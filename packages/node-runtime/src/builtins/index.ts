@@ -1,5 +1,6 @@
 export { AssertionError, assertBuiltin, deepEqual, deepStrictEqual, equal, ok, rejects, strict as assertStrict, strictEqual, throws } from "./assert.ts";
 export { Buffer, BrowserBuffer, bufferBuiltin, kMaxLength } from "./buffer.ts";
+export { ChildProcess, childProcessBuiltin, exec, execFile, execFileSync, execSync, spawn, spawnSync, UnsupportedChildProcessError } from "./child-process.ts";
 export { constantsBuiltin } from "./constants.ts";
 export { dnsBuiltin, dnsPromisesBuiltin, lookup as dnsLookup, promises as dnsPromises } from "./dns.ts";
 export { EventEmitter, eventsBuiltin, once } from "./events.ts";

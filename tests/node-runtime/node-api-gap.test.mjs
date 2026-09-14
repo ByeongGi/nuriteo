@@ -25,6 +25,7 @@ for (const name of unsupported) {
 for (const name of [
   "assert",
   "buffer",
+  "child_process",
   "constants",
   "dns",
   "events",

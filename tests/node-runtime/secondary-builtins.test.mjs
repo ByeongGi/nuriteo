@@ -223,8 +223,16 @@ const tlsSocket = tls.connect({ host: "registry.test", port: 443 });
 const tlsError = await new Promise((resolve) => tlsSocket.once("error", resolve));
 assert.equal(tlsError.code, "ERR_BROWSER_TCP_UNSUPPORTED");
 
+const childProcess = requireBuiltin("node:child_process");
+const child = childProcess.spawn("python", ["--version"]);
+const childError = await new Promise((resolve) => child.once("error", resolve));
+assert.equal(childError.code, "ERR_BROWSER_CHILD_PROCESS_UNSUPPORTED");
+assert.equal(childProcess.spawnSync("python").status, 1);
+assert.throws(() => childProcess.execSync("python --version"), /External child process execution/);
+
 const result = runUnsafeCommonJsForLocalTests(`
   const assert = require("node:assert/strict");
+  const childProcess = require("child_process");
   const dns = require("node:dns");
   const http = require("http");
   const net = require("net");
@@ -236,6 +244,7 @@ const result = runUnsafeCommonJsForLocalTests(`
   const readline = require("readline");
   const { fileURLToPath, pathToFileURL } = require("url");
   const process = require("process");
+  assert.equal(typeof childProcess.spawn, "function");
   assert.equal(path.join("/workspace", "src", "..", "index.js"), "/workspace/index.js");
   assert.equal(fileURLToPath(pathToFileURL("/workspace/a b.js")), "/workspace/a b.js");
   assert.equal(os.platform(), "linux");

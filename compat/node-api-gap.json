@@ -115,6 +115,17 @@
       "nextPhase": "P9-02"
     },
     {
+      "builtin": "child_process",
+      "status": "partial",
+      "priority": 1,
+      "implementedBy": "packages/node-runtime/src/builtins/child-process.ts",
+      "tests": ["tests/node-runtime/secondary-builtins.test.mjs"],
+      "requiredBy": ["npm lifecycle scripts", "node-gyp/native package probes", "editor/help command fallbacks"],
+      "minimumApi": ["spawn", "execFile", "exec", "spawnSync", "execFileSync", "execSync", "ChildProcess"],
+      "acceptance": ["Module loads for dependency graph compatibility and external process attempts fail with ERR_BROWSER_CHILD_PROCESS_UNSUPPORTED."],
+      "nextPhase": "P10"
+    },
+    {
       "builtin": "constants",
       "status": "partial",
       "priority": 1,

@@ -46,6 +46,7 @@ const defaultBuiltins = new Set([
   "assert",
   "assert/strict",
   "buffer",
+  "child_process",
   "constants",
   "dns",
   "dns/promises",
