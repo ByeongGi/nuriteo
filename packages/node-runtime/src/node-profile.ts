@@ -163,6 +163,12 @@ export const NODE_PROFILE = Object.freeze({
       implementedBy: "packages/node-runtime/src/builtins/util.ts",
       tests: Object.freeze(["tests/node-runtime/builtin-subset.test.mjs"])
     }),
+    v8: Object.freeze({
+      status: "partial",
+      source: "browser-native-js",
+      implementedBy: "packages/node-runtime/src/builtins/v8.ts",
+      tests: Object.freeze(["tests/node-runtime/secondary-builtins.test.mjs"])
+    }),
     worker_threads: Object.freeze({
       status: "partial",
       source: "browser-unsupported-diagnostic",
@@ -205,6 +211,7 @@ export const NODE_PROFILE = Object.freeze({
     "node:tty": Object.freeze(["browser-native-js:tty", "node:stream"]),
     "node:url": Object.freeze(["browser-native-js:url", "node:path"]),
     "node:util": Object.freeze(["browser-native-js:util", "node:events"]),
+    "node:v8": Object.freeze(["browser-native-js:v8"]),
     "node:worker_threads": Object.freeze(["browser-unsupported-diagnostic"]),
     "child_process": Object.freeze(["node:child_process"]),
     "crypto": Object.freeze(["node:crypto"]),
@@ -231,6 +238,7 @@ export const NODE_PROFILE = Object.freeze({
     "tty": Object.freeze(["node:tty"]),
     "url": Object.freeze(["node:url"]),
     "util": Object.freeze(["node:util"]),
+    "v8": Object.freeze(["node:v8"]),
     "worker_threads": Object.freeze(["node:worker_threads"])
   })
 });

@@ -258,6 +258,20 @@
       "nextPhase": "P9-02"
     },
     {
+      "builtin": "v8",
+      "status": "partial",
+      "priority": 2,
+      "implementedBy": "packages/node-runtime/src/builtins/v8.ts",
+      "tests": ["tests/node-runtime/secondary-builtins.test.mjs"],
+      "requiredBy": ["npm arborist packument cache sizing"],
+      "minimumApi": ["getHeapStatistics", "getHeapSpaceStatistics"],
+      "acceptance": [
+        "getHeapStatistics returns a stable heap_size_limit for npm arborist cache sizing.",
+        "getHeapSpaceStatistics loads with the expected array shape."
+      ],
+      "nextPhase": "P10"
+    },
+    {
       "builtin": "stream",
       "status": "partial",
       "priority": 1,

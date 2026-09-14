@@ -47,6 +47,7 @@ export const builtinModules = Object.freeze([
   "node:tty",
   "node:url",
   "node:util",
+  "node:v8",
   "node:worker_threads",
   "node:zlib",
   "os",
@@ -63,6 +64,7 @@ export const builtinModules = Object.freeze([
   "tty",
   "url",
   "util",
+  "v8",
   "worker_threads",
   "zlib"
 ]);

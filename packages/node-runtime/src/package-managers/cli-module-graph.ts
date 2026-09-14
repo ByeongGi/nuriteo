@@ -3,6 +3,7 @@ import { dirname, join, normalize } from "../builtins/path.ts";
 export interface CliModuleGraphReader {
   exists(path: string): boolean;
   isFile?(path: string): boolean;
+  listFiles?(path: string): string[];
   readText(path: string): string;
 }
 
@@ -73,6 +74,7 @@ const defaultBuiltins = new Set([
   "tty",
   "url",
   "util",
+  "v8",
   "worker_threads",
   "zlib"
 ]);
@@ -121,6 +123,7 @@ const optionalIssueKinds = new Set<CliModuleGraphIssue["kind"]>([
   "optional-dependency-probe"
 ]);
 const dynamicRequireSpecifier = "<dynamic>";
+const productNpmCommandFiles = new Set(["ci.js", "exec.js", "install.js", "run-script.js"]);
 
 export function analyzeCliModuleGraph(options: CliModuleGraphOptions): CliModuleGraph {
   const builtins = new Set(options.builtins || defaultBuiltins);
@@ -140,6 +143,11 @@ export function analyzeCliModuleGraph(options: CliModuleGraphOptions): CliModule
     for (const specifier of requires) {
       if (isBuiltin(specifier, builtins)) continue;
       if (specifier === dynamicRequireSpecifier || specifier.includes("${") || specifier.includes("+")) {
+        const resolvedCandidates = resolveDynamicRequireCandidates(specifier, current, options.reader);
+        if (resolvedCandidates.length > 0) {
+          queue.push(...resolvedCandidates);
+          continue;
+        }
         issues.push({ specifier, importer: current, kind: classifyDynamicRequire(specifier, current) });
         continue;
       }
@@ -198,7 +206,7 @@ export function extractStaticRequires(source: string, options: StaticRequireExtr
     if (!source.startsWith("require", index)) continue;
     if (isIdentifierPart(source[index - 1]) || isIdentifierPart(source[index + "require".length])) continue;
 
-    const parsed = parseRequireCall(source, index + "require".length, constants);
+    const parsed = parseRequireCall(source, index + "require".length, constants, options.filename);
     if (parsed) {
       requires.add(parsed.specifier);
       index = parsed.end;
@@ -311,18 +319,31 @@ function collectStaticPathConstants(source: string, filename: string | undefined
 function parseRequireCall(
   source: string,
   start: number,
-  constants: Map<string, string>
+  constants: Map<string, string>,
+  filename: string | undefined
 ): { specifier: string; end: number } | null {
   let index = skipWhitespace(source, start);
   if (source[index] !== "(") return null;
   index = skipWhitespace(source, index + 1);
 
   const quote = source[index];
+  if (quote === "`") {
+    const literalStart = index + 1;
+    index = skipTemplateLiteral(source, index);
+    const literalEnd = index;
+    index = skipWhitespace(source, index + 1);
+    if (source[index] !== ")") return null;
+    return {
+      specifier: source.slice(literalStart, literalEnd),
+      end: index
+    };
+  }
+
   if (quote !== "'" && quote !== '"') {
-    const end = source.indexOf(")", index);
+    const end = findClosingParen(source, index);
     if (end === -1 || end - index > 64) return null;
     const expression = source.slice(index, end).trim();
-    return { specifier: constants.get(expression) || dynamicRequireSpecifier, end };
+    return { specifier: constants.get(expression) || resolveKnownRequireExpression(expression, filename) || dynamicRequireSpecifier, end };
   }
 
   const literalStart = index + 1;
@@ -335,6 +356,51 @@ function parseRequireCall(
     specifier: source.slice(literalStart, literalEnd),
     end: index
   };
+}
+
+function resolveKnownRequireExpression(expression: string, filename: string | undefined): string | null {
+  if (
+    filename?.endsWith("/node_modules/@npmcli/config/lib/index.js") &&
+    /^join\(this\.npmPath,\s*['"]package\.json['"]\)$/.test(expression)
+  ) {
+    const nodeModulesIndex = filename.lastIndexOf("/node_modules/@npmcli/config/");
+    if (nodeModulesIndex > 0) return join(filename.slice(0, nodeModulesIndex), "package.json");
+  }
+  return null;
+}
+
+function findClosingParen(source: string, start: number): number {
+  let depth = 1;
+  for (let index = start; index < source.length; index += 1) {
+    const char = source[index];
+    if (char === "'" || char === '"') {
+      index = skipQuotedString(source, index, char);
+      continue;
+    }
+    if (char === "`") {
+      index = skipTemplateLiteral(source, index);
+      continue;
+    }
+    if (char === "(") depth += 1;
+    if (char === ")") {
+      depth -= 1;
+      if (depth === 0) return index;
+    }
+  }
+  return -1;
+}
+
+function resolveDynamicRequireCandidates(specifier: string, importer: string, reader: CliModuleGraphReader): string[] {
+  if (specifier === "./commands/${command}.js" && importer.endsWith("/lib/npm.js") && reader.listFiles) {
+    const commandsDir = join(dirname(importer), "commands");
+    return reader.listFiles(commandsDir)
+      .filter((file) => file.endsWith(".js"))
+      .filter((file) => productNpmCommandFiles.has(file))
+      .map((file) => join(commandsDir, file))
+      .filter((file) => reader.exists(file) && (reader.isFile?.(file) ?? true))
+      .sort();
+  }
+  return [];
 }
 
 function skipWhitespace(source: string, start: number): number {

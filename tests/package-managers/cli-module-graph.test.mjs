@@ -31,6 +31,19 @@ assert.deepEqual(
   ["/workspace/package/lib/cli/entry.js", "node:path"]
 );
 
+assert.deepEqual(
+  extractStaticRequires("return require(`./commands/${command}.js`)"),
+  ["./commands/${command}.js"]
+);
+
+assert.deepEqual(
+  extractStaticRequires(
+    "defaultsObject['npm-version'] = require(join(this.npmPath, 'package.json')).version",
+    { filename: "/workspace/npm/node_modules/@npmcli/config/lib/index.js" }
+  ),
+  ["/workspace/npm/package.json"]
+);
+
 for (const [name, version] of [["npm", "10.9.2"], ["pnpm", "9.15.9"]]) {
   const installed = JSON.parse(fs.readFileSync(path.join(root, `vendor/cli/${name}/${version}/installed.json`), "utf8"));
   const packageRoot = path.join(root, `vendor/cli/${name}/${version}/package`);
@@ -44,6 +57,9 @@ for (const [name, version] of [["npm", "10.9.2"], ["pnpm", "9.15.9"]]) {
       },
       isFile(file) {
         return fs.statSync(file).isFile();
+      },
+      listFiles(file) {
+        return fs.readdirSync(file);
       },
       readText(file) {
         return fs.readFileSync(file, "utf8");
@@ -59,14 +75,17 @@ for (const [name, version] of [["npm", "10.9.2"], ["pnpm", "9.15.9"]]) {
   assert.equal(graph.issues.some((issue) => issue.kind === "unsupported-builtin"), false);
   if (name === "npm") {
     assert.ok(graph.modules.length > 500);
-    assert.ok(graph.issues.some((issue) => issue.kind === "dynamic-command-dispatch"));
-    assert.ok(graph.issues.some((issue) => issue.kind === "dynamic-config-probe"));
+    assert.equal(graph.issues.some((issue) => issue.kind === "dynamic-command-dispatch"), false);
+    assert.ok(graph.modules.some((mod) => mod.path.endsWith("/lib/commands/install.js")));
+    assert.ok(graph.modules.some((mod) => mod.path.endsWith("/lib/commands/run-script.js")));
+    assert.equal(graph.issues.some((issue) => issue.kind === "dynamic-config-probe"), false);
     assert.ok(graph.issues.some((issue) => issue.kind === "optional-dependency-probe"));
+    assert.equal(graph.supported, true);
   } else {
     assert.ok(graph.issues.some((issue) => issue.kind === "dynamic-adapter-dispatch"));
     assert.ok(graph.issues.some((issue) => issue.kind === "optional-cache-probe"));
+    assert.equal(graph.supported, false);
   }
-  assert.equal(graph.supported, false);
 }
 
 console.log("package manager cli module graph test ok");

@@ -23,6 +23,7 @@ import { tlsBuiltin } from "./builtins/tls.ts";
 import { ttyBuiltin } from "./builtins/tty.ts";
 import { urlBuiltin } from "./builtins/url.ts";
 import { utilBuiltin } from "./builtins/util.ts";
+import { v8Builtin } from "./builtins/v8.ts";
 import { workerThreadsBuiltin } from "./builtins/worker-threads-builtin.ts";
 
 export function createBuiltinLoader(bindings: BuiltinBindings): (specifier: string) => RuntimeValue {
@@ -66,6 +67,7 @@ export function createBuiltinLoader(bindings: BuiltinBindings): (specifier: stri
     if (specifier === "tty" || specifier === "node:tty") return ttyBuiltin;
     if (specifier === "url" || specifier === "node:url") return urlBuiltin;
     if (specifier === "util" || specifier === "node:util") return bindings.util || utilBuiltin;
+    if (specifier === "v8" || specifier === "node:v8") return v8Builtin;
     if (specifier === "worker_threads" || specifier === "node:worker_threads") return workerThreadsBuiltin;
     throw new Error(`Unsupported builtin module: ${specifier}`);
   };

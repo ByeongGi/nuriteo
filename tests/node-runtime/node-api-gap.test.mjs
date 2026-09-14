@@ -47,6 +47,7 @@ for (const name of [
   "tty",
   "url",
   "util",
+  "v8",
   "worker_threads"
 ]) {
   const entry = gapsByName.get(name);

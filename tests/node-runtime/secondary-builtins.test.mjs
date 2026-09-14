@@ -78,6 +78,10 @@ const tty = requireBuiltin("node:tty");
 assert.equal(tty.isatty(1), false);
 assert.equal(new tty.WriteStream().isTTY, false);
 
+const v8 = requireBuiltin("node:v8");
+assert.equal(typeof v8.getHeapStatistics().heap_size_limit, "number");
+assert.deepEqual(v8.getHeapSpaceStatistics(), []);
+
 const moduleBuiltin = requireBuiltin("node:module");
 assert.equal(moduleBuiltin.enableCompileCache().status, 0);
 assert.equal(moduleBuiltin.builtinModules.includes("node:module"), true);
@@ -275,6 +279,7 @@ const result = runUnsafeCommonJsForLocalTests(`
   const { Buffer } = require("buffer");
   const { StringDecoder } = require("string_decoder");
   const readline = require("readline");
+  const v8 = require("node:v8");
   const { fileURLToPath, pathToFileURL } = require("url");
   const process = require("process");
   assert.equal(typeof childProcess.spawn, "function");
@@ -291,6 +296,7 @@ const result = runUnsafeCommonJsForLocalTests(`
   assert.equal(workerThreads.isMainThread, true);
   assert.equal(qs.parse("a=1&a=2").a.length, 2);
   assert.equal(new StringDecoder().end(Buffer.from("ok")), "ok");
+  assert.equal(typeof v8.getHeapStatistics().heap_size_limit, "number");
   readline.emitKeypressEvents({ on() {} });
   module.exports = {
     cwd: process.cwd(),
