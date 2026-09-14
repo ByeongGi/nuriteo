@@ -65,7 +65,7 @@
       "runtime": "browser-guest-node-runtime",
       "status": "partial-pass",
       "evidence": ["tests/package-managers/npm-install-plan.test.mjs", "tests/package-managers/npm-integration.test.mjs"],
-      "productGap": "Browser runtime now validates fixture build script, lifecycle marker script, and bin exec. Full npm lifecycle process spawning, peer resolver execution, optional package policy, and interrupted recovery still need real CLI module evaluation."
+      "productGap": "Browser runtime now validates fixture build script, lifecycle marker script, bin exec, and interrupted install-plan recovery. Full npm lifecycle process spawning, peer resolver execution, and optional package policy still need real CLI module evaluation."
     },
     {
       "id": "pnpm-install",
@@ -83,13 +83,13 @@
       "runtime": "browser-guest-node-runtime",
       "status": "partial-pass",
       "evidence": ["tests/package-managers/pnpm-store-plan.test.mjs", "tests/package-managers/pnpm-integration.test.mjs"],
-      "productGap": "Browser runtime now validates fixture build script, lifecycle marker script, and bin exec. Full pnpm lifecycle process spawning, peer resolver execution, optional package policy, and interrupted recovery still need real CLI module evaluation."
+      "productGap": "Browser runtime now validates fixture build script, lifecycle marker script, bin exec, and interrupted install-plan recovery. Full pnpm lifecycle process spawning, peer resolver execution, and optional package policy still need real CLI module evaluation."
     }
   ],
   "gate": {
     "id": "PG10",
     "status": "not-pass",
-    "reason": "Version boot, local install layout, store plan, script/lifecycle/bin fixture, and tarball cache paths pass or partially pass in browser guest runtime, but ci/interrupted recovery and full CLI module evaluation still depend on host-node-test-helper.",
+    "reason": "Version boot, local install layout, store plan, script/lifecycle/bin fixture, interrupted install-plan recovery, and tarball cache paths pass or partially pass in browser guest runtime, but npm ci and full CLI module evaluation still depend on host-node-test-helper.",
     "requiredToPass": [
       "Move npm install/ci/run/exec cases to browser-guest-node-runtime",
       "Move pnpm install/run/exec cases to browser-guest-node-runtime",

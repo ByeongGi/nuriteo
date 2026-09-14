@@ -10,7 +10,7 @@ export { RuntimeChildProcess, spawnRuntimeChild } from "./child-process.ts";
 export { BrokenPipeError, BoundedPipe, createStdio, WouldBlockError } from "./io/index.ts";
 export { RuntimeWorkerThread, startRuntimeThread } from "./worker-threads.ts";
 export { createShellRuntime, ShellRuntime, ShellSyntaxError } from "./shell/index.ts";
-export { applyNpmInstallPlan, applyPnpmStorePlan, CliRegistry, createGuestCli, createGuestRuntimeProcessRunner, createNpmInstallPlan, createNpmRunner, createPackageScriptRunner, createPackageTarballCache, createPnpmRunner, createPnpmStorePlan, extractTarEntries, NpmRunner, PackageScriptRunner, PackageTarballCache, PnpmRunner } from "./package-managers/index.ts";
+export { applyNpmInstallPlan, applyPnpmStorePlan, CliRegistry, createGuestCli, createGuestRuntimeProcessRunner, createNpmInstallPlan, createNpmRunner, createPackageScriptRunner, createPackageTarballCache, createPnpmRunner, createPnpmStorePlan, extractTarEntries, InstallTransactionInterruptedError, NpmRunner, PackageScriptRunner, PackageTarballCache, PnpmRunner, runInstallTransaction } from "./package-managers/index.ts";
 export { createHttpClient, createHttpsClient, gzip, gunzip, integritySha512, RuntimeHttpClient, RuntimeHttpsClient, sha256Hex, sha512Base64 } from "./network/index.ts";
 export { createLoopbackNetwork, LoopbackNetwork, LoopbackNetworkError, parseHttpRequest, parseHttpResponse, serializeHttpRequest, serializeHttpResponse } from "./net/index.ts";
 export { createWasmAdapterPolicy, createWasmAdapterRegistry, rejectNativeAddon, WasmAdapterError, WasmAdapterPolicy, WasmAdapterRegistry } from "./wasm-adapters/index.ts";

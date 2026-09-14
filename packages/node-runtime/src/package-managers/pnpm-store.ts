@@ -1,4 +1,5 @@
 import { join, relative } from "../builtins/path.ts";
+import { runInstallTransaction, type InstallTransactionOptions, type InstallTransactionResult } from "./install-transaction.ts";
 
 export interface PnpmWorkspaceReader {
   readText(path: string): string;
@@ -63,7 +64,10 @@ export interface PnpmStoreApplyResult {
     linkPath: string;
     strategy: PnpmWorkspaceLink["strategy"];
   }>;
+  transaction: InstallTransactionResult;
 }
+
+export interface PnpmStoreApplyOptions extends InstallTransactionOptions {}
 
 export function createPnpmStorePlan(options: PnpmStorePlanOptions): PnpmStorePlan {
   const cwd = trimSlash(options.cwd);
@@ -98,23 +102,22 @@ export function createPnpmStorePlan(options: PnpmStorePlanOptions): PnpmStorePla
   };
 }
 
-export function applyPnpmStorePlan(plan: PnpmStorePlan, writer: PnpmWorkspaceWriter): PnpmStoreApplyResult {
+export function applyPnpmStorePlan(plan: PnpmStorePlan, writer: PnpmWorkspaceWriter, options: PnpmStoreApplyOptions = {}): PnpmStoreApplyResult {
   if (!plan.frozenLockfile.valid) {
     throw new Error(`Cannot apply pnpm store plan with invalid frozen lockfile: ${plan.frozenLockfile.missingLinks.join(", ")}`);
   }
   const directoriesCreated = [plan.storeDir, plan.virtualStoreDir, join(dirname(plan.virtualStoreDir), ".bin")];
-  for (const directory of directoriesCreated) writer.mkdir(directory);
-
   const binLinks: PnpmStoreApplyResult["binLinks"] = [];
+  const operations: Array<() => void> = directoriesCreated.map((directory) => () => writer.mkdir(directory));
   for (const link of plan.rootLinks) {
-    applyLink(writer, link.targetPath, link.linkPath, link.strategy);
+    operations.push(() => applyLink(writer, link.targetPath, link.linkPath, link.strategy));
     for (const bin of link.binLinks) {
-      applyLink(writer, bin.targetPath, bin.linkPath, link.strategy);
+      operations.push(() => applyLink(writer, bin.targetPath, bin.linkPath, link.strategy));
       binLinks.push({ ...bin, strategy: link.strategy });
     }
   }
 
-  writer.writeText(join(plan.virtualStoreDir, "browser-native-plan.json"), JSON.stringify({
+  operations.push(() => writer.writeText(join(plan.virtualStoreDir, "browser-native-plan.json"), JSON.stringify({
     packageManager: plan.packageManager,
     rootLinks: plan.rootLinks.map((link) => ({
       name: link.name,
@@ -122,12 +125,14 @@ export function applyPnpmStorePlan(plan: PnpmStorePlan, writer: PnpmWorkspaceWri
       linkPath: link.linkPath,
       strategy: link.strategy
     }))
-  }, null, 2));
+  }, null, 2)));
+  const transaction = runInstallTransaction(operations, options);
 
   return {
     directoriesCreated,
     packageLinks: plan.rootLinks,
-    binLinks
+    binLinks,
+    transaction
   };
 }
 

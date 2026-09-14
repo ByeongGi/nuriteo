@@ -81,6 +81,7 @@ const required = [
   "packages/node-runtime/src/package-managers/cli-registry.ts",
   "packages/node-runtime/src/package-managers/guest-cli.ts",
   "packages/node-runtime/src/package-managers/guest-runtime-runner.ts",
+  "packages/node-runtime/src/package-managers/install-transaction.ts",
   "packages/node-runtime/src/package-managers/npm-install.ts",
   "packages/node-runtime/src/package-managers/index.ts",
   "packages/node-runtime/src/package-managers/npm-runner.ts",

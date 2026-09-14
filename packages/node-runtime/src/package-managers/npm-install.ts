@@ -1,4 +1,5 @@
 import { join } from "../builtins/path.ts";
+import { runInstallTransaction, type InstallTransactionOptions, type InstallTransactionResult } from "./install-transaction.ts";
 import type { PnpmWorkspaceWriter } from "./pnpm-store.ts";
 
 export interface NpmWorkspaceReader {
@@ -38,7 +39,10 @@ export interface NpmInstallPlan {
 export interface NpmInstallApplyResult {
   links: NpmInstallLink[];
   binLinks: Array<NpmInstallLink["binLinks"][number] & { strategy: NpmInstallLink["strategy"] }>;
+  transaction: InstallTransactionResult;
 }
+
+export interface NpmInstallApplyOptions extends InstallTransactionOptions {}
 
 export function createNpmInstallPlan(options: NpmInstallPlanOptions): NpmInstallPlan {
   const cwd = trimSlash(options.cwd);
@@ -74,22 +78,24 @@ export function createNpmInstallPlan(options: NpmInstallPlanOptions): NpmInstall
   };
 }
 
-export function applyNpmInstallPlan(plan: NpmInstallPlan, writer: PnpmWorkspaceWriter): NpmInstallApplyResult {
+export function applyNpmInstallPlan(plan: NpmInstallPlan, writer: PnpmWorkspaceWriter, options: NpmInstallApplyOptions = {}): NpmInstallApplyResult {
   if (!plan.frozenLockfile.valid) {
     throw new Error(`Cannot apply npm install plan with invalid frozen lockfile: ${plan.frozenLockfile.missingLinks.join(", ")}`);
   }
-  writer.mkdir(dirname(plan.links[0]?.linkPath || "/node_modules"));
+  const operations: Array<() => void> = [() => writer.mkdir(dirname(plan.links[0]?.linkPath || "/node_modules"))];
   const binLinks: NpmInstallApplyResult["binLinks"] = [];
   for (const link of plan.links) {
-    applyLink(writer, link.targetPath, link.linkPath, link.strategy);
+    operations.push(() => applyLink(writer, link.targetPath, link.linkPath, link.strategy));
     for (const bin of link.binLinks) {
-      applyLink(writer, bin.targetPath, bin.linkPath, link.strategy);
+      operations.push(() => applyLink(writer, bin.targetPath, bin.linkPath, link.strategy));
       binLinks.push({ ...bin, strategy: link.strategy });
     }
   }
+  const transaction = runInstallTransaction(operations, options);
   return {
     links: plan.links,
-    binLinks
+    binLinks,
+    transaction
   };
 }
 

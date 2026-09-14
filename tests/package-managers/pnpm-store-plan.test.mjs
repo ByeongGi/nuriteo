@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 
-import { CliRegistry, applyPnpmStorePlan, createPackageScriptRunner, createPnpmRunner, createPnpmStorePlan } from "../../packages/node-runtime/src/index.ts";
+import { CliRegistry, applyPnpmStorePlan, createPackageScriptRunner, createPnpmRunner, createPnpmStorePlan, InstallTransactionInterruptedError } from "../../packages/node-runtime/src/index.ts";
 
 const root = new URL("../..", import.meta.url).pathname;
 const fixture = path.join(root, "tests/fixtures/package-managers/pnpm");
@@ -130,6 +130,14 @@ try {
   assert.equal(fs.existsSync(path.join(workdir, "node_modules/.bin/fixture-hello")), true);
   assert.equal(fs.existsSync(path.join(workdir, "node_modules/.pnpm/browser-native-plan.json")), true);
 
+  fs.rmSync(path.join(workdir, "node_modules"), { recursive: true, force: true });
+  assert.throws(
+    () => applyPnpmStorePlan(copyFallbackPlan, installWriter(), { failAfterOperations: 3 }),
+    (error) => error instanceof InstallTransactionInterruptedError && error.code === "EINSTALLINTERRUPTED"
+  );
+  assert.equal(applyPnpmStorePlan(copyFallbackPlan, installWriter()).transaction.completed, true);
+  assert.equal(fs.existsSync(path.join(workdir, "node_modules/.pnpm/browser-native-plan.json")), true);
+
   const scripts = createPackageScriptRunner({
     cwd: workdir,
     reader: fileReader(),
@@ -141,6 +149,25 @@ try {
   assert.equal(scripts.execBin("fixture-hello").stdout.trim(), "fixture-bin:hello");
 } finally {
   fs.rmSync(workdir, { recursive: true, force: true });
+}
+
+function installWriter() {
+  return {
+    mkdir(directory) {
+      fs.mkdirSync(directory, { recursive: true });
+    },
+    copyDirectory(source, target) {
+      fs.cpSync(source, target, { recursive: true, force: true });
+    },
+    copyFile(source, target) {
+      fs.mkdirSync(path.dirname(target), { recursive: true });
+      fs.copyFileSync(source, target);
+    },
+    writeText(file, data) {
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file, data);
+    }
+  };
 }
 
 console.log("pnpm store plan test ok");
