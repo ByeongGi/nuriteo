@@ -11,6 +11,7 @@ export type PackageManagerCommandKind =
 export type PackageManagerBootMode =
   | "artifact-entry-preflight"
   | "install-plan-application"
+  | "script-runner-application"
   | "blocked-real-cli-evaluation";
 
 export type PackageManagerErrorCode =

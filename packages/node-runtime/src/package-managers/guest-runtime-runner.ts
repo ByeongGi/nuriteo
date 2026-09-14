@@ -7,6 +7,7 @@ import type {
 } from "./types.ts";
 import { applyNpmInstallPlan, createNpmInstallPlan } from "./npm-install.ts";
 import { applyPnpmStorePlan, createPnpmStorePlan } from "./pnpm-store.ts";
+import { createPackageScriptRunner, type PackageScriptReader } from "./script-runner.ts";
 
 export function createGuestRuntimeProcessRunner(options: GuestRuntimeProcessRunnerOptions): PackageManagerProcessRunner {
   if (!options?.artifacts) throw new Error("Guest runtime process runner requires CLI artifacts");
@@ -41,6 +42,10 @@ export function createGuestRuntimeProcessRunner(options: GuestRuntimeProcessRunn
       return applyGuestInstallPlan(request, commandKind, options);
     }
 
+    if ((commandKind === "run-script" || commandKind === "exec") && options.workspace) {
+      return applyGuestScriptCommand(request, commandKind, options);
+    }
+
     const message = `${request.name}: real CLI evaluation is required for ${request.args.join(" ") || "<empty>"}`;
     return {
       ...baseResult(request),
@@ -54,6 +59,33 @@ export function createGuestRuntimeProcessRunner(options: GuestRuntimeProcessRunn
         nextAction: "Evaluate the vendored CLI module graph inside the browser guest runtime instead of using the host-node-test-helper."
       }
     };
+  };
+}
+
+function applyGuestScriptCommand(
+  request: PackageManagerProcessRequest,
+  commandKind: "run-script" | "exec",
+  options: GuestRuntimeProcessRunnerOptions
+): PackageManagerProcessResult {
+  if (!options.workspace) throw new Error("Guest script command requires a workspace");
+
+  const runner = createPackageScriptRunner({
+    cwd: request.cwd,
+    env: request.env,
+    reader: createPackageScriptReader(options.workspace.reader),
+    writer: options.workspace.writer
+  });
+  const scriptResult = commandKind === "run-script"
+    ? runner.runScript(parseRunScriptName(request.args))
+    : runner.execBin(parseExecCommandName(request.args));
+
+  return {
+    ...baseResult(request),
+    bootMode: "script-runner-application",
+    commandKind,
+    stdout: scriptResult.stdout,
+    stderr: scriptResult.stderr,
+    exitCode: scriptResult.exitCode
   };
 }
 
@@ -71,12 +103,25 @@ function applyGuestInstallPlan(
       reader: options.workspace.reader
     });
     const applied = applyNpmInstallPlan(plan, options.workspace.writer);
+    const lifecycle = shouldRunLifecycleScripts(request.args)
+      ? runGuestPackageLifecycles(request, options, applied.links.map((link) => link.linkPath))
+      : { stdout: "", stderr: "", exitCode: 0 };
+    if (lifecycle.exitCode !== 0) {
+      return {
+        ...baseResult(request),
+        bootMode: "install-plan-application",
+        commandKind,
+        stdout: lifecycle.stdout,
+        stderr: lifecycle.stderr,
+        exitCode: lifecycle.exitCode
+      };
+    }
     return {
       ...baseResult(request),
       bootMode: "install-plan-application",
       commandKind,
       exitCode: 0,
-      stdout: `npm ${commandKind}: applied ${applied.links.length} local file links and ${applied.binLinks.length} bin links\n`
+      stdout: `npm ${commandKind}: applied ${applied.links.length} local file links and ${applied.binLinks.length} bin links\n${lifecycle.stdout}`
     };
   }
 
@@ -86,13 +131,53 @@ function applyGuestInstallPlan(
     reader: options.workspace.reader
   });
   const applied = applyPnpmStorePlan(plan, options.workspace.writer);
+  const lifecycle = shouldRunLifecycleScripts(request.args)
+    ? runGuestPackageLifecycles(request, options, applied.packageLinks.map((link) => link.linkPath))
+    : { stdout: "", stderr: "", exitCode: 0 };
+  if (lifecycle.exitCode !== 0) {
+    return {
+      ...baseResult(request),
+      bootMode: "install-plan-application",
+      commandKind,
+      stdout: lifecycle.stdout,
+      stderr: lifecycle.stderr,
+      exitCode: lifecycle.exitCode
+    };
+  }
   return {
     ...baseResult(request),
     bootMode: "install-plan-application",
     commandKind,
     exitCode: 0,
-    stdout: `pnpm install: applied ${applied.packageLinks.length} workspace links and ${applied.binLinks.length} bin links\n`
+    stdout: `pnpm install: applied ${applied.packageLinks.length} workspace links and ${applied.binLinks.length} bin links\n${lifecycle.stdout}`
   };
+}
+
+function runGuestPackageLifecycles(
+  request: PackageManagerProcessRequest,
+  options: GuestRuntimeProcessRunnerOptions,
+  packagePaths: string[]
+): Pick<PackageManagerProcessResult, "stdout" | "stderr" | "exitCode"> {
+  if (!options.workspace) throw new Error("Guest package lifecycle requires a workspace");
+  const runner = createPackageScriptRunner({
+    cwd: request.cwd,
+    env: request.env,
+    reader: createPackageScriptReader(options.workspace.reader),
+    writer: options.workspace.writer
+  });
+  let stdout = "";
+  let stderr = "";
+  for (const packagePath of packagePaths) {
+    const result = runner.runLifecycle(packagePath, "install");
+    stdout += result.stdout;
+    stderr += result.stderr;
+    if (result.exitCode !== 0) return { stdout, stderr, exitCode: result.exitCode };
+  }
+  return { stdout, stderr, exitCode: 0 };
+}
+
+function shouldRunLifecycleScripts(args: readonly string[]): boolean {
+  return !args.includes("--ignore-scripts");
 }
 
 function baseResult(request: PackageManagerProcessRequest): PackageManagerProcessResult {
@@ -108,6 +193,36 @@ function baseResult(request: PackageManagerProcessRequest): PackageManagerProces
   };
   if (request.entry.entrySha256 !== undefined) result.entrySha256 = request.entry.entrySha256;
   return result;
+}
+
+function createPackageScriptReader(reader: NonNullable<GuestRuntimeProcessRunnerOptions["workspace"]>["reader"]): PackageScriptReader {
+  return {
+    exists(path) {
+      const maybeExists = reader as { exists?: (path: string) => boolean };
+      if (maybeExists.exists) return maybeExists.exists(path);
+      try {
+        reader.readText(path);
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    readText(path) {
+      return reader.readText(path);
+    }
+  };
+}
+
+function parseRunScriptName(args: readonly string[]): string {
+  const [command, script] = args;
+  if ((command === "run" || command === "run-script") && script) return script;
+  return "";
+}
+
+function parseExecCommandName(args: readonly string[]): string {
+  const [, ...rest] = args;
+  const execArgs = rest[0] === "--" ? rest.slice(1) : rest;
+  return execArgs[0] || "";
 }
 
 export function classifyPackageManagerCommand(args: readonly string[]): PackageManagerCommandKind {

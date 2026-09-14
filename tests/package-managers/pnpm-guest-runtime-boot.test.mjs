@@ -72,6 +72,27 @@ assert.equal(guestInstall.exitCode, 0, guestInstall.stderr);
 assert.equal(workspace.exists(`${workdir}/node_modules/fixture-bin/package.json`), true);
 assert.equal(workspace.exists(`${workdir}/node_modules/.bin/fixture-hello`), true);
 
+const build = guestInstallPnpm.runScript(workdir, "build");
+assert.equal(build.runtime, "browser-guest-node-runtime");
+assert.equal(build.bootMode, "script-runner-application");
+assert.equal(build.commandKind, "run-script");
+assert.equal(build.exitCode, 0, build.stderr);
+assert.equal(build.stdout.trim(), "consumer:provider");
+
+const lifecycle = guestInstallPnpm.runScript(workdir, "lifecycle-test");
+assert.equal(lifecycle.runtime, "browser-guest-node-runtime");
+assert.equal(lifecycle.bootMode, "script-runner-application");
+assert.equal(lifecycle.commandKind, "run-script");
+assert.equal(lifecycle.exitCode, 0, lifecycle.stderr);
+assert.equal(lifecycle.stdout.trim(), "fixture-optional:installed");
+
+const bin = guestInstallPnpm.exec(workdir, "fixture-hello");
+assert.equal(bin.runtime, "browser-guest-node-runtime");
+assert.equal(bin.bootMode, "script-runner-application");
+assert.equal(bin.commandKind, "exec");
+assert.equal(bin.exitCode, 0, bin.stderr);
+assert.equal(bin.stdout.trim(), "fixture-bin:hello");
+
 console.log("pnpm guest runtime boot test ok");
 
 function readFixtureMounts(source, target) {
