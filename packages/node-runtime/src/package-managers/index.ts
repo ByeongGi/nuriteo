@@ -4,5 +4,7 @@ export { createGuestRuntimeProcessRunner } from "./guest-runtime-runner.ts";
 export { createNpmRunner, NpmRunner } from "./npm-runner.ts";
 export { createPnpmRunner, PnpmRunner } from "./pnpm-runner.ts";
 export { createPnpmStorePlan } from "./pnpm-store.ts";
+export { createPackageTarballCache, extractTarEntries, PackageTarballCache } from "./tarball-cache.ts";
 export type { PnpmStorePlan, PnpmStorePlanOptions, PnpmWorkspaceLink, PnpmWorkspacePackage, PnpmWorkspaceReader } from "./pnpm-store.ts";
+export type { PackageTarballCacheMetrics, PackageTarballCacheOptions, PackageTarballRequest, PackageTarballResult, TarEntry } from "./tarball-cache.ts";
 export type { CliArtifactReader, CliRegistryLike, GuestCli, GuestRuntimeProcessRunnerOptions, PackageManagerProcessRequest, PackageManagerProcessResult, PackageManagerProcessRunner, PackageManagerRunnerOptions } from "./types.ts";
