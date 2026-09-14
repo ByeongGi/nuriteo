@@ -50,6 +50,7 @@ function emitDeclarations() {
   const declarationRoot = path.join(packageRoot, "types");
   const program = ts.createProgram({
     rootNames: [
+      path.join(root, "packages/browser-host/src/supervisor.ts"),
       path.join(root, "packages/sdk/src/index.ts"),
       path.join(root, "packages/preview/src/index.ts"),
       path.join(root, "packages/protocol/src/index.ts")
@@ -82,6 +83,16 @@ function emitDeclarations() {
     console.error(ts.formatDiagnosticsWithColorAndContext(diagnostics, host));
     process.exit(1);
   }
+}
+
+function rewritePackagedDeclarations() {
+  rewritePackagedSource("types/packages/sdk/src/container.d.ts", [
+    ['"@cargo-container/browser-host/supervisor"', '"../../browser-host/src/supervisor"'],
+    ['"@cargo-container/protocol"', '"../../protocol/src/index"']
+  ]);
+  rewritePackagedSource("types/packages/sdk/src/index.d.ts", [
+    ['"@cargo-container/protocol"', '"../../protocol/src/index"']
+  ]);
 }
 
 function listFiles(directory) {
@@ -127,6 +138,7 @@ rewritePackagedSource("packages/sdk/src/index.ts", [
   ['"@cargo-container/protocol"', '"../../protocol/src/index.ts"']
 ]);
 emitDeclarations();
+rewritePackagedDeclarations();
 transpilePackagedTypescript();
 
 fs.mkdirSync(path.join(packageRoot, "assets"), { recursive: true });
@@ -140,9 +152,9 @@ writeFile("index.js", [
 ].join("\n"));
 
 writeFile("index.d.ts", [
-  "export { CargoContainer, createContainer } from './types/packages/sdk/src/container.d.ts';",
-  "export { createPreviewRelay, createPreviewServiceWorker, createPreviewSessionRegistry, createHmrClient } from './types/packages/preview/src/index.d.ts';",
-  "export { protocolVersion } from './types/packages/protocol/src/messages.d.ts';",
+  "export { CargoContainer, createContainer } from './types/packages/sdk/src/container';",
+  "export { createPreviewRelay, createPreviewServiceWorker, createPreviewSessionRegistry, createHmrClient } from './types/packages/preview/src/index';",
+  "export { protocolVersion } from './types/packages/protocol/src/messages';",
   ""
 ].join("\n"));
 

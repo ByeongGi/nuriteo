@@ -1,7 +1,9 @@
 import { chromium } from "@playwright/test";
 import http from "node:http";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
+import { spawnSync } from "node:child_process";
 
 const root = new URL("../..", import.meta.url).pathname;
 const packageRoot = path.join(root, "dist/sdk/package");
@@ -101,6 +103,7 @@ try {
   const types = fs.readFileSync(path.join(packageRoot, "index.d.ts"), "utf8");
   if (!types.includes("CargoContainer")) throw new Error("SDK root types do not export CargoContainer");
   if (!types.includes("createPreviewRelay")) throw new Error("SDK root types do not export preview API");
+  assertSdkTypesCompile();
 
   const hasConsumer = await page.evaluate(() => Boolean(globalThis.__sdkConsumer?.bootAndRun));
   if (!hasConsumer) throw new Error(`SDK consumer did not initialize: ${browserErrors.join("\n") || "no browser error captured"}`);
@@ -115,3 +118,48 @@ try {
 }
 
 console.log("sdk consumer package test ok");
+
+function assertSdkTypesCompile() {
+  const workdir = fs.mkdtempSync(path.join(os.tmpdir(), "sdk-types-consumer-"));
+  try {
+    const scope = path.join(workdir, "node_modules/@cargo-container");
+    fs.mkdirSync(scope, { recursive: true });
+    fs.symlinkSync(packageRoot, path.join(scope, "sdk"), "dir");
+    fs.writeFileSync(path.join(workdir, "index.ts"), [
+      'import { CargoContainer, createContainer, createPreviewRelay, createPreviewSessionRegistry, protocolVersion } from "@cargo-container/sdk";',
+      "",
+      "const container: CargoContainer = createContainer({",
+      '  systemWorkerUrl: new URL("http://127.0.0.1/system-worker.ts"),',
+      '  processWorkerUrl: new URL("http://127.0.0.1/process-worker.ts")',
+      "});",
+      "const sessions = createPreviewSessionRegistry();",
+      "createPreviewRelay({ sessions });",
+      "const version: number = protocolVersion;",
+      "void container;",
+      "void version;",
+      ""
+    ].join("\n"));
+    fs.writeFileSync(path.join(workdir, "tsconfig.json"), `${JSON.stringify({
+      compilerOptions: {
+        allowImportingTsExtensions: true,
+        lib: ["ES2024", "DOM"],
+        module: "ESNext",
+        moduleResolution: "Bundler",
+        noEmit: true,
+        strict: true,
+        target: "ES2024",
+        types: []
+      },
+      include: ["index.ts"]
+    }, null, 2)}\n`);
+    const tsc = spawnSync(process.execPath, [path.join(root, "node_modules/typescript/bin/tsc"), "--pretty", "false"], {
+      cwd: workdir,
+      encoding: "utf8"
+    });
+    if (tsc.status !== 0) {
+      throw new Error(`SDK package types do not compile:\n${tsc.stdout}\n${tsc.stderr}`);
+    }
+  } finally {
+    fs.rmSync(workdir, { recursive: true, force: true });
+  }
+}
