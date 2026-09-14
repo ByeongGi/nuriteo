@@ -31,6 +31,11 @@ const npmInstall = npm.install("/workspace", ["--ignore-scripts"]);
 assert.equal(npmInstall.bootMode, "install-plan-application");
 assert.equal(npmWorkspace.exists("/workspace/node_modules/fixture-bin/package.json"), true);
 assert.equal(npmWorkspace.exists("/workspace/node_modules/.bin/fixture-hello"), true);
+npmWorkspace.symlink("/workspace/packages/fixture-bin", "/workspace/node_modules/fixture-bin-link");
+assert.equal(npmWorkspace.readText("/workspace/node_modules/fixture-bin-link/package.json").includes("fixture-bin"), true);
+npmWorkspace.remove("/workspace/node_modules");
+assert.equal(npmWorkspace.exists("/workspace/node_modules/fixture-bin/package.json"), false);
+assert.equal(npmWorkspace.exists("/workspace/node_modules/.bin/fixture-hello"), false);
 
 const pnpmWorkspace = createOpfsPackageWorkspace({ opfs: createMemoryOpfs(), root: "pnpm-project" });
 mountFixture(path.join(root, "tests/fixtures/package-managers/pnpm"), "/workspace", pnpmWorkspace);

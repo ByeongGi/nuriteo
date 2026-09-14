@@ -17,16 +17,14 @@ export class OpfsPackageWorkspace {
   }
 
   readText(path: string): string {
-    const record = this.#readRecord(path);
-    if (isSymlinkRecord(record)) return this.readText(record.target);
+    const record = this.#readRecord(this.#resolvePath(path));
     if (!isTextFileRecord(record)) throw createWorkspaceError("EISDIR", `Not a text file: ${path}`);
     return record.data;
   }
 
   listDir(path: string): string[] {
-    const normalized = normalizePath(path);
+    const normalized = this.#resolvePath(path);
     const record = this.#readRecord(normalized);
-    if (isSymlinkRecord(record)) return this.listDir(record.target);
     if (!isDirectoryRecord(record)) throw createWorkspaceError("ENOTDIR", `Not a directory: ${normalized}`);
 
     const prefix = `${this.#key(normalized)}/`;
@@ -72,6 +70,15 @@ export class OpfsPackageWorkspace {
     }
   }
 
+  remove(path: string): void {
+    const normalized = normalizePath(path);
+    this.opfs.deleteFile(this.#key(normalized));
+    const prefix = `${this.#key(normalized)}/`;
+    for (const key of this.opfs.listFiles(prefix)) {
+      this.opfs.deleteFile(key);
+    }
+  }
+
   symlink(target: string, path: string): void {
     const normalized = normalizePath(path);
     this.#ensureParent(normalized);
@@ -79,7 +86,7 @@ export class OpfsPackageWorkspace {
   }
 
   exists(path: string): boolean {
-    return this.opfs.readFile(this.#key(path)) !== null;
+    return this.opfs.readFile(this.#key(path)) !== null || this.opfs.readFile(this.#key(this.#resolvePath(path))) !== null;
   }
 
   #readRecord(path: string): WorkspaceRecord {
@@ -98,6 +105,31 @@ export class OpfsPackageWorkspace {
     if (this.exists(parent)) return;
     this.#ensureParent(parent);
     this.mkdir(parent);
+  }
+
+  #resolvePath(path: string): string {
+    let normalized = normalizePath(path);
+    for (let depth = 0; depth < 16; depth += 1) {
+      const next = this.#resolveOneSymlink(normalized);
+      if (next === normalized) return normalized;
+      normalized = next;
+    }
+    throw createWorkspaceError("ELOOP", `Too many symbolic links: ${path}`);
+  }
+
+  #resolveOneSymlink(path: string): string {
+    let bestLink: string | null = null;
+    for (const key of this.opfs.listFiles(`${this.root}/`)) {
+      const relative = key.slice(this.root.length + 1);
+      const link = normalizePath(relative);
+      if (path !== link && !path.startsWith(`${link}/`)) continue;
+      const record = this.opfs.readFile(key);
+      if (!isSymlinkRecord(record)) continue;
+      if (!bestLink || link.length > bestLink.length) bestLink = link;
+    }
+    if (!bestLink) return path;
+    const record = this.opfs.readFile(this.#key(bestLink));
+    return isSymlinkRecord(record) ? normalizePath(`${record.target}${path.slice(bestLink.length)}`) : path;
   }
 
   #key(path: string): string {

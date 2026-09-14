@@ -310,8 +310,20 @@ function createWorkspaceFsFacade(reader: WorkspaceModuleReader, writer?: Package
       async realpath(path: string): Promise<string> {
         return facade.realpathSync(path);
       },
+      async rm(path: string, options: CliRmOptions = {}): Promise<void> {
+        facade.rmSync(path, options);
+      },
+      async rmdir(path: string, options: CliRmOptions = {}): Promise<void> {
+        facade.rmdirSync(path, options);
+      },
       async stat(path: string): Promise<ReturnType<RuntimeFsBinding["statSync"]>> {
         return facade.statSync(path);
+      },
+      async symlink(target: string, path: string): Promise<void> {
+        facade.symlinkSync(target, path);
+      },
+      async unlink(path: string): Promise<void> {
+        facade.unlinkSync(path);
       },
       async utimes(path: string, atime: Date | number | string, mtime: Date | number | string): Promise<void> {
         facade.utimesSync(path, atime, mtime);
@@ -343,11 +355,44 @@ function createWorkspaceFsFacade(reader: WorkspaceModuleReader, writer?: Package
     realpathSync(path: string): string {
       return normalize(path);
     },
+    rm(path: string, optionsOrCallback: CliRmOptions | ((error?: Error | null) => void) = {}, callback?: (error?: Error | null) => void): void {
+      const cb = typeof optionsOrCallback === "function" ? optionsOrCallback : callback;
+      try {
+        facade.rmSync(path, typeof optionsOrCallback === "function" ? {} : optionsOrCallback);
+        cb?.(null);
+      } catch (error) {
+        cb?.(error instanceof Error ? error : new Error(String(error)));
+      }
+    },
+    rmSync(path: string, options: CliRmOptions = {}): void {
+      if (!writer) throw unsupportedFsMutation("rmSync");
+      if (options.force && !facade.existsSync(path)) return;
+      writer.remove(normalize(path));
+    },
+    rmdir(path: string, optionsOrCallback: CliRmOptions | ((error?: Error | null) => void) = {}, callback?: (error?: Error | null) => void): void {
+      facade.rm(path, optionsOrCallback, callback);
+    },
+    rmdirSync(path: string, options: CliRmOptions = {}): void {
+      facade.rmSync(path, options);
+    },
     statSync(path: string): ReturnType<RuntimeFsBinding["statSync"]> {
       return statFromReader(reader, path);
     },
     stat(path: string, callback: (error: Error | null, stats?: ReturnType<RuntimeFsBinding["statSync"]>) => void): void {
       callWithFsCallback(() => facade.statSync(path), callback);
+    },
+    symlink(target: string, path: string, typeOrCallback?: string | ((error?: Error | null) => void), callback?: (error?: Error | null) => void): void {
+      const cb = typeof typeOrCallback === "function" ? typeOrCallback : callback;
+      try {
+        facade.symlinkSync(target, path);
+        cb?.(null);
+      } catch (error) {
+        cb?.(error instanceof Error ? error : new Error(String(error)));
+      }
+    },
+    symlinkSync(target: string, path: string): void {
+      if (!writer?.symlink) throw unsupportedFsMutation("symlinkSync");
+      writer.symlink(resolveSymlinkTarget(target, path), normalize(path));
     },
     lstatSync(path: string): ReturnType<RuntimeFsBinding["statSync"]> {
       return statFromReader(reader, path);
@@ -362,6 +407,12 @@ function createWorkspaceFsFacade(reader: WorkspaceModuleReader, writer?: Package
     },
     utimesSync(path: string, _atime?: Date | number | string, _mtime?: Date | number | string): void {
       facade.statSync(path);
+    },
+    unlink(path: string, callback: (error?: Error | null) => void = () => undefined): void {
+      facade.rm(path, callback);
+    },
+    unlinkSync(path: string): void {
+      facade.rmSync(path);
     },
     writeFileSync(path: string, data: RuntimeFsData): void {
       if (!writer) throw unsupportedFsMutation("writeFileSync");
@@ -420,6 +471,11 @@ interface CliOpenMode {
   writable: boolean;
 }
 
+interface CliRmOptions {
+  force?: boolean;
+  recursive?: boolean;
+}
+
 interface HostProcessLike {
   on?(event: "uncaughtException" | "unhandledRejection", listener: (error: unknown) => void): unknown;
   off?(event: "uncaughtException" | "unhandledRejection", listener: (error: unknown) => void): unknown;
@@ -475,6 +531,17 @@ function initialOpenBytes(reader: WorkspaceModuleReader, path: string, mode: Cli
     if (mode.writable) return new Uint8Array();
     throw error;
   }
+}
+
+function resolveSymlinkTarget(target: string, linkPath: string): string {
+  if (target.startsWith("/")) return normalize(target);
+  return normalize(`${dirnameOf(linkPath)}/${target}`);
+}
+
+function dirnameOf(path: string): string {
+  const normalized = normalize(path);
+  const index = normalized.lastIndexOf("/");
+  return index <= 0 ? "/" : normalized.slice(0, index);
 }
 
 function parseProcessExit(message: string): number | null {

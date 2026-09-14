@@ -181,6 +181,7 @@ rl.close();
 assert.equal(closed, true);
 
 const files = new Map();
+const links = new Map();
 const fsPromises = createBuiltinLoader({
   fs: {
     closeSync() {},
@@ -197,6 +198,9 @@ const fsPromises = createBuiltinLoader({
     readSync() {
       return new Uint8Array();
     },
+    rmSync(path) {
+      files.delete(path);
+    },
     statSync(path) {
       const bytes = files.get(path);
       return {
@@ -204,6 +208,9 @@ const fsPromises = createBuiltinLoader({
         isFile: () => files.has(path),
         isDirectory: () => false
       };
+    },
+    symlinkSync(target, path) {
+      links.set(path, target);
     },
     writeFileSync(path, data) {
       files.set(path, typeof data === "string" ? new TextEncoder().encode(data) : new Uint8Array(data));
@@ -217,6 +224,11 @@ await fsPromises.writeFile("/workspace/fs-promises.txt", "hello");
 assert.equal(await fsPromises.readFile("/workspace/fs-promises.txt", "utf8"), "hello");
 assert.equal((await fsPromises.stat("/workspace/fs-promises.txt")).size, 5);
 await fsPromises.utimes("/workspace/fs-promises.txt", new Date(), new Date());
+await fsPromises.unlink("/workspace/fs-promises.txt");
+assert.equal(files.has("/workspace/fs-promises.txt"), false);
+await fsPromises.rm("/workspace/missing.txt", { force: true });
+await fsPromises.symlink("/workspace/target", "/workspace/link", "dir");
+assert.equal(links.get("/workspace/link"), "/workspace/target");
 
 const fetchCalls = [];
 const httpRequire = createBuiltinLoader({

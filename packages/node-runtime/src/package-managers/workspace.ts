@@ -11,6 +11,7 @@ export interface PackageManagerWorkspaceWriter {
   copyDirectory(source: string, target: string): void;
   copyFile(source: string, target: string): void;
   mkdir(path: string): void;
+  remove(path: string): void;
   symlink?(target: string, path: string): void;
   writeText(path: string, data: string): void;
 }
@@ -32,19 +33,23 @@ export class MemoryPackageManagerWorkspace implements PackageManagerWorkspace {
   }
 
   readText(path: string): string {
-    const normalized = normalizePath(path);
+    const normalized = this.resolvePath(path);
     const data = this.files.get(normalized);
     if (data === undefined) throw createWorkspaceError("ENOENT", `No such file: ${normalized}`);
     return data;
   }
 
   listDir(path: string): string[] {
-    const normalized = normalizePath(path);
+    const normalized = this.resolvePath(path);
     const prefix = normalized === "/" ? "/" : `${normalized}/`;
     const entries = new Set<string>();
     for (const directory of this.directories) {
       if (directory === normalized || !directory.startsWith(prefix)) continue;
       entries.add(firstPathSegment(directory.slice(prefix.length)));
+    }
+    for (const link of this.links.keys()) {
+      if (!link.startsWith(prefix)) continue;
+      entries.add(firstPathSegment(link.slice(prefix.length)));
     }
     for (const file of this.files.keys()) {
       if (!file.startsWith(prefix)) continue;
@@ -89,6 +94,24 @@ export class MemoryPackageManagerWorkspace implements PackageManagerWorkspace {
     }
   }
 
+  remove(path: string): void {
+    const normalized = normalizePath(path);
+    this.files.delete(normalized);
+    this.links.delete(normalized);
+    const prefix = `${normalized}/`;
+    for (const file of [...this.files.keys()]) {
+      if (file.startsWith(prefix)) this.files.delete(file);
+    }
+    for (const link of [...this.links.keys()]) {
+      if (link.startsWith(prefix)) this.links.delete(link);
+    }
+    for (const directory of [...this.directories]) {
+      if (directory !== "/" && (directory === normalized || directory.startsWith(prefix))) {
+        this.directories.delete(directory);
+      }
+    }
+  }
+
   symlink(target: string, path: string): void {
     const normalized = normalizePath(path);
     ensureDirectory(this.directories, dirname(normalized));
@@ -97,7 +120,19 @@ export class MemoryPackageManagerWorkspace implements PackageManagerWorkspace {
 
   exists(path: string): boolean {
     const normalized = normalizePath(path);
-    return this.files.has(normalized) || this.directories.has(normalized) || this.links.has(normalized);
+    if (this.files.has(normalized) || this.directories.has(normalized) || this.links.has(normalized)) return true;
+    const resolved = this.resolvePath(normalized);
+    return this.files.has(resolved) || this.directories.has(resolved) || this.links.has(resolved);
+  }
+
+  private resolvePath(path: string): string {
+    let normalized = normalizePath(path);
+    for (let depth = 0; depth < 16; depth += 1) {
+      const next = resolveOneSymlink(this.links, normalized);
+      if (next === normalized) return normalized;
+      normalized = next;
+    }
+    throw createWorkspaceError("ELOOP", `Too many symbolic links: ${path}`);
   }
 }
 
@@ -124,6 +159,18 @@ function dirname(path: string): string {
 function firstPathSegment(path: string): string {
   const index = path.indexOf("/");
   return index === -1 ? path : path.slice(0, index);
+}
+
+function resolveOneSymlink(links: Map<string, string>, path: string): string {
+  let bestLink: string | null = null;
+  for (const link of links.keys()) {
+    if (path !== link && !path.startsWith(`${link}/`)) continue;
+    if (!bestLink || link.length > bestLink.length) bestLink = link;
+  }
+  if (!bestLink) return path;
+  const target = links.get(bestLink);
+  if (!target) return path;
+  return normalizePath(`${target}${path.slice(bestLink.length)}`);
 }
 
 function createWorkspaceError(code: string, message: string): Error & { code: string } {

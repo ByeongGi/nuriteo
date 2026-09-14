@@ -16,13 +16,27 @@ const mountRoot = "/workspace";
 const workspace = new MemoryPackageManagerWorkspace([
   ...readMounts(repoRoot, mountRoot, "vendor/cli/npm/10.9.2/package"),
   {
+    path: "/workspace/local-dep/package.json",
+    data: JSON.stringify({
+      name: "local-dep",
+      version: "1.0.0",
+      main: "index.js"
+    })
+  },
+  {
+    path: "/workspace/local-dep/index.js",
+    data: "module.exports = 'local-dep';\n"
+  },
+  {
     path: "/workspace/project/package.json",
     data: JSON.stringify({
       name: "npm-install-fixture",
       version: "0.0.0",
       private: true,
       scripts: {},
-      dependencies: {}
+      dependencies: {
+        "local-dep": "file:../local-dep"
+      }
     })
   }
 ]);
@@ -50,9 +64,12 @@ const result = await evaluate({
 
 assert.equal(result.stderr, "");
 assert.equal(result.exitCode, 0);
-assert.match(result.stdout, /up to date/);
+assert.match(result.stdout, /added 1 package/);
 assert.equal(workspace.exists("/workspace/project/node_modules"), true);
-assert.equal(JSON.parse(workspace.readText("/workspace/project/package-lock.json")).lockfileVersion, 3);
+assert.equal(workspace.exists("/workspace/project/node_modules/local-dep/package.json"), true);
+const lockfile = JSON.parse(workspace.readText("/workspace/project/package-lock.json"));
+assert.equal(lockfile.lockfileVersion, 3);
+assert.equal(lockfile.packages["node_modules/local-dep"].link, true);
 
 console.log("npm install cli module evaluation test ok");
 

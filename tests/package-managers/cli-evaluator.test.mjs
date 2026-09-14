@@ -60,6 +60,18 @@ const workspace = new MemoryPackageManagerWorkspace([
         fs.writeFileSync(process.cwd() + '/sync.txt', 'sync');
         await fs.promises.writeFile(process.cwd() + '/.cache/async.txt', 'async');
         await fs.promises.lstat(process.cwd() + '/.cache/async.txt');
+        fs.writeFileSync(process.cwd() + '/delete-me.txt', 'delete');
+        fs.unlinkSync(process.cwd() + '/delete-me.txt');
+        fs.writeFileSync(process.cwd() + '/delete-me-async.txt', 'delete');
+        await fs.promises.unlink(process.cwd() + '/delete-me-async.txt');
+        fs.mkdirSync(process.cwd() + '/delete-dir');
+        fs.rmSync(process.cwd() + '/delete-dir', { recursive: true, force: true });
+        fs.mkdirSync(process.cwd() + '/delete-dir-async');
+        await fs.promises.rm(process.cwd() + '/delete-dir-async', { recursive: true, force: true });
+        fs.mkdirSync(process.cwd() + '/linked-source');
+        fs.writeFileSync(process.cwd() + '/linked-source/package.json', '{"name":"linked-source"}');
+        fs.symlinkSync(process.cwd() + '/linked-source', process.cwd() + '/linked-package', 'dir');
+        await fs.promises.symlink(process.cwd() + '/linked-source', process.cwd() + '/linked-package-async', 'dir');
         const fd = fs.openSync(process.cwd() + '/fd.txt', 'w');
         const bytesWritten = fs.writeSync(fd, 'fd');
         if (bytesWritten !== 2) throw new Error('unexpected write length');
@@ -216,6 +228,12 @@ assert.equal(workspace.readText("/workspace/project/sync.txt"), "sync");
 assert.equal(workspace.readText("/workspace/project/.cache/async.txt"), "async");
 assert.equal(workspace.readText("/workspace/project/fd.txt"), "fd");
 assert.equal(workspace.readText("/workspace/project/numeric-fd.txt"), "numeric");
+assert.equal(workspace.exists("/workspace/project/delete-me.txt"), false);
+assert.equal(workspace.exists("/workspace/project/delete-me-async.txt"), false);
+assert.equal(workspace.exists("/workspace/project/delete-dir"), false);
+assert.equal(workspace.exists("/workspace/project/delete-dir-async"), false);
+assert.equal(workspace.readText("/workspace/project/linked-package/package.json"), '{"name":"linked-source"}');
+assert.equal(workspace.readText("/workspace/project/linked-package-async/package.json"), '{"name":"linked-source"}');
 
 const asyncErrorResult = await createAsyncCliModuleEvaluator({
   root: "/workspace",
