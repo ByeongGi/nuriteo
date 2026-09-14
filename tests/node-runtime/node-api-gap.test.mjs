@@ -22,7 +22,22 @@ for (const name of unsupported) {
   assert.ok(entry.acceptance.length > 0, `${name} must declare acceptance criteria`);
 }
 
-for (const name of ["assert", "buffer", "events", "os", "path", "process", "stream", "tty", "url", "util"]) {
+for (const name of [
+  "assert",
+  "buffer",
+  "constants",
+  "events",
+  "os",
+  "path",
+  "process",
+  "querystring",
+  "stream",
+  "string_decoder",
+  "timers/promises",
+  "tty",
+  "url",
+  "util"
+]) {
   const entry = gapsByName.get(name);
   assert.equal(entry?.status, "partial");
   assert.ok(entry.implementedBy.startsWith("packages/node-runtime/src/builtins/"));

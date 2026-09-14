@@ -20,7 +20,7 @@
     {
       "id": "node-profile",
       "path": "packages/node-runtime/src/node-profile.ts",
-      "summary": "Current browser-native Node profile marks buffer, events, stream, and util as partial."
+      "summary": "Current browser-native Node profile marks core package-manager builtins as partial."
     },
     {
       "id": "cli-smoke",
@@ -113,6 +113,17 @@
         "stream implementation can depend on the shared EventEmitter subset."
       ],
       "nextPhase": "P9-02"
+    },
+    {
+      "builtin": "constants",
+      "status": "partial",
+      "priority": 1,
+      "implementedBy": "packages/node-runtime/src/builtins/constants.ts",
+      "tests": ["tests/node-runtime/secondary-builtins.test.mjs"],
+      "requiredBy": ["graceful-fs", "package-manager filesystem compatibility"],
+      "minimumApi": ["O_RDONLY", "O_WRONLY", "O_RDWR", "S_IFMT", "S_IFREG", "S_IFDIR", "S_IFLNK", "F_OK", "R_OK", "W_OK", "X_OK"],
+      "acceptance": ["Common dependency constants resolve through require('constants') and require('node:constants')."],
+      "nextPhase": "P10"
     },
     {
       "builtin": "util",
@@ -210,6 +221,39 @@
       "minimumApi": ["tmpdir", "homedir", "platform", "arch", "cpus", "EOL"],
       "acceptance": ["Package-manager fixtures use stable browser-safe values."],
       "nextPhase": "P9-04"
+    },
+    {
+      "builtin": "querystring",
+      "status": "partial",
+      "priority": 2,
+      "implementedBy": "packages/node-runtime/src/builtins/querystring.ts",
+      "tests": ["tests/node-runtime/secondary-builtins.test.mjs"],
+      "requiredBy": ["npm registry fetch", "package-manager URL compatibility"],
+      "minimumApi": ["parse", "stringify", "escape", "unescape", "encode", "decode"],
+      "acceptance": ["Duplicate keys, plus-space decoding, and array stringification pass under browser runtime."],
+      "nextPhase": "P10"
+    },
+    {
+      "builtin": "string_decoder",
+      "status": "partial",
+      "priority": 2,
+      "implementedBy": "packages/node-runtime/src/builtins/string-decoder.ts",
+      "tests": ["tests/node-runtime/secondary-builtins.test.mjs"],
+      "requiredBy": ["minipass", "readable-stream", "package-manager stream compatibility"],
+      "minimumApi": ["StringDecoder", "write", "end", "utf8 multibyte boundary handling"],
+      "acceptance": ["Split UTF-8 byte sequences decode without replacement characters across write/end."],
+      "nextPhase": "P10"
+    },
+    {
+      "builtin": "timers/promises",
+      "status": "partial",
+      "priority": 2,
+      "implementedBy": "packages/node-runtime/src/builtins/timers.ts",
+      "tests": ["tests/node-runtime/secondary-builtins.test.mjs"],
+      "requiredBy": ["package-manager async retry/backoff compatibility"],
+      "minimumApi": ["setTimeout promise", "AbortSignal cancellation"],
+      "acceptance": ["Promise timeout resolves with the supplied value and rejects on an aborted signal."],
+      "nextPhase": "P10"
     },
     {
       "builtin": "tty",

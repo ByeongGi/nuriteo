@@ -25,6 +25,12 @@ export const NODE_PROFILE = Object.freeze({
       implementedBy: "packages/node-runtime/src/builtins/buffer.ts",
       tests: Object.freeze(["tests/node-runtime/builtin-subset.test.mjs"])
     }),
+    constants: Object.freeze({
+      status: "partial",
+      source: "browser-native-js",
+      implementedBy: "packages/node-runtime/src/builtins/constants.ts",
+      tests: Object.freeze(["tests/node-runtime/secondary-builtins.test.mjs"])
+    }),
     events: Object.freeze({
       status: "partial",
       source: "browser-native-js",
@@ -55,11 +61,29 @@ export const NODE_PROFILE = Object.freeze({
       implementedBy: "packages/node-runtime/src/builtins/process.ts",
       tests: Object.freeze(["tests/node-runtime/secondary-builtins.test.mjs"])
     }),
+    querystring: Object.freeze({
+      status: "partial",
+      source: "browser-native-js",
+      implementedBy: "packages/node-runtime/src/builtins/querystring.ts",
+      tests: Object.freeze(["tests/node-runtime/secondary-builtins.test.mjs"])
+    }),
     stream: Object.freeze({
       status: "partial",
       source: "browser-native-js",
       implementedBy: "packages/node-runtime/src/builtins/stream.ts",
       tests: Object.freeze(["tests/node-runtime/stream-subset.test.mjs"])
+    }),
+    string_decoder: Object.freeze({
+      status: "partial",
+      source: "browser-native-js",
+      implementedBy: "packages/node-runtime/src/builtins/string-decoder.ts",
+      tests: Object.freeze(["tests/node-runtime/secondary-builtins.test.mjs"])
+    }),
+    "timers/promises": Object.freeze({
+      status: "partial",
+      source: "browser-native-js",
+      implementedBy: "packages/node-runtime/src/builtins/timers.ts",
+      tests: Object.freeze(["tests/node-runtime/secondary-builtins.test.mjs"])
     }),
     tty: Object.freeze({
       status: "partial",
@@ -89,14 +113,18 @@ export const NODE_PROFILE = Object.freeze({
     "node:assert": Object.freeze(["browser-native-js:assert"]),
     "node:assert/strict": Object.freeze(["node:assert"]),
     "node:buffer": Object.freeze(["browser-native-js:buffer"]),
+    "node:constants": Object.freeze(["browser-native-js:constants"]),
     "node:events": Object.freeze(["browser-native-js:events"]),
     "node:module": Object.freeze(["browser-native-js:module"]),
     "node:os": Object.freeze(["browser-native-js:os"]),
     "node:path": Object.freeze(["browser-native-js:path"]),
     "node:path/posix": Object.freeze(["node:path"]),
     "node:process": Object.freeze(["browser-native-js:process"]),
+    "node:querystring": Object.freeze(["browser-native-js:querystring"]),
     "node:stream": Object.freeze(["browser-native-js:stream", "node:events"]),
     "node:stream/promises": Object.freeze(["node:stream"]),
+    "node:string_decoder": Object.freeze(["browser-native-js:string_decoder", "node:buffer"]),
+    "node:timers/promises": Object.freeze(["browser-native-js:timers"]),
     "node:tty": Object.freeze(["browser-native-js:tty", "node:stream"]),
     "node:url": Object.freeze(["browser-native-js:url", "node:path"]),
     "node:util": Object.freeze(["browser-native-js:util", "node:events"]),
@@ -106,8 +134,11 @@ export const NODE_PROFILE = Object.freeze({
     "path": Object.freeze(["node:path"]),
     "path/posix": Object.freeze(["node:path/posix"]),
     "process": Object.freeze(["node:process"]),
+    "querystring": Object.freeze(["node:querystring"]),
     "stream": Object.freeze(["node:stream"]),
     "stream/promises": Object.freeze(["node:stream/promises"]),
+    "string_decoder": Object.freeze(["node:string_decoder"]),
+    "timers/promises": Object.freeze(["node:timers/promises"]),
     "tty": Object.freeze(["node:tty"]),
     "url": Object.freeze(["node:url"]),
     "util": Object.freeze(["node:util"])

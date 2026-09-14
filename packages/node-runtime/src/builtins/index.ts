@@ -1,11 +1,15 @@
 export { AssertionError, assertBuiltin, deepEqual, deepStrictEqual, equal, ok, rejects, strict as assertStrict, strictEqual, throws } from "./assert.ts";
 export { Buffer, BrowserBuffer, bufferBuiltin, kMaxLength } from "./buffer.ts";
+export { constantsBuiltin } from "./constants.ts";
 export { EventEmitter, eventsBuiltin, once } from "./events.ts";
 export { builtinModules, createRequire, enableCompileCache, Module, moduleBuiltin } from "./module.ts";
 export { arch, cpus, EOL, freemem, homedir, osBuiltin, platform, release, tmpdir, totalmem, type as osType } from "./os.ts";
 export { basename, delimiter, dirname, extname, format as pathFormat, isAbsolute, join, normalize, parse as pathParse, pathBuiltin, posix, relative, resolve, sep } from "./path.ts";
 export { BrowserProcess, processBuiltin } from "./process.ts";
+export { decode as querystringDecode, encode as querystringEncode, escape as querystringEscape, parse as querystringParse, querystringBuiltin, stringify as querystringStringify, unescape as querystringUnescape } from "./querystring.ts";
 export { Duplex, PassThrough, Readable, Stream, Transform, Writable, finished, pipeline, promises as streamPromises, streamBuiltin, streamPromisesBuiltin } from "./stream.ts";
+export { StringDecoder, stringDecoderBuiltin } from "./string-decoder.ts";
+export { setTimeoutPromise, timersPromisesBuiltin } from "./timers.ts";
 export { ReadStream, ttyBuiltin, isatty, WriteStream } from "./tty.ts";
 export { domainToASCII, domainToUnicode, fileURLToPath, pathToFileURL, URL, urlBuiltin, URLSearchParams, urlToHttpOptions } from "./url.ts";
 export { utilBuiltin, callbackify, deprecate, format, inherits, inspect, promisify, types as utilTypes } from "./util.ts";

@@ -81,6 +81,9 @@ assert.equal(new tty.WriteStream().isTTY, false);
 const moduleBuiltin = requireBuiltin("node:module");
 assert.equal(moduleBuiltin.enableCompileCache().status, 0);
 assert.equal(moduleBuiltin.builtinModules.includes("node:module"), true);
+assert.equal(moduleBuiltin.builtinModules.includes("node:querystring"), true);
+assert.equal(moduleBuiltin.builtinModules.includes("node:string_decoder"), true);
+assert.equal(moduleBuiltin.builtinModules.includes("node:timers/promises"), true);
 assert.deepEqual(moduleBuiltin.Module._nodeModulePaths("/workspace/app"), [
   "/workspace/app/node_modules",
   "/workspace/node_modules",
@@ -95,15 +98,40 @@ assert.equal(processModule.cwd(), "/workspace/app");
 await new Promise((resolve) => processModule.nextTick(resolve));
 assert.equal(processBuiltin.platform, "linux");
 
+const constants = requireBuiltin("node:constants");
+assert.equal(constants.O_RDONLY, 0);
+assert.equal(constants.S_IFDIR, 0o040000);
+
+const querystring = requireBuiltin("querystring");
+assert.deepEqual({ ...querystring.parse("name=cargo+container&tag=web&tag=runtime") }, {
+  name: "cargo container",
+  tag: ["web", "runtime"]
+});
+assert.equal(querystring.stringify({ name: "cargo container", tag: ["web", "runtime"] }), "name=cargo%20container&tag=web&tag=runtime");
+
+const { StringDecoder } = requireBuiltin("node:string_decoder");
+const decoder = new StringDecoder("utf8");
+const encoded = new TextEncoder().encode("안녕");
+assert.equal(decoder.write(encoded.slice(0, 2)), "");
+assert.equal(decoder.end(encoded.slice(2)), "안녕");
+
+const timers = requireBuiltin("node:timers/promises");
+assert.equal(await timers.setTimeout(1, "done"), "done");
+
 const result = runUnsafeCommonJsForLocalTests(`
   const assert = require("node:assert/strict");
   const path = require("path");
   const os = require("node:os");
+  const qs = require("node:querystring");
+  const { Buffer } = require("buffer");
+  const { StringDecoder } = require("string_decoder");
   const { fileURLToPath, pathToFileURL } = require("url");
   const process = require("process");
   assert.equal(path.join("/workspace", "src", "..", "index.js"), "/workspace/index.js");
   assert.equal(fileURLToPath(pathToFileURL("/workspace/a b.js")), "/workspace/a b.js");
   assert.equal(os.platform(), "linux");
+  assert.equal(qs.parse("a=1&a=2").a.length, 2);
+  assert.equal(new StringDecoder().end(Buffer.from("ok")), "ok");
   module.exports = {
     cwd: process.cwd(),
     path: path.basename("/workspace/index.js"),
