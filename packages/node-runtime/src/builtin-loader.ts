@@ -18,6 +18,7 @@ import { querystringBuiltin } from "./builtins/querystring.ts";
 import { readlineBuiltin } from "./builtins/readline.ts";
 import { streamBuiltin, streamPromisesBuiltin } from "./builtins/stream.ts";
 import { stringDecoderBuiltin } from "./builtins/string-decoder.ts";
+import { timersBuiltin } from "./builtins/timers-classic.ts";
 import { timersPromisesBuiltin } from "./builtins/timers.ts";
 import { tlsBuiltin } from "./builtins/tls.ts";
 import { ttyBuiltin } from "./builtins/tty.ts";
@@ -25,6 +26,7 @@ import { urlBuiltin } from "./builtins/url.ts";
 import { utilBuiltin } from "./builtins/util.ts";
 import { v8Builtin } from "./builtins/v8.ts";
 import { workerThreadsBuiltin } from "./builtins/worker-threads-builtin.ts";
+import { zlibBuiltin } from "./builtins/zlib.ts";
 
 export function createBuiltinLoader(bindings: BuiltinBindings): (specifier: string) => RuntimeValue {
   const internalBinding = bindings.internalBinding;
@@ -62,6 +64,7 @@ export function createBuiltinLoader(bindings: BuiltinBindings): (specifier: stri
     if (specifier === "stream" || specifier === "node:stream") return bindings.stream || streamBuiltin;
     if (specifier === "stream/promises" || specifier === "node:stream/promises") return streamPromisesBuiltin;
     if (specifier === "string_decoder" || specifier === "node:string_decoder") return stringDecoderBuiltin;
+    if (specifier === "timers" || specifier === "node:timers") return timersBuiltin;
     if (specifier === "timers/promises" || specifier === "node:timers/promises") return timersPromisesBuiltin;
     if (specifier === "tls" || specifier === "node:tls") return tlsBuiltin;
     if (specifier === "tty" || specifier === "node:tty") return ttyBuiltin;
@@ -69,6 +72,7 @@ export function createBuiltinLoader(bindings: BuiltinBindings): (specifier: stri
     if (specifier === "util" || specifier === "node:util") return bindings.util || utilBuiltin;
     if (specifier === "v8" || specifier === "node:v8") return v8Builtin;
     if (specifier === "worker_threads" || specifier === "node:worker_threads") return workerThreadsBuiltin;
+    if (specifier === "zlib" || specifier === "node:zlib") return zlibBuiltin;
     throw new Error(`Unsupported builtin module: ${specifier}`);
   };
 }

@@ -24,7 +24,8 @@ export function evaluateCjs(runtime: ModuleRuntime, url: string): RuntimeValue {
     return module.exports;
   }
 
-  const require = (specifier: string) => runtime.requireSync(specifier, canonicalUrl);
+  const dirname = canonicalUrl.slice(0, canonicalUrl.lastIndexOf("/")) || "/";
+  const require = createCjsRequire(runtime, canonicalUrl, dirname);
   const factory = definition.kind === "cjs"
     ? definition.factory
     : compileCjsSource(runtime, definition.source, canonicalUrl, runtime.globals);
@@ -33,10 +34,37 @@ export function evaluateCjs(runtime: ModuleRuntime, url: string): RuntimeValue {
     module,
     require,
     filename: canonicalUrl,
-    dirname: canonicalUrl.slice(0, canonicalUrl.lastIndexOf("/")) || "/"
+    dirname
   });
   module.loaded = true;
   return module.exports;
+}
+
+function createCjsRequire(runtime: ModuleRuntime, filename: string, dirname: string): CjsContext["require"] {
+  return Object.assign(
+    (specifier: string) => runtime.requireSync(specifier, filename),
+    {
+      resolve: Object.assign(
+        (specifier: string) => runtime.resolve(specifier, filename),
+        {
+          paths: () => createNodeModulePaths(dirname)
+        }
+      )
+    }
+  );
+}
+
+function createNodeModulePaths(from: string): string[] {
+  const paths: string[] = [];
+  let current = from || "/workspace";
+  while (current !== "/") {
+    paths.push(`${current}/node_modules`);
+    const next = current.slice(0, current.lastIndexOf("/")) || "/";
+    if (next === current) break;
+    current = next;
+  }
+  paths.push("/node_modules");
+  return paths;
 }
 
 function compileCjsSource(runtime: ModuleRuntime, source: string, filename: string, globals: Record<string, RuntimeValue>): (context: CjsContext) => void {
@@ -48,14 +76,15 @@ function compileCjsSource(runtime: ModuleRuntime, source: string, filename: stri
     "__dirname",
     "process",
     "global",
+    "console",
     "__dynamicImport",
     `${rewriteDynamicImports(stripShebang(source))}\n//# sourceURL=${filename}`
-  ) as (exports: RuntimeModule["exports"], require: (specifier: string) => RuntimeValue, module: RuntimeModule, filename: string, dirname: string, process: RuntimeValue, global: RuntimeValue, dynamicImport: (specifier: string) => Promise<RuntimeNamespace>) => void;
+  ) as (exports: RuntimeModule["exports"], require: (specifier: string) => RuntimeValue, module: RuntimeModule, filename: string, dirname: string, process: RuntimeValue, global: RuntimeValue, console: RuntimeValue, dynamicImport: (specifier: string) => Promise<RuntimeNamespace>) => void;
   return ({ exports, require, module, filename, dirname }) => {
     const dynamicImport = typeof globals.__dynamicImport === "function"
       ? globals.__dynamicImport as (specifier: string) => Promise<RuntimeNamespace>
       : (specifier: string) => runtime.importModule(specifier, filename);
-    compiled(exports, require, module, filename, dirname, globals.process, globals.global, dynamicImport);
+    compiled(exports, require, module, filename, dirname, globals.process, globals.global, globals.console ?? console, dynamicImport);
   };
 }
 

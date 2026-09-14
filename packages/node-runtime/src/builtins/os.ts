@@ -1,4 +1,29 @@
 export const EOL = "\n";
+export const constants = Object.freeze({
+  signals: Object.freeze({
+    SIGHUP: 1,
+    SIGINT: 2,
+    SIGQUIT: 3,
+    SIGILL: 4,
+    SIGTRAP: 5,
+    SIGABRT: 6,
+    SIGBUS: 7,
+    SIGFPE: 8,
+    SIGKILL: 9,
+    SIGUSR1: 10,
+    SIGSEGV: 11,
+    SIGUSR2: 12,
+    SIGPIPE: 13,
+    SIGALRM: 14,
+    SIGTERM: 15,
+    SIGCHLD: 17,
+    SIGCONT: 18,
+    SIGSTOP: 19,
+    SIGTSTP: 20,
+    SIGTTIN: 21,
+    SIGTTOU: 22
+  })
+});
 
 export function tmpdir(): string {
   return "/tmp";
@@ -32,6 +57,10 @@ export function release(): string {
   return "browser";
 }
 
+export function version(): string {
+  return "browser";
+}
+
 export function freemem(): number {
   return 0;
 }
@@ -43,10 +72,12 @@ export function totalmem(): number {
 export const osBuiltin = Object.freeze({
   EOL,
   arch,
+  constants,
   cpus,
   default: {
     EOL,
     arch,
+    constants,
     cpus,
     freemem,
     homedir,
@@ -54,7 +85,8 @@ export const osBuiltin = Object.freeze({
     release,
     tmpdir,
     totalmem,
-    type
+    type,
+    version
   },
   freemem,
   homedir,
@@ -62,5 +94,6 @@ export const osBuiltin = Object.freeze({
   release,
   tmpdir,
   totalmem,
-  type
+  type,
+  version
 });

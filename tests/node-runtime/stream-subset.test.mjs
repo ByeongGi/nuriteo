@@ -108,7 +108,11 @@ await exerciseStreams({
 
 const requireBuiltin = createBuiltinLoader({});
 assert.equal(requireBuiltin("node:stream").Readable, RuntimeReadable);
+assert.equal(typeof requireBuiltin("stream"), "function");
+assert.equal(requireBuiltin("stream").Stream, requireBuiltin("stream"));
 assert.equal(requireBuiltin("stream/promises").pipeline, streamPromisesBuiltin.pipeline);
+assert.equal(requireBuiltin("node:zlib").Z_SYNC_FLUSH, 2);
+assert.equal(typeof requireBuiltin("zlib").createGunzip().write, "function");
 
 const result = runUnsafeCommonJsForLocalTests(`
   const { Readable, Transform, Writable } = require("node:stream");

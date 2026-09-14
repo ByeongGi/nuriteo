@@ -73,7 +73,15 @@ const requireBuiltin = createBuiltinLoader({});
 const bufferBuiltin = requireBuiltin("node:buffer");
 assert.equal(bufferBuiltin.Buffer.from("ok").toString(), "ok");
 assert.equal(typeof requireBuiltin("events"), "function");
-assert.equal(requireBuiltin("events").EventEmitter, EventEmitter);
+assert.equal(requireBuiltin("events").EventEmitter, requireBuiltin("events"));
+const LegacyEventEmitter = requireBuiltin("events");
+function LegacyChild() {
+  LegacyEventEmitter.call(this);
+}
+Object.setPrototypeOf(LegacyChild.prototype, LegacyEventEmitter.prototype);
+const legacyEmitter = new LegacyChild();
+legacyEmitter.on("tick", () => true);
+assert.equal(legacyEmitter.emit("tick"), true);
 assert.equal(requireBuiltin("util").format("x:%s", "y"), "x:y");
 assert.equal(requireBuiltin("node:util").formatWithOptions({ colors: false }, "x:%s", "y"), "x:y");
 

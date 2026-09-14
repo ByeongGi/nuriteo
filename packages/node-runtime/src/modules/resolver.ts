@@ -59,7 +59,7 @@ export class ModuleResolver {
     const name = packageName(specifier);
     const root = this.findPackageRoot(name, parentUrl) || this.findSelfPackageRoot(name, parentUrl);
     const manifest = root ? this.packageRoots[root] : this.packages[name];
-    if (!manifest) throw new Error(`ERR_MODULE_NOT_FOUND: ${specifier}`);
+    if (!manifest) throw moduleNotFound(`ERR_MODULE_NOT_FOUND: ${specifier}`);
 
     const subpath = specifier === name ? "." : `.${specifier.slice(name.length)}`;
     const target = resolvePackageTarget(manifest, subpath);
@@ -107,8 +107,12 @@ export class ModuleResolver {
       const real = this.realpath(candidate);
       if (this.modules.has(real)) return real;
     }
-    throw new Error(`ERR_MODULE_NOT_FOUND: ${path}`);
+    throw moduleNotFound(`ERR_MODULE_NOT_FOUND: ${path}`);
   }
+}
+
+function moduleNotFound(message: string): Error & { code: "MODULE_NOT_FOUND" } {
+  return Object.assign(new Error(message), { code: "MODULE_NOT_FOUND" as const });
 }
 
 function resolvePackageTarget(manifest: PackageManifest, subpath: string): string | undefined {

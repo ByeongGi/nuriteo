@@ -1,4 +1,5 @@
 type Listener = (...args: unknown[]) => void;
+type EventMap = Map<string | symbol, Listener[]>;
 
 export class EventEmitter {
   #events = new Map<string | symbol, Listener[]>();
@@ -85,8 +86,92 @@ export function once(emitter: EventEmitter, eventName: string | symbol): Promise
   });
 }
 
-export const eventsBuiltin = Object.assign(EventEmitter, {
-  EventEmitter,
+const legacyEventEmitter = createLegacyEventEmitterConstructor();
+
+export const eventsBuiltin = Object.assign(legacyEventEmitter, {
+  EventEmitter: legacyEventEmitter,
   once,
-  default: EventEmitter
+  default: legacyEventEmitter
 });
+
+function createLegacyEventEmitterConstructor(): typeof EventEmitter {
+  const events = new WeakMap<object, EventMap>();
+  const maxListeners = new WeakMap<object, number>();
+
+  function getEventMap(target: object): EventMap {
+    let map = events.get(target);
+    if (!map) {
+      map = new Map();
+      events.set(target, map);
+    }
+    return map;
+  }
+
+  function getListeners(target: object, eventName: string | symbol): Listener[] {
+    const map = getEventMap(target);
+    const listeners = map.get(eventName) || [];
+    map.set(eventName, listeners);
+    return listeners;
+  }
+
+  const LegacyEventEmitter = function EventEmitter() {
+    return undefined;
+  } as unknown as typeof EventEmitter;
+
+  LegacyEventEmitter.listenerCount = (emitter: EventEmitter, eventName: string | symbol) => emitter.listenerCount(eventName);
+  LegacyEventEmitter.prototype.on = function on(eventName: string | symbol, listener: Listener) {
+    return this.addListener(eventName, listener);
+  };
+  LegacyEventEmitter.prototype.addListener = function addListener(eventName: string | symbol, listener: Listener) {
+    getListeners(this, eventName).push(listener);
+    return this;
+  };
+  LegacyEventEmitter.prototype.once = function once(eventName: string | symbol, listener: Listener) {
+    const onceListener: Listener & { listener?: Listener } = (...args) => {
+      this.removeListener(eventName, onceListener);
+      listener.apply(this, args);
+    };
+    onceListener.listener = listener;
+    return this.addListener(eventName, onceListener);
+  };
+  LegacyEventEmitter.prototype.emit = function emit(eventName: string | symbol, ...args: unknown[]) {
+    const listeners = [...getListeners(this, eventName)];
+    if (listeners.length === 0) {
+      if (eventName === "error") {
+        const error = args[0];
+        throw error instanceof Error ? error : new Error(String(error || "Unhandled error event"));
+      }
+      return false;
+    }
+    for (const listener of listeners) listener.apply(this, args);
+    return true;
+  };
+  LegacyEventEmitter.prototype.off = function off(eventName: string | symbol, listener: Listener) {
+    return this.removeListener(eventName, listener);
+  };
+  LegacyEventEmitter.prototype.removeListener = function removeListener(eventName: string | symbol, listener: Listener) {
+    const listeners = getListeners(this, eventName);
+    const next = listeners.filter((item) => item !== listener && (item as Listener & { listener?: Listener }).listener !== listener);
+    listeners.splice(0, listeners.length, ...next);
+    return this;
+  };
+  LegacyEventEmitter.prototype.removeAllListeners = function removeAllListeners(eventName?: string | symbol) {
+    if (eventName === undefined) getEventMap(this).clear();
+    else getEventMap(this).delete(eventName);
+    return this;
+  };
+  LegacyEventEmitter.prototype.listeners = function listenersFor(eventName: string | symbol) {
+    return [...getListeners(this, eventName)].map((listener) => (listener as Listener & { listener?: Listener }).listener || listener);
+  };
+  LegacyEventEmitter.prototype.listenerCount = function listenerCount(eventName: string | symbol) {
+    return getListeners(this, eventName).length;
+  };
+  LegacyEventEmitter.prototype.setMaxListeners = function setMaxListeners(count: number) {
+    maxListeners.set(this, count);
+    return this;
+  };
+  LegacyEventEmitter.prototype.getMaxListeners = function getMaxListeners() {
+    return maxListeners.get(this) ?? 10;
+  };
+  return LegacyEventEmitter;
+}

@@ -1,4 +1,5 @@
 import { createBuiltinLoader } from "../builtin-loader.ts";
+import { constantsBuiltin } from "../builtins/constants.ts";
 import { normalize } from "../builtins/path.ts";
 import { BrowserProcess } from "../builtins/process.ts";
 import { createWorkspaceModuleRuntime, type WorkspaceModuleReader } from "../modules/index.ts";
@@ -54,6 +55,7 @@ function startCliModuleEvaluation(options: CliModuleEvaluatorOptions, request: C
   const globalObject: Record<string, unknown> = {
     __dynamicImport: createCliDynamicImport()
   };
+  const consoleObject = createCliConsole(process);
   const fs = createWorkspaceFsFacade(options.reader);
 
   const runtime = createWorkspaceModuleRuntime({
@@ -62,6 +64,7 @@ function startCliModuleEvaluation(options: CliModuleEvaluatorOptions, request: C
     builtins: createBuiltinLoader({ fs, process }),
     globals: {
       __dynamicImport: globalObject.__dynamicImport,
+      console: consoleObject,
       global: globalObject,
       process
     }
@@ -91,6 +94,20 @@ function startCliModuleEvaluation(options: CliModuleEvaluatorOptions, request: C
         entry: request.entry.entry,
         ...(request.entry.entrySha256 ? { entrySha256: request.entry.entrySha256 } : {})
       };
+    }
+  };
+}
+
+function createCliConsole(process: BrowserProcess): Pick<Console, "error" | "log" | "warn"> {
+  return {
+    error(...values: unknown[]) {
+      process.stderr.write(`${values.join(" ")}\n`);
+    },
+    log(...values: unknown[]) {
+      process.stdout.write(`${values.join(" ")}\n`);
+    },
+    warn(...values: unknown[]) {
+      process.stderr.write(`${values.join(" ")}\n`);
     }
   };
 }
@@ -160,6 +177,10 @@ function createWorkspaceFsFacade(reader: WorkspaceModuleReader): RuntimeFsBindin
   const decoder = new TextDecoder();
   let nextFd = 3;
   const openFiles = new Map<number, Uint8Array>();
+  const realpath: CliFsRealpath = (path, callback) => {
+    callback(null, normalize(path));
+  };
+  realpath.native = realpath;
 
   function readFileSync(path: string): Uint8Array;
   function readFileSync(path: string, encoding: "utf8" | "utf-8"): string;
@@ -169,6 +190,7 @@ function createWorkspaceFsFacade(reader: WorkspaceModuleReader): RuntimeFsBindin
   }
 
   const facade = {
+    constants: constantsBuiltin,
     close(fd: number, callback: (error?: Error | null) => void = () => undefined): void {
       openFiles.delete(fd);
       callback(null);
@@ -177,6 +199,8 @@ function createWorkspaceFsFacade(reader: WorkspaceModuleReader): RuntimeFsBindin
       openFiles.delete(fd);
     },
     existsSync(path: string): boolean {
+      const maybeReader = reader as WorkspaceModuleReader & { exists?: (path: string) => boolean };
+      if (maybeReader.exists) return maybeReader.exists(normalize(path));
       try {
         reader.readText(normalize(path));
         return true;
@@ -205,6 +229,26 @@ function createWorkspaceFsFacade(reader: WorkspaceModuleReader): RuntimeFsBindin
       openFiles.set(fd, new TextEncoder().encode(reader.readText(normalize(path))));
       return fd;
     },
+    promises: {
+      async mkdir(_path: string): Promise<void> {
+        throw unsupportedFsMutation("promises.mkdir");
+      },
+      async readFile(path: string, encoding?: "utf8" | "utf-8"): Promise<Uint8Array | string> {
+        return encoding ? readFileSync(path, encoding) : readFileSync(path);
+      },
+      async readdir(path: string): Promise<string[]> {
+        return facade.readdirSync(path);
+      },
+      async realpath(path: string): Promise<string> {
+        return facade.realpathSync(path);
+      },
+      async stat(path: string): Promise<ReturnType<RuntimeFsBinding["statSync"]>> {
+        return facade.statSync(path);
+      },
+      async writeFile(_path: string): Promise<void> {
+        throw unsupportedFsMutation("promises.writeFile");
+      }
+    },
     readFile(path: string, options: unknown, callback?: (error: Error | null, data?: Uint8Array | string) => void): void {
       const cb = typeof options === "function" ? options : callback;
       const encoding = typeof options === "string" ? options : undefined;
@@ -224,6 +268,7 @@ function createWorkspaceFsFacade(reader: WorkspaceModuleReader): RuntimeFsBindin
     readdirSync(path: string): string[] {
       return reader.listDir(normalize(path));
     },
+    realpath,
     realpathSync(path: string): string {
       return normalize(path);
     },
@@ -236,12 +281,19 @@ function createWorkspaceFsFacade(reader: WorkspaceModuleReader): RuntimeFsBindin
     writeFileSync(_path: string): void {
       throw unsupportedFsMutation("writeFileSync");
     },
+    writev(_fd: number, _buffers: ArrayBufferView[], callback: (error?: Error | null, bytesWritten?: number, buffers?: ArrayBufferView[]) => void = () => undefined): void {
+      callback(unsupportedFsMutation("writev"));
+    },
     writeSync(): number {
       throw unsupportedFsMutation("writeSync");
     }
   };
   return facade as RuntimeFsBinding;
 }
+
+type CliFsRealpath = ((path: string, callback: (error: Error | null, resolvedPath?: string) => void) => void) & {
+  native?: CliFsRealpath;
+};
 
 function statFromReader(reader: WorkspaceModuleReader, path: string): ReturnType<RuntimeFsBinding["statSync"]> {
   try {

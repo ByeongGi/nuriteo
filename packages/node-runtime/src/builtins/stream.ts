@@ -4,6 +4,7 @@ import type { RuntimeValue } from "../types.ts";
 type StreamCallback = (error?: Error | null) => void;
 type WriteCallback = (error?: Error | null) => void;
 type TransformCallback = (error?: Error | null, data?: RuntimeValue) => void;
+type Listener = (...args: unknown[]) => void;
 
 export interface WritableOptions {
   write?: (chunk: RuntimeValue, encoding: string, callback: WriteCallback) => void;
@@ -275,14 +276,16 @@ export const promises = Object.freeze({
   pipeline: (...streams: Array<Readable | Writable | Transform | Duplex>) => pipeline(...streams) as Promise<void>
 });
 
-export const streamBuiltin = Object.freeze({
+const legacyStream = createLegacyStreamConstructor();
+
+export const streamBuiltin = Object.assign(legacyStream, {
   Duplex,
   PassThrough,
   Readable,
-  Stream,
+  Stream: legacyStream,
   Transform,
   Writable,
-  default: Stream,
+  default: legacyStream,
   finished,
   pipeline,
   promises
@@ -348,4 +351,55 @@ function waitForCompletion(stream: EventEmitter): Promise<void> {
 
 function asError(error: RuntimeValue): Error {
   return error instanceof Error ? error : new Error(String(error ?? "Stream error"));
+}
+
+function createLegacyStreamConstructor(): typeof Stream {
+  const listeners = new WeakMap<object, Map<string | symbol, Listener[]>>();
+
+  function getListeners(target: object, eventName: string | symbol): Listener[] {
+    let events = listeners.get(target);
+    if (!events) {
+      events = new Map();
+      listeners.set(target, events);
+    }
+    const eventListeners = events.get(eventName) || [];
+    events.set(eventName, eventListeners);
+    return eventListeners;
+  }
+
+  const LegacyStream = function Stream() {
+    return undefined;
+  } as unknown as typeof Stream;
+
+  LegacyStream.prototype.on = function on(eventName: string | symbol, listener: Listener) {
+    getListeners(this, eventName).push(listener);
+    return this;
+  };
+  LegacyStream.prototype.addListener = LegacyStream.prototype.on;
+  LegacyStream.prototype.once = function once(eventName: string | symbol, listener: Listener) {
+    const onceListener: Listener & { listener?: Listener } = (...args) => {
+      this.removeListener(eventName, onceListener);
+      listener.apply(this, args);
+    };
+    onceListener.listener = listener;
+    return this.on(eventName, onceListener);
+  };
+  LegacyStream.prototype.emit = function emit(eventName: string | symbol, ...args: unknown[]) {
+    const eventListeners = [...getListeners(this, eventName)];
+    if (eventListeners.length === 0 && eventName === "error") throw asError(args[0]);
+    for (const listener of eventListeners) listener.apply(this, args);
+    return eventListeners.length > 0;
+  };
+  LegacyStream.prototype.off = function off(eventName: string | symbol, listener: Listener) {
+    return this.removeListener(eventName, listener);
+  };
+  LegacyStream.prototype.removeListener = function removeListener(eventName: string | symbol, listener: Listener) {
+    const eventListeners = getListeners(this, eventName);
+    const next = eventListeners.filter((item) => item !== listener && (item as Listener & { listener?: Listener }).listener !== listener);
+    eventListeners.splice(0, eventListeners.length, ...next);
+    return this;
+  };
+  LegacyStream.prototype.pipe = Stream.prototype.pipe;
+  LegacyStream.prototype.unpipe = Stream.prototype.unpipe;
+  return LegacyStream;
 }

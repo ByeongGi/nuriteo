@@ -100,12 +100,13 @@ export const posix = Object.freeze({
   sep
 });
 
-export const pathBuiltin = Object.freeze({
+export const pathBuiltin = {
   ...posix,
-  default: posix,
   posix,
   win32: posix
-});
+} as typeof posix & { default: typeof posix & { posix: typeof posix; win32: typeof posix }; posix: typeof posix; win32: typeof posix };
+pathBuiltin.default = pathBuiltin;
+Object.freeze(pathBuiltin);
 
 function normalizeParts(parts: string[], allowAboveRoot: boolean): string[] {
   const output: string[] = [];

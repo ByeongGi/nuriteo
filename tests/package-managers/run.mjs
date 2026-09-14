@@ -5,6 +5,7 @@ import "./conformance-matrix.test.mjs";
 import "./npm-cli-module-evaluation.test.mjs";
 import "./npm-guest-runtime-boot.test.mjs";
 import "./npm-install-plan.test.mjs";
+import "./pnpm-cli-module-evaluation.test.mjs";
 import "./pnpm-guest-runtime-boot.test.mjs";
 import "./pnpm-store-plan.test.mjs";
 import "./tarball-cache.test.mjs";

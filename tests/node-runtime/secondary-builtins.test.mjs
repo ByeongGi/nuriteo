@@ -73,6 +73,8 @@ assert.equal(os.arch(), "x64");
 assert.equal(os.tmpdir(), "/tmp");
 assert.equal(os.homedir(), "/home/webcontainer");
 assert.equal(os.EOL, "\n");
+assert.equal(os.version(), "browser");
+assert.equal(os.constants.signals.SIGTERM, 15);
 assert.equal(os.cpus().length, 1);
 
 const tty = requireBuiltin("node:tty");
@@ -108,6 +110,9 @@ assert.equal(processModule.stderr.write("", "utf8", () => { stderrFlushed = true
 assert.equal(stderrFlushed, true);
 processModule.chdir("app");
 assert.equal(processModule.cwd(), "/workspace/app");
+assert.equal(processModule.umask(), 0o022);
+assert.equal(processModule.umask(0o077), 0o022);
+assert.equal(processModule.umask(), 0o077);
 await new Promise((resolve) => processModule.nextTick(resolve));
 assert.equal(processBuiltin.platform, "linux");
 assert.throws(() => new BrowserProcess().exit(3), /process\.exit\(3\)/);
@@ -117,6 +122,8 @@ assert.equal(capturedProcess.exitCode, 4);
 
 const constants = requireBuiltin("node:constants");
 assert.equal(constants.O_RDONLY, 0);
+assert.equal(constants.O_CREAT, 0o100);
+assert.equal(constants.O_TRUNC, 0o1000);
 assert.equal(constants.S_IFDIR, 0o040000);
 
 const crypto = requireBuiltin("node:crypto");
@@ -155,6 +162,8 @@ assert.equal(decoder.end(encoded.slice(2)), "안녕");
 
 const timers = requireBuiltin("node:timers/promises");
 assert.equal(await timers.setTimeout(1, "done"), "done");
+assert.equal(typeof requireBuiltin("timers").setTimeout, "function");
+assert.equal(requireBuiltin("node:timers").clearTimeout, clearTimeout);
 
 const readline = requireBuiltin("node:readline");
 readline.emitKeypressEvents({ on() {} });

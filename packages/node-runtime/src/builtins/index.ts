@@ -10,13 +10,14 @@ export { Agent as HttpAgent, ClientRequest, createHttpBuiltin, createHttpsBuilti
 export { ClientHttp2Session, connect as http2Connect, constants as http2Constants, createSecureServer as createHttp2SecureServer, createServer as createHttp2Server, http2Builtin, UnsupportedHttp2Error } from "./http2.ts";
 export { builtinModules, createRequire, enableCompileCache, Module, moduleBuiltin } from "./module.ts";
 export { connect as netConnect, createConnection as netCreateConnection, isIP, isIPv4, isIPv6, netBuiltin, Socket, UnsupportedTcpSocketError } from "./net.ts";
-export { arch, cpus, EOL, freemem, homedir, osBuiltin, platform, release, tmpdir, totalmem, type as osType } from "./os.ts";
+export { arch, constants as osConstants, cpus, EOL, freemem, homedir, osBuiltin, platform, release, tmpdir, totalmem, type as osType, version as osVersion } from "./os.ts";
 export { basename, delimiter, dirname, extname, format as pathFormat, isAbsolute, join, normalize, parse as pathParse, pathBuiltin, posix, relative, resolve, sep } from "./path.ts";
 export { BrowserProcess, processBuiltin } from "./process.ts";
 export { decode as querystringDecode, encode as querystringEncode, escape as querystringEscape, parse as querystringParse, querystringBuiltin, stringify as querystringStringify, unescape as querystringUnescape } from "./querystring.ts";
 export { createInterface as createReadlineInterface, emitKeypressEvents, Interface as ReadlineInterface, readlineBuiltin } from "./readline.ts";
 export { Duplex, PassThrough, Readable, Stream, Transform, Writable, finished, pipeline, promises as streamPromises, streamBuiltin, streamPromisesBuiltin } from "./stream.ts";
 export { StringDecoder, stringDecoderBuiltin } from "./string-decoder.ts";
+export { timersBuiltin } from "./timers-classic.ts";
 export { setTimeoutPromise, timersPromisesBuiltin } from "./timers.ts";
 export { connect as tlsConnect, createSecureContext, tlsBuiltin, TLSSocket } from "./tls.ts";
 export { ReadStream, ttyBuiltin, isatty, WriteStream } from "./tty.ts";
@@ -24,3 +25,4 @@ export { domainToASCII, domainToUnicode, fileURLToPath, pathToFileURL, URL, urlB
 export { utilBuiltin, callbackify, deprecate, format, formatWithOptions, inherits, inspect, promisify, types as utilTypes } from "./util.ts";
 export { getHeapSpaceStatistics, getHeapStatistics, type HeapStatistics, v8Builtin } from "./v8.ts";
 export { isMainThread, MessageChannel, MessagePort, parentPort, SHARE_ENV, threadId, UnsupportedWorkerThreadError, Worker, workerData, workerThreadsBuiltin } from "./worker-threads-builtin.ts";
+export { BrotliCompress, BrotliDecompress, createBrotliDecompress, createDeflateRaw, createGunzip, createGzip, createInflate, createInflateRaw, createUnzip, DeflateRaw, deflateRawSync, Gzip, Inflate, inflateRawSync, InflateRaw, Unzip, Z_SYNC_FLUSH, zlibBuiltin } from "./zlib.ts";

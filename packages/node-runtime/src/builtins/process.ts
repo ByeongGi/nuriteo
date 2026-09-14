@@ -34,6 +34,7 @@ export class BrowserProcess extends EventEmitter {
   stderr = Object.freeze({ isTTY: false, write: (chunk: unknown, encodingOrCallback?: ProcessWriteEncoding | ProcessWriteCallback, callback?: ProcessWriteCallback) => this.#write("stderr", chunk, encodingOrCallback, callback) });
   #cwd: string;
   #exitMode: ProcessExitMode;
+  #umask = 0o022;
 
   constructor(options: ProcessBuiltinOptions = {}) {
     super();
@@ -66,6 +67,12 @@ export class BrowserProcess extends EventEmitter {
 
   uptime(): number {
     return 0;
+  }
+
+  umask(mask?: number): number {
+    const previous = this.#umask;
+    if (mask !== undefined) this.#umask = mask;
+    return previous;
   }
 
   #write(event: "stdout" | "stderr", chunk: unknown, encodingOrCallback?: ProcessWriteEncoding | ProcessWriteCallback, callback?: ProcessWriteCallback): boolean {
