@@ -10,6 +10,7 @@ export type PackageManagerCommandKind =
 
 export type PackageManagerBootMode =
   | "artifact-entry-preflight"
+  | "install-plan-application"
   | "blocked-real-cli-evaluation";
 
 export type PackageManagerErrorCode =
@@ -60,4 +61,9 @@ export interface CliArtifactReader {
 
 export interface GuestRuntimeProcessRunnerOptions {
   artifacts: CliArtifactReader;
+  workspace?: {
+    reader: import("./pnpm-store.ts").PnpmWorkspaceReader;
+    writer: import("./pnpm-store.ts").PnpmWorkspaceWriter;
+    linkStrategy?: "symlink" | "copy-fallback";
+  };
 }

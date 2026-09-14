@@ -5,6 +5,8 @@ import type {
   PackageManagerProcessResult,
   PackageManagerProcessRunner
 } from "./types.ts";
+import { applyNpmInstallPlan, createNpmInstallPlan } from "./npm-install.ts";
+import { applyPnpmStorePlan, createPnpmStorePlan } from "./pnpm-store.ts";
 
 export function createGuestRuntimeProcessRunner(options: GuestRuntimeProcessRunnerOptions): PackageManagerProcessRunner {
   if (!options?.artifacts) throw new Error("Guest runtime process runner requires CLI artifacts");
@@ -35,6 +37,10 @@ export function createGuestRuntimeProcessRunner(options: GuestRuntimeProcessRunn
       };
     }
 
+    if ((commandKind === "install" || commandKind === "ci") && options.workspace) {
+      return applyGuestInstallPlan(request, commandKind, options);
+    }
+
     const message = `${request.name}: real CLI evaluation is required for ${request.args.join(" ") || "<empty>"}`;
     return {
       ...baseResult(request),
@@ -48,6 +54,44 @@ export function createGuestRuntimeProcessRunner(options: GuestRuntimeProcessRunn
         nextAction: "Evaluate the vendored CLI module graph inside the browser guest runtime instead of using the host-node-test-helper."
       }
     };
+  };
+}
+
+function applyGuestInstallPlan(
+  request: PackageManagerProcessRequest,
+  commandKind: "install" | "ci",
+  options: GuestRuntimeProcessRunnerOptions
+): PackageManagerProcessResult {
+  if (!options.workspace) throw new Error("Guest install plan requires a workspace");
+
+  if (request.name === "npm") {
+    const plan = createNpmInstallPlan({
+      cwd: request.cwd,
+      linkStrategy: options.workspace.linkStrategy || "copy-fallback",
+      reader: options.workspace.reader
+    });
+    const applied = applyNpmInstallPlan(plan, options.workspace.writer);
+    return {
+      ...baseResult(request),
+      bootMode: "install-plan-application",
+      commandKind,
+      exitCode: 0,
+      stdout: `npm ${commandKind}: applied ${applied.links.length} local file links and ${applied.binLinks.length} bin links\n`
+    };
+  }
+
+  const plan = createPnpmStorePlan({
+    cwd: request.cwd,
+    linkStrategy: options.workspace.linkStrategy || "copy-fallback",
+    reader: options.workspace.reader
+  });
+  const applied = applyPnpmStorePlan(plan, options.workspace.writer);
+  return {
+    ...baseResult(request),
+    bootMode: "install-plan-application",
+    commandKind,
+    exitCode: 0,
+    stdout: `pnpm install: applied ${applied.packageLinks.length} workspace links and ${applied.binLinks.length} bin links\n`
   };
 }
 
