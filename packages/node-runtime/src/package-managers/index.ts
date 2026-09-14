@@ -9,6 +9,7 @@ export { createPnpmRunner, PnpmRunner } from "./pnpm-runner.ts";
 export { applyPnpmStorePlan, createPnpmStorePlan } from "./pnpm-store.ts";
 export { createPackageScriptRunner, PackageScriptRunner } from "./script-runner.ts";
 export { createPackageTarballCache, extractTarEntries, PackageTarballCache } from "./tarball-cache.ts";
+export { MemoryPackageManagerWorkspace } from "./workspace.ts";
 export type { InstallTransactionOptions, InstallTransactionResult } from "./install-transaction.ts";
 export type { PnpmStoreApplyOptions, PnpmStoreApplyResult, PnpmStorePlan, PnpmStorePlanOptions, PnpmWorkspaceLink, PnpmWorkspacePackage, PnpmWorkspaceReader, PnpmWorkspaceWriter } from "./pnpm-store.ts";
 export type { PackageTarballCacheMetrics, PackageTarballCacheOptions, PackageTarballRequest, PackageTarballResult, TarEntry } from "./tarball-cache.ts";
@@ -16,3 +17,4 @@ export type { PackageScriptReader, PackageScriptResult, PackageScriptRunnerOptio
 export type { NpmInstallApplyOptions, NpmInstallApplyResult, NpmInstallLink, NpmInstallPlan, NpmInstallPlanOptions, NpmWorkspaceReader } from "./npm-install.ts";
 export type { CliArtifactReader, CliRegistryLike, GuestCli, GuestRuntimeProcessRunnerOptions, PackageManagerProcessRequest, PackageManagerProcessResult, PackageManagerProcessRunner, PackageManagerRunnerOptions } from "./types.ts";
 export type { CliModuleGraph, CliModuleGraphIssue, CliModuleGraphModule, CliModuleGraphOptions, CliModuleGraphReader } from "./cli-module-graph.ts";
+export type { PackageManagerLinkStrategy, PackageManagerWorkspace, PackageManagerWorkspaceMount, PackageManagerWorkspaceReader, PackageManagerWorkspaceWriter } from "./workspace.ts";

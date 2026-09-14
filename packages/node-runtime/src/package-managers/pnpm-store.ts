@@ -1,18 +1,10 @@
 import { join, relative } from "../builtins/path.ts";
 import { runInstallTransaction, type InstallTransactionOptions, type InstallTransactionResult } from "./install-transaction.ts";
+import type { PackageManagerWorkspaceReader, PackageManagerWorkspaceWriter } from "./workspace.ts";
 
-export interface PnpmWorkspaceReader {
-  readText(path: string): string;
-  listDir(path: string): string[];
-}
+export interface PnpmWorkspaceReader extends PackageManagerWorkspaceReader {}
 
-export interface PnpmWorkspaceWriter {
-  copyDirectory(source: string, target: string): void;
-  copyFile(source: string, target: string): void;
-  mkdir(path: string): void;
-  symlink?(target: string, path: string): void;
-  writeText(path: string, data: string): void;
-}
+export interface PnpmWorkspaceWriter extends PackageManagerWorkspaceWriter {}
 
 export interface PnpmStorePlanOptions {
   cwd: string;

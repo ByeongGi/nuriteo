@@ -62,8 +62,8 @@ export interface CliArtifactReader {
 export interface GuestRuntimeProcessRunnerOptions {
   artifacts: CliArtifactReader;
   workspace?: {
-    reader: import("./pnpm-store.ts").PnpmWorkspaceReader;
-    writer: import("./pnpm-store.ts").PnpmWorkspaceWriter;
-    linkStrategy?: "symlink" | "copy-fallback";
+    reader: import("./workspace.ts").PackageManagerWorkspaceReader;
+    writer: import("./workspace.ts").PackageManagerWorkspaceWriter;
+    linkStrategy?: import("./workspace.ts").PackageManagerLinkStrategy;
   };
 }
