@@ -44,10 +44,10 @@
       "id": "npm-install",
       "manager": "npm",
       "command": "npm install --ignore-scripts",
-      "runtime": "host-node-test-helper",
-      "status": "helper-pass-product-gap",
-      "evidence": ["tests/package-managers/npm-integration.test.mjs"],
-      "productGap": "Real npm install still executes through host Node helper while guest-runtime module evaluation and filesystem mutation are expanded."
+      "runtime": "browser-guest-node-runtime",
+      "status": "partial-pass",
+      "evidence": ["tests/package-managers/npm-install-plan.test.mjs", "tests/package-managers/npm-integration.test.mjs"],
+      "productGap": "Browser runtime can validate and materialize local file dependency install layout with copy-fallback links. Full npm dependency graph execution still needs real CLI module evaluation."
     },
     {
       "id": "npm-ci",

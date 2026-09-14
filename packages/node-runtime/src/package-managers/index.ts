@@ -1,10 +1,12 @@
 export { CliRegistry } from "./cli-registry.ts";
 export { createGuestCli } from "./guest-cli.ts";
 export { createGuestRuntimeProcessRunner } from "./guest-runtime-runner.ts";
+export { applyNpmInstallPlan, createNpmInstallPlan } from "./npm-install.ts";
 export { createNpmRunner, NpmRunner } from "./npm-runner.ts";
 export { createPnpmRunner, PnpmRunner } from "./pnpm-runner.ts";
 export { applyPnpmStorePlan, createPnpmStorePlan } from "./pnpm-store.ts";
 export { createPackageTarballCache, extractTarEntries, PackageTarballCache } from "./tarball-cache.ts";
 export type { PnpmStoreApplyResult, PnpmStorePlan, PnpmStorePlanOptions, PnpmWorkspaceLink, PnpmWorkspacePackage, PnpmWorkspaceReader, PnpmWorkspaceWriter } from "./pnpm-store.ts";
 export type { PackageTarballCacheMetrics, PackageTarballCacheOptions, PackageTarballRequest, PackageTarballResult, TarEntry } from "./tarball-cache.ts";
+export type { NpmInstallApplyResult, NpmInstallLink, NpmInstallPlan, NpmInstallPlanOptions, NpmWorkspaceReader } from "./npm-install.ts";
 export type { CliArtifactReader, CliRegistryLike, GuestCli, GuestRuntimeProcessRunnerOptions, PackageManagerProcessRequest, PackageManagerProcessResult, PackageManagerProcessRunner, PackageManagerRunnerOptions } from "./types.ts";

@@ -15,12 +15,17 @@ for (const id of ["npm-version", "pnpm-version", "pnpm-store-plan", "registry-ca
   assert.equal(entry.status, "pass");
 }
 
-for (const id of ["npm-install", "npm-ci"]) {
+for (const id of ["npm-ci"]) {
   const entry = casesById.get(id);
   assert.equal(entry?.runtime, "host-node-test-helper");
   assert.equal(entry.status, "helper-pass-product-gap");
   assert.match(entry.productGap, /guest-runtime|host Node helper|host-node-test-helper/);
 }
+
+const npmInstall = casesById.get("npm-install");
+assert.equal(npmInstall?.runtime, "browser-guest-node-runtime");
+assert.equal(npmInstall.status, "partial-pass");
+assert.match(npmInstall.productGap, /real CLI module evaluation/i);
 
 const pnpmInstall = casesById.get("pnpm-install");
 assert.equal(pnpmInstall?.runtime, "browser-guest-node-runtime");
