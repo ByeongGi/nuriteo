@@ -210,6 +210,13 @@ const httpResponse = await new Promise((resolve, reject) => {
 assert.deepEqual(httpResponse, { statusCode: 201, body: "response-body" });
 assert.deepEqual(fetchCalls, [{ input: "http://registry.test/pkg", method: "POST", body: "request-body" }]);
 
+const http2 = requireBuiltin("node:http2");
+assert.equal(http2.constants.HTTP2_HEADER_PATH, ":path");
+assert.equal(http2.constants.HTTP_STATUS_TOO_MANY_REQUESTS, 429);
+const http2Session = http2.connect("https://registry.test");
+const http2Error = await new Promise((resolve) => http2Session.once("error", resolve));
+assert.equal(http2Error.code, "ERR_BROWSER_HTTP2_UNSUPPORTED");
+
 const net = requireBuiltin("node:net");
 assert.equal(net.isIP("127.0.0.1"), 4);
 assert.equal(net.isIPv6("::1"), true);
@@ -248,6 +255,7 @@ const result = runUnsafeCommonJsForLocalTests(`
   const childProcess = require("child_process");
   const dns = require("node:dns");
   const http = require("http");
+  const http2 = require("http2");
   const net = require("net");
   const path = require("path");
   const workerThreads = require("worker_threads");
@@ -264,6 +272,7 @@ const result = runUnsafeCommonJsForLocalTests(`
   assert.equal(os.platform(), "linux");
   assert.equal(typeof dns.lookup, "function");
   assert.equal(typeof http.request, "function");
+  assert.equal(http2.constants.HTTP2_HEADER_METHOD, ":method");
   assert.equal(net.isIP("127.0.0.1"), 4);
   assert.equal(workerThreads.threadId, 0);
   assert.equal(workerThreads.isMainThread, true);

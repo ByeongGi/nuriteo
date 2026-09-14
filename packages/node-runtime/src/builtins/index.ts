@@ -6,6 +6,7 @@ export { dnsBuiltin, dnsPromisesBuiltin, lookup as dnsLookup, promises as dnsPro
 export { EventEmitter, eventsBuiltin, once } from "./events.ts";
 export { createFsPromisesBuiltin } from "./fs-promises.ts";
 export { Agent as HttpAgent, ClientRequest, createHttpBuiltin, createHttpsBuiltin, IncomingMessage } from "./http.ts";
+export { ClientHttp2Session, connect as http2Connect, constants as http2Constants, createSecureServer as createHttp2SecureServer, createServer as createHttp2Server, http2Builtin, UnsupportedHttp2Error } from "./http2.ts";
 export { builtinModules, createRequire, enableCompileCache, Module, moduleBuiltin } from "./module.ts";
 export { connect as netConnect, createConnection as netCreateConnection, isIP, isIPv4, isIPv6, netBuiltin, Socket, UnsupportedTcpSocketError } from "./net.ts";
 export { arch, cpus, EOL, freemem, homedir, osBuiltin, platform, release, tmpdir, totalmem, type as osType } from "./os.ts";

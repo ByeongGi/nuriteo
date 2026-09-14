@@ -31,6 +31,7 @@ for (const name of [
   "events",
   "fs/promises",
   "http",
+  "http2",
   "https",
   "net",
   "os",

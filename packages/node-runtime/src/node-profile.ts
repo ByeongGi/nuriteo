@@ -25,6 +25,12 @@ export const NODE_PROFILE = Object.freeze({
       implementedBy: "packages/node-runtime/src/builtins/http.ts",
       tests: Object.freeze(["tests/node-runtime/secondary-builtins.test.mjs"])
     }),
+    http2: Object.freeze({
+      status: "partial",
+      source: "browser-unsupported-diagnostic",
+      implementedBy: "packages/node-runtime/src/builtins/http2.ts",
+      tests: Object.freeze(["tests/node-runtime/secondary-builtins.test.mjs"])
+    }),
     https: Object.freeze({
       status: "partial",
       source: "browser-fetch-adapter",
@@ -175,6 +181,7 @@ export const NODE_PROFILE = Object.freeze({
     "node:module": Object.freeze(["browser-native-js:module"]),
     "node:fs/promises": Object.freeze(["node:fs"]),
     "node:http": Object.freeze(["browser-fetch-adapter"]),
+    "node:http2": Object.freeze(["browser-unsupported-diagnostic"]),
     "node:https": Object.freeze(["browser-fetch-adapter"]),
     "node:net": Object.freeze(["browser-unsupported-diagnostic"]),
     "node:os": Object.freeze(["browser-native-js:os"]),
@@ -198,6 +205,7 @@ export const NODE_PROFILE = Object.freeze({
     "dns": Object.freeze(["node:dns"]),
     "dns/promises": Object.freeze(["node:dns/promises"]),
     "http": Object.freeze(["node:http"]),
+    "http2": Object.freeze(["node:http2"]),
     "https": Object.freeze(["node:https"]),
     "module": Object.freeze(["node:module"]),
     "net": Object.freeze(["node:net"]),

@@ -7,6 +7,7 @@ import { dnsBuiltin, dnsPromisesBuiltin } from "./builtins/dns.ts";
 import { eventsBuiltin } from "./builtins/events.ts";
 import { createFsPromisesBuiltin } from "./builtins/fs-promises.ts";
 import { createHttpBuiltin, createHttpsBuiltin } from "./builtins/http.ts";
+import { http2Builtin } from "./builtins/http2.ts";
 import { moduleBuiltin } from "./builtins/module.ts";
 import { netBuiltin } from "./builtins/net.ts";
 import { osBuiltin } from "./builtins/os.ts";
@@ -42,6 +43,7 @@ export function createBuiltinLoader(bindings: BuiltinBindings): (specifier: stri
     if (specifier === "dns" || specifier === "node:dns") return dnsBuiltin;
     if (specifier === "dns/promises" || specifier === "node:dns/promises") return dnsPromisesBuiltin;
     if (specifier === "http" || specifier === "node:http") return createHttpBuiltin(bindings.httpClient);
+    if (specifier === "http2" || specifier === "node:http2") return http2Builtin;
     if (specifier === "https" || specifier === "node:https") return createHttpsBuiltin(bindings.httpsClient || bindings.httpClient);
     if (specifier === "module" || specifier === "node:module") return moduleBuiltin;
     if (specifier === "net" || specifier === "node:net") return netBuiltin;

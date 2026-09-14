@@ -170,6 +170,20 @@
       "nextPhase": "P10"
     },
     {
+      "builtin": "http2",
+      "status": "partial",
+      "priority": 1,
+      "implementedBy": "packages/node-runtime/src/builtins/http2.ts",
+      "tests": ["tests/node-runtime/secondary-builtins.test.mjs"],
+      "requiredBy": ["npm sigstore fetch constants", "pnpm http2-wrapper feature loading"],
+      "minimumApi": ["constants", "connect", "ClientHttp2Session", "createServer", "createSecureServer"],
+      "acceptance": [
+        "HTTP/2 constants required by npm sigstore and pnpm http2-wrapper load under browser runtime.",
+        "Direct HTTP/2 session and server attempts fail with ERR_BROWSER_HTTP2_UNSUPPORTED."
+      ],
+      "nextPhase": "P10"
+    },
+    {
       "builtin": "https",
       "status": "partial",
       "priority": 1,
