@@ -96,6 +96,7 @@ assert.deepEqual(moduleBuiltin.Module._nodeModulePaths("/workspace/app"), [
 assert.equal(moduleBuiltin.Module._resolveFilename("node:path"), "node:path");
 
 const processModule = requireBuiltin("process");
+assert.equal(processModule.version, "v22.23.0");
 assert.equal(processModule.cwd(), "/workspace");
 processModule.chdir("app");
 assert.equal(processModule.cwd(), "/workspace/app");

@@ -71,12 +71,14 @@ exerciseBuiltins({
 const requireBuiltin = createBuiltinLoader({});
 const bufferBuiltin = requireBuiltin("node:buffer");
 assert.equal(bufferBuiltin.Buffer.from("ok").toString(), "ok");
+assert.equal(typeof requireBuiltin("events"), "function");
 assert.equal(requireBuiltin("events").EventEmitter, EventEmitter);
 assert.equal(requireBuiltin("util").format("x:%s", "y"), "x:y");
 
 const result = runUnsafeCommonJsForLocalTests(`
   const { Buffer } = require("node:buffer");
-  const { EventEmitter } = require("node:events");
+  const EventEmitterModule = require("node:events");
+  const { EventEmitter } = EventEmitterModule;
   const util = require("node:util");
   const emitter = new EventEmitter();
   let count = 0;
@@ -85,6 +87,7 @@ const result = runUnsafeCommonJsForLocalTests(`
   emitter.emit("tick");
   module.exports = {
     text: Buffer.from("6869", "hex").toString("utf8"),
+    eventsDefaultIsConstructor: typeof EventEmitterModule === "function",
     count,
     formatted: util.format("%s:%d", "v", 2)
   };
@@ -92,6 +95,7 @@ const result = runUnsafeCommonJsForLocalTests(`
 
 assert.deepEqual(result.exports, {
   text: "hi",
+  eventsDefaultIsConstructor: true,
   count: 1,
   formatted: "v:2"
 });

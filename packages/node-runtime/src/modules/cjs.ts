@@ -47,10 +47,11 @@ function compileCjsSource(source: string, filename: string, globals: Record<stri
     "__filename",
     "__dirname",
     "process",
+    "global",
     `${stripShebang(source)}\n//# sourceURL=${filename}`
-  ) as (exports: RuntimeModule["exports"], require: (specifier: string) => RuntimeValue, module: RuntimeModule, filename: string, dirname: string, process: RuntimeValue) => void;
+  ) as (exports: RuntimeModule["exports"], require: (specifier: string) => RuntimeValue, module: RuntimeModule, filename: string, dirname: string, process: RuntimeValue, global: RuntimeValue) => void;
   return ({ exports, require, module, filename, dirname }) => {
-    compiled(exports, require, module, filename, dirname, globals.process);
+    compiled(exports, require, module, filename, dirname, globals.process, globals.global);
   };
 }
 

@@ -10,10 +10,11 @@ const workspace = new MemoryPackageManagerWorkspace([
   {
     path: "/workspace/cli/package/lib/cli.js",
     data: `
+      const fs = require('fs');
       const manifest = require('../package.json');
       module.exports = function run(process) {
         if (process.argv.includes('--version')) {
-          process.stdout.write(manifest.version + '\\n');
+          process.stdout.write(JSON.parse(fs.readFileSync(__dirname + '/../package.json', 'utf8')).version + '\\n');
           return;
         }
         process.stderr.write('unsupported command\\n');

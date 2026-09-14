@@ -12,6 +12,7 @@ export class BrowserProcess extends EventEmitter {
   exitCode: number | undefined;
   platform = "linux";
   arch = "x64";
+  version = "v22.23.0";
   versions = Object.freeze({
     node: "22.23.0",
     v8: "browser",

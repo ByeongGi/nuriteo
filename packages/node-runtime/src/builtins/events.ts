@@ -85,7 +85,7 @@ export function once(emitter: EventEmitter, eventName: string | symbol): Promise
   });
 }
 
-export const eventsBuiltin = Object.freeze({
+export const eventsBuiltin = Object.assign(EventEmitter, {
   EventEmitter,
   once,
   default: EventEmitter
