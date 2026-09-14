@@ -46,6 +46,7 @@ const defaultBuiltins = new Set([
   "constants",
   "events",
   "fs",
+  "fs/promises",
   "module",
   "os",
   "path",

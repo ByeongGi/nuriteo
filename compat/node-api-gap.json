@@ -126,6 +126,17 @@
       "nextPhase": "P10"
     },
     {
+      "builtin": "fs/promises",
+      "status": "partial",
+      "priority": 1,
+      "implementedBy": "packages/node-runtime/src/builtins/fs-promises.ts",
+      "tests": ["tests/node-runtime/secondary-builtins.test.mjs"],
+      "requiredBy": ["npm config/package-json/pacote file operations", "pnpm filesystem operations"],
+      "minimumApi": ["readFile", "writeFile", "mkdir", "stat"],
+      "acceptance": ["Promise FS methods delegate to the runtime fs binding and resolve/reject through async API shape."],
+      "nextPhase": "P10"
+    },
+    {
       "builtin": "util",
       "status": "partial",
       "priority": 0,

@@ -118,6 +118,43 @@ assert.equal(decoder.end(encoded.slice(2)), "안녕");
 const timers = requireBuiltin("node:timers/promises");
 assert.equal(await timers.setTimeout(1, "done"), "done");
 
+const files = new Map();
+const fsPromises = createBuiltinLoader({
+  fs: {
+    closeSync() {},
+    mkdirSync(path) {
+      files.set(path, new Uint8Array());
+    },
+    openSync() {
+      return 1;
+    },
+    readFileSync(path, encoding) {
+      const bytes = files.get(path) || new Uint8Array();
+      return encoding ? new TextDecoder().decode(bytes) : bytes;
+    },
+    readSync() {
+      return new Uint8Array();
+    },
+    statSync(path) {
+      const bytes = files.get(path);
+      return {
+        size: bytes?.byteLength ?? 0,
+        isFile: () => files.has(path),
+        isDirectory: () => false
+      };
+    },
+    writeFileSync(path, data) {
+      files.set(path, typeof data === "string" ? new TextEncoder().encode(data) : new Uint8Array(data));
+    },
+    writeSync() {
+      return 0;
+    }
+  }
+})("node:fs/promises");
+await fsPromises.writeFile("/workspace/fs-promises.txt", "hello");
+assert.equal(await fsPromises.readFile("/workspace/fs-promises.txt", "utf8"), "hello");
+assert.equal((await fsPromises.stat("/workspace/fs-promises.txt")).size, 5);
+
 const result = runUnsafeCommonJsForLocalTests(`
   const assert = require("node:assert/strict");
   const path = require("path");

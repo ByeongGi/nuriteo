@@ -2,6 +2,7 @@ export { AssertionError, assertBuiltin, deepEqual, deepStrictEqual, equal, ok, r
 export { Buffer, BrowserBuffer, bufferBuiltin, kMaxLength } from "./buffer.ts";
 export { constantsBuiltin } from "./constants.ts";
 export { EventEmitter, eventsBuiltin, once } from "./events.ts";
+export { createFsPromisesBuiltin } from "./fs-promises.ts";
 export { builtinModules, createRequire, enableCompileCache, Module, moduleBuiltin } from "./module.ts";
 export { arch, cpus, EOL, freemem, homedir, osBuiltin, platform, release, tmpdir, totalmem, type as osType } from "./os.ts";
 export { basename, delimiter, dirname, extname, format as pathFormat, isAbsolute, join, normalize, parse as pathParse, pathBuiltin, posix, relative, resolve, sep } from "./path.ts";

@@ -3,6 +3,7 @@ import { assertBuiltin, strict as assertStrictBuiltin } from "./builtins/assert.
 import { bufferBuiltin } from "./builtins/buffer.ts";
 import { constantsBuiltin } from "./builtins/constants.ts";
 import { eventsBuiltin } from "./builtins/events.ts";
+import { createFsPromisesBuiltin } from "./builtins/fs-promises.ts";
 import { moduleBuiltin } from "./builtins/module.ts";
 import { osBuiltin } from "./builtins/os.ts";
 import { pathBuiltin } from "./builtins/path.ts";
@@ -22,6 +23,11 @@ export function createBuiltinLoader(bindings: BuiltinBindings): (specifier: stri
     if (specifier === "fs" || specifier === "node:fs") {
       internalBinding?.("fs");
       return bindings.fs;
+    }
+    if (specifier === "fs/promises" || specifier === "node:fs/promises") {
+      internalBinding?.("fs");
+      if (!bindings.fs) throw new Error("fs/promises requires an fs binding");
+      return createFsPromisesBuiltin(bindings.fs);
     }
     if (specifier === "buffer" || specifier === "node:buffer") return bindings.buffer || bufferBuiltin;
     if (specifier === "events" || specifier === "node:events") return bindings.events || eventsBuiltin;
