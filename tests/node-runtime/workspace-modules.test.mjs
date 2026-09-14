@@ -14,6 +14,7 @@ const workspace = new MemoryPackageManagerWorkspace([
       const conditionalFeature = require("conditional-pkg/feature");
       const parent = require("parent-pkg");
       const self = require("self-pkg/internal");
+      const pattern = require("pattern-pkg/lib/tool");
       const config = require("./config.json");
       module.exports = {
         base: path.basename(__filename),
@@ -24,6 +25,7 @@ const workspace = new MemoryPackageManagerWorkspace([
         conditionalFeature: conditionalFeature.label,
         parent,
         self: self.label,
+        pattern: pattern.label,
         config
       };
     `
@@ -118,6 +120,22 @@ const workspace = new MemoryPackageManagerWorkspace([
   {
     path: "/workspace/node_modules/self-pkg/internal.js",
     data: "exports.label = 'self-reference';"
+  },
+  {
+    path: "/workspace/node_modules/pattern-pkg/package.json",
+    data: JSON.stringify({
+      name: "pattern-pkg",
+      exports: {
+        "./*": {
+          require: "./src/*.cjs",
+          default: "./src/*.js"
+        }
+      }
+    })
+  },
+  {
+    path: "/workspace/node_modules/pattern-pkg/src/lib/tool.cjs",
+    data: "exports.label = 'pattern-export';"
   }
 ]);
 
@@ -136,6 +154,7 @@ assert.deepEqual(runtime.requireSync("./app.cjs", "/workspace/index.cjs"), {
   conditionalFeature: "conditional-node",
   parent: "nested-shared",
   self: "self-reference",
+  pattern: "pattern-export",
   config: {
     mode: "browser-runtime"
   }
@@ -145,5 +164,6 @@ assert.equal(runtime.resolve("plain-pkg", "/workspace/app.cjs"), "/workspace/nod
 assert.equal(runtime.resolve("plain-pkg/feature", "/workspace/app.cjs"), "/workspace/node_modules/plain-pkg/feature.js");
 assert.equal(runtime.resolve("shared", "/workspace/node_modules/parent-pkg/index.js"), "/workspace/node_modules/parent-pkg/node_modules/shared/index.js");
 assert.equal(runtime.resolve("self-pkg/internal", "/workspace/node_modules/self-pkg/index.js"), "/workspace/node_modules/self-pkg/internal.js");
+assert.equal(runtime.resolve("pattern-pkg/lib/tool", "/workspace/app.cjs"), "/workspace/node_modules/pattern-pkg/src/lib/tool.cjs");
 
 console.log("node workspace modules test ok");

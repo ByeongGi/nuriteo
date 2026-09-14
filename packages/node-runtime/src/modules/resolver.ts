@@ -118,11 +118,37 @@ function resolvePackageTarget(manifest: PackageManifest, subpath: string): strin
     }
     const target = isConditionalExportMap(manifest.exports)
       ? subpath === "." ? manifest.exports : undefined
-      : manifest.exports[subpath];
+      : resolveSubpathExport(manifest.exports, subpath);
     return target ? resolveConditionalTarget(target) : undefined;
   }
   if (subpath === ".") return manifest.main || "./index.js";
   return subpath;
+}
+
+function resolveSubpathExport(exportsMap: Record<string, PackageExportTarget | undefined>, subpath: string): PackageExportTarget | undefined {
+  const exact = exportsMap[subpath];
+  if (exact) return exact;
+  for (const [pattern, target] of Object.entries(exportsMap)) {
+    if (!target) continue;
+    const star = pattern.indexOf("*");
+    if (star < 0) continue;
+    const prefix = pattern.slice(0, star);
+    const suffix = pattern.slice(star + 1);
+    if (!subpath.startsWith(prefix) || !subpath.endsWith(suffix)) continue;
+    const matched = subpath.slice(prefix.length, subpath.length - suffix.length);
+    return replaceExportPatternTarget(target, matched);
+  }
+  return undefined;
+}
+
+function replaceExportPatternTarget(target: PackageExportTarget, matched: string): PackageExportTarget {
+  if (typeof target === "string") return target.replaceAll("*", matched);
+  if (Array.isArray(target)) return target.map((item) => replaceExportPatternTarget(item, matched));
+  const replaced: Record<string, PackageExportTarget> = {};
+  for (const [condition, value] of Object.entries(target)) {
+    if (value !== undefined) replaced[condition] = replaceExportPatternTarget(value, matched);
+  }
+  return replaced;
 }
 
 function resolveConditionalTarget(target: PackageExportTarget): string | undefined {
