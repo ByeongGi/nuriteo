@@ -11,6 +11,15 @@
       ],
       "notes": "Synchronous writeFileSync/readFileSync/statSync/openSync/readSync/writeSync/closeSync/mkdirSync subset only."
     },
+    "assert": {
+      "status": "partial",
+      "source": "browser-native-js",
+      "implementedBy": "packages/node-runtime/src/builtins/assert.ts",
+      "tests": [
+        "tests/node-runtime/secondary-builtins.test.mjs"
+      ],
+      "notes": "Browser-native assert subset covering ok, equal, strictEqual, deepStrictEqual, throws, rejects, and assert/strict."
+    },
     "buffer": {
       "status": "partial",
       "source": "browser-native-js",
@@ -29,6 +38,33 @@
       ],
       "notes": "Browser-native EventEmitter subset covering listener order, once, cleanup, and error event behavior."
     },
+    "os": {
+      "status": "partial",
+      "source": "browser-native-js",
+      "implementedBy": "packages/node-runtime/src/builtins/os.ts",
+      "tests": [
+        "tests/node-runtime/secondary-builtins.test.mjs"
+      ],
+      "notes": "Browser-safe Linux-shaped OS metadata for package and framework feature detection."
+    },
+    "path": {
+      "status": "partial",
+      "source": "browser-native-js",
+      "implementedBy": "packages/node-runtime/src/builtins/path.ts",
+      "tests": [
+        "tests/node-runtime/secondary-builtins.test.mjs"
+      ],
+      "notes": "POSIX path subset for browser workspace paths."
+    },
+    "process": {
+      "status": "partial",
+      "source": "browser-native-js",
+      "implementedBy": "packages/node-runtime/src/builtins/process.ts",
+      "tests": [
+        "tests/node-runtime/secondary-builtins.test.mjs"
+      ],
+      "notes": "Per-runtime browser process shape covering argv, env, cwd, chdir, nextTick, stdio shape, platform, versions, and release."
+    },
     "stream": {
       "status": "partial",
       "source": "browser-native-js",
@@ -37,6 +73,24 @@
         "tests/node-runtime/stream-subset.test.mjs"
       ],
       "notes": "Browser-native stream subset covering Readable.from, async iteration, Writable, Transform, PassThrough, pipe, finished, and pipeline."
+    },
+    "tty": {
+      "status": "partial",
+      "source": "browser-native-js",
+      "implementedBy": "packages/node-runtime/src/builtins/tty.ts",
+      "tests": [
+        "tests/node-runtime/secondary-builtins.test.mjs"
+      ],
+      "notes": "Non-interactive TTY subset with deterministic false isatty and stream-shaped read/write classes."
+    },
+    "url": {
+      "status": "partial",
+      "source": "browser-native-js",
+      "implementedBy": "packages/node-runtime/src/builtins/url.ts",
+      "tests": [
+        "tests/node-runtime/secondary-builtins.test.mjs"
+      ],
+      "notes": "URL subset backed by browser URL primitives plus fileURLToPath, pathToFileURL, and urlToHttpOptions."
     },
     "util": {
       "status": "partial",

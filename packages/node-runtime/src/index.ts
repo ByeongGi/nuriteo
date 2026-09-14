@@ -1,5 +1,5 @@
 export { createBuiltinLoader } from "./builtin-loader.ts";
-export { Buffer, BrowserBuffer, bufferBuiltin, Duplex, EventEmitter, eventsBuiltin, finished, PassThrough, pipeline, Readable, Stream, streamBuiltin, streamPromises, streamPromisesBuiltin, Transform, utilBuiltin, Writable } from "./builtins/index.ts";
+export { assertBuiltin, assertStrict, basename, Buffer, BrowserBuffer, bufferBuiltin, BrowserProcess, delimiter, dirname, Duplex, EOL, EventEmitter, eventsBuiltin, extname, fileURLToPath, finished, isAbsolute, join, normalize, osBuiltin, PassThrough, pathBuiltin, pathToFileURL, pipeline, posix, processBuiltin, Readable, resolve, sep, Stream, streamBuiltin, streamPromises, streamPromisesBuiltin, Transform, ttyBuiltin, URL, urlBuiltin, URLSearchParams, urlToHttpOptions, utilBuiltin, Writable } from "./builtins/index.ts";
 export { createInternalBindingRegistry, UnsupportedBindingError } from "./internal-binding.ts";
 export { getBuiltinProfile, getUnsupportedBuiltins, NODE_PROFILE } from "./node-profile.ts";
 export { LivenessTracker } from "./liveness.ts";

@@ -13,7 +13,7 @@ assert.equal(getBuiltinProfile("fs").implementedBy, "packages/node-runtime/src/b
 
 const missing = getUnsupportedBuiltins().map((binding) => binding.name).sort();
 assert.deepEqual(missing, []);
-for (const name of ["buffer", "events", "stream", "util"]) {
+for (const name of ["assert", "buffer", "events", "os", "path", "process", "stream", "tty", "url", "util"]) {
   assert.equal(getBuiltinProfile(name).status, "partial");
   assert.ok(getBuiltinProfile(name).implementedBy.startsWith("packages/node-runtime/src/builtins/"));
 }

@@ -2,6 +2,7 @@ import "./profile.test.mjs";
 import "./node-api-gap.test.mjs";
 import "./builtin-subset.test.mjs";
 import "./stream-subset.test.mjs";
+import "./secondary-builtins.test.mjs";
 import "./modules.test.mjs";
 import "./scheduler.test.mjs";
 import "./typescript.test.mjs";
