@@ -10,12 +10,16 @@ const workspace = new MemoryPackageManagerWorkspace([
       const plain = require("plain-pkg");
       const feature = require("plain-pkg/feature");
       const scoped = require("@scope/tool");
+      const conditional = require("conditional-pkg");
+      const conditionalFeature = require("conditional-pkg/feature");
       const config = require("./config.json");
       module.exports = {
         base: path.basename(__filename),
         plain: plain.label,
         feature: feature.label,
         scoped: scoped.label,
+        conditional: conditional.label,
+        conditionalFeature: conditionalFeature.label,
         config
       };
     `
@@ -43,6 +47,31 @@ const workspace = new MemoryPackageManagerWorkspace([
   {
     path: "/workspace/node_modules/@scope/tool/index.cjs",
     data: "module.exports = { label: 'scoped-tool' };"
+  },
+  {
+    path: "/workspace/node_modules/conditional-pkg/package.json",
+    data: JSON.stringify({
+      name: "conditional-pkg",
+      exports: {
+        ".": {
+          import: "./esm.mjs",
+          require: "./cjs.cjs",
+          default: "./default.js"
+        },
+        "./feature": {
+          node: "./feature.cjs",
+          default: "./feature-default.js"
+        }
+      }
+    })
+  },
+  {
+    path: "/workspace/node_modules/conditional-pkg/cjs.cjs",
+    data: "exports.label = 'conditional-require';"
+  },
+  {
+    path: "/workspace/node_modules/conditional-pkg/feature.cjs",
+    data: "exports.label = 'conditional-node';"
   }
 ]);
 
@@ -57,6 +86,8 @@ assert.deepEqual(runtime.requireSync("./app.cjs", "/workspace/index.cjs"), {
   plain: "plain-main",
   feature: "plain-feature",
   scoped: "scoped-tool",
+  conditional: "conditional-require",
+  conditionalFeature: "conditional-node",
   config: {
     mode: "browser-runtime"
   }

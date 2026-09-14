@@ -1,4 +1,4 @@
-import type { ModuleRuntimeOptions, PackageManifest } from "../types.ts";
+import type { ModuleRuntimeOptions, PackageExportTarget, PackageManifest } from "../types.ts";
 
 function normalizePath(path: string): string {
   const parts = [];
@@ -87,10 +87,34 @@ export class ModuleResolver {
 
 function resolvePackageTarget(manifest: PackageManifest, subpath: string): string | undefined {
   if (manifest.exports) {
-    return typeof manifest.exports === "string"
+    if (typeof manifest.exports === "string" || Array.isArray(manifest.exports)) {
+      return subpath === "." ? resolveConditionalTarget(manifest.exports) : undefined;
+    }
+    const target = isConditionalExportMap(manifest.exports)
       ? subpath === "." ? manifest.exports : undefined
       : manifest.exports[subpath];
+    return target ? resolveConditionalTarget(target) : undefined;
   }
   if (subpath === ".") return manifest.main || "./index.js";
   return subpath;
+}
+
+function resolveConditionalTarget(target: PackageExportTarget): string | undefined {
+  if (typeof target === "string") return target;
+  if (Array.isArray(target)) {
+    for (const item of target) {
+      const resolved = resolveConditionalTarget(item);
+      if (resolved) return resolved;
+    }
+    return undefined;
+  }
+  for (const condition of ["require", "node", "default", "import"]) {
+    const resolved = target[condition] ? resolveConditionalTarget(target[condition]) : undefined;
+    if (resolved) return resolved;
+  }
+  return undefined;
+}
+
+function isConditionalExportMap(exportsMap: Record<string, PackageExportTarget | undefined>): boolean {
+  return Object.keys(exportsMap).some((key) => !key.startsWith("."));
 }

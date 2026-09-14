@@ -1,5 +1,5 @@
 import { createModuleRuntime, ModuleRuntime } from "./runtime.ts";
-import type { ModuleRuntimeOptions, PackageManifest, RuntimeValue } from "../types.ts";
+import type { ModuleRuntimeOptions, PackageExportTarget, PackageManifest, RuntimeValue } from "../types.ts";
 import { join } from "../builtins/path.ts";
 
 export interface WorkspaceModuleReader {
@@ -111,12 +111,26 @@ function packageNameFromNodeModulesPath(packageRoot: string): string | null {
 
 function normalizeExports(exportsMap: PackageJson["exports"]): Pick<PackageManifest, "exports"> {
   if (typeof exportsMap === "string") return { exports: exportsMap };
-  if (!isRecord(exportsMap)) return {};
-  const normalized: Record<string, string> = {};
-  for (const [key, value] of Object.entries(exportsMap)) {
-    if (typeof value === "string") normalized[key] = value;
-  }
+  const normalized = normalizeExportTarget(exportsMap);
   return Object.keys(normalized).length > 0 ? { exports: normalized } : {};
+}
+
+function normalizeExportTarget(value: unknown): Record<string, PackageExportTarget> {
+  if (!isRecord(value)) return {};
+  const normalized: Record<string, PackageExportTarget> = {};
+  for (const [key, target] of Object.entries(value)) {
+    const normalizedTarget = normalizeExportTargetValue(target);
+    if (normalizedTarget !== undefined) normalized[key] = normalizedTarget;
+  }
+  return normalized;
+}
+
+function normalizeExportTargetValue(value: unknown): PackageExportTarget | undefined {
+  if (typeof value === "string") return value;
+  if (Array.isArray(value)) return value.map(normalizeExportTargetValue).filter((item): item is PackageExportTarget => item !== undefined);
+  if (!isRecord(value)) return undefined;
+  const normalized = normalizeExportTarget(value);
+  return Object.keys(normalized).length > 0 ? normalized : undefined;
 }
 
 function readJson<T>(reader: WorkspaceModuleReader, path: string): T {

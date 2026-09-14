@@ -57,7 +57,13 @@ export interface PackageManifest {
   root?: string;
   type?: string;
   main?: string;
-  exports?: string | Record<string, string>;
+  exports?: PackageExports;
+}
+
+export type PackageExports = PackageExportTarget | Record<string, PackageExportTarget>;
+export type PackageExportTarget = string | PackageExportConditionMap | PackageExportTarget[];
+export interface PackageExportConditionMap {
+  [condition: string]: PackageExportTarget | undefined;
 }
 
 export interface ModuleRuntimeOptions {
