@@ -1,5 +1,12 @@
+import type { PackageManagerProcessResult, PackageManagerProcessRunner, PackageManagerRunnerOptions } from "./types.ts";
+import type { RuntimeEnv } from "../types.ts";
+
 export class NpmRunner {
-  constructor(options) {
+  registry: PackageManagerRunnerOptions["registry"];
+  processRunner: PackageManagerProcessRunner;
+  env: RuntimeEnv;
+
+  constructor(options: PackageManagerRunnerOptions) {
     if (!options?.registry) throw new Error("NpmRunner requires a CLI registry");
     if (!options?.processRunner) throw new Error("NpmRunner requires a process runner");
     this.registry = options.registry;
@@ -7,23 +14,23 @@ export class NpmRunner {
     this.env = { ...(options.env || {}) };
   }
 
-  install(cwd, args = []) {
+  install(cwd: string, args: string[] = []): PackageManagerProcessResult {
     return this.#run(cwd, ["install", ...args]);
   }
 
-  ci(cwd, args = []) {
+  ci(cwd: string, args: string[] = []): PackageManagerProcessResult {
     return this.#run(cwd, ["ci", ...args]);
   }
 
-  runScript(cwd, script, args = []) {
+  runScript(cwd: string, script: string, args: string[] = []): PackageManagerProcessResult {
     return this.#run(cwd, ["run", script, ...args]);
   }
 
-  exec(cwd, command, args = []) {
+  exec(cwd: string, command: string, args: string[] = []): PackageManagerProcessResult {
     return this.#run(cwd, ["exec", "--", command, ...args]);
   }
 
-  #run(cwd, args) {
+  #run(cwd: string, args: string[]): PackageManagerProcessResult {
     const entry = this.registry.resolve("npm");
     return this.processRunner({
       name: "npm",
@@ -35,7 +42,6 @@ export class NpmRunner {
   }
 }
 
-export function createNpmRunner(options) {
+export function createNpmRunner(options: PackageManagerRunnerOptions): NpmRunner {
   return new NpmRunner(options);
 }
-

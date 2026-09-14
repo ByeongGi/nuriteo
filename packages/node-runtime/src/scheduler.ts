@@ -1,8 +1,36 @@
 import { LivenessTracker } from "./liveness.ts";
 import { RuntimeProcess } from "./process.ts";
+import type { LivenessHandle, RuntimeTaskCallback } from "./types.ts";
+
+interface RuntimeSchedulerOptions {
+  process?: RuntimeProcess;
+  liveness?: LivenessTracker;
+}
+
+interface ScheduledTimer {
+  callback: RuntimeTaskCallback;
+  due: number;
+  sequence: number;
+  handle: LivenessHandle;
+}
+
+interface ScheduledImmediate {
+  callback: RuntimeTaskCallback;
+  sequence: number;
+  handle: LivenessHandle;
+}
 
 export class RuntimeScheduler {
-  constructor(options = {}) {
+  process: RuntimeProcess;
+  liveness: LivenessTracker;
+  nextTicks: RuntimeTaskCallback[];
+  promiseJobs: RuntimeTaskCallback[];
+  timers: ScheduledTimer[];
+  immediates: ScheduledImmediate[];
+  now: number;
+  sequence: number;
+
+  constructor(options: RuntimeSchedulerOptions = {}) {
     this.process = options.process || new RuntimeProcess();
     this.liveness = options.liveness || new LivenessTracker();
     this.nextTicks = [];
@@ -13,15 +41,15 @@ export class RuntimeScheduler {
     this.sequence = 0;
   }
 
-  nextTick(callback) {
+  nextTick(callback: RuntimeTaskCallback): void {
     this.nextTicks.push(callback);
   }
 
-  queuePromiseJob(callback) {
+  queuePromiseJob(callback: RuntimeTaskCallback): void {
     this.promiseJobs.push(callback);
   }
 
-  setTimeout(callback, delay = 0) {
+  setTimeout(callback: RuntimeTaskCallback, delay = 0): LivenessHandle {
     const handle = this.liveness.ref("timeout");
     this.timers.push({
       callback,
@@ -32,7 +60,7 @@ export class RuntimeScheduler {
     return handle;
   }
 
-  setImmediate(callback) {
+  setImmediate(callback: RuntimeTaskCallback): LivenessHandle {
     const handle = this.liveness.ref("immediate");
     this.immediates.push({
       callback,
@@ -42,7 +70,7 @@ export class RuntimeScheduler {
     return handle;
   }
 
-  async runUntilIdle() {
+  async runUntilIdle(): Promise<{ exitCode: number; exited: boolean; uncaughtException: unknown }> {
     while (!this.process.exited) {
       await this.drainMicrotasks();
       if (this.process.exited) break;
@@ -82,18 +110,20 @@ export class RuntimeScheduler {
     };
   }
 
-  async drainMicrotasks() {
+  async drainMicrotasks(): Promise<void> {
     while (!this.process.exited && (this.nextTicks.length > 0 || this.promiseJobs.length > 0)) {
       while (!this.process.exited && this.nextTicks.length > 0) {
-        await this.invoke(this.nextTicks.shift());
+        const callback = this.nextTicks.shift();
+        if (callback) await this.invoke(callback);
       }
       while (!this.process.exited && this.nextTicks.length === 0 && this.promiseJobs.length > 0) {
-        await this.invoke(this.promiseJobs.shift());
+        const callback = this.promiseJobs.shift();
+        if (callback) await this.invoke(callback);
       }
     }
   }
 
-  takeDueTimer() {
+  takeDueTimer(): ScheduledTimer | null {
     const due = this.timers
       .filter((entry) => entry.due <= this.now && this.liveness.refs.has(entry.handle.id))
       .sort((a, b) => a.due - b.due || a.sequence - b.sequence)[0];
@@ -102,7 +132,7 @@ export class RuntimeScheduler {
     return due;
   }
 
-  async invoke(callback) {
+  async invoke(callback: RuntimeTaskCallback): Promise<void> {
     try {
       await callback();
     } catch (error) {
@@ -111,6 +141,6 @@ export class RuntimeScheduler {
   }
 }
 
-export function createScheduler(options) {
+export function createScheduler(options: RuntimeSchedulerOptions = {}): RuntimeScheduler {
   return new RuntimeScheduler(options);
 }

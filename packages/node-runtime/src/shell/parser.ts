@@ -1,19 +1,23 @@
 export class ShellSyntaxError extends Error {
-  constructor(message) {
+  code: "ERR_CARGO_CONTAINER_UNSUPPORTED_SHELL_SYNTAX";
+
+  constructor(message: string) {
     super(message);
     this.name = "ShellSyntaxError";
     this.code = "ERR_CARGO_CONTAINER_UNSUPPORTED_SHELL_SYNTAX";
   }
 }
 
-export function parseShell(input) {
+import type { ShellStep } from "./types.ts";
+
+export function parseShell(input: string): ShellStep[] {
   const tokens = tokenize(input);
   if (tokens.includes("||") || tokens.includes(";")) {
     throw new ShellSyntaxError("unsupported shell syntax");
   }
-  const commands = [];
-  let current = [];
-  let op = null;
+  const commands: ShellStep[] = [];
+  let current: string[] = [];
+  let op: ShellStep["op"] = null;
 
   for (const token of tokens) {
     if (token === "&&" || token === "|") {
@@ -30,13 +34,13 @@ export function parseShell(input) {
   return commands;
 }
 
-export function tokenize(input) {
-  const tokens = [];
+export function tokenize(input: string): string[] {
+  const tokens: string[] = [];
   let current = "";
-  let quote = null;
+  let quote: "'" | "\"" | null = null;
 
   for (let index = 0; index < input.length; index += 1) {
-    const char = input[index];
+    const char = input[index] ?? "";
     if (quote) {
       if (char === quote) quote = null;
       else current += char;
@@ -67,7 +71,7 @@ export function tokenize(input) {
   push();
   return tokens;
 
-  function push() {
+  function push(): void {
     if (current) {
       tokens.push(current);
       current = "";

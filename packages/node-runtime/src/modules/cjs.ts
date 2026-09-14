@@ -1,4 +1,7 @@
-export function evaluateCjs(runtime, url) {
+import type { ModuleRuntime } from "./runtime.ts";
+import type { RuntimeModule, RuntimeValue } from "../types.ts";
+
+export function evaluateCjs(runtime: ModuleRuntime, url: string): RuntimeValue {
   const canonicalUrl = runtime.cache.canonicalize(url);
   const cached = runtime.cache.cjs.get(canonicalUrl);
   if (cached) return cached.exports;
@@ -8,14 +11,14 @@ export function evaluateCjs(runtime, url) {
     throw new Error(`ERR_REQUIRE_ESM_OR_MISSING: ${canonicalUrl}`);
   }
 
-  const module = {
+  const module: RuntimeModule = {
     id: canonicalUrl,
     exports: {},
     loaded: false
   };
   runtime.cache.cjs.set(canonicalUrl, module);
 
-  const require = (specifier) => runtime.requireSync(specifier, canonicalUrl);
+  const require = (specifier: string) => runtime.requireSync(specifier, canonicalUrl);
   definition.factory({
     exports: module.exports,
     module,

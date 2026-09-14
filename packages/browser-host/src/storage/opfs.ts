@@ -1,39 +1,45 @@
-export class MemoryOpfs {
+import type { JsonValue, OpfsLike } from "./types.ts";
+
+export class MemoryOpfs implements OpfsLike {
+  files: Map<string, JsonValue>;
+  flushed: Set<string>;
+
   constructor() {
     this.files = new Map();
     this.flushed = new Set();
   }
 
-  writeFile(path, value) {
+  writeFile(path: string, value: JsonValue): void {
     this.files.set(path, structuredClone(value));
     this.flushed.delete(path);
   }
 
-  readFile(path) {
+  readFile(path: string): JsonValue | null {
     if (!this.files.has(path)) return null;
-    return structuredClone(this.files.get(path));
+    const value = this.files.get(path);
+    return value === undefined ? null : structuredClone(value);
   }
 
-  deleteFile(path) {
+  deleteFile(path: string): void {
     this.files.delete(path);
     this.flushed.delete(path);
   }
 
-  flush(path) {
+  flush(path: string): boolean {
     if (!this.files.has(path)) return false;
     this.flushed.add(path);
     return true;
   }
 
-  isFlushed(path) {
+  isFlushed(path: string): boolean {
     return this.flushed.has(path);
   }
 
-  listFiles(prefix = "") {
+  listFiles(prefix = ""): string[] {
     return [...this.files.keys()].filter((path) => path.startsWith(prefix)).sort();
   }
 }
 
-export function createMemoryOpfs() {
+export function createMemoryOpfs(): MemoryOpfs {
   return new MemoryOpfs();
 }

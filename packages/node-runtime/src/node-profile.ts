@@ -24,12 +24,16 @@ export const NODE_PROFILE = Object.freeze({
   })
 });
 
-export function getBuiltinProfile(specifier) {
+type BuiltinName = keyof typeof NODE_PROFILE.builtins;
+
+export function getBuiltinProfile(specifier: string): (typeof NODE_PROFILE.builtins)[BuiltinName] | null {
   const normalized = specifier.startsWith("node:") ? specifier.slice(5) : specifier;
-  return NODE_PROFILE.builtins[normalized] || null;
+  return normalized in NODE_PROFILE.builtins
+    ? NODE_PROFILE.builtins[normalized as BuiltinName]
+    : null;
 }
 
-export function getUnsupportedBuiltins() {
+export function getUnsupportedBuiltins(): Array<{ name: string; source: string }> {
   return Object.entries(NODE_PROFILE.builtins)
     .filter(([, profile]) => profile.status === "missing")
     .map(([name, profile]) => ({ name, source: profile.source }));

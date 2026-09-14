@@ -1,13 +1,19 @@
 import { createBuiltinLoader } from "./builtin-loader.ts";
 import { createFsBinding } from "./bindings/fs.ts";
 import { createInternalBindingRegistry } from "./internal-binding.ts";
+import type { RuntimeFsBinding, RuntimeProgramOptions, RuntimeValue } from "./types.ts";
 
-export function runNodeProgram(source, options = {}) {
-  const fs = createFsBinding(options.syncChannel, {
-    generation: options.generation,
-    pid: options.pid,
-    timeoutMs: options.timeoutMs
-  });
+export interface RuntimeProgramResult {
+  result: RuntimeValue;
+  exports: RuntimeValue;
+}
+
+export function runNodeProgram(source: string, options: RuntimeProgramOptions): RuntimeProgramResult {
+  const fsOptions: Parameters<typeof createFsBinding>[1] = {};
+  if (options.generation !== undefined) fsOptions.generation = options.generation;
+  if (options.pid !== undefined) fsOptions.pid = options.pid;
+  if (options.timeoutMs !== undefined) fsOptions.timeoutMs = options.timeoutMs;
+  const fs = createFsBinding(options.syncChannel, fsOptions);
   const internalBinding = createInternalBindingRegistry({ fs });
   const require = createBuiltinLoader({ fs, internalBinding });
 
@@ -25,9 +31,9 @@ export function runNodeProgram(source, options = {}) {
   };
 }
 
-function runFsSmokeProgram(require) {
+function runFsSmokeProgram(require: (specifier: string) => RuntimeValue): RuntimeProgramResult {
   const module = { exports: {} };
-  const fs = require("node:fs");
+  const fs = require("node:fs") as RuntimeFsBinding;
   fs.writeFileSync("/workspace/result.txt", "hello");
   const value = fs.readFileSync("/workspace/result.txt", "utf8");
   module.exports = {
@@ -40,12 +46,12 @@ function runFsSmokeProgram(require) {
   };
 }
 
-export function runUnsafeCommonJsForLocalTests(source, options = {}) {
-  const fs = createFsBinding(options.syncChannel, {
-    generation: options.generation,
-    pid: options.pid,
-    timeoutMs: options.timeoutMs
-  });
+export function runUnsafeCommonJsForLocalTests(source: string, options: RuntimeProgramOptions): RuntimeProgramResult {
+  const fsOptions: Parameters<typeof createFsBinding>[1] = {};
+  if (options.generation !== undefined) fsOptions.generation = options.generation;
+  if (options.pid !== undefined) fsOptions.pid = options.pid;
+  if (options.timeoutMs !== undefined) fsOptions.timeoutMs = options.timeoutMs;
+  const fs = createFsBinding(options.syncChannel, fsOptions);
   const internalBinding = createInternalBindingRegistry({ fs });
   const require = createBuiltinLoader({ fs, internalBinding });
   const module = { exports: {} };

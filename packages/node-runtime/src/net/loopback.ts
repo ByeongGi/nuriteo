@@ -1,7 +1,10 @@
 import { parseHttpRequest, parseHttpResponse, serializeHttpRequest, serializeHttpResponse } from "./http-parser.ts";
+import type { LoopbackErrorCode, LoopbackFetchOptions, LoopbackHandler, LoopbackListener, LoopbackNetworkOptions, RuntimeHttpResponse } from "./types.ts";
 
 export class LoopbackNetworkError extends Error {
-  constructor(message, code) {
+  code: LoopbackErrorCode;
+
+  constructor(message: string, code: LoopbackErrorCode) {
     super(message);
     this.name = "LoopbackNetworkError";
     this.code = code;
@@ -9,12 +12,15 @@ export class LoopbackNetworkError extends Error {
 }
 
 export class LoopbackNetwork {
-  constructor(options = {}) {
+  maxBytes: number;
+  listeners: Map<number, LoopbackListener>;
+
+  constructor(options: LoopbackNetworkOptions = {}) {
     this.maxBytes = options.maxBytes ?? 1024 * 1024;
     this.listeners = new Map();
   }
 
-  listen(port, handler) {
+  listen(port: number, handler: LoopbackHandler): { port: number; close: () => void } {
     if (this.listeners.has(port)) throw new LoopbackNetworkError(`port in use: ${port}`, "EADDRINUSE");
     const listener = { port, handler, closed: false };
     this.listeners.set(port, listener);
@@ -27,7 +33,7 @@ export class LoopbackNetwork {
     };
   }
 
-  async fetch(url, options = {}) {
+  async fetch(url: string | URL, options: LoopbackFetchOptions = {}): Promise<RuntimeHttpResponse> {
     const parsed = new URL(url);
     const port = Number(parsed.port || 80);
     const listener = this.listeners.get(port);
@@ -42,7 +48,9 @@ export class LoopbackNetwork {
     const request = parseHttpRequest(requestRaw);
 
     if (options.signal?.aborted) throw new LoopbackNetworkError("client aborted", "ECONNABORTED");
-    const response = await listener.handler(request, { signal: options.signal });
+    const context: { signal?: AbortSignal } = {};
+    if (options.signal) context.signal = options.signal;
+    const response = await listener.handler(request, context);
     if (options.signal?.aborted) throw new LoopbackNetworkError("client aborted", "ECONNABORTED");
 
     const raw = serializeHttpResponse(response);
@@ -53,7 +61,6 @@ export class LoopbackNetwork {
   }
 }
 
-export function createLoopbackNetwork(options) {
+export function createLoopbackNetwork(options: LoopbackNetworkOptions = {}): LoopbackNetwork {
   return new LoopbackNetwork(options);
 }
-

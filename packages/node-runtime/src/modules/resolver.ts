@@ -1,4 +1,6 @@
-function normalizePath(path) {
+import type { ModuleRuntimeOptions, PackageManifest } from "../types.ts";
+
+function normalizePath(path: string): string {
   const parts = [];
   for (const part of path.split("/")) {
     if (!part || part === ".") continue;
@@ -8,28 +10,33 @@ function normalizePath(path) {
   return `/${parts.join("/")}`;
 }
 
-function dirname(path) {
+function dirname(path: string): string {
   const index = path.lastIndexOf("/");
   return index <= 0 ? "/" : path.slice(0, index);
 }
 
-function packageName(specifier) {
+function packageName(specifier: string): string {
   if (specifier.startsWith("@")) {
     const [scope, name] = specifier.split("/");
     return `${scope}/${name}`;
   }
-  return specifier.split("/")[0];
+  return specifier.split("/")[0] || specifier;
 }
 
 export class ModuleResolver {
-  constructor(options = {}) {
+  modules: Map<string, unknown>;
+  packages: Record<string, PackageManifest>;
+  imports: Record<string, string>;
+  realpath: (url: string) => string;
+
+  constructor(options: ModuleRuntimeOptions & { modules?: Map<string, unknown>; realpath?: (url: string) => string } = {}) {
     this.modules = options.modules || new Map();
     this.packages = options.packages || {};
     this.imports = options.imports || {};
     this.realpath = options.realpath || ((url) => url);
   }
 
-  resolve(specifier, parentUrl = "/workspace/index.mjs") {
+  resolve(specifier: string, parentUrl = "/workspace/index.mjs"): string {
     if (specifier.startsWith("#")) {
       return this.resolveImports(specifier, parentUrl);
     }
@@ -40,21 +47,21 @@ export class ModuleResolver {
     return this.resolvePackage(specifier);
   }
 
-  resolveImports(specifier, parentUrl) {
+  resolveImports(specifier: string, parentUrl: string): string {
     const target = this.imports[specifier];
     if (!target) throw new Error(`ERR_PACKAGE_IMPORT_NOT_DEFINED: ${specifier} from ${parentUrl}`);
     return this.resolve(target, parentUrl);
   }
 
-  resolvePackage(specifier) {
+  resolvePackage(specifier: string): string {
     const name = packageName(specifier);
     const manifest = this.packages[name];
     if (!manifest) throw new Error(`ERR_MODULE_NOT_FOUND: ${specifier}`);
 
     const subpath = specifier === name ? "." : `.${specifier.slice(name.length)}`;
     const exportsMap = manifest.exports || {};
-    const target = typeof exportsMap === "string" && subpath === "."
-      ? exportsMap
+    const target = typeof exportsMap === "string"
+      ? subpath === "." ? exportsMap : undefined
       : exportsMap[subpath];
     if (!target) throw new Error(`ERR_PACKAGE_PATH_NOT_EXPORTED: ${specifier}`);
 
@@ -62,7 +69,7 @@ export class ModuleResolver {
     return this.resolvePath(`${packageRoot}/${target}`);
   }
 
-  resolvePath(path) {
+  resolvePath(path: string): string {
     const normalized = normalizePath(path);
     const candidates = [
       normalized,

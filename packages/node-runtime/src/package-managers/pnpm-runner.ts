@@ -1,5 +1,12 @@
+import type { PackageManagerProcessResult, PackageManagerProcessRunner, PackageManagerRunnerOptions } from "./types.ts";
+import type { RuntimeEnv } from "../types.ts";
+
 export class PnpmRunner {
-  constructor(options) {
+  registry: PackageManagerRunnerOptions["registry"];
+  processRunner: PackageManagerProcessRunner;
+  env: RuntimeEnv;
+
+  constructor(options: PackageManagerRunnerOptions) {
     if (!options?.registry) throw new Error("PnpmRunner requires a CLI registry");
     if (!options?.processRunner) throw new Error("PnpmRunner requires a process runner");
     this.registry = options.registry;
@@ -7,19 +14,19 @@ export class PnpmRunner {
     this.env = { ...(options.env || {}) };
   }
 
-  install(cwd, args = []) {
+  install(cwd: string, args: string[] = []): PackageManagerProcessResult {
     return this.#run(cwd, ["install", ...args]);
   }
 
-  runScript(cwd, script, args = []) {
+  runScript(cwd: string, script: string, args: string[] = []): PackageManagerProcessResult {
     return this.#run(cwd, ["run", script, ...args]);
   }
 
-  exec(cwd, command, args = []) {
+  exec(cwd: string, command: string, args: string[] = []): PackageManagerProcessResult {
     return this.#run(cwd, ["exec", command, ...args]);
   }
 
-  #run(cwd, args) {
+  #run(cwd: string, args: string[]): PackageManagerProcessResult {
     const entry = this.registry.resolve("pnpm");
     return this.processRunner({
       name: "pnpm",
@@ -31,7 +38,6 @@ export class PnpmRunner {
   }
 }
 
-export function createPnpmRunner(options) {
+export function createPnpmRunner(options: PackageManagerRunnerOptions): PnpmRunner {
   return new PnpmRunner(options);
 }
-

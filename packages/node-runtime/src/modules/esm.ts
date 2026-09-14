@@ -1,4 +1,8 @@
-export async function evaluateEsm(runtime, url) {
+import type { EsmRecord } from "./cache.ts";
+import type { ModuleRuntime } from "./runtime.ts";
+import type { RuntimeNamespace, RuntimeValue } from "../types.ts";
+
+export async function evaluateEsm(runtime: ModuleRuntime, url: string): Promise<RuntimeNamespace> {
   const canonicalUrl = runtime.cache.canonicalize(url);
   const existing = runtime.cache.esm.get(canonicalUrl);
   if (existing?.status === "evaluated") return existing.namespace;
@@ -10,9 +14,9 @@ export async function evaluateEsm(runtime, url) {
     return cjsNamespace(runtime.requireSync(canonicalUrl, canonicalUrl));
   }
 
-  const bindings = new Map();
-  const namespace = {};
-  const record = {
+  const bindings = new Map<string, () => RuntimeValue>();
+  const namespace: RuntimeNamespace = {};
+  const record: EsmRecord = {
     status: "evaluating",
     namespace,
     bindings
@@ -29,12 +33,12 @@ export async function evaluateEsm(runtime, url) {
       url: `file://${canonicalUrl}`,
       dirname: canonicalUrl.slice(0, canonicalUrl.lastIndexOf("/")) || "/",
       filename: canonicalUrl,
-      resolve: (specifier) => runtime.resolve(specifier, canonicalUrl)
+      resolve: (specifier: string) => runtime.resolve(specifier, canonicalUrl)
     }),
-    importNamespace: (specifier) => runtime.importSync(specifier, canonicalUrl),
-    dynamicImport: (specifier) => runtime.importModule(specifier, canonicalUrl),
-    exportConst: (name, value) => defineBinding(namespace, bindings, name, () => value),
-    exportLive: (name, getter) => defineBinding(namespace, bindings, name, getter)
+    importNamespace: (specifier: string) => runtime.importSync(specifier, canonicalUrl),
+    dynamicImport: (specifier: string) => runtime.importModule(specifier, canonicalUrl),
+    exportConst: (name: string, value: RuntimeValue) => defineBinding(namespace, bindings, name, () => value),
+    exportLive: (name: string, getter: () => RuntimeValue) => defineBinding(namespace, bindings, name, getter)
   };
 
   await definition.factory(context);
@@ -42,18 +46,18 @@ export async function evaluateEsm(runtime, url) {
   return namespace;
 }
 
-function defineBinding(namespace, bindings, name, getter) {
+function defineBinding(namespace: RuntimeNamespace, bindings: Map<string, () => RuntimeValue>, name: string, getter: () => RuntimeValue): void {
   bindings.set(name, getter);
   if (!Object.prototype.hasOwnProperty.call(namespace, name)) {
     Object.defineProperty(namespace, name, {
       enumerable: true,
-      get: () => bindings.get(name)()
+      get: () => bindings.get(name)?.()
     });
   }
 }
 
-export function cjsNamespace(exports) {
-  const namespace = {};
+export function cjsNamespace(exports: RuntimeValue): RuntimeNamespace {
+  const namespace: RuntimeNamespace = {};
   Object.defineProperty(namespace, "default", {
     enumerable: true,
     value: exports
@@ -62,7 +66,7 @@ export function cjsNamespace(exports) {
     for (const key of Object.keys(exports)) {
       Object.defineProperty(namespace, key, {
         enumerable: true,
-        value: exports[key]
+        value: (exports as Record<string, unknown>)[key]
       });
     }
   }

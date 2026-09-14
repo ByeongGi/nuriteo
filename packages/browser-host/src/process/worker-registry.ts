@@ -1,7 +1,7 @@
 export class WorkerRegistry {
-  #workers = new Map();
+  #workers: Map<string, { terminate: () => void }> = new Map();
 
-  register(pid, generation, worker) {
+  register(pid: number, generation: number, worker: { terminate: () => void }): void {
     const key = processKey(pid, generation);
     if (this.#workers.has(key)) {
       throw new Error(`worker already registered for ${key}`);
@@ -9,11 +9,11 @@ export class WorkerRegistry {
     this.#workers.set(key, worker);
   }
 
-  get(pid, generation) {
+  get(pid: number, generation: number): { terminate: () => void } | null {
     return this.#workers.get(processKey(pid, generation)) || null;
   }
 
-  terminate(pid, generation) {
+  terminate(pid: number, generation: number): boolean {
     const key = processKey(pid, generation);
     const worker = this.#workers.get(key);
     if (!worker) return false;
@@ -22,18 +22,18 @@ export class WorkerRegistry {
     return true;
   }
 
-  terminateAll() {
+  terminateAll(): void {
     for (const worker of this.#workers.values()) {
       worker.terminate();
     }
     this.#workers.clear();
   }
 
-  size() {
+  size(): number {
     return this.#workers.size;
   }
 }
 
-export function processKey(pid, generation) {
+export function processKey(pid: number, generation: number): string {
   return `${pid}:${generation}`;
 }

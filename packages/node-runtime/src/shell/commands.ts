@@ -1,6 +1,9 @@
-export function createCommandRegistry(commands = {}) {
+import type { RuntimeEnv } from "../types.ts";
+import type { ShellCommandMap, ShellCommandRegistry } from "./types.ts";
+
+export function createCommandRegistry(commands: ShellCommandMap = {}): ShellCommandRegistry {
   return {
-    resolve(name, env = {}, cwd = "/workspace") {
+    resolve(name: string, env: RuntimeEnv = {}, cwd = "/workspace") {
       if (commands[name]) return commands[name];
       for (const dir of (env.PATH || "").split(":").filter(Boolean)) {
         const candidate = dir.startsWith("/") ? `${dir}/${name}` : `${cwd}/${dir}/${name}`;
@@ -11,7 +14,7 @@ export function createCommandRegistry(commands = {}) {
   };
 }
 
-export function shebangCommand(source) {
+export function shebangCommand(source: string): string[] | null {
   const firstLine = source.split("\n")[0] || "";
   if (!firstLine.startsWith("#!")) return null;
   return firstLine.slice(2).trim().split(/\s+/);

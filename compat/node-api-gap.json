@@ -1,0 +1,216 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-15",
+  "runtimeProfile": "node-22-browser-native-p3",
+  "nodeVersion": "22.23.0",
+  "scope": {
+    "goal": "Reach WebContainers parity for browser-based JavaScript and TypeScript development workflows.",
+    "included": [
+      "npm and pnpm CLI boot paths",
+      "Vite React install/dev/HMR/build workflow",
+      "Node builtin subsets needed by package-manager and dev-server dependencies"
+    ],
+    "excluded": [
+      "native .node addon loading",
+      "arbitrary native binary execution",
+      "Docker, VM, OS daemon, and direct TCP database compatibility"
+    ]
+  },
+  "sourceEvidence": [
+    {
+      "id": "node-profile",
+      "path": "packages/node-runtime/src/node-profile.ts",
+      "summary": "Current browser-native Node profile marks buffer, events, stream, and util as missing."
+    },
+    {
+      "id": "cli-smoke",
+      "path": "tests/node-runtime/cli-smoke.test.mjs",
+      "summary": "npm --version and pnpm --version remain blocked until missing builtin modules are implemented."
+    },
+    {
+      "id": "package-manager-baseline",
+      "path": "tests/package-managers/cli-baseline.test.mjs",
+      "summary": "Vendored npm and pnpm entrypoints are verified against host Node before browser guest runtime boot."
+    }
+  ],
+  "callTraces": [
+    {
+      "command": "npm --version",
+      "runtime": "browser-guest-node-runtime",
+      "status": "blocked",
+      "firstFailure": "unsupported-builtin",
+      "missingBuiltins": ["buffer", "events", "stream", "util"]
+    },
+    {
+      "command": "pnpm --version",
+      "runtime": "browser-guest-node-runtime",
+      "status": "blocked",
+      "firstFailure": "unsupported-builtin",
+      "missingBuiltins": ["buffer", "events", "stream", "util"]
+    },
+    {
+      "command": "vite --host 127.0.0.1",
+      "runtime": "browser-guest-node-runtime",
+      "status": "not-run",
+      "blockedBy": ["npm --version", "pnpm --version"],
+      "missingBuiltins": ["buffer", "events", "stream", "util"]
+    }
+  ],
+  "gaps": [
+    {
+      "builtin": "buffer",
+      "status": "missing",
+      "priority": 0,
+      "requiredBy": ["npm bootstrap", "pnpm bootstrap", "package metadata and tar/integrity dependencies"],
+      "minimumApi": [
+        "Buffer.from",
+        "Buffer.alloc",
+        "Buffer.allocUnsafe",
+        "Buffer.byteLength",
+        "Buffer.concat",
+        "Buffer.isBuffer",
+        "buffer.toString",
+        "buffer.subarray",
+        "buffer.slice",
+        "buffer.copy",
+        "buffer.equals",
+        "buffer.length",
+        "kMaxLength"
+      ],
+      "acceptance": [
+        "Reference Node fixture covers string, utf8, base64, hex, array buffer, typed array, concat, and slice/copy behavior.",
+        "Browser runtime fixture passes the same fixture without host shortcuts.",
+        "npm --version and pnpm --version move past Buffer construction failures."
+      ],
+      "nextPhase": "P9-02"
+    },
+    {
+      "builtin": "events",
+      "status": "missing",
+      "priority": 0,
+      "requiredBy": ["npm bootstrap", "pnpm bootstrap", "streams", "dev server event lifecycle"],
+      "minimumApi": [
+        "EventEmitter",
+        "on",
+        "once",
+        "emit",
+        "off",
+        "removeListener",
+        "removeAllListeners",
+        "listenerCount",
+        "listeners",
+        "setMaxListeners",
+        "error event semantics"
+      ],
+      "acceptance": [
+        "Reference Node fixture covers listener ordering, once removal, this binding, error throw behavior, and listener cleanup.",
+        "Browser runtime fixture passes the same fixture.",
+        "stream implementation can depend on the shared EventEmitter subset."
+      ],
+      "nextPhase": "P9-02"
+    },
+    {
+      "builtin": "util",
+      "status": "missing",
+      "priority": 0,
+      "requiredBy": ["npm diagnostics", "pnpm diagnostics", "dependency compatibility helpers"],
+      "minimumApi": [
+        "util.format",
+        "util.inspect",
+        "util.inherits",
+        "util.promisify",
+        "util.callbackify",
+        "util.types.isDate",
+        "util.types.isRegExp",
+        "util.types.isArrayBuffer",
+        "util.types.isTypedArray",
+        "util.deprecate"
+      ],
+      "acceptance": [
+        "Reference Node fixture covers formatting, shallow inspection, custom inspect hooks, inheritance, promisify callback order, and util.types probes.",
+        "Browser runtime fixture passes the same fixture.",
+        "Unsupported deep inspect features are explicitly documented instead of silently diverging."
+      ],
+      "nextPhase": "P9-02"
+    },
+    {
+      "builtin": "stream",
+      "status": "missing",
+      "priority": 1,
+      "requiredBy": ["npm install pipeline", "pnpm install pipeline", "tarball extraction", "Vite dev server IO"],
+      "minimumApi": [
+        "Readable",
+        "Writable",
+        "Duplex",
+        "Transform",
+        "PassThrough",
+        "pipeline",
+        "finished",
+        "Readable.from",
+        "readable pipe/unpipe",
+        "async iterator",
+        "backpressure and error propagation subset"
+      ],
+      "acceptance": [
+        "Reference Node fixture covers objectMode false byte streams, pipe lifecycle, transform flush, async iteration, and error forwarding.",
+        "Browser runtime fixture passes the same fixture.",
+        "Tarball download/extract path can stream data without buffering the entire archive in package-manager code."
+      ],
+      "nextPhase": "P9-03"
+    },
+    {
+      "builtin": "path",
+      "status": "needs-audit",
+      "priority": 2,
+      "requiredBy": ["package resolution", "Vite project file paths"],
+      "minimumApi": ["posix.join", "posix.resolve", "posix.normalize", "posix.relative", "dirname", "basename", "extname", "isAbsolute"],
+      "acceptance": ["Trace-driven fixture passes for package-manager and Vite paths."],
+      "nextPhase": "P9-04"
+    },
+    {
+      "builtin": "url",
+      "status": "needs-audit",
+      "priority": 2,
+      "requiredBy": ["package metadata fetch", "Vite dev server URLs"],
+      "minimumApi": ["URL", "URLSearchParams", "fileURLToPath", "pathToFileURL", "urlToHttpOptions"],
+      "acceptance": ["Trace-driven fixture passes for package-manager and Vite URLs."],
+      "nextPhase": "P9-04"
+    },
+    {
+      "builtin": "process",
+      "status": "partial",
+      "priority": 2,
+      "requiredBy": ["CLI args/env/cwd", "framework feature detection"],
+      "minimumApi": ["argv", "env", "cwd", "chdir", "exitCode", "nextTick", "platform", "versions", "release"],
+      "acceptance": ["CLI and Vite fixtures do not fail on process shape checks."],
+      "nextPhase": "P9-04"
+    },
+    {
+      "builtin": "os",
+      "status": "needs-audit",
+      "priority": 3,
+      "requiredBy": ["temporary paths", "platform feature detection"],
+      "minimumApi": ["tmpdir", "homedir", "platform", "arch", "cpus", "EOL"],
+      "acceptance": ["Package-manager fixtures use stable browser-safe values."],
+      "nextPhase": "P9-04"
+    },
+    {
+      "builtin": "tty",
+      "status": "needs-audit",
+      "priority": 3,
+      "requiredBy": ["CLI color/progress behavior"],
+      "minimumApi": ["isatty", "WriteStream", "ReadStream"],
+      "acceptance": ["npm/pnpm output mode is deterministic and non-interactive by default."],
+      "nextPhase": "P9-04"
+    },
+    {
+      "builtin": "assert",
+      "status": "needs-audit",
+      "priority": 3,
+      "requiredBy": ["dependency self-checks"],
+      "minimumApi": ["ok", "equal", "deepEqual", "strictEqual", "throws", "rejects", "strict"],
+      "acceptance": ["Common dependency assertion usage passes under browser runtime."],
+      "nextPhase": "P9-04"
+    }
+  ]
+}

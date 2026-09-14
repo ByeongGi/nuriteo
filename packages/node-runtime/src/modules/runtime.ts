@@ -2,55 +2,61 @@ import { ModuleCache } from "./cache.ts";
 import { evaluateCjs } from "./cjs.ts";
 import { evaluateEsm } from "./esm.ts";
 import { ModuleResolver } from "./resolver.ts";
+import type { ModuleDefinition, ModuleDefinitionMap, ModuleRuntimeOptions, RuntimeNamespace, RuntimeValue } from "../types.ts";
 
 export class ModuleRuntime {
-  constructor(options = {}) {
+  definitions: Map<string, ModuleDefinition>;
+  cache: ModuleCache;
+  resolver: ModuleResolver;
+
+  constructor(options: ModuleRuntimeOptions = {}) {
     this.definitions = new Map();
-    this.cache = new ModuleCache({ realpaths: options.realpaths });
-    this.resolver = new ModuleResolver({
+    this.cache = new ModuleCache(options.realpaths ? { realpaths: options.realpaths } : {});
+    const resolverOptions: ConstructorParameters<typeof ModuleResolver>[0] = {
       modules: this.definitions,
-      packages: options.packages,
-      imports: options.imports,
       realpath: (url) => this.cache.canonicalize(url)
-    });
+    };
+    if (options.packages) resolverOptions.packages = options.packages;
+    if (options.imports) resolverOptions.imports = options.imports;
+    this.resolver = new ModuleResolver(resolverOptions);
   }
 
-  register(url, definition) {
+  register(url: string, definition: ModuleDefinition): ModuleRuntime {
     this.definitions.set(this.cache.canonicalize(url), definition);
     return this;
   }
 
-  registerMany(definitions) {
+  registerMany(definitions: ModuleDefinitionMap): ModuleRuntime {
     for (const [url, definition] of Object.entries(definitions)) {
       this.register(url, definition);
     }
     return this;
   }
 
-  getDefinition(url) {
+  getDefinition(url: string): ModuleDefinition | undefined {
     return this.definitions.get(this.cache.canonicalize(url));
   }
 
-  resolve(specifier, parentUrl) {
+  resolve(specifier: string, parentUrl?: string): string {
     return this.resolver.resolve(specifier, parentUrl);
   }
 
-  requireSync(specifier, parentUrl = "/workspace/index.cjs") {
+  requireSync(specifier: string, parentUrl = "/workspace/index.cjs"): RuntimeValue {
     const url = this.resolve(specifier, parentUrl);
     return evaluateCjs(this, url);
   }
 
-  importSync(specifier, parentUrl = "/workspace/index.mjs") {
+  importSync(specifier: string, parentUrl = "/workspace/index.mjs"): RuntimeNamespace {
     const url = this.resolve(specifier, parentUrl);
     const existing = this.cache.esm.get(url);
     if (existing) return existing.namespace;
 
     const definition = this.getDefinition(url);
     if (definition?.kind === "cjs") {
-      return evaluateCjs(this, url);
+      return evaluateCjs(this, url) as RuntimeNamespace;
     }
 
-    const namespace = {};
+    const namespace: RuntimeNamespace = {};
     this.cache.esm.set(url, {
       status: "evaluating",
       namespace,
@@ -59,12 +65,12 @@ export class ModuleRuntime {
     return namespace;
   }
 
-  async importModule(specifier, parentUrl = "/workspace/index.mjs") {
+  async importModule(specifier: string, parentUrl = "/workspace/index.mjs"): Promise<RuntimeNamespace> {
     const url = this.resolve(specifier, parentUrl);
     return evaluateEsm(this, url);
   }
 }
 
-export function createModuleRuntime(options) {
+export function createModuleRuntime(options: ModuleRuntimeOptions = {}): ModuleRuntime {
   return new ModuleRuntime(options);
 }

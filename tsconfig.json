@@ -13,12 +13,10 @@
     "noUncheckedIndexedAccess": true,
     "strict": true,
     "target": "ES2024",
+    "types": ["node"],
     "useDefineForClassFields": true
   },
   "include": [
-    "packages/protocol/src/**/*.ts",
-    "packages/browser-host/src/supervisor.ts",
-    "packages/sdk/src/**/*.ts",
-    "packages/preview/src/**/*.ts"
+    "packages/**/*.ts"
   ]
 }

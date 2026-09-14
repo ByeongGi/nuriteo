@@ -1,4 +1,5 @@
 import "./profile.test.mjs";
+import "./node-api-gap.test.mjs";
 import "./modules.test.mjs";
 import "./scheduler.test.mjs";
 import "./typescript.test.mjs";

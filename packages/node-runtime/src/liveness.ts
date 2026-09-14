@@ -1,10 +1,15 @@
+import type { LivenessHandle } from "./types.ts";
+
 export class LivenessTracker {
+  refs: Set<number>;
+  nextId: number;
+
   constructor() {
     this.refs = new Set();
     this.nextId = 1;
   }
 
-  ref(label = "handle") {
+  ref(label = "handle"): LivenessHandle {
     const id = this.nextId++;
     this.refs.add(id);
     return {
@@ -24,7 +29,7 @@ export class LivenessTracker {
     };
   }
 
-  hasRefs() {
+  hasRefs(): boolean {
     return this.refs.size > 0;
   }
 }

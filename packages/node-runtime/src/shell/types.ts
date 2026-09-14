@@ -1,0 +1,44 @@
+import type { RuntimeEnv } from "../types.ts";
+
+export interface ShellCommandResult {
+  stdout: string;
+  stderr: string;
+  exitCode: number;
+  argv?: string[];
+}
+
+export interface ShellCommandContext {
+  argv: string[];
+  cwd: string;
+  env: RuntimeEnv;
+  stdin: string;
+  files: Map<string, string>;
+}
+
+export type ShellCommand = (context: ShellCommandContext) => ShellCommandResult | Promise<ShellCommandResult>;
+export type ShellCommandMap = Record<string, ShellCommand>;
+
+export interface ShellCommandRegistry {
+  resolve(name: string, env?: RuntimeEnv, cwd?: string): ShellCommand;
+}
+
+export type ShellOp = "&&" | "|" | null;
+
+export interface ShellStep {
+  op: ShellOp;
+  argv: string[];
+}
+
+export interface ShellRuntimeOptions {
+  cwd?: string;
+  env?: RuntimeEnv;
+  files?: Record<string, string>;
+  commands?: ShellCommandMap;
+}
+
+export interface ShellRunResult {
+  stdout: string;
+  stderr: string;
+  exitCode: number;
+  files: Record<string, string>;
+}

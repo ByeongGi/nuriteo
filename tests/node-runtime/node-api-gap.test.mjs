@@ -1,0 +1,38 @@
+import assert from "node:assert/strict";
+import fs from "node:fs";
+
+import { getUnsupportedBuiltins, NODE_PROFILE } from "../../packages/node-runtime/src/node-profile.ts";
+
+const gap = JSON.parse(fs.readFileSync(new URL("../../compat/node-api-gap.json", import.meta.url), "utf8"));
+
+assert.equal(gap.schemaVersion, 1);
+assert.equal(gap.runtimeProfile, NODE_PROFILE.name);
+assert.equal(gap.nodeVersion, NODE_PROFILE.nodeVersion);
+assert.ok(Array.isArray(gap.gaps));
+assert.ok(Array.isArray(gap.callTraces));
+
+const gapsByName = new Map(gap.gaps.map((entry) => [entry.builtin, entry]));
+const unsupported = getUnsupportedBuiltins().map((binding) => binding.name).sort();
+
+for (const name of unsupported) {
+  const entry = gapsByName.get(name);
+  assert.ok(entry, `${name} must have a node-api-gap entry`);
+  assert.equal(entry.status, "missing");
+  assert.ok(entry.minimumApi.length > 0, `${name} must declare minimum APIs`);
+  assert.ok(entry.acceptance.length > 0, `${name} must declare acceptance criteria`);
+}
+
+for (const name of ["buffer", "events", "stream", "util"]) {
+  assert.equal(gapsByName.get(name)?.status, "missing");
+}
+
+const blockedCommands = gap.callTraces.filter((trace) => trace.status === "blocked");
+assert.ok(blockedCommands.length >= 2);
+for (const trace of blockedCommands) {
+  assert.deepEqual([...trace.missingBuiltins].sort(), unsupported);
+}
+
+const priorities = gap.gaps.map((entry) => entry.priority);
+assert.equal(Math.min(...priorities), 0);
+
+console.log("node api gap inventory test ok");

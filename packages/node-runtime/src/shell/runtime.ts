@@ -1,15 +1,22 @@
 import { createCommandRegistry, shebangCommand } from "./commands.ts";
 import { parseShell } from "./parser.ts";
+import type { RuntimeEnv } from "../types.ts";
+import type { ShellCommand, ShellCommandRegistry, ShellRunResult, ShellRuntimeOptions } from "./types.ts";
 
 export class ShellRuntime {
-  constructor(options = {}) {
+  cwd: string;
+  env: RuntimeEnv;
+  files: Map<string, string>;
+  registry: ShellCommandRegistry;
+
+  constructor(options: ShellRuntimeOptions = {}) {
     this.cwd = options.cwd || "/workspace";
     this.env = { PATH: "/workspace/node_modules/.bin:/bin", ...(options.env || {}) };
     this.files = new Map(Object.entries(options.files || {}));
     this.registry = createCommandRegistry(options.commands || {});
   }
 
-  async run(commandLine) {
+  async run(commandLine: string): Promise<ShellRunResult> {
     const steps = parseShell(commandLine);
     let stdin = "";
     let stdout = "";
@@ -18,6 +25,7 @@ export class ShellRuntime {
 
     for (let index = 0; index < steps.length; index += 1) {
       const step = steps[index];
+      if (!step) continue;
       const nextStep = steps[index + 1];
       if (step.op === "&&" && exitCode !== 0) break;
       const { argv, redirect } = extractRedirect(step.argv);
@@ -33,12 +41,14 @@ export class ShellRuntime {
     return { stdout, stderr, exitCode, files: Object.fromEntries(this.files) };
   }
 
-  async runCommand(argv, stdin) {
+  async runCommand(argv: string[], stdin: string): Promise<Awaited<ReturnType<ShellCommand>>> {
     if (argv[0] === "sh" && argv[1] === "-c") {
       return this.run(argv.slice(2).join(" "));
     }
 
-    const command = this.resolveExecutable(argv[0]);
+    const name = argv[0];
+    if (!name) throw new Error("missing command");
+    const command = this.resolveExecutable(name);
     return command({
       argv,
       cwd: this.cwd,
@@ -48,10 +58,11 @@ export class ShellRuntime {
     });
   }
 
-  resolveExecutable(name) {
+  resolveExecutable(name: string): ShellCommand {
     const filePath = this.resolveFileExecutable(name);
     if (filePath) {
       const source = this.files.get(filePath);
+      if (source === undefined) throw new Error(`missing executable source: ${filePath}`);
       const shebang = shebangCommand(source);
       if (isNodeShebang(shebang)) {
         return ({ argv }) => ({
@@ -67,7 +78,7 @@ export class ShellRuntime {
     return this.registry.resolve(name, this.env, this.cwd);
   }
 
-  resolveFileExecutable(name) {
+  resolveFileExecutable(name: string): string | null {
     const direct = resolvePath(name, this.cwd);
     if (this.files.has(direct)) return direct;
     for (const dir of (this.env.PATH || "").split(":").filter(Boolean)) {
@@ -78,26 +89,27 @@ export class ShellRuntime {
   }
 }
 
-function isNodeShebang(shebang) {
+function isNodeShebang(shebang: string[] | null): boolean {
   if (!shebang) return false;
   if (shebang[0]?.endsWith("node")) return true;
-  return shebang[0]?.endsWith("env") && shebang[1] === "node";
+  return Boolean(shebang[0]?.endsWith("env") && shebang[1] === "node");
 }
 
-export function createShellRuntime(options) {
+export function createShellRuntime(options: ShellRuntimeOptions = {}): ShellRuntime {
   return new ShellRuntime(options);
 }
 
-function extractRedirect(argv) {
+function extractRedirect(argv: string[]): { argv: string[]; redirect: string | null } {
   const index = argv.indexOf(">");
   if (index < 0) return { argv, redirect: null };
-  if (!argv[index + 1]) throw new Error("missing redirect target");
+  const redirect = argv[index + 1];
+  if (!redirect) throw new Error("missing redirect target");
   return {
     argv: argv.slice(0, index),
-    redirect: argv[index + 1]
+    redirect
   };
 }
 
-function resolvePath(path, cwd) {
+function resolvePath(path: string, cwd: string): string {
   return path.startsWith("/") ? path : `${cwd}/${path}`;
 }

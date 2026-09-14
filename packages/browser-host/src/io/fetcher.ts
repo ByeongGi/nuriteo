@@ -1,9 +1,14 @@
 import crypto from "node:crypto";
 
 import { FetchPolicy, FetchPolicyError } from "./fetch-policy.ts";
+import type { HostDownloadResult, HostFetchErrorCode, HostFetchErrorOptions, HostFetcherOptions, HostFetchOptions } from "./types.ts";
 
 export class HostFetchError extends Error {
-  constructor(message, options = {}) {
+  code: HostFetchErrorCode;
+  url: string | null;
+  status: number | null;
+
+  constructor(message: string, options: HostFetchErrorOptions = {}) {
     super(message);
     this.name = "HostFetchError";
     this.code = options.code || "FETCH_ERROR";
@@ -13,20 +18,24 @@ export class HostFetchError extends Error {
 }
 
 export class HostFetcher {
-  constructor(options = {}) {
+  fetchImpl: typeof fetch;
+  policy: FetchPolicy;
+
+  constructor(options: HostFetcherOptions = {}) {
     this.fetchImpl = options.fetchImpl || globalThis.fetch;
     this.policy = options.policy || new FetchPolicy(options.policyOptions);
   }
 
-  async download(input, options = {}) {
+  async download(input: string | URL, options: HostFetchOptions = {}): Promise<HostDownloadResult> {
     let url = this.policy.assertAllowed(input);
-    const redirects = [];
+    const redirects: HostDownloadResult["redirects"] = [];
     const maxRedirects = options.maxRedirects ?? this.policy.maxRedirects;
     const timeoutController = new AbortController();
     const timeout = setTimeout(() => timeoutController.abort(new Error("fetch timeout")), options.timeoutMs ?? 30000);
-    const signals = [timeoutController.signal, options.signal].filter(Boolean);
-    const signal = signals.length === 1 ? signals[0] : AbortSignal.any(signals);
-    const requestOptions = { ...options, signal, timeoutSignal: timeoutController.signal, externalSignal: options.signal };
+    const signals = [timeoutController.signal, options.signal].filter((signal): signal is AbortSignal => signal instanceof AbortSignal);
+    const signal = signals.length === 1 ? signals[0]! : AbortSignal.any(signals);
+    const requestOptions: HostFetchOptions = { ...options, signal, timeoutSignal: timeoutController.signal };
+    if (options.signal) requestOptions.externalSignal = options.signal;
 
     try {
       for (let attempt = 0; attempt <= maxRedirects; attempt += 1) {
@@ -60,15 +69,16 @@ export class HostFetcher {
     }
   }
 
-  async #fetch(url, options) {
+  async #fetch(url: URL, options: HostFetchOptions): Promise<Response> {
     try {
-      return await this.fetchImpl(url.href, {
+      const init: RequestInit = {
         method: options.method || "GET",
         headers: options.headers || {},
-        body: options.body,
-        redirect: "manual",
-        signal: options.signal
-      });
+        redirect: "manual"
+      };
+      if (options.signal !== undefined) init.signal = options.signal;
+      if (options.body !== undefined) init.body = options.body;
+      return await this.fetchImpl(url.href, init);
     } catch (error) {
       if (options.timeoutSignal?.aborted) {
         throw new HostFetchError(`fetch timeout: ${url.href}`, { code: "FETCH_TIMEOUT", url: url.href });
@@ -80,14 +90,14 @@ export class HostFetcher {
     }
   }
 
-  async #readBody(response, options) {
+  async #readBody(response: Response, options: HostFetchOptions): Promise<Uint8Array> {
     const maxBytes = options.maxBytes ?? this.policy.maxBytes;
     const bytes = [];
     let total = 0;
 
     try {
       for await (const chunk of response.body || []) {
-        const current = chunk instanceof Uint8Array ? chunk : new Uint8Array(chunk);
+        const current = chunk instanceof Uint8Array ? chunk : new Uint8Array(chunk as ArrayBuffer);
         total += current.byteLength;
         if (total > maxBytes) {
           throw new HostFetchError(`response exceeded ${maxBytes} bytes`, { code: "ETOOBIG", url: response.url, status: response.status });
@@ -114,7 +124,7 @@ export class HostFetcher {
   }
 }
 
-export function verifyIntegrity(body, integrity) {
+export function verifyIntegrity(body: Uint8Array, integrity?: string): boolean {
   if (!integrity) return true;
   const [algorithm, expected] = integrity.split("-", 2);
   if (!algorithm || !expected) throw new HostFetchError(`unsupported integrity: ${integrity}`, { code: "EBADINTEGRITY" });
@@ -125,12 +135,13 @@ export function verifyIntegrity(body, integrity) {
   return true;
 }
 
-function digest(algorithm, body, encoding) {
+function digest(algorithm: string, body: Uint8Array, encoding: "hex" | "base64"): string {
   return crypto.createHash(algorithm).update(body).digest(encoding);
 }
 
-function isRedirect(status) {
+function isRedirect(status: number): boolean {
   return status === 301 || status === 302 || status === 303 || status === 307 || status === 308;
 }
 
 export { FetchPolicy, FetchPolicyError };
+export type { FetchPolicyOptions, HostDownloadRedirect, HostDownloadResult, HostFetchErrorCode, HostFetchErrorOptions, HostFetcherOptions, HostFetchOptions } from "./types.ts";

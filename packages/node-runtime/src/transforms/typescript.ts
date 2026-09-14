@@ -1,6 +1,23 @@
 import ts from "typescript";
 
-export function transpileTypeScript(source, options = {}) {
+export interface TypeScriptTransformOptions {
+  fileName?: string;
+}
+
+export interface RuntimeDiagnostic {
+  code: number;
+  category: string;
+  message: string;
+  fileName?: string;
+  line: number | null;
+  column: number | null;
+}
+
+export function transpileTypeScript(source: string, options: TypeScriptTransformOptions = {}): {
+  code: string;
+  map: unknown;
+  diagnostics: RuntimeDiagnostic[];
+} {
   const fileName = options.fileName || "/workspace/index.ts";
   const result = ts.transpileModule(source, {
     fileName,
@@ -17,23 +34,24 @@ export function transpileTypeScript(source, options = {}) {
   const sourceMapText = result.sourceMapText || "";
   return {
     code: result.outputText,
-    map: sourceMapText ? JSON.parse(sourceMapText) : null,
+    map: sourceMapText ? JSON.parse(sourceMapText) as unknown : null,
     diagnostics: normalizeDiagnostics(result.diagnostics || [])
   };
 }
 
-export function normalizeDiagnostics(diagnostics) {
+export function normalizeDiagnostics(diagnostics: readonly ts.Diagnostic[]): RuntimeDiagnostic[] {
   return diagnostics.map((diagnostic) => {
     const position = diagnostic.file && typeof diagnostic.start === "number"
       ? diagnostic.file.getLineAndCharacterOfPosition(diagnostic.start)
       : null;
-    return {
+    const output: RuntimeDiagnostic = {
       code: diagnostic.code,
       category: ts.DiagnosticCategory[diagnostic.category],
       message: ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n"),
-      fileName: diagnostic.file?.fileName,
       line: position ? position.line + 1 : null,
       column: position ? position.character + 1 : null
     };
+    if (diagnostic.file?.fileName !== undefined) output.fileName = diagnostic.file.fileName;
+    return output;
   });
 }
