@@ -1,0 +1,9 @@
+import "./profile.test.mjs";
+import "./modules.test.mjs";
+import "./scheduler.test.mjs";
+import "./typescript.test.mjs";
+import "./cli-smoke.test.mjs";
+import "./io-process.test.mjs";
+import "./shell.test.mjs";
+import "./net-http.test.mjs";
+import "./wasm-adapters.test.mjs";

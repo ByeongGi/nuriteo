@@ -1,0 +1,34 @@
+lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
+importers:
+
+  .:
+    dependencies:
+      fixture-bin:
+        specifier: workspace:*
+        version: link:packages/fixture-bin
+      fixture-optional:
+        specifier: workspace:*
+        version: link:packages/fixture-optional
+      fixture-peer-consumer:
+        specifier: workspace:*
+        version: link:packages/fixture-peer-consumer
+      fixture-peer-provider:
+        specifier: workspace:*
+        version: link:packages/fixture-peer-provider
+
+  packages/fixture-bin: {}
+
+  packages/fixture-optional: {}
+
+  packages/fixture-peer-consumer:
+    devDependencies:
+      fixture-peer-provider:
+        specifier: workspace:*
+        version: link:../fixture-peer-provider
+
+  packages/fixture-peer-provider: {}

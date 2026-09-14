@@ -1,0 +1,34 @@
+{
+  "name": "cargo-container",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.15.1",
+  "engines": {
+    "node": ">=22.23.0 <23",
+    "pnpm": ">=11.15.1 <12"
+  },
+  "scripts": {
+    "generate:protocol": "node scripts/generate-protocol.mjs",
+    "test:rust": "cargo test --workspace",
+    "build:wasm": "cargo build -p system-wasm --target wasm32-unknown-unknown",
+    "check:workspace": "node scripts/check-workspace.mjs",
+    "check:node-upgrade": "node scripts/check-node-upgrade.mjs",
+    "check:package-manager-upgrade": "node scripts/check-package-manager-upgrade.mjs",
+    "check:release-readiness": "node scripts/check-release-readiness.mjs",
+    "test:protocol": "node tests/protocol/run.mjs",
+    "test:node-runtime": "node tests/node-runtime/run.mjs",
+    "test:browser-host": "node tests/browser-host/run.mjs",
+    "test:package-managers": "node tests/package-managers/run.mjs",
+    "test:preview": "node tests/preview/run.mjs",
+    "test:vite": "node tests/vite/run.mjs",
+    "test:sdk-consumer": "node tests/sdk-consumer/run.mjs",
+    "test:worker-boot": "node experiments/worker-boot/check.mjs",
+    "test:harness": "node tests/harness/self-test.mjs",
+    "dev:lab": "node examples/runtime-lab/server.mjs",
+    "test:browser": "node tests/browser/run.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0",
+    "typescript": "6.0.3"
+  }
+}

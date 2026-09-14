@@ -1,0 +1,7 @@
+{
+  "name": "fixture-bin",
+  "version": "1.0.0",
+  "bin": {
+    "fixture-hello": "bin/fixture-hello.js"
+  }
+}

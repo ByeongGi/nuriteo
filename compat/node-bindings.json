@@ -1,0 +1,43 @@
+{
+  "nodeVersion": "22.23.0",
+  "runtimeProfile": "node-22-browser-native-p3",
+  "bindings": {
+    "fs": {
+      "status": "partial",
+      "source": "local-sab-syscall-adapter",
+      "implementedBy": "packages/node-runtime/src/bindings/fs.ts",
+      "tests": [
+        "tests/browser/boot.test.mjs"
+      ],
+      "notes": "Synchronous writeFileSync/readFileSync/statSync/openSync/readSync/writeSync/closeSync/mkdirSync subset only."
+    },
+    "buffer": {
+      "status": "missing",
+      "source": "node-v22.23.0",
+      "implementedBy": null,
+      "tests": [],
+      "notes": "Required before broad CLI compatibility."
+    },
+    "events": {
+      "status": "missing",
+      "source": "node-v22.23.0",
+      "implementedBy": null,
+      "tests": [],
+      "notes": "Required by many package manager dependencies."
+    },
+    "stream": {
+      "status": "missing",
+      "source": "node-v22.23.0",
+      "implementedBy": null,
+      "tests": [],
+      "notes": "Required by npm/pnpm install paths."
+    },
+    "util": {
+      "status": "missing",
+      "source": "node-v22.23.0",
+      "implementedBy": null,
+      "tests": [],
+      "notes": "Required by Node-shaped diagnostics and CLI dependencies."
+    }
+  }
+}
