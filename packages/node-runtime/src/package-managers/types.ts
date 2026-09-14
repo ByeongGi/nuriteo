@@ -10,6 +10,7 @@ export type PackageManagerCommandKind =
 
 export type PackageManagerBootMode =
   | "artifact-entry-preflight"
+  | "cli-module-evaluation"
   | "install-plan-application"
   | "script-runner-application"
   | "blocked-real-cli-evaluation";
@@ -62,6 +63,10 @@ export interface CliArtifactReader {
 
 export interface GuestRuntimeProcessRunnerOptions {
   artifacts: CliArtifactReader;
+  cliModuleEvaluation?: {
+    reader: import("../modules/index.ts").WorkspaceModuleReader;
+    root?: string;
+  };
   workspace?: {
     reader: import("./workspace.ts").PackageManagerWorkspaceReader;
     writer: import("./workspace.ts").PackageManagerWorkspaceWriter;

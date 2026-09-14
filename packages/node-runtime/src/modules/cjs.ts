@@ -27,7 +27,7 @@ export function evaluateCjs(runtime: ModuleRuntime, url: string): RuntimeValue {
   const require = (specifier: string) => runtime.requireSync(specifier, canonicalUrl);
   const factory = definition.kind === "cjs"
     ? definition.factory
-    : compileCjsSource(definition.source, canonicalUrl);
+    : compileCjsSource(definition.source, canonicalUrl, runtime.globals);
   factory({
     exports: module.exports,
     module,
@@ -39,16 +39,21 @@ export function evaluateCjs(runtime: ModuleRuntime, url: string): RuntimeValue {
   return module.exports;
 }
 
-function compileCjsSource(source: string, filename: string): (context: CjsContext) => void {
+function compileCjsSource(source: string, filename: string, globals: Record<string, RuntimeValue>): (context: CjsContext) => void {
   const compiled = new Function(
     "exports",
     "require",
     "module",
     "__filename",
     "__dirname",
-    `${source}\n//# sourceURL=${filename}`
-  ) as (exports: RuntimeModule["exports"], require: (specifier: string) => RuntimeValue, module: RuntimeModule, filename: string, dirname: string) => void;
+    "process",
+    `${stripShebang(source)}\n//# sourceURL=${filename}`
+  ) as (exports: RuntimeModule["exports"], require: (specifier: string) => RuntimeValue, module: RuntimeModule, filename: string, dirname: string, process: RuntimeValue) => void;
   return ({ exports, require, module, filename, dirname }) => {
-    compiled(exports, require, module, filename, dirname);
+    compiled(exports, require, module, filename, dirname, globals.process);
   };
+}
+
+function stripShebang(source: string): string {
+  return source.startsWith("#!") ? `//${source.slice(2)}` : source;
 }

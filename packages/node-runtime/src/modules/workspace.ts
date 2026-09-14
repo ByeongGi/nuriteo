@@ -21,6 +21,7 @@ export function createWorkspaceModuleRuntime(options: WorkspaceModuleRuntimeOpti
   };
   const runtime = createModuleRuntime({
     ...(options.builtins ? { builtins: options.builtins } : {}),
+    ...(options.globals ? { globals: options.globals } : {}),
     ...(options.imports ? { imports: options.imports } : {}),
     packages,
     ...(options.realpaths ? { realpaths: options.realpaths } : {})

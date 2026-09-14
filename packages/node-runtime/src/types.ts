@@ -65,6 +65,7 @@ export interface ModuleRuntimeOptions {
   packages?: Record<string, PackageManifest>;
   imports?: Record<string, string>;
   builtins?: (specifier: string) => RuntimeValue;
+  globals?: Record<string, RuntimeValue>;
 }
 
 export interface LivenessHandle {

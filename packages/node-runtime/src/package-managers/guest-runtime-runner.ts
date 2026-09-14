@@ -7,6 +7,7 @@ import type {
 } from "./types.ts";
 import { applyNpmInstallPlan, createNpmInstallPlan } from "./npm-install.ts";
 import { applyPnpmStorePlan, createPnpmStorePlan } from "./pnpm-store.ts";
+import { createCliModuleEvaluator } from "./cli-evaluator.ts";
 import { createPackageScriptRunner, type PackageScriptReader } from "./script-runner.ts";
 
 export function createGuestRuntimeProcessRunner(options: GuestRuntimeProcessRunnerOptions): PackageManagerProcessRunner {
@@ -30,6 +31,22 @@ export function createGuestRuntimeProcessRunner(options: GuestRuntimeProcessRunn
     }
 
     if (commandKind === "version") {
+      if (options.cliModuleEvaluation) {
+        const evaluated = createCliModuleEvaluator(options.cliModuleEvaluation)({
+          entry: request.entry,
+          args: request.args,
+          cwd: request.cwd,
+          env: request.env
+        });
+        return {
+          ...baseResult(request),
+          bootMode: "cli-module-evaluation",
+          commandKind,
+          stdout: evaluated.stdout,
+          stderr: evaluated.stderr,
+          exitCode: evaluated.exitCode
+        };
+      }
       return {
         ...baseResult(request),
         commandKind,

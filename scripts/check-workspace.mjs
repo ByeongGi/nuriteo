@@ -81,6 +81,7 @@ const required = [
   "packages/node-runtime/src/net/loopback.ts",
   "packages/node-runtime/src/net/types.ts",
   "packages/node-runtime/src/package-managers/cli-registry.ts",
+  "packages/node-runtime/src/package-managers/cli-evaluator.ts",
   "packages/node-runtime/src/package-managers/cli-module-graph.ts",
   "packages/node-runtime/src/package-managers/guest-cli.ts",
   "packages/node-runtime/src/package-managers/guest-runtime-runner.ts",

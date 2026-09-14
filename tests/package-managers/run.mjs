@@ -1,4 +1,5 @@
 import "./cli-baseline.test.mjs";
+import "./cli-evaluator.test.mjs";
 import "./cli-module-graph.test.mjs";
 import "./conformance-matrix.test.mjs";
 import "./npm-guest-runtime-boot.test.mjs";

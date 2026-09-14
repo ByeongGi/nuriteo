@@ -10,6 +10,7 @@ export class ModuleRuntime {
   cache: ModuleCache;
   resolver: ModuleResolver;
   builtins: ModuleRuntimeOptions["builtins"] | undefined;
+  globals: Record<string, RuntimeValue>;
 
   constructor(options: ModuleRuntimeOptions = {}) {
     this.definitions = new Map();
@@ -22,6 +23,7 @@ export class ModuleRuntime {
     if (options.imports) resolverOptions.imports = options.imports;
     this.resolver = new ModuleResolver(resolverOptions);
     this.builtins = options.builtins;
+    this.globals = { ...(options.globals || {}) };
   }
 
   register(url: string, definition: ModuleDefinition): ModuleRuntime {

@@ -1,4 +1,5 @@
 export { CliRegistry } from "./cli-registry.ts";
+export { createCliModuleEvaluator } from "./cli-evaluator.ts";
 export { analyzeCliModuleGraph, extractStaticRequires } from "./cli-module-graph.ts";
 export { createGuestCli } from "./guest-cli.ts";
 export { classifyPackageManagerCommand, createGuestRuntimeProcessRunner } from "./guest-runtime-runner.ts";
@@ -16,5 +17,6 @@ export type { PackageTarballCacheMetrics, PackageTarballCacheOptions, PackageTar
 export type { PackageScriptReader, PackageScriptResult, PackageScriptRunnerOptions, PackageScriptWriter } from "./script-runner.ts";
 export type { NpmInstallApplyOptions, NpmInstallApplyResult, NpmInstallLink, NpmInstallPlan, NpmInstallPlanOptions, NpmWorkspaceReader } from "./npm-install.ts";
 export type { CliArtifactReader, CliRegistryLike, GuestCli, GuestRuntimeProcessRunnerOptions, PackageManagerProcessRequest, PackageManagerProcessResult, PackageManagerProcessRunner, PackageManagerRunnerOptions } from "./types.ts";
+export type { CliModuleEvaluationRequest, CliModuleEvaluatorOptions } from "./cli-evaluator.ts";
 export type { CliModuleGraph, CliModuleGraphIssue, CliModuleGraphModule, CliModuleGraphOptions, CliModuleGraphReader } from "./cli-module-graph.ts";
 export type { PackageManagerLinkStrategy, PackageManagerWorkspace, PackageManagerWorkspaceMount, PackageManagerWorkspaceReader, PackageManagerWorkspaceWriter } from "./workspace.ts";
