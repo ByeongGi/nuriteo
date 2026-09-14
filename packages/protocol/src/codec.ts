@@ -1,17 +1,20 @@
 import { ABI_VERSION, ERROR_CODES, HEADER_LENGTH, MAGIC, MAX_PAYLOAD_LENGTH, OPCODES, STATUS } from "./generated.ts";
+import type { DecodedFrame, ErrorCode, FrameFields, FramePayload, RequestFrameInput, ResponseFrameInput } from "./types.ts";
 
-const knownOpcodes = new Set(Object.values(OPCODES));
+const knownOpcodes: Set<number> = new Set(Object.values(OPCODES));
 const encoder = new TextEncoder();
 
 export class WireCodecError extends Error {
-  constructor(code, message) {
+  code: ErrorCode;
+
+  constructor(code: ErrorCode, message: string) {
     super(message);
     this.name = "WireCodecError";
     this.code = code;
   }
 }
 
-function toPayloadBytes(payload = new Uint8Array()) {
+function toPayloadBytes(payload: FramePayload = new Uint8Array()): Uint8Array {
   if (typeof payload === "string") {
     return encoder.encode(payload);
   }
@@ -27,26 +30,26 @@ function toPayloadBytes(payload = new Uint8Array()) {
   throw new WireCodecError(ERROR_CODES.EINVAL, "payload must be bytes or a string");
 }
 
-function assertU32(name, value) {
+function assertU32(name: string, value: number): void {
   if (!Number.isInteger(value) || value < 0 || value > 0xffffffff) {
     throw new WireCodecError(ERROR_CODES.EINVAL, `${name} must be a u32`);
   }
 }
 
-function assertU16(name, value) {
+function assertU16(name: string, value: number): void {
   if (!Number.isInteger(value) || value < 0 || value > 0xffff) {
     throw new WireCodecError(ERROR_CODES.EINVAL, `${name} must be a u16`);
   }
 }
 
-function assertKnownOpcode(opcode) {
+function assertKnownOpcode(opcode: number): asserts opcode is RequestFrameInput["opcode"] {
   assertU16("opcode", opcode);
   if (!knownOpcodes.has(opcode)) {
     throw new WireCodecError(ERROR_CODES.ENOSYS, `unknown opcode ${opcode}`);
   }
 }
 
-function encodeFrame(fields, payload) {
+function encodeFrame(fields: FrameFields, payload: Uint8Array): Uint8Array {
   if (payload.byteLength > MAX_PAYLOAD_LENGTH) {
     throw new WireCodecError(ERROR_CODES.E2BIG, "payload exceeds maxPayloadLength");
   }
@@ -67,7 +70,7 @@ function encodeFrame(fields, payload) {
   return bytes;
 }
 
-export function encodeRequest({ requestId, generation, pid, opcode, payload = new Uint8Array() }) {
+export function encodeRequest({ requestId, generation, pid, opcode, payload = new Uint8Array() }: RequestFrameInput): Uint8Array {
   assertU32("requestId", requestId);
   assertU32("generation", generation);
   assertU32("pid", pid);
@@ -75,7 +78,7 @@ export function encodeRequest({ requestId, generation, pid, opcode, payload = ne
   return encodeFrame({ requestId, generation, pid, opcode, status: STATUS.request }, toPayloadBytes(payload));
 }
 
-export function encodeResponse({ requestId, generation, pid, opcode, status = STATUS.ok, payload = new Uint8Array() }) {
+export function encodeResponse({ requestId, generation, pid, opcode, status = STATUS.ok, payload = new Uint8Array() }: ResponseFrameInput): Uint8Array {
   assertU32("requestId", requestId);
   assertU32("generation", generation);
   assertU32("pid", pid);
@@ -87,8 +90,12 @@ export function encodeResponse({ requestId, generation, pid, opcode, status = ST
   return encodeFrame({ requestId, generation, pid, opcode, status }, toPayloadBytes(payload));
 }
 
-export function decodeFrame(bytes) {
-  const frame = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+export function decodeFrame(bytes: ArrayBuffer | ArrayBufferView | Uint8Array): DecodedFrame {
+  const frame = bytes instanceof Uint8Array
+    ? bytes
+    : ArrayBuffer.isView(bytes)
+      ? new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+      : new Uint8Array(bytes);
   if (frame.byteLength < HEADER_LENGTH) {
     throw new WireCodecError(ERROR_CODES.EBADMSG, "frame is shorter than header");
   }
@@ -127,12 +134,12 @@ export function decodeFrame(bytes) {
     generation: view.getUint32(12, true),
     pid: view.getUint32(16, true),
     opcode,
-    status: view.getUint16(22, true),
+    status: view.getUint16(22, true) as DecodedFrame["status"],
     payload: frame.slice(HEADER_LENGTH)
   };
 }
 
-export function decodeRequest(bytes) {
+export function decodeRequest(bytes: ArrayBuffer | ArrayBufferView | Uint8Array): DecodedFrame {
   const frame = decodeFrame(bytes);
   if (frame.status !== STATUS.request) {
     throw new WireCodecError(ERROR_CODES.EBADMSG, "request status must be request");
@@ -140,7 +147,7 @@ export function decodeRequest(bytes) {
   return frame;
 }
 
-export function decodeResponse(bytes) {
+export function decodeResponse(bytes: ArrayBuffer | ArrayBufferView | Uint8Array): DecodedFrame {
   const frame = decodeFrame(bytes);
   if (frame.status !== STATUS.ok && frame.status !== STATUS.error) {
     throw new WireCodecError(ERROR_CODES.EBADMSG, "response status must be ok or error");

@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    "allowImportingTsExtensions": true,
+    "exactOptionalPropertyTypes": true,
+    "lib": ["ES2024", "DOM"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "noEmit": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitReturns": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noUncheckedIndexedAccess": true,
+    "strict": true,
+    "target": "ES2024",
+    "useDefineForClassFields": true
+  },
+  "include": [
+    "packages/protocol/src/**/*.ts",
+    "packages/browser-host/src/supervisor.ts",
+    "packages/sdk/src/**/*.ts",
+    "packages/preview/src/**/*.ts"
+  ]
+}

@@ -1,11 +1,17 @@
+import type { PreviewSession, PreviewSessionCreateInput, PreviewSessionLookup, PreviewSessionRegistryOptions } from "./types.ts";
+
 export class PreviewSessionRegistry {
-  constructor(options = {}) {
+  now: () => number;
+  ttlMs: number;
+  sessions: Map<string, PreviewSession>;
+
+  constructor(options: PreviewSessionRegistryOptions = {}) {
     this.now = options.now || (() => Date.now());
     this.ttlMs = options.ttlMs ?? 30000;
     this.sessions = new Map();
   }
 
-  create({ origin, projectId, port, container }) {
+  create({ origin, projectId, port, container }: PreviewSessionCreateInput): PreviewSession {
     const sessionId = randomId();
     const session = {
       sessionId,
@@ -20,7 +26,7 @@ export class PreviewSessionRegistry {
     return { ...session };
   }
 
-  get(sessionId, { origin, projectId } = {}) {
+  get(sessionId: string, { origin, projectId }: PreviewSessionLookup = {}): PreviewSession | null {
     const session = this.sessions.get(sessionId);
     if (!session) return null;
     if (this.now() - session.touchedAt > this.ttlMs) {
@@ -33,7 +39,7 @@ export class PreviewSessionRegistry {
     return { ...session };
   }
 
-  replace(sessionId, patch = {}) {
+  replace(sessionId: string, patch: Partial<PreviewSession> = {}): PreviewSession | null {
     const current = this.sessions.get(sessionId);
     if (!current) return null;
     const next = { ...current, ...patch, touchedAt: this.now() };
@@ -41,16 +47,15 @@ export class PreviewSessionRegistry {
     return { ...next };
   }
 
-  delete(sessionId) {
+  delete(sessionId: string): boolean {
     return this.sessions.delete(sessionId);
   }
 }
 
-export function createPreviewSessionRegistry(options) {
+export function createPreviewSessionRegistry(options: PreviewSessionRegistryOptions = {}): PreviewSessionRegistry {
   return new PreviewSessionRegistry(options);
 }
 
-function randomId() {
+function randomId(): string {
   return globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
-

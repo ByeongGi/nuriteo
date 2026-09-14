@@ -1,5 +1,6 @@
 import { decodeRequest, decodeResponse, encodeRequest, encodeResponse, WireCodecError } from "./codec.ts";
 import { ERROR_CODES, HEADER_LENGTH, MAX_PAYLOAD_LENGTH, OPCODES, STATUS } from "./generated.ts";
+import type { DecodedFrame, ErrorCode, FramePayload, OpenedSyncChannel, SyncRequestHandler, SyncRequestOptions, Status } from "./types.ts";
 
 export const SYNC_CONTROL_INTS = 8;
 export const SYNC_CONTROL_BYTES = SYNC_CONTROL_INTS * 4;
@@ -10,6 +11,7 @@ export const SYNC_STATE = Object.freeze({
   failed: 3,
   terminal: 4
 });
+export type SyncState = (typeof SYNC_STATE)[keyof typeof SYNC_STATE];
 
 const INDEX_STATE = 0;
 const INDEX_REQUEST_LENGTH = 1;
@@ -18,18 +20,20 @@ const INDEX_GENERATION = 3;
 const INDEX_ERROR_CODE = 4;
 
 export class SyncChannelError extends Error {
-  constructor(code, message) {
+  code: ErrorCode;
+
+  constructor(code: ErrorCode, message: string) {
     super(message);
     this.name = "SyncChannelError";
     this.code = code;
   }
 }
 
-export function createSyncChannel(capacity = HEADER_LENGTH + MAX_PAYLOAD_LENGTH) {
+export function createSyncChannel(capacity = HEADER_LENGTH + MAX_PAYLOAD_LENGTH): SharedArrayBuffer {
   return new SharedArrayBuffer(SYNC_CONTROL_BYTES + capacity);
 }
 
-export function openSyncChannel(buffer) {
+export function openSyncChannel(buffer: SharedArrayBuffer): OpenedSyncChannel {
   if (!(buffer instanceof SharedArrayBuffer)) {
     throw new SyncChannelError(ERROR_CODES.EINVAL, "sync channel requires SharedArrayBuffer");
   }
@@ -43,7 +47,7 @@ export function openSyncChannel(buffer) {
   };
 }
 
-export function requestSync(channel, request, options = {}) {
+export function requestSync(channel: SharedArrayBuffer, request: Parameters<typeof encodeRequest>[0], options: SyncRequestOptions = {}): DecodedFrame {
   const opened = openSyncChannel(channel);
   const frame = encodeRequest(request);
   const generation = request.generation;
@@ -78,7 +82,7 @@ export function requestSync(channel, request, options = {}) {
     throw new SyncChannelError(ERROR_CODES.EBADMSG, "sync channel terminated while waiting");
   }
   if (state === SYNC_STATE.failed) {
-    const code = Atomics.load(opened.control, INDEX_ERROR_CODE) || ERROR_CODES.EBADMSG;
+    const code = (Atomics.load(opened.control, INDEX_ERROR_CODE) || ERROR_CODES.EBADMSG) as ErrorCode;
     throw new SyncChannelError(code, "sync channel failed while waiting");
   }
   if (state !== SYNC_STATE.response) {
@@ -98,7 +102,7 @@ export function requestSync(channel, request, options = {}) {
   return decodeResponse(response);
 }
 
-export function waitForRequest(channel, options = {}) {
+export function waitForRequest(channel: SharedArrayBuffer, options: SyncRequestOptions = {}): DecodedFrame {
   const opened = openSyncChannel(channel);
   const timeoutMs = options.timeoutMs ?? 1000;
   let state = Atomics.load(opened.control, INDEX_STATE);
@@ -134,15 +138,15 @@ export function waitForRequest(channel, options = {}) {
   }
 }
 
-export function respondSync(channel, request, payload = new Uint8Array()) {
+export function respondSync(channel: SharedArrayBuffer, request: DecodedFrame, payload: FramePayload = new Uint8Array()): void {
   writeResponse(channel, request, STATUS.ok, payload);
 }
 
-export function respondErrorSync(channel, request, payload = new Uint8Array()) {
+export function respondErrorSync(channel: SharedArrayBuffer, request: DecodedFrame, payload: FramePayload = new Uint8Array()): void {
   writeResponse(channel, request, STATUS.error, payload);
 }
 
-function writeResponse(channel, request, status, payload) {
+function writeResponse(channel: SharedArrayBuffer, request: DecodedFrame, status: Status, payload: FramePayload): void {
   const opened = openSyncChannel(channel);
   const response = encodeResponse({
     requestId: request.requestId,
@@ -160,27 +164,27 @@ function writeResponse(channel, request, status, payload) {
   Atomics.notify(opened.control, INDEX_STATE);
 }
 
-export function failSync(channel, code = ERROR_CODES.EBADMSG) {
+export function failSync(channel: SharedArrayBuffer, code: ErrorCode = ERROR_CODES.EBADMSG): void {
   const opened = openSyncChannel(channel);
   Atomics.store(opened.control, INDEX_ERROR_CODE, code);
   Atomics.store(opened.control, INDEX_STATE, SYNC_STATE.failed);
   Atomics.notify(opened.control, INDEX_STATE);
 }
 
-export function markTerminal(channel) {
+export function markTerminal(channel: SharedArrayBuffer): void {
   const opened = openSyncChannel(channel);
   Atomics.store(opened.control, INDEX_STATE, SYNC_STATE.terminal);
   Atomics.notify(opened.control, INDEX_STATE);
 }
 
-export function handleOneRequest(channel, handler, options = {}) {
+export function handleOneRequest(channel: SharedArrayBuffer, handler: SyncRequestHandler, options: SyncRequestOptions = {}): DecodedFrame {
   const request = waitForRequest(channel, options);
   const payload = handler(request);
   respondSync(channel, request, payload);
   return request;
 }
 
-export function handlePingRequest(channel, options = {}) {
+export function handlePingRequest(channel: SharedArrayBuffer, options: SyncRequestOptions = {}): DecodedFrame {
   return handleOneRequest(channel, (request) => {
     if (request.opcode !== OPCODES.ping) {
       throw new SyncChannelError(ERROR_CODES.ENOSYS, `unsupported syscall opcode ${request.opcode}`);
@@ -189,7 +193,7 @@ export function handlePingRequest(channel, options = {}) {
   }, options);
 }
 
-function assertCapacity(opened, byteLength) {
+function assertCapacity(opened: OpenedSyncChannel, byteLength: number): void {
   if (byteLength > opened.data.byteLength) {
     throw new SyncChannelError(ERROR_CODES.E2BIG, "frame exceeds sync channel capacity");
   }

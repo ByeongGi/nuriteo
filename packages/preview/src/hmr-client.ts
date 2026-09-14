@@ -1,5 +1,15 @@
+import type { HmrClientOptions, HmrEventType, HmrListener, HmrSocket } from "./types.ts";
+
 export class HmrClient {
-  constructor(options = {}) {
+  connect: () => HmrSocket;
+  maxRetries: number;
+  reconnectDelayMs: number;
+  listeners: Map<HmrEventType, Set<HmrListener>>;
+  socket: HmrSocket | null;
+  retryCount: number;
+  closed: boolean;
+
+  constructor(options: HmrClientOptions = {}) {
     this.connect = options.connect || (() => createMemorySocket());
     this.maxRetries = options.maxRetries ?? 3;
     this.reconnectDelayMs = options.reconnectDelayMs ?? 0;
@@ -9,25 +19,25 @@ export class HmrClient {
     this.closed = false;
   }
 
-  start() {
+  start(): HmrClient {
     this.closed = false;
     this.#open();
     return this;
   }
 
-  on(type, listener) {
+  on(type: HmrEventType, listener: HmrListener): () => boolean {
     const listeners = this.listeners.get(type) || new Set();
     listeners.add(listener);
     this.listeners.set(type, listeners);
     return () => listeners.delete(listener);
   }
 
-  close() {
+  close(): void {
     this.closed = true;
     this.socket?.close?.();
   }
 
-  #open() {
+  #open(): void {
     this.socket = this.connect();
     this.socket.onmessage = (event) => this.#emit("message", JSON.parse(event.data));
     this.socket.onclose = () => {
@@ -40,16 +50,16 @@ export class HmrClient {
     this.#emit("open", { attempt: this.retryCount + 1 });
   }
 
-  #emit(type, payload) {
+  #emit(type: HmrEventType, payload: unknown): void {
     for (const listener of this.listeners.get(type) || []) listener(payload);
   }
 }
 
-export function createHmrClient(options) {
+export function createHmrClient(options: HmrClientOptions = {}): HmrClient {
   return new HmrClient(options);
 }
 
-function createMemorySocket() {
+function createMemorySocket(): HmrSocket {
   return {
     close() {
       this.onclose?.();
@@ -59,4 +69,3 @@ function createMemorySocket() {
     }
   };
 }
-

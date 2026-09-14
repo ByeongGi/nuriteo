@@ -15,6 +15,7 @@
     "check:node-upgrade": "node scripts/check-node-upgrade.mjs",
     "check:package-manager-upgrade": "node scripts/check-package-manager-upgrade.mjs",
     "check:release-readiness": "node scripts/check-release-readiness.mjs",
+    "check:types": "tsc --noEmit",
     "test:protocol": "node tests/protocol/run.mjs",
     "test:node-runtime": "node tests/node-runtime/run.mjs",
     "test:browser-host": "node tests/browser-host/run.mjs",
