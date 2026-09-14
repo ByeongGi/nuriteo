@@ -1,4 +1,5 @@
 import { createBuiltinLoader } from "../builtin-loader.ts";
+import { Buffer as BrowserBuffer } from "../builtins/buffer.ts";
 import { constantsBuiltin } from "../builtins/constants.ts";
 import { normalize } from "../builtins/path.ts";
 import { BrowserProcess } from "../builtins/process.ts";
@@ -41,6 +42,7 @@ export function createAsyncCliModuleEvaluator(options: AsyncCliModuleEvaluatorOp
 function startCliModuleEvaluation(options: CliModuleEvaluatorOptions, request: CliModuleEvaluationRequest): { finalize: () => CliRunResult } {
   let stdout = "";
   let stderr = "";
+  let asyncExitCode: number | undefined;
   const processOptions = {
     argv: ["node", request.entry.entry, ...request.args],
     cwd: request.cwd,
@@ -54,8 +56,17 @@ function startCliModuleEvaluation(options: CliModuleEvaluatorOptions, request: C
   process.on("stderr", (chunk) => {
     stderr += String(chunk);
   });
+  const restoreHostErrorCapture = captureHostAsyncErrors((error) => {
+    asyncExitCode = 1;
+    stderr += `${errorMessage(error)}\n`;
+  });
   const globalObject: Record<string, unknown> = {
-    __dynamicImport: createCliDynamicImport()
+    ArrayBuffer,
+    Buffer: BrowserBuffer,
+    Uint8Array,
+    __dynamicImport: createCliDynamicImport(),
+    clearTimeout,
+    setTimeout
   };
   const consoleObject = createCliConsole(process);
   const fs = createWorkspaceFsFacade(options.reader, options.writer);
@@ -76,7 +87,7 @@ function startCliModuleEvaluation(options: CliModuleEvaluatorOptions, request: C
   try {
     runtime.requireSync(request.entry.entry, request.entry.entry);
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = errorMessage(error);
     const exit = parseProcessExit(message);
     if (exit !== null) {
       exitCode = exit;
@@ -88,6 +99,8 @@ function startCliModuleEvaluation(options: CliModuleEvaluatorOptions, request: C
 
   return {
     finalize() {
+      restoreHostErrorCapture();
+      if (asyncExitCode !== undefined) exitCode = asyncExitCode;
       if (process.exitCode !== undefined) exitCode = process.exitCode;
       return {
         stdout,
@@ -97,6 +110,28 @@ function startCliModuleEvaluation(options: CliModuleEvaluatorOptions, request: C
         ...(request.entry.entrySha256 ? { entrySha256: request.entry.entrySha256 } : {})
       };
     }
+  };
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function captureHostAsyncErrors(onError: (error: unknown) => void): () => void {
+  const hostProcess = (globalThis as typeof globalThis & { process?: HostProcessLike }).process;
+  if (!hostProcess?.on || !hostProcess.off) return () => undefined;
+
+  const onUncaughtException = (error: unknown) => {
+    onError(error);
+  };
+  const onUnhandledRejection = (reason: unknown) => {
+    onError(reason);
+  };
+  hostProcess.on("uncaughtException", onUncaughtException);
+  hostProcess.on("unhandledRejection", onUnhandledRejection);
+  return () => {
+    hostProcess.off?.("uncaughtException", onUncaughtException);
+    hostProcess.off?.("unhandledRejection", onUnhandledRejection);
   };
 }
 
@@ -340,6 +375,11 @@ interface CliOpenFile {
   bytes: Uint8Array;
   path: string;
   writable: boolean;
+}
+
+interface HostProcessLike {
+  on?(event: "uncaughtException" | "unhandledRejection", listener: (error: unknown) => void): unknown;
+  off?(event: "uncaughtException" | "unhandledRejection", listener: (error: unknown) => void): unknown;
 }
 
 function statFromReader(reader: WorkspaceModuleReader, path: string): ReturnType<RuntimeFsBinding["statSync"]> {

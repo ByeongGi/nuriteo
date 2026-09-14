@@ -77,6 +77,45 @@ const workspace = new MemoryPackageManagerWorkspace([
   {
     path: "/workspace/write-cli/package/package.json",
     data: JSON.stringify({ name: "write-fixture-cli", version: "1.2.3", main: "lib/cli.js" })
+  },
+  {
+    path: "/workspace/async-error-cli/package/bin/npm-cli.js",
+    data: "#!/usr/bin/env node\nrequire('../lib/cli.js')(process)\n"
+  },
+  {
+    path: "/workspace/async-error-cli/package/lib/cli.js",
+    data: `
+      module.exports = function run() {
+        setTimeout(() => {
+          throw new Error('delayed failure');
+        }, 0);
+      };
+    `
+  },
+  {
+    path: "/workspace/async-error-cli/package/package.json",
+    data: JSON.stringify({ name: "async-error-fixture-cli", version: "1.2.3", main: "lib/cli.js" })
+  },
+  {
+    path: "/workspace/global-cli/package/bin/npm-cli.js",
+    data: "#!/usr/bin/env node\nrequire('../lib/cli.js')(process)\n"
+  },
+  {
+    path: "/workspace/global-cli/package/lib/cli.js",
+    data: `
+      const { Buffer } = require('buffer');
+      module.exports = function run(process) {
+        process.stdout.write([
+          typeof global.Uint8Array,
+          global.Buffer.isBuffer(Buffer.from('ok')),
+          Buffer.from('ok') instanceof global.Uint8Array
+        ].join(' ') + '\\n');
+      };
+    `
+  },
+  {
+    path: "/workspace/global-cli/package/package.json",
+    data: JSON.stringify({ name: "global-fixture-cli", version: "1.2.3", main: "lib/cli.js" })
   }
 ]);
 
@@ -155,6 +194,40 @@ assert.equal(writeResult.exitCode, 0);
 assert.equal(workspace.readText("/workspace/project/sync.txt"), "sync");
 assert.equal(workspace.readText("/workspace/project/.cache/async.txt"), "async");
 assert.equal(workspace.readText("/workspace/project/fd.txt"), "fd");
+
+const asyncErrorResult = await createAsyncCliModuleEvaluator({
+  root: "/workspace",
+  reader: workspace,
+  settleTicks: 10,
+  settleTimeoutMs: 10
+})({
+  entry: {
+    name: "npm",
+    version: "1.2.3",
+    entry: "/workspace/async-error-cli/package/bin/npm-cli.js"
+  },
+  args: [],
+  cwd: "/workspace/project"
+});
+assert.equal(asyncErrorResult.stdout, "");
+assert.match(asyncErrorResult.stderr, /delayed failure/);
+assert.equal(asyncErrorResult.exitCode, 1);
+
+const globalResult = createCliModuleEvaluator({
+  root: "/workspace",
+  reader: workspace
+})({
+  entry: {
+    name: "npm",
+    version: "1.2.3",
+    entry: "/workspace/global-cli/package/bin/npm-cli.js"
+  },
+  args: [],
+  cwd: "/workspace/project"
+});
+assert.equal(globalResult.stdout, "function true true\n");
+assert.equal(globalResult.stderr, "");
+assert.equal(globalResult.exitCode, 0);
 
 const entry = {
   name: "npm",
