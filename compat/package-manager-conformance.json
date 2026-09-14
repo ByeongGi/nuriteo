@@ -1,0 +1,99 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-15",
+  "scope": {
+    "goal": "Track npm and pnpm conformance for browser guest runtime productization.",
+    "productRuntime": "browser-guest-node-runtime",
+    "testHelperRuntime": "host-node-test-helper"
+  },
+  "cases": [
+    {
+      "id": "npm-version",
+      "manager": "npm",
+      "command": "npm --version",
+      "runtime": "browser-guest-node-runtime",
+      "status": "pass",
+      "evidence": ["tests/package-managers/npm-guest-runtime-boot.test.mjs"]
+    },
+    {
+      "id": "pnpm-version",
+      "manager": "pnpm",
+      "command": "pnpm --version",
+      "runtime": "browser-guest-node-runtime",
+      "status": "pass",
+      "evidence": ["tests/package-managers/pnpm-guest-runtime-boot.test.mjs"]
+    },
+    {
+      "id": "pnpm-store-plan",
+      "manager": "pnpm",
+      "command": "pnpm install --frozen-lockfile --ignore-scripts",
+      "runtime": "browser-guest-node-runtime",
+      "status": "pass",
+      "evidence": ["tests/package-managers/pnpm-store-plan.test.mjs"],
+      "notes": "Validates virtual store, workspace links, bin links, and frozen lockfile invariants from a native pnpm fixture."
+    },
+    {
+      "id": "registry-cache-tarball",
+      "manager": "npm,pnpm",
+      "command": "registry tarball fetch/cache/extract",
+      "runtime": "browser-guest-node-runtime",
+      "status": "pass",
+      "evidence": ["tests/package-managers/tarball-cache.test.mjs", "tests/package-managers/fetcher.test.mjs"]
+    },
+    {
+      "id": "npm-install",
+      "manager": "npm",
+      "command": "npm install --ignore-scripts",
+      "runtime": "host-node-test-helper",
+      "status": "helper-pass-product-gap",
+      "evidence": ["tests/package-managers/npm-integration.test.mjs"],
+      "productGap": "Real npm install still executes through host Node helper while guest-runtime module evaluation and filesystem mutation are expanded."
+    },
+    {
+      "id": "npm-ci",
+      "manager": "npm",
+      "command": "npm ci",
+      "runtime": "host-node-test-helper",
+      "status": "helper-pass-product-gap",
+      "evidence": ["tests/package-managers/npm-integration.test.mjs"],
+      "productGap": "Real npm ci still executes through host Node helper."
+    },
+    {
+      "id": "npm-run-exec-lifecycle-peer-optional-interrupt",
+      "manager": "npm",
+      "command": "npm run/exec/lifecycle/peer/optional/interrupted recovery",
+      "runtime": "host-node-test-helper",
+      "status": "helper-pass-product-gap",
+      "evidence": ["tests/package-managers/npm-integration.test.mjs"],
+      "productGap": "Script process spawning and lifecycle execution are not yet product guest-runtime paths."
+    },
+    {
+      "id": "pnpm-install",
+      "manager": "pnpm",
+      "command": "pnpm install --frozen-lockfile",
+      "runtime": "host-node-test-helper",
+      "status": "helper-pass-product-gap",
+      "evidence": ["tests/package-managers/pnpm-integration.test.mjs"],
+      "productGap": "Real pnpm install still executes through host Node helper; browser store/link plan is validated separately."
+    },
+    {
+      "id": "pnpm-run-exec-lifecycle-peer-optional-interrupt",
+      "manager": "pnpm",
+      "command": "pnpm run/exec/lifecycle/peer/optional/interrupted recovery",
+      "runtime": "host-node-test-helper",
+      "status": "helper-pass-product-gap",
+      "evidence": ["tests/package-managers/pnpm-integration.test.mjs"],
+      "productGap": "Script process spawning and lifecycle execution are not yet product guest-runtime paths."
+    }
+  ],
+  "gate": {
+    "id": "PG10",
+    "status": "not-pass",
+    "reason": "Version boot, store plan, and tarball cache paths pass in browser guest runtime, but install/ci/run/exec/lifecycle matrix still depends on host-node-test-helper.",
+    "requiredToPass": [
+      "Move npm install/ci/run/exec cases to browser-guest-node-runtime",
+      "Move pnpm install/run/exec cases to browser-guest-node-runtime",
+      "Keep host-node-test-helper only as a reference comparator"
+    ]
+  }
+}
