@@ -56,12 +56,14 @@ for (const [name, version] of [["npm", "10.9.2"], ["pnpm", "9.15.9"]]) {
   assert.equal(graph.modules[0].path, installed.entry);
   assert.ok(graph.modules.some((mod) => mod.path.includes(name === "npm" ? "/lib/cli.js" : "/dist/pnpm.cjs")));
   assert.equal(graph.issues.some((issue) => issue.kind === "missing-module"), false);
-  assert.ok(graph.issues.some((issue) => issue.kind === "dynamic-require"));
   assert.ok(graph.issues.some((issue) => issue.kind === "unsupported-builtin"));
   if (name === "npm") {
     assert.ok(graph.modules.length > 500);
+    assert.ok(graph.issues.some((issue) => issue.kind === "dynamic-command-dispatch"));
+    assert.ok(graph.issues.some((issue) => issue.kind === "dynamic-config-probe"));
     assert.ok(graph.issues.some((issue) => issue.kind === "optional-dependency-probe"));
   } else {
+    assert.ok(graph.issues.some((issue) => issue.kind === "dynamic-adapter-dispatch"));
     assert.ok(graph.issues.some((issue) => issue.kind === "optional-cache-probe"));
   }
   assert.equal(graph.supported, false);

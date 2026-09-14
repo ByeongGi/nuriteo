@@ -26,6 +26,9 @@ export interface CliModuleGraphIssue {
     | "unsupported-builtin"
     | "missing-module"
     | "dynamic-require"
+    | "dynamic-command-dispatch"
+    | "dynamic-config-probe"
+    | "dynamic-adapter-dispatch"
     | "optional-native-probe"
     | "optional-cache-probe"
     | "optional-dependency-probe";
@@ -129,7 +132,7 @@ export function analyzeCliModuleGraph(options: CliModuleGraphOptions): CliModule
     for (const specifier of requires) {
       if (isBuiltin(specifier, builtins)) continue;
       if (specifier === dynamicRequireSpecifier || specifier.includes("${") || specifier.includes("+")) {
-        issues.push({ specifier, importer: current, kind: "dynamic-require" });
+        issues.push({ specifier, importer: current, kind: classifyDynamicRequire(specifier, current) });
         continue;
       }
       const optionalKind = classifyOptionalProbe(specifier, current);
@@ -274,6 +277,13 @@ function classifyOptionalProbe(specifier: string, importer: string): CliModuleGr
     return "optional-dependency-probe";
   }
   return null;
+}
+
+function classifyDynamicRequire(specifier: string, importer: string): CliModuleGraphIssue["kind"] {
+  if (specifier.includes("./commands/") || importer.endsWith("/lib/npm.js")) return "dynamic-command-dispatch";
+  if (importer.endsWith("/node_modules/@npmcli/config/lib/index.js")) return "dynamic-config-probe";
+  if (importer.endsWith("/dist/pnpm.cjs")) return "dynamic-adapter-dispatch";
+  return "dynamic-require";
 }
 
 function collectStaticPathConstants(source: string, filename: string | undefined): Map<string, string> {
