@@ -5,11 +5,20 @@ export interface PnpmWorkspaceReader {
   listDir(path: string): string[];
 }
 
+export interface PnpmWorkspaceWriter {
+  copyDirectory(source: string, target: string): void;
+  copyFile(source: string, target: string): void;
+  mkdir(path: string): void;
+  symlink?(target: string, path: string): void;
+  writeText(path: string, data: string): void;
+}
+
 export interface PnpmStorePlanOptions {
   cwd: string;
   reader: PnpmWorkspaceReader;
   storeDir?: string;
   virtualStoreDir?: string;
+  linkStrategy?: PnpmWorkspaceLink["strategy"];
 }
 
 export interface PnpmWorkspacePackage {
@@ -45,6 +54,17 @@ export interface PnpmStorePlan {
   };
 }
 
+export interface PnpmStoreApplyResult {
+  directoriesCreated: string[];
+  packageLinks: PnpmWorkspaceLink[];
+  binLinks: Array<{
+    name: string;
+    targetPath: string;
+    linkPath: string;
+    strategy: PnpmWorkspaceLink["strategy"];
+  }>;
+}
+
 export function createPnpmStorePlan(options: PnpmStorePlanOptions): PnpmStorePlan {
   const cwd = trimSlash(options.cwd);
   const rootManifest = readJson<PackageJson>(options.reader, join(cwd, "package.json"));
@@ -56,7 +76,7 @@ export function createPnpmStorePlan(options: PnpmStorePlanOptions): PnpmStorePla
   const rootLinks = rootDependencies.map(([name]) => {
     const dependency = packageByName.get(name);
     if (!dependency) throw new Error(`Missing pnpm workspace package: ${name}`);
-    return createWorkspaceLink(cwd, dependency);
+    return createWorkspaceLink(cwd, dependency, options.linkStrategy || "symlink");
   });
   const lockfilePath = join(cwd, "pnpm-lock.yaml");
   const lockfile = options.reader.readText(lockfilePath);
@@ -78,20 +98,73 @@ export function createPnpmStorePlan(options: PnpmStorePlanOptions): PnpmStorePla
   };
 }
 
-function createWorkspaceLink(cwd: string, dependency: PnpmWorkspacePackage): PnpmWorkspaceLink {
+export function applyPnpmStorePlan(plan: PnpmStorePlan, writer: PnpmWorkspaceWriter): PnpmStoreApplyResult {
+  if (!plan.frozenLockfile.valid) {
+    throw new Error(`Cannot apply pnpm store plan with invalid frozen lockfile: ${plan.frozenLockfile.missingLinks.join(", ")}`);
+  }
+  const directoriesCreated = [plan.storeDir, plan.virtualStoreDir, join(dirname(plan.virtualStoreDir), ".bin")];
+  for (const directory of directoriesCreated) writer.mkdir(directory);
+
+  const binLinks: PnpmStoreApplyResult["binLinks"] = [];
+  for (const link of plan.rootLinks) {
+    applyLink(writer, link.targetPath, link.linkPath, link.strategy);
+    for (const bin of link.binLinks) {
+      applyLink(writer, bin.targetPath, bin.linkPath, link.strategy);
+      binLinks.push({ ...bin, strategy: link.strategy });
+    }
+  }
+
+  writer.writeText(join(plan.virtualStoreDir, "browser-native-plan.json"), JSON.stringify({
+    packageManager: plan.packageManager,
+    rootLinks: plan.rootLinks.map((link) => ({
+      name: link.name,
+      dependencyPath: link.dependencyPath,
+      linkPath: link.linkPath,
+      strategy: link.strategy
+    }))
+  }, null, 2));
+
+  return {
+    directoriesCreated,
+    packageLinks: plan.rootLinks,
+    binLinks
+  };
+}
+
+function createWorkspaceLink(cwd: string, dependency: PnpmWorkspacePackage, strategy: PnpmWorkspaceLink["strategy"]): PnpmWorkspaceLink {
   const linkPath = join(cwd, "node_modules", dependency.name);
   return {
     name: dependency.name,
     dependencyPath: dependency.path,
     targetPath: dependency.path,
     linkPath,
-    strategy: "symlink",
+    strategy,
     binLinks: Object.entries(dependency.bin).map(([name, target]) => ({
       name,
       targetPath: join(dependency.path, target),
       linkPath: join(cwd, "node_modules/.bin", name)
     }))
   };
+}
+
+function applyLink(writer: PnpmWorkspaceWriter, targetPath: string, linkPath: string, strategy: PnpmWorkspaceLink["strategy"]): void {
+  writer.mkdir(dirname(linkPath));
+  if (strategy === "symlink" && writer.symlink) {
+    writer.symlink(targetPath, linkPath);
+    return;
+  }
+  if (strategy === "symlink") {
+    writer.writeText(`${linkPath}.link`, targetPath);
+    return;
+  }
+  if (targetPath.endsWith(".js") || targetPath.includes("/bin/")) writer.copyFile(targetPath, linkPath);
+  else writer.copyDirectory(targetPath, linkPath);
+}
+
+function dirname(path: string): string {
+  const index = path.lastIndexOf("/");
+  if (index <= 0) return "/";
+  return path.slice(0, index);
 }
 
 function discoverWorkspacePackages(reader: PnpmWorkspaceReader, cwd: string, patterns: string[]): PnpmWorkspacePackage[] {

@@ -30,7 +30,7 @@
       "runtime": "browser-guest-node-runtime",
       "status": "pass",
       "evidence": ["tests/package-managers/pnpm-store-plan.test.mjs"],
-      "notes": "Validates virtual store, workspace links, bin links, and frozen lockfile invariants from a native pnpm fixture."
+      "notes": "Validates virtual store, workspace links, bin links, frozen lockfile invariants, and copy-fallback node_modules materialization from a native pnpm fixture."
     },
     {
       "id": "registry-cache-tarball",
@@ -71,10 +71,10 @@
       "id": "pnpm-install",
       "manager": "pnpm",
       "command": "pnpm install --frozen-lockfile",
-      "runtime": "host-node-test-helper",
-      "status": "helper-pass-product-gap",
-      "evidence": ["tests/package-managers/pnpm-integration.test.mjs"],
-      "productGap": "Real pnpm install still executes through host Node helper; browser store/link plan is validated separately."
+      "runtime": "browser-guest-node-runtime",
+      "status": "partial-pass",
+      "evidence": ["tests/package-managers/pnpm-store-plan.test.mjs", "tests/package-managers/pnpm-integration.test.mjs"],
+      "productGap": "Browser runtime can validate and materialize workspace-only frozen install layout with copy-fallback links. Full pnpm dependency graph execution still needs real CLI module evaluation."
     },
     {
       "id": "pnpm-run-exec-lifecycle-peer-optional-interrupt",

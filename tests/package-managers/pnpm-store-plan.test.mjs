@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 
-import { CliRegistry, createPnpmRunner, createPnpmStorePlan } from "../../packages/node-runtime/src/index.ts";
+import { CliRegistry, applyPnpmStorePlan, createPnpmRunner, createPnpmStorePlan } from "../../packages/node-runtime/src/index.ts";
 
 const root = new URL("../..", import.meta.url).pathname;
 const fixture = path.join(root, "tests/fixtures/package-managers/pnpm");
@@ -91,6 +91,44 @@ try {
     linkPath: path.join(workdir, "node_modules/.bin/fixture-hello")
   }]);
   assert.equal(fs.existsSync(fixtureBin.binLinks[0].linkPath), true);
+
+  fs.rmSync(path.join(workdir, "node_modules"), { recursive: true, force: true });
+  const copyFallbackPlan = createPnpmStorePlan({
+    cwd: workdir,
+    storeDir,
+    linkStrategy: "copy-fallback",
+    reader: {
+      readText(file) {
+        return fs.readFileSync(file, "utf8");
+      },
+      listDir(dir) {
+        return fs.readdirSync(dir, { withFileTypes: true })
+          .filter((entry) => entry.isDirectory())
+          .map((entry) => entry.name);
+      }
+    }
+  });
+  const applied = applyPnpmStorePlan(copyFallbackPlan, {
+    mkdir(directory) {
+      fs.mkdirSync(directory, { recursive: true });
+    },
+    copyDirectory(source, target) {
+      fs.cpSync(source, target, { recursive: true });
+    },
+    copyFile(source, target) {
+      fs.mkdirSync(path.dirname(target), { recursive: true });
+      fs.copyFileSync(source, target);
+    },
+    writeText(file, data) {
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file, data);
+    }
+  });
+  assert.equal(applied.packageLinks.length, 4);
+  assert.equal(applied.binLinks.length, 1);
+  assert.equal(fs.existsSync(path.join(workdir, "node_modules/fixture-bin/package.json")), true);
+  assert.equal(fs.existsSync(path.join(workdir, "node_modules/.bin/fixture-hello")), true);
+  assert.equal(fs.existsSync(path.join(workdir, "node_modules/.pnpm/browser-native-plan.json")), true);
 } finally {
   fs.rmSync(workdir, { recursive: true, force: true });
 }
