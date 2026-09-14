@@ -13,14 +13,35 @@ export const NODE_PROFILE = Object.freeze({
       implementedBy: "packages/node-runtime/src/bindings/fs.ts",
       tests: Object.freeze(["tests/browser/boot.test.mjs"])
     }),
-    buffer: Object.freeze({ status: "missing", source: "node-v22.23.0" }),
-    events: Object.freeze({ status: "missing", source: "node-v22.23.0" }),
+    buffer: Object.freeze({
+      status: "partial",
+      source: "browser-native-js",
+      implementedBy: "packages/node-runtime/src/builtins/buffer.ts",
+      tests: Object.freeze(["tests/node-runtime/builtin-subset.test.mjs"])
+    }),
+    events: Object.freeze({
+      status: "partial",
+      source: "browser-native-js",
+      implementedBy: "packages/node-runtime/src/builtins/events.ts",
+      tests: Object.freeze(["tests/node-runtime/builtin-subset.test.mjs"])
+    }),
     stream: Object.freeze({ status: "missing", source: "node-v22.23.0" }),
-    util: Object.freeze({ status: "missing", source: "node-v22.23.0" })
+    util: Object.freeze({
+      status: "partial",
+      source: "browser-native-js",
+      implementedBy: "packages/node-runtime/src/builtins/util.ts",
+      tests: Object.freeze(["tests/node-runtime/builtin-subset.test.mjs"])
+    })
   }),
   dependencyGraph: Object.freeze({
+    buffer: Object.freeze(["node:buffer"]),
+    events: Object.freeze(["node:events"]),
     "node:fs": Object.freeze(["internalBinding:fs"]),
-    "fs": Object.freeze(["node:fs"])
+    "node:buffer": Object.freeze(["browser-native-js:buffer"]),
+    "node:events": Object.freeze(["browser-native-js:events"]),
+    "node:util": Object.freeze(["browser-native-js:util", "node:events"]),
+    "fs": Object.freeze(["node:fs"]),
+    "util": Object.freeze(["node:util"])
   })
 });
 

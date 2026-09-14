@@ -20,7 +20,7 @@
     {
       "id": "node-profile",
       "path": "packages/node-runtime/src/node-profile.ts",
-      "summary": "Current browser-native Node profile marks buffer, events, stream, and util as missing."
+      "summary": "Current browser-native Node profile marks buffer, events, and util as partial while stream remains missing."
     },
     {
       "id": "cli-smoke",
@@ -39,28 +39,33 @@
       "runtime": "browser-guest-node-runtime",
       "status": "blocked",
       "firstFailure": "unsupported-builtin",
-      "missingBuiltins": ["buffer", "events", "stream", "util"]
+      "missingBuiltins": ["stream"],
+      "resolvedBuiltins": ["buffer", "events", "util"]
     },
     {
       "command": "pnpm --version",
       "runtime": "browser-guest-node-runtime",
       "status": "blocked",
       "firstFailure": "unsupported-builtin",
-      "missingBuiltins": ["buffer", "events", "stream", "util"]
+      "missingBuiltins": ["stream"],
+      "resolvedBuiltins": ["buffer", "events", "util"]
     },
     {
       "command": "vite --host 127.0.0.1",
       "runtime": "browser-guest-node-runtime",
       "status": "not-run",
       "blockedBy": ["npm --version", "pnpm --version"],
-      "missingBuiltins": ["buffer", "events", "stream", "util"]
+      "missingBuiltins": ["stream"],
+      "resolvedBuiltins": ["buffer", "events", "util"]
     }
   ],
   "gaps": [
     {
       "builtin": "buffer",
-      "status": "missing",
+      "status": "partial",
       "priority": 0,
+      "implementedBy": "packages/node-runtime/src/builtins/buffer.ts",
+      "tests": ["tests/node-runtime/builtin-subset.test.mjs"],
       "requiredBy": ["npm bootstrap", "pnpm bootstrap", "package metadata and tar/integrity dependencies"],
       "minimumApi": [
         "Buffer.from",
@@ -80,14 +85,16 @@
       "acceptance": [
         "Reference Node fixture covers string, utf8, base64, hex, array buffer, typed array, concat, and slice/copy behavior.",
         "Browser runtime fixture passes the same fixture without host shortcuts.",
-        "npm --version and pnpm --version move past Buffer construction failures."
+        "npm --version and pnpm --version are no longer blocked on Buffer construction failures."
       ],
       "nextPhase": "P9-02"
     },
     {
       "builtin": "events",
-      "status": "missing",
+      "status": "partial",
       "priority": 0,
+      "implementedBy": "packages/node-runtime/src/builtins/events.ts",
+      "tests": ["tests/node-runtime/builtin-subset.test.mjs"],
       "requiredBy": ["npm bootstrap", "pnpm bootstrap", "streams", "dev server event lifecycle"],
       "minimumApi": [
         "EventEmitter",
@@ -111,8 +118,10 @@
     },
     {
       "builtin": "util",
-      "status": "missing",
+      "status": "partial",
       "priority": 0,
+      "implementedBy": "packages/node-runtime/src/builtins/util.ts",
+      "tests": ["tests/node-runtime/builtin-subset.test.mjs"],
       "requiredBy": ["npm diagnostics", "pnpm diagnostics", "dependency compatibility helpers"],
       "minimumApi": [
         "util.format",

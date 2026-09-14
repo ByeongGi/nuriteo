@@ -22,9 +22,13 @@ for (const name of unsupported) {
   assert.ok(entry.acceptance.length > 0, `${name} must declare acceptance criteria`);
 }
 
-for (const name of ["buffer", "events", "stream", "util"]) {
-  assert.equal(gapsByName.get(name)?.status, "missing");
+for (const name of ["buffer", "events", "util"]) {
+  const entry = gapsByName.get(name);
+  assert.equal(entry?.status, "partial");
+  assert.ok(entry.implementedBy.startsWith("packages/node-runtime/src/builtins/"));
+  assert.ok(entry.tests.includes("tests/node-runtime/builtin-subset.test.mjs"));
 }
+assert.equal(gapsByName.get("stream")?.status, "missing");
 
 const blockedCommands = gap.callTraces.filter((trace) => trace.status === "blocked");
 assert.ok(blockedCommands.length >= 2);

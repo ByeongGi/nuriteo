@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { getUnsupportedBuiltins } from "../../packages/node-runtime/src/node-profile.ts";
 
 const unsupported = getUnsupportedBuiltins().map((binding) => binding.name).sort();
-assert.deepEqual(unsupported, ["buffer", "events", "stream", "util"]);
+assert.deepEqual(unsupported, ["stream"]);
 
 const attempts = [
   {

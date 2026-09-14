@@ -12,18 +12,22 @@
       "notes": "Synchronous writeFileSync/readFileSync/statSync/openSync/readSync/writeSync/closeSync/mkdirSync subset only."
     },
     "buffer": {
-      "status": "missing",
-      "source": "node-v22.23.0",
-      "implementedBy": null,
-      "tests": [],
-      "notes": "Required before broad CLI compatibility."
+      "status": "partial",
+      "source": "browser-native-js",
+      "implementedBy": "packages/node-runtime/src/builtins/buffer.ts",
+      "tests": [
+        "tests/node-runtime/builtin-subset.test.mjs"
+      ],
+      "notes": "Browser-native Buffer subset covering allocation, encoding, concat, slicing, copy, and equality."
     },
     "events": {
-      "status": "missing",
-      "source": "node-v22.23.0",
-      "implementedBy": null,
-      "tests": [],
-      "notes": "Required by many package manager dependencies."
+      "status": "partial",
+      "source": "browser-native-js",
+      "implementedBy": "packages/node-runtime/src/builtins/events.ts",
+      "tests": [
+        "tests/node-runtime/builtin-subset.test.mjs"
+      ],
+      "notes": "Browser-native EventEmitter subset covering listener order, once, cleanup, and error event behavior."
     },
     "stream": {
       "status": "missing",
@@ -33,11 +37,13 @@
       "notes": "Required by npm/pnpm install paths."
     },
     "util": {
-      "status": "missing",
-      "source": "node-v22.23.0",
-      "implementedBy": null,
-      "tests": [],
-      "notes": "Required by Node-shaped diagnostics and CLI dependencies."
+      "status": "partial",
+      "source": "browser-native-js",
+      "implementedBy": "packages/node-runtime/src/builtins/util.ts",
+      "tests": [
+        "tests/node-runtime/builtin-subset.test.mjs"
+      ],
+      "notes": "Browser-native util subset covering format, inspect, inherits, promisify, callbackify, deprecate, and common util.types probes."
     }
   }
 }

@@ -108,7 +108,10 @@ export interface RuntimeFsBinding {
 
 export interface BuiltinBindings {
   fs?: RuntimeFsBinding;
+  buffer?: RuntimeValue;
+  events?: RuntimeValue;
   internalBinding?: (name: string) => unknown;
+  util?: RuntimeValue;
 }
 
 export interface CliEntry {
