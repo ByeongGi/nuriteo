@@ -20,6 +20,7 @@ export class ModuleRuntime {
       realpath: (url) => this.cache.canonicalize(url)
     };
     if (options.packages) resolverOptions.packages = options.packages;
+    if (options.packageRoots) resolverOptions.packageRoots = options.packageRoots;
     if (options.imports) resolverOptions.imports = options.imports;
     this.resolver = new ModuleResolver(resolverOptions);
     this.builtins = options.builtins;

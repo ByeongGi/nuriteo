@@ -12,6 +12,7 @@ const workspace = new MemoryPackageManagerWorkspace([
       const scoped = require("@scope/tool");
       const conditional = require("conditional-pkg");
       const conditionalFeature = require("conditional-pkg/feature");
+      const parent = require("parent-pkg");
       const config = require("./config.json");
       module.exports = {
         base: path.basename(__filename),
@@ -20,6 +21,7 @@ const workspace = new MemoryPackageManagerWorkspace([
         scoped: scoped.label,
         conditional: conditional.label,
         conditionalFeature: conditionalFeature.label,
+        parent,
         config
       };
     `
@@ -72,6 +74,30 @@ const workspace = new MemoryPackageManagerWorkspace([
   {
     path: "/workspace/node_modules/conditional-pkg/feature.cjs",
     data: "exports.label = 'conditional-node';"
+  },
+  {
+    path: "/workspace/node_modules/shared/package.json",
+    data: JSON.stringify({ name: "shared", main: "index.js" })
+  },
+  {
+    path: "/workspace/node_modules/shared/index.js",
+    data: "exports.label = 'root-shared';"
+  },
+  {
+    path: "/workspace/node_modules/parent-pkg/package.json",
+    data: JSON.stringify({ name: "parent-pkg", main: "index.js" })
+  },
+  {
+    path: "/workspace/node_modules/parent-pkg/index.js",
+    data: "module.exports = require('shared').label;"
+  },
+  {
+    path: "/workspace/node_modules/parent-pkg/node_modules/shared/package.json",
+    data: JSON.stringify({ name: "shared", main: "index.js" })
+  },
+  {
+    path: "/workspace/node_modules/parent-pkg/node_modules/shared/index.js",
+    data: "exports.label = 'nested-shared';"
   }
 ]);
 
@@ -88,6 +114,7 @@ assert.deepEqual(runtime.requireSync("./app.cjs", "/workspace/index.cjs"), {
   scoped: "scoped-tool",
   conditional: "conditional-require",
   conditionalFeature: "conditional-node",
+  parent: "nested-shared",
   config: {
     mode: "browser-runtime"
   }
@@ -95,5 +122,6 @@ assert.deepEqual(runtime.requireSync("./app.cjs", "/workspace/index.cjs"), {
 
 assert.equal(runtime.resolve("plain-pkg", "/workspace/app.cjs"), "/workspace/node_modules/plain-pkg/main.js");
 assert.equal(runtime.resolve("plain-pkg/feature", "/workspace/app.cjs"), "/workspace/node_modules/plain-pkg/feature.js");
+assert.equal(runtime.resolve("shared", "/workspace/node_modules/parent-pkg/index.js"), "/workspace/node_modules/parent-pkg/node_modules/shared/index.js");
 
 console.log("node workspace modules test ok");

@@ -15,15 +15,21 @@ export interface WorkspaceModuleRuntimeOptions extends Omit<ModuleRuntimeOptions
 
 export function createWorkspaceModuleRuntime(options: WorkspaceModuleRuntimeOptions): ModuleRuntime {
   const root = trimSlash(options.root || "/workspace");
+  const discovered = discoverPackageManifests(options.reader, root);
   const packages = {
-    ...discoverPackageManifests(options.reader, root),
+    ...discovered.packages,
     ...(options.packages || {})
+  };
+  const packageRoots = {
+    ...discovered.packageRoots,
+    ...(options.packageRoots || {})
   };
   const runtime = createModuleRuntime({
     ...(options.builtins ? { builtins: options.builtins } : {}),
     ...(options.globals ? { globals: options.globals } : {}),
     ...(options.imports ? { imports: options.imports } : {}),
     packages,
+    packageRoots,
     ...(options.realpaths ? { realpaths: options.realpaths } : {})
   });
 
@@ -48,8 +54,9 @@ export function registerWorkspaceModules(runtime: ModuleRuntime, reader: Workspa
   return runtime;
 }
 
-function discoverPackageManifests(reader: WorkspaceModuleReader, root: string): Record<string, PackageManifest> {
+function discoverPackageManifests(reader: WorkspaceModuleReader, root: string): { packages: Record<string, PackageManifest>; packageRoots: Record<string, PackageManifest> } {
   const packages: Record<string, PackageManifest> = {};
+  const packageRoots: Record<string, PackageManifest> = {};
   for (const file of walkFiles(reader, root)) {
     if (!file.endsWith("/package.json")) continue;
     const packageRoot = file.slice(0, -"/package.json".length);
@@ -57,14 +64,16 @@ function discoverPackageManifests(reader: WorkspaceModuleReader, root: string): 
     if (!name) continue;
 
     const manifest = readJson<PackageJson>(reader, file);
-    packages[name] = {
+    const packageManifest = {
       root: packageRoot,
       ...(typeof manifest.type === "string" ? { type: manifest.type } : {}),
       ...(typeof manifest.main === "string" ? { main: manifest.main } : {}),
       ...normalizeExports(manifest.exports)
     };
+    packages[name] = packageManifest;
+    packageRoots[packageRoot] = packageManifest;
   }
-  return packages;
+  return { packages, packageRoots };
 }
 
 function* walkFiles(reader: WorkspaceModuleReader, path: string): Generator<string> {

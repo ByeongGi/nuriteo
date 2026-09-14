@@ -26,12 +26,14 @@ function packageName(specifier: string): string {
 export class ModuleResolver {
   modules: Map<string, unknown>;
   packages: Record<string, PackageManifest>;
+  packageRoots: Record<string, PackageManifest>;
   imports: Record<string, string>;
   realpath: (url: string) => string;
 
   constructor(options: ModuleRuntimeOptions & { modules?: Map<string, unknown>; realpath?: (url: string) => string } = {}) {
     this.modules = options.modules || new Map();
     this.packages = options.packages || {};
+    this.packageRoots = options.packageRoots || {};
     this.imports = options.imports || {};
     this.realpath = options.realpath || ((url) => url);
   }
@@ -44,7 +46,7 @@ export class ModuleResolver {
       const base = specifier.startsWith("/") ? specifier : `${dirname(parentUrl)}/${specifier}`;
       return this.resolvePath(base);
     }
-    return this.resolvePackage(specifier);
+    return this.resolvePackage(specifier, parentUrl);
   }
 
   resolveImports(specifier: string, parentUrl: string): string {
@@ -53,17 +55,29 @@ export class ModuleResolver {
     return this.resolve(target, parentUrl);
   }
 
-  resolvePackage(specifier: string): string {
+  resolvePackage(specifier: string, parentUrl = "/workspace/index.mjs"): string {
     const name = packageName(specifier);
-    const manifest = this.packages[name];
+    const root = this.findPackageRoot(name, parentUrl);
+    const manifest = root ? this.packageRoots[root] : this.packages[name];
     if (!manifest) throw new Error(`ERR_MODULE_NOT_FOUND: ${specifier}`);
 
     const subpath = specifier === name ? "." : `.${specifier.slice(name.length)}`;
     const target = resolvePackageTarget(manifest, subpath);
     if (!target) throw new Error(`ERR_PACKAGE_PATH_NOT_EXPORTED: ${specifier}`);
 
-    const packageRoot = manifest.root || `/workspace/node_modules/${name}`;
+    const packageRoot = root || manifest.root || `/workspace/node_modules/${name}`;
     return this.resolvePath(`${packageRoot}/${target}`);
+  }
+
+  findPackageRoot(name: string, parentUrl: string): string | null {
+    let current = dirname(parentUrl);
+    while (true) {
+      const candidate = normalizePath(`${current}/node_modules/${name}`);
+      const real = this.realpath(candidate);
+      if (this.packageRoots[real] || this.packageRoots[candidate]) return this.packageRoots[real] ? real : candidate;
+      if (current === "/") return null;
+      current = dirname(current);
+    }
   }
 
   resolvePath(path: string): string {

@@ -69,6 +69,7 @@ export interface PackageExportConditionMap {
 export interface ModuleRuntimeOptions {
   realpaths?: Record<string, string>;
   packages?: Record<string, PackageManifest>;
+  packageRoots?: Record<string, PackageManifest>;
   imports?: Record<string, string>;
   builtins?: (specifier: string) => RuntimeValue;
   globals?: Record<string, RuntimeValue>;
