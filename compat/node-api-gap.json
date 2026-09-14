@@ -355,6 +355,21 @@
       "nextPhase": "P9-04"
     },
     {
+      "builtin": "worker_threads",
+      "status": "partial",
+      "priority": 2,
+      "implementedBy": "packages/node-runtime/src/builtins/worker-threads-builtin.ts",
+      "tests": ["tests/node-runtime/secondary-builtins.test.mjs"],
+      "requiredBy": ["pnpm thread id suffixes", "pnpm tarball worker pool feature detection"],
+      "minimumApi": ["isMainThread", "threadId", "parentPort", "workerData", "MessageChannel", "MessagePort", "Worker"],
+      "acceptance": [
+        "Thread identity feature detection returns stable browser-main-thread values.",
+        "MessageChannel supports same-runtime message delivery for dependency feature probes.",
+        "Actual Worker construction fails with ERR_BROWSER_WORKER_THREAD_UNSUPPORTED until a browser-backed worker bridge is productized."
+      ],
+      "nextPhase": "P10"
+    },
+    {
       "builtin": "assert",
       "status": "partial",
       "priority": 3,

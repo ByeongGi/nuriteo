@@ -230,6 +230,19 @@ assert.equal(childError.code, "ERR_BROWSER_CHILD_PROCESS_UNSUPPORTED");
 assert.equal(childProcess.spawnSync("python").status, 1);
 assert.throws(() => childProcess.execSync("python --version"), /External child process execution/);
 
+const workerThreads = requireBuiltin("node:worker_threads");
+assert.equal(workerThreads.isMainThread, true);
+assert.equal(workerThreads.threadId, 0);
+assert.equal(workerThreads.parentPort, null);
+const channel = new workerThreads.MessageChannel();
+const channelMessage = new Promise((resolve) => channel.port2.once("message", resolve));
+channel.port1.postMessage({ ok: true });
+assert.deepEqual(await channelMessage, { ok: true });
+const worker = new workerThreads.Worker("/workspace/worker.js", { workerData: { task: "build" } });
+assert.deepEqual(worker.workerData, { task: "build" });
+const workerError = await new Promise((resolve) => worker.once("error", resolve));
+assert.equal(workerError.code, "ERR_BROWSER_WORKER_THREAD_UNSUPPORTED");
+
 const result = runUnsafeCommonJsForLocalTests(`
   const assert = require("node:assert/strict");
   const childProcess = require("child_process");
@@ -237,6 +250,7 @@ const result = runUnsafeCommonJsForLocalTests(`
   const http = require("http");
   const net = require("net");
   const path = require("path");
+  const workerThreads = require("worker_threads");
   const os = require("node:os");
   const qs = require("node:querystring");
   const { Buffer } = require("buffer");
@@ -251,6 +265,8 @@ const result = runUnsafeCommonJsForLocalTests(`
   assert.equal(typeof dns.lookup, "function");
   assert.equal(typeof http.request, "function");
   assert.equal(net.isIP("127.0.0.1"), 4);
+  assert.equal(workerThreads.threadId, 0);
+  assert.equal(workerThreads.isMainThread, true);
   assert.equal(qs.parse("a=1&a=2").a.length, 2);
   assert.equal(new StringDecoder().end(Buffer.from("ok")), "ok");
   readline.emitKeypressEvents({ on() {} });

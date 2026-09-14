@@ -44,7 +44,8 @@ for (const name of [
   "tls",
   "tty",
   "url",
-  "util"
+  "util",
+  "worker_threads"
 ]) {
   const entry = gapsByName.get(name);
   assert.equal(entry?.status, "partial");

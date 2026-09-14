@@ -71,6 +71,7 @@ const defaultBuiltins = new Set([
   "tty",
   "url",
   "util",
+  "worker_threads",
   "zlib"
 ]);
 

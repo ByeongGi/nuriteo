@@ -20,3 +20,4 @@ export { connect as tlsConnect, createSecureContext, tlsBuiltin, TLSSocket } fro
 export { ReadStream, ttyBuiltin, isatty, WriteStream } from "./tty.ts";
 export { domainToASCII, domainToUnicode, fileURLToPath, pathToFileURL, URL, urlBuiltin, URLSearchParams, urlToHttpOptions } from "./url.ts";
 export { utilBuiltin, callbackify, deprecate, format, inherits, inspect, promisify, types as utilTypes } from "./util.ts";
+export { isMainThread, MessageChannel, MessagePort, parentPort, SHARE_ENV, threadId, UnsupportedWorkerThreadError, Worker, workerData, workerThreadsBuiltin } from "./worker-threads-builtin.ts";

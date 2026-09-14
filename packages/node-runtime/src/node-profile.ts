@@ -150,6 +150,12 @@ export const NODE_PROFILE = Object.freeze({
       source: "browser-native-js",
       implementedBy: "packages/node-runtime/src/builtins/util.ts",
       tests: Object.freeze(["tests/node-runtime/builtin-subset.test.mjs"])
+    }),
+    worker_threads: Object.freeze({
+      status: "partial",
+      source: "browser-unsupported-diagnostic",
+      implementedBy: "packages/node-runtime/src/builtins/worker-threads-builtin.ts",
+      tests: Object.freeze(["tests/node-runtime/secondary-builtins.test.mjs"])
     })
   }),
   dependencyGraph: Object.freeze({
@@ -185,6 +191,7 @@ export const NODE_PROFILE = Object.freeze({
     "node:tty": Object.freeze(["browser-native-js:tty", "node:stream"]),
     "node:url": Object.freeze(["browser-native-js:url", "node:path"]),
     "node:util": Object.freeze(["browser-native-js:util", "node:events"]),
+    "node:worker_threads": Object.freeze(["browser-unsupported-diagnostic"]),
     "child_process": Object.freeze(["node:child_process"]),
     "fs": Object.freeze(["node:fs"]),
     "fs/promises": Object.freeze(["node:fs/promises"]),
@@ -207,7 +214,8 @@ export const NODE_PROFILE = Object.freeze({
     "tls": Object.freeze(["node:tls"]),
     "tty": Object.freeze(["node:tty"]),
     "url": Object.freeze(["node:url"]),
-    "util": Object.freeze(["node:util"])
+    "util": Object.freeze(["node:util"]),
+    "worker_threads": Object.freeze(["node:worker_threads"])
   })
 });
 
