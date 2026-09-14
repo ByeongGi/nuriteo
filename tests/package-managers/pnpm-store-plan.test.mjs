@@ -1,0 +1,98 @@
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { spawnSync } from "node:child_process";
+
+import { CliRegistry, createPnpmRunner, createPnpmStorePlan } from "../../packages/node-runtime/src/index.ts";
+
+const root = new URL("../..", import.meta.url).pathname;
+const fixture = path.join(root, "tests/fixtures/package-managers/pnpm");
+const installed = JSON.parse(fs.readFileSync(new URL("../../vendor/cli/pnpm/9.15.9/installed.json", import.meta.url), "utf8"));
+const registry = new CliRegistry([installed]);
+const workdir = fs.mkdtempSync(path.join(os.tmpdir(), "pnpm-store-plan-"));
+
+try {
+  fs.cpSync(fixture, workdir, {
+    recursive: true,
+    filter(current) {
+      return !current.includes(`${path.sep}node_modules${path.sep}`) && !current.endsWith(`${path.sep}node_modules`);
+    }
+  });
+
+  const storeDir = path.join(workdir, ".pnpm-store");
+  const pnpm = createPnpmRunner({
+    registry,
+    processRunner({ entry, cwd, args, env }) {
+      const result = spawnSync(process.execPath, [entry.entry, ...args], {
+        cwd,
+        env: { ...process.env, ...env },
+        encoding: "utf8"
+      });
+      return {
+        stdout: result.stdout,
+        stderr: result.stderr,
+        exitCode: result.status ?? 1,
+        entry: entry.entry,
+        entrySha256: entry.entrySha256,
+        args,
+        cwd,
+        runtime: "host-node-test-helper"
+      };
+    }
+  });
+  const frozen = pnpm.install(workdir, ["--frozen-lockfile", "--ignore-scripts", "--store-dir", storeDir]);
+  assert.equal(frozen.exitCode, 0, frozen.stderr);
+
+  const plan = createPnpmStorePlan({
+    cwd: workdir,
+    storeDir,
+    reader: {
+      readText(file) {
+        return fs.readFileSync(file, "utf8");
+      },
+      listDir(dir) {
+        return fs.readdirSync(dir, { withFileTypes: true })
+          .filter((entry) => entry.isDirectory())
+          .map((entry) => entry.name);
+      }
+    }
+  });
+
+  assert.equal(plan.packageManager, "pnpm@9.15.9");
+  assert.equal(plan.storeDir, storeDir);
+  assert.equal(plan.virtualStoreDir, path.join(workdir, "node_modules/.pnpm"));
+  assert.equal(plan.frozenLockfile.valid, true);
+  assert.deepEqual(plan.frozenLockfile.missingLinks, []);
+  assert.deepEqual(plan.workspacePackages.map((pkg) => pkg.name), [
+    "fixture-bin",
+    "fixture-optional",
+    "fixture-peer-consumer",
+    "fixture-peer-provider"
+  ]);
+  assert.deepEqual(plan.rootLinks.map((link) => link.name), [
+    "fixture-bin",
+    "fixture-optional",
+    "fixture-peer-consumer",
+    "fixture-peer-provider"
+  ]);
+
+  for (const link of plan.rootLinks) {
+    assert.equal(link.strategy, "symlink");
+    assert.equal(fs.existsSync(path.join(workdir, "node_modules", link.name)), true);
+    assert.equal(path.relative(workdir, link.targetPath).startsWith("packages/"), true);
+  }
+
+  const fixtureBin = plan.rootLinks.find((link) => link.name === "fixture-bin");
+  assert.ok(fixtureBin);
+  assert.deepEqual(fixtureBin.binLinks, [{
+    name: "fixture-hello",
+    targetPath: path.join(workdir, "packages/fixture-bin/bin/fixture-hello.js"),
+    linkPath: path.join(workdir, "node_modules/.bin/fixture-hello")
+  }]);
+  assert.equal(fs.existsSync(fixtureBin.binLinks[0].linkPath), true);
+} finally {
+  fs.rmSync(workdir, { recursive: true, force: true });
+}
+
+console.log("pnpm store plan test ok");
