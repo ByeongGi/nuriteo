@@ -20,6 +20,17 @@ assert.deepEqual(
   ["./local", "<dynamic>", "node:path"]
 );
 
+assert.deepEqual(
+  extractStaticRequires(
+    `
+      const cliEntry = require('node:path').resolve(__dirname, 'cli/entry.js');
+      module.exports = () => require(cliEntry);
+    `,
+    { filename: "/workspace/package/lib/cli.js" }
+  ),
+  ["/workspace/package/lib/cli/entry.js", "node:path"]
+);
+
 for (const [name, version] of [["npm", "10.9.2"], ["pnpm", "9.15.9"]]) {
   const installed = JSON.parse(fs.readFileSync(path.join(root, `vendor/cli/${name}/${version}/installed.json`), "utf8"));
   const packageRoot = path.join(root, `vendor/cli/${name}/${version}/package`);
@@ -30,6 +41,9 @@ for (const [name, version] of [["npm", "10.9.2"], ["pnpm", "9.15.9"]]) {
     reader: {
       exists(file) {
         return fs.existsSync(file);
+      },
+      isFile(file) {
+        return fs.statSync(file).isFile();
       },
       readText(file) {
         return fs.readFileSync(file, "utf8");
@@ -43,11 +57,12 @@ for (const [name, version] of [["npm", "10.9.2"], ["pnpm", "9.15.9"]]) {
   assert.ok(graph.modules.some((mod) => mod.path.includes(name === "npm" ? "/lib/cli.js" : "/dist/pnpm.cjs")));
   assert.equal(graph.issues.some((issue) => issue.kind === "missing-module"), false);
   assert.ok(graph.issues.some((issue) => issue.kind === "dynamic-require"));
+  assert.ok(graph.issues.some((issue) => issue.kind === "unsupported-builtin"));
   if (name === "npm") {
-    assert.equal(graph.issues.some((issue) => issue.kind === "unsupported-builtin"), false);
+    assert.ok(graph.modules.length > 500);
+    assert.ok(graph.issues.some((issue) => issue.kind === "optional-dependency-probe"));
   } else {
     assert.ok(graph.issues.some((issue) => issue.kind === "optional-cache-probe"));
-    assert.ok(graph.issues.some((issue) => issue.kind === "unsupported-builtin"));
   }
   assert.equal(graph.supported, false);
 }

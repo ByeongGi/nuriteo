@@ -47,7 +47,7 @@
       "runtime": "browser-guest-node-runtime",
       "status": "pass",
       "evidence": ["tests/package-managers/cli-module-graph.test.mjs"],
-      "notes": "Walks vendored npm and pnpm entry module graphs, ignores string/comment false positives, rejects missing package modules, and classifies remaining dynamic require plus unsupported builtin gaps without counting optional cache probes as product blockers."
+      "notes": "Walks vendored npm and pnpm entry module graphs, resolves simple computed path entries, handles JSON modules, ignores string/comment false positives, rejects missing package modules, and classifies remaining dynamic require plus unsupported builtin gaps without counting optional probes as product blockers."
     },
     {
       "id": "npm-install",

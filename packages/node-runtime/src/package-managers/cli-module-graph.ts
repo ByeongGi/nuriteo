@@ -2,6 +2,7 @@ import { dirname, join, normalize } from "../builtins/path.ts";
 
 export interface CliModuleGraphReader {
   exists(path: string): boolean;
+  isFile?(path: string): boolean;
   readText(path: string): string;
 }
 
@@ -114,7 +115,7 @@ export function analyzeCliModuleGraph(options: CliModuleGraphOptions): CliModule
     if (!current || seen.has(current)) continue;
     seen.add(current);
     const source = options.reader.readText(current);
-    const requires = extractStaticRequires(source);
+    const requires = extractStaticRequires(source, { filename: current });
     modules.push({ path: current, requires });
     for (const specifier of requires) {
       if (isBuiltin(specifier, builtins)) continue;
@@ -146,8 +147,13 @@ export function analyzeCliModuleGraph(options: CliModuleGraphOptions): CliModule
   };
 }
 
-export function extractStaticRequires(source: string): string[] {
+export interface StaticRequireExtractionOptions {
+  filename?: string;
+}
+
+export function extractStaticRequires(source: string, options: StaticRequireExtractionOptions = {}): string[] {
   const requires = new Set<string>();
+  const constants = collectStaticPathConstants(source, options.filename);
 
   for (let index = 0; index < source.length; index += 1) {
     const char = source[index];
@@ -172,7 +178,7 @@ export function extractStaticRequires(source: string): string[] {
     if (!source.startsWith("require", index)) continue;
     if (isIdentifierPart(source[index - 1]) || isIdentifierPart(source[index + "require".length])) continue;
 
-    const parsed = parseRequireCall(source, index + "require".length);
+    const parsed = parseRequireCall(source, index + "require".length, constants);
     if (parsed) {
       requires.add(parsed.specifier);
       index = parsed.end;
@@ -193,7 +199,7 @@ function isKnownNodeBuiltin(specifier: string): boolean {
 }
 
 function resolveRequire(specifier: string, importer: string, packageRoot: string, reader: CliModuleGraphReader): string | null {
-  if (specifier.startsWith("./") || specifier.startsWith("../") || specifier.startsWith("/")) {
+  if (specifier === "." || specifier === ".." || specifier.startsWith("./") || specifier.startsWith("../") || specifier.startsWith("/")) {
     const base = specifier.startsWith("/") ? specifier : join(dirname(importer), specifier);
     return resolveFileOrDirectory(base, reader);
   }
@@ -230,13 +236,15 @@ function resolveFileOrDirectory(base: string, reader: CliModuleGraphReader): str
   const candidates = [
     normalized,
     `${normalized}.js`,
+    `${normalized}.json`,
     `${normalized}.cjs`,
     `${normalized}.mjs`,
     join(normalized, "index.js"),
+    join(normalized, "index.json"),
     join(normalized, "index.cjs"),
     join(normalized, "index.mjs")
   ];
-  return candidates.find((candidate) => reader.exists(candidate)) || null;
+  return candidates.find((candidate) => reader.exists(candidate) && (reader.isFile?.(candidate) ?? true)) || null;
 }
 
 function splitPackageSpecifier(specifier: string): [string, string] {
@@ -253,19 +261,41 @@ function classifyOptionalProbe(specifier: string, importer: string): CliModuleGr
   if ((specifier === "esprima" || specifier === "supports-color") && importer.endsWith("/dist/pnpm.cjs")) {
     return "optional-dependency-probe";
   }
+  if (specifier === "bluebird" && importer.endsWith("/node_modules/promise-inflight/inflight.js")) {
+    return "optional-dependency-probe";
+  }
   return null;
 }
 
-function parseRequireCall(source: string, start: number): { specifier: string; end: number } | null {
+function collectStaticPathConstants(source: string, filename: string | undefined): Map<string, string> {
+  const constants = new Map<string, string>();
+  if (!filename) return constants;
+
+  const pathResolvePattern =
+    /\b(?:const|let|var)\s+([$_\p{ID_Start}][$_\p{ID_Continue}]*)\s*=\s*require\(\s*['"]node:path['"]\s*\)\.resolve\(\s*__dirname\s*,\s*['"]([^'"]+)['"]\s*\)/gu;
+  for (const match of source.matchAll(pathResolvePattern)) {
+    const [, name, relativePath] = match;
+    if (name && relativePath) constants.set(name, normalize(join(dirname(filename), relativePath)));
+  }
+
+  return constants;
+}
+
+function parseRequireCall(
+  source: string,
+  start: number,
+  constants: Map<string, string>
+): { specifier: string; end: number } | null {
   let index = skipWhitespace(source, start);
   if (source[index] !== "(") return null;
   index = skipWhitespace(source, index + 1);
 
   const quote = source[index];
   if (quote !== "'" && quote !== '"') {
-    return source.slice(index, index + 64).includes(")")
-      ? { specifier: dynamicRequireSpecifier, end: source.indexOf(")", index) }
-      : null;
+    const end = source.indexOf(")", index);
+    if (end === -1 || end - index > 64) return null;
+    const expression = source.slice(index, end).trim();
+    return { specifier: constants.get(expression) || dynamicRequireSpecifier, end };
   }
 
   const literalStart = index + 1;
