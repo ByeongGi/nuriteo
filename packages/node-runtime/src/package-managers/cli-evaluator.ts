@@ -23,6 +23,7 @@ export function createCliModuleEvaluator(options: CliModuleEvaluatorOptions): (r
     const processOptions = {
       argv: ["node", request.entry.entry, ...request.args],
       cwd: request.cwd,
+      exitMode: "capture" as const,
       ...(request.env ? { env: request.env } : {})
     };
     const process = new BrowserProcess(processOptions);

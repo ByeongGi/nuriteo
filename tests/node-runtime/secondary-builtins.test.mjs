@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 
 import {
+  BrowserProcess,
   createBuiltinLoader,
   processBuiltin
 } from "../../packages/node-runtime/src/index.ts";
@@ -97,11 +98,22 @@ assert.equal(moduleBuiltin.Module._resolveFilename("node:path"), "node:path");
 
 const processModule = requireBuiltin("process");
 assert.equal(processModule.version, "v22.23.0");
+assert.equal(processModule.execPath, "/usr/local/bin/node");
 assert.equal(processModule.cwd(), "/workspace");
+let stdoutFlushed = false;
+assert.equal(processModule.stdout.write("", () => { stdoutFlushed = true; }), true);
+assert.equal(stdoutFlushed, true);
+let stderrFlushed = false;
+assert.equal(processModule.stderr.write("", "utf8", () => { stderrFlushed = true; }), true);
+assert.equal(stderrFlushed, true);
 processModule.chdir("app");
 assert.equal(processModule.cwd(), "/workspace/app");
 await new Promise((resolve) => processModule.nextTick(resolve));
 assert.equal(processBuiltin.platform, "linux");
+assert.throws(() => new BrowserProcess().exit(3), /process\.exit\(3\)/);
+const capturedProcess = new BrowserProcess({ exitMode: "capture" });
+assert.equal(capturedProcess.exit(4), undefined);
+assert.equal(capturedProcess.exitCode, 4);
 
 const constants = requireBuiltin("node:constants");
 assert.equal(constants.O_RDONLY, 0);
