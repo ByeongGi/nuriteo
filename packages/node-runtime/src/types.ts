@@ -110,6 +110,8 @@ export interface BuiltinBindings {
   fs?: RuntimeFsBinding;
   buffer?: RuntimeValue;
   events?: RuntimeValue;
+  httpClient?: import("./network/http-client.ts").RuntimeHttpClient | import("./network/http-client.ts").RuntimeFetcher;
+  httpsClient?: import("./network/http-client.ts").RuntimeHttpClient | import("./network/http-client.ts").RuntimeFetcher;
   internalBinding?: (name: string) => unknown;
   process?: RuntimeValue;
   stream?: RuntimeValue;

@@ -5,6 +5,7 @@ import { constantsBuiltin } from "./builtins/constants.ts";
 import { dnsBuiltin, dnsPromisesBuiltin } from "./builtins/dns.ts";
 import { eventsBuiltin } from "./builtins/events.ts";
 import { createFsPromisesBuiltin } from "./builtins/fs-promises.ts";
+import { createHttpBuiltin, createHttpsBuiltin } from "./builtins/http.ts";
 import { moduleBuiltin } from "./builtins/module.ts";
 import { osBuiltin } from "./builtins/os.ts";
 import { pathBuiltin } from "./builtins/path.ts";
@@ -35,6 +36,8 @@ export function createBuiltinLoader(bindings: BuiltinBindings): (specifier: stri
     if (specifier === "events" || specifier === "node:events") return bindings.events || eventsBuiltin;
     if (specifier === "dns" || specifier === "node:dns") return dnsBuiltin;
     if (specifier === "dns/promises" || specifier === "node:dns/promises") return dnsPromisesBuiltin;
+    if (specifier === "http" || specifier === "node:http") return createHttpBuiltin(bindings.httpClient);
+    if (specifier === "https" || specifier === "node:https") return createHttpsBuiltin(bindings.httpsClient || bindings.httpClient);
     if (specifier === "module" || specifier === "node:module") return moduleBuiltin;
     if (specifier === "assert" || specifier === "node:assert") return assertBuiltin;
     if (specifier === "assert/strict" || specifier === "node:assert/strict") return assertStrictBuiltin;

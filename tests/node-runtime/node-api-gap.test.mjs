@@ -29,6 +29,8 @@ for (const name of [
   "dns",
   "events",
   "fs/promises",
+  "http",
+  "https",
   "os",
   "path",
   "process",

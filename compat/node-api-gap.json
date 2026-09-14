@@ -148,6 +148,28 @@
       "nextPhase": "P10"
     },
     {
+      "builtin": "http",
+      "status": "partial",
+      "priority": 1,
+      "implementedBy": "packages/node-runtime/src/builtins/http.ts",
+      "tests": ["tests/node-runtime/secondary-builtins.test.mjs"],
+      "requiredBy": ["minipass-fetch", "make-fetch-happen", "package registry requests"],
+      "minimumApi": ["request", "get", "Agent", "ClientRequest", "IncomingMessage"],
+      "acceptance": ["Fetch-backed request/get invokes callback with status, headers, and readable body."],
+      "nextPhase": "P10"
+    },
+    {
+      "builtin": "https",
+      "status": "partial",
+      "priority": 1,
+      "implementedBy": "packages/node-runtime/src/builtins/http.ts",
+      "tests": ["tests/node-runtime/secondary-builtins.test.mjs"],
+      "requiredBy": ["minipass-fetch", "make-fetch-happen", "package registry requests"],
+      "minimumApi": ["request", "get", "Agent", "ClientRequest", "IncomingMessage"],
+      "acceptance": ["HTTPS facade shares fetch-backed request/get behavior with https default protocol."],
+      "nextPhase": "P10"
+    },
+    {
       "builtin": "util",
       "status": "partial",
       "priority": 0,

@@ -52,6 +52,8 @@ const defaultBuiltins = new Set([
   "events",
   "fs",
   "fs/promises",
+  "http",
+  "https",
   "module",
   "os",
   "path",

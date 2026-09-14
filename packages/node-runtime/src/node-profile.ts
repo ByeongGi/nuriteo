@@ -19,6 +19,18 @@ export const NODE_PROFILE = Object.freeze({
       implementedBy: "packages/node-runtime/src/builtins/fs-promises.ts",
       tests: Object.freeze(["tests/node-runtime/secondary-builtins.test.mjs"])
     }),
+    http: Object.freeze({
+      status: "partial",
+      source: "browser-fetch-adapter",
+      implementedBy: "packages/node-runtime/src/builtins/http.ts",
+      tests: Object.freeze(["tests/node-runtime/secondary-builtins.test.mjs"])
+    }),
+    https: Object.freeze({
+      status: "partial",
+      source: "browser-fetch-adapter",
+      implementedBy: "packages/node-runtime/src/builtins/http.ts",
+      tests: Object.freeze(["tests/node-runtime/secondary-builtins.test.mjs"])
+    }),
     assert: Object.freeze({
       status: "partial",
       source: "browser-native-js",
@@ -137,6 +149,8 @@ export const NODE_PROFILE = Object.freeze({
     "node:events": Object.freeze(["browser-native-js:events"]),
     "node:module": Object.freeze(["browser-native-js:module"]),
     "node:fs/promises": Object.freeze(["node:fs"]),
+    "node:http": Object.freeze(["browser-fetch-adapter"]),
+    "node:https": Object.freeze(["browser-fetch-adapter"]),
     "node:os": Object.freeze(["browser-native-js:os"]),
     "node:path": Object.freeze(["browser-native-js:path"]),
     "node:path/posix": Object.freeze(["node:path"]),
@@ -154,6 +168,8 @@ export const NODE_PROFILE = Object.freeze({
     "fs/promises": Object.freeze(["node:fs/promises"]),
     "dns": Object.freeze(["node:dns"]),
     "dns/promises": Object.freeze(["node:dns/promises"]),
+    "http": Object.freeze(["node:http"]),
+    "https": Object.freeze(["node:https"]),
     "module": Object.freeze(["node:module"]),
     "os": Object.freeze(["node:os"]),
     "path": Object.freeze(["node:path"]),

@@ -179,9 +179,41 @@ await fsPromises.writeFile("/workspace/fs-promises.txt", "hello");
 assert.equal(await fsPromises.readFile("/workspace/fs-promises.txt", "utf8"), "hello");
 assert.equal((await fsPromises.stat("/workspace/fs-promises.txt")).size, 5);
 
+const fetchCalls = [];
+const httpRequire = createBuiltinLoader({
+  httpClient: {
+    async download(input, options = {}) {
+      fetchCalls.push({ input: String(input), method: options.method, body: new TextDecoder().decode(options.body) });
+      return {
+        body: new TextEncoder().encode("response-body"),
+        headers: { "content-type": "text/plain" },
+        ok: true,
+        redirected: false,
+        redirects: [],
+        sha256: "",
+        status: 201,
+        url: String(input)
+      };
+    }
+  }
+});
+const http = httpRequire("http");
+const httpResponse = await new Promise((resolve, reject) => {
+  const request = http.request({ hostname: "registry.test", path: "/pkg", method: "POST" }, (response) => {
+    const chunks = [];
+    response.on("data", (chunk) => chunks.push(new TextDecoder().decode(chunk)));
+    response.on("end", () => resolve({ statusCode: response.statusCode, body: chunks.join("") }));
+  });
+  request.on("error", reject);
+  request.end("request-body");
+});
+assert.deepEqual(httpResponse, { statusCode: 201, body: "response-body" });
+assert.deepEqual(fetchCalls, [{ input: "http://registry.test/pkg", method: "POST", body: "request-body" }]);
+
 const result = runUnsafeCommonJsForLocalTests(`
   const assert = require("node:assert/strict");
   const dns = require("node:dns");
+  const http = require("http");
   const path = require("path");
   const os = require("node:os");
   const qs = require("node:querystring");
@@ -194,6 +226,7 @@ const result = runUnsafeCommonJsForLocalTests(`
   assert.equal(fileURLToPath(pathToFileURL("/workspace/a b.js")), "/workspace/a b.js");
   assert.equal(os.platform(), "linux");
   assert.equal(typeof dns.lookup, "function");
+  assert.equal(typeof http.request, "function");
   assert.equal(qs.parse("a=1&a=2").a.length, 2);
   assert.equal(new StringDecoder().end(Buffer.from("ok")), "ok");
   readline.emitKeypressEvents({ on() {} });
