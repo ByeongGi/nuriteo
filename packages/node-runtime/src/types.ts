@@ -54,6 +54,7 @@ export type ModuleDefinition = CjsModuleDefinition | CjsSourceModuleDefinition |
 export type ModuleDefinitionMap = Record<string, ModuleDefinition>;
 
 export interface PackageManifest {
+  name?: string;
   root?: string;
   type?: string;
   main?: string;

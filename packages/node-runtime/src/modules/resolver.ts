@@ -57,7 +57,7 @@ export class ModuleResolver {
 
   resolvePackage(specifier: string, parentUrl = "/workspace/index.mjs"): string {
     const name = packageName(specifier);
-    const root = this.findPackageRoot(name, parentUrl);
+    const root = this.findPackageRoot(name, parentUrl) || this.findSelfPackageRoot(name, parentUrl);
     const manifest = root ? this.packageRoots[root] : this.packages[name];
     if (!manifest) throw new Error(`ERR_MODULE_NOT_FOUND: ${specifier}`);
 
@@ -78,6 +78,18 @@ export class ModuleResolver {
       if (current === "/") return null;
       current = dirname(current);
     }
+  }
+
+  findSelfPackageRoot(name: string, parentUrl: string): string | null {
+    let bestRoot: string | null = null;
+    for (const [root, manifest] of Object.entries(this.packageRoots)) {
+      if (manifest.name !== name) continue;
+      const prefix = root.endsWith("/") ? root : `${root}/`;
+      if ((parentUrl === root || parentUrl.startsWith(prefix)) && (!bestRoot || root.length > bestRoot.length)) {
+        bestRoot = root;
+      }
+    }
+    return bestRoot;
   }
 
   resolvePath(path: string): string {

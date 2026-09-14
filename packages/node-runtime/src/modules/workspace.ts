@@ -65,6 +65,7 @@ function discoverPackageManifests(reader: WorkspaceModuleReader, root: string): 
 
     const manifest = readJson<PackageJson>(reader, file);
     const packageManifest = {
+      name,
       root: packageRoot,
       ...(typeof manifest.type === "string" ? { type: manifest.type } : {}),
       ...(typeof manifest.main === "string" ? { main: manifest.main } : {}),
@@ -155,6 +156,7 @@ function trimSlash(path: string): string {
 }
 
 interface PackageJson {
+  name?: unknown;
   type?: unknown;
   main?: unknown;
   exports?: unknown;

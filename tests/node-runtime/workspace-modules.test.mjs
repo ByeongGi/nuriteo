@@ -13,6 +13,7 @@ const workspace = new MemoryPackageManagerWorkspace([
       const conditional = require("conditional-pkg");
       const conditionalFeature = require("conditional-pkg/feature");
       const parent = require("parent-pkg");
+      const self = require("self-pkg/internal");
       const config = require("./config.json");
       module.exports = {
         base: path.basename(__filename),
@@ -22,6 +23,7 @@ const workspace = new MemoryPackageManagerWorkspace([
         conditional: conditional.label,
         conditionalFeature: conditionalFeature.label,
         parent,
+        self: self.label,
         config
       };
     `
@@ -98,6 +100,24 @@ const workspace = new MemoryPackageManagerWorkspace([
   {
     path: "/workspace/node_modules/parent-pkg/node_modules/shared/index.js",
     data: "exports.label = 'nested-shared';"
+  },
+  {
+    path: "/workspace/node_modules/self-pkg/package.json",
+    data: JSON.stringify({
+      name: "self-pkg",
+      exports: {
+        ".": "./index.js",
+        "./internal": "./internal.js"
+      }
+    })
+  },
+  {
+    path: "/workspace/node_modules/self-pkg/index.js",
+    data: "module.exports = require('self-pkg/internal');"
+  },
+  {
+    path: "/workspace/node_modules/self-pkg/internal.js",
+    data: "exports.label = 'self-reference';"
   }
 ]);
 
@@ -115,6 +135,7 @@ assert.deepEqual(runtime.requireSync("./app.cjs", "/workspace/index.cjs"), {
   conditional: "conditional-require",
   conditionalFeature: "conditional-node",
   parent: "nested-shared",
+  self: "self-reference",
   config: {
     mode: "browser-runtime"
   }
@@ -123,5 +144,6 @@ assert.deepEqual(runtime.requireSync("./app.cjs", "/workspace/index.cjs"), {
 assert.equal(runtime.resolve("plain-pkg", "/workspace/app.cjs"), "/workspace/node_modules/plain-pkg/main.js");
 assert.equal(runtime.resolve("plain-pkg/feature", "/workspace/app.cjs"), "/workspace/node_modules/plain-pkg/feature.js");
 assert.equal(runtime.resolve("shared", "/workspace/node_modules/parent-pkg/index.js"), "/workspace/node_modules/parent-pkg/node_modules/shared/index.js");
+assert.equal(runtime.resolve("self-pkg/internal", "/workspace/node_modules/self-pkg/index.js"), "/workspace/node_modules/self-pkg/internal.js");
 
 console.log("node workspace modules test ok");
