@@ -35,9 +35,9 @@
       "id": "webpack-consumer-build",
       "bundler": "webpack",
       "command": "webpack build",
-      "status": "not-run",
-      "evidence": ["docs/productization/evidence/P14-03.md"],
-      "productGap": "Webpack is not installed in the root dev toolchain yet. Add a fixture that verifies conditional exports, worker assets, and wasm asset handling."
+      "status": "pass",
+      "evidence": ["tests/sdk-consumer/webpack-build.test.mjs", "docs/productization/evidence/P14-03.md"],
+      "notes": "Tarball-installed Webpack consumer imports the root SDK package, builds successfully, and verifies runtime worker URL strings survive bundling when expressed from location.href."
     },
     {
       "id": "rspack-consumer-build",
@@ -59,9 +59,8 @@
   "gate": {
     "id": "P14-03",
     "status": "not-pass",
-    "reason": "TypeScript bundler resolution, CJS require, and Vite consumer build smoke pass, but Webpack/Rspack/Next consumer builds are not implemented yet.",
+    "reason": "TypeScript bundler resolution, CJS require, Vite, and Webpack consumer build smoke pass, but Rspack/Next consumer builds are not implemented yet.",
     "requiredToPass": [
-      "Add Webpack SDK consumer build smoke",
       "Add Rspack SDK consumer build smoke",
       "Add Next SDK consumer build smoke",
       "Document automatic and manual Worker/WASM asset handling per bundler"

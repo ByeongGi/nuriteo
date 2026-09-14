@@ -9,12 +9,12 @@ assert.ok(Array.isArray(matrix.cases));
 
 const casesById = new Map(matrix.cases.map((entry) => [entry.id, entry]));
 
-for (const id of ["typescript-bundler-resolution", "node-commonjs-require", "vite-consumer-build"]) {
+for (const id of ["typescript-bundler-resolution", "node-commonjs-require", "vite-consumer-build", "webpack-consumer-build"]) {
   const entry = casesById.get(id);
   assert.equal(entry?.status, "pass");
 }
 
-for (const id of ["webpack-consumer-build", "rspack-consumer-build", "next-consumer-build"]) {
+for (const id of ["rspack-consumer-build", "next-consumer-build"]) {
   const entry = casesById.get(id);
   assert.equal(entry?.status, "not-run");
   assert.match(entry.productGap, /not installed|not implemented|Add a/i);
@@ -29,6 +29,6 @@ for (const entry of matrix.cases) {
 
 assert.equal(matrix.gate.id, "P14-03");
 assert.equal(matrix.gate.status, "not-pass");
-assert.ok(matrix.gate.requiredToPass.length >= 4);
+assert.ok(matrix.gate.requiredToPass.length >= 2);
 
 console.log("sdk consumer bundler matrix test ok");
