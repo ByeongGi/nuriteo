@@ -1,7 +1,7 @@
 export { CliRegistry } from "./cli-registry.ts";
 export { analyzeCliModuleGraph, extractStaticRequires } from "./cli-module-graph.ts";
 export { createGuestCli } from "./guest-cli.ts";
-export { createGuestRuntimeProcessRunner } from "./guest-runtime-runner.ts";
+export { classifyPackageManagerCommand, createGuestRuntimeProcessRunner } from "./guest-runtime-runner.ts";
 export { InstallTransactionInterruptedError, runInstallTransaction } from "./install-transaction.ts";
 export { applyNpmInstallPlan, createNpmInstallPlan } from "./npm-install.ts";
 export { createNpmRunner, NpmRunner } from "./npm-runner.ts";

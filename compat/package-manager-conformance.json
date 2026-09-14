@@ -13,7 +13,8 @@
       "command": "npm --version",
       "runtime": "browser-guest-node-runtime",
       "status": "pass",
-      "evidence": ["tests/package-managers/npm-guest-runtime-boot.test.mjs"]
+      "evidence": ["tests/package-managers/npm-guest-runtime-boot.test.mjs"],
+      "notes": "Guest runner now classifies the command as version and keeps non-version npm paths behind ERR_PM_REAL_CLI_EVALUATION_REQUIRED until real CLI module evaluation is wired."
     },
     {
       "id": "pnpm-version",
@@ -21,7 +22,8 @@
       "command": "pnpm --version",
       "runtime": "browser-guest-node-runtime",
       "status": "pass",
-      "evidence": ["tests/package-managers/pnpm-guest-runtime-boot.test.mjs"]
+      "evidence": ["tests/package-managers/pnpm-guest-runtime-boot.test.mjs"],
+      "notes": "Guest runner now classifies the command as version and keeps non-version pnpm paths behind ERR_PM_REAL_CLI_EVALUATION_REQUIRED until real CLI module evaluation is wired."
     },
     {
       "id": "pnpm-store-plan",
@@ -47,7 +49,7 @@
       "runtime": "browser-guest-node-runtime",
       "status": "pass",
       "evidence": ["tests/package-managers/cli-module-graph.test.mjs"],
-      "notes": "Walks vendored npm and pnpm entry module graphs, resolves simple computed path entries, handles JSON modules, ignores string/comment false positives, rejects missing package modules, and classifies remaining dynamic command/config/adapter dispatch plus unsupported builtin gaps without counting optional probes as product blockers."
+      "notes": "Walks vendored npm and pnpm entry module graphs, resolves simple computed path entries, handles JSON modules, ignores string/comment false positives, rejects missing package modules, verifies there are no static unsupported builtin gaps, and classifies remaining dynamic command/config/adapter dispatch without counting optional probes as product blockers."
     },
     {
       "id": "npm-install",

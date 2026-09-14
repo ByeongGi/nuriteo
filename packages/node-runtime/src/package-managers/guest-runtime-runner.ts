@@ -1,5 +1,6 @@
 import type {
   GuestRuntimeProcessRunnerOptions,
+  PackageManagerCommandKind,
   PackageManagerProcessRequest,
   PackageManagerProcessResult,
   PackageManagerProcessRunner
@@ -10,27 +11,42 @@ export function createGuestRuntimeProcessRunner(options: GuestRuntimeProcessRunn
 
   return function runGuestRuntimeProcess(request: PackageManagerProcessRequest): PackageManagerProcessResult {
     const entrySource = options.artifacts.readText(request.entry.entry);
+    const commandKind = classifyPackageManagerCommand(request.args);
     const preflight = preflightCliEntry(request.name, entrySource);
     if (!preflight.ok) {
       return {
         ...baseResult(request),
+        commandKind,
         stderr: `${request.name}: unsupported guest CLI entry: ${preflight.reason}\n`,
-        exitCode: 1
+        exitCode: 1,
+        error: {
+          code: "ERR_PM_CLI_ENTRY_UNSUPPORTED",
+          message: preflight.reason
+        }
       };
     }
 
-    if (request.args.length === 1 && request.args[0] === "--version") {
+    if (commandKind === "version") {
       return {
         ...baseResult(request),
+        commandKind,
         stdout: `${request.entry.version}\n`,
         exitCode: 0,
       };
     }
 
+    const message = `${request.name}: real CLI evaluation is required for ${request.args.join(" ") || "<empty>"}`;
     return {
       ...baseResult(request),
-      stderr: `${request.name}: guest runtime argument path is not implemented yet: ${request.args.join(" ")}\n`,
-      exitCode: 1
+      bootMode: "blocked-real-cli-evaluation",
+      commandKind,
+      stderr: `${message}\n`,
+      exitCode: 1,
+      error: {
+        code: "ERR_PM_REAL_CLI_EVALUATION_REQUIRED",
+        message,
+        nextAction: "Evaluate the vendored CLI module graph inside the browser guest runtime instead of using the host-node-test-helper."
+      }
     };
   };
 }
@@ -48,6 +64,16 @@ function baseResult(request: PackageManagerProcessRequest): PackageManagerProces
   };
   if (request.entry.entrySha256 !== undefined) result.entrySha256 = request.entry.entrySha256;
   return result;
+}
+
+export function classifyPackageManagerCommand(args: readonly string[]): PackageManagerCommandKind {
+  const [command, second] = args;
+  if (args.length === 1 && (command === "--version" || command === "-v" || command === "version")) return "version";
+  if (command === "install" || command === "i" || command === "add") return "install";
+  if (command === "ci") return "ci";
+  if (command === "run" || command === "run-script") return "run-script";
+  if (command === "exec" || (command === "x" && second !== undefined)) return "exec";
+  return "unknown";
 }
 
 function preflightCliEntry(name: "npm" | "pnpm", source: string): { ok: true } | { ok: false; reason: string } {

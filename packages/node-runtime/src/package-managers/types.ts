@@ -1,5 +1,21 @@
 import type { CliEntry, CliRunResult, RuntimeEnv } from "../types.ts";
 
+export type PackageManagerCommandKind =
+  | "version"
+  | "install"
+  | "ci"
+  | "run-script"
+  | "exec"
+  | "unknown";
+
+export type PackageManagerBootMode =
+  | "artifact-entry-preflight"
+  | "blocked-real-cli-evaluation";
+
+export type PackageManagerErrorCode =
+  | "ERR_PM_CLI_ENTRY_UNSUPPORTED"
+  | "ERR_PM_REAL_CLI_EVALUATION_REQUIRED";
+
 export interface CliRegistryLike {
   resolve(name: string): CliEntry;
 }
@@ -16,10 +32,12 @@ export interface PackageManagerProcessResult extends CliRunResult {
   args: string[];
   cwd: string;
   runtime?: "browser-guest-node-runtime" | "host-node-test-helper";
-  bootMode?: string;
+  bootMode?: PackageManagerBootMode;
+  commandKind?: PackageManagerCommandKind;
   error?: {
-    code?: string;
+    code?: PackageManagerErrorCode;
     message: string;
+    nextAction?: string;
   };
   signal?: string | null;
 }
