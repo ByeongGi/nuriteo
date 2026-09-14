@@ -137,6 +137,21 @@
       "nextPhase": "P10"
     },
     {
+      "builtin": "crypto",
+      "status": "partial",
+      "priority": 1,
+      "implementedBy": "packages/node-runtime/src/builtins/crypto.ts",
+      "tests": ["tests/node-runtime/secondary-builtins.test.mjs", "tests/package-managers/fetcher.test.mjs"],
+      "requiredBy": ["ssri integrity hashing", "npm exec cache keys", "tar unpack temp names", "sigstore/TUF digest helpers"],
+      "minimumApi": ["createHash", "getHashes", "randomBytes", "randomFillSync", "randomUUID", "timingSafeEqual"],
+      "acceptance": [
+        "sha256 and sha512 createHash update/digest pass reference vectors in hex and base64.",
+        "Package-manager tarball integrity paths use the browser-native crypto subset instead of host node:crypto.",
+        "Unsupported public-key, signing, and HMAC operations fail with ERR_BROWSER_CRYPTO_UNSUPPORTED."
+      ],
+      "nextPhase": "P10"
+    },
+    {
       "builtin": "dns",
       "status": "partial",
       "priority": 1,

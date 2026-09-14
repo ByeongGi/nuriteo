@@ -3,6 +3,7 @@ import { assertBuiltin, strict as assertStrictBuiltin } from "./builtins/assert.
 import { bufferBuiltin } from "./builtins/buffer.ts";
 import { childProcessBuiltin } from "./builtins/child-process.ts";
 import { constantsBuiltin } from "./builtins/constants.ts";
+import { cryptoBuiltin } from "./builtins/crypto.ts";
 import { dnsBuiltin, dnsPromisesBuiltin } from "./builtins/dns.ts";
 import { eventsBuiltin } from "./builtins/events.ts";
 import { createFsPromisesBuiltin } from "./builtins/fs-promises.ts";
@@ -50,6 +51,7 @@ export function createBuiltinLoader(bindings: BuiltinBindings): (specifier: stri
     if (specifier === "assert" || specifier === "node:assert") return assertBuiltin;
     if (specifier === "assert/strict" || specifier === "node:assert/strict") return assertStrictBuiltin;
     if (specifier === "constants" || specifier === "node:constants") return constantsBuiltin;
+    if (specifier === "crypto" || specifier === "node:crypto") return cryptoBuiltin;
     if (specifier === "os" || specifier === "node:os") return osBuiltin;
     if (specifier === "path" || specifier === "node:path") return pathBuiltin;
     if (specifier === "path/posix" || specifier === "node:path/posix") return pathBuiltin.posix;

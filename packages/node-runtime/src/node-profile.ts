@@ -67,6 +67,12 @@ export const NODE_PROFILE = Object.freeze({
       implementedBy: "packages/node-runtime/src/builtins/constants.ts",
       tests: Object.freeze(["tests/node-runtime/secondary-builtins.test.mjs"])
     }),
+    crypto: Object.freeze({
+      status: "partial",
+      source: "browser-native-js",
+      implementedBy: "packages/node-runtime/src/builtins/crypto.ts",
+      tests: Object.freeze(["tests/node-runtime/secondary-builtins.test.mjs", "tests/package-managers/fetcher.test.mjs"])
+    }),
     dns: Object.freeze({
       status: "partial",
       source: "browser-native-js",
@@ -175,6 +181,7 @@ export const NODE_PROFILE = Object.freeze({
     "node:buffer": Object.freeze(["browser-native-js:buffer"]),
     "node:child_process": Object.freeze(["browser-unsupported-diagnostic"]),
     "node:constants": Object.freeze(["browser-native-js:constants"]),
+    "node:crypto": Object.freeze(["browser-native-js:crypto"]),
     "node:dns": Object.freeze(["browser-native-js:dns"]),
     "node:dns/promises": Object.freeze(["node:dns"]),
     "node:events": Object.freeze(["browser-native-js:events"]),
@@ -200,6 +207,7 @@ export const NODE_PROFILE = Object.freeze({
     "node:util": Object.freeze(["browser-native-js:util", "node:events"]),
     "node:worker_threads": Object.freeze(["browser-unsupported-diagnostic"]),
     "child_process": Object.freeze(["node:child_process"]),
+    "crypto": Object.freeze(["node:crypto"]),
     "fs": Object.freeze(["node:fs"]),
     "fs/promises": Object.freeze(["node:fs/promises"]),
     "dns": Object.freeze(["node:dns"]),

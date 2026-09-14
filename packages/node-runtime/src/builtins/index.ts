@@ -2,6 +2,7 @@ export { AssertionError, assertBuiltin, deepEqual, deepStrictEqual, equal, ok, r
 export { Buffer, BrowserBuffer, bufferBuiltin, kMaxLength } from "./buffer.ts";
 export { ChildProcess, childProcessBuiltin, exec, execFile, execFileSync, execSync, spawn, spawnSync, UnsupportedChildProcessError } from "./child-process.ts";
 export { constantsBuiltin } from "./constants.ts";
+export { createHash, cryptoBuiltin, getHashes, Hash, randomBytes, randomFillSync, randomUUID, timingSafeEqual, UnsupportedCryptoError } from "./crypto.ts";
 export { dnsBuiltin, dnsPromisesBuiltin, lookup as dnsLookup, promises as dnsPromises } from "./dns.ts";
 export { EventEmitter, eventsBuiltin, once } from "./events.ts";
 export { createFsPromisesBuiltin } from "./fs-promises.ts";

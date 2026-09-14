@@ -102,6 +102,16 @@ const constants = requireBuiltin("node:constants");
 assert.equal(constants.O_RDONLY, 0);
 assert.equal(constants.S_IFDIR, 0o040000);
 
+const crypto = requireBuiltin("node:crypto");
+assert.equal(crypto.createHash("sha1").update("abc").digest("hex"), "a9993e364706816aba3e25717850c26c9cd0d89d");
+assert.equal(crypto.createHash("sha256").update("abc").digest("hex"), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+assert.equal(crypto.createHash("sha512").update("abc").digest("base64"), "3a81oZNherrMQXNJriBBMRLm+k6JqX6iCp7u5ktV05ohkpkqJ0/BqDa6PCOj/uu9RU1EI2Q86A4qmslPpUyknw==");
+assert.equal(crypto.getHashes().includes("sha512"), true);
+assert.equal(crypto.randomBytes(8).byteLength, 8);
+assert.equal(crypto.randomUUID().length, 36);
+assert.equal(crypto.timingSafeEqual(Buffer.from("aa"), Buffer.from("aa")), true);
+assert.throws(() => crypto.createPublicKey(""), /does not support createPublicKey/);
+
 const dns = requireBuiltin("dns");
 const dnsLookup = await new Promise((resolve, reject) => {
   dns.lookup("localhost", (error, address, family) => {
@@ -253,6 +263,7 @@ assert.equal(workerError.code, "ERR_BROWSER_WORKER_THREAD_UNSUPPORTED");
 const result = runUnsafeCommonJsForLocalTests(`
   const assert = require("node:assert/strict");
   const childProcess = require("child_process");
+  const crypto = require("node:crypto");
   const dns = require("node:dns");
   const http = require("http");
   const http2 = require("http2");
@@ -267,6 +278,8 @@ const result = runUnsafeCommonJsForLocalTests(`
   const { fileURLToPath, pathToFileURL } = require("url");
   const process = require("process");
   assert.equal(typeof childProcess.spawn, "function");
+  assert.equal(crypto.createHash("sha256").update("runtime").digest("hex").length, 64);
+  assert.equal(crypto.randomBytes(4).length, 4);
   assert.equal(path.join("/workspace", "src", "..", "index.js"), "/workspace/index.js");
   assert.equal(fileURLToPath(pathToFileURL("/workspace/a b.js")), "/workspace/a b.js");
   assert.equal(os.platform(), "linux");

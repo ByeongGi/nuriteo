@@ -48,6 +48,7 @@ const defaultBuiltins = new Set([
   "buffer",
   "child_process",
   "constants",
+  "crypto",
   "dns",
   "dns/promises",
   "events",

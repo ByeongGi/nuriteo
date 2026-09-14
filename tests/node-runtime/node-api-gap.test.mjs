@@ -27,6 +27,7 @@ for (const name of [
   "buffer",
   "child_process",
   "constants",
+  "crypto",
   "dns",
   "events",
   "fs/promises",
