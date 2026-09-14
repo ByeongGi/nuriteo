@@ -86,6 +86,7 @@ const required = [
   "packages/node-runtime/src/package-managers/npm-runner.ts",
   "packages/node-runtime/src/package-managers/pnpm-runner.ts",
   "packages/node-runtime/src/package-managers/pnpm-store.ts",
+  "packages/node-runtime/src/package-managers/script-runner.ts",
   "packages/node-runtime/src/package-managers/tarball-cache.ts",
   "packages/node-runtime/src/package-managers/types.ts",
   "packages/node-runtime/src/network/crypto.ts",

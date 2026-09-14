@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 
-import { CliRegistry, applyPnpmStorePlan, createPnpmRunner, createPnpmStorePlan } from "../../packages/node-runtime/src/index.ts";
+import { CliRegistry, applyPnpmStorePlan, createPackageScriptRunner, createPnpmRunner, createPnpmStorePlan } from "../../packages/node-runtime/src/index.ts";
 
 const root = new URL("../..", import.meta.url).pathname;
 const fixture = path.join(root, "tests/fixtures/package-managers/pnpm");
@@ -129,8 +129,38 @@ try {
   assert.equal(fs.existsSync(path.join(workdir, "node_modules/fixture-bin/package.json")), true);
   assert.equal(fs.existsSync(path.join(workdir, "node_modules/.bin/fixture-hello")), true);
   assert.equal(fs.existsSync(path.join(workdir, "node_modules/.pnpm/browser-native-plan.json")), true);
+
+  const scripts = createPackageScriptRunner({
+    cwd: workdir,
+    reader: fileReader(),
+    writer: fileWriter()
+  });
+  assert.equal(scripts.runLifecycle(path.join(workdir, "node_modules/fixture-optional"), "install").exitCode, 0);
+  assert.equal(scripts.runScript("build").stdout.trim(), "consumer:provider");
+  assert.equal(scripts.runScript("lifecycle-test").stdout.trim(), "fixture-optional:installed");
+  assert.equal(scripts.execBin("fixture-hello").stdout.trim(), "fixture-bin:hello");
 } finally {
   fs.rmSync(workdir, { recursive: true, force: true });
 }
 
 console.log("pnpm store plan test ok");
+
+function fileReader() {
+  return {
+    exists(file) {
+      return fs.existsSync(file);
+    },
+    readText(file) {
+      return fs.readFileSync(file, "utf8");
+    }
+  };
+}
+
+function fileWriter() {
+  return {
+    writeText(file, data) {
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file, data);
+    }
+  };
+}

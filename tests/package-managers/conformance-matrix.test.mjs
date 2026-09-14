@@ -32,6 +32,13 @@ assert.equal(pnpmInstall?.runtime, "browser-guest-node-runtime");
 assert.equal(pnpmInstall.status, "partial-pass");
 assert.match(pnpmInstall.productGap, /real CLI module evaluation/i);
 
+for (const id of ["npm-run-exec-lifecycle-peer-optional-interrupt", "pnpm-run-exec-lifecycle-peer-optional-interrupt"]) {
+  const entry = casesById.get(id);
+  assert.equal(entry?.runtime, "browser-guest-node-runtime");
+  assert.equal(entry.status, "partial-pass");
+  assert.match(entry.productGap, /lifecycle process spawning/i);
+}
+
 for (const entry of matrix.cases) {
   assert.ok(entry.evidence.length > 0, `${entry.id} must reference evidence`);
   for (const evidence of entry.evidence) {
