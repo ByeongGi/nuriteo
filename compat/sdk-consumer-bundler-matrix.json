@@ -51,18 +51,15 @@
       "id": "next-consumer-build",
       "bundler": "next",
       "command": "next build",
-      "status": "not-run",
-      "evidence": ["docs/productization/evidence/P14-03.md"],
-      "productGap": "Next is not installed in the root dev toolchain yet. Add a browser-client-only fixture and document required transpilation/asset config."
+      "status": "pass",
+      "evidence": ["tests/sdk-consumer/next-build.test.mjs", "docs/productization/evidence/P14-03.md"],
+      "notes": "Tarball-installed Next app router client fixture imports the root SDK package with transpilePackages and verifies worker URL strings survive in client assets."
     }
   ],
   "gate": {
     "id": "P14-03",
-    "status": "not-pass",
-    "reason": "TypeScript bundler resolution, CJS require, Vite, Webpack, and Rspack consumer build smoke pass, but Next consumer build is not implemented yet.",
-    "requiredToPass": [
-      "Add Next SDK consumer build smoke",
-      "Document automatic and manual Worker/WASM asset handling per bundler"
-    ]
+    "status": "pass",
+    "reason": "TypeScript bundler resolution, CJS require, Vite, Webpack, Rspack, and Next consumer build smoke pass. Vite works with direct runtime asset URLs; Webpack/Rspack use location.href runtime URLs; Next uses a client component with transpilePackages.",
+    "requiredToPass": []
   }
 }
