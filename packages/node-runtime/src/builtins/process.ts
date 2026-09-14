@@ -9,12 +9,14 @@ export interface ProcessBuiltinOptions {
   cwd?: string;
   env?: Record<string, string>;
   exitMode?: ProcessExitMode;
+  pid?: number;
 }
 
 export class BrowserProcess extends EventEmitter {
   argv: string[];
   env: Record<string, string>;
   exitCode: number | undefined;
+  pid: number;
   execPath = "/usr/local/bin/node";
   platform = "linux";
   arch = "x64";
@@ -53,6 +55,7 @@ export class BrowserProcess extends EventEmitter {
     this.argv = options.argv || ["node"];
     this.env = { ...(options.env || {}) };
     this.exitCode = undefined;
+    this.pid = options.pid ?? 1;
     this.#cwd = options.cwd || "/workspace";
     this.#exitMode = options.exitMode || "throw";
   }

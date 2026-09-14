@@ -64,6 +64,27 @@ const workspace = new MemoryPackageManagerWorkspace([
         const bytesWritten = fs.writeSync(fd, 'fd');
         if (bytesWritten !== 2) throw new Error('unexpected write length');
         fs.closeSync(fd);
+        const numericFd = fs.openSync(process.cwd() + '/numeric-fd.txt', fs.constants.O_CREAT | fs.constants.O_WRONLY | fs.constants.O_TRUNC);
+        fs.writeSync(numericFd, 'numeric');
+        fs.futimesSync(numericFd, new Date(), new Date());
+        fs.closeSync(numericFd);
+        fs.utimesSync(process.cwd() + '/numeric-fd.txt', new Date(), new Date());
+        fs.lutimesSync(process.cwd() + '/numeric-fd.txt', new Date(), new Date());
+        await fs.promises.utimes(process.cwd() + '/numeric-fd.txt', new Date(), new Date());
+        await new Promise((resolve, reject) => {
+          fs.utimes(process.cwd() + '/sync.txt', new Date(), new Date(), (error) => {
+            if (error) reject(error);
+            else resolve();
+          });
+        });
+        await new Promise((resolve, reject) => {
+          const readFd = fs.openSync(process.cwd() + '/sync.txt', 'r+');
+          fs.futimes(readFd, new Date(), new Date(), (error) => {
+            fs.closeSync(readFd);
+            if (error) reject(error);
+            else resolve();
+          });
+        });
         fs.lstat(process.cwd() + '/sync.txt', (lstatError, lstat) => {
           if (lstatError) throw lstatError;
           fs.stat(process.cwd() + '/fd.txt', (statError, stat) => {
@@ -194,6 +215,7 @@ assert.equal(writeResult.exitCode, 0);
 assert.equal(workspace.readText("/workspace/project/sync.txt"), "sync");
 assert.equal(workspace.readText("/workspace/project/.cache/async.txt"), "async");
 assert.equal(workspace.readText("/workspace/project/fd.txt"), "fd");
+assert.equal(workspace.readText("/workspace/project/numeric-fd.txt"), "numeric");
 
 const asyncErrorResult = await createAsyncCliModuleEvaluator({
   root: "/workspace",

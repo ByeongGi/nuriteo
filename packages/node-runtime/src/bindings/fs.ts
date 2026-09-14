@@ -45,7 +45,7 @@ export function createFsBinding(channel: SharedArrayBuffer, options: RuntimeFsBi
     return body;
   }
 
-  function openSync(path: string, flags = "r"): number {
+  function openSync(path: string, flags: string | number = "r"): number {
     const fd = syscall(OPCODES["fs.open"], { path, flags }).fd;
     if (typeof fd !== "number") throw new Error("fs.open syscall returned no fd");
     return fd;

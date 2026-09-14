@@ -1,15 +1,22 @@
-import "./cli-baseline.test.mjs";
-import "./cli-evaluator.test.mjs";
-import "./cli-module-graph.test.mjs";
-import "./conformance-matrix.test.mjs";
-import "./npm-install-cli-module-evaluation.test.mjs";
-import "./npm-cli-module-evaluation.test.mjs";
-import "./npm-guest-runtime-boot.test.mjs";
-import "./npm-install-plan.test.mjs";
-import "./pnpm-cli-module-evaluation.test.mjs";
-import "./pnpm-guest-runtime-boot.test.mjs";
-import "./pnpm-store-plan.test.mjs";
-import "./tarball-cache.test.mjs";
-import "./fetcher.test.mjs";
-import "./npm-integration.test.mjs";
-import "./pnpm-integration.test.mjs";
+const tests = [
+  "./cli-baseline.test.mjs",
+  "./cli-evaluator.test.mjs",
+  "./cli-module-graph.test.mjs",
+  "./conformance-matrix.test.mjs",
+  "./npm-install-cli-module-evaluation.test.mjs",
+  "./npm-cli-module-evaluation.test.mjs",
+  "./npm-guest-runtime-boot.test.mjs",
+  "./npm-install-plan.test.mjs",
+  "./pnpm-cli-module-evaluation.test.mjs",
+  "./pnpm-install-cli-module-evaluation.test.mjs",
+  "./pnpm-guest-runtime-boot.test.mjs",
+  "./pnpm-store-plan.test.mjs",
+  "./tarball-cache.test.mjs",
+  "./fetcher.test.mjs",
+  "./npm-integration.test.mjs",
+  "./pnpm-integration.test.mjs"
+];
+
+for (const test of tests) {
+  await import(test);
+}

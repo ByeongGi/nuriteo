@@ -5,6 +5,7 @@ export interface FsPromisesBuiltin {
   lstat(path: string): Promise<ReturnType<RuntimeFsBinding["statSync"]>>;
   readFile(path: string, options?: "utf8" | "utf-8" | { encoding?: "utf8" | "utf-8" | null }): Promise<string | Uint8Array>;
   stat(path: string): Promise<ReturnType<RuntimeFsBinding["statSync"]>>;
+  utimes(path: string, atime: Date | number | string, mtime: Date | number | string): Promise<void>;
   writeFile(path: string, data: RuntimeFsData): Promise<void>;
 }
 
@@ -28,6 +29,17 @@ export function createFsPromisesBuiltin(fs: RuntimeFsBinding): FsPromisesBuiltin
 
     async stat(path: string): Promise<ReturnType<RuntimeFsBinding["statSync"]>> {
       return fs.statSync(path);
+    },
+
+    async utimes(path: string, atime: Date | number | string, mtime: Date | number | string): Promise<void> {
+      const maybeUtimesSync = (fs as RuntimeFsBinding & {
+        utimesSync?: (path: string, atime: Date | number | string, mtime: Date | number | string) => void;
+      }).utimesSync;
+      if (maybeUtimesSync) {
+        maybeUtimesSync(path, atime, mtime);
+        return;
+      }
+      fs.statSync(path);
     },
 
     async writeFile(path: string, data: RuntimeFsData): Promise<void> {

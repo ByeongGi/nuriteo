@@ -255,10 +255,27 @@ function createWorkspaceFsFacade(reader: WorkspaceModuleReader, writer?: Package
       if (!writer) throw unsupportedFsMutation("mkdirSync");
       writer.mkdir(normalize(path));
     },
+    futimes(fd: number, _atime: Date | number | string, _mtime: Date | number | string, callback: (error?: Error | null) => void = () => undefined): void {
+      try {
+        assertOpenFile(fd);
+        callback(null);
+      } catch (error) {
+        callback(error instanceof Error ? error : new Error(String(error)));
+      }
+    },
+    futimesSync(fd: number): void {
+      assertOpenFile(fd);
+    },
+    lutimes(path: string, atime: Date | number | string, mtime: Date | number | string, callback: (error?: Error | null) => void = () => undefined): void {
+      facade.utimes(path, atime, mtime, callback);
+    },
+    lutimesSync(path: string, atime?: Date | number | string, mtime?: Date | number | string): void {
+      facade.utimesSync(path, atime, mtime);
+    },
     lstat(path: string, callback: (error: Error | null, stats?: ReturnType<RuntimeFsBinding["statSync"]>) => void): void {
       callWithFsCallback(() => facade.lstatSync(path), callback);
     },
-    open(path: string, flags: string, callback: (error: Error | null, fd?: number) => void): void {
+    open(path: string, flags: string | number, callback: (error: Error | null, fd?: number) => void): void {
       try {
         const fd = facade.openSync(path, flags);
         callback(null, fd);
@@ -266,13 +283,14 @@ function createWorkspaceFsFacade(reader: WorkspaceModuleReader, writer?: Package
         callback(error instanceof Error ? error : new Error(String(error)));
       }
     },
-    openSync(path: string, flags = "r"): number {
+    openSync(path: string, flags: string | number = "r"): number {
       const fd = nextFd++;
       const normalized = normalize(path);
+      const mode = openMode(flags);
       openFiles.set(fd, {
-        bytes: initialOpenBytes(reader, normalized, flags, encoder),
+        bytes: initialOpenBytes(reader, normalized, mode, encoder),
         path: normalized,
-        writable: isWriteFlag(flags)
+        writable: mode.writable
       });
       return fd;
     },
@@ -294,6 +312,9 @@ function createWorkspaceFsFacade(reader: WorkspaceModuleReader, writer?: Package
       },
       async stat(path: string): Promise<ReturnType<RuntimeFsBinding["statSync"]>> {
         return facade.statSync(path);
+      },
+      async utimes(path: string, atime: Date | number | string, mtime: Date | number | string): Promise<void> {
+        facade.utimesSync(path, atime, mtime);
       },
       async writeFile(path: string, data: RuntimeFsData): Promise<void> {
         facade.writeFileSync(path, data);
@@ -331,6 +352,17 @@ function createWorkspaceFsFacade(reader: WorkspaceModuleReader, writer?: Package
     lstatSync(path: string): ReturnType<RuntimeFsBinding["statSync"]> {
       return statFromReader(reader, path);
     },
+    utimes(path: string, _atime: Date | number | string, _mtime: Date | number | string, callback: (error?: Error | null) => void = () => undefined): void {
+      try {
+        facade.statSync(path);
+        callback(null);
+      } catch (error) {
+        callback(error instanceof Error ? error : new Error(String(error)));
+      }
+    },
+    utimesSync(path: string, _atime?: Date | number | string, _mtime?: Date | number | string): void {
+      facade.statSync(path);
+    },
     writeFileSync(path: string, data: RuntimeFsData): void {
       if (!writer) throw unsupportedFsMutation("writeFileSync");
       writer.writeText(normalize(path), decodeFsData(data));
@@ -357,6 +389,12 @@ function createWorkspaceFsFacade(reader: WorkspaceModuleReader, writer?: Package
     if (ArrayBuffer.isView(data)) return decoder.decode(new Uint8Array(data.buffer, data.byteOffset, data.byteLength));
     return decoder.decode(new Uint8Array(data));
   }
+
+  function assertOpenFile(fd: number): CliOpenFile {
+    const file = openFiles.get(fd);
+    if (!file) throw createFsError("EBADF", `Bad file descriptor: ${fd}`);
+    return file;
+  }
 }
 
 function callWithFsCallback<T>(read: () => T, callback: (error: Error | null, value?: T) => void): void {
@@ -374,6 +412,11 @@ type CliFsRealpath = ((path: string, callback: (error: Error | null, resolvedPat
 interface CliOpenFile {
   bytes: Uint8Array;
   path: string;
+  writable: boolean;
+}
+
+interface CliOpenMode {
+  truncate: boolean;
   writable: boolean;
 }
 
@@ -408,16 +451,28 @@ function createFsError(code: string, message: string): Error & { code: string } 
   return Object.assign(new Error(message), { code });
 }
 
-function isWriteFlag(flags: string): boolean {
-  return flags.includes("w") || flags.includes("a") || flags.includes("+");
+function openMode(flags: string | number): CliOpenMode {
+  if (typeof flags === "number") {
+    return {
+      truncate: (flags & constantsBuiltin.O_TRUNC) === constantsBuiltin.O_TRUNC,
+      writable: (flags & constantsBuiltin.O_WRONLY) === constantsBuiltin.O_WRONLY
+        || (flags & constantsBuiltin.O_RDWR) === constantsBuiltin.O_RDWR
+        || (flags & constantsBuiltin.O_CREAT) === constantsBuiltin.O_CREAT
+        || (flags & constantsBuiltin.O_APPEND) === constantsBuiltin.O_APPEND
+    };
+  }
+  return {
+    truncate: flags.startsWith("w"),
+    writable: flags.includes("w") || flags.includes("a") || flags.includes("+")
+  };
 }
 
-function initialOpenBytes(reader: WorkspaceModuleReader, path: string, flags: string, encoder: TextEncoder): Uint8Array {
-  if (flags.startsWith("w")) return new Uint8Array();
+function initialOpenBytes(reader: WorkspaceModuleReader, path: string, mode: CliOpenMode, encoder: TextEncoder): Uint8Array {
+  if (mode.truncate) return new Uint8Array();
   try {
     return encoder.encode(reader.readText(path));
   } catch (error) {
-    if (isWriteFlag(flags)) return new Uint8Array();
+    if (mode.writable) return new Uint8Array();
     throw error;
   }
 }

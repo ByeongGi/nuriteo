@@ -112,7 +112,7 @@ export interface RuntimeFsBindingOptions {
 export type RuntimeFsData = string | ArrayBuffer | ArrayBufferView | Uint8Array;
 
 export interface RuntimeFsBinding {
-  openSync(path: string, flags?: string): number;
+  openSync(path: string, flags?: string | number): number;
   closeSync(fd: number): void;
   writeSync(fd: number, data: RuntimeFsData): number;
   readSync(fd: number, len?: number): Uint8Array;

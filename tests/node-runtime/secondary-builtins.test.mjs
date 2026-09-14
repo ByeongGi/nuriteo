@@ -216,6 +216,7 @@ const fsPromises = createBuiltinLoader({
 await fsPromises.writeFile("/workspace/fs-promises.txt", "hello");
 assert.equal(await fsPromises.readFile("/workspace/fs-promises.txt", "utf8"), "hello");
 assert.equal((await fsPromises.stat("/workspace/fs-promises.txt")).size, 5);
+await fsPromises.utimes("/workspace/fs-promises.txt", new Date(), new Date());
 
 const fetchCalls = [];
 const httpRequire = createBuiltinLoader({
@@ -321,6 +322,7 @@ const result = runUnsafeCommonJsForLocalTests(`
   assert.equal(qs.parse("a=1&a=2").a.length, 2);
   assert.equal(new StringDecoder().end(Buffer.from("ok")), "ok");
   assert.equal(typeof v8.getHeapStatistics().heap_size_limit, "number");
+  assert.equal(typeof process.pid, "number");
   assert.equal(process.report.excludeNetwork, false);
   process.report.excludeNetwork = true;
   assert.equal(process.report.getReport().header.platform, "linux");
