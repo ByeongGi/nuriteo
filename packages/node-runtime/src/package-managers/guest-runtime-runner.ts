@@ -55,7 +55,7 @@ function preflightCliEntry(name: "npm" | "pnpm", source: string): { ok: true } |
   if (name === "npm" && !source.includes("require('../lib/cli.js')(process)")) {
     return { ok: false, reason: "unexpected npm entrypoint shape" };
   }
-  if (name === "pnpm" && !source.includes("require")) {
+  if (name === "pnpm" && !source.includes("require('../dist/pnpm.cjs')")) {
     return { ok: false, reason: "unexpected pnpm entrypoint shape" };
   }
   return { ok: true };
