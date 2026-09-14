@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 
+import { createBuiltinLoader } from "../../packages/node-runtime/src/builtin-loader.ts";
 import { createModuleRuntime } from "../../packages/node-runtime/src/modules/index.ts";
 
 const runtime = createModuleRuntime({
+  builtins: createBuiltinLoader({}),
   imports: {
     "#counter": "./live-binding.mjs"
   },
@@ -116,6 +118,22 @@ runtime.registerMany({
     factory({ module }) {
       module.exports = { kind: "package-feature" };
     }
+  },
+  "/workspace/source-entry.cjs": {
+    kind: "cjs-source",
+    source: `
+      const path = require("node:path");
+      const data = require("./fixture.json");
+      exports.dirname = path.basename(__dirname);
+      exports.filename = path.basename(__filename);
+      exports.answer = data.answer;
+    `
+  },
+  "/workspace/fixture.json": {
+    kind: "json",
+    value: {
+      answer: 42
+    }
   }
 });
 
@@ -143,6 +161,13 @@ assert.equal(cjsInterop.rendered, "value:ok");
 const pkg = await runtime.importModule("pkg-fixture", "/workspace/index.mjs");
 assert.equal(pkg.kind, "package-main");
 assert.equal(pkg.resolved, "/workspace/node_modules/pkg-fixture/feature.cjs");
+
+const sourceEntry = runtime.requireSync("./source-entry.cjs", "/workspace/index.cjs");
+assert.deepEqual(sourceEntry, {
+  dirname: "workspace",
+  filename: "source-entry.cjs",
+  answer: 42
+});
 
 assert.throws(
   () => runtime.resolve("pkg-fixture/private", "/workspace/index.mjs"),

@@ -10,7 +10,7 @@ export async function evaluateEsm(runtime: ModuleRuntime, url: string): Promise<
 
   const definition = runtime.getDefinition(canonicalUrl);
   if (!definition) throw new Error(`ERR_MODULE_NOT_FOUND: ${canonicalUrl}`);
-  if (definition.kind === "cjs") {
+  if (definition.kind !== "esm") {
     return cjsNamespace(runtime.requireSync(canonicalUrl, canonicalUrl));
   }
 

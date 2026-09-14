@@ -3,11 +3,13 @@ import { evaluateCjs } from "./cjs.ts";
 import { evaluateEsm } from "./esm.ts";
 import { ModuleResolver } from "./resolver.ts";
 import type { ModuleDefinition, ModuleDefinitionMap, ModuleRuntimeOptions, RuntimeNamespace, RuntimeValue } from "../types.ts";
+import { builtinModules } from "../builtins/module.ts";
 
 export class ModuleRuntime {
   definitions: Map<string, ModuleDefinition>;
   cache: ModuleCache;
   resolver: ModuleResolver;
+  builtins: ModuleRuntimeOptions["builtins"] | undefined;
 
   constructor(options: ModuleRuntimeOptions = {}) {
     this.definitions = new Map();
@@ -19,6 +21,7 @@ export class ModuleRuntime {
     if (options.packages) resolverOptions.packages = options.packages;
     if (options.imports) resolverOptions.imports = options.imports;
     this.resolver = new ModuleResolver(resolverOptions);
+    this.builtins = options.builtins;
   }
 
   register(url: string, definition: ModuleDefinition): ModuleRuntime {
@@ -42,6 +45,7 @@ export class ModuleRuntime {
   }
 
   requireSync(specifier: string, parentUrl = "/workspace/index.cjs"): RuntimeValue {
+    if (this.builtins && builtinModules.includes(specifier)) return this.builtins(specifier);
     const url = this.resolve(specifier, parentUrl);
     return evaluateCjs(this, url);
   }

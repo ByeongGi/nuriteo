@@ -34,13 +34,23 @@ export type CjsModuleDefinition = {
   factory: (context: CjsContext) => void;
 };
 
+export type CjsSourceModuleDefinition = {
+  kind: "cjs-source";
+  source: string;
+};
+
+export type JsonModuleDefinition = {
+  kind: "json";
+  value: RuntimeValue;
+};
+
 export type EsmModuleDefinition = {
   kind: "esm";
   imports?: string[];
   factory: (context: EsmContext) => void | Promise<void>;
 };
 
-export type ModuleDefinition = CjsModuleDefinition | EsmModuleDefinition;
+export type ModuleDefinition = CjsModuleDefinition | CjsSourceModuleDefinition | JsonModuleDefinition | EsmModuleDefinition;
 export type ModuleDefinitionMap = Record<string, ModuleDefinition>;
 
 export interface PackageManifest {
@@ -53,6 +63,7 @@ export interface ModuleRuntimeOptions {
   realpaths?: Record<string, string>;
   packages?: Record<string, PackageManifest>;
   imports?: Record<string, string>;
+  builtins?: (specifier: string) => RuntimeValue;
 }
 
 export interface LivenessHandle {

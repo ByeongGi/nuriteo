@@ -1,5 +1,5 @@
 import type { ModuleRuntime } from "./runtime.ts";
-import type { RuntimeModule, RuntimeValue } from "../types.ts";
+import type { CjsContext, RuntimeModule, RuntimeValue } from "../types.ts";
 
 export function evaluateCjs(runtime: ModuleRuntime, url: string): RuntimeValue {
   const canonicalUrl = runtime.cache.canonicalize(url);
@@ -7,7 +7,7 @@ export function evaluateCjs(runtime: ModuleRuntime, url: string): RuntimeValue {
   if (cached) return cached.exports;
 
   const definition = runtime.getDefinition(canonicalUrl);
-  if (!definition || definition.kind !== "cjs") {
+  if (!definition || definition.kind === "esm") {
     throw new Error(`ERR_REQUIRE_ESM_OR_MISSING: ${canonicalUrl}`);
   }
 
@@ -18,8 +18,17 @@ export function evaluateCjs(runtime: ModuleRuntime, url: string): RuntimeValue {
   };
   runtime.cache.cjs.set(canonicalUrl, module);
 
+  if (definition.kind === "json") {
+    module.exports = definition.value;
+    module.loaded = true;
+    return module.exports;
+  }
+
   const require = (specifier: string) => runtime.requireSync(specifier, canonicalUrl);
-  definition.factory({
+  const factory = definition.kind === "cjs"
+    ? definition.factory
+    : compileCjsSource(definition.source, canonicalUrl);
+  factory({
     exports: module.exports,
     module,
     require,
@@ -28,4 +37,18 @@ export function evaluateCjs(runtime: ModuleRuntime, url: string): RuntimeValue {
   });
   module.loaded = true;
   return module.exports;
+}
+
+function compileCjsSource(source: string, filename: string): (context: CjsContext) => void {
+  const compiled = new Function(
+    "exports",
+    "require",
+    "module",
+    "__filename",
+    "__dirname",
+    `${source}\n//# sourceURL=${filename}`
+  ) as (exports: RuntimeModule["exports"], require: (specifier: string) => RuntimeValue, module: RuntimeModule, filename: string, dirname: string) => void;
+  return ({ exports, require, module, filename, dirname }) => {
+    compiled(exports, require, module, filename, dirname);
+  };
 }
