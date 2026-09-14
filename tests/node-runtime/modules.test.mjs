@@ -5,6 +5,19 @@ import { createModuleRuntime } from "../../packages/node-runtime/src/modules/ind
 
 const runtime = createModuleRuntime({
   builtins: createBuiltinLoader({}),
+  globals: {
+    console: {
+      log() {
+        return undefined;
+      }
+    },
+    global: {
+      marker: "runtime-global"
+    },
+    process: {
+      argv: ["node", "/workspace/index.cjs", "--fixture"]
+    }
+  },
   imports: {
     "#counter": "./live-binding.mjs"
   },
@@ -129,6 +142,54 @@ runtime.registerMany({
       exports.answer = data.answer;
     `
   },
+  "/workspace/source-process-global.cjs": {
+    kind: "cjs-source",
+    source: `
+      exports.argv = process.argv.slice();
+    `
+  },
+  "/workspace/source-process-local.cjs": {
+    kind: "cjs-source",
+    source: `
+      const process = { argv: ["local"] };
+      exports.argv = process.argv.slice();
+    `
+  },
+  "/workspace/source-runtime-globals.cjs": {
+    kind: "cjs-source",
+    source: `
+      exports.globalMarker = global.marker;
+      exports.consoleType = typeof console.log;
+    `
+  },
+  "/workspace/source-local-globals.cjs": {
+    kind: "cjs-source",
+    source: `
+      const global = { marker: "local-global" };
+      const console = { log: "local-log" };
+      exports.globalMarker = global.marker;
+      exports.consoleType = typeof console.log;
+    `
+  },
+  "/workspace/dot-require/entry.cjs": {
+    kind: "cjs-source",
+    source: `
+      exports.current = require(".").kind;
+      exports.parent = require("..").kind;
+    `
+  },
+  "/workspace/dot-require/index.js": {
+    kind: "cjs-source",
+    source: `
+      exports.kind = "current";
+    `
+  },
+  "/workspace/index.js": {
+    kind: "cjs-source",
+    source: `
+      exports.kind = "parent";
+    `
+  },
   "/workspace/fixture.json": {
     kind: "json",
     value: {
@@ -167,6 +228,20 @@ assert.deepEqual(sourceEntry, {
   dirname: "workspace",
   filename: "source-entry.cjs",
   answer: 42
+});
+assert.deepEqual(runtime.requireSync("./source-process-global.cjs", "/workspace/index.cjs").argv, ["node", "/workspace/index.cjs", "--fixture"]);
+assert.deepEqual(runtime.requireSync("./source-process-local.cjs", "/workspace/index.cjs").argv, ["local"]);
+assert.deepEqual(runtime.requireSync("./source-runtime-globals.cjs", "/workspace/index.cjs"), {
+  globalMarker: "runtime-global",
+  consoleType: "function"
+});
+assert.deepEqual(runtime.requireSync("./source-local-globals.cjs", "/workspace/index.cjs"), {
+  globalMarker: "local-global",
+  consoleType: "string"
+});
+assert.deepEqual(runtime.requireSync("./dot-require/entry.cjs", "/workspace/index.cjs"), {
+  current: "current",
+  parent: "parent"
 });
 
 assert.throws(

@@ -42,7 +42,7 @@ export class ModuleResolver {
     if (specifier.startsWith("#")) {
       return this.resolveImports(specifier, parentUrl);
     }
-    if (specifier.startsWith("/") || specifier.startsWith("./") || specifier.startsWith("../")) {
+    if (specifier === "." || specifier === ".." || specifier.startsWith("/") || specifier.startsWith("./") || specifier.startsWith("../")) {
       const base = specifier.startsWith("/") ? specifier : `${dirname(parentUrl)}/${specifier}`;
       return this.resolvePath(base);
     }

@@ -68,17 +68,18 @@ function createNodeModulePaths(from: string): string[] {
 }
 
 function compileCjsSource(runtime: ModuleRuntime, source: string, filename: string, globals: Record<string, RuntimeValue>): (context: CjsContext) => void {
+  const preparedSource = prepareCjsSource(source);
   const compiled = new Function(
     "exports",
     "require",
     "module",
     "__filename",
     "__dirname",
-    "process",
-    "global",
-    "console",
+    "__process",
+    "__global",
+    "__console",
     "__dynamicImport",
-    `${rewriteDynamicImports(stripShebang(source))}\n//# sourceURL=${filename}`
+    `${preparedSource}\n//# sourceURL=${filename}`
   ) as (exports: RuntimeModule["exports"], require: (specifier: string) => RuntimeValue, module: RuntimeModule, filename: string, dirname: string, process: RuntimeValue, global: RuntimeValue, console: RuntimeValue, dynamicImport: (specifier: string) => Promise<RuntimeNamespace>) => void;
   return ({ exports, require, module, filename, dirname }) => {
     const dynamicImport = typeof globals.__dynamicImport === "function"
@@ -88,10 +89,27 @@ function compileCjsSource(runtime: ModuleRuntime, source: string, filename: stri
   };
 }
 
+function prepareCjsSource(source: string): string {
+  const sourceWithoutShebang = stripShebang(source);
+  const injections = [];
+  if (!declaresLexicalBinding(sourceWithoutShebang, "process")) injections.push("const process = __process;");
+  if (!declaresLexicalBinding(sourceWithoutShebang, "global")) injections.push("const global = __global;");
+  if (!declaresLexicalBinding(sourceWithoutShebang, "console")) injections.push("const console = __console;");
+  const injectedSource = injections.length > 0
+    ? `${injections.join("\n")}\n${sourceWithoutShebang}`
+    : sourceWithoutShebang;
+  return rewriteDynamicImports(injectedSource);
+}
+
 function stripShebang(source: string): string {
   return source.startsWith("#!") ? `//${source.slice(2)}` : source;
 }
 
 function rewriteDynamicImports(source: string): string {
   return source.replace(/\bimport\s*\(/g, "__dynamicImport(");
+}
+
+function declaresLexicalBinding(source: string, name: string): boolean {
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(?:^|[\\n;])\\s*(?:const|let|var|class|function)\\s+${escaped}\\b`).test(source);
 }

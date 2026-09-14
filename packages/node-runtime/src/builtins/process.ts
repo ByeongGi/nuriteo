@@ -29,6 +29,18 @@ export class BrowserProcess extends EventEmitter {
     sourceUrl: "",
     headersUrl: ""
   });
+  report = {
+    excludeNetwork: false,
+    getReport: () => ({
+      header: {
+        arch: this.arch,
+        glibcVersionRuntime: undefined,
+        nodejsVersion: this.version,
+        platform: this.platform
+      },
+      sharedObjects: []
+    })
+  };
   stdin = Object.freeze({ isTTY: false });
   stdout = Object.freeze({ isTTY: false, write: (chunk: unknown, encodingOrCallback?: ProcessWriteEncoding | ProcessWriteCallback, callback?: ProcessWriteCallback) => this.#write("stdout", chunk, encodingOrCallback, callback) });
   stderr = Object.freeze({ isTTY: false, write: (chunk: unknown, encodingOrCallback?: ProcessWriteEncoding | ProcessWriteCallback, callback?: ProcessWriteCallback) => this.#write("stderr", chunk, encodingOrCallback, callback) });

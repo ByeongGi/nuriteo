@@ -46,6 +46,37 @@ const workspace = new MemoryPackageManagerWorkspace([
   {
     path: "/workspace/async-cli/package/package.json",
     data: JSON.stringify({ name: "async-fixture-cli", version: "1.2.3", main: "lib/cli.js" })
+  },
+  {
+    path: "/workspace/write-cli/package/bin/npm-cli.js",
+    data: "#!/usr/bin/env node\nrequire('../lib/cli.js')(process)\n"
+  },
+  {
+    path: "/workspace/write-cli/package/lib/cli.js",
+    data: `
+      const fs = require('fs');
+      module.exports = async function run(process) {
+        fs.mkdirSync(process.cwd() + '/.cache');
+        fs.writeFileSync(process.cwd() + '/sync.txt', 'sync');
+        await fs.promises.writeFile(process.cwd() + '/.cache/async.txt', 'async');
+        await fs.promises.lstat(process.cwd() + '/.cache/async.txt');
+        const fd = fs.openSync(process.cwd() + '/fd.txt', 'w');
+        const bytesWritten = fs.writeSync(fd, 'fd');
+        if (bytesWritten !== 2) throw new Error('unexpected write length');
+        fs.closeSync(fd);
+        fs.lstat(process.cwd() + '/sync.txt', (lstatError, lstat) => {
+          if (lstatError) throw lstatError;
+          fs.stat(process.cwd() + '/fd.txt', (statError, stat) => {
+            if (statError) throw statError;
+            process.stdout.write('wrote ' + lstat.isFile() + ' ' + stat.isFile() + '\\n');
+          });
+        });
+      };
+    `
+  },
+  {
+    path: "/workspace/write-cli/package/package.json",
+    data: JSON.stringify({ name: "write-fixture-cli", version: "1.2.3", main: "lib/cli.js" })
   }
 ]);
 
@@ -104,6 +135,26 @@ const asyncVersion = await evaluateAsync({
 assert.equal(asyncVersion.stdout, "async-version\n");
 assert.equal(asyncVersion.stderr, "");
 assert.equal(asyncVersion.exitCode, 0);
+
+const writeResult = await createAsyncCliModuleEvaluator({
+  root: "/workspace",
+  reader: workspace,
+  writer: workspace
+})({
+  entry: {
+    name: "npm",
+    version: "1.2.3",
+    entry: "/workspace/write-cli/package/bin/npm-cli.js"
+  },
+  args: ["write"],
+  cwd: "/workspace/project"
+});
+assert.equal(writeResult.stdout, "wrote true true\n");
+assert.equal(writeResult.stderr, "");
+assert.equal(writeResult.exitCode, 0);
+assert.equal(workspace.readText("/workspace/project/sync.txt"), "sync");
+assert.equal(workspace.readText("/workspace/project/.cache/async.txt"), "async");
+assert.equal(workspace.readText("/workspace/project/fd.txt"), "fd");
 
 const entry = {
   name: "npm",

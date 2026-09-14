@@ -1,5 +1,15 @@
 export const EOL = "\n";
 export const constants = Object.freeze({
+  errno: Object.freeze({
+    EACCES: 13,
+    EEXIST: 17,
+    EINVAL: 22,
+    EISDIR: 21,
+    ENOENT: 2,
+    ENOTDIR: 20,
+    EPERM: 1,
+    EROFS: 30
+  }),
   signals: Object.freeze({
     SIGHUP: 1,
     SIGINT: 2,

@@ -74,6 +74,7 @@ assert.equal(os.tmpdir(), "/tmp");
 assert.equal(os.homedir(), "/home/webcontainer");
 assert.equal(os.EOL, "\n");
 assert.equal(os.version(), "browser");
+assert.equal(os.constants.errno.EEXIST, 17);
 assert.equal(os.constants.signals.SIGTERM, 15);
 assert.equal(os.cpus().length, 1);
 
@@ -121,6 +122,7 @@ assert.equal(capturedProcess.exit(4), undefined);
 assert.equal(capturedProcess.exitCode, 4);
 
 const constants = requireBuiltin("node:constants");
+assert.equal(constants.EEXIST, 17);
 assert.equal(constants.O_RDONLY, 0);
 assert.equal(constants.O_CREAT, 0o100);
 assert.equal(constants.O_TRUNC, 0o1000);
@@ -319,6 +321,9 @@ const result = runUnsafeCommonJsForLocalTests(`
   assert.equal(qs.parse("a=1&a=2").a.length, 2);
   assert.equal(new StringDecoder().end(Buffer.from("ok")), "ok");
   assert.equal(typeof v8.getHeapStatistics().heap_size_limit, "number");
+  assert.equal(process.report.excludeNetwork, false);
+  process.report.excludeNetwork = true;
+  assert.equal(process.report.getReport().header.platform, "linux");
   readline.emitKeypressEvents({ on() {} });
   module.exports = {
     cwd: process.cwd(),

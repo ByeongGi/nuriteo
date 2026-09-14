@@ -1,4 +1,12 @@
 export const constantsBuiltin = Object.freeze({
+  EACCES: 13,
+  EEXIST: 17,
+  EINVAL: 22,
+  EISDIR: 21,
+  ENOENT: 2,
+  ENOTDIR: 20,
+  EPERM: 1,
+  EROFS: 30,
   O_RDONLY: 0,
   O_WRONLY: 1,
   O_RDWR: 2,

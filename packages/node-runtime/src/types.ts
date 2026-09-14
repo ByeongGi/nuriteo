@@ -125,6 +125,11 @@ export interface RuntimeFsBinding {
     isFile(): boolean;
     isDirectory(): boolean;
   };
+  lstatSync?(path: string): {
+    size: number;
+    isFile(): boolean;
+    isDirectory(): boolean;
+  };
 }
 
 export interface BuiltinBindings {
