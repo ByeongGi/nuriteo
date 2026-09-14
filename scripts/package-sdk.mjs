@@ -34,16 +34,24 @@ function rewritePackagedSource(target, replacements) {
 function transpilePackagedTypescript() {
   for (const file of listFiles(packageRoot).filter((file) => file.endsWith(".ts") && !file.endsWith(".d.ts"))) {
     const source = fs.readFileSync(file, "utf8");
+    const sourceFileName = path.relative(packageRoot, file);
+    const sourceMapName = `${path.basename(file, ".ts")}.js.map`;
     const output = ts.transpileModule(source, {
       compilerOptions: {
         importsNotUsedAsValues: ts.ImportsNotUsedAsValues.Remove,
         module: ts.ModuleKind.ESNext,
+        sourceMap: true,
         target: ts.ScriptTarget.ES2024,
         useDefineForClassFields: true
       },
-      fileName: file
+      fileName: sourceFileName
     });
     fs.writeFileSync(file, output.outputText);
+    if (output.sourceMapText) {
+      fs.writeFileSync(path.join(path.dirname(file), sourceMapName), output.sourceMapText);
+    } else if (!output.outputText.includes(`sourceMappingURL=${sourceMapName}`)) {
+      throw new Error(`TypeScript transpile did not produce a source map for ${sourceFileName}`);
+    }
   }
 }
 

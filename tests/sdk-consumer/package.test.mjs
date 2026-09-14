@@ -103,6 +103,8 @@ try {
   if (headers.manifestBasePath !== "/sdk/") throw new Error("SDK manifest base path mismatch");
   if (headers.systemWorkerPath !== "workers/system-worker.ts") throw new Error("SDK worker asset path mismatch");
   if (headers.systemWasmPath !== "assets/system_wasm.wasm") throw new Error("SDK wasm asset path mismatch");
+  assertSourceMap("packages/sdk/src/container.ts");
+  assertSourceMap("packages/browser-host/src/supervisor.ts");
 
   const types = fs.readFileSync(path.join(packageRoot, "index.d.ts"), "utf8");
   if (!types.includes("CargoContainer")) throw new Error("SDK root types do not export CargoContainer");
@@ -166,6 +168,18 @@ function assertSdkTypesCompile() {
     }
   } finally {
     fs.rmSync(workdir, { recursive: true, force: true });
+  }
+}
+
+function assertSourceMap(packagePath) {
+  const file = path.join(packageRoot, packagePath);
+  const source = fs.readFileSync(file, "utf8");
+  const sourceMapName = `${path.basename(packagePath, ".ts")}.js.map`;
+  if (!source.includes(`sourceMappingURL=${sourceMapName}`)) {
+    throw new Error(`Packaged source is missing sourceMappingURL: ${packagePath}`);
+  }
+  if (!fs.existsSync(path.join(path.dirname(file), sourceMapName))) {
+    throw new Error(`Packaged source map is missing: ${packagePath}`);
   }
 }
 
