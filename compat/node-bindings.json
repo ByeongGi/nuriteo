@@ -38,6 +38,15 @@
       ],
       "notes": "Browser-native EventEmitter subset covering listener order, once, cleanup, and error event behavior."
     },
+    "module": {
+      "status": "partial",
+      "source": "browser-native-js",
+      "implementedBy": "packages/node-runtime/src/builtins/module.ts",
+      "tests": [
+        "tests/node-runtime/secondary-builtins.test.mjs"
+      ],
+      "notes": "Browser-native module subset covering enableCompileCache, builtinModules, createRequire stub, and Module resolution helpers used by npm/pnpm preflight."
+    },
     "os": {
       "status": "partial",
       "source": "browser-native-js",

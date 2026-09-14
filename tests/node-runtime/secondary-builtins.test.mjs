@@ -78,6 +78,16 @@ const tty = requireBuiltin("node:tty");
 assert.equal(tty.isatty(1), false);
 assert.equal(new tty.WriteStream().isTTY, false);
 
+const moduleBuiltin = requireBuiltin("node:module");
+assert.equal(moduleBuiltin.enableCompileCache().status, 0);
+assert.equal(moduleBuiltin.builtinModules.includes("node:module"), true);
+assert.deepEqual(moduleBuiltin.Module._nodeModulePaths("/workspace/app"), [
+  "/workspace/app/node_modules",
+  "/workspace/node_modules",
+  "/node_modules"
+]);
+assert.equal(moduleBuiltin.Module._resolveFilename("node:path"), "node:path");
+
 const processModule = requireBuiltin("process");
 assert.equal(processModule.cwd(), "/workspace");
 processModule.chdir("app");

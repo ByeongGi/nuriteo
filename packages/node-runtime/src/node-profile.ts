@@ -31,6 +31,12 @@ export const NODE_PROFILE = Object.freeze({
       implementedBy: "packages/node-runtime/src/builtins/events.ts",
       tests: Object.freeze(["tests/node-runtime/builtin-subset.test.mjs"])
     }),
+    module: Object.freeze({
+      status: "partial",
+      source: "browser-native-js",
+      implementedBy: "packages/node-runtime/src/builtins/module.ts",
+      tests: Object.freeze(["tests/node-runtime/secondary-builtins.test.mjs"])
+    }),
     os: Object.freeze({
       status: "partial",
       source: "browser-native-js",
@@ -84,6 +90,7 @@ export const NODE_PROFILE = Object.freeze({
     "node:assert/strict": Object.freeze(["node:assert"]),
     "node:buffer": Object.freeze(["browser-native-js:buffer"]),
     "node:events": Object.freeze(["browser-native-js:events"]),
+    "node:module": Object.freeze(["browser-native-js:module"]),
     "node:os": Object.freeze(["browser-native-js:os"]),
     "node:path": Object.freeze(["browser-native-js:path"]),
     "node:path/posix": Object.freeze(["node:path"]),
@@ -94,6 +101,7 @@ export const NODE_PROFILE = Object.freeze({
     "node:url": Object.freeze(["browser-native-js:url", "node:path"]),
     "node:util": Object.freeze(["browser-native-js:util", "node:events"]),
     "fs": Object.freeze(["node:fs"]),
+    "module": Object.freeze(["node:module"]),
     "os": Object.freeze(["node:os"]),
     "path": Object.freeze(["node:path"]),
     "path/posix": Object.freeze(["node:path/posix"]),

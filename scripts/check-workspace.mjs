@@ -35,6 +35,7 @@ const required = [
   "packages/node-runtime/src/builtins/buffer.ts",
   "packages/node-runtime/src/builtins/events.ts",
   "packages/node-runtime/src/builtins/index.ts",
+  "packages/node-runtime/src/builtins/module.ts",
   "packages/node-runtime/src/builtins/os.ts",
   "packages/node-runtime/src/builtins/path.ts",
   "packages/node-runtime/src/builtins/process.ts",

@@ -2,6 +2,7 @@ import type { BuiltinBindings, RuntimeValue } from "./types.ts";
 import { assertBuiltin, strict as assertStrictBuiltin } from "./builtins/assert.ts";
 import { bufferBuiltin } from "./builtins/buffer.ts";
 import { eventsBuiltin } from "./builtins/events.ts";
+import { moduleBuiltin } from "./builtins/module.ts";
 import { osBuiltin } from "./builtins/os.ts";
 import { pathBuiltin } from "./builtins/path.ts";
 import { BrowserProcess } from "./builtins/process.ts";
@@ -20,6 +21,7 @@ export function createBuiltinLoader(bindings: BuiltinBindings): (specifier: stri
     }
     if (specifier === "buffer" || specifier === "node:buffer") return bindings.buffer || bufferBuiltin;
     if (specifier === "events" || specifier === "node:events") return bindings.events || eventsBuiltin;
+    if (specifier === "module" || specifier === "node:module") return moduleBuiltin;
     if (specifier === "assert" || specifier === "node:assert") return assertBuiltin;
     if (specifier === "assert/strict" || specifier === "node:assert/strict") return assertStrictBuiltin;
     if (specifier === "os" || specifier === "node:os") return osBuiltin;
