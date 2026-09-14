@@ -1,0 +1,71 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-15",
+  "scope": {
+    "goal": "Track SDK consumer bundler compatibility for productization.",
+    "packageArtifact": "dist/sdk/cargo-container-sdk-0.0.0.tgz",
+    "stableApi": "docs/productization/sdk-api-freeze-rfc.md"
+  },
+  "cases": [
+    {
+      "id": "typescript-bundler-resolution",
+      "bundler": "typescript",
+      "command": "tsc --noEmit with moduleResolution Bundler",
+      "status": "pass",
+      "evidence": ["tests/sdk-consumer/package.test.mjs"],
+      "notes": "Tarball-installed consumer imports @cargo-container/sdk root types and validates stable API surface."
+    },
+    {
+      "id": "node-commonjs-require",
+      "bundler": "node-cjs",
+      "command": "require('@cargo-container/sdk')",
+      "status": "pass",
+      "evidence": ["tests/sdk-consumer/package.test.mjs"],
+      "notes": "Tarball-installed consumer verifies CommonJS conditional export exposes createContainer, createPreviewRelay, and protocolVersion."
+    },
+    {
+      "id": "vite-consumer-build",
+      "bundler": "vite",
+      "command": "vite build",
+      "status": "not-run",
+      "evidence": ["docs/productization/evidence/P14-03.md"],
+      "productGap": "Vite is not installed in the root dev toolchain yet. Add a fixture that installs the SDK tarball and verifies Worker/WASM asset URL handling."
+    },
+    {
+      "id": "webpack-consumer-build",
+      "bundler": "webpack",
+      "command": "webpack build",
+      "status": "not-run",
+      "evidence": ["docs/productization/evidence/P14-03.md"],
+      "productGap": "Webpack is not installed in the root dev toolchain yet. Add a fixture that verifies conditional exports, worker assets, and wasm asset handling."
+    },
+    {
+      "id": "rspack-consumer-build",
+      "bundler": "rspack",
+      "command": "rspack build",
+      "status": "not-run",
+      "evidence": ["docs/productization/evidence/P14-03.md"],
+      "productGap": "Rspack is not installed in the root dev toolchain yet. Add a fixture that mirrors the Webpack asset checks."
+    },
+    {
+      "id": "next-consumer-build",
+      "bundler": "next",
+      "command": "next build",
+      "status": "not-run",
+      "evidence": ["docs/productization/evidence/P14-03.md"],
+      "productGap": "Next is not installed in the root dev toolchain yet. Add a browser-client-only fixture and document required transpilation/asset config."
+    }
+  ],
+  "gate": {
+    "id": "P14-03",
+    "status": "not-pass",
+    "reason": "TypeScript bundler resolution and CJS require smoke pass, but Vite/Webpack/Rspack/Next consumer builds are not implemented yet.",
+    "requiredToPass": [
+      "Add Vite SDK consumer build smoke",
+      "Add Webpack SDK consumer build smoke",
+      "Add Rspack SDK consumer build smoke",
+      "Add Next SDK consumer build smoke",
+      "Document automatic and manual Worker/WASM asset handling per bundler"
+    ]
+  }
+}
