@@ -53,6 +53,7 @@ const defaultBuiltins = new Set([
   "path/posix",
   "process",
   "querystring",
+  "readline",
   "stream",
   "stream/promises",
   "string_decoder",

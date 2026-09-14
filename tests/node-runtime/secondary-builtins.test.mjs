@@ -118,6 +118,19 @@ assert.equal(decoder.end(encoded.slice(2)), "안녕");
 const timers = requireBuiltin("node:timers/promises");
 assert.equal(await timers.setTimeout(1, "done"), "done");
 
+const readline = requireBuiltin("node:readline");
+readline.emitKeypressEvents({ on() {} });
+const rl = readline.createInterface({ input: ["one\ntwo", "\nthree"], terminal: false });
+const lines = [];
+for await (const line of rl) lines.push(line);
+assert.deepEqual(lines, ["one", "two", "three"]);
+let closed = false;
+rl.on("close", () => {
+  closed = true;
+});
+rl.close();
+assert.equal(closed, true);
+
 const files = new Map();
 const fsPromises = createBuiltinLoader({
   fs: {
@@ -162,6 +175,7 @@ const result = runUnsafeCommonJsForLocalTests(`
   const qs = require("node:querystring");
   const { Buffer } = require("buffer");
   const { StringDecoder } = require("string_decoder");
+  const readline = require("readline");
   const { fileURLToPath, pathToFileURL } = require("url");
   const process = require("process");
   assert.equal(path.join("/workspace", "src", "..", "index.js"), "/workspace/index.js");
@@ -169,6 +183,7 @@ const result = runUnsafeCommonJsForLocalTests(`
   assert.equal(os.platform(), "linux");
   assert.equal(qs.parse("a=1&a=2").a.length, 2);
   assert.equal(new StringDecoder().end(Buffer.from("ok")), "ok");
+  readline.emitKeypressEvents({ on() {} });
   module.exports = {
     cwd: process.cwd(),
     path: path.basename("/workspace/index.js"),

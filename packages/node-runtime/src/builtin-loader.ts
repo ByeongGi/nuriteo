@@ -9,6 +9,7 @@ import { osBuiltin } from "./builtins/os.ts";
 import { pathBuiltin } from "./builtins/path.ts";
 import { BrowserProcess } from "./builtins/process.ts";
 import { querystringBuiltin } from "./builtins/querystring.ts";
+import { readlineBuiltin } from "./builtins/readline.ts";
 import { streamBuiltin, streamPromisesBuiltin } from "./builtins/stream.ts";
 import { stringDecoderBuiltin } from "./builtins/string-decoder.ts";
 import { timersPromisesBuiltin } from "./builtins/timers.ts";
@@ -40,6 +41,7 @@ export function createBuiltinLoader(bindings: BuiltinBindings): (specifier: stri
     if (specifier === "path/posix" || specifier === "node:path/posix") return pathBuiltin.posix;
     if (specifier === "process" || specifier === "node:process") return process;
     if (specifier === "querystring" || specifier === "node:querystring") return querystringBuiltin;
+    if (specifier === "readline" || specifier === "node:readline") return readlineBuiltin;
     if (specifier === "stream" || specifier === "node:stream") return bindings.stream || streamBuiltin;
     if (specifier === "stream/promises" || specifier === "node:stream/promises") return streamPromisesBuiltin;
     if (specifier === "string_decoder" || specifier === "node:string_decoder") return stringDecoderBuiltin;

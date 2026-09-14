@@ -245,6 +245,17 @@
       "nextPhase": "P10"
     },
     {
+      "builtin": "readline",
+      "status": "partial",
+      "priority": 2,
+      "implementedBy": "packages/node-runtime/src/builtins/readline.ts",
+      "tests": ["tests/node-runtime/secondary-builtins.test.mjs"],
+      "requiredBy": ["pnpm FileHandle.readLines", "enquirer keypress setup"],
+      "minimumApi": ["createInterface", "Interface async iterator", "close", "pause", "resume", "question", "emitKeypressEvents"],
+      "acceptance": ["Async iterable input is exposed as lines and non-interactive prompt setup does not throw."],
+      "nextPhase": "P10"
+    },
+    {
       "builtin": "string_decoder",
       "status": "partial",
       "priority": 2,

@@ -73,6 +73,12 @@ export const NODE_PROFILE = Object.freeze({
       implementedBy: "packages/node-runtime/src/builtins/querystring.ts",
       tests: Object.freeze(["tests/node-runtime/secondary-builtins.test.mjs"])
     }),
+    readline: Object.freeze({
+      status: "partial",
+      source: "browser-native-js",
+      implementedBy: "packages/node-runtime/src/builtins/readline.ts",
+      tests: Object.freeze(["tests/node-runtime/secondary-builtins.test.mjs"])
+    }),
     stream: Object.freeze({
       status: "partial",
       source: "browser-native-js",
@@ -128,6 +134,7 @@ export const NODE_PROFILE = Object.freeze({
     "node:path/posix": Object.freeze(["node:path"]),
     "node:process": Object.freeze(["browser-native-js:process"]),
     "node:querystring": Object.freeze(["browser-native-js:querystring"]),
+    "node:readline": Object.freeze(["browser-native-js:readline", "node:events"]),
     "node:stream": Object.freeze(["browser-native-js:stream", "node:events"]),
     "node:stream/promises": Object.freeze(["node:stream"]),
     "node:string_decoder": Object.freeze(["browser-native-js:string_decoder", "node:buffer"]),
@@ -143,6 +150,7 @@ export const NODE_PROFILE = Object.freeze({
     "path/posix": Object.freeze(["node:path/posix"]),
     "process": Object.freeze(["node:process"]),
     "querystring": Object.freeze(["node:querystring"]),
+    "readline": Object.freeze(["node:readline"]),
     "stream": Object.freeze(["node:stream"]),
     "stream/promises": Object.freeze(["node:stream/promises"]),
     "string_decoder": Object.freeze(["node:string_decoder"]),

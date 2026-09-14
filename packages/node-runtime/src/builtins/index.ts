@@ -8,6 +8,7 @@ export { arch, cpus, EOL, freemem, homedir, osBuiltin, platform, release, tmpdir
 export { basename, delimiter, dirname, extname, format as pathFormat, isAbsolute, join, normalize, parse as pathParse, pathBuiltin, posix, relative, resolve, sep } from "./path.ts";
 export { BrowserProcess, processBuiltin } from "./process.ts";
 export { decode as querystringDecode, encode as querystringEncode, escape as querystringEscape, parse as querystringParse, querystringBuiltin, stringify as querystringStringify, unescape as querystringUnescape } from "./querystring.ts";
+export { createInterface as createReadlineInterface, emitKeypressEvents, Interface as ReadlineInterface, readlineBuiltin } from "./readline.ts";
 export { Duplex, PassThrough, Readable, Stream, Transform, Writable, finished, pipeline, promises as streamPromises, streamBuiltin, streamPromisesBuiltin } from "./stream.ts";
 export { StringDecoder, stringDecoderBuiltin } from "./string-decoder.ts";
 export { setTimeoutPromise, timersPromisesBuiltin } from "./timers.ts";

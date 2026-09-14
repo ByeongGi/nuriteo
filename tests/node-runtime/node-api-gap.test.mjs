@@ -32,6 +32,7 @@ for (const name of [
   "path",
   "process",
   "querystring",
+  "readline",
   "stream",
   "string_decoder",
   "timers/promises",
