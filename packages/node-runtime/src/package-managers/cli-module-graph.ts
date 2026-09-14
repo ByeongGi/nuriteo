@@ -283,6 +283,12 @@ function splitPackageSpecifier(specifier: string): [string, string] {
 
 function classifyOptionalProbe(specifier: string, importer: string): CliModuleGraphIssue["kind"] | null {
   if (specifier.endsWith(".node") || specifier.startsWith("@reflink/")) return "optional-native-probe";
+  if (
+    (specifier === "<keyv-adapter>" || specifier === "<pnpmfile>" || specifier === "<project-package-json>") &&
+    importer.endsWith("/dist/pnpm.cjs")
+  ) {
+    return "optional-dependency-probe";
+  }
   if (specifier === "v8-compile-cache") return "optional-cache-probe";
   if (specifier === "../lib/pnpm" && importer.endsWith("/bin/pnpm.cjs")) return "optional-cache-probe";
   if (specifier === "./custom-prompt" && importer.endsWith("/dist/pnpm.cjs")) return "optional-cache-probe";
@@ -343,7 +349,7 @@ function parseRequireCall(
     const end = findClosingParen(source, index);
     if (end === -1 || end - index > 64) return null;
     const expression = source.slice(index, end).trim();
-    return { specifier: constants.get(expression) || resolveKnownRequireExpression(expression, filename) || dynamicRequireSpecifier, end };
+    return { specifier: constants.get(expression) || resolveKnownRequireExpression(expression, filename) || classifyKnownDynamicExpression(expression) || dynamicRequireSpecifier, end };
   }
 
   const literalStart = index + 1;
@@ -366,6 +372,14 @@ function resolveKnownRequireExpression(expression: string, filename: string | un
     const nodeModulesIndex = filename.lastIndexOf("/node_modules/@npmcli/config/");
     if (nodeModulesIndex > 0) return join(filename.slice(0, nodeModulesIndex), "package.json");
   }
+  return null;
+}
+
+function classifyKnownDynamicExpression(expression: string): string | null {
+  if (expression === "adapters[adapter]") return "<keyv-adapter>";
+  if (expression === "pnpmFilePath") return "<pnpmfile>";
+  if (expression === "packageJsonPath") return "<project-package-json>";
+  if (/join\)\(packageDir,\s*["']package\.json["']\)$/.test(expression)) return "<project-package-json>";
   return null;
 }
 

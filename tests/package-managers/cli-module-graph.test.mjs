@@ -44,6 +44,21 @@ assert.deepEqual(
   ["/workspace/npm/package.json"]
 );
 
+assert.deepEqual(
+  extractStaticRequires("return new (require(adapters[adapter]))(options)"),
+  ["<keyv-adapter>"]
+);
+
+assert.deepEqual(
+  extractStaticRequires("const pnpmfile = require(pnpmFilePath)"),
+  ["<pnpmfile>"]
+);
+
+assert.deepEqual(
+  extractStaticRequires("const { devDependencies } = require(packageJsonPath)"),
+  ["<project-package-json>"]
+);
+
 for (const [name, version] of [["npm", "10.9.2"], ["pnpm", "9.15.9"]]) {
   const installed = JSON.parse(fs.readFileSync(path.join(root, `vendor/cli/${name}/${version}/installed.json`), "utf8"));
   const packageRoot = path.join(root, `vendor/cli/${name}/${version}/package`);
@@ -82,9 +97,10 @@ for (const [name, version] of [["npm", "10.9.2"], ["pnpm", "9.15.9"]]) {
     assert.ok(graph.issues.some((issue) => issue.kind === "optional-dependency-probe"));
     assert.equal(graph.supported, true);
   } else {
-    assert.ok(graph.issues.some((issue) => issue.kind === "dynamic-adapter-dispatch"));
+    assert.equal(graph.issues.some((issue) => issue.kind === "dynamic-adapter-dispatch"), false);
     assert.ok(graph.issues.some((issue) => issue.kind === "optional-cache-probe"));
-    assert.equal(graph.supported, false);
+    assert.ok(graph.issues.some((issue) => issue.kind === "optional-dependency-probe"));
+    assert.equal(graph.supported, true);
   }
 }
 
