@@ -41,6 +41,15 @@
       "evidence": ["tests/package-managers/tarball-cache.test.mjs", "tests/package-managers/fetcher.test.mjs"]
     },
     {
+      "id": "cli-module-graph-preflight",
+      "manager": "npm,pnpm",
+      "command": "vendored CLI static require graph preflight",
+      "runtime": "browser-guest-node-runtime",
+      "status": "pass",
+      "evidence": ["tests/package-managers/cli-module-graph.test.mjs"],
+      "notes": "Walks vendored npm and pnpm entry module graphs and verifies the first module window has no unsupported builtin issue."
+    },
+    {
       "id": "npm-install",
       "manager": "npm",
       "command": "npm install --ignore-scripts",
@@ -89,7 +98,7 @@
   "gate": {
     "id": "PG10",
     "status": "not-pass",
-    "reason": "Version boot, local install layout, store plan, script/lifecycle/bin fixture, interrupted install-plan recovery, and tarball cache paths pass or partially pass in browser guest runtime, but npm ci and full CLI module evaluation still depend on host-node-test-helper.",
+    "reason": "Version boot, CLI module graph preflight, local install layout, store plan, script/lifecycle/bin fixture, interrupted install-plan recovery, and tarball cache paths pass or partially pass in browser guest runtime, but npm ci and full CLI module evaluation still depend on host-node-test-helper.",
     "requiredToPass": [
       "Move npm install/ci/run/exec cases to browser-guest-node-runtime",
       "Move pnpm install/run/exec cases to browser-guest-node-runtime",

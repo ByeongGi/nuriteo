@@ -9,7 +9,7 @@ assert.equal(matrix.scope.testHelperRuntime, "host-node-test-helper");
 assert.ok(Array.isArray(matrix.cases));
 
 const casesById = new Map(matrix.cases.map((entry) => [entry.id, entry]));
-for (const id of ["npm-version", "pnpm-version", "pnpm-store-plan", "registry-cache-tarball"]) {
+for (const id of ["npm-version", "pnpm-version", "pnpm-store-plan", "registry-cache-tarball", "cli-module-graph-preflight"]) {
   const entry = casesById.get(id);
   assert.equal(entry?.runtime, "browser-guest-node-runtime");
   assert.equal(entry.status, "pass");
