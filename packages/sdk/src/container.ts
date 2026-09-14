@@ -7,8 +7,8 @@ import {
   type RuntimeRunResult,
   type RuntimeStatus,
   type RuntimeSystemMetricsOptions
-} from "../../browser-host/src/supervisor.ts";
-import type { MessageDetails, ReadyMessage } from "../../protocol/src/index.ts";
+} from "@cargo-container/browser-host/supervisor";
+import type { MessageDetails, ReadyMessage } from "@cargo-container/protocol";
 
 export type CargoContainerOptions = BrowserRuntimeSupervisorOptions;
 export type CargoContainerBootOptions = RuntimeBootOptions;

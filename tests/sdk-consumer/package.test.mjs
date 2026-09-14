@@ -69,6 +69,11 @@ const browser = await chromium.launch({ headless: true, executablePath: chromePa
 
 try {
   const page = await browser.newPage();
+  const browserErrors = [];
+  page.on("pageerror", (error) => browserErrors.push(error.message));
+  page.on("console", (message) => {
+    if (message.type() === "error") browserErrors.push(message.text());
+  });
   await page.goto(baseUrl, { waitUntil: "load" });
   const headers = await page.evaluate(async () => {
     const worker = await fetch("/sdk/workers/system-worker.ts");
@@ -90,6 +95,8 @@ try {
   if (headers.systemWorkerPath !== "workers/system-worker.ts") throw new Error("SDK worker asset path mismatch");
   if (headers.systemWasmPath !== "assets/system_wasm.wasm") throw new Error("SDK wasm asset path mismatch");
 
+  const hasConsumer = await page.evaluate(() => Boolean(globalThis.__sdkConsumer?.bootAndRun));
+  if (!hasConsumer) throw new Error(`SDK consumer did not initialize: ${browserErrors.join("\n") || "no browser error captured"}`);
   const result = await page.evaluate(() => globalThis.__sdkConsumer.bootAndRun());
   if (result.ready.role !== "system") throw new Error("SDK consumer did not boot system worker");
   if (result.run.exports?.value !== "hello") throw new Error("SDK consumer fs smoke failed");

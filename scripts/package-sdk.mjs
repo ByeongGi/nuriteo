@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import ts from "typescript";
 
 const root = process.cwd();
 const outRoot = path.join(root, "dist/sdk");
@@ -20,6 +21,39 @@ function writeFile(target, contents) {
   const file = path.join(packageRoot, target);
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, contents);
+}
+
+function rewritePackagedSource(target, replacements) {
+  const file = path.join(packageRoot, target);
+  let source = fs.readFileSync(file, "utf8");
+  for (const [from, to] of replacements) source = source.replaceAll(from, to);
+  fs.writeFileSync(file, source);
+}
+
+function transpilePackagedTypescript() {
+  for (const file of listFiles(packageRoot).filter((file) => file.endsWith(".ts"))) {
+    const source = fs.readFileSync(file, "utf8");
+    const output = ts.transpileModule(source, {
+      compilerOptions: {
+        importsNotUsedAsValues: ts.ImportsNotUsedAsValues.Remove,
+        module: ts.ModuleKind.ESNext,
+        target: ts.ScriptTarget.ES2024,
+        useDefineForClassFields: true
+      },
+      fileName: file
+    });
+    fs.writeFileSync(file, output.outputText);
+  }
+}
+
+function listFiles(directory) {
+  const files = [];
+  for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+    const entryPath = path.join(directory, entry.name);
+    if (entry.isDirectory()) files.push(...listFiles(entryPath));
+    else if (entry.isFile()) files.push(entryPath);
+  }
+  return files;
 }
 
 const build = spawnSync("cargo", ["build", "-p", "system-wasm", "--target", "wasm32-unknown-unknown"], {
@@ -46,6 +80,15 @@ for (const dir of [
 ]) {
   copyDir(dir, path.join(packageRoot, dir));
 }
+
+rewritePackagedSource("packages/sdk/src/container.ts", [
+  ['"@cargo-container/browser-host/supervisor"', '"../../browser-host/src/supervisor.ts"'],
+  ['"@cargo-container/protocol"', '"../../protocol/src/index.ts"']
+]);
+rewritePackagedSource("packages/sdk/src/index.ts", [
+  ['"@cargo-container/protocol"', '"../../protocol/src/index.ts"']
+]);
+transpilePackagedTypescript();
 
 fs.mkdirSync(path.join(packageRoot, "assets"), { recursive: true });
 fs.copyFileSync(wasmSource, path.join(packageRoot, "assets/system_wasm.wasm"));

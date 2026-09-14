@@ -42,6 +42,9 @@ importers:
 
   packages/sdk:
     dependencies:
+      '@cargo-container/browser-host':
+        specifier: workspace:*
+        version: link:../browser-host
       '@cargo-container/protocol':
         specifier: workspace:*
         version: link:../protocol
