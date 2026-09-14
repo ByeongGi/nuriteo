@@ -20,6 +20,9 @@ if (!fs.existsSync(path.join(packageRoot, "asset-manifest.json"))) {
 if (!fs.existsSync(path.join(packageRoot, "index.d.ts"))) {
   throw new Error("SDK package missing root types; run scripts/package-sdk.mjs first");
 }
+if (!fs.existsSync(path.join(packageRoot, "index.cjs"))) {
+  throw new Error("SDK package missing CommonJS entry; run scripts/package-sdk.mjs first");
+}
 if (!fs.existsSync(packageTarball)) {
   throw new Error("SDK package tarball missing; run scripts/package-sdk.mjs first");
 }
@@ -105,6 +108,7 @@ try {
   if (headers.systemWasmPath !== "assets/system_wasm.wasm") throw new Error("SDK wasm asset path mismatch");
   assertSourceMap("packages/sdk/src/container.ts");
   assertSourceMap("packages/browser-host/src/supervisor.ts");
+  assertCommonjsEntry();
 
   const types = fs.readFileSync(path.join(packageRoot, "index.d.ts"), "utf8");
   if (!types.includes("CargoContainer")) throw new Error("SDK root types do not export CargoContainer");
@@ -237,7 +241,36 @@ function assertSdkTarballInstalls() {
     if (tsc.status !== 0) {
       throw new Error(`Installed SDK tarball types do not compile:\n${tsc.stdout}\n${tsc.stderr}`);
     }
+    fs.writeFileSync(path.join(workdir, "consumer.cjs"), [
+      'const sdk = require("@cargo-container/sdk");',
+      'if (typeof sdk.createContainer !== "function") throw new Error("missing createContainer");',
+      'if (typeof sdk.createPreviewRelay !== "function") throw new Error("missing createPreviewRelay");',
+      'if (sdk.protocolVersion !== 1) throw new Error("protocol version mismatch");',
+      ""
+    ].join("\n"));
+    const cjs = spawnSync(process.execPath, [path.join(workdir, "consumer.cjs")], {
+      cwd: workdir,
+      encoding: "utf8"
+    });
+    if (cjs.status !== 0) {
+      throw new Error(`Installed SDK tarball CommonJS entry failed:\n${cjs.stdout}\n${cjs.stderr}`);
+    }
   } finally {
     fs.rmSync(workdir, { recursive: true, force: true });
+  }
+}
+
+function assertCommonjsEntry() {
+  const cjs = spawnSync(process.execPath, ["-e", [
+    `const sdk = require(${JSON.stringify(path.join(packageRoot, "index.cjs"))});`,
+    'if (typeof sdk.createContainer !== "function") throw new Error("missing createContainer");',
+    'if (typeof sdk.createPreviewRelay !== "function") throw new Error("missing createPreviewRelay");',
+    'if (sdk.protocolVersion !== 1) throw new Error("protocol version mismatch");'
+  ].join("")], {
+    cwd: root,
+    encoding: "utf8"
+  });
+  if (cjs.status !== 0) {
+    throw new Error(`SDK CommonJS entry failed:\n${cjs.stdout}\n${cjs.stderr}`);
   }
 }

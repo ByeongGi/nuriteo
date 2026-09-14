@@ -104,6 +104,45 @@ function rewritePackagedDeclarations() {
   ]);
 }
 
+function emitCommonjsRuntime() {
+  const inputs = [
+    "packages/browser-host/src/supervisor.ts",
+    "packages/sdk/src/container.ts",
+    "packages/preview/src/hmr-client.ts",
+    "packages/preview/src/index.ts",
+    "packages/preview/src/relay.ts",
+    "packages/preview/src/service-worker.ts",
+    "packages/preview/src/session.ts",
+    "packages/protocol/src/messages.ts"
+  ];
+  for (const relativeFile of inputs) {
+    const sourceFile = path.join(packageRoot, relativeFile);
+    const outFile = path.join(packageRoot, "cjs", relativeFile.replace(/\.ts$/, ".cjs"));
+    const source = fs.readFileSync(sourceFile, "utf8");
+    const output = ts.transpileModule(source, {
+      compilerOptions: {
+        importsNotUsedAsValues: ts.ImportsNotUsedAsValues.Remove,
+        module: ts.ModuleKind.CommonJS,
+        sourceMap: true,
+        target: ts.ScriptTarget.ES2022,
+        useDefineForClassFields: true
+      },
+      fileName: relativeFile
+    });
+    fs.mkdirSync(path.dirname(outFile), { recursive: true });
+    fs.writeFileSync(outFile, rewriteCommonjsSpecifiers(output.outputText));
+    if (output.sourceMapText) {
+      fs.writeFileSync(path.join(path.dirname(outFile), `${path.basename(outFile, ".cjs")}.js.map`), output.sourceMapText);
+    }
+  }
+}
+
+function rewriteCommonjsSpecifiers(source) {
+  return source
+    .replaceAll(".ts\")", ".cjs\")")
+    .replaceAll(".ts')", ".cjs')");
+}
+
 function listFiles(directory) {
   const files = [];
   for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
@@ -148,6 +187,7 @@ rewritePackagedSource("packages/sdk/src/index.ts", [
 ]);
 emitDeclarations();
 rewritePackagedDeclarations();
+emitCommonjsRuntime();
 transpilePackagedTypescript();
 
 fs.mkdirSync(path.join(packageRoot, "assets"), { recursive: true });
@@ -167,6 +207,14 @@ writeFile("index.d.ts", [
   ""
 ].join("\n"));
 
+writeFile("index.cjs", [
+  "\"use strict\";",
+  "Object.assign(exports, require('./cjs/packages/sdk/src/container.cjs'));",
+  "Object.assign(exports, require('./cjs/packages/preview/src/index.cjs'));",
+  "Object.assign(exports, require('./cjs/packages/protocol/src/messages.cjs'));",
+  ""
+].join("\n"));
+
 writeFile("package.json", `${JSON.stringify({
   name: "@cargo-container/sdk",
   version: "0.0.0",
@@ -176,6 +224,7 @@ writeFile("package.json", `${JSON.stringify({
   exports: {
     ".": {
       types: "./index.d.ts",
+      require: "./index.cjs",
       default: "./index.js"
     }
   }
