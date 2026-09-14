@@ -2,6 +2,7 @@ import type { BuiltinBindings, RuntimeValue } from "./types.ts";
 import { assertBuiltin, strict as assertStrictBuiltin } from "./builtins/assert.ts";
 import { bufferBuiltin } from "./builtins/buffer.ts";
 import { constantsBuiltin } from "./builtins/constants.ts";
+import { dnsBuiltin, dnsPromisesBuiltin } from "./builtins/dns.ts";
 import { eventsBuiltin } from "./builtins/events.ts";
 import { createFsPromisesBuiltin } from "./builtins/fs-promises.ts";
 import { moduleBuiltin } from "./builtins/module.ts";
@@ -32,6 +33,8 @@ export function createBuiltinLoader(bindings: BuiltinBindings): (specifier: stri
     }
     if (specifier === "buffer" || specifier === "node:buffer") return bindings.buffer || bufferBuiltin;
     if (specifier === "events" || specifier === "node:events") return bindings.events || eventsBuiltin;
+    if (specifier === "dns" || specifier === "node:dns") return dnsBuiltin;
+    if (specifier === "dns/promises" || specifier === "node:dns/promises") return dnsPromisesBuiltin;
     if (specifier === "module" || specifier === "node:module") return moduleBuiltin;
     if (specifier === "assert" || specifier === "node:assert") return assertBuiltin;
     if (specifier === "assert/strict" || specifier === "node:assert/strict") return assertStrictBuiltin;

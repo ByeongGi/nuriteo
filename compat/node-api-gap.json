@@ -126,6 +126,17 @@
       "nextPhase": "P10"
     },
     {
+      "builtin": "dns",
+      "status": "partial",
+      "priority": 1,
+      "implementedBy": "packages/node-runtime/src/builtins/dns.ts",
+      "tests": ["tests/node-runtime/secondary-builtins.test.mjs"],
+      "requiredBy": ["make-fetch-happen", "@npmcli/agent", "socks proxy option normalization"],
+      "minimumApi": ["lookup callback API", "promises.lookup", "ADDRCONFIG", "V4MAPPED"],
+      "acceptance": ["lookup provides deterministic browser-safe addresses and preserves Node callback/promise result shapes."],
+      "nextPhase": "P10"
+    },
+    {
       "builtin": "fs/promises",
       "status": "partial",
       "priority": 1,

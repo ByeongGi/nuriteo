@@ -26,6 +26,7 @@ for (const name of [
   "assert",
   "buffer",
   "constants",
+  "dns",
   "events",
   "fs/promises",
   "os",

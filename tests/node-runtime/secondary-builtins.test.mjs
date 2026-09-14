@@ -102,6 +102,17 @@ const constants = requireBuiltin("node:constants");
 assert.equal(constants.O_RDONLY, 0);
 assert.equal(constants.S_IFDIR, 0o040000);
 
+const dns = requireBuiltin("dns");
+const dnsLookup = await new Promise((resolve, reject) => {
+  dns.lookup("localhost", (error, address, family) => {
+    if (error) reject(error);
+    else resolve({ address, family });
+  });
+});
+assert.deepEqual(dnsLookup, { address: "127.0.0.1", family: 4 });
+assert.deepEqual(await dns.promises.lookup("localhost"), { address: "127.0.0.1", family: 4 });
+assert.equal(await requireBuiltin("node:dns/promises").lookup("example.test", { family: 4 }), "0.0.0.0");
+
 const querystring = requireBuiltin("querystring");
 assert.deepEqual({ ...querystring.parse("name=cargo+container&tag=web&tag=runtime") }, {
   name: "cargo container",
@@ -170,6 +181,7 @@ assert.equal((await fsPromises.stat("/workspace/fs-promises.txt")).size, 5);
 
 const result = runUnsafeCommonJsForLocalTests(`
   const assert = require("node:assert/strict");
+  const dns = require("node:dns");
   const path = require("path");
   const os = require("node:os");
   const qs = require("node:querystring");
@@ -181,6 +193,7 @@ const result = runUnsafeCommonJsForLocalTests(`
   assert.equal(path.join("/workspace", "src", "..", "index.js"), "/workspace/index.js");
   assert.equal(fileURLToPath(pathToFileURL("/workspace/a b.js")), "/workspace/a b.js");
   assert.equal(os.platform(), "linux");
+  assert.equal(typeof dns.lookup, "function");
   assert.equal(qs.parse("a=1&a=2").a.length, 2);
   assert.equal(new StringDecoder().end(Buffer.from("ok")), "ok");
   readline.emitKeypressEvents({ on() {} });
