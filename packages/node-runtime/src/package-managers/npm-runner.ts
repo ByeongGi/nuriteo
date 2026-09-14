@@ -22,6 +22,10 @@ export class NpmRunner {
     return this.#run(cwd, ["ci", ...args]);
   }
 
+  version(cwd = "/workspace"): PackageManagerProcessResult {
+    return this.#run(cwd, ["--version"]);
+  }
+
   runScript(cwd: string, script: string, args: string[] = []): PackageManagerProcessResult {
     return this.#run(cwd, ["run", script, ...args]);
   }

@@ -1,4 +1,4 @@
-import type { CliEntry, RuntimeEnv } from "../types.ts";
+import type { CliEntry, CliRunResult, RuntimeEnv } from "../types.ts";
 
 export interface CliRegistryLike {
   resolve(name: string): CliEntry;
@@ -12,7 +12,18 @@ export interface PackageManagerProcessRequest {
   env: RuntimeEnv;
 }
 
-export type PackageManagerProcessResult = unknown;
+export interface PackageManagerProcessResult extends CliRunResult {
+  args: string[];
+  cwd: string;
+  runtime?: "browser-guest-node-runtime" | "host-node-test-helper";
+  bootMode?: string;
+  error?: {
+    code?: string;
+    message: string;
+  };
+  signal?: string | null;
+}
+
 export type PackageManagerProcessRunner = (request: PackageManagerProcessRequest) => PackageManagerProcessResult;
 
 export interface PackageManagerRunnerOptions {
@@ -23,4 +34,12 @@ export interface PackageManagerRunnerOptions {
 
 export interface GuestCli {
   run(argv: string[]): import("../types.ts").CliRunResult;
+}
+
+export interface CliArtifactReader {
+  readText(path: string): string;
+}
+
+export interface GuestRuntimeProcessRunnerOptions {
+  artifacts: CliArtifactReader;
 }
