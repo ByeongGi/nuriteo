@@ -31,7 +31,7 @@ function rewritePackagedSource(target, replacements) {
 }
 
 function transpilePackagedTypescript() {
-  for (const file of listFiles(packageRoot).filter((file) => file.endsWith(".ts"))) {
+  for (const file of listFiles(packageRoot).filter((file) => file.endsWith(".ts") && !file.endsWith(".d.ts"))) {
     const source = fs.readFileSync(file, "utf8");
     const output = ts.transpileModule(source, {
       compilerOptions: {
@@ -43,6 +43,44 @@ function transpilePackagedTypescript() {
       fileName: file
     });
     fs.writeFileSync(file, output.outputText);
+  }
+}
+
+function emitDeclarations() {
+  const declarationRoot = path.join(packageRoot, "types");
+  const program = ts.createProgram({
+    rootNames: [
+      path.join(root, "packages/sdk/src/index.ts"),
+      path.join(root, "packages/preview/src/index.ts"),
+      path.join(root, "packages/protocol/src/index.ts")
+    ],
+    options: {
+      allowImportingTsExtensions: true,
+      declaration: true,
+      emitDeclarationOnly: true,
+      exactOptionalPropertyTypes: true,
+      lib: ["lib.es2024.d.ts", "lib.dom.d.ts"],
+      module: ts.ModuleKind.ESNext,
+      moduleResolution: ts.ModuleResolutionKind.Bundler,
+      noEmitOnError: true,
+      noUncheckedIndexedAccess: true,
+      outDir: declarationRoot,
+      rootDir: root,
+      strict: true,
+      target: ts.ScriptTarget.ES2024,
+      types: ["node"]
+    }
+  });
+  const emit = program.emit();
+  const diagnostics = ts.getPreEmitDiagnostics(program).concat(emit.diagnostics);
+  if (diagnostics.length > 0) {
+    const host = {
+      getCanonicalFileName: (file) => file,
+      getCurrentDirectory: () => root,
+      getNewLine: () => "\n"
+    };
+    console.error(ts.formatDiagnosticsWithColorAndContext(diagnostics, host));
+    process.exit(1);
   }
 }
 
@@ -88,6 +126,7 @@ rewritePackagedSource("packages/sdk/src/container.ts", [
 rewritePackagedSource("packages/sdk/src/index.ts", [
   ['"@cargo-container/protocol"', '"../../protocol/src/index.ts"']
 ]);
+emitDeclarations();
 transpilePackagedTypescript();
 
 fs.mkdirSync(path.join(packageRoot, "assets"), { recursive: true });
@@ -100,13 +139,24 @@ writeFile("index.js", [
   ""
 ].join("\n"));
 
+writeFile("index.d.ts", [
+  "export { CargoContainer, createContainer } from './types/packages/sdk/src/container.d.ts';",
+  "export { createPreviewRelay, createPreviewServiceWorker, createPreviewSessionRegistry, createHmrClient } from './types/packages/preview/src/index.d.ts';",
+  "export { protocolVersion } from './types/packages/protocol/src/messages.d.ts';",
+  ""
+].join("\n"));
+
 writeFile("package.json", `${JSON.stringify({
   name: "@cargo-container/sdk",
   version: "0.0.0",
   private: true,
   type: "module",
+  types: "./index.d.ts",
   exports: {
-    ".": "./index.js"
+    ".": {
+      types: "./index.d.ts",
+      default: "./index.js"
+    }
   }
 }, null, 2)}\n`);
 

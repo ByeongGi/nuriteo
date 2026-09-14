@@ -14,6 +14,9 @@ if (!fs.existsSync(chromePath)) {
 if (!fs.existsSync(path.join(packageRoot, "asset-manifest.json"))) {
   throw new Error("SDK package missing; run scripts/package-sdk.mjs first");
 }
+if (!fs.existsSync(path.join(packageRoot, "index.d.ts"))) {
+  throw new Error("SDK package missing root types; run scripts/package-sdk.mjs first");
+}
 
 const csp = [
   "default-src 'self'",
@@ -94,6 +97,10 @@ try {
   if (headers.manifestBasePath !== "/sdk/") throw new Error("SDK manifest base path mismatch");
   if (headers.systemWorkerPath !== "workers/system-worker.ts") throw new Error("SDK worker asset path mismatch");
   if (headers.systemWasmPath !== "assets/system_wasm.wasm") throw new Error("SDK wasm asset path mismatch");
+
+  const types = fs.readFileSync(path.join(packageRoot, "index.d.ts"), "utf8");
+  if (!types.includes("CargoContainer")) throw new Error("SDK root types do not export CargoContainer");
+  if (!types.includes("createPreviewRelay")) throw new Error("SDK root types do not export preview API");
 
   const hasConsumer = await page.evaluate(() => Boolean(globalThis.__sdkConsumer?.bootAndRun));
   if (!hasConsumer) throw new Error(`SDK consumer did not initialize: ${browserErrors.join("\n") || "no browser error captured"}`);
