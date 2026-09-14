@@ -390,6 +390,12 @@ function createLegacyStreamConstructor(): typeof Stream {
     for (const listener of eventListeners) listener.apply(this, args);
     return eventListeners.length > 0;
   };
+  LegacyStream.prototype.listeners = function listenersFor(eventName: string | symbol) {
+    return [...getListeners(this, eventName)].map((listener) => (listener as Listener & { listener?: Listener }).listener || listener);
+  };
+  LegacyStream.prototype.listenerCount = function listenerCount(eventName: string | symbol) {
+    return getListeners(this, eventName).length;
+  };
   LegacyStream.prototype.off = function off(eventName: string | symbol, listener: Listener) {
     return this.removeListener(eventName, listener);
   };
@@ -397,6 +403,11 @@ function createLegacyStreamConstructor(): typeof Stream {
     const eventListeners = getListeners(this, eventName);
     const next = eventListeners.filter((item) => item !== listener && (item as Listener & { listener?: Listener }).listener !== listener);
     eventListeners.splice(0, eventListeners.length, ...next);
+    return this;
+  };
+  LegacyStream.prototype.removeAllListeners = function removeAllListeners(eventName?: string | symbol) {
+    if (eventName === undefined) listeners.get(this)?.clear();
+    else listeners.get(this)?.delete(eventName);
     return this;
   };
   LegacyStream.prototype.pipe = Stream.prototype.pipe;
