@@ -7,6 +7,7 @@ import { spawnSync } from "node:child_process";
 
 const root = new URL("../..", import.meta.url).pathname;
 const packageRoot = path.join(root, "dist/sdk/package");
+const packageTarball = path.join(root, "dist/sdk/cargo-container-sdk-0.0.0.tgz");
 const publicRoot = path.join(packageRoot, "examples/sdk-consumer/public");
 const chromePath = process.env.CHROME_PATH || "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 
@@ -18,6 +19,9 @@ if (!fs.existsSync(path.join(packageRoot, "asset-manifest.json"))) {
 }
 if (!fs.existsSync(path.join(packageRoot, "index.d.ts"))) {
   throw new Error("SDK package missing root types; run scripts/package-sdk.mjs first");
+}
+if (!fs.existsSync(packageTarball)) {
+  throw new Error("SDK package tarball missing; run scripts/package-sdk.mjs first");
 }
 
 const csp = [
@@ -104,6 +108,7 @@ try {
   if (!types.includes("CargoContainer")) throw new Error("SDK root types do not export CargoContainer");
   if (!types.includes("createPreviewRelay")) throw new Error("SDK root types do not export preview API");
   assertSdkTypesCompile();
+  assertSdkTarballInstalls();
 
   const hasConsumer = await page.evaluate(() => Boolean(globalThis.__sdkConsumer?.bootAndRun));
   if (!hasConsumer) throw new Error(`SDK consumer did not initialize: ${browserErrors.join("\n") || "no browser error captured"}`);
@@ -158,6 +163,65 @@ function assertSdkTypesCompile() {
     });
     if (tsc.status !== 0) {
       throw new Error(`SDK package types do not compile:\n${tsc.stdout}\n${tsc.stderr}`);
+    }
+  } finally {
+    fs.rmSync(workdir, { recursive: true, force: true });
+  }
+}
+
+function assertSdkTarballInstalls() {
+  const workdir = fs.mkdtempSync(path.join(os.tmpdir(), "sdk-tarball-consumer-"));
+  try {
+    fs.writeFileSync(path.join(workdir, "package.json"), `${JSON.stringify({
+      private: true,
+      type: "module"
+    }, null, 2)}\n`);
+    const install = spawnSync("npm", [
+      "install",
+      packageTarball,
+      "--cache",
+      path.join(workdir, ".npm-cache"),
+      "--ignore-scripts",
+      "--no-audit",
+      "--no-fund"
+    ], {
+      cwd: workdir,
+      encoding: "utf8"
+    });
+    if (install.status !== 0) {
+      throw new Error(`SDK tarball install failed:\n${install.stdout}\n${install.stderr}`);
+    }
+    fs.writeFileSync(path.join(workdir, "index.ts"), [
+      'import { CargoContainer, createContainer, protocolVersion } from "@cargo-container/sdk";',
+      "",
+      "const container: CargoContainer = createContainer({",
+      '  systemWorkerUrl: new URL("http://127.0.0.1/system-worker.ts"),',
+      '  processWorkerUrl: new URL("http://127.0.0.1/process-worker.ts")',
+      "});",
+      "const version: number = protocolVersion;",
+      "void container;",
+      "void version;",
+      ""
+    ].join("\n"));
+    fs.writeFileSync(path.join(workdir, "tsconfig.json"), `${JSON.stringify({
+      compilerOptions: {
+        allowImportingTsExtensions: true,
+        lib: ["ES2024", "DOM"],
+        module: "ESNext",
+        moduleResolution: "Bundler",
+        noEmit: true,
+        strict: true,
+        target: "ES2024",
+        types: []
+      },
+      include: ["index.ts"]
+    }, null, 2)}\n`);
+    const tsc = spawnSync(process.execPath, [path.join(root, "node_modules/typescript/bin/tsc"), "--pretty", "false"], {
+      cwd: workdir,
+      encoding: "utf8"
+    });
+    if (tsc.status !== 0) {
+      throw new Error(`Installed SDK tarball types do not compile:\n${tsc.stdout}\n${tsc.stderr}`);
     }
   } finally {
     fs.rmSync(workdir, { recursive: true, force: true });

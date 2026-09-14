@@ -8,6 +8,7 @@ const root = process.cwd();
 const outRoot = path.join(root, "dist/sdk");
 const packageRoot = path.join(outRoot, "package");
 const wasmSource = path.join(root, "target/wasm32-unknown-unknown/debug/system_wasm.wasm");
+const packageTarballName = "cargo-container-sdk-0.0.0.tgz";
 
 function sha256(file) {
   return crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex");
@@ -245,4 +246,19 @@ globalThis.__sdkConsumer = {
 write("ready");
 `);
 
+const pack = spawnSync("npm", ["pack", packageRoot, "--pack-destination", outRoot], {
+  cwd: root,
+  encoding: "utf8",
+  stdio: "pipe"
+});
+if (pack.status !== 0) {
+  console.error(pack.stderr || pack.stdout);
+  process.exit(pack.status ?? 1);
+}
+const packedName = pack.stdout.trim().split("\n").at(-1);
+if (packedName && packedName !== packageTarballName) {
+  fs.renameSync(path.join(outRoot, packedName), path.join(outRoot, packageTarballName));
+}
+
 console.log(`sdk package written: ${path.relative(root, packageRoot)}`);
+console.log(`sdk package tarball written: ${path.relative(root, path.join(outRoot, packageTarballName))}`);
