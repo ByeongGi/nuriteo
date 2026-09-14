@@ -56,6 +56,7 @@ export type ModuleDefinitionMap = Record<string, ModuleDefinition>;
 export interface PackageManifest {
   root?: string;
   type?: string;
+  main?: string;
   exports?: string | Record<string, string>;
 }
 

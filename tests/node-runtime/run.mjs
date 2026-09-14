@@ -4,6 +4,7 @@ import "./builtin-subset.test.mjs";
 import "./stream-subset.test.mjs";
 import "./secondary-builtins.test.mjs";
 import "./modules.test.mjs";
+import "./workspace-modules.test.mjs";
 import "./scheduler.test.mjs";
 import "./typescript.test.mjs";
 import "./cli-smoke.test.mjs";

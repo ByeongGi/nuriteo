@@ -59,10 +59,7 @@ export class ModuleResolver {
     if (!manifest) throw new Error(`ERR_MODULE_NOT_FOUND: ${specifier}`);
 
     const subpath = specifier === name ? "." : `.${specifier.slice(name.length)}`;
-    const exportsMap = manifest.exports || {};
-    const target = typeof exportsMap === "string"
-      ? subpath === "." ? exportsMap : undefined
-      : exportsMap[subpath];
+    const target = resolvePackageTarget(manifest, subpath);
     if (!target) throw new Error(`ERR_PACKAGE_PATH_NOT_EXPORTED: ${specifier}`);
 
     const packageRoot = manifest.root || `/workspace/node_modules/${name}`;
@@ -86,4 +83,14 @@ export class ModuleResolver {
     }
     throw new Error(`ERR_MODULE_NOT_FOUND: ${path}`);
   }
+}
+
+function resolvePackageTarget(manifest: PackageManifest, subpath: string): string | undefined {
+  if (manifest.exports) {
+    return typeof manifest.exports === "string"
+      ? subpath === "." ? manifest.exports : undefined
+      : manifest.exports[subpath];
+  }
+  if (subpath === ".") return manifest.main || "./index.js";
+  return subpath;
 }

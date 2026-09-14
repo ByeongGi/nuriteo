@@ -19,4 +19,4 @@ export { createWasmAdapterPolicy, createWasmAdapterRegistry, rejectNativeAddon, 
 export { originalPositionFor, transpileTypeScript } from "./transforms/index.ts";
 export { runNodeProgram } from "./bootstrap.ts";
 export { createFsBinding } from "./bindings/fs.ts";
-export { createModuleRuntime, ModuleRuntime } from "./modules/index.ts";
+export { createModuleRuntime, createWorkspaceModuleRuntime, ModuleRuntime, registerWorkspaceModules } from "./modules/index.ts";

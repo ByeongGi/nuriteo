@@ -1,0 +1,137 @@
+import { createModuleRuntime, ModuleRuntime } from "./runtime.ts";
+import type { ModuleRuntimeOptions, PackageManifest, RuntimeValue } from "../types.ts";
+import { join } from "../builtins/path.ts";
+
+export interface WorkspaceModuleReader {
+  readText(path: string): string;
+  listDir(path: string): string[];
+}
+
+export interface WorkspaceModuleRuntimeOptions extends Omit<ModuleRuntimeOptions, "packages"> {
+  reader: WorkspaceModuleReader;
+  root?: string;
+  packages?: Record<string, PackageManifest>;
+}
+
+export function createWorkspaceModuleRuntime(options: WorkspaceModuleRuntimeOptions): ModuleRuntime {
+  const root = trimSlash(options.root || "/workspace");
+  const packages = {
+    ...discoverPackageManifests(options.reader, root),
+    ...(options.packages || {})
+  };
+  const runtime = createModuleRuntime({
+    ...(options.builtins ? { builtins: options.builtins } : {}),
+    ...(options.imports ? { imports: options.imports } : {}),
+    packages,
+    ...(options.realpaths ? { realpaths: options.realpaths } : {})
+  });
+
+  registerWorkspaceModules(runtime, options.reader, root);
+  return runtime;
+}
+
+export function registerWorkspaceModules(runtime: ModuleRuntime, reader: WorkspaceModuleReader, root = "/workspace"): ModuleRuntime {
+  for (const file of walkFiles(reader, trimSlash(root))) {
+    if (file.endsWith(".cjs") || file.endsWith(".js")) {
+      runtime.register(file, {
+        kind: "cjs-source",
+        source: reader.readText(file)
+      });
+    } else if (file.endsWith(".json")) {
+      runtime.register(file, {
+        kind: "json",
+        value: readJson<RuntimeValue>(reader, file)
+      });
+    }
+  }
+  return runtime;
+}
+
+function discoverPackageManifests(reader: WorkspaceModuleReader, root: string): Record<string, PackageManifest> {
+  const packages: Record<string, PackageManifest> = {};
+  for (const file of walkFiles(reader, root)) {
+    if (!file.endsWith("/package.json")) continue;
+    const packageRoot = file.slice(0, -"/package.json".length);
+    const name = packageNameFromNodeModulesPath(packageRoot);
+    if (!name) continue;
+
+    const manifest = readJson<PackageJson>(reader, file);
+    packages[name] = {
+      root: packageRoot,
+      ...(typeof manifest.type === "string" ? { type: manifest.type } : {}),
+      ...(typeof manifest.main === "string" ? { main: manifest.main } : {}),
+      ...normalizeExports(manifest.exports)
+    };
+  }
+  return packages;
+}
+
+function* walkFiles(reader: WorkspaceModuleReader, path: string): Generator<string> {
+  for (const entry of safeListDir(reader, path)) {
+    const child = join(path, entry);
+    if (isLikelyTextModule(child) && safeReadText(reader, child) !== null) {
+      yield child;
+      continue;
+    }
+    yield* walkFiles(reader, child);
+  }
+}
+
+function safeListDir(reader: WorkspaceModuleReader, path: string): string[] {
+  try {
+    return reader.listDir(path);
+  } catch {
+    return [];
+  }
+}
+
+function safeReadText(reader: WorkspaceModuleReader, path: string): string | null {
+  try {
+    return reader.readText(path);
+  } catch {
+    return null;
+  }
+}
+
+function isLikelyTextModule(path: string): boolean {
+  return path.endsWith(".js") || path.endsWith(".cjs") || path.endsWith(".json");
+}
+
+function packageNameFromNodeModulesPath(packageRoot: string): string | null {
+  const marker = "/node_modules/";
+  const index = packageRoot.lastIndexOf(marker);
+  if (index < 0) return null;
+  const relative = packageRoot.slice(index + marker.length);
+  const parts = relative.split("/");
+  if (!parts[0]) return null;
+  if (parts[0].startsWith("@")) return parts[1] ? `${parts[0]}/${parts[1]}` : null;
+  return parts[0];
+}
+
+function normalizeExports(exportsMap: PackageJson["exports"]): Pick<PackageManifest, "exports"> {
+  if (typeof exportsMap === "string") return { exports: exportsMap };
+  if (!isRecord(exportsMap)) return {};
+  const normalized: Record<string, string> = {};
+  for (const [key, value] of Object.entries(exportsMap)) {
+    if (typeof value === "string") normalized[key] = value;
+  }
+  return Object.keys(normalized).length > 0 ? { exports: normalized } : {};
+}
+
+function readJson<T>(reader: WorkspaceModuleReader, path: string): T {
+  return JSON.parse(reader.readText(path)) as T;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function trimSlash(path: string): string {
+  return path.endsWith("/") && path !== "/" ? path.slice(0, -1) : path;
+}
+
+interface PackageJson {
+  type?: unknown;
+  main?: unknown;
+  exports?: unknown;
+}

@@ -75,6 +75,7 @@ const required = [
   "packages/node-runtime/src/modules/index.ts",
   "packages/node-runtime/src/modules/resolver.ts",
   "packages/node-runtime/src/modules/runtime.ts",
+  "packages/node-runtime/src/modules/workspace.ts",
   "packages/node-runtime/src/net/http-parser.ts",
   "packages/node-runtime/src/net/index.ts",
   "packages/node-runtime/src/net/loopback.ts",
