@@ -31,6 +31,7 @@ for (const name of [
   "fs/promises",
   "http",
   "https",
+  "net",
   "os",
   "path",
   "process",
@@ -39,6 +40,7 @@ for (const name of [
   "stream",
   "string_decoder",
   "timers/promises",
+  "tls",
   "tty",
   "url",
   "util"

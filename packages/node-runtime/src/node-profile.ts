@@ -31,6 +31,12 @@ export const NODE_PROFILE = Object.freeze({
       implementedBy: "packages/node-runtime/src/builtins/http.ts",
       tests: Object.freeze(["tests/node-runtime/secondary-builtins.test.mjs"])
     }),
+    net: Object.freeze({
+      status: "partial",
+      source: "browser-unsupported-diagnostic",
+      implementedBy: "packages/node-runtime/src/builtins/net.ts",
+      tests: Object.freeze(["tests/node-runtime/secondary-builtins.test.mjs"])
+    }),
     assert: Object.freeze({
       status: "partial",
       source: "browser-native-js",
@@ -115,6 +121,12 @@ export const NODE_PROFILE = Object.freeze({
       implementedBy: "packages/node-runtime/src/builtins/timers.ts",
       tests: Object.freeze(["tests/node-runtime/secondary-builtins.test.mjs"])
     }),
+    tls: Object.freeze({
+      status: "partial",
+      source: "browser-unsupported-diagnostic",
+      implementedBy: "packages/node-runtime/src/builtins/tls.ts",
+      tests: Object.freeze(["tests/node-runtime/secondary-builtins.test.mjs"])
+    }),
     tty: Object.freeze({
       status: "partial",
       source: "browser-native-js",
@@ -151,6 +163,7 @@ export const NODE_PROFILE = Object.freeze({
     "node:fs/promises": Object.freeze(["node:fs"]),
     "node:http": Object.freeze(["browser-fetch-adapter"]),
     "node:https": Object.freeze(["browser-fetch-adapter"]),
+    "node:net": Object.freeze(["browser-unsupported-diagnostic"]),
     "node:os": Object.freeze(["browser-native-js:os"]),
     "node:path": Object.freeze(["browser-native-js:path"]),
     "node:path/posix": Object.freeze(["node:path"]),
@@ -161,6 +174,7 @@ export const NODE_PROFILE = Object.freeze({
     "node:stream/promises": Object.freeze(["node:stream"]),
     "node:string_decoder": Object.freeze(["browser-native-js:string_decoder", "node:buffer"]),
     "node:timers/promises": Object.freeze(["browser-native-js:timers"]),
+    "node:tls": Object.freeze(["node:net", "browser-unsupported-diagnostic"]),
     "node:tty": Object.freeze(["browser-native-js:tty", "node:stream"]),
     "node:url": Object.freeze(["browser-native-js:url", "node:path"]),
     "node:util": Object.freeze(["browser-native-js:util", "node:events"]),
@@ -171,6 +185,7 @@ export const NODE_PROFILE = Object.freeze({
     "http": Object.freeze(["node:http"]),
     "https": Object.freeze(["node:https"]),
     "module": Object.freeze(["node:module"]),
+    "net": Object.freeze(["node:net"]),
     "os": Object.freeze(["node:os"]),
     "path": Object.freeze(["node:path"]),
     "path/posix": Object.freeze(["node:path/posix"]),
@@ -181,6 +196,7 @@ export const NODE_PROFILE = Object.freeze({
     "stream/promises": Object.freeze(["node:stream/promises"]),
     "string_decoder": Object.freeze(["node:string_decoder"]),
     "timers/promises": Object.freeze(["node:timers/promises"]),
+    "tls": Object.freeze(["node:tls"]),
     "tty": Object.freeze(["node:tty"]),
     "url": Object.freeze(["node:url"]),
     "util": Object.freeze(["node:util"])

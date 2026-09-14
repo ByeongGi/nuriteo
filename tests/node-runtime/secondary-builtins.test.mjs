@@ -210,10 +210,24 @@ const httpResponse = await new Promise((resolve, reject) => {
 assert.deepEqual(httpResponse, { statusCode: 201, body: "response-body" });
 assert.deepEqual(fetchCalls, [{ input: "http://registry.test/pkg", method: "POST", body: "request-body" }]);
 
+const net = requireBuiltin("node:net");
+assert.equal(net.isIP("127.0.0.1"), 4);
+assert.equal(net.isIPv6("::1"), true);
+const socket = net.createConnection({ host: "database.local", port: 5432 });
+const tcpError = await new Promise((resolve) => socket.once("error", resolve));
+assert.equal(tcpError.code, "ERR_BROWSER_TCP_UNSUPPORTED");
+
+const tls = requireBuiltin("tls");
+assert.equal(Array.isArray(tls.rootCertificates), true);
+const tlsSocket = tls.connect({ host: "registry.test", port: 443 });
+const tlsError = await new Promise((resolve) => tlsSocket.once("error", resolve));
+assert.equal(tlsError.code, "ERR_BROWSER_TCP_UNSUPPORTED");
+
 const result = runUnsafeCommonJsForLocalTests(`
   const assert = require("node:assert/strict");
   const dns = require("node:dns");
   const http = require("http");
+  const net = require("net");
   const path = require("path");
   const os = require("node:os");
   const qs = require("node:querystring");
@@ -227,6 +241,7 @@ const result = runUnsafeCommonJsForLocalTests(`
   assert.equal(os.platform(), "linux");
   assert.equal(typeof dns.lookup, "function");
   assert.equal(typeof http.request, "function");
+  assert.equal(net.isIP("127.0.0.1"), 4);
   assert.equal(qs.parse("a=1&a=2").a.length, 2);
   assert.equal(new StringDecoder().end(Buffer.from("ok")), "ok");
   readline.emitKeypressEvents({ on() {} });

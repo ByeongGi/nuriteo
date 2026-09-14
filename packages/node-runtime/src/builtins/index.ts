@@ -6,6 +6,7 @@ export { EventEmitter, eventsBuiltin, once } from "./events.ts";
 export { createFsPromisesBuiltin } from "./fs-promises.ts";
 export { Agent as HttpAgent, ClientRequest, createHttpBuiltin, createHttpsBuiltin, IncomingMessage } from "./http.ts";
 export { builtinModules, createRequire, enableCompileCache, Module, moduleBuiltin } from "./module.ts";
+export { connect as netConnect, createConnection as netCreateConnection, isIP, isIPv4, isIPv6, netBuiltin, Socket, UnsupportedTcpSocketError } from "./net.ts";
 export { arch, cpus, EOL, freemem, homedir, osBuiltin, platform, release, tmpdir, totalmem, type as osType } from "./os.ts";
 export { basename, delimiter, dirname, extname, format as pathFormat, isAbsolute, join, normalize, parse as pathParse, pathBuiltin, posix, relative, resolve, sep } from "./path.ts";
 export { BrowserProcess, processBuiltin } from "./process.ts";
@@ -14,6 +15,7 @@ export { createInterface as createReadlineInterface, emitKeypressEvents, Interfa
 export { Duplex, PassThrough, Readable, Stream, Transform, Writable, finished, pipeline, promises as streamPromises, streamBuiltin, streamPromisesBuiltin } from "./stream.ts";
 export { StringDecoder, stringDecoderBuiltin } from "./string-decoder.ts";
 export { setTimeoutPromise, timersPromisesBuiltin } from "./timers.ts";
+export { connect as tlsConnect, createSecureContext, tlsBuiltin, TLSSocket } from "./tls.ts";
 export { ReadStream, ttyBuiltin, isatty, WriteStream } from "./tty.ts";
 export { domainToASCII, domainToUnicode, fileURLToPath, pathToFileURL, URL, urlBuiltin, URLSearchParams, urlToHttpOptions } from "./url.ts";
 export { utilBuiltin, callbackify, deprecate, format, inherits, inspect, promisify, types as utilTypes } from "./util.ts";

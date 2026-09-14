@@ -170,6 +170,28 @@
       "nextPhase": "P10"
     },
     {
+      "builtin": "net",
+      "status": "partial",
+      "priority": 1,
+      "implementedBy": "packages/node-runtime/src/builtins/net.ts",
+      "tests": ["tests/node-runtime/secondary-builtins.test.mjs"],
+      "requiredBy": ["proxy agents", "package-manager network dependency loading"],
+      "minimumApi": ["Socket", "connect", "createConnection", "isIP", "isIPv4", "isIPv6"],
+      "acceptance": ["Module loads for dependency graph compatibility and direct TCP attempts fail with ERR_BROWSER_TCP_UNSUPPORTED."],
+      "nextPhase": "P10"
+    },
+    {
+      "builtin": "tls",
+      "status": "partial",
+      "priority": 1,
+      "implementedBy": "packages/node-runtime/src/builtins/tls.ts",
+      "tests": ["tests/node-runtime/secondary-builtins.test.mjs"],
+      "requiredBy": ["https/proxy agents", "package-manager network dependency loading"],
+      "minimumApi": ["TLSSocket", "connect", "createSecureContext", "rootCertificates"],
+      "acceptance": ["Module loads for dependency graph compatibility and direct TLS attempts fail with ERR_BROWSER_TCP_UNSUPPORTED."],
+      "nextPhase": "P10"
+    },
+    {
       "builtin": "util",
       "status": "partial",
       "priority": 0,
