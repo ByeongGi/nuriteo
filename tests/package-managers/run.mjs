@@ -2,6 +2,7 @@ import "./cli-baseline.test.mjs";
 import "./cli-evaluator.test.mjs";
 import "./cli-module-graph.test.mjs";
 import "./conformance-matrix.test.mjs";
+import "./npm-cli-module-evaluation.test.mjs";
 import "./npm-guest-runtime-boot.test.mjs";
 import "./npm-install-plan.test.mjs";
 import "./pnpm-guest-runtime-boot.test.mjs";

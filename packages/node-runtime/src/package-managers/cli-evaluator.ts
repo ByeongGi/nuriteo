@@ -2,11 +2,16 @@ import { createBuiltinLoader } from "../builtin-loader.ts";
 import { normalize } from "../builtins/path.ts";
 import { BrowserProcess } from "../builtins/process.ts";
 import { createWorkspaceModuleRuntime, type WorkspaceModuleReader } from "../modules/index.ts";
-import type { CliEntry, CliRunResult, RuntimeEnv, RuntimeFsBinding } from "../types.ts";
+import type { CliEntry, CliRunResult, RuntimeEnv, RuntimeFsBinding, RuntimeNamespace } from "../types.ts";
 
 export interface CliModuleEvaluatorOptions {
   reader: WorkspaceModuleReader;
   root?: string;
+}
+
+export interface AsyncCliModuleEvaluatorOptions extends CliModuleEvaluatorOptions {
+  settleTicks?: number;
+  settleTimeoutMs?: number;
 }
 
 export interface CliModuleEvaluationRequest {
@@ -18,56 +23,136 @@ export interface CliModuleEvaluationRequest {
 
 export function createCliModuleEvaluator(options: CliModuleEvaluatorOptions): (request: CliModuleEvaluationRequest) => CliRunResult {
   return function evaluateCliModule(request: CliModuleEvaluationRequest): CliRunResult {
-    let stdout = "";
-    let stderr = "";
-    const processOptions = {
-      argv: ["node", request.entry.entry, ...request.args],
-      cwd: request.cwd,
-      exitMode: "capture" as const,
-      ...(request.env ? { env: request.env } : {})
-    };
-    const process = new BrowserProcess(processOptions);
-    process.on("stdout", (chunk) => {
-      stdout += String(chunk);
-    });
-    process.on("stderr", (chunk) => {
-      stderr += String(chunk);
-    });
-    const globalObject: Record<string, unknown> = {};
-    const fs = createWorkspaceFsFacade(options.reader);
+    return startCliModuleEvaluation(options, request).finalize();
+  };
+}
 
-    const runtime = createWorkspaceModuleRuntime({
-      root: options.root || "/workspace",
-      reader: options.reader,
-      builtins: createBuiltinLoader({ fs, process }),
-      globals: {
-        global: globalObject,
-        process
-      }
-    });
+export function createAsyncCliModuleEvaluator(options: AsyncCliModuleEvaluatorOptions): (request: CliModuleEvaluationRequest) => Promise<CliRunResult> {
+  return async function evaluateCliModuleAsync(request: CliModuleEvaluationRequest): Promise<CliRunResult> {
+    const evaluation = startCliModuleEvaluation(options, request);
+    await settleCliEvaluation(options);
+    return evaluation.finalize();
+  };
+}
 
-    let exitCode = 0;
-    try {
-      runtime.requireSync(request.entry.entry, request.entry.entry);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      const exit = parseProcessExit(message);
-      if (exit !== null) {
-        exitCode = exit;
-      } else {
-        exitCode = 1;
-        stderr += `${message}\n`;
-      }
+function startCliModuleEvaluation(options: CliModuleEvaluatorOptions, request: CliModuleEvaluationRequest): { finalize: () => CliRunResult } {
+  let stdout = "";
+  let stderr = "";
+  const processOptions = {
+    argv: ["node", request.entry.entry, ...request.args],
+    cwd: request.cwd,
+    exitMode: "capture" as const,
+    ...(request.env ? { env: request.env } : {})
+  };
+  const process = new BrowserProcess(processOptions);
+  process.on("stdout", (chunk) => {
+    stdout += String(chunk);
+  });
+  process.on("stderr", (chunk) => {
+    stderr += String(chunk);
+  });
+  const globalObject: Record<string, unknown> = {
+    __dynamicImport: createCliDynamicImport()
+  };
+  const fs = createWorkspaceFsFacade(options.reader);
+
+  const runtime = createWorkspaceModuleRuntime({
+    root: options.root || "/workspace",
+    reader: options.reader,
+    builtins: createBuiltinLoader({ fs, process }),
+    globals: {
+      __dynamicImport: globalObject.__dynamicImport,
+      global: globalObject,
+      process
     }
-    if (process.exitCode !== undefined) exitCode = process.exitCode;
+  });
 
-    return {
-      stdout,
-      stderr,
-      exitCode,
-      entry: request.entry.entry,
-      ...(request.entry.entrySha256 ? { entrySha256: request.entry.entrySha256 } : {})
-    };
+  let exitCode = 0;
+  try {
+    runtime.requireSync(request.entry.entry, request.entry.entry);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const exit = parseProcessExit(message);
+    if (exit !== null) {
+      exitCode = exit;
+    } else {
+      exitCode = 1;
+      stderr += `${message}\n`;
+    }
+  }
+
+  return {
+    finalize() {
+      if (process.exitCode !== undefined) exitCode = process.exitCode;
+      return {
+        stdout,
+        stderr,
+        exitCode,
+        entry: request.entry.entry,
+        ...(request.entry.entrySha256 ? { entrySha256: request.entry.entrySha256 } : {})
+      };
+    }
+  };
+}
+
+async function settleCliEvaluation(options: AsyncCliModuleEvaluatorOptions): Promise<void> {
+  const ticks = options.settleTicks ?? 8;
+  const timeoutMs = options.settleTimeoutMs ?? 0;
+  for (let index = 0; index < ticks; index += 1) {
+    await Promise.resolve();
+  }
+  if (timeoutMs > 0) {
+    await new Promise((resolve) => setTimeout(resolve, timeoutMs));
+  }
+}
+
+function createCliDynamicImport(): (specifier: string) => Promise<RuntimeNamespace> {
+  return async (specifier: string): Promise<RuntimeNamespace> => {
+    if (specifier === "chalk") return createChalkNamespace();
+    if (specifier === "supports-color") return createSupportsColorNamespace();
+    throw new Error(`ERR_BROWSER_DYNAMIC_IMPORT_UNSUPPORTED: ${specifier}`);
+  };
+}
+
+function createChalkNamespace(): RuntimeNamespace {
+  class Chalk {
+    level: number;
+
+    constructor(options: { level?: number } = {}) {
+      this.level = options.level ?? 0;
+      return createPassthroughChalk(this.level);
+    }
+  }
+
+  const defaultChalk = createPassthroughChalk(0);
+  return {
+    Chalk,
+    default: defaultChalk
+  };
+}
+
+function createPassthroughChalk(level: number): ((...values: unknown[]) => string) & { level: number } {
+  const chalk = ((...values: unknown[]) => values.join(" ")) as ((...values: unknown[]) => string) & { level: number };
+  chalk.level = level;
+  const proxy = new Proxy(chalk, {
+    get(target, property, receiver) {
+      if (property in target) return Reflect.get(target, property, receiver);
+      return proxy;
+    }
+  });
+  return proxy;
+}
+
+function createSupportsColorNamespace(): RuntimeNamespace {
+  const createSupportsColor = () => ({ hasBasic: false, has256: false, has16m: false, level: 0 });
+  return {
+    createSupportsColor,
+    default: {
+      stdout: false,
+      stderr: false
+    },
+    stdout: false,
+    stderr: false
   };
 }
 

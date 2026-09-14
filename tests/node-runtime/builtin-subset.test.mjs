@@ -44,6 +44,7 @@ function exerciseBuiltins({ Buffer, EventEmitter, util }) {
   assert.throws(() => new EventEmitter().emit("error", new Error("boom")), /boom/);
 
   assert.equal(util.format("value:%s %d %%", "x", "4"), "value:x 4 %");
+  assert.equal(util.formatWithOptions({ colors: false }, "value:%s", "x"), "value:x");
   assert.match(util.inspect({ a: 1, b: "x" }), /a: 1/);
   function Parent() {}
   Parent.prototype.kind = "parent";
@@ -74,6 +75,7 @@ assert.equal(bufferBuiltin.Buffer.from("ok").toString(), "ok");
 assert.equal(typeof requireBuiltin("events"), "function");
 assert.equal(requireBuiltin("events").EventEmitter, EventEmitter);
 assert.equal(requireBuiltin("util").format("x:%s", "y"), "x:y");
+assert.equal(requireBuiltin("node:util").formatWithOptions({ colors: false }, "x:%s", "y"), "x:y");
 
 const result = runUnsafeCommonJsForLocalTests(`
   const { Buffer } = require("node:buffer");
@@ -89,7 +91,8 @@ const result = runUnsafeCommonJsForLocalTests(`
     text: Buffer.from("6869", "hex").toString("utf8"),
     eventsDefaultIsConstructor: typeof EventEmitterModule === "function",
     count,
-    formatted: util.format("%s:%d", "v", 2)
+    formatted: util.format("%s:%d", "v", 2),
+    formattedWithOptions: util.formatWithOptions({ colors: false }, "%s:%d", "v", 3)
   };
 `, { syncChannel: new SharedArrayBuffer(1024 * 1024 + 4096) });
 
@@ -97,7 +100,8 @@ assert.deepEqual(result.exports, {
   text: "hi",
   eventsDefaultIsConstructor: true,
   count: 1,
-  formatted: "v:2"
+  formatted: "v:2",
+  formattedWithOptions: "v:3"
 });
 
 console.log("node builtin subset test ok");

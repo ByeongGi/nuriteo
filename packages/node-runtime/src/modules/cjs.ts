@@ -1,5 +1,5 @@
 import type { ModuleRuntime } from "./runtime.ts";
-import type { CjsContext, RuntimeModule, RuntimeValue } from "../types.ts";
+import type { CjsContext, RuntimeModule, RuntimeNamespace, RuntimeValue } from "../types.ts";
 
 export function evaluateCjs(runtime: ModuleRuntime, url: string): RuntimeValue {
   const canonicalUrl = runtime.cache.canonicalize(url);
@@ -27,7 +27,7 @@ export function evaluateCjs(runtime: ModuleRuntime, url: string): RuntimeValue {
   const require = (specifier: string) => runtime.requireSync(specifier, canonicalUrl);
   const factory = definition.kind === "cjs"
     ? definition.factory
-    : compileCjsSource(definition.source, canonicalUrl, runtime.globals);
+    : compileCjsSource(runtime, definition.source, canonicalUrl, runtime.globals);
   factory({
     exports: module.exports,
     module,
@@ -39,7 +39,7 @@ export function evaluateCjs(runtime: ModuleRuntime, url: string): RuntimeValue {
   return module.exports;
 }
 
-function compileCjsSource(source: string, filename: string, globals: Record<string, RuntimeValue>): (context: CjsContext) => void {
+function compileCjsSource(runtime: ModuleRuntime, source: string, filename: string, globals: Record<string, RuntimeValue>): (context: CjsContext) => void {
   const compiled = new Function(
     "exports",
     "require",
@@ -48,13 +48,21 @@ function compileCjsSource(source: string, filename: string, globals: Record<stri
     "__dirname",
     "process",
     "global",
-    `${stripShebang(source)}\n//# sourceURL=${filename}`
-  ) as (exports: RuntimeModule["exports"], require: (specifier: string) => RuntimeValue, module: RuntimeModule, filename: string, dirname: string, process: RuntimeValue, global: RuntimeValue) => void;
+    "__dynamicImport",
+    `${rewriteDynamicImports(stripShebang(source))}\n//# sourceURL=${filename}`
+  ) as (exports: RuntimeModule["exports"], require: (specifier: string) => RuntimeValue, module: RuntimeModule, filename: string, dirname: string, process: RuntimeValue, global: RuntimeValue, dynamicImport: (specifier: string) => Promise<RuntimeNamespace>) => void;
   return ({ exports, require, module, filename, dirname }) => {
-    compiled(exports, require, module, filename, dirname, globals.process, globals.global);
+    const dynamicImport = typeof globals.__dynamicImport === "function"
+      ? globals.__dynamicImport as (specifier: string) => Promise<RuntimeNamespace>
+      : (specifier: string) => runtime.importModule(specifier, filename);
+    compiled(exports, require, module, filename, dirname, globals.process, globals.global, dynamicImport);
   };
 }
 
 function stripShebang(source: string): string {
   return source.startsWith("#!") ? `//${source.slice(2)}` : source;
+}
+
+function rewriteDynamicImports(source: string): string {
+  return source.replace(/\bimport\s*\(/g, "__dynamicImport(");
 }

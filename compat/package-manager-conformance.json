@@ -13,8 +13,8 @@
       "command": "npm --version",
       "runtime": "browser-guest-node-runtime",
       "status": "pass",
-      "evidence": ["tests/package-managers/npm-guest-runtime-boot.test.mjs"],
-      "notes": "Guest runner now classifies the command as version and keeps non-version npm paths behind ERR_PM_REAL_CLI_EVALUATION_REQUIRED until real CLI module evaluation is wired."
+      "evidence": ["tests/package-managers/npm-guest-runtime-boot.test.mjs", "tests/package-managers/npm-cli-module-evaluation.test.mjs"],
+      "notes": "Guest runner classifies the command as version, and the async CLI module evaluator now runs the vendored npm entry through workspace CJS evaluation with dynamic import shims for the npm display path."
     },
     {
       "id": "pnpm-version",
@@ -48,8 +48,8 @@
       "command": "vendored CLI static require graph preflight and fixture CLI module evaluation",
       "runtime": "browser-guest-node-runtime",
       "status": "pass",
-      "evidence": ["tests/package-managers/cli-module-graph.test.mjs", "tests/package-managers/cli-evaluator.test.mjs"],
-      "notes": "Walks vendored npm and pnpm entry module graphs, resolves simple computed path entries, expands npm install/ci/run/exec command dispatch, resolves npmPath package metadata probes, classifies Keyv adapter loading as optional for the default browser runtime store path, handles JSON modules, ignores string/comment false positives, rejects missing package modules, verifies there are no static unsupported builtin gaps, and counts only optional probes after product-scope graph expansion. Also evaluates an npm-shaped CLI entry from workspace modules through cli-module-evaluation boot mode with BrowserProcess stdout/stderr/exit handling."
+      "evidence": ["tests/package-managers/cli-module-graph.test.mjs", "tests/package-managers/cli-evaluator.test.mjs", "tests/package-managers/npm-cli-module-evaluation.test.mjs"],
+      "notes": "Walks vendored npm and pnpm entry module graphs, resolves simple computed path entries, expands npm install/ci/run/exec command dispatch, resolves npmPath package metadata probes, classifies Keyv adapter loading as optional for the default browser runtime store path, handles JSON modules, ignores string/comment false positives, rejects missing package modules, verifies there are no static unsupported builtin gaps, and counts only optional probes after product-scope graph expansion. Also evaluates npm-shaped CLI fixtures and the vendored npm --version entry from workspace modules through async cli-module-evaluation with BrowserProcess stdout/stderr/exit handling."
     },
     {
       "id": "npm-install",
@@ -100,7 +100,7 @@
   "gate": {
     "id": "PG10",
     "status": "not-pass",
-    "reason": "Version boot, local install layout, npm ci plan application, store plan, script-runner-application run/exec/lifecycle fixture, fixture cli-module-evaluation, interrupted install-plan recovery, tarball cache paths, and product-scope static CLI graph classification pass or partially pass in browser guest runtime, but full npm/pnpm CLI module evaluation still depends on host-node-test-helper as the reference comparator. Static graph classification now covers simple computed entries, JSON modules, npm install/ci/run/exec command dispatch, npm config metadata probes, pnpm Keyv adapter optional loading, child_process diagnostics, crypto hashing/random subset, dns, fs/promises, http/https, http2 diagnostics, net/tls unsupported diagnostics, worker_threads diagnostics, and lightweight constants/querystring/readline/string_decoder/timers/v8 builtins. Remaining blocker is moving real npm/pnpm CLI evaluation off the host-node-test-helper before product support.",
+    "reason": "Version boot, vendored npm --version async CLI module evaluation, local install layout, npm ci plan application, store plan, script-runner-application run/exec/lifecycle fixture, interrupted install-plan recovery, tarball cache paths, and product-scope static CLI graph classification pass or partially pass in browser guest runtime, but full npm/pnpm install/ci/run/exec CLI module evaluation still depends on host-node-test-helper as the reference comparator. Static graph classification now covers simple computed entries, JSON modules, npm install/ci/run/exec command dispatch, npm config metadata probes, pnpm Keyv adapter optional loading, child_process diagnostics, crypto hashing/random subset, dns, fs/promises, http/https, http2 diagnostics, net/tls unsupported diagnostics, worker_threads diagnostics, and lightweight constants/querystring/readline/string_decoder/timers/v8 builtins. Remaining blocker is moving real npm/pnpm install/ci/run/exec CLI evaluation off the host-node-test-helper before product support.",
     "requiredToPass": [
       "Move npm install/ci/run/exec cases to browser-guest-node-runtime",
       "Move pnpm install/run/exec cases to browser-guest-node-runtime",

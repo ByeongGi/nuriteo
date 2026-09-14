@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 
-import { createCliModuleEvaluator, createGuestRuntimeProcessRunner, createNpmRunner, MemoryPackageManagerWorkspace } from "../../packages/node-runtime/src/index.ts";
+import { createAsyncCliModuleEvaluator, createCliModuleEvaluator, createGuestRuntimeProcessRunner, createNpmRunner, MemoryPackageManagerWorkspace } from "../../packages/node-runtime/src/index.ts";
 
 const workspace = new MemoryPackageManagerWorkspace([
   {
@@ -25,6 +25,27 @@ const workspace = new MemoryPackageManagerWorkspace([
   {
     path: "/workspace/cli/package/package.json",
     data: JSON.stringify({ name: "fixture-cli", version: "1.2.3", main: "lib/cli.js" })
+  },
+  {
+    path: "/workspace/async-cli/package/bin/npm-cli.js",
+    data: "#!/usr/bin/env node\nrequire('../lib/cli.js')(process)\n"
+  },
+  {
+    path: "/workspace/async-cli/package/lib/cli.js",
+    data: `
+      module.exports = async function run(process) {
+        const { Chalk } = await import('chalk');
+        const chalk = new Chalk({ level: 0 });
+        await Promise.resolve();
+        process.stdout.write(chalk('async-version') + '\\n', 'utf8', () => {
+          process.exitCode = 0;
+        });
+      };
+    `
+  },
+  {
+    path: "/workspace/async-cli/package/package.json",
+    data: JSON.stringify({ name: "async-fixture-cli", version: "1.2.3", main: "lib/cli.js" })
   }
 ]);
 
@@ -66,6 +87,23 @@ const unsupported = evaluate({
 assert.equal(unsupported.stdout, "");
 assert.equal(unsupported.stderr, "unsupported command\n");
 assert.equal(unsupported.exitCode, 7);
+
+const evaluateAsync = createAsyncCliModuleEvaluator({
+  root: "/workspace",
+  reader: workspace
+});
+const asyncVersion = await evaluateAsync({
+  entry: {
+    name: "npm",
+    version: "1.2.3",
+    entry: "/workspace/async-cli/package/bin/npm-cli.js"
+  },
+  args: ["--version"],
+  cwd: "/workspace/project"
+});
+assert.equal(asyncVersion.stdout, "async-version\n");
+assert.equal(asyncVersion.stderr, "");
+assert.equal(asyncVersion.exitCode, 0);
 
 const entry = {
   name: "npm",

@@ -42,6 +42,10 @@ export function format(first: RuntimeValue, ...args: RuntimeValue[]): string {
   return [formatted, ...args.slice(index).map((value) => inspect(value))].join(" ");
 }
 
+export function formatWithOptions(_options: RuntimeValue, first: RuntimeValue, ...args: RuntimeValue[]): string {
+  return format(first, ...args);
+}
+
 export function inherits(ctor: Function, superCtor: Function): void {
   if (typeof ctor !== "function" || typeof superCtor !== "function") throw new TypeError("ctor and superCtor must be functions");
   Object.setPrototypeOf(ctor.prototype, superCtor.prototype);
@@ -91,6 +95,7 @@ export const utilBuiltin = Object.freeze({
   callbackify,
   deprecate,
   format,
+  formatWithOptions,
   inherits,
   inspect,
   promisify,
