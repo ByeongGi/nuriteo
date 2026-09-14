@@ -241,6 +241,34 @@ function assertSdkTarballInstalls() {
     if (tsc.status !== 0) {
       throw new Error(`Installed SDK tarball types do not compile:\n${tsc.stdout}\n${tsc.stderr}`);
     }
+    fs.writeFileSync(path.join(workdir, "tsconfig.build.json"), `${JSON.stringify({
+      compilerOptions: {
+        lib: ["ES2024", "DOM"],
+        module: "ESNext",
+        moduleResolution: "Bundler",
+        outDir: "dist",
+        strict: true,
+        target: "ES2024",
+        types: []
+      },
+      include: ["index.ts"]
+    }, null, 2)}\n`);
+    const build = spawnSync(process.execPath, [
+      path.join(root, "node_modules/typescript/bin/tsc"),
+      "--project",
+      "tsconfig.build.json",
+      "--pretty",
+      "false"
+    ], {
+      cwd: workdir,
+      encoding: "utf8"
+    });
+    if (build.status !== 0) {
+      throw new Error(`Installed SDK tarball consumer build failed:\n${build.stdout}\n${build.stderr}`);
+    }
+    if (!fs.existsSync(path.join(workdir, "dist/index.js"))) {
+      throw new Error("Installed SDK tarball consumer build did not emit dist/index.js");
+    }
     fs.writeFileSync(path.join(workdir, "consumer.cjs"), [
       'const sdk = require("@cargo-container/sdk");',
       'if (typeof sdk.createContainer !== "function") throw new Error("missing createContainer");',
