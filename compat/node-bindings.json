@@ -30,11 +30,13 @@
       "notes": "Browser-native EventEmitter subset covering listener order, once, cleanup, and error event behavior."
     },
     "stream": {
-      "status": "missing",
-      "source": "node-v22.23.0",
-      "implementedBy": null,
-      "tests": [],
-      "notes": "Required by npm/pnpm install paths."
+      "status": "partial",
+      "source": "browser-native-js",
+      "implementedBy": "packages/node-runtime/src/builtins/stream.ts",
+      "tests": [
+        "tests/node-runtime/stream-subset.test.mjs"
+      ],
+      "notes": "Browser-native stream subset covering Readable.from, async iteration, Writable, Transform, PassThrough, pipe, finished, and pipeline."
     },
     "util": {
       "status": "partial",

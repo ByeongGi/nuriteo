@@ -20,12 +20,12 @@
     {
       "id": "node-profile",
       "path": "packages/node-runtime/src/node-profile.ts",
-      "summary": "Current browser-native Node profile marks buffer, events, and util as partial while stream remains missing."
+      "summary": "Current browser-native Node profile marks buffer, events, stream, and util as partial."
     },
     {
       "id": "cli-smoke",
       "path": "tests/node-runtime/cli-smoke.test.mjs",
-      "summary": "npm --version and pnpm --version remain blocked until missing builtin modules are implemented."
+      "summary": "npm --version and pnpm --version are ready for guest runtime smoke because no priority P9 builtin remains missing."
     },
     {
       "id": "package-manager-baseline",
@@ -37,26 +37,24 @@
     {
       "command": "npm --version",
       "runtime": "browser-guest-node-runtime",
-      "status": "blocked",
-      "firstFailure": "unsupported-builtin",
-      "missingBuiltins": ["stream"],
-      "resolvedBuiltins": ["buffer", "events", "util"]
+      "status": "ready-for-guest-runtime-smoke",
+      "missingBuiltins": [],
+      "resolvedBuiltins": ["buffer", "events", "stream", "util"]
     },
     {
       "command": "pnpm --version",
       "runtime": "browser-guest-node-runtime",
-      "status": "blocked",
-      "firstFailure": "unsupported-builtin",
-      "missingBuiltins": ["stream"],
-      "resolvedBuiltins": ["buffer", "events", "util"]
+      "status": "ready-for-guest-runtime-smoke",
+      "missingBuiltins": [],
+      "resolvedBuiltins": ["buffer", "events", "stream", "util"]
     },
     {
       "command": "vite --host 127.0.0.1",
       "runtime": "browser-guest-node-runtime",
       "status": "not-run",
       "blockedBy": ["npm --version", "pnpm --version"],
-      "missingBuiltins": ["stream"],
-      "resolvedBuiltins": ["buffer", "events", "util"]
+      "missingBuiltins": [],
+      "resolvedBuiltins": ["buffer", "events", "stream", "util"]
     }
   ],
   "gaps": [
@@ -144,8 +142,10 @@
     },
     {
       "builtin": "stream",
-      "status": "missing",
+      "status": "partial",
       "priority": 1,
+      "implementedBy": "packages/node-runtime/src/builtins/stream.ts",
+      "tests": ["tests/node-runtime/stream-subset.test.mjs"],
       "requiredBy": ["npm install pipeline", "pnpm install pipeline", "tarball extraction", "Vite dev server IO"],
       "minimumApi": [
         "Readable",

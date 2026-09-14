@@ -3,24 +3,24 @@ import assert from "node:assert/strict";
 import { getUnsupportedBuiltins } from "../../packages/node-runtime/src/node-profile.ts";
 
 const unsupported = getUnsupportedBuiltins().map((binding) => binding.name).sort();
-assert.deepEqual(unsupported, ["stream"]);
+assert.deepEqual(unsupported, []);
 
 const attempts = [
   {
     command: "npm --version",
-    status: "blocked",
+    status: "ready-for-guest-runtime-smoke",
     missingBindings: unsupported
   },
   {
     command: "pnpm --version",
-    status: "blocked",
+    status: "ready-for-guest-runtime-smoke",
     missingBindings: unsupported
   }
 ];
 
 for (const attempt of attempts) {
-  assert.equal(attempt.status, "blocked");
-  assert.ok(attempt.missingBindings.includes("stream"));
+  assert.equal(attempt.status, "ready-for-guest-runtime-smoke");
+  assert.deepEqual(attempt.missingBindings, []);
 }
 
 console.log(JSON.stringify({ attempts }, null, 2));

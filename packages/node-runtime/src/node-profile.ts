@@ -25,7 +25,12 @@ export const NODE_PROFILE = Object.freeze({
       implementedBy: "packages/node-runtime/src/builtins/events.ts",
       tests: Object.freeze(["tests/node-runtime/builtin-subset.test.mjs"])
     }),
-    stream: Object.freeze({ status: "missing", source: "node-v22.23.0" }),
+    stream: Object.freeze({
+      status: "partial",
+      source: "browser-native-js",
+      implementedBy: "packages/node-runtime/src/builtins/stream.ts",
+      tests: Object.freeze(["tests/node-runtime/stream-subset.test.mjs"])
+    }),
     util: Object.freeze({
       status: "partial",
       source: "browser-native-js",
@@ -39,8 +44,12 @@ export const NODE_PROFILE = Object.freeze({
     "node:fs": Object.freeze(["internalBinding:fs"]),
     "node:buffer": Object.freeze(["browser-native-js:buffer"]),
     "node:events": Object.freeze(["browser-native-js:events"]),
+    "node:stream": Object.freeze(["browser-native-js:stream", "node:events"]),
+    "node:stream/promises": Object.freeze(["node:stream"]),
     "node:util": Object.freeze(["browser-native-js:util", "node:events"]),
     "fs": Object.freeze(["node:fs"]),
+    "stream": Object.freeze(["node:stream"]),
+    "stream/promises": Object.freeze(["node:stream/promises"]),
     "util": Object.freeze(["node:util"])
   })
 });
@@ -55,7 +64,8 @@ export function getBuiltinProfile(specifier: string): (typeof NODE_PROFILE.built
 }
 
 export function getUnsupportedBuiltins(): Array<{ name: string; source: string }> {
-  return Object.entries(NODE_PROFILE.builtins)
+  const builtins = NODE_PROFILE.builtins as Record<string, { status: string; source: string }>;
+  return Object.entries(builtins)
     .filter(([, profile]) => profile.status === "missing")
     .map(([name, profile]) => ({ name, source: profile.source }));
 }

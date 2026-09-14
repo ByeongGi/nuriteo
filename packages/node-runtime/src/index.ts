@@ -1,5 +1,5 @@
 export { createBuiltinLoader } from "./builtin-loader.ts";
-export { Buffer, BrowserBuffer, bufferBuiltin, EventEmitter, eventsBuiltin, utilBuiltin } from "./builtins/index.ts";
+export { Buffer, BrowserBuffer, bufferBuiltin, Duplex, EventEmitter, eventsBuiltin, finished, PassThrough, pipeline, Readable, Stream, streamBuiltin, streamPromises, streamPromisesBuiltin, Transform, utilBuiltin, Writable } from "./builtins/index.ts";
 export { createInternalBindingRegistry, UnsupportedBindingError } from "./internal-binding.ts";
 export { getBuiltinProfile, getUnsupportedBuiltins, NODE_PROFILE } from "./node-profile.ts";
 export { LivenessTracker } from "./liveness.ts";

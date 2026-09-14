@@ -111,6 +111,7 @@ export interface BuiltinBindings {
   buffer?: RuntimeValue;
   events?: RuntimeValue;
   internalBinding?: (name: string) => unknown;
+  stream?: RuntimeValue;
   util?: RuntimeValue;
 }
 
