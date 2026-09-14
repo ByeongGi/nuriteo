@@ -230,6 +230,45 @@ writeFile("package.json", `${JSON.stringify({
   }
 }, null, 2)}\n`);
 
+writeFile("README.md", `# Cargo Container SDK
+
+Browser-native runtime SDK for booting the Cargo Container workers, running programs, and wiring preview primitives.
+
+## Install
+
+\`\`\`sh
+npm install ./cargo-container-sdk-0.0.0.tgz
+\`\`\`
+
+## Browser Headers
+
+Serve the consumer page and \`/sdk/**\` assets with:
+
+\`\`\`text
+Cross-Origin-Opener-Policy: same-origin
+Cross-Origin-Embedder-Policy: require-corp
+Content-Security-Policy: default-src 'self'; script-src 'self'; worker-src 'self'; connect-src 'self'; img-src 'self' data:; style-src 'self'
+\`\`\`
+
+Serve \`assets/system_wasm.wasm\` as \`application/wasm\`.
+
+## Usage
+
+\`\`\`ts
+import { createContainer } from "@cargo-container/sdk";
+
+const container = createContainer({
+  systemWorkerUrl: new URL("/sdk/workers/system-worker.ts", location.href),
+  processWorkerUrl: new URL("/sdk/workers/process-worker.ts", location.href)
+});
+
+await container.boot();
+await container.teardown();
+\`\`\`
+
+See \`docs/productization/sdk-quickstart.md\` in the repository for the full productization quickstart.
+`);
+
 writeFile("asset-manifest.json", `${JSON.stringify({
   schemaVersion: 1,
   basePath: "/sdk/",

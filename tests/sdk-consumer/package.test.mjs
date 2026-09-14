@@ -23,6 +23,9 @@ if (!fs.existsSync(path.join(packageRoot, "index.d.ts"))) {
 if (!fs.existsSync(path.join(packageRoot, "index.cjs"))) {
   throw new Error("SDK package missing CommonJS entry; run scripts/package-sdk.mjs first");
 }
+if (!fs.existsSync(path.join(packageRoot, "README.md"))) {
+  throw new Error("SDK package missing README; run scripts/package-sdk.mjs first");
+}
 if (!fs.existsSync(packageTarball)) {
   throw new Error("SDK package tarball missing; run scripts/package-sdk.mjs first");
 }
@@ -113,6 +116,9 @@ try {
   const types = fs.readFileSync(path.join(packageRoot, "index.d.ts"), "utf8");
   if (!types.includes("CargoContainer")) throw new Error("SDK root types do not export CargoContainer");
   if (!types.includes("createPreviewRelay")) throw new Error("SDK root types do not export preview API");
+  const readme = fs.readFileSync(path.join(packageRoot, "README.md"), "utf8");
+  if (!readme.includes("Cross-Origin-Opener-Policy")) throw new Error("SDK README missing hosting headers");
+  if (!readme.includes("createContainer")) throw new Error("SDK README missing minimal usage");
   assertSdkTypesCompile();
   assertSdkTarballInstalls();
 
