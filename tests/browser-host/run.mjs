@@ -1,4 +1,5 @@
 import "./process-lifecycle.test.mjs";
+import "./process-terminal-command.test.mjs";
 import "./permission-model.test.mjs";
 import "./permission-diagnostics.test.mjs";
 import "./credential-safety.test.mjs";

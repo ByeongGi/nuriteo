@@ -72,3 +72,31 @@ export interface HostProcessTableOptions {
   now?: () => number;
   onOutput?: (chunk: HostProcessOutputChunk) => void;
 }
+
+export interface HostProcessShellCommandOptions {
+  cwd?: string;
+  projectId?: string;
+  table: import("./spawn.ts").HostProcessTable;
+  url: string | URL;
+  waitForExit?: boolean;
+}
+
+export interface HostProcessShellCommandContext {
+  argv: string[];
+  cwd: string;
+  env: HostProcessEnv;
+  stdin: string;
+  output?: (chunk: { stream: HostProcessOutputStream; data: string }) => void;
+  signal?: AbortSignal;
+}
+
+export interface HostProcessShellCommandResult {
+  argv: string[];
+  exitCode: number;
+  stderr: string;
+  stdout: string;
+}
+
+export type HostProcessShellCommand = (
+  context: HostProcessShellCommandContext
+) => HostProcessShellCommandResult | Promise<HostProcessShellCommandResult>;

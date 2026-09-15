@@ -20,6 +20,7 @@ export class HostProcessTable {
   workerFactory: (record: HostProcessRecord) => HostWorkerLike;
   now: () => number;
   onOutput: ((chunk: HostProcessOutputChunk) => void) | null;
+  outputListeners: Set<(chunk: HostProcessOutputChunk) => void>;
 
   constructor(options: HostProcessTableOptions = {}) {
     this.nextPid = 1;
@@ -31,6 +32,7 @@ export class HostProcessTable {
     this.workerFactory = options.workerFactory || ((record) => new Worker(record.url as string | URL, { type: "module", name: `process-${record.pid}` }));
     this.now = options.now || Date.now;
     this.onOutput = options.onOutput || null;
+    this.outputListeners = new Set();
   }
 
   prepare(options: HostProcessPrepareOptions = {}): HostProcessSnapshot {
@@ -144,6 +146,13 @@ export class HostProcessTable {
     return record.output.map((chunk) => ({ ...chunk }));
   }
 
+  subscribeOutput(listener: (chunk: HostProcessOutputChunk) => void): () => void {
+    this.outputListeners.add(listener);
+    return () => {
+      this.outputListeners.delete(listener);
+    };
+  }
+
   writeStdin(pid: number, data: string): boolean {
     const record = this.#record(pid);
     if (isTerminal(record.status)) return false;
@@ -200,6 +209,7 @@ export class HostProcessTable {
     if (stream === "stdout") record.stdout += data;
     else record.stderr += data;
     this.onOutput?.({ ...chunk });
+    for (const listener of this.outputListeners) listener({ ...chunk });
   }
 
   #record(pid: number): HostProcessRecord {
