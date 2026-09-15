@@ -530,6 +530,8 @@ function createCliWorkerThreadsBuiltin(options: {
     readonly resourceLimits = Object.freeze({});
     readonly threadId: number;
     readonly workerData: unknown;
+    onerror: ((event: Error) => void) | null = null;
+    onmessage: ((event: { data: unknown }) => void) | null = null;
     #parentPort = new EventEmitter() as InlineParentPort;
     #terminated = false;
 
@@ -544,9 +546,9 @@ function createCliWorkerThreadsBuiltin(options: {
 
       this.#parentPort.postMessage = (value: unknown) => {
         void Promise.resolve(value).then((resolved) => {
-          if (!this.#terminated) this.emit("message", resolved);
+          if (!this.#terminated) this.#dispatchMessage(resolved);
         }, (error) => {
-          if (!this.#terminated) this.emit("error", error instanceof Error ? error : new Error(String(error)));
+          if (!this.#terminated) this.#dispatchError(error instanceof Error ? error : new Error(String(error)));
         });
       };
       this.#parentPort.ref = () => this.#parentPort;
@@ -610,7 +612,17 @@ function createCliWorkerThreadsBuiltin(options: {
     }
 
     #fail(error: Error): void {
+      this.#dispatchError(error);
+    }
+
+    #dispatchError(error: Error): void {
+      this.onerror?.(error);
       this.emit("error", error);
+    }
+
+    #dispatchMessage(value: unknown): void {
+      this.onmessage?.({ data: value });
+      this.emit("message", value);
     }
   }
 

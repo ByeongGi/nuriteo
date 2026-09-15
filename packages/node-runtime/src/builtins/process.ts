@@ -15,6 +15,7 @@ export interface ProcessBuiltinOptions {
 
 export class BrowserProcess extends EventEmitter {
   argv: string[];
+  execArgv: string[];
   env: Record<string, string>;
   exitCode: number | undefined;
   pid: number;
@@ -55,6 +56,7 @@ export class BrowserProcess extends EventEmitter {
   constructor(options: ProcessBuiltinOptions = {}) {
     super();
     this.argv = options.argv || ["node"];
+    this.execArgv = [];
     this.env = { ...(options.env || {}) };
     this.exitCode = undefined;
     this.pid = options.pid ?? 1;

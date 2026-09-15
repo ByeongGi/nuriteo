@@ -6,16 +6,22 @@ export class EventEmitter {
   #maxListeners = 10;
 
   on(eventName: string | symbol, listener: Listener): this {
-    return this.#addListener(eventName, listener);
+    return this.#addListener(eventName, listener, "append");
   }
 
   addListener(eventName: string | symbol, listener: Listener): this {
-    return this.#addListener(eventName, listener);
+    return this.#addListener(eventName, listener, "append");
   }
 
-  #addListener(eventName: string | symbol, listener: Listener): this {
+  prependListener(eventName: string | symbol, listener: Listener): this {
+    return this.#addListener(eventName, listener, "prepend");
+  }
+
+  #addListener(eventName: string | symbol, listener: Listener, placement: "append" | "prepend"): this {
+    if (eventName !== "newListener") this.emit("newListener", eventName, listener);
     const listeners = this.#events.get(eventName) || [];
-    listeners.push(listener);
+    if (placement === "prepend") listeners.unshift(listener);
+    else listeners.push(listener);
     this.#events.set(eventName, listeners);
     return this;
   }
@@ -27,6 +33,15 @@ export class EventEmitter {
     };
     onceListener.listener = listener;
     return this.addListener(eventName, onceListener);
+  }
+
+  prependOnceListener(eventName: string | symbol, listener: Listener): this {
+    const onceListener: Listener & { listener?: Listener } = (...args) => {
+      this.removeListener(eventName, onceListener);
+      listener.apply(this, args);
+    };
+    onceListener.listener = listener;
+    return this.prependListener(eventName, onceListener);
   }
 
   emit(eventName: string | symbol, ...args: unknown[]): boolean {
@@ -136,12 +151,27 @@ function createLegacyEventEmitterConstructor(): typeof EventEmitter {
   });
 
   LegacyEventEmitter.listenerCount = (emitter: EventEmitter, eventName: string | symbol) => emitter.listenerCount(eventName);
+  const addListenerWithPlacement = function addListenerWithPlacement(
+    target: EventEmitter,
+    eventName: string | symbol,
+    listener: Listener,
+    placement: "append" | "prepend"
+  ) {
+    if (eventName !== "newListener") target.emit("newListener", eventName, listener);
+    const listeners = getListeners(target, eventName);
+    if (placement === "prepend") listeners.unshift(listener);
+    else listeners.push(listener);
+    return target;
+  };
   const addListener = function addListener(this: EventEmitter, eventName: string | symbol, listener: Listener) {
-    getListeners(this, eventName).push(listener);
+    addListenerWithPlacement(this, eventName, listener, "append");
     return this;
   };
   LegacyEventEmitter.prototype.on = addListener;
   LegacyEventEmitter.prototype.addListener = addListener;
+  LegacyEventEmitter.prototype.prependListener = function prependListener(eventName: string | symbol, listener: Listener) {
+    return addListenerWithPlacement(this, eventName, listener, "prepend");
+  };
   LegacyEventEmitter.prototype.once = function once(eventName: string | symbol, listener: Listener) {
     const onceListener: Listener & { listener?: Listener } = (...args) => {
       this.removeListener(eventName, onceListener);
@@ -149,6 +179,14 @@ function createLegacyEventEmitterConstructor(): typeof EventEmitter {
     };
     onceListener.listener = listener;
     return this.addListener(eventName, onceListener);
+  };
+  LegacyEventEmitter.prototype.prependOnceListener = function prependOnceListener(eventName: string | symbol, listener: Listener) {
+    const onceListener: Listener & { listener?: Listener } = (...args) => {
+      this.removeListener(eventName, onceListener);
+      listener.apply(this, args);
+    };
+    onceListener.listener = listener;
+    return this.prependListener(eventName, onceListener);
   };
   LegacyEventEmitter.prototype.emit = function emit(eventName: string | symbol, ...args: unknown[]) {
     const listeners = [...getListeners(this, eventName)];

@@ -127,6 +127,7 @@ const processModule = requireBuiltin("process");
 assert.equal(processModule.version, "v22.23.0");
 assert.equal(processModule.execPath, "/usr/local/bin/node");
 assert.equal(processModule.cwd(), "/workspace");
+assert.deepEqual(processModule.execArgv, []);
 let stdoutFlushed = false;
 assert.equal(processModule.stdout.write("", () => { stdoutFlushed = true; }), true);
 assert.equal(stdoutFlushed, true);
@@ -150,6 +151,21 @@ assert.throws(() => new BrowserProcess().exit(3), /process\.exit\(3\)/);
 const capturedProcess = new BrowserProcess({ exitMode: "capture" });
 assert.equal(capturedProcess.exit(4), undefined);
 assert.equal(capturedProcess.exitCode, 4);
+
+const events = requireBuiltin("node:events");
+const emitter = new events.EventEmitter();
+const listenerOrder = [];
+const newListenerEvents = [];
+emitter.on("newListener", (eventName) => {
+  newListenerEvents.push(eventName);
+});
+emitter.on("ready", () => listenerOrder.push("on"));
+emitter.prependListener("ready", () => listenerOrder.push("prepend"));
+emitter.prependOnceListener("ready", () => listenerOrder.push("prepend-once"));
+assert.deepEqual(newListenerEvents, ["ready", "ready", "ready"]);
+emitter.emit("ready");
+emitter.emit("ready");
+assert.deepEqual(listenerOrder, ["prepend-once", "prepend", "on", "prepend", "on"]);
 
 const constants = requireBuiltin("node:constants");
 assert.equal(constants.EEXIST, 17);
@@ -510,6 +526,7 @@ const result = runUnsafeCommonJsForLocalTests(`
   assert.equal(new StringDecoder().end(Buffer.from("ok")), "ok");
   assert.equal(typeof v8.getHeapStatistics().heap_size_limit, "number");
   assert.equal(typeof process.pid, "number");
+  assert.deepEqual(process.execArgv, []);
   assert.equal(process.report.excludeNetwork, false);
   process.report.excludeNetwork = true;
   assert.equal(process.report.getReport().header.platform, "linux");

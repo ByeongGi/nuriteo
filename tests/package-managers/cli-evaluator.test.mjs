@@ -340,9 +340,9 @@ const workspace = new MemoryPackageManagerWorkspace([
         const worker = new Worker('/workspace/worker-cli/package/lib/worker.cjs', {
           workerData: { label: 'wasi' }
         });
-        worker.on('message', (value) => {
-          process.stdout.write(value + '\\n');
-        });
+        worker.onmessage = ({ data }) => {
+          process.stdout.write(data + '\\n');
+        };
         worker.on('error', (error) => {
           process.stderr.write(error.message + '\\n');
         });
@@ -357,7 +357,8 @@ const workspace = new MemoryPackageManagerWorkspace([
         isMainThread,
         workerData.label,
         globalThis.process === process,
-        typeof globalThis.WebAssembly
+        typeof globalThis.WebAssembly,
+        Array.isArray(process.execArgv)
       ].join(':'));
     `
   },
@@ -600,7 +601,7 @@ const workerResult = await createAsyncCliModuleEvaluator({
   args: [],
   cwd: "/workspace/project"
 });
-assert.equal(workerResult.stdout, "false:wasi:true:object\n");
+assert.equal(workerResult.stdout, "false:wasi:true:object:true\n");
 assert.equal(workerResult.stderr, "");
 assert.equal(workerResult.exitCode, 0);
 
