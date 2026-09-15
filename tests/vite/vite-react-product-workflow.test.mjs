@@ -444,6 +444,7 @@ assert.deepEqual(missingDependencyWorkflow.inspectRealCliReadiness().dependencyM
   },
   missing: [
     {
+      artifactNames: ["rolldown", "@rolldown/binding-wasm32-wasi"],
       kind: "wasm-adapter-candidate",
       name: "rolldown",
       nextAction: "Materialize the JavaScript package surface and route native binding requests through an integrity-pinned WASM adapter.",
@@ -564,6 +565,14 @@ const batchDependencyWorkspace = new MemoryPackageManagerWorkspace([
     data: mount.data
   })),
   {
+    path: "/workspace/project/node_modules/@rolldown/binding-wasm32-wasi/package.json",
+    data: JSON.stringify({ name: "@rolldown/binding-wasm32-wasi", version: "1.2.1-wasm", type: "module" })
+  },
+  {
+    path: "/workspace/project/node_modules/@rolldown/binding-wasm32-wasi/index.mjs",
+    data: "export const binding = 'wasm';\n"
+  },
+  {
     path: "/workspace/project/node_modules/@scope/pkg/package.json",
     data: JSON.stringify({ name: "@scope/pkg", version: "3.4.5", type: "module" })
   },
@@ -587,7 +596,8 @@ const planDependencyArtifacts = createViteDependencyArtifactsFromPlan({
   plan: missingDependencyWorkflow.inspectRealCliReadiness().dependencyMaterializationPlan
 });
 assert.deepEqual(planDependencyArtifacts.map((artifact) => [artifact.name, artifact.version]), [
-  ["rolldown", "1.2.1-installed"]
+  ["rolldown", "1.2.1-installed"],
+  ["@rolldown/binding-wasm32-wasi", "1.2.1-wasm"]
 ]);
 const installedDependencyWorkflow = new ViteProductWorkflow({
   manager: "pnpm",

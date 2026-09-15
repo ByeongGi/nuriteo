@@ -279,6 +279,7 @@ export interface ViteDependencyMaterializationSummary {
 }
 
 export interface ViteDependencyMaterializationItem {
+  artifactNames: string[];
   kind: ViteDependencyMaterializationKind;
   name: string;
   nextAction: string;
@@ -963,7 +964,7 @@ export function createViteDependencyArtifactsFromPlan(
   options: ViteProductDependencyArtifactsFromPlanOptions
 ): ViteProductDependencyArtifact[] {
   return createViteDependencyArtifactsFromWorkspace({
-    names: options.plan.missing.map((item) => item.name),
+    names: options.plan.missing.flatMap((item) => item.artifactNames),
     nodeModulesRoot: options.nodeModulesRoot,
     reader: options.reader
   });
@@ -998,7 +999,7 @@ export function createViteDependencyArtifactClosureFromWorkspace(
   for (let iteration = 0; iteration < maxIterations; iteration += 1) {
     const extractableNames = remainingPlan.missing
       .filter((item) => item.kind !== "native-hold")
-      .map((item) => item.name)
+      .flatMap((item) => item.artifactNames)
       .filter((name) => !artifacts.some((artifact) => artifact.name === name))
       .filter((name) => readerExists(options.reader, join(nodeModulesRoot, name, "package.json")));
     if (extractableNames.length === 0) break;
@@ -1149,6 +1150,7 @@ function createDependencyMaterializationPlan(
   }
   const missing = [...missingSpecifiersByPackage.entries()]
     .map(([name, specifiers]) => ({
+      artifactNames: artifactNamesForDependency(name, wasmAdapterPolicy),
       kind: classifyDependencyMaterialization(name, wasmAdapterPolicy),
       name,
       nextAction: nextActionForDependencyMaterialization(name, wasmAdapterPolicy),
@@ -1227,6 +1229,12 @@ function wasmReplacementForDependency(
       wasmPackage: resolved.wasmPackage
     }
   };
+}
+
+function artifactNamesForDependency(name: string, wasmAdapterPolicy: WasmAdapterPolicy | null): string[] {
+  const resolved = resolveWasmDependency(name, wasmAdapterPolicy);
+  if (resolved?.action !== "use-wasm") return [name];
+  return uniquePackageNames([name, resolved.wasmPackage]);
 }
 
 function resolveWasmDependency(name: string, wasmAdapterPolicy: WasmAdapterPolicy | null): WasmAdapterPolicyAction | null {
