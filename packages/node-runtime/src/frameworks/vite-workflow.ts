@@ -47,6 +47,12 @@ export interface ViteProductDependencyArtifactFromWorkspaceOptions {
   version?: string;
 }
 
+export interface ViteProductDependencyArtifactsFromWorkspaceOptions {
+  names: string[];
+  nodeModulesRoot: string;
+  reader: WorkspaceModuleReader;
+}
+
 export type ViteProductPackageArtifactErrorCode = "EVITEARTIFACTMANIFEST" | "EVITEARTIFACTNAME" | "EVITEARTIFACTBIN";
 
 export class ViteProductPackageArtifactError extends Error {
@@ -871,6 +877,17 @@ export function createViteDependencyArtifactFromWorkspace(options: ViteProductDe
     mounts: collectTextMounts(options.reader, packageRoot),
     version: options.version || packageJson.version || "unknown"
   };
+}
+
+export function createViteDependencyArtifactsFromWorkspace(
+  options: ViteProductDependencyArtifactsFromWorkspaceOptions
+): ViteProductDependencyArtifact[] {
+  const nodeModulesRoot = normalizeServedPath(options.nodeModulesRoot).replace(/\/$/, "");
+  return uniquePackageNames(options.names).map((name) => createViteDependencyArtifactFromWorkspace({
+    name,
+    packageRoot: join(nodeModulesRoot, name),
+    reader: options.reader
+  }));
 }
 
 export function runViteReactProductWorkflow(options: ViteProductWorkflowOptions): ViteProductWorkflowResult {

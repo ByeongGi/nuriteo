@@ -7,6 +7,7 @@ import {
   createNpmInstallPlan,
   createPnpmStorePlan,
   createViteDependencyArtifactFromWorkspace,
+  createViteDependencyArtifactsFromWorkspace,
   createVitePackageArtifactFromWorkspace,
   MemoryPackageManagerWorkspace,
   runViteProductCliBackedWorkflow,
@@ -458,6 +459,29 @@ assert.equal(installedDependencyArtifact.version, "1.2.1-installed");
 assert.deepEqual(installedDependencyArtifact.mounts.map((mount) => mount.path), [
   "package.json",
   "parseAst.mjs"
+]);
+const batchDependencyWorkspace = new MemoryPackageManagerWorkspace([
+  ...installedDependencyArtifact.mounts.map((mount) => ({
+    path: `/workspace/project/node_modules/rolldown/${mount.path}`,
+    data: mount.data
+  })),
+  {
+    path: "/workspace/project/node_modules/@scope/pkg/package.json",
+    data: JSON.stringify({ name: "@scope/pkg", version: "3.4.5", type: "module" })
+  },
+  {
+    path: "/workspace/project/node_modules/@scope/pkg/index.mjs",
+    data: "export const ok = true;\n"
+  }
+]);
+const batchDependencyArtifacts = createViteDependencyArtifactsFromWorkspace({
+  reader: batchDependencyWorkspace,
+  nodeModulesRoot: "/workspace/project/node_modules",
+  names: ["rolldown", "rolldown", "@scope/pkg"]
+});
+assert.deepEqual(batchDependencyArtifacts.map((artifact) => [artifact.name, artifact.version]), [
+  ["rolldown", "1.2.1-installed"],
+  ["@scope/pkg", "3.4.5"]
 ]);
 const installedDependencyWorkflow = new ViteProductWorkflow({
   manager: "pnpm",
