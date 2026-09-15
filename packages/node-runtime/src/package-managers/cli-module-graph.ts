@@ -44,6 +44,14 @@ export interface CliModuleGraph {
   supported: boolean;
 }
 
+type GraphPackageExports = GraphPackageExportTarget | Record<string, GraphPackageExportTarget | undefined>;
+type GraphPackageExportTarget = string | GraphPackageExportTarget[] | { [condition: string]: GraphPackageExportTarget | undefined };
+
+interface GraphPackageManifest {
+  main?: string;
+  exports?: GraphPackageExports;
+}
+
 const defaultBuiltins = new Set([
   "assert",
   "assert/strict",
@@ -142,7 +150,11 @@ export function analyzeCliModuleGraph(options: CliModuleGraphOptions): CliModule
     const requires = extractStaticRequires(source, { filename: current });
     const imports = extractStaticEsmSpecifiers(source);
     modules.push({ path: current, requires, imports });
-    for (const specifier of [...requires, ...imports]) {
+    const dependencies = [
+      ...requires.map((specifier) => ({ specifier, conditions: ["require", "node", "default", "import"] })),
+      ...imports.map((specifier) => ({ specifier, conditions: ["import", "node", "default", "require"] }))
+    ];
+    for (const { specifier, conditions } of dependencies) {
       if (isBuiltin(specifier, builtins)) continue;
       if (specifier === dynamicRequireSpecifier || specifier.includes("${") || specifier.includes("+")) {
         const resolvedCandidates = resolveDynamicRequireCandidates(specifier, current, options.reader);
@@ -162,7 +174,7 @@ export function analyzeCliModuleGraph(options: CliModuleGraphOptions): CliModule
         issues.push({ specifier, importer: current, kind: "unsupported-builtin" });
         continue;
       }
-      const resolved = resolveRequire(specifier, current, options.packageRoot, options.reader);
+      const resolved = resolveModuleSpecifier(specifier, current, options.packageRoot, options.reader, conditions);
       if (resolved) queue.push(resolved);
       else issues.push({ specifier, importer: current, kind: "missing-module" });
     }
@@ -272,37 +284,98 @@ function isKnownNodeBuiltin(specifier: string): boolean {
   return knownNodeBuiltins.has(normalized);
 }
 
-function resolveRequire(specifier: string, importer: string, packageRoot: string, reader: CliModuleGraphReader): string | null {
+function resolveModuleSpecifier(specifier: string, importer: string, packageRoot: string, reader: CliModuleGraphReader, conditions: readonly string[]): string | null {
   if (specifier === "." || specifier === ".." || specifier.startsWith("./") || specifier.startsWith("../") || specifier.startsWith("/")) {
     const base = specifier.startsWith("/") ? specifier : join(dirname(importer), specifier);
     return resolveFileOrDirectory(base, reader);
   }
-  return resolvePackage(specifier, importer, packageRoot, reader);
+  return resolvePackage(specifier, importer, packageRoot, reader, conditions);
 }
 
-function resolvePackage(specifier: string, importer: string, packageRoot: string, reader: CliModuleGraphReader): string | null {
+function resolvePackage(specifier: string, importer: string, packageRoot: string, reader: CliModuleGraphReader, conditions: readonly string[]): string | null {
   const [name, subpath] = splitPackageSpecifier(specifier);
   let current = dirname(importer);
   while (current.startsWith(packageRoot)) {
     const root = join(current, "node_modules", name);
-    const resolved = subpath ? resolveFileOrDirectory(join(root, subpath), reader) : resolvePackageRoot(root, reader);
+    const resolved = resolvePackageTarget(root, subpath ? `./${subpath}` : ".", reader, conditions);
     if (resolved) return resolved;
     const next = dirname(current);
     if (next === current) break;
     current = next;
   }
-  return resolvePackageRoot(join(packageRoot, "node_modules", name), reader);
+  return resolvePackageTarget(join(packageRoot, "node_modules", name), subpath ? `./${subpath}` : ".", reader, conditions);
 }
 
-function resolvePackageRoot(root: string, reader: CliModuleGraphReader): string | null {
+function resolvePackageTarget(root: string, subpath: string, reader: CliModuleGraphReader, conditions: readonly string[]): string | null {
   const manifestPath = join(root, "package.json");
   if (reader.exists(manifestPath)) {
-    const manifest = JSON.parse(reader.readText(manifestPath)) as { main?: string; exports?: string | Record<string, string> };
-    const main = typeof manifest.exports === "string" ? manifest.exports : manifest.main || "index.js";
-    const resolved = resolveFileOrDirectory(join(root, main), reader);
+    const manifest = JSON.parse(reader.readText(manifestPath)) as GraphPackageManifest;
+    if (manifest.exports) {
+      const target = resolvePackageExportTarget(manifest.exports, subpath, conditions);
+      if (!target) return null;
+      return resolveFileOrDirectory(join(root, target), reader);
+    }
+    if (subpath === ".") {
+      const resolved = resolveFileOrDirectory(join(root, manifest.main || "index.js"), reader);
+      if (resolved) return resolved;
+    }
+  }
+  if (subpath !== ".") return resolveFileOrDirectory(join(root, subpath.slice(2)), reader);
+  return resolveFileOrDirectory(join(root, "index"), reader);
+}
+
+function resolvePackageExportTarget(exportsMap: GraphPackageExports, subpath: string, conditions: readonly string[]): string | null {
+  const target = selectPackageExportTarget(exportsMap, subpath);
+  const resolved = target === undefined ? undefined : resolveConditionalExportTarget(target, conditions);
+  return typeof resolved === "string" ? resolved : null;
+}
+
+function selectPackageExportTarget(exportsMap: GraphPackageExports, subpath: string): GraphPackageExportTarget | undefined {
+  if (typeof exportsMap === "string" || Array.isArray(exportsMap)) return subpath === "." ? exportsMap : undefined;
+  if (isConditionalExportMap(exportsMap)) return subpath === "." ? exportsMap : undefined;
+  const exact = exportsMap[subpath];
+  if (exact) return exact;
+  for (const [pattern, target] of Object.entries(exportsMap)) {
+    if (!target) continue;
+    const star = pattern.indexOf("*");
+    if (star < 0) continue;
+    const prefix = pattern.slice(0, star);
+    const suffix = pattern.slice(star + 1);
+    if (!subpath.startsWith(prefix) || !subpath.endsWith(suffix)) continue;
+    const matched = subpath.slice(prefix.length, subpath.length - suffix.length);
+    return replaceExportPatternTarget(target, matched);
+  }
+  return undefined;
+}
+
+function resolveConditionalExportTarget(target: GraphPackageExportTarget, conditions: readonly string[]): GraphPackageExportTarget | undefined {
+  if (typeof target === "string") return target;
+  if (Array.isArray(target)) {
+    for (const item of target) {
+      const resolved = resolveConditionalExportTarget(item, conditions);
+      if (resolved) return resolved;
+    }
+    return undefined;
+  }
+  for (const condition of conditions) {
+    const resolved = target[condition] ? resolveConditionalExportTarget(target[condition], conditions) : undefined;
     if (resolved) return resolved;
   }
-  return resolveFileOrDirectory(join(root, "index"), reader);
+  return undefined;
+}
+
+function replaceExportPatternTarget(target: GraphPackageExportTarget, matched: string): GraphPackageExportTarget {
+  if (typeof target === "string") return target.replaceAll("*", matched);
+  if (Array.isArray(target)) return target.map((item) => replaceExportPatternTarget(item, matched));
+  const replaced: Record<string, GraphPackageExportTarget> = {};
+  for (const [condition, value] of Object.entries(target)) {
+    if (value !== undefined) replaced[condition] = replaceExportPatternTarget(value, matched);
+  }
+  return replaced;
+}
+
+function isConditionalExportMap(exportsMap: Record<string, GraphPackageExportTarget | undefined>): boolean {
+  return Object.keys(exportsMap).some((key) => !key.startsWith("."));
 }
 
 function resolveFileOrDirectory(base: string, reader: CliModuleGraphReader): string | null {
