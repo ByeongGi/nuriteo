@@ -49,7 +49,10 @@ export interface ViteProductInstallResult {
   installed: boolean;
   lockfile: string;
   packages: string[];
+  vitePackageSource: ViteProductPackageSource;
 }
+
+export type ViteProductPackageSource = "stub" | "mounted-artifact";
 
 export interface ViteProductCliExecutionResult extends CliRunResult {
   args: string[];
@@ -156,6 +159,7 @@ export interface ViteRealCliReadiness {
   cliModuleGraph: CliModuleGraph;
   missingCapabilities: ViteRuntimeCapability[];
   nextAction: string;
+  vitePackageSource: ViteProductPackageSource;
 }
 
 export interface ViteRuntimeCapabilityStatus {
@@ -267,7 +271,7 @@ export class ViteProductWorkflow {
     this.#installVitePackage();
     const lockfile = this.manager === "npm" ? "package-lock.json" : "pnpm-lock.yaml";
     this.workspace.writeText(join(this.projectRoot, lockfile), createLockfile(this.manager, packages));
-    return { installed: true, lockfile, packages };
+    return { installed: true, lockfile, packages, vitePackageSource: this.#vitePackageSource() };
   }
 
   inspectRealCliReadiness(): ViteRealCliReadiness {
@@ -300,7 +304,8 @@ export class ViteProductWorkflow {
       cliEntryReadiness,
       cliModuleGraph,
       missingCapabilities,
-      nextAction: "Replace the adapter-backed Vite workflow with vendored Vite CLI/module execution once the listed runtime capabilities are implemented."
+      nextAction: "Replace the adapter-backed Vite workflow with vendored Vite CLI/module execution once the listed runtime capabilities are implemented.",
+      vitePackageSource: this.#vitePackageSource()
     };
   }
 
@@ -621,6 +626,10 @@ export class ViteProductWorkflow {
     const manifest = JSON.parse(this.workspace.readText(join(this.projectRoot, "node_modules/vite/package.json"))) as { bin?: string | Record<string, string> };
     if (typeof manifest.bin === "string") return manifest.bin;
     return manifest.bin?.vite || "bin/vite.js";
+  }
+
+  #vitePackageSource(): ViteProductPackageSource {
+    return this.vitePackageArtifact ? "mounted-artifact" : "stub";
   }
 
   #resolveCommandEntrypoint(command: string): string {
