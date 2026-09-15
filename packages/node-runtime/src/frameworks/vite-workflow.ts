@@ -153,6 +153,11 @@ export interface ViteProductHmrResult {
   statePreserved: boolean;
 }
 
+export interface ViteProductSourceEditResult extends ViteProductHmrResult {
+  path: string;
+  update: ViteProductHmrUpdate;
+}
+
 export interface ViteProductBuildResult {
   files: string[];
   distSmoke: string;
@@ -472,15 +477,22 @@ export class ViteProductWorkflow {
   }
 
   editMessage(label: string): ViteProductHmrResult {
+    return this.applySourceEdit("src/message.js", `export const label = "${label}";\n`);
+  }
+
+  applySourceEdit(path: string, data: string): ViteProductSourceEditResult {
+    const requestPath = normalizeServedPath(path);
     const before = this.preview("/").body;
-    this.workspace.writeText(join(this.projectRoot, "src/message.js"), `export const label = "${label}";\n`);
+    this.workspace.writeText(join(this.projectRoot, requestPath), data);
     const after = this.preview("/").body;
-    const update = createViteHmrUpdate("/src/message.js", label);
+    const update = createViteHmrUpdate(requestPath, hmrLabelForSource(requestPath, data));
     this.#hmrUpdates.push(update);
     this.#broadcastHmr(update);
     return {
       before,
       after,
+      path: requestPath,
+      update,
       statePreserved: before.includes(`:${this.#state.count}`) && after.includes(`:${this.#state.count}`)
     };
   }
@@ -732,6 +744,7 @@ export type ViteReactDevServerSnapshot = ViteProductDevServerSnapshot;
 export type ViteReactHmrUpdate = ViteProductHmrUpdate;
 export type ViteReactPreviewResult = ViteProductPreviewResult;
 export type ViteReactHmrResult = ViteProductHmrResult;
+export type ViteReactSourceEditResult = ViteProductSourceEditResult;
 export type ViteReactBuildResult = ViteProductBuildResult;
 export type ViteReactReloadRecoveryResult = ViteProductReloadRecoveryResult;
 
@@ -967,6 +980,18 @@ function contentTypeForPath(path: string): string {
 function transformViteModuleSource(path: string, source: string): string {
   if (!/\.(?:[cm]?jsx?|tsx?)$/.test(path)) return source;
   return `// transformed by vite-cli\n${source}`;
+}
+
+function normalizeServedPath(path: string): string {
+  const normalized = path.replaceAll("\\", "/").replace(/\/+/g, "/");
+  return normalized.startsWith("/") ? normalized : `/${normalized}`;
+}
+
+function hmrLabelForSource(path: string, source: string): string {
+  const label = source.match(/label\s*=\s*"([^"]+)"/)?.[1];
+  if (label) return label;
+  const segments = path.split("/").filter(Boolean);
+  return segments.at(-1) || path;
 }
 
 function assertViteDevCommand(command: string): void {

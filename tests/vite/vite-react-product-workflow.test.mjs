@@ -220,8 +220,20 @@ for (const manager of ["npm", "pnpm"]) {
   assert.equal(update.updates[0].path, "/src/message.js");
   assert.equal(update.updates[0].acceptedPath, "/src/message.js");
   assert.equal(update.updates[0].label, "gamma");
+  const genericEdit = workflow.applySourceEdit("src/message.js", "export const label = \"delta\";\n");
+  assert.equal(genericEdit.path, "/src/message.js");
+  assert.equal(genericEdit.update.updates[0].path, "/src/message.js");
+  assert.equal(genericEdit.update.updates[0].acceptedPath, "/src/message.js");
+  assert.equal(genericEdit.update.updates[0].label, "delta");
+  assert.equal(genericEdit.statePreserved, true);
+  const genericEditedMessageModule = await workflow.fetch("http://127.0.0.1:5173/src/message.js");
+  assert.match(await genericEditedMessageModule.text(), /delta/);
+  const styleEdit = workflow.applySourceEdit("/src/style.css", "body { color: red; }\n");
+  assert.equal(styleEdit.update.updates[0].type, "css-update");
+  assert.equal(styleEdit.update.updates[0].path, "/src/style.css");
+  assert.equal(styleEdit.update.updates[0].label, "style.css");
   hmr.close();
-  assert.deepEqual(hmrEvents, ["open:1", "message:connected", "message:update"]);
+  assert.deepEqual(hmrEvents, ["open:1", "message:connected", "message:update", "message:update", "message:update"]);
 }
 }
 
