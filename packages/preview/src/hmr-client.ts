@@ -39,7 +39,16 @@ export class HmrClient {
 
   #open(): void {
     this.socket = this.connect();
-    this.socket.onmessage = (event) => this.#emit("message", JSON.parse(event.data));
+    this.socket.onmessage = (event) => {
+      try {
+        this.#emit("message", JSON.parse(event.data));
+      } catch (error) {
+        this.#emit("error", {
+          code: "EBADMESSAGE",
+          message: error instanceof Error ? error.message : "invalid HMR message"
+        });
+      }
+    };
     this.socket.onclose = () => {
       this.#emit("close", {});
       if (!this.closed && this.retryCount < this.maxRetries) {

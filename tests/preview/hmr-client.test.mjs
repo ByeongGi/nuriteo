@@ -23,9 +23,11 @@ const hmr = createHmrClient({
 hmr.on("open", (event) => events.push(`open:${event.attempt}`));
 hmr.on("close", () => events.push("close"));
 hmr.on("message", (event) => events.push(`message:${event.type}`));
+hmr.on("error", (event) => events.push(`error:${event.code}`));
 
 hmr.start();
 sockets[0].sendMessage({ type: "connected" });
+sockets[0].onmessage({ data: "{" });
 sockets[0].close();
 await new Promise((resolve) => setTimeout(resolve, 0));
 sockets[1].sendMessage({ type: "update" });
@@ -37,6 +39,7 @@ await new Promise((resolve) => setTimeout(resolve, 0));
 assert.deepEqual(events, [
   "open:1",
   "message:connected",
+  "error:EBADMESSAGE",
   "close",
   "open:2",
   "message:update",
@@ -47,4 +50,3 @@ assert.deepEqual(events, [
 hmr.close();
 
 console.log("preview hmr client test ok");
-

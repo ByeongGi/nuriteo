@@ -49,6 +49,11 @@ export type PreviewErrorCode = "EBADMESSAGE" | "ENOCLIENT" | "ENOSERVER" | "ESTA
 export type HmrEventType = "open" | "message" | "close" | (string & {});
 export type HmrListener<T = unknown> = (payload: T) => void;
 
+export interface HmrClientError {
+  code: "EBADMESSAGE" | (string & {});
+  message: string;
+}
+
 export interface HmrSocket {
   onmessage?: (event: { data: string }) => void;
   onclose?: () => void;
