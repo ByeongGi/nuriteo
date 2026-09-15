@@ -375,7 +375,7 @@ function createWorkspaceFsFacade(reader: WorkspaceModuleReader, writer?: Package
         statFromReader(reader, path);
       }, callback);
     },
-    chmodSync(path: string): void {
+    chmodSync(path: string, _mode?: number): void {
       statFromReader(reader, path);
     },
     chown(path: string, _uid: number, _gid: number, callback: (error?: Error | null) => void = () => undefined): void {
@@ -383,7 +383,7 @@ function createWorkspaceFsFacade(reader: WorkspaceModuleReader, writer?: Package
         statFromReader(reader, path);
       }, callback);
     },
-    chownSync(path: string): void {
+    chownSync(path: string, _uid?: number, _gid?: number): void {
       statFromReader(reader, path);
     },
     copyFile(source: string, target: string, flagsOrCallback?: number | ((error?: Error | null) => void), callback?: (error?: Error | null) => void): void {
@@ -450,6 +450,22 @@ function createWorkspaceFsFacade(reader: WorkspaceModuleReader, writer?: Package
     futimesSync(fd: number): void {
       assertOpenFile(fd);
     },
+    fchmod(fd: number, _mode: number, callback: (error?: Error | null) => void = () => undefined): void {
+      callWithOptionalFsCallback(() => {
+        assertOpenFile(fd);
+      }, callback);
+    },
+    fchmodSync(fd: number, _mode?: number): void {
+      assertOpenFile(fd);
+    },
+    fchown(fd: number, _uid: number, _gid: number, callback: (error?: Error | null) => void = () => undefined): void {
+      callWithOptionalFsCallback(() => {
+        assertOpenFile(fd);
+      }, callback);
+    },
+    fchownSync(fd: number, _uid?: number, _gid?: number): void {
+      assertOpenFile(fd);
+    },
     fsync(fd: number, callback: (error?: Error | null) => void = () => undefined): void {
       callWithOptionalFsCallback(() => {
         assertOpenFile(fd);
@@ -500,17 +516,41 @@ function createWorkspaceFsFacade(reader: WorkspaceModuleReader, writer?: Package
       return fd;
     },
     promises: {
+      async chmod(path: string, mode: number): Promise<void> {
+        facade.chmodSync(path, mode);
+      },
+      async chown(path: string, uid: number, gid: number): Promise<void> {
+        facade.chownSync(path, uid, gid);
+      },
       async mkdir(path: string): Promise<void> {
         facade.mkdirSync(path);
       },
       async copyFile(source: string, target: string): Promise<void> {
         facade.copyFileSync(source, target);
       },
+      async fchmod(fd: number, mode: number): Promise<void> {
+        facade.fchmodSync(fd, mode);
+      },
+      async fchown(fd: number, uid: number, gid: number): Promise<void> {
+        facade.fchownSync(fd, uid, gid);
+      },
+      async fsync(fd: number): Promise<void> {
+        facade.fsyncSync(fd);
+      },
       async link(source: string, target: string): Promise<void> {
         facade.linkSync(source, target);
       },
+      async lchmod(path: string, mode: number): Promise<void> {
+        facade.chmodSync(path, mode);
+      },
+      async lchown(path: string, uid: number, gid: number): Promise<void> {
+        facade.chownSync(path, uid, gid);
+      },
       async lstat(path: string, options?: CliStatOptions): Promise<ReturnType<RuntimeFsBinding["statSync"]> | undefined> {
         return facade.lstatSync(path, options);
+      },
+      async open(path: string, flags: string | number = "r"): Promise<CliFileHandle> {
+        return createFileHandle(facade.openSync(path, flags), facade);
       },
       async readFile(path: string, encoding?: "utf8" | "utf-8"): Promise<Uint8Array | string> {
         return encoding ? readFileSync(path, encoding) : readFileSync(path);
@@ -755,6 +795,39 @@ function createWorkspaceFsFacade(reader: WorkspaceModuleReader, writer?: Package
   }
 }
 
+function createFileHandle(fh: number, fs: CliFileHandleFs): CliFileHandle {
+  return {
+    fd: fh,
+    async chmod(mode: number): Promise<void> {
+      fs.fchmodSync(fh, mode);
+    },
+    async chown(uid: number, gid: number): Promise<void> {
+      fs.fchownSync(fh, uid, gid);
+    },
+    async close(): Promise<void> {
+      fs.closeSync(fh);
+    },
+    async read(
+      buffer: Uint8Array,
+      offset = 0,
+      length = buffer.byteLength - offset,
+      position: number | null = 0
+    ): Promise<{ bytesRead: number; buffer: Uint8Array }> {
+      const start = position ?? 0;
+      const bytes = fs.readSync(fh).slice(start, start + length);
+      buffer.set(bytes, offset);
+      return { bytesRead: bytes.byteLength, buffer };
+    },
+    async sync(): Promise<void> {
+      fs.fsyncSync(fh);
+    },
+    async write(data: RuntimeFsData): Promise<{ bytesWritten: number; buffer: RuntimeFsData }> {
+      const bytesWritten = fs.writeSync(fh, data);
+      return { bytesWritten, buffer: data };
+    }
+  };
+}
+
 function callWithFsCallback<T>(read: () => T, callback: (error: Error | null, value?: T) => void): void {
   try {
     callback(null, read());
@@ -792,6 +865,30 @@ interface CliWriteOptions {
   length?: number;
   offset?: number;
   position?: number;
+}
+
+interface CliFileHandle {
+  fd: number;
+  chmod(mode: number): Promise<void>;
+  chown(uid: number, gid: number): Promise<void>;
+  close(): Promise<void>;
+  read(
+    buffer: Uint8Array,
+    offset?: number,
+    length?: number,
+    position?: number | null
+  ): Promise<{ bytesRead: number; buffer: Uint8Array }>;
+  sync(): Promise<void>;
+  write(data: RuntimeFsData): Promise<{ bytesWritten: number; buffer: RuntimeFsData }>;
+}
+
+interface CliFileHandleFs {
+  closeSync(fd: number): void;
+  fchmodSync(fd: number, mode: number): void;
+  fchownSync(fd: number, uid: number, gid: number): void;
+  fsyncSync(fd: number): void;
+  readSync(fd: number): Uint8Array;
+  writeSync(fd: number, data: RuntimeFsData): number;
 }
 
 interface CliRmOptions {

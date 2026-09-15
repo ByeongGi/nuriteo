@@ -120,6 +120,13 @@ export interface RuntimeFsBinding {
   readFileSync(path: string): Uint8Array;
   readFileSync(path: string, encoding: "utf8" | "utf-8"): string;
   mkdirSync(path: string): void;
+  chmodSync?(path: string, mode: number | string): void;
+  chownSync?(path: string, uid: number, gid: number): void;
+  fchmodSync?(fd: number, mode: number | string): void;
+  fchownSync?(fd: number, uid: number, gid: number): void;
+  fsyncSync?(fd: number): void;
+  lchmodSync?(path: string, mode: number | string): void;
+  lchownSync?(path: string, uid: number, gid: number): void;
   statSync(path: string): {
     ino?: number;
     mode?: number;

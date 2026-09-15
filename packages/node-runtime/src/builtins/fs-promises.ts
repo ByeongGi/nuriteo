@@ -1,10 +1,18 @@
 import type { RuntimeFsBinding, RuntimeFsData } from "../types.ts";
 
 export interface FsPromisesBuiltin {
+  chmod(path: string, mode: number | string): Promise<void>;
+  chown(path: string, uid: number, gid: number): Promise<void>;
   copyFile(source: string, target: string): Promise<void>;
+  fchmod(fd: number, mode: number | string): Promise<void>;
+  fchown(fd: number, uid: number, gid: number): Promise<void>;
+  fsync(fd: number): Promise<void>;
   link(source: string, target: string): Promise<void>;
+  lchmod(path: string, mode: number | string): Promise<void>;
+  lchown(path: string, uid: number, gid: number): Promise<void>;
   mkdir(path: string, options?: { recursive?: boolean }): Promise<void>;
   lstat(path: string): Promise<ReturnType<RuntimeFsBinding["statSync"]>>;
+  open(path: string, flags?: string | number): Promise<FsPromisesFileHandle>;
   readFile(path: string, options?: "utf8" | "utf-8" | { encoding?: "utf8" | "utf-8" | null }): Promise<string | Uint8Array>;
   readlink(path: string): Promise<string>;
   readdir(path: string, options?: { withFileTypes?: boolean }): Promise<unknown[]>;
@@ -20,12 +28,32 @@ export interface FsPromisesBuiltin {
 
 export function createFsPromisesBuiltin(fs: RuntimeFsBinding): FsPromisesBuiltin {
   return Object.freeze({
+    async chmod(path: string, mode: number | string): Promise<void> {
+      callMetadataSync(fs, "chmodSync", [path, mode], () => fs.statSync(path));
+    },
+
+    async chown(path: string, uid: number, gid: number): Promise<void> {
+      callMetadataSync(fs, "chownSync", [path, uid, gid], () => fs.statSync(path));
+    },
+
     async copyFile(source: string, target: string): Promise<void> {
       const maybeCopyFileSync = (fs as RuntimeFsBinding & {
         copyFileSync?: (source: string, target: string) => void;
       }).copyFileSync;
       if (!maybeCopyFileSync) throw new Error("fs.copyFile is not supported by this binding");
       maybeCopyFileSync(source, target);
+    },
+
+    async fchmod(fd: number, mode: number | string): Promise<void> {
+      callMetadataSync(fs, "fchmodSync", [fd, mode], () => fs.readSync(fd, 0));
+    },
+
+    async fchown(fd: number, uid: number, gid: number): Promise<void> {
+      callMetadataSync(fs, "fchownSync", [fd, uid, gid], () => fs.readSync(fd, 0));
+    },
+
+    async fsync(fd: number): Promise<void> {
+      callMetadataSync(fs, "fsyncSync", [fd], () => fs.readSync(fd, 0));
     },
 
     async link(source: string, target: string): Promise<void> {
@@ -36,12 +64,24 @@ export function createFsPromisesBuiltin(fs: RuntimeFsBinding): FsPromisesBuiltin
       maybeLinkSync(source, target);
     },
 
+    async lchmod(path: string, mode: number | string): Promise<void> {
+      callMetadataSync(fs, "lchmodSync", [path, mode], () => fs.lstatSync ? fs.lstatSync(path) : fs.statSync(path));
+    },
+
+    async lchown(path: string, uid: number, gid: number): Promise<void> {
+      callMetadataSync(fs, "lchownSync", [path, uid, gid], () => fs.lstatSync ? fs.lstatSync(path) : fs.statSync(path));
+    },
+
     async mkdir(path: string, _options?: { recursive?: boolean }): Promise<void> {
       fs.mkdirSync(path);
     },
 
     async lstat(path: string): Promise<ReturnType<RuntimeFsBinding["statSync"]>> {
       return fs.lstatSync ? fs.lstatSync(path) : fs.statSync(path);
+    },
+
+    async open(path: string, flags: string | number = "r"): Promise<FsPromisesFileHandle> {
+      return createFsPromisesFileHandle(fs.openSync(path, flags), fs);
     },
 
     async readFile(
@@ -117,6 +157,37 @@ export function createFsPromisesBuiltin(fs: RuntimeFsBinding): FsPromisesBuiltin
   });
 }
 
+function createFsPromisesFileHandle(fd: number, fs: RuntimeFsBinding): FsPromisesFileHandle {
+  return {
+    fd,
+    async chmod(mode: number | string): Promise<void> {
+      callMetadataSync(fs, "fchmodSync", [fd, mode], () => fs.readSync(fd, 0));
+    },
+    async chown(uid: number, gid: number): Promise<void> {
+      callMetadataSync(fs, "fchownSync", [fd, uid, gid], () => fs.readSync(fd, 0));
+    },
+    async close(): Promise<void> {
+      fs.closeSync(fd);
+    },
+    async sync(): Promise<void> {
+      callMetadataSync(fs, "fsyncSync", [fd], () => fs.readSync(fd, 0));
+    },
+    async read(
+      buffer: Uint8Array,
+      offset = 0,
+      length = buffer.byteLength - offset,
+      position: number | null = 0
+    ): Promise<{ bytesRead: number; buffer: Uint8Array }> {
+      const bytes = fs.readSync(fd).slice(position ?? 0, (position ?? 0) + length);
+      buffer.set(bytes, offset);
+      return { bytesRead: bytes.byteLength, buffer };
+    },
+    async write(data: RuntimeFsData): Promise<{ bytesWritten: number; buffer: RuntimeFsData }> {
+      return { bytesWritten: fs.writeSync(fd, data), buffer: data };
+    }
+  };
+}
+
 function removeSync(fs: RuntimeFsBinding, path: string, options: { force?: boolean; recursive?: boolean } = {}): void {
   const maybeRmSync = (fs as RuntimeFsBinding & {
     rmSync?: (path: string, options?: { force?: boolean; recursive?: boolean }) => void;
@@ -127,4 +198,33 @@ function removeSync(fs: RuntimeFsBinding, path: string, options: { force?: boole
   }
   if (options.force) return;
   throw new Error("fs.rm is not supported by this binding");
+}
+
+function callMetadataSync(
+  fs: RuntimeFsBinding,
+  method: string,
+  args: readonly unknown[],
+  assertTargetExists: () => unknown
+): void {
+  const maybeMethod = (fs as RuntimeFsBinding & Record<string, unknown>)[method];
+  if (typeof maybeMethod === "function") {
+    maybeMethod.apply(fs, args);
+    return;
+  }
+  assertTargetExists();
+}
+
+export interface FsPromisesFileHandle {
+  fd: number;
+  chmod(mode: number | string): Promise<void>;
+  chown(uid: number, gid: number): Promise<void>;
+  close(): Promise<void>;
+  read(
+    buffer: Uint8Array,
+    offset?: number,
+    length?: number,
+    position?: number | null
+  ): Promise<{ bytesRead: number; buffer: Uint8Array }>;
+  sync(): Promise<void>;
+  write(data: RuntimeFsData): Promise<{ bytesWritten: number; buffer: RuntimeFsData }>;
 }

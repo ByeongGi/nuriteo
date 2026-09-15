@@ -195,13 +195,31 @@ assert.equal(closed, true);
 
 const files = new Map();
 const links = new Map();
+const openFilePaths = new Map();
+const metadataCalls = [];
 const fsPromises = createBuiltinLoader({
   fs: {
+    chmodSync(path, mode) {
+      metadataCalls.push(["chmod", path, mode]);
+    },
+    chownSync(path, uid, gid) {
+      metadataCalls.push(["chown", path, uid, gid]);
+    },
     closeSync() {},
+    fchmodSync(fd, mode) {
+      metadataCalls.push(["fchmod", fd, mode]);
+    },
+    fchownSync(fd, uid, gid) {
+      metadataCalls.push(["fchown", fd, uid, gid]);
+    },
+    fsyncSync(fd) {
+      metadataCalls.push(["fsync", fd]);
+    },
     mkdirSync(path) {
       files.set(path, new Uint8Array());
     },
-    openSync() {
+    openSync(path) {
+      openFilePaths.set(1, path);
       return 1;
     },
     readFileSync(path, encoding) {
@@ -218,14 +236,20 @@ const fsPromises = createBuiltinLoader({
         .map((entry) => entry.slice(prefix.length).split("/")[0])
         .filter((entry, index, entries) => entry && entries.indexOf(entry) === index);
     },
-    readSync() {
-      return new Uint8Array();
+    readSync(fd) {
+      return files.get(openFilePaths.get(fd)) || new Uint8Array();
     },
     copyFileSync(source, target) {
       files.set(target, files.get(source));
     },
     linkSync(source, target) {
       files.set(target, files.get(source));
+    },
+    lchmodSync(path, mode) {
+      metadataCalls.push(["lchmod", path, mode]);
+    },
+    lchownSync(path, uid, gid) {
+      metadataCalls.push(["lchown", path, uid, gid]);
     },
     renameSync(source, target) {
       files.set(target, files.get(source));
@@ -262,6 +286,33 @@ assert.equal(await fsPromises.readFile("/workspace/fs-promises-copy.txt", "utf8"
 await fsPromises.link("/workspace/fs-promises-copy.txt", "/workspace/fs-promises-link.txt");
 assert.equal(await fsPromises.readFile("/workspace/fs-promises-link.txt", "utf8"), "hello");
 await fsPromises.utimes("/workspace/fs-promises.txt", new Date(), new Date());
+await fsPromises.chmod("/workspace/fs-promises.txt", 0o755);
+await fsPromises.chown("/workspace/fs-promises.txt", 0, 0);
+await fsPromises.lchmod("/workspace/fs-promises.txt", 0o755);
+await fsPromises.lchown("/workspace/fs-promises.txt", 0, 0);
+await fsPromises.fchmod(1, 0o644);
+await fsPromises.fchown(1, 0, 0);
+await fsPromises.fsync(1);
+const handle = await fsPromises.open("/workspace/fs-promises.txt", "r+");
+const handleBuffer = new Uint8Array(2);
+assert.deepEqual(await handle.read(handleBuffer, 0, 2, 1), { bytesRead: 2, buffer: new Uint8Array([101, 108]) });
+await handle.chmod(0o755);
+await handle.chown(0, 0);
+await handle.sync();
+await handle.write("!");
+await handle.close();
+assert.deepEqual(metadataCalls, [
+  ["chmod", "/workspace/fs-promises.txt", 0o755],
+  ["chown", "/workspace/fs-promises.txt", 0, 0],
+  ["lchmod", "/workspace/fs-promises.txt", 0o755],
+  ["lchown", "/workspace/fs-promises.txt", 0, 0],
+  ["fchmod", 1, 0o644],
+  ["fchown", 1, 0, 0],
+  ["fsync", 1],
+  ["fchmod", 1, 0o755],
+  ["fchown", 1, 0, 0],
+  ["fsync", 1]
+]);
 await fsPromises.rename("/workspace/fs-promises.txt", "/workspace/fs-promises-renamed.txt");
 assert.equal(await fsPromises.readFile("/workspace/fs-promises-renamed.txt", "utf8"), "hello");
 await fsPromises.unlink("/workspace/fs-promises.txt");

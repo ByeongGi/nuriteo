@@ -20,12 +20,19 @@ const workspace = new MemoryPackageManagerWorkspace([
     data: JSON.stringify({
       name: "local-dep",
       version: "1.0.0",
-      main: "index.js"
+      main: "index.js",
+      bin: {
+        "local-dep": "cli.js"
+      }
     })
   },
   {
     path: "/workspace/local-dep/index.js",
     data: "module.exports = 'local-dep';\n"
+  },
+  {
+    path: "/workspace/local-dep/cli.js",
+    data: "#!/usr/bin/env node\nconsole.log('local-dep-bin');\n"
   },
   {
     path: "/workspace/project/package.json",
@@ -67,6 +74,7 @@ assert.equal(result.exitCode, 0);
 assert.match(result.stdout, /added 1 package/);
 assert.equal(workspace.exists("/workspace/project/node_modules"), true);
 assert.equal(workspace.exists("/workspace/project/node_modules/local-dep/package.json"), true);
+assert.equal(workspace.exists("/workspace/project/node_modules/.bin/local-dep"), true);
 const lockfile = JSON.parse(workspace.readText("/workspace/project/package-lock.json"));
 assert.equal(lockfile.lockfileVersion, 3);
 assert.equal(lockfile.packages["node_modules/local-dep"].link, true);
@@ -90,6 +98,7 @@ assert.equal(ciResult.stderr, "");
 assert.equal(ciResult.exitCode, 0);
 assert.match(ciResult.stdout, /added 1 package/);
 assert.equal(workspace.exists("/workspace/project/node_modules/local-dep/package.json"), true);
+assert.equal(workspace.exists("/workspace/project/node_modules/.bin/local-dep"), true);
 
 console.log("npm install cli module evaluation test ok");
 

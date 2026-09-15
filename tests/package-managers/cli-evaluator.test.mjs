@@ -59,6 +59,22 @@ const workspace = new MemoryPackageManagerWorkspace([
       module.exports = async function run(process) {
         fs.mkdirSync(process.cwd() + '/.cache');
         fs.writeFileSync(process.cwd() + '/sync.txt', 'sync');
+        fs.chmodSync(process.cwd() + '/sync.txt', 0o755);
+        fs.chownSync(process.cwd() + '/sync.txt', 0, 0);
+        await fs.promises.chmod(process.cwd() + '/sync.txt', 0o755);
+        await fs.promises.chown(process.cwd() + '/sync.txt', 0, 0);
+        await fs.promises.lchmod(process.cwd() + '/sync.txt', 0o755);
+        await fs.promises.lchown(process.cwd() + '/sync.txt', 0, 0);
+        const syncHandle = await fs.promises.open(process.cwd() + '/sync.txt', 'r+');
+        const readBuffer = Buffer.alloc(2);
+        const readResult = await syncHandle.read(readBuffer, 0, 2, 1);
+        if (readResult.bytesRead !== 2 || readBuffer.toString() !== 'yn') {
+          throw new Error('unexpected FileHandle read result');
+        }
+        await syncHandle.chmod(0o755);
+        await syncHandle.chown(0, 0);
+        await syncHandle.sync();
+        await syncHandle.close();
         if (!Buffer.isBuffer(fs.readFileSync(process.cwd() + '/sync.txt'))) {
           throw new Error('readFileSync without encoding must return Buffer');
         }
@@ -106,6 +122,12 @@ const workspace = new MemoryPackageManagerWorkspace([
         fs.closeSync(fd);
         const numericFd = fs.openSync(process.cwd() + '/numeric-fd.txt', fs.constants.O_CREAT | fs.constants.O_WRONLY | fs.constants.O_TRUNC);
         fs.writeSync(numericFd, 'numeric');
+        fs.fchmodSync(numericFd, 0o644);
+        fs.fchownSync(numericFd, 0, 0);
+        fs.fsyncSync(numericFd);
+        await fs.promises.fchmod(numericFd, 0o644);
+        await fs.promises.fchown(numericFd, 0, 0);
+        await fs.promises.fsync(numericFd);
         fs.futimesSync(numericFd, new Date(), new Date());
         fs.closeSync(numericFd);
         fs.utimesSync(process.cwd() + '/numeric-fd.txt', new Date(), new Date());
