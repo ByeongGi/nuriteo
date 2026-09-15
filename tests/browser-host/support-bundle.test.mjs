@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 
 import {
+  createRuntimeRecoveryPlan,
   createRuntimeSupportBundle,
   createRuntimeTraceCollector,
   createRuntimeTraceReport,
@@ -74,5 +75,40 @@ assert.equal(bundle.environment.npmToken, "[REDACTED]");
 assert.equal(bundle.environment.registryUrl, "https://user:[REDACTED]@registry.npmjs.org");
 assert.equal(bundle.diagnostics.at(-1).code, "ERR_USER_VISIBLE");
 assert.equal(bundle.trace.slowestSpans[0].name, "package-script.run");
+
+const recovery = createRuntimeRecoveryPlan({
+  diagnostics: [
+    {
+      code: "ERR_PM_NATIVE_ADDON_UNSUPPORTED",
+      severity: "error",
+      message: "native addon execution is unsupported",
+      source: "package-manager",
+      remediation: "Use a WASM/browser fallback package."
+    },
+    {
+      code: "ENOSERVER",
+      severity: "error",
+      message: "preview server unavailable",
+      source: "preview"
+    },
+    {
+      code: "EOPFSQUOTA",
+      severity: "warning",
+      message: "quota exceeded",
+      source: "storage"
+    }
+  ],
+  supportBundle: bundle
+});
+assert.equal(recovery.blocked, true);
+assert.equal(recovery.supportBundleRecommended, true);
+assert.match(recovery.primaryMessage, /outside the supported browser runtime scope/);
+assert.deepEqual(recovery.actions.map((action) => action.kind), [
+  "open-docs",
+  "retry",
+  "reset-runtime",
+  "clear-cache",
+  "export-support-bundle"
+]);
 
 console.log("browser host support bundle test ok");

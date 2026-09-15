@@ -1,5 +1,9 @@
 import { createContainer } from "/packages/sdk/src/container.ts";
 import {
+  createRuntimeRecoveryPlan,
+  createRuntimeSupportBundle
+} from "/packages/browser-host/src/observability/index.ts";
+import {
   createProjectWorkspaceEditorBridge,
   createProjectWorkspaceStore
 } from "/packages/browser-host/src/storage/index.ts";
@@ -445,6 +449,37 @@ async function runPreviewOverlaySmoke() {
   return result;
 }
 
+function runRecoverySmoke() {
+  const diagnostics = [
+    {
+      code: "ERR_PM_NATIVE_ADDON_UNSUPPORTED",
+      severity: "error",
+      message: "native addon execution is unsupported",
+      source: "package-manager",
+      remediation: "Use a WASM or browser-compatible package."
+    },
+    {
+      code: "ENOSERVER",
+      severity: "error",
+      message: "preview server unavailable",
+      source: "preview"
+    }
+  ];
+  const bundle = createRuntimeSupportBundle({
+    createdAt: "2026-09-16T00:00:00.000Z",
+    diagnostics,
+    environment: {
+      browser: navigator.userAgent,
+      projectId: "runtime-lab"
+    },
+    logs: [terminalLogEl.textContent]
+  });
+  const plan = createRuntimeRecoveryPlan({ diagnostics, supportBundle: bundle });
+  const result = { bundle, plan };
+  log(result);
+  return result;
+}
+
 bootButton.addEventListener("click", () => {
   boot().catch((error) => {
     setStatus("failed");
@@ -511,6 +546,7 @@ globalThis.__runtimeLab = {
   runFsSmoke,
   runPreviewOverlaySmoke,
   runPreviewSmoke,
+  runRecoverySmoke,
   runTerminalCommand,
   saveCurrentFile,
   systemMetrics: () => container?.systemMetrics() || null,

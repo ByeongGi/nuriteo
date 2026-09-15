@@ -55,6 +55,12 @@ await withRuntimeLab(async (page, baseUrl) => {
   if (overlayResult.messages.at(-1).diagnostic.recoveryActions[0].kind !== "open-file") {
     throw new Error("preview overlay did not suggest opening the file");
   }
+  const recoveryResult = await page.evaluate(() => globalThis.__runtimeLab.runRecoverySmoke());
+  if (!recoveryResult.plan.blocked) throw new Error("recovery plan did not mark unsupported native addon as blocked");
+  if (!recoveryResult.plan.actions.some((action) => action.kind === "export-support-bundle")) {
+    throw new Error("recovery plan did not include support bundle export");
+  }
+  if (recoveryResult.bundle.schemaVersion !== 1) throw new Error("support bundle was not created");
   const terminalResult = await page.evaluate(async () => {
     const install = await globalThis.__runtimeLab.runTerminalCommand("npm install");
     const pending = globalThis.__runtimeLab.runTerminalCommand("sleep");
