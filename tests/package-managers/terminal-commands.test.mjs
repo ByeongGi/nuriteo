@@ -36,6 +36,7 @@ assert.deepEqual(calls[0], {
 });
 assert.equal(results[0].result.commandKind, "install");
 assert.equal(chunks[0].data, "npm install: ok\n");
+assert.equal(chunks.filter((chunk) => chunk.data === "npm install: ok\n").length, 1);
 
 const build = await terminal.run("pnpm run build -- --watch");
 assert.equal(build.exitCode, 0);
@@ -61,6 +62,7 @@ assert.deepEqual(calls[2], {
 const missingExec = await terminal.run("pnpm exec");
 assert.equal(missingExec.exitCode, 1);
 assert.match(missingExec.stderr, /missing exec command/);
+assert.equal(chunks.filter((chunk) => chunk.data.includes("missing exec command")).length, 1);
 
 assert.deepEqual(terminal.history(), [
   "npm install --ignore-scripts",

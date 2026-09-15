@@ -37,13 +37,15 @@ function createPackageManagerTerminalCommand(
   runner: PackageManagerTerminalRunner,
   options: PackageManagerTerminalCommandOptions
 ) {
-  return ({ argv, cwd, signal }: Parameters<NonNullable<ShellCommandMap[string]>>[0]): ShellCommandResult => {
+  return ({ argv, cwd, output, signal }: Parameters<NonNullable<ShellCommandMap[string]>>[0]): ShellCommandResult => {
     const commandCwd = options.cwd || cwd;
     if (signal?.aborted) return cancelledResult(argv);
 
     const result = runPackageManagerCommand(name, runner, commandCwd, argv.slice(1));
     options.onResult?.({ name, argv: [...argv], cwd: commandCwd, result });
     if (signal?.aborted) return cancelledResult(argv);
+    if (result.stdout) output?.({ stream: "stdout", data: result.stdout });
+    if (result.stderr) output?.({ stream: "stderr", data: result.stderr });
 
     return {
       stdout: result.stdout,

@@ -30,15 +30,16 @@ export class ShellRuntime {
       const nextStep = steps[index + 1];
       if (step.op === "&&" && exitCode !== 0) break;
       const { argv, redirect } = extractRedirect(step.argv);
-      const result = await this.runCommand(argv, stdin, options);
+      const streamed = { stderr: false, stdout: false };
+      const result = await this.runCommand(argv, stdin, commandOutputOptions(options, streamed, nextStep?.op === "|"));
       if (options.signal?.aborted) return cancelledShellResult(stdout + (result.stdout || ""), stderr + (result.stderr || ""), this.files);
       exitCode = result.exitCode;
       stderr += result.stderr || "";
-      if (result.stderr) options.onOutput?.({ stream: "stderr", data: result.stderr });
+      if (result.stderr && !streamed.stderr) options.onOutput?.({ stream: "stderr", data: result.stderr });
       if (redirect) this.files.set(resolvePath(redirect, this.cwd), result.stdout || "");
       else if (nextStep?.op !== "|") {
         stdout += result.stdout || "";
-        if (result.stdout) options.onOutput?.({ stream: "stdout", data: result.stdout });
+        if (result.stdout && !streamed.stdout) options.onOutput?.({ stream: "stdout", data: result.stdout });
       }
       stdin = nextStep?.op === "|" ? result.stdout || "" : "";
       if (exitCode !== 0) break;
@@ -121,7 +122,24 @@ function cancelledShellResult(stdout: string, stderr: string, files: Map<string,
 function nestedShellOptions(options: ShellRunOptions): ShellRunOptions {
   const nested: ShellRunOptions = {};
   if (options.signal) nested.signal = options.signal;
+  if (options.onOutput) nested.onOutput = options.onOutput;
   return nested;
+}
+
+function commandOutputOptions(
+  options: ShellRunOptions,
+  streamed: { stderr: boolean; stdout: boolean },
+  pipedStdout: boolean
+): ShellRunOptions {
+  if (!options.onOutput) return options;
+  return {
+    ...options,
+    onOutput(chunk) {
+      streamed[chunk.stream] = true;
+      if (pipedStdout && chunk.stream === "stdout") return;
+      options.onOutput?.(chunk);
+    }
+  };
 }
 
 function extractRedirect(argv: string[]): { argv: string[]; redirect: string | null } {
