@@ -55,18 +55,21 @@ const execute = args.includes("--execute");
 const forceWasi = args.includes("--force-wasi");
 const executionIsolation = readFlagValue(args, "--execution-isolation") || "shared";
 const wasmPolicyPath = readFlagValue(args, "--wasm-policy");
+const workerTimeoutMs = readOptionalIntegerFlag(args, "--worker-timeout-ms") ?? 1000;
 const [vitePackageRootArg, nodeModulesRootArg] = args.filter((arg, index) => {
   if (arg === "--execute") return false;
   if (arg === "--execution-isolation") return false;
   if (arg === "--force-wasi") return false;
   if (arg === "--wasm-policy") return false;
+  if (arg === "--worker-timeout-ms") return false;
   if (index > 0 && args[index - 1] === "--execution-isolation") return false;
   if (index > 0 && args[index - 1] === "--wasm-policy") return false;
+  if (index > 0 && args[index - 1] === "--worker-timeout-ms") return false;
   return true;
 });
 
 if (!vitePackageRootArg) {
-  console.error("Usage: node scripts/inspect-vite-package-artifact.mjs <vite-package-root> [node-modules-root] [--execute] [--force-wasi] [--wasm-policy <manifest-json>]");
+  console.error("Usage: node scripts/inspect-vite-package-artifact.mjs <vite-package-root> [node-modules-root] [--execute] [--execution-isolation shared|snapshot|worker] [--worker-timeout-ms <ms>] [--force-wasi] [--wasm-policy <manifest-json>]");
   process.exitCode = 1;
 } else {
   const vitePackageRoot = resolve(vitePackageRootArg);
@@ -98,7 +101,7 @@ if (!vitePackageRootArg) {
       dependencyClosure,
       directReadiness: summarizeReadiness(readiness),
       executionSmoke: execute
-        ? await runExecutionSmoke(vitePackageArtifact, dependencyClosure?.artifacts || [], { executionIsolation, forceWasi, wasmAdapterPolicy })
+        ? await runExecutionSmoke(vitePackageArtifact, dependencyClosure?.artifacts || [], { executionIsolation, forceWasi, wasmAdapterPolicy, workerTimeoutMs })
         : null,
       hydratedReadiness: dependencyClosure
         ? summarizeReadiness(createHydratedWorkflowReadiness(vitePackageArtifact, dependencyClosure.artifacts, wasmAdapterPolicy))
@@ -146,7 +149,7 @@ async function runExecutionSmoke(vitePackageArtifact, dependencyArtifacts, optio
       ...(options.executionIsolation === "worker"
         ? {
           workerFactory: () => new NodeThreadCliEvaluationWorker(),
-          workerTimeoutMs: 1000
+          workerTimeoutMs: options.workerTimeoutMs
         }
         : {})
     });
@@ -164,7 +167,8 @@ async function runExecutionSmoke(vitePackageArtifact, dependencyArtifacts, optio
       timeoutBlocker: classifyTimeoutBlocker(message),
       stderrCauseLines: causeLines(message),
       stderrFirstLine: firstNonEmptyLine(message),
-      stdoutFirstLine: null
+      stdoutFirstLine: null,
+      ...(options.executionIsolation === "worker" ? { workerTimeoutMs: options.workerTimeoutMs } : {})
     };
   }
   return {
@@ -184,7 +188,8 @@ async function runExecutionSmoke(vitePackageArtifact, dependencyArtifacts, optio
     timeoutBlocker: classifyTimeoutBlocker(result.stderr),
     stderrCauseLines: causeLines(result.stderr),
     stderrFirstLine: firstNonEmptyLine(result.stderr),
-    stdoutFirstLine: firstNonEmptyLine(result.stdout)
+    stdoutFirstLine: firstNonEmptyLine(result.stdout),
+    ...(options.executionIsolation === "worker" ? { workerTimeoutMs: options.workerTimeoutMs } : {})
   };
 }
 
@@ -261,6 +266,17 @@ function readFlagValue(values, flag) {
     process.exit(1);
   }
   return value;
+}
+
+function readOptionalIntegerFlag(values, flag) {
+  const value = readFlagValue(values, flag);
+  if (value === null) return null;
+  const number = Number(value);
+  if (!Number.isInteger(number) || number < 1) {
+    console.error(`Expected ${flag} to be a positive integer`);
+    process.exit(1);
+  }
+  return number;
 }
 
 function summarizeReadiness(readiness) {
