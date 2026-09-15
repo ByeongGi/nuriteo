@@ -34,6 +34,41 @@ export interface IsolatedCliRunResult extends CliRunResult {
   workspaceSnapshot: PackageManagerWorkspaceSnapshot;
 }
 
+export interface WorkerBackedAsyncCliModuleEvaluatorOptions extends Omit<AsyncCliModuleEvaluatorOptions, "globals" | "reader" | "writer"> {
+  workerFactory: CliEvaluationWorkerFactory;
+  workspace: MemoryPackageManagerWorkspace;
+}
+
+export type CliEvaluationWorkerFactory = () => CliEvaluationWorkerPort;
+
+export interface CliEvaluationWorkerPort {
+  addEventListener(type: "message" | "error", listener: (event: MessageEvent | ErrorEvent) => void): void;
+  removeEventListener(type: "message" | "error", listener: (event: MessageEvent | ErrorEvent) => void): void;
+  postMessage(message: unknown): void;
+  terminate(): void;
+}
+
+export type CliEvaluationWorkerMessage =
+  | CliEvaluationWorkerEvaluateMessage
+  | CliEvaluationWorkerResultMessage;
+
+export interface CliEvaluationWorkerEvaluateMessage {
+  id: number;
+  request: CliModuleEvaluationRequest;
+  root?: string;
+  settleTicks?: number;
+  settleTimeoutMs?: number;
+  type: "cli:evaluate";
+  workspaceSnapshot: PackageManagerWorkspaceSnapshot;
+}
+
+export interface CliEvaluationWorkerResultMessage {
+  error?: string;
+  id: number;
+  result?: IsolatedCliRunResult;
+  type: "cli:result";
+}
+
 export interface CliModuleEvaluationRequest {
   entry: CliEntry;
   args: string[];
@@ -71,6 +106,74 @@ export function createIsolatedAsyncCliModuleEvaluator(
       workspaceSnapshot: workspace.snapshot()
     };
   };
+}
+
+export function createWorkerBackedAsyncCliModuleEvaluator(
+  options: WorkerBackedAsyncCliModuleEvaluatorOptions
+): (request: CliModuleEvaluationRequest) => Promise<IsolatedCliRunResult> {
+  return function evaluateCliModuleInWorker(request: CliModuleEvaluationRequest): Promise<IsolatedCliRunResult> {
+    const worker = options.workerFactory();
+    const id = nextCliEvaluationWorkerRequestId++;
+    return new Promise((resolve, reject) => {
+      const cleanup = () => {
+        worker.removeEventListener("message", onMessage);
+        worker.removeEventListener("error", onError);
+        worker.terminate();
+      };
+      const onMessage = (event: MessageEvent | ErrorEvent) => {
+        const data = "data" in event ? event.data as Partial<CliEvaluationWorkerResultMessage> : undefined;
+        if (data?.type !== "cli:result" || data.id !== id) return;
+        cleanup();
+        if (data.error) reject(new Error(data.error));
+        else if (data.result) resolve(data.result);
+        else reject(new Error("CLI evaluation worker returned no result"));
+      };
+      const onError = (event: MessageEvent | ErrorEvent) => {
+        cleanup();
+        reject(new Error("message" in event ? event.message : "CLI evaluation worker failed"));
+      };
+      worker.addEventListener("message", onMessage);
+      worker.addEventListener("error", onError);
+      worker.postMessage({
+        id,
+        request,
+        ...(options.root !== undefined ? { root: options.root } : {}),
+        ...(options.settleTicks !== undefined ? { settleTicks: options.settleTicks } : {}),
+        ...(options.settleTimeoutMs !== undefined ? { settleTimeoutMs: options.settleTimeoutMs } : {}),
+        type: "cli:evaluate",
+        workspaceSnapshot: options.workspace.snapshot()
+      } satisfies CliEvaluationWorkerEvaluateMessage);
+    });
+  };
+}
+
+export async function evaluateCliModuleWorkerMessage(
+  message: CliEvaluationWorkerEvaluateMessage
+): Promise<CliEvaluationWorkerResultMessage> {
+  try {
+    const workspace = MemoryPackageManagerWorkspace.fromSnapshot(message.workspaceSnapshot);
+    const result = await createAsyncCliModuleEvaluator({
+      reader: workspace,
+      ...(message.root !== undefined ? { root: message.root } : {}),
+      ...(message.settleTicks !== undefined ? { settleTicks: message.settleTicks } : {}),
+      ...(message.settleTimeoutMs !== undefined ? { settleTimeoutMs: message.settleTimeoutMs } : {}),
+      writer: workspace
+    })(message.request);
+    return {
+      id: message.id,
+      result: {
+        ...result,
+        workspaceSnapshot: workspace.snapshot()
+      },
+      type: "cli:result"
+    };
+  } catch (error) {
+    return {
+      error: errorMessage(error),
+      id: message.id,
+      type: "cli:result"
+    };
+  }
 }
 
 function startCliModuleEvaluation(
@@ -671,6 +774,7 @@ function createWorkerContextBuiltin(parentPort: RuntimeValue, threadId: number, 
 }
 
 let nextInlineWorkerThreadId = 1;
+let nextCliEvaluationWorkerRequestId = 1;
 
 function setCliImmediate(callback: (...args: unknown[]) => void, ...args: unknown[]): ReturnType<typeof setTimeout> {
   return setTimeout(() => callback(...args), 0);

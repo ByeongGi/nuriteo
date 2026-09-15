@@ -6,10 +6,46 @@ import {
   createCliModuleEvaluator,
   createGuestRuntimeProcessRunner,
   createIsolatedAsyncCliModuleEvaluator,
+  createWorkerBackedAsyncCliModuleEvaluator,
   createNpmRunner,
+  evaluateCliModuleWorkerMessage,
   inspectCliEntryReadiness,
   MemoryPackageManagerWorkspace
 } from "../../packages/node-runtime/src/index.ts";
+
+class FakeCliEvaluationWorker {
+  #listeners = {
+    message: new Set(),
+    error: new Set()
+  };
+  #terminated = false;
+
+  addEventListener(type, listener) {
+    this.#listeners[type].add(listener);
+  }
+
+  removeEventListener(type, listener) {
+    this.#listeners[type].delete(listener);
+  }
+
+  postMessage(message) {
+    queueMicrotask(async () => {
+      if (this.#terminated) return;
+      try {
+        const response = await evaluateCliModuleWorkerMessage(message);
+        for (const listener of this.#listeners.message) listener({ data: response });
+      } catch (error) {
+        for (const listener of this.#listeners.error) listener({ message: error instanceof Error ? error.message : String(error) });
+      }
+    });
+  }
+
+  terminate() {
+    this.#terminated = true;
+    this.#listeners.message.clear();
+    this.#listeners.error.clear();
+  }
+}
 
 const workspace = new MemoryPackageManagerWorkspace([
   {
@@ -575,6 +611,48 @@ assert.equal(isolatedWorkspace.exists("/workspace/project/isolated.txt"), false)
 assert.equal(
   MemoryPackageManagerWorkspace.fromSnapshot(isolatedResult.workspaceSnapshot).readText("/workspace/project/isolated.txt"),
   "isolated"
+);
+
+const workerBackedWorkspace = new MemoryPackageManagerWorkspace([
+  {
+    path: "/workspace/write-cli/package/bin/npm-cli.js",
+    data: "#!/usr/bin/env node\nrequire('../lib/cli.js')(process)\n"
+  },
+  {
+    path: "/workspace/write-cli/package/lib/cli.js",
+    data: `
+      const fs = require('fs');
+      module.exports = function run(process) {
+        fs.writeFileSync(process.cwd() + '/worker-backed.txt', 'worker-backed');
+        process.stdout.write('worker-backed-write\\n');
+      };
+    `
+  },
+  {
+    path: "/workspace/write-cli/package/package.json",
+    data: JSON.stringify({ name: "worker-backed-write-cli", version: "1.2.3", main: "lib/cli.js" })
+  }
+]);
+const workerBackedResult = await createWorkerBackedAsyncCliModuleEvaluator({
+  root: "/workspace",
+  workerFactory: () => new FakeCliEvaluationWorker(),
+  workspace: workerBackedWorkspace
+})({
+  entry: {
+    name: "npm",
+    version: "1.2.3",
+    entry: "/workspace/write-cli/package/bin/npm-cli.js"
+  },
+  args: [],
+  cwd: "/workspace/project"
+});
+assert.equal(workerBackedResult.stdout, "worker-backed-write\n");
+assert.equal(workerBackedResult.stderr, "");
+assert.equal(workerBackedResult.exitCode, 0);
+assert.equal(workerBackedWorkspace.exists("/workspace/project/worker-backed.txt"), false);
+assert.equal(
+  MemoryPackageManagerWorkspace.fromSnapshot(workerBackedResult.workspaceSnapshot).readText("/workspace/project/worker-backed.txt"),
+  "worker-backed"
 );
 
 const asyncErrorResult = await createAsyncCliModuleEvaluator({
