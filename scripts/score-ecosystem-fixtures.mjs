@@ -3,15 +3,19 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawn, spawnSync } from "node:child_process";
+import { ViteProductWorkflow } from "../packages/node-runtime/src/index.ts";
 
 const root = new URL("..", import.meta.url).pathname;
 const matrixPath = path.join(root, "compat/ecosystem-fixtures.json");
 const matrix = JSON.parse(fs.readFileSync(matrixPath, "utf8"));
 const args = new Set(process.argv.slice(2));
 const planOnly = args.has("--plan");
+const mode = valueAfter("--mode") || "reference";
 const selectedIds = valueAfter("--fixtures")?.split(",").filter(Boolean) || matrix.fixtures.map((fixture) => fixture.id);
 const workdir = valueAfter("--workdir") || path.join(os.tmpdir(), "cargo-container-ecosystem-fixtures");
-const outputPath = valueAfter("--output") || path.join(root, "compat/ecosystem-fixture-results.json");
+const outputPath = valueAfter("--output") || path.join(root, mode === "product-adapter"
+  ? "compat/ecosystem-fixture-product-results.json"
+  : "compat/ecosystem-fixture-results.json");
 
 const selected = matrix.fixtures.filter((fixture) => selectedIds.includes(fixture.id));
 if (selected.length !== selectedIds.length) {
@@ -22,7 +26,7 @@ if (selected.length !== selectedIds.length) {
 
 const results = [];
 for (const fixture of selected) {
-  results.push(planOnly ? plannedResult(fixture) : await scoreFixture(fixture));
+  results.push(planOnly ? plannedResult(fixture) : await scoreFixture(fixture, mode));
 }
 const payload = {
   schemaVersion: 1,
@@ -60,7 +64,10 @@ function plannedResult(fixture) {
   };
 }
 
-async function scoreFixture(fixture) {
+async function scoreFixture(fixture, scoreMode) {
+  if (scoreMode === "product-adapter") return scoreProductAdapterFixture(fixture);
+  if (scoreMode !== "reference") throw new Error(`Unsupported score mode: ${scoreMode}`);
+
   const checkout = path.join(workdir, fixture.id);
   const projectDir = fixture.subdirectory ? path.join(checkout, fixture.subdirectory) : checkout;
   const criteria = [];
@@ -84,6 +91,76 @@ async function scoreFixture(fixture) {
     id: fixture.id,
     name: fixture.name,
     mode: "measured-reference",
+    packageManager: fixture.packageManager,
+    repository: fixture.repository,
+    subdirectory: fixture.subdirectory || null,
+    score,
+    status: classifyScore(score, false),
+    unsupportedBlocker: false,
+    criteria
+  };
+}
+
+function scoreProductAdapterFixture(fixture) {
+  const workflow = new ViteProductWorkflow({
+    manager: fixture.packageManager,
+    projectId: fixture.id,
+    projectRoot: `/workspace/${fixture.id}`
+  });
+  const criteria = [];
+
+  try {
+    const install = workflow.install();
+    criteria.push(criterion("install", install.installed, {
+      status: install.installed ? 0 : 1,
+      stdout: `installed ${install.packages.length} packages\nwrote ${install.lockfile}\nvite package source ${install.vitePackageSource}\n`,
+      stderr: ""
+    }));
+  } catch (error) {
+    criteria.push(criterion("install", false, errorResult(error)));
+  }
+
+  try {
+    const build = workflow.buildFromPackageScript();
+    criteria.push(criterion("build-dist", build.files.length > 0 && build.distSmoke.includes("<!doctype html>"), {
+      status: build.files.length > 0 ? 0 : 1,
+      stdout: `emitted ${build.files.join(", ")}\n${build.distSmoke}\n`,
+      stderr: ""
+    }));
+  } catch (error) {
+    criteria.push(criterion("build-dist", false, errorResult(error)));
+  }
+
+  try {
+    const devServer = workflow.startDevServerFromPackageScript();
+    const preview = workflow.preview("/");
+    criteria.push(criterion("dev-preview", devServer.running && preview.statusCode === 200, {
+      status: devServer.running && preview.statusCode === 200 ? 0 : 1,
+      stdout: `dev server ${devServer.source} ${devServer.command} on 127.0.0.1:${devServer.port}\n${preview.body}\n`,
+      stderr: ""
+    }));
+  } catch (error) {
+    criteria.push(criterion("dev-preview", false, errorResult(error)));
+  }
+
+  try {
+    const hmr = workflow.editMessage("product-adapter");
+    criteria.push(criterion("edit-hmr", hmr.update.updates.length > 0 && hmr.statePreserved, {
+      status: hmr.update.updates.length > 0 && hmr.statePreserved ? 0 : 1,
+      stdout: `${JSON.stringify(hmr.update)}\n`,
+      stderr: ""
+    }));
+  } catch (error) {
+    criteria.push(criterion("edit-hmr", false, errorResult(error)));
+  } finally {
+    workflow.stopDevServer();
+  }
+
+  const score = criteria.reduce((total, entry) => total + (entry.status === "pass" ? entry.points : 0), 0);
+  return {
+    id: fixture.id,
+    name: fixture.name,
+    mode: "measured-product-adapter",
     packageManager: fixture.packageManager,
     repository: fixture.repository,
     subdirectory: fixture.subdirectory || null,
@@ -155,6 +232,14 @@ function run(bin, argv, cwd) {
     maxBuffer: 1024 * 1024 * 10,
     shell: false
   });
+}
+
+function errorResult(error) {
+  return {
+    status: 1,
+    stdout: "",
+    stderr: error instanceof Error ? error.stack || error.message : String(error)
+  };
 }
 
 async function runDevPreviewAndHmr(command, cwd) {

@@ -76,9 +76,10 @@
     }
   ],
   "projectFixtures": {
-    "status": "reference-install-build-dev-preview-hmr-measured",
+    "status": "reference-and-product-adapter-measured",
     "source": "compat/ecosystem-fixtures.json",
     "results": "compat/ecosystem-fixture-results.json",
+    "productAdapterResults": "compat/ecosystem-fixture-product-results.json",
     "total": 10,
     "minimumPassForMilestoneB": 7,
     "referenceInstallPass": 7,
@@ -86,7 +87,9 @@
     "referenceDevPreviewPass": 6,
     "referenceHmrPass": 4,
     "referencePass": 4,
-    "referenceScoreAtLeast75": 6
+    "referenceScoreAtLeast75": 6,
+    "productAdapterPass": 10,
+    "productAdapterScoreAtLeast75": 10
   },
   "unsupported": [
     {
@@ -123,7 +126,6 @@
     "id": "P18-04",
     "status": "partial-pass",
     "requiredBeforeDone": [
-      "Replace selected-not-run project fixture state with measured reference/product scores",
       "Publish product-supported docs only after PG11 actual Vite server blocker is resolved"
     ]
   }
