@@ -67,6 +67,7 @@ assert.deepEqual(
     import * as namespace from "namespace-pkg";
     export { value } from "./re-export.js";
     export * from "star-pkg";
+    export * as starNamespace from "star-namespace-pkg";
     const text = 'import "not-a-real-import"';
     // import "not-a-comment-import";
     /*
@@ -74,13 +75,14 @@ assert.deepEqual(
     */
     await import("dynamic-pkg");
   `),
-  ["./default.js", "./re-export.js", "named-pkg", "namespace-pkg", "side-effect-pkg", "star-pkg"]
+  ["./default.js", "./re-export.js", "named-pkg", "namespace-pkg", "side-effect-pkg", "star-namespace-pkg", "star-pkg"]
 );
 
 const esmGraphFiles = new Map([
   ["/workspace/vite/bin/vite.js", "import '../dist/node/cli.js';\n"],
   ["/workspace/vite/dist/node/cli.js", "import { start } from './server.js';\nimport 'conditional-pkg';\nimport 'conditional-pkg/features/render';\nimport 'node:fs';\nstart();\n"],
-  ["/workspace/vite/dist/node/server.js", "export const start = () => undefined;\n"],
+  ["/workspace/vite/dist/node/server.js", "export * as hmr from './hmr.js';\nexport const start = () => undefined;\n"],
+  ["/workspace/vite/dist/node/hmr.js", "export const channel = 'hmr';\n"],
   ["/workspace/vite/node_modules/conditional-pkg/package.json", JSON.stringify({
     name: "conditional-pkg",
     exports: {
@@ -117,9 +119,10 @@ assert.deepEqual(
   [
     ["/workspace/vite/bin/vite.js", ["../dist/node/cli.js"]],
     ["/workspace/vite/dist/node/cli.js", ["./server.js", "conditional-pkg", "conditional-pkg/features/render", "node:fs"]],
-    ["/workspace/vite/dist/node/server.js", []],
+    ["/workspace/vite/dist/node/server.js", ["./hmr.js"]],
     ["/workspace/vite/node_modules/conditional-pkg/esm.mjs", []],
-    ["/workspace/vite/node_modules/conditional-pkg/features/render.mjs", []]
+    ["/workspace/vite/node_modules/conditional-pkg/features/render.mjs", []],
+    ["/workspace/vite/dist/node/hmr.js", []]
   ]
 );
 
