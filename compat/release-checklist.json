@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-15",
+  "status": "p16-04-release-operations-pass",
+  "externalPublish": "not-in-scope-until-PG20",
+  "releaseDecision": "internal-release-operations-ready",
+  "requiredDocs": [
+    "docs/release/release-policy.md",
+    "docs/release/provenance.md",
+    "docs/release/incident-playbook.md",
+    "docs/release/support-matrix.md",
+    "docs/release/known-limitations.md",
+    "docs/release/operations.md",
+    "docs/release/fingerprint.json"
+  ],
+  "requiredManifests": [
+    "compat/release-policy.json",
+    "compat/release-provenance.json",
+    "compat/incident-playbook.json",
+    "compat/performance-baseline.json",
+    "compat/soak-baseline.json"
+  ],
+  "requiredChecks": [
+    "node scripts/check-release-policy.mjs",
+    "node scripts/check-release-provenance.mjs",
+    "node scripts/check-incident-playbook.mjs",
+    "node scripts/check-performance-baseline.mjs",
+    "node scripts/check-soak-baseline.mjs",
+    "node scripts/check-workspace.mjs"
+  ],
+  "gateReview": {
+    "PG15": "pass",
+    "PG16": "pass",
+    "PG20": "not-run",
+    "stableLaunch": "blocked-until-PG20"
+  },
+  "smokeDeploy": {
+    "status": "local-only",
+    "reason": "external deployment and registry publish remain out of scope until PG20"
+  },
+  "acceptance": [
+    "release channels and support windows defined",
+    "artifact provenance and SBOM/license checks defined",
+    "incident playbook and support bundle requirement defined",
+    "known limitations public document exists",
+    "external publish decision explicitly recorded"
+  ]
+}

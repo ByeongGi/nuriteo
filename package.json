@@ -18,6 +18,7 @@
     "check:incident-playbook": "node scripts/check-incident-playbook.mjs",
     "check:release-policy": "node scripts/check-release-policy.mjs",
     "check:release-provenance": "node scripts/check-release-provenance.mjs",
+    "check:release-operations": "node scripts/check-release-operations.mjs",
     "check:release-readiness": "node scripts/check-release-readiness.mjs",
     "check:soak-baseline": "node scripts/check-soak-baseline.mjs",
     "check:types": "tsc --noEmit",
