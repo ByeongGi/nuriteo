@@ -60,12 +60,14 @@ export interface ViteProductDevServerSnapshot {
   restartCount: number;
   requests: string[];
   command: string | null;
-  source: "adapter" | "package-script";
+  source: ViteProductDevServerSource;
   cliEntrypoint: string | null;
   processPid: number | null;
   processStarted: boolean;
   processExited: boolean;
 }
+
+export type ViteProductDevServerSource = "adapter" | "package-script" | "cli-execution";
 
 export interface ViteProductHmrUpdate {
   type: "update";
@@ -142,7 +144,7 @@ export class ViteProductWorkflow {
   #listener: { port: number; close: () => void } | null = null;
   #devProcess: RuntimeChildProcess | null = null;
   #devServerCommand: string | null = null;
-  #devServerSource: "adapter" | "package-script" = "adapter";
+  #devServerSource: ViteProductDevServerSource = "adapter";
   #devServerCliEntrypoint: string | null = null;
   #buildCommand: string | null = null;
   #buildCliEntrypoint: string | null = null;
@@ -280,6 +282,22 @@ export class ViteProductWorkflow {
     const cliEntrypoint = this.#resolveCommandEntrypoint(command);
     this.startDevServer();
     this.#devServerSource = "package-script";
+    this.#devServerCommand = command;
+    this.#devServerCliEntrypoint = cliEntrypoint;
+    return this.#snapshot();
+  }
+
+  async startDevServerFromCliExecution(name = "dev"): Promise<ViteProductDevServerSnapshot> {
+    const command = this.#readScript(name);
+    assertViteDevCommand(command);
+    const cliEntrypoint = this.#resolveCommandEntrypoint(command);
+    const args = commandArgs(command);
+    const cliExecution = await this.executeRealCli(args, { PORT: String(this.#port) });
+    const registration = cliExecution.serverRegistrations.at(-1);
+    if (!registration) throw new Error("ERR_VITE_CLI_SERVER_REGISTRATION_MISSING");
+    this.#port = registration.port;
+    this.startDevServer();
+    this.#devServerSource = "cli-execution";
     this.#devServerCommand = command;
     this.#devServerCliEntrypoint = cliEntrypoint;
     return this.#snapshot();
@@ -501,6 +519,7 @@ export type ViteReactProductWorkflowOptions = ViteProductWorkflowOptions;
 export type ViteReactProductWorkflowResult = ViteProductWorkflowResult;
 export type ViteReactCliExecutionResult = ViteProductCliExecutionResult;
 export type ViteReactCliServerRegistration = ViteProductCliServerRegistration;
+export type ViteReactDevServerSource = ViteProductDevServerSource;
 export type ViteReactInstallResult = ViteProductInstallResult;
 export type ViteReactDevServerSnapshot = ViteProductDevServerSnapshot;
 export type ViteReactHmrUpdate = ViteProductHmrUpdate;
@@ -651,4 +670,8 @@ function assertViteDevCommand(command: string): void {
 
 function assertViteBuildCommand(command: string): void {
   if (command !== "vite build") throw new Error(`unsupported Vite build command: ${command}`);
+}
+
+function commandArgs(command: string): string[] {
+  return command.split(/\s+/).slice(1).filter(Boolean);
 }

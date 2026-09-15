@@ -78,6 +78,19 @@ for (const manager of ["npm", "pnpm"]) {
       source: "vite-cli"
     }
   ]);
+  const cliNetwork = createLoopbackNetwork();
+  const cliWorkflow = new ViteProductWorkflow({ manager, template, projectId: `${manager}-${template}-cli`, network: cliNetwork, port: 5180 });
+  cliWorkflow.install();
+  const cliStarted = await cliWorkflow.startDevServerFromCliExecution();
+  assert.equal(cliStarted.running, true);
+  assert.equal(cliStarted.source, "cli-execution");
+  assert.equal(cliStarted.command, "vite --host 127.0.0.1");
+  assert.equal(cliStarted.cliEntrypoint, "/workspace/project/node_modules/vite/bin/vite.js");
+  assert.equal(cliStarted.port, 5180);
+  assert.equal(cliStarted.processPid, 5180);
+  const cliPreview = await cliWorkflow.fetch("http://127.0.0.1:5180/index.html");
+  assert.equal(cliPreview.status, 200);
+  assert.match(await cliPreview.text(), /alpha:1/);
   const started = workflow.startDevServerFromPackageScript();
   assert.equal(started.running, true);
   assert.equal(started.port, 5173);
