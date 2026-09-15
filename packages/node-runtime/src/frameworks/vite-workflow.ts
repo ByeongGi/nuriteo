@@ -44,6 +44,14 @@ export interface ViteProductCliExecutionResult extends CliRunResult {
   args: string[];
   cwd: string;
   mode: "async-cli-module-evaluation";
+  serverRegistrations: ViteProductCliServerRegistration[];
+}
+
+export interface ViteProductCliServerRegistration {
+  command: "dev";
+  host: string;
+  port: number;
+  source: "vite-cli";
 }
 
 export interface ViteProductDevServerSnapshot {
@@ -215,9 +223,15 @@ export class ViteProductWorkflow {
   async executeRealCli(args: string[] = ["--host", "127.0.0.1"], env: RuntimeEnv = {}): Promise<ViteProductCliExecutionResult> {
     if (!this.workspace.exists(join(this.projectRoot, "node_modules/.bin/vite"))) this.install();
     const cliEntrypoint = this.#resolveBin("vite");
+    const serverRegistrations: ViteProductCliServerRegistration[] = [];
     const result = await createAsyncCliModuleEvaluator({
       root: this.projectRoot,
-      reader: this.workspace
+      reader: this.workspace,
+      globals: {
+        __viteRegisterDevServer(registration: ViteProductCliServerRegistration) {
+          serverRegistrations.push(registration);
+        }
+      }
     })({
       entry: {
         name: "vite",
@@ -233,7 +247,8 @@ export class ViteProductWorkflow {
       ...result,
       args,
       cwd: this.projectRoot,
-      mode: "async-cli-module-evaluation"
+      mode: "async-cli-module-evaluation",
+      serverRegistrations
     };
   }
 
@@ -422,11 +437,11 @@ export class ViteProductWorkflow {
     this.workspace.writeText(join(this.projectRoot, "node_modules/vite/bin/vite.js"), "#!/usr/bin/env node\nimport '../dist/node/cli.js';\n");
     this.workspace.writeText(
       join(this.projectRoot, "node_modules/vite/dist/node/cli.js"),
-      "import { createRequire } from 'node:module';\nimport { startDevServer } from './server.js';\nconst require = createRequire(import.meta.url);\nrequire('../../package.json');\nstartDevServer();\n"
+      "import { createRequire } from 'node:module';\nimport { startDevServer } from './server.js';\nconst require = createRequire(import.meta.url);\nrequire('../../package.json');\nstartDevServer({ host: '127.0.0.1', port: Number(process.env.PORT || 5173) });\n"
     );
     this.workspace.writeText(
       join(this.projectRoot, "node_modules/vite/dist/node/server.js"),
-      "import { EventEmitter } from 'node:events';\nimport { createHotChannel } from './hmr.js';\nexport function startDevServer() {\n  const server = new EventEmitter();\n  createHotChannel(server);\n  return server;\n}\n"
+      "import { EventEmitter } from 'node:events';\nimport { createHotChannel } from './hmr.js';\nexport function startDevServer(options) {\n  const server = new EventEmitter();\n  createHotChannel(server);\n  global.__viteRegisterDevServer?.({ command: 'dev', host: options.host, port: options.port, source: 'vite-cli' });\n  return server;\n}\n"
     );
     this.workspace.writeText(
       join(this.projectRoot, "node_modules/vite/dist/node/hmr.js"),
@@ -485,6 +500,7 @@ export type ViteReactPackageManager = ViteProductPackageManager;
 export type ViteReactProductWorkflowOptions = ViteProductWorkflowOptions;
 export type ViteReactProductWorkflowResult = ViteProductWorkflowResult;
 export type ViteReactCliExecutionResult = ViteProductCliExecutionResult;
+export type ViteReactCliServerRegistration = ViteProductCliServerRegistration;
 export type ViteReactInstallResult = ViteProductInstallResult;
 export type ViteReactDevServerSnapshot = ViteProductDevServerSnapshot;
 export type ViteReactHmrUpdate = ViteProductHmrUpdate;

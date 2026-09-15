@@ -70,6 +70,14 @@ for (const manager of ["npm", "pnpm"]) {
   assert.equal(cliExecution.stdout, "");
   assert.equal(cliExecution.stderr, "");
   assert.equal(cliExecution.exitCode, 0);
+  assert.deepEqual(cliExecution.serverRegistrations, [
+    {
+      command: "dev",
+      host: "127.0.0.1",
+      port: 5173,
+      source: "vite-cli"
+    }
+  ]);
   const started = workflow.startDevServerFromPackageScript();
   assert.equal(started.running, true);
   assert.equal(started.port, 5173);

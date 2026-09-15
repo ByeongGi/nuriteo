@@ -15,6 +15,7 @@ import type { PackageManagerWorkspaceWriter } from "./workspace.ts";
 
 export interface CliModuleEvaluatorOptions {
   reader: WorkspaceModuleReader;
+  globals?: Record<string, RuntimeValue>;
   root?: string;
   writer?: PackageManagerWorkspaceWriter;
 }
@@ -99,7 +100,8 @@ function startCliModuleEvaluation(
     clearImmediate: clearCliImmediate,
     clearTimeout,
     setImmediate: setCliImmediate,
-    setTimeout
+    setTimeout,
+    ...(options.globals || {})
   };
   const consoleObject = createCliConsole(process);
   const fs = createWorkspaceFsFacade(options.reader, options.writer);
