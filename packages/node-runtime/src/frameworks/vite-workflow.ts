@@ -154,6 +154,7 @@ export interface ViteProductCliExecutionOptions {
   isolation?: "shared" | "snapshot" | "worker";
   readyTimeoutMs?: number;
   workerFactory?: CliEvaluationWorkerFactory;
+  workerTimeoutMs?: number;
 }
 
 export interface ViteProductCliBuildRegistration {
@@ -583,6 +584,7 @@ export class ViteProductWorkflow {
           "__viteRegisterTransform"
         ],
         workerFactory: options.workerFactory!,
+        ...(options.workerTimeoutMs !== undefined ? { workerTimeoutMs: options.workerTimeoutMs } : {}),
         workspace: this.workspace
       })(request)
       : isolation === "snapshot"

@@ -39,6 +39,7 @@ export interface IsolatedCliRunResult extends CliRunResult {
 export interface WorkerBackedAsyncCliModuleEvaluatorOptions extends Omit<AsyncCliModuleEvaluatorOptions, "globals" | "reader" | "writer"> {
   captureGlobalCalls?: readonly string[];
   workerFactory: CliEvaluationWorkerFactory;
+  workerTimeoutMs?: number;
   workspace: MemoryPackageManagerWorkspace;
 }
 
@@ -133,7 +134,9 @@ export function createWorkerBackedAsyncCliModuleEvaluator(
     const worker = options.workerFactory();
     const id = nextCliEvaluationWorkerRequestId++;
     return new Promise((resolve, reject) => {
+      let timeout: ReturnType<typeof setTimeout> | undefined;
       const cleanup = () => {
+        if (timeout) clearTimeout(timeout);
         worker.removeEventListener("message", onMessage);
         worker.removeEventListener("error", onError);
         worker.terminate();
@@ -152,6 +155,12 @@ export function createWorkerBackedAsyncCliModuleEvaluator(
       };
       worker.addEventListener("message", onMessage);
       worker.addEventListener("error", onError);
+      if (options.workerTimeoutMs !== undefined) {
+        timeout = setTimeout(() => {
+          cleanup();
+          reject(new Error(`ECLIEWORKERTIMEOUT: CLI evaluation worker did not respond within ${options.workerTimeoutMs}ms`));
+        }, options.workerTimeoutMs);
+      }
       worker.postMessage({
         id,
         request,

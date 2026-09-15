@@ -47,6 +47,20 @@ class FakeCliEvaluationWorker {
   }
 }
 
+class NonRespondingCliEvaluationWorker {
+  terminated = false;
+
+  addEventListener() {}
+
+  removeEventListener() {}
+
+  postMessage() {}
+
+  terminate() {
+    this.terminated = true;
+  }
+}
+
 const workspace = new MemoryPackageManagerWorkspace([
   {
     path: "/workspace/cli/package/bin/npm-cli.js",
@@ -810,6 +824,27 @@ const workerBackedPendingCliResult = await createWorkerBackedAsyncCliModuleEvalu
 });
 assert.equal(workerBackedPendingCliResult.exitCode, 1);
 assert.match(workerBackedPendingCliResult.stderr, /ECLIETIMEOUT/);
+
+const nonRespondingWorker = new NonRespondingCliEvaluationWorker();
+await assert.rejects(
+  () => createWorkerBackedAsyncCliModuleEvaluator({
+    root: "/workspace",
+    workerFactory: () => nonRespondingWorker,
+    workerTimeoutMs: 5,
+    workspace: pendingCliWorkspace
+  })({
+    entry: {
+      name: "pending",
+      version: "1.2.3",
+      entry: "/workspace/pending/package/bin/pending.mjs",
+      mode: "esm"
+    },
+    args: [],
+    cwd: "/workspace/project"
+  }),
+  /ECLIEWORKERTIMEOUT/
+);
+assert.equal(nonRespondingWorker.terminated, true);
 
 const asyncErrorResult = await createAsyncCliModuleEvaluator({
   root: "/workspace",

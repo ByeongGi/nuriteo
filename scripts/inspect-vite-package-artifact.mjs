@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { Worker } from "node:worker_threads";
 
 import {
   createWasmAdapterPolicy,
@@ -10,14 +11,56 @@ import {
 } from "../packages/node-runtime/src/index.ts";
 import { createFallbackWorkspaceReader, createNodeFsWorkspaceReader } from "./lib/fs-workspace-reader.mjs";
 
+class NodeThreadCliEvaluationWorker {
+  #listeners = {
+    message: new Set(),
+    error: new Set()
+  };
+  #worker = new Worker(`
+    import { parentPort } from "node:worker_threads";
+    import { evaluateCliModuleWorkerMessage } from ${JSON.stringify(new URL("../packages/node-runtime/src/package-managers/cli-evaluator.ts", import.meta.url).href)};
+    parentPort.on("message", async (message) => {
+      parentPort.postMessage(await evaluateCliModuleWorkerMessage(message));
+    });
+  `, { eval: true, type: "module" });
+
+  constructor() {
+    this.#worker.on("message", (data) => {
+      for (const listener of this.#listeners.message) listener({ data });
+    });
+    this.#worker.on("error", (error) => {
+      for (const listener of this.#listeners.error) listener({ message: error.message });
+    });
+  }
+
+  addEventListener(type, listener) {
+    this.#listeners[type]?.add(listener);
+  }
+
+  removeEventListener(type, listener) {
+    this.#listeners[type]?.delete(listener);
+  }
+
+  postMessage(message) {
+    this.#worker.postMessage(message);
+  }
+
+  terminate() {
+    void this.#worker.terminate();
+  }
+}
+
 const args = process.argv.slice(2);
 const execute = args.includes("--execute");
 const forceWasi = args.includes("--force-wasi");
+const executionIsolation = readFlagValue(args, "--execution-isolation") || "shared";
 const wasmPolicyPath = readFlagValue(args, "--wasm-policy");
 const [vitePackageRootArg, nodeModulesRootArg] = args.filter((arg, index) => {
   if (arg === "--execute") return false;
+  if (arg === "--execution-isolation") return false;
   if (arg === "--force-wasi") return false;
   if (arg === "--wasm-policy") return false;
+  if (index > 0 && args[index - 1] === "--execution-isolation") return false;
   if (index > 0 && args[index - 1] === "--wasm-policy") return false;
   return true;
 });
@@ -55,7 +98,7 @@ if (!vitePackageRootArg) {
       dependencyClosure,
       directReadiness: summarizeReadiness(readiness),
       executionSmoke: execute
-        ? await runExecutionSmoke(vitePackageArtifact, dependencyClosure?.artifacts || [], { forceWasi, wasmAdapterPolicy })
+        ? await runExecutionSmoke(vitePackageArtifact, dependencyClosure?.artifacts || [], { executionIsolation, forceWasi, wasmAdapterPolicy })
         : null,
       hydratedReadiness: dependencyClosure
         ? summarizeReadiness(createHydratedWorkflowReadiness(vitePackageArtifact, dependencyClosure.artifacts, wasmAdapterPolicy))
@@ -70,6 +113,9 @@ if (!vitePackageRootArg) {
 }
 
 async function runExecutionSmoke(vitePackageArtifact, dependencyArtifacts, options) {
+  if (!["shared", "snapshot", "worker"].includes(options.executionIsolation)) {
+    throw new Error(`Unsupported --execution-isolation value: ${options.executionIsolation}`);
+  }
   if (options.forceWasi && dependencyArtifacts.some((artifact) => artifact.name === "@napi-rs/wasm-runtime")) {
     return {
       env: { NAPI_RS_FORCE_WASI: "error" },
@@ -92,11 +138,40 @@ async function runExecutionSmoke(vitePackageArtifact, dependencyArtifacts, optio
   });
   workflow.install();
   const env = options.forceWasi ? { NAPI_RS_FORCE_WASI: "error" } : {};
-  const result = await workflow.executeRealCli(["--host", "127.0.0.1"], env, { readyTimeoutMs: 1000 });
+  let result;
+  try {
+    result = await workflow.executeRealCli(["--host", "127.0.0.1"], env, {
+      isolation: options.executionIsolation,
+      readyTimeoutMs: 1000,
+      ...(options.executionIsolation === "worker"
+        ? {
+          workerFactory: () => new NodeThreadCliEvaluationWorker(),
+          workerTimeoutMs: 1000
+        }
+        : {})
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return {
+      args: ["--host", "127.0.0.1"],
+      env,
+      exitCode: 1,
+      nativeBindingBlocker: null,
+      isolation: options.executionIsolation,
+      isolationBlocker: null,
+      registrations: null,
+      runtimeBuiltinBlocker: null,
+      timeoutBlocker: classifyTimeoutBlocker(message),
+      stderrCauseLines: causeLines(message),
+      stderrFirstLine: firstNonEmptyLine(message),
+      stdoutFirstLine: null
+    };
+  }
   return {
     args: result.args,
     env,
     exitCode: result.exitCode,
+    isolation: options.executionIsolation,
     nativeBindingBlocker: classifyNativeBindingBlocker(result.stderr),
     isolationBlocker: classifyIsolationBlocker(result.stderr),
     registrations: {
@@ -252,9 +327,9 @@ function classifyRuntimeBuiltinBlocker(stderr) {
 }
 
 function classifyTimeoutBlocker(stderr) {
-  if (!stderr.includes("ECLIETIMEOUT")) return null;
+  if (!stderr.includes("ECLIETIMEOUT") && !stderr.includes("ECLIEWORKERTIMEOUT")) return null;
   return {
-    reason: "cli-module-ready-timeout"
+    reason: stderr.includes("ECLIEWORKERTIMEOUT") ? "cli-worker-response-timeout" : "cli-module-ready-timeout"
   };
 }
 
