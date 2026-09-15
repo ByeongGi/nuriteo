@@ -6,8 +6,8 @@ import {
   createRuntimeSupportBundle
 } from "/packages/browser-host/src/observability/index.ts";
 import {
+  createProjectWorkspaceDevServerChangeBridge,
   createProjectWorkspaceEditorBridge,
-  createProjectWorkspaceSourceEditBridge,
   createProjectWorkspaceStore
 } from "/packages/browser-host/src/storage/index.ts";
 import { ViteProductWorkflow } from "/packages/node-runtime/src/frameworks/vite-workflow.ts";
@@ -95,9 +95,12 @@ const viteWorkflow = new ViteProductWorkflow({
 });
 viteWorkflow.install();
 viteWorkflow.startDevServerFromPackageScript();
+const devServerChangeBridge = createProjectWorkspaceDevServerChangeBridge(viteWorkflow, {
+  root: project.root,
+  onDiagnostic: renderEditorDevServerDiagnostic
+});
 const editor = createProjectWorkspaceEditorBridge(project, {
-  onChange: handleEditorChange,
-  onSave: createProjectWorkspaceSourceEditBridge(viteWorkflow, { root: project.root })
+  onChange: handleEditorChange
 });
 let selectedEditorPath = "/workspace/app/src/main.jsx";
 
@@ -325,13 +328,15 @@ function deleteCurrentFile() {
 
 function handleEditorChange(event) {
   editorEvents.push(event);
-  if (!["rename", "delete"].includes(event.kind) || !isSourcePath(event.relativePath)) return;
-  const action = event.kind === "rename" ? "renamed" : "deleted";
-  const diagnostic = {
-    code: event.kind === "rename" ? "EVITE_SOURCE_RENAMED" : "EVITE_SOURCE_DELETED",
-    file: event.path,
+  return devServerChangeBridge(event);
+}
+
+function renderEditorDevServerDiagnostic(diagnostic) {
+  const previewDiagnostic = {
+    code: diagnostic.code,
+    file: diagnostic.file,
     level: "warning",
-    message: `Source file ${action}; rebuild preview or update imports if HMR cannot recover.`,
+    message: diagnostic.message,
     recoveryActions: [
       {
         kind: "show-terminal",
@@ -342,19 +347,15 @@ function handleEditorChange(event) {
         kind: "retry",
         label: "Rebuild preview",
         reason: "Re-run the build after the file tree change.",
-        command: "vite build"
+        command: diagnostic.recoveryCommand
       }
     ],
-    source: "editor"
+    source: "hmr"
   };
   renderDiagnostics({
-    diagnostics: [diagnostic],
-    lastError: diagnostic
+    diagnostics: [previewDiagnostic],
+    lastError: previewDiagnostic
   });
-}
-
-function isSourcePath(path) {
-  return /^src\/.+\.(c|m)?(j|t)sx?$/.test(path);
 }
 
 function renderSearchResults() {

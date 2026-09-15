@@ -155,8 +155,11 @@ await withRuntimeLab(async (page, baseUrl) => {
     throw new Error("editor dirty search did not include edit");
   }
   if (editorResult.saved.dirty) throw new Error("editor save did not clear dirty state");
-  if (editorResult.hmrUpdates.at(-1).updates[0].path !== "/src/main.jsx") {
+  if (!editorResult.hmrUpdates.some((update) => update.updates[0].path === "/src/main.jsx")) {
     throw new Error("editor save did not propagate to Vite source edit HMR");
+  }
+  if (!editorResult.hmrUpdates.some((update) => update.updates[0].path === "/src/Preview.jsx")) {
+    throw new Error("editor create did not propagate to dev server source change");
   }
   if (editorResult.created.path !== "/workspace/app/src/Preview.jsx") throw new Error("editor did not create file");
   if (editorResult.renamed.path !== "/workspace/app/src/Preview.tsx") throw new Error("editor did not rename file");
@@ -170,7 +173,7 @@ await withRuntimeLab(async (page, baseUrl) => {
   if (!editorResult.editorEvents.some((event) => event.kind === "delete" && event.relativePath === "src/Preview.tsx")) {
     throw new Error("editor did not emit delete change event");
   }
-  if (!await page.locator("#diagnostics-status").textContent().then((text) => text === "EVITE_SOURCE_DELETED")) {
+  if (!await page.locator("#diagnostics-status").textContent().then((text) => text === "EDEVSERVER_SOURCE_DELETED")) {
     throw new Error("editor delete did not surface preview recovery diagnostic");
   }
   await page.evaluate(() => globalThis.__runtimeLab.teardown());
