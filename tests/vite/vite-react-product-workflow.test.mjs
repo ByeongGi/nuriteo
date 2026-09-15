@@ -108,12 +108,18 @@ for (const manager of ["npm", "pnpm"]) {
   hmr.on("open", (event) => hmrEvents.push(`open:${event.attempt}`));
   hmr.on("message", (event) => hmrEvents.push(`message:${event.type}`));
   hmr.start();
+  await Promise.resolve();
   workflow.editMessage("gamma");
   const editedMessageModule = await workflow.fetch("http://127.0.0.1:5173/src/message.js");
   assert.match(await editedMessageModule.text(), /gamma/);
-  assert.equal(workflow.hmrUpdates().at(-1).label, "gamma");
+  const update = workflow.hmrUpdates().at(-1);
+  assert.equal(update.type, "update");
+  assert.equal(update.updates[0].type, "js-update");
+  assert.equal(update.updates[0].path, "/src/message.js");
+  assert.equal(update.updates[0].acceptedPath, "/src/message.js");
+  assert.equal(update.updates[0].label, "gamma");
   hmr.close();
-  assert.deepEqual(hmrEvents, ["open:1", "message:update"]);
+  assert.deepEqual(hmrEvents, ["open:1", "message:connected", "message:update"]);
 }
 }
 

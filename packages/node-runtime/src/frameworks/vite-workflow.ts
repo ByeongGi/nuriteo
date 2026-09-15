@@ -51,8 +51,17 @@ export interface ViteProductDevServerSnapshot {
 
 export interface ViteProductHmrUpdate {
   type: "update";
+  updates: ViteProductHmrPayloadUpdate[];
+}
+
+export interface ViteProductHmrPayloadUpdate {
+  type: "js-update" | "css-update";
   path: string;
-  label: string;
+  acceptedPath: string;
+  timestamp: number;
+  explicitImportRequired?: boolean;
+  ssrInvalidates?: string[];
+  label?: string;
 }
 
 export interface ViteProductHmrSocket {
@@ -250,7 +259,7 @@ export class ViteProductWorkflow {
     const before = this.preview("/").body;
     this.workspace.writeText(join(this.projectRoot, "src/message.js"), `export const label = "${label}";\n`);
     const after = this.preview("/").body;
-    const update = { type: "update", path: "/src/message.js", label } satisfies ViteProductHmrUpdate;
+    const update = createViteHmrUpdate("/src/message.js", label);
     this.#hmrUpdates.push(update);
     this.#broadcastHmr(update);
     return {
@@ -275,6 +284,9 @@ export class ViteProductWorkflow {
       }
     };
     this.#hmrSockets.add(socket);
+    queueMicrotask(() => {
+      if (this.#hmrSockets.has(socket)) socket.onmessage?.({ data: JSON.stringify({ type: "connected" }) });
+    });
     return socket;
   }
 
@@ -385,6 +397,23 @@ export const ViteReactProductWorkflow = ViteProductWorkflow;
 
 export function runViteReactProductWorkflow(options: ViteProductWorkflowOptions): ViteProductWorkflowResult {
   return runViteProductWorkflow({ ...options, template: options.template || "react" });
+}
+
+export function createViteHmrUpdate(path: string, label: string, timestamp = Date.now()): ViteProductHmrUpdate {
+  return {
+    type: "update",
+    updates: [
+      {
+        type: path.endsWith(".css") ? "css-update" : "js-update",
+        path,
+        acceptedPath: path,
+        timestamp,
+        explicitImportRequired: false,
+        ssrInvalidates: [],
+        label
+      }
+    ]
+  };
 }
 
 export type ViteReactPackageManager = ViteProductPackageManager;

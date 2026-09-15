@@ -24,7 +24,7 @@ for (const id of ["vite-react-product-workflow", "vite-vue-product-workflow", "v
   assert.equal(product?.runtime, "browser-guest-node-runtime");
   assert.equal(product.status, "partial-pass");
   assert.match(product.productGap, /actual Vite dev server process/i);
-  assert.match(product.productGap, /real Vite HMR protocol/i);
+  assert.match(product.productGap, /real Vite server HMR source/i);
 }
 
 for (const entry of matrix.cases) {
