@@ -116,6 +116,15 @@ export class ViteReactProductWorkflow {
     };
   }
 
+  async fetch(input: string | URL): Promise<Response> {
+    const path = new URL(String(input)).pathname;
+    const preview = this.preview(path);
+    return new Response(preview.body, {
+      status: preview.statusCode,
+      headers: { "content-type": "text/html; charset=utf-8" }
+    });
+  }
+
   editMessage(label: string): ViteReactHmrResult {
     const before = this.preview("/").body;
     this.workspace.writeText(join(this.projectRoot, "src/message.js"), `export const label = "${label}";\n`);
