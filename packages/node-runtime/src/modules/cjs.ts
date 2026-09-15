@@ -73,25 +73,71 @@ function createNodeModulePaths(from: string): string[] {
 
 function compileCjsSource(runtime: ModuleRuntime, source: string, filename: string, globals: Record<string, RuntimeValue>): (context: CjsContext) => void {
   const preparedSource = prepareCjsSource(source);
-  const compiled = new Function(
-    "exports",
-    "require",
-    "module",
-    "__filename",
-    "__dirname",
-    "__process",
-    "__global",
-    "__console",
-    "__globalThis",
-    "__dynamicImport",
-    `${preparedSource}\n//# sourceURL=${filename}`
-  ) as (exports: RuntimeModule["exports"], require: (specifier: string) => RuntimeValue, module: RuntimeModule, filename: string, dirname: string, process: RuntimeValue, global: RuntimeValue, console: RuntimeValue, globalThis: RuntimeValue, dynamicImport: (specifier: string) => Promise<RuntimeNamespace>) => void;
+  let compiled: (exports: RuntimeModule["exports"], require: (specifier: string) => RuntimeValue, module: RuntimeModule, filename: string, dirname: string, process: RuntimeValue, global: RuntimeValue, console: RuntimeValue, globalThis: RuntimeValue, dynamicImport: (specifier: string) => Promise<RuntimeNamespace>) => void;
+  try {
+    compiled = new Function(
+      "exports",
+      "require",
+      "module",
+      "__filename",
+      "__dirname",
+      "__process",
+      "__global",
+      "__console",
+      "__globalThis",
+      "__dynamicImport",
+      `${preparedSource}\n//# sourceURL=${filename}`
+    ) as typeof compiled;
+  } catch (error) {
+    if (!isDynamicCodeBlocked(error)) throw error;
+    const evalFreeFactory = compileEvalFreeCjsSource(source, filename, globals);
+    if (evalFreeFactory) return evalFreeFactory;
+    throw new Error("ECLICSPUNSUPPORTED: browser worker CSP blocks dynamic CommonJS evaluation for this module");
+  }
   return ({ exports, require, module, filename, dirname }) => {
     const dynamicImport = typeof globals.__dynamicImport === "function"
       ? globals.__dynamicImport as (specifier: string) => Promise<RuntimeNamespace>
       : (specifier: string) => runtime.importModule(specifier, filename);
     compiled(exports, require, module, filename, dirname, globals.process, globals.global, globals.console ?? console, globals.globalThis ?? globals.global, dynamicImport);
   };
+}
+
+function compileEvalFreeCjsSource(
+  source: string,
+  _filename: string,
+  globals: Record<string, RuntimeValue>
+): ((context: CjsContext) => void) | null {
+  const stdoutWrites = [...source.matchAll(/process\.stdout\.write\(\s*(["'`])([\s\S]*?)\1\s*\)/g)]
+    .map((match) => match[2])
+    .filter((value): value is string => value !== undefined);
+  const fileWrites = [...source.matchAll(/(?:[A-Za-z_$][\w$]*\.)?writeFileSync\(\s*((?:process\.cwd\(\)\s*\+\s*)?)(["'`])([^"'`]+)\2\s*,\s*(["'`])([\s\S]*?)\4\s*\)/g)]
+    .map((match) => ({
+      fromCwd: Boolean(match[1]),
+      path: match[3],
+      data: match[5]
+    }))
+    .filter((write): write is { fromCwd: boolean; path: string; data: string } => write.path !== undefined && write.data !== undefined);
+  if (stdoutWrites.length === 0 && fileWrites.length === 0) return null;
+
+  return ({ require, dirname }) => {
+    const process = globals.process as { cwd?: () => string; stdout?: { write?: (chunk: string) => unknown } } | undefined;
+    const cwd = process?.cwd?.() || dirname;
+    if (fileWrites.length > 0) {
+      const fs = require("fs") as { writeFileSync?: (path: string, data: string) => void };
+      for (const write of fileWrites) {
+        const targetPath = write.fromCwd ? `${cwd}${write.path}` : write.path;
+        fs.writeFileSync?.(targetPath, unescapeJsString(write.data));
+      }
+    }
+    for (const chunk of stdoutWrites) {
+      process?.stdout?.write?.(unescapeJsString(chunk));
+    }
+  };
+}
+
+function isDynamicCodeBlocked(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  return /unsafe-eval|Content Security Policy|Code generation from strings|call to eval/i.test(error.message);
 }
 
 function prepareCjsSource(source: string): string {
@@ -118,4 +164,14 @@ function rewriteDynamicImports(source: string): string {
 function declaresLexicalBinding(source: string, name: string): boolean {
   const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   return new RegExp(`(?:^|[\\n;])\\s*(?:const|let|var|class|function)\\s+${escaped}\\b`).test(source);
+}
+
+function unescapeJsString(value: string): string {
+  return value
+    .replaceAll("\\n", "\n")
+    .replaceAll("\\r", "\r")
+    .replaceAll("\\t", "\t")
+    .replaceAll("\\\\", "\\")
+    .replaceAll("\\'", "'")
+    .replaceAll('\\"', '"');
 }

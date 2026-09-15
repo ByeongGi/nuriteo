@@ -82,11 +82,11 @@ await withRuntimeLab(async (page, baseUrl) => {
     }
   });
   if (cliWorkerResult.error) throw new Error(cliWorkerResult.error);
-  if (cliWorkerResult.result.exitCode !== 1) throw new Error("process worker CLI CSP guard did not fail closed");
-  if (!cliWorkerResult.result.stderr.includes("ECLICSPUNSUPPORTED")) {
-    throw new Error(`process worker CLI CSP guard did not return diagnostic: ${JSON.stringify(cliWorkerResult.result)}`);
+  if (cliWorkerResult.result.stdout !== "browser-worker-cli\n") {
+    throw new Error(`process worker eval-free CLI stdout mismatch: ${JSON.stringify(cliWorkerResult.result)}`);
   }
-  if (cliWorkerResult.result.entry !== "/workspace/cli/bin/fixture.js") throw new Error("process worker CLI diagnostic did not echo entry");
+  const workerCliFile = cliWorkerResult.result.workspaceSnapshot.files.find((file) => file.path === "/workspace/project/worker-cli.txt");
+  if (!workerCliFile || workerCliFile.data !== "b2s=") throw new Error("process worker eval-free CLI snapshot did not include write result");
 
   const result = await page.evaluate(() => globalThis.__runtimeLab.boot());
   if (result.role !== "system") throw new Error("runtime did not boot through system worker");

@@ -86,28 +86,5 @@ function runProgram(message) {
 }
 
 async function evaluateCli(message) {
-  if (!canEvaluateDynamicCode()) {
-    self.postMessage({
-      id: message.id,
-      result: {
-        stdout: "",
-        stderr: "ECLICSPUNSUPPORTED: browser worker CSP blocks dynamic module evaluation; bundle/eval-free CLI worker execution is required.\n",
-        exitCode: 1,
-        entry: message.request?.entry?.entry || "",
-        workspaceSnapshot: message.workspaceSnapshot
-      },
-      type: "cli:result"
-    });
-    return;
-  }
   self.postMessage(await evaluateCliModuleWorkerMessage(message));
-}
-
-function canEvaluateDynamicCode() {
-  try {
-    new Function("");
-    return true;
-  } catch {
-    return false;
-  }
 }
