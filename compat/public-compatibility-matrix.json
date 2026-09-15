@@ -76,7 +76,7 @@
     }
   ],
   "projectFixtures": {
-    "status": "reference-install-build-measured",
+    "status": "reference-install-build-dev-preview-hmr-measured",
     "source": "compat/ecosystem-fixtures.json",
     "results": "compat/ecosystem-fixture-results.json",
     "total": 10,
@@ -84,6 +84,8 @@
     "referenceInstallPass": 7,
     "referenceBuildPass": 6,
     "referenceDevPreviewPass": 6,
+    "referenceHmrPass": 4,
+    "referencePass": 4,
     "referenceScoreAtLeast75": 6
   },
   "unsupported": [

@@ -9,6 +9,12 @@ assert.equal(matrix.scope.productRuntime, "browser-guest-node-runtime");
 assert.match(matrix.scope.parityBoundary, /Docker/);
 assert.equal(matrix.projectFixtures.total, 10);
 assert.equal(matrix.projectFixtures.minimumPassForMilestoneB, 7);
+assert.equal(matrix.projectFixtures.status, "reference-install-build-dev-preview-hmr-measured");
+assert.equal(matrix.projectFixtures.referenceInstallPass, 7);
+assert.equal(matrix.projectFixtures.referenceBuildPass, 6);
+assert.equal(matrix.projectFixtures.referenceDevPreviewPass, 6);
+assert.equal(matrix.projectFixtures.referenceHmrPass, 4);
+assert.equal(matrix.projectFixtures.referencePass, 4);
 
 for (const section of [matrix.frameworks, matrix.packages, matrix.unsupported]) {
   assert.ok(section.length > 0);

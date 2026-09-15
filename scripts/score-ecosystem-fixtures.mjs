@@ -75,14 +75,9 @@ async function scoreFixture(fixture) {
   const build = runCommandString(fixture.expectedCommands.build, projectDir);
   criteria.push(criterion("build-dist", build.status === 0, build));
 
-  const devPreview = await runDevPreview(fixture.expectedCommands.dev, projectDir);
+  const { devPreview, editHmr } = await runDevPreviewAndHmr(fixture.expectedCommands.dev, projectDir);
   criteria.push(criterion("dev-preview", devPreview.status === 0, devPreview));
-  criteria.push({
-    id: "edit-hmr",
-    points: 25,
-    status: "not-run",
-    note: "Use the interactive harness to edit source and capture HMR event log."
-  });
+  criteria.push(criterion("edit-hmr", editHmr.status === 0, editHmr));
 
   const score = criteria.reduce((total, entry) => total + (entry.status === "pass" ? entry.points : 0), 0);
   return {
@@ -162,7 +157,7 @@ function run(bin, argv, cwd) {
   });
 }
 
-async function runDevPreview(command, cwd) {
+async function runDevPreviewAndHmr(command, cwd) {
   const [bin, ...argv] = command.split(/\s+/).filter(Boolean);
   if (!bin) throw new Error(`empty dev command for ${cwd}`);
   const child = spawn(bin, argv, {
@@ -188,19 +183,70 @@ async function runDevPreview(command, cwd) {
 
   try {
     const response = await waitForPreview(() => firstPreviewUrl(stdout, stderr) || "http://127.0.0.1:5173/");
+    const previewUrl = firstPreviewUrl(stdout, stderr) || "http://127.0.0.1:5173/";
+    const editHmr = response.ok
+      ? await runEditHmr(previewUrl, cwd)
+      : { status: 1, stdout: "", stderr: `preview returned HTTP ${response.status}` };
     return {
-      status: response.ok ? 0 : 1,
-      stdout,
-      stderr: response.ok ? stderr : `${stderr}\npreview returned HTTP ${response.status}`
+      devPreview: {
+        status: response.ok ? 0 : 1,
+        stdout,
+        stderr: response.ok ? stderr : `${stderr}\npreview returned HTTP ${response.status}`
+      },
+      editHmr
+    };
+  } catch (error) {
+    return {
+      devPreview: {
+        status: 1,
+        stdout,
+        stderr: `${stderr}\n${error instanceof Error ? error.message : String(error)}`
+      },
+      editHmr: {
+        status: 1,
+        stdout: "",
+        stderr: "Skipped HMR because preview did not become ready."
+      }
+    };
+  } finally {
+    await stopChildProcess(child);
+  }
+}
+
+async function runEditHmr(previewUrl, cwd) {
+  const target = findEditableSource(cwd);
+  if (!target) {
+    return {
+      status: 1,
+      stdout: "",
+      stderr: "No editable source candidate found."
+    };
+  }
+  const original = fs.readFileSync(target, "utf8");
+  const marker = `\n// cargo-container-hmr-${Date.now()}\n`;
+  const hmrUrl = await resolveHmrUrl(previewUrl);
+  const moduleUrl = sourceModuleUrl(previewUrl, path.relative(cwd, target));
+  let socket;
+  try {
+    await fetch(moduleUrl);
+    socket = await connectHmrSocket(hmrUrl);
+    const update = waitForHmrUpdate(socket);
+    fs.writeFileSync(target, `${original}${marker}`);
+    const message = await update;
+    return {
+      status: 0,
+      stdout: `edited ${path.relative(cwd, target)}\n${message}`,
+      stderr: ""
     };
   } catch (error) {
     return {
       status: 1,
-      stdout,
-      stderr: `${stderr}\n${error instanceof Error ? error.message : String(error)}`
+      stdout: `edited ${path.relative(cwd, target)}`,
+      stderr: error instanceof Error ? error.message : String(error)
     };
   } finally {
-    await stopChildProcess(child);
+    fs.writeFileSync(target, original);
+    socket?.close();
   }
 }
 
@@ -251,6 +297,73 @@ async function waitForPreview(urlProvider) {
 function firstPreviewUrl(stdout, stderr) {
   const match = `${stdout}\n${stderr}`.match(/https?:\/\/(?:localhost|127\.0\.0\.1):\d+\/?/);
   return match?.[0] || null;
+}
+
+function findEditableSource(cwd) {
+  const candidates = [
+    "src/App.jsx",
+    "src/App.tsx",
+    "src/App.js",
+    "src/App.ts",
+    "src/main.jsx",
+    "src/main.tsx",
+    "src/main.js",
+    "src/main.ts"
+  ];
+  return candidates.map((candidate) => path.join(cwd, candidate)).find((candidate) => fs.existsSync(candidate)) || null;
+}
+
+function sourceModuleUrl(previewUrl, relativePath) {
+  const url = new URL(relativePath.replaceAll("\\", "/"), previewUrl);
+  url.searchParams.set("t", String(Date.now()));
+  return url.href;
+}
+
+async function resolveHmrUrl(previewUrl) {
+  const parsed = new URL(previewUrl);
+  const clientUrl = new URL("/@vite/client", parsed);
+  try {
+    const source = await fetch(clientUrl).then((response) => response.ok ? response.text() : "");
+    const token = source.match(/__HMR_TOKEN__\s*=\s*['"]([^'"]+)['"]/)?.[1];
+    const hmr = new URL("/", parsed);
+    hmr.protocol = parsed.protocol === "https:" ? "wss:" : "ws:";
+    if (token) hmr.searchParams.set("token", token);
+    return hmr.href;
+  } catch {
+    const hmr = new URL("/", parsed);
+    hmr.protocol = parsed.protocol === "https:" ? "wss:" : "ws:";
+    return hmr.href;
+  }
+}
+
+function connectHmrSocket(url) {
+  return new Promise((resolve, reject) => {
+    const socket = new WebSocket(url, "vite-hmr");
+    const timeout = setTimeout(() => {
+      socket.close();
+      reject(new Error(`HMR socket did not open: ${url}`));
+    }, 5000);
+    socket.addEventListener("open", () => {
+      clearTimeout(timeout);
+      resolve(socket);
+    }, { once: true });
+    socket.addEventListener("error", () => {
+      clearTimeout(timeout);
+      reject(new Error(`HMR socket failed: ${url}`));
+    }, { once: true });
+  });
+}
+
+function waitForHmrUpdate(socket) {
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error("HMR update was not observed after source edit.")), 10000);
+    socket.addEventListener("message", (event) => {
+      const data = String(event.data);
+      if (!data.includes("\"update\"")) return;
+      clearTimeout(timeout);
+      resolve(data);
+    });
+  });
 }
 
 function tail(value = "") {

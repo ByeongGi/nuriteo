@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-15T18:05:13.195Z",
+  "generatedAt": "2026-09-15T18:13:04.112Z",
   "source": "compat/ecosystem-fixtures.json",
   "minimumPassForMilestoneB": 7,
   "results": [
@@ -20,7 +20,7 @@
           "points": 25,
           "status": "pass",
           "exitCode": 0,
-          "stdoutTail": "Scope: all 283 workspace projects\n✓ Lockfile at ../../../pnpm-lock.yaml passes supply-chain policies (verified 8m ago)\n../../..                                 | Progress: resolved 110, reused 0, downloaded 0, added 110, done\n.../node_modules/unrs-resolver postinstall$ napi-postinstall unrs-resolver 1.11.1 check\n.../node_modules/playwright-chromium install$ node install.js\n.../node_modules/@parcel/watcher install$ node scripts/build-from-source.js\n.../node_modules/simple-git-hooks postinstall$ node ./postinstall.js\n.../node_modules/@parcel/watcher install: Done\n.../node_modules/unrs-resolver postinstall: Done\n.../node_modules/playwright-chromium install: Done\n.../node_modules/simple-git-hooks postinstall: Done\n../../.. postinstall$ simple-git-hooks\n../../.. postinstall: Done\nDone in 968ms using pnpm v12.4.1",
+          "stdoutTail": "Scope: all 283 workspace projects\n✓ Lockfile at ../../../pnpm-lock.yaml passes supply-chain policies (verified 16m ago)\n../../..                                 | Progress: resolved 110, reused 0, downloaded 0, added 110, done\n.../node_modules/unrs-resolver postinstall$ napi-postinstall unrs-resolver 1.11.1 check\n.../node_modules/playwright-chromium install$ node install.js\n.../node_modules/@parcel/watcher install$ node scripts/build-from-source.js\n.../node_modules/simple-git-hooks postinstall$ node ./postinstall.js\n.../node_modules/@parcel/watcher install: Done\n.../node_modules/unrs-resolver postinstall: Done\n.../node_modules/playwright-chromium install: Done\n.../node_modules/simple-git-hooks postinstall: Done\n../../.. postinstall$ simple-git-hooks\n../../.. postinstall: Done\nDone in 968ms using pnpm v12.4.1",
           "stderrTail": ""
         },
         {
@@ -42,8 +42,10 @@
         {
           "id": "edit-hmr",
           "points": 25,
-          "status": "not-run",
-          "note": "Use the interactive harness to edit source and capture HMR event log."
+          "status": "fail",
+          "exitCode": 1,
+          "stdoutTail": "",
+          "stderrTail": "Skipped HMR because preview did not become ready."
         }
       ]
     },
@@ -63,7 +65,7 @@
           "points": 25,
           "status": "fail",
           "exitCode": 1,
-          "stdoutTail": "✓ Lockfile passes supply-chain policies (verified 8m ago)\nLockfile is up to date, resolution step is skipped\nAlready up to date\n[ERR_PNPM_IGNORED_BUILDS] Ignored build scripts: @parcel/watcher@2.5.0, @swc/core@1.9.1, esbuild@0.21.5\nRun \"pnpm approve-builds\" to pick which dependencies should be allowed to run scripts.",
+          "stdoutTail": "✓ Lockfile passes supply-chain policies (verified 16m ago)\nLockfile is up to date, resolution step is skipped\nAlready up to date\n[ERR_PNPM_IGNORED_BUILDS] Ignored build scripts: @parcel/watcher@2.5.0, @swc/core@1.9.1, esbuild@0.21.5\nRun \"pnpm approve-builds\" to pick which dependencies should be allowed to run scripts.",
           "stderrTail": ""
         },
         {
@@ -71,7 +73,7 @@
           "points": 25,
           "status": "fail",
           "exitCode": 1,
-          "stdoutTail": "✓ Lockfile passes supply-chain policies (verified 8m ago)\nLockfile is up to date, resolution step is skipped\nAlready up to date\n[ERR_PNPM_IGNORED_BUILDS] Ignored build scripts: @parcel/watcher@2.5.0, @swc/core@1.9.1, esbuild@0.21.5\nRun \"pnpm approve-builds\" to pick which dependencies should be allowed to run scripts.\n[ERROR] Command failed with exit code 1: /Users/byeonggi/.local/share/mise/installs/node/24.17.0/bin/node /Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/bin/pnpm.mjs install\npnpm: Command failed with exit code 1: /Users/byeonggi/.local/share/mise/installs/node/24.17.0/bin/node /Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/bin/pnpm.mjs install\n    at getFinalError (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:88203:14)\n    at makeError (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:90510:21)\n    at getSyncResult (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:92354:10)\n    at spawnSubprocessSync (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:92314:14)\n    at execaCoreSync (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:92244:23)\n    at callBoundExeca (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:94772:23)\n    at boundExeca (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:94749:49)\n    at sync2 (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:94908:10)\n    at runPnpmCli (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:249521:5)\n    at runDepsStatusCheck (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:251287:7)",
+          "stdoutTail": "✓ Lockfile passes supply-chain policies (verified 16m ago)\nLockfile is up to date, resolution step is skipped\nAlready up to date\n[ERR_PNPM_IGNORED_BUILDS] Ignored build scripts: @parcel/watcher@2.5.0, @swc/core@1.9.1, esbuild@0.21.5\nRun \"pnpm approve-builds\" to pick which dependencies should be allowed to run scripts.\n[ERROR] Command failed with exit code 1: /Users/byeonggi/.local/share/mise/installs/node/24.17.0/bin/node /Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/bin/pnpm.mjs install\npnpm: Command failed with exit code 1: /Users/byeonggi/.local/share/mise/installs/node/24.17.0/bin/node /Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/bin/pnpm.mjs install\n    at getFinalError (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:88203:14)\n    at makeError (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:90510:21)\n    at getSyncResult (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:92354:10)\n    at spawnSubprocessSync (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:92314:14)\n    at execaCoreSync (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:92244:23)\n    at callBoundExeca (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:94772:23)\n    at boundExeca (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:94749:49)\n    at sync2 (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:94908:10)\n    at runPnpmCli (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:249521:5)\n    at runDepsStatusCheck (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:251287:7)",
           "stderrTail": ""
         },
         {
@@ -79,14 +81,16 @@
           "points": 25,
           "status": "fail",
           "exitCode": 1,
-          "stdoutTail": "✓ Lockfile passes supply-chain policies (verified 8m ago)\nLockfile is up to date, resolution step is skipped\nAlready up to date\n[ERR_PNPM_IGNORED_BUILDS] Ignored build scripts: @parcel/watcher@2.5.0, @swc/core@1.9.1, esbuild@0.21.5\nRun \"pnpm approve-builds\" to pick which dependencies should be allowed to run scripts.\n[ERROR] Command failed with exit code 1: /Users/byeonggi/.local/share/mise/installs/node/24.17.0/bin/node /Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/bin/pnpm.mjs install\npnpm: Command failed with exit code 1: /Users/byeonggi/.local/share/mise/installs/node/24.17.0/bin/node /Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/bin/pnpm.mjs install\n    at getFinalError (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:88203:14)\n    at makeError (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:90510:21)\n    at getSyncResult (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:92354:10)\n    at spawnSubprocessSync (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:92314:14)\n    at execaCoreSync (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:92244:23)\n    at callBoundExeca (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:94772:23)\n    at boundExeca (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:94749:49)\n    at sync2 (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:94908:10)\n    at runPnpmCli (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:249521:5)\n    at runDepsStatusCheck (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:251287:7)",
+          "stdoutTail": "✓ Lockfile passes supply-chain policies (verified 16m ago)\nLockfile is up to date, resolution step is skipped\nAlready up to date\n[ERR_PNPM_IGNORED_BUILDS] Ignored build scripts: @parcel/watcher@2.5.0, @swc/core@1.9.1, esbuild@0.21.5\nRun \"pnpm approve-builds\" to pick which dependencies should be allowed to run scripts.\n[ERROR] Command failed with exit code 1: /Users/byeonggi/.local/share/mise/installs/node/24.17.0/bin/node /Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/bin/pnpm.mjs install\npnpm: Command failed with exit code 1: /Users/byeonggi/.local/share/mise/installs/node/24.17.0/bin/node /Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/bin/pnpm.mjs install\n    at getFinalError (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:88203:14)\n    at makeError (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:90510:21)\n    at getSyncResult (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:92354:10)\n    at spawnSubprocessSync (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:92314:14)\n    at execaCoreSync (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:92244:23)\n    at callBoundExeca (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:94772:23)\n    at boundExeca (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:94749:49)\n    at sync2 (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:94908:10)\n    at runPnpmCli (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:249521:5)\n    at runDepsStatusCheck (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:251287:7)",
           "stderrTail": "preview did not become ready: fetch failed"
         },
         {
           "id": "edit-hmr",
           "points": 25,
-          "status": "not-run",
-          "note": "Use the interactive harness to edit source and capture HMR event log."
+          "status": "fail",
+          "exitCode": 1,
+          "stdoutTail": "",
+          "stderrTail": "Skipped HMR because preview did not become ready."
         }
       ]
     },
@@ -122,14 +126,16 @@
           "points": 25,
           "status": "pass",
           "exitCode": 0,
-          "stdoutTail": "> uncryptid@0.0.0 dev\n> vite\n  vite v2.8.6 dev server running at:\n  > Local: http://localhost:3000/\n  > Network: use `--host` to expose\n  ready in 287ms.",
-          "stderrTail": ""
+          "stdoutTail": "> uncryptid@0.0.0 dev\n> vite\n  vite v2.8.6 dev server running at:\n  > Local: http://localhost:3000/\n  > Network: use `--host` to expose\n  ready in 315ms.\n3:11:56 AM [vite] page reload src/main.tsx",
+          "stderrTail": "Browserslist: caniuse-lite is outdated. Please run:\n  npx browserslist@latest --update-db\n  Why you should do it regularly: https://github.com/browserslist/browserslist#browsers-data-updating"
         },
         {
           "id": "edit-hmr",
           "points": 25,
-          "status": "not-run",
-          "note": "Use the interactive harness to edit source and capture HMR event log."
+          "status": "fail",
+          "exitCode": 1,
+          "stdoutTail": "edited src/main.tsx",
+          "stderrTail": "HMR update was not observed after source edit."
         }
       ]
     },
@@ -149,7 +155,7 @@
           "points": 25,
           "status": "pass",
           "exitCode": 0,
-          "stdoutTail": "up to date, audited 340 packages in 925ms\n69 packages are looking for funding\n  run `npm fund` for details\n31 vulnerabilities (6 low, 7 moderate, 17 high, 1 critical)\nTo address issues that do not require attention, run:\n  npm audit fix\nTo address all issues (including breaking changes), run:\n  npm audit fix --force\nRun `npm audit` for details.",
+          "stdoutTail": "up to date, audited 340 packages in 874ms\n69 packages are looking for funding\n  run `npm fund` for details\n31 vulnerabilities (6 low, 7 moderate, 17 high, 1 critical)\nTo address issues that do not require attention, run:\n  npm audit fix\nTo address all issues (including breaking changes), run:\n  npm audit fix --force\nRun `npm audit` for details.",
           "stderrTail": "npm warn ERESOLVE overriding peer dependency\nnpm warn While resolving: mini-create-react-context@0.4.1\nnpm warn Found: react@18.0.0\nnpm warn node_modules/react\nnpm warn   react@\"^18.0.0\" from the root project\nnpm warn   3 more (react-dom, react-router, react-router-dom)\nnpm warn\nnpm warn Could not resolve dependency:\nnpm warn peer react@\"^0.14.0 || ^15.0.0 || ^16.0.0 || ^17.0.0\" from mini-create-react-context@0.4.1\nnpm warn node_modules/react-router/node_modules/mini-create-react-context\nnpm warn   mini-create-react-context@\"^0.4.0\" from react-router@5.2.1\nnpm warn   node_modules/react-router\nnpm warn\nnpm warn Conflicting peer dependency: react@17.0.2\nnpm warn node_modules/react\nnpm warn   peer react@\"^0.14.0 || ^15.0.0 || ^16.0.0 || ^17.0.0\" from mini-create-react-context@0.4.1\nnpm warn   node_modules/react-router/node_modules/mini-create-react-context\nnpm warn     mini-create-react-context@\"^0.4.0\" from react-router@5.2.1\nnpm warn     node_modules/react-router"
         },
         {
@@ -171,8 +177,10 @@
         {
           "id": "edit-hmr",
           "points": 25,
-          "status": "not-run",
-          "note": "Use the interactive harness to edit source and capture HMR event log."
+          "status": "fail",
+          "exitCode": 1,
+          "stdoutTail": "edited src/App.tsx",
+          "stderrTail": "HMR socket failed: ws://localhost:3000/"
         }
       ]
     },
@@ -183,8 +191,8 @@
       "packageManager": "npm",
       "repository": "https://github.com/Sivamani-18/vite-react-ts-boilerplate",
       "subdirectory": null,
-      "score": 75,
-      "status": "partial-pass",
+      "score": 100,
+      "status": "pass",
       "unsupportedBlocker": false,
       "criteria": [
         {
@@ -192,7 +200,7 @@
           "points": 25,
           "status": "pass",
           "exitCode": 0,
-          "stdoutTail": "up to date, audited 301 packages in 820ms\n65 packages are looking for funding\n  run `npm fund` for details\n22 vulnerabilities (2 low, 5 moderate, 15 high)\nTo address all issues, run:\n  npm audit fix\nRun `npm audit` for details.",
+          "stdoutTail": "up to date, audited 301 packages in 1s\n65 packages are looking for funding\n  run `npm fund` for details\n22 vulnerabilities (2 low, 5 moderate, 15 high)\nTo address all issues, run:\n  npm audit fix\nRun `npm audit` for details.",
           "stderrTail": ""
         },
         {
@@ -200,7 +208,7 @@
           "points": 25,
           "status": "pass",
           "exitCode": 0,
-          "stdoutTail": "> vite-react-ts-boilerplate@0.0.0 build\n> tsc -b && vite build\nvite v5.3.4 building for production...\ntransforming...\n✓ 42 modules transformed.\nrendering chunks...\ncomputing gzip size...\ndist/index.html                   0.54 kB │ gzip:  0.32 kB\ndist/assets/react-CHdo91hT.svg    4.13 kB │ gzip:  2.05 kB\ndist/assets/index-C8KuIkIt.css    8.48 kB │ gzip:  2.47 kB\ndist/assets/index-BkChpli2.js   166.43 kB │ gzip: 54.15 kB\n✓ built in 546ms",
+          "stdoutTail": "> vite-react-ts-boilerplate@0.0.0 build\n> tsc -b && vite build\nvite v5.3.4 building for production...\ntransforming...\n✓ 42 modules transformed.\nrendering chunks...\ncomputing gzip size...\ndist/index.html                   0.54 kB │ gzip:  0.32 kB\ndist/assets/react-CHdo91hT.svg    4.13 kB │ gzip:  2.05 kB\ndist/assets/index-C8KuIkIt.css    8.48 kB │ gzip:  2.47 kB\ndist/assets/index-BkChpli2.js   166.43 kB │ gzip: 54.15 kB\n✓ built in 584ms",
           "stderrTail": "Browserslist: caniuse-lite is outdated. Please run:\n  npx update-browserslist-db@latest\n  Why you should do it regularly: https://github.com/browserslist/update-db#readme"
         },
         {
@@ -208,14 +216,16 @@
           "points": 25,
           "status": "pass",
           "exitCode": 0,
-          "stdoutTail": "> vite-react-ts-boilerplate@0.0.0 dev\n> vite\n  VITE v5.3.4  ready in 90 ms\n  ➜  Local:   http://localhost:5173/\n  ➜  Network: use --host to expose",
-          "stderrTail": ""
+          "stdoutTail": "> vite-react-ts-boilerplate@0.0.0 dev\n> vite\n  VITE v5.3.4  ready in 87 ms\n  ➜  Local:   http://localhost:5173/\n  ➜  Network: use --host to expose\n3:12:12 AM [vite] hmr update /src/App.tsx, /src/index.css",
+          "stderrTail": "Browserslist: caniuse-lite is outdated. Please run:\n  npx update-browserslist-db@latest\n  Why you should do it regularly: https://github.com/browserslist/update-db#readme"
         },
         {
           "id": "edit-hmr",
           "points": 25,
-          "status": "not-run",
-          "note": "Use the interactive harness to edit source and capture HMR event log."
+          "status": "pass",
+          "exitCode": 0,
+          "stdoutTail": "edited src/App.tsx\n{\"type\":\"update\",\"updates\":[{\"type\":\"js-update\",\"timestamp\":1789495932305,\"path\":\"/src/App.tsx\",\"acceptedPath\":\"/src/App.tsx\",\"explicitImportRequired\":false,\"isWithinCircularImport\":false,\"ssrInvalidates\":[]},{\"type\":\"js-update\",\"timestamp\":1789495932305,\"path\":\"/src/index.css\",\"acceptedPath\":\"/src/index.css\",\"explicitImportRequired\":false,\"isWithinCircularImport\":false,\"ssrInvalidates\":[]}]}",
+          "stderrTail": ""
         }
       ]
     },
@@ -226,8 +236,8 @@
       "packageManager": "npm",
       "repository": "https://github.com/fuhouyu/homepage",
       "subdirectory": null,
-      "score": 75,
-      "status": "partial-pass",
+      "score": 100,
+      "status": "pass",
       "unsupportedBlocker": false,
       "criteria": [
         {
@@ -235,7 +245,7 @@
           "points": 25,
           "status": "pass",
           "exitCode": 0,
-          "stdoutTail": "up to date, audited 473 packages in 608ms\n153 packages are looking for funding\n  run `npm fund` for details\nfound 0 vulnerabilities",
+          "stdoutTail": "up to date, audited 473 packages in 561ms\n153 packages are looking for funding\n  run `npm fund` for details\nfound 0 vulnerabilities",
           "stderrTail": ""
         },
         {
@@ -243,7 +253,7 @@
           "points": 25,
           "status": "pass",
           "exitCode": 0,
-          "stdoutTail": "> fuhouyu.com@0.0.0 build\n> tsc -b && vite build\nrolldown-vite v7.2.5 building client environment for production...\n\u001b[2K\rtransforming...✓ 3430 modules transformed.\nrendering chunks...\ncomputing gzip size...\ndist/index.html                               0.63 kB │ gzip:   0.33 kB\ndist/assets/Tooltip-D5idU7TC-pVg1etM_.js      1.99 kB │ gzip:   0.82 kB\ndist/assets/index-D67bVBZb.js             1,392.12 kB │ gzip: 308.06 kB\n✓ built in 248ms\n✨ [vite-plugin-compression]:algorithm=gzip - compressed file successfully: \ndist//private/tmp/cargo-container-ecosystem-fixtures/fuhouyu-homepage/assets/Tooltip-D5idU7TC-pVg1etM_.js.gz   1.95kb / gzip: 0.80kb\ndist//private/tmp/cargo-container-ecosystem-fixtures/fuhouyu-homepage/assets/index-D67bVBZb.js.gz              1359.50kb / gzip: 298.72kb",
+          "stdoutTail": "> fuhouyu.com@0.0.0 build\n> tsc -b && vite build\nrolldown-vite v7.2.5 building client environment for production...\n\u001b[2K\rtransforming...✓ 3430 modules transformed.\nrendering chunks...\ncomputing gzip size...\ndist/index.html                               0.63 kB │ gzip:   0.33 kB\ndist/assets/Tooltip-D5idU7TC-pVg1etM_.js      1.99 kB │ gzip:   0.82 kB\ndist/assets/index-D67bVBZb.js             1,392.12 kB │ gzip: 308.06 kB\n✓ built in 250ms\n✨ [vite-plugin-compression]:algorithm=gzip - compressed file successfully: \ndist//private/tmp/cargo-container-ecosystem-fixtures/fuhouyu-homepage/assets/Tooltip-D5idU7TC-pVg1etM_.js.gz   1.95kb / gzip: 0.80kb\ndist//private/tmp/cargo-container-ecosystem-fixtures/fuhouyu-homepage/assets/index-D67bVBZb.js.gz              1359.50kb / gzip: 298.72kb",
           "stderrTail": ""
         },
         {
@@ -251,14 +261,16 @@
           "points": 25,
           "status": "pass",
           "exitCode": 0,
-          "stdoutTail": "> fuhouyu.com@0.0.0 dev\n> cross-env vite --mode dev\n[log] \n  ROLLDOWN-VITE v7.2.5   dev   ready in 161 ms\n[log]   ➜  Local:   http://localhost:5173/\n[log]   ➜  Network: use --host to expose",
+          "stdoutTail": "> fuhouyu.com@0.0.0 dev\n> cross-env vite --mode dev\n[log] \n  ROLLDOWN-VITE v7.2.5   dev   ready in 158 ms\n[log]   ➜  Local:   http://localhost:5173/\n[log]   ➜  Network: use --host to expose\n[log] 3:12:15 AM [vite] (client) hmr update /src/App.tsx",
           "stderrTail": ""
         },
         {
           "id": "edit-hmr",
           "points": 25,
-          "status": "not-run",
-          "note": "Use the interactive harness to edit source and capture HMR event log."
+          "status": "pass",
+          "exitCode": 0,
+          "stdoutTail": "edited src/App.tsx\n{\"type\":\"update\",\"updates\":[{\"type\":\"js-update\",\"timestamp\":1789495935390,\"path\":\"/src/App.tsx\",\"acceptedPath\":\"/src/App.tsx\",\"explicitImportRequired\":false,\"isWithinCircularImport\":false}]}",
+          "stderrTail": ""
         }
       ]
     },
@@ -278,7 +290,7 @@
           "points": 25,
           "status": "fail",
           "exitCode": 1,
-          "stdoutTail": "✓ Lockfile passes supply-chain policies (verified 8m ago)\nLockfile is up to date, resolution step is skipped\nAlready up to date\n[ERR_PNPM_IGNORED_BUILDS] Ignored build scripts: @parcel/watcher@2.6.0, esbuild@0.18.20\nRun \"pnpm approve-builds\" to pick which dependencies should be allowed to run scripts.",
+          "stdoutTail": "✓ Lockfile passes supply-chain policies (verified 16m ago)\nLockfile is up to date, resolution step is skipped\nAlready up to date\n[ERR_PNPM_IGNORED_BUILDS] Ignored build scripts: @parcel/watcher@2.6.0, esbuild@0.18.20\nRun \"pnpm approve-builds\" to pick which dependencies should be allowed to run scripts.",
           "stderrTail": ""
         },
         {
@@ -286,7 +298,7 @@
           "points": 25,
           "status": "fail",
           "exitCode": 1,
-          "stdoutTail": "✓ Lockfile passes supply-chain policies (verified 8m ago)\nLockfile is up to date, resolution step is skipped\nAlready up to date\n[ERR_PNPM_IGNORED_BUILDS] Ignored build scripts: @parcel/watcher@2.6.0, esbuild@0.18.20\nRun \"pnpm approve-builds\" to pick which dependencies should be allowed to run scripts.\n[ERROR] Command failed with exit code 1: /Users/byeonggi/.local/share/mise/installs/node/24.17.0/bin/node /Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/bin/pnpm.mjs install\npnpm: Command failed with exit code 1: /Users/byeonggi/.local/share/mise/installs/node/24.17.0/bin/node /Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/bin/pnpm.mjs install\n    at getFinalError (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:88203:14)\n    at makeError (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:90510:21)\n    at getSyncResult (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:92354:10)\n    at spawnSubprocessSync (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:92314:14)\n    at execaCoreSync (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:92244:23)\n    at callBoundExeca (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:94772:23)\n    at boundExeca (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:94749:49)\n    at sync2 (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:94908:10)\n    at runPnpmCli (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:249521:5)\n    at runDepsStatusCheck (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:251287:7)",
+          "stdoutTail": "✓ Lockfile passes supply-chain policies (verified 16m ago)\nLockfile is up to date, resolution step is skipped\nAlready up to date\n[ERR_PNPM_IGNORED_BUILDS] Ignored build scripts: @parcel/watcher@2.6.0, esbuild@0.18.20\nRun \"pnpm approve-builds\" to pick which dependencies should be allowed to run scripts.\n[ERROR] Command failed with exit code 1: /Users/byeonggi/.local/share/mise/installs/node/24.17.0/bin/node /Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/bin/pnpm.mjs install\npnpm: Command failed with exit code 1: /Users/byeonggi/.local/share/mise/installs/node/24.17.0/bin/node /Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/bin/pnpm.mjs install\n    at getFinalError (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:88203:14)\n    at makeError (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:90510:21)\n    at getSyncResult (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:92354:10)\n    at spawnSubprocessSync (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:92314:14)\n    at execaCoreSync (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:92244:23)\n    at callBoundExeca (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:94772:23)\n    at boundExeca (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:94749:49)\n    at sync2 (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:94908:10)\n    at runPnpmCli (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:249521:5)\n    at runDepsStatusCheck (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:251287:7)",
           "stderrTail": ""
         },
         {
@@ -294,14 +306,16 @@
           "points": 25,
           "status": "fail",
           "exitCode": 1,
-          "stdoutTail": "✓ Lockfile passes supply-chain policies (verified 8m ago)\nLockfile is up to date, resolution step is skipped\nAlready up to date\n[ERR_PNPM_IGNORED_BUILDS] Ignored build scripts: @parcel/watcher@2.6.0, esbuild@0.18.20\nRun \"pnpm approve-builds\" to pick which dependencies should be allowed to run scripts.\n[ERROR] Command failed with exit code 1: /Users/byeonggi/.local/share/mise/installs/node/24.17.0/bin/node /Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/bin/pnpm.mjs install\npnpm: Command failed with exit code 1: /Users/byeonggi/.local/share/mise/installs/node/24.17.0/bin/node /Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/bin/pnpm.mjs install\n    at getFinalError (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:88203:14)\n    at makeError (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:90510:21)\n    at getSyncResult (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:92354:10)\n    at spawnSubprocessSync (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:92314:14)\n    at execaCoreSync (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:92244:23)\n    at callBoundExeca (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:94772:23)\n    at boundExeca (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:94749:49)\n    at sync2 (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:94908:10)\n    at runPnpmCli (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:249521:5)\n    at runDepsStatusCheck (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:251287:7)",
+          "stdoutTail": "✓ Lockfile passes supply-chain policies (verified 16m ago)\nLockfile is up to date, resolution step is skipped\nAlready up to date\n[ERR_PNPM_IGNORED_BUILDS] Ignored build scripts: @parcel/watcher@2.6.0, esbuild@0.18.20\nRun \"pnpm approve-builds\" to pick which dependencies should be allowed to run scripts.\n[ERROR] Command failed with exit code 1: /Users/byeonggi/.local/share/mise/installs/node/24.17.0/bin/node /Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/bin/pnpm.mjs install\npnpm: Command failed with exit code 1: /Users/byeonggi/.local/share/mise/installs/node/24.17.0/bin/node /Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/bin/pnpm.mjs install\n    at getFinalError (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:88203:14)\n    at makeError (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:90510:21)\n    at getSyncResult (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:92354:10)\n    at spawnSubprocessSync (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:92314:14)\n    at execaCoreSync (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:92244:23)\n    at callBoundExeca (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:94772:23)\n    at boundExeca (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:94749:49)\n    at sync2 (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:94908:10)\n    at runPnpmCli (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:249521:5)\n    at runDepsStatusCheck (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:251287:7)",
           "stderrTail": "preview did not become ready: fetch failed"
         },
         {
           "id": "edit-hmr",
           "points": 25,
-          "status": "not-run",
-          "note": "Use the interactive harness to edit source and capture HMR event log."
+          "status": "fail",
+          "exitCode": 1,
+          "stdoutTail": "",
+          "stderrTail": "Skipped HMR because preview did not become ready."
         }
       ]
     },
@@ -321,7 +335,7 @@
           "points": 25,
           "status": "fail",
           "exitCode": 1,
-          "stdoutTail": "✓ Lockfile passes supply-chain policies (verified 8m ago)\nLockfile is up to date, resolution step is skipped\nAlready up to date\n[ERR_PNPM_IGNORED_BUILDS] Ignored build scripts: @tailwindcss/oxide@4.1.12, esbuild@0.25.12\nRun \"pnpm approve-builds\" to pick which dependencies should be allowed to run scripts.",
+          "stdoutTail": "✓ Lockfile passes supply-chain policies (verified 16m ago)\nLockfile is up to date, resolution step is skipped\nAlready up to date\n[ERR_PNPM_IGNORED_BUILDS] Ignored build scripts: @tailwindcss/oxide@4.1.12, esbuild@0.25.12\nRun \"pnpm approve-builds\" to pick which dependencies should be allowed to run scripts.",
           "stderrTail": "[WARN] The \"pnpm\" field in package.json is no longer read by pnpm. The following keys were ignored: \"pnpm.overrides\". See https://pnpm.io/settings for the new home of each setting."
         },
         {
@@ -329,7 +343,7 @@
           "points": 25,
           "status": "fail",
           "exitCode": 1,
-          "stdoutTail": "✓ Lockfile passes supply-chain policies (verified 8m ago)\nLockfile is up to date, resolution step is skipped\nAlready up to date\n[ERR_PNPM_IGNORED_BUILDS] Ignored build scripts: @tailwindcss/oxide@4.1.12, esbuild@0.25.12\nRun \"pnpm approve-builds\" to pick which dependencies should be allowed to run scripts.\n[ERROR] Command failed with exit code 1: /Users/byeonggi/.local/share/mise/installs/node/24.17.0/bin/node /Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/bin/pnpm.mjs install\npnpm: Command failed with exit code 1: /Users/byeonggi/.local/share/mise/installs/node/24.17.0/bin/node /Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/bin/pnpm.mjs install\n    at getFinalError (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:88203:14)\n    at makeError (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:90510:21)\n    at getSyncResult (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:92354:10)\n    at spawnSubprocessSync (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:92314:14)\n    at execaCoreSync (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:92244:23)\n    at callBoundExeca (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:94772:23)\n    at boundExeca (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:94749:49)\n    at sync2 (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:94908:10)\n    at runPnpmCli (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:249521:5)\n    at runDepsStatusCheck (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:251287:7)",
+          "stdoutTail": "✓ Lockfile passes supply-chain policies (verified 16m ago)\nLockfile is up to date, resolution step is skipped\nAlready up to date\n[ERR_PNPM_IGNORED_BUILDS] Ignored build scripts: @tailwindcss/oxide@4.1.12, esbuild@0.25.12\nRun \"pnpm approve-builds\" to pick which dependencies should be allowed to run scripts.\n[ERROR] Command failed with exit code 1: /Users/byeonggi/.local/share/mise/installs/node/24.17.0/bin/node /Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/bin/pnpm.mjs install\npnpm: Command failed with exit code 1: /Users/byeonggi/.local/share/mise/installs/node/24.17.0/bin/node /Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/bin/pnpm.mjs install\n    at getFinalError (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:88203:14)\n    at makeError (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:90510:21)\n    at getSyncResult (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:92354:10)\n    at spawnSubprocessSync (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:92314:14)\n    at execaCoreSync (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:92244:23)\n    at callBoundExeca (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:94772:23)\n    at boundExeca (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:94749:49)\n    at sync2 (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:94908:10)\n    at runPnpmCli (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:249521:5)\n    at runDepsStatusCheck (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:251287:7)",
           "stderrTail": "[WARN] The \"pnpm\" field in package.json is no longer read by pnpm. The following keys were ignored: \"pnpm.overrides\". See https://pnpm.io/settings for the new home of each setting.\n[WARN] The \"pnpm\" field in package.json is no longer read by pnpm. The following keys were ignored: \"pnpm.overrides\". See https://pnpm.io/settings for the new home of each setting."
         },
         {
@@ -337,14 +351,16 @@
           "points": 25,
           "status": "fail",
           "exitCode": 1,
-          "stdoutTail": "✓ Lockfile passes supply-chain policies (verified 8m ago)\nLockfile is up to date, resolution step is skipped\nAlready up to date\n[ERR_PNPM_IGNORED_BUILDS] Ignored build scripts: @tailwindcss/oxide@4.1.12, esbuild@0.25.12\nRun \"pnpm approve-builds\" to pick which dependencies should be allowed to run scripts.\n[ERROR] Command failed with exit code 1: /Users/byeonggi/.local/share/mise/installs/node/24.17.0/bin/node /Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/bin/pnpm.mjs install\npnpm: Command failed with exit code 1: /Users/byeonggi/.local/share/mise/installs/node/24.17.0/bin/node /Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/bin/pnpm.mjs install\n    at getFinalError (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:88203:14)\n    at makeError (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:90510:21)\n    at getSyncResult (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:92354:10)\n    at spawnSubprocessSync (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:92314:14)\n    at execaCoreSync (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:92244:23)\n    at callBoundExeca (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:94772:23)\n    at boundExeca (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:94749:49)\n    at sync2 (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:94908:10)\n    at runPnpmCli (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:249521:5)\n    at runDepsStatusCheck (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:251287:7)",
+          "stdoutTail": "✓ Lockfile passes supply-chain policies (verified 16m ago)\nLockfile is up to date, resolution step is skipped\nAlready up to date\n[ERR_PNPM_IGNORED_BUILDS] Ignored build scripts: @tailwindcss/oxide@4.1.12, esbuild@0.25.12\nRun \"pnpm approve-builds\" to pick which dependencies should be allowed to run scripts.\n[ERROR] Command failed with exit code 1: /Users/byeonggi/.local/share/mise/installs/node/24.17.0/bin/node /Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/bin/pnpm.mjs install\npnpm: Command failed with exit code 1: /Users/byeonggi/.local/share/mise/installs/node/24.17.0/bin/node /Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/bin/pnpm.mjs install\n    at getFinalError (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:88203:14)\n    at makeError (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:90510:21)\n    at getSyncResult (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:92354:10)\n    at spawnSubprocessSync (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:92314:14)\n    at execaCoreSync (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:92244:23)\n    at callBoundExeca (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:94772:23)\n    at boundExeca (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:94749:49)\n    at sync2 (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:94908:10)\n    at runPnpmCli (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:249521:5)\n    at runDepsStatusCheck (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:251287:7)",
           "stderrTail": "[WARN] The \"pnpm\" field in package.json is no longer read by pnpm. The following keys were ignored: \"pnpm.overrides\". See https://pnpm.io/settings for the new home of each setting.\n[WARN] The \"pnpm\" field in package.json is no longer read by pnpm. The following keys were ignored: \"pnpm.overrides\". See https://pnpm.io/settings for the new home of each setting.\npreview did not become ready: fetch failed"
         },
         {
           "id": "edit-hmr",
           "points": 25,
-          "status": "not-run",
-          "note": "Use the interactive harness to edit source and capture HMR event log."
+          "status": "fail",
+          "exitCode": 1,
+          "stdoutTail": "",
+          "stderrTail": "Skipped HMR because preview did not become ready."
         }
       ]
     },
@@ -355,8 +371,8 @@
       "packageManager": "pnpm",
       "repository": "https://github.com/Commencis/starter-react-vite",
       "subdirectory": null,
-      "score": 75,
-      "status": "partial-pass",
+      "score": 100,
+      "status": "pass",
       "unsupportedBlocker": false,
       "criteria": [
         {
@@ -364,7 +380,7 @@
           "points": 25,
           "status": "pass",
           "exitCode": 0,
-          "stdoutTail": "✓ Lockfile passes supply-chain policies (verified 8m ago)\nLockfile is up to date, resolution step is skipped\nAlready up to date\n. prepare$ husky\n. prepare: Done\nDone in 1s using pnpm v11.17.0",
+          "stdoutTail": "✓ Lockfile passes supply-chain policies (verified 16m ago)\nLockfile is up to date, resolution step is skipped\nAlready up to date\n. prepare$ husky\n. prepare: Done\nDone in 1.1s using pnpm v11.17.0",
           "stderrTail": ""
         },
         {
@@ -372,7 +388,7 @@
           "points": 25,
           "status": "pass",
           "exitCode": 0,
-          "stdoutTail": "vite v7.3.6 building client environment for production...\ntransforming...\n✓ 484 modules transformed.\nrendering chunks...\ncomputing gzip size...\ndist/index.html                          0.48 kB │ gzip:   0.31 kB\ndist/assets/Lato-Bold-B5iD31kO.ttf      73.33 kB\ndist/assets/Lato-Regular-BwLIet1C.ttf   75.15 kB\ndist/assets/index-V5FxHAP_.css           0.95 kB │ gzip:   0.53 kB\ndist/assets/home-BqqlbAFa.css            4.79 kB │ gzip:   1.08 kB\ndist/assets/home.loader-P4l6ZK-G.js      0.08 kB │ gzip:   0.09 kB\ndist/assets/chevron-right-Ob0MkykR.js    0.37 kB │ gzip:   0.28 kB\ndist/assets/chevron-left-lx1YWW3B.js     0.37 kB │ gzip:   0.28 kB\ndist/assets/chevron-down-Cr5HIbHL.js     0.38 kB │ gzip:   0.28 kB\ndist/assets/chevron-up-DxEZDITp.js       0.38 kB │ gzip:   0.28 kB\ndist/assets/home.page-DHwGKqpv.js       10.39 kB │ gzip:   4.24 kB\ndist/assets/browser-DyfLqn2v.js        283.42 kB │ gzip:  93.32 kB\ndist/assets/index-BEvDakzI.js          462.24 kB │ gzip: 152.95 kB\n✓ built in 1.36s",
+          "stdoutTail": "vite v7.3.6 building client environment for production...\ntransforming...\n✓ 484 modules transformed.\nrendering chunks...\ncomputing gzip size...\ndist/index.html                          0.48 kB │ gzip:   0.31 kB\ndist/assets/Lato-Bold-B5iD31kO.ttf      73.33 kB\ndist/assets/Lato-Regular-BwLIet1C.ttf   75.15 kB\ndist/assets/index-V5FxHAP_.css           0.95 kB │ gzip:   0.53 kB\ndist/assets/home-BqqlbAFa.css            4.79 kB │ gzip:   1.08 kB\ndist/assets/home.loader-P4l6ZK-G.js      0.08 kB │ gzip:   0.09 kB\ndist/assets/chevron-right-Ob0MkykR.js    0.37 kB │ gzip:   0.28 kB\ndist/assets/chevron-left-lx1YWW3B.js     0.37 kB │ gzip:   0.28 kB\ndist/assets/chevron-down-Cr5HIbHL.js     0.38 kB │ gzip:   0.28 kB\ndist/assets/chevron-up-DxEZDITp.js       0.38 kB │ gzip:   0.28 kB\ndist/assets/home.page-DHwGKqpv.js       10.39 kB │ gzip:   4.24 kB\ndist/assets/browser-DyfLqn2v.js        283.42 kB │ gzip:  93.32 kB\ndist/assets/index-BEvDakzI.js          462.24 kB │ gzip: 152.95 kB\n✓ built in 1.37s",
           "stderrTail": "$ vite build"
         },
         {
@@ -380,14 +396,16 @@
           "points": 25,
           "status": "pass",
           "exitCode": 0,
-          "stdoutTail": "✓ Lockfile passes supply-chain policies (verified 8m ago)\nLockfile is up to date, resolution step is skipped\nAlready up to date\n. prepare$ husky\n. prepare: Done\nDone in 862ms using pnpm v11.17.0\n  VITE v7.3.6  ready in 102 ms\n  ➜  Local:   http://localhost:3000/\n  ➜  Network: http://169.254.41.78:3000/\n  ➜  Network: http://169.254.133.13:3000/\n  ➜  Network: http://192.168.50.254:3000/",
+          "stdoutTail": "✓ Lockfile passes supply-chain policies (verified 16m ago)\nLockfile is up to date, resolution step is skipped\nAlready up to date\n. prepare$ husky\n. prepare: Done\nDone in 799ms using pnpm v11.17.0\n  VITE v7.3.6  ready in 103 ms\n  ➜  Local:   http://localhost:3000/\n  ➜  Network: http://169.254.41.78:3000/\n  ➜  Network: http://169.254.133.13:3000/\n  ➜  Network: http://192.168.50.254:3000/\n3:12:53 AM [vite] (client) hmr update /src/App.tsx",
           "stderrTail": "$ vite"
         },
         {
           "id": "edit-hmr",
           "points": 25,
-          "status": "not-run",
-          "note": "Use the interactive harness to edit source and capture HMR event log."
+          "status": "pass",
+          "exitCode": 0,
+          "stdoutTail": "edited src/App.tsx\n{\"type\":\"update\",\"updates\":[{\"type\":\"js-update\",\"timestamp\":1789495973404,\"path\":\"/src/App.tsx\",\"acceptedPath\":\"/src/App.tsx\",\"explicitImportRequired\":false,\"isWithinCircularImport\":false}]}",
+          "stderrTail": ""
         }
       ]
     },
@@ -398,8 +416,8 @@
       "packageManager": "npm",
       "repository": "https://github.com/R35007/vite-react-typescript",
       "subdirectory": null,
-      "score": 75,
-      "status": "partial-pass",
+      "score": 100,
+      "status": "pass",
       "unsupportedBlocker": false,
       "criteria": [
         {
@@ -407,7 +425,7 @@
           "points": 25,
           "status": "pass",
           "exitCode": 0,
-          "stdoutTail": "> vite-react-typescript@0.0.0 prepare\n> npx rimraf .husky && husky install && sh ./shells/husky\nhusky - Git hooks installed\nhusky - created .husky/pre-commit\nhusky - created .husky/commit-msg\nup to date, audited 1062 packages in 2s\n270 packages are looking for funding\n  run `npm fund` for details\n46 vulnerabilities (5 low, 14 moderate, 20 high, 7 critical)\nTo address issues that do not require attention, run:\n  npm audit fix\nTo address all issues (including breaking changes), run:\n  npm audit fix --force\nRun `npm audit` for details.",
+          "stdoutTail": "> vite-react-typescript@0.0.0 prepare\n> npx rimraf .husky && husky install && sh ./shells/husky\nhusky - Git hooks installed\nhusky - created .husky/pre-commit\nhusky - created .husky/commit-msg\nup to date, audited 1062 packages in 6s\n270 packages are looking for funding\n  run `npm fund` for details\n46 vulnerabilities (5 low, 14 moderate, 20 high, 7 critical)\nTo address issues that do not require attention, run:\n  npm audit fix\nTo address all issues (including breaking changes), run:\n  npm audit fix --force\nRun `npm audit` for details.",
           "stderrTail": ""
         },
         {
@@ -415,7 +433,7 @@
           "points": 25,
           "status": "pass",
           "exitCode": 0,
-          "stdoutTail": "dist/assets/roboto-cyrillic-500-normal-3728fbdd.woff2        9.84 kB\ndist/assets/roboto-latin-ext-300-normal-b076e863.woff2      11.80 kB\ndist/assets/roboto-latin-ext-500-normal-7f1c829b.woff2      11.80 kB\ndist/assets/roboto-latin-ext-700-normal-fc66f942.woff2      11.82 kB\ndist/assets/roboto-latin-ext-400-normal-3c23eb02.woff2      11.87 kB\ndist/assets/roboto-cyrillic-ext-700-normal-3c505383.woff2   14.68 kB\ndist/assets/roboto-cyrillic-ext-500-normal-aeed0e51.woff2   14.97 kB\ndist/assets/roboto-cyrillic-ext-300-normal-435e4b7f.woff2   15.00 kB\ndist/assets/roboto-cyrillic-ext-400-normal-b7ef2cd1.woff2   15.34 kB\ndist/assets/roboto-latin-300-normal-f7591131.woff2          15.74 kB\ndist/assets/roboto-latin-400-normal-f6734f81.woff2          15.74 kB\ndist/assets/roboto-latin-700-normal-f5aebdfe.woff2          15.86 kB\ndist/assets/roboto-latin-500-normal-b0195382.woff2          15.92 kB\ndist/assets/roboto-all-300-normal-6d79427c.woff             65.16 kB\ndist/assets/roboto-all-400-normal-e41533d5.woff             65.46 kB\ndist/assets/roboto-all-700-normal-b5883883.woff             65.56 kB\ndist/assets/roboto-all-500-normal-8f838c80.woff             65.76 kB\ndist/assets/index-b1c7c548.css                              27.76 kB │ gzip:  10.06 kB\ndist/assets/index-bde0dee0.js                              402.95 kB │ gzip: 131.21 kB\n✓ built in 1.87s",
+          "stdoutTail": "dist/assets/roboto-cyrillic-500-normal-3728fbdd.woff2        9.84 kB\ndist/assets/roboto-latin-ext-300-normal-b076e863.woff2      11.80 kB\ndist/assets/roboto-latin-ext-500-normal-7f1c829b.woff2      11.80 kB\ndist/assets/roboto-latin-ext-700-normal-fc66f942.woff2      11.82 kB\ndist/assets/roboto-latin-ext-400-normal-3c23eb02.woff2      11.87 kB\ndist/assets/roboto-cyrillic-ext-700-normal-3c505383.woff2   14.68 kB\ndist/assets/roboto-cyrillic-ext-500-normal-aeed0e51.woff2   14.97 kB\ndist/assets/roboto-cyrillic-ext-300-normal-435e4b7f.woff2   15.00 kB\ndist/assets/roboto-cyrillic-ext-400-normal-b7ef2cd1.woff2   15.34 kB\ndist/assets/roboto-latin-300-normal-f7591131.woff2          15.74 kB\ndist/assets/roboto-latin-400-normal-f6734f81.woff2          15.74 kB\ndist/assets/roboto-latin-700-normal-f5aebdfe.woff2          15.86 kB\ndist/assets/roboto-latin-500-normal-b0195382.woff2          15.92 kB\ndist/assets/roboto-all-300-normal-6d79427c.woff             65.16 kB\ndist/assets/roboto-all-400-normal-e41533d5.woff             65.46 kB\ndist/assets/roboto-all-700-normal-b5883883.woff             65.56 kB\ndist/assets/roboto-all-500-normal-8f838c80.woff             65.76 kB\ndist/assets/index-b1c7c548.css                              27.76 kB │ gzip:  10.06 kB\ndist/assets/index-bde0dee0.js                              402.95 kB │ gzip: 131.21 kB\n✓ built in 1.94s",
           "stderrTail": "Browserslist: caniuse-lite is outdated. Please run:\n  npx update-browserslist-db@latest\n  Why you should do it regularly: https://github.com/browserslist/update-db#readme"
         },
         {
@@ -423,21 +441,23 @@
           "points": 25,
           "status": "pass",
           "exitCode": 0,
-          "stdoutTail": "> vite-react-typescript@0.0.0 dev\n> vite\n  VITE v4.4.7  ready in 213 ms\n  ➜  Local:   http://localhost:5173/\n  ➜  Network: use --host to expose",
+          "stdoutTail": "> vite-react-typescript@0.0.0 dev\n> vite\n  VITE v4.4.7  ready in 205 ms\n  ➜  Local:   http://localhost:5173/\n  ➜  Network: use --host to expose\n3:13:03 AM [vite] hmr update /src/App.tsx",
           "stderrTail": ""
         },
         {
           "id": "edit-hmr",
           "points": 25,
-          "status": "not-run",
-          "note": "Use the interactive harness to edit source and capture HMR event log."
+          "status": "pass",
+          "exitCode": 0,
+          "stdoutTail": "edited src/App.tsx\n{\"type\":\"update\",\"updates\":[{\"type\":\"js-update\",\"timestamp\":1789495983859,\"path\":\"/src/App.tsx\",\"explicitImportRequired\":false,\"acceptedPath\":\"/src/App.tsx\"}]}",
+          "stderrTail": ""
         }
       ]
     }
   ],
   "summary": {
     "total": 10,
-    "passCount": 0,
+    "passCount": 4,
     "milestoneB": "not-yet"
   }
 }
