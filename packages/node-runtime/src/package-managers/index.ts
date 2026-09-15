@@ -1,7 +1,7 @@
 export { CliRegistry } from "./cli-registry.ts";
 export { classifyCliEntryModuleMode, inspectCliEntryReadiness } from "./cli-entry-readiness.ts";
 export { createPackageExecutionPolicy, PackageExecutionPolicy, PackageExecutionPolicyError } from "./execution-policy.ts";
-export { createAsyncCliModuleEvaluator, createCliModuleEvaluator } from "./cli-evaluator.ts";
+export { createAsyncCliModuleEvaluator, createCliModuleEvaluator, createIsolatedAsyncCliModuleEvaluator } from "./cli-evaluator.ts";
 export { analyzeCliModuleGraph, extractStaticEsmSpecifiers, extractStaticRequires } from "./cli-module-graph.ts";
 export { createGuestCli } from "./guest-cli.ts";
 export { classifyPackageManagerCommand, createGuestRuntimeProcessRunner } from "./guest-runtime-runner.ts";
@@ -25,6 +25,6 @@ export type { NativeFallbackAction, NativeFallbackDecision, NativeFallbackPolicy
 export type { PackageExecutionPolicyErrorCode, PackageExecutionPolicyOptions, PackageScriptKind, PackageScriptPolicyCheck } from "./execution-policy.ts";
 export type { CliArtifactReader, CliRegistryLike, GuestCli, GuestRuntimeProcessRunnerOptions, PackageManagerProcessRequest, PackageManagerProcessResult, PackageManagerProcessRunner, PackageManagerRunnerOptions } from "./types.ts";
 export type { PackageManagerTerminalCommandName, PackageManagerTerminalCommandOptions, PackageManagerTerminalCommandResult, PackageManagerTerminalRunner } from "./terminal-commands.ts";
-export type { AsyncCliModuleEvaluatorOptions, CliModuleEvaluationRequest, CliModuleEvaluatorOptions } from "./cli-evaluator.ts";
+export type { AsyncCliModuleEvaluatorOptions, CliModuleEvaluationRequest, CliModuleEvaluatorOptions, IsolatedAsyncCliModuleEvaluatorOptions, IsolatedCliRunResult } from "./cli-evaluator.ts";
 export type { CliModuleGraph, CliModuleGraphIssue, CliModuleGraphModule, CliModuleGraphOptions, CliModuleGraphReader } from "./cli-module-graph.ts";
 export type { PackageManagerLinkStrategy, PackageManagerWorkspace, PackageManagerWorkspaceLinkSnapshot, PackageManagerWorkspaceMount, PackageManagerWorkspaceReader, PackageManagerWorkspaceSnapshot, PackageManagerWorkspaceWriter } from "./workspace.ts";

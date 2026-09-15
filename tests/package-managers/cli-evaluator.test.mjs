@@ -5,6 +5,7 @@ import {
   createAsyncCliModuleEvaluator,
   createCliModuleEvaluator,
   createGuestRuntimeProcessRunner,
+  createIsolatedAsyncCliModuleEvaluator,
   createNpmRunner,
   inspectCliEntryReadiness,
   MemoryPackageManagerWorkspace
@@ -534,6 +535,47 @@ assert.equal(workspace.readText("/workspace/project/linked-file.txt"), "renamed"
 assert.equal(workspace.readText("/workspace/project/linked-file-async.txt"), "renamed-async");
 assert.equal(workspace.readText("/workspace/project/linked-package/package.json"), '{"name":"linked-source"}');
 assert.equal(workspace.readText("/workspace/project/linked-package-async/package.json"), '{"name":"linked-source"}');
+
+const isolatedWorkspace = new MemoryPackageManagerWorkspace([
+  {
+    path: "/workspace/write-cli/package/bin/npm-cli.js",
+    data: "#!/usr/bin/env node\nrequire('../lib/cli.js')(process)\n"
+  },
+  {
+    path: "/workspace/write-cli/package/lib/cli.js",
+    data: `
+      const fs = require('fs');
+      module.exports = function run(process) {
+        fs.writeFileSync(process.cwd() + '/isolated.txt', 'isolated');
+        process.stdout.write('isolated-write\\n');
+      };
+    `
+  },
+  {
+    path: "/workspace/write-cli/package/package.json",
+    data: JSON.stringify({ name: "isolated-write-cli", version: "1.2.3", main: "lib/cli.js" })
+  }
+]);
+const isolatedResult = await createIsolatedAsyncCliModuleEvaluator({
+  root: "/workspace",
+  workspace: isolatedWorkspace
+})({
+  entry: {
+    name: "npm",
+    version: "1.2.3",
+    entry: "/workspace/write-cli/package/bin/npm-cli.js"
+  },
+  args: [],
+  cwd: "/workspace/project"
+});
+assert.equal(isolatedResult.stdout, "isolated-write\n");
+assert.equal(isolatedResult.stderr, "");
+assert.equal(isolatedResult.exitCode, 0);
+assert.equal(isolatedWorkspace.exists("/workspace/project/isolated.txt"), false);
+assert.equal(
+  MemoryPackageManagerWorkspace.fromSnapshot(isolatedResult.workspaceSnapshot).readText("/workspace/project/isolated.txt"),
+  "isolated"
+);
 
 const asyncErrorResult = await createAsyncCliModuleEvaluator({
   root: "/workspace",

@@ -381,6 +381,20 @@ const forcedWasiGuardExecution = await forcedWasiGuardWorkflow.executeRealCli(["
 assert.equal(forcedWasiGuardExecution.exitCode, 1);
 assert.match(forcedWasiGuardExecution.stderr, /EVITEWASISYNCINIT/);
 assert.deepEqual(forcedWasiGuardExecution.buildRegistrations, []);
+const forcedWasiIsolatedExecution = await forcedWasiGuardWorkflow.executeRealCli(
+  ["build"],
+  { NAPI_RS_FORCE_WASI: "error" },
+  { isolation: "snapshot" }
+);
+assert.equal(forcedWasiIsolatedExecution.mode, "isolated-snapshot-cli-module-evaluation");
+assert.equal(forcedWasiIsolatedExecution.exitCode, 0);
+assert.deepEqual(forcedWasiIsolatedExecution.buildRegistrations, [
+  {
+    command: "build",
+    outDir: "dist",
+    source: "vite-cli"
+  }
+]);
 
 const dependencyArtifactWorkflow = new ViteProductWorkflow({
   manager: "pnpm",

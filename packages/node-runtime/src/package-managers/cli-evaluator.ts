@@ -12,7 +12,7 @@ import { createWorkspaceModuleRuntime, type WorkspaceModuleReader } from "../mod
 import type { ModuleRuntime } from "../modules/runtime.ts";
 import type { CliEntry, CliRunResult, RuntimeEnv, RuntimeFsBinding, RuntimeFsData, RuntimeNamespace, RuntimeValue } from "../types.ts";
 import { inspectCliEntryReadiness } from "./cli-entry-readiness.ts";
-import type { PackageManagerWorkspaceWriter } from "./workspace.ts";
+import { MemoryPackageManagerWorkspace, type PackageManagerWorkspaceSnapshot, type PackageManagerWorkspaceWriter } from "./workspace.ts";
 
 export interface CliModuleEvaluatorOptions {
   reader: WorkspaceModuleReader;
@@ -24,6 +24,14 @@ export interface CliModuleEvaluatorOptions {
 export interface AsyncCliModuleEvaluatorOptions extends CliModuleEvaluatorOptions {
   settleTicks?: number;
   settleTimeoutMs?: number;
+}
+
+export interface IsolatedAsyncCliModuleEvaluatorOptions extends Omit<AsyncCliModuleEvaluatorOptions, "reader" | "writer"> {
+  workspace: MemoryPackageManagerWorkspace;
+}
+
+export interface IsolatedCliRunResult extends CliRunResult {
+  workspaceSnapshot: PackageManagerWorkspaceSnapshot;
 }
 
 export interface CliModuleEvaluationRequest {
@@ -45,6 +53,23 @@ export function createAsyncCliModuleEvaluator(options: AsyncCliModuleEvaluatorOp
     await evaluation.ready;
     await settleCliEvaluation(options);
     return evaluation.finalize();
+  };
+}
+
+export function createIsolatedAsyncCliModuleEvaluator(
+  options: IsolatedAsyncCliModuleEvaluatorOptions
+): (request: CliModuleEvaluationRequest) => Promise<IsolatedCliRunResult> {
+  return async function evaluateCliModuleInSnapshot(request: CliModuleEvaluationRequest): Promise<IsolatedCliRunResult> {
+    const workspace = MemoryPackageManagerWorkspace.fromSnapshot(options.workspace.snapshot());
+    const result = await createAsyncCliModuleEvaluator({
+      ...options,
+      reader: workspace,
+      writer: workspace
+    })(request);
+    return {
+      ...result,
+      workspaceSnapshot: workspace.snapshot()
+    };
   };
 }
 

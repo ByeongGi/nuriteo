@@ -1,7 +1,7 @@
 import { join } from "../builtins/path.ts";
 import { spawnRuntimeChild, type RuntimeChildProcess } from "../child-process.ts";
 import { createLoopbackNetwork, type LoopbackNetwork, type RuntimeHttpResponse } from "../net/index.ts";
-import { createAsyncCliModuleEvaluator } from "../package-managers/cli-evaluator.ts";
+import { createAsyncCliModuleEvaluator, createIsolatedAsyncCliModuleEvaluator } from "../package-managers/cli-evaluator.ts";
 import { analyzeCliModuleGraph, type CliModuleGraph, type CliModuleGraphIssue } from "../package-managers/cli-module-graph.ts";
 import { inspectCliEntryReadiness, type CliEntryReadiness } from "../package-managers/cli-entry-readiness.ts";
 import { MemoryPackageManagerWorkspace, type PackageManagerWorkspaceMount } from "../package-managers/workspace.ts";
@@ -137,9 +137,15 @@ export interface ViteProductCliExecutionResult extends CliRunResult {
   buildRegistrations: ViteProductCliBuildRegistration[];
   cwd: string;
   hmrRegistrations: ViteProductCliHmrRegistration[];
-  mode: "async-cli-module-evaluation";
+  mode: ViteProductCliExecutionMode;
   serverRegistrations: ViteProductCliServerRegistration[];
   transformRegistrations: ViteProductCliTransformRegistration[];
+}
+
+export type ViteProductCliExecutionMode = "async-cli-module-evaluation" | "isolated-snapshot-cli-module-evaluation";
+
+export interface ViteProductCliExecutionOptions {
+  isolation?: "shared" | "snapshot";
 }
 
 export interface ViteProductCliBuildRegistration {
@@ -480,14 +486,19 @@ export class ViteProductWorkflow {
     };
   }
 
-  async executeRealCli(args: string[] = ["--host", "127.0.0.1"], env: RuntimeEnv = {}): Promise<ViteProductCliExecutionResult> {
+  async executeRealCli(
+    args: string[] = ["--host", "127.0.0.1"],
+    env: RuntimeEnv = {},
+    options: ViteProductCliExecutionOptions = {}
+  ): Promise<ViteProductCliExecutionResult> {
     if (!this.workspace.exists(join(this.projectRoot, "node_modules/.bin/vite"))) this.install();
     const cliEntrypoint = this.#resolveBin("vite");
     const buildRegistrations: ViteProductCliBuildRegistration[] = [];
     const hmrRegistrations: ViteProductCliHmrRegistration[] = [];
     const serverRegistrations: ViteProductCliServerRegistration[] = [];
     const transformRegistrations: ViteProductCliTransformRegistration[] = [];
-    if (isForcedWasiEnv(env) && this.#hasDependencyArtifact("@napi-rs/wasm-runtime")) {
+    const isolation = options.isolation || "shared";
+    if (isolation === "shared" && isForcedWasiEnv(env) && this.#hasDependencyArtifact("@napi-rs/wasm-runtime")) {
       return {
         args,
         buildRegistrations,
@@ -506,9 +517,8 @@ export class ViteProductWorkflow {
       this.#broadcastHmr(update);
       return update;
     };
-    const result = await createAsyncCliModuleEvaluator({
+    const evaluatorOptions = {
       root: this.projectRoot,
-      reader: this.workspace,
       globals: {
         __viteRegisterBuild(registration: ViteProductCliBuildRegistration) {
           buildRegistrations.push(registration);
@@ -524,7 +534,8 @@ export class ViteProductWorkflow {
         },
         __viteBroadcastHmr: broadcastHmr
       }
-    })({
+    };
+    const request = {
       entry: {
         name: "vite",
         version: this.#readVitePackageVersion(),
@@ -534,14 +545,24 @@ export class ViteProductWorkflow {
       args,
       cwd: this.projectRoot,
       env
-    });
+    };
+    const result = isolation === "snapshot"
+      ? await createIsolatedAsyncCliModuleEvaluator({
+        ...evaluatorOptions,
+        workspace: this.workspace
+      })(request)
+      : await createAsyncCliModuleEvaluator({
+        ...evaluatorOptions,
+        reader: this.workspace,
+        writer: this.workspace
+      })(request);
     return {
       ...result,
       args,
       buildRegistrations,
       cwd: this.projectRoot,
       hmrRegistrations,
-      mode: "async-cli-module-evaluation",
+      mode: isolation === "snapshot" ? "isolated-snapshot-cli-module-evaluation" : "async-cli-module-evaluation",
       serverRegistrations,
       transformRegistrations
     };
