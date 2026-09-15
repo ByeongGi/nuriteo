@@ -77,6 +77,38 @@ await withRuntimeLab(async (page, baseUrl) => {
   if (terminalResult.build.stdout !== "vite build completed\n") throw new Error("terminal build did not run after restart");
   if (!terminalResult.history.includes("vite build")) throw new Error("terminal history did not include build command");
   if (!terminalResult.output.includes("$ npm install")) throw new Error("terminal output did not include command prompt");
+  const editorResult = await page.evaluate(() => {
+    const opened = globalThis.__runtimeLab.openEditorFile("src/main.jsx");
+    const edited = globalThis.__runtimeLab.editCurrentFile("console.log(\"browser edit\")\n");
+    const searchDirty = globalThis.__runtimeLab.editorSearch("browser edit");
+    const saved = globalThis.__runtimeLab.saveCurrentFile();
+    const created = globalThis.__runtimeLab.createEditorFile("src/Preview.jsx", "export const Preview = true;\n");
+    const renamed = globalThis.__runtimeLab.renameCurrentFile("src/Preview.tsx");
+    const searchRenamed = globalThis.__runtimeLab.editorSearch("Preview");
+    globalThis.__runtimeLab.deleteCurrentFile();
+    return {
+      opened,
+      edited,
+      searchDirty,
+      saved,
+      created,
+      renamed,
+      searchRenamed,
+      tree: globalThis.__runtimeLab.editorTree()
+    };
+  });
+  if (editorResult.opened.path !== "/workspace/app/src/main.jsx") throw new Error("editor did not open file");
+  if (!editorResult.edited.dirty) throw new Error("editor did not mark dirty state");
+  if (editorResult.searchDirty[0]?.snippet !== "console.log(\"browser edit\")") {
+    throw new Error("editor dirty search did not include edit");
+  }
+  if (editorResult.saved.dirty) throw new Error("editor save did not clear dirty state");
+  if (editorResult.created.path !== "/workspace/app/src/Preview.jsx") throw new Error("editor did not create file");
+  if (editorResult.renamed.path !== "/workspace/app/src/Preview.tsx") throw new Error("editor did not rename file");
+  if (!editorResult.searchRenamed.some((match) => match.path.endsWith("Preview.tsx"))) {
+    throw new Error("editor search did not include renamed file");
+  }
+  if (JSON.stringify(editorResult.tree).includes("Preview.tsx")) throw new Error("editor did not delete renamed file");
   await page.evaluate(() => globalThis.__runtimeLab.teardown());
   if (await page.locator("#status").textContent() !== "stopped") throw new Error("status was not stopped");
 });

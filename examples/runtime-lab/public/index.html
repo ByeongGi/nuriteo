@@ -32,6 +32,31 @@
         <pre id="terminal-log"></pre>
         <ol id="terminal-history" aria-label="Terminal history"></ol>
       </section>
+      <section class="workspace-panel" aria-labelledby="workspace-title">
+        <div class="workspace-header">
+          <h2 id="workspace-title">Workspace</h2>
+          <p id="editor-status">saved</p>
+        </div>
+        <div class="workspace-layout">
+          <nav aria-label="Project files">
+            <ol id="file-tree"></ol>
+          </nav>
+          <div class="editor-pane">
+            <div class="editor-toolbar">
+              <input id="editor-path" type="text" aria-label="File path">
+              <button id="editor-save" type="button">Save</button>
+              <button id="editor-create" type="button">Create</button>
+              <button id="editor-rename" type="button">Rename</button>
+              <button id="editor-delete" type="button">Delete</button>
+            </div>
+            <textarea id="editor-text" spellcheck="false" aria-label="File editor"></textarea>
+            <div class="search-row">
+              <input id="editor-search" type="search" aria-label="Search files" placeholder="Search">
+            </div>
+            <ol id="editor-search-results" aria-label="Search results"></ol>
+          </div>
+        </div>
+      </section>
       <pre id="log"></pre>
     </main>
   </body>

@@ -69,7 +69,8 @@ button:disabled {
   background: #ffffff;
 }
 
-.terminal-header {
+.terminal-header,
+.workspace-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -85,6 +86,16 @@ h2 {
 }
 
 #terminal-status {
+  min-width: 104px;
+  margin: 0;
+  padding: 5px 8px;
+  border: 1px solid #b8c0cc;
+  background: #f7f8fb;
+  text-align: center;
+  font-size: 13px;
+}
+
+#editor-status {
   min-width: 104px;
   margin: 0;
   padding: 5px 8px;
@@ -138,6 +149,99 @@ h2 {
   line-height: 1.5;
 }
 
+.workspace-panel {
+  margin: 0 0 24px;
+  border: 1px solid #b8c0cc;
+  background: #ffffff;
+}
+
+.workspace-layout {
+  display: grid;
+  grid-template-columns: minmax(160px, 220px) minmax(0, 1fr);
+  min-height: 360px;
+}
+
+.workspace-layout nav {
+  border-right: 1px solid #d8dde6;
+  background: #f7f8fb;
+}
+
+#file-tree,
+#file-tree ol {
+  margin: 0;
+  padding: 8px 0 8px 18px;
+  list-style: none;
+}
+
+#file-tree button {
+  width: 100%;
+  min-width: 0;
+  height: 28px;
+  padding: 0 8px;
+  overflow: hidden;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#file-tree button[aria-current="true"] {
+  background: #dde8ff;
+}
+
+.file-directory {
+  padding: 6px 8px 0 0;
+  color: #4b5565;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.editor-pane {
+  min-width: 0;
+  padding: 16px;
+}
+
+.editor-toolbar {
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) auto auto auto auto;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.editor-toolbar input,
+.search-row input {
+  min-width: 0;
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid #9aa4b5;
+  font: inherit;
+}
+
+#editor-text {
+  width: 100%;
+  height: 190px;
+  margin: 0;
+  padding: 12px;
+  resize: vertical;
+  border: 1px solid #9aa4b5;
+  font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.search-row {
+  margin-top: 12px;
+}
+
+#editor-search-results {
+  max-height: 96px;
+  margin: 8px 0 0;
+  padding-left: 20px;
+  overflow: auto;
+  color: #333b49;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
 #log {
   min-height: 320px;
   margin: 0;
@@ -152,13 +256,15 @@ h2 {
 
 @media (max-width: 700px) {
   header,
-  .terminal-header {
+  .terminal-header,
+  .workspace-header {
     align-items: stretch;
     flex-direction: column;
   }
 
   #status,
-  #terminal-status {
+  #terminal-status,
+  #editor-status {
     width: 100%;
   }
 
@@ -168,5 +274,15 @@ h2 {
 
   button {
     width: 100%;
+  }
+
+  .workspace-layout,
+  .editor-toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .workspace-layout nav {
+    border-right: 0;
+    border-bottom: 1px solid #d8dde6;
   }
 }

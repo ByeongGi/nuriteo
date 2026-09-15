@@ -1,4 +1,8 @@
 import { createContainer } from "/packages/sdk/src/container.ts";
+import {
+  createProjectWorkspaceEditorBridge,
+  createProjectWorkspaceStore
+} from "/packages/browser-host/src/storage/index.ts";
 import { createTerminalSession } from "/packages/node-runtime/src/shell/index.ts";
 import {
   createHmrClient,
@@ -19,9 +23,33 @@ const terminalRestartButton = document.getElementById("terminal-restart");
 const terminalStatusEl = document.getElementById("terminal-status");
 const terminalLogEl = document.getElementById("terminal-log");
 const terminalHistoryEl = document.getElementById("terminal-history");
+const fileTreeEl = document.getElementById("file-tree");
+const editorPathInput = document.getElementById("editor-path");
+const editorTextArea = document.getElementById("editor-text");
+const editorStatusEl = document.getElementById("editor-status");
+const editorSaveButton = document.getElementById("editor-save");
+const editorCreateButton = document.getElementById("editor-create");
+const editorRenameButton = document.getElementById("editor-rename");
+const editorDeleteButton = document.getElementById("editor-delete");
+const editorSearchInput = document.getElementById("editor-search");
+const editorSearchResultsEl = document.getElementById("editor-search-results");
 
 let container = null;
 let terminal = createLabTerminal();
+const project = createProjectWorkspaceStore({
+  projectId: "runtime-lab",
+  root: "/workspace/app",
+  metadata: {
+    framework: "vite-react",
+    name: "Runtime Lab",
+    packageManager: "pnpm"
+  }
+});
+project.writeText("package.json", "{\"scripts\":{\"dev\":\"vite --host 0.0.0.0\",\"build\":\"vite build\"}}\n");
+project.writeText("src/main.jsx", "console.log(\"hello runtime lab\")\n");
+project.writeText("src/App.jsx", "export function App() { return \"App\"; }\n");
+const editor = createProjectWorkspaceEditorBridge(project);
+let selectedEditorPath = "/workspace/app/src/main.jsx";
 
 function log(value) {
   const line = typeof value === "string" ? value : JSON.stringify(value, null, 2);
@@ -146,6 +174,111 @@ function restartTerminal() {
   terminal.restart();
   setTerminalStatus("restarted");
   renderTerminalTranscript();
+}
+
+function setEditorStatus(status) {
+  editorStatusEl.textContent = status;
+}
+
+function renderFileTree() {
+  fileTreeEl.replaceChildren(...renderTreeNodes(editor.tree()));
+}
+
+function renderTreeNodes(nodes) {
+  return nodes.map((node) => {
+    const item = document.createElement("li");
+    if (node.type === "directory") {
+      item.textContent = node.name;
+      item.className = "file-directory";
+      const children = document.createElement("ol");
+      children.replaceChildren(...renderTreeNodes(node.children || []));
+      item.append(children);
+      return item;
+    }
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = `${node.name}${node.dirty ? " *" : ""}`;
+    button.dataset.path = node.path;
+    button.addEventListener("click", () => openEditorFile(node.path));
+    if (node.path === selectedEditorPath) button.setAttribute("aria-current", "true");
+    item.append(button);
+    return item;
+  });
+}
+
+function openEditorFile(path) {
+  const file = editor.openFile(path);
+  selectedEditorPath = file.path;
+  editorPathInput.value = file.path;
+  editorTextArea.value = file.data;
+  setEditorStatus(file.dirty ? "dirty" : "saved");
+  renderFileTree();
+  renderSearchResults();
+  return file;
+}
+
+function editCurrentFile(data = editorTextArea.value) {
+  const file = editor.editText(selectedEditorPath, data);
+  setEditorStatus("dirty");
+  renderFileTree();
+  renderSearchResults();
+  return file;
+}
+
+function saveCurrentFile() {
+  const file = editor.saveFile(selectedEditorPath);
+  editorTextArea.value = file.data;
+  setEditorStatus("saved");
+  renderFileTree();
+  renderSearchResults();
+  return file;
+}
+
+function createEditorFile(path, data = "") {
+  const file = editor.createFile(path, data);
+  return openEditorFile(file.path);
+}
+
+function renameCurrentFile(path) {
+  const file = editor.renameFile(selectedEditorPath, path);
+  selectedEditorPath = file.path;
+  editorPathInput.value = file.path;
+  editorTextArea.value = file.data;
+  setEditorStatus("saved");
+  renderFileTree();
+  renderSearchResults();
+  return file;
+}
+
+function deleteCurrentFile() {
+  editor.deleteFile(selectedEditorPath);
+  const next = editor.tree().flatMap(flattenTree).find((node) => node.type === "file");
+  selectedEditorPath = next?.path || "";
+  if (selectedEditorPath) openEditorFile(selectedEditorPath);
+  else {
+    editorPathInput.value = "";
+    editorTextArea.value = "";
+    setEditorStatus("empty");
+    renderFileTree();
+    renderSearchResults();
+  }
+}
+
+function renderSearchResults() {
+  const query = editorSearchInput.value;
+  const matches = editor.search(query);
+  editorSearchResultsEl.replaceChildren(
+    ...matches.map((match) => {
+      const item = document.createElement("li");
+      item.textContent = `${match.path}:${match.line}:${match.column} ${match.snippet}`;
+      return item;
+    })
+  );
+  return matches;
+}
+
+function flattenTree(node) {
+  return node.type === "file" ? [node] : (node.children || []).flatMap(flattenTree);
 }
 
 function ensureIsolated() {
@@ -291,12 +424,45 @@ terminalRestartButton.addEventListener("click", () => {
   restartTerminal();
 });
 
+editorTextArea.addEventListener("input", () => {
+  editCurrentFile();
+});
+
+editorSaveButton.addEventListener("click", () => {
+  saveCurrentFile();
+});
+
+editorCreateButton.addEventListener("click", () => {
+  const path = editorPathInput.value.trim() || "src/new-file.js";
+  createEditorFile(path, "");
+});
+
+editorRenameButton.addEventListener("click", () => {
+  renameCurrentFile(editorPathInput.value.trim());
+});
+
+editorDeleteButton.addEventListener("click", () => {
+  deleteCurrentFile();
+});
+
+editorSearchInput.addEventListener("input", () => {
+  renderSearchResults();
+});
+
 globalThis.__runtimeLab = {
   boot,
   cancelTerminalCommand,
+  createEditorFile,
+  deleteCurrentFile,
+  editCurrentFile,
+  editorSearch: (query) => editor.search(query),
+  editorTree: () => editor.tree(),
+  openEditorFile,
+  renameCurrentFile,
   runFsSmoke,
   runPreviewSmoke,
   runTerminalCommand,
+  saveCurrentFile,
   systemMetrics: () => container?.systemMetrics() || null,
   teardown,
   restartTerminal,
@@ -309,3 +475,4 @@ globalThis.__runtimeLab = {
 };
 
 setStatus(crossOriginIsolated ? "idle" : "isolation-missing");
+openEditorFile(selectedEditorPath);
