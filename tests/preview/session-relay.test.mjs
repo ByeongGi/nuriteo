@@ -32,6 +32,26 @@ const session = sessions.create({
   port: 4173,
   container
 });
+now += 1;
+const secondPort = sessions.create({
+  origin: "https://preview.local",
+  projectId: "project-a",
+  port: 5173,
+  container
+});
+now += 1;
+const otherProject = sessions.create({
+  origin: "https://preview.local",
+  projectId: "project-b",
+  port: 5173,
+  container
+});
+assert.equal(sessions.find({ origin: "https://preview.local", projectId: "project-a", port: 5173 }).sessionId, secondPort.sessionId);
+assert.deepEqual(
+  sessions.list({ origin: "https://preview.local", projectId: "project-a" }).map((entry) => entry.port),
+  [5173, 4173]
+);
+assert.equal(sessions.get(otherProject.sessionId, { projectId: "project-a" }), null);
 const relay = createPreviewRelay({ sessions, timeoutMs: 10 });
 
 const response = await relay.request({
@@ -53,6 +73,7 @@ await assert.rejects(
 );
 
 now += 101;
+assert.deepEqual(sessions.list({ origin: "https://preview.local" }), []);
 await assert.rejects(
   relay.request({
     sessionId: session.sessionId,

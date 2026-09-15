@@ -15,6 +15,7 @@ export interface PreviewSession {
 export interface PreviewSessionLookup {
   origin?: string;
   projectId?: string;
+  port?: number;
 }
 
 export interface PreviewSessionCreateInput {
