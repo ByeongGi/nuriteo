@@ -23,6 +23,9 @@ const workspace = new MemoryPackageManagerWorkspace([
       main: "index.js",
       bin: {
         "local-dep": "cli.js"
+      },
+      scripts: {
+        install: "node install.js"
       }
     })
   },
@@ -33,6 +36,10 @@ const workspace = new MemoryPackageManagerWorkspace([
   {
     path: "/workspace/local-dep/cli.js",
     data: "#!/usr/bin/env node\nconsole.log('local-dep-bin');\n"
+  },
+  {
+    path: "/workspace/local-dep/install.js",
+    data: "require('fs').writeFileSync('lifecycle-marker.txt', 'local-dep:installed\\n');\n"
   },
   {
     path: "/workspace/project/package.json",
@@ -60,7 +67,7 @@ const result = await evaluate({
     ...entry,
     entry: `${mountRoot}/${path.relative(repoRoot, entry.entry)}`
   },
-  args: ["install", "--ignore-scripts", "--no-audit", "--no-fund", "--update-notifier=false"],
+  args: ["install", "--no-audit", "--no-fund", "--update-notifier=false"],
   cwd: "/workspace/project",
   env: {
     HOME: "/home/webcontainer",
@@ -75,6 +82,7 @@ assert.match(result.stdout, /added 1 package/);
 assert.equal(workspace.exists("/workspace/project/node_modules"), true);
 assert.equal(workspace.exists("/workspace/project/node_modules/local-dep/package.json"), true);
 assert.equal(workspace.exists("/workspace/project/node_modules/.bin/local-dep"), true);
+assert.equal(workspace.readText("/workspace/project/node_modules/local-dep/lifecycle-marker.txt"), "local-dep:installed\n");
 const lockfile = JSON.parse(workspace.readText("/workspace/project/package-lock.json"));
 assert.equal(lockfile.lockfileVersion, 3);
 assert.equal(lockfile.packages["node_modules/local-dep"].link, true);
@@ -85,7 +93,7 @@ const ciResult = await evaluate({
     ...entry,
     entry: `${mountRoot}/${path.relative(repoRoot, entry.entry)}`
   },
-  args: ["ci", "--ignore-scripts", "--no-audit", "--no-fund", "--update-notifier=false"],
+  args: ["ci", "--no-audit", "--no-fund", "--update-notifier=false"],
   cwd: "/workspace/project",
   env: {
     HOME: "/home/webcontainer",
@@ -99,6 +107,7 @@ assert.equal(ciResult.exitCode, 0);
 assert.match(ciResult.stdout, /added 1 package/);
 assert.equal(workspace.exists("/workspace/project/node_modules/local-dep/package.json"), true);
 assert.equal(workspace.exists("/workspace/project/node_modules/.bin/local-dep"), true);
+assert.equal(workspace.readText("/workspace/project/node_modules/local-dep/lifecycle-marker.txt"), "local-dep:installed\n");
 
 console.log("npm install cli module evaluation test ok");
 

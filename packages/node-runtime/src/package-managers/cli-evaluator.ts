@@ -251,7 +251,7 @@ function runCliChildCommand(
 
   if (binary === "node" || binary.endsWith("/node")) {
     if (argv[1] === "-e" && argv[2]) return runNodeEval(argv[2]);
-    const script = argv[1] ? resolveCliPath(argv[1], options.cwd) : "";
+    const script = argv[1] ? resolveNodeScriptPath(argv[1], options.cwd) : "";
     if (script) return runNodeScript(script, options);
     return unsupportedChildCommand(binary);
   }
@@ -272,6 +272,11 @@ function runNodeScript(path: string, options: CliChildCommandOptions): CliChildC
     const source = options.reader.readText(path);
     const output = evaluateConsoleOutput(source);
     if (output !== null) return { stdout: output, stderr: "", exitCode: 0 };
+    const write = evaluateFsWriteFileSync(source);
+    if (write && options.writer) {
+      options.writer.writeText(normalize(`${options.cwd}/${write.path}`), write.data);
+      return { stdout: "", stderr: "", exitCode: 0 };
+    }
     return unsupportedChildCommand(path);
   } catch (error) {
     return {
@@ -288,6 +293,15 @@ function evaluateConsoleOutput(source: string): string | null {
   const stdoutWrite = source.match(/process\.stdout\.write\(\s*(["'`])([\s\S]*?)\1\s*\)/);
   if (stdoutWrite?.[2] !== undefined) return unescapeJsString(stdoutWrite[2]);
   return null;
+}
+
+function evaluateFsWriteFileSync(source: string): { path: string; data: string } | null {
+  const write = source.match(/writeFileSync\(\s*(["'`])([^"'`]+)\1\s*,\s*(["'`])([\s\S]*?)\3\s*\)/);
+  if (!write?.[2] || write[4] === undefined) return null;
+  return {
+    path: write[2],
+    data: unescapeJsString(write[4])
+  };
 }
 
 function resolveExecutable(command: string, options: CliChildCommandOptions): string | null {
@@ -318,6 +332,11 @@ function resolveCliPath(path: string, cwd: string): string {
   if (path.startsWith("/")) return normalize(path);
   if (path.startsWith("./") || path.startsWith("../")) return normalize(`${cwd}/${path}`);
   return normalize(path);
+}
+
+function resolveNodeScriptPath(path: string, cwd: string): string {
+  if (path.startsWith("/")) return normalize(path);
+  return normalize(`${cwd}/${path}`);
 }
 
 function unsupportedChildCommand(command: string): CliChildCommandResult {

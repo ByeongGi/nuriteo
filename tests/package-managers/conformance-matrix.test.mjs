@@ -35,7 +35,8 @@ for (const id of ["npm-run-exec-lifecycle-peer-optional-interrupt", "pnpm-run-ex
   const entry = casesById.get(id);
   assert.equal(entry?.runtime, "browser-guest-node-runtime");
   assert.equal(entry.status, "partial-pass");
-  assert.match(entry.productGap, /lifecycle process spawning/i);
+  assert.match(entry.productGap, /peer resolver execution/i);
+  assert.match(entry.productGap, /optional package policy/i);
 }
 
 for (const entry of matrix.cases) {

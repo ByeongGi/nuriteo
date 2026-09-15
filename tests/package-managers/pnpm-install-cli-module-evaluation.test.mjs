@@ -20,12 +20,19 @@ const workspace = new MemoryPackageManagerWorkspace([
     data: JSON.stringify({
       name: "local-dep",
       version: "1.0.0",
-      main: "index.js"
+      main: "index.js",
+      scripts: {
+        install: "node install.js"
+      }
     })
   },
   {
     path: "/workspace/local-dep/index.js",
     data: "module.exports = 'local-dep';\n"
+  },
+  {
+    path: "/workspace/local-dep/install.js",
+    data: "require('fs').writeFileSync('lifecycle-marker.txt', 'local-dep:installed\\n');\n"
   },
   {
     path: "/workspace/project/package.json",
@@ -53,7 +60,7 @@ const result = await evaluate({
     ...entry,
     entry: `${mountRoot}/${path.relative(repoRoot, entry.entry)}`
   },
-  args: ["install", "--ignore-scripts", "--offline", "--reporter", "silent", "--store-dir", "/workspace/.pnpm-store"],
+  args: ["install", "--offline", "--reporter", "silent", "--store-dir", "/workspace/.pnpm-store"],
   cwd: "/workspace/project",
   env: {
     CI: "true",
@@ -67,8 +74,11 @@ const result = await evaluate({
 assert.equal(result.stdout, "");
 assert.equal(result.stderr, "");
 assert.equal(result.exitCode, 0);
-assert.equal(workspace.readText("/workspace/project/node_modules/local-dep/package.json"), "{\"name\":\"local-dep\",\"version\":\"1.0.0\",\"main\":\"index.js\"}");
+const installedManifest = JSON.parse(workspace.readText("/workspace/project/node_modules/local-dep/package.json"));
+assert.equal(installedManifest.name, "local-dep");
+assert.equal(installedManifest.scripts.install, "node install.js");
 assert.equal(workspace.readText("/workspace/project/node_modules/local-dep/index.js"), "module.exports = 'local-dep';\n");
+assert.equal(workspace.readText("/workspace/project/node_modules/local-dep/lifecycle-marker.txt"), "local-dep:installed\n");
 assert.match(workspace.readText("/workspace/project/pnpm-lock.yaml"), /local-dep@file:\.\.\/local-dep/);
 assert.match(workspace.readText("/workspace/project/node_modules/.modules.yaml"), /packageManager: pnpm@9\.15\.9/);
 assert.match(workspace.readText("/workspace/project/node_modules/.pnpm/lock.yaml"), /specifier: file:\.\.\/local-dep/);
