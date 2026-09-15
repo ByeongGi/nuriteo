@@ -13,6 +13,7 @@ export { createPnpmRunner, PnpmRunner } from "./pnpm-runner.ts";
 export { applyPnpmStorePlan, createPnpmStorePlan } from "./pnpm-store.ts";
 export { createPackageScriptRunner, PackageScriptRunner } from "./script-runner.ts";
 export { createPackageTarballCache, extractTarEntries, PackageTarballCache } from "./tarball-cache.ts";
+export { createPackageManagerTerminalCommands } from "./terminal-commands.ts";
 export { MemoryPackageManagerWorkspace } from "./workspace.ts";
 export type { InstallTransactionOptions, InstallTransactionResult } from "./install-transaction.ts";
 export type { CliEntryModuleMode, CliEntryReadiness, CliEntryReadinessReason, CliEntryReadinessReasonCode, CliEntryReadinessStatus, InspectCliEntryReadinessOptions } from "./cli-entry-readiness.ts";
@@ -23,6 +24,7 @@ export type { NpmInstallApplyOptions, NpmInstallApplyResult, NpmInstallLink, Npm
 export type { NativeFallbackAction, NativeFallbackDecision, NativeFallbackPolicyOptions, NativeFallbackRequest } from "./native-fallback.ts";
 export type { PackageExecutionPolicyErrorCode, PackageExecutionPolicyOptions, PackageScriptKind, PackageScriptPolicyCheck } from "./execution-policy.ts";
 export type { CliArtifactReader, CliRegistryLike, GuestCli, GuestRuntimeProcessRunnerOptions, PackageManagerProcessRequest, PackageManagerProcessResult, PackageManagerProcessRunner, PackageManagerRunnerOptions } from "./types.ts";
+export type { PackageManagerTerminalCommandName, PackageManagerTerminalCommandOptions, PackageManagerTerminalCommandResult, PackageManagerTerminalRunner } from "./terminal-commands.ts";
 export type { AsyncCliModuleEvaluatorOptions, CliModuleEvaluationRequest, CliModuleEvaluatorOptions } from "./cli-evaluator.ts";
 export type { CliModuleGraph, CliModuleGraphIssue, CliModuleGraphModule, CliModuleGraphOptions, CliModuleGraphReader } from "./cli-module-graph.ts";
 export type { PackageManagerLinkStrategy, PackageManagerWorkspace, PackageManagerWorkspaceMount, PackageManagerWorkspaceReader, PackageManagerWorkspaceWriter } from "./workspace.ts";

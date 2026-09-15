@@ -25,6 +25,7 @@ const tests = [
   "./pnpm-registry-install-cli-module-evaluation.test.mjs",
   "./pnpm-guest-runtime-boot.test.mjs",
   "./pnpm-store-plan.test.mjs",
+  "./terminal-commands.test.mjs",
   "./tarball-cache.test.mjs",
   "./fetcher.test.mjs",
   "./npm-integration.test.mjs",
