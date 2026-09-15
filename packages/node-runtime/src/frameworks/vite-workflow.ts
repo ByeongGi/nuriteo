@@ -217,9 +217,20 @@ export interface ViteRealCliReadiness {
   cliEntrypoint: string;
   cliEntryReadiness: CliEntryReadiness;
   cliModuleGraph: CliModuleGraph;
+  dependencyMaterializationPlan: ViteDependencyMaterializationPlan;
   missingCapabilities: ViteRuntimeCapability[];
   nextAction: string;
   vitePackageSource: ViteProductPackageSource;
+}
+
+export interface ViteDependencyMaterializationPlan {
+  missing: ViteDependencyMaterializationItem[];
+  satisfied: string[];
+}
+
+export interface ViteDependencyMaterializationItem {
+  name: string;
+  specifiers: string[];
 }
 
 export interface ViteRuntimeCapabilityStatus {
@@ -382,6 +393,7 @@ export class ViteProductWorkflow {
       cliEntrypoint,
       cliEntryReadiness,
       cliModuleGraph,
+      dependencyMaterializationPlan: createDependencyMaterializationPlan(cliModuleGraph, this.dependencyArtifacts),
       missingCapabilities,
       nextAction: "Replace the adapter-backed Vite workflow with vendored Vite CLI/module execution once the listed runtime capabilities are implemented.",
       vitePackageSource: this.#vitePackageSource()
@@ -966,6 +978,36 @@ function packagesForTemplate(template: ViteProductTemplate): string[] {
 
 function uniquePackageNames(packages: string[]): string[] {
   return [...new Set(packages)];
+}
+
+function createDependencyMaterializationPlan(
+  graph: CliModuleGraph,
+  dependencyArtifacts: readonly ViteProductDependencyArtifact[]
+): ViteDependencyMaterializationPlan {
+  const satisfied = uniquePackageNames(dependencyArtifacts.map((artifact) => artifact.name)).sort();
+  const satisfiedSet = new Set(satisfied);
+  const missingSpecifiersByPackage = new Map<string, Set<string>>();
+  for (const issue of graph.issues) {
+    if (issue.kind !== "missing-module") continue;
+    const packageName = packageNameFromSpecifier(issue.specifier);
+    if (!packageName || packageName === "vite" || satisfiedSet.has(packageName)) continue;
+    const specifiers = missingSpecifiersByPackage.get(packageName) || new Set<string>();
+    specifiers.add(issue.specifier);
+    missingSpecifiersByPackage.set(packageName, specifiers);
+  }
+  return {
+    missing: [...missingSpecifiersByPackage.entries()]
+      .map(([name, specifiers]) => ({ name, specifiers: [...specifiers].sort() }))
+      .sort((left, right) => left.name.localeCompare(right.name)),
+    satisfied
+  };
+}
+
+function packageNameFromSpecifier(specifier: string): string | null {
+  if (specifier.startsWith(".") || specifier.startsWith("/") || specifier.startsWith("#") || specifier.startsWith("node:")) return null;
+  const parts = specifier.split("/");
+  if (specifier.startsWith("@")) return parts.length >= 2 ? `${parts[0]}/${parts[1]}` : null;
+  return parts[0] || null;
 }
 
 function collectTextMounts(reader: WorkspaceModuleReader, packageRoot: string): PackageManagerWorkspaceMount[] {

@@ -398,6 +398,20 @@ const dependencyArtifactWorkflow = new ViteProductWorkflow({
     }
   ]
 });
+const missingDependencyWorkflow = new ViteProductWorkflow({
+  manager: "pnpm",
+  vitePackageArtifact: dependencyArtifactWorkflow.vitePackageArtifact
+});
+missingDependencyWorkflow.install();
+assert.deepEqual(missingDependencyWorkflow.inspectRealCliReadiness().dependencyMaterializationPlan, {
+  missing: [
+    {
+      name: "rolldown",
+      specifiers: ["rolldown/parseAst"]
+    }
+  ],
+  satisfied: []
+});
 const dependencyArtifactInstall = dependencyArtifactWorkflow.install();
 assert.equal(dependencyArtifactInstall.packages.includes("rolldown"), true);
 const dependencyArtifactReadiness = dependencyArtifactWorkflow.inspectRealCliReadiness();
@@ -405,6 +419,10 @@ assert.equal(
   dependencyArtifactReadiness.cliModuleGraph.issues.some((issue) => issue.specifier === "rolldown/parseAst"),
   false
 );
+assert.deepEqual(dependencyArtifactReadiness.dependencyMaterializationPlan, {
+  missing: [],
+  satisfied: ["rolldown"]
+});
 const dependencyArtifactExecution = await dependencyArtifactWorkflow.executeRealCli(["build"]);
 assert.deepEqual(dependencyArtifactExecution.buildRegistrations, [
   {
@@ -447,6 +465,10 @@ const installedDependencyWorkflow = new ViteProductWorkflow({
   dependencyArtifacts: [installedDependencyArtifact]
 });
 installedDependencyWorkflow.install();
+assert.deepEqual(installedDependencyWorkflow.inspectRealCliReadiness().dependencyMaterializationPlan, {
+  missing: [],
+  satisfied: ["rolldown"]
+});
 const installedDependencyExecution = await installedDependencyWorkflow.executeRealCli(["build"]);
 assert.deepEqual(installedDependencyExecution.buildRegistrations, [
   {
