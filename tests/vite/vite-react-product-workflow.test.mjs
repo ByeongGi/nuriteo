@@ -263,6 +263,47 @@ assert.deepEqual(
   ]
 );
 
+assert.throws(
+  () => new ViteProductWorkflow({
+    manager: "npm",
+    vitePackageArtifact: {
+      version: "bad",
+      mounts: []
+    }
+  }).install(),
+  (error) => error.code === "EVITEARTIFACTMANIFEST" && error.path === "/workspace/project/node_modules/vite/package.json"
+);
+assert.throws(
+  () => new ViteProductWorkflow({
+    manager: "npm",
+    vitePackageArtifact: {
+      version: "bad",
+      mounts: [
+        {
+          path: "package.json",
+          data: JSON.stringify({ name: "not-vite", version: "bad", type: "module", bin: { vite: "bin/vite.js" } })
+        }
+      ]
+    }
+  }).install(),
+  (error) => error.code === "EVITEARTIFACTNAME" && error.path === "/workspace/project/node_modules/vite/package.json"
+);
+assert.throws(
+  () => new ViteProductWorkflow({
+    manager: "npm",
+    vitePackageArtifact: {
+      version: "bad",
+      mounts: [
+        {
+          path: "package.json",
+          data: JSON.stringify({ name: "vite", version: "bad", type: "module", bin: { vite: "missing/vite.js" } })
+        }
+      ]
+    }
+  }).install(),
+  (error) => error.code === "EVITEARTIFACTBIN" && error.path === "/workspace/project/node_modules/vite/missing/vite.js"
+);
+
 console.log("vite product workflow test ok");
 
 function expectedFrameworkPackage(template) {

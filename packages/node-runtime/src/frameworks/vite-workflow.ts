@@ -26,6 +26,20 @@ export interface ViteProductPackageArtifact {
   version: string;
 }
 
+export type ViteProductPackageArtifactErrorCode = "EVITEARTIFACTMANIFEST" | "EVITEARTIFACTNAME" | "EVITEARTIFACTBIN";
+
+export class ViteProductPackageArtifactError extends Error {
+  code: ViteProductPackageArtifactErrorCode;
+  path: string;
+
+  constructor(code: ViteProductPackageArtifactErrorCode, message: string, path: string) {
+    super(message);
+    this.name = "ViteProductPackageArtifactError";
+    this.code = code;
+    this.path = path;
+  }
+}
+
 export interface ViteProductWorkflowResult {
   runtime: "browser-guest-node-runtime";
   manager: ViteProductPackageManager;
@@ -182,6 +196,12 @@ export type ViteRuntimeCapability =
   | "real-vite-hmr-protocol"
   | "framework-plugin-module-execution";
 
+interface VitePackageManifest {
+  bin?: string | Record<string, string>;
+  name?: string;
+  version?: string;
+}
+
 export class ViteProductWorkflow {
   readonly manager: ViteProductPackageManager;
   readonly template: ViteProductTemplate;
@@ -266,6 +286,7 @@ export class ViteProductWorkflow {
   install(): ViteProductInstallResult {
     const packages = packagesForTemplate(this.template);
     for (const pkg of packages) {
+      if (pkg === "vite" && this.vitePackageArtifact) continue;
       this.workspace.writeText(join(this.projectRoot, "node_modules", pkg, "package.json"), JSON.stringify({ name: pkg }));
     }
     this.#installVitePackage();
@@ -584,10 +605,19 @@ export class ViteProductWorkflow {
     for (const mount of artifact.mounts) {
       this.workspace.writeText(join(packageRoot, normalizePackageArtifactPath(mount.path)), mount.data);
     }
-    if (!this.workspace.exists(join(packageRoot, "package.json"))) {
-      this.workspace.writeText(join(packageRoot, "package.json"), JSON.stringify({ name: "vite", version: artifact.version, type: "module", bin: { vite: "bin/vite.js" } }));
+    const packageJsonPath = join(packageRoot, "package.json");
+    if (!this.workspace.exists(packageJsonPath)) {
+      throw new ViteProductPackageArtifactError("EVITEARTIFACTMANIFEST", "Mounted Vite package artifact must include package.json.", packageJsonPath);
     }
-    this.workspace.symlink(join(packageRoot, this.#readVitePackageBinPath()), join(this.projectRoot, "node_modules/.bin/vite"));
+    const manifest = this.#readVitePackageManifest();
+    if (manifest.name !== "vite") {
+      throw new ViteProductPackageArtifactError("EVITEARTIFACTNAME", "Mounted Vite package artifact package.json must have name \"vite\".", packageJsonPath);
+    }
+    const binPath = join(packageRoot, readVitePackageBinPath(manifest));
+    if (!this.workspace.exists(binPath)) {
+      throw new ViteProductPackageArtifactError("EVITEARTIFACTBIN", "Mounted Vite package artifact bin entry is missing.", binPath);
+    }
+    this.workspace.symlink(binPath, join(this.projectRoot, "node_modules/.bin/vite"));
   }
 
   #installViteCliEntrypoint(): void {
@@ -618,14 +648,12 @@ export class ViteProductWorkflow {
   }
 
   #readVitePackageVersion(): string {
-    const manifest = JSON.parse(this.workspace.readText(join(this.projectRoot, "node_modules/vite/package.json"))) as { version?: string };
+    const manifest = this.#readVitePackageManifest();
     return manifest.version || this.vitePackageArtifact?.version || "8.2.0";
   }
 
-  #readVitePackageBinPath(): string {
-    const manifest = JSON.parse(this.workspace.readText(join(this.projectRoot, "node_modules/vite/package.json"))) as { bin?: string | Record<string, string> };
-    if (typeof manifest.bin === "string") return manifest.bin;
-    return manifest.bin?.vite || "bin/vite.js";
+  #readVitePackageManifest(): VitePackageManifest {
+    return JSON.parse(this.workspace.readText(join(this.projectRoot, "node_modules/vite/package.json"))) as VitePackageManifest;
   }
 
   #vitePackageSource(): ViteProductPackageSource {
@@ -765,6 +793,11 @@ function packagesForTemplate(template: ViteProductTemplate): string[] {
 
 function normalizePackageArtifactPath(path: string): string {
   return path.replace(/^\/+/, "");
+}
+
+function readVitePackageBinPath(manifest: VitePackageManifest): string {
+  if (typeof manifest.bin === "string") return manifest.bin;
+  return manifest.bin?.vite || "bin/vite.js";
 }
 
 function missingCapabilitiesForTemplate(template: ViteProductTemplate): ViteRuntimeCapability[] {
