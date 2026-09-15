@@ -1,6 +1,14 @@
 import assert from "node:assert/strict";
 
-import { createAsyncCliModuleEvaluator, createCliModuleEvaluator, createGuestRuntimeProcessRunner, createNpmRunner, MemoryPackageManagerWorkspace } from "../../packages/node-runtime/src/index.ts";
+import {
+  classifyCliEntryModuleMode,
+  createAsyncCliModuleEvaluator,
+  createCliModuleEvaluator,
+  createGuestRuntimeProcessRunner,
+  createNpmRunner,
+  inspectCliEntryReadiness,
+  MemoryPackageManagerWorkspace
+} from "../../packages/node-runtime/src/index.ts";
 
 const workspace = new MemoryPackageManagerWorkspace([
   {
@@ -229,6 +237,18 @@ const workspace = new MemoryPackageManagerWorkspace([
   {
     path: "/workspace/global-cli/package/package.json",
     data: JSON.stringify({ name: "global-fixture-cli", version: "1.2.3", main: "lib/cli.js" })
+  },
+  {
+    path: "/workspace/esm-cli/package/bin/vite.js",
+    data: "#!/usr/bin/env node\nimport '../dist/node/cli.js';\n"
+  },
+  {
+    path: "/workspace/esm-cli/package/dist/node/cli.js",
+    data: "export const started = true;\n"
+  },
+  {
+    path: "/workspace/esm-cli/package/package.json",
+    data: JSON.stringify({ name: "esm-fixture-cli", version: "1.2.3", type: "module", bin: { vite: "bin/vite.js" } })
   }
 ]);
 
@@ -358,6 +378,36 @@ const globalResult = createCliModuleEvaluator({
 assert.equal(globalResult.stdout, "function true true ok\n");
 assert.equal(globalResult.stderr, "");
 assert.equal(globalResult.exitCode, 0);
+
+const esmCliEntry = {
+  name: "vite",
+  version: "1.2.3",
+  entry: "/workspace/esm-cli/package/bin/vite.js"
+};
+assert.equal(classifyCliEntryModuleMode({ entry: esmCliEntry, reader: workspace }), "esm");
+assert.deepEqual(inspectCliEntryReadiness({ entry: esmCliEntry, reader: workspace }), {
+  status: "blocked",
+  entry: "/workspace/esm-cli/package/bin/vite.js",
+  mode: "esm",
+  reasons: [
+    {
+      code: "ERR_CLI_ESM_ENTRY_UNSUPPORTED",
+      message: "ESM CLI entrypoint requires async module entry execution: /workspace/esm-cli/package/bin/vite.js"
+    }
+  ],
+  nextAction: "Add async ESM CLI entry execution before routing this command through the browser guest runtime."
+});
+const esmResult = createCliModuleEvaluator({
+  root: "/workspace",
+  reader: workspace
+})({
+  entry: esmCliEntry,
+  args: ["--host", "127.0.0.1"],
+  cwd: "/workspace/project"
+});
+assert.equal(esmResult.stdout, "");
+assert.match(esmResult.stderr, /ERR_CLI_ESM_ENTRY_UNSUPPORTED/);
+assert.equal(esmResult.exitCode, 1);
 
 const entry = {
   name: "npm",

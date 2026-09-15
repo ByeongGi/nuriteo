@@ -7,6 +7,7 @@ import { dirname, normalize } from "../builtins/path.ts";
 import { BrowserProcess } from "../builtins/process.ts";
 import { createWorkspaceModuleRuntime, type WorkspaceModuleReader } from "../modules/index.ts";
 import type { CliEntry, CliRunResult, RuntimeEnv, RuntimeFsBinding, RuntimeFsData, RuntimeNamespace, RuntimeValue } from "../types.ts";
+import { inspectCliEntryReadiness } from "./cli-entry-readiness.ts";
 import type { PackageManagerWorkspaceWriter } from "./workspace.ts";
 
 export interface CliModuleEvaluatorOptions {
@@ -42,6 +43,24 @@ export function createAsyncCliModuleEvaluator(options: AsyncCliModuleEvaluatorOp
 }
 
 function startCliModuleEvaluation(options: CliModuleEvaluatorOptions, request: CliModuleEvaluationRequest): { finalize: () => CliRunResult } {
+  const readiness = inspectCliEntryReadiness({
+    entry: request.entry,
+    reader: options.reader
+  });
+  if (readiness.status === "blocked") {
+    return {
+      finalize() {
+        return {
+          stdout: "",
+          stderr: `${readiness.reasons.map((reason) => `${reason.code}: ${reason.message}`).join("\n")}\n`,
+          exitCode: 1,
+          entry: request.entry.entry,
+          ...(request.entry.entrySha256 ? { entrySha256: request.entry.entrySha256 } : {})
+        };
+      }
+    };
+  }
+
   let stdout = "";
   let stderr = "";
   let asyncExitCode: number | undefined;

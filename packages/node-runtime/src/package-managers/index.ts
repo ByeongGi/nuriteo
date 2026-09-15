@@ -1,4 +1,5 @@
 export { CliRegistry } from "./cli-registry.ts";
+export { classifyCliEntryModuleMode, inspectCliEntryReadiness } from "./cli-entry-readiness.ts";
 export { createPackageExecutionPolicy, PackageExecutionPolicy, PackageExecutionPolicyError } from "./execution-policy.ts";
 export { createAsyncCliModuleEvaluator, createCliModuleEvaluator } from "./cli-evaluator.ts";
 export { analyzeCliModuleGraph, extractStaticRequires } from "./cli-module-graph.ts";
@@ -14,6 +15,7 @@ export { createPackageScriptRunner, PackageScriptRunner } from "./script-runner.
 export { createPackageTarballCache, extractTarEntries, PackageTarballCache } from "./tarball-cache.ts";
 export { MemoryPackageManagerWorkspace } from "./workspace.ts";
 export type { InstallTransactionOptions, InstallTransactionResult } from "./install-transaction.ts";
+export type { CliEntryModuleMode, CliEntryReadiness, CliEntryReadinessReason, CliEntryReadinessReasonCode, CliEntryReadinessStatus, InspectCliEntryReadinessOptions } from "./cli-entry-readiness.ts";
 export type { PnpmStoreApplyOptions, PnpmStoreApplyResult, PnpmStorePlan, PnpmStorePlanOptions, PnpmWorkspaceLink, PnpmWorkspacePackage, PnpmWorkspaceReader, PnpmWorkspaceWriter } from "./pnpm-store.ts";
 export type { PackageTarballCacheMetrics, PackageTarballCacheOptions, PackageTarballRequest, PackageTarballResult, TarEntry } from "./tarball-cache.ts";
 export type { PackageScriptReader, PackageScriptResult, PackageScriptRunnerOptions, PackageScriptWriter } from "./script-runner.ts";

@@ -1,6 +1,7 @@
 import { join } from "../builtins/path.ts";
 import { spawnRuntimeChild, type RuntimeChildProcess } from "../child-process.ts";
 import { createLoopbackNetwork, type LoopbackNetwork, type RuntimeHttpResponse } from "../net/index.ts";
+import { inspectCliEntryReadiness, type CliEntryReadiness } from "../package-managers/cli-entry-readiness.ts";
 import { MemoryPackageManagerWorkspace, type PackageManagerWorkspaceMount } from "../package-managers/workspace.ts";
 
 export type ViteProductPackageManager = "npm" | "pnpm";
@@ -98,6 +99,7 @@ export interface ViteProductReloadRecoveryResult {
 export interface ViteRealCliReadiness {
   status: "blocked";
   cliEntrypoint: string;
+  cliEntryReadiness: CliEntryReadiness;
   missingCapabilities: ViteRuntimeCapability[];
   nextAction: string;
 }
@@ -179,6 +181,15 @@ export class ViteProductWorkflow {
     return {
       status: "blocked",
       cliEntrypoint,
+      cliEntryReadiness: inspectCliEntryReadiness({
+        entry: {
+          name: "vite",
+          version: "8.2.0",
+          entry: cliEntrypoint,
+          mode: "esm"
+        },
+        reader: this.workspace
+      }),
       missingCapabilities: missingCapabilitiesForTemplate(this.template),
       nextAction: "Replace the adapter-backed Vite workflow with vendored Vite CLI/module execution once the listed runtime capabilities are implemented."
     };
