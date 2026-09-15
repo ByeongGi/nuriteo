@@ -15,6 +15,7 @@
     "check:node-upgrade": "node scripts/check-node-upgrade.mjs",
     "check:package-manager-upgrade": "node scripts/check-package-manager-upgrade.mjs",
     "check:performance-baseline": "node scripts/check-performance-baseline.mjs",
+    "check:incident-playbook": "node scripts/check-incident-playbook.mjs",
     "check:release-policy": "node scripts/check-release-policy.mjs",
     "check:release-provenance": "node scripts/check-release-provenance.mjs",
     "check:release-readiness": "node scripts/check-release-readiness.mjs",
