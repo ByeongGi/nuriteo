@@ -485,6 +485,38 @@ assert.deepEqual(forcedWasiIsolatedExecution.buildRegistrations, [
   }
 ]);
 
+const asyncBindingWorkflow = new ViteProductWorkflow({
+  manager: "pnpm",
+  vitePackageArtifact: {
+    version: "9.0.0-async-binding",
+    mounts: [
+      {
+        path: "package.json",
+        data: JSON.stringify({ name: "vite", version: "9.0.0-async-binding", type: "module", bin: { vite: "bin/vite.mjs" } })
+      },
+      {
+        path: "bin/vite.mjs",
+        data: "import '../dist/node/cli.mjs';\n"
+      },
+      {
+        path: "dist/node/cli.mjs",
+        data: "import { createRequire } from 'node:module';\nconst require = createRequire(import.meta.url);\nrequire('./async-binding.mjs');\n"
+      },
+      {
+        path: "dist/node/async-binding.mjs",
+        data: "const value = await Promise.resolve('binding');\nexport const label = value;\n"
+      }
+    ]
+  }
+});
+asyncBindingWorkflow.install();
+const asyncBindingExecution = await asyncBindingWorkflow.executeRealCli(["build"]);
+assert.equal(asyncBindingExecution.exitCode, 1);
+assert.deepEqual(asyncBindingExecution.asyncModuleBlocker, {
+  module: "/workspace/project/node_modules/vite/dist/node/async-binding.mjs",
+  reason: "sync-require-of-async-esm"
+});
+
 const dependencyArtifactWorkflow = new ViteProductWorkflow({
   manager: "pnpm",
   vitePackageArtifact: {

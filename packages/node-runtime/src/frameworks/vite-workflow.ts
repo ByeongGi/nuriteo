@@ -140,12 +140,18 @@ export type ViteProductPackageSource = "stub" | "mounted-artifact";
 
 export interface ViteProductCliExecutionResult extends CliRunResult {
   args: string[];
+  asyncModuleBlocker: ViteProductAsyncModuleBlocker | null;
   buildRegistrations: ViteProductCliBuildRegistration[];
   cwd: string;
   hmrRegistrations: ViteProductCliHmrRegistration[];
   mode: ViteProductCliExecutionMode;
   serverRegistrations: ViteProductCliServerRegistration[];
   transformRegistrations: ViteProductCliTransformRegistration[];
+}
+
+export interface ViteProductAsyncModuleBlocker {
+  module: string;
+  reason: "sync-require-of-async-esm";
 }
 
 export type ViteProductCliExecutionMode = "async-cli-module-evaluation" | "isolated-snapshot-cli-module-evaluation" | "worker-backed-cli-module-evaluation";
@@ -510,6 +516,7 @@ export class ViteProductWorkflow {
     if (isolation === "shared" && isForcedWasiEnv(env) && this.#hasDependencyArtifact("@napi-rs/wasm-runtime")) {
       return {
         args,
+        asyncModuleBlocker: null,
         buildRegistrations,
         cwd: this.projectRoot,
         entry: cliEntrypoint,
@@ -525,6 +532,7 @@ export class ViteProductWorkflow {
     if (isolation === "shared" && this.#hasDependencyArtifact("@napi-rs/wasm-runtime")) {
       return {
         args,
+        asyncModuleBlocker: null,
         buildRegistrations,
         cwd: this.projectRoot,
         entry: cliEntrypoint,
@@ -609,6 +617,7 @@ export class ViteProductWorkflow {
     return {
       ...result,
       args,
+      asyncModuleBlocker: classifyAsyncModuleBlocker(result.stderr),
       buildRegistrations,
       cwd: this.projectRoot,
       hmrRegistrations,
@@ -1313,6 +1322,15 @@ function isObjectRecord(value: unknown): value is Record<string, unknown> {
 
 function isForcedWasiEnv(env: RuntimeEnv): boolean {
   return env.NAPI_RS_FORCE_WASI === "error" || env.NAPI_RS_FORCE_WASI === "true";
+}
+
+function classifyAsyncModuleBlocker(stderr: string): ViteProductAsyncModuleBlocker | null {
+  const match = stderr.match(/ERR_REQUIRE_ASYNC_MODULE: ([^\n]+)/);
+  if (!match?.[1]) return null;
+  return {
+    module: match[1],
+    reason: "sync-require-of-async-esm"
+  };
 }
 
 function createDependencyMaterializationPlan(
