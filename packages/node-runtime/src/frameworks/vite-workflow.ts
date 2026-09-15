@@ -190,7 +190,8 @@ export class ViteProductWorkflow {
           entry: cliEntrypoint,
           mode: "esm"
         },
-        reader: this.workspace
+        reader: this.workspace,
+        supportedModes: ["cjs", "esm"]
       }),
       cliModuleGraph: analyzeCliModuleGraph({
         entry: cliEntrypoint,
