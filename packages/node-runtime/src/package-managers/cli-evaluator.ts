@@ -642,8 +642,9 @@ function createWorkspaceFsFacade(reader: WorkspaceModuleReader, writer?: Package
   const facade = {
     constants: constantsBuiltin,
     close(fd: number, callback: (error?: Error | null) => void = () => undefined): void {
-      openFiles.delete(fd);
-      callback(null);
+      callWithOptionalFsCallback(() => {
+        openFiles.delete(fd);
+      }, callback);
     },
     closeSync(fd: number): void {
       openFiles.delete(fd);
@@ -703,6 +704,24 @@ function createWorkspaceFsFacade(reader: WorkspaceModuleReader, writer?: Package
     },
     accessSync(path: string): void {
       if (!facade.existsSync(path)) throw createFsError("ENOENT", `No such file or directory: ${normalize(path)}`);
+    },
+    appendFile(path: string, data: RuntimeFsData, optionsOrCallback?: unknown, callback?: (error?: Error | null) => void): void {
+      const cb = typeof optionsOrCallback === "function" ? optionsOrCallback as (error?: Error | null) => void : callback;
+      callWithOptionalFsCallback(() => {
+        facade.appendFileSync(path, data);
+      }, cb || (() => undefined));
+    },
+    appendFileSync(path: string, data: RuntimeFsData): void {
+      if (!writer) throw unsupportedFsMutation("appendFileSync");
+      const normalized = normalize(path);
+      let existing = "";
+      try {
+        existing = reader.readText(normalized);
+      } catch (error) {
+        const code = typeof error === "object" && error && "code" in error ? (error as { code?: unknown }).code : undefined;
+        if (code !== "ENOENT") throw error;
+      }
+      writer.writeText(normalized, `${existing}${decodeFsData(data)}`);
     },
     mkdir(path: string, optionsOrCallback?: { recursive?: boolean } | ((error?: Error | null) => void), callback?: (error?: Error | null) => void): void {
       const cb = typeof optionsOrCallback === "function" ? optionsOrCallback : callback;
@@ -792,12 +811,14 @@ function createWorkspaceFsFacade(reader: WorkspaceModuleReader, writer?: Package
     open(path: string, flags: string | number, modeOrCallback?: number | ((error: Error | null, fd?: number) => void), callback?: (error: Error | null, fd?: number) => void): void {
       const cb = typeof modeOrCallback === "function" ? modeOrCallback : callback;
       if (!cb) return;
-      try {
-        const fd = facade.openSync(path, flags);
-        cb(null, fd);
-      } catch (error) {
-        cb(error instanceof Error ? error : new Error(String(error)));
-      }
+      queueMicrotask(() => {
+        try {
+          const fd = facade.openSync(path, flags);
+          cb(null, fd);
+        } catch (error) {
+          cb(error instanceof Error ? error : new Error(String(error)));
+        }
+      });
     },
     openSync(path: string, flags: string | number = "r"): number {
       const fd = nextFd++;
@@ -814,6 +835,9 @@ function createWorkspaceFsFacade(reader: WorkspaceModuleReader, writer?: Package
     promises: {
       async chmod(path: string, mode: number): Promise<void> {
         facade.chmodSync(path, mode);
+      },
+      async appendFile(path: string, data: RuntimeFsData): Promise<void> {
+        facade.appendFileSync(path, data);
       },
       async chown(path: string, uid: number, gid: number): Promise<void> {
         facade.chownSync(path, uid, gid);
@@ -908,12 +932,14 @@ function createWorkspaceFsFacade(reader: WorkspaceModuleReader, writer?: Package
       return maybeReader.readlink(normalize(path));
     },
     read(fd: number, buffer: Uint8Array, offset: number, length: number, position: number | null, callback: (error: Error | null, bytesRead?: number, buffer?: Uint8Array) => void): void {
-      try {
-        const bytesRead = facade.readSync(fd, buffer, offset, length, position) as number;
-        callback(null, bytesRead, buffer);
-      } catch (error) {
-        callback(error instanceof Error ? error : new Error(String(error)));
-      }
+      queueMicrotask(() => {
+        try {
+          const bytesRead = facade.readSync(fd, buffer, offset, length, position) as number;
+          callback(null, bytesRead, buffer);
+        } catch (error) {
+          callback(error instanceof Error ? error : new Error(String(error)));
+        }
+      });
     },
     readSync(fd: number, buffer?: Uint8Array, offset = 0, length = buffer ? buffer.byteLength - offset : 0, position?: number | null): Uint8Array | number {
       const file = openFiles.get(fd);
@@ -1040,24 +1066,40 @@ function createWorkspaceFsFacade(reader: WorkspaceModuleReader, writer?: Package
         : typeof positionOrCallback === "function"
           ? positionOrCallback
           : callback;
-      try {
-        const writeOptions: CliWriteOptions = {};
-        if (typeof lengthOrEncoding === "string") {
-          writeOptions.encoding = lengthOrEncoding;
-          if (typeof offsetOrCallback === "number") writeOptions.position = offsetOrCallback;
-        } else {
-          if (typeof lengthOrEncoding === "number") writeOptions.length = lengthOrEncoding;
-          if (typeof offsetOrCallback === "number") writeOptions.offset = offsetOrCallback;
-          if (typeof positionOrCallback === "number") writeOptions.position = positionOrCallback;
+      queueMicrotask(() => {
+        try {
+          const writeOptions: CliWriteOptions = {};
+          if (typeof lengthOrEncoding === "string") {
+            writeOptions.encoding = lengthOrEncoding;
+            if (typeof offsetOrCallback === "number") writeOptions.position = offsetOrCallback;
+          } else {
+            if (typeof lengthOrEncoding === "number") writeOptions.length = lengthOrEncoding;
+            if (typeof offsetOrCallback === "number") writeOptions.offset = offsetOrCallback;
+            if (typeof positionOrCallback === "number") writeOptions.position = positionOrCallback;
+          }
+          const bytesWritten = writeToOpenFile(fd, data, writeOptions);
+          cb?.(null, bytesWritten, data);
+        } catch (error) {
+          cb?.(error instanceof Error ? error : new Error(String(error)));
         }
-        const bytesWritten = writeToOpenFile(fd, data, writeOptions);
-        cb?.(null, bytesWritten, data);
-      } catch (error) {
-        cb?.(error instanceof Error ? error : new Error(String(error)));
-      }
+      });
     },
-    writev(_fd: number, _buffers: ArrayBufferView[], callback: (error?: Error | null, bytesWritten?: number, buffers?: ArrayBufferView[]) => void = () => undefined): void {
-      callback(unsupportedFsMutation("writev"));
+    writev(fd: number, buffers: ArrayBufferView[], positionOrCallback?: number | ((error?: Error | null, bytesWritten?: number, buffers?: ArrayBufferView[]) => void), callback?: (error?: Error | null, bytesWritten?: number, buffers?: ArrayBufferView[]) => void): void {
+      const cb = typeof positionOrCallback === "function" ? positionOrCallback : callback;
+      queueMicrotask(() => {
+        try {
+          let bytesWritten = 0;
+          let position = typeof positionOrCallback === "number" ? positionOrCallback : undefined;
+          for (const buffer of buffers) {
+            const written = writeToOpenFile(fd, buffer, position === undefined ? {} : { position });
+            bytesWritten += written;
+            if (position !== undefined) position += written;
+          }
+          cb?.(null, bytesWritten, buffers);
+        } catch (error) {
+          cb?.(error instanceof Error ? error : new Error(String(error)));
+        }
+      });
     },
     writeSync(fd: number, data: RuntimeFsData): number {
       return writeToOpenFile(fd, data);

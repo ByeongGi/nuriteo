@@ -1,6 +1,7 @@
 import type { RuntimeFsBinding, RuntimeFsData } from "../types.ts";
 
 export interface FsPromisesBuiltin {
+  appendFile(path: string, data: RuntimeFsData): Promise<void>;
   chmod(path: string, mode: number | string): Promise<void>;
   chown(path: string, uid: number, gid: number): Promise<void>;
   copyFile(source: string, target: string): Promise<void>;
@@ -29,6 +30,14 @@ export interface FsPromisesBuiltin {
 
 export function createFsPromisesBuiltin(fs: RuntimeFsBinding): FsPromisesBuiltin {
   return Object.freeze({
+    async appendFile(path: string, data: RuntimeFsData): Promise<void> {
+      const maybeAppendFileSync = (fs as RuntimeFsBinding & {
+        appendFileSync?: (path: string, data: RuntimeFsData) => void;
+      }).appendFileSync;
+      if (!maybeAppendFileSync) throw new Error("fs.appendFile is not supported by this binding");
+      maybeAppendFileSync(path, data);
+    },
+
     async chmod(path: string, mode: number | string): Promise<void> {
       callMetadataSync(fs, "chmodSync", [path, mode], () => fs.statSync(path));
     },
