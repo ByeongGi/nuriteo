@@ -40,6 +40,7 @@ export class Readable extends Stream {
   #queue: RuntimeValue[] = [];
   #ended = false;
   #destroyed = false;
+  #encoding: BufferEncoding | null = null;
 
   static from(iterable: Iterable<RuntimeValue> | AsyncIterable<RuntimeValue>): Readable {
     const readable = new Readable();
@@ -69,9 +70,15 @@ export class Readable extends Stream {
       this.emit("close");
       return false;
     }
-    this.#queue.push(chunk);
-    this.emit("data", chunk);
+    const value = this.#encoding && chunk instanceof Uint8Array ? new TextDecoder(this.#encoding).decode(chunk) : chunk;
+    this.#queue.push(value);
+    this.emit("data", value);
     return true;
+  }
+
+  setEncoding(encoding: BufferEncoding): this {
+    this.#encoding = encoding;
+    return this;
   }
 
   read(): RuntimeValue {

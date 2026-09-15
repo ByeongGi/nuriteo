@@ -9,6 +9,7 @@ const tests = [
   "./npm-guest-runtime-boot.test.mjs",
   "./npm-install-plan.test.mjs",
   "./pnpm-cli-module-evaluation.test.mjs",
+  "./pnpm-exec-cli-module-evaluation.test.mjs",
   "./pnpm-install-cli-module-evaluation.test.mjs",
   "./pnpm-guest-runtime-boot.test.mjs",
   "./pnpm-store-plan.test.mjs",

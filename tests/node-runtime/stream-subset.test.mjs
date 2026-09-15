@@ -106,6 +106,14 @@ await exerciseStreams({
   promises: streamPromisesBuiltin
 });
 
+const encoded = new RuntimeReadable();
+const encodedChunks = [];
+encoded.setEncoding("utf8");
+encoded.on("data", (chunk) => encodedChunks.push(chunk));
+encoded.push(new TextEncoder().encode("hi"));
+encoded.push(null);
+assert.deepEqual(encodedChunks, ["hi"]);
+
 const requireBuiltin = createBuiltinLoader({});
 assert.equal(requireBuiltin("node:stream").Readable, RuntimeReadable);
 assert.equal(typeof requireBuiltin("stream"), "function");
