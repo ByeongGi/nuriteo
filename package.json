@@ -15,6 +15,7 @@
     "check:node-upgrade": "node scripts/check-node-upgrade.mjs",
     "check:package-manager-upgrade": "node scripts/check-package-manager-upgrade.mjs",
     "check:performance-baseline": "node scripts/check-performance-baseline.mjs",
+    "check:release-policy": "node scripts/check-release-policy.mjs",
     "check:release-readiness": "node scripts/check-release-readiness.mjs",
     "check:soak-baseline": "node scripts/check-soak-baseline.mjs",
     "check:types": "tsc --noEmit",
