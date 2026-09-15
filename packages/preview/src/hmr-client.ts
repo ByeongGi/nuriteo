@@ -1,4 +1,4 @@
-import type { HmrClientOptions, HmrEventType, HmrListener, HmrSocket } from "./types.ts";
+import type { HmrClientError, HmrClientOptions, HmrClientSnapshot, HmrClientState, HmrEventType, HmrListener, HmrSocket } from "./types.ts";
 
 export class HmrClient {
   connect: () => HmrSocket;
@@ -8,6 +8,8 @@ export class HmrClient {
   socket: HmrSocket | null;
   retryCount: number;
   closed: boolean;
+  state: HmrClientState;
+  lastError: HmrClientError | null;
 
   constructor(options: HmrClientOptions = {}) {
     this.connect = options.connect || (() => createMemorySocket());
@@ -17,6 +19,8 @@ export class HmrClient {
     this.socket = null;
     this.retryCount = 0;
     this.closed = false;
+    this.state = "idle";
+    this.lastError = null;
   }
 
   start(): HmrClient {
@@ -34,26 +38,45 @@ export class HmrClient {
 
   close(): void {
     this.closed = true;
+    this.state = "closed";
     this.socket?.close?.();
+  }
+
+  snapshot(): HmrClientSnapshot {
+    return {
+      state: this.state,
+      retryCount: this.retryCount,
+      maxRetries: this.maxRetries,
+      lastError: this.lastError
+    };
   }
 
   #open(): void {
     this.socket = this.connect();
+    this.state = "connected";
+    this.lastError = null;
     this.socket.onmessage = (event) => {
       try {
         this.#emit("message", JSON.parse(event.data));
       } catch (error) {
-        this.#emit("error", {
+        const hmrError = {
           code: "EBADMESSAGE",
           message: error instanceof Error ? error.message : "invalid HMR message"
-        });
+        } satisfies HmrClientError;
+        this.state = "error";
+        this.lastError = hmrError;
+        this.#emit("error", hmrError);
       }
     };
     this.socket.onclose = () => {
       this.#emit("close", {});
       if (!this.closed && this.retryCount < this.maxRetries) {
         this.retryCount += 1;
+        this.state = "reconnecting";
+        this.#emit("reconnect", { attempt: this.retryCount + 1, delayMs: this.reconnectDelayMs });
         setTimeout(() => this.#open(), this.reconnectDelayMs);
+      } else if (!this.closed) {
+        this.state = "closed";
       }
     };
     this.#emit("open", { attempt: this.retryCount + 1 });

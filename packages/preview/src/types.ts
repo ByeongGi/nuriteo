@@ -57,6 +57,15 @@ export interface HmrClientError {
   message: string;
 }
 
+export type HmrClientState = "idle" | "connected" | "reconnecting" | "closed" | "error";
+
+export interface HmrClientSnapshot {
+  state: HmrClientState;
+  retryCount: number;
+  maxRetries: number;
+  lastError: HmrClientError | null;
+}
+
 export interface HmrSocket {
   onmessage?: (event: { data: string }) => void;
   onclose?: () => void;
