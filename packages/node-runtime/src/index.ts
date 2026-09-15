@@ -18,7 +18,8 @@ export { createHttpClient, createHttpsClient, gzip, gunzip, integritySha512, Run
 export { createLoopbackNetwork, LoopbackNetwork, LoopbackNetworkError, parseHttpRequest, parseHttpResponse, serializeHttpRequest, serializeHttpResponse } from "./net/index.ts";
 export { runViteProductWorkflow, runViteReactProductWorkflow, ViteProductWorkflow, ViteReactProductWorkflow } from "./frameworks/index.ts";
 export type { ViteProductBuildResult, ViteProductDevServerSnapshot, ViteProductHmrResult, ViteProductHmrSocket, ViteProductHmrUpdate, ViteProductInstallResult, ViteProductPackageManager, ViteProductPreviewResult, ViteProductTemplate, ViteProductWorkflowOptions, ViteProductWorkflowResult, ViteProductReloadRecoveryResult, ViteRealCliReadiness, ViteRuntimeCapability, ViteReactBuildResult, ViteReactDevServerSnapshot, ViteReactHmrResult, ViteReactHmrUpdate, ViteReactInstallResult, ViteReactPackageManager, ViteReactPreviewResult, ViteReactProductWorkflowOptions, ViteReactProductWorkflowResult, ViteReactReloadRecoveryResult } from "./frameworks/index.ts";
-export { createWasmAdapterPolicy, createWasmAdapterRegistry, rejectNativeAddon, WasmAdapterError, WasmAdapterPolicy, WasmAdapterRegistry } from "./wasm-adapters/index.ts";
+export { createWasiRuntimeBoundary, createWasiStdioLimits, createWasmAdapterPolicy, createWasmAdapterRegistry, filterWasiEnv, rejectNativeAddon, validateWasiEnv, validateWasiFilesystemAccess, validateWasiNetwork, WasiBoundaryError, WasmAdapterError, WasmAdapterPolicy, WasmAdapterRegistry } from "./wasm-adapters/index.ts";
+export type { WasiBoundaryErrorCode, WasiFilesystemAccess, WasiNetworkKind, WasiRuntimeBoundary, WasiRuntimeBoundaryOptions, WasiStdioLimits } from "./wasm-adapters/index.ts";
 export { originalPositionFor, transpileTypeScript } from "./transforms/index.ts";
 export { runNodeProgram } from "./bootstrap.ts";
 export { createFsBinding } from "./bindings/fs.ts";

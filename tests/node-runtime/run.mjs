@@ -12,3 +12,4 @@ import "./io-process.test.mjs";
 import "./shell.test.mjs";
 import "./net-http.test.mjs";
 import "./wasm-adapters.test.mjs";
+import "./wasi-boundary.test.mjs";
