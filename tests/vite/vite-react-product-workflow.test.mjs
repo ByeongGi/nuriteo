@@ -13,6 +13,14 @@ for (const manager of ["npm", "pnpm"]) {
   assert.equal(result.install.installed, true);
   assert.equal(result.install.packages.includes("vite"), true);
   assert.equal(result.install.packages.includes(expectedFrameworkPackage(template)), true);
+  assert.equal(result.realCliReadiness.status, "blocked");
+  assert.equal(result.realCliReadiness.cliEntrypoint, "/workspace/project/node_modules/vite/bin/vite.js");
+  assert.equal(result.realCliReadiness.missingCapabilities.includes("actual-vite-cli-module-execution"), true);
+  assert.equal(result.realCliReadiness.missingCapabilities.includes("real-vite-hmr-protocol"), true);
+  assert.equal(
+    result.realCliReadiness.missingCapabilities.includes("framework-plugin-module-execution"),
+    template !== "react"
+  );
   assert.equal(result.devServer.running, true);
   assert.equal(result.devServer.source, "package-script");
   assert.equal(result.devServer.command, "vite --host 127.0.0.1");

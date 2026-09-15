@@ -22,6 +22,7 @@ export interface ViteProductWorkflowResult {
   template: ViteProductTemplate;
   projectId: string;
   install: ViteProductInstallResult;
+  realCliReadiness: ViteRealCliReadiness;
   devServer: ViteProductDevServerSnapshot;
   preview: ViteProductPreviewResult;
   hmr: ViteProductHmrResult;
@@ -85,6 +86,19 @@ export interface ViteProductReloadRecoveryResult {
   previewAfterRestart: string;
 }
 
+export interface ViteRealCliReadiness {
+  status: "blocked";
+  cliEntrypoint: string;
+  missingCapabilities: ViteRuntimeCapability[];
+  nextAction: string;
+}
+
+export type ViteRuntimeCapability =
+  | "actual-vite-cli-module-execution"
+  | "real-vite-http-module-transform"
+  | "real-vite-hmr-protocol"
+  | "framework-plugin-module-execution";
+
 export class ViteProductWorkflow {
   readonly manager: ViteProductPackageManager;
   readonly template: ViteProductTemplate;
@@ -119,6 +133,7 @@ export class ViteProductWorkflow {
 
   run(): ViteProductWorkflowResult {
     const install = this.install();
+    const realCliReadiness = this.inspectRealCliReadiness();
     const devServer = this.startDevServerFromPackageScript();
     const preview = this.preview("/");
     const hmr = this.editMessage("beta");
@@ -130,6 +145,7 @@ export class ViteProductWorkflow {
       template: this.template,
       projectId: this.projectId,
       install,
+      realCliReadiness,
       devServer,
       preview,
       hmr,
@@ -147,6 +163,16 @@ export class ViteProductWorkflow {
     const lockfile = this.manager === "npm" ? "package-lock.json" : "pnpm-lock.yaml";
     this.workspace.writeText(join(this.projectRoot, lockfile), createLockfile(this.manager, packages));
     return { installed: true, lockfile, packages };
+  }
+
+  inspectRealCliReadiness(): ViteRealCliReadiness {
+    const cliEntrypoint = this.#resolveBin("vite");
+    return {
+      status: "blocked",
+      cliEntrypoint,
+      missingCapabilities: missingCapabilitiesForTemplate(this.template),
+      nextAction: "Replace the adapter-backed Vite workflow with vendored Vite CLI/module execution once the listed runtime capabilities are implemented."
+    };
   }
 
   startDevServer(): ViteProductDevServerSnapshot {
@@ -428,6 +454,16 @@ function createLockfile(manager: ViteProductPackageManager, packages: string[]):
 
 function packagesForTemplate(template: ViteProductTemplate): string[] {
   return ["vite", "typescript", ...Object.keys(dependenciesForTemplate(template))];
+}
+
+function missingCapabilitiesForTemplate(template: ViteProductTemplate): ViteRuntimeCapability[] {
+  const capabilities: ViteRuntimeCapability[] = [
+    "actual-vite-cli-module-execution",
+    "real-vite-http-module-transform",
+    "real-vite-hmr-protocol"
+  ];
+  if (template !== "react") capabilities.push("framework-plugin-module-execution");
+  return capabilities;
 }
 
 function dependenciesForTemplate(template: ViteProductTemplate): Record<string, string> {
