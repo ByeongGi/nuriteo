@@ -86,9 +86,14 @@ export interface ViteProductCliBuildRegistration {
 
 export interface ViteProductCliHmrRegistration {
   channel: "hmr";
+  sendUpdate?: ViteProductCliHmrSendUpdate;
   source: "vite-cli";
   transport: "loopback";
 }
+
+export type ViteProductCliHmrSendUpdate = (
+  update: ViteProductHmrUpdate
+) => void | ViteProductHmrUpdate | Promise<void | ViteProductHmrUpdate>;
 
 export interface ViteProductCliServerRegistration {
   command: "dev";
@@ -241,6 +246,7 @@ export class ViteProductWorkflow {
   #devServerSource: ViteProductDevServerSource = "adapter";
   #devServerCliEntrypoint: string | null = null;
   #moduleTransformSource: ViteProductModuleTransformSource = "adapter";
+  #cliHmrSendUpdate: ViteProductCliHmrSendUpdate | null = null;
   #cliTransformRequest: ViteProductCliTransformRequest | null = null;
   #buildCommand: string | null = null;
   #buildCliEntrypoint: string | null = null;
@@ -360,6 +366,10 @@ export class ViteProductWorkflow {
     const hmrRegistrations: ViteProductCliHmrRegistration[] = [];
     const serverRegistrations: ViteProductCliServerRegistration[] = [];
     const transformRegistrations: ViteProductCliTransformRegistration[] = [];
+    const broadcastHmr = (update: ViteProductHmrUpdate): ViteProductHmrUpdate => {
+      this.#broadcastHmr(update);
+      return update;
+    };
     const result = await createAsyncCliModuleEvaluator({
       root: this.projectRoot,
       reader: this.workspace,
@@ -375,7 +385,8 @@ export class ViteProductWorkflow {
         },
         __viteRegisterTransform(registration: ViteProductCliTransformRegistration) {
           transformRegistrations.push(registration);
-        }
+        },
+        __viteBroadcastHmr: broadcastHmr
       }
     })({
       entry: {
@@ -431,6 +442,7 @@ export class ViteProductWorkflow {
     this.#devServerCommand = command;
     this.#devServerCliEntrypoint = cliEntrypoint;
     this.#moduleTransformSource = "adapter";
+    this.#cliHmrSendUpdate = null;
     this.#cliTransformRequest = null;
     return this.#snapshot();
   }
@@ -446,6 +458,7 @@ export class ViteProductWorkflow {
     if (!cliExecution.transformRegistrations.some((item) => item.source === "vite-cli")) {
       throw new Error("ERR_VITE_CLI_TRANSFORM_REGISTRATION_MISSING");
     }
+    this.#cliHmrSendUpdate = latestHmrSendUpdate(cliExecution.hmrRegistrations);
     this.#cliTransformRequest = latestTransformRequest(cliExecution.transformRegistrations);
     this.#port = registration.port;
     this.startDevServer();
@@ -517,7 +530,7 @@ export class ViteProductWorkflow {
     const after = this.preview("/").body;
     const update = createViteHmrUpdate(requestPath, hmrLabelForSource(requestPath, data));
     this.#hmrUpdates.push(update);
-    this.#broadcastHmr(update);
+    this.#sendHmrUpdate(update);
     return {
       before,
       after,
@@ -700,7 +713,7 @@ export class ViteProductWorkflow {
     );
     this.workspace.writeText(
       join(this.projectRoot, "node_modules/vite/dist/node/hmr.js"),
-      "export function createHotChannel(server) {\n  server.emit('vite:hmr-ready');\n  global.__viteRegisterHmrChannel?.({ channel: 'hmr', source: 'vite-cli', transport: 'loopback' });\n  return { send() {} };\n}\n"
+      "export function createHotChannel(server) {\n  server.emit('vite:hmr-ready');\n  const channel = { send(update) { global.__viteBroadcastHmr?.(update); return update; } };\n  global.__viteRegisterHmrChannel?.({ channel: 'hmr', source: 'vite-cli', transport: 'loopback', sendUpdate: channel.send });\n  return channel;\n}\n"
     );
     this.workspace.writeText(
       join(this.projectRoot, "node_modules/vite/dist/node/transform.js"),
@@ -738,6 +751,14 @@ export class ViteProductWorkflow {
     for (const socket of this.#hmrSockets) {
       socket.onmessage?.({ data: JSON.stringify(payload) });
     }
+  }
+
+  #sendHmrUpdate(payload: ViteProductHmrUpdate): void {
+    if (this.#cliHmrSendUpdate) {
+      void this.#cliHmrSendUpdate(payload);
+      return;
+    }
+    this.#broadcastHmr(payload);
   }
 }
 
@@ -1054,6 +1075,14 @@ function assertViteBuildCommand(command: string): void {
 
 function commandArgs(command: string): string[] {
   return command.split(/\s+/).slice(1).filter(Boolean);
+}
+
+function latestHmrSendUpdate(registrations: ViteProductCliHmrRegistration[]): ViteProductCliHmrSendUpdate | null {
+  for (let index = registrations.length - 1; index >= 0; index -= 1) {
+    const registration = registrations[index];
+    if (registration?.sendUpdate) return registration.sendUpdate;
+  }
+  return null;
 }
 
 function latestTransformRequest(registrations: ViteProductCliTransformRegistration[]): ViteProductCliTransformRequest | null {

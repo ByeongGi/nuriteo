@@ -99,13 +99,14 @@ for (const manager of ["npm", "pnpm"]) {
       source: "vite-cli"
     }
   ]);
-  assert.deepEqual(cliExecution.hmrRegistrations, [
+  assert.deepEqual(cliExecution.hmrRegistrations.map(({ channel, source, transport }) => ({ channel, source, transport })), [
     {
       channel: "hmr",
       source: "vite-cli",
       transport: "loopback"
     }
   ]);
+  assert.equal(typeof cliExecution.hmrRegistrations[0].sendUpdate, "function");
   assert.deepEqual(cliExecution.transformRegistrations.map(({ mode, source }) => ({ mode, source })), [
     {
       mode: "browser-esm",
@@ -145,6 +146,18 @@ for (const manager of ["npm", "pnpm"]) {
   assert.match(await cliPreview.text(), /alpha:1/);
   const cliEntryModule = await cliWorkflow.fetch(`http://127.0.0.1:5180/${entryPathForTemplate(template)}`);
   assert.match(await cliEntryModule.text(), /transformed by vite-cli service:\/src\/main/);
+  const cliHmrEvents = [];
+  const cliHmr = createHmrClient({
+    connect() {
+      return cliWorkflow.connectHmr();
+    }
+  });
+  cliHmr.on("message", (event) => cliHmrEvents.push(event.type));
+  cliHmr.start();
+  await Promise.resolve();
+  cliWorkflow.applySourceEdit("src/message.js", "export const label = \"epsilon\";\n");
+  cliHmr.close();
+  assert.deepEqual(cliHmrEvents, ["connected", "update"]);
   const started = workflow.startDevServerFromPackageScript();
   assert.equal(started.running, true);
   assert.equal(started.port, 5173);
@@ -266,7 +279,7 @@ const artifactWorkflow = new ViteProductWorkflow({
       },
       {
         path: "dist/node/hmr.mjs",
-        data: "export function createHotChannel() {\n  global.__viteRegisterHmrChannel?.({ channel: 'hmr', source: 'vite-cli', transport: 'loopback' });\n}\n"
+        data: "export function createHotChannel() {\n  const channel = { send(update) { global.__viteBroadcastHmr?.(update); return update; } };\n  global.__viteRegisterHmrChannel?.({ channel: 'hmr', source: 'vite-cli', transport: 'loopback', sendUpdate: channel.send });\n  return channel;\n}\n"
       },
       {
         path: "dist/node/transform.mjs",
@@ -302,13 +315,14 @@ assert.deepEqual(artifactCliExecution.serverRegistrations, [
     source: "vite-cli"
   }
 ]);
-assert.deepEqual(artifactCliExecution.hmrRegistrations, [
+assert.deepEqual(artifactCliExecution.hmrRegistrations.map(({ channel, source, transport }) => ({ channel, source, transport })), [
   {
     channel: "hmr",
     source: "vite-cli",
     transport: "loopback"
   }
 ]);
+assert.equal(typeof artifactCliExecution.hmrRegistrations[0].sendUpdate, "function");
 assert.deepEqual(artifactCliExecution.transformRegistrations.map(({ mode, source }) => ({ mode, source })), [
   {
     mode: "browser-esm",
