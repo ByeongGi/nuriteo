@@ -124,6 +124,19 @@ const workspace = new MemoryPackageManagerWorkspace([
         if (!rootEntries.some((entry) => entry.name === 'sync.txt' && entry.isFile() && !entry.isSymbolicLink())) {
           throw new Error('unexpected dirent result');
         }
+        const syncDir = fs.opendirSync(process.cwd());
+        if (syncDir.path !== process.cwd() || !syncDir.readSync()) {
+          throw new Error('unexpected opendirSync result');
+        }
+        syncDir.closeSync();
+        const asyncDir = await fs.promises.opendir(process.cwd());
+        const asyncDirEntries = [];
+        for await (const entry of asyncDir) {
+          asyncDirEntries.push(entry.name);
+        }
+        if (!asyncDirEntries.includes('sync.txt')) {
+          throw new Error('unexpected promises.opendir entries: ' + asyncDirEntries.join(','));
+        }
         await fs.promises.writeFile(process.cwd() + '/.cache/async.txt', 'async');
         await fs.promises.lstat(process.cwd() + '/.cache/async.txt');
         if (await fs.promises.stat(process.cwd() + '/missing-async.txt', { throwIfNoEntry: false }) !== undefined) {

@@ -991,6 +991,9 @@ function createWorkspaceFsFacade(reader: WorkspaceModuleReader, writer?: Package
       async open(path: string, flags: string | number = "r"): Promise<CliFileHandle> {
         return createFileHandle(facade.openSync(path, flags), facade as CliFileHandleFs);
       },
+      async opendir(path: string): Promise<CliDir> {
+        return facade.opendirSync(path);
+      },
       async readFile(path: string, encoding?: "utf8" | "utf-8"): Promise<Uint8Array | string> {
         return encoding ? readFileSync(path, encoding) : readFileSync(path);
       },
@@ -1066,6 +1069,16 @@ function createWorkspaceFsFacade(reader: WorkspaceModuleReader, writer?: Package
       buffer.set(bytes, offset);
       if (position === null || position === undefined) file.position = start + bytes.byteLength;
       return bytes.byteLength;
+    },
+    opendir(path: string, optionsOrCallback?: unknown, callback?: (error: Error | null, dir?: CliDir) => void): void {
+      const cb = typeof optionsOrCallback === "function" ? optionsOrCallback as (error: Error | null, dir?: CliDir) => void : callback;
+      if (!cb) return;
+      callWithFsCallback(() => facade.opendirSync(path), cb);
+    },
+    opendirSync(path: string): CliDir {
+      const normalized = normalize(path);
+      const entries = facade.readdirSync(normalized, { withFileTypes: true }) as CliDirent[];
+      return createCliDir(normalized, entries);
     },
     readdirSync(path: string, options?: CliReaddirOptions): CliDirent[] | string[] {
       const normalized = normalize(path);
@@ -1478,6 +1491,14 @@ interface CliDirent {
   isSymbolicLink(): boolean;
 }
 
+interface CliDir extends AsyncIterable<CliDirent> {
+  path: string;
+  close(): Promise<void>;
+  closeSync(): void;
+  read(): Promise<CliDirent | null>;
+  readSync(): CliDirent | null;
+}
+
 type CliWatchEventType = "change" | "rename";
 type CliWatchListener = (eventType: CliWatchEventType, filename: string) => void;
 type CliFsStat = ReturnType<RuntimeFsBinding["statSync"]>;
@@ -1547,6 +1568,32 @@ function createCliFsStatWatcher(path: string, listener: CliFsStatListener): CliF
   watcher.ref = () => watcher;
   watcher.unref = () => watcher;
   return watcher;
+}
+
+function createCliDir(path: string, entries: CliDirent[]): CliDir {
+  let index = 0;
+  let closed = false;
+  const dir: CliDir = {
+    path,
+    async close(): Promise<void> {
+      dir.closeSync();
+    },
+    closeSync(): void {
+      closed = true;
+    },
+    async read(): Promise<CliDirent | null> {
+      return dir.readSync();
+    },
+    readSync(): CliDirent | null {
+      if (closed) throw createFsError("ERR_DIR_CLOSED", `Directory handle was closed: ${path}`);
+      return entries[index++] || null;
+    },
+    async *[Symbol.asyncIterator](): AsyncIterator<CliDirent> {
+      let entry: CliDirent | null;
+      while ((entry = dir.readSync())) yield entry;
+    }
+  };
+  return dir;
 }
 
 function watchesPath(watchPath: string, changedPath: string): boolean {
