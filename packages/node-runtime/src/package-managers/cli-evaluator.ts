@@ -280,10 +280,15 @@ function startCliModuleEvaluation(
     Buffer: BrowserBuffer,
     SharedArrayBuffer,
     Uint8Array,
+    URL,
     WebAssembly,
     __dynamicImport: createCliDynamicImport(),
     clearImmediate: clearCliImmediate,
     clearTimeout,
+    fetch: createCliWorkspaceFetch(options.reader),
+    navigator: {
+      hardwareConcurrency: 4
+    },
     setImmediate: setCliImmediate,
     setTimeout,
     ...(options.globals || {})
@@ -395,6 +400,51 @@ function createCliModuleBuiltin(getRuntime: () => ModuleRuntime): RuntimeNamespa
     _resolveFilename: resolveFilename,
     createRequire
   });
+}
+
+function createCliWorkspaceFetch(reader: WorkspaceModuleReader): (input: string | URL) => Promise<{
+  arrayBuffer: () => Promise<ArrayBuffer>;
+  ok: boolean;
+  status: number;
+  statusText: string;
+  text: () => Promise<string>;
+}> {
+  const encoder = new TextEncoder();
+  const decoder = new TextDecoder();
+  return async (input) => {
+    const path = normalizeFetchPath(input);
+    try {
+      const bytes = readWorkspaceBytes(reader, path, encoder);
+      return {
+        arrayBuffer: async () => toArrayBuffer(bytes),
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        text: async () => decoder.decode(bytes)
+      };
+    } catch {
+      return {
+        arrayBuffer: async () => new ArrayBuffer(0),
+        ok: false,
+        status: 404,
+        statusText: "Not Found",
+        text: async () => ""
+      };
+    }
+  };
+}
+
+function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  const buffer = new ArrayBuffer(bytes.byteLength);
+  new Uint8Array(buffer).set(bytes);
+  return buffer;
+}
+
+function normalizeFetchPath(input: string | URL): string {
+  const value = String(input);
+  if (value.startsWith("file:")) return normalize(fileURLToPath(value));
+  if (value.startsWith("/")) return normalize(value);
+  throw new Error(`ECLIFETCHUNSUPPORTED: only workspace file fetch is supported: ${value}`);
 }
 
 function normalizeCreateRequireFilename(filename: string | URL): string {

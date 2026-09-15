@@ -779,6 +779,43 @@ assert.equal(workerBackedEsmBootstrapResult.capturedGlobalCalls[0].args[0].sourc
 assert.equal(typeof workerBackedEsmBootstrapResult.capturedGlobalCalls[0].args[0].startedAt, "number");
 assert.deepEqual(workerBackedEsmBootstrapResult.capturedGlobalCalls[0].args[0].invoke, { __cliFunctionRef: true });
 
+const fileFetchWorkspace = new MemoryPackageManagerWorkspace([
+  {
+    path: "/workspace/fetch/package/bin/fetch-wasm.mjs",
+    data: `
+      const wasmUrl = new globalThis.URL('./probe.wasm', import.meta.url).href;
+      const response = await globalThis.fetch(wasmUrl);
+      const bytes = new Uint8Array(await response.arrayBuffer());
+      process.stdout.write(String(response.ok) + ':' + String(bytes.byteLength) + ':' + String(bytes[1]));
+    `
+  },
+  {
+    path: "/workspace/fetch/package/bin/probe.wasm",
+    data: Buffer.from([0, 255, 1, 2]).toString("base64"),
+    encoding: "base64"
+  },
+  {
+    path: "/workspace/fetch/package/package.json",
+    data: JSON.stringify({ name: "fetch-wasm", version: "1.0.0", type: "module", bin: { "fetch-wasm": "bin/fetch-wasm.mjs" } })
+  }
+]);
+const fileFetchResult = await createAsyncCliModuleEvaluator({
+  root: "/workspace",
+  reader: fileFetchWorkspace
+})({
+  entry: {
+    name: "fetch-wasm",
+    version: "1.0.0",
+    entry: "/workspace/fetch/package/bin/fetch-wasm.mjs",
+    mode: "esm"
+  },
+  args: [],
+  cwd: "/workspace/project"
+});
+assert.equal(fileFetchResult.stderr, "");
+assert.equal(fileFetchResult.exitCode, 0);
+assert.equal(fileFetchResult.stdout, "true:4:255");
+
 const pendingCliWorkspace = new MemoryPackageManagerWorkspace([
   {
     path: "/workspace/pending/package/bin/pending.mjs",
