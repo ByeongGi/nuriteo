@@ -1,0 +1,63 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-15",
+  "nextVersion": "16.3.5",
+  "scope": {
+    "runtime": "browser-guest-node-runtime",
+    "phase": "P11-03",
+    "goal": "Classify Next.js app router compatibility before product support is claimed."
+  },
+  "packageFacts": {
+    "bin": "dist/bin/next",
+    "nodeEngine": ">=20.9.0",
+    "wasmSwcPackage": "@next/swc-wasm-nodejs@16.3.5",
+    "nativeOptionalDependencies": [
+      "@next/swc-darwin-arm64",
+      "@next/swc-darwin-x64",
+      "@next/swc-linux-arm64-gnu",
+      "@next/swc-linux-arm64-musl",
+      "@next/swc-linux-x64-gnu",
+      "@next/swc-linux-x64-musl",
+      "@next/swc-win32-arm64-msvc",
+      "@next/swc-win32-x64-msvc",
+      "sharp"
+    ]
+  },
+  "capabilities": [
+    {
+      "id": "next-app-router-dev",
+      "command": "next dev",
+      "status": "hold",
+      "reason": "Requires actual Next CLI/module execution, file watching, route worker lifecycle, and SWC transform path inside the product runtime."
+    },
+    {
+      "id": "next-app-router-build",
+      "command": "next build",
+      "status": "hold",
+      "reason": "Requires SWC transform path, filesystem metadata compatibility, worker lifecycle, and native optional dependency diagnostics."
+    },
+    {
+      "id": "next-static-export",
+      "command": "next build with output export",
+      "status": "candidate",
+      "reason": "May become supportable after WASM SWC and build-time filesystem contracts are verified; runtime server features remain out of scope."
+    },
+    {
+      "id": "next-native-swc",
+      "command": "load @next/swc-* native optional packages",
+      "status": "unsupported",
+      "reason": "Native platform packages and native .node addons are outside the browser runtime support scope."
+    },
+    {
+      "id": "next-wasm-swc",
+      "command": "load @next/swc-wasm-nodejs",
+      "status": "candidate",
+      "reason": "A version-matched WASM package exists, but it still needs integration with the runtime WASM adapter policy and Next's loader path."
+    }
+  ],
+  "gate": {
+    "id": "P11-03",
+    "status": "documented",
+    "supportDecision": "Do not claim Next.js product support yet. Track static export and WASM SWC as candidates; keep full app router dev/build on hold until runtime module execution, worker, watcher, and SWC paths are verified."
+  }
+}
