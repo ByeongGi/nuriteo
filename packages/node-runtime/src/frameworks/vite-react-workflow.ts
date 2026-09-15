@@ -37,6 +37,8 @@ export interface ViteReactDevServerSnapshot {
   running: boolean;
   restartCount: number;
   requests: string[];
+  command: string | null;
+  source: "adapter" | "package-script";
   processPid: number | null;
   processStarted: boolean;
   processExited: boolean;
@@ -81,6 +83,8 @@ export class ViteReactProductWorkflow {
   #running = false;
   #listener: { port: number; close: () => void } | null = null;
   #devProcess: RuntimeChildProcess | null = null;
+  #devServerCommand: string | null = null;
+  #devServerSource: "adapter" | "package-script" = "adapter";
   #requests: string[] = [];
   #hmrUpdates: ViteReactHmrUpdate[] = [];
 
@@ -95,10 +99,10 @@ export class ViteReactProductWorkflow {
 
   run(): ViteReactProductWorkflowResult {
     const install = this.install();
-    const devServer = this.startDevServer();
+    const devServer = this.startDevServerFromPackageScript();
     const preview = this.preview("/");
     const hmr = this.editMessage("beta");
-    const build = this.build();
+    const build = this.buildFromPackageScript();
     const reloadRecovery = this.restart();
     return {
       runtime: "browser-guest-node-runtime",
@@ -125,6 +129,8 @@ export class ViteReactProductWorkflow {
 
   startDevServer(): ViteReactDevServerSnapshot {
     if (this.#listener) return this.#snapshot();
+    this.#devServerSource = "adapter";
+    this.#devServerCommand = "vite --host 127.0.0.1";
     this.#listener = this.network.listen(this.#port, (request) => {
       this.#requests.push(request.path);
       const preview = this.preview(request.path);
@@ -139,6 +145,15 @@ export class ViteReactProductWorkflow {
     });
     void this.#devProcess.scheduler.drainMicrotasks();
     this.#running = true;
+    return this.#snapshot();
+  }
+
+  startDevServerFromPackageScript(name = "dev"): ViteReactDevServerSnapshot {
+    const command = this.#readScript(name);
+    assertViteDevCommand(command);
+    this.startDevServer();
+    this.#devServerSource = "package-script";
+    this.#devServerCommand = command;
     return this.#snapshot();
   }
 
@@ -193,10 +208,19 @@ export class ViteReactProductWorkflow {
     };
   }
 
+  buildFromPackageScript(name = "build"): ViteReactBuildResult {
+    assertViteBuildCommand(this.#readScript(name));
+    return this.build();
+  }
+
   restart(): ViteReactReloadRecoveryResult {
+    const command = this.#devServerCommand;
+    const source = this.#devServerSource;
     this.stopDevServer();
     this.#restartCount += 1;
     this.startDevServer();
+    this.#devServerCommand = command;
+    this.#devServerSource = source;
     return {
       restarted: true,
       previewAfterRestart: this.preview("/").body
@@ -209,6 +233,8 @@ export class ViteReactProductWorkflow {
       running: this.#running,
       restartCount: this.#restartCount,
       requests: [...this.#requests],
+      command: this.#devServerCommand,
+      source: this.#devServerSource,
       processPid: this.#devProcess?.process.pid ?? null,
       processStarted: this.#devProcess?.started ?? false,
       processExited: this.#devProcess?.process.exited ?? false
@@ -218,6 +244,13 @@ export class ViteReactProductWorkflow {
   #readLabel(): string {
     const source = this.workspace.readText(join(this.projectRoot, "src/message.js"));
     return source.match(/label\s*=\s*"([^"]+)"/)?.[1] || "unknown";
+  }
+
+  #readScript(name: string): string {
+    const manifest = JSON.parse(this.workspace.readText(join(this.projectRoot, "package.json"))) as { scripts?: Record<string, string> };
+    const command = manifest.scripts?.[name];
+    if (!command) throw new Error(`missing package script: ${name}`);
+    return command;
   }
 }
 
@@ -289,4 +322,14 @@ function toRuntimeHttpResponse(preview: ViteReactPreviewResult): RuntimeHttpResp
     headers: { "content-type": "text/html; charset=utf-8" },
     body: preview.body
   };
+}
+
+function assertViteDevCommand(command: string): void {
+  if (!/^vite(\s|$)/.test(command) || command.includes(" build") || command.includes(" preview")) {
+    throw new Error(`unsupported Vite dev command: ${command}`);
+  }
+}
+
+function assertViteBuildCommand(command: string): void {
+  if (command !== "vite build") throw new Error(`unsupported Vite build command: ${command}`);
 }

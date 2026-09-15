@@ -12,6 +12,8 @@ for (const manager of ["npm", "pnpm"]) {
   assert.equal(result.install.packages.includes("vite"), true);
   assert.equal(result.install.packages.includes("react"), true);
   assert.equal(result.devServer.running, true);
+  assert.equal(result.devServer.source, "package-script");
+  assert.equal(result.devServer.command, "vite --host 127.0.0.1");
   assert.equal(result.devServer.processPid, 5173);
   assert.equal(result.devServer.processStarted, true);
   assert.equal(result.devServer.processExited, false);
@@ -28,9 +30,11 @@ for (const manager of ["npm", "pnpm"]) {
   const network = createLoopbackNetwork();
   const workflow = new ViteReactProductWorkflow({ manager, projectId: `${manager}-preview`, network, port: 5173 });
   workflow.install();
-  const started = workflow.startDevServer();
+  const started = workflow.startDevServerFromPackageScript();
   assert.equal(started.running, true);
   assert.equal(started.port, 5173);
+  assert.equal(started.source, "package-script");
+  assert.equal(started.command, "vite --host 127.0.0.1");
   assert.equal(started.processPid, 5173);
   assert.equal(started.processStarted, true);
   assert.equal(started.processExited, false);
