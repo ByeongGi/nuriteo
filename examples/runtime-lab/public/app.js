@@ -47,6 +47,7 @@ const recoveryActionsEl = document.getElementById("recovery-actions");
 
 let container = null;
 let terminal = createLabTerminal();
+let editorEvents = [];
 let lastSupportBundle = null;
 let lastSupportBundleExport = null;
 const recoveryExecutor = createRuntimeRecoveryActionExecutor({
@@ -95,6 +96,7 @@ const viteWorkflow = new ViteProductWorkflow({
 viteWorkflow.install();
 viteWorkflow.startDevServerFromPackageScript();
 const editor = createProjectWorkspaceEditorBridge(project, {
+  onChange: handleEditorChange,
   onSave: createProjectWorkspaceSourceEditBridge(viteWorkflow, { root: project.root })
 });
 let selectedEditorPath = "/workspace/app/src/main.jsx";
@@ -319,6 +321,40 @@ function deleteCurrentFile() {
     renderFileTree();
     renderSearchResults();
   }
+}
+
+function handleEditorChange(event) {
+  editorEvents.push(event);
+  if (!["rename", "delete"].includes(event.kind) || !isSourcePath(event.relativePath)) return;
+  const action = event.kind === "rename" ? "renamed" : "deleted";
+  const diagnostic = {
+    code: event.kind === "rename" ? "EVITE_SOURCE_RENAMED" : "EVITE_SOURCE_DELETED",
+    file: event.path,
+    level: "warning",
+    message: `Source file ${action}; rebuild preview or update imports if HMR cannot recover.`,
+    recoveryActions: [
+      {
+        kind: "show-terminal",
+        label: "Open terminal",
+        reason: "Review the dev server output for import or HMR errors."
+      },
+      {
+        kind: "retry",
+        label: "Rebuild preview",
+        reason: "Re-run the build after the file tree change.",
+        command: "vite build"
+      }
+    ],
+    source: "editor"
+  };
+  renderDiagnostics({
+    diagnostics: [diagnostic],
+    lastError: diagnostic
+  });
+}
+
+function isSourcePath(path) {
+  return /^src\/.+\.(c|m)?(j|t)sx?$/.test(path);
 }
 
 function renderSearchResults() {
@@ -704,6 +740,7 @@ globalThis.__runtimeLab = {
   deleteCurrentFile,
   editCurrentFile,
   editorSearch: (query) => editor.search(query),
+  editorEvents: () => [...editorEvents],
   editorTree: () => editor.tree(),
   openEditorFile,
   renameCurrentFile,

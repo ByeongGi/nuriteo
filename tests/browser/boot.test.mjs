@@ -144,6 +144,7 @@ await withRuntimeLab(async (page, baseUrl) => {
       created,
       renamed,
       searchRenamed,
+      editorEvents: globalThis.__runtimeLab.editorEvents(),
       hmrUpdates: globalThis.__runtimeLab.viteHmrUpdates(),
       tree: globalThis.__runtimeLab.editorTree()
     };
@@ -163,6 +164,15 @@ await withRuntimeLab(async (page, baseUrl) => {
     throw new Error("editor search did not include renamed file");
   }
   if (JSON.stringify(editorResult.tree).includes("Preview.tsx")) throw new Error("editor did not delete renamed file");
+  if (!editorResult.editorEvents.some((event) => event.kind === "rename" && event.previousPath.endsWith("Preview.jsx"))) {
+    throw new Error("editor did not emit rename change event");
+  }
+  if (!editorResult.editorEvents.some((event) => event.kind === "delete" && event.relativePath === "src/Preview.tsx")) {
+    throw new Error("editor did not emit delete change event");
+  }
+  if (!await page.locator("#diagnostics-status").textContent().then((text) => text === "EVITE_SOURCE_DELETED")) {
+    throw new Error("editor delete did not surface preview recovery diagnostic");
+  }
   await page.evaluate(() => globalThis.__runtimeLab.teardown());
   if (await page.locator("#status").textContent() !== "stopped") throw new Error("status was not stopped");
 });

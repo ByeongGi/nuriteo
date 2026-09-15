@@ -20,7 +20,25 @@ export interface ProjectWorkspaceEditorSaveEvent extends ProjectWorkspaceEditorF
   relativePath: string;
 }
 
+export type ProjectWorkspaceEditorChangeKind =
+  | "create"
+  | "delete"
+  | "discard"
+  | "edit"
+  | "rename"
+  | "save";
+
+export interface ProjectWorkspaceEditorChangeEvent {
+  data?: string;
+  dirty: boolean;
+  kind: ProjectWorkspaceEditorChangeKind;
+  path: string;
+  previousPath?: string;
+  relativePath: string;
+}
+
 export interface ProjectWorkspaceEditorBridgeOptions {
+  onChange?: (event: ProjectWorkspaceEditorChangeEvent) => void;
   onSave?: (event: ProjectWorkspaceEditorSaveEvent) => void;
 }
 
@@ -34,10 +52,12 @@ export interface ProjectWorkspaceSearchMatch {
 export class ProjectWorkspaceEditorBridge {
   readonly store: ProjectWorkspaceStore;
   #dirty = new Map<string, string>();
+  #onChange: ((event: ProjectWorkspaceEditorChangeEvent) => void) | null;
   #onSave: ((event: ProjectWorkspaceEditorSaveEvent) => void) | null;
 
   constructor(store: ProjectWorkspaceStore, options: ProjectWorkspaceEditorBridgeOptions = {}) {
     this.store = store;
+    this.#onChange = options.onChange || null;
     this.#onSave = options.onSave || null;
   }
 
@@ -68,14 +88,18 @@ export class ProjectWorkspaceEditorBridge {
     if (this.#exists(normalized)) throw Object.assign(new Error(`Project file already exists: ${normalized}`), { code: "EEXIST" });
     this.store.writeText(normalized, data);
     this.#dirty.delete(normalized);
-    return { path: normalized, data, dirty: false };
+    const file = { path: normalized, data, dirty: false };
+    this.#emitChange("create", file);
+    return file;
   }
 
   editText(path: string, data: string): ProjectWorkspaceEditorFile {
     const normalized = this.#projectPath(path);
     if (!this.#exists(normalized)) throw Object.assign(new Error(`No such project file: ${normalized}`), { code: "ENOENT" });
     this.#dirty.set(normalized, data);
-    return { path: normalized, data, dirty: true };
+    const file = { path: normalized, data, dirty: true };
+    this.#emitChange("edit", file);
+    return file;
   }
 
   saveFile(path: string): ProjectWorkspaceEditorFile {
@@ -86,6 +110,7 @@ export class ProjectWorkspaceEditorBridge {
     this.#dirty.delete(normalized);
     const file = { path: normalized, data, dirty: false };
     this.#onSave?.({ ...file, relativePath: this.#relativePath(normalized) });
+    this.#emitChange("save", file);
     return file;
   }
 
@@ -97,7 +122,9 @@ export class ProjectWorkspaceEditorBridge {
   discard(path: string): ProjectWorkspaceEditorFile {
     const normalized = this.#projectPath(path);
     this.#dirty.delete(normalized);
-    return this.openFile(normalized);
+    const file = this.openFile(normalized);
+    this.#emitChange("discard", file);
+    return file;
   }
 
   renameFile(from: string, to: string): ProjectWorkspaceEditorFile {
@@ -109,14 +136,18 @@ export class ProjectWorkspaceEditorBridge {
     this.store.files.delete(fromPath);
     this.#dirty.delete(fromPath);
     this.store.writeText(toPath, data);
-    return { path: toPath, data, dirty: false };
+    const file = { path: toPath, data, dirty: false };
+    this.#emitChange("rename", file, fromPath);
+    return file;
   }
 
   deleteFile(path: string): void {
     const normalized = this.#projectPath(path);
     if (!this.#exists(normalized)) throw Object.assign(new Error(`No such project file: ${normalized}`), { code: "ENOENT" });
+    const data = this.#dirty.get(normalized) ?? this.store.readText(normalized);
     this.store.files.delete(normalized);
     this.#dirty.delete(normalized);
+    this.#emitChange("delete", { path: normalized, data, dirty: false });
   }
 
   dirtyFiles(): ProjectWorkspaceEditorFile[] {
@@ -172,6 +203,17 @@ export class ProjectWorkspaceEditorBridge {
 
   #relativePath(path: string): string {
     return path.slice(this.store.root.length).replace(/^\/+/, "");
+  }
+
+  #emitChange(kind: ProjectWorkspaceEditorChangeKind, file: ProjectWorkspaceEditorFile, previousPath?: string): void {
+    this.#onChange?.({
+      data: file.data,
+      dirty: file.dirty,
+      kind,
+      path: file.path,
+      ...(previousPath ? { previousPath } : {}),
+      relativePath: this.#relativePath(file.path)
+    });
   }
 }
 
