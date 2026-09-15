@@ -7,6 +7,7 @@ export { classifyPackageManagerCommand, createGuestRuntimeProcessRunner } from "
 export { InstallTransactionInterruptedError, runInstallTransaction } from "./install-transaction.ts";
 export { applyNpmInstallPlan, createNpmInstallPlan } from "./npm-install.ts";
 export { createNpmRunner, NpmRunner } from "./npm-runner.ts";
+export { containsNativeFallback, createNativeFallbackPolicy, inferPackageName, NativeFallbackPolicy } from "./native-fallback.ts";
 export { createPnpmRunner, PnpmRunner } from "./pnpm-runner.ts";
 export { applyPnpmStorePlan, createPnpmStorePlan } from "./pnpm-store.ts";
 export { createPackageScriptRunner, PackageScriptRunner } from "./script-runner.ts";
@@ -17,6 +18,7 @@ export type { PnpmStoreApplyOptions, PnpmStoreApplyResult, PnpmStorePlan, PnpmSt
 export type { PackageTarballCacheMetrics, PackageTarballCacheOptions, PackageTarballRequest, PackageTarballResult, TarEntry } from "./tarball-cache.ts";
 export type { PackageScriptReader, PackageScriptResult, PackageScriptRunnerOptions, PackageScriptWriter } from "./script-runner.ts";
 export type { NpmInstallApplyOptions, NpmInstallApplyResult, NpmInstallLink, NpmInstallPlan, NpmInstallPlanOptions, NpmWorkspaceReader } from "./npm-install.ts";
+export type { NativeFallbackAction, NativeFallbackDecision, NativeFallbackPolicyOptions, NativeFallbackRequest } from "./native-fallback.ts";
 export type { PackageExecutionPolicyErrorCode, PackageExecutionPolicyOptions, PackageScriptKind, PackageScriptPolicyCheck } from "./execution-policy.ts";
 export type { CliArtifactReader, CliRegistryLike, GuestCli, GuestRuntimeProcessRunnerOptions, PackageManagerProcessRequest, PackageManagerProcessResult, PackageManagerProcessRunner, PackageManagerRunnerOptions } from "./types.ts";
 export type { AsyncCliModuleEvaluatorOptions, CliModuleEvaluationRequest, CliModuleEvaluatorOptions } from "./cli-evaluator.ts";

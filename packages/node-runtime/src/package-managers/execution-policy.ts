@@ -1,3 +1,5 @@
+import { containsNativeFallback, createNativeFallbackPolicy, type NativeFallbackPolicy } from "./native-fallback.ts";
+
 export type PackageScriptKind = "script" | "lifecycle" | "bin";
 
 export type PackageExecutionPolicyErrorCode =
@@ -17,6 +19,7 @@ export interface PackageExecutionPolicyOptions {
   lifecycleScripts?: "allow" | "deny";
   blockNativeAddons?: boolean;
   maxScriptBytes?: number;
+  nativeFallbackPolicy?: NativeFallbackPolicy;
 }
 
 export class PackageExecutionPolicyError extends Error {
@@ -33,11 +36,13 @@ export class PackageExecutionPolicy {
   readonly lifecycleScripts: "allow" | "deny";
   readonly blockNativeAddons: boolean;
   readonly maxScriptBytes: number;
+  readonly nativeFallbackPolicy: NativeFallbackPolicy;
 
   constructor(options: PackageExecutionPolicyOptions = {}) {
     this.lifecycleScripts = options.lifecycleScripts || "allow";
     this.blockNativeAddons = options.blockNativeAddons ?? true;
     this.maxScriptBytes = options.maxScriptBytes ?? 512 * 1024;
+    this.nativeFallbackPolicy = options.nativeFallbackPolicy || createNativeFallbackPolicy();
   }
 
   assertAllowed(check: PackageScriptPolicyCheck): void {
@@ -47,20 +52,15 @@ export class PackageExecutionPolicy {
     if (new TextEncoder().encode(check.source).byteLength > this.maxScriptBytes) {
       throw new PackageExecutionPolicyError(`package script exceeded ${this.maxScriptBytes} bytes: ${check.path}`, "ERR_PM_RESOURCE_LIMIT");
     }
-    if (this.blockNativeAddons && includesNativeAddonPattern(check.command, check.source)) {
-      throw new PackageExecutionPolicyError(`native addon execution is unsupported: ${check.command}`, "ERR_PM_NATIVE_ADDON_UNSUPPORTED");
+    if (this.blockNativeAddons && containsNativeFallback(check.command, check.source)) {
+      const decision = this.nativeFallbackPolicy.classify(check);
+      if (decision.action === "unsupported") {
+        throw new PackageExecutionPolicyError(`native addon execution is unsupported: ${check.command}; ${decision.reason}`, "ERR_PM_NATIVE_ADDON_UNSUPPORTED");
+      }
     }
   }
 }
 
 export function createPackageExecutionPolicy(options: PackageExecutionPolicyOptions = {}): PackageExecutionPolicy {
   return new PackageExecutionPolicy(options);
-}
-
-function includesNativeAddonPattern(command: string, source: string): boolean {
-  const text = `${command}\n${source}`;
-  return /\.node(?:["'\s)]|$)/.test(text)
-    || /\bnode-gyp\b/.test(text)
-    || /\bprebuild-install\b/.test(text)
-    || /\bnode-pre-gyp\b/.test(text);
 }

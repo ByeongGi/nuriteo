@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-15",
+  "status": "p19-04-native-fallback-policy",
+  "classification": {
+    "patterns": [".node", "node-gyp", "prebuild-install", "node-pre-gyp"],
+    "actions": ["allow-js", "use-wasm", "browser-polyfill", "unsupported"],
+    "unsupportedErrorCode": "ERR_PM_NATIVE_ADDON_UNSUPPORTED"
+  },
+  "supportedDecisions": [
+    {
+      "package": "@esbuild/darwin-arm64",
+      "action": "use-wasm",
+      "wasmPackage": "esbuild-wasm",
+      "status": "candidate-until-integrity-pinned"
+    },
+    {
+      "package": "fsevents",
+      "action": "browser-polyfill",
+      "polyfillPackage": "browser-empty-fsevents",
+      "status": "fixture-policy"
+    },
+    {
+      "package": "lightningcss-darwin-arm64",
+      "action": "unsupported",
+      "status": "native-only-unless-browser-compatible-wasm-package-is-pinned"
+    }
+  ],
+  "requirements": {
+    "packageNameInference": true,
+    "packageExecutionPolicyIntegration": true,
+    "unsupportedMustRemainDiagnostic": true,
+    "wasmOrPolyfillMustNotBeReportedAsNativePolicyError": true
+  }
+}
