@@ -14,6 +14,7 @@ for (const manager of ["npm", "pnpm"]) {
   assert.equal(result.devServer.running, true);
   assert.equal(result.devServer.source, "package-script");
   assert.equal(result.devServer.command, "vite --host 127.0.0.1");
+  assert.equal(result.devServer.cliEntrypoint, "/workspace/project/node_modules/vite/bin/vite.js");
   assert.equal(result.devServer.processPid, 5173);
   assert.equal(result.devServer.processStarted, true);
   assert.equal(result.devServer.processExited, false);
@@ -24,6 +25,8 @@ for (const manager of ["npm", "pnpm"]) {
   assert.equal(result.hmr.statePreserved, true);
   assert.equal(result.build.files.includes("dist/index.html"), true);
   assert.match(result.build.distSmoke, /beta:1/);
+  assert.equal(result.build.command, "vite build");
+  assert.equal(result.build.cliEntrypoint, "/workspace/project/node_modules/vite/bin/vite.js");
   assert.equal(result.reloadRecovery.restarted, true);
   assert.match(result.reloadRecovery.previewAfterRestart, /beta:1/);
 
@@ -35,11 +38,14 @@ for (const manager of ["npm", "pnpm"]) {
   assert.equal(started.port, 5173);
   assert.equal(started.source, "package-script");
   assert.equal(started.command, "vite --host 127.0.0.1");
+  assert.equal(started.cliEntrypoint, "/workspace/project/node_modules/vite/bin/vite.js");
   assert.equal(started.processPid, 5173);
   assert.equal(started.processStarted, true);
   assert.equal(started.processExited, false);
+  const conflict = new ViteReactProductWorkflow({ manager, projectId: `${manager}-conflict`, network, port: 5173 });
+  conflict.install();
   assert.throws(
-    () => new ViteReactProductWorkflow({ manager, projectId: `${manager}-conflict`, network, port: 5173 }).startDevServer(),
+    () => conflict.startDevServer(),
     (error) => error.code === "EADDRINUSE"
   );
   const sessions = createPreviewSessionRegistry({ ttlMs: 1000 });

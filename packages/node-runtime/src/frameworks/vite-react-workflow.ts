@@ -39,6 +39,7 @@ export interface ViteReactDevServerSnapshot {
   requests: string[];
   command: string | null;
   source: "adapter" | "package-script";
+  cliEntrypoint: string | null;
   processPid: number | null;
   processStarted: boolean;
   processExited: boolean;
@@ -64,6 +65,8 @@ export interface ViteReactHmrResult {
 export interface ViteReactBuildResult {
   files: string[];
   distSmoke: string;
+  command: string | null;
+  cliEntrypoint: string | null;
 }
 
 export interface ViteReactReloadRecoveryResult {
@@ -85,6 +88,9 @@ export class ViteReactProductWorkflow {
   #devProcess: RuntimeChildProcess | null = null;
   #devServerCommand: string | null = null;
   #devServerSource: "adapter" | "package-script" = "adapter";
+  #devServerCliEntrypoint: string | null = null;
+  #buildCommand: string | null = null;
+  #buildCliEntrypoint: string | null = null;
   #requests: string[] = [];
   #hmrUpdates: ViteReactHmrUpdate[] = [];
 
@@ -122,6 +128,7 @@ export class ViteReactProductWorkflow {
     for (const pkg of packages) {
       this.workspace.writeText(join(this.projectRoot, "node_modules", pkg, "package.json"), JSON.stringify({ name: pkg }));
     }
+    this.#installViteCliEntrypoint();
     const lockfile = this.manager === "npm" ? "package-lock.json" : "pnpm-lock.yaml";
     this.workspace.writeText(join(this.projectRoot, lockfile), createLockfile(this.manager, packages));
     return { installed: true, lockfile, packages };
@@ -131,6 +138,7 @@ export class ViteReactProductWorkflow {
     if (this.#listener) return this.#snapshot();
     this.#devServerSource = "adapter";
     this.#devServerCommand = "vite --host 127.0.0.1";
+    this.#devServerCliEntrypoint = this.#resolveBin("vite");
     this.#listener = this.network.listen(this.#port, (request) => {
       this.#requests.push(request.path);
       const preview = this.preview(request.path);
@@ -151,9 +159,11 @@ export class ViteReactProductWorkflow {
   startDevServerFromPackageScript(name = "dev"): ViteReactDevServerSnapshot {
     const command = this.#readScript(name);
     assertViteDevCommand(command);
+    const cliEntrypoint = this.#resolveCommandEntrypoint(command);
     this.startDevServer();
     this.#devServerSource = "package-script";
     this.#devServerCommand = command;
+    this.#devServerCliEntrypoint = cliEntrypoint;
     return this.#snapshot();
   }
 
@@ -204,23 +214,30 @@ export class ViteReactProductWorkflow {
     this.workspace.writeText(join(this.projectRoot, "dist/assets/index.js"), `document.querySelector("#app").textContent = "${this.#readLabel()}:${this.#state.count}";\n`);
     return {
       files: ["dist/index.html", "dist/assets/index.js"],
-      distSmoke: this.workspace.readText(join(this.projectRoot, "dist/index.html"))
+      distSmoke: this.workspace.readText(join(this.projectRoot, "dist/index.html")),
+      command: this.#buildCommand,
+      cliEntrypoint: this.#buildCliEntrypoint
     };
   }
 
   buildFromPackageScript(name = "build"): ViteReactBuildResult {
-    assertViteBuildCommand(this.#readScript(name));
+    const command = this.#readScript(name);
+    assertViteBuildCommand(command);
+    this.#buildCommand = command;
+    this.#buildCliEntrypoint = this.#resolveCommandEntrypoint(command);
     return this.build();
   }
 
   restart(): ViteReactReloadRecoveryResult {
     const command = this.#devServerCommand;
     const source = this.#devServerSource;
+    const cliEntrypoint = this.#devServerCliEntrypoint;
     this.stopDevServer();
     this.#restartCount += 1;
     this.startDevServer();
     this.#devServerCommand = command;
     this.#devServerSource = source;
+    this.#devServerCliEntrypoint = cliEntrypoint;
     return {
       restarted: true,
       previewAfterRestart: this.preview("/").body
@@ -235,6 +252,7 @@ export class ViteReactProductWorkflow {
       requests: [...this.#requests],
       command: this.#devServerCommand,
       source: this.#devServerSource,
+      cliEntrypoint: this.#devServerCliEntrypoint,
       processPid: this.#devProcess?.process.pid ?? null,
       processStarted: this.#devProcess?.started ?? false,
       processExited: this.#devProcess?.process.exited ?? false
@@ -251,6 +269,25 @@ export class ViteReactProductWorkflow {
     const command = manifest.scripts?.[name];
     if (!command) throw new Error(`missing package script: ${name}`);
     return command;
+  }
+
+  #installViteCliEntrypoint(): void {
+    const packageJsonPath = join(this.projectRoot, "node_modules/vite/package.json");
+    this.workspace.writeText(packageJsonPath, JSON.stringify({ name: "vite", version: "8.2.0", bin: { vite: "bin/vite.js" } }));
+    this.workspace.writeText(join(this.projectRoot, "node_modules/vite/bin/vite.js"), "#!/usr/bin/env node\nimport '../dist/node/cli.js';\n");
+    this.workspace.symlink(join(this.projectRoot, "node_modules/vite/bin/vite.js"), join(this.projectRoot, "node_modules/.bin/vite"));
+  }
+
+  #resolveCommandEntrypoint(command: string): string {
+    const [binary] = command.split(/\s+/);
+    if (!binary) throw new Error(`missing command binary: ${command}`);
+    return this.#resolveBin(binary);
+  }
+
+  #resolveBin(binary: string): string {
+    const binPath = join(this.projectRoot, "node_modules/.bin", binary);
+    if (!this.workspace.exists(binPath)) throw new Error(`missing package bin: ${binary}`);
+    return this.workspace.readlink(binPath);
   }
 }
 
