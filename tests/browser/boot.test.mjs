@@ -49,6 +49,34 @@ await withRuntimeLab(async (page, baseUrl) => {
   if (previewResult.ready.type !== "preview:ready") throw new Error("preview handshake did not complete");
   if (previewResult.routed.response?.body !== "preview:/index.html") throw new Error("preview request did not route to container port");
   if (!previewResult.hmr.includes("message:update")) throw new Error("HMR reconnect/update smoke did not complete");
+  const terminalResult = await page.evaluate(async () => {
+    const install = await globalThis.__runtimeLab.runTerminalCommand("npm install");
+    const pending = globalThis.__runtimeLab.runTerminalCommand("sleep");
+    const active = globalThis.__runtimeLab.terminalTranscript().at(-1);
+    const cancelAccepted = globalThis.__runtimeLab.cancelTerminalCommand();
+    const cancelled = await pending;
+    globalThis.__runtimeLab.restartTerminal();
+    const build = await globalThis.__runtimeLab.runTerminalCommand("vite build");
+    return {
+      install,
+      active,
+      cancelAccepted,
+      cancelled,
+      build,
+      history: globalThis.__runtimeLab.terminalHistory(),
+      output: globalThis.__runtimeLab.terminalOutput()
+    };
+  });
+  if (terminalResult.install.entry.status !== "completed") throw new Error("terminal install did not complete");
+  if (!terminalResult.install.stdout.includes("linked node_modules/.bin/vite")) {
+    throw new Error("terminal install did not show linked Vite bin");
+  }
+  if (terminalResult.active.command !== "sleep") throw new Error("terminal did not expose active command");
+  if (!terminalResult.cancelAccepted) throw new Error("terminal cancel was not accepted");
+  if (terminalResult.cancelled.entry.status !== "cancelled") throw new Error("terminal command was not cancelled");
+  if (terminalResult.build.stdout !== "vite build completed\n") throw new Error("terminal build did not run after restart");
+  if (!terminalResult.history.includes("vite build")) throw new Error("terminal history did not include build command");
+  if (!terminalResult.output.includes("$ npm install")) throw new Error("terminal output did not include command prompt");
   await page.evaluate(() => globalThis.__runtimeLab.teardown());
   if (await page.locator("#status").textContent() !== "stopped") throw new Error("status was not stopped");
 });

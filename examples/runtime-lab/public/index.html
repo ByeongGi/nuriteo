@@ -17,6 +17,21 @@
         <button id="boot" type="button">Boot</button>
         <button id="teardown" type="button">Teardown</button>
       </section>
+      <section class="terminal-panel" aria-labelledby="terminal-title">
+        <div class="terminal-header">
+          <h2 id="terminal-title">Terminal</h2>
+          <p id="terminal-status">idle</p>
+        </div>
+        <form id="terminal-form" class="terminal-form">
+          <label for="terminal-command">Command</label>
+          <input id="terminal-command" name="command" type="text" value="npm install" autocomplete="off">
+          <button id="terminal-run" type="submit">Run</button>
+          <button id="terminal-cancel" type="button" disabled>Cancel</button>
+          <button id="terminal-restart" type="button">Restart</button>
+        </form>
+        <pre id="terminal-log"></pre>
+        <ol id="terminal-history" aria-label="Terminal history"></ol>
+      </section>
       <pre id="log"></pre>
     </main>
   </body>
