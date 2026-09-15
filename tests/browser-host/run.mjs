@@ -6,6 +6,7 @@ import "./tracing.test.mjs";
 import "./support-bundle.test.mjs";
 import "./recovery-action-executor.test.mjs";
 import "./package-workspace.test.mjs";
+import "./package-manager-diagnostics.test.mjs";
 import "./project-editor-bridge.test.mjs";
 import "./project-import-export.test.mjs";
 import "./project-recovery.test.mjs";

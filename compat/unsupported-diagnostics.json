@@ -42,13 +42,13 @@
   "evidence": [
     "tests/productization/unsupported-diagnostics.test.mjs",
     "packages/browser-host/src/observability/unsupported-runtime.ts",
-    "packages/browser-host/src/observability/recovery-actions.ts"
+    "packages/browser-host/src/observability/recovery-actions.ts",
+    "packages/browser-host/src/observability/package-manager-diagnostics.ts"
   ],
   "gate": {
     "id": "P18-03",
     "status": "partial-pass",
     "requiredBeforeDone": [
-      "Route package-manager/native fallback failures through unsupported diagnostic classifier",
       "Route TCP database requests from runtime network boundary into ERR_RUNTIME_TCP_DB_UNSUPPORTED",
       "Show unsupported diagnostics in product UI overlay and recovery panel"
     ]
