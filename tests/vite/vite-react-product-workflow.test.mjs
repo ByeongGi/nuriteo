@@ -78,9 +78,17 @@ for (const manager of ["npm", "pnpm"]) {
       source: "vite-cli"
     }
   ]);
+  assert.deepEqual(cliExecution.hmrRegistrations, [
+    {
+      channel: "hmr",
+      source: "vite-cli",
+      transport: "loopback"
+    }
+  ]);
   assert.deepEqual(cliExecution.buildRegistrations, []);
   const cliBuildExecution = await workflow.executeRealCli(["build"]);
   assert.deepEqual(cliBuildExecution.serverRegistrations, []);
+  assert.deepEqual(cliBuildExecution.hmrRegistrations, []);
   assert.deepEqual(cliBuildExecution.buildRegistrations, [
     {
       command: "build",

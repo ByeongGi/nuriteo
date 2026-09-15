@@ -44,6 +44,7 @@ export interface ViteProductCliExecutionResult extends CliRunResult {
   args: string[];
   buildRegistrations: ViteProductCliBuildRegistration[];
   cwd: string;
+  hmrRegistrations: ViteProductCliHmrRegistration[];
   mode: "async-cli-module-evaluation";
   serverRegistrations: ViteProductCliServerRegistration[];
 }
@@ -52,6 +53,12 @@ export interface ViteProductCliBuildRegistration {
   command: "build";
   outDir: string;
   source: "vite-cli";
+}
+
+export interface ViteProductCliHmrRegistration {
+  channel: "hmr";
+  source: "vite-cli";
+  transport: "loopback";
 }
 
 export interface ViteProductCliServerRegistration {
@@ -233,6 +240,7 @@ export class ViteProductWorkflow {
     if (!this.workspace.exists(join(this.projectRoot, "node_modules/.bin/vite"))) this.install();
     const cliEntrypoint = this.#resolveBin("vite");
     const buildRegistrations: ViteProductCliBuildRegistration[] = [];
+    const hmrRegistrations: ViteProductCliHmrRegistration[] = [];
     const serverRegistrations: ViteProductCliServerRegistration[] = [];
     const result = await createAsyncCliModuleEvaluator({
       root: this.projectRoot,
@@ -240,6 +248,9 @@ export class ViteProductWorkflow {
       globals: {
         __viteRegisterBuild(registration: ViteProductCliBuildRegistration) {
           buildRegistrations.push(registration);
+        },
+        __viteRegisterHmrChannel(registration: ViteProductCliHmrRegistration) {
+          hmrRegistrations.push(registration);
         },
         __viteRegisterDevServer(registration: ViteProductCliServerRegistration) {
           serverRegistrations.push(registration);
@@ -261,6 +272,7 @@ export class ViteProductWorkflow {
       args,
       buildRegistrations,
       cwd: this.projectRoot,
+      hmrRegistrations,
       mode: "async-cli-module-evaluation",
       serverRegistrations
     };
@@ -492,7 +504,7 @@ export class ViteProductWorkflow {
     );
     this.workspace.writeText(
       join(this.projectRoot, "node_modules/vite/dist/node/hmr.js"),
-      "export function createHotChannel(server) {\n  server.emit('vite:hmr-ready');\n  return { send() {} };\n}\n"
+      "export function createHotChannel(server) {\n  server.emit('vite:hmr-ready');\n  global.__viteRegisterHmrChannel?.({ channel: 'hmr', source: 'vite-cli', transport: 'loopback' });\n  return { send() {} };\n}\n"
     );
     this.workspace.symlink(join(this.projectRoot, "node_modules/vite/bin/vite.js"), join(this.projectRoot, "node_modules/.bin/vite"));
   }
@@ -548,6 +560,7 @@ export type ViteReactProductWorkflowOptions = ViteProductWorkflowOptions;
 export type ViteReactProductWorkflowResult = ViteProductWorkflowResult;
 export type ViteReactCliBuildRegistration = ViteProductCliBuildRegistration;
 export type ViteReactCliExecutionResult = ViteProductCliExecutionResult;
+export type ViteReactCliHmrRegistration = ViteProductCliHmrRegistration;
 export type ViteReactCliServerRegistration = ViteProductCliServerRegistration;
 export type ViteReactDevServerSource = ViteProductDevServerSource;
 export type ViteReactInstallResult = ViteProductInstallResult;
