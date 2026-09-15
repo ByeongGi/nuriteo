@@ -6,6 +6,7 @@ import { EventEmitter } from "../builtins/events.ts";
 import { builtinModules, moduleBuiltin, Module as RuntimeModuleBuiltin } from "../builtins/module.ts";
 import { dirname, normalize } from "../builtins/path.ts";
 import { BrowserProcess } from "../builtins/process.ts";
+import { Readable, Writable } from "../builtins/stream.ts";
 import { fileURLToPath } from "../builtins/url.ts";
 import { createWorkspaceModuleRuntime, type WorkspaceModuleReader } from "../modules/index.ts";
 import type { ModuleRuntime } from "../modules/runtime.ts";
@@ -791,6 +792,52 @@ function createWorkspaceFsFacade(reader: WorkspaceModuleReader, writer?: Package
       writer.writeText(normalize(target), reader.readText(normalize(source)));
       notifyFsChange(normalize(target), "change");
     },
+    createReadStream(path: string, options: CliCreateReadStreamOptions | "utf8" | "utf-8" = {}): Readable & { path: string } {
+      const stream = new Readable() as Readable & { path: string };
+      const normalized = normalize(path);
+      stream.path = normalized;
+      queueMicrotask(() => {
+        try {
+          stream.emit("open", nextFd++);
+          const encodingOption = typeof options === "string" ? options : options.encoding;
+          const encoding = encodingOption === "utf8" || encodingOption === "utf-8" ? encodingOption : undefined;
+          const data = encoding ? readFileSync(normalized, encoding) : readFileSync(normalized);
+          if (encoding) stream.setEncoding(encoding);
+          stream.push(data);
+          stream.push(null);
+        } catch (error) {
+          stream.destroy(error);
+        }
+      });
+      return stream;
+    },
+    createWriteStream(path: string, options: CliCreateWriteStreamOptions = {}): Writable & { path: string } {
+      if (!writer) throw unsupportedFsMutation("createWriteStream");
+      const normalized = normalize(path);
+      const chunks: string[] = options.flags?.includes("a") && facade.existsSync(normalized)
+        ? [reader.readText(normalized)]
+        : [];
+      const stream = new Writable({
+        write(chunk, _encoding, callback) {
+          chunks.push(decodeFsData(chunk as RuntimeFsData));
+          callback();
+        },
+        final(callback) {
+          try {
+            writer.writeText(normalized, chunks.join(""));
+            notifyFsChange(normalized, "change");
+            callback();
+          } catch (error) {
+            callback(error instanceof Error ? error : new Error(String(error)));
+          }
+        }
+      }) as Writable & { path: string };
+      stream.path = normalized;
+      queueMicrotask(() => {
+        stream.emit("open", nextFd++);
+      });
+      return stream;
+    },
     existsSync(path: string): boolean {
       const maybeReader = reader as WorkspaceModuleReader & { exists?: (path: string) => boolean };
       if (maybeReader.exists) return maybeReader.exists(normalize(path));
@@ -1423,6 +1470,14 @@ interface CliWriteOptions {
   length?: number;
   offset?: number;
   position?: number;
+}
+
+interface CliCreateReadStreamOptions {
+  encoding?: "utf8" | "utf-8" | null;
+}
+
+interface CliCreateWriteStreamOptions {
+  flags?: string;
 }
 
 interface CliFileHandle {

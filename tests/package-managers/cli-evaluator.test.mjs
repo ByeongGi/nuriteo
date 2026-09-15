@@ -156,6 +156,28 @@ const workspace = new MemoryPackageManagerWorkspace([
         await fs.promises.rename(process.cwd() + '/rename-source-async.txt', process.cwd() + '/rename-target-async.txt');
         fs.copyFileSync(process.cwd() + '/rename-target.txt', process.cwd() + '/copied.txt');
         await fs.promises.copyFile(process.cwd() + '/rename-target-async.txt', process.cwd() + '/copied-async.txt');
+        const streamedRead = await new Promise((resolve, reject) => {
+          let text = '';
+          fs.createReadStream(process.cwd() + '/copied.txt', { encoding: 'utf8' })
+            .on('data', (chunk) => {
+              text += chunk;
+            })
+            .on('error', reject)
+            .on('end', () => resolve(text));
+        });
+        if (streamedRead !== 'renamed') {
+          throw new Error('unexpected createReadStream data: ' + streamedRead);
+        }
+        await new Promise((resolve, reject) => {
+          const stream = fs.createWriteStream(process.cwd() + '/streamed-write.txt');
+          stream.on('error', reject);
+          stream.on('finish', resolve);
+          stream.write('streamed');
+          stream.end('-write');
+        });
+        if (fs.readFileSync(process.cwd() + '/streamed-write.txt', 'utf8') !== 'streamed-write') {
+          throw new Error('unexpected createWriteStream output');
+        }
         fs.linkSync(process.cwd() + '/copied.txt', process.cwd() + '/linked-file.txt');
         await fs.promises.link(process.cwd() + '/copied-async.txt', process.cwd() + '/linked-file-async.txt');
         fs.mkdirSync(process.cwd() + '/linked-source');
