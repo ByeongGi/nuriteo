@@ -41,6 +41,9 @@ if (!vitePackageRootArg) {
     console.log(JSON.stringify({
       dependencyClosure,
       directReadiness: summarizeReadiness(readiness),
+      hydratedReadiness: dependencyClosure
+        ? summarizeReadiness(createHydratedWorkflowReadiness(vitePackageArtifact, dependencyClosure.artifacts))
+        : null,
       vitePackageArtifact: {
         mountCount: vitePackageArtifact.mounts.length,
         version: vitePackageArtifact.version
@@ -57,7 +60,7 @@ function inspectDependencyClosure(nodeModulesRoot, vitePackageArtifact) {
     reader,
     vitePackageArtifact
   });
-  return {
+  const result = {
     artifactNames: closure.artifacts.map((artifact) => artifact.name),
     iterations: closure.iterations.map((iteration) => ({
       extracted: iteration.extracted,
@@ -70,6 +73,21 @@ function inspectDependencyClosure(nodeModulesRoot, vitePackageArtifact) {
     remainingPlan: summarizePlan(closure.remainingPlan),
     sourceRoot: nodeModulesRoot
   };
+  Object.defineProperty(result, "artifacts", {
+    enumerable: false,
+    value: closure.artifacts
+  });
+  return result;
+}
+
+function createHydratedWorkflowReadiness(vitePackageArtifact, dependencyArtifacts) {
+  const workflow = new ViteProductWorkflow({
+    dependencyArtifacts,
+    manager: "pnpm",
+    vitePackageArtifact
+  });
+  workflow.install();
+  return workflow.inspectRealCliReadiness();
 }
 
 function createDependencyReader(nodeModulesRoot) {
