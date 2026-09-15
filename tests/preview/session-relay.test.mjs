@@ -27,6 +27,15 @@ const container = {
     };
   }
 };
+const secondContainer = {
+  async fetch(url) {
+    return {
+      statusCode: 200,
+      headers: { "x-preview": "second" },
+      body: `second:${url}`
+    };
+  }
+};
 const session = sessions.create({
   origin: "https://preview.local",
   projectId: "project-a",
@@ -140,7 +149,7 @@ await assert.rejects(
   (error) => error.code === "ETIMEOUT"
 );
 
-const serviceWorker = createPreviewServiceWorker({ relay });
+const serviceWorker = createPreviewServiceWorker({ relay, now: () => now });
 const ready = await serviceWorker.handleMessage({
   data: {
     type: "preview:handshake",
@@ -151,6 +160,31 @@ const ready = await serviceWorker.handleMessage({
   }
 });
 assert.equal(ready.type, "preview:ready");
+const secondLivePort = sessions.create({
+  origin: "https://preview.local",
+  projectId: "project-a",
+  port: 6173,
+  container: secondContainer
+});
+const secondReady = await serviceWorker.handleMessage({
+  data: {
+    type: "preview:handshake",
+    clientId: "client-2",
+    sessionId: secondLivePort.sessionId,
+    origin: "https://preview.local",
+    projectId: "project-a"
+  }
+});
+assert.equal(secondReady.type, "preview:ready");
+const logged = await serviceWorker.handleMessage({
+  data: {
+    type: "preview:console",
+    clientId: "client-1",
+    level: "warn",
+    message: "vite warning"
+  }
+});
+assert.equal(logged.type, "preview:ready");
 const routed = await serviceWorker.handleMessage({
   data: {
     type: "preview:fetch",
@@ -160,6 +194,17 @@ const routed = await serviceWorker.handleMessage({
   }
 });
 assert.equal(routed.type, "preview:response");
+assert.equal(routed.response.body, "http://127.0.0.1:4173/app.js");
+const secondRouted = await serviceWorker.handleMessage({
+  data: {
+    type: "preview:fetch",
+    clientId: "client-2",
+    path: "/app.js",
+    method: "GET"
+  }
+});
+assert.equal(secondRouted.type, "preview:response");
+assert.equal(secondRouted.response.body, "second:http://127.0.0.1:6173/app.js");
 
 serviceWorker.restart();
 const afterRestart = await serviceWorker.handleMessage({
@@ -170,5 +215,11 @@ const afterRestart = await serviceWorker.handleMessage({
   }
 });
 assert.equal(afterRestart.code, "ENOCLIENT");
+const overlay = serviceWorker.overlayState("client-1");
+assert.deepEqual(overlay.diagnostics.map((entry) => `${entry.source}:${entry.level}:${entry.message}`), [
+  "console:warn:vite warning",
+  "service-worker:error:ENOCLIENT"
+]);
+assert.equal(overlay.lastError.code, "ENOCLIENT");
 
 console.log("preview session relay test ok");

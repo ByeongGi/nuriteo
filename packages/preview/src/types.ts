@@ -49,6 +49,20 @@ export interface PreviewRelayLike {
 
 export type PreviewErrorCode = "EBADMESSAGE" | "ENOCLIENT" | "ENOSERVER" | "ESTALESESSION" | "ETIMEOUT" | "EUNKNOWN" | (string & {});
 
+export interface PreviewDiagnostic {
+  at: number;
+  source: "console" | "relay" | "service-worker";
+  level: "log" | "info" | "warn" | "error";
+  message: string;
+  clientId?: string;
+  code?: PreviewErrorCode;
+}
+
+export interface PreviewOverlayState {
+  diagnostics: PreviewDiagnostic[];
+  lastError: PreviewDiagnostic | null;
+}
+
 export type HmrEventType = "open" | "message" | "close" | (string & {});
 export type HmrListener<T = unknown> = (payload: T) => void;
 

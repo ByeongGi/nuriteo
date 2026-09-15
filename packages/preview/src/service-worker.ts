@@ -1,7 +1,8 @@
-import type { PreviewErrorCode, PreviewRelayLike } from "./types.ts";
+import type { PreviewDiagnostic, PreviewErrorCode, PreviewOverlayState, PreviewRelayLike } from "./types.ts";
 
 export interface PreviewServiceWorkerOptions {
   relay: PreviewRelayLike;
+  now?: () => number;
 }
 
 type PreviewClient = {
@@ -22,6 +23,8 @@ type PreviewMessageEvent = {
     method?: string;
     headers?: HeadersInit;
     body?: BodyInit | null;
+    level?: PreviewDiagnostic["level"];
+    message?: string;
   };
   port?: PreviewMessagePort;
 };
@@ -33,11 +36,15 @@ type PreviewServiceWorkerResponse =
 
 export class PreviewServiceWorker {
   relay: PreviewRelayLike;
+  now: () => number;
   clients: Map<string, PreviewClient>;
+  diagnostics: PreviewDiagnostic[];
 
-  constructor({ relay }: PreviewServiceWorkerOptions) {
+  constructor({ relay, now }: PreviewServiceWorkerOptions) {
     this.relay = relay;
+    this.now = now || (() => Date.now());
     this.clients = new Map();
+    this.diagnostics = [];
   }
 
   async handleMessage(event: PreviewMessageEvent): Promise<PreviewServiceWorkerResponse> {
@@ -56,10 +63,22 @@ export class PreviewServiceWorker {
       return { type: "preview:ready", clientId: data.clientId };
     }
 
+    if (data.type === "preview:console") {
+      if (!data.clientId || !data.message) return this.#error("EBADMESSAGE", data.clientId);
+      const level = data.level || "log";
+      this.#record({
+        source: "console",
+        level,
+        message: data.message,
+        clientId: data.clientId
+      });
+      return { type: "preview:ready", clientId: data.clientId };
+    }
+
     if (data.type === "preview:fetch") {
-      if (!data.clientId) return { type: "preview:error", code: "EBADMESSAGE" };
+      if (!data.clientId) return this.#error("EBADMESSAGE");
       const client = this.clients.get(data.clientId);
-      if (!client) return { type: "preview:error", code: "ENOCLIENT" };
+      if (!client) return this.#error("ENOCLIENT", data.clientId);
       try {
         const request = { ...client };
         if (data.path !== undefined) Object.assign(request, { path: data.path });
@@ -69,22 +88,50 @@ export class PreviewServiceWorker {
         const response = await this.relay.request(request);
         return { type: "preview:response", response };
       } catch (error) {
-        return {
-          type: "preview:error",
-          code: error instanceof Error && "code" in error && typeof error.code === "string" ? error.code : "EUNKNOWN",
-          message: error instanceof Error ? error.message : String(error)
-        };
+        return this.#error(errorCode(error), data.clientId, error instanceof Error ? error.message : String(error), "relay");
       }
     }
 
-    return { type: "preview:error", code: "EBADMESSAGE" };
+    return this.#error("EBADMESSAGE", data.clientId);
   }
 
   restart(): void {
     this.clients.clear();
   }
+
+  overlayState(clientId?: string): PreviewOverlayState {
+    const diagnostics = clientId
+      ? this.diagnostics.filter((entry) => entry.clientId === clientId)
+      : [...this.diagnostics];
+    return {
+      diagnostics,
+      lastError: diagnostics.findLast((entry) => entry.level === "error") || null
+    };
+  }
+
+  #error(code: PreviewErrorCode, clientId?: string, message = code, source: PreviewDiagnostic["source"] = "service-worker"): PreviewServiceWorkerResponse {
+    this.#record({
+      source,
+      level: "error",
+      message,
+      ...(clientId ? { clientId } : {}),
+      code
+    });
+    return { type: "preview:error", code, message };
+  }
+
+  #record(diagnostic: Omit<PreviewDiagnostic, "at">): void {
+    this.diagnostics.push({
+      at: this.now(),
+      ...diagnostic
+    });
+  }
 }
 
 export function createPreviewServiceWorker(options: PreviewServiceWorkerOptions): PreviewServiceWorker {
   return new PreviewServiceWorker(options);
+}
+
+function errorCode(error: unknown): PreviewErrorCode {
+  return error instanceof Error && "code" in error && typeof error.code === "string" ? error.code : "EUNKNOWN";
 }
