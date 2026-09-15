@@ -685,6 +685,29 @@ assert.deepEqual(planDependencyArtifacts.map((artifact) => [artifact.name, artif
   ["rolldown", "1.2.1-installed"],
   ["@rolldown/binding-wasm32-wasi", "1.2.1-wasm"]
 ]);
+const partialDependencyWorkspace = new MemoryPackageManagerWorkspace([
+  ...installedDependencyArtifact.mounts.map((mount) => ({
+    path: `/workspace/project/node_modules/rolldown/${mount.path}`,
+    data: mount.data
+  }))
+]);
+assert.throws(
+  () => createViteDependencyArtifactsFromPlan({
+    reader: partialDependencyWorkspace,
+    nodeModulesRoot: "/workspace/project/node_modules",
+    plan: missingDependencyWorkflow.inspectRealCliReadiness().dependencyMaterializationPlan
+  }),
+  /@rolldown\/binding-wasm32-wasi/
+);
+const partialPlanDependencyArtifacts = createViteDependencyArtifactsFromPlan({
+  reader: partialDependencyWorkspace,
+  nodeModulesRoot: "/workspace/project/node_modules",
+  plan: missingDependencyWorkflow.inspectRealCliReadiness().dependencyMaterializationPlan,
+  skipMissing: true
+});
+assert.deepEqual(partialPlanDependencyArtifacts.map((artifact) => [artifact.name, artifact.version]), [
+  ["rolldown", "1.2.1-installed"]
+]);
 const installedDependencyWorkflow = new ViteProductWorkflow({
   manager: "pnpm",
   vitePackageArtifact: dependencyArtifactWorkflow.vitePackageArtifact,

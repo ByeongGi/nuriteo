@@ -53,12 +53,14 @@ export interface ViteProductDependencyArtifactsFromWorkspaceOptions {
   names: string[];
   nodeModulesRoot: string;
   reader: WorkspaceModuleReader;
+  skipMissing?: boolean;
 }
 
 export interface ViteProductDependencyArtifactsFromPlanOptions {
   nodeModulesRoot: string;
   plan: ViteDependencyMaterializationPlan;
   reader: WorkspaceModuleReader;
+  skipMissing?: boolean;
 }
 
 export interface ViteProductDependencyArtifactMergeResult {
@@ -953,11 +955,15 @@ export function createViteDependencyArtifactsFromWorkspace(
   options: ViteProductDependencyArtifactsFromWorkspaceOptions
 ): ViteProductDependencyArtifact[] {
   const nodeModulesRoot = normalizeServedPath(options.nodeModulesRoot).replace(/\/$/, "");
-  return uniquePackageNames(options.names).map((name) => createViteDependencyArtifactFromWorkspace({
-    name,
-    packageRoot: join(nodeModulesRoot, name),
-    reader: options.reader
-  }));
+  return uniquePackageNames(options.names).flatMap((name) => {
+    const packageRoot = join(nodeModulesRoot, name);
+    if (options.skipMissing && !readerExists(options.reader, join(packageRoot, "package.json"))) return [];
+    return createViteDependencyArtifactFromWorkspace({
+      name,
+      packageRoot,
+      reader: options.reader
+    });
+  });
 }
 
 export function createViteDependencyArtifactsFromPlan(
@@ -966,7 +972,8 @@ export function createViteDependencyArtifactsFromPlan(
   return createViteDependencyArtifactsFromWorkspace({
     names: options.plan.missing.flatMap((item) => item.artifactNames),
     nodeModulesRoot: options.nodeModulesRoot,
-    reader: options.reader
+    reader: options.reader,
+    ...(options.skipMissing === undefined ? {} : { skipMissing: options.skipMissing })
   });
 }
 
