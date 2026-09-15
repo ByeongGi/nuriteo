@@ -6,6 +6,7 @@ const results = JSON.parse(fs.readFileSync(new URL("../../compat/ecosystem-fixtu
 
 assert.equal(results.schemaVersion, 1);
 assert.equal(results.source, "compat/ecosystem-fixtures.json");
+assert.deepEqual(results.failureSummary, {});
 assert.equal(results.minimumPassForMilestoneB, matrix.scope.minimumPassForMilestoneB);
 assert.equal(results.results.length, matrix.fixtures.length);
 assert.equal(results.summary.total, matrix.fixtures.length);

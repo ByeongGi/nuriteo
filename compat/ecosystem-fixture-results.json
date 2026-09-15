@@ -29,7 +29,8 @@
           "status": "fail",
           "exitCode": 1,
           "stdoutTail": "",
-          "stderrTail": "    at throwUnhandledRejectionsMode (node:internal/process/promises:388:19)\n    at processPromiseRejections (node:internal/process/promises:475:17)\n    at process.processTicksAndRejections (node:internal/process/task_queues:106:37) {\n  [cause]: Error [ERR_MODULE_NOT_FOUND]: Cannot find module '/private/tmp/cargo-container-ecosystem-fixtures/vite-official-template-react/packages/vite/dist/node/cli.js' imported from /private/tmp/cargo-container-ecosystem-fixtures/vite-official-template-react/packages/vite/bin/vite.js\n      at finalizeResolution (node:internal/modules/esm/resolve:271:11)\n      at moduleResolve (node:internal/modules/esm/resolve:865:10)\n      at defaultResolve (node:internal/modules/esm/resolve:992:11)\n      at #cachedDefaultResolve (node:internal/modules/esm/loader:691:20)\n      at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:708:38)\n      at ModuleLoader.resolveSync (node:internal/modules/esm/loader:740:52)\n      at #resolve (node:internal/modules/esm/loader:673:17)\n      at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:593:35)\n      at node:internal/modules/esm/loader:622:32\n      at TracingChannel.tracePromise (node:diagnostics_channel:362:14) {\n    code: 'ERR_MODULE_NOT_FOUND',\n    url: 'file:///private/tmp/cargo-container-ecosystem-fixtures/vite-official-template-react/packages/vite/dist/node/cli.js'\n  }\n}\nNode.js v24.17.0\n[ELIFECYCLE] Command failed with exit code 1."
+          "stderrTail": "    at throwUnhandledRejectionsMode (node:internal/process/promises:388:19)\n    at processPromiseRejections (node:internal/process/promises:475:17)\n    at process.processTicksAndRejections (node:internal/process/task_queues:106:37) {\n  [cause]: Error [ERR_MODULE_NOT_FOUND]: Cannot find module '/private/tmp/cargo-container-ecosystem-fixtures/vite-official-template-react/packages/vite/dist/node/cli.js' imported from /private/tmp/cargo-container-ecosystem-fixtures/vite-official-template-react/packages/vite/bin/vite.js\n      at finalizeResolution (node:internal/modules/esm/resolve:271:11)\n      at moduleResolve (node:internal/modules/esm/resolve:865:10)\n      at defaultResolve (node:internal/modules/esm/resolve:992:11)\n      at #cachedDefaultResolve (node:internal/modules/esm/loader:691:20)\n      at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:708:38)\n      at ModuleLoader.resolveSync (node:internal/modules/esm/loader:740:52)\n      at #resolve (node:internal/modules/esm/loader:673:17)\n      at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:593:35)\n      at node:internal/modules/esm/loader:622:32\n      at TracingChannel.tracePromise (node:diagnostics_channel:362:14) {\n    code: 'ERR_MODULE_NOT_FOUND',\n    url: 'file:///private/tmp/cargo-container-ecosystem-fixtures/vite-official-template-react/packages/vite/dist/node/cli.js'\n  }\n}\nNode.js v24.17.0\n[ELIFECYCLE] Command failed with exit code 1.",
+          "failureCategory": "build-dist-command-failed"
         },
         {
           "id": "dev-preview",
@@ -37,7 +38,8 @@
           "status": "fail",
           "exitCode": 1,
           "stdoutTail": "",
-          "stderrTail": "    at processPromiseRejections (node:internal/process/promises:475:17)\n    at process.processTicksAndRejections (node:internal/process/task_queues:106:37) {\n  [cause]: Error [ERR_MODULE_NOT_FOUND]: Cannot find module '/private/tmp/cargo-container-ecosystem-fixtures/vite-official-template-react/packages/vite/dist/node/cli.js' imported from /private/tmp/cargo-container-ecosystem-fixtures/vite-official-template-react/packages/vite/bin/vite.js\n      at finalizeResolution (node:internal/modules/esm/resolve:271:11)\n      at moduleResolve (node:internal/modules/esm/resolve:865:10)\n      at defaultResolve (node:internal/modules/esm/resolve:992:11)\n      at #cachedDefaultResolve (node:internal/modules/esm/loader:691:20)\n      at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:708:38)\n      at ModuleLoader.resolveSync (node:internal/modules/esm/loader:740:52)\n      at #resolve (node:internal/modules/esm/loader:673:17)\n      at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:593:35)\n      at node:internal/modules/esm/loader:622:32\n      at TracingChannel.tracePromise (node:diagnostics_channel:362:14) {\n    code: 'ERR_MODULE_NOT_FOUND',\n    url: 'file:///private/tmp/cargo-container-ecosystem-fixtures/vite-official-template-react/packages/vite/dist/node/cli.js'\n  }\n}\nNode.js v24.17.0\n[ELIFECYCLE] Command failed with exit code 1.\npreview did not become ready: fetch failed"
+          "stderrTail": "    at processPromiseRejections (node:internal/process/promises:475:17)\n    at process.processTicksAndRejections (node:internal/process/task_queues:106:37) {\n  [cause]: Error [ERR_MODULE_NOT_FOUND]: Cannot find module '/private/tmp/cargo-container-ecosystem-fixtures/vite-official-template-react/packages/vite/dist/node/cli.js' imported from /private/tmp/cargo-container-ecosystem-fixtures/vite-official-template-react/packages/vite/bin/vite.js\n      at finalizeResolution (node:internal/modules/esm/resolve:271:11)\n      at moduleResolve (node:internal/modules/esm/resolve:865:10)\n      at defaultResolve (node:internal/modules/esm/resolve:992:11)\n      at #cachedDefaultResolve (node:internal/modules/esm/loader:691:20)\n      at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:708:38)\n      at ModuleLoader.resolveSync (node:internal/modules/esm/loader:740:52)\n      at #resolve (node:internal/modules/esm/loader:673:17)\n      at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:593:35)\n      at node:internal/modules/esm/loader:622:32\n      at TracingChannel.tracePromise (node:diagnostics_channel:362:14) {\n    code: 'ERR_MODULE_NOT_FOUND',\n    url: 'file:///private/tmp/cargo-container-ecosystem-fixtures/vite-official-template-react/packages/vite/dist/node/cli.js'\n  }\n}\nNode.js v24.17.0\n[ELIFECYCLE] Command failed with exit code 1.\npreview did not become ready: fetch failed",
+          "failureCategory": "dev-preview-unavailable"
         },
         {
           "id": "edit-hmr",
@@ -45,7 +47,8 @@
           "status": "fail",
           "exitCode": 1,
           "stdoutTail": "",
-          "stderrTail": "Skipped HMR because preview did not become ready."
+          "stderrTail": "Skipped HMR because preview did not become ready.",
+          "failureCategory": "dev-preview-unavailable"
         }
       ]
     },
@@ -66,7 +69,8 @@
           "status": "fail",
           "exitCode": 1,
           "stdoutTail": "✓ Lockfile passes supply-chain policies (verified 16m ago)\nLockfile is up to date, resolution step is skipped\nAlready up to date\n[ERR_PNPM_IGNORED_BUILDS] Ignored build scripts: @parcel/watcher@2.5.0, @swc/core@1.9.1, esbuild@0.21.5\nRun \"pnpm approve-builds\" to pick which dependencies should be allowed to run scripts.",
-          "stderrTail": ""
+          "stderrTail": "",
+          "failureCategory": "package-manager-ignored-build-scripts"
         },
         {
           "id": "build-dist",
@@ -74,7 +78,8 @@
           "status": "fail",
           "exitCode": 1,
           "stdoutTail": "✓ Lockfile passes supply-chain policies (verified 16m ago)\nLockfile is up to date, resolution step is skipped\nAlready up to date\n[ERR_PNPM_IGNORED_BUILDS] Ignored build scripts: @parcel/watcher@2.5.0, @swc/core@1.9.1, esbuild@0.21.5\nRun \"pnpm approve-builds\" to pick which dependencies should be allowed to run scripts.\n[ERROR] Command failed with exit code 1: /Users/byeonggi/.local/share/mise/installs/node/24.17.0/bin/node /Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/bin/pnpm.mjs install\npnpm: Command failed with exit code 1: /Users/byeonggi/.local/share/mise/installs/node/24.17.0/bin/node /Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/bin/pnpm.mjs install\n    at getFinalError (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:88203:14)\n    at makeError (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:90510:21)\n    at getSyncResult (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:92354:10)\n    at spawnSubprocessSync (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:92314:14)\n    at execaCoreSync (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:92244:23)\n    at callBoundExeca (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:94772:23)\n    at boundExeca (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:94749:49)\n    at sync2 (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:94908:10)\n    at runPnpmCli (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:249521:5)\n    at runDepsStatusCheck (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:251287:7)",
-          "stderrTail": ""
+          "stderrTail": "",
+          "failureCategory": "package-manager-ignored-build-scripts"
         },
         {
           "id": "dev-preview",
@@ -82,7 +87,8 @@
           "status": "fail",
           "exitCode": 1,
           "stdoutTail": "✓ Lockfile passes supply-chain policies (verified 16m ago)\nLockfile is up to date, resolution step is skipped\nAlready up to date\n[ERR_PNPM_IGNORED_BUILDS] Ignored build scripts: @parcel/watcher@2.5.0, @swc/core@1.9.1, esbuild@0.21.5\nRun \"pnpm approve-builds\" to pick which dependencies should be allowed to run scripts.\n[ERROR] Command failed with exit code 1: /Users/byeonggi/.local/share/mise/installs/node/24.17.0/bin/node /Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/bin/pnpm.mjs install\npnpm: Command failed with exit code 1: /Users/byeonggi/.local/share/mise/installs/node/24.17.0/bin/node /Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/bin/pnpm.mjs install\n    at getFinalError (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:88203:14)\n    at makeError (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:90510:21)\n    at getSyncResult (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:92354:10)\n    at spawnSubprocessSync (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:92314:14)\n    at execaCoreSync (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:92244:23)\n    at callBoundExeca (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:94772:23)\n    at boundExeca (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:94749:49)\n    at sync2 (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:94908:10)\n    at runPnpmCli (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:249521:5)\n    at runDepsStatusCheck (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:251287:7)",
-          "stderrTail": "preview did not become ready: fetch failed"
+          "stderrTail": "preview did not become ready: fetch failed",
+          "failureCategory": "package-manager-ignored-build-scripts"
         },
         {
           "id": "edit-hmr",
@@ -90,7 +96,8 @@
           "status": "fail",
           "exitCode": 1,
           "stdoutTail": "",
-          "stderrTail": "Skipped HMR because preview did not become ready."
+          "stderrTail": "Skipped HMR because preview did not become ready.",
+          "failureCategory": "dev-preview-unavailable"
         }
       ]
     },
@@ -135,7 +142,8 @@
           "status": "fail",
           "exitCode": 1,
           "stdoutTail": "edited src/main.tsx",
-          "stderrTail": "HMR update was not observed after source edit."
+          "stderrTail": "HMR update was not observed after source edit.",
+          "failureCategory": "hmr-update-timeout"
         }
       ]
     },
@@ -180,7 +188,8 @@
           "status": "fail",
           "exitCode": 1,
           "stdoutTail": "edited src/App.tsx",
-          "stderrTail": "HMR socket failed: ws://localhost:3000/"
+          "stderrTail": "HMR socket failed: ws://localhost:3000/",
+          "failureCategory": "hmr-socket-connect-failed"
         }
       ]
     },
@@ -291,7 +300,8 @@
           "status": "fail",
           "exitCode": 1,
           "stdoutTail": "✓ Lockfile passes supply-chain policies (verified 16m ago)\nLockfile is up to date, resolution step is skipped\nAlready up to date\n[ERR_PNPM_IGNORED_BUILDS] Ignored build scripts: @parcel/watcher@2.6.0, esbuild@0.18.20\nRun \"pnpm approve-builds\" to pick which dependencies should be allowed to run scripts.",
-          "stderrTail": ""
+          "stderrTail": "",
+          "failureCategory": "package-manager-ignored-build-scripts"
         },
         {
           "id": "build-dist",
@@ -299,7 +309,8 @@
           "status": "fail",
           "exitCode": 1,
           "stdoutTail": "✓ Lockfile passes supply-chain policies (verified 16m ago)\nLockfile is up to date, resolution step is skipped\nAlready up to date\n[ERR_PNPM_IGNORED_BUILDS] Ignored build scripts: @parcel/watcher@2.6.0, esbuild@0.18.20\nRun \"pnpm approve-builds\" to pick which dependencies should be allowed to run scripts.\n[ERROR] Command failed with exit code 1: /Users/byeonggi/.local/share/mise/installs/node/24.17.0/bin/node /Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/bin/pnpm.mjs install\npnpm: Command failed with exit code 1: /Users/byeonggi/.local/share/mise/installs/node/24.17.0/bin/node /Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/bin/pnpm.mjs install\n    at getFinalError (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:88203:14)\n    at makeError (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:90510:21)\n    at getSyncResult (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:92354:10)\n    at spawnSubprocessSync (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:92314:14)\n    at execaCoreSync (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:92244:23)\n    at callBoundExeca (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:94772:23)\n    at boundExeca (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:94749:49)\n    at sync2 (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:94908:10)\n    at runPnpmCli (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:249521:5)\n    at runDepsStatusCheck (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:251287:7)",
-          "stderrTail": ""
+          "stderrTail": "",
+          "failureCategory": "package-manager-ignored-build-scripts"
         },
         {
           "id": "dev-preview",
@@ -307,7 +318,8 @@
           "status": "fail",
           "exitCode": 1,
           "stdoutTail": "✓ Lockfile passes supply-chain policies (verified 16m ago)\nLockfile is up to date, resolution step is skipped\nAlready up to date\n[ERR_PNPM_IGNORED_BUILDS] Ignored build scripts: @parcel/watcher@2.6.0, esbuild@0.18.20\nRun \"pnpm approve-builds\" to pick which dependencies should be allowed to run scripts.\n[ERROR] Command failed with exit code 1: /Users/byeonggi/.local/share/mise/installs/node/24.17.0/bin/node /Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/bin/pnpm.mjs install\npnpm: Command failed with exit code 1: /Users/byeonggi/.local/share/mise/installs/node/24.17.0/bin/node /Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/bin/pnpm.mjs install\n    at getFinalError (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:88203:14)\n    at makeError (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:90510:21)\n    at getSyncResult (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:92354:10)\n    at spawnSubprocessSync (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:92314:14)\n    at execaCoreSync (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:92244:23)\n    at callBoundExeca (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:94772:23)\n    at boundExeca (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:94749:49)\n    at sync2 (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:94908:10)\n    at runPnpmCli (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:249521:5)\n    at runDepsStatusCheck (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:251287:7)",
-          "stderrTail": "preview did not become ready: fetch failed"
+          "stderrTail": "preview did not become ready: fetch failed",
+          "failureCategory": "package-manager-ignored-build-scripts"
         },
         {
           "id": "edit-hmr",
@@ -315,7 +327,8 @@
           "status": "fail",
           "exitCode": 1,
           "stdoutTail": "",
-          "stderrTail": "Skipped HMR because preview did not become ready."
+          "stderrTail": "Skipped HMR because preview did not become ready.",
+          "failureCategory": "dev-preview-unavailable"
         }
       ]
     },
@@ -336,7 +349,8 @@
           "status": "fail",
           "exitCode": 1,
           "stdoutTail": "✓ Lockfile passes supply-chain policies (verified 16m ago)\nLockfile is up to date, resolution step is skipped\nAlready up to date\n[ERR_PNPM_IGNORED_BUILDS] Ignored build scripts: @tailwindcss/oxide@4.1.12, esbuild@0.25.12\nRun \"pnpm approve-builds\" to pick which dependencies should be allowed to run scripts.",
-          "stderrTail": "[WARN] The \"pnpm\" field in package.json is no longer read by pnpm. The following keys were ignored: \"pnpm.overrides\". See https://pnpm.io/settings for the new home of each setting."
+          "stderrTail": "[WARN] The \"pnpm\" field in package.json is no longer read by pnpm. The following keys were ignored: \"pnpm.overrides\". See https://pnpm.io/settings for the new home of each setting.",
+          "failureCategory": "package-manager-ignored-build-scripts"
         },
         {
           "id": "build-dist",
@@ -344,7 +358,8 @@
           "status": "fail",
           "exitCode": 1,
           "stdoutTail": "✓ Lockfile passes supply-chain policies (verified 16m ago)\nLockfile is up to date, resolution step is skipped\nAlready up to date\n[ERR_PNPM_IGNORED_BUILDS] Ignored build scripts: @tailwindcss/oxide@4.1.12, esbuild@0.25.12\nRun \"pnpm approve-builds\" to pick which dependencies should be allowed to run scripts.\n[ERROR] Command failed with exit code 1: /Users/byeonggi/.local/share/mise/installs/node/24.17.0/bin/node /Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/bin/pnpm.mjs install\npnpm: Command failed with exit code 1: /Users/byeonggi/.local/share/mise/installs/node/24.17.0/bin/node /Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/bin/pnpm.mjs install\n    at getFinalError (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:88203:14)\n    at makeError (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:90510:21)\n    at getSyncResult (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:92354:10)\n    at spawnSubprocessSync (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:92314:14)\n    at execaCoreSync (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:92244:23)\n    at callBoundExeca (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:94772:23)\n    at boundExeca (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:94749:49)\n    at sync2 (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:94908:10)\n    at runPnpmCli (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:249521:5)\n    at runDepsStatusCheck (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:251287:7)",
-          "stderrTail": "[WARN] The \"pnpm\" field in package.json is no longer read by pnpm. The following keys were ignored: \"pnpm.overrides\". See https://pnpm.io/settings for the new home of each setting.\n[WARN] The \"pnpm\" field in package.json is no longer read by pnpm. The following keys were ignored: \"pnpm.overrides\". See https://pnpm.io/settings for the new home of each setting."
+          "stderrTail": "[WARN] The \"pnpm\" field in package.json is no longer read by pnpm. The following keys were ignored: \"pnpm.overrides\". See https://pnpm.io/settings for the new home of each setting.\n[WARN] The \"pnpm\" field in package.json is no longer read by pnpm. The following keys were ignored: \"pnpm.overrides\". See https://pnpm.io/settings for the new home of each setting.",
+          "failureCategory": "package-manager-ignored-build-scripts"
         },
         {
           "id": "dev-preview",
@@ -352,7 +367,8 @@
           "status": "fail",
           "exitCode": 1,
           "stdoutTail": "✓ Lockfile passes supply-chain policies (verified 16m ago)\nLockfile is up to date, resolution step is skipped\nAlready up to date\n[ERR_PNPM_IGNORED_BUILDS] Ignored build scripts: @tailwindcss/oxide@4.1.12, esbuild@0.25.12\nRun \"pnpm approve-builds\" to pick which dependencies should be allowed to run scripts.\n[ERROR] Command failed with exit code 1: /Users/byeonggi/.local/share/mise/installs/node/24.17.0/bin/node /Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/bin/pnpm.mjs install\npnpm: Command failed with exit code 1: /Users/byeonggi/.local/share/mise/installs/node/24.17.0/bin/node /Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/bin/pnpm.mjs install\n    at getFinalError (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:88203:14)\n    at makeError (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:90510:21)\n    at getSyncResult (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:92354:10)\n    at spawnSubprocessSync (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:92314:14)\n    at execaCoreSync (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:92244:23)\n    at callBoundExeca (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:94772:23)\n    at boundExeca (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:94749:49)\n    at sync2 (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:94908:10)\n    at runPnpmCli (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:249521:5)\n    at runDepsStatusCheck (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.17.0/dist/pnpm.mjs:251287:7)",
-          "stderrTail": "[WARN] The \"pnpm\" field in package.json is no longer read by pnpm. The following keys were ignored: \"pnpm.overrides\". See https://pnpm.io/settings for the new home of each setting.\n[WARN] The \"pnpm\" field in package.json is no longer read by pnpm. The following keys were ignored: \"pnpm.overrides\". See https://pnpm.io/settings for the new home of each setting.\npreview did not become ready: fetch failed"
+          "stderrTail": "[WARN] The \"pnpm\" field in package.json is no longer read by pnpm. The following keys were ignored: \"pnpm.overrides\". See https://pnpm.io/settings for the new home of each setting.\n[WARN] The \"pnpm\" field in package.json is no longer read by pnpm. The following keys were ignored: \"pnpm.overrides\". See https://pnpm.io/settings for the new home of each setting.\npreview did not become ready: fetch failed",
+          "failureCategory": "package-manager-ignored-build-scripts"
         },
         {
           "id": "edit-hmr",
@@ -360,7 +376,8 @@
           "status": "fail",
           "exitCode": 1,
           "stdoutTail": "",
-          "stderrTail": "Skipped HMR because preview did not become ready."
+          "stderrTail": "Skipped HMR because preview did not become ready.",
+          "failureCategory": "dev-preview-unavailable"
         }
       ]
     },
@@ -459,5 +476,12 @@
     "total": 10,
     "passCount": 4,
     "milestoneB": "not-yet"
+  },
+  "failureSummary": {
+    "build-dist-command-failed": 1,
+    "dev-preview-unavailable": 5,
+    "hmr-socket-connect-failed": 1,
+    "hmr-update-timeout": 1,
+    "package-manager-ignored-build-scripts": 9
   }
 }

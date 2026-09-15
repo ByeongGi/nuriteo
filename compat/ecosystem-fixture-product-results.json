@@ -459,5 +459,6 @@
     "total": 10,
     "passCount": 10,
     "milestoneB": "pass"
-  }
+  },
+  "failureSummary": {}
 }

@@ -6,6 +6,13 @@ const results = JSON.parse(fs.readFileSync(new URL("../../compat/ecosystem-fixtu
 
 assert.equal(results.schemaVersion, 1);
 assert.equal(results.source, "compat/ecosystem-fixtures.json");
+assert.deepEqual(results.failureSummary, {
+  "build-dist-command-failed": 1,
+  "dev-preview-unavailable": 5,
+  "hmr-socket-connect-failed": 1,
+  "hmr-update-timeout": 1,
+  "package-manager-ignored-build-scripts": 9
+});
 assert.equal(results.minimumPassForMilestoneB, matrix.scope.minimumPassForMilestoneB);
 assert.equal(results.results.length, matrix.fixtures.length);
 assert.equal(results.summary.total, matrix.fixtures.length);
@@ -21,6 +28,7 @@ for (const result of results.results) {
   assert.ok(["pass", "partial-pass", "hold", "unsupported"].includes(result.status), `${result.id} has invalid status`);
   assert.equal(typeof result.score, "number", `${result.id} must have score`);
   assert.deepEqual(result.criteria.map((criterion) => criterion.id).sort(), criteriaIds);
+  assert.ok(result.criteria.every((criterion) => criterion.status === "pass" || criterion.failureCategory), `${result.id} failed criteria must be classified`);
 }
 
 assert.equal(results.results.filter((result) => result.criteria.some((criterion) => criterion.id === "install" && criterion.status === "pass")).length, 7);

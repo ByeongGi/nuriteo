@@ -34,6 +34,7 @@ const payload = {
   source: "compat/ecosystem-fixtures.json",
   minimumPassForMilestoneB: matrix.scope.minimumPassForMilestoneB,
   results,
+  failureSummary: summarizeFailures(results),
   summary: summarize(results)
 };
 
@@ -198,6 +199,7 @@ function criterion(id, passed, result) {
     points: spec?.points || 0,
     status: passed ? "pass" : "fail",
     exitCode: result.status,
+    ...(!passed ? { failureCategory: classifyFailure(id, result) } : {}),
     stdoutTail: tail(result.stdout),
     stderrTail: tail(result.stderr)
   };
@@ -217,6 +219,31 @@ function classifyScore(score, unsupportedBlocker) {
   if (score >= 80) return "pass";
   if (score >= 50) return "partial-pass";
   return "hold";
+}
+
+function summarizeFailures(results) {
+  const counts = {};
+  for (const result of results) {
+    for (const entry of result.criteria) {
+      if (entry.status !== "fail") continue;
+      const category = entry.failureCategory || "unclassified";
+      counts[category] = (counts[category] || 0) + 1;
+    }
+  }
+  return Object.fromEntries(Object.entries(counts).sort(([left], [right]) => left.localeCompare(right)));
+}
+
+function classifyFailure(id, result) {
+  const text = `${result.stdout || ""}\n${result.stderr || ""}`.toLowerCase();
+  if (text.includes("err_pnpm_ignored_builds")) return "package-manager-ignored-build-scripts";
+  if (text.includes("preview did not become ready") || text.includes("preview returned http")) return "dev-preview-unavailable";
+  if (id === "edit-hmr" && text.includes("skipped hmr")) return "dev-preview-unavailable";
+  if (id === "edit-hmr" && text.includes("hmr socket failed")) return "hmr-socket-connect-failed";
+  if (id === "edit-hmr" && text.includes("hmr socket did not open")) return "hmr-socket-connect-failed";
+  if (id === "edit-hmr" && text.includes("hmr update was not observed")) return "hmr-update-timeout";
+  if (id === "edit-hmr" && text.includes("no editable source")) return "hmr-edit-source-missing";
+  if (text.includes("native addon")) return "native-addon-unsupported";
+  return `${id}-command-failed`;
 }
 
 function runCommandString(command, cwd) {
