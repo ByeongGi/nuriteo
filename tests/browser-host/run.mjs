@@ -1,4 +1,5 @@
 import "./process-lifecycle.test.mjs";
+import "./permission-model.test.mjs";
 import "./package-workspace.test.mjs";
 import "./project-import-export.test.mjs";
 import "./project-recovery.test.mjs";

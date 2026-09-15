@@ -26,6 +26,7 @@ export interface HostFetchOptions extends RequestInit {
   integrity?: string;
   maxBytes?: number;
   maxRedirects?: number;
+  projectId?: string;
   timeoutMs?: number;
   timeoutSignal?: AbortSignal;
   externalSignal?: AbortSignal;
@@ -52,4 +53,5 @@ export interface HostFetcherOptions {
   fetchImpl?: typeof fetch;
   policy?: import("./fetch-policy.ts").FetchPolicy;
   policyOptions?: FetchPolicyOptions;
+  permissions?: import("../security/index.ts").PermissionManager;
 }

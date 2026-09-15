@@ -8,6 +8,7 @@ export interface HostProcessPrepareOptions {
   parent?: number | null;
   cwd?: string;
   env?: HostProcessEnv;
+  projectId?: string;
   url?: string | URL | undefined;
 }
 
@@ -17,6 +18,7 @@ export interface HostProcessRecord {
   parent: number | null;
   cwd: string;
   env: HostProcessEnv;
+  projectId?: string;
   url?: string | URL | undefined;
   status: HostProcessStatus;
   exitCode: number | null;
@@ -31,6 +33,7 @@ export interface HostProcessSnapshot {
   parent: number | null;
   cwd: string;
   env: HostProcessEnv;
+  projectId?: string;
   status: HostProcessStatus;
   exitCode: number | null;
   error: string | null;
@@ -49,4 +52,5 @@ export type HostWorkerFactory = (record: HostProcessRecord) => HostWorkerLike;
 export interface HostProcessTableOptions {
   registry?: import("./worker-registry.ts").WorkerRegistry;
   workerFactory?: HostWorkerFactory;
+  permissions?: import("../security/index.ts").PermissionManager;
 }

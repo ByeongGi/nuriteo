@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 
 import { FetchPolicy, FetchPolicyError } from "./fetch-policy.ts";
 import type { HostDownloadResult, HostFetchErrorCode, HostFetchErrorOptions, HostFetcherOptions, HostFetchOptions } from "./types.ts";
+import type { PermissionManager } from "../security/index.ts";
 
 export class HostFetchError extends Error {
   code: HostFetchErrorCode;
@@ -20,14 +21,22 @@ export class HostFetchError extends Error {
 export class HostFetcher {
   fetchImpl: typeof fetch;
   policy: FetchPolicy;
+  permissions: PermissionManager | null;
 
   constructor(options: HostFetcherOptions = {}) {
     this.fetchImpl = options.fetchImpl || globalThis.fetch;
     this.policy = options.policy || new FetchPolicy(options.policyOptions);
+    this.permissions = options.permissions || null;
   }
 
   async download(input: string | URL, options: HostFetchOptions = {}): Promise<HostDownloadResult> {
     let url = this.policy.assertAllowed(input);
+    this.permissions?.assertAllowed({
+      scope: "network",
+      action: "fetch",
+      resource: url.href,
+      ...(options.projectId ? { projectId: options.projectId } : {})
+    });
     const redirects: HostDownloadResult["redirects"] = [];
     const maxRedirects = options.maxRedirects ?? this.policy.maxRedirects;
     const timeoutController = new AbortController();
@@ -59,6 +68,12 @@ export class HostFetcher {
         const location = response.headers.get("location");
         if (!location) throw new HostFetchError("redirect without location", { code: "EBADREDIRECT", url: url.href, status: response.status });
         const next = this.policy.assertAllowed(new URL(location, url).href);
+        this.permissions?.assertAllowed({
+          scope: "network",
+          action: "redirect",
+          resource: next.href,
+          ...(options.projectId ? { projectId: options.projectId } : {})
+        });
         redirects.push({ from: url.href, to: next.href, status: response.status });
         url = next;
       }

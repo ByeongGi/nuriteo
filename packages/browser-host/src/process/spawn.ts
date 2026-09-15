@@ -1,5 +1,6 @@
 import { WorkerRegistry } from "./worker-registry.ts";
 import type { HostProcessPrepareOptions, HostProcessRecord, HostProcessSnapshot, HostProcessStatus, HostProcessTableOptions, HostWorkerLike } from "./types.ts";
+import type { PermissionManager } from "../security/index.ts";
 
 export class HostProcessError extends Error {
   constructor(message: string) {
@@ -13,6 +14,7 @@ export class HostProcessTable {
   nextGeneration: number;
   records: Map<number, HostProcessRecord>;
   registry: WorkerRegistry;
+  permissions: PermissionManager | null;
   workerFactory: (record: HostProcessRecord) => HostWorkerLike;
 
   constructor(options: HostProcessTableOptions = {}) {
@@ -20,16 +22,24 @@ export class HostProcessTable {
     this.nextGeneration = 1;
     this.records = new Map();
     this.registry = options.registry || new WorkerRegistry();
+    this.permissions = options.permissions || null;
     this.workerFactory = options.workerFactory || ((record) => new Worker(record.url as string | URL, { type: "module", name: `process-${record.pid}` }));
   }
 
   prepare(options: HostProcessPrepareOptions = {}): HostProcessSnapshot {
+    this.permissions?.assertAllowed({
+      scope: "process",
+      action: "prepare",
+      resource: String(options.url || "<inline>"),
+      ...(options.projectId ? { projectId: options.projectId } : {})
+    });
     const record: HostProcessRecord = {
       pid: this.nextPid++,
       generation: this.nextGeneration++,
       parent: options.parent || null,
       cwd: options.cwd || "/workspace",
       env: { ...(options.env || {}) },
+      ...(options.projectId ? { projectId: options.projectId } : {}),
       url: options.url,
       status: "prepared",
       exitCode: null,
@@ -149,6 +159,7 @@ function snapshot(record: HostProcessRecord): HostProcessSnapshot {
     parent: record.parent,
     cwd: record.cwd,
     env: { ...record.env },
+    ...(record.projectId ? { projectId: record.projectId } : {}),
     status: record.status,
     exitCode: record.exitCode,
     error: record.error || null,
