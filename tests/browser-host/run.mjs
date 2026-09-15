@@ -3,6 +3,7 @@ import "./permission-model.test.mjs";
 import "./credential-safety.test.mjs";
 import "./security-headers.test.mjs";
 import "./tracing.test.mjs";
+import "./support-bundle.test.mjs";
 import "./package-workspace.test.mjs";
 import "./project-import-export.test.mjs";
 import "./project-recovery.test.mjs";
