@@ -122,6 +122,11 @@ function inspectDependencyClosure(nodeModulesRoot, vitePackageArtifact, wasmAdap
   });
   const result = {
     artifactNames: closure.artifacts.map((artifact) => artifact.name),
+    artifactMountSummary: closure.artifacts.map((artifact) => ({
+      binaryMountCount: artifact.mounts.filter((mount) => mount.encoding === "base64").length,
+      mountCount: artifact.mounts.length,
+      name: artifact.name
+    })),
     iterations: closure.iterations.map((iteration) => ({
       extracted: iteration.extracted,
       remainingMissing: iteration.plan.missing.map((item) => ({

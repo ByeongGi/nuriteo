@@ -769,7 +769,7 @@ function createWorkspaceFsFacade(reader: WorkspaceModuleReader, writer?: Package
   function readFileSync(path: string): Uint8Array;
   function readFileSync(path: string, encoding: "utf8" | "utf-8"): string;
   function readFileSync(path: string, encoding?: "utf8" | "utf-8"): Uint8Array | string {
-    const bytes = encoder.encode(reader.readText(normalize(path)));
+    const bytes = readWorkspaceBytes(reader, normalize(path), encoder);
     return encoding ? decoder.decode(bytes) : BrowserBuffer.from(bytes);
   }
 
@@ -810,7 +810,7 @@ function createWorkspaceFsFacade(reader: WorkspaceModuleReader, writer?: Package
     },
     copyFileSync(source: string, target: string): void {
       if (!writer) throw unsupportedFsMutation("copyFileSync");
-      writer.writeText(normalize(target), reader.readText(normalize(source)));
+      writer.writeText(normalize(target), decoder.decode(readWorkspaceBytes(reader, normalize(source), encoder)));
       notifyFsChange(normalize(target), "change");
     },
     cp(source: string, target: string, optionsOrCallback?: CliCpOptions | ((error?: Error | null) => void), callback?: (error?: Error | null) => void): void {
@@ -1724,7 +1724,7 @@ function safeStatFromReader(reader: WorkspaceModuleReader, path: string): CliFsS
 
 function statFromReader(reader: WorkspaceModuleReader, path: string): ReturnType<RuntimeFsBinding["statSync"]> {
   try {
-    const size = new TextEncoder().encode(reader.readText(normalize(path))).byteLength;
+    const size = readWorkspaceBytes(reader, normalize(path), new TextEncoder()).byteLength;
     return {
       ino: hashInode(normalize(path)),
       mode: 0o100644,
@@ -1792,11 +1792,17 @@ function openMode(flags: string | number): CliOpenMode {
 function initialOpenBytes(reader: WorkspaceModuleReader, path: string, mode: CliOpenMode, encoder: TextEncoder): Uint8Array {
   if (mode.truncate) return new Uint8Array();
   try {
-    return encoder.encode(reader.readText(path));
+    return readWorkspaceBytes(reader, path, encoder);
   } catch (error) {
     if (mode.writable) return new Uint8Array();
     throw error;
   }
+}
+
+function readWorkspaceBytes(reader: WorkspaceModuleReader, path: string, encoder: TextEncoder): Uint8Array {
+  const maybeReader = reader as WorkspaceModuleReader & { readBytes?: (path: string) => Uint8Array };
+  if (maybeReader.readBytes) return maybeReader.readBytes(path);
+  return encoder.encode(reader.readText(path));
 }
 
 function resolveSymlinkTarget(target: string, linkPath: string): string {

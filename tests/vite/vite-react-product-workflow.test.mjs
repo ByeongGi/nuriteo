@@ -744,6 +744,62 @@ assert.deepEqual(installedDependencyExecution.buildRegistrations, [
   }
 ]);
 
+const binaryDependencyWorkspace = new MemoryPackageManagerWorkspace([
+  {
+    path: "/workspace/project/node_modules/binary-probe/package.json",
+    data: JSON.stringify({ name: "binary-probe", version: "1.0.0", main: "index.cjs" })
+  },
+  {
+    path: "/workspace/project/node_modules/binary-probe/index.cjs",
+    data: "const fs = require('fs');\nmodule.exports = fs.readFileSync(__dirname + '/probe.wasm').toString('hex');\n"
+  },
+  {
+    path: "/workspace/project/node_modules/binary-probe/probe.wasm",
+    data: "AAECA/8=",
+    encoding: "base64"
+  }
+]);
+const binaryDependencyArtifact = createViteDependencyArtifactFromWorkspace({
+  reader: binaryDependencyWorkspace,
+  packageRoot: "/workspace/project/node_modules/binary-probe"
+});
+assert.deepEqual(binaryDependencyArtifact.mounts.find((mount) => mount.path === "probe.wasm"), {
+  path: "probe.wasm",
+  data: "AAECA/8=",
+  encoding: "base64"
+});
+const binaryDependencyWorkflow = new ViteProductWorkflow({
+  manager: "pnpm",
+  vitePackageArtifact: {
+    version: "9.2.2-binary-dependency",
+    mounts: [
+      {
+        path: "package.json",
+        data: JSON.stringify({ name: "vite", version: "9.2.2-binary-dependency", type: "module", bin: { vite: "bin/vite.mjs" } })
+      },
+      {
+        path: "bin/vite.mjs",
+        data: "import '../dist/node/cli.mjs';\n"
+      },
+      {
+        path: "dist/node/cli.mjs",
+        data: "import probe from 'binary-probe';\nglobal.__viteRegisterBuild?.({ command: 'build', outDir: probe, source: 'vite-cli' });\n"
+      }
+    ]
+  },
+  dependencyArtifacts: [binaryDependencyArtifact]
+});
+binaryDependencyWorkflow.install();
+const binaryDependencyExecution = await binaryDependencyWorkflow.executeRealCli(["build"]);
+assert.equal(binaryDependencyExecution.exitCode, 0, binaryDependencyExecution.stderr);
+assert.deepEqual(binaryDependencyExecution.buildRegistrations, [
+  {
+    command: "build",
+    outDir: "00010203ff",
+    source: "vite-cli"
+  }
+]);
+
 const pureJsDependencyWorkspace = new MemoryPackageManagerWorkspace([
   {
     path: "/workspace/project/node_modules/postcss/package.json",

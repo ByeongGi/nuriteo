@@ -23,6 +23,10 @@ class NodeFsWorkspaceReader {
     return readFileSync(this.#toNativePath(path), "utf8");
   }
 
+  readBytes(path) {
+    return readFileSync(this.#toNativePath(path));
+  }
+
   listDir(path) {
     return readdirSync(this.#toNativePath(path)).sort();
   }
@@ -62,6 +66,18 @@ class FallbackWorkspaceReader {
     for (const reader of this.#readers) {
       try {
         return reader.readText(path);
+      } catch {
+        // Try the next mounted root.
+      }
+    }
+    throw Object.assign(new Error(`No such file: ${path}`), { code: "ENOENT" });
+  }
+
+  readBytes(path) {
+    for (const reader of this.#readers) {
+      try {
+        if (reader.readBytes) return reader.readBytes(path);
+        return new TextEncoder().encode(reader.readText(path));
       } catch {
         // Try the next mounted root.
       }

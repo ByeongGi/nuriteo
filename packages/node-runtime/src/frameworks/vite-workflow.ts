@@ -799,7 +799,7 @@ export class ViteProductWorkflow {
   #installVitePackageArtifact(artifact: ViteProductPackageArtifact): void {
     const packageRoot = join(this.projectRoot, "node_modules/vite");
     for (const mount of artifact.mounts) {
-      this.workspace.writeText(join(packageRoot, normalizePackageArtifactPath(mount.path)), mount.data);
+      this.#writePackageMount(join(packageRoot, normalizePackageArtifactPath(mount.path)), mount);
     }
     const packageJsonPath = join(packageRoot, "package.json");
     if (!this.workspace.exists(packageJsonPath)) {
@@ -820,7 +820,7 @@ export class ViteProductWorkflow {
     for (const artifact of this.dependencyArtifacts) {
       const packageRoot = join(this.projectRoot, "node_modules", artifact.name);
       for (const mount of artifact.mounts) {
-        this.workspace.writeText(join(packageRoot, normalizePackageArtifactPath(mount.path)), mount.data);
+        this.#writePackageMount(join(packageRoot, normalizePackageArtifactPath(mount.path)), mount);
       }
       const packageJsonPath = join(packageRoot, "package.json");
       if (!this.workspace.exists(packageJsonPath)) {
@@ -839,6 +839,14 @@ export class ViteProductWorkflow {
 
   #hasDependencyArtifact(name: string): boolean {
     return this.dependencyArtifacts.some((artifact) => artifact.name === name);
+  }
+
+  #writePackageMount(path: string, mount: PackageManagerWorkspaceMount): void {
+    if (mount.encoding === "base64") {
+      this.workspace.writeBytes(path, decodeBase64(mount.data));
+      return;
+    }
+    this.workspace.writeText(path, mount.data);
   }
 
   #installViteCliEntrypoint(): void {
@@ -1304,10 +1312,19 @@ function createDependencyMaterializationSummary(
 function collectTextMounts(reader: WorkspaceModuleReader, packageRoot: string): PackageManagerWorkspaceMount[] {
   const mounts: PackageManagerWorkspaceMount[] = [];
   for (const file of walkWorkspaceTextFiles(reader, packageRoot)) {
-    mounts.push({
-      path: file.slice(packageRoot.length + 1),
-      data: reader.readText(file)
-    });
+    const path = file.slice(packageRoot.length + 1);
+    if (isBinaryPackageMount(path)) {
+      mounts.push({
+        path,
+        data: encodeBase64(readWorkspaceBytes(reader, file)),
+        encoding: "base64"
+      });
+    } else {
+      mounts.push({
+        path,
+        data: reader.readText(file)
+      });
+    }
   }
   return mounts.sort((left, right) => left.path.localeCompare(right.path));
 }
@@ -1344,6 +1361,36 @@ function readerExists(reader: WorkspaceModuleReader, path: string): boolean {
       return false;
     }
   }
+}
+
+function isBinaryPackageMount(path: string): boolean {
+  return path.endsWith(".wasm");
+}
+
+function readWorkspaceBytes(reader: WorkspaceModuleReader, path: string): Uint8Array {
+  const maybeReader = reader as WorkspaceModuleReader & { readBytes?: (path: string) => Uint8Array };
+  if (maybeReader.readBytes) return maybeReader.readBytes(path);
+  return new TextEncoder().encode(reader.readText(path));
+}
+
+function encodeBase64(bytes: Uint8Array): string {
+  if (typeof btoa === "function") {
+    let binary = "";
+    for (const byte of bytes) binary += String.fromCharCode(byte);
+    return btoa(binary);
+  }
+  const bufferCtor = (globalThis as typeof globalThis & { Buffer?: { from(value: Uint8Array): { toString(encoding: "base64"): string } } }).Buffer;
+  if (bufferCtor) return bufferCtor.from(bytes).toString("base64");
+  throw new Error("Base64 encoding is not available in this runtime");
+}
+
+function decodeBase64(value: string): Uint8Array {
+  if (typeof atob === "function") {
+    return Uint8Array.from(atob(value), (char) => char.charCodeAt(0));
+  }
+  const bufferCtor = (globalThis as typeof globalThis & { Buffer?: { from(value: string, encoding: "base64"): Uint8Array } }).Buffer;
+  if (bufferCtor) return new Uint8Array(bufferCtor.from(value, "base64"));
+  throw new Error("Base64 decoding is not available in this runtime");
 }
 
 function normalizePackageArtifactPath(path: string): string {

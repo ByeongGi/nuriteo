@@ -4,6 +4,7 @@ export type PackageManagerLinkStrategy = "symlink" | "copy-fallback";
 
 export interface PackageManagerWorkspaceReader {
   readText(path: string): string;
+  readBytes?(path: string): Uint8Array;
   listDir(path: string): string[];
   readlink?(path: string): string;
 }
@@ -23,22 +24,33 @@ export interface PackageManagerWorkspace extends PackageManagerWorkspaceReader, 
 export interface PackageManagerWorkspaceMount {
   path: string;
   data: string;
+  encoding?: "utf8" | "base64";
 }
 
 export class MemoryPackageManagerWorkspace implements PackageManagerWorkspace {
-  readonly files = new Map<string, string>();
+  readonly files = new Map<string, Uint8Array>();
   readonly directories = new Set<string>(["/"]);
   readonly links = new Map<string, string>();
 
   constructor(mounts: PackageManagerWorkspaceMount[] = []) {
-    for (const mount of mounts) this.writeText(mount.path, mount.data);
+    for (const mount of mounts) {
+      if (mount.encoding === "base64") {
+        this.writeBytes(mount.path, decodeBase64(mount.data));
+      } else {
+        this.writeText(mount.path, mount.data);
+      }
+    }
   }
 
   readText(path: string): string {
+    return new TextDecoder().decode(this.readBytes(path));
+  }
+
+  readBytes(path: string): Uint8Array {
     const normalized = this.resolvePath(path);
     const data = this.files.get(normalized);
     if (data === undefined) throw createWorkspaceError("ENOENT", `No such file: ${normalized}`);
-    return data;
+    return data.slice();
   }
 
   listDir(path: string): string[] {
@@ -80,14 +92,18 @@ export class MemoryPackageManagerWorkspace implements PackageManagerWorkspace {
   }
 
   writeText(path: string, data: string): void {
+    this.writeBytes(path, new TextEncoder().encode(data));
+  }
+
+  writeBytes(path: string, data: Uint8Array): void {
     const normalized = normalizePath(path);
     ensureDirectory(this.directories, dirname(normalized));
-    this.files.set(normalized, data);
+    this.files.set(normalized, data.slice());
     this.links.delete(normalized);
   }
 
   copyFile(source: string, target: string): void {
-    this.writeText(target, this.readText(source));
+    this.writeBytes(target, this.readBytes(source));
   }
 
   copyDirectory(source: string, target: string): void {
@@ -104,7 +120,7 @@ export class MemoryPackageManagerWorkspace implements PackageManagerWorkspace {
     }
     for (const [file, data] of this.files) {
       if (!file.startsWith(prefix)) continue;
-      this.writeText(join(normalizedTarget, file.slice(prefix.length)), data);
+      this.writeBytes(join(normalizedTarget, file.slice(prefix.length)), data);
     }
   }
 
@@ -132,7 +148,7 @@ export class MemoryPackageManagerWorkspace implements PackageManagerWorkspace {
     this.remove(normalizedTarget);
     const file = this.files.get(normalizedSource);
     if (file !== undefined) {
-      this.writeText(normalizedTarget, file);
+      this.writeBytes(normalizedTarget, file);
       this.remove(normalizedSource);
       return;
     }
@@ -152,7 +168,7 @@ export class MemoryPackageManagerWorkspace implements PackageManagerWorkspace {
       if (directory.startsWith(prefix)) this.mkdir(join(normalizedTarget, directory.slice(prefix.length)));
     }
     for (const [path, data] of [...this.files]) {
-      if (path.startsWith(prefix)) this.writeText(join(normalizedTarget, path.slice(prefix.length)), data);
+      if (path.startsWith(prefix)) this.writeBytes(join(normalizedTarget, path.slice(prefix.length)), data);
     }
     for (const [path, linkTarget] of [...this.links]) {
       if (path.startsWith(prefix)) this.symlink(linkTarget, join(normalizedTarget, path.slice(prefix.length)));
@@ -223,4 +239,13 @@ function resolveOneSymlink(links: Map<string, string>, path: string): string {
 
 function createWorkspaceError(code: string, message: string): Error & { code: string } {
   return Object.assign(new Error(message), { code });
+}
+
+function decodeBase64(value: string): Uint8Array {
+  if (typeof atob === "function") {
+    return Uint8Array.from(atob(value), (char) => char.charCodeAt(0));
+  }
+  const bufferCtor = (globalThis as typeof globalThis & { Buffer?: { from(value: string, encoding: "base64"): Uint8Array } }).Buffer;
+  if (bufferCtor) return new Uint8Array(bufferCtor.from(value, "base64"));
+  throw new Error("Base64 decoding is not available in this runtime");
 }
