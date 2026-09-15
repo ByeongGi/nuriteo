@@ -77,6 +77,14 @@ export interface ProjectWorkspaceSnapshot {
   files: ProjectWorkspaceFile[];
 }
 
+export interface ProjectWorkspaceArchive {
+  [key: string]: JsonValue;
+  schemaVersion: 1;
+  format: "cargo-container-project-archive";
+  exportedAt: number;
+  snapshot: ProjectWorkspaceSnapshot;
+}
+
 export interface ProjectWorkspaceStoreOptions extends SnapshotStoreOptions {
   projectId: string;
   root?: string;
@@ -86,6 +94,11 @@ export interface ProjectWorkspaceStoreOptions extends SnapshotStoreOptions {
 export interface ProjectWorkspaceSaveOptions {
   owner: string;
   metadata?: ProjectWorkspaceMetadata;
+}
+
+export interface ProjectWorkspaceImportOptions {
+  owner?: string;
+  save?: boolean;
 }
 
 export interface StorageQuotaFileUsage {

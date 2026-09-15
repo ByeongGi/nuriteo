@@ -1,7 +1,9 @@
 import { createSnapshotStore, type SnapshotStore } from "./snapshot.ts";
 import type {
   JsonValue,
+  ProjectWorkspaceArchive,
   ProjectWorkspaceFile,
+  ProjectWorkspaceImportOptions,
   ProjectWorkspaceMetadata,
   ProjectWorkspaceSaveOptions,
   ProjectWorkspaceSnapshot,
@@ -73,8 +75,27 @@ export class ProjectWorkspaceStore {
     return this.#restore(snapshot);
   }
 
+  exportArchive(exportedAt = Date.now()): ProjectWorkspaceArchive {
+    return {
+      schemaVersion: 1,
+      format: "cargo-container-project-archive",
+      exportedAt,
+      snapshot: this.snapshot()
+    };
+  }
+
+  importArchive(archive: JsonValue, options: ProjectWorkspaceImportOptions = {}): ProjectWorkspaceSnapshot {
+    const imported = assertProjectWorkspaceArchive(archive);
+    const snapshot = this.#restore(imported.snapshot);
+    if (options.save) {
+      if (!options.owner) throw new Error("Project archive import save requires an owner");
+      this.snapshots.save(snapshot, { owner: options.owner });
+    }
+    return snapshot;
+  }
+
   #restore(value: JsonValue): ProjectWorkspaceSnapshot {
-    const snapshot = assertProjectWorkspaceSnapshot(value);
+    const snapshot = migrateProjectWorkspaceSnapshot(value);
     this.metadata = { ...snapshot.metadata };
     this.files = new Map(snapshot.files.map((file) => [file.path, file.data]));
     return snapshot;
@@ -89,6 +110,19 @@ export class ProjectWorkspaceStore {
 
 export function createProjectWorkspaceStore(options: ProjectWorkspaceStoreOptions): ProjectWorkspaceStore {
   return new ProjectWorkspaceStore(options);
+}
+
+export function migrateProjectWorkspaceSnapshot(value: JsonValue): ProjectWorkspaceSnapshot {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("Invalid project workspace snapshot");
+  }
+  const snapshot = value as Partial<ProjectWorkspaceSnapshot> & {
+    schemaVersion?: number;
+    files?: ProjectWorkspaceFile[] | Record<string, string>;
+  };
+  if (snapshot.schemaVersion === 1) return assertProjectWorkspaceSnapshot(value);
+  if (snapshot.schemaVersion === 0 || snapshot.schemaVersion === undefined) return migrateLegacyProjectWorkspaceSnapshot(snapshot);
+  throw new Error(`Unsupported project workspace snapshot schema: ${snapshot.schemaVersion}`);
 }
 
 function assertProjectWorkspaceSnapshot(value: JsonValue): ProjectWorkspaceSnapshot {
@@ -109,6 +143,48 @@ function assertProjectWorkspaceSnapshot(value: JsonValue): ProjectWorkspaceSnaps
     }
   }
   return snapshot as ProjectWorkspaceSnapshot;
+}
+
+function assertProjectWorkspaceArchive(value: JsonValue): ProjectWorkspaceArchive {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("Invalid project workspace archive");
+  }
+  const archive = value as Partial<ProjectWorkspaceArchive>;
+  if (archive.schemaVersion !== 1 || archive.format !== "cargo-container-project-archive") {
+    throw new Error("Invalid project workspace archive header");
+  }
+  return {
+    schemaVersion: 1,
+    format: "cargo-container-project-archive",
+    exportedAt: typeof archive.exportedAt === "number" ? archive.exportedAt : 0,
+    snapshot: migrateProjectWorkspaceSnapshot(archive.snapshot || null)
+  };
+}
+
+function migrateLegacyProjectWorkspaceSnapshot(
+  snapshot: Partial<ProjectWorkspaceSnapshot> & { files?: ProjectWorkspaceFile[] | Record<string, string> }
+): ProjectWorkspaceSnapshot {
+  if (typeof snapshot.projectId !== "string" || typeof snapshot.root !== "string") {
+    throw new Error("Invalid legacy project workspace snapshot header");
+  }
+  const files = normalizeLegacyFiles(snapshot.files);
+  return assertProjectWorkspaceSnapshot({
+    schemaVersion: 1,
+    projectId: snapshot.projectId,
+    root: normalizeRoot(snapshot.root),
+    metadata: snapshot.metadata && typeof snapshot.metadata === "object" && !Array.isArray(snapshot.metadata)
+      ? snapshot.metadata
+      : {},
+    files
+  });
+}
+
+function normalizeLegacyFiles(files: ProjectWorkspaceFile[] | Record<string, string> | undefined): ProjectWorkspaceFile[] {
+  if (Array.isArray(files)) return files;
+  return Object.entries(files || {}).map(([path, data]) => {
+    if (typeof data !== "string") throw new Error("Invalid legacy project workspace file");
+    return { path, data };
+  });
 }
 
 function normalizeRoot(path: string): string {
