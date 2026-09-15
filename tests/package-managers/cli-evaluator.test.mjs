@@ -708,6 +708,63 @@ assert.deepEqual(workerBackedRegistrationResult.capturedGlobalCalls, [
   }
 ]);
 
+const workerBackedEsmBootstrapWorkspace = new MemoryPackageManagerWorkspace([
+  {
+    path: "/workspace/vite/package/bin/vite.mjs",
+    data: `
+      import { performance } from 'node:perf_hooks';
+      import module from 'node:module';
+      global.__vite_start_time = performance.now();
+      function start() {
+        module.enableCompileCache?.();
+        return import('../dist/node/cli.mjs');
+      }
+      if (process.argv.includes('--profile')) {
+        // profile boot path remains outside the CSP-safe subset.
+      } else {
+        start();
+      }
+    `
+  },
+  {
+    path: "/workspace/vite/package/dist/node/cli.mjs",
+    data: `
+      global.__fixtureRegister?.({
+        command: 'dev',
+        source: 'vite-cli',
+        startedAt: global.__vite_start_time,
+        invoke() { return 'not-serializable'; }
+      });
+    `
+  },
+  {
+    path: "/workspace/vite/package/package.json",
+    data: JSON.stringify({ name: "vite", version: "0.0.0-worker-bootstrap", type: "module", bin: { vite: "bin/vite.mjs" } })
+  }
+]);
+const workerBackedEsmBootstrapResult = await createWorkerBackedAsyncCliModuleEvaluator({
+  captureGlobalCalls: ["__fixtureRegister"],
+  root: "/workspace",
+  workerFactory: () => new FakeCliEvaluationWorker(),
+  workspace: workerBackedEsmBootstrapWorkspace
+})({
+  entry: {
+    name: "vite",
+    version: "0.0.0-worker-bootstrap",
+    entry: "/workspace/vite/package/bin/vite.mjs"
+  },
+  args: [],
+  cwd: "/workspace/project"
+});
+assert.equal(workerBackedEsmBootstrapResult.stderr, "");
+assert.equal(workerBackedEsmBootstrapResult.exitCode, 0);
+assert.equal(workerBackedEsmBootstrapResult.capturedGlobalCalls.length, 1);
+assert.equal(workerBackedEsmBootstrapResult.capturedGlobalCalls[0].name, "__fixtureRegister");
+assert.equal(workerBackedEsmBootstrapResult.capturedGlobalCalls[0].args[0].command, "dev");
+assert.equal(workerBackedEsmBootstrapResult.capturedGlobalCalls[0].args[0].source, "vite-cli");
+assert.equal(typeof workerBackedEsmBootstrapResult.capturedGlobalCalls[0].args[0].startedAt, "number");
+assert.deepEqual(workerBackedEsmBootstrapResult.capturedGlobalCalls[0].args[0].invoke, { __cliFunctionRef: true });
+
 const asyncErrorResult = await createAsyncCliModuleEvaluator({
   root: "/workspace",
   reader: workspace,
