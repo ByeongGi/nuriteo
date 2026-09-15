@@ -67,6 +67,12 @@ export class ClientRequest extends Writable {
     return true;
   }
 
+  abort(): this {
+    this.destroy();
+    this.emit("abort");
+    return this;
+  }
+
   override end(
     chunkOrCallback?: RuntimeValue | ((error?: Error | null) => void),
     _encodingOrCallback?: string | ((error?: Error | null) => void),

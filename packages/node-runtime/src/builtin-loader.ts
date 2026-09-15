@@ -42,7 +42,7 @@ export function createBuiltinLoader(bindings: BuiltinBindings): (specifier: stri
       return createFsPromisesBuiltin(bindings.fs);
     }
     if (specifier === "buffer" || specifier === "node:buffer") return bindings.buffer || bufferBuiltin;
-    if (specifier === "child_process" || specifier === "node:child_process") return childProcessBuiltin;
+    if (specifier === "child_process" || specifier === "node:child_process") return bindings.childProcess || childProcessBuiltin;
     if (specifier === "events" || specifier === "node:events") return bindings.events || eventsBuiltin;
     if (specifier === "dns" || specifier === "node:dns") return dnsBuiltin;
     if (specifier === "dns/promises" || specifier === "node:dns/promises") return dnsPromisesBuiltin;

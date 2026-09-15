@@ -146,6 +146,7 @@ export interface RuntimeFsBinding {
 }
 
 export interface BuiltinBindings {
+  childProcess?: RuntimeValue;
   fs?: RuntimeFsBinding;
   buffer?: RuntimeValue;
   events?: RuntimeValue;

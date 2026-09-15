@@ -341,6 +341,13 @@ const httpRequire = createBuiltinLoader({
   }
 });
 const http = httpRequire("http");
+const abortedRequest = http.request("http://registry.test/abort");
+let abortEvent = false;
+abortedRequest.on("abort", () => {
+  abortEvent = true;
+});
+assert.equal(abortedRequest.abort(), abortedRequest);
+assert.equal(abortEvent, true);
 const httpResponse = await new Promise((resolve, reject) => {
   const request = http.request({ hostname: "registry.test", path: "/pkg", method: "POST" }, (response) => {
     const chunks = [];

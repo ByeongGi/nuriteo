@@ -1,8 +1,9 @@
 import { createBuiltinLoader } from "../builtin-loader.ts";
 import { Buffer as BrowserBuffer } from "../builtins/buffer.ts";
+import { ChildProcess, UnsupportedChildProcessError, type SpawnSyncResult } from "../builtins/child-process.ts";
 import { constantsBuiltin } from "../builtins/constants.ts";
 import { EventEmitter } from "../builtins/events.ts";
-import { normalize } from "../builtins/path.ts";
+import { dirname, normalize } from "../builtins/path.ts";
 import { BrowserProcess } from "../builtins/process.ts";
 import { createWorkspaceModuleRuntime, type WorkspaceModuleReader } from "../modules/index.ts";
 import type { CliEntry, CliRunResult, RuntimeEnv, RuntimeFsBinding, RuntimeFsData, RuntimeNamespace, RuntimeValue } from "../types.ts";
@@ -81,11 +82,18 @@ function startCliModuleEvaluation(options: CliModuleEvaluatorOptions, request: C
     reader: options.reader,
     root: options.root || "/workspace"
   });
+  const childProcess = createCliChildProcessBuiltin({
+    env: request.env || {},
+    parentProcess: process,
+    reader: options.reader,
+    root: options.root || "/workspace",
+    writer: options.writer
+  });
 
   const runtime = createWorkspaceModuleRuntime({
     root: options.root || "/workspace",
     reader: options.reader,
-    builtins: createBuiltinLoader({ fs, process, workerThreads }),
+    builtins: createBuiltinLoader({ childProcess, fs, process, workerThreads }),
     globals: {
       __dynamicImport: globalObject.__dynamicImport,
       console: consoleObject,
@@ -122,6 +130,276 @@ function startCliModuleEvaluation(options: CliModuleEvaluatorOptions, request: C
       };
     }
   };
+}
+
+function createCliChildProcessBuiltin(options: {
+  env: RuntimeEnv;
+  parentProcess: BrowserProcess;
+  reader: WorkspaceModuleReader;
+  root: string;
+  writer?: PackageManagerWorkspaceWriter | undefined;
+}): RuntimeNamespace {
+  let nextPid = 100;
+
+  const spawn = (command: string, args: readonly string[] = [], spawnOptions: CliSpawnOptions = {}): ChildProcess => {
+    const child = new ChildProcess();
+    child.pid = nextPid++;
+    queueMicrotask(() => {
+      const result = runCliChildCommand(command, args, {
+        cwd: spawnOptions.cwd || options.parentProcess.cwd(),
+        env: { ...options.env, ...(spawnOptions.env || {}) },
+        reader: options.reader,
+        writer: options.writer
+      });
+      if (result.error) {
+        child.emit("error", result.error);
+      } else {
+        if (spawnOptions.stdio === "inherit") {
+          if (result.stdout) options.parentProcess.stdout.write(result.stdout);
+          if (result.stderr) options.parentProcess.stderr.write(result.stderr);
+        }
+        if (result.stdout) child.stdout.push(result.stdout);
+        if (result.stderr) child.stderr.push(result.stderr);
+        child.stdout.push(null);
+        child.stderr.push(null);
+      }
+      child.exitCode = result.exitCode;
+      child.emit("exit", result.exitCode, null);
+      child.emit("close", result.exitCode, null);
+    });
+    return child;
+  };
+
+  const execFile = (
+    file: string,
+    argsOrCallback?: readonly string[] | CliExecCallback,
+    optionsOrCallback?: CliSpawnOptions | CliExecCallback,
+    maybeCallback?: CliExecCallback
+  ): ChildProcess => {
+    const args = Array.isArray(argsOrCallback) ? argsOrCallback : [];
+    const spawnOptions = typeof optionsOrCallback === "object" ? optionsOrCallback : {};
+    const callback = typeof argsOrCallback === "function"
+      ? argsOrCallback
+      : typeof optionsOrCallback === "function"
+        ? optionsOrCallback
+        : maybeCallback;
+    const child = spawn(file, args, spawnOptions);
+    if (callback) wireExecCallback(child, callback);
+    return child;
+  };
+
+  const exec = (
+    command: string,
+    optionsOrCallback?: CliSpawnOptions | CliExecCallback,
+    maybeCallback?: CliExecCallback
+  ): ChildProcess => {
+    const callback = typeof optionsOrCallback === "function" ? optionsOrCallback : maybeCallback;
+    const child = spawn("sh", ["-c", command], typeof optionsOrCallback === "object" ? optionsOrCallback : {});
+    if (callback) wireExecCallback(child, callback);
+    return child;
+  };
+
+  const spawnSync = (command: string, args: readonly string[] = [], spawnOptions: CliSpawnOptions = {}): SpawnSyncResult => {
+    const result = runCliChildCommand(command, args, {
+      cwd: spawnOptions.cwd || options.parentProcess.cwd(),
+      env: { ...options.env, ...(spawnOptions.env || {}) },
+      reader: options.reader,
+      writer: options.writer
+    });
+    return {
+      ...(result.error ? { error: result.error } : {}),
+      pid: nextPid++,
+      signal: null,
+      status: result.exitCode,
+      stderr: new TextEncoder().encode(result.stderr),
+      stdout: new TextEncoder().encode(result.stdout)
+    } as SpawnSyncResult;
+  };
+
+  const execFileSync = (file: string, args: readonly string[] = [], spawnOptions: CliSpawnOptions = {}): Uint8Array => {
+    const result = spawnSync(file, args, spawnOptions);
+    if (result.error) throw result.error;
+    if (result.status !== 0) throw new UnsupportedChildProcessError(file);
+    return result.stdout;
+  };
+
+  const execSync = (command: string, spawnOptions: CliSpawnOptions = {}): Uint8Array => {
+    return execFileSync("sh", ["-c", command], spawnOptions);
+  };
+
+  return Object.freeze({
+    ChildProcess,
+    exec,
+    execFile,
+    execFileSync,
+    execSync,
+    spawn,
+    spawnSync
+  });
+}
+
+function runCliChildCommand(
+  command: string,
+  args: readonly string[],
+  options: CliChildCommandOptions
+): CliChildCommandResult {
+  const argv = isShellCommand(command, args)
+    ? splitShellWords(args[1] || "")
+    : [command, ...args];
+  const binary = argv[0];
+  if (!binary) return { stdout: "", stderr: "", exitCode: 0 };
+
+  if (binary === "node" || binary.endsWith("/node")) {
+    if (argv[1] === "-e" && argv[2]) return runNodeEval(argv[2]);
+    const script = argv[1] ? resolveCliPath(argv[1], options.cwd) : "";
+    if (script) return runNodeScript(script, options);
+    return unsupportedChildCommand(binary);
+  }
+
+  const binPath = resolveExecutable(binary, options);
+  if (binPath) return runNodeScript(binPath, { ...options, cwd: dirname(binPath) });
+  return unsupportedChildCommand(binary);
+}
+
+function runNodeEval(source: string): CliChildCommandResult {
+  const output = evaluateConsoleOutput(source);
+  if (output !== null) return { stdout: output, stderr: "", exitCode: 0 };
+  return unsupportedChildCommand("node -e");
+}
+
+function runNodeScript(path: string, options: CliChildCommandOptions): CliChildCommandResult {
+  try {
+    const source = options.reader.readText(path);
+    const output = evaluateConsoleOutput(source);
+    if (output !== null) return { stdout: output, stderr: "", exitCode: 0 };
+    return unsupportedChildCommand(path);
+  } catch (error) {
+    return {
+      stdout: "",
+      stderr: `${errorMessage(error)}\n`,
+      exitCode: 1
+    };
+  }
+}
+
+function evaluateConsoleOutput(source: string): string | null {
+  const consoleLog = source.match(/console\.log\(\s*(["'`])([\s\S]*?)\1\s*\)/);
+  if (consoleLog?.[2] !== undefined) return `${unescapeJsString(consoleLog[2])}\n`;
+  const stdoutWrite = source.match(/process\.stdout\.write\(\s*(["'`])([\s\S]*?)\1\s*\)/);
+  if (stdoutWrite?.[2] !== undefined) return unescapeJsString(stdoutWrite[2]);
+  return null;
+}
+
+function resolveExecutable(command: string, options: CliChildCommandOptions): string | null {
+  const direct = resolveCliPath(command, options.cwd);
+  if (readerExists(options.reader, direct)) return direct;
+  const pathEntries = (options.env.PATH || "").split(":").filter(Boolean);
+  for (const entry of pathEntries) {
+    const candidate = resolveCliPath(`${entry}/${command}`, options.cwd);
+    if (readerExists(options.reader, candidate)) return candidate;
+  }
+  const localBin = `${options.cwd}/node_modules/.bin/${command}`;
+  if (readerExists(options.reader, localBin)) return localBin;
+  return null;
+}
+
+function readerExists(reader: WorkspaceModuleReader, path: string): boolean {
+  const maybeReader = reader as WorkspaceModuleReader & { exists?: (path: string) => boolean };
+  if (maybeReader.exists) return maybeReader.exists(path);
+  try {
+    reader.readText(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function resolveCliPath(path: string, cwd: string): string {
+  if (path.startsWith("/")) return normalize(path);
+  if (path.startsWith("./") || path.startsWith("../")) return normalize(`${cwd}/${path}`);
+  return normalize(path);
+}
+
+function unsupportedChildCommand(command: string): CliChildCommandResult {
+  return {
+    stdout: "",
+    stderr: "",
+    exitCode: 1,
+    error: new UnsupportedChildProcessError(command)
+  };
+}
+
+function isShellCommand(command: string, args: readonly string[]): boolean {
+  return (command === "sh" || command === "/bin/sh") && args[0] === "-c";
+}
+
+function splitShellWords(command: string): string[] {
+  const words: string[] = [];
+  let current = "";
+  let quote: "'" | "\"" | "`" | null = null;
+  let escaping = false;
+  for (const char of command) {
+    if (escaping) {
+      current += char;
+      escaping = false;
+      continue;
+    }
+    if (char === "\\") {
+      escaping = true;
+      continue;
+    }
+    if (quote) {
+      if (char === quote) quote = null;
+      else current += char;
+      continue;
+    }
+    if (char === "'" || char === "\"" || char === "`") {
+      quote = char;
+      continue;
+    }
+    if (/\s/.test(char)) {
+      if (current) {
+        words.push(current);
+        current = "";
+      }
+      continue;
+    }
+    current += char;
+  }
+  if (current) words.push(current);
+  return words;
+}
+
+function unescapeJsString(value: string): string {
+  return value
+    .replaceAll("\\n", "\n")
+    .replaceAll("\\r", "\r")
+    .replaceAll("\\t", "\t")
+    .replaceAll("\\\"", "\"")
+    .replaceAll("\\'", "'")
+    .replaceAll("\\\\", "\\");
+}
+
+function wireExecCallback(child: ChildProcess, callback: CliExecCallback): void {
+  let stdout = "";
+  let stderr = "";
+  let settled = false;
+  child.stdout.on("data", (chunk) => {
+    stdout += String(chunk);
+  });
+  child.stderr.on("data", (chunk) => {
+    stderr += String(chunk);
+  });
+  child.once("error", (error) => {
+    if (settled) return;
+    settled = true;
+    callback(error as Error, stdout, stderr);
+  });
+  child.once("close", (code) => {
+    if (settled) return;
+    settled = true;
+    callback(code === 0 ? null : new Error(`Command failed with exit code ${code}`), stdout, stderr);
+  });
 }
 
 function createCliWorkerThreadsBuiltin(options: {
@@ -889,6 +1167,28 @@ interface CliFileHandleFs {
   fsyncSync(fd: number): void;
   readSync(fd: number): Uint8Array;
   writeSync(fd: number, data: RuntimeFsData): number;
+}
+
+interface CliSpawnOptions {
+  cwd?: string;
+  env?: Record<string, string | undefined>;
+  stdio?: "pipe" | "ignore" | "inherit" | readonly unknown[];
+}
+
+type CliExecCallback = (error: Error | null, stdout: string | Uint8Array, stderr: string | Uint8Array) => void;
+
+interface CliChildCommandOptions {
+  cwd: string;
+  env: Record<string, string | undefined>;
+  reader: WorkspaceModuleReader;
+  writer?: PackageManagerWorkspaceWriter | undefined;
+}
+
+interface CliChildCommandResult {
+  stdout: string;
+  stderr: string;
+  exitCode: number;
+  error?: Error;
 }
 
 interface CliRmOptions {
