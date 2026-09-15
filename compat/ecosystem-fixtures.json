@@ -1,0 +1,234 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-16",
+  "scope": {
+    "goal": "Select public Vite React projects and freeze the scoring rubric for ecosystem compatibility.",
+    "productRuntime": "browser-guest-node-runtime",
+    "referenceRuntime": "host-node-reference-harness",
+    "minimumPassForMilestoneB": 7,
+    "fixtureCount": 10
+  },
+  "scoringRubric": {
+    "totalPoints": 100,
+    "criteria": [
+      {
+        "id": "install",
+        "points": 25,
+        "description": "Package manager install completes without unsupported native or postinstall blockers."
+      },
+      {
+        "id": "dev-preview",
+        "points": 25,
+        "description": "Dev server starts, preview loads, and core application content renders."
+      },
+      {
+        "id": "edit-hmr",
+        "points": 25,
+        "description": "A source edit updates served modules through HMR without losing client state."
+      },
+      {
+        "id": "build-dist",
+        "points": 25,
+        "description": "Production build completes and generated dist output passes a static smoke check."
+      }
+    ],
+    "classification": {
+      "pass": "score >= 80 and no unsupported blocker",
+      "partial-pass": "score >= 50 or one recoverable product-runtime gap",
+      "hold": "requires unsupported-but-replaceable dependency, missing lockfile migration, or non-critical Node API gap",
+      "unsupported": "requires Docker, direct TCP database, native addon without browser/WASM fallback, or arbitrary Linux binary"
+    }
+  },
+  "referenceNodeBaseline": {
+    "status": "selected-not-run",
+    "node": ">=22.23.0 <23",
+    "packageManagers": ["npm", "pnpm"],
+    "commands": [
+      "install",
+      "dev",
+      "preview",
+      "source-edit-hmr",
+      "build",
+      "dist-smoke"
+    ],
+    "evidenceRequired": [
+      "install log",
+      "dev server URL",
+      "browser screenshot or DOM assertion",
+      "HMR event log",
+      "build log",
+      "dist file list"
+    ]
+  },
+  "fixtures": [
+    {
+      "id": "vite-official-template-react",
+      "name": "Vite official template-react",
+      "repository": "https://github.com/vitejs/vite",
+      "subdirectory": "packages/create-vite/template-react",
+      "license": "MIT",
+      "packageManager": "pnpm",
+      "lockfile": "monorepo-pnpm-lock",
+      "expectedCommands": {
+        "install": "pnpm install",
+        "dev": "pnpm dev",
+        "build": "pnpm build"
+      },
+      "nativeDependencyRisk": "low",
+      "status": "selected",
+      "source": "https://github.com/vitejs/vite/blob/main/packages/create-vite/template-react/package.json"
+    },
+    {
+      "id": "awe-templates-react-starter",
+      "name": "awe-templates/react-starter",
+      "repository": "https://github.com/awe-templates/react-starter",
+      "license": "MIT",
+      "packageManager": "pnpm",
+      "lockfile": "pnpm-lock.yaml",
+      "expectedCommands": {
+        "install": "pnpm install",
+        "dev": "pnpm dev",
+        "build": "pnpm build"
+      },
+      "nativeDependencyRisk": "medium",
+      "riskNotes": "SWC/Tailwind toolchain may need WASM/native fallback classification.",
+      "status": "selected",
+      "source": "https://github.com/awe-templates/react-starter"
+    },
+    {
+      "id": "hvalette-react-vite-template",
+      "name": "hvalette/react-vite-template",
+      "repository": "https://github.com/hvalette/react-vite-template",
+      "license": "MIT",
+      "packageManager": "npm",
+      "lockfile": "package-lock.json",
+      "expectedCommands": {
+        "install": "npm install",
+        "dev": "npm run dev",
+        "build": "npm run build"
+      },
+      "nativeDependencyRisk": "medium",
+      "riskNotes": "PWA and Tailwind dependencies should be classified before product-runtime scoring.",
+      "status": "selected",
+      "source": "https://github.com/hvalette/react-vite-template"
+    },
+    {
+      "id": "gabbloquet-vite-react18",
+      "name": "gabbloquet/vite-react18",
+      "repository": "https://github.com/gabbloquet/vite-react18",
+      "license": "unknown",
+      "packageManager": "npm",
+      "lockfile": "package-lock.json",
+      "expectedCommands": {
+        "install": "npm install",
+        "dev": "npm run dev",
+        "build": "npm run build"
+      },
+      "nativeDependencyRisk": "low",
+      "status": "selected",
+      "source": "https://github.com/gabbloquet/vite-react18"
+    },
+    {
+      "id": "sivamani18-vite-react-ts-boilerplate",
+      "name": "Sivamani-18/vite-react-ts-boilerplate",
+      "repository": "https://github.com/Sivamani-18/vite-react-ts-boilerplate",
+      "license": "unknown",
+      "packageManager": "npm",
+      "lockfile": "package-lock-or-none",
+      "expectedCommands": {
+        "install": "npm install",
+        "dev": "npm run dev",
+        "build": "npm run build"
+      },
+      "nativeDependencyRisk": "medium",
+      "riskNotes": "Tailwind/PostCSS dependency set should be checked for native tooling.",
+      "status": "selected",
+      "source": "https://github.com/Sivamani-18/vite-react-ts-boilerplate"
+    },
+    {
+      "id": "fuhouyu-homepage",
+      "name": "fuhouyu/homepage",
+      "repository": "https://github.com/fuhouyu/homepage",
+      "license": "listed-public-repo",
+      "packageManager": "npm",
+      "lockfile": "package-lock-or-none",
+      "expectedCommands": {
+        "install": "npm install",
+        "dev": "npm run dev",
+        "build": "npm run build"
+      },
+      "nativeDependencyRisk": "medium",
+      "riskNotes": "Ant Design app; verify browser-compatible dependency graph.",
+      "status": "selected",
+      "source": "https://github.com/fuhouyu/homepage"
+    },
+    {
+      "id": "seongpil0948-react-dev-guide",
+      "name": "seongpil0948/react-dev-guide",
+      "repository": "https://github.com/seongpil0948/react-dev-guide",
+      "license": "unknown",
+      "packageManager": "pnpm",
+      "lockfile": "pnpm-lock.yaml",
+      "expectedCommands": {
+        "install": "pnpm install",
+        "dev": "pnpm dev",
+        "build": "pnpm build"
+      },
+      "nativeDependencyRisk": "medium",
+      "riskNotes": "Playwright/e2e files are out of product-runtime scope unless app dev/build ignores them.",
+      "status": "selected",
+      "source": "https://github.com/seongpil0948/react-dev-guide"
+    },
+    {
+      "id": "ravaniproshan-velorah-landing",
+      "name": "RavaniRoshan/velorah-landing",
+      "repository": "https://github.com/RavaniRoshan/velorah-landing",
+      "license": "unknown",
+      "packageManager": "pnpm",
+      "lockfile": "pnpm-lock-or-workspace",
+      "expectedCommands": {
+        "install": "pnpm install",
+        "dev": "pnpm dev",
+        "build": "pnpm build"
+      },
+      "nativeDependencyRisk": "medium",
+      "riskNotes": "Tailwind v4 and motion/Radix dependencies should be classified.",
+      "status": "selected",
+      "source": "https://github.com/RavaniRoshan/velorah-landing"
+    },
+    {
+      "id": "commencis-starter-react-vite",
+      "name": "Commencis/starter-react-vite",
+      "repository": "https://github.com/Commencis/starter-react-vite",
+      "license": "Apache-2.0",
+      "packageManager": "pnpm",
+      "lockfile": "pnpm-lock.yaml",
+      "expectedCommands": {
+        "install": "pnpm install",
+        "dev": "pnpm dev",
+        "build": "pnpm build"
+      },
+      "nativeDependencyRisk": "medium",
+      "riskNotes": "Storybook/MSW/tooling may need optional-scope filtering.",
+      "status": "selected",
+      "source": "https://github.com/Commencis/starter-react-vite"
+    },
+    {
+      "id": "r35007-vite-react-typescript",
+      "name": "R35007/vite-react-typescript",
+      "repository": "https://github.com/R35007/vite-react-typescript",
+      "license": "MIT",
+      "packageManager": "npm",
+      "lockfile": "package-lock.json",
+      "expectedCommands": {
+        "install": "npm install",
+        "dev": "npm run dev",
+        "build": "npm run build"
+      },
+      "nativeDependencyRisk": "medium",
+      "riskNotes": "Cypress and heavier tooling are out of first compatibility scoring unless dev/build requires them.",
+      "status": "selected",
+      "source": "https://github.com/R35007/vite-react-typescript"
+    }
+  ]
+}
