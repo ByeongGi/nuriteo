@@ -9,10 +9,12 @@ import {
 } from "../packages/node-runtime/src/index.ts";
 import { createFallbackWorkspaceReader, createNodeFsWorkspaceReader } from "./lib/fs-workspace-reader.mjs";
 
-const [vitePackageRootArg, nodeModulesRootArg] = process.argv.slice(2);
+const args = process.argv.slice(2);
+const execute = args.includes("--execute");
+const [vitePackageRootArg, nodeModulesRootArg] = args.filter((arg) => arg !== "--execute");
 
 if (!vitePackageRootArg) {
-  console.error("Usage: node scripts/inspect-vite-package-artifact.mjs <vite-package-root> [node-modules-root]");
+  console.error("Usage: node scripts/inspect-vite-package-artifact.mjs <vite-package-root> [node-modules-root] [--execute]");
   process.exitCode = 1;
 } else {
   const vitePackageRoot = resolve(vitePackageRootArg);
@@ -41,6 +43,9 @@ if (!vitePackageRootArg) {
     console.log(JSON.stringify({
       dependencyClosure,
       directReadiness: summarizeReadiness(readiness),
+      executionSmoke: execute
+        ? await runExecutionSmoke(vitePackageArtifact, dependencyClosure?.artifacts || [])
+        : null,
       hydratedReadiness: dependencyClosure
         ? summarizeReadiness(createHydratedWorkflowReadiness(vitePackageArtifact, dependencyClosure.artifacts))
         : null,
@@ -50,6 +55,29 @@ if (!vitePackageRootArg) {
       }
     }, null, 2));
   }
+}
+
+async function runExecutionSmoke(vitePackageArtifact, dependencyArtifacts) {
+  const workflow = new ViteProductWorkflow({
+    dependencyArtifacts,
+    manager: "pnpm",
+    vitePackageArtifact
+  });
+  workflow.install();
+  const result = await workflow.executeRealCli(["--host", "127.0.0.1"]);
+  return {
+    args: result.args,
+    exitCode: result.exitCode,
+    nativeBindingBlocker: classifyNativeBindingBlocker(result.stderr),
+    registrations: {
+      build: result.buildRegistrations.length,
+      hmr: result.hmrRegistrations.length,
+      server: result.serverRegistrations.length,
+      transform: result.transformRegistrations.length
+    },
+    stderrFirstLine: firstNonEmptyLine(result.stderr),
+    stdoutFirstLine: firstNonEmptyLine(result.stdout)
+  };
 }
 
 function inspectDependencyClosure(nodeModulesRoot, vitePackageArtifact) {
@@ -140,4 +168,24 @@ function summarizePlan(plan) {
     satisfied: plan.satisfied,
     summary: plan.summary
   };
+}
+
+function classifyNativeBindingBlocker(stderr) {
+  if (!stderr.includes("Cannot find native binding")) return null;
+  return {
+    packageName: inferNativeBindingPackageName(stderr),
+    reason: "native-binding-runtime-error"
+  };
+}
+
+function inferNativeBindingPackageName(stderr) {
+  if (stderr.includes("/node_modules/rolldown/")) return "rolldown";
+  const scopedPackageMatch = stderr.match(/\/node_modules\/(@[^/]+\/[^/]+)\//);
+  if (scopedPackageMatch) return scopedPackageMatch[1];
+  const packageMatch = stderr.match(/\/node_modules\/([^/@][^/]*)\//);
+  return packageMatch ? packageMatch[1] : null;
+}
+
+function firstNonEmptyLine(value) {
+  return value.split(/\r?\n/).find((line) => line.trim().length > 0) || null;
 }
