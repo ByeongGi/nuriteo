@@ -25,6 +25,7 @@
     "check:wasi-boundary": "node scripts/check-wasi-boundary.mjs",
     "check:non-js-tooling": "node scripts/check-non-js-tooling-candidates.mjs",
     "check:native-fallback": "node scripts/check-native-fallback-policy.mjs",
+    "inspect:vite-artifact": "node scripts/inspect-vite-package-artifact.mjs",
     "check:types": "tsc --noEmit",
     "test:protocol": "node tests/protocol/run.mjs",
     "test:node-runtime": "node tests/node-runtime/run.mjs",

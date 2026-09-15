@@ -7,7 +7,7 @@ import {
   createViteDependencyArtifactFromWorkspace,
   createVitePackageArtifactFromWorkspace
 } from "../../packages/node-runtime/src/index.ts";
-import { createNodeFsWorkspaceReader } from "./fs-workspace-reader.mjs";
+import { createNodeFsWorkspaceReader } from "../../scripts/lib/fs-workspace-reader.mjs";
 
 const root = mkdtempSync(join(tmpdir(), "cargo-container-fs-reader-"));
 const viteRoot = join(root, "vite");
