@@ -8,7 +8,7 @@ assert.equal(matrix.scope.productRuntime, "browser-guest-node-runtime");
 assert.equal(matrix.scope.referenceRuntime, "host-node-reference-harness");
 
 const casesById = new Map(matrix.cases.map((entry) => [entry.id, entry]));
-for (const id of ["vite-vanilla-reference-workflow", "vite-react-reference-workflow"]) {
+for (const id of ["vite-vanilla-reference-workflow", "vite-react-reference-workflow", "vite-vue-reference-workflow"]) {
   const entry = casesById.get(id);
   assert.equal(entry?.runtime, "host-node-reference-harness");
   assert.equal(entry.status, "pass");

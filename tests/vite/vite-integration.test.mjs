@@ -18,6 +18,11 @@ const fixtures = [
     name: "vite-react",
     path: path.join(root, "tests/fixtures/vite-react"),
     messageFile: "src/message.js"
+  },
+  {
+    name: "vite-vue",
+    path: path.join(root, "tests/fixtures/vite-vue"),
+    messageFile: "src/message.js"
   }
 ];
 const chromePath = process.env.CHROME_PATH || "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";

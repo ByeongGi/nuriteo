@@ -128,6 +128,8 @@ const required = [
   "docs/productization/evidence/P10-03.md",
   "docs/productization/evidence/P10-04.md",
   "docs/productization/evidence/P11-01.md",
+  "docs/productization/evidence/P11-02.md",
+  "docs/productization/evidence/P11-04.md",
   "docs/release/support-matrix.md",
   "docs/release/known-limitations.md",
   "docs/release/operations.md",
@@ -249,6 +251,11 @@ const required = [
   "tests/fixtures/vite-react/src/main.jsx",
   "tests/fixtures/vite-react/src/message.js",
   "tests/fixtures/vite-react/src/style.css",
+  "tests/fixtures/vite-vue/package.json",
+  "tests/fixtures/vite-vue/index.html",
+  "tests/fixtures/vite-vue/src/main.js",
+  "tests/fixtures/vite-vue/src/message.js",
+  "tests/fixtures/vite-vue/src/style.css",
   "tests/sdk-consumer/package.test.mjs",
   "tests/sdk-consumer/run.mjs"
 ];
