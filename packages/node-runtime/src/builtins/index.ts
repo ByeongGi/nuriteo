@@ -25,4 +25,4 @@ export { domainToASCII, domainToUnicode, fileURLToPath, pathToFileURL, URL, urlB
 export { utilBuiltin, callbackify, deprecate, format, formatWithOptions, inherits, inspect, promisify, types as utilTypes } from "./util.ts";
 export { getHeapSpaceStatistics, getHeapStatistics, type HeapStatistics, v8Builtin } from "./v8.ts";
 export { isMainThread, MessageChannel, MessagePort, parentPort, SHARE_ENV, threadId, UnsupportedWorkerThreadError, Worker, workerData, workerThreadsBuiltin } from "./worker-threads-builtin.ts";
-export { BrotliCompress, BrotliDecompress, createBrotliDecompress, createDeflateRaw, createGunzip, createGzip, createInflate, createInflateRaw, createUnzip, DeflateRaw, deflateRawSync, Gzip, Inflate, inflateRawSync, InflateRaw, Unzip, Z_SYNC_FLUSH, zlibBuiltin } from "./zlib.ts";
+export { BrotliCompress, BrotliDecompress, createBrotliDecompress, createDeflateRaw, createGunzip, createGzip, createInflate, createInflateRaw, createUnzip, DeflateRaw, deflateRawSync, Gunzip, gunzipSync, Gzip, gzipSync, Inflate, inflateRawSync, InflateRaw, Unzip, Z_SYNC_FLUSH, zlibBuiltin } from "./zlib.ts";

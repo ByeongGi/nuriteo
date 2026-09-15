@@ -32,5 +32,8 @@
     "@playwright/test": "1.63.0",
     "@types/node": "^22.20.2",
     "typescript": "6.0.3"
+  },
+  "dependencies": {
+    "fflate": "^0.8.3"
   }
 }

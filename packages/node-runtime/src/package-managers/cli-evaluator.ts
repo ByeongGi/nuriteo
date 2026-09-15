@@ -806,6 +806,7 @@ function createWorkspaceFsFacade(reader: WorkspaceModuleReader, writer?: Package
       openFiles.set(fd, {
         bytes: initialOpenBytes(reader, normalized, mode, encoder),
         path: normalized,
+        position: 0,
         writable: mode.writable
       });
       return fd;
@@ -848,7 +849,7 @@ function createWorkspaceFsFacade(reader: WorkspaceModuleReader, writer?: Package
         return facade.lstatSync(path, options);
       },
       async open(path: string, flags: string | number = "r"): Promise<CliFileHandle> {
-        return createFileHandle(facade.openSync(path, flags), facade);
+        return createFileHandle(facade.openSync(path, flags), facade as CliFileHandleFs);
       },
       async readFile(path: string, encoding?: "utf8" | "utf-8"): Promise<Uint8Array | string> {
         return encoding ? readFileSync(path, encoding) : readFileSync(path);
@@ -906,10 +907,23 @@ function createWorkspaceFsFacade(reader: WorkspaceModuleReader, writer?: Package
       if (!maybeReader.readlink) throw createFsError("ENOENT", `No such file or directory: ${normalize(path)}`);
       return maybeReader.readlink(normalize(path));
     },
-    readSync(fd: number): Uint8Array {
+    read(fd: number, buffer: Uint8Array, offset: number, length: number, position: number | null, callback: (error: Error | null, bytesRead?: number, buffer?: Uint8Array) => void): void {
+      try {
+        const bytesRead = facade.readSync(fd, buffer, offset, length, position) as number;
+        callback(null, bytesRead, buffer);
+      } catch (error) {
+        callback(error instanceof Error ? error : new Error(String(error)));
+      }
+    },
+    readSync(fd: number, buffer?: Uint8Array, offset = 0, length = buffer ? buffer.byteLength - offset : 0, position?: number | null): Uint8Array | number {
       const file = openFiles.get(fd);
       if (!file) throw createFsError("EBADF", `Bad file descriptor: ${fd}`);
-      return file.bytes;
+      if (!buffer) return file.bytes;
+      const start = position ?? file.position;
+      const bytes = file.bytes.slice(start, start + length);
+      buffer.set(bytes, offset);
+      if (position === null || position === undefined) file.position = start + bytes.byteLength;
+      return bytes.byteLength;
     },
     readdirSync(path: string, options?: CliReaddirOptions): CliDirent[] | string[] {
       const normalized = normalize(path);
@@ -1112,7 +1126,7 @@ function createFileHandle(fh: number, fs: CliFileHandleFs): CliFileHandle {
       position: number | null = 0
     ): Promise<{ bytesRead: number; buffer: Uint8Array }> {
       const start = position ?? 0;
-      const bytes = fs.readSync(fh).slice(start, start + length);
+      const bytes = (fs.readSync(fh) as Uint8Array).slice(start, start + length);
       buffer.set(bytes, offset);
       return { bytesRead: bytes.byteLength, buffer };
     },
@@ -1154,6 +1168,7 @@ type CliFsRealpath = ((path: string, callback: (error: Error | null, resolvedPat
 interface CliOpenFile {
   bytes: Uint8Array;
   path: string;
+  position: number;
   writable: boolean;
 }
 
@@ -1189,7 +1204,7 @@ interface CliFileHandleFs {
   fchmodSync(fd: number, mode: number): void;
   fchownSync(fd: number, uid: number, gid: number): void;
   fsyncSync(fd: number): void;
-  readSync(fd: number): Uint8Array;
+  readSync(fd: number, buffer?: Uint8Array, offset?: number, length?: number, position?: number | null): Uint8Array | number;
   writeSync(fd: number, data: RuntimeFsData): number;
 }
 

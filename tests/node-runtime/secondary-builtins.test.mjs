@@ -94,9 +94,11 @@ assert.equal(typeof v8.getHeapStatistics().heap_size_limit, "number");
 assert.deepEqual(v8.getHeapSpaceStatistics(), []);
 
 const zlib = requireBuiltin("node:zlib");
+const compressed = zlib.gzipSync(new TextEncoder().encode("zip-ok"));
 const unzip = zlib.createUnzip();
 assert.equal(typeof unzip._handle._processChunk, "function");
-assert.equal(unzip._handle._processChunk(new Uint8Array([1]))[0][0], 1);
+assert.equal(new TextDecoder().decode(unzip._handle._processChunk(compressed)[0]), "zip-ok");
+assert.equal(new TextDecoder().decode(zlib.gunzipSync(compressed)), "zip-ok");
 assert.equal(unzip.reset(), undefined);
 assert.equal(unzip.close(), undefined);
 
