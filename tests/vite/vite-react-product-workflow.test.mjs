@@ -12,6 +12,9 @@ for (const manager of ["npm", "pnpm"]) {
   assert.equal(result.install.packages.includes("vite"), true);
   assert.equal(result.install.packages.includes("react"), true);
   assert.equal(result.devServer.running, true);
+  assert.equal(result.devServer.processPid, 5173);
+  assert.equal(result.devServer.processStarted, true);
+  assert.equal(result.devServer.processExited, false);
   assert.equal(result.preview.statusCode, 200);
   assert.match(result.preview.body, /alpha:1/);
   assert.match(result.hmr.before, /alpha:1/);
@@ -28,6 +31,9 @@ for (const manager of ["npm", "pnpm"]) {
   const started = workflow.startDevServer();
   assert.equal(started.running, true);
   assert.equal(started.port, 5173);
+  assert.equal(started.processPid, 5173);
+  assert.equal(started.processStarted, true);
+  assert.equal(started.processExited, false);
   assert.throws(
     () => new ViteReactProductWorkflow({ manager, projectId: `${manager}-conflict`, network, port: 5173 }).startDevServer(),
     (error) => error.code === "EADDRINUSE"
@@ -50,13 +56,17 @@ for (const manager of ["npm", "pnpm"]) {
   assert.match(await response.text(), /alpha:1/);
   assert.deepEqual(workflow.startDevServer().requests, ["/index.html"]);
 
-  workflow.stopDevServer();
+  const stopped = workflow.stopDevServer();
+  assert.equal(stopped.running, false);
+  assert.equal(stopped.processExited, true);
   await assert.rejects(
     workflow.fetch("http://127.0.0.1:5173/index.html"),
     (error) => error.code === "ECONNREFUSED"
   );
   const restarted = workflow.startDevServer();
   assert.equal(restarted.running, true);
+  assert.equal(restarted.processStarted, true);
+  assert.equal(restarted.processExited, false);
   const recovered = await workflow.fetch("http://127.0.0.1:5173/index.html");
   assert.equal(recovered.status, 200);
   assert.match(await recovered.text(), /alpha:1/);

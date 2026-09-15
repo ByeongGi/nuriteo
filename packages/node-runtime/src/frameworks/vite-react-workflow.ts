@@ -1,4 +1,5 @@
 import { join } from "../builtins/path.ts";
+import { spawnRuntimeChild, type RuntimeChildProcess } from "../child-process.ts";
 import { createLoopbackNetwork, type LoopbackNetwork, type RuntimeHttpResponse } from "../net/index.ts";
 import { MemoryPackageManagerWorkspace, type PackageManagerWorkspaceMount } from "../package-managers/workspace.ts";
 
@@ -36,6 +37,9 @@ export interface ViteReactDevServerSnapshot {
   running: boolean;
   restartCount: number;
   requests: string[];
+  processPid: number | null;
+  processStarted: boolean;
+  processExited: boolean;
 }
 
 export interface ViteReactHmrUpdate {
@@ -76,6 +80,7 @@ export class ViteReactProductWorkflow {
   #restartCount = 0;
   #running = false;
   #listener: { port: number; close: () => void } | null = null;
+  #devProcess: RuntimeChildProcess | null = null;
   #requests: string[] = [];
   #hmrUpdates: ViteReactHmrUpdate[] = [];
 
@@ -125,6 +130,14 @@ export class ViteReactProductWorkflow {
       const preview = this.preview(request.path);
       return toRuntimeHttpResponse(preview);
     });
+    this.#devProcess = spawnRuntimeChild({
+      pid: this.#port,
+      entrypoint: ({ scheduler, stdio }) => {
+        stdio.stdout.write(new TextEncoder().encode(`vite dev server listening on 127.0.0.1:${this.#port}\n`));
+        scheduler.liveness.ref("vite-dev-server");
+      }
+    });
+    void this.#devProcess.scheduler.drainMicrotasks();
     this.#running = true;
     return this.#snapshot();
   }
@@ -133,6 +146,7 @@ export class ViteReactProductWorkflow {
     this.#listener?.close();
     this.#listener = null;
     this.#running = false;
+    this.#devProcess?.process.exit(143);
     return this.#snapshot();
   }
 
@@ -194,7 +208,10 @@ export class ViteReactProductWorkflow {
       port: this.#port,
       running: this.#running,
       restartCount: this.#restartCount,
-      requests: [...this.#requests]
+      requests: [...this.#requests],
+      processPid: this.#devProcess?.process.pid ?? null,
+      processStarted: this.#devProcess?.started ?? false,
+      processExited: this.#devProcess?.process.exited ?? false
     };
   }
 
