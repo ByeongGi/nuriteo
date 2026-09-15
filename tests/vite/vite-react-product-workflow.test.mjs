@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 
-import { createLoopbackNetwork, runViteProductCliBackedWorkflow, runViteProductWorkflow, ViteProductWorkflow } from "../../packages/node-runtime/src/index.ts";
+import {
+  createLoopbackNetwork,
+  createVitePackageArtifactFromWorkspace,
+  MemoryPackageManagerWorkspace,
+  runViteProductCliBackedWorkflow,
+  runViteProductWorkflow,
+  ViteProductWorkflow
+} from "../../packages/node-runtime/src/index.ts";
 import { createHmrClient, createPreviewRelay, createPreviewSessionRegistry } from "../../packages/preview/src/index.ts";
 
 for (const template of ["react", "vue-runtime", "svelte"]) {
@@ -342,6 +349,46 @@ assert.deepEqual(artifactBuildExecution.buildRegistrations, [
     source: "vite-cli"
   }
 ]);
+
+const installedViteWorkspace = new MemoryPackageManagerWorkspace([
+  {
+    path: "/vendor/vite/package.json",
+    data: JSON.stringify({ name: "vite", version: "9.1.0-installed", type: "module", bin: { vite: "bin/vite.mjs" } })
+  },
+  {
+    path: "/vendor/vite/bin/vite.mjs",
+    data: "#!/usr/bin/env node\nimport '../dist/node/cli.mjs';\n"
+  },
+  {
+    path: "/vendor/vite/dist/node/cli.mjs",
+    data: "import { startDevServer } from './server.mjs';\nstartDevServer({ host: '127.0.0.1', port: Number(process.env.PORT || 5173) });\n"
+  },
+  {
+    path: "/vendor/vite/dist/node/server.mjs",
+    data: "export function startDevServer(options) {\n  global.__viteRegisterTransform?.({ mode: 'browser-esm', source: 'vite-cli', transformRequest(request) { return `// installed package transform:${request.path}\\n${request.source}`; } });\n  global.__viteRegisterHmrChannel?.({ channel: 'hmr', source: 'vite-cli', transport: 'loopback', sendUpdate(update) { global.__viteBroadcastHmr?.(update); return update; } });\n  global.__viteRegisterDevServer?.({ command: 'dev', host: options.host, port: options.port, source: 'vite-cli' });\n}\n"
+  }
+]);
+const installedArtifact = createVitePackageArtifactFromWorkspace({
+  reader: installedViteWorkspace,
+  packageRoot: "/vendor/vite"
+});
+assert.equal(installedArtifact.version, "9.1.0-installed");
+assert.deepEqual(installedArtifact.mounts.map((mount) => mount.path), [
+  "bin/vite.mjs",
+  "dist/node/cli.mjs",
+  "dist/node/server.mjs",
+  "package.json"
+]);
+const installedArtifactWorkflow = new ViteProductWorkflow({
+  manager: "npm",
+  port: 5301,
+  vitePackageArtifact: installedArtifact
+});
+installedArtifactWorkflow.install();
+const installedArtifactServer = await installedArtifactWorkflow.startDevServerFromCliExecution();
+assert.equal(installedArtifactServer.source, "cli-execution");
+const installedArtifactModule = await installedArtifactWorkflow.fetch("http://127.0.0.1:5301/src/main.jsx");
+assert.match(await installedArtifactModule.text(), /installed package transform:\/src\/main\.jsx/);
 
 assert.throws(
   () => new ViteProductWorkflow({

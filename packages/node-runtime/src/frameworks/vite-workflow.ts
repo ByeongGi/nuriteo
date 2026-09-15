@@ -5,6 +5,7 @@ import { createAsyncCliModuleEvaluator } from "../package-managers/cli-evaluator
 import { analyzeCliModuleGraph, type CliModuleGraph } from "../package-managers/cli-module-graph.ts";
 import { inspectCliEntryReadiness, type CliEntryReadiness } from "../package-managers/cli-entry-readiness.ts";
 import { MemoryPackageManagerWorkspace, type PackageManagerWorkspaceMount } from "../package-managers/workspace.ts";
+import type { WorkspaceModuleReader } from "../modules/index.ts";
 import type { CliRunResult, RuntimeEnv } from "../types.ts";
 
 export type ViteProductPackageManager = "npm" | "pnpm";
@@ -24,6 +25,12 @@ export interface ViteProductWorkflowOptions {
 export interface ViteProductPackageArtifact {
   mounts: PackageManagerWorkspaceMount[];
   version: string;
+}
+
+export interface ViteProductPackageArtifactFromWorkspaceOptions {
+  packageRoot: string;
+  reader: WorkspaceModuleReader;
+  version?: string;
 }
 
 export type ViteProductPackageArtifactErrorCode = "EVITEARTIFACTMANIFEST" | "EVITEARTIFACTNAME" | "EVITEARTIFACTBIN";
@@ -772,6 +779,19 @@ export function runViteProductCliBackedWorkflow(options: ViteProductWorkflowOpti
 
 export const ViteReactProductWorkflow = ViteProductWorkflow;
 
+export function createVitePackageArtifactFromWorkspace(options: ViteProductPackageArtifactFromWorkspaceOptions): ViteProductPackageArtifact {
+  const packageRoot = normalizeServedPath(options.packageRoot).replace(/\/$/, "");
+  const packageJson = JSON.parse(options.reader.readText(join(packageRoot, "package.json"))) as VitePackageManifest;
+  if (packageJson.name !== "vite") {
+    throw new ViteProductPackageArtifactError("EVITEARTIFACTNAME", "Mounted Vite package artifact package.json must have name \"vite\".", join(packageRoot, "package.json"));
+  }
+  const mounts = collectTextMounts(options.reader, packageRoot);
+  return {
+    mounts,
+    version: options.version || packageJson.version || "unknown"
+  };
+}
+
 export function runViteReactProductWorkflow(options: ViteProductWorkflowOptions): ViteProductWorkflowResult {
   return runViteProductWorkflow({ ...options, template: options.template || "react" });
 }
@@ -873,6 +893,35 @@ function createLockfile(manager: ViteProductPackageManager, packages: string[]):
 
 function packagesForTemplate(template: ViteProductTemplate): string[] {
   return ["vite", "typescript", ...Object.keys(dependenciesForTemplate(template))];
+}
+
+function collectTextMounts(reader: WorkspaceModuleReader, packageRoot: string): PackageManagerWorkspaceMount[] {
+  const mounts: PackageManagerWorkspaceMount[] = [];
+  for (const file of walkWorkspaceTextFiles(reader, packageRoot)) {
+    mounts.push({
+      path: file.slice(packageRoot.length + 1),
+      data: reader.readText(file)
+    });
+  }
+  return mounts.sort((left, right) => left.path.localeCompare(right.path));
+}
+
+function* walkWorkspaceTextFiles(reader: WorkspaceModuleReader, path: string): Generator<string> {
+  let entries: string[];
+  try {
+    entries = reader.listDir(path);
+  } catch {
+    try {
+      reader.readText(path);
+      yield path;
+    } catch {
+      // Ignore non-text entries in the mounted package artifact.
+    }
+    return;
+  }
+  for (const entry of entries) {
+    yield* walkWorkspaceTextFiles(reader, join(path, entry));
+  }
 }
 
 function normalizePackageArtifactPath(path: string): string {
