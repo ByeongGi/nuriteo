@@ -26,6 +26,7 @@ const tests = [
   "./pnpm-guest-runtime-boot.test.mjs",
   "./pnpm-store-plan.test.mjs",
   "./terminal-commands.test.mjs",
+  "./workspace-snapshot.test.mjs",
   "./tarball-cache.test.mjs",
   "./fetcher.test.mjs",
   "./npm-integration.test.mjs",

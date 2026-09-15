@@ -27,6 +27,17 @@ export interface PackageManagerWorkspaceMount {
   encoding?: "utf8" | "base64";
 }
 
+export interface PackageManagerWorkspaceSnapshot {
+  directories: string[];
+  files: PackageManagerWorkspaceMount[];
+  links: PackageManagerWorkspaceLinkSnapshot[];
+}
+
+export interface PackageManagerWorkspaceLinkSnapshot {
+  path: string;
+  target: string;
+}
+
 export class MemoryPackageManagerWorkspace implements PackageManagerWorkspace {
   readonly files = new Map<string, Uint8Array>();
   readonly directories = new Set<string>(["/"]);
@@ -182,6 +193,32 @@ export class MemoryPackageManagerWorkspace implements PackageManagerWorkspace {
     this.links.set(normalized, normalizePath(target));
   }
 
+  snapshot(): PackageManagerWorkspaceSnapshot {
+    return {
+      directories: [...this.directories].sort(),
+      files: [...this.files.entries()]
+        .map(([path, data]) => ({
+          path,
+          data: encodeBase64(data),
+          encoding: "base64" as const
+        }))
+        .sort((left, right) => left.path.localeCompare(right.path)),
+      links: [...this.links.entries()]
+        .map(([path, target]) => ({ path, target }))
+        .sort((left, right) => left.path.localeCompare(right.path))
+    };
+  }
+
+  static fromSnapshot(snapshot: PackageManagerWorkspaceSnapshot): MemoryPackageManagerWorkspace {
+    const workspace = new MemoryPackageManagerWorkspace(snapshot.files);
+    workspace.directories.clear();
+    for (const directory of snapshot.directories) workspace.directories.add(normalizePath(directory));
+    workspace.directories.add("/");
+    workspace.links.clear();
+    for (const link of snapshot.links) workspace.symlink(link.target, link.path);
+    return workspace;
+  }
+
   exists(path: string): boolean {
     const normalized = normalizePath(path);
     if (this.files.has(normalized) || this.directories.has(normalized) || this.links.has(normalized)) return true;
@@ -248,4 +285,15 @@ function decodeBase64(value: string): Uint8Array {
   const bufferCtor = (globalThis as typeof globalThis & { Buffer?: { from(value: string, encoding: "base64"): Uint8Array } }).Buffer;
   if (bufferCtor) return new Uint8Array(bufferCtor.from(value, "base64"));
   throw new Error("Base64 decoding is not available in this runtime");
+}
+
+function encodeBase64(value: Uint8Array): string {
+  if (typeof btoa === "function") {
+    let binary = "";
+    for (const byte of value) binary += String.fromCharCode(byte);
+    return btoa(binary);
+  }
+  const bufferCtor = (globalThis as typeof globalThis & { Buffer?: { from(value: Uint8Array): { toString(encoding: "base64"): string } } }).Buffer;
+  if (bufferCtor) return bufferCtor.from(value).toString("base64");
+  throw new Error("Base64 encoding is not available in this runtime");
 }
