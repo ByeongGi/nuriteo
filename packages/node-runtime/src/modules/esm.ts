@@ -130,27 +130,50 @@ export function cjsNamespace(exports: RuntimeValue): RuntimeNamespace {
 }
 
 function compileEsmSource(source: string, filename: string, globals: Record<string, RuntimeValue>): (context: EsmContext) => Promise<void> {
-  return createEsmSourceCompiler(prepareEsmSource(source), filename, globals);
+  return createEsmSourceCompiler({
+    filename,
+    globals,
+    originalSource: source,
+    preparedSource: prepareEsmSource(source)
+  });
 }
 
 function compileEsmSourceSync(source: string, filename: string, globals: Record<string, RuntimeValue>): (context: EsmContext) => void {
   return createSyncEsmSourceCompiler(prepareSyncEsmSource(source), filename, globals);
 }
 
-function createEsmSourceCompiler(source: string, filename: string, globals: Record<string, RuntimeValue>): (context: EsmContext) => Promise<void> {
+function createEsmSourceCompiler(options: {
+  filename: string;
+  globals: Record<string, RuntimeValue>;
+  originalSource: string;
+  preparedSource: string;
+}): (context: EsmContext) => Promise<void> {
+  const { filename, globals, originalSource, preparedSource } = options;
   const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor as new (...args: string[]) => (context: {
     dynamicImport: (specifier: string) => Promise<RuntimeNamespace>;
     exportConst: (name: string, value: RuntimeValue) => void;
     exportLive: (name: string, getter: () => RuntimeValue) => void;
   }, process: RuntimeValue, global: RuntimeValue, console: RuntimeValue, globalThis: RuntimeValue) => Promise<void>;
-  const compiled = new AsyncFunction(
-    "__context",
-    "process",
-    "global",
-    "console",
-    "globalThis",
-    `const __import = __context.dynamicImport;\nconst __exportConst = __context.exportConst;\nconst __exportLive = __context.exportLive;\n${source}\n//# sourceURL=${filename}`
-  );
+  let compiled: (context: {
+    dynamicImport: (specifier: string) => Promise<RuntimeNamespace>;
+    exportConst: (name: string, value: RuntimeValue) => void;
+    exportLive: (name: string, getter: () => RuntimeValue) => void;
+  }, process: RuntimeValue, global: RuntimeValue, console: RuntimeValue, globalThis: RuntimeValue) => Promise<void>;
+  try {
+    compiled = new AsyncFunction(
+      "__context",
+      "process",
+      "global",
+      "console",
+      "globalThis",
+      `const __import = __context.dynamicImport;\nconst __exportConst = __context.exportConst;\nconst __exportLive = __context.exportLive;\n${preparedSource}\n//# sourceURL=${filename}`
+    ) as typeof compiled;
+  } catch (error) {
+    if (!isDynamicCodeBlocked(error)) throw error;
+    const evalFreeCompiler = compileEvalFreeEsmSource(originalSource, globals);
+    if (evalFreeCompiler) return evalFreeCompiler;
+    throw new Error(`ECLICSPUNSUPPORTED: browser worker CSP blocks dynamic ESM evaluation for this module: ${filename}`);
+  }
   return (context) => compiled(context, globals.process, globals.global, globals.console ?? console, globals.globalThis ?? globals.global);
 }
 
@@ -164,6 +187,375 @@ function createSyncEsmSourceCompiler(source: string, filename: string, globals: 
     `const __import = __context.importNamespace;\nconst __exportConst = __context.exportConst;\nconst __exportLive = __context.exportLive;\n${source}\n//# sourceURL=${filename}`
   ) as (context: EsmContext, process: RuntimeValue, global: RuntimeValue, console: RuntimeValue, globalThis: RuntimeValue) => void;
   return (context) => compiled(context, globals.process, globals.global, globals.console ?? console, globals.globalThis ?? globals.global);
+}
+
+function compileEvalFreeEsmSource(source: string, globals: Record<string, RuntimeValue>): ((context: EsmContext) => Promise<void>) | null {
+  const sourceWithoutShebang = stripShebang(source);
+  const importRecords = collectEvalFreeImports(sourceWithoutShebang);
+  const functions = collectEvalFreeExportFunctions(sourceWithoutShebang);
+  const topLevel = removeEvalFreeImports(removeEvalFreeFunctionBlocks(sourceWithoutShebang, functions));
+  if (importRecords.length === 0 && functions.length === 0 && !containsEvalFreeExecutableStatement(topLevel)) return null;
+
+  return async (context) => {
+    const scope = new Map<string, RuntimeValue>();
+    const loadedSpecifiers = new Set<string>();
+    for (const record of importRecords) {
+      if (record.kind === "side-effect") {
+        if (!loadedSpecifiers.has(record.specifier)) {
+          await context.dynamicImport(record.specifier);
+          loadedSpecifiers.add(record.specifier);
+        }
+        continue;
+      }
+      const namespace = await context.dynamicImport(record.specifier);
+      loadedSpecifiers.add(record.specifier);
+      for (const binding of record.bindings) {
+        scope.set(binding.local, namespace[binding.imported]);
+      }
+    }
+    for (const fn of functions) {
+      const callable = (...args: RuntimeValue[]) => executeEvalFreeFunction(fn, args, scope, globals, context);
+      scope.set(fn.name, callable);
+      context.exportConst(fn.name, callable);
+    }
+    await executeEvalFreeStatements(topLevel, scope, globals, context);
+  };
+}
+
+interface EvalFreeImportRecord {
+  bindings: { imported: string; local: string }[];
+  kind: "named" | "side-effect";
+  specifier: string;
+}
+
+interface EvalFreeFunctionRecord {
+  body: string;
+  end: number;
+  name: string;
+  params: string[];
+  start: number;
+}
+
+function collectEvalFreeImports(source: string): EvalFreeImportRecord[] {
+  const records: EvalFreeImportRecord[] = [];
+  for (const match of source.matchAll(/^[ \t]*import\s+\{([^}\n]+)\}\s+from\s+["']([^"']+)["'];?[ \t]*$/gm)) {
+    const clause = match[1];
+    const specifier = match[2];
+    if (!clause || !specifier) continue;
+    records.push({
+      bindings: clause
+        .split(",")
+        .map((binding) => binding.trim())
+        .filter(Boolean)
+        .map((binding) => {
+          const [imported, local] = binding.split(/\s+as\s+/);
+          const importedName = imported?.trim() || "";
+          return { imported: importedName, local: local?.trim() || importedName };
+        })
+        .filter((binding) => binding.imported.length > 0 && binding.local.length > 0),
+      kind: "named",
+      specifier
+    });
+  }
+  for (const match of source.matchAll(/^[ \t]*import\s+["']([^"']+)["'];?[ \t]*$/gm)) {
+    if (!match[1]) continue;
+    records.push({ bindings: [], kind: "side-effect", specifier: match[1] });
+  }
+  return records;
+}
+
+function removeEvalFreeImports(source: string): string {
+  return source
+    .replace(/^[ \t]*import\s+\{[^}\n]+\}\s+from\s+["'][^"']+["'];?[ \t]*$/gm, "")
+    .replace(/^[ \t]*import\s+["'][^"']+["'];?[ \t]*$/gm, "");
+}
+
+function collectEvalFreeExportFunctions(source: string): EvalFreeFunctionRecord[] {
+  const records: EvalFreeFunctionRecord[] = [];
+  const pattern = /export\s+function\s+([A-Za-z_$][\w$]*)\s*\(([^)]*)\)\s*\{/g;
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(source))) {
+    const name = match[1];
+    if (!name) continue;
+    const bodyStart = pattern.lastIndex;
+    const bodyEnd = findMatchingBrace(source, bodyStart - 1);
+    if (bodyEnd < 0) continue;
+    records.push({
+      body: source.slice(bodyStart, bodyEnd),
+      end: bodyEnd + 1,
+      name,
+      params: (match[2] || "").split(",").map((param) => param.trim()).filter(Boolean),
+      start: match.index
+    });
+    pattern.lastIndex = bodyEnd + 1;
+  }
+  return records;
+}
+
+function removeEvalFreeFunctionBlocks(source: string, functions: readonly EvalFreeFunctionRecord[]): string {
+  let output = "";
+  let cursor = 0;
+  for (const fn of functions) {
+    output += source.slice(cursor, fn.start);
+    cursor = fn.end;
+  }
+  return output + source.slice(cursor);
+}
+
+function containsEvalFreeExecutableStatement(source: string): boolean {
+  return /(?:^|[;\n])\s*(?:if\s*\(|[A-Za-z_$][\w$]*\s*\(|global(?:This)?\.__[A-Za-z_$][\w$]*\?\.\()/.test(source);
+}
+
+async function executeEvalFreeFunction(
+  fn: EvalFreeFunctionRecord,
+  args: RuntimeValue[],
+  parentScope: Map<string, RuntimeValue>,
+  globals: Record<string, RuntimeValue>,
+  context: EsmContext
+): Promise<RuntimeValue> {
+  const scope = new Map(parentScope);
+  fn.params.forEach((param, index) => scope.set(param, args[index]));
+  return executeEvalFreeStatements(fn.body, scope, globals, context);
+}
+
+async function executeEvalFreeStatements(
+  source: string,
+  scope: Map<string, RuntimeValue>,
+  globals: Record<string, RuntimeValue>,
+  context: EsmContext
+): Promise<RuntimeValue> {
+  let remaining = source;
+  const conditional = extractProcessArgvConditional(remaining);
+  if (conditional) {
+    const process = globals.process as { argv?: string[] } | undefined;
+    const selected = process?.argv?.includes(conditional.argument) ? conditional.whenTrue : conditional.whenFalse;
+    await executeEvalFreeStatements(selected, scope, globals, context);
+    remaining = `${remaining.slice(0, conditional.start)}\n${remaining.slice(conditional.end)}`;
+  }
+
+  for (const call of collectGlobalHookCalls(remaining)) {
+    const handler = getEvalFreeGlobalValue(globals, call.name);
+    if (typeof handler === "function") {
+      (handler as (...args: RuntimeValue[]) => RuntimeValue)(evaluateEvalFreeObjectLiteral(call.argument, scope, globals));
+    }
+  }
+
+  for (const call of collectEvalFreeFunctionCalls(remaining)) {
+    const callable = scope.get(call.name);
+    if (typeof callable !== "function") continue;
+    await (callable as (...args: RuntimeValue[]) => RuntimeValue | Promise<RuntimeValue>)(...call.args.map((arg) => evaluateEvalFreeExpression(arg, scope, globals)));
+  }
+
+  const returnExpression = remaining.match(/\breturn\s+([^;\n]+);?/);
+  return returnExpression?.[1] ? evaluateEvalFreeExpression(returnExpression[1], scope, globals) : undefined;
+}
+
+function extractProcessArgvConditional(source: string): { argument: string; end: number; start: number; whenFalse: string; whenTrue: string } | null {
+  const match = /if\s*\(\s*process\.argv\.includes\(\s*["']([^"']+)["']\s*\)\s*\)\s*\{/.exec(source);
+  if (!match?.[1]) return null;
+  const trueOpen = (match.index ?? 0) + match[0].length - 1;
+  const trueClose = findMatchingBrace(source, trueOpen);
+  if (trueClose < 0) return null;
+  const elseMatch = /^\s*else\s*\{/.exec(source.slice(trueClose + 1));
+  if (!elseMatch) return null;
+  const falseOpen = trueClose + 1 + elseMatch[0].length - 1;
+  const falseClose = findMatchingBrace(source, falseOpen);
+  if (falseClose < 0) return null;
+  return {
+    argument: match[1],
+    end: falseClose + 1,
+    start: match.index,
+    whenFalse: source.slice(falseOpen + 1, falseClose),
+    whenTrue: source.slice(trueOpen + 1, trueClose)
+  };
+}
+
+function collectGlobalHookCalls(source: string): { argument: string; name: string }[] {
+  const calls: { argument: string; name: string }[] = [];
+  const pattern = /global(?:This)?\.(__(?:[A-Za-z_$][\w$]*))\?\.\(\s*\{/g;
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(source))) {
+    const name = match[1];
+    const open = pattern.lastIndex - 1;
+    const close = findMatchingBrace(source, open);
+    if (!name || close < 0) continue;
+    calls.push({ argument: source.slice(open, close + 1), name });
+    pattern.lastIndex = close + 1;
+  }
+  return calls;
+}
+
+function getEvalFreeGlobalValue(globals: Record<string, RuntimeValue>, name: string): RuntimeValue {
+  const globalObject = globals.global;
+  const globalThisObject = globals.globalThis;
+  if (typeof globalObject === "object" && globalObject !== null && name in globalObject) {
+    return (globalObject as Record<string, RuntimeValue>)[name];
+  }
+  if (typeof globalThisObject === "object" && globalThisObject !== null && name in globalThisObject) {
+    return (globalThisObject as Record<string, RuntimeValue>)[name];
+  }
+  return globals[name];
+}
+
+function collectEvalFreeFunctionCalls(source: string): { args: string[]; name: string }[] {
+  const calls: { args: string[]; name: string }[] = [];
+  const pattern = /(?:^|[;\n])\s*([A-Za-z_$][\w$]*)\s*\(/g;
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(source))) {
+    const name = match[1];
+    if (!name || name === "if" || name === "return") continue;
+    const open = pattern.lastIndex - 1;
+    const close = findMatchingParen(source, open);
+    if (close < 0) continue;
+    calls.push({ args: splitTopLevelComma(source.slice(open + 1, close)), name });
+    pattern.lastIndex = close + 1;
+  }
+  return calls;
+}
+
+function evaluateEvalFreeObjectLiteral(source: string, scope: Map<string, RuntimeValue>, globals: Record<string, RuntimeValue>): Record<string, RuntimeValue> {
+  const inner = source.trim().replace(/^\{/, "").replace(/\}$/, "");
+  const result: Record<string, RuntimeValue> = {};
+  for (const property of splitTopLevelComma(inner)) {
+    const method = property.match(/^\s*([A-Za-z_$][\w$]*)\s*\([^)]*\)\s*\{/);
+    if (method?.[1]) {
+      result[method[1]] = () => undefined;
+      continue;
+    }
+    const separator = property.indexOf(":");
+    if (separator < 0) continue;
+    const key = property.slice(0, separator).trim().replace(/^["']|["']$/g, "");
+    if (!key) continue;
+    result[key] = evaluateEvalFreeExpression(property.slice(separator + 1).trim(), scope, globals);
+  }
+  return result;
+}
+
+function evaluateEvalFreeExpression(source: string, scope: Map<string, RuntimeValue>, globals: Record<string, RuntimeValue>): RuntimeValue {
+  const expression = source.trim();
+  const stringMatch = expression.match(/^(["'`])([\s\S]*)\1$/);
+  if (stringMatch) return unescapeJsString(stringMatch[2] || "");
+  if (/^-?\d+(?:\.\d+)?$/.test(expression)) return Number(expression);
+  if (expression === "true") return true;
+  if (expression === "false") return false;
+  if (expression === "undefined") return undefined;
+  if (expression.startsWith("{") && expression.endsWith("}")) return evaluateEvalFreeObjectLiteral(expression, scope, globals);
+  const numberEnvMatch = expression.match(/^Number\(\s*process\.env\.([A-Za-z_$][\w$]*)\s*\|\|\s*(\d+)\s*\)$/);
+  if (numberEnvMatch?.[1] && numberEnvMatch[2]) {
+    const process = globals.process as { env?: Record<string, string | undefined> } | undefined;
+    return Number(process?.env?.[numberEnvMatch[1]] || numberEnvMatch[2]);
+  }
+  const callMatch = expression.match(/^([A-Za-z_$][\w$]*)\((.*)\)$/);
+  if (callMatch?.[1]) {
+    const callable = scope.get(callMatch[1]);
+    if (typeof callable === "function") {
+      return (callable as (...args: RuntimeValue[]) => RuntimeValue)(...splitTopLevelComma(callMatch[2] || "").map((arg) => evaluateEvalFreeExpression(arg, scope, globals)));
+    }
+  }
+  const memberMatch = expression.match(/^([A-Za-z_$][\w$]*)\.([A-Za-z_$][\w$]*)$/);
+  if (memberMatch?.[1] && memberMatch[2]) {
+    const target = scope.get(memberMatch[1]);
+    if (typeof target === "object" && target !== null) return (target as Record<string, RuntimeValue>)[memberMatch[2]];
+  }
+  if (scope.has(expression)) return scope.get(expression);
+  return undefined;
+}
+
+function findMatchingBrace(source: string, openIndex: number): number {
+  return findMatchingDelimiter(source, openIndex, "{", "}");
+}
+
+function findMatchingParen(source: string, openIndex: number): number {
+  return findMatchingDelimiter(source, openIndex, "(", ")");
+}
+
+function findMatchingDelimiter(source: string, openIndex: number, openChar: string, closeChar: string): number {
+  let depth = 0;
+  let state: "normal" | "single" | "double" | "template" = "normal";
+  let escaped = false;
+  for (let index = openIndex; index < source.length; index += 1) {
+    const char = source[index] || "";
+    if (state !== "normal") {
+      if (escaped) {
+        escaped = false;
+      } else if (char === "\\") {
+        escaped = true;
+      } else if ((state === "single" && char === "'") || (state === "double" && char === "\"") || (state === "template" && char === "`")) {
+        state = "normal";
+      }
+      continue;
+    }
+    if (char === "'") {
+      state = "single";
+      continue;
+    }
+    if (char === "\"") {
+      state = "double";
+      continue;
+    }
+    if (char === "`") {
+      state = "template";
+      continue;
+    }
+    if (char === openChar) depth += 1;
+    if (char === closeChar) {
+      depth -= 1;
+      if (depth === 0) return index;
+    }
+  }
+  return -1;
+}
+
+function splitTopLevelComma(source: string): string[] {
+  const parts: string[] = [];
+  let start = 0;
+  let braceDepth = 0;
+  let parenDepth = 0;
+  let state: "normal" | "single" | "double" | "template" = "normal";
+  let escaped = false;
+  for (let index = 0; index < source.length; index += 1) {
+    const char = source[index] || "";
+    if (state !== "normal") {
+      if (escaped) escaped = false;
+      else if (char === "\\") escaped = true;
+      else if ((state === "single" && char === "'") || (state === "double" && char === "\"") || (state === "template" && char === "`")) state = "normal";
+      continue;
+    }
+    if (char === "'") state = "single";
+    else if (char === "\"") state = "double";
+    else if (char === "`") state = "template";
+    else if (char === "{") braceDepth += 1;
+    else if (char === "}") braceDepth -= 1;
+    else if (char === "(") parenDepth += 1;
+    else if (char === ")") parenDepth -= 1;
+    else if (char === "," && braceDepth === 0 && parenDepth === 0) {
+      const part = source.slice(start, index).trim();
+      if (part) parts.push(part);
+      start = index + 1;
+    }
+  }
+  const last = source.slice(start).trim();
+  if (last) parts.push(last);
+  return parts;
+}
+
+function isDynamicCodeBlocked(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  return /unsafe-eval|Content Security Policy|Code generation from strings|call to eval/i.test(error.message);
+}
+
+function stripShebang(source: string): string {
+  return source.startsWith("#!") ? `//${source.slice(2)}` : source;
+}
+
+function unescapeJsString(value: string): string {
+  return value
+    .replaceAll("\\n", "\n")
+    .replaceAll("\\r", "\r")
+    .replaceAll("\\t", "\t")
+    .replaceAll("\\\\", "\\")
+    .replaceAll("\\'", "'")
+    .replaceAll('\\"', '"');
 }
 
 function prepareEsmSource(source: string): string {

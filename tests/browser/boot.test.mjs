@@ -88,6 +88,93 @@ await withRuntimeLab(async (page, baseUrl) => {
   const workerCliFile = cliWorkerResult.result.workspaceSnapshot.files.find((file) => file.path === "/workspace/project/worker-cli.txt");
   if (!workerCliFile || workerCliFile.data !== "b2s=") throw new Error("process worker eval-free CLI snapshot did not include write result");
 
+  const esmCliWorkerResult = await page.evaluate(async () => {
+    const encode = (value) => btoa(value);
+    const worker = new Worker("/workers/process-worker.ts", { type: "module" });
+    try {
+      const result = await new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error("esm cli worker evaluation timeout")), 1000);
+        worker.addEventListener("message", (event) => {
+          if (event.data?.type !== "cli:result") return;
+          clearTimeout(timeout);
+          resolve(event.data);
+        });
+        worker.addEventListener("error", (event) => {
+          clearTimeout(timeout);
+          reject(new Error(event.message));
+        });
+        worker.postMessage({
+          captureGlobalCalls: [
+            "__viteRegisterDevServer",
+            "__viteRegisterHmrChannel",
+            "__viteRegisterTransform"
+          ],
+          id: 2,
+          type: "cli:evaluate",
+          root: "/workspace",
+          request: {
+            entry: {
+              name: "vite",
+              version: "0.0.0-worker-smoke",
+              entry: "/workspace/cli/bin/vite.mjs"
+            },
+            args: [],
+            cwd: "/workspace/project",
+            env: { PORT: "5300" }
+          },
+          workspaceSnapshot: {
+            directories: [
+              "/",
+              "/workspace",
+              "/workspace/cli",
+              "/workspace/cli/bin",
+              "/workspace/cli/dist",
+              "/workspace/project"
+            ],
+            files: [
+              {
+                path: "/workspace/cli/bin/vite.mjs",
+                data: encode("import { startDevServer } from '../dist/server.mjs';\nstartDevServer({ host: '127.0.0.1', port: Number(process.env.PORT || 5173) });\n"),
+                encoding: "base64"
+              },
+              {
+                path: "/workspace/cli/dist/server.mjs",
+                data: encode("import { createHotChannel } from './hmr.mjs';\nimport { registerTransform } from './transform.mjs';\nexport function startDevServer(options) {\n  registerTransform();\n  createHotChannel();\n  global.__viteRegisterDevServer?.({ command: 'dev', host: options.host, port: options.port, source: 'vite-cli' });\n}\n"),
+                encoding: "base64"
+              },
+              {
+                path: "/workspace/cli/dist/hmr.mjs",
+                data: encode("export function createHotChannel() {\n  global.__viteRegisterHmrChannel?.({ channel: 'hmr', source: 'vite-cli', transport: 'loopback', sendUpdate(update) { return update; } });\n}\n"),
+                encoding: "base64"
+              },
+              {
+                path: "/workspace/cli/dist/transform.mjs",
+                data: encode("export function registerTransform() {\n  global.__viteRegisterTransform?.({ mode: 'browser-esm', source: 'vite-cli', transformRequest(request) { return { code: request.source }; } });\n}\n"),
+                encoding: "base64"
+              }
+            ],
+            links: []
+          }
+        });
+      });
+      return result;
+    } finally {
+      worker.terminate();
+    }
+  });
+  if (esmCliWorkerResult.error) throw new Error(esmCliWorkerResult.error);
+  const esmCapturedCalls = esmCliWorkerResult.result.capturedGlobalCalls.map((call) => [call.name, call.args[0]]);
+  if (esmCapturedCalls.length !== 3) throw new Error(`process worker eval-free ESM CLI did not capture Vite registrations: ${JSON.stringify(esmCliWorkerResult.result)}`);
+  if (!esmCapturedCalls.some(([name, registration]) => name === "__viteRegisterDevServer" && registration.port === 5300)) {
+    throw new Error(`process worker eval-free ESM CLI did not capture dev server registration: ${JSON.stringify(esmCapturedCalls)}`);
+  }
+  if (!esmCapturedCalls.some(([name, registration]) => name === "__viteRegisterHmrChannel" && registration.sendUpdate?.__cliFunctionRef)) {
+    throw new Error(`process worker eval-free ESM CLI did not capture HMR function ref: ${JSON.stringify(esmCapturedCalls)}`);
+  }
+  if (!esmCapturedCalls.some(([name, registration]) => name === "__viteRegisterTransform" && registration.transformRequest?.__cliFunctionRef)) {
+    throw new Error(`process worker eval-free ESM CLI did not capture transform function ref: ${JSON.stringify(esmCapturedCalls)}`);
+  }
+
   const result = await page.evaluate(() => globalThis.__runtimeLab.boot());
   if (result.role !== "system") throw new Error("runtime did not boot through system worker");
   if (!result.details.processSeen) throw new Error("system worker did not see process worker");
