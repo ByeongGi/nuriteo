@@ -99,7 +99,8 @@ function createEsmSourceCompiler(source: string, filename: string, globals: Reco
 }
 
 function prepareEsmSource(source: string): string {
-  return source
+  const declarationExports = collectDeclarationExports(source);
+  const prepared = source
     .replace(/^#!.*(?:\n|$)/, "")
     .replace(/^[ \t]*import\s+\*\s+as\s+([A-Za-z_$][\w$]*)\s+from\s+["']([^"']+)["'];?[ \t]*$/gm, "const $1 = await __import(\"$2\");")
     .replace(/^[ \t]*import\s+([A-Za-z_$][\w$]*)\s*,\s*\{([^}\n]+)\}\s+from\s+["']([^"']+)["'];?[ \t]*$/gm, (_match, defaultName: string, named: string, specifier: string) => {
@@ -122,6 +123,18 @@ function prepareEsmSource(source: string): string {
     .replace(/^[ \t]*export\s+\{([^}]+)\};?[ \t]*$/gm, (_match, clause: string) => {
       return rewriteNamedExport(clause);
     });
+  return declarationExports.length > 0
+    ? `${prepared}\n${declarationExports.map((name) => `__exportConst("${name}", ${name});`).join("\n")}`
+    : prepared;
+}
+
+function collectDeclarationExports(source: string): string[] {
+  const names = new Set<string>();
+  const pattern = /^[ \t]*export\s+(?:async\s+)?(?:function|class)\s+([A-Za-z_$][\w$]*)\b/gm;
+  for (const match of source.matchAll(pattern)) {
+    if (match[1]) names.add(match[1]);
+  }
+  return [...names];
 }
 
 function rewriteDefaultAndNamedImport(defaultName: string, named: string, specifier: string): string {

@@ -265,7 +265,6 @@ const workspace = new MemoryPackageManagerWorkspace([
         }
       }
       export default defaultLabel;
-      export { namedLabel, Factory };
     `
   },
   {
