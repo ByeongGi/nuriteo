@@ -42,9 +42,16 @@ export interface ViteProductInstallResult {
 
 export interface ViteProductCliExecutionResult extends CliRunResult {
   args: string[];
+  buildRegistrations: ViteProductCliBuildRegistration[];
   cwd: string;
   mode: "async-cli-module-evaluation";
   serverRegistrations: ViteProductCliServerRegistration[];
+}
+
+export interface ViteProductCliBuildRegistration {
+  command: "build";
+  outDir: string;
+  source: "vite-cli";
 }
 
 export interface ViteProductCliServerRegistration {
@@ -225,11 +232,15 @@ export class ViteProductWorkflow {
   async executeRealCli(args: string[] = ["--host", "127.0.0.1"], env: RuntimeEnv = {}): Promise<ViteProductCliExecutionResult> {
     if (!this.workspace.exists(join(this.projectRoot, "node_modules/.bin/vite"))) this.install();
     const cliEntrypoint = this.#resolveBin("vite");
+    const buildRegistrations: ViteProductCliBuildRegistration[] = [];
     const serverRegistrations: ViteProductCliServerRegistration[] = [];
     const result = await createAsyncCliModuleEvaluator({
       root: this.projectRoot,
       reader: this.workspace,
       globals: {
+        __viteRegisterBuild(registration: ViteProductCliBuildRegistration) {
+          buildRegistrations.push(registration);
+        },
         __viteRegisterDevServer(registration: ViteProductCliServerRegistration) {
           serverRegistrations.push(registration);
         }
@@ -248,6 +259,7 @@ export class ViteProductWorkflow {
     return {
       ...result,
       args,
+      buildRegistrations,
       cwd: this.projectRoot,
       mode: "async-cli-module-evaluation",
       serverRegistrations
@@ -396,6 +408,19 @@ export class ViteProductWorkflow {
     return this.build();
   }
 
+  async buildFromCliExecution(name = "build"): Promise<ViteProductBuildResult> {
+    const command = this.#readScript(name);
+    assertViteBuildCommand(command);
+    const cliEntrypoint = this.#resolveCommandEntrypoint(command);
+    const cliExecution = await this.executeRealCli(commandArgs(command));
+    if (!cliExecution.buildRegistrations.some((registration) => registration.command === "build")) {
+      throw new Error("ERR_VITE_CLI_BUILD_REGISTRATION_MISSING");
+    }
+    this.#buildCommand = command;
+    this.#buildCliEntrypoint = cliEntrypoint;
+    return this.build();
+  }
+
   restart(): ViteProductReloadRecoveryResult {
     const command = this.#devServerCommand;
     const source = this.#devServerSource;
@@ -455,7 +480,11 @@ export class ViteProductWorkflow {
     this.workspace.writeText(join(this.projectRoot, "node_modules/vite/bin/vite.js"), "#!/usr/bin/env node\nimport '../dist/node/cli.js';\n");
     this.workspace.writeText(
       join(this.projectRoot, "node_modules/vite/dist/node/cli.js"),
-      "import { createRequire } from 'node:module';\nimport { startDevServer } from './server.js';\nconst require = createRequire(import.meta.url);\nrequire('../../package.json');\nstartDevServer({ host: '127.0.0.1', port: Number(process.env.PORT || 5173) });\n"
+      "import { createRequire } from 'node:module';\nimport { runBuild } from './build.js';\nimport { startDevServer } from './server.js';\nconst require = createRequire(import.meta.url);\nrequire('../../package.json');\nif (process.argv.includes('build')) {\n  runBuild({ outDir: 'dist' });\n} else {\n  startDevServer({ host: '127.0.0.1', port: Number(process.env.PORT || 5173) });\n}\n"
+    );
+    this.workspace.writeText(
+      join(this.projectRoot, "node_modules/vite/dist/node/build.js"),
+      "export function runBuild(options) {\n  global.__viteRegisterBuild?.({ command: 'build', outDir: options.outDir, source: 'vite-cli' });\n}\n"
     );
     this.workspace.writeText(
       join(this.projectRoot, "node_modules/vite/dist/node/server.js"),
@@ -517,6 +546,7 @@ export function createViteHmrUpdate(path: string, label: string, timestamp = Dat
 export type ViteReactPackageManager = ViteProductPackageManager;
 export type ViteReactProductWorkflowOptions = ViteProductWorkflowOptions;
 export type ViteReactProductWorkflowResult = ViteProductWorkflowResult;
+export type ViteReactCliBuildRegistration = ViteProductCliBuildRegistration;
 export type ViteReactCliExecutionResult = ViteProductCliExecutionResult;
 export type ViteReactCliServerRegistration = ViteProductCliServerRegistration;
 export type ViteReactDevServerSource = ViteProductDevServerSource;

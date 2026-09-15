@@ -78,6 +78,20 @@ for (const manager of ["npm", "pnpm"]) {
       source: "vite-cli"
     }
   ]);
+  assert.deepEqual(cliExecution.buildRegistrations, []);
+  const cliBuildExecution = await workflow.executeRealCli(["build"]);
+  assert.deepEqual(cliBuildExecution.serverRegistrations, []);
+  assert.deepEqual(cliBuildExecution.buildRegistrations, [
+    {
+      command: "build",
+      outDir: "dist",
+      source: "vite-cli"
+    }
+  ]);
+  const cliBuild = await workflow.buildFromCliExecution();
+  assert.equal(cliBuild.command, "vite build");
+  assert.equal(cliBuild.cliEntrypoint, "/workspace/project/node_modules/vite/bin/vite.js");
+  assert.equal(cliBuild.files.includes("dist/index.html"), true);
   const cliNetwork = createLoopbackNetwork();
   const cliWorkflow = new ViteProductWorkflow({ manager, template, projectId: `${manager}-${template}-cli`, network: cliNetwork, port: 5180 });
   cliWorkflow.install();
