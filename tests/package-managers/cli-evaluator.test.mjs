@@ -370,6 +370,19 @@ const workspace = new MemoryPackageManagerWorkspace([
   {
     path: "/workspace/esm-cli/package/package.json",
     data: JSON.stringify({ name: "esm-fixture-cli", version: "1.2.3", type: "module", bin: { vite: "bin/vite.js" } })
+  },
+  {
+    path: "/workspace/unawaited-dynamic-cli/package/bin/vite.js",
+    data: `
+      function start() {
+        return import('../dist/node/missing.js');
+      }
+      start();
+    `
+  },
+  {
+    path: "/workspace/unawaited-dynamic-cli/package/package.json",
+    data: JSON.stringify({ name: "unawaited-dynamic-cli", version: "1.2.3", type: "module", bin: { vite: "bin/vite.js" } })
   }
 ]);
 
@@ -541,6 +554,23 @@ const asyncEsmResult = await createAsyncCliModuleEvaluator({
 assert.equal(asyncEsmResult.stdout, "vite esm boot class boot star star createRequire 1.2.3 true mark\n");
 assert.equal(asyncEsmResult.stderr, "");
 assert.equal(asyncEsmResult.exitCode, 0);
+
+const unawaitedDynamicResult = await createAsyncCliModuleEvaluator({
+  root: "/workspace",
+  reader: workspace,
+  settleTicks: 10
+})({
+  entry: {
+    name: "vite",
+    version: "1.2.3",
+    entry: "/workspace/unawaited-dynamic-cli/package/bin/vite.js"
+  },
+  args: [],
+  cwd: "/workspace/project"
+});
+assert.equal(unawaitedDynamicResult.stdout, "");
+assert.match(unawaitedDynamicResult.stderr, /ERR_MODULE_NOT_FOUND/);
+assert.equal(unawaitedDynamicResult.exitCode, 1);
 
 const entry = {
   name: "npm",

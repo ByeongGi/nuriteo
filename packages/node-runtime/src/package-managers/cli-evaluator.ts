@@ -42,8 +42,8 @@ export function createCliModuleEvaluator(options: CliModuleEvaluatorOptions): (r
 export function createAsyncCliModuleEvaluator(options: AsyncCliModuleEvaluatorOptions): (request: CliModuleEvaluationRequest) => Promise<CliRunResult> {
   return async function evaluateCliModuleAsync(request: CliModuleEvaluationRequest): Promise<CliRunResult> {
     const evaluation = startCliModuleEvaluation(options, request, { supportedModes: ["cjs", "esm"] });
-    await settleCliEvaluation(options);
     await evaluation.ready;
+    await settleCliEvaluation(options);
     return evaluation.finalize();
   };
 }
@@ -678,9 +678,7 @@ async function settleCliEvaluation(options: AsyncCliModuleEvaluatorOptions): Pro
   for (let index = 0; index < ticks; index += 1) {
     await Promise.resolve();
   }
-  if (timeoutMs > 0) {
-    await new Promise((resolve) => setTimeout(resolve, timeoutMs));
-  }
+  await new Promise((resolve) => setTimeout(resolve, timeoutMs));
 }
 
 function createCliDynamicImport(): (specifier: string) => Promise<RuntimeNamespace> {
