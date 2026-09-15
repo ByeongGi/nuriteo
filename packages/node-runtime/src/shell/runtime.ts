@@ -34,8 +34,12 @@ export class ShellRuntime {
       if (options.signal?.aborted) return cancelledShellResult(stdout + (result.stdout || ""), stderr + (result.stderr || ""), this.files);
       exitCode = result.exitCode;
       stderr += result.stderr || "";
+      if (result.stderr) options.onOutput?.({ stream: "stderr", data: result.stderr });
       if (redirect) this.files.set(resolvePath(redirect, this.cwd), result.stdout || "");
-      else if (nextStep?.op !== "|") stdout += result.stdout || "";
+      else if (nextStep?.op !== "|") {
+        stdout += result.stdout || "";
+        if (result.stdout) options.onOutput?.({ stream: "stdout", data: result.stdout });
+      }
       stdin = nextStep?.op === "|" ? result.stdout || "" : "";
       if (exitCode !== 0) break;
     }
@@ -45,7 +49,7 @@ export class ShellRuntime {
 
   async runCommand(argv: string[], stdin: string, options: ShellRunOptions = {}): Promise<Awaited<ReturnType<ShellCommand>>> {
     if (argv[0] === "sh" && argv[1] === "-c") {
-      return this.run(argv.slice(2).join(" "), options);
+      return this.run(argv.slice(2).join(" "), nestedShellOptions(options));
     }
 
     const name = argv[0];
@@ -58,7 +62,9 @@ export class ShellRuntime {
       stdin,
       files: this.files
     };
+    if (options.signal && options.onOutput) return command({ ...context, output: options.onOutput, signal: options.signal });
     if (options.signal) return command({ ...context, signal: options.signal });
+    if (options.onOutput) return command({ ...context, output: options.onOutput });
     return command(context);
   }
 
@@ -110,6 +116,12 @@ function cancelledShellResult(stdout: string, stderr: string, files: Map<string,
     exitCode: 130,
     files: Object.fromEntries(files)
   };
+}
+
+function nestedShellOptions(options: ShellRunOptions): ShellRunOptions {
+  const nested: ShellRunOptions = {};
+  if (options.signal) nested.signal = options.signal;
+  return nested;
 }
 
 function extractRedirect(argv: string[]): { argv: string[]; redirect: string | null } {

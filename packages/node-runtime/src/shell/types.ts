@@ -13,6 +13,7 @@ export interface ShellCommandContext {
   env: RuntimeEnv;
   stdin: string;
   files: Map<string, string>;
+  output?: ShellOutputSink;
   signal?: AbortSignal;
 }
 
@@ -38,8 +39,18 @@ export interface ShellRuntimeOptions {
 }
 
 export interface ShellRunOptions {
+  onOutput?: ShellOutputSink;
   signal?: AbortSignal;
 }
+
+export type ShellOutputStream = "stdout" | "stderr";
+
+export interface ShellOutputChunk {
+  stream: ShellOutputStream;
+  data: string;
+}
+
+export type ShellOutputSink = (chunk: ShellOutputChunk) => void;
 
 export interface ShellRunResult {
   stdout: string;

@@ -65,23 +65,33 @@ export class TerminalSession {
     const entry = this.#createEntry(command);
     this.#active = { controller, entry };
     this.#transcript.push(entry);
+    let outputReceived = false;
 
     try {
-      const result = await this.#runtime.run(command, { signal: controller.signal });
+      const result = await this.#runtime.run(command, {
+        onOutput: (chunk) => {
+          outputReceived = true;
+          if (chunk.stream === "stdout") entry.stdout += chunk.data;
+          else entry.stderr += chunk.data;
+          this.#onChunk?.({ entryId: entry.id, ...chunk });
+        },
+        signal: controller.signal
+      });
       entry.stdout = result.stdout;
       entry.stderr = result.stderr;
       entry.exitCode = result.exitCode;
       entry.status = controller.signal.aborted || result.exitCode === 130 ? "cancelled" : "completed";
+      if (!outputReceived) this.#emitOutput(entry);
       return { ...result, entry: cloneEntry(entry) };
     } catch (error) {
       entry.stderr = error instanceof Error ? `${error.message}\n` : `${String(error)}\n`;
       entry.exitCode = 1;
       entry.status = controller.signal.aborted ? "cancelled" : "completed";
+      if (!outputReceived) this.#emitOutput(entry);
       throw error;
     } finally {
       entry.finishedAt = this.#now();
       this.#active = null;
-      this.#emitOutput(entry);
     }
   }
 

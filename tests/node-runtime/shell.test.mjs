@@ -58,6 +58,24 @@ assert.equal(failed.stderr, "nope\n");
 const sh = await shell.run("sh -c \"echo nested\"");
 assert.equal(sh.stdout, "nested\n");
 
+const outputChunks = [];
+const pipedOutput = await shell.run("echo 'stream me' | upper", {
+  onOutput(chunk) {
+    outputChunks.push(chunk);
+  }
+});
+assert.equal(pipedOutput.stdout, "STREAM ME\n");
+assert.deepEqual(outputChunks, [{ stream: "stdout", data: "STREAM ME\n" }]);
+
+const nestedOutputChunks = [];
+const nestedOutput = await shell.run("sh -c \"echo nested-output\"", {
+  onOutput(chunk) {
+    nestedOutputChunks.push(chunk);
+  }
+});
+assert.equal(nestedOutput.stdout, "nested-output\n");
+assert.deepEqual(nestedOutputChunks, [{ stream: "stdout", data: "nested-output\n" }]);
+
 const bin = await shell.run("hello");
 assert.equal(bin.stdout, "from-bin\n");
 
