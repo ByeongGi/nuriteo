@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { existsSync } from "node:fs";
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
 
 import {
   createViteDependencyArtifactClosureFromWorkspace,
@@ -50,8 +50,9 @@ if (!vitePackageRootArg) {
 }
 
 function inspectDependencyClosure(nodeModulesRoot, vitePackageArtifact) {
+  const closureSourceRoot = resolveDependencyClosureSourceRoot(nodeModulesRoot);
   const reader = createNodeFsWorkspaceReader({
-    root: nodeModulesRoot,
+    root: closureSourceRoot,
     virtualRoot: "/workspace/project/node_modules"
   });
   const closure = createViteDependencyArtifactClosureFromWorkspace({
@@ -70,8 +71,14 @@ function inspectDependencyClosure(nodeModulesRoot, vitePackageArtifact) {
         specifiers: item.specifiers
       }))
     })),
-    remainingPlan: summarizePlan(closure.remainingPlan)
+    remainingPlan: summarizePlan(closure.remainingPlan),
+    sourceRoot: closureSourceRoot
   };
+}
+
+function resolveDependencyClosureSourceRoot(nodeModulesRoot) {
+  const pnpmHoistedRoot = join(nodeModulesRoot, ".pnpm/node_modules");
+  return existsSync(pnpmHoistedRoot) ? pnpmHoistedRoot : nodeModulesRoot;
 }
 
 function summarizeReadiness(readiness) {

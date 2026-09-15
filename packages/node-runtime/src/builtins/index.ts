@@ -1,3 +1,4 @@
+export { AsyncLocalStorage, asyncHooksBuiltin, createHook as createAsyncHook, executionAsyncId, triggerAsyncId, type AsyncHook } from "./async-hooks.ts";
 export { AssertionError, assertBuiltin, deepEqual, deepStrictEqual, equal, ok, rejects, strict as assertStrict, strictEqual, throws } from "./assert.ts";
 export { Buffer, BrowserBuffer, bufferBuiltin, kMaxLength } from "./buffer.ts";
 export { ChildProcess, childProcessBuiltin, exec, execFile, execFileSync, execSync, spawn, spawnSync, UnsupportedChildProcessError } from "./child-process.ts";

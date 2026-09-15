@@ -1,4 +1,5 @@
 import type { BuiltinBindings, RuntimeValue } from "./types.ts";
+import { asyncHooksBuiltin } from "./builtins/async-hooks.ts";
 import { assertBuiltin, strict as assertStrictBuiltin } from "./builtins/assert.ts";
 import { bufferBuiltin } from "./builtins/buffer.ts";
 import { childProcessBuiltin } from "./builtins/child-process.ts";
@@ -52,6 +53,7 @@ export function createBuiltinLoader(bindings: BuiltinBindings): (specifier: stri
     if (specifier === "https" || specifier === "node:https") return createHttpsBuiltin(bindings.httpsClient || bindings.httpClient);
     if (specifier === "module" || specifier === "node:module") return bindings.module || moduleBuiltin;
     if (specifier === "net" || specifier === "node:net") return netBuiltin;
+    if (specifier === "async_hooks" || specifier === "node:async_hooks") return asyncHooksBuiltin;
     if (specifier === "assert" || specifier === "node:assert") return assertBuiltin;
     if (specifier === "assert/strict" || specifier === "node:assert/strict") return assertStrictBuiltin;
     if (specifier === "constants" || specifier === "node:constants") return constantsBuiltin;

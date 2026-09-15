@@ -49,6 +49,12 @@ export const NODE_PROFILE = Object.freeze({
       implementedBy: "packages/node-runtime/src/builtins/assert.ts",
       tests: Object.freeze(["tests/node-runtime/secondary-builtins.test.mjs"])
     }),
+    async_hooks: Object.freeze({
+      status: "partial",
+      source: "browser-native-js",
+      implementedBy: "packages/node-runtime/src/builtins/async-hooks.ts",
+      tests: Object.freeze(["tests/node-runtime/secondary-builtins.test.mjs"])
+    }),
     buffer: Object.freeze({
       status: "partial",
       source: "browser-native-js",
@@ -139,6 +145,12 @@ export const NODE_PROFILE = Object.freeze({
       implementedBy: "packages/node-runtime/src/builtins/string-decoder.ts",
       tests: Object.freeze(["tests/node-runtime/secondary-builtins.test.mjs"])
     }),
+    timers: Object.freeze({
+      status: "partial",
+      source: "browser-native-js",
+      implementedBy: "packages/node-runtime/src/builtins/timers-classic.ts",
+      tests: Object.freeze(["tests/node-runtime/secondary-builtins.test.mjs"])
+    }),
     "timers/promises": Object.freeze({
       status: "partial",
       source: "browser-native-js",
@@ -190,6 +202,7 @@ export const NODE_PROFILE = Object.freeze({
     "node:fs": Object.freeze(["internalBinding:fs"]),
     "node:assert": Object.freeze(["browser-native-js:assert"]),
     "node:assert/strict": Object.freeze(["node:assert"]),
+    "node:async_hooks": Object.freeze(["browser-native-js:async_hooks"]),
     "node:buffer": Object.freeze(["browser-native-js:buffer"]),
     "node:child_process": Object.freeze(["browser-unsupported-diagnostic"]),
     "node:constants": Object.freeze(["browser-native-js:constants"]),
@@ -213,6 +226,7 @@ export const NODE_PROFILE = Object.freeze({
     "node:stream": Object.freeze(["browser-native-js:stream", "node:events"]),
     "node:stream/promises": Object.freeze(["node:stream"]),
     "node:string_decoder": Object.freeze(["browser-native-js:string_decoder", "node:buffer"]),
+    "node:timers": Object.freeze(["browser-native-js:timers"]),
     "node:timers/promises": Object.freeze(["browser-native-js:timers"]),
     "node:tls": Object.freeze(["node:net", "browser-unsupported-diagnostic"]),
     "node:tty": Object.freeze(["browser-native-js:tty", "node:stream"]),
@@ -220,6 +234,7 @@ export const NODE_PROFILE = Object.freeze({
     "node:util": Object.freeze(["browser-native-js:util", "node:events"]),
     "node:v8": Object.freeze(["browser-native-js:v8"]),
     "node:worker_threads": Object.freeze(["browser-unsupported-diagnostic"]),
+    "async_hooks": Object.freeze(["node:async_hooks"]),
     "child_process": Object.freeze(["node:child_process"]),
     "crypto": Object.freeze(["node:crypto"]),
     "fs": Object.freeze(["node:fs"]),
@@ -241,6 +256,7 @@ export const NODE_PROFILE = Object.freeze({
     "stream": Object.freeze(["node:stream"]),
     "stream/promises": Object.freeze(["node:stream/promises"]),
     "string_decoder": Object.freeze(["node:string_decoder"]),
+    "timers": Object.freeze(["node:timers"]),
     "timers/promises": Object.freeze(["node:timers/promises"]),
     "tls": Object.freeze(["node:tls"]),
     "tty": Object.freeze(["node:tty"]),

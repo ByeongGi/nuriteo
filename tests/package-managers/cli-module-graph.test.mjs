@@ -21,6 +21,16 @@ assert.deepEqual(
 );
 
 assert.deepEqual(
+  extractStaticRequires(`
+    /**
+     * const braces = require('braces');
+     */
+    const real = require("real-package");
+  `),
+  ["real-package"]
+);
+
+assert.deepEqual(
   extractStaticRequires(
     `
       const cliEntry = require('node:path').resolve(__dirname, 'cli/entry.js');

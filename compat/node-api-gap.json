@@ -391,6 +391,17 @@
       "nextPhase": "P10"
     },
     {
+      "builtin": "timers",
+      "status": "partial",
+      "priority": 2,
+      "implementedBy": "packages/node-runtime/src/builtins/timers-classic.ts",
+      "tests": ["tests/node-runtime/secondary-builtins.test.mjs"],
+      "requiredBy": ["package-manager timeout/immediate compatibility", "pnpm CLI graph"],
+      "minimumApi": ["setTimeout", "clearTimeout", "setImmediate", "clearImmediate"],
+      "acceptance": ["Classic timer functions are available from node:timers and match browser scheduler behavior."],
+      "nextPhase": "P10"
+    },
+    {
       "builtin": "timers/promises",
       "status": "partial",
       "priority": 2,
@@ -425,6 +436,17 @@
         "MessageChannel supports same-runtime message delivery for dependency feature probes.",
         "Actual Worker construction fails with ERR_BROWSER_WORKER_THREAD_UNSUPPORTED until a browser-backed worker bridge is productized."
       ],
+      "nextPhase": "P10"
+    },
+    {
+      "builtin": "async_hooks",
+      "status": "partial",
+      "priority": 2,
+      "implementedBy": "packages/node-runtime/src/builtins/async-hooks.ts",
+      "tests": ["tests/node-runtime/secondary-builtins.test.mjs"],
+      "requiredBy": ["pnpm async context feature detection", "package-manager CLI graph"],
+      "minimumApi": ["AsyncLocalStorage", "createHook", "executionAsyncId", "triggerAsyncId"],
+      "acceptance": ["AsyncLocalStorage stores synchronous context and createHook exposes chainable enable/disable no-op hooks."],
       "nextPhase": "P10"
     },
     {

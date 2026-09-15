@@ -3,6 +3,7 @@ import { join, resolve } from "./path.ts";
 export const builtinModules = Object.freeze([
   "assert",
   "assert/strict",
+  "async_hooks",
   "buffer",
   "child_process",
   "constants",
@@ -19,6 +20,7 @@ export const builtinModules = Object.freeze([
   "net",
   "node:assert",
   "node:assert/strict",
+  "node:async_hooks",
   "node:buffer",
   "node:child_process",
   "node:constants",

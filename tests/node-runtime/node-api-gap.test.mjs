@@ -24,6 +24,7 @@ for (const name of unsupported) {
 
 for (const name of [
   "assert",
+  "async_hooks",
   "buffer",
   "child_process",
   "constants",
@@ -43,6 +44,7 @@ for (const name of [
   "readline",
   "stream",
   "string_decoder",
+  "timers",
   "timers/promises",
   "tls",
   "tty",

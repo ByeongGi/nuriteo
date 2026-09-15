@@ -56,6 +56,7 @@ interface GraphPackageManifest {
 const defaultBuiltins = new Set([
   "assert",
   "assert/strict",
+  "async_hooks",
   "buffer",
   "child_process",
   "constants",
@@ -80,6 +81,7 @@ const defaultBuiltins = new Set([
   "stream",
   "stream/promises",
   "string_decoder",
+  "timers",
   "timers/promises",
   "tls",
   "tty",
@@ -197,6 +199,8 @@ export interface StaticRequireExtractionOptions {
 }
 
 export function extractStaticRequires(source: string, options: StaticRequireExtractionOptions = {}): string[] {
+  source = maskJSDocComments(source);
+  source = maskJavaScriptComments(source);
   const requires = new Set<string>();
   const constants = collectStaticPathConstants(source, options.filename);
 
@@ -234,6 +238,8 @@ export function extractStaticRequires(source: string, options: StaticRequireExtr
 }
 
 export function extractStaticEsmSpecifiers(source: string): string[] {
+  source = maskJSDocComments(source);
+  source = maskJavaScriptComments(source);
   const imports = new Set<string>();
 
   for (let index = 0; index < source.length; index += 1) {
@@ -687,6 +693,47 @@ function skipLineComment(source: string, start: number): number {
 function skipBlockComment(source: string, start: number): number {
   const end = source.indexOf("*/", start + 2);
   return end === -1 ? source.length - 1 : end + 1;
+}
+
+function maskJavaScriptComments(source: string): string {
+  let output = "";
+  for (let index = 0; index < source.length; index += 1) {
+    const char = source[index];
+    if (char === "'" || char === '"') {
+      const end = skipQuotedString(source, index, char);
+      output += source.slice(index, end + 1);
+      index = end;
+      continue;
+    }
+    if (char === "`") {
+      const end = skipTemplateLiteral(source, index);
+      output += source.slice(index, end + 1);
+      index = end;
+      continue;
+    }
+    if (char === "/" && source[index + 1] === "/") {
+      const end = skipLineComment(source, index);
+      output += maskCommentSlice(source.slice(index, end + 1));
+      index = end;
+      continue;
+    }
+    if (char === "/" && source[index + 1] === "*") {
+      const end = skipBlockComment(source, index);
+      output += maskCommentSlice(source.slice(index, end + 1));
+      index = end;
+      continue;
+    }
+    output += char;
+  }
+  return output;
+}
+
+function maskJSDocComments(source: string): string {
+  return source.replace(/\/\*\*[\s\S]*?\*\//g, (comment) => maskCommentSlice(comment));
+}
+
+function maskCommentSlice(comment: string): string {
+  return comment.replace(/[^\n\r]/g, " ");
 }
 
 function isIdentifierPart(char: string | undefined): boolean {
