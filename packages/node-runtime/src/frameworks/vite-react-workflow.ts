@@ -56,6 +56,7 @@ export interface ViteReactHmrUpdate {
 
 export interface ViteReactPreviewResult {
   statusCode: number;
+  headers?: Record<string, string>;
   body: string;
 }
 
@@ -183,9 +184,22 @@ export class ViteReactProductWorkflow {
 
   preview(path = "/"): ViteReactPreviewResult {
     if (!this.#running) return { statusCode: 503, body: "dev server unavailable" };
-    if (path !== "/" && path !== "/index.html") return { statusCode: 404, body: "Not found" };
+    const requestPath = path.split("?")[0] || "/";
+    if (requestPath === "/@vite/client") {
+      return {
+        statusCode: 200,
+        headers: { "content-type": "text/javascript; charset=utf-8" },
+        body: "export const createHotContext = () => ({ accept() {} });\n"
+      };
+    }
+    if (requestPath !== "/" && requestPath !== "/index.html") {
+      const source = this.#readServedSource(requestPath);
+      if (source) return source;
+      return { statusCode: 404, body: "Not found" };
+    }
     return {
       statusCode: 200,
+      headers: { "content-type": "text/html; charset=utf-8" },
       body: renderHtml(this.#readLabel(), this.#state.count)
     };
   }
@@ -277,6 +291,16 @@ export class ViteReactProductWorkflow {
     return command;
   }
 
+  #readServedSource(requestPath: string): ViteReactPreviewResult | null {
+    const workspacePath = join(this.projectRoot, requestPath);
+    if (!this.workspace.exists(workspacePath)) return null;
+    return {
+      statusCode: 200,
+      headers: { "content-type": contentTypeForPath(requestPath) },
+      body: this.workspace.readText(workspacePath)
+    };
+  }
+
   #installViteCliEntrypoint(): void {
     const packageJsonPath = join(this.projectRoot, "node_modules/vite/package.json");
     this.workspace.writeText(packageJsonPath, JSON.stringify({ name: "vite", version: "8.2.0", bin: { vite: "bin/vite.js" } }));
@@ -337,6 +361,10 @@ function createViteMounts(projectRoot: string, template: ViteProductTemplate, la
     {
       path: join(projectRoot, "src/message.js"),
       data: `export const label = "${label}";\n`
+    },
+    {
+      path: join(projectRoot, "src/style.css"),
+      data: "#app { font-family: system-ui, sans-serif; }\n"
     }
   ];
 }
@@ -412,9 +440,19 @@ function renderHtml(label: string, count: number): string {
 function toRuntimeHttpResponse(preview: ViteReactPreviewResult): RuntimeHttpResponse {
   return {
     statusCode: preview.statusCode,
-    headers: { "content-type": "text/html; charset=utf-8" },
+    headers: preview.headers || { "content-type": "text/html; charset=utf-8" },
     body: preview.body
   };
+}
+
+function contentTypeForPath(path: string): string {
+  if (path.endsWith(".css")) return "text/css; charset=utf-8";
+  if (path.endsWith(".html")) return "text/html; charset=utf-8";
+  if (path.endsWith(".svelte")) return "text/javascript; charset=utf-8";
+  if (path.endsWith(".js") || path.endsWith(".jsx") || path.endsWith(".ts") || path.endsWith(".tsx")) {
+    return "text/javascript; charset=utf-8";
+  }
+  return "application/octet-stream";
 }
 
 function assertViteDevCommand(command: string): void {

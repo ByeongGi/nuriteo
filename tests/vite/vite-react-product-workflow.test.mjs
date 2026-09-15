@@ -67,6 +67,14 @@ for (const manager of ["npm", "pnpm"]) {
   assert.equal(response.status, 200);
   assert.match(await response.text(), /alpha:1/);
   assert.deepEqual(workflow.startDevServer().requests, ["/index.html"]);
+  const viteClient = await workflow.fetch("http://127.0.0.1:5173/@vite/client");
+  assert.equal(viteClient.headers.get("content-type"), "text/javascript; charset=utf-8");
+  assert.match(await viteClient.text(), /createHotContext/);
+  const entryModule = await workflow.fetch(`http://127.0.0.1:5173/${entryPathForTemplate(template)}`);
+  assert.equal(entryModule.headers.get("content-type"), "text/javascript; charset=utf-8");
+  assert.match(await entryModule.text(), /message\.js|App\.svelte/);
+  const styleModule = await workflow.fetch("http://127.0.0.1:5173/src/style.css");
+  assert.equal(styleModule.headers.get("content-type"), "text/css; charset=utf-8");
 
   const stopped = workflow.stopDevServer();
   assert.equal(stopped.running, false);
@@ -100,6 +108,8 @@ for (const manager of ["npm", "pnpm"]) {
   hmr.on("message", (event) => hmrEvents.push(`message:${event.type}`));
   hmr.start();
   workflow.editMessage("gamma");
+  const editedMessageModule = await workflow.fetch("http://127.0.0.1:5173/src/message.js");
+  assert.match(await editedMessageModule.text(), /gamma/);
   hmr.socket.sendMessage(workflow.hmrUpdates().at(-1));
   hmr.close();
   assert.deepEqual(hmrEvents, ["open:1", "message:update"]);
@@ -112,4 +122,9 @@ function expectedFrameworkPackage(template) {
   if (template === "react") return "react";
   if (template === "vue-runtime") return "vue";
   return "svelte";
+}
+
+function entryPathForTemplate(template) {
+  if (template === "react") return "src/main.jsx";
+  return "src/main.js";
 }
