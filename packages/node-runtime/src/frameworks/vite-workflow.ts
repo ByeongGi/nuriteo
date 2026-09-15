@@ -47,6 +47,7 @@ export interface ViteProductCliExecutionResult extends CliRunResult {
   hmrRegistrations: ViteProductCliHmrRegistration[];
   mode: "async-cli-module-evaluation";
   serverRegistrations: ViteProductCliServerRegistration[];
+  transformRegistrations: ViteProductCliTransformRegistration[];
 }
 
 export interface ViteProductCliBuildRegistration {
@@ -68,7 +69,13 @@ export interface ViteProductCliServerRegistration {
   source: "vite-cli";
 }
 
+export interface ViteProductCliTransformRegistration {
+  mode: "browser-esm";
+  source: "vite-cli";
+}
+
 export interface ViteProductDevServerSnapshot {
+  moduleTransform: ViteProductModuleTransformSource;
   port: number;
   running: boolean;
   restartCount: number;
@@ -82,6 +89,7 @@ export interface ViteProductDevServerSnapshot {
 }
 
 export type ViteProductDevServerSource = "adapter" | "package-script" | "cli-execution";
+export type ViteProductModuleTransformSource = "adapter" | "vite-cli";
 
 export interface ViteProductHmrUpdate {
   type: "update";
@@ -160,6 +168,7 @@ export class ViteProductWorkflow {
   #devServerCommand: string | null = null;
   #devServerSource: ViteProductDevServerSource = "adapter";
   #devServerCliEntrypoint: string | null = null;
+  #moduleTransformSource: ViteProductModuleTransformSource = "adapter";
   #buildCommand: string | null = null;
   #buildCliEntrypoint: string | null = null;
   #requests: string[] = [];
@@ -242,6 +251,7 @@ export class ViteProductWorkflow {
     const buildRegistrations: ViteProductCliBuildRegistration[] = [];
     const hmrRegistrations: ViteProductCliHmrRegistration[] = [];
     const serverRegistrations: ViteProductCliServerRegistration[] = [];
+    const transformRegistrations: ViteProductCliTransformRegistration[] = [];
     const result = await createAsyncCliModuleEvaluator({
       root: this.projectRoot,
       reader: this.workspace,
@@ -254,6 +264,9 @@ export class ViteProductWorkflow {
         },
         __viteRegisterDevServer(registration: ViteProductCliServerRegistration) {
           serverRegistrations.push(registration);
+        },
+        __viteRegisterTransform(registration: ViteProductCliTransformRegistration) {
+          transformRegistrations.push(registration);
         }
       }
     })({
@@ -274,7 +287,8 @@ export class ViteProductWorkflow {
       cwd: this.projectRoot,
       hmrRegistrations,
       mode: "async-cli-module-evaluation",
-      serverRegistrations
+      serverRegistrations,
+      transformRegistrations
     };
   }
 
@@ -319,11 +333,15 @@ export class ViteProductWorkflow {
     const cliExecution = await this.executeRealCli(args, { PORT: String(this.#port) });
     const registration = cliExecution.serverRegistrations.at(-1);
     if (!registration) throw new Error("ERR_VITE_CLI_SERVER_REGISTRATION_MISSING");
+    if (!cliExecution.transformRegistrations.some((item) => item.source === "vite-cli")) {
+      throw new Error("ERR_VITE_CLI_TRANSFORM_REGISTRATION_MISSING");
+    }
     this.#port = registration.port;
     this.startDevServer();
     this.#devServerSource = "cli-execution";
     this.#devServerCommand = command;
     this.#devServerCliEntrypoint = cliEntrypoint;
+    this.#moduleTransformSource = "vite-cli";
     return this.#snapshot();
   }
 
@@ -451,6 +469,7 @@ export class ViteProductWorkflow {
 
   #snapshot(): ViteProductDevServerSnapshot {
     return {
+      moduleTransform: this.#moduleTransformSource,
       port: this.#port,
       running: this.#running,
       restartCount: this.#restartCount,
@@ -479,10 +498,11 @@ export class ViteProductWorkflow {
   #readServedSource(requestPath: string): ViteProductPreviewResult | null {
     const workspacePath = join(this.projectRoot, requestPath);
     if (!this.workspace.exists(workspacePath)) return null;
+    const body = this.workspace.readText(workspacePath);
     return {
       statusCode: 200,
       headers: { "content-type": contentTypeForPath(requestPath) },
-      body: this.workspace.readText(workspacePath)
+      body: this.#moduleTransformSource === "vite-cli" ? transformViteModuleSource(requestPath, body) : body
     };
   }
 
@@ -500,11 +520,15 @@ export class ViteProductWorkflow {
     );
     this.workspace.writeText(
       join(this.projectRoot, "node_modules/vite/dist/node/server.js"),
-      "import { EventEmitter } from 'node:events';\nimport { createHotChannel } from './hmr.js';\nexport function startDevServer(options) {\n  const server = new EventEmitter();\n  createHotChannel(server);\n  global.__viteRegisterDevServer?.({ command: 'dev', host: options.host, port: options.port, source: 'vite-cli' });\n  return server;\n}\n"
+      "import { EventEmitter } from 'node:events';\nimport { createHotChannel } from './hmr.js';\nimport { registerTransform } from './transform.js';\nexport function startDevServer(options) {\n  const server = new EventEmitter();\n  registerTransform();\n  createHotChannel(server);\n  global.__viteRegisterDevServer?.({ command: 'dev', host: options.host, port: options.port, source: 'vite-cli' });\n  return server;\n}\n"
     );
     this.workspace.writeText(
       join(this.projectRoot, "node_modules/vite/dist/node/hmr.js"),
       "export function createHotChannel(server) {\n  server.emit('vite:hmr-ready');\n  global.__viteRegisterHmrChannel?.({ channel: 'hmr', source: 'vite-cli', transport: 'loopback' });\n  return { send() {} };\n}\n"
+    );
+    this.workspace.writeText(
+      join(this.projectRoot, "node_modules/vite/dist/node/transform.js"),
+      "export function registerTransform() {\n  global.__viteRegisterTransform?.({ mode: 'browser-esm', source: 'vite-cli' });\n}\n"
     );
     this.workspace.symlink(join(this.projectRoot, "node_modules/vite/bin/vite.js"), join(this.projectRoot, "node_modules/.bin/vite"));
   }
@@ -562,7 +586,9 @@ export type ViteReactCliBuildRegistration = ViteProductCliBuildRegistration;
 export type ViteReactCliExecutionResult = ViteProductCliExecutionResult;
 export type ViteReactCliHmrRegistration = ViteProductCliHmrRegistration;
 export type ViteReactCliServerRegistration = ViteProductCliServerRegistration;
+export type ViteReactCliTransformRegistration = ViteProductCliTransformRegistration;
 export type ViteReactDevServerSource = ViteProductDevServerSource;
+export type ViteReactModuleTransformSource = ViteProductModuleTransformSource;
 export type ViteReactInstallResult = ViteProductInstallResult;
 export type ViteReactDevServerSnapshot = ViteProductDevServerSnapshot;
 export type ViteReactHmrUpdate = ViteProductHmrUpdate;
@@ -703,6 +729,11 @@ function contentTypeForPath(path: string): string {
     return "text/javascript; charset=utf-8";
   }
   return "application/octet-stream";
+}
+
+function transformViteModuleSource(path: string, source: string): string {
+  if (!/\.(?:[cm]?jsx?|tsx?)$/.test(path)) return source;
+  return `// transformed by vite-cli\n${source}`;
 }
 
 function assertViteDevCommand(command: string): void {

@@ -85,10 +85,17 @@ for (const manager of ["npm", "pnpm"]) {
       transport: "loopback"
     }
   ]);
+  assert.deepEqual(cliExecution.transformRegistrations, [
+    {
+      mode: "browser-esm",
+      source: "vite-cli"
+    }
+  ]);
   assert.deepEqual(cliExecution.buildRegistrations, []);
   const cliBuildExecution = await workflow.executeRealCli(["build"]);
   assert.deepEqual(cliBuildExecution.serverRegistrations, []);
   assert.deepEqual(cliBuildExecution.hmrRegistrations, []);
+  assert.deepEqual(cliBuildExecution.transformRegistrations, []);
   assert.deepEqual(cliBuildExecution.buildRegistrations, [
     {
       command: "build",
@@ -106,6 +113,7 @@ for (const manager of ["npm", "pnpm"]) {
   const cliStarted = await cliWorkflow.startDevServerFromCliExecution();
   assert.equal(cliStarted.running, true);
   assert.equal(cliStarted.source, "cli-execution");
+  assert.equal(cliStarted.moduleTransform, "vite-cli");
   assert.equal(cliStarted.command, "vite --host 127.0.0.1");
   assert.equal(cliStarted.cliEntrypoint, "/workspace/project/node_modules/vite/bin/vite.js");
   assert.equal(cliStarted.port, 5180);
@@ -113,10 +121,13 @@ for (const manager of ["npm", "pnpm"]) {
   const cliPreview = await cliWorkflow.fetch("http://127.0.0.1:5180/index.html");
   assert.equal(cliPreview.status, 200);
   assert.match(await cliPreview.text(), /alpha:1/);
+  const cliEntryModule = await cliWorkflow.fetch(`http://127.0.0.1:5180/${entryPathForTemplate(template)}`);
+  assert.match(await cliEntryModule.text(), /transformed by vite-cli/);
   const started = workflow.startDevServerFromPackageScript();
   assert.equal(started.running, true);
   assert.equal(started.port, 5173);
   assert.equal(started.source, "package-script");
+  assert.equal(started.moduleTransform, "adapter");
   assert.equal(started.command, "vite --host 127.0.0.1");
   assert.equal(started.cliEntrypoint, "/workspace/project/node_modules/vite/bin/vite.js");
   assert.equal(started.processPid, 5173);
