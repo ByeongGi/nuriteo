@@ -101,8 +101,62 @@ function createEsmSourceCompiler(source: string, filename: string, globals: Reco
 function prepareEsmSource(source: string): string {
   return source
     .replace(/^#!.*(?:\n|$)/, "")
+    .replace(/^\s*import\s+([^"';]+?)\s+from\s+["']([^"']+)["'];?\s*$/gm, (_match, clause: string, specifier: string) => {
+      return rewriteStaticImport(clause, specifier);
+    })
     .replace(/^\s*import\s+["']([^"']+)["'];?\s*$/gm, "await __import(\"$1\");")
     .replace(/\bimport\s*\(/g, "__import(")
     .replace(/^\s*export\s+const\s+([A-Za-z_$][\w$]*)\s*=\s*([^;\n]+);?\s*$/gm, "const $1 = $2;\n__exportConst(\"$1\", $1);")
-    .replace(/^\s*export\s+default\s+([^;\n]+);?\s*$/gm, "__exportConst(\"default\", $1);");
+    .replace(/^\s*export\s+default\s+([^;\n]+);?\s*$/gm, "__exportConst(\"default\", $1);")
+    .replace(/^\s*export\s+\{([^}]+)\};?\s*$/gm, (_match, clause: string) => {
+      return rewriteNamedExport(clause);
+    });
+}
+
+function rewriteStaticImport(clause: string, specifier: string): string {
+  const trimmed = clause.trim();
+  if (trimmed.startsWith("* as ")) {
+    return `const ${trimmed.slice("* as ".length).trim()} = await __import("${specifier}");`;
+  }
+
+  const namedStart = trimmed.indexOf("{");
+  if (namedStart === 0) {
+    return `const { ${rewriteNamedImportBindings(trimmed.slice(1, trimmed.lastIndexOf("}"))) } = await __import("${specifier}");`;
+  }
+  if (namedStart > 0) {
+    const defaultName = trimmed.slice(0, namedStart).trim().replace(/,$/, "");
+    const named = trimmed.slice(namedStart + 1, trimmed.lastIndexOf("}"));
+    const temp = `__esm_${defaultName}`;
+    return [
+      `const ${temp} = await __import("${specifier}");`,
+      `const ${defaultName} = ${temp}.default;`,
+      `const { ${rewriteNamedImportBindings(named)} } = ${temp};`
+    ].join("\n");
+  }
+
+  return `const ${trimmed} = (await __import("${specifier}")).default;`;
+}
+
+function rewriteNamedImportBindings(clause: string): string {
+  return clause
+    .split(",")
+    .map((binding) => binding.trim())
+    .filter(Boolean)
+    .map((binding) => binding.replace(/\s+as\s+/g, ": "))
+    .join(", ");
+}
+
+function rewriteNamedExport(clause: string): string {
+  return clause
+    .split(",")
+    .map((binding) => binding.trim())
+    .filter(Boolean)
+    .map((binding) => {
+      const [local, exported] = binding.split(/\s+as\s+/);
+      const localName = local?.trim();
+      if (!localName) return "";
+      return `__exportConst("${(exported || localName).trim()}", ${localName});`;
+    })
+    .filter(Boolean)
+    .join("\n");
 }

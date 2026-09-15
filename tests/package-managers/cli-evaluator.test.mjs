@@ -244,7 +244,20 @@ const workspace = new MemoryPackageManagerWorkspace([
   },
   {
     path: "/workspace/esm-cli/package/dist/node/cli.js",
-    data: "process.stdout.write('vite esm boot\\n');\nexport const started = true;\n"
+    data: `
+      import defaultLabel, { namedLabel as renamedLabel } from './labels.js';
+      import * as namespaceLabels from './namespace.js';
+      process.stdout.write(defaultLabel + ' ' + renamedLabel + ' ' + namespaceLabels.namespaceLabel + '\\n');
+      export const started = true;
+    `
+  },
+  {
+    path: "/workspace/esm-cli/package/dist/node/labels.js",
+    data: "const defaultLabel = 'vite';\nconst namedLabel = 'esm';\nexport default defaultLabel;\nexport { namedLabel };\n"
+  },
+  {
+    path: "/workspace/esm-cli/package/dist/node/namespace.js",
+    data: "export const namespaceLabel = 'boot';\n"
   },
   {
     path: "/workspace/esm-cli/package/package.json",
