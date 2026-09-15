@@ -55,7 +55,7 @@ export class ModuleRuntime {
 
   importSync(specifier: string, parentUrl = "/workspace/index.mjs"): RuntimeNamespace {
     if (this.builtins && builtinModules.includes(specifier)) return this.builtins(specifier) as RuntimeNamespace;
-    const url = this.resolve(specifier, parentUrl);
+    const url = this.resolver.resolveImport(specifier, parentUrl);
     const existing = this.cache.esm.get(url);
     if (existing) return existing.namespace;
 
@@ -75,7 +75,7 @@ export class ModuleRuntime {
 
   async importModule(specifier: string, parentUrl = "/workspace/index.mjs"): Promise<RuntimeNamespace> {
     if (this.builtins && builtinModules.includes(specifier)) return this.builtins(specifier) as RuntimeNamespace;
-    const url = this.resolve(specifier, parentUrl);
+    const url = this.resolver.resolveImport(specifier, parentUrl);
     return evaluateEsm(this, url);
   }
 }

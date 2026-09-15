@@ -39,30 +39,38 @@ export class ModuleResolver {
   }
 
   resolve(specifier: string, parentUrl = "/workspace/index.mjs"): string {
+    return this.resolveWithConditions(specifier, parentUrl, ["require", "node", "default", "import"]);
+  }
+
+  resolveImport(specifier: string, parentUrl = "/workspace/index.mjs"): string {
+    return this.resolveWithConditions(specifier, parentUrl, ["import", "node", "default", "require"]);
+  }
+
+  resolveWithConditions(specifier: string, parentUrl: string, conditions: readonly string[]): string {
     if (specifier.startsWith("#")) {
-      return this.resolveImports(specifier, parentUrl);
+      return this.resolveImports(specifier, parentUrl, conditions);
     }
     if (specifier === "." || specifier === ".." || specifier.startsWith("/") || specifier.startsWith("./") || specifier.startsWith("../")) {
       const base = specifier.startsWith("/") ? specifier : `${dirname(parentUrl)}/${specifier}`;
       return this.resolvePath(base);
     }
-    return this.resolvePackage(specifier, parentUrl);
+    return this.resolvePackage(specifier, parentUrl, conditions);
   }
 
-  resolveImports(specifier: string, parentUrl: string): string {
+  resolveImports(specifier: string, parentUrl: string, conditions: readonly string[] = ["require", "node", "default", "import"]): string {
     const target = this.imports[specifier];
     if (!target) throw new Error(`ERR_PACKAGE_IMPORT_NOT_DEFINED: ${specifier} from ${parentUrl}`);
-    return this.resolve(target, parentUrl);
+    return this.resolveWithConditions(target, parentUrl, conditions);
   }
 
-  resolvePackage(specifier: string, parentUrl = "/workspace/index.mjs"): string {
+  resolvePackage(specifier: string, parentUrl = "/workspace/index.mjs", conditions: readonly string[] = ["require", "node", "default", "import"]): string {
     const name = packageName(specifier);
     const root = this.findPackageRoot(name, parentUrl) || this.findSelfPackageRoot(name, parentUrl);
     const manifest = root ? this.packageRoots[root] : this.packages[name];
     if (!manifest) throw moduleNotFound(`ERR_MODULE_NOT_FOUND: ${specifier}`);
 
     const subpath = specifier === name ? "." : `.${specifier.slice(name.length)}`;
-    const target = resolvePackageTarget(manifest, subpath);
+    const target = resolvePackageTarget(manifest, subpath, conditions);
     if (!target) throw new Error(`ERR_PACKAGE_PATH_NOT_EXPORTED: ${specifier}`);
 
     const packageRoot = root || manifest.root || `/workspace/node_modules/${name}`;
@@ -115,15 +123,15 @@ function moduleNotFound(message: string): Error & { code: "MODULE_NOT_FOUND" } {
   return Object.assign(new Error(message), { code: "MODULE_NOT_FOUND" as const });
 }
 
-function resolvePackageTarget(manifest: PackageManifest, subpath: string): string | undefined {
+function resolvePackageTarget(manifest: PackageManifest, subpath: string, conditions: readonly string[]): string | undefined {
   if (manifest.exports) {
     if (typeof manifest.exports === "string" || Array.isArray(manifest.exports)) {
-      return subpath === "." ? resolveConditionalTarget(manifest.exports) : undefined;
+      return subpath === "." ? resolveConditionalTarget(manifest.exports, conditions) : undefined;
     }
     const target = isConditionalExportMap(manifest.exports)
       ? subpath === "." ? manifest.exports : undefined
       : resolveSubpathExport(manifest.exports, subpath);
-    return target ? resolveConditionalTarget(target) : undefined;
+    return target ? resolveConditionalTarget(target, conditions) : undefined;
   }
   if (subpath === ".") return manifest.main || "./index.js";
   return subpath;
@@ -155,17 +163,17 @@ function replaceExportPatternTarget(target: PackageExportTarget, matched: string
   return replaced;
 }
 
-function resolveConditionalTarget(target: PackageExportTarget): string | undefined {
+function resolveConditionalTarget(target: PackageExportTarget, conditions: readonly string[]): string | undefined {
   if (typeof target === "string") return target;
   if (Array.isArray(target)) {
     for (const item of target) {
-      const resolved = resolveConditionalTarget(item);
+      const resolved = resolveConditionalTarget(item, conditions);
       if (resolved) return resolved;
     }
     return undefined;
   }
-  for (const condition of ["require", "node", "default", "import"]) {
-    const resolved = target[condition] ? resolveConditionalTarget(target[condition]) : undefined;
+  for (const condition of conditions) {
+    const resolved = target[condition] ? resolveConditionalTarget(target[condition], conditions) : undefined;
     if (resolved) return resolved;
   }
   return undefined;
