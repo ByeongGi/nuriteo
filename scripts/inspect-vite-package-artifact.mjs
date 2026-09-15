@@ -1,8 +1,9 @@
 #!/usr/bin/env node
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 import {
+  createWasmAdapterPolicy,
   createViteDependencyArtifactClosureFromWorkspace,
   createVitePackageArtifactFromWorkspace,
   ViteProductWorkflow
@@ -11,10 +12,18 @@ import { createFallbackWorkspaceReader, createNodeFsWorkspaceReader } from "./li
 
 const args = process.argv.slice(2);
 const execute = args.includes("--execute");
-const [vitePackageRootArg, nodeModulesRootArg] = args.filter((arg) => arg !== "--execute");
+const forceWasi = args.includes("--force-wasi");
+const wasmPolicyPath = readFlagValue(args, "--wasm-policy");
+const [vitePackageRootArg, nodeModulesRootArg] = args.filter((arg, index) => {
+  if (arg === "--execute") return false;
+  if (arg === "--force-wasi") return false;
+  if (arg === "--wasm-policy") return false;
+  if (index > 0 && args[index - 1] === "--wasm-policy") return false;
+  return true;
+});
 
 if (!vitePackageRootArg) {
-  console.error("Usage: node scripts/inspect-vite-package-artifact.mjs <vite-package-root> [node-modules-root] [--execute]");
+  console.error("Usage: node scripts/inspect-vite-package-artifact.mjs <vite-package-root> [node-modules-root] [--execute] [--force-wasi] [--wasm-policy <manifest-json>]");
   process.exitCode = 1;
 } else {
   const vitePackageRoot = resolve(vitePackageRootArg);
@@ -30,25 +39,28 @@ if (!vitePackageRootArg) {
       reader: viteReader,
       packageRoot: "/vendor/vite"
     });
+    const wasmAdapterPolicy = wasmPolicyPath ? createPolicyFromManifest(wasmPolicyPath) : null;
     const workflow = new ViteProductWorkflow({
       manager: "pnpm",
+      ...(wasmAdapterPolicy ? { wasmAdapterPolicy } : {}),
       vitePackageArtifact
     });
     workflow.install();
     const readiness = workflow.inspectRealCliReadiness();
     const dependencyClosure = nodeModulesRootArg
-      ? inspectDependencyClosure(resolve(nodeModulesRootArg), vitePackageArtifact)
+      ? inspectDependencyClosure(resolve(nodeModulesRootArg), vitePackageArtifact, wasmAdapterPolicy)
       : null;
 
     console.log(JSON.stringify({
       dependencyClosure,
       directReadiness: summarizeReadiness(readiness),
       executionSmoke: execute
-        ? await runExecutionSmoke(vitePackageArtifact, dependencyClosure?.artifacts || [])
+        ? await runExecutionSmoke(vitePackageArtifact, dependencyClosure?.artifacts || [], { forceWasi, wasmAdapterPolicy })
         : null,
       hydratedReadiness: dependencyClosure
-        ? summarizeReadiness(createHydratedWorkflowReadiness(vitePackageArtifact, dependencyClosure.artifacts))
+        ? summarizeReadiness(createHydratedWorkflowReadiness(vitePackageArtifact, dependencyClosure.artifacts, wasmAdapterPolicy))
         : null,
+      wasmPolicy: wasmPolicyPath ? resolve(wasmPolicyPath) : null,
       vitePackageArtifact: {
         mountCount: vitePackageArtifact.mounts.length,
         version: vitePackageArtifact.version
@@ -57,16 +69,19 @@ if (!vitePackageRootArg) {
   }
 }
 
-async function runExecutionSmoke(vitePackageArtifact, dependencyArtifacts) {
+async function runExecutionSmoke(vitePackageArtifact, dependencyArtifacts, options) {
   const workflow = new ViteProductWorkflow({
     dependencyArtifacts,
     manager: "pnpm",
+    ...(options.wasmAdapterPolicy ? { wasmAdapterPolicy: options.wasmAdapterPolicy } : {}),
     vitePackageArtifact
   });
   workflow.install();
-  const result = await workflow.executeRealCli(["--host", "127.0.0.1"]);
+  const env = options.forceWasi ? { NAPI_RS_FORCE_WASI: "error" } : {};
+  const result = await workflow.executeRealCli(["--host", "127.0.0.1"], env);
   return {
     args: result.args,
+    env,
     exitCode: result.exitCode,
     nativeBindingBlocker: classifyNativeBindingBlocker(result.stderr),
     registrations: {
@@ -75,18 +90,21 @@ async function runExecutionSmoke(vitePackageArtifact, dependencyArtifacts) {
       server: result.serverRegistrations.length,
       transform: result.transformRegistrations.length
     },
+    runtimeBuiltinBlocker: classifyRuntimeBuiltinBlocker(result.stderr),
+    stderrCauseLines: causeLines(result.stderr),
     stderrFirstLine: firstNonEmptyLine(result.stderr),
     stdoutFirstLine: firstNonEmptyLine(result.stdout)
   };
 }
 
-function inspectDependencyClosure(nodeModulesRoot, vitePackageArtifact) {
+function inspectDependencyClosure(nodeModulesRoot, vitePackageArtifact, wasmAdapterPolicy) {
   const reader = createDependencyReader(nodeModulesRoot);
   const closure = createViteDependencyArtifactClosureFromWorkspace({
     manager: "pnpm",
     nodeModulesRoot: "/workspace/project/node_modules",
     reader,
-    vitePackageArtifact
+    vitePackageArtifact,
+    ...(wasmAdapterPolicy ? { wasmAdapterPolicy } : {})
   });
   const result = {
     artifactNames: closure.artifacts.map((artifact) => artifact.name),
@@ -108,10 +126,11 @@ function inspectDependencyClosure(nodeModulesRoot, vitePackageArtifact) {
   return result;
 }
 
-function createHydratedWorkflowReadiness(vitePackageArtifact, dependencyArtifacts) {
+function createHydratedWorkflowReadiness(vitePackageArtifact, dependencyArtifacts, wasmAdapterPolicy) {
   const workflow = new ViteProductWorkflow({
     dependencyArtifacts,
     manager: "pnpm",
+    ...(wasmAdapterPolicy ? { wasmAdapterPolicy } : {}),
     vitePackageArtifact
   });
   workflow.install();
@@ -131,6 +150,21 @@ function createDependencyReader(nodeModulesRoot) {
     }));
   }
   return createFallbackWorkspaceReader(readers);
+}
+
+function createPolicyFromManifest(path) {
+  return createWasmAdapterPolicy(JSON.parse(readFileSync(resolve(path), "utf8")));
+}
+
+function readFlagValue(values, flag) {
+  const index = values.indexOf(flag);
+  if (index < 0) return null;
+  const value = values[index + 1];
+  if (!value || value.startsWith("--")) {
+    console.error(`Missing value for ${flag}`);
+    process.exit(1);
+  }
+  return value;
 }
 
 function summarizeReadiness(readiness) {
@@ -171,10 +205,19 @@ function summarizePlan(plan) {
 }
 
 function classifyNativeBindingBlocker(stderr) {
-  if (!stderr.includes("Cannot find native binding")) return null;
+  if (!stderr.includes("Cannot find native binding") && !stderr.includes("WASI binding not found")) return null;
   return {
     packageName: inferNativeBindingPackageName(stderr),
     reason: "native-binding-runtime-error"
+  };
+}
+
+function classifyRuntimeBuiltinBlocker(stderr) {
+  const match = stderr.match(/ERR_MODULE_NOT_FOUND: (node:[\w-]+)/);
+  if (!match) return null;
+  return {
+    builtin: match[1],
+    reason: "missing-runtime-builtin"
   };
 }
 
@@ -188,4 +231,11 @@ function inferNativeBindingPackageName(stderr) {
 
 function firstNonEmptyLine(value) {
   return value.split(/\r?\n/).find((line) => line.trim().length > 0) || null;
+}
+
+function causeLines(value) {
+  return value
+    .split(/\r?\n/)
+    .filter((line) => line.startsWith("Caused by:"))
+    .slice(0, 8);
 }

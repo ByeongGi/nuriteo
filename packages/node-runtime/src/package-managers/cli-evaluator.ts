@@ -637,7 +637,24 @@ function clearCliImmediate(handle: ReturnType<typeof setTimeout>): void {
 }
 
 function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.stack || error.message : String(error);
+  return formatErrorWithCauses(error, new Set());
+}
+
+function formatErrorWithCauses(error: unknown, seen: Set<unknown>): string {
+  if (seen.has(error)) return "[Circular error cause]";
+  seen.add(error);
+  if (!(error instanceof Error)) return String(error);
+  const parts = [error.stack || error.message];
+  const errorWithCause = error as Error & { cause?: unknown; errors?: unknown[] };
+  if (errorWithCause.cause !== undefined) {
+    parts.push(`Caused by: ${formatErrorWithCauses(errorWithCause.cause, seen)}`);
+  }
+  if (Array.isArray(errorWithCause.errors)) {
+    for (const nested of errorWithCause.errors) {
+      parts.push(`Caused by: ${formatErrorWithCauses(nested, seen)}`);
+    }
+  }
+  return parts.join("\n");
 }
 
 function captureHostAsyncErrors(onError: (error: unknown) => void): () => void {

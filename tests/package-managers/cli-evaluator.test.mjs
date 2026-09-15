@@ -274,6 +274,22 @@ const workspace = new MemoryPackageManagerWorkspace([
     data: JSON.stringify({ name: "async-error-fixture-cli", version: "1.2.3", main: "lib/cli.js" })
   },
   {
+    path: "/workspace/error-cause-cli/package/bin/npm-cli.js",
+    data: "#!/usr/bin/env node\nrequire('../lib/cli.js')()\n"
+  },
+  {
+    path: "/workspace/error-cause-cli/package/lib/cli.js",
+    data: `
+      module.exports = function run() {
+        throw new Error('top failure', { cause: new Error('nested native binding failure') });
+      };
+    `
+  },
+  {
+    path: "/workspace/error-cause-cli/package/package.json",
+    data: JSON.stringify({ name: "error-cause-fixture-cli", version: "1.2.3", main: "lib/cli.js" })
+  },
+  {
     path: "/workspace/global-cli/package/bin/npm-cli.js",
     data: "#!/usr/bin/env node\nrequire('../lib/cli.js')(process)\n"
   },
@@ -496,6 +512,24 @@ const asyncErrorResult = await createAsyncCliModuleEvaluator({
 assert.equal(asyncErrorResult.stdout, "");
 assert.match(asyncErrorResult.stderr, /delayed failure/);
 assert.equal(asyncErrorResult.exitCode, 1);
+
+const errorCauseResult = createCliModuleEvaluator({
+  root: "/workspace",
+  reader: workspace
+})({
+  entry: {
+    name: "npm",
+    version: "1.2.3",
+    entry: "/workspace/error-cause-cli/package/bin/npm-cli.js"
+  },
+  args: [],
+  cwd: "/workspace/project"
+});
+assert.equal(errorCauseResult.stdout, "");
+assert.match(errorCauseResult.stderr, /top failure/);
+assert.match(errorCauseResult.stderr, /Caused by:/);
+assert.match(errorCauseResult.stderr, /nested native binding failure/);
+assert.equal(errorCauseResult.exitCode, 1);
 
 const globalResult = createCliModuleEvaluator({
   root: "/workspace",
