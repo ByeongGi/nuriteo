@@ -27,6 +27,7 @@ import { ttyBuiltin } from "./builtins/tty.ts";
 import { urlBuiltin } from "./builtins/url.ts";
 import { utilBuiltin } from "./builtins/util.ts";
 import { v8Builtin } from "./builtins/v8.ts";
+import { wasiBuiltin } from "./builtins/wasi.ts";
 import { workerThreadsBuiltin } from "./builtins/worker-threads-builtin.ts";
 import { zlibBuiltin } from "./builtins/zlib.ts";
 
@@ -75,6 +76,7 @@ export function createBuiltinLoader(bindings: BuiltinBindings): (specifier: stri
     if (specifier === "url" || specifier === "node:url") return urlBuiltin;
     if (specifier === "util" || specifier === "node:util") return bindings.util || utilBuiltin;
     if (specifier === "v8" || specifier === "node:v8") return v8Builtin;
+    if (specifier === "wasi" || specifier === "node:wasi") return wasiBuiltin;
     if (specifier === "worker_threads" || specifier === "node:worker_threads") return bindings.workerThreads || workerThreadsBuiltin;
     if (specifier === "zlib" || specifier === "node:zlib") return zlibBuiltin;
     throw new Error(`Unsupported builtin module: ${specifier}`);

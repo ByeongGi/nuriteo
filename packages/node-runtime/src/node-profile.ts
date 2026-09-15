@@ -187,6 +187,12 @@ export const NODE_PROFILE = Object.freeze({
       implementedBy: "packages/node-runtime/src/builtins/v8.ts",
       tests: Object.freeze(["tests/node-runtime/secondary-builtins.test.mjs"])
     }),
+    wasi: Object.freeze({
+      status: "partial",
+      source: "browser-wasi-facade",
+      implementedBy: "packages/node-runtime/src/builtins/wasi.ts",
+      tests: Object.freeze(["tests/node-runtime/secondary-builtins.test.mjs"])
+    }),
     worker_threads: Object.freeze({
       status: "partial",
       source: "browser-unsupported-diagnostic",
@@ -233,6 +239,7 @@ export const NODE_PROFILE = Object.freeze({
     "node:url": Object.freeze(["browser-native-js:url", "node:path"]),
     "node:util": Object.freeze(["browser-native-js:util", "node:events"]),
     "node:v8": Object.freeze(["browser-native-js:v8"]),
+    "node:wasi": Object.freeze(["browser-wasi-facade"]),
     "node:worker_threads": Object.freeze(["browser-unsupported-diagnostic"]),
     "async_hooks": Object.freeze(["node:async_hooks"]),
     "child_process": Object.freeze(["node:child_process"]),
@@ -263,6 +270,7 @@ export const NODE_PROFILE = Object.freeze({
     "url": Object.freeze(["node:url"]),
     "util": Object.freeze(["node:util"]),
     "v8": Object.freeze(["node:v8"]),
+    "wasi": Object.freeze(["node:wasi"]),
     "worker_threads": Object.freeze(["node:worker_threads"])
   })
 });

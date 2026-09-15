@@ -747,7 +747,7 @@ assert.deepEqual(installedDependencyExecution.buildRegistrations, [
 const pureJsDependencyWorkspace = new MemoryPackageManagerWorkspace([
   {
     path: "/workspace/project/node_modules/postcss/package.json",
-    data: JSON.stringify({ name: "postcss", version: "8.5.23", type: "module", exports: { ".": "./lib/postcss.mjs" } })
+    data: JSON.stringify({ name: "postcss", version: "8.5.23", type: "module", exports: { ".": "./lib/postcss.mjs" }, dependencies: { "manifest-only": "^1.0.0" } })
   },
   {
     path: "/workspace/project/node_modules/postcss/lib/postcss.mjs",
@@ -800,6 +800,14 @@ const pureJsDependencyWorkspace = new MemoryPackageManagerWorkspace([
   {
     path: "/workspace/project/node_modules/picomatch/index.js",
     data: "export default function picomatch(pattern) { return `match:${pattern}`; }\n"
+  },
+  {
+    path: "/workspace/project/node_modules/manifest-only/package.json",
+    data: JSON.stringify({ name: "manifest-only", version: "1.0.0" })
+  },
+  {
+    path: "/workspace/project/node_modules/manifest-only/index.js",
+    data: "module.exports = { ok: true };\n"
   }
 ]);
 const pureJsViteArtifact = {
@@ -887,13 +895,14 @@ const pureJsClosure = createViteDependencyArtifactClosureFromWorkspace({
 });
 assert.deepEqual(pureJsClosure.iterations.map((iteration) => iteration.extracted), [
   ["postcss", "tinyglobby"],
-  ["fdir", "nanoid", "picocolors", "picomatch", "source-map-js"]
+  ["fdir", "manifest-only", "nanoid", "picocolors", "picomatch", "source-map-js"]
 ]);
 assert.deepEqual(pureJsClosure.remainingPlan.missing, []);
 assert.deepEqual(pureJsClosure.artifacts.map((artifact) => artifact.name), [
   "postcss",
   "tinyglobby",
   "fdir",
+  "manifest-only",
   "nanoid",
   "picocolors",
   "picomatch",
@@ -914,7 +923,7 @@ assert.deepEqual(pureJsCompleteWorkflow.inspectRealCliReadiness().dependencyMate
   },
   missingCount: 0,
   optionalCount: 0,
-  satisfiedCount: 7
+  satisfiedCount: 8
 });
 const pureJsExecution = await pureJsCompleteWorkflow.executeRealCli(["build"]);
 assert.equal(pureJsExecution.exitCode, 0, pureJsExecution.stderr);

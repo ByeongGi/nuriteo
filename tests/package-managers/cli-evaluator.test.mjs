@@ -317,6 +317,8 @@ const workspace = new MemoryPackageManagerWorkspace([
           typeof global.Uint8Array,
           global.Buffer.isBuffer(Buffer.from('ok')),
           Buffer.from('ok') instanceof global.Uint8Array,
+          globalThis.process === process,
+          typeof globalThis.WebAssembly,
           eventValue
         ].join(' ') + '\\n');
       };
@@ -543,7 +545,7 @@ const globalResult = createCliModuleEvaluator({
   args: [],
   cwd: "/workspace/project"
 });
-assert.equal(globalResult.stdout, "function true true ok\n");
+assert.equal(globalResult.stdout, "function true true true object ok\n");
 assert.equal(globalResult.stderr, "");
 assert.equal(globalResult.exitCode, 0);
 

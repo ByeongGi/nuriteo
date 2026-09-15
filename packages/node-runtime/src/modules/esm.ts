@@ -88,15 +88,16 @@ function createEsmSourceCompiler(source: string, filename: string, globals: Reco
     dynamicImport: (specifier: string) => Promise<RuntimeNamespace>;
     exportConst: (name: string, value: RuntimeValue) => void;
     exportLive: (name: string, getter: () => RuntimeValue) => void;
-  }, process: RuntimeValue, global: RuntimeValue, console: RuntimeValue) => Promise<void>;
+  }, process: RuntimeValue, global: RuntimeValue, console: RuntimeValue, globalThis: RuntimeValue) => Promise<void>;
   const compiled = new AsyncFunction(
     "__context",
     "process",
     "global",
     "console",
+    "globalThis",
     `const __import = __context.dynamicImport;\nconst __exportConst = __context.exportConst;\nconst __exportLive = __context.exportLive;\n${source}\n//# sourceURL=${filename}`
   );
-  return (context) => compiled(context, globals.process, globals.global, globals.console ?? console);
+  return (context) => compiled(context, globals.process, globals.global, globals.console ?? console, globals.globalThis ?? globals.global);
 }
 
 function prepareEsmSource(source: string): string {

@@ -78,14 +78,15 @@ function compileCjsSource(runtime: ModuleRuntime, source: string, filename: stri
     "__process",
     "__global",
     "__console",
+    "__globalThis",
     "__dynamicImport",
     `${preparedSource}\n//# sourceURL=${filename}`
-  ) as (exports: RuntimeModule["exports"], require: (specifier: string) => RuntimeValue, module: RuntimeModule, filename: string, dirname: string, process: RuntimeValue, global: RuntimeValue, console: RuntimeValue, dynamicImport: (specifier: string) => Promise<RuntimeNamespace>) => void;
+  ) as (exports: RuntimeModule["exports"], require: (specifier: string) => RuntimeValue, module: RuntimeModule, filename: string, dirname: string, process: RuntimeValue, global: RuntimeValue, console: RuntimeValue, globalThis: RuntimeValue, dynamicImport: (specifier: string) => Promise<RuntimeNamespace>) => void;
   return ({ exports, require, module, filename, dirname }) => {
     const dynamicImport = typeof globals.__dynamicImport === "function"
       ? globals.__dynamicImport as (specifier: string) => Promise<RuntimeNamespace>
       : (specifier: string) => runtime.importModule(specifier, filename);
-    compiled(exports, require, module, filename, dirname, globals.process, globals.global, globals.console ?? console, dynamicImport);
+    compiled(exports, require, module, filename, dirname, globals.process, globals.global, globals.console ?? console, globals.globalThis ?? globals.global, dynamicImport);
   };
 }
 
@@ -94,6 +95,7 @@ function prepareCjsSource(source: string): string {
   const injections = [];
   if (!declaresLexicalBinding(sourceWithoutShebang, "process")) injections.push("const process = __process;");
   if (!declaresLexicalBinding(sourceWithoutShebang, "global")) injections.push("const global = __global;");
+  if (!declaresLexicalBinding(sourceWithoutShebang, "globalThis")) injections.push("const globalThis = __globalThis;");
   if (!declaresLexicalBinding(sourceWithoutShebang, "console")) injections.push("const console = __console;");
   const injectedSource = injections.length > 0
     ? `${injections.join("\n")}\n${sourceWithoutShebang}`

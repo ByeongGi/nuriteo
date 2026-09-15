@@ -96,7 +96,9 @@ function startCliModuleEvaluation(
   const globalObject: Record<string, unknown> = {
     ArrayBuffer,
     Buffer: BrowserBuffer,
+    SharedArrayBuffer,
     Uint8Array,
+    WebAssembly,
     __dynamicImport: createCliDynamicImport(),
     clearImmediate: clearCliImmediate,
     clearTimeout,
@@ -105,6 +107,10 @@ function startCliModuleEvaluation(
     ...(options.globals || {})
   };
   const consoleObject = createCliConsole(process);
+  globalObject.console = consoleObject;
+  globalObject.global = globalObject;
+  globalObject.globalThis = globalObject;
+  globalObject.process = process;
   const fs = createWorkspaceFsFacade(options.reader, options.writer);
 
   const workerThreads = createCliWorkerThreadsBuiltin({

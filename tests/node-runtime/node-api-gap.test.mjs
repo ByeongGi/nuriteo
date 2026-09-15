@@ -51,6 +51,7 @@ for (const name of [
   "url",
   "util",
   "v8",
+  "wasi",
   "worker_threads"
 ]) {
   const entry = gapsByName.get(name);

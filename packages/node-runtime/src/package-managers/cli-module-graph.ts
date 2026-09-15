@@ -88,6 +88,7 @@ const defaultBuiltins = new Set([
   "url",
   "util",
   "v8",
+  "wasi",
   "worker_threads",
   "zlib"
 ]);
@@ -127,6 +128,7 @@ const knownNodeBuiltins = new Set([
   "url",
   "util",
   "v8",
+  "wasi",
   "worker_threads",
   "zlib"
 ]);

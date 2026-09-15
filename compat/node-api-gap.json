@@ -272,6 +272,21 @@
       "nextPhase": "P10"
     },
     {
+      "builtin": "wasi",
+      "status": "partial",
+      "priority": 1,
+      "implementedBy": "packages/node-runtime/src/builtins/wasi.ts",
+      "tests": ["tests/node-runtime/secondary-builtins.test.mjs"],
+      "requiredBy": ["Rolldown WASI binding candidate", "Vite 8 browser runtime WASM fallback"],
+      "minimumApi": ["WASI", "WASI#wasiImport", "WASI#getImportObject", "WASI#initialize", "WASI#start"],
+      "acceptance": [
+        "node:wasi resolves in package-manager CLI evaluation.",
+        "WASI exposes a Node-compatible constructor and import object surface.",
+        "Full WASI syscall execution remains governed by the P19 WASI runtime boundary."
+      ],
+      "nextPhase": "P11"
+    },
+    {
       "builtin": "stream",
       "status": "partial",
       "priority": 1,

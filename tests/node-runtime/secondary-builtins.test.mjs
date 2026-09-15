@@ -110,6 +110,7 @@ assert.equal(moduleBuiltin.builtinModules.includes("node:querystring"), true);
 assert.equal(moduleBuiltin.builtinModules.includes("node:string_decoder"), true);
 assert.equal(moduleBuiltin.builtinModules.includes("node:timers/promises"), true);
 assert.equal(moduleBuiltin.builtinModules.includes("node:perf_hooks"), true);
+assert.equal(moduleBuiltin.builtinModules.includes("node:wasi"), true);
 assert.equal(moduleBuiltin.isBuiltin("node:module"), true);
 assert.equal(moduleBuiltin.isBuiltin("module"), true);
 assert.equal(moduleBuiltin.isBuiltin("vite"), false);
@@ -212,6 +213,17 @@ assert.equal(asyncHook.enable(), asyncHook);
 assert.equal(asyncHook.disable(), asyncHook);
 assert.equal(asyncHooks.executionAsyncId(), 0);
 assert.equal(asyncHooks.triggerAsyncId(), 0);
+
+const wasi = requireBuiltin("node:wasi");
+const runtimeWasi = new wasi.WASI({
+  env: { NODE_ENV: "test" },
+  preopens: { "/": "/" },
+  returnOnExit: true,
+  version: "preview1"
+});
+assert.equal(runtimeWasi.version, "preview1");
+assert.deepEqual(runtimeWasi.getImportObject(), { wasi_snapshot_preview1: runtimeWasi.wasiImport });
+assert.equal(runtimeWasi.start({} /* minimal WebAssembly.Instance stand-in */), 0);
 
 const perfHooks = requireBuiltin("node:perf_hooks");
 const mark = perfHooks.performance.mark("vite-start");

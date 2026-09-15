@@ -332,7 +332,9 @@ export type ViteRuntimeCapability =
 
 interface VitePackageManifest {
   bin?: string | Record<string, string>;
+  dependencies?: Record<string, string>;
   name?: string;
+  optionalDependencies?: Record<string, string>;
   version?: string;
 }
 
@@ -1004,11 +1006,14 @@ export function createViteDependencyArtifactClosureFromWorkspace(
   let remainingPlan = inspectDependencyMaterializationPlan(options, artifacts);
 
   for (let iteration = 0; iteration < maxIterations; iteration += 1) {
-    const extractableNames = remainingPlan.missing
+    const planNames = remainingPlan.missing
       .filter((item) => item.kind !== "native-hold")
-      .flatMap((item) => item.artifactNames)
+      .flatMap((item) => item.artifactNames);
+    const manifestDependencyNames = dependencyNamesFromArtifacts(artifacts);
+    const extractableNames = uniquePackageNames([...planNames, ...manifestDependencyNames])
       .filter((name) => !artifacts.some((artifact) => artifact.name === name))
-      .filter((name) => readerExists(options.reader, join(nodeModulesRoot, name, "package.json")));
+      .filter((name) => readerExists(options.reader, join(nodeModulesRoot, name, "package.json")))
+      .sort((left, right) => left.localeCompare(right));
     if (extractableNames.length === 0) break;
 
     const extracted = createViteDependencyArtifactsFromWorkspace({
@@ -1022,7 +1027,6 @@ export function createViteDependencyArtifactClosureFromWorkspace(
       extracted: extracted.map((artifact) => artifact.name),
       plan: remainingPlan
     });
-    if (remainingPlan.missing.length === 0) break;
   }
 
   return {
@@ -1030,6 +1034,19 @@ export function createViteDependencyArtifactClosureFromWorkspace(
     iterations,
     remainingPlan
   };
+}
+
+function dependencyNamesFromArtifacts(artifacts: readonly ViteProductDependencyArtifact[]): string[] {
+  return uniquePackageNames(artifacts.flatMap((artifact) => {
+    const packageJsonMount = artifact.mounts.find((mount) => mount.path === "package.json");
+    if (!packageJsonMount) return [];
+    try {
+      const manifest = JSON.parse(packageJsonMount.data) as VitePackageManifest;
+      return Object.keys(manifest.dependencies || {});
+    } catch {
+      return [];
+    }
+  }));
 }
 
 export function runViteReactProductWorkflow(options: ViteProductWorkflowOptions): ViteProductWorkflowResult {

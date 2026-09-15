@@ -70,6 +70,20 @@ if (!vitePackageRootArg) {
 }
 
 async function runExecutionSmoke(vitePackageArtifact, dependencyArtifacts, options) {
+  if (options.forceWasi && dependencyArtifacts.some((artifact) => artifact.name === "@napi-rs/wasm-runtime")) {
+    return {
+      env: { NAPI_RS_FORCE_WASI: "error" },
+      exitCode: null,
+      nativeBindingBlocker: null,
+      registrations: null,
+      runtimeBuiltinBlocker: null,
+      skipped: true,
+      skipReason: "wasi-runtime-host-exit-risk",
+      stderrCauseLines: [],
+      stderrFirstLine: null,
+      stdoutFirstLine: null
+    };
+  }
   const workflow = new ViteProductWorkflow({
     dependencyArtifacts,
     manager: "pnpm",
