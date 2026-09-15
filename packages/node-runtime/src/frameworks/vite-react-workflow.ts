@@ -54,6 +54,13 @@ export interface ViteReactHmrUpdate {
   label: string;
 }
 
+export interface ViteProductHmrSocket {
+  onmessage?: (event: { data: string }) => void;
+  onclose?: () => void;
+  close?: () => void;
+  sendMessage?: (payload: unknown) => void;
+}
+
 export interface ViteReactPreviewResult {
   statusCode: number;
   headers?: Record<string, string>;
@@ -98,6 +105,7 @@ export class ViteReactProductWorkflow {
   #buildCliEntrypoint: string | null = null;
   #requests: string[] = [];
   #hmrUpdates: ViteReactHmrUpdate[] = [];
+  #hmrSockets = new Set<ViteProductHmrSocket>();
 
   constructor(options: ViteReactProductWorkflowOptions) {
     this.manager = options.manager;
@@ -216,7 +224,9 @@ export class ViteReactProductWorkflow {
     const before = this.preview("/").body;
     this.workspace.writeText(join(this.projectRoot, "src/message.js"), `export const label = "${label}";\n`);
     const after = this.preview("/").body;
-    this.#hmrUpdates.push({ type: "update", path: "/src/message.js", label });
+    const update = { type: "update", path: "/src/message.js", label } satisfies ViteReactHmrUpdate;
+    this.#hmrUpdates.push(update);
+    this.#broadcastHmr(update);
     return {
       before,
       after,
@@ -226,6 +236,20 @@ export class ViteReactProductWorkflow {
 
   hmrUpdates(): ViteReactHmrUpdate[] {
     return [...this.#hmrUpdates];
+  }
+
+  connectHmr(): ViteProductHmrSocket {
+    const socket: ViteProductHmrSocket = {
+      close: () => {
+        this.#hmrSockets.delete(socket);
+        socket.onclose?.();
+      },
+      sendMessage: (payload) => {
+        socket.onmessage?.({ data: JSON.stringify(payload) });
+      }
+    };
+    this.#hmrSockets.add(socket);
+    return socket;
   }
 
   build(): ViteReactBuildResult {
@@ -318,6 +342,12 @@ export class ViteReactProductWorkflow {
     const binPath = join(this.projectRoot, "node_modules/.bin", binary);
     if (!this.workspace.exists(binPath)) throw new Error(`missing package bin: ${binary}`);
     return this.workspace.readlink(binPath);
+  }
+
+  #broadcastHmr(payload: ViteReactHmrUpdate): void {
+    for (const socket of this.#hmrSockets) {
+      socket.onmessage?.({ data: JSON.stringify(payload) });
+    }
   }
 }
 

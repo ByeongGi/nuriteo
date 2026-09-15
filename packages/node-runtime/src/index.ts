@@ -16,7 +16,7 @@ export { analyzeCliModuleGraph, applyNpmInstallPlan, applyPnpmStorePlan, classif
 export { createHttpClient, createHttpsClient, gzip, gunzip, integritySha512, RuntimeHttpClient, RuntimeHttpsClient, sha256Hex, sha512Base64 } from "./network/index.ts";
 export { createLoopbackNetwork, LoopbackNetwork, LoopbackNetworkError, parseHttpRequest, parseHttpResponse, serializeHttpRequest, serializeHttpResponse } from "./net/index.ts";
 export { runViteProductWorkflow, runViteReactProductWorkflow, ViteProductWorkflow, ViteReactProductWorkflow } from "./frameworks/index.ts";
-export type { ViteProductTemplate, ViteReactBuildResult, ViteReactDevServerSnapshot, ViteReactHmrResult, ViteReactHmrUpdate, ViteReactInstallResult, ViteReactPackageManager, ViteReactPreviewResult, ViteReactProductWorkflowOptions, ViteReactProductWorkflowResult, ViteReactReloadRecoveryResult } from "./frameworks/index.ts";
+export type { ViteProductHmrSocket, ViteProductTemplate, ViteReactBuildResult, ViteReactDevServerSnapshot, ViteReactHmrResult, ViteReactHmrUpdate, ViteReactInstallResult, ViteReactPackageManager, ViteReactPreviewResult, ViteReactProductWorkflowOptions, ViteReactProductWorkflowResult, ViteReactReloadRecoveryResult } from "./frameworks/index.ts";
 export { createWasmAdapterPolicy, createWasmAdapterRegistry, rejectNativeAddon, WasmAdapterError, WasmAdapterPolicy, WasmAdapterRegistry } from "./wasm-adapters/index.ts";
 export { originalPositionFor, transpileTypeScript } from "./transforms/index.ts";
 export { runNodeProgram } from "./bootstrap.ts";

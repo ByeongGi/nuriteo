@@ -94,14 +94,7 @@ for (const manager of ["npm", "pnpm"]) {
   const hmrEvents = [];
   const hmr = createHmrClient({
     connect() {
-      return {
-        sendMessage(payload) {
-          this.onmessage?.({ data: JSON.stringify(payload) });
-        },
-        close() {
-          this.onclose?.();
-        }
-      };
+      return workflow.connectHmr();
     }
   });
   hmr.on("open", (event) => hmrEvents.push(`open:${event.attempt}`));
@@ -110,7 +103,7 @@ for (const manager of ["npm", "pnpm"]) {
   workflow.editMessage("gamma");
   const editedMessageModule = await workflow.fetch("http://127.0.0.1:5173/src/message.js");
   assert.match(await editedMessageModule.text(), /gamma/);
-  hmr.socket.sendMessage(workflow.hmrUpdates().at(-1));
+  assert.equal(workflow.hmrUpdates().at(-1).label, "gamma");
   hmr.close();
   assert.deepEqual(hmrEvents, ["open:1", "message:update"]);
 }
