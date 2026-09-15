@@ -20,8 +20,20 @@ for (const manager of ["npm", "pnpm"]) {
   assert.deepEqual(result.realCliReadiness.cliEntryReadiness.reasons, []);
   assert.equal(result.realCliReadiness.cliModuleGraph.entry, "/workspace/project/node_modules/vite/bin/vite.js");
   assert.deepEqual(result.realCliReadiness.cliModuleGraph.modules[0].imports, ["../dist/node/cli.js"]);
-  assert.equal(result.realCliReadiness.cliModuleGraph.issues[0].kind, "missing-module");
-  assert.equal(result.realCliReadiness.cliModuleGraph.supported, false);
+  assert.equal(
+    result.realCliReadiness.cliModuleGraph.modules.some((mod) => mod.path.endsWith("/dist/node/cli.js")),
+    true
+  );
+  assert.equal(
+    result.realCliReadiness.cliModuleGraph.modules.some((mod) => mod.path.endsWith("/dist/node/server.js")),
+    true
+  );
+  assert.equal(
+    result.realCliReadiness.cliModuleGraph.modules.some((mod) => mod.path.endsWith("/dist/node/hmr.js")),
+    true
+  );
+  assert.deepEqual(result.realCliReadiness.cliModuleGraph.issues, []);
+  assert.equal(result.realCliReadiness.cliModuleGraph.supported, true);
   assert.equal(result.realCliReadiness.missingCapabilities.includes("actual-vite-cli-module-execution"), true);
   assert.equal(result.realCliReadiness.missingCapabilities.includes("real-vite-hmr-protocol"), true);
   assert.equal(

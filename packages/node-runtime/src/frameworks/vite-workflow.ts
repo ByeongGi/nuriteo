@@ -385,8 +385,20 @@ export class ViteProductWorkflow {
 
   #installViteCliEntrypoint(): void {
     const packageJsonPath = join(this.projectRoot, "node_modules/vite/package.json");
-    this.workspace.writeText(packageJsonPath, JSON.stringify({ name: "vite", version: "8.2.0", bin: { vite: "bin/vite.js" } }));
+    this.workspace.writeText(packageJsonPath, JSON.stringify({ name: "vite", version: "8.2.0", type: "module", bin: { vite: "bin/vite.js" } }));
     this.workspace.writeText(join(this.projectRoot, "node_modules/vite/bin/vite.js"), "#!/usr/bin/env node\nimport '../dist/node/cli.js';\n");
+    this.workspace.writeText(
+      join(this.projectRoot, "node_modules/vite/dist/node/cli.js"),
+      "import { createRequire } from 'node:module';\nimport { startDevServer } from './server.js';\nconst require = createRequire(import.meta.url);\nrequire('../../package.json');\nstartDevServer();\n"
+    );
+    this.workspace.writeText(
+      join(this.projectRoot, "node_modules/vite/dist/node/server.js"),
+      "import { EventEmitter } from 'node:events';\nimport { createHotChannel } from './hmr.js';\nexport function startDevServer() {\n  const server = new EventEmitter();\n  createHotChannel(server);\n  return server;\n}\n"
+    );
+    this.workspace.writeText(
+      join(this.projectRoot, "node_modules/vite/dist/node/hmr.js"),
+      "export function createHotChannel(server) {\n  server.emit('vite:hmr-ready');\n  return { send() {} };\n}\n"
+    );
     this.workspace.symlink(join(this.projectRoot, "node_modules/vite/bin/vite.js"), join(this.projectRoot, "node_modules/.bin/vite"));
   }
 
