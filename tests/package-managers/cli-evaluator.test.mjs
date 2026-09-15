@@ -244,7 +244,7 @@ const workspace = new MemoryPackageManagerWorkspace([
   },
   {
     path: "/workspace/esm-cli/package/dist/node/cli.js",
-    data: "export const started = true;\n"
+    data: "process.stdout.write('vite esm boot\\n');\nexport const started = true;\n"
   },
   {
     path: "/workspace/esm-cli/package/package.json",
@@ -397,6 +397,7 @@ assert.deepEqual(inspectCliEntryReadiness({ entry: esmCliEntry, reader: workspac
   ],
   nextAction: "Add async ESM CLI entry execution before routing this command through the browser guest runtime."
 });
+assert.equal(inspectCliEntryReadiness({ entry: esmCliEntry, reader: workspace, supportedModes: ["cjs", "esm"] }).status, "ready");
 const esmResult = createCliModuleEvaluator({
   root: "/workspace",
   reader: workspace
@@ -408,6 +409,17 @@ const esmResult = createCliModuleEvaluator({
 assert.equal(esmResult.stdout, "");
 assert.match(esmResult.stderr, /ERR_CLI_ESM_ENTRY_UNSUPPORTED/);
 assert.equal(esmResult.exitCode, 1);
+const asyncEsmResult = await createAsyncCliModuleEvaluator({
+  root: "/workspace",
+  reader: workspace
+})({
+  entry: esmCliEntry,
+  args: ["--host", "127.0.0.1"],
+  cwd: "/workspace/project"
+});
+assert.equal(asyncEsmResult.stdout, "vite esm boot\n");
+assert.equal(asyncEsmResult.stderr, "");
+assert.equal(asyncEsmResult.exitCode, 0);
 
 const entry = {
   name: "npm",

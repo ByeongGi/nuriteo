@@ -50,7 +50,12 @@ export type EsmModuleDefinition = {
   factory: (context: EsmContext) => void | Promise<void>;
 };
 
-export type ModuleDefinition = CjsModuleDefinition | CjsSourceModuleDefinition | JsonModuleDefinition | EsmModuleDefinition;
+export type EsmSourceModuleDefinition = {
+  kind: "esm-source";
+  source: string;
+};
+
+export type ModuleDefinition = CjsModuleDefinition | CjsSourceModuleDefinition | JsonModuleDefinition | EsmModuleDefinition | EsmSourceModuleDefinition;
 export type ModuleDefinitionMap = Record<string, ModuleDefinition>;
 
 export interface PackageManifest {

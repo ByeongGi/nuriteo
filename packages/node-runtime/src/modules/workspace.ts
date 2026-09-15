@@ -39,7 +39,12 @@ export function createWorkspaceModuleRuntime(options: WorkspaceModuleRuntimeOpti
 
 export function registerWorkspaceModules(runtime: ModuleRuntime, reader: WorkspaceModuleReader, root = "/workspace"): ModuleRuntime {
   for (const file of walkFiles(reader, trimSlash(root))) {
-    if (file.endsWith(".cjs") || file.endsWith(".js")) {
+    if (isEsmSourceFile(reader, file)) {
+      runtime.register(file, {
+        kind: "esm-source",
+        source: reader.readText(file)
+      });
+    } else if (file.endsWith(".cjs") || file.endsWith(".js")) {
       runtime.register(file, {
         kind: "cjs-source",
         source: reader.readText(file)
@@ -105,7 +110,30 @@ function safeReadText(reader: WorkspaceModuleReader, path: string): string | nul
 }
 
 function isLikelyTextModule(path: string): boolean {
-  return path.endsWith(".js") || path.endsWith(".cjs") || path.endsWith(".json");
+  return path.endsWith(".js") || path.endsWith(".cjs") || path.endsWith(".mjs") || path.endsWith(".json");
+}
+
+function isEsmSourceFile(reader: WorkspaceModuleReader, path: string): boolean {
+  if (path.endsWith(".mjs")) return true;
+  if (!path.endsWith(".js")) return false;
+  return nearestPackageType(reader, path) === "module";
+}
+
+function nearestPackageType(reader: WorkspaceModuleReader, path: string): string | null {
+  let current = path.slice(0, path.lastIndexOf("/")) || "/";
+  while (current !== "/") {
+    const manifest = safeReadText(reader, join(current, "package.json"));
+    if (manifest) {
+      try {
+        const parsed = JSON.parse(manifest) as { type?: unknown };
+        return typeof parsed.type === "string" ? parsed.type : null;
+      } catch {
+        return null;
+      }
+    }
+    current = current.slice(0, current.lastIndexOf("/")) || "/";
+  }
+  return null;
 }
 
 function packageNameFromNodeModulesPath(packageRoot: string): string | null {

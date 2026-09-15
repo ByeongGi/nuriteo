@@ -25,6 +25,7 @@ export interface CliEntryReadiness {
 export interface InspectCliEntryReadinessOptions {
   entry: CliEntry;
   reader: PackageManagerWorkspaceReader;
+  supportedModes?: readonly CliEntryModuleMode[];
 }
 
 export function inspectCliEntryReadiness(options: InspectCliEntryReadinessOptions): CliEntryReadiness {
@@ -43,7 +44,8 @@ export function inspectCliEntryReadiness(options: InspectCliEntryReadinessOption
     reader: options.reader,
     source
   });
-  if (mode === "esm") {
+  const supportedModes = options.supportedModes || ["cjs"];
+  if (!supportedModes.includes(mode) && mode === "esm") {
     return blocked(options.entry.entry, mode, {
       code: "ERR_CLI_ESM_ENTRY_UNSUPPORTED",
       message: `ESM CLI entrypoint requires async module entry execution: ${options.entry.entry}`

@@ -30,25 +30,32 @@ export interface CliModuleEvaluationRequest {
 
 export function createCliModuleEvaluator(options: CliModuleEvaluatorOptions): (request: CliModuleEvaluationRequest) => CliRunResult {
   return function evaluateCliModule(request: CliModuleEvaluationRequest): CliRunResult {
-    return startCliModuleEvaluation(options, request).finalize();
+    return startCliModuleEvaluation(options, request, { supportedModes: ["cjs"] }).finalize();
   };
 }
 
 export function createAsyncCliModuleEvaluator(options: AsyncCliModuleEvaluatorOptions): (request: CliModuleEvaluationRequest) => Promise<CliRunResult> {
   return async function evaluateCliModuleAsync(request: CliModuleEvaluationRequest): Promise<CliRunResult> {
-    const evaluation = startCliModuleEvaluation(options, request);
+    const evaluation = startCliModuleEvaluation(options, request, { supportedModes: ["cjs", "esm"] });
     await settleCliEvaluation(options);
+    await evaluation.ready;
     return evaluation.finalize();
   };
 }
 
-function startCliModuleEvaluation(options: CliModuleEvaluatorOptions, request: CliModuleEvaluationRequest): { finalize: () => CliRunResult } {
+function startCliModuleEvaluation(
+  options: CliModuleEvaluatorOptions,
+  request: CliModuleEvaluationRequest,
+  capabilities: { supportedModes: readonly ("cjs" | "esm")[] }
+): { ready: Promise<void>; finalize: () => CliRunResult } {
   const readiness = inspectCliEntryReadiness({
     entry: request.entry,
-    reader: options.reader
+    reader: options.reader,
+    supportedModes: capabilities.supportedModes
   });
   if (readiness.status === "blocked") {
     return {
+      ready: Promise.resolve(),
       finalize() {
         return {
           stdout: "",
@@ -122,8 +129,16 @@ function startCliModuleEvaluation(options: CliModuleEvaluatorOptions, request: C
   });
 
   let exitCode = 0;
+  let ready = Promise.resolve();
   try {
-    runtime.requireSync(request.entry.entry, request.entry.entry);
+    if (readiness.mode === "esm") {
+      ready = runtime.importModule(request.entry.entry, request.entry.entry).then(() => undefined, (error) => {
+        asyncExitCode = 1;
+        stderr += `${errorMessage(error)}\n`;
+      });
+    } else {
+      runtime.requireSync(request.entry.entry, request.entry.entry);
+    }
   } catch (error) {
     const message = errorMessage(error);
     const exit = parseProcessExit(message);
@@ -136,6 +151,7 @@ function startCliModuleEvaluation(options: CliModuleEvaluatorOptions, request: C
   }
 
   return {
+    ready,
     finalize() {
       restoreHostErrorCapture();
       if (asyncExitCode !== undefined) exitCode = asyncExitCode;
