@@ -53,6 +53,12 @@ export interface ViteProductDependencyArtifactsFromWorkspaceOptions {
   reader: WorkspaceModuleReader;
 }
 
+export interface ViteProductDependencyArtifactsFromPlanOptions {
+  nodeModulesRoot: string;
+  plan: ViteDependencyMaterializationPlan;
+  reader: WorkspaceModuleReader;
+}
+
 export type ViteProductPackageArtifactErrorCode = "EVITEARTIFACTMANIFEST" | "EVITEARTIFACTNAME" | "EVITEARTIFACTBIN";
 
 export class ViteProductPackageArtifactError extends Error {
@@ -888,6 +894,16 @@ export function createViteDependencyArtifactsFromWorkspace(
     packageRoot: join(nodeModulesRoot, name),
     reader: options.reader
   }));
+}
+
+export function createViteDependencyArtifactsFromPlan(
+  options: ViteProductDependencyArtifactsFromPlanOptions
+): ViteProductDependencyArtifact[] {
+  return createViteDependencyArtifactsFromWorkspace({
+    names: options.plan.missing.map((item) => item.name),
+    nodeModulesRoot: options.nodeModulesRoot,
+    reader: options.reader
+  });
 }
 
 export function runViteReactProductWorkflow(options: ViteProductWorkflowOptions): ViteProductWorkflowResult {

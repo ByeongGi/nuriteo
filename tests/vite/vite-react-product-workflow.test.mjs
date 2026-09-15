@@ -7,6 +7,7 @@ import {
   createNpmInstallPlan,
   createPnpmStorePlan,
   createViteDependencyArtifactFromWorkspace,
+  createViteDependencyArtifactsFromPlan,
   createViteDependencyArtifactsFromWorkspace,
   createVitePackageArtifactFromWorkspace,
   MemoryPackageManagerWorkspace,
@@ -482,6 +483,14 @@ const batchDependencyArtifacts = createViteDependencyArtifactsFromWorkspace({
 assert.deepEqual(batchDependencyArtifacts.map((artifact) => [artifact.name, artifact.version]), [
   ["rolldown", "1.2.1-installed"],
   ["@scope/pkg", "3.4.5"]
+]);
+const planDependencyArtifacts = createViteDependencyArtifactsFromPlan({
+  reader: batchDependencyWorkspace,
+  nodeModulesRoot: "/workspace/project/node_modules",
+  plan: missingDependencyWorkflow.inspectRealCliReadiness().dependencyMaterializationPlan
+});
+assert.deepEqual(planDependencyArtifacts.map((artifact) => [artifact.name, artifact.version]), [
+  ["rolldown", "1.2.1-installed"]
 ]);
 const installedDependencyWorkflow = new ViteProductWorkflow({
   manager: "pnpm",
