@@ -35,6 +35,15 @@
       "notes": "npm and pnpm install, dev server, browser preview, Vue runtime render, source edit, HMR state preservation, build, dist smoke, and restart pass in the reference harness."
     },
     {
+      "id": "vite-svelte-reference-workflow",
+      "framework": "vite",
+      "template": "svelte",
+      "runtime": "host-node-reference-harness",
+      "status": "pass",
+      "evidence": ["tests/vite/vite-integration.test.mjs", "tests/fixtures/vite-svelte/package.json"],
+      "notes": "npm and pnpm install, dev server, browser preview, Svelte render, source edit, HMR state preservation, build, dist smoke, and restart pass in the reference harness."
+    },
+    {
       "id": "vite-react-product-workflow",
       "framework": "vite",
       "template": "react",

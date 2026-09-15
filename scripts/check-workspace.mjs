@@ -256,6 +256,13 @@ const required = [
   "tests/fixtures/vite-vue/src/main.js",
   "tests/fixtures/vite-vue/src/message.js",
   "tests/fixtures/vite-vue/src/style.css",
+  "tests/fixtures/vite-svelte/package.json",
+  "tests/fixtures/vite-svelte/index.html",
+  "tests/fixtures/vite-svelte/vite.config.js",
+  "tests/fixtures/vite-svelte/src/App.svelte",
+  "tests/fixtures/vite-svelte/src/main.js",
+  "tests/fixtures/vite-svelte/src/message.js",
+  "tests/fixtures/vite-svelte/src/style.css",
   "tests/sdk-consumer/package.test.mjs",
   "tests/sdk-consumer/run.mjs"
 ];
