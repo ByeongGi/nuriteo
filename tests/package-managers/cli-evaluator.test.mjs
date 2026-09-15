@@ -154,6 +154,12 @@ const workspace = new MemoryPackageManagerWorkspace([
             process.stdout.write('wrote ' + lstat.isFile() + ' ' + stat.isFile() + '\\n');
           });
         });
+        let statCallbackWasSync = true;
+        fs.stat(process.cwd() + '/sync.txt', (statError) => {
+          if (statError) throw statError;
+          if (statCallbackWasSync) throw new Error('fs.stat callback should be async');
+        });
+        statCallbackWasSync = false;
       };
     `
   },

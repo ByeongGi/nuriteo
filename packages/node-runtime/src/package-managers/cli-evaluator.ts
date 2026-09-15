@@ -1107,20 +1107,24 @@ function createFileHandle(fh: number, fs: CliFileHandleFs): CliFileHandle {
 }
 
 function callWithFsCallback<T>(read: () => T, callback: (error: Error | null, value?: T) => void): void {
-  try {
-    callback(null, read());
-  } catch (error) {
-    callback(error instanceof Error ? error : new Error(String(error)));
-  }
+  queueMicrotask(() => {
+    try {
+      callback(null, read());
+    } catch (error) {
+      callback(error instanceof Error ? error : new Error(String(error)));
+    }
+  });
 }
 
 function callWithOptionalFsCallback(run: () => void, callback: (error?: Error | null) => void): void {
-  try {
-    run();
-    callback(null);
-  } catch (error) {
-    callback(error instanceof Error ? error : new Error(String(error)));
-  }
+  queueMicrotask(() => {
+    try {
+      run();
+      callback(null);
+    } catch (error) {
+      callback(error instanceof Error ? error : new Error(String(error)));
+    }
+  });
 }
 
 type CliFsRealpath = ((path: string, callback: (error: Error | null, resolvedPath?: string) => void) => void) & {
