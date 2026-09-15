@@ -141,6 +141,7 @@ await withRuntimeLab(async (page, baseUrl) => {
       created,
       renamed,
       searchRenamed,
+      hmrUpdates: globalThis.__runtimeLab.viteHmrUpdates(),
       tree: globalThis.__runtimeLab.editorTree()
     };
   });
@@ -150,6 +151,9 @@ await withRuntimeLab(async (page, baseUrl) => {
     throw new Error("editor dirty search did not include edit");
   }
   if (editorResult.saved.dirty) throw new Error("editor save did not clear dirty state");
+  if (editorResult.hmrUpdates.at(-1).updates[0].path !== "/src/main.jsx") {
+    throw new Error("editor save did not propagate to Vite source edit HMR");
+  }
   if (editorResult.created.path !== "/workspace/app/src/Preview.jsx") throw new Error("editor did not create file");
   if (editorResult.renamed.path !== "/workspace/app/src/Preview.tsx") throw new Error("editor did not rename file");
   if (!editorResult.searchRenamed.some((match) => match.path.endsWith("Preview.tsx"))) {

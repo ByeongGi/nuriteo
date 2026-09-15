@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 
 import {
   createProjectWorkspaceEditorBridge,
+  createProjectWorkspaceSourceEditBridge,
   createProjectWorkspaceStore
 } from "../../packages/browser-host/src/index.ts";
 
@@ -12,7 +13,16 @@ const project = createProjectWorkspaceStore({
 project.writeText("package.json", "{\"scripts\":{\"dev\":\"vite\"}}\n");
 project.writeText("src/main.js", "console.log(\"hello\")\n");
 
-const editor = createProjectWorkspaceEditorBridge(project);
+const savedEvents = [];
+const sourceEdits = [];
+const editor = createProjectWorkspaceEditorBridge(project, {
+  onSave: createProjectWorkspaceSourceEditBridge({
+    applySourceEdit(path, data) {
+      sourceEdits.push({ path, data });
+      return { path, data };
+    }
+  })
+});
 
 assert.deepEqual(editor.tree(), [
   {
@@ -59,6 +69,8 @@ const saved = editor.saveFile("src/main.js");
 assert.equal(saved.dirty, false);
 assert.equal(project.readText("src/main.js"), "console.log(\"edited\")\n");
 assert.deepEqual(editor.dirtyFiles(), []);
+savedEvents.push(...sourceEdits);
+assert.deepEqual(savedEvents, [{ path: "src/main.js", data: "console.log(\"edited\")\n" }]);
 
 const created = editor.createFile("src/App.jsx", "export function App() {}\n");
 assert.equal(created.path, "/workspace/app/src/App.jsx");

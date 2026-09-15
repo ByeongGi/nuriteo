@@ -6,8 +6,10 @@ import {
 } from "/packages/browser-host/src/observability/index.ts";
 import {
   createProjectWorkspaceEditorBridge,
+  createProjectWorkspaceSourceEditBridge,
   createProjectWorkspaceStore
 } from "/packages/browser-host/src/storage/index.ts";
+import { ViteProductWorkflow } from "/packages/node-runtime/src/frameworks/vite-workflow.ts";
 import { createTerminalSession } from "/packages/node-runtime/src/shell/index.ts";
 import {
   createHmrClient,
@@ -84,7 +86,16 @@ const project = createProjectWorkspaceStore({
 project.writeText("package.json", "{\"scripts\":{\"dev\":\"vite --host 0.0.0.0\",\"build\":\"vite build\"}}\n");
 project.writeText("src/main.jsx", "console.log(\"hello runtime lab\")\n");
 project.writeText("src/App.jsx", "export function App() { return \"App\"; }\n");
-const editor = createProjectWorkspaceEditorBridge(project);
+const viteWorkflow = new ViteProductWorkflow({
+  manager: "pnpm",
+  projectId: "runtime-lab",
+  projectRoot: project.root
+});
+viteWorkflow.install();
+viteWorkflow.startDevServerFromPackageScript();
+const editor = createProjectWorkspaceEditorBridge(project, {
+  onSave: createProjectWorkspaceSourceEditBridge(viteWorkflow, { root: project.root })
+});
 let selectedEditorPath = "/workspace/app/src/main.jsx";
 
 function log(value) {
@@ -684,6 +695,7 @@ globalThis.__runtimeLab = {
   saveCurrentFile,
   systemMetrics: () => container?.systemMetrics() || null,
   teardown,
+  viteHmrUpdates: () => viteWorkflow.hmrUpdates(),
   restartTerminal,
   status: () => statusEl.textContent,
   terminalHistory: () => terminal.history(),

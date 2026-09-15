@@ -2,9 +2,11 @@ export { createStorageLease, StorageLease, StorageLeaseError } from "./lease.ts"
 export { createMemoryOpfs, MemoryOpfs } from "./opfs.ts";
 export { createOpfsPackageWorkspace, OpfsPackageWorkspace } from "./package-workspace.ts";
 export { createProjectWorkspaceEditorBridge, ProjectWorkspaceEditorBridge } from "./editor-bridge.ts";
+export { createProjectWorkspaceSourceEditBridge } from "./source-edit-bridge.ts";
 export { createProjectWorkspaceStore, migrateProjectWorkspaceSnapshot, ProjectWorkspaceStore } from "./project-workspace.ts";
 export { createQuotaManagedOpfs, QuotaManagedOpfs, StorageQuotaError } from "./quota.ts";
 export { createSnapshotStore, digestSnapshot, SnapshotStore, SnapshotStoreError } from "./snapshot.ts";
 export type { OpfsPackageWorkspaceOptions } from "./package-workspace.ts";
-export type { ProjectWorkspaceEditorFile, ProjectWorkspaceSearchMatch, ProjectWorkspaceTreeNode, ProjectWorkspaceTreeNodeType } from "./editor-bridge.ts";
+export type { ProjectWorkspaceEditorBridgeOptions, ProjectWorkspaceEditorFile, ProjectWorkspaceEditorSaveEvent, ProjectWorkspaceSearchMatch, ProjectWorkspaceTreeNode, ProjectWorkspaceTreeNodeType } from "./editor-bridge.ts";
+export type { ProjectWorkspaceSourceEditBridge, ProjectWorkspaceSourceEditBridgeOptions, ProjectWorkspaceSourceEditTarget } from "./source-edit-bridge.ts";
 export type { JsonPrimitive, JsonValue, OpfsLike, ProjectWorkspaceArchive, ProjectWorkspaceFile, ProjectWorkspaceImportOptions, ProjectWorkspaceMetadata, ProjectWorkspaceSaveOptions, ProjectWorkspaceSnapshot, ProjectWorkspaceStoreOptions, SnapshotMarker, SnapshotRecord, SnapshotSaveOptions, SnapshotSaveResult, SnapshotStoreErrorCode, SnapshotStoreOptions, StorageEvictionOptions, StorageEvictionResult, StorageLeaseErrorCode, StorageLeaseHandle, StorageLeaseOptions, StorageQuotaErrorCode, StorageQuotaFileUsage, StorageQuotaManagedOpfsOptions, StorageQuotaUsage } from "./types.ts";

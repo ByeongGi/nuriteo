@@ -16,6 +16,14 @@ export interface ProjectWorkspaceEditorFile {
   path: string;
 }
 
+export interface ProjectWorkspaceEditorSaveEvent extends ProjectWorkspaceEditorFile {
+  relativePath: string;
+}
+
+export interface ProjectWorkspaceEditorBridgeOptions {
+  onSave?: (event: ProjectWorkspaceEditorSaveEvent) => void;
+}
+
 export interface ProjectWorkspaceSearchMatch {
   column: number;
   line: number;
@@ -26,9 +34,11 @@ export interface ProjectWorkspaceSearchMatch {
 export class ProjectWorkspaceEditorBridge {
   readonly store: ProjectWorkspaceStore;
   #dirty = new Map<string, string>();
+  #onSave: ((event: ProjectWorkspaceEditorSaveEvent) => void) | null;
 
-  constructor(store: ProjectWorkspaceStore) {
+  constructor(store: ProjectWorkspaceStore, options: ProjectWorkspaceEditorBridgeOptions = {}) {
     this.store = store;
+    this.#onSave = options.onSave || null;
   }
 
   tree(): ProjectWorkspaceTreeNode[] {
@@ -74,7 +84,9 @@ export class ProjectWorkspaceEditorBridge {
     if (data === undefined) return this.openFile(normalized);
     this.store.writeText(normalized, data);
     this.#dirty.delete(normalized);
-    return { path: normalized, data, dirty: false };
+    const file = { path: normalized, data, dirty: false };
+    this.#onSave?.({ ...file, relativePath: this.#relativePath(normalized) });
+    return file;
   }
 
   saveAll(): ProjectWorkspaceEditorFile[] {
@@ -157,10 +169,17 @@ export class ProjectWorkspaceEditorBridge {
     if (normalized === this.store.root || normalized.startsWith(`${this.store.root}/`)) return normalized;
     return `${this.store.root}/${normalized.replace(/^\/+/, "")}`;
   }
+
+  #relativePath(path: string): string {
+    return path.slice(this.store.root.length).replace(/^\/+/, "");
+  }
 }
 
-export function createProjectWorkspaceEditorBridge(store: ProjectWorkspaceStore): ProjectWorkspaceEditorBridge {
-  return new ProjectWorkspaceEditorBridge(store);
+export function createProjectWorkspaceEditorBridge(
+  store: ProjectWorkspaceStore,
+  options: ProjectWorkspaceEditorBridgeOptions = {}
+): ProjectWorkspaceEditorBridge {
+  return new ProjectWorkspaceEditorBridge(store, options);
 }
 
 function insertTreeFile(root: ProjectWorkspaceTreeNode, path: string, dirty: boolean): void {
