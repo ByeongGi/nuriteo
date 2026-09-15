@@ -68,10 +68,20 @@ const workspace = new MemoryPackageManagerWorkspace([
         fs.rmSync(process.cwd() + '/delete-dir', { recursive: true, force: true });
         fs.mkdirSync(process.cwd() + '/delete-dir-async');
         await fs.promises.rm(process.cwd() + '/delete-dir-async', { recursive: true, force: true });
+        fs.writeFileSync(process.cwd() + '/rename-source.txt', 'renamed');
+        fs.renameSync(process.cwd() + '/rename-source.txt', process.cwd() + '/rename-target.txt');
+        await fs.promises.writeFile(process.cwd() + '/rename-source-async.txt', 'renamed-async');
+        await fs.promises.rename(process.cwd() + '/rename-source-async.txt', process.cwd() + '/rename-target-async.txt');
         fs.mkdirSync(process.cwd() + '/linked-source');
         fs.writeFileSync(process.cwd() + '/linked-source/package.json', '{"name":"linked-source"}');
         fs.symlinkSync(process.cwd() + '/linked-source', process.cwd() + '/linked-package', 'dir');
         await fs.promises.symlink(process.cwd() + '/linked-source', process.cwd() + '/linked-package-async', 'dir');
+        if (fs.readlinkSync(process.cwd() + '/linked-package') !== process.cwd() + '/linked-source') {
+          throw new Error('unexpected sync readlink');
+        }
+        if (await fs.promises.readlink(process.cwd() + '/linked-package-async') !== process.cwd() + '/linked-source') {
+          throw new Error('unexpected async readlink');
+        }
         const fd = fs.openSync(process.cwd() + '/fd.txt', 'w');
         const bytesWritten = fs.writeSync(fd, 'fd');
         if (bytesWritten !== 2) throw new Error('unexpected write length');
@@ -211,7 +221,8 @@ assert.equal(asyncVersion.exitCode, 0);
 const writeResult = await createAsyncCliModuleEvaluator({
   root: "/workspace",
   reader: workspace,
-  writer: workspace
+  writer: workspace,
+  settleTicks: 20
 })({
   entry: {
     name: "npm",
@@ -232,6 +243,10 @@ assert.equal(workspace.exists("/workspace/project/delete-me.txt"), false);
 assert.equal(workspace.exists("/workspace/project/delete-me-async.txt"), false);
 assert.equal(workspace.exists("/workspace/project/delete-dir"), false);
 assert.equal(workspace.exists("/workspace/project/delete-dir-async"), false);
+assert.equal(workspace.exists("/workspace/project/rename-source.txt"), false);
+assert.equal(workspace.readText("/workspace/project/rename-target.txt"), "renamed");
+assert.equal(workspace.exists("/workspace/project/rename-source-async.txt"), false);
+assert.equal(workspace.readText("/workspace/project/rename-target-async.txt"), "renamed-async");
 assert.equal(workspace.readText("/workspace/project/linked-package/package.json"), '{"name":"linked-source"}');
 assert.equal(workspace.readText("/workspace/project/linked-package-async/package.json"), '{"name":"linked-source"}');
 

@@ -69,6 +69,20 @@ export class BrowserProcess extends EventEmitter {
     else this.#cwd = path;
   }
 
+  hrtime(previous?: [number, number]): [number, number] {
+    const now = performance.now();
+    const seconds = Math.floor(now / 1000);
+    const nanoseconds = Math.floor((now - seconds * 1000) * 1_000_000);
+    if (!previous) return [seconds, nanoseconds];
+    let diffSeconds = seconds - previous[0];
+    let diffNanoseconds = nanoseconds - previous[1];
+    if (diffNanoseconds < 0) {
+      diffSeconds -= 1;
+      diffNanoseconds += 1_000_000_000;
+    }
+    return [diffSeconds, diffNanoseconds];
+  }
+
   exit(code = 0): never | undefined {
     this.exitCode = code;
     this.emit("exit", code);

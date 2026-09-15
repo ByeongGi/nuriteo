@@ -4,6 +4,8 @@ export interface FsPromisesBuiltin {
   mkdir(path: string, options?: { recursive?: boolean }): Promise<void>;
   lstat(path: string): Promise<ReturnType<RuntimeFsBinding["statSync"]>>;
   readFile(path: string, options?: "utf8" | "utf-8" | { encoding?: "utf8" | "utf-8" | null }): Promise<string | Uint8Array>;
+  readlink(path: string): Promise<string>;
+  rename(source: string, target: string): Promise<void>;
   rm(path: string, options?: { force?: boolean; recursive?: boolean }): Promise<void>;
   rmdir(path: string, options?: { force?: boolean; recursive?: boolean }): Promise<void>;
   stat(path: string): Promise<ReturnType<RuntimeFsBinding["statSync"]>>;
@@ -29,6 +31,22 @@ export function createFsPromisesBuiltin(fs: RuntimeFsBinding): FsPromisesBuiltin
     ): Promise<string | Uint8Array> {
       const encoding = typeof options === "string" ? options : options?.encoding;
       return encoding ? fs.readFileSync(path, encoding) : fs.readFileSync(path);
+    },
+
+    async readlink(path: string): Promise<string> {
+      const maybeReadlinkSync = (fs as RuntimeFsBinding & {
+        readlinkSync?: (path: string) => string;
+      }).readlinkSync;
+      if (!maybeReadlinkSync) throw new Error("fs.readlink is not supported by this binding");
+      return maybeReadlinkSync(path);
+    },
+
+    async rename(source: string, target: string): Promise<void> {
+      const maybeRenameSync = (fs as RuntimeFsBinding & {
+        renameSync?: (source: string, target: string) => void;
+      }).renameSync;
+      if (!maybeRenameSync) throw new Error("fs.rename is not supported by this binding");
+      maybeRenameSync(source, target);
     },
 
     async rm(path: string, options?: { force?: boolean; recursive?: boolean }): Promise<void> {

@@ -5,6 +5,7 @@ export type PackageManagerLinkStrategy = "symlink" | "copy-fallback";
 export interface PackageManagerWorkspaceReader {
   readText(path: string): string;
   listDir(path: string): string[];
+  readlink?(path: string): string;
 }
 
 export interface PackageManagerWorkspaceWriter {
@@ -12,6 +13,7 @@ export interface PackageManagerWorkspaceWriter {
   copyFile(source: string, target: string): void;
   mkdir(path: string): void;
   remove(path: string): void;
+  rename?(source: string, target: string): void;
   symlink?(target: string, path: string): void;
   writeText(path: string, data: string): void;
 }
@@ -59,6 +61,18 @@ export class MemoryPackageManagerWorkspace implements PackageManagerWorkspace {
       throw createWorkspaceError("ENOENT", `No such directory: ${normalized}`);
     }
     return [...entries].sort();
+  }
+
+  readlink(path: string): string {
+    const normalized = normalizePath(path);
+    const target = this.links.get(normalized);
+    if (!target) {
+      if (!this.files.has(normalized) && !this.directories.has(normalized)) {
+        throw createWorkspaceError("ENOENT", `No such file or directory: ${normalized}`);
+      }
+      throw createWorkspaceError("EINVAL", `Not a symbolic link: ${normalized}`);
+    }
+    return target;
   }
 
   mkdir(path: string): void {
@@ -110,6 +124,40 @@ export class MemoryPackageManagerWorkspace implements PackageManagerWorkspace {
         this.directories.delete(directory);
       }
     }
+  }
+
+  rename(source: string, target: string): void {
+    const normalizedSource = normalizePath(source);
+    const normalizedTarget = normalizePath(target);
+    this.remove(normalizedTarget);
+    const file = this.files.get(normalizedSource);
+    if (file !== undefined) {
+      this.writeText(normalizedTarget, file);
+      this.remove(normalizedSource);
+      return;
+    }
+    const link = this.links.get(normalizedSource);
+    if (link !== undefined) {
+      this.symlink(link, normalizedTarget);
+      this.remove(normalizedSource);
+      return;
+    }
+    if (!this.directories.has(normalizedSource)) {
+      throw createWorkspaceError("ENOENT", `No such file or directory: ${normalizedSource}`);
+    }
+
+    const prefix = `${normalizedSource}/`;
+    this.mkdir(normalizedTarget);
+    for (const directory of [...this.directories]) {
+      if (directory.startsWith(prefix)) this.mkdir(join(normalizedTarget, directory.slice(prefix.length)));
+    }
+    for (const [path, data] of [...this.files]) {
+      if (path.startsWith(prefix)) this.writeText(join(normalizedTarget, path.slice(prefix.length)), data);
+    }
+    for (const [path, linkTarget] of [...this.links]) {
+      if (path.startsWith(prefix)) this.symlink(linkTarget, join(normalizedTarget, path.slice(prefix.length)));
+    }
+    this.remove(normalizedSource);
   }
 
   symlink(target: string, path: string): void {

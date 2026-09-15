@@ -38,7 +38,6 @@ function exercisePortableBuiltins({ path, url, assertModule }) {
     port: 8443,
     auth: "user:pw"
   });
-
   assertModule.ok(true);
   assertModule.equal("1", 1);
   assertModule.strictEqual(1, 1);
@@ -66,6 +65,14 @@ exercisePortableBuiltins({
   url: runtimeUrl,
   assertModule: runtimeAssert
 });
+const parsedUrl = runtimeUrl.parse("https://user:pw@example.test:8443/a?b=1#c", true);
+assert.equal(parsedUrl.protocol, "https:");
+assert.equal(parsedUrl.host, "example.test:8443");
+assert.equal(parsedUrl.auth, "user:pw");
+assert.deepEqual({ ...parsedUrl.query }, { b: "1" });
+assert.equal(runtimeUrl.format(parsedUrl), "https://user:pw@example.test:8443/a?b=1#c");
+assert.equal(runtimeUrl.resolve("https://example.test/a/b", "../c"), "https://example.test/c");
+assert.equal(runtimeUrl.resolve("//registry.npmjs.org/", "."), "//registry.npmjs.org/");
 
 const os = requireBuiltin("os");
 assert.equal(os.platform(), "linux");
@@ -114,6 +121,12 @@ assert.equal(processModule.cwd(), "/workspace/app");
 assert.equal(processModule.umask(), 0o022);
 assert.equal(processModule.umask(0o077), 0o022);
 assert.equal(processModule.umask(), 0o077);
+const startedAt = processModule.hrtime();
+const elapsed = processModule.hrtime(startedAt);
+assert.equal(startedAt.length, 2);
+assert.equal(elapsed.length, 2);
+assert.equal(typeof elapsed[0], "number");
+assert.equal(typeof elapsed[1], "number");
 await new Promise((resolve) => processModule.nextTick(resolve));
 assert.equal(processBuiltin.platform, "linux");
 assert.throws(() => new BrowserProcess().exit(3), /process\.exit\(3\)/);
@@ -195,8 +208,15 @@ const fsPromises = createBuiltinLoader({
       const bytes = files.get(path) || new Uint8Array();
       return encoding ? new TextDecoder().decode(bytes) : bytes;
     },
+    readlinkSync(path) {
+      return links.get(path);
+    },
     readSync() {
       return new Uint8Array();
+    },
+    renameSync(source, target) {
+      files.set(target, files.get(source));
+      files.delete(source);
     },
     rmSync(path) {
       files.delete(path);
@@ -224,11 +244,14 @@ await fsPromises.writeFile("/workspace/fs-promises.txt", "hello");
 assert.equal(await fsPromises.readFile("/workspace/fs-promises.txt", "utf8"), "hello");
 assert.equal((await fsPromises.stat("/workspace/fs-promises.txt")).size, 5);
 await fsPromises.utimes("/workspace/fs-promises.txt", new Date(), new Date());
+await fsPromises.rename("/workspace/fs-promises.txt", "/workspace/fs-promises-renamed.txt");
+assert.equal(await fsPromises.readFile("/workspace/fs-promises-renamed.txt", "utf8"), "hello");
 await fsPromises.unlink("/workspace/fs-promises.txt");
 assert.equal(files.has("/workspace/fs-promises.txt"), false);
 await fsPromises.rm("/workspace/missing.txt", { force: true });
 await fsPromises.symlink("/workspace/target", "/workspace/link", "dir");
 assert.equal(links.get("/workspace/link"), "/workspace/target");
+assert.equal(await fsPromises.readlink("/workspace/link"), "/workspace/target");
 
 const fetchCalls = [];
 const httpRequire = createBuiltinLoader({

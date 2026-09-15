@@ -251,6 +251,27 @@ function createWorkspaceFsFacade(reader: WorkspaceModuleReader, writer?: Package
         }
       }
     },
+    access(path: string, modeOrCallback?: number | ((error?: Error | null) => void), callback?: (error?: Error | null) => void): void {
+      const cb = typeof modeOrCallback === "function" ? modeOrCallback : callback;
+      try {
+        facade.accessSync(path);
+        cb?.(null);
+      } catch (error) {
+        cb?.(error instanceof Error ? error : new Error(String(error)));
+      }
+    },
+    accessSync(path: string): void {
+      if (!facade.existsSync(path)) throw createFsError("ENOENT", `No such file or directory: ${normalize(path)}`);
+    },
+    mkdir(path: string, optionsOrCallback?: { recursive?: boolean } | ((error?: Error | null) => void), callback?: (error?: Error | null) => void): void {
+      const cb = typeof optionsOrCallback === "function" ? optionsOrCallback : callback;
+      try {
+        facade.mkdirSync(path);
+        cb?.(null);
+      } catch (error) {
+        cb?.(error instanceof Error ? error : new Error(String(error)));
+      }
+    },
     mkdirSync(path: string): void {
       if (!writer) throw unsupportedFsMutation("mkdirSync");
       writer.mkdir(normalize(path));
@@ -304,11 +325,17 @@ function createWorkspaceFsFacade(reader: WorkspaceModuleReader, writer?: Package
       async readFile(path: string, encoding?: "utf8" | "utf-8"): Promise<Uint8Array | string> {
         return encoding ? readFileSync(path, encoding) : readFileSync(path);
       },
+      async readlink(path: string): Promise<string> {
+        return facade.readlinkSync(path);
+      },
       async readdir(path: string): Promise<string[]> {
         return facade.readdirSync(path);
       },
       async realpath(path: string): Promise<string> {
         return facade.realpathSync(path);
+      },
+      async rename(source: string, target: string): Promise<void> {
+        facade.renameSync(source, target);
       },
       async rm(path: string, options: CliRmOptions = {}): Promise<void> {
         facade.rmSync(path, options);
@@ -343,6 +370,14 @@ function createWorkspaceFsFacade(reader: WorkspaceModuleReader, writer?: Package
       }
     },
     readFileSync,
+    readlink(path: string, callback: (error: Error | null, target?: string) => void): void {
+      callWithFsCallback(() => facade.readlinkSync(path), callback);
+    },
+    readlinkSync(path: string): string {
+      const maybeReader = reader as WorkspaceModuleReader & { readlink?: (path: string) => string };
+      if (!maybeReader.readlink) throw createFsError("ENOENT", `No such file or directory: ${normalize(path)}`);
+      return maybeReader.readlink(normalize(path));
+    },
     readSync(fd: number): Uint8Array {
       const file = openFiles.get(fd);
       if (!file) throw createFsError("EBADF", `Bad file descriptor: ${fd}`);
@@ -351,9 +386,32 @@ function createWorkspaceFsFacade(reader: WorkspaceModuleReader, writer?: Package
     readdirSync(path: string): string[] {
       return reader.listDir(normalize(path));
     },
+    readdir(path: string, optionsOrCallback?: CliReaddirOptions | ((error: Error | null, entries?: CliDirent[] | string[]) => void), callback?: (error: Error | null, entries?: CliDirent[] | string[]) => void): void {
+      const cb = typeof optionsOrCallback === "function" ? optionsOrCallback : callback;
+      if (!cb) return;
+      try {
+        const names = facade.readdirSync(path);
+        const withFileTypes = typeof optionsOrCallback === "object" && optionsOrCallback?.withFileTypes === true;
+        cb(null, withFileTypes ? names.map((name) => createDirent(name, normalize(`${path}/${name}`), reader)) : names);
+      } catch (error) {
+        cb(error instanceof Error ? error : new Error(String(error)));
+      }
+    },
     realpath,
     realpathSync(path: string): string {
       return normalize(path);
+    },
+    rename(source: string, target: string, callback: (error?: Error | null) => void = () => undefined): void {
+      try {
+        facade.renameSync(source, target);
+        callback(null);
+      } catch (error) {
+        callback(error instanceof Error ? error : new Error(String(error)));
+      }
+    },
+    renameSync(source: string, target: string): void {
+      if (!writer?.rename) throw unsupportedFsMutation("renameSync");
+      writer.rename(normalize(source), normalize(target));
     },
     rm(path: string, optionsOrCallback: CliRmOptions | ((error?: Error | null) => void) = {}, callback?: (error?: Error | null) => void): void {
       const cb = typeof optionsOrCallback === "function" ? optionsOrCallback : callback;
@@ -418,6 +476,15 @@ function createWorkspaceFsFacade(reader: WorkspaceModuleReader, writer?: Package
       if (!writer) throw unsupportedFsMutation("writeFileSync");
       writer.writeText(normalize(path), decodeFsData(data));
     },
+    writeFile(path: string, data: RuntimeFsData, optionsOrCallback?: unknown, callback?: (error?: Error | null) => void): void {
+      const cb = typeof optionsOrCallback === "function" ? optionsOrCallback as (error?: Error | null) => void : callback;
+      try {
+        facade.writeFileSync(path, data);
+        cb?.(null);
+      } catch (error) {
+        cb?.(error instanceof Error ? error : new Error(String(error)));
+      }
+    },
     writev(_fd: number, _buffers: ArrayBufferView[], callback: (error?: Error | null, bytesWritten?: number, buffers?: ArrayBufferView[]) => void = () => undefined): void {
       callback(unsupportedFsMutation("writev"));
     },
@@ -476,6 +543,17 @@ interface CliRmOptions {
   recursive?: boolean;
 }
 
+interface CliReaddirOptions {
+  withFileTypes?: boolean;
+}
+
+interface CliDirent {
+  name: string;
+  isDirectory(): boolean;
+  isFile(): boolean;
+  isSymbolicLink(): boolean;
+}
+
 interface HostProcessLike {
   on?(event: "uncaughtException" | "unhandledRejection", listener: (error: unknown) => void): unknown;
   off?(event: "uncaughtException" | "unhandledRejection", listener: (error: unknown) => void): unknown;
@@ -501,6 +579,16 @@ function statFromReader(reader: WorkspaceModuleReader, path: string): ReturnType
 
 function unsupportedFsMutation(method: string): Error {
   return createFsError("ERR_BROWSER_FS_MUTATION_UNSUPPORTED", `fs.${method} is not supported by CLI module evaluator`);
+}
+
+function createDirent(name: string, path: string, reader: WorkspaceModuleReader): CliDirent {
+  const stats = statFromReader(reader, path);
+  return {
+    name,
+    isDirectory: () => stats.isDirectory(),
+    isFile: () => stats.isFile(),
+    isSymbolicLink: () => false
+  };
 }
 
 function createFsError(code: string, message: string): Error & { code: string } {

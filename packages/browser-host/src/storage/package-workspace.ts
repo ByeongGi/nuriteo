@@ -36,6 +36,16 @@ export class OpfsPackageWorkspace {
     return [...entries].sort();
   }
 
+  readlink(path: string): string {
+    const normalized = normalizePath(path);
+    const record = this.opfs.readFile(this.#key(normalized));
+    if (!isSymlinkRecord(record)) {
+      if (!isWorkspaceRecord(record)) throw createWorkspaceError("ENOENT", `No such file or directory: ${normalized}`);
+      throw createWorkspaceError("EINVAL", `Not a symbolic link: ${normalized}`);
+    }
+    return record.target;
+  }
+
   mkdir(path: string): void {
     this.#writeRecord(path, { kind: "directory" });
   }
@@ -77,6 +87,32 @@ export class OpfsPackageWorkspace {
     for (const key of this.opfs.listFiles(prefix)) {
       this.opfs.deleteFile(key);
     }
+  }
+
+  rename(source: string, target: string): void {
+    const normalizedSource = normalizePath(source);
+    const normalizedTarget = normalizePath(target);
+    this.remove(normalizedTarget);
+    const sourceRecord = this.opfs.readFile(this.#key(normalizedSource));
+    if (isWorkspaceRecord(sourceRecord)) {
+      this.#ensureParent(normalizedTarget);
+      this.#writeRecord(normalizedTarget, sourceRecord);
+      this.remove(normalizedSource);
+      return;
+    }
+
+    const sourcePrefix = `${this.#key(normalizedSource)}/`;
+    let moved = false;
+    this.mkdir(normalizedTarget);
+    for (const sourceKey of this.opfs.listFiles(sourcePrefix)) {
+      const relative = sourceKey.slice(sourcePrefix.length);
+      const record = this.opfs.readFile(sourceKey);
+      if (!relative || !isWorkspaceRecord(record)) continue;
+      this.#writeRecord(`${normalizedTarget}/${relative}`, record);
+      moved = true;
+    }
+    if (!moved) throw createWorkspaceError("ENOENT", `No such file or directory: ${normalizedSource}`);
+    this.remove(normalizedSource);
   }
 
   symlink(target: string, path: string): void {
