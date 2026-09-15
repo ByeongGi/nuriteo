@@ -87,13 +87,14 @@ function createEsmSourceCompiler(source: string, filename: string, globals: Reco
   const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor as new (...args: string[]) => (context: {
     dynamicImport: (specifier: string) => Promise<RuntimeNamespace>;
     exportConst: (name: string, value: RuntimeValue) => void;
+    exportLive: (name: string, getter: () => RuntimeValue) => void;
   }, process: RuntimeValue, global: RuntimeValue, console: RuntimeValue) => Promise<void>;
   const compiled = new AsyncFunction(
     "__context",
     "process",
     "global",
     "console",
-    `const __import = __context.dynamicImport;\nconst __exportConst = __context.exportConst;\n${source}\n//# sourceURL=${filename}`
+    `const __import = __context.dynamicImport;\nconst __exportConst = __context.exportConst;\nconst __exportLive = __context.exportLive;\n${source}\n//# sourceURL=${filename}`
   );
   return (context) => compiled(context, globals.process, globals.global, globals.console ?? console);
 }
@@ -113,6 +114,7 @@ function prepareEsmSource(source: string): string {
     .replace(/^[ \t]*import\s+["']([^"']+)["'];?[ \t]*$/gm, "await __import(\"$1\");")
     .replace(/\bimport\s*\(/g, "__import(")
     .replace(/^[ \t]*export\s+const\s+([A-Za-z_$][\w$]*)\s*=\s*([^;\n]+);?[ \t]*$/gm, "const $1 = $2;\n__exportConst(\"$1\", $1);")
+    .replace(/^[ \t]*export\s+(let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*([^;\n]+);?[ \t]*$/gm, "$1 $2 = $3;\n__exportLive(\"$2\", () => $2);")
     .replace(/^[ \t]*export\s+async\s+function\s+([A-Za-z_$][\w$]*)\s*\(/gm, "async function $1(")
     .replace(/^[ \t]*export\s+function\s+([A-Za-z_$][\w$]*)\s*\(/gm, "function $1(")
     .replace(/^[ \t]*export\s+class\s+([A-Za-z_$][\w$]*)\b/gm, "class $1")

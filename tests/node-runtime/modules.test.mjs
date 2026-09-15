@@ -125,6 +125,23 @@ runtime.registerMany({
       ctx.exportConst("rendered", loaded.default("ok"));
     }
   },
+  "/workspace/source-live-binding.mjs": {
+    kind: "esm-source",
+    source: `
+      export let count = 0;
+      export function increment() {
+        count += 1;
+      }
+    `
+  },
+  "/workspace/source-live-binding-consumer.mjs": {
+    kind: "esm-source",
+    source: `
+      import * as counter from './source-live-binding.mjs';
+      counter.increment();
+      export const observed = counter.count;
+    `
+  },
   "/workspace/node_modules/pkg-fixture/main.mjs": {
     kind: "esm",
     factory(ctx) {
@@ -236,6 +253,9 @@ const cjsInterop = await runtime.importModule("./cjs-dynamic-consumer.mjs", "/wo
 assert.equal(cjsInterop.hasDefault, true);
 assert.equal(cjsInterop.namedStatic, "fixture");
 assert.equal(cjsInterop.rendered, "value:ok");
+
+const sourceLive = await runtime.importModule("./source-live-binding-consumer.mjs", "/workspace/index.mjs");
+assert.equal(sourceLive.observed, 1);
 
 const pkg = await runtime.importModule("pkg-fixture", "/workspace/index.mjs");
 assert.equal(pkg.kind, "package-main");
