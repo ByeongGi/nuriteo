@@ -2,7 +2,7 @@ export { CliRegistry } from "./cli-registry.ts";
 export { classifyCliEntryModuleMode, inspectCliEntryReadiness } from "./cli-entry-readiness.ts";
 export { createPackageExecutionPolicy, PackageExecutionPolicy, PackageExecutionPolicyError } from "./execution-policy.ts";
 export { createAsyncCliModuleEvaluator, createCliModuleEvaluator } from "./cli-evaluator.ts";
-export { analyzeCliModuleGraph, extractStaticRequires } from "./cli-module-graph.ts";
+export { analyzeCliModuleGraph, extractStaticEsmSpecifiers, extractStaticRequires } from "./cli-module-graph.ts";
 export { createGuestCli } from "./guest-cli.ts";
 export { classifyPackageManagerCommand, createGuestRuntimeProcessRunner } from "./guest-runtime-runner.ts";
 export { InstallTransactionInterruptedError, runInstallTransaction } from "./install-transaction.ts";

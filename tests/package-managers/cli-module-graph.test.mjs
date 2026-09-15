@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 
-import { analyzeCliModuleGraph, extractStaticRequires } from "../../packages/node-runtime/src/index.ts";
+import { analyzeCliModuleGraph, extractStaticEsmSpecifiers, extractStaticRequires } from "../../packages/node-runtime/src/index.ts";
 
 const root = new URL("../..", import.meta.url).pathname;
 
@@ -57,6 +57,53 @@ assert.deepEqual(
 assert.deepEqual(
   extractStaticRequires("const { devDependencies } = require(packageJsonPath)"),
   ["<project-package-json>"]
+);
+
+assert.deepEqual(
+  extractStaticEsmSpecifiers(`
+    import "side-effect-pkg";
+    import defaultExport from "./default.js";
+    import { named as renamed } from "named-pkg";
+    import * as namespace from "namespace-pkg";
+    export { value } from "./re-export.js";
+    export * from "star-pkg";
+    const text = 'import "not-a-real-import"';
+    // import "not-a-comment-import";
+    /*
+      export * from "not-a-block-export";
+    */
+    await import("dynamic-pkg");
+  `),
+  ["./default.js", "./re-export.js", "named-pkg", "namespace-pkg", "side-effect-pkg", "star-pkg"]
+);
+
+const esmGraphFiles = new Map([
+  ["/workspace/vite/bin/vite.js", "import '../dist/node/cli.js';\n"],
+  ["/workspace/vite/dist/node/cli.js", "import { start } from './server.js';\nimport 'node:fs';\nstart();\n"],
+  ["/workspace/vite/dist/node/server.js", "export const start = () => undefined;\n"]
+]);
+const esmGraph = analyzeCliModuleGraph({
+  entry: "/workspace/vite/bin/vite.js",
+  packageRoot: "/workspace/vite",
+  reader: {
+    exists(file) {
+      return esmGraphFiles.has(file);
+    },
+    readText(file) {
+      const source = esmGraphFiles.get(file);
+      if (source === undefined) throw new Error(`missing ${file}`);
+      return source;
+    }
+  }
+});
+assert.equal(esmGraph.supported, true);
+assert.deepEqual(
+  esmGraph.modules.map((mod) => [mod.path, mod.imports]),
+  [
+    ["/workspace/vite/bin/vite.js", ["../dist/node/cli.js"]],
+    ["/workspace/vite/dist/node/cli.js", ["./server.js", "node:fs"]],
+    ["/workspace/vite/dist/node/server.js", []]
+  ]
 );
 
 for (const [name, version] of [["npm", "10.9.2"], ["pnpm", "9.15.9"]]) {

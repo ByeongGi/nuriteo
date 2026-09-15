@@ -18,6 +18,7 @@ export interface CliModuleGraphOptions {
 export interface CliModuleGraphModule {
   path: string;
   requires: string[];
+  imports: string[];
 }
 
 export interface CliModuleGraphIssue {
@@ -139,8 +140,9 @@ export function analyzeCliModuleGraph(options: CliModuleGraphOptions): CliModule
     seen.add(current);
     const source = options.reader.readText(current);
     const requires = extractStaticRequires(source, { filename: current });
-    modules.push({ path: current, requires });
-    for (const specifier of requires) {
+    const imports = extractStaticEsmSpecifiers(source);
+    modules.push({ path: current, requires, imports });
+    for (const specifier of [...requires, ...imports]) {
       if (isBuiltin(specifier, builtins)) continue;
       if (specifier === dynamicRequireSpecifier || specifier.includes("${") || specifier.includes("+")) {
         const resolvedCandidates = resolveDynamicRequireCandidates(specifier, current, options.reader);
@@ -214,6 +216,50 @@ export function extractStaticRequires(source: string, options: StaticRequireExtr
   }
 
   return [...requires].sort();
+}
+
+export function extractStaticEsmSpecifiers(source: string): string[] {
+  const imports = new Set<string>();
+
+  for (let index = 0; index < source.length; index += 1) {
+    const char = source[index];
+
+    if (char === "'" || char === '"') {
+      index = skipQuotedString(source, index, char);
+      continue;
+    }
+    if (char === "`") {
+      index = skipTemplateLiteral(source, index);
+      continue;
+    }
+    if (char === "/" && source[index + 1] === "/") {
+      index = skipLineComment(source, index);
+      continue;
+    }
+    if (char === "/" && source[index + 1] === "*") {
+      index = skipBlockComment(source, index);
+      continue;
+    }
+
+    if (source.startsWith("import", index) && isStaticModuleKeywordStart(source, index) && !isIdentifierPart(source[index + "import".length])) {
+      const parsed = parseStaticImport(source, index + "import".length);
+      if (parsed) {
+        imports.add(parsed.specifier);
+        index = parsed.end;
+      }
+      continue;
+    }
+
+    if (source.startsWith("export", index) && isStaticModuleKeywordStart(source, index) && !isIdentifierPart(source[index + "export".length])) {
+      const parsed = parseStaticExport(source, index + "export".length);
+      if (parsed) {
+        imports.add(parsed.specifier);
+        index = parsed.end;
+      }
+    }
+  }
+
+  return [...imports].sort();
 }
 
 function isBuiltin(specifier: string, builtins: Set<string>): boolean {
@@ -364,6 +410,40 @@ function parseRequireCall(
   };
 }
 
+function parseStaticImport(source: string, start: number): { specifier: string; end: number } | null {
+  let index = skipWhitespace(source, start);
+  const quote = source[index];
+  if (quote === "'" || quote === '"') {
+    const specifierStart = index + 1;
+    index = skipQuotedString(source, index, quote);
+    return { specifier: source.slice(specifierStart, index), end: index };
+  }
+  if (source[index] === "(" || source[index] === ".") return null;
+
+  const statementEnd = findStatementEnd(source, index);
+  const statement = source.slice(index, statementEnd);
+  const from = statement.match(/\bfrom\s*(['"])([^'"]+)\1/);
+  if (!from?.[2]) return null;
+  return {
+    specifier: from[2],
+    end: statementEnd
+  };
+}
+
+function parseStaticExport(source: string, start: number): { specifier: string; end: number } | null {
+  let index = skipWhitespace(source, start);
+  if (source[index] !== "*" && source[index] !== "{") return null;
+
+  const statementEnd = findStatementEnd(source, index);
+  const statement = source.slice(index, statementEnd);
+  const from = statement.match(/\bfrom\s*(['"])([^'"]+)\1/);
+  if (!from?.[2]) return null;
+  return {
+    specifier: from[2],
+    end: statementEnd
+  };
+}
+
 function resolveKnownRequireExpression(expression: string, filename: string | undefined): string | null {
   if (
     filename?.endsWith("/node_modules/@npmcli/config/lib/index.js") &&
@@ -402,6 +482,23 @@ function findClosingParen(source: string, start: number): number {
     }
   }
   return -1;
+}
+
+function findStatementEnd(source: string, start: number): number {
+  for (let index = start; index < source.length; index += 1) {
+    const char = source[index];
+    if (char === "'" || char === '"') {
+      index = skipQuotedString(source, index, char);
+      continue;
+    }
+    if (char === "`") {
+      index = skipTemplateLiteral(source, index);
+      continue;
+    }
+    if (char === ";") return index;
+    if (char === "\n") return index;
+  }
+  return source.length;
 }
 
 function resolveDynamicRequireCandidates(specifier: string, importer: string, reader: CliModuleGraphReader): string[] {
@@ -457,4 +554,14 @@ function skipBlockComment(source: string, start: number): number {
 
 function isIdentifierPart(char: string | undefined): boolean {
   return !!char && /[$_\p{ID_Continue}]/u.test(char);
+}
+
+function isStaticModuleKeywordStart(source: string, index: number): boolean {
+  if (isIdentifierPart(source[index - 1])) return false;
+  for (let cursor = index - 1; cursor >= 0; cursor -= 1) {
+    const char = source[cursor];
+    if (char === " " || char === "\t" || char === "\r") continue;
+    return char === "\n" || char === ";" || char === "{" || char === "}";
+  }
+  return true;
 }
