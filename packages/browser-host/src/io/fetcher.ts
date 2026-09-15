@@ -3,6 +3,7 @@ import crypto from "node:crypto";
 import { FetchPolicy, FetchPolicyError } from "./fetch-policy.ts";
 import type { HostDownloadResult, HostFetchErrorCode, HostFetchErrorOptions, HostFetcherOptions, HostFetchOptions } from "./types.ts";
 import type { PermissionManager } from "../security/index.ts";
+import { stripSensitiveHeadersForRedirect } from "../security/index.ts";
 
 export class HostFetchError extends Error {
   code: HostFetchErrorCode;
@@ -39,6 +40,7 @@ export class HostFetcher {
     });
     const redirects: HostDownloadResult["redirects"] = [];
     const maxRedirects = options.maxRedirects ?? this.policy.maxRedirects;
+    let headers = options.headers || {};
     const timeoutController = new AbortController();
     const timeout = setTimeout(() => timeoutController.abort(new Error("fetch timeout")), options.timeoutMs ?? 30000);
     const signals = [timeoutController.signal, options.signal].filter((signal): signal is AbortSignal => signal instanceof AbortSignal);
@@ -48,7 +50,7 @@ export class HostFetcher {
 
     try {
       for (let attempt = 0; attempt <= maxRedirects; attempt += 1) {
-        const response = await this.#fetch(url, requestOptions);
+        const response = await this.#fetch(url, { ...requestOptions, headers });
         if (!isRedirect(response.status)) {
           const body = await this.#readBody(response, requestOptions);
           const sha256 = digest("sha256", body, "hex");
@@ -75,6 +77,7 @@ export class HostFetcher {
           ...(options.projectId ? { projectId: options.projectId } : {})
         });
         redirects.push({ from: url.href, to: next.href, status: response.status });
+        headers = stripSensitiveHeadersForRedirect(headers, url, next);
         url = next;
       }
 
