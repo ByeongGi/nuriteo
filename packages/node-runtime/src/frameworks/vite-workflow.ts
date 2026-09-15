@@ -144,12 +144,27 @@ export interface ViteProductReloadRecoveryResult {
 
 export interface ViteRealCliReadiness {
   status: "blocked";
+  capabilityStatus: ViteRuntimeCapabilityStatus[];
   cliEntrypoint: string;
   cliEntryReadiness: CliEntryReadiness;
   cliModuleGraph: CliModuleGraph;
   missingCapabilities: ViteRuntimeCapability[];
   nextAction: string;
 }
+
+export interface ViteRuntimeCapabilityStatus {
+  capability: ViteRuntimeReadinessCapability;
+  evidence: string;
+  nextAction?: string;
+  status: "ready" | "blocked";
+}
+
+export type ViteRuntimeReadinessCapability =
+  | ViteRuntimeCapability
+  | "esm-cli-entrypoint"
+  | "minimal-vite-cli-module-graph"
+  | "cli-registration-hooks"
+  | "cli-backed-dev-build-workflow";
 
 export type ViteRuntimeCapability =
   | "actual-vite-cli-module-execution"
@@ -249,26 +264,34 @@ export class ViteProductWorkflow {
 
   inspectRealCliReadiness(): ViteRealCliReadiness {
     const cliEntrypoint = this.#resolveBin("vite");
+    const cliEntryReadiness = inspectCliEntryReadiness({
+      entry: {
+        name: "vite",
+        version: "8.2.0",
+        entry: cliEntrypoint,
+        mode: "esm"
+      },
+      reader: this.workspace,
+      supportedModes: ["cjs", "esm"]
+    });
+    const cliModuleGraph = analyzeCliModuleGraph({
+      entry: cliEntrypoint,
+      packageRoot: join(this.projectRoot, "node_modules/vite"),
+      reader: this.workspace,
+      maxModules: 128
+    });
+    const missingCapabilities = missingCapabilitiesForTemplate(this.template);
     return {
       status: "blocked",
+      capabilityStatus: createViteCapabilityStatus({
+        cliEntryReadiness,
+        cliModuleGraph,
+        missingCapabilities
+      }),
       cliEntrypoint,
-      cliEntryReadiness: inspectCliEntryReadiness({
-        entry: {
-          name: "vite",
-          version: "8.2.0",
-          entry: cliEntrypoint,
-          mode: "esm"
-        },
-        reader: this.workspace,
-        supportedModes: ["cjs", "esm"]
-      }),
-      cliModuleGraph: analyzeCliModuleGraph({
-        entry: cliEntrypoint,
-        packageRoot: join(this.projectRoot, "node_modules/vite"),
-        reader: this.workspace,
-        maxModules: 128
-      }),
-      missingCapabilities: missingCapabilitiesForTemplate(this.template),
+      cliEntryReadiness,
+      cliModuleGraph,
+      missingCapabilities,
       nextAction: "Replace the adapter-backed Vite workflow with vendored Vite CLI/module execution once the listed runtime capabilities are implemented."
     };
   }
@@ -701,6 +724,84 @@ function missingCapabilitiesForTemplate(template: ViteProductTemplate): ViteRunt
   ];
   if (template !== "react") capabilities.push("framework-plugin-module-execution");
   return capabilities;
+}
+
+function createViteCapabilityStatus(options: {
+  cliEntryReadiness: CliEntryReadiness;
+  cliModuleGraph: CliModuleGraph;
+  missingCapabilities: ViteRuntimeCapability[];
+}): ViteRuntimeCapabilityStatus[] {
+  const statuses: ViteRuntimeCapabilityStatus[] = [
+    createCapabilityStatus({
+      capability: "esm-cli-entrypoint",
+      evidence: "The Vite bin entrypoint is classified as ESM and accepted by the async CLI evaluator.",
+      nextAction: "Expand CLI entrypoint classification before executing this package through the browser guest runtime.",
+      status: options.cliEntryReadiness.status === "ready" ? "ready" : "blocked"
+    }),
+    createCapabilityStatus({
+      capability: "minimal-vite-cli-module-graph",
+      evidence: "The materialized Vite CLI module graph resolves bin/vite.js and dist node modules without missing-module issues.",
+      nextAction: "Resolve the reported Vite CLI module graph issues before CLI-backed workflow execution.",
+      status: options.cliModuleGraph.supported ? "ready" : "blocked"
+    }),
+    {
+      capability: "cli-registration-hooks",
+      evidence: "The materialized Vite CLI graph emits dev server, build, HMR, and transform registrations through runtime globals.",
+      status: "ready"
+    },
+    {
+      capability: "cli-backed-dev-build-workflow",
+      evidence: "The product workflow can execute the Vite CLI entrypoint before starting dev/build lifecycle adapters.",
+      status: "ready"
+    }
+  ];
+
+  for (const capability of options.missingCapabilities) {
+    statuses.push({
+      capability,
+      evidence: evidenceForMissingCapability(capability),
+      nextAction: nextActionForMissingCapability(capability),
+      status: "blocked"
+    });
+  }
+  return statuses;
+}
+
+function createCapabilityStatus(options: ViteRuntimeCapabilityStatus & { nextAction: string }): ViteRuntimeCapabilityStatus {
+  if (options.status === "ready") {
+    return {
+      capability: options.capability,
+      evidence: options.evidence,
+      status: "ready"
+    };
+  }
+  return options;
+}
+
+function evidenceForMissingCapability(capability: ViteRuntimeCapability): string {
+  switch (capability) {
+    case "actual-vite-cli-module-execution":
+      return "The current product workflow executes the materialized Vite CLI graph, not the vendored Vite package source.";
+    case "real-vite-http-module-transform":
+      return "HTTP module serving still uses the product adapter transform contract instead of Vite server transform middleware.";
+    case "real-vite-hmr-protocol":
+      return "HMR currently sends Vite wire-compatible payloads from the adapter instead of the real Vite server HMR implementation.";
+    case "framework-plugin-module-execution":
+      return "Vue and Svelte product workflows still model plugin readiness instead of executing framework plugins through Vite.";
+  }
+}
+
+function nextActionForMissingCapability(capability: ViteRuntimeCapability): string {
+  switch (capability) {
+    case "actual-vite-cli-module-execution":
+      return "Vendor or install the real Vite package artifact and run its CLI/module graph through the async browser guest evaluator.";
+    case "real-vite-http-module-transform":
+      return "Route preview module requests through real Vite transform middleware after the vendored server module boots.";
+    case "real-vite-hmr-protocol":
+      return "Connect the real Vite HMR channel to the preview socket lifecycle and preserve update diagnostics.";
+    case "framework-plugin-module-execution":
+      return "Execute the selected framework plugin module path under the same Vite server runtime.";
+  }
 }
 
 function dependenciesForTemplate(template: ViteProductTemplate): Record<string, string> {

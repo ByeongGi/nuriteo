@@ -34,6 +34,14 @@ for (const manager of ["npm", "pnpm"]) {
   );
   assert.deepEqual(result.realCliReadiness.cliModuleGraph.issues, []);
   assert.equal(result.realCliReadiness.cliModuleGraph.supported, true);
+  assert.deepEqual(
+    result.realCliReadiness.capabilityStatus.filter((capability) => capability.status === "ready").map((capability) => capability.capability),
+    ["esm-cli-entrypoint", "minimal-vite-cli-module-graph", "cli-registration-hooks", "cli-backed-dev-build-workflow"]
+  );
+  assert.deepEqual(
+    result.realCliReadiness.capabilityStatus.filter((capability) => capability.status === "blocked").map((capability) => capability.capability),
+    result.realCliReadiness.missingCapabilities
+  );
   assert.equal(result.realCliReadiness.missingCapabilities.includes("actual-vite-cli-module-execution"), true);
   assert.equal(result.realCliReadiness.missingCapabilities.includes("real-vite-hmr-protocol"), true);
   assert.equal(
