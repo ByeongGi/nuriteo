@@ -1,4 +1,4 @@
-import type { PreviewDiagnostic, PreviewErrorCode, PreviewOverlayState, PreviewRelayLike } from "./types.ts";
+import type { PreviewDiagnostic, PreviewErrorCode, PreviewOverlayMessage, PreviewOverlayState, PreviewRelayLike } from "./types.ts";
 
 export interface PreviewServiceWorkerOptions {
   relay: PreviewRelayLike;
@@ -10,6 +10,7 @@ type PreviewClient = {
   sessionId: string;
   origin: string;
   projectId: string;
+  port?: PreviewMessagePort;
 };
 
 type PreviewMessagePort = {
@@ -38,12 +39,14 @@ export class PreviewServiceWorker {
   relay: PreviewRelayLike;
   now: () => number;
   clients: Map<string, PreviewClient>;
+  clientPorts: Map<string, PreviewMessagePort>;
   diagnostics: PreviewDiagnostic[];
 
   constructor({ relay, now }: PreviewServiceWorkerOptions) {
     this.relay = relay;
     this.now = now || (() => Date.now());
     this.clients = new Map();
+    this.clientPorts = new Map();
     this.diagnostics = [];
   }
 
@@ -57,8 +60,10 @@ export class PreviewServiceWorker {
         clientId: data.clientId,
         sessionId: data.sessionId,
         origin: data.origin,
-        projectId: data.projectId
+        projectId: data.projectId,
+        ...(event.port ? { port: event.port } : {})
       });
+      if (event.port) this.clientPorts.set(data.clientId, event.port);
       event.port?.postMessage?.({ type: "preview:ready", clientId: data.clientId });
       return { type: "preview:ready", clientId: data.clientId };
     }
@@ -121,10 +126,32 @@ export class PreviewServiceWorker {
   }
 
   #record(diagnostic: Omit<PreviewDiagnostic, "at">): void {
-    this.diagnostics.push({
+    const entry = {
       at: this.now(),
       ...diagnostic
-    });
+    };
+    this.diagnostics.push(entry);
+    this.#emitOverlay(entry);
+  }
+
+  #emitOverlay(diagnostic: PreviewDiagnostic): void {
+    if (diagnostic.clientId) {
+      const port = this.clients.get(diagnostic.clientId)?.port || this.clientPorts.get(diagnostic.clientId);
+      port?.postMessage?.(this.#overlayMessage(diagnostic, diagnostic.clientId));
+      return;
+    }
+    for (const [clientId, port] of this.clientPorts) {
+      port.postMessage?.(this.#overlayMessage(diagnostic, clientId));
+    }
+  }
+
+  #overlayMessage(diagnostic: PreviewDiagnostic, clientId?: string): PreviewOverlayMessage {
+    return {
+      type: "preview:overlay",
+      ...(clientId ? { clientId } : {}),
+      state: this.overlayState(clientId),
+      diagnostic
+    };
   }
 }
 

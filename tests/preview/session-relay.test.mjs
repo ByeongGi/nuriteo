@@ -150,6 +150,7 @@ await assert.rejects(
 );
 
 const serviceWorker = createPreviewServiceWorker({ relay, now: () => now });
+const clientOneMessages = [];
 const ready = await serviceWorker.handleMessage({
   data: {
     type: "preview:handshake",
@@ -157,15 +158,18 @@ const ready = await serviceWorker.handleMessage({
     sessionId: fresh.sessionId,
     origin: "https://preview.local",
     projectId: "project-a"
-  }
+  },
+  port: { postMessage: (message) => clientOneMessages.push(message) }
 });
 assert.equal(ready.type, "preview:ready");
+assert.equal(clientOneMessages[0].type, "preview:ready");
 const secondLivePort = sessions.create({
   origin: "https://preview.local",
   projectId: "project-a",
   port: 6173,
   container: secondContainer
 });
+const clientTwoMessages = [];
 const secondReady = await serviceWorker.handleMessage({
   data: {
     type: "preview:handshake",
@@ -173,7 +177,8 @@ const secondReady = await serviceWorker.handleMessage({
     sessionId: secondLivePort.sessionId,
     origin: "https://preview.local",
     projectId: "project-a"
-  }
+  },
+  port: { postMessage: (message) => clientTwoMessages.push(message) }
 });
 assert.equal(secondReady.type, "preview:ready");
 const logged = await serviceWorker.handleMessage({
@@ -185,6 +190,10 @@ const logged = await serviceWorker.handleMessage({
   }
 });
 assert.equal(logged.type, "preview:ready");
+assert.equal(clientOneMessages.at(-1).type, "preview:overlay");
+assert.equal(clientOneMessages.at(-1).clientId, "client-1");
+assert.equal(clientOneMessages.at(-1).diagnostic.message, "vite warning");
+assert.equal(clientTwoMessages.length, 1);
 const routed = await serviceWorker.handleMessage({
   data: {
     type: "preview:fetch",
@@ -215,6 +224,8 @@ const afterRestart = await serviceWorker.handleMessage({
   }
 });
 assert.equal(afterRestart.code, "ENOCLIENT");
+assert.equal(clientOneMessages.at(-1).type, "preview:overlay");
+assert.equal(clientOneMessages.at(-1).state.lastError.code, "ENOCLIENT");
 const overlay = serviceWorker.overlayState("client-1");
 assert.deepEqual(overlay.diagnostics.map((entry) => `${entry.source}:${entry.level}:${entry.message}`), [
   "console:warn:vite warning",

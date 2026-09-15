@@ -63,6 +63,13 @@ export interface PreviewOverlayState {
   lastError: PreviewDiagnostic | null;
 }
 
+export interface PreviewOverlayMessage {
+  type: "preview:overlay";
+  clientId?: string;
+  state: PreviewOverlayState;
+  diagnostic: PreviewDiagnostic;
+}
+
 export type HmrEventType = "open" | "message" | "close" | (string & {});
 export type HmrListener<T = unknown> = (payload: T) => void;
 
