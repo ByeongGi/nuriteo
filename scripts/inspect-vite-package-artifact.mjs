@@ -164,6 +164,7 @@ async function runExecutionSmoke(vitePackageArtifact, dependencyArtifacts, optio
       isolationBlocker: null,
       registrations: null,
       runtimeBuiltinBlocker: null,
+      asyncModuleBlocker: classifyAsyncModuleBlocker(message),
       timeoutBlocker: classifyTimeoutBlocker(message),
       wasiWorkerBootBlocker: classifyWasiWorkerBootBlocker(message, dependencyArtifacts, options.executionIsolation),
       stderrCauseLines: causeLines(message),
@@ -186,6 +187,7 @@ async function runExecutionSmoke(vitePackageArtifact, dependencyArtifacts, optio
       transform: result.transformRegistrations.length
     },
     runtimeBuiltinBlocker: classifyRuntimeBuiltinBlocker(result.stderr),
+    asyncModuleBlocker: classifyAsyncModuleBlocker(result.stderr),
     timeoutBlocker: classifyTimeoutBlocker(result.stderr),
     wasiWorkerBootBlocker: classifyWasiWorkerBootBlocker(result.stderr, dependencyArtifacts, options.executionIsolation),
     stderrCauseLines: causeLines(result.stderr),
@@ -341,6 +343,15 @@ function classifyRuntimeBuiltinBlocker(stderr) {
   return {
     builtin: match[1],
     reason: "missing-runtime-builtin"
+  };
+}
+
+function classifyAsyncModuleBlocker(stderr) {
+  const match = stderr.match(/ERR_REQUIRE_ASYNC_MODULE: ([^\n]+)/);
+  if (!match) return null;
+  return {
+    module: match[1],
+    reason: "sync-require-of-async-esm"
   };
 }
 

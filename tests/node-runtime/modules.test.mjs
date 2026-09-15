@@ -217,6 +217,36 @@ runtime.registerMany({
       export const rendered = label('ok') + ':' + labels.default('ns');
     `
   },
+  "/workspace/source-multiline-named-import.mjs": {
+    kind: "esm-source",
+    source: `
+      import {
+        default as label,
+      } from './source-default-function.mjs';
+      export const rendered = label('multi');
+    `
+  },
+  "/workspace/source-destructured-export.mjs": {
+    kind: "esm-source",
+    source: `
+      const values = { fs: 'fs-export', vol: 'vol-export' };
+      export const { fs: __fs, vol } = values;
+    `
+  },
+  "/workspace/source-top-level-await.mjs": {
+    kind: "esm-source",
+    source: `
+      const value = await Promise.resolve('async-source');
+      export const label = value;
+    `
+  },
+  "/workspace/source-top-level-await-require.mjs": {
+    kind: "esm-source",
+    source: `
+      const value = await Promise.resolve('require-async-source');
+      export const label = value;
+    `
+  },
   "/workspace/node_modules/pkg-fixture/main.mjs": {
     kind: "esm",
     factory(ctx) {
@@ -383,6 +413,16 @@ assert.equal(sourceAnonymousDefault.rendered, "anonymous:ok:anonymous-factory");
 
 const sourceDefaultNamespace = await runtime.importModule("./source-default-namespace-import.mjs", "/workspace/index.mjs");
 assert.equal(sourceDefaultNamespace.rendered, "label:ok:label:ns");
+const sourceMultilineNamedImport = await runtime.importModule("./source-multiline-named-import.mjs", "/workspace/index.mjs");
+assert.equal(sourceMultilineNamedImport.rendered, "label:multi");
+const sourceDestructuredExport = await runtime.importModule("./source-destructured-export.mjs", "/workspace/index.mjs");
+assert.equal(sourceDestructuredExport.fs, "fs-export");
+assert.equal(sourceDestructuredExport.vol, "vol-export");
+assert.equal((await runtime.importModule("./source-top-level-await.mjs", "/workspace/index.mjs")).label, "async-source");
+assert.throws(
+  () => runtime.requireSync("./source-top-level-await-require.mjs", "/workspace/index.cjs"),
+  /ERR_REQUIRE_ASYNC_MODULE/
+);
 
 const pkg = await runtime.importModule("pkg-fixture", "/workspace/index.mjs");
 assert.equal(pkg.kind, "package-main");

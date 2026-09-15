@@ -178,14 +178,22 @@ function createEsmSourceCompiler(options: {
 }
 
 function createSyncEsmSourceCompiler(source: string, filename: string, globals: Record<string, RuntimeValue>): (context: EsmContext) => void {
-  const compiled = new Function(
-    "__context",
-    "process",
-    "global",
-    "console",
-    "globalThis",
-    `const __import = __context.importNamespace;\nconst __exportConst = __context.exportConst;\nconst __exportLive = __context.exportLive;\n${source}\n//# sourceURL=${filename}`
-  ) as (context: EsmContext, process: RuntimeValue, global: RuntimeValue, console: RuntimeValue, globalThis: RuntimeValue) => void;
+  let compiled: (context: EsmContext, process: RuntimeValue, global: RuntimeValue, console: RuntimeValue, globalThis: RuntimeValue) => void;
+  try {
+    compiled = new Function(
+      "__context",
+      "process",
+      "global",
+      "console",
+      "globalThis",
+      `const __import = __context.importNamespace;\nconst __exportConst = __context.exportConst;\nconst __exportLive = __context.exportLive;\n${source}\n//# sourceURL=${filename}`
+    ) as (context: EsmContext, process: RuntimeValue, global: RuntimeValue, console: RuntimeValue, globalThis: RuntimeValue) => void;
+  } catch (error) {
+    if (error instanceof SyntaxError && /await is only valid|Unexpected reserved word/i.test(error.message)) {
+      throw new Error(`ERR_REQUIRE_ASYNC_MODULE: ${filename}`);
+    }
+    throw error;
+  }
   return (context) => compiled(context, globals.process, globals.global, globals.console ?? console, globals.globalThis ?? globals.global);
 }
 
@@ -616,15 +624,18 @@ function prepareEsmSource(source: string): string {
     .replace(/^[ \t]*import\s+([A-Za-z_$][\w$]*)\s*,\s*\*\s+as\s+([A-Za-z_$][\w$]*)\s+from\s+["']([^"']+)["'];?[ \t]*$/gm, (_match, defaultName: string, namespaceName: string, specifier: string) => {
       return rewriteDefaultAndNamespaceImport(defaultName, namespaceName, specifier);
     })
-    .replace(/^[ \t]*import\s+([A-Za-z_$][\w$]*)\s*,\s*\{([^}\n]+)\}\s+from\s+["']([^"']+)["'];?[ \t]*$/gm, (_match, defaultName: string, named: string, specifier: string) => {
+    .replace(/^[ \t]*import\s+([A-Za-z_$][\w$]*)\s*,\s*\{([\s\S]*?)\}\s+from\s+["']([^"']+)["'];?[ \t]*$/gm, (_match, defaultName: string, named: string, specifier: string) => {
       return rewriteDefaultAndNamedImport(defaultName, named, specifier);
     })
-    .replace(/^[ \t]*import\s+\{([^}\n]+)\}\s+from\s+["']([^"']+)["'];?[ \t]*$/gm, (_match, named: string, specifier: string) => {
+    .replace(/^[ \t]*import\s+\{([\s\S]*?)\}\s+from\s+["']([^"']+)["'];?[ \t]*$/gm, (_match, named: string, specifier: string) => {
       return `const { ${rewriteNamedImportBindings(named)} } = await __import("${specifier}");`;
     })
     .replace(/^[ \t]*import\s+([A-Za-z_$][\w$]*)\s+from\s+["']([^"']+)["'];?[ \t]*$/gm, "const $1 = (await __import(\"$2\")).default;")
     .replace(/^[ \t]*import\s+["']([^"']+)["'];?[ \t]*$/gm, "await __import(\"$1\");")
     .replace(/\bimport\s*\(/g, "__import(")
+    .replace(/^[ \t]*export\s+const\s+\{([^}]+)\}\s*=\s*([^;\n]+);?[ \t]*$/gm, (_match, destructuring: string, expression: string) => {
+      return rewriteDestructuredConstExport(destructuring, expression);
+    })
     .replace(/^[ \t]*export\s+const\s+([A-Za-z_$][\w$]*)\s*=\s*([^;\n]+);?[ \t]*$/gm, "const $1 = $2;\n__exportConst(\"$1\", $1);")
     .replace(/^[ \t]*export\s+(let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*([^;\n]+);?[ \t]*$/gm, "$1 $2 = $3;\n__exportLive(\"$2\", () => $2);")
     .replace(/^[ \t]*export\s+default\s+async\s+function\s+([A-Za-z_$][\w$]*)\s*\(/gm, "async function $1(")
@@ -842,6 +853,29 @@ function rewriteStarReExport(specifier: string): string {
     `  if (__key !== "default") __exportConst(__key, ${temp}[__key]);`,
     "}"
   ].join("\n");
+}
+
+function rewriteDestructuredConstExport(destructuring: string, expression: string): string {
+  const exports = destructuring
+    .split(",")
+    .map((binding) => binding.trim())
+    .filter(Boolean)
+    .map((binding) => {
+      const [exported, local] = binding.split(":").map((part) => part.trim());
+      return {
+        exported: exported || "",
+        local: local || exported || ""
+      };
+    })
+    .filter(({ exported, local }) => isIdentifier(exported) && isIdentifier(local));
+  return [
+    `const { ${destructuring} } = ${expression};`,
+    ...exports.map(({ exported, local }) => `__exportConst("${exported}", ${local});`)
+  ].join("\n");
+}
+
+function isIdentifier(value: string): boolean {
+  return /^[A-Za-z_$][\w$]*$/.test(value);
 }
 
 function rewriteNamespaceReExport(name: string, specifier: string): string {
