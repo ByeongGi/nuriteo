@@ -35,7 +35,7 @@ assert.equal(cohorts.get("unsupported-native-addon").requiredErrorCode, "ERR_PM_
 assert.equal(cohorts.get("binary-tool-wrapper").requiredErrorCode, "ERR_RUNTIME_UNSUPPORTED_BINARY");
 assert.ok(cohorts.get("wasm-tool-fallback").notes.includes("integrity"));
 assert.ok(cohorts.get("optional-native-polyfill").notes.includes("polyfill"));
-assert.equal(matrix.gate.status, "partial-pass");
-assert.ok(matrix.gate.requiredBeforeDone.length >= 3);
+assert.equal(matrix.gate.status, "pass");
+assert.deepEqual(matrix.gate.requiredBeforeDone, []);
 
 console.log("package compatibility cohorts matrix test ok");
