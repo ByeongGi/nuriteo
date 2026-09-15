@@ -1,7 +1,13 @@
 import { join } from "../builtins/path.ts";
 import { spawnRuntimeChild, type RuntimeChildProcess } from "../child-process.ts";
 import { createLoopbackNetwork, type LoopbackNetwork, type RuntimeHttpResponse } from "../net/index.ts";
-import { createAsyncCliModuleEvaluator, createIsolatedAsyncCliModuleEvaluator } from "../package-managers/cli-evaluator.ts";
+import {
+  createAsyncCliModuleEvaluator,
+  createIsolatedAsyncCliModuleEvaluator,
+  createWorkerBackedAsyncCliModuleEvaluator,
+  type CliEvaluationCapturedGlobalCall,
+  type CliEvaluationWorkerFactory
+} from "../package-managers/cli-evaluator.ts";
 import { analyzeCliModuleGraph, type CliModuleGraph, type CliModuleGraphIssue } from "../package-managers/cli-module-graph.ts";
 import { inspectCliEntryReadiness, type CliEntryReadiness } from "../package-managers/cli-entry-readiness.ts";
 import { MemoryPackageManagerWorkspace, type PackageManagerWorkspaceMount } from "../package-managers/workspace.ts";
@@ -142,10 +148,11 @@ export interface ViteProductCliExecutionResult extends CliRunResult {
   transformRegistrations: ViteProductCliTransformRegistration[];
 }
 
-export type ViteProductCliExecutionMode = "async-cli-module-evaluation" | "isolated-snapshot-cli-module-evaluation";
+export type ViteProductCliExecutionMode = "async-cli-module-evaluation" | "isolated-snapshot-cli-module-evaluation" | "worker-backed-cli-module-evaluation";
 
 export interface ViteProductCliExecutionOptions {
-  isolation?: "shared" | "snapshot";
+  isolation?: "shared" | "snapshot" | "worker";
+  workerFactory?: CliEvaluationWorkerFactory;
 }
 
 export interface ViteProductCliBuildRegistration {
@@ -546,23 +553,51 @@ export class ViteProductWorkflow {
       cwd: this.projectRoot,
       env
     };
-    const result = isolation === "snapshot"
-      ? await createIsolatedAsyncCliModuleEvaluator({
-        ...evaluatorOptions,
+    if (isolation === "worker" && !options.workerFactory) {
+      throw new Error("ERR_VITE_CLI_WORKER_FACTORY_REQUIRED");
+    }
+    const result = isolation === "worker"
+      ? await createWorkerBackedAsyncCliModuleEvaluator({
+        root: this.projectRoot,
+        captureGlobalCalls: [
+          "__viteRegisterBuild",
+          "__viteRegisterHmrChannel",
+          "__viteRegisterDevServer",
+          "__viteRegisterTransform"
+        ],
+        workerFactory: options.workerFactory!,
         workspace: this.workspace
       })(request)
-      : await createAsyncCliModuleEvaluator({
-        ...evaluatorOptions,
-        reader: this.workspace,
-        writer: this.workspace
-      })(request);
+      : isolation === "snapshot"
+        ? await createIsolatedAsyncCliModuleEvaluator({
+          ...evaluatorOptions,
+          workspace: this.workspace
+        })(request)
+        : await createAsyncCliModuleEvaluator({
+          ...evaluatorOptions,
+          reader: this.workspace,
+          writer: this.workspace
+        })(request);
+    if (hasCapturedViteGlobalCalls(result)) {
+      applyCapturedViteGlobalCalls(result.capturedGlobalCalls, {
+        buildRegistrations,
+        hmrRegistrations,
+        serverRegistrations,
+        transformRegistrations,
+        broadcastHmr
+      });
+    }
     return {
       ...result,
       args,
       buildRegistrations,
       cwd: this.projectRoot,
       hmrRegistrations,
-      mode: isolation === "snapshot" ? "isolated-snapshot-cli-module-evaluation" : "async-cli-module-evaluation",
+      mode: isolation === "worker"
+        ? "worker-backed-cli-module-evaluation"
+        : isolation === "snapshot"
+          ? "isolated-snapshot-cli-module-evaluation"
+          : "async-cli-module-evaluation",
       serverRegistrations,
       transformRegistrations
     };
@@ -1198,6 +1233,63 @@ function packagesForTemplate(template: ViteProductTemplate): string[] {
 
 function uniquePackageNames(packages: string[]): string[] {
   return [...new Set(packages)];
+}
+
+function hasCapturedViteGlobalCalls(result: CliRunResult): result is CliRunResult & { capturedGlobalCalls: CliEvaluationCapturedGlobalCall[] } {
+  return "capturedGlobalCalls" in result && Array.isArray(result.capturedGlobalCalls);
+}
+
+function applyCapturedViteGlobalCalls(
+  calls: readonly CliEvaluationCapturedGlobalCall[],
+  target: {
+    buildRegistrations: ViteProductCliBuildRegistration[];
+    hmrRegistrations: ViteProductCliHmrRegistration[];
+    serverRegistrations: ViteProductCliServerRegistration[];
+    transformRegistrations: ViteProductCliTransformRegistration[];
+    broadcastHmr: (update: ViteProductHmrUpdate) => ViteProductHmrUpdate;
+  }
+): void {
+  for (const call of calls) {
+    const registration = call.args[0];
+    if (!isObjectRecord(registration)) continue;
+    if (call.name === "__viteRegisterBuild") {
+      target.buildRegistrations.push({
+        command: "build",
+        outDir: typeof registration.outDir === "string" ? registration.outDir : "dist",
+        source: "vite-cli"
+      });
+    } else if (call.name === "__viteRegisterDevServer") {
+      target.serverRegistrations.push({
+        command: "dev",
+        host: typeof registration.host === "string" ? registration.host : "127.0.0.1",
+        port: typeof registration.port === "number" ? registration.port : 5173,
+        source: "vite-cli"
+      });
+    } else if (call.name === "__viteRegisterHmrChannel") {
+      target.hmrRegistrations.push({
+        channel: "hmr",
+        source: "vite-cli",
+        transport: "loopback",
+        ...(registration.sendUpdate ? { sendUpdate: (update: ViteProductHmrUpdate) => target.broadcastHmr(update) } : {})
+      });
+    } else if (call.name === "__viteRegisterTransform") {
+      target.transformRegistrations.push({
+        mode: "browser-esm",
+        source: "vite-cli",
+        ...(registration.transformRequest
+          ? {
+            transformRequest(request: ViteProductCliTransformRequestInput): ViteProductCliTransformResult {
+              return { code: `// worker proxy transform:${request.path}\n${request.source}` };
+            }
+          }
+          : {})
+      });
+    }
+  }
+}
+
+function isObjectRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }
 
 function isForcedWasiEnv(env: RuntimeEnv): boolean {

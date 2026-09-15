@@ -12,6 +12,7 @@ import {
   createViteDependencyArtifactsFromWorkspace,
   createVitePackageArtifactFromWorkspace,
   createWasmAdapterPolicy,
+  evaluateCliModuleWorkerMessage,
   MemoryPackageManagerWorkspace,
   mergeViteDependencyArtifacts,
   runViteProductCliBackedWorkflow,
@@ -19,6 +20,40 @@ import {
   ViteProductWorkflow
 } from "../../packages/node-runtime/src/index.ts";
 import { createHmrClient, createPreviewRelay, createPreviewSessionRegistry } from "../../packages/preview/src/index.ts";
+
+class FakeCliEvaluationWorker {
+  #listeners = {
+    message: new Set(),
+    error: new Set()
+  };
+  #terminated = false;
+
+  addEventListener(type, listener) {
+    this.#listeners[type].add(listener);
+  }
+
+  removeEventListener(type, listener) {
+    this.#listeners[type].delete(listener);
+  }
+
+  postMessage(message) {
+    queueMicrotask(async () => {
+      if (this.#terminated) return;
+      try {
+        const response = await evaluateCliModuleWorkerMessage(message);
+        for (const listener of this.#listeners.message) listener({ data: response });
+      } catch (error) {
+        for (const listener of this.#listeners.error) listener({ message: error instanceof Error ? error.message : String(error) });
+      }
+    });
+  }
+
+  terminate() {
+    this.#terminated = true;
+    this.#listeners.message.clear();
+    this.#listeners.error.clear();
+  }
+}
 
 for (const template of ["react", "vue-runtime", "svelte"]) {
 for (const manager of ["npm", "pnpm"]) {
@@ -347,12 +382,62 @@ assert.deepEqual(artifactCliExecution.transformRegistrations.map(({ mode, source
   }
 ]);
 assert.equal(typeof artifactCliExecution.transformRegistrations[0].transformRequest, "function");
+await assert.rejects(
+  () => artifactWorkflow.executeRealCli(["build"], {}, { isolation: "worker" }),
+  /ERR_VITE_CLI_WORKER_FACTORY_REQUIRED/
+);
+const artifactWorkerExecution = await artifactWorkflow.executeRealCli(
+  ["--host", "127.0.0.1"],
+  { PORT: "5299" },
+  { isolation: "worker", workerFactory: () => new FakeCliEvaluationWorker() }
+);
+assert.equal(artifactWorkerExecution.mode, "worker-backed-cli-module-evaluation");
+assert.deepEqual(artifactWorkerExecution.serverRegistrations, [
+  {
+    command: "dev",
+    host: "127.0.0.1",
+    port: 5299,
+    source: "vite-cli"
+  }
+]);
+assert.deepEqual(artifactWorkerExecution.hmrRegistrations.map(({ channel, source, transport }) => ({ channel, source, transport })), [
+  {
+    channel: "hmr",
+    source: "vite-cli",
+    transport: "loopback"
+  }
+]);
+assert.equal(typeof artifactWorkerExecution.hmrRegistrations[0].sendUpdate, "function");
+assert.deepEqual(artifactWorkerExecution.transformRegistrations.map(({ mode, source }) => ({ mode, source })), [
+  {
+    mode: "browser-esm",
+    source: "vite-cli"
+  }
+]);
+assert.equal(typeof artifactWorkerExecution.transformRegistrations[0].transformRequest, "function");
+const artifactWorkerTransform = await artifactWorkerExecution.transformRegistrations[0].transformRequest({
+  path: "/src/main.jsx",
+  source: "console.log('worker')\n"
+});
+assert.match(artifactWorkerTransform.code, /worker proxy transform:\/src\/main\.jsx/);
 const artifactStarted = await artifactWorkflow.startDevServerFromCliExecution();
 assert.equal(artifactStarted.moduleTransform, "vite-cli");
 const artifactModule = await artifactWorkflow.fetch("http://127.0.0.1:5299/src/main.jsx");
 assert.match(await artifactModule.text(), /artifact transform:\/src\/main\.jsx/);
 const artifactBuildExecution = await artifactWorkflow.executeRealCli(["build"]);
 assert.deepEqual(artifactBuildExecution.buildRegistrations, [
+  {
+    command: "build",
+    outDir: "dist",
+    source: "vite-cli"
+  }
+]);
+const artifactWorkerBuildExecution = await artifactWorkflow.executeRealCli(
+  ["build"],
+  {},
+  { isolation: "worker", workerFactory: () => new FakeCliEvaluationWorker() }
+);
+assert.deepEqual(artifactWorkerBuildExecution.buildRegistrations, [
   {
     command: "build",
     outDir: "dist",
