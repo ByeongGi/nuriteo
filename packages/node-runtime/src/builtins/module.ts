@@ -130,6 +130,10 @@ export function enableCompileCache(): { status: number; directory?: string; mess
 
 export const moduleBuiltin = Object.freeze({
   Module,
+  _cache: Module._cache,
+  _extensions: Module._extensions,
+  _nodeModulePaths: Module._nodeModulePaths,
+  _resolveFilename: Module._resolveFilename,
   builtinModules,
   createRequire,
   default: Module,

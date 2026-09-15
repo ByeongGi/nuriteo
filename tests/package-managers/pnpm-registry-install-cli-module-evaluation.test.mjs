@@ -96,7 +96,11 @@ try {
   assert.equal(requestCount >= 1, true);
   assert.equal(workspace.exists("/workspace/project/node_modules/fixture-registry/package.json"), true);
   assert.equal(workspace.readText("/workspace/project/node_modules/fixture-registry/index.js"), "module.exports = 'registry-ok';\n");
+  assert.equal(workspace.exists("/workspace/project/node_modules/.bin/fixture-registry"), true);
   assert.match(workspace.readlink("/workspace/project/node_modules/fixture-registry"), /node_modules\/\.pnpm\/fixture-registry@http/);
+  assert.match(workspace.readText("/workspace/project/pnpm-lock.yaml"), /specifier: http:\/\/127\.0\.0\.1:\d+\/fixture-registry-1\.0\.0\.tgz/);
+  assert.match(workspace.readText("/workspace/project/node_modules/.modules.yaml"), /packageManager: pnpm@9\.15\.9/);
+  assert.match(workspace.readText("/workspace/project/node_modules/.pnpm/lock.yaml"), /fixture-registry@http:\/\/127\.0\.0\.1:\d+\/fixture-registry-1\.0\.0\.tgz/);
 } finally {
   await new Promise((resolve) => server.close(resolve));
 }

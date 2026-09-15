@@ -7,6 +7,7 @@ type ProcessWriteEncoding = BufferEncoding | string;
 export interface ProcessBuiltinOptions {
   argv?: string[];
   cwd?: string;
+  emitExitInCapture?: boolean;
   env?: Record<string, string>;
   exitMode?: ProcessExitMode;
   pid?: number;
@@ -47,6 +48,7 @@ export class BrowserProcess extends EventEmitter {
   stdout = Object.freeze({ isTTY: false, write: (chunk: unknown, encodingOrCallback?: ProcessWriteEncoding | ProcessWriteCallback, callback?: ProcessWriteCallback) => this.#write("stdout", chunk, encodingOrCallback, callback) });
   stderr = Object.freeze({ isTTY: false, write: (chunk: unknown, encodingOrCallback?: ProcessWriteEncoding | ProcessWriteCallback, callback?: ProcessWriteCallback) => this.#write("stderr", chunk, encodingOrCallback, callback) });
   #cwd: string;
+  #emitExitInCapture: boolean;
   #exitMode: ProcessExitMode;
   #umask = 0o022;
 
@@ -57,6 +59,7 @@ export class BrowserProcess extends EventEmitter {
     this.exitCode = undefined;
     this.pid = options.pid ?? 1;
     this.#cwd = options.cwd || "/workspace";
+    this.#emitExitInCapture = options.emitExitInCapture ?? false;
     this.#exitMode = options.exitMode || "throw";
   }
 
@@ -85,7 +88,10 @@ export class BrowserProcess extends EventEmitter {
 
   exit(code = 0): never | undefined {
     this.exitCode = code;
-    if (this.#exitMode === "capture") return undefined;
+    if (this.#exitMode === "capture") {
+      if (this.#emitExitInCapture) this.emit("exit", code);
+      return undefined;
+    }
     this.emit("exit", code);
     throw new Error(`process.exit(${code})`);
   }

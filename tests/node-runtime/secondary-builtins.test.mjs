@@ -113,6 +113,7 @@ assert.deepEqual(moduleBuiltin.Module._nodeModulePaths("/workspace/app"), [
   "/workspace/node_modules",
   "/node_modules"
 ]);
+assert.deepEqual(moduleBuiltin._nodeModulePaths("/workspace/app"), moduleBuiltin.Module._nodeModulePaths("/workspace/app"));
 assert.equal(moduleBuiltin.Module._resolveFilename("node:path"), "node:path");
 
 const processModule = requireBuiltin("process");

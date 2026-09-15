@@ -450,8 +450,15 @@ function createCliWorkerThreadsBuiltin(options: {
         const workerProcess = new BrowserProcess({
           argv: ["node", String(filename)],
           cwd: options.parentProcess.cwd(),
+          emitExitInCapture: true,
           env: options.parentProcess.env,
           exitMode: "capture"
+        });
+        workerProcess.on("exit", (code) => {
+          if (this.#terminated) return;
+          this.#terminated = true;
+          this.#parentPort.removeAllListeners();
+          this.emit("exit", typeof code === "number" ? code : 0);
         });
         workerGlobal.global = workerGlobal;
         workerGlobal.process = workerProcess;
