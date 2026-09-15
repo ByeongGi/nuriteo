@@ -1,6 +1,7 @@
 import { join } from "../builtins/path.ts";
 import { spawnRuntimeChild, type RuntimeChildProcess } from "../child-process.ts";
 import { createLoopbackNetwork, type LoopbackNetwork, type RuntimeHttpResponse } from "../net/index.ts";
+import { analyzeCliModuleGraph, type CliModuleGraph } from "../package-managers/cli-module-graph.ts";
 import { inspectCliEntryReadiness, type CliEntryReadiness } from "../package-managers/cli-entry-readiness.ts";
 import { MemoryPackageManagerWorkspace, type PackageManagerWorkspaceMount } from "../package-managers/workspace.ts";
 
@@ -100,6 +101,7 @@ export interface ViteRealCliReadiness {
   status: "blocked";
   cliEntrypoint: string;
   cliEntryReadiness: CliEntryReadiness;
+  cliModuleGraph: CliModuleGraph;
   missingCapabilities: ViteRuntimeCapability[];
   nextAction: string;
 }
@@ -189,6 +191,12 @@ export class ViteProductWorkflow {
           mode: "esm"
         },
         reader: this.workspace
+      }),
+      cliModuleGraph: analyzeCliModuleGraph({
+        entry: cliEntrypoint,
+        packageRoot: join(this.projectRoot, "node_modules/vite"),
+        reader: this.workspace,
+        maxModules: 128
       }),
       missingCapabilities: missingCapabilitiesForTemplate(this.template),
       nextAction: "Replace the adapter-backed Vite workflow with vendored Vite CLI/module execution once the listed runtime capabilities are implemented."

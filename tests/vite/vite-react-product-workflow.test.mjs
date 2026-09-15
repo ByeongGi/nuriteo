@@ -18,6 +18,10 @@ for (const manager of ["npm", "pnpm"]) {
   assert.equal(result.realCliReadiness.cliEntryReadiness.status, "blocked");
   assert.equal(result.realCliReadiness.cliEntryReadiness.mode, "esm");
   assert.equal(result.realCliReadiness.cliEntryReadiness.reasons[0].code, "ERR_CLI_ESM_ENTRY_UNSUPPORTED");
+  assert.equal(result.realCliReadiness.cliModuleGraph.entry, "/workspace/project/node_modules/vite/bin/vite.js");
+  assert.deepEqual(result.realCliReadiness.cliModuleGraph.modules[0].imports, ["../dist/node/cli.js"]);
+  assert.equal(result.realCliReadiness.cliModuleGraph.issues[0].kind, "missing-module");
+  assert.equal(result.realCliReadiness.cliModuleGraph.supported, false);
   assert.equal(result.realCliReadiness.missingCapabilities.includes("actual-vite-cli-module-execution"), true);
   assert.equal(result.realCliReadiness.missingCapabilities.includes("real-vite-hmr-protocol"), true);
   assert.equal(
