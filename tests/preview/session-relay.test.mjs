@@ -89,6 +89,27 @@ const fresh = sessions.create({
   port: 4173,
   container
 });
+const unavailable = sessions.create({
+  origin: "https://preview.local",
+  projectId: "project-a",
+  port: 5173,
+  container: {
+    async fetch() {
+      const error = new Error("connection refused");
+      error.code = "ECONNREFUSED";
+      throw error;
+    }
+  }
+});
+await assert.rejects(
+  relay.request({
+    sessionId: unavailable.sessionId,
+    origin: "https://preview.local",
+    projectId: "project-a",
+    path: "/index.html"
+  }),
+  (error) => error.code === "ENOSERVER"
+);
 await assert.rejects(
   relay.request({
     sessionId: fresh.sessionId,

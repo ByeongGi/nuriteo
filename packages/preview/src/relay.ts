@@ -41,6 +41,7 @@ export class PreviewRelay {
       });
     } catch (error) {
       if (controller.signal.aborted) throw new PreviewRelayError("preview request timeout", "ETIMEOUT");
+      if (isConnectionRefused(error)) throw new PreviewRelayError("preview server unavailable", "ENOSERVER");
       throw error;
     } finally {
       clearTimeout(timeout);
@@ -50,4 +51,11 @@ export class PreviewRelay {
 
 export function createPreviewRelay(options: PreviewRelayOptions): PreviewRelay {
   return new PreviewRelay(options);
+}
+
+function isConnectionRefused(error: unknown): boolean {
+  return typeof error === "object"
+    && error !== null
+    && "code" in error
+    && (error as { code?: unknown }).code === "ECONNREFUSED";
 }
