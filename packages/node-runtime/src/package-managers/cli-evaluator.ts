@@ -370,6 +370,22 @@ function createWorkspaceFsFacade(reader: WorkspaceModuleReader, writer?: Package
     closeSync(fd: number): void {
       openFiles.delete(fd);
     },
+    chmod(path: string, _mode: number, callback: (error?: Error | null) => void = () => undefined): void {
+      callWithOptionalFsCallback(() => {
+        statFromReader(reader, path);
+      }, callback);
+    },
+    chmodSync(path: string): void {
+      statFromReader(reader, path);
+    },
+    chown(path: string, _uid: number, _gid: number, callback: (error?: Error | null) => void = () => undefined): void {
+      callWithOptionalFsCallback(() => {
+        statFromReader(reader, path);
+      }, callback);
+    },
+    chownSync(path: string): void {
+      statFromReader(reader, path);
+    },
     copyFile(source: string, target: string, flagsOrCallback?: number | ((error?: Error | null) => void), callback?: (error?: Error | null) => void): void {
       const cb = typeof flagsOrCallback === "function" ? flagsOrCallback : callback;
       try {
@@ -434,6 +450,14 @@ function createWorkspaceFsFacade(reader: WorkspaceModuleReader, writer?: Package
     futimesSync(fd: number): void {
       assertOpenFile(fd);
     },
+    fsync(fd: number, callback: (error?: Error | null) => void = () => undefined): void {
+      callWithOptionalFsCallback(() => {
+        assertOpenFile(fd);
+      }, callback);
+    },
+    fsyncSync(fd: number): void {
+      assertOpenFile(fd);
+    },
     lutimes(path: string, atime: Date | number | string, mtime: Date | number | string, callback: (error?: Error | null) => void = () => undefined): void {
       facade.utimes(path, atime, mtime, callback);
     },
@@ -454,12 +478,14 @@ function createWorkspaceFsFacade(reader: WorkspaceModuleReader, writer?: Package
     linkSync(source: string, target: string): void {
       facade.copyFileSync(source, target);
     },
-    open(path: string, flags: string | number, callback: (error: Error | null, fd?: number) => void): void {
+    open(path: string, flags: string | number, modeOrCallback?: number | ((error: Error | null, fd?: number) => void), callback?: (error: Error | null, fd?: number) => void): void {
+      const cb = typeof modeOrCallback === "function" ? modeOrCallback : callback;
+      if (!cb) return;
       try {
         const fd = facade.openSync(path, flags);
-        callback(null, fd);
+        cb(null, fd);
       } catch (error) {
-        callback(error instanceof Error ? error : new Error(String(error)));
+        cb(error instanceof Error ? error : new Error(String(error)));
       }
     },
     openSync(path: string, flags: string | number = "r"): number {
@@ -656,27 +682,70 @@ function createWorkspaceFsFacade(reader: WorkspaceModuleReader, writer?: Package
         cb?.(error instanceof Error ? error : new Error(String(error)));
       }
     },
+    write(fd: number, data: RuntimeFsData, offsetOrCallback?: number | ((error: Error | null, bytesWritten?: number, buffer?: RuntimeFsData) => void), lengthOrEncoding?: number | string, positionOrCallback?: number | ((error: Error | null, bytesWritten?: number, buffer?: RuntimeFsData) => void), callback?: (error: Error | null, bytesWritten?: number, buffer?: RuntimeFsData) => void): void {
+      const cb = typeof offsetOrCallback === "function"
+        ? offsetOrCallback
+        : typeof positionOrCallback === "function"
+          ? positionOrCallback
+          : callback;
+      try {
+        const writeOptions: CliWriteOptions = {};
+        if (typeof lengthOrEncoding === "string") {
+          writeOptions.encoding = lengthOrEncoding;
+          if (typeof offsetOrCallback === "number") writeOptions.position = offsetOrCallback;
+        } else {
+          if (typeof lengthOrEncoding === "number") writeOptions.length = lengthOrEncoding;
+          if (typeof offsetOrCallback === "number") writeOptions.offset = offsetOrCallback;
+          if (typeof positionOrCallback === "number") writeOptions.position = positionOrCallback;
+        }
+        const bytesWritten = writeToOpenFile(fd, data, writeOptions);
+        cb?.(null, bytesWritten, data);
+      } catch (error) {
+        cb?.(error instanceof Error ? error : new Error(String(error)));
+      }
+    },
     writev(_fd: number, _buffers: ArrayBufferView[], callback: (error?: Error | null, bytesWritten?: number, buffers?: ArrayBufferView[]) => void = () => undefined): void {
       callback(unsupportedFsMutation("writev"));
     },
     writeSync(fd: number, data: RuntimeFsData): number {
-      const file = openFiles.get(fd);
-      if (!file) throw createFsError("EBADF", `Bad file descriptor: ${fd}`);
-      if (!file.writable || !writer) throw unsupportedFsMutation("writeSync");
-      const decoded = decodeFsData(data);
-      const next = `${decoder.decode(file.bytes)}${decoded}`;
-      file.bytes = encoder.encode(next);
-      writer.writeText(file.path, next);
-      return encoder.encode(decoded).byteLength;
+      return writeToOpenFile(fd, data);
     }
   };
+
   return facade as RuntimeFsBinding;
+
+  function writeToOpenFile(fd: number, data: RuntimeFsData, options: CliWriteOptions = {}): number {
+    const file = openFiles.get(fd);
+    if (!file) throw createFsError("EBADF", `Bad file descriptor: ${fd}`);
+    if (!file.writable || !writer) throw unsupportedFsMutation("writeSync");
+    const bytes = encodeFsWriteData(data, options, encoder);
+    const position = options.position ?? file.bytes.byteLength;
+    const next = new Uint8Array(Math.max(file.bytes.byteLength, position + bytes.byteLength));
+    next.set(file.bytes);
+    next.set(bytes, position);
+    file.bytes = next;
+    writer.writeText(file.path, decoder.decode(next));
+    return bytes.byteLength;
+  }
 
   function decodeFsData(data: RuntimeFsData): string {
     if (typeof data === "string") return data;
     if (data instanceof Uint8Array) return decoder.decode(data);
     if (ArrayBuffer.isView(data)) return decoder.decode(new Uint8Array(data.buffer, data.byteOffset, data.byteLength));
     return decoder.decode(new Uint8Array(data));
+  }
+
+  function encodeFsWriteData(data: RuntimeFsData, options: CliWriteOptions, encoder: TextEncoder): Uint8Array {
+    const source = typeof data === "string"
+      ? encoder.encode(data)
+      : data instanceof Uint8Array
+        ? data
+        : ArrayBuffer.isView(data)
+          ? new Uint8Array(data.buffer, data.byteOffset, data.byteLength)
+          : new Uint8Array(data);
+    const offset = options.offset ?? 0;
+    const length = options.length ?? source.byteLength - offset;
+    return source.slice(offset, offset + length);
   }
 
   function assertOpenFile(fd: number): CliOpenFile {
@@ -689,6 +758,15 @@ function createWorkspaceFsFacade(reader: WorkspaceModuleReader, writer?: Package
 function callWithFsCallback<T>(read: () => T, callback: (error: Error | null, value?: T) => void): void {
   try {
     callback(null, read());
+  } catch (error) {
+    callback(error instanceof Error ? error : new Error(String(error)));
+  }
+}
+
+function callWithOptionalFsCallback(run: () => void, callback: (error?: Error | null) => void): void {
+  try {
+    run();
+    callback(null);
   } catch (error) {
     callback(error instanceof Error ? error : new Error(String(error)));
   }
@@ -707,6 +785,13 @@ interface CliOpenFile {
 interface CliOpenMode {
   truncate: boolean;
   writable: boolean;
+}
+
+interface CliWriteOptions {
+  encoding?: string;
+  length?: number;
+  offset?: number;
+  position?: number;
 }
 
 interface CliRmOptions {

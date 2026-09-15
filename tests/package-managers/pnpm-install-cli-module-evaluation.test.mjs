@@ -69,6 +69,9 @@ assert.equal(result.stderr, "");
 assert.equal(result.exitCode, 0);
 assert.equal(workspace.readText("/workspace/project/node_modules/local-dep/package.json"), "{\"name\":\"local-dep\",\"version\":\"1.0.0\",\"main\":\"index.js\"}");
 assert.equal(workspace.readText("/workspace/project/node_modules/local-dep/index.js"), "module.exports = 'local-dep';\n");
+assert.match(workspace.readText("/workspace/project/pnpm-lock.yaml"), /local-dep@file:\.\.\/local-dep/);
+assert.match(workspace.readText("/workspace/project/node_modules/.modules.yaml"), /packageManager: pnpm@9\.15\.9/);
+assert.match(workspace.readText("/workspace/project/node_modules/.pnpm/lock.yaml"), /specifier: file:\.\.\/local-dep/);
 
 console.log("pnpm install cli module evaluation test ok");
 

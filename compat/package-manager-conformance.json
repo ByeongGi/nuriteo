@@ -85,7 +85,7 @@
       "runtime": "browser-guest-node-runtime",
       "status": "partial-pass",
       "evidence": ["tests/package-managers/pnpm-install-cli-module-evaluation.test.mjs", "tests/package-managers/pnpm-store-plan.test.mjs", "tests/package-managers/pnpm-integration.test.mjs"],
-      "productGap": "Browser runtime can now run vendored pnpm CLI module evaluation for a local file dependency install and materialize symlinked node_modules package files, plus validate and materialize workspace-only frozen install layout with copy-fallback links. Lockfile/modules metadata emission, registry dependency installs, run/exec, lifecycle, peer, and optional policy still need real CLI module evaluation coverage."
+      "productGap": "Browser runtime can now run vendored pnpm CLI module evaluation for a local file dependency install and materialize symlinked node_modules package files, pnpm-lock.yaml, node_modules/.modules.yaml, and virtual-store lock.yaml, plus validate and materialize workspace-only frozen install layout with copy-fallback links. Registry dependency installs, run/exec, lifecycle, peer, and optional policy still need real CLI module evaluation coverage."
     },
     {
       "id": "pnpm-run-exec-lifecycle-peer-optional-interrupt",
