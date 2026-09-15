@@ -25,6 +25,7 @@ assert.deepEqual(
     /**
      * const braces = require('braces');
      */
+    const loaded = tsx.require(name, rootFile);
     const real = require("real-package");
   `),
   ["real-package"]

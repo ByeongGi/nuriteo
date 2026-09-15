@@ -225,7 +225,7 @@ export function extractStaticRequires(source: string, options: StaticRequireExtr
     }
 
     if (!source.startsWith("require", index)) continue;
-    if (isIdentifierPart(source[index - 1]) || isIdentifierPart(source[index + "require".length])) continue;
+    if (isIdentifierPart(source[index - 1]) || source[index - 1] === "." || isIdentifierPart(source[index + "require".length])) continue;
 
     const parsed = parseRequireCall(source, index + "require".length, constants, options.filename);
     if (parsed) {
