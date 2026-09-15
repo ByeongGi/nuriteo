@@ -35,7 +35,10 @@ async function withRuntimeLab(callback) {
 
 await withRuntimeLab(async (page, baseUrl) => {
   await page.goto(baseUrl, { waitUntil: "load" });
-  for (let i = 0; i < 100; i += 1) {
+  await page.waitForFunction(() => Boolean(globalThis.__runtimeLab?.boot), null, { timeout: 5000 });
+  const iterations = Number.parseInt(process.env.SOAK_ITERATIONS || "100", 10);
+  if (!Number.isSafeInteger(iterations) || iterations <= 0) throw new Error(`invalid SOAK_ITERATIONS: ${process.env.SOAK_ITERATIONS}`);
+  for (let i = 0; i < iterations; i += 1) {
     const metrics = await page.evaluate(async () => {
       await globalThis.__runtimeLab.boot();
       await globalThis.__runtimeLab.runFsSmoke();
@@ -44,7 +47,7 @@ await withRuntimeLab(async (page, baseUrl) => {
       await globalThis.__runtimeLab.teardown();
       return { beforeTeardown, system, status: globalThis.__runtimeLab.status() };
     });
-    if (metrics.beforeTeardown.activeWorkers !== 2) throw new Error(`active workers missing at iteration ${i}`);
+    if (metrics.beforeTeardown.activeWorkers !== 2) throw new Error(`active workers did not reach run budget at iteration ${i}`);
     if (metrics.beforeTeardown.pendingRequests !== 0) throw new Error(`pending requests leaked before teardown at iteration ${i}`);
     if (metrics.system.openFiles !== 0) throw new Error(`open file descriptors leaked at iteration ${i}`);
     if (metrics.system.watchCount !== 0) throw new Error(`watch handles leaked at iteration ${i}`);

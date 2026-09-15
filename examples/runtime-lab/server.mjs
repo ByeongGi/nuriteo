@@ -2,6 +2,7 @@ import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import ts from "typescript";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const publicRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "public");
@@ -30,10 +31,44 @@ const mime = {
   ".css": "text/css; charset=utf-8"
 };
 
+const browserImportAliases = new Map([
+  ["@cargo-container/browser-host", "/packages/browser-host/src/index.ts"],
+  ["@cargo-container/browser-host/supervisor", "/packages/browser-host/src/supervisor.ts"],
+  ["@cargo-container/preview", "/packages/preview/src/index.ts"],
+  ["@cargo-container/protocol", "/packages/protocol/src/index.ts"],
+  ["@cargo-container/sdk", "/packages/sdk/src/index.ts"],
+  ["fflate", "/node_modules/fflate/esm/browser.js"]
+]);
+
+function rewriteBrowserImports(source) {
+  let output = source;
+  for (const [specifier, browserPath] of browserImportAliases) {
+    output = output
+      .replaceAll(`from "${specifier}"`, `from "${browserPath}"`)
+      .replaceAll(`from '${specifier}'`, `from '${browserPath}'`)
+      .replaceAll(`import("${specifier}")`, `import("${browserPath}")`)
+      .replaceAll(`import('${specifier}')`, `import('${browserPath}')`);
+  }
+  return output;
+}
+
+function toBrowserJavaScript(source, filename) {
+  if (path.extname(filename) !== ".ts") return source;
+  const output = ts.transpileModule(source.toString("utf8"), {
+    compilerOptions: {
+      module: ts.ModuleKind.ESNext,
+      target: ts.ScriptTarget.ES2024,
+      useDefineForClassFields: true
+    },
+    fileName: filename
+  }).outputText;
+  return rewriteBrowserImports(output);
+}
+
 function resolveFile(pathname) {
   const cleanPath = pathname.replace(/^\/broken/, "");
   if (cleanPath === "/" || cleanPath === "") return path.join(publicRoot, "index.html");
-  if (cleanPath.startsWith("/packages/") || cleanPath.startsWith("/workers/")) {
+  if (cleanPath.startsWith("/packages/") || cleanPath.startsWith("/workers/") || cleanPath.startsWith("/node_modules/fflate/")) {
     return path.join(repoRoot, cleanPath.slice(1));
   }
   return path.join(publicRoot, cleanPath);
@@ -56,12 +91,13 @@ const server = http.createServer((req, res) => {
       res.end("Not found");
       return;
     }
+    const body = toBrowserJavaScript(bytes, file);
     res.writeHead(200, {
       ...(isolated ? isolationHeaders : {}),
       "Content-Security-Policy": csp,
       "Content-Type": mime[path.extname(file)] || "application/octet-stream"
     });
-    res.end(bytes);
+    res.end(body);
   });
 });
 
