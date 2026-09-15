@@ -6,6 +6,10 @@ export function createNodeFsWorkspaceReader(options) {
   return new NodeFsWorkspaceReader(options);
 }
 
+export function createFallbackWorkspaceReader(readers) {
+  return new FallbackWorkspaceReader(readers);
+}
+
 class NodeFsWorkspaceReader {
   #root;
   #virtualRoot;
@@ -44,6 +48,55 @@ class NodeFsWorkspaceReader {
       throw Object.assign(new Error(`Path escapes workspace root: ${path}`), { code: "EACCES" });
     }
     return nativePath;
+  }
+}
+
+class FallbackWorkspaceReader {
+  #readers;
+
+  constructor(readers) {
+    this.#readers = readers;
+  }
+
+  readText(path) {
+    for (const reader of this.#readers) {
+      try {
+        return reader.readText(path);
+      } catch {
+        // Try the next mounted root.
+      }
+    }
+    throw Object.assign(new Error(`No such file: ${path}`), { code: "ENOENT" });
+  }
+
+  listDir(path) {
+    const entries = new Set();
+    let found = false;
+    for (const reader of this.#readers) {
+      try {
+        for (const entry of reader.listDir(path)) entries.add(entry);
+        found = true;
+      } catch {
+        // Try the next mounted root.
+      }
+    }
+    if (!found) throw Object.assign(new Error(`No such directory: ${path}`), { code: "ENOENT" });
+    return [...entries].sort();
+  }
+
+  readlink(path) {
+    for (const reader of this.#readers) {
+      try {
+        return reader.readlink(path);
+      } catch {
+        // Try the next mounted root.
+      }
+    }
+    throw Object.assign(new Error(`Not a symbolic link: ${path}`), { code: "EINVAL" });
+  }
+
+  exists(path) {
+    return this.#readers.some((reader) => reader.exists(path));
   }
 }
 

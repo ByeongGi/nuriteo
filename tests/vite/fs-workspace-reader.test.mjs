@@ -7,7 +7,7 @@ import {
   createViteDependencyArtifactFromWorkspace,
   createVitePackageArtifactFromWorkspace
 } from "../../packages/node-runtime/src/index.ts";
-import { createNodeFsWorkspaceReader } from "../../scripts/lib/fs-workspace-reader.mjs";
+import { createFallbackWorkspaceReader, createNodeFsWorkspaceReader } from "../../scripts/lib/fs-workspace-reader.mjs";
 
 const root = mkdtempSync(join(tmpdir(), "cargo-container-fs-reader-"));
 const viteRoot = join(root, "vite");
@@ -67,5 +67,28 @@ assert.deepEqual(
     version: "4.0.5"
   }
 );
+
+const fallbackRoot = join(root, "fallback-node-modules");
+const fallbackHoistedRoot = join(fallbackRoot, ".pnpm", "node_modules");
+mkdirSync(join(fallbackRoot, "ws"), { recursive: true });
+mkdirSync(join(fallbackHoistedRoot, "tinyglobby"), { recursive: true });
+writeFileSync(join(fallbackRoot, "ws", "package.json"), JSON.stringify({ name: "ws", version: "8.21.1" }));
+writeFileSync(join(fallbackRoot, "ws", "index.js"), "module.exports = {};\n");
+writeFileSync(join(fallbackHoistedRoot, "tinyglobby", "package.json"), JSON.stringify({ name: "tinyglobby", version: "0.2.17" }));
+writeFileSync(join(fallbackHoistedRoot, "tinyglobby", "index.mjs"), "export const glob = () => [];\n");
+const fallbackReader = createFallbackWorkspaceReader([
+  createNodeFsWorkspaceReader({
+    root: fallbackRoot,
+    virtualRoot: "/workspace/project/node_modules"
+  }),
+  createNodeFsWorkspaceReader({
+    root: fallbackHoistedRoot,
+    virtualRoot: "/workspace/project/node_modules"
+  })
+]);
+assert.deepEqual(fallbackReader.listDir("/workspace/project/node_modules"), [".pnpm", "tinyglobby", "ws"]);
+assert.equal(fallbackReader.exists("/workspace/project/node_modules/ws/package.json"), true);
+assert.equal(fallbackReader.exists("/workspace/project/node_modules/tinyglobby/package.json"), true);
+assert.equal(JSON.parse(fallbackReader.readText("/workspace/project/node_modules/tinyglobby/package.json")).version, "0.2.17");
 
 console.log("vite filesystem workspace reader test ok");

@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 import { existsSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { resolve } from "node:path";
 
 import {
   createViteDependencyArtifactClosureFromWorkspace,
   createVitePackageArtifactFromWorkspace,
   ViteProductWorkflow
 } from "../packages/node-runtime/src/index.ts";
-import { createNodeFsWorkspaceReader } from "./lib/fs-workspace-reader.mjs";
+import { createFallbackWorkspaceReader, createNodeFsWorkspaceReader } from "./lib/fs-workspace-reader.mjs";
 
 const [vitePackageRootArg, nodeModulesRootArg] = process.argv.slice(2);
 
@@ -50,11 +50,7 @@ if (!vitePackageRootArg) {
 }
 
 function inspectDependencyClosure(nodeModulesRoot, vitePackageArtifact) {
-  const closureSourceRoot = resolveDependencyClosureSourceRoot(nodeModulesRoot);
-  const reader = createNodeFsWorkspaceReader({
-    root: closureSourceRoot,
-    virtualRoot: "/workspace/project/node_modules"
-  });
+  const reader = createDependencyReader(nodeModulesRoot);
   const closure = createViteDependencyArtifactClosureFromWorkspace({
     manager: "pnpm",
     nodeModulesRoot: "/workspace/project/node_modules",
@@ -72,13 +68,23 @@ function inspectDependencyClosure(nodeModulesRoot, vitePackageArtifact) {
       }))
     })),
     remainingPlan: summarizePlan(closure.remainingPlan),
-    sourceRoot: closureSourceRoot
+    sourceRoot: nodeModulesRoot
   };
 }
 
-function resolveDependencyClosureSourceRoot(nodeModulesRoot) {
-  const pnpmHoistedRoot = join(nodeModulesRoot, ".pnpm/node_modules");
-  return existsSync(pnpmHoistedRoot) ? pnpmHoistedRoot : nodeModulesRoot;
+function createDependencyReader(nodeModulesRoot) {
+  const readers = [createNodeFsWorkspaceReader({
+    root: nodeModulesRoot,
+    virtualRoot: "/workspace/project/node_modules"
+  })];
+  const pnpmHoistedRoot = `${nodeModulesRoot}/.pnpm/node_modules`;
+  if (existsSync(pnpmHoistedRoot)) {
+    readers.push(createNodeFsWorkspaceReader({
+      root: pnpmHoistedRoot,
+      virtualRoot: "/workspace/project/node_modules"
+    }));
+  }
+  return createFallbackWorkspaceReader(readers);
 }
 
 function summarizeReadiness(readiness) {

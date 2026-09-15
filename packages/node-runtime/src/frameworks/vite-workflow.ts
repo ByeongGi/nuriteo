@@ -1314,6 +1314,8 @@ function* walkWorkspaceTextFiles(reader: WorkspaceModuleReader, path: string): G
 }
 
 function readerExists(reader: WorkspaceModuleReader, path: string): boolean {
+  const maybeReader = reader as WorkspaceModuleReader & { exists?: (path: string) => boolean };
+  if (maybeReader.exists?.(path) === true) return true;
   try {
     reader.readText(path);
     return true;
