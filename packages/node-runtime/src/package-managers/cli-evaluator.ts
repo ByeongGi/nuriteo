@@ -792,6 +792,30 @@ function createWorkspaceFsFacade(reader: WorkspaceModuleReader, writer?: Package
       writer.writeText(normalize(target), reader.readText(normalize(source)));
       notifyFsChange(normalize(target), "change");
     },
+    cp(source: string, target: string, optionsOrCallback?: CliCpOptions | ((error?: Error | null) => void), callback?: (error?: Error | null) => void): void {
+      const cb = typeof optionsOrCallback === "function" ? optionsOrCallback : callback;
+      const options = typeof optionsOrCallback === "function" ? {} : optionsOrCallback || {};
+      callWithOptionalFsCallback(() => {
+        facade.cpSync(source, target, options);
+      }, cb || (() => undefined));
+    },
+    cpSync(source: string, target: string, options: CliCpOptions = {}): void {
+      if (!writer) throw unsupportedFsMutation("cpSync");
+      const normalizedSource = normalize(source);
+      const normalizedTarget = normalize(target);
+      if (options.force === false && facade.existsSync(normalizedTarget)) {
+        throw createFsError("EEXIST", `File already exists: ${normalizedTarget}`);
+      }
+      const stats = statFromReader(reader, normalizedSource);
+      if (stats.isDirectory()) {
+        if (!options.recursive) throw createFsError("EISDIR", `Cannot copy directory without recursive option: ${normalizedSource}`);
+        writer.copyDirectory(normalizedSource, normalizedTarget);
+        notifyFsChange(normalizedTarget, "rename");
+        return;
+      }
+      writer.copyFile(normalizedSource, normalizedTarget);
+      notifyFsChange(normalizedTarget, "change");
+    },
     createReadStream(path: string, options: CliCreateReadStreamOptions | "utf8" | "utf-8" = {}): Readable & { path: string } {
       const stream = new Readable() as Readable & { path: string };
       const normalized = normalize(path);
@@ -1013,6 +1037,9 @@ function createWorkspaceFsFacade(reader: WorkspaceModuleReader, writer?: Package
       },
       async copyFile(source: string, target: string): Promise<void> {
         facade.copyFileSync(source, target);
+      },
+      async cp(source: string, target: string, options: CliCpOptions = {}): Promise<void> {
+        facade.cpSync(source, target, options);
       },
       async fchmod(fd: number, mode: number): Promise<void> {
         facade.fchmodSync(fd, mode);
@@ -1527,6 +1554,11 @@ interface CliChildCommandResult {
 }
 
 interface CliRmOptions {
+  force?: boolean;
+  recursive?: boolean;
+}
+
+interface CliCpOptions {
   force?: boolean;
   recursive?: boolean;
 }

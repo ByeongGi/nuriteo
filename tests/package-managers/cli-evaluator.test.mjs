@@ -156,6 +156,20 @@ const workspace = new MemoryPackageManagerWorkspace([
         await fs.promises.rename(process.cwd() + '/rename-source-async.txt', process.cwd() + '/rename-target-async.txt');
         fs.copyFileSync(process.cwd() + '/rename-target.txt', process.cwd() + '/copied.txt');
         await fs.promises.copyFile(process.cwd() + '/rename-target-async.txt', process.cwd() + '/copied-async.txt');
+        fs.cpSync(process.cwd() + '/copied.txt', process.cwd() + '/cp-file.txt');
+        if (fs.readFileSync(process.cwd() + '/cp-file.txt', 'utf8') !== 'renamed') {
+          throw new Error('unexpected cpSync file copy');
+        }
+        fs.mkdirSync(process.cwd() + '/cp-source');
+        fs.writeFileSync(process.cwd() + '/cp-source/nested.txt', 'nested');
+        fs.cpSync(process.cwd() + '/cp-source', process.cwd() + '/cp-target', { recursive: true });
+        if (fs.readFileSync(process.cwd() + '/cp-target/nested.txt', 'utf8') !== 'nested') {
+          throw new Error('unexpected cpSync recursive copy');
+        }
+        await fs.promises.cp(process.cwd() + '/cp-source', process.cwd() + '/cp-target-async', { recursive: true });
+        if (fs.readFileSync(process.cwd() + '/cp-target-async/nested.txt', 'utf8') !== 'nested') {
+          throw new Error('unexpected promises.cp recursive copy');
+        }
         const streamedRead = await new Promise((resolve, reject) => {
           let text = '';
           fs.createReadStream(process.cwd() + '/copied.txt', { encoding: 'utf8' })
