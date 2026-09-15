@@ -64,6 +64,27 @@ export interface ViteProductDependencyArtifactMergeResult {
   replaced: string[];
 }
 
+export interface ViteProductDependencyArtifactClosureOptions {
+  initialArtifacts?: ViteProductDependencyArtifact[];
+  manager: ViteProductPackageManager;
+  maxIterations?: number;
+  nodeModulesRoot: string;
+  projectRoot?: string;
+  reader: WorkspaceModuleReader;
+  vitePackageArtifact: ViteProductPackageArtifact;
+}
+
+export interface ViteProductDependencyArtifactClosureResult {
+  artifacts: ViteProductDependencyArtifact[];
+  iterations: ViteProductDependencyArtifactClosureIteration[];
+  remainingPlan: ViteDependencyMaterializationPlan;
+}
+
+export interface ViteProductDependencyArtifactClosureIteration {
+  extracted: string[];
+  plan: ViteDependencyMaterializationPlan;
+}
+
 export type ViteProductPackageArtifactErrorCode = "EVITEARTIFACTMANIFEST" | "EVITEARTIFACTNAME" | "EVITEARTIFACTBIN";
 
 export class ViteProductPackageArtifactError extends Error {
@@ -952,6 +973,44 @@ export function mergeViteDependencyArtifacts(
   };
 }
 
+export function createViteDependencyArtifactClosureFromWorkspace(
+  options: ViteProductDependencyArtifactClosureOptions
+): ViteProductDependencyArtifactClosureResult {
+  const nodeModulesRoot = normalizeServedPath(options.nodeModulesRoot).replace(/\/$/, "");
+  const maxIterations = options.maxIterations ?? 8;
+  let artifacts = options.initialArtifacts || [];
+  const iterations: ViteProductDependencyArtifactClosureIteration[] = [];
+  let remainingPlan = inspectDependencyMaterializationPlan(options, artifacts);
+
+  for (let iteration = 0; iteration < maxIterations; iteration += 1) {
+    const extractableNames = remainingPlan.missing
+      .filter((item) => item.kind !== "native-hold")
+      .map((item) => item.name)
+      .filter((name) => !artifacts.some((artifact) => artifact.name === name))
+      .filter((name) => readerExists(options.reader, join(nodeModulesRoot, name, "package.json")));
+    if (extractableNames.length === 0) break;
+
+    const extracted = createViteDependencyArtifactsFromWorkspace({
+      names: extractableNames,
+      nodeModulesRoot,
+      reader: options.reader
+    });
+    artifacts = mergeViteDependencyArtifacts(artifacts, extracted).artifacts;
+    remainingPlan = inspectDependencyMaterializationPlan(options, artifacts);
+    iterations.push({
+      extracted: extracted.map((artifact) => artifact.name),
+      plan: remainingPlan
+    });
+    if (remainingPlan.missing.length === 0) break;
+  }
+
+  return {
+    artifacts,
+    iterations,
+    remainingPlan
+  };
+}
+
 export function runViteReactProductWorkflow(options: ViteProductWorkflowOptions): ViteProductWorkflowResult {
   return runViteProductWorkflow({ ...options, template: options.template || "react" });
 }
@@ -1096,6 +1155,20 @@ function createDependencyMaterializationPlan(
     optional,
     satisfied
   };
+}
+
+function inspectDependencyMaterializationPlan(
+  options: ViteProductDependencyArtifactClosureOptions,
+  dependencyArtifacts: readonly ViteProductDependencyArtifact[]
+): ViteDependencyMaterializationPlan {
+  const workflow = new ViteProductWorkflow({
+    manager: options.manager,
+    vitePackageArtifact: options.vitePackageArtifact,
+    dependencyArtifacts: [...dependencyArtifacts],
+    ...(options.projectRoot === undefined ? {} : { projectRoot: options.projectRoot })
+  });
+  workflow.install();
+  return workflow.inspectRealCliReadiness().dependencyMaterializationPlan;
 }
 
 function packageNameFromSpecifier(specifier: string): string | null {

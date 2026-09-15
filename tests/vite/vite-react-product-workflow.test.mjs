@@ -6,6 +6,7 @@ import {
   createLoopbackNetwork,
   createNpmInstallPlan,
   createPnpmStorePlan,
+  createViteDependencyArtifactClosureFromWorkspace,
   createViteDependencyArtifactFromWorkspace,
   createViteDependencyArtifactsFromPlan,
   createViteDependencyArtifactsFromWorkspace,
@@ -723,10 +724,30 @@ const transitivePureJsArtifacts = createViteDependencyArtifactsFromPlan({
 });
 const mergedPureJsArtifacts = mergeViteDependencyArtifacts(directPureJsArtifacts, transitivePureJsArtifacts);
 assert.deepEqual(mergedPureJsArtifacts.replaced, []);
+const pureJsClosure = createViteDependencyArtifactClosureFromWorkspace({
+  manager: "pnpm",
+  reader: pureJsDependencyWorkspace,
+  nodeModulesRoot: "/workspace/project/node_modules",
+  vitePackageArtifact: pureJsViteArtifact
+});
+assert.deepEqual(pureJsClosure.iterations.map((iteration) => iteration.extracted), [
+  ["postcss", "tinyglobby"],
+  ["fdir", "nanoid", "picocolors", "picomatch", "source-map-js"]
+]);
+assert.deepEqual(pureJsClosure.remainingPlan.missing, []);
+assert.deepEqual(pureJsClosure.artifacts.map((artifact) => artifact.name), [
+  "postcss",
+  "tinyglobby",
+  "fdir",
+  "nanoid",
+  "picocolors",
+  "picomatch",
+  "source-map-js"
+]);
 const pureJsCompleteWorkflow = new ViteProductWorkflow({
   manager: "pnpm",
   vitePackageArtifact: pureJsViteArtifact,
-  dependencyArtifacts: mergedPureJsArtifacts.artifacts
+  dependencyArtifacts: pureJsClosure.artifacts
 });
 pureJsCompleteWorkflow.install();
 assert.deepEqual(pureJsCompleteWorkflow.inspectRealCliReadiness().dependencyMaterializationPlan.missing, []);
