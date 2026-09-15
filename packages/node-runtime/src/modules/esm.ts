@@ -105,6 +105,9 @@ function prepareEsmSource(source: string): string {
   const prepared = source
     .replace(/^#!.*(?:\n|$)/, "")
     .replace(/^[ \t]*import\s+\*\s+as\s+([A-Za-z_$][\w$]*)\s+from\s+["']([^"']+)["'];?[ \t]*$/gm, "const $1 = await __import(\"$2\");")
+    .replace(/^[ \t]*import\s+([A-Za-z_$][\w$]*)\s*,\s*\*\s+as\s+([A-Za-z_$][\w$]*)\s+from\s+["']([^"']+)["'];?[ \t]*$/gm, (_match, defaultName: string, namespaceName: string, specifier: string) => {
+      return rewriteDefaultAndNamespaceImport(defaultName, namespaceName, specifier);
+    })
     .replace(/^[ \t]*import\s+([A-Za-z_$][\w$]*)\s*,\s*\{([^}\n]+)\}\s+from\s+["']([^"']+)["'];?[ \t]*$/gm, (_match, defaultName: string, named: string, specifier: string) => {
       return rewriteDefaultAndNamedImport(defaultName, named, specifier);
     })
@@ -173,6 +176,11 @@ function rewriteDefaultAndNamedImport(defaultName: string, named: string, specif
     `const ${defaultName} = ${temp}.default;`,
     `const { ${rewriteNamedImportBindings(named)} } = ${temp};`
   ].join("\n");
+}
+
+function rewriteDefaultAndNamespaceImport(defaultName: string, namespaceName: string, specifier: string): string {
+  const temp = `__esm_${defaultName}_${namespaceName}`;
+  return [`const ${temp} = await __import("${specifier}");`, `const ${defaultName} = ${temp}.default;`, `const ${namespaceName} = ${temp};`].join("\n");
 }
 
 function rewriteNamedImportBindings(clause: string): string {

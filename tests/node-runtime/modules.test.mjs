@@ -194,6 +194,13 @@ runtime.registerMany({
       export const rendered = label('ok') + ':' + new Factory().label();
     `
   },
+  "/workspace/source-default-namespace-import.mjs": {
+    kind: "esm-source",
+    source: `
+      import label, * as labels from './source-default-function.mjs';
+      export const rendered = label('ok') + ':' + labels.default('ns');
+    `
+  },
   "/workspace/node_modules/pkg-fixture/main.mjs": {
     kind: "esm",
     factory(ctx) {
@@ -314,6 +321,9 @@ assert.equal(sourceDefaultDeclaration.rendered, "label:ok:factory");
 
 const sourceAnonymousDefault = await runtime.importModule("./source-anonymous-default-consumer.mjs", "/workspace/index.mjs");
 assert.equal(sourceAnonymousDefault.rendered, "anonymous:ok:anonymous-factory");
+
+const sourceDefaultNamespace = await runtime.importModule("./source-default-namespace-import.mjs", "/workspace/index.mjs");
+assert.equal(sourceDefaultNamespace.rendered, "label:ok:label:ns");
 
 const pkg = await runtime.importModule("pkg-fixture", "/workspace/index.mjs");
 assert.equal(pkg.kind, "package-main");
