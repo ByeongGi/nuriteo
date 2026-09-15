@@ -3,6 +3,8 @@ import fs from "node:fs";
 
 import {
   assertRuntimeFeatureSupported,
+  createPackageManagerRecoveryDiagnostic,
+  createRuntimeNetworkRecoveryDiagnostic,
   createRuntimeRecoveryPlan,
   createRuntimeSupportBundle,
   createUnsupportedRuntimeDiagnostic,
@@ -13,6 +15,8 @@ const matrix = JSON.parse(fs.readFileSync(new URL("../../compat/unsupported-diag
 
 assert.equal(matrix.schemaVersion, 1);
 assert.equal(matrix.scope.productRuntime, "browser-guest-node-runtime");
+assert.equal(matrix.gate.status, "pass");
+assert.deepEqual(matrix.gate.requiredBeforeDone, []);
 for (const evidence of matrix.evidence) {
   assert.equal(fs.existsSync(new URL(`../../${evidence}`, import.meta.url)), true, `evidence missing: ${evidence}`);
 }
@@ -68,5 +72,24 @@ assert.equal(recovery.blocked, true);
 assert.equal(recovery.supportBundleRecommended, true);
 assert.equal(recovery.actions[0].kind, "open-docs");
 assert.equal(recovery.actions.at(-1).kind, "export-support-bundle");
+
+const packageRecovery = createPackageManagerRecoveryDiagnostic({
+  entry: "npm",
+  args: ["run", "postinstall"],
+  error: {
+    code: "ERR_PM_NATIVE_ADDON_UNSUPPORTED",
+    message: "native addon execution is unsupported"
+  }
+});
+assert.equal(packageRecovery.diagnostic.code, "ERR_PM_NATIVE_ADDON_UNSUPPORTED");
+assert.equal(packageRecovery.recovery.blocked, true);
+
+const networkRecovery = createRuntimeNetworkRecoveryDiagnostic({
+  error: { code: "ERR_BROWSER_TCP_UNSUPPORTED", message: "Direct TCP sockets are not available" },
+  host: "database.local",
+  port: 5432
+});
+assert.equal(networkRecovery.diagnostic.code, "ERR_RUNTIME_TCP_DB_UNSUPPORTED");
+assert.equal(networkRecovery.recovery.blocked, true);
 
 console.log("unsupported diagnostics conformance test ok");

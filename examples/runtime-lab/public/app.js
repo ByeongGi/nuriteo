@@ -1,5 +1,6 @@
 import { createContainer } from "/packages/sdk/src/container.ts";
 import {
+  createRuntimeNetworkRecoveryDiagnostic,
   createRuntimeRecoveryActionExecutor,
   createRuntimeRecoveryPlan,
   createRuntimeSupportBundle
@@ -584,6 +585,15 @@ async function runPreviewOverlaySmoke() {
 }
 
 function runRecoverySmoke() {
+  const networkRecovery = createRuntimeNetworkRecoveryDiagnostic({
+    error: {
+      code: "ERR_BROWSER_TCP_UNSUPPORTED",
+      message: "Direct TCP sockets are not available in the browser runtime"
+    },
+    host: "database.local",
+    port: 5432,
+    requestId: "runtime-lab-db"
+  });
   const diagnostics = [
     {
       code: "ERR_PM_NATIVE_ADDON_UNSUPPORTED",
@@ -603,7 +613,8 @@ function runRecoverySmoke() {
       severity: "warning",
       message: "package cache quota exceeded",
       source: "storage"
-    }
+    },
+    ...(networkRecovery ? [networkRecovery.diagnostic] : [])
   ];
   const bundle = createRuntimeSupportBundle({
     createdAt: "2026-09-16T00:00:00.000Z",

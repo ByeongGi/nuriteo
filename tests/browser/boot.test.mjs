@@ -67,6 +67,9 @@ await withRuntimeLab(async (page, baseUrl) => {
   }
   const recoveryResult = await page.evaluate(() => globalThis.__runtimeLab.runRecoverySmoke());
   if (!recoveryResult.plan.blocked) throw new Error("recovery plan did not mark unsupported native addon as blocked");
+  if (!recoveryResult.bundle.diagnostics.some((diagnostic) => diagnostic.code === "ERR_RUNTIME_TCP_DB_UNSUPPORTED")) {
+    throw new Error("runtime network boundary did not route TCP DB diagnostic into recovery smoke");
+  }
   if (!recoveryResult.plan.actions.some((action) => action.kind === "export-support-bundle")) {
     throw new Error("recovery plan did not include support bundle export");
   }
