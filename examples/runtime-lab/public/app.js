@@ -16,7 +16,8 @@ import {
   createHmrClient,
   createPreviewRelay,
   createPreviewServiceWorker,
-  createPreviewSessionRegistry
+  createPreviewSessionRegistry,
+  createVitePreviewErrorDiagnostic
 } from "/packages/preview/src/index.ts";
 
 const statusEl = document.getElementById("status");
@@ -582,6 +583,18 @@ async function runPreviewSmoke() {
 
 async function runPreviewOverlaySmoke() {
   const messages = [];
+  const diagnostic = createVitePreviewErrorDiagnostic({
+    command: "pnpm run build",
+    error: new Error("Unexpected token at /dist/assets/App.js:1:1"),
+    file: "/dist/assets/App.js",
+    line: 1,
+    column: 1,
+    source: "build",
+    sourceMap: {
+      mappings: "AAAA",
+      sources: ["/workspace/app/src/App.jsx"]
+    }
+  });
   const sessions = createPreviewSessionRegistry({ ttlMs: 1000 });
   const session = sessions.create({
     origin: location.origin,
@@ -614,13 +627,14 @@ async function runPreviewOverlaySmoke() {
     data: {
       type: "preview:error-diagnostic",
       clientId: "runtime-lab-overlay-client",
-      source: "build",
-      code: "EVITEBUILD",
-      message: "Unexpected token",
-      file: "/workspace/app/src/App.jsx",
-      line: 3,
-      column: 18,
-      stack: "App.jsx:3:18"
+      source: diagnostic.source,
+      code: diagnostic.code,
+      message: diagnostic.message,
+      file: diagnostic.file,
+      line: diagnostic.line,
+      column: diagnostic.column,
+      stack: diagnostic.stack,
+      recoveryActions: diagnostic.recoveryActions
     }
   });
   const state = serviceWorker.overlayState("runtime-lab-overlay-client");
