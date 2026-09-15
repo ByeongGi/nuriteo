@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 
 import {
+  applyNpmInstallPlan,
   createLoopbackNetwork,
+  createNpmInstallPlan,
   createVitePackageArtifactFromWorkspace,
   MemoryPackageManagerWorkspace,
   runViteProductCliBackedWorkflow,
@@ -389,6 +391,64 @@ const installedArtifactServer = await installedArtifactWorkflow.startDevServerFr
 assert.equal(installedArtifactServer.source, "cli-execution");
 const installedArtifactModule = await installedArtifactWorkflow.fetch("http://127.0.0.1:5301/src/main.jsx");
 assert.match(await installedArtifactModule.text(), /installed package transform:\/src\/main\.jsx/);
+
+const npmInstalledWorkspace = new MemoryPackageManagerWorkspace([
+  ...installedArtifact.mounts.map((mount) => ({
+    path: `/workspace/vite-package/${mount.path}`,
+    data: mount.data
+  })),
+  {
+    path: "/workspace/project/package.json",
+    data: JSON.stringify({
+      name: "vite-package-manager-artifact-fixture",
+      version: "1.0.0",
+      private: true,
+      dependencies: {
+        vite: "file:../vite-package"
+      }
+    })
+  },
+  {
+    path: "/workspace/project/package-lock.json",
+    data: JSON.stringify({
+      lockfileVersion: 3,
+      packages: {
+        "": {
+          dependencies: {
+            vite: "file:../vite-package"
+          }
+        },
+        "../vite-package": {
+          version: "9.1.0-installed"
+        },
+        "node_modules/vite": {
+          resolved: "../vite-package",
+          link: true
+        }
+      }
+    })
+  }
+]);
+const installPlan = createNpmInstallPlan({
+  cwd: "/workspace/project",
+  reader: npmInstalledWorkspace
+});
+applyNpmInstallPlan(installPlan, npmInstalledWorkspace);
+const npmInstalledArtifact = createVitePackageArtifactFromWorkspace({
+  reader: npmInstalledWorkspace,
+  packageRoot: "/workspace/project/node_modules/vite"
+});
+assert.equal(npmInstalledArtifact.version, "9.1.0-installed");
+const npmInstalledArtifactWorkflow = new ViteProductWorkflow({
+  manager: "npm",
+  port: 5302,
+  vitePackageArtifact: npmInstalledArtifact
+});
+npmInstalledArtifactWorkflow.install();
+const npmInstalledServer = await npmInstalledArtifactWorkflow.startDevServerFromCliExecution();
+assert.equal(npmInstalledServer.source, "cli-execution");
+const npmInstalledModule = await npmInstalledArtifactWorkflow.fetch("http://127.0.0.1:5302/src/main.jsx");
+assert.match(await npmInstalledModule.text(), /installed package transform:\/src\/main\.jsx/);
 
 assert.throws(
   () => new ViteProductWorkflow({

@@ -785,6 +785,10 @@ export function createVitePackageArtifactFromWorkspace(options: ViteProductPacka
   if (packageJson.name !== "vite") {
     throw new ViteProductPackageArtifactError("EVITEARTIFACTNAME", "Mounted Vite package artifact package.json must have name \"vite\".", join(packageRoot, "package.json"));
   }
+  const binPath = join(packageRoot, readVitePackageBinPath(packageJson));
+  if (!readerExists(options.reader, binPath)) {
+    throw new ViteProductPackageArtifactError("EVITEARTIFACTBIN", "Mounted Vite package artifact bin entry is missing.", binPath);
+  }
   const mounts = collectTextMounts(options.reader, packageRoot);
   return {
     mounts,
@@ -921,6 +925,20 @@ function* walkWorkspaceTextFiles(reader: WorkspaceModuleReader, path: string): G
   }
   for (const entry of entries) {
     yield* walkWorkspaceTextFiles(reader, join(path, entry));
+  }
+}
+
+function readerExists(reader: WorkspaceModuleReader, path: string): boolean {
+  try {
+    reader.readText(path);
+    return true;
+  } catch {
+    try {
+      reader.listDir(path);
+      return true;
+    } catch {
+      return false;
+    }
   }
 }
 
