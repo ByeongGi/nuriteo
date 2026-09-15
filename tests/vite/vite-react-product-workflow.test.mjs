@@ -532,6 +532,92 @@ assert.deepEqual(optionalDependencyPlan.optional, [
   }
 ]);
 
+const actualLikeViteDependencyWorkflow = new ViteProductWorkflow({
+  manager: "pnpm",
+  vitePackageArtifact: {
+    version: "8.2.0-actual-like-deps",
+    mounts: [
+      {
+        path: "package.json",
+        data: JSON.stringify({
+          name: "vite",
+          version: "8.2.0-actual-like-deps",
+          type: "module",
+          bin: { vite: "bin/vite.mjs" },
+          dependencies: {
+            esbuild: "^0.27.2",
+            lightningcss: "^1.33.0",
+            picomatch: "^4.0.5",
+            postcss: "^8.5.23",
+            rolldown: "~1.2.0",
+            tinyglobby: "^0.2.17"
+          }
+        })
+      },
+      {
+        path: "bin/vite.mjs",
+        data: "import '../dist/node/cli.mjs';\n"
+      },
+      {
+        path: "dist/node/cli.mjs",
+        data: "import 'esbuild';\nimport 'lightningcss';\nimport 'picomatch';\nimport 'postcss';\nimport 'rolldown';\nimport 'tinyglobby';\n"
+      }
+    ]
+  },
+  wasmAdapterPolicy: createWasmAdapterPolicy({
+    adapters: [
+      {
+        name: "rolldown-wasi",
+        path: "vendor/rolldown.wasm",
+        sha256: "0".repeat(64),
+        exports: { memory: "memory" }
+      },
+      {
+        name: "esbuild-wasm",
+        path: "vendor/esbuild.wasm",
+        sha256: "1".repeat(64),
+        exports: { memory: "memory" }
+      }
+    ],
+    candidateReplacements: [
+      {
+        package: "rolldown",
+        adapterName: "rolldown-wasi",
+        wasmPackage: "@rolldown/binding-wasm32-wasi",
+        fallbackPolicy: "prefer-wasm"
+      },
+      {
+        package: "esbuild",
+        adapterName: "esbuild-wasm",
+        wasmPackage: "esbuild-wasm",
+        fallbackPolicy: "prefer-wasm"
+      }
+    ]
+  })
+});
+actualLikeViteDependencyWorkflow.install();
+const actualLikeDependencyPlan = actualLikeViteDependencyWorkflow.inspectRealCliReadiness().dependencyMaterializationPlan;
+assert.deepEqual(actualLikeDependencyPlan.summary, {
+  missingByKind: {
+    "package-artifact": 3,
+    "wasm-adapter-candidate": 2,
+    "native-hold": 0
+  },
+  missingCount: 5,
+  optionalCount: 1,
+  satisfiedCount: 0
+});
+assert.deepEqual(actualLikeDependencyPlan.missing.map((item) => [item.name, item.kind, item.artifactNames]), [
+  ["esbuild", "wasm-adapter-candidate", ["esbuild", "esbuild-wasm"]],
+  ["picomatch", "package-artifact", ["picomatch"]],
+  ["postcss", "package-artifact", ["postcss"]],
+  ["rolldown", "wasm-adapter-candidate", ["rolldown", "@rolldown/binding-wasm32-wasi"]],
+  ["tinyglobby", "package-artifact", ["tinyglobby"]]
+]);
+assert.deepEqual(actualLikeDependencyPlan.optional.map((item) => [item.specifier, item.kind]), [
+  ["lightningcss", "optional-dependency-probe"]
+]);
+
 const installedDependencyWorkspace = new MemoryPackageManagerWorkspace([
   {
     path: "/vendor/rolldown/package.json",
