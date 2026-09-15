@@ -3,6 +3,7 @@ export type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue
 
 export type StorageLeaseErrorCode = "ELEASEHELD" | "ELEASEMISSING" | (string & {});
 export type SnapshotStoreErrorCode = "EINTEGRITY" | "ENOSNAPSHOT" | "ESNAPSHOTMISSING" | (string & {});
+export type StorageQuotaErrorCode = "EOPFSQUOTA" | (string & {});
 
 export interface StorageLeaseOptions {
   now?: () => number;
@@ -85,4 +86,39 @@ export interface ProjectWorkspaceStoreOptions extends SnapshotStoreOptions {
 export interface ProjectWorkspaceSaveOptions {
   owner: string;
   metadata?: ProjectWorkspaceMetadata;
+}
+
+export interface StorageQuotaFileUsage {
+  [key: string]: JsonValue;
+  path: string;
+  bytes: number;
+  flushed: boolean;
+}
+
+export interface StorageQuotaUsage {
+  [key: string]: JsonValue;
+  quotaBytes: number;
+  usedBytes: number;
+  files: StorageQuotaFileUsage[];
+}
+
+export interface StorageEvictionOptions {
+  requiredBytes?: number;
+  prefixes?: string[];
+}
+
+export interface StorageEvictionResult {
+  before: StorageQuotaUsage;
+  after: StorageQuotaUsage;
+  evicted: StorageQuotaFileUsage[];
+  freedBytes: number;
+  requiredBytes: number;
+}
+
+export interface StorageQuotaManagedOpfsOptions {
+  opfs: OpfsLike;
+  quotaBytes: number;
+  evictionPrefixes?: string[];
+  protectedPrefixes?: string[];
+  estimateValueBytes?: (value: JsonValue) => number;
 }

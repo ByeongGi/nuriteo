@@ -2,6 +2,7 @@ export { createStorageLease, StorageLease, StorageLeaseError } from "./lease.ts"
 export { createMemoryOpfs, MemoryOpfs } from "./opfs.ts";
 export { createOpfsPackageWorkspace, OpfsPackageWorkspace } from "./package-workspace.ts";
 export { createProjectWorkspaceStore, ProjectWorkspaceStore } from "./project-workspace.ts";
+export { createQuotaManagedOpfs, QuotaManagedOpfs, StorageQuotaError } from "./quota.ts";
 export { createSnapshotStore, digestSnapshot, SnapshotStore, SnapshotStoreError } from "./snapshot.ts";
 export type { OpfsPackageWorkspaceOptions } from "./package-workspace.ts";
-export type { JsonPrimitive, JsonValue, OpfsLike, ProjectWorkspaceFile, ProjectWorkspaceMetadata, ProjectWorkspaceSaveOptions, ProjectWorkspaceSnapshot, ProjectWorkspaceStoreOptions, SnapshotMarker, SnapshotRecord, SnapshotSaveOptions, SnapshotSaveResult, SnapshotStoreErrorCode, SnapshotStoreOptions, StorageLeaseErrorCode, StorageLeaseHandle, StorageLeaseOptions } from "./types.ts";
+export type { JsonPrimitive, JsonValue, OpfsLike, ProjectWorkspaceFile, ProjectWorkspaceMetadata, ProjectWorkspaceSaveOptions, ProjectWorkspaceSnapshot, ProjectWorkspaceStoreOptions, SnapshotMarker, SnapshotRecord, SnapshotSaveOptions, SnapshotSaveResult, SnapshotStoreErrorCode, SnapshotStoreOptions, StorageEvictionOptions, StorageEvictionResult, StorageLeaseErrorCode, StorageLeaseHandle, StorageLeaseOptions, StorageQuotaErrorCode, StorageQuotaFileUsage, StorageQuotaManagedOpfsOptions, StorageQuotaUsage } from "./types.ts";
