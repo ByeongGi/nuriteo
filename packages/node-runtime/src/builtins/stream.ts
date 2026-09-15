@@ -76,6 +76,13 @@ export class Readable extends Stream {
     return true;
   }
 
+  override pipe<T extends Writable>(destination: T): T {
+    super.pipe(destination);
+    while (this.#queue.length > 0) destination.write(this.#queue.shift());
+    if (this.#ended) destination.end();
+    return destination;
+  }
+
   setEncoding(encoding: BufferEncoding): this {
     this.#encoding = encoding;
     return this;

@@ -114,6 +114,18 @@ encoded.push(new TextEncoder().encode("hi"));
 encoded.push(null);
 assert.deepEqual(encodedChunks, ["hi"]);
 
+const latePipeReadable = new RuntimeReadable();
+latePipeReadable.push("late");
+latePipeReadable.push(null);
+const latePipeOutput = [];
+latePipeReadable.pipe(new RuntimeWritable({
+  write(chunk, _encoding, callback) {
+    latePipeOutput.push(String(chunk));
+    callback();
+  }
+}));
+assert.deepEqual(latePipeOutput, ["late"]);
+
 const requireBuiltin = createBuiltinLoader({});
 assert.equal(requireBuiltin("node:stream").Readable, RuntimeReadable);
 assert.equal(typeof requireBuiltin("stream"), "function");
