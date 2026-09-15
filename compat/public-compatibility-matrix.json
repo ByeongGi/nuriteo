@@ -1,0 +1,124 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-16",
+  "scope": {
+    "goal": "Publish the current WebContainers-parity compatibility surface for developers.",
+    "productRuntime": "browser-guest-node-runtime",
+    "parityBoundary": "Node/npm/pnpm/Vite/browser preview/storage/SDK are in scope; Docker, direct TCP databases, arbitrary native binaries, and native addons without a WASM/browser fallback are out of scope."
+  },
+  "frameworks": [
+    {
+      "name": "Vite React",
+      "status": "partial-pass",
+      "supportLevel": "product-target",
+      "evidence": ["compat/framework-conformance.json", "docs/productization/evidence/P11-01.md"],
+      "notes": "Adapter path covers install/dev/preview/edit-HMR/build/reload recovery. Actual Vite server source execution is still required before product-supported."
+    },
+    {
+      "name": "Vite Vue runtime",
+      "status": "partial-pass",
+      "supportLevel": "secondary-target",
+      "evidence": ["compat/framework-conformance.json", "docs/productization/evidence/P11-02.md"],
+      "notes": "Fixture path passes through the product workflow adapter; real plugin/module execution remains."
+    },
+    {
+      "name": "Vite Svelte",
+      "status": "partial-pass",
+      "supportLevel": "secondary-target",
+      "evidence": ["compat/framework-conformance.json", "docs/productization/evidence/P11-02.md"],
+      "notes": "Fixture path passes through the product workflow adapter; real Svelte plugin/module execution remains."
+    },
+    {
+      "name": "Next.js app router",
+      "status": "hold",
+      "supportLevel": "research",
+      "evidence": ["compat/nextjs-compatibility.json", "docs/productization/evidence/P11-03.md"],
+      "notes": "Native SWC/sharp and broader server runtime assumptions keep this out of the first product target."
+    }
+  ],
+  "packages": [
+    {
+      "cohort": "pure-js-cjs-esm",
+      "status": "supported",
+      "evidence": ["compat/package-compatibility-cohorts.json"]
+    },
+    {
+      "cohort": "registry-cache-tarball",
+      "status": "supported",
+      "evidence": ["compat/package-compatibility-cohorts.json"]
+    },
+    {
+      "cohort": "lifecycle-js",
+      "status": "supported",
+      "evidence": ["compat/package-compatibility-cohorts.json"]
+    },
+    {
+      "cohort": "optional-native-polyfill",
+      "status": "supported-with-polyfill",
+      "evidence": ["compat/package-compatibility-cohorts.json"]
+    },
+    {
+      "cohort": "wasm-tool-fallback",
+      "status": "candidate",
+      "evidence": ["compat/package-compatibility-cohorts.json", "compat/wasm-tool-adapters.json"]
+    },
+    {
+      "cohort": "unsupported-native-addon",
+      "status": "unsupported",
+      "requiredErrorCode": "ERR_PM_NATIVE_ADDON_UNSUPPORTED",
+      "evidence": ["compat/package-compatibility-cohorts.json", "compat/unsupported-diagnostics.json"]
+    },
+    {
+      "cohort": "binary-tool-wrapper",
+      "status": "unsupported",
+      "requiredErrorCode": "ERR_RUNTIME_UNSUPPORTED_BINARY",
+      "evidence": ["compat/package-compatibility-cohorts.json", "compat/unsupported-diagnostics.json"]
+    }
+  ],
+  "projectFixtures": {
+    "status": "selected-not-run",
+    "source": "compat/ecosystem-fixtures.json",
+    "total": 10,
+    "minimumPassForMilestoneB": 7
+  },
+  "unsupported": [
+    {
+      "feature": "Docker/container runtime",
+      "status": "unsupported",
+      "requiredErrorCode": "ERR_RUNTIME_DOCKER_UNSUPPORTED"
+    },
+    {
+      "feature": "Direct TCP database",
+      "status": "unsupported",
+      "requiredErrorCode": "ERR_RUNTIME_TCP_DB_UNSUPPORTED"
+    },
+    {
+      "feature": "Native Node addon without fallback",
+      "status": "unsupported",
+      "requiredErrorCode": "ERR_PM_NATIVE_ADDON_UNSUPPORTED"
+    },
+    {
+      "feature": "Arbitrary Linux binary",
+      "status": "unsupported",
+      "requiredErrorCode": "ERR_RUNTIME_UNSUPPORTED_BINARY"
+    }
+  ],
+  "reproduce": [
+    "pnpm exec tsc --noEmit --pretty false",
+    "node tests/productization/run.mjs",
+    "node tests/package-managers/run.mjs",
+    "node tests/vite/vite-react-product-workflow.test.mjs",
+    "node tests/preview/run.mjs",
+    "node tests/browser-host/run.mjs",
+    "node tests/browser/boot.test.mjs"
+  ],
+  "gate": {
+    "id": "P18-04",
+    "status": "partial-pass",
+    "requiredBeforeDone": [
+      "Replace selected-not-run project fixture state with measured reference/product scores",
+      "Publish docs only after PG11 actual Vite server blocker is resolved",
+      "Wire unsupported diagnostics into UI acceptance tests"
+    ]
+  }
+}
