@@ -53,3 +53,36 @@ export interface SnapshotRecord {
   snapshot: JsonValue;
   integrity: string;
 }
+
+export interface ProjectWorkspaceFile {
+  [key: string]: JsonValue;
+  path: string;
+  data: string;
+}
+
+export interface ProjectWorkspaceMetadata {
+  [key: string]: JsonValue;
+  name?: string;
+  packageManager?: "npm" | "pnpm" | null;
+  framework?: string | null;
+}
+
+export interface ProjectWorkspaceSnapshot {
+  [key: string]: JsonValue;
+  schemaVersion: 1;
+  projectId: string;
+  root: string;
+  metadata: ProjectWorkspaceMetadata;
+  files: ProjectWorkspaceFile[];
+}
+
+export interface ProjectWorkspaceStoreOptions extends SnapshotStoreOptions {
+  projectId: string;
+  root?: string;
+  metadata?: ProjectWorkspaceMetadata;
+}
+
+export interface ProjectWorkspaceSaveOptions {
+  owner: string;
+  metadata?: ProjectWorkspaceMetadata;
+}
