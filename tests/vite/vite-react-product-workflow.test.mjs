@@ -414,6 +414,7 @@ assert.deepEqual(missingDependencyWorkflow.inspectRealCliReadiness().dependencyM
       "native-hold": 0
     },
     missingCount: 1,
+    optionalCount: 0,
     satisfiedCount: 0
   },
   missing: [
@@ -424,6 +425,7 @@ assert.deepEqual(missingDependencyWorkflow.inspectRealCliReadiness().dependencyM
       specifiers: ["rolldown/parseAst"]
     }
   ],
+  optional: [],
   satisfied: []
 });
 const dependencyArtifactInstall = dependencyArtifactWorkflow.install();
@@ -441,9 +443,11 @@ assert.deepEqual(dependencyArtifactReadiness.dependencyMaterializationPlan, {
       "native-hold": 0
     },
     missingCount: 0,
+    optionalCount: 0,
     satisfiedCount: 1
   },
   missing: [],
+  optional: [],
   satisfied: ["rolldown"]
 });
 const dependencyArtifactExecution = await dependencyArtifactWorkflow.executeRealCli(["build"]);
@@ -452,6 +456,47 @@ assert.deepEqual(dependencyArtifactExecution.buildRegistrations, [
     command: "build",
     outDir: "dist",
     source: "vite-cli"
+  }
+]);
+
+const optionalDependencyWorkflow = new ViteProductWorkflow({
+  manager: "pnpm",
+  vitePackageArtifact: {
+    version: "9.2.1-optional-deps",
+    mounts: [
+      {
+        path: "package.json",
+        data: JSON.stringify({ name: "vite", version: "9.2.1-optional-deps", type: "module", bin: { vite: "bin/vite.mjs" } })
+      },
+      {
+        path: "bin/vite.mjs",
+        data: "import '../dist/node/cli.mjs';\n"
+      },
+      {
+        path: "dist/node/cli.mjs",
+        data: "import 'lightningcss';\nglobal.__viteRegisterBuild?.({ command: 'build', outDir: 'dist', source: 'vite-cli' });\n"
+      }
+    ]
+  }
+});
+optionalDependencyWorkflow.install();
+const optionalDependencyPlan = optionalDependencyWorkflow.inspectRealCliReadiness().dependencyMaterializationPlan;
+assert.deepEqual(optionalDependencyPlan.summary, {
+  missingByKind: {
+    "package-artifact": 0,
+    "wasm-adapter-candidate": 0,
+    "native-hold": 0
+  },
+  missingCount: 0,
+  optionalCount: 1,
+  satisfiedCount: 0
+});
+assert.deepEqual(optionalDependencyPlan.missing, []);
+assert.deepEqual(optionalDependencyPlan.optional, [
+  {
+    kind: "optional-dependency-probe",
+    nextAction: "Leave this dependency optional unless a project feature explicitly imports it.",
+    specifier: "lightningcss"
   }
 ]);
 
@@ -527,9 +572,11 @@ assert.deepEqual(installedDependencyWorkflow.inspectRealCliReadiness().dependenc
       "native-hold": 0
     },
     missingCount: 0,
+    optionalCount: 0,
     satisfiedCount: 1
   },
   missing: [],
+  optional: [],
   satisfied: ["rolldown"]
 });
 const installedDependencyExecution = await installedDependencyWorkflow.executeRealCli(["build"]);
@@ -635,6 +682,7 @@ assert.deepEqual(pureJsInitialWorkflow.inspectRealCliReadiness().dependencyMater
     "native-hold": 0
   },
   missingCount: 2,
+  optionalCount: 0,
   satisfiedCount: 0
 });
 const directPureJsArtifacts = createViteDependencyArtifactsFromPlan({
@@ -665,6 +713,7 @@ assert.deepEqual(pureJsDirectWorkflow.inspectRealCliReadiness().dependencyMateri
     "native-hold": 0
   },
   missingCount: 5,
+  optionalCount: 0,
   satisfiedCount: 2
 });
 const transitivePureJsArtifacts = createViteDependencyArtifactsFromPlan({
@@ -688,6 +737,7 @@ assert.deepEqual(pureJsCompleteWorkflow.inspectRealCliReadiness().dependencyMate
     "native-hold": 0
   },
   missingCount: 0,
+  optionalCount: 0,
   satisfiedCount: 7
 });
 const pureJsExecution = await pureJsCompleteWorkflow.executeRealCli(["build"]);

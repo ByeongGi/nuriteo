@@ -2,7 +2,7 @@ import { join } from "../builtins/path.ts";
 import { spawnRuntimeChild, type RuntimeChildProcess } from "../child-process.ts";
 import { createLoopbackNetwork, type LoopbackNetwork, type RuntimeHttpResponse } from "../net/index.ts";
 import { createAsyncCliModuleEvaluator } from "../package-managers/cli-evaluator.ts";
-import { analyzeCliModuleGraph, type CliModuleGraph } from "../package-managers/cli-module-graph.ts";
+import { analyzeCliModuleGraph, type CliModuleGraph, type CliModuleGraphIssue } from "../package-managers/cli-module-graph.ts";
 import { inspectCliEntryReadiness, type CliEntryReadiness } from "../package-managers/cli-entry-readiness.ts";
 import { MemoryPackageManagerWorkspace, type PackageManagerWorkspaceMount } from "../package-managers/workspace.ts";
 import type { WorkspaceModuleReader } from "../modules/index.ts";
@@ -243,12 +243,14 @@ export interface ViteRealCliReadiness {
 export interface ViteDependencyMaterializationPlan {
   summary: ViteDependencyMaterializationSummary;
   missing: ViteDependencyMaterializationItem[];
+  optional: ViteDependencyMaterializationOptionalItem[];
   satisfied: string[];
 }
 
 export interface ViteDependencyMaterializationSummary {
   missingByKind: Record<ViteDependencyMaterializationKind, number>;
   missingCount: number;
+  optionalCount: number;
   satisfiedCount: number;
 }
 
@@ -260,6 +262,17 @@ export interface ViteDependencyMaterializationItem {
 }
 
 export type ViteDependencyMaterializationKind = "package-artifact" | "wasm-adapter-candidate" | "native-hold";
+
+export interface ViteDependencyMaterializationOptionalItem {
+  kind: ViteDependencyMaterializationOptionalKind;
+  nextAction: string;
+  specifier: string;
+}
+
+export type ViteDependencyMaterializationOptionalKind = Extract<
+  CliModuleGraphIssue["kind"],
+  "optional-native-probe" | "optional-cache-probe" | "optional-dependency-probe"
+>;
 
 export interface ViteRuntimeCapabilityStatus {
   capability: ViteRuntimeReadinessCapability;
@@ -1069,9 +1082,18 @@ function createDependencyMaterializationPlan(
       specifiers: [...specifiers].sort()
     }))
     .sort((left, right) => left.name.localeCompare(right.name));
+  const optional = graph.issues
+    .filter((issue): issue is CliModuleGraphIssue & { kind: ViteDependencyMaterializationOptionalKind } => issue.kind.startsWith("optional-"))
+    .map((issue) => ({
+      kind: issue.kind,
+      nextAction: nextActionForOptionalDependencyMaterialization(issue),
+      specifier: issue.specifier
+    }))
+    .sort((left, right) => left.specifier.localeCompare(right.specifier));
   return {
-    summary: createDependencyMaterializationSummary(missing, satisfied),
+    summary: createDependencyMaterializationSummary(missing, optional, satisfied),
     missing,
+    optional,
     satisfied
   };
 }
@@ -1100,8 +1122,19 @@ function nextActionForDependencyMaterialization(name: string): string {
   return "Extract this package from an installed node_modules tree and mount it as a dependency artifact.";
 }
 
+function nextActionForOptionalDependencyMaterialization(issue: CliModuleGraphIssue): string {
+  if (issue.kind === "optional-native-probe") {
+    return "Leave this native probe optional unless the package path becomes required by the selected project.";
+  }
+  if (issue.kind === "optional-cache-probe") {
+    return "Leave this cache optimization optional; runtime execution must continue without it.";
+  }
+  return "Leave this dependency optional unless a project feature explicitly imports it.";
+}
+
 function createDependencyMaterializationSummary(
   missing: readonly ViteDependencyMaterializationItem[],
+  optional: readonly ViteDependencyMaterializationOptionalItem[],
   satisfied: readonly string[]
 ): ViteDependencyMaterializationSummary {
   const missingByKind: Record<ViteDependencyMaterializationKind, number> = {
@@ -1115,6 +1148,7 @@ function createDependencyMaterializationSummary(
   return {
     missingByKind,
     missingCount: missing.length,
+    optionalCount: optional.length,
     satisfiedCount: satisfied.length
   };
 }
