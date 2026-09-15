@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 
-import { runViteReactProductWorkflow, ViteReactProductWorkflow } from "../../packages/node-runtime/src/index.ts";
+import { createLoopbackNetwork, runViteReactProductWorkflow, ViteReactProductWorkflow } from "../../packages/node-runtime/src/index.ts";
 import { createHmrClient, createPreviewRelay, createPreviewSessionRegistry } from "../../packages/preview/src/index.ts";
 
 for (const manager of ["npm", "pnpm"]) {
@@ -22,9 +22,16 @@ for (const manager of ["npm", "pnpm"]) {
   assert.equal(result.reloadRecovery.restarted, true);
   assert.match(result.reloadRecovery.previewAfterRestart, /beta:1/);
 
-  const workflow = new ViteReactProductWorkflow({ manager, projectId: `${manager}-preview` });
+  const network = createLoopbackNetwork();
+  const workflow = new ViteReactProductWorkflow({ manager, projectId: `${manager}-preview`, network, port: 5173 });
   workflow.install();
-  workflow.startDevServer();
+  const started = workflow.startDevServer();
+  assert.equal(started.running, true);
+  assert.equal(started.port, 5173);
+  assert.throws(
+    () => new ViteReactProductWorkflow({ manager, projectId: `${manager}-conflict`, network, port: 5173 }).startDevServer(),
+    (error) => error.code === "EADDRINUSE"
+  );
   const sessions = createPreviewSessionRegistry({ ttlMs: 1000 });
   const session = sessions.create({
     origin: "https://preview.local",
@@ -41,6 +48,18 @@ for (const manager of ["npm", "pnpm"]) {
   });
   assert.equal(response.status, 200);
   assert.match(await response.text(), /alpha:1/);
+  assert.deepEqual(workflow.startDevServer().requests, ["/index.html"]);
+
+  workflow.stopDevServer();
+  await assert.rejects(
+    workflow.fetch("http://127.0.0.1:5173/index.html"),
+    (error) => error.code === "ECONNREFUSED"
+  );
+  const restarted = workflow.startDevServer();
+  assert.equal(restarted.running, true);
+  const recovered = await workflow.fetch("http://127.0.0.1:5173/index.html");
+  assert.equal(recovered.status, 200);
+  assert.match(await recovered.text(), /alpha:1/);
 
   const hmrEvents = [];
   const hmr = createHmrClient({
@@ -58,7 +77,8 @@ for (const manager of ["npm", "pnpm"]) {
   hmr.on("open", (event) => hmrEvents.push(`open:${event.attempt}`));
   hmr.on("message", (event) => hmrEvents.push(`message:${event.type}`));
   hmr.start();
-  hmr.socket.sendMessage({ type: "update", path: "/src/message.js" });
+  workflow.editMessage("gamma");
+  hmr.socket.sendMessage(workflow.hmrUpdates().at(-1));
   hmr.close();
   assert.deepEqual(hmrEvents, ["open:1", "message:update"]);
 }

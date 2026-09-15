@@ -1,4 +1,5 @@
 import { join } from "../builtins/path.ts";
+import { createLoopbackNetwork, type LoopbackNetwork, type RuntimeHttpResponse } from "../net/index.ts";
 import { MemoryPackageManagerWorkspace, type PackageManagerWorkspaceMount } from "../package-managers/workspace.ts";
 
 export type ViteReactPackageManager = "npm" | "pnpm";
@@ -8,6 +9,8 @@ export interface ViteReactProductWorkflowOptions {
   projectId?: string;
   projectRoot?: string;
   initialLabel?: string;
+  network?: LoopbackNetwork;
+  port?: number;
 }
 
 export interface ViteReactProductWorkflowResult {
@@ -32,6 +35,13 @@ export interface ViteReactDevServerSnapshot {
   port: number;
   running: boolean;
   restartCount: number;
+  requests: string[];
+}
+
+export interface ViteReactHmrUpdate {
+  type: "update";
+  path: string;
+  label: string;
 }
 
 export interface ViteReactPreviewResult {
@@ -60,15 +70,21 @@ export class ViteReactProductWorkflow {
   readonly projectId: string;
   readonly projectRoot: string;
   readonly workspace: MemoryPackageManagerWorkspace;
+  readonly network: LoopbackNetwork;
   #state = { count: 1 };
-  #port = 5173;
+  #port: number;
   #restartCount = 0;
   #running = false;
+  #listener: { port: number; close: () => void } | null = null;
+  #requests: string[] = [];
+  #hmrUpdates: ViteReactHmrUpdate[] = [];
 
   constructor(options: ViteReactProductWorkflowOptions) {
     this.manager = options.manager;
     this.projectId = options.projectId || `vite-react-${options.manager}`;
     this.projectRoot = options.projectRoot || "/workspace/project";
+    this.network = options.network || createLoopbackNetwork();
+    this.#port = options.port ?? 5173;
     this.workspace = new MemoryPackageManagerWorkspace(createViteReactMounts(this.projectRoot, options.initialLabel || "alpha"));
   }
 
@@ -103,7 +119,20 @@ export class ViteReactProductWorkflow {
   }
 
   startDevServer(): ViteReactDevServerSnapshot {
+    if (this.#listener) return this.#snapshot();
+    this.#listener = this.network.listen(this.#port, (request) => {
+      this.#requests.push(request.path);
+      const preview = this.preview(request.path);
+      return toRuntimeHttpResponse(preview);
+    });
     this.#running = true;
+    return this.#snapshot();
+  }
+
+  stopDevServer(): ViteReactDevServerSnapshot {
+    this.#listener?.close();
+    this.#listener = null;
+    this.#running = false;
     return this.#snapshot();
   }
 
@@ -117,23 +146,27 @@ export class ViteReactProductWorkflow {
   }
 
   async fetch(input: string | URL): Promise<Response> {
-    const path = new URL(String(input)).pathname;
-    const preview = this.preview(path);
-    return new Response(preview.body, {
-      status: preview.statusCode,
-      headers: { "content-type": "text/html; charset=utf-8" }
-    });
+    const response = await this.network.fetch(input);
+    const init: ResponseInit = { status: response.statusCode };
+    if (response.statusText) init.statusText = response.statusText;
+    if (response.headers) init.headers = response.headers;
+    return new Response(response.body || "", init);
   }
 
   editMessage(label: string): ViteReactHmrResult {
     const before = this.preview("/").body;
     this.workspace.writeText(join(this.projectRoot, "src/message.js"), `export const label = "${label}";\n`);
     const after = this.preview("/").body;
+    this.#hmrUpdates.push({ type: "update", path: "/src/message.js", label });
     return {
       before,
       after,
       statePreserved: before.includes(`:${this.#state.count}`) && after.includes(`:${this.#state.count}`)
     };
+  }
+
+  hmrUpdates(): ViteReactHmrUpdate[] {
+    return [...this.#hmrUpdates];
   }
 
   build(): ViteReactBuildResult {
@@ -147,9 +180,9 @@ export class ViteReactProductWorkflow {
   }
 
   restart(): ViteReactReloadRecoveryResult {
-    this.#running = false;
+    this.stopDevServer();
     this.#restartCount += 1;
-    this.#running = true;
+    this.startDevServer();
     return {
       restarted: true,
       previewAfterRestart: this.preview("/").body
@@ -160,7 +193,8 @@ export class ViteReactProductWorkflow {
     return {
       port: this.#port,
       running: this.#running,
-      restartCount: this.#restartCount
+      restartCount: this.#restartCount,
+      requests: [...this.#requests]
     };
   }
 
@@ -230,4 +264,12 @@ function createLockfile(manager: ViteReactPackageManager, packages: string[]): s
 
 function renderHtml(label: string, count: number): string {
   return `<!doctype html><div id="app">${label}:${count}</div>`;
+}
+
+function toRuntimeHttpResponse(preview: ViteReactPreviewResult): RuntimeHttpResponse {
+  return {
+    statusCode: preview.statusCode,
+    headers: { "content-type": "text/html; charset=utf-8" },
+    body: preview.body
+  };
 }
