@@ -47,6 +47,21 @@ export interface PreviewRelayLike {
   request(input: PreviewRelayRequest): Promise<Response>;
 }
 
+export interface PreviewTraceSink {
+  startSpan(input: {
+    category: "preview";
+    name: string;
+    requestId?: string | number;
+    attributes?: Record<string, string | number | boolean | null>;
+  }): {
+    end(input?: {
+      status?: "ok" | "error";
+      errorCode?: string;
+      attributes?: Record<string, string | number | boolean | null>;
+    }): unknown;
+  };
+}
+
 export type PreviewErrorCode = "EBADMESSAGE" | "ENOCLIENT" | "ENOSERVER" | "ESTALESESSION" | "ETIMEOUT" | "EUNKNOWN" | (string & {});
 
 export interface PreviewDiagnostic {

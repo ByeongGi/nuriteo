@@ -16,7 +16,23 @@ export interface PackageScriptRunnerOptions {
   env?: RuntimeEnv;
   policy?: PackageExecutionPolicy;
   reader: PackageScriptReader;
+  trace?: PackageScriptTraceSink;
   writer: PackageScriptWriter;
+}
+
+export interface PackageScriptTraceSink {
+  startSpan(input: {
+    category: "package-manager";
+    name: string;
+    requestId?: string | number;
+    attributes?: Record<string, string | number | boolean | null>;
+  }): {
+    end(input?: {
+      status?: "ok" | "error";
+      errorCode?: string;
+      attributes?: Record<string, string | number | boolean | null>;
+    }): unknown;
+  };
 }
 
 export interface PackageScriptResult {
@@ -35,6 +51,7 @@ export class PackageScriptRunner {
   env: RuntimeEnv;
   policy: PackageExecutionPolicy;
   reader: PackageScriptReader;
+  trace: PackageScriptTraceSink | null;
   writer: PackageScriptWriter;
 
   constructor(options: PackageScriptRunnerOptions) {
@@ -42,6 +59,7 @@ export class PackageScriptRunner {
     this.env = { ...(options.env || {}) };
     this.policy = options.policy || createPackageExecutionPolicy();
     this.reader = options.reader;
+    this.trace = options.trace || null;
     this.writer = options.writer;
   }
 
@@ -70,12 +88,32 @@ export class PackageScriptRunner {
   }
 
   #runCommand(command: string, cwd: string, kind: PackageScriptKind): PackageScriptResult {
+    const span = this.trace?.startSpan({
+      category: "package-manager",
+      name: "package-script.run",
+      attributes: { command, cwd, kind }
+    });
     const manifestPath = join(cwd, "package.json");
     const policyError = this.#checkPolicy({ kind, command, path: manifestPath, source: "" });
-    if (policyError) return policyError;
+    if (policyError) {
+      span?.end({
+        status: "error",
+        ...(policyError.error?.code ? { errorCode: policyError.error.code } : {})
+      });
+      return policyError;
+    }
     const [binary, script] = command.split(/\s+/, 2);
-    if (binary !== "node" || !script) return this.#failure(command, `unsupported package script command: ${command}`);
-    return this.#runNodeFile(join(cwd, script), cwd, command, kind);
+    if (binary !== "node" || !script) {
+      const result = this.#failure(command, `unsupported package script command: ${command}`);
+      span?.end({ status: "error" });
+      return result;
+    }
+    const result = this.#runNodeFile(join(cwd, script), cwd, command, kind);
+    span?.end({
+      status: result.exitCode === 0 ? "ok" : "error",
+      ...(result.error?.code ? { errorCode: result.error.code } : {})
+    });
+    return result;
   }
 
   #runNodeFile(file: string, cwd: string, command = `node ${basename(file)}`, kind: PackageScriptKind = "script"): PackageScriptResult {

@@ -53,4 +53,5 @@ export interface HostProcessTableOptions {
   registry?: import("./worker-registry.ts").WorkerRegistry;
   workerFactory?: HostWorkerFactory;
   permissions?: import("../security/index.ts").PermissionManager;
+  trace?: import("../observability/index.ts").RuntimeTraceSink;
 }

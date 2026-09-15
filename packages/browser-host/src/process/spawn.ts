@@ -1,5 +1,6 @@
 import { WorkerRegistry } from "./worker-registry.ts";
 import type { HostProcessPrepareOptions, HostProcessRecord, HostProcessSnapshot, HostProcessStatus, HostProcessTableOptions, HostWorkerLike } from "./types.ts";
+import type { RuntimeTraceSink } from "../observability/index.ts";
 import type { PermissionManager } from "../security/index.ts";
 
 export class HostProcessError extends Error {
@@ -15,6 +16,7 @@ export class HostProcessTable {
   records: Map<number, HostProcessRecord>;
   registry: WorkerRegistry;
   permissions: PermissionManager | null;
+  trace: RuntimeTraceSink | null;
   workerFactory: (record: HostProcessRecord) => HostWorkerLike;
 
   constructor(options: HostProcessTableOptions = {}) {
@@ -23,16 +25,28 @@ export class HostProcessTable {
     this.records = new Map();
     this.registry = options.registry || new WorkerRegistry();
     this.permissions = options.permissions || null;
+    this.trace = options.trace || null;
     this.workerFactory = options.workerFactory || ((record) => new Worker(record.url as string | URL, { type: "module", name: `process-${record.pid}` }));
   }
 
   prepare(options: HostProcessPrepareOptions = {}): HostProcessSnapshot {
-    this.permissions?.assertAllowed({
-      scope: "process",
-      action: "prepare",
-      resource: String(options.url || "<inline>"),
-      ...(options.projectId ? { projectId: options.projectId } : {})
+    const span = this.trace?.startSpan({
+      category: "process",
+      name: "host-process.prepare",
+      ...(options.projectId ? { requestId: options.projectId } : {}),
+      attributes: { resource: String(options.url || "<inline>") }
     });
+    try {
+      this.permissions?.assertAllowed({
+        scope: "process",
+        action: "prepare",
+        resource: String(options.url || "<inline>"),
+        ...(options.projectId ? { projectId: options.projectId } : {})
+      });
+    } catch (error) {
+      span?.end({ status: "error", errorCode: error instanceof Error && "code" in error && typeof error.code === "string" ? error.code : "EUNKNOWN" });
+      throw error;
+    }
     const record: HostProcessRecord = {
       pid: this.nextPid++,
       generation: this.nextGeneration++,
@@ -47,7 +61,9 @@ export class HostProcessTable {
       resourcesReleased: false
     };
     this.records.set(record.pid, record);
-    return snapshot(record);
+    const current = snapshot(record);
+    span?.end({ attributes: { pid: current.pid, generation: current.generation } });
+    return current;
   }
 
   async start(pid: number): Promise<HostProcessSnapshot> {

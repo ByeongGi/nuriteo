@@ -54,4 +54,5 @@ export interface HostFetcherOptions {
   policy?: import("./fetch-policy.ts").FetchPolicy;
   policyOptions?: FetchPolicyOptions;
   permissions?: import("../security/index.ts").PermissionManager;
+  trace?: import("../observability/index.ts").RuntimeTraceSink;
 }

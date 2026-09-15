@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 
 import { FetchPolicy, FetchPolicyError } from "./fetch-policy.ts";
 import type { HostDownloadResult, HostFetchErrorCode, HostFetchErrorOptions, HostFetcherOptions, HostFetchOptions } from "./types.ts";
+import type { RuntimeTraceSink } from "../observability/index.ts";
 import type { PermissionManager } from "../security/index.ts";
 import { stripSensitiveHeadersForRedirect } from "../security/index.ts";
 
@@ -23,20 +24,22 @@ export class HostFetcher {
   fetchImpl: typeof fetch;
   policy: FetchPolicy;
   permissions: PermissionManager | null;
+  trace: RuntimeTraceSink | null;
 
   constructor(options: HostFetcherOptions = {}) {
     this.fetchImpl = options.fetchImpl || globalThis.fetch;
     this.policy = options.policy || new FetchPolicy(options.policyOptions);
     this.permissions = options.permissions || null;
+    this.trace = options.trace || null;
   }
 
   async download(input: string | URL, options: HostFetchOptions = {}): Promise<HostDownloadResult> {
     let url = this.policy.assertAllowed(input);
-    this.permissions?.assertAllowed({
-      scope: "network",
-      action: "fetch",
-      resource: url.href,
-      ...(options.projectId ? { projectId: options.projectId } : {})
+    const span = this.trace?.startSpan({
+      category: "network",
+      name: "host-fetch.download",
+      ...(options.projectId ? { requestId: options.projectId } : {}),
+      attributes: { url: url.href }
     });
     const redirects: HostDownloadResult["redirects"] = [];
     const maxRedirects = options.maxRedirects ?? this.policy.maxRedirects;
@@ -49,13 +52,19 @@ export class HostFetcher {
     if (options.signal) requestOptions.externalSignal = options.signal;
 
     try {
+      this.permissions?.assertAllowed({
+        scope: "network",
+        action: "fetch",
+        resource: url.href,
+        ...(options.projectId ? { projectId: options.projectId } : {})
+      });
       for (let attempt = 0; attempt <= maxRedirects; attempt += 1) {
         const response = await this.#fetch(url, { ...requestOptions, headers });
         if (!isRedirect(response.status)) {
           const body = await this.#readBody(response, requestOptions);
           const sha256 = digest("sha256", body, "hex");
           verifyIntegrity(body, options.integrity);
-          return {
+          const result = {
             url: url.href,
             status: response.status,
             ok: response.ok,
@@ -65,6 +74,8 @@ export class HostFetcher {
             body,
             sha256
           };
+          span?.end({ status: response.ok ? "ok" : "error", attributes: { status: response.status, bytes: body.byteLength } });
+          return result;
         }
 
         const location = response.headers.get("location");
@@ -81,7 +92,12 @@ export class HostFetcher {
         url = next;
       }
 
-      throw new HostFetchError("too many redirects", { code: "ETOOMANYREDIRECTS", url: url.href });
+      const error = new HostFetchError("too many redirects", { code: "ETOOMANYREDIRECTS", url: url.href });
+      span?.end({ status: "error", errorCode: error.code });
+      throw error;
+    } catch (error) {
+      span?.end({ status: "error", errorCode: errorCode(error) });
+      throw error;
     } finally {
       clearTimeout(timeout);
     }
@@ -159,6 +175,10 @@ function digest(algorithm: string, body: Uint8Array, encoding: "hex" | "base64")
 
 function isRedirect(status: number): boolean {
   return status === 301 || status === 302 || status === 303 || status === 307 || status === 308;
+}
+
+function errorCode(error: unknown): string {
+  return error instanceof Error && "code" in error && typeof error.code === "string" ? error.code : "EUNKNOWN";
 }
 
 export { FetchPolicy, FetchPolicyError };
