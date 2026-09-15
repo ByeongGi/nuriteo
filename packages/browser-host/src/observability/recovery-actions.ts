@@ -107,6 +107,8 @@ function isUnsupportedDiagnostic(diagnostic: RuntimeDiagnostic): boolean {
   return text.includes("unsupported")
     || text.includes("native addon")
     || text.includes("docker")
+    || text.includes("sync-require-of-async-esm")
+    || text.includes("err_require_async_module")
     || text.includes("tcp db")
     || text.includes("tcp database");
 }

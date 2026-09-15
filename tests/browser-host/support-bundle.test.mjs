@@ -96,6 +96,13 @@ const recovery = createRuntimeRecoveryPlan({
       severity: "warning",
       message: "quota exceeded",
       source: "storage"
+    },
+    {
+      code: "ERR_VITE_ASYNC_MODULE_BLOCKER",
+      severity: "error",
+      message: "sync-require-of-async-esm: Rolldown browser WASI binding requires async ESM initialization",
+      source: "framework:vite",
+      remediation: "Use a supported WASI/browser binding path or export a support bundle."
     }
   ],
   supportBundle: bundle
