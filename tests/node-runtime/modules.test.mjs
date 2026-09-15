@@ -168,6 +168,32 @@ runtime.registerMany({
       export const rendered = label('ok') + ':' + new Factory().label();
     `
   },
+  "/workspace/source-anonymous-default-function.mjs": {
+    kind: "esm-source",
+    source: `
+      export default function (value) {
+        return 'anonymous:' + value;
+      }
+    `
+  },
+  "/workspace/source-anonymous-default-class.mjs": {
+    kind: "esm-source",
+    source: `
+      export default class {
+        label() {
+          return 'anonymous-factory';
+        }
+      }
+    `
+  },
+  "/workspace/source-anonymous-default-consumer.mjs": {
+    kind: "esm-source",
+    source: `
+      import label from './source-anonymous-default-function.mjs';
+      import Factory from './source-anonymous-default-class.mjs';
+      export const rendered = label('ok') + ':' + new Factory().label();
+    `
+  },
   "/workspace/node_modules/pkg-fixture/main.mjs": {
     kind: "esm",
     factory(ctx) {
@@ -285,6 +311,9 @@ assert.equal(sourceLive.observed, 1);
 
 const sourceDefaultDeclaration = await runtime.importModule("./source-default-declaration-consumer.mjs", "/workspace/index.mjs");
 assert.equal(sourceDefaultDeclaration.rendered, "label:ok:factory");
+
+const sourceAnonymousDefault = await runtime.importModule("./source-anonymous-default-consumer.mjs", "/workspace/index.mjs");
+assert.equal(sourceAnonymousDefault.rendered, "anonymous:ok:anonymous-factory");
 
 const pkg = await runtime.importModule("pkg-fixture", "/workspace/index.mjs");
 assert.equal(pkg.kind, "package-main");

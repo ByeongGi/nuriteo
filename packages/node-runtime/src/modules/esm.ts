@@ -101,7 +101,7 @@ function createEsmSourceCompiler(source: string, filename: string, globals: Reco
 
 function prepareEsmSource(source: string): string {
   const declarationExports = collectDeclarationExports(source);
-  const defaultDeclarationExport = collectDefaultDeclarationExport(source);
+  const defaultDeclarationExport = collectDefaultDeclarationExport(source) ?? (hasAnonymousDefaultDeclarationExport(source) ? "__default_export__" : null);
   const prepared = source
     .replace(/^#!.*(?:\n|$)/, "")
     .replace(/^[ \t]*import\s+\*\s+as\s+([A-Za-z_$][\w$]*)\s+from\s+["']([^"']+)["'];?[ \t]*$/gm, "const $1 = await __import(\"$2\");")
@@ -119,6 +119,9 @@ function prepareEsmSource(source: string): string {
     .replace(/^[ \t]*export\s+default\s+async\s+function\s+([A-Za-z_$][\w$]*)\s*\(/gm, "async function $1(")
     .replace(/^[ \t]*export\s+default\s+function\s+([A-Za-z_$][\w$]*)\s*\(/gm, "function $1(")
     .replace(/^[ \t]*export\s+default\s+class\s+([A-Za-z_$][\w$]*)\b/gm, "class $1")
+    .replace(/^[ \t]*export\s+default\s+async\s+function\s*\(/gm, "const __default_export__ = async function (")
+    .replace(/^[ \t]*export\s+default\s+function\s*\(/gm, "const __default_export__ = function (")
+    .replace(/^[ \t]*export\s+default\s+class\b/gm, "const __default_export__ = class")
     .replace(/^[ \t]*export\s+async\s+function\s+([A-Za-z_$][\w$]*)\s*\(/gm, "async function $1(")
     .replace(/^[ \t]*export\s+function\s+([A-Za-z_$][\w$]*)\s*\(/gm, "function $1(")
     .replace(/^[ \t]*export\s+class\s+([A-Za-z_$][\w$]*)\b/gm, "class $1")
@@ -157,6 +160,10 @@ function collectDeclarationExports(source: string): string[] {
 function collectDefaultDeclarationExport(source: string): string | null {
   const match = source.match(/^[ \t]*export\s+default\s+(?:async\s+)?(?:function|class)\s+([A-Za-z_$][\w$]*)\b/m);
   return match?.[1] ?? null;
+}
+
+function hasAnonymousDefaultDeclarationExport(source: string): boolean {
+  return /^[ \t]*export\s+default\s+(?:async\s+)?function\s*\(/m.test(source) || /^[ \t]*export\s+default\s+class(?:\s+extends\b|\s*\{)/m.test(source);
 }
 
 function rewriteDefaultAndNamedImport(defaultName: string, named: string, specifier: string): string {
