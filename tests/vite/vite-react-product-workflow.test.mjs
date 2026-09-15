@@ -222,6 +222,43 @@ for (const manager of ["npm", "pnpm"]) {
 }
 }
 
+const artifactWorkflow = new ViteProductWorkflow({
+  manager: "npm",
+  vitePackageArtifact: {
+    version: "9.0.0-artifact",
+    mounts: [
+      {
+        path: "package.json",
+        data: JSON.stringify({ name: "vite", version: "9.0.0-artifact", type: "module", bin: { vite: "custom-bin/vite.mjs" } })
+      },
+      {
+        path: "custom-bin/vite.mjs",
+        data: "#!/usr/bin/env node\nimport '../dist/node/cli.mjs';\n"
+      },
+      {
+        path: "dist/node/cli.mjs",
+        data: "import { boot } from './real-server.mjs';\nboot();\n"
+      },
+      {
+        path: "dist/node/real-server.mjs",
+        data: "export function boot() {}\n"
+      }
+    ]
+  }
+});
+artifactWorkflow.install();
+const artifactReadiness = artifactWorkflow.inspectRealCliReadiness();
+assert.equal(artifactReadiness.cliEntrypoint, "/workspace/project/node_modules/vite/custom-bin/vite.mjs");
+assert.equal(artifactReadiness.cliEntryReadiness.status, "ready");
+assert.deepEqual(
+  artifactReadiness.cliModuleGraph.modules.map((mod) => [mod.path, mod.imports]),
+  [
+    ["/workspace/project/node_modules/vite/custom-bin/vite.mjs", ["../dist/node/cli.mjs"]],
+    ["/workspace/project/node_modules/vite/dist/node/cli.mjs", ["./real-server.mjs"]],
+    ["/workspace/project/node_modules/vite/dist/node/real-server.mjs", []]
+  ]
+);
+
 console.log("vite product workflow test ok");
 
 function expectedFrameworkPackage(template) {

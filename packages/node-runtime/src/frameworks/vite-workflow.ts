@@ -13,11 +13,17 @@ export type ViteProductTemplate = "react" | "vue-runtime" | "svelte";
 export interface ViteProductWorkflowOptions {
   manager: ViteProductPackageManager;
   template?: ViteProductTemplate;
+  vitePackageArtifact?: ViteProductPackageArtifact;
   projectId?: string;
   projectRoot?: string;
   initialLabel?: string;
   network?: LoopbackNetwork;
   port?: number;
+}
+
+export interface ViteProductPackageArtifact {
+  mounts: PackageManagerWorkspaceMount[];
+  version: string;
 }
 
 export interface ViteProductWorkflowResult {
@@ -177,6 +183,7 @@ export class ViteProductWorkflow {
   readonly template: ViteProductTemplate;
   readonly projectId: string;
   readonly projectRoot: string;
+  readonly vitePackageArtifact: ViteProductPackageArtifact | null;
   readonly workspace: MemoryPackageManagerWorkspace;
   readonly network: LoopbackNetwork;
   #state = { count: 1 };
@@ -200,6 +207,7 @@ export class ViteProductWorkflow {
     this.template = options.template || "react";
     this.projectId = options.projectId || `vite-${this.template}-${options.manager}`;
     this.projectRoot = options.projectRoot || "/workspace/project";
+    this.vitePackageArtifact = options.vitePackageArtifact || null;
     this.network = options.network || createLoopbackNetwork();
     this.#port = options.port ?? 5173;
     this.workspace = new MemoryPackageManagerWorkspace(createViteMounts(this.projectRoot, this.template, options.initialLabel || "alpha"));
@@ -256,7 +264,7 @@ export class ViteProductWorkflow {
     for (const pkg of packages) {
       this.workspace.writeText(join(this.projectRoot, "node_modules", pkg, "package.json"), JSON.stringify({ name: pkg }));
     }
-    this.#installViteCliEntrypoint();
+    this.#installVitePackage();
     const lockfile = this.manager === "npm" ? "package-lock.json" : "pnpm-lock.yaml";
     this.workspace.writeText(join(this.projectRoot, lockfile), createLockfile(this.manager, packages));
     return { installed: true, lockfile, packages };
@@ -266,10 +274,10 @@ export class ViteProductWorkflow {
     const cliEntrypoint = this.#resolveBin("vite");
     const cliEntryReadiness = inspectCliEntryReadiness({
       entry: {
-        name: "vite",
-        version: "8.2.0",
-        entry: cliEntrypoint,
-        mode: "esm"
+          name: "vite",
+          version: this.#readVitePackageVersion(),
+          entry: cliEntrypoint,
+          mode: "esm"
       },
       reader: this.workspace,
       supportedModes: ["cjs", "esm"]
@@ -323,7 +331,7 @@ export class ViteProductWorkflow {
     })({
       entry: {
         name: "vite",
-        version: "8.2.0",
+        version: this.#readVitePackageVersion(),
         entry: cliEntrypoint,
         mode: "esm"
       },
@@ -558,6 +566,25 @@ export class ViteProductWorkflow {
     };
   }
 
+  #installVitePackage(): void {
+    if (this.vitePackageArtifact) {
+      this.#installVitePackageArtifact(this.vitePackageArtifact);
+      return;
+    }
+    this.#installViteCliEntrypoint();
+  }
+
+  #installVitePackageArtifact(artifact: ViteProductPackageArtifact): void {
+    const packageRoot = join(this.projectRoot, "node_modules/vite");
+    for (const mount of artifact.mounts) {
+      this.workspace.writeText(join(packageRoot, normalizePackageArtifactPath(mount.path)), mount.data);
+    }
+    if (!this.workspace.exists(join(packageRoot, "package.json"))) {
+      this.workspace.writeText(join(packageRoot, "package.json"), JSON.stringify({ name: "vite", version: artifact.version, type: "module", bin: { vite: "bin/vite.js" } }));
+    }
+    this.workspace.symlink(join(packageRoot, this.#readVitePackageBinPath()), join(this.projectRoot, "node_modules/.bin/vite"));
+  }
+
   #installViteCliEntrypoint(): void {
     const packageJsonPath = join(this.projectRoot, "node_modules/vite/package.json");
     this.workspace.writeText(packageJsonPath, JSON.stringify({ name: "vite", version: "8.2.0", type: "module", bin: { vite: "bin/vite.js" } }));
@@ -583,6 +610,17 @@ export class ViteProductWorkflow {
       "export function registerTransform() {\n  global.__viteRegisterTransform?.({ mode: 'browser-esm', source: 'vite-cli' });\n}\n"
     );
     this.workspace.symlink(join(this.projectRoot, "node_modules/vite/bin/vite.js"), join(this.projectRoot, "node_modules/.bin/vite"));
+  }
+
+  #readVitePackageVersion(): string {
+    const manifest = JSON.parse(this.workspace.readText(join(this.projectRoot, "node_modules/vite/package.json"))) as { version?: string };
+    return manifest.version || this.vitePackageArtifact?.version || "8.2.0";
+  }
+
+  #readVitePackageBinPath(): string {
+    const manifest = JSON.parse(this.workspace.readText(join(this.projectRoot, "node_modules/vite/package.json"))) as { bin?: string | Record<string, string> };
+    if (typeof manifest.bin === "string") return manifest.bin;
+    return manifest.bin?.vite || "bin/vite.js";
   }
 
   #resolveCommandEntrypoint(command: string): string {
@@ -714,6 +752,10 @@ function createLockfile(manager: ViteProductPackageManager, packages: string[]):
 
 function packagesForTemplate(template: ViteProductTemplate): string[] {
   return ["vite", "typescript", ...Object.keys(dependenciesForTemplate(template))];
+}
+
+function normalizePackageArtifactPath(path: string): string {
+  return path.replace(/^\/+/, "");
 }
 
 function missingCapabilitiesForTemplate(template: ViteProductTemplate): ViteRuntimeCapability[] {
