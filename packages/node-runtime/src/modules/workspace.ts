@@ -74,7 +74,8 @@ function discoverPackageManifests(reader: WorkspaceModuleReader, root: string): 
       root: packageRoot,
       ...(typeof manifest.type === "string" ? { type: manifest.type } : {}),
       ...(typeof manifest.main === "string" ? { main: manifest.main } : {}),
-      ...normalizeExports(manifest.exports)
+      ...normalizeExports(manifest.exports),
+      ...normalizeImports(manifest.imports)
     };
     packages[name] = packageManifest;
     packageRoots[packageRoot] = packageManifest;
@@ -153,6 +154,11 @@ function normalizeExports(exportsMap: PackageJson["exports"]): Pick<PackageManif
   return Object.keys(normalized).length > 0 ? { exports: normalized } : {};
 }
 
+function normalizeImports(importsMap: PackageJson["imports"]): Pick<PackageManifest, "imports"> {
+  const normalized = normalizeExportTarget(importsMap);
+  return Object.keys(normalized).length > 0 ? { imports: normalized } : {};
+}
+
 function normalizeExportTarget(value: unknown): Record<string, PackageExportTarget> {
   if (!isRecord(value)) return {};
   const normalized: Record<string, PackageExportTarget> = {};
@@ -188,4 +194,5 @@ interface PackageJson {
   type?: unknown;
   main?: unknown;
   exports?: unknown;
+  imports?: unknown;
 }

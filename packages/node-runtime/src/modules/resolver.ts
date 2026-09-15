@@ -58,6 +58,8 @@ export class ModuleResolver {
   }
 
   resolveImports(specifier: string, parentUrl: string, conditions: readonly string[] = ["require", "node", "default", "import"]): string {
+    const packageImport = this.resolvePackageImport(specifier, parentUrl, conditions);
+    if (packageImport) return packageImport;
     const target = this.imports[specifier];
     if (!target) throw new Error(`ERR_PACKAGE_IMPORT_NOT_DEFINED: ${specifier} from ${parentUrl}`);
     return this.resolveWithConditions(target, parentUrl, conditions);
@@ -98,6 +100,41 @@ export class ModuleResolver {
       }
     }
     return bestRoot;
+  }
+
+  resolvePackageImport(specifier: string, parentUrl: string, conditions: readonly string[]): string | null {
+    const root = this.findContainingPackageRoot(parentUrl);
+    const manifest = root ? this.packageManifestForRoot(root) : undefined;
+    if (!root || !manifest?.imports) return null;
+    const target = resolveSubpathExport(manifest.imports as Record<string, PackageExportTarget | undefined>, specifier);
+    const resolved = target ? resolveConditionalTarget(target, conditions) : undefined;
+    if (!resolved) return null;
+    if (resolved.startsWith("./") || resolved.startsWith("../")) return this.resolvePath(`${root}/${resolved}`);
+    return this.resolveWithConditions(resolved, parentUrl, conditions);
+  }
+
+  findContainingPackageRoot(parentUrl: string): string | null {
+    let bestRoot: string | null = null;
+    for (const root of this.knownPackageRoots()) {
+      const prefix = root.endsWith("/") ? root : `${root}/`;
+      if ((parentUrl === root || parentUrl.startsWith(prefix)) && (!bestRoot || root.length > bestRoot.length)) {
+        bestRoot = root;
+      }
+    }
+    return bestRoot;
+  }
+
+  knownPackageRoots(): string[] {
+    const roots = new Set(Object.keys(this.packageRoots));
+    for (const manifest of Object.values(this.packages)) {
+      if (manifest.root) roots.add(manifest.root);
+    }
+    return [...roots];
+  }
+
+  packageManifestForRoot(root: string): PackageManifest | undefined {
+    if (this.packageRoots[root]) return this.packageRoots[root];
+    return Object.values(this.packages).find((manifest) => manifest.root === root);
   }
 
   resolvePath(path: string): string {

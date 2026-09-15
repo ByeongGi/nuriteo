@@ -34,6 +34,12 @@ const runtime = createModuleRuntime({
           import: "./feature.mjs",
           require: "./feature.cjs"
         }
+      },
+      imports: {
+        "#private": {
+          import: "./private.mjs",
+          require: "./private.cjs"
+        }
       }
     }
   },
@@ -226,6 +232,31 @@ runtime.registerMany({
       ctx.exportConst("kind", "package-import-feature");
     }
   },
+  "/workspace/node_modules/pkg-fixture/private.cjs": {
+    kind: "cjs",
+    factory({ module }) {
+      module.exports = { kind: "package-private-require" };
+    }
+  },
+  "/workspace/node_modules/pkg-fixture/private.mjs": {
+    kind: "esm",
+    factory(ctx) {
+      ctx.exportConst("kind", "package-private-import");
+    }
+  },
+  "/workspace/node_modules/pkg-fixture/imports-consumer.cjs": {
+    kind: "cjs",
+    factory({ module, require }) {
+      module.exports = require("#private");
+    }
+  },
+  "/workspace/node_modules/pkg-fixture/imports-consumer.mjs": {
+    kind: "esm",
+    imports: ["#private"],
+    factory(ctx) {
+      ctx.exportConst("kind", ctx.importNamespace("#private").kind);
+    }
+  },
   "/workspace/source-entry.cjs": {
     kind: "cjs-source",
     source: `
@@ -330,6 +361,9 @@ assert.equal(pkg.kind, "package-main");
 assert.equal(pkg.resolved, "/workspace/node_modules/pkg-fixture/feature.mjs");
 assert.equal(runtime.requireSync("pkg-fixture", "/workspace/index.cjs").kind, "package-require-main");
 assert.equal(runtime.requireSync("pkg-fixture/feature", "/workspace/index.cjs").kind, "package-feature");
+assert.equal(runtime.requireSync("./imports-consumer.cjs", "/workspace/node_modules/pkg-fixture/index.cjs").kind, "package-private-require");
+const packageImports = await runtime.importModule("./imports-consumer.mjs", "/workspace/node_modules/pkg-fixture/index.mjs");
+assert.equal(packageImports.kind, "package-private-import");
 
 const sourceEntry = runtime.requireSync("./source-entry.cjs", "/workspace/index.cjs");
 assert.deepEqual(sourceEntry, {

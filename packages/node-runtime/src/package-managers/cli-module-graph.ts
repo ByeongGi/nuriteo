@@ -50,6 +50,7 @@ type GraphPackageExportTarget = string | GraphPackageExportTarget[] | { [conditi
 interface GraphPackageManifest {
   main?: string;
   exports?: GraphPackageExports;
+  imports?: GraphPackageExports;
 }
 
 const defaultBuiltins = new Set([
@@ -255,6 +256,15 @@ export function extractStaticEsmSpecifiers(source: string): string[] {
       continue;
     }
 
+    if (source.startsWith("import", index) && !isIdentifierPart(source[index - 1]) && !isIdentifierPart(source[index + "import".length])) {
+      const dynamic = parseDynamicImport(source, index + "import".length);
+      if (dynamic) {
+        imports.add(dynamic.specifier);
+        index = dynamic.end;
+        continue;
+      }
+    }
+
     if (source.startsWith("import", index) && isStaticModuleKeywordStart(source, index) && !isIdentifierPart(source[index + "import".length])) {
       const parsed = parseStaticImport(source, index + "import".length);
       if (parsed) {
@@ -286,7 +296,22 @@ function isKnownNodeBuiltin(specifier: string): boolean {
   return knownNodeBuiltins.has(normalized);
 }
 
+function parseDynamicImport(source: string, index: number): { specifier: string; end: number } | null {
+  let cursor = skipWhitespace(source, index);
+  if (source[cursor] !== "(") return null;
+  cursor = skipWhitespace(source, cursor + 1);
+  const quote = source[cursor];
+  if (quote !== "'" && quote !== "\"") return null;
+  const specifierStart = cursor + 1;
+  cursor = skipQuotedString(source, cursor, quote);
+  const specifier = source.slice(specifierStart, cursor);
+  cursor = skipWhitespace(source, cursor + 1);
+  if (source[cursor] !== ")") return null;
+  return { specifier, end: cursor };
+}
+
 function resolveModuleSpecifier(specifier: string, importer: string, packageRoot: string, reader: CliModuleGraphReader, conditions: readonly string[]): string | null {
+  if (specifier.startsWith("#")) return resolvePackageImport(specifier, importer, packageRoot, reader, conditions);
   if (specifier === "." || specifier === ".." || specifier.startsWith("./") || specifier.startsWith("../") || specifier.startsWith("/")) {
     const base = specifier.startsWith("/") ? specifier : join(dirname(importer), specifier);
     return resolveFileOrDirectory(base, reader);
@@ -306,6 +331,30 @@ function resolvePackage(specifier: string, importer: string, packageRoot: string
     current = next;
   }
   return resolvePackageTarget(join(packageRoot, "node_modules", name), subpath ? `./${subpath}` : ".", reader, conditions);
+}
+
+function resolvePackageImport(specifier: string, importer: string, packageRoot: string, reader: CliModuleGraphReader, conditions: readonly string[]): string | null {
+  const root = findContainingPackageRoot(importer, packageRoot, reader);
+  if (!root) return null;
+  const manifestPath = join(root, "package.json");
+  if (!reader.exists(manifestPath)) return null;
+  const manifest = JSON.parse(reader.readText(manifestPath)) as GraphPackageManifest;
+  if (!manifest.imports) return null;
+  const target = resolvePackageExportTarget(manifest.imports, specifier, conditions);
+  if (!target) return null;
+  if (target.startsWith("./") || target.startsWith("../")) return resolveFileOrDirectory(join(root, target), reader);
+  return resolveModuleSpecifier(target, importer, packageRoot, reader, conditions);
+}
+
+function findContainingPackageRoot(importer: string, packageRoot: string, reader: CliModuleGraphReader): string | null {
+  let current = dirname(importer);
+  while (current.startsWith(packageRoot)) {
+    if (reader.exists(join(current, "package.json"))) return current;
+    const next = dirname(current);
+    if (next === current) break;
+    current = next;
+  }
+  return null;
 }
 
 function resolvePackageTarget(root: string, subpath: string, reader: CliModuleGraphReader, conditions: readonly string[]): string | null {
@@ -334,9 +383,9 @@ function resolvePackageExportTarget(exportsMap: GraphPackageExports, subpath: st
 
 function selectPackageExportTarget(exportsMap: GraphPackageExports, subpath: string): GraphPackageExportTarget | undefined {
   if (typeof exportsMap === "string" || Array.isArray(exportsMap)) return subpath === "." ? exportsMap : undefined;
-  if (isConditionalExportMap(exportsMap)) return subpath === "." ? exportsMap : undefined;
   const exact = exportsMap[subpath];
   if (exact) return exact;
+  if (isConditionalExportMap(exportsMap)) return subpath === "." ? exportsMap : undefined;
   for (const [pattern, target] of Object.entries(exportsMap)) {
     if (!target) continue;
     const star = pattern.indexOf("*");
@@ -404,6 +453,9 @@ function splitPackageSpecifier(specifier: string): [string, string] {
 
 function classifyOptionalProbe(specifier: string, importer: string): CliModuleGraphIssue["kind"] | null {
   if (specifier.endsWith(".node") || specifier.startsWith("@reflink/")) return "optional-native-probe";
+  if (specifier === "node:inspector" && importer.endsWith("/bin/vite.js")) return "optional-dependency-probe";
+  if (specifier.startsWith("@vitejs/devtools/") && importer.includes("/node_modules/vite/")) return "optional-dependency-probe";
+  if ((specifier === "jiti" || specifier === "lightningcss") && importer.includes("/node_modules/vite/")) return "optional-dependency-probe";
   if (
     (specifier === "<keyv-adapter>" || specifier === "<pnpmfile>" || specifier === "<project-package-json>") &&
     importer.endsWith("/dist/pnpm.cjs")

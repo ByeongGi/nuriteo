@@ -74,17 +74,24 @@ assert.deepEqual(
       export * from "not-a-block-export";
     */
     await import("dynamic-pkg");
+    import("./lazy-local.js");
   `),
-  ["./default.js", "./re-export.js", "named-pkg", "namespace-pkg", "side-effect-pkg", "star-namespace-pkg", "star-pkg"]
+  ["./default.js", "./lazy-local.js", "./re-export.js", "dynamic-pkg", "named-pkg", "namespace-pkg", "side-effect-pkg", "star-namespace-pkg", "star-pkg"]
 );
 
 const esmGraphFiles = new Map([
-  ["/workspace/vite/bin/vite.js", "import '../dist/node/cli.js';\n"],
+  ["/workspace/vite/bin/vite.js", "function start() {\n  return import('../dist/node/cli.js');\n}\nstart();\n"],
   ["/workspace/vite/dist/node/cli.js", "import { start } from './server.js';\nimport 'conditional-pkg';\nimport 'conditional-pkg/features/render';\nimport 'node:fs';\nimport 'node:perf_hooks';\nstart();\n"],
   ["/workspace/vite/dist/node/server.js", "export * as hmr from './hmr.js';\nexport const start = () => undefined;\n"],
   ["/workspace/vite/dist/node/hmr.js", "export const channel = 'hmr';\n"],
   ["/workspace/vite/node_modules/conditional-pkg/package.json", JSON.stringify({
     name: "conditional-pkg",
+    imports: {
+      "#private": {
+        import: "./private.mjs",
+        default: "./private.js"
+      }
+    },
     exports: {
       ".": {
         import: "./esm.mjs",
@@ -96,7 +103,8 @@ const esmGraphFiles = new Map([
       }
     }
   })],
-  ["/workspace/vite/node_modules/conditional-pkg/esm.mjs", "export const mode = 'esm';\n"],
+  ["/workspace/vite/node_modules/conditional-pkg/esm.mjs", "import '#private';\nexport const mode = 'esm';\n"],
+  ["/workspace/vite/node_modules/conditional-pkg/private.mjs", "export const value = 'private';\n"],
   ["/workspace/vite/node_modules/conditional-pkg/features/render.mjs", "export const render = () => undefined;\n"]
 ]);
 const esmGraph = analyzeCliModuleGraph({
@@ -120,9 +128,10 @@ assert.deepEqual(
     ["/workspace/vite/bin/vite.js", ["../dist/node/cli.js"]],
     ["/workspace/vite/dist/node/cli.js", ["./server.js", "conditional-pkg", "conditional-pkg/features/render", "node:fs", "node:perf_hooks"]],
     ["/workspace/vite/dist/node/server.js", ["./hmr.js"]],
-    ["/workspace/vite/node_modules/conditional-pkg/esm.mjs", []],
+    ["/workspace/vite/node_modules/conditional-pkg/esm.mjs", ["#private"]],
     ["/workspace/vite/node_modules/conditional-pkg/features/render.mjs", []],
-    ["/workspace/vite/dist/node/hmr.js", []]
+    ["/workspace/vite/dist/node/hmr.js", []],
+    ["/workspace/vite/node_modules/conditional-pkg/private.mjs", []]
   ]
 );
 

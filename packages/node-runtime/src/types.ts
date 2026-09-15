@@ -64,6 +64,7 @@ export interface PackageManifest {
   type?: string;
   main?: string;
   exports?: PackageExports;
+  imports?: PackageExports;
 }
 
 export type PackageExports = PackageExportTarget | Record<string, PackageExportTarget>;
