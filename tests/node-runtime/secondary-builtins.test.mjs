@@ -108,6 +108,10 @@ assert.equal(moduleBuiltin.builtinModules.includes("node:module"), true);
 assert.equal(moduleBuiltin.builtinModules.includes("node:querystring"), true);
 assert.equal(moduleBuiltin.builtinModules.includes("node:string_decoder"), true);
 assert.equal(moduleBuiltin.builtinModules.includes("node:timers/promises"), true);
+assert.equal(moduleBuiltin.isBuiltin("node:module"), true);
+assert.equal(moduleBuiltin.isBuiltin("module"), true);
+assert.equal(moduleBuiltin.isBuiltin("vite"), false);
+assert.equal(moduleBuiltin.syncBuiltinESMExports(), undefined);
 assert.deepEqual(moduleBuiltin.Module._nodeModulePaths("/workspace/app"), [
   "/workspace/app/node_modules",
   "/workspace/node_modules",

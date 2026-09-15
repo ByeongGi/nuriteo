@@ -128,6 +128,12 @@ export function enableCompileCache(): { status: number; directory?: string; mess
   return { status: 0 };
 }
 
+export function isBuiltin(specifier: string): boolean {
+  return builtinModules.includes(specifier);
+}
+
+export function syncBuiltinESMExports(): void {}
+
 export const moduleBuiltin = Object.freeze({
   Module,
   _cache: Module._cache,
@@ -137,7 +143,9 @@ export const moduleBuiltin = Object.freeze({
   builtinModules,
   createRequire,
   default: Module,
-  enableCompileCache
+  enableCompileCache,
+  isBuiltin,
+  syncBuiltinESMExports
 });
 
 function dirname(path: string): string {

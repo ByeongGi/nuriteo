@@ -8,7 +8,7 @@ export { EventEmitter, eventsBuiltin, once } from "./events.ts";
 export { createFsPromisesBuiltin } from "./fs-promises.ts";
 export { Agent as HttpAgent, ClientRequest, createHttpBuiltin, createHttpsBuiltin, IncomingMessage } from "./http.ts";
 export { ClientHttp2Session, connect as http2Connect, constants as http2Constants, createSecureServer as createHttp2SecureServer, createServer as createHttp2Server, http2Builtin, UnsupportedHttp2Error } from "./http2.ts";
-export { builtinModules, createRequire, enableCompileCache, Module, moduleBuiltin } from "./module.ts";
+export { builtinModules, createRequire, enableCompileCache, isBuiltin, Module, moduleBuiltin, syncBuiltinESMExports } from "./module.ts";
 export { connect as netConnect, createConnection as netCreateConnection, isIP, isIPv4, isIPv6, netBuiltin, Socket, UnsupportedTcpSocketError } from "./net.ts";
 export { arch, constants as osConstants, cpus, EOL, freemem, homedir, osBuiltin, platform, release, tmpdir, totalmem, type as osType, version as osVersion } from "./os.ts";
 export { basename, delimiter, dirname, extname, format as pathFormat, isAbsolute, join, normalize, parse as pathParse, pathBuiltin, posix, relative, resolve, sep } from "./path.ts";

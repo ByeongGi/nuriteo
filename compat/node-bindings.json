@@ -45,7 +45,7 @@
       "tests": [
         "tests/node-runtime/secondary-builtins.test.mjs"
       ],
-      "notes": "Browser-native module subset covering enableCompileCache, builtinModules, createRequire stub, and Module resolution helpers used by npm/pnpm preflight."
+      "notes": "Browser-native module subset covering enableCompileCache, builtinModules, isBuiltin, syncBuiltinESMExports, createRequire stub, and Module resolution helpers used by npm/pnpm/Vite preflight."
     },
     "os": {
       "status": "partial",
