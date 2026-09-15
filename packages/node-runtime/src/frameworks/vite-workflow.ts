@@ -241,8 +241,15 @@ export interface ViteRealCliReadiness {
 }
 
 export interface ViteDependencyMaterializationPlan {
+  summary: ViteDependencyMaterializationSummary;
   missing: ViteDependencyMaterializationItem[];
   satisfied: string[];
+}
+
+export interface ViteDependencyMaterializationSummary {
+  missingByKind: Record<ViteDependencyMaterializationKind, number>;
+  missingCount: number;
+  satisfiedCount: number;
 }
 
 export interface ViteDependencyMaterializationItem {
@@ -1054,15 +1061,17 @@ function createDependencyMaterializationPlan(
     specifiers.add(issue.specifier);
     missingSpecifiersByPackage.set(packageName, specifiers);
   }
+  const missing = [...missingSpecifiersByPackage.entries()]
+    .map(([name, specifiers]) => ({
+      kind: classifyDependencyMaterialization(name),
+      name,
+      nextAction: nextActionForDependencyMaterialization(name),
+      specifiers: [...specifiers].sort()
+    }))
+    .sort((left, right) => left.name.localeCompare(right.name));
   return {
-    missing: [...missingSpecifiersByPackage.entries()]
-      .map(([name, specifiers]) => ({
-        kind: classifyDependencyMaterialization(name),
-        name,
-        nextAction: nextActionForDependencyMaterialization(name),
-        specifiers: [...specifiers].sort()
-      }))
-      .sort((left, right) => left.name.localeCompare(right.name)),
+    summary: createDependencyMaterializationSummary(missing, satisfied),
+    missing,
     satisfied
   };
 }
@@ -1089,6 +1098,25 @@ function nextActionForDependencyMaterialization(name: string): string {
     return "Keep this dependency optional or blocked until a supported browser/WASM replacement is proven.";
   }
   return "Extract this package from an installed node_modules tree and mount it as a dependency artifact.";
+}
+
+function createDependencyMaterializationSummary(
+  missing: readonly ViteDependencyMaterializationItem[],
+  satisfied: readonly string[]
+): ViteDependencyMaterializationSummary {
+  const missingByKind: Record<ViteDependencyMaterializationKind, number> = {
+    "package-artifact": 0,
+    "wasm-adapter-candidate": 0,
+    "native-hold": 0
+  };
+  for (const item of missing) {
+    missingByKind[item.kind] += 1;
+  }
+  return {
+    missingByKind,
+    missingCount: missing.length,
+    satisfiedCount: satisfied.length
+  };
 }
 
 function collectTextMounts(reader: WorkspaceModuleReader, packageRoot: string): PackageManagerWorkspaceMount[] {

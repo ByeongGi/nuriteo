@@ -407,6 +407,15 @@ const missingDependencyWorkflow = new ViteProductWorkflow({
 });
 missingDependencyWorkflow.install();
 assert.deepEqual(missingDependencyWorkflow.inspectRealCliReadiness().dependencyMaterializationPlan, {
+  summary: {
+    missingByKind: {
+      "package-artifact": 0,
+      "wasm-adapter-candidate": 1,
+      "native-hold": 0
+    },
+    missingCount: 1,
+    satisfiedCount: 0
+  },
   missing: [
     {
       kind: "wasm-adapter-candidate",
@@ -425,6 +434,15 @@ assert.equal(
   false
 );
 assert.deepEqual(dependencyArtifactReadiness.dependencyMaterializationPlan, {
+  summary: {
+    missingByKind: {
+      "package-artifact": 0,
+      "wasm-adapter-candidate": 0,
+      "native-hold": 0
+    },
+    missingCount: 0,
+    satisfiedCount: 1
+  },
   missing: [],
   satisfied: ["rolldown"]
 });
@@ -502,6 +520,15 @@ const installedDependencyWorkflow = new ViteProductWorkflow({
 });
 installedDependencyWorkflow.install();
 assert.deepEqual(installedDependencyWorkflow.inspectRealCliReadiness().dependencyMaterializationPlan, {
+  summary: {
+    missingByKind: {
+      "package-artifact": 0,
+      "wasm-adapter-candidate": 0,
+      "native-hold": 0
+    },
+    missingCount: 0,
+    satisfiedCount: 1
+  },
   missing: [],
   satisfied: ["rolldown"]
 });
@@ -601,6 +628,15 @@ assert.deepEqual(pureJsInitialWorkflow.inspectRealCliReadiness().dependencyMater
 assert.deepEqual([...new Set(pureJsInitialWorkflow.inspectRealCliReadiness().dependencyMaterializationPlan.missing.map((item) => item.kind))], [
   "package-artifact"
 ]);
+assert.deepEqual(pureJsInitialWorkflow.inspectRealCliReadiness().dependencyMaterializationPlan.summary, {
+  missingByKind: {
+    "package-artifact": 2,
+    "wasm-adapter-candidate": 0,
+    "native-hold": 0
+  },
+  missingCount: 2,
+  satisfiedCount: 0
+});
 const directPureJsArtifacts = createViteDependencyArtifactsFromPlan({
   reader: pureJsDependencyWorkspace,
   nodeModulesRoot: "/workspace/project/node_modules",
@@ -622,6 +658,15 @@ assert.deepEqual(pureJsDirectWorkflow.inspectRealCliReadiness().dependencyMateri
 assert.deepEqual([...new Set(pureJsDirectWorkflow.inspectRealCliReadiness().dependencyMaterializationPlan.missing.map((item) => item.kind))], [
   "package-artifact"
 ]);
+assert.deepEqual(pureJsDirectWorkflow.inspectRealCliReadiness().dependencyMaterializationPlan.summary, {
+  missingByKind: {
+    "package-artifact": 5,
+    "wasm-adapter-candidate": 0,
+    "native-hold": 0
+  },
+  missingCount: 5,
+  satisfiedCount: 2
+});
 const transitivePureJsArtifacts = createViteDependencyArtifactsFromPlan({
   reader: pureJsDependencyWorkspace,
   nodeModulesRoot: "/workspace/project/node_modules",
@@ -636,6 +681,15 @@ const pureJsCompleteWorkflow = new ViteProductWorkflow({
 });
 pureJsCompleteWorkflow.install();
 assert.deepEqual(pureJsCompleteWorkflow.inspectRealCliReadiness().dependencyMaterializationPlan.missing, []);
+assert.deepEqual(pureJsCompleteWorkflow.inspectRealCliReadiness().dependencyMaterializationPlan.summary, {
+  missingByKind: {
+    "package-artifact": 0,
+    "wasm-adapter-candidate": 0,
+    "native-hold": 0
+  },
+  missingCount: 0,
+  satisfiedCount: 7
+});
 const pureJsExecution = await pureJsCompleteWorkflow.executeRealCli(["build"]);
 assert.equal(pureJsExecution.exitCode, 0, pureJsExecution.stderr);
 assert.deepEqual(pureJsExecution.buildRegistrations, [
