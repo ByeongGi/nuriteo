@@ -101,6 +101,7 @@ function createEsmSourceCompiler(source: string, filename: string, globals: Reco
 
 function prepareEsmSource(source: string): string {
   const declarationExports = collectDeclarationExports(source);
+  const defaultDeclarationExport = collectDefaultDeclarationExport(source);
   const prepared = source
     .replace(/^#!.*(?:\n|$)/, "")
     .replace(/^[ \t]*import\s+\*\s+as\s+([A-Za-z_$][\w$]*)\s+from\s+["']([^"']+)["'];?[ \t]*$/gm, "const $1 = await __import(\"$2\");")
@@ -115,6 +116,9 @@ function prepareEsmSource(source: string): string {
     .replace(/\bimport\s*\(/g, "__import(")
     .replace(/^[ \t]*export\s+const\s+([A-Za-z_$][\w$]*)\s*=\s*([^;\n]+);?[ \t]*$/gm, "const $1 = $2;\n__exportConst(\"$1\", $1);")
     .replace(/^[ \t]*export\s+(let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*([^;\n]+);?[ \t]*$/gm, "$1 $2 = $3;\n__exportLive(\"$2\", () => $2);")
+    .replace(/^[ \t]*export\s+default\s+async\s+function\s+([A-Za-z_$][\w$]*)\s*\(/gm, "async function $1(")
+    .replace(/^[ \t]*export\s+default\s+function\s+([A-Za-z_$][\w$]*)\s*\(/gm, "function $1(")
+    .replace(/^[ \t]*export\s+default\s+class\s+([A-Za-z_$][\w$]*)\b/gm, "class $1")
     .replace(/^[ \t]*export\s+async\s+function\s+([A-Za-z_$][\w$]*)\s*\(/gm, "async function $1(")
     .replace(/^[ \t]*export\s+function\s+([A-Za-z_$][\w$]*)\s*\(/gm, "function $1(")
     .replace(/^[ \t]*export\s+class\s+([A-Za-z_$][\w$]*)\b/gm, "class $1")
@@ -132,8 +136,12 @@ function prepareEsmSource(source: string): string {
       return rewriteNamedExport(clause);
     })
     .replace(/\bimport\.meta\b/g, "__context.importMeta");
-  return declarationExports.length > 0
-    ? `${prepared}\n${declarationExports.map((name) => `__exportConst("${name}", ${name});`).join("\n")}`
+  const postExports = [
+    ...declarationExports.map((name) => `__exportConst("${name}", ${name});`),
+    ...(defaultDeclarationExport ? [`__exportConst("default", ${defaultDeclarationExport});`] : [])
+  ];
+  return postExports.length > 0
+    ? `${prepared}\n${postExports.join("\n")}`
     : prepared;
 }
 
@@ -144,6 +152,11 @@ function collectDeclarationExports(source: string): string[] {
     if (match[1]) names.add(match[1]);
   }
   return [...names];
+}
+
+function collectDefaultDeclarationExport(source: string): string | null {
+  const match = source.match(/^[ \t]*export\s+default\s+(?:async\s+)?(?:function|class)\s+([A-Za-z_$][\w$]*)\b/m);
+  return match?.[1] ?? null;
 }
 
 function rewriteDefaultAndNamedImport(defaultName: string, named: string, specifier: string): string {

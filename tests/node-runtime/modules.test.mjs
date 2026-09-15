@@ -142,6 +142,32 @@ runtime.registerMany({
       export const observed = counter.count;
     `
   },
+  "/workspace/source-default-function.mjs": {
+    kind: "esm-source",
+    source: `
+      export default function label(value) {
+        return 'label:' + value;
+      }
+    `
+  },
+  "/workspace/source-default-class.mjs": {
+    kind: "esm-source",
+    source: `
+      export default class Factory {
+        label() {
+          return 'factory';
+        }
+      }
+    `
+  },
+  "/workspace/source-default-declaration-consumer.mjs": {
+    kind: "esm-source",
+    source: `
+      import label from './source-default-function.mjs';
+      import Factory from './source-default-class.mjs';
+      export const rendered = label('ok') + ':' + new Factory().label();
+    `
+  },
   "/workspace/node_modules/pkg-fixture/main.mjs": {
     kind: "esm",
     factory(ctx) {
@@ -256,6 +282,9 @@ assert.equal(cjsInterop.rendered, "value:ok");
 
 const sourceLive = await runtime.importModule("./source-live-binding-consumer.mjs", "/workspace/index.mjs");
 assert.equal(sourceLive.observed, 1);
+
+const sourceDefaultDeclaration = await runtime.importModule("./source-default-declaration-consumer.mjs", "/workspace/index.mjs");
+assert.equal(sourceDefaultDeclaration.rendered, "label:ok:factory");
 
 const pkg = await runtime.importModule("pkg-fixture", "/workspace/index.mjs");
 assert.equal(pkg.kind, "package-main");
