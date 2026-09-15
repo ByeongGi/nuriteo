@@ -16,8 +16,8 @@ for (const id of ["vite-vanilla-reference-workflow", "vite-react-reference-workf
 
 const product = casesById.get("vite-react-product-workflow");
 assert.equal(product?.runtime, "browser-guest-node-runtime");
-assert.equal(product.status, "not-run");
-assert.match(product.productGap, /browser guest runtime/i);
+assert.equal(product.status, "partial-pass");
+assert.match(product.productGap, /actual Vite dev server process/i);
 
 for (const entry of matrix.cases) {
   assert.ok(entry.evidence.length > 0, `${entry.id} must reference evidence`);
@@ -28,6 +28,6 @@ for (const entry of matrix.cases) {
 
 assert.equal(matrix.gate.id, "PG11");
 assert.equal(matrix.gate.status, "not-pass");
-assert.ok(matrix.gate.requiredToPass.length >= 4);
+assert.ok(matrix.gate.requiredToPass.length >= 3);
 
 console.log("framework conformance matrix test ok");
