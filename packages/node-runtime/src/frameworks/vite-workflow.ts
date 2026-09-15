@@ -100,6 +100,21 @@ export interface ViteProductCliServerRegistration {
 export interface ViteProductCliTransformRegistration {
   mode: "browser-esm";
   source: "vite-cli";
+  transformRequest?: ViteProductCliTransformRequest;
+}
+
+export type ViteProductCliTransformRequest = (
+  request: ViteProductCliTransformRequestInput
+) => ViteProductCliTransformResult | string | Promise<ViteProductCliTransformResult | string>;
+
+export interface ViteProductCliTransformRequestInput {
+  path: string;
+  source: string;
+}
+
+export interface ViteProductCliTransformResult {
+  code: string;
+  map?: unknown;
 }
 
 export interface ViteProductDevServerSnapshot {
@@ -226,6 +241,7 @@ export class ViteProductWorkflow {
   #devServerSource: ViteProductDevServerSource = "adapter";
   #devServerCliEntrypoint: string | null = null;
   #moduleTransformSource: ViteProductModuleTransformSource = "adapter";
+  #cliTransformRequest: ViteProductCliTransformRequest | null = null;
   #buildCommand: string | null = null;
   #buildCliEntrypoint: string | null = null;
   #requests: string[] = [];
@@ -389,9 +405,9 @@ export class ViteProductWorkflow {
     this.#devServerSource = "adapter";
     this.#devServerCommand = "vite --host 127.0.0.1";
     this.#devServerCliEntrypoint = this.#resolveBin("vite");
-    this.#listener = this.network.listen(this.#port, (request) => {
+    this.#listener = this.network.listen(this.#port, async (request) => {
       this.#requests.push(request.path);
-      const preview = this.preview(request.path);
+      const preview = await this.#previewRequest(request.path);
       return toRuntimeHttpResponse(preview);
     });
     this.#devProcess = spawnRuntimeChild({
@@ -415,6 +431,7 @@ export class ViteProductWorkflow {
     this.#devServerCommand = command;
     this.#devServerCliEntrypoint = cliEntrypoint;
     this.#moduleTransformSource = "adapter";
+    this.#cliTransformRequest = null;
     return this.#snapshot();
   }
 
@@ -429,6 +446,7 @@ export class ViteProductWorkflow {
     if (!cliExecution.transformRegistrations.some((item) => item.source === "vite-cli")) {
       throw new Error("ERR_VITE_CLI_TRANSFORM_REGISTRATION_MISSING");
     }
+    this.#cliTransformRequest = latestTransformRequest(cliExecution.transformRegistrations);
     this.#port = registration.port;
     this.startDevServer();
     this.#devServerSource = "cli-execution";
@@ -466,6 +484,18 @@ export class ViteProductWorkflow {
       headers: { "content-type": "text/html; charset=utf-8" },
       body: renderHtml(this.#readLabel(), this.#state.count)
     };
+  }
+
+  async #previewRequest(path = "/"): Promise<ViteProductPreviewResult> {
+    if (!this.#running) return { statusCode: 503, body: "dev server unavailable" };
+    const requestPath = path.split("?")[0] || "/";
+    if (requestPath === "/@vite/client") return this.preview(requestPath);
+    if (requestPath !== "/" && requestPath !== "/index.html") {
+      const source = await this.#readServedSourceAsync(requestPath);
+      if (source) return source;
+      return { statusCode: 404, body: "Not found" };
+    }
+    return this.preview(requestPath);
   }
 
   async fetch(input: string | URL): Promise<Response> {
@@ -606,6 +636,24 @@ export class ViteProductWorkflow {
     };
   }
 
+  async #readServedSourceAsync(requestPath: string): Promise<ViteProductPreviewResult | null> {
+    const workspacePath = join(this.projectRoot, requestPath);
+    if (!this.workspace.exists(workspacePath)) return null;
+    const body = this.workspace.readText(workspacePath);
+    return {
+      statusCode: 200,
+      headers: { "content-type": contentTypeForPath(requestPath) },
+      body: await this.#transformServedSource(requestPath, body)
+    };
+  }
+
+  async #transformServedSource(requestPath: string, source: string): Promise<string> {
+    if (this.#moduleTransformSource !== "vite-cli") return source;
+    if (!this.#cliTransformRequest) return transformViteModuleSource(requestPath, source);
+    const transformed = await this.#cliTransformRequest({ path: requestPath, source });
+    return typeof transformed === "string" ? transformed : transformed.code;
+  }
+
   #installVitePackage(): void {
     if (this.vitePackageArtifact) {
       this.#installVitePackageArtifact(this.vitePackageArtifact);
@@ -656,7 +704,7 @@ export class ViteProductWorkflow {
     );
     this.workspace.writeText(
       join(this.projectRoot, "node_modules/vite/dist/node/transform.js"),
-      "export function registerTransform() {\n  global.__viteRegisterTransform?.({ mode: 'browser-esm', source: 'vite-cli' });\n}\n"
+      "export function registerTransform() {\n  global.__viteRegisterTransform?.({ mode: 'browser-esm', source: 'vite-cli', transformRequest(request) { return { code: `// transformed by vite-cli service:${request.path}\\n${request.source}` }; } });\n}\n"
     );
     this.workspace.symlink(join(this.projectRoot, "node_modules/vite/bin/vite.js"), join(this.projectRoot, "node_modules/.bin/vite"));
   }
@@ -1006,4 +1054,12 @@ function assertViteBuildCommand(command: string): void {
 
 function commandArgs(command: string): string[] {
   return command.split(/\s+/).slice(1).filter(Boolean);
+}
+
+function latestTransformRequest(registrations: ViteProductCliTransformRegistration[]): ViteProductCliTransformRequest | null {
+  for (let index = registrations.length - 1; index >= 0; index -= 1) {
+    const registration = registrations[index];
+    if (registration?.transformRequest) return registration.transformRequest;
+  }
+  return null;
 }

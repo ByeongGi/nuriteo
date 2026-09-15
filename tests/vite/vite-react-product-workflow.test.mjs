@@ -106,12 +106,13 @@ for (const manager of ["npm", "pnpm"]) {
       transport: "loopback"
     }
   ]);
-  assert.deepEqual(cliExecution.transformRegistrations, [
+  assert.deepEqual(cliExecution.transformRegistrations.map(({ mode, source }) => ({ mode, source })), [
     {
       mode: "browser-esm",
       source: "vite-cli"
     }
   ]);
+  assert.equal(typeof cliExecution.transformRegistrations[0].transformRequest, "function");
   assert.deepEqual(cliExecution.buildRegistrations, []);
   const cliBuildExecution = await workflow.executeRealCli(["build"]);
   assert.deepEqual(cliBuildExecution.serverRegistrations, []);
@@ -143,7 +144,7 @@ for (const manager of ["npm", "pnpm"]) {
   assert.equal(cliPreview.status, 200);
   assert.match(await cliPreview.text(), /alpha:1/);
   const cliEntryModule = await cliWorkflow.fetch(`http://127.0.0.1:5180/${entryPathForTemplate(template)}`);
-  assert.match(await cliEntryModule.text(), /transformed by vite-cli/);
+  assert.match(await cliEntryModule.text(), /transformed by vite-cli service:\/src\/main/);
   const started = workflow.startDevServerFromPackageScript();
   assert.equal(started.running, true);
   assert.equal(started.port, 5173);
@@ -239,6 +240,7 @@ for (const manager of ["npm", "pnpm"]) {
 
 const artifactWorkflow = new ViteProductWorkflow({
   manager: "npm",
+  port: 5299,
   vitePackageArtifact: {
     version: "9.0.0-artifact",
     mounts: [
@@ -268,7 +270,7 @@ const artifactWorkflow = new ViteProductWorkflow({
       },
       {
         path: "dist/node/transform.mjs",
-        data: "export function registerTransform() {\n  global.__viteRegisterTransform?.({ mode: 'browser-esm', source: 'vite-cli' });\n}\n"
+        data: "export function registerTransform() {\n  global.__viteRegisterTransform?.({ mode: 'browser-esm', source: 'vite-cli', transformRequest(request) { return { code: `// artifact transform:${request.path}\\n${request.source}` }; } });\n}\n"
       }
     ]
   }
@@ -307,12 +309,17 @@ assert.deepEqual(artifactCliExecution.hmrRegistrations, [
     transport: "loopback"
   }
 ]);
-assert.deepEqual(artifactCliExecution.transformRegistrations, [
+assert.deepEqual(artifactCliExecution.transformRegistrations.map(({ mode, source }) => ({ mode, source })), [
   {
     mode: "browser-esm",
     source: "vite-cli"
   }
 ]);
+assert.equal(typeof artifactCliExecution.transformRegistrations[0].transformRequest, "function");
+const artifactStarted = await artifactWorkflow.startDevServerFromCliExecution();
+assert.equal(artifactStarted.moduleTransform, "vite-cli");
+const artifactModule = await artifactWorkflow.fetch("http://127.0.0.1:5299/src/main.jsx");
+assert.match(await artifactModule.text(), /artifact transform:\/src\/main\.jsx/);
 const artifactBuildExecution = await artifactWorkflow.executeRealCli(["build"]);
 assert.deepEqual(artifactBuildExecution.buildRegistrations, [
   {
