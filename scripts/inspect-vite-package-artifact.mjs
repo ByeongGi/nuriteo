@@ -123,6 +123,8 @@ async function runExecutionSmoke(vitePackageArtifact, dependencyArtifacts, optio
     return {
       env: { NAPI_RS_FORCE_WASI: "error" },
       exitCode: null,
+      asyncBindingReadinessBlocker: null,
+      asyncModuleBlocker: null,
       nativeBindingBlocker: null,
       registrations: null,
       runtimeBuiltinBlocker: null,
@@ -164,6 +166,7 @@ async function runExecutionSmoke(vitePackageArtifact, dependencyArtifacts, optio
       isolationBlocker: null,
       registrations: null,
       runtimeBuiltinBlocker: null,
+      asyncBindingReadinessBlocker: classifyAsyncBindingReadinessBlocker(message),
       asyncModuleBlocker: classifyAsyncModuleBlocker(message),
       timeoutBlocker: classifyTimeoutBlocker(message),
       wasiWorkerBootBlocker: classifyWasiWorkerBootBlocker(message, dependencyArtifacts, options.executionIsolation),
@@ -187,6 +190,7 @@ async function runExecutionSmoke(vitePackageArtifact, dependencyArtifacts, optio
       transform: result.transformRegistrations.length
     },
     runtimeBuiltinBlocker: classifyRuntimeBuiltinBlocker(result.stderr),
+    asyncBindingReadinessBlocker: classifyAsyncBindingReadinessBlocker(result.stderr),
     asyncModuleBlocker: classifyAsyncModuleBlocker(result.stderr),
     timeoutBlocker: classifyTimeoutBlocker(result.stderr),
     wasiWorkerBootBlocker: classifyWasiWorkerBootBlocker(result.stderr, dependencyArtifacts, options.executionIsolation),
@@ -352,6 +356,13 @@ function classifyAsyncModuleBlocker(stderr) {
   return {
     module: match[1],
     reason: "sync-require-of-async-esm"
+  };
+}
+
+function classifyAsyncBindingReadinessBlocker(stderr) {
+  if (!stderr.includes("Class extends value undefined is not a constructor or null")) return null;
+  return {
+    reason: "async-binding-namespace-not-ready"
   };
 }
 

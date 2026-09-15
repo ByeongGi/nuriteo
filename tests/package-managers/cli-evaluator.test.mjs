@@ -816,6 +816,43 @@ assert.equal(fileFetchResult.stderr, "");
 assert.equal(fileFetchResult.exitCode, 0);
 assert.equal(fileFetchResult.stdout, "true:4:255");
 
+const asyncRequireBridgeWorkspace = new MemoryPackageManagerWorkspace([
+  {
+    path: "/workspace/async-require/package/bin/cli.cjs",
+    data: `
+      const binding = require('../lib/binding.mjs');
+      setTimeout(() => {
+        process.stdout.write(String(binding.label));
+      }, 0);
+    `
+  },
+  {
+    path: "/workspace/async-require/package/lib/binding.mjs",
+    data: "const value = await Promise.resolve('async-binding-ready');\nexport const label = value;\n"
+  },
+  {
+    path: "/workspace/async-require/package/package.json",
+    data: JSON.stringify({ name: "async-require", version: "1.0.0", bin: { "async-require": "bin/cli.cjs" } })
+  }
+]);
+const asyncRequireBridgeResult = await createAsyncCliModuleEvaluator({
+  root: "/workspace",
+  reader: asyncRequireBridgeWorkspace,
+  settleTicks: 2,
+  settleTimeoutMs: 10
+})({
+  entry: {
+    name: "async-require",
+    version: "1.0.0",
+    entry: "/workspace/async-require/package/bin/cli.cjs"
+  },
+  args: [],
+  cwd: "/workspace/project"
+});
+assert.equal(asyncRequireBridgeResult.stderr, "");
+assert.equal(asyncRequireBridgeResult.exitCode, 0);
+assert.equal(asyncRequireBridgeResult.stdout, "async-binding-ready");
+
 const pendingCliWorkspace = new MemoryPackageManagerWorkspace([
   {
     path: "/workspace/pending/package/bin/pending.mjs",

@@ -108,7 +108,9 @@ function isUnsupportedDiagnostic(diagnostic: RuntimeDiagnostic): boolean {
     || text.includes("native addon")
     || text.includes("docker")
     || text.includes("sync-require-of-async-esm")
+    || text.includes("async-binding-namespace-not-ready")
     || text.includes("err_require_async_module")
+    || text.includes("class extends value undefined")
     || text.includes("tcp db")
     || text.includes("tcp database");
 }

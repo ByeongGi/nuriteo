@@ -140,6 +140,7 @@ export type ViteProductPackageSource = "stub" | "mounted-artifact";
 
 export interface ViteProductCliExecutionResult extends CliRunResult {
   args: string[];
+  asyncBindingReadinessBlocker: ViteProductAsyncBindingReadinessBlocker | null;
   asyncModuleBlocker: ViteProductAsyncModuleBlocker | null;
   buildRegistrations: ViteProductCliBuildRegistration[];
   cwd: string;
@@ -152,6 +153,10 @@ export interface ViteProductCliExecutionResult extends CliRunResult {
 export interface ViteProductAsyncModuleBlocker {
   module: string;
   reason: "sync-require-of-async-esm";
+}
+
+export interface ViteProductAsyncBindingReadinessBlocker {
+  reason: "async-binding-namespace-not-ready";
 }
 
 export type ViteProductCliExecutionMode = "async-cli-module-evaluation" | "isolated-snapshot-cli-module-evaluation" | "worker-backed-cli-module-evaluation";
@@ -516,6 +521,7 @@ export class ViteProductWorkflow {
     if (isolation === "shared" && isForcedWasiEnv(env) && this.#hasDependencyArtifact("@napi-rs/wasm-runtime")) {
       return {
         args,
+        asyncBindingReadinessBlocker: null,
         asyncModuleBlocker: null,
         buildRegistrations,
         cwd: this.projectRoot,
@@ -532,6 +538,7 @@ export class ViteProductWorkflow {
     if (isolation === "shared" && this.#hasDependencyArtifact("@napi-rs/wasm-runtime")) {
       return {
         args,
+        asyncBindingReadinessBlocker: null,
         asyncModuleBlocker: null,
         buildRegistrations,
         cwd: this.projectRoot,
@@ -617,6 +624,7 @@ export class ViteProductWorkflow {
     return {
       ...result,
       args,
+      asyncBindingReadinessBlocker: classifyAsyncBindingReadinessBlocker(result.stderr),
       asyncModuleBlocker: classifyAsyncModuleBlocker(result.stderr),
       buildRegistrations,
       cwd: this.projectRoot,
@@ -1330,6 +1338,13 @@ function classifyAsyncModuleBlocker(stderr: string): ViteProductAsyncModuleBlock
   return {
     module: match[1],
     reason: "sync-require-of-async-esm"
+  };
+}
+
+function classifyAsyncBindingReadinessBlocker(stderr: string): ViteProductAsyncBindingReadinessBlocker | null {
+  if (!stderr.includes("Class extends value undefined is not a constructor or null")) return null;
+  return {
+    reason: "async-binding-namespace-not-ready"
   };
 }
 

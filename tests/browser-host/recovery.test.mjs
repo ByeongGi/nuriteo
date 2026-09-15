@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 
-import { createMemoryOpfs, createSnapshotStore, createStorageLease, HostProcessTable } from "../../packages/browser-host/src/index.ts";
+import {
+  createMemoryOpfs,
+  createRuntimeRecoveryPlan,
+  createSnapshotStore,
+  createStorageLease,
+  HostProcessTable
+} from "../../packages/browser-host/src/index.ts";
 
 const opfs = createMemoryOpfs();
 const store = createSnapshotStore({
@@ -68,5 +74,19 @@ assert.equal(failed.resourcesReleased, true);
 table.teardown();
 table.teardown();
 assert.equal(workers[0].terminated, true);
+
+const asyncBindingRecovery = createRuntimeRecoveryPlan({
+  diagnostics: [
+    {
+      code: "ERR_VITE_ASYNC_BINDING_READINESS",
+      severity: "error",
+      message: "async-binding-namespace-not-ready: Class extends value undefined is not a constructor or null",
+      source: "framework:vite"
+    }
+  ]
+});
+assert.equal(asyncBindingRecovery.blocked, true);
+assert.equal(asyncBindingRecovery.supportBundleRecommended, true);
+assert.deepEqual(asyncBindingRecovery.actions.map((action) => action.kind), ["open-docs", "export-support-bundle"]);
 
 console.log("browser host recovery test ok");

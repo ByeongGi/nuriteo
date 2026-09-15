@@ -75,6 +75,7 @@ export interface PackageExportConditionMap {
 }
 
 export interface ModuleRuntimeOptions {
+  allowAsyncRequireEsm?: boolean;
   realpaths?: Record<string, string>;
   packages?: Record<string, PackageManifest>;
   packageRoots?: Record<string, PackageManifest>;

@@ -25,6 +25,7 @@ export function createWorkspaceModuleRuntime(options: WorkspaceModuleRuntimeOpti
     ...(options.packageRoots || {})
   };
   const runtime = createModuleRuntime({
+    ...(options.allowAsyncRequireEsm !== undefined ? { allowAsyncRequireEsm: options.allowAsyncRequireEsm } : {}),
     ...(options.builtins ? { builtins: options.builtins } : {}),
     ...(options.globals ? { globals: options.globals } : {}),
     ...(options.imports ? { imports: options.imports } : {}),

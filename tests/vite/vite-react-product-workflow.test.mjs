@@ -511,11 +511,41 @@ const asyncBindingWorkflow = new ViteProductWorkflow({
 });
 asyncBindingWorkflow.install();
 const asyncBindingExecution = await asyncBindingWorkflow.executeRealCli(["build"]);
-assert.equal(asyncBindingExecution.exitCode, 1);
-assert.deepEqual(asyncBindingExecution.asyncModuleBlocker, {
-  module: "/workspace/project/node_modules/vite/dist/node/async-binding.mjs",
-  reason: "sync-require-of-async-esm"
+assert.equal(asyncBindingExecution.exitCode, 0);
+assert.equal(asyncBindingExecution.asyncBindingReadinessBlocker, null);
+assert.equal(asyncBindingExecution.asyncModuleBlocker, null);
+
+const asyncBindingReadinessWorkflow = new ViteProductWorkflow({
+  manager: "pnpm",
+  vitePackageArtifact: {
+    version: "9.0.0-async-binding-readiness",
+    mounts: [
+      {
+        path: "package.json",
+        data: JSON.stringify({ name: "vite", version: "9.0.0-async-binding-readiness", type: "module", bin: { vite: "bin/vite.mjs" } })
+      },
+      {
+        path: "bin/vite.mjs",
+        data: "import '../dist/node/cli.mjs';\n"
+      },
+      {
+        path: "dist/node/cli.mjs",
+        data: "import { createRequire } from 'node:module';\nconst require = createRequire(import.meta.url);\nconst binding = require('./async-binding.mjs');\nclass Derived extends binding.Base {}\nvoid Derived;\n"
+      },
+      {
+        path: "dist/node/async-binding.mjs",
+        data: "const Base = await Promise.resolve(class Base {});\nexport { Base };\n"
+      }
+    ]
+  }
 });
+asyncBindingReadinessWorkflow.install();
+const asyncBindingReadinessExecution = await asyncBindingReadinessWorkflow.executeRealCli(["build"]);
+assert.equal(asyncBindingReadinessExecution.exitCode, 1);
+assert.deepEqual(asyncBindingReadinessExecution.asyncBindingReadinessBlocker, {
+  reason: "async-binding-namespace-not-ready"
+});
+assert.equal(asyncBindingReadinessExecution.asyncModuleBlocker, null);
 
 const dependencyArtifactWorkflow = new ViteProductWorkflow({
   manager: "pnpm",

@@ -11,6 +11,7 @@ export class ModuleRuntime {
   resolver: ModuleResolver;
   builtins: ModuleRuntimeOptions["builtins"] | undefined;
   globals: Record<string, RuntimeValue>;
+  allowAsyncRequireEsm: boolean;
 
   constructor(options: ModuleRuntimeOptions = {}) {
     this.definitions = new Map();
@@ -25,6 +26,7 @@ export class ModuleRuntime {
     this.resolver = new ModuleResolver(resolverOptions);
     this.builtins = options.builtins;
     this.globals = { ...(options.globals || {}) };
+    this.allowAsyncRequireEsm = options.allowAsyncRequireEsm === true;
   }
 
   register(url: string, definition: ModuleDefinition): ModuleRuntime {

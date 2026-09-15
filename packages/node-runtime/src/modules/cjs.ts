@@ -12,7 +12,16 @@ export function evaluateCjs(runtime: ModuleRuntime, url: string): RuntimeValue {
     throw new Error(`ERR_REQUIRE_ESM_OR_MISSING: ${canonicalUrl}`);
   }
   if (definition.kind === "esm" || definition.kind === "esm-source") {
-    return evaluateEsmSync(runtime, canonicalUrl);
+    try {
+      return evaluateEsmSync(runtime, canonicalUrl);
+    } catch (error) {
+      if (!runtime.allowAsyncRequireEsm || !isRequireAsyncModuleError(error)) throw error;
+      runtime.cache.esm.delete(canonicalUrl);
+      const pending = runtime.importModule(canonicalUrl);
+      const record = runtime.cache.esm.get(canonicalUrl);
+      pending.catch(() => undefined);
+      return record?.namespace || {};
+    }
   }
 
   const module: RuntimeModule = {
@@ -42,6 +51,10 @@ export function evaluateCjs(runtime: ModuleRuntime, url: string): RuntimeValue {
   });
   module.loaded = true;
   return module.exports;
+}
+
+function isRequireAsyncModuleError(error: unknown): boolean {
+  return error instanceof Error && error.message.includes("ERR_REQUIRE_ASYNC_MODULE");
 }
 
 function createCjsRequire(runtime: ModuleRuntime, filename: string, dirname: string): CjsContext["require"] {

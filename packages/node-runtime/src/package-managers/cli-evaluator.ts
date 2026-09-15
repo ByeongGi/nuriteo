@@ -321,6 +321,7 @@ function startCliModuleEvaluation(
     return runtime;
   });
   runtime = createWorkspaceModuleRuntime({
+    allowAsyncRequireEsm: true,
     root: options.root || "/workspace",
     reader: options.reader,
     builtins: createBuiltinLoader({ childProcess, fs, module, process, workerThreads }),
