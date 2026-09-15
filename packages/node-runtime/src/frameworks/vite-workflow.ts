@@ -3,11 +3,11 @@ import { spawnRuntimeChild, type RuntimeChildProcess } from "../child-process.ts
 import { createLoopbackNetwork, type LoopbackNetwork, type RuntimeHttpResponse } from "../net/index.ts";
 import { MemoryPackageManagerWorkspace, type PackageManagerWorkspaceMount } from "../package-managers/workspace.ts";
 
-export type ViteReactPackageManager = "npm" | "pnpm";
+export type ViteProductPackageManager = "npm" | "pnpm";
 export type ViteProductTemplate = "react" | "vue-runtime" | "svelte";
 
-export interface ViteReactProductWorkflowOptions {
-  manager: ViteReactPackageManager;
+export interface ViteProductWorkflowOptions {
+  manager: ViteProductPackageManager;
   template?: ViteProductTemplate;
   projectId?: string;
   projectRoot?: string;
@@ -16,26 +16,26 @@ export interface ViteReactProductWorkflowOptions {
   port?: number;
 }
 
-export interface ViteReactProductWorkflowResult {
+export interface ViteProductWorkflowResult {
   runtime: "browser-guest-node-runtime";
-  manager: ViteReactPackageManager;
+  manager: ViteProductPackageManager;
   template: ViteProductTemplate;
   projectId: string;
-  install: ViteReactInstallResult;
-  devServer: ViteReactDevServerSnapshot;
-  preview: ViteReactPreviewResult;
-  hmr: ViteReactHmrResult;
-  build: ViteReactBuildResult;
-  reloadRecovery: ViteReactReloadRecoveryResult;
+  install: ViteProductInstallResult;
+  devServer: ViteProductDevServerSnapshot;
+  preview: ViteProductPreviewResult;
+  hmr: ViteProductHmrResult;
+  build: ViteProductBuildResult;
+  reloadRecovery: ViteProductReloadRecoveryResult;
 }
 
-export interface ViteReactInstallResult {
+export interface ViteProductInstallResult {
   installed: boolean;
   lockfile: string;
   packages: string[];
 }
 
-export interface ViteReactDevServerSnapshot {
+export interface ViteProductDevServerSnapshot {
   port: number;
   running: boolean;
   restartCount: number;
@@ -48,7 +48,7 @@ export interface ViteReactDevServerSnapshot {
   processExited: boolean;
 }
 
-export interface ViteReactHmrUpdate {
+export interface ViteProductHmrUpdate {
   type: "update";
   path: string;
   label: string;
@@ -61,32 +61,32 @@ export interface ViteProductHmrSocket {
   sendMessage?: (payload: unknown) => void;
 }
 
-export interface ViteReactPreviewResult {
+export interface ViteProductPreviewResult {
   statusCode: number;
   headers?: Record<string, string>;
   body: string;
 }
 
-export interface ViteReactHmrResult {
+export interface ViteProductHmrResult {
   before: string;
   after: string;
   statePreserved: boolean;
 }
 
-export interface ViteReactBuildResult {
+export interface ViteProductBuildResult {
   files: string[];
   distSmoke: string;
   command: string | null;
   cliEntrypoint: string | null;
 }
 
-export interface ViteReactReloadRecoveryResult {
+export interface ViteProductReloadRecoveryResult {
   restarted: boolean;
   previewAfterRestart: string;
 }
 
-export class ViteReactProductWorkflow {
-  readonly manager: ViteReactPackageManager;
+export class ViteProductWorkflow {
+  readonly manager: ViteProductPackageManager;
   readonly template: ViteProductTemplate;
   readonly projectId: string;
   readonly projectRoot: string;
@@ -104,10 +104,10 @@ export class ViteReactProductWorkflow {
   #buildCommand: string | null = null;
   #buildCliEntrypoint: string | null = null;
   #requests: string[] = [];
-  #hmrUpdates: ViteReactHmrUpdate[] = [];
+  #hmrUpdates: ViteProductHmrUpdate[] = [];
   #hmrSockets = new Set<ViteProductHmrSocket>();
 
-  constructor(options: ViteReactProductWorkflowOptions) {
+  constructor(options: ViteProductWorkflowOptions) {
     this.manager = options.manager;
     this.template = options.template || "react";
     this.projectId = options.projectId || `vite-${this.template}-${options.manager}`;
@@ -117,7 +117,7 @@ export class ViteReactProductWorkflow {
     this.workspace = new MemoryPackageManagerWorkspace(createViteMounts(this.projectRoot, this.template, options.initialLabel || "alpha"));
   }
 
-  run(): ViteReactProductWorkflowResult {
+  run(): ViteProductWorkflowResult {
     const install = this.install();
     const devServer = this.startDevServerFromPackageScript();
     const preview = this.preview("/");
@@ -138,7 +138,7 @@ export class ViteReactProductWorkflow {
     };
   }
 
-  install(): ViteReactInstallResult {
+  install(): ViteProductInstallResult {
     const packages = packagesForTemplate(this.template);
     for (const pkg of packages) {
       this.workspace.writeText(join(this.projectRoot, "node_modules", pkg, "package.json"), JSON.stringify({ name: pkg }));
@@ -149,7 +149,7 @@ export class ViteReactProductWorkflow {
     return { installed: true, lockfile, packages };
   }
 
-  startDevServer(): ViteReactDevServerSnapshot {
+  startDevServer(): ViteProductDevServerSnapshot {
     if (this.#listener) return this.#snapshot();
     this.#devServerSource = "adapter";
     this.#devServerCommand = "vite --host 127.0.0.1";
@@ -171,7 +171,7 @@ export class ViteReactProductWorkflow {
     return this.#snapshot();
   }
 
-  startDevServerFromPackageScript(name = "dev"): ViteReactDevServerSnapshot {
+  startDevServerFromPackageScript(name = "dev"): ViteProductDevServerSnapshot {
     const command = this.#readScript(name);
     assertViteDevCommand(command);
     const cliEntrypoint = this.#resolveCommandEntrypoint(command);
@@ -182,7 +182,7 @@ export class ViteReactProductWorkflow {
     return this.#snapshot();
   }
 
-  stopDevServer(): ViteReactDevServerSnapshot {
+  stopDevServer(): ViteProductDevServerSnapshot {
     this.#listener?.close();
     this.#listener = null;
     this.#running = false;
@@ -190,7 +190,7 @@ export class ViteReactProductWorkflow {
     return this.#snapshot();
   }
 
-  preview(path = "/"): ViteReactPreviewResult {
+  preview(path = "/"): ViteProductPreviewResult {
     if (!this.#running) return { statusCode: 503, body: "dev server unavailable" };
     const requestPath = path.split("?")[0] || "/";
     if (requestPath === "/@vite/client") {
@@ -220,11 +220,11 @@ export class ViteReactProductWorkflow {
     return new Response(response.body || "", init);
   }
 
-  editMessage(label: string): ViteReactHmrResult {
+  editMessage(label: string): ViteProductHmrResult {
     const before = this.preview("/").body;
     this.workspace.writeText(join(this.projectRoot, "src/message.js"), `export const label = "${label}";\n`);
     const after = this.preview("/").body;
-    const update = { type: "update", path: "/src/message.js", label } satisfies ViteReactHmrUpdate;
+    const update = { type: "update", path: "/src/message.js", label } satisfies ViteProductHmrUpdate;
     this.#hmrUpdates.push(update);
     this.#broadcastHmr(update);
     return {
@@ -234,7 +234,7 @@ export class ViteReactProductWorkflow {
     };
   }
 
-  hmrUpdates(): ViteReactHmrUpdate[] {
+  hmrUpdates(): ViteProductHmrUpdate[] {
     return [...this.#hmrUpdates];
   }
 
@@ -252,7 +252,7 @@ export class ViteReactProductWorkflow {
     return socket;
   }
 
-  build(): ViteReactBuildResult {
+  build(): ViteProductBuildResult {
     const html = renderHtml(this.#readLabel(), this.#state.count);
     this.workspace.writeText(join(this.projectRoot, "dist/index.html"), html);
     this.workspace.writeText(join(this.projectRoot, "dist/assets/index.js"), `document.querySelector("#app").textContent = "${this.#readLabel()}:${this.#state.count}";\n`);
@@ -264,7 +264,7 @@ export class ViteReactProductWorkflow {
     };
   }
 
-  buildFromPackageScript(name = "build"): ViteReactBuildResult {
+  buildFromPackageScript(name = "build"): ViteProductBuildResult {
     const command = this.#readScript(name);
     assertViteBuildCommand(command);
     this.#buildCommand = command;
@@ -272,7 +272,7 @@ export class ViteReactProductWorkflow {
     return this.build();
   }
 
-  restart(): ViteReactReloadRecoveryResult {
+  restart(): ViteProductReloadRecoveryResult {
     const command = this.#devServerCommand;
     const source = this.#devServerSource;
     const cliEntrypoint = this.#devServerCliEntrypoint;
@@ -288,7 +288,7 @@ export class ViteReactProductWorkflow {
     };
   }
 
-  #snapshot(): ViteReactDevServerSnapshot {
+  #snapshot(): ViteProductDevServerSnapshot {
     return {
       port: this.#port,
       running: this.#running,
@@ -315,7 +315,7 @@ export class ViteReactProductWorkflow {
     return command;
   }
 
-  #readServedSource(requestPath: string): ViteReactPreviewResult | null {
+  #readServedSource(requestPath: string): ViteProductPreviewResult | null {
     const workspacePath = join(this.projectRoot, requestPath);
     if (!this.workspace.exists(workspacePath)) return null;
     return {
@@ -344,22 +344,33 @@ export class ViteReactProductWorkflow {
     return this.workspace.readlink(binPath);
   }
 
-  #broadcastHmr(payload: ViteReactHmrUpdate): void {
+  #broadcastHmr(payload: ViteProductHmrUpdate): void {
     for (const socket of this.#hmrSockets) {
       socket.onmessage?.({ data: JSON.stringify(payload) });
     }
   }
 }
 
-export function runViteReactProductWorkflow(options: ViteReactProductWorkflowOptions): ViteReactProductWorkflowResult {
-  return new ViteReactProductWorkflow(options).run();
+export function runViteProductWorkflow(options: ViteProductWorkflowOptions): ViteProductWorkflowResult {
+  return new ViteProductWorkflow(options).run();
 }
 
-export const ViteProductWorkflow = ViteReactProductWorkflow;
+export const ViteReactProductWorkflow = ViteProductWorkflow;
 
-export function runViteProductWorkflow(options: ViteReactProductWorkflowOptions): ViteReactProductWorkflowResult {
-  return new ViteReactProductWorkflow(options).run();
+export function runViteReactProductWorkflow(options: ViteProductWorkflowOptions): ViteProductWorkflowResult {
+  return runViteProductWorkflow({ ...options, template: options.template || "react" });
 }
+
+export type ViteReactPackageManager = ViteProductPackageManager;
+export type ViteReactProductWorkflowOptions = ViteProductWorkflowOptions;
+export type ViteReactProductWorkflowResult = ViteProductWorkflowResult;
+export type ViteReactInstallResult = ViteProductInstallResult;
+export type ViteReactDevServerSnapshot = ViteProductDevServerSnapshot;
+export type ViteReactHmrUpdate = ViteProductHmrUpdate;
+export type ViteReactPreviewResult = ViteProductPreviewResult;
+export type ViteReactHmrResult = ViteProductHmrResult;
+export type ViteReactBuildResult = ViteProductBuildResult;
+export type ViteReactReloadRecoveryResult = ViteProductReloadRecoveryResult;
 
 function createViteMounts(projectRoot: string, template: ViteProductTemplate, label: string): PackageManagerWorkspaceMount[] {
   const entry = template === "react" ? "/src/main.jsx" : "/src/main.js";
@@ -399,7 +410,7 @@ function createViteMounts(projectRoot: string, template: ViteProductTemplate, la
   ];
 }
 
-function createLockfile(manager: ViteReactPackageManager, packages: string[]): string {
+function createLockfile(manager: ViteProductPackageManager, packages: string[]): string {
   if (manager === "npm") {
     return JSON.stringify({
       lockfileVersion: 3,
@@ -467,7 +478,7 @@ function renderHtml(label: string, count: number): string {
   return `<!doctype html><div id="app">${label}:${count}</div>`;
 }
 
-function toRuntimeHttpResponse(preview: ViteReactPreviewResult): RuntimeHttpResponse {
+function toRuntimeHttpResponse(preview: ViteProductPreviewResult): RuntimeHttpResponse {
   return {
     statusCode: preview.statusCode,
     headers: preview.headers || { "content-type": "text/html; charset=utf-8" },

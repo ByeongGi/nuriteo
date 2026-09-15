@@ -95,7 +95,7 @@ const required = [
   "packages/node-runtime/src/package-managers/tarball-cache.ts",
   "packages/node-runtime/src/package-managers/types.ts",
   "packages/node-runtime/src/frameworks/index.ts",
-  "packages/node-runtime/src/frameworks/vite-react-workflow.ts",
+  "packages/node-runtime/src/frameworks/vite-workflow.ts",
   "packages/node-runtime/src/network/crypto.ts",
   "packages/node-runtime/src/network/http-client.ts",
   "packages/node-runtime/src/network/https-client.ts",
