@@ -76,6 +76,7 @@ function discoverPackageManifests(reader: WorkspaceModuleReader, root: string): 
       root: packageRoot,
       ...(typeof manifest.type === "string" ? { type: manifest.type } : {}),
       ...(typeof manifest.main === "string" ? { main: manifest.main } : {}),
+      ...normalizeBrowser(manifest.browser),
       ...normalizeExports(manifest.exports),
       ...normalizeImports(manifest.imports)
     };
@@ -161,6 +162,16 @@ function normalizeImports(importsMap: PackageJson["imports"]): Pick<PackageManif
   return Object.keys(normalized).length > 0 ? { imports: normalized } : {};
 }
 
+function normalizeBrowser(browser: PackageJson["browser"]): Pick<PackageManifest, "browser"> {
+  if (typeof browser === "string") return { browser };
+  if (!isRecord(browser)) return {};
+  const normalized: Record<string, string | false> = {};
+  for (const [key, value] of Object.entries(browser)) {
+    if (typeof value === "string" || value === false) normalized[key] = value;
+  }
+  return Object.keys(normalized).length > 0 ? { browser: normalized } : {};
+}
+
 function normalizeExportTarget(value: unknown): Record<string, PackageExportTarget> {
   if (!isRecord(value)) return {};
   const normalized: Record<string, PackageExportTarget> = {};
@@ -203,6 +214,7 @@ interface PackageJson {
   name?: unknown;
   type?: unknown;
   main?: unknown;
+  browser?: unknown;
   exports?: unknown;
   imports?: unknown;
 }

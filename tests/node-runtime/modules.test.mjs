@@ -41,6 +41,16 @@ const runtime = createModuleRuntime({
           require: "./private.cjs"
         }
       }
+    },
+    "browser-conditional": {
+      root: "/workspace/node_modules/browser-conditional",
+      exports: {
+        ".": {
+          browser: "./browser.mjs",
+          import: "./node.mjs",
+          require: "./node.cjs"
+        }
+      }
     }
   },
   realpaths: {
@@ -257,6 +267,24 @@ runtime.registerMany({
       ctx.exportConst("kind", ctx.importNamespace("#private").kind);
     }
   },
+  "/workspace/node_modules/browser-conditional/browser.mjs": {
+    kind: "esm",
+    factory(ctx) {
+      ctx.exportConst("kind", "browser-conditional");
+    }
+  },
+  "/workspace/node_modules/browser-conditional/node.mjs": {
+    kind: "esm",
+    factory(ctx) {
+      ctx.exportConst("kind", "node-conditional");
+    }
+  },
+  "/workspace/node_modules/browser-conditional/node.cjs": {
+    kind: "cjs",
+    factory({ module }) {
+      module.exports = { kind: "node-require-conditional" };
+    }
+  },
   "/workspace/source-entry.cjs": {
     kind: "cjs-source",
     source: `
@@ -364,6 +392,8 @@ assert.equal(runtime.requireSync("pkg-fixture/feature", "/workspace/index.cjs").
 assert.equal(runtime.requireSync("./imports-consumer.cjs", "/workspace/node_modules/pkg-fixture/index.cjs").kind, "package-private-require");
 const packageImports = await runtime.importModule("./imports-consumer.mjs", "/workspace/node_modules/pkg-fixture/index.mjs");
 assert.equal(packageImports.kind, "package-private-import");
+assert.equal((await runtime.importModule("browser-conditional", "/workspace/index.mjs")).kind, "browser-conditional");
+assert.equal(runtime.requireSync("browser-conditional", "/workspace/index.cjs").kind, "browser-conditional");
 
 const sourceEntry = runtime.requireSync("./source-entry.cjs", "/workspace/index.cjs");
 assert.deepEqual(sourceEntry, {

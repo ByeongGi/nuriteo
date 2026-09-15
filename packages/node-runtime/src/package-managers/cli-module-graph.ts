@@ -49,6 +49,7 @@ type GraphPackageExportTarget = string | GraphPackageExportTarget[] | { [conditi
 
 interface GraphPackageManifest {
   main?: string;
+  browser?: string | Record<string, string | false>;
   exports?: GraphPackageExports;
   imports?: GraphPackageExports;
 }
@@ -158,8 +159,8 @@ export function analyzeCliModuleGraph(options: CliModuleGraphOptions): CliModule
     const imports = extractStaticEsmSpecifiers(source);
     modules.push({ path: current, requires, imports });
     const dependencies = [
-      ...requires.map((specifier) => ({ specifier, conditions: ["require", "node", "default", "import"] })),
-      ...imports.map((specifier) => ({ specifier, conditions: ["import", "node", "default", "require"] }))
+      ...requires.map((specifier) => ({ specifier, conditions: ["browser", "require", "node", "default", "import"] })),
+      ...imports.map((specifier) => ({ specifier, conditions: ["browser", "import", "node", "default", "require"] }))
     ];
     for (const { specifier, conditions } of dependencies) {
       if (isBuiltin(specifier, builtins)) continue;
@@ -384,12 +385,21 @@ function resolvePackageTarget(root: string, subpath: string, reader: CliModuleGr
       return resolveFileOrDirectory(join(root, target), reader);
     }
     if (subpath === ".") {
-      const resolved = resolveFileOrDirectory(join(root, manifest.main || "index.js"), reader);
+      const resolved = resolveFileOrDirectory(join(root, resolveBrowserMainTarget(manifest, conditions) || manifest.main || "index.js"), reader);
       if (resolved) return resolved;
     }
   }
   if (subpath !== ".") return resolveFileOrDirectory(join(root, subpath.slice(2)), reader);
   return resolveFileOrDirectory(join(root, "index"), reader);
+}
+
+function resolveBrowserMainTarget(manifest: GraphPackageManifest, conditions: readonly string[]): string | undefined {
+  if (!conditions.includes("browser")) return undefined;
+  if (typeof manifest.browser === "string") return manifest.browser;
+  if (!manifest.browser || typeof manifest.browser !== "object") return undefined;
+  const main = manifest.main || "index.js";
+  const mapped = manifest.browser[main] ?? manifest.browser[`./${main}`];
+  return mapped && typeof mapped === "string" ? mapped : undefined;
 }
 
 function resolvePackageExportTarget(exportsMap: GraphPackageExports, subpath: string, conditions: readonly string[]): string | null {

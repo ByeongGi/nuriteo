@@ -12,6 +12,7 @@ const workspace = new MemoryPackageManagerWorkspace([
       const scoped = require("@scope/tool");
       const conditional = require("conditional-pkg");
       const conditionalFeature = require("conditional-pkg/feature");
+      const browserMain = require("browser-main-pkg");
       const parent = require("parent-pkg");
       const self = require("self-pkg/internal");
       const pattern = require("pattern-pkg/lib/tool");
@@ -26,6 +27,7 @@ const workspace = new MemoryPackageManagerWorkspace([
         scoped: scoped.label,
         conditional: conditional.label,
         conditionalFeature: conditionalFeature.label,
+        browserMain: browserMain.label,
         parent,
         self: self.label,
         pattern: pattern.label,
@@ -103,6 +105,18 @@ const workspace = new MemoryPackageManagerWorkspace([
   {
     path: "/workspace/node_modules/conditional-pkg/feature.cjs",
     data: "exports.label = 'conditional-node';"
+  },
+  {
+    path: "/workspace/node_modules/browser-main-pkg/package.json",
+    data: JSON.stringify({ name: "browser-main-pkg", main: "node.cjs", browser: "browser.js" })
+  },
+  {
+    path: "/workspace/node_modules/browser-main-pkg/node.cjs",
+    data: "exports.label = 'node-main';"
+  },
+  {
+    path: "/workspace/node_modules/browser-main-pkg/browser.js",
+    data: "exports.label = 'browser-main';"
   },
   {
     path: "/workspace/node_modules/shared/package.json",
@@ -205,6 +219,7 @@ assert.deepEqual(runtime.requireSync("./app.cjs", "/workspace/index.cjs"), {
   scoped: "scoped-tool",
   conditional: "conditional-require",
   conditionalFeature: "conditional-node",
+  browserMain: "browser-main",
   parent: "nested-shared",
   self: "self-reference",
   pattern: "pattern-export",
@@ -218,6 +233,7 @@ assert.deepEqual(runtime.requireSync("./app.cjs", "/workspace/index.cjs"), {
 
 assert.equal(runtime.resolve("plain-pkg", "/workspace/app.cjs"), "/workspace/node_modules/plain-pkg/main.js");
 assert.equal(runtime.resolve("plain-pkg/feature", "/workspace/app.cjs"), "/workspace/node_modules/plain-pkg/feature.js");
+assert.equal(runtime.resolve("browser-main-pkg", "/workspace/app.cjs"), "/workspace/node_modules/browser-main-pkg/browser.js");
 assert.equal(runtime.resolve("shared", "/workspace/node_modules/parent-pkg/index.js"), "/workspace/node_modules/parent-pkg/node_modules/shared/index.js");
 assert.equal(runtime.resolve("self-pkg/internal", "/workspace/node_modules/self-pkg/index.js"), "/workspace/node_modules/self-pkg/internal.js");
 assert.equal(runtime.resolve("pattern-pkg/lib/tool", "/workspace/app.cjs"), "/workspace/node_modules/pattern-pkg/src/lib/tool.cjs");

@@ -92,7 +92,7 @@ assert.deepEqual(
 
 const esmGraphFiles = new Map([
   ["/workspace/vite/bin/vite.js", "function start() {\n  return import('../dist/node/cli.js');\n}\nstart();\n"],
-  ["/workspace/vite/dist/node/cli.js", "import { start } from './server.js';\nimport 'conditional-pkg';\nimport 'conditional-pkg/features/render';\nimport 'node:fs';\nimport 'node:perf_hooks';\nstart();\n"],
+  ["/workspace/vite/dist/node/cli.js", "import { start } from './server.js';\nimport 'conditional-pkg';\nimport 'conditional-pkg/features/render';\nimport 'browser-main-pkg';\nimport 'browser-export-pkg';\nimport 'node:fs';\nimport 'node:perf_hooks';\nstart();\n"],
   ["/workspace/vite/dist/node/server.js", "export * as hmr from './hmr.js';\nexport const start = () => undefined;\n"],
   ["/workspace/vite/dist/node/hmr.js", "export const channel = 'hmr';\n"],
   ["/workspace/vite/node_modules/conditional-pkg/package.json", JSON.stringify({
@@ -116,7 +116,25 @@ const esmGraphFiles = new Map([
   })],
   ["/workspace/vite/node_modules/conditional-pkg/esm.mjs", "import '#private';\nexport const mode = 'esm';\n"],
   ["/workspace/vite/node_modules/conditional-pkg/private.mjs", "export const value = 'private';\n"],
-  ["/workspace/vite/node_modules/conditional-pkg/features/render.mjs", "export const render = () => undefined;\n"]
+  ["/workspace/vite/node_modules/conditional-pkg/features/render.mjs", "export const render = () => undefined;\n"],
+  ["/workspace/vite/node_modules/browser-main-pkg/package.json", JSON.stringify({
+    name: "browser-main-pkg",
+    main: "node.cjs",
+    browser: "browser.js"
+  })],
+  ["/workspace/vite/node_modules/browser-main-pkg/node.cjs", "module.exports = { mode: 'node' };\n"],
+  ["/workspace/vite/node_modules/browser-main-pkg/browser.js", "export const mode = 'browser-main';\n"],
+  ["/workspace/vite/node_modules/browser-export-pkg/package.json", JSON.stringify({
+    name: "browser-export-pkg",
+    exports: {
+      ".": {
+        browser: "./browser.mjs",
+        import: "./node.mjs"
+      }
+    }
+  })],
+  ["/workspace/vite/node_modules/browser-export-pkg/browser.mjs", "export const mode = 'browser-export';\n"],
+  ["/workspace/vite/node_modules/browser-export-pkg/node.mjs", "export const mode = 'node-export';\n"]
 ]);
 const esmGraph = analyzeCliModuleGraph({
   entry: "/workspace/vite/bin/vite.js",
@@ -137,8 +155,10 @@ assert.deepEqual(
   esmGraph.modules.map((mod) => [mod.path, mod.imports]),
   [
     ["/workspace/vite/bin/vite.js", ["../dist/node/cli.js"]],
-    ["/workspace/vite/dist/node/cli.js", ["./server.js", "conditional-pkg", "conditional-pkg/features/render", "node:fs", "node:perf_hooks"]],
+    ["/workspace/vite/dist/node/cli.js", ["./server.js", "browser-export-pkg", "browser-main-pkg", "conditional-pkg", "conditional-pkg/features/render", "node:fs", "node:perf_hooks"]],
     ["/workspace/vite/dist/node/server.js", ["./hmr.js"]],
+    ["/workspace/vite/node_modules/browser-export-pkg/browser.mjs", []],
+    ["/workspace/vite/node_modules/browser-main-pkg/browser.js", []],
     ["/workspace/vite/node_modules/conditional-pkg/esm.mjs", ["#private"]],
     ["/workspace/vite/node_modules/conditional-pkg/features/render.mjs", []],
     ["/workspace/vite/dist/node/hmr.js", []],

@@ -39,11 +39,11 @@ export class ModuleResolver {
   }
 
   resolve(specifier: string, parentUrl = "/workspace/index.mjs"): string {
-    return this.resolveWithConditions(specifier, parentUrl, ["require", "node", "default", "import"]);
+    return this.resolveWithConditions(specifier, parentUrl, ["browser", "require", "node", "default", "import"]);
   }
 
   resolveImport(specifier: string, parentUrl = "/workspace/index.mjs"): string {
-    return this.resolveWithConditions(specifier, parentUrl, ["import", "node", "default", "require"]);
+    return this.resolveWithConditions(specifier, parentUrl, ["browser", "import", "node", "default", "require"]);
   }
 
   resolveWithConditions(specifier: string, parentUrl: string, conditions: readonly string[]): string {
@@ -170,8 +170,21 @@ function resolvePackageTarget(manifest: PackageManifest, subpath: string, condit
       : resolveSubpathExport(manifest.exports, subpath);
     return target ? resolveConditionalTarget(target, conditions) : undefined;
   }
-  if (subpath === ".") return manifest.main || "./index.js";
+  if (subpath === ".") return resolveBrowserMainTarget(manifest, conditions) || manifest.main || "./index.js";
   return subpath;
+}
+
+function resolveBrowserMainTarget(manifest: PackageManifest, conditions: readonly string[]): string | undefined {
+  if (!conditions.includes("browser")) return undefined;
+  if (typeof manifest.browser === "string") return manifest.browser;
+  if (!manifest.browser || typeof manifest.browser !== "object") return undefined;
+  const main = manifest.main || "./index.js";
+  const mapped = manifest.browser[main] ?? manifest.browser[stripLeadingDotSlash(main)];
+  return mapped && typeof mapped === "string" ? mapped : undefined;
+}
+
+function stripLeadingDotSlash(path: string): string {
+  return path.startsWith("./") ? path.slice(2) : path;
 }
 
 function resolveSubpathExport(exportsMap: Record<string, PackageExportTarget | undefined>, subpath: string): PackageExportTarget | undefined {

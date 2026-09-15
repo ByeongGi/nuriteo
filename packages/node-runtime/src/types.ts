@@ -63,6 +63,7 @@ export interface PackageManifest {
   root?: string;
   type?: string;
   main?: string;
+  browser?: string | Record<string, string | false>;
   exports?: PackageExports;
   imports?: PackageExports;
 }
