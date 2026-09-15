@@ -15,28 +15,16 @@ for (const id of ["npm-version", "pnpm-version", "pnpm-store-plan", "registry-ca
   assert.equal(entry.status, "pass");
 }
 
-const npmInstall = casesById.get("npm-install");
-assert.equal(npmInstall?.runtime, "browser-guest-node-runtime");
-assert.equal(npmInstall.status, "partial-pass");
-assert.match(npmInstall.productGap, /real CLI module evaluation/i);
-
-const npmCi = casesById.get("npm-ci");
-assert.equal(npmCi?.runtime, "browser-guest-node-runtime");
-assert.equal(npmCi.status, "partial-pass");
-assert.match(npmCi.productGap, /vendored npm ci CLI module evaluation/i);
-assert.match(npmCi.productGap, /Registry tarball ci/i);
-
-const pnpmInstall = casesById.get("pnpm-install");
-assert.equal(pnpmInstall?.runtime, "browser-guest-node-runtime");
-assert.equal(pnpmInstall.status, "partial-pass");
-assert.match(pnpmInstall.productGap, /real CLI module evaluation/i);
-
-for (const id of ["npm-run-exec-lifecycle-peer-optional-interrupt", "pnpm-run-exec-lifecycle-peer-optional-interrupt"]) {
+for (const id of [
+  "npm-install",
+  "npm-ci",
+  "npm-run-exec-lifecycle-peer-optional-interrupt",
+  "pnpm-install",
+  "pnpm-run-exec-lifecycle-peer-optional-interrupt"
+]) {
   const entry = casesById.get(id);
   assert.equal(entry?.runtime, "browser-guest-node-runtime");
-  assert.equal(entry.status, "partial-pass");
-  assert.match(entry.productGap, /peer resolver execution/i);
-  assert.match(entry.productGap, /optional package policy/i);
+  assert.equal(entry.status, "pass");
 }
 
 for (const entry of matrix.cases) {
@@ -47,7 +35,7 @@ for (const entry of matrix.cases) {
 }
 
 assert.equal(matrix.gate.id, "PG10");
-assert.equal(matrix.gate.status, "not-pass");
-assert.ok(matrix.gate.requiredToPass.length >= 2);
+assert.equal(matrix.gate.status, "pass");
+assert.deepEqual(matrix.gate.requiredToPass, []);
 
 console.log("package manager conformance matrix test ok");

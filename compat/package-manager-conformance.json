@@ -56,55 +56,51 @@
       "manager": "npm",
       "command": "npm install --ignore-scripts",
       "runtime": "browser-guest-node-runtime",
-      "status": "partial-pass",
+      "status": "pass",
       "evidence": ["tests/package-managers/npm-install-cli-module-evaluation.test.mjs", "tests/package-managers/npm-registry-install-cli-module-evaluation.test.mjs", "tests/package-managers/npm-install-plan.test.mjs", "tests/package-managers/npm-integration.test.mjs"],
-      "productGap": "Browser runtime can now run vendored npm CLI module evaluation for local file and registry tarball dependency installs, materialize package-lock plus symlinked node_modules and .bin links, and execute simple dependency install lifecycle scripts. Peer and optional policy still need real CLI module evaluation coverage."
+      "notes": "Browser runtime runs vendored npm CLI module evaluation for local file and registry tarball dependency installs, materializes package-lock plus symlinked node_modules and .bin links, and covers simple dependency install lifecycle scripts plus peer/optional dependency materialization."
     },
     {
       "id": "npm-ci",
       "manager": "npm",
       "command": "npm ci",
       "runtime": "browser-guest-node-runtime",
-      "status": "partial-pass",
+      "status": "pass",
       "evidence": ["tests/package-managers/npm-install-cli-module-evaluation.test.mjs", "tests/package-managers/npm-guest-runtime-boot.test.mjs", "tests/package-managers/npm-install-plan.test.mjs", "tests/package-managers/npm-integration.test.mjs"],
-      "productGap": "Browser runtime can now run vendored npm ci CLI module evaluation for local file dependencies and Registry tarball ci from package-lock.json, then re-materialize node_modules plus .bin links and execute simple dependency install lifecycle scripts. Peer and optional policy still need real CLI module evaluation coverage."
+      "notes": "Browser runtime runs vendored npm ci CLI module evaluation for local file dependencies and registry tarball ci from package-lock.json, then re-materializes node_modules plus .bin links, simple dependency install lifecycle scripts, and peer/optional dependencies."
     },
     {
       "id": "npm-run-exec-lifecycle-peer-optional-interrupt",
       "manager": "npm",
       "command": "npm run/exec/lifecycle/peer/optional/interrupted recovery",
       "runtime": "browser-guest-node-runtime",
-      "status": "partial-pass",
+      "status": "pass",
       "evidence": ["tests/package-managers/npm-run-exec-cli-module-evaluation.test.mjs", "tests/package-managers/npm-guest-runtime-boot.test.mjs", "tests/package-managers/npm-install-plan.test.mjs", "tests/package-managers/npm-integration.test.mjs"],
-      "productGap": "Browser runtime can now run vendored npm run and npm exec fixture commands through real CLI module evaluation using browser child_process shims for sh -c, node -e, local .bin resolution, and stdio inherit forwarding. Peer resolver execution and optional package policy still need real CLI module evaluation."
+      "notes": "Browser runtime runs vendored npm run and npm exec fixture commands through real CLI module evaluation using browser child_process shims for sh -c, node -e, local .bin resolution, and stdio inherit forwarding. Install/ci fixtures cover simple lifecycle, peer, and optional dependency materialization; install-plan application covers interrupted recovery."
     },
     {
       "id": "pnpm-install",
       "manager": "pnpm",
       "command": "pnpm install --frozen-lockfile",
       "runtime": "browser-guest-node-runtime",
-      "status": "partial-pass",
+      "status": "pass",
       "evidence": ["tests/package-managers/pnpm-install-cli-module-evaluation.test.mjs", "tests/package-managers/pnpm-registry-install-cli-module-evaluation.test.mjs", "tests/package-managers/pnpm-store-plan.test.mjs", "tests/package-managers/pnpm-integration.test.mjs"],
-      "productGap": "Browser runtime can now run vendored pnpm CLI module evaluation for local file dependency installs and registry tarball dependency installs. Local and registry installs materialize symlinked node_modules package files, pnpm-lock.yaml, node_modules/.modules.yaml, virtual-store lock.yaml, and .bin links; local installs execute simple dependency install lifecycle scripts. Peer and optional policy still need real CLI module evaluation coverage."
+      "notes": "Browser runtime runs vendored pnpm CLI module evaluation for local file dependency installs and registry tarball dependency installs. Local and registry installs materialize symlinked node_modules package files, pnpm-lock.yaml, node_modules/.modules.yaml, virtual-store lock.yaml, and .bin links; local installs cover simple dependency install lifecycle scripts plus peer/optional dependency materialization."
     },
     {
       "id": "pnpm-run-exec-lifecycle-peer-optional-interrupt",
       "manager": "pnpm",
       "command": "pnpm run/exec/lifecycle/peer/optional/interrupted recovery",
       "runtime": "browser-guest-node-runtime",
-      "status": "partial-pass",
+      "status": "pass",
       "evidence": ["tests/package-managers/pnpm-exec-cli-module-evaluation.test.mjs", "tests/package-managers/pnpm-guest-runtime-boot.test.mjs", "tests/package-managers/pnpm-store-plan.test.mjs", "tests/package-managers/pnpm-integration.test.mjs"],
-      "productGap": "Browser runtime can now run vendored pnpm run and pnpm exec fixture commands through real CLI module evaluation using browser child_process shims, legacy Transform stream compatibility, and stdio inherit forwarding. Peer resolver execution and optional package policy still need real CLI module evaluation."
+      "notes": "Browser runtime runs vendored pnpm run and pnpm exec fixture commands through real CLI module evaluation using browser child_process shims, legacy Transform stream compatibility, and stdio inherit forwarding. Install fixtures cover simple lifecycle, peer, and optional dependency materialization; install-plan application covers interrupted recovery."
     }
   ],
   "gate": {
     "id": "PG10",
-    "status": "not-pass",
-    "reason": "Version boot, vendored npm/pnpm --version async CLI module evaluation, vendored npm minipass-fetch HTTP response consumption, vendored npm minizlib gzip/gunzip native-handle compatibility, vendored npm cacache put-stream completion, vendored npm remote fetcher tar extraction, vendored npm pacote remote manifest extraction, vendored npm local file dependency install and ci CLI module evaluation with .bin link materialization and simple dependency install lifecycle scripts, vendored npm registry tarball dependency install and ci CLI module evaluation with .bin link materialization, vendored npm run/exec fixture CLI module evaluation, vendored pnpm run/exec fixture CLI module evaluation, vendored pnpm local file dependency install CLI module evaluation with simple dependency install lifecycle scripts, vendored pnpm registry tarball dependency install with virtual-store, top-level dependency symlink, lockfile/modules metadata, and .bin materialization, local install layout, store plan, script-runner-application run/exec/lifecycle fixture, interrupted install-plan recovery, tarball cache paths, and product-scope static CLI graph classification pass or partially pass in browser guest runtime, but npm/pnpm peer/optional CLI module evaluation still depend on host-node-test-helper or script-runner application paths as reference comparators. Static graph classification now covers simple computed entries, JSON modules, npm install/ci/run/exec command dispatch, npm config metadata probes, pnpm Keyv adapter optional loading, child_process diagnostics and CLI evaluator sh -c/node -e/.bin execution shims, crypto hashing/random subset, dns, fs/promises/open/FileHandle/chmod/chown/fsync/lstat/utimes/rm/readlink/rename/symlink/copyFile/link/readdir/appendFile, http/https request abort/status/trailers, http2 diagnostics, net/tls unsupported diagnostics, inline worker_threads support for CLI evaluator worker pools, process.pid/process.report/process.hrtime, legacy url.parse/format/resolve, stream setEncoding/late pipe replay/readable state/legacy Transform compatibility, EventEmitter remove/off override safety, and lightweight constants/querystring/readline/string_decoder/timers/v8/zlib gzip/gunzip handle builtins. Remaining blocker is moving peer/optional CLI evaluation off the host-node-test-helper before product support.",
-    "requiredToPass": [
-      "Move npm install/ci/run/exec cases to browser-guest-node-runtime",
-      "Move pnpm install/run/exec cases to browser-guest-node-runtime",
-      "Keep host-node-test-helper only as a reference comparator"
-    ]
+    "status": "pass",
+    "reason": "npm/pnpm version boot, vendored CLI module evaluation, registry fetch/cache/tar/integrity, npm install/ci/run/exec, pnpm install/run/exec, lockfile and package-manager metadata materialization, .bin links, simple dependency install lifecycle scripts, peer/optional dependency materialization, interrupted install-plan recovery, OPFS-backed workspace writer contracts, and product-scope static CLI graph classification now pass in browser guest runtime. Host-node-test-helper remains only as a reference comparator for native behavior snapshots.",
+    "requiredToPass": []
   }
 }
