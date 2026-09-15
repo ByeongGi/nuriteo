@@ -40,6 +40,7 @@ for (const manager of ["npm", "pnpm"]) {
     result.realCliReadiness.capabilityStatus.filter((capability) => capability.status === "ready").map((capability) => capability.capability),
     ["esm-cli-entrypoint", "minimal-vite-cli-module-graph", "cli-registration-hooks", "cli-backed-dev-build-workflow"]
   );
+  assert.equal(result.realCliReadiness.capabilityStatus.some((capability) => capability.capability === "mounted-vite-artifact-input"), false);
   assert.deepEqual(
     result.realCliReadiness.capabilityStatus.filter((capability) => capability.status === "blocked").map((capability) => capability.capability),
     result.realCliReadiness.missingCapabilities
@@ -264,6 +265,7 @@ const artifactInstall = artifactWorkflow.install();
 assert.equal(artifactInstall.vitePackageSource, "mounted-artifact");
 const artifactReadiness = artifactWorkflow.inspectRealCliReadiness();
 assert.equal(artifactReadiness.vitePackageSource, "mounted-artifact");
+assert.equal(artifactReadiness.capabilityStatus.some((capability) => capability.capability === "mounted-vite-artifact-input" && capability.status === "ready"), true);
 assert.equal(artifactReadiness.cliEntrypoint, "/workspace/project/node_modules/vite/custom-bin/vite.mjs");
 assert.equal(artifactReadiness.cliEntryReadiness.status, "ready");
 assert.deepEqual(

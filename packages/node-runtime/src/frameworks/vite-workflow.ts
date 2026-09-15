@@ -187,6 +187,7 @@ export type ViteRuntimeReadinessCapability =
   | ViteRuntimeCapability
   | "esm-cli-entrypoint"
   | "minimal-vite-cli-module-graph"
+  | "mounted-vite-artifact-input"
   | "cli-registration-hooks"
   | "cli-backed-dev-build-workflow";
 
@@ -319,7 +320,8 @@ export class ViteProductWorkflow {
       capabilityStatus: createViteCapabilityStatus({
         cliEntryReadiness,
         cliModuleGraph,
-        missingCapabilities
+        missingCapabilities,
+        vitePackageSource: this.#vitePackageSource()
       }),
       cliEntrypoint,
       cliEntryReadiness,
@@ -814,6 +816,7 @@ function createViteCapabilityStatus(options: {
   cliEntryReadiness: CliEntryReadiness;
   cliModuleGraph: CliModuleGraph;
   missingCapabilities: ViteRuntimeCapability[];
+  vitePackageSource: ViteProductPackageSource;
 }): ViteRuntimeCapabilityStatus[] {
   const statuses: ViteRuntimeCapabilityStatus[] = [
     createCapabilityStatus({
@@ -839,6 +842,13 @@ function createViteCapabilityStatus(options: {
       status: "ready"
     }
   ];
+  if (options.vitePackageSource === "mounted-artifact") {
+    statuses.push({
+      capability: "mounted-vite-artifact-input",
+      evidence: "The workflow accepted an externally mounted Vite package artifact and analyzed that artifact's bin/module graph.",
+      status: "ready"
+    });
+  }
 
   for (const capability of options.missingCapabilities) {
     statuses.push({
