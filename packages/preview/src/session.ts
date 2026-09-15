@@ -18,6 +18,7 @@ export class PreviewSessionRegistry {
       origin,
       projectId,
       port,
+      baseUrl: createPreviewBaseUrl(origin, projectId, port),
       container,
       createdAt: this.now(),
       touchedAt: this.now()
@@ -48,7 +49,12 @@ export class PreviewSessionRegistry {
       this.sessions.delete(sessionId);
       return null;
     }
-    const next = { ...current, ...patch, touchedAt: this.now() };
+    const merged = { ...current, ...patch };
+    const next = {
+      ...merged,
+      baseUrl: createPreviewBaseUrl(merged.origin, merged.projectId, merged.port),
+      touchedAt: this.now()
+    };
     this.sessions.set(sessionId, next);
     return { ...next };
   }
@@ -82,6 +88,15 @@ export class PreviewSessionRegistry {
 
 export function createPreviewSessionRegistry(options: PreviewSessionRegistryOptions = {}): PreviewSessionRegistry {
   return new PreviewSessionRegistry(options);
+}
+
+export function createPreviewBaseUrl(origin: string, projectId: string, port: number): string {
+  return `${origin.replace(/\/+$/, "")}/__preview/${encodeURIComponent(projectId)}/${port}/`;
+}
+
+export function createPreviewUrl(session: Pick<PreviewSession, "baseUrl">, path = "/"): string {
+  const normalizedPath = path.startsWith("/") ? path.slice(1) : path;
+  return new URL(normalizedPath, session.baseUrl).toString();
 }
 
 function randomId(): string {

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 
 import {
+  createPreviewUrl,
   createPreviewRelay,
   createPreviewServiceWorker,
   createPreviewSessionRegistry
@@ -51,6 +52,11 @@ assert.deepEqual(
   sessions.list({ origin: "https://preview.local", projectId: "project-a" }).map((entry) => entry.port),
   [5173, 4173]
 );
+assert.equal(session.baseUrl, "https://preview.local/__preview/project-a/4173/");
+assert.equal(createPreviewUrl(session, "/index.html"), "https://preview.local/__preview/project-a/4173/index.html");
+assert.equal(createPreviewUrl(secondPort, "src/main.js"), "https://preview.local/__preview/project-a/5173/src/main.js");
+const moved = sessions.replace(secondPort.sessionId, { port: 6173 });
+assert.equal(moved.baseUrl, "https://preview.local/__preview/project-a/6173/");
 assert.equal(sessions.get(otherProject.sessionId, { projectId: "project-a" }), null);
 const relay = createPreviewRelay({ sessions, timeoutMs: 10 });
 

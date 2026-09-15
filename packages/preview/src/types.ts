@@ -7,6 +7,7 @@ export interface PreviewSession {
   origin: string;
   projectId: string;
   port: number;
+  baseUrl: string;
   container: PreviewContainer;
   createdAt: number;
   touchedAt: number;
