@@ -1,4 +1,6 @@
 export { createCommandRegistry, shebangCommand } from "./commands.ts";
 export { parseShell, ShellSyntaxError, tokenize } from "./parser.ts";
 export { createShellRuntime, ShellRuntime } from "./runtime.ts";
-export type { ShellCommand, ShellCommandContext, ShellCommandMap, ShellCommandRegistry, ShellCommandResult, ShellOp, ShellRunResult, ShellRuntimeOptions, ShellStep } from "./types.ts";
+export { createTerminalSession, TerminalSession } from "./terminal-session.ts";
+export type { TerminalEntryStatus, TerminalOutputChunk, TerminalRunResult, TerminalSessionOptions, TerminalTranscriptEntry } from "./terminal-session.ts";
+export type { ShellCommand, ShellCommandContext, ShellCommandMap, ShellCommandRegistry, ShellCommandResult, ShellOp, ShellRunOptions, ShellRunResult, ShellRuntimeOptions, ShellStep } from "./types.ts";

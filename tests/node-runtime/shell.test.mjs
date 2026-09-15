@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 
-import { createShellRuntime, ShellSyntaxError } from "../../packages/node-runtime/src/index.ts";
+import { createShellRuntime, createTerminalSession, ShellSyntaxError } from "../../packages/node-runtime/src/index.ts";
 
 const shell = createShellRuntime({
   cwd: "/workspace/my app",
@@ -62,5 +62,59 @@ const bin = await shell.run("hello");
 assert.equal(bin.stdout, "from-bin\n");
 
 await assert.rejects(() => shell.run("echo ok || echo nope"), ShellSyntaxError);
+
+const chunks = [];
+const terminal = createTerminalSession({
+  now: (() => {
+    let tick = 1000;
+    return () => {
+      tick += 10;
+      return tick;
+    };
+  })(),
+  onChunk(chunk) {
+    chunks.push(chunk);
+  },
+  commands: {
+    echo({ argv }) {
+      return { stdout: `${argv.slice(1).join(" ")}\n`, stderr: "", exitCode: 0 };
+    },
+    wait({ signal }) {
+      return new Promise((resolve) => {
+        signal?.addEventListener(
+          "abort",
+          () => resolve({ stdout: "", stderr: "stopped\n", exitCode: 130 }),
+          { once: true }
+        );
+      });
+    }
+  }
+});
+
+const terminalRun = await terminal.run("echo terminal");
+assert.equal(terminalRun.stdout, "terminal\n");
+assert.equal(terminalRun.entry.command, "echo terminal");
+assert.equal(terminalRun.entry.status, "completed");
+assert.equal(terminalRun.entry.exitCode, 0);
+assert.deepEqual(terminal.history(), ["echo terminal"]);
+assert.equal(terminal.transcript()[0].stdout, "terminal\n");
+assert.deepEqual(chunks, [{ entryId: 1, stream: "stdout", data: "terminal\n" }]);
+
+const pendingRun = terminal.run("wait");
+assert.equal(terminal.activeEntry?.command, "wait");
+assert.equal(terminal.cancel(), true);
+const cancelledRun = await pendingRun;
+assert.equal(cancelledRun.exitCode, 130);
+assert.equal(cancelledRun.entry.status, "cancelled");
+assert.equal(terminal.activeEntry, null);
+
+const pendingRestartRun = terminal.run("wait");
+assert.equal(terminal.activeEntry?.command, "wait");
+terminal.restart();
+const restartedRun = await pendingRestartRun;
+assert.equal(restartedRun.entry.status, "cancelled");
+const afterRestartRun = await terminal.run("echo after-restart");
+assert.equal(afterRestartRun.stdout, "after-restart\n");
+assert.equal(afterRestartRun.entry.status, "completed");
 
 console.log("node shell test ok");

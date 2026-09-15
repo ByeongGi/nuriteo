@@ -1,7 +1,7 @@
 import { createCommandRegistry, shebangCommand } from "./commands.ts";
 import { parseShell } from "./parser.ts";
 import type { RuntimeEnv } from "../types.ts";
-import type { ShellCommand, ShellCommandRegistry, ShellRunResult, ShellRuntimeOptions } from "./types.ts";
+import type { ShellCommand, ShellCommandRegistry, ShellRunOptions, ShellRunResult, ShellRuntimeOptions } from "./types.ts";
 
 export class ShellRuntime {
   cwd: string;
@@ -16,7 +16,7 @@ export class ShellRuntime {
     this.registry = createCommandRegistry(options.commands || {});
   }
 
-  async run(commandLine: string): Promise<ShellRunResult> {
+  async run(commandLine: string, options: ShellRunOptions = {}): Promise<ShellRunResult> {
     const steps = parseShell(commandLine);
     let stdin = "";
     let stdout = "";
@@ -24,12 +24,14 @@ export class ShellRuntime {
     let exitCode = 0;
 
     for (let index = 0; index < steps.length; index += 1) {
+      if (options.signal?.aborted) return cancelledShellResult(stdout, stderr, this.files);
       const step = steps[index];
       if (!step) continue;
       const nextStep = steps[index + 1];
       if (step.op === "&&" && exitCode !== 0) break;
       const { argv, redirect } = extractRedirect(step.argv);
-      const result = await this.runCommand(argv, stdin);
+      const result = await this.runCommand(argv, stdin, options);
+      if (options.signal?.aborted) return cancelledShellResult(stdout + (result.stdout || ""), stderr + (result.stderr || ""), this.files);
       exitCode = result.exitCode;
       stderr += result.stderr || "";
       if (redirect) this.files.set(resolvePath(redirect, this.cwd), result.stdout || "");
@@ -41,21 +43,23 @@ export class ShellRuntime {
     return { stdout, stderr, exitCode, files: Object.fromEntries(this.files) };
   }
 
-  async runCommand(argv: string[], stdin: string): Promise<Awaited<ReturnType<ShellCommand>>> {
+  async runCommand(argv: string[], stdin: string, options: ShellRunOptions = {}): Promise<Awaited<ReturnType<ShellCommand>>> {
     if (argv[0] === "sh" && argv[1] === "-c") {
-      return this.run(argv.slice(2).join(" "));
+      return this.run(argv.slice(2).join(" "), options);
     }
 
     const name = argv[0];
     if (!name) throw new Error("missing command");
     const command = this.resolveExecutable(name);
-    return command({
+    const context = {
       argv,
       cwd: this.cwd,
       env: this.env,
       stdin,
       files: this.files
-    });
+    };
+    if (options.signal) return command({ ...context, signal: options.signal });
+    return command(context);
   }
 
   resolveExecutable(name: string): ShellCommand {
@@ -97,6 +101,15 @@ function isNodeShebang(shebang: string[] | null): boolean {
 
 export function createShellRuntime(options: ShellRuntimeOptions = {}): ShellRuntime {
   return new ShellRuntime(options);
+}
+
+function cancelledShellResult(stdout: string, stderr: string, files: Map<string, string>): ShellRunResult {
+  return {
+    stdout,
+    stderr: stderr || "cancelled\n",
+    exitCode: 130,
+    files: Object.fromEntries(files)
+  };
 }
 
 function extractRedirect(argv: string[]): { argv: string[]; redirect: string | null } {

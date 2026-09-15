@@ -13,6 +13,7 @@ export interface ShellCommandContext {
   env: RuntimeEnv;
   stdin: string;
   files: Map<string, string>;
+  signal?: AbortSignal;
 }
 
 export type ShellCommand = (context: ShellCommandContext) => ShellCommandResult | Promise<ShellCommandResult>;
@@ -34,6 +35,10 @@ export interface ShellRuntimeOptions {
   env?: RuntimeEnv;
   files?: Record<string, string>;
   commands?: ShellCommandMap;
+}
+
+export interface ShellRunOptions {
+  signal?: AbortSignal;
 }
 
 export interface ShellRunResult {
