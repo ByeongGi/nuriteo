@@ -156,25 +156,34 @@ function createLabTerminal() {
 function packageManagerCommand(manager, args) {
   const action = args.join(" ") || "--help";
   if (action === "install") {
+    const install = viteWorkflow.install();
     return {
-      stdout: `${manager} install\nresolved 3 packages\nlinked node_modules/.bin/vite\n`,
+      stdout: `${manager} install\nresolved ${install.packages.length} packages\nlinked node_modules/.bin/vite\nwrote ${install.lockfile}\n`,
       stderr: "",
       exitCode: 0
     };
   }
   if (action === "run dev" || action === "dev") {
-    return { stdout: `${manager} run dev\nvite dev server ready at http://127.0.0.1:5173\n`, stderr: "", exitCode: 0 };
+    const devServer = viteWorkflow.startDevServerFromPackageScript();
+    return { stdout: `${manager} run dev\nvite dev server ready at http://127.0.0.1:${devServer.port}\n`, stderr: "", exitCode: 0 };
   }
   if (action === "run build" || action === "build") {
-    return { stdout: `${manager} run build\nvite build completed\n`, stderr: "", exitCode: 0 };
+    const build = viteWorkflow.buildFromPackageScript();
+    return { stdout: `${manager} run build\nvite build completed\nemitted ${build.files.join(", ")}\n`, stderr: "", exitCode: 0 };
   }
   return { stdout: "", stderr: `${manager}: unsupported lab command: ${action}\n`, exitCode: 1 };
 }
 
 function viteCommand(args) {
   const action = args[0] || "dev";
-  if (action === "dev") return { stdout: "vite dev server ready at http://127.0.0.1:5173\n", stderr: "", exitCode: 0 };
-  if (action === "build") return { stdout: "vite build completed\n", stderr: "", exitCode: 0 };
+  if (action === "dev") {
+    const devServer = viteWorkflow.startDevServer();
+    return { stdout: `vite dev server ready at http://127.0.0.1:${devServer.port}\n`, stderr: "", exitCode: 0 };
+  }
+  if (action === "build") {
+    viteWorkflow.build();
+    return { stdout: "vite build completed\n", stderr: "", exitCode: 0 };
+  }
   return { stdout: "", stderr: `vite: unsupported lab command: ${action}\n`, exitCode: 1 };
 }
 
