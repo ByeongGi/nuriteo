@@ -30,7 +30,10 @@ const runtime = createModuleRuntime({
           import: "./main.mjs",
           require: "./require-main.cjs"
         },
-        "./feature": "./feature.cjs"
+        "./feature": {
+          import: "./feature.mjs",
+          require: "./feature.cjs"
+        }
       }
     }
   },
@@ -141,6 +144,12 @@ runtime.registerMany({
       module.exports = { kind: "package-feature" };
     }
   },
+  "/workspace/node_modules/pkg-fixture/feature.mjs": {
+    kind: "esm",
+    factory(ctx) {
+      ctx.exportConst("kind", "package-import-feature");
+    }
+  },
   "/workspace/source-entry.cjs": {
     kind: "cjs-source",
     source: `
@@ -230,8 +239,9 @@ assert.equal(cjsInterop.rendered, "value:ok");
 
 const pkg = await runtime.importModule("pkg-fixture", "/workspace/index.mjs");
 assert.equal(pkg.kind, "package-main");
-assert.equal(pkg.resolved, "/workspace/node_modules/pkg-fixture/feature.cjs");
+assert.equal(pkg.resolved, "/workspace/node_modules/pkg-fixture/feature.mjs");
 assert.equal(runtime.requireSync("pkg-fixture", "/workspace/index.cjs").kind, "package-require-main");
+assert.equal(runtime.requireSync("pkg-fixture/feature", "/workspace/index.cjs").kind, "package-feature");
 
 const sourceEntry = runtime.requireSync("./source-entry.cjs", "/workspace/index.cjs");
 assert.deepEqual(sourceEntry, {

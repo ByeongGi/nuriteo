@@ -3,9 +3,12 @@ import { Buffer as BrowserBuffer } from "../builtins/buffer.ts";
 import { ChildProcess, UnsupportedChildProcessError, type SpawnSyncResult } from "../builtins/child-process.ts";
 import { constantsBuiltin } from "../builtins/constants.ts";
 import { EventEmitter } from "../builtins/events.ts";
+import { builtinModules, moduleBuiltin, Module as RuntimeModuleBuiltin } from "../builtins/module.ts";
 import { dirname, normalize } from "../builtins/path.ts";
 import { BrowserProcess } from "../builtins/process.ts";
+import { fileURLToPath } from "../builtins/url.ts";
 import { createWorkspaceModuleRuntime, type WorkspaceModuleReader } from "../modules/index.ts";
+import type { ModuleRuntime } from "../modules/runtime.ts";
 import type { CliEntry, CliRunResult, RuntimeEnv, RuntimeFsBinding, RuntimeFsData, RuntimeNamespace, RuntimeValue } from "../types.ts";
 import { inspectCliEntryReadiness } from "./cli-entry-readiness.ts";
 import type { PackageManagerWorkspaceWriter } from "./workspace.ts";
@@ -116,10 +119,15 @@ function startCliModuleEvaluation(
     writer: options.writer
   });
 
-  const runtime = createWorkspaceModuleRuntime({
+  let runtime: ModuleRuntime | undefined;
+  const module = createCliModuleBuiltin(() => {
+    if (!runtime) throw new Error("ERR_CLI_MODULE_RUNTIME_NOT_READY");
+    return runtime;
+  });
+  runtime = createWorkspaceModuleRuntime({
     root: options.root || "/workspace",
     reader: options.reader,
-    builtins: createBuiltinLoader({ childProcess, fs, process, workerThreads }),
+    builtins: createBuiltinLoader({ childProcess, fs, module, process, workerThreads }),
     globals: {
       __dynamicImport: globalObject.__dynamicImport,
       console: consoleObject,
@@ -165,6 +173,43 @@ function startCliModuleEvaluation(
       };
     }
   };
+}
+
+function createCliModuleBuiltin(getRuntime: () => ModuleRuntime): RuntimeNamespace {
+  const createRequire = (filename: string | URL): ((specifier: string) => RuntimeValue) & {
+    cache: RuntimeValue;
+    extensions: RuntimeValue;
+    resolve: ((specifier: string) => string) & { paths: (specifier?: string) => string[] };
+  } => {
+    const parentUrl = normalizeCreateRequireFilename(filename);
+    const require = ((specifier: string) => getRuntime().requireSync(specifier, parentUrl)) as ReturnType<typeof createRequire>;
+    require.resolve = Object.assign(
+      (specifier: string) => getRuntime().resolve(specifier, parentUrl),
+      {
+        paths: () => RuntimeModuleBuiltin._nodeModulePaths(dirname(parentUrl))
+      }
+    );
+    require.cache = RuntimeModuleBuiltin._cache;
+    require.extensions = RuntimeModuleBuiltin._extensions;
+    return require;
+  };
+
+  const resolveFilename = (request: string, parent?: { filename?: string } | null): string => {
+    if (builtinModules.includes(request)) return request;
+    return getRuntime().resolve(request, parent?.filename ? normalize(parent.filename) : "/workspace/index.cjs");
+  };
+
+  return Object.freeze({
+    ...moduleBuiltin,
+    _resolveFilename: resolveFilename,
+    createRequire
+  });
+}
+
+function normalizeCreateRequireFilename(filename: string | URL): string {
+  const value = String(filename);
+  if (value.startsWith("file:")) return normalize(fileURLToPath(value));
+  return normalize(value);
 }
 
 function createCliChildProcessBuiltin(options: {

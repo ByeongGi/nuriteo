@@ -35,7 +35,7 @@ export async function evaluateEsm(runtime: ModuleRuntime, url: string): Promise<
       url: `file://${canonicalUrl}`,
       dirname: canonicalUrl.slice(0, canonicalUrl.lastIndexOf("/")) || "/",
       filename: canonicalUrl,
-      resolve: (specifier: string) => runtime.resolve(specifier, canonicalUrl)
+      resolve: (specifier: string) => runtime.resolveImport(specifier, canonicalUrl)
     }),
     importNamespace: (specifier: string) => runtime.importSync(specifier, canonicalUrl),
     dynamicImport: (specifier: string) => runtime.importModule(specifier, canonicalUrl),
@@ -122,7 +122,8 @@ function prepareEsmSource(source: string): string {
     })
     .replace(/^[ \t]*export\s+\{([^}]+)\};?[ \t]*$/gm, (_match, clause: string) => {
       return rewriteNamedExport(clause);
-    });
+    })
+    .replace(/\bimport\.meta\b/g, "__context.importMeta");
   return declarationExports.length > 0
     ? `${prepared}\n${declarationExports.map((name) => `__exportConst("${name}", ${name});`).join("\n")}`
     : prepared;

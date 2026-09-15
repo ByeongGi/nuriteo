@@ -49,7 +49,7 @@ export function createBuiltinLoader(bindings: BuiltinBindings): (specifier: stri
     if (specifier === "http" || specifier === "node:http") return createHttpBuiltin(bindings.httpClient);
     if (specifier === "http2" || specifier === "node:http2") return http2Builtin;
     if (specifier === "https" || specifier === "node:https") return createHttpsBuiltin(bindings.httpsClient || bindings.httpClient);
-    if (specifier === "module" || specifier === "node:module") return moduleBuiltin;
+    if (specifier === "module" || specifier === "node:module") return bindings.module || moduleBuiltin;
     if (specifier === "net" || specifier === "node:net") return netBuiltin;
     if (specifier === "assert" || specifier === "node:assert") return assertBuiltin;
     if (specifier === "assert/strict" || specifier === "node:assert/strict") return assertStrictBuiltin;
