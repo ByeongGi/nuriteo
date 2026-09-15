@@ -322,7 +322,16 @@ function resolveModuleSpecifier(specifier: string, importer: string, packageRoot
 function resolvePackage(specifier: string, importer: string, packageRoot: string, reader: CliModuleGraphReader, conditions: readonly string[]): string | null {
   const [name, subpath] = splitPackageSpecifier(specifier);
   let current = dirname(importer);
-  while (current.startsWith(packageRoot)) {
+  while (true) {
+    const root = join(current, "node_modules", name);
+    const resolved = resolvePackageTarget(root, subpath ? `./${subpath}` : ".", reader, conditions);
+    if (resolved) return resolved;
+    const next = dirname(current);
+    if (next === current || !current.startsWith(packageRoot)) break;
+    current = next;
+  }
+  current = dirname(packageRoot);
+  while (true) {
     const root = join(current, "node_modules", name);
     const resolved = resolvePackageTarget(root, subpath ? `./${subpath}` : ".", reader, conditions);
     if (resolved) return resolved;

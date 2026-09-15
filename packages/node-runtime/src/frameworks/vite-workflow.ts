@@ -15,6 +15,7 @@ export interface ViteProductWorkflowOptions {
   manager: ViteProductPackageManager;
   template?: ViteProductTemplate;
   vitePackageArtifact?: ViteProductPackageArtifact;
+  dependencyArtifacts?: ViteProductDependencyArtifact[];
   projectId?: string;
   projectRoot?: string;
   initialLabel?: string;
@@ -25,6 +26,12 @@ export interface ViteProductWorkflowOptions {
 export interface ViteProductPackageArtifact {
   mounts: PackageManagerWorkspaceMount[];
   version: string;
+}
+
+export interface ViteProductDependencyArtifact {
+  mounts: PackageManagerWorkspaceMount[];
+  name: string;
+  version?: string;
 }
 
 export interface ViteProductPackageArtifactFromWorkspaceOptions {
@@ -240,6 +247,7 @@ export class ViteProductWorkflow {
   readonly template: ViteProductTemplate;
   readonly projectId: string;
   readonly projectRoot: string;
+  readonly dependencyArtifacts: ViteProductDependencyArtifact[];
   readonly vitePackageArtifact: ViteProductPackageArtifact | null;
   readonly workspace: MemoryPackageManagerWorkspace;
   readonly network: LoopbackNetwork;
@@ -266,6 +274,7 @@ export class ViteProductWorkflow {
     this.template = options.template || "react";
     this.projectId = options.projectId || `vite-${this.template}-${options.manager}`;
     this.projectRoot = options.projectRoot || "/workspace/project";
+    this.dependencyArtifacts = options.dependencyArtifacts || [];
     this.vitePackageArtifact = options.vitePackageArtifact || null;
     this.network = options.network || createLoopbackNetwork();
     this.#port = options.port ?? 5173;
@@ -321,13 +330,19 @@ export class ViteProductWorkflow {
   install(): ViteProductInstallResult {
     const packages = packagesForTemplate(this.template);
     for (const pkg of packages) {
-      if (pkg === "vite" && this.vitePackageArtifact) continue;
+      if ((pkg === "vite" && this.vitePackageArtifact) || this.#hasDependencyArtifact(pkg)) continue;
       this.workspace.writeText(join(this.projectRoot, "node_modules", pkg, "package.json"), JSON.stringify({ name: pkg }));
     }
     this.#installVitePackage();
+    this.#installDependencyArtifacts();
     const lockfile = this.manager === "npm" ? "package-lock.json" : "pnpm-lock.yaml";
     this.workspace.writeText(join(this.projectRoot, lockfile), createLockfile(this.manager, packages));
-    return { installed: true, lockfile, packages, vitePackageSource: this.#vitePackageSource() };
+    return {
+      installed: true,
+      lockfile,
+      packages: uniquePackageNames([...packages, ...this.dependencyArtifacts.map((artifact) => artifact.name)]),
+      vitePackageSource: this.#vitePackageSource()
+    };
   }
 
   inspectRealCliReadiness(): ViteRealCliReadiness {
@@ -702,6 +717,31 @@ export class ViteProductWorkflow {
     this.workspace.symlink(binPath, join(this.projectRoot, "node_modules/.bin/vite"));
   }
 
+  #installDependencyArtifacts(): void {
+    for (const artifact of this.dependencyArtifacts) {
+      const packageRoot = join(this.projectRoot, "node_modules", artifact.name);
+      for (const mount of artifact.mounts) {
+        this.workspace.writeText(join(packageRoot, normalizePackageArtifactPath(mount.path)), mount.data);
+      }
+      const packageJsonPath = join(packageRoot, "package.json");
+      if (!this.workspace.exists(packageJsonPath)) {
+        throw new ViteProductPackageArtifactError("EVITEARTIFACTMANIFEST", `Mounted dependency artifact ${artifact.name} must include package.json.`, packageJsonPath);
+      }
+      const manifest = JSON.parse(this.workspace.readText(packageJsonPath)) as VitePackageManifest;
+      if (manifest.name !== artifact.name) {
+        throw new ViteProductPackageArtifactError(
+          "EVITEARTIFACTNAME",
+          `Mounted dependency artifact package.json must have name "${artifact.name}".`,
+          packageJsonPath
+        );
+      }
+    }
+  }
+
+  #hasDependencyArtifact(name: string): boolean {
+    return this.dependencyArtifacts.some((artifact) => artifact.name === name);
+  }
+
   #installViteCliEntrypoint(): void {
     const packageJsonPath = join(this.projectRoot, "node_modules/vite/package.json");
     this.workspace.writeText(packageJsonPath, JSON.stringify({ name: "vite", version: "8.2.0", type: "module", bin: { vite: "bin/vite.js" } }));
@@ -897,6 +937,10 @@ function createLockfile(manager: ViteProductPackageManager, packages: string[]):
 
 function packagesForTemplate(template: ViteProductTemplate): string[] {
   return ["vite", "typescript", ...Object.keys(dependenciesForTemplate(template))];
+}
+
+function uniquePackageNames(packages: string[]): string[] {
+  return [...new Set(packages)];
 }
 
 function collectTextMounts(reader: WorkspaceModuleReader, packageRoot: string): PackageManagerWorkspaceMount[] {

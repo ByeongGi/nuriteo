@@ -354,6 +354,65 @@ assert.deepEqual(artifactBuildExecution.buildRegistrations, [
   }
 ]);
 
+const dependencyArtifactWorkflow = new ViteProductWorkflow({
+  manager: "pnpm",
+  vitePackageArtifact: {
+    version: "9.2.0-artifact",
+    mounts: [
+      {
+        path: "package.json",
+        data: JSON.stringify({ name: "vite", version: "9.2.0-artifact", type: "module", bin: { vite: "bin/vite.mjs" } })
+      },
+      {
+        path: "bin/vite.mjs",
+        data: "import '../dist/node/cli.mjs';\n"
+      },
+      {
+        path: "dist/node/cli.mjs",
+        data: "import { parseAst } from 'rolldown/parseAst';\nglobal.__viteRegisterBuild?.({ command: 'build', outDir: parseAst('dist'), source: 'vite-cli' });\n"
+      }
+    ]
+  },
+  dependencyArtifacts: [
+    {
+      name: "rolldown",
+      version: "1.2.0",
+      mounts: [
+        {
+          path: "package.json",
+          data: JSON.stringify({
+            name: "rolldown",
+            version: "1.2.0",
+            type: "module",
+            exports: {
+              "./parseAst": "./parseAst.mjs"
+            }
+          })
+        },
+        {
+          path: "parseAst.mjs",
+          data: "export function parseAst(value) { return value; }\n"
+        }
+      ]
+    }
+  ]
+});
+const dependencyArtifactInstall = dependencyArtifactWorkflow.install();
+assert.equal(dependencyArtifactInstall.packages.includes("rolldown"), true);
+const dependencyArtifactReadiness = dependencyArtifactWorkflow.inspectRealCliReadiness();
+assert.equal(
+  dependencyArtifactReadiness.cliModuleGraph.issues.some((issue) => issue.specifier === "rolldown/parseAst"),
+  false
+);
+const dependencyArtifactExecution = await dependencyArtifactWorkflow.executeRealCli(["build"]);
+assert.deepEqual(dependencyArtifactExecution.buildRegistrations, [
+  {
+    command: "build",
+    outDir: "dist",
+    source: "vite-cli"
+  }
+]);
+
 const installedViteWorkspace = new MemoryPackageManagerWorkspace([
   {
     path: "/vendor/vite/package.json",
