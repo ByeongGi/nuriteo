@@ -53,6 +53,8 @@ assert.deepEqual(
   [5173, 4173]
 );
 assert.equal(session.baseUrl, "https://preview.local/__preview/project-a/4173/");
+assert.equal(session.serverState, "running");
+assert.equal(session.lastErrorCode, null);
 assert.equal(createPreviewUrl(session, "/index.html"), "https://preview.local/__preview/project-a/4173/index.html");
 assert.equal(createPreviewUrl(secondPort, "src/main.js"), "https://preview.local/__preview/project-a/5173/src/main.js");
 const moved = sessions.replace(secondPort.sessionId, { port: 6173 });
@@ -116,6 +118,18 @@ await assert.rejects(
   }),
   (error) => error.code === "ENOSERVER"
 );
+assert.equal(sessions.get(unavailable.sessionId).serverState, "stopped");
+assert.equal(sessions.get(unavailable.sessionId).lastErrorCode, "ENOSERVER");
+sessions.replace(unavailable.sessionId, { container });
+const afterServerRestart = await relay.request({
+  sessionId: unavailable.sessionId,
+  origin: "https://preview.local",
+  projectId: "project-a",
+  path: "/index.html"
+});
+assert.equal(afterServerRestart.statusCode, 200);
+assert.equal(sessions.get(unavailable.sessionId).serverState, "running");
+assert.equal(sessions.get(unavailable.sessionId).lastErrorCode, null);
 await assert.rejects(
   relay.request({
     sessionId: fresh.sessionId,

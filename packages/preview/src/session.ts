@@ -19,6 +19,8 @@ export class PreviewSessionRegistry {
       projectId,
       port,
       baseUrl: createPreviewBaseUrl(origin, projectId, port),
+      serverState: "running" as const,
+      lastErrorCode: null,
       container,
       createdAt: this.now(),
       touchedAt: this.now()

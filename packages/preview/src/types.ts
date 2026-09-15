@@ -8,6 +8,8 @@ export interface PreviewSession {
   projectId: string;
   port: number;
   baseUrl: string;
+  serverState: "running" | "stopped";
+  lastErrorCode: PreviewErrorCode | null;
   container: PreviewContainer;
   createdAt: number;
   touchedAt: number;

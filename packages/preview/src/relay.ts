@@ -33,15 +33,20 @@ export class PreviewRelay {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
     try {
-      return await session.container.fetch(`http://127.0.0.1:${session.port}${path}`, {
+      const response = await session.container.fetch(`http://127.0.0.1:${session.port}${path}`, {
         method,
         headers,
         body,
         signal: controller.signal
       });
+      this.sessions.replace(sessionId, { serverState: "running", lastErrorCode: null });
+      return response;
     } catch (error) {
       if (controller.signal.aborted) throw new PreviewRelayError("preview request timeout", "ETIMEOUT");
-      if (isConnectionRefused(error)) throw new PreviewRelayError("preview server unavailable", "ENOSERVER");
+      if (isConnectionRefused(error)) {
+        this.sessions.replace(sessionId, { serverState: "stopped", lastErrorCode: "ENOSERVER" });
+        throw new PreviewRelayError("preview server unavailable", "ENOSERVER");
+      }
       throw error;
     } finally {
       clearTimeout(timeout);
