@@ -37,8 +37,10 @@ const workspace = new MemoryPackageManagerWorkspace([
   {
     path: "/workspace/source-esm.mjs",
     data: `
+      import path from "node:path";
       import { basename } from "node:path";
       export const base = basename("/workspace/source-esm.mjs");
+      export const defaultBase = path.basename("/workspace/source-esm-default.mjs");
     `
   },
   {
@@ -175,5 +177,6 @@ assert.equal(runtime.resolve("pattern-pkg/lib/tool", "/workspace/app.cjs"), "/wo
 
 const sourceEsm = await runtime.importModule("./source-esm.mjs", "/workspace/index.mjs");
 assert.equal(sourceEsm.base, "source-esm.mjs");
+assert.equal(sourceEsm.defaultBase, "source-esm-default.mjs");
 
 console.log("node workspace modules test ok");

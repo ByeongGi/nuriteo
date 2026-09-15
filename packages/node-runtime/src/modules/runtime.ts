@@ -54,7 +54,7 @@ export class ModuleRuntime {
   }
 
   importSync(specifier: string, parentUrl = "/workspace/index.mjs"): RuntimeNamespace {
-    if (this.builtins && builtinModules.includes(specifier)) return this.builtins(specifier) as RuntimeNamespace;
+    if (this.builtins && builtinModules.includes(specifier)) return asEsmNamespace(this.builtins(specifier));
     const url = this.resolver.resolveImport(specifier, parentUrl);
     const existing = this.cache.esm.get(url);
     if (existing) return existing.namespace;
@@ -74,7 +74,7 @@ export class ModuleRuntime {
   }
 
   async importModule(specifier: string, parentUrl = "/workspace/index.mjs"): Promise<RuntimeNamespace> {
-    if (this.builtins && builtinModules.includes(specifier)) return this.builtins(specifier) as RuntimeNamespace;
+    if (this.builtins && builtinModules.includes(specifier)) return asEsmNamespace(this.builtins(specifier));
     const url = this.resolver.resolveImport(specifier, parentUrl);
     return evaluateEsm(this, url);
   }
@@ -82,4 +82,14 @@ export class ModuleRuntime {
 
 export function createModuleRuntime(options: ModuleRuntimeOptions = {}): ModuleRuntime {
   return new ModuleRuntime(options);
+}
+
+function asEsmNamespace(value: RuntimeValue): RuntimeNamespace {
+  const namespace: RuntimeNamespace = { default: value };
+  if ((typeof value === "object" || typeof value === "function") && value) {
+    for (const key of Object.keys(value)) {
+      namespace[key] = (value as Record<string, RuntimeValue>)[key];
+    }
+  }
+  return namespace;
 }
