@@ -27,4 +27,4 @@ export type { CliArtifactReader, CliRegistryLike, GuestCli, GuestRuntimeProcessR
 export type { PackageManagerTerminalCommandName, PackageManagerTerminalCommandOptions, PackageManagerTerminalCommandResult, PackageManagerTerminalRunner } from "./terminal-commands.ts";
 export type { AsyncCliModuleEvaluatorOptions, CliModuleEvaluationRequest, CliModuleEvaluatorOptions } from "./cli-evaluator.ts";
 export type { CliModuleGraph, CliModuleGraphIssue, CliModuleGraphModule, CliModuleGraphOptions, CliModuleGraphReader } from "./cli-module-graph.ts";
-export type { PackageManagerLinkStrategy, PackageManagerWorkspace, PackageManagerWorkspaceMount, PackageManagerWorkspaceReader, PackageManagerWorkspaceWriter } from "./workspace.ts";
+export type { PackageManagerLinkStrategy, PackageManagerWorkspace, PackageManagerWorkspaceLinkSnapshot, PackageManagerWorkspaceMount, PackageManagerWorkspaceReader, PackageManagerWorkspaceSnapshot, PackageManagerWorkspaceWriter } from "./workspace.ts";
