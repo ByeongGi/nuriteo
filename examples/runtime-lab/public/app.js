@@ -1,5 +1,6 @@
 import { createContainer } from "/packages/sdk/src/container.ts";
 import {
+  createRuntimeRecoveryActionExecutor,
   createRuntimeRecoveryPlan,
   createRuntimeSupportBundle
 } from "/packages/browser-host/src/observability/index.ts";
@@ -44,6 +45,33 @@ const recoveryActionsEl = document.getElementById("recovery-actions");
 let container = null;
 let terminal = createLabTerminal();
 let lastSupportBundle = null;
+let lastSupportBundleExport = null;
+const recoveryExecutor = createRuntimeRecoveryActionExecutor({
+  handlers: {
+    clearCache() {
+      terminal.restart();
+      appendTerminalOutput("package cache cleared\n");
+      return { cleared: true };
+    },
+    exportSupportBundle(bundle) {
+      return exportSupportBundle(bundle);
+    },
+    openDocs(href) {
+      const target = href || "/docs/productization/public-compatibility-matrix.md";
+      log(`docs:${target}`);
+      return target;
+    },
+    resetRuntime() {
+      restartTerminal();
+      return { restarted: true };
+    },
+    retry(action) {
+      if (action.command) return runTerminalCommand(action.command);
+      appendTerminalOutput("preview request retried\n");
+      return { retried: true };
+    }
+  }
+});
 const project = createProjectWorkspaceStore({
   projectId: "runtime-lab",
   root: "/workspace/app",
@@ -317,38 +345,66 @@ function renderRecoveryActions(actions) {
       button.dataset.action = action.kind;
       if (action.path) button.dataset.path = action.path;
       if (action.command) button.dataset.command = action.command;
-      button.addEventListener("click", () => applyRecoveryAction(action));
+      button.addEventListener("click", () => {
+        applyRecoveryAction(action).catch((error) => log(error.message));
+      });
       return button;
     })
   );
 }
 
-function applyRecoveryAction(action) {
+async function applyRecoveryAction(action) {
   if (action.kind === "open-file" && action.path) {
     openEditorFile(action.path);
-    return "opened-file";
+    return {
+      action,
+      message: "Opened file.",
+      status: "handled",
+      value: action.path
+    };
   }
   if (action.kind === "show-terminal") {
     terminalInput.focus();
-    return "showed-terminal";
+    return {
+      action,
+      message: "Focused terminal.",
+      status: "handled"
+    };
   }
   if (action.kind === "restart-dev-server" || action.kind === "reset-runtime") {
-    restartTerminal();
-    return "restarted";
+    return recoveryExecutor.execute({
+      kind: "reset-runtime",
+      label: action.label,
+      reason: "Restart the runtime session and dev server."
+    });
   }
   if (action.kind === "rerun-build") {
-    runTerminalCommand(action.command || "npm run build").catch((error) => appendTerminalOutput(`${error.message}\n`));
-    return "rerun-build";
+    return recoveryExecutor.execute({
+      kind: "retry",
+      label: action.label,
+      reason: "Rerun the build command after reviewing the diagnostic.",
+      command: action.command || "npm run build"
+    });
   }
-  if (action.kind === "clear-cache") {
-    appendTerminalOutput("cache cleared\n");
-    return "cache-cleared";
-  }
-  if (action.kind === "export-support-bundle") {
-    log(lastSupportBundle || "support bundle unavailable");
-    return "exported-support-bundle";
-  }
-  return "noop";
+  const result = await recoveryExecutor.execute(action);
+  log(result);
+  return result;
+}
+
+function exportSupportBundle(bundle) {
+  const payload = JSON.stringify(bundle, null, 2);
+  lastSupportBundleExport = {
+    fileName: "runtime-support-bundle.json",
+    payload
+  };
+  const url = URL.createObjectURL(new Blob([payload], { type: "application/json" }));
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = lastSupportBundleExport.fileName;
+  anchor.click();
+  URL.revokeObjectURL(url);
+  log(bundle);
+  return lastSupportBundleExport;
 }
 
 function ensureIsolated() {
@@ -530,6 +586,12 @@ function runRecoverySmoke() {
       severity: "error",
       message: "preview server unavailable",
       source: "preview"
+    },
+    {
+      code: "EOPFSQUOTA",
+      severity: "warning",
+      message: "package cache quota exceeded",
+      source: "storage"
     }
   ];
   const bundle = createRuntimeSupportBundle({
@@ -542,6 +604,7 @@ function runRecoverySmoke() {
     logs: [terminalLogEl.textContent]
   });
   lastSupportBundle = bundle;
+  recoveryExecutor.setSupportBundle(bundle);
   const plan = createRuntimeRecoveryPlan({ diagnostics, supportBundle: bundle });
   renderRecoveryPlan(plan);
   const result = { bundle, plan };
@@ -626,6 +689,7 @@ globalThis.__runtimeLab = {
   terminalHistory: () => terminal.history(),
   terminalOutput: () => terminalLogEl.textContent,
   terminalTranscript: () => terminal.transcript(),
+  supportBundleExport: () => lastSupportBundleExport,
   metrics: () => container?.metrics || null,
   log: () => logEl.textContent
 };

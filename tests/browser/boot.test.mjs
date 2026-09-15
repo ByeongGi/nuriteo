@@ -74,9 +74,27 @@ await withRuntimeLab(async (page, baseUrl) => {
   if (await page.locator("#diagnostics-status").textContent() !== "blocked") {
     throw new Error("diagnostics panel did not render recovery status");
   }
+  await page.locator("#recovery-actions button", { hasText: "Retry preview request" }).click();
+  await page.waitForFunction(() => globalThis.__runtimeLab.terminalOutput().includes("preview request retried"));
+  await page.locator("#recovery-actions button", { hasText: "Restart dev server" }).click();
+  if (await page.locator("#terminal-status").textContent() !== "restarted") {
+    throw new Error("reset-runtime recovery action did not restart terminal session");
+  }
+  await page.locator("#recovery-actions button", { hasText: "Clear package cache" }).click();
+  if (!await page.locator("#terminal-log").textContent().then((text) => text.includes("package cache cleared"))) {
+    throw new Error("clear-cache recovery action did not write terminal feedback");
+  }
   await page.locator("#recovery-actions button", { hasText: "Export support bundle" }).click();
   if (!await page.locator("#log").textContent().then((text) => text.includes("ERR_PM_NATIVE_ADDON_UNSUPPORTED"))) {
     throw new Error("export support bundle action did not write bundle to log");
+  }
+  await page.waitForFunction(() => Boolean(globalThis.__runtimeLab.supportBundleExport()));
+  const exportedBundle = await page.evaluate(() => globalThis.__runtimeLab.supportBundleExport());
+  if (exportedBundle.fileName !== "runtime-support-bundle.json") {
+    throw new Error("export support bundle action did not prepare a download file");
+  }
+  if (!exportedBundle.payload.includes("ERR_PM_NATIVE_ADDON_UNSUPPORTED")) {
+    throw new Error("export support bundle action did not serialize diagnostics");
   }
   const terminalResult = await page.evaluate(async () => {
     const install = await globalThis.__runtimeLab.runTerminalCommand("npm install");
