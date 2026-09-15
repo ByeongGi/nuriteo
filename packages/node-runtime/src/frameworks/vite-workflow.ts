@@ -40,6 +40,13 @@ export interface ViteProductPackageArtifactFromWorkspaceOptions {
   version?: string;
 }
 
+export interface ViteProductDependencyArtifactFromWorkspaceOptions {
+  name?: string;
+  packageRoot: string;
+  reader: WorkspaceModuleReader;
+  version?: string;
+}
+
 export type ViteProductPackageArtifactErrorCode = "EVITEARTIFACTMANIFEST" | "EVITEARTIFACTNAME" | "EVITEARTIFACTBIN";
 
 export class ViteProductPackageArtifactError extends Error {
@@ -832,6 +839,24 @@ export function createVitePackageArtifactFromWorkspace(options: ViteProductPacka
   const mounts = collectTextMounts(options.reader, packageRoot);
   return {
     mounts,
+    version: options.version || packageJson.version || "unknown"
+  };
+}
+
+export function createViteDependencyArtifactFromWorkspace(options: ViteProductDependencyArtifactFromWorkspaceOptions): ViteProductDependencyArtifact {
+  const packageRoot = normalizeServedPath(options.packageRoot).replace(/\/$/, "");
+  const packageJsonPath = join(packageRoot, "package.json");
+  const packageJson = JSON.parse(options.reader.readText(packageJsonPath)) as VitePackageManifest;
+  const name = options.name || packageJson.name;
+  if (!name) {
+    throw new ViteProductPackageArtifactError("EVITEARTIFACTNAME", "Mounted dependency artifact package.json must have a package name.", packageJsonPath);
+  }
+  if (packageJson.name !== name) {
+    throw new ViteProductPackageArtifactError("EVITEARTIFACTNAME", `Mounted dependency artifact package.json must have name "${name}".`, packageJsonPath);
+  }
+  return {
+    name,
+    mounts: collectTextMounts(options.reader, packageRoot),
     version: options.version || packageJson.version || "unknown"
   };
 }

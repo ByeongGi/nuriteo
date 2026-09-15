@@ -6,6 +6,7 @@ import {
   createLoopbackNetwork,
   createNpmInstallPlan,
   createPnpmStorePlan,
+  createViteDependencyArtifactFromWorkspace,
   createVitePackageArtifactFromWorkspace,
   MemoryPackageManagerWorkspace,
   runViteProductCliBackedWorkflow,
@@ -409,6 +410,48 @@ assert.deepEqual(dependencyArtifactExecution.buildRegistrations, [
   {
     command: "build",
     outDir: "dist",
+    source: "vite-cli"
+  }
+]);
+
+const installedDependencyWorkspace = new MemoryPackageManagerWorkspace([
+  {
+    path: "/vendor/rolldown/package.json",
+    data: JSON.stringify({
+      name: "rolldown",
+      version: "1.2.1-installed",
+      type: "module",
+      exports: {
+        "./parseAst": "./parseAst.mjs"
+      }
+    })
+  },
+  {
+    path: "/vendor/rolldown/parseAst.mjs",
+    data: "export function parseAst(value) { return `installed:${value}`; }\n"
+  }
+]);
+const installedDependencyArtifact = createViteDependencyArtifactFromWorkspace({
+  reader: installedDependencyWorkspace,
+  packageRoot: "/vendor/rolldown"
+});
+assert.equal(installedDependencyArtifact.name, "rolldown");
+assert.equal(installedDependencyArtifact.version, "1.2.1-installed");
+assert.deepEqual(installedDependencyArtifact.mounts.map((mount) => mount.path), [
+  "package.json",
+  "parseAst.mjs"
+]);
+const installedDependencyWorkflow = new ViteProductWorkflow({
+  manager: "pnpm",
+  vitePackageArtifact: dependencyArtifactWorkflow.vitePackageArtifact,
+  dependencyArtifacts: [installedDependencyArtifact]
+});
+installedDependencyWorkflow.install();
+const installedDependencyExecution = await installedDependencyWorkflow.executeRealCli(["build"]);
+assert.deepEqual(installedDependencyExecution.buildRegistrations, [
+  {
+    command: "build",
+    outDir: "installed:dist",
     source: "vite-cli"
   }
 ]);
