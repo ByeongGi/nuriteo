@@ -1,0 +1,40 @@
+name: Release provenance
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/release-provenance.yml"
+      - "compat/**"
+      - "docs/release/**"
+      - "dist/sdk/package/**"
+      - "packages/**"
+      - "scripts/**"
+      - "workers/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "Cargo.lock"
+
+jobs:
+  release-provenance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.15.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.23.0
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.97.1
+          targets: wasm32-unknown-unknown
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec tsc --noEmit --pretty false
+      - run: node scripts/check-release-policy.mjs
+      - run: node scripts/check-performance-baseline.mjs
+      - run: node scripts/check-soak-baseline.mjs
+      - run: node scripts/check-release-provenance.mjs
+      - run: node scripts/check-workspace.mjs
