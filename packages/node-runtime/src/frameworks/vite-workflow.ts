@@ -487,6 +487,21 @@ export class ViteProductWorkflow {
     const hmrRegistrations: ViteProductCliHmrRegistration[] = [];
     const serverRegistrations: ViteProductCliServerRegistration[] = [];
     const transformRegistrations: ViteProductCliTransformRegistration[] = [];
+    if (isForcedWasiEnv(env) && this.#hasDependencyArtifact("@napi-rs/wasm-runtime")) {
+      return {
+        args,
+        buildRegistrations,
+        cwd: this.projectRoot,
+        entry: cliEntrypoint,
+        exitCode: 1,
+        hmrRegistrations,
+        mode: "async-cli-module-evaluation",
+        serverRegistrations,
+        stderr: "EVITEWASISYNCINIT: forced WASI execution requires isolated worker evaluation before running @napi-rs/wasm-runtime in the browser runtime.\n",
+        stdout: "",
+        transformRegistrations
+      };
+    }
     const broadcastHmr = (update: ViteProductHmrUpdate): ViteProductHmrUpdate => {
       this.#broadcastHmr(update);
       return update;
@@ -1162,6 +1177,10 @@ function packagesForTemplate(template: ViteProductTemplate): string[] {
 
 function uniquePackageNames(packages: string[]): string[] {
   return [...new Set(packages)];
+}
+
+function isForcedWasiEnv(env: RuntimeEnv): boolean {
+  return env.NAPI_RS_FORCE_WASI === "error" || env.NAPI_RS_FORCE_WASI === "true";
 }
 
 function createDependencyMaterializationPlan(

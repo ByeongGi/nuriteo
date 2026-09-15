@@ -360,6 +360,28 @@ assert.deepEqual(artifactBuildExecution.buildRegistrations, [
   }
 ]);
 
+const forcedWasiGuardWorkflow = new ViteProductWorkflow({
+  manager: "pnpm",
+  vitePackageArtifact: artifactWorkflow.vitePackageArtifact,
+  dependencyArtifacts: [
+    {
+      name: "@napi-rs/wasm-runtime",
+      version: "1.2.4",
+      mounts: [
+        {
+          path: "package.json",
+          data: JSON.stringify({ name: "@napi-rs/wasm-runtime", version: "1.2.4" })
+        }
+      ]
+    }
+  ]
+});
+forcedWasiGuardWorkflow.install();
+const forcedWasiGuardExecution = await forcedWasiGuardWorkflow.executeRealCli(["build"], { NAPI_RS_FORCE_WASI: "error" });
+assert.equal(forcedWasiGuardExecution.exitCode, 1);
+assert.match(forcedWasiGuardExecution.stderr, /EVITEWASISYNCINIT/);
+assert.deepEqual(forcedWasiGuardExecution.buildRegistrations, []);
+
 const dependencyArtifactWorkflow = new ViteProductWorkflow({
   manager: "pnpm",
   vitePackageArtifact: {
