@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 
-import { createLoopbackNetwork, runViteProductWorkflow, ViteProductWorkflow } from "../../packages/node-runtime/src/index.ts";
+import { createLoopbackNetwork, runViteProductCliBackedWorkflow, runViteProductWorkflow, ViteProductWorkflow } from "../../packages/node-runtime/src/index.ts";
 import { createHmrClient, createPreviewRelay, createPreviewSessionRegistry } from "../../packages/preview/src/index.ts";
 
 for (const template of ["react", "vue-runtime", "svelte"]) {
@@ -58,6 +58,16 @@ for (const manager of ["npm", "pnpm"]) {
   assert.equal(result.build.cliEntrypoint, "/workspace/project/node_modules/vite/bin/vite.js");
   assert.equal(result.reloadRecovery.restarted, true);
   assert.match(result.reloadRecovery.previewAfterRestart, /beta:1/);
+
+  const cliBacked = await runViteProductCliBackedWorkflow({ manager, template, port: 5190 });
+  assert.equal(cliBacked.devServer.source, "cli-execution");
+  assert.equal(cliBacked.devServer.moduleTransform, "vite-cli");
+  assert.equal(cliBacked.devServer.processPid, 5190);
+  assert.match(cliBacked.preview.body, /alpha:1/);
+  assert.equal(cliBacked.hmr.statePreserved, true);
+  assert.equal(cliBacked.build.command, "vite build");
+  assert.match(cliBacked.build.distSmoke, /beta:1/);
+  assert.match(cliBacked.reloadRecovery.previewAfterRestart, /beta:1/);
 
   const network = createLoopbackNetwork();
   const workflow = new ViteProductWorkflow({ manager, template, projectId: `${manager}-${template}-preview`, network, port: 5173 });

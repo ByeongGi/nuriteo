@@ -34,6 +34,11 @@ export interface ViteProductWorkflowResult {
   reloadRecovery: ViteProductReloadRecoveryResult;
 }
 
+export interface ViteProductCliBackedWorkflowResult extends ViteProductWorkflowResult {
+  devServer: ViteProductDevServerSnapshot;
+  build: ViteProductBuildResult;
+}
+
 export interface ViteProductInstallResult {
   installed: boolean;
   lockfile: string;
@@ -208,6 +213,29 @@ export class ViteProductWorkflow {
     };
   }
 
+  async runCliBacked(): Promise<ViteProductCliBackedWorkflowResult> {
+    const install = this.install();
+    const realCliReadiness = this.inspectRealCliReadiness();
+    const devServer = await this.startDevServerFromCliExecution();
+    const preview = this.preview("/");
+    const hmr = this.editMessage("beta");
+    const build = await this.buildFromCliExecution();
+    const reloadRecovery = this.restart();
+    return {
+      runtime: "browser-guest-node-runtime",
+      manager: this.manager,
+      template: this.template,
+      projectId: this.projectId,
+      install,
+      realCliReadiness,
+      devServer,
+      preview,
+      hmr,
+      build,
+      reloadRecovery
+    };
+  }
+
   install(): ViteProductInstallResult {
     const packages = packagesForTemplate(this.template);
     for (const pkg of packages) {
@@ -322,6 +350,7 @@ export class ViteProductWorkflow {
     this.#devServerSource = "package-script";
     this.#devServerCommand = command;
     this.#devServerCliEntrypoint = cliEntrypoint;
+    this.#moduleTransformSource = "adapter";
     return this.#snapshot();
   }
 
@@ -556,10 +585,18 @@ export function runViteProductWorkflow(options: ViteProductWorkflowOptions): Vit
   return new ViteProductWorkflow(options).run();
 }
 
+export function runViteProductCliBackedWorkflow(options: ViteProductWorkflowOptions): Promise<ViteProductCliBackedWorkflowResult> {
+  return new ViteProductWorkflow(options).runCliBacked();
+}
+
 export const ViteReactProductWorkflow = ViteProductWorkflow;
 
 export function runViteReactProductWorkflow(options: ViteProductWorkflowOptions): ViteProductWorkflowResult {
   return runViteProductWorkflow({ ...options, template: options.template || "react" });
+}
+
+export function runViteReactCliBackedWorkflow(options: ViteProductWorkflowOptions): Promise<ViteProductCliBackedWorkflowResult> {
+  return runViteProductCliBackedWorkflow({ ...options, template: options.template || "react" });
 }
 
 export function createViteHmrUpdate(path: string, label: string, timestamp = Date.now()): ViteProductHmrUpdate {
@@ -580,6 +617,7 @@ export function createViteHmrUpdate(path: string, label: string, timestamp = Dat
 }
 
 export type ViteReactPackageManager = ViteProductPackageManager;
+export type ViteReactCliBackedWorkflowResult = ViteProductCliBackedWorkflowResult;
 export type ViteReactProductWorkflowOptions = ViteProductWorkflowOptions;
 export type ViteReactProductWorkflowResult = ViteProductWorkflowResult;
 export type ViteReactCliBuildRegistration = ViteProductCliBuildRegistration;
