@@ -58,6 +58,14 @@ const workspace = new MemoryPackageManagerWorkspace([
       const { Buffer } = require('buffer');
       module.exports = async function run(process) {
         fs.mkdirSync(process.cwd() + '/.cache');
+        const tempDir = fs.mkdtempSync(process.cwd() + '/.cache/tmp-');
+        if (!tempDir.startsWith(process.cwd() + '/.cache/tmp-')) {
+          throw new Error('unexpected mkdtempSync path');
+        }
+        const asyncTempDir = await fs.promises.mkdtemp(process.cwd() + '/.cache/async-tmp-');
+        if (!asyncTempDir.startsWith(process.cwd() + '/.cache/async-tmp-')) {
+          throw new Error('unexpected promises.mkdtemp path');
+        }
         fs.writeFileSync(process.cwd() + '/sync.txt', 'sync');
         fs.chmodSync(process.cwd() + '/sync.txt', 0o755);
         fs.chownSync(process.cwd() + '/sync.txt', 0, 0);

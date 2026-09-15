@@ -281,6 +281,8 @@ await fsPromises.writeFile("/workspace/fs-promises.txt", "hello");
 assert.equal(await fsPromises.readFile("/workspace/fs-promises.txt", "utf8"), "hello");
 assert.equal((await fsPromises.stat("/workspace/fs-promises.txt")).size, 5);
 assert.deepEqual(await fsPromises.readdir("/workspace"), ["fs-promises.txt"]);
+const tempDir = await fsPromises.mkdtemp("/workspace/tmp-");
+assert.equal(tempDir.startsWith("/workspace/tmp-"), true);
 await fsPromises.copyFile("/workspace/fs-promises.txt", "/workspace/fs-promises-copy.txt");
 assert.equal(await fsPromises.readFile("/workspace/fs-promises-copy.txt", "utf8"), "hello");
 await fsPromises.link("/workspace/fs-promises-copy.txt", "/workspace/fs-promises-link.txt");
@@ -351,6 +353,9 @@ assert.equal(abortEvent, true);
 const httpResponse = await new Promise((resolve, reject) => {
   const request = http.request({ hostname: "registry.test", path: "/pkg", method: "POST" }, (response) => {
     const chunks = [];
+    assert.deepEqual(response.rawHeaders, ["content-type", "text/plain"]);
+    assert.deepEqual(response.trailers, {});
+    assert.deepEqual(response.rawTrailers, []);
     response.on("data", (chunk) => chunks.push(new TextDecoder().decode(chunk)));
     response.on("end", () => resolve({ statusCode: response.statusCode, body: chunks.join("") }));
   });

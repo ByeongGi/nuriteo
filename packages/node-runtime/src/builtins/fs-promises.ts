@@ -11,6 +11,7 @@ export interface FsPromisesBuiltin {
   lchmod(path: string, mode: number | string): Promise<void>;
   lchown(path: string, uid: number, gid: number): Promise<void>;
   mkdir(path: string, options?: { recursive?: boolean }): Promise<void>;
+  mkdtemp(prefix: string): Promise<string>;
   lstat(path: string): Promise<ReturnType<RuntimeFsBinding["statSync"]>>;
   open(path: string, flags?: string | number): Promise<FsPromisesFileHandle>;
   readFile(path: string, options?: "utf8" | "utf-8" | { encoding?: "utf8" | "utf-8" | null }): Promise<string | Uint8Array>;
@@ -74,6 +75,14 @@ export function createFsPromisesBuiltin(fs: RuntimeFsBinding): FsPromisesBuiltin
 
     async mkdir(path: string, _options?: { recursive?: boolean }): Promise<void> {
       fs.mkdirSync(path);
+    },
+
+    async mkdtemp(prefix: string): Promise<string> {
+      const maybeMkdtempSync = fs.mkdtempSync;
+      if (maybeMkdtempSync) return maybeMkdtempSync(prefix);
+      const path = `${prefix}${Math.random().toString(36).slice(2, 8)}`;
+      fs.mkdirSync(path);
+      return path;
     },
 
     async lstat(path: string): Promise<ReturnType<RuntimeFsBinding["statSync"]>> {

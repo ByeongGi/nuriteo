@@ -28,13 +28,17 @@ export class Agent {
 
 export class IncomingMessage extends Readable {
   headers: Record<string, string>;
+  rawHeaders: string[];
+  rawTrailers: string[] = [];
   statusCode: number;
   statusMessage: string;
+  trailers: Record<string, string> = {};
   url: string;
 
   constructor(options: { body: Uint8Array; headers: Record<string, string>; statusCode: number; statusMessage?: string; url: string }) {
     super();
     this.headers = options.headers;
+    this.rawHeaders = Object.entries(options.headers).flatMap(([key, value]) => [key, value]);
     this.statusCode = options.statusCode;
     this.statusMessage = options.statusMessage || "";
     this.url = options.url;

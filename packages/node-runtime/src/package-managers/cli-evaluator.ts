@@ -526,7 +526,7 @@ function clearCliImmediate(handle: ReturnType<typeof setTimeout>): void {
 }
 
 function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+  return error instanceof Error ? error.stack || error.message : String(error);
 }
 
 function captureHostAsyncErrors(onError: (error: unknown) => void): () => void {
@@ -717,6 +717,23 @@ function createWorkspaceFsFacade(reader: WorkspaceModuleReader, writer?: Package
       if (!writer) throw unsupportedFsMutation("mkdirSync");
       writer.mkdir(normalize(path));
     },
+    mkdtemp(prefix: string, optionsOrCallback?: unknown, callback?: (error: Error | null, path?: string) => void): void {
+      const cb = typeof optionsOrCallback === "function"
+        ? optionsOrCallback as (error: Error | null, path?: string) => void
+        : callback;
+      if (!cb) return;
+      callWithFsCallback(() => facade.mkdtempSync(prefix), cb);
+    },
+    mkdtempSync(prefix: string): string {
+      if (!writer) throw unsupportedFsMutation("mkdtempSync");
+      for (let index = 0; index < 1000; index += 1) {
+        const path = normalize(`${prefix}${index.toString(36).padStart(6, "0")}`);
+        if (facade.existsSync(path)) continue;
+        writer.mkdir(path);
+        return path;
+      }
+      throw createFsError("EEXIST", `Could not create temporary directory for prefix: ${prefix}`);
+    },
     futimes(fd: number, _atime: Date | number | string, _mtime: Date | number | string, callback: (error?: Error | null) => void = () => undefined): void {
       try {
         assertOpenFile(fd);
@@ -802,6 +819,9 @@ function createWorkspaceFsFacade(reader: WorkspaceModuleReader, writer?: Package
       },
       async mkdir(path: string): Promise<void> {
         facade.mkdirSync(path);
+      },
+      async mkdtemp(prefix: string): Promise<string> {
+        return facade.mkdtempSync(prefix);
       },
       async copyFile(source: string, target: string): Promise<void> {
         facade.copyFileSync(source, target);
