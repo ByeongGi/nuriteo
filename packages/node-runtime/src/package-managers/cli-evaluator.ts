@@ -1186,11 +1186,14 @@ function createFileHandle(fh: number, fs: CliFileHandleFs): CliFileHandle {
 
 function callWithFsCallback<T>(read: () => T, callback: (error: Error | null, value?: T) => void): void {
   queueMicrotask(() => {
+    let value: T;
     try {
-      callback(null, read());
+      value = read();
     } catch (error) {
       callback(error instanceof Error ? error : new Error(String(error)));
+      return;
     }
+    callback(null, value);
   });
 }
 
@@ -1198,10 +1201,11 @@ function callWithOptionalFsCallback(run: () => void, callback: (error?: Error | 
   queueMicrotask(() => {
     try {
       run();
-      callback(null);
     } catch (error) {
       callback(error instanceof Error ? error : new Error(String(error)));
+      return;
     }
+    callback(null);
   });
 }
 

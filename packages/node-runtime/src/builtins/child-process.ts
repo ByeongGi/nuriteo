@@ -28,7 +28,7 @@ export class ChildProcess extends EventEmitter {
   stdio = [this.stdin, this.stdout, this.stderr] as const;
 
   kill(signal = "SIGTERM"): boolean {
-    if (this.killed) return false;
+    if (this.killed || this.exitCode !== null || this.signalCode !== null) return false;
     this.killed = true;
     this.signalCode = signal;
     this.emit("exit", null, signal);

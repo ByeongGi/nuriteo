@@ -85,8 +85,8 @@ export class BrowserProcess extends EventEmitter {
 
   exit(code = 0): never | undefined {
     this.exitCode = code;
-    this.emit("exit", code);
     if (this.#exitMode === "capture") return undefined;
+    this.emit("exit", code);
     throw new Error(`process.exit(${code})`);
   }
 

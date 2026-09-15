@@ -38,6 +38,11 @@ export class Stream extends EventEmitter {
 }
 
 export class Readable extends Stream {
+  readable = true;
+  _readableState: { encoding: BufferEncoding | null; objectMode: boolean } = {
+    encoding: null,
+    objectMode: false
+  };
   #queue: RuntimeValue[] = [];
   #ended = false;
   #destroyed = false;
@@ -67,6 +72,7 @@ export class Readable extends Stream {
   push(chunk: RuntimeValue): boolean {
     if (chunk === null) {
       this.#ended = true;
+      this.readable = false;
       this.emit("end");
       this.emit("close");
       return false;
@@ -86,6 +92,7 @@ export class Readable extends Stream {
 
   setEncoding(encoding: BufferEncoding): this {
     this.#encoding = encoding;
+    this._readableState.encoding = encoding;
     return this;
   }
 
@@ -95,6 +102,7 @@ export class Readable extends Stream {
 
   destroy(error?: RuntimeValue): this {
     this.#destroyed = true;
+    this.readable = false;
     if (error) this.emit("error", error);
     this.emit("close");
     return this;
@@ -113,6 +121,10 @@ export class Readable extends Stream {
 }
 
 export class Writable extends Stream {
+  writable = true;
+  _writableState: { objectMode: boolean } = {
+    objectMode: false
+  };
   #options: WritableOptions;
   #ended = false;
   #destroyed = false;
@@ -161,6 +173,7 @@ export class Writable extends Stream {
         return;
       }
       this.#ended = true;
+      this.writable = false;
       this.emit("finish");
       this.emit("close");
       done?.();
@@ -170,6 +183,7 @@ export class Writable extends Stream {
 
   destroy(error?: RuntimeValue): this {
     this.#destroyed = true;
+    this.writable = false;
     if (error) this.emit("error", error);
     this.emit("close");
     return this;
@@ -292,13 +306,14 @@ export const promises = Object.freeze({
 });
 
 const legacyStream = createLegacyStreamConstructor();
+const legacyTransform = createLegacyTransformConstructor(legacyStream);
 
 export const streamBuiltin = Object.assign(legacyStream, {
   Duplex,
   PassThrough,
   Readable,
   Stream: legacyStream,
-  Transform,
+  Transform: legacyTransform,
   Writable,
   default: legacyStream,
   finished,
@@ -441,4 +456,138 @@ function createLegacyStreamConstructor(): typeof Stream {
   LegacyStream.prototype.pipe = Stream.prototype.pipe;
   LegacyStream.prototype.unpipe = Stream.prototype.unpipe;
   return LegacyStream;
+}
+
+function createLegacyTransformConstructor(LegacyStream: typeof Stream): typeof Transform {
+  const readableEncoding = new WeakMap<object, BufferEncoding | null>();
+
+  const LegacyTransform = function Transform(this: Transform, options: TransformOptions = {}) {
+    Object.defineProperties(this, {
+      _readableState: {
+        configurable: true,
+        value: { encoding: null, objectMode: false },
+        writable: true
+      },
+      _writableState: {
+        configurable: true,
+        value: { objectMode: false },
+        writable: true
+      },
+      readable: {
+        configurable: true,
+        value: true,
+        writable: true
+      },
+      writable: {
+        configurable: true,
+        value: true,
+        writable: true
+      }
+    });
+    Object.defineProperty(this, "__browserTransformOptions", {
+      configurable: true,
+      value: options,
+      writable: true
+    });
+    readableEncoding.set(this, null);
+  } as unknown as typeof Transform;
+
+  LegacyTransform.prototype = Object.create(LegacyStream.prototype) as Transform;
+  LegacyTransform.prototype.constructor = LegacyTransform;
+  Object.defineProperty(LegacyTransform, Symbol.hasInstance, {
+    value(value: unknown) {
+      return value instanceof Transform ||
+        (typeof value === "object" &&
+          value !== null &&
+          typeof (value as { pipe?: unknown }).pipe === "function" &&
+          typeof (value as { write?: unknown }).write === "function");
+    }
+  });
+
+  LegacyTransform.prototype.push = function push(this: Transform & LegacyTransformState, chunk: RuntimeValue): boolean {
+    if (chunk === null) {
+      this.readable = false;
+      this.emit("end");
+      this.emit("close");
+      return false;
+    }
+    const value = normalizeReadableChunk(chunk, readableEncoding.get(this) ?? null);
+    this.emit("data", value);
+    return true;
+  };
+  LegacyTransform.prototype.write = function write(
+    this: Transform & LegacyTransformState,
+    chunk: RuntimeValue,
+    encodingOrCallback: string | WriteCallback = "utf8",
+    callback?: WriteCallback
+  ): boolean {
+    const encoding = typeof encodingOrCallback === "string" ? encodingOrCallback : "utf8";
+    const done = typeof encodingOrCallback === "function" ? encodingOrCallback : callback;
+    const transform = this._transform ?? this.__browserTransformOptions?.transform;
+    const finish = (error?: Error | null, data?: RuntimeValue) => {
+      if (error) {
+        this.destroy(error);
+        done?.(error);
+        return;
+      }
+      if (data !== undefined) this.push(data);
+      done?.();
+    };
+    if (transform) transform.call(this, chunk, encoding, finish);
+    else finish(null, chunk);
+    return true;
+  };
+  LegacyTransform.prototype.end = function end(
+    this: Transform & LegacyTransformState,
+    chunkOrCallback?: RuntimeValue | StreamCallback,
+    encodingOrCallback?: string | StreamCallback,
+    callback?: StreamCallback
+  ): Transform {
+    const chunk = typeof chunkOrCallback === "function" ? undefined : chunkOrCallback;
+    const done = typeof chunkOrCallback === "function"
+      ? chunkOrCallback
+      : typeof encodingOrCallback === "function"
+        ? encodingOrCallback
+        : callback;
+    if (chunk !== undefined) this.write(chunk);
+    const flush = this._flush ?? this.__browserTransformOptions?.flush;
+    const finish = (error?: Error | null, data?: RuntimeValue) => {
+      if (error) {
+        this.destroy(error);
+        done?.(error);
+        return;
+      }
+      if (data !== undefined) this.push(data);
+      this.writable = false;
+      this.push(null);
+      this.emit("finish");
+      done?.();
+    };
+    if (flush) flush.call(this, finish);
+    else finish();
+    return this;
+  };
+  LegacyTransform.prototype.setEncoding = function setEncoding(this: Transform & LegacyTransformState, encoding: BufferEncoding): Transform {
+    readableEncoding.set(this, encoding);
+    this._readableState.encoding = encoding;
+    return this;
+  };
+  LegacyTransform.prototype.destroy = function destroy(this: Transform & LegacyTransformState, error?: RuntimeValue): Transform {
+    this.readable = false;
+    this.writable = false;
+    if (error) this.emit("error", error);
+    this.emit("close");
+    return this;
+  };
+  return LegacyTransform;
+}
+
+interface LegacyTransformState {
+  __browserTransformOptions?: TransformOptions;
+  _flush?: (callback: TransformCallback) => void;
+  _readableState: { encoding: BufferEncoding | null; objectMode: boolean };
+  _transform?: (chunk: RuntimeValue, encoding: string, callback: TransformCallback) => void;
+  _writableState: { objectMode: boolean };
+  readable: boolean;
+  writable: boolean;
 }

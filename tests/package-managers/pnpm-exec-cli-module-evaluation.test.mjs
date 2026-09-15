@@ -20,7 +20,10 @@ const workspace = new MemoryPackageManagerWorkspace([
     data: JSON.stringify({
       name: "pnpm-exec-fixture",
       version: "0.0.0",
-      private: true
+      private: true,
+      scripts: {
+        echo: "node -e \"console.log('pnpm-run-ok')\""
+      }
     })
   },
   {
@@ -49,18 +52,32 @@ const evaluate = createAsyncCliModuleEvaluator({
   settleTicks: 100,
   settleTimeoutMs: 200
 });
+const cliEntry = {
+  ...entry,
+  entry: `${mountRoot}/${path.relative(repoRoot, entry.entry)}`
+};
+const env = {
+  HOME: "/home/webcontainer",
+  PATH: "/workspace/project/node_modules/.bin:/usr/local/bin:/usr/bin:/bin",
+  npm_config_user_agent: `pnpm/${installed.version} node/v22.23.0 browser`
+};
+
+const run = await evaluate({
+  entry: cliEntry,
+  args: ["--reporter", "silent", "run", "echo"],
+  cwd: "/workspace/project",
+  env
+});
+
+assert.equal(run.stderr, "");
+assert.equal(run.exitCode, 0);
+assert.match(run.stdout, /pnpm-run-ok/);
+
 const result = await evaluate({
-  entry: {
-    ...entry,
-    entry: `${mountRoot}/${path.relative(repoRoot, entry.entry)}`
-  },
+  entry: cliEntry,
   args: ["exec", "local-bin"],
   cwd: "/workspace/project",
-  env: {
-    HOME: "/home/webcontainer",
-    PATH: "/workspace/project/node_modules/.bin:/usr/local/bin:/usr/bin:/bin",
-    npm_config_user_agent: `pnpm/${installed.version} node/v22.23.0 browser`
-  }
+  env
 });
 
 assert.equal(result.stderr, "");
