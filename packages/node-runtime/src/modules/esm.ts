@@ -52,6 +52,56 @@ export async function evaluateEsm(runtime: ModuleRuntime, url: string): Promise<
   return namespace;
 }
 
+export function evaluateEsmSync(runtime: ModuleRuntime, url: string): RuntimeNamespace {
+  const canonicalUrl = runtime.cache.canonicalize(url);
+  const existing = runtime.cache.esm.get(canonicalUrl);
+  if (existing) return existing.namespace;
+
+  const definition = runtime.getDefinition(canonicalUrl);
+  if (!definition) throw new Error(`ERR_MODULE_NOT_FOUND: ${canonicalUrl}`);
+  if (definition.kind !== "esm" && definition.kind !== "esm-source") {
+    return cjsNamespace(runtime.requireSync(canonicalUrl, canonicalUrl));
+  }
+
+  const bindings = new Map<string, () => RuntimeValue>();
+  const namespace: RuntimeNamespace = {};
+  const record: EsmRecord = {
+    status: "evaluating",
+    namespace,
+    bindings
+  };
+  runtime.cache.esm.set(canonicalUrl, record);
+
+  if (definition.kind === "esm") {
+    for (const specifier of definition.imports || []) {
+      runtime.importSync(specifier, canonicalUrl);
+    }
+  }
+
+  const context = {
+    url: canonicalUrl,
+    importMeta: Object.freeze({
+      url: `file://${canonicalUrl}`,
+      dirname: canonicalUrl.slice(0, canonicalUrl.lastIndexOf("/")) || "/",
+      filename: canonicalUrl,
+      resolve: (specifier: string) => runtime.resolveImport(specifier, canonicalUrl)
+    }),
+    importNamespace: (specifier: string) => runtime.importSync(specifier, canonicalUrl),
+    dynamicImport: (specifier: string) => Promise.resolve(runtime.importSync(specifier, canonicalUrl)),
+    exportConst: (name: string, value: RuntimeValue) => defineBinding(namespace, bindings, name, () => value),
+    exportLive: (name: string, getter: () => RuntimeValue) => defineBinding(namespace, bindings, name, getter)
+  };
+
+  if (definition.kind === "esm-source") {
+    compileEsmSourceSync(definition.source, canonicalUrl, runtime.globals)(context);
+  } else {
+    const result = definition.factory(context);
+    if (isPromiseLike(result)) throw new Error(`ERR_REQUIRE_ASYNC_MODULE: ${canonicalUrl}`);
+  }
+  record.status = "evaluated";
+  return namespace;
+}
+
 function defineBinding(namespace: RuntimeNamespace, bindings: Map<string, () => RuntimeValue>, name: string, getter: () => RuntimeValue): void {
   bindings.set(name, getter);
   if (!Object.prototype.hasOwnProperty.call(namespace, name)) {
@@ -83,6 +133,10 @@ function compileEsmSource(source: string, filename: string, globals: Record<stri
   return createEsmSourceCompiler(prepareEsmSource(source), filename, globals);
 }
 
+function compileEsmSourceSync(source: string, filename: string, globals: Record<string, RuntimeValue>): (context: EsmContext) => void {
+  return createSyncEsmSourceCompiler(prepareSyncEsmSource(source), filename, globals);
+}
+
 function createEsmSourceCompiler(source: string, filename: string, globals: Record<string, RuntimeValue>): (context: EsmContext) => Promise<void> {
   const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor as new (...args: string[]) => (context: {
     dynamicImport: (specifier: string) => Promise<RuntimeNamespace>;
@@ -100,10 +154,23 @@ function createEsmSourceCompiler(source: string, filename: string, globals: Reco
   return (context) => compiled(context, globals.process, globals.global, globals.console ?? console, globals.globalThis ?? globals.global);
 }
 
+function createSyncEsmSourceCompiler(source: string, filename: string, globals: Record<string, RuntimeValue>): (context: EsmContext) => void {
+  const compiled = new Function(
+    "__context",
+    "process",
+    "global",
+    "console",
+    "globalThis",
+    `const __import = __context.importNamespace;\nconst __exportConst = __context.exportConst;\nconst __exportLive = __context.exportLive;\n${source}\n//# sourceURL=${filename}`
+  ) as (context: EsmContext, process: RuntimeValue, global: RuntimeValue, console: RuntimeValue, globalThis: RuntimeValue) => void;
+  return (context) => compiled(context, globals.process, globals.global, globals.console ?? console, globals.globalThis ?? globals.global);
+}
+
 function prepareEsmSource(source: string): string {
-  const declarationExports = collectDeclarationExports(source);
-  const defaultDeclarationExport = collectDefaultDeclarationExport(source) ?? (hasAnonymousDefaultDeclarationExport(source) ? "__default_export__" : null);
-  const prepared = source
+  const sourceWithoutBlockComments = stripBlockComments(source);
+  const declarationExports = collectDeclarationExports(sourceWithoutBlockComments);
+  const defaultDeclarationExport = collectDefaultDeclarationExport(sourceWithoutBlockComments) ?? (hasAnonymousDefaultDeclarationExport(sourceWithoutBlockComments) ? "__default_export__" : null);
+  const prepared = sourceWithoutBlockComments
     .replace(/^#!.*(?:\n|$)/, "")
     .replace(/^[ \t]*import\s+\*\s+as\s+([A-Za-z_$][\w$]*)\s+from\s+["']([^"']+)["'];?[ \t]*$/gm, "const $1 = await __import(\"$2\");")
     .replace(/^[ \t]*import\s+([A-Za-z_$][\w$]*)\s*,\s*\*\s+as\s+([A-Za-z_$][\w$]*)\s+from\s+["']([^"']+)["'];?[ \t]*$/gm, (_match, defaultName: string, namespaceName: string, specifier: string) => {
@@ -150,6 +217,107 @@ function prepareEsmSource(source: string): string {
   return postExports.length > 0
     ? `${prepared}\n${postExports.join("\n")}`
     : prepared;
+}
+
+function stripBlockComments(source: string): string {
+  let output = "";
+  let state: "normal" | "single" | "double" | "template" | "regex" | "line-comment" | "block-comment" = "normal";
+  let escaped = false;
+  let inRegexClass = false;
+  let previousSignificant = "";
+
+  for (let index = 0; index < source.length; index += 1) {
+    const char = source[index] || "";
+    const next = source[index + 1] || "";
+
+    if (state === "block-comment") {
+      if (char === "*" && next === "/") {
+        output += "  ";
+        index += 1;
+        state = "normal";
+      } else {
+        output += char === "\n" ? "\n" : " ";
+      }
+      continue;
+    }
+
+    if (state === "line-comment") {
+      output += char;
+      if (char === "\n") state = "normal";
+      continue;
+    }
+
+    if (state === "single" || state === "double" || state === "template") {
+      output += char;
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+      if (char === "\\") {
+        escaped = true;
+        continue;
+      }
+      if ((state === "single" && char === "'") || (state === "double" && char === "\"") || (state === "template" && char === "`")) {
+        state = "normal";
+      }
+      continue;
+    }
+
+    if (state === "regex") {
+      output += char;
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+      if (char === "\\") {
+        escaped = true;
+        continue;
+      }
+      if (char === "[") inRegexClass = true;
+      if (char === "]") inRegexClass = false;
+      if (char === "/" && !inRegexClass) state = "normal";
+      continue;
+    }
+
+    if (char === "/" && next === "*") {
+      output += "  ";
+      index += 1;
+      state = "block-comment";
+      continue;
+    }
+    if (char === "/" && next === "/") {
+      output += char;
+      state = "line-comment";
+      continue;
+    }
+    if (char === "/" && isRegexStart(previousSignificant)) {
+      output += char;
+      state = "regex";
+      escaped = false;
+      inRegexClass = false;
+      previousSignificant = char;
+      continue;
+    }
+    if (char === "'") state = "single";
+    if (char === "\"") state = "double";
+    if (char === "`") state = "template";
+    output += char;
+    if (!/\s/.test(char)) previousSignificant = char;
+  }
+
+  return output;
+}
+
+function isRegexStart(previousSignificant: string): boolean {
+  return !previousSignificant || "([{=:;,!&|?+-*~%^<>".includes(previousSignificant);
+}
+
+function prepareSyncEsmSource(source: string): string {
+  return prepareEsmSource(source).replace(/\bawait\s+__import\(/g, "__import(");
+}
+
+function isPromiseLike(value: unknown): value is Promise<unknown> {
+  return (typeof value === "object" || typeof value === "function") && value !== null && typeof (value as { then?: unknown }).then === "function";
 }
 
 function collectDeclarationExports(source: string): string[] {

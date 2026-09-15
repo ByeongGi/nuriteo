@@ -50,9 +50,11 @@ export function registerWorkspaceModules(runtime: ModuleRuntime, reader: Workspa
         source: reader.readText(file)
       });
     } else if (file.endsWith(".json")) {
+      const value = tryReadJson<RuntimeValue>(reader, file);
+      if (value === undefined) continue;
       runtime.register(file, {
         kind: "json",
-        value: readJson<RuntimeValue>(reader, file)
+        value
       });
     }
   }
@@ -179,6 +181,14 @@ function normalizeExportTargetValue(value: unknown): PackageExportTarget | undef
 
 function readJson<T>(reader: WorkspaceModuleReader, path: string): T {
   return JSON.parse(reader.readText(path)) as T;
+}
+
+function tryReadJson<T>(reader: WorkspaceModuleReader, path: string): T | undefined {
+  try {
+    return readJson<T>(reader, path);
+  } catch {
+    return undefined;
+  }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

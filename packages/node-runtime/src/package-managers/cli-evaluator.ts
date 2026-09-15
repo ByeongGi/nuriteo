@@ -569,6 +569,7 @@ function createCliWorkerThreadsBuiltin(options: {
           this.emit("exit", typeof code === "number" ? code : 0);
         });
         workerGlobal.global = workerGlobal;
+        workerGlobal.globalThis = workerGlobal;
         workerGlobal.process = workerProcess;
         const workerThreads = createWorkerContextBuiltin(this.#parentPort, this.threadId, this.workerData);
         const runtime = createWorkspaceModuleRuntime({

@@ -329,6 +329,43 @@ const workspace = new MemoryPackageManagerWorkspace([
     data: JSON.stringify({ name: "global-fixture-cli", version: "1.2.3", main: "lib/cli.js" })
   },
   {
+    path: "/workspace/worker-cli/package/bin/npm-cli.js",
+    data: "#!/usr/bin/env node\nrequire('../lib/cli.js')(process)\n"
+  },
+  {
+    path: "/workspace/worker-cli/package/lib/cli.js",
+    data: `
+      const { Worker } = require('node:worker_threads');
+      module.exports = function run(process) {
+        const worker = new Worker('/workspace/worker-cli/package/lib/worker.cjs', {
+          workerData: { label: 'wasi' }
+        });
+        worker.on('message', (value) => {
+          process.stdout.write(value + '\\n');
+        });
+        worker.on('error', (error) => {
+          process.stderr.write(error.message + '\\n');
+        });
+      };
+    `
+  },
+  {
+    path: "/workspace/worker-cli/package/lib/worker.cjs",
+    data: `
+      const { parentPort, workerData, isMainThread } = require('node:worker_threads');
+      parentPort.postMessage([
+        isMainThread,
+        workerData.label,
+        globalThis.process === process,
+        typeof globalThis.WebAssembly
+      ].join(':'));
+    `
+  },
+  {
+    path: "/workspace/worker-cli/package/package.json",
+    data: JSON.stringify({ name: "worker-fixture-cli", version: "1.2.3", main: "lib/cli.js" })
+  },
+  {
     path: "/workspace/esm-cli/package/bin/vite.js",
     data: "#!/usr/bin/env node\nimport '../dist/node/cli.js';\n"
   },
@@ -548,6 +585,24 @@ const globalResult = createCliModuleEvaluator({
 assert.equal(globalResult.stdout, "function true true true object ok\n");
 assert.equal(globalResult.stderr, "");
 assert.equal(globalResult.exitCode, 0);
+
+const workerResult = await createAsyncCliModuleEvaluator({
+  root: "/workspace",
+  reader: workspace,
+  settleTicks: 10,
+  settleTimeoutMs: 10
+})({
+  entry: {
+    name: "npm",
+    version: "1.2.3",
+    entry: "/workspace/worker-cli/package/bin/npm-cli.js"
+  },
+  args: [],
+  cwd: "/workspace/project"
+});
+assert.equal(workerResult.stdout, "false:wasi:true:object\n");
+assert.equal(workerResult.stderr, "");
+assert.equal(workerResult.exitCode, 0);
 
 const esmCliEntry = {
   name: "vite",

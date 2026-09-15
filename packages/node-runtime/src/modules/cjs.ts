@@ -1,4 +1,5 @@
 import type { ModuleRuntime } from "./runtime.ts";
+import { evaluateEsmSync } from "./esm.ts";
 import type { CjsContext, RuntimeModule, RuntimeNamespace, RuntimeValue } from "../types.ts";
 
 export function evaluateCjs(runtime: ModuleRuntime, url: string): RuntimeValue {
@@ -7,8 +8,11 @@ export function evaluateCjs(runtime: ModuleRuntime, url: string): RuntimeValue {
   if (cached) return cached.exports;
 
   const definition = runtime.getDefinition(canonicalUrl);
-  if (!definition || definition.kind === "esm") {
+  if (!definition) {
     throw new Error(`ERR_REQUIRE_ESM_OR_MISSING: ${canonicalUrl}`);
+  }
+  if (definition.kind === "esm" || definition.kind === "esm-source") {
+    return evaluateEsmSync(runtime, canonicalUrl);
   }
 
   const module: RuntimeModule = {

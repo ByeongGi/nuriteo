@@ -222,8 +222,13 @@ const runtimeWasi = new wasi.WASI({
   version: "preview1"
 });
 assert.equal(runtimeWasi.version, "preview1");
-assert.deepEqual(runtimeWasi.getImportObject(), { wasi_snapshot_preview1: runtimeWasi.wasiImport });
-assert.equal(runtimeWasi.start({} /* minimal WebAssembly.Instance stand-in */), 0);
+assert.equal(runtimeWasi.getImportObject().wasi_snapshot_preview1, runtimeWasi.wasiImport);
+assert.equal(typeof runtimeWasi.wasiImport.random_get, "function");
+const wasiMemory = new WebAssembly.Memory({ initial: 1 });
+runtimeWasi.initialize({ exports: { memory: wasiMemory } });
+assert.equal(runtimeWasi.wasiImport.random_get(0, 8), 0);
+assert.equal(new Uint8Array(wasiMemory.buffer, 0, 8).some((value) => value !== 0), true);
+assert.equal(runtimeWasi.start({ exports: { memory: wasiMemory } }), 0);
 
 const perfHooks = requireBuiltin("node:perf_hooks");
 const mark = perfHooks.performance.mark("vite-start");

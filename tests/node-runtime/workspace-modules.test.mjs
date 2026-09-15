@@ -15,6 +15,9 @@ const workspace = new MemoryPackageManagerWorkspace([
       const parent = require("parent-pkg");
       const self = require("self-pkg/internal");
       const pattern = require("pattern-pkg/lib/tool");
+      const esmOnly = require("esm-only");
+      const commentedExports = require("commented-exports");
+      const regexLiteral = require("regex-literal");
       const config = require("./config.json");
       module.exports = {
         base: path.basename(__filename),
@@ -26,6 +29,9 @@ const workspace = new MemoryPackageManagerWorkspace([
         parent,
         self: self.label,
         pattern: pattern.label,
+        esmOnly: esmOnly.label,
+        commentedExports: commentedExports.label,
+        regexLiteral: regexLiteral.label,
         config
       };
     `
@@ -33,6 +39,16 @@ const workspace = new MemoryPackageManagerWorkspace([
   {
     path: "/workspace/config.json",
     data: JSON.stringify({ mode: "browser-runtime" })
+  },
+  {
+    path: "/workspace/tsconfig.json",
+    data: `// This file is JSONC in many real projects.
+      {
+        "compilerOptions": {
+          "module": "esnext"
+        }
+      }
+    `
   },
   {
     path: "/workspace/source-esm.mjs",
@@ -145,6 +161,34 @@ const workspace = new MemoryPackageManagerWorkspace([
   {
     path: "/workspace/node_modules/pattern-pkg/src/lib/tool.cjs",
     data: "exports.label = 'pattern-export';"
+  },
+  {
+    path: "/workspace/node_modules/esm-only/package.json",
+    data: JSON.stringify({ name: "esm-only", type: "module", exports: "./index.js" })
+  },
+  {
+    path: "/workspace/node_modules/esm-only/index.js",
+    data: "import { suffix } from './suffix.js';\nexport const label = `esm-${suffix}`;\n"
+  },
+  {
+    path: "/workspace/node_modules/esm-only/suffix.js",
+    data: "export const suffix = 'required';\n"
+  },
+  {
+    path: "/workspace/node_modules/commented-exports/package.json",
+    data: JSON.stringify({ name: "commented-exports", type: "module", exports: "./index.js" })
+  },
+  {
+    path: "/workspace/node_modules/commented-exports/index.js",
+    data: "/*\nexport function phantom() {}\n*/\nexport const label = 'comments-ignored';\n"
+  },
+  {
+    path: "/workspace/node_modules/regex-literal/package.json",
+    data: JSON.stringify({ name: "regex-literal", type: "module", exports: "./index.js" })
+  },
+  {
+    path: "/workspace/node_modules/regex-literal/index.js",
+    data: "const blockCommentPattern = /\\/\\*[\\s\\S]*?\\*\\//g;\nexport const label = blockCommentPattern.test('/*x*/') ? 'regex-preserved' : 'broken';\n"
   }
 ]);
 
@@ -164,6 +208,9 @@ assert.deepEqual(runtime.requireSync("./app.cjs", "/workspace/index.cjs"), {
   parent: "nested-shared",
   self: "self-reference",
   pattern: "pattern-export",
+  esmOnly: "esm-required",
+  commentedExports: "comments-ignored",
+  regexLiteral: "regex-preserved",
   config: {
     mode: "browser-runtime"
   }

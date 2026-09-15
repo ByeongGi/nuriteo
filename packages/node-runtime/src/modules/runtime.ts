@@ -1,6 +1,6 @@
 import { ModuleCache } from "./cache.ts";
 import { evaluateCjs } from "./cjs.ts";
-import { evaluateEsm } from "./esm.ts";
+import { evaluateEsm, evaluateEsmSync } from "./esm.ts";
 import { ModuleResolver } from "./resolver.ts";
 import type { ModuleDefinition, ModuleDefinitionMap, ModuleRuntimeOptions, RuntimeNamespace, RuntimeValue } from "../types.ts";
 import { builtinModules } from "../builtins/module.ts";
@@ -67,14 +67,7 @@ export class ModuleRuntime {
     if (definition?.kind === "cjs") {
       return evaluateCjs(this, url) as RuntimeNamespace;
     }
-
-    const namespace: RuntimeNamespace = {};
-    this.cache.esm.set(url, {
-      status: "evaluating",
-      namespace,
-      bindings: new Map()
-    });
-    return namespace;
+    return evaluateEsmSync(this, url);
   }
 
   async importModule(specifier: string, parentUrl = "/workspace/index.mjs"): Promise<RuntimeNamespace> {
