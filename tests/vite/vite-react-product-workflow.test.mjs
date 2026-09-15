@@ -551,6 +551,10 @@ const actualLikeViteDependencyWorkflow = new ViteProductWorkflow({
             postcss: "^8.5.23",
             rolldown: "~1.2.0",
             tinyglobby: "^0.2.17"
+          },
+          peerDependenciesMeta: {
+            tsx: { optional: true },
+            yaml: { optional: true }
           }
         })
       },
@@ -560,7 +564,7 @@ const actualLikeViteDependencyWorkflow = new ViteProductWorkflow({
       },
       {
         path: "dist/node/cli.mjs",
-        data: "import 'esbuild';\nimport 'lightningcss';\nimport 'picomatch';\nimport 'postcss';\nimport 'rolldown';\nimport 'tinyglobby';\n"
+        data: "import 'esbuild';\nimport 'lightningcss';\nimport 'picomatch';\nimport 'postcss';\nimport 'rolldown';\nimport 'tinyglobby';\nimport 'tsx/cjs/api';\nimport 'yaml';\n"
       }
     ]
   },
@@ -604,7 +608,7 @@ assert.deepEqual(actualLikeDependencyPlan.summary, {
     "native-hold": 0
   },
   missingCount: 5,
-  optionalCount: 1,
+  optionalCount: 3,
   satisfiedCount: 0
 });
 assert.deepEqual(actualLikeDependencyPlan.missing.map((item) => [item.name, item.kind, item.artifactNames]), [
@@ -615,7 +619,9 @@ assert.deepEqual(actualLikeDependencyPlan.missing.map((item) => [item.name, item
   ["tinyglobby", "package-artifact", ["tinyglobby"]]
 ]);
 assert.deepEqual(actualLikeDependencyPlan.optional.map((item) => [item.specifier, item.kind]), [
-  ["lightningcss", "optional-dependency-probe"]
+  ["lightningcss", "optional-dependency-probe"],
+  ["tsx/cjs/api", "optional-dependency-probe"],
+  ["yaml", "optional-dependency-probe"]
 ]);
 
 const installedDependencyWorkspace = new MemoryPackageManagerWorkspace([

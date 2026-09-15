@@ -465,6 +465,7 @@ function classifyOptionalProbe(specifier: string, importer: string): CliModuleGr
   if (specifier === "node:inspector" && importer.endsWith("/bin/vite.js")) return "optional-dependency-probe";
   if (specifier.startsWith("@vitejs/devtools/") && importer.includes("/node_modules/vite/")) return "optional-dependency-probe";
   if ((specifier === "jiti" || specifier === "lightningcss") && importer.includes("/node_modules/vite/")) return "optional-dependency-probe";
+  if ((specifier === "yaml" || specifier.startsWith("tsx/")) && importer.includes("/node_modules/vite/")) return "optional-dependency-probe";
   if (
     (specifier === "<keyv-adapter>" || specifier === "<pnpmfile>" || specifier === "<project-package-json>") &&
     importer.endsWith("/dist/pnpm.cjs")
