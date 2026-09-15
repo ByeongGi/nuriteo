@@ -737,6 +737,8 @@ function createWorkspaceFsFacade(reader: WorkspaceModuleReader, writer?: Package
   const encoder = new TextEncoder();
   let nextFd = 3;
   const openFiles = new Map<number, CliOpenFile>();
+  const watchers = new Set<CliFsWatcher>();
+  const statWatchers = new Map<string, Set<CliFsStatWatcher>>();
   const realpath: CliFsRealpath = (path, callback) => {
     callback(null, normalize(path));
   };
@@ -787,6 +789,7 @@ function createWorkspaceFsFacade(reader: WorkspaceModuleReader, writer?: Package
     copyFileSync(source: string, target: string): void {
       if (!writer) throw unsupportedFsMutation("copyFileSync");
       writer.writeText(normalize(target), reader.readText(normalize(source)));
+      notifyFsChange(normalize(target), "change");
     },
     existsSync(path: string): boolean {
       const maybeReader = reader as WorkspaceModuleReader & { exists?: (path: string) => boolean };
@@ -832,6 +835,7 @@ function createWorkspaceFsFacade(reader: WorkspaceModuleReader, writer?: Package
         if (code !== "ENOENT") throw error;
       }
       writer.writeText(normalized, `${existing}${decodeFsData(data)}`);
+      notifyFsChange(normalized, "change");
     },
     mkdir(path: string, optionsOrCallback?: { recursive?: boolean } | ((error?: Error | null) => void), callback?: (error?: Error | null) => void): void {
       const cb = typeof optionsOrCallback === "function" ? optionsOrCallback : callback;
@@ -844,7 +848,9 @@ function createWorkspaceFsFacade(reader: WorkspaceModuleReader, writer?: Package
     },
     mkdirSync(path: string): void {
       if (!writer) throw unsupportedFsMutation("mkdirSync");
-      writer.mkdir(normalize(path));
+      const normalized = normalize(path);
+      writer.mkdir(normalized);
+      notifyFsChange(normalized, "rename");
     },
     mkdtemp(prefix: string, optionsOrCallback?: unknown, callback?: (error: Error | null, path?: string) => void): void {
       const cb = typeof optionsOrCallback === "function"
@@ -1092,6 +1098,8 @@ function createWorkspaceFsFacade(reader: WorkspaceModuleReader, writer?: Package
     renameSync(source: string, target: string): void {
       if (!writer?.rename) throw unsupportedFsMutation("renameSync");
       writer.rename(normalize(source), normalize(target));
+      notifyFsChange(normalize(source), "rename");
+      notifyFsChange(normalize(target), "rename");
     },
     rm(path: string, optionsOrCallback: CliRmOptions | ((error?: Error | null) => void) = {}, callback?: (error?: Error | null) => void): void {
       const cb = typeof optionsOrCallback === "function" ? optionsOrCallback : callback;
@@ -1104,8 +1112,10 @@ function createWorkspaceFsFacade(reader: WorkspaceModuleReader, writer?: Package
     },
     rmSync(path: string, options: CliRmOptions = {}): void {
       if (!writer) throw unsupportedFsMutation("rmSync");
-      if (options.force && !facade.existsSync(path)) return;
-      writer.remove(normalize(path));
+      const normalized = normalize(path);
+      if (options.force && !facade.existsSync(normalized)) return;
+      writer.remove(normalized);
+      notifyFsChange(normalized, "rename");
     },
     rmdir(path: string, optionsOrCallback: CliRmOptions | ((error?: Error | null) => void) = {}, callback?: (error?: Error | null) => void): void {
       facade.rm(path, optionsOrCallback, callback);
@@ -1136,6 +1146,7 @@ function createWorkspaceFsFacade(reader: WorkspaceModuleReader, writer?: Package
     symlinkSync(target: string, path: string): void {
       if (!writer?.symlink) throw unsupportedFsMutation("symlinkSync");
       writer.symlink(resolveSymlinkTarget(target, path), normalize(path));
+      notifyFsChange(normalize(path), "rename");
     },
     lstatSync(path: string, options?: CliStatOptions): ReturnType<RuntimeFsBinding["statSync"]> | undefined {
       return facade.statSync(path, options);
@@ -1157,9 +1168,49 @@ function createWorkspaceFsFacade(reader: WorkspaceModuleReader, writer?: Package
     unlinkSync(path: string): void {
       facade.rmSync(path);
     },
+    unwatchFile(path: string, listener?: CliFsStatListener): void {
+      const normalized = normalize(path);
+      if (!listener) {
+        statWatchers.delete(normalized);
+        return;
+      }
+      const listeners = statWatchers.get(normalized);
+      listeners?.forEach((watcher) => {
+        if (watcher.listener === listener) listeners.delete(watcher);
+      });
+      if (listeners?.size === 0) statWatchers.delete(normalized);
+    },
+    watch(path: string, optionsOrListener?: CliWatchOptions | CliWatchListener, maybeListener?: CliWatchListener): CliFsWatcher {
+      const listener = typeof optionsOrListener === "function" ? optionsOrListener : maybeListener;
+      const watcher = createCliFsWatcher(normalize(path), listener);
+      watchers.add(watcher);
+      watcher.once("close", () => {
+        watchers.delete(watcher);
+      });
+      return watcher;
+    },
+    watchFile(path: string, optionsOrListener?: CliWatchFileOptions | CliFsStatListener, maybeListener?: CliFsStatListener): CliFsStatWatcher {
+      const listener = typeof optionsOrListener === "function" ? optionsOrListener : maybeListener;
+      if (!listener) throw createFsError("ERR_INVALID_ARG_TYPE", "fs.watchFile listener is required");
+      const normalized = normalize(path);
+      const watcher = createCliFsStatWatcher(normalized, listener);
+      let listeners = statWatchers.get(normalized);
+      if (!listeners) {
+        listeners = new Set();
+        statWatchers.set(normalized, listeners);
+      }
+      listeners.add(watcher);
+      watcher.once("close", () => {
+        listeners?.delete(watcher);
+        if (listeners?.size === 0) statWatchers.delete(normalized);
+      });
+      return watcher;
+    },
     writeFileSync(path: string, data: RuntimeFsData): void {
       if (!writer) throw unsupportedFsMutation("writeFileSync");
-      writer.writeText(normalize(path), decodeFsData(data));
+      const normalized = normalize(path);
+      writer.writeText(normalized, decodeFsData(data));
+      notifyFsChange(normalized, "change");
     },
     writeFile(path: string, data: RuntimeFsData, optionsOrCallback?: unknown, callback?: (error?: Error | null) => void): void {
       const cb = typeof optionsOrCallback === "function" ? optionsOrCallback as (error?: Error | null) => void : callback;
@@ -1218,6 +1269,26 @@ function createWorkspaceFsFacade(reader: WorkspaceModuleReader, writer?: Package
 
   return facade as RuntimeFsBinding;
 
+  function notifyFsChange(path: string, eventType: CliWatchEventType): void {
+    const normalized = normalize(path);
+    const filename = basenameOf(normalized);
+    queueMicrotask(() => {
+      for (const watcher of watchers) {
+        if (!watcher.closed && watchesPath(watcher.path, normalized)) {
+          watcher.emit("change", eventType, filename);
+          watcher.listener?.(eventType, filename);
+        }
+      }
+      const listeners = statWatchers.get(normalized);
+      if (!listeners) return;
+      const current = safeStatFromReader(reader, normalized);
+      for (const watcher of listeners) {
+        if (!watcher.closed) watcher.listener(current, watcher.previous);
+        watcher.previous = current;
+      }
+    });
+  }
+
   function writeToOpenFile(fd: number, data: RuntimeFsData, options: CliWriteOptions = {}): number {
     const file = openFiles.get(fd);
     if (!file) throw createFsError("EBADF", `Bad file descriptor: ${fd}`);
@@ -1229,6 +1300,7 @@ function createWorkspaceFsFacade(reader: WorkspaceModuleReader, writer?: Package
     next.set(bytes, position);
     file.bytes = next;
     writer.writeText(file.path, decoder.decode(next));
+    notifyFsChange(file.path, "change");
     return bytes.byteLength;
   }
 
@@ -1406,9 +1478,93 @@ interface CliDirent {
   isSymbolicLink(): boolean;
 }
 
+type CliWatchEventType = "change" | "rename";
+type CliWatchListener = (eventType: CliWatchEventType, filename: string) => void;
+type CliFsStat = ReturnType<RuntimeFsBinding["statSync"]>;
+type CliFsStatListener = (current: CliFsStat | undefined, previous: CliFsStat | undefined) => void;
+
+interface CliWatchOptions {
+  persistent?: boolean;
+  recursive?: boolean;
+}
+
+interface CliWatchFileOptions {
+  bigint?: boolean;
+  interval?: number;
+  persistent?: boolean;
+}
+
+type CliFsWatcher = EventEmitter & {
+  closed: boolean;
+  close(): void;
+  listener?: CliWatchListener;
+  path: string;
+  ref(): CliFsWatcher;
+  unref(): CliFsWatcher;
+};
+
+type CliFsStatWatcher = EventEmitter & {
+  closed: boolean;
+  close(): void;
+  listener: CliFsStatListener;
+  path: string;
+  previous: CliFsStat | undefined;
+  ref(): CliFsStatWatcher;
+  unref(): CliFsStatWatcher;
+};
+
 interface HostProcessLike {
   on?(event: "uncaughtException" | "unhandledRejection", listener: (error: unknown) => void): unknown;
   off?(event: "uncaughtException" | "unhandledRejection", listener: (error: unknown) => void): unknown;
+}
+
+function createCliFsWatcher(path: string, listener?: CliWatchListener): CliFsWatcher {
+  const watcher = new EventEmitter() as CliFsWatcher;
+  watcher.closed = false;
+  if (listener) watcher.listener = listener;
+  watcher.path = path;
+  watcher.close = () => {
+    if (watcher.closed) return;
+    watcher.closed = true;
+    watcher.emit("close");
+  };
+  watcher.ref = () => watcher;
+  watcher.unref = () => watcher;
+  return watcher;
+}
+
+function createCliFsStatWatcher(path: string, listener: CliFsStatListener): CliFsStatWatcher {
+  const watcher = new EventEmitter() as CliFsStatWatcher;
+  watcher.closed = false;
+  watcher.listener = listener;
+  watcher.path = path;
+  watcher.previous = undefined;
+  watcher.close = () => {
+    if (watcher.closed) return;
+    watcher.closed = true;
+    watcher.emit("close");
+  };
+  watcher.ref = () => watcher;
+  watcher.unref = () => watcher;
+  return watcher;
+}
+
+function watchesPath(watchPath: string, changedPath: string): boolean {
+  return watchPath === changedPath || changedPath.startsWith(`${watchPath}/`);
+}
+
+function basenameOf(path: string): string {
+  const normalized = normalize(path);
+  const index = normalized.lastIndexOf("/");
+  return index === -1 ? normalized : normalized.slice(index + 1);
+}
+
+function safeStatFromReader(reader: WorkspaceModuleReader, path: string): CliFsStat | undefined {
+  try {
+    return statFromReader(reader, path);
+  } catch {
+    return undefined;
+  }
 }
 
 function statFromReader(reader: WorkspaceModuleReader, path: string): ReturnType<RuntimeFsBinding["statSync"]> {

@@ -74,7 +74,30 @@ const workspace = new MemoryPackageManagerWorkspace([
         if (!asyncTempDir.startsWith(process.cwd() + '/.cache/async-tmp-')) {
           throw new Error('unexpected promises.mkdtemp path');
         }
+        const watchEvents = [];
+        const watcher = fs.watch(process.cwd(), (eventType, filename) => {
+          watchEvents.push(eventType + ':' + filename);
+        });
+        watcher.on('change', (eventType, filename) => {
+          watchEvents.push('on:' + eventType + ':' + filename);
+        });
+        const fileEvents = [];
+        const fileWatcher = fs.watchFile(process.cwd() + '/watched.txt', (_current, previous) => {
+          fileEvents.push(previous === undefined ? 'created' : 'changed');
+        });
         fs.writeFileSync(process.cwd() + '/sync.txt', 'sync');
+        fs.writeFileSync(process.cwd() + '/watched.txt', 'one');
+        fs.writeFileSync(process.cwd() + '/watched.txt', 'two');
+        await Promise.resolve();
+        watcher.close();
+        fileWatcher.close();
+        fs.unwatchFile(process.cwd() + '/watched.txt');
+        if (!watchEvents.includes('change:sync.txt') || !watchEvents.includes('on:change:sync.txt') || !watchEvents.includes('change:watched.txt')) {
+          throw new Error('unexpected fs.watch events: ' + watchEvents.join(','));
+        }
+        if (fileEvents.length !== 2 || fileEvents[0] !== 'created' || fileEvents[1] !== 'changed') {
+          throw new Error('unexpected fs.watchFile events: ' + fileEvents.join(','));
+        }
         fs.chmodSync(process.cwd() + '/sync.txt', 0o755);
         fs.chownSync(process.cwd() + '/sync.txt', 0, 0);
         await fs.promises.chmod(process.cwd() + '/sync.txt', 0o755);
