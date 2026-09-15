@@ -1,16 +1,18 @@
 import assert from "node:assert/strict";
 
-import { createLoopbackNetwork, runViteReactProductWorkflow, ViteReactProductWorkflow } from "../../packages/node-runtime/src/index.ts";
+import { createLoopbackNetwork, runViteProductWorkflow, ViteProductWorkflow } from "../../packages/node-runtime/src/index.ts";
 import { createHmrClient, createPreviewRelay, createPreviewSessionRegistry } from "../../packages/preview/src/index.ts";
 
+for (const template of ["react", "vue-runtime", "svelte"]) {
 for (const manager of ["npm", "pnpm"]) {
-  const result = runViteReactProductWorkflow({ manager });
+  const result = runViteProductWorkflow({ manager, template });
 
   assert.equal(result.runtime, "browser-guest-node-runtime");
   assert.equal(result.manager, manager);
+  assert.equal(result.template, template);
   assert.equal(result.install.installed, true);
   assert.equal(result.install.packages.includes("vite"), true);
-  assert.equal(result.install.packages.includes("react"), true);
+  assert.equal(result.install.packages.includes(expectedFrameworkPackage(template)), true);
   assert.equal(result.devServer.running, true);
   assert.equal(result.devServer.source, "package-script");
   assert.equal(result.devServer.command, "vite --host 127.0.0.1");
@@ -31,7 +33,7 @@ for (const manager of ["npm", "pnpm"]) {
   assert.match(result.reloadRecovery.previewAfterRestart, /beta:1/);
 
   const network = createLoopbackNetwork();
-  const workflow = new ViteReactProductWorkflow({ manager, projectId: `${manager}-preview`, network, port: 5173 });
+  const workflow = new ViteProductWorkflow({ manager, template, projectId: `${manager}-${template}-preview`, network, port: 5173 });
   workflow.install();
   const started = workflow.startDevServerFromPackageScript();
   assert.equal(started.running, true);
@@ -42,7 +44,7 @@ for (const manager of ["npm", "pnpm"]) {
   assert.equal(started.processPid, 5173);
   assert.equal(started.processStarted, true);
   assert.equal(started.processExited, false);
-  const conflict = new ViteReactProductWorkflow({ manager, projectId: `${manager}-conflict`, network, port: 5173 });
+  const conflict = new ViteProductWorkflow({ manager, template, projectId: `${manager}-${template}-conflict`, network, port: 5173 });
   conflict.install();
   assert.throws(
     () => conflict.startDevServer(),
@@ -51,7 +53,7 @@ for (const manager of ["npm", "pnpm"]) {
   const sessions = createPreviewSessionRegistry({ ttlMs: 1000 });
   const session = sessions.create({
     origin: "https://preview.local",
-    projectId: `${manager}-preview`,
+    projectId: `${manager}-${template}-preview`,
     port: 5173,
     container: workflow
   });
@@ -59,7 +61,7 @@ for (const manager of ["npm", "pnpm"]) {
   const response = await relay.request({
     sessionId: session.sessionId,
     origin: "https://preview.local",
-    projectId: `${manager}-preview`,
+    projectId: `${manager}-${template}-preview`,
     path: "/index.html"
   });
   assert.equal(response.status, 200);
@@ -102,5 +104,12 @@ for (const manager of ["npm", "pnpm"]) {
   hmr.close();
   assert.deepEqual(hmrEvents, ["open:1", "message:update"]);
 }
+}
 
-console.log("vite react product workflow test ok");
+console.log("vite product workflow test ok");
+
+function expectedFrameworkPackage(template) {
+  if (template === "react") return "react";
+  if (template === "vue-runtime") return "vue";
+  return "svelte";
+}

@@ -19,10 +19,12 @@ for (const id of [
   assert.equal(entry.status, "pass");
 }
 
-const product = casesById.get("vite-react-product-workflow");
-assert.equal(product?.runtime, "browser-guest-node-runtime");
-assert.equal(product.status, "partial-pass");
-assert.match(product.productGap, /actual Vite dev server process/i);
+for (const id of ["vite-react-product-workflow", "vite-vue-product-workflow", "vite-svelte-product-workflow"]) {
+  const product = casesById.get(id);
+  assert.equal(product?.runtime, "browser-guest-node-runtime");
+  assert.equal(product.status, "partial-pass");
+  assert.match(product.productGap, /actual Vite dev server process/i);
+}
 
 for (const entry of matrix.cases) {
   assert.ok(entry.evidence.length > 0, `${entry.id} must reference evidence`);

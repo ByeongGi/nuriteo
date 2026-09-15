@@ -4,9 +4,11 @@ import { createLoopbackNetwork, type LoopbackNetwork, type RuntimeHttpResponse }
 import { MemoryPackageManagerWorkspace, type PackageManagerWorkspaceMount } from "../package-managers/workspace.ts";
 
 export type ViteReactPackageManager = "npm" | "pnpm";
+export type ViteProductTemplate = "react" | "vue-runtime" | "svelte";
 
 export interface ViteReactProductWorkflowOptions {
   manager: ViteReactPackageManager;
+  template?: ViteProductTemplate;
   projectId?: string;
   projectRoot?: string;
   initialLabel?: string;
@@ -17,6 +19,7 @@ export interface ViteReactProductWorkflowOptions {
 export interface ViteReactProductWorkflowResult {
   runtime: "browser-guest-node-runtime";
   manager: ViteReactPackageManager;
+  template: ViteProductTemplate;
   projectId: string;
   install: ViteReactInstallResult;
   devServer: ViteReactDevServerSnapshot;
@@ -76,6 +79,7 @@ export interface ViteReactReloadRecoveryResult {
 
 export class ViteReactProductWorkflow {
   readonly manager: ViteReactPackageManager;
+  readonly template: ViteProductTemplate;
   readonly projectId: string;
   readonly projectRoot: string;
   readonly workspace: MemoryPackageManagerWorkspace;
@@ -96,11 +100,12 @@ export class ViteReactProductWorkflow {
 
   constructor(options: ViteReactProductWorkflowOptions) {
     this.manager = options.manager;
-    this.projectId = options.projectId || `vite-react-${options.manager}`;
+    this.template = options.template || "react";
+    this.projectId = options.projectId || `vite-${this.template}-${options.manager}`;
     this.projectRoot = options.projectRoot || "/workspace/project";
     this.network = options.network || createLoopbackNetwork();
     this.#port = options.port ?? 5173;
-    this.workspace = new MemoryPackageManagerWorkspace(createViteReactMounts(this.projectRoot, options.initialLabel || "alpha"));
+    this.workspace = new MemoryPackageManagerWorkspace(createViteMounts(this.projectRoot, this.template, options.initialLabel || "alpha"));
   }
 
   run(): ViteReactProductWorkflowResult {
@@ -113,6 +118,7 @@ export class ViteReactProductWorkflow {
     return {
       runtime: "browser-guest-node-runtime",
       manager: this.manager,
+      template: this.template,
       projectId: this.projectId,
       install,
       devServer,
@@ -124,7 +130,7 @@ export class ViteReactProductWorkflow {
   }
 
   install(): ViteReactInstallResult {
-    const packages = ["@vitejs/plugin-react", "vite", "typescript", "react", "react-dom"];
+    const packages = packagesForTemplate(this.template);
     for (const pkg of packages) {
       this.workspace.writeText(join(this.projectRoot, "node_modules", pkg, "package.json"), JSON.stringify({ name: pkg }));
     }
@@ -295,12 +301,19 @@ export function runViteReactProductWorkflow(options: ViteReactProductWorkflowOpt
   return new ViteReactProductWorkflow(options).run();
 }
 
-function createViteReactMounts(projectRoot: string, label: string): PackageManagerWorkspaceMount[] {
+export const ViteProductWorkflow = ViteReactProductWorkflow;
+
+export function runViteProductWorkflow(options: ViteReactProductWorkflowOptions): ViteReactProductWorkflowResult {
+  return new ViteReactProductWorkflow(options).run();
+}
+
+function createViteMounts(projectRoot: string, template: ViteProductTemplate, label: string): PackageManagerWorkspaceMount[] {
+  const entry = template === "react" ? "/src/main.jsx" : "/src/main.js";
   return [
     {
       path: join(projectRoot, "package.json"),
       data: JSON.stringify({
-        name: "vite-react-product-workflow",
+        name: `vite-${template}-product-workflow`,
         version: "1.0.0",
         private: true,
         type: "module",
@@ -310,22 +323,17 @@ function createViteReactMounts(projectRoot: string, label: string): PackageManag
           preview: "vite preview --host 127.0.0.1"
         },
         dependencies: {
-          "@vitejs/plugin-react": "latest",
           vite: "8.2.0",
           typescript: "6.0.3",
-          react: "18.3.1",
-          "react-dom": "18.3.1"
+          ...dependenciesForTemplate(template)
         }
       })
     },
     {
       path: join(projectRoot, "index.html"),
-      data: "<div id=\"root\"></div><script type=\"module\" src=\"/src/main.jsx\"></script>\n"
+      data: `<div id="root"></div><script type="module" src="${entry}"></script>\n`
     },
-    {
-      path: join(projectRoot, "src/main.jsx"),
-      data: "import React from \"react\";\nimport { createRoot } from \"react-dom/client\";\nimport { label } from \"./message.js\";\ncreateRoot(document.getElementById(\"root\")).render(`${label}:1`);\n"
-    },
+    ...sourceMountsForTemplate(projectRoot, template),
     {
       path: join(projectRoot, "src/message.js"),
       data: `export const label = "${label}";\n`
@@ -347,6 +355,54 @@ function createLockfile(manager: ViteReactPackageManager, packages: string[]): s
     "    dependencies:",
     ...packages.map((pkg) => `      ${pkg}: product-fixture`)
   ].join("\n") + "\n";
+}
+
+function packagesForTemplate(template: ViteProductTemplate): string[] {
+  return ["vite", "typescript", ...Object.keys(dependenciesForTemplate(template))];
+}
+
+function dependenciesForTemplate(template: ViteProductTemplate): Record<string, string> {
+  if (template === "react") {
+    return {
+      "@vitejs/plugin-react": "latest",
+      react: "18.3.1",
+      "react-dom": "18.3.1"
+    };
+  }
+  if (template === "vue-runtime") return { vue: "3.5.25" };
+  return {
+    "@sveltejs/vite-plugin-svelte": "7.3.0",
+    svelte: "5.57.0"
+  };
+}
+
+function sourceMountsForTemplate(projectRoot: string, template: ViteProductTemplate): PackageManagerWorkspaceMount[] {
+  if (template === "react") {
+    return [{
+      path: join(projectRoot, "src/main.jsx"),
+      data: "import React from \"react\";\nimport { createRoot } from \"react-dom/client\";\nimport { label } from \"./message.js\";\ncreateRoot(document.getElementById(\"root\")).render(`${label}:1`);\n"
+    }];
+  }
+  if (template === "vue-runtime") {
+    return [{
+      path: join(projectRoot, "src/main.js"),
+      data: "import { createApp, h } from \"vue\";\nimport { label } from \"./message.js\";\nglobalThis.__fixtureState ||= { count: 1 };\ncreateApp({ render: () => h(\"div\", { id: \"app\" }, `${label}:${globalThis.__fixtureState.count}`) }).mount(\"#root\");\n"
+    }];
+  }
+  return [
+    {
+      path: join(projectRoot, "vite.config.js"),
+      data: "import { svelte } from \"@sveltejs/vite-plugin-svelte\";\nexport default { plugins: [svelte()] };\n"
+    },
+    {
+      path: join(projectRoot, "src/main.js"),
+      data: "import App from \"./App.svelte\";\nexport default new App({ target: document.getElementById(\"root\") });\n"
+    },
+    {
+      path: join(projectRoot, "src/App.svelte"),
+      data: "<script>import { label } from \"./message.js\"; globalThis.__fixtureState ||= { count: 1 };</script>\n<div id=\"app\">{label}:{globalThis.__fixtureState.count}</div>\n"
+    }
+  ];
 }
 
 function renderHtml(label: string, count: number): string {

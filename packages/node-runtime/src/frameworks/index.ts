@@ -1,2 +1,2 @@
-export { runViteReactProductWorkflow, ViteReactProductWorkflow } from "./vite-react-workflow.ts";
-export type { ViteReactBuildResult, ViteReactDevServerSnapshot, ViteReactHmrResult, ViteReactHmrUpdate, ViteReactInstallResult, ViteReactPackageManager, ViteReactPreviewResult, ViteReactProductWorkflowOptions, ViteReactProductWorkflowResult, ViteReactReloadRecoveryResult } from "./vite-react-workflow.ts";
+export { runViteProductWorkflow, runViteReactProductWorkflow, ViteProductWorkflow, ViteReactProductWorkflow } from "./vite-react-workflow.ts";
+export type { ViteProductTemplate, ViteReactBuildResult, ViteReactDevServerSnapshot, ViteReactHmrResult, ViteReactHmrUpdate, ViteReactInstallResult, ViteReactPackageManager, ViteReactPreviewResult, ViteReactProductWorkflowOptions, ViteReactProductWorkflowResult, ViteReactReloadRecoveryResult } from "./vite-react-workflow.ts";
