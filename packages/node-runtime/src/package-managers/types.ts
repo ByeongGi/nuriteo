@@ -71,5 +71,6 @@ export interface GuestRuntimeProcessRunnerOptions {
     reader: import("./workspace.ts").PackageManagerWorkspaceReader;
     writer: import("./workspace.ts").PackageManagerWorkspaceWriter;
     linkStrategy?: import("./workspace.ts").PackageManagerLinkStrategy;
+    scriptPolicy?: import("./execution-policy.ts").PackageExecutionPolicy;
   };
 }

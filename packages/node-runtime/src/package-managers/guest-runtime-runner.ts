@@ -90,7 +90,8 @@ function applyGuestScriptCommand(
     cwd: request.cwd,
     env: request.env,
     reader: createPackageScriptReader(options.workspace.reader),
-    writer: options.workspace.writer
+    writer: options.workspace.writer,
+    ...(options.workspace.scriptPolicy ? { policy: options.workspace.scriptPolicy } : {})
   });
   const scriptResult = commandKind === "run-script"
     ? runner.runScript(parseRunScriptName(request.args))
@@ -180,7 +181,8 @@ function runGuestPackageLifecycles(
     cwd: request.cwd,
     env: request.env,
     reader: createPackageScriptReader(options.workspace.reader),
-    writer: options.workspace.writer
+    writer: options.workspace.writer,
+    ...(options.workspace.scriptPolicy ? { policy: options.workspace.scriptPolicy } : {})
   });
   let stdout = "";
   let stderr = "";

@@ -1,5 +1,6 @@
 import { basename, dirname, join } from "../builtins/path.ts";
 import type { RuntimeEnv } from "../types.ts";
+import { createPackageExecutionPolicy, PackageExecutionPolicyError, type PackageExecutionPolicy, type PackageScriptKind } from "./execution-policy.ts";
 
 export interface PackageScriptReader {
   exists(path: string): boolean;
@@ -13,6 +14,7 @@ export interface PackageScriptWriter {
 export interface PackageScriptRunnerOptions {
   cwd: string;
   env?: RuntimeEnv;
+  policy?: PackageExecutionPolicy;
   reader: PackageScriptReader;
   writer: PackageScriptWriter;
 }
@@ -22,17 +24,23 @@ export interface PackageScriptResult {
   stderr: string;
   exitCode: number;
   command: string;
+  error?: {
+    code: string;
+    message: string;
+  };
 }
 
 export class PackageScriptRunner {
   cwd: string;
   env: RuntimeEnv;
+  policy: PackageExecutionPolicy;
   reader: PackageScriptReader;
   writer: PackageScriptWriter;
 
   constructor(options: PackageScriptRunnerOptions) {
     this.cwd = trimSlash(options.cwd);
     this.env = { ...(options.env || {}) };
+    this.policy = options.policy || createPackageExecutionPolicy();
     this.reader = options.reader;
     this.writer = options.writer;
   }
@@ -41,14 +49,14 @@ export class PackageScriptRunner {
     const manifest = this.#readPackageJson(this.cwd);
     const command = manifest.scripts?.[name];
     if (!command) return this.#failure(name, `missing package script: ${name}`);
-    return this.#runCommand(command, this.cwd);
+    return this.#runCommand(command, this.cwd, "script");
   }
 
   runLifecycle(packagePath: string, name: string): PackageScriptResult {
     const manifest = this.#readPackageJson(packagePath);
     const command = manifest.scripts?.[name];
     if (!command) return { stdout: "", stderr: "", exitCode: 0, command: "" };
-    return this.#runCommand(command, packagePath);
+    return this.#runCommand(command, packagePath, "lifecycle");
   }
 
   execBin(name: string): PackageScriptResult {
@@ -58,17 +66,22 @@ export class PackageScriptRunner {
     ];
     const binPath = candidates.find((candidate) => this.reader.exists(candidate));
     if (!binPath) return this.#failure(name, `command not found: ${name}`);
-    return this.#runNodeFile(binPath, dirname(binPath));
+    return this.#runNodeFile(binPath, dirname(binPath), `node ${basename(binPath)}`, "bin");
   }
 
-  #runCommand(command: string, cwd: string): PackageScriptResult {
+  #runCommand(command: string, cwd: string, kind: PackageScriptKind): PackageScriptResult {
+    const manifestPath = join(cwd, "package.json");
+    const policyError = this.#checkPolicy({ kind, command, path: manifestPath, source: "" });
+    if (policyError) return policyError;
     const [binary, script] = command.split(/\s+/, 2);
     if (binary !== "node" || !script) return this.#failure(command, `unsupported package script command: ${command}`);
-    return this.#runNodeFile(join(cwd, script), cwd, command);
+    return this.#runNodeFile(join(cwd, script), cwd, command, kind);
   }
 
-  #runNodeFile(file: string, cwd: string, command = `node ${basename(file)}`): PackageScriptResult {
+  #runNodeFile(file: string, cwd: string, command = `node ${basename(file)}`, kind: PackageScriptKind = "script"): PackageScriptResult {
     const source = this.reader.readText(file);
+    const policyError = this.#checkPolicy({ kind, command, path: file, source });
+    if (policyError) return policyError;
     if (source.includes("console.log(\"fixture-bin:hello\")")) {
       return { stdout: "fixture-bin:hello\n", stderr: "", exitCode: 0, command };
     }
@@ -105,8 +118,24 @@ export class PackageScriptRunner {
     return JSON.parse(this.reader.readText(join(path, "package.json"))) as PackageJson;
   }
 
-  #failure(command: string, message: string): PackageScriptResult {
-    return { stdout: "", stderr: `${message}\n`, exitCode: 1, command };
+  #failure(command: string, message: string, code?: string): PackageScriptResult {
+    return {
+      stdout: "",
+      stderr: `${message}\n`,
+      exitCode: 1,
+      command,
+      ...(code ? { error: { code, message } } : {})
+    };
+  }
+
+  #checkPolicy(check: Parameters<PackageExecutionPolicy["assertAllowed"]>[0]): PackageScriptResult | null {
+    try {
+      this.policy.assertAllowed(check);
+      return null;
+    } catch (error) {
+      if (error instanceof PackageExecutionPolicyError) return this.#failure(check.command, error.message, error.code);
+      throw error;
+    }
   }
 }
 

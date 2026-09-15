@@ -1,4 +1,5 @@
 export { CliRegistry } from "./cli-registry.ts";
+export { createPackageExecutionPolicy, PackageExecutionPolicy, PackageExecutionPolicyError } from "./execution-policy.ts";
 export { createAsyncCliModuleEvaluator, createCliModuleEvaluator } from "./cli-evaluator.ts";
 export { analyzeCliModuleGraph, extractStaticRequires } from "./cli-module-graph.ts";
 export { createGuestCli } from "./guest-cli.ts";
@@ -16,6 +17,7 @@ export type { PnpmStoreApplyOptions, PnpmStoreApplyResult, PnpmStorePlan, PnpmSt
 export type { PackageTarballCacheMetrics, PackageTarballCacheOptions, PackageTarballRequest, PackageTarballResult, TarEntry } from "./tarball-cache.ts";
 export type { PackageScriptReader, PackageScriptResult, PackageScriptRunnerOptions, PackageScriptWriter } from "./script-runner.ts";
 export type { NpmInstallApplyOptions, NpmInstallApplyResult, NpmInstallLink, NpmInstallPlan, NpmInstallPlanOptions, NpmWorkspaceReader } from "./npm-install.ts";
+export type { PackageExecutionPolicyErrorCode, PackageExecutionPolicyOptions, PackageScriptKind, PackageScriptPolicyCheck } from "./execution-policy.ts";
 export type { CliArtifactReader, CliRegistryLike, GuestCli, GuestRuntimeProcessRunnerOptions, PackageManagerProcessRequest, PackageManagerProcessResult, PackageManagerProcessRunner, PackageManagerRunnerOptions } from "./types.ts";
 export type { AsyncCliModuleEvaluatorOptions, CliModuleEvaluationRequest, CliModuleEvaluatorOptions } from "./cli-evaluator.ts";
 export type { CliModuleGraph, CliModuleGraphIssue, CliModuleGraphModule, CliModuleGraphOptions, CliModuleGraphReader } from "./cli-module-graph.ts";
