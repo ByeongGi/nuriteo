@@ -27,6 +27,9 @@ function exerciseBuiltins({ Buffer, EventEmitter, util }) {
   assert.equal(Buffer.from("abc").copy(target, 1), 3);
   assert.equal(target.slice(1, 4).toString(), "abc");
   assert.equal(Buffer.from("abc").equals(Buffer.from("abc")), true);
+  const shared = new SharedArrayBuffer(3);
+  new Uint8Array(shared).set([1, 2, 3]);
+  assert.deepEqual([...Buffer.from(shared)], [1, 2, 3]);
 
   const emitter = new EventEmitter();
   const events = [];
@@ -72,6 +75,9 @@ exerciseBuiltins({
 const requireBuiltin = createBuiltinLoader({});
 const bufferBuiltin = requireBuiltin("node:buffer");
 assert.equal(bufferBuiltin.Buffer.from("ok").toString(), "ok");
+const inflated = requireBuiltin("node:zlib").gunzipSync(requireBuiltin("node:zlib").gzipSync(RuntimeBuffer.from("ok")));
+assert.equal(typeof inflated.copy, "function");
+assert.equal(inflated.toString("utf8", 0, 2), "ok");
 assert.equal(typeof requireBuiltin("events"), "function");
 assert.equal(requireBuiltin("events").EventEmitter, requireBuiltin("events"));
 const LegacyEventEmitter = requireBuiltin("events");
@@ -80,6 +86,8 @@ function LegacyChild() {
 }
 Object.setPrototypeOf(LegacyChild.prototype, LegacyEventEmitter.prototype);
 const legacyEmitter = new LegacyChild();
+assert.equal(legacyEmitter instanceof requireBuiltin("events"), true);
+assert.equal(new EventEmitter() instanceof requireBuiltin("events"), true);
 legacyEmitter.on("tick", () => true);
 assert.equal(legacyEmitter.emit("tick"), true);
 assert.equal(requireBuiltin("util").format("x:%s", "y"), "x:y");

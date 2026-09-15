@@ -1,4 +1,5 @@
 import { EventEmitter } from "./events.ts";
+import { BrowserBuffer } from "./buffer.ts";
 import type { RuntimeValue } from "../types.ts";
 
 type StreamCallback = (error?: Error | null) => void;
@@ -70,7 +71,7 @@ export class Readable extends Stream {
       this.emit("close");
       return false;
     }
-    const value = this.#encoding && chunk instanceof Uint8Array ? new TextDecoder(this.#encoding).decode(chunk) : chunk;
+    const value = normalizeReadableChunk(chunk, this.#encoding);
     this.#queue.push(value);
     this.emit("data", value);
     return true;
@@ -339,6 +340,14 @@ function waitReadableEvent(stream: Readable): Promise<
   });
 }
 
+function normalizeReadableChunk(chunk: RuntimeValue, encoding: BufferEncoding | null): RuntimeValue {
+  if (encoding && chunk instanceof Uint8Array) return new TextDecoder(encoding).decode(chunk);
+  if (chunk instanceof Uint8Array && typeof (chunk as { copy?: unknown }).copy !== "function") {
+    return BrowserBuffer.from(chunk);
+  }
+  return chunk;
+}
+
 function waitForCompletion(stream: EventEmitter): Promise<void> {
   return new Promise((resolve, reject) => {
     let settled = false;
@@ -384,6 +393,11 @@ function createLegacyStreamConstructor(): typeof Stream {
   const LegacyStream = function Stream() {
     return undefined;
   } as unknown as typeof Stream;
+  Object.defineProperty(LegacyStream, Symbol.hasInstance, {
+    value(value: unknown) {
+      return value instanceof Stream;
+    }
+  });
 
   LegacyStream.prototype.on = function on(eventName: string | symbol, listener: Listener) {
     getListeners(this, eventName).push(listener);

@@ -93,6 +93,32 @@ try {
   assert.equal(workspace.exists("/workspace/project/node_modules/.bin/fixture-registry"), true);
   const lockfile = JSON.parse(workspace.readText("/workspace/project/package-lock.json"));
   assert.equal(lockfile.packages["node_modules/fixture-registry"].version, "1.0.0");
+
+  workspace.remove("/workspace/project/node_modules");
+  const ciResult = await createAsyncCliModuleEvaluator({
+    root: mountRoot,
+    reader: workspace,
+    writer: workspace,
+    settleTicks: 5000,
+    settleTimeoutMs: 5000
+  })({
+    entry: {
+      ...entry,
+      entry: `${mountRoot}/${path.relative(repoRoot, entry.entry)}`
+    },
+    args: ["ci", "--ignore-scripts", "--no-audit", "--no-fund", "--update-notifier=false"],
+    cwd: "/workspace/project",
+    env: {
+      HOME: "/home/webcontainer",
+      PATH: "/usr/local/bin:/usr/bin:/bin",
+      npm_config_user_agent: `npm/${installed.version} node/v22.23.0 browser`
+    }
+  });
+
+  assert.equal(ciResult.stderr, "");
+  assert.equal(ciResult.exitCode, 0);
+  assert.equal(workspace.exists("/workspace/project/node_modules/fixture-registry/package.json"), true);
+  assert.equal(workspace.exists("/workspace/project/node_modules/.bin/fixture-registry"), true);
 } finally {
   await new Promise((resolve) => server.close(resolve));
 }

@@ -435,8 +435,10 @@ function createCliWorkerThreadsBuiltin(options: {
       }
 
       this.#parentPort.postMessage = (value: unknown) => {
-        queueMicrotask(() => {
-          if (!this.#terminated) this.emit("message", value);
+        void Promise.resolve(value).then((resolved) => {
+          if (!this.#terminated) this.emit("message", resolved);
+        }, (error) => {
+          if (!this.#terminated) this.emit("error", error instanceof Error ? error : new Error(String(error)));
         });
       };
       this.#parentPort.ref = () => this.#parentPort;

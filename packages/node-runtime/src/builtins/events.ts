@@ -125,6 +125,15 @@ function createLegacyEventEmitterConstructor(): typeof EventEmitter {
   const LegacyEventEmitter = function EventEmitter() {
     return undefined;
   } as unknown as typeof EventEmitter;
+  Object.defineProperty(LegacyEventEmitter, Symbol.hasInstance, {
+    value(value: unknown) {
+      return value instanceof EventEmitter ||
+        (typeof value === "object" &&
+          value !== null &&
+          typeof (value as { on?: unknown }).on === "function" &&
+          typeof (value as { emit?: unknown }).emit === "function");
+    }
+  });
 
   LegacyEventEmitter.listenerCount = (emitter: EventEmitter, eventName: string | symbol) => emitter.listenerCount(eventName);
   const addListener = function addListener(this: EventEmitter, eventName: string | symbol, listener: Listener) {

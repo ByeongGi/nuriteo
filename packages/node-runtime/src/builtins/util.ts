@@ -85,7 +85,12 @@ export const types = Object.freeze({
   isDate: (value: RuntimeValue): value is Date => value instanceof Date,
   isRegExp: (value: RuntimeValue): value is RegExp => value instanceof RegExp,
   isArrayBuffer: (value: RuntimeValue): value is ArrayBuffer => value instanceof ArrayBuffer,
+  isAnyArrayBuffer: (value: RuntimeValue): value is ArrayBuffer | SharedArrayBuffer =>
+    value instanceof ArrayBuffer ||
+    (typeof SharedArrayBuffer !== "undefined" && value instanceof SharedArrayBuffer),
   isTypedArray: (value: RuntimeValue): value is ArrayBufferView => ArrayBuffer.isView(value) && !(value instanceof DataView),
+  isBoxedPrimitive: (value: RuntimeValue): boolean =>
+    /^\[object (?:Boolean|Number|String|Symbol|BigInt)\]$/.test(Object.prototype.toString.call(value)),
   isNativeError: (value: RuntimeValue): value is Error => value instanceof Error,
   isPromise: (value: RuntimeValue): value is Promise<unknown> => Boolean(value && typeof (value as Promise<unknown>).then === "function")
 });

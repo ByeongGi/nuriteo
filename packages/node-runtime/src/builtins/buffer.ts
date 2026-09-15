@@ -7,10 +7,13 @@ const textDecoder = new TextDecoder();
 const hexDigits = "0123456789abcdef";
 
 export class BrowserBuffer extends Uint8Array {
-  static from(value: string | ArrayBuffer | ArrayBufferView | ArrayLike<number> | Iterable<number>, encodingOrMap?: BufferEncoding | ((value: number, index: number) => number), thisArg?: unknown): BrowserBuffer {
+  static from(value: string | ArrayBuffer | SharedArrayBuffer | ArrayBufferView | ArrayLike<number> | Iterable<number>, encodingOrMap?: BufferEncoding | ((value: number, index: number) => number), thisArg?: unknown): BrowserBuffer {
     const encoding = typeof encodingOrMap === "string" ? encodingOrMap : "utf8";
     if (typeof value === "string") return new BrowserBuffer(decodeString(value, encoding));
     if (value instanceof ArrayBuffer) return new BrowserBuffer(value.slice(0));
+    if (typeof SharedArrayBuffer !== "undefined" && value instanceof SharedArrayBuffer) {
+      return new BrowserBuffer(Uint8Array.from(new Uint8Array(value)));
+    }
     if (ArrayBuffer.isView(value)) {
       return new BrowserBuffer(copyViewBytes(value));
     }

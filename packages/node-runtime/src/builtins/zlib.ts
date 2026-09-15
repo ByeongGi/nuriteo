@@ -7,6 +7,7 @@ import {
 } from "fflate";
 
 import type { RuntimeValue } from "../types.ts";
+import { BrowserBuffer } from "./buffer.ts";
 import { PassThrough } from "./stream.ts";
 
 export const Z_SYNC_FLUSH = 2;
@@ -25,7 +26,7 @@ export class ZlibPassThrough extends PassThrough {
       },
       _processChunk(chunk: Uint8Array): Uint8Array[] {
         if (chunk.byteLength === 0) return [];
-        return [processChunk(chunk)];
+        return [BrowserBuffer.from(processChunk(chunk))];
       }
     };
   }
@@ -106,19 +107,19 @@ export function createUnzip(options?: Record<string, RuntimeValue>): Unzip {
 }
 
 export function deflateRawSync(bytes: Uint8Array): Uint8Array {
-  return fflateDeflateSync(bytes);
+  return BrowserBuffer.from(fflateDeflateSync(bytes));
 }
 
 export function inflateRawSync(bytes: Uint8Array): Uint8Array {
-  return fflateInflateSync(bytes);
+  return BrowserBuffer.from(fflateInflateSync(bytes));
 }
 
 export function gunzipSync(bytes: Uint8Array): Uint8Array {
-  return fflateGunzipSync(bytes);
+  return BrowserBuffer.from(fflateGunzipSync(bytes));
 }
 
 export function gzipSync(bytes: Uint8Array): Uint8Array {
-  return fflateGzipSync(bytes);
+  return BrowserBuffer.from(fflateGzipSync(bytes));
 }
 
 function createProcessChunk(mode: RuntimeValue): (chunk: Uint8Array) => Uint8Array {

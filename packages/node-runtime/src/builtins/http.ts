@@ -1,6 +1,8 @@
 import type { HostFetchOptions } from "../../../browser-host/src/io/index.ts";
 import type { RuntimeFetcher, RuntimeHttpClient } from "../network/http-client.ts";
 import type { RuntimeValue } from "../types.ts";
+import { BrowserBuffer } from "./buffer.ts";
+import { EventEmitter } from "./events.ts";
 import { Readable, Writable } from "./stream.ts";
 
 export interface HttpRequestOptions {
@@ -18,11 +20,25 @@ export interface HttpRequestOptions {
 
 export type HttpRequestCallback = (response: IncomingMessage) => void;
 
-export class Agent {
+export class Agent extends EventEmitter {
+  static defaultMaxSockets = Infinity;
   keepAlive: boolean;
+  maxSockets: number;
+  options: Record<string, unknown>;
 
-  constructor(options: { keepAlive?: boolean } = {}) {
+  constructor(options: { keepAlive?: boolean; maxSockets?: number } = {}) {
+    super();
     this.keepAlive = !!options.keepAlive;
+    this.maxSockets = options.maxSockets ?? Agent.defaultMaxSockets;
+    this.options = { ...options };
+  }
+
+  addRequest(): void {
+    // Browser fetch owns connection scheduling; package managers only need Node's Agent shape.
+  }
+
+  destroy(): void {
+    this.removeAllListeners();
   }
 }
 
@@ -44,7 +60,7 @@ export class IncomingMessage extends Readable {
     this.url = options.url;
 
     queueMicrotask(() => {
-      this.push(options.body);
+      this.push(BrowserBuffer.from(options.body));
       this.push(null);
     });
   }
@@ -56,12 +72,15 @@ export class ClientRequest extends Writable {
   private options: HttpRequestOptions;
   private callback: HttpRequestCallback | undefined;
   private fetcher: RuntimeFetcher;
+  private headers: Record<string, string | number | readonly string[]>;
 
   constructor(fetcher: RuntimeFetcher, options: string | URL | HttpRequestOptions, callback?: HttpRequestCallback) {
     super();
     this.fetcher = fetcher;
     this.options = normalizeRequestOptions(options);
     this.callback = callback;
+    this.headers = { ...(this.options.headers || {}) };
+    this.options.headers = this.headers;
   }
 
   override write(chunk: RuntimeValue, encodingOrCallback?: string | ((error?: Error | null) => void), callback?: (error?: Error | null) => void): boolean {
@@ -74,6 +93,32 @@ export class ClientRequest extends Writable {
   abort(): this {
     this.destroy();
     this.emit("abort");
+    return this;
+  }
+
+  flushHeaders(): void {
+    // Headers are dispatched with the body in the browser-backed fetch path.
+  }
+
+  getHeader(name: string): string | number | readonly string[] | undefined {
+    return this.headers[normalizeHeaderName(name)];
+  }
+
+  removeHeader(name: string): void {
+    delete this.headers[normalizeHeaderName(name)];
+  }
+
+  setHeader(name: string, value: string | number | readonly string[]): this {
+    this.headers[normalizeHeaderName(name)] = value;
+    return this;
+  }
+
+  setNoDelay(_noDelay = true): this {
+    return this;
+  }
+
+  setTimeout(_timeout: number, callback?: () => void): this {
+    if (callback) this.once("timeout", callback);
     return this;
   }
 
@@ -125,7 +170,9 @@ export interface HttpBuiltin {
   IncomingMessage: typeof IncomingMessage;
   STATUS_CODES: Record<number, string>;
   get(options: string | URL | HttpRequestOptions, callback?: HttpRequestCallback): ClientRequest;
+  get(url: string | URL, options: HttpRequestOptions, callback?: HttpRequestCallback): ClientRequest;
   request(options: string | URL | HttpRequestOptions, callback?: HttpRequestCallback): ClientRequest;
+  request(url: string | URL, options: HttpRequestOptions, callback?: HttpRequestCallback): ClientRequest;
 }
 
 export function createHttpBuiltin(clientOrFetcher?: RuntimeHttpClient | RuntimeFetcher, defaultProtocol = "http:"): HttpBuiltin {
@@ -137,10 +184,21 @@ export function createHttpBuiltin(clientOrFetcher?: RuntimeHttpClient | RuntimeF
       ? { protocol: defaultProtocol, ...options }
       : options;
 
-  const request = (options: string | URL | HttpRequestOptions, callback?: HttpRequestCallback) =>
-    new ClientRequest(fetcher, withProtocol(options), callback);
-  const get = (options: string | URL | HttpRequestOptions, callback?: HttpRequestCallback) => {
-    const requestInstance = request(options, callback);
+  const request = (
+    options: string | URL | HttpRequestOptions,
+    optionsOrCallback?: HttpRequestOptions | HttpRequestCallback,
+    maybeCallback?: HttpRequestCallback
+  ) => {
+    const requestOptions = mergeRequestOptions(options, optionsOrCallback);
+    const callback = typeof optionsOrCallback === "function" ? optionsOrCallback : maybeCallback;
+    return new ClientRequest(fetcher, withProtocol(requestOptions), callback);
+  };
+  const get = (
+    options: string | URL | HttpRequestOptions,
+    optionsOrCallback?: HttpRequestOptions | HttpRequestCallback,
+    maybeCallback?: HttpRequestCallback
+  ) => {
+    const requestInstance = request(options, optionsOrCallback, maybeCallback);
     requestInstance.end();
     return requestInstance;
   };
@@ -186,6 +244,12 @@ function normalizeRequestOptions(options: string | URL | HttpRequestOptions): Ht
   return options;
 }
 
+function mergeRequestOptions(options: string | URL | HttpRequestOptions, optionsOrCallback?: HttpRequestOptions | HttpRequestCallback): HttpRequestOptions {
+  const base = normalizeRequestOptions(options);
+  if (!optionsOrCallback || typeof optionsOrCallback === "function") return base;
+  return { ...base, ...optionsOrCallback };
+}
+
 function requestUrl(options: HttpRequestOptions): string {
   if (options.href) return options.href;
   const protocol = options.protocol || "http:";
@@ -199,6 +263,10 @@ function normalizeHeaders(headers: HttpRequestOptions["headers"] = {}): Record<s
   return Object.fromEntries(
     Object.entries(headers).map(([key, value]) => [key, Array.isArray(value) ? value.join(", ") : String(value)])
   );
+}
+
+function normalizeHeaderName(name: string): string {
+  return name.toLowerCase();
 }
 
 function concatBody(chunks: RuntimeValue[]): Uint8Array {

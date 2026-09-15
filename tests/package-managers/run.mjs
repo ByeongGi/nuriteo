@@ -20,6 +20,7 @@ const tests = [
   "./pnpm-cli-module-evaluation.test.mjs",
   "./pnpm-exec-cli-module-evaluation.test.mjs",
   "./pnpm-install-cli-module-evaluation.test.mjs",
+  "./pnpm-registry-install-cli-module-evaluation.test.mjs",
   "./pnpm-guest-runtime-boot.test.mjs",
   "./pnpm-store-plan.test.mjs",
   "./tarball-cache.test.mjs",

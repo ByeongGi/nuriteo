@@ -114,6 +114,14 @@ encoded.push(new TextEncoder().encode("hi"));
 encoded.push(null);
 assert.deepEqual(encodedChunks, ["hi"]);
 
+const binary = new RuntimeReadable();
+binary.push(new Uint8Array([1, 2, 3]));
+binary.push(null);
+const binaryChunks = [];
+for await (const chunk of binary) binaryChunks.push(chunk);
+assert.equal(typeof binaryChunks[0].copy, "function");
+assert.equal(binaryChunks[0].toString("hex"), "010203");
+
 const latePipeReadable = new RuntimeReadable();
 latePipeReadable.push("late");
 latePipeReadable.push(null);
@@ -130,6 +138,7 @@ const requireBuiltin = createBuiltinLoader({});
 assert.equal(requireBuiltin("node:stream").Readable, RuntimeReadable);
 assert.equal(typeof requireBuiltin("stream"), "function");
 assert.equal(requireBuiltin("stream").Stream, requireBuiltin("stream"));
+assert.equal(new RuntimePassThrough() instanceof requireBuiltin("stream"), true);
 const legacyStream = new (requireBuiltin("stream"))();
 const legacyListener = () => undefined;
 legacyStream.on("readable", legacyListener);
