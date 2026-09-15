@@ -634,6 +634,7 @@ const workerBackedWorkspace = new MemoryPackageManagerWorkspace([
   }
 ]);
 const workerBackedResult = await createWorkerBackedAsyncCliModuleEvaluator({
+  captureGlobalCalls: ["__fixtureRegister"],
   root: "/workspace",
   workerFactory: () => new FakeCliEvaluationWorker(),
   workspace: workerBackedWorkspace
@@ -654,6 +655,58 @@ assert.equal(
   MemoryPackageManagerWorkspace.fromSnapshot(workerBackedResult.workspaceSnapshot).readText("/workspace/project/worker-backed.txt"),
   "worker-backed"
 );
+assert.deepEqual(workerBackedResult.capturedGlobalCalls, []);
+
+const workerBackedRegistrationWorkspace = new MemoryPackageManagerWorkspace([
+  {
+    path: "/workspace/register-cli/package/bin/npm-cli.js",
+    data: "#!/usr/bin/env node\nrequire('../lib/cli.js')(process)\n"
+  },
+  {
+    path: "/workspace/register-cli/package/lib/cli.js",
+    data: `
+      module.exports = function run(process) {
+        global.__fixtureRegister?.({
+          command: 'dev',
+          nested: { ok: true },
+          invoke() { return 'not-serializable'; }
+        });
+        process.stdout.write('registered\\n');
+      };
+    `
+  },
+  {
+    path: "/workspace/register-cli/package/package.json",
+    data: JSON.stringify({ name: "worker-backed-register-cli", version: "1.2.3", main: "lib/cli.js" })
+  }
+]);
+const workerBackedRegistrationResult = await createWorkerBackedAsyncCliModuleEvaluator({
+  captureGlobalCalls: ["__fixtureRegister"],
+  root: "/workspace",
+  workerFactory: () => new FakeCliEvaluationWorker(),
+  workspace: workerBackedRegistrationWorkspace
+})({
+  entry: {
+    name: "npm",
+    version: "1.2.3",
+    entry: "/workspace/register-cli/package/bin/npm-cli.js"
+  },
+  args: [],
+  cwd: "/workspace/project"
+});
+assert.equal(workerBackedRegistrationResult.stdout, "registered\n");
+assert.deepEqual(workerBackedRegistrationResult.capturedGlobalCalls, [
+  {
+    name: "__fixtureRegister",
+    args: [
+      {
+        command: "dev",
+        nested: { ok: true },
+        invoke: { __cliFunctionRef: true }
+      }
+    ]
+  }
+]);
 
 const asyncErrorResult = await createAsyncCliModuleEvaluator({
   root: "/workspace",

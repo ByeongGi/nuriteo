@@ -31,12 +31,19 @@ export interface IsolatedAsyncCliModuleEvaluatorOptions extends Omit<AsyncCliMod
 }
 
 export interface IsolatedCliRunResult extends CliRunResult {
+  capturedGlobalCalls?: CliEvaluationCapturedGlobalCall[];
   workspaceSnapshot: PackageManagerWorkspaceSnapshot;
 }
 
 export interface WorkerBackedAsyncCliModuleEvaluatorOptions extends Omit<AsyncCliModuleEvaluatorOptions, "globals" | "reader" | "writer"> {
+  captureGlobalCalls?: readonly string[];
   workerFactory: CliEvaluationWorkerFactory;
   workspace: MemoryPackageManagerWorkspace;
+}
+
+export interface CliEvaluationCapturedGlobalCall {
+  args: unknown[];
+  name: string;
 }
 
 export type CliEvaluationWorkerFactory = () => CliEvaluationWorkerPort;
@@ -53,6 +60,7 @@ export type CliEvaluationWorkerMessage =
   | CliEvaluationWorkerResultMessage;
 
 export interface CliEvaluationWorkerEvaluateMessage {
+  captureGlobalCalls?: readonly string[];
   id: number;
   request: CliModuleEvaluationRequest;
   root?: string;
@@ -140,6 +148,7 @@ export function createWorkerBackedAsyncCliModuleEvaluator(
         ...(options.root !== undefined ? { root: options.root } : {}),
         ...(options.settleTicks !== undefined ? { settleTicks: options.settleTicks } : {}),
         ...(options.settleTimeoutMs !== undefined ? { settleTimeoutMs: options.settleTimeoutMs } : {}),
+        ...(options.captureGlobalCalls !== undefined ? { captureGlobalCalls: options.captureGlobalCalls } : {}),
         type: "cli:evaluate",
         workspaceSnapshot: options.workspace.snapshot()
       } satisfies CliEvaluationWorkerEvaluateMessage);
@@ -152,7 +161,9 @@ export async function evaluateCliModuleWorkerMessage(
 ): Promise<CliEvaluationWorkerResultMessage> {
   try {
     const workspace = MemoryPackageManagerWorkspace.fromSnapshot(message.workspaceSnapshot);
+    const capturedGlobalCalls: CliEvaluationCapturedGlobalCall[] = [];
     const result = await createAsyncCliModuleEvaluator({
+      ...(message.captureGlobalCalls ? { globals: createCapturedGlobalCallHandlers(message.captureGlobalCalls, capturedGlobalCalls) } : {}),
       reader: workspace,
       ...(message.root !== undefined ? { root: message.root } : {}),
       ...(message.settleTicks !== undefined ? { settleTicks: message.settleTicks } : {}),
@@ -163,6 +174,7 @@ export async function evaluateCliModuleWorkerMessage(
       id: message.id,
       result: {
         ...result,
+        ...(message.captureGlobalCalls ? { capturedGlobalCalls } : {}),
         workspaceSnapshot: workspace.snapshot()
       },
       type: "cli:result"
@@ -174,6 +186,27 @@ export async function evaluateCliModuleWorkerMessage(
       type: "cli:result"
     };
   }
+}
+
+function createCapturedGlobalCallHandlers(
+  names: readonly string[],
+  calls: CliEvaluationCapturedGlobalCall[]
+): Record<string, RuntimeValue> {
+  return Object.fromEntries(names.map((name) => [
+    name,
+    (...args: unknown[]) => {
+      calls.push({ name, args: args.map((arg) => sanitizeWorkerResultValue(arg)) });
+    }
+  ]));
+}
+
+function sanitizeWorkerResultValue(value: unknown, seen = new Set<unknown>()): unknown {
+  if (typeof value === "function") return { __cliFunctionRef: true };
+  if (value === null || typeof value !== "object") return value;
+  if (seen.has(value)) return { __cliCircularRef: true };
+  seen.add(value);
+  if (Array.isArray(value)) return value.map((item) => sanitizeWorkerResultValue(item, seen));
+  return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, sanitizeWorkerResultValue(item, seen)]));
 }
 
 function startCliModuleEvaluation(
