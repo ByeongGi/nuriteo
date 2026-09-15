@@ -66,11 +66,37 @@ export type PreviewErrorCode = "EBADMESSAGE" | "ENOCLIENT" | "ENOSERVER" | "ESTA
 
 export interface PreviewDiagnostic {
   at: number;
-  source: "console" | "relay" | "service-worker";
+  source: "build" | "console" | "hmr" | "relay" | "runtime" | "service-worker";
   level: "log" | "info" | "warn" | "error";
   message: string;
   clientId?: string;
   code?: PreviewErrorCode;
+  column?: number;
+  file?: string;
+  line?: number;
+  recoveryActions?: PreviewRecoveryAction[];
+  stack?: string;
+}
+
+export interface PreviewRecoveryAction {
+  kind: "open-file" | "restart-dev-server" | "rerun-build" | "show-terminal";
+  label: string;
+  command?: string;
+  path?: string;
+}
+
+export type PreviewErrorStage = "build" | "hmr" | "runtime";
+
+export interface PreviewErrorDiagnosticInput {
+  source: PreviewErrorStage;
+  message: string;
+  clientId?: string;
+  code?: PreviewErrorCode;
+  column?: number;
+  file?: string;
+  line?: number;
+  recoveryActions?: PreviewRecoveryAction[];
+  stack?: string;
 }
 
 export interface PreviewOverlayState {

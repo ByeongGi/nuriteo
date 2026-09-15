@@ -1,3 +1,4 @@
+import { createPreviewErrorDiagnostic } from "./error-overlay.ts";
 import type { PreviewDiagnostic, PreviewErrorCode, PreviewOverlayMessage, PreviewOverlayState, PreviewRelayLike } from "./types.ts";
 
 export interface PreviewServiceWorkerOptions {
@@ -24,8 +25,15 @@ type PreviewMessageEvent = {
     method?: string;
     headers?: HeadersInit;
     body?: BodyInit | null;
+    code?: PreviewErrorCode;
+    column?: number;
+    file?: string;
+    line?: number;
     level?: PreviewDiagnostic["level"];
     message?: string;
+    recoveryActions?: PreviewDiagnostic["recoveryActions"];
+    source?: "build" | "hmr" | "runtime";
+    stack?: string;
   };
   port?: PreviewMessagePort;
 };
@@ -80,6 +88,22 @@ export class PreviewServiceWorker {
       return { type: "preview:ready", clientId: data.clientId };
     }
 
+    if (data.type === "preview:error-diagnostic") {
+      if (!data.message || !isPreviewErrorSource(data.source)) return this.#error("EBADMESSAGE", data.clientId);
+      this.#record(createPreviewErrorDiagnostic({
+        source: data.source,
+        message: data.message,
+        ...(data.clientId ? { clientId: data.clientId } : {}),
+        ...(data.code ? { code: data.code } : {}),
+        ...(data.column !== undefined ? { column: data.column } : {}),
+        ...(data.file ? { file: data.file } : {}),
+        ...(data.line !== undefined ? { line: data.line } : {}),
+        ...(data.recoveryActions ? { recoveryActions: data.recoveryActions } : {}),
+        ...(data.stack ? { stack: data.stack } : {})
+      }, this.now()));
+      return readyResponse(data.clientId);
+    }
+
     if (data.type === "preview:fetch") {
       if (!data.clientId) return this.#error("EBADMESSAGE");
       const client = this.clients.get(data.clientId);
@@ -125,8 +149,8 @@ export class PreviewServiceWorker {
     return { type: "preview:error", code, message };
   }
 
-  #record(diagnostic: Omit<PreviewDiagnostic, "at">): void {
-    const entry = {
+  #record(diagnostic: Omit<PreviewDiagnostic, "at"> | PreviewDiagnostic): void {
+    const entry = "at" in diagnostic ? diagnostic : {
       at: this.now(),
       ...diagnostic
     };
@@ -161,4 +185,15 @@ export function createPreviewServiceWorker(options: PreviewServiceWorkerOptions)
 
 function errorCode(error: unknown): PreviewErrorCode {
   return error instanceof Error && "code" in error && typeof error.code === "string" ? error.code : "EUNKNOWN";
+}
+
+function isPreviewErrorSource(source: unknown): source is "build" | "hmr" | "runtime" {
+  return source === "build" || source === "hmr" || source === "runtime";
+}
+
+function readyResponse(clientId?: string): PreviewServiceWorkerResponse {
+  return {
+    type: "preview:ready",
+    ...(clientId ? { clientId } : {})
+  };
 }

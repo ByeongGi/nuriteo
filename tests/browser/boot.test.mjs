@@ -49,6 +49,12 @@ await withRuntimeLab(async (page, baseUrl) => {
   if (previewResult.ready.type !== "preview:ready") throw new Error("preview handshake did not complete");
   if (previewResult.routed.response?.body !== "preview:/index.html") throw new Error("preview request did not route to container port");
   if (!previewResult.hmr.includes("message:update")) throw new Error("HMR reconnect/update smoke did not complete");
+  const overlayResult = await page.evaluate(() => globalThis.__runtimeLab.runPreviewOverlaySmoke());
+  if (overlayResult.state.lastError.code !== "EVITEBUILD") throw new Error("preview overlay did not store build error");
+  if (overlayResult.state.lastError.file !== "/workspace/app/src/App.jsx") throw new Error("preview overlay did not store file");
+  if (overlayResult.messages.at(-1).diagnostic.recoveryActions[0].kind !== "open-file") {
+    throw new Error("preview overlay did not suggest opening the file");
+  }
   const terminalResult = await page.evaluate(async () => {
     const install = await globalThis.__runtimeLab.runTerminalCommand("npm install");
     const pending = globalThis.__runtimeLab.runTerminalCommand("sleep");

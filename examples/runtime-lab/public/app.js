@@ -396,6 +396,55 @@ async function runPreviewSmoke() {
   return result;
 }
 
+async function runPreviewOverlaySmoke() {
+  const messages = [];
+  const sessions = createPreviewSessionRegistry({ ttlMs: 1000 });
+  const session = sessions.create({
+    origin: location.origin,
+    projectId: "runtime-lab",
+    port: 5173,
+    container: {
+      async fetch() {
+        return {
+          statusCode: 200,
+          headers: { "content-type": "text/html" },
+          body: "<div id=\"app\"></div>"
+        };
+      }
+    }
+  });
+  const serviceWorker = createPreviewServiceWorker({
+    relay: createPreviewRelay({ sessions, timeoutMs: 250 })
+  });
+  await serviceWorker.handleMessage({
+    data: {
+      type: "preview:handshake",
+      clientId: "runtime-lab-overlay-client",
+      sessionId: session.sessionId,
+      origin: location.origin,
+      projectId: "runtime-lab"
+    },
+    port: { postMessage: (message) => messages.push(message) }
+  });
+  await serviceWorker.handleMessage({
+    data: {
+      type: "preview:error-diagnostic",
+      clientId: "runtime-lab-overlay-client",
+      source: "build",
+      code: "EVITEBUILD",
+      message: "Unexpected token",
+      file: "/workspace/app/src/App.jsx",
+      line: 3,
+      column: 18,
+      stack: "App.jsx:3:18"
+    }
+  });
+  const state = serviceWorker.overlayState("runtime-lab-overlay-client");
+  const result = { messages, state };
+  log(result);
+  return result;
+}
+
 bootButton.addEventListener("click", () => {
   boot().catch((error) => {
     setStatus("failed");
@@ -460,6 +509,7 @@ globalThis.__runtimeLab = {
   openEditorFile,
   renameCurrentFile,
   runFsSmoke,
+  runPreviewOverlaySmoke,
   runPreviewSmoke,
   runTerminalCommand,
   saveCurrentFile,

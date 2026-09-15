@@ -194,6 +194,28 @@ assert.equal(clientOneMessages.at(-1).type, "preview:overlay");
 assert.equal(clientOneMessages.at(-1).clientId, "client-1");
 assert.equal(clientOneMessages.at(-1).diagnostic.message, "vite warning");
 assert.equal(clientTwoMessages.length, 1);
+const buildDiagnostic = await serviceWorker.handleMessage({
+  data: {
+    type: "preview:error-diagnostic",
+    clientId: "client-1",
+    source: "build",
+    code: "EVITEBUILD",
+    message: "Unexpected token",
+    file: "/workspace/app/src/App.jsx",
+    line: 7,
+    column: 12,
+    stack: "App.jsx:7:12"
+  }
+});
+assert.equal(buildDiagnostic.type, "preview:ready");
+assert.equal(clientOneMessages.at(-1).type, "preview:overlay");
+assert.equal(clientOneMessages.at(-1).diagnostic.source, "build");
+assert.equal(clientOneMessages.at(-1).diagnostic.file, "/workspace/app/src/App.jsx");
+assert.equal(clientOneMessages.at(-1).diagnostic.line, 7);
+assert.deepEqual(clientOneMessages.at(-1).diagnostic.recoveryActions, [
+  { kind: "open-file", label: "Open file", path: "/workspace/app/src/App.jsx" },
+  { kind: "rerun-build", label: "Rerun build", command: "npm run build" }
+]);
 const routed = await serviceWorker.handleMessage({
   data: {
     type: "preview:fetch",
@@ -229,6 +251,7 @@ assert.equal(clientOneMessages.at(-1).state.lastError.code, "ENOCLIENT");
 const overlay = serviceWorker.overlayState("client-1");
 assert.deepEqual(overlay.diagnostics.map((entry) => `${entry.source}:${entry.level}:${entry.message}`), [
   "console:warn:vite warning",
+  "build:error:Unexpected token",
   "service-worker:error:ENOCLIENT"
 ]);
 assert.equal(overlay.lastError.code, "ENOCLIENT");
