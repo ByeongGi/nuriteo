@@ -152,6 +152,7 @@ export type ViteProductCliExecutionMode = "async-cli-module-evaluation" | "isola
 
 export interface ViteProductCliExecutionOptions {
   isolation?: "shared" | "snapshot" | "worker";
+  readyTimeoutMs?: number;
   workerFactory?: CliEvaluationWorkerFactory;
 }
 
@@ -520,11 +521,27 @@ export class ViteProductWorkflow {
         transformRegistrations
       };
     }
+    if (isolation === "shared" && this.#hasDependencyArtifact("@napi-rs/wasm-runtime")) {
+      return {
+        args,
+        buildRegistrations,
+        cwd: this.projectRoot,
+        entry: cliEntrypoint,
+        exitCode: 1,
+        hmrRegistrations,
+        mode: "async-cli-module-evaluation",
+        serverRegistrations,
+        stderr: "EVITEWASIISOLATIONREQUIRED: Vite/Rolldown WASI runtime dependencies require snapshot or worker isolation before shared CLI execution.\n",
+        stdout: "",
+        transformRegistrations
+      };
+    }
     const broadcastHmr = (update: ViteProductHmrUpdate): ViteProductHmrUpdate => {
       this.#broadcastHmr(update);
       return update;
     };
     const evaluatorOptions = {
+      ...(options.readyTimeoutMs !== undefined ? { readyTimeoutMs: options.readyTimeoutMs } : {}),
       root: this.projectRoot,
       globals: {
         __viteRegisterBuild(registration: ViteProductCliBuildRegistration) {

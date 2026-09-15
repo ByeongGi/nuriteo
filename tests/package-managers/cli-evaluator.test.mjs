@@ -765,6 +765,52 @@ assert.equal(workerBackedEsmBootstrapResult.capturedGlobalCalls[0].args[0].sourc
 assert.equal(typeof workerBackedEsmBootstrapResult.capturedGlobalCalls[0].args[0].startedAt, "number");
 assert.deepEqual(workerBackedEsmBootstrapResult.capturedGlobalCalls[0].args[0].invoke, { __cliFunctionRef: true });
 
+const pendingCliWorkspace = new MemoryPackageManagerWorkspace([
+  {
+    path: "/workspace/pending/package/bin/pending.mjs",
+    data: "await new Promise(() => {});\n"
+  },
+  {
+    path: "/workspace/pending/package/package.json",
+    data: JSON.stringify({ name: "pending-cli", version: "1.2.3", type: "module", bin: { pending: "bin/pending.mjs" } })
+  }
+]);
+const pendingCliResult = await createAsyncCliModuleEvaluator({
+  readyTimeoutMs: 5,
+  root: "/workspace",
+  reader: pendingCliWorkspace,
+  settleTimeoutMs: 1
+})({
+  entry: {
+    name: "pending",
+    version: "1.2.3",
+    entry: "/workspace/pending/package/bin/pending.mjs",
+    mode: "esm"
+  },
+  args: [],
+  cwd: "/workspace/project"
+});
+assert.equal(pendingCliResult.exitCode, 1);
+assert.match(pendingCliResult.stderr, /ECLIETIMEOUT/);
+
+const workerBackedPendingCliResult = await createWorkerBackedAsyncCliModuleEvaluator({
+  readyTimeoutMs: 5,
+  root: "/workspace",
+  workerFactory: () => new FakeCliEvaluationWorker(),
+  workspace: pendingCliWorkspace
+})({
+  entry: {
+    name: "pending",
+    version: "1.2.3",
+    entry: "/workspace/pending/package/bin/pending.mjs",
+    mode: "esm"
+  },
+  args: [],
+  cwd: "/workspace/project"
+});
+assert.equal(workerBackedPendingCliResult.exitCode, 1);
+assert.match(workerBackedPendingCliResult.stderr, /ECLIETIMEOUT/);
+
 const asyncErrorResult = await createAsyncCliModuleEvaluator({
   root: "/workspace",
   reader: workspace,

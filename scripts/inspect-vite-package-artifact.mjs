@@ -92,12 +92,13 @@ async function runExecutionSmoke(vitePackageArtifact, dependencyArtifacts, optio
   });
   workflow.install();
   const env = options.forceWasi ? { NAPI_RS_FORCE_WASI: "error" } : {};
-  const result = await workflow.executeRealCli(["--host", "127.0.0.1"], env);
+  const result = await workflow.executeRealCli(["--host", "127.0.0.1"], env, { readyTimeoutMs: 1000 });
   return {
     args: result.args,
     env,
     exitCode: result.exitCode,
     nativeBindingBlocker: classifyNativeBindingBlocker(result.stderr),
+    isolationBlocker: classifyIsolationBlocker(result.stderr),
     registrations: {
       build: result.buildRegistrations.length,
       hmr: result.hmrRegistrations.length,
@@ -105,6 +106,7 @@ async function runExecutionSmoke(vitePackageArtifact, dependencyArtifacts, optio
       transform: result.transformRegistrations.length
     },
     runtimeBuiltinBlocker: classifyRuntimeBuiltinBlocker(result.stderr),
+    timeoutBlocker: classifyTimeoutBlocker(result.stderr),
     stderrCauseLines: causeLines(result.stderr),
     stderrFirstLine: firstNonEmptyLine(result.stderr),
     stdoutFirstLine: firstNonEmptyLine(result.stdout)
@@ -231,12 +233,28 @@ function classifyNativeBindingBlocker(stderr) {
   };
 }
 
+function classifyIsolationBlocker(stderr) {
+  if (!stderr.includes("EVITEWASIISOLATIONREQUIRED") && !stderr.includes("EVITEWASISYNCINIT")) return null;
+  return {
+    reason: stderr.includes("EVITEWASIISOLATIONREQUIRED")
+      ? "wasi-runtime-shared-execution-requires-isolation"
+      : "forced-wasi-sync-init-requires-isolation"
+  };
+}
+
 function classifyRuntimeBuiltinBlocker(stderr) {
   const match = stderr.match(/ERR_MODULE_NOT_FOUND: (node:[\w-]+)/);
   if (!match) return null;
   return {
     builtin: match[1],
     reason: "missing-runtime-builtin"
+  };
+}
+
+function classifyTimeoutBlocker(stderr) {
+  if (!stderr.includes("ECLIETIMEOUT")) return null;
+  return {
+    reason: "cli-module-ready-timeout"
   };
 }
 

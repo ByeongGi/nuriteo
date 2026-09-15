@@ -466,6 +466,10 @@ const forcedWasiGuardExecution = await forcedWasiGuardWorkflow.executeRealCli(["
 assert.equal(forcedWasiGuardExecution.exitCode, 1);
 assert.match(forcedWasiGuardExecution.stderr, /EVITEWASISYNCINIT/);
 assert.deepEqual(forcedWasiGuardExecution.buildRegistrations, []);
+const sharedWasiGuardExecution = await forcedWasiGuardWorkflow.executeRealCli(["build"]);
+assert.equal(sharedWasiGuardExecution.exitCode, 1);
+assert.match(sharedWasiGuardExecution.stderr, /EVITEWASIISOLATIONREQUIRED/);
+assert.deepEqual(sharedWasiGuardExecution.buildRegistrations, []);
 const forcedWasiIsolatedExecution = await forcedWasiGuardWorkflow.executeRealCli(
   ["build"],
   { NAPI_RS_FORCE_WASI: "error" },

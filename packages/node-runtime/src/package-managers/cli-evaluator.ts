@@ -22,6 +22,7 @@ export interface CliModuleEvaluatorOptions {
 }
 
 export interface AsyncCliModuleEvaluatorOptions extends CliModuleEvaluatorOptions {
+  readyTimeoutMs?: number;
   settleTicks?: number;
   settleTimeoutMs?: number;
 }
@@ -62,6 +63,7 @@ export type CliEvaluationWorkerMessage =
 export interface CliEvaluationWorkerEvaluateMessage {
   captureGlobalCalls?: readonly string[];
   id: number;
+  readyTimeoutMs?: number;
   request: CliModuleEvaluationRequest;
   root?: string;
   settleTicks?: number;
@@ -93,7 +95,15 @@ export function createCliModuleEvaluator(options: CliModuleEvaluatorOptions): (r
 export function createAsyncCliModuleEvaluator(options: AsyncCliModuleEvaluatorOptions): (request: CliModuleEvaluationRequest) => Promise<CliRunResult> {
   return async function evaluateCliModuleAsync(request: CliModuleEvaluationRequest): Promise<CliRunResult> {
     const evaluation = startCliModuleEvaluation(options, request, { supportedModes: ["cjs", "esm"] });
-    await evaluation.ready;
+    const readyTimeout = await waitForCliEvaluationReady(evaluation.ready, options);
+    if (readyTimeout) {
+      const result = evaluation.finalize();
+      return {
+        ...result,
+        exitCode: 1,
+        stderr: `${result.stderr}ECLIETIMEOUT: CLI module evaluation did not become ready within ${readyTimeout.timeoutMs}ms\n`
+      };
+    }
     await settleCliEvaluation(options);
     return evaluation.finalize();
   };
@@ -146,6 +156,7 @@ export function createWorkerBackedAsyncCliModuleEvaluator(
         id,
         request,
         ...(options.root !== undefined ? { root: options.root } : {}),
+        ...(options.readyTimeoutMs !== undefined ? { readyTimeoutMs: options.readyTimeoutMs } : {}),
         ...(options.settleTicks !== undefined ? { settleTicks: options.settleTicks } : {}),
         ...(options.settleTimeoutMs !== undefined ? { settleTimeoutMs: options.settleTimeoutMs } : {}),
         ...(options.captureGlobalCalls !== undefined ? { captureGlobalCalls: options.captureGlobalCalls } : {}),
@@ -166,6 +177,7 @@ export async function evaluateCliModuleWorkerMessage(
       ...(message.captureGlobalCalls ? { globals: createCapturedGlobalCallHandlers(message.captureGlobalCalls, capturedGlobalCalls) } : {}),
       reader: workspace,
       ...(message.root !== undefined ? { root: message.root } : {}),
+      ...(message.readyTimeoutMs !== undefined ? { readyTimeoutMs: message.readyTimeoutMs } : {}),
       ...(message.settleTicks !== undefined ? { settleTicks: message.settleTicks } : {}),
       ...(message.settleTimeoutMs !== undefined ? { settleTimeoutMs: message.settleTimeoutMs } : {}),
       writer: workspace
@@ -877,6 +889,28 @@ async function settleCliEvaluation(options: AsyncCliModuleEvaluatorOptions): Pro
     await Promise.resolve();
   }
   await new Promise((resolve) => setTimeout(resolve, timeoutMs));
+}
+
+async function waitForCliEvaluationReady(
+  ready: Promise<void>,
+  options: AsyncCliModuleEvaluatorOptions
+): Promise<{ timeoutMs: number } | null> {
+  if (options.readyTimeoutMs === undefined) {
+    await ready;
+    return null;
+  }
+  const timeoutMs = options.readyTimeoutMs;
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      ready.then(() => null),
+      new Promise<{ timeoutMs: number }>((resolve) => {
+        timeout = setTimeout(() => resolve({ timeoutMs }), timeoutMs);
+      })
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
 }
 
 function createCliDynamicImport(): (specifier: string) => Promise<RuntimeNamespace> {
