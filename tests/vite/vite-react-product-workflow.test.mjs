@@ -239,11 +239,23 @@ const artifactWorkflow = new ViteProductWorkflow({
       },
       {
         path: "dist/node/cli.mjs",
-        data: "import { boot } from './real-server.mjs';\nboot();\n"
+        data: "import { runBuild } from './build.mjs';\nimport { startDevServer } from './real-server.mjs';\nif (process.argv.includes('build')) {\n  runBuild({ outDir: 'dist' });\n} else {\n  startDevServer({ host: '127.0.0.1', port: Number(process.env.PORT || 5173) });\n}\n"
       },
       {
         path: "dist/node/real-server.mjs",
-        data: "export function boot() {}\n"
+        data: "import { createHotChannel } from './hmr.mjs';\nimport { registerTransform } from './transform.mjs';\nexport function startDevServer(options) {\n  registerTransform();\n  createHotChannel();\n  global.__viteRegisterDevServer?.({ command: 'dev', host: options.host, port: options.port, source: 'vite-cli' });\n}\n"
+      },
+      {
+        path: "dist/node/build.mjs",
+        data: "export function runBuild(options) {\n  global.__viteRegisterBuild?.({ command: 'build', outDir: options.outDir, source: 'vite-cli' });\n}\n"
+      },
+      {
+        path: "dist/node/hmr.mjs",
+        data: "export function createHotChannel() {\n  global.__viteRegisterHmrChannel?.({ channel: 'hmr', source: 'vite-cli', transport: 'loopback' });\n}\n"
+      },
+      {
+        path: "dist/node/transform.mjs",
+        data: "export function registerTransform() {\n  global.__viteRegisterTransform?.({ mode: 'browser-esm', source: 'vite-cli' });\n}\n"
       }
     ]
   }
@@ -258,10 +270,43 @@ assert.deepEqual(
   artifactReadiness.cliModuleGraph.modules.map((mod) => [mod.path, mod.imports]),
   [
     ["/workspace/project/node_modules/vite/custom-bin/vite.mjs", ["../dist/node/cli.mjs"]],
-    ["/workspace/project/node_modules/vite/dist/node/cli.mjs", ["./real-server.mjs"]],
-    ["/workspace/project/node_modules/vite/dist/node/real-server.mjs", []]
+    ["/workspace/project/node_modules/vite/dist/node/cli.mjs", ["./build.mjs", "./real-server.mjs"]],
+    ["/workspace/project/node_modules/vite/dist/node/build.mjs", []],
+    ["/workspace/project/node_modules/vite/dist/node/real-server.mjs", ["./hmr.mjs", "./transform.mjs"]],
+    ["/workspace/project/node_modules/vite/dist/node/hmr.mjs", []],
+    ["/workspace/project/node_modules/vite/dist/node/transform.mjs", []]
   ]
 );
+const artifactCliExecution = await artifactWorkflow.executeRealCli(["--host", "127.0.0.1"], { PORT: "5299" });
+assert.deepEqual(artifactCliExecution.serverRegistrations, [
+  {
+    command: "dev",
+    host: "127.0.0.1",
+    port: 5299,
+    source: "vite-cli"
+  }
+]);
+assert.deepEqual(artifactCliExecution.hmrRegistrations, [
+  {
+    channel: "hmr",
+    source: "vite-cli",
+    transport: "loopback"
+  }
+]);
+assert.deepEqual(artifactCliExecution.transformRegistrations, [
+  {
+    mode: "browser-esm",
+    source: "vite-cli"
+  }
+]);
+const artifactBuildExecution = await artifactWorkflow.executeRealCli(["build"]);
+assert.deepEqual(artifactBuildExecution.buildRegistrations, [
+  {
+    command: "build",
+    outDir: "dist",
+    source: "vite-cli"
+  }
+]);
 
 assert.throws(
   () => new ViteProductWorkflow({

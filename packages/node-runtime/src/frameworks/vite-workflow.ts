@@ -299,10 +299,10 @@ export class ViteProductWorkflow {
     const cliEntrypoint = this.#resolveBin("vite");
     const cliEntryReadiness = inspectCliEntryReadiness({
       entry: {
-          name: "vite",
-          version: this.#readVitePackageVersion(),
-          entry: cliEntrypoint,
-          mode: "esm"
+        name: "vite",
+        version: this.#readVitePackageVersion(),
+        entry: cliEntrypoint,
+        mode: "esm"
       },
       reader: this.workspace,
       supportedModes: ["cjs", "esm"]
