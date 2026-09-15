@@ -93,6 +93,13 @@ const v8 = requireBuiltin("node:v8");
 assert.equal(typeof v8.getHeapStatistics().heap_size_limit, "number");
 assert.deepEqual(v8.getHeapSpaceStatistics(), []);
 
+const zlib = requireBuiltin("node:zlib");
+const unzip = zlib.createUnzip();
+assert.equal(typeof unzip._handle._processChunk, "function");
+assert.equal(unzip._handle._processChunk(new Uint8Array([1]))[0][0], 1);
+assert.equal(unzip.reset(), undefined);
+assert.equal(unzip.close(), undefined);
+
 const moduleBuiltin = requireBuiltin("node:module");
 assert.equal(moduleBuiltin.enableCompileCache().status, 0);
 assert.equal(moduleBuiltin.builtinModules.includes("node:module"), true);
@@ -343,6 +350,7 @@ const httpRequire = createBuiltinLoader({
   }
 });
 const http = httpRequire("http");
+assert.equal(http.STATUS_CODES[200], "OK");
 const abortedRequest = http.request("http://registry.test/abort");
 let abortEvent = false;
 abortedRequest.on("abort", () => {

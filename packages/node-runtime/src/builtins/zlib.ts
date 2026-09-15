@@ -4,8 +4,29 @@ import type { RuntimeValue } from "../types.ts";
 export const Z_SYNC_FLUSH = 2;
 
 export class ZlibPassThrough extends PassThrough {
+  _handle: ZlibNativeHandle;
+
   constructor(_options: Record<string, RuntimeValue> = {}) {
     super();
+    this._handle = {
+      close() {},
+      reset() {},
+      _handle: {
+        close() {}
+      },
+      _processChunk(chunk: Uint8Array): Uint8Array[] {
+        return [chunk];
+      }
+    };
+  }
+
+  close(): void {
+    this._handle.close();
+    this.emit("close");
+  }
+
+  reset(): void {
+    this._handle.reset();
   }
 }
 
@@ -51,6 +72,15 @@ export function deflateRawSync(bytes: Uint8Array): Uint8Array {
 
 export function inflateRawSync(bytes: Uint8Array): Uint8Array {
   return bytes;
+}
+
+export interface ZlibNativeHandle {
+  _handle: {
+    close(): void;
+  };
+  close(): void;
+  reset(): void;
+  _processChunk(chunk: Uint8Array, flushFlag?: number): Uint8Array[];
 }
 
 export const zlibBuiltin = Object.freeze({

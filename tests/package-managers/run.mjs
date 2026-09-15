@@ -3,6 +3,7 @@ const tests = [
   "./cli-evaluator.test.mjs",
   "./cli-module-graph.test.mjs",
   "./conformance-matrix.test.mjs",
+  "./npm-fetch-cli-module-evaluation.test.mjs",
   "./npm-install-cli-module-evaluation.test.mjs",
   "./npm-run-exec-cli-module-evaluation.test.mjs",
   "./npm-cli-module-evaluation.test.mjs",

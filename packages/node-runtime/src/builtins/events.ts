@@ -43,10 +43,14 @@ export class EventEmitter {
   }
 
   off(eventName: string | symbol, listener: Listener): this {
-    return this.removeListener(eventName, listener);
+    return this.#removeListener(eventName, listener);
   }
 
   removeListener(eventName: string | symbol, listener: Listener): this {
+    return this.#removeListener(eventName, listener);
+  }
+
+  #removeListener(eventName: string | symbol, listener: Listener): this {
     const listeners = this.#events.get(eventName);
     if (!listeners) return this;
     const next = listeners.filter((item) => item !== listener && (item as Listener & { listener?: Listener }).listener !== listener);
@@ -149,15 +153,14 @@ function createLegacyEventEmitterConstructor(): typeof EventEmitter {
     for (const listener of listeners) listener.apply(this, args);
     return true;
   };
-  LegacyEventEmitter.prototype.off = function off(eventName: string | symbol, listener: Listener) {
-    return this.removeListener(eventName, listener);
-  };
-  LegacyEventEmitter.prototype.removeListener = function removeListener(eventName: string | symbol, listener: Listener) {
+  const removeListener = function removeListener(this: EventEmitter, eventName: string | symbol, listener: Listener) {
     const listeners = getListeners(this, eventName);
     const next = listeners.filter((item) => item !== listener && (item as Listener & { listener?: Listener }).listener !== listener);
     listeners.splice(0, listeners.length, ...next);
     return this;
   };
+  LegacyEventEmitter.prototype.off = removeListener;
+  LegacyEventEmitter.prototype.removeListener = removeListener;
   LegacyEventEmitter.prototype.removeAllListeners = function removeAllListeners(eventName?: string | symbol) {
     if (eventName === undefined) getEventMap(this).clear();
     else getEventMap(this).delete(eventName);

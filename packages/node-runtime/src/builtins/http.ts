@@ -99,7 +99,7 @@ export class ClientRequest extends Writable {
       headers: normalizeHeaders(this.options.headers),
       method: this.options.method || "GET"
     };
-    if (this.options.signal) requestOptions.signal = this.options.signal;
+    if (this.options.signal instanceof AbortSignal) requestOptions.signal = this.options.signal;
     if (this.chunks.length > 0) requestOptions.body = toArrayBuffer(concatBody(this.chunks));
     const result = await this.fetcher.download(url, requestOptions);
     const response = new IncomingMessage({
@@ -123,6 +123,7 @@ export interface HttpBuiltin {
   Agent: typeof Agent;
   ClientRequest: typeof ClientRequest;
   IncomingMessage: typeof IncomingMessage;
+  STATUS_CODES: Record<number, string>;
   get(options: string | URL | HttpRequestOptions, callback?: HttpRequestCallback): ClientRequest;
   request(options: string | URL | HttpRequestOptions, callback?: HttpRequestCallback): ClientRequest;
 }
@@ -148,10 +149,33 @@ export function createHttpBuiltin(clientOrFetcher?: RuntimeHttpClient | RuntimeF
     Agent,
     ClientRequest,
     IncomingMessage,
+    STATUS_CODES,
     get,
     request
   });
 }
+
+export const STATUS_CODES = Object.freeze({
+  200: "OK",
+  201: "Created",
+  204: "No Content",
+  301: "Moved Permanently",
+  302: "Found",
+  303: "See Other",
+  304: "Not Modified",
+  307: "Temporary Redirect",
+  308: "Permanent Redirect",
+  400: "Bad Request",
+  401: "Unauthorized",
+  403: "Forbidden",
+  404: "Not Found",
+  408: "Request Timeout",
+  429: "Too Many Requests",
+  500: "Internal Server Error",
+  502: "Bad Gateway",
+  503: "Service Unavailable",
+  504: "Gateway Timeout"
+});
 
 export function createHttpsBuiltin(clientOrFetcher?: RuntimeHttpClient | RuntimeFetcher): HttpBuiltin {
   return createHttpBuiltin(clientOrFetcher, "https:");
