@@ -165,6 +165,7 @@ async function runExecutionSmoke(vitePackageArtifact, dependencyArtifacts, optio
       registrations: null,
       runtimeBuiltinBlocker: null,
       timeoutBlocker: classifyTimeoutBlocker(message),
+      wasiWorkerBootBlocker: classifyWasiWorkerBootBlocker(message, dependencyArtifacts, options.executionIsolation),
       stderrCauseLines: causeLines(message),
       stderrFirstLine: firstNonEmptyLine(message),
       stdoutFirstLine: null,
@@ -186,6 +187,7 @@ async function runExecutionSmoke(vitePackageArtifact, dependencyArtifacts, optio
     },
     runtimeBuiltinBlocker: classifyRuntimeBuiltinBlocker(result.stderr),
     timeoutBlocker: classifyTimeoutBlocker(result.stderr),
+    wasiWorkerBootBlocker: classifyWasiWorkerBootBlocker(result.stderr, dependencyArtifacts, options.executionIsolation),
     stderrCauseLines: causeLines(result.stderr),
     stderrFirstLine: firstNonEmptyLine(result.stderr),
     stdoutFirstLine: firstNonEmptyLine(result.stdout),
@@ -346,6 +348,17 @@ function classifyTimeoutBlocker(stderr) {
   if (!stderr.includes("ECLIETIMEOUT") && !stderr.includes("ECLIEWORKERTIMEOUT")) return null;
   return {
     reason: stderr.includes("ECLIEWORKERTIMEOUT") ? "cli-worker-response-timeout" : "cli-module-ready-timeout"
+  };
+}
+
+function classifyWasiWorkerBootBlocker(stderr, dependencyArtifacts, executionIsolation) {
+  if (executionIsolation !== "worker") return null;
+  if (!stderr.includes("ECLIEWORKERTIMEOUT")) return null;
+  const artifactNames = new Set(dependencyArtifacts.map((artifact) => artifact.name));
+  if (!artifactNames.has("@napi-rs/wasm-runtime") && !artifactNames.has("@rolldown/binding-wasm32-wasi")) return null;
+  return {
+    reason: "rolldown-wasi-worker-boot-timeout",
+    runtime: artifactNames.has("@napi-rs/wasm-runtime") ? "@napi-rs/wasm-runtime" : "@rolldown/binding-wasm32-wasi"
   };
 }
 
