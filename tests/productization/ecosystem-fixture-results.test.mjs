@@ -1,0 +1,30 @@
+import assert from "node:assert/strict";
+import fs from "node:fs";
+
+const matrix = JSON.parse(fs.readFileSync(new URL("../../compat/ecosystem-fixtures.json", import.meta.url), "utf8"));
+const results = JSON.parse(fs.readFileSync(new URL("../../compat/ecosystem-fixture-results.json", import.meta.url), "utf8"));
+
+assert.equal(results.schemaVersion, 1);
+assert.equal(results.source, "compat/ecosystem-fixtures.json");
+assert.equal(results.minimumPassForMilestoneB, matrix.scope.minimumPassForMilestoneB);
+assert.equal(results.results.length, matrix.fixtures.length);
+assert.equal(results.summary.total, matrix.fixtures.length);
+assert.equal(results.summary.milestoneB, "not-yet");
+
+const fixtureIds = new Set(matrix.fixtures.map((fixture) => fixture.id));
+const resultIds = new Set(results.results.map((result) => result.id));
+assert.deepEqual(resultIds, fixtureIds);
+
+const criteriaIds = matrix.scoringRubric.criteria.map((criterion) => criterion.id).sort();
+for (const result of results.results) {
+  assert.ok(fixtureIds.has(result.id), `unknown fixture result: ${result.id}`);
+  assert.ok(["pass", "partial-pass", "hold", "unsupported"].includes(result.status), `${result.id} has invalid status`);
+  assert.equal(typeof result.score, "number", `${result.id} must have score`);
+  assert.deepEqual(result.criteria.map((criterion) => criterion.id).sort(), criteriaIds);
+}
+
+assert.equal(results.results.filter((result) => result.criteria.some((criterion) => criterion.id === "install" && criterion.status === "pass")).length, 7);
+assert.equal(results.results.filter((result) => result.criteria.some((criterion) => criterion.id === "build-dist" && criterion.status === "pass")).length, 6);
+assert.equal(results.results.filter((result) => result.score >= 50).length, 6);
+
+console.log("ecosystem fixture results test ok");

@@ -9,7 +9,7 @@ assert.equal(matrix.scope.referenceRuntime, "host-node-reference-harness");
 assert.equal(matrix.scope.minimumPassForMilestoneB, 7);
 assert.equal(matrix.scope.fixtureCount, 10);
 assert.equal(matrix.fixtures.length, 10);
-assert.equal(matrix.referenceNodeBaseline.status, "selected-not-run");
+assert.equal(matrix.referenceNodeBaseline.status, "install-build-measured");
 
 const criteriaPoints = matrix.scoringRubric.criteria.reduce((total, criterion) => total + criterion.points, 0);
 assert.equal(criteriaPoints, matrix.scoringRubric.totalPoints);

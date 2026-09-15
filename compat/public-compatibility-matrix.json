@@ -76,10 +76,14 @@
     }
   ],
   "projectFixtures": {
-    "status": "selected-not-run",
+    "status": "reference-install-build-measured",
     "source": "compat/ecosystem-fixtures.json",
+    "results": "compat/ecosystem-fixture-results.json",
     "total": 10,
-    "minimumPassForMilestoneB": 7
+    "minimumPassForMilestoneB": 7,
+    "referenceInstallPass": 7,
+    "referenceBuildPass": 6,
+    "referenceScoreAtLeast50": 6
   },
   "unsupported": [
     {

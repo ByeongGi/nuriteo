@@ -40,7 +40,7 @@
     }
   },
   "referenceNodeBaseline": {
-    "status": "selected-not-run",
+    "status": "install-build-measured",
     "node": ">=22.23.0 <23",
     "packageManagers": ["npm", "pnpm"],
     "commands": [
@@ -53,11 +53,11 @@
     ],
     "evidenceRequired": [
       "install log",
+      "build log",
+      "dist file list",
       "dev server URL",
       "browser screenshot or DOM assertion",
-      "HMR event log",
-      "build log",
-      "dist file list"
+      "HMR event log"
     ]
   },
   "fixtures": [

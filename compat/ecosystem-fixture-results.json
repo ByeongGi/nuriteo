@@ -1,0 +1,423 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-09-15T17:56:58.990Z",
+  "source": "compat/ecosystem-fixtures.json",
+  "minimumPassForMilestoneB": 7,
+  "results": [
+    {
+      "id": "vite-official-template-react",
+      "name": "Vite official template-react",
+      "mode": "measured-reference",
+      "packageManager": "pnpm",
+      "repository": "https://github.com/vitejs/vite",
+      "subdirectory": "packages/create-vite/template-react",
+      "score": 25,
+      "status": "hold",
+      "unsupportedBlocker": false,
+      "criteria": [
+        {
+          "id": "install",
+          "points": 25,
+          "status": "pass",
+          "exitCode": 0,
+          "stdoutTail": ".../node_modules/unrs-resolver postinstall: [napi-postinstall@0.3.4] Failed to find package \"@unrs/resolver-binding-darwin-arm64\" on the file system\n.../node_modules/unrs-resolver postinstall: \n.../node_modules/unrs-resolver postinstall: This can happen if you use the \"--no-optional\" flag. The \"optionalDependencies\"\n.../node_modules/unrs-resolver postinstall: package.json feature is used by unrs-resolver to install the correct napi binary\n.../node_modules/unrs-resolver postinstall: for your current platform. This install script will now attempt to work around\n.../node_modules/unrs-resolver postinstall: this. If that fails, you need to remove the \"--no-optional\" flag to use unrs-resolver.\n.../node_modules/unrs-resolver postinstall: \n.../node_modules/unrs-resolver postinstall: [napi-postinstall@0.3.4] Trying to install package \"@unrs/resolver-binding-darwin-arm64\" using npm\n.../node_modules/unrs-resolver postinstall: [napi-postinstall@0.3.4] Failed to install package \"@unrs/resolver-binding-darwin-arm64\" using npm Cannot find module 'unrs-resolver/package.json'\n.../node_modules/unrs-resolver postinstall: Require stack:\n.../node_modules/unrs-resolver postinstall: - /private/tmp/cargo-container-ecosystem-fixtures/vite-official-template-react/node_modules/.pnpm/napi-postinstall@0.3.4/node_modules/napi-postinstall/lib/index.js\n.../node_modules/unrs-resolver postinstall: - /private/tmp/cargo-container-ecosystem-fixtures/vite-official-template-react/node_modules/.pnpm/napi-postinstall@0.3.4/node_modules/napi-postinstall/lib/cli.js\n.../node_modules/simple-git-hooks postinstall: Done\n.../node_modules/unrs-resolver postinstall: [napi-postinstall@0.3.4] Trying to download \"https://registry.npmjs.org/@unrs/resolver-binding-darwin-arm64/-/resolver-binding-darwin-arm64-1.11.1.tgz\"\n.../node_modules/unrs-resolver postinstall: Done\n.../node_modules/workerd postinstall: Done\n.../esbuild@0.28.2/node_modules/esbuild postinstall: Done\n../../.. postinstall$ simple-git-hooks\n../../.. postinstall: Done\nDone in 21.3s using pnpm v12.4.1",
+          "stderrTail": "! Corepack is about to download https://registry.npmjs.org/pnpm/-/pnpm-12.4.1.tgz\nDownloading the pnpm 12.4.1 binary for darwin-arm64..."
+        },
+        {
+          "id": "build-dist",
+          "points": 25,
+          "status": "fail",
+          "exitCode": 1,
+          "stdoutTail": "",
+          "stderrTail": "    at throwUnhandledRejectionsMode (node:internal/process/promises:388:19)\n    at processPromiseRejections (node:internal/process/promises:475:17)\n    at process.processTicksAndRejections (node:internal/process/task_queues:106:37) {\n  [cause]: Error [ERR_MODULE_NOT_FOUND]: Cannot find module '/private/tmp/cargo-container-ecosystem-fixtures/vite-official-template-react/packages/vite/dist/node/cli.js' imported from /private/tmp/cargo-container-ecosystem-fixtures/vite-official-template-react/packages/vite/bin/vite.js\n      at finalizeResolution (node:internal/modules/esm/resolve:271:11)\n      at moduleResolve (node:internal/modules/esm/resolve:865:10)\n      at defaultResolve (node:internal/modules/esm/resolve:992:11)\n      at #cachedDefaultResolve (node:internal/modules/esm/loader:691:20)\n      at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:708:38)\n      at ModuleLoader.resolveSync (node:internal/modules/esm/loader:740:52)\n      at #resolve (node:internal/modules/esm/loader:673:17)\n      at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:593:35)\n      at node:internal/modules/esm/loader:622:32\n      at TracingChannel.tracePromise (node:diagnostics_channel:362:14) {\n    code: 'ERR_MODULE_NOT_FOUND',\n    url: 'file:///private/tmp/cargo-container-ecosystem-fixtures/vite-official-template-react/packages/vite/dist/node/cli.js'\n  }\n}\nNode.js v24.17.0\n[ELIFECYCLE] Command failed with exit code 1."
+        },
+        {
+          "id": "dev-preview",
+          "points": 25,
+          "status": "not-run",
+          "note": "Use the interactive harness to start dev server and assert rendered DOM."
+        },
+        {
+          "id": "edit-hmr",
+          "points": 25,
+          "status": "not-run",
+          "note": "Use the interactive harness to edit source and capture HMR event log."
+        }
+      ]
+    },
+    {
+      "id": "awe-templates-react-starter",
+      "name": "awe-templates/react-starter",
+      "mode": "measured-reference",
+      "packageManager": "pnpm",
+      "repository": "https://github.com/awe-templates/react-starter",
+      "subdirectory": null,
+      "score": 0,
+      "status": "hold",
+      "unsupportedBlocker": false,
+      "criteria": [
+        {
+          "id": "install",
+          "points": 25,
+          "status": "fail",
+          "exitCode": 1,
+          "stdoutTail": "+ @swc/cli 0.5.0\n+ @swc/core 1.9.1\n+ @types/react 18.3.12\n+ @types/react-dom 18.3.1\n+ @vitejs/plugin-react-swc 3.7.1\n+ autoprefixer 10.4.20\n+ eslint 9.14.0\n+ eslint-plugin-react-hooks 5.0.0\n+ eslint-plugin-react-refresh 0.4.14\n+ globals 15.12.0\n+ postcss 8.4.47\n+ prettier 3.3.3\n+ sass 1.80.6\n+ tailwindcss 3.4.14\n+ typescript 5.6.3\n+ typescript-eslint 8.13.0\n+ vite 5.4.10\n+ vite-plugin-checker 0.8.0\n[ERR_PNPM_IGNORED_BUILDS] Ignored build scripts: @parcel/watcher@2.5.0, @swc/core@1.9.1, esbuild@0.21.5\nRun \"pnpm approve-builds\" to pick which dependencies should be allowed to run scripts.",
+          "stderrTail": ""
+        },
+        {
+          "id": "build-dist",
+          "points": 25,
+          "status": "fail",
+          "exitCode": 1,
+          "stdoutTail": "✓ Lockfile passes supply-chain policies (verified 684ms ago)\nLockfile is up to date, resolution step is skipped\nAlready up to date\n[ERR_PNPM_IGNORED_BUILDS] Ignored build scripts: @parcel/watcher@2.5.0, @swc/core@1.9.1, esbuild@0.21.5\nRun \"pnpm approve-builds\" to pick which dependencies should be allowed to run scripts.\n[ERROR] Command failed with exit code 1: /Users/byeonggi/.local/share/mise/installs/node/24.17.0/bin/node /Users/byeonggi/.cache/node/corepack/v1/pnpm/11.15.1/bin/pnpm.mjs install\npnpm: Command failed with exit code 1: /Users/byeonggi/.local/share/mise/installs/node/24.17.0/bin/node /Users/byeonggi/.cache/node/corepack/v1/pnpm/11.15.1/bin/pnpm.mjs install\n    at getFinalError (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.15.1/dist/pnpm.mjs:88127:14)\n    at makeError (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.15.1/dist/pnpm.mjs:90434:21)\n    at getSyncResult (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.15.1/dist/pnpm.mjs:92278:10)\n    at spawnSubprocessSync (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.15.1/dist/pnpm.mjs:92238:14)\n    at execaCoreSync (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.15.1/dist/pnpm.mjs:92168:23)\n    at callBoundExeca (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.15.1/dist/pnpm.mjs:94696:23)\n    at boundExeca (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.15.1/dist/pnpm.mjs:94673:49)\n    at sync2 (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.15.1/dist/pnpm.mjs:94832:10)\n    at runPnpmCli (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.15.1/dist/pnpm.mjs:248744:5)\n    at runDepsStatusCheck (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.15.1/dist/pnpm.mjs:250510:7)",
+          "stderrTail": ""
+        },
+        {
+          "id": "dev-preview",
+          "points": 25,
+          "status": "not-run",
+          "note": "Use the interactive harness to start dev server and assert rendered DOM."
+        },
+        {
+          "id": "edit-hmr",
+          "points": 25,
+          "status": "not-run",
+          "note": "Use the interactive harness to edit source and capture HMR event log."
+        }
+      ]
+    },
+    {
+      "id": "hvalette-react-vite-template",
+      "name": "hvalette/react-vite-template",
+      "mode": "measured-reference",
+      "packageManager": "npm",
+      "repository": "https://github.com/hvalette/react-vite-template",
+      "subdirectory": null,
+      "score": 50,
+      "status": "partial-pass",
+      "unsupportedBlocker": false,
+      "criteria": [
+        {
+          "id": "install",
+          "points": 25,
+          "status": "pass",
+          "exitCode": 0,
+          "stdoutTail": "> uncryptid@0.0.0 prepare\n> husky install\nhusky - Git hooks installed\nadded 705 packages, and audited 706 packages in 6s\n128 packages are looking for funding\n  run `npm fund` for details\n39 vulnerabilities (2 low, 8 moderate, 26 high, 3 critical)\nTo address issues that do not require attention, run:\n  npm audit fix\nTo address all issues (including breaking changes), run:\n  npm audit fix --force\nRun `npm audit` for details.",
+          "stderrTail": ""
+        },
+        {
+          "id": "build-dist",
+          "points": 25,
+          "status": "pass",
+          "exitCode": 0,
+          "stdoutTail": "> uncryptid@0.0.0 build\n> tsc && vite build\nvite v2.8.6 building for production...\ntransforming...\n✓ 39 modules transformed.\nrendering chunks...\ndist/index.html                  1.44 KiB\ndist/manifest.webmanifest        0.44 KiB\ndist/assets/index.2cb3a35c.js    1.86 KiB / gzip: 0.99 KiB\ndist/assets/index.6f552440.css   3.18 KiB / gzip: 1.25 KiB\ndist/assets/vendor.a261680a.js   142.38 KiB / gzip: 46.72 KiB\nPWA v0.11.13\nmode      generateSW\nprecache  11 entries (148.86 KiB)\nfiles generated\n  dist/sw.js\n  dist/workbox-f279ae30.js",
+          "stderrTail": "Browserslist: caniuse-lite is outdated. Please run:\n  npx browserslist@latest --update-db\n  Why you should do it regularly: https://github.com/browserslist/browserslist#browsers-data-updating"
+        },
+        {
+          "id": "dev-preview",
+          "points": 25,
+          "status": "not-run",
+          "note": "Use the interactive harness to start dev server and assert rendered DOM."
+        },
+        {
+          "id": "edit-hmr",
+          "points": 25,
+          "status": "not-run",
+          "note": "Use the interactive harness to edit source and capture HMR event log."
+        }
+      ]
+    },
+    {
+      "id": "gabbloquet-vite-react18",
+      "name": "gabbloquet/vite-react18",
+      "mode": "measured-reference",
+      "packageManager": "npm",
+      "repository": "https://github.com/gabbloquet/vite-react18",
+      "subdirectory": null,
+      "score": 50,
+      "status": "partial-pass",
+      "unsupportedBlocker": false,
+      "criteria": [
+        {
+          "id": "install",
+          "points": 25,
+          "status": "pass",
+          "exitCode": 0,
+          "stdoutTail": "up to date, audited 340 packages in 875ms\n69 packages are looking for funding\n  run `npm fund` for details\n31 vulnerabilities (6 low, 7 moderate, 17 high, 1 critical)\nTo address issues that do not require attention, run:\n  npm audit fix\nTo address all issues (including breaking changes), run:\n  npm audit fix --force\nRun `npm audit` for details.",
+          "stderrTail": "npm warn ERESOLVE overriding peer dependency\nnpm warn While resolving: mini-create-react-context@0.4.1\nnpm warn Found: react@18.0.0\nnpm warn node_modules/react\nnpm warn   react@\"^18.0.0\" from the root project\nnpm warn   3 more (react-dom, react-router, react-router-dom)\nnpm warn\nnpm warn Could not resolve dependency:\nnpm warn peer react@\"^0.14.0 || ^15.0.0 || ^16.0.0 || ^17.0.0\" from mini-create-react-context@0.4.1\nnpm warn node_modules/react-router/node_modules/mini-create-react-context\nnpm warn   mini-create-react-context@\"^0.4.0\" from react-router@5.2.1\nnpm warn   node_modules/react-router\nnpm warn\nnpm warn Conflicting peer dependency: react@17.0.2\nnpm warn node_modules/react\nnpm warn   peer react@\"^0.14.0 || ^15.0.0 || ^16.0.0 || ^17.0.0\" from mini-create-react-context@0.4.1\nnpm warn   node_modules/react-router/node_modules/mini-create-react-context\nnpm warn     mini-create-react-context@\"^0.4.0\" from react-router@5.2.1\nnpm warn     node_modules/react-router"
+        },
+        {
+          "id": "build-dist",
+          "points": 25,
+          "status": "pass",
+          "exitCode": 0,
+          "stdoutTail": "> vite-react18@0.0.0 build\n> npm run build:client && npm run build:server\n> vite-react18@0.0.0 build:client\n> vite build --outDir dist/client\nvite v2.9.1 building for production...\ntransforming...\n✓ 68 modules transformed.\nrendering chunks...\ndist/client/assets/logo.df7320db.svg      2.61 KiB\ndist/client/assets/favicon.45e6edc3.svg   1.59 KiB\ndist/client/index.html                    0.46 KiB\ndist/client/assets/index.db14a502.css     0.86 KiB / gzip: 0.52 KiB\ndist/client/assets/index.003e6786.js      167.44 KiB / gzip: 54.21 KiB\n> vite-react18@0.0.0 build:server\n> vite build --ssr src/entry-server.tsx --outDir dist/server\nvite v2.9.1 building SSR bundle for production...\ntransforming...\n✓ 13 modules transformed.\nrendering chunks...\ndist/server/entry-server.js   10.42 KiB",
+          "stderrTail": ""
+        },
+        {
+          "id": "dev-preview",
+          "points": 25,
+          "status": "not-run",
+          "note": "Use the interactive harness to start dev server and assert rendered DOM."
+        },
+        {
+          "id": "edit-hmr",
+          "points": 25,
+          "status": "not-run",
+          "note": "Use the interactive harness to edit source and capture HMR event log."
+        }
+      ]
+    },
+    {
+      "id": "sivamani18-vite-react-ts-boilerplate",
+      "name": "Sivamani-18/vite-react-ts-boilerplate",
+      "mode": "measured-reference",
+      "packageManager": "npm",
+      "repository": "https://github.com/Sivamani-18/vite-react-ts-boilerplate",
+      "subdirectory": null,
+      "score": 50,
+      "status": "partial-pass",
+      "unsupportedBlocker": false,
+      "criteria": [
+        {
+          "id": "install",
+          "points": 25,
+          "status": "pass",
+          "exitCode": 0,
+          "stdoutTail": "added 300 packages, and audited 301 packages in 2s\n65 packages are looking for funding\n  run `npm fund` for details\n22 vulnerabilities (2 low, 5 moderate, 15 high)\nTo address all issues, run:\n  npm audit fix\nRun `npm audit` for details.",
+          "stderrTail": "npm warn deprecated inflight@1.0.6: This module is not supported, and leaks memory. Do not use it. Check out lru-cache if you want a good and tested way to coalesce async requests by a key value, which is much more comprehensive and powerful.\nnpm warn deprecated rimraf@3.0.2: Rimraf versions prior to v4 are no longer supported\nnpm warn deprecated glob@7.2.3: Glob versions prior to v9 are no longer supported\nnpm warn deprecated @humanwhocodes/object-schema@2.0.3: Use @eslint/object-schema instead\nnpm warn deprecated @humanwhocodes/config-array@0.11.14: Use @eslint/config-array instead"
+        },
+        {
+          "id": "build-dist",
+          "points": 25,
+          "status": "pass",
+          "exitCode": 0,
+          "stdoutTail": "> vite-react-ts-boilerplate@0.0.0 build\n> tsc -b && vite build\nvite v5.3.4 building for production...\ntransforming...\n✓ 42 modules transformed.\nrendering chunks...\ncomputing gzip size...\ndist/index.html                   0.54 kB │ gzip:  0.32 kB\ndist/assets/react-CHdo91hT.svg    4.13 kB │ gzip:  2.05 kB\ndist/assets/index-C8KuIkIt.css    8.48 kB │ gzip:  2.47 kB\ndist/assets/index-BkChpli2.js   166.43 kB │ gzip: 54.15 kB\n✓ built in 573ms",
+          "stderrTail": "Browserslist: caniuse-lite is outdated. Please run:\n  npx update-browserslist-db@latest\n  Why you should do it regularly: https://github.com/browserslist/update-db#readme"
+        },
+        {
+          "id": "dev-preview",
+          "points": 25,
+          "status": "not-run",
+          "note": "Use the interactive harness to start dev server and assert rendered DOM."
+        },
+        {
+          "id": "edit-hmr",
+          "points": 25,
+          "status": "not-run",
+          "note": "Use the interactive harness to edit source and capture HMR event log."
+        }
+      ]
+    },
+    {
+      "id": "fuhouyu-homepage",
+      "name": "fuhouyu/homepage",
+      "mode": "measured-reference",
+      "packageManager": "npm",
+      "repository": "https://github.com/fuhouyu/homepage",
+      "subdirectory": null,
+      "score": 50,
+      "status": "partial-pass",
+      "unsupportedBlocker": false,
+      "criteria": [
+        {
+          "id": "install",
+          "points": 25,
+          "status": "pass",
+          "exitCode": 0,
+          "stdoutTail": "added 471 packages, and audited 472 packages in 19s\n153 packages are looking for funding\n  run `npm fund` for details\nfound 0 vulnerabilities",
+          "stderrTail": "npm warn deprecated rolldown-vite@7.2.5: Use 7.3.1 for migration purposes. For the most recent updates, migrate to Vite 8 once you're ready.\nnpm warn deprecated eslint@9.39.5: This version is no longer supported. Please see https://eslint.org/version-support for other options."
+        },
+        {
+          "id": "build-dist",
+          "points": 25,
+          "status": "pass",
+          "exitCode": 0,
+          "stdoutTail": "> fuhouyu.com@0.0.0 build\n> tsc -b && vite build\nrolldown-vite v7.2.5 building client environment for production...\n\u001b[2K\rtransforming...✓ 3430 modules transformed.\nrendering chunks...\ncomputing gzip size...\ndist/index.html                               0.63 kB │ gzip:   0.33 kB\ndist/assets/Tooltip-D5idU7TC-pVg1etM_.js      1.99 kB │ gzip:   0.82 kB\ndist/assets/index-D67bVBZb.js             1,392.12 kB │ gzip: 308.06 kB\n✓ built in 249ms\n✨ [vite-plugin-compression]:algorithm=gzip - compressed file successfully: \ndist//private/tmp/cargo-container-ecosystem-fixtures/fuhouyu-homepage/assets/Tooltip-D5idU7TC-pVg1etM_.js.gz   1.95kb / gzip: 0.80kb\ndist//private/tmp/cargo-container-ecosystem-fixtures/fuhouyu-homepage/assets/index-D67bVBZb.js.gz              1359.50kb / gzip: 298.72kb",
+          "stderrTail": ""
+        },
+        {
+          "id": "dev-preview",
+          "points": 25,
+          "status": "not-run",
+          "note": "Use the interactive harness to start dev server and assert rendered DOM."
+        },
+        {
+          "id": "edit-hmr",
+          "points": 25,
+          "status": "not-run",
+          "note": "Use the interactive harness to edit source and capture HMR event log."
+        }
+      ]
+    },
+    {
+      "id": "seongpil0948-react-dev-guide",
+      "name": "seongpil0948/react-dev-guide",
+      "mode": "measured-reference",
+      "packageManager": "pnpm",
+      "repository": "https://github.com/seongpil0948/react-dev-guide",
+      "subdirectory": null,
+      "score": 0,
+      "status": "hold",
+      "unsupportedBlocker": false,
+      "criteria": [
+        {
+          "id": "install",
+          "points": 25,
+          "status": "fail",
+          "exitCode": 1,
+          "stdoutTail": "+ react 18.3.1 (19.3.0 is available)\n+ react-dom 18.3.1 (19.3.0 is available)\n+ react-router-dom 6.30.6 (7.18.4 is available)\ndevDependencies:\n+ @playwright/test 1.63.0\n+ @types/d3 7.4.3\n+ @types/react 18.3.31 (19.3.0 is available)\n+ @types/react-dom 18.3.7 (19.3.0 is available)\n+ @typescript-eslint/eslint-plugin 5.62.0 (8.70.0 is available)\n+ @typescript-eslint/parser 5.62.0 (8.70.0 is available)\n+ @vitejs/plugin-react 4.7.0 (6.1.1 is available)\n+ d3 7.9.0\n+ eslint 8.57.1 (10.10.0 is available) deprecated\n+ eslint-plugin-react-hooks 4.6.2 (7.1.1 is available)\n+ eslint-plugin-react-refresh 0.3.5 (0.5.7 is available)\n+ sass 1.104.1\n+ typescript 5.9.3 (7.0.2 is available)\n+ vite 4.5.14 (8.3.0 is available)\n[ERR_PNPM_IGNORED_BUILDS] Ignored build scripts: @parcel/watcher@2.6.0, esbuild@0.18.20\nRun \"pnpm approve-builds\" to pick which dependencies should be allowed to run scripts.",
+          "stderrTail": ""
+        },
+        {
+          "id": "build-dist",
+          "points": 25,
+          "status": "fail",
+          "exitCode": 1,
+          "stdoutTail": "✓ Lockfile passes supply-chain policies (verified 634ms ago)\nLockfile is up to date, resolution step is skipped\nAlready up to date\n[ERR_PNPM_IGNORED_BUILDS] Ignored build scripts: @parcel/watcher@2.6.0, esbuild@0.18.20\nRun \"pnpm approve-builds\" to pick which dependencies should be allowed to run scripts.\n[ERROR] Command failed with exit code 1: /Users/byeonggi/.local/share/mise/installs/node/24.17.0/bin/node /Users/byeonggi/.cache/node/corepack/v1/pnpm/11.15.1/bin/pnpm.mjs install\npnpm: Command failed with exit code 1: /Users/byeonggi/.local/share/mise/installs/node/24.17.0/bin/node /Users/byeonggi/.cache/node/corepack/v1/pnpm/11.15.1/bin/pnpm.mjs install\n    at getFinalError (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.15.1/dist/pnpm.mjs:88127:14)\n    at makeError (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.15.1/dist/pnpm.mjs:90434:21)\n    at getSyncResult (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.15.1/dist/pnpm.mjs:92278:10)\n    at spawnSubprocessSync (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.15.1/dist/pnpm.mjs:92238:14)\n    at execaCoreSync (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.15.1/dist/pnpm.mjs:92168:23)\n    at callBoundExeca (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.15.1/dist/pnpm.mjs:94696:23)\n    at boundExeca (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.15.1/dist/pnpm.mjs:94673:49)\n    at sync2 (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.15.1/dist/pnpm.mjs:94832:10)\n    at runPnpmCli (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.15.1/dist/pnpm.mjs:248744:5)\n    at runDepsStatusCheck (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.15.1/dist/pnpm.mjs:250510:7)",
+          "stderrTail": ""
+        },
+        {
+          "id": "dev-preview",
+          "points": 25,
+          "status": "not-run",
+          "note": "Use the interactive harness to start dev server and assert rendered DOM."
+        },
+        {
+          "id": "edit-hmr",
+          "points": 25,
+          "status": "not-run",
+          "note": "Use the interactive harness to edit source and capture HMR event log."
+        }
+      ]
+    },
+    {
+      "id": "ravaniproshan-velorah-landing",
+      "name": "RavaniRoshan/velorah-landing",
+      "mode": "measured-reference",
+      "packageManager": "pnpm",
+      "repository": "https://github.com/RavaniRoshan/velorah-landing",
+      "subdirectory": null,
+      "score": 0,
+      "status": "hold",
+      "unsupportedBlocker": false,
+      "criteria": [
+        {
+          "id": "install",
+          "points": 25,
+          "status": "fail",
+          "exitCode": 1,
+          "stdoutTail": "+ react-dnd-html5-backend 16.0.1\n+ react-dom 18.3.1 (19.3.0 is available)\n+ react-hook-form 7.55.0 (7.88.0 is available)\n+ react-popper 2.3.0\n+ react-resizable-panels 2.1.7 (4.12.4 is available)\n+ react-responsive-masonry 2.7.1 (2.7.2 is available)\n+ react-router 7.13.0 (8.4.0 is available)\n+ react-slick 0.31.0\n+ recharts 2.15.2 (3.10.1 is available) deprecated\n+ sonner 2.0.3 (2.0.8 is available)\n+ tailwind-merge 3.2.0 (3.7.0 is available)\n+ tw-animate-css 1.3.8 (1.4.0 is available)\n+ vaul 1.1.2\ndevDependencies:\n+ @tailwindcss/vite 4.1.12 (4.3.3 is available)\n+ @vitejs/plugin-react 4.7.0 (6.1.1 is available)\n+ tailwindcss 4.1.12 (4.3.3 is available)\n+ vite 6.3.5 (8.3.0 is available)\n[ERR_PNPM_IGNORED_BUILDS] Ignored build scripts: @tailwindcss/oxide@4.1.12, esbuild@0.25.12\nRun \"pnpm approve-builds\" to pick which dependencies should be allowed to run scripts.",
+          "stderrTail": "[WARN] The \"pnpm\" field in package.json is no longer read by pnpm. The following keys were ignored: \"pnpm.overrides\". See https://pnpm.io/settings for the new home of each setting."
+        },
+        {
+          "id": "build-dist",
+          "points": 25,
+          "status": "fail",
+          "exitCode": 1,
+          "stdoutTail": "✓ Lockfile passes supply-chain policies (verified 645ms ago)\nLockfile is up to date, resolution step is skipped\nAlready up to date\n[ERR_PNPM_IGNORED_BUILDS] Ignored build scripts: @tailwindcss/oxide@4.1.12, esbuild@0.25.12\nRun \"pnpm approve-builds\" to pick which dependencies should be allowed to run scripts.\n[ERROR] Command failed with exit code 1: /Users/byeonggi/.local/share/mise/installs/node/24.17.0/bin/node /Users/byeonggi/.cache/node/corepack/v1/pnpm/11.15.1/bin/pnpm.mjs install\npnpm: Command failed with exit code 1: /Users/byeonggi/.local/share/mise/installs/node/24.17.0/bin/node /Users/byeonggi/.cache/node/corepack/v1/pnpm/11.15.1/bin/pnpm.mjs install\n    at getFinalError (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.15.1/dist/pnpm.mjs:88127:14)\n    at makeError (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.15.1/dist/pnpm.mjs:90434:21)\n    at getSyncResult (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.15.1/dist/pnpm.mjs:92278:10)\n    at spawnSubprocessSync (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.15.1/dist/pnpm.mjs:92238:14)\n    at execaCoreSync (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.15.1/dist/pnpm.mjs:92168:23)\n    at callBoundExeca (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.15.1/dist/pnpm.mjs:94696:23)\n    at boundExeca (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.15.1/dist/pnpm.mjs:94673:49)\n    at sync2 (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.15.1/dist/pnpm.mjs:94832:10)\n    at runPnpmCli (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.15.1/dist/pnpm.mjs:248744:5)\n    at runDepsStatusCheck (file:///Users/byeonggi/.cache/node/corepack/v1/pnpm/11.15.1/dist/pnpm.mjs:250510:7)",
+          "stderrTail": "[WARN] The \"pnpm\" field in package.json is no longer read by pnpm. The following keys were ignored: \"pnpm.overrides\". See https://pnpm.io/settings for the new home of each setting.\n[WARN] The \"pnpm\" field in package.json is no longer read by pnpm. The following keys were ignored: \"pnpm.overrides\". See https://pnpm.io/settings for the new home of each setting."
+        },
+        {
+          "id": "dev-preview",
+          "points": 25,
+          "status": "not-run",
+          "note": "Use the interactive harness to start dev server and assert rendered DOM."
+        },
+        {
+          "id": "edit-hmr",
+          "points": 25,
+          "status": "not-run",
+          "note": "Use the interactive harness to edit source and capture HMR event log."
+        }
+      ]
+    },
+    {
+      "id": "commencis-starter-react-vite",
+      "name": "Commencis/starter-react-vite",
+      "mode": "measured-reference",
+      "packageManager": "pnpm",
+      "repository": "https://github.com/Commencis/starter-react-vite",
+      "subdirectory": null,
+      "score": 50,
+      "status": "partial-pass",
+      "unsupportedBlocker": false,
+      "criteria": [
+        {
+          "id": "install",
+          "points": 25,
+          "status": "pass",
+          "exitCode": 0,
+          "stdoutTail": "+ @types/react-dom 19.2.4\n+ @vitejs/plugin-react-swc 4.3.3\n+ @vitest/coverage-v8 4.1.10\n+ commitlint 21.2.1\n+ eslint 9.39.5\n+ husky 9.1.7\n+ jsdom 29.1.1\n+ lint-staged 17.3.0\n+ msw 2.15.0\n+ prettier 3.9.6\n+ sass-embedded 1.100.0\n+ storybook 10.5.5\n+ stylelint 17.14.1\n+ typescript 5.9.3\n+ vite 7.3.6\n+ vite-plugin-svgr 5.2.0\n+ vitest 4.1.10\n. prepare$ husky\n. prepare: Done\nDone in 6.2s using pnpm v11.17.0",
+          "stderrTail": "! Corepack is about to download https://registry.npmjs.org/pnpm/-/pnpm-11.17.0.tgz"
+        },
+        {
+          "id": "build-dist",
+          "points": 25,
+          "status": "pass",
+          "exitCode": 0,
+          "stdoutTail": "vite v7.3.6 building client environment for production...\ntransforming...\n✓ 484 modules transformed.\nrendering chunks...\ncomputing gzip size...\ndist/index.html                          0.48 kB │ gzip:   0.31 kB\ndist/assets/Lato-Bold-B5iD31kO.ttf      73.33 kB\ndist/assets/Lato-Regular-BwLIet1C.ttf   75.15 kB\ndist/assets/index-V5FxHAP_.css           0.95 kB │ gzip:   0.53 kB\ndist/assets/home-BqqlbAFa.css            4.79 kB │ gzip:   1.08 kB\ndist/assets/home.loader-P4l6ZK-G.js      0.08 kB │ gzip:   0.09 kB\ndist/assets/chevron-right-Ob0MkykR.js    0.37 kB │ gzip:   0.28 kB\ndist/assets/chevron-left-lx1YWW3B.js     0.37 kB │ gzip:   0.28 kB\ndist/assets/chevron-down-Cr5HIbHL.js     0.38 kB │ gzip:   0.28 kB\ndist/assets/chevron-up-DxEZDITp.js       0.38 kB │ gzip:   0.28 kB\ndist/assets/home.page-DHwGKqpv.js       10.39 kB │ gzip:   4.24 kB\ndist/assets/browser-DyfLqn2v.js        283.42 kB │ gzip:  93.32 kB\ndist/assets/index-BEvDakzI.js          462.24 kB │ gzip: 152.95 kB\n✓ built in 1.62s",
+          "stderrTail": "$ vite build"
+        },
+        {
+          "id": "dev-preview",
+          "points": 25,
+          "status": "not-run",
+          "note": "Use the interactive harness to start dev server and assert rendered DOM."
+        },
+        {
+          "id": "edit-hmr",
+          "points": 25,
+          "status": "not-run",
+          "note": "Use the interactive harness to edit source and capture HMR event log."
+        }
+      ]
+    },
+    {
+      "id": "r35007-vite-react-typescript",
+      "name": "R35007/vite-react-typescript",
+      "mode": "measured-reference",
+      "packageManager": "npm",
+      "repository": "https://github.com/R35007/vite-react-typescript",
+      "subdirectory": null,
+      "score": 50,
+      "status": "partial-pass",
+      "unsupportedBlocker": false,
+      "criteria": [
+        {
+          "id": "install",
+          "points": 25,
+          "status": "pass",
+          "exitCode": 0,
+          "stdoutTail": "> vite-react-typescript@0.0.0 prepare\n> npx rimraf .husky && husky install && sh ./shells/husky\nhusky - Git hooks installed\nhusky - created .husky/pre-commit\nhusky - created .husky/commit-msg\nadded 1061 packages, and audited 1062 packages in 22s\n270 packages are looking for funding\n  run `npm fund` for details\n46 vulnerabilities (5 low, 14 moderate, 20 high, 7 critical)\nTo address issues that do not require attention, run:\n  npm audit fix\nTo address all issues (including breaking changes), run:\n  npm audit fix --force\nRun `npm audit` for details.",
+          "stderrTail": ""
+        },
+        {
+          "id": "build-dist",
+          "points": 25,
+          "status": "pass",
+          "exitCode": 0,
+          "stdoutTail": "dist/assets/roboto-cyrillic-500-normal-3728fbdd.woff2        9.84 kB\ndist/assets/roboto-latin-ext-300-normal-b076e863.woff2      11.80 kB\ndist/assets/roboto-latin-ext-500-normal-7f1c829b.woff2      11.80 kB\ndist/assets/roboto-latin-ext-700-normal-fc66f942.woff2      11.82 kB\ndist/assets/roboto-latin-ext-400-normal-3c23eb02.woff2      11.87 kB\ndist/assets/roboto-cyrillic-ext-700-normal-3c505383.woff2   14.68 kB\ndist/assets/roboto-cyrillic-ext-500-normal-aeed0e51.woff2   14.97 kB\ndist/assets/roboto-cyrillic-ext-300-normal-435e4b7f.woff2   15.00 kB\ndist/assets/roboto-cyrillic-ext-400-normal-b7ef2cd1.woff2   15.34 kB\ndist/assets/roboto-latin-300-normal-f7591131.woff2          15.74 kB\ndist/assets/roboto-latin-400-normal-f6734f81.woff2          15.74 kB\ndist/assets/roboto-latin-700-normal-f5aebdfe.woff2          15.86 kB\ndist/assets/roboto-latin-500-normal-b0195382.woff2          15.92 kB\ndist/assets/roboto-all-300-normal-6d79427c.woff             65.16 kB\ndist/assets/roboto-all-400-normal-e41533d5.woff             65.46 kB\ndist/assets/roboto-all-700-normal-b5883883.woff             65.56 kB\ndist/assets/roboto-all-500-normal-8f838c80.woff             65.76 kB\ndist/assets/index-b1c7c548.css                              27.76 kB │ gzip:  10.06 kB\ndist/assets/index-bde0dee0.js                              402.95 kB │ gzip: 131.21 kB\n✓ built in 2.11s",
+          "stderrTail": "Browserslist: caniuse-lite is outdated. Please run:\n  npx update-browserslist-db@latest\n  Why you should do it regularly: https://github.com/browserslist/update-db#readme"
+        },
+        {
+          "id": "dev-preview",
+          "points": 25,
+          "status": "not-run",
+          "note": "Use the interactive harness to start dev server and assert rendered DOM."
+        },
+        {
+          "id": "edit-hmr",
+          "points": 25,
+          "status": "not-run",
+          "note": "Use the interactive harness to edit source and capture HMR event log."
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "total": 10,
+    "passCount": 0,
+    "milestoneB": "not-yet"
+  }
+}
