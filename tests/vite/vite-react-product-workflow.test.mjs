@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 
 import {
   applyNpmInstallPlan,
+  applyPnpmStorePlan,
   createLoopbackNetwork,
   createNpmInstallPlan,
+  createPnpmStorePlan,
   createVitePackageArtifactFromWorkspace,
   MemoryPackageManagerWorkspace,
   runViteProductCliBackedWorkflow,
@@ -449,6 +451,53 @@ const npmInstalledServer = await npmInstalledArtifactWorkflow.startDevServerFrom
 assert.equal(npmInstalledServer.source, "cli-execution");
 const npmInstalledModule = await npmInstalledArtifactWorkflow.fetch("http://127.0.0.1:5302/src/main.jsx");
 assert.match(await npmInstalledModule.text(), /installed package transform:\/src\/main\.jsx/);
+
+const pnpmInstalledWorkspace = new MemoryPackageManagerWorkspace([
+  ...installedArtifact.mounts.map((mount) => ({
+    path: `/workspace/packages/vite/${mount.path}`,
+    data: mount.data
+  })),
+  {
+    path: "/workspace/project/package.json",
+    data: JSON.stringify({
+      name: "vite-pnpm-artifact-fixture",
+      version: "1.0.0",
+      private: true,
+      packageManager: "pnpm@9.15.9",
+      dependencies: {
+        vite: "workspace:*"
+      }
+    })
+  },
+  {
+    path: "/workspace/project/pnpm-workspace.yaml",
+    data: "packages:\n  - \"../packages/*\"\n"
+  },
+  {
+    path: "/workspace/project/pnpm-lock.yaml",
+    data: "lockfileVersion: '9.0'\n\nimporters:\n  .:\n    dependencies:\n      vite:\n        specifier: workspace:*\n        version: link:../packages/vite\n"
+  }
+]);
+const pnpmPlan = createPnpmStorePlan({
+  cwd: "/workspace/project",
+  reader: pnpmInstalledWorkspace
+});
+applyPnpmStorePlan(pnpmPlan, pnpmInstalledWorkspace);
+const pnpmInstalledArtifact = createVitePackageArtifactFromWorkspace({
+  reader: pnpmInstalledWorkspace,
+  packageRoot: "/workspace/project/node_modules/vite"
+});
+assert.equal(pnpmInstalledArtifact.version, "9.1.0-installed");
+const pnpmInstalledArtifactWorkflow = new ViteProductWorkflow({
+  manager: "pnpm",
+  port: 5303,
+  vitePackageArtifact: pnpmInstalledArtifact
+});
+pnpmInstalledArtifactWorkflow.install();
+const pnpmInstalledServer = await pnpmInstalledArtifactWorkflow.startDevServerFromCliExecution();
+assert.equal(pnpmInstalledServer.source, "cli-execution");
+const pnpmInstalledModule = await pnpmInstalledArtifactWorkflow.fetch("http://127.0.0.1:5303/src/main.jsx");
+assert.match(await pnpmInstalledModule.text(), /installed package transform:\/src\/main\.jsx/);
 
 assert.throws(
   () => new ViteProductWorkflow({
