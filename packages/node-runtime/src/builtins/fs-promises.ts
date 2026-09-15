@@ -1,10 +1,13 @@
 import type { RuntimeFsBinding, RuntimeFsData } from "../types.ts";
 
 export interface FsPromisesBuiltin {
+  copyFile(source: string, target: string): Promise<void>;
+  link(source: string, target: string): Promise<void>;
   mkdir(path: string, options?: { recursive?: boolean }): Promise<void>;
   lstat(path: string): Promise<ReturnType<RuntimeFsBinding["statSync"]>>;
   readFile(path: string, options?: "utf8" | "utf-8" | { encoding?: "utf8" | "utf-8" | null }): Promise<string | Uint8Array>;
   readlink(path: string): Promise<string>;
+  readdir(path: string, options?: { withFileTypes?: boolean }): Promise<unknown[]>;
   rename(source: string, target: string): Promise<void>;
   rm(path: string, options?: { force?: boolean; recursive?: boolean }): Promise<void>;
   rmdir(path: string, options?: { force?: boolean; recursive?: boolean }): Promise<void>;
@@ -17,6 +20,22 @@ export interface FsPromisesBuiltin {
 
 export function createFsPromisesBuiltin(fs: RuntimeFsBinding): FsPromisesBuiltin {
   return Object.freeze({
+    async copyFile(source: string, target: string): Promise<void> {
+      const maybeCopyFileSync = (fs as RuntimeFsBinding & {
+        copyFileSync?: (source: string, target: string) => void;
+      }).copyFileSync;
+      if (!maybeCopyFileSync) throw new Error("fs.copyFile is not supported by this binding");
+      maybeCopyFileSync(source, target);
+    },
+
+    async link(source: string, target: string): Promise<void> {
+      const maybeLinkSync = (fs as RuntimeFsBinding & {
+        linkSync?: (source: string, target: string) => void;
+      }).linkSync;
+      if (!maybeLinkSync) throw new Error("fs.link is not supported by this binding");
+      maybeLinkSync(source, target);
+    },
+
     async mkdir(path: string, _options?: { recursive?: boolean }): Promise<void> {
       fs.mkdirSync(path);
     },
@@ -39,6 +58,14 @@ export function createFsPromisesBuiltin(fs: RuntimeFsBinding): FsPromisesBuiltin
       }).readlinkSync;
       if (!maybeReadlinkSync) throw new Error("fs.readlink is not supported by this binding");
       return maybeReadlinkSync(path);
+    },
+
+    async readdir(path: string, options?: { withFileTypes?: boolean }): Promise<unknown[]> {
+      const maybeReaddirSync = (fs as RuntimeFsBinding & {
+        readdirSync?: (path: string, options?: { withFileTypes?: boolean }) => unknown[];
+      }).readdirSync;
+      if (!maybeReaddirSync) throw new Error("fs.readdir is not supported by this binding");
+      return maybeReaddirSync(path, options);
     },
 
     async rename(source: string, target: string): Promise<void> {

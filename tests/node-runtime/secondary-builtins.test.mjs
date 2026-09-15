@@ -211,8 +211,21 @@ const fsPromises = createBuiltinLoader({
     readlinkSync(path) {
       return links.get(path);
     },
+    readdirSync(path) {
+      const prefix = `${path}/`;
+      return [...files.keys()]
+        .filter((entry) => entry.startsWith(prefix))
+        .map((entry) => entry.slice(prefix.length).split("/")[0])
+        .filter((entry, index, entries) => entry && entries.indexOf(entry) === index);
+    },
     readSync() {
       return new Uint8Array();
+    },
+    copyFileSync(source, target) {
+      files.set(target, files.get(source));
+    },
+    linkSync(source, target) {
+      files.set(target, files.get(source));
     },
     renameSync(source, target) {
       files.set(target, files.get(source));
@@ -243,6 +256,11 @@ const fsPromises = createBuiltinLoader({
 await fsPromises.writeFile("/workspace/fs-promises.txt", "hello");
 assert.equal(await fsPromises.readFile("/workspace/fs-promises.txt", "utf8"), "hello");
 assert.equal((await fsPromises.stat("/workspace/fs-promises.txt")).size, 5);
+assert.deepEqual(await fsPromises.readdir("/workspace"), ["fs-promises.txt"]);
+await fsPromises.copyFile("/workspace/fs-promises.txt", "/workspace/fs-promises-copy.txt");
+assert.equal(await fsPromises.readFile("/workspace/fs-promises-copy.txt", "utf8"), "hello");
+await fsPromises.link("/workspace/fs-promises-copy.txt", "/workspace/fs-promises-link.txt");
+assert.equal(await fsPromises.readFile("/workspace/fs-promises-link.txt", "utf8"), "hello");
 await fsPromises.utimes("/workspace/fs-promises.txt", new Date(), new Date());
 await fsPromises.rename("/workspace/fs-promises.txt", "/workspace/fs-promises-renamed.txt");
 assert.equal(await fsPromises.readFile("/workspace/fs-promises-renamed.txt", "utf8"), "hello");

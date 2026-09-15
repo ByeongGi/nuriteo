@@ -23,7 +23,8 @@ assert.match(npmInstall.productGap, /real CLI module evaluation/i);
 const npmCi = casesById.get("npm-ci");
 assert.equal(npmCi?.runtime, "browser-guest-node-runtime");
 assert.equal(npmCi.status, "partial-pass");
-assert.match(npmCi.productGap, /Full npm cli ci evaluation/i);
+assert.match(npmCi.productGap, /vendored npm ci CLI module evaluation/i);
+assert.match(npmCi.productGap, /Registry tarball ci/i);
 
 const pnpmInstall = casesById.get("pnpm-install");
 assert.equal(pnpmInstall?.runtime, "browser-guest-node-runtime");
