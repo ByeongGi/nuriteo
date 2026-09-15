@@ -117,6 +117,9 @@ function prepareEsmSource(source: string): string {
     .replace(/^[ \t]*export\s+function\s+([A-Za-z_$][\w$]*)\s*\(/gm, "function $1(")
     .replace(/^[ \t]*export\s+class\s+([A-Za-z_$][\w$]*)\b/gm, "class $1")
     .replace(/^[ \t]*export\s+default\s+([^;\n]+);?[ \t]*$/gm, "__exportConst(\"default\", $1);")
+    .replace(/^[ \t]*export\s+\*\s+from\s+["']([^"']+)["'];?[ \t]*$/gm, (_match, specifier: string) => {
+      return rewriteStarReExport(specifier);
+    })
     .replace(/^[ \t]*export\s+\{([^}]+)\}\s+from\s+["']([^"']+)["'];?[ \t]*$/gm, (_match, clause: string, specifier: string) => {
       return rewriteNamedReExport(clause, specifier);
     })
@@ -186,6 +189,16 @@ function rewriteNamedReExport(clause: string, specifier: string): string {
         return `__exportConst("${(exported || importedName).trim()}", ${temp}.${importedName});`;
       })
       .filter(Boolean)
+  ].join("\n");
+}
+
+function rewriteStarReExport(specifier: string): string {
+  const temp = `__reexport_all_${Math.abs(hashString(specifier))}`;
+  return [
+    `const ${temp} = await __import("${specifier}");`,
+    `for (const __key of Object.keys(${temp})) {`,
+    `  if (__key !== "default") __exportConst(__key, ${temp}[__key]);`,
+    "}"
   ].join("\n");
 }
 
