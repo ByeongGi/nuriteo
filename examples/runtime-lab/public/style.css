@@ -70,7 +70,8 @@ button:disabled {
 }
 
 .terminal-header,
-.workspace-header {
+.workspace-header,
+.diagnostics-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -96,6 +97,16 @@ h2 {
 }
 
 #editor-status {
+  min-width: 104px;
+  margin: 0;
+  padding: 5px 8px;
+  border: 1px solid #b8c0cc;
+  background: #f7f8fb;
+  text-align: center;
+  font-size: 13px;
+}
+
+#diagnostics-status {
   min-width: 104px;
   margin: 0;
   padding: 5px 8px;
@@ -242,6 +253,34 @@ h2 {
   line-height: 1.5;
 }
 
+.diagnostics-panel {
+  margin: 0 0 24px;
+  border: 1px solid #b8c0cc;
+  background: #ffffff;
+}
+
+#diagnostics-list {
+  min-height: 52px;
+  max-height: 140px;
+  margin: 0;
+  padding: 14px 16px 14px 36px;
+  overflow: auto;
+  color: #333b49;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.recovery-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0 16px 16px;
+}
+
+.recovery-actions:empty {
+  display: none;
+}
+
 #log {
   min-height: 320px;
   margin: 0;
@@ -257,14 +296,16 @@ h2 {
 @media (max-width: 700px) {
   header,
   .terminal-header,
-  .workspace-header {
+  .workspace-header,
+  .diagnostics-header {
     align-items: stretch;
     flex-direction: column;
   }
 
   #status,
   #terminal-status,
-  #editor-status {
+  #editor-status,
+  #diagnostics-status {
     width: 100%;
   }
 
@@ -274,6 +315,11 @@ h2 {
 
   button {
     width: 100%;
+  }
+
+  .recovery-actions {
+    display: grid;
+    grid-template-columns: 1fr;
   }
 
   .workspace-layout,

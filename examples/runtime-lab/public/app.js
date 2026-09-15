@@ -37,9 +37,13 @@ const editorRenameButton = document.getElementById("editor-rename");
 const editorDeleteButton = document.getElementById("editor-delete");
 const editorSearchInput = document.getElementById("editor-search");
 const editorSearchResultsEl = document.getElementById("editor-search-results");
+const diagnosticsStatusEl = document.getElementById("diagnostics-status");
+const diagnosticsListEl = document.getElementById("diagnostics-list");
+const recoveryActionsEl = document.getElementById("recovery-actions");
 
 let container = null;
 let terminal = createLabTerminal();
+let lastSupportBundle = null;
 const project = createProjectWorkspaceStore({
   projectId: "runtime-lab",
   root: "/workspace/app",
@@ -285,6 +289,68 @@ function flattenTree(node) {
   return node.type === "file" ? [node] : (node.children || []).flatMap(flattenTree);
 }
 
+function renderDiagnostics(state) {
+  diagnosticsStatusEl.textContent = state.lastError ? state.lastError.code || "error" : "ready";
+  diagnosticsListEl.replaceChildren(
+    ...state.diagnostics.map((diagnostic) => {
+      const item = document.createElement("li");
+      const location = diagnostic.file ? ` ${diagnostic.file}${diagnostic.line ? `:${diagnostic.line}` : ""}` : "";
+      item.textContent = `${diagnostic.source}:${diagnostic.level}:${diagnostic.message}${location}`;
+      return item;
+    })
+  );
+  const actions = state.lastError?.recoveryActions || [];
+  renderRecoveryActions(actions);
+}
+
+function renderRecoveryPlan(plan) {
+  diagnosticsStatusEl.textContent = plan.blocked ? "blocked" : "recoverable";
+  renderRecoveryActions(plan.actions);
+}
+
+function renderRecoveryActions(actions) {
+  recoveryActionsEl.replaceChildren(
+    ...actions.map((action) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = action.label;
+      button.dataset.action = action.kind;
+      if (action.path) button.dataset.path = action.path;
+      if (action.command) button.dataset.command = action.command;
+      button.addEventListener("click", () => applyRecoveryAction(action));
+      return button;
+    })
+  );
+}
+
+function applyRecoveryAction(action) {
+  if (action.kind === "open-file" && action.path) {
+    openEditorFile(action.path);
+    return "opened-file";
+  }
+  if (action.kind === "show-terminal") {
+    terminalInput.focus();
+    return "showed-terminal";
+  }
+  if (action.kind === "restart-dev-server" || action.kind === "reset-runtime") {
+    restartTerminal();
+    return "restarted";
+  }
+  if (action.kind === "rerun-build") {
+    runTerminalCommand(action.command || "npm run build").catch((error) => appendTerminalOutput(`${error.message}\n`));
+    return "rerun-build";
+  }
+  if (action.kind === "clear-cache") {
+    appendTerminalOutput("cache cleared\n");
+    return "cache-cleared";
+  }
+  if (action.kind === "export-support-bundle") {
+    log(lastSupportBundle || "support bundle unavailable");
+    return "exported-support-bundle";
+  }
+  return "noop";
+}
+
 function ensureIsolated() {
   if (!crossOriginIsolated) {
     throw new Error("runtime-lab requires COOP/COEP isolation for SharedArrayBuffer");
@@ -444,6 +510,7 @@ async function runPreviewOverlaySmoke() {
     }
   });
   const state = serviceWorker.overlayState("runtime-lab-overlay-client");
+  renderDiagnostics(state);
   const result = { messages, state };
   log(result);
   return result;
@@ -474,7 +541,9 @@ function runRecoverySmoke() {
     },
     logs: [terminalLogEl.textContent]
   });
+  lastSupportBundle = bundle;
   const plan = createRuntimeRecoveryPlan({ diagnostics, supportBundle: bundle });
+  renderRecoveryPlan(plan);
   const result = { bundle, plan };
   log(result);
   return result;
@@ -535,6 +604,7 @@ editorSearchInput.addEventListener("input", () => {
 
 globalThis.__runtimeLab = {
   boot,
+  applyRecoveryAction,
   cancelTerminalCommand,
   createEditorFile,
   deleteCurrentFile,

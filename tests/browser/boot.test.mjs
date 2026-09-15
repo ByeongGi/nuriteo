@@ -55,12 +55,29 @@ await withRuntimeLab(async (page, baseUrl) => {
   if (overlayResult.messages.at(-1).diagnostic.recoveryActions[0].kind !== "open-file") {
     throw new Error("preview overlay did not suggest opening the file");
   }
+  if (await page.locator("#diagnostics-status").textContent() !== "EVITEBUILD") {
+    throw new Error("diagnostics panel did not render overlay status");
+  }
+  if (!await page.locator("#diagnostics-list").textContent().then((text) => text.includes("Unexpected token"))) {
+    throw new Error("diagnostics panel did not render overlay message");
+  }
+  await page.locator("#recovery-actions button", { hasText: "Open file" }).click();
+  if (await page.locator("#editor-path").inputValue() !== "/workspace/app/src/App.jsx") {
+    throw new Error("open-file recovery action did not select editor file");
+  }
   const recoveryResult = await page.evaluate(() => globalThis.__runtimeLab.runRecoverySmoke());
   if (!recoveryResult.plan.blocked) throw new Error("recovery plan did not mark unsupported native addon as blocked");
   if (!recoveryResult.plan.actions.some((action) => action.kind === "export-support-bundle")) {
     throw new Error("recovery plan did not include support bundle export");
   }
   if (recoveryResult.bundle.schemaVersion !== 1) throw new Error("support bundle was not created");
+  if (await page.locator("#diagnostics-status").textContent() !== "blocked") {
+    throw new Error("diagnostics panel did not render recovery status");
+  }
+  await page.locator("#recovery-actions button", { hasText: "Export support bundle" }).click();
+  if (!await page.locator("#log").textContent().then((text) => text.includes("ERR_PM_NATIVE_ADDON_UNSUPPORTED"))) {
+    throw new Error("export support bundle action did not write bundle to log");
+  }
   const terminalResult = await page.evaluate(async () => {
     const install = await globalThis.__runtimeLab.runTerminalCommand("npm install");
     const pending = globalThis.__runtimeLab.runTerminalCommand("sleep");
