@@ -11,6 +11,7 @@ import {
   createViteDependencyArtifactsFromWorkspace,
   createVitePackageArtifactFromWorkspace,
   MemoryPackageManagerWorkspace,
+  mergeViteDependencyArtifacts,
   runViteProductCliBackedWorkflow,
   runViteProductWorkflow,
   ViteProductWorkflow
@@ -507,6 +508,132 @@ assert.deepEqual(installedDependencyExecution.buildRegistrations, [
   {
     command: "build",
     outDir: "installed:dist",
+    source: "vite-cli"
+  }
+]);
+
+const pureJsDependencyWorkspace = new MemoryPackageManagerWorkspace([
+  {
+    path: "/workspace/project/node_modules/postcss/package.json",
+    data: JSON.stringify({ name: "postcss", version: "8.5.23", type: "module", exports: { ".": "./lib/postcss.mjs" } })
+  },
+  {
+    path: "/workspace/project/node_modules/postcss/lib/postcss.mjs",
+    data: "import { nanoid } from 'nanoid';\nimport { green } from 'picocolors';\nimport { SourceMapGenerator } from 'source-map-js';\nexport default function postcss(value) { return { css: `${green(value)}:${nanoid(4)}:${new SourceMapGenerator().kind}` }; }\n"
+  },
+  {
+    path: "/workspace/project/node_modules/tinyglobby/package.json",
+    data: JSON.stringify({ name: "tinyglobby", version: "0.2.17", type: "module", exports: { ".": "./dist/index.mjs" } })
+  },
+  {
+    path: "/workspace/project/node_modules/tinyglobby/dist/index.mjs",
+    data: "import { fdir } from 'fdir';\nimport picomatch from 'picomatch';\nexport function glob(pattern) { return `${new fdir().crawl(pattern)}:${picomatch(pattern)}`; }\n"
+  },
+  {
+    path: "/workspace/project/node_modules/nanoid/package.json",
+    data: JSON.stringify({ name: "nanoid", version: "3.3.16", type: "module", exports: { ".": "./index.js" } })
+  },
+  {
+    path: "/workspace/project/node_modules/nanoid/index.js",
+    data: "export function nanoid(size) { return `id-${size}`; }\n"
+  },
+  {
+    path: "/workspace/project/node_modules/picocolors/package.json",
+    data: JSON.stringify({ name: "picocolors", version: "1.1.1", type: "module", exports: { ".": "./picocolors.js" } })
+  },
+  {
+    path: "/workspace/project/node_modules/picocolors/picocolors.js",
+    data: "export function green(value) { return `green:${value}`; }\n"
+  },
+  {
+    path: "/workspace/project/node_modules/source-map-js/package.json",
+    data: JSON.stringify({ name: "source-map-js", version: "1.2.1", type: "module", exports: { ".": "./source-map.js" } })
+  },
+  {
+    path: "/workspace/project/node_modules/source-map-js/source-map.js",
+    data: "export class SourceMapGenerator { kind = 'map'; }\n"
+  },
+  {
+    path: "/workspace/project/node_modules/fdir/package.json",
+    data: JSON.stringify({ name: "fdir", version: "6.5.0", type: "module", exports: { ".": "./index.mjs" } })
+  },
+  {
+    path: "/workspace/project/node_modules/fdir/index.mjs",
+    data: "export class fdir { crawl(pattern) { return `crawl:${pattern}`; } }\n"
+  },
+  {
+    path: "/workspace/project/node_modules/picomatch/package.json",
+    data: JSON.stringify({ name: "picomatch", version: "4.0.5", type: "module", exports: { ".": "./index.js" } })
+  },
+  {
+    path: "/workspace/project/node_modules/picomatch/index.js",
+    data: "export default function picomatch(pattern) { return `match:${pattern}`; }\n"
+  }
+]);
+const pureJsViteArtifact = {
+  version: "9.3.0-pure-js-deps",
+  mounts: [
+    {
+      path: "package.json",
+      data: JSON.stringify({ name: "vite", version: "9.3.0-pure-js-deps", type: "module", bin: { vite: "bin/vite.mjs" } })
+    },
+    {
+      path: "bin/vite.mjs",
+      data: "import '../dist/node/cli.mjs';\n"
+    },
+    {
+      path: "dist/node/cli.mjs",
+      data: "import postcss from 'postcss';\nimport { glob } from 'tinyglobby';\nconst output = postcss(glob('dist')).css;\nglobal.__viteRegisterBuild?.({ command: 'build', outDir: output, source: 'vite-cli' });\n"
+    }
+  ]
+};
+const pureJsInitialWorkflow = new ViteProductWorkflow({
+  manager: "pnpm",
+  vitePackageArtifact: pureJsViteArtifact
+});
+pureJsInitialWorkflow.install();
+assert.deepEqual(pureJsInitialWorkflow.inspectRealCliReadiness().dependencyMaterializationPlan.missing.map((item) => item.name), [
+  "postcss",
+  "tinyglobby"
+]);
+const directPureJsArtifacts = createViteDependencyArtifactsFromPlan({
+  reader: pureJsDependencyWorkspace,
+  nodeModulesRoot: "/workspace/project/node_modules",
+  plan: pureJsInitialWorkflow.inspectRealCliReadiness().dependencyMaterializationPlan
+});
+const pureJsDirectWorkflow = new ViteProductWorkflow({
+  manager: "pnpm",
+  vitePackageArtifact: pureJsViteArtifact,
+  dependencyArtifacts: directPureJsArtifacts
+});
+pureJsDirectWorkflow.install();
+assert.deepEqual(pureJsDirectWorkflow.inspectRealCliReadiness().dependencyMaterializationPlan.missing.map((item) => item.name), [
+  "fdir",
+  "nanoid",
+  "picocolors",
+  "picomatch",
+  "source-map-js"
+]);
+const transitivePureJsArtifacts = createViteDependencyArtifactsFromPlan({
+  reader: pureJsDependencyWorkspace,
+  nodeModulesRoot: "/workspace/project/node_modules",
+  plan: pureJsDirectWorkflow.inspectRealCliReadiness().dependencyMaterializationPlan
+});
+const mergedPureJsArtifacts = mergeViteDependencyArtifacts(directPureJsArtifacts, transitivePureJsArtifacts);
+assert.deepEqual(mergedPureJsArtifacts.replaced, []);
+const pureJsCompleteWorkflow = new ViteProductWorkflow({
+  manager: "pnpm",
+  vitePackageArtifact: pureJsViteArtifact,
+  dependencyArtifacts: mergedPureJsArtifacts.artifacts
+});
+pureJsCompleteWorkflow.install();
+assert.deepEqual(pureJsCompleteWorkflow.inspectRealCliReadiness().dependencyMaterializationPlan.missing, []);
+const pureJsExecution = await pureJsCompleteWorkflow.executeRealCli(["build"]);
+assert.equal(pureJsExecution.exitCode, 0, pureJsExecution.stderr);
+assert.deepEqual(pureJsExecution.buildRegistrations, [
+  {
+    command: "build",
+    outDir: "green:crawl:dist:match:dist:id-4:map",
     source: "vite-cli"
   }
 ]);
