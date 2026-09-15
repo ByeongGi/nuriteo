@@ -409,7 +409,9 @@ missingDependencyWorkflow.install();
 assert.deepEqual(missingDependencyWorkflow.inspectRealCliReadiness().dependencyMaterializationPlan, {
   missing: [
     {
+      kind: "wasm-adapter-candidate",
       name: "rolldown",
+      nextAction: "Materialize the JavaScript package surface and route native binding requests through an integrity-pinned WASM adapter.",
       specifiers: ["rolldown/parseAst"]
     }
   ],
@@ -596,6 +598,9 @@ assert.deepEqual(pureJsInitialWorkflow.inspectRealCliReadiness().dependencyMater
   "postcss",
   "tinyglobby"
 ]);
+assert.deepEqual([...new Set(pureJsInitialWorkflow.inspectRealCliReadiness().dependencyMaterializationPlan.missing.map((item) => item.kind))], [
+  "package-artifact"
+]);
 const directPureJsArtifacts = createViteDependencyArtifactsFromPlan({
   reader: pureJsDependencyWorkspace,
   nodeModulesRoot: "/workspace/project/node_modules",
@@ -613,6 +618,9 @@ assert.deepEqual(pureJsDirectWorkflow.inspectRealCliReadiness().dependencyMateri
   "picocolors",
   "picomatch",
   "source-map-js"
+]);
+assert.deepEqual([...new Set(pureJsDirectWorkflow.inspectRealCliReadiness().dependencyMaterializationPlan.missing.map((item) => item.kind))], [
+  "package-artifact"
 ]);
 const transitivePureJsArtifacts = createViteDependencyArtifactsFromPlan({
   reader: pureJsDependencyWorkspace,

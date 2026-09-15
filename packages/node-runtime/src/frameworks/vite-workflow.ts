@@ -246,9 +246,13 @@ export interface ViteDependencyMaterializationPlan {
 }
 
 export interface ViteDependencyMaterializationItem {
+  kind: ViteDependencyMaterializationKind;
   name: string;
+  nextAction: string;
   specifiers: string[];
 }
+
+export type ViteDependencyMaterializationKind = "package-artifact" | "wasm-adapter-candidate" | "native-hold";
 
 export interface ViteRuntimeCapabilityStatus {
   capability: ViteRuntimeReadinessCapability;
@@ -1052,7 +1056,12 @@ function createDependencyMaterializationPlan(
   }
   return {
     missing: [...missingSpecifiersByPackage.entries()]
-      .map(([name, specifiers]) => ({ name, specifiers: [...specifiers].sort() }))
+      .map(([name, specifiers]) => ({
+        kind: classifyDependencyMaterialization(name),
+        name,
+        nextAction: nextActionForDependencyMaterialization(name),
+        specifiers: [...specifiers].sort()
+      }))
       .sort((left, right) => left.name.localeCompare(right.name)),
     satisfied
   };
@@ -1063,6 +1072,23 @@ function packageNameFromSpecifier(specifier: string): string | null {
   const parts = specifier.split("/");
   if (specifier.startsWith("@")) return parts.length >= 2 ? `${parts[0]}/${parts[1]}` : null;
   return parts[0] || null;
+}
+
+function classifyDependencyMaterialization(name: string): ViteDependencyMaterializationKind {
+  if (name === "esbuild" || name === "rolldown") return "wasm-adapter-candidate";
+  if (name === "lightningcss") return "native-hold";
+  return "package-artifact";
+}
+
+function nextActionForDependencyMaterialization(name: string): string {
+  const kind = classifyDependencyMaterialization(name);
+  if (kind === "wasm-adapter-candidate") {
+    return "Materialize the JavaScript package surface and route native binding requests through an integrity-pinned WASM adapter.";
+  }
+  if (kind === "native-hold") {
+    return "Keep this dependency optional or blocked until a supported browser/WASM replacement is proven.";
+  }
+  return "Extract this package from an installed node_modules tree and mount it as a dependency artifact.";
 }
 
 function collectTextMounts(reader: WorkspaceModuleReader, packageRoot: string): PackageManagerWorkspaceMount[] {
