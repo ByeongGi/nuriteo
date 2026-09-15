@@ -101,40 +101,30 @@ function createEsmSourceCompiler(source: string, filename: string, globals: Reco
 function prepareEsmSource(source: string): string {
   return source
     .replace(/^#!.*(?:\n|$)/, "")
-    .replace(/^\s*import\s+([^"';]+?)\s+from\s+["']([^"']+)["'];?\s*$/gm, (_match, clause: string, specifier: string) => {
-      return rewriteStaticImport(clause, specifier);
+    .replace(/^[ \t]*import\s+\*\s+as\s+([A-Za-z_$][\w$]*)\s+from\s+["']([^"']+)["'];?[ \t]*$/gm, "const $1 = await __import(\"$2\");")
+    .replace(/^[ \t]*import\s+([A-Za-z_$][\w$]*)\s*,\s*\{([^}\n]+)\}\s+from\s+["']([^"']+)["'];?[ \t]*$/gm, (_match, defaultName: string, named: string, specifier: string) => {
+      return rewriteDefaultAndNamedImport(defaultName, named, specifier);
     })
-    .replace(/^\s*import\s+["']([^"']+)["'];?\s*$/gm, "await __import(\"$1\");")
+    .replace(/^[ \t]*import\s+\{([^}\n]+)\}\s+from\s+["']([^"']+)["'];?[ \t]*$/gm, (_match, named: string, specifier: string) => {
+      return `const { ${rewriteNamedImportBindings(named)} } = await __import("${specifier}");`;
+    })
+    .replace(/^[ \t]*import\s+([A-Za-z_$][\w$]*)\s+from\s+["']([^"']+)["'];?[ \t]*$/gm, "const $1 = (await __import(\"$2\")).default;")
+    .replace(/^[ \t]*import\s+["']([^"']+)["'];?[ \t]*$/gm, "await __import(\"$1\");")
     .replace(/\bimport\s*\(/g, "__import(")
-    .replace(/^\s*export\s+const\s+([A-Za-z_$][\w$]*)\s*=\s*([^;\n]+);?\s*$/gm, "const $1 = $2;\n__exportConst(\"$1\", $1);")
-    .replace(/^\s*export\s+default\s+([^;\n]+);?\s*$/gm, "__exportConst(\"default\", $1);")
-    .replace(/^\s*export\s+\{([^}]+)\};?\s*$/gm, (_match, clause: string) => {
+    .replace(/^[ \t]*export\s+const\s+([A-Za-z_$][\w$]*)\s*=\s*([^;\n]+);?[ \t]*$/gm, "const $1 = $2;\n__exportConst(\"$1\", $1);")
+    .replace(/^[ \t]*export\s+default\s+([^;\n]+);?[ \t]*$/gm, "__exportConst(\"default\", $1);")
+    .replace(/^[ \t]*export\s+\{([^}]+)\};?[ \t]*$/gm, (_match, clause: string) => {
       return rewriteNamedExport(clause);
     });
 }
 
-function rewriteStaticImport(clause: string, specifier: string): string {
-  const trimmed = clause.trim();
-  if (trimmed.startsWith("* as ")) {
-    return `const ${trimmed.slice("* as ".length).trim()} = await __import("${specifier}");`;
-  }
-
-  const namedStart = trimmed.indexOf("{");
-  if (namedStart === 0) {
-    return `const { ${rewriteNamedImportBindings(trimmed.slice(1, trimmed.lastIndexOf("}"))) } = await __import("${specifier}");`;
-  }
-  if (namedStart > 0) {
-    const defaultName = trimmed.slice(0, namedStart).trim().replace(/,$/, "");
-    const named = trimmed.slice(namedStart + 1, trimmed.lastIndexOf("}"));
-    const temp = `__esm_${defaultName}`;
-    return [
-      `const ${temp} = await __import("${specifier}");`,
-      `const ${defaultName} = ${temp}.default;`,
-      `const { ${rewriteNamedImportBindings(named)} } = ${temp};`
-    ].join("\n");
-  }
-
-  return `const ${trimmed} = (await __import("${specifier}")).default;`;
+function rewriteDefaultAndNamedImport(defaultName: string, named: string, specifier: string): string {
+  const temp = `__esm_${defaultName}`;
+  return [
+    `const ${temp} = await __import("${specifier}");`,
+    `const ${defaultName} = ${temp}.default;`,
+    `const { ${rewriteNamedImportBindings(named)} } = ${temp};`
+  ].join("\n");
 }
 
 function rewriteNamedImportBindings(clause: string): string {

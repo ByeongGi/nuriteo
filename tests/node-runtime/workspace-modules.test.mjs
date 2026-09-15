@@ -35,6 +35,13 @@ const workspace = new MemoryPackageManagerWorkspace([
     data: JSON.stringify({ mode: "browser-runtime" })
   },
   {
+    path: "/workspace/source-esm.mjs",
+    data: `
+      import { basename } from "node:path";
+      export const base = basename("/workspace/source-esm.mjs");
+    `
+  },
+  {
     path: "/workspace/node_modules/plain-pkg/package.json",
     data: JSON.stringify({ name: "plain-pkg", main: "main.js" })
   },
@@ -165,5 +172,8 @@ assert.equal(runtime.resolve("plain-pkg/feature", "/workspace/app.cjs"), "/works
 assert.equal(runtime.resolve("shared", "/workspace/node_modules/parent-pkg/index.js"), "/workspace/node_modules/parent-pkg/node_modules/shared/index.js");
 assert.equal(runtime.resolve("self-pkg/internal", "/workspace/node_modules/self-pkg/index.js"), "/workspace/node_modules/self-pkg/internal.js");
 assert.equal(runtime.resolve("pattern-pkg/lib/tool", "/workspace/app.cjs"), "/workspace/node_modules/pattern-pkg/src/lib/tool.cjs");
+
+const sourceEsm = await runtime.importModule("./source-esm.mjs", "/workspace/index.mjs");
+assert.equal(sourceEsm.base, "source-esm.mjs");
 
 console.log("node workspace modules test ok");
