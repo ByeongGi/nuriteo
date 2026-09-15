@@ -35,6 +35,59 @@ async function withRuntimeLab(callback) {
 
 await withRuntimeLab(async (page, baseUrl) => {
   await page.goto(baseUrl, { waitUntil: "load" });
+  const cliWorkerResult = await page.evaluate(async () => {
+    const encode = (value) => btoa(value);
+    const worker = new Worker("/workers/process-worker.ts", { type: "module" });
+    try {
+      const result = await new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error("cli worker evaluation timeout")), 1000);
+        worker.addEventListener("message", (event) => {
+          if (event.data?.type !== "cli:result") return;
+          clearTimeout(timeout);
+          resolve(event.data);
+        });
+        worker.addEventListener("error", (event) => {
+          clearTimeout(timeout);
+          reject(new Error(event.message));
+        });
+        worker.postMessage({
+          id: 1,
+          type: "cli:evaluate",
+          root: "/workspace",
+          request: {
+            entry: {
+              name: "fixture-cli",
+              version: "1.0.0",
+              entry: "/workspace/cli/bin/fixture.js"
+            },
+            args: [],
+            cwd: "/workspace/project"
+          },
+          workspaceSnapshot: {
+            directories: ["/", "/workspace", "/workspace/cli", "/workspace/cli/bin", "/workspace/project"],
+            files: [
+              {
+                path: "/workspace/cli/bin/fixture.js",
+                data: encode("const fs = require('fs');\nfs.writeFileSync(process.cwd() + '/worker-cli.txt', 'ok');\nprocess.stdout.write('browser-worker-cli\\n');\n"),
+                encoding: "base64"
+              }
+            ],
+            links: []
+          }
+        });
+      });
+      return result;
+    } finally {
+      worker.terminate();
+    }
+  });
+  if (cliWorkerResult.error) throw new Error(cliWorkerResult.error);
+  if (cliWorkerResult.result.exitCode !== 1) throw new Error("process worker CLI CSP guard did not fail closed");
+  if (!cliWorkerResult.result.stderr.includes("ECLICSPUNSUPPORTED")) {
+    throw new Error(`process worker CLI CSP guard did not return diagnostic: ${JSON.stringify(cliWorkerResult.result)}`);
+  }
+  if (cliWorkerResult.result.entry !== "/workspace/cli/bin/fixture.js") throw new Error("process worker CLI diagnostic did not echo entry");
+
   const result = await page.evaluate(() => globalThis.__runtimeLab.boot());
   if (result.role !== "system") throw new Error("runtime did not boot through system worker");
   if (!result.details.processSeen) throw new Error("system worker did not see process worker");

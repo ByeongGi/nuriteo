@@ -2,6 +2,7 @@ import { createFailedMessage, createReadyMessage } from "../packages/protocol/sr
 import { OPCODES } from "../packages/protocol/src/generated.ts";
 import { requestSync } from "../packages/protocol/src/sync-client.ts";
 import { runNodeProgram } from "../packages/node-runtime/src/bootstrap.ts";
+import { evaluateCliModuleWorkerMessage } from "../packages/node-runtime/src/package-managers/cli-evaluator.ts";
 
 let systemPort = null;
 let syncChannel = null;
@@ -37,6 +38,8 @@ self.addEventListener("message", (event) => {
     }
   } else if (event.data?.type === "run") {
     runProgram(event.data);
+  } else if (event.data?.type === "cli:evaluate") {
+    evaluateCli(event.data);
   }
 });
 
@@ -79,5 +82,32 @@ function runProgram(message) {
       ok: false,
       error: error.message
     });
+  }
+}
+
+async function evaluateCli(message) {
+  if (!canEvaluateDynamicCode()) {
+    self.postMessage({
+      id: message.id,
+      result: {
+        stdout: "",
+        stderr: "ECLICSPUNSUPPORTED: browser worker CSP blocks dynamic module evaluation; bundle/eval-free CLI worker execution is required.\n",
+        exitCode: 1,
+        entry: message.request?.entry?.entry || "",
+        workspaceSnapshot: message.workspaceSnapshot
+      },
+      type: "cli:result"
+    });
+    return;
+  }
+  self.postMessage(await evaluateCliModuleWorkerMessage(message));
+}
+
+function canEvaluateDynamicCode() {
+  try {
+    new Function("");
+    return true;
+  } catch {
+    return false;
   }
 }
