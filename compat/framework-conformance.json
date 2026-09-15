@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-15",
+  "scope": {
+    "goal": "Track framework workflow readiness for productization.",
+    "productRuntime": "browser-guest-node-runtime",
+    "referenceRuntime": "host-node-reference-harness"
+  },
+  "cases": [
+    {
+      "id": "vite-vanilla-reference-workflow",
+      "framework": "vite",
+      "template": "vanilla",
+      "runtime": "host-node-reference-harness",
+      "status": "pass",
+      "evidence": ["tests/vite/vite-integration.test.mjs", "tests/fixtures/vite-vanilla/package.json"],
+      "notes": "npm and pnpm install, dev server, browser preview, source edit, HMR state preservation, build, dist smoke, and restart pass in the reference harness."
+    },
+    {
+      "id": "vite-react-reference-workflow",
+      "framework": "vite",
+      "template": "react",
+      "runtime": "host-node-reference-harness",
+      "status": "pass",
+      "evidence": ["tests/vite/vite-integration.test.mjs", "tests/fixtures/vite-react/package.json"],
+      "notes": "npm and pnpm install, dev server, browser preview, React render, source edit, HMR state preservation, build, dist smoke, and restart pass in the reference harness."
+    },
+    {
+      "id": "vite-react-product-workflow",
+      "framework": "vite",
+      "template": "react",
+      "runtime": "browser-guest-node-runtime",
+      "status": "not-run",
+      "evidence": ["docs/productization/phases/P11-frameworks.md"],
+      "productGap": "P11 still needs the Vite dev server and preview lifecycle connected to the browser guest runtime path rather than the host-node reference harness."
+    }
+  ],
+  "gate": {
+    "id": "PG11",
+    "status": "not-pass",
+    "reason": "The Vite React reference workflow passes for npm and pnpm, but the product browser guest runtime workflow has not yet run install -> dev -> preview -> edit/HMR -> build -> reload recovery.",
+    "requiredToPass": [
+      "Run Vite React npm workflow through browser-guest-node-runtime",
+      "Run Vite React pnpm workflow through browser-guest-node-runtime",
+      "Route the browser guest dev server through product preview lifecycle",
+      "Verify reload recovery from the product runtime path"
+    ]
+  }
+}

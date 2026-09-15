@@ -8,24 +8,37 @@ import { once } from "node:events";
 import { chromium } from "@playwright/test";
 
 const root = new URL("../..", import.meta.url).pathname;
-const fixture = path.join(root, "tests/fixtures/vite-vanilla");
+const fixtures = [
+  {
+    name: "vite-vanilla",
+    path: path.join(root, "tests/fixtures/vite-vanilla"),
+    messageFile: "src/message.ts"
+  },
+  {
+    name: "vite-react",
+    path: path.join(root, "tests/fixtures/vite-react"),
+    messageFile: "src/message.js"
+  }
+];
 const chromePath = process.env.CHROME_PATH || "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 
 if (!fs.existsSync(chromePath)) {
   throw new Error(`Chrome not found at ${chromePath}`);
 }
 
-for (const manager of ["npm", "pnpm"]) {
-  await runViteFixture(manager);
+for (const fixture of fixtures) {
+  for (const manager of ["npm", "pnpm"]) {
+    await runViteFixture(fixture, manager);
+  }
 }
 
 console.log("vite integration test ok");
 
-async function runViteFixture(manager) {
-  const workdir = fs.mkdtempSync(path.join(os.tmpdir(), `vite-${manager}-`));
+async function runViteFixture(fixture, manager) {
+  const workdir = fs.mkdtempSync(path.join(os.tmpdir(), `${fixture.name}-${manager}-`));
   let completed = false;
   try {
-    copyFixture(fixture, workdir);
+    copyFixture(fixture.path, workdir);
     const installArgs = manager === "npm"
       ? ["install", "--cache", path.join(workdir, ".npm-cache")]
       : ["install", "--frozen-lockfile=false", "--store-dir", path.join(workdir, ".pnpm-store")];
@@ -39,7 +52,7 @@ async function runViteFixture(manager) {
       const page = await devBrowser.newPage();
       await page.goto(devUrl, { waitUntil: "networkidle" });
       await page.waitForFunction(() => document.querySelector("#app")?.textContent === "alpha:1");
-      fs.writeFileSync(path.join(workdir, "src/message.ts"), "export const label = \"beta\";\n");
+      fs.writeFileSync(path.join(workdir, fixture.messageFile), "export const label = \"beta\";\n");
       await page.waitForFunction(() => document.querySelector("#app")?.textContent === "beta:1");
       const state = await page.evaluate(() => globalThis.__fixtureState?.count);
       assert.equal(state, 1);

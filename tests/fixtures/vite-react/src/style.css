@@ -1,0 +1,15 @@
+body {
+  margin: 0;
+  font-family: system-ui, sans-serif;
+}
+
+#root {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+}
+
+#app {
+  color: #172033;
+  font-size: 32px;
+}
