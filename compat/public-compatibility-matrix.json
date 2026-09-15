@@ -40,39 +40,39 @@
     {
       "cohort": "pure-js-cjs-esm",
       "status": "supported",
-      "evidence": ["compat/package-compatibility-cohorts.json"]
+      "evidence": ["compat/package-compatibility-cohorts.json", "tests/productization/package-cohort-execution.test.mjs"]
     },
     {
       "cohort": "registry-cache-tarball",
       "status": "supported",
-      "evidence": ["compat/package-compatibility-cohorts.json"]
+      "evidence": ["compat/package-compatibility-cohorts.json", "tests/productization/package-cohort-execution.test.mjs"]
     },
     {
       "cohort": "lifecycle-js",
       "status": "supported",
-      "evidence": ["compat/package-compatibility-cohorts.json"]
+      "evidence": ["compat/package-compatibility-cohorts.json", "tests/productization/package-cohort-execution.test.mjs"]
     },
     {
       "cohort": "optional-native-polyfill",
       "status": "supported-with-polyfill",
-      "evidence": ["compat/package-compatibility-cohorts.json"]
+      "evidence": ["compat/package-compatibility-cohorts.json", "tests/productization/package-cohort-execution.test.mjs"]
     },
     {
       "cohort": "wasm-tool-fallback",
       "status": "candidate",
-      "evidence": ["compat/package-compatibility-cohorts.json", "compat/wasm-tool-adapters.json"]
+      "evidence": ["compat/package-compatibility-cohorts.json", "compat/wasm-tool-adapters.json", "tests/productization/package-cohort-execution.test.mjs"]
     },
     {
       "cohort": "unsupported-native-addon",
       "status": "unsupported",
       "requiredErrorCode": "ERR_PM_NATIVE_ADDON_UNSUPPORTED",
-      "evidence": ["compat/package-compatibility-cohorts.json", "compat/unsupported-diagnostics.json"]
+      "evidence": ["compat/package-compatibility-cohorts.json", "compat/unsupported-diagnostics.json", "tests/productization/package-cohort-execution.test.mjs"]
     },
     {
       "cohort": "binary-tool-wrapper",
       "status": "unsupported",
       "requiredErrorCode": "ERR_RUNTIME_UNSUPPORTED_BINARY",
-      "evidence": ["compat/package-compatibility-cohorts.json", "compat/unsupported-diagnostics.json"]
+      "evidence": ["compat/package-compatibility-cohorts.json", "compat/unsupported-diagnostics.json", "tests/productization/package-cohort-execution.test.mjs"]
     }
   ],
   "projectFixtures": {
@@ -117,8 +117,7 @@
     "status": "partial-pass",
     "requiredBeforeDone": [
       "Replace selected-not-run project fixture state with measured reference/product scores",
-      "Publish docs only after PG11 actual Vite server blocker is resolved",
-      "Wire unsupported diagnostics into UI acceptance tests"
+      "Publish product-supported docs only after PG11 actual Vite server blocker is resolved"
     ]
   }
 }
