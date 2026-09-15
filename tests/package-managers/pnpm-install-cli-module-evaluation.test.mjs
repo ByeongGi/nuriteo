@@ -16,13 +16,27 @@ const mountRoot = "/workspace";
 const workspace = new MemoryPackageManagerWorkspace([
   ...readMounts(repoRoot, mountRoot, "vendor/cli/pnpm/9.15.9/package"),
   {
+    path: "/workspace/local-dep/package.json",
+    data: JSON.stringify({
+      name: "local-dep",
+      version: "1.0.0",
+      main: "index.js"
+    })
+  },
+  {
+    path: "/workspace/local-dep/index.js",
+    data: "module.exports = 'local-dep';\n"
+  },
+  {
     path: "/workspace/project/package.json",
     data: JSON.stringify({
       name: "pnpm-install-fixture",
       version: "0.0.0",
       private: true,
       scripts: {},
-      dependencies: {}
+      dependencies: {
+        "local-dep": "file:../local-dep"
+      }
     })
   }
 ]);
@@ -30,8 +44,8 @@ const evaluate = createAsyncCliModuleEvaluator({
   root: mountRoot,
   reader: workspace,
   writer: workspace,
-  settleTicks: 350,
-  settleTimeoutMs: 1000
+  settleTicks: 2000,
+  settleTimeoutMs: 5000
 });
 
 const result = await evaluate({
@@ -39,11 +53,12 @@ const result = await evaluate({
     ...entry,
     entry: `${mountRoot}/${path.relative(repoRoot, entry.entry)}`
   },
-  args: ["install", "--ignore-scripts", "--offline", "--parseable"],
+  args: ["install", "--ignore-scripts", "--offline", "--reporter", "silent", "--store-dir", "/workspace/.pnpm-store"],
   cwd: "/workspace/project",
   env: {
     CI: "true",
     HOME: "/home/webcontainer",
+    PNPM_HOME: "/home/webcontainer/.local/share/pnpm",
     PATH: "/usr/local/bin:/usr/bin:/bin",
     npm_config_user_agent: `pnpm/${installed.version} node/v22.23.0 browser`
   }
@@ -52,6 +67,8 @@ const result = await evaluate({
 assert.equal(result.stdout, "");
 assert.equal(result.stderr, "");
 assert.equal(result.exitCode, 0);
+assert.equal(workspace.readText("/workspace/project/node_modules/local-dep/package.json"), "{\"name\":\"local-dep\",\"version\":\"1.0.0\",\"main\":\"index.js\"}");
+assert.equal(workspace.readText("/workspace/project/node_modules/local-dep/index.js"), "module.exports = 'local-dep';\n");
 
 console.log("pnpm install cli module evaluation test ok");
 

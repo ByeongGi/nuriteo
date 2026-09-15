@@ -121,14 +121,20 @@ export interface RuntimeFsBinding {
   readFileSync(path: string, encoding: "utf8" | "utf-8"): string;
   mkdirSync(path: string): void;
   statSync(path: string): {
+    ino?: number;
+    mode?: number;
     size: number;
     isFile(): boolean;
     isDirectory(): boolean;
+    isSymbolicLink?(): boolean;
   };
   lstatSync?(path: string): {
+    ino?: number;
+    mode?: number;
     size: number;
     isFile(): boolean;
     isDirectory(): boolean;
+    isSymbolicLink?(): boolean;
   };
 }
 
@@ -142,6 +148,7 @@ export interface BuiltinBindings {
   process?: RuntimeValue;
   stream?: RuntimeValue;
   util?: RuntimeValue;
+  workerThreads?: RuntimeValue;
 }
 
 export interface CliEntry {

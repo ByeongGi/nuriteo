@@ -6,10 +6,14 @@ export class EventEmitter {
   #maxListeners = 10;
 
   on(eventName: string | symbol, listener: Listener): this {
-    return this.addListener(eventName, listener);
+    return this.#addListener(eventName, listener);
   }
 
   addListener(eventName: string | symbol, listener: Listener): this {
+    return this.#addListener(eventName, listener);
+  }
+
+  #addListener(eventName: string | symbol, listener: Listener): this {
     const listeners = this.#events.get(eventName) || [];
     listeners.push(listener);
     this.#events.set(eventName, listeners);
@@ -119,13 +123,12 @@ function createLegacyEventEmitterConstructor(): typeof EventEmitter {
   } as unknown as typeof EventEmitter;
 
   LegacyEventEmitter.listenerCount = (emitter: EventEmitter, eventName: string | symbol) => emitter.listenerCount(eventName);
-  LegacyEventEmitter.prototype.on = function on(eventName: string | symbol, listener: Listener) {
-    return this.addListener(eventName, listener);
-  };
-  LegacyEventEmitter.prototype.addListener = function addListener(eventName: string | symbol, listener: Listener) {
+  const addListener = function addListener(this: EventEmitter, eventName: string | symbol, listener: Listener) {
     getListeners(this, eventName).push(listener);
     return this;
   };
+  LegacyEventEmitter.prototype.on = addListener;
+  LegacyEventEmitter.prototype.addListener = addListener;
   LegacyEventEmitter.prototype.once = function once(eventName: string | symbol, listener: Listener) {
     const onceListener: Listener & { listener?: Listener } = (...args) => {
       this.removeListener(eventName, onceListener);

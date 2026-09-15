@@ -71,7 +71,7 @@ export function createBuiltinLoader(bindings: BuiltinBindings): (specifier: stri
     if (specifier === "url" || specifier === "node:url") return urlBuiltin;
     if (specifier === "util" || specifier === "node:util") return bindings.util || utilBuiltin;
     if (specifier === "v8" || specifier === "node:v8") return v8Builtin;
-    if (specifier === "worker_threads" || specifier === "node:worker_threads") return workerThreadsBuiltin;
+    if (specifier === "worker_threads" || specifier === "node:worker_threads") return bindings.workerThreads || workerThreadsBuiltin;
     if (specifier === "zlib" || specifier === "node:zlib") return zlibBuiltin;
     throw new Error(`Unsupported builtin module: ${specifier}`);
   };

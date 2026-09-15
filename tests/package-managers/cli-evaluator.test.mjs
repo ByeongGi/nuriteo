@@ -55,11 +55,25 @@ const workspace = new MemoryPackageManagerWorkspace([
     path: "/workspace/write-cli/package/lib/cli.js",
     data: `
       const fs = require('fs');
+      const { Buffer } = require('buffer');
       module.exports = async function run(process) {
         fs.mkdirSync(process.cwd() + '/.cache');
         fs.writeFileSync(process.cwd() + '/sync.txt', 'sync');
+        if (!Buffer.isBuffer(fs.readFileSync(process.cwd() + '/sync.txt'))) {
+          throw new Error('readFileSync without encoding must return Buffer');
+        }
+        if (fs.statSync(process.cwd() + '/missing.txt', { throwIfNoEntry: false }) !== undefined) {
+          throw new Error('statSync throwIfNoEntry false should return undefined');
+        }
+        const rootEntries = fs.readdirSync(process.cwd(), { withFileTypes: true });
+        if (!rootEntries.some((entry) => entry.name === 'sync.txt' && entry.isFile() && !entry.isSymbolicLink())) {
+          throw new Error('unexpected dirent result');
+        }
         await fs.promises.writeFile(process.cwd() + '/.cache/async.txt', 'async');
         await fs.promises.lstat(process.cwd() + '/.cache/async.txt');
+        if (await fs.promises.stat(process.cwd() + '/missing-async.txt', { throwIfNoEntry: false }) !== undefined) {
+          throw new Error('promises.stat throwIfNoEntry false should return undefined');
+        }
         fs.writeFileSync(process.cwd() + '/delete-me.txt', 'delete');
         fs.unlinkSync(process.cwd() + '/delete-me.txt');
         fs.writeFileSync(process.cwd() + '/delete-me-async.txt', 'delete');
@@ -72,6 +86,10 @@ const workspace = new MemoryPackageManagerWorkspace([
         fs.renameSync(process.cwd() + '/rename-source.txt', process.cwd() + '/rename-target.txt');
         await fs.promises.writeFile(process.cwd() + '/rename-source-async.txt', 'renamed-async');
         await fs.promises.rename(process.cwd() + '/rename-source-async.txt', process.cwd() + '/rename-target-async.txt');
+        fs.copyFileSync(process.cwd() + '/rename-target.txt', process.cwd() + '/copied.txt');
+        await fs.promises.copyFile(process.cwd() + '/rename-target-async.txt', process.cwd() + '/copied-async.txt');
+        fs.linkSync(process.cwd() + '/copied.txt', process.cwd() + '/linked-file.txt');
+        await fs.promises.link(process.cwd() + '/copied-async.txt', process.cwd() + '/linked-file-async.txt');
         fs.mkdirSync(process.cwd() + '/linked-source');
         fs.writeFileSync(process.cwd() + '/linked-source/package.json', '{"name":"linked-source"}');
         fs.symlinkSync(process.cwd() + '/linked-source', process.cwd() + '/linked-package', 'dir');
@@ -147,11 +165,27 @@ const workspace = new MemoryPackageManagerWorkspace([
     path: "/workspace/global-cli/package/lib/cli.js",
     data: `
       const { Buffer } = require('buffer');
+      const { EventEmitter } = require('events');
+      class BundleWalker extends EventEmitter {
+        addListener(event, listener) {
+          return this.on(event, listener);
+        }
+        on(event, listener) {
+          const result = super.on(event, listener);
+          if (event === 'done') this.emit('done', 'ok');
+          return result;
+        }
+      }
       module.exports = function run(process) {
+        let eventValue = '';
+        new BundleWalker().once('done', (value) => {
+          eventValue = value;
+        });
         process.stdout.write([
           typeof global.Uint8Array,
           global.Buffer.isBuffer(Buffer.from('ok')),
-          Buffer.from('ok') instanceof global.Uint8Array
+          Buffer.from('ok') instanceof global.Uint8Array,
+          eventValue
         ].join(' ') + '\\n');
       };
     `
@@ -222,7 +256,8 @@ const writeResult = await createAsyncCliModuleEvaluator({
   root: "/workspace",
   reader: workspace,
   writer: workspace,
-  settleTicks: 20
+  settleTicks: 100,
+  settleTimeoutMs: 10
 })({
   entry: {
     name: "npm",
@@ -247,6 +282,10 @@ assert.equal(workspace.exists("/workspace/project/rename-source.txt"), false);
 assert.equal(workspace.readText("/workspace/project/rename-target.txt"), "renamed");
 assert.equal(workspace.exists("/workspace/project/rename-source-async.txt"), false);
 assert.equal(workspace.readText("/workspace/project/rename-target-async.txt"), "renamed-async");
+assert.equal(workspace.readText("/workspace/project/copied.txt"), "renamed");
+assert.equal(workspace.readText("/workspace/project/copied-async.txt"), "renamed-async");
+assert.equal(workspace.readText("/workspace/project/linked-file.txt"), "renamed");
+assert.equal(workspace.readText("/workspace/project/linked-file-async.txt"), "renamed-async");
 assert.equal(workspace.readText("/workspace/project/linked-package/package.json"), '{"name":"linked-source"}');
 assert.equal(workspace.readText("/workspace/project/linked-package-async/package.json"), '{"name":"linked-source"}');
 
@@ -280,7 +319,7 @@ const globalResult = createCliModuleEvaluator({
   args: [],
   cwd: "/workspace/project"
 });
-assert.equal(globalResult.stdout, "function true true\n");
+assert.equal(globalResult.stdout, "function true true ok\n");
 assert.equal(globalResult.stderr, "");
 assert.equal(globalResult.exitCode, 0);
 

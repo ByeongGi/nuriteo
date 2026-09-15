@@ -1,10 +1,11 @@
 import { createBuiltinLoader } from "../builtin-loader.ts";
 import { Buffer as BrowserBuffer } from "../builtins/buffer.ts";
 import { constantsBuiltin } from "../builtins/constants.ts";
+import { EventEmitter } from "../builtins/events.ts";
 import { normalize } from "../builtins/path.ts";
 import { BrowserProcess } from "../builtins/process.ts";
 import { createWorkspaceModuleRuntime, type WorkspaceModuleReader } from "../modules/index.ts";
-import type { CliEntry, CliRunResult, RuntimeEnv, RuntimeFsBinding, RuntimeFsData, RuntimeNamespace } from "../types.ts";
+import type { CliEntry, CliRunResult, RuntimeEnv, RuntimeFsBinding, RuntimeFsData, RuntimeNamespace, RuntimeValue } from "../types.ts";
 import type { PackageManagerWorkspaceWriter } from "./workspace.ts";
 
 export interface CliModuleEvaluatorOptions {
@@ -65,16 +66,26 @@ function startCliModuleEvaluation(options: CliModuleEvaluatorOptions, request: C
     Buffer: BrowserBuffer,
     Uint8Array,
     __dynamicImport: createCliDynamicImport(),
+    clearImmediate: clearCliImmediate,
     clearTimeout,
+    setImmediate: setCliImmediate,
     setTimeout
   };
   const consoleObject = createCliConsole(process);
   const fs = createWorkspaceFsFacade(options.reader, options.writer);
 
+  const workerThreads = createCliWorkerThreadsBuiltin({
+    fs,
+    globals: globalObject,
+    parentProcess: process,
+    reader: options.reader,
+    root: options.root || "/workspace"
+  });
+
   const runtime = createWorkspaceModuleRuntime({
     root: options.root || "/workspace",
     reader: options.reader,
-    builtins: createBuiltinLoader({ fs, process }),
+    builtins: createBuiltinLoader({ fs, process, workerThreads }),
     globals: {
       __dynamicImport: globalObject.__dynamicImport,
       console: consoleObject,
@@ -111,6 +122,129 @@ function startCliModuleEvaluation(options: CliModuleEvaluatorOptions, request: C
       };
     }
   };
+}
+
+function createCliWorkerThreadsBuiltin(options: {
+  fs: RuntimeFsBinding;
+  globals: Record<string, unknown>;
+  parentProcess: BrowserProcess;
+  reader: WorkspaceModuleReader;
+  root: string;
+}): RuntimeNamespace {
+  type InlineParentPort = EventEmitter & {
+    postMessage: (value: unknown) => void;
+    ref: () => InlineParentPort;
+    unref: () => InlineParentPort;
+  };
+
+  class InlineWorker extends EventEmitter {
+    readonly stdin = null;
+    readonly stdout = null;
+    readonly stderr = null;
+    readonly resourceLimits = Object.freeze({});
+    readonly threadId: number;
+    readonly workerData: unknown;
+    #parentPort = new EventEmitter() as InlineParentPort;
+    #terminated = false;
+
+    constructor(filename: string | URL, workerOptions: { eval?: boolean; workerData?: unknown } = {}) {
+      super();
+      this.threadId = nextInlineWorkerThreadId++;
+      this.workerData = workerOptions.workerData;
+      if (workerOptions.eval) {
+        queueMicrotask(() => this.#fail(new Error("eval workers are not supported by CLI module evaluator")));
+        return;
+      }
+
+      this.#parentPort.postMessage = (value: unknown) => {
+        queueMicrotask(() => {
+          if (!this.#terminated) this.emit("message", value);
+        });
+      };
+      this.#parentPort.ref = () => this.#parentPort;
+      this.#parentPort.unref = () => this.#parentPort;
+      try {
+        const workerGlobal: Record<string, unknown> = {
+          ...options.globals
+        };
+        const workerProcess = new BrowserProcess({
+          argv: ["node", String(filename)],
+          cwd: options.parentProcess.cwd(),
+          env: options.parentProcess.env,
+          exitMode: "capture"
+        });
+        workerGlobal.global = workerGlobal;
+        workerGlobal.process = workerProcess;
+        const workerThreads = createWorkerContextBuiltin(this.#parentPort, this.threadId, this.workerData);
+        const runtime = createWorkspaceModuleRuntime({
+          root: options.root,
+          reader: options.reader,
+          builtins: createBuiltinLoader({
+            fs: options.fs,
+            process: workerProcess,
+            workerThreads
+          }),
+          globals: workerGlobal
+        });
+        runtime.requireSync(normalize(String(filename)), normalize(String(filename)));
+      } catch (error) {
+        queueMicrotask(() => this.#fail(error instanceof Error ? error : new Error(String(error))));
+      }
+    }
+
+    postMessage(value: unknown): void {
+      if (this.#terminated) return;
+      queueMicrotask(() => this.#parentPort.emit("message", value));
+    }
+
+    terminate(): Promise<number> {
+      if (this.#terminated) return Promise.resolve(0);
+      this.#terminated = true;
+      this.#parentPort.removeAllListeners();
+      this.emit("exit", 0);
+      return Promise.resolve(0);
+    }
+
+    ref(): this {
+      return this;
+    }
+
+    unref(): this {
+      return this;
+    }
+
+    #fail(error: Error): void {
+      this.emit("error", error);
+    }
+  }
+
+  return Object.freeze({
+    Worker: InlineWorker,
+    isMainThread: true,
+    parentPort: null,
+    threadId: 0,
+    workerData: null
+  });
+}
+
+function createWorkerContextBuiltin(parentPort: RuntimeValue, threadId: number, workerData: unknown): RuntimeNamespace {
+  return Object.freeze({
+    Worker: class UnsupportedNestedWorker extends EventEmitter {},
+    isMainThread: false,
+    parentPort,
+    threadId,
+    workerData
+  });
+}
+
+let nextInlineWorkerThreadId = 1;
+
+function setCliImmediate(callback: (...args: unknown[]) => void, ...args: unknown[]): ReturnType<typeof setTimeout> {
+  return setTimeout(() => callback(...args), 0);
+}
+
+function clearCliImmediate(handle: ReturnType<typeof setTimeout>): void {
+  clearTimeout(handle);
 }
 
 function errorMessage(error: unknown): string {
@@ -224,7 +358,7 @@ function createWorkspaceFsFacade(reader: WorkspaceModuleReader, writer?: Package
   function readFileSync(path: string, encoding: "utf8" | "utf-8"): string;
   function readFileSync(path: string, encoding?: "utf8" | "utf-8"): Uint8Array | string {
     const bytes = encoder.encode(reader.readText(normalize(path)));
-    return encoding ? decoder.decode(bytes) : bytes;
+    return encoding ? decoder.decode(bytes) : BrowserBuffer.from(bytes);
   }
 
   const facade = {
@@ -235,6 +369,19 @@ function createWorkspaceFsFacade(reader: WorkspaceModuleReader, writer?: Package
     },
     closeSync(fd: number): void {
       openFiles.delete(fd);
+    },
+    copyFile(source: string, target: string, flagsOrCallback?: number | ((error?: Error | null) => void), callback?: (error?: Error | null) => void): void {
+      const cb = typeof flagsOrCallback === "function" ? flagsOrCallback : callback;
+      try {
+        facade.copyFileSync(source, target);
+        cb?.(null);
+      } catch (error) {
+        cb?.(error instanceof Error ? error : new Error(String(error)));
+      }
+    },
+    copyFileSync(source: string, target: string): void {
+      if (!writer) throw unsupportedFsMutation("copyFileSync");
+      writer.writeText(normalize(target), reader.readText(normalize(source)));
     },
     existsSync(path: string): boolean {
       const maybeReader = reader as WorkspaceModuleReader & { exists?: (path: string) => boolean };
@@ -294,7 +441,18 @@ function createWorkspaceFsFacade(reader: WorkspaceModuleReader, writer?: Package
       facade.utimesSync(path, atime, mtime);
     },
     lstat(path: string, callback: (error: Error | null, stats?: ReturnType<RuntimeFsBinding["statSync"]>) => void): void {
-      callWithFsCallback(() => facade.lstatSync(path), callback);
+      callWithFsCallback(() => statFromReader(reader, path), callback);
+    },
+    link(source: string, target: string, callback: (error?: Error | null) => void = () => undefined): void {
+      try {
+        facade.linkSync(source, target);
+        callback(null);
+      } catch (error) {
+        callback(error instanceof Error ? error : new Error(String(error)));
+      }
+    },
+    linkSync(source: string, target: string): void {
+      facade.copyFileSync(source, target);
     },
     open(path: string, flags: string | number, callback: (error: Error | null, fd?: number) => void): void {
       try {
@@ -319,8 +477,14 @@ function createWorkspaceFsFacade(reader: WorkspaceModuleReader, writer?: Package
       async mkdir(path: string): Promise<void> {
         facade.mkdirSync(path);
       },
-      async lstat(path: string): Promise<ReturnType<RuntimeFsBinding["statSync"]>> {
-        return facade.lstatSync(path);
+      async copyFile(source: string, target: string): Promise<void> {
+        facade.copyFileSync(source, target);
+      },
+      async link(source: string, target: string): Promise<void> {
+        facade.linkSync(source, target);
+      },
+      async lstat(path: string, options?: CliStatOptions): Promise<ReturnType<RuntimeFsBinding["statSync"]> | undefined> {
+        return facade.lstatSync(path, options);
       },
       async readFile(path: string, encoding?: "utf8" | "utf-8"): Promise<Uint8Array | string> {
         return encoding ? readFileSync(path, encoding) : readFileSync(path);
@@ -328,8 +492,8 @@ function createWorkspaceFsFacade(reader: WorkspaceModuleReader, writer?: Package
       async readlink(path: string): Promise<string> {
         return facade.readlinkSync(path);
       },
-      async readdir(path: string): Promise<string[]> {
-        return facade.readdirSync(path);
+      async readdir(path: string, options?: CliReaddirOptions): Promise<CliDirent[] | string[]> {
+        return facade.readdirSync(path, options);
       },
       async realpath(path: string): Promise<string> {
         return facade.realpathSync(path);
@@ -343,8 +507,8 @@ function createWorkspaceFsFacade(reader: WorkspaceModuleReader, writer?: Package
       async rmdir(path: string, options: CliRmOptions = {}): Promise<void> {
         facade.rmdirSync(path, options);
       },
-      async stat(path: string): Promise<ReturnType<RuntimeFsBinding["statSync"]>> {
-        return facade.statSync(path);
+      async stat(path: string, options?: CliStatOptions): Promise<ReturnType<RuntimeFsBinding["statSync"]> | undefined> {
+        return facade.statSync(path, options);
       },
       async symlink(target: string, path: string): Promise<void> {
         facade.symlinkSync(target, path);
@@ -383,8 +547,10 @@ function createWorkspaceFsFacade(reader: WorkspaceModuleReader, writer?: Package
       if (!file) throw createFsError("EBADF", `Bad file descriptor: ${fd}`);
       return file.bytes;
     },
-    readdirSync(path: string): string[] {
-      return reader.listDir(normalize(path));
+    readdirSync(path: string, options?: CliReaddirOptions): CliDirent[] | string[] {
+      const normalized = normalize(path);
+      const names = reader.listDir(normalized);
+      return options?.withFileTypes ? names.map((name) => createDirent(name, normalize(`${normalized}/${name}`), reader)) : names;
     },
     readdir(path: string, optionsOrCallback?: CliReaddirOptions | ((error: Error | null, entries?: CliDirent[] | string[]) => void), callback?: (error: Error | null, entries?: CliDirent[] | string[]) => void): void {
       const cb = typeof optionsOrCallback === "function" ? optionsOrCallback : callback;
@@ -392,7 +558,7 @@ function createWorkspaceFsFacade(reader: WorkspaceModuleReader, writer?: Package
       try {
         const names = facade.readdirSync(path);
         const withFileTypes = typeof optionsOrCallback === "object" && optionsOrCallback?.withFileTypes === true;
-        cb(null, withFileTypes ? names.map((name) => createDirent(name, normalize(`${path}/${name}`), reader)) : names);
+        cb(null, withFileTypes ? facade.readdirSync(path, { withFileTypes }) : names);
       } catch (error) {
         cb(error instanceof Error ? error : new Error(String(error)));
       }
@@ -433,11 +599,16 @@ function createWorkspaceFsFacade(reader: WorkspaceModuleReader, writer?: Package
     rmdirSync(path: string, options: CliRmOptions = {}): void {
       facade.rmSync(path, options);
     },
-    statSync(path: string): ReturnType<RuntimeFsBinding["statSync"]> {
-      return statFromReader(reader, path);
+    statSync(path: string, options?: CliStatOptions): ReturnType<RuntimeFsBinding["statSync"]> | undefined {
+      try {
+        return statFromReader(reader, path);
+      } catch (error) {
+        if (options?.throwIfNoEntry === false) return undefined;
+        throw error;
+      }
     },
     stat(path: string, callback: (error: Error | null, stats?: ReturnType<RuntimeFsBinding["statSync"]>) => void): void {
-      callWithFsCallback(() => facade.statSync(path), callback);
+      callWithFsCallback(() => statFromReader(reader, path), callback);
     },
     symlink(target: string, path: string, typeOrCallback?: string | ((error?: Error | null) => void), callback?: (error?: Error | null) => void): void {
       const cb = typeof typeOrCallback === "function" ? typeOrCallback : callback;
@@ -452,8 +623,8 @@ function createWorkspaceFsFacade(reader: WorkspaceModuleReader, writer?: Package
       if (!writer?.symlink) throw unsupportedFsMutation("symlinkSync");
       writer.symlink(resolveSymlinkTarget(target, path), normalize(path));
     },
-    lstatSync(path: string): ReturnType<RuntimeFsBinding["statSync"]> {
-      return statFromReader(reader, path);
+    lstatSync(path: string, options?: CliStatOptions): ReturnType<RuntimeFsBinding["statSync"]> | undefined {
+      return facade.statSync(path, options);
     },
     utimes(path: string, _atime: Date | number | string, _mtime: Date | number | string, callback: (error?: Error | null) => void = () => undefined): void {
       try {
@@ -547,6 +718,10 @@ interface CliReaddirOptions {
   withFileTypes?: boolean;
 }
 
+interface CliStatOptions {
+  throwIfNoEntry?: boolean;
+}
+
 interface CliDirent {
   name: string;
   isDirectory(): boolean;
@@ -563,18 +738,33 @@ function statFromReader(reader: WorkspaceModuleReader, path: string): ReturnType
   try {
     const size = new TextEncoder().encode(reader.readText(normalize(path))).byteLength;
     return {
+      ino: hashInode(normalize(path)),
+      mode: 0o100644,
       size,
       isFile: () => true,
-      isDirectory: () => false
+      isDirectory: () => false,
+      isSymbolicLink: () => false
     };
   } catch {
     reader.listDir(normalize(path));
     return {
+      ino: hashInode(normalize(path)),
+      mode: 0o040755,
       size: 0,
       isFile: () => false,
-      isDirectory: () => true
+      isDirectory: () => true,
+      isSymbolicLink: () => false
     };
   }
+}
+
+function hashInode(path: string): number {
+  let hash = 2166136261;
+  for (let index = 0; index < path.length; index += 1) {
+    hash ^= path.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
 }
 
 function unsupportedFsMutation(method: string): Error {
