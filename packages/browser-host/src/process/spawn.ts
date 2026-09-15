@@ -1,5 +1,5 @@
 import { WorkerRegistry } from "./worker-registry.ts";
-import type { HostProcessPrepareOptions, HostProcessRecord, HostProcessSnapshot, HostProcessStatus, HostProcessTableOptions, HostWorkerLike } from "./types.ts";
+import type { HostProcessOutputChunk, HostProcessPrepareOptions, HostProcessRecord, HostProcessSnapshot, HostProcessStatus, HostProcessTableOptions, HostWorkerLike } from "./types.ts";
 import type { RuntimeTraceSink } from "../observability/index.ts";
 import type { PermissionManager } from "../security/index.ts";
 
@@ -18,6 +18,8 @@ export class HostProcessTable {
   permissions: PermissionManager | null;
   trace: RuntimeTraceSink | null;
   workerFactory: (record: HostProcessRecord) => HostWorkerLike;
+  now: () => number;
+  onOutput: ((chunk: HostProcessOutputChunk) => void) | null;
 
   constructor(options: HostProcessTableOptions = {}) {
     this.nextPid = 1;
@@ -27,6 +29,8 @@ export class HostProcessTable {
     this.permissions = options.permissions || null;
     this.trace = options.trace || null;
     this.workerFactory = options.workerFactory || ((record) => new Worker(record.url as string | URL, { type: "module", name: `process-${record.pid}` }));
+    this.now = options.now || Date.now;
+    this.onOutput = options.onOutput || null;
   }
 
   prepare(options: HostProcessPrepareOptions = {}): HostProcessSnapshot {
@@ -57,6 +61,9 @@ export class HostProcessTable {
       url: options.url,
       status: "prepared",
       exitCode: null,
+      output: [],
+      stdout: "",
+      stderr: "",
       waiters: [],
       resourcesReleased: false
     };
@@ -76,37 +83,44 @@ export class HostProcessTable {
     this.registry.register(record.pid, record.generation, worker);
 
     return new Promise((resolve) => {
+      let resolved = false;
       const timeout = setTimeout(() => {
         if (isTerminal(record.status)) {
-          resolve(snapshot(record));
+          resolveOnce(snapshot(record));
           return;
         }
-        resolve(this.#finish(record, "failed", 1, "startup timeout"));
+        resolveOnce(this.#finish(record, "failed", 1, "startup timeout"));
       }, 1000);
       const onMessage = (event: Event) => {
-        const data = "data" in event ? event.data as { type?: string; error?: string; code?: number } : {};
+        const data = "data" in event ? event.data as { type?: string; error?: string; code?: number; data?: string } : {};
         if (data?.type === "ready") {
-          cleanup();
           record.status = "ready";
-          resolve(snapshot(record));
+          clearTimeout(timeout);
+          resolveOnce(snapshot(record));
+        } else if (data?.type === "stdout" || data?.type === "stderr") {
+          this.#appendOutput(record, data.type, data.data || "");
         } else if (data?.type === "failed") {
-          cleanup();
-          resolve(this.#finish(record, "failed", 1, data.error || "startup failed"));
+          resolveOnce(this.#finish(record, "failed", 1, data.error || "startup failed"));
         } else if (data?.type === "exit") {
-          cleanup();
-          resolve(this.#finish(record, "exited", data.code ?? 0));
+          resolveOnce(this.#finish(record, "exited", data.code ?? 0));
         }
       };
       const onError = (event: Event) => {
         const errorEvent = event as ErrorEvent;
-        cleanup();
-        resolve(this.#finish(record, "failed", 1, errorEvent.message || "worker error"));
+        resolveOnce(this.#finish(record, "failed", 1, errorEvent.message || "worker error"));
       };
       const cleanup = () => {
         clearTimeout(timeout);
         worker.removeEventListener?.("message", onMessage);
         worker.removeEventListener?.("error", onError);
       };
+      const resolveOnce = (current: HostProcessSnapshot) => {
+        if (resolved) return;
+        resolved = true;
+        resolve(current);
+      };
+      record.waiters.push(resolveOnce);
+      record.cleanup = cleanup;
       worker.addEventListener?.("message", onMessage);
       worker.addEventListener?.("error", onError);
       worker.postMessage?.({
@@ -123,6 +137,20 @@ export class HostProcessTable {
     const record = this.#record(pid);
     if (isTerminal(record.status)) return Promise.resolve(snapshot(record));
     return new Promise((resolve) => record.waiters.push(resolve));
+  }
+
+  output(pid: number): HostProcessOutputChunk[] {
+    const record = this.#record(pid);
+    return record.output.map((chunk) => ({ ...chunk }));
+  }
+
+  writeStdin(pid: number, data: string): boolean {
+    const record = this.#record(pid);
+    if (isTerminal(record.status)) return false;
+    const worker = this.registry.get(record.pid, record.generation);
+    if (!worker?.postMessage) return false;
+    worker.postMessage({ type: "stdin", pid: record.pid, generation: record.generation, data });
+    return true;
   }
 
   stop(pid: number, code = 0): HostProcessSnapshot {
@@ -147,6 +175,8 @@ export class HostProcessTable {
   }
 
   #finish(record: HostProcessRecord, status: HostProcessStatus, exitCode: number, error: string | null = null): HostProcessSnapshot {
+    record.cleanup?.();
+    delete record.cleanup;
     record.status = status;
     record.exitCode = exitCode;
     record.error = error;
@@ -155,6 +185,21 @@ export class HostProcessTable {
     const current = snapshot(record);
     for (const waiter of record.waiters.splice(0)) waiter(current);
     return current;
+  }
+
+  #appendOutput(record: HostProcessRecord, stream: "stdout" | "stderr", data: string): void {
+    if (!data) return;
+    const chunk = {
+      pid: record.pid,
+      generation: record.generation,
+      stream,
+      data,
+      at: this.now()
+    };
+    record.output.push(chunk);
+    if (stream === "stdout") record.stdout += data;
+    else record.stderr += data;
+    this.onOutput?.({ ...chunk });
   }
 
   #record(pid: number): HostProcessRecord {
@@ -179,6 +224,8 @@ function snapshot(record: HostProcessRecord): HostProcessSnapshot {
     status: record.status,
     exitCode: record.exitCode,
     error: record.error || null,
+    stdout: record.stdout,
+    stderr: record.stderr,
     resourcesReleased: Boolean(record.resourcesReleased)
   };
 }

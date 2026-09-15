@@ -1,7 +1,9 @@
-export class WorkerRegistry {
-  #workers: Map<string, { terminate: () => void }> = new Map();
+import type { HostWorkerLike } from "./types.ts";
 
-  register(pid: number, generation: number, worker: { terminate: () => void }): void {
+export class WorkerRegistry {
+  #workers: Map<string, HostWorkerLike> = new Map();
+
+  register(pid: number, generation: number, worker: HostWorkerLike): void {
     const key = processKey(pid, generation);
     if (this.#workers.has(key)) {
       throw new Error(`worker already registered for ${key}`);
@@ -9,7 +11,7 @@ export class WorkerRegistry {
     this.#workers.set(key, worker);
   }
 
-  get(pid: number, generation: number): { terminate: () => void } | null {
+  get(pid: number, generation: number): HostWorkerLike | null {
     return this.#workers.get(processKey(pid, generation)) || null;
   }
 

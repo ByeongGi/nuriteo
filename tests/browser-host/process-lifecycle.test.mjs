@@ -18,7 +18,12 @@ class MockWorker {
   }
 
   postMessage(message) {
+    this.messages = [...(this.messages || []), message];
     this.startedWith = message;
+    if (message.type === "stdin") {
+      this.stdin = `${this.stdin || ""}${message.data}`;
+      return;
+    }
     if (this.mode === "hang") return;
     queueMicrotask(() => {
       if (this.mode === "ready") this.emit("message", { data: { type: "ready" } });
@@ -38,14 +43,17 @@ class MockWorker {
 
 function createTable(mode) {
   const workers = [];
+  const output = [];
   const table = new HostProcessTable({
+    now: () => 1234,
+    onOutput: (chunk) => output.push(chunk),
     workerFactory() {
       const worker = new MockWorker(mode);
       workers.push(worker);
       return worker;
     }
   });
-  return { table, workers };
+  return { output, table, workers };
 }
 
 const readyCase = createTable("ready");
@@ -63,9 +71,18 @@ assert.equal(ready.status, "ready");
 assert.equal(ready.parent, 99);
 assert.equal(ready.cwd, "/workspace/app");
 assert.equal(ready.env.NODE_ENV, "test");
+readyCase.workers[0].emit("message", { data: { type: "stdout", data: "hello\n" } });
+readyCase.workers[0].emit("message", { data: { type: "stderr", data: "warn\n" } });
+assert.deepEqual(readyCase.output.map((chunk) => `${chunk.stream}:${chunk.data.trim()}`), ["stdout:hello", "stderr:warn"]);
+assert.deepEqual(readyCase.table.output(prepared.pid).map((chunk) => chunk.at), [1234, 1234]);
+assert.equal(readyCase.table.writeStdin(prepared.pid, "yes\n"), true);
+assert.equal(readyCase.workers[0].stdin, "yes\n");
 const exited = readyCase.table.stop(prepared.pid, 0);
 assert.equal(exited.status, "exited");
+assert.equal(exited.stdout, "hello\n");
+assert.equal(exited.stderr, "warn\n");
 assert.equal(exited.resourcesReleased, true);
+assert.equal(readyCase.table.writeStdin(prepared.pid, "late\n"), false);
 const duplicateStop = readyCase.table.stop(prepared.pid, 0);
 assert.equal(duplicateStop.status, "exited");
 

@@ -1,4 +1,5 @@
 export type HostProcessStatus = "prepared" | "starting" | "ready" | "failed" | "exited" | "killed";
+export type HostProcessOutputStream = "stdout" | "stderr";
 
 export interface HostProcessEnv {
   [key: string]: string;
@@ -23,8 +24,12 @@ export interface HostProcessRecord {
   status: HostProcessStatus;
   exitCode: number | null;
   error?: string | null;
+  output: HostProcessOutputChunk[];
+  stdout: string;
+  stderr: string;
   waiters: Array<(snapshot: HostProcessSnapshot) => void>;
   resourcesReleased: boolean;
+  cleanup?: () => void;
 }
 
 export interface HostProcessSnapshot {
@@ -37,7 +42,17 @@ export interface HostProcessSnapshot {
   status: HostProcessStatus;
   exitCode: number | null;
   error: string | null;
+  stdout: string;
+  stderr: string;
   resourcesReleased: boolean;
+}
+
+export interface HostProcessOutputChunk {
+  pid: number;
+  generation: number;
+  stream: HostProcessOutputStream;
+  data: string;
+  at: number;
 }
 
 export interface HostWorkerLike {
@@ -54,4 +69,6 @@ export interface HostProcessTableOptions {
   workerFactory?: HostWorkerFactory;
   permissions?: import("../security/index.ts").PermissionManager;
   trace?: import("../observability/index.ts").RuntimeTraceSink;
+  now?: () => number;
+  onOutput?: (chunk: HostProcessOutputChunk) => void;
 }
