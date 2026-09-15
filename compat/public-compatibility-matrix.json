@@ -83,7 +83,8 @@
     "minimumPassForMilestoneB": 7,
     "referenceInstallPass": 7,
     "referenceBuildPass": 6,
-    "referenceScoreAtLeast50": 6
+    "referenceDevPreviewPass": 6,
+    "referenceScoreAtLeast75": 6
   },
   "unsupported": [
     {

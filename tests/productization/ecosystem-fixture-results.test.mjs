@@ -25,6 +25,7 @@ for (const result of results.results) {
 
 assert.equal(results.results.filter((result) => result.criteria.some((criterion) => criterion.id === "install" && criterion.status === "pass")).length, 7);
 assert.equal(results.results.filter((result) => result.criteria.some((criterion) => criterion.id === "build-dist" && criterion.status === "pass")).length, 6);
-assert.equal(results.results.filter((result) => result.score >= 50).length, 6);
+assert.equal(results.results.filter((result) => result.criteria.some((criterion) => criterion.id === "dev-preview" && criterion.status === "pass")).length, 6);
+assert.equal(results.results.filter((result) => result.score >= 75).length, 6);
 
 console.log("ecosystem fixture results test ok");

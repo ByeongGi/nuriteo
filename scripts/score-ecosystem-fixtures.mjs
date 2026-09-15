@@ -2,7 +2,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 
 const root = new URL("..", import.meta.url).pathname;
 const matrixPath = path.join(root, "compat/ecosystem-fixtures.json");
@@ -20,7 +20,10 @@ if (selected.length !== selectedIds.length) {
   throw new Error(`Unknown fixture id: ${missing.join(", ")}`);
 }
 
-const results = selected.map((fixture) => planOnly ? plannedResult(fixture) : scoreFixture(fixture));
+const results = [];
+for (const fixture of selected) {
+  results.push(planOnly ? plannedResult(fixture) : await scoreFixture(fixture));
+}
 const payload = {
   schemaVersion: 1,
   generatedAt: new Date().toISOString(),
@@ -57,7 +60,7 @@ function plannedResult(fixture) {
   };
 }
 
-function scoreFixture(fixture) {
+async function scoreFixture(fixture) {
   const checkout = path.join(workdir, fixture.id);
   const projectDir = fixture.subdirectory ? path.join(checkout, fixture.subdirectory) : checkout;
   const criteria = [];
@@ -72,12 +75,8 @@ function scoreFixture(fixture) {
   const build = runCommandString(fixture.expectedCommands.build, projectDir);
   criteria.push(criterion("build-dist", build.status === 0, build));
 
-  criteria.push({
-    id: "dev-preview",
-    points: 25,
-    status: "not-run",
-    note: "Use the interactive harness to start dev server and assert rendered DOM."
-  });
+  const devPreview = await runDevPreview(fixture.expectedCommands.dev, projectDir);
+  criteria.push(criterion("dev-preview", devPreview.status === 0, devPreview));
   criteria.push({
     id: "edit-hmr",
     points: 25,
@@ -161,6 +160,97 @@ function run(bin, argv, cwd) {
     maxBuffer: 1024 * 1024 * 10,
     shell: false
   });
+}
+
+async function runDevPreview(command, cwd) {
+  const [bin, ...argv] = command.split(/\s+/).filter(Boolean);
+  if (!bin) throw new Error(`empty dev command for ${cwd}`);
+  const child = spawn(bin, argv, {
+    cwd,
+    detached: process.platform !== "win32",
+    env: {
+      ...process.env,
+      BROWSER: "none",
+      CI: "true",
+      HOST: "127.0.0.1",
+      PORT: "5173"
+    },
+    shell: false
+  });
+  let stdout = "";
+  let stderr = "";
+  child.stdout.on("data", (chunk) => {
+    stdout += chunk;
+  });
+  child.stderr.on("data", (chunk) => {
+    stderr += chunk;
+  });
+
+  try {
+    const response = await waitForPreview(() => firstPreviewUrl(stdout, stderr) || "http://127.0.0.1:5173/");
+    return {
+      status: response.ok ? 0 : 1,
+      stdout,
+      stderr: response.ok ? stderr : `${stderr}\npreview returned HTTP ${response.status}`
+    };
+  } catch (error) {
+    return {
+      status: 1,
+      stdout,
+      stderr: `${stderr}\n${error instanceof Error ? error.message : String(error)}`
+    };
+  } finally {
+    await stopChildProcess(child);
+  }
+}
+
+async function stopChildProcess(child) {
+  if (child.exitCode !== null || child.signalCode) return;
+  killChildProcess(child, "SIGTERM");
+  const exited = await waitForExit(child, 1000);
+  if (exited) return;
+  killChildProcess(child, "SIGKILL");
+  await waitForExit(child, 1000);
+}
+
+function killChildProcess(child, signal) {
+  try {
+    if (process.platform !== "win32" && child.pid) process.kill(-child.pid, signal);
+    else child.kill(signal);
+  } catch {
+    child.kill(signal);
+  }
+}
+
+function waitForExit(child, timeoutMs) {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(false), timeoutMs);
+    child.once("exit", () => {
+      clearTimeout(timer);
+      resolve(true);
+    });
+  });
+}
+
+async function waitForPreview(urlProvider) {
+  const deadline = Date.now() + 15000;
+  let lastError = null;
+  while (Date.now() < deadline) {
+    const url = urlProvider();
+    try {
+      const response = await fetch(url);
+      if (response.status < 500) return response;
+    } catch (error) {
+      lastError = error;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  throw new Error(`preview did not become ready: ${lastError instanceof Error ? lastError.message : "timeout"}`);
+}
+
+function firstPreviewUrl(stdout, stderr) {
+  const match = `${stdout}\n${stderr}`.match(/https?:\/\/(?:localhost|127\.0\.0\.1):\d+\/?/);
+  return match?.[0] || null;
 }
 
 function tail(value = "") {

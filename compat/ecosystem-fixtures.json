@@ -40,7 +40,7 @@
     }
   },
   "referenceNodeBaseline": {
-    "status": "install-build-measured",
+    "status": "install-build-dev-preview-measured",
     "node": ">=22.23.0 <23",
     "packageManagers": ["npm", "pnpm"],
     "commands": [
