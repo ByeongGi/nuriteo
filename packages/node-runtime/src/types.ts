@@ -210,16 +210,20 @@ export type WasmExportKind = "function" | "global" | "memory" | "table";
 
 export interface WasmAdapterManifestEntry {
   name: string;
+  status?: "supported" | "candidate" | "hold";
   package?: string;
   path: string;
   sha256: string;
   exports?: Record<string, WasmExportKind>;
+  fallbackPolicy?: "deny-native" | "prefer-wasm" | "allow-js";
 }
 
 export interface WasmAdapterReplacement {
   package?: string;
   nativePackages?: string[];
+  adapterName?: string;
   wasmPackage?: string;
+  fallbackPolicy?: "deny-native" | "prefer-wasm" | "allow-js";
   status?: string;
 }
 

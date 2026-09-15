@@ -3,7 +3,7 @@ import type { WasmAdapterManifest, WasmAdapterReplacement } from "../types.ts";
 
 export type WasmAdapterPolicyAction =
   | { packageName: string; action: "allow-js" }
-  | { packageName: string; action: "use-wasm"; wasmPackage: string; status?: string };
+  | { packageName: string; action: "use-wasm"; adapterName?: string; wasmPackage: string; fallbackPolicy: "prefer-wasm" | "deny-native" | "allow-js"; status?: string };
 
 export class WasmAdapterPolicy {
   manifest: WasmAdapterManifest;
@@ -27,7 +27,9 @@ export class WasmAdapterPolicy {
       return {
         packageName,
         action: "use-wasm",
+        ...(candidate.adapterName === undefined ? {} : { adapterName: candidate.adapterName }),
         wasmPackage: candidate.wasmPackage,
+        fallbackPolicy: candidate.fallbackPolicy || "prefer-wasm",
         ...(candidate.status === undefined ? {} : { status: candidate.status })
       };
     }
@@ -37,4 +39,24 @@ export class WasmAdapterPolicy {
 
 export function createWasmAdapterPolicy(manifest: WasmAdapterManifest): WasmAdapterPolicy {
   return new WasmAdapterPolicy(manifest);
+}
+
+export function verifyWasmAdapterManifest(manifest: WasmAdapterManifest): void {
+  const adapters = new Set(manifest.adapters.map((adapter) => adapter.name));
+  for (const adapter of manifest.adapters) {
+    if (!/^[0-9a-f]{64}$/.test(adapter.sha256)) {
+      throw new WasmAdapterError(`invalid WASM adapter hash: ${adapter.name}`, "EINTEGRITY");
+    }
+    if (!adapter.exports || Object.keys(adapter.exports).length === 0) {
+      throw new WasmAdapterError(`missing WASM export contract: ${adapter.name}`, "EBADWASMEXPORT");
+    }
+  }
+  for (const replacement of manifest.candidateReplacements || []) {
+    if (replacement.adapterName && !adapters.has(replacement.adapterName)) {
+      throw new WasmAdapterError(`unknown replacement adapter: ${replacement.adapterName}`, "ENOADAPTER");
+    }
+    if (replacement.wasmPackage && !replacement.fallbackPolicy) {
+      throw new WasmAdapterError(`missing fallback policy for WASM package: ${replacement.wasmPackage}`, "ENATIVEADDON");
+    }
+  }
 }

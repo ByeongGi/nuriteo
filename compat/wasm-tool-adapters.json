@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-15",
+  "status": "p19-02-tool-adapters",
+  "supportedAdapters": [
+    {
+      "name": "system-wasm",
+      "source": "vendor/manifests/wasm-adapters.json",
+      "integrity": "sha256-required",
+      "exportContract": "required",
+      "fallbackPolicy": "deny-native",
+      "fixture": "tests/node-runtime/wasm-adapters.test.mjs"
+    }
+  ],
+  "viteEcosystemCandidates": [
+    {
+      "package": "rolldown",
+      "wasmPackage": "@rolldown/binding-wasm32-wasi",
+      "fallbackPolicy": "prefer-wasm",
+      "status": "candidate"
+    },
+    {
+      "package": "esbuild",
+      "wasmPackage": "esbuild-wasm",
+      "fallbackPolicy": "prefer-wasm",
+      "status": "candidate-until-integrity-pinned"
+    },
+    {
+      "package": "lightningcss",
+      "wasmPackage": null,
+      "fallbackPolicy": "deny-native",
+      "status": "hold"
+    }
+  ],
+  "requirements": {
+    "supportedAdaptersMustHaveHash": true,
+    "supportedAdaptersMustHaveExportContract": true,
+    "wasmPackageFallbackPolicyRequired": true,
+    "nativeOnlyFallbackMustDeny": true
+  }
+}

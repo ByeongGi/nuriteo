@@ -21,6 +21,7 @@
     "check:release-operations": "node scripts/check-release-operations.mjs",
     "check:release-readiness": "node scripts/check-release-readiness.mjs",
     "check:soak-baseline": "node scripts/check-soak-baseline.mjs",
+    "check:wasm-tool-adapters": "node scripts/check-wasm-tool-adapters.mjs",
     "check:wasi-boundary": "node scripts/check-wasi-boundary.mjs",
     "check:types": "tsc --noEmit",
     "test:protocol": "node tests/protocol/run.mjs",

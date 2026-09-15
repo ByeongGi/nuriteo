@@ -9,6 +9,7 @@
   "adapters": [
     {
       "name": "system-wasm",
+      "status": "supported",
       "kind": "rust-wasm",
       "path": "target/wasm32-unknown-unknown/debug/system_wasm.wasm",
       "sha256": "027f556c263fb7ee6da61d9d1e9a35e6a3c463e3a6834bc43915546464424b96",
@@ -19,7 +20,8 @@
       "usedFor": [
         "Rust/WASM VFS and syscall kernel fixture",
         "browser-compatible WASM loader verification"
-      ]
+      ],
+      "fallbackPolicy": "deny-native"
     }
   ],
   "candidateReplacements": [
@@ -49,7 +51,22 @@
         "@rolldown/binding-win32-arm64-msvc"
       ],
       "wasmPackage": "@rolldown/binding-wasm32-wasi",
-      "status": "prefer-wasi-binding-for-browser-runtime-when-vite-fixture-requires-bundling"
+      "fallbackPolicy": "prefer-wasm",
+      "status": "candidate-prefer-wasi-binding-for-browser-runtime-when-vite-fixture-requires-bundling"
+    },
+    {
+      "package": "esbuild",
+      "version": "0.27.2",
+      "nativePackages": [
+        "@esbuild/darwin-arm64",
+        "@esbuild/darwin-x64",
+        "@esbuild/linux-arm64",
+        "@esbuild/linux-x64",
+        "@esbuild/win32-x64"
+      ],
+      "wasmPackage": "esbuild-wasm",
+      "fallbackPolicy": "prefer-wasm",
+      "status": "candidate-until-esbuild-wasm-artifact-is-integrity-pinned"
     },
     {
       "package": "lightningcss",
@@ -65,6 +82,7 @@
         "lightningcss-win32-arm64-msvc"
       ],
       "wasmPackage": null,
+      "fallbackPolicy": "deny-native",
       "status": "native-only-unless-browser-compatible-wasm-package-is-pinned"
     }
   ]

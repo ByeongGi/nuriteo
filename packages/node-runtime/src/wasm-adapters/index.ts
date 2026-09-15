@@ -1,5 +1,5 @@
 export { createWasmAdapterRegistry, rejectNativeAddon, WasmAdapterError, WasmAdapterRegistry } from "./loader.ts";
-export { createWasmAdapterPolicy, WasmAdapterPolicy } from "./policy.ts";
+export { createWasmAdapterPolicy, verifyWasmAdapterManifest, WasmAdapterPolicy } from "./policy.ts";
 export { createWasiRuntimeBoundary, createWasiStdioLimits, filterWasiEnv, validateWasiEnv, validateWasiFilesystemAccess, validateWasiNetwork, WasiBoundaryError } from "./wasi-boundary.ts";
 export type { WasmAdapterErrorCode, WasmAdapterRegistryOptions } from "./loader.ts";
 export type { WasmAdapterPolicyAction } from "./policy.ts";
