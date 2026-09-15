@@ -1,9 +1,11 @@
 import { join } from "../builtins/path.ts";
 import { spawnRuntimeChild, type RuntimeChildProcess } from "../child-process.ts";
 import { createLoopbackNetwork, type LoopbackNetwork, type RuntimeHttpResponse } from "../net/index.ts";
+import { createAsyncCliModuleEvaluator } from "../package-managers/cli-evaluator.ts";
 import { analyzeCliModuleGraph, type CliModuleGraph } from "../package-managers/cli-module-graph.ts";
 import { inspectCliEntryReadiness, type CliEntryReadiness } from "../package-managers/cli-entry-readiness.ts";
 import { MemoryPackageManagerWorkspace, type PackageManagerWorkspaceMount } from "../package-managers/workspace.ts";
+import type { CliRunResult, RuntimeEnv } from "../types.ts";
 
 export type ViteProductPackageManager = "npm" | "pnpm";
 export type ViteProductTemplate = "react" | "vue-runtime" | "svelte";
@@ -36,6 +38,12 @@ export interface ViteProductInstallResult {
   installed: boolean;
   lockfile: string;
   packages: string[];
+}
+
+export interface ViteProductCliExecutionResult extends CliRunResult {
+  args: string[];
+  cwd: string;
+  mode: "async-cli-module-evaluation";
 }
 
 export interface ViteProductDevServerSnapshot {
@@ -201,6 +209,31 @@ export class ViteProductWorkflow {
       }),
       missingCapabilities: missingCapabilitiesForTemplate(this.template),
       nextAction: "Replace the adapter-backed Vite workflow with vendored Vite CLI/module execution once the listed runtime capabilities are implemented."
+    };
+  }
+
+  async executeRealCli(args: string[] = ["--host", "127.0.0.1"], env: RuntimeEnv = {}): Promise<ViteProductCliExecutionResult> {
+    if (!this.workspace.exists(join(this.projectRoot, "node_modules/.bin/vite"))) this.install();
+    const cliEntrypoint = this.#resolveBin("vite");
+    const result = await createAsyncCliModuleEvaluator({
+      root: this.projectRoot,
+      reader: this.workspace
+    })({
+      entry: {
+        name: "vite",
+        version: "8.2.0",
+        entry: cliEntrypoint,
+        mode: "esm"
+      },
+      args,
+      cwd: this.projectRoot,
+      env
+    });
+    return {
+      ...result,
+      args,
+      cwd: this.projectRoot,
+      mode: "async-cli-module-evaluation"
     };
   }
 
@@ -451,6 +484,7 @@ export function createViteHmrUpdate(path: string, label: string, timestamp = Dat
 export type ViteReactPackageManager = ViteProductPackageManager;
 export type ViteReactProductWorkflowOptions = ViteProductWorkflowOptions;
 export type ViteReactProductWorkflowResult = ViteProductWorkflowResult;
+export type ViteReactCliExecutionResult = ViteProductCliExecutionResult;
 export type ViteReactInstallResult = ViteProductInstallResult;
 export type ViteReactDevServerSnapshot = ViteProductDevServerSnapshot;
 export type ViteReactHmrUpdate = ViteProductHmrUpdate;

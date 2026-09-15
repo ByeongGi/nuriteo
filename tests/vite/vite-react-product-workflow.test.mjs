@@ -62,6 +62,14 @@ for (const manager of ["npm", "pnpm"]) {
   const network = createLoopbackNetwork();
   const workflow = new ViteProductWorkflow({ manager, template, projectId: `${manager}-${template}-preview`, network, port: 5173 });
   workflow.install();
+  const cliExecution = await workflow.executeRealCli(["--host", "127.0.0.1"]);
+  assert.equal(cliExecution.mode, "async-cli-module-evaluation");
+  assert.deepEqual(cliExecution.args, ["--host", "127.0.0.1"]);
+  assert.equal(cliExecution.cwd, "/workspace/project");
+  assert.equal(cliExecution.entry, "/workspace/project/node_modules/vite/bin/vite.js");
+  assert.equal(cliExecution.stdout, "");
+  assert.equal(cliExecution.stderr, "");
+  assert.equal(cliExecution.exitCode, 0);
   const started = workflow.startDevServerFromPackageScript();
   assert.equal(started.running, true);
   assert.equal(started.port, 5173);
