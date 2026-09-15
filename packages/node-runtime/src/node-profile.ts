@@ -103,6 +103,12 @@ export const NODE_PROFILE = Object.freeze({
       implementedBy: "packages/node-runtime/src/builtins/path.ts",
       tests: Object.freeze(["tests/node-runtime/secondary-builtins.test.mjs"])
     }),
+    perf_hooks: Object.freeze({
+      status: "partial",
+      source: "browser-native-js",
+      implementedBy: "packages/node-runtime/src/builtins/perf-hooks.ts",
+      tests: Object.freeze(["tests/node-runtime/secondary-builtins.test.mjs"])
+    }),
     process: Object.freeze({
       status: "partial",
       source: "browser-native-js",
@@ -200,6 +206,7 @@ export const NODE_PROFILE = Object.freeze({
     "node:os": Object.freeze(["browser-native-js:os"]),
     "node:path": Object.freeze(["browser-native-js:path"]),
     "node:path/posix": Object.freeze(["node:path"]),
+    "node:perf_hooks": Object.freeze(["browser-native-js:perf_hooks"]),
     "node:process": Object.freeze(["browser-native-js:process"]),
     "node:querystring": Object.freeze(["browser-native-js:querystring"]),
     "node:readline": Object.freeze(["browser-native-js:readline", "node:events"]),
@@ -227,6 +234,7 @@ export const NODE_PROFILE = Object.freeze({
     "os": Object.freeze(["node:os"]),
     "path": Object.freeze(["node:path"]),
     "path/posix": Object.freeze(["node:path/posix"]),
+    "perf_hooks": Object.freeze(["node:perf_hooks"]),
     "process": Object.freeze(["node:process"]),
     "querystring": Object.freeze(["node:querystring"]),
     "readline": Object.freeze(["node:readline"]),

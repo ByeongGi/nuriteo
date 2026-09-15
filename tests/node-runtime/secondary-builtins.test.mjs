@@ -108,6 +108,7 @@ assert.equal(moduleBuiltin.builtinModules.includes("node:module"), true);
 assert.equal(moduleBuiltin.builtinModules.includes("node:querystring"), true);
 assert.equal(moduleBuiltin.builtinModules.includes("node:string_decoder"), true);
 assert.equal(moduleBuiltin.builtinModules.includes("node:timers/promises"), true);
+assert.equal(moduleBuiltin.builtinModules.includes("node:perf_hooks"), true);
 assert.equal(moduleBuiltin.isBuiltin("node:module"), true);
 assert.equal(moduleBuiltin.isBuiltin("module"), true);
 assert.equal(moduleBuiltin.isBuiltin("vite"), false);
@@ -193,6 +194,26 @@ const timers = requireBuiltin("node:timers/promises");
 assert.equal(await timers.setTimeout(1, "done"), "done");
 assert.equal(typeof requireBuiltin("timers").setTimeout, "function");
 assert.equal(requireBuiltin("node:timers").clearTimeout, clearTimeout);
+
+const perfHooks = requireBuiltin("node:perf_hooks");
+const mark = perfHooks.performance.mark("vite-start");
+assert.equal(mark.entryType, "mark");
+assert.equal(mark.name, "vite-start");
+assert.equal(typeof perfHooks.performance.now(), "number");
+const measure = perfHooks.performance.measure("vite-bootstrap", "vite-start");
+assert.equal(measure.entryType, "measure");
+assert.equal(perfHooks.performance.getEntriesByType("mark").some((entry) => entry.name === "vite-start"), true);
+assert.equal(perfHooks.performance.getEntriesByName("vite-bootstrap")[0].duration >= 0, true);
+let observed = false;
+const observer = new perfHooks.PerformanceObserver(() => {
+  observed = true;
+});
+observer.observe({ entryTypes: ["mark", "measure"] });
+assert.equal(observed, true);
+assert.deepEqual(observer.takeRecords(), []);
+assert.equal(perfHooks.constants.NODE_PERFORMANCE_ENTRY_TYPE_MARK, "mark");
+perfHooks.performance.clearMarks("vite-start");
+assert.equal(perfHooks.performance.getEntriesByName("vite-start").length, 0);
 
 const readline = requireBuiltin("node:readline");
 readline.emitKeypressEvents({ on() {} });

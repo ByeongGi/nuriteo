@@ -12,6 +12,7 @@ export { builtinModules, createRequire, enableCompileCache, isBuiltin, Module, m
 export { connect as netConnect, createConnection as netCreateConnection, isIP, isIPv4, isIPv6, netBuiltin, Socket, UnsupportedTcpSocketError } from "./net.ts";
 export { arch, constants as osConstants, cpus, EOL, freemem, homedir, osBuiltin, platform, release, tmpdir, totalmem, type as osType, version as osVersion } from "./os.ts";
 export { basename, delimiter, dirname, extname, format as pathFormat, isAbsolute, join, normalize, parse as pathParse, pathBuiltin, posix, relative, resolve, sep } from "./path.ts";
+export { constants as perfHooksConstants, PerformanceObserver, performance, perfHooksBuiltin, type PerformanceEntry } from "./perf-hooks.ts";
 export { BrowserProcess, processBuiltin } from "./process.ts";
 export { decode as querystringDecode, encode as querystringEncode, escape as querystringEscape, parse as querystringParse, querystringBuiltin, stringify as querystringStringify, unescape as querystringUnescape } from "./querystring.ts";
 export { createInterface as createReadlineInterface, emitKeypressEvents, Interface as ReadlineInterface, readlineBuiltin } from "./readline.ts";

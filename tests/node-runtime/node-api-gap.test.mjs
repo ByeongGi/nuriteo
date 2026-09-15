@@ -37,6 +37,7 @@ for (const name of [
   "net",
   "os",
   "path",
+  "perf_hooks",
   "process",
   "querystring",
   "readline",

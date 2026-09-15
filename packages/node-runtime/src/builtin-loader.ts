@@ -13,6 +13,7 @@ import { moduleBuiltin } from "./builtins/module.ts";
 import { netBuiltin } from "./builtins/net.ts";
 import { osBuiltin } from "./builtins/os.ts";
 import { pathBuiltin } from "./builtins/path.ts";
+import { perfHooksBuiltin } from "./builtins/perf-hooks.ts";
 import { BrowserProcess } from "./builtins/process.ts";
 import { querystringBuiltin } from "./builtins/querystring.ts";
 import { readlineBuiltin } from "./builtins/readline.ts";
@@ -58,6 +59,7 @@ export function createBuiltinLoader(bindings: BuiltinBindings): (specifier: stri
     if (specifier === "os" || specifier === "node:os") return osBuiltin;
     if (specifier === "path" || specifier === "node:path") return pathBuiltin;
     if (specifier === "path/posix" || specifier === "node:path/posix") return pathBuiltin.posix;
+    if (specifier === "perf_hooks" || specifier === "node:perf_hooks") return perfHooksBuiltin;
     if (specifier === "process" || specifier === "node:process") return process;
     if (specifier === "querystring" || specifier === "node:querystring") return querystringBuiltin;
     if (specifier === "readline" || specifier === "node:readline") return readlineBuiltin;

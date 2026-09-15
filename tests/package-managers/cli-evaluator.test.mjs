@@ -282,15 +282,17 @@ const workspace = new MemoryPackageManagerWorkspace([
     path: "/workspace/esm-cli/package/dist/node/cli.js",
     data: `
       import { createRequire } from 'node:module';
+      import { performance } from 'node:perf_hooks';
       import defaultLabel, { namedLabel as renamedLabel, Factory } from './labels.js';
       import { reExportedLabel } from './re-export.js';
       import { starLabel, starNamespace } from './star.js';
       import * as namespaceLabels from './namespace.js';
       const require = createRequire(import.meta.url);
+      const mark = performance.mark('vite-cli-start');
       const config = require('./config.cjs');
       const manifest = require('../../package.json');
       const configResolved = require.resolve('./config.cjs').endsWith('/dist/node/config.cjs');
-      process.stdout.write(defaultLabel + ' ' + renamedLabel() + ' ' + namespaceLabels.namespaceLabel + ' ' + new Factory().label() + ' ' + reExportedLabel + ' ' + starLabel + ' ' + starNamespace.starLabel + ' ' + config.label + ' ' + manifest.version + ' ' + configResolved + '\\n');
+      process.stdout.write(defaultLabel + ' ' + renamedLabel() + ' ' + namespaceLabels.namespaceLabel + ' ' + new Factory().label() + ' ' + reExportedLabel + ' ' + starLabel + ' ' + starNamespace.starLabel + ' ' + config.label + ' ' + manifest.version + ' ' + configResolved + ' ' + mark.entryType + '\\n');
       export const started = true;
     `
   },
@@ -500,7 +502,7 @@ const asyncEsmResult = await createAsyncCliModuleEvaluator({
   args: ["--host", "127.0.0.1"],
   cwd: "/workspace/project"
 });
-assert.equal(asyncEsmResult.stdout, "vite esm boot class boot star star createRequire 1.2.3 true\n");
+assert.equal(asyncEsmResult.stdout, "vite esm boot class boot star star createRequire 1.2.3 true mark\n");
 assert.equal(asyncEsmResult.stderr, "");
 assert.equal(asyncEsmResult.exitCode, 0);
 

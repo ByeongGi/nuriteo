@@ -310,6 +310,21 @@
       "nextPhase": "P9-04"
     },
     {
+      "builtin": "perf_hooks",
+      "status": "partial",
+      "priority": 2,
+      "implementedBy": "packages/node-runtime/src/builtins/perf-hooks.ts",
+      "tests": ["tests/node-runtime/secondary-builtins.test.mjs"],
+      "requiredBy": ["Vite dev/build timing", "Rollup/plugin performance marks", "framework diagnostics"],
+      "minimumApi": ["performance.now", "performance.mark", "performance.measure", "performance.getEntries", "performance.getEntriesByName", "performance.getEntriesByType", "performance.clearMarks", "performance.clearMeasures", "PerformanceObserver", "constants"],
+      "acceptance": [
+        "Vite/Rollup timing imports from node:perf_hooks load under the browser runtime.",
+        "Marks and measures preserve Node-compatible entry shapes for timing probes.",
+        "PerformanceObserver provides a non-crashing browser-safe observer shape for feature probes."
+      ],
+      "nextPhase": "P11"
+    },
+    {
       "builtin": "url",
       "status": "partial",
       "priority": 2,

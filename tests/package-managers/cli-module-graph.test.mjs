@@ -80,7 +80,7 @@ assert.deepEqual(
 
 const esmGraphFiles = new Map([
   ["/workspace/vite/bin/vite.js", "import '../dist/node/cli.js';\n"],
-  ["/workspace/vite/dist/node/cli.js", "import { start } from './server.js';\nimport 'conditional-pkg';\nimport 'conditional-pkg/features/render';\nimport 'node:fs';\nstart();\n"],
+  ["/workspace/vite/dist/node/cli.js", "import { start } from './server.js';\nimport 'conditional-pkg';\nimport 'conditional-pkg/features/render';\nimport 'node:fs';\nimport 'node:perf_hooks';\nstart();\n"],
   ["/workspace/vite/dist/node/server.js", "export * as hmr from './hmr.js';\nexport const start = () => undefined;\n"],
   ["/workspace/vite/dist/node/hmr.js", "export const channel = 'hmr';\n"],
   ["/workspace/vite/node_modules/conditional-pkg/package.json", JSON.stringify({
@@ -118,7 +118,7 @@ assert.deepEqual(
   esmGraph.modules.map((mod) => [mod.path, mod.imports]),
   [
     ["/workspace/vite/bin/vite.js", ["../dist/node/cli.js"]],
-    ["/workspace/vite/dist/node/cli.js", ["./server.js", "conditional-pkg", "conditional-pkg/features/render", "node:fs"]],
+    ["/workspace/vite/dist/node/cli.js", ["./server.js", "conditional-pkg", "conditional-pkg/features/render", "node:fs", "node:perf_hooks"]],
     ["/workspace/vite/dist/node/server.js", ["./hmr.js"]],
     ["/workspace/vite/node_modules/conditional-pkg/esm.mjs", []],
     ["/workspace/vite/node_modules/conditional-pkg/features/render.mjs", []],
