@@ -5,6 +5,7 @@ import { createAsyncCliModuleEvaluator } from "../package-managers/cli-evaluator
 import { analyzeCliModuleGraph, type CliModuleGraph, type CliModuleGraphIssue } from "../package-managers/cli-module-graph.ts";
 import { inspectCliEntryReadiness, type CliEntryReadiness } from "../package-managers/cli-entry-readiness.ts";
 import { MemoryPackageManagerWorkspace, type PackageManagerWorkspaceMount } from "../package-managers/workspace.ts";
+import type { WasmAdapterPolicy, WasmAdapterPolicyAction } from "../wasm-adapters/index.ts";
 import type { WorkspaceModuleReader } from "../modules/index.ts";
 import type { CliRunResult, RuntimeEnv } from "../types.ts";
 
@@ -21,6 +22,7 @@ export interface ViteProductWorkflowOptions {
   initialLabel?: string;
   network?: LoopbackNetwork;
   port?: number;
+  wasmAdapterPolicy?: WasmAdapterPolicy;
 }
 
 export interface ViteProductPackageArtifact {
@@ -72,6 +74,7 @@ export interface ViteProductDependencyArtifactClosureOptions {
   projectRoot?: string;
   reader: WorkspaceModuleReader;
   vitePackageArtifact: ViteProductPackageArtifact;
+  wasmAdapterPolicy?: WasmAdapterPolicy;
 }
 
 export interface ViteProductDependencyArtifactClosureResult {
@@ -280,9 +283,17 @@ export interface ViteDependencyMaterializationItem {
   name: string;
   nextAction: string;
   specifiers: string[];
+  wasm?: ViteDependencyMaterializationWasmReplacement;
 }
 
 export type ViteDependencyMaterializationKind = "package-artifact" | "wasm-adapter-candidate" | "native-hold";
+
+export interface ViteDependencyMaterializationWasmReplacement {
+  adapterName?: string;
+  fallbackPolicy: "deny-native" | "prefer-wasm" | "allow-js";
+  status?: string;
+  wasmPackage: string;
+}
 
 export interface ViteDependencyMaterializationOptionalItem {
   kind: ViteDependencyMaterializationOptionalKind;
@@ -329,6 +340,7 @@ export class ViteProductWorkflow {
   readonly projectRoot: string;
   readonly dependencyArtifacts: ViteProductDependencyArtifact[];
   readonly vitePackageArtifact: ViteProductPackageArtifact | null;
+  readonly wasmAdapterPolicy: WasmAdapterPolicy | null;
   readonly workspace: MemoryPackageManagerWorkspace;
   readonly network: LoopbackNetwork;
   #state = { count: 1 };
@@ -356,6 +368,7 @@ export class ViteProductWorkflow {
     this.projectRoot = options.projectRoot || "/workspace/project";
     this.dependencyArtifacts = options.dependencyArtifacts || [];
     this.vitePackageArtifact = options.vitePackageArtifact || null;
+    this.wasmAdapterPolicy = options.wasmAdapterPolicy || null;
     this.network = options.network || createLoopbackNetwork();
     this.#port = options.port ?? 5173;
     this.workspace = new MemoryPackageManagerWorkspace(createViteMounts(this.projectRoot, this.template, options.initialLabel || "alpha"));
@@ -455,7 +468,7 @@ export class ViteProductWorkflow {
       cliEntrypoint,
       cliEntryReadiness,
       cliModuleGraph,
-      dependencyMaterializationPlan: createDependencyMaterializationPlan(cliModuleGraph, this.dependencyArtifacts),
+      dependencyMaterializationPlan: createDependencyMaterializationPlan(cliModuleGraph, this.dependencyArtifacts, this.wasmAdapterPolicy),
       missingCapabilities,
       nextAction: "Replace the adapter-backed Vite workflow with vendored Vite CLI/module execution once the listed runtime capabilities are implemented.",
       vitePackageSource: this.#vitePackageSource()
@@ -1120,7 +1133,8 @@ function uniquePackageNames(packages: string[]): string[] {
 
 function createDependencyMaterializationPlan(
   graph: CliModuleGraph,
-  dependencyArtifacts: readonly ViteProductDependencyArtifact[]
+  dependencyArtifacts: readonly ViteProductDependencyArtifact[],
+  wasmAdapterPolicy: WasmAdapterPolicy | null
 ): ViteDependencyMaterializationPlan {
   const satisfied = uniquePackageNames(dependencyArtifacts.map((artifact) => artifact.name)).sort();
   const satisfiedSet = new Set(satisfied);
@@ -1135,10 +1149,11 @@ function createDependencyMaterializationPlan(
   }
   const missing = [...missingSpecifiersByPackage.entries()]
     .map(([name, specifiers]) => ({
-      kind: classifyDependencyMaterialization(name),
+      kind: classifyDependencyMaterialization(name, wasmAdapterPolicy),
       name,
-      nextAction: nextActionForDependencyMaterialization(name),
-      specifiers: [...specifiers].sort()
+      nextAction: nextActionForDependencyMaterialization(name, wasmAdapterPolicy),
+      specifiers: [...specifiers].sort(),
+      ...wasmReplacementForDependency(name, wasmAdapterPolicy)
     }))
     .sort((left, right) => left.name.localeCompare(right.name));
   const optional = graph.issues
@@ -1165,6 +1180,7 @@ function inspectDependencyMaterializationPlan(
     manager: options.manager,
     vitePackageArtifact: options.vitePackageArtifact,
     dependencyArtifacts: [...dependencyArtifacts],
+    ...(options.wasmAdapterPolicy === undefined ? {} : { wasmAdapterPolicy: options.wasmAdapterPolicy }),
     ...(options.projectRoot === undefined ? {} : { projectRoot: options.projectRoot })
   });
   workflow.install();
@@ -1178,14 +1194,16 @@ function packageNameFromSpecifier(specifier: string): string | null {
   return parts[0] || null;
 }
 
-function classifyDependencyMaterialization(name: string): ViteDependencyMaterializationKind {
+function classifyDependencyMaterialization(name: string, wasmAdapterPolicy: WasmAdapterPolicy | null): ViteDependencyMaterializationKind {
+  const resolved = resolveWasmDependency(name, wasmAdapterPolicy);
+  if (resolved?.action === "use-wasm") return "wasm-adapter-candidate";
   if (name === "esbuild" || name === "rolldown") return "wasm-adapter-candidate";
   if (name === "lightningcss") return "native-hold";
   return "package-artifact";
 }
 
-function nextActionForDependencyMaterialization(name: string): string {
-  const kind = classifyDependencyMaterialization(name);
+function nextActionForDependencyMaterialization(name: string, wasmAdapterPolicy: WasmAdapterPolicy | null): string {
+  const kind = classifyDependencyMaterialization(name, wasmAdapterPolicy);
   if (kind === "wasm-adapter-candidate") {
     return "Materialize the JavaScript package surface and route native binding requests through an integrity-pinned WASM adapter.";
   }
@@ -1193,6 +1211,31 @@ function nextActionForDependencyMaterialization(name: string): string {
     return "Keep this dependency optional or blocked until a supported browser/WASM replacement is proven.";
   }
   return "Extract this package from an installed node_modules tree and mount it as a dependency artifact.";
+}
+
+function wasmReplacementForDependency(
+  name: string,
+  wasmAdapterPolicy: WasmAdapterPolicy | null
+): { wasm?: ViteDependencyMaterializationWasmReplacement } {
+  const resolved = resolveWasmDependency(name, wasmAdapterPolicy);
+  if (resolved?.action !== "use-wasm") return {};
+  return {
+    wasm: {
+      ...(resolved.adapterName === undefined ? {} : { adapterName: resolved.adapterName }),
+      fallbackPolicy: resolved.fallbackPolicy,
+      ...(resolved.status === undefined ? {} : { status: resolved.status }),
+      wasmPackage: resolved.wasmPackage
+    }
+  };
+}
+
+function resolveWasmDependency(name: string, wasmAdapterPolicy: WasmAdapterPolicy | null): WasmAdapterPolicyAction | null {
+  if (!wasmAdapterPolicy) return null;
+  try {
+    return wasmAdapterPolicy.resolvePackage(name);
+  } catch {
+    return null;
+  }
 }
 
 function nextActionForOptionalDependencyMaterialization(issue: CliModuleGraphIssue): string {

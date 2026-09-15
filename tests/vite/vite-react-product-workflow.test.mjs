@@ -11,6 +11,7 @@ import {
   createViteDependencyArtifactsFromPlan,
   createViteDependencyArtifactsFromWorkspace,
   createVitePackageArtifactFromWorkspace,
+  createWasmAdapterPolicy,
   MemoryPackageManagerWorkspace,
   mergeViteDependencyArtifacts,
   runViteProductCliBackedWorkflow,
@@ -402,9 +403,32 @@ const dependencyArtifactWorkflow = new ViteProductWorkflow({
     }
   ]
 });
+const viteWasmPolicy = createWasmAdapterPolicy({
+  adapters: [
+    {
+      name: "rolldown-wasi",
+      path: "vendor/rolldown.wasm",
+      sha256: "0".repeat(64),
+      exports: {
+        memory: "memory",
+        parseAst: "function"
+      }
+    }
+  ],
+  candidateReplacements: [
+    {
+      package: "rolldown",
+      adapterName: "rolldown-wasi",
+      wasmPackage: "@rolldown/binding-wasm32-wasi",
+      fallbackPolicy: "prefer-wasm",
+      status: "candidate-test-policy"
+    }
+  ]
+});
 const missingDependencyWorkflow = new ViteProductWorkflow({
   manager: "pnpm",
-  vitePackageArtifact: dependencyArtifactWorkflow.vitePackageArtifact
+  vitePackageArtifact: dependencyArtifactWorkflow.vitePackageArtifact,
+  wasmAdapterPolicy: viteWasmPolicy
 });
 missingDependencyWorkflow.install();
 assert.deepEqual(missingDependencyWorkflow.inspectRealCliReadiness().dependencyMaterializationPlan, {
@@ -423,7 +447,13 @@ assert.deepEqual(missingDependencyWorkflow.inspectRealCliReadiness().dependencyM
       kind: "wasm-adapter-candidate",
       name: "rolldown",
       nextAction: "Materialize the JavaScript package surface and route native binding requests through an integrity-pinned WASM adapter.",
-      specifiers: ["rolldown/parseAst"]
+      specifiers: ["rolldown/parseAst"],
+      wasm: {
+        adapterName: "rolldown-wasi",
+        fallbackPolicy: "prefer-wasm",
+        status: "candidate-test-policy",
+        wasmPackage: "@rolldown/binding-wasm32-wasi"
+      }
     }
   ],
   optional: [],
