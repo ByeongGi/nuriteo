@@ -1,0 +1,69 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-15",
+  "status": "p19-03-non-js-tooling-candidates",
+  "decisionCriteria": {
+    "productValue": ["common frontend workflow need", "project-local execution", "clear user-visible output"],
+    "maintenanceCost": ["artifact size", "WASI/syscall surface", "release cadence", "security patch pressure"],
+    "runtimeFit": ["no direct TCP", "project sandbox filesystem only", "bounded stdio", "deterministic adapter contract"]
+  },
+  "candidates": [
+    {
+      "id": "jq-wasm",
+      "tool": "jq",
+      "category": "json-transform",
+      "status": "candidate",
+      "productValue": "medium",
+      "maintenanceCost": "medium",
+      "runtimeFit": "good",
+      "reason": "Useful for package/config inspection and support diagnostics, but not essential for Vite React parity.",
+      "requiredBeforeSupport": ["integrity-pinned WASM artifact", "stdin/stdout fixture", "project sandbox file fixture"]
+    },
+    {
+      "id": "python-wasi",
+      "tool": "python",
+      "category": "general-purpose-language",
+      "status": "hold",
+      "productValue": "medium",
+      "maintenanceCost": "high",
+      "runtimeFit": "partial",
+      "reason": "Large runtime and broad stdlib/syscall expectations create high support cost for a Node/npm focused product.",
+      "requiredBeforeSupport": ["stdlib packaging policy", "import filesystem fixture", "network-denial diagnostics", "resource budget"]
+    },
+    {
+      "id": "sqlite-wasm",
+      "tool": "sqlite",
+      "category": "embedded-db",
+      "status": "candidate",
+      "productValue": "medium",
+      "maintenanceCost": "medium",
+      "runtimeFit": "good",
+      "reason": "Useful for local dev fixtures and package tools that accept embedded DB alternatives, but not a TCP database replacement.",
+      "requiredBeforeSupport": ["OPFS/project storage boundary fixture", "transaction durability fixture", "unsupported TCP DB diagnostic"]
+    },
+    {
+      "id": "git-wasm",
+      "tool": "git",
+      "category": "vcs",
+      "status": "hold",
+      "productValue": "high",
+      "maintenanceCost": "high",
+      "runtimeFit": "partial",
+      "reason": "High product value, but credential, network, packfile performance, and filesystem semantics need a dedicated phase.",
+      "requiredBeforeSupport": ["credential boundary", "fetch adapter policy", "packfile performance baseline", "project storage fixture"]
+    },
+    {
+      "id": "docker-linux-binary",
+      "tool": "docker",
+      "category": "container-runtime",
+      "status": "unsupported",
+      "productValue": "low-for-browser-parity-scope",
+      "maintenanceCost": "very-high",
+      "runtimeFit": "bad",
+      "reason": "Requires privileged OS/container features and direct networking outside the browser runtime model.",
+      "requiredBeforeSupport": []
+    }
+  ],
+  "firstSupportLane": ["jq-wasm", "sqlite-wasm"],
+  "excludedByDefault": ["docker-linux-binary", "arbitrary-linux-binary"]
+}
