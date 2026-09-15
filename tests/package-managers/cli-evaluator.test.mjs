@@ -245,15 +245,32 @@ const workspace = new MemoryPackageManagerWorkspace([
   {
     path: "/workspace/esm-cli/package/dist/node/cli.js",
     data: `
-      import defaultLabel, { namedLabel as renamedLabel } from './labels.js';
+      import defaultLabel, { namedLabel as renamedLabel, Factory } from './labels.js';
+      import { reExportedLabel } from './re-export.js';
       import * as namespaceLabels from './namespace.js';
-      process.stdout.write(defaultLabel + ' ' + renamedLabel + ' ' + namespaceLabels.namespaceLabel + '\\n');
+      process.stdout.write(defaultLabel + ' ' + renamedLabel() + ' ' + namespaceLabels.namespaceLabel + ' ' + new Factory().label() + ' ' + reExportedLabel + '\\n');
       export const started = true;
     `
   },
   {
     path: "/workspace/esm-cli/package/dist/node/labels.js",
-    data: "const defaultLabel = 'vite';\nconst namedLabel = 'esm';\nexport default defaultLabel;\nexport { namedLabel };\n"
+    data: `
+      const defaultLabel = 'vite';
+      export function namedLabel() {
+        return 'esm';
+      }
+      export class Factory {
+        label() {
+          return 'class';
+        }
+      }
+      export default defaultLabel;
+      export { namedLabel, Factory };
+    `
+  },
+  {
+    path: "/workspace/esm-cli/package/dist/node/re-export.js",
+    data: "export { namespaceLabel as reExportedLabel } from './namespace.js';\n"
   },
   {
     path: "/workspace/esm-cli/package/dist/node/namespace.js",
@@ -430,7 +447,7 @@ const asyncEsmResult = await createAsyncCliModuleEvaluator({
   args: ["--host", "127.0.0.1"],
   cwd: "/workspace/project"
 });
-assert.equal(asyncEsmResult.stdout, "vite esm boot\n");
+assert.equal(asyncEsmResult.stdout, "vite esm boot class boot\n");
 assert.equal(asyncEsmResult.stderr, "");
 assert.equal(asyncEsmResult.exitCode, 0);
 

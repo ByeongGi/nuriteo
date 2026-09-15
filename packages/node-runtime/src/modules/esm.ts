@@ -112,7 +112,13 @@ function prepareEsmSource(source: string): string {
     .replace(/^[ \t]*import\s+["']([^"']+)["'];?[ \t]*$/gm, "await __import(\"$1\");")
     .replace(/\bimport\s*\(/g, "__import(")
     .replace(/^[ \t]*export\s+const\s+([A-Za-z_$][\w$]*)\s*=\s*([^;\n]+);?[ \t]*$/gm, "const $1 = $2;\n__exportConst(\"$1\", $1);")
+    .replace(/^[ \t]*export\s+async\s+function\s+([A-Za-z_$][\w$]*)\s*\(/gm, "async function $1(")
+    .replace(/^[ \t]*export\s+function\s+([A-Za-z_$][\w$]*)\s*\(/gm, "function $1(")
+    .replace(/^[ \t]*export\s+class\s+([A-Za-z_$][\w$]*)\b/gm, "class $1")
     .replace(/^[ \t]*export\s+default\s+([^;\n]+);?[ \t]*$/gm, "__exportConst(\"default\", $1);")
+    .replace(/^[ \t]*export\s+\{([^}]+)\}\s+from\s+["']([^"']+)["'];?[ \t]*$/gm, (_match, clause: string, specifier: string) => {
+      return rewriteNamedReExport(clause, specifier);
+    })
     .replace(/^[ \t]*export\s+\{([^}]+)\};?[ \t]*$/gm, (_match, clause: string) => {
       return rewriteNamedExport(clause);
     });
@@ -149,4 +155,30 @@ function rewriteNamedExport(clause: string): string {
     })
     .filter(Boolean)
     .join("\n");
+}
+
+function rewriteNamedReExport(clause: string, specifier: string): string {
+  const temp = `__reexport_${Math.abs(hashString(`${specifier}:${clause}`))}`;
+  return [
+    `const ${temp} = await __import("${specifier}");`,
+    ...clause
+      .split(",")
+      .map((binding) => binding.trim())
+      .filter(Boolean)
+      .map((binding) => {
+        const [imported, exported] = binding.split(/\s+as\s+/);
+        const importedName = imported?.trim();
+        if (!importedName) return "";
+        return `__exportConst("${(exported || importedName).trim()}", ${temp}.${importedName});`;
+      })
+      .filter(Boolean)
+  ].join("\n");
+}
+
+function hashString(value: string): number {
+  let hash = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    hash = (hash * 31 + value.charCodeAt(index)) | 0;
+  }
+  return hash;
 }
