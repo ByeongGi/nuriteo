@@ -46,6 +46,10 @@ export function formatWithOptions(_options: RuntimeValue, first: RuntimeValue, .
   return format(first, ...args);
 }
 
+export function styleText(_format: RuntimeValue, text: RuntimeValue): string {
+  return String(text);
+}
+
 export function inherits(ctor: Function, superCtor: Function): void {
   if (typeof ctor !== "function" || typeof superCtor !== "function") throw new TypeError("ctor and superCtor must be functions");
   Object.setPrototypeOf(ctor.prototype, superCtor.prototype);
@@ -104,5 +108,6 @@ export const utilBuiltin = Object.freeze({
   inherits,
   inspect,
   promisify,
+  styleText,
   types
 });

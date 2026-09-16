@@ -354,6 +354,15 @@ runtime.registerMany({
       exports.consoleType = typeof console.log;
     `
   },
+  "/workspace/source-local-globals.mjs": {
+    kind: "esm-source",
+    source: `
+      const global = { marker: "local-esm-global" };
+      const console = { log: "local-esm-log" };
+      export const globalMarker = global.marker;
+      export const consoleType = typeof console.log;
+    `
+  },
   "/workspace/dot-require/entry.cjs": {
     kind: "cjs-source",
     source: `
@@ -449,6 +458,10 @@ assert.deepEqual(runtime.requireSync("./source-runtime-globals.cjs", "/workspace
 });
 assert.deepEqual(runtime.requireSync("./source-local-globals.cjs", "/workspace/index.cjs"), {
   globalMarker: "local-global",
+  consoleType: "string"
+});
+assert.deepEqual(await runtime.importModule("./source-local-globals.mjs", "/workspace/index.mjs"), {
+  globalMarker: "local-esm-global",
   consoleType: "string"
 });
 assert.deepEqual(runtime.requireSync("./dot-require/entry.cjs", "/workspace/index.cjs"), {

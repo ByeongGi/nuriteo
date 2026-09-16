@@ -162,11 +162,11 @@ function createEsmSourceCompiler(options: {
   try {
     compiled = new AsyncFunction(
       "__context",
-      "process",
-      "global",
-      "console",
-      "globalThis",
-      `const __import = __context.dynamicImport;\nconst __exportConst = __context.exportConst;\nconst __exportLive = __context.exportLive;\n${preparedSource}\n//# sourceURL=${filename}`
+      "__process",
+      "__global",
+      "__console",
+      "__globalThis",
+      `${prepareEsmRuntimeGlobals(preparedSource)}\n//# sourceURL=${filename}`
     ) as typeof compiled;
   } catch (error) {
     if (!isDynamicCodeBlocked(error)) throw error;
@@ -182,11 +182,11 @@ function createSyncEsmSourceCompiler(source: string, filename: string, globals: 
   try {
     compiled = new Function(
       "__context",
-      "process",
-      "global",
-      "console",
-      "globalThis",
-      `const __import = __context.importNamespace;\nconst __exportConst = __context.exportConst;\nconst __exportLive = __context.exportLive;\n${source}\n//# sourceURL=${filename}`
+      "__process",
+      "__global",
+      "__console",
+      "__globalThis",
+      `${prepareEsmRuntimeGlobals(source, "importNamespace")}\n//# sourceURL=${filename}`
     ) as (context: EsmContext, process: RuntimeValue, global: RuntimeValue, console: RuntimeValue, globalThis: RuntimeValue) => void;
   } catch (error) {
     if (error instanceof SyntaxError && /await is only valid|Unexpected reserved word/i.test(error.message)) {
@@ -195,6 +195,19 @@ function createSyncEsmSourceCompiler(source: string, filename: string, globals: 
     throw error;
   }
   return (context) => compiled(context, globals.process, globals.global, globals.console ?? console, globals.globalThis ?? globals.global);
+}
+
+function prepareEsmRuntimeGlobals(source: string, importHook: "dynamicImport" | "importNamespace" = "dynamicImport"): string {
+  const injections = [
+    `const __import = __context.${importHook};`,
+    "const __exportConst = __context.exportConst;",
+    "const __exportLive = __context.exportLive;"
+  ];
+  if (!declaresLexicalBinding(source, "process")) injections.push("const process = __process;");
+  if (!declaresLexicalBinding(source, "global")) injections.push("const global = __global;");
+  if (!declaresLexicalBinding(source, "globalThis")) injections.push("const globalThis = __globalThis;");
+  if (!declaresLexicalBinding(source, "console")) injections.push("const console = __console;");
+  return `${injections.join("\n")}\n${source}`;
 }
 
 function compileEvalFreeEsmSource(source: string, globals: Record<string, RuntimeValue>): ((context: EsmContext) => Promise<void>) | null {
@@ -612,6 +625,11 @@ function unescapeJsString(value: string): string {
     .replaceAll("\\\\", "\\")
     .replaceAll("\\'", "'")
     .replaceAll('\\"', '"');
+}
+
+function declaresLexicalBinding(source: string, name: string): boolean {
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(?:^|[\\n;])\\s*(?:const|let|var|class|function)\\s+${escaped}\\b`).test(source);
 }
 
 function prepareEsmSource(source: string): string {

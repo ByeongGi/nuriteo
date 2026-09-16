@@ -1023,6 +1023,13 @@ function createSupportsColorNamespace(): RuntimeNamespace {
   };
 }
 
+function normalizeFsPath(path: string | URL | { href?: string }): string {
+  if (typeof path === "string") return normalize(path);
+  if (path instanceof URL) return normalize(fileURLToPath(path.href));
+  if (typeof path.href === "string" && path.href.startsWith("file:")) return normalize(fileURLToPath(path.href));
+  throw new TypeError("Path must be a string or file URL");
+}
+
 function createWorkspaceFsFacade(reader: WorkspaceModuleReader, writer?: PackageManagerWorkspaceWriter): RuntimeFsBinding {
   const decoder = new TextDecoder();
   const encoder = new TextEncoder();
@@ -1031,14 +1038,14 @@ function createWorkspaceFsFacade(reader: WorkspaceModuleReader, writer?: Package
   const watchers = new Set<CliFsWatcher>();
   const statWatchers = new Map<string, Set<CliFsStatWatcher>>();
   const realpath: CliFsRealpath = (path, callback) => {
-    callback(null, normalize(path));
+    callback(null, normalizeFsPath(path));
   };
   realpath.native = realpath;
 
-  function readFileSync(path: string): Uint8Array;
-  function readFileSync(path: string, encoding: "utf8" | "utf-8"): string;
-  function readFileSync(path: string, encoding?: "utf8" | "utf-8"): Uint8Array | string {
-    const bytes = readWorkspaceBytes(reader, normalize(path), encoder);
+  function readFileSync(path: string | URL): Uint8Array;
+  function readFileSync(path: string | URL, encoding: "utf8" | "utf-8"): string;
+  function readFileSync(path: string | URL, encoding?: "utf8" | "utf-8"): Uint8Array | string {
+    const bytes = readWorkspaceBytes(reader, normalizeFsPath(path), encoder);
     return encoding ? decoder.decode(bytes) : BrowserBuffer.from(bytes);
   }
 

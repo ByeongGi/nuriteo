@@ -20,7 +20,7 @@ export function evaluateCjs(runtime: ModuleRuntime, url: string): RuntimeValue {
       const pending = runtime.importModule(canonicalUrl);
       const record = runtime.cache.esm.get(canonicalUrl);
       pending.catch(() => undefined);
-      return record?.namespace || {};
+      return createPendingEsmNamespaceProxy(record?.namespace || {});
     }
   }
 
@@ -55,6 +55,39 @@ export function evaluateCjs(runtime: ModuleRuntime, url: string): RuntimeValue {
 
 function isRequireAsyncModuleError(error: unknown): boolean {
   return error instanceof Error && error.message.includes("ERR_REQUIRE_ASYNC_MODULE");
+}
+
+function createPendingEsmNamespaceProxy(namespace: RuntimeNamespace): RuntimeNamespace {
+  const knownProperties = new Set<PropertyKey>(Reflect.ownKeys(namespace));
+  const placeholder = function AsyncEsmBindingPlaceholder() {};
+  return new Proxy(namespace, {
+    defineProperty(target, property, descriptor) {
+      knownProperties.add(property);
+      return Reflect.defineProperty(target, property, descriptor);
+    },
+    get(target, property, receiver) {
+      if (property === "__esModule") return true;
+      const value = Reflect.get(target, property, receiver);
+      if (value !== undefined) return value;
+      return typeof property === "string" ? placeholder : value;
+    },
+    getOwnPropertyDescriptor(target, property) {
+      knownProperties.add(property);
+      return Reflect.getOwnPropertyDescriptor(target, property) || {
+        configurable: true,
+        enumerable: true,
+        get: () => Reflect.get(target, property) ?? placeholder
+      };
+    },
+    ownKeys(target) {
+      return [...new Set([...Reflect.ownKeys(target), ...knownProperties])]
+        .filter((property): property is string | symbol => typeof property !== "number");
+    },
+    set(_target, property) {
+      knownProperties.add(property);
+      return true;
+    }
+  });
 }
 
 function createCjsRequire(runtime: ModuleRuntime, filename: string, dirname: string): CjsContext["require"] {
