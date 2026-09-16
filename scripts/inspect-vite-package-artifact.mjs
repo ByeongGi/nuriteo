@@ -217,6 +217,7 @@ async function runExecutionSmoke(vitePackageArtifact, dependencyArtifacts, optio
   }
   const fetchResults = await fetchExecutionSmokePaths(workflow, options.fetchPaths);
   result.closeBridgedServers?.();
+  const distArtifacts = summarizeDistArtifacts(result.workspaceSnapshot);
   return {
     args: result.args,
     env,
@@ -241,8 +242,36 @@ async function runExecutionSmoke(vitePackageArtifact, dependencyArtifacts, optio
     stderrPreview: previewText(result.stderr),
     stdoutFirstLine: firstNonEmptyLine(result.stdout),
     stdoutPreview: previewText(result.stdout),
+    distArtifactBlocker: classifyDistArtifactBlocker(result.args, result.exitCode, distArtifacts),
+    distArtifacts,
     ...(fetchResults ? { fetchResults } : {}),
     ...(options.executionIsolation === "worker" ? { workerTimeoutMs: options.workerTimeoutMs } : {})
+  };
+}
+
+function classifyDistArtifactBlocker(args, exitCode, distArtifacts) {
+  if (!args.includes("build")) return null;
+  if (exitCode !== 0) return null;
+  if (!distArtifacts || distArtifacts.count > 0) return null;
+  return {
+    code: "EVITEDISTEMPTY",
+    reason: "build-exited-without-dist-artifacts"
+  };
+}
+
+function summarizeDistArtifacts(workspaceSnapshot) {
+  if (!workspaceSnapshot?.files) return null;
+  const files = workspaceSnapshot.files
+    .filter((file) => file.path.startsWith("/workspace/project/dist/"))
+    .map((file) => ({
+      encoding: file.encoding,
+      path: file.path.replace("/workspace/project/", ""),
+      size: String(file.data || "").length
+    }))
+    .sort((left, right) => left.path.localeCompare(right.path));
+  return {
+    count: files.length,
+    files
   };
 }
 
