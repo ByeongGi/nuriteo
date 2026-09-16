@@ -2,11 +2,12 @@ import { createFailedMessage, createReadyMessage } from "../packages/protocol/sr
 import { OPCODES } from "../packages/protocol/src/generated.ts";
 import { requestSync } from "../packages/protocol/src/sync-client.ts";
 import { runNodeProgram } from "../packages/node-runtime/src/bootstrap.ts";
-import { evaluateCliModuleWorkerMessage } from "../packages/node-runtime/src/package-managers/cli-evaluator.ts";
+import { createCliEvaluationHttpBridge, evaluateCliModuleWorkerMessage } from "../packages/node-runtime/src/package-managers/cli-evaluator.ts";
 
 let systemPort = null;
 let syncChannel = null;
 let nextRequestId = 1;
+const cliHttpBridges = new Map();
 
 self.addEventListener("message", (event) => {
   if (event.data?.type === "boot") {
@@ -40,6 +41,8 @@ self.addEventListener("message", (event) => {
     runProgram(event.data);
   } else if (event.data?.type === "cli:evaluate") {
     evaluateCli(event.data);
+  } else if (event.data?.type === "cli:http:request") {
+    handleCliHttpRequest(event.data);
   }
 });
 
@@ -86,5 +89,36 @@ function runProgram(message) {
 }
 
 async function evaluateCli(message) {
-  self.postMessage(await evaluateCliModuleWorkerMessage(message));
+  const httpBridge = message.bridgeLoopbackServer ? createCliEvaluationHttpBridge() : null;
+  const response = await evaluateCliModuleWorkerMessage(message, httpBridge ? { httpBridge } : {});
+  if (httpBridge && response.result?.bridgedServerPorts?.length) cliHttpBridges.set(message.id, httpBridge);
+  self.postMessage(response);
+}
+
+async function handleCliHttpRequest(message) {
+  const bridge = cliHttpBridges.get(message.evaluationId);
+  if (!bridge) {
+    self.postMessage({
+      error: `missing CLI HTTP bridge: ${message.evaluationId}`,
+      evaluationId: message.evaluationId,
+      id: message.id,
+      type: "cli:http:response"
+    });
+    return;
+  }
+  try {
+    self.postMessage({
+      evaluationId: message.evaluationId,
+      id: message.id,
+      response: await bridge.handleRequest(message.port, message.request),
+      type: "cli:http:response"
+    });
+  } catch (error) {
+    self.postMessage({
+      error: error instanceof Error ? error.message : String(error),
+      evaluationId: message.evaluationId,
+      id: message.id,
+      type: "cli:http:response"
+    });
+  }
 }

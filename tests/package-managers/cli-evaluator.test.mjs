@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   classifyCliEntryModuleMode,
   createAsyncCliModuleEvaluator,
+  createCliEvaluationHttpBridge,
   createCliModuleEvaluator,
   createLoopbackNetwork,
   createGuestRuntimeProcessRunner,
@@ -19,6 +20,7 @@ class FakeCliEvaluationWorker {
     message: new Set(),
     error: new Set()
   };
+  #httpBridges = new Map();
   #terminated = false;
 
   addEventListener(type, listener) {
@@ -33,7 +35,21 @@ class FakeCliEvaluationWorker {
     queueMicrotask(async () => {
       if (this.#terminated) return;
       try {
-        const response = await evaluateCliModuleWorkerMessage(message);
+        if (message.type === "cli:http:request") {
+          const bridge = this.#httpBridges.get(message.evaluationId);
+          if (!bridge) throw new Error(`missing CLI HTTP bridge: ${message.evaluationId}`);
+          const response = {
+            evaluationId: message.evaluationId,
+            id: message.id,
+            response: await bridge.handleRequest(message.port, message.request),
+            type: "cli:http:response"
+          };
+          for (const listener of this.#listeners.message) listener({ data: response });
+          return;
+        }
+        const bridge = message.bridgeLoopbackServer ? createCliEvaluationHttpBridge() : null;
+        const response = await evaluateCliModuleWorkerMessage(message, bridge ? { httpBridge: bridge } : {});
+        if (bridge && response.result?.bridgedServerPorts?.length) this.#httpBridges.set(message.id, bridge);
         for (const listener of this.#listeners.message) listener({ data: response });
       } catch (error) {
         for (const listener of this.#listeners.error) listener({ message: error instanceof Error ? error.message : String(error) });
@@ -930,6 +946,34 @@ const httpServerResponse = await httpServerNetwork.fetch("http://127.0.0.1:6123/
 assert.equal(httpServerResponse.statusCode, 200);
 assert.equal(httpServerResponse.headers?.["x-cli-server"], "loopback");
 assert.equal(httpServerResponse.body, "served:POST:/src/main.js");
+
+const workerHttpServerNetwork = createLoopbackNetwork();
+const workerHttpServerResult = await createWorkerBackedAsyncCliModuleEvaluator({
+  loopbackNetwork: workerHttpServerNetwork,
+  root: "/workspace",
+  workerFactory: () => new FakeCliEvaluationWorker(),
+  workspace: httpServerBridgeWorkspace
+})({
+  entry: {
+    name: "http-server",
+    version: "1.0.0",
+    entry: "/workspace/http-server/package/bin/server.cjs"
+  },
+  args: [],
+  cwd: "/workspace/project"
+});
+assert.equal(workerHttpServerResult.stderr, "");
+assert.equal(workerHttpServerResult.exitCode, 0);
+assert.deepEqual(workerHttpServerResult.bridgedServerPorts, [6123]);
+const workerHttpServerResponse = await workerHttpServerNetwork.fetch("http://127.0.0.1:6123/worker.js", { method: "PUT", body: "worker-body" });
+assert.equal(workerHttpServerResponse.statusCode, 200);
+assert.equal(workerHttpServerResponse.headers?.["x-cli-server"], "loopback");
+assert.equal(workerHttpServerResponse.body, "served:PUT:/worker.js");
+workerHttpServerResult.closeBridgedServers?.();
+await assert.rejects(
+  workerHttpServerNetwork.fetch("http://127.0.0.1:6123/worker.js"),
+  (error) => error.code === "ECONNREFUSED"
+);
 
 const pendingCliWorkspace = new MemoryPackageManagerWorkspace([
   {

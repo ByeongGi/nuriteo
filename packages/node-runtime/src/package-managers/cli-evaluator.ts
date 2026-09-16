@@ -10,7 +10,7 @@ import { Readable, Writable } from "../builtins/stream.ts";
 import { fileURLToPath } from "../builtins/url.ts";
 import { createWorkspaceModuleRuntime, type WorkspaceModuleReader } from "../modules/index.ts";
 import type { ModuleRuntime } from "../modules/runtime.ts";
-import type { LoopbackNetwork } from "../net/index.ts";
+import { createLoopbackNetwork, type LoopbackNetwork, type RuntimeHttpRequest, type RuntimeHttpResponse } from "../net/index.ts";
 import type { CliEntry, CliRunResult, RuntimeEnv, RuntimeFsBinding, RuntimeFsData, RuntimeNamespace, RuntimeValue } from "../types.ts";
 import { inspectCliEntryReadiness } from "./cli-entry-readiness.ts";
 import { MemoryPackageManagerWorkspace, type PackageManagerWorkspaceSnapshot, type PackageManagerWorkspaceWriter } from "./workspace.ts";
@@ -34,11 +34,13 @@ export interface IsolatedAsyncCliModuleEvaluatorOptions extends Omit<AsyncCliMod
 }
 
 export interface IsolatedCliRunResult extends CliRunResult {
+  bridgedServerPorts?: number[];
   capturedGlobalCalls?: CliEvaluationCapturedGlobalCall[];
+  closeBridgedServers?: () => void;
   workspaceSnapshot: PackageManagerWorkspaceSnapshot;
 }
 
-export interface WorkerBackedAsyncCliModuleEvaluatorOptions extends Omit<AsyncCliModuleEvaluatorOptions, "globals" | "loopbackNetwork" | "reader" | "writer"> {
+export interface WorkerBackedAsyncCliModuleEvaluatorOptions extends Omit<AsyncCliModuleEvaluatorOptions, "globals" | "reader" | "writer"> {
   captureGlobalCalls?: readonly string[];
   workerFactory: CliEvaluationWorkerFactory;
   workerTimeoutMs?: number;
@@ -61,9 +63,12 @@ export interface CliEvaluationWorkerPort {
 
 export type CliEvaluationWorkerMessage =
   | CliEvaluationWorkerEvaluateMessage
+  | CliEvaluationWorkerHttpRequestMessage
+  | CliEvaluationWorkerHttpResponseMessage
   | CliEvaluationWorkerResultMessage;
 
 export interface CliEvaluationWorkerEvaluateMessage {
+  bridgeLoopbackServer?: boolean;
   captureGlobalCalls?: readonly string[];
   id: number;
   readyTimeoutMs?: number;
@@ -80,6 +85,28 @@ export interface CliEvaluationWorkerResultMessage {
   id: number;
   result?: IsolatedCliRunResult;
   type: "cli:result";
+}
+
+export interface CliEvaluationWorkerHttpRequestMessage {
+  evaluationId: number;
+  id: number;
+  port: number;
+  request: RuntimeHttpRequest;
+  type: "cli:http:request";
+}
+
+export interface CliEvaluationWorkerHttpResponseMessage {
+  error?: string;
+  evaluationId: number;
+  id: number;
+  response?: RuntimeHttpResponse;
+  type: "cli:http:response";
+}
+
+export interface CliEvaluationHttpBridge {
+  handleRequest(port: number, request: RuntimeHttpRequest): Promise<RuntimeHttpResponse>;
+  network: LoopbackNetwork;
+  ports(): number[];
 }
 
 export interface CliModuleEvaluationRequest {
@@ -137,19 +164,79 @@ export function createWorkerBackedAsyncCliModuleEvaluator(
     const id = nextCliEvaluationWorkerRequestId++;
     return new Promise((resolve, reject) => {
       let timeout: ReturnType<typeof setTimeout> | undefined;
+      const bridgedListeners: Array<{ close: () => void }> = [];
+      const pendingHttpRequests = new Map<number, {
+        reject: (error: Error) => void;
+        resolve: (response: RuntimeHttpResponse) => void;
+      }>();
+      let nextHttpRequestId = 1;
       const cleanup = () => {
         if (timeout) clearTimeout(timeout);
         worker.removeEventListener("message", onMessage);
         worker.removeEventListener("error", onError);
         worker.terminate();
       };
+      const closeBridgedServers = () => {
+        if (timeout) clearTimeout(timeout);
+        for (const listener of bridgedListeners) listener.close();
+        bridgedListeners.length = 0;
+        pendingHttpRequests.clear();
+        worker.removeEventListener("message", onMessage);
+        worker.removeEventListener("error", onError);
+        worker.terminate();
+      };
       const onMessage = (event: MessageEvent | ErrorEvent) => {
-        const data = "data" in event ? event.data as Partial<CliEvaluationWorkerResultMessage> : undefined;
+        const data = "data" in event ? event.data as Partial<CliEvaluationWorkerMessage> : undefined;
+        if (data?.type === "cli:http:response" && data.evaluationId === id) {
+          if (typeof data.id !== "number") return;
+          const pending = pendingHttpRequests.get(data.id);
+          if (!pending) return;
+          pendingHttpRequests.delete(data.id);
+          if (data.error) pending.reject(new Error(data.error));
+          else if (data.response) pending.resolve(data.response);
+          else pending.reject(new Error("CLI evaluation worker returned no HTTP response"));
+          return;
+        }
         if (data?.type !== "cli:result" || data.id !== id) return;
-        cleanup();
-        if (data.error) reject(new Error(data.error));
-        else if (data.result) resolve(data.result);
-        else reject(new Error("CLI evaluation worker returned no result"));
+        if (data.error) {
+          cleanup();
+          reject(new Error(data.error));
+          return;
+        }
+        if (!data.result) {
+          cleanup();
+          reject(new Error("CLI evaluation worker returned no result"));
+          return;
+        }
+        const bridgedPorts = options.loopbackNetwork ? data.result.bridgedServerPorts || [] : [];
+        if (bridgedPorts.length === 0) {
+          cleanup();
+          resolve(data.result);
+          return;
+        }
+        if (timeout) clearTimeout(timeout);
+        for (const port of bridgedPorts) {
+          bridgedListeners.push(options.loopbackNetwork!.listen(port, (request) => {
+            const requestId = nextHttpRequestId++;
+            return new Promise<RuntimeHttpResponse>((resolveRequest, rejectRequest) => {
+              pendingHttpRequests.set(requestId, {
+                reject: rejectRequest,
+                resolve: resolveRequest
+              });
+              worker.postMessage({
+                evaluationId: id,
+                id: requestId,
+                port,
+                request,
+                type: "cli:http:request"
+              } satisfies CliEvaluationWorkerHttpRequestMessage);
+            });
+          }));
+        }
+        resolve({
+          ...data.result,
+          closeBridgedServers
+        });
       };
       const onError = (event: MessageEvent | ErrorEvent) => {
         cleanup();
@@ -171,6 +258,7 @@ export function createWorkerBackedAsyncCliModuleEvaluator(
         ...(options.settleTicks !== undefined ? { settleTicks: options.settleTicks } : {}),
         ...(options.settleTimeoutMs !== undefined ? { settleTimeoutMs: options.settleTimeoutMs } : {}),
         ...(options.captureGlobalCalls !== undefined ? { captureGlobalCalls: options.captureGlobalCalls } : {}),
+        ...(options.loopbackNetwork ? { bridgeLoopbackServer: true } : {}),
         type: "cli:evaluate",
         workspaceSnapshot: options.workspace.snapshot()
       } satisfies CliEvaluationWorkerEvaluateMessage);
@@ -179,7 +267,8 @@ export function createWorkerBackedAsyncCliModuleEvaluator(
 }
 
 export async function evaluateCliModuleWorkerMessage(
-  message: CliEvaluationWorkerEvaluateMessage
+  message: CliEvaluationWorkerEvaluateMessage,
+  options: { httpBridge?: CliEvaluationHttpBridge } = {}
 ): Promise<CliEvaluationWorkerResultMessage> {
   try {
     const workspace = MemoryPackageManagerWorkspace.fromSnapshot(message.workspaceSnapshot);
@@ -191,12 +280,14 @@ export async function evaluateCliModuleWorkerMessage(
       ...(message.readyTimeoutMs !== undefined ? { readyTimeoutMs: message.readyTimeoutMs } : {}),
       ...(message.settleTicks !== undefined ? { settleTicks: message.settleTicks } : {}),
       ...(message.settleTimeoutMs !== undefined ? { settleTimeoutMs: message.settleTimeoutMs } : {}),
+      ...(options.httpBridge ? { loopbackNetwork: options.httpBridge.network } : {}),
       writer: workspace
     })(message.request);
     return {
       id: message.id,
       result: {
         ...result,
+        ...(options.httpBridge ? { bridgedServerPorts: options.httpBridge.ports() } : {}),
         ...(message.captureGlobalCalls ? { capturedGlobalCalls } : {}),
         workspaceSnapshot: workspace.snapshot()
       },
@@ -209,6 +300,21 @@ export async function evaluateCliModuleWorkerMessage(
       type: "cli:result"
     };
   }
+}
+
+export function createCliEvaluationHttpBridge(): CliEvaluationHttpBridge {
+  const network = createLoopbackNetwork();
+  return {
+    async handleRequest(port, request) {
+      return network.fetch(`http://127.0.0.1:${port}${request.path}`, {
+        headers: request.headers,
+        method: request.method,
+        ...(request.body === undefined ? {} : { body: request.body })
+      });
+    },
+    network,
+    ports: () => [...network.listeners.keys()]
+  };
 }
 
 function createCapturedGlobalCallHandlers(

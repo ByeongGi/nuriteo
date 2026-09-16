@@ -599,6 +599,7 @@ export class ViteProductWorkflow {
           "__viteRegisterDevServer",
           "__viteRegisterTransform"
         ],
+        loopbackNetwork: this.network,
         workerFactory: options.workerFactory!,
         ...(options.workerTimeoutMs !== undefined ? { workerTimeoutMs: options.workerTimeoutMs } : {}),
         workspace: this.workspace
@@ -676,12 +677,12 @@ export class ViteProductWorkflow {
     return this.#snapshot();
   }
 
-  async startDevServerFromCliExecution(name = "dev"): Promise<ViteProductDevServerSnapshot> {
+  async startDevServerFromCliExecution(name = "dev", options: ViteProductCliExecutionOptions = {}): Promise<ViteProductDevServerSnapshot> {
     const command = this.#readScript(name);
     assertViteDevCommand(command);
     const cliEntrypoint = this.#resolveCommandEntrypoint(command);
     const args = commandArgs(command);
-    const cliExecution = await this.executeRealCli(args, { PORT: String(this.#port) });
+    const cliExecution = await this.executeRealCli(args, { PORT: String(this.#port) }, options);
     const registration = cliExecution.serverRegistrations.at(-1);
     if (!registration) {
       if (cliExecution.exitCode !== 0) throw new Error(cliExecution.stderr || "ERR_VITE_CLI_SERVER_REGISTRATION_MISSING");

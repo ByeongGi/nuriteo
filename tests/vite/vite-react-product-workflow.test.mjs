@@ -4,6 +4,7 @@ import {
   applyNpmInstallPlan,
   applyPnpmStorePlan,
   createLoopbackNetwork,
+  createCliEvaluationHttpBridge,
   createNpmInstallPlan,
   createPnpmStorePlan,
   createViteDependencyArtifactClosureFromWorkspace,
@@ -26,6 +27,7 @@ class FakeCliEvaluationWorker {
     message: new Set(),
     error: new Set()
   };
+  #httpBridges = new Map();
   #terminated = false;
 
   addEventListener(type, listener) {
@@ -40,7 +42,21 @@ class FakeCliEvaluationWorker {
     queueMicrotask(async () => {
       if (this.#terminated) return;
       try {
-        const response = await evaluateCliModuleWorkerMessage(message);
+        if (message.type === "cli:http:request") {
+          const bridge = this.#httpBridges.get(message.evaluationId);
+          if (!bridge) throw new Error(`missing CLI HTTP bridge: ${message.evaluationId}`);
+          const response = {
+            evaluationId: message.evaluationId,
+            id: message.id,
+            response: await bridge.handleRequest(message.port, message.request),
+            type: "cli:http:response"
+          };
+          for (const listener of this.#listeners.message) listener({ data: response });
+          return;
+        }
+        const bridge = message.bridgeLoopbackServer ? createCliEvaluationHttpBridge() : null;
+        const response = await evaluateCliModuleWorkerMessage(message, bridge ? { httpBridge: bridge } : {});
+        if (bridge && response.result?.bridgedServerPorts?.length) this.#httpBridges.set(message.id, bridge);
         for (const listener of this.#listeners.message) listener({ data: response });
       } catch (error) {
         for (const listener of this.#listeners.error) listener({ message: error instanceof Error ? error.message : String(error) });
@@ -232,6 +248,30 @@ for (const manager of ["npm", "pnpm"]) {
   const httpServerPreview = await httpServerArtifactWorkflow.fetch("http://127.0.0.1:5304/index.html");
   assert.equal(httpServerPreview.status, 200);
   assert.equal(await httpServerPreview.text(), "actual-server:/index.html");
+  const workerHttpServerNetwork = createLoopbackNetwork();
+  const workerHttpServerArtifactWorkflow = new ViteProductWorkflow({
+    manager,
+    template,
+    projectId: `${manager}-${template}-worker-http-cli`,
+    network: workerHttpServerNetwork,
+    port: 5305,
+    vitePackageArtifact: {
+      version: "9.0.0-worker-http-server",
+      mounts: httpServerArtifactWorkflow.vitePackageArtifact.mounts
+    }
+  });
+  workerHttpServerArtifactWorkflow.install();
+  const workerHttpServerStarted = await workerHttpServerArtifactWorkflow.startDevServerFromCliExecution("dev", {
+    isolation: "worker",
+    workerFactory: () => new FakeCliEvaluationWorker()
+  });
+  assert.equal(workerHttpServerStarted.running, true);
+  assert.equal(workerHttpServerStarted.source, "cli-execution");
+  assert.equal(workerHttpServerStarted.moduleTransform, "vite-cli");
+  assert.equal(workerHttpServerStarted.port, 5305);
+  const workerHttpServerPreview = await workerHttpServerArtifactWorkflow.fetch("http://127.0.0.1:5305/worker-index.html");
+  assert.equal(workerHttpServerPreview.status, 200);
+  assert.equal(await workerHttpServerPreview.text(), "actual-server:/worker-index.html");
   const cliHmrEvents = [];
   const cliHmr = createHmrClient({
     connect() {
