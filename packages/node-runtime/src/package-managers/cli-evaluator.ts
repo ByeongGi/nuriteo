@@ -4,7 +4,7 @@ import { ChildProcess, UnsupportedChildProcessError, type SpawnSyncResult } from
 import { constantsBuiltin } from "../builtins/constants.ts";
 import { EventEmitter } from "../builtins/events.ts";
 import { builtinModules, moduleBuiltin, Module as RuntimeModuleBuiltin } from "../builtins/module.ts";
-import { dirname, normalize } from "../builtins/path.ts";
+import { dirname, isAbsolute, join, normalize } from "../builtins/path.ts";
 import { BrowserProcess } from "../builtins/process.ts";
 import { Readable, Writable } from "../builtins/stream.ts";
 import { fileURLToPath } from "../builtins/url.ts";
@@ -406,7 +406,7 @@ function startCliModuleEvaluation(
   globalObject.global = globalObject;
   globalObject.globalThis = globalObject;
   globalObject.process = process;
-  const fs = createWorkspaceFsFacade(options.reader, options.writer);
+  const fs = createWorkspaceFsFacade(options.reader, options.writer, () => process.cwd());
 
   const workerThreads = createCliWorkerThreadsBuiltin({
     fs,
@@ -1138,29 +1138,34 @@ function createSupportsColorNamespace(): RuntimeNamespace {
   };
 }
 
-function normalizeFsPath(path: string | URL | { href?: string }): string {
-  if (typeof path === "string") return normalize(path);
+function normalizeFsPath(path: string | URL | { href?: string }, cwd: string): string {
+  if (typeof path === "string") return normalize(isAbsolute(path) ? path : join(cwd, path));
   if (path instanceof URL) return normalize(fileURLToPath(path.href));
   if (typeof path.href === "string" && path.href.startsWith("file:")) return normalize(fileURLToPath(path.href));
   throw new TypeError("Path must be a string or file URL");
 }
 
-function createWorkspaceFsFacade(reader: WorkspaceModuleReader, writer?: PackageManagerWorkspaceWriter): RuntimeFsBinding {
+function createWorkspaceFsFacade(
+  reader: WorkspaceModuleReader,
+  writer?: PackageManagerWorkspaceWriter,
+  getCwd: () => string = () => "/workspace"
+): RuntimeFsBinding {
   const decoder = new TextDecoder();
   const encoder = new TextEncoder();
   let nextFd = 3;
   const openFiles = new Map<number, CliOpenFile>();
   const watchers = new Set<CliFsWatcher>();
   const statWatchers = new Map<string, Set<CliFsStatWatcher>>();
+  const resolvePath = (path: string | URL | { href?: string }) => normalizeFsPath(path, getCwd());
   const realpath: CliFsRealpath = (path, callback) => {
-    callback(null, normalizeFsPath(path));
+    callback(null, resolvePath(path));
   };
   realpath.native = realpath;
 
   function readFileSync(path: string | URL): Uint8Array;
   function readFileSync(path: string | URL, encoding: "utf8" | "utf-8"): string;
   function readFileSync(path: string | URL, encoding?: "utf8" | "utf-8"): Uint8Array | string {
-    const bytes = readWorkspaceBytes(reader, normalizeFsPath(path), encoder);
+    const bytes = readWorkspaceBytes(reader, resolvePath(path), encoder);
     return encoding ? decoder.decode(bytes) : BrowserBuffer.from(bytes);
   }
 
@@ -1176,19 +1181,19 @@ function createWorkspaceFsFacade(reader: WorkspaceModuleReader, writer?: Package
     },
     chmod(path: string, _mode: number, callback: (error?: Error | null) => void = () => undefined): void {
       callWithOptionalFsCallback(() => {
-        statFromReader(reader, path);
+        statFromReader(reader, resolvePath(path));
       }, callback);
     },
     chmodSync(path: string, _mode?: number): void {
-      statFromReader(reader, path);
+      statFromReader(reader, resolvePath(path));
     },
     chown(path: string, _uid: number, _gid: number, callback: (error?: Error | null) => void = () => undefined): void {
       callWithOptionalFsCallback(() => {
-        statFromReader(reader, path);
+        statFromReader(reader, resolvePath(path));
       }, callback);
     },
     chownSync(path: string, _uid?: number, _gid?: number): void {
-      statFromReader(reader, path);
+      statFromReader(reader, resolvePath(path));
     },
     copyFile(source: string, target: string, flagsOrCallback?: number | ((error?: Error | null) => void), callback?: (error?: Error | null) => void): void {
       const cb = typeof flagsOrCallback === "function" ? flagsOrCallback : callback;
@@ -1201,8 +1206,10 @@ function createWorkspaceFsFacade(reader: WorkspaceModuleReader, writer?: Package
     },
     copyFileSync(source: string, target: string): void {
       if (!writer) throw unsupportedFsMutation("copyFileSync");
-      writer.writeText(normalize(target), decoder.decode(readWorkspaceBytes(reader, normalize(source), encoder)));
-      notifyFsChange(normalize(target), "change");
+      const normalizedSource = resolvePath(source);
+      const normalizedTarget = resolvePath(target);
+      writer.writeText(normalizedTarget, decoder.decode(readWorkspaceBytes(reader, normalizedSource, encoder)));
+      notifyFsChange(normalizedTarget, "change");
     },
     cp(source: string, target: string, optionsOrCallback?: CliCpOptions | ((error?: Error | null) => void), callback?: (error?: Error | null) => void): void {
       const cb = typeof optionsOrCallback === "function" ? optionsOrCallback : callback;
@@ -1213,8 +1220,8 @@ function createWorkspaceFsFacade(reader: WorkspaceModuleReader, writer?: Package
     },
     cpSync(source: string, target: string, options: CliCpOptions = {}): void {
       if (!writer) throw unsupportedFsMutation("cpSync");
-      const normalizedSource = normalize(source);
-      const normalizedTarget = normalize(target);
+      const normalizedSource = resolvePath(source);
+      const normalizedTarget = resolvePath(target);
       if (options.force === false && facade.existsSync(normalizedTarget)) {
         throw createFsError("EEXIST", `File already exists: ${normalizedTarget}`);
       }
@@ -1230,7 +1237,7 @@ function createWorkspaceFsFacade(reader: WorkspaceModuleReader, writer?: Package
     },
     createReadStream(path: string, options: CliCreateReadStreamOptions | "utf8" | "utf-8" = {}): Readable & { path: string } {
       const stream = new Readable() as Readable & { path: string };
-      const normalized = normalize(path);
+      const normalized = resolvePath(path);
       stream.path = normalized;
       queueMicrotask(() => {
         try {
@@ -1249,7 +1256,7 @@ function createWorkspaceFsFacade(reader: WorkspaceModuleReader, writer?: Package
     },
     createWriteStream(path: string, options: CliCreateWriteStreamOptions = {}): Writable & { path: string } {
       if (!writer) throw unsupportedFsMutation("createWriteStream");
-      const normalized = normalize(path);
+      const normalized = resolvePath(path);
       const chunks: string[] = options.flags?.includes("a") && facade.existsSync(normalized)
         ? [reader.readText(normalized)]
         : [];
@@ -1275,14 +1282,15 @@ function createWorkspaceFsFacade(reader: WorkspaceModuleReader, writer?: Package
       return stream;
     },
     existsSync(path: string): boolean {
+      const normalized = resolvePath(path);
       const maybeReader = reader as WorkspaceModuleReader & { exists?: (path: string) => boolean };
-      if (maybeReader.exists) return maybeReader.exists(normalize(path));
+      if (maybeReader.exists) return maybeReader.exists(normalized);
       try {
-        reader.readText(normalize(path));
+        reader.readText(normalized);
         return true;
       } catch {
         try {
-          reader.listDir(normalize(path));
+          reader.listDir(normalized);
           return true;
         } catch {
           return false;
@@ -1299,7 +1307,8 @@ function createWorkspaceFsFacade(reader: WorkspaceModuleReader, writer?: Package
       }
     },
     accessSync(path: string): void {
-      if (!facade.existsSync(path)) throw createFsError("ENOENT", `No such file or directory: ${normalize(path)}`);
+      const normalized = resolvePath(path);
+      if (!facade.existsSync(normalized)) throw createFsError("ENOENT", `No such file or directory: ${normalized}`);
     },
     appendFile(path: string, data: RuntimeFsData, optionsOrCallback?: unknown, callback?: (error?: Error | null) => void): void {
       const cb = typeof optionsOrCallback === "function" ? optionsOrCallback as (error?: Error | null) => void : callback;
@@ -1309,7 +1318,7 @@ function createWorkspaceFsFacade(reader: WorkspaceModuleReader, writer?: Package
     },
     appendFileSync(path: string, data: RuntimeFsData): void {
       if (!writer) throw unsupportedFsMutation("appendFileSync");
-      const normalized = normalize(path);
+      const normalized = resolvePath(path);
       let existing = "";
       try {
         existing = reader.readText(normalized);
@@ -1331,7 +1340,7 @@ function createWorkspaceFsFacade(reader: WorkspaceModuleReader, writer?: Package
     },
     mkdirSync(path: string): void {
       if (!writer) throw unsupportedFsMutation("mkdirSync");
-      const normalized = normalize(path);
+      const normalized = resolvePath(path);
       writer.mkdir(normalized);
       notifyFsChange(normalized, "rename");
     },
@@ -1345,7 +1354,7 @@ function createWorkspaceFsFacade(reader: WorkspaceModuleReader, writer?: Package
     mkdtempSync(prefix: string): string {
       if (!writer) throw unsupportedFsMutation("mkdtempSync");
       for (let index = 0; index < 1000; index += 1) {
-        const path = normalize(`${prefix}${index.toString(36).padStart(6, "0")}`);
+        const path = resolvePath(`${prefix}${index.toString(36).padStart(6, "0")}`);
         if (facade.existsSync(path)) continue;
         writer.mkdir(path);
         return path;
@@ -1394,7 +1403,7 @@ function createWorkspaceFsFacade(reader: WorkspaceModuleReader, writer?: Package
       facade.utimesSync(path, atime, mtime);
     },
     lstat(path: string, callback: (error: Error | null, stats?: ReturnType<RuntimeFsBinding["statSync"]>) => void): void {
-      callWithFsCallback(() => statFromReader(reader, path), callback);
+      callWithFsCallback(() => statFromReader(reader, resolvePath(path)), callback);
     },
     link(source: string, target: string, callback: (error?: Error | null) => void = () => undefined): void {
       try {
@@ -1421,7 +1430,7 @@ function createWorkspaceFsFacade(reader: WorkspaceModuleReader, writer?: Package
     },
     openSync(path: string, flags: string | number = "r"): number {
       const fd = nextFd++;
-      const normalized = normalize(path);
+      const normalized = resolvePath(path);
       const mode = openMode(flags);
       openFiles.set(fd, {
         bytes: initialOpenBytes(reader, normalized, mode, encoder),
@@ -1532,9 +1541,10 @@ function createWorkspaceFsFacade(reader: WorkspaceModuleReader, writer?: Package
       callWithFsCallback(() => facade.readlinkSync(path), callback);
     },
     readlinkSync(path: string): string {
+      const normalized = resolvePath(path);
       const maybeReader = reader as WorkspaceModuleReader & { readlink?: (path: string) => string };
-      if (!maybeReader.readlink) throw createFsError("ENOENT", `No such file or directory: ${normalize(path)}`);
-      return maybeReader.readlink(normalize(path));
+      if (!maybeReader.readlink) throw createFsError("ENOENT", `No such file or directory: ${normalized}`);
+      return maybeReader.readlink(normalized);
     },
     read(fd: number, buffer: Uint8Array, offset: number, length: number, position: number | null, callback: (error: Error | null, bytesRead?: number, buffer?: Uint8Array) => void): void {
       queueMicrotask(() => {
@@ -1562,12 +1572,12 @@ function createWorkspaceFsFacade(reader: WorkspaceModuleReader, writer?: Package
       callWithFsCallback(() => facade.opendirSync(path), cb);
     },
     opendirSync(path: string): CliDir {
-      const normalized = normalize(path);
+      const normalized = resolvePath(path);
       const entries = facade.readdirSync(normalized, { withFileTypes: true }) as CliDirent[];
       return createCliDir(normalized, entries);
     },
     readdirSync(path: string, options?: CliReaddirOptions): CliDirent[] | string[] {
-      const normalized = normalize(path);
+      const normalized = resolvePath(path);
       const names = reader.listDir(normalized);
       return options?.withFileTypes ? names.map((name) => createDirent(name, normalize(`${normalized}/${name}`), reader)) : names;
     },
@@ -1584,7 +1594,7 @@ function createWorkspaceFsFacade(reader: WorkspaceModuleReader, writer?: Package
     },
     realpath,
     realpathSync(path: string): string {
-      return normalize(path);
+      return resolvePath(path);
     },
     rename(source: string, target: string, callback: (error?: Error | null) => void = () => undefined): void {
       try {
@@ -1596,9 +1606,11 @@ function createWorkspaceFsFacade(reader: WorkspaceModuleReader, writer?: Package
     },
     renameSync(source: string, target: string): void {
       if (!writer?.rename) throw unsupportedFsMutation("renameSync");
-      writer.rename(normalize(source), normalize(target));
-      notifyFsChange(normalize(source), "rename");
-      notifyFsChange(normalize(target), "rename");
+      const normalizedSource = resolvePath(source);
+      const normalizedTarget = resolvePath(target);
+      writer.rename(normalizedSource, normalizedTarget);
+      notifyFsChange(normalizedSource, "rename");
+      notifyFsChange(normalizedTarget, "rename");
     },
     rm(path: string, optionsOrCallback: CliRmOptions | ((error?: Error | null) => void) = {}, callback?: (error?: Error | null) => void): void {
       const cb = typeof optionsOrCallback === "function" ? optionsOrCallback : callback;
@@ -1611,7 +1623,7 @@ function createWorkspaceFsFacade(reader: WorkspaceModuleReader, writer?: Package
     },
     rmSync(path: string, options: CliRmOptions = {}): void {
       if (!writer) throw unsupportedFsMutation("rmSync");
-      const normalized = normalize(path);
+      const normalized = resolvePath(path);
       if (options.force && !facade.existsSync(normalized)) return;
       writer.remove(normalized);
       notifyFsChange(normalized, "rename");
@@ -1624,14 +1636,14 @@ function createWorkspaceFsFacade(reader: WorkspaceModuleReader, writer?: Package
     },
     statSync(path: string, options?: CliStatOptions): ReturnType<RuntimeFsBinding["statSync"]> | undefined {
       try {
-        return statFromReader(reader, path);
+        return statFromReader(reader, resolvePath(path));
       } catch (error) {
         if (options?.throwIfNoEntry === false) return undefined;
         throw error;
       }
     },
     stat(path: string, callback: (error: Error | null, stats?: ReturnType<RuntimeFsBinding["statSync"]>) => void): void {
-      callWithFsCallback(() => statFromReader(reader, path), callback);
+      callWithFsCallback(() => statFromReader(reader, resolvePath(path)), callback);
     },
     symlink(target: string, path: string, typeOrCallback?: string | ((error?: Error | null) => void), callback?: (error?: Error | null) => void): void {
       const cb = typeof typeOrCallback === "function" ? typeOrCallback : callback;
@@ -1644,8 +1656,9 @@ function createWorkspaceFsFacade(reader: WorkspaceModuleReader, writer?: Package
     },
     symlinkSync(target: string, path: string): void {
       if (!writer?.symlink) throw unsupportedFsMutation("symlinkSync");
-      writer.symlink(resolveSymlinkTarget(target, path), normalize(path));
-      notifyFsChange(normalize(path), "rename");
+      const normalizedPath = resolvePath(path);
+      writer.symlink(resolveSymlinkTarget(target, normalizedPath), normalizedPath);
+      notifyFsChange(normalizedPath, "rename");
     },
     lstatSync(path: string, options?: CliStatOptions): ReturnType<RuntimeFsBinding["statSync"]> | undefined {
       return facade.statSync(path, options);
@@ -1668,7 +1681,7 @@ function createWorkspaceFsFacade(reader: WorkspaceModuleReader, writer?: Package
       facade.rmSync(path);
     },
     unwatchFile(path: string, listener?: CliFsStatListener): void {
-      const normalized = normalize(path);
+      const normalized = resolvePath(path);
       if (!listener) {
         statWatchers.delete(normalized);
         return;
@@ -1681,7 +1694,7 @@ function createWorkspaceFsFacade(reader: WorkspaceModuleReader, writer?: Package
     },
     watch(path: string, optionsOrListener?: CliWatchOptions | CliWatchListener, maybeListener?: CliWatchListener): CliFsWatcher {
       const listener = typeof optionsOrListener === "function" ? optionsOrListener : maybeListener;
-      const watcher = createCliFsWatcher(normalize(path), listener);
+      const watcher = createCliFsWatcher(resolvePath(path), listener);
       watchers.add(watcher);
       watcher.once("close", () => {
         watchers.delete(watcher);
@@ -1691,7 +1704,7 @@ function createWorkspaceFsFacade(reader: WorkspaceModuleReader, writer?: Package
     watchFile(path: string, optionsOrListener?: CliWatchFileOptions | CliFsStatListener, maybeListener?: CliFsStatListener): CliFsStatWatcher {
       const listener = typeof optionsOrListener === "function" ? optionsOrListener : maybeListener;
       if (!listener) throw createFsError("ERR_INVALID_ARG_TYPE", "fs.watchFile listener is required");
-      const normalized = normalize(path);
+      const normalized = resolvePath(path);
       const watcher = createCliFsStatWatcher(normalized, listener);
       let listeners = statWatchers.get(normalized);
       if (!listeners) {
@@ -1707,7 +1720,7 @@ function createWorkspaceFsFacade(reader: WorkspaceModuleReader, writer?: Package
     },
     writeFileSync(path: string, data: RuntimeFsData): void {
       if (!writer) throw unsupportedFsMutation("writeFileSync");
-      const normalized = normalize(path);
+      const normalized = resolvePath(path);
       writer.writeText(normalized, decodeFsData(data));
       notifyFsChange(normalized, "change");
     },

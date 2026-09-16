@@ -324,6 +324,38 @@ const workspace = new MemoryPackageManagerWorkspace([
     data: JSON.stringify({ name: "write-fixture-cli", version: "1.2.3", main: "lib/cli.js" })
   },
   {
+    path: "/workspace/relative-cli/package/bin/npm-cli.js",
+    data: "#!/usr/bin/env node\nrequire('../lib/cli.js')(process)\n"
+  },
+  {
+    path: "/workspace/relative-cli/package/lib/cli.js",
+    data: `
+      const fs = require('fs');
+      module.exports = async function run(process) {
+        fs.writeFileSync('created.txt', 'created');
+        await fs.promises.writeFile('created-async.txt', 'async-created');
+        const values = [
+          fs.existsSync('relative.txt'),
+          fs.readFileSync('relative.txt', 'utf8'),
+          fs.statSync('relative.txt').isFile(),
+          fs.readdirSync('.').includes('relative.txt'),
+          await fs.promises.readFile('relative.txt', 'utf8'),
+          fs.readFileSync('created.txt', 'utf8'),
+          await fs.promises.readFile('created-async.txt', 'utf8')
+        ];
+        process.stdout.write(values.join(':') + '\\n');
+      };
+    `
+  },
+  {
+    path: "/workspace/relative-cli/package/package.json",
+    data: JSON.stringify({ name: "relative-fixture-cli", version: "1.2.3", main: "lib/cli.js" })
+  },
+  {
+    path: "/workspace/project/relative.txt",
+    data: "hello"
+  },
+  {
     path: "/workspace/async-error-cli/package/bin/npm-cli.js",
     data: "#!/usr/bin/env node\nrequire('../lib/cli.js')(process)\n"
   },
@@ -602,6 +634,25 @@ assert.equal(workspace.readText("/workspace/project/linked-file.txt"), "renamed"
 assert.equal(workspace.readText("/workspace/project/linked-file-async.txt"), "renamed-async");
 assert.equal(workspace.readText("/workspace/project/linked-package/package.json"), '{"name":"linked-source"}');
 assert.equal(workspace.readText("/workspace/project/linked-package-async/package.json"), '{"name":"linked-source"}');
+
+const relativeResult = await createAsyncCliModuleEvaluator({
+  root: "/workspace",
+  reader: workspace,
+  writer: workspace
+})({
+  entry: {
+    name: "npm",
+    version: "1.2.3",
+    entry: "/workspace/relative-cli/package/bin/npm-cli.js"
+  },
+  args: ["relative"],
+  cwd: "/workspace/project"
+});
+assert.equal(relativeResult.stdout, "true:hello:true:true:hello:created:async-created\n");
+assert.equal(relativeResult.stderr, "");
+assert.equal(relativeResult.exitCode, 0);
+assert.equal(workspace.readText("/workspace/project/created.txt"), "created");
+assert.equal(workspace.readText("/workspace/project/created-async.txt"), "async-created");
 
 const isolatedWorkspace = new MemoryPackageManagerWorkspace([
   {
