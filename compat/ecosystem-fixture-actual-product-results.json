@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-16T12:16:11.162Z",
+  "generatedAt": "2026-09-16T12:27:06.522Z",
   "source": "compat/ecosystem-fixtures.json",
   "minimumPassForMilestoneB": 7,
   "results": [
@@ -11,8 +11,8 @@
       "packageManager": "pnpm",
       "repository": "https://github.com/vitejs/vite",
       "subdirectory": "packages/create-vite/template-react",
-      "score": 25,
-      "status": "hold",
+      "score": 50,
+      "status": "partial-pass",
       "unsupportedBlocker": false,
       "criteria": [
         {
@@ -20,7 +20,7 @@
           "points": 25,
           "status": "pass",
           "exitCode": 0,
-          "stdoutTail": "source import: imported 15 files from /private/tmp/cargo-container-ecosystem-fixtures/vite-official-template-react/packages/create-vite/template-react (51867 bytes)\ninstalled 18 packages\nvite package source mounted-artifact\ndependency artifacts 13\nfixture dependency artifacts @rolldown/binding-wasm32-wasi,picomatch,rolldown,tinyglobby,@emnapi/core,@emnapi/runtime,@napi-rs/wasm-runtime,@oxc-project/types,@rolldown/pluginutils,fdir,@emnapi/wasi-threads,@tybys/wasm-util,tslib\nmissing fixture dependency artifacts @types/react,@types/react-dom,@vitejs/plugin-react,oxlint,react,react-dom",
+          "stdoutTail": "source import: imported 15 files from /private/tmp/cargo-container-ecosystem-fixtures/vite-official-template-react/packages/create-vite/template-react (51867 bytes)\ninstalled 18 packages\nvite package source mounted-artifact\ndependency artifacts 13\nfixture dependency artifacts @rolldown/binding-wasm32-wasi,picomatch,rolldown,tinyglobby,@emnapi/core,@emnapi/runtime,@napi-rs/wasm-runtime,@oxc-project/types,@rolldown/pluginutils,fdir,@emnapi/wasi-threads,@tybys/wasm-util,tslib\nmissing fixture dependency artifacts @types/react,@types/react-dom,oxlint",
           "stderrTail": ""
         },
         {
@@ -29,26 +29,25 @@
           "status": "fail",
           "exitCode": 1,
           "failureCategory": "dev-preview-command-failed",
-          "stdoutTail": "preview status: null",
-          "stderrTail": "failed to load config from /workspace/vite-official-template-react/vite.config.js\nerror when starting dev server:\nError: ERR_MODULE_NOT_FOUND: /workspace/vite-official-template-react/node_modules/@vitejs/plugin-react/./index.js\n    at moduleNotFound (file:///Users/byeonggi/PROJECT/cargo-container/packages/node-runtime/src/modules/resolver.ts:179:24)\n    at ModuleResolver.resolvePath (file:///Users/byeonggi/PROJECT/cargo-container/packages/node-runtime/src/modules/resolver.ts:167:11)\n    at ModuleResolver.resolvePackage (file:///Users/byeonggi/PROJECT/cargo-container/packages/node-runtime/src/modules/resolver.ts:83:17)\n    at ModuleResolver.resolveWithConditions (file:///Users/byeonggi/PROJECT/cargo-container/packages/node-runtime/src/modules/resolver.ts:61:17)\n    at ModuleResolver.resolveImport (file:///Users/byeonggi/PROJECT/cargo-container/packages/node-runtime/src/modules/resolver.ts:48:17)\n    at ModuleRuntime.resolveImport (file:///Users/byeonggi/PROJECT/cargo-container/packages/node-runtime/src/modules/runtime.ts:62:26)\n    at ModuleRuntime.importModule (file:///Users/byeonggi/PROJECT/cargo-container/packages/node-runtime/src/modules/runtime.ts:86:22)\n    at dynamicImport (file:///Users/byeonggi/PROJECT/cargo-container/packages/node-runtime/src/modules/esm.ts:41:51)\n    at eval (/workspace/vite-official-template-react/node_modules/.vite-temp/vite.config.js.timestamp-1789560968254-e92508f77beea.mjs:10:22)\n    at file:///Users/byeonggi/PROJECT/cargo-container/packages/node-runtime/src/modules/esm.ts:185:23"
+          "stdoutTail": "",
+          "stderrTail": "Error: EACTUALDEVHMRTIMEOUT: actual product dev/HMR scoring did not settle for vite-official-template-react\n    at Timeout.<anonymous> (file:///Users/byeonggi/PROJECT/cargo-container/scripts/score-ecosystem-fixtures.mjs:693:39)\n    at listOnTimeout (node:internal/timers:605:17)\n    at process.processTimers (node:internal/timers:541:7)"
         },
         {
           "id": "edit-hmr",
           "points": 25,
           "status": "fail",
           "exitCode": 1,
-          "failureCategory": "edit-hmr-command-failed",
+          "failureCategory": "dev-preview-unavailable",
           "stdoutTail": "",
-          "stderrTail": "HMR edit bridge is unavailable."
+          "stderrTail": "Skipped HMR because actual Vite preview did not settle."
         },
         {
           "id": "build-dist",
           "points": 25,
-          "status": "fail",
-          "exitCode": 1,
-          "failureCategory": "build-dist-command-failed",
-          "stdoutTail": "dist artifacts: {\"count\":0,\"files\":[]}",
-          "stderrTail": "failed to load config from /workspace/vite-official-template-react/vite.config.js\nerror during build:\nError: ERR_MODULE_NOT_FOUND: /workspace/vite-official-template-react/node_modules/@vitejs/plugin-react/./index.js\n    at moduleNotFound (file:///Users/byeonggi/PROJECT/cargo-container/packages/node-runtime/src/modules/resolver.ts:179:24)\n    at ModuleResolver.resolvePath (file:///Users/byeonggi/PROJECT/cargo-container/packages/node-runtime/src/modules/resolver.ts:167:11)\n    at ModuleResolver.resolvePackage (file:///Users/byeonggi/PROJECT/cargo-container/packages/node-runtime/src/modules/resolver.ts:83:17)\n    at ModuleResolver.resolveWithConditions (file:///Users/byeonggi/PROJECT/cargo-container/packages/node-runtime/src/modules/resolver.ts:61:17)\n    at ModuleResolver.resolveImport (file:///Users/byeonggi/PROJECT/cargo-container/packages/node-runtime/src/modules/resolver.ts:48:17)\n    at ModuleRuntime.resolveImport (file:///Users/byeonggi/PROJECT/cargo-container/packages/node-runtime/src/modules/runtime.ts:62:26)\n    at ModuleRuntime.importModule (file:///Users/byeonggi/PROJECT/cargo-container/packages/node-runtime/src/modules/runtime.ts:86:22)\n    at dynamicImport (file:///Users/byeonggi/PROJECT/cargo-container/packages/node-runtime/src/modules/esm.ts:41:51)\n    at eval (/workspace/vite-official-template-react/node_modules/.vite-temp/vite.config.js.timestamp-1789560970633-166ef86aba14.mjs:10:22)\n    at file:///Users/byeonggi/PROJECT/cargo-container/packages/node-runtime/src/modules/esm.ts:185:23"
+          "status": "pass",
+          "exitCode": 0,
+          "stdoutTail": "vite v8.2.0 building client environment for production...\n✓ built in 1ms\ndist artifacts: {\"count\":2,\"files\":[{\"path\":\"dist/assets/index.js\",\"size\":308},{\"path\":\"dist/index.html\",\"size\":492}]}",
+          "stderrTail": ""
         }
       ],
       "evidence": {
@@ -102,10 +101,7 @@
         "missingFixtureDependencyArtifacts": [
           "@types/react",
           "@types/react-dom",
-          "@vitejs/plugin-react",
-          "oxlint",
-          "react",
-          "react-dom"
+          "oxlint"
         ],
         "sourceImport": "imported 15 files from /private/tmp/cargo-container-ecosystem-fixtures/vite-official-template-react/packages/create-vite/template-react (51867 bytes)",
         "vitePackageRoot": "/private/tmp/cargo-container-vite-smoke/node_modules/vite"
@@ -113,9 +109,8 @@
     }
   ],
   "failureSummary": {
-    "build-dist-command-failed": 1,
     "dev-preview-command-failed": 1,
-    "edit-hmr-command-failed": 1
+    "dev-preview-unavailable": 1
   },
   "summary": {
     "total": 1,

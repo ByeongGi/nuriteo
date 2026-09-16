@@ -979,6 +979,18 @@ export class ViteProductWorkflow {
       this.workspace.writeText(join(packageRoot, "client.js"), "export function createRoot(target) { return { render(value) { if (target) target.textContent = String(value); } }; }\n");
       return;
     }
+    if (pkg === "@vitejs/plugin-react") {
+      this.workspace.writeText(join(packageRoot, "package.json"), JSON.stringify({
+        name: "@vitejs/plugin-react",
+        version: "latest",
+        type: "module",
+        exports: {
+          ".": "./index.js"
+        }
+      }));
+      this.workspace.writeText(join(packageRoot, "index.js"), "export default function react() { return { name: 'browser-native-react-plugin' }; }\n");
+      return;
+    }
     this.workspace.writeText(join(packageRoot, "package.json"), JSON.stringify({ name: pkg }));
   }
 

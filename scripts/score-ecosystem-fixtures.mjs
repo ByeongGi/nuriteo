@@ -81,7 +81,13 @@ function plannedResult(fixture) {
 
 async function scoreFixture(fixture, scoreMode) {
   if (scoreMode === "product-adapter") return scoreProductAdapterFixture(fixture);
-  if (scoreMode === "product-actual") return scoreProductActualFixture(fixture);
+  if (scoreMode === "product-actual") {
+    return withTimeout(
+      scoreProductActualFixture(fixture),
+      actualWorkerTimeoutMs * 2 + 10000,
+      `EACTUALFIXTURETIMEOUT: actual product fixture scoring did not settle for ${fixture.id}`
+    ).catch((error) => blockedActualResult(fixture, "dev-preview", error));
+  }
   if (scoreMode !== "reference") throw new Error(`Unsupported score mode: ${scoreMode}`);
 
   const checkout = path.join(workdir, fixture.id);
@@ -192,7 +198,18 @@ async function scoreProductActualFixture(fixture) {
   }
 
   const devAndHmr = finalSourceImport.ok
-    ? await runActualDevPreviewAndHmr(workflow, finalSourceImport)
+    ? await withTimeout(
+      runActualDevPreviewAndHmr(workflow, finalSourceImport),
+      actualWorkerTimeoutMs + 5000,
+      `EACTUALDEVHMRTIMEOUT: actual product dev/HMR scoring did not settle for ${fixture.id}`
+    ).catch((error) => ({
+      devPreview: errorResult(error),
+      editHmr: {
+        status: 1,
+        stdout: "",
+        stderr: "Skipped HMR because actual Vite preview did not settle."
+      }
+    }))
     : {
       devPreview: { status: 1, stdout: "", stderr: finalSourceImport.error },
       editHmr: { status: 1, stdout: "", stderr: finalSourceImport.error }
@@ -209,7 +226,7 @@ async function scoreProductActualFixture(fixture) {
     criteria.push(criterion("build-dist", Boolean(build && build.exitCode === 0 && distArtifacts.count > 0), {
       status: build && build.exitCode === 0 && distArtifacts.count > 0 ? 0 : 1,
       stdout: build ? `${build.stdout}\ndist artifacts: ${JSON.stringify(distArtifacts)}` : "",
-      stderr: build?.stderr || finalSourceImport.error || "build did not run"
+      stderr: build ? build.stderr : finalSourceImport.error || "build did not run"
     }));
   } catch (error) {
     criteria.push(criterion("build-dist", false, errorResult(error)));
@@ -425,14 +442,19 @@ function createFixtureDependencyArtifacts(fixture, projectDir, context) {
     ...(context.wasmAdapterPolicy ? { wasmAdapterPolicy: context.wasmAdapterPolicy } : {})
   });
   const found = new Set(directArtifacts.map((artifact) => artifact.name));
+  const provided = new Set(defaultProvidedDependencyNames());
   return {
     artifacts: closure.artifacts,
     closureIterations: closure.iterations.map((iteration) => ({
       extracted: iteration.extracted,
       missingCount: iteration.plan.missing.length
     })),
-    missing: names.filter((name) => !found.has(name))
+    missing: names.filter((name) => !found.has(name) && !provided.has(name))
   };
+}
+
+function defaultProvidedDependencyNames() {
+  return ["@vitejs/plugin-react", "react", "react-dom", "typescript", "vite"];
 }
 
 function readProjectDependencyNames(projectDir) {
@@ -661,6 +683,16 @@ function executeActualCli(workflow, args) {
     }, timeoutMs);
   });
   return Promise.race([execution, guard]).finally(() => {
+    if (timeout) clearTimeout(timeout);
+  });
+}
+
+function withTimeout(promise, timeoutMs, message) {
+  let timeout = null;
+  const guard = new Promise((_, reject) => {
+    timeout = setTimeout(() => reject(new Error(message)), timeoutMs);
+  });
+  return Promise.race([promise, guard]).finally(() => {
     if (timeout) clearTimeout(timeout);
   });
 }
