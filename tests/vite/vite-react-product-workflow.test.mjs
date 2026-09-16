@@ -887,15 +887,14 @@ const actualLikeDependencyPlan = actualLikeViteDependencyWorkflow.inspectRealCli
 assert.deepEqual(actualLikeDependencyPlan.summary, {
   missingByKind: {
     "package-artifact": 3,
-    "wasm-adapter-candidate": 2,
+    "wasm-adapter-candidate": 1,
     "native-hold": 0
   },
-  missingCount: 5,
+  missingCount: 4,
   optionalCount: 3,
   satisfiedCount: 0
 });
 assert.deepEqual(actualLikeDependencyPlan.missing.map((item) => [item.name, item.kind, item.artifactNames]), [
-  ["esbuild", "wasm-adapter-candidate", ["esbuild", "esbuild-wasm"]],
   ["picomatch", "package-artifact", ["picomatch"]],
   ["postcss", "package-artifact", ["postcss"]],
   ["rolldown", "wasm-adapter-candidate", ["rolldown", "@rolldown/binding-wasm32-wasi"]],

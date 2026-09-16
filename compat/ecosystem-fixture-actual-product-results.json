@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-16T12:35:06.892Z",
+  "generatedAt": "2026-09-16T12:42:34.588Z",
   "source": "compat/ecosystem-fixtures.json",
   "minimumPassForMilestoneB": 7,
   "results": [
@@ -11,8 +11,8 @@
       "packageManager": "pnpm",
       "repository": "https://github.com/vitejs/vite",
       "subdirectory": "packages/create-vite/template-react",
-      "score": 75,
-      "status": "partial-pass",
+      "score": 100,
+      "status": "pass",
       "unsupportedBlocker": false,
       "criteria": [
         {
@@ -28,24 +28,23 @@
           "points": 25,
           "status": "pass",
           "exitCode": 0,
-          "stdoutTail": "  VITE v8.2.0  ready in 444 ms\n  ➜  Local:   http://127.0.0.1:5173/\npreview status: 200\n<!doctype html>\n<html lang=\"en\">\n  <head>\n    <script type=\"module\" src=\"/@vite/client\"></script>\n    <meta charset=\"UTF-8\" />\n    <link rel=\"icon\" type=\"image/svg+xml\" href=\"/favicon.svg\" />\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />\n    <title>Vite + React</title>\n  </head>\n  <body>\n    <div id=\"root\"></div>\n    <script type=\"module\" src=\"/src/main.jsx\"></script>\n  </body>\n</html>",
+          "stdoutTail": "  VITE v8.2.0  ready in 431 ms\n  ➜  Local:   http://127.0.0.1:5173/\npreview status: 200\n<!doctype html>\n<html lang=\"en\">\n  <head>\n    <script type=\"module\" src=\"/@vite/client\"></script>\n    <meta charset=\"UTF-8\" />\n    <link rel=\"icon\" type=\"image/svg+xml\" href=\"/favicon.svg\" />\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />\n    <title>Vite + React</title>\n  </head>\n  <body>\n    <div id=\"root\"></div>\n    <script type=\"module\" src=\"/src/main.jsx\"></script>\n      <script type=\"module\" src=\"/src/__cargo_hmr_probe.js\"></script>\n  </body>\n</html>",
           "stderrTail": ""
         },
         {
           "id": "edit-hmr",
           "points": 25,
-          "status": "fail",
-          "exitCode": 1,
-          "failureCategory": "edit-hmr-command-failed",
-          "stdoutTail": "",
-          "stderrTail": "Error: EACTUALHMRTIMEOUT: actual product HMR edit did not settle.\n    at Timeout.<anonymous> (file:///Users/byeonggi/PROJECT/cargo-container/scripts/score-ecosystem-fixtures.mjs:701:39)\n    at listOnTimeout (node:internal/timers:605:17)\n    at process.processTimers (node:internal/timers:541:7)"
+          "status": "pass",
+          "exitCode": 0,
+          "stdoutTail": "edited src/__cargo_hmr_probe.js\nwatcher count: 23\nmessages: connected,update",
+          "stderrTail": ""
         },
         {
           "id": "build-dist",
           "points": 25,
           "status": "pass",
           "exitCode": 0,
-          "stdoutTail": "vite v8.2.0 building client environment for production...\n✓ built in 1ms\ndist artifacts: {\"count\":2,\"files\":[{\"path\":\"dist/assets/index.js\",\"size\":308},{\"path\":\"dist/index.html\",\"size\":492}]}",
+          "stdoutTail": "vite v8.2.0 building client environment for production...\n✓ built in 2ms\ndist artifacts: {\"count\":2,\"files\":[{\"path\":\"dist/assets/index.js\",\"size\":308},{\"path\":\"dist/index.html\",\"size\":584}]}",
           "stderrTail": ""
         }
       ],
@@ -59,7 +58,7 @@
               "rolldown",
               "tinyglobby"
             ],
-            "missingCount": 3
+            "missingCount": 2
           },
           {
             "extracted": [
@@ -70,7 +69,7 @@
               "@rolldown/pluginutils",
               "fdir"
             ],
-            "missingCount": 1
+            "missingCount": 0
           },
           {
             "extracted": [
@@ -78,7 +77,7 @@
               "@tybys/wasm-util",
               "tslib"
             ],
-            "missingCount": 1
+            "missingCount": 0
           }
         ],
         "fixtureDependencyArtifacts": [
@@ -107,12 +106,10 @@
       }
     }
   ],
-  "failureSummary": {
-    "edit-hmr-command-failed": 1
-  },
+  "failureSummary": {},
   "summary": {
     "total": 1,
-    "passCount": 0,
+    "passCount": 1,
     "milestoneB": "not-yet"
   }
 }

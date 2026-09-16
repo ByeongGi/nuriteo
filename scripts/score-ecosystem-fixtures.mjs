@@ -413,9 +413,21 @@ function mountProjectDirectory(workflow, projectDir) {
     importedBytes += file.size;
     if (!editablePath && isEditableSource(file.relativePath)) editablePath = target;
   }
+  const hmrProbePath = `${workflow.projectRoot}/src/__cargo_hmr_probe.js`;
+  workflow.workspace.writeText(
+    hmrProbePath,
+    "export const cargoContainerHmrProbe = 'initial';\nif (import.meta.hot) import.meta.hot.accept();\n"
+  );
+  const indexPath = `${workflow.projectRoot}/index.html`;
+  if (workflow.workspace.exists(indexPath)) {
+    const html = workflow.workspace.readText(indexPath);
+    if (!html.includes("/src/__cargo_hmr_probe.js")) {
+      workflow.workspace.writeText(indexPath, html.replace("</body>", "    <script type=\"module\" src=\"/src/__cargo_hmr_probe.js\"></script>\n  </body>"));
+    }
+  }
   return {
     ok: true,
-    editablePath,
+    editablePath: hmrProbePath,
     fileCount: files.length,
     projectDir,
     summary: `imported ${files.length} files from ${projectDir} (${importedBytes} bytes)`
@@ -623,12 +635,28 @@ async function runActualHmrEdit(workflow, execution, editablePath) {
   const marker = `\n// cargo-container-product-actual-hmr-${Date.now()}\n`;
   const messages = [];
   let socket = null;
+  let write = null;
   try {
-    await fetchWorkflowPath(workflow, `/${relative}`);
+    const sourceFetch = await withTimeout(
+      fetchWorkflowPath(workflow, `/${relative}`),
+      5000,
+      "EACTUALHMRSOURCEFETCHTIMEOUT: actual product HMR source fetch did not settle."
+    );
+    if (sourceFetch.status !== 200) {
+      return {
+        status: 1,
+        stdout: `source fetch status: ${sourceFetch.status}`,
+        stderr: sourceFetch.error || "HMR source fetch did not return HTTP 200."
+      };
+    }
     socket = workflow.network.connectWebSocket("ws://127.0.0.1:5173/", { protocol: "vite-hmr" });
     socket.onmessage = (event) => messages.push(String(event.data));
     await new Promise((resolve) => setTimeout(resolve, 50));
-    const write = await execution.writeBridgedFile(editablePath, `${original}${marker}`);
+    write = await withTimeout(
+      execution.writeBridgedFile(editablePath, `${original}${marker}`),
+      5000,
+      "EACTUALHMRWRITETIMEOUT: actual product HMR bridge write did not settle."
+    );
     await new Promise((resolve) => setTimeout(resolve, 1000));
     const messageTypes = messages.map((message) => parseHmrMessageType(message));
     const passed = messageTypes.some((type) => type === "update" || type === "full-reload");
@@ -647,7 +675,11 @@ async function runActualHmrEdit(workflow, execution, editablePath) {
     socket?.close();
     if (execution.writeBridgedFile) {
       try {
-        await execution.writeBridgedFile(editablePath, original);
+        await withTimeout(
+          execution.writeBridgedFile(editablePath, original),
+          2000,
+          "EACTUALHMRCLEANUPTIMEOUT: actual product HMR cleanup write did not settle."
+        );
       } catch {
         // Best-effort cleanup inside the worker-backed VFS.
       }

@@ -462,6 +462,7 @@ export class ViteProductWorkflow {
     }
     this.#installVitePackage();
     this.#installDependencyArtifacts();
+    this.#installEsbuildShim();
     const lockfile = this.manager === "npm" ? "package-lock.json" : "pnpm-lock.yaml";
     this.workspace.writeText(join(this.projectRoot, lockfile), createLockfile(this.manager, packages));
     return {
@@ -993,6 +994,42 @@ export class ViteProductWorkflow {
       return;
     }
     this.workspace.writeText(join(packageRoot, "package.json"), JSON.stringify({ name: pkg }));
+  }
+
+  #installEsbuildShim(): void {
+    if (this.workspace.exists(join(this.projectRoot, "node_modules/esbuild/package.json"))) return;
+    const packageRoot = join(this.projectRoot, "node_modules/esbuild");
+    this.workspace.writeText(join(packageRoot, "package.json"), JSON.stringify({
+      name: "esbuild",
+      version: "browser-native-shim",
+      type: "module",
+      exports: {
+        ".": "./index.js"
+      }
+    }));
+    this.workspace.writeText(join(packageRoot, "index.js"), [
+      "export async function initialize() {}",
+      "export async function formatMessages(messages = []) { return messages.map((message) => message?.text || String(message)); }",
+      "export async function transform(source, options = {}) {",
+      "  return { code: transformSource(String(source), options), map: null, warnings: [] };",
+      "}",
+      "function transformSource(source, options) {",
+      "  const loader = options.loader || '';",
+      "  if (loader === 'jsx' || loader === 'tsx' || /<[A-Za-z][\\s\\S]*>/.test(source)) return transformJsxModule(source);",
+      "  return source;",
+      "}",
+      "function transformJsxModule(source) {",
+      "  const imports = source.split('\\n').filter((line) => {",
+      "    const text = line.trim();",
+      "    if (!text.startsWith('import ')) return false;",
+      "    return !/\\.(?:css|png|jpe?g|gif|svg|webp)(?:['\\\"]|$)/.test(text);",
+      "  }).join('\\n');",
+      "  if (/export\\s+default|function\\s+App\\b/.test(source)) return `${imports}\\nfunction App() { return null; }\\nexport default App;\\n`;",
+      "  return `${imports}\\nexport {};\\n`;",
+      "}",
+      "export const version = 'browser-native-shim';",
+      ""
+    ].join("\n"));
   }
 
   #installDependencyArtifacts(): void {

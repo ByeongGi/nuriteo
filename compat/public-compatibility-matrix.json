@@ -128,12 +128,13 @@
     "productAdapterPass": 10,
     "productAdapterScoreAtLeast75": 10,
     "actualProductMeasured": 1,
-    "actualProductPass": 0,
-    "actualProductPartialPass": 1,
+    "actualProductPass": 1,
+    "actualProductPartialPass": 0,
     "actualProductScoreAtLeast50": 1,
     "actualProductScoreAtLeast75": 1,
+    "actualProductScoreAtLeast100": 1,
     "actualProductBlockers": [
-      "actual Vite edit-HMR scoring still times out for Vite official template React",
+      "actual-product scoring must expand from 1 measured fixture to the 7 of 10 Milestone B pass threshold",
       "large transitive fixture materialization can still hit worker stability limits"
     ]
   },
