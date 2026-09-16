@@ -16,6 +16,7 @@ import { inspectCliEntryReadiness } from "./cli-entry-readiness.ts";
 import { MemoryPackageManagerWorkspace, type PackageManagerWorkspaceSnapshot, type PackageManagerWorkspaceWriter } from "./workspace.ts";
 
 export interface CliModuleEvaluatorOptions {
+  fsTrace?: CliEvaluationFsTraceEntry[];
   loopbackNetwork?: LoopbackNetwork;
   reader: WorkspaceModuleReader;
   globals?: Record<string, RuntimeValue>;
@@ -37,11 +38,13 @@ export interface IsolatedCliRunResult extends CliRunResult {
   bridgedServerPorts?: number[];
   capturedGlobalCalls?: CliEvaluationCapturedGlobalCall[];
   closeBridgedServers?: () => void;
+  fsTrace?: CliEvaluationFsTraceEntry[];
   workspaceSnapshot: PackageManagerWorkspaceSnapshot;
 }
 
 export interface WorkerBackedAsyncCliModuleEvaluatorOptions extends Omit<AsyncCliModuleEvaluatorOptions, "globals" | "reader" | "writer"> {
   captureGlobalCalls?: readonly string[];
+  traceFs?: boolean;
   workerFactory: CliEvaluationWorkerFactory;
   workerTimeoutMs?: number;
   workspace: MemoryPackageManagerWorkspace;
@@ -50,6 +53,13 @@ export interface WorkerBackedAsyncCliModuleEvaluatorOptions extends Omit<AsyncCl
 export interface CliEvaluationCapturedGlobalCall {
   args: unknown[];
   name: string;
+}
+
+export interface CliEvaluationFsTraceEntry {
+  error?: string;
+  op: string;
+  path: string;
+  result?: boolean | string;
 }
 
 export type CliEvaluationWorkerFactory = () => CliEvaluationWorkerPort;
@@ -76,6 +86,7 @@ export interface CliEvaluationWorkerEvaluateMessage {
   root?: string;
   settleTicks?: number;
   settleTimeoutMs?: number;
+  traceFs?: boolean;
   type: "cli:evaluate";
   workspaceSnapshot: PackageManagerWorkspaceSnapshot;
 }
@@ -259,6 +270,7 @@ export function createWorkerBackedAsyncCliModuleEvaluator(
         ...(options.settleTimeoutMs !== undefined ? { settleTimeoutMs: options.settleTimeoutMs } : {}),
         ...(options.captureGlobalCalls !== undefined ? { captureGlobalCalls: options.captureGlobalCalls } : {}),
         ...(options.loopbackNetwork ? { bridgeLoopbackServer: true } : {}),
+        ...(options.traceFs ? { traceFs: true } : {}),
         type: "cli:evaluate",
         workspaceSnapshot: options.workspace.snapshot()
       } satisfies CliEvaluationWorkerEvaluateMessage);
@@ -273,7 +285,9 @@ export async function evaluateCliModuleWorkerMessage(
   try {
     const workspace = MemoryPackageManagerWorkspace.fromSnapshot(message.workspaceSnapshot);
     const capturedGlobalCalls: CliEvaluationCapturedGlobalCall[] = [];
+    const fsTrace: CliEvaluationFsTraceEntry[] = [];
     const result = await createAsyncCliModuleEvaluator({
+      ...(message.traceFs ? { fsTrace } : {}),
       ...(message.captureGlobalCalls ? { globals: createCapturedGlobalCallHandlers(message.captureGlobalCalls, capturedGlobalCalls) } : {}),
       reader: workspace,
       ...(message.root !== undefined ? { root: message.root } : {}),
@@ -289,6 +303,7 @@ export async function evaluateCliModuleWorkerMessage(
         ...result,
         ...(options.httpBridge ? { bridgedServerPorts: options.httpBridge.ports() } : {}),
         ...(message.captureGlobalCalls ? { capturedGlobalCalls } : {}),
+        ...(message.traceFs ? { fsTrace } : {}),
         workspaceSnapshot: workspace.snapshot()
       },
       type: "cli:result"
@@ -406,7 +421,7 @@ function startCliModuleEvaluation(
   globalObject.global = globalObject;
   globalObject.globalThis = globalObject;
   globalObject.process = process;
-  const fs = createWorkspaceFsFacade(options.reader, options.writer, () => process.cwd());
+  const fs = createWorkspaceFsFacade(options.reader, options.writer, () => process.cwd(), options.fsTrace);
 
   const workerThreads = createCliWorkerThreadsBuiltin({
     fs,
@@ -1008,6 +1023,13 @@ function errorMessage(error: unknown): string {
   return formatErrorWithCauses(error, new Set());
 }
 
+function fsTraceError(error: unknown): string {
+  if (typeof error === "object" && error && "code" in error && typeof (error as { code?: unknown }).code === "string") {
+    return (error as { code: string }).code;
+  }
+  return error instanceof Error ? error.message : String(error);
+}
+
 function formatErrorWithCauses(error: unknown, seen: Set<unknown>): string {
   if (seen.has(error)) return "[Circular error cause]";
   seen.add(error);
@@ -1148,7 +1170,8 @@ function normalizeFsPath(path: string | URL | { href?: string }, cwd: string): s
 function createWorkspaceFsFacade(
   reader: WorkspaceModuleReader,
   writer?: PackageManagerWorkspaceWriter,
-  getCwd: () => string = () => "/workspace"
+  getCwd: () => string = () => "/workspace",
+  fsTrace?: CliEvaluationFsTraceEntry[]
 ): RuntimeFsBinding {
   const decoder = new TextDecoder();
   const encoder = new TextEncoder();
@@ -1157,16 +1180,28 @@ function createWorkspaceFsFacade(
   const watchers = new Set<CliFsWatcher>();
   const statWatchers = new Map<string, Set<CliFsStatWatcher>>();
   const resolvePath = (path: string | URL | { href?: string }) => normalizeFsPath(path, getCwd());
+  const traceFs = (entry: CliEvaluationFsTraceEntry) => {
+    if (fsTrace && fsTrace.length < 1000) fsTrace.push(entry);
+  };
   const realpath: CliFsRealpath = (path, callback) => {
-    callback(null, resolvePath(path));
+    const normalized = resolvePath(path);
+    traceFs({ op: "realpath", path: normalized, result: normalized });
+    callback(null, normalized);
   };
   realpath.native = realpath;
 
   function readFileSync(path: string | URL): Uint8Array;
   function readFileSync(path: string | URL, encoding: "utf8" | "utf-8"): string;
   function readFileSync(path: string | URL, encoding?: "utf8" | "utf-8"): Uint8Array | string {
-    const bytes = readWorkspaceBytes(reader, resolvePath(path), encoder);
-    return encoding ? decoder.decode(bytes) : BrowserBuffer.from(bytes);
+    const normalized = resolvePath(path);
+    try {
+      const bytes = readWorkspaceBytes(reader, normalized, encoder);
+      traceFs({ op: "readFileSync", path: normalized, result: encoding ? "text" : "bytes" });
+      return encoding ? decoder.decode(bytes) : BrowserBuffer.from(bytes);
+    } catch (error) {
+      traceFs({ error: fsTraceError(error), op: "readFileSync", path: normalized });
+      throw error;
+    }
   }
 
   const facade = {
@@ -1284,15 +1319,22 @@ function createWorkspaceFsFacade(
     existsSync(path: string): boolean {
       const normalized = resolvePath(path);
       const maybeReader = reader as WorkspaceModuleReader & { exists?: (path: string) => boolean };
-      if (maybeReader.exists) return maybeReader.exists(normalized);
+      if (maybeReader.exists) {
+        const result = maybeReader.exists(normalized);
+        traceFs({ op: "existsSync", path: normalized, result });
+        return result;
+      }
       try {
         reader.readText(normalized);
+        traceFs({ op: "existsSync", path: normalized, result: true });
         return true;
       } catch {
         try {
           reader.listDir(normalized);
+          traceFs({ op: "existsSync", path: normalized, result: true });
           return true;
         } catch {
+          traceFs({ op: "existsSync", path: normalized, result: false });
           return false;
         }
       }
@@ -1432,13 +1474,19 @@ function createWorkspaceFsFacade(
       const fd = nextFd++;
       const normalized = resolvePath(path);
       const mode = openMode(flags);
-      openFiles.set(fd, {
-        bytes: initialOpenBytes(reader, normalized, mode, encoder),
-        path: normalized,
-        position: 0,
-        writable: mode.writable
-      });
-      return fd;
+      try {
+        openFiles.set(fd, {
+          bytes: initialOpenBytes(reader, normalized, mode, encoder),
+          path: normalized,
+          position: 0,
+          writable: mode.writable
+        });
+        traceFs({ op: "openSync", path: normalized, result: String(flags) });
+        return fd;
+      } catch (error) {
+        traceFs({ error: fsTraceError(error), op: "openSync", path: normalized });
+        throw error;
+      }
     },
     promises: {
       async chmod(path: string, mode: number): Promise<void> {
@@ -1578,7 +1626,14 @@ function createWorkspaceFsFacade(
     },
     readdirSync(path: string, options?: CliReaddirOptions): CliDirent[] | string[] {
       const normalized = resolvePath(path);
-      const names = reader.listDir(normalized);
+      let names: string[];
+      try {
+        names = reader.listDir(normalized);
+        traceFs({ op: "readdirSync", path: normalized, result: String(names.length) });
+      } catch (error) {
+        traceFs({ error: fsTraceError(error), op: "readdirSync", path: normalized });
+        throw error;
+      }
       return options?.withFileTypes ? names.map((name) => createDirent(name, normalize(`${normalized}/${name}`), reader)) : names;
     },
     readdir(path: string, optionsOrCallback?: CliReaddirOptions | ((error: Error | null, entries?: CliDirent[] | string[]) => void), callback?: (error: Error | null, entries?: CliDirent[] | string[]) => void): void {
@@ -1635,15 +1690,19 @@ function createWorkspaceFsFacade(
       facade.rmSync(path, options);
     },
     statSync(path: string, options?: CliStatOptions): ReturnType<RuntimeFsBinding["statSync"]> | undefined {
+      const normalized = resolvePath(path);
       try {
-        return statFromReader(reader, resolvePath(path));
+        const stats = statFromReader(reader, normalized);
+        traceFs({ op: "statSync", path: normalized, result: stats.isDirectory() ? "dir" : "file" });
+        return stats;
       } catch (error) {
+        traceFs({ error: fsTraceError(error), op: "statSync", path: normalized });
         if (options?.throwIfNoEntry === false) return undefined;
         throw error;
       }
     },
     stat(path: string, callback: (error: Error | null, stats?: ReturnType<RuntimeFsBinding["statSync"]>) => void): void {
-      callWithFsCallback(() => statFromReader(reader, resolvePath(path)), callback);
+      callWithFsCallback(() => facade.statSync(path) as ReturnType<RuntimeFsBinding["statSync"]>, callback);
     },
     symlink(target: string, path: string, typeOrCallback?: string | ((error?: Error | null) => void), callback?: (error?: Error | null) => void): void {
       const cb = typeof typeOrCallback === "function" ? typeOrCallback : callback;

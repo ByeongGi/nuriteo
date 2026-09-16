@@ -4,6 +4,62 @@ export type ProcessExitMode = "throw" | "capture";
 type ProcessWriteCallback = () => void;
 type ProcessWriteEncoding = BufferEncoding | string;
 
+class ProcessReadableStdio extends EventEmitter {
+  isTTY = false;
+  readable = true;
+
+  pause(): this {
+    return this;
+  }
+
+  ref(): this {
+    return this;
+  }
+
+  resume(): this {
+    return this;
+  }
+
+  setEncoding(_encoding?: BufferEncoding | string): this {
+    return this;
+  }
+
+  setRawMode(_mode: boolean): this {
+    return this;
+  }
+
+  unref(): this {
+    return this;
+  }
+}
+
+class ProcessWritableStdio extends EventEmitter {
+  isTTY = false;
+  writable = true;
+  #writeChunk: (chunk: unknown) => void;
+
+  constructor(writeChunk: (chunk: unknown) => void) {
+    super();
+    this.#writeChunk = writeChunk;
+  }
+
+  write(chunk: unknown, encodingOrCallback?: ProcessWriteEncoding | ProcessWriteCallback, callback?: ProcessWriteCallback): boolean {
+    this.#writeChunk(chunk);
+    this.emit("data", chunk);
+    const writeCallback = typeof encodingOrCallback === "function" ? encodingOrCallback : callback;
+    writeCallback?.();
+    return true;
+  }
+
+  ref(): this {
+    return this;
+  }
+
+  unref(): this {
+    return this;
+  }
+}
+
 export interface ProcessBuiltinOptions {
   argv?: string[];
   cwd?: string;
@@ -45,9 +101,9 @@ export class BrowserProcess extends EventEmitter {
       sharedObjects: []
     })
   };
-  stdin = Object.freeze({ isTTY: false });
-  stdout = Object.freeze({ isTTY: false, write: (chunk: unknown, encodingOrCallback?: ProcessWriteEncoding | ProcessWriteCallback, callback?: ProcessWriteCallback) => this.#write("stdout", chunk, encodingOrCallback, callback) });
-  stderr = Object.freeze({ isTTY: false, write: (chunk: unknown, encodingOrCallback?: ProcessWriteEncoding | ProcessWriteCallback, callback?: ProcessWriteCallback) => this.#write("stderr", chunk, encodingOrCallback, callback) });
+  stdin = new ProcessReadableStdio();
+  stdout = new ProcessWritableStdio((chunk) => this.emit("stdout", chunk));
+  stderr = new ProcessWritableStdio((chunk) => this.emit("stderr", chunk));
   #cwd: string;
   #emitExitInCapture: boolean;
   #exitMode: ProcessExitMode;
@@ -112,12 +168,6 @@ export class BrowserProcess extends EventEmitter {
     return previous;
   }
 
-  #write(event: "stdout" | "stderr", chunk: unknown, encodingOrCallback?: ProcessWriteEncoding | ProcessWriteCallback, callback?: ProcessWriteCallback): boolean {
-    this.emit(event, chunk);
-    const writeCallback = typeof encodingOrCallback === "function" ? encodingOrCallback : callback;
-    writeCallback?.();
-    return true;
-  }
 }
 
 export const processBuiltin = new BrowserProcess();

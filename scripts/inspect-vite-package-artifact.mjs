@@ -78,6 +78,7 @@ const execute = args.includes("--execute");
 const forceWasi = args.includes("--force-wasi");
 const executionIsolation = readFlagValue(args, "--execution-isolation") || "shared";
 const fetchPaths = readListFlagValue(args, "--fetch-paths");
+const traceFs = args.includes("--trace-fs");
 const wasmPolicyPath = readFlagValue(args, "--wasm-policy");
 const workerTimeoutMs = readOptionalIntegerFlag(args, "--worker-timeout-ms") ?? 1000;
 const [vitePackageRootArg, nodeModulesRootArg] = args.filter((arg, index) => {
@@ -85,6 +86,7 @@ const [vitePackageRootArg, nodeModulesRootArg] = args.filter((arg, index) => {
   if (arg === "--execution-isolation") return false;
   if (arg === "--fetch-paths") return false;
   if (arg === "--force-wasi") return false;
+  if (arg === "--trace-fs") return false;
   if (arg === "--wasm-policy") return false;
   if (arg === "--worker-timeout-ms") return false;
   if (index > 0 && args[index - 1] === "--execution-isolation") return false;
@@ -95,7 +97,7 @@ const [vitePackageRootArg, nodeModulesRootArg] = args.filter((arg, index) => {
 });
 
 if (!vitePackageRootArg) {
-  console.error("Usage: node scripts/inspect-vite-package-artifact.mjs <vite-package-root> [node-modules-root] [--execute] [--execution-isolation shared|snapshot|worker] [--fetch-paths <path[,path...]>] [--worker-timeout-ms <ms>] [--force-wasi] [--wasm-policy <manifest-json>]");
+  console.error("Usage: node scripts/inspect-vite-package-artifact.mjs <vite-package-root> [node-modules-root] [--execute] [--execution-isolation shared|snapshot|worker] [--fetch-paths <path[,path...]>] [--trace-fs] [--worker-timeout-ms <ms>] [--force-wasi] [--wasm-policy <manifest-json>]");
   process.exitCode = 1;
 } else {
   const vitePackageRoot = resolve(vitePackageRootArg);
@@ -127,7 +129,7 @@ if (!vitePackageRootArg) {
       dependencyClosure,
       directReadiness: summarizeReadiness(readiness),
       executionSmoke: execute
-        ? await runExecutionSmoke(vitePackageArtifact, dependencyClosure?.artifacts || [], { executionIsolation, fetchPaths, forceWasi, wasmAdapterPolicy, workerTimeoutMs })
+        ? await runExecutionSmoke(vitePackageArtifact, dependencyClosure?.artifacts || [], { executionIsolation, fetchPaths, forceWasi, traceFs, wasmAdapterPolicy, workerTimeoutMs })
         : null,
       hydratedReadiness: dependencyClosure
         ? summarizeReadiness(createHydratedWorkflowReadiness(vitePackageArtifact, dependencyClosure.artifacts, wasmAdapterPolicy))
@@ -174,6 +176,7 @@ async function runExecutionSmoke(vitePackageArtifact, dependencyArtifacts, optio
     result = await workflow.executeRealCli(["--host", "127.0.0.1"], env, {
       isolation: options.executionIsolation,
       readyTimeoutMs: 1000,
+      ...(options.traceFs ? { traceFs: true } : {}),
       ...(options.executionIsolation === "worker"
         ? {
           workerFactory: () => new NodeThreadCliEvaluationWorker(),
@@ -189,6 +192,7 @@ async function runExecutionSmoke(vitePackageArtifact, dependencyArtifacts, optio
       exitCode: 1,
       nativeBindingBlocker: null,
       isolation: options.executionIsolation,
+      ...(options.traceFs ? { fsTrace: [] } : {}),
       isolationBlocker: null,
       registrations: null,
       runtimeBuiltinBlocker: null,
@@ -198,6 +202,7 @@ async function runExecutionSmoke(vitePackageArtifact, dependencyArtifacts, optio
       wasiWorkerBootBlocker: classifyWasiWorkerBootBlocker(message, dependencyArtifacts, options.executionIsolation),
       stderrCauseLines: causeLines(message),
       stderrFirstLine: firstNonEmptyLine(message),
+      stderrPreview: previewText(message),
       stdoutFirstLine: null,
       ...(options.fetchPaths.length > 0 ? { fetchResults: null } : {}),
       ...(options.executionIsolation === "worker" ? { workerTimeoutMs: options.workerTimeoutMs } : {})
@@ -210,6 +215,7 @@ async function runExecutionSmoke(vitePackageArtifact, dependencyArtifacts, optio
     env,
     exitCode: result.exitCode,
     isolation: options.executionIsolation,
+    ...(options.traceFs && result.fsTrace ? { fsTrace: summarizeFsTrace(result.fsTrace) } : {}),
     nativeBindingBlocker: classifyNativeBindingBlocker(result.stderr),
     isolationBlocker: classifyIsolationBlocker(result.stderr),
     registrations: {
@@ -225,7 +231,9 @@ async function runExecutionSmoke(vitePackageArtifact, dependencyArtifacts, optio
     wasiWorkerBootBlocker: classifyWasiWorkerBootBlocker(result.stderr, dependencyArtifacts, options.executionIsolation),
     stderrCauseLines: causeLines(result.stderr),
     stderrFirstLine: firstNonEmptyLine(result.stderr),
+    stderrPreview: previewText(result.stderr),
     stdoutFirstLine: firstNonEmptyLine(result.stdout),
+    stdoutPreview: previewText(result.stdout),
     ...(fetchResults ? { fetchResults } : {}),
     ...(options.executionIsolation === "worker" ? { workerTimeoutMs: options.workerTimeoutMs } : {})
   };
@@ -251,6 +259,29 @@ async function fetchExecutionSmokePaths(workflow, fetchPaths) {
     }
   }
   return results;
+}
+
+function summarizeFsTrace(entries) {
+  const summary = [];
+  const seen = new Map();
+  for (const entry of entries) {
+    const key = `${entry.op}:${entry.path}:${entry.result ?? ""}:${entry.error ?? ""}`;
+    const existing = seen.get(key);
+    if (existing) {
+      existing.count += 1;
+      continue;
+    }
+    const item = {
+      count: 1,
+      op: entry.op,
+      path: entry.path,
+      ...(entry.result === undefined ? {} : { result: entry.result }),
+      ...(entry.error === undefined ? {} : { error: entry.error })
+    };
+    seen.set(key, item);
+    summary.push(item);
+  }
+  return summary.slice(0, 200);
 }
 
 function inspectDependencyClosure(nodeModulesRoot, vitePackageArtifact, wasmAdapterPolicy) {
@@ -452,6 +483,11 @@ function inferNativeBindingPackageName(stderr) {
 
 function firstNonEmptyLine(value) {
   return value.split(/\r?\n/).find((line) => line.trim().length > 0) || null;
+}
+
+function previewText(value) {
+  const text = String(value || "").trim();
+  return text.length > 0 ? text.slice(0, 2000) : null;
 }
 
 function causeLines(value) {

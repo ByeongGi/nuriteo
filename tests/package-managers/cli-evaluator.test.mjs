@@ -530,6 +530,23 @@ const workspace = new MemoryPackageManagerWorkspace([
     data: JSON.stringify({ name: "esm-fixture-cli", version: "1.2.3", type: "module", bin: { vite: "bin/vite.js" } })
   },
   {
+    path: "/workspace/bundle-process-cli/package/bin/vite.js",
+    data: "#!/usr/bin/env node\nimport '../dist/node/cli.js';\n"
+  },
+  {
+    path: "/workspace/bundle-process-cli/package/dist/node/cli.js",
+    data: `
+      import process$1 from 'node:process';
+      process.stdin.on('data', () => {});
+      process.stdout.write(process.cwd() + '|' + process$1.cwd() + '|' + typeof process.stdin.on + '\\n');
+      export const started = true;
+    `
+  },
+  {
+    path: "/workspace/bundle-process-cli/package/package.json",
+    data: JSON.stringify({ name: "bundle-process-fixture-cli", version: "1.2.3", type: "module", bin: { vite: "bin/vite.js" } })
+  },
+  {
     path: "/workspace/unawaited-dynamic-cli/package/bin/vite.js",
     data: `
       function start() {
@@ -1206,6 +1223,22 @@ const asyncEsmResult = await createAsyncCliModuleEvaluator({
 assert.equal(asyncEsmResult.stdout, "vite esm boot class boot star star createRequire 1.2.3 true mark\n");
 assert.equal(asyncEsmResult.stderr, "");
 assert.equal(asyncEsmResult.exitCode, 0);
+
+const bundleProcessResult = await createAsyncCliModuleEvaluator({
+  root: "/workspace",
+  reader: workspace
+})({
+  entry: {
+    name: "vite",
+    version: "1.2.3",
+    entry: "/workspace/bundle-process-cli/package/bin/vite.js"
+  },
+  args: ["--host", "127.0.0.1"],
+  cwd: "/workspace/project"
+});
+assert.equal(bundleProcessResult.stdout, "/workspace/project|/workspace/project|function\n");
+assert.equal(bundleProcessResult.stderr, "");
+assert.equal(bundleProcessResult.exitCode, 0);
 
 const unawaitedDynamicResult = await createAsyncCliModuleEvaluator({
   root: "/workspace",

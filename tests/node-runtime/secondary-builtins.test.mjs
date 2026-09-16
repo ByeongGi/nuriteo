@@ -128,6 +128,15 @@ assert.equal(processModule.version, "v22.23.0");
 assert.equal(processModule.execPath, "/usr/local/bin/node");
 assert.equal(processModule.cwd(), "/workspace");
 assert.deepEqual(processModule.execArgv, []);
+let stdinEvent = "";
+processModule.stdin.on("data", (chunk) => {
+  stdinEvent = String(chunk);
+});
+processModule.stdin.emit("data", "typed");
+assert.equal(stdinEvent, "typed");
+assert.equal(processModule.stdin.setRawMode(true), processModule.stdin);
+assert.equal(processModule.stdin.pause(), processModule.stdin);
+assert.equal(processModule.stdin.resume(), processModule.stdin);
 let stdoutFlushed = false;
 assert.equal(processModule.stdout.write("", () => { stdoutFlushed = true; }), true);
 assert.equal(stdoutFlushed, true);

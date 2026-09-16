@@ -629,7 +629,7 @@ function unescapeJsString(value: string): string {
 
 function declaresLexicalBinding(source: string, name: string): boolean {
   const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return new RegExp(`(?:^|[\\n;])\\s*(?:const|let|var|class|function)\\s+${escaped}\\b`).test(source);
+  return new RegExp(`(?:^|[\\n;])\\s*(?:const|let|var|class|function)\\s+${escaped}(?![$\\w])`).test(source);
 }
 
 function prepareEsmSource(source: string): string {

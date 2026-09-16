@@ -6,6 +6,7 @@ import {
   createIsolatedAsyncCliModuleEvaluator,
   createWorkerBackedAsyncCliModuleEvaluator,
   type CliEvaluationCapturedGlobalCall,
+  type CliEvaluationFsTraceEntry,
   type CliEvaluationWorkerFactory
 } from "../package-managers/cli-evaluator.ts";
 import { analyzeCliModuleGraph, type CliModuleGraph, type CliModuleGraphIssue } from "../package-managers/cli-module-graph.ts";
@@ -144,6 +145,7 @@ export interface ViteProductCliExecutionResult extends CliRunResult {
   asyncModuleBlocker: ViteProductAsyncModuleBlocker | null;
   buildRegistrations: ViteProductCliBuildRegistration[];
   cwd: string;
+  fsTrace?: CliEvaluationFsTraceEntry[];
   hmrRegistrations: ViteProductCliHmrRegistration[];
   mode: ViteProductCliExecutionMode;
   serverRegistrations: ViteProductCliServerRegistration[];
@@ -164,6 +166,7 @@ export type ViteProductCliExecutionMode = "async-cli-module-evaluation" | "isola
 export interface ViteProductCliExecutionOptions {
   isolation?: "shared" | "snapshot" | "worker";
   readyTimeoutMs?: number;
+  traceFs?: boolean;
   workerFactory?: CliEvaluationWorkerFactory;
   workerTimeoutMs?: number;
 }
@@ -556,7 +559,9 @@ export class ViteProductWorkflow {
       this.#broadcastHmr(update);
       return update;
     };
+    const fsTrace: CliEvaluationFsTraceEntry[] = [];
     const evaluatorOptions = {
+      ...(options.traceFs ? { fsTrace } : {}),
       ...(options.readyTimeoutMs !== undefined ? { readyTimeoutMs: options.readyTimeoutMs } : {}),
       loopbackNetwork: this.network,
       root: this.projectRoot,
@@ -600,6 +605,7 @@ export class ViteProductWorkflow {
           "__viteRegisterTransform"
         ],
         loopbackNetwork: this.network,
+        ...(options.traceFs ? { traceFs: true } : {}),
         workerFactory: options.workerFactory!,
         ...(options.workerTimeoutMs !== undefined ? { workerTimeoutMs: options.workerTimeoutMs } : {}),
         workspace: this.workspace
@@ -630,6 +636,7 @@ export class ViteProductWorkflow {
       asyncModuleBlocker: classifyAsyncModuleBlocker(result.stderr),
       buildRegistrations,
       cwd: this.projectRoot,
+      ...(options.traceFs && !("fsTrace" in result) ? { fsTrace } : {}),
       hmrRegistrations,
       mode: isolation === "worker"
         ? "worker-backed-cli-module-evaluation"
