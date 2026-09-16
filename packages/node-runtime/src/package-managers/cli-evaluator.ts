@@ -321,7 +321,14 @@ export function createCliEvaluationHttpBridge(): CliEvaluationHttpBridge {
   const network = createLoopbackNetwork();
   return {
     async handleRequest(port, request) {
-      return network.fetch(`http://127.0.0.1:${port}${request.path}`, {
+      const response = await network.fetch(`http://127.0.0.1:${port}${request.path}`, {
+        headers: request.headers,
+        method: request.method,
+        ...(request.body === undefined ? {} : { body: request.body })
+      });
+      const viteClientPath = viteInternalClientFsPath(request.path);
+      if (response.statusCode !== 404 || !viteClientPath) return response;
+      return network.fetch(`http://127.0.0.1:${port}${viteClientPath}`, {
         headers: request.headers,
         method: request.method,
         ...(request.body === undefined ? {} : { body: request.body })
@@ -330,6 +337,13 @@ export function createCliEvaluationHttpBridge(): CliEvaluationHttpBridge {
     network,
     ports: () => [...network.listeners.keys()]
   };
+}
+
+function viteInternalClientFsPath(path: string): string | null {
+  const normalizedPath = path.split("?")[0] || "/";
+  if (normalizedPath === "/@vite/client") return "/@fs//workspace/project/node_modules/vite/dist/client/client.mjs";
+  if (normalizedPath === "/@vite/env") return "/@fs//workspace/project/node_modules/vite/dist/client/env.mjs";
+  return null;
 }
 
 function createCapturedGlobalCallHandlers(

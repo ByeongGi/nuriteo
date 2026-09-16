@@ -1045,6 +1045,50 @@ await assert.rejects(
   (error) => error.code === "ECONNREFUSED"
 );
 
+const viteClientBridgeWorkspace = new MemoryPackageManagerWorkspace([
+  {
+    path: "/workspace/vite-client-bridge/package/bin/server.cjs",
+    data: `
+      const http = require('node:http');
+      http.createServer((request, response) => {
+        if (request.url === '/@fs//workspace/project/node_modules/vite/dist/client/client.mjs') {
+          response.setHeader('content-type', 'text/javascript');
+          response.end('export const createHotContext = () => ({ accept() {} });');
+          return;
+        }
+        response.writeHead(404, { 'content-type': 'text/plain' });
+        response.end('');
+      }).listen(6124, '127.0.0.1', () => process.stdout.write('listening'));
+    `
+  },
+  {
+    path: "/workspace/vite-client-bridge/package/package.json",
+    data: JSON.stringify({ name: "vite-client-bridge", version: "1.0.0", bin: { "vite-client-bridge": "bin/server.cjs" } })
+  }
+]);
+const viteClientBridgeNetwork = createLoopbackNetwork();
+const viteClientBridgeResult = await createWorkerBackedAsyncCliModuleEvaluator({
+  loopbackNetwork: viteClientBridgeNetwork,
+  root: "/workspace",
+  workerFactory: () => new FakeCliEvaluationWorker(),
+  workspace: viteClientBridgeWorkspace
+})({
+  entry: {
+    name: "vite-client-bridge",
+    version: "1.0.0",
+    entry: "/workspace/vite-client-bridge/package/bin/server.cjs"
+  },
+  args: [],
+  cwd: "/workspace/project"
+});
+assert.equal(viteClientBridgeResult.exitCode, 0);
+const viteClientBridgeResponse = await viteClientBridgeNetwork.fetch("http://127.0.0.1:6124/@vite/client", {
+  headers: { "sec-fetch-dest": "script" }
+});
+assert.equal(viteClientBridgeResponse.statusCode, 200);
+assert.match(viteClientBridgeResponse.body, /createHotContext/);
+viteClientBridgeResult.closeBridgedServers?.();
+
 const pendingCliWorkspace = new MemoryPackageManagerWorkspace([
   {
     path: "/workspace/pending/package/bin/pending.mjs",
