@@ -170,7 +170,10 @@ async function runExecutionSmoke(vitePackageArtifact, dependencyArtifacts, optio
     vitePackageArtifact
   });
   workflow.install();
-  const env = options.forceWasi ? { NAPI_RS_FORCE_WASI: "error" } : {};
+  const env = {
+    ...(process.env.DEBUG ? { DEBUG: process.env.DEBUG } : {}),
+    ...(options.forceWasi ? { NAPI_RS_FORCE_WASI: "error" } : {})
+  };
   let result;
   try {
     result = await workflow.executeRealCli(["--host", "127.0.0.1"], env, {
