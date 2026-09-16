@@ -38,10 +38,11 @@ class NodeThreadCliEvaluationWorker {
           const bridge = httpBridges.get(message.evaluationId);
           try {
             if (!bridge?.writeFile) throw new Error("missing CLI fs bridge: " + message.evaluationId);
-            bridge.writeFile(message.path, message.data);
+            const result = bridge.writeFile(message.path, message.data);
             parentPort.postMessage({
               evaluationId: message.evaluationId,
               id: message.id,
+              result,
               type: "cli:fs:write:result"
             });
           } catch (error) {
@@ -138,6 +139,7 @@ const projectFile = readFlagValue(args, "--project-file");
 const traceFs = args.includes("--trace-fs");
 const wasmPolicyPath = readFlagValue(args, "--wasm-policy");
 const websocketEdit = readFlagValue(args, "--websocket-edit");
+const websocketEditDelayMs = readOptionalIntegerFlag(args, "--websocket-edit-delay-ms") ?? 1000;
 const websocketPaths = readListFlagValue(args, "--websocket-paths");
 const workerTimeoutMs = readOptionalIntegerFlag(args, "--worker-timeout-ms") ?? 1000;
 const [vitePackageRootArg, nodeModulesRootArg] = args.filter((arg, index) => {
@@ -150,6 +152,7 @@ const [vitePackageRootArg, nodeModulesRootArg] = args.filter((arg, index) => {
   if (arg === "--trace-fs") return false;
   if (arg === "--wasm-policy") return false;
   if (arg === "--websocket-edit") return false;
+  if (arg === "--websocket-edit-delay-ms") return false;
   if (arg === "--websocket-paths") return false;
   if (arg === "--worker-timeout-ms") return false;
   if (index > 0 && args[index - 1] === "--cli-args") return false;
@@ -158,13 +161,14 @@ const [vitePackageRootArg, nodeModulesRootArg] = args.filter((arg, index) => {
   if (index > 0 && args[index - 1] === "--project-file") return false;
   if (index > 0 && args[index - 1] === "--wasm-policy") return false;
   if (index > 0 && args[index - 1] === "--websocket-edit") return false;
+  if (index > 0 && args[index - 1] === "--websocket-edit-delay-ms") return false;
   if (index > 0 && args[index - 1] === "--websocket-paths") return false;
   if (index > 0 && args[index - 1] === "--worker-timeout-ms") return false;
   return true;
 });
 
 if (!vitePackageRootArg) {
-  console.error("Usage: node scripts/inspect-vite-package-artifact.mjs <vite-package-root> [node-modules-root] [--execute] [--cli-args <arg[,arg...]>] [--execution-isolation shared|snapshot|worker] [--fetch-paths <path[,path...]>] [--project-file <relative-path=source>] [--websocket-paths <path[,path...]>] [--websocket-edit <absolute-path=source>] [--trace-fs] [--worker-timeout-ms <ms>] [--force-wasi] [--wasm-policy <manifest-json>]");
+  console.error("Usage: node scripts/inspect-vite-package-artifact.mjs <vite-package-root> [node-modules-root] [--execute] [--cli-args <arg[,arg...]>] [--execution-isolation shared|snapshot|worker] [--fetch-paths <path[,path...]>] [--project-file <relative-path=source>] [--websocket-paths <path[,path...]>] [--websocket-edit <absolute-path=source>] [--websocket-edit-delay-ms <ms>] [--trace-fs] [--worker-timeout-ms <ms>] [--force-wasi] [--wasm-policy <manifest-json>]");
   process.exitCode = 1;
 } else {
   const vitePackageRoot = resolve(vitePackageRootArg);
@@ -197,7 +201,7 @@ if (!vitePackageRootArg) {
       dependencyClosure,
       directReadiness: summarizeReadiness(readiness),
       executionSmoke: execute
-        ? await runExecutionSmoke(vitePackageArtifact, dependencyClosure?.artifacts || [], { cliArgs, executionIsolation, fetchPaths, forceWasi, projectFile, traceFs, wasmAdapterPolicy, websocketEdit, websocketPaths, workerTimeoutMs })
+        ? await runExecutionSmoke(vitePackageArtifact, dependencyClosure?.artifacts || [], { cliArgs, executionIsolation, fetchPaths, forceWasi, projectFile, traceFs, wasmAdapterPolicy, websocketEdit, websocketEditDelayMs, websocketPaths, workerTimeoutMs })
         : null,
       hydratedReadiness: dependencyClosure
         ? summarizeReadiness(createHydratedWorkflowReadiness(vitePackageArtifact, dependencyClosure.artifacts, wasmAdapterPolicy))
@@ -282,7 +286,7 @@ async function runExecutionSmoke(vitePackageArtifact, dependencyArtifacts, optio
     };
   }
   const fetchResults = await fetchExecutionSmokePaths(workflow, options.fetchPaths);
-  const websocketResults = await connectExecutionSmokeWebSockets(workflow, options.websocketPaths, result, options.websocketEdit);
+  const websocketResults = await connectExecutionSmokeWebSockets(workflow, options.websocketPaths, result, options.websocketEdit, options.websocketEditDelayMs);
   result.closeBridgedServers?.();
   const distArtifacts = summarizeDistArtifacts(result.workspaceSnapshot);
   return {
@@ -372,12 +376,13 @@ async function fetchExecutionSmokePath(workflow, path) {
   }
 }
 
-async function connectExecutionSmokeWebSockets(workflow, websocketPaths, executionResult, websocketEdit) {
+async function connectExecutionSmokeWebSockets(workflow, websocketPaths, executionResult, websocketEdit, websocketEditDelayMs) {
   if (!websocketPaths || websocketPaths.length === 0) return null;
   const results = [];
   for (const path of websocketPaths) {
     const messages = [];
     const edit = parseWebSocketEdit(websocketEdit);
+    let editResult = null;
     let postEditFetch = null;
     try {
       const socket = workflow.network.connectWebSocket(`ws://127.0.0.1:5173${path}`, { protocol: "vite-hmr" });
@@ -386,8 +391,8 @@ async function connectExecutionSmokeWebSockets(workflow, websocketPaths, executi
       await Promise.resolve();
       await new Promise((resolve) => setTimeout(resolve, 10));
       if (edit && executionResult.writeBridgedFile) {
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-        await executionResult.writeBridgedFile(edit.path, edit.data);
+        await new Promise((resolve) => setTimeout(resolve, websocketEditDelayMs));
+        editResult = await executionResult.writeBridgedFile(edit.path, edit.data);
         await new Promise((resolve) => setTimeout(resolve, 1000));
         postEditFetch = await fetchExecutionSmokePath(workflow, projectPathToUrl(edit.path));
       }
@@ -395,8 +400,9 @@ async function connectExecutionSmokeWebSockets(workflow, websocketPaths, executi
       const messageTypes = messages.map((message) => parseMessageType(message));
       results.push({
         ...(edit ? { editPath: edit.path } : {}),
+        ...(editResult ? { editResult } : {}),
         ...(postEditFetch ? { postEditFetch } : {}),
-        hmrUpdateBlocker: classifyHmrUpdateBlocker(edit, executionResult, messageTypes),
+        hmrUpdateBlocker: classifyHmrUpdateBlocker(edit, executionResult, editResult, messageTypes),
         messages: messages.map((message) => previewText(message)),
         messageTypes,
         path,
@@ -421,7 +427,7 @@ function projectPathToUrl(path) {
   return "/" + path.slice("/workspace/project/".length);
 }
 
-function classifyHmrUpdateBlocker(edit, executionResult, messageTypes) {
+function classifyHmrUpdateBlocker(edit, executionResult, editResult, messageTypes) {
   if (!edit) return null;
   if (!executionResult.writeBridgedFile) {
     return {
@@ -430,6 +436,12 @@ function classifyHmrUpdateBlocker(edit, executionResult, messageTypes) {
     };
   }
   if (messageTypes.some((type) => type === "update" || type === "full-reload" || type === "error")) return null;
+  if (editResult && editResult.watcherCount > 0) {
+    return {
+      code: "EVITEHMRNOBROADCAST",
+      reason: "Vite file watchers are registered, but no HMR update payload was observed after worker VFS edit"
+    };
+  }
   return {
     code: "EVITEHMRNOUPDATE",
     reason: "no Vite HMR update payload was observed after worker VFS edit"
@@ -576,6 +588,8 @@ function createPolicyFromManifest(path) {
 }
 
 function readFlagValue(values, flag) {
+  const inline = values.find((value) => value.startsWith(`${flag}=`));
+  if (inline) return inline.slice(flag.length + 1);
   const index = values.indexOf(flag);
   if (index < 0) return null;
   const value = values[index + 1];

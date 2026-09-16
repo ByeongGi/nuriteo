@@ -40,7 +40,7 @@ export interface IsolatedCliRunResult extends CliRunResult {
   capturedGlobalCalls?: CliEvaluationCapturedGlobalCall[];
   closeBridgedServers?: () => void;
   fsTrace?: CliEvaluationFsTraceEntry[];
-  writeBridgedFile?: (path: string, data: string) => Promise<void>;
+  writeBridgedFile?: (path: string, data: string) => Promise<CliEvaluationFsWriteResult>;
   workspaceSnapshot: PackageManagerWorkspaceSnapshot;
 }
 
@@ -134,7 +134,14 @@ export interface CliEvaluationWorkerFsWriteResultMessage {
   error?: string;
   evaluationId: number;
   id: number;
+  result?: CliEvaluationFsWriteResult;
   type: "cli:fs:write:result";
+}
+
+export interface CliEvaluationFsWriteResult {
+  statWatcherCount: number;
+  watcherCount: number;
+  watchedPaths: string[];
 }
 
 export interface CliEvaluationWorkerWebSocketConnectMessage {
@@ -171,7 +178,7 @@ export interface CliEvaluationHttpBridge {
   handleRequest(port: number, request: RuntimeHttpRequest): Promise<RuntimeHttpResponse>;
   network: LoopbackNetwork;
   ports(): number[];
-  writeFile?(path: string, data: string): void;
+  writeFile?(path: string, data: string): CliEvaluationFsWriteResult;
 }
 
 export interface CliModuleEvaluationRequest {
@@ -236,7 +243,7 @@ export function createWorkerBackedAsyncCliModuleEvaluator(
       }>();
       const pendingFsWrites = new Map<number, {
         reject: (error: Error) => void;
-        resolve: () => void;
+        resolve: (result: CliEvaluationFsWriteResult) => void;
       }>();
       let nextHttpRequestId = 1;
       let nextFsWriteId = 1;
@@ -262,7 +269,7 @@ export function createWorkerBackedAsyncCliModuleEvaluator(
       };
       const writeBridgedFile = (path: string, data: string) => {
         const writeId = nextFsWriteId++;
-        return new Promise<void>((resolveWrite, rejectWrite) => {
+        return new Promise<CliEvaluationFsWriteResult>((resolveWrite, rejectWrite) => {
           pendingFsWrites.set(writeId, {
             reject: rejectWrite,
             resolve: resolveWrite
@@ -284,7 +291,8 @@ export function createWorkerBackedAsyncCliModuleEvaluator(
           if (!pending) return;
           pendingFsWrites.delete(data.id);
           if (data.error) pending.reject(new Error(data.error));
-          else pending.resolve();
+          else if (data.result) pending.resolve(data.result);
+          else pending.reject(new Error("CLI evaluation worker returned no FS write result"));
           return;
         }
         if (data?.type === "cli:http:response" && data.evaluationId === id) {
@@ -432,7 +440,10 @@ export async function evaluateCliModuleWorkerMessage(
       ...(message.captureGlobalCalls ? { globals: createCapturedGlobalCallHandlers(message.captureGlobalCalls, capturedGlobalCalls) } : {}),
       ...(options.httpBridge ? {
         onFsFacade: (fs) => {
-          options.httpBridge!.writeFile = (path, data) => fs.writeFileSync(path, data);
+          options.httpBridge!.writeFile = (path, data) => {
+            fs.writeFileSync(path, data);
+            return getCliFsWatchSummary(fs);
+          };
         }
       } : {}),
       reader: workspace,
@@ -1340,6 +1351,8 @@ function createWorkspaceFsFacade(
   const openFiles = new Map<number, CliOpenFile>();
   const watchers = new Set<CliFsWatcher>();
   const statWatchers = new Map<string, Set<CliFsStatWatcher>>();
+  const modifiedTimes = new Map<string, number>();
+  let nextModifiedTime = 1;
   const resolvePath = (path: string | URL | { href?: string }) => normalizeFsPath(path, getCwd());
   const traceFs = (entry: CliEvaluationFsTraceEntry) => {
     if (fsTrace && fsTrace.length < 1000) fsTrace.push(entry);
@@ -1530,6 +1543,7 @@ function createWorkspaceFsFacade(
         if (code !== "ENOENT") throw error;
       }
       writer.writeText(normalized, `${existing}${decodeFsData(data)}`);
+      touchPath(normalized);
       notifyFsChange(normalized, "change");
     },
     mkdir(path: string, optionsOrCallback?: { recursive?: boolean } | ((error?: Error | null) => void), callback?: (error?: Error | null) => void): void {
@@ -1545,6 +1559,7 @@ function createWorkspaceFsFacade(
       if (!writer) throw unsupportedFsMutation("mkdirSync");
       const normalized = resolvePath(path);
       writer.mkdir(normalized);
+      touchPath(normalized);
       notifyFsChange(normalized, "rename");
     },
     mkdtemp(prefix: string, optionsOrCallback?: unknown, callback?: (error: Error | null, path?: string) => void): void {
@@ -1853,7 +1868,7 @@ function createWorkspaceFsFacade(
     statSync(path: string, options?: CliStatOptions): ReturnType<RuntimeFsBinding["statSync"]> | undefined {
       const normalized = resolvePath(path);
       try {
-        const stats = statFromReader(reader, normalized);
+        const stats = withModifiedTime(normalized, statFromReader(reader, normalized));
         traceFs({ op: "statSync", path: normalized, result: stats.isDirectory() ? "dir" : "file" });
         return stats;
       } catch (error) {
@@ -1945,6 +1960,7 @@ function createWorkspaceFsFacade(
       if (!writer) throw unsupportedFsMutation("writeFileSync");
       const normalized = resolvePath(path);
       writer.writeText(normalized, decodeFsData(data));
+      touchPath(normalized);
       notifyFsChange(normalized, "change");
     },
     writeFile(path: string, data: RuntimeFsData, optionsOrCallback?: unknown, callback?: (error?: Error | null) => void): void {
@@ -2002,6 +2018,15 @@ function createWorkspaceFsFacade(
     }
   };
 
+  (facade as RuntimeFsBinding & CliFsDebugBinding).__debugWatchSummary = () => ({
+    statWatcherCount: statWatchers.size,
+    watcherCount: watchers.size,
+    watchedPaths: [
+      ...[...watchers].map((watcher) => watcher.path),
+      ...statWatchers.keys()
+    ].sort()
+  });
+
   return facade as RuntimeFsBinding;
 
   function notifyFsChange(path: string, eventType: CliWatchEventType): void {
@@ -2036,8 +2061,26 @@ function createWorkspaceFsFacade(
     next.set(bytes, position);
     file.bytes = next;
     writer.writeText(file.path, decoder.decode(next));
+    touchPath(file.path);
     notifyFsChange(file.path, "change");
     return bytes.byteLength;
+  }
+
+  function touchPath(path: string): void {
+    modifiedTimes.set(normalize(path), nextModifiedTime++);
+  }
+
+  function withModifiedTime<T extends ReturnType<RuntimeFsBinding["statSync"]>>(path: string, stats: T): T {
+    const modifiedTime = modifiedTimes.get(normalize(path));
+    if (modifiedTime === undefined) return stats;
+    const time = new Date(modifiedTime);
+    return {
+      ...stats,
+      ctime: time,
+      ctimeMs: modifiedTime,
+      mtime: time,
+      mtimeMs: modifiedTime
+    };
   }
 
   function decodeFsData(data: RuntimeFsData): string {
@@ -2239,6 +2282,18 @@ type CliWatchEventType = "change" | "rename";
 type CliWatchListener = (eventType: CliWatchEventType, filename: string) => void;
 type CliFsStat = ReturnType<RuntimeFsBinding["statSync"]>;
 type CliFsStatListener = (current: CliFsStat | undefined, previous: CliFsStat | undefined) => void;
+
+interface CliFsDebugBinding {
+  __debugWatchSummary?: () => CliEvaluationFsWriteResult;
+}
+
+function getCliFsWatchSummary(fs: RuntimeFsBinding): CliEvaluationFsWriteResult {
+  return (fs as RuntimeFsBinding & CliFsDebugBinding).__debugWatchSummary?.() ?? {
+    statWatcherCount: 0,
+    watcherCount: 0,
+    watchedPaths: []
+  };
+}
 
 interface CliWatchOptions {
   persistent?: boolean;

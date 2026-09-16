@@ -47,6 +47,12 @@ export class Readable extends Stream {
   #ended = false;
   #destroyed = false;
   #encoding: BufferEncoding | null = null;
+  #readScheduled = false;
+
+  constructor(options: { objectMode?: boolean } = {}) {
+    super();
+    this._readableState.objectMode = options.objectMode === true;
+  }
 
   static from(iterable: Iterable<RuntimeValue> | AsyncIterable<RuntimeValue>): Readable {
     const readable = new Readable();
@@ -97,7 +103,24 @@ export class Readable extends Stream {
   }
 
   read(): RuntimeValue {
+    this.#scheduleRead();
     return this.#queue.shift() ?? null;
+  }
+
+  override on(eventName: string | symbol, listener: Listener): this {
+    super.on(eventName, listener);
+    if (eventName === "data" || eventName === "readable") this.#scheduleRead();
+    return this;
+  }
+
+  override addListener(eventName: string | symbol, listener: Listener): this {
+    return this.on(eventName, listener);
+  }
+
+  override once(eventName: string | symbol, listener: Listener): this {
+    super.once(eventName, listener);
+    if (eventName === "data" || eventName === "readable") this.#scheduleRead();
+    return this;
   }
 
   destroy(error?: RuntimeValue): this {
@@ -106,6 +129,22 @@ export class Readable extends Stream {
     if (error) this.emit("error", error);
     this.emit("close");
     return this;
+  }
+
+  protected _read(_size?: number): void {}
+
+  #scheduleRead(): void {
+    if (this.#readScheduled || this.#ended || this.#destroyed) return;
+    this.#readScheduled = true;
+    queueMicrotask(() => {
+      this.#readScheduled = false;
+      if (this.#ended || this.#destroyed) return;
+      try {
+        void this._read(4096);
+      } catch (error) {
+        this.destroy(error);
+      }
+    });
   }
 
   async *[Symbol.asyncIterator](): AsyncIterableIterator<RuntimeValue> {

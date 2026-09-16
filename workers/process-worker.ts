@@ -136,10 +136,11 @@ function handleCliFsWrite(message) {
   const bridge = cliHttpBridges.get(message.evaluationId);
   try {
     if (!bridge?.writeFile) throw new Error(`missing CLI fs bridge: ${message.evaluationId}`);
-    bridge.writeFile(message.path, message.data);
+    const result = bridge.writeFile(message.path, message.data);
     self.postMessage({
       evaluationId: message.evaluationId,
       id: message.id,
+      result,
       type: "cli:fs:write:result"
     });
   } catch (error) {

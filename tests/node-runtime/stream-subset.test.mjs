@@ -134,6 +134,23 @@ latePipeReadable.pipe(new RuntimeWritable({
 }));
 assert.deepEqual(latePipeOutput, ["late"]);
 
+class PullReadable extends RuntimeReadable {
+  reads = 0;
+
+  _read() {
+    this.reads += 1;
+    this.push("pulled");
+    this.push(null);
+  }
+}
+
+const pullReadable = new PullReadable({ objectMode: true });
+const pulled = [];
+pullReadable.on("data", (chunk) => pulled.push(String(chunk)));
+await new Promise((resolve) => pullReadable.once("end", resolve));
+assert.deepEqual(pulled, ["pulled"]);
+assert.equal(pullReadable.reads, 1);
+
 const requireBuiltin = createBuiltinLoader({});
 assert.equal(requireBuiltin("node:stream").Readable, RuntimeReadable);
 assert.equal(typeof requireBuiltin("stream"), "function");
