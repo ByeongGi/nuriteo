@@ -366,7 +366,7 @@ async function fetchExecutionSmokePath(workflow, path) {
       headers: headersForFetchPath(path)
     });
     return {
-      bodyStart: (await response.text()).slice(0, 160),
+      bodyStart: (await response.text()).slice(0, 2000),
       contentType: response.headers.get("content-type"),
       path,
       status: response.status

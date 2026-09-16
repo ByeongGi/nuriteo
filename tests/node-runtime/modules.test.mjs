@@ -367,13 +367,15 @@ runtime.registerMany({
     kind: "esm-source",
     source: `
       const helper = "value";
+      const literal = "import.meta";
       const code = \`
 export default function WorkerWrapper(options) {
   import.meta.url;
   return "\${helper}:" + options.name;
 }
 \`;
-      const finalValue = code.includes("export default function WorkerWrapper") && code.includes("__context.importMeta.url") ? helper : "missing";
+      const metaUrl = import.meta.url;
+      const finalValue = literal === "import.meta" && code.includes("export default function WorkerWrapper") && metaUrl.endsWith("/workspace/source-template-export-literal.mjs") ? helper : "missing";
       export { finalValue as value };
     `
   },

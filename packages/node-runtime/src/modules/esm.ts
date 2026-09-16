@@ -134,12 +134,12 @@ function compileEsmSource(source: string, filename: string, globals: Record<stri
     filename,
     globals,
     originalSource: source,
-    preparedSource: prepareEsmSource(source)
+    preparedSource: prepareEsmSource(source, importMetaRewriteModeFor(filename))
   });
 }
 
 function compileEsmSourceSync(source: string, filename: string, globals: Record<string, RuntimeValue>): (context: EsmContext) => void {
-  return createSyncEsmSourceCompiler(prepareSyncEsmSource(source), filename, globals);
+  return createSyncEsmSourceCompiler(prepareSyncEsmSource(source, importMetaRewriteModeFor(filename)), filename, globals);
 }
 
 function createEsmSourceCompiler(options: {
@@ -169,7 +169,15 @@ function createEsmSourceCompiler(options: {
       `${prepareEsmRuntimeGlobals(preparedSource)}\n//# sourceURL=${filename}`
     ) as typeof compiled;
   } catch (error) {
-    if (!isDynamicCodeBlocked(error)) throw error;
+    if (!isDynamicCodeBlocked(error)) {
+      if (error instanceof SyntaxError && error.message.includes("import.meta")) {
+        const fallbackIndex = preparedSource.search(/import[\s\S]{0,32}meta/);
+        const line = fallbackIndex >= 0 ? preparedSource.slice(0, fallbackIndex).split("\n").length : null;
+        const snippet = fallbackIndex >= 0 ? preparedSource.slice(Math.max(0, fallbackIndex - 80), fallbackIndex + 160).replace(/\s+/g, " ").trim() : null;
+        throw new SyntaxError(`${error.message} while compiling ${filename}${line ? ` near transformed line ${line}` : ""}${snippet ? `: ${snippet}` : ""}`);
+      }
+      throw error;
+    }
     const evalFreeCompiler = compileEvalFreeEsmSource(originalSource, globals);
     if (evalFreeCompiler) return evalFreeCompiler;
     throw new Error(`ECLICSPUNSUPPORTED: browser worker CSP blocks dynamic ESM evaluation for this module: ${filename}`);
@@ -632,7 +640,15 @@ function declaresLexicalBinding(source: string, name: string): boolean {
   return new RegExp(`(?:^|[\\n;])\\s*(?:const|let|var|class|function)\\s+${escaped}(?![$\\w])`).test(source);
 }
 
-function prepareEsmSource(source: string): string {
+type ImportMetaRewriteMode = "preserve-string-literals" | "vite-bundle";
+
+function importMetaRewriteModeFor(filename: string): ImportMetaRewriteMode {
+  return filename.includes("/node_modules/vite/") || filename.includes("/node_modules/rolldown/")
+    ? "vite-bundle"
+    : "preserve-string-literals";
+}
+
+function prepareEsmSource(source: string, importMetaRewriteMode: ImportMetaRewriteMode = "preserve-string-literals"): string {
   const literalProtection = protectImportExportLinesInsideLiterals(stripBlockComments(source));
   const sourceWithoutBlockComments = literalProtection.source;
   const declarationExports = collectDeclarationExports(sourceWithoutBlockComments);
@@ -678,8 +694,7 @@ function prepareEsmSource(source: string): string {
     })
     .replace(/^[ \t]*export\s+\{([^}]+)\};?[ \t]*$/gm, (_match, clause: string) => {
       return rewriteNamedExport(clause);
-    })
-    .replace(/\bimport\.meta\b/g, "__context.importMeta");
+    });
   const postExports = [
     ...declarationExports.map((name) => `__exportConst("${name}", ${name});`),
     ...(defaultDeclarationExport ? [`__exportConst("default", ${defaultDeclarationExport});`] : [])
@@ -687,7 +702,113 @@ function prepareEsmSource(source: string): string {
   const output = postExports.length > 0
     ? `${prepared}\n${postExports.join("\n")}`
     : prepared;
-  return literalProtection.restore(output);
+  return rewriteImportMetaReferences(literalProtection.restore(output), importMetaRewriteMode);
+}
+
+function rewriteImportMetaReferences(source: string, mode: ImportMetaRewriteMode): string {
+  const rewritten = source.replace(/\bimport\.meta\b/g, "__context.importMeta");
+  if (mode === "vite-bundle") return restoreViteImportMetaAnalysisSentinels(rewritten);
+  return restoreImportMetaInStringLiterals(rewritten);
+}
+
+function restoreViteImportMetaAnalysisSentinels(source: string): string {
+  return source
+    .replaceAll("__context.importMeta.hot", "import.meta.hot")
+    .replaceAll('rawUrl === "__context.importMeta"', '(rawUrl === "import.meta" || rawUrl === "__context.importMeta")')
+    .replaceAll('if (rawUrl === "__context.importMeta") continue;', 'if (rawUrl === "import.meta" || rawUrl === "__context.importMeta") continue;');
+}
+
+function restoreImportMetaInStringLiterals(source: string): string {
+  let output = "";
+  let state: "normal" | "single" | "double" | "regex" | "line-comment" | "block-comment" = "normal";
+  let escaped = false;
+  let inRegexClass = false;
+  let previousSignificant = "";
+
+  for (let index = 0; index < source.length; index += 1) {
+    const char = source[index] || "";
+    const next = source[index + 1] || "";
+
+    if (state === "single" || state === "double") {
+      if (source.startsWith("__context.importMeta", index)) {
+        output += "import.meta";
+        index += "__context.importMeta".length - 1;
+        continue;
+      }
+      output += char;
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+      if (char === "\\") {
+        escaped = true;
+        continue;
+      }
+      if ((state === "single" && char === "'") || (state === "double" && char === "\"")) state = "normal";
+      continue;
+    }
+
+    output += char;
+
+    if (state === "regex") {
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+      if (char === "\\") {
+        escaped = true;
+        continue;
+      }
+      if (char === "[") inRegexClass = true;
+      if (char === "]") inRegexClass = false;
+      if (char === "/" && !inRegexClass) state = "normal";
+      continue;
+    }
+    if (state === "line-comment") {
+      if (char === "\n") state = "normal";
+      continue;
+    }
+    if (state === "block-comment") {
+      if (char === "*" && next === "/") {
+        output += next;
+        index += 1;
+        state = "normal";
+      }
+      continue;
+    }
+    if (char === "/" && next === "/") {
+      output += next;
+      index += 1;
+      state = "line-comment";
+      continue;
+    }
+    if (char === "/" && next === "*") {
+      output += next;
+      index += 1;
+      state = "block-comment";
+      continue;
+    }
+    if (char === "/" && isRegexStart(previousSignificant)) {
+      state = "regex";
+      escaped = false;
+      inRegexClass = false;
+      previousSignificant = char;
+      continue;
+    }
+    if (char === "'") {
+      state = "single";
+      escaped = false;
+      continue;
+    }
+    if (char === "\"") {
+      state = "double";
+      escaped = false;
+      continue;
+    }
+    if (!/\s/.test(char)) previousSignificant = char;
+  }
+
+  return output;
 }
 
 function protectImportExportLinesInsideLiterals(source: string): { restore: (value: string) => string; source: string } {
@@ -884,8 +1005,8 @@ function isRegexStart(previousSignificant: string): boolean {
   return !previousSignificant || "([{=:;,!&|?+-*~%^<>".includes(previousSignificant);
 }
 
-function prepareSyncEsmSource(source: string): string {
-  return prepareEsmSource(source).replace(/\bawait\s+__import\(/g, "__import(");
+function prepareSyncEsmSource(source: string, importMetaRewriteMode: ImportMetaRewriteMode = "preserve-string-literals"): string {
+  return prepareEsmSource(source, importMetaRewriteMode).replace(/\bawait\s+__import\(/g, "__import(");
 }
 
 function isPromiseLike(value: unknown): value is Promise<unknown> {
