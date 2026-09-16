@@ -25,6 +25,7 @@ export function transpileTypeScript(source: string, options: TypeScriptTransform
     compilerOptions: {
       target: ts.ScriptTarget.ES2022,
       module: ts.ModuleKind.ESNext,
+      jsx: ts.JsxEmit.React,
       sourceMap: true,
       inlineSources: true,
       importsNotUsedAsValues: ts.ImportsNotUsedAsValues.Remove

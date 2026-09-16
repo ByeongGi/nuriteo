@@ -1,5 +1,6 @@
 import type { ModuleRuntime } from "./runtime.ts";
 import { evaluateEsmSync } from "./esm.ts";
+import { transpileTypeScript } from "../transforms/typescript.ts";
 import type { CjsContext, RuntimeModule, RuntimeNamespace, RuntimeValue } from "../types.ts";
 
 export function evaluateCjs(runtime: ModuleRuntime, url: string): RuntimeValue {
@@ -257,18 +258,10 @@ function browserTransformSyncFallback(filename: string, sourceText: string): Run
 function transformBrowserSupportedSource(filename: string, sourceText: string): string {
   const clean = filename.split("?")[0] || filename;
   if (!/\.(?:[cm]?tsx?|jsx)$/.test(clean)) return sourceText;
-  let code = sourceText;
-  if (/\.(?:[cm]?tsx?)$/.test(clean)) code = stripTypeScriptSyntax(code);
-  return code;
-}
-
-function stripTypeScriptSyntax(source: string): string {
-  return source
-    .replace(/\s+as\s+const\b/g, "")
-    .replace(/\s+as\s+[A-Za-z_$][\w$]*(?:<[^>\n]+>)?/g, "")
-    .replace(/:\s*[A-Za-z_$][\w$]*(?:<[^>\n]+>)?(?=\s*[,)=;])/g, "")
-    .replace(/interface\s+[A-Za-z_$][\w$]*\s*\{[^}]*\}\s*/g, "")
-    .replace(/type\s+[A-Za-z_$][\w$]*\s*=\s*[^;\n]+;?/g, "");
+  if (/\.(?:[cm]?tsx?)$/.test(clean)) {
+    return transpileTypeScript(sourceText, { fileName: clean }).code;
+  }
+  return sourceText;
 }
 
 function createBindingCallableBuiltinPluginPlaceholder(runtime: ModuleRuntime): new (bindingPlugin?: { __name?: string; options?: RuntimeNamespace }) => RuntimeNamespace {
