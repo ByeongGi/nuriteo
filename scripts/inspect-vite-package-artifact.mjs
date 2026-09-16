@@ -34,6 +34,11 @@ class NodeThreadCliEvaluationWorker {
           });
           return;
         }
+        if (message.type === "cli:fs:write") {
+          const bridge = httpBridges.get(message.evaluationId);
+          bridge?.writeFile?.(message.path, message.data);
+          return;
+        }
         if (message.type === "cli:ws:connect") {
           const bridge = httpBridges.get(message.evaluationId);
           if (!bridge) throw new Error("missing CLI HTTP bridge: " + message.evaluationId);
@@ -114,8 +119,10 @@ const forceWasi = args.includes("--force-wasi");
 const cliArgs = readListFlagValue(args, "--cli-args");
 const executionIsolation = readFlagValue(args, "--execution-isolation") || "shared";
 const fetchPaths = readListFlagValue(args, "--fetch-paths");
+const projectFile = readFlagValue(args, "--project-file");
 const traceFs = args.includes("--trace-fs");
 const wasmPolicyPath = readFlagValue(args, "--wasm-policy");
+const websocketEdit = readFlagValue(args, "--websocket-edit");
 const websocketPaths = readListFlagValue(args, "--websocket-paths");
 const workerTimeoutMs = readOptionalIntegerFlag(args, "--worker-timeout-ms") ?? 1000;
 const [vitePackageRootArg, nodeModulesRootArg] = args.filter((arg, index) => {
@@ -124,21 +131,25 @@ const [vitePackageRootArg, nodeModulesRootArg] = args.filter((arg, index) => {
   if (arg === "--execution-isolation") return false;
   if (arg === "--fetch-paths") return false;
   if (arg === "--force-wasi") return false;
+  if (arg === "--project-file") return false;
   if (arg === "--trace-fs") return false;
   if (arg === "--wasm-policy") return false;
+  if (arg === "--websocket-edit") return false;
   if (arg === "--websocket-paths") return false;
   if (arg === "--worker-timeout-ms") return false;
   if (index > 0 && args[index - 1] === "--cli-args") return false;
   if (index > 0 && args[index - 1] === "--execution-isolation") return false;
   if (index > 0 && args[index - 1] === "--fetch-paths") return false;
+  if (index > 0 && args[index - 1] === "--project-file") return false;
   if (index > 0 && args[index - 1] === "--wasm-policy") return false;
+  if (index > 0 && args[index - 1] === "--websocket-edit") return false;
   if (index > 0 && args[index - 1] === "--websocket-paths") return false;
   if (index > 0 && args[index - 1] === "--worker-timeout-ms") return false;
   return true;
 });
 
 if (!vitePackageRootArg) {
-  console.error("Usage: node scripts/inspect-vite-package-artifact.mjs <vite-package-root> [node-modules-root] [--execute] [--cli-args <arg[,arg...]>] [--execution-isolation shared|snapshot|worker] [--fetch-paths <path[,path...]>] [--websocket-paths <path[,path...]>] [--trace-fs] [--worker-timeout-ms <ms>] [--force-wasi] [--wasm-policy <manifest-json>]");
+  console.error("Usage: node scripts/inspect-vite-package-artifact.mjs <vite-package-root> [node-modules-root] [--execute] [--cli-args <arg[,arg...]>] [--execution-isolation shared|snapshot|worker] [--fetch-paths <path[,path...]>] [--project-file <relative-path=source>] [--websocket-paths <path[,path...]>] [--websocket-edit <absolute-path=source>] [--trace-fs] [--worker-timeout-ms <ms>] [--force-wasi] [--wasm-policy <manifest-json>]");
   process.exitCode = 1;
 } else {
   const vitePackageRoot = resolve(vitePackageRootArg);
@@ -160,6 +171,7 @@ if (!vitePackageRootArg) {
       ...(wasmAdapterPolicy ? { wasmAdapterPolicy } : {}),
       vitePackageArtifact
     });
+    mountProjectFile(workflow, projectFile);
     workflow.install();
     const readiness = workflow.inspectRealCliReadiness();
     const dependencyClosure = nodeModulesRootArg
@@ -170,7 +182,7 @@ if (!vitePackageRootArg) {
       dependencyClosure,
       directReadiness: summarizeReadiness(readiness),
       executionSmoke: execute
-        ? await runExecutionSmoke(vitePackageArtifact, dependencyClosure?.artifacts || [], { cliArgs, executionIsolation, fetchPaths, forceWasi, traceFs, wasmAdapterPolicy, websocketPaths, workerTimeoutMs })
+        ? await runExecutionSmoke(vitePackageArtifact, dependencyClosure?.artifacts || [], { cliArgs, executionIsolation, fetchPaths, forceWasi, projectFile, traceFs, wasmAdapterPolicy, websocketEdit, websocketPaths, workerTimeoutMs })
         : null,
       hydratedReadiness: dependencyClosure
         ? summarizeReadiness(createHydratedWorkflowReadiness(vitePackageArtifact, dependencyClosure.artifacts, wasmAdapterPolicy))
@@ -210,6 +222,7 @@ async function runExecutionSmoke(vitePackageArtifact, dependencyArtifacts, optio
     ...(options.wasmAdapterPolicy ? { wasmAdapterPolicy: options.wasmAdapterPolicy } : {}),
     vitePackageArtifact
   });
+  mountProjectFile(workflow, options.projectFile);
   workflow.install();
   const env = {
     ...(process.env.DEBUG ? { DEBUG: process.env.DEBUG } : {}),
@@ -254,7 +267,7 @@ async function runExecutionSmoke(vitePackageArtifact, dependencyArtifacts, optio
     };
   }
   const fetchResults = await fetchExecutionSmokePaths(workflow, options.fetchPaths);
-  const websocketResults = await connectExecutionSmokeWebSockets(workflow, options.websocketPaths);
+  const websocketResults = await connectExecutionSmokeWebSockets(workflow, options.websocketPaths, result, options.websocketEdit);
   result.closeBridgedServers?.();
   const distArtifacts = summarizeDistArtifacts(result.workspaceSnapshot);
   return {
@@ -340,20 +353,29 @@ async function fetchExecutionSmokePaths(workflow, fetchPaths) {
   return results;
 }
 
-async function connectExecutionSmokeWebSockets(workflow, websocketPaths) {
+async function connectExecutionSmokeWebSockets(workflow, websocketPaths, executionResult, websocketEdit) {
   if (!websocketPaths || websocketPaths.length === 0) return null;
   const results = [];
   for (const path of websocketPaths) {
     const messages = [];
+    const edit = parseWebSocketEdit(websocketEdit);
     try {
       const socket = workflow.network.connectWebSocket(`ws://127.0.0.1:5173${path}`, { protocol: "vite-hmr" });
       socket.onmessage = (event) => messages.push(event.data);
       await Promise.resolve();
       await Promise.resolve();
       await new Promise((resolve) => setTimeout(resolve, 10));
+      if (edit && executionResult.writeBridgedFile) {
+        executionResult.writeBridgedFile(edit.path, edit.data);
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+      }
       socket.close();
+      const messageTypes = messages.map((message) => parseMessageType(message));
       results.push({
+        ...(edit ? { editPath: edit.path } : {}),
+        hmrUpdateBlocker: classifyHmrUpdateBlocker(edit, executionResult, messageTypes),
         messages: messages.map((message) => previewText(message)),
+        messageTypes,
         path,
         protocol: socket.protocol,
         status: "connected"
@@ -369,6 +391,55 @@ async function connectExecutionSmokeWebSockets(workflow, websocketPaths) {
     }
   }
   return results;
+}
+
+function classifyHmrUpdateBlocker(edit, executionResult, messageTypes) {
+  if (!edit) return null;
+  if (!executionResult.writeBridgedFile) {
+    return {
+      code: "EVITEHMRWRITEUNAVAILABLE",
+      reason: "worker-backed VFS edit bridge is unavailable"
+    };
+  }
+  if (messageTypes.some((type) => type === "update" || type === "full-reload" || type === "error")) return null;
+  return {
+    code: "EVITEHMRNOUPDATE",
+    reason: "no Vite HMR update payload was observed after worker VFS edit"
+  };
+}
+
+function parseWebSocketEdit(value) {
+  if (!value) return null;
+  const separator = value.indexOf("=");
+  if (separator <= 0) throw new Error("--websocket-edit must use <absolute-path=source>");
+  return {
+    data: value.slice(separator + 1).replaceAll("\\n", "\n"),
+    path: value.slice(0, separator)
+  };
+}
+
+function mountProjectFile(workflow, value) {
+  const file = parseProjectFile(value);
+  if (!file) return;
+  workflow.workspace.writeText(`${workflow.projectRoot}/${file.path}`, file.data);
+}
+
+function parseProjectFile(value) {
+  if (!value) return null;
+  const separator = value.indexOf("=");
+  if (separator <= 0) throw new Error("--project-file must use <relative-path=source>");
+  return {
+    data: value.slice(separator + 1).replaceAll("\\n", "\n"),
+    path: value.slice(0, separator).replace(/^\/+/, "")
+  };
+}
+
+function parseMessageType(message) {
+  try {
+    return JSON.parse(message).type || null;
+  } catch {
+    return null;
+  }
 }
 
 function headersForFetchPath(path) {

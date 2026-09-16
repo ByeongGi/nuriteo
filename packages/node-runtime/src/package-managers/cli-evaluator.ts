@@ -20,6 +20,7 @@ export interface CliModuleEvaluatorOptions {
   loopbackNetwork?: LoopbackNetwork;
   reader: WorkspaceModuleReader;
   globals?: Record<string, RuntimeValue>;
+  onFsFacade?: (fs: RuntimeFsBinding) => void;
   root?: string;
   writer?: PackageManagerWorkspaceWriter;
 }
@@ -39,6 +40,7 @@ export interface IsolatedCliRunResult extends CliRunResult {
   capturedGlobalCalls?: CliEvaluationCapturedGlobalCall[];
   closeBridgedServers?: () => void;
   fsTrace?: CliEvaluationFsTraceEntry[];
+  writeBridgedFile?: (path: string, data: string) => void;
   workspaceSnapshot: PackageManagerWorkspaceSnapshot;
 }
 
@@ -75,6 +77,7 @@ export type CliEvaluationWorkerMessage =
   | CliEvaluationWorkerEvaluateMessage
   | CliEvaluationWorkerHttpRequestMessage
   | CliEvaluationWorkerHttpResponseMessage
+  | CliEvaluationWorkerFsWriteMessage
   | CliEvaluationWorkerWebSocketCloseMessage
   | CliEvaluationWorkerWebSocketConnectMessage
   | CliEvaluationWorkerWebSocketErrorMessage
@@ -118,6 +121,13 @@ export interface CliEvaluationWorkerHttpResponseMessage {
   type: "cli:http:response";
 }
 
+export interface CliEvaluationWorkerFsWriteMessage {
+  data: string;
+  evaluationId: number;
+  path: string;
+  type: "cli:fs:write";
+}
+
 export interface CliEvaluationWorkerWebSocketConnectMessage {
   evaluationId: number;
   headers?: Record<string, string>;
@@ -152,6 +162,7 @@ export interface CliEvaluationHttpBridge {
   handleRequest(port: number, request: RuntimeHttpRequest): Promise<RuntimeHttpResponse>;
   network: LoopbackNetwork;
   ports(): number[];
+  writeFile?(path: string, data: string): void;
 }
 
 export interface CliModuleEvaluationRequest {
@@ -233,6 +244,14 @@ export function createWorkerBackedAsyncCliModuleEvaluator(
         worker.removeEventListener("message", onMessage);
         worker.removeEventListener("error", onError);
         worker.terminate();
+      };
+      const writeBridgedFile = (path: string, data: string) => {
+        worker.postMessage({
+          data,
+          evaluationId: id,
+          path,
+          type: "cli:fs:write"
+        } satisfies CliEvaluationWorkerFsWriteMessage);
       };
       const onMessage = (event: MessageEvent | ErrorEvent) => {
         const data = "data" in event ? event.data as Partial<CliEvaluationWorkerMessage> : undefined;
@@ -335,7 +354,8 @@ export function createWorkerBackedAsyncCliModuleEvaluator(
         }
         resolve({
           ...data.result,
-          closeBridgedServers
+          closeBridgedServers,
+          writeBridgedFile
         });
       };
       const onError = (event: MessageEvent | ErrorEvent) => {
@@ -378,6 +398,11 @@ export async function evaluateCliModuleWorkerMessage(
     const result = await createAsyncCliModuleEvaluator({
       ...(message.traceFs ? { fsTrace } : {}),
       ...(message.captureGlobalCalls ? { globals: createCapturedGlobalCallHandlers(message.captureGlobalCalls, capturedGlobalCalls) } : {}),
+      ...(options.httpBridge ? {
+        onFsFacade: (fs) => {
+          options.httpBridge!.writeFile = (path, data) => fs.writeFileSync(path, data);
+        }
+      } : {}),
       reader: workspace,
       ...(message.root !== undefined ? { root: message.root } : {}),
       ...(message.readyTimeoutMs !== undefined ? { readyTimeoutMs: message.readyTimeoutMs } : {}),
@@ -525,6 +550,7 @@ function startCliModuleEvaluation(
   globalObject.globalThis = globalObject;
   globalObject.process = process;
   const fs = createWorkspaceFsFacade(options.reader, options.writer, () => process.cwd(), options.fsTrace);
+  options.onFsFacade?.(fs);
 
   const workerThreads = createCliWorkerThreadsBuiltin({
     fs,
@@ -1856,7 +1882,9 @@ function createWorkspaceFsFacade(
     },
     watch(path: string, optionsOrListener?: CliWatchOptions | CliWatchListener, maybeListener?: CliWatchListener): CliFsWatcher {
       const listener = typeof optionsOrListener === "function" ? optionsOrListener : maybeListener;
-      const watcher = createCliFsWatcher(resolvePath(path), listener);
+      const normalized = resolvePath(path);
+      traceFs({ op: "watch", path: normalized, result: listener ? "listener" : "emitter" });
+      const watcher = createCliFsWatcher(normalized, listener);
       watchers.add(watcher);
       watcher.once("close", () => {
         watchers.delete(watcher);
@@ -1867,6 +1895,7 @@ function createWorkspaceFsFacade(
       const listener = typeof optionsOrListener === "function" ? optionsOrListener : maybeListener;
       if (!listener) throw createFsError("ERR_INVALID_ARG_TYPE", "fs.watchFile listener is required");
       const normalized = resolvePath(path);
+      traceFs({ op: "watchFile", path: normalized, result: "listener" });
       const watcher = createCliFsStatWatcher(normalized, listener);
       let listeners = statWatchers.get(normalized);
       if (!listeners) {
@@ -1946,6 +1975,7 @@ function createWorkspaceFsFacade(
   function notifyFsChange(path: string, eventType: CliWatchEventType): void {
     const normalized = normalize(path);
     const filename = basenameOf(normalized);
+    traceFs({ op: `notify:${eventType}`, path: normalized, result: String(watchers.size + statWatchers.size) });
     queueMicrotask(() => {
       for (const watcher of watchers) {
         if (!watcher.closed && watchesPath(watcher.path, normalized)) {

@@ -44,6 +44,8 @@ self.addEventListener("message", (event) => {
     evaluateCli(event.data);
   } else if (event.data?.type === "cli:http:request") {
     handleCliHttpRequest(event.data);
+  } else if (event.data?.type === "cli:fs:write") {
+    handleCliFsWrite(event.data);
   } else if (event.data?.type === "cli:ws:connect") {
     handleCliWebSocketConnect(event.data);
   } else if (event.data?.type === "cli:ws:message") {
@@ -128,6 +130,12 @@ async function handleCliHttpRequest(message) {
       type: "cli:http:response"
     });
   }
+}
+
+function handleCliFsWrite(message) {
+  const bridge = cliHttpBridges.get(message.evaluationId);
+  if (!bridge?.writeFile) return;
+  bridge.writeFile(message.path, message.data);
 }
 
 async function handleCliWebSocketConnect(message) {
