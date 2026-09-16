@@ -3,11 +3,11 @@ export { AssertionError, assertBuiltin, deepEqual, deepStrictEqual, equal, ok, r
 export { Buffer, BrowserBuffer, bufferBuiltin, kMaxLength } from "./buffer.ts";
 export { ChildProcess, childProcessBuiltin, exec, execFile, execFileSync, execSync, spawn, spawnSync, UnsupportedChildProcessError } from "./child-process.ts";
 export { constantsBuiltin } from "./constants.ts";
-export { createHash, cryptoBuiltin, getHashes, Hash, randomBytes, randomFillSync, randomUUID, timingSafeEqual, UnsupportedCryptoError } from "./crypto.ts";
+export { createHash, cryptoBuiltin, getHashes, getRandomValues, hash as cryptoHash, Hash, randomBytes, randomFillSync, randomUUID, timingSafeEqual, UnsupportedCryptoError } from "./crypto.ts";
 export { dnsBuiltin, dnsPromisesBuiltin, lookup as dnsLookup, promises as dnsPromises } from "./dns.ts";
 export { EventEmitter, eventsBuiltin, once } from "./events.ts";
 export { createFsPromisesBuiltin } from "./fs-promises.ts";
-export { Agent as HttpAgent, ClientRequest, createHttpBuiltin, createHttpsBuiltin, IncomingMessage } from "./http.ts";
+export { Agent as HttpAgent, ClientRequest, createHttpBuiltin, createHttpsBuiltin, IncomingMessage, Server as HttpServer, ServerResponse } from "./http.ts";
 export { ClientHttp2Session, connect as http2Connect, constants as http2Constants, createSecureServer as createHttp2SecureServer, createServer as createHttp2Server, http2Builtin, UnsupportedHttp2Error } from "./http2.ts";
 export { builtinModules, createRequire, enableCompileCache, isBuiltin, Module, moduleBuiltin, syncBuiltinESMExports } from "./module.ts";
 export { connect as netConnect, createConnection as netCreateConnection, isIP, isIPv4, isIPv6, netBuiltin, Socket, UnsupportedTcpSocketError } from "./net.ts";

@@ -12,6 +12,7 @@ export const inspect: InspectFunction = Object.assign(
     if (typeof value === "string") return `'${value}'`;
     if (typeof value === "function") return `[Function${value.name ? `: ${value.name}` : ""}]`;
     if (!value || typeof value !== "object") return String(value);
+    if (value instanceof Error) return value.stack || `${value.name}: ${value.message}`;
     const custom = (value as Record<symbol, unknown>)[inspectCustom];
     if (typeof custom === "function") return String(custom.call(value));
     if (Array.isArray(value)) return `[ ${value.map((item) => inspect(item)).join(", ")} ]`;

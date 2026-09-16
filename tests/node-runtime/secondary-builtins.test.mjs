@@ -178,8 +178,14 @@ const crypto = requireBuiltin("node:crypto");
 assert.equal(crypto.createHash("sha1").update("abc").digest("hex"), "a9993e364706816aba3e25717850c26c9cd0d89d");
 assert.equal(crypto.createHash("sha256").update("abc").digest("hex"), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
 assert.equal(crypto.createHash("sha512").update("abc").digest("base64"), "3a81oZNherrMQXNJriBBMRLm+k6JqX6iCp7u5ktV05ohkpkqJ0/BqDa6PCOj/uu9RU1EI2Q86A4qmslPpUyknw==");
+assert.equal(crypto.hash("sha256", "abc", "hex"), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
 assert.equal(crypto.getHashes().includes("sha512"), true);
 assert.equal(crypto.randomBytes(8).byteLength, 8);
+const randomValues = new Uint8Array(8);
+assert.equal(crypto.getRandomValues(randomValues), randomValues);
+assert.equal(randomValues.byteLength, 8);
+const webRandomValues = new Uint8Array(4);
+assert.equal(crypto.webcrypto.getRandomValues(webRandomValues), webRandomValues);
 assert.equal(crypto.randomUUID().length, 36);
 assert.equal(crypto.timingSafeEqual(Buffer.from("aa"), Buffer.from("aa")), true);
 assert.throws(() => crypto.createPublicKey(""), /does not support createPublicKey/);
@@ -430,6 +436,23 @@ const httpRequire = createBuiltinLoader({
 });
 const http = httpRequire("http");
 assert.equal(http.STATUS_CODES[200], "OK");
+const httpServer = http.createServer((request, response) => {
+  response.writeHead(204, { "x-runtime": "browser" });
+  assert.equal(request.url, "/");
+});
+let listening = false;
+await new Promise((resolve) => {
+  httpServer.listen(5173, "127.0.0.1", () => {
+    listening = true;
+    resolve();
+  });
+});
+assert.equal(listening, true);
+assert.deepEqual(httpServer.address(), { address: "127.0.0.1", family: "IPv4", port: 5173 });
+assert.equal(httpServer.setTimeout(1000), httpServer);
+assert.equal(httpServer.timeout, 1000);
+await new Promise((resolve) => httpServer.close(resolve));
+assert.equal(httpServer.address(), null);
 const abortedRequest = http.request("http://registry.test/abort");
 let abortEvent = false;
 abortedRequest.on("abort", () => {

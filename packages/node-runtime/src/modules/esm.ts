@@ -633,7 +633,8 @@ function declaresLexicalBinding(source: string, name: string): boolean {
 }
 
 function prepareEsmSource(source: string): string {
-  const sourceWithoutBlockComments = stripBlockComments(source);
+  const literalProtection = protectImportExportLinesInsideLiterals(stripBlockComments(source));
+  const sourceWithoutBlockComments = literalProtection.source;
   const declarationExports = collectDeclarationExports(sourceWithoutBlockComments);
   const defaultDeclarationExport = collectDefaultDeclarationExport(sourceWithoutBlockComments) ?? (hasAnonymousDefaultDeclarationExport(sourceWithoutBlockComments) ? "__default_export__" : null);
   const prepared = sourceWithoutBlockComments
@@ -683,9 +684,111 @@ function prepareEsmSource(source: string): string {
     ...declarationExports.map((name) => `__exportConst("${name}", ${name});`),
     ...(defaultDeclarationExport ? [`__exportConst("default", ${defaultDeclarationExport});`] : [])
   ];
-  return postExports.length > 0
+  const output = postExports.length > 0
     ? `${prepared}\n${postExports.join("\n")}`
     : prepared;
+  return literalProtection.restore(output);
+}
+
+function protectImportExportLinesInsideLiterals(source: string): { restore: (value: string) => string; source: string } {
+  const importToken = "__CARGO_CONTAINER_LITERAL_IMPORT__";
+  const exportToken = "__CARGO_CONTAINER_LITERAL_EXPORT__";
+  const literalLineStarts = literalLineStartMask(source);
+  const lines = source.split("\n");
+  return {
+    source: lines
+      .map((line, index) => literalLineStarts[index]
+        ? line
+          .replace(/^([ \t]*)import(?=\s|["'{*])/, `$1${importToken}`)
+          .replace(/^([ \t]*)export\b/, `$1${exportToken}`)
+        : line)
+      .join("\n"),
+    restore: (value: string) => value
+      .replaceAll(importToken, "import")
+      .replaceAll(exportToken, "export")
+  };
+}
+
+function literalLineStartMask(source: string): boolean[] {
+  const mask: boolean[] = [false];
+  const contexts: ("normal" | "single" | "double" | "template" | "template-expression")[] = ["normal"];
+  const expressionBraceDepths: number[] = [];
+  let escaped = false;
+
+  for (let index = 0; index < source.length; index += 1) {
+    const char = source[index] || "";
+    const next = source[index + 1] || "";
+    const context = contexts[contexts.length - 1];
+
+    if (char === "\n") {
+      mask.push(contexts.some((item) => item === "single" || item === "double" || item === "template"));
+      continue;
+    }
+
+    if (context === "single" || context === "double") {
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+      if (char === "\\") {
+        escaped = true;
+        continue;
+      }
+      if ((context === "single" && char === "'") || (context === "double" && char === "\"")) contexts.pop();
+      continue;
+    }
+
+    if (context === "template") {
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+      if (char === "\\") {
+        escaped = true;
+        continue;
+      }
+      if (char === "$" && next === "{") {
+        contexts.push("template-expression");
+        expressionBraceDepths.push(1);
+        index += 1;
+        continue;
+      }
+      if (char === "`") contexts.pop();
+      continue;
+    }
+
+    if (char === "'") {
+      contexts.push("single");
+      escaped = false;
+      continue;
+    }
+    if (char === "\"") {
+      contexts.push("double");
+      escaped = false;
+      continue;
+    }
+    if (char === "`") {
+      contexts.push("template");
+      escaped = false;
+      continue;
+    }
+
+    if (context === "template-expression") {
+      const last = expressionBraceDepths.length - 1;
+      if (char === "{") expressionBraceDepths[last] = (expressionBraceDepths[last] || 0) + 1;
+      if (char === "}") {
+        const nextDepth = (expressionBraceDepths[last] || 0) - 1;
+        if (nextDepth <= 0) {
+          expressionBraceDepths.pop();
+          contexts.pop();
+        } else {
+          expressionBraceDepths[last] = nextDepth;
+        }
+      }
+    }
+  }
+
+  return mask;
 }
 
 function stripBlockComments(source: string): string {

@@ -160,6 +160,92 @@ export class ClientRequest extends Writable {
   }
 }
 
+export type HttpRequestListener = (request: IncomingMessage, response: ServerResponse) => void;
+
+export class ServerResponse extends Writable {
+  headersSent = false;
+  statusCode = 200;
+  statusMessage = "OK";
+  private headers: Record<string, string | number | readonly string[]> = {};
+
+  getHeader(name: string): string | number | readonly string[] | undefined {
+    return this.headers[normalizeHeaderName(name)];
+  }
+
+  removeHeader(name: string): void {
+    delete this.headers[normalizeHeaderName(name)];
+  }
+
+  setHeader(name: string, value: string | number | readonly string[]): this {
+    this.headers[normalizeHeaderName(name)] = value;
+    return this;
+  }
+
+  writeHead(statusCode: number, statusMessageOrHeaders?: string | Record<string, string | number | readonly string[]>, maybeHeaders?: Record<string, string | number | readonly string[]>): this {
+    this.statusCode = statusCode;
+    if (typeof statusMessageOrHeaders === "string") this.statusMessage = statusMessageOrHeaders;
+    const headers = typeof statusMessageOrHeaders === "object" ? statusMessageOrHeaders : maybeHeaders;
+    for (const [key, value] of Object.entries(headers || {})) this.setHeader(key, value);
+    this.headersSent = true;
+    return this;
+  }
+}
+
+export class Server extends EventEmitter {
+  listening = false;
+  keepAliveTimeout = 5000;
+  headersTimeout = 60000;
+  requestTimeout = 300000;
+  timeout = 0;
+  private hostname = "127.0.0.1";
+  private port = 0;
+
+  constructor(listener?: HttpRequestListener) {
+    super();
+    if (listener) this.on("request", listener as (...args: unknown[]) => void);
+  }
+
+  address(): { address: string; family: string; port: number } | null {
+    if (!this.listening) return null;
+    return {
+      address: this.hostname,
+      family: "IPv4",
+      port: this.port
+    };
+  }
+
+  close(callback?: (error?: Error) => void): this {
+    this.listening = false;
+    queueMicrotask(() => {
+      callback?.();
+      this.emit("close");
+    });
+    return this;
+  }
+
+  listen(portOrCallback?: number | string | (() => void), hostnameOrCallback?: string | (() => void), callback?: () => void): this {
+    if (typeof portOrCallback === "function") {
+      callback = portOrCallback;
+    } else if (portOrCallback !== undefined) {
+      this.port = Number(portOrCallback);
+    }
+    if (typeof hostnameOrCallback === "function") callback = hostnameOrCallback;
+    else if (hostnameOrCallback) this.hostname = hostnameOrCallback;
+    this.listening = true;
+    queueMicrotask(() => {
+      callback?.();
+      this.emit("listening");
+    });
+    return this;
+  }
+
+  setTimeout(timeout: number, callback?: () => void): this {
+    this.timeout = timeout;
+    if (callback) this.on("timeout", callback);
+    return this;
+  }
+}
+
 function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
   return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
 }
@@ -168,7 +254,10 @@ export interface HttpBuiltin {
   Agent: typeof Agent;
   ClientRequest: typeof ClientRequest;
   IncomingMessage: typeof IncomingMessage;
+  Server: typeof Server;
+  ServerResponse: typeof ServerResponse;
   STATUS_CODES: Record<number, string>;
+  createServer(listener?: HttpRequestListener): Server;
   get(options: string | URL | HttpRequestOptions, callback?: HttpRequestCallback): ClientRequest;
   get(url: string | URL, options: HttpRequestOptions, callback?: HttpRequestCallback): ClientRequest;
   request(options: string | URL | HttpRequestOptions, callback?: HttpRequestCallback): ClientRequest;
@@ -207,7 +296,10 @@ export function createHttpBuiltin(clientOrFetcher?: RuntimeHttpClient | RuntimeF
     Agent,
     ClientRequest,
     IncomingMessage,
+    Server,
+    ServerResponse,
     STATUS_CODES,
+    createServer: (listener?: HttpRequestListener) => new Server(listener),
     get,
     request
   });

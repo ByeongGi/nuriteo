@@ -363,6 +363,20 @@ runtime.registerMany({
       export const consoleType = typeof console.log;
     `
   },
+  "/workspace/source-template-export-literal.mjs": {
+    kind: "esm-source",
+    source: `
+      const helper = "value";
+      const code = \`
+export default function WorkerWrapper(options) {
+  import.meta.url;
+  return "\${helper}:" + options.name;
+}
+\`;
+      const finalValue = code.includes("export default function WorkerWrapper") && code.includes("__context.importMeta.url") ? helper : "missing";
+      export { finalValue as value };
+    `
+  },
   "/workspace/dot-require/entry.cjs": {
     kind: "cjs-source",
     source: `
@@ -463,6 +477,9 @@ assert.deepEqual(runtime.requireSync("./source-local-globals.cjs", "/workspace/i
 assert.deepEqual(await runtime.importModule("./source-local-globals.mjs", "/workspace/index.mjs"), {
   globalMarker: "local-esm-global",
   consoleType: "string"
+});
+assert.deepEqual(await runtime.importModule("./source-template-export-literal.mjs", "/workspace/index.mjs"), {
+  value: "value"
 });
 assert.deepEqual(runtime.requireSync("./dot-require/entry.cjs", "/workspace/index.cjs"), {
   current: "current",

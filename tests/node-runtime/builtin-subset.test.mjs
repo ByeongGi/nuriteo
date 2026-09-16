@@ -50,6 +50,7 @@ function exerciseBuiltins({ Buffer, EventEmitter, util }) {
   assert.equal(util.formatWithOptions({ colors: false }, "value:%s", "x"), "value:x");
   assert.equal(util.styleText("bold", "value"), "value");
   assert.equal(util.styleText(["cyan", "bold"], "value"), "value");
+  assert.match(util.inspect(new Error("boom")), /Error: boom/);
   assert.match(util.inspect({ a: 1, b: "x" }), /a: 1/);
   function Parent() {}
   Parent.prototype.kind = "parent";

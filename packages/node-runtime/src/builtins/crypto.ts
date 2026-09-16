@@ -89,6 +89,10 @@ export function createHash(algorithm: string): Hash {
   return new Hash(algorithm);
 }
 
+export function hash(algorithm: string, data: BinaryLike, outputEncoding: HashEncoding = "hex"): string | BrowserBuffer {
+  return createHash(algorithm).update(data).digest(outputEncoding);
+}
+
 export function getHashes(): string[] {
   return ["sha1", "sha256", "sha512"];
 }
@@ -103,6 +107,11 @@ export function randomBytes(size: number): BrowserBuffer {
 export function randomFillSync<T extends ArrayBufferView<ArrayBufferLike>>(buffer: T): T {
   fillRandom(new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength));
   return buffer;
+}
+
+export function getRandomValues<T extends ArrayBufferView<ArrayBufferLike>>(array: T): T {
+  fillRandom(new Uint8Array(array.buffer, array.byteOffset, array.byteLength));
+  return array;
 }
 
 export function randomUUID(): string {
@@ -152,14 +161,19 @@ export const cryptoBuiltin = Object.freeze({
   createPrivateKey,
   createPublicKey,
   generateKeyPairSync,
+  getRandomValues,
   getHashes,
+  hash,
   randomBytes,
   randomFillSync,
   randomUUID,
   sign,
   timingSafeEqual,
   verify,
-  webcrypto: globalThis.crypto
+  webcrypto: Object.freeze({
+    getRandomValues,
+    randomUUID
+  })
 });
 
 function normalizeHashAlgorithm(algorithm: string): HashAlgorithm {

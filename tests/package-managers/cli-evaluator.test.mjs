@@ -853,6 +853,42 @@ assert.equal(asyncRequireBridgeResult.stderr, "");
 assert.equal(asyncRequireBridgeResult.exitCode, 0);
 assert.equal(asyncRequireBridgeResult.stdout, "async-binding-ready");
 
+const asyncRequireConstructorBridgeWorkspace = new MemoryPackageManagerWorkspace([
+  {
+    path: "/workspace/async-constructor/package/bin/cli.cjs",
+    data: `
+      const binding = require('../lib/binding.mjs');
+      const callable = new binding.BindingCallableBuiltinPlugin({ name: 'builtin:test' });
+      process.stdout.write(String(callable.getOrder('transform')));
+    `
+  },
+  {
+    path: "/workspace/async-constructor/package/lib/binding.mjs",
+    data: "await Promise.resolve();\nexport class BindingCallableBuiltinPlugin {\n  getOrder() { return 'post'; }\n}\n"
+  },
+  {
+    path: "/workspace/async-constructor/package/package.json",
+    data: JSON.stringify({ name: "async-constructor", version: "1.0.0", bin: { "async-constructor": "bin/cli.cjs" } })
+  }
+]);
+const asyncRequireConstructorBridgeResult = await createAsyncCliModuleEvaluator({
+  root: "/workspace",
+  reader: asyncRequireConstructorBridgeWorkspace,
+  settleTicks: 2,
+  settleTimeoutMs: 10
+})({
+  entry: {
+    name: "async-constructor",
+    version: "1.0.0",
+    entry: "/workspace/async-constructor/package/bin/cli.cjs"
+  },
+  args: [],
+  cwd: "/workspace/project"
+});
+assert.equal(asyncRequireConstructorBridgeResult.stderr, "");
+assert.equal(asyncRequireConstructorBridgeResult.exitCode, 0);
+assert.equal(asyncRequireConstructorBridgeResult.stdout, "undefined");
+
 const pendingCliWorkspace = new MemoryPackageManagerWorkspace([
   {
     path: "/workspace/pending/package/bin/pending.mjs",

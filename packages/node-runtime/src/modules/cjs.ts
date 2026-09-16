@@ -60,6 +60,10 @@ function isRequireAsyncModuleError(error: unknown): boolean {
 function createPendingEsmNamespaceProxy(namespace: RuntimeNamespace): RuntimeNamespace {
   const knownProperties = new Set<PropertyKey>(Reflect.ownKeys(namespace));
   const placeholder = function AsyncEsmBindingPlaceholder() {};
+  Object.defineProperty(placeholder.prototype, "getOrder", {
+    configurable: true,
+    value: () => undefined
+  });
   return new Proxy(namespace, {
     defineProperty(target, property, descriptor) {
       knownProperties.add(property);
