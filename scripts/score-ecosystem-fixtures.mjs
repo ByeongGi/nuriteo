@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { spawn, spawnSync } from "node:child_process";
 import { ViteProductWorkflow } from "../packages/node-runtime/src/index.ts";
+import { resolveViteHmrUrl } from "../packages/preview/src/index.ts";
 
 const root = new URL("..", import.meta.url).pathname;
 const matrixPath = path.join(root, "compat/ecosystem-fixtures.json");
@@ -436,15 +437,9 @@ async function resolveHmrUrl(previewUrl) {
   const clientUrl = new URL("/@vite/client", parsed);
   try {
     const source = await fetch(clientUrl).then((response) => response.ok ? response.text() : "");
-    const token = source.match(/__HMR_TOKEN__\s*=\s*['"]([^'"]+)['"]/)?.[1];
-    const hmr = new URL("/", parsed);
-    hmr.protocol = parsed.protocol === "https:" ? "wss:" : "ws:";
-    if (token) hmr.searchParams.set("token", token);
-    return hmr.href;
+    return resolveViteHmrUrl({ previewUrl, clientSource: source }).url;
   } catch {
-    const hmr = new URL("/", parsed);
-    hmr.protocol = parsed.protocol === "https:" ? "wss:" : "ws:";
-    return hmr.href;
+    return resolveViteHmrUrl({ previewUrl }).url;
   }
 }
 
