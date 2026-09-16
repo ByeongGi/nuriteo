@@ -338,6 +338,8 @@ const workspace = new MemoryPackageManagerWorkspace([
           fs.existsSync('relative.txt'),
           fs.readFileSync('relative.txt', 'utf8'),
           fs.statSync('relative.txt').isFile(),
+          fs.statSync('relative.txt').mtime instanceof Date,
+          typeof fs.statSync('relative.txt').mtimeMs,
           fs.readdirSync('.').includes('relative.txt'),
           await fs.promises.readFile('relative.txt', 'utf8'),
           fs.readFileSync('created.txt', 'utf8'),
@@ -648,7 +650,7 @@ const relativeResult = await createAsyncCliModuleEvaluator({
   args: ["relative"],
   cwd: "/workspace/project"
 });
-assert.equal(relativeResult.stdout, "true:hello:true:true:hello:created:async-created\n");
+assert.equal(relativeResult.stdout, "true:hello:true:true:number:true:hello:created:async-created\n");
 assert.equal(relativeResult.stderr, "");
 assert.equal(relativeResult.exitCode, 0);
 assert.equal(workspace.readText("/workspace/project/created.txt"), "created");

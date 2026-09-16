@@ -137,9 +137,24 @@ export interface RuntimeFsBinding {
   lchmodSync?(path: string, mode: number | string): void;
   lchownSync?(path: string, uid: number, gid: number): void;
   statSync(path: string): {
+    atime?: Date;
+    atimeMs?: number;
+    birthtime?: Date;
+    birthtimeMs?: number;
+    blksize?: number;
+    blocks?: number;
+    ctime?: Date;
+    ctimeMs?: number;
+    dev?: number;
+    gid?: number;
     ino?: number;
+    mtime?: Date;
+    mtimeMs?: number;
     mode?: number;
+    nlink?: number;
+    rdev?: number;
     size: number;
+    uid?: number;
     isFile(): boolean;
     isDirectory(): boolean;
     isSymbolicLink?(): boolean;

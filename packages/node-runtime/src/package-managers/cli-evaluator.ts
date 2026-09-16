@@ -2127,12 +2127,28 @@ function safeStatFromReader(reader: WorkspaceModuleReader, path: string): CliFsS
 }
 
 function statFromReader(reader: WorkspaceModuleReader, path: string): ReturnType<RuntimeFsBinding["statSync"]> {
+  const time = new Date(0);
   try {
     const size = readWorkspaceBytes(reader, normalize(path), new TextEncoder()).byteLength;
     return {
+      atime: time,
+      atimeMs: time.getTime(),
+      birthtime: time,
+      birthtimeMs: time.getTime(),
+      blksize: 4096,
+      blocks: Math.ceil(size / 512),
+      ctime: time,
+      ctimeMs: time.getTime(),
+      dev: 0,
+      gid: 0,
       ino: hashInode(normalize(path)),
       mode: 0o100644,
+      mtime: time,
+      mtimeMs: time.getTime(),
+      nlink: 1,
+      rdev: 0,
       size,
+      uid: 0,
       isFile: () => true,
       isDirectory: () => false,
       isSymbolicLink: () => false
@@ -2140,9 +2156,24 @@ function statFromReader(reader: WorkspaceModuleReader, path: string): ReturnType
   } catch {
     reader.listDir(normalize(path));
     return {
+      atime: time,
+      atimeMs: time.getTime(),
+      birthtime: time,
+      birthtimeMs: time.getTime(),
+      blksize: 4096,
+      blocks: 0,
+      ctime: time,
+      ctimeMs: time.getTime(),
+      dev: 0,
+      gid: 0,
       ino: hashInode(normalize(path)),
       mode: 0o040755,
+      mtime: time,
+      mtimeMs: time.getTime(),
+      nlink: 1,
+      rdev: 0,
       size: 0,
+      uid: 0,
       isFile: () => false,
       isDirectory: () => true,
       isSymbolicLink: () => false

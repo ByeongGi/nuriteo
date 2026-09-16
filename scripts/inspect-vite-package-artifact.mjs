@@ -18,9 +18,32 @@ class NodeThreadCliEvaluationWorker {
   };
   #worker = new Worker(`
     import { parentPort } from "node:worker_threads";
-    import { evaluateCliModuleWorkerMessage } from ${JSON.stringify(new URL("../packages/node-runtime/src/package-managers/cli-evaluator.ts", import.meta.url).href)};
+    import { createCliEvaluationHttpBridge, evaluateCliModuleWorkerMessage } from ${JSON.stringify(new URL("../packages/node-runtime/src/package-managers/cli-evaluator.ts", import.meta.url).href)};
+    const httpBridges = new Map();
     parentPort.on("message", async (message) => {
-      parentPort.postMessage(await evaluateCliModuleWorkerMessage(message));
+      try {
+        if (message.type === "cli:http:request") {
+          const bridge = httpBridges.get(message.evaluationId);
+          if (!bridge) throw new Error("missing CLI HTTP bridge: " + message.evaluationId);
+          parentPort.postMessage({
+            evaluationId: message.evaluationId,
+            id: message.id,
+            response: await bridge.handleRequest(message.port, message.request),
+            type: "cli:http:response"
+          });
+          return;
+        }
+        const bridge = message.bridgeLoopbackServer ? createCliEvaluationHttpBridge() : null;
+        const response = await evaluateCliModuleWorkerMessage(message, bridge ? { httpBridge: bridge } : {});
+        if (bridge && response.result?.bridgedServerPorts?.length) httpBridges.set(message.id, bridge);
+        parentPort.postMessage(response);
+      } catch (error) {
+        parentPort.postMessage({
+          error: error instanceof Error ? error.stack || error.message : String(error),
+          id: message.id,
+          type: "cli:result"
+        });
+      }
     });
   `, { eval: true, type: "module" });
 
@@ -54,22 +77,25 @@ const args = process.argv.slice(2);
 const execute = args.includes("--execute");
 const forceWasi = args.includes("--force-wasi");
 const executionIsolation = readFlagValue(args, "--execution-isolation") || "shared";
+const fetchPaths = readListFlagValue(args, "--fetch-paths");
 const wasmPolicyPath = readFlagValue(args, "--wasm-policy");
 const workerTimeoutMs = readOptionalIntegerFlag(args, "--worker-timeout-ms") ?? 1000;
 const [vitePackageRootArg, nodeModulesRootArg] = args.filter((arg, index) => {
   if (arg === "--execute") return false;
   if (arg === "--execution-isolation") return false;
+  if (arg === "--fetch-paths") return false;
   if (arg === "--force-wasi") return false;
   if (arg === "--wasm-policy") return false;
   if (arg === "--worker-timeout-ms") return false;
   if (index > 0 && args[index - 1] === "--execution-isolation") return false;
+  if (index > 0 && args[index - 1] === "--fetch-paths") return false;
   if (index > 0 && args[index - 1] === "--wasm-policy") return false;
   if (index > 0 && args[index - 1] === "--worker-timeout-ms") return false;
   return true;
 });
 
 if (!vitePackageRootArg) {
-  console.error("Usage: node scripts/inspect-vite-package-artifact.mjs <vite-package-root> [node-modules-root] [--execute] [--execution-isolation shared|snapshot|worker] [--worker-timeout-ms <ms>] [--force-wasi] [--wasm-policy <manifest-json>]");
+  console.error("Usage: node scripts/inspect-vite-package-artifact.mjs <vite-package-root> [node-modules-root] [--execute] [--execution-isolation shared|snapshot|worker] [--fetch-paths <path[,path...]>] [--worker-timeout-ms <ms>] [--force-wasi] [--wasm-policy <manifest-json>]");
   process.exitCode = 1;
 } else {
   const vitePackageRoot = resolve(vitePackageRootArg);
@@ -101,7 +127,7 @@ if (!vitePackageRootArg) {
       dependencyClosure,
       directReadiness: summarizeReadiness(readiness),
       executionSmoke: execute
-        ? await runExecutionSmoke(vitePackageArtifact, dependencyClosure?.artifacts || [], { executionIsolation, forceWasi, wasmAdapterPolicy, workerTimeoutMs })
+        ? await runExecutionSmoke(vitePackageArtifact, dependencyClosure?.artifacts || [], { executionIsolation, fetchPaths, forceWasi, wasmAdapterPolicy, workerTimeoutMs })
         : null,
       hydratedReadiness: dependencyClosure
         ? summarizeReadiness(createHydratedWorkflowReadiness(vitePackageArtifact, dependencyClosure.artifacts, wasmAdapterPolicy))
@@ -173,9 +199,12 @@ async function runExecutionSmoke(vitePackageArtifact, dependencyArtifacts, optio
       stderrCauseLines: causeLines(message),
       stderrFirstLine: firstNonEmptyLine(message),
       stdoutFirstLine: null,
+      ...(options.fetchPaths.length > 0 ? { fetchResults: null } : {}),
       ...(options.executionIsolation === "worker" ? { workerTimeoutMs: options.workerTimeoutMs } : {})
     };
   }
+  const fetchResults = await fetchExecutionSmokePaths(workflow, options.fetchPaths);
+  result.closeBridgedServers?.();
   return {
     args: result.args,
     env,
@@ -197,8 +226,31 @@ async function runExecutionSmoke(vitePackageArtifact, dependencyArtifacts, optio
     stderrCauseLines: causeLines(result.stderr),
     stderrFirstLine: firstNonEmptyLine(result.stderr),
     stdoutFirstLine: firstNonEmptyLine(result.stdout),
+    ...(fetchResults ? { fetchResults } : {}),
     ...(options.executionIsolation === "worker" ? { workerTimeoutMs: options.workerTimeoutMs } : {})
   };
+}
+
+async function fetchExecutionSmokePaths(workflow, fetchPaths) {
+  if (!fetchPaths || fetchPaths.length === 0) return null;
+  const results = [];
+  for (const path of fetchPaths) {
+    try {
+      const response = await workflow.fetch(`http://127.0.0.1:5173${path}`);
+      results.push({
+        bodyStart: (await response.text()).slice(0, 160),
+        path,
+        status: response.status
+      });
+    } catch (error) {
+      results.push({
+        error: error instanceof Error ? error.message : String(error),
+        path,
+        status: null
+      });
+    }
+  }
+  return results;
 }
 
 function inspectDependencyClosure(nodeModulesRoot, vitePackageArtifact, wasmAdapterPolicy) {
@@ -274,6 +326,12 @@ function readFlagValue(values, flag) {
     process.exit(1);
   }
   return value;
+}
+
+function readListFlagValue(values, flag) {
+  const value = readFlagValue(values, flag);
+  if (value === null) return [];
+  return value.split(",").map((item) => item.trim()).filter(Boolean);
 }
 
 function readOptionalIntegerFlag(values, flag) {
