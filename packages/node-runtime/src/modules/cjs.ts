@@ -20,7 +20,7 @@ export function evaluateCjs(runtime: ModuleRuntime, url: string): RuntimeValue {
       const pending = runtime.importModule(canonicalUrl);
       const record = runtime.cache.esm.get(canonicalUrl);
       pending.catch(() => undefined);
-      return createPendingEsmNamespaceProxy(record?.namespace || {});
+      return createPendingEsmNamespaceProxy(record?.namespace || {}, runtime);
     }
   }
 
@@ -57,7 +57,7 @@ function isRequireAsyncModuleError(error: unknown): boolean {
   return error instanceof Error && error.message.includes("ERR_REQUIRE_ASYNC_MODULE");
 }
 
-function createPendingEsmNamespaceProxy(namespace: RuntimeNamespace): RuntimeNamespace {
+function createPendingEsmNamespaceProxy(namespace: RuntimeNamespace, runtime: ModuleRuntime): RuntimeNamespace {
   const knownProperties = new Set<PropertyKey>(Reflect.ownKeys(namespace));
   const placeholder = function AsyncEsmBindingPlaceholder() {};
   Object.defineProperty(placeholder.prototype, "getOrder", {
@@ -83,17 +83,43 @@ function createPendingEsmNamespaceProxy(namespace: RuntimeNamespace): RuntimeNam
     },
     get(target, property, receiver) {
       if (property === "__esModule") return true;
+      if (property === "enhancedTransformSync" || property === "transformSync") return browserTransformSyncFallback;
+      if (property === "BindingBundler") return createBindingBundlerPlaceholder(runtime);
+      if (property === "BindingCallableBuiltinPlugin") return createBindingCallableBuiltinPluginPlaceholder(runtime);
       const value = Reflect.get(target, property, receiver);
       if (value !== undefined) return value;
-      if (property === "BindingCallableBuiltinPlugin") return createBindingCallableBuiltinPluginPlaceholder();
       return typeof property === "string" ? placeholder : value;
     },
     getOwnPropertyDescriptor(target, property) {
       knownProperties.add(property);
+      if (property === "enhancedTransformSync" || property === "transformSync") {
+        return {
+          configurable: true,
+          enumerable: true,
+          get: () => browserTransformSyncFallback
+        };
+      }
+      if (property === "BindingCallableBuiltinPlugin") {
+        return {
+          configurable: true,
+          enumerable: true,
+          get: () => createBindingCallableBuiltinPluginPlaceholder(runtime)
+        };
+      }
+      if (property === "BindingBundler") {
+        return {
+          configurable: true,
+          enumerable: true,
+          get: () => createBindingBundlerPlaceholder(runtime)
+        };
+      }
       return Reflect.getOwnPropertyDescriptor(target, property) || {
         configurable: true,
         enumerable: true,
-        get: () => Reflect.get(target, property) ?? (property === "BindingCallableBuiltinPlugin" ? createBindingCallableBuiltinPluginPlaceholder() : placeholder)
+        get: () => {
+          if (property === "enhancedTransformSync" || property === "transformSync") return browserTransformSyncFallback;
+          return Reflect.get(target, property) ?? (property === "BindingCallableBuiltinPlugin" ? createBindingCallableBuiltinPluginPlaceholder(runtime) : placeholder);
+        }
       };
     },
     ownKeys(target) {
@@ -107,11 +133,149 @@ function createPendingEsmNamespaceProxy(namespace: RuntimeNamespace): RuntimeNam
   });
 }
 
-function createBindingCallableBuiltinPluginPlaceholder(): new (bindingPlugin?: { __name?: string; options?: RuntimeNamespace }) => RuntimeNamespace {
+function createBindingBundlerPlaceholder(runtime: ModuleRuntime): new () => RuntimeNamespace {
+  return function BindingBundler() {
+    return {
+      closed: false,
+      close: async () => undefined,
+      generate: async () => ({ output: [] }),
+      getWatchFiles: () => [],
+      scan: async (bundlerOptions: RuntimeNamespace) => {
+        debugAsyncEsmBinding("BindingBundler.scan");
+        await runBrowserBindingScan(runtime, bundlerOptions);
+        return {};
+      },
+      write: async () => ({ output: [] })
+    };
+  } as unknown as new () => RuntimeNamespace;
+}
+
+async function runBrowserBindingScan(runtime: ModuleRuntime, bundlerOptions: RuntimeNamespace): Promise<void> {
+  const fs = runtime.builtins?.("node:fs") as { readFileSync?: (path: string, encoding: "utf8") => string } | undefined;
+  const plugins = Array.isArray(bundlerOptions.plugins) ? bundlerOptions.plugins as RuntimeNamespace[] : [];
+  const visited = new Set<string>();
+  for (const entry of normalizeScanInputs(bundlerOptions.input)) {
+    await scanModule(entry, undefined);
+  }
+
+  async function scanModule(id: string, importer: string | undefined): Promise<void> {
+    const resolved = await resolveScanId(id, importer);
+    const moduleId = resolved?.id || id;
+    if (resolved?.external || visited.has(moduleId)) return;
+    visited.add(moduleId);
+
+    const source = await loadScanModule(moduleId);
+    if (source === undefined) return;
+
+    for (const specifier of extractStaticImportSpecifiers(source)) {
+      const child = await resolveScanId(specifier, moduleId);
+      if (child?.external) continue;
+      await scanModule(child?.id || normalizeRelativeScanId(specifier, moduleId), moduleId);
+    }
+  }
+
+  async function loadScanModule(id: string): Promise<string | undefined> {
+    for (const plugin of plugins) {
+      const loaded = await callPluginHook(plugin.load, id);
+      const code = extractPluginCode(loaded);
+      if (code !== undefined) return code;
+    }
+    try {
+      return fs?.readFileSync?.(id, "utf8");
+    } catch {
+      return undefined;
+    }
+  }
+
+  async function resolveScanId(id: string, importer: string | undefined): Promise<{ id: string; external?: boolean } | undefined> {
+    for (const plugin of plugins) {
+      const resolved = await callPluginHook(plugin.resolveId, id, importer);
+      if (!resolved) continue;
+      if (typeof resolved === "string") return { id: resolved };
+      if (typeof resolved === "object" && "id" in resolved && typeof resolved.id === "string") {
+        return { id: resolved.id, external: (resolved as { external?: boolean }).external === true };
+      }
+    }
+    return undefined;
+  }
+}
+
+function normalizeScanInputs(input: RuntimeValue): string[] {
+  if (typeof input === "string") return [input];
+  if (Array.isArray(input)) return input.filter((value): value is string => typeof value === "string");
+  if (input && typeof input === "object") {
+    return Object.values(input as Record<string, RuntimeValue>).filter((value): value is string => typeof value === "string");
+  }
+  return [];
+}
+
+async function callPluginHook(hook: RuntimeValue, ...args: RuntimeValue[]): Promise<RuntimeValue> {
+  if (typeof hook === "function") return hook(...args);
+  if (hook && typeof hook === "object") {
+    const handler = (hook as { handler?: RuntimeValue }).handler;
+    if (typeof handler === "function") return handler(...args);
+  }
+  return undefined;
+}
+
+function extractPluginCode(value: RuntimeValue): string | undefined {
+  if (typeof value === "string") return value;
+  if (value && typeof value === "object") {
+    const code = (value as { code?: RuntimeValue }).code;
+    if (typeof code === "string") return code;
+  }
+  return undefined;
+}
+
+function extractStaticImportSpecifiers(source: string): string[] {
+  const specifiers: string[] = [];
+  const importPattern = /(?:^|[;\n])\s*import\s+(?:[\w*{}\n\r\t, ]+\s+from\s+)?["']([^"']+)["']/g;
+  let match: RegExpExecArray | null;
+  while ((match = importPattern.exec(source))) {
+    const specifier = match[1];
+    if (specifier) specifiers.push(specifier);
+  }
+  return specifiers;
+}
+
+function normalizeRelativeScanId(specifier: string, importer: string): string {
+  if (!specifier.startsWith(".")) return specifier;
+  return normalizePosixPath(`${dirnameOf(importer)}/${specifier}`);
+}
+
+function browserTransformSyncFallback(filename: string, sourceText: string): RuntimeNamespace {
+  const code = transformBrowserSupportedSource(filename, sourceText);
+  return {
+    code,
+    errors: [],
+    map: null,
+    tsconfigFilePaths: [],
+    warnings: []
+  };
+}
+
+function transformBrowserSupportedSource(filename: string, sourceText: string): string {
+  const clean = filename.split("?")[0] || filename;
+  if (!/\.(?:[cm]?tsx?|jsx)$/.test(clean)) return sourceText;
+  let code = sourceText;
+  if (/\.(?:[cm]?tsx?)$/.test(clean)) code = stripTypeScriptSyntax(code);
+  return code;
+}
+
+function stripTypeScriptSyntax(source: string): string {
+  return source
+    .replace(/\s+as\s+const\b/g, "")
+    .replace(/\s+as\s+[A-Za-z_$][\w$]*(?:<[^>\n]+>)?/g, "")
+    .replace(/:\s*[A-Za-z_$][\w$]*(?:<[^>\n]+>)?(?=\s*[,)=;])/g, "")
+    .replace(/interface\s+[A-Za-z_$][\w$]*\s*\{[^}]*\}\s*/g, "")
+    .replace(/type\s+[A-Za-z_$][\w$]*\s*=\s*[^;\n]+;?/g, "");
+}
+
+function createBindingCallableBuiltinPluginPlaceholder(runtime: ModuleRuntime): new (bindingPlugin?: { __name?: string; options?: RuntimeNamespace }) => RuntimeNamespace {
   return function BindingCallableBuiltinPlugin(bindingPlugin?: { __name?: string; options?: RuntimeNamespace }) {
     debugAsyncEsmBinding(`BindingCallableBuiltinPlugin:${bindingPlugin?.__name || "<unknown>"}`);
     if (bindingPlugin?.__name === "builtin:vite-resolve") {
-      return createViteResolveBuiltinPlugin(bindingPlugin.options || {});
+      return createViteResolveBuiltinPlugin(runtime, bindingPlugin.options || {});
     }
     return createEmptyCallableBuiltinPlugin();
   } as unknown as new (bindingPlugin?: { __name?: string; options?: RuntimeNamespace }) => RuntimeNamespace;
@@ -123,6 +287,18 @@ function createEmptyCallableBuiltinPlugin(): RuntimeNamespace {
     configurable: true,
     value: () => undefined
   });
+  Object.defineProperty(plugin, "close", {
+    configurable: true,
+    value: async () => undefined
+  });
+  Object.defineProperty(plugin, "scan", {
+    configurable: true,
+    value: async () => undefined
+  });
+  Object.defineProperty(plugin, "write", {
+    configurable: true,
+    value: async () => ({ assets: [], chunks: [] })
+  });
   return plugin;
 }
 
@@ -132,7 +308,7 @@ function debugAsyncEsmBinding(message: string): void {
   console.error(`cargo:binding ${message}`);
 }
 
-function createViteResolveBuiltinPlugin(options: RuntimeNamespace): RuntimeNamespace {
+function createViteResolveBuiltinPlugin(runtime: ModuleRuntime, options: RuntimeNamespace): RuntimeNamespace {
   const resolveOptions = options.resolveOptions as { root?: string } | undefined;
   const root = normalizePosixPath(resolveOptions?.root || "/workspace/project");
   const plugin: RuntimeNamespace = {
@@ -141,6 +317,8 @@ function createViteResolveBuiltinPlugin(options: RuntimeNamespace): RuntimeNames
       if (id.startsWith("/@") || id.startsWith("//")) return undefined;
       if (id.startsWith("/") && looksLikeProjectSource(id)) return { id: `${root}${id}` };
       if (id.startsWith(".") && importer && looksLikeProjectSource(id)) return { id: normalizePosixPath(`${dirnameOf(importer)}/${id}`) };
+      const packageId = resolveBrowserPackageId(runtime, root, id);
+      if (packageId) return { id: packageId };
       return undefined;
     }
   };
@@ -149,6 +327,78 @@ function createViteResolveBuiltinPlugin(options: RuntimeNamespace): RuntimeNames
     value: () => undefined
   });
   return plugin;
+}
+
+function resolveBrowserPackageId(runtime: ModuleRuntime, root: string, specifier: string): string | undefined {
+  if (!/^[\w@][^:]*$/.test(specifier)) return undefined;
+  const fs = runtime.builtins?.("node:fs") as { readFileSync?: (path: string, encoding: "utf8") => string; statSync?: (path: string) => { isFile(): boolean } } | undefined;
+  if (!fs?.readFileSync) return undefined;
+  const { packageName, subpath } = splitPackageSpecifier(specifier);
+  if (!packageName) return undefined;
+  const packageRoot = `${root}/node_modules/${packageName}`;
+  const manifest = readPackageManifest(fs, `${packageRoot}/package.json`);
+  const exportTarget = resolvePackageExportTarget(manifest, subpath);
+  const candidates = [
+    exportTarget,
+    subpath === "." ? manifest?.browser : undefined,
+    subpath === "." ? manifest?.module : undefined,
+    subpath === "." ? manifest?.main : undefined,
+    subpath === "." ? "./index.js" : `${subpath}.js`,
+    subpath === "." ? undefined : `${subpath}/index.js`
+  ].filter((value): value is string => typeof value === "string");
+  for (const candidate of candidates) {
+    const resolved = normalizePosixPath(`${packageRoot}/${candidate.startsWith("./") ? candidate.slice(2) : candidate}`);
+    if (fileExists(fs, resolved)) return resolved;
+  }
+  return undefined;
+}
+
+function splitPackageSpecifier(specifier: string): { packageName?: string; subpath: string } {
+  const parts = specifier.split("/");
+  if (specifier.startsWith("@")) {
+    if (parts.length < 2) return { subpath: "." };
+    return {
+      packageName: `${parts[0]}/${parts[1]}`,
+      subpath: parts.length > 2 ? `./${parts.slice(2).join("/")}` : "."
+    };
+  }
+  const packageName = parts[0];
+  if (!packageName) return { subpath: "." };
+  return {
+    packageName,
+    subpath: parts.length > 1 ? `./${parts.slice(1).join("/")}` : "."
+  };
+}
+
+function readPackageManifest(fs: { readFileSync?: (path: string, encoding: "utf8") => string }, path: string): { browser?: string; exports?: RuntimeValue; main?: string; module?: string } | undefined {
+  try {
+    return JSON.parse(fs.readFileSync?.(path, "utf8") || "{}") as { browser?: string; exports?: RuntimeValue; main?: string; module?: string };
+  } catch {
+    return undefined;
+  }
+}
+
+function resolvePackageExportTarget(manifest: { exports?: RuntimeValue } | undefined, subpath: string): string | undefined {
+  const exports = manifest?.exports;
+  if (typeof exports === "string" && subpath === ".") return exports;
+  if (!exports || typeof exports !== "object" || Array.isArray(exports)) return undefined;
+  const target = (exports as Record<string, RuntimeValue>)[subpath];
+  if (typeof target === "string") return target;
+  if (target && typeof target === "object" && !Array.isArray(target)) {
+    const conditions = target as Record<string, RuntimeValue>;
+    for (const condition of ["browser", "module", "import", "default"]) {
+      if (typeof conditions[condition] === "string") return conditions[condition];
+    }
+  }
+  return undefined;
+}
+
+function fileExists(fs: { statSync?: (path: string) => { isFile(): boolean } }, path: string): boolean {
+  try {
+    return fs.statSync?.(path).isFile() === true;
+  } catch {
+    return false;
+  }
 }
 
 function looksLikeProjectSource(id: string): boolean {
