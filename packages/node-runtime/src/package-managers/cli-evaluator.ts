@@ -362,8 +362,8 @@ export function createWorkerBackedAsyncCliModuleEvaluator(
               const requestLabel = `${request.method} ${request.path}`;
               const requestTimeout = setTimeout(() => {
                 pendingHttpRequests.delete(requestId);
-                rejectRequest(new Error(`ECLIHTTPBRIDGETIMEOUT: CLI evaluation worker did not respond to ${requestLabel} within 2000ms`));
-              }, 2000);
+                rejectRequest(new Error(`ECLIHTTPBRIDGETIMEOUT: CLI evaluation worker did not respond to ${requestLabel} within 10000ms`));
+              }, 10000);
               pendingHttpRequests.set(requestId, {
                 reject: rejectRequest,
                 resolve: resolveRequest,

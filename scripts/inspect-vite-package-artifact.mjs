@@ -139,7 +139,7 @@ const forceWasi = args.includes("--force-wasi");
 const cliArgs = readListFlagValue(args, "--cli-args");
 const executionIsolation = readFlagValue(args, "--execution-isolation") || "shared";
 const fetchPaths = readListFlagValue(args, "--fetch-paths");
-const projectFile = readFlagValue(args, "--project-file");
+const projectFiles = readFlagValues(args, "--project-file");
 const traceFs = args.includes("--trace-fs");
 const wasmPolicyPath = readFlagValue(args, "--wasm-policy");
 const websocketEdit = readFlagValue(args, "--websocket-edit");
@@ -194,7 +194,7 @@ if (!vitePackageRootArg) {
       ...(wasmAdapterPolicy ? { wasmAdapterPolicy } : {}),
       vitePackageArtifact
     });
-    mountProjectFile(workflow, projectFile);
+    mountProjectFiles(workflow, projectFiles);
     workflow.install();
     const readiness = workflow.inspectRealCliReadiness();
     const dependencyClosure = nodeModulesRootArg
@@ -205,7 +205,7 @@ if (!vitePackageRootArg) {
       dependencyClosure,
       directReadiness: summarizeReadiness(readiness),
       executionSmoke: execute
-        ? await runExecutionSmoke(vitePackageArtifact, dependencyClosure?.artifacts || [], { cliArgs, executionIsolation, fetchPaths, forceWasi, projectFile, traceFs, wasmAdapterPolicy, websocketEdit, websocketEditDelayMs, websocketPaths, workerTimeoutMs })
+        ? await runExecutionSmoke(vitePackageArtifact, dependencyClosure?.artifacts || [], { cliArgs, executionIsolation, fetchPaths, forceWasi, projectFiles, traceFs, wasmAdapterPolicy, websocketEdit, websocketEditDelayMs, websocketPaths, workerTimeoutMs })
         : null,
       hydratedReadiness: dependencyClosure
         ? summarizeReadiness(createHydratedWorkflowReadiness(vitePackageArtifact, dependencyClosure.artifacts, wasmAdapterPolicy))
@@ -245,7 +245,7 @@ async function runExecutionSmoke(vitePackageArtifact, dependencyArtifacts, optio
     ...(options.wasmAdapterPolicy ? { wasmAdapterPolicy: options.wasmAdapterPolicy } : {}),
     vitePackageArtifact
   });
-  mountProjectFile(workflow, options.projectFile);
+  mountProjectFiles(workflow, options.projectFiles);
   workflow.install();
   const env = {
     ...(process.env.DEBUG ? { DEBUG: process.env.DEBUG } : {}),
@@ -462,10 +462,12 @@ function parseWebSocketEdit(value) {
   };
 }
 
-function mountProjectFile(workflow, value) {
-  const file = parseProjectFile(value);
-  if (!file) return;
-  workflow.workspace.writeText(`${workflow.projectRoot}/${file.path}`, file.data);
+function mountProjectFiles(workflow, values) {
+  for (const value of values || []) {
+    const file = parseProjectFile(value);
+    if (!file) continue;
+    workflow.workspace.writeText(`${workflow.projectRoot}/${file.path}`, file.data);
+  }
 }
 
 function parseProjectFile(value) {
@@ -602,6 +604,25 @@ function readFlagValue(values, flag) {
     process.exit(1);
   }
   return value;
+}
+
+function readFlagValues(values, flag) {
+  const result = [];
+  for (let index = 0; index < values.length; index++) {
+    const value = values[index];
+    if (value.startsWith(`${flag}=`)) {
+      result.push(value.slice(flag.length + 1));
+      continue;
+    }
+    if (value !== flag) continue;
+    const next = values[index + 1];
+    if (!next || next.startsWith("--")) {
+      console.error(`Missing value for ${flag}`);
+      process.exit(1);
+    }
+    result.push(next);
+  }
+  return result;
 }
 
 function readListFlagValue(values, flag) {
