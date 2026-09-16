@@ -981,9 +981,9 @@ export class ViteProductWorkflow {
       this.workspace.writeText(join(packageRoot, "client.js"), "export function createRoot(target) { return { render(value) { if (target) target.textContent = String(value); } }; }\n");
       return;
     }
-    if (pkg === "@vitejs/plugin-react") {
+    if (pkg === "@vitejs/plugin-react" || pkg === "@vitejs/plugin-react-swc") {
       this.workspace.writeText(join(packageRoot, "package.json"), JSON.stringify({
-        name: "@vitejs/plugin-react",
+        name: pkg,
         version: "latest",
         type: "module",
         exports: {

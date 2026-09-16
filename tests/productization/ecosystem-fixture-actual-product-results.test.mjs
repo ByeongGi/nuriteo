@@ -10,10 +10,10 @@ assert.equal(results.minimumPassForMilestoneB, matrix.scope.minimumPassForMilest
 assert.ok(results.results.length >= 1);
 assert.equal(results.summary.total, results.results.length);
 assert.equal(results.summary.milestoneB, "not-yet");
-assert.equal(results.summary.passCount, 3);
-assert.equal(results.results.filter((result) => result.score >= 50).length, 4);
-assert.equal(results.results.filter((result) => result.score >= 75).length, 3);
-assert.equal(results.results.filter((result) => result.score === 100).length, 3);
+assert.equal(results.summary.passCount, 5);
+assert.equal(results.results.filter((result) => result.score >= 50).length, 5);
+assert.equal(results.results.filter((result) => result.score >= 75).length, 5);
+assert.equal(results.results.filter((result) => result.score === 100).length, 5);
 
 const criteriaIds = matrix.scoringRubric.criteria.map((criterion) => criterion.id).sort();
 for (const result of results.results) {

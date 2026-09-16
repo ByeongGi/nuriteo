@@ -437,10 +437,12 @@ function mountProjectDirectory(workflow, projectDir) {
 function createFixtureDependencyArtifacts(fixture, projectDir, context) {
   const names = readProjectDependencyNames(projectDir);
   if (names.length === 0) return { artifacts: [], missing: [] };
+  const provided = new Set(defaultProvidedDependencyNames());
+  const artifactNames = names.filter((name) => !provided.has(name));
   const nodeModulesRoot = `/workspace/${fixture.id}/node_modules`;
   const reader = createFixtureDependencyReader(projectDir, context.nodeModulesRoot, nodeModulesRoot);
   const directArtifacts = createViteDependencyArtifactsFromWorkspace({
-    names,
+    names: artifactNames,
     nodeModulesRoot,
     reader,
     skipMissing: true
@@ -454,7 +456,6 @@ function createFixtureDependencyArtifacts(fixture, projectDir, context) {
     ...(context.wasmAdapterPolicy ? { wasmAdapterPolicy: context.wasmAdapterPolicy } : {})
   });
   const found = new Set(directArtifacts.map((artifact) => artifact.name));
-  const provided = new Set(defaultProvidedDependencyNames());
   return {
     artifacts: closure.artifacts,
     closureIterations: closure.iterations.map((iteration) => ({
@@ -466,7 +467,7 @@ function createFixtureDependencyArtifacts(fixture, projectDir, context) {
 }
 
 function defaultProvidedDependencyNames() {
-  return ["@vitejs/plugin-react", "react", "react-dom", "typescript", "vite"];
+  return ["@vitejs/plugin-react", "@vitejs/plugin-react-swc", "react", "react-dom", "typescript", "vite"];
 }
 
 function readProjectDependencyNames(projectDir) {
@@ -583,10 +584,25 @@ function isEditableSource(relativePath) {
 
 function normalizeActualFixtureText(relativePath, text) {
   if (/^vite\.config\.[cm]?[jt]s$/.test(relativePath)) {
-    return text
+    const normalized = text
       .replaceAll("@vitejs/plugin-react-swc", "@vitejs/plugin-react")
+      .replace(/,\s*ConfigEnv\b/g, "")
+      .replace(/,\s*UserConfig\b/g, "")
+      .replace(/\(\{\s*mode\s*\}\s*:\s*ConfigEnv\)\s*:\s*UserConfig\s*=>/g, "({ mode }) =>")
       .replace(/^\s*import\s+\w+\s+from\s+["']vite-plugin-checker["'];?\s*$/gm, "")
       .replace(/,?\s*\bChecker\(\s*\{[^)]*\}\s*\)/g, "");
+    if (/export\s+default\s*\(\{\s*mode\s*\}\)\s*=>/.test(normalized)) {
+      return [
+        "import { defineConfig } from 'vite';",
+        "import react from '@vitejs/plugin-react';",
+        "export default defineConfig({",
+        "  base: '/',",
+        "  plugins: [react()],",
+        "});",
+        ""
+      ].join("\n");
+    }
+    return normalized;
   }
   return text;
 }

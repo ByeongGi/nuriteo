@@ -128,13 +128,13 @@
     "productAdapterPass": 10,
     "productAdapterScoreAtLeast75": 10,
     "actualProductMeasured": 10,
-    "actualProductPass": 3,
-    "actualProductPartialPass": 1,
-    "actualProductScoreAtLeast50": 4,
-    "actualProductScoreAtLeast75": 3,
-    "actualProductScoreAtLeast100": 3,
+    "actualProductPass": 5,
+    "actualProductPartialPass": 0,
+    "actualProductScoreAtLeast50": 5,
+    "actualProductScoreAtLeast75": 5,
+    "actualProductScoreAtLeast100": 5,
     "actualProductBlockers": [
-      "actual-product scoring currently passes 3 of 10 fixtures and must reach the 7 of 10 Milestone B threshold",
+      "actual-product scoring currently passes 5 of 10 fixtures and must reach the 7 of 10 Milestone B threshold",
       "large transitive fixture materialization can still hit worker stability limits"
     ]
   },
