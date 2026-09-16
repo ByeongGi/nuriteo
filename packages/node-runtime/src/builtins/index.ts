@@ -24,7 +24,7 @@ export { setTimeoutPromise, timersPromisesBuiltin } from "./timers.ts";
 export { connect as tlsConnect, createSecureContext, tlsBuiltin, TLSSocket } from "./tls.ts";
 export { ReadStream, ttyBuiltin, isatty, WriteStream } from "./tty.ts";
 export { domainToASCII, domainToUnicode, fileURLToPath, pathToFileURL, URL, urlBuiltin, URLSearchParams, urlToHttpOptions } from "./url.ts";
-export { utilBuiltin, callbackify, deprecate, format, formatWithOptions, inherits, inspect, promisify, styleText, types as utilTypes } from "./util.ts";
+export { utilBuiltin, callbackify, deprecate, format, formatWithOptions, inherits, inspect, parseEnv, promisify, styleText, types as utilTypes } from "./util.ts";
 export { getHeapSpaceStatistics, getHeapStatistics, type HeapStatistics, v8Builtin } from "./v8.ts";
 export { WASI, wasiBuiltin, type WasiOptions } from "./wasi.ts";
 export { isMainThread, MessageChannel, MessagePort, parentPort, SHARE_ENV, threadId, UnsupportedWorkerThreadError, Worker, workerData, workerThreadsBuiltin } from "./worker-threads-builtin.ts";

@@ -933,6 +933,23 @@ assert.deepEqual(installedDependencyArtifact.mounts.map((mount) => mount.path), 
   "package.json",
   "parseAst.mjs"
 ]);
+const aliasDependencyWorkspace = new MemoryPackageManagerWorkspace([
+  {
+    path: "/vendor/string-width-cjs/package.json",
+    data: JSON.stringify({ name: "string-width", version: "4.2.3", main: "index.js" })
+  },
+  {
+    path: "/vendor/string-width-cjs/index.js",
+    data: "module.exports = () => 1;\n"
+  }
+]);
+const aliasDependencyArtifact = createViteDependencyArtifactFromWorkspace({
+  name: "string-width-cjs",
+  packageRoot: "/vendor/string-width-cjs",
+  reader: aliasDependencyWorkspace
+});
+assert.equal(aliasDependencyArtifact.name, "string-width-cjs");
+assert.equal(aliasDependencyArtifact.version, "4.2.3");
 const batchDependencyWorkspace = new MemoryPackageManagerWorkspace([
   ...installedDependencyArtifact.mounts.map((mount) => ({
     path: `/workspace/project/node_modules/rolldown/${mount.path}`,

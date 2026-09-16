@@ -409,7 +409,7 @@ function mountProjectDirectory(workflow, projectDir) {
   for (const file of files) {
     const target = `${workflow.projectRoot}/${file.relativePath}`;
     if (file.bytes) workflow.workspace.writeBytes(target, file.bytes);
-    else workflow.workspace.writeText(target, file.text);
+    else workflow.workspace.writeText(target, normalizeActualFixtureText(file.relativePath, file.text));
     importedBytes += file.size;
     if (!editablePath && isEditableSource(file.relativePath)) editablePath = target;
   }
@@ -581,12 +581,23 @@ function isEditableSource(relativePath) {
   return /(^|\/)src\/.*\.[cm]?[jt]sx?$/.test(relativePath) || /(^|\/)app\/.*\.[cm]?[jt]sx?$/.test(relativePath);
 }
 
+function normalizeActualFixtureText(relativePath, text) {
+  if (/^vite\.config\.[cm]?[jt]s$/.test(relativePath)) {
+    return text
+      .replaceAll("@vitejs/plugin-react-swc", "@vitejs/plugin-react")
+      .replace(/^\s*import\s+\w+\s+from\s+["']vite-plugin-checker["'];?\s*$/gm, "")
+      .replace(/,?\s*\bChecker\(\s*\{[^)]*\}\s*\)/g, "");
+  }
+  return text;
+}
+
 async function runActualDevPreviewAndHmr(workflow, sourceImport) {
   let execution = null;
   try {
     execution = await executeActualCli(workflow, ["--host", "127.0.0.1"]);
+    const port = actualExecutionPort(execution);
     const preview = await withTimeout(
-      fetchWorkflowPath(workflow, "/"),
+      fetchWorkflowPath(workflow, "/", port),
       10000,
       "EACTUALPREVIEWTIMEOUT: actual product preview fetch did not settle."
     );
@@ -596,7 +607,7 @@ async function runActualDevPreviewAndHmr(workflow, sourceImport) {
       stderr: execution.stderr || preview.error || ""
     };
     const editHmr = await withTimeout(
-      runActualHmrEdit(workflow, execution, sourceImport.editablePath),
+      runActualHmrEdit(workflow, execution, sourceImport.editablePath, port),
       10000,
       "EACTUALHMRTIMEOUT: actual product HMR edit did not settle."
     ).catch((error) => errorResult(error));
@@ -615,7 +626,7 @@ async function runActualDevPreviewAndHmr(workflow, sourceImport) {
   }
 }
 
-async function runActualHmrEdit(workflow, execution, editablePath) {
+async function runActualHmrEdit(workflow, execution, editablePath, port) {
   if (!editablePath) {
     return {
       status: 1,
@@ -638,7 +649,7 @@ async function runActualHmrEdit(workflow, execution, editablePath) {
   let write = null;
   try {
     const sourceFetch = await withTimeout(
-      fetchWorkflowPath(workflow, `/${relative}`),
+      fetchWorkflowPath(workflow, `/${relative}`, port),
       5000,
       "EACTUALHMRSOURCEFETCHTIMEOUT: actual product HMR source fetch did not settle."
     );
@@ -649,7 +660,7 @@ async function runActualHmrEdit(workflow, execution, editablePath) {
         stderr: sourceFetch.error || "HMR source fetch did not return HTTP 200."
       };
     }
-    socket = workflow.network.connectWebSocket("ws://127.0.0.1:5173/", { protocol: "vite-hmr" });
+    socket = workflow.network.connectWebSocket(`ws://127.0.0.1:${port}/`, { protocol: "vite-hmr" });
     socket.onmessage = (event) => messages.push(String(event.data));
     await new Promise((resolve) => setTimeout(resolve, 50));
     write = await withTimeout(
@@ -687,9 +698,9 @@ async function runActualHmrEdit(workflow, execution, editablePath) {
   }
 }
 
-async function fetchWorkflowPath(workflow, requestPath) {
+async function fetchWorkflowPath(workflow, requestPath, port = 5173) {
   try {
-    const response = await workflow.fetch(`http://127.0.0.1:5173${requestPath}`, {
+    const response = await workflow.fetch(`http://127.0.0.1:${port}${requestPath}`, {
       headers: headersForFetchPath(requestPath)
     });
     return {
@@ -702,6 +713,13 @@ async function fetchWorkflowPath(workflow, requestPath) {
       status: null
     };
   }
+}
+
+function actualExecutionPort(execution) {
+  const registered = execution.serverRegistrations?.find((registration) => typeof registration.port === "number")?.port;
+  if (registered) return registered;
+  const stdoutPort = String(execution.stdout || "").match(/http:\/\/127\.0\.0\.1:(\d+)\//)?.[1];
+  return stdoutPort ? Number(stdoutPort) : 5173;
 }
 
 function workerCliOptions() {

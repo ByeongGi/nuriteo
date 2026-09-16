@@ -51,6 +51,37 @@ export function styleText(_format: RuntimeValue, text: RuntimeValue): string {
   return String(text);
 }
 
+export function parseEnv(content: string): Record<string, string> {
+  const env: Record<string, string> = {};
+  for (const rawLine of String(content).split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith("#")) continue;
+    const match = /^(?:export\s+)?([\w.-]+)\s*=\s*(.*)$/.exec(line);
+    if (!match) continue;
+    const key = match[1];
+    const rawValue = match[2];
+    if (key === undefined || rawValue === undefined) continue;
+    let value = rawValue.trim();
+    const quote = value[0];
+    if ((quote === "\"" || quote === "'") && value.endsWith(quote)) {
+      value = value.slice(1, -1);
+      if (quote === "\"") {
+        value = value
+          .replaceAll("\\n", "\n")
+          .replaceAll("\\r", "\r")
+          .replaceAll("\\t", "\t")
+          .replaceAll("\\\"", "\"")
+          .replaceAll("\\\\", "\\");
+      }
+    } else {
+      const comment = value.search(/\s+#/);
+      if (comment >= 0) value = value.slice(0, comment).trim();
+    }
+    env[key] = value;
+  }
+  return env;
+}
+
 export function inherits(ctor: Function, superCtor: Function): void {
   if (typeof ctor !== "function" || typeof superCtor !== "function") throw new TypeError("ctor and superCtor must be functions");
   Object.setPrototypeOf(ctor.prototype, superCtor.prototype);
@@ -108,6 +139,7 @@ export const utilBuiltin = Object.freeze({
   formatWithOptions,
   inherits,
   inspect,
+  parseEnv,
   promisify,
   styleText,
   types

@@ -17,12 +17,12 @@ assert.equal(matrix.projectFixtures.referenceHmrPass, 4);
 assert.equal(matrix.projectFixtures.referencePass, 4);
 assert.equal(matrix.projectFixtures.productAdapterPass, 10);
 assert.equal(matrix.projectFixtures.productAdapterScoreAtLeast75, 10);
-assert.equal(matrix.projectFixtures.actualProductMeasured, 1);
-assert.equal(matrix.projectFixtures.actualProductPass, 1);
-assert.equal(matrix.projectFixtures.actualProductPartialPass, 0);
-assert.equal(matrix.projectFixtures.actualProductScoreAtLeast50, 1);
-assert.equal(matrix.projectFixtures.actualProductScoreAtLeast75, 1);
-assert.equal(matrix.projectFixtures.actualProductScoreAtLeast100, 1);
+assert.equal(matrix.projectFixtures.actualProductMeasured, 10);
+assert.equal(matrix.projectFixtures.actualProductPass, 3);
+assert.equal(matrix.projectFixtures.actualProductPartialPass, 1);
+assert.equal(matrix.projectFixtures.actualProductScoreAtLeast50, 4);
+assert.equal(matrix.projectFixtures.actualProductScoreAtLeast75, 3);
+assert.equal(matrix.projectFixtures.actualProductScoreAtLeast100, 3);
 assert.equal(fs.existsSync(new URL(`../../${matrix.projectFixtures.productAdapterResults}`, import.meta.url)), true);
 assert.equal(fs.existsSync(new URL(`../../${matrix.projectFixtures.actualProductResults}`, import.meta.url)), true);
 

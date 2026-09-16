@@ -1043,7 +1043,7 @@ export class ViteProductWorkflow {
         throw new ViteProductPackageArtifactError("EVITEARTIFACTMANIFEST", `Mounted dependency artifact ${artifact.name} must include package.json.`, packageJsonPath);
       }
       const manifest = JSON.parse(this.workspace.readText(packageJsonPath)) as VitePackageManifest;
-      if (manifest.name !== artifact.name) {
+      if (manifest.name !== artifact.name && !isPackageAliasName(artifact.name, manifest.name)) {
         throw new ViteProductPackageArtifactError(
           "EVITEARTIFACTNAME",
           `Mounted dependency artifact package.json must have name "${artifact.name}".`,
@@ -1167,7 +1167,7 @@ export function createViteDependencyArtifactFromWorkspace(options: ViteProductDe
   if (!name) {
     throw new ViteProductPackageArtifactError("EVITEARTIFACTNAME", "Mounted dependency artifact package.json must have a package name.", packageJsonPath);
   }
-  if (packageJson.name !== name) {
+  if (packageJson.name !== name && !isPackageAliasName(name, packageJson.name)) {
     throw new ViteProductPackageArtifactError("EVITEARTIFACTNAME", `Mounted dependency artifact package.json must have name "${name}".`, packageJsonPath);
   }
   return {
@@ -1519,6 +1519,11 @@ function packageNameFromSpecifier(specifier: string): string | null {
   const parts = specifier.split("/");
   if (specifier.startsWith("@")) return parts.length >= 2 ? `${parts[0]}/${parts[1]}` : null;
   return parts[0] || null;
+}
+
+function isPackageAliasName(aliasName: string, packageName: string | undefined): boolean {
+  if (!packageName) return false;
+  return aliasName.endsWith("-cjs") && aliasName.slice(0, -4) === packageName;
 }
 
 function classifyDependencyMaterialization(name: string, wasmAdapterPolicy: WasmAdapterPolicy | null): ViteDependencyMaterializationKind {

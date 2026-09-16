@@ -48,6 +48,11 @@ function exerciseBuiltins({ Buffer, EventEmitter, util }) {
 
   assert.equal(util.format("value:%s %d %%", "x", "4"), "value:x 4 %");
   assert.equal(util.formatWithOptions({ colors: false }, "value:%s", "x"), "value:x");
+  assert.deepEqual(util.parseEnv("A=1\nexport B=\"two\\nlines\"\nC=three # comment\n# ignored"), {
+    A: "1",
+    B: "two\nlines",
+    C: "three"
+  });
   assert.equal(util.styleText("bold", "value"), "value");
   assert.equal(util.styleText(["cyan", "bold"], "value"), "value");
   assert.match(util.inspect(new Error("boom")), /Error: boom/);
