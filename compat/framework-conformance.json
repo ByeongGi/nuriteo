@@ -65,7 +65,7 @@
         "tests/vite/vite-react-product-workflow.test.mjs",
         "docs/productization/evidence/P11-01.md"
       ],
-      "productGap": "Actual Vite 8.2.0 worker-backed product runtime now covers install artifacts, hydrated dependency materialization, actual Vite CLI dev server start, browser preview relay, real Vite import-analysis transform, React bare package import rewrite, TypeScript/TSX transform fallback, real Vite HMR connected/update payloads, actual Vite build dist artifact generation, and worker bridge reload recovery. Secondary Vue/Svelte product candidates remain partial-pass and keep PG11 open."
+      "productGap": "Actual Vite 8.2.0 worker-backed product runtime now covers install artifacts, hydrated dependency materialization, actual Vite CLI dev server start, browser preview relay, real Vite import-analysis transform, React bare package import rewrite, TypeScript/TSX transform fallback, real Vite HMR connected/update payloads, actual Vite build dist artifact generation, and worker bridge reload recovery. Secondary Vue/Svelte product candidates remain partial-pass/deferred outside the first product-supported framework set."
     },
     {
       "id": "vite-vue-product-workflow",

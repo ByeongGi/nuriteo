@@ -37,7 +37,8 @@ const browserImportAliases = new Map([
   ["@cargo-container/preview", "/packages/preview/src/index.ts"],
   ["@cargo-container/protocol", "/packages/protocol/src/index.ts"],
   ["@cargo-container/sdk", "/packages/sdk/src/index.ts"],
-  ["fflate", "/node_modules/fflate/esm/browser.js"]
+  ["fflate", "/node_modules/fflate/esm/browser.js"],
+  ["typescript", "/shims/typescript.js"]
 ]);
 
 function rewriteBrowserImports(source) {

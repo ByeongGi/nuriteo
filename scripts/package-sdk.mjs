@@ -108,11 +108,15 @@ function emitCommonjsRuntime() {
   const inputs = [
     "packages/browser-host/src/supervisor.ts",
     "packages/sdk/src/container.ts",
+    "packages/preview/src/error-overlay.ts",
     "packages/preview/src/hmr-client.ts",
     "packages/preview/src/index.ts",
     "packages/preview/src/relay.ts",
     "packages/preview/src/service-worker.ts",
     "packages/preview/src/session.ts",
+    "packages/preview/src/source-map.ts",
+    "packages/preview/src/vite-diagnostics.ts",
+    "packages/preview/src/vite-hmr-url.ts",
     "packages/protocol/src/messages.ts"
   ];
   for (const relativeFile of inputs) {
@@ -135,6 +139,21 @@ function emitCommonjsRuntime() {
       fs.writeFileSync(path.join(path.dirname(outFile), `${path.basename(outFile, ".cjs")}.js.map`), output.sourceMapText);
     }
   }
+}
+
+function browserTypescriptShim() {
+  return [
+    "const ModuleKind = Object.freeze({ CommonJS: 1, ESNext: 99 });",
+    "const ScriptTarget = Object.freeze({ ES2024: 11 });",
+    "const ImportsNotUsedAsValues = Object.freeze({ Remove: 0 });",
+    "function transpileModule(source) {",
+    "  return { outputText: String(source), diagnostics: [], sourceMapText: \"\" };",
+    "}",
+    "const ts = Object.freeze({ ImportsNotUsedAsValues, ModuleKind, ScriptTarget, transpileModule });",
+    "export { ImportsNotUsedAsValues, ModuleKind, ScriptTarget, transpileModule };",
+    "export default ts;",
+    ""
+  ].join("\n");
 }
 
 function rewriteCommonjsSpecifiers(source) {
@@ -185,6 +204,14 @@ rewritePackagedSource("packages/sdk/src/container.ts", [
 rewritePackagedSource("packages/sdk/src/index.ts", [
   ['"@cargo-container/protocol"', '"../../protocol/src/index.ts"']
 ]);
+rewritePackagedSource("packages/node-runtime/src/transforms/typescript.ts", [
+  ['"typescript"', '"../../../../shims/typescript.js"']
+]);
+rewritePackagedSource("packages/node-runtime/src/builtins/zlib.ts", [
+  ['"fflate"', '"../../../../node_modules/fflate/esm/browser.js"']
+]);
+writeFile("shims/typescript.js", browserTypescriptShim());
+writeFile("node_modules/fflate/esm/browser.js", fs.readFileSync(path.join(root, "node_modules/fflate/esm/browser.js"), "utf8"));
 emitDeclarations();
 rewritePackagedDeclarations();
 emitCommonjsRuntime();

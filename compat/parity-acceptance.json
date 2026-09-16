@@ -1,0 +1,164 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-16",
+  "status": "pg20-pass",
+  "releaseDecision": "release-candidate-ready-for-scoped-browser-js-ts-development",
+  "stableExternalPublish": "approved-after-release-checklist-reconfirmation",
+  "scope": {
+    "source": "docs/productization/webcontainers-parity-scope.md",
+    "included": [
+      {
+        "area": "Node runtime subset",
+        "status": "product-supported",
+        "evidence": [
+          "compat/node-api-gap.json",
+          "tests/node-runtime/run.mjs",
+          "docs/productization/evidence/P9-04.md"
+        ]
+      },
+      {
+        "area": "npm and pnpm package managers",
+        "status": "product-supported",
+        "evidence": [
+          "compat/package-manager-conformance.json",
+          "tests/package-managers/run.mjs",
+          "docs/productization/evidence/P10-04.md"
+        ]
+      },
+      {
+        "area": "Vite React development workflow",
+        "status": "product-supported",
+        "evidence": [
+          "compat/framework-conformance.json",
+          "tests/vite/vite-react-product-workflow.test.mjs",
+          "docs/productization/evidence/P11-01.md"
+        ]
+      },
+      {
+        "area": "Preview, HMR, terminal, file workspace, and recovery UX",
+        "status": "product-supported",
+        "evidence": [
+          "tests/preview/run.mjs",
+          "tests/browser-host/run.mjs",
+          "docs/productization/evidence/P17-04.md"
+        ]
+      },
+      {
+        "area": "Persistent project storage and recovery",
+        "status": "product-supported",
+        "evidence": [
+          "tests/browser-host/run.mjs",
+          "docs/productization/evidence/P12-04.md"
+        ]
+      },
+      {
+        "area": "SDK/API embedding",
+        "status": "product-supported",
+        "evidence": [
+          "compat/sdk-consumer-bundler-matrix.json",
+          "tests/sdk-consumer/run.mjs",
+          "docs/productization/evidence/P14-04.md"
+        ]
+      },
+      {
+        "area": "WASM/WASI tooling boundary",
+        "status": "product-supported-with-candidates",
+        "evidence": [
+          "compat/wasm-tool-adapters.json",
+          "compat/wasi-runtime-boundary.json",
+          "docs/productization/evidence/P19-04.md"
+        ]
+      },
+      {
+        "area": "Actual public Vite React ecosystem fixture gate",
+        "status": "product-supported",
+        "evidence": [
+          "compat/ecosystem-fixture-actual-product-results.json",
+          "docs/productization/evidence/P18-04.md"
+        ],
+        "requiredPass": 7,
+        "actualPass": 7
+      }
+    ],
+    "excluded": [
+      {
+        "area": "Docker/container runtime",
+        "status": "unsupported",
+        "requiredErrorCode": "ERR_RUNTIME_DOCKER_UNSUPPORTED",
+        "evidence": ["compat/unsupported-diagnostics.json", "tests/productization/unsupported-diagnostics.test.mjs"]
+      },
+      {
+        "area": "Direct TCP database",
+        "status": "unsupported",
+        "requiredErrorCode": "ERR_RUNTIME_TCP_DB_UNSUPPORTED",
+        "evidence": ["compat/unsupported-diagnostics.json", "tests/productization/unsupported-diagnostics.test.mjs"]
+      },
+      {
+        "area": "Native Node addon without fallback",
+        "status": "unsupported",
+        "requiredErrorCode": "ERR_PM_NATIVE_ADDON_UNSUPPORTED",
+        "evidence": ["compat/unsupported-diagnostics.json", "tests/productization/unsupported-diagnostics.test.mjs"]
+      },
+      {
+        "area": "Arbitrary Linux binary",
+        "status": "unsupported",
+        "requiredErrorCode": "ERR_RUNTIME_UNSUPPORTED_BINARY",
+        "evidence": ["compat/unsupported-diagnostics.json", "tests/productization/unsupported-diagnostics.test.mjs"]
+      },
+      {
+        "area": "All npm packages and all frameworks",
+        "status": "not-claimed",
+        "evidence": ["compat/public-compatibility-matrix.json", "docs/release/known-limitations.md"]
+      }
+    ]
+  },
+  "walkthrough": {
+    "status": "pass",
+    "covers": ["install", "dev", "preview", "edit-hmr", "build", "reload-recovery"],
+    "evidence": [
+      "tests/vite/vite-react-product-workflow.test.mjs",
+      "compat/ecosystem-fixture-actual-product-results.json",
+      "docs/productization/evidence/P20-01.md"
+    ]
+  },
+  "documentation": {
+    "status": "pass",
+    "requiredDocs": [
+      "docs/productization/sdk-quickstart.md",
+      "docs/productization/public-compatibility-matrix.md",
+      "docs/productization/webcontainers-parity-scope.md",
+      "docs/release/known-limitations.md",
+      "docs/release/support-matrix.md",
+      "docs/release/release-checklist.md",
+      "docs/productization/parity-acceptance.md"
+    ],
+    "evidence": ["docs/productization/evidence/P20-03.md"]
+  },
+  "operations": {
+    "status": "pass",
+    "supportOwner": "maintainer",
+    "requiredChecks": [
+      "pnpm exec tsc --noEmit --pretty false",
+      "node tests/productization/run.mjs",
+      "node tests/package-managers/run.mjs",
+      "node tests/vite/vite-react-product-workflow.test.mjs",
+      "node tests/preview/run.mjs",
+      "node tests/browser-host/run.mjs",
+      "node tests/browser/boot.test.mjs",
+      "node tests/sdk-consumer/run.mjs",
+      "node scripts/check-release-operations.mjs"
+    ],
+    "remainingBacklog": [
+      "3 of 10 public Vite React actual-product fixtures remain hold due large transitive dependency materialization and worker stability limits",
+      "Vite Vue/Svelte actual worker-backed validation remains deferred",
+      "Next.js app router remains hold because native SWC/sharp and server runtime assumptions are outside first product target",
+      "External stable publish still requires one final release checklist reconfirmation at publish time"
+    ],
+    "evidence": ["docs/productization/evidence/P20-04.md"]
+  },
+  "gate": {
+    "id": "PG20",
+    "status": "pass",
+    "requiredBeforeDone": []
+  }
+}

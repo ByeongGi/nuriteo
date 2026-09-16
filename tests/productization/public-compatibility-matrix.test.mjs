@@ -55,7 +55,8 @@ for (const command of matrix.reproduce) {
 }
 
 assert.equal(matrix.gate.id, "P18-04");
-assert.equal(matrix.gate.status, "partial-pass");
+assert.equal(matrix.gate.status, "pass");
+assert.deepEqual(matrix.gate.requiredBeforeDone, []);
 assert.equal(matrix.gate.requiredBeforeDone.includes("Wire unsupported diagnostics into UI acceptance tests"), false);
 assert.ok(matrix.packages.every((cohort) => cohort.evidence.includes("tests/productization/package-cohort-execution.test.mjs")));
 

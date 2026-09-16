@@ -170,9 +170,7 @@
   ],
   "gate": {
     "id": "P18-04",
-    "status": "partial-pass",
-    "requiredBeforeDone": [
-      "Publish product-supported docs only after PG11 actual Vite server blocker is resolved"
-    ]
+    "status": "pass",
+    "requiredBeforeDone": []
   }
 }
