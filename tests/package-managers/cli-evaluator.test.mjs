@@ -946,7 +946,8 @@ const asyncRequireConstructorBridgeWorkspace = new MemoryPackageManagerWorkspace
     data: `
       const binding = require('../lib/binding.mjs');
       const callable = new binding.BindingCallableBuiltinPlugin({ name: 'builtin:test' });
-      process.stdout.write(String(callable.getOrder('transform')) + ':' + typeof callable.close + ':' + typeof callable.scan);
+      process.stdout.write(String(callable.getOrder('transform')) + ':' + typeof callable.close + ':' + typeof callable.scan + ':' + typeof callable.write);
+      callable.write().then((result) => process.stdout.write(':' + Array.isArray(result.chunks) + ':' + Array.isArray(result.assets)));
     `
   },
   {
@@ -974,7 +975,7 @@ const asyncRequireConstructorBridgeResult = await createAsyncCliModuleEvaluator(
 });
 assert.equal(asyncRequireConstructorBridgeResult.stderr, "");
 assert.equal(asyncRequireConstructorBridgeResult.exitCode, 0);
-assert.equal(asyncRequireConstructorBridgeResult.stdout, "undefined:function:function");
+assert.equal(asyncRequireConstructorBridgeResult.stdout, "undefined:function:function:function:true:true");
 
 const httpServerBridgeWorkspace = new MemoryPackageManagerWorkspace([
   {

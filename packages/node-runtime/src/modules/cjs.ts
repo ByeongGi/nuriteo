@@ -72,6 +72,10 @@ function createPendingEsmNamespaceProxy(namespace: RuntimeNamespace): RuntimeNam
     configurable: true,
     value: async () => undefined
   });
+  Object.defineProperty(placeholder.prototype, "write", {
+    configurable: true,
+    value: async () => ({ assets: [], chunks: [] })
+  });
   return new Proxy(namespace, {
     defineProperty(target, property, descriptor) {
       knownProperties.add(property);

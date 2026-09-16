@@ -76,6 +76,7 @@ class NodeThreadCliEvaluationWorker {
 const args = process.argv.slice(2);
 const execute = args.includes("--execute");
 const forceWasi = args.includes("--force-wasi");
+const cliArgs = readListFlagValue(args, "--cli-args");
 const executionIsolation = readFlagValue(args, "--execution-isolation") || "shared";
 const fetchPaths = readListFlagValue(args, "--fetch-paths");
 const traceFs = args.includes("--trace-fs");
@@ -83,12 +84,14 @@ const wasmPolicyPath = readFlagValue(args, "--wasm-policy");
 const workerTimeoutMs = readOptionalIntegerFlag(args, "--worker-timeout-ms") ?? 1000;
 const [vitePackageRootArg, nodeModulesRootArg] = args.filter((arg, index) => {
   if (arg === "--execute") return false;
+  if (arg === "--cli-args") return false;
   if (arg === "--execution-isolation") return false;
   if (arg === "--fetch-paths") return false;
   if (arg === "--force-wasi") return false;
   if (arg === "--trace-fs") return false;
   if (arg === "--wasm-policy") return false;
   if (arg === "--worker-timeout-ms") return false;
+  if (index > 0 && args[index - 1] === "--cli-args") return false;
   if (index > 0 && args[index - 1] === "--execution-isolation") return false;
   if (index > 0 && args[index - 1] === "--fetch-paths") return false;
   if (index > 0 && args[index - 1] === "--wasm-policy") return false;
@@ -97,7 +100,7 @@ const [vitePackageRootArg, nodeModulesRootArg] = args.filter((arg, index) => {
 });
 
 if (!vitePackageRootArg) {
-  console.error("Usage: node scripts/inspect-vite-package-artifact.mjs <vite-package-root> [node-modules-root] [--execute] [--execution-isolation shared|snapshot|worker] [--fetch-paths <path[,path...]>] [--trace-fs] [--worker-timeout-ms <ms>] [--force-wasi] [--wasm-policy <manifest-json>]");
+  console.error("Usage: node scripts/inspect-vite-package-artifact.mjs <vite-package-root> [node-modules-root] [--execute] [--cli-args <arg[,arg...]>] [--execution-isolation shared|snapshot|worker] [--fetch-paths <path[,path...]>] [--trace-fs] [--worker-timeout-ms <ms>] [--force-wasi] [--wasm-policy <manifest-json>]");
   process.exitCode = 1;
 } else {
   const vitePackageRoot = resolve(vitePackageRootArg);
@@ -129,7 +132,7 @@ if (!vitePackageRootArg) {
       dependencyClosure,
       directReadiness: summarizeReadiness(readiness),
       executionSmoke: execute
-        ? await runExecutionSmoke(vitePackageArtifact, dependencyClosure?.artifacts || [], { executionIsolation, fetchPaths, forceWasi, traceFs, wasmAdapterPolicy, workerTimeoutMs })
+        ? await runExecutionSmoke(vitePackageArtifact, dependencyClosure?.artifacts || [], { cliArgs, executionIsolation, fetchPaths, forceWasi, traceFs, wasmAdapterPolicy, workerTimeoutMs })
         : null,
       hydratedReadiness: dependencyClosure
         ? summarizeReadiness(createHydratedWorkflowReadiness(vitePackageArtifact, dependencyClosure.artifacts, wasmAdapterPolicy))
@@ -176,7 +179,8 @@ async function runExecutionSmoke(vitePackageArtifact, dependencyArtifacts, optio
   };
   let result;
   try {
-    result = await workflow.executeRealCli(["--host", "127.0.0.1"], env, {
+    const args = options.cliArgs.length > 0 ? options.cliArgs : ["--host", "127.0.0.1"];
+    result = await workflow.executeRealCli(args, env, {
       isolation: options.executionIsolation,
       readyTimeoutMs: 1000,
       ...(options.traceFs ? { traceFs: true } : {}),
@@ -190,7 +194,7 @@ async function runExecutionSmoke(vitePackageArtifact, dependencyArtifacts, optio
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     return {
-      args: ["--host", "127.0.0.1"],
+      args: options.cliArgs.length > 0 ? options.cliArgs : ["--host", "127.0.0.1"],
       env,
       exitCode: 1,
       nativeBindingBlocker: null,
