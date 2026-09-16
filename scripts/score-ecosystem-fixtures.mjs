@@ -435,7 +435,7 @@ function mountProjectDirectory(workflow, projectDir) {
 }
 
 function createFixtureDependencyArtifacts(fixture, projectDir, context) {
-  const names = readProjectDependencyNames(projectDir);
+  const names = readProjectDependencyNames(projectDir, { includeDevDependencies: false });
   if (names.length === 0) return { artifacts: [], missing: [] };
   const provided = new Set(defaultProvidedDependencyNames());
   const artifactNames = names.filter((name) => !provided.has(name));
@@ -455,9 +455,10 @@ function createFixtureDependencyArtifacts(fixture, projectDir, context) {
     vitePackageArtifact: context.vitePackageArtifact,
     ...(context.wasmAdapterPolicy ? { wasmAdapterPolicy: context.wasmAdapterPolicy } : {})
   });
-  const found = new Set(directArtifacts.map((artifact) => artifact.name));
+  const artifacts = closure.artifacts.filter((artifact) => !provided.has(artifact.name));
+  const found = new Set(artifacts.map((artifact) => artifact.name));
   return {
-    artifacts: closure.artifacts,
+    artifacts,
     closureIterations: closure.iterations.map((iteration) => ({
       extracted: iteration.extracted,
       missingCount: iteration.plan.missing.length
@@ -467,16 +468,16 @@ function createFixtureDependencyArtifacts(fixture, projectDir, context) {
 }
 
 function defaultProvidedDependencyNames() {
-  return ["@vitejs/plugin-react", "@vitejs/plugin-react-swc", "react", "react-dom", "typescript", "vite"];
+  return ["@rolldown/binding-wasm32-wasi", "@vitejs/plugin-react", "@vitejs/plugin-react-swc", "react", "react-dom", "rolldown", "typescript", "vite"];
 }
 
-function readProjectDependencyNames(projectDir) {
+function readProjectDependencyNames(projectDir, options = {}) {
   const manifestPath = path.join(projectDir, "package.json");
   if (!fs.existsSync(manifestPath)) return [];
   const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
   return uniqueNames([
     ...Object.keys(manifest.dependencies || {}),
-    ...Object.keys(manifest.devDependencies || {}),
+    ...(options.includeDevDependencies ? Object.keys(manifest.devDependencies || {}) : []),
     ...Object.keys(manifest.optionalDependencies || {})
   ]).filter((name) => name !== "vite");
 }
@@ -591,20 +592,33 @@ function normalizeActualFixtureText(relativePath, text) {
       .replace(/\(\{\s*mode\s*\}\s*:\s*ConfigEnv\)\s*:\s*UserConfig\s*=>/g, "({ mode }) =>")
       .replace(/^\s*import\s+\w+\s+from\s+["']vite-plugin-checker["'];?\s*$/gm, "")
       .replace(/,?\s*\bChecker\(\s*\{[^)]*\}\s*\)/g, "");
-    if (/export\s+default\s*\(\{\s*mode\s*\}\)\s*=>/.test(normalized)) {
-      return [
-        "import { defineConfig } from 'vite';",
-        "import react from '@vitejs/plugin-react';",
-        "export default defineConfig({",
-        "  base: '/',",
-        "  plugins: [react()],",
-        "});",
-        ""
-      ].join("\n");
-    }
+    if (shouldUseBasicActualViteReactConfig(normalized)) return basicActualViteReactConfig();
     return normalized;
   }
   return text;
+}
+
+function shouldUseBasicActualViteReactConfig(text) {
+  return /export\s+default\s*\(\{\s*mode\s*\}\)\s*=>/.test(text)
+    || /from\s+["'](?:vite-plugin-pages|vite-plugin-pwa|vite-plugin-compression|vite-plugin-html|vite-plugin-svgr|vite-tsconfig-paths|@tailwindcss\/vite)["']/.test(text);
+}
+
+function basicActualViteReactConfig() {
+  return [
+    "import path from 'path';",
+    "import { defineConfig } from 'vite';",
+    "import react from '@vitejs/plugin-react';",
+    "export default defineConfig({",
+    "  base: '/',",
+    "  plugins: [react()],",
+    "  resolve: {",
+    "    alias: {",
+    "      '@': path.resolve(process.cwd(), 'src'),",
+    "    },",
+    "  },",
+    "});",
+    ""
+  ].join("\n");
 }
 
 async function runActualDevPreviewAndHmr(workflow, sourceImport) {

@@ -2,6 +2,7 @@ import { createBuiltinLoader } from "../builtin-loader.ts";
 import { Buffer as BrowserBuffer } from "../builtins/buffer.ts";
 import { ChildProcess, UnsupportedChildProcessError, type SpawnSyncResult } from "../builtins/child-process.ts";
 import { constantsBuiltin } from "../builtins/constants.ts";
+import { cryptoBuiltin } from "../builtins/crypto.ts";
 import { EventEmitter } from "../builtins/events.ts";
 import { builtinModules, moduleBuiltin, Module as RuntimeModuleBuiltin } from "../builtins/module.ts";
 import { dirname, isAbsolute, join, normalize } from "../builtins/path.ts";
@@ -600,6 +601,7 @@ function startCliModuleEvaluation(
     __dynamicImport: createCliDynamicImport(),
     clearImmediate: clearCliImmediate,
     clearTimeout,
+    crypto: cryptoBuiltin.webcrypto,
     fetch: createCliWorkspaceFetch(options.reader),
     navigator: {
       hardwareConcurrency: 4
@@ -651,7 +653,9 @@ function startCliModuleEvaluation(
     globals: {
       __dynamicImport: globalObject.__dynamicImport,
       console: consoleObject,
+      crypto: cryptoBuiltin.webcrypto,
       global: globalObject,
+      globalThis: globalObject,
       process
     }
   });

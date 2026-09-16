@@ -112,7 +112,7 @@
     }
   ],
   "projectFixtures": {
-    "status": "reference-product-adapter-and-actual-product-measured",
+    "status": "product-supported-milestone-b-pass",
     "source": "compat/ecosystem-fixtures.json",
     "results": "compat/ecosystem-fixture-results.json",
     "productAdapterResults": "compat/ecosystem-fixture-product-results.json",
@@ -128,14 +128,13 @@
     "productAdapterPass": 10,
     "productAdapterScoreAtLeast75": 10,
     "actualProductMeasured": 10,
-    "actualProductPass": 5,
+    "actualProductPass": 7,
     "actualProductPartialPass": 0,
-    "actualProductScoreAtLeast50": 5,
-    "actualProductScoreAtLeast75": 5,
-    "actualProductScoreAtLeast100": 5,
+    "actualProductScoreAtLeast50": 7,
+    "actualProductScoreAtLeast75": 7,
+    "actualProductScoreAtLeast100": 7,
     "actualProductBlockers": [
-      "actual-product scoring currently passes 5 of 10 fixtures and must reach the 7 of 10 Milestone B threshold",
-      "large transitive fixture materialization can still hit worker stability limits"
+      "3 of 10 measured fixtures remain hold due large transitive fixture materialization and worker stability limits"
     ]
   },
   "unsupported": [

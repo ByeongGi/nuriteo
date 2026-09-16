@@ -103,7 +103,24 @@ export class BrowserBuffer extends Uint8Array {
 
 Object.defineProperty(BrowserBuffer, Symbol.species, { value: Uint8Array });
 
-export const Buffer = BrowserBuffer;
+export type BufferConstructor = typeof BrowserBuffer & {
+  (value: number | string | ArrayBuffer | SharedArrayBuffer | ArrayBufferView | ArrayLike<number> | Iterable<number>, encodingOrOffset?: BufferEncoding | number, length?: number): BrowserBuffer;
+};
+
+const BufferFacade = function Buffer(value: number | string | ArrayBuffer | SharedArrayBuffer | ArrayBufferView | ArrayLike<number> | Iterable<number>, encodingOrOffset?: BufferEncoding | number, length?: number): BrowserBuffer {
+  if (typeof value === "number") return BrowserBuffer.alloc(value);
+  if (value instanceof ArrayBuffer && typeof encodingOrOffset === "number") {
+    const offset = Math.max(0, encodingOrOffset);
+    const end = typeof length === "number" ? Math.min(value.byteLength, offset + Math.max(0, length)) : value.byteLength;
+    return new BrowserBuffer(value.slice(offset, end));
+  }
+  return BrowserBuffer.from(value, typeof encodingOrOffset === "string" ? encodingOrOffset : undefined);
+};
+
+Object.setPrototypeOf(BufferFacade, BrowserBuffer);
+Object.defineProperty(BufferFacade, "prototype", { value: BrowserBuffer.prototype });
+
+export const Buffer = BufferFacade as unknown as BufferConstructor;
 export const kMaxLength = 0x7fffffff;
 
 export const bufferBuiltin = Object.freeze({
