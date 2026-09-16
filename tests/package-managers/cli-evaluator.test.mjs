@@ -977,6 +977,99 @@ assert.equal(asyncRequireConstructorBridgeResult.stderr, "");
 assert.equal(asyncRequireConstructorBridgeResult.exitCode, 0);
 assert.equal(asyncRequireConstructorBridgeResult.stdout, "undefined:function:function:function:true:true");
 
+const asyncRequireBundlerBridgeWorkspace = new MemoryPackageManagerWorkspace([
+  {
+    path: "/workspace/async-bundler/package/bin/cli.cjs",
+    data: `
+      const binding = require('../lib/binding.mjs');
+      const bundler = new binding.BindingBundler();
+      Promise.all([bundler.generate(), bundler.write()]).then(([generated, written]) => {
+        process.stdout.write([
+          Array.isArray(generated.chunks),
+          Array.isArray(generated.assets),
+          Array.isArray(written.chunks),
+          Array.isArray(written.assets)
+        ].join(':'));
+      });
+    `
+  },
+  {
+    path: "/workspace/async-bundler/package/lib/binding.mjs",
+    data: "await Promise.resolve();\nexport class BindingBundler {}\n"
+  },
+  {
+    path: "/workspace/async-bundler/package/package.json",
+    data: JSON.stringify({ name: "async-bundler", version: "1.0.0", bin: { "async-bundler": "bin/cli.cjs" } })
+  }
+]);
+const asyncRequireBundlerBridgeResult = await createAsyncCliModuleEvaluator({
+  root: "/workspace",
+  reader: asyncRequireBundlerBridgeWorkspace,
+  settleTicks: 2,
+  settleTimeoutMs: 10
+})({
+  entry: {
+    name: "async-bundler",
+    version: "1.0.0",
+    entry: "/workspace/async-bundler/package/bin/cli.cjs"
+  },
+  args: [],
+  cwd: "/workspace/project"
+});
+assert.equal(asyncRequireBundlerBridgeResult.stderr, "");
+assert.equal(asyncRequireBundlerBridgeResult.exitCode, 0);
+assert.equal(asyncRequireBundlerBridgeResult.stdout, "true:true:true:true");
+
+const asyncRequireBundlerWriteWorkspace = new MemoryPackageManagerWorkspace([
+  {
+    path: "/workspace/project/index.html",
+    data: '<div id="root"></div><script type="module" src="/src/main.ts"></script>\n'
+  },
+  {
+    path: "/workspace/project/src/main.ts",
+    data: "const value: number = 1;\ndocument.body.textContent = String(value);\n"
+  },
+  {
+    path: "/workspace/async-bundler-write/package/bin/cli.cjs",
+    data: `
+      const binding = require('../lib/binding.mjs');
+      const bundler = new binding.BindingBundler();
+      bundler.write({
+        inputOptions: { cwd: '/workspace/project', input: [{ import: '/workspace/project/index.html' }] },
+        outputOptions: { dir: '/workspace/project/dist' }
+      }).then((result) => process.stdout.write(String(result.chunks.length) + ':' + String(result.assets.length)));
+    `
+  },
+  {
+    path: "/workspace/async-bundler-write/package/lib/binding.mjs",
+    data: "await Promise.resolve();\nexport class BindingBundler {}\n"
+  },
+  {
+    path: "/workspace/async-bundler-write/package/package.json",
+    data: JSON.stringify({ name: "async-bundler-write", version: "1.0.0", bin: { "async-bundler-write": "bin/cli.cjs" } })
+  }
+]);
+const asyncRequireBundlerWriteResult = await createIsolatedAsyncCliModuleEvaluator({
+  root: "/workspace",
+  workspace: asyncRequireBundlerWriteWorkspace,
+  settleTicks: 2,
+  settleTimeoutMs: 10
+})({
+  entry: {
+    name: "async-bundler-write",
+    version: "1.0.0",
+    entry: "/workspace/async-bundler-write/package/bin/cli.cjs"
+  },
+  args: [],
+  cwd: "/workspace/project"
+});
+assert.equal(asyncRequireBundlerWriteResult.stderr, "");
+assert.equal(asyncRequireBundlerWriteResult.exitCode, 0);
+assert.equal(asyncRequireBundlerWriteResult.stdout, "1:1");
+const bundlerWriteFiles = new Map(asyncRequireBundlerWriteResult.workspaceSnapshot.files.map((file) => [file.path, Buffer.from(file.data, "base64").toString("utf8")]));
+assert.match(bundlerWriteFiles.get("/workspace/project/dist/index.html"), /assets\/index\.js/);
+assert.equal(bundlerWriteFiles.get("/workspace/project/dist/assets/index.js")?.includes("const value = 1;"), true);
+
 const httpServerBridgeWorkspace = new MemoryPackageManagerWorkspace([
   {
     path: "/workspace/http-server/package/bin/server.cjs",

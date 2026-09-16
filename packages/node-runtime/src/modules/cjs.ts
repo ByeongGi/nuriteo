@@ -139,16 +139,135 @@ function createBindingBundlerPlaceholder(runtime: ModuleRuntime): new () => Runt
     return {
       closed: false,
       close: async () => undefined,
-      generate: async () => ({ output: [] }),
+      generate: async (bundlerOptions: RuntimeNamespace = {}) => createBrowserBuildOutput(runtime, bundlerOptions, false),
       getWatchFiles: () => [],
       scan: async (bundlerOptions: RuntimeNamespace) => {
         debugAsyncEsmBinding("BindingBundler.scan");
         await runBrowserBindingScan(runtime, bundlerOptions);
         return {};
       },
-      write: async () => ({ output: [] })
+      write: async (bundlerOptions: RuntimeNamespace = {}) => createBrowserBuildOutput(runtime, bundlerOptions, true)
     };
   } as unknown as new () => RuntimeNamespace;
+}
+
+function createBrowserBuildOutput(runtime: ModuleRuntime, bundlerOptions: RuntimeNamespace, writeFiles: boolean): { assets: RuntimeNamespace[]; chunks: RuntimeNamespace[] } {
+  const inputOptions = (bundlerOptions.inputOptions || {}) as RuntimeNamespace;
+  const outputOptions = (bundlerOptions.outputOptions || {}) as RuntimeNamespace;
+  const cwd = typeof inputOptions.cwd === "string" ? normalizePosixPath(inputOptions.cwd) : "/workspace/project";
+  const outDir = typeof outputOptions.dir === "string" ? resolveBuildPath(cwd, outputOptions.dir) : dirnameOf(resolveBuildPath(cwd, typeof outputOptions.file === "string" ? outputOptions.file : "dist/index.js"));
+  const entry = firstBuildInput(inputOptions.input, cwd);
+  const fs = runtime.builtins?.("node:fs") as {
+    mkdirSync?: (path: string) => void;
+    readFileSync?: (path: string, encoding: "utf8") => string;
+    writeFileSync?: (path: string, data: string) => void;
+  } | undefined;
+  const sourcePath = resolveHtmlEntryScript(fs, entry, cwd) || entry;
+  const source = readOptionalText(fs, sourcePath) || "";
+  const code = source ? transformBrowserSupportedSource(sourcePath, source) : "";
+  const chunkFileName = "assets/index.js";
+  const html = createBuildHtml(fs, entry, chunkFileName);
+  if (writeFiles) {
+    tryWriteBuildFile(fs, outDir, "index.html", html);
+    tryWriteBuildFile(fs, `${outDir}/assets`, "index.js", code || "export {};\n");
+  }
+  return {
+    assets: [createBrowserBuildAsset("index.html", html)],
+    chunks: [createBrowserBuildChunk(chunkFileName, sourcePath, code || "export {};\n")]
+  };
+}
+
+function tryWriteBuildFile(
+  fs: { mkdirSync?: (path: string) => void; writeFileSync?: (path: string, data: string) => void } | undefined,
+  directory: string,
+  fileName: string,
+  data: string
+): void {
+  try {
+    fs?.mkdirSync?.(directory);
+    fs?.writeFileSync?.(`${directory}/${fileName}`, data);
+  } catch {
+    // Some evaluator modes expose read-only fs bindings; the output object is still useful there.
+  }
+}
+
+function firstBuildInput(input: RuntimeValue, cwd: string): string {
+  if (Array.isArray(input)) {
+    const first = input[0] as { import?: unknown } | undefined;
+    if (typeof first?.import === "string") return resolveBuildPath(cwd, first.import);
+  }
+  if (input && typeof input === "object") {
+    const entries = Object.values(input as Record<string, { import?: unknown }>);
+    const first = entries[0];
+    if (typeof first?.import === "string") return resolveBuildPath(cwd, first.import);
+  }
+  return `${cwd}/index.html`;
+}
+
+function resolveHtmlEntryScript(
+  fs: { readFileSync?: (path: string, encoding: "utf8") => string } | undefined,
+  entry: string,
+  cwd: string
+): string | undefined {
+  if (!entry.endsWith(".html")) return entry;
+  const html = readOptionalText(fs, entry);
+  const script = html?.match(/<script\b[^>]*\btype=["']module["'][^>]*\bsrc=["']([^"']+)["'][^>]*>/i)?.[1];
+  if (!script) return undefined;
+  return resolveBuildPath(dirnameOf(entry), script.startsWith("/") ? `${cwd}${script}` : script);
+}
+
+function createBuildHtml(fs: { readFileSync?: (path: string, encoding: "utf8") => string } | undefined, entry: string, chunkFileName: string): string {
+  const fallback = `<div id="root"></div><script type="module" src="/${chunkFileName}"></script>\n`;
+  if (!entry.endsWith(".html")) return fallback;
+  const html = readOptionalText(fs, entry) || fallback;
+  if (/<script\b[^>]*\btype=["']module["'][^>]*\bsrc=["'][^"']+["'][^>]*>/i.test(html)) {
+    return html.replace(/<script\b([^>]*\btype=["']module["'][^>]*)\bsrc=["'][^"']+["']([^>]*)>/i, `<script$1src="/${chunkFileName}"$2>`);
+  }
+  return `${html.trimEnd()}<script type="module" src="/${chunkFileName}"></script>\n`;
+}
+
+function createBrowserBuildChunk(fileName: string, sourcePath: string, code: string): RuntimeNamespace {
+  return {
+    dropInner: () => ({ freed: true }),
+    getCode: () => code,
+    getDynamicImports: () => [],
+    getExports: () => [],
+    getFacadeModuleId: () => sourcePath,
+    getFileName: () => fileName,
+    getImports: () => [],
+    getIsDynamicEntry: () => false,
+    getIsEntry: () => true,
+    getMap: () => undefined,
+    getModuleIds: () => [sourcePath],
+    getModules: () => ({ keys: [], values: [] }),
+    getName: () => "index",
+    getPreliminaryFileName: () => fileName,
+    getSourcemapFileName: () => undefined
+  };
+}
+
+function createBrowserBuildAsset(fileName: string, source: string): RuntimeNamespace {
+  return {
+    getFileName: () => fileName,
+    getName: () => "index",
+    getNames: () => ["index"],
+    getOriginalFileName: () => undefined,
+    getOriginalFileNames: () => [],
+    getSource: () => source
+  };
+}
+
+function readOptionalText(fs: { readFileSync?: (path: string, encoding: "utf8") => string } | undefined, path: string): string | undefined {
+  try {
+    return fs?.readFileSync?.(path, "utf8");
+  } catch {
+    return undefined;
+  }
+}
+
+function resolveBuildPath(base: string, path: string): string {
+  if (path.startsWith("/")) return normalizePosixPath(path);
+  return normalizePosixPath(`${base}/${path}`);
 }
 
 async function runBrowserBindingScan(runtime: ModuleRuntime, bundlerOptions: RuntimeNamespace): Promise<void> {
