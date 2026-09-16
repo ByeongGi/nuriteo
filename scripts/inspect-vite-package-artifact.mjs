@@ -20,6 +20,7 @@ class NodeThreadCliEvaluationWorker {
     import { parentPort } from "node:worker_threads";
     import { createCliEvaluationHttpBridge, evaluateCliModuleWorkerMessage } from ${JSON.stringify(new URL("../packages/node-runtime/src/package-managers/cli-evaluator.ts", import.meta.url).href)};
     const httpBridges = new Map();
+    const webSockets = new Map();
     parentPort.on("message", async (message) => {
       try {
         if (message.type === "cli:http:request") {
@@ -31,6 +32,40 @@ class NodeThreadCliEvaluationWorker {
             response: await bridge.handleRequest(message.port, message.request),
             type: "cli:http:response"
           });
+          return;
+        }
+        if (message.type === "cli:ws:connect") {
+          const bridge = httpBridges.get(message.evaluationId);
+          if (!bridge) throw new Error("missing CLI HTTP bridge: " + message.evaluationId);
+          const socket = bridge.network.connectWebSocket("ws://127.0.0.1:" + message.port + message.path, {
+            headers: message.headers,
+            protocol: message.protocol
+          });
+          webSockets.set(message.evaluationId + ":" + message.id, socket);
+          socket.onmessage = (event) => parentPort.postMessage({
+            data: event.data,
+            evaluationId: message.evaluationId,
+            id: message.id,
+            type: "cli:ws:message"
+          });
+          socket.onclose = () => {
+            webSockets.delete(message.evaluationId + ":" + message.id);
+            parentPort.postMessage({
+              evaluationId: message.evaluationId,
+              id: message.id,
+              type: "cli:ws:close"
+            });
+          };
+          return;
+        }
+        if (message.type === "cli:ws:message") {
+          webSockets.get(message.evaluationId + ":" + message.id)?.send(message.data);
+          return;
+        }
+        if (message.type === "cli:ws:close") {
+          const key = message.evaluationId + ":" + message.id;
+          webSockets.get(key)?.close();
+          webSockets.delete(key);
           return;
         }
         const bridge = message.bridgeLoopbackServer ? createCliEvaluationHttpBridge() : null;
@@ -81,6 +116,7 @@ const executionIsolation = readFlagValue(args, "--execution-isolation") || "shar
 const fetchPaths = readListFlagValue(args, "--fetch-paths");
 const traceFs = args.includes("--trace-fs");
 const wasmPolicyPath = readFlagValue(args, "--wasm-policy");
+const websocketPaths = readListFlagValue(args, "--websocket-paths");
 const workerTimeoutMs = readOptionalIntegerFlag(args, "--worker-timeout-ms") ?? 1000;
 const [vitePackageRootArg, nodeModulesRootArg] = args.filter((arg, index) => {
   if (arg === "--execute") return false;
@@ -90,17 +126,19 @@ const [vitePackageRootArg, nodeModulesRootArg] = args.filter((arg, index) => {
   if (arg === "--force-wasi") return false;
   if (arg === "--trace-fs") return false;
   if (arg === "--wasm-policy") return false;
+  if (arg === "--websocket-paths") return false;
   if (arg === "--worker-timeout-ms") return false;
   if (index > 0 && args[index - 1] === "--cli-args") return false;
   if (index > 0 && args[index - 1] === "--execution-isolation") return false;
   if (index > 0 && args[index - 1] === "--fetch-paths") return false;
   if (index > 0 && args[index - 1] === "--wasm-policy") return false;
+  if (index > 0 && args[index - 1] === "--websocket-paths") return false;
   if (index > 0 && args[index - 1] === "--worker-timeout-ms") return false;
   return true;
 });
 
 if (!vitePackageRootArg) {
-  console.error("Usage: node scripts/inspect-vite-package-artifact.mjs <vite-package-root> [node-modules-root] [--execute] [--cli-args <arg[,arg...]>] [--execution-isolation shared|snapshot|worker] [--fetch-paths <path[,path...]>] [--trace-fs] [--worker-timeout-ms <ms>] [--force-wasi] [--wasm-policy <manifest-json>]");
+  console.error("Usage: node scripts/inspect-vite-package-artifact.mjs <vite-package-root> [node-modules-root] [--execute] [--cli-args <arg[,arg...]>] [--execution-isolation shared|snapshot|worker] [--fetch-paths <path[,path...]>] [--websocket-paths <path[,path...]>] [--trace-fs] [--worker-timeout-ms <ms>] [--force-wasi] [--wasm-policy <manifest-json>]");
   process.exitCode = 1;
 } else {
   const vitePackageRoot = resolve(vitePackageRootArg);
@@ -132,7 +170,7 @@ if (!vitePackageRootArg) {
       dependencyClosure,
       directReadiness: summarizeReadiness(readiness),
       executionSmoke: execute
-        ? await runExecutionSmoke(vitePackageArtifact, dependencyClosure?.artifacts || [], { cliArgs, executionIsolation, fetchPaths, forceWasi, traceFs, wasmAdapterPolicy, workerTimeoutMs })
+        ? await runExecutionSmoke(vitePackageArtifact, dependencyClosure?.artifacts || [], { cliArgs, executionIsolation, fetchPaths, forceWasi, traceFs, wasmAdapterPolicy, websocketPaths, workerTimeoutMs })
         : null,
       hydratedReadiness: dependencyClosure
         ? summarizeReadiness(createHydratedWorkflowReadiness(vitePackageArtifact, dependencyClosure.artifacts, wasmAdapterPolicy))
@@ -216,6 +254,7 @@ async function runExecutionSmoke(vitePackageArtifact, dependencyArtifacts, optio
     };
   }
   const fetchResults = await fetchExecutionSmokePaths(workflow, options.fetchPaths);
+  const websocketResults = await connectExecutionSmokeWebSockets(workflow, options.websocketPaths);
   result.closeBridgedServers?.();
   const distArtifacts = summarizeDistArtifacts(result.workspaceSnapshot);
   return {
@@ -245,6 +284,7 @@ async function runExecutionSmoke(vitePackageArtifact, dependencyArtifacts, optio
     distArtifactBlocker: classifyDistArtifactBlocker(result.args, result.exitCode, distArtifacts),
     distArtifacts,
     ...(fetchResults ? { fetchResults } : {}),
+    ...(websocketResults ? { websocketResults } : {}),
     ...(options.executionIsolation === "worker" ? { workerTimeoutMs: options.workerTimeoutMs } : {})
   };
 }
@@ -294,6 +334,37 @@ async function fetchExecutionSmokePaths(workflow, fetchPaths) {
         error: error instanceof Error ? error.message : String(error),
         path,
         status: null
+      });
+    }
+  }
+  return results;
+}
+
+async function connectExecutionSmokeWebSockets(workflow, websocketPaths) {
+  if (!websocketPaths || websocketPaths.length === 0) return null;
+  const results = [];
+  for (const path of websocketPaths) {
+    const messages = [];
+    try {
+      const socket = workflow.network.connectWebSocket(`ws://127.0.0.1:5173${path}`, { protocol: "vite-hmr" });
+      socket.onmessage = (event) => messages.push(event.data);
+      await Promise.resolve();
+      await Promise.resolve();
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      socket.close();
+      results.push({
+        messages: messages.map((message) => previewText(message)),
+        path,
+        protocol: socket.protocol,
+        status: "connected"
+      });
+    } catch (error) {
+      results.push({
+        error: error instanceof Error ? error.message : String(error),
+        messages,
+        path,
+        protocol: "vite-hmr",
+        status: "error"
       });
     }
   }

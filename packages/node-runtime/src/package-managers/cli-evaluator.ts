@@ -10,7 +10,7 @@ import { Readable, Writable } from "../builtins/stream.ts";
 import { fileURLToPath } from "../builtins/url.ts";
 import { createWorkspaceModuleRuntime, type WorkspaceModuleReader } from "../modules/index.ts";
 import type { ModuleRuntime } from "../modules/runtime.ts";
-import { createLoopbackNetwork, type LoopbackNetwork, type RuntimeHttpRequest, type RuntimeHttpResponse } from "../net/index.ts";
+import { createLoopbackNetwork, type LoopbackNetwork, type RuntimeHttpRequest, type RuntimeHttpResponse, type RuntimeWebSocket } from "../net/index.ts";
 import type { CliEntry, CliRunResult, RuntimeEnv, RuntimeFsBinding, RuntimeFsData, RuntimeNamespace, RuntimeValue } from "../types.ts";
 import { inspectCliEntryReadiness } from "./cli-entry-readiness.ts";
 import { MemoryPackageManagerWorkspace, type PackageManagerWorkspaceSnapshot, type PackageManagerWorkspaceWriter } from "./workspace.ts";
@@ -75,6 +75,10 @@ export type CliEvaluationWorkerMessage =
   | CliEvaluationWorkerEvaluateMessage
   | CliEvaluationWorkerHttpRequestMessage
   | CliEvaluationWorkerHttpResponseMessage
+  | CliEvaluationWorkerWebSocketCloseMessage
+  | CliEvaluationWorkerWebSocketConnectMessage
+  | CliEvaluationWorkerWebSocketErrorMessage
+  | CliEvaluationWorkerWebSocketMessage
   | CliEvaluationWorkerResultMessage;
 
 export interface CliEvaluationWorkerEvaluateMessage {
@@ -112,6 +116,36 @@ export interface CliEvaluationWorkerHttpResponseMessage {
   id: number;
   response?: RuntimeHttpResponse;
   type: "cli:http:response";
+}
+
+export interface CliEvaluationWorkerWebSocketConnectMessage {
+  evaluationId: number;
+  headers?: Record<string, string>;
+  id: number;
+  path: string;
+  port: number;
+  protocol: string;
+  type: "cli:ws:connect";
+}
+
+export interface CliEvaluationWorkerWebSocketMessage {
+  data: string;
+  evaluationId: number;
+  id: number;
+  type: "cli:ws:message";
+}
+
+export interface CliEvaluationWorkerWebSocketCloseMessage {
+  evaluationId: number;
+  id: number;
+  type: "cli:ws:close";
+}
+
+export interface CliEvaluationWorkerWebSocketErrorMessage {
+  error: string;
+  evaluationId: number;
+  id: number;
+  type: "cli:ws:error";
 }
 
 export interface CliEvaluationHttpBridge {
@@ -181,6 +215,8 @@ export function createWorkerBackedAsyncCliModuleEvaluator(
         resolve: (response: RuntimeHttpResponse) => void;
       }>();
       let nextHttpRequestId = 1;
+      let nextWebSocketId = 1;
+      const bridgedWebSockets = new Map<number, RuntimeWebSocket>();
       const cleanup = () => {
         if (timeout) clearTimeout(timeout);
         worker.removeEventListener("message", onMessage);
@@ -191,6 +227,8 @@ export function createWorkerBackedAsyncCliModuleEvaluator(
         if (timeout) clearTimeout(timeout);
         for (const listener of bridgedListeners) listener.close();
         bridgedListeners.length = 0;
+        for (const socket of bridgedWebSockets.values()) socket.close();
+        bridgedWebSockets.clear();
         pendingHttpRequests.clear();
         worker.removeEventListener("message", onMessage);
         worker.removeEventListener("error", onError);
@@ -206,6 +244,27 @@ export function createWorkerBackedAsyncCliModuleEvaluator(
           if (data.error) pending.reject(new Error(data.error));
           else if (data.response) pending.resolve(data.response);
           else pending.reject(new Error("CLI evaluation worker returned no HTTP response"));
+          return;
+        }
+        if (data?.type === "cli:ws:message" && data.evaluationId === id) {
+          if (typeof data.id !== "number") return;
+          if (typeof data.data !== "string") return;
+          const socket = bridgedWebSockets.get(data.id);
+          if (socket) socket.send(data.data);
+          return;
+        }
+        if (data?.type === "cli:ws:close" && data.evaluationId === id) {
+          if (typeof data.id !== "number") return;
+          const socket = bridgedWebSockets.get(data.id);
+          bridgedWebSockets.delete(data.id);
+          socket?.close();
+          return;
+        }
+        if (data?.type === "cli:ws:error" && data.evaluationId === id) {
+          if (typeof data.id !== "number") return;
+          const socket = bridgedWebSockets.get(data.id);
+          bridgedWebSockets.delete(data.id);
+          socket?.close();
           return;
         }
         if (data?.type !== "cli:result" || data.id !== id) return;
@@ -242,6 +301,36 @@ export function createWorkerBackedAsyncCliModuleEvaluator(
                 type: "cli:http:request"
               } satisfies CliEvaluationWorkerHttpRequestMessage);
             });
+          }, {
+            websocket: (socket, request, context) => {
+              const socketId = nextWebSocketId++;
+              bridgedWebSockets.set(socketId, socket);
+              socket.onmessage = (event) => {
+                worker.postMessage({
+                  data: event.data,
+                  evaluationId: id,
+                  id: socketId,
+                  type: "cli:ws:message"
+                } satisfies CliEvaluationWorkerWebSocketMessage);
+              };
+              socket.onclose = () => {
+                bridgedWebSockets.delete(socketId);
+                worker.postMessage({
+                  evaluationId: id,
+                  id: socketId,
+                  type: "cli:ws:close"
+                } satisfies CliEvaluationWorkerWebSocketCloseMessage);
+              };
+              worker.postMessage({
+                evaluationId: id,
+                headers: request.headers,
+                id: socketId,
+                path: request.path,
+                port,
+                protocol: context.protocol,
+                type: "cli:ws:connect"
+              } satisfies CliEvaluationWorkerWebSocketConnectMessage);
+            }
           }));
         }
         resolve({

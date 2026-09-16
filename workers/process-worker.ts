@@ -8,6 +8,7 @@ let systemPort = null;
 let syncChannel = null;
 let nextRequestId = 1;
 const cliHttpBridges = new Map();
+const cliWebSockets = new Map();
 
 self.addEventListener("message", (event) => {
   if (event.data?.type === "boot") {
@@ -43,6 +44,12 @@ self.addEventListener("message", (event) => {
     evaluateCli(event.data);
   } else if (event.data?.type === "cli:http:request") {
     handleCliHttpRequest(event.data);
+  } else if (event.data?.type === "cli:ws:connect") {
+    handleCliWebSocketConnect(event.data);
+  } else if (event.data?.type === "cli:ws:message") {
+    handleCliWebSocketMessage(event.data);
+  } else if (event.data?.type === "cli:ws:close") {
+    handleCliWebSocketClose(event.data);
   }
 });
 
@@ -121,4 +128,57 @@ async function handleCliHttpRequest(message) {
       type: "cli:http:response"
     });
   }
+}
+
+async function handleCliWebSocketConnect(message) {
+  const bridge = cliHttpBridges.get(message.evaluationId);
+  if (!bridge) {
+    self.postMessage({
+      error: `missing CLI HTTP bridge: ${message.evaluationId}`,
+      evaluationId: message.evaluationId,
+      id: message.id,
+      type: "cli:ws:error"
+    });
+    return;
+  }
+  try {
+    const socket = bridge.network.connectWebSocket(`ws://127.0.0.1:${message.port}${message.path}`, {
+      headers: message.headers,
+      protocol: message.protocol
+    });
+    cliWebSockets.set(`${message.evaluationId}:${message.id}`, socket);
+    socket.onmessage = (event) => {
+      self.postMessage({
+        data: event.data,
+        evaluationId: message.evaluationId,
+        id: message.id,
+        type: "cli:ws:message"
+      });
+    };
+    socket.onclose = () => {
+      cliWebSockets.delete(`${message.evaluationId}:${message.id}`);
+      self.postMessage({
+        evaluationId: message.evaluationId,
+        id: message.id,
+        type: "cli:ws:close"
+      });
+    };
+  } catch (error) {
+    self.postMessage({
+      error: error instanceof Error ? error.message : String(error),
+      evaluationId: message.evaluationId,
+      id: message.id,
+      type: "cli:ws:error"
+    });
+  }
+}
+
+function handleCliWebSocketMessage(message) {
+  cliWebSockets.get(`${message.evaluationId}:${message.id}`)?.send(message.data);
+}
+
+function handleCliWebSocketClose(message) {
+  const key = `${message.evaluationId}:${message.id}`;
+  cliWebSockets.get(key)?.close();
+  cliWebSockets.delete(key);
 }

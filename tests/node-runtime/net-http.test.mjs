@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 
-import { createLoopbackNetwork } from "../../packages/node-runtime/src/index.ts";
+import { createHttpBuiltin, createLoopbackNetwork } from "../../packages/node-runtime/src/index.ts";
 
 const net = createLoopbackNetwork({ maxBytes: 128 * 1024 });
 const server = net.listen(4173, async (request) => {
@@ -72,5 +72,33 @@ assert.throws(
   () => net.connectWebSocket("ws://127.0.0.1:5173/", { protocol: "vite-hmr" }),
   (error) => error.code === "ECONNREFUSED"
 );
+
+const upgradeNetwork = createLoopbackNetwork();
+const http = createHttpBuiltin(undefined, "http:", upgradeNetwork);
+const upgradeServer = http.createServer((_request, response) => {
+  response.writeHead(426);
+  response.end("Upgrade Required");
+});
+const upgradeEvents = [];
+upgradeServer.on("upgrade", (request, socket) => {
+  upgradeEvents.push(`${request.url}:${request.headers["sec-websocket-protocol"]}`);
+  socket.on("data", (frame) => {
+    const payloadLength = frame[1] & 0x7f;
+    const mask = frame.slice(2, 6);
+    const payload = frame.slice(6, 6 + payloadLength).map((byte, index) => byte ^ mask[index % 4]);
+    upgradeEvents.push(new TextDecoder().decode(payload));
+  });
+  socket.write(new Uint8Array([0x81, 0x07, ...new TextEncoder().encode("welcome")]));
+});
+upgradeServer.listen(5300, "127.0.0.1");
+const upgradedMessages = [];
+const upgradedSocket = upgradeNetwork.connectWebSocket("ws://127.0.0.1:5300/", { protocol: "vite-hmr" });
+upgradedSocket.onmessage = (event) => upgradedMessages.push(event.data);
+await Promise.resolve();
+upgradedSocket.send("hello");
+await Promise.resolve();
+assert.equal(JSON.stringify(upgradeEvents), JSON.stringify(["/:vite-hmr", "hello"]));
+assert.equal(JSON.stringify(upgradedMessages), JSON.stringify(["welcome"]));
+upgradeServer.close();
 
 console.log("node runtime net http test ok");

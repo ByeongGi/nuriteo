@@ -1,5 +1,5 @@
 import type { HostFetchOptions } from "../../../browser-host/src/io/index.ts";
-import type { LoopbackNetwork, RuntimeHttpRequest, RuntimeHttpResponse } from "../net/index.ts";
+import type { LoopbackNetwork, RuntimeHttpRequest, RuntimeHttpResponse, RuntimeWebSocket } from "../net/index.ts";
 import type { RuntimeFetcher, RuntimeHttpClient } from "../network/http-client.ts";
 import type { RuntimeValue } from "../types.ts";
 import { BrowserBuffer } from "./buffer.ts";
@@ -48,6 +48,7 @@ export class IncomingMessage extends Readable {
   method: string;
   rawHeaders: string[];
   rawTrailers: string[] = [];
+  socket?: RuntimeValue;
   statusCode: number;
   statusMessage: string;
   trailers: Record<string, string> = {};
@@ -260,7 +261,9 @@ export class Server extends EventEmitter {
     else if (hostnameOrCallback) this.hostname = hostnameOrCallback;
     if (this.network) {
       this.listener?.close();
-      this.listener = this.network.listen(this.port, (request) => this.handleLoopbackRequest(request));
+      this.listener = this.network.listen(this.port, (request) => this.handleLoopbackRequest(request), {
+        websocket: (socket, request) => this.handleLoopbackUpgrade(socket, request)
+      });
     }
     this.listening = true;
     queueMicrotask(() => {
@@ -297,6 +300,199 @@ export class Server extends EventEmitter {
     }
     return finished;
   }
+
+  private handleLoopbackUpgrade(socket: RuntimeWebSocket, request: RuntimeHttpRequest): void {
+    const incoming = new IncomingMessage({
+      body: new Uint8Array(),
+      headers: request.headers,
+      method: request.method,
+      statusCode: 0,
+      url: request.path
+    });
+    const rawSocket = new LoopbackUpgradeSocket(socket);
+    incoming.socket = rawSocket;
+    if (!this.emit("upgrade", incoming, rawSocket, BrowserBuffer.alloc(0))) socket.close();
+  }
+}
+
+class LoopbackUpgradeSocket extends EventEmitter {
+  authorized = false;
+  encrypted = false;
+  readable = true;
+  writable = true;
+  destroyed = false;
+  bytesWritten = 0;
+  private runtimeSocket: RuntimeWebSocket;
+  private pending: Uint8Array<ArrayBufferLike> = new Uint8Array();
+
+  constructor(runtimeSocket: RuntimeWebSocket) {
+    super();
+    this.runtimeSocket = runtimeSocket;
+    this.runtimeSocket.onmessage = (event) => {
+      this.emit("data", encodeClientTextFrame(event.data));
+    };
+    this.runtimeSocket.onclose = () => {
+      this.destroyed = true;
+      this.readable = false;
+      this.writable = false;
+      this.emit("end");
+      this.emit("close");
+    };
+  }
+
+  cork(): void {}
+
+  uncork(): void {}
+
+  pause(): this {
+    return this;
+  }
+
+  resume(): this {
+    return this;
+  }
+
+  setNoDelay(_noDelay = true): this {
+    return this;
+  }
+
+  setTimeout(_timeout: number, callback?: () => void): this {
+    if (callback) this.once("timeout", callback);
+    return this;
+  }
+
+  write(chunk: RuntimeValue, callback?: (error?: Error | null) => void): boolean {
+    if (this.destroyed) return false;
+    const bytes = toUint8Array(chunk);
+    this.bytesWritten += bytes.byteLength;
+    if (!looksLikeHttpUpgradeResponse(bytes)) this.forwardServerFrames(bytes);
+    callback?.();
+    return true;
+  }
+
+  end(chunk?: RuntimeValue, callback?: () => void): this {
+    if (chunk !== undefined) this.write(chunk);
+    this.destroy();
+    callback?.();
+    return this;
+  }
+
+  destroy(error?: Error): this {
+    if (this.destroyed) return this;
+    this.destroyed = true;
+    this.readable = false;
+    this.writable = false;
+    if (error) this.emit("error", error);
+    this.runtimeSocket.close();
+    this.emit("close", !!error);
+    return this;
+  }
+
+  private forwardServerFrames(bytes: Uint8Array): void {
+    this.pending = concatUint8Arrays([this.pending, bytes]) as Uint8Array;
+    while (this.pending.byteLength >= 2) {
+      const frame = decodeServerFrame(this.pending);
+      if (!frame) return;
+      this.pending = this.pending.slice(frame.frameLength);
+      if (frame.opcode === 1) this.runtimeSocket.send(new TextDecoder().decode(frame.payload));
+      else if (frame.opcode === 8) this.runtimeSocket.close();
+    }
+  }
+}
+
+function looksLikeHttpUpgradeResponse(bytes: Uint8Array): boolean {
+  return new TextDecoder().decode(bytes.slice(0, Math.min(bytes.byteLength, 32))).startsWith("HTTP/1.1 101");
+}
+
+function decodeServerFrame(bytes: Uint8Array): { frameLength: number; opcode: number; payload: Uint8Array } | null {
+  if (bytes.byteLength < 2) return null;
+  const opcode = (bytes[0] ?? 0) & 0x0f;
+  let offset = 2;
+  let length = (bytes[1] ?? 0) & 0x7f;
+  if (length === 126) {
+    if (bytes.byteLength < 4) return null;
+    length = ((bytes[2] ?? 0) << 8) | (bytes[3] ?? 0);
+    offset = 4;
+  } else if (length === 127) {
+    if (bytes.byteLength < 10) return null;
+    const high = readUint32(bytes, 2);
+    const low = readUint32(bytes, 6);
+    if (high !== 0) throw new Error("EWSFRAMETOOLARGE: loopback WebSocket frame exceeds supported size");
+    length = low;
+    offset = 10;
+  }
+  const masked = ((bytes[1] ?? 0) & 0x80) !== 0;
+  const maskOffset = offset;
+  if (masked) offset += 4;
+  const frameLength = offset + length;
+  if (bytes.byteLength < frameLength) return null;
+  const payload = bytes.slice(offset, frameLength);
+  if (!masked) return { frameLength, opcode, payload };
+  const mask = bytes.slice(maskOffset, maskOffset + 4);
+  return {
+    frameLength,
+    opcode,
+    payload: payload.map((byte, index) => byte ^ (mask[index % 4] ?? 0))
+  };
+}
+
+function encodeClientTextFrame(data: string): Uint8Array {
+  const payload = new TextEncoder().encode(data);
+  const headerLength = payload.byteLength < 126 ? 2 : payload.byteLength <= 0xffff ? 4 : 10;
+  const header = new Uint8Array(headerLength + 4);
+  header[0] = 0x81;
+  if (payload.byteLength < 126) {
+    header[1] = 0x80 | payload.byteLength;
+  } else if (payload.byteLength <= 0xffff) {
+    header[1] = 0x80 | 126;
+    header[2] = (payload.byteLength >> 8) & 0xff;
+    header[3] = payload.byteLength & 0xff;
+  } else {
+    header[1] = 0x80 | 127;
+    writeUint32(header, 2, 0);
+    writeUint32(header, 6, payload.byteLength);
+  }
+  const maskOffset = headerLength;
+  header.set([0x12, 0x34, 0x56, 0x78], maskOffset);
+  const output = new Uint8Array(header.byteLength + payload.byteLength);
+  output.set(header, 0);
+  for (let index = 0; index < payload.byteLength; index++) {
+    output[header.byteLength + index] = (payload[index] ?? 0) ^ (header[maskOffset + (index % 4)] ?? 0);
+  }
+  return output;
+}
+
+function readUint32(bytes: Uint8Array, offset: number): number {
+  return (
+    ((bytes[offset] ?? 0) * 0x1000000) +
+    (((bytes[offset + 1] ?? 0) << 16) | ((bytes[offset + 2] ?? 0) << 8) | (bytes[offset + 3] ?? 0))
+  ) >>> 0;
+}
+
+function writeUint32(bytes: Uint8Array, offset: number, value: number): void {
+  bytes[offset] = (value >>> 24) & 0xff;
+  bytes[offset + 1] = (value >>> 16) & 0xff;
+  bytes[offset + 2] = (value >>> 8) & 0xff;
+  bytes[offset + 3] = value & 0xff;
+}
+
+function toUint8Array(value: RuntimeValue): Uint8Array {
+  if (typeof value === "string") return new TextEncoder().encode(value);
+  if (value instanceof Uint8Array) return value;
+  if (value instanceof ArrayBuffer) return new Uint8Array(value);
+  if (ArrayBuffer.isView(value)) return new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
+  return new TextEncoder().encode(String(value));
+}
+
+function concatUint8Arrays(chunks: Uint8Array[]): Uint8Array {
+  const total = chunks.reduce((sum, chunk) => sum + chunk.byteLength, 0);
+  const output = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    output.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return output;
 }
 
 function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {

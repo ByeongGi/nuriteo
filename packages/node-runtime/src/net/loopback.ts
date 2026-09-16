@@ -75,7 +75,9 @@ export class LoopbackNetwork {
       headers: {
         connection: "Upgrade",
         host: parsed.host,
+        "sec-websocket-key": "dGhlIHNhbXBsZSBub25jZQ==",
         upgrade: "websocket",
+        "sec-websocket-version": "13",
         ...(protocol ? { "sec-websocket-protocol": protocol } : {}),
         ...(options.headers || {})
       }
