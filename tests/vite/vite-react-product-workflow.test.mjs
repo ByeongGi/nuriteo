@@ -23,6 +23,8 @@ import {
 import { createHmrClient, createPreviewRelay, createPreviewSessionRegistry } from "../../packages/preview/src/index.ts";
 
 class FakeCliEvaluationWorker {
+  messages = [];
+
   #listeners = {
     message: new Set(),
     error: new Set()
@@ -39,6 +41,7 @@ class FakeCliEvaluationWorker {
   }
 
   postMessage(message) {
+    this.messages.push(message);
     queueMicrotask(async () => {
       if (this.#terminated) return;
       try {
@@ -507,6 +510,13 @@ const artifactWorkerTransform = await artifactWorkerExecution.transformRegistrat
   source: "console.log('worker')\n"
 });
 assert.match(artifactWorkerTransform.code, /worker proxy transform:\/src\/main\.jsx/);
+const readyTimeoutWorker = new FakeCliEvaluationWorker();
+await artifactWorkflow.executeRealCli(
+  ["--host", "127.0.0.1"],
+  { PORT: "5300" },
+  { isolation: "worker", readyTimeoutMs: 17, workerFactory: () => readyTimeoutWorker }
+);
+assert.equal(readyTimeoutWorker.messages.find((message) => message.type === "cli:evaluate")?.readyTimeoutMs, 17);
 const artifactStarted = await artifactWorkflow.startDevServerFromCliExecution();
 assert.equal(artifactStarted.moduleTransform, "vite-cli");
 const artifactModule = await artifactWorkflow.fetch("http://127.0.0.1:5299/src/main.jsx");

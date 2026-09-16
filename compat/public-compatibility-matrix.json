@@ -131,8 +131,9 @@
     "actualProductPass": 0,
     "actualProductPartialPass": 1,
     "actualProductScoreAtLeast50": 1,
+    "actualProductScoreAtLeast75": 1,
     "actualProductBlockers": [
-      "actual Vite dev/HMR scoring still times out for Vite official template React",
+      "actual Vite edit-HMR scoring still times out for Vite official template React",
       "large transitive fixture materialization can still hit worker stability limits"
     ]
   },

@@ -21,6 +21,7 @@ assert.equal(matrix.projectFixtures.actualProductMeasured, 1);
 assert.equal(matrix.projectFixtures.actualProductPass, 0);
 assert.equal(matrix.projectFixtures.actualProductPartialPass, 1);
 assert.equal(matrix.projectFixtures.actualProductScoreAtLeast50, 1);
+assert.equal(matrix.projectFixtures.actualProductScoreAtLeast75, 1);
 assert.equal(fs.existsSync(new URL(`../../${matrix.projectFixtures.productAdapterResults}`, import.meta.url)), true);
 assert.equal(fs.existsSync(new URL(`../../${matrix.projectFixtures.actualProductResults}`, import.meta.url)), true);
 

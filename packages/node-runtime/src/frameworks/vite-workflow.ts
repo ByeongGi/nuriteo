@@ -605,6 +605,7 @@ export class ViteProductWorkflow {
           "__viteRegisterTransform"
         ],
         loopbackNetwork: this.network,
+        ...(options.readyTimeoutMs !== undefined ? { readyTimeoutMs: options.readyTimeoutMs } : {}),
         ...(options.traceFs ? { traceFs: true } : {}),
         workerFactory: options.workerFactory!,
         ...(options.workerTimeoutMs !== undefined ? { workerTimeoutMs: options.workerTimeoutMs } : {}),

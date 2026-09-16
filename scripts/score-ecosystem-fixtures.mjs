@@ -200,7 +200,7 @@ async function scoreProductActualFixture(fixture) {
   const devAndHmr = finalSourceImport.ok
     ? await withTimeout(
       runActualDevPreviewAndHmr(workflow, finalSourceImport),
-      actualWorkerTimeoutMs + 5000,
+      actualWorkerTimeoutMs + 15000,
       `EACTUALDEVHMRTIMEOUT: actual product dev/HMR scoring did not settle for ${fixture.id}`
     ).catch((error) => ({
       devPreview: errorResult(error),
@@ -573,13 +573,21 @@ async function runActualDevPreviewAndHmr(workflow, sourceImport) {
   let execution = null;
   try {
     execution = await executeActualCli(workflow, ["--host", "127.0.0.1"]);
-    const preview = await fetchWorkflowPath(workflow, "/");
+    const preview = await withTimeout(
+      fetchWorkflowPath(workflow, "/"),
+      10000,
+      "EACTUALPREVIEWTIMEOUT: actual product preview fetch did not settle."
+    );
     const devPreview = {
       status: execution.exitCode === 0 && preview.status === 200 ? 0 : 1,
       stdout: `${execution.stdout}\npreview status: ${preview.status}\n${preview.bodyStart || ""}`,
       stderr: execution.stderr || preview.error || ""
     };
-    const editHmr = await runActualHmrEdit(workflow, execution, sourceImport.editablePath);
+    const editHmr = await withTimeout(
+      runActualHmrEdit(workflow, execution, sourceImport.editablePath),
+      10000,
+      "EACTUALHMRTIMEOUT: actual product HMR edit did not settle."
+    ).catch((error) => errorResult(error));
     return { devPreview, editHmr };
   } catch (error) {
     return {
@@ -718,6 +726,24 @@ function parseHmrMessageType(message) {
   } catch {
     return null;
   }
+}
+
+function headersForFetchPath(path) {
+  if (path.startsWith("/@vite/") || path.startsWith("/@id/") || /\.[cm]?[jt]sx?(?:$|\?)/.test(path)) {
+    return {
+      accept: "*/*",
+      "sec-fetch-dest": "script"
+    };
+  }
+  if (/\.css(?:$|\?)/.test(path)) {
+    return {
+      accept: "text/css,*/*;q=0.1",
+      "sec-fetch-dest": "style"
+    };
+  }
+  return {
+    accept: "text/html,application/xhtml+xml"
+  };
 }
 
 function uniqueNames(values) {

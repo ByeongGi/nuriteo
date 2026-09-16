@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-16T12:27:06.522Z",
+  "generatedAt": "2026-09-16T12:35:06.892Z",
   "source": "compat/ecosystem-fixtures.json",
   "minimumPassForMilestoneB": 7,
   "results": [
@@ -11,7 +11,7 @@
       "packageManager": "pnpm",
       "repository": "https://github.com/vitejs/vite",
       "subdirectory": "packages/create-vite/template-react",
-      "score": 50,
+      "score": 75,
       "status": "partial-pass",
       "unsupportedBlocker": false,
       "criteria": [
@@ -26,20 +26,19 @@
         {
           "id": "dev-preview",
           "points": 25,
-          "status": "fail",
-          "exitCode": 1,
-          "failureCategory": "dev-preview-command-failed",
-          "stdoutTail": "",
-          "stderrTail": "Error: EACTUALDEVHMRTIMEOUT: actual product dev/HMR scoring did not settle for vite-official-template-react\n    at Timeout.<anonymous> (file:///Users/byeonggi/PROJECT/cargo-container/scripts/score-ecosystem-fixtures.mjs:693:39)\n    at listOnTimeout (node:internal/timers:605:17)\n    at process.processTimers (node:internal/timers:541:7)"
+          "status": "pass",
+          "exitCode": 0,
+          "stdoutTail": "  VITE v8.2.0  ready in 444 ms\n  ➜  Local:   http://127.0.0.1:5173/\npreview status: 200\n<!doctype html>\n<html lang=\"en\">\n  <head>\n    <script type=\"module\" src=\"/@vite/client\"></script>\n    <meta charset=\"UTF-8\" />\n    <link rel=\"icon\" type=\"image/svg+xml\" href=\"/favicon.svg\" />\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />\n    <title>Vite + React</title>\n  </head>\n  <body>\n    <div id=\"root\"></div>\n    <script type=\"module\" src=\"/src/main.jsx\"></script>\n  </body>\n</html>",
+          "stderrTail": ""
         },
         {
           "id": "edit-hmr",
           "points": 25,
           "status": "fail",
           "exitCode": 1,
-          "failureCategory": "dev-preview-unavailable",
+          "failureCategory": "edit-hmr-command-failed",
           "stdoutTail": "",
-          "stderrTail": "Skipped HMR because actual Vite preview did not settle."
+          "stderrTail": "Error: EACTUALHMRTIMEOUT: actual product HMR edit did not settle.\n    at Timeout.<anonymous> (file:///Users/byeonggi/PROJECT/cargo-container/scripts/score-ecosystem-fixtures.mjs:701:39)\n    at listOnTimeout (node:internal/timers:605:17)\n    at process.processTimers (node:internal/timers:541:7)"
         },
         {
           "id": "build-dist",
@@ -109,8 +108,7 @@
     }
   ],
   "failureSummary": {
-    "dev-preview-command-failed": 1,
-    "dev-preview-unavailable": 1
+    "edit-hmr-command-failed": 1
   },
   "summary": {
     "total": 1,
