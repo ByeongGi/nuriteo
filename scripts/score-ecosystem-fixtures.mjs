@@ -28,6 +28,7 @@ const actualVitePackageRoot = valueAfter("--vite-package-root");
 const actualNodeModulesRoot = valueAfter("--node-modules-root");
 const actualWasmPolicyPath = valueAfter("--wasm-policy");
 const actualWorkerTimeoutMs = Number(valueAfter("--worker-timeout-ms") || "10000");
+const useSharedFixtureNodeModules = args.has("--shared-fixture-node-modules");
 let actualProductContext = null;
 
 const selected = matrix.fixtures.filter((fixture) => selectedIds.includes(fixture.id));
@@ -201,7 +202,7 @@ async function scoreProductActualFixture(fixture) {
 
   try {
     const build = finalSourceImport.ok
-      ? await workflow.executeRealCli(["build"], {}, workerCliOptions())
+      ? await executeActualCli(workflow, ["build"])
       : null;
     const distArtifacts = build ? summarizeWorkspaceDistArtifacts(build.workspaceSnapshot, workflow.projectRoot) : { count: 0, files: [] };
     build?.closeBridgedServers?.();
@@ -461,6 +462,20 @@ function createFixtureDependencyReader(projectDir, fallbackNodeModulesRoot, virt
       }));
     }
   }
+  for (const sharedRoot of discoverSharedFixtureNodeModulesRoots()) {
+    if (sharedRoot === fixtureNodeModules) continue;
+    readers.push(createNodeFsWorkspaceReader({
+      root: sharedRoot,
+      virtualRoot: virtualNodeModulesRoot
+    }));
+    const sharedPnpmHoisted = path.join(sharedRoot, ".pnpm/node_modules");
+    if (fs.existsSync(sharedPnpmHoisted)) {
+      readers.push(createNodeFsWorkspaceReader({
+        root: sharedPnpmHoisted,
+        virtualRoot: virtualNodeModulesRoot
+      }));
+    }
+  }
   readers.push(createNodeFsWorkspaceReader({
     root: fallbackNodeModulesRoot,
     virtualRoot: virtualNodeModulesRoot
@@ -473,6 +488,22 @@ function createFixtureDependencyReader(projectDir, fallbackNodeModulesRoot, virt
     }));
   }
   return createFallbackWorkspaceReader(readers);
+}
+
+function discoverSharedFixtureNodeModulesRoots() {
+  if (!useSharedFixtureNodeModules) return [];
+  const roots = [];
+  for (const fixture of matrix.fixtures) {
+    const checkout = path.join(workdir, fixture.id);
+    const candidates = [
+      fixture.subdirectory ? path.join(checkout, fixture.subdirectory, "node_modules") : null,
+      path.join(checkout, "node_modules")
+    ].filter(Boolean);
+    for (const candidate of candidates) {
+      if (fs.existsSync(candidate) && !roots.includes(candidate)) roots.push(candidate);
+    }
+  }
+  return roots;
 }
 
 function collectProjectFiles(rootDir, currentDir, files) {
@@ -519,7 +550,7 @@ function isEditableSource(relativePath) {
 async function runActualDevPreviewAndHmr(workflow, sourceImport) {
   let execution = null;
   try {
-    execution = await workflow.executeRealCli(["--host", "127.0.0.1"], {}, workerCliOptions());
+    execution = await executeActualCli(workflow, ["--host", "127.0.0.1"]);
     const preview = await fetchWorkflowPath(workflow, "/");
     const devPreview = {
       status: execution.exitCode === 0 && preview.status === 200 ? 0 : 1,
@@ -618,6 +649,20 @@ function workerCliOptions() {
     workerFactory: () => new NodeThreadCliEvaluationWorker(),
     workerTimeoutMs: actualWorkerTimeoutMs
   };
+}
+
+function executeActualCli(workflow, args) {
+  const timeoutMs = actualWorkerTimeoutMs + 5000;
+  let timeout = null;
+  const execution = workflow.executeRealCli(args, {}, workerCliOptions());
+  const guard = new Promise((_, reject) => {
+    timeout = setTimeout(() => {
+      reject(new Error(`EACTUALCLITIMEOUT: actual product CLI scoring did not settle within ${timeoutMs}ms for ${args.join(" ")}`));
+    }, timeoutMs);
+  });
+  return Promise.race([execution, guard]).finally(() => {
+    if (timeout) clearTimeout(timeout);
+  });
 }
 
 function summarizeWorkspaceDistArtifacts(snapshot, projectRoot) {
