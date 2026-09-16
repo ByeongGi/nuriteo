@@ -40,7 +40,7 @@ export interface IsolatedCliRunResult extends CliRunResult {
   capturedGlobalCalls?: CliEvaluationCapturedGlobalCall[];
   closeBridgedServers?: () => void;
   fsTrace?: CliEvaluationFsTraceEntry[];
-  writeBridgedFile?: (path: string, data: string) => void;
+  writeBridgedFile?: (path: string, data: string) => Promise<void>;
   workspaceSnapshot: PackageManagerWorkspaceSnapshot;
 }
 
@@ -78,6 +78,7 @@ export type CliEvaluationWorkerMessage =
   | CliEvaluationWorkerHttpRequestMessage
   | CliEvaluationWorkerHttpResponseMessage
   | CliEvaluationWorkerFsWriteMessage
+  | CliEvaluationWorkerFsWriteResultMessage
   | CliEvaluationWorkerWebSocketCloseMessage
   | CliEvaluationWorkerWebSocketConnectMessage
   | CliEvaluationWorkerWebSocketErrorMessage
@@ -124,8 +125,16 @@ export interface CliEvaluationWorkerHttpResponseMessage {
 export interface CliEvaluationWorkerFsWriteMessage {
   data: string;
   evaluationId: number;
+  id: number;
   path: string;
   type: "cli:fs:write";
+}
+
+export interface CliEvaluationWorkerFsWriteResultMessage {
+  error?: string;
+  evaluationId: number;
+  id: number;
+  type: "cli:fs:write:result";
 }
 
 export interface CliEvaluationWorkerWebSocketConnectMessage {
@@ -225,7 +234,12 @@ export function createWorkerBackedAsyncCliModuleEvaluator(
         reject: (error: Error) => void;
         resolve: (response: RuntimeHttpResponse) => void;
       }>();
+      const pendingFsWrites = new Map<number, {
+        reject: (error: Error) => void;
+        resolve: () => void;
+      }>();
       let nextHttpRequestId = 1;
+      let nextFsWriteId = 1;
       let nextWebSocketId = 1;
       const bridgedWebSockets = new Map<number, RuntimeWebSocket>();
       const cleanup = () => {
@@ -241,20 +255,38 @@ export function createWorkerBackedAsyncCliModuleEvaluator(
         for (const socket of bridgedWebSockets.values()) socket.close();
         bridgedWebSockets.clear();
         pendingHttpRequests.clear();
+        pendingFsWrites.clear();
         worker.removeEventListener("message", onMessage);
         worker.removeEventListener("error", onError);
         worker.terminate();
       };
       const writeBridgedFile = (path: string, data: string) => {
-        worker.postMessage({
-          data,
-          evaluationId: id,
-          path,
-          type: "cli:fs:write"
-        } satisfies CliEvaluationWorkerFsWriteMessage);
+        const writeId = nextFsWriteId++;
+        return new Promise<void>((resolveWrite, rejectWrite) => {
+          pendingFsWrites.set(writeId, {
+            reject: rejectWrite,
+            resolve: resolveWrite
+          });
+          worker.postMessage({
+            data,
+            evaluationId: id,
+            id: writeId,
+            path,
+            type: "cli:fs:write"
+          } satisfies CliEvaluationWorkerFsWriteMessage);
+        });
       };
       const onMessage = (event: MessageEvent | ErrorEvent) => {
         const data = "data" in event ? event.data as Partial<CliEvaluationWorkerMessage> : undefined;
+        if (data?.type === "cli:fs:write:result" && data.evaluationId === id) {
+          if (typeof data.id !== "number") return;
+          const pending = pendingFsWrites.get(data.id);
+          if (!pending) return;
+          pendingFsWrites.delete(data.id);
+          if (data.error) pending.reject(new Error(data.error));
+          else pending.resolve();
+          return;
+        }
         if (data?.type === "cli:http:response" && data.evaluationId === id) {
           if (typeof data.id !== "number") return;
           const pending = pendingHttpRequests.get(data.id);

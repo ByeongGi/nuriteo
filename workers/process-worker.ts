@@ -134,8 +134,22 @@ async function handleCliHttpRequest(message) {
 
 function handleCliFsWrite(message) {
   const bridge = cliHttpBridges.get(message.evaluationId);
-  if (!bridge?.writeFile) return;
-  bridge.writeFile(message.path, message.data);
+  try {
+    if (!bridge?.writeFile) throw new Error(`missing CLI fs bridge: ${message.evaluationId}`);
+    bridge.writeFile(message.path, message.data);
+    self.postMessage({
+      evaluationId: message.evaluationId,
+      id: message.id,
+      type: "cli:fs:write:result"
+    });
+  } catch (error) {
+    self.postMessage({
+      error: error instanceof Error ? error.message : String(error),
+      evaluationId: message.evaluationId,
+      id: message.id,
+      type: "cli:fs:write:result"
+    });
+  }
 }
 
 async function handleCliWebSocketConnect(message) {

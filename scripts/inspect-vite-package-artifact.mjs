@@ -36,7 +36,22 @@ class NodeThreadCliEvaluationWorker {
         }
         if (message.type === "cli:fs:write") {
           const bridge = httpBridges.get(message.evaluationId);
-          bridge?.writeFile?.(message.path, message.data);
+          try {
+            if (!bridge?.writeFile) throw new Error("missing CLI fs bridge: " + message.evaluationId);
+            bridge.writeFile(message.path, message.data);
+            parentPort.postMessage({
+              evaluationId: message.evaluationId,
+              id: message.id,
+              type: "cli:fs:write:result"
+            });
+          } catch (error) {
+            parentPort.postMessage({
+              error: error instanceof Error ? error.message : String(error),
+              evaluationId: message.evaluationId,
+              id: message.id,
+              type: "cli:fs:write:result"
+            });
+          }
           return;
         }
         if (message.type === "cli:ws:connect") {
@@ -332,25 +347,29 @@ async function fetchExecutionSmokePaths(workflow, fetchPaths) {
   if (!fetchPaths || fetchPaths.length === 0) return null;
   const results = [];
   for (const path of fetchPaths) {
-    try {
-      const response = await workflow.fetch(`http://127.0.0.1:5173${path}`, {
-        headers: headersForFetchPath(path)
-      });
-      results.push({
-        bodyStart: (await response.text()).slice(0, 160),
-        contentType: response.headers.get("content-type"),
-        path,
-        status: response.status
-      });
-    } catch (error) {
-      results.push({
-        error: error instanceof Error ? error.message : String(error),
-        path,
-        status: null
-      });
-    }
+    results.push(await fetchExecutionSmokePath(workflow, path));
   }
   return results;
+}
+
+async function fetchExecutionSmokePath(workflow, path) {
+  try {
+    const response = await workflow.fetch(`http://127.0.0.1:5173${path}`, {
+      headers: headersForFetchPath(path)
+    });
+    return {
+      bodyStart: (await response.text()).slice(0, 160),
+      contentType: response.headers.get("content-type"),
+      path,
+      status: response.status
+    };
+  } catch (error) {
+    return {
+      error: error instanceof Error ? error.message : String(error),
+      path,
+      status: null
+    };
+  }
 }
 
 async function connectExecutionSmokeWebSockets(workflow, websocketPaths, executionResult, websocketEdit) {
@@ -359,6 +378,7 @@ async function connectExecutionSmokeWebSockets(workflow, websocketPaths, executi
   for (const path of websocketPaths) {
     const messages = [];
     const edit = parseWebSocketEdit(websocketEdit);
+    let postEditFetch = null;
     try {
       const socket = workflow.network.connectWebSocket(`ws://127.0.0.1:5173${path}`, { protocol: "vite-hmr" });
       socket.onmessage = (event) => messages.push(event.data);
@@ -366,13 +386,16 @@ async function connectExecutionSmokeWebSockets(workflow, websocketPaths, executi
       await Promise.resolve();
       await new Promise((resolve) => setTimeout(resolve, 10));
       if (edit && executionResult.writeBridgedFile) {
-        executionResult.writeBridgedFile(edit.path, edit.data);
         await new Promise((resolve) => setTimeout(resolve, 1000));
+        await executionResult.writeBridgedFile(edit.path, edit.data);
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        postEditFetch = await fetchExecutionSmokePath(workflow, projectPathToUrl(edit.path));
       }
       socket.close();
       const messageTypes = messages.map((message) => parseMessageType(message));
       results.push({
         ...(edit ? { editPath: edit.path } : {}),
+        ...(postEditFetch ? { postEditFetch } : {}),
         hmrUpdateBlocker: classifyHmrUpdateBlocker(edit, executionResult, messageTypes),
         messages: messages.map((message) => previewText(message)),
         messageTypes,
@@ -391,6 +414,11 @@ async function connectExecutionSmokeWebSockets(workflow, websocketPaths, executi
     }
   }
   return results;
+}
+
+function projectPathToUrl(path) {
+  if (!path.startsWith("/workspace/project/")) return path;
+  return "/" + path.slice("/workspace/project/".length);
 }
 
 function classifyHmrUpdateBlocker(edit, executionResult, messageTypes) {
