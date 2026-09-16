@@ -9,30 +9,42 @@
   "frameworks": [
     {
       "name": "Vite React",
-      "status": "partial-pass",
+      "status": "supported",
       "supportLevel": "product-target",
-      "evidence": ["compat/framework-conformance.json", "docs/productization/evidence/P11-01.md"],
-      "notes": "Adapter path covers install/dev/preview/edit-HMR/build/reload recovery. Actual Vite server source execution is still required before product-supported."
+      "evidence": [
+        "compat/framework-conformance.json",
+        "docs/productization/evidence/P11-01.md"
+      ],
+      "notes": "Actual Vite 8.2.0 worker-backed path covers install/dev/preview/edit-HMR/build/reload recovery for the product target. Secondary framework candidates remain partial-pass."
     },
     {
       "name": "Vite Vue runtime",
       "status": "partial-pass",
       "supportLevel": "secondary-target",
-      "evidence": ["compat/framework-conformance.json", "docs/productization/evidence/P11-02.md"],
+      "evidence": [
+        "compat/framework-conformance.json",
+        "docs/productization/evidence/P11-02.md"
+      ],
       "notes": "Fixture path passes through the product workflow adapter; real plugin/module execution remains."
     },
     {
       "name": "Vite Svelte",
       "status": "partial-pass",
       "supportLevel": "secondary-target",
-      "evidence": ["compat/framework-conformance.json", "docs/productization/evidence/P11-02.md"],
+      "evidence": [
+        "compat/framework-conformance.json",
+        "docs/productization/evidence/P11-02.md"
+      ],
       "notes": "Fixture path passes through the product workflow adapter; real Svelte plugin/module execution remains."
     },
     {
       "name": "Next.js app router",
       "status": "hold",
       "supportLevel": "research",
-      "evidence": ["compat/nextjs-compatibility.json", "docs/productization/evidence/P11-03.md"],
+      "evidence": [
+        "compat/nextjs-compatibility.json",
+        "docs/productization/evidence/P11-03.md"
+      ],
       "notes": "Native SWC/sharp and broader server runtime assumptions keep this out of the first product target."
     }
   ],
@@ -40,39 +52,63 @@
     {
       "cohort": "pure-js-cjs-esm",
       "status": "supported",
-      "evidence": ["compat/package-compatibility-cohorts.json", "tests/productization/package-cohort-execution.test.mjs"]
+      "evidence": [
+        "compat/package-compatibility-cohorts.json",
+        "tests/productization/package-cohort-execution.test.mjs"
+      ]
     },
     {
       "cohort": "registry-cache-tarball",
       "status": "supported",
-      "evidence": ["compat/package-compatibility-cohorts.json", "tests/productization/package-cohort-execution.test.mjs"]
+      "evidence": [
+        "compat/package-compatibility-cohorts.json",
+        "tests/productization/package-cohort-execution.test.mjs"
+      ]
     },
     {
       "cohort": "lifecycle-js",
       "status": "supported",
-      "evidence": ["compat/package-compatibility-cohorts.json", "tests/productization/package-cohort-execution.test.mjs"]
+      "evidence": [
+        "compat/package-compatibility-cohorts.json",
+        "tests/productization/package-cohort-execution.test.mjs"
+      ]
     },
     {
       "cohort": "optional-native-polyfill",
       "status": "supported-with-polyfill",
-      "evidence": ["compat/package-compatibility-cohorts.json", "tests/productization/package-cohort-execution.test.mjs"]
+      "evidence": [
+        "compat/package-compatibility-cohorts.json",
+        "tests/productization/package-cohort-execution.test.mjs"
+      ]
     },
     {
       "cohort": "wasm-tool-fallback",
       "status": "candidate",
-      "evidence": ["compat/package-compatibility-cohorts.json", "compat/wasm-tool-adapters.json", "tests/productization/package-cohort-execution.test.mjs"]
+      "evidence": [
+        "compat/package-compatibility-cohorts.json",
+        "compat/wasm-tool-adapters.json",
+        "tests/productization/package-cohort-execution.test.mjs"
+      ]
     },
     {
       "cohort": "unsupported-native-addon",
       "status": "unsupported",
       "requiredErrorCode": "ERR_PM_NATIVE_ADDON_UNSUPPORTED",
-      "evidence": ["compat/package-compatibility-cohorts.json", "compat/unsupported-diagnostics.json", "tests/productization/package-cohort-execution.test.mjs"]
+      "evidence": [
+        "compat/package-compatibility-cohorts.json",
+        "compat/unsupported-diagnostics.json",
+        "tests/productization/package-cohort-execution.test.mjs"
+      ]
     },
     {
       "cohort": "binary-tool-wrapper",
       "status": "unsupported",
       "requiredErrorCode": "ERR_RUNTIME_UNSUPPORTED_BINARY",
-      "evidence": ["compat/package-compatibility-cohorts.json", "compat/unsupported-diagnostics.json", "tests/productization/package-cohort-execution.test.mjs"]
+      "evidence": [
+        "compat/package-compatibility-cohorts.json",
+        "compat/unsupported-diagnostics.json",
+        "tests/productization/package-cohort-execution.test.mjs"
+      ]
     }
   ],
   "projectFixtures": {

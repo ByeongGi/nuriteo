@@ -19,7 +19,13 @@ for (const id of [
   assert.equal(entry.status, "pass");
 }
 
-for (const id of ["vite-react-product-workflow", "vite-vue-product-workflow", "vite-svelte-product-workflow"]) {
+const reactProduct = casesById.get("vite-react-product-workflow");
+assert.equal(reactProduct?.runtime, "browser-guest-node-runtime");
+assert.equal(reactProduct.status, "pass");
+assert.match(reactProduct.productGap, /actual Vite 8\.2\.0 worker-backed product runtime/i);
+assert.match(reactProduct.productGap, /reload recovery/i);
+
+for (const id of ["vite-vue-product-workflow", "vite-svelte-product-workflow"]) {
   const product = casesById.get(id);
   assert.equal(product?.runtime, "browser-guest-node-runtime");
   assert.equal(product.status, "partial-pass");
@@ -37,5 +43,6 @@ for (const entry of matrix.cases) {
 assert.equal(matrix.gate.id, "PG11");
 assert.equal(matrix.gate.status, "not-pass");
 assert.ok(matrix.gate.requiredToPass.length >= 3);
+assert.match(matrix.gate.reason, /Vite React.*pass/i);
 
 console.log("framework conformance matrix test ok");

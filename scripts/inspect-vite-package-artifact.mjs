@@ -140,6 +140,7 @@ const cliArgs = readListFlagValue(args, "--cli-args");
 const executionIsolation = readFlagValue(args, "--execution-isolation") || "shared";
 const fetchPaths = readListFlagValue(args, "--fetch-paths");
 const projectFiles = readFlagValues(args, "--project-file");
+const restartSmoke = args.includes("--restart-smoke");
 const traceFs = args.includes("--trace-fs");
 const wasmPolicyPath = readFlagValue(args, "--wasm-policy");
 const websocketEdit = readFlagValue(args, "--websocket-edit");
@@ -153,6 +154,7 @@ const [vitePackageRootArg, nodeModulesRootArg] = args.filter((arg, index) => {
   if (arg === "--fetch-paths") return false;
   if (arg === "--force-wasi") return false;
   if (arg === "--project-file") return false;
+  if (arg === "--restart-smoke") return false;
   if (arg === "--trace-fs") return false;
   if (arg === "--wasm-policy") return false;
   if (arg === "--websocket-edit") return false;
@@ -172,7 +174,7 @@ const [vitePackageRootArg, nodeModulesRootArg] = args.filter((arg, index) => {
 });
 
 if (!vitePackageRootArg) {
-  console.error("Usage: node scripts/inspect-vite-package-artifact.mjs <vite-package-root> [node-modules-root] [--execute] [--cli-args <arg[,arg...]>] [--execution-isolation shared|snapshot|worker] [--fetch-paths <path[,path...]>] [--project-file <relative-path=source>] [--websocket-paths <path[,path...]>] [--websocket-edit <absolute-path=source>] [--websocket-edit-delay-ms <ms>] [--trace-fs] [--worker-timeout-ms <ms>] [--force-wasi] [--wasm-policy <manifest-json>]");
+  console.error("Usage: node scripts/inspect-vite-package-artifact.mjs <vite-package-root> [node-modules-root] [--execute] [--restart-smoke] [--cli-args <arg[,arg...]>] [--execution-isolation shared|snapshot|worker] [--fetch-paths <path[,path...]>] [--project-file <relative-path=source>] [--websocket-paths <path[,path...]>] [--websocket-edit <absolute-path=source>] [--websocket-edit-delay-ms <ms>] [--trace-fs] [--worker-timeout-ms <ms>] [--force-wasi] [--wasm-policy <manifest-json>]");
   process.exitCode = 1;
 } else {
   const vitePackageRoot = resolve(vitePackageRootArg);
@@ -206,6 +208,9 @@ if (!vitePackageRootArg) {
       directReadiness: summarizeReadiness(readiness),
       executionSmoke: execute
         ? await runExecutionSmoke(vitePackageArtifact, dependencyClosure?.artifacts || [], { cliArgs, executionIsolation, fetchPaths, forceWasi, projectFiles, traceFs, wasmAdapterPolicy, websocketEdit, websocketEditDelayMs, websocketPaths, workerTimeoutMs })
+        : null,
+      restartSmoke: restartSmoke
+        ? await runRestartSmoke(vitePackageArtifact, dependencyClosure?.artifacts || [], { cliArgs, executionIsolation, forceWasi, projectFiles, wasmAdapterPolicy, workerTimeoutMs })
         : null,
       hydratedReadiness: dependencyClosure
         ? summarizeReadiness(createHydratedWorkflowReadiness(vitePackageArtifact, dependencyClosure.artifacts, wasmAdapterPolicy))
@@ -323,6 +328,115 @@ async function runExecutionSmoke(vitePackageArtifact, dependencyArtifacts, optio
     ...(websocketResults ? { websocketResults } : {}),
     ...(options.executionIsolation === "worker" ? { workerTimeoutMs: options.workerTimeoutMs } : {})
   };
+}
+
+async function runRestartSmoke(vitePackageArtifact, dependencyArtifacts, options) {
+  if (options.executionIsolation !== "worker") {
+    return {
+      skipped: true,
+      skipReason: "restart smoke currently requires --execution-isolation worker"
+    };
+  }
+  const workflow = new ViteProductWorkflow({
+    dependencyArtifacts,
+    manager: "pnpm",
+    ...(options.wasmAdapterPolicy ? { wasmAdapterPolicy: options.wasmAdapterPolicy } : {}),
+    vitePackageArtifact
+  });
+  mountProjectFiles(workflow, options.projectFiles);
+  workflow.install();
+  const env = {
+    ...(process.env.DEBUG ? { DEBUG: process.env.DEBUG } : {}),
+    ...(options.forceWasi ? { NAPI_RS_FORCE_WASI: "error" } : {})
+  };
+  const args = options.cliArgs.length > 0 ? options.cliArgs : ["--host", "127.0.0.1"];
+  let first;
+  let second;
+  let stoppedFetch;
+  try {
+    first = await workflow.executeRealCli(args, env, {
+      isolation: "worker",
+      readyTimeoutMs: 1000,
+      workerFactory: () => new NodeThreadCliEvaluationWorker(),
+      workerTimeoutMs: options.workerTimeoutMs
+    });
+    const firstFetch = await fetchExecutionSmokePath(workflow, "/");
+    first.closeBridgedServers?.();
+    stoppedFetch = await fetchExecutionSmokePath(workflow, "/");
+    second = await workflow.executeRealCli(args, env, {
+      isolation: "worker",
+      readyTimeoutMs: 1000,
+      workerFactory: () => new NodeThreadCliEvaluationWorker(),
+      workerTimeoutMs: options.workerTimeoutMs
+    });
+    const secondFetch = await fetchExecutionSmokePath(workflow, "/");
+    second.closeBridgedServers?.();
+    return {
+      args,
+      env,
+      first: summarizeRestartCliRun(first, firstFetch),
+      restartBlocker: classifyRestartBlocker(first, firstFetch, stoppedFetch, second, secondFetch),
+      second: summarizeRestartCliRun(second, secondFetch),
+      stoppedFetch,
+      workerTimeoutMs: options.workerTimeoutMs
+    };
+  } catch (error) {
+    first?.closeBridgedServers?.();
+    second?.closeBridgedServers?.();
+    return {
+      args,
+      env,
+      error: error instanceof Error ? error.message : String(error),
+      restartBlocker: {
+        code: "EVITERESTARTFAILED",
+        reason: "actual Vite worker restart smoke threw before completing"
+      },
+      workerTimeoutMs: options.workerTimeoutMs
+    };
+  }
+}
+
+function summarizeRestartCliRun(result, fetchResult) {
+  return {
+    exitCode: result.exitCode,
+    fetch: fetchResult,
+    stderrFirstLine: firstNonEmptyLine(result.stderr),
+    stdoutFirstLine: firstNonEmptyLine(result.stdout)
+  };
+}
+
+function classifyRestartBlocker(first, firstFetch, stoppedFetch, second, secondFetch) {
+  if (first.exitCode !== 0) {
+    return {
+      code: "EVITERESTARTFIRSTEXIT",
+      reason: "first actual Vite worker CLI run did not start cleanly"
+    };
+  }
+  if (firstFetch.status !== 200) {
+    return {
+      code: "EVITERESTARTFIRSTFETCH",
+      reason: "first actual Vite worker server did not serve preview"
+    };
+  }
+  if (stoppedFetch.status !== null) {
+    return {
+      code: "EVITERESTARTSTOP",
+      reason: "preview was still reachable after closing the first worker bridge"
+    };
+  }
+  if (second.exitCode !== 0) {
+    return {
+      code: "EVITERESTARTSECONDEXIT",
+      reason: "second actual Vite worker CLI run did not start cleanly"
+    };
+  }
+  if (secondFetch.status !== 200) {
+    return {
+      code: "EVITERESTARTSECONDFETCH",
+      reason: "second actual Vite worker server did not serve preview"
+    };
+  }
+  return null;
 }
 
 function classifyDistArtifactBlocker(args, exitCode, distArtifacts) {
