@@ -28,9 +28,9 @@ assert.match(reactProduct.productGap, /reload recovery/i);
 for (const id of ["vite-vue-product-workflow", "vite-svelte-product-workflow"]) {
   const product = casesById.get(id);
   assert.equal(product?.runtime, "browser-guest-node-runtime");
-  assert.equal(product.status, "partial-pass");
-  assert.match(product.productGap, /actual Vite dev server process/i);
-  assert.match(product.productGap, /real Vite server HMR source/i);
+  assert.equal(product.status, "deferred");
+  assert.match(product.productGap, /Deferred from the first product-supported framework set/i);
+  assert.match(product.productGap, /Product-supported promotion requires/i);
 }
 
 for (const entry of matrix.cases) {
@@ -41,7 +41,7 @@ for (const entry of matrix.cases) {
 }
 
 assert.equal(matrix.gate.id, "PG11");
-assert.equal(matrix.gate.status, "not-pass");
+assert.equal(matrix.gate.status, "pass");
 assert.ok(matrix.gate.requiredToPass.length >= 3);
 assert.match(matrix.gate.reason, /Vite React.*pass/i);
 

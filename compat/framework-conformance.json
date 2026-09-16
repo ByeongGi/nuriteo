@@ -72,34 +72,34 @@
       "framework": "vite",
       "template": "vue-runtime",
       "runtime": "browser-guest-node-runtime",
-      "status": "partial-pass",
+      "status": "deferred",
       "evidence": [
         "tests/vite/vite-react-product-workflow.test.mjs",
         "docs/productization/evidence/P11-02.md"
       ],
-      "productGap": "The browser guest runtime Vite product workflow adapter now covers Vue runtime install artifacts, node_modules/.bin/vite CLI entrypoint materialization/resolution, package.json script-driven dev/build entrypoints, RuntimeChildProcess-backed loopback dev-server lifecycle, Vite-like HTTP module serving, preview relay fetch, source edit/HMR state preservation, Vite wire-compatible HMR connected/update payloads, HMR client update events, and build/dist smoke for npm and pnpm. P11 still needs the actual Vite dev server process and real Vite server HMR source connected to this product runtime path."
+      "productGap": "Deferred from the first product-supported framework set. The browser guest runtime Vite product workflow adapter covers Vue runtime install artifacts, node_modules/.bin/vite CLI entrypoint materialization/resolution, package.json script-driven dev/build entrypoints, RuntimeChildProcess-backed loopback dev-server lifecycle, Vite-like HTTP module serving, preview relay fetch, source edit/HMR state preservation, Vite wire-compatible HMR connected/update payloads, HMR client update events, and build/dist smoke for npm and pnpm. Product-supported promotion requires an actual Vite worker-backed Vue runtime validation pass."
     },
     {
       "id": "vite-svelte-product-workflow",
       "framework": "vite",
       "template": "svelte",
       "runtime": "browser-guest-node-runtime",
-      "status": "partial-pass",
+      "status": "deferred",
       "evidence": [
         "tests/vite/vite-react-product-workflow.test.mjs",
         "docs/productization/evidence/P11-02.md"
       ],
-      "productGap": "The browser guest runtime Vite product workflow adapter now covers Svelte install artifacts, node_modules/.bin/vite CLI entrypoint materialization/resolution, package.json script-driven dev/build entrypoints, RuntimeChildProcess-backed loopback dev-server lifecycle, Vite-like HTTP module serving, preview relay fetch, source edit/HMR state preservation, Vite wire-compatible HMR connected/update payloads, HMR client update events, and build/dist smoke for npm and pnpm. P11 still needs the actual Vite dev server process, Svelte plugin module execution, and real Vite server HMR source connected to this product runtime path."
+      "productGap": "Deferred from the first product-supported framework set. The browser guest runtime Vite product workflow adapter covers Svelte install artifacts, node_modules/.bin/vite CLI entrypoint materialization/resolution, package.json script-driven dev/build entrypoints, RuntimeChildProcess-backed loopback dev-server lifecycle, Vite-like HTTP module serving, preview relay fetch, source edit/HMR state preservation, Vite wire-compatible HMR connected/update payloads, HMR client update events, and build/dist smoke for npm and pnpm. Product-supported promotion requires actual Svelte plugin/module execution and real Vite server HMR validation."
     }
   ],
   "gate": {
     "id": "PG11",
-    "status": "not-pass",
-    "reason": "The Vite React reference workflow and browser guest runtime product workflow now pass through actual Vite worker-backed dev, preview, edit/HMR, build/dist, and reload recovery. PG11 remains not-pass until the selected secondary Vite Vue/Svelte candidate workflows are either product-supported or explicitly moved to public limitations.",
+    "status": "pass",
+    "reason": "The first product-supported framework set is Vite React. It passes through actual Vite worker-backed dev, preview, edit/HMR, build/dist, and reload recovery. Vue runtime and Svelte remain reference/adapter-proven secondary candidates and are explicitly deferred to public limitations until product-supported actual worker-backed validation is added.",
     "requiredToPass": [
-      "Promote or explicitly defer Vite Vue runtime product workflow after real plugin/module execution review",
-      "Promote or explicitly defer Vite Svelte product workflow after real plugin/module execution review",
-      "Update public compatibility docs to match the final P11 secondary framework decision"
+      "Keep Vite React product-supported evidence green",
+      "Keep Vue runtime and Svelte documented as deferred secondary framework candidates",
+      "Reopen framework gate if Vue/Svelte are promoted into the product-supported framework set"
     ]
   }
 }

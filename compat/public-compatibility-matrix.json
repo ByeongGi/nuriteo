@@ -19,23 +19,23 @@
     },
     {
       "name": "Vite Vue runtime",
-      "status": "partial-pass",
-      "supportLevel": "secondary-target",
+      "status": "deferred",
+      "supportLevel": "secondary-candidate",
       "evidence": [
         "compat/framework-conformance.json",
         "docs/productization/evidence/P11-02.md"
       ],
-      "notes": "Fixture path passes through the product workflow adapter; real plugin/module execution remains."
+      "notes": "Reference and product-adapter paths pass. It is not part of the first product-supported framework set until actual Vite worker-backed validation is added."
     },
     {
       "name": "Vite Svelte",
-      "status": "partial-pass",
-      "supportLevel": "secondary-target",
+      "status": "deferred",
+      "supportLevel": "secondary-candidate",
       "evidence": [
         "compat/framework-conformance.json",
         "docs/productization/evidence/P11-02.md"
       ],
-      "notes": "Fixture path passes through the product workflow adapter; real Svelte plugin/module execution remains."
+      "notes": "Reference and product-adapter paths pass. It is not part of the first product-supported framework set until actual Svelte plugin/module execution is validated."
     },
     {
       "name": "Next.js app router",
