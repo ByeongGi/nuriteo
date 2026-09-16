@@ -3,8 +3,17 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawn, spawnSync } from "node:child_process";
-import { ViteProductWorkflow } from "../packages/node-runtime/src/index.ts";
+import {
+  createViteDependencyArtifactClosureFromWorkspace,
+  createViteDependencyArtifactsFromWorkspace,
+  createVitePackageArtifactFromWorkspace,
+  createWasmAdapterPolicy,
+  mergeViteDependencyArtifacts,
+  ViteProductWorkflow
+} from "../packages/node-runtime/src/index.ts";
 import { resolveViteHmrUrl } from "../packages/preview/src/index.ts";
+import { createFallbackWorkspaceReader, createNodeFsWorkspaceReader } from "./lib/fs-workspace-reader.mjs";
+import { NodeThreadCliEvaluationWorker } from "./lib/node-thread-cli-worker.mjs";
 
 const root = new URL("..", import.meta.url).pathname;
 const matrixPath = path.join(root, "compat/ecosystem-fixtures.json");
@@ -14,9 +23,12 @@ const planOnly = args.has("--plan");
 const mode = valueAfter("--mode") || "reference";
 const selectedIds = valueAfter("--fixtures")?.split(",").filter(Boolean) || matrix.fixtures.map((fixture) => fixture.id);
 const workdir = valueAfter("--workdir") || path.join(os.tmpdir(), "cargo-container-ecosystem-fixtures");
-const outputPath = valueAfter("--output") || path.join(root, mode === "product-adapter"
-  ? "compat/ecosystem-fixture-product-results.json"
-  : "compat/ecosystem-fixture-results.json");
+const outputPath = valueAfter("--output") || path.join(root, defaultOutputForMode(mode));
+const actualVitePackageRoot = valueAfter("--vite-package-root");
+const actualNodeModulesRoot = valueAfter("--node-modules-root");
+const actualWasmPolicyPath = valueAfter("--wasm-policy");
+const actualWorkerTimeoutMs = Number(valueAfter("--worker-timeout-ms") || "10000");
+let actualProductContext = null;
 
 const selected = matrix.fixtures.filter((fixture) => selectedIds.includes(fixture.id));
 if (selected.length !== selectedIds.length) {
@@ -68,6 +80,7 @@ function plannedResult(fixture) {
 
 async function scoreFixture(fixture, scoreMode) {
   if (scoreMode === "product-adapter") return scoreProductAdapterFixture(fixture);
+  if (scoreMode === "product-actual") return scoreProductActualFixture(fixture);
   if (scoreMode !== "reference") throw new Error(`Unsupported score mode: ${scoreMode}`);
 
   const checkout = path.join(workdir, fixture.id);
@@ -101,6 +114,139 @@ async function scoreFixture(fixture, scoreMode) {
     unsupportedBlocker: false,
     criteria
   };
+}
+
+function getActualProductContext() {
+  if (actualProductContext) return actualProductContext;
+  if (!actualVitePackageRoot || !actualNodeModulesRoot) {
+    actualProductContext = {
+      error: new Error("--mode=product-actual requires --vite-package-root and --node-modules-root")
+    };
+    return actualProductContext;
+  }
+  try {
+    const vitePackageRoot = path.resolve(actualVitePackageRoot);
+    const nodeModulesRoot = path.resolve(actualNodeModulesRoot);
+    const viteReader = createNodeFsWorkspaceReader({
+      root: vitePackageRoot,
+      virtualRoot: "/vendor/vite"
+    });
+    const vitePackageArtifact = createVitePackageArtifactFromWorkspace({
+      packageRoot: "/vendor/vite",
+      reader: viteReader
+    });
+    const wasmAdapterPolicy = actualWasmPolicyPath
+      ? createWasmAdapterPolicy(JSON.parse(fs.readFileSync(path.resolve(actualWasmPolicyPath), "utf8")))
+      : null;
+    const dependencyArtifacts = createViteDependencyArtifactClosureFromWorkspace({
+      manager: "pnpm",
+      nodeModulesRoot: "/workspace/project/node_modules",
+      reader: createDependencyReader(nodeModulesRoot),
+      vitePackageArtifact,
+      ...(wasmAdapterPolicy ? { wasmAdapterPolicy } : {})
+    }).artifacts;
+    actualProductContext = {
+      dependencyArtifacts,
+      nodeModulesRoot,
+      vitePackageArtifact,
+      vitePackageRoot,
+      wasmAdapterPolicy
+    };
+  } catch (error) {
+    actualProductContext = { error };
+  }
+  return actualProductContext;
+}
+
+async function scoreProductActualFixture(fixture) {
+  const context = getActualProductContext();
+  if (context.error) return blockedActualResult(fixture, "install", context.error);
+
+  const probeWorkflow = createActualProductWorkflow(fixture, context.dependencyArtifacts, context);
+  const sourceImport = ensureAndMountFixtureSource(probeWorkflow, fixture);
+  const fixtureDependencyResult = sourceImport.ok
+    ? createFixtureDependencyArtifacts(fixture, sourceImport.projectDir, context)
+    : { artifacts: [], missing: [] };
+  const dependencyMerge = mergeViteDependencyArtifacts(context.dependencyArtifacts, fixtureDependencyResult.artifacts);
+  const workflow = createActualProductWorkflow(fixture, dependencyMerge.artifacts, context);
+  const finalSourceImport = ensureAndMountFixtureSource(workflow, fixture);
+  const criteria = [];
+
+  try {
+    const install = workflow.install();
+    criteria.push(criterion("install", finalSourceImport.ok && install.installed, {
+      status: finalSourceImport.ok && install.installed ? 0 : 1,
+      stdout: [
+        `source import: ${finalSourceImport.summary}`,
+        `installed ${install.packages.length} packages`,
+        `vite package source ${install.vitePackageSource}`,
+        `dependency artifacts ${dependencyMerge.artifacts.length}`,
+        `fixture dependency artifacts ${fixtureDependencyResult.artifacts.map((artifact) => artifact.name).join(",") || "none"}`,
+        `missing fixture dependency artifacts ${fixtureDependencyResult.missing.join(",") || "none"}`
+      ].join("\n"),
+      stderr: finalSourceImport.ok ? "" : finalSourceImport.error
+    }));
+  } catch (error) {
+    criteria.push(criterion("install", false, errorResult(error)));
+  }
+
+  const devAndHmr = finalSourceImport.ok
+    ? await runActualDevPreviewAndHmr(workflow, finalSourceImport)
+    : {
+      devPreview: { status: 1, stdout: "", stderr: finalSourceImport.error },
+      editHmr: { status: 1, stdout: "", stderr: finalSourceImport.error }
+    };
+  criteria.push(criterion("dev-preview", devAndHmr.devPreview.status === 0, devAndHmr.devPreview));
+  criteria.push(criterion("edit-hmr", devAndHmr.editHmr.status === 0, devAndHmr.editHmr));
+
+  try {
+    const build = finalSourceImport.ok
+      ? await workflow.executeRealCli(["build"], {}, workerCliOptions())
+      : null;
+    const distArtifacts = build ? summarizeWorkspaceDistArtifacts(build.workspaceSnapshot, workflow.projectRoot) : { count: 0, files: [] };
+    build?.closeBridgedServers?.();
+    criteria.push(criterion("build-dist", Boolean(build && build.exitCode === 0 && distArtifacts.count > 0), {
+      status: build && build.exitCode === 0 && distArtifacts.count > 0 ? 0 : 1,
+      stdout: build ? `${build.stdout}\ndist artifacts: ${JSON.stringify(distArtifacts)}` : "",
+      stderr: build?.stderr || finalSourceImport.error || "build did not run"
+    }));
+  } catch (error) {
+    criteria.push(criterion("build-dist", false, errorResult(error)));
+  }
+
+  const score = criteria.reduce((total, entry) => total + (entry.status === "pass" ? entry.points : 0), 0);
+  return {
+    id: fixture.id,
+    name: fixture.name,
+    mode: "measured-product-actual",
+    packageManager: fixture.packageManager,
+    repository: fixture.repository,
+    subdirectory: fixture.subdirectory || null,
+    score,
+    status: classifyScore(score, false),
+    unsupportedBlocker: false,
+    criteria,
+    evidence: {
+      dependencyArtifactCount: dependencyMerge.artifacts.length,
+      fixtureDependencyClosureIterations: fixtureDependencyResult.closureIterations || [],
+      fixtureDependencyArtifacts: fixtureDependencyResult.artifacts.map((artifact) => artifact.name),
+      importedFiles: finalSourceImport.fileCount || 0,
+      missingFixtureDependencyArtifacts: fixtureDependencyResult.missing,
+      sourceImport: finalSourceImport.summary,
+      vitePackageRoot: context.vitePackageRoot
+    }
+  };
+}
+
+function createActualProductWorkflow(fixture, dependencyArtifacts, context) {
+  return new ViteProductWorkflow({
+    dependencyArtifacts,
+    manager: fixture.packageManager,
+    projectId: fixture.id,
+    projectRoot: `/workspace/${fixture.id}`,
+    ...(context.wasmAdapterPolicy ? { wasmAdapterPolicy: context.wasmAdapterPolicy } : {}),
+    vitePackageArtifact: context.vitePackageArtifact
+  });
 }
 
 function scoreProductAdapterFixture(fixture) {
@@ -191,6 +337,329 @@ function failedResult(fixture, criterionId, result) {
         .map((entry) => ({ id: entry.id, points: entry.points, status: "not-run" }))
     ]
   };
+}
+
+function blockedActualResult(fixture, criterionId, error) {
+  return {
+    id: fixture.id,
+    name: fixture.name,
+    mode: "measured-product-actual",
+    packageManager: fixture.packageManager,
+    repository: fixture.repository,
+    subdirectory: fixture.subdirectory || null,
+    score: 0,
+    status: "hold",
+    unsupportedBlocker: false,
+    criteria: [
+      criterion(criterionId, false, errorResult(error)),
+      ...matrix.scoringRubric.criteria
+        .filter((entry) => entry.id !== criterionId)
+        .map((entry) => ({ id: entry.id, points: entry.points, status: "not-run" }))
+    ]
+  };
+}
+
+function ensureAndMountFixtureSource(workflow, fixture) {
+  const checkout = path.join(workdir, fixture.id);
+  const projectDir = fixture.subdirectory ? path.join(checkout, fixture.subdirectory) : checkout;
+  fs.mkdirSync(workdir, { recursive: true });
+  if (!fs.existsSync(checkout)) {
+    const clone = run("git", ["clone", "--depth", "1", fixture.repository, checkout], workdir);
+    if (clone.status !== 0) {
+      return {
+        ok: false,
+        error: `${clone.stderr || clone.stdout || "git clone failed"}`,
+        summary: "checkout unavailable"
+      };
+    }
+  }
+  if (!fs.existsSync(projectDir)) {
+    return {
+      ok: false,
+      error: `Fixture project directory does not exist: ${projectDir}`,
+      summary: "project directory missing"
+    };
+  }
+  return mountProjectDirectory(workflow, projectDir);
+}
+
+function mountProjectDirectory(workflow, projectDir) {
+  const files = [];
+  collectProjectFiles(projectDir, projectDir, files);
+  let importedBytes = 0;
+  let editablePath = null;
+  for (const file of files) {
+    const target = `${workflow.projectRoot}/${file.relativePath}`;
+    if (file.bytes) workflow.workspace.writeBytes(target, file.bytes);
+    else workflow.workspace.writeText(target, file.text);
+    importedBytes += file.size;
+    if (!editablePath && isEditableSource(file.relativePath)) editablePath = target;
+  }
+  return {
+    ok: true,
+    editablePath,
+    fileCount: files.length,
+    projectDir,
+    summary: `imported ${files.length} files from ${projectDir} (${importedBytes} bytes)`
+  };
+}
+
+function createFixtureDependencyArtifacts(fixture, projectDir, context) {
+  const names = readProjectDependencyNames(projectDir);
+  if (names.length === 0) return { artifacts: [], missing: [] };
+  const nodeModulesRoot = `/workspace/${fixture.id}/node_modules`;
+  const reader = createFixtureDependencyReader(projectDir, context.nodeModulesRoot, nodeModulesRoot);
+  const directArtifacts = createViteDependencyArtifactsFromWorkspace({
+    names,
+    nodeModulesRoot,
+    reader,
+    skipMissing: true
+  });
+  const closure = createViteDependencyArtifactClosureFromWorkspace({
+    initialArtifacts: directArtifacts,
+    manager: fixture.packageManager,
+    nodeModulesRoot,
+    reader,
+    vitePackageArtifact: context.vitePackageArtifact,
+    ...(context.wasmAdapterPolicy ? { wasmAdapterPolicy: context.wasmAdapterPolicy } : {})
+  });
+  const found = new Set(directArtifacts.map((artifact) => artifact.name));
+  return {
+    artifacts: closure.artifacts,
+    closureIterations: closure.iterations.map((iteration) => ({
+      extracted: iteration.extracted,
+      missingCount: iteration.plan.missing.length
+    })),
+    missing: names.filter((name) => !found.has(name))
+  };
+}
+
+function readProjectDependencyNames(projectDir) {
+  const manifestPath = path.join(projectDir, "package.json");
+  if (!fs.existsSync(manifestPath)) return [];
+  const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+  return uniqueNames([
+    ...Object.keys(manifest.dependencies || {}),
+    ...Object.keys(manifest.devDependencies || {}),
+    ...Object.keys(manifest.optionalDependencies || {})
+  ]).filter((name) => name !== "vite");
+}
+
+function createFixtureDependencyReader(projectDir, fallbackNodeModulesRoot, virtualNodeModulesRoot) {
+  const readers = [];
+  const fixtureNodeModules = path.join(projectDir, "node_modules");
+  if (fs.existsSync(fixtureNodeModules)) {
+    readers.push(createNodeFsWorkspaceReader({
+      root: fixtureNodeModules,
+      virtualRoot: virtualNodeModulesRoot
+    }));
+    const fixturePnpmHoisted = path.join(fixtureNodeModules, ".pnpm/node_modules");
+    if (fs.existsSync(fixturePnpmHoisted)) {
+      readers.push(createNodeFsWorkspaceReader({
+        root: fixturePnpmHoisted,
+        virtualRoot: virtualNodeModulesRoot
+      }));
+    }
+  }
+  readers.push(createNodeFsWorkspaceReader({
+    root: fallbackNodeModulesRoot,
+    virtualRoot: virtualNodeModulesRoot
+  }));
+  const fallbackPnpmHoisted = path.join(fallbackNodeModulesRoot, ".pnpm/node_modules");
+  if (fs.existsSync(fallbackPnpmHoisted)) {
+    readers.push(createNodeFsWorkspaceReader({
+      root: fallbackPnpmHoisted,
+      virtualRoot: virtualNodeModulesRoot
+    }));
+  }
+  return createFallbackWorkspaceReader(readers);
+}
+
+function collectProjectFiles(rootDir, currentDir, files) {
+  if (files.length >= 1000) return;
+  for (const entry of fs.readdirSync(currentDir, { withFileTypes: true })) {
+    if (shouldSkipProjectEntry(entry.name)) continue;
+    const absolute = path.join(currentDir, entry.name);
+    const relativePath = path.relative(rootDir, absolute).replaceAll(path.sep, "/");
+    if (entry.isDirectory()) {
+      collectProjectFiles(rootDir, absolute, files);
+      continue;
+    }
+    if (!entry.isFile()) continue;
+    const stat = fs.statSync(absolute);
+    if (stat.size > 1024 * 1024) continue;
+    const bytes = fs.readFileSync(absolute);
+    if (isLikelyText(bytes)) {
+      files.push({ relativePath, size: stat.size, text: bytes.toString("utf8") });
+    } else {
+      files.push({ bytes, relativePath, size: stat.size });
+    }
+  }
+}
+
+function shouldSkipProjectEntry(name) {
+  return new Set([
+    ".git",
+    ".next",
+    ".turbo",
+    "coverage",
+    "dist",
+    "node_modules"
+  ]).has(name);
+}
+
+function isLikelyText(bytes) {
+  return !bytes.subarray(0, Math.min(bytes.length, 4096)).includes(0);
+}
+
+function isEditableSource(relativePath) {
+  return /(^|\/)src\/.*\.[cm]?[jt]sx?$/.test(relativePath) || /(^|\/)app\/.*\.[cm]?[jt]sx?$/.test(relativePath);
+}
+
+async function runActualDevPreviewAndHmr(workflow, sourceImport) {
+  let execution = null;
+  try {
+    execution = await workflow.executeRealCli(["--host", "127.0.0.1"], {}, workerCliOptions());
+    const preview = await fetchWorkflowPath(workflow, "/");
+    const devPreview = {
+      status: execution.exitCode === 0 && preview.status === 200 ? 0 : 1,
+      stdout: `${execution.stdout}\npreview status: ${preview.status}\n${preview.bodyStart || ""}`,
+      stderr: execution.stderr || preview.error || ""
+    };
+    const editHmr = await runActualHmrEdit(workflow, execution, sourceImport.editablePath);
+    return { devPreview, editHmr };
+  } catch (error) {
+    return {
+      devPreview: errorResult(error),
+      editHmr: {
+        status: 1,
+        stdout: "",
+        stderr: "Skipped HMR because actual Vite preview did not start."
+      }
+    };
+  } finally {
+    execution?.closeBridgedServers?.();
+  }
+}
+
+async function runActualHmrEdit(workflow, execution, editablePath) {
+  if (!editablePath) {
+    return {
+      status: 1,
+      stdout: "",
+      stderr: "No editable source candidate found."
+    };
+  }
+  if (!execution.writeBridgedFile) {
+    return {
+      status: 1,
+      stdout: "",
+      stderr: "HMR edit bridge is unavailable."
+    };
+  }
+  const relative = editablePath.slice(`${workflow.projectRoot}/`.length);
+  const original = workflow.workspace.readText(editablePath);
+  const marker = `\n// cargo-container-product-actual-hmr-${Date.now()}\n`;
+  const messages = [];
+  let socket = null;
+  try {
+    await fetchWorkflowPath(workflow, `/${relative}`);
+    socket = workflow.network.connectWebSocket("ws://127.0.0.1:5173/", { protocol: "vite-hmr" });
+    socket.onmessage = (event) => messages.push(String(event.data));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    const write = await execution.writeBridgedFile(editablePath, `${original}${marker}`);
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    const messageTypes = messages.map((message) => parseHmrMessageType(message));
+    const passed = messageTypes.some((type) => type === "update" || type === "full-reload");
+    return {
+      status: passed ? 0 : 1,
+      stdout: [
+        `edited ${relative}`,
+        `watcher count: ${write.watcherCount ?? "unknown"}`,
+        `messages: ${messageTypes.join(",") || "none"}`
+      ].join("\n"),
+      stderr: passed ? "" : "HMR update was not observed after source edit."
+    };
+  } catch (error) {
+    return errorResult(error);
+  } finally {
+    socket?.close();
+    if (execution.writeBridgedFile) {
+      try {
+        await execution.writeBridgedFile(editablePath, original);
+      } catch {
+        // Best-effort cleanup inside the worker-backed VFS.
+      }
+    }
+  }
+}
+
+async function fetchWorkflowPath(workflow, requestPath) {
+  try {
+    const response = await workflow.fetch(`http://127.0.0.1:5173${requestPath}`, {
+      headers: headersForFetchPath(requestPath)
+    });
+    return {
+      bodyStart: (await response.text()).slice(0, 500),
+      status: response.status
+    };
+  } catch (error) {
+    return {
+      error: error instanceof Error ? error.message : String(error),
+      status: null
+    };
+  }
+}
+
+function workerCliOptions() {
+  return {
+    isolation: "worker",
+    readyTimeoutMs: 1000,
+    workerFactory: () => new NodeThreadCliEvaluationWorker(),
+    workerTimeoutMs: actualWorkerTimeoutMs
+  };
+}
+
+function summarizeWorkspaceDistArtifacts(snapshot, projectRoot) {
+  const prefix = `${projectRoot}/dist/`;
+  const files = (snapshot?.files || [])
+    .filter((file) => file.path.startsWith(prefix))
+    .map((file) => ({
+      path: file.path.slice(projectRoot.length + 1),
+      size: String(file.data || "").length
+    }))
+    .sort((left, right) => left.path.localeCompare(right.path));
+  return {
+    count: files.length,
+    files
+  };
+}
+
+function parseHmrMessageType(message) {
+  try {
+    return JSON.parse(message).type || null;
+  } catch {
+    return null;
+  }
+}
+
+function uniqueNames(values) {
+  return [...new Set(values.filter((value) => typeof value === "string" && value.length > 0))].sort();
+}
+
+function createDependencyReader(nodeModulesRoot) {
+  const readers = [createNodeFsWorkspaceReader({
+    root: nodeModulesRoot,
+    virtualRoot: "/workspace/project/node_modules"
+  })];
+  const pnpmHoistedRoot = path.join(nodeModulesRoot, ".pnpm/node_modules");
+  if (fs.existsSync(pnpmHoistedRoot)) {
+    readers.push(createNodeFsWorkspaceReader({
+      root: pnpmHoistedRoot,
+      virtualRoot: "/workspace/project/node_modules"
+    }));
+  }
+  return createFallbackWorkspaceReader(readers);
 }
 
 function criterion(id, passed, result) {
@@ -478,7 +947,19 @@ function tail(value = "") {
   return lines.slice(-20).join("\n");
 }
 
+function defaultOutputForMode(scoreMode) {
+  if (scoreMode === "product-adapter") return "compat/ecosystem-fixture-product-results.json";
+  if (scoreMode === "product-actual") return "compat/ecosystem-fixture-actual-product-results.json";
+  return "compat/ecosystem-fixture-results.json";
+}
+
 function valueAfter(name) {
   const prefix = `${name}=`;
-  return process.argv.slice(2).find((arg) => arg.startsWith(prefix))?.slice(prefix.length);
+  const values = process.argv.slice(2);
+  const inline = values.find((arg) => arg.startsWith(prefix));
+  if (inline) return inline.slice(prefix.length);
+  const index = values.indexOf(name);
+  if (index < 0) return undefined;
+  const value = values[index + 1];
+  return value && !value.startsWith("--") ? value : undefined;
 }

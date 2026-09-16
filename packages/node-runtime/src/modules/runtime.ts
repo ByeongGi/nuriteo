@@ -12,12 +12,15 @@ export class ModuleRuntime {
   builtins: ModuleRuntimeOptions["builtins"] | undefined;
   globals: Record<string, RuntimeValue>;
   allowAsyncRequireEsm: boolean;
+  loadModuleDefinition: ModuleRuntimeOptions["loadModuleDefinition"] | undefined;
 
   constructor(options: ModuleRuntimeOptions = {}) {
     this.definitions = new Map();
     this.cache = new ModuleCache(options.realpaths ? { realpaths: options.realpaths } : {});
+    this.loadModuleDefinition = options.loadModuleDefinition;
     const resolverOptions: ConstructorParameters<typeof ModuleResolver>[0] = {
       modules: this.definitions,
+      moduleExists: (url) => Boolean(this.getDefinition(url)),
       realpath: (url) => this.cache.canonicalize(url)
     };
     if (options.packages) resolverOptions.packages = options.packages;
@@ -42,7 +45,13 @@ export class ModuleRuntime {
   }
 
   getDefinition(url: string): ModuleDefinition | undefined {
-    return this.definitions.get(this.cache.canonicalize(url));
+    const canonicalUrl = this.cache.canonicalize(url);
+    const existing = this.definitions.get(canonicalUrl);
+    if (existing) return existing;
+    const loaded = this.loadModuleDefinition?.(canonicalUrl);
+    if (!loaded) return undefined;
+    this.register(canonicalUrl, loaded);
+    return loaded;
   }
 
   resolve(specifier: string, parentUrl?: string): string {

@@ -29,13 +29,15 @@ export class ModuleResolver {
   packageRoots: Record<string, PackageManifest>;
   imports: Record<string, string>;
   realpath: (url: string) => string;
+  moduleExists: (url: string) => boolean;
 
-  constructor(options: ModuleRuntimeOptions & { modules?: Map<string, unknown>; realpath?: (url: string) => string } = {}) {
+  constructor(options: ModuleRuntimeOptions & { moduleExists?: (url: string) => boolean; modules?: Map<string, unknown>; realpath?: (url: string) => string } = {}) {
     this.modules = options.modules || new Map();
     this.packages = options.packages || {};
     this.packageRoots = options.packageRoots || {};
     this.imports = options.imports || {};
     this.realpath = options.realpath || ((url) => url);
+    this.moduleExists = options.moduleExists || ((url) => this.modules.has(url));
   }
 
   resolve(specifier: string, parentUrl = "/workspace/index.mjs"): string {
@@ -47,6 +49,8 @@ export class ModuleResolver {
   }
 
   resolveWithConditions(specifier: string, parentUrl: string, conditions: readonly string[]): string {
+    const normalizedSpecifier = normalizeFileUrlSpecifier(specifier);
+    if (normalizedSpecifier !== specifier) return this.resolvePath(normalizedSpecifier);
     if (specifier.startsWith("#")) {
       return this.resolveImports(specifier, parentUrl, conditions);
     }
@@ -144,16 +148,31 @@ export class ModuleResolver {
       `${normalized}.mjs`,
       `${normalized}.cjs`,
       `${normalized}.js`,
+      `${normalized}.mts`,
+      `${normalized}.cts`,
+      `${normalized}.ts`,
+      `${normalized}.tsx`,
       `${normalized}/index.mjs`,
       `${normalized}/index.cjs`,
-      `${normalized}/index.js`
+      `${normalized}/index.js`,
+      `${normalized}/index.mts`,
+      `${normalized}/index.cts`,
+      `${normalized}/index.ts`,
+      `${normalized}/index.tsx`
     ];
     for (const candidate of candidates) {
       const real = this.realpath(candidate);
-      if (this.modules.has(real)) return real;
+      if (this.modules.has(real) || this.moduleExists(real)) return real;
     }
     throw moduleNotFound(`ERR_MODULE_NOT_FOUND: ${path}`);
   }
+}
+
+function normalizeFileUrlSpecifier(specifier: string): string {
+  if (!specifier.startsWith("file://")) return specifier;
+  const url = new URL(specifier);
+  if (url.hostname && url.hostname !== "localhost") return specifier;
+  return normalizePath(decodeURIComponent(url.pathname));
 }
 
 function moduleNotFound(message: string): Error & { code: "MODULE_NOT_FOUND" } {

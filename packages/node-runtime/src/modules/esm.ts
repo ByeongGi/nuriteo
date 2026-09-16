@@ -682,6 +682,7 @@ function prepareEsmSource(source: string, importMetaRewriteMode: ImportMetaRewri
     .replace(/^[ \t]*export\s+async\s+function\s+([A-Za-z_$][\w$]*)\s*\(/gm, "async function $1(")
     .replace(/^[ \t]*export\s+function\s+([A-Za-z_$][\w$]*)\s*\(/gm, "function $1(")
     .replace(/^[ \t]*export\s+class\s+([A-Za-z_$][\w$]*)\b/gm, "class $1")
+    .replace(/^[ \t]*export\s+default\s+([A-Za-z_$][\w$]*\([\s\S]*?\n[ \t]*(?:[\}\]]\)|\)));?[ \t]*$/gm, "const __default_export__ = $1;\n__exportConst(\"default\", __default_export__);")
     .replace(/^[ \t]*export\s+default\s+([^;\n]+);?[ \t]*$/gm, "__exportConst(\"default\", $1);")
     .replace(/^[ \t]*export\s+\*\s+as\s+([A-Za-z_$][\w$]*)\s+from\s+["']([^"']+)["'];?[ \t]*$/gm, (_match, name: string, specifier: string) => {
       return rewriteNamespaceReExport(name, specifier);

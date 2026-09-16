@@ -112,10 +112,11 @@
     }
   ],
   "projectFixtures": {
-    "status": "reference-and-product-adapter-measured",
+    "status": "reference-product-adapter-and-actual-product-measured",
     "source": "compat/ecosystem-fixtures.json",
     "results": "compat/ecosystem-fixture-results.json",
     "productAdapterResults": "compat/ecosystem-fixture-product-results.json",
+    "actualProductResults": "compat/ecosystem-fixture-actual-product-results.json",
     "total": 10,
     "minimumPassForMilestoneB": 7,
     "referenceInstallPass": 7,
@@ -125,7 +126,13 @@
     "referencePass": 4,
     "referenceScoreAtLeast75": 6,
     "productAdapterPass": 10,
-    "productAdapterScoreAtLeast75": 10
+    "productAdapterScoreAtLeast75": 10,
+    "actualProductMeasured": 1,
+    "actualProductPass": 0,
+    "actualProductBlockers": [
+      "missing fixture dependency artifacts for Vite official template React when project node_modules are unavailable",
+      "large transitive fixture materialization can still hit worker stability limits"
+    ]
   },
   "unsupported": [
     {

@@ -9,7 +9,7 @@ assert.equal(matrix.scope.productRuntime, "browser-guest-node-runtime");
 assert.match(matrix.scope.parityBoundary, /Docker/);
 assert.equal(matrix.projectFixtures.total, 10);
 assert.equal(matrix.projectFixtures.minimumPassForMilestoneB, 7);
-assert.equal(matrix.projectFixtures.status, "reference-and-product-adapter-measured");
+assert.equal(matrix.projectFixtures.status, "reference-product-adapter-and-actual-product-measured");
 assert.equal(matrix.projectFixtures.referenceInstallPass, 7);
 assert.equal(matrix.projectFixtures.referenceBuildPass, 6);
 assert.equal(matrix.projectFixtures.referenceDevPreviewPass, 6);
@@ -17,7 +17,10 @@ assert.equal(matrix.projectFixtures.referenceHmrPass, 4);
 assert.equal(matrix.projectFixtures.referencePass, 4);
 assert.equal(matrix.projectFixtures.productAdapterPass, 10);
 assert.equal(matrix.projectFixtures.productAdapterScoreAtLeast75, 10);
+assert.equal(matrix.projectFixtures.actualProductMeasured, 1);
+assert.equal(matrix.projectFixtures.actualProductPass, 0);
 assert.equal(fs.existsSync(new URL(`../../${matrix.projectFixtures.productAdapterResults}`, import.meta.url)), true);
+assert.equal(fs.existsSync(new URL(`../../${matrix.projectFixtures.actualProductResults}`, import.meta.url)), true);
 
 for (const section of [matrix.frameworks, matrix.packages, matrix.unsupported]) {
   assert.ok(section.length > 0);

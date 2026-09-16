@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 
 import { createBuiltinLoader } from "../../packages/node-runtime/src/builtin-loader.ts";
-import { createModuleRuntime } from "../../packages/node-runtime/src/modules/index.ts";
+import { createModuleRuntime, createWorkspaceModuleRuntime } from "../../packages/node-runtime/src/modules/index.ts";
 
 const runtime = createModuleRuntime({
   builtins: createBuiltinLoader({}),
@@ -158,6 +158,10 @@ runtime.registerMany({
       export const observed = counter.count;
     `
   },
+  "/workspace/file url target.mjs": {
+    kind: "esm-source",
+    source: "export const label = 'file-url-target';\n"
+  },
   "/workspace/source-default-function.mjs": {
     kind: "esm-source",
     source: `
@@ -182,6 +186,17 @@ runtime.registerMany({
       import label from './source-default-function.mjs';
       import Factory from './source-default-class.mjs';
       export const rendered = label('ok') + ':' + new Factory().label();
+    `
+  },
+  "/workspace/source-multiline-default-call.mjs": {
+    kind: "esm-source",
+    source: `
+      function defineConfig(value) {
+        return value;
+      }
+      export default defineConfig({
+        plugins: ['react'],
+      })
     `
   },
   "/workspace/source-anonymous-default-function.mjs": {
@@ -429,9 +444,13 @@ assert.equal(cjsInterop.rendered, "value:ok");
 
 const sourceLive = await runtime.importModule("./source-live-binding-consumer.mjs", "/workspace/index.mjs");
 assert.equal(sourceLive.observed, 1);
+assert.equal((await runtime.importModule("file:///workspace/file%20url%20target.mjs", "/workspace/index.mjs")).label, "file-url-target");
 
 const sourceDefaultDeclaration = await runtime.importModule("./source-default-declaration-consumer.mjs", "/workspace/index.mjs");
 assert.equal(sourceDefaultDeclaration.rendered, "label:ok:factory");
+assert.deepEqual((await runtime.importModule("./source-multiline-default-call.mjs", "/workspace/index.mjs")).default, {
+  plugins: ["react"]
+});
 
 const sourceAnonymousDefault = await runtime.importModule("./source-anonymous-default-consumer.mjs", "/workspace/index.mjs");
 assert.equal(sourceAnonymousDefault.rendered, "anonymous:ok:anonymous-factory");
@@ -492,5 +511,26 @@ assert.throws(
   () => runtime.resolve("pkg-fixture/private", "/workspace/index.mjs"),
   /ERR_PACKAGE_PATH_NOT_EXPORTED/
 );
+
+const lazyFiles = new Map();
+const lazyRuntime = createWorkspaceModuleRuntime({
+  reader: {
+    listDir() {
+      return [];
+    },
+    readText(path) {
+      const value = lazyFiles.get(path);
+      if (value === undefined) throw new Error(`ENOENT: ${path}`);
+      return value;
+    }
+  },
+  root: "/workspace"
+});
+lazyFiles.set("/workspace/generated-temp.mjs", "export const generated = 'runtime-created';\n");
+assert.equal((await lazyRuntime.importModule("file:///workspace/generated-temp.mjs", "/workspace/index.mjs")).generated, "runtime-created");
+lazyFiles.set("/workspace/generated-config.ts", "export default { plugins: ['ts-config'] as string[] };\n");
+assert.deepEqual((await lazyRuntime.importModule("file:///workspace/generated-config.ts", "/workspace/index.mjs")).default, {
+  plugins: ["ts-config"]
+});
 
 console.log("node modules test ok");

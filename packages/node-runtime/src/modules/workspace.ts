@@ -1,6 +1,7 @@
 import { createModuleRuntime, ModuleRuntime } from "./runtime.ts";
 import type { ModuleRuntimeOptions, PackageExportTarget, PackageManifest, RuntimeValue } from "../types.ts";
 import { join } from "../builtins/path.ts";
+import { transpileTypeScript } from "../transforms/typescript.ts";
 
 export interface WorkspaceModuleReader {
   readText(path: string): string;
@@ -31,6 +32,7 @@ export function createWorkspaceModuleRuntime(options: WorkspaceModuleRuntimeOpti
     ...(options.imports ? { imports: options.imports } : {}),
     packages,
     packageRoots,
+    loadModuleDefinition: (url) => readWorkspaceModuleDefinition(options.reader, root, url),
     ...(options.realpaths ? { realpaths: options.realpaths } : {})
   });
 
@@ -40,26 +42,38 @@ export function createWorkspaceModuleRuntime(options: WorkspaceModuleRuntimeOpti
 
 export function registerWorkspaceModules(runtime: ModuleRuntime, reader: WorkspaceModuleReader, root = "/workspace"): ModuleRuntime {
   for (const file of walkFiles(reader, trimSlash(root))) {
-    if (isEsmSourceFile(reader, file)) {
-      runtime.register(file, {
-        kind: "esm-source",
-        source: reader.readText(file)
-      });
-    } else if (file.endsWith(".cjs") || file.endsWith(".js")) {
-      runtime.register(file, {
-        kind: "cjs-source",
-        source: reader.readText(file)
-      });
-    } else if (file.endsWith(".json")) {
-      const value = tryReadJson<RuntimeValue>(reader, file);
-      if (value === undefined) continue;
-      runtime.register(file, {
-        kind: "json",
-        value
-      });
-    }
+    const definition = readWorkspaceModuleDefinition(reader, trimSlash(root), file);
+    if (definition) runtime.register(file, definition);
   }
   return runtime;
+}
+
+function readWorkspaceModuleDefinition(reader: WorkspaceModuleReader, root: string, file: string) {
+  const normalizedRoot = trimSlash(root);
+  if (file !== normalizedRoot && !file.startsWith(`${normalizedRoot}/`)) return undefined;
+  if (isEsmSourceFile(reader, file)) {
+    const source = safeReadText(reader, file);
+    return source === null ? undefined : {
+      kind: "esm-source" as const,
+      source: isTypeScriptSourceFile(file) ? transpileTypeScript(source, { fileName: file }).code : source
+    };
+  }
+  if (file.endsWith(".cjs") || file.endsWith(".cts") || file.endsWith(".js")) {
+    const source = safeReadText(reader, file);
+    return source === null ? undefined : {
+      kind: "cjs-source" as const,
+      source: file.endsWith(".cts") ? transpileTypeScript(source, { fileName: file }).code : source
+    };
+  }
+  if (file.endsWith(".json")) {
+    const value = tryReadJson<RuntimeValue>(reader, file);
+    if (value === undefined) return undefined;
+    return {
+      kind: "json" as const,
+      value
+    };
+  }
+  return undefined;
 }
 
 function discoverPackageManifests(reader: WorkspaceModuleReader, root: string): { packages: Record<string, PackageManifest>; packageRoots: Record<string, PackageManifest> } {
@@ -71,7 +85,8 @@ function discoverPackageManifests(reader: WorkspaceModuleReader, root: string): 
     const name = packageNameFromNodeModulesPath(packageRoot);
     if (!name) continue;
 
-    const manifest = readJson<PackageJson>(reader, file);
+    const manifest = tryReadJson<PackageJson>(reader, file);
+    if (!manifest) continue;
     const packageManifest = {
       name,
       root: packageRoot,
@@ -115,13 +130,26 @@ function safeReadText(reader: WorkspaceModuleReader, path: string): string | nul
 }
 
 function isLikelyTextModule(path: string): boolean {
-  return path.endsWith(".js") || path.endsWith(".cjs") || path.endsWith(".mjs") || path.endsWith(".json");
+  if (path.endsWith(".d.ts") || path.endsWith(".d.mts") || path.endsWith(".d.cts")) return false;
+  return path.endsWith(".js")
+    || path.endsWith(".cjs")
+    || path.endsWith(".mjs")
+    || path.endsWith(".ts")
+    || path.endsWith(".tsx")
+    || path.endsWith(".cts")
+    || path.endsWith(".mts")
+    || path.endsWith(".json");
 }
 
 function isEsmSourceFile(reader: WorkspaceModuleReader, path: string): boolean {
+  if (path.endsWith(".mts") || path.endsWith(".tsx") || path.endsWith(".ts")) return true;
   if (path.endsWith(".mjs")) return true;
   if (!path.endsWith(".js")) return false;
   return nearestPackageType(reader, path) === "module";
+}
+
+function isTypeScriptSourceFile(path: string): boolean {
+  return path.endsWith(".ts") || path.endsWith(".tsx") || path.endsWith(".mts");
 }
 
 function nearestPackageType(reader: WorkspaceModuleReader, path: string): string | null {

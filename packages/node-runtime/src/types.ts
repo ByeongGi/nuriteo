@@ -82,6 +82,7 @@ export interface ModuleRuntimeOptions {
   imports?: Record<string, string>;
   builtins?: (specifier: string) => RuntimeValue;
   globals?: Record<string, RuntimeValue>;
+  loadModuleDefinition?: (url: string) => ModuleDefinition | undefined;
 }
 
 export interface LivenessHandle {
