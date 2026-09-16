@@ -1,5 +1,5 @@
 import { parseHttpRequest, parseHttpResponse, serializeHttpRequest, serializeHttpResponse } from "./http-parser.ts";
-import type { LoopbackErrorCode, LoopbackFetchOptions, LoopbackHandler, LoopbackListener, LoopbackNetworkOptions, RuntimeHttpResponse } from "./types.ts";
+import type { LoopbackErrorCode, LoopbackFetchOptions, LoopbackHandler, LoopbackListener, LoopbackNetworkOptions, LoopbackWebSocketHandler, LoopbackWebSocketOptions, RuntimeHttpResponse, RuntimeWebSocket } from "./types.ts";
 
 export class LoopbackNetworkError extends Error {
   code: LoopbackErrorCode;
@@ -20,9 +20,9 @@ export class LoopbackNetwork {
     this.listeners = new Map();
   }
 
-  listen(port: number, handler: LoopbackHandler): { port: number; close: () => void } {
+  listen(port: number, handler: LoopbackHandler, options: { websocket?: LoopbackWebSocketHandler } = {}): { port: number; close: () => void } {
     if (this.listeners.has(port)) throw new LoopbackNetworkError(`port in use: ${port}`, "EADDRINUSE");
-    const listener = { port, handler, closed: false };
+    const listener = { port, handler, ...(options.websocket ? { websocketHandler: options.websocket } : {}), closed: false };
     this.listeners.set(port, listener);
     return {
       port,
@@ -59,8 +59,71 @@ export class LoopbackNetwork {
     }
     return parseHttpResponse(raw);
   }
+
+  connectWebSocket(url: string | URL, options: LoopbackWebSocketOptions = {}): RuntimeWebSocket {
+    const parsed = new URL(url);
+    const port = Number(parsed.port || 80);
+    const listener = this.listeners.get(port);
+    if (!listener || listener.closed) throw new LoopbackNetworkError(`connection refused: ${port}`, "ECONNREFUSED");
+    if (!listener.websocketHandler) throw new LoopbackNetworkError(`websocket upgrade unavailable: ${port}`, "ENOUPGRADE");
+
+    const protocol = options.protocol || "";
+    const [clientSocket, serverSocket] = createLoopbackWebSocketPair(protocol);
+    const requestRaw = serializeHttpRequest({
+      method: "GET",
+      path: `${parsed.pathname}${parsed.search}`,
+      headers: {
+        connection: "Upgrade",
+        host: parsed.host,
+        upgrade: "websocket",
+        ...(protocol ? { "sec-websocket-protocol": protocol } : {}),
+        ...(options.headers || {})
+      }
+    });
+    const request = parseHttpRequest(requestRaw);
+    void listener.websocketHandler(serverSocket, request, { protocol });
+    return clientSocket;
+  }
 }
 
 export function createLoopbackNetwork(options: LoopbackNetworkOptions = {}): LoopbackNetwork {
   return new LoopbackNetwork(options);
+}
+
+function createLoopbackWebSocketPair(protocol: string): [RuntimeWebSocket, RuntimeWebSocket] {
+  let clientClosed = false;
+  let serverClosed = false;
+  const client: RuntimeWebSocket = {
+    protocol,
+    close() {
+      if (clientClosed) return;
+      clientClosed = true;
+      serverClosed = true;
+      queueMicrotask(() => {
+        server.onclose?.();
+        client.onclose?.();
+      });
+    },
+    send(data) {
+      if (clientClosed || serverClosed) return;
+      queueMicrotask(() => server.onmessage?.({ data }));
+    }
+  };
+  const server: RuntimeWebSocket = {
+    protocol,
+    close() {
+      if (serverClosed) return;
+      serverClosed = true;
+      clientClosed = true;
+      queueMicrotask(() => {
+        client.onclose?.();
+        server.onclose?.();
+      });
+    },
+    send(data) {
+      if (clientClosed || serverClosed) return;
+      queueMicrotask(() => client.onmessage?.({ data }));
+    }
+  };
+  return [client, server];
 }

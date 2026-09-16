@@ -368,12 +368,25 @@ for (const manager of ["npm", "pnpm"]) {
   assert.equal(genericEdit.statePreserved, true);
   const genericEditedMessageModule = await workflow.fetch("http://127.0.0.1:5173/src/message.js");
   assert.match(await genericEditedMessageModule.text(), /delta/);
+  const networkHmrEvents = [];
+  const networkHmr = createHmrClient({
+    connect() {
+      return workflow.network.connectWebSocket("ws://127.0.0.1:5173/", { protocol: "vite-hmr" });
+    }
+  });
+  networkHmr.on("message", (event) => networkHmrEvents.push(event.type));
+  networkHmr.start();
+  await Promise.resolve();
+  workflow.applySourceEdit("src/message.js", "export const label = \"zeta\";\n");
+  await Promise.resolve();
+  networkHmr.close();
+  assert.equal(JSON.stringify(networkHmrEvents), JSON.stringify(["connected", "update"]));
   const styleEdit = workflow.applySourceEdit("/src/style.css", "body { color: red; }\n");
   assert.equal(styleEdit.update.updates[0].type, "css-update");
   assert.equal(styleEdit.update.updates[0].path, "/src/style.css");
   assert.equal(styleEdit.update.updates[0].label, "style.css");
   hmr.close();
-  assert.deepEqual(hmrEvents, ["open:1", "message:connected", "message:update", "message:update", "message:update"]);
+  assert.deepEqual(hmrEvents, ["open:1", "message:connected", "message:update", "message:update", "message:update", "message:update"]);
 }
 }
 

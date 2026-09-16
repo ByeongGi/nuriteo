@@ -657,6 +657,14 @@ export class ViteProductWorkflow {
       this.#requests.push(request.path);
       const preview = await this.#previewRequest(request.path);
       return toRuntimeHttpResponse(preview);
+    }, {
+      websocket: (socket) => {
+        this.#attachHmrSocket({
+          close: () => socket.close(),
+          onmessage: (event) => socket.send(event.data),
+          sendMessage: (payload) => socket.send(JSON.stringify(payload))
+        });
+      }
     });
     this.#devProcess = spawnRuntimeChild({
       pid: this.#port,
@@ -800,11 +808,15 @@ export class ViteProductWorkflow {
         socket.onmessage?.({ data: JSON.stringify(payload) });
       }
     };
+    this.#attachHmrSocket(socket);
+    return socket;
+  }
+
+  #attachHmrSocket(socket: ViteProductHmrSocket): void {
     this.#hmrSockets.add(socket);
     queueMicrotask(() => {
       if (this.#hmrSockets.has(socket)) socket.onmessage?.({ data: JSON.stringify({ type: "connected" }) });
     });
-    return socket;
   }
 
   build(): ViteProductBuildResult {

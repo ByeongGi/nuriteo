@@ -16,16 +16,31 @@ export interface RuntimeHttpResponse {
   body?: string;
 }
 
-export type LoopbackErrorCode = "EADDRINUSE" | "ECONNABORTED" | "ECONNREFUSED" | "ETOOBIG" | (string & {});
+export interface RuntimeWebSocket {
+  readonly protocol: string;
+  onclose?: () => void;
+  onmessage?: (event: { data: string }) => void;
+  close(): void;
+  send(data: string): void;
+}
+
+export type LoopbackErrorCode = "EADDRINUSE" | "ECONNABORTED" | "ECONNREFUSED" | "ENOUPGRADE" | "ETOOBIG" | (string & {});
 
 export type LoopbackHandler = (
   request: RuntimeHttpRequest,
   context: { signal?: AbortSignal }
 ) => RuntimeHttpResponse | Promise<RuntimeHttpResponse>;
 
+export type LoopbackWebSocketHandler = (
+  socket: RuntimeWebSocket,
+  request: RuntimeHttpRequest,
+  context: { protocol: string }
+) => void | Promise<void>;
+
 export interface LoopbackListener {
   port: number;
   handler: LoopbackHandler;
+  websocketHandler?: LoopbackWebSocketHandler;
   closed: boolean;
 }
 
@@ -39,4 +54,9 @@ export interface LoopbackFetchOptions {
   body?: string;
   signal?: AbortSignal;
   maxBytes?: number;
+}
+
+export interface LoopbackWebSocketOptions {
+  headers?: RuntimeHeaders;
+  protocol?: string;
 }

@@ -51,5 +51,26 @@ const empty = await net.fetch("http://127.0.0.1:4173/again");
 assert.equal(empty.statusCode, 204);
 relistened.close();
 
-console.log("node runtime net http test ok");
+const websocketServer = net.listen(5173, () => ({ statusCode: 426, body: "Upgrade Required" }), {
+  websocket(socket, request, context) {
+    assert.equal(request.path, "/");
+    assert.equal(context.protocol, "vite-hmr");
+    socket.onmessage = (event) => socket.send(`echo:${event.data}`);
+    socket.send(JSON.stringify({ type: "connected" }));
+  }
+});
+const websocketMessages = [];
+const websocket = net.connectWebSocket("ws://127.0.0.1:5173/", { protocol: "vite-hmr" });
+websocket.onmessage = (event) => websocketMessages.push(event.data);
+await Promise.resolve();
+websocket.send("hello");
+await Promise.resolve();
+await Promise.resolve();
+assert.equal(JSON.stringify(websocketMessages), JSON.stringify([JSON.stringify({ type: "connected" }), "echo:hello"]));
+websocketServer.close();
+assert.throws(
+  () => net.connectWebSocket("ws://127.0.0.1:5173/", { protocol: "vite-hmr" }),
+  (error) => error.code === "ECONNREFUSED"
+);
 
+console.log("node runtime net http test ok");
