@@ -4,6 +4,7 @@ import {
   classifyCliEntryModuleMode,
   createAsyncCliModuleEvaluator,
   createCliModuleEvaluator,
+  createLoopbackNetwork,
   createGuestRuntimeProcessRunner,
   createIsolatedAsyncCliModuleEvaluator,
   createWorkerBackedAsyncCliModuleEvaluator,
@@ -888,6 +889,47 @@ const asyncRequireConstructorBridgeResult = await createAsyncCliModuleEvaluator(
 assert.equal(asyncRequireConstructorBridgeResult.stderr, "");
 assert.equal(asyncRequireConstructorBridgeResult.exitCode, 0);
 assert.equal(asyncRequireConstructorBridgeResult.stdout, "undefined");
+
+const httpServerBridgeWorkspace = new MemoryPackageManagerWorkspace([
+  {
+    path: "/workspace/http-server/package/bin/server.cjs",
+    data: `
+      const http = require('node:http');
+      const server = http.createServer((request, response) => {
+        response.setHeader('x-cli-server', 'loopback');
+        response.end('served:' + request.method + ':' + request.url);
+      });
+      server.listen(6123, '127.0.0.1', () => process.stdout.write('listening'));
+    `
+  },
+  {
+    path: "/workspace/http-server/package/package.json",
+    data: JSON.stringify({ name: "http-server", version: "1.0.0", bin: { "http-server": "bin/server.cjs" } })
+  }
+]);
+const httpServerNetwork = createLoopbackNetwork();
+const httpServerBridgeResult = await createAsyncCliModuleEvaluator({
+  loopbackNetwork: httpServerNetwork,
+  root: "/workspace",
+  reader: httpServerBridgeWorkspace,
+  settleTicks: 2,
+  settleTimeoutMs: 10
+})({
+  entry: {
+    name: "http-server",
+    version: "1.0.0",
+    entry: "/workspace/http-server/package/bin/server.cjs"
+  },
+  args: [],
+  cwd: "/workspace/project"
+});
+assert.equal(httpServerBridgeResult.stderr, "");
+assert.equal(httpServerBridgeResult.exitCode, 0);
+assert.equal(httpServerBridgeResult.stdout, "listening");
+const httpServerResponse = await httpServerNetwork.fetch("http://127.0.0.1:6123/src/main.js", { method: "POST", body: "body" });
+assert.equal(httpServerResponse.statusCode, 200);
+assert.equal(httpServerResponse.headers?.["x-cli-server"], "loopback");
+assert.equal(httpServerResponse.body, "served:POST:/src/main.js");
 
 const pendingCliWorkspace = new MemoryPackageManagerWorkspace([
   {

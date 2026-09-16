@@ -10,11 +10,13 @@ import { Readable, Writable } from "../builtins/stream.ts";
 import { fileURLToPath } from "../builtins/url.ts";
 import { createWorkspaceModuleRuntime, type WorkspaceModuleReader } from "../modules/index.ts";
 import type { ModuleRuntime } from "../modules/runtime.ts";
+import type { LoopbackNetwork } from "../net/index.ts";
 import type { CliEntry, CliRunResult, RuntimeEnv, RuntimeFsBinding, RuntimeFsData, RuntimeNamespace, RuntimeValue } from "../types.ts";
 import { inspectCliEntryReadiness } from "./cli-entry-readiness.ts";
 import { MemoryPackageManagerWorkspace, type PackageManagerWorkspaceSnapshot, type PackageManagerWorkspaceWriter } from "./workspace.ts";
 
 export interface CliModuleEvaluatorOptions {
+  loopbackNetwork?: LoopbackNetwork;
   reader: WorkspaceModuleReader;
   globals?: Record<string, RuntimeValue>;
   root?: string;
@@ -36,7 +38,7 @@ export interface IsolatedCliRunResult extends CliRunResult {
   workspaceSnapshot: PackageManagerWorkspaceSnapshot;
 }
 
-export interface WorkerBackedAsyncCliModuleEvaluatorOptions extends Omit<AsyncCliModuleEvaluatorOptions, "globals" | "reader" | "writer"> {
+export interface WorkerBackedAsyncCliModuleEvaluatorOptions extends Omit<AsyncCliModuleEvaluatorOptions, "globals" | "loopbackNetwork" | "reader" | "writer"> {
   captureGlobalCalls?: readonly string[];
   workerFactory: CliEvaluationWorkerFactory;
   workerTimeoutMs?: number;
@@ -324,7 +326,14 @@ function startCliModuleEvaluation(
     allowAsyncRequireEsm: true,
     root: options.root || "/workspace",
     reader: options.reader,
-    builtins: createBuiltinLoader({ childProcess, fs, module, process, workerThreads }),
+    builtins: createBuiltinLoader({
+      childProcess,
+      fs,
+      ...(options.loopbackNetwork ? { httpServerNetwork: options.loopbackNetwork } : {}),
+      module,
+      process,
+      workerThreads
+    }),
     globals: {
       __dynamicImport: globalObject.__dynamicImport,
       console: consoleObject,

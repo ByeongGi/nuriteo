@@ -1,4 +1,5 @@
 import type { HostFetchOptions } from "../../../browser-host/src/io/index.ts";
+import type { LoopbackNetwork, RuntimeHttpRequest, RuntimeHttpResponse } from "../net/index.ts";
 import type { RuntimeFetcher, RuntimeHttpClient } from "../network/http-client.ts";
 import type { RuntimeValue } from "../types.ts";
 import { BrowserBuffer } from "./buffer.ts";
@@ -44,6 +45,7 @@ export class Agent extends EventEmitter {
 
 export class IncomingMessage extends Readable {
   headers: Record<string, string>;
+  method: string;
   rawHeaders: string[];
   rawTrailers: string[] = [];
   statusCode: number;
@@ -51,9 +53,10 @@ export class IncomingMessage extends Readable {
   trailers: Record<string, string> = {};
   url: string;
 
-  constructor(options: { body: Uint8Array; headers: Record<string, string>; statusCode: number; statusMessage?: string; url: string }) {
+  constructor(options: { body: Uint8Array; headers: Record<string, string>; method?: string; statusCode: number; statusMessage?: string; url: string }) {
     super();
     this.headers = options.headers;
+    this.method = options.method || "GET";
     this.rawHeaders = Object.entries(options.headers).flatMap(([key, value]) => [key, value]);
     this.statusCode = options.statusCode;
     this.statusMessage = options.statusMessage || "";
@@ -166,7 +169,17 @@ export class ServerResponse extends Writable {
   headersSent = false;
   statusCode = 200;
   statusMessage = "OK";
+  private chunks: RuntimeValue[] = [];
   private headers: Record<string, string | number | readonly string[]> = {};
+
+  constructor() {
+    super({
+      write: (chunk, _encoding, callback) => {
+        this.chunks.push(chunk);
+        callback();
+      }
+    });
+  }
 
   getHeader(name: string): string | number | readonly string[] | undefined {
     return this.headers[normalizeHeaderName(name)];
@@ -189,6 +202,15 @@ export class ServerResponse extends Writable {
     this.headersSent = true;
     return this;
   }
+
+  toRuntimeHttpResponse(): RuntimeHttpResponse {
+    return {
+      statusCode: this.statusCode,
+      statusText: this.statusMessage,
+      headers: normalizeHeaders(this.headers),
+      body: new TextDecoder().decode(concatBody(this.chunks))
+    };
+  }
 }
 
 export class Server extends EventEmitter {
@@ -198,10 +220,13 @@ export class Server extends EventEmitter {
   requestTimeout = 300000;
   timeout = 0;
   private hostname = "127.0.0.1";
+  private listener: { port: number; close: () => void } | null = null;
+  private network: LoopbackNetwork | null;
   private port = 0;
 
-  constructor(listener?: HttpRequestListener) {
+  constructor(listener?: HttpRequestListener, network?: LoopbackNetwork) {
     super();
+    this.network = network || null;
     if (listener) this.on("request", listener as (...args: unknown[]) => void);
   }
 
@@ -215,6 +240,8 @@ export class Server extends EventEmitter {
   }
 
   close(callback?: (error?: Error) => void): this {
+    this.listener?.close();
+    this.listener = null;
     this.listening = false;
     queueMicrotask(() => {
       callback?.();
@@ -231,6 +258,10 @@ export class Server extends EventEmitter {
     }
     if (typeof hostnameOrCallback === "function") callback = hostnameOrCallback;
     else if (hostnameOrCallback) this.hostname = hostnameOrCallback;
+    if (this.network) {
+      this.listener?.close();
+      this.listener = this.network.listen(this.port, (request) => this.handleLoopbackRequest(request));
+    }
     this.listening = true;
     queueMicrotask(() => {
       callback?.();
@@ -243,6 +274,28 @@ export class Server extends EventEmitter {
     this.timeout = timeout;
     if (callback) this.on("timeout", callback);
     return this;
+  }
+
+  private async handleLoopbackRequest(request: RuntimeHttpRequest): Promise<RuntimeHttpResponse> {
+    const incoming = new IncomingMessage({
+      body: new TextEncoder().encode(request.body || ""),
+      headers: request.headers,
+      method: request.method,
+      statusCode: 0,
+      url: request.path
+    });
+    const response = new ServerResponse();
+    const finished = new Promise<RuntimeHttpResponse>((resolve) => {
+      response.once("finish", () => resolve(response.toRuntimeHttpResponse()));
+      response.once("close", () => {
+        if (!response.writableEnded) resolve(response.toRuntimeHttpResponse());
+      });
+    });
+    if (!this.emit("request", incoming, response)) {
+      response.writeHead(404, { "content-type": "text/plain" });
+      response.end("Not found");
+    }
+    return finished;
   }
 }
 
@@ -264,7 +317,7 @@ export interface HttpBuiltin {
   request(url: string | URL, options: HttpRequestOptions, callback?: HttpRequestCallback): ClientRequest;
 }
 
-export function createHttpBuiltin(clientOrFetcher?: RuntimeHttpClient | RuntimeFetcher, defaultProtocol = "http:"): HttpBuiltin {
+export function createHttpBuiltin(clientOrFetcher?: RuntimeHttpClient | RuntimeFetcher, defaultProtocol = "http:", serverNetwork?: LoopbackNetwork): HttpBuiltin {
   const fetcher = clientOrFetcher && "download" in clientOrFetcher
     ? clientOrFetcher
     : clientOrFetcher?.fetcher || createGlobalFetcher();
@@ -299,7 +352,7 @@ export function createHttpBuiltin(clientOrFetcher?: RuntimeHttpClient | RuntimeF
     Server,
     ServerResponse,
     STATUS_CODES,
-    createServer: (listener?: HttpRequestListener) => new Server(listener),
+    createServer: (listener?: HttpRequestListener) => new Server(listener, serverNetwork),
     get,
     request
   });

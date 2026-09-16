@@ -49,7 +49,7 @@ export function createBuiltinLoader(bindings: BuiltinBindings): (specifier: stri
     if (specifier === "events" || specifier === "node:events") return bindings.events || eventsBuiltin;
     if (specifier === "dns" || specifier === "node:dns") return dnsBuiltin;
     if (specifier === "dns/promises" || specifier === "node:dns/promises") return dnsPromisesBuiltin;
-    if (specifier === "http" || specifier === "node:http") return createHttpBuiltin(bindings.httpClient);
+    if (specifier === "http" || specifier === "node:http") return createHttpBuiltin(bindings.httpClient, "http:", bindings.httpServerNetwork);
     if (specifier === "http2" || specifier === "node:http2") return http2Builtin;
     if (specifier === "https" || specifier === "node:https") return createHttpsBuiltin(bindings.httpsClient || bindings.httpClient);
     if (specifier === "module" || specifier === "node:module") return bindings.module || moduleBuiltin;

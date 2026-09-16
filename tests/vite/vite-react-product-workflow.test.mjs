@@ -198,6 +198,40 @@ for (const manager of ["npm", "pnpm"]) {
   assert.match(await cliPreview.text(), /alpha:1/);
   const cliEntryModule = await cliWorkflow.fetch(`http://127.0.0.1:5180/${entryPathForTemplate(template)}`);
   assert.match(await cliEntryModule.text(), /transformed by vite-cli service:\/src\/main/);
+  const httpServerArtifactWorkflow = new ViteProductWorkflow({
+    manager,
+    template,
+    projectId: `${manager}-${template}-http-cli`,
+    network: createLoopbackNetwork(),
+    port: 5304,
+    vitePackageArtifact: {
+      version: "9.0.0-http-server",
+      mounts: [
+        {
+          path: "package.json",
+          data: JSON.stringify({ name: "vite", version: "9.0.0-http-server", type: "module", bin: { vite: "bin/vite.mjs" } })
+        },
+        {
+          path: "bin/vite.mjs",
+          data: "import '../dist/node/cli.mjs';\n"
+        },
+        {
+          path: "dist/node/cli.mjs",
+          data: "import http from 'node:http';\nconst port = Number(process.env.PORT || 5173);\nhttp.createServer((request, response) => {\n  response.setHeader('content-type', 'text/plain');\n  response.end('actual-server:' + request.url);\n}).listen(port, '127.0.0.1', () => process.stdout.write(`  VITE v9.0.0 ready\\n\\n  ➜  Local:   http://127.0.0.1:${port}/\\n`));\n"
+        }
+      ]
+    }
+  });
+  httpServerArtifactWorkflow.install();
+  const httpServerStarted = await httpServerArtifactWorkflow.startDevServerFromCliExecution();
+  assert.equal(httpServerStarted.running, true);
+  assert.equal(httpServerStarted.source, "cli-execution");
+  assert.equal(httpServerStarted.moduleTransform, "vite-cli");
+  assert.equal(httpServerStarted.port, 5304);
+  assert.equal(httpServerStarted.processPid, null);
+  const httpServerPreview = await httpServerArtifactWorkflow.fetch("http://127.0.0.1:5304/index.html");
+  assert.equal(httpServerPreview.status, 200);
+  assert.equal(await httpServerPreview.text(), "actual-server:/index.html");
   const cliHmrEvents = [];
   const cliHmr = createHmrClient({
     connect() {

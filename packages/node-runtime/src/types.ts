@@ -160,6 +160,7 @@ export interface BuiltinBindings {
   buffer?: RuntimeValue;
   events?: RuntimeValue;
   httpClient?: import("./network/http-client.ts").RuntimeHttpClient | import("./network/http-client.ts").RuntimeFetcher;
+  httpServerNetwork?: import("./net/index.ts").LoopbackNetwork;
   httpsClient?: import("./network/http-client.ts").RuntimeHttpClient | import("./network/http-client.ts").RuntimeFetcher;
   internalBinding?: (name: string) => unknown;
   module?: RuntimeValue;

@@ -558,6 +558,7 @@ export class ViteProductWorkflow {
     };
     const evaluatorOptions = {
       ...(options.readyTimeoutMs !== undefined ? { readyTimeoutMs: options.readyTimeoutMs } : {}),
+      loopbackNetwork: this.network,
       root: this.projectRoot,
       globals: {
         __viteRegisterBuild(registration: ViteProductCliBuildRegistration) {
@@ -682,7 +683,16 @@ export class ViteProductWorkflow {
     const args = commandArgs(command);
     const cliExecution = await this.executeRealCli(args, { PORT: String(this.#port) });
     const registration = cliExecution.serverRegistrations.at(-1);
-    if (!registration) throw new Error("ERR_VITE_CLI_SERVER_REGISTRATION_MISSING");
+    if (!registration) {
+      if (cliExecution.exitCode !== 0) throw new Error(cliExecution.stderr || "ERR_VITE_CLI_SERVER_REGISTRATION_MISSING");
+      this.#port = parseViteReadyPort(cliExecution.stdout) ?? this.#port;
+      this.#running = true;
+      this.#devServerSource = "cli-execution";
+      this.#devServerCommand = command;
+      this.#devServerCliEntrypoint = cliEntrypoint;
+      this.#moduleTransformSource = "vite-cli";
+      return this.#snapshot();
+    }
     if (!cliExecution.transformRegistrations.some((item) => item.source === "vite-cli")) {
       throw new Error("ERR_VITE_CLI_TRANSFORM_REGISTRATION_MISSING");
     }
@@ -1777,6 +1787,11 @@ function assertViteBuildCommand(command: string): void {
 
 function commandArgs(command: string): string[] {
   return command.split(/\s+/).slice(1).filter(Boolean);
+}
+
+function parseViteReadyPort(stdout: string): number | null {
+  const match = stdout.match(/http:\/\/(?:127\.0\.0\.1|localhost):(\d+)\//);
+  return match?.[1] ? Number(match[1]) : null;
 }
 
 function latestHmrSendUpdate(registrations: ViteProductCliHmrRegistration[]): ViteProductCliHmrSendUpdate | null {
