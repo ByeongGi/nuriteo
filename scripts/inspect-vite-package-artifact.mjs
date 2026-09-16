@@ -244,9 +244,12 @@ async function fetchExecutionSmokePaths(workflow, fetchPaths) {
   const results = [];
   for (const path of fetchPaths) {
     try {
-      const response = await workflow.fetch(`http://127.0.0.1:5173${path}`);
+      const response = await workflow.fetch(`http://127.0.0.1:5173${path}`, {
+        headers: headersForFetchPath(path)
+      });
       results.push({
         bodyStart: (await response.text()).slice(0, 160),
+        contentType: response.headers.get("content-type"),
         path,
         status: response.status
       });
@@ -259,6 +262,24 @@ async function fetchExecutionSmokePaths(workflow, fetchPaths) {
     }
   }
   return results;
+}
+
+function headersForFetchPath(path) {
+  if (path.startsWith("/@vite/") || path.startsWith("/@id/") || /\.[cm]?[jt]sx?(?:$|\?)/.test(path)) {
+    return {
+      accept: "*/*",
+      "sec-fetch-dest": "script"
+    };
+  }
+  if (/\.css(?:$|\?)/.test(path)) {
+    return {
+      accept: "text/css,*/*;q=0.1",
+      "sec-fetch-dest": "style"
+    };
+  }
+  return {
+    accept: "text/html,application/xhtml+xml"
+  };
 }
 
 function summarizeFsTrace(entries) {

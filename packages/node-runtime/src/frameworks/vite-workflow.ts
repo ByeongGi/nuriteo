@@ -1,6 +1,6 @@
 import { join } from "../builtins/path.ts";
 import { spawnRuntimeChild, type RuntimeChildProcess } from "../child-process.ts";
-import { createLoopbackNetwork, type LoopbackNetwork, type RuntimeHttpResponse } from "../net/index.ts";
+import { createLoopbackNetwork, type LoopbackFetchOptions, type LoopbackNetwork, type RuntimeHttpResponse } from "../net/index.ts";
 import {
   createAsyncCliModuleEvaluator,
   createIsolatedAsyncCliModuleEvaluator,
@@ -757,8 +757,8 @@ export class ViteProductWorkflow {
     return this.preview(requestPath);
   }
 
-  async fetch(input: string | URL): Promise<Response> {
-    const response = await this.network.fetch(input);
+  async fetch(input: string | URL, options: LoopbackFetchOptions = {}): Promise<Response> {
+    const response = await this.network.fetch(input, options);
     const init: ResponseInit = { status: response.statusCode };
     if (response.statusText) init.statusText = response.statusText;
     if (response.headers) init.headers = response.headers;
