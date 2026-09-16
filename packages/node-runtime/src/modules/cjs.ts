@@ -85,6 +85,7 @@ function createPendingEsmNamespaceProxy(namespace: RuntimeNamespace): RuntimeNam
       if (property === "__esModule") return true;
       const value = Reflect.get(target, property, receiver);
       if (value !== undefined) return value;
+      if (property === "BindingCallableBuiltinPlugin") return createBindingCallableBuiltinPluginPlaceholder();
       return typeof property === "string" ? placeholder : value;
     },
     getOwnPropertyDescriptor(target, property) {
@@ -92,7 +93,7 @@ function createPendingEsmNamespaceProxy(namespace: RuntimeNamespace): RuntimeNam
       return Reflect.getOwnPropertyDescriptor(target, property) || {
         configurable: true,
         enumerable: true,
-        get: () => Reflect.get(target, property) ?? placeholder
+        get: () => Reflect.get(target, property) ?? (property === "BindingCallableBuiltinPlugin" ? createBindingCallableBuiltinPluginPlaceholder() : placeholder)
       };
     },
     ownKeys(target) {
@@ -104,6 +105,71 @@ function createPendingEsmNamespaceProxy(namespace: RuntimeNamespace): RuntimeNam
       return true;
     }
   });
+}
+
+function createBindingCallableBuiltinPluginPlaceholder(): new (bindingPlugin?: { __name?: string; options?: RuntimeNamespace }) => RuntimeNamespace {
+  return function BindingCallableBuiltinPlugin(bindingPlugin?: { __name?: string; options?: RuntimeNamespace }) {
+    debugAsyncEsmBinding(`BindingCallableBuiltinPlugin:${bindingPlugin?.__name || "<unknown>"}`);
+    if (bindingPlugin?.__name === "builtin:vite-resolve") {
+      return createViteResolveBuiltinPlugin(bindingPlugin.options || {});
+    }
+    return createEmptyCallableBuiltinPlugin();
+  } as unknown as new (bindingPlugin?: { __name?: string; options?: RuntimeNamespace }) => RuntimeNamespace;
+}
+
+function createEmptyCallableBuiltinPlugin(): RuntimeNamespace {
+  const plugin: RuntimeNamespace = {};
+  Object.defineProperty(plugin, "getOrder", {
+    configurable: true,
+    value: () => undefined
+  });
+  return plugin;
+}
+
+function debugAsyncEsmBinding(message: string): void {
+  const debug = (globalThis as { process?: { env?: { DEBUG?: string } } }).process?.env?.DEBUG;
+  if (!debug?.split(",").some((scope) => scope === "cargo:binding" || scope === "cargo:*")) return;
+  console.error(`cargo:binding ${message}`);
+}
+
+function createViteResolveBuiltinPlugin(options: RuntimeNamespace): RuntimeNamespace {
+  const resolveOptions = options.resolveOptions as { root?: string } | undefined;
+  const root = normalizePosixPath(resolveOptions?.root || "/workspace/project");
+  const plugin: RuntimeNamespace = {
+    async resolveId(id: string, importer?: string) {
+      if (id.startsWith("\0") || id.startsWith("virtual:") || id.startsWith("/virtual:") || id.startsWith("__vite-")) return undefined;
+      if (id.startsWith("/@") || id.startsWith("//")) return undefined;
+      if (id.startsWith("/") && looksLikeProjectSource(id)) return { id: `${root}${id}` };
+      if (id.startsWith(".") && importer && looksLikeProjectSource(id)) return { id: normalizePosixPath(`${dirnameOf(importer)}/${id}`) };
+      return undefined;
+    }
+  };
+  Object.defineProperty(plugin, "getOrder", {
+    configurable: true,
+    value: () => undefined
+  });
+  return plugin;
+}
+
+function looksLikeProjectSource(id: string): boolean {
+  const path = id.split("?")[0] || id;
+  return /\.(?:[cm]?[jt]sx?|css|json|html)$/.test(path);
+}
+
+function normalizePosixPath(path: string): string {
+  const parts: string[] = [];
+  for (const part of path.split("/")) {
+    if (!part || part === ".") continue;
+    if (part === "..") parts.pop();
+    else parts.push(part);
+  }
+  return `/${parts.join("/")}`;
+}
+
+function dirnameOf(path: string): string {
+  const clean = path.split("?")[0] || path;
+  const index = clean.lastIndexOf("/");
+  return index <= 0 ? "/" : clean.slice(0, index);
 }
 
 function createCjsRequire(runtime: ModuleRuntime, filename: string, dirname: string): CjsContext["require"] {

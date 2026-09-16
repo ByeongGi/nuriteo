@@ -458,7 +458,7 @@ export class ViteProductWorkflow {
     const packages = packagesForTemplate(this.template);
     for (const pkg of packages) {
       if ((pkg === "vite" && this.vitePackageArtifact) || this.#hasDependencyArtifact(pkg)) continue;
-      this.workspace.writeText(join(this.projectRoot, "node_modules", pkg, "package.json"), JSON.stringify({ name: pkg }));
+      this.#installFixturePackage(pkg);
     }
     this.#installVitePackage();
     this.#installDependencyArtifacts();
@@ -951,6 +951,35 @@ export class ViteProductWorkflow {
       throw new ViteProductPackageArtifactError("EVITEARTIFACTBIN", "Mounted Vite package artifact bin entry is missing.", binPath);
     }
     this.workspace.symlink(binPath, join(this.projectRoot, "node_modules/.bin/vite"));
+  }
+
+  #installFixturePackage(pkg: string): void {
+    const packageRoot = join(this.projectRoot, "node_modules", pkg);
+    if (pkg === "react") {
+      this.workspace.writeText(join(packageRoot, "package.json"), JSON.stringify({
+        name: "react",
+        version: "18.3.1",
+        type: "module",
+        exports: {
+          ".": "./index.js"
+        }
+      }));
+      this.workspace.writeText(join(packageRoot, "index.js"), "export default {}; export const Fragment = Symbol.for('react.fragment');\n");
+      return;
+    }
+    if (pkg === "react-dom") {
+      this.workspace.writeText(join(packageRoot, "package.json"), JSON.stringify({
+        name: "react-dom",
+        version: "18.3.1",
+        type: "module",
+        exports: {
+          "./client": "./client.js"
+        }
+      }));
+      this.workspace.writeText(join(packageRoot, "client.js"), "export function createRoot(target) { return { render(value) { if (target) target.textContent = String(value); } }; }\n");
+      return;
+    }
+    this.workspace.writeText(join(packageRoot, "package.json"), JSON.stringify({ name: pkg }));
   }
 
   #installDependencyArtifacts(): void {

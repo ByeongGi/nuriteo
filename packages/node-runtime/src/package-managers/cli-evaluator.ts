@@ -18,6 +18,7 @@ import { MemoryPackageManagerWorkspace, type PackageManagerWorkspaceSnapshot, ty
 export interface CliModuleEvaluatorOptions {
   fsTrace?: CliEvaluationFsTraceEntry[];
   loopbackNetwork?: LoopbackNetwork;
+  onOutputSnapshot?: (snapshot: () => CliEvaluationOutputSnapshot) => void;
   reader: WorkspaceModuleReader;
   globals?: Record<string, RuntimeValue>;
   onFsFacade?: (fs: RuntimeFsBinding) => void;
@@ -139,9 +140,15 @@ export interface CliEvaluationWorkerFsWriteResultMessage {
 }
 
 export interface CliEvaluationFsWriteResult {
+  output?: CliEvaluationOutputSnapshot;
   statWatcherCount: number;
   watcherCount: number;
   watchedPaths: string[];
+}
+
+export interface CliEvaluationOutputSnapshot {
+  stderr: string;
+  stdout: string;
 }
 
 export interface CliEvaluationWorkerWebSocketConnectMessage {
@@ -175,6 +182,7 @@ export interface CliEvaluationWorkerWebSocketErrorMessage {
 }
 
 export interface CliEvaluationHttpBridge {
+  getOutput?(): CliEvaluationOutputSnapshot;
   handleRequest(port: number, request: RuntimeHttpRequest): Promise<RuntimeHttpResponse>;
   network: LoopbackNetwork;
   ports(): number[];
@@ -240,6 +248,7 @@ export function createWorkerBackedAsyncCliModuleEvaluator(
       const pendingHttpRequests = new Map<number, {
         reject: (error: Error) => void;
         resolve: (response: RuntimeHttpResponse) => void;
+        timeout: ReturnType<typeof setTimeout>;
       }>();
       const pendingFsWrites = new Map<number, {
         reject: (error: Error) => void;
@@ -261,6 +270,7 @@ export function createWorkerBackedAsyncCliModuleEvaluator(
         bridgedListeners.length = 0;
         for (const socket of bridgedWebSockets.values()) socket.close();
         bridgedWebSockets.clear();
+        for (const request of pendingHttpRequests.values()) clearTimeout(request.timeout);
         pendingHttpRequests.clear();
         pendingFsWrites.clear();
         worker.removeEventListener("message", onMessage);
@@ -300,6 +310,7 @@ export function createWorkerBackedAsyncCliModuleEvaluator(
           const pending = pendingHttpRequests.get(data.id);
           if (!pending) return;
           pendingHttpRequests.delete(data.id);
+          clearTimeout(pending.timeout);
           if (data.error) pending.reject(new Error(data.error));
           else if (data.response) pending.resolve(data.response);
           else pending.reject(new Error("CLI evaluation worker returned no HTTP response"));
@@ -348,9 +359,15 @@ export function createWorkerBackedAsyncCliModuleEvaluator(
           bridgedListeners.push(options.loopbackNetwork!.listen(port, (request) => {
             const requestId = nextHttpRequestId++;
             return new Promise<RuntimeHttpResponse>((resolveRequest, rejectRequest) => {
+              const requestLabel = `${request.method} ${request.path}`;
+              const requestTimeout = setTimeout(() => {
+                pendingHttpRequests.delete(requestId);
+                rejectRequest(new Error(`ECLIHTTPBRIDGETIMEOUT: CLI evaluation worker did not respond to ${requestLabel} within 2000ms`));
+              }, 2000);
               pendingHttpRequests.set(requestId, {
                 reject: rejectRequest,
-                resolve: resolveRequest
+                resolve: resolveRequest,
+                timeout: requestTimeout
               });
               worker.postMessage({
                 evaluationId: id,
@@ -439,6 +456,9 @@ export async function evaluateCliModuleWorkerMessage(
       ...(message.traceFs ? { fsTrace } : {}),
       ...(message.captureGlobalCalls ? { globals: createCapturedGlobalCallHandlers(message.captureGlobalCalls, capturedGlobalCalls) } : {}),
       ...(options.httpBridge ? {
+        onOutputSnapshot: (snapshot) => {
+          options.httpBridge!.getOutput = snapshot;
+        },
         onFsFacade: (fs) => {
           options.httpBridge!.writeFile = (path, data) => {
             fs.writeFileSync(path, data);
@@ -559,6 +579,7 @@ function startCliModuleEvaluation(
     ...(request.env ? { env: request.env } : {})
   };
   const process = new BrowserProcess(processOptions);
+  options.onOutputSnapshot?.(() => ({ stderr, stdout }));
   process.on("stdout", (chunk) => {
     stdout += String(chunk);
   });

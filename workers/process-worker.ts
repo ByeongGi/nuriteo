@@ -132,15 +132,19 @@ async function handleCliHttpRequest(message) {
   }
 }
 
-function handleCliFsWrite(message) {
+async function handleCliFsWrite(message) {
   const bridge = cliHttpBridges.get(message.evaluationId);
   try {
     if (!bridge?.writeFile) throw new Error(`missing CLI fs bridge: ${message.evaluationId}`);
     const result = bridge.writeFile(message.path, message.data);
+    await new Promise((resolve) => setTimeout(resolve, 1000));
     self.postMessage({
       evaluationId: message.evaluationId,
       id: message.id,
-      result,
+      result: {
+        ...result,
+        ...(bridge.getOutput ? { output: bridge.getOutput() } : {})
+      },
       type: "cli:fs:write:result"
     });
   } catch (error) {
