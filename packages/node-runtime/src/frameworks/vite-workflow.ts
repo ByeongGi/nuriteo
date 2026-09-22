@@ -781,7 +781,7 @@ export class ViteProductWorkflow {
     const init: ResponseInit = { status: response.statusCode };
     if (response.statusText) init.statusText = response.statusText;
     if (response.headers) init.headers = response.headers;
-    return new Response(response.body || "", init);
+    return new Response(toResponseBody(response.body), init);
   }
 
   editMessage(label: string): ViteProductHmrResult {
@@ -2056,6 +2056,13 @@ function toRuntimeHttpResponse(preview: ViteProductPreviewResult): RuntimeHttpRe
     headers: preview.headers || { "content-type": "text/html; charset=utf-8" },
     body: preview.body
   };
+}
+
+function toResponseBody(body: RuntimeHttpResponse["body"]): BodyInit {
+  if (!(body instanceof Uint8Array)) return body || "";
+  const copy = new Uint8Array(body.byteLength);
+  copy.set(body);
+  return copy.buffer;
 }
 
 function contentTypeForPath(path: string): string {

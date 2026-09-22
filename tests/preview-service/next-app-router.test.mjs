@@ -36,6 +36,57 @@ assert.match(homeAfter.body, /Edited Home/);
 
 const build = workflow.buildFromPackageScript("build");
 assert.ok(build.files.includes("out/index.html"));
+assert.equal(build.cliEntrypoint, "/workspace/app/node_modules/next/dist/bin/next.cjs");
+
+const cliWorkflow = new NextProductWorkflow({
+  manager: "pnpm",
+  port: 3010,
+  nextPackageArtifact: {
+    version: "15.1.0-test",
+    mounts: [
+      {
+        path: "package.json",
+        data: JSON.stringify({ name: "next", version: "15.1.0-test", bin: { next: "dist/bin/next" } })
+      },
+      {
+        path: "dist/bin/next",
+        data: [
+          "#!/usr/bin/env node",
+          "const command = process.argv[2];",
+          "const port = Number(process.env.PORT || 3000);",
+          "if (command === 'build') global.__nextRegisterBuild({ command: 'build', outputDirectory: '.next', source: 'next-cli' });",
+          "else global.__nextRegisterDevServer({ command: command === 'start' ? 'start' : 'dev', host: '127.0.0.1', port, source: 'next-cli' });"
+        ].join("\n")
+      }
+    ]
+  }
+});
+const cliInstall = cliWorkflow.install();
+assert.equal(cliInstall.nextPackageSource, "mounted-artifact");
+const readiness = cliWorkflow.inspectRealCliReadiness();
+assert.equal(readiness.status, "ready");
+assert.equal(readiness.cliEntrypoint, "/workspace/app/node_modules/next/dist/bin/next");
+
+const cliDev = await cliWorkflow.startDevServerFromCliExecution();
+assert.equal(cliDev.source, "cli-execution");
+assert.equal(cliDev.moduleTransform, "adapter");
+assert.equal(cliDev.port, 3010);
+assert.equal(cliDev.processStarted, true);
+
+const cliBuild = await cliWorkflow.buildFromCliExecution();
+assert.equal(cliBuild.command, "next build");
+assert.equal(cliBuild.cliEntrypoint, "/workspace/app/node_modules/next/dist/bin/next");
+assert.ok(cliBuild.files.includes("out/index.html"));
+
+const cliStopped = cliWorkflow.stopDevServer();
+assert.equal(cliStopped.running, false);
+assert.equal(cliStopped.processExited, true);
+
+const productionServer = await cliWorkflow.startProductionServerFromCliExecution();
+assert.equal(productionServer.command, "next start");
+assert.equal(productionServer.source, "cli-execution");
+assert.equal(productionServer.port, 3010);
+cliWorkflow.stopDevServer();
 
 const controller = createPreviewWorkflowController();
 const loaded = controller.loadTemplate("next-app");

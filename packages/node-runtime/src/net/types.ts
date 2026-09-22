@@ -13,7 +13,7 @@ export interface RuntimeHttpResponse {
   statusCode: number;
   statusText?: string;
   headers?: RuntimeHeaders;
-  body?: string;
+  body?: string | Uint8Array;
 }
 
 export interface RuntimeWebSocket {

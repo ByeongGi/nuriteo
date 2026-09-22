@@ -1,14 +1,15 @@
 {
-  "schemaVersion": 2,
-  "updatedAt": "2026-09-19",
+  "schemaVersion": 3,
+  "updatedAt": "2026-09-23",
   "nextVersion": "15.1.0",
   "publicGrade": "product-preview",
+  "fullRuntimeGrade": "candidate",
   "productSupportClaim": true,
   "productSupportClaimScope": "App Router preview adapter in apps/preview-service (multi-route, layout, link navigation, HMR). Not a claim of full desktop next CLI / native SWC parity.",
   "scope": {
     "runtime": "browser-guest-node-runtime",
     "phase": "productization",
-    "goal": "Claim Next.js App Router preview as product-supported while keeping native CLI/SWC boundaries explicit."
+    "goal": "Keep the App Router adapter product-supported and validate the pinned full Next runtime before browser-worker promotion."
   },
   "packageFacts": {
     "bin": "dist/bin/next",
@@ -46,16 +47,22 @@
       "reason": "Adapter writes out/index.html smoke artifacts for product build button."
     },
     {
+      "id": "next-cli-artifact-execution",
+      "command": "next dev | next build | next start",
+      "status": "supported",
+      "reason": "The pinned Next 15.1.0 distribution is mounted and its real CLI dev, build, and start paths pass in the guest runtime integration fixture."
+    },
+    {
       "id": "next-app-router-dev",
       "command": "next dev",
-      "status": "hold",
-      "reason": "Full Next CLI/module execution, file watching, route workers, and SWC transform path inside the guest runtime remain incomplete."
+      "status": "supported",
+      "reason": "The real Next 15.1.0 development server compiles the App Router with version-matched WASM SWC and serves the rendered route."
     },
     {
       "id": "next-app-router-build",
       "command": "next build",
-      "status": "hold",
-      "reason": "Full SWC transform path, filesystem metadata compatibility, worker lifecycle, and native optional dependency diagnostics remain incomplete."
+      "status": "supported",
+      "reason": "The real Next 15.1.0 build emits BUILD_ID, RSC/client manifests, middleware and Edge bundles, prerender metadata, server chunks, and production assets."
     },
     {
       "id": "next-static-export",
@@ -72,13 +79,31 @@
     {
       "id": "next-wasm-swc",
       "command": "load @next/swc-wasm-nodejs",
-      "status": "candidate",
-      "reason": "A version-matched WASM package exists, but it still needs integration with the runtime WASM adapter policy and Next's loader path."
+      "status": "supported",
+      "reason": "The version-matched @next/swc-wasm-nodejs 15.1.0 transform path is used by real next dev and next build validation."
+    },
+    {
+      "id": "next-rsc-server-actions",
+      "command": "RSC and Server Actions",
+      "status": "supported",
+      "reason": "Production RSC manifests are emitted and a real Server Action POST returns the expected 303 action redirect."
+    },
+    {
+      "id": "next-middleware-edge",
+      "command": "Middleware and Edge route",
+      "status": "supported",
+      "reason": "Middleware response mutation and an Edge-runtime route execute through the production server fixture."
+    },
+    {
+      "id": "next-isr-image",
+      "command": "ISR and Image Optimization",
+      "status": "supported",
+      "reason": "ISR transitions from stale to regenerated cache content and Image Optimization returns byte-exact PNG data."
     }
   ],
   "gate": {
     "id": "SG25-nextjs",
     "status": "product-preview-claimed",
-    "supportDecision": "Claim Next.js App Router preview adapter as product-supported. Do not claim full next CLI / native SWC / RSC server runtime parity. Public grade: product-preview."
+    "supportDecision": "The App Router preview adapter remains the public product-supported surface. The pinned full runtime is candidate-grade with real guest-runtime evidence; native .node SWC remains unsupported and is replaced by version-matched WASM SWC."
   }
 }

@@ -39,11 +39,16 @@ export class LoopbackNetwork {
     const listener = this.listeners.get(port);
     if (!listener || listener.closed) throw new LoopbackNetworkError(`connection refused: ${port}`, "ECONNREFUSED");
 
+    const body = options.body || "";
+    const headers: Record<string, string> = { host: parsed.host, ...(options.headers || {}) };
+    if (body && headers["content-length"] === undefined && headers["Content-Length"] === undefined) {
+      headers["content-length"] = String(new TextEncoder().encode(body).byteLength);
+    }
     const requestRaw = serializeHttpRequest({
       method: options.method || "GET",
       path: `${parsed.pathname}${parsed.search}`,
-      headers: { host: parsed.host, ...(options.headers || {}) },
-      body: options.body || ""
+      headers,
+      body
     });
     const request = parseHttpRequest(requestRaw);
 
@@ -53,11 +58,15 @@ export class LoopbackNetwork {
     const response = await listener.handler(request, context);
     if (options.signal?.aborted) throw new LoopbackNetworkError("client aborted", "ECONNABORTED");
 
-    const raw = serializeHttpResponse(response);
-    if (raw.length > (options.maxBytes ?? this.maxBytes)) {
+    const responseBody = response.body || "";
+    const bodyBytes = typeof responseBody === "string"
+      ? new TextEncoder().encode(responseBody).byteLength
+      : responseBody.byteLength;
+    const raw = serializeHttpResponse({ ...response, body: "" });
+    if (raw.length + bodyBytes > (options.maxBytes ?? this.maxBytes)) {
       throw new LoopbackNetworkError("response exceeded max bytes", "ETOOBIG");
     }
-    return parseHttpResponse(raw);
+    return { ...parseHttpResponse(raw), body: responseBody };
   }
 
   connectWebSocket(url: string | URL, options: LoopbackWebSocketOptions = {}): RuntimeWebSocket {
