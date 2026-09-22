@@ -77,6 +77,15 @@ assert.deepEqual(readyCase.output.map((chunk) => `${chunk.stream}:${chunk.data.t
 assert.deepEqual(readyCase.table.output(prepared.pid).map((chunk) => chunk.at), [1234, 1234]);
 assert.equal(readyCase.table.writeStdin(prepared.pid, "yes\n"), true);
 assert.equal(readyCase.workers[0].stdin, "yes\n");
+assert.equal(readyCase.table.resize(prepared.pid, { cols: 120, rows: 36 }), true);
+assert.deepEqual(readyCase.workers[0].messages.at(-1), {
+  type: "resize",
+  pid: prepared.pid,
+  generation: prepared.generation,
+  cols: 120,
+  rows: 36
+});
+assert.deepEqual(readyCase.table.list({ activeOnly: true }).map((entry) => entry.pid), [prepared.pid]);
 const exited = readyCase.table.stop(prepared.pid, 0);
 assert.equal(exited.status, "exited");
 assert.equal(exited.stdout, "hello\n");
@@ -85,6 +94,7 @@ assert.equal(exited.resourcesReleased, true);
 assert.equal(readyCase.table.writeStdin(prepared.pid, "late\n"), false);
 const duplicateStop = readyCase.table.stop(prepared.pid, 0);
 assert.equal(duplicateStop.status, "exited");
+assert.deepEqual(readyCase.table.list({ activeOnly: true }), []);
 
 const failedCase = createTable("failed");
 const failedPrepared = failedCase.table.prepare({ url: "/workers/process-worker.ts" });
@@ -108,6 +118,16 @@ assert.equal(waitCase.workers[0].terminated, true);
 const replacement = waitCase.table.prepare({ url: "/workers/process-worker.ts" });
 assert.notEqual(replacement.pid, waitPrepared.pid);
 assert.notEqual(replacement.generation, waitPrepared.generation);
+const signalStart = waitCase.table.start(replacement.pid);
+const interrupted = waitCase.table.signal(replacement.pid, "SIGINT");
+assert.equal(interrupted.exitCode, 130);
+assert.deepEqual(waitCase.workers.at(-1).messages.at(-1), {
+  type: "signal",
+  pid: replacement.pid,
+  generation: replacement.generation,
+  signal: "SIGINT"
+});
+await signalStart;
 
 const teardownCase = createTable("hang");
 const teardownPrepared = teardownCase.table.prepare({ url: "/workers/process-worker.ts" });

@@ -65,44 +65,59 @@
         "tests/vite/vite-react-product-workflow.test.mjs",
         "docs/archive/productization-2026-09-16/evidence/P11-01.md"
       ],
-      "productGap": "Actual Vite 8.2.0 worker-backed product runtime now covers install artifacts, hydrated dependency materialization, actual Vite CLI dev server start, browser preview relay, real Vite import-analysis transform, React bare package import rewrite, TypeScript/TSX transform fallback, real Vite HMR connected/update payloads, actual Vite build dist artifact generation, and worker bridge reload recovery. Secondary Vue/Svelte product candidates remain partial-pass/deferred outside the first product-supported framework set."
+      "productGap": "Actual Vite 8.2.0 worker-backed product runtime covers install artifacts, hydrated dependency materialization, actual Vite CLI dev server start, browser preview relay, real Vite import-analysis transform, React bare package import rewrite, TypeScript/TSX transform fallback, real Vite HMR connected/update payloads, actual Vite build dist artifact generation, and worker bridge reload recovery."
     },
     {
       "id": "vite-vue-product-workflow",
       "framework": "vite",
       "template": "vue-runtime",
       "runtime": "browser-guest-node-runtime",
-      "status": "candidate",
+      "status": "supported",
       "evidence": [
         "tests/vite/vite-react-product-workflow.test.mjs",
         "tests/vite/vite-vue-svelte-actual.test.mjs",
         "compat/framework-actual-validation.json",
+        "compat/framework-product-support.json",
         "docs/archive/productization-2026-09-16/evidence/P11-02.md"
       ],
-      "productGap": "Actual worker-backed adapter and CLI-backed workflows pass for Vue runtime. Grade is candidate (not product-supported). Broader public Vue fixture coverage remains open."
+      "supportContract": "The fixture tied to the pinned Vite template-vue upstream passes npm/pnpm install, worker-backed dev/preview, edit-HMR with state preservation, build/dist smoke, and reload recovery within the W6 performance budget."
     },
     {
       "id": "vite-svelte-product-workflow",
       "framework": "vite",
       "template": "svelte",
       "runtime": "browser-guest-node-runtime",
-      "status": "candidate",
+      "status": "supported",
       "evidence": [
         "tests/vite/vite-react-product-workflow.test.mjs",
         "tests/vite/vite-vue-svelte-actual.test.mjs",
         "compat/framework-actual-validation.json",
+        "compat/framework-product-support.json",
         "docs/archive/productization-2026-09-16/evidence/P11-02.md"
       ],
-      "productGap": "Actual worker-backed adapter and CLI-backed workflows pass for Svelte, including plugin module path. Grade is candidate (not product-supported)."
+      "supportContract": "The fixture tied to the pinned Vite template-svelte upstream passes npm/pnpm install, plugin-backed worker dev/preview, edit-HMR with state preservation, build/dist smoke, and reload recovery within the W6 performance budget."
+    },
+    {
+      "id": "nextjs-full-runtime-candidate",
+      "framework": "nextjs",
+      "template": "app-router",
+      "runtime": "browser-guest-node-runtime",
+      "status": "pass",
+      "evidence": [
+        "tests/preview-service/next-full-runtime.test.mjs",
+        "compat/nextjs-compatibility.json",
+        "docs/productization/nextjs-product-support-target.md"
+      ],
+      "supportContract": "Pinned Next 15.1.0 real CLI dev/build/start, WASM SWC, RSC/Server Actions, Middleware/Edge, ISR, Image Optimization, binary HTTP responses, and lifecycle teardown pass; public promotion remains candidate pending browser-worker and release/security gates."
     }
   ],
   "gate": {
     "id": "SG25",
     "status": "pass",
-    "reason": "Vite React remains product-supported. Vue and Svelte both have actual worker-backed validation records and are graded candidate. Next.js stays explicitly non-product-supported with capability split.",
+    "reason": "Vite React, Vue, and Svelte have worker-backed product support evidence. Webpack and Rspack remain separately documented candidates.",
     "requiredToPass": [
       "Keep Vite React product-supported evidence green",
-      "Keep Vue and Svelte actual worker-backed validation recorded at candidate or higher",
+      "Keep Vue and Svelte exact-revision worker-backed support gates green",
       "Keep Next.js grade explicit without overstating support"
     ]
   }

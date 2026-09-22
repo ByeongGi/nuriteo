@@ -47,6 +47,19 @@ export interface HostProcessSnapshot {
   resourcesReleased: boolean;
 }
 
+export type HostProcessSignal = "SIGINT" | "SIGTERM" | "SIGKILL";
+
+export interface HostProcessResize {
+  cols: number;
+  rows: number;
+}
+
+export interface HostProcessTerminalControl {
+  size: HostProcessResize;
+  onInput(listener: (data: string) => void): () => void;
+  onResize(listener: (size: HostProcessResize) => void): () => void;
+}
+
 export interface HostProcessOutputChunk {
   pid: number;
   generation: number;
@@ -89,6 +102,7 @@ export interface HostProcessShellCommandContext {
   stdin: string;
   output?: (chunk: { stream: HostProcessOutputStream; data: string }) => void;
   signal?: AbortSignal;
+  terminal?: HostProcessTerminalControl;
 }
 
 export interface HostProcessShellCommandResult {

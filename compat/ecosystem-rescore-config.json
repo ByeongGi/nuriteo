@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-22",
+  "fixtureCatalog": "compat/ecosystem-fixtures.json",
+  "resultSchemaVersion": 1,
+  "runtime": {
+    "node": "22.23.0",
+    "pnpm": "11.15.1"
+  },
+  "toolchain": {
+    "vite": "8.2.0",
+    "rolldown": "1.2.8",
+    "rolldownWasiBinding": "1.2.8",
+    "wasmPolicy": "vendor/manifests/wasm-adapters.json"
+  },
+  "workerTimeoutMs": 90000,
+  "publicFixtureIds": [
+    "vite-official-template-react",
+    "awe-templates-react-starter",
+    "hvalette-react-vite-template",
+    "gabbloquet-vite-react18",
+    "sivamani18-vite-react-ts-boilerplate",
+    "fuhouyu-homepage",
+    "seongpil0948-react-dev-guide",
+    "ravaniproshan-velorah-landing",
+    "commencis-starter-react-vite",
+    "r35007-vite-react-typescript"
+  ]
+}

@@ -28,26 +28,28 @@ const next = actualFrameworks.results.find((entry) => entry.framework === "nextj
 assert(react?.grade === "supported", "Vite React must remain supported");
 assert(vue?.validation === "actual-worker-backed", "Vue must have actual worker-backed validation");
 assert(svelte?.validation === "actual-worker-backed", "Svelte must have actual worker-backed validation");
-assert(["candidate", "supported"].includes(vue?.grade), "Vue must be candidate or supported");
-assert(["candidate", "supported"].includes(svelte?.grade), "Svelte must be candidate or supported");
+assert(vue?.grade === "supported", "Vue must be supported");
+assert(svelte?.grade === "supported", "Svelte must be supported");
 assert(next?.grade === "product-preview", "Next.js public grade must record the adapter preview claim");
 assert(nextjs.publicGrade === "product-preview", "nextjs-compatibility publicGrade must be product-preview");
+assert(nextjs.fullRuntimeGrade === "candidate", "full Next.js runtime must remain candidate until browser-worker promotion");
 assert(nextjs.productSupportClaim === true, "Next.js adapter product support must be claimed");
 assert(
-  nextjs.capabilities.some((entry) => entry.id === "next-app-router-dev" && entry.status === "hold"),
-  "full Next.js CLI dev support must remain hold"
+  nextjs.capabilities.some((entry) => entry.id === "next-app-router-dev" && entry.status === "supported"),
+  "full Next.js CLI dev implementation evidence must be supported"
 );
 
 const vueMatrix = publicMatrix.frameworks.find((entry) => entry.name === "Vite Vue runtime");
 const svelteMatrix = publicMatrix.frameworks.find((entry) => entry.name === "Vite Svelte");
-assert(vueMatrix?.status === "candidate", "public matrix Vue status must be candidate");
-assert(svelteMatrix?.status === "candidate", "public matrix Svelte status must be candidate");
+assert(vueMatrix?.status === "supported", "public matrix Vue status must be supported");
+assert(svelteMatrix?.status === "supported", "public matrix Svelte status must be supported");
 assert(publicMatrix.projectFixtures.total === 20, "public matrix fixture total must be 20");
 assert(publicMatrix.projectFixtures.serviceWorkflowPassOrHold >= 14, "public matrix SG25 passOrHold must be >=14");
 
 for (const file of [
   "tests/vite/vite-vue-svelte-actual.test.mjs",
   "compat/framework-actual-validation.json",
+  "compat/framework-product-support.json",
   "compat/service-workflow-fixture-results.json",
   "docs/productization/public-compatibility-matrix.md"
 ]) {
@@ -55,8 +57,8 @@ for (const file of [
 }
 
 const publicDoc = fs.readFileSync("docs/productization/public-compatibility-matrix.md", "utf8");
-assert(publicDoc.includes("Vite Vue runtime | candidate"), "public matrix doc must list Vue as candidate");
-assert(publicDoc.includes("Vite Svelte | candidate"), "public matrix doc must list Svelte as candidate");
+assert(publicDoc.includes("Vite Vue runtime | supported"), "public matrix doc must list Vue as supported");
+assert(publicDoc.includes("Vite Svelte | supported"), "public matrix doc must list Svelte as supported");
 assert(publicDoc.includes("20") && publicDoc.includes("minimumPassOrHoldForSG25") || publicDoc.includes("15 pass"), "public matrix doc must describe the 20-fixture SG25 gate");
 
 const supportDoc = fs.readFileSync("docs/release/support-matrix.md", "utf8");

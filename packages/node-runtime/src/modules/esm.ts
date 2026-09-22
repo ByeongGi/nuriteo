@@ -720,7 +720,7 @@ function restoreViteImportMetaAnalysisSentinels(source: string): string {
 }
 
 function restoreImportMetaInStringLiterals(source: string): string {
-  let output = "";
+  const output: string[] = [];
   let state: "normal" | "single" | "double" | "regex" | "line-comment" | "block-comment" = "normal";
   let escaped = false;
   let inRegexClass = false;
@@ -732,11 +732,11 @@ function restoreImportMetaInStringLiterals(source: string): string {
 
     if (state === "single" || state === "double") {
       if (source.startsWith("__context.importMeta", index)) {
-        output += "import.meta";
+        output.push("import.meta");
         index += "__context.importMeta".length - 1;
         continue;
       }
-      output += char;
+      output.push(char);
       if (escaped) {
         escaped = false;
         continue;
@@ -749,7 +749,7 @@ function restoreImportMetaInStringLiterals(source: string): string {
       continue;
     }
 
-    output += char;
+    output.push(char);
 
     if (state === "regex") {
       if (escaped) {
@@ -771,20 +771,20 @@ function restoreImportMetaInStringLiterals(source: string): string {
     }
     if (state === "block-comment") {
       if (char === "*" && next === "/") {
-        output += next;
+        output.push(next);
         index += 1;
         state = "normal";
       }
       continue;
     }
     if (char === "/" && next === "/") {
-      output += next;
+      output.push(next);
       index += 1;
       state = "line-comment";
       continue;
     }
     if (char === "/" && next === "*") {
-      output += next;
+      output.push(next);
       index += 1;
       state = "block-comment";
       continue;
@@ -809,7 +809,7 @@ function restoreImportMetaInStringLiterals(source: string): string {
     if (!/\s/.test(char)) previousSignificant = char;
   }
 
-  return output;
+  return output.join("");
 }
 
 function protectImportExportLinesInsideLiterals(source: string): { restore: (value: string) => string; source: string } {
@@ -914,7 +914,7 @@ function literalLineStartMask(source: string): boolean[] {
 }
 
 function stripBlockComments(source: string): string {
-  let output = "";
+  const output: string[] = [];
   let state: "normal" | "single" | "double" | "template" | "regex" | "line-comment" | "block-comment" = "normal";
   let escaped = false;
   let inRegexClass = false;
@@ -926,23 +926,23 @@ function stripBlockComments(source: string): string {
 
     if (state === "block-comment") {
       if (char === "*" && next === "/") {
-        output += "  ";
+        output.push("  ");
         index += 1;
         state = "normal";
       } else {
-        output += char === "\n" ? "\n" : " ";
+        output.push(char === "\n" ? "\n" : " ");
       }
       continue;
     }
 
     if (state === "line-comment") {
-      output += char;
+      output.push(char);
       if (char === "\n") state = "normal";
       continue;
     }
 
     if (state === "single" || state === "double" || state === "template") {
-      output += char;
+      output.push(char);
       if (escaped) {
         escaped = false;
         continue;
@@ -958,7 +958,7 @@ function stripBlockComments(source: string): string {
     }
 
     if (state === "regex") {
-      output += char;
+      output.push(char);
       if (escaped) {
         escaped = false;
         continue;
@@ -974,18 +974,18 @@ function stripBlockComments(source: string): string {
     }
 
     if (char === "/" && next === "*") {
-      output += "  ";
+      output.push("  ");
       index += 1;
       state = "block-comment";
       continue;
     }
     if (char === "/" && next === "/") {
-      output += char;
+      output.push(char);
       state = "line-comment";
       continue;
     }
     if (char === "/" && isRegexStart(previousSignificant)) {
-      output += char;
+      output.push(char);
       state = "regex";
       escaped = false;
       inRegexClass = false;
@@ -995,11 +995,11 @@ function stripBlockComments(source: string): string {
     if (char === "'") state = "single";
     if (char === "\"") state = "double";
     if (char === "`") state = "template";
-    output += char;
+    output.push(char);
     if (!/\s/.test(char)) previousSignificant = char;
   }
 
-  return output;
+  return output.join("");
 }
 
 function isRegexStart(previousSignificant: string): boolean {

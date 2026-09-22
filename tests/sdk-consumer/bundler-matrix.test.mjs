@@ -4,7 +4,7 @@ import fs from "node:fs";
 const matrix = JSON.parse(fs.readFileSync(new URL("../../compat/sdk-consumer-bundler-matrix.json", import.meta.url), "utf8"));
 
 assert.equal(matrix.schemaVersion, 1);
-assert.equal(matrix.scope.packageArtifact, "dist/sdk/cargo-container-sdk-0.0.0.tgz");
+assert.equal(matrix.scope.packageArtifact, "dist/sdk/cargo-container-sdk-0.1.0-beta.1.tgz");
 assert.ok(Array.isArray(matrix.cases));
 
 const casesById = new Map(matrix.cases.map((entry) => [entry.id, entry]));

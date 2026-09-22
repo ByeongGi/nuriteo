@@ -9,7 +9,7 @@ export interface MaterializedProject {
   store: ProjectWorkspaceStore;
   files: ZipProjectFile[];
   health: ProjectHealthReport;
-  source: "template" | "zip" | "github";
+  source: "template" | "zip" | "github" | "snapshot";
 }
 
 export interface MaterializeOptions {

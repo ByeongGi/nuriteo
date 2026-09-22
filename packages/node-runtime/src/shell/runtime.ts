@@ -24,7 +24,7 @@ export class ShellRuntime {
     let exitCode = 0;
 
     for (let index = 0; index < steps.length; index += 1) {
-      if (options.signal?.aborted) return cancelledShellResult(stdout, stderr, this.files);
+      if (options.signal?.aborted) return cancelledShellResult(stdout, stderr, this.files, options.signal.reason);
       const step = steps[index];
       if (!step) continue;
       const nextStep = steps[index + 1];
@@ -32,7 +32,7 @@ export class ShellRuntime {
       const { argv, redirect } = extractRedirect(step.argv);
       const streamed = { stderr: false, stdout: false };
       const result = await this.runCommand(argv, stdin, commandOutputOptions(options, streamed, nextStep?.op === "|"));
-      if (options.signal?.aborted) return cancelledShellResult(stdout + (result.stdout || ""), stderr + (result.stderr || ""), this.files);
+      if (options.signal?.aborted) return cancelledShellResult(stdout + (result.stdout || ""), stderr + (result.stderr || ""), this.files, options.signal.reason);
       exitCode = result.exitCode;
       stderr += result.stderr || "";
       if (result.stderr && !streamed.stderr) options.onOutput?.({ stream: "stderr", data: result.stderr });
@@ -55,6 +55,8 @@ export class ShellRuntime {
 
     const name = argv[0];
     if (!name) throw new Error("missing command");
+    const builtin = this.runStatefulBuiltin(argv);
+    if (builtin) return builtin;
     const command = this.resolveExecutable(name);
     const context = {
       argv,
@@ -63,10 +65,34 @@ export class ShellRuntime {
       stdin,
       files: this.files
     };
-    if (options.signal && options.onOutput) return command({ ...context, output: options.onOutput, signal: options.signal });
-    if (options.signal) return command({ ...context, signal: options.signal });
-    if (options.onOutput) return command({ ...context, output: options.onOutput });
-    return command(context);
+    return command({
+      ...context,
+      ...(options.signal ? { signal: options.signal } : {}),
+      ...(options.onOutput ? { output: options.onOutput } : {}),
+      ...(options.terminal ? { terminal: options.terminal } : {})
+    });
+  }
+
+  runStatefulBuiltin(argv: string[]): Awaited<ReturnType<ShellCommand>> | null {
+    if (argv[0] === "cd") {
+      const target = normalizePath(argv[1] || this.env.HOME || "/workspace", this.cwd);
+      this.cwd = target;
+      this.env.PWD = target;
+      return { stdout: "", stderr: "", exitCode: 0, argv };
+    }
+    if (argv[0] === "export") {
+      for (const assignment of argv.slice(1)) {
+        const index = assignment.indexOf("=");
+        if (index <= 0) return { stdout: "", stderr: `export: invalid assignment: ${assignment}\n`, exitCode: 2, argv };
+        this.env[assignment.slice(0, index)] = assignment.slice(index + 1);
+      }
+      return { stdout: "", stderr: "", exitCode: 0, argv };
+    }
+    if (argv[0] === "unset") {
+      for (const name of argv.slice(1)) delete this.env[name];
+      return { stdout: "", stderr: "", exitCode: 0, argv };
+    }
+    return null;
   }
 
   resolveExecutable(name: string): ShellCommand {
@@ -110,11 +136,12 @@ export function createShellRuntime(options: ShellRuntimeOptions = {}): ShellRunt
   return new ShellRuntime(options);
 }
 
-function cancelledShellResult(stdout: string, stderr: string, files: Map<string, string>): ShellRunResult {
+function cancelledShellResult(stdout: string, stderr: string, files: Map<string, string>, reason?: unknown): ShellRunResult {
+  const signal = reason === "SIGTERM" || reason === "SIGKILL" ? reason : "SIGINT";
   return {
     stdout,
-    stderr: stderr || "cancelled\n",
-    exitCode: 130,
+    stderr: stderr || `${signal.toLowerCase()}\n`,
+    exitCode: signal === "SIGTERM" ? 143 : signal === "SIGKILL" ? 137 : 130,
     files: Object.fromEntries(files)
   };
 }
@@ -123,7 +150,19 @@ function nestedShellOptions(options: ShellRunOptions): ShellRunOptions {
   const nested: ShellRunOptions = {};
   if (options.signal) nested.signal = options.signal;
   if (options.onOutput) nested.onOutput = options.onOutput;
+  if (options.terminal) nested.terminal = options.terminal;
   return nested;
+}
+
+function normalizePath(path: string, cwd: string): string {
+  const parts = (path.startsWith("/") ? path : `${cwd}/${path}`).split("/");
+  const normalized: string[] = [];
+  for (const part of parts) {
+    if (!part || part === ".") continue;
+    if (part === "..") normalized.pop();
+    else normalized.push(part);
+  }
+  return `/${normalized.join("/")}`;
 }
 
 function commandOutputOptions(

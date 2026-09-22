@@ -12,6 +12,7 @@ import {
   ViteProductWorkflow
 } from "../packages/node-runtime/src/index.ts";
 import { resolveViteHmrUrl } from "../packages/preview/src/index.ts";
+import { readProjectDependencyNames } from "./lib/ecosystem-fixture-dependencies.mjs";
 import { createFallbackWorkspaceReader, createNodeFsWorkspaceReader } from "./lib/fs-workspace-reader.mjs";
 import { NodeThreadCliEvaluationWorker } from "./lib/node-thread-cli-worker.mjs";
 
@@ -29,7 +30,9 @@ const actualNodeModulesRoot = valueAfter("--node-modules-root");
 const actualWasmPolicyPath = valueAfter("--wasm-policy");
 const actualWorkerTimeoutMs = Number(valueAfter("--worker-timeout-ms") || "10000");
 const useSharedFixtureNodeModules = args.has("--shared-fixture-node-modules");
+const installMissingFixtureDependencies = args.has("--install-missing-fixture-dependencies");
 let actualProductContext = null;
+const fixtureDependencyInstalls = new Map();
 
 const selected = matrix.fixtures.filter((fixture) => selectedIds.includes(fixture.id));
 if (selected.length !== selectedIds.length) {
@@ -46,6 +49,10 @@ const payload = {
   schemaVersion: 1,
   generatedAt: new Date().toISOString(),
   source: "compat/ecosystem-fixtures.json",
+  inputContract: {
+    fixtureRevisions: Object.fromEntries(selected.map((fixture) => [fixture.id, fixture.revision || null])),
+    viteVersion: actualVitePackageRoot ? readPackageVersion(actualVitePackageRoot) : null
+  },
   minimumPassForMilestoneB: matrix.scope.minimumPassForMilestoneB,
   results,
   failureSummary: summarizeFailures(results),
@@ -66,6 +73,7 @@ function plannedResult(fixture) {
     mode: "plan",
     packageManager: fixture.packageManager,
     repository: fixture.repository,
+    revision: fixture.revision || null,
     subdirectory: fixture.subdirectory || null,
     expectedCommands: fixture.expectedCommands,
     score: 0,
@@ -94,9 +102,9 @@ async function scoreFixture(fixture, scoreMode) {
   const projectDir = fixture.subdirectory ? path.join(checkout, fixture.subdirectory) : checkout;
   const criteria = [];
   fs.mkdirSync(workdir, { recursive: true });
-  if (!fs.existsSync(checkout)) {
-    const clone = run("git", ["clone", "--depth", "1", fixture.repository, checkout], workdir);
-    if (clone.status !== 0) return failedResult(fixture, "install", clone);
+  const checkoutResult = ensureFixtureCheckout(fixture, checkout);
+  if (!checkoutResult.ok) {
+    return failedResult(fixture, "install", { status: 1, stdout: "", stderr: checkoutResult.error });
   }
 
   const install = runCommandString(fixture.expectedCommands.install, projectDir);
@@ -115,6 +123,7 @@ async function scoreFixture(fixture, scoreMode) {
     mode: "measured-reference",
     packageManager: fixture.packageManager,
     repository: fixture.repository,
+    revision: fixture.revision || null,
     subdirectory: fixture.subdirectory || null,
     score,
     status: classifyScore(score, false),
@@ -239,6 +248,7 @@ async function scoreProductActualFixture(fixture) {
     mode: "measured-product-actual",
     packageManager: fixture.packageManager,
     repository: fixture.repository,
+    revision: fixture.revision || null,
     subdirectory: fixture.subdirectory || null,
     score,
     status: classifyScore(score, false),
@@ -329,6 +339,7 @@ function scoreProductAdapterFixture(fixture) {
     mode: "measured-product-adapter",
     packageManager: fixture.packageManager,
     repository: fixture.repository,
+    revision: fixture.revision || null,
     subdirectory: fixture.subdirectory || null,
     score,
     status: classifyScore(score, false),
@@ -344,6 +355,7 @@ function failedResult(fixture, criterionId, result) {
     mode: "measured-reference",
     packageManager: fixture.packageManager,
     repository: fixture.repository,
+    revision: fixture.revision || null,
     subdirectory: fixture.subdirectory || null,
     score: 0,
     status: "partial-pass",
@@ -364,6 +376,7 @@ function blockedActualResult(fixture, criterionId, error) {
     mode: "measured-product-actual",
     packageManager: fixture.packageManager,
     repository: fixture.repository,
+    revision: fixture.revision || null,
     subdirectory: fixture.subdirectory || null,
     score: 0,
     status: "hold",
@@ -381,15 +394,13 @@ function ensureAndMountFixtureSource(workflow, fixture) {
   const checkout = path.join(workdir, fixture.id);
   const projectDir = fixture.subdirectory ? path.join(checkout, fixture.subdirectory) : checkout;
   fs.mkdirSync(workdir, { recursive: true });
-  if (!fs.existsSync(checkout)) {
-    const clone = run("git", ["clone", "--depth", "1", fixture.repository, checkout], workdir);
-    if (clone.status !== 0) {
+  const checkoutResult = ensureFixtureCheckout(fixture, checkout);
+  if (!checkoutResult.ok) {
       return {
         ok: false,
-        error: `${clone.stderr || clone.stdout || "git clone failed"}`,
+        error: checkoutResult.error,
         summary: "checkout unavailable"
       };
-    }
   }
   if (!fs.existsSync(projectDir)) {
     return {
@@ -399,6 +410,43 @@ function ensureAndMountFixtureSource(workflow, fixture) {
     };
   }
   return mountProjectDirectory(workflow, projectDir);
+}
+
+function ensureFixtureCheckout(fixture, checkout) {
+  if (fixture.repository.startsWith("local://")) {
+    return { ok: fs.existsSync(checkout), error: `Local fixture checkout does not exist: ${checkout}` };
+  }
+  if (!/^[0-9a-f]{40}$/.test(fixture.revision || "")) {
+    return { ok: false, error: `Fixture ${fixture.id} must pin a 40-character git revision.` };
+  }
+  if (fs.existsSync(checkout)) {
+    const current = run("git", ["rev-parse", "HEAD"], checkout);
+    if (current.status !== 0) {
+      return { ok: false, error: `Fixture checkout is not a valid git repository: ${checkout}` };
+    }
+    if (current.stdout.trim() !== fixture.revision) {
+      return {
+        ok: false,
+        error: `Fixture checkout revision mismatch for ${fixture.id}: expected ${fixture.revision}, found ${current.stdout.trim()}`
+      };
+    }
+    return { ok: true };
+  }
+
+  fs.mkdirSync(checkout, { recursive: true });
+  const steps = [
+    ["init"],
+    ["remote", "add", "origin", fixture.repository],
+    ["fetch", "--depth", "1", "origin", fixture.revision],
+    ["checkout", "--detach", fixture.revision]
+  ];
+  for (const step of steps) {
+    const result = run("git", step, checkout);
+    if (result.status !== 0) {
+      return { ok: false, error: result.stderr || result.stdout || `git ${step[0]} failed` };
+    }
+  }
+  return { ok: true };
 }
 
 function mountProjectDirectory(workflow, projectDir) {
@@ -435,9 +483,24 @@ function mountProjectDirectory(workflow, projectDir) {
 }
 
 function createFixtureDependencyArtifacts(fixture, projectDir, context) {
-  // Include devDependencies so Vite config-time packages (e.g. tailwindcss, plugins) materialize.
-  const names = readProjectDependencyNames(projectDir, { includeDevDependencies: true });
+  const names = readProjectDependencyNames(projectDir);
   if (names.length === 0) return { artifacts: [], missing: [] };
+  let result = collectFixtureDependencyArtifacts(fixture, projectDir, context, names);
+  if (installMissingFixtureDependencies && result.missing.length > 0) {
+    const install = ensureFixtureDependenciesInstalled(fixture, projectDir);
+    if (install.status !== 0) {
+      throw new Error([
+        `EFIXTUREDEPENDENCYINSTALL: failed to prepare dependencies for ${fixture.id}`,
+        install.stdout,
+        install.stderr
+      ].filter(Boolean).join("\n"));
+    }
+    result = collectFixtureDependencyArtifacts(fixture, projectDir, context, names);
+  }
+  return result;
+}
+
+function collectFixtureDependencyArtifacts(fixture, projectDir, context, names) {
   const provided = new Set(defaultProvidedDependencyNames());
   const artifactNames = names.filter((name) => !provided.has(name));
   const nodeModulesRoot = `/workspace/${fixture.id}/node_modules`;
@@ -468,19 +531,33 @@ function createFixtureDependencyArtifacts(fixture, projectDir, context) {
   };
 }
 
-function defaultProvidedDependencyNames() {
-  return ["@rolldown/binding-wasm32-wasi", "@vitejs/plugin-react", "@vitejs/plugin-react-swc", "react", "react-dom", "rolldown", "typescript", "vite"];
+function ensureFixtureDependenciesInstalled(fixture, projectDir) {
+  const cached = fixtureDependencyInstalls.get(projectDir);
+  if (cached) return cached;
+  let result;
+  if (fixture.packageManager === "pnpm") {
+    result = run("pnpm", [
+      "install",
+      "--dir", projectDir,
+      "--frozen-lockfile",
+      "--ignore-scripts",
+      "--reporter=append-only"
+    ], root);
+  } else if (fixture.packageManager === "npm") {
+    result = run("npm", ["ci", "--ignore-scripts", "--no-audit", "--no-fund"], projectDir);
+  } else {
+    result = {
+      status: 1,
+      stdout: "",
+      stderr: `Unsupported fixture package manager: ${fixture.packageManager}`
+    };
+  }
+  fixtureDependencyInstalls.set(projectDir, result);
+  return result;
 }
 
-function readProjectDependencyNames(projectDir, options = {}) {
-  const manifestPath = path.join(projectDir, "package.json");
-  if (!fs.existsSync(manifestPath)) return [];
-  const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
-  return uniqueNames([
-    ...Object.keys(manifest.dependencies || {}),
-    ...(options.includeDevDependencies ? Object.keys(manifest.devDependencies || {}) : []),
-    ...Object.keys(manifest.optionalDependencies || {})
-  ]).filter((name) => name !== "vite");
+function defaultProvidedDependencyNames() {
+  return ["@rolldown/binding-wasm32-wasi", "@vitejs/plugin-react", "@vitejs/plugin-react-swc", "react", "react-dom", "rolldown", "typescript", "vite"];
 }
 
 function createFixtureDependencyReader(projectDir, fallbackNodeModulesRoot, virtualNodeModulesRoot) {
@@ -1135,6 +1212,14 @@ function defaultOutputForMode(scoreMode) {
   if (scoreMode === "product-adapter") return "compat/ecosystem-fixture-product-results.json";
   if (scoreMode === "product-actual") return "compat/ecosystem-fixture-actual-product-results.json";
   return "compat/ecosystem-fixture-results.json";
+}
+
+function readPackageVersion(packageRoot) {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(path.resolve(packageRoot), "package.json"), "utf8")).version || null;
+  } catch {
+    return null;
+  }
 }
 
 function valueAfter(name) {

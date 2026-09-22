@@ -1,7 +1,8 @@
-import { Download, FolderInput, Play, RefreshCw, Rocket, Hammer, Maximize2 } from "lucide-react";
+import { Cloud, Download, FolderInput, Play, RefreshCw, Rocket, Hammer, Maximize2 } from "lucide-react";
 import { AppMenuBar } from "./AppMenuBar";
 import { StatusPill, phaseTone } from "./StatusPill";
 import type { PreviewControllerModel } from "../hooks/usePreviewController";
+import { NotificationCenter } from "./NotificationCenter";
 
 export function TopBar({ model }: { model: PreviewControllerModel }) {
   const {
@@ -120,9 +121,14 @@ export function TopBar({ model }: { model: PreviewControllerModel }) {
           <FolderInput className="size-3.5" />
           Import…
         </button>
+        <button id="open-cloud-projects" type="button" className="btn-ghost" onClick={() => model.setCloudOpen(true)}>
+          <Cloud className="size-3.5" />
+          Cloud
+        </button>
       </nav>
 
       <div className="flex items-center justify-end gap-2" aria-live="polite">
+        <NotificationCenter model={model} />
         <span className="hidden font-mono text-[11px] text-cargo-muted sm:inline">
           dirty {changeStatus.dirty.length}
         </span>

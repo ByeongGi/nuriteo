@@ -5,7 +5,7 @@ import { constantsBuiltin } from "../builtins/constants.ts";
 import { cryptoBuiltin } from "../builtins/crypto.ts";
 import { EventEmitter } from "../builtins/events.ts";
 import { builtinModules, moduleBuiltin, Module as RuntimeModuleBuiltin } from "../builtins/module.ts";
-import { dirname, isAbsolute, join, normalize } from "../builtins/path.ts";
+import { dirname, isAbsolute, join, normalize, pathBuiltin } from "../builtins/path.ts";
 import { BrowserProcess } from "../builtins/process.ts";
 import { Readable, Writable } from "../builtins/stream.ts";
 import { fileURLToPath } from "../builtins/url.ts";
@@ -28,9 +28,11 @@ export interface CliModuleEvaluatorOptions {
 }
 
 export interface AsyncCliModuleEvaluatorOptions extends CliModuleEvaluatorOptions {
+  exitTimeoutMs?: number;
   readyTimeoutMs?: number;
   settleTicks?: number;
   settleTimeoutMs?: number;
+  waitForExit?: boolean;
 }
 
 export interface IsolatedAsyncCliModuleEvaluatorOptions extends Omit<AsyncCliModuleEvaluatorOptions, "reader" | "writer"> {
@@ -90,6 +92,7 @@ export type CliEvaluationWorkerMessage =
 export interface CliEvaluationWorkerEvaluateMessage {
   bridgeLoopbackServer?: boolean;
   captureGlobalCalls?: readonly string[];
+  exitTimeoutMs?: number;
   id: number;
   readyTimeoutMs?: number;
   request: CliModuleEvaluationRequest;
@@ -98,6 +101,7 @@ export interface CliEvaluationWorkerEvaluateMessage {
   settleTimeoutMs?: number;
   traceFs?: boolean;
   type: "cli:evaluate";
+  waitForExit?: boolean;
   workspaceSnapshot: PackageManagerWorkspaceSnapshot;
 }
 
@@ -215,6 +219,17 @@ export function createAsyncCliModuleEvaluator(options: AsyncCliModuleEvaluatorOp
         stderr: `${result.stderr}ECLIETIMEOUT: CLI module evaluation did not become ready within ${readyTimeout.timeoutMs}ms\n`
       };
     }
+    if (options.waitForExit) {
+      const exitTimeout = await waitForCliEvaluationExit(evaluation.exited, options);
+      if (exitTimeout) {
+        const result = evaluation.finalize();
+        return {
+          ...result,
+          exitCode: 1,
+          stderr: `${result.stderr}ECLIEXITTIMEOUT: CLI module evaluation did not exit within ${exitTimeout.timeoutMs}ms\n`
+        };
+      }
+    }
     await settleCliEvaluation(options);
     return evaluation.finalize();
   };
@@ -259,26 +274,31 @@ export function createWorkerBackedAsyncCliModuleEvaluator(
       let nextFsWriteId = 1;
       let nextWebSocketId = 1;
       const bridgedWebSockets = new Map<number, RuntimeWebSocket>();
-      const cleanup = () => {
+      let closed = false;
+      const cleanup = (error = new Error("ECLIBRIDGECLOSED: CLI evaluation worker bridge closed")) => {
+        if (closed) return;
+        closed = true;
         if (timeout) clearTimeout(timeout);
-        worker.removeEventListener("message", onMessage);
-        worker.removeEventListener("error", onError);
-        worker.terminate();
-      };
-      const closeBridgedServers = () => {
-        if (timeout) clearTimeout(timeout);
-        for (const listener of bridgedListeners) listener.close();
-        bridgedListeners.length = 0;
-        for (const socket of bridgedWebSockets.values()) socket.close();
-        bridgedWebSockets.clear();
-        for (const request of pendingHttpRequests.values()) clearTimeout(request.timeout);
+        for (const request of pendingHttpRequests.values()) {
+          clearTimeout(request.timeout);
+          request.reject(error);
+        }
         pendingHttpRequests.clear();
+        for (const write of pendingFsWrites.values()) write.reject(error);
         pendingFsWrites.clear();
         worker.removeEventListener("message", onMessage);
         worker.removeEventListener("error", onError);
         worker.terminate();
       };
+      const closeBridgedServers = () => {
+        for (const listener of bridgedListeners) listener.close();
+        bridgedListeners.length = 0;
+        for (const socket of bridgedWebSockets.values()) socket.close();
+        bridgedWebSockets.clear();
+        cleanup();
+      };
       const writeBridgedFile = (path: string, data: string) => {
+        if (closed) return Promise.reject(new Error("ECLIBRIDGECLOSED: CLI evaluation worker bridge closed"));
         const writeId = nextFsWriteId++;
         return new Promise<CliEvaluationFsWriteResult>((resolveWrite, rejectWrite) => {
           pendingFsWrites.set(writeId, {
@@ -424,20 +444,23 @@ export function createWorkerBackedAsyncCliModuleEvaluator(
       worker.addEventListener("error", onError);
       if (options.workerTimeoutMs !== undefined) {
         timeout = setTimeout(() => {
-          cleanup();
-          reject(new Error(`ECLIEWORKERTIMEOUT: CLI evaluation worker did not respond within ${options.workerTimeoutMs}ms`));
+          const error = new Error(`ECLIEWORKERTIMEOUT: CLI evaluation worker did not respond within ${options.workerTimeoutMs}ms`);
+          cleanup(error);
+          reject(error);
         }, options.workerTimeoutMs);
       }
       worker.postMessage({
         id,
         request,
         ...(options.root !== undefined ? { root: options.root } : {}),
+        ...(options.exitTimeoutMs !== undefined ? { exitTimeoutMs: options.exitTimeoutMs } : {}),
         ...(options.readyTimeoutMs !== undefined ? { readyTimeoutMs: options.readyTimeoutMs } : {}),
         ...(options.settleTicks !== undefined ? { settleTicks: options.settleTicks } : {}),
         ...(options.settleTimeoutMs !== undefined ? { settleTimeoutMs: options.settleTimeoutMs } : {}),
         ...(options.captureGlobalCalls !== undefined ? { captureGlobalCalls: options.captureGlobalCalls } : {}),
         ...(options.loopbackNetwork ? { bridgeLoopbackServer: true } : {}),
         ...(options.traceFs ? { traceFs: true } : {}),
+        ...(options.waitForExit ? { waitForExit: true } : {}),
         type: "cli:evaluate",
         workspaceSnapshot: options.workspace.snapshot()
       } satisfies CliEvaluationWorkerEvaluateMessage);
@@ -469,9 +492,11 @@ export async function evaluateCliModuleWorkerMessage(
       } : {}),
       reader: workspace,
       ...(message.root !== undefined ? { root: message.root } : {}),
+      ...(message.exitTimeoutMs !== undefined ? { exitTimeoutMs: message.exitTimeoutMs } : {}),
       ...(message.readyTimeoutMs !== undefined ? { readyTimeoutMs: message.readyTimeoutMs } : {}),
       ...(message.settleTicks !== undefined ? { settleTicks: message.settleTicks } : {}),
       ...(message.settleTimeoutMs !== undefined ? { settleTimeoutMs: message.settleTimeoutMs } : {}),
+      ...(message.waitForExit ? { waitForExit: true } : {}),
       ...(options.httpBridge ? { loopbackNetwork: options.httpBridge.network } : {}),
       writer: workspace
     })(message.request);
@@ -549,7 +574,7 @@ function startCliModuleEvaluation(
   options: CliModuleEvaluatorOptions,
   request: CliModuleEvaluationRequest,
   capabilities: { supportedModes: readonly ("cjs" | "esm")[] }
-): { ready: Promise<void>; finalize: () => CliRunResult } {
+): { ready: Promise<void>; exited: Promise<void>; finalize: () => CliRunResult } {
   const readiness = inspectCliEntryReadiness({
     entry: request.entry,
     reader: options.reader,
@@ -558,6 +583,7 @@ function startCliModuleEvaluation(
   if (readiness.status === "blocked") {
     return {
       ready: Promise.resolve(),
+      exited: Promise.resolve(),
       finalize() {
         return {
           stdout: "",
@@ -573,41 +599,89 @@ function startCliModuleEvaluation(
   let stdout = "";
   let stderr = "";
   let asyncExitCode: number | undefined;
+  const capturesExit = request.entry.name === "npm";
   const processOptions = {
     argv: ["node", request.entry.entry, ...request.args],
     cwd: request.cwd,
-    exitMode: "capture" as const,
+    // A thrown sentinel is catchable by userland. npm catches it after its
+    // exit handler has reset, then runs the handler a second time and reports
+    // "Exit prior to setting npm". Capture the request and emit the exit event
+    // instead; the evaluator treats that explicit request as authoritative.
+    // pnpm/Yarn use the thrown sentinel to stop their bundled top-level flow;
+    // npm catches that sentinel inside its own exit handler, so only npm uses
+    // the non-throwing exit-event path.
+    exitMode: capturesExit ? "capture" as const : "throw" as const,
+    ...(capturesExit ? { emitExitInCapture: true } : {}),
     ...(request.env ? { env: request.env } : {})
   };
   const process = new BrowserProcess(processOptions);
+  const timerScope = createCliTimerScope();
+  let requestedExitCode: number | undefined;
+  let resolveExited!: () => void;
+  const exited = new Promise<void>((resolve) => {
+    resolveExited = resolve;
+  });
+  process.on("exit", (code) => {
+    requestedExitCode = typeof code === "number" ? code : process.exitCode ?? 0;
+    resolveExited();
+  });
   options.onOutputSnapshot?.(() => ({ stderr, stdout }));
   process.on("stdout", (chunk) => {
-    stdout += String(chunk);
+    stdout = appendCliOutput(stdout, chunk);
   });
   process.on("stderr", (chunk) => {
-    stderr += String(chunk);
+    stderr = appendCliOutput(stderr, chunk);
   });
   const restoreHostErrorCapture = captureHostAsyncErrors((error) => {
-    asyncExitCode = 1;
-    stderr += `${errorMessage(error)}\n`;
+    const message = errorMessage(error);
+    const processExit = parseProcessExit(message);
+    asyncExitCode = processExit ?? 1;
+    if (processExit === null) stderr = appendCliOutput(stderr, `${message}\n`);
+    resolveExited();
   });
+  let runtime: ModuleRuntime | undefined;
   const globalObject: Record<string, unknown> = {
+    AbortController,
+    AbortSignal,
     ArrayBuffer,
+    Blob,
     Buffer: BrowserBuffer,
+    Crypto,
+    CryptoKey,
+    Error,
+    File,
+    FormData,
+    Headers,
+    ReadableStream,
+    Request,
+    Response,
     SharedArrayBuffer,
+    SubtleCrypto,
+    TextDecoder,
+    TextEncoder,
+    TransformStream,
     Uint8Array,
     URL,
+    URLSearchParams,
     WebAssembly,
-    __dynamicImport: createCliDynamicImport(),
-    clearImmediate: clearCliImmediate,
-    clearTimeout,
+    WritableStream,
+    __dynamicImport: createCliDynamicImport(() => runtime, options.root || "/workspace"),
+    atob,
+    btoa,
+    clearImmediate: timerScope.clearImmediate,
+    clearInterval: timerScope.clearInterval,
+    clearTimeout: timerScope.clearTimeout,
     crypto: cryptoBuiltin.webcrypto,
     fetch: createCliWorkspaceFetch(options.reader),
     navigator: {
       hardwareConcurrency: 4
     },
-    setImmediate: setCliImmediate,
-    setTimeout,
+    performance,
+    queueMicrotask,
+    setImmediate: timerScope.setImmediate,
+    setInterval: timerScope.setInterval,
+    setTimeout: timerScope.setTimeout,
+    structuredClone,
     ...(options.globals || {})
   };
   const consoleObject = createCliConsole(process);
@@ -627,13 +701,16 @@ function startCliModuleEvaluation(
   });
   const childProcess = createCliChildProcessBuiltin({
     env: request.env || {},
+    getRuntime: () => {
+      if (!runtime) throw new Error("ERR_CLI_MODULE_RUNTIME_NOT_READY");
+      return runtime;
+    },
     parentProcess: process,
     reader: options.reader,
     root: options.root || "/workspace",
     writer: options.writer
   });
 
-  let runtime: ModuleRuntime | undefined;
   const module = createCliModuleBuiltin(() => {
     if (!runtime) throw new Error("ERR_CLI_MODULE_RUNTIME_NOT_READY");
     return runtime;
@@ -644,13 +721,18 @@ function startCliModuleEvaluation(
     reader: options.reader,
     builtins: createBuiltinLoader({
       childProcess,
+      console: consoleObject,
       fs,
       ...(options.loopbackNetwork ? { httpServerNetwork: options.loopbackNetwork } : {}),
       module,
+      path: createCliPathBuiltin(process),
       process,
+      timers: timerScope.builtin,
+      timersPromises: timerScope.promisesBuiltin,
       workerThreads
     }),
     globals: {
+      Buffer: BrowserBuffer,
       __dynamicImport: globalObject.__dynamicImport,
       console: consoleObject,
       crypto: cryptoBuiltin.webcrypto,
@@ -666,7 +748,7 @@ function startCliModuleEvaluation(
     if (readiness.mode === "esm") {
       ready = runtime.importModule(request.entry.entry, request.entry.entry).then(() => undefined, (error) => {
         asyncExitCode = 1;
-        stderr += `${errorMessage(error)}\n`;
+        stderr = appendCliOutput(stderr, `${errorMessage(error)}\n`);
       });
     } else {
       runtime.requireSync(request.entry.entry, request.entry.entry);
@@ -678,23 +760,29 @@ function startCliModuleEvaluation(
       exitCode = exit;
     } else {
       exitCode = 1;
-      stderr += `${message}\n`;
+      stderr = appendCliOutput(stderr, `${message}\n`);
     }
   }
 
   return {
     ready,
+    exited,
     finalize() {
       restoreHostErrorCapture();
       if (asyncExitCode !== undefined) exitCode = asyncExitCode;
       if (process.exitCode !== undefined) exitCode = process.exitCode;
-      return {
+      // Some legacy CLIs catch the sentinel thrown by process.exit(), log it,
+      // and overwrite exitCode. The explicit exit request is authoritative.
+      if (requestedExitCode !== undefined) exitCode = requestedExitCode;
+      const result: CliRunResult = {
         stdout,
         stderr,
         exitCode,
         entry: request.entry.entry,
         ...(request.entry.entrySha256 ? { entrySha256: request.entry.entrySha256 } : {})
       };
+      Object.defineProperty(result, "dispose", { value: timerScope.dispose });
+      return result;
     }
   };
 }
@@ -708,7 +796,7 @@ function createCliModuleBuiltin(getRuntime: () => ModuleRuntime): RuntimeNamespa
     const parentUrl = normalizeCreateRequireFilename(filename);
     const require = ((specifier: string) => getRuntime().requireSync(specifier, parentUrl)) as ReturnType<typeof createRequire>;
     require.resolve = Object.assign(
-      (specifier: string) => getRuntime().resolve(specifier, parentUrl),
+      (specifier: string) => builtinModules.includes(specifier) ? specifier : getRuntime().resolve(specifier, parentUrl),
       {
         paths: () => RuntimeModuleBuiltin._nodeModulePaths(dirname(parentUrl))
       }
@@ -723,11 +811,17 @@ function createCliModuleBuiltin(getRuntime: () => ModuleRuntime): RuntimeNamespa
     return getRuntime().resolve(request, parent?.filename ? normalize(parent.filename) : "/workspace/index.cjs");
   };
 
-  return Object.freeze({
-    ...moduleBuiltin,
+  class CliModule extends RuntimeModuleBuiltin {
+    override require(specifier: string): RuntimeValue {
+      return getRuntime().requireSync(specifier, this.filename || "/workspace/index.cjs");
+    }
+  }
+  return Object.assign(CliModule, moduleBuiltin, {
+    Module: CliModule,
+    default: CliModule,
     _resolveFilename: resolveFilename,
     createRequire
-  });
+  }) as unknown as RuntimeNamespace;
 }
 
 function createCliWorkspaceFetch(reader: WorkspaceModuleReader): (input: string | URL) => Promise<{
@@ -783,6 +877,7 @@ function normalizeCreateRequireFilename(filename: string | URL): string {
 
 function createCliChildProcessBuiltin(options: {
   env: RuntimeEnv;
+  getRuntime: () => ModuleRuntime;
   parentProcess: BrowserProcess;
   reader: WorkspaceModuleReader;
   root: string;
@@ -876,15 +971,147 @@ function createCliChildProcessBuiltin(options: {
     return execFileSync("sh", ["-c", command], spawnOptions);
   };
 
+  const fork = (modulePath: string, argsOrOptions?: readonly string[] | CliSpawnOptions, maybeOptions?: CliSpawnOptions): ChildProcess => {
+    const forkOptions: CliSpawnOptions = Array.isArray(argsOrOptions)
+      ? maybeOptions || {}
+      : (argsOrOptions as CliSpawnOptions | undefined) || {};
+    const child = new ChildProcess();
+    child.pid = nextPid++;
+    const forkedChild = child as ChildProcess & {
+      connected: boolean;
+      disconnect(): void;
+      send(message: unknown): boolean;
+    };
+    const forkEnv = Object.fromEntries(Object.entries(forkOptions.env || {}).filter((entry): entry is [string, string] => typeof entry[1] === "string"));
+    let jestWorkerPath: string | null = null;
+    let jestSetupArgs: unknown[] = [];
+    let jestInitialized = false;
+    forkedChild.connected = true;
+    forkedChild.disconnect = () => {
+      forkedChild.connected = false;
+      child.emit("disconnect");
+    };
+    forkedChild.send = (message: unknown): boolean => {
+      if (!forkedChild.connected) return false;
+      if (Array.isArray(message) && typeof message[0] === "number") {
+        if (message[0] === 0) {
+          jestWorkerPath = typeof message[2] === "string" ? message[2] : null;
+          jestSetupArgs = Array.isArray(message[3]) ? message[3] : [];
+          return true;
+        }
+        if (message[0] === 2) {
+          forkedChild.disconnect();
+          return true;
+        }
+        if (message[0] === 1 && jestWorkerPath) {
+          const workerPath = jestWorkerPath;
+          const method = typeof message[2] === "string" ? message[2] : "default";
+          const args = Array.isArray(message[3]) ? message[3] : [];
+          queueMicrotask(() => {
+            const previousEnv = { ...options.parentProcess.env };
+            Object.assign(options.parentProcess.env, forkEnv);
+            const restoreEnv = () => {
+              for (const key of Object.keys(options.parentProcess.env)) {
+                if (!(key in previousEnv)) delete options.parentProcess.env[key];
+              }
+              Object.assign(options.parentProcess.env, previousEnv);
+            };
+            try {
+              const workerModule = options.getRuntime().requireSync(workerPath, modulePath) as Record<string, unknown> & {
+                default?: unknown;
+                setup?: (...args: unknown[]) => unknown;
+              };
+              const invoke = async () => {
+                if (!jestInitialized && typeof workerModule.setup === "function") {
+                  jestInitialized = true;
+                  await workerModule.setup(...jestSetupArgs);
+                }
+                const candidate = method === "default" && workerModule.__esModule ? workerModule.default : workerModule[method];
+                if (typeof candidate !== "function") throw new TypeError(`Jest worker method is not callable: ${method}`);
+                return candidate.apply(workerModule, args);
+              };
+              Promise.resolve(invoke()).then((value) => {
+                restoreEnv();
+                child.emit("message", [0, value]);
+              }, (error) => {
+                restoreEnv();
+                const normalized = error instanceof Error ? error : new Error(String(error));
+                child.emit("message", [1, normalized.name, normalized.message, normalized.stack, { ...normalized }]);
+              });
+            } catch (error) {
+              restoreEnv();
+              const normalized = error instanceof Error ? error : new Error(String(error));
+              child.emit("message", [1, normalized.name, normalized.message, normalized.stack, { ...normalized }]);
+            }
+          });
+          return true;
+        }
+      }
+      const workerOptions = typeof message === "object" && message !== null
+        ? (message as { nextWorkerOptions?: unknown }).nextWorkerOptions
+        : undefined;
+      if (workerOptions === undefined) return true;
+      queueMicrotask(() => {
+        try {
+          const workerModule = options.getRuntime().requireSync(modulePath, modulePath) as {
+            startServer?: (serverOptions: unknown) => Promise<void> | void;
+          };
+          if (typeof workerModule.startServer !== "function") {
+            throw new Error(`ERR_CLI_FORK_ENTRY_UNSUPPORTED: ${modulePath}`);
+          }
+          Promise.resolve(workerModule.startServer(workerOptions)).then(() => {
+            child.emit("message", {
+              nextServerReady: true,
+              port: (workerOptions as { port?: number }).port
+            });
+          }, (error) => {
+            child.emit("error", error);
+            child.exitCode = 1;
+            child.emit("exit", 1, null);
+            child.emit("close", 1, null);
+          });
+        } catch (error) {
+          child.emit("error", error);
+          child.exitCode = 1;
+          child.emit("exit", 1, null);
+          child.emit("close", 1, null);
+        }
+      });
+      return true;
+    };
+    if (forkOptions.stdio === "inherit") {
+      child.stdout.on("data", (chunk) => options.parentProcess.stdout.write(chunk));
+      child.stderr.on("data", (chunk) => options.parentProcess.stderr.write(chunk));
+    }
+    if (!modulePath.includes("jest-worker/processChild")) {
+      queueMicrotask(() => child.emit("message", { nextWorkerReady: true }));
+    }
+    return child;
+  };
+
   return Object.freeze({
     ChildProcess,
     exec,
     execFile,
     execFileSync,
     execSync,
+    fork,
     spawn,
     spawnSync
   });
+}
+
+function createCliPathBuiltin(process: BrowserProcess): RuntimeNamespace {
+  const resolve = (...paths: string[]) => pathBuiltin.resolve(process.cwd(), ...paths);
+  const posix = { ...pathBuiltin.posix, resolve };
+  const boundPath = {
+    ...pathBuiltin,
+    posix,
+    resolve,
+    win32: posix
+  } as RuntimeNamespace;
+  Object.defineProperty(boundPath, "default", { configurable: true, enumerable: false, value: boundPath, writable: true });
+  return boundPath;
 }
 
 function runCliChildCommand(
@@ -1208,16 +1435,106 @@ function createWorkerContextBuiltin(parentPort: RuntimeValue, threadId: number, 
 let nextInlineWorkerThreadId = 1;
 let nextCliEvaluationWorkerRequestId = 1;
 
-function setCliImmediate(callback: (...args: unknown[]) => void, ...args: unknown[]): ReturnType<typeof setTimeout> {
-  return setTimeout(() => callback(...args), 0);
-}
-
-function clearCliImmediate(handle: ReturnType<typeof setTimeout>): void {
-  clearTimeout(handle);
+function createCliTimerScope(): {
+  builtin: RuntimeNamespace;
+  clearImmediate: (handle: ReturnType<typeof setTimeout>) => void;
+  clearInterval: (handle: ReturnType<typeof setInterval>) => void;
+  clearTimeout: (handle: ReturnType<typeof setTimeout>) => void;
+  dispose: () => void;
+  promisesBuiltin: RuntimeNamespace;
+  setImmediate: (callback: (...args: unknown[]) => void, ...args: unknown[]) => ReturnType<typeof setTimeout>;
+  setInterval: (callback: (...args: unknown[]) => void, delay?: number, ...args: unknown[]) => ReturnType<typeof setInterval>;
+  setTimeout: (callback: (...args: unknown[]) => void, delay?: number, ...args: unknown[]) => ReturnType<typeof setTimeout>;
+} {
+  const timeoutHandles = new Set<ReturnType<typeof setTimeout>>();
+  const intervalHandles = new Set<ReturnType<typeof setInterval>>();
+  const scopedClearTimeout = (handle: ReturnType<typeof setTimeout>) => {
+    timeoutHandles.delete(handle);
+    clearTimeout(handle);
+  };
+  const scopedSetTimeout = (callback: (...args: unknown[]) => void, delay = 0, ...args: unknown[]) => {
+    let handle: ReturnType<typeof setTimeout>;
+    handle = setTimeout(() => {
+      timeoutHandles.delete(handle);
+      callback(...args);
+    }, delay);
+    timeoutHandles.add(handle);
+    return handle;
+  };
+  const scopedClearInterval = (handle: ReturnType<typeof setInterval>) => {
+    intervalHandles.delete(handle);
+    clearInterval(handle);
+  };
+  const scopedSetInterval = (callback: (...args: unknown[]) => void, delay = 0, ...args: unknown[]) => {
+    const handle = setInterval(callback, delay, ...args);
+    intervalHandles.add(handle);
+    return handle;
+  };
+  const scopedSetImmediate = (callback: (...args: unknown[]) => void, ...args: unknown[]) => scopedSetTimeout(callback, 0, ...args);
+  const dispose = () => {
+    for (const handle of timeoutHandles) clearTimeout(handle);
+    for (const handle of intervalHandles) clearInterval(handle);
+    timeoutHandles.clear();
+    intervalHandles.clear();
+  };
+  const builtin = Object.freeze({
+    clearImmediate: scopedClearTimeout,
+    clearInterval: scopedClearInterval,
+    clearTimeout: scopedClearTimeout,
+    default: {
+      clearImmediate: scopedClearTimeout,
+      clearInterval: scopedClearInterval,
+      clearTimeout: scopedClearTimeout,
+      setImmediate: scopedSetImmediate,
+      setInterval: scopedSetInterval,
+      setTimeout: scopedSetTimeout
+    },
+    setImmediate: scopedSetImmediate,
+    setInterval: scopedSetInterval,
+    setTimeout: scopedSetTimeout
+  });
+  const setTimeoutPromise = <T = void>(delay = 1, value?: T, options: { signal?: AbortSignal } = {}) => new Promise<T>((resolve, reject) => {
+    if (options.signal?.aborted) {
+      reject(options.signal.reason);
+      return;
+    }
+    const handle = scopedSetTimeout(() => {
+      options.signal?.removeEventListener("abort", onAbort);
+      resolve(value as T);
+    }, delay);
+    const onAbort = () => {
+      scopedClearTimeout(handle);
+      options.signal?.removeEventListener("abort", onAbort);
+      reject(options.signal?.reason);
+    };
+    options.signal?.addEventListener("abort", onAbort, { once: true });
+  });
+  const promisesBuiltin = Object.freeze({ default: { setTimeout: setTimeoutPromise }, setTimeout: setTimeoutPromise });
+  return {
+    builtin,
+    clearImmediate: scopedClearTimeout,
+    clearInterval: scopedClearInterval,
+    clearTimeout: scopedClearTimeout,
+    dispose,
+    promisesBuiltin,
+    setImmediate: scopedSetImmediate,
+    setInterval: scopedSetInterval,
+    setTimeout: scopedSetTimeout
+  };
 }
 
 function errorMessage(error: unknown): string {
   return formatErrorWithCauses(error, new Set());
+}
+
+const maxCliOutputCharacters = 1_048_576;
+
+function appendCliOutput(current: string, chunk: unknown): string {
+  if (current.length >= maxCliOutputCharacters) return current;
+  const value = String(chunk);
+  const remaining = maxCliOutputCharacters - current.length;
+  if (value.length <= remaining) return current + value;
+  return `${current}${value.slice(0, Math.max(0, remaining - 28))}\n[CLI output truncated]\n`;
 }
 
 function fsTraceError(error: unknown): string {
@@ -1262,18 +1579,57 @@ function captureHostAsyncErrors(onError: (error: unknown) => void): () => void {
   };
 }
 
-function createCliConsole(process: BrowserProcess): Pick<Console, "error" | "log" | "warn"> {
+function createCliConsole(process: BrowserProcess): Console {
+  const counts = new Map<string, number>();
+  const timers = new Map<string, number>();
+  const format = (value: unknown) => value instanceof Error ? value.stack || value.message : String(value);
+  const stdout = (...values: unknown[]) => process.stdout.write(`${values.map(format).join(" ")}\n`);
+  const stderr = (...values: unknown[]) => {
+    if (values.length === 1 && parseProcessExit(errorMessage(values[0])) !== null) return;
+    process.stderr.write(`${values.map(format).join(" ")}\n`);
+  };
   return {
-    error(...values: unknown[]) {
-      process.stderr.write(`${values.join(" ")}\n`);
+    assert(condition?: boolean, ...values: unknown[]) {
+      if (!condition) stderr("Assertion failed", ...values);
     },
+    count(label = "default") {
+      const next = (counts.get(label) || 0) + 1;
+      counts.set(label, next);
+      stdout(`${label}: ${next}`);
+    },
+    countReset(label = "default") {
+      counts.delete(label);
+    },
+    debug: stdout,
+    dir(value: unknown) {
+      stdout(typeof value === "string" ? value : JSON.stringify(value));
+    },
+    error(...values: unknown[]) {
+      stderr(...values);
+    },
+    info: stdout,
     log(...values: unknown[]) {
-      process.stdout.write(`${values.join(" ")}\n`);
+      stdout(...values);
+    },
+    time(label = "default") {
+      timers.set(label, performance.now());
+    },
+    timeEnd(label = "default") {
+      const started = timers.get(label);
+      if (started !== undefined) stdout(`${label}: ${performance.now() - started}ms`);
+      timers.delete(label);
+    },
+    timeLog(label = "default", ...values: unknown[]) {
+      const started = timers.get(label);
+      if (started !== undefined) stdout(`${label}: ${performance.now() - started}ms`, ...values);
+    },
+    trace(...values: unknown[]) {
+      stderr(...values);
     },
     warn(...values: unknown[]) {
-      process.stderr.write(`${values.join(" ")}\n`);
+      stderr(...values);
     }
-  };
+  } as unknown as Console;
 }
 
 async function settleCliEvaluation(options: AsyncCliModuleEvaluatorOptions): Promise<void> {
@@ -1307,12 +1663,53 @@ async function waitForCliEvaluationReady(
   }
 }
 
-function createCliDynamicImport(): (specifier: string) => Promise<RuntimeNamespace> {
+async function waitForCliEvaluationExit(
+  exited: Promise<void>,
+  options: AsyncCliModuleEvaluatorOptions
+): Promise<{ timeoutMs: number } | null> {
+  if (options.exitTimeoutMs === undefined) {
+    await exited;
+    return null;
+  }
+  const timeoutMs = options.exitTimeoutMs;
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      exited.then(() => null),
+      new Promise<{ timeoutMs: number }>((resolve) => {
+        timeout = setTimeout(() => resolve({ timeoutMs }), timeoutMs);
+      })
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
+}
+
+function createCliDynamicImport(
+  getRuntime?: () => ModuleRuntime | undefined,
+  root = "/workspace"
+): (specifier: string) => Promise<RuntimeNamespace> {
   return async (specifier: string): Promise<RuntimeNamespace> => {
     if (specifier === "chalk") return createChalkNamespace();
     if (specifier === "supports-color") return createSupportsColorNamespace();
+    const packageSpecifier = packageSpecifierFromRootFileUrl(specifier, root);
+    const runtime = getRuntime?.();
+    if (packageSpecifier && runtime) {
+      return runtime.importModule(packageSpecifier, join(root, "package.json"));
+    }
     throw new Error(`ERR_BROWSER_DYNAMIC_IMPORT_UNSUPPORTED: ${specifier}`);
   };
+}
+
+function packageSpecifierFromRootFileUrl(specifier: string, root: string): string | null {
+  if (!specifier.startsWith("file:")) return null;
+  const path = normalize(fileURLToPath(specifier));
+  const prefix = `${normalize(root).replace(/\/$/, "")}/`;
+  const packagePath = path.startsWith(prefix) ? path.slice(prefix.length) : path.replace(/^\//, "");
+  const segments = packagePath.split("/").filter(Boolean);
+  if (segments[0]?.startsWith("@") && segments[1]) return `${segments[0]}/${segments[1]}`;
+  if (segments.length === 1 && segments[0]) return segments[0];
+  return null;
 }
 
 function createChalkNamespace(): RuntimeNamespace {
@@ -1377,7 +1774,8 @@ function createWorkspaceFsFacade(
   const watchers = new Set<CliFsWatcher>();
   const statWatchers = new Map<string, Set<CliFsStatWatcher>>();
   const modifiedTimes = new Map<string, number>();
-  let nextModifiedTime = 1;
+  const initialModifiedTime = Date.now();
+  let nextModifiedTime = initialModifiedTime + 1;
   const resolvePath = (path: string | URL | { href?: string }) => normalizeFsPath(path, getCwd());
   const traceFs = (entry: CliEvaluationFsTraceEntry) => {
     if (fsTrace && fsTrace.length < 1000) fsTrace.push(entry);
@@ -1388,6 +1786,8 @@ function createWorkspaceFsFacade(
     callback(null, normalized);
   };
   realpath.native = realpath;
+  const realpathSync: CliFsRealpathSync = (path) => resolvePath(path);
+  realpathSync.native = realpathSync;
 
   function readFileSync(path: string | URL): Uint8Array;
   function readFileSync(path: string | URL, encoding: "utf8" | "utf-8"): string;
@@ -1537,6 +1937,12 @@ function createWorkspaceFsFacade(
           return false;
         }
       }
+    },
+    exists(path: string, callback: (exists: boolean) => void): void {
+      // Node's deprecated fs.exists API intentionally uses a single boolean
+      // callback rather than the usual error-first callback contract. Yarn
+      // Classic still promisifies this API during workspace discovery.
+      queueMicrotask(() => callback(facade.existsSync(path)));
     },
     access(path: string, modeOrCallback?: number | ((error?: Error | null) => void), callback?: (error?: Error | null) => void): void {
       const cb = typeof modeOrCallback === "function" ? modeOrCallback : callback;
@@ -1690,6 +2096,9 @@ function createWorkspaceFsFacade(
       }
     },
     promises: {
+      async access(path: string): Promise<void> {
+        facade.accessSync(path);
+      },
       async chmod(path: string, mode: number): Promise<void> {
         facade.chmodSync(path, mode);
       },
@@ -1849,9 +2258,7 @@ function createWorkspaceFsFacade(
       }
     },
     realpath,
-    realpathSync(path: string): string {
-      return resolvePath(path);
-    },
+    realpathSync,
     rename(source: string, target: string, callback: (error?: Error | null) => void = () => undefined): void {
       try {
         facade.renameSync(source, target);
@@ -2043,6 +2450,25 @@ function createWorkspaceFsFacade(
     }
   };
 
+  function CliReadStream(this: Record<string, unknown>, path: string, options: CliCreateReadStreamOptions | "utf8" | "utf-8" = {}) {
+    const stream = facade.createReadStream(path, options);
+    if (!(this instanceof CliReadStream)) return stream;
+    return bindCliFsStream(this, stream);
+  }
+
+  function CliWriteStream(this: Record<string, unknown>, path: string, options: CliCreateWriteStreamOptions = {}) {
+    const stream = facade.createWriteStream(path, options);
+    if (!(this instanceof CliWriteStream)) return stream;
+    return bindCliFsStream(this, stream);
+  }
+
+  Object.assign(facade, {
+    FileReadStream: CliReadStream,
+    FileWriteStream: CliWriteStream,
+    ReadStream: CliReadStream,
+    WriteStream: CliWriteStream
+  });
+
   (facade as RuntimeFsBinding & CliFsDebugBinding).__debugWatchSummary = () => ({
     statWatcherCount: statWatchers.size,
     watcherCount: watchers.size,
@@ -2096,8 +2522,7 @@ function createWorkspaceFsFacade(
   }
 
   function withModifiedTime<T extends ReturnType<RuntimeFsBinding["statSync"]>>(path: string, stats: T): T {
-    const modifiedTime = modifiedTimes.get(normalize(path));
-    if (modifiedTime === undefined) return stats;
+    const modifiedTime = modifiedTimes.get(normalize(path)) ?? initialModifiedTime;
     const time = new Date(modifiedTime);
     return {
       ...stats,
@@ -2133,6 +2558,32 @@ function createWorkspaceFsFacade(
     if (!file) throw createFsError("EBADF", `Bad file descriptor: ${fd}`);
     return file;
   }
+}
+
+function bindCliFsStream<T extends Record<string, unknown>>(target: T, stream: Readable | Writable): T {
+  Object.assign(target, stream);
+  let prototype = Object.getPrototypeOf(stream) as object | null;
+  while (prototype && prototype !== Object.prototype) {
+    for (const name of Object.getOwnPropertyNames(prototype)) {
+      if (name === "constructor" || Object.hasOwn(target, name)) continue;
+      const descriptor = Object.getOwnPropertyDescriptor(prototype, name);
+      if (typeof descriptor?.value === "function") {
+        Object.defineProperty(target, name, {
+          configurable: true,
+          value: descriptor.value.bind(stream),
+          writable: true
+        });
+      } else if (descriptor?.get || descriptor?.set) {
+        Object.defineProperty(target, name, {
+          configurable: true,
+          ...(descriptor.get ? { get: descriptor.get.bind(stream) } : {}),
+          ...(descriptor.set ? { set: descriptor.set.bind(stream) } : {})
+        });
+      }
+    }
+    prototype = Object.getPrototypeOf(prototype) as object | null;
+  }
+  return target;
 }
 
 function createFileHandle(fh: number, fs: CliFileHandleFs): CliFileHandle {
@@ -2196,6 +2647,7 @@ function callWithOptionalFsCallback(run: () => void, callback: (error?: Error | 
 type CliFsRealpath = ((path: string, callback: (error: Error | null, resolvedPath?: string) => void) => void) & {
   native?: CliFsRealpath;
 };
+type CliFsRealpathSync = ((path: string) => string) & { native?: CliFsRealpathSync };
 
 interface CliOpenFile {
   bytes: Uint8Array;
@@ -2556,6 +3008,6 @@ function dirnameOf(path: string): string {
 }
 
 function parseProcessExit(message: string): number | null {
-  const match = message.match(/^process\.exit\((\d+)\)$/);
+  const match = message.match(/^(?:Error:\s*)?process\.exit\((\d+)\)(?:\n|$)/);
   return match ? Number(match[1]) : null;
 }

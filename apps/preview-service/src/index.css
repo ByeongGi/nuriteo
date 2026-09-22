@@ -219,3 +219,16 @@ textarea {
 #terminal-xterm .xterm-viewport {
   overflow-y: auto !important;
 }
+
+.folder-icon { color: var(--accent); }
+.file-icon-code { color: #7eb6ff; }
+.file-icon-data { color: #e0b45a; }
+.file-icon-style { color: #d88ee8; }
+.file-icon-markup { color: #e27878; }
+.file-icon-document { color: #62c28a; }
+.file-icon-file { color: var(--muted); }
+
+html[data-icon-theme="monochrome"] .folder-icon,
+html[data-icon-theme="monochrome"] .file-icon {
+  color: var(--muted);
+}

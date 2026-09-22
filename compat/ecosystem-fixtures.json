@@ -66,6 +66,7 @@
       "id": "vite-official-template-react",
       "name": "Vite official template-react",
       "repository": "https://github.com/vitejs/vite",
+      "revision": "1544bb1b7ac92f775e9d0dea97954c99cc6cbd43",
       "subdirectory": "packages/create-vite/template-react",
       "license": "MIT",
       "packageManager": "pnpm",
@@ -83,6 +84,7 @@
       "id": "awe-templates-react-starter",
       "name": "awe-templates/react-starter",
       "repository": "https://github.com/awe-templates/react-starter",
+      "revision": "a2a1e370eb7dec2f3a87ba88e7e08efb9eaf1654",
       "license": "MIT",
       "packageManager": "pnpm",
       "lockfile": "pnpm-lock.yaml",
@@ -100,6 +102,7 @@
       "id": "hvalette-react-vite-template",
       "name": "hvalette/react-vite-template",
       "repository": "https://github.com/hvalette/react-vite-template",
+      "revision": "22959650fcfe432f98d023eb57efa367073ec39e",
       "license": "MIT",
       "packageManager": "npm",
       "lockfile": "package-lock.json",
@@ -117,6 +120,7 @@
       "id": "gabbloquet-vite-react18",
       "name": "gabbloquet/vite-react18",
       "repository": "https://github.com/gabbloquet/vite-react18",
+      "revision": "73b69837690a8ccf64015126ea82a8d297a1b584",
       "license": "unknown",
       "packageManager": "npm",
       "lockfile": "package-lock.json",
@@ -133,6 +137,7 @@
       "id": "sivamani18-vite-react-ts-boilerplate",
       "name": "Sivamani-18/vite-react-ts-boilerplate",
       "repository": "https://github.com/Sivamani-18/vite-react-ts-boilerplate",
+      "revision": "7bd73d35ca4036ba4a68ee7f9a4ec11df1d2f2e3",
       "license": "unknown",
       "packageManager": "npm",
       "lockfile": "package-lock-or-none",
@@ -150,6 +155,7 @@
       "id": "fuhouyu-homepage",
       "name": "fuhouyu/homepage",
       "repository": "https://github.com/fuhouyu/homepage",
+      "revision": "13b25559fdeebbee991ec8763803487cfb6b456d",
       "license": "listed-public-repo",
       "packageManager": "npm",
       "lockfile": "package-lock-or-none",
@@ -167,6 +173,7 @@
       "id": "seongpil0948-react-dev-guide",
       "name": "seongpil0948/react-dev-guide",
       "repository": "https://github.com/seongpil0948/react-dev-guide",
+      "revision": "0d3e853ed95b3f25d8f9c24dc1a19b3f9cbecbba",
       "license": "unknown",
       "packageManager": "pnpm",
       "lockfile": "pnpm-lock.yaml",
@@ -184,6 +191,7 @@
       "id": "ravaniproshan-velorah-landing",
       "name": "RavaniRoshan/velorah-landing",
       "repository": "https://github.com/RavaniRoshan/velorah-landing",
+      "revision": "ebd83651f56115e04988c1dceb7e46a337defaa3",
       "license": "unknown",
       "packageManager": "pnpm",
       "lockfile": "pnpm-lock-or-workspace",
@@ -201,6 +209,7 @@
       "id": "commencis-starter-react-vite",
       "name": "Commencis/starter-react-vite",
       "repository": "https://github.com/Commencis/starter-react-vite",
+      "revision": "a0647b6d566ff61868ac91ac8132b8480b05e652",
       "license": "Apache-2.0",
       "packageManager": "pnpm",
       "lockfile": "pnpm-lock.yaml",
@@ -218,6 +227,7 @@
       "id": "r35007-vite-react-typescript",
       "name": "R35007/vite-react-typescript",
       "repository": "https://github.com/R35007/vite-react-typescript",
+      "revision": "c1ae13ccab557fffcdeed0eed356b5ae95ef7318",
       "license": "MIT",
       "packageManager": "npm",
       "lockfile": "package-lock.json",
@@ -246,6 +256,11 @@
       "nativeDependencyRisk": "low",
       "status": "selected",
       "cohort": "framework-vue",
+      "upstream": {
+        "repository": "https://github.com/vitejs/vite",
+        "revision": "1544bb1b7ac92f775e9d0dea97954c99cc6cbd43",
+        "subdirectory": "packages/create-vite/template-vue"
+      },
       "source": "tests/fixtures/vite-vue"
     },
     {
@@ -263,6 +278,11 @@
       "nativeDependencyRisk": "low",
       "status": "selected",
       "cohort": "framework-svelte",
+      "upstream": {
+        "repository": "https://github.com/vitejs/vite",
+        "revision": "1544bb1b7ac92f775e9d0dea97954c99cc6cbd43",
+        "subdirectory": "packages/create-vite/template-svelte"
+      },
       "source": "tests/fixtures/vite-svelte"
     },
     {

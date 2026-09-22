@@ -34,6 +34,23 @@ assert.equal(imported.readText("src/main.js"), "console.log(\"exported\")\n");
 assert.equal(opfs.readFile("projects/project-import/CURRENT").generation, 1);
 assert.equal(imported.loadLatest().metadata.framework, "vite-react");
 
+const encoded = source.exportSnapshot(1236);
+assert.ok(encoded instanceof Uint8Array);
+const binaryImport = createProjectWorkspaceStore({
+  projectId: "project-binary-import",
+  root: "/workspace/project"
+});
+const binarySnapshot = binaryImport.importSnapshot(encoded);
+assert.equal(binarySnapshot.metadata.name, "Exported");
+assert.equal(binaryImport.readText("src/main.js"), "console.log(\"exported\")\n");
+
+const corruptedArchive = JSON.parse(new TextDecoder().decode(encoded));
+corruptedArchive.snapshot.files[0].data = "tampered";
+assert.throws(
+  () => binaryImport.importSnapshot(new TextEncoder().encode(JSON.stringify(corruptedArchive))),
+  /integrity mismatch/
+);
+
 now += 101;
 const legacy = migrateProjectWorkspaceSnapshot({
   schemaVersion: 0,

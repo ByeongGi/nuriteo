@@ -45,6 +45,23 @@ export type { ProjectServiceOptions } from "./project-service.ts";
 export { ShareService } from "./share-service.ts";
 export type { ResolvedShare, ShareServiceOptions } from "./share-service.ts";
 
+export { HmacSessionIdentityProvider, FileProductionDatabase, FileProductionObjectStorage } from "./production-adapters.ts";
+export { ProductionServiceBackend } from "./production-service.ts";
+export { handleProductionApi } from "./production-api.ts";
+export type { ProductionApiRequest, ProductionApiResponse } from "./production-api.ts";
+export type {
+  AuditEvent,
+  CloudProjectRecord,
+  CloudProjectSnapshot,
+  CloudShareRecord,
+  IdentityPrincipal,
+  IdentityProviderAdapter,
+  ProductionBackendOptions,
+  ProductionDatabaseAdapter,
+  ProductionObjectStorageAdapter,
+  UsageEvent
+} from "./production-types.ts";
+
 import { AuthService } from "./auth.ts";
 import { InMemoryRemoteBackup } from "./remote-backup.ts";
 import { ProjectService } from "./project-service.ts";

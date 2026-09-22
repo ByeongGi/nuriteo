@@ -1,5 +1,5 @@
 import { ShellRuntime, createShellRuntime } from "./runtime.ts";
-import type { ShellRunResult, ShellRuntimeOptions } from "./types.ts";
+import type { ShellRunResult, ShellRuntimeOptions, ShellTerminalControl, ShellTerminalSize } from "./types.ts";
 
 export type TerminalEntryStatus = "running" | "completed" | "cancelled";
 
@@ -30,14 +30,24 @@ export interface TerminalRunResult extends ShellRunResult {
   entry: TerminalTranscriptEntry;
 }
 
+export interface TerminalSessionSnapshot {
+  activeEntry: TerminalTranscriptEntry | null;
+  cwd: string;
+  env: Record<string, string>;
+  size: ShellTerminalSize;
+}
+
 export class TerminalSession {
-  #active: { controller: AbortController; entry: TerminalTranscriptEntry } | null = null;
+  #active: { controller: AbortController; entry: TerminalTranscriptEntry; signal: string | null } | null = null;
   #nextId = 1;
   #now: () => number;
   #onChunk: ((chunk: TerminalOutputChunk) => void) | null;
   #runtime: ShellRuntime;
   #runtimeOptions: ShellRuntimeOptions;
   #transcript: TerminalTranscriptEntry[] = [];
+  #inputListeners = new Set<(data: string) => void>();
+  #resizeListeners = new Set<(size: ShellTerminalSize) => void>();
+  #size: ShellTerminalSize = { cols: 80, rows: 24 };
 
   constructor(options: TerminalSessionOptions = {}) {
     const { now, onChunk, ...runtimeOptions } = options;
@@ -59,11 +69,35 @@ export class TerminalSession {
     return this.#transcript.map(cloneEntry);
   }
 
+  snapshot(): TerminalSessionSnapshot {
+    return {
+      activeEntry: this.activeEntry ? cloneEntry(this.activeEntry) : null,
+      cwd: this.#runtime.cwd,
+      env: { ...this.#runtime.env },
+      size: { ...this.#size }
+    };
+  }
+
+  write(data: string): boolean {
+    if (!this.#active) return false;
+    for (const listener of this.#inputListeners) listener(data);
+    return true;
+  }
+
+  resize(cols: number, rows: number): ShellTerminalSize {
+    if (!Number.isInteger(cols) || !Number.isInteger(rows) || cols < 1 || rows < 1) {
+      throw new RangeError("terminal size must use positive integer columns and rows");
+    }
+    this.#size = { cols, rows };
+    for (const listener of this.#resizeListeners) listener({ ...this.#size });
+    return { ...this.#size };
+  }
+
   async run(command: string): Promise<TerminalRunResult> {
     if (this.#active) throw new Error("terminal command already running");
     const controller = new AbortController();
     const entry = this.#createEntry(command);
-    this.#active = { controller, entry };
+    this.#active = { controller, entry, signal: null };
     this.#transcript.push(entry);
     let outputReceived = false;
 
@@ -75,7 +109,8 @@ export class TerminalSession {
           else entry.stderr += chunk.data;
           this.#onChunk?.({ entryId: entry.id, ...chunk });
         },
-        signal: controller.signal
+        signal: controller.signal,
+        terminal: this.#terminalControl()
       });
       entry.stdout = result.stdout;
       entry.stderr = result.stderr;
@@ -97,8 +132,20 @@ export class TerminalSession {
 
   cancel(entryId = this.#active?.entry.id): boolean {
     if (!this.#active || entryId !== this.#active.entry.id) return false;
-    this.#active.controller.abort();
+    this.#active.signal = "SIGINT";
+    this.#active.controller.abort("SIGINT");
     return true;
+  }
+
+  signal(signal: "SIGINT" | "SIGTERM" | "SIGKILL" = "SIGTERM"): boolean {
+    if (!this.#active) return false;
+    this.#active.signal = signal;
+    this.#active.controller.abort(signal);
+    return true;
+  }
+
+  kill(): boolean {
+    return this.signal("SIGKILL");
   }
 
   restart(): void {
@@ -124,6 +171,20 @@ export class TerminalSession {
     if (!this.#onChunk) return;
     if (entry.stdout) this.#onChunk({ entryId: entry.id, stream: "stdout", data: entry.stdout });
     if (entry.stderr) this.#onChunk({ entryId: entry.id, stream: "stderr", data: entry.stderr });
+  }
+
+  #terminalControl(): ShellTerminalControl {
+    return {
+      size: { ...this.#size },
+      onInput: (listener) => {
+        this.#inputListeners.add(listener);
+        return () => this.#inputListeners.delete(listener);
+      },
+      onResize: (listener) => {
+        this.#resizeListeners.add(listener);
+        return () => this.#resizeListeners.delete(listener);
+      }
+    };
   }
 }
 

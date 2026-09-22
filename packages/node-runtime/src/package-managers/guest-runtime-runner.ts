@@ -7,6 +7,7 @@ import type {
 } from "./types.ts";
 import { applyNpmInstallPlan, createNpmInstallPlan } from "./npm-install.ts";
 import { applyPnpmStorePlan, createPnpmStorePlan } from "./pnpm-store.ts";
+import { applyYarnInstallPlan, createYarnInstallPlan } from "./yarn-install.ts";
 import { createCliModuleEvaluator } from "./cli-evaluator.ts";
 import { createPackageScriptRunner, type PackageScriptReader } from "./script-runner.ts";
 
@@ -143,6 +144,26 @@ function applyGuestInstallPlan(
     };
   }
 
+  if (request.name === "yarn") {
+    const plan = createYarnInstallPlan({
+      cwd: request.cwd,
+      linkStrategy: options.workspace.linkStrategy || "copy-fallback",
+      reader: options.workspace.reader
+    });
+    const applied = applyYarnInstallPlan(plan, options.workspace.writer);
+    const lifecycle = shouldRunLifecycleScripts(request.args)
+      ? runGuestPackageLifecycles(request, options, applied.links.map((link) => link.linkPath))
+      : { stdout: "", stderr: "", exitCode: 0 };
+    return {
+      ...baseResult(request),
+      bootMode: "install-plan-application",
+      commandKind,
+      stdout: `yarn install: applied ${applied.links.length} local file links and ${applied.binLinks.length} bin links\n${lifecycle.stdout}`,
+      stderr: lifecycle.stderr,
+      exitCode: lifecycle.exitCode
+    };
+  }
+
   const plan = createPnpmStorePlan({
     cwd: request.cwd,
     linkStrategy: options.workspace.linkStrategy || "copy-fallback",
@@ -254,13 +275,16 @@ export function classifyPackageManagerCommand(args: readonly string[]): PackageM
   return "unknown";
 }
 
-function preflightCliEntry(name: "npm" | "pnpm", source: string): { ok: true } | { ok: false; reason: string } {
+function preflightCliEntry(name: "npm" | "pnpm" | "yarn", source: string): { ok: true } | { ok: false; reason: string } {
   if (!source.startsWith("#!/usr/bin/env node")) return { ok: false, reason: "missing node shebang" };
   if (name === "npm" && !source.includes("require('../lib/cli.js')(process)")) {
     return { ok: false, reason: "unexpected npm entrypoint shape" };
   }
   if (name === "pnpm" && !source.includes("require('../dist/pnpm.cjs')")) {
     return { ok: false, reason: "unexpected pnpm entrypoint shape" };
+  }
+  if (name === "yarn" && !source.includes("../lib/cli")) {
+    return { ok: false, reason: "unexpected Yarn v1 entrypoint shape" };
   }
   return { ok: true };
 }

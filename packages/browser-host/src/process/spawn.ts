@@ -1,5 +1,5 @@
 import { WorkerRegistry } from "./worker-registry.ts";
-import type { HostProcessOutputChunk, HostProcessPrepareOptions, HostProcessRecord, HostProcessSnapshot, HostProcessStatus, HostProcessTableOptions, HostWorkerLike } from "./types.ts";
+import type { HostProcessOutputChunk, HostProcessPrepareOptions, HostProcessRecord, HostProcessResize, HostProcessSignal, HostProcessSnapshot, HostProcessStatus, HostProcessTableOptions, HostWorkerLike } from "./types.ts";
 import type { RuntimeTraceSink } from "../observability/index.ts";
 import {
   assertAbuseAllowed,
@@ -166,6 +166,13 @@ export class HostProcessTable {
     return record.output.map((chunk) => ({ ...chunk }));
   }
 
+  list(options: { activeOnly?: boolean; projectId?: string } = {}): HostProcessSnapshot[] {
+    return [...this.records.values()]
+      .filter((record) => !options.activeOnly || !isTerminal(record.status))
+      .filter((record) => !options.projectId || record.projectId === options.projectId)
+      .map(snapshot);
+  }
+
   subscribeOutput(listener: (chunk: HostProcessOutputChunk) => void): () => void {
     this.outputListeners.add(listener);
     return () => {
@@ -182,6 +189,28 @@ export class HostProcessTable {
     return true;
   }
 
+  resize(pid: number, size: HostProcessResize): boolean {
+    if (!Number.isInteger(size.cols) || !Number.isInteger(size.rows) || size.cols < 1 || size.rows < 1) {
+      throw new RangeError("process terminal size must use positive integer columns and rows");
+    }
+    const record = this.#record(pid);
+    if (isTerminal(record.status)) return false;
+    const worker = this.registry.get(record.pid, record.generation);
+    if (!worker?.postMessage) return false;
+    worker.postMessage({ type: "resize", pid: record.pid, generation: record.generation, ...size });
+    return true;
+  }
+
+  signal(pid: number, signal: HostProcessSignal): HostProcessSnapshot {
+    const record = this.#record(pid);
+    if (isTerminal(record.status)) return snapshot(record);
+    const worker = this.registry.get(record.pid, record.generation);
+    worker?.postMessage?.({ type: "signal", pid: record.pid, generation: record.generation, signal });
+    if (signal === "SIGINT") return this.#finish(record, "exited", 130);
+    if (signal === "SIGTERM") return this.#finish(record, "exited", 143);
+    return this.#finish(record, "killed", 137);
+  }
+
   stop(pid: number, code = 0): HostProcessSnapshot {
     const record = this.#record(pid);
     if (isTerminal(record.status)) return snapshot(record);
@@ -191,7 +220,7 @@ export class HostProcessTable {
   kill(pid: number): HostProcessSnapshot {
     const record = this.#record(pid);
     if (isTerminal(record.status)) return snapshot(record);
-    return this.#finish(record, "killed", 137);
+    return this.signal(pid, "SIGKILL");
   }
 
   teardown(): void {

@@ -24,7 +24,7 @@ export interface CliRegistryLike {
 }
 
 export interface PackageManagerProcessRequest {
-  name: "npm" | "pnpm";
+  name: "npm" | "pnpm" | "yarn";
   entry: CliEntry;
   cwd: string;
   args: string[];

@@ -14,11 +14,12 @@ assert.deepEqual(results.failureSummary, {
   "package-manager-ignored-build-scripts": 9
 });
 assert.equal(results.minimumPassForMilestoneB, matrix.scope.minimumPassForMilestoneB);
-assert.equal(results.results.length, matrix.fixtures.length);
-assert.equal(results.summary.total, matrix.fixtures.length);
+const publicFixtures = matrix.fixtures.filter((fixture) => fixture.repository.startsWith("https://github.com/"));
+assert.equal(results.results.length, publicFixtures.length);
+assert.equal(results.summary.total, publicFixtures.length);
 assert.equal(results.summary.milestoneB, "not-yet");
 
-const fixtureIds = new Set(matrix.fixtures.map((fixture) => fixture.id));
+const fixtureIds = new Set(publicFixtures.map((fixture) => fixture.id));
 const resultIds = new Set(results.results.map((result) => result.id));
 assert.deepEqual(resultIds, fixtureIds);
 

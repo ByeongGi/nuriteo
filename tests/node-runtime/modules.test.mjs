@@ -353,11 +353,35 @@ runtime.registerMany({
       exports.argv = process.argv.slice();
     `
   },
+  "/workspace/source-webpack-process.cjs": {
+    kind: "cjs-source",
+    source: `
+      module.exports =
+      /******/ (function(modules) { // webpackBootstrap
+        return process.argv.slice();
+      })([
+        function() { var process = { argv: ["nested"] }; }
+      ]);
+    `
+  },
   "/workspace/source-runtime-globals.cjs": {
     kind: "cjs-source",
     source: `
       exports.globalMarker = global.marker;
       exports.consoleType = typeof console.log;
+    `
+  },
+  "/workspace/source-dynamic-import.cjs": {
+    kind: "cjs-source",
+    source: `
+      exports.literal = 'import("./missing-in-string.cjs")';
+      exports.template = \`import("./missing-in-template.cjs")\`;
+      exports.commentPreserved = () => {
+        // import("./missing-in-comment.cjs")
+        return true;
+      };
+      exports.property = { import: () => "property" }.import();
+      exports.loaded = import("./cjs-target.cjs");
     `
   },
   "/workspace/source-local-globals.cjs": {
@@ -485,8 +509,15 @@ assert.deepEqual(sourceEntry, {
   filename: "source-entry.cjs",
   answer: 42
 });
+const sourceDynamicImport = runtime.requireSync("./source-dynamic-import.cjs", "/workspace/index.cjs");
+assert.equal(sourceDynamicImport.literal, 'import("./missing-in-string.cjs")');
+assert.equal(sourceDynamicImport.template, 'import("./missing-in-template.cjs")');
+assert.equal(sourceDynamicImport.commentPreserved(), true);
+assert.equal(sourceDynamicImport.property, "property");
+assert.equal((await sourceDynamicImport.loaded).default.kind, "fixture");
 assert.deepEqual(runtime.requireSync("./source-process-global.cjs", "/workspace/index.cjs").argv, ["node", "/workspace/index.cjs", "--fixture"]);
 assert.deepEqual(runtime.requireSync("./source-process-local.cjs", "/workspace/index.cjs").argv, ["local"]);
+assert.deepEqual(runtime.requireSync("./source-webpack-process.cjs", "/workspace/index.cjs"), ["node", "/workspace/index.cjs", "--fixture"]);
 assert.deepEqual(runtime.requireSync("./source-runtime-globals.cjs", "/workspace/index.cjs"), {
   globalMarker: "runtime-global",
   consoleType: "function"
@@ -532,5 +563,18 @@ lazyFiles.set("/workspace/generated-config.ts", "export default { plugins: ['ts-
 assert.deepEqual((await lazyRuntime.importModule("file:///workspace/generated-config.ts", "/workspace/index.mjs")).default, {
   plugins: ["ts-config"]
 });
+lazyFiles.set("/workspace/cache-reader.cjs", `
+  exports.read = () => require("./mutable.json").value;
+  exports.reload = () => {
+    delete require.cache[require.resolve("./mutable.json")];
+    return require("./mutable.json").value;
+  };
+`);
+lazyFiles.set("/workspace/mutable.json", JSON.stringify({ value: "before" }));
+const cacheReader = lazyRuntime.requireSync("./cache-reader.cjs", "/workspace/index.cjs");
+assert.equal(cacheReader.read(), "before");
+lazyFiles.set("/workspace/mutable.json", JSON.stringify({ value: "after" }));
+assert.equal(cacheReader.read(), "before");
+assert.equal(cacheReader.reload(), "after");
 
 console.log("node modules test ok");

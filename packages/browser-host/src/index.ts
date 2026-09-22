@@ -2,6 +2,8 @@ export { BrowserRuntimeSupervisor, RuntimeBootError } from "./supervisor.ts";
 export type { BrowserRuntimeSupervisorOptions, RuntimeBootOptions, RuntimeMetrics, RuntimeRunOptions, RuntimeRunResult, RuntimeStatus, RuntimeSystemMetricsOptions } from "./supervisor.ts";
 export { assertRuntimeFeatureSupported, createPackageManagerRecoveryDiagnostic, createPackageManagerUnsupportedDiagnostic, createPermissionDeniedDiagnostic, createPermissionRecoveryDiagnostic, createRuntimeNetworkRecoveryDiagnostic, createRuntimeNetworkUnsupportedDiagnostic, createRuntimeRecoveryActionExecutor, createRuntimeRecoveryPlan, createRuntimeSupportBundle, createRuntimeTraceCollector, createRuntimeTraceReport, createUnsupportedRuntimeDiagnostic, redactRuntimeLog, RuntimeRecoveryActionExecutor, RuntimeTraceCollector, UnsupportedRuntimeFeatureError } from "./observability/index.ts";
 export { createHostProcessShellCommand, HostProcessError, HostProcessTable, processKey, teardownProcessTable, WorkerRegistry } from "./process/index.ts";
+export { createSqliteProjectClient, SqliteProjectClient } from "./tooling/index.ts";
+export type { SqliteProjectClientOptions, SqliteWorkerLike, SqliteWorkerMessage, SqliteWorkerResponse } from "./tooling/index.ts";
 export { FetchPolicy, FetchPolicyError, HostFetcher, HostFetchError, verifyIntegrity } from "./io/index.ts";
 export {
   AbuseLimitError,
@@ -26,7 +28,7 @@ export {
   stripSensitiveHeadersForRedirect,
   validateRuntimeHeaders
 } from "./security/index.ts";
-export { createMemoryOpfs, createOpfsPackageWorkspace, createProjectWorkspaceDevServerChangeBridge, createProjectWorkspaceEditorBridge, createProjectWorkspaceSourceEditBridge, createProjectWorkspaceStore, createQuotaManagedOpfs, createSnapshotStore, createStorageLease, digestSnapshot, MemoryOpfs, migrateProjectWorkspaceSnapshot, OpfsPackageWorkspace, ProjectWorkspaceEditorBridge, ProjectWorkspaceStore, QuotaManagedOpfs, SnapshotStore, SnapshotStoreError, StorageLease, StorageLeaseError, StorageQuotaError } from "./storage/index.ts";
+export { createMemoryOpfs, createOpfsPackageWorkspace, createProjectWorkspaceDevServerChangeBridge, createProjectWorkspaceEditorBridge, createProjectWorkspaceSourceEditBridge, createProjectWorkspaceStore, createQuotaManagedOpfs, createSnapshotStore, createStorageLease, decodeProjectWorkspaceArchive, digestSnapshot, encodeProjectWorkspaceArchive, MemoryOpfs, migrateProjectWorkspaceSnapshot, OpfsPackageWorkspace, ProjectWorkspaceEditorBridge, ProjectWorkspaceStore, QuotaManagedOpfs, SnapshotStore, SnapshotStoreError, StorageLease, StorageLeaseError, StorageQuotaError } from "./storage/index.ts";
 export {
   createProjectHealthCheck,
   detectPackageScripts,
@@ -43,7 +45,7 @@ export {
   workflowTemplateForProjectTemplate
 } from "./onboarding/index.ts";
 export type { PackageManagerDiagnosticResult, PackageManagerRecoveryDiagnostic, PermissionDiagnosticInput, PermissionRecoveryDiagnostic, RuntimeDiagnostic, RuntimeDiagnosticSeverity, RuntimeNetworkDiagnosticInput, RuntimeNetworkRecoveryDiagnostic, RuntimeRecoveryAction, RuntimeRecoveryActionExecutionResult, RuntimeRecoveryActionExecutorHandlers, RuntimeRecoveryActionExecutorOptions, RuntimeRecoveryActionKind, RuntimeRecoveryActionStatus, RuntimeRecoveryPlan, RuntimeRecoveryPlanInput, RuntimeSupportBundle, RuntimeSupportBundleInput, RuntimeTraceCategory, RuntimeTraceEndInput, RuntimeTraceHandle, RuntimeTraceReport, RuntimeTraceSink, RuntimeTraceSpan, RuntimeTraceSpanInput, RuntimeTraceStatus, UnsupportedRuntimeFeatureErrorCode, UnsupportedRuntimeFeatureInput, UnsupportedRuntimeFeatureKind } from "./observability/index.ts";
-export type { HostProcessEnv, HostProcessOutputChunk, HostProcessOutputStream, HostProcessPrepareOptions, HostProcessRecord, HostProcessShellCommand, HostProcessShellCommandContext, HostProcessShellCommandOptions, HostProcessShellCommandResult, HostProcessSnapshot, HostProcessStatus, HostProcessTableOptions, HostWorkerFactory, HostWorkerLike } from "./process/index.ts";
+export type { HostProcessEnv, HostProcessOutputChunk, HostProcessOutputStream, HostProcessPrepareOptions, HostProcessRecord, HostProcessResize, HostProcessShellCommand, HostProcessShellCommandContext, HostProcessShellCommandOptions, HostProcessShellCommandResult, HostProcessSignal, HostProcessSnapshot, HostProcessStatus, HostProcessTableOptions, HostProcessTerminalControl, HostWorkerFactory, HostWorkerLike } from "./process/index.ts";
 export type {
   AbuseCheckRequest,
   AbuseCheckResult,

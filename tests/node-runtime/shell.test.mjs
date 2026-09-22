@@ -80,6 +80,16 @@ const bin = await shell.run("hello");
 assert.equal(bin.stdout, "from-bin\n");
 
 await assert.rejects(() => shell.run("echo ok || echo nope"), ShellSyntaxError);
+await assert.rejects(
+  () => shell.run("echo $(pwd)"),
+  (error) => error instanceof ShellSyntaxError && error.code === "ERR_CARGO_CONTAINER_UNSUPPORTED_SHELL_SYNTAX" && /command substitution/.test(error.message)
+);
+assert.equal((await shell.run("echo '$() & ; ||'" )).stdout, "$() & ; ||\n");
+
+await shell.run("cd packages/../src");
+await shell.run("export MODE=development");
+assert.equal(shell.cwd, "/workspace/my app/src");
+assert.equal(shell.env.MODE, "development");
 
 const chunks = [];
 const terminal = createTerminalSession({
@@ -134,5 +144,55 @@ assert.equal(restartedRun.entry.status, "cancelled");
 const afterRestartRun = await terminal.run("echo after-restart");
 assert.equal(afterRestartRun.stdout, "after-restart\n");
 assert.equal(afterRestartRun.entry.status, "completed");
+
+const controls = [];
+const interactive = createTerminalSession({
+  cwd: "/workspace/one",
+  env: { SESSION: "one" },
+  commands: {
+    interactive({ terminal, signal }) {
+      return new Promise((resolve) => {
+        const stopInput = terminal.onInput((data) => controls.push(["input", data]));
+        const stopResize = terminal.onResize((size) => controls.push(["resize", size]));
+        signal.addEventListener("abort", () => {
+          controls.push(["signal", signal.reason]);
+          stopInput();
+          stopResize();
+          resolve({ stdout: "", stderr: "interrupted\n", exitCode: 130 });
+        }, { once: true });
+      });
+    }
+  }
+});
+const interactiveRun = interactive.run("interactive");
+assert.equal(interactive.write("hello\n"), true);
+assert.deepEqual(interactive.resize(132, 40), { cols: 132, rows: 40 });
+assert.equal(interactive.signal("SIGINT"), true);
+await interactiveRun;
+assert.deepEqual(controls, [
+  ["input", "hello\n"],
+  ["resize", { cols: 132, rows: 40 }],
+  ["signal", "SIGINT"]
+]);
+assert.deepEqual(interactive.snapshot().size, { cols: 132, rows: 40 });
+
+const terminated = createTerminalSession({
+  commands: {
+    wait({ signal }) {
+      return new Promise((resolve) => signal.addEventListener("abort", () => resolve({ stdout: "", stderr: "", exitCode: 0 }), { once: true }));
+    }
+  }
+});
+const terminatedRun = terminated.run("wait");
+terminated.signal("SIGTERM");
+assert.equal((await terminatedRun).exitCode, 143);
+
+const isolated = createTerminalSession({ cwd: "/workspace/two", env: { SESSION: "two" } });
+await isolated.run("cd child");
+await isolated.run("export FLAG=yes");
+assert.equal(isolated.snapshot().cwd, "/workspace/two/child");
+assert.equal(isolated.snapshot().env.FLAG, "yes");
+assert.equal(interactive.snapshot().cwd, "/workspace/one");
+assert.equal(interactive.snapshot().env.FLAG, undefined);
 
 console.log("node shell test ok");

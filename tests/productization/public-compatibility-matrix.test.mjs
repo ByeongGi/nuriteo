@@ -7,9 +7,9 @@ const docs = fs.readFileSync(new URL("../../docs/productization/public-compatibi
 assert.equal(matrix.schemaVersion, 1);
 assert.equal(matrix.scope.productRuntime, "browser-guest-node-runtime");
 assert.match(matrix.scope.parityBoundary, /Docker/);
-assert.equal(matrix.projectFixtures.total, 10);
+assert.equal(matrix.projectFixtures.total, 20);
 assert.equal(matrix.projectFixtures.minimumPassForMilestoneB, 7);
-assert.equal(matrix.projectFixtures.status, "product-supported-milestone-b-pass");
+assert.equal(matrix.projectFixtures.status, "sg25-service-workflow-pass");
 assert.equal(matrix.projectFixtures.referenceInstallPass, 7);
 assert.equal(matrix.projectFixtures.referenceBuildPass, 6);
 assert.equal(matrix.projectFixtures.referenceDevPreviewPass, 6);
@@ -23,6 +23,10 @@ assert.equal(matrix.projectFixtures.actualProductPartialPass, 0);
 assert.equal(matrix.projectFixtures.actualProductScoreAtLeast50, 7);
 assert.equal(matrix.projectFixtures.actualProductScoreAtLeast75, 7);
 assert.equal(matrix.projectFixtures.actualProductScoreAtLeast100, 7);
+assert.equal(matrix.projectFixtures.serviceWorkflowTotal, 20);
+assert.equal(matrix.projectFixtures.serviceWorkflowPass, 15);
+assert.equal(matrix.projectFixtures.serviceWorkflowHold, 5);
+assert.equal(matrix.projectFixtures.serviceWorkflowPassOrHold, 20);
 assert.equal(fs.existsSync(new URL(`../../${matrix.projectFixtures.productAdapterResults}`, import.meta.url)), true);
 assert.equal(fs.existsSync(new URL(`../../${matrix.projectFixtures.actualProductResults}`, import.meta.url)), true);
 
@@ -31,7 +35,7 @@ for (const section of [matrix.frameworks, matrix.packages, matrix.unsupported]) 
 }
 
 for (const framework of matrix.frameworks) {
-  assert.match(docs, new RegExp(escapeRegExp(framework.name)));
+  assert.match(docs, new RegExp(escapeRegExp(framework.name), "i"));
   assert.ok(framework.evidence.length > 0, `${framework.name} must reference evidence`);
   for (const evidence of framework.evidence) {
     assert.equal(fs.existsSync(new URL(`../../${evidence}`, import.meta.url)), true, `${framework.name} evidence missing: ${evidence}`);

@@ -4,7 +4,7 @@ export { createOpfsPackageWorkspace, OpfsPackageWorkspace } from "./package-work
 export { createProjectWorkspaceDevServerChangeBridge } from "./dev-server-change-bridge.ts";
 export { createProjectWorkspaceEditorBridge, ProjectWorkspaceEditorBridge } from "./editor-bridge.ts";
 export { createProjectWorkspaceSourceEditBridge } from "./source-edit-bridge.ts";
-export { createProjectWorkspaceStore, migrateProjectWorkspaceSnapshot, ProjectWorkspaceStore } from "./project-workspace.ts";
+export { createProjectWorkspaceStore, decodeProjectWorkspaceArchive, encodeProjectWorkspaceArchive, migrateProjectWorkspaceSnapshot, ProjectWorkspaceStore } from "./project-workspace.ts";
 export { createQuotaManagedOpfs, QuotaManagedOpfs, StorageQuotaError } from "./quota.ts";
 export { createSnapshotStore, digestSnapshot, SnapshotStore, SnapshotStoreError } from "./snapshot.ts";
 export type { OpfsPackageWorkspaceOptions } from "./package-workspace.ts";

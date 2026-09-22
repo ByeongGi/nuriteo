@@ -11,9 +11,10 @@ export class ShellSyntaxError extends Error {
 import type { ShellStep } from "./types.ts";
 
 export function parseShell(input: string): ShellStep[] {
+  assertSupportedSyntax(input);
   const tokens = tokenize(input);
   if (tokens.includes("||") || tokens.includes(";")) {
-    throw new ShellSyntaxError("unsupported shell syntax");
+    throw new ShellSyntaxError("unsupported shell syntax: only pipelines (|), &&, and stdout overwrite (>) are supported");
   }
   const commands: ShellStep[] = [];
   let current: string[] = [];
@@ -32,6 +33,42 @@ export function parseShell(input: string): ShellStep[] {
   if (current.length === 0) throw new ShellSyntaxError("missing command");
   commands.push({ op, argv: current });
   return commands;
+}
+
+function assertSupportedSyntax(input: string): void {
+  const syntax = unquotedSyntax(input);
+  const unsupported: Array<[RegExp, string]> = [
+    [/\$\(|`/, "command substitution"],
+    [/(^|[^&])&($|[^&])/, "background jobs (&)"],
+    [/>>|<</, "append and heredoc redirects"],
+    [/(^|\s)<(?!<)/, "stdin file redirects"],
+    [/\|\||;/, "OR and command-list operators"],
+    [/[{}]/, "shell blocks and brace expansion"]
+  ];
+  for (const [pattern, feature] of unsupported) {
+    if (pattern.test(syntax)) {
+      throw new ShellSyntaxError(
+        `unsupported shell syntax: ${feature}; supported forms are argv/quotes, pipelines (|), &&, and stdout overwrite (>)`
+      );
+    }
+  }
+}
+
+function unquotedSyntax(input: string): string {
+  let quote: "'" | "\"" | null = null;
+  let result = "";
+  for (const char of input) {
+    if (quote) {
+      if (char === quote) quote = null;
+      result += " ";
+    } else if (char === "'" || char === "\"") {
+      quote = char;
+      result += " ";
+    } else {
+      result += char;
+    }
+  }
+  return result;
 }
 
 export function tokenize(input: string): string[] {

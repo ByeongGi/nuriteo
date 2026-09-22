@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import ts from "typescript";
 import {
@@ -16,7 +17,9 @@ const root = process.cwd();
 const outRoot = path.join(root, "dist/sdk");
 const packageRoot = path.join(outRoot, "package");
 const wasmSource = path.join(root, "target/wasm32-unknown-unknown/debug/system_wasm.wasm");
-const packageTarballName = "cargo-container-sdk-0.0.0.tgz";
+const sdkManifest = JSON.parse(fs.readFileSync(path.join(root, "packages/sdk/package.json"), "utf8"));
+const sdkVersion = sdkManifest.version;
+const packageTarballName = `cargo-container-sdk-${sdkVersion}.tgz`;
 const sdkBasePath = resolveSdkBasePath();
 const writeFingerprintFlag = shouldWriteFingerprint();
 const sdkBaseUrl = (suffix) => new URL(suffix, `https://example.invalid${sdkBasePath}`).pathname;
@@ -119,6 +122,8 @@ function emitCommonjsRuntime() {
   const inputs = [
     "packages/browser-host/src/supervisor.ts",
     "packages/sdk/src/container.ts",
+    "packages/sdk/src/services.ts",
+    "packages/sdk/src/webcontainer.ts",
     "packages/preview/src/error-overlay.ts",
     "packages/preview/src/hmr-client.ts",
     "packages/preview/src/index.ts",
@@ -233,6 +238,8 @@ fs.copyFileSync(wasmSource, path.join(packageRoot, "assets/system_wasm.wasm"));
 
 writeFile("index.js", [
   "export { CargoContainer, createContainer } from './packages/sdk/src/container.ts';",
+  "export { CargoContainerServices, CargoFileSystemApi, CargoPackageManagerApi, CargoPreviewApi, CargoProcessApi, CargoProjectApi, registerCargoPreviewServiceWorker, resolveCargoWorkerAssets, SdkError } from './packages/sdk/src/services.ts';",
+  "export { CargoWebContainer, CargoWebContainerFileSystem, createCargoMountSnapshot, createCargoWebContainer } from './packages/sdk/src/webcontainer.ts';",
   "export { createPreviewRelay, createPreviewServiceWorker, createPreviewSessionRegistry, createHmrClient } from './packages/preview/src/index.ts';",
   "export { protocolVersion } from './packages/protocol/src/messages.ts';",
   ""
@@ -240,6 +247,10 @@ writeFile("index.js", [
 
 writeFile("index.d.ts", [
   "export { CargoContainer, createContainer } from './types/packages/sdk/src/container';",
+  "export { CargoContainerServices, CargoFileSystemApi, CargoPackageManagerApi, CargoPreviewApi, CargoProcessApi, CargoProjectApi, registerCargoPreviewServiceWorker, resolveCargoWorkerAssets, SdkError } from './types/packages/sdk/src/services';",
+  "export type { CargoCommandResult, CargoContainerServicesOptions, CargoFileEntry, CargoFileSystemAdapter, CargoFileWatchEvent, CargoPackageCommandOptions, CargoPackageManagerAdapter, CargoPreviewAdapter, CargoPreviewEvent, CargoPreviewPort, CargoProcessAdapter, CargoProcessHandle, CargoProcessSpawnOptions, CargoProjectAdapter, CargoSdkTraceEvent, CargoWorkerAssets, RegisterCargoPreviewServiceWorkerOptions, SdkErrorCode } from './types/packages/sdk/src/services';",
+  "export { CargoWebContainer, CargoWebContainerFileSystem, createCargoMountSnapshot, createCargoWebContainer } from './types/packages/sdk/src/webcontainer';",
+  "export type { CargoCoepMode, CargoFileSystemTree, CargoFileSystemTreeNode, CargoMountSnapshot, CargoSpawnOptions, CargoWebContainerEventName, CargoWebContainerLifecycle, CargoWebContainerOptions } from './types/packages/sdk/src/webcontainer';",
   "export { createPreviewRelay, createPreviewServiceWorker, createPreviewSessionRegistry, createHmrClient } from './types/packages/preview/src/index';",
   "export { protocolVersion } from './types/packages/protocol/src/messages';",
   ""
@@ -248,6 +259,8 @@ writeFile("index.d.ts", [
 writeFile("index.cjs", [
   "\"use strict\";",
   "Object.assign(exports, require('./cjs/packages/sdk/src/container.cjs'));",
+  "Object.assign(exports, require('./cjs/packages/sdk/src/services.cjs'));",
+  "Object.assign(exports, require('./cjs/packages/sdk/src/webcontainer.cjs'));",
   "Object.assign(exports, require('./cjs/packages/preview/src/index.cjs'));",
   "Object.assign(exports, require('./cjs/packages/protocol/src/messages.cjs'));",
   ""
@@ -255,8 +268,8 @@ writeFile("index.cjs", [
 
 writeFile("package.json", `${JSON.stringify({
   name: "@cargo-container/sdk",
-  version: "0.0.0",
-  private: true,
+  version: sdkVersion,
+  publishConfig: sdkManifest.publishConfig,
   type: "module",
   types: "./index.d.ts",
   exports: {
@@ -275,7 +288,7 @@ Browser-native runtime SDK for booting the Cargo Container workers, running prog
 ## Install
 
 \`\`\`sh
-npm install ./cargo-container-sdk-0.0.0.tgz
+npm install ./cargo-container-sdk-${sdkVersion}.tgz
 \`\`\`
 
 ## Browser Headers
@@ -354,7 +367,7 @@ writeFile("examples/sdk-consumer/public/index.html", `<!doctype html>
 </html>
 `);
 
-writeFile("examples/sdk-consumer/public/app.js", `import { createContainer } from ${JSON.stringify(sdkBaseUrl("index.js"))};
+writeFile("examples/sdk-consumer/public/app.js", `import { CargoContainerServices, createContainer, resolveCargoWorkerAssets } from ${JSON.stringify(sdkBaseUrl("index.js"))};
 
 const status = document.getElementById("status");
 
@@ -365,16 +378,18 @@ function write(value) {
 globalThis.__sdkConsumer = {
   async bootAndRun() {
     if (!crossOriginIsolated) throw new Error("cross-origin isolation missing");
+    const assets = resolveCargoWorkerAssets(${JSON.stringify(sdkBasePath)});
+    const services = new CargoContainerServices();
     const container = createContainer({
-      systemWorkerUrl: new URL(${JSON.stringify(sdkBaseUrl("workers/system-worker.ts"))}, location.href),
-      processWorkerUrl: new URL(${JSON.stringify(sdkBaseUrl("workers/process-worker.ts"))}, location.href),
+      systemWorkerUrl: assets.systemWorkerUrl,
+      processWorkerUrl: assets.processWorkerUrl,
       timeoutMs: 2500
     });
     const ready = await container.boot();
     const run = await container.run("", { entrypoint: "fs-smoke", timeoutMs: 7000 });
     const metrics = await container.systemMetrics();
     await container.teardown();
-    const result = { ready, run, metrics, status: container.status };
+    const result = { ready, run, metrics, services: typeof services.fs.readFile, status: container.status };
     write(result);
     return result;
   }
@@ -383,18 +398,30 @@ globalThis.__sdkConsumer = {
 write("ready");
 `);
 
-const pack = spawnSync("npm", ["pack", packageRoot, "--pack-destination", outRoot], {
-  cwd: root,
-  encoding: "utf8",
-  stdio: "pipe"
-});
-if (pack.status !== 0) {
-  console.error(pack.stderr || pack.stdout);
-  process.exit(pack.status ?? 1);
-}
-const packedName = pack.stdout.trim().split("\n").at(-1);
-if (packedName && packedName !== packageTarballName) {
-  fs.renameSync(path.join(outRoot, packedName), path.join(outRoot, packageTarballName));
+const packCache = fs.mkdtempSync(path.join(os.tmpdir(), "cargo-container-sdk-pack-"));
+try {
+  const pack = spawnSync("npm", [
+    "pack",
+    packageRoot,
+    "--pack-destination",
+    outRoot,
+    "--cache",
+    packCache
+  ], {
+    cwd: root,
+    encoding: "utf8",
+    stdio: "pipe"
+  });
+  if (pack.status !== 0) {
+    console.error(pack.stderr || pack.stdout);
+    process.exit(pack.status ?? 1);
+  }
+  const packedName = pack.stdout.trim().split("\n").at(-1);
+  if (packedName && packedName !== packageTarballName) {
+    fs.renameSync(path.join(outRoot, packedName), path.join(outRoot, packageTarballName));
+  }
+} finally {
+  fs.rmSync(packCache, { recursive: true, force: true });
 }
 
 const existingFingerprint = fs.existsSync(path.join(root, FINGERPRINT_PATH))

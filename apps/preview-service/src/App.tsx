@@ -16,6 +16,7 @@ import { PreviewPane } from "./components/PreviewPane";
 import { BottomDock } from "./components/BottomDock";
 import { CommandPalette } from "./components/CommandPalette";
 import { DiffPane } from "./components/DiffPane";
+import { CloudProjectsDialog } from "./components/CloudProjectsDialog";
 
 export default function App() {
   const model = usePreviewController();
@@ -122,6 +123,7 @@ export default function App() {
 
       <WelcomeOverlay model={model} />
       <ImportDialog model={model} />
+      <CloudProjectsDialog model={model} />
       <CommandPalette
         open={model.paletteOpen}
         mode={model.paletteMode}

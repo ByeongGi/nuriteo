@@ -19,27 +19,31 @@
     },
     {
       "framework": "vite-vue",
-      "grade": "candidate",
+      "publicName": "Vite Vue runtime",
+      "grade": "supported",
       "validation": "actual-worker-backed",
       "status": "pass",
       "evidence": [
         "tests/vite/vite-react-product-workflow.test.mjs",
         "tests/vite/vite-vue-svelte-actual.test.mjs",
-        "tests/fixtures/vite-vue/package.json"
+        "tests/fixtures/vite-vue/package.json",
+        "compat/framework-product-support.json"
       ],
-      "notes": "Actual worker-backed adapter and CLI-backed workflow pass for vue-runtime template on npm/pnpm. Promoted to candidate; not yet product-supported."
+      "notes": "Product-supported. The local runtime fixture is tied to an exact Vite template-vue upstream revision and passes npm/pnpm install, dev/preview, edit-HMR, build, reload recovery, and framework performance budgets."
     },
     {
       "framework": "vite-svelte",
-      "grade": "candidate",
+      "publicName": "Vite Svelte",
+      "grade": "supported",
       "validation": "actual-worker-backed",
       "status": "pass",
       "evidence": [
         "tests/vite/vite-react-product-workflow.test.mjs",
         "tests/vite/vite-vue-svelte-actual.test.mjs",
-        "tests/fixtures/vite-svelte/package.json"
+        "tests/fixtures/vite-svelte/package.json",
+        "compat/framework-product-support.json"
       ],
-      "notes": "Actual worker-backed adapter and CLI-backed workflow pass for svelte template on npm/pnpm, including plugin module path. Grade candidate; product-supported promotion still requires broader public fixture coverage."
+      "notes": "Product-supported. The local runtime fixture is tied to an exact Vite template-svelte upstream revision and passes npm/pnpm install, dev/preview, edit-HMR, build, reload recovery, plugin loading, and framework performance budgets."
     },
     {
       "framework": "nextjs",
@@ -51,7 +55,19 @@
         "tests/vite/nextjs-compatibility.test.mjs",
         "docs/productization/public-compatibility-matrix.md"
       ],
-      "notes": "App Router preview adapter is product-supported. Full Next CLI dev/build and native SWC remain hold or unsupported and are not part of this claim."
+      "notes": "App Router preview adapter is product-supported; the separate pinned full-runtime lane is candidate-grade."
+    },
+    {
+      "framework": "nextjs-full-runtime",
+      "grade": "candidate",
+      "validation": "actual-guest-runtime",
+      "status": "pass",
+      "evidence": [
+        "compat/nextjs-compatibility.json",
+        "tests/preview-service/next-full-runtime.test.mjs",
+        "docs/productization/nextjs-product-support-target.md"
+      ],
+      "notes": "Pinned Next 15.1.0 real CLI dev/build/start and App Router server capabilities pass with version-matched WASM SWC; browser-worker promotion and a patched release baseline remain pending."
     }
   ],
   "gate": {
@@ -60,8 +76,8 @@
     "requirements": [
       "vite-react remains supported",
       "vue and svelte both have actual worker-backed validation records",
-      "at least one of vue/svelte is candidate or higher",
-      "nextjs preview-adapter grade is explicit while full CLI support remains hold"
+      "vue and svelte are product-supported through fixtures tied to exact-revision public template upstreams",
+      "nextjs preview-adapter grade and full-runtime candidate grade are explicit"
     ]
   }
 }

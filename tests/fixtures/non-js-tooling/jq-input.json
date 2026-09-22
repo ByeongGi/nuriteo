@@ -1,0 +1,7 @@
+{
+  "packages": [
+    { "name": "@cargo-container/runtime", "kind": "runtime", "supported": true },
+    { "name": "@cargo-container/docs", "kind": "documentation", "supported": false },
+    { "name": "@cargo-container/preview", "kind": "runtime", "supported": true }
+  ]
+}

@@ -8,13 +8,16 @@ assert.equal(results.schemaVersion, 1);
 assert.equal(results.source, "compat/ecosystem-fixtures.json");
 assert.deepEqual(results.failureSummary, {});
 assert.equal(results.minimumPassForMilestoneB, matrix.scope.minimumPassForMilestoneB);
-assert.equal(results.results.length, matrix.fixtures.length);
-assert.equal(results.summary.total, matrix.fixtures.length);
+const publicFixtures = matrix.fixtures.filter((fixture) => fixture.repository.startsWith("https://github.com/"));
+assert.equal(results.results.length, publicFixtures.length);
+assert.equal(results.summary.total, publicFixtures.length);
 assert.equal(results.summary.passCount, 10);
 assert.equal(results.summary.milestoneB, "pass");
 
 const criteriaIds = matrix.scoringRubric.criteria.map((criterion) => criterion.id).sort();
+const publicFixtureIds = new Set(publicFixtures.map((fixture) => fixture.id));
 for (const result of results.results) {
+  assert.ok(publicFixtureIds.has(result.id), `unknown public fixture result: ${result.id}`);
   assert.equal(result.mode, "measured-product-adapter");
   assert.equal(result.score, 100);
   assert.equal(result.status, "pass");

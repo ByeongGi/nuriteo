@@ -117,6 +117,10 @@ export function deprecate<T extends (...args: unknown[]) => unknown>(fn: T): T {
   return fn;
 }
 
+export function debuglog(_section: string): ((...values: unknown[]) => void) & { enabled: boolean } {
+  return Object.assign((..._values: unknown[]) => undefined, { enabled: false });
+}
+
 export const types = Object.freeze({
   isDate: (value: RuntimeValue): value is Date => value instanceof Date,
   isRegExp: (value: RuntimeValue): value is RegExp => value instanceof RegExp,
@@ -128,12 +132,16 @@ export const types = Object.freeze({
   isBoxedPrimitive: (value: RuntimeValue): boolean =>
     /^\[object (?:Boolean|Number|String|Symbol|BigInt)\]$/.test(Object.prototype.toString.call(value)),
   isNativeError: (value: RuntimeValue): value is Error => value instanceof Error,
+  isProxy: (_value: RuntimeValue): boolean => false,
   isPromise: (value: RuntimeValue): value is Promise<unknown> => Boolean(value && typeof (value as Promise<unknown>).then === "function")
 });
 
 export const utilBuiltin = Object.freeze({
   EventEmitter,
+  TextDecoder,
+  TextEncoder,
   callbackify,
+  debuglog,
   deprecate,
   format,
   formatWithOptions,

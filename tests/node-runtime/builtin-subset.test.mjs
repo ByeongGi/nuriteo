@@ -4,6 +4,7 @@ import {
   Buffer as RuntimeBuffer,
   createBuiltinLoader,
   EventEmitter,
+  IncomingMessage,
   utilBuiltin
 } from "../../packages/node-runtime/src/index.ts";
 import { runUnsafeCommonJsForLocalTests } from "../../packages/node-runtime/src/bootstrap.ts";
@@ -30,6 +31,16 @@ function exerciseBuiltins({ Buffer, EventEmitter, util }) {
   const shared = new SharedArrayBuffer(3);
   new Uint8Array(shared).set([1, 2, 3]);
   assert.deepEqual([...Buffer.from(shared)], [1, 2, 3]);
+  const numeric = Buffer.alloc(29);
+  assert.equal(numeric.writeInt8(-2, 0), 1);
+  assert.equal(numeric.writeInt32LE(-123456, 1), 5);
+  assert.equal(numeric.writeDoubleLE(3.25, 5), 13);
+  assert.equal(numeric.writeBigUInt64LE(0x0102030405060708n, 13), 21);
+  assert.equal(numeric.readInt8(0), -2);
+  assert.equal(numeric.readInt32LE(1), -123456);
+  assert.equal(numeric.readDoubleLE(5), 3.25);
+  assert.equal(numeric.readBigUInt64LE(13), 0x0102030405060708n);
+  assert.equal(RuntimeBuffer.from("89504e47", "hex").readUInt32BE(0), 0x89504e47);
 
   const emitter = new EventEmitter();
   const events = [];
@@ -83,6 +94,8 @@ exerciseBuiltins({
 const requireBuiltin = createBuiltinLoader({});
 const bufferBuiltin = requireBuiltin("node:buffer");
 assert.equal(bufferBuiltin.Buffer.from("ok").toString(), "ok");
+assert.equal(bufferBuiltin.Blob, Blob);
+assert.equal(bufferBuiltin.File, File);
 const inflated = requireBuiltin("node:zlib").gunzipSync(requireBuiltin("node:zlib").gzipSync(RuntimeBuffer.from("ok")));
 assert.equal(typeof inflated.copy, "function");
 assert.equal(inflated.toString("utf8", 0, 2), "ok");
@@ -101,6 +114,71 @@ assert.equal(legacyEmitter.emit("tick"), true);
 assert.equal(requireBuiltin("util").format("x:%s", "y"), "x:y");
 assert.equal(requireBuiltin("node:util").formatWithOptions({ colors: false }, "x:%s", "y"), "x:y");
 assert.equal(requireBuiltin("node:util").styleText("bold", "x"), "x");
+assert.equal(requireBuiltin("node:util").types.isProxy({}), false);
+
+const streamBuiltin = requireBuiltin("node:stream");
+const bufferedSource = new streamBuiltin.Readable();
+bufferedSource.push(RuntimeBuffer.from("late"));
+bufferedSource.push(null);
+const bufferedTransform = bufferedSource.pipe(new streamBuiltin.Transform({
+  transform(chunk, _encoding, callback) {
+    callback(null, chunk);
+  }
+}));
+let bufferedOutput = "";
+await new Promise((resolve) => {
+  bufferedTransform.on("data", (chunk) => {
+    bufferedOutput += chunk.toString();
+  });
+  bufferedTransform.on("end", resolve);
+});
+assert.equal(bufferedOutput, "late");
+
+const iteratedSource = new streamBuiltin.Readable();
+const iteratedChunks = [];
+const iterate = (async () => {
+  for await (const chunk of iteratedSource) iteratedChunks.push(chunk.toString());
+})();
+iteratedSource.push(RuntimeBuffer.from("async"));
+iteratedSource.push(null);
+await iterate;
+assert.deepEqual(iteratedChunks, ["async"]);
+
+const replacedRequest = new streamBuiltin.Readable();
+const clonedBody = new streamBuiltin.PassThrough();
+replacedRequest.on("data", (chunk) => clonedBody.push(chunk));
+replacedRequest.on("end", () => clonedBody.push(null));
+replacedRequest.push(RuntimeBuffer.from("cloned"));
+replacedRequest.push(null);
+await Promise.resolve();
+for (const key in clonedBody) replacedRequest[key] = clonedBody[key];
+const replacedChunks = [];
+for await (const chunk of replacedRequest) replacedChunks.push(chunk.toString());
+assert.deepEqual(replacedChunks, ["cloned"]);
+
+const incomingRequest = new IncomingMessage({
+  body: RuntimeBuffer.from("[]"),
+  headers: { "content-type": "text/plain;charset=UTF-8" },
+  method: "POST",
+  statusCode: 0,
+  url: "/action"
+});
+const clonedIncomingBody = new streamBuiltin.PassThrough();
+incomingRequest.on("data", (chunk) => clonedIncomingBody.push(chunk));
+const incomingEnded = new Promise((resolve) => {
+  incomingRequest.on("end", () => {
+    clonedIncomingBody.push(null);
+    resolve();
+  });
+});
+await incomingEnded;
+for (const key in clonedIncomingBody) {
+  const value = clonedIncomingBody[key];
+  incomingRequest[key] = typeof value === "function" ? value.bind(incomingRequest) : value;
+}
+const incomingChunks = [];
+for await (const chunk of incomingRequest) incomingChunks.push(chunk);
+assert.equal(RuntimeBuffer.concat(incomingChunks).toString(), "[]");
 
 const result = runUnsafeCommonJsForLocalTests(`
   const { Buffer } = require("node:buffer");

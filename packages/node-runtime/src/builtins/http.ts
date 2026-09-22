@@ -44,6 +44,8 @@ export class Agent extends EventEmitter {
 }
 
 export class IncomingMessage extends Readable {
+  #body: Uint8Array;
+  #bodyStarted = false;
   headers: Record<string, string>;
   method: string;
   rawHeaders: string[];
@@ -62,9 +64,25 @@ export class IncomingMessage extends Readable {
     this.statusCode = options.statusCode;
     this.statusMessage = options.statusMessage || "";
     this.url = options.url;
+    this.#body = options.body;
+  }
 
+  override async *[Symbol.asyncIterator](): AsyncIterableIterator<RuntimeValue> {
+    this.#startBody();
+    yield* super[Symbol.asyncIterator]();
+  }
+
+  override on(eventName: string | symbol, listener: (...args: unknown[]) => void): this {
+    super.on(eventName, listener);
+    if (eventName === "data" || eventName === "readable") this.#startBody();
+    return this;
+  }
+
+  #startBody(): void {
+    if (this.#bodyStarted) return;
+    this.#bodyStarted = true;
     queueMicrotask(() => {
-      this.push(BrowserBuffer.from(options.body));
+      if (this.#body.byteLength > 0) this.push(BrowserBuffer.from(this.#body));
       this.push(null);
     });
   }
@@ -167,6 +185,7 @@ export class ClientRequest extends Writable {
 export type HttpRequestListener = (request: IncomingMessage, response: ServerResponse) => void;
 
 export class ServerResponse extends Writable {
+  _header: string | null = null;
   headersSent = false;
   statusCode = 200;
   statusMessage = "OK";
@@ -186,6 +205,18 @@ export class ServerResponse extends Writable {
     return this.headers[normalizeHeaderName(name)];
   }
 
+  getHeaderNames(): string[] {
+    return Object.keys(this.headers);
+  }
+
+  getHeaders(): Record<string, string | number | readonly string[]> {
+    return { ...this.headers };
+  }
+
+  hasHeader(name: string): boolean {
+    return Object.hasOwn(this.headers, normalizeHeaderName(name));
+  }
+
   removeHeader(name: string): void {
     delete this.headers[normalizeHeaderName(name)];
   }
@@ -195,21 +226,33 @@ export class ServerResponse extends Writable {
     return this;
   }
 
+  _implicitHeader(): void {
+    if (!this.headersSent) this.writeHead(this.statusCode);
+  }
+
+  flushHeaders(): void {
+    this._implicitHeader();
+  }
+
   writeHead(statusCode: number, statusMessageOrHeaders?: string | Record<string, string | number | readonly string[]>, maybeHeaders?: Record<string, string | number | readonly string[]>): this {
     this.statusCode = statusCode;
     if (typeof statusMessageOrHeaders === "string") this.statusMessage = statusMessageOrHeaders;
     const headers = typeof statusMessageOrHeaders === "object" ? statusMessageOrHeaders : maybeHeaders;
     for (const [key, value] of Object.entries(headers || {})) this.setHeader(key, value);
+    this._header = `HTTP/1.1 ${statusCode} ${this.statusMessage}`;
     this.headersSent = true;
     return this;
   }
 
   toRuntimeHttpResponse(): RuntimeHttpResponse {
+    const body = this.chunks.some((chunk) => chunk instanceof Uint8Array || chunk instanceof ArrayBuffer || ArrayBuffer.isView(chunk))
+      ? concatBody(this.chunks)
+      : this.chunks.map((chunk) => String(chunk)).join("");
     return {
       statusCode: this.statusCode,
       statusText: this.statusMessage,
       headers: normalizeHeaders(this.headers),
-      body: new TextDecoder().decode(concatBody(this.chunks))
+      body
     };
   }
 }

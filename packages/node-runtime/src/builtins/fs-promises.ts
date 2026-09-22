@@ -15,6 +15,7 @@ export interface FsPromisesBuiltin {
   mkdtemp(prefix: string): Promise<string>;
   lstat(path: string): Promise<ReturnType<RuntimeFsBinding["statSync"]>>;
   open(path: string, flags?: string | number): Promise<FsPromisesFileHandle>;
+  opendir(path: string): Promise<unknown>;
   readFile(path: string, options?: "utf8" | "utf-8" | { encoding?: "utf8" | "utf-8" | null }): Promise<string | Uint8Array>;
   readlink(path: string): Promise<string>;
   readdir(path: string, options?: { withFileTypes?: boolean }): Promise<unknown[]>;
@@ -100,6 +101,14 @@ export function createFsPromisesBuiltin(fs: RuntimeFsBinding): FsPromisesBuiltin
 
     async open(path: string, flags: string | number = "r"): Promise<FsPromisesFileHandle> {
       return createFsPromisesFileHandle(fs.openSync(path, flags), fs);
+    },
+
+    async opendir(path: string): Promise<unknown> {
+      const maybeOpendirSync = (fs as RuntimeFsBinding & {
+        opendirSync?: (path: string) => unknown;
+      }).opendirSync;
+      if (!maybeOpendirSync) throw new Error("fs.opendir is not supported by this binding");
+      return maybeOpendirSync(path);
     },
 
     async readFile(

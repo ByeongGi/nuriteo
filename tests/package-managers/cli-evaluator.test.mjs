@@ -78,6 +78,50 @@ class NonRespondingCliEvaluationWorker {
   }
 }
 
+class HangingBridgeCliEvaluationWorker {
+  #listeners = {
+    message: new Set(),
+    error: new Set()
+  };
+  terminated = false;
+
+  addEventListener(type, listener) {
+    this.#listeners[type].add(listener);
+  }
+
+  removeEventListener(type, listener) {
+    this.#listeners[type].delete(listener);
+  }
+
+  postMessage(message) {
+    if (message.type !== "cli:evaluate") return;
+    queueMicrotask(() => {
+      for (const listener of this.#listeners.message) {
+        listener({
+          data: {
+            id: message.id,
+            result: {
+              bridgedServerPorts: [6125],
+              entry: message.request.entry.entry,
+              exitCode: 0,
+              stderr: "",
+              stdout: "",
+              workspaceSnapshot: message.workspaceSnapshot
+            },
+            type: "cli:result"
+          }
+        });
+      }
+    });
+  }
+
+  terminate() {
+    this.terminated = true;
+    this.#listeners.message.clear();
+    this.#listeners.error.clear();
+  }
+}
+
 const workspace = new MemoryPackageManagerWorkspace([
   {
     path: "/workspace/cli/package/bin/npm-cli.js",
@@ -260,6 +304,15 @@ const workspace = new MemoryPackageManagerWorkspace([
         if (fs.readFileSync(process.cwd() + '/streamed-write.txt', 'utf8') !== 'streamed-write') {
           throw new Error('unexpected createWriteStream output');
         }
+        await new Promise((resolve, reject) => {
+          const stream = new fs.WriteStream(process.cwd() + '/constructed-stream.txt');
+          stream.on('error', reject);
+          stream.on('finish', resolve);
+          stream.end('constructed');
+        });
+        if (fs.readFileSync(process.cwd() + '/constructed-stream.txt', 'utf8') !== 'constructed') {
+          throw new Error('unexpected WriteStream constructor output');
+        }
         fs.linkSync(process.cwd() + '/copied.txt', process.cwd() + '/linked-file.txt');
         await fs.promises.link(process.cwd() + '/copied-async.txt', process.cwd() + '/linked-file-async.txt');
         fs.mkdirSync(process.cwd() + '/linked-source');
@@ -332,14 +385,19 @@ const workspace = new MemoryPackageManagerWorkspace([
     data: `
       const fs = require('fs');
       module.exports = async function run(process) {
+        const initialMtime = fs.statSync('relative.txt').mtimeMs;
         fs.writeFileSync('created.txt', 'created');
         await fs.promises.writeFile('created-async.txt', 'async-created');
+        const callbackExists = await new Promise((resolve) => fs.exists('relative.txt', resolve));
         const values = [
           fs.existsSync('relative.txt'),
+          callbackExists,
           fs.readFileSync('relative.txt', 'utf8'),
           fs.statSync('relative.txt').isFile(),
           fs.statSync('relative.txt').mtime instanceof Date,
           typeof fs.statSync('relative.txt').mtimeMs,
+          initialMtime > 0,
+          fs.statSync('created.txt').mtimeMs > initialMtime,
           fs.readdirSync('.').includes('relative.txt'),
           await fs.promises.readFile('relative.txt', 'utf8'),
           fs.readFileSync('created.txt', 'utf8'),
@@ -374,6 +432,30 @@ const workspace = new MemoryPackageManagerWorkspace([
   {
     path: "/workspace/async-error-cli/package/package.json",
     data: JSON.stringify({ name: "async-error-fixture-cli", version: "1.2.3", main: "lib/cli.js" })
+  },
+  {
+    path: "/workspace/async-exit-cli/package/bin/npm-cli.js",
+    data: `
+      setTimeout(() => {
+        process.stdout.write('finished\\n');
+        process.exit(0);
+      }, 5);
+    `
+  },
+  {
+    path: "/workspace/async-exit-cli/package/package.json",
+    data: JSON.stringify({ name: "async-exit-fixture-cli", version: "1.2.3", bin: { npm: "bin/npm-cli.js" } })
+  },
+  {
+    path: "/workspace/timer-cli/package/bin/npm-cli.js",
+    data: `
+      const { setInterval } = require('node:timers');
+      setInterval(() => process.stdout.write('tick\\n'), 1);
+    `
+  },
+  {
+    path: "/workspace/timer-cli/package/package.json",
+    data: JSON.stringify({ name: "timer-fixture-cli", version: "1.2.3", bin: { npm: "bin/npm-cli.js" } })
   },
   {
     path: "/workspace/error-cause-cli/package/bin/npm-cli.js",
@@ -634,7 +716,7 @@ const writeResult = await createAsyncCliModuleEvaluator({
   args: ["write"],
   cwd: "/workspace/project"
 });
-assert.equal(writeResult.stdout, "wrote true true\n");
+assert.equal(writeResult.stdout, "wrote true true\n", JSON.stringify(writeResult));
 assert.equal(writeResult.stderr, "");
 assert.equal(writeResult.exitCode, 0);
 assert.equal(workspace.readText("/workspace/project/sync.txt"), "sync");
@@ -669,7 +751,7 @@ const relativeResult = await createAsyncCliModuleEvaluator({
   args: ["relative"],
   cwd: "/workspace/project"
 });
-assert.equal(relativeResult.stdout, "true:hello:true:true:number:true:hello:created:async-created\n");
+assert.equal(relativeResult.stdout, "true:true:hello:true:true:number:true:true:true:hello:created:async-created\n");
 assert.equal(relativeResult.stderr, "");
 assert.equal(relativeResult.exitCode, 0);
 assert.equal(workspace.readText("/workspace/project/created.txt"), "created");
@@ -1252,6 +1334,36 @@ await assert.rejects(
 );
 assert.equal(nonRespondingWorker.terminated, true);
 
+const hangingBridgeWorker = new HangingBridgeCliEvaluationWorker();
+const hangingBridgeNetwork = createLoopbackNetwork();
+const hangingBridgeResult = await createWorkerBackedAsyncCliModuleEvaluator({
+  loopbackNetwork: hangingBridgeNetwork,
+  root: "/workspace",
+  workerFactory: () => hangingBridgeWorker,
+  workerTimeoutMs: 100,
+  workspace: pendingCliWorkspace
+})({
+  entry: {
+    name: "pending",
+    version: "1.2.3",
+    entry: "/workspace/pending/package/bin/pending.mjs",
+    mode: "esm"
+  },
+  args: [],
+  cwd: "/workspace/project"
+});
+const hangingHttpRequest = hangingBridgeNetwork.fetch("http://127.0.0.1:6125/");
+const hangingFsWrite = hangingBridgeResult.writeBridgedFile("/workspace/project/src/main.ts", "updated");
+await Promise.resolve();
+hangingBridgeResult.closeBridgedServers();
+await assert.rejects(hangingHttpRequest, /ECLIBRIDGECLOSED/);
+await assert.rejects(hangingFsWrite, /ECLIBRIDGECLOSED/);
+assert.equal(hangingBridgeWorker.terminated, true);
+await assert.rejects(
+  () => hangingBridgeResult.writeBridgedFile("/workspace/project/src/main.ts", "late write"),
+  /ECLIBRIDGECLOSED/
+);
+
 const asyncErrorResult = await createAsyncCliModuleEvaluator({
   root: "/workspace",
   reader: workspace,
@@ -1269,6 +1381,47 @@ const asyncErrorResult = await createAsyncCliModuleEvaluator({
 assert.equal(asyncErrorResult.stdout, "");
 assert.match(asyncErrorResult.stderr, /delayed failure/);
 assert.equal(asyncErrorResult.exitCode, 1);
+
+const asyncExitResult = await createAsyncCliModuleEvaluator({
+  exitTimeoutMs: 100,
+  root: "/workspace",
+  reader: workspace,
+  waitForExit: true
+})({
+  entry: {
+    name: "npm",
+    version: "1.2.3",
+    entry: "/workspace/async-exit-cli/package/bin/npm-cli.js"
+  },
+  args: [],
+  cwd: "/workspace/project"
+});
+assert.equal(asyncExitResult.stdout, "finished\n");
+assert.equal(asyncExitResult.stderr, "");
+assert.equal(asyncExitResult.exitCode, 0);
+
+let readTimerOutput = () => ({ stderr: "", stdout: "" });
+const timerResult = await createAsyncCliModuleEvaluator({
+  onOutputSnapshot(snapshot) {
+    readTimerOutput = snapshot;
+  },
+  root: "/workspace",
+  reader: workspace,
+  settleTimeoutMs: 5
+})({
+  entry: {
+    name: "npm",
+    version: "1.2.3",
+    entry: "/workspace/timer-cli/package/bin/npm-cli.js"
+  },
+  args: [],
+  cwd: "/workspace/project"
+});
+assert.equal(typeof timerResult.dispose, "function");
+timerResult.dispose();
+const timerOutputAfterDispose = readTimerOutput().stdout;
+await new Promise((resolve) => setTimeout(resolve, 10));
+assert.equal(readTimerOutput().stdout, timerOutputAfterDispose);
 
 const errorCauseResult = createCliModuleEvaluator({
   root: "/workspace",

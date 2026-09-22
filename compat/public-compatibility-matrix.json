@@ -15,32 +15,34 @@
         "compat/framework-conformance.json",
         "docs/archive/productization-2026-09-16/evidence/P11-01.md"
       ],
-      "notes": "Actual Vite 8.2.0 worker-backed path covers install/dev/preview/edit-HMR/build/reload recovery for the product target. Secondary framework candidates remain partial-pass."
+      "notes": "Actual Vite 8.2.0 worker-backed path covers install/dev/preview/edit-HMR/build/reload recovery for the product target."
     },
     {
       "name": "Vite Vue runtime",
-      "status": "candidate",
-      "supportLevel": "secondary-candidate",
+      "status": "supported",
+      "supportLevel": "product-target",
       "evidence": [
         "compat/framework-conformance.json",
         "compat/framework-actual-validation.json",
+        "compat/framework-product-support.json",
         "tests/vite/vite-vue-svelte-actual.test.mjs"
       ],
-      "notes": "Actual worker-backed validation recorded. Candidate grade; not product-supported yet."
+      "notes": "The runtime fixture is tied to a pinned Vite template-vue upstream revision and passes npm/pnpm install, dev/preview, edit-HMR, build, and reload recovery within the framework budget."
     },
     {
       "name": "Vite Svelte",
-      "status": "candidate",
-      "supportLevel": "secondary-candidate",
+      "status": "supported",
+      "supportLevel": "product-target",
       "evidence": [
         "compat/framework-conformance.json",
         "compat/framework-actual-validation.json",
+        "compat/framework-product-support.json",
         "tests/vite/vite-vue-svelte-actual.test.mjs"
       ],
-      "notes": "Actual worker-backed validation recorded including plugin module path. Candidate grade; not product-supported yet."
+      "notes": "The runtime fixture is tied to a pinned Vite template-svelte upstream revision and passes npm/pnpm install, plugin-backed dev/preview, edit-HMR, build, and reload recovery within the framework budget."
     },
     {
-      "name": "Next.js app router",
+      "name": "Next.js App Router preview adapter",
       "status": "product-preview",
       "supportLevel": "preview-adapter",
       "evidence": [
@@ -49,7 +51,18 @@
         "tests/vite/nextjs-compatibility.test.mjs",
         "docs/productization/nextjs-product-support-target.md"
       ],
-      "notes": "App Router preview adapter is product-supported for multi-route preview, layout, link navigation, and HMR. Full Next CLI dev/build, native SWC, and RSC server runtime remain hold or unsupported."
+      "notes": "App Router preview adapter is product-supported for multi-route preview, layout, link navigation, and HMR."
+    },
+    {
+      "name": "Next.js 15.1 full runtime",
+      "status": "candidate",
+      "supportLevel": "pinned-guest-runtime",
+      "evidence": [
+        "compat/nextjs-compatibility.json",
+        "tests/preview-service/next-full-runtime.test.mjs",
+        "docs/productization/nextjs-product-support-target.md"
+      ],
+      "notes": "Real next dev/build/start, WASM SWC, RSC/Server Actions, Middleware/Edge, ISR, and Image Optimization pass for the pinned fixture. Native .node SWC remains unsupported; browser-worker promotion is pending."
     }
   ],
   "packages": [
@@ -174,6 +187,7 @@
     "node tests/productization/run.mjs",
     "node tests/package-managers/run.mjs",
     "node tests/vite/vite-react-product-workflow.test.mjs",
+    "pnpm test:next-full-runtime",
     "node tests/preview/run.mjs",
     "node tests/browser-host/run.mjs",
     "node tests/browser/boot.test.mjs"

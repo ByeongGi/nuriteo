@@ -1,12 +1,20 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-09-15",
+  "updatedAt": "2026-09-22",
   "scope": {
     "goal": "Track SDK consumer bundler compatibility for productization.",
-    "packageArtifact": "dist/sdk/cargo-container-sdk-0.0.0.tgz",
+    "packageArtifact": "dist/sdk/cargo-container-sdk-0.1.0-beta.1.tgz",
     "stableApi": "docs/productization/sdk-api-freeze-rfc.md"
   },
   "cases": [
+    {
+      "id": "sdk-service-webcontainer-contract",
+      "bundler": "source-contract",
+      "command": "node tests/sdk-consumer/services.test.mjs",
+      "status": "pass",
+      "evidence": ["tests/sdk-consumer/services.test.mjs", "compat/sdk-public-release.json"],
+      "notes": "Validates typed errors, filesystem/package/process/project/preview adapters, trace events, mount-root containment, lifecycle retry and teardown, and the Cargo WebContainer-style facade."
+    },
     {
       "id": "typescript-bundler-resolution",
       "bundler": "typescript",

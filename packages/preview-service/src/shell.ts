@@ -10,9 +10,9 @@ export interface PreviewShellHandlers {
   getCwd: () => string;
   getProject: () => ProjectWorkspaceStore | null;
   install: () => Promise<{ stdout: string; stderr: string; exitCode: number }>;
-  runDev: () => Promise<{ stdout: string; stderr: string; exitCode: number }>;
-  runBuild: () => Promise<{ stdout: string; stderr: string; exitCode: number }>;
-  restartDev: () => Promise<{ stdout: string; stderr: string; exitCode: number }>;
+  runDev: (args?: string[]) => Promise<{ stdout: string; stderr: string; exitCode: number }>;
+  runBuild: (args?: string[]) => Promise<{ stdout: string; stderr: string; exitCode: number }>;
+  restartDev: (args?: string[]) => Promise<{ stdout: string; stderr: string; exitCode: number }>;
   onChunk?: (chunk: { stream: "stdout" | "stderr"; data: string }) => void;
 }
 
@@ -44,6 +44,7 @@ const HELP = [
   "  npm run dev | pnpm run dev",
   "  npm run build | pnpm run build",
   "  npm run start        Alias for run preview",
+  "  npm/pnpm run <name> -- <args> forwards arbitrary script arguments",
   "",
   "Notes:",
   "  yarn                 Unsupported (v1 evaluation-only candidate). Use npm or pnpm.",
@@ -57,7 +58,7 @@ export function createPreviewShellSession(handlers: PreviewShellHandlers): Previ
   const commands: ShellCommandMap = {
     help: ({ argv }) => ok(argv, `${HELP}\n`),
     clear: ({ argv }) => ok(argv, ""),
-    pwd: ({ argv }) => ok(argv, `${handlers.getCwd()}\n`),
+    pwd: ({ argv, cwd }) => ok(argv, `${cwd}\n`),
     echo: ({ argv }) => ok(argv, `${argv.slice(1).join(" ")}\n`),
     ls: ({ argv }) => listFiles(handlers, argv),
     cat: ({ argv }) => readFile(handlers, argv),
@@ -125,12 +126,9 @@ async function runPackageManager(
 
   if (command === "run" || command === "run-script") {
     if (!script) return fail(argv, `${manager}: missing script name\n`);
-    if (rest.length > 0) {
-      return fail(argv, `${manager}: extra script args are not supported yet (${rest.join(" ")})\n`);
-    }
-    if (script === "dev" || script === "start") return toResult(argv, await handlers.runDev());
-    if (script === "build") return toResult(argv, await handlers.runBuild());
-    if (script === "restart") return toResult(argv, await handlers.restartDev());
+    if (script === "dev" || script === "start") return toResult(argv, await handlers.runDev(rest));
+    if (script === "build") return toResult(argv, await handlers.runBuild(rest));
+    if (script === "restart") return toResult(argv, await handlers.restartDev(rest));
     return fail(argv, `${manager}: unsupported script "${script}". Try: install, run dev, run build\n`);
   }
 

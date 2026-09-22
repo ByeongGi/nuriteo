@@ -39,18 +39,23 @@ export class Stream extends EventEmitter {
 
 export class Readable extends Stream {
   readable = true;
+  __browserReadableQueue: RuntimeValue[];
+  __browserReadableEnded = false;
+  __browserReadableEndEmitted = false;
   _readableState: { encoding: BufferEncoding | null; objectMode: boolean } = {
     encoding: null,
     objectMode: false
   };
   #queue: RuntimeValue[] = [];
   #ended = false;
+  #endEmitted = false;
   #destroyed = false;
   #encoding: BufferEncoding | null = null;
   #readScheduled = false;
 
   constructor(options: { objectMode?: boolean } = {}) {
     super();
+    this.__browserReadableQueue = this.#queue;
     this._readableState.objectMode = options.objectMode === true;
   }
 
@@ -78,21 +83,21 @@ export class Readable extends Stream {
   push(chunk: RuntimeValue): boolean {
     if (chunk === null) {
       this.#ended = true;
+      this.__browserReadableEnded = true;
       this.readable = false;
-      this.emit("end");
-      this.emit("close");
+      if (this.listenerCount("end") > 0) this.#emitEnd();
       return false;
     }
     const value = normalizeReadableChunk(chunk, this.#encoding);
-    this.#queue.push(value);
-    this.emit("data", value);
+    if (this.listenerCount("data") > 0) this.emit("data", value);
+    else this.#queue.push(value);
     return true;
   }
 
   override pipe<T extends Writable>(destination: T): T {
     super.pipe(destination);
     while (this.#queue.length > 0) destination.write(this.#queue.shift());
-    if (this.#ended) destination.end();
+    this.#scheduleRead();
     return destination;
   }
 
@@ -109,7 +114,7 @@ export class Readable extends Stream {
 
   override on(eventName: string | symbol, listener: Listener): this {
     super.on(eventName, listener);
-    if (eventName === "data" || eventName === "readable") this.#scheduleRead();
+    if (eventName === "data" || eventName === "end" || eventName === "readable") this.#scheduleRead();
     return this;
   }
 
@@ -119,7 +124,7 @@ export class Readable extends Stream {
 
   override once(eventName: string | symbol, listener: Listener): this {
     super.once(eventName, listener);
-    if (eventName === "data" || eventName === "readable") this.#scheduleRead();
+    if (eventName === "data" || eventName === "end" || eventName === "readable") this.#scheduleRead();
     return this;
   }
 
@@ -134,25 +139,42 @@ export class Readable extends Stream {
   protected _read(_size?: number): void {}
 
   #scheduleRead(): void {
-    if (this.#readScheduled || this.#ended || this.#destroyed) return;
+    if (this.#readScheduled || this.#destroyed) return;
     this.#readScheduled = true;
     queueMicrotask(() => {
       this.#readScheduled = false;
-      if (this.#ended || this.#destroyed) return;
+      if (this.#destroyed) return;
       try {
-        void this._read(4096);
+        while (this.#queue.length > 0 && this.listenerCount("data") > 0) {
+          this.emit("data", this.#queue.shift());
+        }
+        if (this.#ended && this.listenerCount("end") > 0) this.#emitEnd();
+        if (!this.#ended) void this._read(4096);
       } catch (error) {
         this.destroy(error);
       }
     });
   }
 
+  #emitEnd(): void {
+    if (this.#endEmitted) return;
+    this.#endEmitted = true;
+    this.__browserReadableEndEmitted = true;
+    this.emit("end");
+    this.emit("close");
+  }
+
   async *[Symbol.asyncIterator](): AsyncIterableIterator<RuntimeValue> {
     while (!this.#destroyed) {
-      while (this.#queue.length > 0) yield this.#queue.shift();
-      if (this.#ended) return;
+      const replacementState = this as unknown as Partial<LegacyTransformState>;
+      const queue = replacementState.__browserReadableQueue ?? this.#queue;
+      while (queue.length > 0) yield queue.shift();
+      if (replacementState.__browserReadableEnded === true || this.#ended) return;
       const event = await waitReadableEvent(this);
-      if (event.kind === "data") continue;
+      if (event.kind === "data") {
+        yield event.chunk;
+        continue;
+      }
       if (event.kind === "end") return;
       if (event.kind === "error") throw event.error;
     }
@@ -356,6 +378,12 @@ export const streamBuiltin = Object.assign(legacyStream, {
   Writable,
   default: legacyStream,
   finished,
+  isDisturbed: (stream: RuntimeValue): boolean => Boolean(
+    stream && typeof stream === "object" && (
+      (stream as { locked?: boolean }).locked === true
+      || (stream as { readableEnded?: boolean }).readableEnded === true
+    )
+  ),
   pipeline,
   promises
 });
@@ -364,6 +392,27 @@ export const streamPromisesBuiltin = Object.freeze({
   finished: promises.finished,
   pipeline: promises.pipeline
 });
+
+const webStreamsGlobal = globalThis as unknown as Record<string, unknown>;
+export const streamWebBuiltin = Object.freeze(Object.fromEntries([
+  "ByteLengthQueuingStrategy",
+  "CompressionStream",
+  "CountQueuingStrategy",
+  "DecompressionStream",
+  "ReadableByteStreamController",
+  "ReadableStream",
+  "ReadableStreamBYOBReader",
+  "ReadableStreamBYOBRequest",
+  "ReadableStreamDefaultController",
+  "ReadableStreamDefaultReader",
+  "TextDecoderStream",
+  "TextEncoderStream",
+  "TransformStream",
+  "TransformStreamDefaultController",
+  "WritableStream",
+  "WritableStreamDefaultController",
+  "WritableStreamDefaultWriter"
+].map((name) => [name, webStreamsGlobal[name]])));
 
 function waitReadableEvent(stream: Readable): Promise<
   | { kind: "data"; chunk: RuntimeValue }
@@ -521,6 +570,24 @@ function createLegacyTransformConstructor(LegacyStream: typeof Stream): typeof T
         configurable: true,
         value: true,
         writable: true
+      },
+      __browserReadableQueue: {
+        configurable: true,
+        enumerable: true,
+        value: [],
+        writable: true
+      },
+      __browserReadableEnded: {
+        configurable: true,
+        enumerable: true,
+        value: false,
+        writable: true
+      },
+      __browserReadableEndEmitted: {
+        configurable: true,
+        enumerable: true,
+        value: false,
+        writable: true
       }
     });
     Object.defineProperty(this, "__browserTransformOptions", {
@@ -546,14 +613,21 @@ function createLegacyTransformConstructor(LegacyStream: typeof Stream): typeof T
   LegacyTransform.prototype.push = function push(this: Transform & LegacyTransformState, chunk: RuntimeValue): boolean {
     if (chunk === null) {
       this.readable = false;
-      this.emit("end");
-      this.emit("close");
+      this.__browserReadableEnded = true;
+      scheduleLegacyReadableFlush(this);
       return false;
     }
     const value = normalizeReadableChunk(chunk, readableEncoding.get(this) ?? null);
-    this.emit("data", value);
+    if (this.listenerCount("data") > 0) this.emit("data", value);
+    else this.__browserReadableQueue.push(value);
     return true;
   };
+  LegacyTransform.prototype.on = function on(this: Transform & LegacyTransformState, eventName: string | symbol, listener: Listener) {
+    LegacyStream.prototype.on.call(this, eventName, listener);
+    if (eventName === "data" || eventName === "end") scheduleLegacyReadableFlush(this);
+    return this;
+  };
+  LegacyTransform.prototype.addListener = LegacyTransform.prototype.on;
   LegacyTransform.prototype.write = function write(
     this: Transform & LegacyTransformState,
     chunk: RuntimeValue,
@@ -618,10 +692,25 @@ function createLegacyTransformConstructor(LegacyStream: typeof Stream): typeof T
     this.emit("close");
     return this;
   };
+
+  function scheduleLegacyReadableFlush(stream: Transform & LegacyTransformState): void {
+    queueMicrotask(() => {
+      const queue = stream.__browserReadableQueue;
+      while (queue.length > 0 && stream.listenerCount("data") > 0) stream.emit("data", queue.shift());
+      if (stream.__browserReadableEnded && !stream.__browserReadableEndEmitted && stream.listenerCount("end") > 0) {
+        stream.__browserReadableEndEmitted = true;
+        stream.emit("end");
+        stream.emit("close");
+      }
+    });
+  }
   return LegacyTransform;
 }
 
 interface LegacyTransformState {
+  __browserReadableEnded: boolean;
+  __browserReadableEndEmitted: boolean;
+  __browserReadableQueue: RuntimeValue[];
   __browserTransformOptions?: TransformOptions;
   _flush?: (callback: TransformCallback) => void;
   _readableState: { encoding: BufferEncoding | null; objectMode: boolean };

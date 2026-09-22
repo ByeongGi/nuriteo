@@ -9,12 +9,13 @@ export interface PackageManagerTerminalRunner {
   ci?(cwd: string, args?: string[]): PackageManagerProcessResult;
 }
 
-export type PackageManagerTerminalCommandName = "npm" | "pnpm";
+export type PackageManagerTerminalCommandName = "npm" | "pnpm" | "yarn";
 
 export interface PackageManagerTerminalCommandOptions {
   cwd?: string;
   npm?: PackageManagerTerminalRunner;
   pnpm?: PackageManagerTerminalRunner;
+  yarn?: PackageManagerTerminalRunner;
   onResult?: (result: PackageManagerTerminalCommandResult) => void;
 }
 
@@ -29,6 +30,7 @@ export function createPackageManagerTerminalCommands(options: PackageManagerTerm
   const commands: ShellCommandMap = {};
   if (options.npm) commands.npm = createPackageManagerTerminalCommand("npm", options.npm, options);
   if (options.pnpm) commands.pnpm = createPackageManagerTerminalCommand("pnpm", options.pnpm, options);
+  if (options.yarn) commands.yarn = createPackageManagerTerminalCommand("yarn", options.yarn, options);
   return commands;
 }
 
@@ -63,6 +65,7 @@ function runPackageManagerCommand(
   args: string[]
 ): PackageManagerProcessResult {
   const [command, second, ...rest] = args;
+  if (name === "yarn" && !command) return runner.install(cwd);
   if (!command || command === "--version" || command === "-v" || command === "version") return runner.version(cwd);
   if (command === "install" || command === "i" || command === "add") return runner.install(cwd, args.slice(1));
   if (command === "ci") {
@@ -78,6 +81,9 @@ function runPackageManagerCommand(
     const [execCommand, ...execRest] = execArgs;
     if (!execCommand) return unsupportedPackageManagerResult(name, cwd, args, `${name}: missing exec command\n`);
     return runner.exec(cwd, execCommand, execRest);
+  }
+  if (name === "yarn" && command && !command.startsWith("-")) {
+    return runner.runScript(cwd, command, args.slice(1));
   }
   return unsupportedPackageManagerResult(name, cwd, args, `${name}: unsupported terminal command: ${args.join(" ")}\n`);
 }

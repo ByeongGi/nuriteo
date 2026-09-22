@@ -15,6 +15,7 @@ export interface ShellCommandContext {
   files: Map<string, string>;
   output?: ShellOutputSink;
   signal?: AbortSignal;
+  terminal?: ShellTerminalControl;
 }
 
 export type ShellCommand = (context: ShellCommandContext) => ShellCommandResult | Promise<ShellCommandResult>;
@@ -41,6 +42,18 @@ export interface ShellRuntimeOptions {
 export interface ShellRunOptions {
   onOutput?: ShellOutputSink;
   signal?: AbortSignal;
+  terminal?: ShellTerminalControl;
+}
+
+export interface ShellTerminalSize {
+  cols: number;
+  rows: number;
+}
+
+export interface ShellTerminalControl {
+  size: ShellTerminalSize;
+  onInput(listener: (data: string) => void): () => void;
+  onResize(listener: (size: ShellTerminalSize) => void): () => void;
 }
 
 export type ShellOutputStream = "stdout" | "stderr";

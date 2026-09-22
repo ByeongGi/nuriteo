@@ -4,7 +4,7 @@ import path from "node:path";
 
 export const DEFAULT_SDK_BASE_PATH = "/sdk/";
 export const PACKAGE_ROOT = "dist/sdk/package";
-export const TARBALL_PATH = "dist/sdk/cargo-container-sdk-0.0.0.tgz";
+export const TARBALL_PATH = "dist/sdk/cargo-container-sdk-0.1.0-beta.1.tgz";
 export const FINGERPRINT_PATH = "docs/release/fingerprint.json";
 export const ASSET_MANIFEST_PATH = "dist/sdk/package/asset-manifest.json";
 

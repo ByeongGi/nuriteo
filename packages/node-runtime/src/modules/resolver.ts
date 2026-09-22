@@ -164,6 +164,10 @@ export class ModuleResolver {
       const real = this.realpath(candidate);
       if (this.modules.has(real) || this.moduleExists(real)) return real;
     }
+    const directoryManifest = this.packageRoots[normalized];
+    if (directoryManifest?.main && directoryManifest.main !== ".") {
+      return this.resolvePath(`${normalized}/${directoryManifest.main}`);
+    }
     throw moduleNotFound(`ERR_MODULE_NOT_FOUND: ${path}`);
   }
 }

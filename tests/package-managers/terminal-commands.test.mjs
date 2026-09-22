@@ -9,6 +9,7 @@ const calls = [];
 const results = [];
 const npm = createFakeRunner("npm", calls);
 const pnpm = createFakeRunner("pnpm", calls);
+const yarn = createFakeRunner("yarn", calls);
 const chunks = [];
 const terminal = createTerminalSession({
   cwd: "/workspace/app",
@@ -16,6 +17,7 @@ const terminal = createTerminalSession({
     cwd: "/workspace/app",
     npm,
     pnpm,
+    yarn,
     onResult(result) {
       results.push(result);
     }
@@ -64,11 +66,32 @@ assert.equal(missingExec.exitCode, 1);
 assert.match(missingExec.stderr, /missing exec command/);
 assert.equal(chunks.filter((chunk) => chunk.data.includes("missing exec command")).length, 1);
 
+const yarnInstall = await terminal.run("yarn");
+assert.equal(yarnInstall.exitCode, 0);
+assert.deepEqual(calls[3], {
+  manager: "yarn",
+  method: "install",
+  cwd: "/workspace/app",
+  args: []
+});
+
+const yarnShorthand = await terminal.run("yarn build --watch");
+assert.equal(yarnShorthand.exitCode, 0);
+assert.deepEqual(calls[4], {
+  manager: "yarn",
+  method: "runScript",
+  cwd: "/workspace/app",
+  script: "build",
+  args: ["--watch"]
+});
+
 assert.deepEqual(terminal.history(), [
   "npm install --ignore-scripts",
   "pnpm run build -- --watch",
   "npm exec -- fixture-hello --flag",
-  "pnpm exec"
+  "pnpm exec",
+  "yarn",
+  "yarn build --watch"
 ]);
 
 console.log("package manager terminal commands test ok");

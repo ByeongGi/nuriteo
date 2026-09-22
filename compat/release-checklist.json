@@ -22,6 +22,8 @@
   ],
   "requiredChecks": [
     "node scripts/package-sdk.mjs",
+    "node scripts/check-sdk-public-release.mjs",
+    "node scripts/check-sdk-publish-rehearsal.mjs",
     "node scripts/check-release-readiness.mjs",
     "node scripts/check-release-ops-sg29.mjs",
     "node scripts/check-release-policy.mjs",
@@ -35,6 +37,8 @@
     "elevatedFrom": "docs/release/release-checklist.md",
     "requiredCommands": [
       "node scripts/package-sdk.mjs",
+      "node scripts/check-sdk-public-release.mjs",
+      "node scripts/check-sdk-publish-rehearsal.mjs",
       "node scripts/check-release-readiness.mjs",
       "node scripts/check-release-ops-sg29.mjs"
     ]

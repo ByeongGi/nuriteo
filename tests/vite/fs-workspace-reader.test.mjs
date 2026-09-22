@@ -34,6 +34,8 @@ const viteReader = createNodeFsWorkspaceReader({
 assert.deepEqual(viteReader.listDir("/vendor/vite/bin"), ["vite.js"]);
 assert.equal(viteReader.exists("/vendor/vite/package.json"), true);
 assert.equal(viteReader.exists("/vendor/vite/missing.js"), false);
+assert.equal(viteReader.isFile("/vendor/vite/package.json"), true);
+assert.equal(viteReader.isFile("/vendor/vite/dist"), false);
 assert.throws(() => viteReader.readText("/vendor/other/package.json"), /outside virtual root/);
 
 const viteArtifact = createVitePackageArtifactFromWorkspace({
@@ -89,6 +91,8 @@ const fallbackReader = createFallbackWorkspaceReader([
 assert.deepEqual(fallbackReader.listDir("/workspace/project/node_modules"), [".pnpm", "tinyglobby", "ws"]);
 assert.equal(fallbackReader.exists("/workspace/project/node_modules/ws/package.json"), true);
 assert.equal(fallbackReader.exists("/workspace/project/node_modules/tinyglobby/package.json"), true);
+assert.equal(fallbackReader.isFile("/workspace/project/node_modules/tinyglobby/package.json"), true);
+assert.equal(fallbackReader.isFile("/workspace/project/node_modules/tinyglobby"), false);
 assert.equal(JSON.parse(fallbackReader.readText("/workspace/project/node_modules/tinyglobby/package.json")).version, "0.2.17");
 
 console.log("vite filesystem workspace reader test ok");

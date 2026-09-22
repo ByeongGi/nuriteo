@@ -9,16 +9,22 @@ import {
   type RuntimeSystemMetricsOptions
 } from "@cargo-container/browser-host/supervisor";
 import type { MessageDetails, ReadyMessage } from "@cargo-container/protocol";
+import { CargoContainerServices, type CargoContainerServicesOptions } from "./services.ts";
 
-export type CargoContainerOptions = BrowserRuntimeSupervisorOptions;
+export type CargoContainerOptions = BrowserRuntimeSupervisorOptions & {
+  services?: CargoContainerServicesOptions;
+};
 export type CargoContainerBootOptions = RuntimeBootOptions;
 export type CargoContainerRunOptions = RuntimeRunOptions;
 
 export class CargoContainer {
   #supervisor: BrowserRuntimeSupervisor;
+  readonly services: CargoContainerServices;
 
   constructor(options: CargoContainerOptions) {
-    this.#supervisor = new BrowserRuntimeSupervisor(options);
+    const { services, ...supervisorOptions } = options;
+    this.#supervisor = new BrowserRuntimeSupervisor(supervisorOptions);
+    this.services = new CargoContainerServices(services);
   }
 
   get status(): RuntimeStatus {

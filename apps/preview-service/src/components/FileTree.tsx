@@ -1,10 +1,11 @@
 import { useMemo, useState, type DragEvent, type MouseEvent } from "react";
 import clsx from "clsx";
-import { ChevronDown, ChevronRight, FileCode2, Folder, FilePlus2, FolderPlus, Copy, Eye, EyeOff, FoldVertical, RefreshCw } from "lucide-react";
+import { Braces, ChevronDown, ChevronRight, File, FileCode2, FileJson, FilePlus2, FileText, Folder, FolderPlus, Copy, Eye, EyeOff, FoldVertical, Palette, RefreshCw } from "lucide-react";
 import type { ProjectWorkspaceTreeNode } from "@cargo-container/browser-host";
 import type { PreviewControllerModel } from "../hooks/usePreviewController";
 import { createGitignoreMatcher, type GitignoreMatcher } from "../lib/gitignore";
 import { ContextMenu, type ContextMenuItem } from "./ContextMenu";
+import { fileIconKind, type FileIconKind } from "../lib/fileIcons";
 
 type MenuTarget =
   | { kind: "blank" }
@@ -173,7 +174,7 @@ function TreeNode({
             }}
           >
             {open ? <ChevronDown className="size-3.5 shrink-0" /> : <ChevronRight className="size-3.5 shrink-0" />}
-            <Folder className="size-3.5 shrink-0 text-cargo-accent/80" />
+            <Folder className="folder-icon size-3.5 shrink-0" />
             <span className="truncate">{node.name}</span>
           </button>
         </div>
@@ -216,12 +217,27 @@ function TreeNode({
           onClick={(event) => onOpen(node.path, event)}
           onDoubleClick={(event) => onOpen(node.path, event)}
         >
-          <FileCode2 className="size-3.5 shrink-0 opacity-70" />
+          <FileTypeIcon path={node.path} />
           <span className="truncate">{node.name}{node.dirty ? " •" : ""}</span>
         </button>
       </div>
     </li>
   );
+}
+
+const FILE_ICONS = {
+  code: Braces,
+  data: FileJson,
+  style: Palette,
+  markup: FileCode2,
+  document: FileText,
+  file: File
+} satisfies Record<FileIconKind, typeof File>;
+
+function FileTypeIcon({ path }: { path: string }) {
+  const kind = fileIconKind(path);
+  const Icon = FILE_ICONS[kind];
+  return <Icon className={`file-icon file-icon-${kind} size-3.5 shrink-0`} aria-hidden />;
 }
 
 export function FileTree({ model }: { model: PreviewControllerModel }) {

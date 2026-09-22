@@ -7,9 +7,11 @@ export const builtinModules = Object.freeze([
   "buffer",
   "child_process",
   "constants",
+  "console",
   "crypto",
   "dns",
   "dns/promises",
+  "diagnostics_channel",
   "events",
   "fs",
   "fs/promises",
@@ -24,9 +26,11 @@ export const builtinModules = Object.freeze([
   "node:buffer",
   "node:child_process",
   "node:constants",
+  "node:console",
   "node:crypto",
   "node:dns",
   "node:dns/promises",
+  "node:diagnostics_channel",
   "node:events",
   "node:fs",
   "node:fs/promises",
@@ -44,6 +48,7 @@ export const builtinModules = Object.freeze([
   "node:readline",
   "node:stream",
   "node:stream/promises",
+  "node:stream/web",
   "node:string_decoder",
   "node:timers",
   "node:timers/promises",
@@ -51,7 +56,9 @@ export const builtinModules = Object.freeze([
   "node:tty",
   "node:url",
   "node:util",
+  "node:util/types",
   "node:v8",
+  "node:vm",
   "node:wasi",
   "node:worker_threads",
   "node:zlib",
@@ -64,6 +71,7 @@ export const builtinModules = Object.freeze([
   "readline",
   "stream",
   "stream/promises",
+  "stream/web",
   "string_decoder",
   "timers",
   "timers/promises",
@@ -71,7 +79,9 @@ export const builtinModules = Object.freeze([
   "tty",
   "url",
   "util",
+  "util/types",
   "v8",
+  "vm",
   "wasi",
   "worker_threads",
   "zlib"
@@ -97,11 +107,11 @@ export class Module {
   }
 
   static builtinModules = builtinModules;
-  static _extensions = Object.freeze({
+  static _extensions: Record<string, unknown> = {
     ".js": true,
     ".cjs": true,
     ".json": true
-  });
+  };
   static _cache = Object.create(null) as Record<string, Module>;
 
   static _nodeModulePaths(from: string): string[] {

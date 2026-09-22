@@ -105,8 +105,7 @@ export const pathBuiltin = {
   posix,
   win32: posix
 } as typeof posix & { default: typeof posix & { posix: typeof posix; win32: typeof posix }; posix: typeof posix; win32: typeof posix };
-pathBuiltin.default = pathBuiltin;
-Object.freeze(pathBuiltin);
+Object.defineProperty(pathBuiltin, "default", { configurable: true, enumerable: false, value: pathBuiltin, writable: true });
 
 function normalizeParts(parts: string[], allowAboveRoot: boolean): string[] {
   const output: string[] = [];

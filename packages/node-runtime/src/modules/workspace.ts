@@ -5,6 +5,7 @@ import { transpileTypeScript } from "../transforms/typescript.ts";
 
 export interface WorkspaceModuleReader {
   readText(path: string): string;
+  isFile?(path: string): boolean;
   listDir(path: string): string[];
 }
 
@@ -33,10 +34,11 @@ export function createWorkspaceModuleRuntime(options: WorkspaceModuleRuntimeOpti
     packages,
     packageRoots,
     loadModuleDefinition: (url) => readWorkspaceModuleDefinition(options.reader, root, url),
+    moduleExists: (url) => options.reader.isFile?.(url) === true,
     ...(options.realpaths ? { realpaths: options.realpaths } : {})
   });
 
-  registerWorkspaceModules(runtime, options.reader, root);
+  if (!options.reader.isFile) registerWorkspaceModules(runtime, options.reader, root);
   return runtime;
 }
 
@@ -58,7 +60,7 @@ function readWorkspaceModuleDefinition(reader: WorkspaceModuleReader, root: stri
       source: isTypeScriptSourceFile(file) ? transpileTypeScript(source, { fileName: file }).code : source
     };
   }
-  if (file.endsWith(".cjs") || file.endsWith(".cts") || file.endsWith(".js")) {
+  if (file.endsWith(".cjs") || file.endsWith(".cts") || file.endsWith(".js") || isExtensionlessExecutable(reader, file)) {
     const source = safeReadText(reader, file);
     return source === null ? undefined : {
       kind: "cjs-source" as const,
@@ -105,12 +107,25 @@ function discoverPackageManifests(reader: WorkspaceModuleReader, root: string): 
 function* walkFiles(reader: WorkspaceModuleReader, path: string): Generator<string> {
   for (const entry of safeListDir(reader, path)) {
     const child = join(path, entry);
+    if (reader.isFile?.(child) === true) {
+      yield child;
+      continue;
+    }
     if (isLikelyTextModule(child) && safeReadText(reader, child) !== null) {
+      yield child;
+      continue;
+    }
+    if (isExtensionlessExecutable(reader, child)) {
       yield child;
       continue;
     }
     yield* walkFiles(reader, child);
   }
+}
+
+function isExtensionlessExecutable(reader: WorkspaceModuleReader, path: string): boolean {
+  if (path.split("/").at(-1)?.includes(".")) return false;
+  return safeReadText(reader, path)?.startsWith("#!") === true;
 }
 
 function safeListDir(reader: WorkspaceModuleReader, path: string): string[] {

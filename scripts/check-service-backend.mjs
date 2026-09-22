@@ -15,6 +15,12 @@ const requiredFiles = [
   "packages/service-backend/src/share-service.ts",
   "packages/service-backend/src/usage-meter.ts",
   "packages/service-backend/src/auth.ts",
+  "packages/service-backend/src/production-types.ts",
+  "packages/service-backend/src/production-adapters.ts",
+  "packages/service-backend/src/production-service.ts",
+  "packages/service-backend/src/production-api.ts",
+  "compat/service-backend-production.json",
+  "tests/service-backend/production-backend.test.mjs",
   "docs/productization/service-backend.md",
   "tests/service-backend/project-service.test.mjs"
 ];

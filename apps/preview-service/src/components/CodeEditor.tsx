@@ -9,6 +9,7 @@ import { monacoModelPath, syncMonacoProjectFiles } from "../lib/monacoProjectSyn
 import { subscribeToLanguageProblems, workspacePathForModel } from "../lib/monacoLanguageService";
 import { ContextMenu } from "./ContextMenu";
 import { EditorBreadcrumbs } from "./EditorBreadcrumbs";
+import { monacoTheme } from "../lib/settings";
 
 loader.config({ monaco });
 
@@ -39,6 +40,8 @@ export function CodeEditor({ model }: { model: PreviewControllerModel }) {
     openFile,
     closeTab,
     editSelected,
+    editFile,
+    saveFile,
     saveCurrentFile,
     formatCurrentFile,
     reconnectHmr,
@@ -301,13 +304,14 @@ export function CodeEditor({ model }: { model: PreviewControllerModel }) {
               language={language}
               value={editorFile.data}
               height="100%"
-              theme={settings.theme === "light" ? "vs" : "vs-dark"}
+              theme={monacoTheme(settings.theme)}
               onChange={(value) => editSelected(value ?? "")}
               onMount={onEditorMount}
               options={{
                 fontFamily: "var(--mono)",
                 fontSize: settings.fontSize,
-                minimap: { enabled: false },
+                minimap: { enabled: settings.editorMinimap },
+                wordWrap: settings.wordWrap ? "on" : "off",
                 scrollBeyondLastLine: false,
                 automaticLayout: true,
                 tabSize: 2,
@@ -332,24 +336,30 @@ export function CodeEditor({ model }: { model: PreviewControllerModel }) {
         {splitPath && splitFile ? (
           <div className="flex min-h-0 min-w-0 flex-col border-l border-cargo-line">
             <div className="flex shrink-0 items-center justify-between border-b border-cargo-line px-2 py-1 text-[11px] text-cargo-muted">
-              <span className="truncate font-mono">{displayPath(splitPath)}</span>
-              <button type="button" className="btn-small btn-ghost" onClick={() => setSplitPath(null)}>
-                Close split
-              </button>
+              <span className="truncate font-mono">{displayPath(splitPath)}{splitFile.dirty ? " •" : ""}</span>
+              <div className="flex items-center gap-1">
+                <button type="button" className="btn-small" disabled={!splitFile.dirty} onClick={() => saveFile(splitPath)}>
+                  Save
+                </button>
+                <button type="button" className="btn-small btn-ghost" onClick={() => setSplitPath(null)}>
+                  Close split
+                </button>
+              </div>
             </div>
             <div className="relative min-h-0 flex-1">
               <Editor
                 key={`split-${splitPath}`}
-                path={`file:///__cargo_split__${splitPath}`}
+                path={monacoModelPath(splitPath)}
                 language={languageForPath(splitPath)}
                 value={splitFile.data}
+                onChange={(value) => editFile(splitPath, value ?? "")}
                 height="100%"
-                theme={settings.theme === "light" ? "vs" : "vs-dark"}
+                theme={monacoTheme(settings.theme)}
                 options={{
                   fontFamily: "var(--mono)",
                   fontSize: settings.fontSize,
-                  readOnly: true,
-                  minimap: { enabled: false },
+                  minimap: { enabled: settings.editorMinimap },
+                  wordWrap: settings.wordWrap ? "on" : "off",
                   automaticLayout: true,
                   scrollBeyondLastLine: false
                 }}

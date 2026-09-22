@@ -13,6 +13,7 @@ import "./package-manager-diagnostics.test.mjs";
 import "./network-diagnostics.test.mjs";
 import "./project-editor-bridge.test.mjs";
 import "./project-import-export.test.mjs";
+import "./sqlite-project-client.test.mjs";
 import "./project-onboarding.test.mjs";
 import "./project-recovery.test.mjs";
 import "./project-workspace.test.mjs";

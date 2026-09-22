@@ -5,7 +5,7 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 
 const root = new URL("../..", import.meta.url).pathname;
-const packageTarball = path.join(root, "dist/sdk/cargo-container-sdk-0.0.0.tgz");
+const packageTarball = path.join(root, "dist/sdk/cargo-container-sdk-0.1.0-beta.1.tgz");
 
 if (!fs.existsSync(packageTarball)) {
   throw new Error("SDK package tarball missing; run scripts/package-sdk.mjs first");

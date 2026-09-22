@@ -1,10 +1,14 @@
 export type SaveTrigger = "autosave" | "manual";
-export type ColorTheme = "dark" | "light";
+export type ColorTheme = "dark" | "light" | "high-contrast";
+export type IconTheme = "color" | "monochrome";
 
 export interface IdeSettings {
   theme: ColorTheme;
   fontSize: number;
   saveTrigger: SaveTrigger;
+  iconTheme: IconTheme;
+  editorMinimap: boolean;
+  wordWrap: boolean;
   showPreview: boolean;
   showTerminal: boolean;
   showSidebar: boolean;
@@ -14,6 +18,9 @@ export const DEFAULT_SETTINGS: IdeSettings = {
   theme: "dark",
   fontSize: 13,
   saveTrigger: "autosave",
+  iconTheme: "color",
+  editorMinimap: false,
+  wordWrap: false,
   showPreview: true,
   showTerminal: true,
   showSidebar: true
@@ -26,7 +33,7 @@ export function loadSettings(): IdeSettings {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return { ...DEFAULT_SETTINGS };
     const parsed = JSON.parse(raw) as Partial<IdeSettings>;
-    return { ...DEFAULT_SETTINGS, ...parsed };
+    return normalizeSettings(parsed);
   } catch {
     return { ...DEFAULT_SETTINGS };
   }
@@ -39,6 +46,7 @@ export function saveSettings(settings: IdeSettings): void {
 
 export function applySettingsToDocument(settings: IdeSettings): void {
   document.documentElement.dataset.theme = settings.theme;
+  document.documentElement.dataset.iconTheme = settings.iconTheme;
   document.documentElement.style.setProperty("--editor-font-size", `${settings.fontSize}px`);
   if (settings.theme === "light") {
     document.documentElement.style.setProperty("--bg", "#f4f6fa");
@@ -49,6 +57,15 @@ export function applySettingsToDocument(settings: IdeSettings): void {
     document.documentElement.style.setProperty("--line-strong", "#b7c0cf");
     document.documentElement.style.setProperty("--ink", "#1a2230");
     document.documentElement.style.setProperty("--muted", "#5b677a");
+  } else if (settings.theme === "high-contrast") {
+    document.documentElement.style.setProperty("--bg", "#000000");
+    document.documentElement.style.setProperty("--bg-elevated", "#050505");
+    document.documentElement.style.setProperty("--panel", "#090909");
+    document.documentElement.style.setProperty("--panel-2", "#111111");
+    document.documentElement.style.setProperty("--line", "#ffffff");
+    document.documentElement.style.setProperty("--line-strong", "#ffd75f");
+    document.documentElement.style.setProperty("--ink", "#ffffff");
+    document.documentElement.style.setProperty("--muted", "#d7d7d7");
   } else {
     document.documentElement.style.removeProperty("--bg");
     document.documentElement.style.removeProperty("--bg-elevated");
@@ -59,4 +76,26 @@ export function applySettingsToDocument(settings: IdeSettings): void {
     document.documentElement.style.removeProperty("--ink");
     document.documentElement.style.removeProperty("--muted");
   }
+}
+
+export function monacoTheme(theme: ColorTheme): "vs" | "vs-dark" | "hc-black" {
+  if (theme === "light") return "vs";
+  if (theme === "high-contrast") return "hc-black";
+  return "vs-dark";
+}
+
+function normalizeSettings(parsed: Partial<IdeSettings>): IdeSettings {
+  return {
+    theme: parsed.theme === "light" || parsed.theme === "high-contrast" ? parsed.theme : "dark",
+    iconTheme: parsed.iconTheme === "monochrome" ? "monochrome" : "color",
+    fontSize: typeof parsed.fontSize === "number" && parsed.fontSize >= 11 && parsed.fontSize <= 20
+      ? parsed.fontSize
+      : DEFAULT_SETTINGS.fontSize,
+    saveTrigger: parsed.saveTrigger === "manual" ? "manual" : "autosave",
+    editorMinimap: parsed.editorMinimap === true,
+    wordWrap: parsed.wordWrap === true,
+    showPreview: parsed.showPreview !== false,
+    showTerminal: parsed.showTerminal !== false,
+    showSidebar: parsed.showSidebar !== false
+  };
 }

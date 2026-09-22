@@ -166,6 +166,35 @@ assert.deepEqual(
   ]
 );
 
+const selfReferenceFiles = new Map([
+  ["/workspace/node_modules/example/package.json", JSON.stringify({ name: "example" })],
+  ["/workspace/node_modules/example/bin/cli.js", "require('example/dist/internal')"],
+  ["/workspace/node_modules/example/dist/internal/package.json", JSON.stringify({ main: "runtime.cjs" })],
+  ["/workspace/node_modules/example/dist/internal/runtime.cjs", "module.exports = true"]
+]);
+const selfReferenceGraph = analyzeCliModuleGraph({
+  entry: "/workspace/node_modules/example/bin/cli.js",
+  packageRoot: "/workspace/node_modules/example",
+  reader: {
+    exists(file) {
+      return selfReferenceFiles.has(file);
+    },
+    isFile(file) {
+      return selfReferenceFiles.has(file);
+    },
+    readText(file) {
+      const source = selfReferenceFiles.get(file);
+      if (source === undefined) throw new Error(`missing ${file}`);
+      return source;
+    }
+  }
+});
+assert.equal(selfReferenceGraph.supported, true);
+assert.deepEqual(selfReferenceGraph.modules.map((mod) => mod.path), [
+  "/workspace/node_modules/example/bin/cli.js",
+  "/workspace/node_modules/example/dist/internal/runtime.cjs"
+]);
+
 for (const [name, version] of [["npm", "10.9.2"], ["pnpm", "9.15.9"]]) {
   const installed = JSON.parse(fs.readFileSync(path.join(root, `vendor/cli/${name}/${version}/installed.json`), "utf8"));
   const packageRoot = path.join(root, `vendor/cli/${name}/${version}/package`);

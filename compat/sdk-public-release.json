@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "version": "0.1.0-beta.1",
+  "channel": "beta",
+  "status": "publish-rehearsed-not-published",
+  "r05StableSdkServices": {
+    "status": "pass",
+    "surfaces": [
+      "filesystem",
+      "package-manager",
+      "preview-ports-events-script",
+      "project-import-export",
+      "process-spawn-stdio-resize-signal-wait",
+      "worker-asset-resolution",
+      "preview-service-worker-registration",
+      "trace-events"
+    ],
+    "typedErrors": true,
+    "lifecycleRecovery": true
+  },
+  "r09WebContainerFacade": {
+    "status": "pass",
+    "compatibility": "cargo-specific-facade-not-drop-in-webcontainer-api",
+    "surfaces": [
+      "boot",
+      "coep-workdirName",
+      "mount-filesystem-tree",
+      "mount-cargo-snapshot",
+      "filesystem-watch",
+      "process-spawn",
+      "setPreviewScript",
+      "port-server-ready-server-close-events",
+      "teardown"
+    ],
+    "snapshotDecision": "CargoMountSnapshot is versioned and intentionally not claimed as a WebContainer snapshot format.",
+    "symlinkDecision": "Tree shape is accepted but mount rejects with ESDK_SYMLINK_UNSUPPORTED until the host filesystem adapter defines symlink semantics."
+  },
+  "r12Publish": {
+    "status": "rehearsal-pass-external-publish-not-authorized",
+    "artifact": "dist/sdk/cargo-container-sdk-0.1.0-beta.1.tgz",
+    "exports": ["esm", "commonjs", "types"],
+    "provenance": "npm provenance required",
+    "rollback": "repoint beta dist-tag to the previously verified beta artifact",
+    "actualRegistryPublish": false
+  },
+  "consumerMatrix": "compat/sdk-consumer-bundler-matrix.json",
+  "commands": [
+    "node tests/sdk-consumer/services.test.mjs",
+    "node scripts/package-sdk.mjs",
+    "node scripts/check-sdk-public-release.mjs",
+    "node scripts/check-sdk-publish-rehearsal.mjs",
+    "node tests/sdk-consumer/run.mjs"
+  ]
+}

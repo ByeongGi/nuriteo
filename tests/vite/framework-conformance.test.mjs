@@ -28,9 +28,11 @@ assert.match(reactProduct.productGap, /actual Vite 8\.2\.0 worker-backed product
 for (const id of ["vite-vue-product-workflow", "vite-svelte-product-workflow"]) {
   const product = casesById.get(id);
   assert.equal(product?.runtime, "browser-guest-node-runtime");
-  assert.equal(product.status, "candidate");
+  assert.equal(product.status, "supported");
   assert.ok(product.evidence.includes("tests/vite/vite-vue-svelte-actual.test.mjs"));
   assert.ok(product.evidence.includes("compat/framework-actual-validation.json"));
+  assert.ok(product.evidence.includes("compat/framework-product-support.json"));
+  assert.match(product.supportContract, /npm\/pnpm install/i);
 }
 
 for (const entry of matrix.cases) {
@@ -45,10 +47,12 @@ const byFramework = new Map(actual.results.map((entry) => [entry.framework, entr
 assert.equal(byFramework.get("vite-react")?.grade, "supported");
 assert.equal(byFramework.get("vite-vue")?.validation, "actual-worker-backed");
 assert.equal(byFramework.get("vite-svelte")?.validation, "actual-worker-backed");
-assert.ok(["candidate", "supported"].includes(byFramework.get("vite-vue")?.grade));
-assert.ok(["candidate", "supported"].includes(byFramework.get("vite-svelte")?.grade));
+assert.equal(byFramework.get("vite-vue")?.grade, "supported");
+assert.equal(byFramework.get("vite-svelte")?.grade, "supported");
 assert.equal(byFramework.get("nextjs")?.grade, "product-preview");
 assert.equal(byFramework.get("nextjs")?.validation, "product-preview-adapter");
+assert.equal(byFramework.get("nextjs-full-runtime")?.grade, "candidate");
+assert.equal(byFramework.get("nextjs-full-runtime")?.validation, "actual-guest-runtime");
 assert.equal(actual.gate.status, "pass");
 
 assert.equal(matrix.gate.id, "SG25");

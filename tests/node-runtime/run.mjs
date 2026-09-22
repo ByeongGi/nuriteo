@@ -11,5 +11,7 @@ import "./cli-smoke.test.mjs";
 import "./io-process.test.mjs";
 import "./shell.test.mjs";
 import "./net-http.test.mjs";
+import "./non-js-tooling.test.mjs";
+import "./project-tooling.test.mjs";
 import "./wasm-adapters.test.mjs";
 import "./wasi-boundary.test.mjs";

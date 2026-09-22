@@ -60,8 +60,8 @@
     "edge": "supported",
     "safari": "hold",
     "viteReact": "supported",
-    "viteVue": "candidate",
-    "viteSvelte": "candidate",
+    "viteVue": "supported",
+    "viteSvelte": "supported",
     "nextjsPreviewAdapter": "supported",
     "nextjsFullCli": "hold"
   },

@@ -48,6 +48,7 @@ type GraphPackageExports = GraphPackageExportTarget | Record<string, GraphPackag
 type GraphPackageExportTarget = string | GraphPackageExportTarget[] | { [condition: string]: GraphPackageExportTarget | undefined };
 
 interface GraphPackageManifest {
+  name?: string;
   main?: string;
   browser?: string | Record<string, string | false>;
   exports?: GraphPackageExports;
@@ -61,9 +62,11 @@ const defaultBuiltins = new Set([
   "buffer",
   "child_process",
   "constants",
+  "console",
   "crypto",
   "dns",
   "dns/promises",
+  "diagnostics_channel",
   "events",
   "fs",
   "fs/promises",
@@ -81,6 +84,7 @@ const defaultBuiltins = new Set([
   "readline",
   "stream",
   "stream/promises",
+  "stream/web",
   "string_decoder",
   "timers",
   "timers/promises",
@@ -88,7 +92,9 @@ const defaultBuiltins = new Set([
   "tty",
   "url",
   "util",
+  "util/types",
   "v8",
+  "vm",
   "wasi",
   "worker_threads",
   "zlib"
@@ -101,9 +107,11 @@ const knownNodeBuiltins = new Set([
   "buffer",
   "child_process",
   "constants",
+  "console",
   "crypto",
   "dns",
   "dns/promises",
+  "diagnostics_channel",
   "events",
   "fs",
   "fs/promises",
@@ -121,6 +129,7 @@ const knownNodeBuiltins = new Set([
   "readline",
   "stream",
   "stream/promises",
+  "stream/web",
   "string_decoder",
   "timers",
   "timers/promises",
@@ -128,7 +137,9 @@ const knownNodeBuiltins = new Set([
   "tty",
   "url",
   "util",
+  "util/types",
   "v8",
+  "vm",
   "wasi",
   "worker_threads",
   "zlib"
@@ -330,6 +341,14 @@ function resolveModuleSpecifier(specifier: string, importer: string, packageRoot
 
 function resolvePackage(specifier: string, importer: string, packageRoot: string, reader: CliModuleGraphReader, conditions: readonly string[]): string | null {
   const [name, subpath] = splitPackageSpecifier(specifier);
+  const packageManifestPath = join(packageRoot, "package.json");
+  if (reader.exists(packageManifestPath)) {
+    const packageManifest = JSON.parse(reader.readText(packageManifestPath)) as GraphPackageManifest;
+    if (packageManifest.name === name) {
+      const selfReference = resolvePackageTarget(packageRoot, subpath ? `./${subpath}` : ".", reader, conditions);
+      if (selfReference) return selfReference;
+    }
+  }
   let current = dirname(importer);
   while (true) {
     const root = join(current, "node_modules", name);
@@ -469,7 +488,17 @@ function resolveFileOrDirectory(base: string, reader: CliModuleGraphReader): str
     join(normalized, "index.cjs"),
     join(normalized, "index.mjs")
   ];
-  return candidates.find((candidate) => reader.exists(candidate) && (reader.isFile?.(candidate) ?? true)) || null;
+  const resolvedFile = candidates.find((candidate) => reader.exists(candidate) && (reader.isFile?.(candidate) ?? true));
+  if (resolvedFile) return resolvedFile;
+  const manifestPath = join(normalized, "package.json");
+  if (!reader.exists(manifestPath) || !(reader.isFile?.(manifestPath) ?? true)) return null;
+  try {
+    const manifest = JSON.parse(reader.readText(manifestPath)) as GraphPackageManifest;
+    if (!manifest.main || manifest.main === ".") return null;
+    return resolveFileOrDirectory(join(normalized, manifest.main), reader);
+  } catch {
+    return null;
+  }
 }
 
 function splitPackageSpecifier(specifier: string): [string, string] {

@@ -1,4 +1,6 @@
 import { EventEmitter } from "./events.ts";
+import { builtinModules } from "./module.ts";
+import { constantsBuiltin } from "./constants.ts";
 
 export type ProcessExitMode = "throw" | "capture";
 type ProcessWriteCallback = () => void;
@@ -51,6 +53,13 @@ class ProcessWritableStdio extends EventEmitter {
     return true;
   }
 
+  end(chunk?: unknown, callback?: ProcessWriteCallback): this {
+    if (chunk !== undefined) this.write(chunk);
+    callback?.();
+    this.emit("finish");
+    return this;
+  }
+
   ref(): this {
     return this;
   }
@@ -82,7 +91,8 @@ export class BrowserProcess extends EventEmitter {
   versions = Object.freeze({
     node: "22.23.0",
     v8: "browser",
-    uv: "browser"
+    uv: "browser",
+    webcontainer: "1.0.0"
   });
   release = Object.freeze({
     name: "node",
@@ -121,6 +131,34 @@ export class BrowserProcess extends EventEmitter {
     this.#exitMode = options.exitMode || "throw";
   }
 
+  binding(name: string): unknown {
+    if (name === "natives") {
+      return Object.freeze(Object.fromEntries(
+        builtinModules
+          .filter((moduleName) => !moduleName.startsWith("node:"))
+          .map((moduleName) => [moduleName, ""])
+      ));
+    }
+    if (name === "constants") {
+      const errno = Object.freeze({
+        EBADF: 9,
+        EACCES: constantsBuiltin.EACCES,
+        EEXIST: constantsBuiltin.EEXIST,
+        EINVAL: constantsBuiltin.EINVAL,
+        EISDIR: constantsBuiltin.EISDIR,
+        ENOENT: constantsBuiltin.ENOENT,
+        ENOTDIR: constantsBuiltin.ENOTDIR,
+        EPERM: constantsBuiltin.EPERM,
+        EROFS: constantsBuiltin.EROFS
+      });
+      return Object.freeze({ ...constantsBuiltin, EBADF: errno.EBADF, fs: constantsBuiltin, os: { errno } });
+    }
+    if (name === "buffer") return Object.freeze({ kStringMaxLength: 0x1fffffe8 });
+    const error = new Error(`No such module: ${name}`) as Error & { code?: string };
+    error.code = "ERR_UNKNOWN_BUILTIN_MODULE";
+    throw error;
+  }
+
   cwd(): string {
     return this.#cwd;
   }
@@ -130,7 +168,7 @@ export class BrowserProcess extends EventEmitter {
     else this.#cwd = path;
   }
 
-  hrtime(previous?: [number, number]): [number, number] {
+  hrtime = Object.assign((previous?: [number, number]): [number, number] => {
     const now = performance.now();
     const seconds = Math.floor(now / 1000);
     const nanoseconds = Math.floor((now - seconds * 1000) * 1_000_000);
@@ -142,7 +180,19 @@ export class BrowserProcess extends EventEmitter {
       diffNanoseconds += 1_000_000_000;
     }
     return [diffSeconds, diffNanoseconds];
-  }
+  }, {
+    bigint: (): bigint => BigInt(Math.floor(performance.now() * 1_000_000))
+  });
+
+  memoryUsage = Object.assign(() => ({
+    arrayBuffers: 0,
+    external: 0,
+    heapTotal: 1_073_741_824,
+    heapUsed: 67_108_864,
+    rss: 134_217_728
+  }), {
+    rss: () => 134_217_728
+  });
 
   exit(code = 0): never | undefined {
     this.exitCode = code;

@@ -38,6 +38,8 @@ jobs:
       - run: node scripts/check-performance-baseline.mjs
       - run: node scripts/check-soak-baseline.mjs
       - run: node scripts/package-sdk.mjs
+      - run: node scripts/check-sdk-public-release.mjs
+      - run: node scripts/check-sdk-publish-rehearsal.mjs
       - run: node scripts/check-release-readiness.mjs
       - run: node scripts/check-release-ops-sg29.mjs
       - run: node scripts/check-public-beta-readiness.mjs

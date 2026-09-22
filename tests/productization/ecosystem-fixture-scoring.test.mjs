@@ -19,6 +19,8 @@ assert.deepEqual(payload.results.map((entry) => entry.id), [
   "vite-official-template-react",
   "hvalette-react-vite-template"
 ]);
+assert.match(payload.results[0].revision, /^[0-9a-f]{40}$/);
+assert.equal(payload.results[0].revision, payload.inputContract.fixtureRevisions["vite-official-template-react"]);
 assert.ok(payload.results.every((entry) => entry.mode === "plan"));
 assert.ok(payload.results.every((entry) => entry.criteria.length === 4));
 assert.equal(payload.summary.milestoneB, "not-yet");

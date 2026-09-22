@@ -82,6 +82,7 @@ export interface ProjectWorkspaceArchive {
   schemaVersion: 1;
   format: "cargo-container-project-archive";
   exportedAt: number;
+  integrity?: string;
   snapshot: ProjectWorkspaceSnapshot;
 }
 

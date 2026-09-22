@@ -1,4 +1,4 @@
-import { createSnapshotStore, type SnapshotStore } from "./snapshot.ts";
+import { createSnapshotStore, digestSnapshot, type SnapshotStore } from "./snapshot.ts";
 import type {
   JsonValue,
   ProjectWorkspaceArchive,
@@ -76,12 +76,18 @@ export class ProjectWorkspaceStore {
   }
 
   exportArchive(exportedAt = Date.now()): ProjectWorkspaceArchive {
+    const snapshot = this.snapshot();
     return {
       schemaVersion: 1,
       format: "cargo-container-project-archive",
       exportedAt,
-      snapshot: this.snapshot()
+      integrity: digestSnapshot(snapshot),
+      snapshot
     };
+  }
+
+  exportSnapshot(exportedAt = Date.now()): Uint8Array {
+    return encodeProjectWorkspaceArchive(this.exportArchive(exportedAt));
   }
 
   importArchive(archive: JsonValue, options: ProjectWorkspaceImportOptions = {}): ProjectWorkspaceSnapshot {
@@ -92,6 +98,13 @@ export class ProjectWorkspaceStore {
       this.snapshots.save(snapshot, { owner: options.owner });
     }
     return snapshot;
+  }
+
+  importSnapshot(
+    snapshot: Uint8Array | ArrayBuffer | string,
+    options: ProjectWorkspaceImportOptions = {}
+  ): ProjectWorkspaceSnapshot {
+    return this.importArchive(decodeProjectWorkspaceArchive(snapshot), options);
   }
 
   #restore(value: JsonValue): ProjectWorkspaceSnapshot {
@@ -125,6 +138,33 @@ export function migrateProjectWorkspaceSnapshot(value: JsonValue): ProjectWorksp
   throw new Error(`Unsupported project workspace snapshot schema: ${snapshot.schemaVersion}`);
 }
 
+export function encodeProjectWorkspaceArchive(archive: JsonValue): Uint8Array {
+  return new TextEncoder().encode(JSON.stringify(assertProjectWorkspaceArchive(archive)));
+}
+
+export function decodeProjectWorkspaceArchive(
+  value: Uint8Array | ArrayBuffer | string
+): ProjectWorkspaceArchive {
+  let text: string;
+  try {
+    text = typeof value === "string"
+      ? value
+      : new TextDecoder("utf-8", { fatal: true }).decode(
+        value instanceof Uint8Array ? value : new Uint8Array(value)
+      );
+  } catch {
+    throw new Error("Invalid project workspace snapshot encoding");
+  }
+
+  let archive: JsonValue;
+  try {
+    archive = JSON.parse(text) as JsonValue;
+  } catch {
+    throw new Error("Invalid project workspace snapshot JSON");
+  }
+  return assertProjectWorkspaceArchive(archive);
+}
+
 function assertProjectWorkspaceSnapshot(value: JsonValue): ProjectWorkspaceSnapshot {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error("Invalid project workspace snapshot");
@@ -153,11 +193,18 @@ function assertProjectWorkspaceArchive(value: JsonValue): ProjectWorkspaceArchiv
   if (archive.schemaVersion !== 1 || archive.format !== "cargo-container-project-archive") {
     throw new Error("Invalid project workspace archive header");
   }
+  const snapshot = migrateProjectWorkspaceSnapshot(archive.snapshot || null);
+  if (archive.integrity !== undefined) {
+    if (typeof archive.integrity !== "string" || archive.integrity !== digestSnapshot(snapshot)) {
+      throw new Error("Project workspace snapshot integrity mismatch");
+    }
+  }
   return {
     schemaVersion: 1,
     format: "cargo-container-project-archive",
     exportedAt: typeof archive.exportedAt === "number" ? archive.exportedAt : 0,
-    snapshot: migrateProjectWorkspaceSnapshot(archive.snapshot || null)
+    ...(typeof archive.integrity === "string" ? { integrity: archive.integrity } : {}),
+    snapshot
   };
 }
 

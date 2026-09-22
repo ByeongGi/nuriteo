@@ -13,6 +13,7 @@ export class ModuleRuntime {
   globals: Record<string, RuntimeValue>;
   allowAsyncRequireEsm: boolean;
   loadModuleDefinition: ModuleRuntimeOptions["loadModuleDefinition"] | undefined;
+  readonly loadedDefinitions = new Set<string>();
 
   constructor(options: ModuleRuntimeOptions = {}) {
     this.definitions = new Map();
@@ -20,7 +21,7 @@ export class ModuleRuntime {
     this.loadModuleDefinition = options.loadModuleDefinition;
     const resolverOptions: ConstructorParameters<typeof ModuleResolver>[0] = {
       modules: this.definitions,
-      moduleExists: (url) => Boolean(this.getDefinition(url)),
+      moduleExists: (url) => options.moduleExists?.(url) === true || Boolean(this.getDefinition(url)),
       realpath: (url) => this.cache.canonicalize(url)
     };
     if (options.packages) resolverOptions.packages = options.packages;
@@ -51,7 +52,14 @@ export class ModuleRuntime {
     const loaded = this.loadModuleDefinition?.(canonicalUrl);
     if (!loaded) return undefined;
     this.register(canonicalUrl, loaded);
+    this.loadedDefinitions.add(canonicalUrl);
     return loaded;
+  }
+
+  invalidateLoadedDefinition(url: string): void {
+    const canonicalUrl = this.cache.canonicalize(url);
+    if (!this.loadedDefinitions.delete(canonicalUrl)) return;
+    this.definitions.delete(canonicalUrl);
   }
 
   resolve(specifier: string, parentUrl?: string): string {

@@ -16,7 +16,7 @@ assert.deepEqual(acceptance.gate.requiredBeforeDone, []);
 assert.equal(acceptance.releaseDecision, "release-candidate-ready-for-scoped-browser-js-ts-development");
 
 assert.equal(publicMatrix.gate.status, "pass");
-assert.equal(publicMatrix.projectFixtures.status, "product-supported-milestone-b-pass");
+assert.equal(publicMatrix.projectFixtures.status, "sg25-service-workflow-pass");
 assert.equal(actualResults.summary.milestoneB, "pass");
 assert.equal(actualResults.summary.passCount, acceptance.scope.included.find((item) => item.area === "Actual public Vite React ecosystem fixture gate").actualPass);
 

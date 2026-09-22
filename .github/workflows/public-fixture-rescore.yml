@@ -1,0 +1,46 @@
+name: Public fixture re-score
+
+on:
+  workflow_dispatch:
+    inputs:
+      fixtures:
+        description: Optional comma-separated subset of the ten pinned public fixture ids
+        required: false
+        type: string
+  schedule:
+    - cron: "17 2 * * 1"
+
+concurrency:
+  group: public-fixture-rescore
+  cancel-in-progress: false
+
+jobs:
+  rescore:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.15.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.23.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check:fixtures-rescore
+      - name: Re-score pinned public fixtures
+        env:
+          FIXTURE_IDS: ${{ inputs.fixtures }}
+        run: |
+          mkdir -p artifacts
+          if [ -n "$FIXTURE_IDS" ]; then
+            pnpm fixtures:rescore:public -- --fixtures="$FIXTURE_IDS" --output=artifacts/ecosystem-fixture-actual-product-results.json
+          else
+            pnpm fixtures:rescore:public -- --output=artifacts/ecosystem-fixture-actual-product-results.json
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: public-fixture-rescore-${{ github.run_id }}
+          path: artifacts/ecosystem-fixture-actual-product-results.json
+          if-no-files-found: error

@@ -57,4 +57,20 @@ const pathZip = controller.exportPathZip("src");
 assert.ok(pathZip instanceof Uint8Array);
 assert.ok(pathZip.byteLength > 0);
 
+loaded.project.writeText(messagePath, 'export const label = "snapshot-boot";\n');
+const exportedSnapshot = controller.exportSnapshot();
+assert.ok(exportedSnapshot instanceof Uint8Array);
+
+const restoredController = createPreviewWorkflowController();
+const restored = await restoredController.bootSnapshot(new Blob([exportedSnapshot]));
+assert.equal(restored.phase, "template_loaded");
+assert.equal(restored.source, "snapshot");
+assert.equal(restored.projectId, loaded.projectId);
+assert.equal(restored.project.readText(messagePath), 'export const label = "snapshot-boot";\n');
+assert.ok(restored.workflow, "snapshot boot should recreate a runnable workflow");
+
+const importedAgain = await restoredController.importSnapshot(exportedSnapshot.buffer);
+assert.equal(importedAgain.source, "snapshot");
+assert.equal(importedAgain.health.ok, true);
+
 console.log("preview-service ide4-runtime ok");

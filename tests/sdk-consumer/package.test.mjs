@@ -7,7 +7,7 @@ import { spawnSync } from "node:child_process";
 
 const root = new URL("../..", import.meta.url).pathname;
 const packageRoot = path.join(root, "dist/sdk/package");
-const packageTarball = path.join(root, "dist/sdk/cargo-container-sdk-0.0.0.tgz");
+const packageTarball = path.join(root, "dist/sdk/cargo-container-sdk-0.1.0-beta.1.tgz");
 const publicRoot = path.join(packageRoot, "examples/sdk-consumer/public");
 const chromePath = process.env.CHROME_PATH || "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 
@@ -115,6 +115,8 @@ try {
 
   const types = fs.readFileSync(path.join(packageRoot, "index.d.ts"), "utf8");
   if (!types.includes("CargoContainer")) throw new Error("SDK root types do not export CargoContainer");
+  if (!types.includes("CargoContainerServices")) throw new Error("SDK root types do not export service APIs");
+  if (!types.includes("createCargoWebContainer")) throw new Error("SDK root types do not export WebContainer facade");
   if (!types.includes("createPreviewRelay")) throw new Error("SDK root types do not export preview API");
   const readme = fs.readFileSync(path.join(packageRoot, "README.md"), "utf8");
   if (!readme.includes("Cross-Origin-Opener-Policy")) throw new Error("SDK README missing hosting headers");
@@ -128,6 +130,7 @@ try {
   if (result.ready.role !== "system") throw new Error("SDK consumer did not boot system worker");
   if (result.run.exports?.value !== "hello") throw new Error("SDK consumer fs smoke failed");
   if (result.run.exports?.size !== 5) throw new Error("SDK consumer stat smoke failed");
+  if (result.services !== "function") throw new Error("SDK consumer service API missing");
   if (result.status !== "stopped") throw new Error("SDK consumer did not teardown");
 } finally {
   await browser.close();
@@ -143,16 +146,26 @@ function assertSdkTypesCompile() {
     fs.mkdirSync(scope, { recursive: true });
     fs.symlinkSync(packageRoot, path.join(scope, "sdk"), "dir");
     fs.writeFileSync(path.join(workdir, "index.ts"), [
-      'import { CargoContainer, createContainer, createPreviewRelay, createPreviewSessionRegistry, protocolVersion } from "@cargo-container/sdk";',
+      'import { CargoContainer, CargoContainerServices, SdkError, createCargoMountSnapshot, createCargoWebContainer, createContainer, createPreviewRelay, createPreviewSessionRegistry, protocolVersion, resolveCargoWorkerAssets } from "@cargo-container/sdk";',
       "",
       "const container: CargoContainer = createContainer({",
       '  systemWorkerUrl: new URL("http://127.0.0.1/system-worker.ts"),',
       '  processWorkerUrl: new URL("http://127.0.0.1/process-worker.ts")',
       "});",
       "const sessions = createPreviewSessionRegistry();",
+      "const services = new CargoContainerServices();",
+      'const assets = resolveCargoWorkerAssets("https://cdn.example/sdk/");',
+      'const facade = createCargoWebContainer({ services, workdirName: "project" });',
+      'const mount = createCargoMountSnapshot({ "README.md": "hello" });',
+      'const error: SdkError | null = null;',
       "createPreviewRelay({ sessions });",
       "const version: number = protocolVersion;",
       "void container;",
+      "void services;",
+      "void assets;",
+      "void facade;",
+      "void mount;",
+      "void error;",
       "void version;",
       ""
     ].join("\n"));
@@ -216,15 +229,25 @@ function assertSdkTarballInstalls() {
       throw new Error(`SDK tarball install failed:\n${install.stdout}\n${install.stderr}`);
     }
     fs.writeFileSync(path.join(workdir, "index.ts"), [
-      'import { CargoContainer, createContainer, protocolVersion } from "@cargo-container/sdk";',
+      'import { CargoContainer, CargoContainerServices, SdkError, createCargoMountSnapshot, createCargoWebContainer, createContainer, protocolVersion, resolveCargoWorkerAssets } from "@cargo-container/sdk";',
       "",
       "const container: CargoContainer = createContainer({",
       '  systemWorkerUrl: new URL("http://127.0.0.1/system-worker.ts"),',
       '  processWorkerUrl: new URL("http://127.0.0.1/process-worker.ts")',
       "});",
       "const version: number = protocolVersion;",
+      "const services = new CargoContainerServices();",
+      'const assets = resolveCargoWorkerAssets("https://cdn.example/sdk/");',
+      'const facade = createCargoWebContainer({ services, workdirName: "project" });',
+      'const mount = createCargoMountSnapshot({ "README.md": "hello" });',
+      'const error: SdkError | null = null;',
       "void container;",
+      "void services;",
+      "void assets;",
       "void version;",
+      "void facade;",
+      "void mount;",
+      "void error;",
       ""
     ].join("\n"));
     fs.writeFileSync(path.join(workdir, "tsconfig.json"), `${JSON.stringify({
@@ -279,6 +302,10 @@ function assertSdkTarballInstalls() {
       'const sdk = require("@cargo-container/sdk");',
       'if (typeof sdk.createContainer !== "function") throw new Error("missing createContainer");',
       'if (typeof sdk.createPreviewRelay !== "function") throw new Error("missing createPreviewRelay");',
+      'if (typeof sdk.CargoContainerServices !== "function") throw new Error("missing CargoContainerServices");',
+      'if (typeof sdk.resolveCargoWorkerAssets !== "function") throw new Error("missing resolveCargoWorkerAssets");',
+      'if (typeof sdk.createCargoWebContainer !== "function") throw new Error("missing createCargoWebContainer");',
+      'if (typeof sdk.SdkError !== "function") throw new Error("missing SdkError");',
       'if (sdk.protocolVersion !== 1) throw new Error("protocol version mismatch");',
       ""
     ].join("\n"));
@@ -299,6 +326,10 @@ function assertCommonjsEntry() {
     `const sdk = require(${JSON.stringify(path.join(packageRoot, "index.cjs"))});`,
     'if (typeof sdk.createContainer !== "function") throw new Error("missing createContainer");',
     'if (typeof sdk.createPreviewRelay !== "function") throw new Error("missing createPreviewRelay");',
+    'if (typeof sdk.CargoContainerServices !== "function") throw new Error("missing CargoContainerServices");',
+    'if (typeof sdk.resolveCargoWorkerAssets !== "function") throw new Error("missing resolveCargoWorkerAssets");',
+    'if (typeof sdk.createCargoWebContainer !== "function") throw new Error("missing createCargoWebContainer");',
+    'if (typeof sdk.SdkError !== "function") throw new Error("missing SdkError");',
     'if (sdk.protocolVersion !== 1) throw new Error("protocol version mismatch");'
   ].join("")], {
     cwd: root,

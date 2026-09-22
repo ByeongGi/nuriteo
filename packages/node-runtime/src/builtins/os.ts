@@ -79,6 +79,18 @@ export function totalmem(): number {
   return 0;
 }
 
+export function networkInterfaces(): Record<string, Array<{
+  address: string;
+  family: "IPv4" | "IPv6";
+  internal: boolean;
+  mac: string;
+  netmask: string;
+  cidr: string | null;
+  scopeid?: number;
+}>> {
+  return {};
+}
+
 export const osBuiltin = Object.freeze({
   EOL,
   arch,
@@ -91,6 +103,7 @@ export const osBuiltin = Object.freeze({
     cpus,
     freemem,
     homedir,
+    networkInterfaces,
     platform,
     release,
     tmpdir,
@@ -100,6 +113,7 @@ export const osBuiltin = Object.freeze({
   },
   freemem,
   homedir,
+  networkInterfaces,
   platform,
   release,
   tmpdir,

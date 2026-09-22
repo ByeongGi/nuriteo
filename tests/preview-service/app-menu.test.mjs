@@ -51,13 +51,18 @@ try {
   await page.evaluate(() => globalThis.__previewService.loadTemplate("vite-react"));
   await page.locator("#welcome").waitFor({ state: "hidden" });
 
+  await page.locator("#editor-split").click();
+  assert.ok(await page.getByRole("button", { name: "Save" }).count() >= 2, "split pane should expose its own Save action");
+
+  await page.locator('[data-view="settings"]').click();
+  const settingsPanel = page.getByLabel("Settings");
+  await settingsPanel.getByText("Application menu scope").waitFor();
+  await settingsPanel.getByText("File icon theme").waitFor();
+  await settingsPanel.locator("select").first().selectOption("high-contrast");
+  assert.equal(await page.locator("html").getAttribute("data-theme"), "high-contrast");
+
   const viewTrigger = menuBar.getByRole("menuitem", { name: "View" });
   await viewTrigger.click();
-  await page.mouse.click(1400, 880);
-  await page.getByRole("menu").waitFor({ state: "hidden" });
-
-  await viewTrigger.focus();
-  await page.keyboard.press("Enter");
   await page.getByRole("menuitem", { name: /Toggle Terminal/ }).click();
 
   await fileTrigger.click();

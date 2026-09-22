@@ -1,23 +1,73 @@
 {
-  "schemaVersion": 1,
-  "updatedAt": "2026-09-15",
-  "status": "p19-03-non-js-tooling-candidates",
+  "schemaVersion": 2,
+  "updatedAt": "2026-09-22",
+  "status": "non-js-tooling-product-adapters-supported",
   "decisionCriteria": {
     "productValue": ["common frontend workflow need", "project-local execution", "clear user-visible output"],
     "maintenanceCost": ["artifact size", "WASI/syscall surface", "release cadence", "security patch pressure"],
     "runtimeFit": ["no direct TCP", "project sandbox filesystem only", "bounded stdio", "deterministic adapter contract"]
   },
+  "validationRequirements": [
+    "artifact integrity",
+    "filesystem boundary",
+    "transaction durability where applicable",
+    "credential and network boundary",
+    "performance budget"
+  ],
   "candidates": [
     {
       "id": "jq-wasm",
       "tool": "jq",
       "category": "json-transform",
-      "status": "candidate",
+      "status": "supported",
+      "supportDecision": "product-supported-project-adapter",
       "productValue": "medium",
       "maintenanceCost": "medium",
       "runtimeFit": "good",
-      "reason": "Useful for package/config inspection and support diagnostics, but not essential for Vite React parity.",
-      "requiredBeforeSupport": ["integrity-pinned WASM artifact", "stdin/stdout fixture", "project sandbox file fixture"]
+      "reason": "Pinned jq WebAssembly executes deterministic JSON transforms from host-approved project files without native dependencies or runtime network access.",
+      "package": {
+        "name": "jq-wasm",
+        "version": "3.0.0-jq-1.8.2",
+        "registryIntegrity": "sha512-jgWSEBJSd0lYR4Q5Fw8333MxQS5jCRI+g9KwAGL7yK1spwzTJy8C5uOS08wbpKE0Gz8oQYLlRpNLE/W70Ksp2g=="
+      },
+      "artifact": {
+        "path": "dist/build/jq.wasm",
+        "sha256": "27d493c06601e9cbc7112ef4198ee71a0dc3e9c9a4a1754e73888841da6c450a",
+        "bytes": 928824
+      },
+      "filesystem": {
+        "mode": "host-mediated-project-read",
+        "result": "pass",
+        "outsideProject": "deny"
+      },
+      "durability": {
+        "result": "not-applicable"
+      },
+      "credentialsAndNetwork": {
+        "credentialInjection": "deny",
+        "runtimeFetch": "deny",
+        "directTcp": "deny",
+        "result": "pass"
+      },
+      "performance": {
+        "artifactBudgetBytes": 2097152,
+        "coldStartBudgetMs": 2000,
+        "result": "pass"
+      },
+      "productSurface": {
+        "api": "createJqProjectAdapter",
+        "command": "jq <filter> <project-json-path> [output-path]",
+        "inputBoundary": "project-root-only",
+        "outputBoundary": "project-root-only",
+        "limits": { "inputBytes": 2097152, "outputBytes": 2097152 },
+        "status": "pass"
+      },
+      "fixtures": [
+        "tests/fixtures/non-js-tooling/jq-input.json",
+        "tests/node-runtime/non-js-tooling.test.mjs",
+        "tests/node-runtime/project-tooling.test.mjs"
+      ],
+      "requiredBeforeSupport": []
     },
     {
       "id": "python-wasi",
@@ -34,12 +84,58 @@
       "id": "sqlite-wasm",
       "tool": "sqlite",
       "category": "embedded-db",
-      "status": "candidate",
+      "status": "supported",
+      "supportDecision": "product-supported-project-worker-adapter-with-constraints",
       "productValue": "medium",
       "maintenanceCost": "medium",
-      "runtimeFit": "good",
-      "reason": "Useful for local dev fixtures and package tools that accept embedded DB alternatives, but not a TCP database replacement.",
-      "requiredBeforeSupport": ["OPFS/project storage boundary fixture", "transaction durability fixture", "unsupported TCP DB diagnostic"]
+      "runtimeFit": "good-with-worker-opfs-constraints",
+      "reason": "Pinned official SQLite WebAssembly passes transactions and OPFS reopen durability, but remains an embedded browser database rather than a TCP database replacement.",
+      "package": {
+        "name": "@sqlite.org/sqlite-wasm",
+        "version": "3.53.4-build1",
+        "registryIntegrity": "sha512-U8pvL0patYHMgieD8JxxYJTlh9m1LUX8+BDYb7MiKQzBI89f2qbdmdcG/PvnPaLm9wsBbv4VlVG453ixnxBOnA=="
+      },
+      "artifact": {
+        "path": "dist/sqlite3.wasm",
+        "sha256": "2ee8f3dab694532afc8840e07703127287662d08b74e6ff50491ce63f00d5752",
+        "bytes": 868907
+      },
+      "filesystem": {
+        "mode": "project-namespaced-opfs-worker",
+        "result": "conditional-pass",
+        "constraints": ["dedicated Worker", "COOP/COEP", "project-scoped database path"]
+      },
+      "durability": {
+        "mode": "commit-rollback-close-worker-reopen-worker",
+        "result": "pass"
+      },
+      "credentialsAndNetwork": {
+        "credentialInjection": "deny",
+        "runtimeFetch": "same-origin-pinned-artifact-only",
+        "directTcp": "deny",
+        "tcpDatabaseDiagnostic": "required",
+        "result": "pass"
+      },
+      "performance": {
+        "artifactBudgetBytes": 2097152,
+        "coldStartBudgetMs": 2000,
+        "opfsDurabilityBudgetMs": 10000,
+        "result": "pass"
+      },
+      "productSurface": {
+        "api": "createSqliteProjectClient",
+        "worker": "dedicated-worker-per-client",
+        "namespace": "projectId + database",
+        "lifecycle": ["replace-values", "read-values", "close", "reopen"],
+        "status": "pass"
+      },
+      "fixtures": [
+        "tests/node-runtime/non-js-tooling.test.mjs",
+        "tests/browser/non-js-tooling.test.mjs",
+        "tests/browser/fixtures/sqlite-opfs-worker.mjs",
+        "tests/browser-host/sqlite-project-client.test.mjs"
+      ],
+      "requiredBeforeSupport": []
     },
     {
       "id": "git-wasm",
@@ -64,6 +160,7 @@
       "requiredBeforeSupport": []
     }
   ],
+  "supportedAdapters": ["jq-wasm", "sqlite-wasm"],
   "firstSupportLane": ["jq-wasm", "sqlite-wasm"],
   "excludedByDefault": ["docker-linux-binary", "arbitrary-linux-binary"]
 }

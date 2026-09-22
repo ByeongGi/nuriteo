@@ -5,6 +5,7 @@ export type PackageManagerLinkStrategy = "symlink" | "copy-fallback";
 export interface PackageManagerWorkspaceReader {
   readText(path: string): string;
   readBytes?(path: string): Uint8Array;
+  isFile?(path: string): boolean;
   listDir(path: string): string[];
   readlink?(path: string): string;
 }
@@ -42,6 +43,7 @@ export class MemoryPackageManagerWorkspace implements PackageManagerWorkspace {
   readonly files = new Map<string, Uint8Array>();
   readonly directories = new Set<string>(["/"]);
   readonly links = new Map<string, string>();
+  readonly #directoryEntries = new Map<string, Set<string>>([["/", new Set()]]);
 
   constructor(mounts: PackageManagerWorkspaceMount[] = []) {
     for (const mount of mounts) {
@@ -66,24 +68,10 @@ export class MemoryPackageManagerWorkspace implements PackageManagerWorkspace {
 
   listDir(path: string): string[] {
     const normalized = this.resolvePath(path);
-    const prefix = normalized === "/" ? "/" : `${normalized}/`;
-    const entries = new Set<string>();
-    for (const directory of this.directories) {
-      if (directory === normalized || !directory.startsWith(prefix)) continue;
-      entries.add(firstPathSegment(directory.slice(prefix.length)));
-    }
-    for (const link of this.links.keys()) {
-      if (!link.startsWith(prefix)) continue;
-      entries.add(firstPathSegment(link.slice(prefix.length)));
-    }
-    for (const file of this.files.keys()) {
-      if (!file.startsWith(prefix)) continue;
-      entries.add(firstPathSegment(file.slice(prefix.length)));
-    }
-    if (entries.size === 0 && !this.directories.has(normalized)) {
+    if (!this.directories.has(normalized)) {
       throw createWorkspaceError("ENOENT", `No such directory: ${normalized}`);
     }
-    return [...entries].sort();
+    return [...(this.#directoryEntries.get(normalized) ?? [])].sort();
   }
 
   readlink(path: string): string {
@@ -99,7 +87,7 @@ export class MemoryPackageManagerWorkspace implements PackageManagerWorkspace {
   }
 
   mkdir(path: string): void {
-    ensureDirectory(this.directories, normalizePath(path));
+    ensureDirectory(this.directories, normalizePath(path), (directory) => this.#indexPath(directory));
   }
 
   writeText(path: string, data: string): void {
@@ -108,9 +96,10 @@ export class MemoryPackageManagerWorkspace implements PackageManagerWorkspace {
 
   writeBytes(path: string, data: Uint8Array): void {
     const normalized = normalizePath(path);
-    ensureDirectory(this.directories, dirname(normalized));
+    ensureDirectory(this.directories, dirname(normalized), (directory) => this.#indexPath(directory));
     this.files.set(normalized, data.slice());
     this.links.delete(normalized);
+    this.#indexPath(normalized);
   }
 
   copyFile(source: string, target: string): void {
@@ -151,6 +140,7 @@ export class MemoryPackageManagerWorkspace implements PackageManagerWorkspace {
         this.directories.delete(directory);
       }
     }
+    this.#rebuildDirectoryEntries();
   }
 
   rename(source: string, target: string): void {
@@ -189,8 +179,9 @@ export class MemoryPackageManagerWorkspace implements PackageManagerWorkspace {
 
   symlink(target: string, path: string): void {
     const normalized = normalizePath(path);
-    ensureDirectory(this.directories, dirname(normalized));
+    ensureDirectory(this.directories, dirname(normalized), (directory) => this.#indexPath(directory));
     this.links.set(normalized, normalizePath(target));
+    this.#indexPath(normalized);
   }
 
   snapshot(): PackageManagerWorkspaceSnapshot {
@@ -216,6 +207,7 @@ export class MemoryPackageManagerWorkspace implements PackageManagerWorkspace {
     workspace.directories.add("/");
     workspace.links.clear();
     for (const link of snapshot.links) workspace.symlink(link.target, link.path);
+    workspace.#rebuildDirectoryEntries();
     return workspace;
   }
 
@@ -224,6 +216,35 @@ export class MemoryPackageManagerWorkspace implements PackageManagerWorkspace {
     if (this.files.has(normalized) || this.directories.has(normalized) || this.links.has(normalized)) return true;
     const resolved = this.resolvePath(normalized);
     return this.files.has(resolved) || this.directories.has(resolved) || this.links.has(resolved);
+  }
+
+  isFile(path: string): boolean {
+    return this.files.has(this.resolvePath(path));
+  }
+
+  #indexPath(path: string): void {
+    const normalized = normalizePath(path);
+    if (normalized === "/") {
+      if (!this.#directoryEntries.has("/")) this.#directoryEntries.set("/", new Set());
+      return;
+    }
+    const parent = dirname(normalized);
+    let entries = this.#directoryEntries.get(parent);
+    if (!entries) {
+      entries = new Set();
+      this.#directoryEntries.set(parent, entries);
+    }
+    entries.add(basename(normalized));
+    if (this.directories.has(normalized) && !this.#directoryEntries.has(normalized)) {
+      this.#directoryEntries.set(normalized, new Set());
+    }
+  }
+
+  #rebuildDirectoryEntries(): void {
+    this.#directoryEntries.clear();
+    for (const directory of this.directories) this.#indexPath(directory);
+    for (const file of this.files.keys()) this.#indexPath(file);
+    for (const link of this.links.keys()) this.#indexPath(link);
   }
 
   private resolvePath(path: string): string {
@@ -237,11 +258,13 @@ export class MemoryPackageManagerWorkspace implements PackageManagerWorkspace {
   }
 }
 
-function ensureDirectory(directories: Set<string>, path: string): void {
+function ensureDirectory(directories: Set<string>, path: string, onCreate?: (path: string) => void): void {
   const normalized = normalizePath(path);
   if (directories.has(normalized)) return;
-  ensureDirectory(directories, dirname(normalized));
+  const parent = dirname(normalized);
+  ensureDirectory(directories, parent, onCreate);
   directories.add(normalized);
+  onCreate?.(normalized);
 }
 
 function normalizePath(path: string): string {
@@ -257,9 +280,9 @@ function dirname(path: string): string {
   return path.slice(0, index);
 }
 
-function firstPathSegment(path: string): string {
-  const index = path.indexOf("/");
-  return index === -1 ? path : path.slice(0, index);
+function basename(path: string): string {
+  const index = path.lastIndexOf("/");
+  return path.slice(index + 1);
 }
 
 function resolveOneSymlink(links: Map<string, string>, path: string): string {
@@ -279,21 +302,26 @@ function createWorkspaceError(code: string, message: string): Error & { code: st
 }
 
 function decodeBase64(value: string): Uint8Array {
-  if (typeof atob === "function") {
-    return Uint8Array.from(atob(value), (char) => char.charCodeAt(0));
-  }
   const bufferCtor = (globalThis as typeof globalThis & { Buffer?: { from(value: string, encoding: "base64"): Uint8Array } }).Buffer;
   if (bufferCtor) return new Uint8Array(bufferCtor.from(value, "base64"));
+  if (typeof atob === "function") {
+    const binary = atob(value);
+    const decoded = new Uint8Array(binary.length);
+    for (let index = 0; index < binary.length; index += 1) decoded[index] = binary.charCodeAt(index);
+    return decoded;
+  }
   throw new Error("Base64 decoding is not available in this runtime");
 }
 
 function encodeBase64(value: Uint8Array): string {
-  if (typeof btoa === "function") {
-    let binary = "";
-    for (const byte of value) binary += String.fromCharCode(byte);
-    return btoa(binary);
-  }
   const bufferCtor = (globalThis as typeof globalThis & { Buffer?: { from(value: Uint8Array): { toString(encoding: "base64"): string } } }).Buffer;
   if (bufferCtor) return bufferCtor.from(value).toString("base64");
+  if (typeof btoa === "function") {
+    const chunks: string[] = [];
+    for (let offset = 0; offset < value.length; offset += 24_576) {
+      chunks.push(String.fromCharCode(...value.subarray(offset, offset + 24_576)));
+    }
+    return btoa(chunks.join(""));
+  }
   throw new Error("Base64 encoding is not available in this runtime");
 }

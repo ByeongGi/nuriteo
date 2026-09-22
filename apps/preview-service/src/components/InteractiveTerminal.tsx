@@ -53,11 +53,10 @@ export function InteractiveTerminal({
     const onData = (data: string) => {
       if (busyRef.current) {
         if (data === "\u0003") {
-          modelRef.current.controller.cancelShellCommand();
+          modelRef.current.controller.signalShell("SIGINT", terminalId);
           term.write("^C\r\n");
-          busyRef.current = false;
-          lineRef.current = "";
-          term.write(PROMPT);
+        } else {
+          modelRef.current.controller.writeShellInput(data, terminalId);
         }
         return;
       }
@@ -100,6 +99,7 @@ export function InteractiveTerminal({
     const observer = new ResizeObserver(() => {
       try {
         fit.fit();
+        modelRef.current.controller.resizeShell(term.cols, term.rows, terminalId);
       } catch {
         /* ignore */
       }
@@ -160,9 +160,14 @@ export function InteractiveTerminal({
 
     busyRef.current = true;
     try {
-      const result = await modelRef.current.controller.runShellCommand(command);
-      if (result.stdout) term.write(result.stdout.replace(/\n/g, "\r\n"));
-      if (result.stderr) term.write(`\x1b[31m${result.stderr.replace(/\n/g, "\r\n")}\x1b[0m`);
+      let streamed = false;
+      const result = await modelRef.current.controller.runShellCommand(command, terminalId, (chunk) => {
+        streamed = true;
+        if (chunk.stream === "stdout") term.write(chunk.data.replace(/\n/g, "\r\n"));
+        else term.write(`\x1b[31m${chunk.data.replace(/\n/g, "\r\n")}\x1b[0m`);
+      });
+      if (!streamed && result.stdout) term.write(result.stdout.replace(/\n/g, "\r\n"));
+      if (!streamed && result.stderr) term.write(`\x1b[31m${result.stderr.replace(/\n/g, "\r\n")}\x1b[0m`);
       if (result.exitCode !== 0) {
         term.writeln(`\x1b[90mexit ${result.exitCode}\x1b[0m`);
       }

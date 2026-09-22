@@ -2,9 +2,12 @@ export type RuntimeValue = unknown;
 export type RuntimeNamespace = Record<string, RuntimeValue>;
 
 export interface RuntimeModule {
+  children: RuntimeModule[];
   id: string;
+  filename: string;
   exports: RuntimeNamespace | RuntimeValue;
   loaded: boolean;
+  parent: RuntimeModule | null;
 }
 
 export interface CjsContext {
@@ -83,6 +86,7 @@ export interface ModuleRuntimeOptions {
   builtins?: (specifier: string) => RuntimeValue;
   globals?: Record<string, RuntimeValue>;
   loadModuleDefinition?: (url: string) => ModuleDefinition | undefined;
+  moduleExists?: (url: string) => boolean;
 }
 
 export interface LivenessHandle {
@@ -121,6 +125,8 @@ export interface RuntimeFsBindingOptions {
 export type RuntimeFsData = string | ArrayBuffer | ArrayBufferView | Uint8Array;
 
 export interface RuntimeFsBinding {
+  exists?(path: string, callback: (exists: boolean) => void): void;
+  existsSync?(path: string): boolean;
   openSync(path: string, flags?: string | number): number;
   closeSync(fd: number): void;
   writeSync(fd: number, data: RuntimeFsData): number;
@@ -172,6 +178,7 @@ export interface RuntimeFsBinding {
 
 export interface BuiltinBindings {
   childProcess?: RuntimeValue;
+  console?: RuntimeValue;
   fs?: RuntimeFsBinding;
   buffer?: RuntimeValue;
   events?: RuntimeValue;
@@ -180,8 +187,11 @@ export interface BuiltinBindings {
   httpsClient?: import("./network/http-client.ts").RuntimeHttpClient | import("./network/http-client.ts").RuntimeFetcher;
   internalBinding?: (name: string) => unknown;
   module?: RuntimeValue;
+  path?: RuntimeValue;
   process?: RuntimeValue;
   stream?: RuntimeValue;
+  timers?: RuntimeValue;
+  timersPromises?: RuntimeValue;
   util?: RuntimeValue;
   workerThreads?: RuntimeValue;
 }
@@ -202,6 +212,7 @@ export interface CliRunResult {
   exitCode: number;
   entry: string;
   entrySha256?: string;
+  dispose?: () => void;
 }
 
 export type RuntimeEnv = Record<string, string>;

@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-22",
+  "status": "supported",
+  "capabilities": {
+    "isolatedSessions": "supported",
+    "cwdAndEnvironment": "supported",
+    "streamingStdio": "supported",
+    "terminalResize": "supported",
+    "longRunningProcess": "supported",
+    "signals": ["SIGINT", "SIGTERM", "SIGKILL"],
+    "processListAndKill": "supported",
+    "portListAndStop": "supported",
+    "packageScriptArguments": "supported",
+    "projectLocalBin": "supported"
+  },
+  "shellGrammar": {
+    "supported": ["quoted argv", "pipeline", "AND operator", "stdout overwrite"],
+    "diagnosticCode": "ERR_CARGO_CONTAINER_UNSUPPORTED_SHELL_SYNTAX",
+    "unsupported": ["background jobs", "command substitution", "OR operator", "command lists", "heredoc", "append redirect", "stdin redirect", "shell blocks"]
+  },
+  "tests": [
+    "tests/node-runtime/shell.test.mjs",
+    "tests/browser-host/process-lifecycle.test.mjs",
+    "tests/browser-host/process-terminal-command.test.mjs",
+    "tests/package-managers/terminal-commands.test.mjs",
+    "tests/preview-service/terminal-session-control.test.mjs"
+  ]
+}

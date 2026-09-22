@@ -1,6 +1,7 @@
 import type { ModuleRuntime } from "./runtime.ts";
 import { evaluateEsmSync } from "./esm.ts";
 import { transpileTypeScript } from "../transforms/typescript.ts";
+import { builtinModules, Module as RuntimeModuleBuiltin } from "../builtins/module.ts";
 import type { CjsContext, RuntimeModule, RuntimeNamespace, RuntimeValue } from "../types.ts";
 
 export function evaluateCjs(runtime: ModuleRuntime, url: string): RuntimeValue {
@@ -26,9 +27,12 @@ export function evaluateCjs(runtime: ModuleRuntime, url: string): RuntimeValue {
   }
 
   const module: RuntimeModule = {
+    children: [],
     id: canonicalUrl,
+    filename: canonicalUrl,
     exports: {},
-    loaded: false
+    loaded: false,
+    parent: null
   };
   runtime.cache.cjs.set(canonicalUrl, module);
 
@@ -536,16 +540,67 @@ function dirnameOf(path: string): string {
 
 function createCjsRequire(runtime: ModuleRuntime, filename: string, dirname: string): CjsContext["require"] {
   return Object.assign(
-    (specifier: string) => runtime.requireSync(specifier, filename),
+    (specifier: string) => {
+      const value = runtime.requireSync(specifier, filename);
+      if (!builtinModules.includes(specifier)) {
+        const parent = runtime.cache.cjs.get(runtime.cache.canonicalize(filename));
+        const child = runtime.cache.cjs.get(runtime.cache.canonicalize(runtime.resolve(specifier, filename)));
+        if (parent && child && parent !== child && !parent.children.includes(child)) {
+          parent.children.push(child);
+          child.parent ??= parent;
+        }
+      }
+      return value;
+    },
     {
       resolve: Object.assign(
-        (specifier: string) => runtime.resolve(specifier, filename),
+        (specifier: string) => builtinModules.includes(specifier) ? specifier : runtime.resolve(specifier, filename),
         {
           paths: () => createNodeModulePaths(dirname)
         }
-      )
+      ),
+      cache: cjsCacheFacade(runtime),
+      extensions: RuntimeModuleBuiltin._extensions
     }
   );
+}
+
+const cjsCacheFacades = new WeakMap<ModuleRuntime, Record<string, RuntimeModule>>();
+
+function cjsCacheFacade(runtime: ModuleRuntime): Record<string, RuntimeModule> {
+  const cached = cjsCacheFacades.get(runtime);
+  if (cached) return cached;
+  const facade = new Proxy(Object.create(null) as Record<string, RuntimeModule>, {
+    deleteProperty(_target, property) {
+      if (typeof property === "string") {
+        const canonicalUrl = runtime.cache.canonicalize(property);
+        runtime.cache.cjs.delete(canonicalUrl);
+        runtime.invalidateLoadedDefinition(canonicalUrl);
+      }
+      return true;
+    },
+    get(_target, property) {
+      if (typeof property !== "string") return undefined;
+      return runtime.cache.cjs.get(runtime.cache.canonicalize(property));
+    },
+    getOwnPropertyDescriptor(_target, property) {
+      if (typeof property !== "string") return undefined;
+      const value = runtime.cache.cjs.get(runtime.cache.canonicalize(property));
+      return value === undefined ? undefined : { configurable: true, enumerable: true, value, writable: true };
+    },
+    has(_target, property) {
+      return typeof property === "string" && runtime.cache.cjs.has(runtime.cache.canonicalize(property));
+    },
+    ownKeys() {
+      return [...runtime.cache.cjs.keys()];
+    },
+    set(_target, property, value) {
+      if (typeof property === "string") runtime.cache.cjs.set(runtime.cache.canonicalize(property), value);
+      return true;
+    }
+  });
+  cjsCacheFacades.set(runtime, facade);
+  return facade;
 }
 
 function createNodeModulePaths(from: string): string[] {
@@ -563,7 +618,7 @@ function createNodeModulePaths(from: string): string[] {
 
 function compileCjsSource(runtime: ModuleRuntime, source: string, filename: string, globals: Record<string, RuntimeValue>): (context: CjsContext) => void {
   const preparedSource = prepareCjsSource(source);
-  let compiled: (exports: RuntimeModule["exports"], require: (specifier: string) => RuntimeValue, module: RuntimeModule, filename: string, dirname: string, process: RuntimeValue, global: RuntimeValue, console: RuntimeValue, globalThis: RuntimeValue, dynamicImport: (specifier: string) => Promise<RuntimeNamespace>) => void;
+  let compiled: (exports: RuntimeModule["exports"], require: (specifier: string) => RuntimeValue, module: RuntimeModule, filename: string, dirname: string, process: RuntimeValue, global: RuntimeValue, console: RuntimeValue, globalThis: RuntimeValue, buffer: RuntimeValue, dynamicImport: (specifier: string) => Promise<RuntimeNamespace>, setTimeout: RuntimeValue, clearTimeout: RuntimeValue, setInterval: RuntimeValue, clearInterval: RuntimeValue, setImmediate: RuntimeValue, clearImmediate: RuntimeValue) => void;
   try {
     compiled = new Function(
       "exports",
@@ -575,7 +630,14 @@ function compileCjsSource(runtime: ModuleRuntime, source: string, filename: stri
       "__global",
       "__console",
       "__globalThis",
+      "__Buffer",
       "__dynamicImport",
+      "__setTimeout",
+      "__clearTimeout",
+      "__setInterval",
+      "__clearInterval",
+      "__setImmediate",
+      "__clearImmediate",
       `${preparedSource}\n//# sourceURL=${filename}`
     ) as typeof compiled;
   } catch (error) {
@@ -585,10 +647,39 @@ function compileCjsSource(runtime: ModuleRuntime, source: string, filename: stri
     throw new Error("ECLICSPUNSUPPORTED: browser worker CSP blocks dynamic CommonJS evaluation for this module");
   }
   return ({ exports, require, module, filename, dirname }) => {
-    const dynamicImport = typeof globals.__dynamicImport === "function"
+    const configuredDynamicImport = typeof globals.__dynamicImport === "function"
       ? globals.__dynamicImport as (specifier: string) => Promise<RuntimeNamespace>
-      : (specifier: string) => runtime.importModule(specifier, filename);
-    compiled(exports, require, module, filename, dirname, globals.process, globals.global, globals.console ?? console, globals.globalThis ?? globals.global, dynamicImport);
+      : null;
+    const dynamicImport = async (specifier: string): Promise<RuntimeNamespace> => {
+      try {
+        return await runtime.importModule(specifier, filename);
+      } catch (error) {
+        if (configuredDynamicImport && !specifier.startsWith(".") && !specifier.startsWith("/")) {
+          return configuredDynamicImport(specifier);
+        }
+        throw error;
+      }
+    };
+    const runtimeGlobal = globals.global as Record<string, RuntimeValue> | undefined;
+    compiled(
+      exports,
+      require,
+      module,
+      filename,
+      dirname,
+      globals.process,
+      globals.global,
+      globals.console ?? console,
+      globals.globalThis ?? globals.global,
+      globals.Buffer,
+      dynamicImport,
+      runtimeGlobal?.setTimeout ?? setTimeout,
+      runtimeGlobal?.clearTimeout ?? clearTimeout,
+      runtimeGlobal?.setInterval ?? setInterval,
+      runtimeGlobal?.clearInterval ?? clearInterval,
+      runtimeGlobal?.setImmediate ?? globalThis.setImmediate,
+      runtimeGlobal?.clearImmediate ?? globalThis.clearImmediate
+    );
   };
 }
 
@@ -633,14 +724,31 @@ function isDynamicCodeBlocked(error: unknown): boolean {
 function prepareCjsSource(source: string): string {
   const sourceWithoutShebang = stripShebang(source);
   const injections = [];
-  if (!declaresLexicalBinding(sourceWithoutShebang, "process")) injections.push("const process = __process;");
+  // Webpack wraps each bundled module in a nested function. A `var process`
+  // inside one of those factories must not hide the runtime process binding
+  // from the bundle bootstrap itself.
+  if (isWebpackBundle(sourceWithoutShebang) || !declaresLexicalBinding(sourceWithoutShebang, "process")) {
+    injections.push("const process = __process;");
+  }
   if (!declaresLexicalBinding(sourceWithoutShebang, "global")) injections.push("const global = __global;");
   if (!declaresLexicalBinding(sourceWithoutShebang, "globalThis")) injections.push("const globalThis = __globalThis;");
   if (!declaresLexicalBinding(sourceWithoutShebang, "console")) injections.push("const console = __console;");
+  if (!declaresLexicalBinding(sourceWithoutShebang, "Buffer")) injections.push("const Buffer = __Buffer;");
+  if (!declaresLexicalBinding(sourceWithoutShebang, "setTimeout")) injections.push("const setTimeout = __setTimeout;");
+  if (!declaresLexicalBinding(sourceWithoutShebang, "clearTimeout")) injections.push("const clearTimeout = __clearTimeout;");
+  if (!declaresLexicalBinding(sourceWithoutShebang, "setInterval")) injections.push("const setInterval = __setInterval;");
+  if (!declaresLexicalBinding(sourceWithoutShebang, "clearInterval")) injections.push("const clearInterval = __clearInterval;");
+  if (!declaresLexicalBinding(sourceWithoutShebang, "setImmediate")) injections.push("const setImmediate = __setImmediate;");
+  if (!declaresLexicalBinding(sourceWithoutShebang, "clearImmediate")) injections.push("const clearImmediate = __clearImmediate;");
   const injectedSource = injections.length > 0
     ? `${injections.join("\n")}\n${sourceWithoutShebang}`
     : sourceWithoutShebang;
   return rewriteDynamicImports(injectedSource);
+}
+
+function isWebpackBundle(source: string): boolean {
+  return /^\s*module\.exports\s*=\s*\/\*{6}\//.test(source)
+    || source.slice(0, 2048).includes("webpackBootstrap");
 }
 
 function stripShebang(source: string): string {
@@ -648,12 +756,148 @@ function stripShebang(source: string): string {
 }
 
 function rewriteDynamicImports(source: string): string {
-  return source.replace(/\bimport\s*\(/g, "__dynamicImport(");
+  const output: string[] = [];
+  const contexts: Array<"normal" | "single" | "double" | "template" | "template-expression" | "line-comment" | "block-comment" | "regex"> = ["normal"];
+  const templateBraceDepths: number[] = [];
+  let escaped = false;
+  let regexClass = false;
+  let previousSignificant = "";
+
+  for (let index = 0; index < source.length; index += 1) {
+    const context = contexts.at(-1) || "normal";
+    const char = source[index] || "";
+    const next = source[index + 1] || "";
+
+    if (context === "single" || context === "double") {
+      output.push(char);
+      if (escaped) escaped = false;
+      else if (char === "\\") escaped = true;
+      else if ((context === "single" && char === "'") || (context === "double" && char === "\"")) contexts.pop();
+      continue;
+    }
+    if (context === "template") {
+      output.push(char);
+      if (escaped) escaped = false;
+      else if (char === "\\") escaped = true;
+      else if (char === "$" && next === "{") {
+        output.push(next);
+        index += 1;
+        contexts.push("template-expression");
+        templateBraceDepths.push(1);
+        previousSignificant = "{";
+      } else if (char === "`") contexts.pop();
+      continue;
+    }
+    if (context === "line-comment") {
+      output.push(char);
+      if (char === "\n") contexts.pop();
+      continue;
+    }
+    if (context === "block-comment") {
+      output.push(char);
+      if (char === "*" && next === "/") {
+        output.push(next);
+        index += 1;
+        contexts.pop();
+      }
+      continue;
+    }
+    if (context === "regex") {
+      output.push(char);
+      if (escaped) escaped = false;
+      else if (char === "\\") escaped = true;
+      else if (char === "[") regexClass = true;
+      else if (char === "]") regexClass = false;
+      else if (char === "/" && !regexClass) contexts.pop();
+      continue;
+    }
+
+    if (char === "/" && next === "/") {
+      output.push(char, next);
+      index += 1;
+      contexts.push("line-comment");
+      continue;
+    }
+    if (char === "/" && next === "*") {
+      output.push(char, next);
+      index += 1;
+      contexts.push("block-comment");
+      continue;
+    }
+    if (char === "'") {
+      output.push(char);
+      contexts.push("single");
+      escaped = false;
+      continue;
+    }
+    if (char === "\"") {
+      output.push(char);
+      contexts.push("double");
+      escaped = false;
+      continue;
+    }
+    if (char === "`") {
+      output.push(char);
+      contexts.push("template");
+      escaped = false;
+      continue;
+    }
+    if (char === "/" && isLikelyRegexStart(previousSignificant)) {
+      output.push(char);
+      contexts.push("regex");
+      escaped = false;
+      regexClass = false;
+      previousSignificant = char;
+      continue;
+    }
+
+    if (context === "template-expression") {
+      const depthIndex = templateBraceDepths.length - 1;
+      if (char === "{") templateBraceDepths[depthIndex] = (templateBraceDepths[depthIndex] || 0) + 1;
+      if (char === "}") {
+        const nextDepth = (templateBraceDepths[depthIndex] || 0) - 1;
+        if (nextDepth === 0) {
+          templateBraceDepths.pop();
+          contexts.pop();
+        } else {
+          templateBraceDepths[depthIndex] = nextDepth;
+        }
+      }
+    }
+
+    if (source.startsWith("import", index) && !/[\w$\.]/.test(source[index - 1] || "")) {
+      let cursor = index + "import".length;
+      while (/\s/.test(source[cursor] || "")) cursor += 1;
+      if (source[cursor] === "(") {
+        output.push("__dynamicImport", source.slice(index + "import".length, cursor + 1));
+        index = cursor;
+        previousSignificant = "(";
+        continue;
+      }
+    }
+
+    output.push(char);
+    if (!/\s/.test(char)) previousSignificant = char;
+  }
+
+  return output.join("");
+}
+
+function isLikelyRegexStart(previousSignificant: string): boolean {
+  return previousSignificant === "" || /[({\[=,:;!&|?+\-*%^~<>]/.test(previousSignificant);
 }
 
 function declaresLexicalBinding(source: string, name: string): boolean {
   const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return new RegExp(`(?:^|[\\n;])\\s*(?:const|let|var|class|function)\\s+${escaped}(?![$\\w])`).test(source);
+  const direct = new RegExp(`(?:^|[\\n;])\\s*(?:const|let|var|class|function)\\s+${escaped}(?![$\\w])`);
+  const destructuredDeclaration = new RegExp(`(?:^|[\\n;])\\s*(?:const|let|var)\\s*\\{([^}]*)\\}`, "g");
+  for (const match of source.matchAll(destructuredDeclaration)) {
+    const bindings = match[1] || "";
+    const shorthand = new RegExp(`(?:^|,)\\s*${escaped}\\s*(?:=|,|$)`);
+    const aliased = new RegExp(`(?:^|,)\\s*[$\\w]+\\s*:\\s*${escaped}\\s*(?:=|,|$)`);
+    if (shorthand.test(bindings) || aliased.test(bindings)) return true;
+  }
+  return direct.test(source);
 }
 
 function unescapeJsString(value: string): string {

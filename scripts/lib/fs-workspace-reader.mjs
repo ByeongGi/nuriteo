@@ -1,4 +1,4 @@
-import { lstatSync, readFileSync, readdirSync, readlinkSync } from "node:fs";
+import { lstatSync, readFileSync, readdirSync, readlinkSync, statSync } from "node:fs";
 import { resolve, sep } from "node:path";
 import { posix } from "node:path";
 
@@ -39,6 +39,14 @@ class NodeFsWorkspaceReader {
     try {
       lstatSync(this.#toNativePath(path));
       return true;
+    } catch {
+      return false;
+    }
+  }
+
+  isFile(path) {
+    try {
+      return statSync(this.#toNativePath(path)).isFile();
     } catch {
       return false;
     }
@@ -113,6 +121,20 @@ class FallbackWorkspaceReader {
 
   exists(path) {
     return this.#readers.some((reader) => reader.exists(path));
+  }
+
+  isFile(path) {
+    return this.#readers.some((reader) => reader.exists(path) && (reader.isFile?.(path) ?? canReadFile(reader, path)));
+  }
+}
+
+function canReadFile(reader, path) {
+  try {
+    if (reader.readBytes) reader.readBytes(path);
+    else reader.readText(path);
+    return true;
+  } catch {
+    return false;
   }
 }
 

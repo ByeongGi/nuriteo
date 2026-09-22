@@ -1,5 +1,6 @@
 import type { PreviewControllerModel } from "../hooks/usePreviewController";
-import type { ColorTheme, SaveTrigger } from "../lib/settings";
+import type { ColorTheme, IconTheme, SaveTrigger } from "../lib/settings";
+import { MENU_EXCLUDED_SCOPE, MENU_SUPPORT_SCOPE } from "../lib/menuSupport";
 
 export function SettingsPanel({ model }: { model: PreviewControllerModel }) {
   const { settings, updateSettings, changeStatus } = model;
@@ -19,6 +20,19 @@ export function SettingsPanel({ model }: { model: PreviewControllerModel }) {
           >
             <option value="dark">Dark</option>
             <option value="light">Light</option>
+            <option value="high-contrast">High contrast</option>
+          </select>
+        </label>
+
+        <label className="block space-y-1">
+          <span className="text-cargo-muted">File icon theme</span>
+          <select
+            className="w-full rounded-md border border-cargo-line bg-cargo-panel px-2 py-1.5 text-cargo-ink"
+            value={settings.iconTheme}
+            onChange={(event) => updateSettings({ iconTheme: event.target.value as IconTheme })}
+          >
+            <option value="color">File type colors</option>
+            <option value="monochrome">Monochrome</option>
           </select>
         </label>
 
@@ -35,6 +49,24 @@ export function SettingsPanel({ model }: { model: PreviewControllerModel }) {
           <span className="font-mono text-cargo-ink">{settings.fontSize}px</span>
         </label>
 
+        <label className="flex items-center justify-between gap-3">
+          <span className="text-cargo-muted">Editor minimap</span>
+          <input
+            type="checkbox"
+            checked={settings.editorMinimap}
+            onChange={(event) => updateSettings({ editorMinimap: event.target.checked })}
+          />
+        </label>
+
+        <label className="flex items-center justify-between gap-3">
+          <span className="text-cargo-muted">Word wrap</span>
+          <input
+            type="checkbox"
+            checked={settings.wordWrap}
+            onChange={(event) => updateSettings({ wordWrap: event.target.checked })}
+          />
+        </label>
+
         <label className="block space-y-1">
           <span className="text-cargo-muted">Save trigger</span>
           <select
@@ -46,6 +78,14 @@ export function SettingsPanel({ model }: { model: PreviewControllerModel }) {
             <option value="manual">Save on ⌘S only</option>
           </select>
         </label>
+
+        <div className="rounded-lg border border-cargo-line bg-cargo-panel p-3">
+          <p className="font-semibold tracking-wide text-cargo-muted uppercase">Application menu scope</p>
+          {Object.entries(MENU_SUPPORT_SCOPE).map(([menu, actions]) => (
+            <p key={menu} className="mt-1 text-cargo-ink"><strong>{menu}:</strong> {actions.join(", ")}</p>
+          ))}
+          <p className="mt-2 text-cargo-muted">Excluded: {MENU_EXCLUDED_SCOPE.join(", ")}.</p>
+        </div>
 
         <div className="rounded-lg border border-cargo-line bg-cargo-panel p-3">
           <p className="font-semibold tracking-wide text-cargo-muted uppercase">Working tree</p>

@@ -1,6 +1,7 @@
 import {
   createProjectWorkspaceDevServerChangeBridge,
   createProjectWorkspaceEditorBridge,
+  decodeProjectWorkspaceArchive,
   ProjectWorkspaceEditorBridge,
   ProjectWorkspaceStore,
   type ProjectWorkspaceEditorChangeEvent,
@@ -9,6 +10,7 @@ import {
 import {
   exportMaterializedProjectZip,
   exportProjectZip,
+  createProjectHealthCheck,
   materializeGitHubUrl,
   materializeTemplate,
   materializeZip,
@@ -160,7 +162,11 @@ export interface PreviewWorkflowController {
   loadTemplate(templateId?: TemplateId, options?: { label?: string }): PreviewWorkflowSnapshot;
   importZipFile(file: Blob): Promise<PreviewWorkflowSnapshot>;
   importGitHub(url: string): Promise<PreviewWorkflowSnapshot>;
+  importSnapshot(snapshot: Blob | Uint8Array | ArrayBuffer | string): Promise<PreviewWorkflowSnapshot>;
+  importProjectFiles(files: Array<{ path: string; content: string }>, name?: string): PreviewWorkflowSnapshot;
+  bootSnapshot(snapshot: Blob | Uint8Array | ArrayBuffer | string): Promise<PreviewWorkflowSnapshot>;
   exportZip(): Uint8Array;
+  exportSnapshot(): Uint8Array;
   exportTreeJson(path?: string): FileSystemTree;
   exportPathZip(relativePath: string): Uint8Array;
   setPackageManagerOverride(value: SupportedPackageManager | null | ""): void;
@@ -170,13 +176,19 @@ export interface PreviewWorkflowController {
   restartDev(): Promise<PreviewWorkflowSnapshot>;
   reconnectHmr(): Promise<HmrClientSnapshot>;
   runBuild(): Promise<PreviewWorkflowSnapshot>;
+  stopPreviewPort(port?: number): boolean;
   ensureServiceWorker(): Promise<ServiceWorkerRegistration>;
   clearPackageCache(): { freedBytes: number; evicted: number };
   resolveWriterConflict(): void;
   runRecoveryAction(kind: RuntimeRecoveryActionKind | string): Promise<unknown>;
   simulateQuotaPressure(bytes?: number): void;
-  runShellCommand(command: string): Promise<TerminalRunResult>;
-  cancelShellCommand(): boolean;
+  runShellCommand(command: string, terminalId?: string, onOutput?: (chunk: { stream: "stdout" | "stderr"; data: string }) => void): Promise<TerminalRunResult>;
+  writeShellInput(data: string, terminalId?: string): boolean;
+  resizeShell(cols: number, rows: number, terminalId?: string): void;
+  signalShell(signal?: "SIGINT" | "SIGTERM" | "SIGKILL", terminalId?: string): boolean;
+  closeShell(terminalId: string): boolean;
+  listShellProcesses(): Array<{ terminalId: string; command: string; cwd: string; status: "running" }>;
+  cancelShellCommand(terminalId?: string): boolean;
   log(line: unknown): void;
 }
 
@@ -623,9 +635,74 @@ export function createPreviewWorkflowController(
     return applyMaterializedProject(materialized);
   }
 
+  async function bootSnapshot(
+    input: Blob | Uint8Array | ArrayBuffer | string
+  ): Promise<PreviewWorkflowSnapshot> {
+    const bytes = input instanceof Blob ? new Uint8Array(await input.arrayBuffer()) : input;
+    const archive = decodeProjectWorkspaceArchive(bytes);
+    const restored = new ProjectWorkspaceStore({
+      projectId: archive.snapshot.projectId,
+      root: archive.snapshot.root,
+      metadata: archive.snapshot.metadata
+    });
+    restored.importArchive(archive);
+    const files = restored.listFiles().map((file) => ({
+      path: relativeProjectPath(file.path, restored.root),
+      data: file.data
+    }));
+    const configuredManager = restored.metadata.packageManager;
+    const defaultPackageManager = configuredManager === "npm" || configuredManager === "pnpm"
+      ? configuredManager
+      : undefined;
+    const overrides = packageOverrides();
+    const health = createProjectHealthCheck({
+      files,
+      ...(overrides ? { overrides } : {}),
+      ...(defaultPackageManager ? { defaultPackageManager } : {})
+    });
+    return applyMaterializedProject({
+      store: restored,
+      files,
+      health,
+      source: "snapshot"
+    }, {
+      label: typeof restored.metadata.name === "string" ? restored.metadata.name : "snapshot"
+    });
+  }
+
+  const importSnapshot = bootSnapshot;
+
+  function importProjectFiles(
+    files: Array<{ path: string; content: string }>,
+    name = "cloud project"
+  ): PreviewWorkflowSnapshot {
+    const root = "/workspace/app";
+    const store = new ProjectWorkspaceStore({
+      projectId: "preview-service-cloud",
+      root,
+      metadata: { name }
+    });
+    const materializedFiles = files.map((file) => ({
+      path: file.path.replace(/^\/+/, "").replace(/^workspace\/app\//, ""),
+      data: file.content
+    }));
+    for (const file of materializedFiles) store.writeText(`${root}/${file.path}`, file.data);
+    const overrides = packageOverrides();
+    const health = createProjectHealthCheck({
+      files: materializedFiles,
+      ...(overrides ? { overrides } : {})
+    });
+    return applyMaterializedProject({ store, files: materializedFiles, health, source: "snapshot" }, { label: name });
+  }
+
   function exportZip(): Uint8Array {
     if (!state.project) throw new Error("No project to export");
     return exportMaterializedProjectZip(state.project, state.project.projectId || "project");
+  }
+
+  function exportSnapshot(): Uint8Array {
+    if (!state.project) throw new Error("No project to export");
+    return state.project.exportSnapshot();
   }
 
   function exportTreeJson(path?: string): FileSystemTree {
@@ -971,6 +1048,20 @@ export function createPreviewWorkflowController(
     return result;
   }
 
+  function stopPreviewPort(port = state.session?.port): boolean {
+    if (!state.session || port === undefined || state.session.port !== port) return false;
+    try { state.workflow?.stopDevServer(); } catch { /* best-effort process cleanup */ }
+    state.sessions.delete(state.session.sessionId);
+    stopSessionHeartbeat();
+    state.session = null;
+    state.previewUrl = null;
+    state.hmrState = "idle";
+    try { state.hmr?.close(); } catch { /* best-effort socket cleanup */ }
+    state.hmr = null;
+    emit("phase", { phase: state.phase, port, stopped: true });
+    return true;
+  }
+
   function resolveWriterConflict(): void {
     state.reliability.forceTakeWriter();
     log(`writer lease acquired owner=${state.reliability.owner}`);
@@ -1016,11 +1107,13 @@ export function createPreviewWorkflowController(
     throw new Error(`Unsupported recovery action: ${kind}`);
   }
 
-  const shell: PreviewShellSession = createPreviewShellSession({
+  const shellOutputListeners = new Map<string, (chunk: { stream: "stdout" | "stderr"; data: string }) => void>();
+  const createShell = (terminalId: string): PreviewShellSession => createPreviewShellSession({
     getCwd: () => state.workflow?.projectRoot || state.project?.root || "/workspace/app",
     getProject: () => state.project,
     onChunk(chunk) {
       log(`[${chunk.stream}] ${chunk.data.replace(/\n$/, "")}`);
+      shellOutputListeners.get(terminalId)?.(chunk);
     },
     async install() {
       if (!state.workflow) loadTemplate("vite-react");
@@ -1091,7 +1184,20 @@ export function createPreviewWorkflowController(
     }
   });
 
-  async function runShellCommand(command: string): Promise<TerminalRunResult> {
+  const shells = new Map<string, PreviewShellSession>();
+  function shellFor(terminalId = "default"): PreviewShellSession {
+    const existing = shells.get(terminalId);
+    if (existing) return existing;
+    const shell = createShell(terminalId);
+    shells.set(terminalId, shell);
+    return shell;
+  }
+
+  async function runShellCommand(
+    command: string,
+    terminalId = "default",
+    onOutput?: (chunk: { stream: "stdout" | "stderr"; data: string }) => void
+  ): Promise<TerminalRunResult> {
     const trimmed = command.trim();
     if (!trimmed) {
       return {
@@ -1114,18 +1220,59 @@ export function createPreviewWorkflowController(
     }
     log(`$ ${trimmed}`);
     try {
-      const result = await shell.run(trimmed);
+      if (onOutput) shellOutputListeners.set(terminalId, onOutput);
+      const pending = shellFor(terminalId).run(trimmed);
+      emit("log", { line: "shell-process-start", terminalId, command: trimmed });
+      const result = await pending;
       emit("log", { line: "shell", command: trimmed, exitCode: result.exitCode });
       return result;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       log(`shell error: ${message}`);
       throw error;
+    } finally {
+      if (onOutput) shellOutputListeners.delete(terminalId);
     }
   }
 
-  function cancelShellCommand(): boolean {
-    return shell.cancel();
+  function writeShellInput(data: string, terminalId = "default"): boolean {
+    return shellFor(terminalId).session.write(data);
+  }
+
+  function resizeShell(cols: number, rows: number, terminalId = "default"): void {
+    shellFor(terminalId).session.resize(cols, rows);
+  }
+
+  function signalShell(signal: "SIGINT" | "SIGTERM" | "SIGKILL" = "SIGTERM", terminalId = "default"): boolean {
+    return shellFor(terminalId).session.signal(signal);
+  }
+
+  function closeShell(terminalId: string): boolean {
+    const shell = shells.get(terminalId);
+    if (!shell) return false;
+    shell.session.kill();
+    shellOutputListeners.delete(terminalId);
+    return shells.delete(terminalId);
+  }
+
+  function listShellProcesses(): Array<{ terminalId: string; command: string; cwd: string; status: "running" }> {
+    const processes: Array<{ terminalId: string; command: string; cwd: string; status: "running" }> = [];
+    for (const [terminalId, shell] of shells) {
+      const current = shell.session.snapshot();
+      if (current.activeEntry) {
+        processes.push({
+          terminalId,
+          command: current.activeEntry.command,
+          cwd: current.cwd,
+          status: "running"
+        });
+      }
+    }
+    return processes;
+  }
+
+  function cancelShellCommand(terminalId = "default"): boolean {
+    return shellFor(terminalId).cancel();
   }
 
   function getSnapshot(): PreviewWorkflowSnapshot {
@@ -1161,7 +1308,11 @@ export function createPreviewWorkflowController(
     loadTemplate,
     importZipFile,
     importGitHub,
+    importSnapshot,
+    importProjectFiles,
+    bootSnapshot,
     exportZip,
+    exportSnapshot,
     exportTreeJson,
     exportPathZip,
     setPackageManagerOverride,
@@ -1171,12 +1322,18 @@ export function createPreviewWorkflowController(
     restartDev,
     reconnectHmr,
     runBuild,
+    stopPreviewPort,
     ensureServiceWorker,
     clearPackageCache,
     resolveWriterConflict,
     runRecoveryAction,
     simulateQuotaPressure,
     runShellCommand,
+    writeShellInput,
+    resizeShell,
+    signalShell,
+    closeShell,
+    listShellProcesses,
     cancelShellCommand,
     log
   };

@@ -23,6 +23,9 @@ import {
   type LocalHistoryRevision,
   type LocalHistoryRevisionKind
 } from "../lib/localHistory";
+import { useNotificationCenter } from "./useNotificationCenter";
+import { notificationForWorkflowEvent } from "../lib/notifications";
+import { CloudProjectsClient } from "../lib/cloudProjects";
 
 const AUTOSAVE_MS = 800;
 
@@ -87,6 +90,7 @@ export function usePreviewController() {
   const [splitPath, setSplitPath] = useState<string | null>(null);
   const [editorTick, setEditorTick] = useState(0);
   const [importOpen, setImportOpen] = useState(false);
+  const [cloudOpen, setCloudOpen] = useState(false);
   const [dockTab, setDockTab] = useState<DockTab>("terminal");
   const [frameNonce, setFrameNonce] = useState(0);
   const [sidebarView, setSidebarView] = useState<SidebarView>("explorer");
@@ -121,13 +125,15 @@ export function usePreviewController() {
   } | null>(null);
   const [localHistory, setLocalHistory] = useState(loadLocalHistory);
   const [localHistoryPersistent, setLocalHistoryPersistent] = useState(true);
+  const notificationCenter = useNotificationCenter();
   const localHistoryRef = useRef(localHistory);
   const selectedPathRef = useRef(selectedPath);
   selectedPathRef.current = selectedPath;
-  const autosaveTimerRef = useRef<number | null>(null);
+  const autosaveTimersRef = useRef(new Map<string, number>());
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
   const deepLinkDoneRef = useRef(false);
+  const cloudRuntimeStartedAtRef = useRef<number | null>(null);
 
   const refreshSnapshot = useCallback(() => {
     setSnapshot(controller.getSnapshot());
@@ -156,11 +162,15 @@ export function usePreviewController() {
     [controller]
   );
 
-  const clearAutosave = useCallback(() => {
-    if (autosaveTimerRef.current !== null) {
-      window.clearTimeout(autosaveTimerRef.current);
-      autosaveTimerRef.current = null;
+  const clearAutosave = useCallback((path?: string) => {
+    if (path) {
+      const timer = autosaveTimersRef.current.get(path);
+      if (timer !== undefined) window.clearTimeout(timer);
+      autosaveTimersRef.current.delete(path);
+      return;
     }
+    for (const timer of autosaveTimersRef.current.values()) window.clearTimeout(timer);
+    autosaveTimersRef.current.clear();
   }, []);
 
   const updateSettings = useCallback((patch: Partial<IdeSettings>) => {
@@ -231,8 +241,9 @@ export function usePreviewController() {
         if (activeTerminalId === id) setActiveTerminalId(next[0]?.id || "term-1");
         return next;
       });
+      controller.closeShell(id);
     },
-    [activeTerminalId]
+    [activeTerminalId, controller]
   );
 
   const reorderOpenPaths = useCallback((fromPath: string, beforePath: string) => {
@@ -442,10 +453,22 @@ export function usePreviewController() {
   }, []);
 
   const saveCurrentFile = useCallback(() => {
-    clearAutosave();
     const current = controller.getSnapshot();
     const path = selectedPathRef.current;
     if (!current.editor || !path) return;
+    clearAutosave(path);
+    const file = current.editor.openFile(path);
+    current.editor.saveFile(path);
+    recordHistoryCheckpoint(path, file.data, "save");
+    bumpEditor();
+    refreshSnapshot();
+    setFrameNonce((value) => value + 1);
+  }, [bumpEditor, clearAutosave, controller, recordHistoryCheckpoint, refreshSnapshot]);
+
+  const saveFile = useCallback((path: string) => {
+    const current = controller.getSnapshot();
+    if (!current.editor) return;
+    clearAutosave(path);
     const file = current.editor.openFile(path);
     current.editor.saveFile(path);
     recordHistoryCheckpoint(path, file.data, "save");
@@ -471,32 +494,40 @@ export function usePreviewController() {
     [bumpEditor]
   );
 
-  const editSelected = useCallback(
-    (value: string) => {
+  const editFile = useCallback(
+    (path: string, value: string) => {
       const current = controller.getSnapshot();
-      const path = selectedPathRef.current;
-      if (!current.editor || !path) return;
+      if (!current.editor) return;
       const previous = current.editor.openFile(path).data;
       recordHistoryCheckpoint(path, previous, "edit");
       current.editor.editText(path, value);
       bumpEditor();
       refreshSnapshot();
-      clearAutosave();
+      clearAutosave(path);
       if (settingsRef.current.saveTrigger !== "autosave") return;
-      autosaveTimerRef.current = window.setTimeout(() => {
+      const timer = window.setTimeout(() => {
+        autosaveTimersRef.current.delete(path);
         const latest = controller.getSnapshot();
-        const target = selectedPathRef.current;
-        if (!latest.editor || !target) return;
-        const file = latest.editor.openFile(target);
+        if (!latest.editor) return;
+        const file = latest.editor.openFile(path);
         if (!file.dirty) return;
-        latest.editor.saveFile(target);
-        recordHistoryCheckpoint(target, file.data, "save");
+        latest.editor.saveFile(path);
+        recordHistoryCheckpoint(path, file.data, "save");
         bumpEditor();
         refreshSnapshot();
         setFrameNonce((value) => value + 1);
       }, AUTOSAVE_MS);
+      autosaveTimersRef.current.set(path, timer);
     },
     [bumpEditor, clearAutosave, controller, recordHistoryCheckpoint, refreshSnapshot]
+  );
+
+  const editSelected = useCallback(
+    (value: string) => {
+      const path = selectedPathRef.current;
+      if (path) editFile(path, value);
+    },
+    [editFile]
   );
 
   const editCurrentFile = editSelected;
@@ -916,6 +947,19 @@ export function usePreviewController() {
     setActivePortId(id);
   }, []);
 
+  const stopPort = useCallback(
+    (port: number) => {
+      controller.stopPreviewPort(port);
+      setPorts((entries) => entries.filter((entry) => entry.port !== port));
+      setActivePortId((current) => {
+        const remaining = ports.filter((entry) => entry.port !== port);
+        return remaining.some((entry) => entry.id === current) ? current : remaining[0]?.id || null;
+      });
+      refreshSnapshot();
+    },
+    [controller, ports, refreshSnapshot]
+  );
+
   const addPreviewPathTab = useCallback(
     (pathInput = "/") => {
       const current = controller.getSnapshot();
@@ -1133,12 +1177,34 @@ export function usePreviewController() {
 
   useEffect(() => {
     const unsubscribe = controller.on((event) => {
+      const notification = notificationForWorkflowEvent(event);
+      if (notification) notificationCenter.pushNotification(notification);
+      const cloudToken = localStorage.getItem("cargo-container.cloud-session") || "";
+      if (cloudToken && event.type === "phase" && event.detail.phase === PHASES.installed) {
+        void new CloudProjectsClient({ token: () => cloudToken }).ingestUsage({
+          id: `install:${event.snapshot.projectId || "project"}:${crypto.randomUUID()}`,
+          kind: "install",
+          quantity: 1,
+          occurredAt: new Date().toISOString()
+        }).catch(() => undefined);
+      }
       if (event.type === "preview-ready") {
+        cloudRuntimeStartedAtRef.current = Date.now();
         setFrameNonce((value) => value + 1);
         syncPortsFromSnapshot(event.snapshot);
       } else if (event.type === "hmr-update") {
         // Soft refresh keeps the session URL and avoids full SW rebind churn.
         setSoftRefreshToken((value) => value + 1);
+      }
+      if (cloudToken && event.type === "phase" && event.detail.stopped === true && cloudRuntimeStartedAtRef.current !== null) {
+        const minutes = Math.max(0, (Date.now() - cloudRuntimeStartedAtRef.current) / 60_000);
+        cloudRuntimeStartedAtRef.current = null;
+        void new CloudProjectsClient({ token: () => cloudToken }).ingestUsage({
+          id: `runtime:${event.snapshot.projectId || "project"}:${crypto.randomUUID()}`,
+          kind: "runtime_minutes",
+          quantity: minutes,
+          occurredAt: new Date().toISOString()
+        }).catch(() => undefined);
       }
       if (event.snapshot.diagnostics.length > 0 || event.snapshot.phase === PHASES.failed) {
         setDockTab("diagnostics");
@@ -1148,7 +1214,7 @@ export function usePreviewController() {
     return () => {
       unsubscribe();
     };
-  }, [controller, syncPortsFromSnapshot]);
+  }, [controller, notificationCenter.pushNotification, syncPortsFromSnapshot]);
 
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
@@ -1158,13 +1224,19 @@ export function usePreviewController() {
         stack?: string;
       } | null;
       if (!data || data.type !== "cargo-preview-error") return;
-      controller.log(`preview error: ${data.message || "unknown"}`);
+      const message = data.message || "unknown";
+      controller.log(`preview error: ${message}`);
+      notificationCenter.pushNotification({
+        title: "Preview runtime error",
+        message,
+        level: "error"
+      });
       setDockTab("diagnostics");
       refreshSnapshot();
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, [controller, refreshSnapshot]);
+  }, [controller, notificationCenter.pushNotification, refreshSnapshot]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -1346,6 +1418,7 @@ export function usePreviewController() {
   );
 
   return {
+    ...notificationCenter,
     controller,
     snapshot,
     selectedPath,
@@ -1357,6 +1430,8 @@ export function usePreviewController() {
     displayPath,
     importOpen,
     setImportOpen,
+    cloudOpen,
+    setCloudOpen,
     dockTab,
     setDockTab,
     frameNonce,
@@ -1373,9 +1448,11 @@ export function usePreviewController() {
     settings,
     updateSettings,
     ports,
+    processes: controller.listShellProcesses(),
     activePortId,
     activePreviewUrl,
     selectPort,
+    stopPort,
     addPreviewPathTab,
     navigatePreviewPath,
     changeStatus,
@@ -1383,6 +1460,8 @@ export function usePreviewController() {
     openFile,
     closeTab,
     editSelected,
+    editFile,
+    saveFile,
     saveCurrentFile,
     formatCurrentFile,
     createFile,

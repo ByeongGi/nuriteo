@@ -35,6 +35,14 @@
         ]
       },
       {
+        "area": "Vite Vue and Svelte development workflows",
+        "status": "product-supported",
+        "evidence": [
+          "compat/framework-product-support.json",
+          "tests/vite/vite-vue-svelte-actual.test.mjs"
+        ]
+      },
+      {
         "area": "Preview, HMR, terminal, file workspace, and recovery UX",
         "status": "product-supported",
         "evidence": [
@@ -150,8 +158,7 @@
     ],
     "remainingBacklog": [
       "3 of 10 public Vite React actual-product fixtures remain hold due large transitive dependency materialization and worker stability limits",
-      "Vite Vue/Svelte actual worker-backed validation remains deferred",
-      "Next.js app router remains hold because native SWC/sharp and server runtime assumptions are outside first product target",
+      "Pinned Next.js 15.1 full runtime is candidate after guest-runtime validation; browser-worker/release promotion and native-addon boundaries remain",
       "External stable publish still requires one final release checklist reconfirmation at publish time"
     ],
     "evidence": ["docs/archive/productization-2026-09-16/evidence/P20-04.md"]
