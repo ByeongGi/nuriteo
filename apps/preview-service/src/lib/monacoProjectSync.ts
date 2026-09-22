@@ -1,6 +1,8 @@
 import * as monaco from "monaco-editor";
+import { createMonacoTypeLibraries } from "./monacoTypeLibraries";
 
 const synced = new Map<string, { data: string; disposables: monaco.IDisposable[] }>();
+const syncedTypeLibraries = new Map<string, { data: string; disposables: monaco.IDisposable[] }>();
 
 function languageForPath(path: string): string {
   const lower = path.toLowerCase();
@@ -36,6 +38,8 @@ export function syncMonacoProjectFiles(files: Array<{ path: string; data: string
     if (!monaco.editor || !monaco.languages) return;
     const tsDefaults = monaco.typescript.typescriptDefaults;
     const jsDefaults = monaco.typescript.javascriptDefaults;
+
+    syncTypeLibraries(files, tsDefaults, jsDefaults);
 
     const nextPaths = new Set<string>();
     for (const file of files) {
@@ -82,5 +86,32 @@ export function syncMonacoProjectFiles(files: Array<{ path: string; data: string
     }
   } catch {
     // IntelliSense sync is best-effort; never crash the IDE shell.
+  }
+}
+
+function syncTypeLibraries(
+  files: Array<{ path: string; data: string }>,
+  tsDefaults: typeof monaco.typescript.typescriptDefaults,
+  jsDefaults: typeof monaco.typescript.javascriptDefaults
+): void {
+  const nextPaths = new Set<string>();
+  for (const library of createMonacoTypeLibraries(files)) {
+    nextPaths.add(library.path);
+    const current = syncedTypeLibraries.get(library.path);
+    if (current?.data === library.data) continue;
+    current?.disposables.forEach((disposable) => disposable.dispose());
+    syncedTypeLibraries.set(library.path, {
+      data: library.data,
+      disposables: [
+        tsDefaults.addExtraLib(library.data, library.path),
+        jsDefaults.addExtraLib(library.data, library.path)
+      ]
+    });
+  }
+
+  for (const path of [...syncedTypeLibraries.keys()]) {
+    if (nextPaths.has(path)) continue;
+    syncedTypeLibraries.get(path)?.disposables.forEach((disposable) => disposable.dispose());
+    syncedTypeLibraries.delete(path);
   }
 }

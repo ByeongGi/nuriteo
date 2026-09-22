@@ -83,6 +83,17 @@ try {
   assert.ok(languageFeatures.completionNames.includes("toFixed"), "Completion provider must return number members");
   assert.equal(languageFeatures.diagnosticCount, 0, "Valid cross-file TypeScript must have no semantic errors");
 
+  await page.waitForFunction(
+    () => document.querySelector("#editor-statusbar")?.textContent?.includes("Language Service ready"),
+    null,
+    { timeout: 15_000 }
+  );
+  await page.waitForFunction(
+    () => document.querySelector("#editor-statusbar [aria-label]")?.getAttribute("aria-label") === "0 errors and 0 warnings",
+    null,
+    { timeout: 15_000 }
+  );
+
   assert.ok(
     workerRequests.some((url) => url.includes("ts.worker")),
     `Vite-bundled TypeScript module worker must be requested; saw ${JSON.stringify(workerRequests)}`
@@ -97,6 +108,19 @@ try {
     assert.equal(response.status(), 200, `${workerUrl} must be served`);
     assert.match(response.headers()["content-type"] || "", /javascript/, `${workerUrl} must use JavaScript MIME`);
   }
+
+  await page.reload({ waitUntil: "networkidle" });
+  await page.locator('#template-gallery [data-template="next-app"]').click();
+  await page.waitForFunction(
+    () => document.querySelector("#editor-statusbar")?.textContent?.includes("Language Service ready"),
+    null,
+    { timeout: 60_000 }
+  );
+  await page.getByRole("tab", { name: "Problems", exact: true }).click();
+  await page.getByText("No problems reported.").waitFor({ timeout: 15_000 });
+  assert.equal(await page.locator("#editor-statusbar [aria-label]").getAttribute("aria-label"), "0 errors and 0 warnings");
+  assert.equal(await page.locator("#diagnostics-user li").count(), 1);
+
   assert.deepEqual(pageErrors, []);
   console.log(`preview service Monaco language service ok diagnostics=${status.typescriptDiagnostics}`);
 } finally {

@@ -38,6 +38,7 @@ async function initializeMonacoWorkers(): Promise<MonacoWorkerStatus> {
       ts.typescriptDefaults.setCompilerOptions({
         target: ts.ScriptTarget.ES2022,
         allowNonTsExtensions: true,
+        allowImportingTsExtensions: true,
         moduleResolution: ts.ModuleResolutionKind.NodeJs,
         module: ts.ModuleKind.ESNext,
         jsx: ts.JsxEmit.ReactJSX,
@@ -52,6 +53,7 @@ async function initializeMonacoWorkers(): Promise<MonacoWorkerStatus> {
       ts.javascriptDefaults.setCompilerOptions({
         target: ts.ScriptTarget.ES2022,
         allowNonTsExtensions: true,
+        allowImportingTsExtensions: true,
         allowJs: true,
         checkJs: false,
         noEmit: true,
@@ -124,7 +126,7 @@ async function runTypeScriptWorkerProbe(): Promise<MonacoWorkerStatus> {
     const getWorker = await monaco.typescript.getTypeScriptWorker();
     const worker = await getWorker(uri);
     const diagnostics = await withTimeout(
-      worker.getSemanticDiagnostics(uri.toString()),
+      waitForProbeDiagnostics(worker, uri.toString()),
       WORKER_READY_TIMEOUT_MS,
       "Monaco TypeScript worker readiness timed out."
     );
@@ -133,6 +135,20 @@ async function runTypeScriptWorkerProbe(): Promise<MonacoWorkerStatus> {
   } finally {
     if (!existing) model.dispose();
   }
+}
+
+async function waitForProbeDiagnostics(
+  worker: monaco.languages.typescript.TypeScriptWorker,
+  fileName: string
+): Promise<monaco.languages.typescript.Diagnostic[]> {
+  const retryIntervalMs = 25;
+  const maxAttempts = Math.ceil(WORKER_READY_TIMEOUT_MS / retryIntervalMs);
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    const diagnostics = await worker.getSemanticDiagnostics(fileName);
+    if (diagnostics.length > 0) return diagnostics;
+    await new Promise((resolve) => setTimeout(resolve, retryIntervalMs));
+  }
+  throw new Error("Monaco TypeScript worker returned no probe diagnostic.");
 }
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
