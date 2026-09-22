@@ -68,6 +68,7 @@ export interface HostProcessTableOptions {
   registry?: import("./worker-registry.ts").WorkerRegistry;
   workerFactory?: HostWorkerFactory;
   permissions?: import("../security/index.ts").PermissionManager;
+  abusePolicy?: import("../security/abuse-limits.ts").AbuseLimitPolicy;
   trace?: import("../observability/index.ts").RuntimeTraceSink;
   now?: () => number;
   onOutput?: (chunk: HostProcessOutputChunk) => void;

@@ -5,6 +5,7 @@ export type RuntimeRecoveryActionKind =
   | "export-support-bundle"
   | "open-docs"
   | "reset-runtime"
+  | "resolve-writer-conflict"
   | "retry";
 
 export interface RuntimeRecoveryAction {
@@ -80,6 +81,25 @@ function actionsForDiagnostic(diagnostic: RuntimeDiagnostic): RuntimeRecoveryAct
         kind: "clear-cache",
         label: "Clear package cache",
         reason: "Free OPFS cache space before retrying install or build."
+      },
+      {
+        kind: "retry",
+        label: "Retry after cleanup",
+        reason: "Retry install or build once cache space is available."
+      }
+    ];
+  }
+  if (diagnostic.code === "ELEASEHELD") {
+    return [
+      {
+        kind: "resolve-writer-conflict",
+        label: "Take over writer lease",
+        reason: "Another tab holds the project writer lease. Take over after confirming the other tab is idle."
+      },
+      {
+        kind: "retry",
+        label: "Retry as reader",
+        reason: "Wait for the other tab to release the writer lease, then retry."
       }
     ];
   }
@@ -123,12 +143,11 @@ function primaryMessageFor(diagnostics: readonly RuntimeDiagnostic[], hasUnsuppo
 }
 
 function uniqueActions(actions: RuntimeRecoveryAction[]): RuntimeRecoveryAction[] {
-  const seen = new Set<string>();
+  const seen = new Set<RuntimeRecoveryActionKind>();
   const unique: RuntimeRecoveryAction[] = [];
   for (const action of actions) {
-    const key = `${action.kind}:${action.label}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
+    if (seen.has(action.kind)) continue;
+    seen.add(action.kind);
     unique.push(action);
   }
   return unique;

@@ -1,16 +1,19 @@
 {
-  "schemaVersion": 1,
-  "updatedAt": "2026-09-15",
-  "nextVersion": "16.3.5",
+  "schemaVersion": 2,
+  "updatedAt": "2026-09-19",
+  "nextVersion": "15.1.0",
+  "publicGrade": "product-preview",
+  "productSupportClaim": true,
+  "productSupportClaimScope": "App Router preview adapter in apps/preview-service (multi-route, layout, link navigation, HMR). Not a claim of full desktop next CLI / native SWC parity.",
   "scope": {
     "runtime": "browser-guest-node-runtime",
-    "phase": "P11-03",
-    "goal": "Classify Next.js app router compatibility before product support is claimed."
+    "phase": "productization",
+    "goal": "Claim Next.js App Router preview as product-supported while keeping native CLI/SWC boundaries explicit."
   },
   "packageFacts": {
     "bin": "dist/bin/next",
     "nodeEngine": ">=20.9.0",
-    "wasmSwcPackage": "@next/swc-wasm-nodejs@16.3.5",
+    "wasmSwcPackage": "@next/swc-wasm-nodejs",
     "nativeOptionalDependencies": [
       "@next/swc-darwin-arm64",
       "@next/swc-darwin-x64",
@@ -25,16 +28,34 @@
   },
   "capabilities": [
     {
+      "id": "next-app-router-preview-adapter",
+      "command": "next dev (adapter)",
+      "status": "supported",
+      "reason": "NextProductWorkflow serves app/**/page.tsx with layout wrapping, next/link navigation, and save-triggered preview refresh in the product IDE."
+    },
+    {
+      "id": "next-app-router-multi-route",
+      "command": "app/**/page.tsx routing",
+      "status": "supported",
+      "reason": "Preview path maps to app route segments (e.g. /about -> app/about/page.tsx)."
+    },
+    {
+      "id": "next-app-router-build-adapter",
+      "command": "next build (adapter smoke)",
+      "status": "supported",
+      "reason": "Adapter writes out/index.html smoke artifacts for product build button."
+    },
+    {
       "id": "next-app-router-dev",
       "command": "next dev",
       "status": "hold",
-      "reason": "Requires actual Next CLI/module execution, file watching, route worker lifecycle, and SWC transform path inside the product runtime."
+      "reason": "Full Next CLI/module execution, file watching, route workers, and SWC transform path inside the guest runtime remain incomplete."
     },
     {
       "id": "next-app-router-build",
       "command": "next build",
       "status": "hold",
-      "reason": "Requires SWC transform path, filesystem metadata compatibility, worker lifecycle, and native optional dependency diagnostics."
+      "reason": "Full SWC transform path, filesystem metadata compatibility, worker lifecycle, and native optional dependency diagnostics remain incomplete."
     },
     {
       "id": "next-static-export",
@@ -56,8 +77,8 @@
     }
   ],
   "gate": {
-    "id": "P11-03",
-    "status": "documented",
-    "supportDecision": "Do not claim Next.js product support yet. Track static export and WASM SWC as candidates; keep full app router dev/build on hold until runtime module execution, worker, watcher, and SWC paths are verified."
+    "id": "SG25-nextjs",
+    "status": "product-preview-claimed",
+    "supportDecision": "Claim Next.js App Router preview adapter as product-supported. Do not claim full next CLI / native SWC / RSC server runtime parity. Public grade: product-preview."
   }
 }

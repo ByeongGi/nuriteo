@@ -10,7 +10,7 @@ function assert(condition, message) {
 }
 
 const checklist = readJson("compat/release-checklist.json");
-const progress = fs.readFileSync("docs/productization/PROGRESS.md", "utf8");
+const progress = fs.readFileSync("docs/archive/productization-2026-09-16/PROGRESS.md", "utf8");
 const document = fs.readFileSync("docs/release/release-checklist.md", "utf8");
 
 assert(checklist.schemaVersion === 1, "unexpected release checklist schema");

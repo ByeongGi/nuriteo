@@ -1,12 +1,13 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-09-16",
+  "updatedAt": "2026-09-18",
   "scope": {
     "goal": "Select public Vite React projects and freeze the scoring rubric for ecosystem compatibility.",
     "productRuntime": "browser-guest-node-runtime",
     "referenceRuntime": "host-node-reference-harness",
     "minimumPassForMilestoneB": 7,
-    "fixtureCount": 10
+    "minimumPassOrHoldForSG25": 14,
+    "fixtureCount": 20
   },
   "scoringRubric": {
     "totalPoints": 100,
@@ -229,6 +230,178 @@
       "riskNotes": "Cypress and heavier tooling are out of first compatibility scoring unless dev/build requires them.",
       "status": "selected",
       "source": "https://github.com/R35007/vite-react-typescript"
+    },
+    {
+      "id": "local-vite-vue-fixture",
+      "name": "Local Vite Vue fixture",
+      "repository": "local://tests/fixtures/vite-vue",
+      "license": "project",
+      "packageManager": "npm",
+      "lockfile": "none",
+      "expectedCommands": {
+        "install": "npm install",
+        "dev": "npm run dev",
+        "build": "npm run build"
+      },
+      "nativeDependencyRisk": "low",
+      "status": "selected",
+      "cohort": "framework-vue",
+      "source": "tests/fixtures/vite-vue"
+    },
+    {
+      "id": "local-vite-svelte-fixture",
+      "name": "Local Vite Svelte fixture",
+      "repository": "local://tests/fixtures/vite-svelte",
+      "license": "project",
+      "packageManager": "npm",
+      "lockfile": "none",
+      "expectedCommands": {
+        "install": "npm install",
+        "dev": "npm run dev",
+        "build": "npm run build"
+      },
+      "nativeDependencyRisk": "low",
+      "status": "selected",
+      "cohort": "framework-svelte",
+      "source": "tests/fixtures/vite-svelte"
+    },
+    {
+      "id": "local-vite-vanilla-fixture",
+      "name": "Local Vite TypeScript vanilla fixture",
+      "repository": "local://tests/fixtures/vite-vanilla",
+      "license": "project",
+      "packageManager": "npm",
+      "lockfile": "none",
+      "expectedCommands": {
+        "install": "npm install",
+        "dev": "npm run dev",
+        "build": "npm run build"
+      },
+      "nativeDependencyRisk": "low",
+      "status": "selected",
+      "cohort": "framework-vanilla",
+      "source": "tests/fixtures/vite-vanilla"
+    },
+    {
+      "id": "local-vite-react-fixture",
+      "name": "Local Vite React fixture",
+      "repository": "local://tests/fixtures/vite-react",
+      "license": "project",
+      "packageManager": "npm",
+      "lockfile": "none",
+      "expectedCommands": {
+        "install": "npm install",
+        "dev": "npm run dev",
+        "build": "npm run build"
+      },
+      "nativeDependencyRisk": "low",
+      "status": "selected",
+      "cohort": "framework-react",
+      "source": "tests/fixtures/vite-react"
+    },
+    {
+      "id": "preview-service-vite-react-template",
+      "name": "Preview-service Vite React template",
+      "repository": "local://packages/browser-host/src/onboarding/templates.ts#vite-react",
+      "license": "project",
+      "packageManager": "pnpm",
+      "lockfile": "pnpm-lock.yaml",
+      "expectedCommands": {
+        "install": "pnpm install",
+        "dev": "pnpm dev",
+        "build": "pnpm build"
+      },
+      "nativeDependencyRisk": "low",
+      "status": "selected",
+      "cohort": "service-template",
+      "source": "packages/browser-host/src/onboarding/templates.ts"
+    },
+    {
+      "id": "preview-service-vite-ts-template",
+      "name": "Preview-service Vite TS template",
+      "repository": "local://packages/browser-host/src/onboarding/templates.ts#vite-ts",
+      "license": "project",
+      "packageManager": "npm",
+      "lockfile": "package-lock.json",
+      "expectedCommands": {
+        "install": "npm install",
+        "dev": "npm run dev",
+        "build": "npm run build"
+      },
+      "nativeDependencyRisk": "low",
+      "status": "selected",
+      "cohort": "service-template",
+      "source": "packages/browser-host/src/onboarding/templates.ts"
+    },
+    {
+      "id": "preview-service-minimal-npm-template",
+      "name": "Preview-service minimal npm template",
+      "repository": "local://packages/browser-host/src/onboarding/templates.ts#minimal-npm",
+      "license": "project",
+      "packageManager": "npm",
+      "lockfile": "package-lock.json",
+      "expectedCommands": {
+        "install": "npm install",
+        "dev": "npm run dev",
+        "build": "npm run build"
+      },
+      "nativeDependencyRisk": "low",
+      "status": "selected",
+      "cohort": "service-template",
+      "source": "packages/browser-host/src/onboarding/templates.ts"
+    },
+    {
+      "id": "preview-service-minimal-pnpm-template",
+      "name": "Preview-service minimal pnpm template",
+      "repository": "local://packages/browser-host/src/onboarding/templates.ts#minimal-pnpm",
+      "license": "project",
+      "packageManager": "pnpm",
+      "lockfile": "pnpm-lock.yaml",
+      "expectedCommands": {
+        "install": "pnpm install",
+        "dev": "pnpm dev",
+        "build": "pnpm build"
+      },
+      "nativeDependencyRisk": "low",
+      "status": "selected",
+      "cohort": "service-template",
+      "source": "packages/browser-host/src/onboarding/templates.ts"
+    },
+    {
+      "id": "webpack-rspack-dev-candidate",
+      "name": "Webpack/Rspack dev workflow candidate",
+      "repository": "local://docs/productization/non-js-tooling-candidates.md#webpack-rspack",
+      "license": "n/a",
+      "packageManager": "npm",
+      "lockfile": "none",
+      "expectedCommands": {
+        "install": "npm install",
+        "dev": "webpack serve",
+        "build": "webpack"
+      },
+      "nativeDependencyRisk": "high",
+      "riskNotes": "Evaluated as candidate only; not part of product-supported workflow.",
+      "status": "selected",
+      "cohort": "bundler-candidate",
+      "source": "docs/productization"
+    },
+    {
+      "id": "next-static-export-candidate",
+      "name": "Next.js static export candidate",
+      "repository": "local://compat/nextjs-compatibility.json#next-static-export",
+      "license": "n/a",
+      "packageManager": "npm",
+      "lockfile": "none",
+      "expectedCommands": {
+        "install": "npm install",
+        "dev": "next dev",
+        "build": "next build"
+      },
+      "nativeDependencyRisk": "high",
+      "riskNotes": "Static export remains candidate; app-router dev stays hold.",
+      "status": "selected",
+      "cohort": "nextjs",
+      "source": "compat/nextjs-compatibility.json"
     }
   ]
 }

@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-18",
+  "status": "p24-reliability-policy",
+  "memory": {
+    "heapCeilingMiB": 256,
+    "source": "compat/performance-baseline.json#runtime-memory-heap-limit",
+    "enforcement": "soft-budget-with-diagnostic"
+  },
+  "timeouts": {
+    "installMs": 120000,
+    "cliWorkerMs": 90000,
+    "devServerIdleMs": 600000,
+    "previewRelayMs": 1500
+  },
+  "storage": {
+    "quotaBytesDefault": 268435456,
+    "evictionPrefixes": ["cache/", "packages/"],
+    "protectedPrefixes": ["projects/"],
+    "writerLeaseTtlMs": 30000
+  },
+  "soak": {
+    "bootRunTeardownIterations": 1000,
+    "installDevRestartIterationsDefault": 25,
+    "largeNodeModulesFileCount": 2500
+  },
+  "browserGrades": {
+    "chrome": "supported",
+    "edge": "candidate",
+    "safari": "hold"
+  },
+  "browserGradeNotes": {
+    "chrome": "Primary gate browser with COOP/COEP and SharedArrayBuffer.",
+    "edge": "Chromium-family candidate; requires COOP/COEP hosting smoke before promotion.",
+    "safari": "Hold until SharedArrayBuffer + cross-origin isolation + OPFS/Service Worker preview routing are validated on desktop Safari."
+  },
+  "holdFixtures": [
+    {
+      "id": "awe-templates-react-starter",
+      "mitigation": "Include devDependencies during fixture dependency materialization so Vite config packages like tailwindcss resolve."
+    },
+    {
+      "id": "ravaniproshan-velorah-landing",
+      "mitigation": "CLI worker timeout and large transitive tree; ensure timed-out workers terminate and do not leave running preview state."
+    },
+    {
+      "id": "r35007-vite-react-typescript",
+      "mitigation": "Same large-tree CLI worker timeout class as velorah-landing."
+    }
+  ]
+}

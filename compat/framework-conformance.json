@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-09-16",
+  "updatedAt": "2026-09-18",
   "scope": {
     "goal": "Track framework workflow readiness for productization.",
     "productRuntime": "browser-guest-node-runtime",
@@ -63,7 +63,7 @@
       "status": "pass",
       "evidence": [
         "tests/vite/vite-react-product-workflow.test.mjs",
-        "docs/productization/evidence/P11-01.md"
+        "docs/archive/productization-2026-09-16/evidence/P11-01.md"
       ],
       "productGap": "Actual Vite 8.2.0 worker-backed product runtime now covers install artifacts, hydrated dependency materialization, actual Vite CLI dev server start, browser preview relay, real Vite import-analysis transform, React bare package import rewrite, TypeScript/TSX transform fallback, real Vite HMR connected/update payloads, actual Vite build dist artifact generation, and worker bridge reload recovery. Secondary Vue/Svelte product candidates remain partial-pass/deferred outside the first product-supported framework set."
     },
@@ -72,34 +72,38 @@
       "framework": "vite",
       "template": "vue-runtime",
       "runtime": "browser-guest-node-runtime",
-      "status": "deferred",
+      "status": "candidate",
       "evidence": [
         "tests/vite/vite-react-product-workflow.test.mjs",
-        "docs/productization/evidence/P11-02.md"
+        "tests/vite/vite-vue-svelte-actual.test.mjs",
+        "compat/framework-actual-validation.json",
+        "docs/archive/productization-2026-09-16/evidence/P11-02.md"
       ],
-      "productGap": "Deferred from the first product-supported framework set. The browser guest runtime Vite product workflow adapter covers Vue runtime install artifacts, node_modules/.bin/vite CLI entrypoint materialization/resolution, package.json script-driven dev/build entrypoints, RuntimeChildProcess-backed loopback dev-server lifecycle, Vite-like HTTP module serving, preview relay fetch, source edit/HMR state preservation, Vite wire-compatible HMR connected/update payloads, HMR client update events, and build/dist smoke for npm and pnpm. Product-supported promotion requires an actual Vite worker-backed Vue runtime validation pass."
+      "productGap": "Actual worker-backed adapter and CLI-backed workflows pass for Vue runtime. Grade is candidate (not product-supported). Broader public Vue fixture coverage remains open."
     },
     {
       "id": "vite-svelte-product-workflow",
       "framework": "vite",
       "template": "svelte",
       "runtime": "browser-guest-node-runtime",
-      "status": "deferred",
+      "status": "candidate",
       "evidence": [
         "tests/vite/vite-react-product-workflow.test.mjs",
-        "docs/productization/evidence/P11-02.md"
+        "tests/vite/vite-vue-svelte-actual.test.mjs",
+        "compat/framework-actual-validation.json",
+        "docs/archive/productization-2026-09-16/evidence/P11-02.md"
       ],
-      "productGap": "Deferred from the first product-supported framework set. The browser guest runtime Vite product workflow adapter covers Svelte install artifacts, node_modules/.bin/vite CLI entrypoint materialization/resolution, package.json script-driven dev/build entrypoints, RuntimeChildProcess-backed loopback dev-server lifecycle, Vite-like HTTP module serving, preview relay fetch, source edit/HMR state preservation, Vite wire-compatible HMR connected/update payloads, HMR client update events, and build/dist smoke for npm and pnpm. Product-supported promotion requires actual Svelte plugin/module execution and real Vite server HMR validation."
+      "productGap": "Actual worker-backed adapter and CLI-backed workflows pass for Svelte, including plugin module path. Grade is candidate (not product-supported)."
     }
   ],
   "gate": {
-    "id": "PG11",
+    "id": "SG25",
     "status": "pass",
-    "reason": "The first product-supported framework set is Vite React. It passes through actual Vite worker-backed dev, preview, edit/HMR, build/dist, and reload recovery. Vue runtime and Svelte remain reference/adapter-proven secondary candidates and are explicitly deferred to public limitations until product-supported actual worker-backed validation is added.",
+    "reason": "Vite React remains product-supported. Vue and Svelte both have actual worker-backed validation records and are graded candidate. Next.js stays explicitly non-product-supported with capability split.",
     "requiredToPass": [
       "Keep Vite React product-supported evidence green",
-      "Keep Vue runtime and Svelte documented as deferred secondary framework candidates",
-      "Reopen framework gate if Vue/Svelte are promoted into the product-supported framework set"
+      "Keep Vue and Svelte actual worker-backed validation recorded at candidate or higher",
+      "Keep Next.js grade explicit without overstating support"
     ]
   }
 }

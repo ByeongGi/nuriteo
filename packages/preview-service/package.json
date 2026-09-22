@@ -1,0 +1,16 @@
+{
+  "name": "@cargo-container/preview-service",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./controller": "./src/controller.ts",
+    "./observability": "./src/observability.ts"
+  },
+  "dependencies": {
+    "@cargo-container/browser-host": "workspace:*",
+    "@cargo-container/node-runtime": "workspace:*",
+    "@cargo-container/preview": "workspace:*"
+  }
+}

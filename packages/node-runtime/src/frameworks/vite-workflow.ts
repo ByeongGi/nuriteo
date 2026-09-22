@@ -14,10 +14,11 @@ import { inspectCliEntryReadiness, type CliEntryReadiness } from "../package-man
 import { MemoryPackageManagerWorkspace, type PackageManagerWorkspaceMount } from "../package-managers/workspace.ts";
 import type { WasmAdapterPolicy, WasmAdapterPolicyAction } from "../wasm-adapters/index.ts";
 import type { WorkspaceModuleReader } from "../modules/index.ts";
+import { transpileTypeScript } from "../transforms/typescript.ts";
 import type { CliRunResult, RuntimeEnv } from "../types.ts";
 
 export type ViteProductPackageManager = "npm" | "pnpm";
-export type ViteProductTemplate = "react" | "vue-runtime" | "svelte";
+export type ViteProductTemplate = "react" | "vue-runtime" | "svelte" | "vanilla";
 
 export interface ViteProductWorkflowOptions {
   manager: ViteProductPackageManager;
@@ -699,30 +700,38 @@ export class ViteProductWorkflow {
     assertViteDevCommand(command);
     const cliEntrypoint = this.#resolveCommandEntrypoint(command);
     const args = commandArgs(command);
-    const cliExecution = await this.executeRealCli(args, { PORT: String(this.#port) }, options);
-    const registration = cliExecution.serverRegistrations.at(-1);
-    if (!registration) {
-      if (cliExecution.exitCode !== 0) throw new Error(cliExecution.stderr || "ERR_VITE_CLI_SERVER_REGISTRATION_MISSING");
-      this.#port = parseViteReadyPort(cliExecution.stdout) ?? this.#port;
-      this.#running = true;
+    try {
+      const cliExecution = await this.executeRealCli(args, { PORT: String(this.#port) }, options);
+      const registration = cliExecution.serverRegistrations.at(-1);
+      if (!registration) {
+        if (cliExecution.exitCode !== 0) throw new Error(cliExecution.stderr || "ERR_VITE_CLI_SERVER_REGISTRATION_MISSING");
+        this.#port = parseViteReadyPort(cliExecution.stdout) ?? this.#port;
+        this.#running = true;
+        this.#devServerSource = "cli-execution";
+        this.#devServerCommand = command;
+        this.#devServerCliEntrypoint = cliEntrypoint;
+        this.#moduleTransformSource = "vite-cli";
+        return this.#snapshot();
+      }
+      if (!cliExecution.transformRegistrations.some((item) => item.source === "vite-cli")) {
+        throw new Error("ERR_VITE_CLI_TRANSFORM_REGISTRATION_MISSING");
+      }
+      this.#cliHmrSendUpdate = latestHmrSendUpdate(cliExecution.hmrRegistrations);
+      this.#cliTransformRequest = latestTransformRequest(cliExecution.transformRegistrations);
+      this.#port = registration.port;
+      this.startDevServer();
       this.#devServerSource = "cli-execution";
       this.#devServerCommand = command;
       this.#devServerCliEntrypoint = cliEntrypoint;
       this.#moduleTransformSource = "vite-cli";
       return this.#snapshot();
+    } catch (error) {
+      // Timed-out or crashed CLI workers must not leave a half-open preview session.
+      this.stopDevServer();
+      this.#cliHmrSendUpdate = null;
+      this.#cliTransformRequest = null;
+      throw error;
     }
-    if (!cliExecution.transformRegistrations.some((item) => item.source === "vite-cli")) {
-      throw new Error("ERR_VITE_CLI_TRANSFORM_REGISTRATION_MISSING");
-    }
-    this.#cliHmrSendUpdate = latestHmrSendUpdate(cliExecution.hmrRegistrations);
-    this.#cliTransformRequest = latestTransformRequest(cliExecution.transformRegistrations);
-    this.#port = registration.port;
-    this.startDevServer();
-    this.#devServerSource = "cli-execution";
-    this.#devServerCommand = command;
-    this.#devServerCliEntrypoint = cliEntrypoint;
-    this.#moduleTransformSource = "vite-cli";
-    return this.#snapshot();
   }
 
   stopDevServer(): ViteProductDevServerSnapshot {
@@ -740,19 +749,19 @@ export class ViteProductWorkflow {
       return {
         statusCode: 200,
         headers: { "content-type": "text/javascript; charset=utf-8" },
-        body: "export const createHotContext = () => ({ accept() {} });\n"
+        body: "export const createHotContext = () => ({ accept() {}, on() {}, dispose() {} });\nexport function updateStyle() {}\nexport function removeStyle() {}\n"
       };
     }
-    if (requestPath !== "/" && requestPath !== "/index.html") {
-      const source = this.#readServedSource(requestPath);
-      if (source) return source;
-      return { statusCode: 404, body: "Not found" };
+    if (requestPath === "/" || requestPath === "/index.html") {
+      return {
+        statusCode: 200,
+        headers: { "content-type": "text/html; charset=utf-8" },
+        body: this.#renderPreviewHtml()
+      };
     }
-    return {
-      statusCode: 200,
-      headers: { "content-type": "text/html; charset=utf-8" },
-      body: renderHtml(this.#readLabel(), this.#state.count)
-    };
+    const source = this.#readServedSource(requestPath);
+    if (source) return source;
+    return { statusCode: 404, body: "Not found" };
   }
 
   async #previewRequest(path = "/"): Promise<ViteProductPreviewResult> {
@@ -776,7 +785,10 @@ export class ViteProductWorkflow {
   }
 
   editMessage(label: string): ViteProductHmrResult {
-    return this.applySourceEdit("src/message.js", `export const label = "${label}";\n`);
+    const relative = ["src/message.js", "src/message.ts", "src/message.jsx", "src/message.tsx"]
+      .find((path) => this.workspace.exists(join(this.projectRoot, path)))
+      || "src/message.js";
+    return this.applySourceEdit(relative, `export const label = "${label}";\n`);
   }
 
   applySourceEdit(path: string, data: string): ViteProductSourceEditResult {
@@ -887,8 +899,13 @@ export class ViteProductWorkflow {
   }
 
   #readLabel(): string {
-    const source = this.workspace.readText(join(this.projectRoot, "src/message.js"));
-    return source.match(/label\s*=\s*"([^"]+)"/)?.[1] || "unknown";
+    for (const relative of ["src/message.js", "src/message.ts", "src/message.jsx", "src/message.tsx"]) {
+      const path = join(this.projectRoot, relative);
+      if (!this.workspace.exists(path)) continue;
+      const source = this.workspace.readText(path);
+      return source.match(/label\s*=\s*"([^"]+)"/)?.[1] || "unknown";
+    }
+    return "unknown";
   }
 
   #readScript(name: string): string {
@@ -898,33 +915,123 @@ export class ViteProductWorkflow {
     return command;
   }
 
+  #resolveServedWorkspacePath(requestPath: string): string | null {
+    const direct = join(this.projectRoot, requestPath);
+    if (this.workspace.exists(direct)) return direct;
+    if (requestPath.endsWith(".js")) {
+      for (const extension of [".ts", ".tsx", ".jsx", ".mjs"]) {
+        const candidate = join(this.projectRoot, `${requestPath.slice(0, -3)}${extension}`);
+        if (this.workspace.exists(candidate)) return candidate;
+      }
+    }
+    return null;
+  }
+
   #readServedSource(requestPath: string): ViteProductPreviewResult | null {
-    const workspacePath = join(this.projectRoot, requestPath);
-    if (!this.workspace.exists(workspacePath)) return null;
+    const workspacePath = this.#resolveServedWorkspacePath(requestPath);
+    if (!workspacePath) return null;
     const body = this.workspace.readText(workspacePath);
+    const transformPath = workspacePath.slice(this.projectRoot.length) || requestPath;
     return {
       statusCode: 200,
       headers: { "content-type": contentTypeForPath(requestPath) },
-      body: this.#moduleTransformSource === "vite-cli" ? transformViteModuleSource(requestPath, body) : body
+      body: transformViteModuleSource(transformPath, body, this.#moduleTransformSource)
     };
   }
 
   async #readServedSourceAsync(requestPath: string): Promise<ViteProductPreviewResult | null> {
-    const workspacePath = join(this.projectRoot, requestPath);
-    if (!this.workspace.exists(workspacePath)) return null;
+    const workspacePath = this.#resolveServedWorkspacePath(requestPath);
+    if (!workspacePath) return null;
     const body = this.workspace.readText(workspacePath);
+    const transformPath = workspacePath.slice(this.projectRoot.length) || requestPath;
     return {
       statusCode: 200,
       headers: { "content-type": contentTypeForPath(requestPath) },
-      body: await this.#transformServedSource(requestPath, body)
+      body: await this.#transformServedSource(transformPath, body)
     };
   }
 
   async #transformServedSource(requestPath: string, source: string): Promise<string> {
-    if (this.#moduleTransformSource !== "vite-cli") return source;
-    if (!this.#cliTransformRequest) return transformViteModuleSource(requestPath, source);
-    const transformed = await this.#cliTransformRequest({ path: requestPath, source });
-    return typeof transformed === "string" ? transformed : transformed.code;
+    if (this.#moduleTransformSource === "vite-cli" && this.#cliTransformRequest) {
+      const transformed = await this.#cliTransformRequest({ path: requestPath, source });
+      return typeof transformed === "string" ? transformed : transformed.code;
+    }
+    return transformViteModuleSource(requestPath, source, this.#moduleTransformSource);
+  }
+
+  #renderPreviewHtml(): string {
+    const label = this.#readLabel();
+    const count = this.#state.count;
+    const indexPath = join(this.projectRoot, "index.html");
+    const importMap = JSON.stringify({
+      imports: {
+        react: "./node_modules/react/index.js",
+        "react-dom": "./node_modules/react-dom/client.js",
+        "react-dom/client": "./node_modules/react-dom/client.js",
+        "react/jsx-runtime": "./node_modules/react/jsx-runtime.js",
+        "react/jsx-dev-runtime": "./node_modules/react/jsx-runtime.js"
+      }
+    });
+    const styleLink = this.workspace.exists(join(this.projectRoot, "src/style.css"))
+      ? '<link rel="stylesheet" href="./src/style.css" />'
+      : "";
+    const bootstrap = this.#previewEntryScript();
+
+    if (this.workspace.exists(indexPath)) {
+      let html = this.workspace.readText(indexPath);
+      html = html.replace(/(src|href)=["']\/(?!\/)/g, '$1="./');
+      if (!/<script\s+type=["']importmap["']/.test(html)) {
+        html = html.replace(
+          /<head([^>]*)>/i,
+          `<head$1><script type="importmap">${importMap}</script>${styleLink}`
+        );
+        if (!/<head[^>]*>/i.test(html)) {
+          html = `<!doctype html><html><head><script type="importmap">${importMap}</script>${styleLink}</head><body>${html.replace(/^<!doctype html>/i, "")}</body></html>`;
+        }
+      }
+      // Keep a static smoke label in #app/#root so relay/HTML assertions and first paint work,
+      // then let the real entry module replace it.
+      if (!/id=["']app["']/.test(html) && !/id=["']root["']/.test(html)) {
+        html = html.replace(/<body([^>]*)>/i, `<body$1><div id="app">${label}:${count}</div>`);
+      } else {
+        html = html.replace(
+          /(<div[^>]*id=["'](?:app|root)["'][^>]*>)(.*?)(<\/div>)/i,
+          `$1${label}:${count}$3`
+        );
+      }
+      if (bootstrap && !new RegExp(bootstrap.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).test(html)) {
+        html = html.replace(/<\/body>/i, `<script type="module" src="${bootstrap}"></script></body>`);
+        if (!/<\/body>/i.test(html)) html += `<script type="module" src="${bootstrap}"></script>`;
+      }
+      return html;
+    }
+
+    return [
+      "<!doctype html>",
+      "<html><head>",
+      `<script type="importmap">${importMap}</script>`,
+      styleLink,
+      "</head><body>",
+      `<div id="app">${label}:${count}</div>`,
+      bootstrap ? `<script type="module" src="${bootstrap}"></script>` : "",
+      "</body></html>"
+    ].join("");
+  }
+
+  #previewEntryScript(): string | null {
+    const candidates = [
+      "src/main.tsx",
+      "src/main.jsx",
+      "src/main.ts",
+      "src/main.js",
+      "src/App.tsx",
+      "src/App.jsx",
+      "src/App.svelte"
+    ];
+    for (const candidate of candidates) {
+      if (this.workspace.exists(join(this.projectRoot, candidate))) return `./${candidate}`;
+    }
+    return null;
   }
 
   #installVitePackage(): void {
@@ -966,7 +1073,43 @@ export class ViteProductWorkflow {
           ".": "./index.js"
         }
       }));
-      this.workspace.writeText(join(packageRoot, "index.js"), "export default {}; export const Fragment = Symbol.for('react.fragment');\n");
+      this.workspace.writeText(join(packageRoot, "index.js"), [
+        "const Fragment = Symbol.for('react.fragment');",
+        "let hookCursor = 0;",
+        "let hookStates = [];",
+        "let scheduleRerender = null;",
+        "export function resetHooks() { hookCursor = 0; }",
+        "export function bindScheduler(fn) { scheduleRerender = fn; }",
+        "function createElement(type, props, ...children) {",
+        "  const flat = children.flat(Infinity).filter((child) => child !== null && child !== undefined && child !== false);",
+        "  return { $$typeof: 'element', type, props: props || {}, children: flat };",
+        "}",
+        "function StrictMode(props) { return props.children; }",
+        "function useState(initial) {",
+        "  const index = hookCursor++;",
+        "  if (hookStates[index] === undefined) hookStates[index] = typeof initial === 'function' ? initial() : initial;",
+        "  const setState = (update) => {",
+        "    const previous = hookStates[index];",
+        "    hookStates[index] = typeof update === 'function' ? update(previous) : update;",
+        "    scheduleRerender && scheduleRerender();",
+        "  };",
+        "  return [hookStates[index], setState];",
+        "}",
+        "export { Fragment, createElement, StrictMode, useState };",
+        "export default { Fragment, createElement, StrictMode, useState };",
+        ""
+      ].join("\n"));
+      this.workspace.writeText(join(packageRoot, "jsx-runtime.js"), [
+        "import { createElement, Fragment } from './index.js';",
+        "export function jsx(type, props, key) {",
+        "  const { children, ...rest } = props || {};",
+        "  const next = key === undefined ? rest : { ...rest, key };",
+        "  return createElement(type, next, ...(Array.isArray(children) ? children : children === undefined ? [] : [children]));",
+        "}",
+        "export const jsxs = jsx;",
+        "export { Fragment };",
+        ""
+      ].join("\n"));
       return;
     }
     if (pkg === "react-dom") {
@@ -975,10 +1118,56 @@ export class ViteProductWorkflow {
         version: "18.3.1",
         type: "module",
         exports: {
+          ".": "./client.js",
           "./client": "./client.js"
         }
       }));
-      this.workspace.writeText(join(packageRoot, "client.js"), "export function createRoot(target) { return { render(value) { if (target) target.textContent = String(value); } }; }\n");
+      this.workspace.writeText(join(packageRoot, "client.js"), [
+        "import { Fragment, resetHooks, bindScheduler } from '../react/index.js';",
+        "function renderNode(value) {",
+        "  if (value == null || value === false) return [];",
+        "  if (typeof value === 'string' || typeof value === 'number') return [document.createTextNode(String(value))];",
+        "  if (Array.isArray(value)) return value.flatMap(renderNode);",
+        "  if (typeof value.type === 'function') {",
+        "    const props = { ...(value.props || {}) };",
+        "    if (value.children?.length) props.children = value.children.length === 1 ? value.children[0] : value.children;",
+        "    return renderNode(value.type(props));",
+        "  }",
+        "  if (value.type === Fragment) return (value.children || []).flatMap(renderNode);",
+        "  const el = document.createElement(value.type);",
+        "  const props = value.props || {};",
+        "  for (const [key, raw] of Object.entries(props)) {",
+        "    if (key === 'children' || raw == null || raw === false) continue;",
+        "    if (key === 'className') el.setAttribute('class', String(raw));",
+        "    else if (key === 'style' && typeof raw === 'object') Object.assign(el.style, raw);",
+        "    else if (key.startsWith('on') && typeof raw === 'function') el.addEventListener(key.slice(2).toLowerCase(), raw);",
+        "    else el.setAttribute(key, String(raw));",
+        "  }",
+        "  const kids = props.children !== undefined ? props.children : value.children;",
+        "  for (const child of renderNode(kids || [])) el.appendChild(child);",
+        "  return [el];",
+        "}",
+        "export function createRoot(target) {",
+        "  let element = null;",
+        "  const mount = () => {",
+        "    if (!target || !element) return;",
+        "    resetHooks();",
+        "    if (typeof element === 'string' || typeof element === 'number') {",
+        "      target.textContent = String(element);",
+        "      return;",
+        "    }",
+        "    target.replaceChildren(...renderNode(element));",
+        "  };",
+        "  bindScheduler(mount);",
+        "  return {",
+        "    render(value) {",
+        "      element = value;",
+        "      mount();",
+        "    }",
+        "  };",
+        "}",
+        ""
+      ].join("\n"));
       return;
     }
     if (pkg === "@vitejs/plugin-react" || pkg === "@vitejs/plugin-react-swc") {
@@ -1319,7 +1508,12 @@ export type ViteReactBuildResult = ViteProductBuildResult;
 export type ViteReactReloadRecoveryResult = ViteProductReloadRecoveryResult;
 
 function createViteMounts(projectRoot: string, template: ViteProductTemplate, label: string): PackageManagerWorkspaceMount[] {
-  const entry = template === "react" ? "/src/main.jsx" : "/src/main.js";
+  const entry = template === "react"
+    ? "./src/main.jsx"
+    : template === "vanilla"
+      ? "./src/main.js"
+      : "./src/main.js";
+  const messagePath = template === "vanilla" ? "src/message.js" : "src/message.js";
   return [
     {
       path: join(projectRoot, "package.json"),
@@ -1335,23 +1529,23 @@ function createViteMounts(projectRoot: string, template: ViteProductTemplate, la
         },
         dependencies: {
           vite: "8.2.0",
-          typescript: "6.0.3",
+          ...(template === "vanilla" ? {} : { typescript: "6.0.3" }),
           ...dependenciesForTemplate(template)
         }
       })
     },
     {
       path: join(projectRoot, "index.html"),
-      data: `<div id="root"></div><script type="module" src="${entry}"></script>\n`
+      data: `<!doctype html><html><head><meta charset="UTF-8" /></head><body><div id="app"></div><script type="module" src="${entry}"></script></body></html>\n`
     },
     ...sourceMountsForTemplate(projectRoot, template),
     {
-      path: join(projectRoot, "src/message.js"),
+      path: join(projectRoot, messagePath),
       data: `export const label = "${label}";\n`
     },
     {
       path: join(projectRoot, "src/style.css"),
-      data: "#app { font-family: system-ui, sans-serif; }\n"
+      data: "body { margin: 0; font-family: system-ui, sans-serif; }\n#app { padding: 1rem; }\n"
     }
   ];
 }
@@ -1373,7 +1567,8 @@ function createLockfile(manager: ViteProductPackageManager, packages: string[]):
 }
 
 function packagesForTemplate(template: ViteProductTemplate): string[] {
-  return ["vite", "typescript", ...Object.keys(dependenciesForTemplate(template))];
+  const base = template === "vanilla" ? ["vite"] : ["vite", "typescript"];
+  return [...base, ...Object.keys(dependenciesForTemplate(template))];
 }
 
 function uniquePackageNames(packages: string[]): string[] {
@@ -1706,7 +1901,7 @@ function missingCapabilitiesForTemplate(template: ViteProductTemplate): ViteRunt
     "real-vite-http-module-transform",
     "real-vite-hmr-protocol"
   ];
-  if (template !== "react") capabilities.push("framework-plugin-module-execution");
+  if (template !== "react" && template !== "vanilla") capabilities.push("framework-plugin-module-execution");
   return capabilities;
 }
 
@@ -1797,6 +1992,7 @@ function nextActionForMissingCapability(capability: ViteRuntimeCapability): stri
 }
 
 function dependenciesForTemplate(template: ViteProductTemplate): Record<string, string> {
+  if (template === "vanilla") return {};
   if (template === "react") {
     return {
       "@vitejs/plugin-react": "latest",
@@ -1811,17 +2007,26 @@ function dependenciesForTemplate(template: ViteProductTemplate): Record<string, 
   };
 }
 
-function sourceMountsForTemplate(projectRoot: string, template: ViteProductTemplate): PackageManagerWorkspaceMount[] {
+function sourceMountsForTemplate(
+  projectRoot: string,
+  template: ViteProductTemplate
+): PackageManagerWorkspaceMount[] {
+  if (template === "vanilla") {
+    return [{
+      path: join(projectRoot, "src/main.js"),
+      data: "import { label } from \"./message.js\";\nimport \"./style.css\";\nconst app = document.querySelector(\"#app\");\nif (app) app.textContent = `${label}:1`;\n"
+    }];
+  }
   if (template === "react") {
     return [{
       path: join(projectRoot, "src/main.jsx"),
-      data: "import React from \"react\";\nimport { createRoot } from \"react-dom/client\";\nimport { label } from \"./message.js\";\ncreateRoot(document.getElementById(\"root\")).render(`${label}:1`);\n"
+      data: "import React from \"react\";\nimport { createRoot } from \"react-dom/client\";\nimport { label } from \"./message.js\";\ncreateRoot(document.getElementById(\"app\")).render(`${label}:1`);\n"
     }];
   }
   if (template === "vue-runtime") {
     return [{
       path: join(projectRoot, "src/main.js"),
-      data: "import { createApp, h } from \"vue\";\nimport { label } from \"./message.js\";\nglobalThis.__fixtureState ||= { count: 1 };\ncreateApp({ render: () => h(\"div\", { id: \"app\" }, `${label}:${globalThis.__fixtureState.count}`) }).mount(\"#root\");\n"
+      data: "import { createApp, h } from \"vue\";\nimport { label } from \"./message.js\";\nglobalThis.__fixtureState ||= { count: 1 };\ncreateApp({ render: () => h(\"div\", { id: \"app\" }, `${label}:${globalThis.__fixtureState.count}`) }).mount(\"#app\");\n"
     }];
   }
   return [
@@ -1831,7 +2036,7 @@ function sourceMountsForTemplate(projectRoot: string, template: ViteProductTempl
     },
     {
       path: join(projectRoot, "src/main.js"),
-      data: "import App from \"./App.svelte\";\nexport default new App({ target: document.getElementById(\"root\") });\n"
+      data: "import App from \"./App.svelte\";\nexport default new App({ target: document.getElementById(\"app\") });\n"
     },
     {
       path: join(projectRoot, "src/App.svelte"),
@@ -1841,6 +2046,7 @@ function sourceMountsForTemplate(projectRoot: string, template: ViteProductTempl
 }
 
 function renderHtml(label: string, count: number): string {
+  // Fallback used by build() smoke output when a full preview document is not needed.
   return `<!doctype html><div id="app">${label}:${count}</div>`;
 }
 
@@ -1862,9 +2068,45 @@ function contentTypeForPath(path: string): string {
   return "application/octet-stream";
 }
 
-function transformViteModuleSource(path: string, source: string): string {
+function transformViteModuleSource(
+  path: string,
+  source: string,
+  moduleTransformSource: "adapter" | "vite-cli" | string = "adapter"
+): string {
   if (!/\.(?:[cm]?jsx?|tsx?)$/.test(path)) return source;
-  return `// transformed by vite-cli\n${source}`;
+  if (moduleTransformSource === "vite-cli") {
+    return `// transformed by vite-cli\n${source}`;
+  }
+  // Adapter preview path: emit browser-runnable ESM for TS/JSX so React/Vite edits show up.
+  if (/\.(?:[cm]?tsx?|jsx)$/.test(path)) {
+    try {
+      const result = transpileTypeScript(source, {
+        fileName: path,
+        jsx: /\.(?:jsx|tsx)$/.test(path) ? "react-jsx" : "react"
+      });
+      return rewriteBrowserModuleImports(result.code);
+    } catch {
+      return rewriteBrowserModuleImports(source);
+    }
+  }
+  return rewriteBrowserModuleImports(source);
+}
+
+function rewriteBrowserModuleImports(source: string): string {
+  let next = source.replace(
+    /import\s+["'](\.[^"']+\.(?:css|scss|sass|less))["'];?/g,
+    (_full, specifier: string) => (
+      `(() => { const href = new URL(${JSON.stringify(specifier)}, import.meta.url).href; if (![...document.querySelectorAll('link[rel="stylesheet"]')].some((node) => node.href === href)) { const link = document.createElement("link"); link.rel = "stylesheet"; link.href = href; document.head.appendChild(link); } })();`
+    )
+  );
+  next = next.replace(
+    /from\s+["'](\.[^"']+)["']/g,
+    (full, specifier: string) => {
+      if (/\.[a-z0-9]+$/i.test(specifier)) return full;
+      return full.replace(specifier, `${specifier}.js`);
+    }
+  );
+  return next;
 }
 
 function normalizeServedPath(path: string): string {

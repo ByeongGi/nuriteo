@@ -3,12 +3,23 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import ts from "typescript";
+import {
+  collectSdkFingerprint,
+  FINGERPRINT_PATH,
+  readJson,
+  resolveSdkBasePath,
+  shouldWriteFingerprint,
+  writeFingerprint
+} from "./lib/release-fingerprint.mjs";
 
 const root = process.cwd();
 const outRoot = path.join(root, "dist/sdk");
 const packageRoot = path.join(outRoot, "package");
 const wasmSource = path.join(root, "target/wasm32-unknown-unknown/debug/system_wasm.wasm");
 const packageTarballName = "cargo-container-sdk-0.0.0.tgz";
+const sdkBasePath = resolveSdkBasePath();
+const writeFingerprintFlag = shouldWriteFingerprint();
+const sdkBaseUrl = (suffix) => new URL(suffix, `https://example.invalid${sdkBasePath}`).pathname;
 
 function sha256(file) {
   return crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex");
@@ -269,7 +280,7 @@ npm install ./cargo-container-sdk-0.0.0.tgz
 
 ## Browser Headers
 
-Serve the consumer page and \`/sdk/**\` assets with:
+Serve the consumer page and \`${sdkBasePath}**\` assets with:
 
 \`\`\`text
 Cross-Origin-Opener-Policy: same-origin
@@ -279,14 +290,17 @@ Content-Security-Policy: default-src 'self'; script-src 'self'; worker-src 'self
 
 Serve \`assets/system_wasm.wasm\` as \`application/wasm\`.
 
+Asset base path for this package: \`${sdkBasePath}\`
+Override at package time with \`--base-path=/your/deploy/path/\` or \`CARGO_CONTAINER_SDK_BASE_PATH\`.
+
 ## Usage
 
 \`\`\`ts
 import { createContainer } from "@cargo-container/sdk";
 
 const container = createContainer({
-  systemWorkerUrl: new URL("/sdk/workers/system-worker.ts", location.href),
-  processWorkerUrl: new URL("/sdk/workers/process-worker.ts", location.href)
+  systemWorkerUrl: new URL(${JSON.stringify(sdkBaseUrl("workers/system-worker.ts"))}, location.href),
+  processWorkerUrl: new URL(${JSON.stringify(sdkBaseUrl("workers/process-worker.ts"))}, location.href)
 });
 
 await container.boot();
@@ -298,7 +312,7 @@ See \`docs/productization/sdk-quickstart.md\` in the repository for the full pro
 
 writeFile("asset-manifest.json", `${JSON.stringify({
   schemaVersion: 1,
-  basePath: "/sdk/",
+  basePath: sdkBasePath,
   requiredHeaders: {
     "Cross-Origin-Opener-Policy": "same-origin",
     "Cross-Origin-Embedder-Policy": "require-corp",
@@ -340,7 +354,7 @@ writeFile("examples/sdk-consumer/public/index.html", `<!doctype html>
 </html>
 `);
 
-writeFile("examples/sdk-consumer/public/app.js", `import { createContainer } from "/sdk/index.js";
+writeFile("examples/sdk-consumer/public/app.js", `import { createContainer } from ${JSON.stringify(sdkBaseUrl("index.js"))};
 
 const status = document.getElementById("status");
 
@@ -352,8 +366,8 @@ globalThis.__sdkConsumer = {
   async bootAndRun() {
     if (!crossOriginIsolated) throw new Error("cross-origin isolation missing");
     const container = createContainer({
-      systemWorkerUrl: new URL("/sdk/workers/system-worker.ts", location.href),
-      processWorkerUrl: new URL("/sdk/workers/process-worker.ts", location.href),
+      systemWorkerUrl: new URL(${JSON.stringify(sdkBaseUrl("workers/system-worker.ts"))}, location.href),
+      processWorkerUrl: new URL(${JSON.stringify(sdkBaseUrl("workers/process-worker.ts"))}, location.href),
       timeoutMs: 2500
     });
     const ready = await container.boot();
@@ -383,5 +397,23 @@ if (packedName && packedName !== packageTarballName) {
   fs.renameSync(path.join(outRoot, packedName), path.join(outRoot, packageTarballName));
 }
 
+const existingFingerprint = fs.existsSync(path.join(root, FINGERPRINT_PATH))
+  ? readJson(path.join(root, FINGERPRINT_PATH))
+  : null;
+const fingerprint = collectSdkFingerprint({
+  root,
+  basePath: sdkBasePath,
+  existing: existingFingerprint
+});
+
+if (writeFingerprintFlag) {
+  const target = writeFingerprint(fingerprint, { root });
+  console.log(`release fingerprint written: ${path.relative(root, target)}`);
+} else {
+  console.log("release fingerprint not updated; pass --write-fingerprint to refresh docs/release/fingerprint.json");
+}
+
 console.log(`sdk package written: ${path.relative(root, packageRoot)}`);
 console.log(`sdk package tarball written: ${path.relative(root, path.join(outRoot, packageTarballName))}`);
+console.log(`sdk asset base path: ${sdkBasePath}`);
+console.log(`sdk fingerprint preview: assetManifest=${fingerprint.sdkPackage.assetManifestSha256.slice(0, 12)}… tarball=${fingerprint.sdkPackage.tarballSha256.slice(0, 12)}…`);

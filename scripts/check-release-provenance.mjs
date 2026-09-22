@@ -1,19 +1,12 @@
-import crypto from "node:crypto";
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-
-function readJson(file) {
-  return JSON.parse(fs.readFileSync(file, "utf8"));
-}
-
-function sha256(file) {
-  return crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex");
-}
-
-function assert(condition, message) {
-  if (!condition) throw new Error(message);
-}
+import {
+  assert,
+  readJson,
+  sha256File,
+  verifyReleaseArtifacts
+} from "./lib/release-fingerprint.mjs";
 
 function git(args) {
   const result = spawnSync("git", args, { encoding: "utf8", stdio: "pipe" });
@@ -22,8 +15,6 @@ function git(args) {
 }
 
 const policy = readJson("compat/release-provenance.json");
-const fingerprint = readJson("docs/release/fingerprint.json");
-const assetManifest = readJson("dist/sdk/package/asset-manifest.json");
 const npmManifest = readJson("vendor/manifests/npm.json");
 const pnpmManifest = readJson("vendor/manifests/pnpm.json");
 const packageJson = readJson("package.json");
@@ -34,12 +25,10 @@ assert(policy.schemaVersion === 1, "unexpected release provenance schema");
 assert(/^[0-9a-f]{40}$/.test(sourceCommit), "source commit must be a full git sha");
 for (const artifact of policy.requiredArtifacts) {
   assert(fs.existsSync(path.resolve(artifact)), `missing release artifact: ${artifact}`);
-  assert(/^[0-9a-f]{64}$/.test(sha256(artifact)), `invalid artifact hash: ${artifact}`);
+  assert(/^[0-9a-f]{64}$/.test(sha256File(artifact)), `invalid artifact hash: ${artifact}`);
 }
 
-assert(assetManifest.assets.systemWasm.sha256 === sha256("dist/sdk/package/assets/system_wasm.wasm"), "system wasm hash mismatch");
-assert(fingerprint.sdkPackage.assetManifestSha256 === sha256("dist/sdk/package/asset-manifest.json"), "asset manifest fingerprint mismatch");
-assert(fingerprint.sdkPackage.systemWasmSha256 === assetManifest.assets.systemWasm.sha256, "system wasm fingerprint mismatch");
+const { fingerprint } = verifyReleaseArtifacts();
 
 const components = new Map(policy.sbom.requiredComponents.map((component) => [component.name, component]));
 assert(components.get("npm")?.version === npmManifest.version, "npm SBOM version mismatch");
@@ -54,4 +43,4 @@ for (const command of policy.ci.requiredCommands) {
 }
 assert(policy.signing.stable.includes("sigstore"), "stable signing policy must require sigstore or equivalent");
 
-console.log(`release provenance ok ${sourceCommit}`);
+console.log(`release provenance ok ${sourceCommit} basePath=${fingerprint.sdkPackage.basePath}`);

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-09-15",
+  "updatedAt": "2026-09-18",
   "runtime": "browser-guest-node-runtime",
   "requiredIterations": 1000,
   "budgets": {
@@ -35,11 +35,23 @@
       "test": "tests/preview/hmr-client.test.mjs",
       "command": "node tests/preview/hmr-client.test.mjs",
       "status": "required"
+    },
+    {
+      "id": "service-install-dev-restart-soak",
+      "test": "tests/preview-service/workflow-soak.test.mjs",
+      "command": "WORKFLOW_SOAK_ITERATIONS=25 node tests/preview-service/workflow-soak.test.mjs",
+      "status": "required"
+    },
+    {
+      "id": "large-node-modules-stress",
+      "test": "tests/browser-host/large-node-modules-stress.test.mjs",
+      "command": "node tests/browser-host/large-node-modules-stress.test.mjs",
+      "status": "required"
     }
   ],
   "gate": {
-    "id": "P15-03",
+    "id": "SG24",
     "status": "pass",
-    "threshold": "required soak fixtures must exist, and browser soak must support at least requiredIterations"
+    "threshold": "required soak fixtures must exist, browser soak must support at least requiredIterations, and install/dev/restart plus large node_modules stress must be present"
   }
 }

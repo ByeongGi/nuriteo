@@ -435,7 +435,8 @@ function mountProjectDirectory(workflow, projectDir) {
 }
 
 function createFixtureDependencyArtifacts(fixture, projectDir, context) {
-  const names = readProjectDependencyNames(projectDir, { includeDevDependencies: false });
+  // Include devDependencies so Vite config-time packages (e.g. tailwindcss, plugins) materialize.
+  const names = readProjectDependencyNames(projectDir, { includeDevDependencies: true });
   if (names.length === 0) return { artifacts: [], missing: [] };
   const provided = new Set(defaultProvidedDependencyNames());
   const artifactNames = names.filter((name) => !provided.has(name));

@@ -55,8 +55,16 @@ const secretPatterns = [
     replacement: "[REDACTED_TOKEN]"
   },
   {
-    pattern: /\b(password|passwd|token|secret|authorization)=([^&\s]+)/gi,
+    pattern: /\b(password|passwd|token|secret|authorization|_auth|npm-auth-token)=([^&\s]+)/gi,
     replacement: "$1=[REDACTED]"
+  },
+  {
+    pattern: /\b(cookie|set-cookie)=([^\s&]+)/gi,
+    replacement: "$1=[REDACTED]"
+  },
+  {
+    pattern: /\b((?:Cookie|Set-Cookie):\s*)(.+)/g,
+    replacement: "$1[REDACTED]"
   },
   {
     pattern: /(https?:\/\/[^:/\s]+:)[^@\s]+(@)/g,
@@ -149,7 +157,7 @@ function remediationFor(code: string): string {
 function redactEnvironment(environment: Record<string, string | number | boolean | null>): Record<string, string | number | boolean | null> {
   return Object.fromEntries(
     Object.entries(environment).map(([key, value]) => {
-      if (/token|secret|password|authorization/i.test(key)) return [key, "[REDACTED]"];
+      if (/token|secret|password|authorization|auth|cookie|_auth/i.test(key)) return [key, "[REDACTED]"];
       if (typeof value === "string") return [key, redactRuntimeLog(value)];
       return [key, value];
     })

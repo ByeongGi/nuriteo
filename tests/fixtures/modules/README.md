@@ -11,4 +11,4 @@ Required cases:
 - `import.meta.url`, `import.meta.dirname`, `import.meta.filename`, and `import.meta.resolve` follow Node-shaped behavior,
 - TypeScript emits sourcemaps through existing tooling rather than a custom parser.
 
-Reference evidence is recorded in `docs/implementation/evidence/P0-03.md`.
+Reference evidence is recorded in `docs/archive/implementation-2026-09-15/evidence/P0-03.md`.

@@ -18,6 +18,7 @@ export interface RuntimeRecoveryActionExecutorHandlers {
   ) => unknown | Promise<unknown>;
   openDocs?: (href: string | undefined, action: RuntimeRecoveryAction) => unknown | Promise<unknown>;
   resetRuntime?: (action: RuntimeRecoveryAction) => unknown | Promise<unknown>;
+  resolveWriterConflict?: (action: RuntimeRecoveryAction) => unknown | Promise<unknown>;
   retry?: (action: RuntimeRecoveryAction) => unknown | Promise<unknown>;
 }
 
@@ -61,6 +62,9 @@ export class RuntimeRecoveryActionExecutor {
     if (action.kind === "retry") return this.#runHandler(action, this.#handlers.retry, "Retried operation.");
     if (action.kind === "reset-runtime") return this.#runHandler(action, this.#handlers.resetRuntime, "Restarted runtime.");
     if (action.kind === "clear-cache") return this.#runHandler(action, this.#handlers.clearCache, "Cleared cache.");
+    if (action.kind === "resolve-writer-conflict") {
+      return this.#runHandler(action, this.#handlers.resolveWriterConflict, "Resolved writer lease conflict.");
+    }
     if (action.kind === "open-docs") {
       return this.#runHandler(action, (registeredAction) => this.#handlers.openDocs?.(registeredAction.href, registeredAction), "Opened documentation.");
     }

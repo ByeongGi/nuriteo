@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-09-16",
+  "updatedAt": "2026-09-18",
   "scope": {
     "goal": "Publish the current WebContainers-parity compatibility surface for developers.",
     "productRuntime": "browser-guest-node-runtime",
@@ -13,39 +13,43 @@
       "supportLevel": "product-target",
       "evidence": [
         "compat/framework-conformance.json",
-        "docs/productization/evidence/P11-01.md"
+        "docs/archive/productization-2026-09-16/evidence/P11-01.md"
       ],
       "notes": "Actual Vite 8.2.0 worker-backed path covers install/dev/preview/edit-HMR/build/reload recovery for the product target. Secondary framework candidates remain partial-pass."
     },
     {
       "name": "Vite Vue runtime",
-      "status": "deferred",
+      "status": "candidate",
       "supportLevel": "secondary-candidate",
       "evidence": [
         "compat/framework-conformance.json",
-        "docs/productization/evidence/P11-02.md"
+        "compat/framework-actual-validation.json",
+        "tests/vite/vite-vue-svelte-actual.test.mjs"
       ],
-      "notes": "Reference and product-adapter paths pass. It is not part of the first product-supported framework set until actual Vite worker-backed validation is added."
+      "notes": "Actual worker-backed validation recorded. Candidate grade; not product-supported yet."
     },
     {
       "name": "Vite Svelte",
-      "status": "deferred",
+      "status": "candidate",
       "supportLevel": "secondary-candidate",
       "evidence": [
         "compat/framework-conformance.json",
-        "docs/productization/evidence/P11-02.md"
+        "compat/framework-actual-validation.json",
+        "tests/vite/vite-vue-svelte-actual.test.mjs"
       ],
-      "notes": "Reference and product-adapter paths pass. It is not part of the first product-supported framework set until actual Svelte plugin/module execution is validated."
+      "notes": "Actual worker-backed validation recorded including plugin module path. Candidate grade; not product-supported yet."
     },
     {
       "name": "Next.js app router",
-      "status": "hold",
-      "supportLevel": "research",
+      "status": "product-preview",
+      "supportLevel": "preview-adapter",
       "evidence": [
         "compat/nextjs-compatibility.json",
-        "docs/productization/evidence/P11-03.md"
+        "compat/framework-actual-validation.json",
+        "tests/vite/nextjs-compatibility.test.mjs",
+        "docs/productization/nextjs-product-support-target.md"
       ],
-      "notes": "Native SWC/sharp and broader server runtime assumptions keep this out of the first product target."
+      "notes": "App Router preview adapter is product-supported for multi-route preview, layout, link navigation, and HMR. Full Next CLI dev/build, native SWC, and RSC server runtime remain hold or unsupported."
     }
   ],
   "packages": [
@@ -112,13 +116,15 @@
     }
   ],
   "projectFixtures": {
-    "status": "product-supported-milestone-b-pass",
+    "status": "sg25-service-workflow-pass",
     "source": "compat/ecosystem-fixtures.json",
     "results": "compat/ecosystem-fixture-results.json",
     "productAdapterResults": "compat/ecosystem-fixture-product-results.json",
     "actualProductResults": "compat/ecosystem-fixture-actual-product-results.json",
-    "total": 10,
+    "serviceWorkflowResults": "compat/service-workflow-fixture-results.json",
+    "total": 20,
     "minimumPassForMilestoneB": 7,
+    "minimumPassOrHoldForSG25": 14,
     "referenceInstallPass": 7,
     "referenceBuildPass": 6,
     "referenceDevPreviewPass": 6,
@@ -134,8 +140,12 @@
     "actualProductScoreAtLeast75": 7,
     "actualProductScoreAtLeast100": 7,
     "actualProductBlockers": [
-      "3 of 10 measured fixtures remain hold due large transitive fixture materialization and worker stability limits"
-    ]
+      "3 of 10 measured public Vite React fixtures remain hold due large transitive fixture materialization and worker stability limits"
+    ],
+    "serviceWorkflowTotal": 20,
+    "serviceWorkflowPass": 15,
+    "serviceWorkflowHold": 5,
+    "serviceWorkflowPassOrHold": 20
   },
   "unsupported": [
     {

@@ -21,6 +21,9 @@
     "compat/soak-baseline.json"
   ],
   "requiredChecks": [
+    "node scripts/package-sdk.mjs",
+    "node scripts/check-release-readiness.mjs",
+    "node scripts/check-release-ops-sg29.mjs",
     "node scripts/check-release-policy.mjs",
     "node scripts/check-release-provenance.mjs",
     "node scripts/check-incident-playbook.mjs",
@@ -28,6 +31,14 @@
     "node scripts/check-soak-baseline.mjs",
     "node scripts/check-workspace.mjs"
   ],
+  "ciGate": {
+    "elevatedFrom": "docs/release/release-checklist.md",
+    "requiredCommands": [
+      "node scripts/package-sdk.mjs",
+      "node scripts/check-release-readiness.mjs",
+      "node scripts/check-release-ops-sg29.mjs"
+    ]
+  },
   "gateReview": {
     "PG15": "pass",
     "PG16": "pass",

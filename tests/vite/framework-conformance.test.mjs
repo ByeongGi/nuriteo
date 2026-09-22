@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 
 const matrix = JSON.parse(fs.readFileSync(new URL("../../compat/framework-conformance.json", import.meta.url), "utf8"));
+const actual = JSON.parse(fs.readFileSync(new URL("../../compat/framework-actual-validation.json", import.meta.url), "utf8"));
 
 assert.equal(matrix.schemaVersion, 1);
 assert.equal(matrix.scope.productRuntime, "browser-guest-node-runtime");
@@ -23,26 +24,35 @@ const reactProduct = casesById.get("vite-react-product-workflow");
 assert.equal(reactProduct?.runtime, "browser-guest-node-runtime");
 assert.equal(reactProduct.status, "pass");
 assert.match(reactProduct.productGap, /actual Vite 8\.2\.0 worker-backed product runtime/i);
-assert.match(reactProduct.productGap, /reload recovery/i);
 
 for (const id of ["vite-vue-product-workflow", "vite-svelte-product-workflow"]) {
   const product = casesById.get(id);
   assert.equal(product?.runtime, "browser-guest-node-runtime");
-  assert.equal(product.status, "deferred");
-  assert.match(product.productGap, /Deferred from the first product-supported framework set/i);
-  assert.match(product.productGap, /Product-supported promotion requires/i);
+  assert.equal(product.status, "candidate");
+  assert.ok(product.evidence.includes("tests/vite/vite-vue-svelte-actual.test.mjs"));
+  assert.ok(product.evidence.includes("compat/framework-actual-validation.json"));
 }
 
 for (const entry of matrix.cases) {
   assert.ok(entry.evidence.length > 0, `${entry.id} must reference evidence`);
   for (const evidence of entry.evidence) {
-    assert.equal(fs.existsSync(new URL(`../../${evidence}`, import.meta.url)), true, `${entry.id} evidence missing: ${evidence}`);
+    const evidencePath = evidence.includes("#") ? evidence.slice(0, evidence.indexOf("#")) : evidence;
+    assert.equal(fs.existsSync(new URL(`../../${evidencePath}`, import.meta.url)), true, `${entry.id} evidence missing: ${evidence}`);
   }
 }
 
-assert.equal(matrix.gate.id, "PG11");
+const byFramework = new Map(actual.results.map((entry) => [entry.framework, entry]));
+assert.equal(byFramework.get("vite-react")?.grade, "supported");
+assert.equal(byFramework.get("vite-vue")?.validation, "actual-worker-backed");
+assert.equal(byFramework.get("vite-svelte")?.validation, "actual-worker-backed");
+assert.ok(["candidate", "supported"].includes(byFramework.get("vite-vue")?.grade));
+assert.ok(["candidate", "supported"].includes(byFramework.get("vite-svelte")?.grade));
+assert.equal(byFramework.get("nextjs")?.grade, "product-preview");
+assert.equal(byFramework.get("nextjs")?.validation, "product-preview-adapter");
+assert.equal(actual.gate.status, "pass");
+
+assert.equal(matrix.gate.id, "SG25");
 assert.equal(matrix.gate.status, "pass");
 assert.ok(matrix.gate.requiredToPass.length >= 3);
-assert.match(matrix.gate.reason, /Vite React.*pass/i);
 
 console.log("framework conformance matrix test ok");

@@ -39,6 +39,9 @@
       "node scripts/check-release-policy.mjs",
       "node scripts/check-performance-baseline.mjs",
       "node scripts/check-soak-baseline.mjs",
+      "node scripts/package-sdk.mjs",
+      "node scripts/check-release-readiness.mjs",
+      "node scripts/check-release-ops-sg29.mjs",
       "node scripts/check-release-provenance.mjs",
       "node scripts/check-workspace.mjs"
     ]

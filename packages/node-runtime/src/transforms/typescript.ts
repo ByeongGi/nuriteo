@@ -2,6 +2,8 @@ import ts from "typescript";
 
 export interface TypeScriptTransformOptions {
   fileName?: string;
+  /** Defaults to classic `React` JSX. Prefer `react-jsx` for Vite React TSX starters. */
+  jsx?: "react" | "react-jsx";
 }
 
 export interface RuntimeDiagnostic {
@@ -25,7 +27,7 @@ export function transpileTypeScript(source: string, options: TypeScriptTransform
     compilerOptions: {
       target: ts.ScriptTarget.ES2022,
       module: ts.ModuleKind.ESNext,
-      jsx: ts.JsxEmit.React,
+      jsx: options.jsx === "react-jsx" ? ts.JsxEmit.ReactJSX : ts.JsxEmit.React,
       sourceMap: true,
       inlineSources: true,
       importsNotUsedAsValues: ts.ImportsNotUsedAsValues.Remove

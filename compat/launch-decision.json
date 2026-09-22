@@ -1,0 +1,79 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-18",
+  "gate": "SG30",
+  "decision": "private-beta-ready",
+  "allowedDecisions": ["private-beta-ready", "public-beta-ready", "hold"],
+  "milestones": {
+    "S-A": {
+      "name": "Single-user preview MVP",
+      "status": "pass",
+      "evidence": [
+        "apps/preview-service",
+        "tests/preview-service/mvp.test.mjs",
+        "docs/productization/service-readiness-plan.md#sg22"
+      ]
+    },
+    "S-B": {
+      "name": "Private beta service",
+      "status": "pass",
+      "evidence": [
+        "packages/service-backend",
+        "tests/service-backend/project-service.test.mjs",
+        "scripts/check-service-backend.mjs",
+        "docs/productization/service-backend.md",
+        "compat/security-beta-checklist.json",
+        "compat/error-catalog.json",
+        "scripts/check-observability-support.mjs"
+      ]
+    },
+    "S-C": {
+      "name": "Public beta readiness",
+      "status": "hold",
+      "evidence": [
+        "compat/service-workflow-fixture-results.json",
+        "docs/productization/browser-support-grades.md",
+        "compat/runtime-reliability-policy.json"
+      ],
+      "blockers": [
+        "Safari remains hold pending SharedArrayBuffer/COOP/COEP validation",
+        "3 public Vite React fixtures remain hold for large-tree worker timeouts",
+        "Live public-repo re-score and Edge desktop smoke are not fully automated in this environment"
+      ]
+    }
+  },
+  "gates": {
+    "SG21": "pass",
+    "SG22": "pass",
+    "SG23": "pass",
+    "SG24": "pass",
+    "SG25": "pass",
+    "SG26": "pass",
+    "SG27": "pass",
+    "SG28": "pass",
+    "SG29": "pass",
+    "SG30": "private-beta-ready"
+  },
+  "supportMatrix": {
+    "chrome": "supported",
+    "edge": "candidate",
+    "safari": "hold",
+    "viteReact": "supported",
+    "viteVue": "candidate",
+    "viteSvelte": "candidate",
+    "nextjsPreviewAdapter": "supported",
+    "nextjsFullCli": "hold"
+  },
+  "acceptedRisks": [
+    "Safari not supported for private beta cohort",
+    "Next.js App Router preview is adapter-backed; the full next CLI, native SWC, and server-only features are not product-supported",
+    "Large transitive dependency trees may still hit CLI worker timeouts",
+    "Remote persistence is local-first with in-memory/remote-backup stub rather than production cloud"
+  ],
+  "launchBlockersForPublicBeta": [
+    "Safari grade must leave hold or remain explicitly out of public cohort",
+    "Public fixture live matrix / Edge smoke must be reconfirmed",
+    "S-C remains hold while three large-tree public fixtures and Safari validation are unresolved"
+  ],
+  "rationale": "S-A and S-B criteria are met with preview MVP, onboarding, reliability policy, private-beta backend path, security checklist, observability/support, and release-ops rollback rehearsal. S-C is not fully met, so the launch decision is private-beta-ready rather than public-beta-ready."
+}

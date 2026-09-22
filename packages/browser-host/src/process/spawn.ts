@@ -1,7 +1,12 @@
 import { WorkerRegistry } from "./worker-registry.ts";
 import type { HostProcessOutputChunk, HostProcessPrepareOptions, HostProcessRecord, HostProcessSnapshot, HostProcessStatus, HostProcessTableOptions, HostWorkerLike } from "./types.ts";
 import type { RuntimeTraceSink } from "../observability/index.ts";
-import type { PermissionManager } from "../security/index.ts";
+import {
+  assertAbuseAllowed,
+  createAbuseLimitPolicy,
+  type AbuseLimitPolicy,
+  type PermissionManager
+} from "../security/index.ts";
 
 export class HostProcessError extends Error {
   constructor(message: string) {
@@ -16,6 +21,7 @@ export class HostProcessTable {
   records: Map<number, HostProcessRecord>;
   registry: WorkerRegistry;
   permissions: PermissionManager | null;
+  abusePolicy: AbuseLimitPolicy;
   trace: RuntimeTraceSink | null;
   workerFactory: (record: HostProcessRecord) => HostWorkerLike;
   now: () => number;
@@ -28,6 +34,7 @@ export class HostProcessTable {
     this.records = new Map();
     this.registry = options.registry || new WorkerRegistry();
     this.permissions = options.permissions || null;
+    this.abusePolicy = options.abusePolicy || createAbuseLimitPolicy();
     this.trace = options.trace || null;
     this.workerFactory = options.workerFactory || ((record) => new Worker(record.url as string | URL, { type: "module", name: `process-${record.pid}` }));
     this.now = options.now || Date.now;
@@ -49,6 +56,13 @@ export class HostProcessTable {
         resource: String(options.url || "<inline>"),
         ...(options.projectId ? { projectId: options.projectId } : {})
       });
+      assertAbuseAllowed({
+        kind: "worker-spawn",
+        // Count reserved/active process slots, not only started workers.
+        // Workers register in start(); prepare() must still enforce the spawn ceiling.
+        workerSpawnCount: this.#activeProcessCount() + 1,
+        ...(options.projectId ? { projectId: options.projectId } : {})
+      }, this.abusePolicy);
     } catch (error) {
       span?.end({ status: "error", errorCode: error instanceof Error && "code" in error && typeof error.code === "string" ? error.code : "EUNKNOWN" });
       throw error;
@@ -79,6 +93,12 @@ export class HostProcessTable {
     const record = this.#record(pid);
     if (record.status !== "prepared") throw new HostProcessError(`cannot start process in ${record.status}`);
     if (!record.url) return this.#finish(record, "failed", 1, "missing worker url");
+
+    assertAbuseAllowed({
+      kind: "worker-spawn",
+      workerSpawnCount: this.registry.size() + 1,
+      ...(record.projectId ? { projectId: record.projectId } : {})
+    }, this.abusePolicy);
 
     record.status = "starting";
     const worker = this.workerFactory(record);
@@ -216,6 +236,14 @@ export class HostProcessTable {
     const record = this.records.get(pid);
     if (!record) throw new HostProcessError(`unknown pid ${pid}`);
     return record;
+  }
+
+  #activeProcessCount(): number {
+    let count = 0;
+    for (const record of this.records.values()) {
+      if (!isTerminal(record.status)) count += 1;
+    }
+    return count;
   }
 }
 

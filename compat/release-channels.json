@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-18",
+  "gate": "SG29",
+  "currentChannel": "internal",
+  "channels": [
+    {
+      "id": "internal",
+      "audience": "maintainers and controlled product QA",
+      "externalPublish": false,
+      "promotionCriteria": [
+        "SG21 release artifact integrity pass",
+        "package-sdk fingerprint committed",
+        "check-release-readiness pass",
+        "known limitations reviewed"
+      ]
+    },
+    {
+      "id": "private-beta",
+      "audience": "invited private beta operators and trusted integrations",
+      "externalPublish": false,
+      "promotionCriteria": [
+        "internal channel rehearsal pass",
+        "SG26 service backend schema freeze",
+        "SG27 security beta checklist pass",
+        "rollback rehearsal pass"
+      ]
+    },
+    {
+      "id": "public-beta",
+      "audience": "public beta cohort with published support matrix",
+      "externalPublish": true,
+      "promotionCriteria": [
+        "private-beta channel stable for one rehearsal window",
+        "SG25 compatibility matrix bound into release artifact",
+        "SG29 same-day release and rollback rehearsal pass",
+        "fingerprint drift blocked in CI"
+      ]
+    },
+    {
+      "id": "stable",
+      "audience": "production browser development sessions",
+      "externalPublish": true,
+      "promotionCriteria": [
+        "public-beta channel pass",
+        "at least two beta release/rollback rehearsals",
+        "release checklist CI gate pass",
+        "sigstore or equivalent attestation for external publish"
+      ]
+    }
+  ]
+}

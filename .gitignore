@@ -5,6 +5,8 @@
 
 /packages/*/node_modules/
 /examples/*/node_modules/
+/apps/*/node_modules/
+/apps/*/dist/
 /tests/**/node_modules/
 
 .DS_Store
