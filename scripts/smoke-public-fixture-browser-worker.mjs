@@ -15,7 +15,8 @@ import {
 import { createFallbackWorkspaceReader, createNodeFsWorkspaceReader } from "./lib/fs-workspace-reader.mjs";
 
 const root = path.resolve(new URL("..", import.meta.url).pathname);
-const preparedRoot = path.resolve(process.env.CARGO_FIXTURE_PREP_ROOT || "/private/tmp/fixture-prep-full-ten-node22-exact");
+if (!process.env.CARGO_FIXTURE_PREP_ROOT) throw new Error("CARGO_FIXTURE_PREP_ROOT is required; run the pinned public fixture preparation workflow first");
+const preparedRoot = path.resolve(process.env.CARGO_FIXTURE_PREP_ROOT);
 const fixtureId = "vite-official-template-react";
 const revision = "1544bb1b7ac92f775e9d0dea97954c99cc6cbd43";
 const checkout = path.join(preparedRoot, "fixtures", fixtureId);

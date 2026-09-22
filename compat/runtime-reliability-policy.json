@@ -8,7 +8,8 @@
     "enforcement": "node-worker-v8-limit-and-guest-workspace-byte-limit",
     "nodeWorkerV8OldGenerationLimitMiB": 256,
     "guestWorkspaceLimitBytes": 268435456,
-    "browserWorkerHeapEnforcement": "hold-unobservable-from-host"
+    "browserWorkerHeapEnforcement": "hold-unobservable-from-host",
+    "browserWorkerResourceObservation": "chrome-page-memory-and-worker-target-churn"
   },
   "timeouts": {
     "installMs": 120000,
