@@ -23,8 +23,15 @@ export { createId, createToken, resetIdSequence } from "./ids.ts";
 export { LocalFirstProjectStore } from "./store.ts";
 export type { LocalFirstProjectStoreOptions } from "./store.ts";
 
-export { InMemoryRemoteBackup } from "./remote-backup.ts";
-export type { RemoteBackupAdapter } from "./remote-backup.ts";
+export {
+  FILE_REMOTE_BACKUP_SCHEMA_VERSION,
+  FileRemoteBackup,
+  InMemoryRemoteBackup
+} from "./remote-backup.ts";
+export type {
+  FileRemoteBackupOptions,
+  RemoteBackupAdapter
+} from "./remote-backup.ts";
 
 export { InMemoryUsageMeter } from "./usage-meter.ts";
 export type { UsageMeter } from "./usage-meter.ts";
@@ -63,7 +70,10 @@ export interface CreateServiceBackendOptions extends LocalFirstProjectStoreOptio
   enableRemoteBackup?: boolean;
 }
 
-/** Wire a private-beta backend with local-first store + in-memory remote stub. */
+/**
+ * Wire a private-beta backend with a local-first store. Backup defaults to the
+ * in-memory adapter; inject FileRemoteBackup for single-node restart recovery.
+ */
 export function createServiceBackend(
   options: CreateServiceBackendOptions = {}
 ): ServiceBackend {

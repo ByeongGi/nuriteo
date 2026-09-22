@@ -8,6 +8,13 @@ export type MonacoWorkerStatus = {
   typescriptDiagnostics: number;
 };
 
+export type MonacoLanguageFeatureStatus = {
+  definitionFiles: string[];
+  quickInfoKind: string | null;
+  completionNames: string[];
+  diagnosticCount: number;
+};
+
 /**
  * Monaco 0.56 declares module workers with `new URL(..., import.meta.url)`.
  * Vite 8 bundles those URLs directly; no legacy worker plugin or no-op fallback
@@ -54,7 +61,9 @@ async function initializeMonacoWorkers(): Promise<MonacoWorkerStatus> {
     return await runTypeScriptWorkerProbe();
   } catch (error) {
     configuration = null;
-    throw new Error("Monaco language worker initialization failed.", { cause: error });
+    throw new Error("Monaco language worker initialization failed.", {
+      cause: error
+    });
   }
 }
 
@@ -66,6 +75,40 @@ export async function probeMonacoTypeScriptWorker(): Promise<MonacoWorkerStatus>
   if (typeof self === "undefined") throw new Error("Monaco language workers require a browser context.");
   configuration ||= initializeMonacoWorkers();
   return configuration;
+}
+
+/** Verify the semantic features used by completion, hover, and go-to-definition. */
+export async function probeMonacoLanguageFeatures(): Promise<MonacoLanguageFeatureStatus> {
+  await configureMonacoWorkers();
+  const definitionUri = monaco.Uri.parse("file:///__cargo_language_probe__/answer.ts");
+  const consumerUri = monaco.Uri.parse("file:///__cargo_language_probe__/consumer.ts");
+  const definitionModel = monaco.editor.createModel("export const answer: number = 42;\n", "typescript", definitionUri);
+  const consumerSource = ['import { answer } from "./answer";', "answer.toFixed(2);", "answer."].join("\n");
+  const consumerModel = monaco.editor.createModel(consumerSource, "typescript", consumerUri);
+
+  try {
+    const getWorker = await monaco.typescript.getTypeScriptWorker();
+    const worker = await getWorker(consumerUri);
+    const fileName = consumerUri.toString();
+    const definitionOffset = consumerSource.indexOf("answer.toFixed");
+    const completionOffset = consumerSource.lastIndexOf("answer.") + "answer.".length;
+    const [definitions, quickInfo, completions, diagnostics] = await Promise.all([
+      worker.getDefinitionAtPosition(fileName, definitionOffset),
+      worker.getQuickInfoAtPosition(fileName, definitionOffset),
+      worker.getCompletionsAtPosition(fileName, completionOffset),
+      worker.getSemanticDiagnostics(fileName)
+    ]);
+
+    return {
+      definitionFiles: definitions?.map((entry) => entry.fileName) || [],
+      quickInfoKind: quickInfo?.kind || null,
+      completionNames: completions?.entries.map((entry) => entry.name) || [],
+      diagnosticCount: diagnostics.length
+    };
+  } finally {
+    definitionModel.dispose();
+    consumerModel.dispose();
+  }
 }
 
 async function runTypeScriptWorkerProbe(): Promise<MonacoWorkerStatus> {

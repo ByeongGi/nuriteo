@@ -1,6 +1,6 @@
 import * as monaco from "monaco-editor";
 
-const synced = new Map<string, string>();
+const synced = new Map<string, { data: string; disposables: monaco.IDisposable[] }>();
 
 function languageForPath(path: string): string {
   const lower = path.toLowerCase();
@@ -17,6 +17,10 @@ function languageForPath(path: string): string {
 export function monacoModelPath(path: string): string {
   // Monaco TS service resolves better with file:// style paths.
   return `file://${path.startsWith("/") ? path : `/${path}`}`;
+}
+
+function normalizedPath(path: string): string {
+  return monaco.Uri.parse(monacoModelPath(path)).path;
 }
 
 function uriForPath(path: string): monaco.Uri {
@@ -36,7 +40,8 @@ export function syncMonacoProjectFiles(files: Array<{ path: string; data: string
     const nextPaths = new Set<string>();
     for (const file of files) {
       if (!/\.(?:[cm]?[jt]sx?|mjs|cjs|json|css|html)$/.test(file.path)) continue;
-      nextPaths.add(file.path);
+      const normalized = normalizedPath(file.path);
+      nextPaths.add(normalized);
       const uri = uriForPath(file.path);
       const existing = monaco.editor.getModel(uri);
       const language = languageForPath(file.path);
@@ -49,11 +54,14 @@ export function syncMonacoProjectFiles(files: Array<{ path: string; data: string
       }
 
       if ((language === "typescript" || language === "javascript") && tsDefaults && jsDefaults) {
-        const libPath = `file://${file.path}`;
-        if (synced.get(file.path) !== file.data) {
-          tsDefaults.addExtraLib(file.data, libPath);
-          jsDefaults.addExtraLib(file.data, libPath);
-          synced.set(file.path, file.data);
+        const current = synced.get(normalized);
+        if (current?.data !== file.data) {
+          current?.disposables.forEach((disposable) => disposable.dispose());
+          const libPath = monacoModelPath(file.path);
+          synced.set(normalized, {
+            data: file.data,
+            disposables: [tsDefaults.addExtraLib(file.data, libPath), jsDefaults.addExtraLib(file.data, libPath)]
+          });
         }
       }
     }
@@ -62,13 +70,15 @@ export function syncMonacoProjectFiles(files: Array<{ path: string; data: string
       const path = model.uri.path;
       if (!path || nextPaths.has(path)) continue;
       if (path.includes("/node_modules/")) continue;
-      if ([...synced.keys()].some((entry) => entry === path || entry.endsWith(path))) {
+      if (synced.has(path)) {
         model.dispose();
       }
     }
 
     for (const path of [...synced.keys()]) {
-      if (!nextPaths.has(path)) synced.delete(path);
+      if (nextPaths.has(path)) continue;
+      synced.get(path)?.disposables.forEach((disposable) => disposable.dispose());
+      synced.delete(path);
     }
   } catch {
     // IntelliSense sync is best-effort; never crash the IDE shell.

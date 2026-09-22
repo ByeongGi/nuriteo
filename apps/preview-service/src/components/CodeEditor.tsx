@@ -1,12 +1,14 @@
-import { useEffect, useMemo, useState, type DragEvent, type MouseEvent } from "react";
-import Editor, { loader } from "@monaco-editor/react";
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type MouseEvent } from "react";
+import Editor, { loader, type OnMount } from "@monaco-editor/react";
 import * as monaco from "monaco-editor";
 import { X } from "lucide-react";
 import clsx from "clsx";
 import type { PreviewControllerModel } from "../hooks/usePreviewController";
 import { configureMonacoWorkers } from "../lib/monacoWorkers";
 import { monacoModelPath, syncMonacoProjectFiles } from "../lib/monacoProjectSync";
+import { subscribeToLanguageProblems, workspacePathForModel } from "../lib/monacoLanguageService";
 import { ContextMenu } from "./ContextMenu";
+import { EditorBreadcrumbs } from "./EditorBreadcrumbs";
 
 loader.config({ monaco });
 
@@ -15,7 +17,8 @@ const TAB_MIME = "application/x-cargo-tab";
 function languageForPath(path: string): string {
   const lower = path.toLowerCase();
   if (lower.endsWith(".tsx") || lower.endsWith(".ts")) return "typescript";
-  if (lower.endsWith(".jsx") || lower.endsWith(".js") || lower.endsWith(".mjs") || lower.endsWith(".cjs")) return "javascript";
+  if (lower.endsWith(".jsx") || lower.endsWith(".js") || lower.endsWith(".mjs") || lower.endsWith(".cjs"))
+    return "javascript";
   if (lower.endsWith(".json")) return "json";
   if (lower.endsWith(".css")) return "css";
   if (lower.endsWith(".html") || lower.endsWith(".htm")) return "html";
@@ -23,10 +26,6 @@ function languageForPath(path: string): string {
   if (lower.endsWith(".svg")) return "xml";
   if (lower.endsWith(".yml") || lower.endsWith(".yaml")) return "yaml";
   return "plaintext";
-}
-
-function breadcrumbParts(path: string, displayPath: (path: string) => string): string[] {
-  return displayPath(path).split("/").filter(Boolean);
 }
 
 export function CodeEditor({ model }: { model: PreviewControllerModel }) {
@@ -47,20 +46,23 @@ export function CodeEditor({ model }: { model: PreviewControllerModel }) {
     settings,
     setSplitPath,
     reorderOpenPaths,
-    goToDefinition
+    goToDefinition,
+    languageProblems,
+    setLanguageProblems,
+    editorLocation
   } = model;
 
   const [workerState, setWorkerState] = useState<"starting" | "ready" | "failed">("starting");
-  const [tabMenu, setTabMenu] = useState<{ x: number; y: number; path: string } | null>(null);
+  const [cursor, setCursor] = useState({ line: 1, column: 1 });
+  const [tabMenu, setTabMenu] = useState<{
+    x: number;
+    y: number;
+    path: string;
+  } | null>(null);
   const [dragOverTab, setDragOverTab] = useState<string | null>(null);
-  const language = useMemo(
-    () => (selectedPath ? languageForPath(selectedPath) : "plaintext"),
-    [selectedPath]
-  );
-  const crumbs = useMemo(
-    () => (selectedPath ? breadcrumbParts(selectedPath, displayPath) : []),
-    [displayPath, selectedPath]
-  );
+  const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
+  const editorSubscriptionsRef = useRef<monaco.IDisposable[]>([]);
+  const language = useMemo(() => (selectedPath ? languageForPath(selectedPath) : "plaintext"), [selectedPath]);
 
   useEffect(() => {
     let cancelled = false;
@@ -88,6 +90,70 @@ export function CodeEditor({ model }: { model: PreviewControllerModel }) {
     );
   }, [model.snapshot, workerState]);
 
+  useEffect(() => {
+    if (workerState !== "ready") return;
+    const subscription = subscribeToLanguageProblems(setLanguageProblems);
+    return () => subscription.dispose();
+  }, [setLanguageProblems, workerState]);
+
+  useEffect(() => {
+    if (!editorLocation || editorLocation.path !== selectedPath) return;
+    const editor = editorRef.current;
+    if (!editor) return;
+    const position = {
+      lineNumber: editorLocation.line,
+      column: editorLocation.column
+    };
+    editor.setPosition(position);
+    editor.revealPositionInCenter(position);
+    editor.focus();
+  }, [editorLocation, selectedPath]);
+
+  useEffect(
+    () => () => {
+      for (const subscription of editorSubscriptionsRef.current) subscription.dispose();
+      editorSubscriptionsRef.current = [];
+      editorRef.current = null;
+    },
+    []
+  );
+
+  const onEditorMount = useCallback<OnMount>(
+    (editor) => {
+      for (const subscription of editorSubscriptionsRef.current) subscription.dispose();
+      editorSubscriptionsRef.current = [];
+      editorRef.current = editor;
+
+      const updateCursor = () => {
+        const position = editor.getPosition();
+        if (position) setCursor({ line: position.lineNumber, column: position.column });
+      };
+
+      editorSubscriptionsRef.current.push(
+        editor.onDidChangeCursorPosition(updateCursor),
+        editor.onDidChangeModel(() => {
+          const path = workspacePathForModel(editor.getModel());
+          if (path && path !== selectedPath) openFile(path);
+        })
+      );
+      updateCursor();
+    },
+    [openFile, selectedPath]
+  );
+
+  const revealDefinition = useCallback(() => {
+    const editor = editorRef.current;
+    if (!editor) {
+      goToDefinition();
+      return;
+    }
+    editor.focus();
+    editor.trigger("editor-toolbar", "editor.action.revealDefinition", null);
+  }, [goToDefinition]);
+
+  const errorCount = languageProblems.filter((problem) => problem.severity === "error").length;
+  const warningCount = languageProblems.filter((problem) => problem.severity === "warning").length;
+
   const onTabDragStart = (event: DragEvent, path: string) => {
     event.dataTransfer.setData(TAB_MIME, path);
     event.dataTransfer.effectAllowed = "move";
@@ -102,9 +168,16 @@ export function CodeEditor({ model }: { model: PreviewControllerModel }) {
   };
 
   return (
-    <section className="flex h-full min-h-0 min-w-0 flex-col border-r border-cargo-line bg-cargo-bg" aria-label="Editor">
+    <section
+      className="flex h-full min-h-0 min-w-0 flex-col border-r border-cargo-line bg-cargo-bg"
+      aria-label="Editor"
+    >
       <div className="flex items-center gap-2 border-b border-cargo-line bg-cargo-elevated/80 px-2">
-        <div id="editor-tabs" className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto py-1.5" aria-label="Open files">
+        <div
+          id="editor-tabs"
+          className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto py-1.5"
+          aria-label="Open files"
+        >
           {openPaths.length === 0 ? (
             <span className="px-2 text-xs text-cargo-muted">No open files</span>
           ) : (
@@ -157,11 +230,17 @@ export function CodeEditor({ model }: { model: PreviewControllerModel }) {
             className="btn-small btn-ghost"
             disabled={!selectedPath}
             title="Go to Definition (F12)"
-            onClick={() => goToDefinition()}
+            onClick={revealDefinition}
           >
             Definition
           </button>
-          <button id="editor-format" type="button" className="btn-small" disabled={!selectedPath} onClick={() => void formatCurrentFile()}>
+          <button
+            id="editor-format"
+            type="button"
+            className="btn-small"
+            disabled={!selectedPath}
+            onClick={() => void formatCurrentFile()}
+          >
             Format
           </button>
           <button
@@ -173,7 +252,13 @@ export function CodeEditor({ model }: { model: PreviewControllerModel }) {
           >
             Split
           </button>
-          <button id="editor-save" type="button" className="btn-small" disabled={!selectedPath} onClick={() => saveCurrentFile()}>
+          <button
+            id="editor-save"
+            type="button"
+            className="btn-small"
+            disabled={!selectedPath}
+            onClick={() => saveCurrentFile()}
+          >
             Save
           </button>
           <button
@@ -189,19 +274,7 @@ export function CodeEditor({ model }: { model: PreviewControllerModel }) {
       </div>
 
       <div className="flex items-center justify-between gap-3 border-b border-cargo-line px-3 py-1.5 text-xs">
-        <nav id="editor-breadcrumbs" className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden font-mono text-cargo-muted" aria-label="Breadcrumbs">
-          {crumbs.length === 0 ? (
-            <span id="editor-path">Open a file</span>
-          ) : (
-            crumbs.map((part, index) => (
-              <span key={`${part}-${index}`} className="flex items-center gap-1">
-                {index > 0 ? <span className="opacity-50">/</span> : null}
-                <span className={index === crumbs.length - 1 ? "text-cargo-ink" : ""}>{part}</span>
-              </span>
-            ))
-          )}
-          <span id="editor-path" className="sr-only">{selectedPath ? displayPath(selectedPath) : "Open a file"}</span>
-        </nav>
+        <EditorBreadcrumbs path={selectedPath || null} displayPath={displayPath} />
         <span
           id="editor-status"
           className={clsx(
@@ -209,7 +282,13 @@ export function CodeEditor({ model }: { model: PreviewControllerModel }) {
             editorFile?.dirty ? "border-amber-700/40 text-cargo-warn" : "border-cargo-line text-cargo-muted"
           )}
         >
-          {!selectedPath ? "empty" : editorFile?.dirty ? (settings.saveTrigger === "autosave" ? "unsaved · autosave" : "unsaved") : "saved"}
+          {!selectedPath
+            ? "empty"
+            : editorFile?.dirty
+              ? settings.saveTrigger === "autosave"
+                ? "unsaved · autosave"
+                : "unsaved"
+              : "saved"}
         </span>
       </div>
 
@@ -224,6 +303,7 @@ export function CodeEditor({ model }: { model: PreviewControllerModel }) {
               height="100%"
               theme={settings.theme === "light" ? "vs" : "vs-dark"}
               onChange={(value) => editSelected(value ?? "")}
+              onMount={onEditorMount}
               options={{
                 fontFamily: "var(--mono)",
                 fontSize: settings.fontSize,
@@ -232,7 +312,11 @@ export function CodeEditor({ model }: { model: PreviewControllerModel }) {
                 automaticLayout: true,
                 tabSize: 2,
                 padding: { top: 12 },
-                quickSuggestions: true
+                quickSuggestions: true,
+                suggestOnTriggerCharacters: true,
+                parameterHints: { enabled: true },
+                inlayHints: { enabled: "on" },
+                definitionLinkOpensInPeek: false
               }}
             />
           ) : (
@@ -249,7 +333,9 @@ export function CodeEditor({ model }: { model: PreviewControllerModel }) {
           <div className="flex min-h-0 min-w-0 flex-col border-l border-cargo-line">
             <div className="flex shrink-0 items-center justify-between border-b border-cargo-line px-2 py-1 text-[11px] text-cargo-muted">
               <span className="truncate font-mono">{displayPath(splitPath)}</span>
-              <button type="button" className="btn-small btn-ghost" onClick={() => setSplitPath(null)}>Close split</button>
+              <button type="button" className="btn-small btn-ghost" onClick={() => setSplitPath(null)}>
+                Close split
+              </button>
             </div>
             <div className="relative min-h-0 flex-1">
               <Editor
@@ -273,10 +359,20 @@ export function CodeEditor({ model }: { model: PreviewControllerModel }) {
         ) : null}
       </div>
 
-      <div id="editor-statusbar" className="border-t border-cargo-line px-3 py-1 font-mono text-[11px] text-cargo-muted">
-        {selectedPath
-          ? `${language} · ${displayPath(selectedPath)} · ${settings.saveTrigger} · F1 commands`
-          : "No file open · F1 command palette · ⌘P go to file"}
+      <div
+        id="editor-statusbar"
+        className="flex items-center justify-between gap-3 border-t border-cargo-line px-3 py-1 font-mono text-[11px] text-cargo-muted"
+      >
+        <span>
+          {selectedPath
+            ? `${language} · ${displayPath(selectedPath)} · ${settings.saveTrigger} · F1 commands`
+            : "No file open · F1 command palette · ⌘P go to file"}
+        </span>
+        {selectedPath ? (
+          <span className="shrink-0" aria-label={`${errorCount} errors and ${warningCount} warnings`}>
+            Ln {cursor.line}, Col {cursor.column} · × {errorCount} · △ {warningCount} · Language Service {workerState}
+          </span>
+        ) : null}
       </div>
 
       <ContextMenu

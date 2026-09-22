@@ -233,8 +233,8 @@ export function FileTree({ model }: { model: PreviewControllerModel }) {
       }
       return;
     }
-    if (event.dataTransfer.files?.length) {
-      void model.importDroppedEntries(event.dataTransfer.files, path);
+    if (event.dataTransfer.items?.length || event.dataTransfer.files?.length) {
+      void model.importDroppedEntries(event.dataTransfer, path);
     }
   };
 
@@ -246,6 +246,7 @@ export function FileTree({ model }: { model: PreviewControllerModel }) {
 
   const onRootDrop = (event: DragEvent) => {
     event.preventDefault();
+    event.stopPropagation();
     setDropTarget(null);
     const raw = event.dataTransfer.getData(DRAG_MIME);
     if (raw && projectRoot) {
@@ -257,8 +258,8 @@ export function FileTree({ model }: { model: PreviewControllerModel }) {
       }
       return;
     }
-    if (event.dataTransfer.files?.length) {
-      void model.importDroppedEntries(event.dataTransfer.files, projectRoot || null);
+    if (event.dataTransfer.items?.length || event.dataTransfer.files?.length) {
+      void model.importDroppedEntries(event.dataTransfer, projectRoot || null);
     }
   };
 
