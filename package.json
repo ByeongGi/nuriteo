@@ -31,6 +31,7 @@
     "check:observability-support": "node scripts/check-observability-support.mjs",
     "check:sg25": "node scripts/check-sg25.mjs",
     "check:sg30": "node scripts/check-sg30.mjs",
+    "check:public-beta-readiness": "node scripts/check-public-beta-readiness.mjs",
     "test:vite-vue-svelte-actual": "node tests/vite/vite-vue-svelte-actual.test.mjs",
     "test:workflow-soak": "node tests/preview-service/workflow-soak.test.mjs",
     "test:large-node-modules-stress": "node tests/browser-host/large-node-modules-stress.test.mjs",

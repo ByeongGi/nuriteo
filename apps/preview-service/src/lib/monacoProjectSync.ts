@@ -14,9 +14,13 @@ function languageForPath(path: string): string {
   return "plaintext";
 }
 
-function uriForPath(path: string): monaco.Uri {
+export function monacoModelPath(path: string): string {
   // Monaco TS service resolves better with file:// style paths.
-  return monaco.Uri.parse(`file://${path.startsWith("/") ? path : `/${path}`}`);
+  return `file://${path.startsWith("/") ? path : `/${path}`}`;
+}
+
+function uriForPath(path: string): monaco.Uri {
+  return monaco.Uri.parse(monacoModelPath(path));
 }
 
 /**
@@ -26,8 +30,8 @@ function uriForPath(path: string): monaco.Uri {
 export function syncMonacoProjectFiles(files: Array<{ path: string; data: string }>): void {
   try {
     if (!monaco.editor || !monaco.languages) return;
-    const tsDefaults = monaco.languages.typescript?.typescriptDefaults;
-    const jsDefaults = monaco.languages.typescript?.javascriptDefaults;
+    const tsDefaults = monaco.typescript.typescriptDefaults;
+    const jsDefaults = monaco.typescript.javascriptDefaults;
 
     const nextPaths = new Set<string>();
     for (const file of files) {

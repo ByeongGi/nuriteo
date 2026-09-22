@@ -279,6 +279,8 @@ const required = [
   "docs/productization/beta-onboarding-guide.md",
   "scripts/check-sg25.mjs",
   "scripts/check-sg30.mjs",
+  "scripts/check-public-beta-readiness.mjs",
+  "tests/preview-service/monaco-workers.test.mjs",
   "packages/browser-host/src/onboarding/index.ts",
   "packages/browser-host/src/onboarding/package-detect.ts",
   "packages/browser-host/src/onboarding/templates.ts",

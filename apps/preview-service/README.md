@@ -25,7 +25,7 @@ Product IDE for Cargo Container, built like a WebContainers-style workspace.
 - Preview soft reload, editable path, multi path tabs
 - Deep links: `?file=src/main.tsx&terminal=dev`, `?template=vite-react`, `?github=owner/repo`
 - Runtime: `exportTreeJson` / `exportPathZip`, preview error bridge, change status
-- Monaco language workers: real TS/JSON/CSS/HTML workers via `vite-plugin-monaco-editor` (esbuild prebundle; Vite 8 `?worker` bypass)
+- Monaco language workers: real TS/JSON/CSS/HTML module workers bundled from Monaco 0.56's native `new URL(..., import.meta.url)` declarations by Vite 8. There is no legacy plugin or no-op worker fallback. `tests/preview-service/monaco-workers.test.mjs` exercises the TypeScript worker and its semantic diagnostics.
 
 Layer C (Share/Fork/accounts) is intentionally out of scope. See `docs/productization/classic-parity-spec-and-plan.md`.
 

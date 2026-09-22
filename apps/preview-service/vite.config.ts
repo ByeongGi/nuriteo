@@ -3,13 +3,6 @@ import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
-import monacoEditorPluginModule from "vite-plugin-monaco-editor";
-
-const monacoEditorPlugin = (
-  typeof monacoEditorPluginModule === "function"
-    ? monacoEditorPluginModule
-    : (monacoEditorPluginModule as { default: typeof monacoEditorPluginModule }).default
-) as typeof monacoEditorPluginModule;
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 
@@ -47,14 +40,7 @@ export default defineConfig({
   plugins: [
     react(),
     tailwindcss(),
-    serviceWorkerHeaders(),
-    // Prebundle Monaco language workers with esbuild (bypasses Vite 8/Rolldown
-    // deep `?worker` resolution). Serves same-origin scripts under /monacoeditorwork.
-    monacoEditorPlugin({
-      languageWorkers: ["editorWorkerService", "typescript", "json", "css", "html"],
-      publicPath: "monacoeditorwork",
-      globalAPI: false
-    })
+    serviceWorkerHeaders()
   ],
   resolve: {
     alias: {

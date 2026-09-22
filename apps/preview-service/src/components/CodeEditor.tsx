@@ -5,7 +5,7 @@ import { X } from "lucide-react";
 import clsx from "clsx";
 import type { PreviewControllerModel } from "../hooks/usePreviewController";
 import { configureMonacoWorkers } from "../lib/monacoWorkers";
-import { syncMonacoProjectFiles } from "../lib/monacoProjectSync";
+import { monacoModelPath, syncMonacoProjectFiles } from "../lib/monacoProjectSync";
 import { ContextMenu } from "./ContextMenu";
 
 loader.config({ monaco });
@@ -50,7 +50,7 @@ export function CodeEditor({ model }: { model: PreviewControllerModel }) {
     goToDefinition
   } = model;
 
-  const [workersReady, setWorkersReady] = useState(false);
+  const [workerState, setWorkerState] = useState<"starting" | "ready" | "failed">("starting");
   const [tabMenu, setTabMenu] = useState<{ x: number; y: number; path: string } | null>(null);
   const [dragOverTab, setDragOverTab] = useState<string | null>(null);
   const language = useMemo(
@@ -64,16 +64,21 @@ export function CodeEditor({ model }: { model: PreviewControllerModel }) {
 
   useEffect(() => {
     let cancelled = false;
-    void configureMonacoWorkers().then(() => {
-      if (!cancelled) setWorkersReady(true);
-    });
+    void configureMonacoWorkers()
+      .then(() => {
+        if (!cancelled) setWorkerState("ready");
+      })
+      .catch((error: unknown) => {
+        console.error(error);
+        if (!cancelled) setWorkerState("failed");
+      });
     return () => {
       cancelled = true;
     };
   }, []);
 
   useEffect(() => {
-    if (!workersReady) return;
+    if (workerState !== "ready") return;
     const files = model.snapshot.project?.listFiles() || [];
     syncMonacoProjectFiles(
       files.map((file) => {
@@ -81,7 +86,7 @@ export function CodeEditor({ model }: { model: PreviewControllerModel }) {
         return { path: file.path, data: open?.data ?? file.data };
       })
     );
-  }, [model.snapshot, workersReady]);
+  }, [model.snapshot, workerState]);
 
   const onTabDragStart = (event: DragEvent, path: string) => {
     event.dataTransfer.setData(TAB_MIME, path);
@@ -210,10 +215,10 @@ export function CodeEditor({ model }: { model: PreviewControllerModel }) {
 
       <div className={clsx("min-h-0 flex-1", splitPath ? "grid grid-cols-2" : "flex flex-col")}>
         <div className="relative min-h-0 min-w-0 flex-1">
-          {selectedPath && editorFile && workersReady ? (
+          {selectedPath && editorFile && workerState === "ready" ? (
             <Editor
               key={selectedPath}
-              path={selectedPath}
+              path={monacoModelPath(selectedPath)}
               language={language}
               value={editorFile.data}
               height="100%"
@@ -232,7 +237,11 @@ export function CodeEditor({ model }: { model: PreviewControllerModel }) {
             />
           ) : (
             <div className="flex h-full items-center justify-center px-6 text-sm text-cargo-muted">
-              {selectedPath && !workersReady ? "Starting editor…" : "Select a file from the sidebar to edit."}
+              {selectedPath && workerState === "failed"
+                ? "Editor language workers failed to start. Check the built Monaco worker assets."
+                : selectedPath && workerState === "starting"
+                  ? "Starting editor…"
+                  : "Select a file from the sidebar to edit."}
             </div>
           )}
         </div>
@@ -245,7 +254,7 @@ export function CodeEditor({ model }: { model: PreviewControllerModel }) {
             <div className="relative min-h-0 flex-1">
               <Editor
                 key={`split-${splitPath}`}
-                path={`split:${splitPath}`}
+                path={`file:///__cargo_split__${splitPath}`}
                 language={languageForPath(splitPath)}
                 value={splitFile.data}
                 height="100%"

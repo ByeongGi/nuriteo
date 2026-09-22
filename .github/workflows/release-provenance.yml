@@ -6,6 +6,7 @@ on:
     paths:
       - ".github/workflows/release-provenance.yml"
       - "compat/**"
+      - "apps/preview-service/**"
       - "docs/release/**"
       - "dist/sdk/package/**"
       - "packages/**"
@@ -39,5 +40,6 @@ jobs:
       - run: node scripts/package-sdk.mjs
       - run: node scripts/check-release-readiness.mjs
       - run: node scripts/check-release-ops-sg29.mjs
+      - run: node scripts/check-public-beta-readiness.mjs
       - run: node scripts/check-release-provenance.mjs
       - run: node scripts/check-workspace.mjs
