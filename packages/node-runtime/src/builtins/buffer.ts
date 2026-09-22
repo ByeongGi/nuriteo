@@ -289,7 +289,9 @@ function encodeBase64(bytes: Uint8Array): string {
 
 function decodeBase64(value: string): Uint8Array {
   if (globalThis.Buffer) return new Uint8Array(globalThis.Buffer.from(value, "base64"));
-  const binary = atob(value);
+  const alphabet = value.replaceAll("-", "+").replaceAll("_", "/").replace(/[^A-Za-z0-9+/]/g, "");
+  const normalized = alphabet.length % 4 === 1 ? alphabet.slice(0, -1) : alphabet;
+  const binary = atob(normalized);
   const output = new Uint8Array(binary.length);
   for (let index = 0; index < binary.length; index += 1) output[index] = binary.charCodeAt(index);
   return output;

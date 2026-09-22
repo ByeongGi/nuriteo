@@ -68,8 +68,9 @@ export function collectSdkFingerprint({
   const wasmPath = path.join(packageRoot, "assets/system_wasm.wasm");
   const systemWorkerPath = path.join(packageRoot, "workers/system-worker.ts");
   const processWorkerPath = path.join(packageRoot, "workers/process-worker.ts");
+  const yarnClassicFactoryPath = path.join(packageRoot, "vendor/yarn-cli-1.22.22.mjs");
 
-  for (const file of [assetManifestPath, wasmPath, systemWorkerPath, processWorkerPath, tarballPath]) {
+  for (const file of [assetManifestPath, wasmPath, systemWorkerPath, processWorkerPath, yarnClassicFactoryPath, tarballPath]) {
     if (!fs.existsSync(file)) {
       throw new Error(`missing SDK package artifact for fingerprint: ${path.relative(root, file)}`);
     }
@@ -86,6 +87,7 @@ export function collectSdkFingerprint({
   const systemWasmSha256 = sha256File(wasmPath);
   const systemWorkerSha256 = sha256File(systemWorkerPath);
   const processWorkerSha256 = sha256File(processWorkerPath);
+  const yarnClassicFactorySha256 = sha256File(yarnClassicFactoryPath);
   const assetManifestSha256 = sha256File(assetManifestPath);
   const tarballSha256 = sha256File(tarballPath);
 
@@ -97,6 +99,9 @@ export function collectSdkFingerprint({
   }
   if (assetManifest.assets.processWorker.sha256 !== processWorkerSha256) {
     throw new Error("asset-manifest processWorker sha256 does not match packaged worker bytes");
+  }
+  if (assetManifest.assets.yarnClassicFactory?.sha256 !== yarnClassicFactorySha256) {
+    throw new Error("asset-manifest yarnClassicFactory sha256 does not match packaged factory bytes");
   }
 
   return {
@@ -111,6 +116,7 @@ export function collectSdkFingerprint({
       systemWasmSha256,
       systemWorkerSha256,
       processWorkerSha256,
+      yarnClassicFactorySha256,
       tarballPath: TARBALL_PATH,
       tarballSha256
     },
@@ -158,6 +164,10 @@ export function verifyReleaseArtifacts({ root = process.cwd() } = {}) {
     "SDK process worker fingerprint mismatch"
   );
   assertFingerprint(
+    assetManifest.assets.yarnClassicFactory?.sha256 === sha256File(path.join(packageRoot, "vendor/yarn-cli-1.22.22.mjs")),
+    "SDK Yarn Classic factory fingerprint mismatch"
+  );
+  assertFingerprint(
     fingerprint.sdkPackage.assetManifestSha256 === sha256File(assetManifestPath),
     "asset manifest fingerprint mismatch"
   );
@@ -172,6 +182,10 @@ export function verifyReleaseArtifacts({ root = process.cwd() } = {}) {
   assertFingerprint(
     fingerprint.sdkPackage.processWorkerSha256 === assetManifest.assets.processWorker.sha256,
     "process worker fingerprint field mismatch"
+  );
+  assertFingerprint(
+    fingerprint.sdkPackage.yarnClassicFactorySha256 === assetManifest.assets.yarnClassicFactory.sha256,
+    "Yarn Classic factory fingerprint field mismatch"
   );
   assertFingerprint(
     fingerprint.sdkPackage.tarballSha256 === sha256File(tarballPath),

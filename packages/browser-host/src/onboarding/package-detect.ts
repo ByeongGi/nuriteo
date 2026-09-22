@@ -1,8 +1,9 @@
-export type SupportedPackageManager = "npm" | "pnpm";
+export type SupportedPackageManager = "npm" | "pnpm" | "yarn";
 export type PackageManagerDetectionSource =
   | "packageManager-field"
   | "pnpm-lock"
   | "package-lock"
+  | "yarn-lock"
   | "default"
   | "override";
 
@@ -51,7 +52,7 @@ export interface DetectPackageScriptsInput {
   defaultPackageManager?: SupportedPackageManager;
 }
 
-const SUPPORTED_MANAGERS = new Set<SupportedPackageManager>(["npm", "pnpm"]);
+const SUPPORTED_MANAGERS = new Set<SupportedPackageManager>(["npm", "pnpm", "yarn"]);
 
 export function detectPackageScripts(input: DetectPackageScriptsInput = {}): PackageScriptDetection {
   const diagnostics: OnboardingDiagnostic[] = [];
@@ -64,7 +65,7 @@ export function detectPackageScripts(input: DetectPackageScriptsInput = {}): Pac
   let packageManagerSource: PackageManagerDetectionSource = "default";
 
   const fieldManager = parsePackageManagerField(parsed?.packageManager);
-  if (fieldManager === "npm" || fieldManager === "pnpm") {
+  if (fieldManager === "npm" || fieldManager === "pnpm" || fieldManager === "yarn") {
     packageManager = fieldManager;
     packageManagerSource = "packageManager-field";
   } else if (fieldManager) {
@@ -72,7 +73,7 @@ export function detectPackageScripts(input: DetectPackageScriptsInput = {}): Pac
       code: "ERR_IMPORT_UNSUPPORTED_PACKAGE_MANAGER",
       level: "error",
       message: `Unsupported packageManager field: ${parsed?.packageManager}`,
-      recoveryHint: "Override the package manager to npm or pnpm."
+      recoveryHint: "Override the package manager to npm, pnpm, or Yarn v1."
     });
   } else if (files.has("pnpm-lock.yaml") || files.has("/pnpm-lock.yaml")) {
     packageManager = "pnpm";
@@ -80,15 +81,19 @@ export function detectPackageScripts(input: DetectPackageScriptsInput = {}): Pac
   } else if (files.has("package-lock.json") || files.has("/package-lock.json")) {
     packageManager = "npm";
     packageManagerSource = "package-lock";
+  } else if (files.has("yarn.lock") || files.has("/yarn.lock")) {
+    packageManager = "yarn";
+    packageManagerSource = "yarn-lock";
   }
 
   const hasPnpmLock = [...files].some((file) => file.endsWith("pnpm-lock.yaml"));
   const hasNpmLock = [...files].some((file) => file.endsWith("package-lock.json"));
-  if (hasPnpmLock && hasNpmLock) {
+  const hasYarnLock = [...files].some((file) => file.endsWith("yarn.lock"));
+  if ([hasPnpmLock, hasNpmLock, hasYarnLock].filter(Boolean).length > 1) {
     diagnostics.push({
       code: "ERR_IMPORT_LOCKFILE_CONFLICT",
       level: "warning",
-      message: "Both pnpm-lock.yaml and package-lock.json are present.",
+      message: "Multiple package manager lockfiles are present.",
       recoveryHint: "Choose one package manager override before install."
     });
   }
@@ -99,7 +104,7 @@ export function detectPackageScripts(input: DetectPackageScriptsInput = {}): Pac
         code: "ERR_IMPORT_UNSUPPORTED_PACKAGE_MANAGER",
         level: "error",
         message: `Unsupported package manager override: ${overrides.packageManager}`,
-        recoveryHint: "Use npm or pnpm."
+        recoveryHint: "Use npm, pnpm, or Yarn v1."
       });
     } else {
       packageManager = overrides.packageManager;
@@ -108,7 +113,7 @@ export function detectPackageScripts(input: DetectPackageScriptsInput = {}): Pac
   }
 
   const installCommand = overrides.installCommand
-    || (packageManager === "pnpm" ? "pnpm install" : "npm install");
+    || `${packageManager} install`;
   const devScript = overrides.devScript ?? pickScript(scripts, ["dev", "start"]);
   const buildScript = overrides.buildScript ?? pickScript(scripts, ["build"]);
 
@@ -184,10 +189,14 @@ function normalizeScripts(scripts: Record<string, string> | undefined): Record<s
   return out;
 }
 
-function parsePackageManagerField(value: string | undefined): SupportedPackageManager | "yarn" | "bun" | null {
+function parsePackageManagerField(value: string | undefined): SupportedPackageManager | "bun" | "unsupported-yarn" | null {
   if (!value) return null;
   const name = value.split("@")[0]?.trim().toLowerCase();
-  if (name === "npm" || name === "pnpm" || name === "yarn" || name === "bun") return name;
+  if (name === "yarn") {
+    const version = value.slice(name.length + 1);
+    return !version || /^1(?:\.|$)/.test(version) ? "yarn" : "unsupported-yarn";
+  }
+  if (name === "npm" || name === "pnpm" || name === "bun") return name;
   return null;
 }
 

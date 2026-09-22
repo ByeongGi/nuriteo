@@ -7,9 +7,30 @@ export class NodeThreadCliEvaluationWorker {
   };
   #worker = new Worker(`
     import { parentPort } from "node:worker_threads";
+    import { Worker as NestedWorker } from "node:worker_threads";
     import { createCliEvaluationHttpBridge, evaluateCliModuleWorkerMessage } from ${JSON.stringify(new URL("../../packages/node-runtime/src/package-managers/cli-evaluator.ts", import.meta.url).href)};
     const httpBridges = new Map();
     const webSockets = new Map();
+    const nestedWorkers = new Set();
+    const createNestedWorker = (request) => {
+      const child = new NestedWorker(new URL(${JSON.stringify(new URL("./node-thread-cli-nested-worker.mjs", import.meta.url).href)}), {
+        workerData: request,
+        execArgv: [],
+        resourceLimits: { maxOldGenerationSizeMb: 256 }
+      });
+      nestedWorkers.add(child);
+      child.on("exit", () => nestedWorkers.delete(child));
+      return {
+        postMessage: (value) => child.postMessage(value),
+        terminate: () => child.terminate(),
+        onMessage: (listener) => child.on("message", listener),
+        onError: (listener) => child.on("error", listener),
+        onExit: (listener) => child.on("exit", listener)
+      };
+    };
+    process.on("exit", () => {
+      for (const worker of nestedWorkers) void worker.terminate();
+    });
     parentPort.on("message", async (message) => {
       try {
         if (message.type === "cli:http:request") {
@@ -83,7 +104,10 @@ export class NodeThreadCliEvaluationWorker {
           return;
         }
         const bridge = message.bridgeLoopbackServer ? createCliEvaluationHttpBridge() : null;
-        const response = await evaluateCliModuleWorkerMessage(message, bridge ? { httpBridge: bridge } : {});
+        const response = await evaluateCliModuleWorkerMessage(message, {
+          ...(bridge ? { httpBridge: bridge } : {}),
+          nestedWorkerFactory: createNestedWorker
+        });
         if (bridge && response.result?.bridgedServerPorts?.length) httpBridges.set(message.id, bridge);
         parentPort.postMessage(response);
       } catch (error) {
@@ -94,7 +118,7 @@ export class NodeThreadCliEvaluationWorker {
         });
       }
     });
-  `, { eval: true, type: "module" });
+  `, { eval: true, type: "module", resourceLimits: { maxOldGenerationSizeMb: 256 } });
 
   constructor() {
     this.#worker.on("message", (data) => {

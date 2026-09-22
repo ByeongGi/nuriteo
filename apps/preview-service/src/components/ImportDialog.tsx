@@ -13,12 +13,12 @@ const TEMPLATES: Array<{ id: TemplateId; title: string; blurb: string }> = [
 
 export function ImportDialog({ model }: { model: PreviewControllerModel }) {
   const [githubUrl, setGithubUrl] = useState("");
-  const [pm, setPm] = useState<"" | "npm" | "pnpm">("");
+  const [pm, setPm] = useState<"" | "npm" | "pnpm" | "yarn">("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const applyPm = () => {
-    model.setPackageManagerOverride(pm === "npm" || pm === "pnpm" ? pm : null);
+    model.setPackageManagerOverride(pm || null);
   };
 
   const run = async (action: () => Promise<unknown> | unknown) => {
@@ -73,14 +73,15 @@ export function ImportDialog({ model }: { model: PreviewControllerModel }) {
               className="w-full rounded-lg border border-cargo-line bg-cargo-elevated px-3 py-2 text-sm text-cargo-ink outline-none focus:border-cargo-accent"
               value={pm}
               onChange={(event) => {
-                const value = event.target.value as "" | "npm" | "pnpm";
+                const value = event.target.value as "" | "npm" | "pnpm" | "yarn";
                 setPm(value);
-                model.setPackageManagerOverride(value === "npm" || value === "pnpm" ? value : null);
+                model.setPackageManagerOverride(value || null);
               }}
             >
               <option value="">Auto-detect</option>
               <option value="npm">npm</option>
               <option value="pnpm">pnpm</option>
+              <option value="yarn">Yarn v1</option>
             </select>
           </label>
 

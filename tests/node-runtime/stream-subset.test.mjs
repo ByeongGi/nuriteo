@@ -166,6 +166,15 @@ assert.equal(legacyStream.listenerCount("readable"), 0);
 assert.equal(requireBuiltin("stream/promises").pipeline, streamPromisesBuiltin.pipeline);
 assert.equal(requireBuiltin("node:zlib").Z_SYNC_FLUSH, 2);
 assert.equal(typeof requireBuiltin("zlib").createGunzip().write, "function");
+const streamCompressed = requireBuiltin("zlib").gzipSync(new TextEncoder().encode("streamed-tarball"));
+const streamGunzip = requireBuiltin("zlib").createGunzip();
+const streamInflated = [];
+streamGunzip.on("data", (chunk) => streamInflated.push(chunk));
+assert.equal(streamGunzip.writable, true);
+streamGunzip.write(streamCompressed.subarray(0, 5));
+streamGunzip.end(streamCompressed.subarray(5));
+assert.equal(streamGunzip.writable, false);
+assert.equal(new TextDecoder().decode(requireBuiltin("buffer").Buffer.concat(streamInflated)), "streamed-tarball");
 
 const result = runUnsafeCommonJsForLocalTests(`
   const { Readable, Transform, Writable } = require("node:stream");

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-09-22",
+  "updatedAt": "2026-09-23",
   "gate": "SG30",
   "decision": "private-beta-ready",
   "allowedDecisions": ["private-beta-ready", "public-beta-ready", "hold"],
@@ -31,6 +31,7 @@
       "name": "Public beta readiness",
       "status": "hold",
       "evidence": [
+        "compat/ecosystem-fixture-actual-product-results.json",
         "compat/service-workflow-fixture-results.json",
         "compat/browser-smoke-results.json",
         "docs/productization/browser-support-grades.md",
@@ -38,8 +39,7 @@
       ],
       "blockers": [
         "Safari remains hold pending SharedArrayBuffer/COOP/COEP validation",
-        "3 public Vite React fixtures remain hold for large-tree worker timeouts",
-        "Live public-repo re-score is not fully automated in this environment"
+        "The ten public Vite React fixtures pass in a Node worker; browser-worker validation of this repository cohort remains pending"
       ]
     }
   },
@@ -60,6 +60,7 @@
     "edge": "supported",
     "safari": "hold",
     "viteReact": "supported",
+    "publicFixtureBrowserWorker": "hold",
     "viteVue": "supported",
     "viteSvelte": "supported",
     "nextjsPreviewAdapter": "supported",
@@ -68,13 +69,13 @@
   "acceptedRisks": [
     "Safari not supported for private beta cohort",
     "Next.js App Router preview is adapter-backed; the full next CLI, native SWC, and server-only features are not product-supported",
-    "Large transitive dependency trees may still hit CLI worker timeouts",
-    "Remote persistence is local-first with in-memory/remote-backup stub rather than production cloud"
+    "Large public repositories have Node-worker evidence; equivalent browser-worker soak remains unverified",
+    "Production cloud provider wiring and deployment remain pending"
   ],
   "launchBlockersForPublicBeta": [
     "Safari grade must leave hold or remain explicitly out of public cohort",
-    "Public fixture live matrix must be reconfirmed",
-    "S-C remains hold while three large-tree public fixtures and Safari validation are unresolved"
+    "The ten-repository Node-worker result must be verified in the browser-worker public cohort",
+    "S-C remains hold while Safari and browser-worker cohort validation are unresolved"
   ],
   "rationale": "S-A and S-B criteria are met with preview MVP, onboarding, reliability policy, private-beta backend path, security checklist, observability/support, and release-ops rollback rehearsal. S-C is not fully met, so the launch decision is private-beta-ready rather than public-beta-ready."
 }

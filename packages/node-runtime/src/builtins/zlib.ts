@@ -11,13 +11,19 @@ import { BrowserBuffer } from "./buffer.ts";
 import { PassThrough } from "./stream.ts";
 
 export const Z_SYNC_FLUSH = 2;
+const MAX_STREAM_INPUT_BYTES = 32 * 1024 * 1024;
+const MAX_STREAM_OUTPUT_BYTES = 128 * 1024 * 1024;
 
 export class ZlibPassThrough extends PassThrough {
   _handle: ZlibNativeHandle;
+  #chunks: Uint8Array[] = [];
+  #inputBytes = 0;
+  #processChunk: (chunk: Uint8Array) => Uint8Array;
 
   constructor(options: Record<string, RuntimeValue> = {}) {
     super();
     const processChunk = createProcessChunk(options.mode);
+    this.#processChunk = processChunk;
     this._handle = {
       close() {},
       reset() {},
@@ -37,11 +43,40 @@ export class ZlibPassThrough extends PassThrough {
   }
 
   reset(): void {
+    this.#chunks = [];
+    this.#inputBytes = 0;
     this._handle.reset();
   }
 
   _processChunk(chunk: Uint8Array, flushFlag?: number): Uint8Array[] {
     return this._handle._processChunk(chunk, flushFlag);
+  }
+
+  protected override _transform(chunk: RuntimeValue, encoding: string, callback: (error?: Error | null) => void): void {
+    const bytes = typeof chunk === "string" ? BrowserBuffer.from(chunk, encoding as "utf8") : BrowserBuffer.from(chunk as Uint8Array);
+    if (this.#inputBytes + bytes.byteLength > MAX_STREAM_INPUT_BYTES) {
+      callback(new Error("zlib stream input exceeds 32 MiB"));
+      return;
+    }
+    this.#chunks.push(bytes);
+    this.#inputBytes += bytes.byteLength;
+    callback();
+  }
+
+  protected override _flush(callback: (error?: Error | null, data?: RuntimeValue) => void): void {
+    try {
+      if (this.#inputBytes === 0) {
+        callback();
+        return;
+      }
+      const output = this.#processChunk(BrowserBuffer.concat(this.#chunks, this.#inputBytes));
+      if (output.byteLength > MAX_STREAM_OUTPUT_BYTES) throw new Error("zlib stream output exceeds 128 MiB");
+      this.#chunks = [];
+      this.#inputBytes = 0;
+      callback(null, BrowserBuffer.from(output));
+    } catch (error) {
+      callback(error instanceof Error ? error : new Error(String(error)));
+    }
   }
 }
 

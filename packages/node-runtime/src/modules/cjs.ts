@@ -644,7 +644,7 @@ function compileCjsSource(runtime: ModuleRuntime, source: string, filename: stri
     if (!isDynamicCodeBlocked(error)) throw error;
     const evalFreeFactory = compileEvalFreeCjsSource(source, filename, globals);
     if (evalFreeFactory) return evalFreeFactory;
-    throw new Error("ECLICSPUNSUPPORTED: browser worker CSP blocks dynamic CommonJS evaluation for this module");
+    throw new Error(`ECLICSPUNSUPPORTED: browser worker CSP blocks dynamic CommonJS evaluation for this module: ${filename}`);
   }
   return ({ exports, require, module, filename, dirname }) => {
     const configuredDynamicImport = typeof globals.__dynamicImport === "function"
@@ -730,10 +730,14 @@ function prepareCjsSource(source: string): string {
   if (isWebpackBundle(sourceWithoutShebang) || !declaresLexicalBinding(sourceWithoutShebang, "process")) {
     injections.push("const process = __process;");
   }
-  if (!declaresLexicalBinding(sourceWithoutShebang, "global")) injections.push("const global = __global;");
+  if (isWebpackBundle(sourceWithoutShebang) || !declaresLexicalBinding(sourceWithoutShebang, "global")) {
+    injections.push("const global = __global;");
+  }
   if (!declaresLexicalBinding(sourceWithoutShebang, "globalThis")) injections.push("const globalThis = __globalThis;");
   if (!declaresLexicalBinding(sourceWithoutShebang, "console")) injections.push("const console = __console;");
-  if (!declaresLexicalBinding(sourceWithoutShebang, "Buffer")) injections.push("const Buffer = __Buffer;");
+  if (isWebpackBundle(sourceWithoutShebang) || !declaresLexicalBinding(sourceWithoutShebang, "Buffer")) {
+    injections.push("const Buffer = __Buffer;");
+  }
   if (!declaresLexicalBinding(sourceWithoutShebang, "setTimeout")) injections.push("const setTimeout = __setTimeout;");
   if (!declaresLexicalBinding(sourceWithoutShebang, "clearTimeout")) injections.push("const clearTimeout = __clearTimeout;");
   if (!declaresLexicalBinding(sourceWithoutShebang, "setInterval")) injections.push("const setInterval = __setInterval;");

@@ -115,6 +115,10 @@ class HangingBridgeCliEvaluationWorker {
     });
   }
 
+  emitError(message) {
+    for (const listener of this.#listeners.error) listener({ message });
+  }
+
   terminate() {
     this.terminated = true;
     this.#listeners.message.clear();
@@ -1359,10 +1363,32 @@ hangingBridgeResult.closeBridgedServers();
 await assert.rejects(hangingHttpRequest, /ECLIBRIDGECLOSED/);
 await assert.rejects(hangingFsWrite, /ECLIBRIDGECLOSED/);
 assert.equal(hangingBridgeWorker.terminated, true);
+assert.equal(hangingBridgeNetwork.listeners.size, 0);
 await assert.rejects(
   () => hangingBridgeResult.writeBridgedFile("/workspace/project/src/main.ts", "late write"),
   /ECLIBRIDGECLOSED/
 );
+
+const crashWorker = new HangingBridgeCliEvaluationWorker();
+const crashNetwork = createLoopbackNetwork();
+const crashResult = await createWorkerBackedAsyncCliModuleEvaluator({
+  loopbackNetwork: crashNetwork,
+  root: "/workspace",
+  workerFactory: () => crashWorker,
+  workspace: pendingCliWorkspace
+})({
+  entry: { name: "pending", version: "1.2.3", entry: "/workspace/pending/package/bin/pending.mjs", mode: "esm" },
+  args: [],
+  cwd: "/workspace/project"
+});
+const interruptedHttp = crashNetwork.fetch("http://127.0.0.1:6125/");
+const interruptedWrite = crashResult.writeBridgedFile("/workspace/project/src/main.ts", "update");
+await Promise.resolve();
+crashWorker.emitError("worker heap limit");
+await assert.rejects(interruptedHttp, /ECLIBRIDGECLOSED/);
+await assert.rejects(interruptedWrite, /ECLIBRIDGECLOSED/);
+assert.equal(crashNetwork.listeners.size, 0);
+assert.equal(crashWorker.terminated, true);
 
 const asyncErrorResult = await createAsyncCliModuleEvaluator({
   root: "/workspace",

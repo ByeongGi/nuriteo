@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-09-22",
+  "updatedAt": "2026-09-23",
   "version": "1.22.22",
-  "status": "hold",
-  "publicGrade": "candidate",
+  "status": "supported",
+  "publicGrade": "supported",
   "artifact": {
     "manifest": "vendor/manifests/yarn.json",
     "installed": "vendor/cli/yarn/1.22.22/installed.json",
@@ -11,6 +11,8 @@
     "entrySha256": "148e19db309ec9eaf7720b28df811337906eea8a1758deaa54afee60a6305e04",
     "bundle": "vendor/cli/yarn/1.22.22/package/lib/cli.js",
     "bundleSha256": "443ed69e76443b89afddccfc9faec1ff16eb5e500979cc079c696dec4c3d94ee",
+    "cspFactory": "apps/preview-service/public/vendor/yarn-cli-1.22.22.mjs",
+    "cspFactorySha256": "e6f01b28a30aae3d6bd6cf78302d0b1ba1f5e6e8d2f6f918989b6cd7f2a428a0",
     "bundleBytes": 5320747,
     "tarballSha256": "c17d3797fb9a9115bf375e31bfd30058cac6bc9c3b8807a3d8cb2094794b51ca"
   },
@@ -21,20 +23,20 @@
     { "id": "local-file-install", "status": "pass", "evidence": ["tests/package-managers/yarn-guest-runtime-boot.test.mjs"] },
     { "id": "scripts-and-exec", "status": "pass", "evidence": ["tests/package-managers/yarn-guest-runtime-boot.test.mjs", "tests/package-managers/terminal-commands.test.mjs"] },
     { "id": "cancellation-recovery-soak", "status": "pass", "evidence": ["tests/package-managers/yarn-guest-runtime-boot.test.mjs"] },
-    { "id": "registry-resolution-install", "status": "hold", "blocker": "The real Yarn bundle resolves registry metadata and downloads the tarball, but its decompression peek pipeline fails with write after end before materialization.", "evidence": ["tests/package-managers/yarn-registry-install-real-cli.test.mjs"] },
-    { "id": "real-cli-browser-execution", "status": "hold", "blocker": "Actual Yarn --version passes in the guest evaluator, but registry install still fails and a passing worker-backed browser fixture is absent.", "evidence": ["tests/package-managers/yarn-real-cli.test.mjs"] },
-    { "id": "detection-override-ui", "status": "hold", "blocker": "Onboarding detects Yarn and returns ERR_IMPORT_UNSUPPORTED_PACKAGE_MANAGER; preview shell intentionally blocks Yarn." }
+    { "id": "registry-resolution-install", "status": "pass", "evidence": ["tests/package-managers/yarn-registry-install-real-cli.test.mjs"] },
+    { "id": "real-cli-browser-execution", "status": "pass", "evidence": ["tests/package-managers/yarn-browser-worker-real-cli.test.mjs", "apps/preview-service/public/vendor/yarn-cli-1.22.22.mjs"] },
+    { "id": "detection-override-ui", "status": "pass", "evidence": ["tests/browser-host/project-onboarding.test.mjs", "tests/preview-service/ide4-runtime.test.mjs"] }
   ],
   "promotionGate": {
-    "status": "blocked",
+    "status": "passed",
     "requires": ["registry-resolution-install", "real-cli-browser-execution", "detection-override-ui"],
-    "reason": "The artifact and local plan are reproducible, but browser registry install and the product shell are not supported."
+    "reason": "Pinned Yarn Classic passes real registry materialization, strict-CSP Chrome Worker install/cancel/recovery, and product detection/override/shell gates."
   },
   "failureTaxonomy": {
     "YARN_REGISTRY_DECOMPRESSION_STREAM_ORDERING": {
-      "status": "open",
+      "status": "resolved",
       "stage": "post-tarball-download/pre-materialization",
-      "symptom": "Yarn's bundled decompression peek pipeline raises write after end.",
+      "symptom": "The bundled decompression peek pipeline formerly raised write after end; stream lifecycle and gunzip transform fixes now pass package materialization.",
       "evidence": "tests/package-managers/yarn-registry-install-real-cli.test.mjs"
     }
   }

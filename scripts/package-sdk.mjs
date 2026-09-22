@@ -212,6 +212,15 @@ for (const dir of [
 ]) {
   copyDir(dir, path.join(packageRoot, dir));
 }
+fs.mkdirSync(path.join(packageRoot, "vendor"), { recursive: true });
+fs.copyFileSync(
+  path.join(root, "apps/preview-service/public/vendor/yarn-cli-1.22.22.mjs"),
+  path.join(packageRoot, "vendor/yarn-cli-1.22.22.mjs")
+);
+const yarnGate = readJson(path.join(root, "compat/yarn-v1-product-support.json"));
+if (sha256(path.join(packageRoot, "vendor/yarn-cli-1.22.22.mjs")) !== yarnGate.artifact.cspFactorySha256) {
+  throw new Error("SDK Yarn Classic factory differs from the pinned product support asset");
+}
 
 rewritePackagedSource("packages/sdk/src/container.ts", [
   ['"@cargo-container/browser-host/supervisor"', '"../../browser-host/src/supervisor.ts"'],
@@ -302,6 +311,7 @@ Content-Security-Policy: default-src 'self'; script-src 'self'; worker-src 'self
 \`\`\`
 
 Serve \`assets/system_wasm.wasm\` as \`application/wasm\`.
+Serve \`vendor/yarn-cli-1.22.22.mjs\` as \`text/javascript\` beside the workers; the process worker verifies its SHA-256 before loading Yarn Classic.
 
 Asset base path for this package: \`${sdkBasePath}\`
 Override at package time with \`--base-path=/your/deploy/path/\` or \`CARGO_CONTAINER_SDK_BASE_PATH\`.
@@ -346,6 +356,10 @@ writeFile("asset-manifest.json", `${JSON.stringify({
     processWorker: {
       path: "workers/process-worker.ts",
       sha256: sha256(path.join(packageRoot, "workers/process-worker.ts"))
+    },
+    yarnClassicFactory: {
+      path: "vendor/yarn-cli-1.22.22.mjs",
+      sha256: sha256(path.join(packageRoot, "vendor/yarn-cli-1.22.22.mjs"))
     },
     systemWasm: {
       path: "assets/system_wasm.wasm",

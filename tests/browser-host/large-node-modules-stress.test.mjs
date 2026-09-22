@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createMemoryOpfs, createQuotaManagedOpfs, createProjectWorkspaceStore } from "../../packages/browser-host/src/index.ts";
-import { MemoryPackageManagerWorkspace } from "../../packages/node-runtime/src/package-managers/workspace.ts";
+import { MemoryPackageManagerWorkspace, WorkspaceMemoryLimitError } from "../../packages/node-runtime/src/package-managers/workspace.ts";
 
 const policy = JSON.parse(
   await import("node:fs").then((fs) => fs.readFileSync(new URL("../../compat/runtime-reliability-policy.json", import.meta.url), "utf8"))
@@ -53,6 +53,26 @@ for (let i = 0; i < 100; i += 1) {
   project.writeText(`/workspace/stress-app/src/mod-${i}.js`, `export const n = ${i};\n`);
 }
 assert.equal(project.listFiles().length, 100);
+
+const boundedWorkspace = new MemoryPackageManagerWorkspace([], 10);
+boundedWorkspace.writeText("/workspace/cache/a", "123456");
+assert.equal(boundedWorkspace.usedBytes, 6);
+assert.throws(
+  () => boundedWorkspace.writeText("/workspace/cache/b", "12345"),
+  (error) => error instanceof WorkspaceMemoryLimitError && error.code === "ENOMEM" && error.limitBytes === 10
+);
+assert.equal(boundedWorkspace.usedBytes, 6);
+assert.equal(boundedWorkspace.exists("/workspace/cache/b"), false);
+boundedWorkspace.remove("/workspace/cache/a");
+boundedWorkspace.writeText("/workspace/cache/b", "12345");
+assert.equal(boundedWorkspace.usedBytes, 5);
+boundedWorkspace.writeText("/workspace/cache/b", "12");
+assert.equal(boundedWorkspace.usedBytes, 2);
+boundedWorkspace.writeText("/workspace/cache/a", "12345678");
+assert.equal(boundedWorkspace.usedBytes, 10);
+boundedWorkspace.rename("/workspace/cache/a", "/workspace/cache/c");
+assert.equal(boundedWorkspace.usedBytes, 10);
+assert.equal(boundedWorkspace.readText("/workspace/cache/c"), "12345678");
 
 console.log(
   `large node_modules stress ok files=${fileCount} samples=${samplePaths.length} elapsedMs=${Date.now() - started} freedCacheBytes=${eviction.freedBytes}`

@@ -19,16 +19,21 @@ export class WorkerRegistry {
     const key = processKey(pid, generation);
     const worker = this.#workers.get(key);
     if (!worker) return false;
-    worker.terminate();
     this.#workers.delete(key);
+    worker.terminate();
     return true;
   }
 
   terminateAll(): void {
-    for (const worker of this.#workers.values()) {
-      worker.terminate();
-    }
+    const workers = [...this.#workers.values()];
     this.#workers.clear();
+    for (const worker of workers) {
+      try {
+        worker.terminate();
+      } catch {
+        // A broken worker must not prevent the other workers from being released.
+      }
+    }
   }
 
   size(): number {

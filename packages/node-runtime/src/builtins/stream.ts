@@ -85,12 +85,15 @@ export class Readable extends Stream {
       this.#ended = true;
       this.__browserReadableEnded = true;
       this.readable = false;
-      if (this.listenerCount("end") > 0) this.#emitEnd();
+      this.#scheduleRead();
       return false;
     }
     const value = normalizeReadableChunk(chunk, this.#encoding);
     if (this.listenerCount("data") > 0) this.emit("data", value);
-    else this.#queue.push(value);
+    else {
+      this.#queue.push(value);
+      if (this.listenerCount("readable") > 0) this.#scheduleRead();
+    }
     return true;
   }
 
@@ -148,7 +151,8 @@ export class Readable extends Stream {
         while (this.#queue.length > 0 && this.listenerCount("data") > 0) {
           this.emit("data", this.#queue.shift());
         }
-        if (this.#ended && this.listenerCount("end") > 0) this.#emitEnd();
+        if (this.#queue.length > 0 && this.listenerCount("readable") > 0) this.emit("readable");
+        if (this.#ended && this.#queue.length === 0 && this.listenerCount("end") > 0) this.#emitEnd();
         if (!this.#ended) void this._read(4096);
       } catch (error) {
         this.destroy(error);
@@ -262,6 +266,7 @@ export class Writable extends Stream {
 }
 
 export class Duplex extends Readable {
+  writable = true;
   #writable = new Writable();
 
   get writableEnded(): boolean {
@@ -273,7 +278,9 @@ export class Duplex extends Readable {
   }
 
   end(chunkOrCallback?: RuntimeValue | StreamCallback, encodingOrCallback?: string | StreamCallback, callback?: StreamCallback): this {
+    if (!this.writable) return this;
     this.#writable.end(chunkOrCallback, encodingOrCallback, callback);
+    this.writable = false;
     this.push(null);
     return this;
   }
@@ -303,6 +310,7 @@ export class Transform extends Duplex {
   }
 
   end(chunkOrCallback?: RuntimeValue | StreamCallback, encodingOrCallback?: string | StreamCallback, callback?: StreamCallback): this {
+    if (!this.writable) return this;
     const chunk = typeof chunkOrCallback === "function" ? undefined : chunkOrCallback;
     const done = typeof chunkOrCallback === "function"
       ? chunkOrCallback
@@ -317,6 +325,8 @@ export class Transform extends Duplex {
         return;
       }
       if (data !== undefined) this.push(data);
+      this.writable = false;
+      this.emit("finish");
       this.push(null);
       done?.();
     });

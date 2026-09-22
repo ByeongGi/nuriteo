@@ -16,7 +16,7 @@ export { createYarnRunner, YarnRunner } from "./yarn-runner.ts";
 export { createPackageScriptRunner, PackageScriptRunner } from "./script-runner.ts";
 export { createPackageTarballCache, extractTarEntries, PackageTarballCache } from "./tarball-cache.ts";
 export { createPackageManagerTerminalCommands } from "./terminal-commands.ts";
-export { MemoryPackageManagerWorkspace } from "./workspace.ts";
+export { DEFAULT_WORKSPACE_MEMORY_LIMIT_BYTES, MemoryPackageManagerWorkspace, WorkspaceMemoryLimitError } from "./workspace.ts";
 export type { InstallTransactionOptions, InstallTransactionResult } from "./install-transaction.ts";
 export type { CliEntryModuleMode, CliEntryReadiness, CliEntryReadinessReason, CliEntryReadinessReasonCode, CliEntryReadinessStatus, InspectCliEntryReadinessOptions } from "./cli-entry-readiness.ts";
 export type { PnpmStoreApplyOptions, PnpmStoreApplyResult, PnpmStorePlan, PnpmStorePlanOptions, PnpmWorkspaceLink, PnpmWorkspacePackage, PnpmWorkspaceReader, PnpmWorkspaceWriter } from "./pnpm-store.ts";

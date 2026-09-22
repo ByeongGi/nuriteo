@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-09-18",
+  "updatedAt": "2026-09-23",
   "scope": {
     "goal": "SG25 service workflow fixture set (20) with pass or documented hold counts",
     "total": 20,
@@ -8,8 +8,8 @@
   },
   "summary": {
     "total": 20,
-    "pass": 15,
-    "hold": 5,
+    "pass": 18,
+    "hold": 2,
     "passOrHold": 20,
     "sg25": "pass"
   },
@@ -23,10 +23,10 @@
     },
     {
       "id": "awe-templates-react-starter",
-      "status": "hold",
-      "score": 25,
+      "status": "pass",
+      "score": 100,
       "source": "compat/ecosystem-fixture-actual-product-results.json",
-      "notes": "Documented hold from actual product scoring (materialization/worker limits)."
+      "notes": "Exact-revision Node worker actual-product workflow pass."
     },
     {
       "id": "hvalette-react-vite-template",
@@ -65,10 +65,10 @@
     },
     {
       "id": "ravaniproshan-velorah-landing",
-      "status": "hold",
-      "score": 25,
+      "status": "pass",
+      "score": 100,
       "source": "compat/ecosystem-fixture-actual-product-results.json",
-      "notes": "Documented hold from actual product scoring (materialization/worker limits)."
+      "notes": "Exact-revision Node worker actual-product workflow pass."
     },
     {
       "id": "commencis-starter-react-vite",
@@ -79,10 +79,10 @@
     },
     {
       "id": "r35007-vite-react-typescript",
-      "status": "hold",
-      "score": 25,
+      "status": "pass",
+      "score": 100,
       "source": "compat/ecosystem-fixture-actual-product-results.json",
-      "notes": "Documented hold from actual product scoring (materialization/worker limits)."
+      "notes": "Exact-revision Node worker actual-product workflow pass."
     },
     {
       "id": "local-vite-vue-fixture",

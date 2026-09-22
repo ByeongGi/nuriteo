@@ -11,19 +11,20 @@ const {
 } = await import(pathToFileURL(path.join(root, "packages/preview-service/src/index.ts")).href);
 
 const controller = createPreviewWorkflowController();
+controller.setPackageManagerOverride("yarn");
 const loaded = controller.loadTemplate("vite-react");
 assert.equal(loaded.phase, "template_loaded");
 assert.ok(loaded.project);
+assert.equal(loaded.workflow.manager, "yarn");
 
 const tree = controller.exportTreeJson();
 assert.ok(tree["package.json"], "exportTreeJson should include package.json");
 assert.ok(tree["package.json"].file?.contents.includes("\""), "package.json should be a file node");
 
 const yarn = await controller.runShellCommand("yarn install");
-assert.notEqual(yarn.exitCode, 0);
-assert.match(yarn.stderr, /yarn/i);
-assert.match(yarn.stderr, /npm|pnpm/i);
-assert.match(yarn.stderr, /evaluation-only|unsupported/i);
+assert.equal(yarn.exitCode, 0, yarn.stderr);
+assert.equal(yarn.stderr, "");
+assert.equal(loaded.workflow.workspace.exists(`${loaded.workflow.projectRoot}/yarn.lock`), true);
 
 const before = controller.getChangeStatus();
 assert.deepEqual(before.dirty, []);

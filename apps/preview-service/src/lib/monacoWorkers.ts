@@ -89,7 +89,7 @@ export async function probeMonacoLanguageFeatures(): Promise<MonacoLanguageFeatu
   const consumerModel = monaco.editor.createModel(consumerSource, "typescript", consumerUri);
 
   try {
-    const getWorker = await monaco.typescript.getTypeScriptWorker();
+    const getWorker = await getRegisteredTypeScriptWorker();
     const worker = await getWorker(consumerUri);
     const fileName = consumerUri.toString();
     const definitionOffset = consumerSource.indexOf("answer.toFixed");
@@ -123,7 +123,7 @@ async function runTypeScriptWorkerProbe(): Promise<MonacoWorkerStatus> {
   const model = existing || monaco.editor.createModel("const cargoProbe: string = 42;\n", "typescript", uri);
 
   try {
-    const getWorker = await monaco.typescript.getTypeScriptWorker();
+    const getWorker = await getRegisteredTypeScriptWorker();
     const worker = await getWorker(uri);
     const diagnostics = await withTimeout(
       waitForProbeDiagnostics(worker, uri.toString()),
@@ -149,6 +149,19 @@ async function waitForProbeDiagnostics(
     await new Promise((resolve) => setTimeout(resolve, retryIntervalMs));
   }
   throw new Error("Monaco TypeScript worker returned no probe diagnostic.");
+}
+
+async function getRegisteredTypeScriptWorker() {
+  // Monaco registers a language asynchronously after its first model appears.
+  const deadline = Date.now() + WORKER_READY_TIMEOUT_MS;
+  while (true) {
+    try {
+      return await monaco.typescript.getTypeScriptWorker();
+    } catch (error) {
+      if (error !== "TypeScript not registered!" || Date.now() >= deadline) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+  }
 }
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {

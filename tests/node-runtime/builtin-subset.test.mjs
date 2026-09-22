@@ -91,6 +91,17 @@ exerciseBuiltins({
   util: utilBuiltin
 });
 
+const hostBuffer = globalThis.Buffer;
+try {
+  globalThis.Buffer = undefined;
+  assert.equal(RuntimeBuffer.from("aGk", "base64").toString(), "hi");
+  assert.equal(RuntimeBuffer.from("aGk= \n#", "base64").toString(), "hi");
+  assert.equal(RuntimeBuffer.from("_w", "base64").toString("hex"), "ff");
+  assert.equal(RuntimeBuffer.from("a", "base64").byteLength, 0);
+} finally {
+  globalThis.Buffer = hostBuffer;
+}
+
 const requireBuiltin = createBuiltinLoader({});
 const bufferBuiltin = requireBuiltin("node:buffer");
 assert.equal(bufferBuiltin.Buffer.from("ok").toString(), "ok");

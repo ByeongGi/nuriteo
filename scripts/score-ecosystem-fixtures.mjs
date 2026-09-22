@@ -2,6 +2,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { createHash } from "node:crypto";
 import { spawn, spawnSync } from "node:child_process";
 import {
   createViteDependencyArtifactClosureFromWorkspace,
@@ -19,6 +20,7 @@ import { NodeThreadCliEvaluationWorker } from "./lib/node-thread-cli-worker.mjs"
 const root = new URL("..", import.meta.url).pathname;
 const matrixPath = path.join(root, "compat/ecosystem-fixtures.json");
 const matrix = JSON.parse(fs.readFileSync(matrixPath, "utf8"));
+const rescoreConfig = JSON.parse(fs.readFileSync(path.join(root, "compat/ecosystem-rescore-config.json"), "utf8"));
 const args = new Set(process.argv.slice(2));
 const planOnly = args.has("--plan");
 const mode = valueAfter("--mode") || "reference";
@@ -50,6 +52,10 @@ const payload = {
   generatedAt: new Date().toISOString(),
   source: "compat/ecosystem-fixtures.json",
   inputContract: {
+    executionHost: mode === "product-actual" ? "node-worker-thread" : "host-node",
+    nodeVersion: process.versions.node,
+    npmVersion: run("npm", ["--version"], root).stdout?.trim() || null,
+    pnpmVersion: rescoreConfig.runtime.pnpm,
     fixtureRevisions: Object.fromEntries(selected.map((fixture) => [fixture.id, fixture.revision || null])),
     viteVersion: actualVitePackageRoot ? readPackageVersion(actualVitePackageRoot) : null
   },
@@ -185,7 +191,7 @@ async function scoreProductActualFixture(fixture) {
     : { artifacts: [], missing: [] };
   const dependencyMerge = mergeViteDependencyArtifacts(context.dependencyArtifacts, fixtureDependencyResult.artifacts);
   const workflow = createActualProductWorkflow(fixture, dependencyMerge.artifacts, context);
-  const finalSourceImport = ensureAndMountFixtureSource(workflow, fixture);
+  const finalSourceImport = sourceImport.ok ? ensureAndMountFixtureSource(workflow, fixture) : sourceImport;
   const criteria = [];
 
   try {
@@ -258,6 +264,7 @@ async function scoreProductActualFixture(fixture) {
       dependencyArtifactCount: dependencyMerge.artifacts.length,
       fixtureDependencyClosureIterations: fixtureDependencyResult.closureIterations || [],
       fixtureDependencyArtifacts: fixtureDependencyResult.artifacts.map((artifact) => artifact.name),
+      fixtureDependencyLockfile: fixtureDependencyResult.lockfile || null,
       importedFiles: finalSourceImport.fileCount || 0,
       missingFixtureDependencyArtifacts: fixtureDependencyResult.missing,
       sourceImport: finalSourceImport.summary,
@@ -497,7 +504,23 @@ function createFixtureDependencyArtifacts(fixture, projectDir, context) {
     }
     result = collectFixtureDependencyArtifacts(fixture, projectDir, context, names);
   }
+  const lockfile = fixture.packageManager === "pnpm" ? path.join(projectDir, "pnpm-lock.yaml") : path.join(projectDir, "package-lock.json");
+  if (fs.existsSync(lockfile)) {
+    const sha256 = createHash("sha256").update(fs.readFileSync(lockfile)).digest("hex");
+    const expected = rescoreConfig.generatedFixtureLockSha256?.[fixture.id];
+    if (expected && sha256 !== expected) {
+      throw new Error(`EFIXTURELOCKDRIFT: ${fixture.id} generated lockfile hash ${sha256} differs from pinned ${expected}`);
+    }
+    result.lockfile = {
+      source: isTrackedFixtureLockfile(projectDir, path.basename(lockfile)) ? "upstream" : "generated",
+      sha256
+    };
+  }
   return result;
+}
+
+function isTrackedFixtureLockfile(projectDir, filename) {
+  return run("git", ["ls-files", "--error-unmatch", filename], projectDir).status === 0;
 }
 
 function collectFixtureDependencyArtifacts(fixture, projectDir, context, names) {
@@ -534,17 +557,31 @@ function collectFixtureDependencyArtifacts(fixture, projectDir, context, names) 
 function ensureFixtureDependenciesInstalled(fixture, projectDir) {
   const cached = fixtureDependencyInstalls.get(projectDir);
   if (cached) return cached;
+  const preparation = rescoreConfig.fixtureDependencyPreparation || {};
   let result;
   if (fixture.packageManager === "pnpm") {
-    result = run("pnpm", [
+    const lockfile = path.join(projectDir, "pnpm-lock.yaml");
+    const version = preparation.pnpmVersions?.[fixture.id] || rescoreConfig.runtime.pnpm;
+    const isolatedWorkspace = preparation.isolatedWorkspaceIds?.includes(fixture.id) || false;
+    const args = [
+      `pnpm@${version}`,
       "install",
-      "--dir", projectDir,
-      "--frozen-lockfile",
+      ...(isolatedWorkspace ? ["--ignore-workspace"] : []),
+      fs.existsSync(lockfile) ? "--frozen-lockfile" : "--no-frozen-lockfile",
       "--ignore-scripts",
       "--reporter=append-only"
-    ], root);
+    ];
+    result = run("corepack", args, projectDir);
   } else if (fixture.packageManager === "npm") {
-    result = run("npm", ["ci", "--ignore-scripts", "--no-audit", "--no-fund"], projectDir);
+    const cache = path.join(workdir, ".npm-cache");
+    const common = ["--ignore-scripts", "--no-audit", "--no-fund", `--cache=${cache}`];
+    const legacyPeers = preparation.npmLegacyPeerDepsIds?.includes(fixture.id) ? ["--legacy-peer-deps"] : [];
+    if (!fs.existsSync(path.join(projectDir, "package-lock.json"))) {
+      result = run("npm", ["install", "--package-lock-only", ...common, ...legacyPeers], projectDir);
+    }
+    if (!result || result.status === 0) {
+      result = run("npm", ["ci", ...common, ...legacyPeers], projectDir);
+    }
   } else {
     result = {
       status: 1,

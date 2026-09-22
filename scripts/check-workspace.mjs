@@ -272,6 +272,7 @@ const required = [
   "docs/productization/service-backend.md",
   "tests/service-backend/project-service.test.mjs",
   "compat/runtime-reliability-policy.json",
+  "compat/large-fixture-restart-soak.json",
   "docs/productization/browser-support-grades.md",
   "scripts/check-runtime-reliability-policy.mjs",
   "tests/preview-service/workflow-soak.test.mjs",

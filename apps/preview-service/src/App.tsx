@@ -146,6 +146,7 @@ export default function App() {
           <option value="">auto</option>
           <option value="npm">npm</option>
           <option value="pnpm">pnpm</option>
+          <option value="yarn">Yarn v1</option>
         </select>
       </div>
     </div>

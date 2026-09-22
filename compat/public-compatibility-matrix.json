@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-09-18",
+  "updatedAt": "2026-09-23",
   "scope": {
     "goal": "Publish the current WebContainers-parity compatibility surface for developers.",
     "productRuntime": "browser-guest-node-runtime",
-    "parityBoundary": "Node/npm/pnpm/Vite/browser preview/storage/SDK are in scope; Docker, direct TCP databases, arbitrary native binaries, and native addons without a WASM/browser fallback are out of scope."
+    "parityBoundary": "Node/npm/pnpm/Yarn Classic 1.22.22/Vite/browser preview/storage/SDK are in scope; Yarn Berry, private registry auth UX, Docker, direct TCP databases, arbitrary native binaries, and native addons without a WASM/browser fallback are out of scope."
   },
   "frameworks": [
     {
@@ -147,17 +147,16 @@
     "productAdapterPass": 10,
     "productAdapterScoreAtLeast75": 10,
     "actualProductMeasured": 10,
-    "actualProductPass": 7,
+    "actualProductPass": 10,
     "actualProductPartialPass": 0,
-    "actualProductScoreAtLeast50": 7,
-    "actualProductScoreAtLeast75": 7,
-    "actualProductScoreAtLeast100": 7,
-    "actualProductBlockers": [
-      "3 of 10 measured public Vite React fixtures remain hold due large transitive fixture materialization and worker stability limits"
-    ],
+    "actualProductScoreAtLeast50": 10,
+    "actualProductScoreAtLeast75": 10,
+    "actualProductScoreAtLeast100": 10,
+    "actualProductExecutionHost": "node-worker-thread",
+    "actualProductBlockers": [],
     "serviceWorkflowTotal": 20,
-    "serviceWorkflowPass": 15,
-    "serviceWorkflowHold": 5,
+    "serviceWorkflowPass": 18,
+    "serviceWorkflowHold": 2,
     "serviceWorkflowPassOrHold": 20
   },
   "unsupported": [

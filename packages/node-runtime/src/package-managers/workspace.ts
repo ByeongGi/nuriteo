@@ -39,13 +39,33 @@ export interface PackageManagerWorkspaceLinkSnapshot {
   target: string;
 }
 
+export const DEFAULT_WORKSPACE_MEMORY_LIMIT_BYTES = 256 * 1024 * 1024;
+
+export class WorkspaceMemoryLimitError extends Error {
+  readonly code = "ENOMEM";
+  readonly usedBytes: number;
+  readonly requestedBytes: number;
+  readonly limitBytes: number;
+  constructor(usedBytes: number, requestedBytes: number, limitBytes: number) {
+    super(`Workspace memory limit exceeded: ${usedBytes + requestedBytes} bytes exceeds ${limitBytes} bytes`);
+    this.name = "WorkspaceMemoryLimitError";
+    this.usedBytes = usedBytes;
+    this.requestedBytes = requestedBytes;
+    this.limitBytes = limitBytes;
+  }
+}
+
 export class MemoryPackageManagerWorkspace implements PackageManagerWorkspace {
   readonly files = new Map<string, Uint8Array>();
   readonly directories = new Set<string>(["/"]);
   readonly links = new Map<string, string>();
   readonly #directoryEntries = new Map<string, Set<string>>([["/", new Set()]]);
+  readonly memoryLimitBytes: number;
+  #usedBytes = 0;
 
-  constructor(mounts: PackageManagerWorkspaceMount[] = []) {
+  constructor(mounts: PackageManagerWorkspaceMount[] = [], memoryLimitBytes = DEFAULT_WORKSPACE_MEMORY_LIMIT_BYTES) {
+    if (!Number.isSafeInteger(memoryLimitBytes) || memoryLimitBytes < 0) throw new RangeError("Invalid workspace memory limit");
+    this.memoryLimitBytes = memoryLimitBytes;
     for (const mount of mounts) {
       if (mount.encoding === "base64") {
         this.writeBytes(mount.path, decodeBase64(mount.data));
@@ -96,8 +116,14 @@ export class MemoryPackageManagerWorkspace implements PackageManagerWorkspace {
 
   writeBytes(path: string, data: Uint8Array): void {
     const normalized = normalizePath(path);
+    const previousBytes = this.files.get(normalized)?.byteLength ?? 0;
+    const nextUsedBytes = this.#usedBytes - previousBytes + data.byteLength;
+    if (nextUsedBytes > this.memoryLimitBytes) {
+      throw new WorkspaceMemoryLimitError(this.#usedBytes - previousBytes, data.byteLength, this.memoryLimitBytes);
+    }
     ensureDirectory(this.directories, dirname(normalized), (directory) => this.#indexPath(directory));
     this.files.set(normalized, data.slice());
+    this.#usedBytes = nextUsedBytes;
     this.links.delete(normalized);
     this.#indexPath(normalized);
   }
@@ -126,11 +152,16 @@ export class MemoryPackageManagerWorkspace implements PackageManagerWorkspace {
 
   remove(path: string): void {
     const normalized = normalizePath(path);
-    this.files.delete(normalized);
+    const removeFile = (file: string) => {
+      const data = this.files.get(file);
+      if (data) this.#usedBytes -= data.byteLength;
+      this.files.delete(file);
+    };
+    removeFile(normalized);
     this.links.delete(normalized);
     const prefix = `${normalized}/`;
     for (const file of [...this.files.keys()]) {
-      if (file.startsWith(prefix)) this.files.delete(file);
+      if (file.startsWith(prefix)) removeFile(file);
     }
     for (const link of [...this.links.keys()]) {
       if (link.startsWith(prefix)) this.links.delete(link);
@@ -146,11 +177,20 @@ export class MemoryPackageManagerWorkspace implements PackageManagerWorkspace {
   rename(source: string, target: string): void {
     const normalizedSource = normalizePath(source);
     const normalizedTarget = normalizePath(target);
+    if (normalizedSource === normalizedTarget) return;
+    if (normalizedTarget.startsWith(`${normalizedSource}/`)) {
+      throw createWorkspaceError("EINVAL", `Cannot move a directory into itself: ${normalizedTarget}`);
+    }
     this.remove(normalizedTarget);
     const file = this.files.get(normalizedSource);
     if (file !== undefined) {
-      this.writeBytes(normalizedTarget, file);
-      this.remove(normalizedSource);
+      ensureDirectory(this.directories, dirname(normalizedTarget), (directory) => this.#indexPath(directory));
+      this.files.delete(normalizedSource);
+      const replaced = this.files.get(normalizedTarget);
+      if (replaced) this.#usedBytes -= replaced.byteLength;
+      this.files.set(normalizedTarget, file);
+      this.links.delete(normalizedTarget);
+      this.#rebuildDirectoryEntries();
       return;
     }
     const link = this.links.get(normalizedSource);
@@ -200,8 +240,12 @@ export class MemoryPackageManagerWorkspace implements PackageManagerWorkspace {
     };
   }
 
-  static fromSnapshot(snapshot: PackageManagerWorkspaceSnapshot): MemoryPackageManagerWorkspace {
-    const workspace = new MemoryPackageManagerWorkspace(snapshot.files);
+  get usedBytes(): number {
+    return this.#usedBytes;
+  }
+
+  static fromSnapshot(snapshot: PackageManagerWorkspaceSnapshot, memoryLimitBytes = DEFAULT_WORKSPACE_MEMORY_LIMIT_BYTES): MemoryPackageManagerWorkspace {
+    const workspace = new MemoryPackageManagerWorkspace(snapshot.files, memoryLimitBytes);
     workspace.directories.clear();
     for (const directory of snapshot.directories) workspace.directories.add(normalizePath(directory));
     workspace.directories.add("/");

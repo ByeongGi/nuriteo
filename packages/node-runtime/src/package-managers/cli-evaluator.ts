@@ -12,11 +12,12 @@ import { fileURLToPath } from "../builtins/url.ts";
 import { createWorkspaceModuleRuntime, type WorkspaceModuleReader } from "../modules/index.ts";
 import type { ModuleRuntime } from "../modules/runtime.ts";
 import { createLoopbackNetwork, type LoopbackNetwork, type RuntimeHttpRequest, type RuntimeHttpResponse, type RuntimeWebSocket } from "../net/index.ts";
-import type { CliEntry, CliRunResult, RuntimeEnv, RuntimeFsBinding, RuntimeFsData, RuntimeNamespace, RuntimeValue } from "../types.ts";
+import type { CjsContext, CliEntry, CliRunResult, RuntimeEnv, RuntimeFsBinding, RuntimeFsData, RuntimeNamespace, RuntimeValue } from "../types.ts";
 import { inspectCliEntryReadiness } from "./cli-entry-readiness.ts";
 import { MemoryPackageManagerWorkspace, type PackageManagerWorkspaceSnapshot, type PackageManagerWorkspaceWriter } from "./workspace.ts";
 
 export interface CliModuleEvaluatorOptions {
+  precompiledCjsFactories?: Record<string, (context: CjsContext, globals: Record<string, RuntimeValue>) => void>;
   fsTrace?: CliEvaluationFsTraceEntry[];
   loopbackNetwork?: LoopbackNetwork;
   onOutputSnapshot?: (snapshot: () => CliEvaluationOutputSnapshot) => void;
@@ -25,7 +26,27 @@ export interface CliModuleEvaluatorOptions {
   onFsFacade?: (fs: RuntimeFsBinding) => void;
   root?: string;
   writer?: PackageManagerWorkspaceWriter;
+  nestedWorkerFactory?: CliNestedWorkerFactory;
 }
+
+export interface CliNestedWorkerRequest {
+  filename: string;
+  workerData?: unknown;
+  cwd: string;
+  env: Record<string, string>;
+  root: string;
+  workspaceSnapshot: PackageManagerWorkspaceSnapshot;
+}
+
+export interface CliNestedWorkerPort {
+  postMessage(value: unknown): void;
+  terminate(): Promise<number> | void;
+  onMessage(listener: (value: unknown) => void): void;
+  onError(listener: (error: Error) => void): void;
+  onExit(listener: (code: number) => void): void;
+}
+
+export type CliNestedWorkerFactory = (request: CliNestedWorkerRequest) => CliNestedWorkerPort;
 
 export interface AsyncCliModuleEvaluatorOptions extends CliModuleEvaluatorOptions {
   exitTimeoutMs?: number;
@@ -279,6 +300,10 @@ export function createWorkerBackedAsyncCliModuleEvaluator(
         if (closed) return;
         closed = true;
         if (timeout) clearTimeout(timeout);
+        for (const listener of bridgedListeners) listener.close();
+        bridgedListeners.length = 0;
+        for (const socket of bridgedWebSockets.values()) socket.close();
+        bridgedWebSockets.clear();
         for (const request of pendingHttpRequests.values()) {
           clearTimeout(request.timeout);
           request.reject(error);
@@ -290,13 +315,7 @@ export function createWorkerBackedAsyncCliModuleEvaluator(
         worker.removeEventListener("error", onError);
         worker.terminate();
       };
-      const closeBridgedServers = () => {
-        for (const listener of bridgedListeners) listener.close();
-        bridgedListeners.length = 0;
-        for (const socket of bridgedWebSockets.values()) socket.close();
-        bridgedWebSockets.clear();
-        cleanup();
-      };
+      const closeBridgedServers = () => cleanup();
       const writeBridgedFile = (path: string, data: string) => {
         if (closed) return Promise.reject(new Error("ECLIBRIDGECLOSED: CLI evaluation worker bridge closed"));
         const writeId = nextFsWriteId++;
@@ -470,7 +489,7 @@ export function createWorkerBackedAsyncCliModuleEvaluator(
 
 export async function evaluateCliModuleWorkerMessage(
   message: CliEvaluationWorkerEvaluateMessage,
-  options: { httpBridge?: CliEvaluationHttpBridge } = {}
+  options: { httpBridge?: CliEvaluationHttpBridge; nestedWorkerFactory?: CliNestedWorkerFactory; precompiledCjsFactories?: CliModuleEvaluatorOptions["precompiledCjsFactories"] } = {}
 ): Promise<CliEvaluationWorkerResultMessage> {
   try {
     const workspace = MemoryPackageManagerWorkspace.fromSnapshot(message.workspaceSnapshot);
@@ -498,6 +517,8 @@ export async function evaluateCliModuleWorkerMessage(
       ...(message.settleTimeoutMs !== undefined ? { settleTimeoutMs: message.settleTimeoutMs } : {}),
       ...(message.waitForExit ? { waitForExit: true } : {}),
       ...(options.httpBridge ? { loopbackNetwork: options.httpBridge.network } : {}),
+      ...(options.nestedWorkerFactory ? { nestedWorkerFactory: options.nestedWorkerFactory } : {}),
+      ...(options.precompiledCjsFactories ? { precompiledCjsFactories: options.precompiledCjsFactories } : {}),
       writer: workspace
     })(message.request);
     return {
@@ -652,6 +673,7 @@ function startCliModuleEvaluation(
     File,
     FormData,
     Headers,
+    Promise,
     ReadableStream,
     Request,
     Response,
@@ -695,6 +717,7 @@ function startCliModuleEvaluation(
   const workerThreads = createCliWorkerThreadsBuiltin({
     fs,
     globals: globalObject,
+    ...(options.nestedWorkerFactory ? { nestedWorkerFactory: options.nestedWorkerFactory } : {}),
     parentProcess: process,
     reader: options.reader,
     root: options.root || "/workspace"
@@ -741,6 +764,9 @@ function startCliModuleEvaluation(
       process
     }
   });
+  for (const [path, factory] of Object.entries(options.precompiledCjsFactories || {})) {
+    runtime.register(path, { kind: "cjs", factory: (context) => factory(context, runtime!.globals) });
+  }
 
   let exitCode = 0;
   let ready = Promise.resolve();
@@ -1300,6 +1326,7 @@ function wireExecCallback(child: ChildProcess, callback: CliExecCallback): void 
 function createCliWorkerThreadsBuiltin(options: {
   fs: RuntimeFsBinding;
   globals: Record<string, unknown>;
+  nestedWorkerFactory?: CliNestedWorkerFactory;
   parentProcess: BrowserProcess;
   reader: WorkspaceModuleReader;
   root: string;
@@ -1309,6 +1336,83 @@ function createCliWorkerThreadsBuiltin(options: {
     ref: () => InlineParentPort;
     unref: () => InlineParentPort;
   };
+
+  class IsolatedWorker extends EventEmitter {
+    readonly stdin = null;
+    readonly stdout = null;
+    readonly stderr = null;
+    readonly resourceLimits = Object.freeze({});
+    readonly threadId: number;
+    readonly workerData: unknown;
+    onerror: ((error: Error) => void) | null = null;
+    onmessage: ((event: { data: unknown }) => void) | null = null;
+    #port: CliNestedWorkerPort | null = null;
+    #terminated = false;
+
+    constructor(filename: string | URL, workerOptions: { eval?: boolean; workerData?: unknown } = {}) {
+      super();
+      this.threadId = nextInlineWorkerThreadId++;
+      this.workerData = workerOptions.workerData;
+      if (workerOptions.eval) {
+        queueMicrotask(() => this.#fail(new Error("eval workers are not supported by CLI module evaluator")));
+        return;
+      }
+      const snapshotReader = options.reader as WorkspaceModuleReader & { snapshot?: () => PackageManagerWorkspaceSnapshot };
+      if (!snapshotReader.snapshot) {
+        queueMicrotask(() => this.#fail(new Error("Nested CLI worker requires a snapshot-backed workspace")));
+        return;
+      }
+      try {
+        this.#port = options.nestedWorkerFactory!({
+          filename: normalize(String(filename)),
+          workerData: workerOptions.workerData,
+          cwd: options.parentProcess.cwd(),
+          env: { ...options.parentProcess.env },
+          root: options.root,
+          workspaceSnapshot: snapshotReader.snapshot()
+        });
+        this.#port.onMessage((value) => {
+          if (this.#terminated) return;
+          if (value && typeof value === "object" && "__cargoNestedWorkerError" in value) {
+            this.#fail(new Error(String(value.__cargoNestedWorkerError)));
+            return;
+          }
+          this.onmessage?.({ data: value });
+          this.emit("message", value);
+        });
+        this.#port.onError((error) => {
+          if (!this.#terminated) this.#fail(error);
+        });
+        this.#port.onExit((code) => {
+          if (this.#terminated) return;
+          this.#terminated = true;
+          this.emit("exit", code);
+        });
+      } catch (error) {
+        queueMicrotask(() => this.#fail(error instanceof Error ? error : new Error(String(error))));
+      }
+    }
+
+    postMessage(value: unknown): void {
+      if (!this.#terminated) this.#port?.postMessage(value);
+    }
+
+    terminate(): Promise<number> {
+      if (this.#terminated) return Promise.resolve(0);
+      this.#terminated = true;
+      const result = this.#port?.terminate();
+      this.emit("exit", 0);
+      return Promise.resolve(result).then((code) => typeof code === "number" ? code : 0);
+    }
+
+    ref(): this { return this; }
+    unref(): this { return this; }
+
+    #fail(error: Error): void {
+      this.onerror?.(error);
+      this.emit("error", error);
+    }
+  }
 
   class InlineWorker extends EventEmitter {
     readonly stdin = null;
@@ -1414,7 +1518,7 @@ function createCliWorkerThreadsBuiltin(options: {
   }
 
   return Object.freeze({
-    Worker: InlineWorker,
+    Worker: options.nestedWorkerFactory ? IsolatedWorker : InlineWorker,
     isMainThread: true,
     parentPort: null,
     threadId: 0,
@@ -1430,6 +1534,107 @@ function createWorkerContextBuiltin(parentPort: RuntimeValue, threadId: number, 
     threadId,
     workerData
   });
+}
+
+export function createCliNestedWorkerRuntime(
+  request: CliNestedWorkerRequest,
+  bridge: { postMessage(value: unknown): void }
+): { postMessage(value: unknown): void; ready: Promise<void> } {
+  const workspace = MemoryPackageManagerWorkspace.fromSnapshot(request.workspaceSnapshot);
+  const process = new BrowserProcess({
+    argv: ["node", request.filename],
+    cwd: request.cwd,
+    env: request.env,
+    exitMode: "capture"
+  });
+  const parentPort = new EventEmitter() as EventEmitter & {
+    postMessage(value: unknown): void;
+    ref(): EventEmitter;
+    unref(): EventEmitter;
+  };
+  parentPort.postMessage = (value) => bridge.postMessage(value);
+  parentPort.ref = () => parentPort;
+  parentPort.unref = () => parentPort;
+  const fs = createWorkspaceFsFacade(workspace, workspace, () => process.cwd());
+  const workerThreads = createWorkerContextBuiltin(parentPort, nextInlineWorkerThreadId++, request.workerData);
+  let runtime: ModuleRuntime | undefined;
+  const workerGlobal: Record<string, RuntimeValue> = {
+    AbortController,
+    AbortSignal,
+    ArrayBuffer,
+    Blob,
+    Buffer: BrowserBuffer,
+    Crypto,
+    CryptoKey,
+    Error,
+    File,
+    FormData,
+    Headers,
+    ReadableStream,
+    Request,
+    Response,
+    SharedArrayBuffer,
+    SubtleCrypto,
+    TextDecoder,
+    TextEncoder,
+    TransformStream,
+    Uint8Array,
+    URL,
+    URLSearchParams,
+    WebAssembly,
+    WritableStream,
+    __dynamicImport: createCliDynamicImport(() => runtime, request.root),
+    atob,
+    btoa,
+    crypto: cryptoBuiltin.webcrypto,
+    navigator: { hardwareConcurrency: 4 },
+    performance,
+    queueMicrotask,
+    setImmediate,
+    setInterval,
+    setTimeout,
+    clearImmediate,
+    clearInterval,
+    clearTimeout,
+    structuredClone
+  };
+  const consoleObject = createCliConsole(process);
+  workerGlobal.console = consoleObject;
+  workerGlobal.global = workerGlobal;
+  workerGlobal.globalThis = workerGlobal;
+  workerGlobal.process = process;
+  const module = createCliModuleBuiltin(() => {
+    if (!runtime) throw new Error("ERR_CLI_NESTED_WORKER_RUNTIME_NOT_READY");
+    return runtime;
+  });
+  runtime = createWorkspaceModuleRuntime({
+    allowAsyncRequireEsm: true,
+    root: request.root,
+    reader: workspace,
+    builtins: createBuiltinLoader({
+      console: consoleObject,
+      fs,
+      module,
+      path: createCliPathBuiltin(process),
+      process,
+      workerThreads
+    }),
+    globals: workerGlobal
+  });
+  const pending: unknown[] = [];
+  let initialized = false;
+  const ready = runtime.importModule(request.filename, request.filename).then(() => {
+    initialized = true;
+    for (const value of pending) parentPort.emit("message", value);
+    pending.length = 0;
+  });
+  return {
+    postMessage(value) {
+      if (initialized) parentPort.emit("message", value);
+      else pending.push(value);
+    },
+    ready
+  };
 }
 
 let nextInlineWorkerThreadId = 1;
@@ -1448,34 +1653,43 @@ function createCliTimerScope(): {
 } {
   const timeoutHandles = new Set<ReturnType<typeof setTimeout>>();
   const intervalHandles = new Set<ReturnType<typeof setInterval>>();
+  const nativeHandles = new Map<ReturnType<typeof setTimeout>, ReturnType<typeof setTimeout>>();
   const scopedClearTimeout = (handle: ReturnType<typeof setTimeout>) => {
     timeoutHandles.delete(handle);
-    clearTimeout(handle);
+    clearTimeout(nativeHandles.get(handle) ?? handle);
+    nativeHandles.delete(handle);
   };
   const scopedSetTimeout = (callback: (...args: unknown[]) => void, delay = 0, ...args: unknown[]) => {
     let handle: ReturnType<typeof setTimeout>;
-    handle = setTimeout(() => {
+    const nativeHandle = setTimeout(() => {
       timeoutHandles.delete(handle);
+      nativeHandles.delete(handle);
       callback(...args);
     }, delay);
+    handle = toNodeTimerHandle(nativeHandle);
+    nativeHandles.set(handle, nativeHandle);
     timeoutHandles.add(handle);
     return handle;
   };
   const scopedClearInterval = (handle: ReturnType<typeof setInterval>) => {
     intervalHandles.delete(handle);
-    clearInterval(handle);
+    clearInterval(nativeHandles.get(handle) ?? handle);
+    nativeHandles.delete(handle);
   };
   const scopedSetInterval = (callback: (...args: unknown[]) => void, delay = 0, ...args: unknown[]) => {
-    const handle = setInterval(callback, delay, ...args);
+    const nativeHandle = setInterval(callback, delay, ...args);
+    const handle = toNodeTimerHandle(nativeHandle);
+    nativeHandles.set(handle, nativeHandle);
     intervalHandles.add(handle);
     return handle;
   };
   const scopedSetImmediate = (callback: (...args: unknown[]) => void, ...args: unknown[]) => scopedSetTimeout(callback, 0, ...args);
   const dispose = () => {
-    for (const handle of timeoutHandles) clearTimeout(handle);
-    for (const handle of intervalHandles) clearInterval(handle);
+    for (const handle of timeoutHandles) clearTimeout(nativeHandles.get(handle) ?? handle);
+    for (const handle of intervalHandles) clearInterval(nativeHandles.get(handle) ?? handle);
     timeoutHandles.clear();
     intervalHandles.clear();
+    nativeHandles.clear();
   };
   const builtin = Object.freeze({
     clearImmediate: scopedClearTimeout,
@@ -1521,6 +1735,17 @@ function createCliTimerScope(): {
     setInterval: scopedSetInterval,
     setTimeout: scopedSetTimeout
   };
+}
+
+function toNodeTimerHandle(nativeHandle: ReturnType<typeof setTimeout>): ReturnType<typeof setTimeout> {
+  if (typeof nativeHandle !== "number") return nativeHandle;
+  let referenced = true;
+  return {
+    ref() { referenced = true; return this; },
+    unref() { referenced = false; return this; },
+    hasRef() { return referenced; },
+    [Symbol.toPrimitive]() { return nativeHandle as number; }
+  } as unknown as ReturnType<typeof setTimeout>;
 }
 
 function errorMessage(error: unknown): string {

@@ -101,8 +101,13 @@ export class HostProcessTable {
     }, this.abusePolicy);
 
     record.status = "starting";
-    const worker = this.workerFactory(record);
-    this.registry.register(record.pid, record.generation, worker);
+    let worker: HostWorkerLike;
+    try {
+      worker = this.workerFactory(record);
+      this.registry.register(record.pid, record.generation, worker);
+    } catch (error) {
+      return this.#finish(record, "failed", 1, error instanceof Error ? error.message : String(error));
+    }
 
     return new Promise((resolve) => {
       let resolved = false;
@@ -145,13 +150,17 @@ export class HostProcessTable {
       record.cleanup = cleanup;
       worker.addEventListener?.("message", onMessage);
       worker.addEventListener?.("error", onError);
-      worker.postMessage?.({
-        type: "start",
-        pid: record.pid,
-        generation: record.generation,
-        cwd: record.cwd,
-        env: record.env
-      });
+      try {
+        worker.postMessage?.({
+          type: "start",
+          pid: record.pid,
+          generation: record.generation,
+          cwd: record.cwd,
+          env: record.env
+        });
+      } catch (error) {
+        resolveOnce(this.#finish(record, "failed", 1, error instanceof Error ? error.message : String(error)));
+      }
     });
   }
 
@@ -239,7 +248,11 @@ export class HostProcessTable {
     record.exitCode = exitCode;
     record.error = error;
     record.resourcesReleased = true;
-    this.registry.terminate(record.pid, record.generation);
+    try {
+      this.registry.terminate(record.pid, record.generation);
+    } catch (error) {
+      record.error ||= error instanceof Error ? error.message : String(error);
+    }
     const current = snapshot(record);
     for (const waiter of record.waiters.splice(0)) waiter(current);
     return current;

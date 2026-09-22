@@ -88,6 +88,7 @@ await withRuntimeLab(async (page, baseUrl) => {
   const workerCliFile = cliWorkerResult.result.workspaceSnapshot.files.find((file) => file.path === "/workspace/project/worker-cli.txt");
   if (!workerCliFile || workerCliFile.data !== "b2s=") throw new Error("process worker eval-free CLI snapshot did not include write result");
 
+
   const esmCliWorkerResult = await page.evaluate(async () => {
     const encode = (value) => btoa(value);
     const worker = new Worker("/workers/process-worker.ts", { type: "module" });

@@ -9,6 +9,8 @@ const serviceFixtures = readJson("compat/service-workflow-fixture-results.json")
 const browserSmoke = readJson("compat/browser-smoke-results.json");
 
 const heldFixtureIds = new Set(reliability.holdFixtures.map((fixture) => fixture.id));
+const measuredHeldFixtureIds = actualFixtures.results.filter((result) => result.status === "hold").map((result) => result.id);
+assert.deepEqual([...heldFixtureIds].sort(), measuredHeldFixtureIds.sort(), "public fixture holds must match canonical measurements");
 
 for (const id of heldFixtureIds) {
   const actual = actualFixtures.results.find((result) => result.id === id);
@@ -22,7 +24,8 @@ for (const id of heldFixtureIds) {
 const browserHolds = Object.entries(reliability.browserGrades)
   .filter(([, grade]) => grade === "hold")
   .map(([browser]) => browser);
-const unresolved = heldFixtureIds.size > 0 || browserHolds.length > 0;
+const publicCohortBrowserHold = decision.supportMatrix.publicFixtureBrowserWorker !== "supported";
+const unresolved = heldFixtureIds.size > 0 || browserHolds.length > 0 || publicCohortBrowserHold;
 
 assert.equal(browserSmoke.results.edge.status, "pass", "supported Edge grade requires passing smoke evidence");
 assert.equal(browserSmoke.results.safari.status, "hold", "Safari evidence must remain hold until validated");
@@ -45,5 +48,5 @@ assert.deepEqual(
 );
 
 console.log(
-  `public beta readiness ok decision=${decision.decision} heldFixtures=${heldFixtureIds.size} browserHolds=${browserHolds.join(",") || "none"}`
+  `public beta readiness ok decision=${decision.decision} heldFixtures=${heldFixtureIds.size} browserHolds=${browserHolds.join(",") || "none"} publicCohortBrowserHold=${publicCohortBrowserHold}`
 );

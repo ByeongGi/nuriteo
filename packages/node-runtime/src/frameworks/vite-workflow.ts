@@ -17,7 +17,7 @@ import type { WorkspaceModuleReader } from "../modules/index.ts";
 import { transpileTypeScript } from "../transforms/typescript.ts";
 import type { CliRunResult, RuntimeEnv } from "../types.ts";
 
-export type ViteProductPackageManager = "npm" | "pnpm";
+export type ViteProductPackageManager = "npm" | "pnpm" | "yarn";
 export type ViteProductTemplate = "react" | "vue-runtime" | "svelte" | "vanilla";
 
 export interface ViteProductWorkflowOptions {
@@ -464,7 +464,7 @@ export class ViteProductWorkflow {
     this.#installVitePackage();
     this.#installDependencyArtifacts();
     this.#installEsbuildShim();
-    const lockfile = this.manager === "npm" ? "package-lock.json" : "pnpm-lock.yaml";
+    const lockfile = this.manager === "npm" ? "package-lock.json" : this.manager === "yarn" ? "yarn.lock" : "pnpm-lock.yaml";
     this.workspace.writeText(join(this.projectRoot, lockfile), createLockfile(this.manager, packages));
     return {
       installed: true,
@@ -1556,6 +1556,12 @@ function createLockfile(manager: ViteProductPackageManager, packages: string[]):
       lockfileVersion: 3,
       packages: Object.fromEntries(packages.map((pkg) => [`node_modules/${pkg}`, { version: "product-fixture" }]))
     });
+  }
+  if (manager === "yarn") {
+    return [
+      "# yarn lockfile v1",
+      ...packages.flatMap((pkg) => [`${pkg}@product-fixture:`, "  version \"product-fixture\""])
+    ].join("\n") + "\n";
   }
   return [
     "lockfileVersion: '9.0'",

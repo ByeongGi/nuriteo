@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-09-23",
+  "executionHost": "node-worker-thread",
+  "nodeVersion": "22.23.0",
+  "fixture": "awe-templates-react-starter",
+  "revision": "a2a1e370eb7dec2f3a87ba88e7e08efb9eaf1654",
+  "mode": "product-actual",
+  "iterations": [
+    { "score": 100, "status": "pass", "stages": ["install", "dev-preview", "edit-hmr", "build-dist"] },
+    { "score": 100, "status": "pass", "stages": ["install", "dev-preview", "edit-hmr", "build-dist"] },
+    { "score": 100, "status": "pass", "stages": ["install", "dev-preview", "edit-hmr", "build-dist"] }
+  ],
+  "scope": "Node worker fixture repeatability; does not establish browser worker heap enforcement"
+}

@@ -3,6 +3,11 @@ import { OPCODES } from "../packages/protocol/src/generated.ts";
 import { requestSync } from "../packages/protocol/src/sync-client.ts";
 import { runNodeProgram } from "../packages/node-runtime/src/bootstrap.ts";
 import { createCliEvaluationHttpBridge, evaluateCliModuleWorkerMessage } from "../packages/node-runtime/src/package-managers/cli-evaluator.ts";
+import { MemoryPackageManagerWorkspace } from "../packages/node-runtime/src/package-managers/workspace.ts";
+
+const YARN_BUNDLE_SHA256 = "443ed69e76443b89afddccfc9faec1ff16eb5e500979cc079c696dec4c3d94ee";
+const YARN_ENTRY_SHA256 = "148e19db309ec9eaf7720b28df811337906eea8a1758deaa54afee60a6305e04";
+const YARN_FACTORY_SHA256 = "e6f01b28a30aae3d6bd6cf78302d0b1ba1f5e6e8d2f6f918989b6cd7f2a428a0";
 
 let systemPort = null;
 let syncChannel = null;
@@ -98,10 +103,67 @@ function runProgram(message) {
 }
 
 async function evaluateCli(message) {
-  const httpBridge = message.bridgeLoopbackServer ? createCliEvaluationHttpBridge() : null;
-  const response = await evaluateCliModuleWorkerMessage(message, httpBridge ? { httpBridge } : {});
-  if (httpBridge && response.result?.bridgedServerPorts?.length) cliHttpBridges.set(message.id, httpBridge);
+  let response;
+  try {
+    const precompiledCjsFactories = message.request?.entry?.name === "yarn"
+      ? await loadPinnedYarnFactories(message)
+      : undefined;
+    const httpBridge = message.bridgeLoopbackServer ? createCliEvaluationHttpBridge() : null;
+    response = await evaluateCliModuleWorkerMessage(message, {
+    ...(httpBridge ? { httpBridge } : {}),
+    ...(precompiledCjsFactories ? { precompiledCjsFactories } : {}),
+    nestedWorkerFactory: (request) => {
+      const worker = new Worker(new URL("./cli-nested-worker.ts", import.meta.url), { type: "module" });
+      worker.postMessage({ type: "cli:nested:init", request });
+      return {
+        postMessage: (value) => worker.postMessage(value),
+        terminate: () => worker.terminate(),
+        onMessage: (listener) => worker.addEventListener("message", (event) => listener(event.data)),
+        onError: (listener) => worker.addEventListener("error", (event) => listener(new Error(event.message))),
+        onExit: () => {}
+      };
+    }
+    });
+    if (httpBridge && response.result?.bridgedServerPorts?.length) cliHttpBridges.set(message.id, httpBridge);
+  } catch (error) {
+    response = { id: message.id, error: error instanceof Error ? error.message : String(error), type: "cli:result" };
+  }
   self.postMessage(response);
+}
+
+async function loadPinnedYarnFactories(message) {
+  if (message.request.entry.version !== "1.22.22") throw new Error("ERR_YARN_CSP_UNSUPPORTED_VERSION");
+  const entry = message.request.entry.entry;
+  if (!entry.endsWith("/bin/yarn.js")) throw new Error("ERR_YARN_CSP_UNEXPECTED_ENTRY");
+  const bundle = entry.slice(0, -"bin/yarn.js".length) + "lib/cli.js";
+  const workspace = MemoryPackageManagerWorkspace.fromSnapshot(message.workspaceSnapshot);
+  if (await sha256(workspace.readBytes(entry)) !== YARN_ENTRY_SHA256 ||
+      await sha256(workspace.readBytes(bundle)) !== YARN_BUNDLE_SHA256) {
+    throw new Error("ERR_YARN_CSP_BUNDLE_INTEGRITY");
+  }
+  const factoryUrl = new URL("../vendor/yarn-cli-1.22.22.mjs", self.location.href);
+  const factoryResponse = await fetch(factoryUrl, { cache: "no-store" });
+  if (!factoryResponse.ok || await sha256(new Uint8Array(await factoryResponse.arrayBuffer())) !== YARN_FACTORY_SHA256) {
+    throw new Error("ERR_YARN_CSP_FACTORY_INTEGRITY");
+  }
+  const { sourceSha256, evaluateYarnCjs } = await import(/* @vite-ignore */ factoryUrl.href);
+  if (sourceSha256 !== YARN_BUNDLE_SHA256 || typeof evaluateYarnCjs !== "function") {
+    throw new Error("ERR_YARN_CSP_FACTORY_MISMATCH");
+  }
+  return {
+    [bundle]: evaluateYarnCjs,
+    [entry]: (context, globals) => {
+      const cli = context.require(bundle);
+      if (!cli.autoRun) Promise.resolve(cli.default()).catch((error) => {
+        globals.console.error(error?.stack || error?.message || error);
+        globals.process.exitCode = 1;
+      });
+    }
+  };
+}
+
+async function sha256(bytes) {
+  return Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", bytes)), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 async function handleCliHttpRequest(message) {

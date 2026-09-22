@@ -40,19 +40,13 @@ const HELP = [
   "  echo <text>          Print text",
   "",
   "Package scripts (wired to preview workflow):",
-  "  npm install | pnpm install",
-  "  npm run dev | pnpm run dev",
-  "  npm run build | pnpm run build",
+  "  npm install | pnpm install | yarn install",
+  "  npm run dev | pnpm run dev | yarn dev",
+  "  npm run build | pnpm run build | yarn build",
   "  npm run start        Alias for run preview",
-  "  npm/pnpm run <name> -- <args> forwards arbitrary script arguments",
-  "",
-  "Notes:",
-  "  yarn                 Unsupported (v1 evaluation-only candidate). Use npm or pnpm.",
+  "  npm/pnpm/yarn run <name> -- <args> forwards arbitrary script arguments",
   ""
 ].join("\n");
-
-const YARN_UNSUPPORTED =
-  "yarn: unsupported in cargo-container product shell (yarn v1 is evaluation-only). Use npm or pnpm instead.\n";
 
 export function createPreviewShellSession(handlers: PreviewShellHandlers): PreviewShellSession {
   const commands: ShellCommandMap = {
@@ -70,7 +64,7 @@ export function createPreviewShellSession(handlers: PreviewShellHandlers): Previ
     mv: ({ argv }) => moveFile(handlers, argv),
     npm: (context) => runPackageManager(handlers, "npm", context.argv),
     pnpm: (context) => runPackageManager(handlers, "pnpm", context.argv),
-    yarn: ({ argv }) => fail(argv, YARN_UNSUPPORTED)
+    yarn: (context) => runPackageManager(handlers, "yarn", context.argv)
   };
 
   let cwd = handlers.getCwd();
@@ -110,12 +104,13 @@ export function createPreviewShellSession(handlers: PreviewShellHandlers): Previ
 
 async function runPackageManager(
   handlers: PreviewShellHandlers,
-  manager: "npm" | "pnpm",
+  manager: "npm" | "pnpm" | "yarn",
   argv: string[]
 ): Promise<ShellCommandResult> {
   const args = argv.slice(1);
   const [command, script, ...rest] = args;
 
+  if (!command && manager === "yarn") return toResult(argv, await handlers.install());
   if (!command || command === "--version" || command === "-v" || command === "version") {
     return ok(argv, `${manager} (cargo-container preview shell)\n`);
   }
@@ -134,6 +129,12 @@ async function runPackageManager(
 
   if (command === "start") {
     return toResult(argv, await handlers.runDev());
+  }
+
+  if (manager === "yarn" && (command === "dev" || command === "build" || command === "restart")) {
+    if (command === "dev") return toResult(argv, await handlers.runDev(args.slice(1)));
+    if (command === "build") return toResult(argv, await handlers.runBuild(args.slice(1)));
+    return toResult(argv, await handlers.restartDev(args.slice(1)));
   }
 
   return fail(

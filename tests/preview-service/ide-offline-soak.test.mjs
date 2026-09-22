@@ -22,7 +22,7 @@ const tree = controller.exportTreeJson();
 assert.ok(Object.keys(tree).length > 0, "export tree should include files");
 
 const yarn = await controller.runShellCommand("yarn --version");
-assert.notEqual(yarn.exitCode, 0);
-assert.match(yarn.stderr, /npm|pnpm|yarn/i);
+assert.equal(yarn.exitCode, 0, yarn.stderr);
+assert.match(yarn.stdout, /yarn/i);
 
 console.log("preview-service ide-offline-soak ok");

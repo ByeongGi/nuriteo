@@ -4,6 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
+import { MemoryPackageManagerWorkspace } from "../../packages/node-runtime/src/package-managers/workspace.ts";
 
 const root = new URL("../..", import.meta.url).pathname;
 const packageRoot = path.join(root, "dist/sdk/package");
@@ -100,7 +101,10 @@ try {
       wasmType: wasm.headers.get("content-type"),
       manifestBasePath: manifest.basePath,
       systemWorkerPath: manifest.assets.systemWorker.path,
-      systemWasmPath: manifest.assets.systemWasm.path
+      systemWasmPath: manifest.assets.systemWasm.path,
+      yarnFactoryPath: manifest.assets.yarnClassicFactory.path,
+      yarnFactorySha256: manifest.assets.yarnClassicFactory.sha256,
+      yarnFactoryType: (await fetch("/sdk/vendor/yarn-cli-1.22.22.mjs")).headers.get("content-type")
     };
   });
   if (!headers.isolated) throw new Error("consumer page is not cross-origin isolated");
@@ -109,6 +113,18 @@ try {
   if (headers.manifestBasePath !== "/sdk/") throw new Error("SDK manifest base path mismatch");
   if (headers.systemWorkerPath !== "workers/system-worker.ts") throw new Error("SDK worker asset path mismatch");
   if (headers.systemWasmPath !== "assets/system_wasm.wasm") throw new Error("SDK wasm asset path mismatch");
+  if (headers.yarnFactoryPath !== "vendor/yarn-cli-1.22.22.mjs") throw new Error("SDK Yarn factory asset path mismatch");
+  if (!headers.yarnFactoryType?.includes("text/javascript")) throw new Error(`SDK Yarn factory MIME mismatch: ${headers.yarnFactoryType}`);
+  const yarnGate = JSON.parse(fs.readFileSync(path.join(root, "compat/yarn-v1-product-support.json"), "utf8"));
+  if (headers.yarnFactorySha256 !== yarnGate.artifact.cspFactorySha256) throw new Error("SDK Yarn factory integrity manifest mismatch");
+  const packagedYarnFactory = path.join(packageRoot, headers.yarnFactoryPath);
+  if (fs.readFileSync(packagedYarnFactory).equals(fs.readFileSync(path.join(root, yarnGate.artifact.cspFactory))) === false) {
+    throw new Error("SDK Yarn factory differs from preview product asset");
+  }
+  const packedEntries = spawnSync("tar", ["-tzf", packageTarball], { encoding: "utf8" });
+  if (packedEntries.status !== 0 || !packedEntries.stdout.includes("package/vendor/yarn-cli-1.22.22.mjs")) {
+    throw new Error("SDK tarball is missing the Yarn Classic factory");
+  }
   assertSourceMap("packages/sdk/src/container.ts");
   assertSourceMap("packages/browser-host/src/supervisor.ts");
   assertCommonjsEntry();
@@ -132,6 +148,41 @@ try {
   if (result.run.exports?.size !== 5) throw new Error("SDK consumer stat smoke failed");
   if (result.services !== "function") throw new Error("SDK consumer service API missing");
   if (result.status !== "stopped") throw new Error("SDK consumer did not teardown");
+  const yarnPackageRoot = path.join(root, "vendor/cli/yarn/1.22.22/package");
+  const yarnWorkspace = new MemoryPackageManagerWorkspace([
+    ...["bin/yarn.js", "lib/cli.js", "lib/v8-compile-cache.js", "package.json"].map((name) => ({
+      path: `/workspace/vendor/yarn/package/${name}`,
+      data: fs.readFileSync(path.join(yarnPackageRoot, name), "utf8")
+    })),
+    { path: "/workspace/project/package.json", data: JSON.stringify({ name: "sdk-yarn-smoke", private: true }) }
+  ]);
+  const yarnVersion = await page.evaluate(async (snapshot) => {
+    const worker = new Worker("/sdk/workers/process-worker.ts", { type: "module" });
+    try {
+      return await new Promise((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error("SDK Yarn Worker timed out")), 30000);
+        worker.addEventListener("message", (event) => {
+          if (event.data?.type !== "cli:result") return;
+          clearTimeout(timer);
+          resolve(event.data);
+        });
+        worker.addEventListener("error", (event) => { clearTimeout(timer); reject(new Error(event.message)); });
+        worker.postMessage({
+          id: 7,
+          type: "cli:evaluate",
+          root: "/workspace",
+          request: {
+            args: ["--version"], cwd: "/workspace/project",
+            entry: { entry: "/workspace/vendor/yarn/package/bin/yarn.js", name: "yarn", version: "1.22.22" }
+          },
+          workspaceSnapshot: snapshot
+        });
+      });
+    } finally { worker.terminate(); }
+  }, yarnWorkspace.snapshot());
+  if (yarnVersion.error || yarnVersion.result?.exitCode !== 0 || yarnVersion.result.stdout !== "1.22.22\n") {
+    throw new Error(`Packaged SDK Yarn Worker failed: ${yarnVersion.error || yarnVersion.result?.stderr}`);
+  }
 } finally {
   await browser.close();
   await new Promise((resolve) => server.close(resolve));

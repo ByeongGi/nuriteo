@@ -28,7 +28,7 @@ const plan = {
   fixtureDependencyPreparation: {
     enabled: true,
     ignoreScripts: true,
-    lockfileMode: "frozen"
+    lockfileMode: "frozen-or-pinned-generated"
   },
   workdir: runRoot,
   runtime: config.runtime,
@@ -52,7 +52,8 @@ try {
       }
     }, null, 2)}\n`);
 
-    run("pnpm", [
+    run("corepack", [
+      `pnpm@${config.runtime.pnpm}`,
       "install",
       "--dir", toolchainRoot,
       "--ignore-workspace",

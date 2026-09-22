@@ -11,6 +11,7 @@ function assert(condition, message) {
 
 const fixtures = readJson("compat/ecosystem-fixtures.json");
 const service = readJson("compat/service-workflow-fixture-results.json");
+const actualPublic = readJson("compat/ecosystem-fixture-actual-product-results.json");
 const actualFrameworks = readJson("compat/framework-actual-validation.json");
 const publicMatrix = readJson("compat/public-compatibility-matrix.json");
 const nextjs = readJson("compat/nextjs-compatibility.json");
@@ -18,6 +19,15 @@ const nextjs = readJson("compat/nextjs-compatibility.json");
 assert(fixtures.scope.fixtureCount === 20, "fixture catalog must have 20 entries");
 assert(fixtures.fixtures.length === 20, "fixture list length must be 20");
 assert(service.summary.total === 20, "service workflow results must cover 20 fixtures");
+assert(service.summary.total === service.results.length, "service workflow total must match its result list");
+assert(service.summary.pass === service.results.filter((result) => result.status === "pass").length, "service pass count is stale");
+assert(service.summary.hold === service.results.filter((result) => result.status === "hold").length, "service hold count is stale");
+assert(service.summary.passOrHold === service.summary.pass + service.summary.hold, "service pass-or-hold count is stale");
+for (const result of service.results.filter((entry) => entry.source === "compat/ecosystem-fixture-actual-product-results.json")) {
+  const measured = actualPublic.results.find((entry) => entry.id === result.id);
+  assert(measured, `service public fixture ${result.id} is missing measured evidence`);
+  assert(result.status === measured.status && result.score === measured.score, `service public fixture ${result.id} drifted from measured evidence`);
+}
 assert(service.summary.passOrHold >= 14, "SG25 requires >=14 pass or documented hold");
 assert(service.summary.sg25 === "pass", "service workflow SG25 summary must pass");
 

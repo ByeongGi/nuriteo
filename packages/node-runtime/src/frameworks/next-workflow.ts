@@ -10,7 +10,7 @@ import type { CliRunResult, RuntimeEnv } from "../types.ts";
 import type { WorkspaceModuleReader } from "../modules/index.ts";
 import { createViteHmrUpdate, type ViteProductHmrSocket, type ViteProductHmrUpdate } from "./vite-workflow.ts";
 
-export type NextProductPackageManager = "npm" | "pnpm";
+export type NextProductPackageManager = "npm" | "pnpm" | "yarn";
 
 export interface NextProductWorkflowOptions {
   dependencyArtifacts?: NextProductDependencyArtifact[];

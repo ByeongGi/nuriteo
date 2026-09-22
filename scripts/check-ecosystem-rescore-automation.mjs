@@ -12,6 +12,7 @@ const publicFixtures = catalog.fixtures.filter((fixture) => config.publicFixture
 assert.equal(config.schemaVersion, 1);
 assert.equal(config.resultSchemaVersion, 1);
 assert.match(config.runtime.node, /^\d+\.\d+\.\d+$/);
+assert.match(config.runtime.npm, /^\d+\.\d+\.\d+$/);
 assert.match(config.runtime.pnpm, /^\d+\.\d+\.\d+$/);
 assert.match(config.toolchain.vite, /^\d+\.\d+\.\d+$/);
 assert.match(config.toolchain.rolldown, /^\d+\.\d+\.\d+$/);
@@ -23,6 +24,23 @@ assert.equal(
 );
 assert.equal(config.publicFixtureIds.length, 10, "public re-score lane must contain the ten public Vite React fixtures");
 assert.equal(publicFixtures.length, config.publicFixtureIds.length, "all configured public fixture ids must exist");
+for (const [fixtureId, sha256] of Object.entries(config.generatedFixtureLockSha256 || {})) {
+  assert.ok(config.publicFixtureIds.includes(fixtureId), `generated lock fixture ${fixtureId} must be public`);
+  assert.match(sha256, /^[0-9a-f]{64}$/, `generated lock hash for ${fixtureId} must be SHA-256`);
+}
+for (const [fixtureId, version] of Object.entries(config.fixtureDependencyPreparation?.pnpmVersions || {})) {
+  assert.ok(config.publicFixtureIds.includes(fixtureId), `pnpm version fixture ${fixtureId} must be public`);
+  assert.match(version, /^\d+\.\d+\.\d+$/, `pnpm version for ${fixtureId} must be exact`);
+  assert.equal(publicFixtures.find((fixture) => fixture.id === fixtureId)?.packageManager, "pnpm");
+}
+for (const fixtureId of config.fixtureDependencyPreparation?.isolatedWorkspaceIds || []) {
+  assert.ok(config.publicFixtureIds.includes(fixtureId), `isolated fixture ${fixtureId} must be public`);
+  assert.ok(config.generatedFixtureLockSha256?.[fixtureId], `isolated fixture ${fixtureId} must pin its generated lock`);
+}
+for (const fixtureId of config.fixtureDependencyPreparation?.npmLegacyPeerDepsIds || []) {
+  assert.ok(config.publicFixtureIds.includes(fixtureId), `legacy peer fixture ${fixtureId} must be public`);
+  assert.equal(publicFixtures.find((fixture) => fixture.id === fixtureId)?.packageManager, "npm");
+}
 assert.deepEqual(publicFixtures.map((fixture) => fixture.id), config.publicFixtureIds, "fixture order must be stable");
 for (const fixture of publicFixtures) {
   assert.match(fixture.repository, /^https:\/\/github\.com\//, `${fixture.id} must be a public GitHub repository`);
@@ -50,7 +68,7 @@ assert.deepEqual(defaultRunnerPlan.fixtureIds, config.publicFixtureIds);
 assert.deepEqual(defaultRunnerPlan.fixtureDependencyPreparation, {
   enabled: true,
   ignoreScripts: true,
-  lockfileMode: "frozen"
+  lockfileMode: "frozen-or-pinned-generated"
 });
 
 const subsetIds = config.publicFixtureIds.slice(0, 2);
@@ -67,6 +85,10 @@ console.log(`ecosystem re-score automation ok fixtures=${publicFixtures.length}$
 function validateResults(results) {
   assert.equal(results.schemaVersion, config.resultSchemaVersion);
   assert.equal(results.source, config.fixtureCatalog);
+  assert.equal(results.inputContract.executionHost, "node-worker-thread", "fixture scoring must identify its execution host");
+  assert.match(results.inputContract.nodeVersion || "", /^\d+\.\d+\.\d+$/, "fixture scoring must record its Node version");
+  assert.match(results.inputContract.npmVersion || "", /^\d+\.\d+\.\d+$/, "fixture scoring must record its npm version");
+  assert.equal(results.inputContract.pnpmVersion, config.runtime.pnpm, "fixture scoring must pin pnpm");
   assert.equal(results.inputContract.viteVersion, config.toolchain.vite);
   const resultIds = results.results.map((result) => result.id);
   assert.ok(resultIds.length > 0, "result set must not be empty");
@@ -79,6 +101,13 @@ function validateResults(results) {
     assert.equal(result.mode, "measured-product-actual", `${result.id} must use the actual product path`);
     assert.equal(result.revision, results.inputContract.fixtureRevisions[result.id], `${result.id} result revision drifted`);
     assert.equal(result.criteria.length, 4, `${result.id} must record all four scoring criteria`);
+    const pinnedGeneratedLock = config.generatedFixtureLockSha256?.[result.id];
+    if (pinnedGeneratedLock && result.criteria.find((criterion) => criterion.id === "install")?.status === "pass") {
+      assert.deepEqual(result.evidence?.fixtureDependencyLockfile, {
+        source: "generated",
+        sha256: pinnedGeneratedLock
+      }, `${result.id} must record its pinned generated dependency lock`);
+    }
   }
 }
 

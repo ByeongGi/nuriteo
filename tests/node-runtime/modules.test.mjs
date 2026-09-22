@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
 
 import { createBuiltinLoader } from "../../packages/node-runtime/src/builtin-loader.ts";
+import { BrowserBuffer } from "../../packages/node-runtime/src/builtins/buffer.ts";
 import { createModuleRuntime, createWorkspaceModuleRuntime } from "../../packages/node-runtime/src/modules/index.ts";
 
 const runtime = createModuleRuntime({
   builtins: createBuiltinLoader({}),
   globals: {
+    Buffer: BrowserBuffer,
     console: {
       log() {
         return undefined;
@@ -364,6 +366,28 @@ runtime.registerMany({
       ]);
     `
   },
+  "/workspace/source-webpack-buffer.cjs": {
+    kind: "cjs-source",
+    source: `
+      module.exports =
+      /******/ (function(modules) { // webpackBootstrap
+        return Buffer.from([0]).constructor.name;
+      })([
+        function() { var Buffer = "nested"; }
+      ]);
+    `
+  },
+  "/workspace/source-webpack-global.cjs": {
+    kind: "cjs-source",
+    source: `
+      module.exports =
+      /******/ (function(modules) { // webpackBootstrap
+        return global.marker;
+      })([
+        function() { var global = { marker: "nested" }; }
+      ]);
+    `
+  },
   "/workspace/source-runtime-globals.cjs": {
     kind: "cjs-source",
     source: `
@@ -518,6 +542,8 @@ assert.equal((await sourceDynamicImport.loaded).default.kind, "fixture");
 assert.deepEqual(runtime.requireSync("./source-process-global.cjs", "/workspace/index.cjs").argv, ["node", "/workspace/index.cjs", "--fixture"]);
 assert.deepEqual(runtime.requireSync("./source-process-local.cjs", "/workspace/index.cjs").argv, ["local"]);
 assert.deepEqual(runtime.requireSync("./source-webpack-process.cjs", "/workspace/index.cjs"), ["node", "/workspace/index.cjs", "--fixture"]);
+assert.equal(runtime.requireSync("./source-webpack-buffer.cjs", "/workspace/index.cjs"), "BrowserBuffer");
+assert.equal(runtime.requireSync("./source-webpack-global.cjs", "/workspace/index.cjs"), "runtime-global");
 assert.deepEqual(runtime.requireSync("./source-runtime-globals.cjs", "/workspace/index.cjs"), {
   globalMarker: "runtime-global",
   consoleType: "function"

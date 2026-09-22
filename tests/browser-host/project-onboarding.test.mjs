@@ -25,7 +25,7 @@ assert.ok(react.store.listFiles().some((file) => file.path.endsWith("package.jso
 
 const detectionOverride = detectPackageScripts({
   packageJsonText: JSON.stringify({
-    packageManager: "yarn@1.22.0",
+    packageManager: "yarn@3.8.0",
     scripts: { build: "echo build" }
   }),
   files: ["package-lock.json", "pnpm-lock.yaml"],
@@ -41,6 +41,22 @@ assert.equal(detectionOverride.installCommand, "npm ci");
 assert.equal(detectionOverride.devScript, "start");
 assert.ok(detectionOverride.diagnostics.some((entry) => entry.code === "ERR_IMPORT_UNSUPPORTED_PACKAGE_MANAGER"));
 assert.ok(detectionOverride.diagnostics.some((entry) => entry.code === "ERR_IMPORT_LOCKFILE_CONFLICT"));
+
+const yarnField = detectPackageScripts({
+  packageJsonText: JSON.stringify({ packageManager: "yarn@1.22.22", scripts: { dev: "vite" } }),
+  files: ["yarn.lock"]
+});
+assert.equal(yarnField.packageManager, "yarn");
+assert.equal(yarnField.packageManagerSource, "packageManager-field");
+assert.equal(yarnField.installCommand, "yarn install");
+assert.equal(yarnField.diagnostics.some((entry) => entry.code === "ERR_IMPORT_UNSUPPORTED_PACKAGE_MANAGER"), false);
+
+const yarnLock = detectPackageScripts({
+  packageJsonText: JSON.stringify({ scripts: { dev: "vite" } }),
+  files: ["yarn.lock"]
+});
+assert.equal(yarnLock.packageManager, "yarn");
+assert.equal(yarnLock.packageManagerSource, "yarn-lock");
 
 const missingScripts = detectPackageScripts({
   packageJsonText: JSON.stringify({ name: "no-scripts" }),

@@ -137,4 +137,38 @@ const tornDown = await teardownCase.table.wait(teardownPrepared.pid);
 assert.equal(tornDown.status, "killed");
 assert.equal(teardownCase.workers[0].terminated, true);
 
+const churn = createTable("hang");
+for (let iteration = 0; iteration < 100; iteration += 1) {
+  const process = churn.table.prepare({ url: "/workers/process-worker.ts" });
+  const starting = churn.table.start(process.pid);
+  const waiting = churn.table.wait(process.pid);
+  churn.table.teardown();
+  assert.equal((await starting).status, "killed");
+  assert.equal((await waiting).resourcesReleased, true);
+  assert.equal(churn.table.registry.size(), 0);
+  assert.equal(churn.workers.at(-1).listeners.get("message").length, 0);
+  assert.equal(churn.workers.at(-1).listeners.get("error").length, 0);
+}
+assert.equal(churn.workers.filter((worker) => !worker.terminated).length, 0);
+const recovered = churn.table.prepare({ url: "/workers/process-worker.ts" });
+const recoveredStart = churn.table.start(recovered.pid);
+churn.workers.at(-1).emit("message", { data: { type: "ready" } });
+assert.equal((await recoveredStart).status, "ready");
+churn.table.teardown();
+assert.equal(churn.table.registry.size(), 0);
+
+const failedFactory = new HostProcessTable({ workerFactory: () => { throw new Error("allocation failed"); } });
+const failedAllocation = failedFactory.prepare({ url: "/workers/process-worker.ts" });
+assert.equal((await failedFactory.start(failedAllocation.pid)).status, "failed");
+assert.equal((await failedFactory.wait(failedAllocation.pid)).resourcesReleased, true);
+
+const failedPost = new HostProcessTable({ workerFactory: () => ({
+  postMessage() { throw new Error("post failed"); },
+  terminate() { throw new Error("terminate failed"); }
+}) });
+const failedSend = failedPost.prepare({ url: "/workers/process-worker.ts" });
+assert.equal((await failedPost.start(failedSend.pid)).status, "failed");
+assert.equal((await failedPost.wait(failedSend.pid)).resourcesReleased, true);
+assert.equal(failedPost.registry.size(), 0);
+
 console.log("browser host process lifecycle test ok");
