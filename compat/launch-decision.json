@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-09-18",
+  "updatedAt": "2026-09-22",
   "gate": "SG30",
   "decision": "private-beta-ready",
   "allowedDecisions": ["private-beta-ready", "public-beta-ready", "hold"],
@@ -32,13 +32,14 @@
       "status": "hold",
       "evidence": [
         "compat/service-workflow-fixture-results.json",
+        "compat/browser-smoke-results.json",
         "docs/productization/browser-support-grades.md",
         "compat/runtime-reliability-policy.json"
       ],
       "blockers": [
         "Safari remains hold pending SharedArrayBuffer/COOP/COEP validation",
         "3 public Vite React fixtures remain hold for large-tree worker timeouts",
-        "Live public-repo re-score and Edge desktop smoke are not fully automated in this environment"
+        "Live public-repo re-score is not fully automated in this environment"
       ]
     }
   },
@@ -56,7 +57,7 @@
   },
   "supportMatrix": {
     "chrome": "supported",
-    "edge": "candidate",
+    "edge": "supported",
     "safari": "hold",
     "viteReact": "supported",
     "viteVue": "candidate",
@@ -72,7 +73,7 @@
   ],
   "launchBlockersForPublicBeta": [
     "Safari grade must leave hold or remain explicitly out of public cohort",
-    "Public fixture live matrix / Edge smoke must be reconfirmed",
+    "Public fixture live matrix must be reconfirmed",
     "S-C remains hold while three large-tree public fixtures and Safari validation are unresolved"
   ],
   "rationale": "S-A and S-B criteria are met with preview MVP, onboarding, reliability policy, private-beta backend path, security checklist, observability/support, and release-ops rollback rehearsal. S-C is not fully met, so the launch decision is private-beta-ready rather than public-beta-ready."

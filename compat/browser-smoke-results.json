@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-22",
+  "results": {
+    "chrome": {
+      "status": "pass",
+      "evidence": [
+        "tests/browser/isolation.test.mjs",
+        "tests/preview-service/mvp.test.mjs"
+      ]
+    },
+    "edge": {
+      "status": "pass",
+      "version": "153.0.4234.48",
+      "platform": "macOS desktop",
+      "checks": [
+        "COOP/COEP response headers",
+        "crossOriginIsolated",
+        "SharedArrayBuffer",
+        "Service Worker activation",
+        "Vite React preview iframe"
+      ],
+      "evidence": ["tests/preview-service/edge-browser-smoke.test.mjs"]
+    },
+    "safari": {
+      "status": "hold",
+      "reason": "Desktop Safari automation has not validated the full preview, Service Worker, OPFS, and SharedArrayBuffer contract."
+    }
+  }
+}

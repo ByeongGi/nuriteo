@@ -10,6 +10,7 @@ import { PortsPanel } from "./components/PortsPanel";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { ScmPanel } from "./components/ScmPanel";
 import { OutlinePanel } from "./components/OutlinePanel";
+import { LocalHistoryPanel } from "./components/LocalHistoryPanel";
 import { CodeEditor } from "./components/CodeEditor";
 import { PreviewPane } from "./components/PreviewPane";
 import { BottomDock } from "./components/BottomDock";
@@ -31,6 +32,8 @@ export default function App() {
         return <ScmPanel model={model} />;
       case "outline":
         return <OutlinePanel model={model} />;
+      case "timeline":
+        return <LocalHistoryPanel model={model} />;
       case "ports":
         return <PortsPanel model={model} />;
       case "settings":

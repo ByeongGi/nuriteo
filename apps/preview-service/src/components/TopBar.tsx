@@ -1,4 +1,5 @@
 import { Download, FolderInput, Play, RefreshCw, Rocket, Hammer, Maximize2 } from "lucide-react";
+import { AppMenuBar } from "./AppMenuBar";
 import { StatusPill, phaseTone } from "./StatusPill";
 import type { PreviewControllerModel } from "../hooks/usePreviewController";
 
@@ -36,6 +37,15 @@ export function TopBar({ model }: { model: PreviewControllerModel }) {
           <span id="project-meta" className="truncate font-mono text-[11px] font-medium text-cargo-muted">
             {meta}
           </span>
+        </div>
+        <div className="ml-1 shrink-0 border-l border-cargo-line pl-1">
+          <AppMenuBar
+            hasProject={hasProject}
+            hasSelectedFile={Boolean(model.selectedPath)}
+            runCommand={model.runCommand}
+            setPaletteMode={model.setPaletteMode}
+            setPaletteOpen={model.setPaletteOpen}
+          />
         </div>
       </div>
 

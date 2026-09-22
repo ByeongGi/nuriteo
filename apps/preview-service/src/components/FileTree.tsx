@@ -1,8 +1,9 @@
 import { useMemo, useState, type DragEvent, type MouseEvent } from "react";
 import clsx from "clsx";
-import { ChevronDown, ChevronRight, FileCode2, Folder, FilePlus2, FolderPlus, Copy, FoldVertical, RefreshCw } from "lucide-react";
+import { ChevronDown, ChevronRight, FileCode2, Folder, FilePlus2, FolderPlus, Copy, Eye, EyeOff, FoldVertical, RefreshCw } from "lucide-react";
 import type { ProjectWorkspaceTreeNode } from "@cargo-container/browser-host";
 import type { PreviewControllerModel } from "../hooks/usePreviewController";
+import { createGitignoreMatcher, type GitignoreMatcher } from "../lib/gitignore";
 import { ContextMenu, type ContextMenuItem } from "./ContextMenu";
 
 type MenuTarget =
@@ -35,6 +36,41 @@ function filterTree(nodes: ProjectWorkspaceTreeNode[], query: string): ProjectWo
     return out;
   };
   return walk(nodes);
+}
+
+function projectRelativePath(path: string, projectRoot: string): string {
+  const normalizedRoot = projectRoot.replace(/\/+$/u, "");
+  if (path === normalizedRoot) return "";
+  if (path.startsWith(`${normalizedRoot}/`)) return path.slice(normalizedRoot.length + 1);
+  return path.replace(/^\/+/, "");
+}
+
+function filterIgnoredTree(
+  nodes: ProjectWorkspaceTreeNode[],
+  projectRoot: string,
+  matcher: GitignoreMatcher,
+  ignoredPaths: Map<string, boolean>
+): ProjectWorkspaceTreeNode[] {
+  const visibleNodes: ProjectWorkspaceTreeNode[] = [];
+  for (const node of nodes) {
+    const cacheKey = `${node.type}:${node.path}`;
+    let ignored = ignoredPaths.get(cacheKey);
+    if (ignored === undefined) {
+      ignored = matcher.isIgnored(projectRelativePath(node.path, projectRoot), node.type === "directory");
+      ignoredPaths.set(cacheKey, ignored);
+    }
+    if (ignored) continue;
+
+    if (node.type === "directory") {
+      visibleNodes.push({
+        ...node,
+        children: filterIgnoredTree(node.children || [], projectRoot, matcher, ignoredPaths)
+      });
+    } else {
+      visibleNodes.push(node);
+    }
+  }
+  return visibleNodes;
 }
 
 function TreeNodes({
@@ -190,16 +226,33 @@ function TreeNode({
 
 export function FileTree({ model }: { model: PreviewControllerModel }) {
   const [filter, setFilter] = useState("");
+  const [showIgnored, setShowIgnored] = useState(false);
   const [menu, setMenu] = useState<{ x: number; y: number; target: MenuTarget } | null>(null);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
   const [collapseToken, setCollapseToken] = useState(0);
-  const tree = useMemo(
-    () => filterTree(model.snapshot.editor?.tree() || [], filter.trim()),
-    [filter, model.snapshot]
-  );
-
   const disabled = !model.snapshot.editor;
   const projectRoot = model.snapshot.project?.root || "";
+  const tree = useMemo(() => {
+    const nodes = model.snapshot.editor?.tree() || [];
+    if (showIgnored || !model.snapshot.project || !projectRoot) {
+      return filterTree(nodes, filter.trim());
+    }
+
+    const gitignorePath = `${projectRoot.replace(/\/+$/u, "")}/.gitignore`;
+    const gitignoreFile = model.snapshot.project.listFiles().find((file) => file.path === gitignorePath);
+    let gitignoreSource = gitignoreFile?.data || "";
+    if (gitignoreFile && model.snapshot.editor) {
+      try {
+        gitignoreSource = model.snapshot.editor.openFile(gitignorePath).data;
+      } catch {
+        // The project snapshot remains the source of truth if the editor cannot open the file.
+      }
+    }
+
+    const matcher = createGitignoreMatcher(gitignoreSource);
+    const visibleNodes = filterIgnoredTree(nodes, projectRoot, matcher, new Map());
+    return filterTree(visibleNodes, filter.trim());
+  }, [filter, model.snapshot, projectRoot, showIgnored]);
 
   const openContext = (event: MouseEvent, target: MenuTarget) => {
     event.preventDefault();
@@ -382,6 +435,18 @@ export function FileTree({ model }: { model: PreviewControllerModel }) {
             onClick={() => model.createFolder()}
           >
             <FolderPlus className="size-3.5" />
+          </button>
+          <button
+            id="file-toggle-ignored"
+            type="button"
+            className="icon-btn size-7"
+            title={showIgnored ? "Hide ignored files" : "Show ignored files"}
+            aria-label={showIgnored ? "Hide ignored files" : "Show ignored files"}
+            aria-pressed={showIgnored}
+            disabled={disabled}
+            onClick={() => setShowIgnored((value) => !value)}
+          >
+            {showIgnored ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
           </button>
           <button
             type="button"

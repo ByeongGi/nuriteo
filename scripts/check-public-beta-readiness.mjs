@@ -6,6 +6,7 @@ const decision = readJson("compat/launch-decision.json");
 const reliability = readJson("compat/runtime-reliability-policy.json");
 const actualFixtures = readJson("compat/ecosystem-fixture-actual-product-results.json");
 const serviceFixtures = readJson("compat/service-workflow-fixture-results.json");
+const browserSmoke = readJson("compat/browser-smoke-results.json");
 
 const heldFixtureIds = new Set(reliability.holdFixtures.map((fixture) => fixture.id));
 
@@ -22,6 +23,9 @@ const browserHolds = Object.entries(reliability.browserGrades)
   .filter(([, grade]) => grade === "hold")
   .map(([browser]) => browser);
 const unresolved = heldFixtureIds.size > 0 || browserHolds.length > 0;
+
+assert.equal(browserSmoke.results.edge.status, "pass", "supported Edge grade requires passing smoke evidence");
+assert.equal(browserSmoke.results.safari.status, "hold", "Safari evidence must remain hold until validated");
 
 if (unresolved) {
   assert.notEqual(decision.decision, "public-beta-ready", "unresolved fixture/browser holds forbid public-beta-ready");

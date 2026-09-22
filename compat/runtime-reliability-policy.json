@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-09-18",
+  "updatedAt": "2026-09-22",
   "status": "p24-reliability-policy",
   "memory": {
     "heapCeilingMiB": 256,
@@ -26,12 +26,12 @@
   },
   "browserGrades": {
     "chrome": "supported",
-    "edge": "candidate",
+    "edge": "supported",
     "safari": "hold"
   },
   "browserGradeNotes": {
     "chrome": "Primary gate browser with COOP/COEP and SharedArrayBuffer.",
-    "edge": "Chromium-family candidate; requires COOP/COEP hosting smoke before promotion.",
+    "edge": "Microsoft Edge 153 desktop smoke passes COOP/COEP, SharedArrayBuffer, Service Worker activation, and Vite React preview.",
     "safari": "Hold until SharedArrayBuffer + cross-origin isolation + OPFS/Service Worker preview routing are validated on desktop Safari."
   },
   "holdFixtures": [

@@ -11,6 +11,7 @@ function assert(condition, message) {
 
 const policy = readJson("compat/runtime-reliability-policy.json");
 const soak = readJson("compat/soak-baseline.json");
+const browserSmoke = readJson("compat/browser-smoke-results.json");
 const supportMatrix = fs.readFileSync("docs/release/support-matrix.md", "utf8");
 const browserGrades = fs.readFileSync("docs/productization/browser-support-grades.md", "utf8");
 
@@ -22,7 +23,13 @@ assert(policy.timeouts.devServerIdleMs >= 60_000, "dev server idle timeout must 
 assert(policy.storage.quotaBytesDefault >= 64 * 1024 * 1024, "default quota must be at least 64MiB");
 assert(policy.soak.bootRunTeardownIterations >= soak.requiredIterations, "policy soak iterations must cover baseline");
 assert(policy.browserGrades.chrome === "supported", "Chrome must remain supported");
-assert(["candidate", "supported"].includes(policy.browserGrades.edge), "Edge must be candidate or supported");
+assert(policy.browserGrades.edge === "supported", "Edge must remain supported after the desktop smoke gate");
+assert(browserSmoke.results.edge.status === "pass", "Edge support requires passing browser smoke evidence");
+assert(
+  browserSmoke.results.edge.evidence.includes("tests/preview-service/edge-browser-smoke.test.mjs"),
+  "Edge smoke evidence must reference its executable test"
+);
+assert(browserSmoke.results.safari.status === "hold", "Safari smoke evidence must remain hold until validated");
 assert(["hold", "unsupported"].includes(policy.browserGrades.safari), "Safari must be hold or unsupported until SAB validation");
 assert(Array.isArray(policy.holdFixtures) && policy.holdFixtures.length === 3, "policy must track the three hold fixtures");
 
@@ -36,6 +43,7 @@ assert(browserGrades.includes("candidate"), "browser grades doc must define cand
 assert(browserGrades.includes("SharedArrayBuffer"), "browser grades doc must discuss SharedArrayBuffer");
 assert(fs.existsSync("tests/browser-host/large-node-modules-stress.test.mjs"), "large node_modules stress test missing");
 assert(fs.existsSync("tests/preview-service/workflow-soak.test.mjs"), "workflow soak test missing");
+assert(fs.existsSync("tests/preview-service/edge-browser-smoke.test.mjs"), "Edge browser smoke test missing");
 
 console.log(
   `runtime reliability policy ok chrome=${policy.browserGrades.chrome} edge=${policy.browserGrades.edge} safari=${policy.browserGrades.safari}`

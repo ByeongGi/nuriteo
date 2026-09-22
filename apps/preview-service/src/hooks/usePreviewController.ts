@@ -15,6 +15,14 @@ import type { PreviewPortEntry, SidebarView, TerminalSessionTab } from "../lib/u
 import { findSymbolDefinition, indexProjectSymbols, wordAt } from "../lib/symbols";
 import type { LanguageProblem } from "../lib/monacoLanguageService";
 import { collectDroppedEntries, type DroppedEntrySource } from "../lib/droppedEntries";
+import {
+  listLocalHistoryRevisions,
+  loadLocalHistory,
+  persistLocalHistory,
+  recordLocalHistoryRevision,
+  type LocalHistoryRevision,
+  type LocalHistoryRevisionKind
+} from "../lib/localHistory";
 
 const AUTOSAVE_MS = 800;
 
@@ -111,6 +119,9 @@ export function usePreviewController() {
     column: number;
     requestId: number;
   } | null>(null);
+  const [localHistory, setLocalHistory] = useState(loadLocalHistory);
+  const [localHistoryPersistent, setLocalHistoryPersistent] = useState(true);
+  const localHistoryRef = useRef(localHistory);
   const selectedPathRef = useRef(selectedPath);
   selectedPathRef.current = selectedPath;
   const autosaveTimerRef = useRef<number | null>(null);
@@ -125,6 +136,25 @@ export function usePreviewController() {
   const bumpEditor = useCallback(() => {
     setEditorTick((value) => value + 1);
   }, []);
+
+  const recordHistoryCheckpoint = useCallback(
+    (path: string, content: string, kind: LocalHistoryRevisionKind, force = false) => {
+      const projectId = controller.getSnapshot().project?.root;
+      if (!projectId) return;
+      const next = recordLocalHistoryRevision(localHistoryRef.current, {
+        projectId,
+        path,
+        content,
+        kind,
+        force
+      });
+      if (next === localHistoryRef.current) return;
+      localHistoryRef.current = next;
+      setLocalHistory(next);
+      setLocalHistoryPersistent(persistLocalHistory(next));
+    },
+    [controller]
+  );
 
   const clearAutosave = useCallback(() => {
     if (autosaveTimerRef.current !== null) {
@@ -248,15 +278,17 @@ export function usePreviewController() {
           return options.replace;
         });
         if (next === file.data) continue;
+        recordHistoryCheckpoint(file.path, file.data, "edit");
         current.editor.editText(file.path, next);
         current.editor.saveFile(file.path);
+        recordHistoryCheckpoint(file.path, next, "save");
       }
       bumpEditor();
       refreshSnapshot();
       setFrameNonce((value) => value + 1);
       return count;
     },
-    [bumpEditor, controller, refreshSnapshot]
+    [bumpEditor, controller, recordHistoryCheckpoint, refreshSnapshot]
   );
 
   const openPreferredFile = useCallback(
@@ -291,20 +323,22 @@ export function usePreviewController() {
   }, [updateSettings]);
 
   const openDiffView = useCallback(
-    (path: string) => {
+    (path: string, originalOverride?: string) => {
       const current = controller.getSnapshot();
       if (!current.editor || !current.project) return;
       const file = current.editor.openFile(path);
-      let original = "";
-      try {
-        original = current.project.readText(path);
-      } catch {
-        original = "";
+      let original = originalOverride || "";
+      if (originalOverride === undefined) {
+        try {
+          original = current.project.readText(path);
+        } catch {
+          original = "";
+        }
       }
       // If dirty, original is saved store content; modified is buffer.
       // If not dirty, compare against empty baseline marker for visibility.
       const modified = file.data;
-      if (!file.dirty) {
+      if (!file.dirty && originalOverride === undefined) {
         // Still allow viewing file against itself as a no-op diff entry point from SCM after edits saved.
         original = modified;
       }
@@ -320,6 +354,25 @@ export function usePreviewController() {
       openFile(path);
     },
     [controller, openFile]
+  );
+
+  const openHistoryDiff = useCallback(
+    (revision: LocalHistoryRevision) => openDiffView(revision.path, revision.content),
+    [openDiffView]
+  );
+
+  const restoreHistoryRevision = useCallback(
+    (revision: LocalHistoryRevision) => {
+      const current = controller.getSnapshot();
+      if (!current.editor) return;
+      const file = current.editor.openFile(revision.path);
+      recordHistoryCheckpoint(revision.path, file.data, "edit", true);
+      current.editor.editText(revision.path, revision.content);
+      openFile(revision.path);
+      bumpEditor();
+      refreshSnapshot();
+    },
+    [bumpEditor, controller, openFile, recordHistoryCheckpoint, refreshSnapshot]
   );
 
   const closeDiffView = useCallback(() => setDiffView(null), []);
@@ -393,11 +446,13 @@ export function usePreviewController() {
     const current = controller.getSnapshot();
     const path = selectedPathRef.current;
     if (!current.editor || !path) return;
+    const file = current.editor.openFile(path);
     current.editor.saveFile(path);
+    recordHistoryCheckpoint(path, file.data, "save");
     bumpEditor();
     refreshSnapshot();
     setFrameNonce((value) => value + 1);
-  }, [bumpEditor, clearAutosave, controller, refreshSnapshot]);
+  }, [bumpEditor, clearAutosave, controller, recordHistoryCheckpoint, refreshSnapshot]);
 
   const closeTab = useCallback(
     (path: string) => {
@@ -421,6 +476,8 @@ export function usePreviewController() {
       const current = controller.getSnapshot();
       const path = selectedPathRef.current;
       if (!current.editor || !path) return;
+      const previous = current.editor.openFile(path).data;
+      recordHistoryCheckpoint(path, previous, "edit");
       current.editor.editText(path, value);
       bumpEditor();
       refreshSnapshot();
@@ -430,14 +487,16 @@ export function usePreviewController() {
         const latest = controller.getSnapshot();
         const target = selectedPathRef.current;
         if (!latest.editor || !target) return;
-        if (!latest.editor.openFile(target).dirty) return;
+        const file = latest.editor.openFile(target);
+        if (!file.dirty) return;
         latest.editor.saveFile(target);
+        recordHistoryCheckpoint(target, file.data, "save");
         bumpEditor();
         refreshSnapshot();
         setFrameNonce((value) => value + 1);
       }, AUTOSAVE_MS);
     },
-    [bumpEditor, clearAutosave, controller, refreshSnapshot]
+    [bumpEditor, clearAutosave, controller, recordHistoryCheckpoint, refreshSnapshot]
   );
 
   const editCurrentFile = editSelected;
@@ -450,15 +509,17 @@ export function usePreviewController() {
     try {
       const formatted = await formatDocument(path, file.data);
       if (formatted === file.data) return;
+      recordHistoryCheckpoint(path, file.data, "edit");
       current.editor.editText(path, formatted);
       current.editor.saveFile(path);
+      recordHistoryCheckpoint(path, formatted, "save");
       bumpEditor();
       refreshSnapshot();
       setFrameNonce((value) => value + 1);
     } catch (error) {
       controller.log(`format failed: ${error instanceof Error ? error.message : String(error)}`);
     }
-  }, [bumpEditor, controller, refreshSnapshot]);
+  }, [bumpEditor, controller, recordHistoryCheckpoint, refreshSnapshot]);
 
   const createFile = useCallback(
     (relativePath?: string) => {
@@ -1279,6 +1340,10 @@ export function usePreviewController() {
   void editorTick;
 
   const filePaths = useMemo(() => (snapshot.project?.listFiles() || []).map((file) => file.path), [snapshot.project]);
+  const localHistoryRevisions = useMemo(
+    () => listLocalHistoryRevisions(localHistory, snapshot.project?.root || ""),
+    [localHistory, snapshot.project?.root]
+  );
 
   return {
     controller,
@@ -1357,6 +1422,10 @@ export function usePreviewController() {
     diffView,
     openDiffView,
     closeDiffView,
+    localHistoryRevisions,
+    localHistoryPersistent,
+    openHistoryDiff,
+    restoreHistoryRevision,
     languageProblems,
     setLanguageProblems,
     editorLocation,

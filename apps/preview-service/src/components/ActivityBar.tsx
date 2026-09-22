@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import { Files, Search, Cable, Settings2, GitBranch, ListTree } from "lucide-react";
+import { Files, Search, Cable, Settings2, GitBranch, ListTree, History } from "lucide-react";
 import type { SidebarView } from "../lib/uiState";
 
 const ITEMS: Array<{ id: SidebarView; label: string; icon: typeof Files }> = [
@@ -7,6 +7,7 @@ const ITEMS: Array<{ id: SidebarView; label: string; icon: typeof Files }> = [
   { id: "search", label: "Search", icon: Search },
   { id: "scm", label: "Source Control", icon: GitBranch },
   { id: "outline", label: "Outline", icon: ListTree },
+  { id: "timeline", label: "Timeline", icon: History },
   { id: "ports", label: "Ports", icon: Cable },
   { id: "settings", label: "Settings", icon: Settings2 }
 ];
