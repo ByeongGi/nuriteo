@@ -25,7 +25,7 @@
     "Select billing policy and provider; usage events are collected but never billed."
   ],
   "gate": {
-    "test": "node tests/service-backend/production-backend.test.mjs",
-    "check": "node scripts/check-service-backend-production.mjs"
+    "test": "node tests/service-backend/production-backend.test.ts",
+    "check": "node tooling/checks/check-service-backend-production.ts"
   }
 }

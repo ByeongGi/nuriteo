@@ -34,14 +34,14 @@ jobs:
           targets: wasm32-unknown-unknown
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec tsc --noEmit --pretty false
-      - run: node scripts/check-release-policy.mjs
-      - run: node scripts/check-performance-baseline.mjs
-      - run: node scripts/check-soak-baseline.mjs
-      - run: node scripts/package-sdk.mjs
-      - run: node scripts/check-sdk-public-release.mjs
-      - run: node scripts/check-sdk-publish-rehearsal.mjs
-      - run: node scripts/check-release-readiness.mjs
-      - run: node scripts/check-release-ops-sg29.mjs
-      - run: node scripts/check-public-beta-readiness.mjs
-      - run: node scripts/check-release-provenance.mjs
-      - run: node scripts/check-workspace.mjs
+      - run: node tooling/checks/check-release-policy.ts
+      - run: node tooling/checks/check-performance-baseline.ts
+      - run: node tooling/checks/check-soak-baseline.ts
+      - run: node tooling/release/package-sdk.ts
+      - run: node tooling/checks/check-sdk-public-release.ts
+      - run: node tooling/checks/check-sdk-publish-rehearsal.ts
+      - run: node tooling/checks/check-release-readiness.ts
+      - run: node tooling/checks/check-release-ops-sg29.ts
+      - run: node tooling/checks/check-public-beta-readiness.ts
+      - run: node tooling/checks/check-release-provenance.ts
+      - run: node tooling/checks/check-workspace.ts

@@ -40,7 +40,7 @@
     }
   ],
   "evidence": [
-    "tests/productization/unsupported-diagnostics.test.mjs",
+    "tests/productization/unsupported-diagnostics.test.ts",
     "packages/browser-host/src/observability/unsupported-runtime.ts",
     "packages/browser-host/src/observability/recovery-actions.ts",
     "packages/browser-host/src/observability/package-manager-diagnostics.ts",

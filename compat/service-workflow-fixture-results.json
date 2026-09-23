@@ -88,56 +88,56 @@
       "id": "local-vite-vue-fixture",
       "status": "pass",
       "score": 100,
-      "source": "tests/vite/vite-vue-svelte-actual.test.mjs|tests/vite/vite-react-product-workflow.test.mjs",
+      "source": "tests/compatibility/frameworks/vite/vite-vue-svelte-actual.test.ts|tests/compatibility/frameworks/vite/vite-react-product-workflow.test.ts",
       "notes": "Local service-workflow / adapter validation pass."
     },
     {
       "id": "local-vite-svelte-fixture",
       "status": "pass",
       "score": 100,
-      "source": "tests/vite/vite-vue-svelte-actual.test.mjs|tests/vite/vite-react-product-workflow.test.mjs",
+      "source": "tests/compatibility/frameworks/vite/vite-vue-svelte-actual.test.ts|tests/compatibility/frameworks/vite/vite-react-product-workflow.test.ts",
       "notes": "Local service-workflow / adapter validation pass."
     },
     {
       "id": "local-vite-vanilla-fixture",
       "status": "pass",
       "score": 100,
-      "source": "tests/vite/vite-vue-svelte-actual.test.mjs|tests/vite/vite-react-product-workflow.test.mjs",
+      "source": "tests/compatibility/frameworks/vite/vite-vue-svelte-actual.test.ts|tests/compatibility/frameworks/vite/vite-react-product-workflow.test.ts",
       "notes": "Local service-workflow / adapter validation pass."
     },
     {
       "id": "local-vite-react-fixture",
       "status": "pass",
       "score": 100,
-      "source": "tests/vite/vite-vue-svelte-actual.test.mjs|tests/vite/vite-react-product-workflow.test.mjs",
+      "source": "tests/compatibility/frameworks/vite/vite-vue-svelte-actual.test.ts|tests/compatibility/frameworks/vite/vite-react-product-workflow.test.ts",
       "notes": "Local service-workflow / adapter validation pass."
     },
     {
       "id": "preview-service-vite-react-template",
       "status": "pass",
       "score": 100,
-      "source": "tests/browser-host/project-onboarding.test.mjs|tests/preview-service/mvp.test.mjs",
+      "source": "packages/browser-host/test/project-onboarding.test.ts|apps/preview-service/test/mvp.test.ts",
       "notes": "Local service-workflow / adapter validation pass."
     },
     {
       "id": "preview-service-vite-ts-template",
       "status": "pass",
       "score": 100,
-      "source": "tests/browser-host/project-onboarding.test.mjs|tests/preview-service/mvp.test.mjs",
+      "source": "packages/browser-host/test/project-onboarding.test.ts|apps/preview-service/test/mvp.test.ts",
       "notes": "Local service-workflow / adapter validation pass."
     },
     {
       "id": "preview-service-minimal-npm-template",
       "status": "pass",
       "score": 100,
-      "source": "tests/browser-host/project-onboarding.test.mjs|tests/preview-service/mvp.test.mjs",
+      "source": "packages/browser-host/test/project-onboarding.test.ts|apps/preview-service/test/mvp.test.ts",
       "notes": "Local service-workflow / adapter validation pass."
     },
     {
       "id": "preview-service-minimal-pnpm-template",
       "status": "pass",
       "score": 100,
-      "source": "tests/browser-host/project-onboarding.test.mjs|tests/preview-service/mvp.test.mjs",
+      "source": "packages/browser-host/test/project-onboarding.test.ts|apps/preview-service/test/mvp.test.ts",
       "notes": "Local service-workflow / adapter validation pass."
     },
     {

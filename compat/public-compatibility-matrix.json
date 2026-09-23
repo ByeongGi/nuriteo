@@ -25,7 +25,7 @@
         "compat/framework-conformance.json",
         "compat/framework-actual-validation.json",
         "compat/framework-product-support.json",
-        "tests/vite/vite-vue-svelte-actual.test.mjs"
+        "tests/compatibility/frameworks/vite/vite-vue-svelte-actual.test.ts"
       ],
       "notes": "The runtime fixture is tied to a pinned Vite template-vue upstream revision and passes npm/pnpm install, dev/preview, edit-HMR, build, and reload recovery within the framework budget."
     },
@@ -37,7 +37,7 @@
         "compat/framework-conformance.json",
         "compat/framework-actual-validation.json",
         "compat/framework-product-support.json",
-        "tests/vite/vite-vue-svelte-actual.test.mjs"
+        "tests/compatibility/frameworks/vite/vite-vue-svelte-actual.test.ts"
       ],
       "notes": "The runtime fixture is tied to a pinned Vite template-svelte upstream revision and passes npm/pnpm install, plugin-backed dev/preview, edit-HMR, build, and reload recovery within the framework budget."
     },
@@ -48,7 +48,7 @@
       "evidence": [
         "compat/nextjs-compatibility.json",
         "compat/framework-actual-validation.json",
-        "tests/vite/nextjs-compatibility.test.mjs",
+        "tests/compatibility/frameworks/vite/nextjs-compatibility.test.ts",
         "docs/productization/nextjs-product-support-target.md"
       ],
       "notes": "App Router preview adapter is product-supported for multi-route preview, layout, link navigation, and HMR."
@@ -59,7 +59,7 @@
       "supportLevel": "pinned-guest-runtime",
       "evidence": [
         "compat/nextjs-compatibility.json",
-        "tests/preview-service/next-full-runtime.test.mjs",
+        "apps/preview-service/test/next-full-runtime.test.ts",
         "docs/productization/nextjs-product-support-target.md"
       ],
       "notes": "Real next dev/build/start, WASM SWC, RSC/Server Actions, Middleware/Edge, ISR, and Image Optimization pass for the pinned fixture. Native .node SWC remains unsupported; browser-worker promotion is pending."
@@ -71,7 +71,7 @@
       "status": "supported",
       "evidence": [
         "compat/package-compatibility-cohorts.json",
-        "tests/productization/package-cohort-execution.test.mjs"
+        "tests/productization/package-cohort-execution.test.ts"
       ]
     },
     {
@@ -79,7 +79,7 @@
       "status": "supported",
       "evidence": [
         "compat/package-compatibility-cohorts.json",
-        "tests/productization/package-cohort-execution.test.mjs"
+        "tests/productization/package-cohort-execution.test.ts"
       ]
     },
     {
@@ -87,7 +87,7 @@
       "status": "supported",
       "evidence": [
         "compat/package-compatibility-cohorts.json",
-        "tests/productization/package-cohort-execution.test.mjs"
+        "tests/productization/package-cohort-execution.test.ts"
       ]
     },
     {
@@ -95,7 +95,7 @@
       "status": "supported-with-polyfill",
       "evidence": [
         "compat/package-compatibility-cohorts.json",
-        "tests/productization/package-cohort-execution.test.mjs"
+        "tests/productization/package-cohort-execution.test.ts"
       ]
     },
     {
@@ -104,7 +104,7 @@
       "evidence": [
         "compat/package-compatibility-cohorts.json",
         "compat/wasm-tool-adapters.json",
-        "tests/productization/package-cohort-execution.test.mjs"
+        "tests/productization/package-cohort-execution.test.ts"
       ]
     },
     {
@@ -114,7 +114,7 @@
       "evidence": [
         "compat/package-compatibility-cohorts.json",
         "compat/unsupported-diagnostics.json",
-        "tests/productization/package-cohort-execution.test.mjs"
+        "tests/productization/package-cohort-execution.test.ts"
       ]
     },
     {
@@ -124,7 +124,7 @@
       "evidence": [
         "compat/package-compatibility-cohorts.json",
         "compat/unsupported-diagnostics.json",
-        "tests/productization/package-cohort-execution.test.mjs"
+        "tests/productization/package-cohort-execution.test.ts"
       ]
     }
   ],
@@ -183,13 +183,13 @@
   ],
   "reproduce": [
     "pnpm exec tsc --noEmit --pretty false",
-    "node tests/productization/run.mjs",
-    "node tests/package-managers/run.mjs",
-    "node tests/vite/vite-react-product-workflow.test.mjs",
+    "node tests/productization/run.ts",
+    "node tests/compatibility/package-managers/run.ts",
+    "node tests/compatibility/frameworks/vite/vite-react-product-workflow.test.ts",
     "pnpm test:next-full-runtime",
-    "node tests/preview/run.mjs",
-    "node tests/browser-host/run.mjs",
-    "node tests/browser/boot.test.mjs"
+    "node packages/preview/test/run.ts",
+    "node packages/browser-host/test/run.ts",
+    "node tests/system/browser/boot.test.ts"
   ],
   "gate": {
     "id": "P18-04",

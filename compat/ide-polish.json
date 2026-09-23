@@ -18,7 +18,7 @@
     "window and process menus"
   ],
   "tests": [
-    "tests/preview-service/ide-polish.test.mjs",
-    "tests/preview-service/app-menu.test.mjs"
+    "apps/preview-service/test/ide-polish.test.ts",
+    "apps/preview-service/test/app-menu.test.ts"
   ]
 }

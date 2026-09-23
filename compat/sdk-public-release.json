@@ -45,10 +45,10 @@
   },
   "consumerMatrix": "compat/sdk-consumer-bundler-matrix.json",
   "commands": [
-    "node tests/sdk-consumer/services.test.mjs",
-    "node scripts/package-sdk.mjs",
-    "node scripts/check-sdk-public-release.mjs",
-    "node scripts/check-sdk-publish-rehearsal.mjs",
-    "node tests/sdk-consumer/run.mjs"
+    "node tests/contract/sdk-consumer/services.test.ts",
+    "node tooling/release/package-sdk.ts",
+    "node tooling/checks/check-sdk-public-release.ts",
+    "node tooling/checks/check-sdk-publish-rehearsal.ts",
+    "node tests/contract/sdk-consumer/run.ts"
   ]
 }

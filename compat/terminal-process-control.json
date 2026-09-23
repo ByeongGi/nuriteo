@@ -20,10 +20,10 @@
     "unsupported": ["background jobs", "command substitution", "OR operator", "command lists", "heredoc", "append redirect", "stdin redirect", "shell blocks"]
   },
   "tests": [
-    "tests/node-runtime/shell.test.mjs",
-    "tests/browser-host/process-lifecycle.test.mjs",
-    "tests/browser-host/process-terminal-command.test.mjs",
-    "tests/package-managers/terminal-commands.test.mjs",
-    "tests/preview-service/terminal-session-control.test.mjs"
+    "packages/node-runtime/test/shell.test.ts",
+    "packages/browser-host/test/process-lifecycle.test.ts",
+    "packages/browser-host/test/process-terminal-command.test.ts",
+    "tests/compatibility/package-managers/terminal-commands.test.ts",
+    "apps/preview-service/test/terminal-session-control.test.ts"
   ]
 }

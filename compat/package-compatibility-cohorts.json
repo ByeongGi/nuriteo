@@ -14,10 +14,10 @@
       "packages": ["fixture-peer-consumer", "fixture-peer-provider", "fixture-bin"],
       "expectedRuntimePath": "workspace module runtime and package script runner",
       "evidence": [
-        "tests/package-managers/npm-guest-runtime-boot.test.mjs",
-        "tests/package-managers/pnpm-guest-runtime-boot.test.mjs",
-        "tests/package-managers/cli-evaluator.test.mjs",
-        "tests/productization/package-cohort-execution.test.mjs"
+        "tests/compatibility/package-managers/npm-guest-runtime-boot.test.ts",
+        "tests/compatibility/package-managers/pnpm-guest-runtime-boot.test.ts",
+        "tests/compatibility/package-managers/cli-evaluator.test.ts",
+        "tests/productization/package-cohort-execution.test.ts"
       ],
       "notes": "CJS/ESM fixture packages, local file dependencies, peer dependency resolution, and .bin execution are product-supported."
     },
@@ -28,10 +28,10 @@
       "packages": ["fixture-registry"],
       "expectedRuntimePath": "browser fetch adapter, tarball cache, integrity, writer-backed workspace",
       "evidence": [
-        "tests/package-managers/npm-registry-install-cli-module-evaluation.test.mjs",
-        "tests/package-managers/pnpm-registry-install-cli-module-evaluation.test.mjs",
-        "tests/package-managers/tarball-cache.test.mjs",
-        "tests/productization/package-cohort-execution.test.mjs"
+        "tests/compatibility/package-managers/npm-registry-install-cli-module-evaluation.test.ts",
+        "tests/compatibility/package-managers/pnpm-registry-install-cli-module-evaluation.test.ts",
+        "tests/compatibility/package-managers/tarball-cache.test.ts",
+        "tests/productization/package-cohort-execution.test.ts"
       ],
       "notes": "HTTP tarball fetch, gzip/tar extraction, integrity checking, and node_modules materialization are covered."
     },
@@ -42,10 +42,10 @@
       "packages": ["local-dep", "fixture-optional"],
       "expectedRuntimePath": "package script runner with execution policy",
       "evidence": [
-        "tests/package-managers/npm-install-cli-module-evaluation.test.mjs",
-        "tests/package-managers/pnpm-install-cli-module-evaluation.test.mjs",
-        "tests/package-managers/execution-boundary.test.mjs",
-        "tests/productization/package-cohort-execution.test.mjs"
+        "tests/compatibility/package-managers/npm-install-cli-module-evaluation.test.ts",
+        "tests/compatibility/package-managers/pnpm-install-cli-module-evaluation.test.ts",
+        "tests/compatibility/package-managers/execution-boundary.test.ts",
+        "tests/productization/package-cohort-execution.test.ts"
       ],
       "notes": "Simple JavaScript lifecycle scripts are allowed inside policy limits; risky lifecycle behavior remains policy-checked."
     },
@@ -57,9 +57,9 @@
       "expectedRuntimePath": "pinned WASM adapter with export contract",
       "evidence": [
         "compat/wasm-tool-adapters.json",
-        "tests/node-runtime/wasm-adapters.test.mjs",
-        "tests/package-managers/native-fallback-policy.test.mjs",
-        "tests/productization/package-cohort-execution.test.mjs"
+        "packages/node-runtime/test/wasm-adapters.test.ts",
+        "tests/compatibility/package-managers/native-fallback-policy.test.ts",
+        "tests/productization/package-cohort-execution.test.ts"
       ],
       "notes": "WASM-backed replacements are accepted only after integrity pinning and adapter contract verification."
     },
@@ -71,8 +71,8 @@
       "expectedRuntimePath": "browser polyfill or empty optional dependency",
       "evidence": [
         "compat/native-fallback-policy.json",
-        "tests/package-managers/native-fallback-policy.test.mjs",
-        "tests/productization/package-cohort-execution.test.mjs"
+        "tests/compatibility/package-managers/native-fallback-policy.test.ts",
+        "tests/productization/package-cohort-execution.test.ts"
       ],
       "notes": "Optional native packages can be ignored or replaced by a browser polyfill when the app does not require native behavior."
     },
@@ -85,9 +85,9 @@
       "requiredErrorCode": "ERR_PM_NATIVE_ADDON_UNSUPPORTED",
       "evidence": [
         "compat/native-fallback-policy.json",
-        "tests/package-managers/native-fallback-policy.test.mjs",
-        "tests/package-managers/execution-boundary.test.mjs",
-        "tests/productization/package-cohort-execution.test.mjs"
+        "tests/compatibility/package-managers/native-fallback-policy.test.ts",
+        "tests/compatibility/package-managers/execution-boundary.test.ts",
+        "tests/productization/package-cohort-execution.test.ts"
       ],
       "notes": "Native addon execution is outside the browser runtime unless a proven WASM adapter or browser polyfill exists."
     },
@@ -100,8 +100,8 @@
       "requiredErrorCode": "ERR_RUNTIME_UNSUPPORTED_BINARY",
       "evidence": [
         "compat/non-js-tooling-candidates.json",
-        "tests/browser-host/support-bundle.test.mjs",
-        "tests/productization/package-cohort-execution.test.mjs"
+        "packages/browser-host/test/support-bundle.test.ts",
+        "tests/productization/package-cohort-execution.test.ts"
       ],
       "notes": "Privileged OS/container features and arbitrary native binaries are outside WebContainers-parity browser scope."
     }

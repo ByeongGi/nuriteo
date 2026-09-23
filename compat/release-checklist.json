@@ -21,26 +21,26 @@
     "compat/soak-baseline.json"
   ],
   "requiredChecks": [
-    "node scripts/package-sdk.mjs",
-    "node scripts/check-sdk-public-release.mjs",
-    "node scripts/check-sdk-publish-rehearsal.mjs",
-    "node scripts/check-release-readiness.mjs",
-    "node scripts/check-release-ops-sg29.mjs",
-    "node scripts/check-release-policy.mjs",
-    "node scripts/check-release-provenance.mjs",
-    "node scripts/check-incident-playbook.mjs",
-    "node scripts/check-performance-baseline.mjs",
-    "node scripts/check-soak-baseline.mjs",
-    "node scripts/check-workspace.mjs"
+    "node tooling/release/package-sdk.ts",
+    "node tooling/checks/check-sdk-public-release.ts",
+    "node tooling/checks/check-sdk-publish-rehearsal.ts",
+    "node tooling/checks/check-release-readiness.ts",
+    "node tooling/checks/check-release-ops-sg29.ts",
+    "node tooling/checks/check-release-policy.ts",
+    "node tooling/checks/check-release-provenance.ts",
+    "node tooling/checks/check-incident-playbook.ts",
+    "node tooling/checks/check-performance-baseline.ts",
+    "node tooling/checks/check-soak-baseline.ts",
+    "node tooling/checks/check-workspace.ts"
   ],
   "ciGate": {
     "elevatedFrom": "docs/release/release-checklist.md",
     "requiredCommands": [
-      "node scripts/package-sdk.mjs",
-      "node scripts/check-sdk-public-release.mjs",
-      "node scripts/check-sdk-publish-rehearsal.mjs",
-      "node scripts/check-release-readiness.mjs",
-      "node scripts/check-release-ops-sg29.mjs"
+      "node tooling/release/package-sdk.ts",
+      "node tooling/checks/check-sdk-public-release.ts",
+      "node tooling/checks/check-sdk-publish-rehearsal.ts",
+      "node tooling/checks/check-release-readiness.ts",
+      "node tooling/checks/check-release-ops-sg29.ts"
     ]
   },
   "gateReview": {

@@ -14,38 +14,38 @@
   "fixtures": [
     {
       "id": "browser-runtime-boot-run-teardown",
-      "test": "tests/browser/soak.test.mjs",
-      "command": "SOAK_ITERATIONS=1000 node tests/browser/soak.test.mjs",
+      "test": "tests/system/browser/soak.test.ts",
+      "command": "SOAK_ITERATIONS=1000 node tests/system/browser/soak.test.ts",
       "status": "required"
     },
     {
       "id": "package-cache-return-to-budget",
-      "test": "tests/package-managers/tarball-cache.test.mjs",
-      "command": "node tests/package-managers/tarball-cache.test.mjs",
+      "test": "tests/compatibility/package-managers/tarball-cache.test.ts",
+      "command": "node tests/compatibility/package-managers/tarball-cache.test.ts",
       "status": "required"
     },
     {
       "id": "worker-churn-return-to-budget",
-      "test": "tests/browser-host/process-lifecycle.test.mjs",
-      "command": "node tests/browser-host/process-lifecycle.test.mjs",
+      "test": "packages/browser-host/test/process-lifecycle.test.ts",
+      "command": "node packages/browser-host/test/process-lifecycle.test.ts",
       "status": "required"
     },
     {
       "id": "preview-reconnect-return-to-budget",
-      "test": "tests/preview/hmr-client.test.mjs",
-      "command": "node tests/preview/hmr-client.test.mjs",
+      "test": "packages/preview/test/hmr-client.test.ts",
+      "command": "node packages/preview/test/hmr-client.test.ts",
       "status": "required"
     },
     {
       "id": "service-install-dev-restart-soak",
-      "test": "tests/preview-service/workflow-soak.test.mjs",
-      "command": "WORKFLOW_SOAK_ITERATIONS=25 node tests/preview-service/workflow-soak.test.mjs",
+      "test": "apps/preview-service/test/workflow-soak.test.ts",
+      "command": "WORKFLOW_SOAK_ITERATIONS=25 node apps/preview-service/test/workflow-soak.test.ts",
       "status": "required"
     },
     {
       "id": "large-node-modules-stress",
-      "test": "tests/browser-host/large-node-modules-stress.test.mjs",
-      "command": "node tests/browser-host/large-node-modules-stress.test.mjs",
+      "test": "packages/browser-host/test/large-node-modules-stress.test.ts",
+      "command": "node packages/browser-host/test/large-node-modules-stress.test.ts",
       "status": "required"
     }
   ],

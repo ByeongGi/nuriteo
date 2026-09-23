@@ -77,7 +77,7 @@
     "packages/browser-host/src/observability/recovery-action-executor.ts",
     "packages/browser-host/src/observability/recovery-actions.ts",
     "compat/error-catalog.json",
-    "scripts/check-observability-support.mjs",
-    "tests/preview-service/observability-support.test.mjs"
+    "tooling/checks/check-observability-support.ts",
+    "apps/preview-service/test/observability-support.test.ts"
   ]
 }

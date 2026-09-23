@@ -59,9 +59,9 @@
   "ciGate": {
     "checklist": "compat/release-checklist.json",
     "requiredCommands": [
-      "node scripts/package-sdk.mjs",
-      "node scripts/check-release-readiness.mjs",
-      "node scripts/check-release-ops-sg29.mjs"
+      "node tooling/release/package-sdk.ts",
+      "node tooling/checks/check-release-readiness.ts",
+      "node tooling/checks/check-release-ops-sg29.ts"
     ]
   }
 }

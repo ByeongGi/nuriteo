@@ -10,9 +10,9 @@
     {
       "id": "sdk-service-webcontainer-contract",
       "bundler": "source-contract",
-      "command": "node tests/sdk-consumer/services.test.mjs",
+      "command": "node tests/contract/sdk-consumer/services.test.ts",
       "status": "pass",
-      "evidence": ["tests/sdk-consumer/services.test.mjs", "compat/sdk-public-release.json"],
+      "evidence": ["tests/contract/sdk-consumer/services.test.ts", "compat/sdk-public-release.json"],
       "notes": "Validates typed errors, filesystem/package/process/project/preview adapters, trace events, mount-root containment, lifecycle retry and teardown, and the Cargo WebContainer-style facade."
     },
     {
@@ -20,7 +20,7 @@
       "bundler": "typescript",
       "command": "tsc --noEmit with moduleResolution Bundler",
       "status": "pass",
-      "evidence": ["tests/sdk-consumer/package.test.mjs"],
+      "evidence": ["tests/contract/sdk-consumer/package.test.ts"],
       "notes": "Tarball-installed consumer imports @cargo-container/sdk root types and validates stable API surface."
     },
     {
@@ -28,7 +28,7 @@
       "bundler": "node-cjs",
       "command": "require('@cargo-container/sdk')",
       "status": "pass",
-      "evidence": ["tests/sdk-consumer/package.test.mjs"],
+      "evidence": ["tests/contract/sdk-consumer/package.test.ts"],
       "notes": "Tarball-installed consumer verifies CommonJS conditional export exposes createContainer, createPreviewRelay, and protocolVersion."
     },
     {
@@ -36,7 +36,7 @@
       "bundler": "vite",
       "command": "vite build",
       "status": "pass",
-      "evidence": ["tests/sdk-consumer/vite-build.test.mjs", "docs/archive/productization-2026-09-16/evidence/P14-03.md"],
+      "evidence": ["tests/contract/sdk-consumer/vite-build.test.ts", "docs/archive/productization-2026-09-16/evidence/P14-03.md"],
       "notes": "Tarball-installed Vite consumer imports the root SDK package, builds successfully, and verifies worker asset URL strings survive bundling."
     },
     {
@@ -44,7 +44,7 @@
       "bundler": "webpack",
       "command": "webpack build",
       "status": "pass",
-      "evidence": ["tests/sdk-consumer/webpack-build.test.mjs", "docs/archive/productization-2026-09-16/evidence/P14-03.md"],
+      "evidence": ["tests/contract/sdk-consumer/webpack-build.test.ts", "docs/archive/productization-2026-09-16/evidence/P14-03.md"],
       "notes": "Tarball-installed Webpack consumer imports the root SDK package, builds successfully, and verifies runtime worker URL strings survive bundling when expressed from location.href."
     },
     {
@@ -52,7 +52,7 @@
       "bundler": "rspack",
       "command": "rspack build",
       "status": "pass",
-      "evidence": ["tests/sdk-consumer/rspack-build.test.mjs", "docs/archive/productization-2026-09-16/evidence/P14-03.md"],
+      "evidence": ["tests/contract/sdk-consumer/rspack-build.test.ts", "docs/archive/productization-2026-09-16/evidence/P14-03.md"],
       "notes": "Tarball-installed Rspack consumer imports the root SDK package, builds successfully, and verifies runtime worker URL strings survive bundling when expressed from location.href."
     },
     {
@@ -60,7 +60,7 @@
       "bundler": "next",
       "command": "next build",
       "status": "pass",
-      "evidence": ["tests/sdk-consumer/next-build.test.mjs", "docs/archive/productization-2026-09-16/evidence/P14-03.md"],
+      "evidence": ["tests/contract/sdk-consumer/next-build.test.ts", "docs/archive/productization-2026-09-16/evidence/P14-03.md"],
       "notes": "Tarball-installed Next app router client fixture imports the root SDK package with transpilePackages and verifies worker URL strings survive in client assets."
     }
   ],

@@ -17,15 +17,15 @@
     "tarballSha256": "c17d3797fb9a9115bf375e31bfd30058cac6bc9c3b8807a3d8cb2094794b51ca"
   },
   "capabilities": [
-    { "id": "vendored-real-cli", "status": "pass", "evidence": ["vendor/cli/yarn/1.22.22/installed.json", "tests/package-managers/yarn-vendored-cli.test.mjs"] },
-    { "id": "real-cli-bundle-graph", "status": "pass", "evidence": ["tests/package-managers/yarn-vendored-cli.test.mjs"] },
-    { "id": "real-cli-version", "status": "pass", "evidence": ["tests/package-managers/yarn-real-cli.test.mjs", "tests/package-managers/cli-evaluator.test.mjs"] },
-    { "id": "local-file-install", "status": "pass", "evidence": ["tests/package-managers/yarn-guest-runtime-boot.test.mjs"] },
-    { "id": "scripts-and-exec", "status": "pass", "evidence": ["tests/package-managers/yarn-guest-runtime-boot.test.mjs", "tests/package-managers/terminal-commands.test.mjs"] },
-    { "id": "cancellation-recovery-soak", "status": "pass", "evidence": ["tests/package-managers/yarn-guest-runtime-boot.test.mjs"] },
-    { "id": "registry-resolution-install", "status": "pass", "evidence": ["tests/package-managers/yarn-registry-install-real-cli.test.mjs"] },
-    { "id": "real-cli-browser-execution", "status": "pass", "evidence": ["tests/package-managers/yarn-browser-worker-real-cli.test.mjs", "apps/preview-service/public/vendor/yarn-cli-1.22.22.mjs"] },
-    { "id": "detection-override-ui", "status": "pass", "evidence": ["tests/browser-host/project-onboarding.test.mjs", "tests/preview-service/ide4-runtime.test.mjs"] }
+    { "id": "vendored-real-cli", "status": "pass", "evidence": ["vendor/cli/yarn/1.22.22/installed.json", "tests/compatibility/package-managers/yarn-vendored-cli.test.ts"] },
+    { "id": "real-cli-bundle-graph", "status": "pass", "evidence": ["tests/compatibility/package-managers/yarn-vendored-cli.test.ts"] },
+    { "id": "real-cli-version", "status": "pass", "evidence": ["tests/compatibility/package-managers/yarn-real-cli.test.ts", "tests/compatibility/package-managers/cli-evaluator.test.ts"] },
+    { "id": "local-file-install", "status": "pass", "evidence": ["tests/compatibility/package-managers/yarn-guest-runtime-boot.test.ts"] },
+    { "id": "scripts-and-exec", "status": "pass", "evidence": ["tests/compatibility/package-managers/yarn-guest-runtime-boot.test.ts", "tests/compatibility/package-managers/terminal-commands.test.ts"] },
+    { "id": "cancellation-recovery-soak", "status": "pass", "evidence": ["tests/compatibility/package-managers/yarn-guest-runtime-boot.test.ts"] },
+    { "id": "registry-resolution-install", "status": "pass", "evidence": ["tests/compatibility/package-managers/yarn-registry-install-real-cli.test.ts"] },
+    { "id": "real-cli-browser-execution", "status": "pass", "evidence": ["tests/compatibility/package-managers/yarn-browser-worker-real-cli.test.ts", "apps/preview-service/public/vendor/yarn-cli-1.22.22.mjs"] },
+    { "id": "detection-override-ui", "status": "pass", "evidence": ["packages/browser-host/test/project-onboarding.test.ts", "apps/preview-service/test/ide4-runtime.test.ts"] }
   ],
   "promotionGate": {
     "status": "passed",
@@ -37,7 +37,7 @@
       "status": "resolved",
       "stage": "post-tarball-download/pre-materialization",
       "symptom": "The bundled decompression peek pipeline formerly raised write after end; stream lifecycle and gunzip transform fixes now pass package materialization.",
-      "evidence": "tests/package-managers/yarn-registry-install-real-cli.test.mjs"
+      "evidence": "tests/compatibility/package-managers/yarn-registry-install-real-cli.test.ts"
     }
   }
 }

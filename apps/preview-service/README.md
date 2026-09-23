@@ -27,7 +27,7 @@ Product IDE for Cargo Container, built like a WebContainers-style workspace.
 - Runtime: `exportTreeJson` / `exportPathZip`, preview error bridge, change status
 - Project-wide Monaco language service: TypeScript/JavaScript completion, hover, parameter and inlay hints, semantic diagnostics, and cross-file go-to-definition.
 - Language-service errors and warnings appear in the status bar and the clickable Problems panel.
-- Monaco language workers are real TS/JSON/CSS/HTML module workers bundled from Monaco 0.56's native `new URL(..., import.meta.url)` declarations by Vite 8. There is no legacy plugin or no-op worker fallback. `tests/preview-service/monaco-workers.test.mjs` exercises semantic diagnostics, completion, hover, and cross-file definition resolution.
+- Monaco language workers are real TS/JSON/CSS/HTML module workers bundled from Monaco 0.56's native `new URL(..., import.meta.url)` declarations by Vite 8. There is no legacy plugin or no-op worker fallback. `apps/preview-service/test/monaco-workers.test.ts` exercises semantic diagnostics, completion, hover, and cross-file definition resolution.
 
 This is the browser-native Monaco language-service layer. External stdio/WebSocket LSP servers and a VS Code extension host remain outside the Classic Editor runtime.
 

@@ -1,0 +1,19 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "erasableSyntaxOnly": true,
+    "noCheck": true,
+    "skipLibCheck": true
+  },
+  "include": [
+    "apps/*/test/**/*.ts",
+    "experiments/*/check.ts",
+    "packages/*/test/**/*.ts",
+    "tests/**/*.ts",
+    "tooling/**/*.ts"
+  ],
+  "exclude": [
+    "tests/fixtures/**",
+    "tests/system/browser/fixtures/**"
+  ]
+}

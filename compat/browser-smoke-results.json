@@ -5,8 +5,8 @@
     "chrome": {
       "status": "pass",
       "evidence": [
-        "tests/browser/isolation.test.mjs",
-        "tests/preview-service/mvp.test.mjs"
+        "tests/system/browser/isolation.test.ts",
+        "apps/preview-service/test/mvp.test.ts"
       ]
     },
     "edge": {
@@ -20,7 +20,7 @@
         "Service Worker activation",
         "Vite React preview iframe"
       ],
-      "evidence": ["tests/preview-service/edge-browser-smoke.test.mjs"]
+      "evidence": ["apps/preview-service/test/edge-browser-smoke.test.ts"]
     },
     "safari": {
       "status": "hold",

@@ -1,7 +1,0 @@
-import "./services.test.mjs";
-import "./bundler-matrix.test.mjs";
-import "./package.test.mjs";
-import "./vite-build.test.mjs";
-import "./webpack-build.test.mjs";
-import "./rspack-build.test.mjs";
-import "./next-build.test.mjs";

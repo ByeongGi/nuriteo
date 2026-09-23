@@ -7,7 +7,7 @@
       "source": "local-sab-syscall-adapter",
       "implementedBy": "packages/node-runtime/src/bindings/fs.ts",
       "tests": [
-        "tests/browser/boot.test.mjs"
+        "tests/system/browser/boot.test.ts"
       ],
       "notes": "Synchronous writeFileSync/readFileSync/statSync/openSync/readSync/writeSync/closeSync/mkdirSync subset only."
     },
@@ -16,7 +16,7 @@
       "source": "browser-native-js",
       "implementedBy": "packages/node-runtime/src/builtins/assert.ts",
       "tests": [
-        "tests/node-runtime/secondary-builtins.test.mjs"
+        "packages/node-runtime/test/secondary-builtins.test.ts"
       ],
       "notes": "Browser-native assert subset covering ok, equal, strictEqual, deepStrictEqual, throws, rejects, and assert/strict."
     },
@@ -25,7 +25,7 @@
       "source": "browser-native-js",
       "implementedBy": "packages/node-runtime/src/builtins/buffer.ts",
       "tests": [
-        "tests/node-runtime/builtin-subset.test.mjs"
+        "packages/node-runtime/test/builtin-subset.test.ts"
       ],
       "notes": "Browser-native Buffer subset covering allocation, encoding, concat, slicing, copy, and equality."
     },
@@ -34,7 +34,7 @@
       "source": "browser-native-js",
       "implementedBy": "packages/node-runtime/src/builtins/events.ts",
       "tests": [
-        "tests/node-runtime/builtin-subset.test.mjs"
+        "packages/node-runtime/test/builtin-subset.test.ts"
       ],
       "notes": "Browser-native EventEmitter subset covering listener order, once, cleanup, and error event behavior."
     },
@@ -43,7 +43,7 @@
       "source": "browser-native-js",
       "implementedBy": "packages/node-runtime/src/builtins/module.ts",
       "tests": [
-        "tests/node-runtime/secondary-builtins.test.mjs"
+        "packages/node-runtime/test/secondary-builtins.test.ts"
       ],
       "notes": "Browser-native module subset covering enableCompileCache, builtinModules, isBuiltin, syncBuiltinESMExports, createRequire stub, and Module resolution helpers used by npm/pnpm/Vite preflight."
     },
@@ -52,7 +52,7 @@
       "source": "browser-native-js",
       "implementedBy": "packages/node-runtime/src/builtins/os.ts",
       "tests": [
-        "tests/node-runtime/secondary-builtins.test.mjs"
+        "packages/node-runtime/test/secondary-builtins.test.ts"
       ],
       "notes": "Browser-safe Linux-shaped OS metadata for package and framework feature detection."
     },
@@ -61,7 +61,7 @@
       "source": "browser-native-js",
       "implementedBy": "packages/node-runtime/src/builtins/path.ts",
       "tests": [
-        "tests/node-runtime/secondary-builtins.test.mjs"
+        "packages/node-runtime/test/secondary-builtins.test.ts"
       ],
       "notes": "POSIX path subset for browser workspace paths."
     },
@@ -70,7 +70,7 @@
       "source": "browser-native-js",
       "implementedBy": "packages/node-runtime/src/builtins/process.ts",
       "tests": [
-        "tests/node-runtime/secondary-builtins.test.mjs"
+        "packages/node-runtime/test/secondary-builtins.test.ts"
       ],
       "notes": "Per-runtime browser process shape covering argv, env, cwd, chdir, nextTick, stdio shape, platform, versions, and release."
     },
@@ -79,7 +79,7 @@
       "source": "browser-native-js",
       "implementedBy": "packages/node-runtime/src/builtins/stream.ts",
       "tests": [
-        "tests/node-runtime/stream-subset.test.mjs"
+        "packages/node-runtime/test/stream-subset.test.ts"
       ],
       "notes": "Browser-native stream subset covering Readable.from, async iteration, Writable, Transform, PassThrough, pipe, finished, and pipeline."
     },
@@ -88,7 +88,7 @@
       "source": "browser-native-js",
       "implementedBy": "packages/node-runtime/src/builtins/tty.ts",
       "tests": [
-        "tests/node-runtime/secondary-builtins.test.mjs"
+        "packages/node-runtime/test/secondary-builtins.test.ts"
       ],
       "notes": "Non-interactive TTY subset with deterministic false isatty and stream-shaped read/write classes."
     },
@@ -97,7 +97,7 @@
       "source": "browser-native-js",
       "implementedBy": "packages/node-runtime/src/builtins/url.ts",
       "tests": [
-        "tests/node-runtime/secondary-builtins.test.mjs"
+        "packages/node-runtime/test/secondary-builtins.test.ts"
       ],
       "notes": "URL subset backed by browser URL primitives plus fileURLToPath, pathToFileURL, and urlToHttpOptions."
     },
@@ -106,7 +106,7 @@
       "source": "browser-native-js",
       "implementedBy": "packages/node-runtime/src/builtins/util.ts",
       "tests": [
-        "tests/node-runtime/builtin-subset.test.mjs"
+        "packages/node-runtime/test/builtin-subset.test.ts"
       ],
       "notes": "Browser-native util subset covering format, inspect, inherits, promisify, callbackify, deprecate, and common util.types probes."
     }

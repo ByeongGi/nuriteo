@@ -23,7 +23,7 @@
       "risk": "high",
       "evidence": [
         "packages/browser-host/src/security/credentials.ts",
-        "tests/browser-host/credential-safety.test.mjs"
+        "packages/browser-host/test/credential-safety.test.ts"
       ]
     },
     {
@@ -33,7 +33,7 @@
       "risk": "high",
       "evidence": [
         "packages/browser-host/src/security/permissions.ts",
-        "tests/browser-host/permission-model.test.mjs"
+        "packages/browser-host/test/permission-model.test.ts"
       ]
     },
     {
@@ -44,8 +44,8 @@
       "evidence": [
         "packages/preview/src/session.ts",
         "packages/preview/src/relay.ts",
-        "tests/preview/session-relay.test.mjs",
-        "tests/browser/isolation.test.mjs"
+        "packages/preview/test/session-relay.test.ts",
+        "tests/system/browser/isolation.test.ts"
       ]
     },
     {
@@ -55,8 +55,8 @@
       "risk": "high",
       "evidence": [
         "packages/browser-host/src/security/headers.ts",
-        "scripts/check-security-beta.mjs",
-        "tests/browser-host/security-headers.test.mjs"
+        "tooling/checks/check-security-beta.ts",
+        "packages/browser-host/test/security-headers.test.ts"
       ]
     },
     {
@@ -66,7 +66,7 @@
       "risk": "high",
       "evidence": [
         "packages/browser-host/src/security/abuse-limits.ts",
-        "tests/browser-host/security-beta.test.mjs"
+        "packages/browser-host/test/security-beta.test.ts"
       ]
     },
     {
@@ -77,8 +77,8 @@
       "evidence": [
         "packages/browser-host/src/observability/support-bundle.ts",
         "packages/browser-host/src/security/credentials.ts",
-        "tests/browser-host/security-beta.test.mjs",
-        "tests/browser-host/support-bundle.test.mjs"
+        "packages/browser-host/test/security-beta.test.ts",
+        "packages/browser-host/test/support-bundle.test.ts"
       ]
     }
   ],
@@ -93,11 +93,11 @@
     "packages/node-runtime/src/package-managers/execution-policy.ts",
     "packages/preview/src/session.ts",
     "packages/preview/src/relay.ts",
-    "scripts/check-security-beta.mjs",
-    "tests/browser-host/security-beta.test.mjs"
+    "tooling/checks/check-security-beta.ts",
+    "packages/browser-host/test/security-beta.test.ts"
   ],
   "requiredChecks": [
-    "node scripts/check-security-beta.mjs",
-    "node tests/browser-host/security-beta.test.mjs"
+    "node tooling/checks/check-security-beta.ts",
+    "node packages/browser-host/test/security-beta.test.ts"
   ]
 }

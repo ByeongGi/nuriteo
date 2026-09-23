@@ -10,7 +10,7 @@
       "budgetMs": 2500,
       "sampleMs": 800,
       "status": "pass",
-      "evidence": ["tests/browser/boot.test.mjs", "tests/sdk-consumer/package.test.mjs"]
+      "evidence": ["tests/system/browser/boot.test.ts", "tests/contract/sdk-consumer/package.test.ts"]
     },
     {
       "id": "npm-install-local-plan",
@@ -18,7 +18,7 @@
       "budgetMs": 1000,
       "sampleMs": 120,
       "status": "pass",
-      "evidence": ["tests/package-managers/npm-guest-runtime-boot.test.mjs"]
+      "evidence": ["tests/compatibility/package-managers/npm-guest-runtime-boot.test.ts"]
     },
     {
       "id": "pnpm-install-local-plan",
@@ -26,7 +26,7 @@
       "budgetMs": 1200,
       "sampleMs": 160,
       "status": "pass",
-      "evidence": ["tests/package-managers/pnpm-guest-runtime-boot.test.mjs"]
+      "evidence": ["tests/compatibility/package-managers/pnpm-guest-runtime-boot.test.ts"]
     },
     {
       "id": "vite-product-dev-adapter",
@@ -34,7 +34,7 @@
       "budgetMs": 1000,
       "sampleMs": 80,
       "status": "pass",
-      "evidence": ["tests/vite/vite-react-product-workflow.test.mjs"],
+      "evidence": ["tests/compatibility/frameworks/vite/vite-react-product-workflow.test.ts"],
       "notes": "Adapter-backed Vite product workflow baseline. Actual Vite CLI wall-clock baseline remains blocked by PG11."
     },
     {
@@ -43,7 +43,7 @@
       "budgetMs": 250,
       "sampleMs": 20,
       "status": "pass",
-      "evidence": ["tests/vite/vite-react-product-workflow.test.mjs", "tests/preview/hmr-client.test.mjs"],
+      "evidence": ["tests/compatibility/frameworks/vite/vite-react-product-workflow.test.ts", "packages/preview/test/hmr-client.test.ts"],
       "notes": "Adapter-backed HMR event/update baseline. Real Vite HMR protocol baseline remains blocked by PG11."
     },
     {
@@ -52,7 +52,7 @@
       "budgetMs": 1500,
       "sampleMs": 100,
       "status": "pass",
-      "evidence": ["tests/vite/vite-react-product-workflow.test.mjs"],
+      "evidence": ["tests/compatibility/frameworks/vite/vite-react-product-workflow.test.ts"],
       "notes": "Adapter-backed dist smoke baseline. Actual Vite build baseline remains blocked by PG11."
     },
     {
@@ -61,7 +61,7 @@
       "budgetBytes": 268435456,
       "sampleBytes": 268435456,
       "status": "pass",
-      "evidence": ["tests/node-runtime/secondary-builtins.test.mjs"]
+      "evidence": ["packages/node-runtime/test/secondary-builtins.test.ts"]
     }
   ],
   "gate": {

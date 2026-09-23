@@ -10,7 +10,7 @@
       "status": "pass",
       "evidence": [
         "apps/preview-service",
-        "tests/preview-service/mvp.test.mjs",
+        "apps/preview-service/test/mvp.test.ts",
         "docs/productization/service-readiness-plan.md#sg22"
       ]
     },
@@ -19,12 +19,12 @@
       "status": "pass",
       "evidence": [
         "packages/service-backend",
-        "tests/service-backend/project-service.test.mjs",
-        "scripts/check-service-backend.mjs",
+        "tests/service-backend/project-service.test.ts",
+        "tooling/checks/check-service-backend.ts",
         "docs/productization/service-backend.md",
         "compat/security-beta-checklist.json",
         "compat/error-catalog.json",
-        "scripts/check-observability-support.mjs"
+        "tooling/checks/check-observability-support.ts"
       ]
     },
     "S-C": {

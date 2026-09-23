@@ -21,7 +21,7 @@
       "requiredCapabilities": ["install", "dev-preview", "edit-hmr", "build-dist", "reload-recovery"],
       "evidence": [
         "tests/fixtures/vite-vue/package.json",
-        "tests/vite/vite-vue-svelte-actual.test.mjs",
+        "tests/compatibility/frameworks/vite/vite-vue-svelte-actual.test.ts",
         "compat/framework-actual-validation.json"
       ]
     },
@@ -39,7 +39,7 @@
       "requiredCapabilities": ["install", "dev-preview", "edit-hmr", "build-dist", "reload-recovery"],
       "evidence": [
         "tests/fixtures/vite-svelte/package.json",
-        "tests/vite/vite-vue-svelte-actual.test.mjs",
+        "tests/compatibility/frameworks/vite/vite-vue-svelte-actual.test.ts",
         "compat/framework-actual-validation.json"
       ]
     }

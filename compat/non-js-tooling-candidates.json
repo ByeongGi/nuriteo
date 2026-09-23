@@ -64,8 +64,8 @@
       },
       "fixtures": [
         "tests/fixtures/non-js-tooling/jq-input.json",
-        "tests/node-runtime/non-js-tooling.test.mjs",
-        "tests/node-runtime/project-tooling.test.mjs"
+        "packages/node-runtime/test/non-js-tooling.test.ts",
+        "packages/node-runtime/test/project-tooling.test.ts"
       ],
       "requiredBeforeSupport": []
     },
@@ -130,10 +130,10 @@
         "status": "pass"
       },
       "fixtures": [
-        "tests/node-runtime/non-js-tooling.test.mjs",
-        "tests/browser/non-js-tooling.test.mjs",
-        "tests/browser/fixtures/sqlite-opfs-worker.mjs",
-        "tests/browser-host/sqlite-project-client.test.mjs"
+        "packages/node-runtime/test/non-js-tooling.test.ts",
+        "tests/system/browser/non-js-tooling.test.ts",
+        "tests/system/browser/fixtures/sqlite-opfs-worker.mjs",
+        "packages/browser-host/test/sqlite-project-client.test.ts"
       ],
       "requiredBeforeSupport": []
     },

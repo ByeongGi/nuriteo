@@ -12,7 +12,7 @@
       "validation": "actual-worker-backed",
       "status": "pass",
       "evidence": [
-        "tests/vite/vite-react-product-workflow.test.mjs",
+        "tests/compatibility/frameworks/vite/vite-react-product-workflow.test.ts",
         "compat/framework-conformance.json#vite-react-product-workflow"
       ],
       "notes": "Product-supported. Install/dev/preview/edit-HMR/build/reload recovery covered by worker-backed product workflow."
@@ -24,8 +24,8 @@
       "validation": "actual-worker-backed",
       "status": "pass",
       "evidence": [
-        "tests/vite/vite-react-product-workflow.test.mjs",
-        "tests/vite/vite-vue-svelte-actual.test.mjs",
+        "tests/compatibility/frameworks/vite/vite-react-product-workflow.test.ts",
+        "tests/compatibility/frameworks/vite/vite-vue-svelte-actual.test.ts",
         "tests/fixtures/vite-vue/package.json",
         "compat/framework-product-support.json"
       ],
@@ -38,8 +38,8 @@
       "validation": "actual-worker-backed",
       "status": "pass",
       "evidence": [
-        "tests/vite/vite-react-product-workflow.test.mjs",
-        "tests/vite/vite-vue-svelte-actual.test.mjs",
+        "tests/compatibility/frameworks/vite/vite-react-product-workflow.test.ts",
+        "tests/compatibility/frameworks/vite/vite-vue-svelte-actual.test.ts",
         "tests/fixtures/vite-svelte/package.json",
         "compat/framework-product-support.json"
       ],
@@ -52,7 +52,7 @@
       "status": "pass",
       "evidence": [
         "compat/nextjs-compatibility.json",
-        "tests/vite/nextjs-compatibility.test.mjs",
+        "tests/compatibility/frameworks/vite/nextjs-compatibility.test.ts",
         "docs/productization/public-compatibility-matrix.md"
       ],
       "notes": "App Router preview adapter is product-supported; the separate pinned full-runtime lane is candidate-grade."
@@ -64,7 +64,7 @@
       "status": "pass",
       "evidence": [
         "compat/nextjs-compatibility.json",
-        "tests/preview-service/next-full-runtime.test.mjs",
+        "apps/preview-service/test/next-full-runtime.test.ts",
         "docs/productization/nextjs-product-support-target.md"
       ],
       "notes": "Pinned Next 15.1.0 real CLI dev/build/start and App Router server capabilities pass with version-matched WASM SWC; browser-worker promotion and a patched release baseline remain pending."

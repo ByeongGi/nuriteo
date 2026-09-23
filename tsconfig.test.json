@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "erasableSyntaxOnly": true
+  },
+  "include": [
+    "packages/protocol/test/**/*.ts",
+    "packages/service-backend/test/**/*.ts"
+  ]
+}

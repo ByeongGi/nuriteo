@@ -14,7 +14,7 @@
       "runtime": "host-node-reference-harness",
       "status": "pass",
       "evidence": [
-        "tests/vite/vite-integration.test.mjs",
+        "tests/compatibility/frameworks/vite/vite-integration.test.ts",
         "tests/fixtures/vite-vanilla/package.json"
       ],
       "notes": "npm and pnpm install, dev server, browser preview, source edit, HMR state preservation, build, dist smoke, and restart pass in the reference harness."
@@ -26,7 +26,7 @@
       "runtime": "host-node-reference-harness",
       "status": "pass",
       "evidence": [
-        "tests/vite/vite-integration.test.mjs",
+        "tests/compatibility/frameworks/vite/vite-integration.test.ts",
         "tests/fixtures/vite-react/package.json"
       ],
       "notes": "npm and pnpm install, dev server, browser preview, React render, source edit, HMR state preservation, build, dist smoke, and restart pass in the reference harness."
@@ -38,7 +38,7 @@
       "runtime": "host-node-reference-harness",
       "status": "pass",
       "evidence": [
-        "tests/vite/vite-integration.test.mjs",
+        "tests/compatibility/frameworks/vite/vite-integration.test.ts",
         "tests/fixtures/vite-vue/package.json"
       ],
       "notes": "npm and pnpm install, dev server, browser preview, Vue runtime render, source edit, HMR state preservation, build, dist smoke, and restart pass in the reference harness."
@@ -50,7 +50,7 @@
       "runtime": "host-node-reference-harness",
       "status": "pass",
       "evidence": [
-        "tests/vite/vite-integration.test.mjs",
+        "tests/compatibility/frameworks/vite/vite-integration.test.ts",
         "tests/fixtures/vite-svelte/package.json"
       ],
       "notes": "npm and pnpm install, dev server, browser preview, Svelte render, source edit, HMR state preservation, build, dist smoke, and restart pass in the reference harness."
@@ -62,7 +62,7 @@
       "runtime": "browser-guest-node-runtime",
       "status": "pass",
       "evidence": [
-        "tests/vite/vite-react-product-workflow.test.mjs",
+        "tests/compatibility/frameworks/vite/vite-react-product-workflow.test.ts",
         "docs/archive/productization-2026-09-16/evidence/P11-01.md"
       ],
       "productGap": "Actual Vite 8.2.0 worker-backed product runtime covers install artifacts, hydrated dependency materialization, actual Vite CLI dev server start, browser preview relay, real Vite import-analysis transform, React bare package import rewrite, TypeScript/TSX transform fallback, real Vite HMR connected/update payloads, actual Vite build dist artifact generation, and worker bridge reload recovery."
@@ -74,8 +74,8 @@
       "runtime": "browser-guest-node-runtime",
       "status": "supported",
       "evidence": [
-        "tests/vite/vite-react-product-workflow.test.mjs",
-        "tests/vite/vite-vue-svelte-actual.test.mjs",
+        "tests/compatibility/frameworks/vite/vite-react-product-workflow.test.ts",
+        "tests/compatibility/frameworks/vite/vite-vue-svelte-actual.test.ts",
         "compat/framework-actual-validation.json",
         "compat/framework-product-support.json",
         "docs/archive/productization-2026-09-16/evidence/P11-02.md"
@@ -89,8 +89,8 @@
       "runtime": "browser-guest-node-runtime",
       "status": "supported",
       "evidence": [
-        "tests/vite/vite-react-product-workflow.test.mjs",
-        "tests/vite/vite-vue-svelte-actual.test.mjs",
+        "tests/compatibility/frameworks/vite/vite-react-product-workflow.test.ts",
+        "tests/compatibility/frameworks/vite/vite-vue-svelte-actual.test.ts",
         "compat/framework-actual-validation.json",
         "compat/framework-product-support.json",
         "docs/archive/productization-2026-09-16/evidence/P11-02.md"
@@ -104,7 +104,7 @@
       "runtime": "browser-guest-node-runtime",
       "status": "pass",
       "evidence": [
-        "tests/preview-service/next-full-runtime.test.mjs",
+        "apps/preview-service/test/next-full-runtime.test.ts",
         "compat/nextjs-compatibility.json",
         "docs/productization/nextjs-product-support-target.md"
       ],

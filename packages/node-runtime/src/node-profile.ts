@@ -11,193 +11,193 @@ export const NODE_PROFILE = Object.freeze({
       status: "partial",
       source: "local-sab-syscall-adapter",
       implementedBy: "packages/node-runtime/src/bindings/fs.ts",
-      tests: Object.freeze(["tests/browser/boot.test.mjs"])
+      tests: Object.freeze(["tests/system/browser/boot.test.ts"])
     }),
     "fs/promises": Object.freeze({
       status: "partial",
       source: "browser-native-js",
       implementedBy: "packages/node-runtime/src/builtins/fs-promises.ts",
-      tests: Object.freeze(["tests/node-runtime/secondary-builtins.test.mjs"])
+      tests: Object.freeze(["packages/node-runtime/test/secondary-builtins.test.ts"])
     }),
     http: Object.freeze({
       status: "partial",
       source: "browser-fetch-adapter",
       implementedBy: "packages/node-runtime/src/builtins/http.ts",
-      tests: Object.freeze(["tests/node-runtime/secondary-builtins.test.mjs"])
+      tests: Object.freeze(["packages/node-runtime/test/secondary-builtins.test.ts"])
     }),
     http2: Object.freeze({
       status: "partial",
       source: "browser-unsupported-diagnostic",
       implementedBy: "packages/node-runtime/src/builtins/http2.ts",
-      tests: Object.freeze(["tests/node-runtime/secondary-builtins.test.mjs"])
+      tests: Object.freeze(["packages/node-runtime/test/secondary-builtins.test.ts"])
     }),
     https: Object.freeze({
       status: "partial",
       source: "browser-fetch-adapter",
       implementedBy: "packages/node-runtime/src/builtins/http.ts",
-      tests: Object.freeze(["tests/node-runtime/secondary-builtins.test.mjs"])
+      tests: Object.freeze(["packages/node-runtime/test/secondary-builtins.test.ts"])
     }),
     net: Object.freeze({
       status: "partial",
       source: "browser-unsupported-diagnostic",
       implementedBy: "packages/node-runtime/src/builtins/net.ts",
-      tests: Object.freeze(["tests/node-runtime/secondary-builtins.test.mjs"])
+      tests: Object.freeze(["packages/node-runtime/test/secondary-builtins.test.ts"])
     }),
     assert: Object.freeze({
       status: "partial",
       source: "browser-native-js",
       implementedBy: "packages/node-runtime/src/builtins/assert.ts",
-      tests: Object.freeze(["tests/node-runtime/secondary-builtins.test.mjs"])
+      tests: Object.freeze(["packages/node-runtime/test/secondary-builtins.test.ts"])
     }),
     async_hooks: Object.freeze({
       status: "partial",
       source: "browser-native-js",
       implementedBy: "packages/node-runtime/src/builtins/async-hooks.ts",
-      tests: Object.freeze(["tests/node-runtime/secondary-builtins.test.mjs"])
+      tests: Object.freeze(["packages/node-runtime/test/secondary-builtins.test.ts"])
     }),
     buffer: Object.freeze({
       status: "partial",
       source: "browser-native-js",
       implementedBy: "packages/node-runtime/src/builtins/buffer.ts",
-      tests: Object.freeze(["tests/node-runtime/builtin-subset.test.mjs"])
+      tests: Object.freeze(["packages/node-runtime/test/builtin-subset.test.ts"])
     }),
     child_process: Object.freeze({
       status: "partial",
       source: "browser-unsupported-diagnostic",
       implementedBy: "packages/node-runtime/src/builtins/child-process.ts",
-      tests: Object.freeze(["tests/node-runtime/secondary-builtins.test.mjs"])
+      tests: Object.freeze(["packages/node-runtime/test/secondary-builtins.test.ts"])
     }),
     constants: Object.freeze({
       status: "partial",
       source: "browser-native-js",
       implementedBy: "packages/node-runtime/src/builtins/constants.ts",
-      tests: Object.freeze(["tests/node-runtime/secondary-builtins.test.mjs"])
+      tests: Object.freeze(["packages/node-runtime/test/secondary-builtins.test.ts"])
     }),
     crypto: Object.freeze({
       status: "partial",
       source: "browser-native-js",
       implementedBy: "packages/node-runtime/src/builtins/crypto.ts",
-      tests: Object.freeze(["tests/node-runtime/secondary-builtins.test.mjs", "tests/package-managers/fetcher.test.mjs"])
+      tests: Object.freeze(["packages/node-runtime/test/secondary-builtins.test.ts", "tests/compatibility/package-managers/fetcher.test.ts"])
     }),
     dns: Object.freeze({
       status: "partial",
       source: "browser-native-js",
       implementedBy: "packages/node-runtime/src/builtins/dns.ts",
-      tests: Object.freeze(["tests/node-runtime/secondary-builtins.test.mjs"])
+      tests: Object.freeze(["packages/node-runtime/test/secondary-builtins.test.ts"])
     }),
     events: Object.freeze({
       status: "partial",
       source: "browser-native-js",
       implementedBy: "packages/node-runtime/src/builtins/events.ts",
-      tests: Object.freeze(["tests/node-runtime/builtin-subset.test.mjs"])
+      tests: Object.freeze(["packages/node-runtime/test/builtin-subset.test.ts"])
     }),
     module: Object.freeze({
       status: "partial",
       source: "browser-native-js",
       implementedBy: "packages/node-runtime/src/builtins/module.ts",
-      tests: Object.freeze(["tests/node-runtime/secondary-builtins.test.mjs"])
+      tests: Object.freeze(["packages/node-runtime/test/secondary-builtins.test.ts"])
     }),
     os: Object.freeze({
       status: "partial",
       source: "browser-native-js",
       implementedBy: "packages/node-runtime/src/builtins/os.ts",
-      tests: Object.freeze(["tests/node-runtime/secondary-builtins.test.mjs"])
+      tests: Object.freeze(["packages/node-runtime/test/secondary-builtins.test.ts"])
     }),
     path: Object.freeze({
       status: "partial",
       source: "browser-native-js",
       implementedBy: "packages/node-runtime/src/builtins/path.ts",
-      tests: Object.freeze(["tests/node-runtime/secondary-builtins.test.mjs"])
+      tests: Object.freeze(["packages/node-runtime/test/secondary-builtins.test.ts"])
     }),
     perf_hooks: Object.freeze({
       status: "partial",
       source: "browser-native-js",
       implementedBy: "packages/node-runtime/src/builtins/perf-hooks.ts",
-      tests: Object.freeze(["tests/node-runtime/secondary-builtins.test.mjs"])
+      tests: Object.freeze(["packages/node-runtime/test/secondary-builtins.test.ts"])
     }),
     process: Object.freeze({
       status: "partial",
       source: "browser-native-js",
       implementedBy: "packages/node-runtime/src/builtins/process.ts",
-      tests: Object.freeze(["tests/node-runtime/secondary-builtins.test.mjs"])
+      tests: Object.freeze(["packages/node-runtime/test/secondary-builtins.test.ts"])
     }),
     querystring: Object.freeze({
       status: "partial",
       source: "browser-native-js",
       implementedBy: "packages/node-runtime/src/builtins/querystring.ts",
-      tests: Object.freeze(["tests/node-runtime/secondary-builtins.test.mjs"])
+      tests: Object.freeze(["packages/node-runtime/test/secondary-builtins.test.ts"])
     }),
     readline: Object.freeze({
       status: "partial",
       source: "browser-native-js",
       implementedBy: "packages/node-runtime/src/builtins/readline.ts",
-      tests: Object.freeze(["tests/node-runtime/secondary-builtins.test.mjs"])
+      tests: Object.freeze(["packages/node-runtime/test/secondary-builtins.test.ts"])
     }),
     stream: Object.freeze({
       status: "partial",
       source: "browser-native-js",
       implementedBy: "packages/node-runtime/src/builtins/stream.ts",
-      tests: Object.freeze(["tests/node-runtime/stream-subset.test.mjs"])
+      tests: Object.freeze(["packages/node-runtime/test/stream-subset.test.ts"])
     }),
     string_decoder: Object.freeze({
       status: "partial",
       source: "browser-native-js",
       implementedBy: "packages/node-runtime/src/builtins/string-decoder.ts",
-      tests: Object.freeze(["tests/node-runtime/secondary-builtins.test.mjs"])
+      tests: Object.freeze(["packages/node-runtime/test/secondary-builtins.test.ts"])
     }),
     timers: Object.freeze({
       status: "partial",
       source: "browser-native-js",
       implementedBy: "packages/node-runtime/src/builtins/timers-classic.ts",
-      tests: Object.freeze(["tests/node-runtime/secondary-builtins.test.mjs"])
+      tests: Object.freeze(["packages/node-runtime/test/secondary-builtins.test.ts"])
     }),
     "timers/promises": Object.freeze({
       status: "partial",
       source: "browser-native-js",
       implementedBy: "packages/node-runtime/src/builtins/timers.ts",
-      tests: Object.freeze(["tests/node-runtime/secondary-builtins.test.mjs"])
+      tests: Object.freeze(["packages/node-runtime/test/secondary-builtins.test.ts"])
     }),
     tls: Object.freeze({
       status: "partial",
       source: "browser-unsupported-diagnostic",
       implementedBy: "packages/node-runtime/src/builtins/tls.ts",
-      tests: Object.freeze(["tests/node-runtime/secondary-builtins.test.mjs"])
+      tests: Object.freeze(["packages/node-runtime/test/secondary-builtins.test.ts"])
     }),
     tty: Object.freeze({
       status: "partial",
       source: "browser-native-js",
       implementedBy: "packages/node-runtime/src/builtins/tty.ts",
-      tests: Object.freeze(["tests/node-runtime/secondary-builtins.test.mjs"])
+      tests: Object.freeze(["packages/node-runtime/test/secondary-builtins.test.ts"])
     }),
     url: Object.freeze({
       status: "partial",
       source: "browser-native-js",
       implementedBy: "packages/node-runtime/src/builtins/url.ts",
-      tests: Object.freeze(["tests/node-runtime/secondary-builtins.test.mjs"])
+      tests: Object.freeze(["packages/node-runtime/test/secondary-builtins.test.ts"])
     }),
     util: Object.freeze({
       status: "partial",
       source: "browser-native-js",
       implementedBy: "packages/node-runtime/src/builtins/util.ts",
-      tests: Object.freeze(["tests/node-runtime/builtin-subset.test.mjs"])
+      tests: Object.freeze(["packages/node-runtime/test/builtin-subset.test.ts"])
     }),
     v8: Object.freeze({
       status: "partial",
       source: "browser-native-js",
       implementedBy: "packages/node-runtime/src/builtins/v8.ts",
-      tests: Object.freeze(["tests/node-runtime/secondary-builtins.test.mjs"])
+      tests: Object.freeze(["packages/node-runtime/test/secondary-builtins.test.ts"])
     }),
     wasi: Object.freeze({
       status: "partial",
       source: "browser-wasi-facade",
       implementedBy: "packages/node-runtime/src/builtins/wasi.ts",
-      tests: Object.freeze(["tests/node-runtime/secondary-builtins.test.mjs"])
+      tests: Object.freeze(["packages/node-runtime/test/secondary-builtins.test.ts"])
     }),
     worker_threads: Object.freeze({
       status: "partial",
       source: "browser-unsupported-diagnostic",
       implementedBy: "packages/node-runtime/src/builtins/worker-threads-builtin.ts",
-      tests: Object.freeze(["tests/node-runtime/secondary-builtins.test.mjs"])
+      tests: Object.freeze(["packages/node-runtime/test/secondary-builtins.test.ts"])
     })
   }),
   dependencyGraph: Object.freeze({
