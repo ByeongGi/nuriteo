@@ -1,6 +1,7 @@
 import "./ecosystem-fixtures.test.ts";
 import "./ecosystem-fixture-scoring.test.ts";
 import "./ecosystem-fixture-results.test.ts";
+import "./public-fixture-browser-worker-results.test.ts";
 import "./ecosystem-fixture-product-results.test.ts";
 import "./ecosystem-fixture-actual-product-results.test.ts";
 import "./package-compatibility-cohorts.test.ts";

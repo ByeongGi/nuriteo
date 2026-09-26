@@ -750,6 +750,11 @@ function prepareCjsSource(source: string): string {
   return rewriteDynamicImports(injectedSource);
 }
 
+/** Build-time companion for the CSP-safe module registry. */
+export function prepareCjsSourceForStaticFactory(source: string): string {
+  return prepareCjsSource(source);
+}
+
 function isWebpackBundle(source: string): boolean {
   return /^\s*module\.exports\s*=\s*\/\*{6}\//.test(source)
     || source.slice(0, 2048).includes("webpackBootstrap");

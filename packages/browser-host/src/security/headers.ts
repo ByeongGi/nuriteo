@@ -23,7 +23,7 @@ export interface RuntimeHeaderValidation {
 export const REQUIRED_RUNTIME_HEADERS = {
   coop: "same-origin",
   coep: "require-corp",
-  csp: "default-src 'self'; script-src 'self'; worker-src 'self'; connect-src 'self'; img-src 'self' data:; style-src 'self'",
+  csp: "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; connect-src 'self'; img-src 'self' data:; style-src 'self'",
   wasmMime: "application/wasm"
 } as const;
 

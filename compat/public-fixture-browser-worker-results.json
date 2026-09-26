@@ -1,0 +1,81 @@
+{
+  "schemaVersion": 1,
+  "status": "pass",
+  "fixtureId": "vite-official-template-react",
+  "revision": "1544bb1b7ac92f775e9d0dea97954c99cc6cbd43",
+  "viteVersion": "8.2.0",
+  "dependencyArtifactCount": 6,
+  "mountedFixtureFileCount": 16,
+  "executionHost": "strict-csp-chrome-process-worker",
+  "headers": {
+    "csp": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; connect-src 'self'; img-src 'self' data:; style-src 'self'",
+    "coop": "same-origin",
+    "coep": "require-corp",
+    "isolated": true
+  },
+  "install": {
+    "dependencyArtifactCount": 6,
+    "status": "pass"
+  },
+  "dev": {
+    "exitCode": 0,
+    "indexStatus": 200,
+    "port": 5173,
+    "sourceStatus": 200
+  },
+  "hmr": {
+    "afterEditContainsMarker": true,
+    "beforeEditContainsMarker": false,
+    "connected": true,
+    "statWatcherCount": 0,
+    "updateType": "full-reload",
+    "watcherCount": 22
+  },
+  "build": {
+    "distFiles": [
+      {
+        "bytes": 13057,
+        "path": "/workspace/project/dist/assets/hero-CLDdwZDr.png"
+      },
+      {
+        "bytes": 9153,
+        "path": "/workspace/project/dist/assets/index-84Hpev2d.js"
+      },
+      {
+        "bytes": 5060,
+        "path": "/workspace/project/dist/assets/index-BQi_LKWJ.css"
+      },
+      {
+        "bytes": 4126,
+        "path": "/workspace/project/dist/assets/react-CHdo91hT.svg"
+      },
+      {
+        "bytes": 8709,
+        "path": "/workspace/project/dist/assets/vite-BF8QNONU.svg"
+      },
+      {
+        "bytes": 9522,
+        "path": "/workspace/project/dist/favicon.svg"
+      },
+      {
+        "bytes": 5031,
+        "path": "/workspace/project/dist/icons.svg"
+      },
+      {
+        "bytes": 462,
+        "path": "/workspace/project/dist/index.html"
+      }
+    ],
+    "exitCode": 0
+  },
+  "preview": {
+    "exitCode": 0,
+    "port": 4173,
+    "statusCode": 200
+  },
+  "lifecycle": {
+    "workerTargetsAfter": 0,
+    "workerTargetsBefore": 0,
+    "restartable": true
+  }
+}

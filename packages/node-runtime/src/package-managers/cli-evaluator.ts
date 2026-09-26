@@ -12,12 +12,13 @@ import { fileURLToPath } from "../builtins/url.ts";
 import { createWorkspaceModuleRuntime, type WorkspaceModuleReader } from "../modules/index.ts";
 import type { ModuleRuntime } from "../modules/runtime.ts";
 import { createLoopbackNetwork, type LoopbackNetwork, type RuntimeHttpRequest, type RuntimeHttpResponse, type RuntimeWebSocket } from "../net/index.ts";
-import type { CjsContext, CliEntry, CliRunResult, RuntimeEnv, RuntimeFsBinding, RuntimeFsData, RuntimeNamespace, RuntimeValue } from "../types.ts";
+import type { CjsContext, CliEntry, CliRunResult, EsmContext, RuntimeEnv, RuntimeFsBinding, RuntimeFsData, RuntimeNamespace, RuntimeValue } from "../types.ts";
 import { inspectCliEntryReadiness } from "./cli-entry-readiness.ts";
 import { MemoryPackageManagerWorkspace, type PackageManagerWorkspaceSnapshot, type PackageManagerWorkspaceWriter } from "./workspace.ts";
 
 export interface CliModuleEvaluatorOptions {
   precompiledCjsFactories?: Record<string, (context: CjsContext, globals: Record<string, RuntimeValue>) => void>;
+  precompiledEsmFactories?: Record<string, (context: EsmContext, globals: Record<string, RuntimeValue>) => void | Promise<void>>;
   fsTrace?: CliEvaluationFsTraceEntry[];
   loopbackNetwork?: LoopbackNetwork;
   onOutputSnapshot?: (snapshot: () => CliEvaluationOutputSnapshot) => void;
@@ -489,7 +490,12 @@ export function createWorkerBackedAsyncCliModuleEvaluator(
 
 export async function evaluateCliModuleWorkerMessage(
   message: CliEvaluationWorkerEvaluateMessage,
-  options: { httpBridge?: CliEvaluationHttpBridge; nestedWorkerFactory?: CliNestedWorkerFactory; precompiledCjsFactories?: CliModuleEvaluatorOptions["precompiledCjsFactories"] } = {}
+  options: {
+    httpBridge?: CliEvaluationHttpBridge;
+    nestedWorkerFactory?: CliNestedWorkerFactory;
+    precompiledCjsFactories?: CliModuleEvaluatorOptions["precompiledCjsFactories"];
+    precompiledEsmFactories?: CliModuleEvaluatorOptions["precompiledEsmFactories"];
+  } = {}
 ): Promise<CliEvaluationWorkerResultMessage> {
   try {
     const workspace = MemoryPackageManagerWorkspace.fromSnapshot(message.workspaceSnapshot);
@@ -519,6 +525,7 @@ export async function evaluateCliModuleWorkerMessage(
       ...(options.httpBridge ? { loopbackNetwork: options.httpBridge.network } : {}),
       ...(options.nestedWorkerFactory ? { nestedWorkerFactory: options.nestedWorkerFactory } : {}),
       ...(options.precompiledCjsFactories ? { precompiledCjsFactories: options.precompiledCjsFactories } : {}),
+      ...(options.precompiledEsmFactories ? { precompiledEsmFactories: options.precompiledEsmFactories } : {}),
       writer: workspace
     })(message.request);
     return {
@@ -766,6 +773,9 @@ function startCliModuleEvaluation(
   });
   for (const [path, factory] of Object.entries(options.precompiledCjsFactories || {})) {
     runtime.register(path, { kind: "cjs", factory: (context) => factory(context, runtime!.globals) });
+  }
+  for (const [path, factory] of Object.entries(options.precompiledEsmFactories || {})) {
+    runtime.register(path, { kind: "esm", factory: (context) => factory(context, runtime!.globals) });
   }
 
   let exitCode = 0;
@@ -1919,6 +1929,13 @@ function createCliDynamicImport(
     if (specifier === "supports-color") return createSupportsColorNamespace();
     const packageSpecifier = packageSpecifierFromRootFileUrl(specifier, root);
     const runtime = getRuntime?.();
+    if (runtime && specifier.startsWith("file:")) {
+      const file = normalize(fileURLToPath(specifier));
+      const normalizedRoot = normalize(root).replace(/\/$/, "");
+      if (file === normalizedRoot || file.startsWith(`${normalizedRoot}/`)) {
+        return runtime.importModule(file, file);
+      }
+    }
     if (packageSpecifier && runtime) {
       return runtime.importModule(packageSpecifier, join(root, "package.json"));
     }

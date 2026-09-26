@@ -33,7 +33,7 @@ if (!fs.existsSync(packageTarball)) {
 
 const csp = [
   "default-src 'self'",
-  "script-src 'self'",
+  "script-src 'self' 'wasm-unsafe-eval'",
   "worker-src 'self'",
   "connect-src 'self'",
   "img-src 'self' data:",
@@ -107,7 +107,11 @@ try {
       yarnFactoryType: (await fetch("/sdk/vendor/yarn-cli-1.22.22.mjs")).headers.get("content-type"),
       nextFactoryPath: manifest.assets.nextCliFactory.path,
       nextFactorySha256: manifest.assets.nextCliFactory.sha256,
-      nextFactoryType: (await fetch("/sdk/vendor/next-cli-15.1.9.mjs")).headers.get("content-type")
+      nextFactoryType: (await fetch("/sdk/vendor/next-cli-15.1.9.mjs")).headers.get("content-type"),
+      viteFactoryPath: manifest.assets.viteStaticFactories.path,
+      viteFactoryType: (await fetch("/sdk/vendor/vite-8.2.0/vite-cli-static-factories.mjs")).headers.get("content-type"),
+      rolldownWasiPath: manifest.assets.rolldownWasi.path,
+      rolldownWasiType: (await fetch("/sdk/vendor/vite-8.2.0/assets/rolldown-binding.wasm")).headers.get("content-type")
     };
   });
   if (!headers.isolated) throw new Error("consumer page is not cross-origin isolated");
@@ -120,6 +124,10 @@ try {
   if (!headers.yarnFactoryType?.includes("text/javascript")) throw new Error(`SDK Yarn factory MIME mismatch: ${headers.yarnFactoryType}`);
   if (headers.nextFactoryPath !== "vendor/next-cli-15.1.9.mjs") throw new Error("SDK Next factory asset path mismatch");
   if (!headers.nextFactoryType?.includes("text/javascript")) throw new Error(`SDK Next factory MIME mismatch: ${headers.nextFactoryType}`);
+  if (headers.viteFactoryPath !== "vendor/vite-8.2.0/vite-cli-static-factories.mjs") throw new Error("SDK Vite factory asset path mismatch");
+  if (!headers.viteFactoryType?.includes("text/javascript")) throw new Error(`SDK Vite factory MIME mismatch: ${headers.viteFactoryType}`);
+  if (headers.rolldownWasiPath !== "vendor/vite-8.2.0/assets/rolldown-binding.wasm") throw new Error("SDK Rolldown WASI asset path mismatch");
+  if (headers.rolldownWasiType !== "application/wasm") throw new Error(`SDK Rolldown WASI MIME mismatch: ${headers.rolldownWasiType}`);
   const yarnGate = JSON.parse(fs.readFileSync(path.join(root, "compat/yarn-v1-product-support.json"), "utf8"));
   if (headers.yarnFactorySha256 !== yarnGate.artifact.cspFactorySha256) throw new Error("SDK Yarn factory integrity manifest mismatch");
   const packagedYarnFactory = path.join(packageRoot, headers.yarnFactoryPath);
@@ -138,6 +146,13 @@ try {
   }
   if (!packedEntries.stdout.includes("package/vendor/next-cli-15.1.9.mjs")) {
     throw new Error("SDK tarball is missing the Next.js factory");
+  }
+  for (const entry of [
+    "package/vendor/vite-8.2.0/vite-cli-static-factories.mjs",
+    "package/vendor/vite-8.2.0/rolldown-wasi-binding.mjs",
+    "package/vendor/vite-8.2.0/assets/rolldown-binding.wasm"
+  ]) {
+    if (!packedEntries.stdout.includes(entry)) throw new Error(`SDK tarball is missing ${entry}`);
   }
   assertSourceMap("packages/sdk/src/container.ts");
   assertSourceMap("packages/browser-host/src/supervisor.ts");

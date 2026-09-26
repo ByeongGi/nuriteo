@@ -991,6 +991,34 @@ assert.equal(fileFetchResult.stderr, "");
 assert.equal(fileFetchResult.exitCode, 0);
 assert.equal(fileFetchResult.stdout, "true:4:255");
 
+const staticEsmWorkspace = new MemoryPackageManagerWorkspace([
+  { path: "/workspace/static-esm/bin/main.mjs", data: "throw new Error('dynamic evaluation must not run');\n" },
+  { path: "/workspace/static-esm/generated/config.mjs", data: "throw new Error('dynamic evaluation must not run');\n" }
+]);
+const staticEsmResult = await evaluateCliModuleWorkerMessage({
+  id: 91,
+  request: {
+    entry: { name: "static-esm", version: "1.0.0", entry: "/workspace/static-esm/bin/main.mjs", mode: "esm" },
+    args: [],
+    cwd: "/workspace/static-esm"
+  },
+  root: "/workspace",
+  type: "cli:evaluate",
+  workspaceSnapshot: staticEsmWorkspace.snapshot()
+}, {
+  precompiledEsmFactories: {
+    "/workspace/static-esm/bin/main.mjs": async (context) => {
+      await context.dynamicImport("file:///workspace/static-esm/generated/config.mjs");
+    },
+    "/workspace/static-esm/generated/config.mjs": (_context, globals) => {
+      globals.process.stdout.write("static-esm-file-url-ready");
+    }
+  }
+});
+assert.equal(staticEsmResult.error, undefined);
+assert.equal(staticEsmResult.result?.exitCode, 0);
+assert.equal(staticEsmResult.result?.stdout, "static-esm-file-url-ready");
+
 const asyncRequireBridgeWorkspace = new MemoryPackageManagerWorkspace([
   {
     path: "/workspace/async-require/package/bin/cli.cjs",
