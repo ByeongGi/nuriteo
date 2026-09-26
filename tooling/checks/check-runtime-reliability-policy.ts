@@ -27,7 +27,7 @@ assert(policy.memory.browserWorkerHeapEnforcement === "hold-unobservable-from-ho
 assert(policy.memory.browserWorkerResourceObservation === "chrome-page-memory-and-worker-target-churn", "browser worker resource observation contract missing");
 assert(browserWorkerResources.status === "pass-with-heap-enforcement-hold", "browser worker resource evidence must preserve heap enforcement hold");
 assert(browserWorkerResources.executionHost === "strict-csp-headless-chrome", "browser worker resources must be measured in strict-CSP Chrome");
-assert(browserWorkerResources.csp === "default-src 'self'; script-src 'self'; worker-src 'self'; connect-src 'self'; img-src 'self' data:; style-src 'self'", "browser worker resource CSP drift");
+assert(browserWorkerResources.csp === "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; connect-src 'self'; img-src 'self' data:; style-src 'self'", "browser worker resource CSP drift");
 assert(browserWorkerResources.crossOriginIsolated === true, "browser worker resource probe must be cross-origin isolated");
 assert(browserWorkerResources.iterations >= 30 && browserWorkerResources.successfulBoots === browserWorkerResources.iterations, "browser worker churn must run at least 30 successful boots");
 assert(browserWorkerResources.forcedBootFailuresAndRecoveries >= 3, "browser worker probe must recover from forced boot failures");

@@ -1070,7 +1070,9 @@ export class ViteProductWorkflow {
         version: "18.3.1",
         type: "module",
         exports: {
-          ".": "./index.js"
+          ".": "./index.js",
+          "./jsx-runtime": "./jsx-runtime.js",
+          "./jsx-dev-runtime": "./jsx-runtime.js"
         }
       }));
       this.workspace.writeText(join(packageRoot, "index.js"), [
