@@ -15,5 +15,6 @@ import "./non-js-tooling.test.ts";
 import "./project-tooling.test.ts";
 import "./project-tooling-candidates.test.ts";
 import "./git-wasm-runtime.test.ts";
+import "./git-host-transport.test.ts";
 import "./wasm-adapters.test.ts";
 import "./wasi-boundary.test.ts";

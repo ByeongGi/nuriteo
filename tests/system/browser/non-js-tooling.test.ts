@@ -97,6 +97,102 @@ try {
   assert.equal(git.persistedHead, true);
   assert.equal(git.persistedIndex, true);
   assert.ok(git.elapsedMs <= 5000, `Git WASM browser fixture exceeded 5000ms: ${git.elapsedMs}`);
+
+  const opfsGit = await page.evaluate(async () => {
+    const createClient = () => {
+      const worker = new Worker("/tests/system/browser/fixtures/git-opfs-worker.mjs", { type: "module" });
+      return {
+        request(message, timeoutMs = 15_000) {
+          return new Promise((resolve, reject) => {
+            const id = crypto.randomUUID();
+            const timeout = setTimeout(() => reject(new Error(`Git OPFS ${message.action} timed out`)), timeoutMs);
+            const onMessage = (event) => {
+              if (event.data?.id !== id) return;
+              clearTimeout(timeout);
+              worker.removeEventListener("message", onMessage);
+              resolve(event.data);
+            };
+            worker.addEventListener("message", onMessage);
+            worker.postMessage({ id, ...message });
+          });
+        },
+        close() { worker.terminate(); }
+      };
+    };
+
+    const projectId = `opfs-${crypto.randomUUID()}`;
+    const corruptProjectId = `corrupt-${crypto.randomUUID()}`;
+    const malformedProjectId = `malformed-${crypto.randomUUID()}`;
+    const first = createClient();
+    const startedAt = performance.now();
+    const init = await first.request({ projectId, action: "init" });
+    const write = await first.request({ projectId, action: "write-file", path: "main.txt", contents: "opfs persisted\n" });
+    const before = await first.request({ projectId, action: "status" });
+    const add = await first.request({ projectId, action: "add", path: "main.txt" });
+    const commit = await first.request({ projectId, action: "commit", message: "opfs commit", author: { name: "OPFS Fixture", email: "opfs@example.test" } });
+    const log = await first.request({ projectId, action: "log", maxEntries: 1 });
+    first.close();
+
+    const reopened = createClient();
+    const statusAfterReopen = await reopened.request({ projectId, action: "status" });
+    const logAfterReopen = await reopened.request({ projectId, action: "log", maxEntries: 1 });
+    const readAfterReopen = await reopened.request({ projectId, action: "read-file", path: "main.txt" });
+    const symlinkImport = await reopened.request({ projectId, action: "import-symlink", path: "link.txt" });
+    const oversized = await reopened.request({ projectId, action: "write-file", path: "large.bin", contents: "x".repeat(16 * 1024 * 1024 + 1) }, 30_000);
+    await reopened.request({ projectId, action: "remove" });
+
+    const corrupt = createClient();
+    await corrupt.request({ projectId: corruptProjectId, action: "init" });
+    await corrupt.request({ projectId: corruptProjectId, action: "corrupt-head" });
+    const corruption = await corrupt.request({ projectId: corruptProjectId, action: "status" });
+    await corrupt.request({ projectId: corruptProjectId, action: "remove" });
+    corrupt.close();
+
+    const malformed = createClient();
+    await malformed.request({ projectId: malformedProjectId, action: "init" });
+    const malformedObject = await malformed.request({ projectId: malformedProjectId, action: "inject-malformed-object" });
+    const malformedValidation = await malformed.request({ projectId: malformedProjectId, action: "validate-object", oid: malformedObject.oid });
+    await malformed.request({ projectId: malformedProjectId, action: "remove" });
+    malformed.close();
+    reopened.close();
+    return {
+      elapsedMs: performance.now() - startedAt,
+      init,
+      write,
+      before,
+      add,
+      commit,
+      log,
+      statusAfterReopen,
+      logAfterReopen,
+      readAfterReopen,
+      symlinkImport,
+      oversized,
+      corruption,
+      malformedValidation
+    };
+  });
+  for (const [name, operation] of Object.entries({ init: opfsGit.init, write: opfsGit.write, add: opfsGit.add, commit: opfsGit.commit, log: opfsGit.log })) {
+    assert.equal(operation.ok, true, `${name}: ${operation.error}`);
+  }
+  assert.equal(opfsGit.init.variant, "pthreads");
+  assert.equal(opfsGit.init.artifactSha256, "ec1807f0ad7924bd179f1a864b645d2cd44149ca40cb4492ef9cff7425ab4c83");
+  assert.equal(opfsGit.before.ok, true, opfsGit.before.error);
+  assert.equal(opfsGit.statusAfterReopen.ok, true, opfsGit.statusAfterReopen.error);
+  assert.equal(opfsGit.statusAfterReopen.stdout, "");
+  assert.match(opfsGit.log.headOid, /^[a-f0-9]{40}$/);
+  assert.equal(opfsGit.logAfterReopen.headOid, opfsGit.log.headOid);
+  assert.equal(opfsGit.readAfterReopen.ok, true, opfsGit.readAfterReopen.error);
+  assert.equal(opfsGit.readAfterReopen.contents, "opfs persisted\n");
+  assert.equal(opfsGit.symlinkImport.ok, false);
+  assert.equal(opfsGit.symlinkImport.code, "EGITSYMLINK");
+  assert.equal(opfsGit.oversized.ok, false);
+  assert.equal(opfsGit.oversized.code, "EGITFILELIMIT");
+  assert.equal(opfsGit.corruption.ok, false);
+  assert.equal(opfsGit.corruption.code, "EGITCORRUPT");
+  assert.equal(opfsGit.malformedValidation.ok, false);
+  assert.equal(opfsGit.malformedValidation.code, "EGITCORRUPT");
+  assert.ok(opfsGit.elapsedMs <= 15_000, `Git OPFS fixture exceeded 15000ms: ${opfsGit.elapsedMs}`);
 } finally {
   await browser.close();
   await server.close();

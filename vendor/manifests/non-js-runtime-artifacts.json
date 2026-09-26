@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-09-27",
+  "artifacts": [
+    {
+      "id": "python-wasi-webc",
+      "source": "wasmer-registry:python/python@=3.13.18",
+      "distribution": "external-cache-not-vendored",
+      "sha256": "0464f16f1ad0ce4d1ab4266b057b62accd5b4123995a08103897699aefc92a54",
+      "bytes": 157272498
+    },
+    {
+      "id": "wasmer-sdk-runtime",
+      "source": "npm:@wasmer/sdk@0.18.0/pkg/wasmer_sdk_js_bg.wasm",
+      "distribution": "pnpm-lockfile-integrity",
+      "sha256": "eb00b569d1f5dc4cdb23f8986a6b812158eb7a01845000af14ae564fea050397",
+      "bytes": 4804809
+    },
+    {
+      "id": "wasm-git-memfs",
+      "source": "npm:wasm-git@0.0.17/lg2.wasm",
+      "distribution": "pnpm-lockfile-integrity",
+      "sha256": "5cd5df122c066f63c1a940e66fb126a0a35f44b7c0f1c9801b1c1007078eb0f9",
+      "bytes": 862879
+    },
+    {
+      "id": "wasm-git-opfs",
+      "source": "npm:wasm-git@0.0.17/lg2_opfs.wasm",
+      "distribution": "pnpm-lockfile-integrity",
+      "sha256": "ec1807f0ad7924bd179f1a864b645d2cd44149ca40cb4492ef9cff7425ab4c83",
+      "bytes": 976417
+    }
+  ]
+}

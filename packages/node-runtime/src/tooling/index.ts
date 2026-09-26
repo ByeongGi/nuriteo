@@ -7,4 +7,6 @@ export { createIntegrityPinnedWasmGitRuntime, IntegrityPinnedWasmGitRuntime } fr
 export type { WasmGitProjectSnapshot, WasmGitRuntimeOptions } from "./wasm-git-runtime.ts";
 export { createIntegrityPinnedWasmerPythonRuntime, IntegrityPinnedWasmerPythonRuntime } from "./wasmer-python-runtime.ts";
 export type { WasmerPythonClient, WasmerPythonProjectSnapshot, WasmerPythonRuntimeOptions } from "./wasmer-python-runtime.ts";
+export { createGitHostTransportBoundary, GitHostTransportBoundary } from "./git-host-transport.ts";
+export type { GitHostFetchRequest, GitHostFetchResponse, GitHostTransportOptions, GitValidatedPackfile } from "./git-host-transport.ts";
 export type { JqProjectAdapterOptions, JqRuntime, JqTransformResult } from "./jq-project-adapter.ts";

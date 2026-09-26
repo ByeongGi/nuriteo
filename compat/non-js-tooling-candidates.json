@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 4,
+  "schemaVersion": 5,
   "updatedAt": "2026-09-27",
   "status": "supported-adapters-with-held-runtime-validated-candidates",
   "decisionCriteria": {
@@ -77,7 +77,7 @@
       "productValue": "medium",
       "maintenanceCost": "high",
       "runtimeFit": "partial",
-      "reason": "Integrity-pinned Wasmer SDK and Python 3.13.18 WEBC pass Node 22 import, project I/O, stdio, cancellation, timeout, and network-disabled execution, but the 150 MiB external artifact, modified-MIT attribution condition, browser fixture, and enforceable memory ceiling remain blockers.",
+      "reason": "Integrity-pinned Wasmer SDK and Python 3.13.18 WEBC pass Node 22 and cross-origin-isolated Chrome Worker import, project I/O, stdio, cancellation, timeout, static-memory admission, and network-disabled execution. The 150 MiB external artifact, modified-MIT attribution condition, provenance, and guest peak-memory enforcement remain blockers.",
       "candidateArtifacts": [
         {
           "name": "@wasmer/sdk",
@@ -86,7 +86,7 @@
           "licenseMetadata": "Modified MIT; UI attribution required above documented commercial thresholds",
           "runtimeFormat": "WASIX host plus separately resolved registry package",
           "decision": "hold",
-          "blocker": "Python WEBC is 157272498 bytes and not vendored; browser delivery, attribution review, and memory enforcement remain unresolved. Host/WISP networking remains disabled."
+          "blocker": "Python WEBC is 157272498 bytes and not vendored; attribution review, production delivery provenance, and guest peak-memory enforcement remain unresolved. Host/WISP networking remains disabled."
         },
         {
           "name": "pyodide",
@@ -111,7 +111,7 @@
       "filesystem": {
         "mode": "project-read-write-plus-read-only-stdlib-mount",
         "adapterResult": "pass",
-        "runtimeResult": "node-pass-browser-not-run",
+        "runtimeResult": "node-and-chrome-worker-pass",
         "outsideProject": "deny",
         "stdlibWrite": "deny"
       },
@@ -134,7 +134,8 @@
         "executionBudgetMs": 10000,
         "adapterResult": "pass",
         "observedNode22ElapsedMs": 6181.7,
-        "runtimeResult": "partial-pass-memory-unenforced"
+        "staticAdmissionResult": "pass-256MiB-pre-execution-envelope",
+        "runtimeResult": "node-and-chrome-pass-guest-peak-memory-unenforced"
       },
       "productSurface": {
         "api": "createPythonWasiProjectAdapter",
@@ -143,11 +144,12 @@
       },
       "fixtures": [
         "packages/node-runtime/test/project-tooling-candidates.test.ts",
-        "tooling/runtime-evidence/python-wasi-runtime.ts"
+        "tooling/runtime-evidence/python-wasi-runtime.ts",
+        "tests/system/browser/python-wasi-runtime.test.ts",
+        "tests/system/browser/fixtures/python-wasi-worker.mjs"
       ],
       "requiredBeforeSupport": [
         "approve modified-MIT attribution obligations and 150 MiB delivery budget",
-        "same-origin browser Worker import and project-local read/write fixture using the pinned WEBC",
         "enforce and measure a per-sandbox peak-memory ceiling",
         "replace registry bootstrap with signed or vendored artifact provenance"
       ]
@@ -217,7 +219,7 @@
       "productValue": "high",
       "maintenanceCost": "high",
       "runtimeFit": "partial",
-      "reason": "Pinned wasm-git/libgit2 passes local init/status/add/commit/log plus host-snapshot reopen in Node 22 and a Chrome Worker. Remote transport stays fail-closed; license review, OPFS product integration, adversarial repository safety, and packfile budgets still block promotion.",
+      "reason": "Pinned wasm-git/libgit2 passes local workflows, project-namespaced Chrome OPFS reopen, corruption and import-boundary rejection, and bounded host transport contracts. Remote execution stays fail-closed; license review, actual pack application budgets, and transport-to-libgit2 integration still block promotion.",
       "candidateArtifacts": [
         {
           "name": "wasm-git",
@@ -227,7 +229,7 @@
           "upstreamLicense": "Bundled COPYING: GPL-2.0 with linking exception; npm package metadata field is empty",
           "runtimeFormat": "Emscripten libgit2 WebAssembly",
           "decision": "hold",
-          "blocker": "License obligations need product review; OPFS integration, adversarial repository safety, and packfile budgets are not yet verified."
+          "blocker": "License obligations need product review; actual pack application time/peak-memory budgets and host transport integration are not yet verified."
         },
         {
           "name": "isomorphic-git",
@@ -245,12 +247,17 @@
         "sha256": "5cd5df122c066f63c1a940e66fb126a0a35f44b7c0f1c9801b1c1007078eb0f9",
         "bytes": 862879,
         "loaderPath": "lg2.js",
-        "loaderSha256": "6f3181a5ea4d5a926c243bdd6239c0730ac758c87dfbb88a28a1264dd96f61c6"
+        "loaderSha256": "6f3181a5ea4d5a926c243bdd6239c0730ac758c87dfbb88a28a1264dd96f61c6",
+        "opfsPath": "lg2_opfs.wasm",
+        "opfsSha256": "ec1807f0ad7924bd179f1a864b645d2cd44149ca40cb4492ef9cff7425ab4c83",
+        "opfsBytes": 976417,
+        "opfsLoaderPath": "lg2_opfs.js",
+        "opfsLoaderSha256": "7e54dd2f7bb6f3b1615ce2f992f88b0b3a14c617dda96b031e41b580ec49e545"
       },
       "filesystem": {
         "mode": "project-only-local-repository",
         "adapterResult": "pass",
-        "runtimeResult": "node-and-chrome-host-snapshot-pass",
+        "runtimeResult": "node-and-chrome-host-snapshot-plus-chrome-opfs-reopen-pass",
         "outsideProject": "deny",
         "directGitMetadataMutation": "deny"
       },
@@ -263,9 +270,11 @@
         "credentialInjection": "deny",
         "runtimeFetch": "deny",
         "directTcp": "deny",
-        "fetchAndClone": "fail-closed-with-redacted-EGITNETWORK",
+        "fetchAndClone": "fail-closed-until-host-transport-is-connected",
+        "hostTransportContract": "credential-free-https-plus-one-shot-opaque-handle-and-redacted-errors-pass",
+        "packfileValidation": "PACK-v2-v3-header-and-64MiB-limit-pass",
         "adapterResult": "pass",
-        "runtimeResult": "pass-local-only-remote-disabled"
+        "runtimeResult": "pass-local-only-host-transport-contract-not-connected"
       },
       "performance": {
         "outputBudgetBytes": 1048576,
@@ -274,10 +283,12 @@
         "adapterResult": "pass",
         "localWorkflowBudgetMs": 5000,
         "observedNode22ElapsedMs": 57.8,
-        "runtimeResult": "local-pass-packfile-not-run"
+        "packfileAdmissionBudgetMs": 250,
+        "packfileAdmissionResult": "pass",
+        "runtimeResult": "local-and-admission-pass-actual-pack-application-not-run"
       },
       "productSurface": {
-        "api": "createGitWasmProjectAdapter",
+        "api": "createGitWasmProjectAdapter + createGitOpfsProjectClient + createGitHostTransportBoundary",
         "localOperations": ["init", "status", "add", "commit", "log"],
         "remoteOperations": "disabled",
         "status": "candidate-contract-only"
@@ -285,15 +296,17 @@
       "fixtures": [
         "packages/node-runtime/test/project-tooling-candidates.test.ts",
         "packages/node-runtime/test/git-wasm-runtime.test.ts",
+        "packages/node-runtime/test/git-host-transport.test.ts",
+        "packages/browser-host/test/git-opfs-project-client.test.ts",
         "tests/system/browser/fixtures/git-wasm-worker.mjs",
+        "tests/system/browser/fixtures/git-opfs-worker.mjs",
         "tests/system/browser/non-js-tooling.test.ts"
       ],
       "requiredBeforeSupport": [
         "approve bundled GPL-2.0 with linking exception obligations and source offer process",
-        "wire the integrity-pinned runtime through the product OPFS project store",
-        "symlink, malformed object, oversized object, and repository corruption fixture",
-        "large packfile time and peak-memory baseline",
-        "host-mediated same-origin HTTP transport with one-shot credential handles and redacted diagnostics"
+        "run actual large packfile indexing/application time and peak-memory baseline",
+        "connect the bounded host transport to libgit2 without exposing credentials or direct TCP",
+        "restore reliable pthread-build status/log text capture or expose equivalent structured results"
       ]
     },
     {
