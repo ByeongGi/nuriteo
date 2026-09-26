@@ -1,23 +1,36 @@
+import { lazy, type ReactNode } from "react";
 import { Group, Panel, Separator } from "react-resizable-panels";
 import { usePreviewController } from "./hooks/usePreviewController";
 import { TopBar } from "./components/TopBar";
 import { WelcomeOverlay } from "./components/WelcomeOverlay";
-import { ImportDialog } from "./components/ImportDialog";
 import { ActivityBar } from "./components/ActivityBar";
 import { FileTree } from "./components/FileTree";
-import { SearchPanel } from "./components/SearchPanel";
-import { PortsPanel } from "./components/PortsPanel";
-import { SettingsPanel } from "./components/SettingsPanel";
-import { ScmPanel } from "./components/ScmPanel";
-import { OutlinePanel } from "./components/OutlinePanel";
-import { LocalHistoryPanel } from "./components/LocalHistoryPanel";
-import { CodeEditor } from "./components/CodeEditor";
 import { PreviewPane } from "./components/PreviewPane";
-import { BottomDock } from "./components/BottomDock";
-import { CommandPalette } from "./components/CommandPalette";
-import { DiffPane } from "./components/DiffPane";
-import { CloudProjectsDialog } from "./components/CloudProjectsDialog";
+import { LazyFeatureBoundary } from "./components/LazyFeatureBoundary";
 
+const CodeEditor = lazy(() => import("./components/CodeEditor").then(({ CodeEditor }) => ({ default: CodeEditor })));
+const BottomDock = lazy(() => import("./components/BottomDock").then(({ BottomDock }) => ({ default: BottomDock })));
+const DiffPane = lazy(() => import("./components/DiffPane").then(({ DiffPane }) => ({ default: DiffPane })));
+const ImportDialog = lazy(() => import("./components/ImportDialog").then(({ ImportDialog }) => ({ default: ImportDialog })));
+const CloudProjectsDialog = lazy(() => import("./components/CloudProjectsDialog").then(({ CloudProjectsDialog }) => ({ default: CloudProjectsDialog })));
+const CommandPalette = lazy(() => import("./components/CommandPalette").then(({ CommandPalette }) => ({ default: CommandPalette })));
+const SearchPanel = lazy(() => import("./components/SearchPanel").then(({ SearchPanel }) => ({ default: SearchPanel })));
+const PortsPanel = lazy(() => import("./components/PortsPanel").then(({ PortsPanel }) => ({ default: PortsPanel })));
+const SettingsPanel = lazy(() => import("./components/SettingsPanel").then(({ SettingsPanel }) => ({ default: SettingsPanel })));
+const ScmPanel = lazy(() => import("./components/ScmPanel").then(({ ScmPanel }) => ({ default: ScmPanel })));
+const OutlinePanel = lazy(() => import("./components/OutlinePanel").then(({ OutlinePanel }) => ({ default: OutlinePanel })));
+const LocalHistoryPanel = lazy(() => import("./components/LocalHistoryPanel").then(({ LocalHistoryPanel }) => ({ default: LocalHistoryPanel })));
+
+function feature(name: string, child: ReactNode, fallback = "Loading…") {
+  return (
+    <LazyFeatureBoundary
+      name={name}
+      fallback={<div className="flex h-full items-center justify-center p-4 text-xs text-cargo-muted">{fallback}</div>}
+    >
+      {child}
+    </LazyFeatureBoundary>
+  );
+}
 export default function App() {
   const model = usePreviewController();
   const showSidebar = model.settings.showSidebar && !model.zenMode;
@@ -28,17 +41,17 @@ export default function App() {
   const sidebar = (() => {
     switch (model.sidebarView) {
       case "search":
-        return <SearchPanel model={model} />;
+        return feature("Search", <SearchPanel model={model} />, "Loading search…");
       case "scm":
-        return <ScmPanel model={model} />;
+        return feature("Source Control", <ScmPanel model={model} />, "Loading source control…");
       case "outline":
-        return <OutlinePanel model={model} />;
+        return feature("Outline", <OutlinePanel model={model} />, "Loading outline…");
       case "timeline":
-        return <LocalHistoryPanel model={model} />;
+        return feature("Timeline", <LocalHistoryPanel model={model} />, "Loading timeline…");
       case "ports":
-        return <PortsPanel model={model} />;
+        return feature("Ports", <PortsPanel model={model} />, "Loading ports…");
       case "settings":
-        return <SettingsPanel model={model} />;
+        return feature("Settings", <SettingsPanel model={model} />, "Loading settings…");
       case "explorer":
       default:
         return <FileTree model={model} />;
@@ -91,13 +104,15 @@ export default function App() {
                 </>
               ) : null}
               <Panel id="editor" minSize="20%" defaultSize={showPreview && !model.diffView ? "44%" : "82%"} className="min-w-0">
-                <CodeEditor model={model} />
+                {model.selectedPath
+                  ? feature("Code editor", <CodeEditor model={model} />, "Starting editor…")
+                  : <section className="flex h-full items-center justify-center px-6 text-sm text-cargo-muted" aria-label="Editor">Select a file from the sidebar to edit.</section>}
               </Panel>
               {model.diffView ? (
                 <>
                   <Separator id="sep-diff" className="ide-separator" />
                   <Panel id="diff" minSize="18%" defaultSize="38%" className="min-w-0">
-                    <DiffPane model={model} />
+                    {feature("Diff editor", <DiffPane model={model} />, "Loading diff…")}
                   </Panel>
                 </>
               ) : showPreview ? (
@@ -114,7 +129,13 @@ export default function App() {
             <>
               <Separator id="sep-dock" className="ide-separator ide-separator-horizontal" />
               <Panel id="dock" minSize="12%" defaultSize="26%" className="min-h-0">
-                <BottomDock model={model} />
+                {model.hasProject
+                  ? feature("Terminal and diagnostics", <BottomDock model={model} />, "Starting terminal…")
+                  : <div className="flex h-full flex-col border-t border-cargo-line bg-cargo-elevated/90" data-panel="dock">
+                      <p id="terminal-status" className="border-b border-cargo-line px-3 py-2 text-[11px] text-cargo-muted">idle</p>
+                      <pre id="terminal-log" className="sr-only" aria-hidden="true" />
+                      <div className="flex flex-1 items-center justify-center text-xs text-cargo-muted">Open a project to start a terminal.</div>
+                    </div>}
               </Panel>
             </>
           ) : null}
@@ -122,16 +143,18 @@ export default function App() {
       </div>
 
       <WelcomeOverlay model={model} />
-      <ImportDialog model={model} />
-      <CloudProjectsDialog model={model} />
-      <CommandPalette
-        open={model.paletteOpen}
-        mode={model.paletteMode}
-        filePaths={model.filePaths}
-        onClose={() => model.setPaletteOpen(false)}
-        onRun={model.runCommand}
-        onOpenFile={(path) => model.openFile(path)}
-      />
+      {model.importOpen ? feature("Project import", <ImportDialog model={model} />) : null}
+      {model.cloudOpen ? feature("Cloud Projects", <CloudProjectsDialog model={model} />) : null}
+      {model.paletteOpen
+        ? feature("Command palette", <CommandPalette
+            open
+            mode={model.paletteMode}
+            filePaths={model.filePaths}
+            onClose={() => model.setPaletteOpen(false)}
+            onRun={model.runCommand}
+            onOpenFile={(path) => model.openFile(path)}
+          />)
+        : null}
 
       <div className="legacy-controls hidden" hidden>
         <select id="template-select" aria-label="Project template" defaultValue="vite-react">

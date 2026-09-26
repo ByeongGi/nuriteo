@@ -21,6 +21,9 @@ const browser = await chromium.launch({ executablePath: chromePath, headless: tr
 const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
 
 try {
+  await page.addInitScript(() => {
+    localStorage.setItem("cargo.preview-service.settings", JSON.stringify({ saveTrigger: "manual" }));
+  });
   await page.goto(baseUrl, { waitUntil: "networkidle" });
   await page.waitForFunction(() => Boolean(globalThis.__previewService));
   await page.evaluate(() => {
@@ -33,7 +36,9 @@ try {
   });
 
   await page.getByRole("button", { name: "Source Control" }).click();
-  await page.getByRole("button", { name: "Open diff" }).click();
+  const sourceControl = page.getByRole("complementary", { name: "Source control" });
+  await sourceControl.waitFor();
+  await sourceControl.getByRole("button", { name: "Open diff" }).click();
 
   const diffEditor = page.getByRole("region", { name: "Diff editor" });
   await diffEditor.waitFor();
