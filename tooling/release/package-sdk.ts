@@ -217,9 +217,17 @@ fs.copyFileSync(
   path.join(root, "apps/preview-service/public/vendor/yarn-cli-1.22.22.mjs"),
   path.join(packageRoot, "vendor/yarn-cli-1.22.22.mjs")
 );
+fs.copyFileSync(
+  path.join(root, "apps/preview-service/public/vendor/next-cli-15.1.9.mjs"),
+  path.join(packageRoot, "vendor/next-cli-15.1.9.mjs")
+);
 const yarnGate = readJson(path.join(root, "compat/yarn-v1-product-support.json"));
 if (sha256(path.join(packageRoot, "vendor/yarn-cli-1.22.22.mjs")) !== yarnGate.artifact.cspFactorySha256) {
   throw new Error("SDK Yarn Classic factory differs from the pinned product support asset");
+}
+const nextBrowserWorker = readJson(path.join(root, "compat/nextjs-browser-worker-results.json"));
+if (sha256(path.join(packageRoot, "vendor/next-cli-15.1.9.mjs")) !== nextBrowserWorker.nextCliFactorySha256) {
+  throw new Error("SDK Next.js factory differs from the pinned browser-worker evidence");
 }
 
 rewritePackagedSource("packages/sdk/src/container.ts", [
@@ -311,7 +319,7 @@ Content-Security-Policy: default-src 'self'; script-src 'self'; worker-src 'self
 \`\`\`
 
 Serve \`assets/system_wasm.wasm\` as \`application/wasm\`.
-Serve \`vendor/yarn-cli-1.22.22.mjs\` as \`text/javascript\` beside the workers; the process worker verifies its SHA-256 before loading Yarn Classic.
+Serve \`vendor/yarn-cli-1.22.22.mjs\` and \`vendor/next-cli-15.1.9.mjs\` as \`text/javascript\` beside the workers; the process worker verifies their SHA-256 values before loading the pinned CLI factories.
 
 Asset base path for this package: \`${sdkBasePath}\`
 Override at package time with \`--base-path=/your/deploy/path/\` or \`CARGO_CONTAINER_SDK_BASE_PATH\`.
@@ -360,6 +368,10 @@ writeFile("asset-manifest.json", `${JSON.stringify({
     yarnClassicFactory: {
       path: "vendor/yarn-cli-1.22.22.mjs",
       sha256: sha256(path.join(packageRoot, "vendor/yarn-cli-1.22.22.mjs"))
+    },
+    nextCliFactory: {
+      path: "vendor/next-cli-15.1.9.mjs",
+      sha256: sha256(path.join(packageRoot, "vendor/next-cli-15.1.9.mjs"))
     },
     systemWasm: {
       path: "assets/system_wasm.wasm",

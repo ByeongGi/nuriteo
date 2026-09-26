@@ -1,7 +1,7 @@
 {
-  "schemaVersion": 4,
+  "schemaVersion": 5,
   "updatedAt": "2026-09-27",
-  "nextVersion": "15.1.0",
+  "nextVersion": "15.1.9",
   "publicGrade": "product-preview",
   "fullRuntimeGrade": "candidate",
   "productSupportClaim": true,
@@ -13,10 +13,10 @@
   },
   "packageFacts": {
     "bin": "dist/bin/next",
-    "nodeEngine": ">=20.9.0",
+    "nodeEngine": "^18.18.0 || ^19.8.0 || >=20.0.0",
     "wasmSwcPackage": "@next/swc-wasm-nodejs",
-    "wasmSwcVersion": "15.1.0",
-    "wasmSwcIntegrity": "sha512-H8DoPXweAanN/NegmsAZolxN6QTccL/SKc55TyCjIUwaCNiNSO/nLl4MV5VTTYpy8vgL1AZlUzZRW12+wxRllg==",
+    "wasmSwcVersion": "15.1.9",
+    "wasmSwcIntegrity": "sha512-lev3AYphZCq94oLGd/TF99dRqsq00ALRL9mtkTRE+fdu9nQncWxLV5jN7TPfWW5IGzZf9AlC431ohitLXwbwHQ==",
     "nativeAddonPolicy": "unsupported",
     "nativeOptionalDependencies": [
       "@next/swc-darwin-arm64",
@@ -34,12 +34,12 @@
     "status": "hold",
     "executionHost": "strict-csp-headless-chrome",
     "blockerCode": "ECLICSPUNSUPPORTED",
-    "reason": "The real Next 15.1.0 CommonJS CLI entry cannot execute under the release CSP without dynamic code generation, so dev/build/start and downstream full-runtime features are not browser-worker validated.",
+    "reason": "The real Next 15.1.9 CLI entry now executes through an integrity-pinned static factory under the release CSP. The first downstream uncompiled module, dist/server/require-hook.js, is blocked, so dev/build/start and downstream full-runtime features are not browser-worker validated.",
     "evidence": "compat/nextjs-browser-worker-results.json"
   },
   "security": {
     "status": "hold",
-    "reason": "Pinned Next 15.1.0 is an intentionally retained compatibility fixture, not a release-eligible security baseline.",
+    "reason": "Pinned Next 15.1.9 patches CVE-2025-66478 but is npm-deprecated for later advisories; it is an intentionally retained compatibility fixture, not a release-eligible security baseline.",
     "evidence": "compat/nextjs-security-baseline.json"
   },
   "capabilities": [
@@ -65,19 +65,19 @@
       "id": "next-cli-artifact-execution",
       "command": "next dev | next build | next start",
       "status": "candidate",
-      "reason": "The pinned Next 15.1.0 distribution is mounted and its real CLI dev, build, and start paths pass in the Node-hosted guest runtime integration fixture. Strict-CSP browser-worker execution remains hold."
+      "reason": "The pinned Next 15.1.9 distribution is mounted and its real CLI dev, build, and start paths pass in the Node-hosted guest runtime integration fixture. Strict-CSP browser-worker execution remains hold."
     },
     {
       "id": "next-app-router-dev",
       "command": "next dev",
       "status": "candidate",
-      "reason": "The real Next 15.1.0 development server compiles the App Router with version-matched WASM SWC and serves the rendered route."
+      "reason": "The real Next 15.1.9 development server compiles the App Router with version-matched WASM SWC and serves the rendered route."
     },
     {
       "id": "next-app-router-build",
       "command": "next build",
       "status": "candidate",
-      "reason": "The real Next 15.1.0 build emits BUILD_ID, RSC/client manifests, middleware and Edge bundles, prerender metadata, server chunks, and production assets."
+      "reason": "The real Next 15.1.9 build emits BUILD_ID, RSC/client manifests, middleware and Edge bundles, prerender metadata, server chunks, and production assets."
     },
     {
       "id": "next-static-export",
@@ -95,7 +95,7 @@
       "id": "next-wasm-swc",
       "command": "load @next/swc-wasm-nodejs",
       "status": "candidate",
-      "reason": "The integrity-pinned, version-matched @next/swc-wasm-nodejs 15.1.0 transform path is used by the Node-hosted real next dev and next build validation. It is not promoted for strict-CSP browser workers while the CLI entry is blocked."
+      "reason": "The integrity-pinned, version-matched @next/swc-wasm-nodejs 15.1.9 transform path is used by the Node-hosted real next dev and next build validation. It is not promoted for strict-CSP browser workers while the downstream CLI graph is incomplete."
     },
     {
       "id": "next-rsc-server-actions",

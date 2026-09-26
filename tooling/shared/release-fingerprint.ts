@@ -69,8 +69,9 @@ export function collectSdkFingerprint({
   const systemWorkerPath = path.join(packageRoot, "workers/system-worker.ts");
   const processWorkerPath = path.join(packageRoot, "workers/process-worker.ts");
   const yarnClassicFactoryPath = path.join(packageRoot, "vendor/yarn-cli-1.22.22.mjs");
+  const nextCliFactoryPath = path.join(packageRoot, "vendor/next-cli-15.1.9.mjs");
 
-  for (const file of [assetManifestPath, wasmPath, systemWorkerPath, processWorkerPath, yarnClassicFactoryPath, tarballPath]) {
+  for (const file of [assetManifestPath, wasmPath, systemWorkerPath, processWorkerPath, yarnClassicFactoryPath, nextCliFactoryPath, tarballPath]) {
     if (!fs.existsSync(file)) {
       throw new Error(`missing SDK package artifact for fingerprint: ${path.relative(root, file)}`);
     }
@@ -88,6 +89,7 @@ export function collectSdkFingerprint({
   const systemWorkerSha256 = sha256File(systemWorkerPath);
   const processWorkerSha256 = sha256File(processWorkerPath);
   const yarnClassicFactorySha256 = sha256File(yarnClassicFactoryPath);
+  const nextCliFactorySha256 = sha256File(nextCliFactoryPath);
   const assetManifestSha256 = sha256File(assetManifestPath);
   const tarballSha256 = sha256File(tarballPath);
 
@@ -103,6 +105,9 @@ export function collectSdkFingerprint({
   if (assetManifest.assets.yarnClassicFactory?.sha256 !== yarnClassicFactorySha256) {
     throw new Error("asset-manifest yarnClassicFactory sha256 does not match packaged factory bytes");
   }
+  if (assetManifest.assets.nextCliFactory?.sha256 !== nextCliFactorySha256) {
+    throw new Error("asset-manifest nextCliFactory sha256 does not match packaged factory bytes");
+  }
 
   return {
     schemaVersion: 2,
@@ -117,6 +122,7 @@ export function collectSdkFingerprint({
       systemWorkerSha256,
       processWorkerSha256,
       yarnClassicFactorySha256,
+      nextCliFactorySha256,
       tarballPath: TARBALL_PATH,
       tarballSha256
     },
@@ -168,6 +174,10 @@ export function verifyReleaseArtifacts({ root = process.cwd() } = {}) {
     "SDK Yarn Classic factory fingerprint mismatch"
   );
   assertFingerprint(
+    assetManifest.assets.nextCliFactory?.sha256 === sha256File(path.join(packageRoot, "vendor/next-cli-15.1.9.mjs")),
+    "SDK Next.js factory fingerprint mismatch"
+  );
+  assertFingerprint(
     fingerprint.sdkPackage.assetManifestSha256 === sha256File(assetManifestPath),
     "asset manifest fingerprint mismatch"
   );
@@ -186,6 +196,10 @@ export function verifyReleaseArtifacts({ root = process.cwd() } = {}) {
   assertFingerprint(
     fingerprint.sdkPackage.yarnClassicFactorySha256 === assetManifest.assets.yarnClassicFactory.sha256,
     "Yarn Classic factory fingerprint field mismatch"
+  );
+  assertFingerprint(
+    fingerprint.sdkPackage.nextCliFactorySha256 === assetManifest.assets.nextCliFactory.sha256,
+    "Next.js factory fingerprint field mismatch"
   );
   assertFingerprint(
     fingerprint.sdkPackage.tarballSha256 === sha256File(tarballPath),

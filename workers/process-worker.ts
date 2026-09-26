@@ -8,6 +8,8 @@ import { MemoryPackageManagerWorkspace } from "../packages/node-runtime/src/pack
 const YARN_BUNDLE_SHA256 = "443ed69e76443b89afddccfc9faec1ff16eb5e500979cc079c696dec4c3d94ee";
 const YARN_ENTRY_SHA256 = "148e19db309ec9eaf7720b28df811337906eea8a1758deaa54afee60a6305e04";
 const YARN_FACTORY_SHA256 = "e6f01b28a30aae3d6bd6cf78302d0b1ba1f5e6e8d2f6f918989b6cd7f2a428a0";
+const NEXT_ENTRY_SHA256 = "90ff5ff3414148edecac938f64d64d596076b0ff2b11eaa6b9fcaf754a73f7e9";
+const NEXT_FACTORY_SHA256 = "9c56ecb503686a9815b2b86a3d9f4b3b49a00dcf4821950da951a93354233f68";
 
 let systemPort = null;
 let syncChannel = null;
@@ -105,9 +107,7 @@ function runProgram(message) {
 async function evaluateCli(message) {
   let response;
   try {
-    const precompiledCjsFactories = message.request?.entry?.name === "yarn"
-      ? await loadPinnedYarnFactories(message)
-      : undefined;
+    const precompiledCjsFactories = await loadPinnedCliFactories(message);
     const httpBridge = message.bridgeLoopbackServer ? createCliEvaluationHttpBridge() : null;
     response = await evaluateCliModuleWorkerMessage(message, {
     ...(httpBridge ? { httpBridge } : {}),
@@ -129,6 +129,32 @@ async function evaluateCli(message) {
     response = { id: message.id, error: error instanceof Error ? error.message : String(error), type: "cli:result" };
   }
   self.postMessage(response);
+}
+
+async function loadPinnedCliFactories(message) {
+  if (message.request?.entry?.name === "yarn") return loadPinnedYarnFactories(message);
+  if (message.request?.entry?.name === "next") return loadPinnedNextFactories(message);
+  return undefined;
+}
+
+async function loadPinnedNextFactories(message) {
+  if (message.request.entry.version !== "15.1.9") throw new Error("ERR_NEXT_CSP_UNSUPPORTED_VERSION");
+  const entry = message.request.entry.entry;
+  if (!entry.endsWith("/dist/bin/next")) throw new Error("ERR_NEXT_CSP_UNEXPECTED_ENTRY");
+  const workspace = MemoryPackageManagerWorkspace.fromSnapshot(message.workspaceSnapshot);
+  if (await sha256(workspace.readBytes(entry)) !== NEXT_ENTRY_SHA256) {
+    throw new Error("ERR_NEXT_CSP_ENTRY_INTEGRITY");
+  }
+  const factoryUrl = new URL("../vendor/next-cli-15.1.9.mjs", self.location.href);
+  const factoryResponse = await fetch(factoryUrl, { cache: "no-store" });
+  if (!factoryResponse.ok || await sha256(new Uint8Array(await factoryResponse.arrayBuffer())) !== NEXT_FACTORY_SHA256) {
+    throw new Error("ERR_NEXT_CSP_FACTORY_INTEGRITY");
+  }
+  const { sourceSha256, evaluateNextCjs } = await import(/* @vite-ignore */ factoryUrl.href);
+  if (sourceSha256 !== NEXT_ENTRY_SHA256 || typeof evaluateNextCjs !== "function") {
+    throw new Error("ERR_NEXT_CSP_FACTORY_MISMATCH");
+  }
+  return { [entry]: evaluateNextCjs };
 }
 
 async function loadPinnedYarnFactories(message) {

@@ -104,7 +104,10 @@ try {
       systemWasmPath: manifest.assets.systemWasm.path,
       yarnFactoryPath: manifest.assets.yarnClassicFactory.path,
       yarnFactorySha256: manifest.assets.yarnClassicFactory.sha256,
-      yarnFactoryType: (await fetch("/sdk/vendor/yarn-cli-1.22.22.mjs")).headers.get("content-type")
+      yarnFactoryType: (await fetch("/sdk/vendor/yarn-cli-1.22.22.mjs")).headers.get("content-type"),
+      nextFactoryPath: manifest.assets.nextCliFactory.path,
+      nextFactorySha256: manifest.assets.nextCliFactory.sha256,
+      nextFactoryType: (await fetch("/sdk/vendor/next-cli-15.1.9.mjs")).headers.get("content-type")
     };
   });
   if (!headers.isolated) throw new Error("consumer page is not cross-origin isolated");
@@ -115,15 +118,26 @@ try {
   if (headers.systemWasmPath !== "assets/system_wasm.wasm") throw new Error("SDK wasm asset path mismatch");
   if (headers.yarnFactoryPath !== "vendor/yarn-cli-1.22.22.mjs") throw new Error("SDK Yarn factory asset path mismatch");
   if (!headers.yarnFactoryType?.includes("text/javascript")) throw new Error(`SDK Yarn factory MIME mismatch: ${headers.yarnFactoryType}`);
+  if (headers.nextFactoryPath !== "vendor/next-cli-15.1.9.mjs") throw new Error("SDK Next factory asset path mismatch");
+  if (!headers.nextFactoryType?.includes("text/javascript")) throw new Error(`SDK Next factory MIME mismatch: ${headers.nextFactoryType}`);
   const yarnGate = JSON.parse(fs.readFileSync(path.join(root, "compat/yarn-v1-product-support.json"), "utf8"));
   if (headers.yarnFactorySha256 !== yarnGate.artifact.cspFactorySha256) throw new Error("SDK Yarn factory integrity manifest mismatch");
   const packagedYarnFactory = path.join(packageRoot, headers.yarnFactoryPath);
   if (fs.readFileSync(packagedYarnFactory).equals(fs.readFileSync(path.join(root, yarnGate.artifact.cspFactory))) === false) {
     throw new Error("SDK Yarn factory differs from preview product asset");
   }
+  const nextEvidence = JSON.parse(fs.readFileSync(path.join(root, "compat/nextjs-browser-worker-results.json"), "utf8"));
+  if (headers.nextFactorySha256 !== nextEvidence.nextCliFactorySha256) throw new Error("SDK Next factory integrity manifest mismatch");
+  const packagedNextFactory = path.join(packageRoot, headers.nextFactoryPath);
+  if (fs.readFileSync(packagedNextFactory).equals(fs.readFileSync(path.join(root, "apps/preview-service/public/vendor/next-cli-15.1.9.mjs"))) === false) {
+    throw new Error("SDK Next factory differs from preview product asset");
+  }
   const packedEntries = spawnSync("tar", ["-tzf", packageTarball], { encoding: "utf8" });
   if (packedEntries.status !== 0 || !packedEntries.stdout.includes("package/vendor/yarn-cli-1.22.22.mjs")) {
     throw new Error("SDK tarball is missing the Yarn Classic factory");
+  }
+  if (!packedEntries.stdout.includes("package/vendor/next-cli-15.1.9.mjs")) {
+    throw new Error("SDK tarball is missing the Next.js factory");
   }
   assertSourceMap("packages/sdk/src/container.ts");
   assertSourceMap("packages/browser-host/src/supervisor.ts");

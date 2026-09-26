@@ -15,10 +15,11 @@ const root = path.resolve(new URL("../../..", import.meta.url).pathname);
 const nextRoot = dirname(realpathSync(require.resolve("next/package.json")));
 const nextManifest = JSON.parse(fs.readFileSync(path.join(nextRoot, "package.json"), "utf8"));
 const nextEntry = fs.readFileSync(path.join(nextRoot, "dist/bin/next"));
+const nextRequireHook = fs.readFileSync(path.join(nextRoot, "dist/server/require-hook.js"));
 const nextEntrySha256 = createHash("sha256").update(nextEntry).digest("hex");
 const chromePath = process.env.CHROME_PATH || "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 
-assert.equal(nextManifest.version, "15.1.0");
+assert.equal(nextManifest.version, "15.1.9");
 assert.equal(typeof nextManifest.bin === "string" ? nextManifest.bin : nextManifest.bin?.next, "./dist/bin/next");
 assert.ok(fs.existsSync(chromePath), `Chrome not found at ${chromePath}`);
 
@@ -31,7 +32,8 @@ const workspaceSnapshot = {
     "/workspace/app/node_modules",
     "/workspace/app/node_modules/next",
     "/workspace/app/node_modules/next/dist",
-    "/workspace/app/node_modules/next/dist/bin"
+    "/workspace/app/node_modules/next/dist/bin",
+    "/workspace/app/node_modules/next/dist/server"
   ],
   files: [
     {
@@ -40,7 +42,7 @@ const workspaceSnapshot = {
         name: "next-browser-worker-preflight",
         private: true,
         scripts: { build: "next build", dev: "next dev", start: "next start" },
-        dependencies: { next: "15.1.0", react: "19.0.0", "react-dom": "19.0.0" }
+        dependencies: { next: "15.1.9", react: "19.0.0", "react-dom": "19.0.0" }
       })),
       encoding: "base64"
     },
@@ -53,10 +55,16 @@ const workspaceSnapshot = {
       path: "/workspace/app/node_modules/next/dist/bin/next",
       data: encode(nextEntry),
       encoding: "base64"
+    },
+    {
+      path: "/workspace/app/node_modules/next/dist/server/require-hook.js",
+      data: encode(nextRequireHook),
+      encoding: "base64"
     }
   ],
   links: []
 };
+let tamperFactoryResponse = false;
 
 const server = await createServer({
   root,
@@ -70,6 +78,11 @@ const server = await createServer({
         response.setHeader("Cross-Origin-Opener-Policy", REQUIRED_RUNTIME_HEADERS.coop);
         response.setHeader("Cross-Origin-Embedder-Policy", REQUIRED_RUNTIME_HEADERS.coep);
         response.setHeader("Content-Security-Policy", REQUIRED_RUNTIME_HEADERS.csp);
+        if (request.url === "/vendor/next-cli-15.1.9.mjs" && tamperFactoryResponse) {
+          response.setHeader("Content-Type", "text/javascript; charset=utf-8");
+          response.end("export const sourceSha256 = 'tampered'; export function evaluateNextCjs() {}\n");
+          return;
+        }
         if (request.url === "/next-browser-worker-probe") {
           response.setHeader("Content-Type", "text/html; charset=utf-8");
           response.end("<!doctype html><html><body>Next browser worker probe</body></html>");
@@ -125,7 +138,7 @@ try {
           request: {
             entry: {
               name: "next",
-              version: "15.1.0",
+              version: "15.1.9",
               entry: "/workspace/app/node_modules/next/dist/bin/next",
               entrySha256,
               mode: "cjs"
@@ -151,12 +164,19 @@ try {
     assert.equal(outcome.result?.entrySha256, nextEntrySha256);
     assert.equal(outcome.result?.exitCode, 1);
     assert.match(outcome.result?.stderr || "", /ECLICSPUNSUPPORTED/);
-    assert.match(outcome.result?.stderr || "", /node_modules\/next\/dist\/bin\/next/);
+    assert.doesNotMatch(outcome.result?.stderr || "", /ECLICSPUNSUPPORTED:.*node_modules\/next\/dist\/bin\/next/);
+    assert.match(outcome.result?.stderr || "", /node_modules\/next\/dist\/server\/require-hook\.js/);
   }
 
   await assertWorkersReleased("command teardown");
 
-  const recovery = await runPreflight(4, "dev") as { result?: { exitCode?: number; stderr?: string } };
+  tamperFactoryResponse = true;
+  const rejectedFactory = await runPreflight(4, "dev") as { error?: string };
+  assert.equal(rejectedFactory.error, "ERR_NEXT_CSP_FACTORY_INTEGRITY");
+  tamperFactoryResponse = false;
+  await assertWorkersReleased("factory integrity rejection");
+
+  const recovery = await runPreflight(5, "dev") as { result?: { exitCode?: number; stderr?: string } };
   assert.equal(recovery.result?.exitCode, 1);
   assert.match(recovery.result?.stderr || "", /ECLICSPUNSUPPORTED/);
   await assertWorkersReleased("recovery teardown");

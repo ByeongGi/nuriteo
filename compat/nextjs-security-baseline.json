@@ -3,16 +3,16 @@
   "updatedAt": "2026-09-27",
   "status": "hold",
   "next": {
-    "version": "15.1.0",
-    "lockfileIntegrity": "sha512-QKhzt6Y8rgLNlj30izdMbxAwjHMFANnLwDwZ+WQh5sMhyt4lEBqDK9QpvWHtIM4rINKPoJ8aiRZKg5ULSybVHw==",
+    "version": "15.1.9",
+    "lockfileIntegrity": "sha512-OoQpDPV2i3o5Hnn46nz2x6fzdFxFO+JsU4ZES12z65/feMjPHKKHLDVQ2NuEvTaXTRisix/G5+6hyTkwK329kA==",
     "releaseSecurityEligible": false,
     "minimumMaintenanceLine": "15.5.26",
-    "reason": "15.1.0 is below published patched versions for critical and later Next.js security advisories; it is fixture-only and must not be promoted as a release baseline."
+    "reason": "15.1.9 patches CVE-2025-66478 for the 15.1 line, but npm deprecates it because later advisories require a maintained release. It is fixture-only and must not be promoted as a release baseline."
   },
   "wasmSwc": {
     "package": "@next/swc-wasm-nodejs",
-    "version": "15.1.0",
-    "lockfileIntegrity": "sha512-H8DoPXweAanN/NegmsAZolxN6QTccL/SKc55TyCjIUwaCNiNSO/nLl4MV5VTTYpy8vgL1AZlUzZRW12+wxRllg==",
+    "version": "15.1.9",
+    "lockfileIntegrity": "sha512-lev3AYphZCq94oLGd/TF99dRqsq00ALRL9mtkTRE+fdu9nQncWxLV5jN7TPfWW5IGzZf9AlC431ohitLXwbwHQ==",
     "versionMatched": true,
     "nativeNodeAddonsSupported": false
   },
@@ -25,6 +25,12 @@
       "source": "https://nextjs.org/blog/CVE-2025-66478"
     },
     {
+      "id": "2025-12-11-nextjs-security-update",
+      "severity": "high",
+      "packageStatus": "next@15.1.9 is deprecated on npm",
+      "source": "https://nextjs.org/blog/security-update-2025-12-11"
+    },
+    {
       "id": "2026-09-22-nextjs-security-update",
       "severity": "critical",
       "patchedMaintenanceRelease": "15.5.26",
@@ -35,7 +41,7 @@
     "keepFullRuntimeCandidate": true,
     "denyNativeNodeSwcClaim": true,
     "requireVersionMatchedWasmSwc": true,
-    "requirePatchedNextBeforeReleasePromotion": true,
+    "requireMaintainedNextBeforeReleasePromotion": true,
     "requireBrowserWorkerFeatureLaneBeforePromotion": true
   }
 }

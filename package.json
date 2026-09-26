@@ -9,6 +9,7 @@
   },
   "scripts": {
     "generate:protocol": "node tooling/generators/generate-protocol.ts",
+    "generate:next-csp-factory": "node tooling/generators/build-next-csp-factory.ts",
     "test:rust": "cargo test --workspace",
     "build:wasm": "cargo build -p system-wasm --target wasm32-unknown-unknown",
     "check:workspace": "node tooling/checks/check-workspace.ts",
@@ -74,14 +75,14 @@
     "test:browser": "node tests/system/browser/run.ts"
   },
   "devDependencies": {
-    "@next/swc-wasm-nodejs": "15.1.0",
+    "@next/swc-wasm-nodejs": "15.1.9",
     "@playwright/test": "1.63.0",
     "@sqlite.org/sqlite-wasm": "3.53.4-build1",
     "@types/node": "^22.20.2",
     "@types/react": "19.0.3",
     "client-only": "0.0.1",
     "jq-wasm": "3.0.0-jq-1.8.2",
-    "next": "15.1.0",
+    "next": "15.1.9",
     "react": "19.0.0",
     "react-dom": "19.0.0",
     "typescript": "6.0.3"

@@ -67,7 +67,7 @@
         "apps/preview-service/test/next-full-runtime.test.ts",
         "docs/productization/nextjs-product-support-target.md"
       ],
-      "notes": "Pinned Next 15.1.0 real CLI dev/build/start and App Router server capabilities pass with version-matched WASM SWC; browser-worker promotion and a patched release baseline remain pending."
+      "notes": "Pinned Next 15.1.9 real CLI dev/build/start and App Router server capabilities pass with version-matched WASM SWC; browser-worker promotion and a maintained release baseline remain pending."
     }
   ],
   "gate": {

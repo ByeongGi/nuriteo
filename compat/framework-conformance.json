@@ -108,7 +108,7 @@
         "compat/nextjs-compatibility.json",
         "docs/productization/nextjs-product-support-target.md"
       ],
-      "supportContract": "Pinned Next 15.1.0 real CLI dev/build/start, WASM SWC, RSC/Server Actions, Middleware/Edge, ISR, Image Optimization, binary HTTP responses, and lifecycle teardown pass; public promotion remains candidate pending browser-worker and release/security gates."
+      "supportContract": "Pinned Next 15.1.9 real CLI dev/build/start, WASM SWC, RSC/Server Actions, Middleware/Edge, ISR, Image Optimization, binary HTTP responses, and lifecycle teardown pass; public promotion remains candidate pending browser-worker and release/security gates."
     }
   ],
   "gate": {

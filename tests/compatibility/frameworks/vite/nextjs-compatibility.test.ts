@@ -3,16 +3,16 @@ import fs from "node:fs";
 
 const matrix = JSON.parse(fs.readFileSync(new URL("../../../../compat/nextjs-compatibility.json", import.meta.url), "utf8"));
 
-assert.equal(matrix.schemaVersion, 4);
-assert.equal(matrix.nextVersion, "15.1.0");
+assert.equal(matrix.schemaVersion, 5);
+assert.equal(matrix.nextVersion, "15.1.9");
 assert.equal(matrix.publicGrade, "product-preview");
 assert.equal(matrix.fullRuntimeGrade, "candidate");
 assert.equal(matrix.productSupportClaim, true);
 assert.match(matrix.productSupportClaimScope, /App Router preview adapter/);
 assert.equal(matrix.packageFacts.bin, "dist/bin/next");
-assert.equal(matrix.packageFacts.nodeEngine, ">=20.9.0");
+assert.equal(matrix.packageFacts.nodeEngine, "^18.18.0 || ^19.8.0 || >=20.0.0");
 assert.equal(matrix.packageFacts.wasmSwcPackage, "@next/swc-wasm-nodejs");
-assert.equal(matrix.packageFacts.wasmSwcVersion, "15.1.0");
+assert.equal(matrix.packageFacts.wasmSwcVersion, "15.1.9");
 assert.equal(matrix.packageFacts.nativeAddonPolicy, "unsupported");
 assert.match(matrix.packageFacts.wasmSwcIntegrity, /^sha512-/);
 assert.ok(matrix.packageFacts.nativeOptionalDependencies.includes("@next/swc-darwin-arm64"));
