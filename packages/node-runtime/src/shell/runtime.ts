@@ -35,6 +35,7 @@ export class ShellRuntime {
       const { argv, redirect } = extractRedirect(step.argv);
       const streamed = { stderr: false, stdout: false };
       const result = await this.runCommand(argv, stdin, commandOutputOptions(options, streamed, nextStep?.op === "|"));
+      outputTruncatedBytes += result.outputTruncatedBytes || 0;
       if (options.signal?.aborted) {
         const cancelledStdout = appendWithinLimit(stdout, result.stdout || "", this.maxOutputBytes - byteLength(stderr));
         const cancelledStderr = appendWithinLimit(stderr, result.stderr || "", this.maxOutputBytes - byteLength(cancelledStdout.value));

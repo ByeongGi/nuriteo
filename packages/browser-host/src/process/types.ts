@@ -111,6 +111,7 @@ export interface HostProcessShellCommandOptions {
   table: import("./spawn.ts").HostProcessTable;
   url: string | URL;
   waitForExit?: boolean;
+  releaseOnExit?: boolean;
 }
 
 export interface HostProcessShellCommandContext {
@@ -128,6 +129,7 @@ export interface HostProcessShellCommandResult {
   exitCode: number;
   stderr: string;
   stdout: string;
+  outputTruncatedBytes?: number;
 }
 
 export type HostProcessShellCommand = (

@@ -213,6 +213,12 @@ export class HostProcessTable {
       .map(snapshot);
   }
 
+  release(pid: number): boolean {
+    const record = this.#record(pid);
+    if (!isTerminal(record.status)) return false;
+    return this.records.delete(pid);
+  }
+
   subscribeOutput(listener: (chunk: HostProcessOutputChunk) => void): () => void {
     this.outputListeners.add(listener);
     return () => {

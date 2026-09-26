@@ -6,17 +6,17 @@
   "capabilities": {
     "isolatedSessions": { "status": "supported", "semantics": "Each preview terminal id owns an independent shell runtime, cwd, environment, transcript, foreground command, input listeners, and terminal size." },
     "cwdAndEnvironment": { "status": "supported", "semantics": "Session-local cd/export/unset state; host process start messages carry an absolute normalized cwd and validated environment names." },
-    "streamingStdio": { "status": "partial", "semantics": "Shell callbacks and the host Worker protocol stream separate stdout/stderr chunks; the preview production path still uses allowlisted workflow callbacks rather than the host Worker process table." },
+    "streamingStdio": { "status": "supported", "semantics": "Allowlisted production Worker commands stream separate stdout/stderr chunks through HostProcessTable into the preview xterm; package workflow commands remain direct workflow adapters." },
     "terminalResize": { "status": "partial", "semantics": "Resize is retained per session and delivered through the host protocol, but no kernel ioctl/termios PTY exists." },
     "foregroundProcess": { "status": "partial", "semantics": "One active command per terminal is tracked and receives stdin/resize/signal events; process groups and job control are unsupported." },
     "exitStatus": { "status": "supported", "semantics": "Completion records exit code; virtual SIGINT/SIGTERM/SIGKILL fallbacks use 130/143/137." },
-    "lifecycleRecovery": { "status": "partial", "semantics": "Close, teardown, listener cleanup, generation rejection, and fresh-session restart are tested; production Worker command execution is not wired." },
+    "lifecycleRecovery": { "status": "supported", "semantics": "Production Worker close, teardown, listener cleanup, generation rejection, resource release, and fresh-session restart are covered in Chrome and unit tests." },
     "signals": { "status": "partial", "values": ["SIGINT", "SIGTERM", "SIGKILL"], "semantics": "SIGINT/SIGTERM are cooperative with a bounded grace period before Worker termination; SIGKILL terminates immediately. These are virtual signals, not Unix kernel delivery." },
-    "processListAndKill": { "status": "partial", "semantics": "The preview UI lists active terminal commands and offers interrupt/terminate/kill. It is not yet backed by the host PID table." },
+    "processListAndKill": { "status": "partial", "semantics": "The preview UI reads active PID/generation/cwd/argv/TTY state from HostProcessTable and offers interrupt/terminate/kill; retained history and POSIX process groups are unsupported." },
     "portListAndStop": { "status": "supported", "semantics": "The Ports panel lists and stops preview workflow ports." },
     "packageScriptArguments": { "status": "supported", "semantics": "npm/pnpm/yarn supported script arguments remain argv entries." },
     "projectLocalBin": { "status": "partial", "semantics": "The shell resolves registered PATH entries and recognizes pinned Node shebang fixtures; it is not arbitrary executable or native-binary execution." },
-    "boundedBackpressure": { "status": "partial", "semantics": "Host output retention is capped and acknowledged, stdin uses a credit window, shell result/transcript bytes and scheduler callbacks are capped. A production Worker must cooperate with the ack protocol." },
+    "boundedBackpressure": { "status": "supported", "semantics": "The production Worker gates output on HostProcessTable acknowledgements, delays stdin credit acknowledgement until output admission, and caps retained host/shell/transcript bytes and scheduler callbacks." },
     "commandSecurity": { "status": "supported", "semantics": "Commands resolve through an explicit registry/project PATH mapping; start messages carry immutable argv arrays, validated cwd/env, and never join input into a native shell command." }
   },
   "limits": {
@@ -51,7 +51,8 @@
     "packages/browser-host/test/process-lifecycle.test.ts",
     "packages/browser-host/test/process-terminal-command.test.ts",
     "tests/compatibility/package-managers/terminal-commands.test.ts",
-    "apps/preview-service/test/terminal-session-control.test.ts"
+    "apps/preview-service/test/terminal-session-control.test.ts",
+    "apps/preview-service/test/terminal-worker-browser.test.ts"
   ],
   "reproductionCommands": [
     "node tooling/checks/check-terminal-process-control.ts",
@@ -60,6 +61,7 @@
     "node packages/browser-host/test/process-lifecycle.test.ts",
     "node packages/browser-host/test/process-terminal-command.test.ts",
     "node apps/preview-service/test/terminal-session-control.test.ts",
+    "node apps/preview-service/test/terminal-worker-browser.test.ts",
     "pnpm test:browser-host",
     "pnpm test:preview-service",
     "pnpm test:browser",

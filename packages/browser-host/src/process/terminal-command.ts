@@ -39,13 +39,15 @@ export function createHostProcessShellCommand(options: HostProcessShellCommandOp
         argv: [...argv],
         exitCode: final.exitCode ?? 0,
         stderr: final.stderr,
-        stdout: final.stdout
+        stdout: final.stdout,
+        ...(final.outputDroppedBytes > 0 ? { outputTruncatedBytes: final.outputDroppedBytes } : {})
       };
     } finally {
       signal?.removeEventListener("abort", abort);
       stopInput();
       stopResize();
       unsubscribe();
+      if (options.releaseOnExit) options.table.release(prepared.pid);
     }
   };
 }

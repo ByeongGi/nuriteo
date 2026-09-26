@@ -8,7 +8,7 @@ const contract = JSON.parse(fs.readFileSync("compat/terminal-process-control.jso
 const document = fs.readFileSync("docs/productization/terminal-process-control.md", "utf8");
 
 assert(contract.schemaVersion === 2, "unexpected terminal/process contract schema");
-assert(contract.status === "partial", "terminal/process status must remain partial until production Worker integration is evidenced");
+assert(contract.status === "partial", "terminal/process status must remain partial while kernel PTY semantics are unsupported");
 assert(contract.runtimeModel === "browser-worker-virtual-process", "runtime model must be explicit");
 assert(contract.posixPty?.status === "unsupported", "kernel POSIX PTY must not be claimed in a browser runtime");
 assert(contract.security?.executionModel === "parsed-argv-allowlist", "command execution must use parsed argv and an allowlist");
@@ -45,7 +45,7 @@ for (const [name, value] of Object.entries(contract.limits)) {
 }
 assert(contract.shellGrammar.diagnosticCode === "ERR_CARGO_CONTAINER_UNSUPPORTED_SHELL_SYNTAX", "shell diagnostic code changed");
 assert(contract.posixPty.unsupported.length >= 5, "POSIX PTY limitations are incomplete");
-assert(document.includes("HostProcessTable/createHostProcessShellCommand는 아직 preview production shell에 연결되지 않았다"), "production integration gap must stay documented");
+assert(document.includes("HostProcessTable/createHostProcessShellCommand가 preview production shell의 제한된 Worker command에 연결된다"), "production Worker integration must stay documented");
 
 const tests = new Set(contract.tests);
 assert(tests.size === contract.tests.length, "duplicate terminal/process evidence tests");

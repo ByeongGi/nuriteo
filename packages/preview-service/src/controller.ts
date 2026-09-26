@@ -67,6 +67,11 @@ import {
   shouldInjectPreviewErrorBridge
 } from "./preview-inject.ts";
 import type { RuntimeRecoveryActionKind } from "../../browser-host/src/observability/recovery-actions.ts";
+import {
+  createHostProcessShellCommand,
+  type HostProcessStatus,
+  type HostProcessTable
+} from "../../browser-host/src/process/index.ts";
 import type { TerminalRunResult } from "../../node-runtime/src/shell/index.ts";
 
 export type FileSystemTree = {
@@ -187,8 +192,18 @@ export interface PreviewWorkflowController {
   resizeShell(cols: number, rows: number, terminalId?: string): void;
   signalShell(signal?: "SIGINT" | "SIGTERM" | "SIGKILL", terminalId?: string): boolean;
   closeShell(terminalId: string): boolean;
-  listShellProcesses(): Array<{ pid: number; terminalId: string; command: string; cwd: string; status: "running" }>;
+  listShellProcesses(): Array<{
+    pid: number;
+    generation?: number;
+    terminalId: string;
+    command: string;
+    argv?: string[];
+    cwd: string;
+    status: "running" | HostProcessStatus;
+    terminalSize?: { cols: number; rows: number };
+  }>;
   cancelShellCommand(terminalId?: string): boolean;
+  dispose(): void;
   log(line: unknown): void;
 }
 
@@ -196,6 +211,7 @@ export interface PreviewWorkflowControllerOptions {
   ttlMs?: number;
   relayTimeoutMs?: number;
   previewPort?: number;
+  terminalProcessTable?: HostProcessTable;
 }
 
 interface PreviewWorkflowState {
@@ -1108,6 +1124,7 @@ export function createPreviewWorkflowController(
   }
 
   const shellOutputListeners = new Map<string, (chunk: { stream: "stdout" | "stderr"; data: string }) => void>();
+  const terminalProcessTable = options.terminalProcessTable || null;
   const createShell = (terminalId: string): PreviewShellSession => createPreviewShellSession({
     getCwd: () => state.workflow?.projectRoot || state.project?.root || "/workspace/app",
     getProject: () => state.project,
@@ -1115,6 +1132,9 @@ export function createPreviewWorkflowController(
       log(`[${chunk.stream}] ${chunk.data.replace(/\n$/, "")}`);
       shellOutputListeners.get(terminalId)?.(chunk);
     },
+    ...(terminalProcessTable ? {
+      processCommands: createTerminalProcessCommands(terminalProcessTable, terminalId)
+    } : {}),
     async install() {
       if (!state.workflow) loadTemplate("vite-react");
       if (!state.workflow) return { stdout: "", stderr: "no workflow\n", exitCode: 1 };
@@ -1256,11 +1276,35 @@ export function createPreviewWorkflowController(
     return shells.delete(terminalId);
   }
 
-  function listShellProcesses(): Array<{ pid: number; terminalId: string; command: string; cwd: string; status: "running" }> {
-    const processes: Array<{ pid: number; terminalId: string; command: string; cwd: string; status: "running" }> = [];
+  function listShellProcesses(): Array<{
+    pid: number;
+    generation?: number;
+    terminalId: string;
+    command: string;
+    argv?: string[];
+    cwd: string;
+    status: "running" | HostProcessStatus;
+    terminalSize?: { cols: number; rows: number };
+  }> {
+    const processes: ReturnType<PreviewWorkflowController["listShellProcesses"]> = [];
+    const workerTerminals = new Set<string>();
+    for (const process of terminalProcessTable?.list({ activeOnly: true }) || []) {
+      const terminalId = process.projectId || "default";
+      workerTerminals.add(terminalId);
+      processes.push({
+        pid: process.pid,
+        generation: process.generation,
+        terminalId,
+        command: process.argv.join(" "),
+        argv: [...process.argv],
+        cwd: process.cwd,
+        status: process.status,
+        terminalSize: { ...process.terminalSize }
+      });
+    }
     for (const [terminalId, shell] of shells) {
       const current = shell.session.snapshot();
-      if (current.activeEntry) {
+      if (current.activeEntry && !workerTerminals.has(terminalId)) {
         processes.push({
           pid: current.activeEntry.id,
           terminalId,
@@ -1275,6 +1319,14 @@ export function createPreviewWorkflowController(
 
   function cancelShellCommand(terminalId = "default"): boolean {
     return shellFor(terminalId).cancel();
+  }
+
+  function dispose(): void {
+    for (const terminalId of [...shells.keys()]) closeShell(terminalId);
+    terminalProcessTable?.teardown();
+    stopSessionHeartbeat();
+    try { state.hmr?.close(); } catch { /* best-effort application teardown */ }
+    state.hmr = null;
   }
 
   function getSnapshot(): PreviewWorkflowSnapshot {
@@ -1337,7 +1389,23 @@ export function createPreviewWorkflowController(
     closeShell,
     listShellProcesses,
     cancelShellCommand,
+    dispose,
     log
+  };
+}
+
+function createTerminalProcessCommands(table: HostProcessTable, terminalId: string) {
+  const command = createHostProcessShellCommand({
+    table,
+    projectId: terminalId,
+    releaseOnExit: true,
+    url: "worker://cargo-container/process-worker"
+  });
+  return {
+    "worker-cat": (context: Parameters<typeof command>[0]) => command({ ...context, argv: ["cat", ...context.argv.slice(1)] }),
+    "worker-env": (context: Parameters<typeof command>[0]) => command({ ...context, argv: ["env", ...context.argv.slice(1)] }),
+    "worker-pwd": (context: Parameters<typeof command>[0]) => command({ ...context, argv: ["pwd", ...context.argv.slice(1)] }),
+    "worker-tty": (context: Parameters<typeof command>[0]) => command({ ...context, argv: ["terminal-size", ...context.argv.slice(1)] })
   };
 }
 

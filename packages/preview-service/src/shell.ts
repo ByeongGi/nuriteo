@@ -14,6 +14,7 @@ export interface PreviewShellHandlers {
   runBuild: (args?: string[]) => Promise<{ stdout: string; stderr: string; exitCode: number }>;
   restartDev: (args?: string[]) => Promise<{ stdout: string; stderr: string; exitCode: number }>;
   onChunk?: (chunk: { stream: "stdout" | "stderr"; data: string }) => void;
+  processCommands?: ShellCommandMap;
 }
 
 export interface PreviewShellSession {
@@ -38,6 +39,12 @@ const HELP = [
   "  rm <path>            Delete a project file",
   "  mv <from> <to>       Rename/move a project file",
   "  echo <text>          Print text",
+  "",
+  "Worker processes (browser virtual process):",
+  "  worker-cat           Echo stdin until interrupted",
+  "  worker-pwd           Print the Worker process cwd",
+  "  worker-env           Print the Worker process environment",
+  "  worker-tty [--watch] Print or watch the Worker TTY size",
   "",
   "Package scripts (wired to preview workflow):",
   "  npm install | pnpm install | yarn install",
@@ -64,7 +71,8 @@ export function createPreviewShellSession(handlers: PreviewShellHandlers): Previ
     mv: ({ argv }) => moveFile(handlers, argv),
     npm: (context) => runPackageManager(handlers, "npm", context),
     pnpm: (context) => runPackageManager(handlers, "pnpm", context),
-    yarn: (context) => runPackageManager(handlers, "yarn", context)
+    yarn: (context) => runPackageManager(handlers, "yarn", context),
+    ...(handlers.processCommands || {})
   };
 
   let cwd = handlers.getCwd();

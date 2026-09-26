@@ -5,6 +5,7 @@ export interface ShellCommandResult {
   stderr: string;
   exitCode: number;
   argv?: string[];
+  outputTruncatedBytes?: number;
 }
 
 export interface ShellCommandContext {
