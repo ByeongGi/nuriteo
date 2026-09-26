@@ -11,12 +11,13 @@
         "initialize/initialized/shutdown/exit lifecycle",
         "didOpen/didChange/didClose document synchronization",
         "diagnostics, completion, definition, and rename protocol paths",
-        "Monaco provider and marker integration for JavaScript and TypeScript"
+        "Monaco provider and marker integration for JavaScript and TypeScript",
+        "HostProcessTable-backed process bridge with deny-by-default process permission and PID/generation cleanup"
       ],
       "limitations": [
         "bundled demonstrator server only",
         "lexical workspace symbols rather than a production compiler language server",
-        "no external language-server process bridge",
+        "bundled lexical server behind the process bridge rather than a third-party compiler server",
         "no incremental text synchronization or cancellation"
       ]
     },
@@ -27,12 +28,13 @@
         "deny-by-default capability grants and allowlisted entrypoints",
         "isolated module Worker activation, command contribution, and deactivation",
         "one-shot crash recovery with a bounded recovery budget",
+        "HostProcessTable runtime lifecycle and persisted per-capability user grants",
         "no ambient filesystem, network, process, clipboard, or secret access"
       ],
       "limitations": [
         "built-in static extension registry only",
         "no VSIX, marketplace, arbitrary JavaScript, or VS Code API compatibility",
-        "no persistent permission UI or multi-extension scheduling"
+        "no multi-extension scheduling or external signed artifact distribution"
       ]
     },
     "debugAdapter": {
@@ -42,11 +44,13 @@
         "initialize/launch/setBreakpoints/configurationDone lifecycle",
         "continue, stepIn, stepOut, next, stackTrace, scopes, variables, terminate, and disconnect",
         "Run and Extensions sidebar with session state, call stack, scopes, and variables",
-        "workspace-URI-only deterministic fixture with no host process or socket access"
+        "HostProcessTable-backed guest debug runtime with Source Map v3 breakpoint and stack mapping",
+        "conditional breakpoints, watches, safe debug console expressions, and terminate cleanup",
+        "workspace-URI-only runtime with no host process or socket access"
       ],
       "limitations": [
-        "deterministic fixture adapter rather than a guest runtime inspector",
-        "no source maps, conditional breakpoints, watches, or debug console",
+        "bounded guest interpreter rather than a V8/Node inspector attached to the preview application",
+        "runtime does not expose inspector endpoints or live Vite call frames",
         "no persisted breakpoints or multi-thread UI"
       ]
     }
@@ -55,7 +59,7 @@
     "csp": "same-origin module workers; no unsafe-eval relaxation",
     "filesystem": "workspace URI documents only; no host filesystem handles",
     "network": "no language-server network capability",
-    "process": "no host process spawn",
+    "process": "scoped browser guest Worker processes only; no host OS process spawn",
     "secrets": "not exposed to language workers"
   },
   "tests": [

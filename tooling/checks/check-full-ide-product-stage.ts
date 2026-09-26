@@ -17,7 +17,10 @@ assert(document.includes("not VS Code compatible"), "document must preserve the 
 assert(document.includes("Content-Security-Policy"), "document must describe the CSP boundary");
 assert(editor.includes("LSP {lspState}"), "editor status does not expose LSP lifecycle");
 assert(fs.existsSync("apps/preview-service/src/workers/extensionHost.worker.ts"), "extension host worker missing");
-assert(fs.existsSync("apps/preview-service/src/workers/debugAdapter.worker.ts"), "debug adapter worker missing");
+assert(fs.existsSync("apps/preview-service/src/workers/languageServerProcess.worker.ts"), "language server process worker missing");
+assert(fs.existsSync("apps/preview-service/src/workers/debugRuntimeProcess.worker.ts"), "debug runtime process worker missing");
+assert(fs.existsSync("apps/preview-service/src/lib/sourceMap.ts"), "source-map bridge missing");
+assert(fs.existsSync("apps/preview-service/src/lib/extensionPermissions.ts"), "persistent extension permission store missing");
 for (const test of contract.tests) assert(fs.existsSync(test), `full IDE product-stage test missing: ${test}`);
 
 console.log("full IDE product-stage contract ok");

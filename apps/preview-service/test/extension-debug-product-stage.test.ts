@@ -9,6 +9,7 @@ import {
   verifyExtensionManifest
 } from "../src/lib/extensionManifest.ts";
 import type { JsonRpcMessage, JsonRpcResponse } from "../src/lib/lspProtocol.ts";
+import { DEBUG_FIXTURE_SOURCE_MAP, DEBUG_FIXTURE_SOURCE_URI, RuntimeSourceMap } from "../src/lib/sourceMap.ts";
 
 await verifyExtensionManifest(BUILTIN_WORKSPACE_TOOLS_MANIFEST);
 await assert.rejects(
@@ -64,7 +65,10 @@ const request = (command: string, args?: unknown) => {
 
 request("initialize");
 request("launch", { program: "file:///workspace/debug-fixture.ts" });
-request("setBreakpoints", { breakpoints: [{ line: 3 }] });
+request("setBreakpoints", {
+  source: { path: DEBUG_FIXTURE_SOURCE_URI },
+  breakpoints: [{ line: 3, condition: "counter >= 2" }]
+});
 request("configurationDone");
 await new Promise((resolve) => setTimeout(resolve, 0));
 assert.ok(dapOutput.some((message) => message.type === "event" && message.event === "initialized"));
@@ -77,11 +81,21 @@ assert.equal(
 request("scopes", { frameId: 100 });
 assert.equal(((dapOutput.at(-1) as DapResponse).body as { scopes: Array<{ name: string }> }).scopes[0]?.name, "Locals");
 request("variables", { variablesReference: 200 });
-assert.equal(((dapOutput.at(-1) as DapResponse).body as { variables: Array<{ value: string }> }).variables[0]?.value, "3");
+assert.equal(((dapOutput.at(-1) as DapResponse).body as { variables: Array<{ value: string }> }).variables[0]?.value, "2");
+request("evaluate", { expression: "counter + 1", context: "watch" });
+assert.equal(((dapOutput.at(-1) as DapResponse).body as { result: string }).result, "3");
 request("next", { threadId: 1 });
+request("stackTrace", { threadId: 1 });
+assert.equal(((dapOutput.at(-1) as DapResponse).body as { stackFrames: Array<{ line: number }> }).stackFrames[0]?.line, 4);
+request("evaluate", { expression: "counter = 7", context: "repl" });
+assert.equal(((dapOutput.at(-1) as DapResponse).body as { result: string }).result, "7");
 request("continue", { threadId: 1 });
 request("terminate");
 await new Promise((resolve) => setTimeout(resolve, 0));
 assert.ok(dapOutput.some((message) => message.type === "event" && message.event === "terminated"));
+
+const sourceMap = new RuntimeSourceMap(DEBUG_FIXTURE_SOURCE_MAP);
+assert.deepEqual(sourceMap.generatedPositionFor(DEBUG_FIXTURE_SOURCE_URI, 3), { line: 5, column: 0 });
+assert.deepEqual(sourceMap.originalPositionFor(6), { uri: DEBUG_FIXTURE_SOURCE_URI, line: 4, column: 0 });
 
 console.log("preview-service extension host and DAP product-stage contract ok");

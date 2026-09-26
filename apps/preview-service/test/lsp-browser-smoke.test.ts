@@ -22,7 +22,7 @@ const page = await browser.newPage();
 const workerRequests: string[] = [];
 const pageErrors: string[] = [];
 page.on("request", (request) => {
-  if (["lsp.worker", "extensionHost.worker", "debugAdapter.worker"].some((name) => request.url().includes(name))) {
+  if (["languageServerProcess.worker", "extensionHost.worker", "debugRuntimeProcess.worker"].some((name) => request.url().includes(name))) {
     workerRequests.push(request.url());
   }
 });
@@ -56,6 +56,15 @@ try {
 
   await page.getByRole("button", { name: "Run and Extensions" }).click();
   await page.getByText("Workspace Tools · active").waitFor({ timeout: 15_000 });
+  await page.getByLabel("commands.register").uncheck();
+  await page.getByText("grants: languages.diagnostics").waitFor({ timeout: 15_000 });
+  assert.equal(await page.locator("#extension-run-command").isDisabled(), true);
+  await page.getByRole("button", { name: "Explorer" }).click();
+  await page.getByRole("button", { name: "Run and Extensions" }).click();
+  await page.getByText("Workspace Tools · active").waitFor({ timeout: 15_000 });
+  assert.equal(await page.getByLabel("commands.register").isChecked(), false);
+  await page.getByLabel("commands.register").check();
+  await page.getByText("grants: languages.diagnostics, commands.register").waitFor({ timeout: 15_000 });
   await page.locator("#extension-run-command").click();
   await page.getByText("Hello from isolated Workspace Tools").waitFor();
   await page.locator("#extension-crash-recover").click();
@@ -63,17 +72,21 @@ try {
 
   await page.locator("#debug-start").click();
   await page.getByText("paused · breakpoint · line 3").waitFor({ timeout: 15_000 });
-  assert.equal(await page.locator("#debug-stack").textContent(), "fixtureMain:3");
+  assert.equal(await page.locator("#debug-stack").textContent(), "guestMain:3");
   assert.equal(await page.locator("#debug-scopes").textContent(), "Locals");
-  assert.equal(await page.locator("#debug-variables").textContent(), "counter=3");
+  assert.equal(await page.locator("#debug-variables").textContent(), "counter=2");
   await page.locator("#debug-step").click();
   await page.getByText("paused · step · line 4").waitFor({ timeout: 15_000 });
   await page.locator("#debug-continue").click();
-  await page.getByText("paused · breakpoint · line 6").waitFor({ timeout: 15_000 });
+  await page.getByText("paused · breakpoint · line 4").waitFor({ timeout: 15_000 });
+  await page.locator("#debug-watch").click();
+  await page.getByText("counter + 1=5").waitFor({ timeout: 15_000 });
+  await page.locator("#debug-console-run").click();
+  await page.getByText("counter=7").waitFor({ timeout: 15_000 });
   await page.locator("#debug-terminate").click();
-  await page.getByText("terminated · breakpoint · line 6").waitFor({ timeout: 15_000 });
+  await page.getByText("terminated · breakpoint · line 4").waitFor({ timeout: 15_000 });
 
-  for (const workerName of ["lsp.worker", "extensionHost.worker", "debugAdapter.worker"]) {
+  for (const workerName of ["languageServerProcess.worker", "extensionHost.worker", "debugRuntimeProcess.worker"]) {
     assert.ok(workerRequests.some((url) => url.includes(workerName)), `${workerName} must be requested`);
   }
   assert.ok(workerRequests.every((url) => new URL(url).origin === baseUrl), "IDE protocol workers must remain same-origin");

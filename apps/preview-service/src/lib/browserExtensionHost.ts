@@ -1,7 +1,9 @@
-import { JsonRpcClient, WorkerJsonRpcTransport } from "./jsonRpcClient.ts";
+import { JsonRpcClient } from "./jsonRpcClient.ts";
+import type { JsonRpcTransport } from "./jsonRpcClient.ts";
+import { HostProcessJsonRpcTransport } from "./hostProcessJsonRpcTransport.ts";
 import {
-  assertExtensionCapability,
   verifyExtensionManifest,
+  type ExtensionCapability,
   type SignedExtensionManifest
 } from "./extensionManifest.ts";
 
@@ -9,7 +11,8 @@ export type ExtensionHostState = "stopped" | "verifying" | "active" | "recoverin
 
 export class BrowserExtensionHost {
   readonly #manifest: SignedExtensionManifest;
-  readonly #createWorker: () => Worker;
+  readonly #grantedCapabilities: ExtensionCapability[];
+  readonly #createTransport: () => Promise<JsonRpcTransport>;
   #client: JsonRpcClient | null = null;
   #state: ExtensionHostState = "stopped";
   #recoveryCount = 0;
@@ -17,13 +20,22 @@ export class BrowserExtensionHost {
 
   constructor(
     manifest: SignedExtensionManifest,
-    createWorker = () => new Worker(new URL("../workers/extensionHost.worker.ts", import.meta.url), {
-      type: "module",
-      name: `extension-${manifest.id}`
-    })
+    grantedCapabilities: ExtensionCapability[] = manifest.capabilities,
+    createTransport = () => HostProcessJsonRpcTransport.start(
+      "file:///workspace",
+      {
+        resource: `worker://cargo/extensions/${manifest.id}`,
+        projectId: manifest.id,
+        createWorker: () => new Worker(
+          new URL("../workers/extensionHost.worker.ts", import.meta.url),
+          { type: "module", name: `extension-${manifest.id}` }
+        )
+      }
+    )
   ) {
     this.#manifest = manifest;
-    this.#createWorker = createWorker;
+    this.#grantedCapabilities = grantedCapabilities.filter((capability) => manifest.capabilities.includes(capability));
+    this.#createTransport = createTransport;
   }
 
   get state(): ExtensionHostState {
@@ -43,7 +55,9 @@ export class BrowserExtensionHost {
   }
 
   async executeHelloCommand(): Promise<string> {
-    assertExtensionCapability(this.#manifest, "commands.register");
+    if (!this.#grantedCapabilities.includes("commands.register")) {
+      throw new Error(`Extension ${this.#manifest.id} was not granted commands.register.`);
+    }
     const result = await this.#request<{ message: string }>("workspace/executeCommand", {
       command: "cargo.workspaceTools.hello"
     });
@@ -81,12 +95,12 @@ export class BrowserExtensionHost {
 
   async #spawnAndActivate(): Promise<void> {
     if (this.#disposed) throw new Error("Extension host is disposed.");
-    const client = new JsonRpcClient(new WorkerJsonRpcTransport(this.#createWorker()));
+    const client = new JsonRpcClient(await this.#createTransport());
     this.#client = client;
     await client.request("extensionHost/activate", {
       id: this.#manifest.id,
       entrypoint: this.#manifest.entrypoint,
-      capabilities: this.#manifest.capabilities
+      capabilities: this.#grantedCapabilities
     });
   }
 

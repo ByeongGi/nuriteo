@@ -1,4 +1,5 @@
-import { JsonRpcClient, WorkerJsonRpcTransport } from "./jsonRpcClient.ts";
+import { JsonRpcClient, type JsonRpcTransport } from "./jsonRpcClient.ts";
+import { HostProcessJsonRpcTransport } from "./hostProcessJsonRpcTransport.ts";
 import type {
   LspCompletionItem,
   LspLocation,
@@ -17,13 +18,13 @@ export interface LanguageServerDocument {
 }
 
 export class BrowserLanguageServer {
-  readonly #createWorker: () => Worker;
+  readonly #createTransport: (rootUri: string) => Promise<JsonRpcTransport>;
   #client: JsonRpcClient | null = null;
   #state: LanguageServerState = "stopped";
   #diagnosticsListener: (params: LspPublishDiagnosticsParams) => void = () => undefined;
 
-  constructor(createWorker = () => new Worker(new URL("../workers/lsp.worker.ts", import.meta.url), { type: "module", name: "cargo-lsp" })) {
-    this.#createWorker = createWorker;
+  constructor(createTransport = (rootUri: string) => HostProcessJsonRpcTransport.start(rootUri)) {
+    this.#createTransport = createTransport;
   }
 
   get state(): LanguageServerState {
@@ -38,7 +39,7 @@ export class BrowserLanguageServer {
     if (this.#state === "starting" || this.#state === "ready") return;
     this.#state = "starting";
     try {
-      const client = new JsonRpcClient(new WorkerJsonRpcTransport(this.#createWorker()));
+      const client = new JsonRpcClient(await this.#createTransport(rootUri));
       this.#client = client;
       client.onNotification((message) => {
         if (message.method === "textDocument/publishDiagnostics") {
