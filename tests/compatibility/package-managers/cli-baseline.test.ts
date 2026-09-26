@@ -22,6 +22,16 @@ const { installed } = JSON.parse(vendor.stdout);
 const registry = new CliRegistry(installed);
 const guestCli = createGuestCli(registry);
 
+const portableRegistry = new CliRegistry([{
+  ...installed[0],
+  entry: "/stale/checkout/npm-cli.js",
+  entryRelative: "vendor/cli/npm/10.9.2/package/bin/npm-cli.js"
+}], { root: "/portable/checkout" });
+assert.equal(
+  portableRegistry.resolve("npm").entry,
+  "/portable/checkout/vendor/cli/npm/10.9.2/package/bin/npm-cli.js"
+);
+
 for (const name of ["npm", "pnpm"]) {
   const manifest = JSON.parse(fs.readFileSync(new URL(`../../../vendor/manifests/${name}.json`, import.meta.url), "utf8"));
   const entry = registry.resolve(name);

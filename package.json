@@ -69,6 +69,8 @@
     "build:preview": "pnpm --filter @cargo-container/preview-service-app build",
     "test:preview-service": "node apps/preview-service/test/run.ts",
     "test:next-full-runtime": "node --experimental-strip-types apps/preview-service/test/next-full-runtime.test.ts",
+    "test:next-browser-worker": "node --experimental-strip-types apps/preview-service/test/next-browser-worker.test.ts",
+    "check:nextjs-runtime-candidate": "node tooling/checks/check-nextjs-runtime-candidate.ts",
     "test:browser": "node tests/system/browser/run.ts"
   },
   "devDependencies": {

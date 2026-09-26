@@ -1,6 +1,6 @@
 {
-  "schemaVersion": 3,
-  "updatedAt": "2026-09-23",
+  "schemaVersion": 4,
+  "updatedAt": "2026-09-27",
   "nextVersion": "15.1.0",
   "publicGrade": "product-preview",
   "fullRuntimeGrade": "candidate",
@@ -15,6 +15,9 @@
     "bin": "dist/bin/next",
     "nodeEngine": ">=20.9.0",
     "wasmSwcPackage": "@next/swc-wasm-nodejs",
+    "wasmSwcVersion": "15.1.0",
+    "wasmSwcIntegrity": "sha512-H8DoPXweAanN/NegmsAZolxN6QTccL/SKc55TyCjIUwaCNiNSO/nLl4MV5VTTYpy8vgL1AZlUzZRW12+wxRllg==",
+    "nativeAddonPolicy": "unsupported",
     "nativeOptionalDependencies": [
       "@next/swc-darwin-arm64",
       "@next/swc-darwin-x64",
@@ -26,6 +29,18 @@
       "@next/swc-win32-x64-msvc",
       "sharp"
     ]
+  },
+  "browserWorker": {
+    "status": "hold",
+    "executionHost": "strict-csp-headless-chrome",
+    "blockerCode": "ECLICSPUNSUPPORTED",
+    "reason": "The real Next 15.1.0 CommonJS CLI entry cannot execute under the release CSP without dynamic code generation, so dev/build/start and downstream full-runtime features are not browser-worker validated.",
+    "evidence": "compat/nextjs-browser-worker-results.json"
+  },
+  "security": {
+    "status": "hold",
+    "reason": "Pinned Next 15.1.0 is an intentionally retained compatibility fixture, not a release-eligible security baseline.",
+    "evidence": "compat/nextjs-security-baseline.json"
   },
   "capabilities": [
     {
@@ -49,19 +64,19 @@
     {
       "id": "next-cli-artifact-execution",
       "command": "next dev | next build | next start",
-      "status": "supported",
-      "reason": "The pinned Next 15.1.0 distribution is mounted and its real CLI dev, build, and start paths pass in the guest runtime integration fixture."
+      "status": "candidate",
+      "reason": "The pinned Next 15.1.0 distribution is mounted and its real CLI dev, build, and start paths pass in the Node-hosted guest runtime integration fixture. Strict-CSP browser-worker execution remains hold."
     },
     {
       "id": "next-app-router-dev",
       "command": "next dev",
-      "status": "supported",
+      "status": "candidate",
       "reason": "The real Next 15.1.0 development server compiles the App Router with version-matched WASM SWC and serves the rendered route."
     },
     {
       "id": "next-app-router-build",
       "command": "next build",
-      "status": "supported",
+      "status": "candidate",
       "reason": "The real Next 15.1.0 build emits BUILD_ID, RSC/client manifests, middleware and Edge bundles, prerender metadata, server chunks, and production assets."
     },
     {
@@ -79,31 +94,31 @@
     {
       "id": "next-wasm-swc",
       "command": "load @next/swc-wasm-nodejs",
-      "status": "supported",
-      "reason": "The version-matched @next/swc-wasm-nodejs 15.1.0 transform path is used by real next dev and next build validation."
+      "status": "candidate",
+      "reason": "The integrity-pinned, version-matched @next/swc-wasm-nodejs 15.1.0 transform path is used by the Node-hosted real next dev and next build validation. It is not promoted for strict-CSP browser workers while the CLI entry is blocked."
     },
     {
       "id": "next-rsc-server-actions",
       "command": "RSC and Server Actions",
-      "status": "supported",
+      "status": "candidate",
       "reason": "Production RSC manifests are emitted and a real Server Action POST returns the expected 303 action redirect."
     },
     {
       "id": "next-middleware-edge",
       "command": "Middleware and Edge route",
-      "status": "supported",
+      "status": "candidate",
       "reason": "Middleware response mutation and an Edge-runtime route execute through the production server fixture."
     },
     {
       "id": "next-isr-image",
       "command": "ISR and Image Optimization",
-      "status": "supported",
+      "status": "candidate",
       "reason": "ISR transitions from stale to regenerated cache content and Image Optimization returns byte-exact PNG data."
     }
   ],
   "gate": {
     "id": "SG25-nextjs",
     "status": "product-preview-claimed",
-    "supportDecision": "The App Router preview adapter remains the public product-supported surface. The pinned full runtime is candidate-grade with real guest-runtime evidence; native .node SWC remains unsupported and is replaced by version-matched WASM SWC."
+    "supportDecision": "The App Router preview adapter remains the public product-supported surface. The pinned full runtime stays candidate-grade: Node-hosted guest-runtime evidence passes, but strict-CSP browser-worker preflight and the release security baseline are hold. Native .node SWC remains unsupported; only the integrity-pinned, version-matched WASM package is permitted."
   }
 }

@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-27",
+  "status": "hold",
+  "next": {
+    "version": "15.1.0",
+    "lockfileIntegrity": "sha512-QKhzt6Y8rgLNlj30izdMbxAwjHMFANnLwDwZ+WQh5sMhyt4lEBqDK9QpvWHtIM4rINKPoJ8aiRZKg5ULSybVHw==",
+    "releaseSecurityEligible": false,
+    "minimumMaintenanceLine": "15.5.26",
+    "reason": "15.1.0 is below published patched versions for critical and later Next.js security advisories; it is fixture-only and must not be promoted as a release baseline."
+  },
+  "wasmSwc": {
+    "package": "@next/swc-wasm-nodejs",
+    "version": "15.1.0",
+    "lockfileIntegrity": "sha512-H8DoPXweAanN/NegmsAZolxN6QTccL/SKc55TyCjIUwaCNiNSO/nLl4MV5VTTYpy8vgL1AZlUzZRW12+wxRllg==",
+    "versionMatched": true,
+    "nativeNodeAddonsSupported": false
+  },
+  "advisories": [
+    {
+      "id": "CVE-2025-66478",
+      "severity": "critical",
+      "affected": "Next.js 15.1.0 through 15.1.8",
+      "patched15_1": "15.1.9",
+      "source": "https://nextjs.org/blog/CVE-2025-66478"
+    },
+    {
+      "id": "2026-09-22-nextjs-security-update",
+      "severity": "critical",
+      "patchedMaintenanceRelease": "15.5.26",
+      "source": "https://nextjs.org/blog/nextjs-security-update-september-22-2026"
+    }
+  ],
+  "requirements": {
+    "keepFullRuntimeCandidate": true,
+    "denyNativeNodeSwcClaim": true,
+    "requireVersionMatchedWasmSwc": true,
+    "requirePatchedNextBeforeReleasePromotion": true,
+    "requireBrowserWorkerFeatureLaneBeforePromotion": true
+  }
+}
