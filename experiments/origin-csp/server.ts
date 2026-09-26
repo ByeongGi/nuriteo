@@ -20,7 +20,7 @@ const isolationHeaders = {
 
 const csp = [
   "default-src 'self'",
-  "script-src 'self'",
+  "script-src 'self' 'wasm-unsafe-eval'",
   "worker-src 'self'",
   "child-src 'self'",
   "frame-src 'self'",

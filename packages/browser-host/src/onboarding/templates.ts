@@ -59,7 +59,7 @@ function createNextAppTemplate(): ProjectTemplate {
             start: "next start"
           },
           dependencies: {
-            next: "15.1.0",
+            next: "15.1.9",
             react: "^19.0.0",
             "react-dom": "^19.0.0"
           },

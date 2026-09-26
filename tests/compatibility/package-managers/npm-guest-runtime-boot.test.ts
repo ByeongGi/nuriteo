@@ -9,6 +9,7 @@ const root = new URL("../../..", import.meta.url).pathname;
 const fixture = path.join(root, "tests/fixtures/package-managers/npm");
 const installed = JSON.parse(fs.readFileSync(new URL("../../../vendor/cli/npm/10.9.2/installed.json", import.meta.url), "utf8"));
 const registry = new CliRegistry([installed]);
+const resolvedEntry = registry.resolve("npm");
 const workdir = "/workspace";
 const npm = createNpmRunner({
   registry,
@@ -35,7 +36,7 @@ assert.equal(result.exitCode, native.status);
 assert.equal(result.stdout, native.stdout);
 assert.equal(result.stderr, native.stderr);
 assert.equal(result.stdout.trim(), installed.version);
-assert.equal(result.entry, installed.entry);
+assert.equal(result.entry, resolvedEntry.entry);
 assert.equal(result.entrySha256, installed.entrySha256);
 assert.deepEqual(result.args, ["--version"]);
 assert.equal(result.cwd, "/workspace");

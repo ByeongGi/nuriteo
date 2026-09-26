@@ -39,14 +39,15 @@ function writeFixtureCli(manifest) {
   fs.writeFileSync(entryPath, contents);
   fs.chmodSync(entryPath, 0o755);
   const hash = crypto.createHash("sha256").update(contents).digest("hex");
+  const entryRelative = path.relative(process.cwd(), entryPath);
   const installed = {
     name: manifest.name,
     version: manifest.version,
     source: manifest.source,
     integrity: manifest.integrity,
     license: manifest.license,
-    entry: entryPath,
-    entryRelative: path.relative(process.cwd(), entryPath),
+    entry: entryRelative,
+    entryRelative,
     entrySha256: hash,
     resolutionPolicy: manifest.resolutionPolicy,
     mode: "version-entry-fixture"
@@ -88,6 +89,7 @@ function writeRealCli(manifest, tarballDir) {
     if (!fs.existsSync(entryPath)) throw new Error(`entry not found after install: ${entryPath}`);
     fs.chmodSync(entryPath, 0o755);
 
+    const entryRelative = path.relative(process.cwd(), entryPath);
     const installed = {
       name: manifest.name,
       version: manifest.version,
@@ -97,8 +99,8 @@ function writeRealCli(manifest, tarballDir) {
       tarball: tarball,
       tarballRelative: path.relative(process.cwd(), tarball),
       tarballSha256: sha256File(tarball),
-      entry: entryPath,
-      entryRelative: path.relative(process.cwd(), entryPath),
+      entry: entryRelative,
+      entryRelative,
       entrySha256: sha256File(entryPath),
       resolutionPolicy: manifest.resolutionPolicy,
       mode: "real-tarball"

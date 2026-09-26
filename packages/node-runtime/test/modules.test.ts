@@ -3,6 +3,20 @@ import assert from "node:assert/strict";
 import { createBuiltinLoader } from "../../node-runtime/src/builtin-loader.ts";
 import { BrowserBuffer } from "../../node-runtime/src/builtins/buffer.ts";
 import { createModuleRuntime, createWorkspaceModuleRuntime } from "../../node-runtime/src/modules/index.ts";
+import { prepareEsmStaticFactoryBody } from "../../node-runtime/src/modules/esm.ts";
+
+const viteStaticFactoryBody = prepareEsmStaticFactoryBody(`
+  const key = "MODE";
+  const definitions = { "import.meta.url": "url", [\`import.meta.env.\${key}\`]: "mode" };
+  const actualUrl = import.meta.url;
+  const generated = \`literal import.meta.hot; runtime \${import.meta.url}\`;
+  export { actualUrl, definitions, generated };
+`, "/workspace/project/node_modules/vite/dist/node/probe.js");
+assert.match(viteStaticFactoryBody, /"import\.meta\.url"/);
+assert.match(viteStaticFactoryBody, /`import\.meta\.env\.\$\{key\}`/);
+assert.match(viteStaticFactoryBody, /const actualUrl = __context\.importMeta\.url/);
+assert.match(viteStaticFactoryBody, /runtime \$\{__context\.importMeta\.url\}/);
+assert.doesNotThrow(() => new Function("__context", "__process", "__global", "__console", "__globalThis", viteStaticFactoryBody));
 
 const runtime = createModuleRuntime({
   builtins: createBuiltinLoader({}),

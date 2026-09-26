@@ -15,6 +15,8 @@ const actualPublic = readJson("compat/ecosystem-fixture-actual-product-results.j
 const actualFrameworks = readJson("compat/framework-actual-validation.json");
 const publicMatrix = readJson("compat/public-compatibility-matrix.json");
 const nextjs = readJson("compat/nextjs-compatibility.json");
+const nextBrowserWorker = readJson("compat/nextjs-browser-worker-results.json");
+const nextSecurity = readJson("compat/nextjs-security-baseline.json");
 
 assert(fixtures.scope.fixtureCount === 20, "fixture catalog must have 20 entries");
 assert(fixtures.fixtures.length === 20, "fixture list length must be 20");
@@ -44,9 +46,12 @@ assert(next?.grade === "product-preview", "Next.js public grade must record the 
 assert(nextjs.publicGrade === "product-preview", "nextjs-compatibility publicGrade must be product-preview");
 assert(nextjs.fullRuntimeGrade === "candidate", "full Next.js runtime must remain candidate until browser-worker promotion");
 assert(nextjs.productSupportClaim === true, "Next.js adapter product support must be claimed");
+assert(nextjs.browserWorker.status === "hold", "full Next.js runtime must retain the measured browser-worker hold");
+assert(nextBrowserWorker.preflight.code === "ECLICSPUNSUPPORTED", "Next.js browser-worker blocker must remain explicit");
+assert(nextSecurity.status === "hold" && nextSecurity.next.releaseSecurityEligible === false, "vulnerable Next.js fixture must not become a release baseline");
 assert(
-  nextjs.capabilities.some((entry) => entry.id === "next-app-router-dev" && entry.status === "supported"),
-  "full Next.js CLI dev implementation evidence must be supported"
+  nextjs.capabilities.some((entry) => entry.id === "next-app-router-dev" && entry.status === "candidate"),
+  "full Next.js CLI dev evidence must remain candidate until browser-worker and security promotion"
 );
 
 const vueMatrix = publicMatrix.frameworks.find((entry) => entry.name === "Vite Vue runtime");
@@ -60,6 +65,8 @@ for (const file of [
   "tests/compatibility/frameworks/vite/vite-vue-svelte-actual.test.ts",
   "compat/framework-actual-validation.json",
   "compat/framework-product-support.json",
+  "compat/nextjs-browser-worker-results.json",
+  "compat/nextjs-security-baseline.json",
   "compat/service-workflow-fixture-results.json",
   "docs/productization/public-compatibility-matrix.md"
 ]) {

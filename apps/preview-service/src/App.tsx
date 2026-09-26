@@ -17,6 +17,7 @@ import { BottomDock } from "./components/BottomDock";
 import { CommandPalette } from "./components/CommandPalette";
 import { DiffPane } from "./components/DiffPane";
 import { CloudProjectsDialog } from "./components/CloudProjectsDialog";
+import { DeveloperToolsPanel } from "./components/DeveloperToolsPanel";
 
 export default function App() {
   const model = usePreviewController();
@@ -39,6 +40,8 @@ export default function App() {
         return <PortsPanel model={model} />;
       case "settings":
         return <SettingsPanel model={model} />;
+      case "developer-tools":
+        return <DeveloperToolsPanel />;
       case "explorer":
       default:
         return <FileTree model={model} />;

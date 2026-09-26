@@ -7,7 +7,7 @@
   "tarball": "/private/tmp/npm-10.9.2.tgz",
   "tarballRelative": "../../../../private/tmp/npm-10.9.2.tgz",
   "tarballSha256": "5cd1e5ab971ea6333f910bc2d50700167c5ef4e66da279b2a3efc874c6b116e4",
-  "entry": "/Users/byeonggi/PROJECT/cargo-container/vendor/cli/npm/10.9.2/package/bin/npm-cli.js",
+  "entry": "vendor/cli/npm/10.9.2/package/bin/npm-cli.js",
   "entryRelative": "vendor/cli/npm/10.9.2/package/bin/npm-cli.js",
   "entrySha256": "8e5f6f3429f8cdbe693cdc29904e9d5a7b127a494bd15c804bd54c7403bfcbe7",
   "resolutionPolicy": "real-cli-artifact-only; do-not-replace-dependency-resolution-with-custom-installer",

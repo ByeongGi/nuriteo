@@ -217,9 +217,22 @@ fs.copyFileSync(
   path.join(root, "apps/preview-service/public/vendor/yarn-cli-1.22.22.mjs"),
   path.join(packageRoot, "vendor/yarn-cli-1.22.22.mjs")
 );
+fs.copyFileSync(
+  path.join(root, "apps/preview-service/public/vendor/next-cli-15.1.9.mjs"),
+  path.join(packageRoot, "vendor/next-cli-15.1.9.mjs")
+);
+fs.cpSync(
+  path.join(root, "apps/preview-service/public/vendor/vite-8.2.0"),
+  path.join(packageRoot, "vendor/vite-8.2.0"),
+  { recursive: true }
+);
 const yarnGate = readJson(path.join(root, "compat/yarn-v1-product-support.json"));
 if (sha256(path.join(packageRoot, "vendor/yarn-cli-1.22.22.mjs")) !== yarnGate.artifact.cspFactorySha256) {
   throw new Error("SDK Yarn Classic factory differs from the pinned product support asset");
+}
+const nextBrowserWorker = readJson(path.join(root, "compat/nextjs-browser-worker-results.json"));
+if (sha256(path.join(packageRoot, "vendor/next-cli-15.1.9.mjs")) !== nextBrowserWorker.nextCliFactorySha256) {
+  throw new Error("SDK Next.js factory differs from the pinned browser-worker evidence");
 }
 
 rewritePackagedSource("packages/sdk/src/container.ts", [
@@ -307,11 +320,12 @@ Serve the consumer page and \`${sdkBasePath}**\` assets with:
 \`\`\`text
 Cross-Origin-Opener-Policy: same-origin
 Cross-Origin-Embedder-Policy: require-corp
-Content-Security-Policy: default-src 'self'; script-src 'self'; worker-src 'self'; connect-src 'self'; img-src 'self' data:; style-src 'self'
+Content-Security-Policy: default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; connect-src 'self'; img-src 'self' data:; style-src 'self'
 \`\`\`
 
 Serve \`assets/system_wasm.wasm\` as \`application/wasm\`.
-Serve \`vendor/yarn-cli-1.22.22.mjs\` as \`text/javascript\` beside the workers; the process worker verifies its SHA-256 before loading Yarn Classic.
+Serve \`vendor/yarn-cli-1.22.22.mjs\` and \`vendor/next-cli-15.1.9.mjs\` as \`text/javascript\` beside the workers; the process worker verifies their SHA-256 values before loading the pinned CLI factories.
+Serve \`vendor/vite-8.2.0/**\` beside the workers; the process worker verifies the static graph, Rolldown browser binding, nested Worker, and WASM hashes before loading them.
 
 Asset base path for this package: \`${sdkBasePath}\`
 Override at package time with \`--base-path=/your/deploy/path/\` or \`CARGO_CONTAINER_SDK_BASE_PATH\`.
@@ -339,7 +353,7 @@ writeFile("asset-manifest.json", `${JSON.stringify({
   requiredHeaders: {
     "Cross-Origin-Opener-Policy": "same-origin",
     "Cross-Origin-Embedder-Policy": "require-corp",
-    "Content-Security-Policy": "default-src 'self'; script-src 'self'; worker-src 'self'; connect-src 'self'; img-src 'self' data:; style-src 'self'"
+    "Content-Security-Policy": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; connect-src 'self'; img-src 'self' data:; style-src 'self'"
   },
   mimeTypes: {
     ".js": "text/javascript; charset=utf-8",
@@ -360,6 +374,22 @@ writeFile("asset-manifest.json", `${JSON.stringify({
     yarnClassicFactory: {
       path: "vendor/yarn-cli-1.22.22.mjs",
       sha256: sha256(path.join(packageRoot, "vendor/yarn-cli-1.22.22.mjs"))
+    },
+    nextCliFactory: {
+      path: "vendor/next-cli-15.1.9.mjs",
+      sha256: sha256(path.join(packageRoot, "vendor/next-cli-15.1.9.mjs"))
+    },
+    viteStaticFactories: {
+      path: "vendor/vite-8.2.0/vite-cli-static-factories.mjs",
+      sha256: sha256(path.join(packageRoot, "vendor/vite-8.2.0/vite-cli-static-factories.mjs"))
+    },
+    rolldownWasiBinding: {
+      path: "vendor/vite-8.2.0/rolldown-wasi-binding.mjs",
+      sha256: sha256(path.join(packageRoot, "vendor/vite-8.2.0/rolldown-wasi-binding.mjs"))
+    },
+    rolldownWasi: {
+      path: "vendor/vite-8.2.0/assets/rolldown-binding.wasm",
+      sha256: sha256(path.join(packageRoot, "vendor/vite-8.2.0/assets/rolldown-binding.wasm"))
     },
     systemWasm: {
       path: "assets/system_wasm.wasm",

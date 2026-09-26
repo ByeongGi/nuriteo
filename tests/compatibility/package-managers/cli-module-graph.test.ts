@@ -197,9 +197,10 @@ assert.deepEqual(selfReferenceGraph.modules.map((mod) => mod.path), [
 
 for (const [name, version] of [["npm", "10.9.2"], ["pnpm", "9.15.9"]]) {
   const installed = JSON.parse(fs.readFileSync(path.join(root, `vendor/cli/${name}/${version}/installed.json`), "utf8"));
+  const installedEntry = path.resolve(root, installed.entryRelative || installed.entry);
   const packageRoot = path.join(root, `vendor/cli/${name}/${version}/package`);
   const graph = analyzeCliModuleGraph({
-    entry: installed.entry,
+    entry: installedEntry,
     packageRoot,
     maxModules: 2048,
     reader: {
@@ -218,9 +219,9 @@ for (const [name, version] of [["npm", "10.9.2"], ["pnpm", "9.15.9"]]) {
     }
   });
 
-  assert.equal(graph.entry, installed.entry);
+  assert.equal(graph.entry, installedEntry);
   assert.ok(graph.modules.length >= 2, `${name} graph should walk past the bin entry`);
-  assert.equal(graph.modules[0].path, installed.entry);
+  assert.equal(graph.modules[0].path, installedEntry);
   assert.ok(graph.modules.some((mod) => mod.path.includes(name === "npm" ? "/lib/cli.js" : "/dist/pnpm.cjs")));
   assert.equal(graph.issues.some((issue) => issue.kind === "missing-module"), false);
   assert.equal(graph.issues.some((issue) => issue.kind === "unsupported-builtin"), false);

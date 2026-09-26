@@ -4,3 +4,4 @@ import "./non-js-tooling.test.ts";
 import "./recovery.test.ts";
 import "./soak.test.ts";
 import "./static-cjs-factory-csp.test.ts";
+import "../../../apps/preview-service/test/next-browser-worker.test.ts";
