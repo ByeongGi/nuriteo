@@ -144,10 +144,32 @@ await malformedWorker.terminate();
 assert.equal(malformedResult.ok, false);
 assert.equal(Atomics.load(opened.control, 0), SYNC_STATE.failed);
 
-const smallChannel = createSyncChannel(64);
-assertSyncError(() => requestSync(smallChannel, {
+const publishingChannel = createSyncChannel(4096);
+const publishingOpened = openSyncChannel(publishingChannel);
+Atomics.store(publishingOpened.control, 0, SYNC_STATE.writing);
+const publishingWorker = spawnServer("normal", publishingChannel);
+await new Promise((resolve) => setTimeout(resolve, 20));
+const publishingFrame = encodeRequest({
   requestId: 6,
   generation: 11,
+  pid: 3,
+  opcode: OPCODES.ping,
+  payload: "ping"
+});
+publishingOpened.data.set(publishingFrame);
+Atomics.store(publishingOpened.control, 1, publishingFrame.byteLength);
+Atomics.store(publishingOpened.control, 3, 11);
+Atomics.store(publishingOpened.control, 0, SYNC_STATE.request);
+Atomics.notify(publishingOpened.control, 0);
+const publishingResult = await waitForWorker(publishingWorker);
+await publishingWorker.terminate();
+assert.equal(publishingResult.ok, true);
+assert.equal(Atomics.load(publishingOpened.control, 0), SYNC_STATE.response);
+
+const smallChannel = createSyncChannel(64);
+assertSyncError(() => requestSync(smallChannel, {
+  requestId: 7,
+  generation: 12,
   pid: 3,
   opcode: OPCODES.ping,
   payload: new Uint8Array(128)
