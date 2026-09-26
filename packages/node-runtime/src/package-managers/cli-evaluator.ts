@@ -11,6 +11,7 @@ import { Readable, Writable } from "../builtins/stream.ts";
 import { fileURLToPath } from "../builtins/url.ts";
 import { createWorkspaceModuleRuntime, type WorkspaceModuleReader } from "../modules/index.ts";
 import type { ModuleRuntime } from "../modules/runtime.ts";
+import type { StaticCjsFactoryRegistry } from "../modules/static-cjs-factory.ts";
 import { createLoopbackNetwork, type LoopbackNetwork, type RuntimeHttpRequest, type RuntimeHttpResponse, type RuntimeWebSocket } from "../net/index.ts";
 import type { CjsContext, CliEntry, CliRunResult, RuntimeEnv, RuntimeFsBinding, RuntimeFsData, RuntimeNamespace, RuntimeValue } from "../types.ts";
 import { inspectCliEntryReadiness } from "./cli-entry-readiness.ts";
@@ -18,6 +19,7 @@ import { MemoryPackageManagerWorkspace, type PackageManagerWorkspaceSnapshot, ty
 
 export interface CliModuleEvaluatorOptions {
   precompiledCjsFactories?: Record<string, (context: CjsContext, globals: Record<string, RuntimeValue>) => void>;
+  precompiledCjsFactoryRegistry?: StaticCjsFactoryRegistry;
   fsTrace?: CliEvaluationFsTraceEntry[];
   loopbackNetwork?: LoopbackNetwork;
   onOutputSnapshot?: (snapshot: () => CliEvaluationOutputSnapshot) => void;
@@ -116,6 +118,7 @@ export interface CliEvaluationWorkerEvaluateMessage {
   exitTimeoutMs?: number;
   id: number;
   readyTimeoutMs?: number;
+  requiredPrecompiledCjsFactoryPaths?: readonly string[];
   request: CliModuleEvaluationRequest;
   root?: string;
   settleTicks?: number;
@@ -479,6 +482,7 @@ export function createWorkerBackedAsyncCliModuleEvaluator(
         ...(options.captureGlobalCalls !== undefined ? { captureGlobalCalls: options.captureGlobalCalls } : {}),
         ...(options.loopbackNetwork ? { bridgeLoopbackServer: true } : {}),
         ...(options.traceFs ? { traceFs: true } : {}),
+        ...(options.precompiledCjsFactoryRegistry ? { requiredPrecompiledCjsFactoryPaths: options.precompiledCjsFactoryRegistry.paths() } : {}),
         ...(options.waitForExit ? { waitForExit: true } : {}),
         type: "cli:evaluate",
         workspaceSnapshot: options.workspace.snapshot()
@@ -489,9 +493,15 @@ export function createWorkerBackedAsyncCliModuleEvaluator(
 
 export async function evaluateCliModuleWorkerMessage(
   message: CliEvaluationWorkerEvaluateMessage,
-  options: { httpBridge?: CliEvaluationHttpBridge; nestedWorkerFactory?: CliNestedWorkerFactory; precompiledCjsFactories?: CliModuleEvaluatorOptions["precompiledCjsFactories"] } = {}
+  options: { httpBridge?: CliEvaluationHttpBridge; nestedWorkerFactory?: CliNestedWorkerFactory; precompiledCjsFactories?: CliModuleEvaluatorOptions["precompiledCjsFactories"]; precompiledCjsFactoryRegistry?: StaticCjsFactoryRegistry } = {}
 ): Promise<CliEvaluationWorkerResultMessage> {
   try {
+    const availableFactoryPaths = new Set([
+      ...Object.keys(options.precompiledCjsFactories || {}),
+      ...(options.precompiledCjsFactoryRegistry?.paths() || [])
+    ]);
+    const missingFactory = message.requiredPrecompiledCjsFactoryPaths?.find((path) => !availableFactoryPaths.has(path));
+    if (missingFactory) throw new Error(`ESTATICFACTORYWORKERMISSING: ${missingFactory}`);
     const workspace = MemoryPackageManagerWorkspace.fromSnapshot(message.workspaceSnapshot);
     const capturedGlobalCalls: CliEvaluationCapturedGlobalCall[] = [];
     const fsTrace: CliEvaluationFsTraceEntry[] = [];
@@ -519,6 +529,7 @@ export async function evaluateCliModuleWorkerMessage(
       ...(options.httpBridge ? { loopbackNetwork: options.httpBridge.network } : {}),
       ...(options.nestedWorkerFactory ? { nestedWorkerFactory: options.nestedWorkerFactory } : {}),
       ...(options.precompiledCjsFactories ? { precompiledCjsFactories: options.precompiledCjsFactories } : {}),
+      ...(options.precompiledCjsFactoryRegistry ? { precompiledCjsFactoryRegistry: options.precompiledCjsFactoryRegistry } : {}),
       writer: workspace
     })(message.request);
     return {
@@ -764,7 +775,11 @@ function startCliModuleEvaluation(
       process
     }
   });
-  for (const [path, factory] of Object.entries(options.precompiledCjsFactories || {})) {
+  const precompiledFactories = {
+    ...(options.precompiledCjsFactoryRegistry?.factories() || {}),
+    ...(options.precompiledCjsFactories || {})
+  };
+  for (const [path, factory] of Object.entries(precompiledFactories)) {
     runtime.register(path, { kind: "cjs", factory: (context) => factory(context, runtime!.globals) });
   }
 

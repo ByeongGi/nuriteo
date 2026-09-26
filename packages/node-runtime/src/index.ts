@@ -37,3 +37,5 @@ export { createJqProjectAdapter, createJqShellCommands, JqProjectAdapter } from 
 export type { JqProjectAdapterOptions, JqRuntime, JqTransformResult } from "./tooling/index.ts";
 export { createFsBinding } from "./bindings/fs.ts";
 export { createModuleRuntime, createWorkspaceModuleRuntime, ModuleRuntime, registerWorkspaceModules } from "./modules/index.ts";
+export { createStaticCjsFactoryRegistry, StaticCjsFactoryRegistry } from "./modules/index.ts";
+export type { StaticCjsFactory, StaticCjsFactoryArtifact } from "./modules/index.ts";

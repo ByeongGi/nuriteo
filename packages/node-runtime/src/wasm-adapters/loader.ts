@@ -6,6 +6,8 @@ export interface WasmAdapterRegistryOptions {
   root?: string;
   readBytes?: (adapter: WasmAdapterManifestEntry, root: string) => Uint8Array | Promise<Uint8Array>;
   sha256?: (bytes: Uint8Array) => string | Promise<string>;
+  imports?: (adapter: WasmAdapterManifestEntry, module: WebAssembly.Module) => WebAssembly.Imports | Promise<WebAssembly.Imports>;
+  resolveWorkerAsset?: (path: string, adapter: WasmAdapterManifestEntry) => string | URL | Promise<string | URL>;
 }
 
 export class WasmAdapterError extends Error {
@@ -24,6 +26,8 @@ export class WasmAdapterRegistry {
   readBytes: NonNullable<WasmAdapterRegistryOptions["readBytes"]>;
   sha256: NonNullable<WasmAdapterRegistryOptions["sha256"]>;
   adapters: Map<string, WasmAdapterManifestEntry>;
+  imports: WasmAdapterRegistryOptions["imports"];
+  resolveWorkerAsset: WasmAdapterRegistryOptions["resolveWorkerAsset"];
 
   constructor(manifest: WasmAdapterManifest, options: WasmAdapterRegistryOptions = {}) {
     this.manifest = manifest;
@@ -31,6 +35,8 @@ export class WasmAdapterRegistry {
     this.readBytes = options.readBytes || readNodeFile;
     this.sha256 = options.sha256 || sha256Hex;
     this.adapters = new Map(manifest.adapters.map((adapter) => [adapter.name, adapter]));
+    this.imports = options.imports;
+    this.resolveWorkerAsset = options.resolveWorkerAsset;
   }
 
   resolve(name: string): WasmAdapterManifestEntry {
@@ -39,7 +45,7 @@ export class WasmAdapterRegistry {
     return { ...adapter };
   }
 
-  async instantiate(name: string, imports: WebAssembly.Imports = {}): Promise<{
+  async instantiate(name: string, imports?: WebAssembly.Imports): Promise<{
     adapter: WasmAdapterManifestEntry;
     hash: string;
     instance: WebAssembly.Instance;
@@ -52,9 +58,24 @@ export class WasmAdapterRegistry {
       throw new WasmAdapterError(`WASM integrity mismatch: ${name}`, "EINTEGRITY");
     }
     const module = await WebAssembly.compile(toBufferSource(bytes));
-    const instance = await WebAssembly.instantiate(module, imports);
+    const resolvedImports = imports || await this.imports?.(adapter, module) || {};
+    const instance = await WebAssembly.instantiate(module, resolvedImports);
     assertExports(instance.exports, adapter.exports || {});
     return { adapter, hash, instance, module };
+  }
+
+  async workerAsset(name: string, path: string): Promise<URL> {
+    const adapter = this.resolve(name);
+    if (!this.resolveWorkerAsset) throw new WasmAdapterError(`worker asset resolver is unavailable: ${name}`, "ENOWORKERASSETRESOLVER");
+    const resolved = await this.resolveWorkerAsset(path, adapter);
+    const url = resolved instanceof URL ? resolved : new URL(resolved, globalThis.location?.href || "http://localhost/");
+    if (url.protocol !== "http:" && url.protocol !== "https:") {
+      throw new WasmAdapterError(`worker asset must use an HTTP(S) same-origin URL: ${url.href}`, "EWORKERASSETORIGIN");
+    }
+    if (globalThis.location?.origin && url.origin !== globalThis.location.origin) {
+      throw new WasmAdapterError(`cross-origin worker asset is forbidden: ${url.href}`, "EWORKERASSETORIGIN");
+    }
+    return url;
   }
 }
 

@@ -63,6 +63,11 @@ export const ERROR_CATALOG: Readonly<Record<string, SupportErrorCategory>> = Obj
   ERR_PM_CLI_ENTRY_UNSUPPORTED: "unsupported",
   ERR_BUNDLER_STRICT_CSP_FACTORY_MISSING: "unsupported",
   ERR_BUNDLER_WASM_RUNTIME_UNVALIDATED: "unsupported",
+  ESTATICFACTORYINTEGRITY: "unsupported",
+  ESTATICFACTORYSOURCEMISMATCH: "unsupported",
+  ESTATICFACTORYWORKERMISSING: "unsupported",
+  ENOWORKERASSETRESOLVER: "unsupported",
+  EWORKERASSETORIGIN: "unsupported",
 
   ERR_PM_LIFECYCLE_BLOCKED: "permission",
   EPERMISSION: "permission",

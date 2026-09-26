@@ -102,7 +102,7 @@ export class BundlerCandidateWorkflow {
     if (!this.#precompiledCliFactory) {
       blockers.push({
         code: "ERR_BUNDLER_STRICT_CSP_FACTORY_MISSING",
-        message: `${this.bundler} has no integrity-checked precompiled CLI factory for script-src 'self'; unsafe-eval remains forbidden.`,
+        message: `${this.bundler} has no integrity-checked precompiled factory artifact for its complete CLI/dev-server graph under script-src 'self'; unsafe-eval remains forbidden.`,
         stage: "cli-bootstrap"
       });
     }

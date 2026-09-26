@@ -6,12 +6,18 @@
   "supportDecision": "hold",
   "factoryInvestigation": {
     "existingPath": "The Yarn factory is a single integrity-pinned self-contained bundle transformed into one static ESM function.",
-    "webpackGap": "Webpack CLI is a multi-package CommonJS graph. ModuleRuntime only accepts source readers and has no canonical-path to static-factory registry, so strict CSP fails on the first non-precompiled module.",
-    "rspackGap": "Rspack has the same multi-module factory gap. Its WASM fallback additionally needs browser-worker asset resolution plus WASI threads imports and async initialization that WasmAdapterRegistry does not expose.",
-    "requiredRuntimeApis": [
-      "ModuleRuntime static CJS factory registry keyed by canonical module path and integrity",
-      "CLI evaluator propagation of that registry across isolated and worker-backed execution",
-      "WasmAdapterRegistry async WASI threads import provider and same-origin worker asset resolver"
+    "implementedRuntimeApis": [
+      "StaticCjsFactoryRegistry keyed by canonical module path with factory and source SHA-256 metadata",
+      "CLI evaluator registry propagation across direct, isolated, and worker-backed execution with missing-factory diagnostics",
+      "WasmAdapterRegistry async import provider and same-origin worker asset resolver",
+      "Chrome strict-CSP execution proof without unsafe-eval"
+    ],
+    "webpackGap": "No generated and reviewed static factory artifact exists for the complete webpack, webpack-cli, webpack-dev-server and transitive CommonJS graph.",
+    "rspackGap": "No generated static factory graph exists, and no package-specific emnapi/WASI-threads import provider has been implemented for the 30 MB published binding.",
+    "remainingArtifacts": [
+      "Integrity manifest and static factory module for every executable module in the Webpack graph",
+      "Integrity manifest and static factory module for every executable module in the Rspack graph",
+      "Rspack binding-wasm32-wasi emnapi/WASI threads import implementation and worker assets"
     ]
   },
   "results": [
@@ -61,7 +67,7 @@
         {
           "code": "ERR_BUNDLER_STRICT_CSP_FACTORY_MISSING",
           "stage": "cli-bootstrap",
-          "message": "No integrity-checked precompiled webpack CLI factory exists for the strict-CSP browser guest; unsafe-eval is not enabled."
+          "message": "The runtime static-factory registry is available, but no integrity-checked factory artifact for the complete webpack CLI/dev-server graph exists; unsafe-eval is not enabled."
         }
       ]
     },
@@ -123,7 +129,7 @@
         {
           "code": "ERR_BUNDLER_STRICT_CSP_FACTORY_MISSING",
           "stage": "cli-bootstrap",
-          "message": "No integrity-checked precompiled Rspack CLI factory exists for the strict-CSP browser guest; unsafe-eval is not enabled."
+          "message": "The runtime static-factory registry is available, but no integrity-checked factory artifact for the complete Rspack CLI/dev-server graph exists; unsafe-eval is not enabled."
         },
         {
           "code": "ERR_BUNDLER_WASM_RUNTIME_UNVALIDATED",

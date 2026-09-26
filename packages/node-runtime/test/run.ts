@@ -15,3 +15,4 @@ import "./non-js-tooling.test.ts";
 import "./project-tooling.test.ts";
 import "./wasm-adapters.test.ts";
 import "./wasi-boundary.test.ts";
+import "./static-cjs-factory.test.ts";

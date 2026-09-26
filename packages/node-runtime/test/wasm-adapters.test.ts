@@ -26,6 +26,23 @@ const browserLike = createWasmAdapterRegistry(manifest, {
 });
 assert.equal((await browserLike.instantiate("system-wasm")).instance.exports.cargo_container_abi_version(), 1);
 
+let importProviderCalled = false;
+const asyncImports = createWasmAdapterRegistry(manifest, {
+  root,
+  imports: async () => {
+    importProviderCalled = true;
+    return {};
+  },
+  resolveWorkerAsset: (assetPath) => `https://example.test/vendor/${assetPath}`
+});
+assert.equal((await asyncImports.instantiate("system-wasm")).instance.exports.cargo_container_abi_version(), 1);
+assert.equal(importProviderCalled, true);
+assert.equal((await asyncImports.workerAsset("system-wasm", "thread-worker.js")).href, "https://example.test/vendor/thread-worker.js");
+await assert.rejects(
+  createWasmAdapterRegistry(manifest).workerAsset("system-wasm", "worker.js"),
+  (error) => error.code === "ENOWORKERASSETRESOLVER"
+);
+
 const tampered = structuredClone(manifest);
 tampered.adapters[0].sha256 = "0".repeat(64);
 await assert.rejects(
