@@ -26,7 +26,6 @@ import type { DockTab, PreviewServiceApi } from "../lib/types";
 import type { CommandId } from "../lib/commands";
 import { applySettingsToDocument, loadSettings, saveSettings, type IdeSettings } from "../lib/settings";
 import { clearDeepLinkParams, hasDeepLinkIntent, parseDeepLink } from "../lib/deepLink";
-import { formatDocument } from "../lib/formatDocument";
 import type { PreviewPortEntry, SidebarView, TerminalSessionTab } from "../lib/uiState";
 import { findSymbolDefinition, indexProjectSymbols, wordAt } from "../lib/symbols";
 import type { LanguageProblem } from "../lib/monacoLanguageService";
@@ -515,6 +514,7 @@ export function usePreviewController() {
     if (!current.editor || !path) return;
     const file = current.editor.openFile(path);
     try {
+      const { formatDocument } = await import("../lib/formatDocument");
       const formatted = await formatDocument(path, file.data);
       if (formatted === file.data) return;
       recordHistoryCheckpoint(path, file.data, "edit");
@@ -525,9 +525,15 @@ export function usePreviewController() {
       refreshSnapshot();
       setFrameNonce((value) => value + 1);
     } catch (error) {
-      controller.log(`format failed: ${error instanceof Error ? error.message : String(error)}`);
+      const message = error instanceof Error ? error.message : String(error);
+      controller.log(`format failed: ${message}`);
+      notificationCenter.pushNotification({
+        title: "Format unavailable",
+        message: `${message} Reload the application and try again.`,
+        level: "error"
+      });
     }
-  }, [bumpEditor, controller, recordHistoryCheckpoint, refreshSnapshot]);
+  }, [bumpEditor, controller, notificationCenter.pushNotification, recordHistoryCheckpoint, refreshSnapshot]);
 
   const createFile = useCallback(
     (relativePath?: string) => {

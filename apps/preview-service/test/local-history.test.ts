@@ -30,6 +30,9 @@ const browser = await chromium.launch({ executablePath: chromePath, headless: tr
 const page = await browser.newPage();
 
 try {
+  await page.addInitScript(() => {
+    localStorage.setItem("cargo.preview-service.settings", JSON.stringify({ saveTrigger: "manual" }));
+  });
   await page.goto(baseUrl, { waitUntil: "networkidle" });
   await page.click("#welcome-start");
   await page.waitForFunction(() => Boolean(globalThis.__previewService), null, { timeout: 30_000 });
