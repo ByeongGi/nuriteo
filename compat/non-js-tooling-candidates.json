@@ -1,7 +1,7 @@
 {
-  "schemaVersion": 2,
-  "updatedAt": "2026-09-22",
-  "status": "non-js-tooling-product-adapters-supported",
+  "schemaVersion": 4,
+  "updatedAt": "2026-09-27",
+  "status": "supported-adapters-with-held-runtime-validated-candidates",
   "decisionCriteria": {
     "productValue": ["common frontend workflow need", "project-local execution", "clear user-visible output"],
     "maintenanceCost": ["artifact size", "WASI/syscall surface", "release cadence", "security patch pressure"],
@@ -77,8 +77,80 @@
       "productValue": "medium",
       "maintenanceCost": "high",
       "runtimeFit": "partial",
-      "reason": "Large runtime and broad stdlib/syscall expectations create high support cost for a Node/npm focused product.",
-      "requiredBeforeSupport": ["stdlib packaging policy", "import filesystem fixture", "network-denial diagnostics", "resource budget"]
+      "reason": "Integrity-pinned Wasmer SDK and Python 3.13.18 WEBC pass Node 22 import, project I/O, stdio, cancellation, timeout, and network-disabled execution, but the 150 MiB external artifact, modified-MIT attribution condition, browser fixture, and enforceable memory ceiling remain blockers.",
+      "candidateArtifacts": [
+        {
+          "name": "@wasmer/sdk",
+          "versionObserved": "0.18.0",
+          "registryIntegrity": "sha512-umeaf9asTL5xS6Sp6D3tDiO4v/B3Z7gLsLWra0BDKkThX0+XTZWhb5nl77sqlfTUjTSxOLpBN7xQivNSsBLQBQ==",
+          "licenseMetadata": "Modified MIT; UI attribution required above documented commercial thresholds",
+          "runtimeFormat": "WASIX host plus separately resolved registry package",
+          "decision": "hold",
+          "blocker": "Python WEBC is 157272498 bytes and not vendored; browser delivery, attribution review, and memory enforcement remain unresolved. Host/WISP networking remains disabled."
+        },
+        {
+          "name": "pyodide",
+          "versionObserved": "314.0.7",
+          "registryIntegrity": "sha512-0YvXxEhfEdpLfb/XkM2BFAeMROq0iMUX2bzzH9pOttyMcWkwq+HbE5uyuGD82LN7y2q+SNvi/6V5JEsOlD2R1A==",
+          "licenseMetadata": "MPL-2.0",
+          "runtimeFormat": "Emscripten CPython, not WASI",
+          "decision": "not-selected-for-python-wasi",
+          "blocker": "Does not exercise the product WASI boundary and has a separate Emscripten filesystem/package-loading model."
+        }
+      ],
+      "artifact": {
+        "result": "external-integrity-pass",
+        "package": "python/python@=3.13.18",
+        "format": "WEBC",
+        "sha256": "0464f16f1ad0ce4d1ab4266b057b62accd5b4123995a08103897699aefc92a54",
+        "bytes": 157272498,
+        "sdkWasmSha256": "eb00b569d1f5dc4cdb23f8986a6b812158eb7a01845000af14ae564fea050397",
+        "sdkWasmBytes": 4804809,
+        "distribution": "external-cache-not-vendored"
+      },
+      "filesystem": {
+        "mode": "project-read-write-plus-read-only-stdlib-mount",
+        "adapterResult": "pass",
+        "runtimeResult": "node-pass-browser-not-run",
+        "outsideProject": "deny",
+        "stdlibWrite": "deny"
+      },
+      "syscalls": {
+        "expected": ["args/env", "fd read/write/seek/stat", "path open/stat/readlink/create/unlink/rename", "clock", "random", "proc_exit"],
+        "denied": ["socket tcp/udp", "process spawn", "host filesystem outside mounts"],
+        "result": "behavioral-pass-without-syscall-trace"
+      },
+      "credentialsAndNetwork": {
+        "credentialInjection": "deny",
+        "runtimeFetch": "deny",
+        "directTcp": "deny",
+        "diagnostic": "EWASINETWORK",
+        "adapterResult": "pass",
+        "runtimeResult": "pass-network-disabled"
+      },
+      "performance": {
+        "stdioBudgetBytes": 1048576,
+        "memoryBudgetBytes": 268435456,
+        "executionBudgetMs": 10000,
+        "adapterResult": "pass",
+        "observedNode22ElapsedMs": 6181.7,
+        "runtimeResult": "partial-pass-memory-unenforced"
+      },
+      "productSurface": {
+        "api": "createPythonWasiProjectAdapter",
+        "lifecycle": "fresh-disposable-runtime-per-execution",
+        "status": "candidate-contract-only"
+      },
+      "fixtures": [
+        "packages/node-runtime/test/project-tooling-candidates.test.ts",
+        "tooling/runtime-evidence/python-wasi-runtime.ts"
+      ],
+      "requiredBeforeSupport": [
+        "approve modified-MIT attribution obligations and 150 MiB delivery budget",
+        "same-origin browser Worker import and project-local read/write fixture using the pinned WEBC",
+        "enforce and measure a per-sandbox peak-memory ceiling",
+        "replace registry bootstrap with signed or vendored artifact provenance"
+      ]
     },
     {
       "id": "sqlite-wasm",
@@ -145,8 +217,84 @@
       "productValue": "high",
       "maintenanceCost": "high",
       "runtimeFit": "partial",
-      "reason": "High product value, but credential, network, packfile performance, and filesystem semantics need a dedicated phase.",
-      "requiredBeforeSupport": ["credential boundary", "fetch adapter policy", "packfile performance baseline", "project storage fixture"]
+      "reason": "Pinned wasm-git/libgit2 passes local init/status/add/commit/log plus host-snapshot reopen in Node 22 and a Chrome Worker. Remote transport stays fail-closed; license review, OPFS product integration, adversarial repository safety, and packfile budgets still block promotion.",
+      "candidateArtifacts": [
+        {
+          "name": "wasm-git",
+          "versionObserved": "0.0.17",
+          "registryIntegrity": "sha512-eAWLe2BQrx23t9jjffV5BkwbVW1c9nfUh4KDzPgMMKynNPGGTqztGYuJZY0x60hyO6clIn4eFUNkFnY535XtHw==",
+          "licenseMetadata": null,
+          "upstreamLicense": "Bundled COPYING: GPL-2.0 with linking exception; npm package metadata field is empty",
+          "runtimeFormat": "Emscripten libgit2 WebAssembly",
+          "decision": "hold",
+          "blocker": "License obligations need product review; OPFS integration, adversarial repository safety, and packfile budgets are not yet verified."
+        },
+        {
+          "name": "isomorphic-git",
+          "versionObserved": "1.42.2",
+          "registryIntegrity": "sha512-Rb7czWhLO4JYqmg4an01nNomuAgFbWWK2CVfkHGBOvK5t7hrGTKOXPx/csscJ1j9o3uXFzNcC6njgvCafSmIPw==",
+          "licenseMetadata": "MIT",
+          "runtimeFormat": "JavaScript, not WebAssembly",
+          "decision": "fallback-study-only",
+          "blocker": "Does not validate the Git WASM lane; browser remote operations still require an explicit host HTTP/CORS and credential boundary."
+        }
+      ],
+      "artifact": {
+        "result": "pass",
+        "path": "lg2.wasm",
+        "sha256": "5cd5df122c066f63c1a940e66fb126a0a35f44b7c0f1c9801b1c1007078eb0f9",
+        "bytes": 862879,
+        "loaderPath": "lg2.js",
+        "loaderSha256": "6f3181a5ea4d5a926c243bdd6239c0730ac758c87dfbb88a28a1264dd96f61c6"
+      },
+      "filesystem": {
+        "mode": "project-only-local-repository",
+        "adapterResult": "pass",
+        "runtimeResult": "node-and-chrome-host-snapshot-pass",
+        "outsideProject": "deny",
+        "directGitMetadataMutation": "deny"
+      },
+      "syscalls": {
+        "expected": ["directory enumerate", "fd read/write/seek/stat/sync", "path open/stat/readlink/symlink/create/unlink/rename", "clock", "random"],
+        "denied": ["socket tcp/udp", "process spawn", "host filesystem outside project mount"],
+        "result": "behavioral-pass-without-syscall-trace"
+      },
+      "credentialsAndNetwork": {
+        "credentialInjection": "deny",
+        "runtimeFetch": "deny",
+        "directTcp": "deny",
+        "fetchAndClone": "fail-closed-with-redacted-EGITNETWORK",
+        "adapterResult": "pass",
+        "runtimeResult": "pass-local-only-remote-disabled"
+      },
+      "performance": {
+        "outputBudgetBytes": 1048576,
+        "memoryBudgetBytes": 268435456,
+        "packfileBudgetBytes": 67108864,
+        "adapterResult": "pass",
+        "localWorkflowBudgetMs": 5000,
+        "observedNode22ElapsedMs": 57.8,
+        "runtimeResult": "local-pass-packfile-not-run"
+      },
+      "productSurface": {
+        "api": "createGitWasmProjectAdapter",
+        "localOperations": ["init", "status", "add", "commit", "log"],
+        "remoteOperations": "disabled",
+        "status": "candidate-contract-only"
+      },
+      "fixtures": [
+        "packages/node-runtime/test/project-tooling-candidates.test.ts",
+        "packages/node-runtime/test/git-wasm-runtime.test.ts",
+        "tests/system/browser/fixtures/git-wasm-worker.mjs",
+        "tests/system/browser/non-js-tooling.test.ts"
+      ],
+      "requiredBeforeSupport": [
+        "approve bundled GPL-2.0 with linking exception obligations and source offer process",
+        "wire the integrity-pinned runtime through the product OPFS project store",
+        "symlink, malformed object, oversized object, and repository corruption fixture",
+        "large packfile time and peak-memory baseline",
+        "host-mediated same-origin HTTP transport with one-shot credential handles and redacted diagnostics"
+      ]
     },
     {
       "id": "docker-linux-binary",

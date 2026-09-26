@@ -62,6 +62,41 @@ try {
   assert.notEqual(result.reopened.databasePath, result.otherReopened.databasePath);
   assert.match(result.reopened.sqliteVersion, /^3\./);
   assert.ok(result.elapsedMs <= 10_000, `SQLite OPFS durability fixture exceeded 10000ms: ${result.elapsedMs}`);
+
+  const git = await page.evaluate(async () => {
+    const worker = new Worker("/tests/system/browser/fixtures/git-wasm-worker.mjs", { type: "module" });
+    try {
+      return await new Promise((resolve, reject) => {
+        const id = crypto.randomUUID();
+        const timeout = setTimeout(() => reject(new Error("Git WASM browser fixture timed out")), 10_000);
+        worker.addEventListener("message", (event) => {
+          if (event.data?.id !== id) return;
+          clearTimeout(timeout);
+          resolve(event.data);
+        });
+        worker.addEventListener("error", (event) => {
+          clearTimeout(timeout);
+          reject(new Error(event.message));
+        }, { once: true });
+        worker.postMessage({ id });
+      });
+    } finally {
+      worker.terminate();
+    }
+  });
+  assert.equal(git.ok, true, git.error);
+  assert.equal(git.hash, "5cd5df122c066f63c1a940e66fb126a0a35f44b7c0f1c9801b1c1007078eb0f9");
+  assert.equal(git.bytes, 862879);
+  assert.equal(git.init.exitCode, 0);
+  assert.match(git.before.stdout, /\?\? message\.txt/);
+  assert.equal(git.commit.exitCode, 0);
+  assert.equal(git.clean.stdout, "");
+  assert.match(git.log.stdout, /^[a-f0-9]{40} browser fixture\n$/);
+  assert.equal(git.reopenedStatus.stdout, "");
+  assert.equal(git.reopenedLog.stdout, git.log.stdout);
+  assert.equal(git.persistedHead, true);
+  assert.equal(git.persistedIndex, true);
+  assert.ok(git.elapsedMs <= 5000, `Git WASM browser fixture exceeded 5000ms: ${git.elapsedMs}`);
 } finally {
   await browser.close();
   await server.close();

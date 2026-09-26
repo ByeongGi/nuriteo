@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import crypto from "node:crypto";
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -7,8 +8,8 @@ function assert(condition, message) {
 const matrix = JSON.parse(fs.readFileSync("compat/non-js-tooling-candidates.json", "utf8"));
 const document = fs.readFileSync("docs/productization/non-js-tooling-candidates.md", "utf8");
 
-assert(matrix.schemaVersion === 2, "unexpected non-JS tooling schema");
-assert(matrix.status === "non-js-tooling-product-adapters-supported", "non-JS tooling product adapters are incomplete");
+assert(matrix.schemaVersion === 4, "unexpected non-JS tooling schema");
+assert(matrix.status === "supported-adapters-with-held-runtime-validated-candidates", "non-JS tooling adapter status is incomplete");
 assert(matrix.decisionCriteria.productValue.length >= 3, "product value criteria incomplete");
 assert(matrix.decisionCriteria.maintenanceCost.length >= 4, "maintenance cost criteria incomplete");
 assert(matrix.decisionCriteria.runtimeFit.includes("no direct TCP"), "runtime fit must reject direct TCP");
@@ -44,7 +45,50 @@ assert(fs.readFileSync("packages/browser-host/src/index.ts", "utf8").includes("c
 assert(fs.readFileSync("tests/system/browser/fixtures/sqlite-opfs-worker.mjs", "utf8").includes("projectId"), "sqlite worker must enforce a project namespace");
 assert(candidates.get("python-wasi")?.status === "hold", "python must stay hold until support surface is proven");
 assert(candidates.get("git-wasm")?.status === "hold", "git must stay hold until credential/network/storage phase exists");
+for (const id of ["python-wasi", "git-wasm"]) {
+  const candidate = candidates.get(id);
+  assert(/^[a-f0-9]{64}$/.test(candidate.artifact?.sha256 || ""), `${id} runtime artifact hash missing`);
+  assert(candidate.artifact?.bytes > 0, `${id} runtime artifact size missing`);
+  assert(candidate.filesystem?.adapterResult === "pass", `${id} adapter filesystem boundary missing`);
+  assert(candidate.filesystem?.runtimeResult.includes("pass"), `${id} runtime filesystem evidence missing`);
+  assert(candidate.syscalls?.expected.length >= 5, `${id} expected syscall surface is incomplete`);
+  assert(candidate.syscalls?.denied.some((entry) => entry.includes("socket")), `${id} denied syscall surface must include sockets`);
+  assert(candidate.syscalls?.result.includes("behavioral-pass"), `${id} syscall behavioral evidence missing`);
+  assert(candidate.credentialsAndNetwork?.directTcp === "deny", `${id} must deny direct TCP`);
+  assert(candidate.credentialsAndNetwork?.runtimeResult.includes("pass"), `${id} runtime network evidence missing`);
+  assert(candidate.performance?.runtimeResult.includes("pass"), `${id} runtime performance evidence missing`);
+  assert(candidate.productSurface?.status === "candidate-contract-only", `${id} must not be product-supported`);
+  assert(candidate.requiredBeforeSupport.length >= 4, `${id} promotion blockers are incomplete`);
+  assert(candidate.candidateArtifacts.length >= 2, `${id} artifact alternatives were not evaluated`);
+  for (const artifact of candidate.candidateArtifacts) {
+    assert(artifact.versionObserved, `${id} candidate artifact version missing`);
+    assert(artifact.registryIntegrity?.startsWith("sha512-"), `${id} registry integrity missing`);
+    assert(artifact.decision, `${id} artifact decision missing`);
+  }
+  for (const fixture of candidate.fixtures || []) assert(fs.existsSync(fixture), `candidate fixture missing: ${fixture}`);
+  assert(!matrix.supportedAdapters.includes(id), `${id} must not appear in supported adapters`);
+  assert(!matrix.firstSupportLane.includes(id), `${id} must not appear in the first support lane`);
+}
+const runtimeExports = fs.readFileSync("packages/node-runtime/src/index.ts", "utf8");
+assert(runtimeExports.includes("createPythonWasiProjectAdapter"), "Python candidate adapter must be exported");
+assert(runtimeExports.includes("createGitWasmProjectAdapter"), "Git candidate adapter must be exported");
+assert(runtimeExports.includes("createIntegrityPinnedWasmerPythonRuntime"), "integrity-pinned Python runtime must be exported");
+assert(runtimeExports.includes("createIntegrityPinnedWasmGitRuntime"), "integrity-pinned Git runtime must be exported");
+assert(candidates.get("python-wasi")?.performance.runtimeResult.includes("memory-unenforced"), "Python must retain the memory enforcement blocker");
+assert(candidates.get("git-wasm")?.performance.runtimeResult.includes("packfile-not-run"), "Git must retain the packfile blocker");
+assert(candidates.get("git-wasm")?.credentialsAndNetwork.fetchAndClone.includes("redacted"), "Git remote denial must require redaction");
+const gitCandidate = candidates.get("git-wasm");
+assert(JSON.parse(fs.readFileSync("node_modules/wasm-git/package.json", "utf8")).version === "0.0.17", "Git WASM package version drifted");
+assert(sha256("node_modules/wasm-git/lg2.wasm") === gitCandidate.artifact.sha256, "Git WASM artifact hash drifted");
+assert(sha256("node_modules/wasm-git/lg2.js") === gitCandidate.artifact.loaderSha256, "Git WASM loader hash drifted");
+const pythonCandidate = candidates.get("python-wasi");
+assert(JSON.parse(fs.readFileSync("node_modules/@wasmer/sdk/package.json", "utf8")).version === "0.18.0", "Wasmer SDK version drifted");
+assert(sha256("node_modules/@wasmer/sdk/pkg/wasmer_sdk_js_bg.wasm") === pythonCandidate.artifact.sdkWasmSha256, "Wasmer SDK WASM hash drifted");
 assert(candidates.get("docker-linux-binary")?.status === "unsupported", "docker must remain unsupported");
 assert(matrix.excludedByDefault.includes("arbitrary-linux-binary"), "arbitrary Linux binaries must be excluded by default");
 
 console.log("non-JS tooling candidates ok");
+
+function sha256(path) {
+  return crypto.createHash("sha256").update(fs.readFileSync(path)).digest("hex");
+}

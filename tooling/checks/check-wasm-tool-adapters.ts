@@ -13,6 +13,8 @@ assert(matrix.schemaVersion === 1, "unexpected WASM tool adapter schema");
 assert(matrix.requirements.supportedAdaptersMustHaveHash === true, "supported adapters must require hash");
 assert(matrix.requirements.supportedAdaptersMustHaveExportContract === true, "supported adapters must require export contract");
 assert(source.includes("verifyWasmAdapterManifest"), "missing adapter manifest verifier");
+assert(matrix.systemWasmBaseline.rustc === "1.97.1", "system WASM Rust baseline drifted");
+assert(matrix.systemWasmBaseline.rebuildHashStable === true, "system WASM rebuild evidence missing");
 
 for (const entry of matrix.supportedAdapters) {
   const adapter = manifest.adapters.find((item) => item.name === entry.name);
@@ -23,6 +25,8 @@ for (const entry of matrix.supportedAdapters) {
   assert(adapter.fallbackPolicy === entry.fallbackPolicy, `adapter fallback mismatch: ${entry.name}`);
   assert(test.includes(entry.name), `adapter fixture missing ${entry.name}`);
 }
+const systemWasm = manifest.adapters.find((item) => item.name === "system-wasm");
+assert(systemWasm.sha256 === matrix.systemWasmBaseline.sha256, "system WASM baseline hash mismatch");
 
 for (const candidate of matrix.viteEcosystemCandidates) {
   const replacement = manifest.candidateReplacements.find((item) => item.package === candidate.package);
