@@ -73,7 +73,10 @@ impl PortTable {
     }
 
     pub fn connect(&mut self, port: u16) -> PortTableResult<ConnectionId> {
-        let listener_id = *self.by_port.get(&port).ok_or(PortTableError::PortNotFound)?;
+        let listener_id = *self
+            .by_port
+            .get(&port)
+            .ok_or(PortTableError::PortNotFound)?;
         let id = ConnectionId(self.next_connection);
         self.next_connection += 1;
         let connection = Connection::new(id, listener_id, self.capacity);
@@ -110,13 +113,19 @@ impl PortTable {
                 if !connection.server_open {
                     return Err(PortTableError::ConnectionClosed);
                 }
-                connection.client_to_server.write(bytes).map_err(map_buffer_error)
+                connection
+                    .client_to_server
+                    .write(bytes)
+                    .map_err(map_buffer_error)
             }
             ConnectionEndpoint::Server => {
                 if !connection.client_open {
                     return Err(PortTableError::ConnectionClosed);
                 }
-                connection.server_to_client.write(bytes).map_err(map_buffer_error)
+                connection
+                    .server_to_client
+                    .write(bytes)
+                    .map_err(map_buffer_error)
             }
         }
     }

@@ -10,3 +10,12 @@ edition = "2024"
 license = "UNLICENSED"
 publish = false
 rust-version = "1.97"
+
+# Keep the checked-in WASM adapter reproducible across checkout paths. Native
+# workspace crates retain the regular dev profile; only the two crates linked
+# into system_wasm omit DWARF data containing absolute source paths.
+[profile.dev.package.system-core]
+debug = 0
+
+[profile.dev.package.system-wasm]
+debug = 0

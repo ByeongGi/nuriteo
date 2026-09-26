@@ -14,16 +14,9 @@ pub struct SnapshotEntry {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SnapshotEntryKind {
-    File {
-        data: Vec<u8>,
-        nlink: u32,
-    },
-    Directory {
-        entries: Vec<(String, u64)>,
-    },
-    Symlink {
-        target: String,
-    },
+    File { data: Vec<u8>, nlink: u32 },
+    Directory { entries: Vec<(String, u64)> },
+    Symlink { target: String },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

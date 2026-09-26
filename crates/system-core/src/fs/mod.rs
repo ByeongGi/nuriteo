@@ -613,7 +613,11 @@ mod tests {
         let mut fs = SystemFs::new();
         fs.mkdir("/workspace/src").unwrap();
         let fd = fs
-            .open(PID_A, "/workspace/src/app.txt", OpenOptions::read_write_create())
+            .open(
+                PID_A,
+                "/workspace/src/app.txt",
+                OpenOptions::read_write_create(),
+            )
             .unwrap();
         fs.write(PID_A, fd, b"snapshot").unwrap();
         fs.hardlink("/workspace/src/app.txt", "/workspace/src/hard.txt")
@@ -637,6 +641,9 @@ mod tests {
 
         let mut corrupted = snapshot.clone();
         corrupted.entries[0].inode = 999;
-        assert_eq!(corrupted.verify().unwrap_err(), SnapshotError::IntegrityMismatch);
+        assert_eq!(
+            corrupted.verify().unwrap_err(),
+            SnapshotError::IntegrityMismatch
+        );
     }
 }
