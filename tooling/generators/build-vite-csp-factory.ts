@@ -193,7 +193,7 @@ fs.copyFileSync(
 );
 
 const factoryPath = path.join(outputRoot, "vite-cli-static-factories.mjs");
-const factorySource = `// Generated from the pinned Vite ${viteVersion} dependency closure. Do not edit by hand.
+const factorySource = normalizeGeneratedWhitespace(`// Generated from the pinned Vite ${viteVersion} dependency closure. Do not edit by hand.
 import * as rolldownWasiBinding from "./rolldown-wasi-binding.mjs";
 
 export const fixtureRevision = ${JSON.stringify(fixtureRevision)};
@@ -244,7 +244,7 @@ ${indent(cjsFactories.join(",\n"), 2)}
 export const esmFactories = Object.freeze({
 ${indent(esmFactories.join(",\n"), 2)}
 });
-`;
+`);
 fs.writeFileSync(factoryPath, factorySource);
 
 const files = walkFiles(outputRoot).map((file) => ({
@@ -290,6 +290,13 @@ function validateEsmFactory(body: string): boolean {
 function indent(value: string, spaces: number): string {
   const prefix = " ".repeat(spaces);
   return value.split("\n").map((line) => `${prefix}${line}`).join("\n");
+}
+
+function normalizeGeneratedWhitespace(value: string): string {
+  return value.split("\n").map((line) => {
+    const indent = line.match(/^[ \t]*/)?.[0] || "";
+    return `${indent.replaceAll("\t", "  ")}${line.slice(indent.length)}`.trimEnd();
+  }).join("\n");
 }
 
 function sha256(value: crypto.BinaryLike): string {

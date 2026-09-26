@@ -31,7 +31,7 @@ const assets = {
   "apps/preview-service/public/vendor/vite-8.2.0/assets/rolldown-binding.wasm": "ce4821fa65dcc84f641980889d175fecbdf9fc108ed438c5ab363802a681fce1",
   "apps/preview-service/public/vendor/vite-8.2.0/assets/wasi-worker-browser-IL7bwx-u.js": "cca841fe347316a6512d885211fc9604d819a06082a4c3eb710e0673cb5a1983",
   "apps/preview-service/public/vendor/vite-8.2.0/rolldown-wasi-binding.mjs": "b1a16143d4991cc6f4ff6a3043d40a2b757d74746ebe408298b1a2d4b5cb0606",
-  "apps/preview-service/public/vendor/vite-8.2.0/vite-cli-static-factories.mjs": "95842700db2ab13a0eacfc174034b8b8007f0e82981aee176ed7620c651903a8"
+  "apps/preview-service/public/vendor/vite-8.2.0/vite-cli-static-factories.mjs": "a349825dafc4ab5b2ad3a9fa4489965bda62cb8f47bc5a9fa84f200ea1bfa2aa"
 };
 for (const [relativePath, expected] of Object.entries(assets)) {
   const bytes = fs.readFileSync(new URL(`../../${relativePath}`, import.meta.url));

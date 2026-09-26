@@ -8,7 +8,7 @@ import { MemoryPackageManagerWorkspace } from "../packages/node-runtime/src/pack
 const YARN_BUNDLE_SHA256 = "443ed69e76443b89afddccfc9faec1ff16eb5e500979cc079c696dec4c3d94ee";
 const YARN_ENTRY_SHA256 = "148e19db309ec9eaf7720b28df811337906eea8a1758deaa54afee60a6305e04";
 const YARN_FACTORY_SHA256 = "e6f01b28a30aae3d6bd6cf78302d0b1ba1f5e6e8d2f6f918989b6cd7f2a428a0";
-const VITE_FACTORY_SHA256 = "95842700db2ab13a0eacfc174034b8b8007f0e82981aee176ed7620c651903a8";
+const VITE_FACTORY_SHA256 = "a349825dafc4ab5b2ad3a9fa4489965bda62cb8f47bc5a9fa84f200ea1bfa2aa";
 const ROLLDOWN_WASI_BINDING_SHA256 = "b1a16143d4991cc6f4ff6a3043d40a2b757d74746ebe408298b1a2d4b5cb0606";
 const ROLLDOWN_WASI_MODULE_SHA256 = "ce4821fa65dcc84f641980889d175fecbdf9fc108ed438c5ab363802a681fce1";
 const ROLLDOWN_WASI_WORKER_PATH = "assets/wasi-worker-browser-IL7bwx-u.js";
