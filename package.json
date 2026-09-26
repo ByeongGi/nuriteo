@@ -50,7 +50,9 @@
     "check:wasm-tool-adapters": "node tooling/checks/check-wasm-tool-adapters.ts",
     "check:wasi-boundary": "node tooling/checks/check-wasi-boundary.ts",
     "check:non-js-tooling": "node tooling/checks/check-non-js-tooling-candidates.ts",
-    "test:non-js-tooling": "node packages/node-runtime/test/non-js-tooling.test.ts && node tests/system/browser/non-js-tooling.test.ts",
+    "test:non-js-tooling": "node packages/node-runtime/test/non-js-tooling.test.ts && node packages/node-runtime/test/project-tooling.test.ts && node packages/node-runtime/test/project-tooling-candidates.test.ts && node packages/node-runtime/test/git-wasm-runtime.test.ts && node packages/node-runtime/test/git-host-transport.test.ts && node tests/system/browser/non-js-tooling.test.ts",
+    "test:python-wasi-runtime-evidence": "node tooling/runtime-evidence/python-wasi-runtime.ts",
+    "test:python-wasi-browser-evidence": "node tests/system/browser/python-wasi-runtime.test.ts",
     "check:native-fallback": "node tooling/checks/check-native-fallback-policy.ts",
     "inspect:vite-artifact": "node tooling/checks/inspect-vite-package-artifact.ts",
     "check:types": "tsc -p tsconfig.json && tsc -p tsconfig.test.json && tsc -p tsconfig.tools.json && tsc -p tsconfig.migrated.json",
@@ -82,12 +84,14 @@
     "@sqlite.org/sqlite-wasm": "3.53.4-build1",
     "@types/node": "^22.20.2",
     "@types/react": "19.0.3",
+    "@wasmer/sdk": "0.18.0",
     "client-only": "0.0.1",
     "jq-wasm": "3.0.0-jq-1.8.2",
     "next": "15.1.9",
     "react": "19.0.0",
     "react-dom": "19.0.0",
-    "typescript": "6.0.3"
+    "typescript": "6.0.3",
+    "wasm-git": "0.0.17"
   },
   "dependencies": {
     "fflate": "^0.8.3"

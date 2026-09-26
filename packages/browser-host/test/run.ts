@@ -14,6 +14,7 @@ import "./network-diagnostics.test.ts";
 import "./project-editor-bridge.test.ts";
 import "./project-import-export.test.ts";
 import "./sqlite-project-client.test.ts";
+import "./git-opfs-project-client.test.ts";
 import "./project-onboarding.test.ts";
 import "./project-recovery.test.ts";
 import "./project-workspace.test.ts";

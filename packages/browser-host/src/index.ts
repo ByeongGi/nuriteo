@@ -3,6 +3,8 @@ export type { BrowserRuntimeSupervisorOptions, RuntimeBootOptions, RuntimeMetric
 export { assertRuntimeFeatureSupported, createPackageManagerRecoveryDiagnostic, createPackageManagerUnsupportedDiagnostic, createPermissionDeniedDiagnostic, createPermissionRecoveryDiagnostic, createRuntimeNetworkRecoveryDiagnostic, createRuntimeNetworkUnsupportedDiagnostic, createRuntimeRecoveryActionExecutor, createRuntimeRecoveryPlan, createRuntimeSupportBundle, createRuntimeTraceCollector, createRuntimeTraceReport, createUnsupportedRuntimeDiagnostic, redactRuntimeLog, RuntimeRecoveryActionExecutor, RuntimeTraceCollector, UnsupportedRuntimeFeatureError } from "./observability/index.ts";
 export { createHostProcessShellCommand, HostProcessError, HostProcessTable, processKey, teardownProcessTable, WorkerRegistry } from "./process/index.ts";
 export { createSqliteProjectClient, SqliteProjectClient } from "./tooling/index.ts";
+export { createGitOpfsProjectClient, GitOpfsProjectClient } from "./tooling/index.ts";
+export type { GitOpfsAction, GitOpfsProjectClientOptions, GitOpfsWorkerLike, GitOpfsWorkerMessage, GitOpfsWorkerResponse } from "./tooling/index.ts";
 export type { SqliteProjectClientOptions, SqliteWorkerLike, SqliteWorkerMessage, SqliteWorkerResponse } from "./tooling/index.ts";
 export { FetchPolicy, FetchPolicyError, HostFetcher, HostFetchError, verifyIntegrity } from "./io/index.ts";
 export {

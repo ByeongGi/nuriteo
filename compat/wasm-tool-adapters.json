@@ -1,7 +1,16 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-09-15",
+  "updatedAt": "2026-09-27",
   "status": "p19-02-tool-adapters",
+  "systemWasmBaseline": {
+    "rustc": "1.97.1",
+    "target": "wasm32-unknown-unknown",
+    "profile": "debug",
+    "sha256": "3726e4726748f300833f0d882c2210ccb255588377249a0044880d553103b1ad",
+    "exports": ["cargo_container_abi_version", "memory"],
+    "rebuildHashStable": true,
+    "result": "pass"
+  },
   "supportedAdapters": [
     {
       "name": "system-wasm",

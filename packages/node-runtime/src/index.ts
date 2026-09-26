@@ -33,7 +33,8 @@ export { createWasiRuntimeBoundary, createWasiStdioLimits, createWasmAdapterPoli
 export type { WasiBoundaryErrorCode, WasiFilesystemAccess, WasiNetworkKind, WasiRuntimeBoundary, WasiRuntimeBoundaryOptions, WasiStdioLimits } from "./wasm-adapters/index.ts";
 export { originalPositionFor, transpileTypeScript } from "./transforms/index.ts";
 export { runNodeProgram } from "./bootstrap.ts";
-export { createJqProjectAdapter, createJqShellCommands, JqProjectAdapter } from "./tooling/index.ts";
+export { createGitHostTransportBoundary, createGitWasmProjectAdapter, createIntegrityPinnedWasmerPythonRuntime, createIntegrityPinnedWasmGitRuntime, createJqProjectAdapter, createJqShellCommands, createPythonWasiProjectAdapter, GitHostTransportBoundary, GitWasmProjectAdapter, IntegrityPinnedWasmerPythonRuntime, IntegrityPinnedWasmGitRuntime, JqProjectAdapter, PythonWasiProjectAdapter } from "./tooling/index.ts";
+export type { GitCommitOptions, GitHostFetchRequest, GitHostFetchResponse, GitHostTransportOptions, GitValidatedPackfile, GitWasmOperation, GitWasmProjectAdapterOptions, GitWasmRuntime, GitWasmRuntimeRequest, GitWasmRuntimeResult, PythonWasiExecutionLimits, PythonWasiExecutionRequest, PythonWasiExecutionResult, PythonWasiMount, PythonWasiProjectAdapterOptions, PythonWasiRunOptions, PythonWasiRuntime, WasmerPythonClient, WasmerPythonProjectSnapshot, WasmerPythonRuntimeOptions, WasmGitProjectSnapshot, WasmGitRuntimeOptions } from "./tooling/index.ts";
 export type { JqProjectAdapterOptions, JqRuntime, JqTransformResult } from "./tooling/index.ts";
 export { createFsBinding } from "./bindings/fs.ts";
 export { createModuleRuntime, createWorkspaceModuleRuntime, ModuleRuntime, registerWorkspaceModules } from "./modules/index.ts";

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-15T00:00:00+09:00",
+  "generatedAt": "2026-09-27T00:00:00+09:00",
   "policy": {
     "nativeNodeAddons": "unsupported-by-default",
     "wasmAdapters": "allowed-only-with-manifest-integrity-and-export-contract",
@@ -12,7 +12,7 @@
       "status": "supported",
       "kind": "rust-wasm",
       "path": "target/wasm32-unknown-unknown/debug/system_wasm.wasm",
-      "sha256": "afd37e815bd691e182526073d432f196c97735029cba97cc112c492d5a5242f0",
+      "sha256": "3726e4726748f300833f0d882c2210ccb255588377249a0044880d553103b1ad",
       "exports": {
         "cargo_container_abi_version": "function",
         "memory": "memory"
