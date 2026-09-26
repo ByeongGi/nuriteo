@@ -1,4 +1,4 @@
-export type SidebarView = "explorer" | "search" | "ports" | "scm" | "outline" | "timeline" | "settings";
+export type SidebarView = "explorer" | "search" | "ports" | "scm" | "outline" | "timeline" | "developer-tools" | "settings";
 
 export interface PreviewPortEntry {
   id: string;

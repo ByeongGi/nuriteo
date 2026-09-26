@@ -1,0 +1,66 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-27",
+  "status": "active",
+  "productClaim": "scoped browser IDE protocols; not VS Code or marketplace compatible",
+  "milestones": {
+    "lspTransport": {
+      "status": "vertical-slice",
+      "implemented": [
+        "JSON-RPC 2.0 request/response/notification transport over a dedicated module Worker",
+        "initialize/initialized/shutdown/exit lifecycle",
+        "didOpen/didChange/didClose document synchronization",
+        "diagnostics, completion, definition, and rename protocol paths",
+        "Monaco provider and marker integration for JavaScript and TypeScript"
+      ],
+      "limitations": [
+        "bundled demonstrator server only",
+        "lexical workspace symbols rather than a production compiler language server",
+        "no external language-server process bridge",
+        "no incremental text synchronization or cancellation"
+      ]
+    },
+    "extensionHost": {
+      "status": "vertical-slice",
+      "implemented": [
+        "P-256 signed and SHA-256 integrity-pinned built-in manifest verification",
+        "deny-by-default capability grants and allowlisted entrypoints",
+        "isolated module Worker activation, command contribution, and deactivation",
+        "one-shot crash recovery with a bounded recovery budget",
+        "no ambient filesystem, network, process, clipboard, or secret access"
+      ],
+      "limitations": [
+        "built-in static extension registry only",
+        "no VSIX, marketplace, arbitrary JavaScript, or VS Code API compatibility",
+        "no persistent permission UI or multi-extension scheduling"
+      ]
+    },
+    "debugAdapter": {
+      "status": "vertical-slice",
+      "implemented": [
+        "native DAP request, response, and event transport over a dedicated module Worker",
+        "initialize/launch/setBreakpoints/configurationDone lifecycle",
+        "continue, stepIn, stepOut, next, stackTrace, scopes, variables, terminate, and disconnect",
+        "Run and Extensions sidebar with session state, call stack, scopes, and variables",
+        "workspace-URI-only deterministic fixture with no host process or socket access"
+      ],
+      "limitations": [
+        "deterministic fixture adapter rather than a guest runtime inspector",
+        "no source maps, conditional breakpoints, watches, or debug console",
+        "no persisted breakpoints or multi-thread UI"
+      ]
+    }
+  },
+  "securityBoundaries": {
+    "csp": "same-origin module workers; no unsafe-eval relaxation",
+    "filesystem": "workspace URI documents only; no host filesystem handles",
+    "network": "no language-server network capability",
+    "process": "no host process spawn",
+    "secrets": "not exposed to language workers"
+  },
+  "tests": [
+    "apps/preview-service/test/lsp-product-stage.test.ts",
+    "apps/preview-service/test/extension-debug-product-stage.test.ts",
+    "apps/preview-service/test/lsp-browser-smoke.test.ts"
+  ]
+}

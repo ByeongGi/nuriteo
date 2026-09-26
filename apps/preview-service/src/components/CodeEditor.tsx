@@ -10,6 +10,8 @@ import { subscribeToLanguageProblems, workspacePathForModel } from "../lib/monac
 import { ContextMenu } from "./ContextMenu";
 import { EditorBreadcrumbs } from "./EditorBreadcrumbs";
 import { monacoTheme } from "../lib/settings";
+import { MonacoLspBridge } from "../lib/monacoLspBridge";
+import type { LanguageServerState } from "../lib/browserLanguageServer";
 
 loader.config({ monaco });
 
@@ -56,6 +58,7 @@ export function CodeEditor({ model }: { model: PreviewControllerModel }) {
   } = model;
 
   const [workerState, setWorkerState] = useState<"starting" | "ready" | "failed">("starting");
+  const [lspState, setLspState] = useState<LanguageServerState>("stopped");
   const [cursor, setCursor] = useState({ line: 1, column: 1 });
   const [tabMenu, setTabMenu] = useState<{
     x: number;
@@ -65,6 +68,7 @@ export function CodeEditor({ model }: { model: PreviewControllerModel }) {
   const [dragOverTab, setDragOverTab] = useState<string | null>(null);
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const editorSubscriptionsRef = useRef<monaco.IDisposable[]>([]);
+  const lspBridgeRef = useRef<MonacoLspBridge | null>(null);
   const language = useMemo(() => (selectedPath ? languageForPath(selectedPath) : "plaintext"), [selectedPath]);
 
   useEffect(() => {
@@ -83,15 +87,26 @@ export function CodeEditor({ model }: { model: PreviewControllerModel }) {
   }, []);
 
   useEffect(() => {
+    const bridge = new MonacoLspBridge();
+    lspBridgeRef.current = bridge;
+    bridge.onStatus(setLspState);
+    void bridge.start("file:///workspace").catch((error: unknown) => console.error(error));
+    return () => {
+      lspBridgeRef.current = null;
+      void bridge.dispose();
+    };
+  }, []);
+
+  useEffect(() => {
     if (workerState !== "ready") return;
     const files = model.snapshot.project?.listFiles() || [];
-    syncMonacoProjectFiles(
-      files.map((file) => {
-        const open = model.snapshot.editor?.openFile(file.path);
-        return { path: file.path, data: open?.data ?? file.data };
-      })
-    );
-  }, [model.snapshot, workerState]);
+    const syncedFiles = files.map((file) => {
+      const open = model.snapshot.editor?.openFile(file.path);
+      return { path: file.path, data: open?.data ?? file.data };
+    });
+    syncMonacoProjectFiles(syncedFiles);
+    lspBridgeRef.current?.sync(syncedFiles);
+  }, [lspState, model.snapshot, workerState]);
 
   useEffect(() => {
     if (workerState !== "ready") return;
@@ -380,7 +395,7 @@ export function CodeEditor({ model }: { model: PreviewControllerModel }) {
         </span>
         {selectedPath ? (
           <span className="shrink-0" aria-label={`${errorCount} errors and ${warningCount} warnings`}>
-            Ln {cursor.line}, Col {cursor.column} · × {errorCount} · △ {warningCount} · Language Service {workerState}
+            Ln {cursor.line}, Col {cursor.column} · × {errorCount} · △ {warningCount} · Language Service {workerState} · LSP {lspState}
           </span>
         ) : null}
       </div>
