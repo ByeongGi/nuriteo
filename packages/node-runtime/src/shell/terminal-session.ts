@@ -24,6 +24,7 @@ export interface TerminalTranscriptEntry {
   status: TerminalEntryStatus;
   stderr: string;
   stdout: string;
+  outputTruncatedBytes: number;
 }
 
 export interface TerminalRunResult extends ShellRunResult {
@@ -48,6 +49,8 @@ export class TerminalSession {
   #inputListeners = new Set<(data: string) => void>();
   #resizeListeners = new Set<(size: ShellTerminalSize) => void>();
   #size: ShellTerminalSize = { cols: 80, rows: 24 };
+  #maxOutputBytes: number;
+  #maxInputChunkBytes: number;
 
   constructor(options: TerminalSessionOptions = {}) {
     const { now, onChunk, ...runtimeOptions } = options;
@@ -55,6 +58,8 @@ export class TerminalSession {
     this.#onChunk = onChunk || null;
     this.#runtimeOptions = cloneRuntimeOptions(runtimeOptions);
     this.#runtime = createShellRuntime(this.#runtimeOptions);
+    this.#maxOutputBytes = positiveLimit(runtimeOptions.maxOutputBytes, 1024 * 1024, "maxOutputBytes");
+    this.#maxInputChunkBytes = positiveLimit(runtimeOptions.maxInputChunkBytes, 64 * 1024, "maxInputChunkBytes");
   }
 
   get activeEntry(): TerminalTranscriptEntry | null {
@@ -80,6 +85,7 @@ export class TerminalSession {
 
   write(data: string): boolean {
     if (!this.#active) return false;
+    if (new TextEncoder().encode(data).byteLength > this.#maxInputChunkBytes) return false;
     for (const listener of this.#inputListeners) listener(data);
     return true;
   }
@@ -99,30 +105,30 @@ export class TerminalSession {
     const entry = this.#createEntry(command);
     this.#active = { controller, entry, signal: null };
     this.#transcript.push(entry);
-    let outputReceived = false;
+    const streamedOutput = { stdout: false, stderr: false };
 
     try {
       const result = await this.#runtime.run(command, {
         onOutput: (chunk) => {
-          outputReceived = true;
-          if (chunk.stream === "stdout") entry.stdout += chunk.data;
-          else entry.stderr += chunk.data;
+          streamedOutput[chunk.stream] = true;
+          appendEntryOutput(entry, chunk.stream, chunk.data, this.#maxOutputBytes);
           this.#onChunk?.({ entryId: entry.id, ...chunk });
         },
         signal: controller.signal,
         terminal: this.#terminalControl()
       });
-      entry.stdout = result.stdout;
-      entry.stderr = result.stderr;
+      if (!streamedOutput.stdout) entry.stdout = result.stdout;
+      if (!streamedOutput.stderr) entry.stderr = result.stderr;
       entry.exitCode = result.exitCode;
+      entry.outputTruncatedBytes = Math.max(entry.outputTruncatedBytes, result.outputTruncatedBytes || 0);
       entry.status = controller.signal.aborted || result.exitCode === 130 ? "cancelled" : "completed";
-      if (!outputReceived) this.#emitOutput(entry);
+      if (!streamedOutput.stdout && !streamedOutput.stderr) this.#emitOutput(entry);
       return { ...result, entry: cloneEntry(entry) };
     } catch (error) {
       entry.stderr = error instanceof Error ? `${error.message}\n` : `${String(error)}\n`;
       entry.exitCode = 1;
       entry.status = controller.signal.aborted ? "cancelled" : "completed";
-      if (!outputReceived) this.#emitOutput(entry);
+      if (!streamedOutput.stdout && !streamedOutput.stderr) this.#emitOutput(entry);
       throw error;
     } finally {
       entry.finishedAt = this.#now();
@@ -163,7 +169,8 @@ export class TerminalSession {
       startedAt: this.#now(),
       status: "running",
       stderr: "",
-      stdout: ""
+      stdout: "",
+      outputTruncatedBytes: 0
     };
   }
 
@@ -198,9 +205,32 @@ function cloneRuntimeOptions(options: ShellRuntimeOptions): ShellRuntimeOptions 
   if (options.commands) clone.commands = { ...options.commands };
   if (options.env) clone.env = { ...options.env };
   if (options.files) clone.files = { ...options.files };
+  if (options.maxOutputBytes !== undefined) clone.maxOutputBytes = options.maxOutputBytes;
+  if (options.maxInputChunkBytes !== undefined) clone.maxInputChunkBytes = options.maxInputChunkBytes;
   return clone;
 }
 
 function cloneEntry(entry: TerminalTranscriptEntry): TerminalTranscriptEntry {
   return { ...entry };
+}
+
+function appendEntryOutput(
+  entry: TerminalTranscriptEntry,
+  stream: "stdout" | "stderr",
+  data: string,
+  maxBytes: number
+): void {
+  const used = new TextEncoder().encode(entry.stdout).byteLength + new TextEncoder().encode(entry.stderr).byteLength;
+  const encoded = new TextEncoder().encode(data);
+  const available = Math.max(0, maxBytes - used);
+  const retained = new TextDecoder().decode(encoded.slice(0, available));
+  if (stream === "stdout") entry.stdout += retained;
+  else entry.stderr += retained;
+  entry.outputTruncatedBytes += encoded.byteLength - new TextEncoder().encode(retained).byteLength;
+}
+
+function positiveLimit(value: number | undefined, fallback: number, name: string): number {
+  const resolved = value ?? fallback;
+  if (!Number.isSafeInteger(resolved) || resolved < 1) throw new RangeError(`${name} must be a positive safe integer`);
+  return resolved;
 }

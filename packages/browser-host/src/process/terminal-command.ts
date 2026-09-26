@@ -7,6 +7,7 @@ import type {
 export function createHostProcessShellCommand(options: HostProcessShellCommandOptions): HostProcessShellCommand {
   return async ({ argv, cwd, env, stdin, output, signal, terminal }): Promise<HostProcessShellCommandResult> => {
     const prepared = options.table.prepare({
+      argv,
       cwd: options.cwd || cwd,
       env,
       ...(options.projectId ? { projectId: options.projectId } : {}),
@@ -38,13 +39,15 @@ export function createHostProcessShellCommand(options: HostProcessShellCommandOp
         argv: [...argv],
         exitCode: final.exitCode ?? 0,
         stderr: final.stderr,
-        stdout: final.stdout
+        stdout: final.stdout,
+        ...(final.outputDroppedBytes > 0 ? { outputTruncatedBytes: final.outputDroppedBytes } : {})
       };
     } finally {
       signal?.removeEventListener("abort", abort);
       stopInput();
       stopResize();
       unsubscribe();
+      if (options.releaseOnExit) options.table.release(prepared.pid);
     }
   };
 }

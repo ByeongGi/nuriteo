@@ -47,6 +47,7 @@ class TerminalWorker {
 
 const workers = [];
 const table = new HostProcessTable({
+  signalGraceMs: 0,
   workerFactory() {
     const worker = new TerminalWorker();
     workers.push(worker);
@@ -88,6 +89,7 @@ assert.equal(workers[0].messages.some((message) => message.type === "stdin" && m
 
 const cancelWorkers = [];
 const cancelTable = new HostProcessTable({
+  signalGraceMs: 0,
   workerFactory() {
     const worker = new TerminalWorker();
     cancelWorkers.push(worker);

@@ -5,7 +5,7 @@ import {
   type PreviewWorkflowController,
   type PreviewWorkflowSnapshot
 } from "@cargo-container/preview-service";
-import type { SupportedPackageManager, TemplateId } from "@cargo-container/browser-host";
+import { HostProcessTable, type SupportedPackageManager, type TemplateId } from "@cargo-container/browser-host";
 import type { DockTab, PreviewServiceApi } from "../lib/types";
 import type { CommandId } from "../lib/commands";
 import { applySettingsToDocument, loadSettings, saveSettings, type IdeSettings } from "../lib/settings";
@@ -80,9 +80,22 @@ function portFromSnapshot(snapshot: PreviewWorkflowSnapshot): number {
 export function usePreviewController() {
   const controllerRef = useRef<PreviewWorkflowController | null>(null);
   if (!controllerRef.current) {
-    controllerRef.current = createPreviewWorkflowController();
+    controllerRef.current = createPreviewWorkflowController({
+      terminalProcessTable: new HostProcessTable({
+        workerFactory: () => new Worker(
+          new URL("../../../../workers/process-worker.ts", import.meta.url),
+          { type: "module", name: "cargo-terminal-process" }
+        )
+      })
+    });
   }
   const controller = controllerRef.current;
+
+  useEffect(() => {
+    const dispose = () => controller.dispose();
+    window.addEventListener("beforeunload", dispose);
+    return () => window.removeEventListener("beforeunload", dispose);
+  }, [controller]);
 
   const [snapshot, setSnapshot] = useState<PreviewWorkflowSnapshot>(() => controller.getSnapshot());
   const [selectedPath, setSelectedPath] = useState("");
