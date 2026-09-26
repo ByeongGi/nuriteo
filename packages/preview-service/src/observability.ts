@@ -61,6 +61,8 @@ export const ERROR_CATALOG: Readonly<Record<string, SupportErrorCategory>> = Obj
   ERR_IMPORT_UNSUPPORTED_PACKAGE_MANAGER: "unsupported",
   ERR_CLI_ESM_ENTRY_UNSUPPORTED: "unsupported",
   ERR_PM_CLI_ENTRY_UNSUPPORTED: "unsupported",
+  ERR_BUNDLER_STRICT_CSP_FACTORY_MISSING: "unsupported",
+  ERR_BUNDLER_WASM_RUNTIME_UNVALIDATED: "unsupported",
 
   ERR_PM_LIFECYCLE_BLOCKED: "permission",
   EPERMISSION: "permission",
@@ -80,6 +82,9 @@ export const ERROR_CATALOG: Readonly<Record<string, SupportErrorCategory>> = Obj
   ERR_PM_REAL_CLI_EVALUATION_REQUIRED: "package-manager",
   ERR_CLI_ENTRY_MISSING: "package-manager",
   ERR_CLI_MODE_UNKNOWN: "package-manager",
+  ERR_BUNDLER_FIXTURE_REVISION_INVALID: "package-manager",
+  ERR_BUNDLER_INTEGRITY_MISSING: "package-manager",
+  ERR_BUNDLER_VERSION_NOT_EXACT: "package-manager",
   ERR_IMPORT_HEALTH: "package-manager",
   ERR_IMPORT_LOCKFILE_CONFLICT: "package-manager",
   ERR_IMPORT_MISSING_SCRIPT: "package-manager",

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-09-22",
+  "updatedAt": "2026-09-27",
   "scope": {
     "runtime": "browser-guest-node-runtime",
     "viteVersion": "8.2.0",
@@ -87,13 +87,17 @@
       "id": "webpack-dev-workflow",
       "grade": "candidate",
       "productSupport": false,
-      "blocker": "No dedicated worker-backed public fixture covers install, dev-server/HMR, build, and recovery."
+      "blocker": "The exact-revision fixture and integrity-pinned toolchain reach CLI bootstrap, then fail closed because no strict-CSP precompiled webpack CLI factory exists.",
+      "diagnosticCodes": ["ERR_BUNDLER_STRICT_CSP_FACTORY_MISSING"],
+      "evidence": ["compat/bundler-dev-workflow-results.json", "tests/compatibility/frameworks/bundlers/bundler-candidate-workflow.test.ts"]
     },
     {
       "id": "rspack-dev-workflow",
       "grade": "candidate",
       "productSupport": false,
-      "blocker": "Native binding/WASM fallback and a dedicated worker-backed public fixture are not validated."
+      "blocker": "The exact-revision fixture and integrity-pinned toolchain reach CLI bootstrap, then fail closed: no strict-CSP precompiled CLI factory exists and the pinned WASI binding has not passed the browser-worker gate.",
+      "diagnosticCodes": ["ERR_BUNDLER_STRICT_CSP_FACTORY_MISSING", "ERR_BUNDLER_WASM_RUNTIME_UNVALIDATED"],
+      "evidence": ["compat/bundler-dev-workflow-results.json", "tests/compatibility/frameworks/bundlers/bundler-candidate-workflow.test.ts"]
     }
   ],
   "gate": {

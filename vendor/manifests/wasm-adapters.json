@@ -12,7 +12,7 @@
       "status": "supported",
       "kind": "rust-wasm",
       "path": "target/wasm32-unknown-unknown/debug/system_wasm.wasm",
-      "sha256": "027f556c263fb7ee6da61d9d1e9a35e6a3c463e3a6834bc43915546464424b96",
+      "sha256": "afd37e815bd691e182526073d432f196c97735029cba97cc112c492d5a5242f0",
       "exports": {
         "cargo_container_abi_version": "function",
         "memory": "memory"

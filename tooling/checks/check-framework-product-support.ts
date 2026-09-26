@@ -7,6 +7,7 @@ const support = readJson("compat/framework-product-support.json");
 const fixtures = readJson("compat/ecosystem-fixtures.json");
 const validation = readJson("compat/framework-actual-validation.json");
 const publicMatrix = readJson("compat/public-compatibility-matrix.json");
+const bundlerResults = readJson("compat/bundler-dev-workflow-results.json");
 
 assert(support.schemaVersion === 1, "unexpected framework support schema");
 assert(support.gate?.status === "pass", "framework promotion gate must pass");
@@ -51,6 +52,23 @@ for (const candidate of support.bundlerCandidates) {
   assert(candidate.grade === "candidate", `${candidate.id} must remain candidate`);
   assert(candidate.productSupport === false, `${candidate.id} must not claim product support`);
   assert(candidate.blocker.length > 0, `${candidate.id} must name a blocker`);
+  assert(candidate.diagnosticCodes.length > 0, `${candidate.id} must name typed diagnostics`);
+  for (const evidence of candidate.evidence) {
+    assert(fs.existsSync(path.join(root, evidence)), `${candidate.id} evidence missing: ${evidence}`);
+  }
+}
+
+assert(bundlerResults.supportDecision === "hold", "bundler candidates must remain hold");
+for (const bundler of ["webpack", "rspack"]) {
+  const result = bundlerResults.results.find((candidate) => candidate.bundler === bundler);
+  assert(result?.grade === "candidate", `${bundler} result must remain candidate`);
+  assert(result.productSupport === false, `${bundler} must not claim product support`);
+  assert(/^[0-9a-f]{40}$/.test(result.fixture.revision), `${bundler} fixture revision must be exact`);
+  assert(result.measurements.install === "pass-exact-version-and-sri", `${bundler} install pin validation must pass`);
+  assert(result.measurements.devServer === "blocked-before-port-bind", `${bundler} must fail before binding a port`);
+  assert(result.measurements.teardown === "pass-no-listener-leak", `${bundler} teardown must be recoverable`);
+  assert(result.dependencies.every((dependency) => /^\d+\.\d+\.\d+/.test(dependency.version)), `${bundler} dependencies must use exact versions`);
+  assert(result.dependencies.every((dependency) => /^sha512-/.test(dependency.integrity)), `${bundler} dependencies must pin integrity`);
 }
 
 console.log(`framework product support ok supported=${support.frameworks.length} candidates=${support.bundlerCandidates.length}`);

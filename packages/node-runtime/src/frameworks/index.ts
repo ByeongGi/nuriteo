@@ -20,3 +20,17 @@ export type {
   NextProductSourceEditResult,
   NextProductWorkflowOptions
 } from "./next-workflow.ts";
+
+export { BundlerCandidateBlockedError, BundlerCandidateWorkflow } from "./bundler-candidate-workflow.ts";
+export type {
+  BundlerCandidateBlocker,
+  BundlerCandidateBlockerCode,
+  BundlerCandidateDependency,
+  BundlerCandidateFixture,
+  BundlerCandidateId,
+  BundlerCandidateInstallResult,
+  BundlerCandidateReadiness,
+  BundlerCandidateRecoveryResult,
+  BundlerCandidateStage,
+  BundlerCandidateWorkflowOptions
+} from "./bundler-candidate-workflow.ts";

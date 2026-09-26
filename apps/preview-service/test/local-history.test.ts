@@ -3,6 +3,7 @@ import { spawn } from "node:child_process";
 import assert from "node:assert/strict";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { getAvailableLoopbackPort } from "./available-port.ts";
 import {
   emptyLocalHistory,
   listLocalHistoryRevisions,
@@ -15,7 +16,7 @@ verifyHistoryBoundsAndFallback();
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const appRoot = path.join(root, "apps/preview-service");
 const chromePath = process.env.CHROME_PATH || "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
-const port = 5191;
+const port = await getAvailableLoopbackPort();
 const baseUrl = `http://127.0.0.1:${port}`;
 const viteBin = path.join(appRoot, "node_modules/.bin/vite");
 const server = spawn(viteBin, ["--host", "127.0.0.1", "--port", String(port), "--strictPort"], {

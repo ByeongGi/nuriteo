@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-09-18",
+  "updatedAt": "2026-09-27",
   "scope": {
     "goal": "Record actual worker-backed framework validation results for SG25.",
     "productRuntime": "browser-guest-node-runtime"
@@ -68,6 +68,28 @@
         "docs/productization/nextjs-product-support-target.md"
       ],
       "notes": "Pinned Next 15.1.0 real CLI dev/build/start and App Router server capabilities pass with version-matched WASM SWC; browser-worker promotion and a patched release baseline remain pending."
+    },
+    {
+      "framework": "webpack-dev-workflow",
+      "grade": "candidate",
+      "validation": "actual-product-boundary",
+      "status": "hold",
+      "evidence": [
+        "compat/bundler-dev-workflow-results.json",
+        "tests/compatibility/frameworks/bundlers/bundler-candidate-workflow.test.ts"
+      ],
+      "notes": "Exact revision and registry SRI inputs pass validation; the product boundary returns ERR_BUNDLER_STRICT_CSP_FACTORY_MISSING before port binding. Downstream dev/preview/edit/build stages are not claimed."
+    },
+    {
+      "framework": "rspack-dev-workflow",
+      "grade": "candidate",
+      "validation": "actual-product-boundary",
+      "status": "hold",
+      "evidence": [
+        "compat/bundler-dev-workflow-results.json",
+        "tests/compatibility/frameworks/bundlers/bundler-candidate-workflow.test.ts"
+      ],
+      "notes": "Exact revision and registry SRI inputs pass validation; strict-CSP CLI bootstrap and the pinned WASI worker path remain blocked before port binding. Downstream dev/preview/edit/build stages are not claimed."
     }
   ],
   "gate": {

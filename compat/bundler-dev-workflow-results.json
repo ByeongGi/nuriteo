@@ -1,0 +1,142 @@
+{
+  "schemaVersion": 1,
+  "measuredAt": "2026-09-27",
+  "runtime": "browser-guest-node-runtime",
+  "securityBoundary": "strict-csp-no-unsafe-eval",
+  "supportDecision": "hold",
+  "factoryInvestigation": {
+    "existingPath": "The Yarn factory is a single integrity-pinned self-contained bundle transformed into one static ESM function.",
+    "webpackGap": "Webpack CLI is a multi-package CommonJS graph. ModuleRuntime only accepts source readers and has no canonical-path to static-factory registry, so strict CSP fails on the first non-precompiled module.",
+    "rspackGap": "Rspack has the same multi-module factory gap. Its WASM fallback additionally needs browser-worker asset resolution plus WASI threads imports and async initialization that WasmAdapterRegistry does not expose.",
+    "requiredRuntimeApis": [
+      "ModuleRuntime static CJS factory registry keyed by canonical module path and integrity",
+      "CLI evaluator propagation of that registry across isolated and worker-backed execution",
+      "WasmAdapterRegistry async WASI threads import provider and same-origin worker asset resolver"
+    ]
+  },
+  "results": [
+    {
+      "bundler": "webpack",
+      "grade": "candidate",
+      "productSupport": false,
+      "fixture": {
+        "repository": "https://github.com/webpack/webpack",
+        "revision": "92561183fc7cf44dce57f9d05b4819ba7693c961",
+        "tag": "v5.111.0",
+        "subdirectory": "examples/hot-module-replacement"
+      },
+      "dependencies": [
+        {
+          "name": "webpack",
+          "version": "5.111.0",
+          "role": "bundler",
+          "integrity": "sha512-A2R74kfE6b3eLKS91iZiol03Ebx7avmJJBOyiP+4LePW9NNeNJGQkKeSQos4dk6R4H0YAMYlv+aOrs1CyWT3eA=="
+        },
+        {
+          "name": "webpack-cli",
+          "version": "7.2.3",
+          "role": "cli",
+          "integrity": "sha512-vDFU7jrfCctnN7jJQWPl+V26B51GLp11prVZXg50oeonsgeBzSTJEWmXkjHsOjTgMjlPOQM8GWLh33X9RN/0ow=="
+        },
+        {
+          "name": "webpack-dev-server",
+          "version": "5.2.2",
+          "role": "dev-server",
+          "integrity": "sha512-QcQ72gh8a+7JO63TAx/6XZf/CWhgMzu5m0QirvPfGvptOusAxG12w2+aua1Jkjr7hzaWDnJ2n6JFeexMHI+Zjg=="
+        }
+      ],
+      "measurements": {
+        "install": "pass-exact-version-and-sri",
+        "cliBootstrap": "blocked",
+        "devServer": "blocked-before-port-bind",
+        "serverReady": "not-reached",
+        "preview": "not-reached",
+        "sourceEdit": "not-reached",
+        "update": "not-reached",
+        "productionBuild": "not-reached",
+        "teardown": "pass-no-listener-leak",
+        "restartRecovery": "pass-repeatable-typed-failure"
+      },
+      "blockers": [
+        {
+          "code": "ERR_BUNDLER_STRICT_CSP_FACTORY_MISSING",
+          "stage": "cli-bootstrap",
+          "message": "No integrity-checked precompiled webpack CLI factory exists for the strict-CSP browser guest; unsafe-eval is not enabled."
+        }
+      ]
+    },
+    {
+      "bundler": "rspack",
+      "grade": "candidate",
+      "productSupport": false,
+      "fixture": {
+        "repository": "https://github.com/web-infra-dev/rspack",
+        "revision": "ccc3c0e56a82343c1da7e151a9b3c40d67e1c872",
+        "tag": "v2.2.4",
+        "subdirectory": "examples/basic"
+      },
+      "dependencies": [
+        {
+          "name": "@rspack/core",
+          "version": "2.2.4",
+          "role": "bundler",
+          "integrity": "sha512-p8/w2i3viGQDVaqbHZtKpBwQNG7rY+Bf8iwu3i+d4KHwC1+VMLc4fBD30qU+cAHuUtsdx15sicvTVz3CniYOlg=="
+        },
+        {
+          "name": "@rspack/cli",
+          "version": "2.2.4",
+          "role": "cli",
+          "integrity": "sha512-14ItRehZ983xA9g7MD+enl8/KYWZuuz9LJchTHxHvQ8MOVouKk7h0J06LrzH2b99dAAKH/wO3ojkCpOB9XSdFQ=="
+        },
+        {
+          "name": "@rspack/dev-server",
+          "version": "1.2.1",
+          "role": "dev-server",
+          "integrity": "sha512-e/ARvskYn2Qdd02qLvc0i6H9BnOmzP0xGHS2XCr7GZ3t2k5uC5ZlLkeN1iEebU0FkAW+6ot89NahFo3nupKuww=="
+        },
+        {
+          "name": "@rspack/binding",
+          "version": "2.2.4",
+          "role": "binding",
+          "integrity": "sha512-KoH5Wofyt1+egnqWF3pr8ItiYQiLgrHYLHOAn4YpzIMsGc8zDur3dCIhrhJ1uhbD3O7zkKqav4he3bo1kAmX9Q=="
+        },
+        {
+          "name": "@rspack/binding-wasm32-wasi",
+          "version": "2.2.4",
+          "role": "wasm-binding",
+          "integrity": "sha512-Ak0PYNbyQd/0d7xsuCCBvc/V9+S8+NoHHv5dzlHepa6udSF7zKDxv9MxRMdhIIBrgn+8GMHQb3ohwW1XjzmONg=="
+        }
+      ],
+      "measurements": {
+        "install": "pass-exact-version-and-sri",
+        "cliBootstrap": "blocked",
+        "devServer": "blocked-before-port-bind",
+        "serverReady": "not-reached",
+        "preview": "not-reached",
+        "sourceEdit": "not-reached",
+        "update": "not-reached",
+        "productionBuild": "not-reached",
+        "teardown": "pass-no-listener-leak",
+        "restartRecovery": "pass-repeatable-typed-failure"
+      },
+      "blockers": [
+        {
+          "code": "ERR_BUNDLER_STRICT_CSP_FACTORY_MISSING",
+          "stage": "cli-bootstrap",
+          "message": "No integrity-checked precompiled Rspack CLI factory exists for the strict-CSP browser guest; unsafe-eval is not enabled."
+        },
+        {
+          "code": "ERR_BUNDLER_WASM_RUNTIME_UNVALIDATED",
+          "stage": "cli-bootstrap",
+          "message": "The pinned 30,060,130-byte WASI binding and its threads/runtime path have not passed the strict-CSP browser-worker gate."
+        }
+      ]
+    }
+  ],
+  "reproduction": [
+    "pnpm view webpack@5.111.0 dist.integrity",
+    "pnpm view @rspack/binding@2.2.4 --json",
+    "node tests/compatibility/frameworks/bundlers/bundler-candidate-workflow.test.ts",
+    "node tooling/checks/check-framework-product-support.ts"
+  ]
+}
