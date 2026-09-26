@@ -10,9 +10,12 @@ await controller.runShellCommand("cd projects/one", "terminal-one");
 await controller.runShellCommand("export COLOR=blue", "terminal-one");
 const first = await controller.runShellCommand("pwd", "terminal-one");
 const second = await controller.runShellCommand("pwd", "terminal-two");
+const empty = await controller.runShellCommand("   ", "terminal-two");
 assert.equal(first.entry.cwd, "/workspace/app/projects/one");
 assert.equal(first.stdout, "/workspace/app/projects/one\n");
 assert.equal(second.entry.cwd, "/workspace/app");
+assert.equal(empty.entry.cwd, "/workspace/app");
+assert.equal(empty.exitCode, 0);
 assert.equal(controller.closeShell("terminal-one"), true);
 const restarted = await controller.runShellCommand("pwd", "terminal-one");
 assert.equal(restarted.stdout, "/workspace/app\n");
@@ -22,6 +25,8 @@ await controller.runShellCommand("echo streamed", "terminal-one", (chunk) => chu
 assert.deepEqual(chunks, [{ stream: "stdout", data: "streamed\n" }]);
 assert.equal(controller.closeShell("terminal-one"), true);
 assert.equal(controller.closeShell("terminal-one"), false);
+assert.deepEqual(controller.listShellProcesses(), []);
+assert.equal(controller.closeShell("terminal-two"), true);
 
 const calls = [];
 const shell = createPreviewShellSession({

@@ -21,21 +21,13 @@ import {
   type TemplateId
 } from "../../browser-host/src/onboarding/index.ts";
 import {
-  NextProductWorkflow,
-  type NextProductBuildResult,
-  type NextProductInstallResult
+  NextProductWorkflow
 } from "../../node-runtime/src/frameworks/next-workflow.ts";
 import {
   ViteProductWorkflow,
-  type ViteProductBuildResult,
-  type ViteProductInstallResult,
-  type ViteProductPackageManager,
-  type ViteProductTemplate
+  type ViteProductPackageManager
 } from "../../node-runtime/src/frameworks/vite-workflow.ts";
 
-type ProductWorkflow = ViteProductWorkflow | NextProductWorkflow;
-type ProductInstallResult = ViteProductInstallResult | NextProductInstallResult;
-type ProductBuildResult = ViteProductBuildResult | NextProductBuildResult;
 import {
   createHmrClient,
   createPreviewRelay,
@@ -61,158 +53,42 @@ import {
   createPreviewReliabilitySession,
   type PreviewReliabilitySession
 } from "./reliability.ts";
-import { createPreviewShellSession, type PreviewShellSession } from "./shell.ts";
 import {
   injectPreviewErrorBridge,
   shouldInjectPreviewErrorBridge
 } from "./preview-inject.ts";
 import type { RuntimeRecoveryActionKind } from "../../browser-host/src/observability/recovery-actions.ts";
-import {
-  createHostProcessShellCommand,
-  type HostProcessStatus,
-  type HostProcessTable
-} from "../../browser-host/src/process/index.ts";
-import type { TerminalRunResult } from "../../node-runtime/src/shell/index.ts";
-
-export type FileSystemTree = {
-  [name: string]: { file: { contents: string } } | { directory: FileSystemTree };
-};
-
-export interface PreviewChangeStatus {
-  dirty: string[];
-  untrackedHint: string;
-  hasGitMarker: boolean;
-}
-
-export const PHASES = Object.freeze({
-  idle: "idle",
-  templateLoaded: "template_loaded",
-  installing: "installing",
-  installed: "installed",
-  startingDev: "starting_dev",
-  previewReady: "preview_ready",
-  hmrConnected: "hmr_connected",
-  building: "building",
-  built: "built",
-  failed: "failed"
-} as const);
-
-export type PreviewWorkflowPhase = (typeof PHASES)[keyof typeof PHASES];
-
-export type PreviewWorkflowEventType =
-  | "log"
-  | "phase"
-  | "error"
-  | "editor-change"
-  | "hmr-update"
-  | "diagnostic"
-  | "import-failed"
-  | "template-loaded"
-  | "override"
-  | "hmr"
-  | "preview-ready"
-  | "build";
-
-export interface PreviewWorkflowLastError {
-  source: string;
-  message: string;
-  stack?: string;
-}
-
-export interface PreviewWorkflowUiDiagnostic {
-  code?: string;
-  message: string;
-  level?: string;
-  file?: string;
-  stack?: string;
-  recoveryActions?: Array<{
-    kind: PreviewRecoveryAction["kind"] | RuntimeRecoveryActionKind | (string & {});
-    label: string;
-  }>;
-}
-
-export interface PreviewWorkflowSnapshot {
-  phase: PreviewWorkflowPhase;
-  projectId: string | null;
-  manager: ViteProductPackageManager | SupportedPackageManager | null;
-  template: ViteProductTemplate | "next-app" | null;
-  source: MaterializedProject["source"] | null;
-  health: ProjectHealthReport | null;
-  packageManagerOverride: SupportedPackageManager | null;
-  previewUrl: string | null;
-  hmrState: HmrClientState | "idle";
-  install: ProductInstallResult | null;
-  build: ProductBuildResult | null;
-  lastError: PreviewWorkflowLastError | null;
-  diagnostics: PreviewWorkflowUiDiagnostic[];
-  logs: string[];
-  editor: ProjectWorkspaceEditorBridge | null;
-  project: ProjectWorkspaceStore | null;
-  workflow: ProductWorkflow | null;
-  session: PreviewSession | null;
-}
-
-export interface PreviewWorkflowEvent {
-  type: PreviewWorkflowEventType;
-  detail: Record<string, unknown>;
-  snapshot: PreviewWorkflowSnapshot;
-}
-
-export type PreviewWorkflowListener = (event: PreviewWorkflowEvent) => void;
-
-export interface PreviewWorkflowController {
-  on(listener: PreviewWorkflowListener): () => boolean;
-  getSnapshot(): PreviewWorkflowSnapshot;
-  loadViteReactTemplate(options?: { label?: string }): PreviewWorkflowSnapshot;
-  loadTemplate(templateId?: TemplateId, options?: { label?: string }): PreviewWorkflowSnapshot;
-  importZipFile(file: Blob): Promise<PreviewWorkflowSnapshot>;
-  importGitHub(url: string): Promise<PreviewWorkflowSnapshot>;
-  importSnapshot(snapshot: Blob | Uint8Array | ArrayBuffer | string): Promise<PreviewWorkflowSnapshot>;
-  importProjectFiles(files: Array<{ path: string; content: string }>, name?: string): PreviewWorkflowSnapshot;
-  bootSnapshot(snapshot: Blob | Uint8Array | ArrayBuffer | string): Promise<PreviewWorkflowSnapshot>;
-  exportZip(): Uint8Array;
-  exportSnapshot(): Uint8Array;
-  exportTreeJson(path?: string): FileSystemTree;
-  exportPathZip(relativePath: string): Uint8Array;
-  setPackageManagerOverride(value: SupportedPackageManager | null | ""): void;
-  setPreviewErrorBridge(enabled: boolean): void;
-  getChangeStatus(): PreviewChangeStatus;
-  runPreview(): Promise<PreviewWorkflowSnapshot>;
-  restartDev(): Promise<PreviewWorkflowSnapshot>;
-  reconnectHmr(): Promise<HmrClientSnapshot>;
-  runBuild(): Promise<PreviewWorkflowSnapshot>;
-  stopPreviewPort(port?: number): boolean;
-  ensureServiceWorker(): Promise<ServiceWorkerRegistration>;
-  clearPackageCache(): { freedBytes: number; evicted: number };
-  resolveWriterConflict(): void;
-  runRecoveryAction(kind: RuntimeRecoveryActionKind | string): Promise<unknown>;
-  simulateQuotaPressure(bytes?: number): void;
-  runShellCommand(command: string, terminalId?: string, onOutput?: (chunk: { stream: "stdout" | "stderr"; data: string }) => void): Promise<TerminalRunResult>;
-  writeShellInput(data: string, terminalId?: string): boolean;
-  resizeShell(cols: number, rows: number, terminalId?: string): void;
-  signalShell(signal?: "SIGINT" | "SIGTERM" | "SIGKILL", terminalId?: string): boolean;
-  closeShell(terminalId: string): boolean;
-  listShellProcesses(): Array<{
-    pid: number;
-    generation?: number;
-    terminalId: string;
-    command: string;
-    argv?: string[];
-    cwd: string;
-    status: "running" | HostProcessStatus;
-    terminalSize?: { cols: number; rows: number };
-  }>;
-  cancelShellCommand(terminalId?: string): boolean;
-  dispose(): void;
-  log(line: unknown): void;
-}
-
-export interface PreviewWorkflowControllerOptions {
-  ttlMs?: number;
-  relayTimeoutMs?: number;
-  previewPort?: number;
-  terminalProcessTable?: HostProcessTable;
-}
+import { PHASES } from "./controller-contracts.ts";
+import type {
+  FileSystemTree,
+  PreviewChangeStatus,
+  PreviewWorkflowController,
+  PreviewWorkflowControllerOptions,
+  PreviewWorkflowEventType,
+  PreviewWorkflowLastError,
+  PreviewWorkflowListener,
+  PreviewWorkflowPhase,
+  PreviewWorkflowSnapshot,
+  PreviewWorkflowUiDiagnostic,
+  ProductBuildResult,
+  ProductInstallResult,
+  ProductWorkflow
+} from "./controller-contracts.ts";
+import { createPreviewShellLifecycle } from "./shell-lifecycle.ts";
+export { PHASES } from "./controller-contracts.ts";
+export type {
+  FileSystemTree,
+  PreviewChangeStatus,
+  PreviewWorkflowController,
+  PreviewWorkflowControllerOptions,
+  PreviewWorkflowEvent,
+  PreviewWorkflowEventType,
+  PreviewWorkflowLastError,
+  PreviewWorkflowListener,
+  PreviewWorkflowPhase,
+  PreviewWorkflowSnapshot,
+  PreviewWorkflowUiDiagnostic
+} from "./controller-contracts.ts";
 
 interface PreviewWorkflowState {
   phase: PreviewWorkflowPhase;
@@ -1123,19 +999,18 @@ export function createPreviewWorkflowController(
     throw new Error(`Unsupported recovery action: ${kind}`);
   }
 
-  const shellOutputListeners = new Map<string, (chunk: { stream: "stdout" | "stderr"; data: string }) => void>();
-  const terminalProcessTable = options.terminalProcessTable || null;
-  const createShell = (terminalId: string): PreviewShellSession => createPreviewShellSession({
+  const shellLifecycle = createPreviewShellLifecycle({
     getCwd: () => state.workflow?.projectRoot || state.project?.root || "/workspace/app",
     getProject: () => state.project,
-    onChunk(chunk) {
-      log(`[${chunk.stream}] ${chunk.data.replace(/\n$/, "")}`);
-      shellOutputListeners.get(terminalId)?.(chunk);
+    terminalProcessTable: options.terminalProcessTable || null,
+    log,
+    onProcessFinish(command, exitCode) {
+      emit("log", { line: "shell", command, exitCode });
     },
-    ...(terminalProcessTable ? {
-      processCommands: createTerminalProcessCommands(terminalProcessTable, terminalId)
-    } : {}),
-    async install() {
+    onProcessStart(terminalId, command) {
+      emit("log", { line: "shell-process-start", terminalId, command });
+    },
+    install: async () => {
       if (!state.workflow) loadTemplate("vite-react");
       if (!state.workflow) return { stdout: "", stderr: "no workflow\n", exitCode: 1 };
       try {
@@ -1154,23 +1029,15 @@ export function createPreviewWorkflowController(
         };
       }
     },
-    async runDev() {
+    runDev: async () => {
       try {
         await runPreview();
-        return {
-          stdout: `dev server ready ${state.previewUrl || ""}\n`,
-          stderr: "",
-          exitCode: 0
-        };
+        return { stdout: `dev server ready ${state.previewUrl || ""}\n`, stderr: "", exitCode: 0 };
       } catch (error) {
-        return {
-          stdout: "",
-          stderr: `${error instanceof Error ? error.message : String(error)}\n`,
-          exitCode: 1
-        };
+        return { stdout: "", stderr: `${error instanceof Error ? error.message : String(error)}\n`, exitCode: 1 };
       }
     },
-    async runBuild() {
+    runBuild: async () => {
       try {
         await runBuild();
         return {
@@ -1179,151 +1046,31 @@ export function createPreviewWorkflowController(
           exitCode: 0
         };
       } catch (error) {
-        return {
-          stdout: "",
-          stderr: `${error instanceof Error ? error.message : String(error)}\n`,
-          exitCode: 1
-        };
+        return { stdout: "", stderr: `${error instanceof Error ? error.message : String(error)}\n`, exitCode: 1 };
       }
     },
-    async restartDev() {
+    restartDev: async () => {
       try {
         await restartDev();
-        return {
-          stdout: `dev restarted ${state.previewUrl || ""}\n`,
-          stderr: "",
-          exitCode: 0
-        };
+        return { stdout: `dev restarted ${state.previewUrl || ""}\n`, stderr: "", exitCode: 0 };
       } catch (error) {
-        return {
-          stdout: "",
-          stderr: `${error instanceof Error ? error.message : String(error)}\n`,
-          exitCode: 1
-        };
+        return { stdout: "", stderr: `${error instanceof Error ? error.message : String(error)}\n`, exitCode: 1 };
       }
     }
   });
-
-  const shells = new Map<string, PreviewShellSession>();
-  function shellFor(terminalId = "default"): PreviewShellSession {
-    const existing = shells.get(terminalId);
-    if (existing) return existing;
-    const shell = createShell(terminalId);
-    shells.set(terminalId, shell);
-    return shell;
-  }
-
-  async function runShellCommand(
-    command: string,
-    terminalId = "default",
-    onOutput?: (chunk: { stream: "stdout" | "stderr"; data: string }) => void
-  ): Promise<TerminalRunResult> {
-    const trimmed = command.trim();
-    if (!trimmed) {
-      return {
-        stdout: "",
-        stderr: "",
-        exitCode: 0,
-        files: {},
-        entry: {
-          id: 0,
-          command: "",
-          cwd: state.workflow?.projectRoot || state.project?.root || "/workspace/app",
-          exitCode: 0,
-          finishedAt: Date.now(),
-          startedAt: Date.now(),
-          status: "completed",
-          stderr: "",
-          stdout: "",
-          outputTruncatedBytes: 0
-        }
-      };
-    }
-    log(`$ ${trimmed}`);
-    try {
-      if (onOutput) shellOutputListeners.set(terminalId, onOutput);
-      const pending = shellFor(terminalId).run(trimmed);
-      emit("log", { line: "shell-process-start", terminalId, command: trimmed });
-      const result = await pending;
-      emit("log", { line: "shell", command: trimmed, exitCode: result.exitCode });
-      return result;
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      log(`shell error: ${message}`);
-      throw error;
-    } finally {
-      if (onOutput) shellOutputListeners.delete(terminalId);
-    }
-  }
-
-  function writeShellInput(data: string, terminalId = "default"): boolean {
-    return shellFor(terminalId).session.write(data);
-  }
-
-  function resizeShell(cols: number, rows: number, terminalId = "default"): void {
-    shellFor(terminalId).session.resize(cols, rows);
-  }
-
-  function signalShell(signal: "SIGINT" | "SIGTERM" | "SIGKILL" = "SIGTERM", terminalId = "default"): boolean {
-    return shellFor(terminalId).session.signal(signal);
-  }
-
-  function closeShell(terminalId: string): boolean {
-    const shell = shells.get(terminalId);
-    if (!shell) return false;
-    shell.session.kill();
-    shellOutputListeners.delete(terminalId);
-    return shells.delete(terminalId);
-  }
-
-  function listShellProcesses(): Array<{
-    pid: number;
-    generation?: number;
-    terminalId: string;
-    command: string;
-    argv?: string[];
-    cwd: string;
-    status: "running" | HostProcessStatus;
-    terminalSize?: { cols: number; rows: number };
-  }> {
-    const processes: ReturnType<PreviewWorkflowController["listShellProcesses"]> = [];
-    const workerTerminals = new Set<string>();
-    for (const process of terminalProcessTable?.list({ activeOnly: true }) || []) {
-      const terminalId = process.projectId || "default";
-      workerTerminals.add(terminalId);
-      processes.push({
-        pid: process.pid,
-        generation: process.generation,
-        terminalId,
-        command: process.argv.join(" "),
-        argv: [...process.argv],
-        cwd: process.cwd,
-        status: process.status,
-        terminalSize: { ...process.terminalSize }
-      });
-    }
-    for (const [terminalId, shell] of shells) {
-      const current = shell.session.snapshot();
-      if (current.activeEntry && !workerTerminals.has(terminalId)) {
-        processes.push({
-          pid: current.activeEntry.id,
-          terminalId,
-          command: current.activeEntry.command,
-          cwd: current.cwd,
-          status: "running"
-        });
-      }
-    }
-    return processes;
-  }
-
-  function cancelShellCommand(terminalId = "default"): boolean {
-    return shellFor(terminalId).cancel();
-  }
+  const {
+    cancelShellCommand,
+    closeShell,
+    dispose: disposeShellLifecycle,
+    listShellProcesses,
+    resizeShell,
+    runShellCommand,
+    signalShell,
+    writeShellInput
+  } = shellLifecycle;
 
   function dispose(): void {
-    for (const terminalId of [...shells.keys()]) closeShell(terminalId);
-    terminalProcessTable?.teardown();
+    disposeShellLifecycle();
     stopSessionHeartbeat();
     try { state.hmr?.close(); } catch { /* best-effort application teardown */ }
     state.hmr = null;
@@ -1391,21 +1138,6 @@ export function createPreviewWorkflowController(
     cancelShellCommand,
     dispose,
     log
-  };
-}
-
-function createTerminalProcessCommands(table: HostProcessTable, terminalId: string) {
-  const command = createHostProcessShellCommand({
-    table,
-    projectId: terminalId,
-    releaseOnExit: true,
-    url: "worker://cargo-container/process-worker"
-  });
-  return {
-    "worker-cat": (context: Parameters<typeof command>[0]) => command({ ...context, argv: ["cat", ...context.argv.slice(1)] }),
-    "worker-env": (context: Parameters<typeof command>[0]) => command({ ...context, argv: ["env", ...context.argv.slice(1)] }),
-    "worker-pwd": (context: Parameters<typeof command>[0]) => command({ ...context, argv: ["pwd", ...context.argv.slice(1)] }),
-    "worker-tty": (context: Parameters<typeof command>[0]) => command({ ...context, argv: ["terminal-size", ...context.argv.slice(1)] })
   };
 }
 
