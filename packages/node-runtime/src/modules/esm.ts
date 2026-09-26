@@ -215,6 +215,13 @@ function prepareEsmRuntimeGlobals(source: string, importHook: "dynamicImport" | 
   if (!declaresLexicalBinding(source, "global")) injections.push("const global = __global;");
   if (!declaresLexicalBinding(source, "globalThis")) injections.push("const globalThis = __globalThis;");
   if (!declaresLexicalBinding(source, "console")) injections.push("const console = __console;");
+  if (!declaresLexicalBinding(source, "Buffer")) injections.push("const Buffer = __global?.Buffer ?? __globalThis?.Buffer;");
+  if (!declaresLexicalBinding(source, "setTimeout")) injections.push("const setTimeout = __global?.setTimeout ?? __globalThis?.setTimeout;");
+  if (!declaresLexicalBinding(source, "clearTimeout")) injections.push("const clearTimeout = __global?.clearTimeout ?? __globalThis?.clearTimeout;");
+  if (!declaresLexicalBinding(source, "setInterval")) injections.push("const setInterval = __global?.setInterval ?? __globalThis?.setInterval;");
+  if (!declaresLexicalBinding(source, "clearInterval")) injections.push("const clearInterval = __global?.clearInterval ?? __globalThis?.clearInterval;");
+  if (!declaresLexicalBinding(source, "setImmediate")) injections.push("const setImmediate = __global?.setImmediate ?? __globalThis?.setImmediate;");
+  if (!declaresLexicalBinding(source, "clearImmediate")) injections.push("const clearImmediate = __global?.clearImmediate ?? __globalThis?.clearImmediate;");
   return `${injections.join("\n")}\n${source}`;
 }
 
@@ -377,6 +384,10 @@ async function executeEvalFreeStatements(
     setEvalFreeGlobalValue(globals, assignment.name, evaluateEvalFreeExpression(assignment.expression, scope, globals, context));
   }
 
+  for (const declaration of collectEvalFreeDeclarations(remaining)) {
+    scope.set(declaration.name, evaluateEvalFreeExpression(declaration.expression, scope, globals, context));
+  }
+
   for (const call of collectGlobalHookCalls(remaining)) {
     const handler = getEvalFreeGlobalValue(globals, call.name);
     if (typeof handler === "function") {
@@ -390,8 +401,24 @@ async function executeEvalFreeStatements(
     await (callable as (...args: RuntimeValue[]) => RuntimeValue | Promise<RuntimeValue>)(...call.args.map((arg) => evaluateEvalFreeExpression(arg, scope, globals, context)));
   }
 
+
+  for (const clause of remaining.matchAll(/^[ \t]*export\s+\{([^}\n]+)\};?[ \t]*$/gm)) {
+    for (const binding of (clause[1] || "").split(",")) {
+      const [local, exported] = binding.trim().split(/\s+as\s+/);
+      if (local) context.exportConst(exported || local, scope.get(local));
+    }
+  }
+  const defaultExport = remaining.match(/^[ \t]*export\s+default\s+([^;\n]+);?[ \t]*$/m);
+  if (defaultExport?.[1]) context.exportConst("default", evaluateEvalFreeExpression(defaultExport[1], scope, globals, context));
+
   const returnExpression = remaining.match(/\breturn\s+([^;\n]+);?/);
   return returnExpression?.[1] ? evaluateEvalFreeExpression(returnExpression[1], scope, globals, context) : undefined;
+}
+
+function collectEvalFreeDeclarations(source: string): { expression: string; name: string }[] {
+  return [...source.matchAll(/^[ \t]*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*([\s\S]*?);[ \t]*$/gm)]
+    .map((match) => ({ name: match[1] || "", expression: match[2] || "" }))
+    .filter((declaration) => declaration.name.length > 0);
 }
 
 function extractProcessArgvConditional(source: string): { argument: string; end: number; start: number; whenFalse: string; whenTrue: string } | null {
@@ -504,6 +531,9 @@ function evaluateEvalFreeExpression(source: string, scope: Map<string, RuntimeVa
   if (expression === "true") return true;
   if (expression === "false") return false;
   if (expression === "undefined") return undefined;
+  if (expression.startsWith("[") && expression.endsWith("]")) {
+    return splitTopLevelComma(expression.slice(1, -1)).map((item) => evaluateEvalFreeExpression(item, scope, globals, context));
+  }
   if (expression.startsWith("{") && expression.endsWith("}")) return evaluateEvalFreeObjectLiteral(expression, scope, globals);
   const dynamicImportMatch = expression.match(/^import\(\s*(["'])([^"']+)\1\s*\)(?:\.then\([^)]*\))?$/);
   if (dynamicImportMatch?.[2] && context) return context.dynamicImport(dynamicImportMatch[2]);
@@ -695,7 +725,8 @@ function prepareEsmSource(source: string, importMetaRewriteMode: ImportMetaRewri
     })
     .replace(/^[ \t]*export\s+\{([^}]+)\};?[ \t]*$/gm, (_match, clause: string) => {
       return rewriteNamedExport(clause);
-    });
+    })
+    .replace(/^[ \t]*export\s+\{\s*\};?[ \t]*$/gm, "");
   const postExports = [
     ...declarationExports.map((name) => `__exportConst("${name}", ${name});`),
     ...(defaultDeclarationExport ? [`__exportConst("default", ${defaultDeclarationExport});`] : [])
@@ -706,6 +737,19 @@ function prepareEsmSource(source: string, importMetaRewriteMode: ImportMetaRewri
   return rewriteImportMetaReferences(literalProtection.restore(output), importMetaRewriteMode);
 }
 
+/**
+ * Build-time companion for the CSP-safe module registry. The returned source
+ * is JavaScript that can be embedded in a same-origin static factory; runtime
+ * code must never pass it to eval or Function.
+ */
+export function prepareEsmSourceForStaticFactory(source: string, filename: string): string {
+  return prepareEsmSource(source, importMetaRewriteModeFor(filename));
+}
+
+export function prepareEsmStaticFactoryBody(source: string, filename: string): string {
+  return prepareEsmRuntimeGlobals(prepareEsmSource(source, importMetaRewriteModeFor(filename)));
+}
+
 function rewriteImportMetaReferences(source: string, mode: ImportMetaRewriteMode): string {
   const rewritten = source.replace(/\bimport\.meta\b/g, "__context.importMeta");
   if (mode === "vite-bundle") return restoreViteImportMetaAnalysisSentinels(rewritten);
@@ -713,15 +757,20 @@ function rewriteImportMetaReferences(source: string, mode: ImportMetaRewriteMode
 }
 
 function restoreViteImportMetaAnalysisSentinels(source: string): string {
-  return source
-    .replaceAll("__context.importMeta.hot", "import.meta.hot")
-    .replaceAll('rawUrl === "__context.importMeta"', '(rawUrl === "import.meta" || rawUrl === "__context.importMeta")')
-    .replaceAll('if (rawUrl === "__context.importMeta") continue;', 'if (rawUrl === "import.meta" || rawUrl === "__context.importMeta") continue;');
+  // Vite treats import.meta expressions as source text in define keys, filters,
+  // generated client modules, and diagnostics. Those string literals must keep
+  // their original spelling; only executable references belong to the runtime
+  // context used by the static factory.
+  return restoreImportMetaInStringLiterals(source);
 }
 
 function restoreImportMetaInStringLiterals(source: string): string {
   const output: string[] = [];
-  let state: "normal" | "single" | "double" | "regex" | "line-comment" | "block-comment" = "normal";
+  type LexicalContext = {
+    braceDepth?: number;
+    type: "normal" | "template-expression" | "single" | "double" | "template" | "regex" | "line-comment" | "block-comment";
+  };
+  const contexts: LexicalContext[] = [{ type: "normal" }];
   let escaped = false;
   let inRegexClass = false;
   let previousSignificant = "";
@@ -729,8 +778,10 @@ function restoreImportMetaInStringLiterals(source: string): string {
   for (let index = 0; index < source.length; index += 1) {
     const char = source[index] || "";
     const next = source[index + 1] || "";
+    const context = contexts[contexts.length - 1];
+    if (!context) break;
 
-    if (state === "single" || state === "double") {
+    if (context.type === "single" || context.type === "double" || context.type === "template") {
       if (source.startsWith("__context.importMeta", index)) {
         output.push("import.meta");
         index += "__context.importMeta".length - 1;
@@ -745,13 +796,22 @@ function restoreImportMetaInStringLiterals(source: string): string {
         escaped = true;
         continue;
       }
-      if ((state === "single" && char === "'") || (state === "double" && char === "\"")) state = "normal";
+      if (context.type === "template" && char === "$" && next === "{") {
+        output.push(next);
+        index += 1;
+        contexts.push({ type: "template-expression", braceDepth: 1 });
+        previousSignificant = "{";
+        continue;
+      }
+      if ((context.type === "single" && char === "'") || (context.type === "double" && char === "\"") || (context.type === "template" && char === "`")) {
+        contexts.pop();
+      }
       continue;
     }
 
     output.push(char);
 
-    if (state === "regex") {
+    if (context.type === "regex") {
       if (escaped) {
         escaped = false;
         continue;
@@ -762,49 +822,61 @@ function restoreImportMetaInStringLiterals(source: string): string {
       }
       if (char === "[") inRegexClass = true;
       if (char === "]") inRegexClass = false;
-      if (char === "/" && !inRegexClass) state = "normal";
+      if (char === "/" && !inRegexClass) contexts.pop();
       continue;
     }
-    if (state === "line-comment") {
-      if (char === "\n") state = "normal";
+    if (context.type === "line-comment") {
+      if (char === "\n") contexts.pop();
       continue;
     }
-    if (state === "block-comment") {
+    if (context.type === "block-comment") {
       if (char === "*" && next === "/") {
         output.push(next);
         index += 1;
-        state = "normal";
+        contexts.pop();
       }
       continue;
     }
     if (char === "/" && next === "/") {
       output.push(next);
       index += 1;
-      state = "line-comment";
+      contexts.push({ type: "line-comment" });
       continue;
     }
     if (char === "/" && next === "*") {
       output.push(next);
       index += 1;
-      state = "block-comment";
+      contexts.push({ type: "block-comment" });
       continue;
     }
     if (char === "/" && isRegexStart(previousSignificant)) {
-      state = "regex";
+      contexts.push({ type: "regex" });
       escaped = false;
       inRegexClass = false;
       previousSignificant = char;
       continue;
     }
     if (char === "'") {
-      state = "single";
+      contexts.push({ type: "single" });
       escaped = false;
       continue;
     }
     if (char === "\"") {
-      state = "double";
+      contexts.push({ type: "double" });
       escaped = false;
       continue;
+    }
+    if (char === "`") {
+      contexts.push({ type: "template" });
+      escaped = false;
+      continue;
+    }
+    if (context.type === "template-expression") {
+      if (char === "{") context.braceDepth = (context.braceDepth || 0) + 1;
+      if (char === "}") {
+        context.braceDepth = (context.braceDepth || 0) - 1;
+        if (context.braceDepth === 0) contexts.pop();
+      }
     }
     if (!/\s/.test(char)) previousSignificant = char;
   }

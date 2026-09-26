@@ -8,6 +8,11 @@ import { MemoryPackageManagerWorkspace } from "../packages/node-runtime/src/pack
 const YARN_BUNDLE_SHA256 = "443ed69e76443b89afddccfc9faec1ff16eb5e500979cc079c696dec4c3d94ee";
 const YARN_ENTRY_SHA256 = "148e19db309ec9eaf7720b28df811337906eea8a1758deaa54afee60a6305e04";
 const YARN_FACTORY_SHA256 = "e6f01b28a30aae3d6bd6cf78302d0b1ba1f5e6e8d2f6f918989b6cd7f2a428a0";
+const VITE_FACTORY_SHA256 = "95842700db2ab13a0eacfc174034b8b8007f0e82981aee176ed7620c651903a8";
+const ROLLDOWN_WASI_BINDING_SHA256 = "b1a16143d4991cc6f4ff6a3043d40a2b757d74746ebe408298b1a2d4b5cb0606";
+const ROLLDOWN_WASI_MODULE_SHA256 = "ce4821fa65dcc84f641980889d175fecbdf9fc108ed438c5ab363802a681fce1";
+const ROLLDOWN_WASI_WORKER_PATH = "assets/wasi-worker-browser-IL7bwx-u.js";
+const ROLLDOWN_WASI_WORKER_SHA256 = "cca841fe347316a6512d885211fc9604d819a06082a4c3eb710e0673cb5a1983";
 
 let systemPort = null;
 let syncChannel = null;
@@ -105,30 +110,80 @@ function runProgram(message) {
 async function evaluateCli(message) {
   let response;
   try {
-    const precompiledCjsFactories = message.request?.entry?.name === "yarn"
-      ? await loadPinnedYarnFactories(message)
-      : undefined;
+    const pinnedRuntime = message.request?.entry?.name === "yarn"
+      ? { precompiledCjsFactories: await loadPinnedYarnFactories(message) }
+      : isPinnedViteEntrypoint(message.request?.entry)
+        ? await loadPinnedViteFactories(message)
+        : {};
+    const { readRolldownWasiDirectory, ...pinnedFactories } = pinnedRuntime;
     const httpBridge = message.bridgeLoopbackServer ? createCliEvaluationHttpBridge() : null;
     response = await evaluateCliModuleWorkerMessage(message, {
-    ...(httpBridge ? { httpBridge } : {}),
-    ...(precompiledCjsFactories ? { precompiledCjsFactories } : {}),
-    nestedWorkerFactory: (request) => {
-      const worker = new Worker(new URL("./cli-nested-worker.ts", import.meta.url), { type: "module" });
-      worker.postMessage({ type: "cli:nested:init", request });
-      return {
-        postMessage: (value) => worker.postMessage(value),
-        terminate: () => worker.terminate(),
-        onMessage: (listener) => worker.addEventListener("message", (event) => listener(event.data)),
-        onError: (listener) => worker.addEventListener("error", (event) => listener(new Error(event.message))),
-        onExit: () => {}
-      };
-    }
+      ...(httpBridge ? { httpBridge } : {}),
+      ...pinnedFactories,
+      nestedWorkerFactory: (request) => {
+        const worker = new Worker(new URL("./cli-nested-worker.ts", import.meta.url), { type: "module" });
+        worker.postMessage({ type: "cli:nested:init", request });
+        return {
+          postMessage: (value) => worker.postMessage(value),
+          terminate: () => worker.terminate(),
+          onMessage: (listener) => worker.addEventListener("message", (event) => listener(event.data)),
+          onError: (listener) => worker.addEventListener("error", (event) => listener(new Error(event.message))),
+          onExit: () => {}
+        };
+      }
     });
+    if (readRolldownWasiDirectory && response.result?.workspaceSnapshot) {
+      const workspace = MemoryPackageManagerWorkspace.fromSnapshot(response.result.workspaceSnapshot);
+      for (const file of readRolldownWasiDirectory(message.request.cwd)) workspace.writeBytes(file.path, file.data);
+      response.result.workspaceSnapshot = workspace.snapshot();
+    }
     if (httpBridge && response.result?.bridgedServerPorts?.length) cliHttpBridges.set(message.id, httpBridge);
   } catch (error) {
     response = { id: message.id, error: error instanceof Error ? error.message : String(error), type: "cli:result" };
   }
   self.postMessage(response);
+}
+
+function isPinnedViteEntrypoint(entry) {
+  return entry?.name === "vite" && entry.entry?.endsWith("/node_modules/vite/bin/vite.js");
+}
+
+async function loadPinnedViteFactories(message) {
+  if (message.request.entry.version !== "8.2.0") throw new Error("ERR_VITE_CSP_UNSUPPORTED_VERSION");
+  const entry = message.request.entry.entry;
+  if (!entry.endsWith("/node_modules/vite/bin/vite.js")) throw new Error("ERR_VITE_CSP_UNEXPECTED_ENTRY");
+  const assetRoot = new URL("../vendor/vite-8.2.0/", self.location.href);
+  await verifyStaticAsset(new URL("vite-cli-static-factories.mjs", assetRoot), VITE_FACTORY_SHA256, "ERR_VITE_CSP_FACTORY_INTEGRITY");
+  await verifyStaticAsset(new URL("rolldown-wasi-binding.mjs", assetRoot), ROLLDOWN_WASI_BINDING_SHA256, "ERR_ROLLDOWN_WASI_BINDING_INTEGRITY");
+  await verifyStaticAsset(new URL("assets/rolldown-binding.wasm", assetRoot), ROLLDOWN_WASI_MODULE_SHA256, "ERR_ROLLDOWN_WASI_MODULE_INTEGRITY");
+  await verifyStaticAsset(new URL(ROLLDOWN_WASI_WORKER_PATH, assetRoot), ROLLDOWN_WASI_WORKER_SHA256, "ERR_ROLLDOWN_WASI_WORKER_INTEGRITY");
+  const factories = await import(/* @vite-ignore */ new URL("vite-cli-static-factories.mjs", assetRoot).href);
+  if (factories.fixtureRevision !== "1544bb1b7ac92f775e9d0dea97954c99cc6cbd43" || factories.viteVersion !== "8.2.0" || factories.rolldownVersion !== "1.2.8") {
+    throw new Error("ERR_VITE_CSP_FACTORY_MISMATCH");
+  }
+  const workspace = MemoryPackageManagerWorkspace.fromSnapshot(message.workspaceSnapshot);
+  for (const [path, expected] of Object.entries(factories.sourceSha256 || {})) {
+    if (await sha256(workspace.readBytes(path)) !== expected) throw new Error(`ERR_VITE_CSP_SOURCE_INTEGRITY: ${path}`);
+  }
+  if (typeof factories.cjsFactories !== "object" || typeof factories.esmFactories !== "object") {
+    throw new Error("ERR_VITE_CSP_FACTORY_EXPORTS");
+  }
+  if (typeof factories.mountWorkspaceIntoRolldownWasi !== "function" || typeof factories.readRolldownWasiDirectory !== "function") {
+    throw new Error("ERR_ROLLDOWN_WASI_FS_BRIDGE");
+  }
+  factories.mountWorkspaceIntoRolldownWasi(message.workspaceSnapshot);
+  return {
+    precompiledCjsFactories: factories.cjsFactories,
+    precompiledEsmFactories: factories.esmFactories,
+    readRolldownWasiDirectory: factories.readRolldownWasiDirectory
+  };
+}
+
+async function verifyStaticAsset(url, expectedSha256, code) {
+  const response = await fetch(url, { cache: "no-store" });
+  if (!response.ok || await sha256(new Uint8Array(await response.arrayBuffer())) !== expectedSha256) {
+    throw new Error(code);
+  }
 }
 
 async function loadPinnedYarnFactories(message) {
