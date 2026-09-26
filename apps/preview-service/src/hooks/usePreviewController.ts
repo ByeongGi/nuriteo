@@ -1,5 +1,21 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  basename,
+  buildPreviewUrl,
+  displayPath,
+  isDescendantPath,
+  joinPath,
+  parentDir,
+  pickFirstFile,
+  portFromSnapshot,
+  resolveProjectFile,
+  simpleGlobMatch
+} from "./previewControllerPaths.ts";
+import { usePreviewWorkflowSubscription } from "./usePreviewWorkflowSubscription.ts";
+import { usePreviewKeyboardShortcuts } from "./usePreviewKeyboardShortcuts.ts";
+
+const AUTOSAVE_MS = 800;
+import {
   createPreviewWorkflowController,
   PHASES,
   type PreviewWorkflowController,
@@ -24,58 +40,7 @@ import {
   type LocalHistoryRevisionKind
 } from "../lib/localHistory";
 import { useNotificationCenter } from "./useNotificationCenter";
-import { notificationForWorkflowEvent } from "../lib/notifications";
-import { CloudProjectsClient } from "../lib/cloudProjects";
 
-const AUTOSAVE_MS = 800;
-
-function displayPath(path: string): string {
-  return path.replace(/^\/workspace\/[^/]+\//, "");
-}
-
-function pickFirstFile(snapshot: PreviewWorkflowSnapshot): string | null {
-  const files = snapshot.project?.listFiles() || [];
-  const preferred =
-    files.find((file) => /main\.(jsx|tsx|js|ts)$/.test(file.path)) ||
-    files.find((file) => /page\.(jsx|tsx|js|ts)$/.test(file.path)) ||
-    files.find((file) => file.path.endsWith("package.json")) ||
-    files[0];
-  return preferred?.path ?? null;
-}
-
-function resolveProjectFile(snapshot: PreviewWorkflowSnapshot, relativeOrAbs: string): string | null {
-  const files = snapshot.project?.listFiles() || [];
-  if (files.length === 0) return null;
-  const needle = relativeOrAbs.replace(/^\.\//, "").replace(/^\/+/, "");
-  const exact = files.find(
-    (file) => file.path === relativeOrAbs || file.path.endsWith(`/${needle}`) || displayPath(file.path) === needle
-  );
-  return exact?.path ?? null;
-}
-
-function basename(path: string): string {
-  const parts = path.split("/").filter(Boolean);
-  return parts.at(-1) || path;
-}
-
-function isDescendantPath(parent: string, child: string): boolean {
-  const prefix = parent.endsWith("/") ? parent : `${parent}/`;
-  return child === parent || child.startsWith(prefix);
-}
-
-function parentDir(path: string): string {
-  const index = path.lastIndexOf("/");
-  return index <= 0 ? path : path.slice(0, index);
-}
-
-function joinPath(root: string, relative: string): string {
-  const cleaned = relative.replace(/^\/+/, "").replaceAll("\\", "/");
-  return `${root.replace(/\/+$/, "")}/${cleaned}`.replace(/\/+/g, "/");
-}
-
-function portFromSnapshot(snapshot: PreviewWorkflowSnapshot): number {
-  return snapshot.session?.port || 5173;
-}
 
 export function usePreviewController() {
   const controllerRef = useRef<PreviewWorkflowController | null>(null);
@@ -133,7 +98,6 @@ export function usePreviewController() {
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
   const deepLinkDoneRef = useRef(false);
-  const cloudRuntimeStartedAtRef = useRef<number | null>(null);
 
   const refreshSnapshot = useCallback(() => {
     setSnapshot(controller.getSnapshot());
@@ -1175,46 +1139,21 @@ export function usePreviewController() {
     applySettingsToDocument(settings);
   }, [settings]);
 
-  useEffect(() => {
-    const unsubscribe = controller.on((event) => {
-      const notification = notificationForWorkflowEvent(event);
-      if (notification) notificationCenter.pushNotification(notification);
-      const cloudToken = localStorage.getItem("cargo-container.cloud-session") || "";
-      if (cloudToken && event.type === "phase" && event.detail.phase === PHASES.installed) {
-        void new CloudProjectsClient({ token: () => cloudToken }).ingestUsage({
-          id: `install:${event.snapshot.projectId || "project"}:${crypto.randomUUID()}`,
-          kind: "install",
-          quantity: 1,
-          occurredAt: new Date().toISOString()
-        }).catch(() => undefined);
-      }
-      if (event.type === "preview-ready") {
-        cloudRuntimeStartedAtRef.current = Date.now();
-        setFrameNonce((value) => value + 1);
-        syncPortsFromSnapshot(event.snapshot);
-      } else if (event.type === "hmr-update") {
-        // Soft refresh keeps the session URL and avoids full SW rebind churn.
-        setSoftRefreshToken((value) => value + 1);
-      }
-      if (cloudToken && event.type === "phase" && event.detail.stopped === true && cloudRuntimeStartedAtRef.current !== null) {
-        const minutes = Math.max(0, (Date.now() - cloudRuntimeStartedAtRef.current) / 60_000);
-        cloudRuntimeStartedAtRef.current = null;
-        void new CloudProjectsClient({ token: () => cloudToken }).ingestUsage({
-          id: `runtime:${event.snapshot.projectId || "project"}:${crypto.randomUUID()}`,
-          kind: "runtime_minutes",
-          quantity: minutes,
-          occurredAt: new Date().toISOString()
-        }).catch(() => undefined);
-      }
-      if (event.snapshot.diagnostics.length > 0 || event.snapshot.phase === PHASES.failed) {
-        setDockTab("diagnostics");
-      }
-      setSnapshot(event.snapshot);
-    });
-    return () => {
-      unsubscribe();
-    };
-  }, [controller, notificationCenter.pushNotification, syncPortsFromSnapshot]);
+  usePreviewWorkflowSubscription({
+    controller,
+    pushNotification: notificationCenter.pushNotification,
+    onPreviewReady(next) {
+      setFrameNonce((value) => value + 1);
+      syncPortsFromSnapshot(next);
+    },
+    onHmrUpdate() {
+      setSoftRefreshToken((value) => value + 1);
+    },
+    onDiagnostics() {
+      setDockTab("diagnostics");
+    },
+    onSnapshot: setSnapshot
+  });
 
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
@@ -1238,72 +1177,20 @@ export function usePreviewController() {
     return () => window.removeEventListener("message", onMessage);
   }, [controller, notificationCenter.pushNotification, refreshSnapshot]);
 
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      const meta = event.metaKey || event.ctrlKey;
-      const key = event.key.toLowerCase();
-      if (meta && key === "s") {
-        event.preventDefault();
-        saveCurrentFile();
-        return;
-      }
-      if (meta && key === "p") {
-        event.preventDefault();
-        setPaletteMode("files");
-        setPaletteOpen(true);
-        return;
-      }
-      if (meta && key === "b") {
-        event.preventDefault();
-        runCommand("toggle-sidebar");
-        return;
-      }
-      if (meta && key === "j") {
-        event.preventDefault();
-        runCommand("toggle-preview");
-        return;
-      }
-      if (meta && event.shiftKey && key === "f") {
-        event.preventDefault();
-        runCommand("search");
-        return;
-      }
-      if (meta && event.shiftKey && key === "e") {
-        event.preventDefault();
-        runCommand("explorer");
-        return;
-      }
-      if (meta && key === ",") {
-        event.preventDefault();
-        runCommand("settings");
-        return;
-      }
-      if (meta && event.shiftKey === false && event.altKey && key === "f") {
-        event.preventDefault();
-        void formatCurrentFile();
-        return;
-      }
-      if (event.ctrlKey && event.key === "`") {
-        event.preventDefault();
-        runCommand("toggle-terminal");
-        return;
-      }
-      if (event.key === "F1") {
-        event.preventDefault();
-        setPaletteMode("commands");
-        setPaletteOpen(true);
-      }
-      if (event.key === "F12") {
-        event.preventDefault();
-        goToDefinition();
-      }
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "c" && !event.shiftKey) {
-        // Allow normal copy in inputs/editors; explorer cut/copy uses explicit commands.
-      }
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [formatCurrentFile, goToDefinition, runCommand, saveCurrentFile]);
+  usePreviewKeyboardShortcuts({
+    formatCurrentFile,
+    goToDefinition,
+    runCommand,
+    saveCurrentFile,
+    openCommandPalette() {
+      setPaletteMode("commands");
+      setPaletteOpen(true);
+    },
+    openFilePalette() {
+      setPaletteMode("files");
+      setPaletteOpen(true);
+    }
+  });
 
   useEffect(() => () => clearAutosave(), [clearAutosave]);
 
@@ -1515,39 +1402,4 @@ export function usePreviewController() {
     refreshPreview: () => setFrameNonce((value) => value + 1)
   };
 }
-
-function simpleGlobMatch(path: string, glob: string): boolean {
-  const patterns = glob
-    .split(",")
-    .map((part) => part.trim())
-    .filter(Boolean);
-  if (patterns.length === 0) return true;
-  return patterns.some((pattern) => {
-    const escaped = pattern
-      .replace(/[.+^${}()|[\]\\]/g, "\\$&")
-      .replace(/\*\*/g, ":::DOUBLE_STAR:::")
-      .replace(/\*/g, "[^/]*")
-      .replace(/:::DOUBLE_STAR:::/g, ".*")
-      .replace(/\?/g, ".");
-    return new RegExp(`^${escaped}$`).test(path);
-  });
-}
-
 export type PreviewControllerModel = ReturnType<typeof usePreviewController>;
-
-function buildPreviewUrl(basePreviewUrl: string, path: string): string {
-  try {
-    const url = new URL(basePreviewUrl, window.location.origin);
-    const marker = "/__preview/";
-    const index = url.pathname.indexOf(marker);
-    if (index < 0) return basePreviewUrl;
-    const parts = url.pathname.slice(index + marker.length).split("/");
-    const projectId = parts[0] || "preview-service";
-    const port = parts[1] || "5173";
-    const normalized = path.startsWith("/") ? path : `/${path}`;
-    url.pathname = `${marker}${projectId}/${port}${normalized === "/" ? "/" : normalized}`;
-    return `${url.pathname}${url.search}`;
-  } catch {
-    return basePreviewUrl;
-  }
-}
