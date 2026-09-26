@@ -101,6 +101,11 @@ try {
   const response = await page.goto(`${server.resolvedUrls.local[0]}next-browser-worker-probe`, { waitUntil: "load" });
   assert.equal(response?.headers()["content-security-policy"], REQUIRED_RUNTIME_HEADERS.csp);
   assert.equal(await page.evaluate(() => crossOriginIsolated), true);
+  const workerModuleProbe = await page.evaluate(async () => {
+    const response = await fetch("/workers/process-worker.ts", { cache: "no-store" });
+    return { body: (await response.text()).slice(0, 200), status: response.status };
+  });
+  assert.equal(workerModuleProbe.status, 200, `process worker module preflight failed: ${workerModuleProbe.body}`);
 
   const cdp = await browser.newBrowserCDPSession();
   const workerTargetCount = async () => {
@@ -127,9 +132,10 @@ try {
           clearTimeout(timeout);
           resolve(event.data);
         });
-        worker.addEventListener("error", (event) => {
+        worker.addEventListener("error", async (event) => {
           clearTimeout(timeout);
-          reject(new Error(event.message));
+          const probe = await fetch("/workers/process-worker.ts", { cache: "no-store" }).catch(() => null);
+          reject(new Error(event.message || `process worker module load failed${probe ? ` status=${probe.status}` : ""}`));
         });
         worker.postMessage({
           id,
