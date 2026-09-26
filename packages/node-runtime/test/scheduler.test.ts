@@ -67,4 +67,11 @@ immediateScheduler.setImmediate(() => {
 await immediateScheduler.runUntilIdle();
 assert.deepEqual(immediateEvents, ["immediate", "nextTick-after-immediate"]);
 
+const boundedScheduler = createScheduler({ maxCallbacksPerRun: 3, yieldEveryCallbacks: 1 });
+const enqueueForever = () => boundedScheduler.nextTick(enqueueForever);
+boundedScheduler.nextTick(enqueueForever);
+const boundedResult = await boundedScheduler.runUntilIdle();
+assert.equal(boundedResult.exitCode, 1);
+assert.equal(boundedResult.uncaughtException.code, "ERR_CARGO_CONTAINER_SCHEDULER_LIMIT");
+
 console.log("node scheduler test ok");

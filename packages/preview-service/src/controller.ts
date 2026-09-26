@@ -187,7 +187,7 @@ export interface PreviewWorkflowController {
   resizeShell(cols: number, rows: number, terminalId?: string): void;
   signalShell(signal?: "SIGINT" | "SIGTERM" | "SIGKILL", terminalId?: string): boolean;
   closeShell(terminalId: string): boolean;
-  listShellProcesses(): Array<{ terminalId: string; command: string; cwd: string; status: "running" }>;
+  listShellProcesses(): Array<{ pid: number; terminalId: string; command: string; cwd: string; status: "running" }>;
   cancelShellCommand(terminalId?: string): boolean;
   log(line: unknown): void;
 }
@@ -1214,7 +1214,8 @@ export function createPreviewWorkflowController(
           startedAt: Date.now(),
           status: "completed",
           stderr: "",
-          stdout: ""
+          stdout: "",
+          outputTruncatedBytes: 0
         }
       };
     }
@@ -1255,12 +1256,13 @@ export function createPreviewWorkflowController(
     return shells.delete(terminalId);
   }
 
-  function listShellProcesses(): Array<{ terminalId: string; command: string; cwd: string; status: "running" }> {
-    const processes: Array<{ terminalId: string; command: string; cwd: string; status: "running" }> = [];
+  function listShellProcesses(): Array<{ pid: number; terminalId: string; command: string; cwd: string; status: "running" }> {
+    const processes: Array<{ pid: number; terminalId: string; command: string; cwd: string; status: "running" }> = [];
     for (const [terminalId, shell] of shells) {
       const current = shell.session.snapshot();
       if (current.activeEntry) {
         processes.push({
+          pid: current.activeEntry.id,
           terminalId,
           command: current.activeEntry.command,
           cwd: current.cwd,

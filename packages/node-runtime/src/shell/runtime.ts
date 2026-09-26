@@ -8,12 +8,14 @@ export class ShellRuntime {
   env: RuntimeEnv;
   files: Map<string, string>;
   registry: ShellCommandRegistry;
+  maxOutputBytes: number;
 
   constructor(options: ShellRuntimeOptions = {}) {
     this.cwd = options.cwd || "/workspace";
     this.env = { PATH: "/workspace/node_modules/.bin:/bin", ...(options.env || {}) };
     this.files = new Map(Object.entries(options.files || {}));
     this.registry = createCommandRegistry(options.commands || {});
+    this.maxOutputBytes = positiveLimit(options.maxOutputBytes, 1024 * 1024, "maxOutputBytes");
   }
 
   async run(commandLine: string, options: ShellRunOptions = {}): Promise<ShellRunResult> {
@@ -22,6 +24,7 @@ export class ShellRuntime {
     let stdout = "";
     let stderr = "";
     let exitCode = 0;
+    let outputTruncatedBytes = 0;
 
     for (let index = 0; index < steps.length; index += 1) {
       if (options.signal?.aborted) return cancelledShellResult(stdout, stderr, this.files, options.signal.reason);
@@ -32,20 +35,48 @@ export class ShellRuntime {
       const { argv, redirect } = extractRedirect(step.argv);
       const streamed = { stderr: false, stdout: false };
       const result = await this.runCommand(argv, stdin, commandOutputOptions(options, streamed, nextStep?.op === "|"));
-      if (options.signal?.aborted) return cancelledShellResult(stdout + (result.stdout || ""), stderr + (result.stderr || ""), this.files, options.signal.reason);
+      if (options.signal?.aborted) {
+        const cancelledStdout = appendWithinLimit(stdout, result.stdout || "", this.maxOutputBytes - byteLength(stderr));
+        const cancelledStderr = appendWithinLimit(stderr, result.stderr || "", this.maxOutputBytes - byteLength(cancelledStdout.value));
+        const cancelled = cancelledShellResult(cancelledStdout.value, cancelledStderr.value, this.files, options.signal.reason);
+        const boundedCancelledStderr = appendWithinLimit("", cancelled.stderr, this.maxOutputBytes - byteLength(cancelled.stdout));
+        const dropped = outputTruncatedBytes + cancelledStdout.droppedBytes + cancelledStderr.droppedBytes + boundedCancelledStderr.droppedBytes;
+        const boundedCancelled = { ...cancelled, stderr: boundedCancelledStderr.value };
+        return dropped > 0 ? { ...boundedCancelled, outputTruncatedBytes: dropped } : boundedCancelled;
+      }
       exitCode = result.exitCode;
-      stderr += result.stderr || "";
+      const appendedStderr = appendWithinLimit(stderr, result.stderr || "", this.maxOutputBytes - byteLength(stdout));
+      stderr = appendedStderr.value;
+      outputTruncatedBytes += appendedStderr.droppedBytes;
       if (result.stderr && !streamed.stderr) options.onOutput?.({ stream: "stderr", data: result.stderr });
-      if (redirect) this.files.set(resolvePath(redirect, this.cwd), result.stdout || "");
+      if (redirect) {
+        const redirected = appendWithinLimit("", result.stdout || "", this.maxOutputBytes);
+        this.files.set(resolvePath(redirect, this.cwd), redirected.value);
+        outputTruncatedBytes += redirected.droppedBytes;
+      }
       else if (nextStep?.op !== "|") {
-        stdout += result.stdout || "";
+        const appendedStdout = appendWithinLimit(stdout, result.stdout || "", this.maxOutputBytes - byteLength(stderr));
+        stdout = appendedStdout.value;
+        outputTruncatedBytes += appendedStdout.droppedBytes;
         if (result.stdout && !streamed.stdout) options.onOutput?.({ stream: "stdout", data: result.stdout });
       }
-      stdin = nextStep?.op === "|" ? result.stdout || "" : "";
+      if (nextStep?.op === "|") {
+        const piped = appendWithinLimit("", result.stdout || "", this.maxOutputBytes);
+        stdin = piped.value;
+        outputTruncatedBytes += piped.droppedBytes;
+      } else {
+        stdin = "";
+      }
       if (exitCode !== 0) break;
     }
 
-    return { stdout, stderr, exitCode, files: Object.fromEntries(this.files) };
+    return {
+      stdout,
+      stderr,
+      exitCode,
+      files: Object.fromEntries(this.files),
+      ...(outputTruncatedBytes > 0 ? { outputTruncatedBytes } : {})
+    };
   }
 
   async runCommand(argv: string[], stdin: string, options: ShellRunOptions = {}): Promise<Awaited<ReturnType<ShellCommand>>> {
@@ -144,6 +175,24 @@ function cancelledShellResult(stdout: string, stderr: string, files: Map<string,
     exitCode: signal === "SIGTERM" ? 143 : signal === "SIGKILL" ? 137 : 130,
     files: Object.fromEntries(files)
   };
+}
+
+function appendWithinLimit(current: string, next: string, maxBytes: number): { value: string; droppedBytes: number } {
+  const available = Math.max(0, maxBytes - byteLength(current));
+  const encoded = new TextEncoder().encode(next);
+  if (encoded.byteLength <= available) return { value: current + next, droppedBytes: 0 };
+  const retained = new TextDecoder().decode(encoded.slice(0, available));
+  return { value: current + retained, droppedBytes: encoded.byteLength - byteLength(retained) };
+}
+
+function byteLength(value: string): number {
+  return new TextEncoder().encode(value).byteLength;
+}
+
+function positiveLimit(value: number | undefined, fallback: number, name: string): number {
+  const resolved = value ?? fallback;
+  if (!Number.isSafeInteger(resolved) || resolved < 1) throw new RangeError(`${name} must be a positive safe integer`);
+  return resolved;
 }
 
 function nestedShellOptions(options: ShellRunOptions): ShellRunOptions {

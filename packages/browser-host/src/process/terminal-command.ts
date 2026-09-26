@@ -7,6 +7,7 @@ import type {
 export function createHostProcessShellCommand(options: HostProcessShellCommandOptions): HostProcessShellCommand {
   return async ({ argv, cwd, env, stdin, output, signal, terminal }): Promise<HostProcessShellCommandResult> => {
     const prepared = options.table.prepare({
+      argv,
       cwd: options.cwd || cwd,
       env,
       ...(options.projectId ? { projectId: options.projectId } : {}),

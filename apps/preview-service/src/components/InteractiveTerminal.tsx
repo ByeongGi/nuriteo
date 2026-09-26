@@ -9,10 +9,12 @@ const PROMPT = "$ ";
 
 export function InteractiveTerminal({
   model,
-  terminalId = "default"
+  terminalId = "default",
+  active = true
 }: {
   model: PreviewControllerModel;
   terminalId?: string;
+  active?: boolean;
 }) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const termRef = useRef<Terminal | null>(null);
@@ -21,11 +23,13 @@ export function InteractiveTerminal({
   const historyRef = useRef<string[]>([]);
   const historyIndexRef = useRef(-1);
   const busyRef = useRef(false);
+  const mountedRef = useRef(false);
   const modelRef = useRef(model);
   modelRef.current = model;
 
   useEffect(() => {
     if (!hostRef.current || termRef.current) return;
+    mountedRef.current = true;
 
     const term = new Terminal({
       convertEol: true,
@@ -107,6 +111,7 @@ export function InteractiveTerminal({
     observer.observe(hostRef.current);
 
     return () => {
+      mountedRef.current = false;
       observer.disconnect();
       term.dispose();
       termRef.current = null;
@@ -115,7 +120,7 @@ export function InteractiveTerminal({
   }, [terminalId]);
 
   useEffect(() => {
-    if (!model.terminalFocusRequest) return;
+    if (!active || !model.terminalFocusRequest) return;
     const timer = window.setTimeout(() => {
       try {
         fitRef.current?.fit();
@@ -125,7 +130,7 @@ export function InteractiveTerminal({
       }
     }, 50);
     return () => window.clearTimeout(timer);
-  }, [model.terminalFocusRequest]);
+  }, [active, model.terminalFocusRequest]);
 
   function recallHistory(term: Terminal, direction: -1 | 1): void {
     const history = historyRef.current;
@@ -162,20 +167,21 @@ export function InteractiveTerminal({
     try {
       let streamed = false;
       const result = await modelRef.current.controller.runShellCommand(command, terminalId, (chunk) => {
+        if (!mountedRef.current) return;
         streamed = true;
         if (chunk.stream === "stdout") term.write(chunk.data.replace(/\n/g, "\r\n"));
         else term.write(`\x1b[31m${chunk.data.replace(/\n/g, "\r\n")}\x1b[0m`);
       });
+      if (!mountedRef.current) return;
       if (!streamed && result.stdout) term.write(result.stdout.replace(/\n/g, "\r\n"));
       if (!streamed && result.stderr) term.write(`\x1b[31m${result.stderr.replace(/\n/g, "\r\n")}\x1b[0m`);
-      if (result.exitCode !== 0) {
-        term.writeln(`\x1b[90mexit ${result.exitCode}\x1b[0m`);
-      }
+      term.writeln(`\x1b[90mexit ${result.exitCode}${result.outputTruncatedBytes ? ` · ${result.outputTruncatedBytes} output bytes truncated` : ""}\x1b[0m`);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      term.writeln(`\x1b[31m${message}\x1b[0m`);
+      if (mountedRef.current) term.writeln(`\x1b[31m${message}\x1b[0m`);
     } finally {
       busyRef.current = false;
+      if (!mountedRef.current) return;
       term.write(PROMPT);
       try {
         fitRef.current?.fit();
@@ -187,10 +193,11 @@ export function InteractiveTerminal({
 
   return (
     <div
-      id="terminal-xterm"
+      id={`terminal-xterm-${terminalId}`}
+      data-terminal-id={terminalId}
       ref={hostRef}
       className="h-full min-h-0 w-full overflow-hidden bg-[#0f141c] px-2 py-1"
-      aria-label="Interactive terminal"
+      aria-label={`Interactive terminal ${terminalId}`}
     />
   );
 }

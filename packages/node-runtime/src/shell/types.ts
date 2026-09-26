@@ -37,6 +37,8 @@ export interface ShellRuntimeOptions {
   env?: RuntimeEnv;
   files?: Record<string, string>;
   commands?: ShellCommandMap;
+  maxOutputBytes?: number;
+  maxInputChunkBytes?: number;
 }
 
 export interface ShellRunOptions {
@@ -70,4 +72,5 @@ export interface ShellRunResult {
   stderr: string;
   exitCode: number;
   files: Record<string, string>;
+  outputTruncatedBytes?: number;
 }

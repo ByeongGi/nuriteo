@@ -4,7 +4,7 @@ import {
   type TerminalSession
 } from "../../node-runtime/src/shell/index.ts";
 import type { ProjectWorkspaceStore } from "../../browser-host/src/storage/index.ts";
-import type { ShellCommandMap, ShellCommandResult } from "../../node-runtime/src/shell/types.ts";
+import type { ShellCommandContext, ShellCommandMap, ShellCommandResult } from "../../node-runtime/src/shell/types.ts";
 
 export interface PreviewShellHandlers {
   getCwd: () => string;
@@ -62,9 +62,9 @@ export function createPreviewShellSession(handlers: PreviewShellHandlers): Previ
     touch: ({ argv }) => touchFile(handlers, argv),
     rm: ({ argv }) => removeFile(handlers, argv),
     mv: ({ argv }) => moveFile(handlers, argv),
-    npm: (context) => runPackageManager(handlers, "npm", context.argv),
-    pnpm: (context) => runPackageManager(handlers, "pnpm", context.argv),
-    yarn: (context) => runPackageManager(handlers, "yarn", context.argv)
+    npm: (context) => runPackageManager(handlers, "npm", context),
+    pnpm: (context) => runPackageManager(handlers, "pnpm", context),
+    yarn: (context) => runPackageManager(handlers, "yarn", context)
   };
 
   let cwd = handlers.getCwd();
@@ -105,42 +105,74 @@ export function createPreviewShellSession(handlers: PreviewShellHandlers): Previ
 async function runPackageManager(
   handlers: PreviewShellHandlers,
   manager: "npm" | "pnpm" | "yarn",
-  argv: string[]
+  context: ShellCommandContext
 ): Promise<ShellCommandResult> {
+  const { argv, signal } = context;
   const args = argv.slice(1);
   const [command, script, ...rest] = args;
 
-  if (!command && manager === "yarn") return toResult(argv, await handlers.install());
+  if (!command && manager === "yarn") return toResult(argv, await abortable(handlers.install(), signal));
   if (!command || command === "--version" || command === "-v" || command === "version") {
     return ok(argv, `${manager} (cargo-container preview shell)\n`);
   }
 
   if (command === "install" || command === "i" || command === "add") {
-    return toResult(argv, await handlers.install());
+    return toResult(argv, await abortable(handlers.install(), signal));
   }
 
   if (command === "run" || command === "run-script") {
     if (!script) return fail(argv, `${manager}: missing script name\n`);
-    if (script === "dev" || script === "start") return toResult(argv, await handlers.runDev(rest));
-    if (script === "build") return toResult(argv, await handlers.runBuild(rest));
-    if (script === "restart") return toResult(argv, await handlers.restartDev(rest));
+    if (script === "dev" || script === "start") return toResult(argv, await abortable(handlers.runDev(rest), signal));
+    if (script === "build") return toResult(argv, await abortable(handlers.runBuild(rest), signal));
+    if (script === "restart") return toResult(argv, await abortable(handlers.restartDev(rest), signal));
     return fail(argv, `${manager}: unsupported script "${script}". Try: install, run dev, run build\n`);
   }
 
   if (command === "start") {
-    return toResult(argv, await handlers.runDev());
+    return toResult(argv, await abortable(handlers.runDev(), signal));
   }
 
   if (manager === "yarn" && (command === "dev" || command === "build" || command === "restart")) {
-    if (command === "dev") return toResult(argv, await handlers.runDev(args.slice(1)));
-    if (command === "build") return toResult(argv, await handlers.runBuild(args.slice(1)));
-    return toResult(argv, await handlers.restartDev(args.slice(1)));
+    if (command === "dev") return toResult(argv, await abortable(handlers.runDev(args.slice(1)), signal));
+    if (command === "build") return toResult(argv, await abortable(handlers.runBuild(args.slice(1)), signal));
+    return toResult(argv, await abortable(handlers.restartDev(args.slice(1)), signal));
   }
 
   return fail(
     argv,
     `${manager}: unsupported command "${args.join(" ")}". Try: install | run dev | run build\n`
   );
+}
+
+function abortable<T extends { stdout: string; stderr: string; exitCode: number }>(
+  operation: Promise<T>,
+  signal?: AbortSignal
+): Promise<T> {
+  if (!signal) return operation;
+  if (signal.aborted) return Promise.resolve(signalResult(signal.reason) as T);
+  return new Promise((resolve, reject) => {
+    const abort = () => resolve(signalResult(signal.reason) as T);
+    signal.addEventListener("abort", abort, { once: true });
+    operation.then(
+      (value) => {
+        signal.removeEventListener("abort", abort);
+        resolve(value);
+      },
+      (error) => {
+        signal.removeEventListener("abort", abort);
+        reject(error);
+      }
+    );
+  });
+}
+
+function signalResult(reason: unknown): { stdout: string; stderr: string; exitCode: number } {
+  const signal = reason === "SIGTERM" || reason === "SIGKILL" ? reason : "SIGINT";
+  return {
+    stdout: "",
+    stderr: `${signal.toLowerCase()}\n`,
+    exitCode: signal === "SIGINT" ? 130 : signal === "SIGTERM" ? 143 : 137
+  };
 }
 
 function listFiles(handlers: PreviewShellHandlers, argv: string[]): ShellCommandResult {

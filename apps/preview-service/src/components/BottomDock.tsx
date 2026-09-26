@@ -53,7 +53,12 @@ export function BottomDock({ model }: { model: PreviewControllerModel }) {
                       : "border-transparent text-cargo-muted hover:bg-cargo-panel-2"
                   }`}
                 >
-                  <button type="button" onClick={() => setActiveTerminalId(terminal.id)}>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={activeTerminalId === terminal.id}
+                    onClick={() => setActiveTerminalId(terminal.id)}
+                  >
                     {terminal.title}
                   </button>
                   {terminals.length > 1 ? (
@@ -83,7 +88,7 @@ export function BottomDock({ model }: { model: PreviewControllerModel }) {
             </pre>
             {terminals.map((terminal) => (
               <div key={terminal.id} className={activeTerminalId === terminal.id ? "min-h-0 flex-1" : "hidden"}>
-                <InteractiveTerminal model={model} terminalId={terminal.id} />
+                <InteractiveTerminal model={model} terminalId={terminal.id} active={activeTerminalId === terminal.id} />
               </div>
             ))}
           </Tabs.Panel>
