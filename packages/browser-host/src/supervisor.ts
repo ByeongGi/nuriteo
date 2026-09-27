@@ -1,4 +1,10 @@
 import type { MessageDetails, ReadyMessage } from "../../protocol/src/index.ts";
+import {
+  assertBrowserRuntimeResourceAdmission,
+  BrowserRuntimeResourceError,
+  DEFAULT_BROWSER_RUNTIME_MEMORY_LIMIT_BYTES,
+  type BrowserRuntimeResourceEstimate
+} from "./resources/index.ts";
 
 export type RuntimeStatus = "idle" | "booting" | "ready" | "failed" | "stopped";
 
@@ -6,12 +12,16 @@ export interface RuntimeMetrics {
   bootCount: number;
   teardownCount: number;
   activeWorkers: number;
+  admissionRejections: number;
+  lastAdmissionBytes: number;
   pendingRequests: number;
+  watchdogTerminations: number;
 }
 
 export interface BrowserRuntimeSupervisorOptions {
   systemWorkerUrl?: string | URL | undefined;
   processWorkerUrl?: string | URL | undefined;
+  memoryLimitBytes?: number;
   timeoutMs?: number;
 }
 
@@ -29,6 +39,7 @@ export interface RuntimeRunOptions {
   pid?: number;
   timeoutMs?: number;
   syscallTimeoutMs?: number;
+  resourceEstimate?: Omit<BrowserRuntimeResourceEstimate, "sourceBytes">;
 }
 
 export interface RuntimeSystemMetricsOptions {
@@ -69,6 +80,7 @@ type RuntimeMessageData = {
 };
 
 type ResolvedBrowserRuntimeSupervisorOptions = BrowserRuntimeSupervisorOptions & {
+  memoryLimitBytes: number;
   timeoutMs: number;
 };
 
@@ -101,15 +113,19 @@ export class BrowserRuntimeSupervisor {
     bootCount: 0,
     teardownCount: 0,
     activeWorkers: 0,
-    pendingRequests: 0
+    admissionRejections: 0,
+    lastAdmissionBytes: 0,
+    pendingRequests: 0,
+    watchdogTerminations: 0
   };
 
   constructor(options: BrowserRuntimeSupervisorOptions = {}) {
     this.#options = {
-      timeoutMs: 2000,
       systemWorkerUrl: options.systemWorkerUrl,
       processWorkerUrl: options.processWorkerUrl,
-      ...options
+      ...options,
+      memoryLimitBytes: options.memoryLimitBytes ?? DEFAULT_BROWSER_RUNTIME_MEMORY_LIMIT_BYTES,
+      timeoutMs: options.timeoutMs ?? 2000
     };
   }
 
@@ -168,6 +184,10 @@ export class BrowserRuntimeSupervisor {
   }
 
   async teardown(): Promise<void> {
+    this.#stopWorkers(false);
+  }
+
+  #stopWorkers(watchdog: boolean): void {
     const workers: Worker[] = [];
     if (this.#systemWorker) workers.push(this.#systemWorker);
     if (this.#processWorker) workers.push(this.#processWorker);
@@ -177,12 +197,23 @@ export class BrowserRuntimeSupervisor {
     this.#metrics.activeWorkers = 0;
     this.#metrics.pendingRequests = 0;
     this.#metrics.teardownCount += 1;
+    if (watchdog && workers.length > 0) this.#metrics.watchdogTerminations += 1;
     this.#status = "stopped";
   }
 
   run(source: string, options: RuntimeRunOptions = {}): Promise<RuntimeRunResult> {
     if (this.#status !== "ready") {
       throw new RuntimeBootError(`Cannot run program while status is ${this.#status}`);
+    }
+    try {
+      const admission = assertBrowserRuntimeResourceAdmission({
+        ...options.resourceEstimate,
+        sourceBytes: new TextEncoder().encode(source).byteLength
+      }, this.#options.memoryLimitBytes);
+      this.#metrics.lastAdmissionBytes = admission.totalBytes;
+    } catch (error) {
+      if (error instanceof BrowserRuntimeResourceError) this.#metrics.admissionRejections += 1;
+      throw error;
     }
     return this.#sendProcessRequest({
       type: "run",
@@ -269,17 +300,18 @@ export class BrowserRuntimeSupervisor {
 
       let settled = false;
       this.#metrics.pendingRequests += 1;
-      const timeout = setTimeout(() => fail(new RuntimeBootError("process worker request timeout")), timeoutMs);
+      const timeout = setTimeout(() => fail(new RuntimeBootError("process worker request timeout"), true), timeoutMs);
       const cleanup = () => {
         clearTimeout(timeout);
         this.#metrics.pendingRequests = Math.max(0, this.#metrics.pendingRequests - 1);
         worker.removeEventListener("message", onMessage);
         worker.removeEventListener("error", onError);
       };
-      const fail = (error: RuntimeBootError) => {
+      const fail = (error: RuntimeBootError, watchdog = false) => {
         if (settled) return;
         settled = true;
         cleanup();
+        if (watchdog) this.#stopWorkers(true);
         reject(error);
       };
       const onMessage = (event: MessageEvent<RuntimeMessageData>) => {
@@ -291,11 +323,15 @@ export class BrowserRuntimeSupervisor {
         if (event.data.ok) resolve(event.data);
         else reject(new RuntimeBootError(event.data.error || "process worker request failed"));
       };
-      const onError = (event: ErrorEvent) => fail(new RuntimeBootError(event.message || "process worker error"));
+      const onError = (event: ErrorEvent) => fail(new RuntimeBootError(event.message || "process worker error"), true);
 
       worker.addEventListener("message", onMessage);
       worker.addEventListener("error", onError);
-      worker.postMessage(message);
+      try {
+        worker.postMessage(message);
+      } catch (error) {
+        fail(new RuntimeBootError("process worker request could not be posted", error), true);
+      }
     });
   }
 
@@ -309,17 +345,18 @@ export class BrowserRuntimeSupervisor {
 
       let settled = false;
       this.#metrics.pendingRequests += 1;
-      const timeout = setTimeout(() => fail(new RuntimeBootError("system worker request timeout")), timeoutMs);
+      const timeout = setTimeout(() => fail(new RuntimeBootError("system worker request timeout"), true), timeoutMs);
       const cleanup = () => {
         clearTimeout(timeout);
         this.#metrics.pendingRequests = Math.max(0, this.#metrics.pendingRequests - 1);
         worker.removeEventListener("message", onMessage);
         worker.removeEventListener("error", onError);
       };
-      const fail = (error: RuntimeBootError) => {
+      const fail = (error: RuntimeBootError, watchdog = false) => {
         if (settled) return;
         settled = true;
         cleanup();
+        if (watchdog) this.#stopWorkers(true);
         reject(error);
       };
       const onMessage = (event: MessageEvent<RuntimeMessageData>) => {
@@ -329,11 +366,15 @@ export class BrowserRuntimeSupervisor {
         cleanup();
         resolve(event.data.metrics || {});
       };
-      const onError = (event: ErrorEvent) => fail(new RuntimeBootError(event.message || "system worker error"));
+      const onError = (event: ErrorEvent) => fail(new RuntimeBootError(event.message || "system worker error"), true);
 
       worker.addEventListener("message", onMessage);
       worker.addEventListener("error", onError);
-      worker.postMessage(message);
+      try {
+        worker.postMessage(message);
+      } catch (error) {
+        fail(new RuntimeBootError("system worker request could not be posted", error), true);
+      }
     });
   }
 }

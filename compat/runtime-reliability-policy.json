@@ -5,11 +5,15 @@
   "memory": {
     "heapCeilingMiB": 256,
     "source": "compat/performance-baseline.json#runtime-memory-heap-limit",
-    "enforcement": "node-worker-v8-limit-and-guest-workspace-byte-limit",
+    "enforcement": "node-worker-v8-limit-and-product-owned-browser-resource-contract",
     "nodeWorkerV8OldGenerationLimitMiB": 256,
     "guestWorkspaceLimitBytes": 268435456,
-    "browserWorkerHeapEnforcement": "hold-unobservable-from-host",
-    "browserWorkerResourceObservation": "chrome-page-memory-and-worker-target-churn"
+    "browserWorkerHeapEnforcement": "unavailable-not-claimed",
+    "browserWorkerResourceObservation": "chrome-page-memory-and-worker-target-churn",
+    "browserWorkerResourceContract": "preflight-admission-wasm-constructor-workspace-watchdog",
+    "browserWorkerAdmissionLimitBytes": 268435456,
+    "browserWorkerWasmMaximumPages": 32768,
+    "browserWorkerWasmMaximumBytes": 2147483648
   },
   "timeouts": {
     "installMs": 120000,

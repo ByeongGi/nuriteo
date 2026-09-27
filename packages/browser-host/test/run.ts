@@ -25,3 +25,4 @@ import "./storage-quota.test.ts";
 import "./storage-snapshot.test.ts";
 import "./large-node-modules-stress.test.ts";
 import "./reliability-recovery.test.ts";
+import "./runtime-resource-policy.test.ts";

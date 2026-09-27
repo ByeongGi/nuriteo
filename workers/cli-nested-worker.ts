@@ -1,4 +1,7 @@
 import { createCliNestedWorkerRuntime, type CliNestedWorkerRequest } from "../packages/node-runtime/src/package-managers/cli-evaluator.ts";
+import { installWebAssemblyMemoryLimit } from "../packages/browser-host/src/resources/index.ts";
+
+installWebAssemblyMemoryLimit();
 
 let runtime: ReturnType<typeof createCliNestedWorkerRuntime> | null = null;
 const queuedMessages: unknown[] = [];

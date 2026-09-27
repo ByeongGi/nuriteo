@@ -1,5 +1,7 @@
 export { BrowserRuntimeSupervisor, RuntimeBootError } from "./supervisor.ts";
 export type { BrowserRuntimeSupervisorOptions, RuntimeBootOptions, RuntimeMetrics, RuntimeRunOptions, RuntimeRunResult, RuntimeStatus, RuntimeSystemMetricsOptions } from "./supervisor.ts";
+export { assertBrowserRuntimeResourceAdmission, BrowserRuntimeResourceError, createBoundedWebAssemblyMemoryConstructor, DEFAULT_BROWSER_RUNTIME_MEMORY_LIMIT_BYTES, DEFAULT_BROWSER_WASM_MEMORY_LIMIT_BYTES, installWebAssemblyMemoryLimit, WASM_PAGE_BYTES } from "./resources/index.ts";
+export type { BrowserRuntimeResourceAdmission, BrowserRuntimeResourceEstimate } from "./resources/index.ts";
 export { assertRuntimeFeatureSupported, createPackageManagerRecoveryDiagnostic, createPackageManagerUnsupportedDiagnostic, createPermissionDeniedDiagnostic, createPermissionRecoveryDiagnostic, createRuntimeNetworkRecoveryDiagnostic, createRuntimeNetworkUnsupportedDiagnostic, createRuntimeRecoveryActionExecutor, createRuntimeRecoveryPlan, createRuntimeSupportBundle, createRuntimeTraceCollector, createRuntimeTraceReport, createUnsupportedRuntimeDiagnostic, redactRuntimeLog, RuntimeRecoveryActionExecutor, RuntimeTraceCollector, UnsupportedRuntimeFeatureError } from "./observability/index.ts";
 export { createHostProcessShellCommand, HostProcessError, HostProcessTable, processKey, SystemWasmClient, SystemWasmError, SystemWasmVirtualPty, teardownProcessTable, WorkerRegistry } from "./process/index.ts";
 export { createSqliteProjectClient, SqliteProjectClient } from "./tooling/index.ts";

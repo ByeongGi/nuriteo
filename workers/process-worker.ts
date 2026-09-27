@@ -7,6 +7,7 @@ import { MemoryPackageManagerWorkspace } from "../packages/node-runtime/src/pack
 import { createProcessWorkerRuntime } from "../packages/browser-host/src/process/worker-runtime.ts";
 import { SystemWasmClient } from "../packages/browser-host/src/process/system-wasm-client.ts";
 import { SystemWasmVirtualPty } from "../packages/browser-host/src/process/virtual-pty.ts";
+import { installWebAssemblyMemoryLimit } from "../packages/browser-host/src/resources/index.ts";
 
 const YARN_BUNDLE_SHA256 = "443ed69e76443b89afddccfc9faec1ff16eb5e500979cc079c696dec4c3d94ee";
 const YARN_ENTRY_SHA256 = "148e19db309ec9eaf7720b28df811337906eea8a1758deaa54afee60a6305e04";
@@ -33,6 +34,8 @@ const BUNDLER_ASSETS = Object.freeze({
     workerSha256: "32c8dd24f1bb60f9f258c450810a5382d7919e3de315b63f924b7cc38518290b"
   }
 });
+
+const wasmMemoryPolicy = installWebAssemblyMemoryLimit();
 
 let systemPort = null;
 let syncChannel = null;
@@ -111,13 +114,17 @@ function handleWorkerMessage(message) {
       };
       self.postMessage(createReadyMessage("process", {
         crossOriginIsolated: self.crossOriginIsolated,
-        sharedArrayBuffer: typeof SharedArrayBuffer
+        sharedArrayBuffer: typeof SharedArrayBuffer,
+        webAssemblyMemoryLimitBytes: wasmMemoryPolicy.limitBytes,
+        webAssemblyMaximumPages: wasmMemoryPolicy.maximumPages
       }));
     } catch (error) {
       self.postMessage(createFailedMessage("process", error));
     }
   } else if (message?.type === "run") {
     runProgram(message);
+  } else if (message?.type === "resource-policy-probe") {
+    probeResourcePolicy(message);
   } else if (message?.type === "cli:evaluate") {
     evaluateCli(message);
   } else if (message?.type === "cli:http:request") {
@@ -131,6 +138,24 @@ function handleWorkerMessage(message) {
   } else if (message?.type === "cli:ws:close") {
     handleCliWebSocketClose(message);
   }
+}
+
+function probeResourcePolicy(message) {
+  let oversizeRejected = false;
+  try {
+    new WebAssembly.Memory({ initial: 1, maximum: wasmMemoryPolicy.maximumPages + 1 });
+  } catch {
+    oversizeRejected = true;
+  }
+  const bounded = new WebAssembly.Memory({ initial: 1, maximum: 2 });
+  self.postMessage({
+    type: "resource-policy-result",
+    requestId: message.requestId,
+    limitBytes: wasmMemoryPolicy.limitBytes,
+    maximumPages: wasmMemoryPolicy.maximumPages,
+    boundedMemoryBytes: bounded.buffer.byteLength,
+    oversizeRejected
+  });
 }
 
 async function runSyscallPing(message) {

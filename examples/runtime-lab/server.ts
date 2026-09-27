@@ -69,7 +69,10 @@ function toBrowserJavaScript(source: Buffer, filename: string): Buffer | string 
 function resolveFile(pathname: string): string {
   const cleanPath = pathname.replace(/^\/broken/, "");
   if (cleanPath === "/" || cleanPath === "") return path.join(publicRoot, "index.html");
-  if (cleanPath.startsWith("/packages/") || cleanPath.startsWith("/workers/") || cleanPath.startsWith("/node_modules/fflate/")) {
+  if (cleanPath.startsWith("/runtime/")) {
+    return path.join(repoRoot, "apps/preview-service/public", cleanPath.slice(1));
+  }
+  if (cleanPath.startsWith("/packages/") || cleanPath.startsWith("/workers/") || cleanPath.startsWith("/tests/") || cleanPath.startsWith("/node_modules/fflate/")) {
     return path.join(repoRoot, cleanPath.slice(1));
   }
   return path.join(publicRoot, cleanPath);

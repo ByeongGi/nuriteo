@@ -68,9 +68,14 @@ try {
         return await new Promise((resolve, reject) => {
           const timeout = setTimeout(() => reject(new Error("process worker boot timed out")), 15000);
           worker.addEventListener("message", (event) => {
-            if (event.data?.type !== "ready" && event.data?.type !== "failed") return;
-            clearTimeout(timeout);
-            resolve(event.data);
+            if (event.data?.type === "ready") {
+              worker.postMessage({ type: "resource-policy-probe", requestId: 1 });
+              return;
+            }
+            if (event.data?.type === "resource-policy-result" || event.data?.type === "failed") {
+              clearTimeout(timeout);
+              resolve(event.data);
+            }
           });
           worker.addEventListener("error", (event) => {
             clearTimeout(timeout);
@@ -93,7 +98,11 @@ try {
       forcedFailures += 1;
     }
     const outcome = await runWorker(false);
-    assert.equal(outcome.type, "ready", `worker boot failed at iteration ${i}: ${JSON.stringify(outcome)}`);
+    assert.equal(outcome.type, "resource-policy-result", `worker resource policy probe failed at iteration ${i}: ${JSON.stringify(outcome)}`);
+    assert.equal(outcome.limitBytes, 2 * 1024 * 1024 * 1024, `worker WASM memory policy drifted at iteration ${i}`);
+    assert.equal(outcome.maximumPages, 32768, `worker WASM page limit drifted at iteration ${i}`);
+    assert.equal(outcome.boundedMemoryBytes, 64 * 1024, `worker bounded WASM allocation failed at iteration ${i}`);
+    assert.equal(outcome.oversizeRejected, true, `worker accepted oversized WASM memory at iteration ${i}`);
     outcomes.push(outcome);
   }
   // Target removal is asynchronous after terminate(); bound the wait, then require the baseline.
@@ -109,7 +118,7 @@ try {
   const result = {
     schemaVersion: 1,
     date: new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date()),
-    status: "pass-with-heap-enforcement-hold",
+    status: "pass-with-product-resource-contract",
     executionHost: "strict-csp-headless-chrome",
     workerEntrypoint: "/workers/process-worker.ts",
     csp: REQUIRED_RUNTIME_HEADERS.csp,
@@ -120,7 +129,14 @@ try {
     workerTargetsBefore: baselineTargets,
     workerTargetsAfter: remainingTargets,
     pageMemory: { before, after, scope: "page/agent-cluster estimate; not a per-Worker hard limit" },
-    jsHeapHardCap: { status: "hold", reason: "No Web Worker API enforces a per-Worker V8 heap ceiling; page memory measurement is observational only." }
+    productResourceContract: {
+      status: "pass",
+      admissionLimitBytes: 256 * 1024 * 1024,
+      wasmMaximumPages: 32768,
+      workspaceLimitBytes: 256 * 1024 * 1024,
+      watchdog: "terminates the system/process worker pair on timeout or worker error"
+    },
+    jsHeapHardCap: { status: "unavailable-not-claimed", reason: "No Web Worker API enforces a per-Worker V8 heap ceiling; page memory measurement is observational only." }
   };
   if (process.argv.includes("--write-results")) {
     fs.writeFileSync(path.join(root, "compat/browser-worker-resource-results.json"), `${JSON.stringify(result, null, 2)}\n`);
