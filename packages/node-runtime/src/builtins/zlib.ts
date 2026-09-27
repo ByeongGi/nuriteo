@@ -82,6 +82,11 @@ export class ZlibPassThrough extends PassThrough {
 
 export class BrotliCompress extends ZlibPassThrough {}
 export class BrotliDecompress extends ZlibPassThrough {}
+export class Deflate extends ZlibPassThrough {
+  constructor(options: Record<string, RuntimeValue> = {}) {
+    super({ ...options, mode: "deflate" });
+  }
+}
 export class DeflateRaw extends ZlibPassThrough {
   constructor(options: Record<string, RuntimeValue> = {}) {
     super({ ...options, mode: "deflateRaw" });
@@ -119,6 +124,10 @@ export function createBrotliDecompress(options?: Record<string, RuntimeValue>): 
 
 export function createDeflateRaw(options?: Record<string, RuntimeValue>): DeflateRaw {
   return new DeflateRaw(options);
+}
+
+export function createDeflate(options?: Record<string, RuntimeValue>): Deflate {
+  return new Deflate(options);
 }
 
 export function createGunzip(options?: Record<string, RuntimeValue>): Gunzip {
@@ -182,6 +191,7 @@ export interface ZlibNativeHandle {
 export const zlibBuiltin = Object.freeze({
   BrotliCompress,
   BrotliDecompress,
+  Deflate,
   DeflateRaw,
   Gunzip,
   Gzip,
@@ -190,6 +200,7 @@ export const zlibBuiltin = Object.freeze({
   Unzip,
   Z_SYNC_FLUSH,
   createBrotliDecompress,
+  createDeflate,
   createDeflateRaw,
   createGunzip,
   createGzip,
@@ -199,6 +210,7 @@ export const zlibBuiltin = Object.freeze({
   default: {
     Z_SYNC_FLUSH,
     createBrotliDecompress,
+    createDeflate,
     createDeflateRaw,
     createGunzip,
     createGzip,

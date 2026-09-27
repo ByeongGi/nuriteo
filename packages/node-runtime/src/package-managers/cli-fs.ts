@@ -23,6 +23,18 @@ function normalizeFsPath(path: string | URL | { href?: string }, cwd: string): s
   throw new TypeError("Path must be a string or file URL");
 }
 
+function decodeFsBytes(decoder: TextDecoder, value: ArrayBuffer | ArrayBufferView): string {
+  const view = value instanceof ArrayBuffer
+    ? new Uint8Array(value)
+    : new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
+  const shared = typeof SharedArrayBuffer === "function"
+    && (view.buffer instanceof SharedArrayBuffer || Object.prototype.toString.call(view.buffer) === "[object SharedArrayBuffer]");
+  if (!shared) return decoder.decode(view);
+  const copy = new Uint8Array(view.byteLength);
+  copy.set(view);
+  return decoder.decode(copy);
+}
+
 export function createWorkspaceFsFacade(
   reader: WorkspaceModuleReader,
   writer?: PackageManagerWorkspaceWriter,
@@ -58,7 +70,7 @@ export function createWorkspaceFsFacade(
     try {
       const bytes = readWorkspaceBytes(reader, normalized, encoder);
       traceFs({ op: "readFileSync", path: normalized, result: encoding ? "text" : "bytes" });
-      return encoding ? decoder.decode(bytes) : BrowserBuffer.from(bytes);
+      return encoding ? decodeFsBytes(decoder, bytes) : BrowserBuffer.from(bytes);
     } catch (error) {
       traceFs({ error: fsTraceError(error), op: "readFileSync", path: normalized });
       throw error;
@@ -104,7 +116,7 @@ export function createWorkspaceFsFacade(
       if (!writer) throw unsupportedFsMutation("copyFileSync");
       const normalizedSource = resolvePath(source);
       const normalizedTarget = resolvePath(target);
-      writer.writeText(normalizedTarget, decoder.decode(readWorkspaceBytes(reader, normalizedSource, encoder)));
+      writer.writeText(normalizedTarget, decodeFsBytes(decoder, readWorkspaceBytes(reader, normalizedSource, encoder)));
       notifyFsChange(normalizedTarget, "change");
     },
     cp(source: string, target: string, optionsOrCallback?: CliCpOptions | ((error?: Error | null) => void), callback?: (error?: Error | null) => void): void {
@@ -773,7 +785,7 @@ export function createWorkspaceFsFacade(
     next.set(file.bytes);
     next.set(bytes, position);
     file.bytes = next;
-    writer.writeText(file.path, decoder.decode(next));
+    writer.writeText(file.path, decodeFsBytes(decoder, next));
     touchPath(file.path);
     notifyFsChange(file.path, "change");
     return bytes.byteLength;
@@ -797,9 +809,9 @@ export function createWorkspaceFsFacade(
 
   function decodeFsData(data: RuntimeFsData): string {
     if (typeof data === "string") return data;
-    if (data instanceof Uint8Array) return decoder.decode(data);
-    if (ArrayBuffer.isView(data)) return decoder.decode(new Uint8Array(data.buffer, data.byteOffset, data.byteLength));
-    return decoder.decode(new Uint8Array(data));
+    if (data instanceof Uint8Array) return decodeFsBytes(decoder, data);
+    if (ArrayBuffer.isView(data)) return decodeFsBytes(decoder, data);
+    return decodeFsBytes(decoder, data);
   }
 
   function encodeFsWriteData(data: RuntimeFsData, options: CliWriteOptions, encoder: TextEncoder): Uint8Array {

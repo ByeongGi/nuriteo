@@ -609,6 +609,12 @@ function sanitizeWorkerResultValue(value: unknown, seen = new Set<unknown>()): u
   return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, sanitizeWorkerResultValue(item, seen)]));
 }
 
+function isPromiseLike(value: unknown): value is PromiseLike<unknown> {
+  return (typeof value === "object" || typeof value === "function")
+    && value !== null
+    && typeof (value as { then?: unknown }).then === "function";
+}
+
 function startCliModuleEvaluation(
   options: CliModuleEvaluatorOptions,
   request: CliModuleEvaluationRequest,
@@ -638,7 +644,7 @@ function startCliModuleEvaluation(
   let stdout = "";
   let stderr = "";
   let asyncExitCode: number | undefined;
-  const capturesExit = request.entry.name === "npm";
+  const capturesExit = request.entry.name === "npm" || request.entry.name === "webpack";
   const processOptions = {
     argv: ["node", request.entry.entry, ...request.args],
     cwd: request.cwd,
@@ -646,9 +652,9 @@ function startCliModuleEvaluation(
     // exit handler has reset, then runs the handler a second time and reports
     // "Exit prior to setting npm". Capture the request and emit the exit event
     // instead; the evaluator treats that explicit request as authoritative.
-    // pnpm/Yarn use the thrown sentinel to stop their bundled top-level flow;
-    // npm catches that sentinel inside its own exit handler, so only npm uses
-    // the non-throwing exit-event path.
+    // pnpm/Yarn use the thrown sentinel to stop their bundled top-level flow.
+    // npm catches that sentinel inside its own exit handler, while webpack-cli
+    // issues exits from async command actions; both use the exit-event path.
     exitMode: capturesExit ? "capture" as const : "throw" as const,
     ...(capturesExit ? { emitExitInCapture: true } : {}),
     ...(request.env ? { env: request.env } : {})
@@ -705,7 +711,7 @@ function startCliModuleEvaluation(
     URLSearchParams,
     WebAssembly,
     WritableStream,
-    __dynamicImport: createCliDynamicImport(() => runtime, options.root || "/workspace"),
+    __dynamicImport: createCliDynamicImport(() => runtime, options.root || "/workspace", request.entry.entry),
     atob,
     btoa,
     clearImmediate: timerScope.clearImmediate,
@@ -802,7 +808,13 @@ function startCliModuleEvaluation(
         stderr = appendCliOutput(stderr, `${errorMessage(error)}\n`);
       });
     } else {
-      runtime.requireSync(request.entry.entry, request.entry.entry);
+      const entryExports = runtime.requireSync(request.entry.entry, request.entry.entry);
+      if (isPromiseLike(entryExports)) {
+        ready = Promise.resolve(entryExports).then(() => undefined, (error) => {
+          asyncExitCode = 1;
+          stderr = appendCliOutput(stderr, `${errorMessage(error)}\n`);
+        });
+      }
     }
   } catch (error) {
     const message = errorMessage(error);
@@ -1608,7 +1620,7 @@ export function createCliNestedWorkerRuntime(
     URLSearchParams,
     WebAssembly,
     WritableStream,
-    __dynamicImport: createCliDynamicImport(() => runtime, request.root),
+    __dynamicImport: createCliDynamicImport(() => runtime, request.root, request.filename),
     atob,
     btoa,
     crypto: cryptoBuiltin.webcrypto,
@@ -1931,9 +1943,10 @@ async function waitForCliEvaluationExit(
 
 function createCliDynamicImport(
   getRuntime?: () => ModuleRuntime | undefined,
-  root = "/workspace"
-): (specifier: string) => Promise<RuntimeNamespace> {
-  return async (specifier: string): Promise<RuntimeNamespace> => {
+  root = "/workspace",
+  parentUrl = join(root, "package.json")
+): (specifier: string, parentOverride?: string) => Promise<RuntimeNamespace> {
+  return async (specifier: string, parentOverride?: string): Promise<RuntimeNamespace> => {
     if (specifier === "chalk") return createChalkNamespace();
     if (specifier === "supports-color") return createSupportsColorNamespace();
     const packageSpecifier = packageSpecifierFromRootFileUrl(specifier, root);
@@ -1947,6 +1960,12 @@ function createCliDynamicImport(
     }
     if (packageSpecifier && runtime) {
       return runtime.importModule(packageSpecifier, join(root, "package.json"));
+    }
+    if (runtime && /^(?:@[^/]+\/)?[^./][^:]*$/.test(specifier)) {
+      return runtime.importModule(specifier, parentOverride || parentUrl);
+    }
+    if (runtime && (specifier.startsWith("./") || specifier.startsWith("../") || specifier.startsWith("/"))) {
+      return runtime.importModule(specifier, parentOverride || parentUrl);
     }
     throw new Error(`ERR_BROWSER_DYNAMIC_IMPORT_UNSUPPORTED: ${specifier}`);
   };

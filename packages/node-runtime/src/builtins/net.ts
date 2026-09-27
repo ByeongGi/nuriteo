@@ -69,6 +69,51 @@ export function connect(options: TcpConnectOptions | number | string, callback?:
 
 export const createConnection = connect;
 
+export class Server extends EventEmitter {
+  listening = false;
+  #host = "127.0.0.1";
+  #port = 0;
+
+  address(): { address: string; family: string; port: number } | null {
+    return this.listening ? { address: this.#host, family: "IPv4", port: this.#port } : null;
+  }
+
+  close(callback?: (error?: Error) => void): this {
+    this.listening = false;
+    queueMicrotask(() => {
+      callback?.();
+      this.emit("close");
+    });
+    return this;
+  }
+
+  listen(portOrOptions: number | { host?: string; port?: number }, hostOrCallback?: string | (() => void), callback?: () => void): this {
+    if (typeof portOrOptions === "number") this.#port = portOrOptions;
+    else {
+      this.#port = portOrOptions.port ?? 0;
+      this.#host = portOrOptions.host || this.#host;
+    }
+    if (typeof hostOrCallback === "string") this.#host = hostOrCallback;
+    else if (typeof hostOrCallback === "function") callback = hostOrCallback;
+    this.listening = true;
+    queueMicrotask(() => {
+      callback?.();
+      this.emit("listening");
+    });
+    return this;
+  }
+
+  unref(): this {
+    return this;
+  }
+}
+
+export function createServer(listener?: (...args: unknown[]) => void): Server {
+  const server = new Server();
+  if (listener) server.on("connection", listener);
+  return server;
+}
+
 export function isIP(input: string): 0 | 4 | 6 {
   if (/^(?:\d{1,3}\.){3}\d{1,3}$/.test(input)) return 4;
   if (input.includes(":")) return 6;
@@ -84,9 +129,11 @@ export function isIPv6(input: string): boolean {
 }
 
 export const netBuiltin = Object.freeze({
+  Server,
   Socket,
   connect,
   createConnection,
+  createServer,
   isIP,
   isIPv4,
   isIPv6

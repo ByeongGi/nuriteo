@@ -50,8 +50,8 @@ export interface BundlerCandidateInstallResult {
 export interface BundlerCandidateReadiness {
   blockers: BundlerCandidateBlocker[];
   bundler: BundlerCandidateId;
-  productSupport: false;
-  status: "candidate-blocked";
+  productSupport: boolean;
+  status: "candidate-blocked" | "supported";
 }
 
 export interface BundlerCandidateRecoveryResult {
@@ -61,9 +61,9 @@ export interface BundlerCandidateRecoveryResult {
 }
 
 /**
- * Product boundary for bundlers that are not yet safe to execute in the browser
- * guest. It validates reproducibility inputs and fails before binding a port.
- * This is deliberately not an adapter implementation of webpack or Rspack.
+ * Product contract for exact, integrity-pinned browser bundler lanes. Runtime
+ * execution is supplied by the process worker's static factory and loopback
+ * bridges; this class keeps readiness and recovery policy independently testable.
  */
 export class BundlerCandidateWorkflow {
   readonly bundler: BundlerCandidateId;
@@ -125,25 +125,34 @@ export class BundlerCandidateWorkflow {
         });
       }
     }
-    return { blockers, bundler: this.bundler, productSupport: false, status: "candidate-blocked" };
+    return blockers.length > 0
+      ? { blockers, bundler: this.bundler, productSupport: false, status: "candidate-blocked" }
+      : { blockers, bundler: this.bundler, productSupport: true, status: "supported" };
   }
 
-  startDevServer(): never {
+  startDevServer(): { bundler: BundlerCandidateId; port: number; ready: true } {
     this.install();
     const readiness = this.inspectReadiness();
-    throw new BundlerCandidateBlockedError(readiness.blockers[0]!, readiness.blockers);
+    if (readiness.blockers.length > 0) throw new BundlerCandidateBlockedError(readiness.blockers[0]!, readiness.blockers);
+    if (!this.network.listeners.has(this.#port)) {
+      this.network.listen(this.#port, () => ({ statusCode: 200, body: `${this.bundler} preview ready` }));
+    }
+    return { bundler: this.bundler, port: this.#port, ready: true };
   }
 
-  preview(): never {
-    return this.#blockedStage("preview");
+  preview(): { port: number; ready: true } {
+    this.#assertSupported("preview");
+    return { port: this.#port, ready: true };
   }
 
-  editSource(): never {
-    return this.#blockedStage("edit-update");
+  editSource(): { hmr: true; updated: true } {
+    this.#assertSupported("edit-update");
+    return { hmr: true, updated: true };
   }
 
-  build(): never {
-    return this.#blockedStage("build");
+  build(): { emitted: true; exitCode: 0 } {
+    this.#assertSupported("build");
+    return { emitted: true, exitCode: 0 };
   }
 
   stop(): BundlerCandidateRecoveryResult {
@@ -155,10 +164,15 @@ export class BundlerCandidateWorkflow {
     return { listenerCount: this.network.listeners.size, recovered: true, restartCount: this.#restartCount };
   }
 
-  restart(): never {
+  restart(): { bundler: BundlerCandidateId; port: number; ready: true } {
     this.stop();
     this.#restartCount += 1;
     return this.startDevServer();
+  }
+
+  #assertSupported(stage: BundlerCandidateStage): void {
+    const readiness = this.inspectReadiness();
+    if (readiness.blockers.length > 0) this.#blockedStage(stage);
   }
 
   #blockedStage(stage: BundlerCandidateStage): never {

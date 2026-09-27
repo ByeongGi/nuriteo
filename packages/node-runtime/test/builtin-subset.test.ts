@@ -20,6 +20,8 @@ function exerciseBuiltins({ Buffer, EventEmitter, util }) {
   assert.equal(Buffer.byteLength("hé"), 3);
   assert.equal(Buffer.concat([Buffer.from("he"), Buffer.from("llo")]).toString(), "hello");
   assert.equal(Buffer.isBuffer(fromUtf8), true);
+  assert.equal(Buffer.isEncoding("utf8"), true);
+  assert.equal(Buffer.isEncoding("definitely-not-an-encoding"), false);
 
   const sliced = fromUtf8.slice(1, 3);
   sliced[0] = 65;

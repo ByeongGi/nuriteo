@@ -10,6 +10,8 @@
   "scripts": {
     "generate:protocol": "node tooling/generators/generate-protocol.ts",
     "generate:next-csp-factory": "node tooling/generators/build-next-csp-factory.ts",
+    "generate:bundler-csp-factories": "node --experimental-strip-types tooling/generators/build-bundler-csp-factories.ts",
+    "generate:rspack-wasi-browser": "node --experimental-strip-types tooling/generators/build-rspack-wasi-browser.ts",
     "test:rust": "cargo test --workspace",
     "build:wasm": "cargo build -p system-wasm --target wasm32-unknown-unknown",
     "check:workspace": "node tooling/checks/check-workspace.ts",
@@ -75,12 +77,18 @@
     "test:preview-service": "node apps/preview-service/test/run.ts",
     "test:next-full-runtime": "node --experimental-strip-types apps/preview-service/test/next-full-runtime.test.ts",
     "test:next-browser-worker": "node --experimental-strip-types apps/preview-service/test/next-browser-worker.test.ts",
+    "test:bundler-browser": "BUNDLER_LANE=webpack node --experimental-strip-types apps/preview-service/test/bundler-browser-worker.test.ts && BUNDLER_LANE=rspack node --experimental-strip-types apps/preview-service/test/bundler-browser-worker.test.ts",
     "check:nextjs-runtime-candidate": "node tooling/checks/check-nextjs-runtime-candidate.ts",
     "test:browser": "node tests/system/browser/run.ts"
   },
   "devDependencies": {
+    "@emnapi/runtime": "1.11.3",
     "@next/swc-wasm-nodejs": "15.1.9",
     "@playwright/test": "1.63.0",
+    "@rspack/binding-wasm32-wasi": "2.2.4",
+    "@rspack/cli": "2.2.4",
+    "@rspack/core": "2.2.4",
+    "@rspack/dev-server": "1.2.1",
     "@sqlite.org/sqlite-wasm": "3.53.4-build1",
     "@types/node": "^22.20.2",
     "@types/react": "19.0.3",
@@ -91,7 +99,10 @@
     "react": "19.0.0",
     "react-dom": "19.0.0",
     "typescript": "6.0.3",
-    "wasm-git": "0.0.17"
+    "wasm-git": "0.0.17",
+    "webpack": "5.111.0",
+    "webpack-cli": "7.2.3",
+    "webpack-dev-server": "5.2.2"
   },
   "dependencies": {
     "fflate": "^0.8.3"
