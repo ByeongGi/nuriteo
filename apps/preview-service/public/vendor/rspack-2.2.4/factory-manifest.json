@@ -9,8 +9,8 @@
   "skippedModules": [],
   "assets": {
     "factory": {
-      "bytes": 25792576,
-      "sha256": "f7ba4be8f06325962935d7937759c6a4f9a618d29a955df0b75bb252e82b168d"
+      "bytes": 25654842,
+      "sha256": "79e720c3e30ab37d79ee861babf954f827c1e8958f097d07b414c62ea849f730"
     },
     "workspace": {
       "bytes": 19903960,

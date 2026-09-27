@@ -19,12 +19,12 @@ const ROLLDOWN_WASI_WORKER_SHA256 = "cca841fe347316a6512d885211fc9604d819a06082a
 const BUNDLER_ASSETS = Object.freeze({
   webpack: {
     version: "5.111.0",
-    factorySha256: "41b7318db4bdb47187a83c5e85d09a6003ce3e43b3376280a13080806a06dbd5",
+    factorySha256: "ffe5da97377b1679e71f1c5087bac1e2ce221a9befd4bbe8fd0e70f2fa29a69d",
     workspaceSha256: "7e2a5bc5ffc0a89711509d8c63f19eb1fea287095a0f9a028302b60c6141d0ec"
   },
   rspack: {
     version: "2.2.4",
-    factorySha256: "f7ba4be8f06325962935d7937759c6a4f9a618d29a955df0b75bb252e82b168d",
+    factorySha256: "79e720c3e30ab37d79ee861babf954f827c1e8958f097d07b414c62ea849f730",
     workspaceSha256: "dde01ba66a703c2ac0186412fddcf3bf004a599824fd3edc96dcef5743e25823",
     bindingSha256: "a0dbff6f0abde0062a9e44ce366f71b93a307b32f5e4543e9582d5bfd4e5d4e5",
     wasmSha256: "99425ddaffe461d35421208867c36c7b1edf2166c293a6425f3dc7f653b57055",

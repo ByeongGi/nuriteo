@@ -396,7 +396,7 @@ export function readRspackWasiDirectory(root) {
   return files;
 }\n`
     : "";
-  const factorySource = `// Generated from integrity-pinned ${lane} ${config.version} packages. Do not edit.\n${imports}
+  const factorySource = normalizeGeneratedText(`// Generated from integrity-pinned ${lane} ${config.version} packages. Do not edit.\n${imports}
 export const bundler = ${JSON.stringify(lane)};
 export const version = ${JSON.stringify(config.version)};
 export const packageVersions = Object.freeze(${JSON.stringify(Object.fromEntries([...defaultByName].map(([name, node]) => [name, node.manifest.version]).sort()), null, 2)});
@@ -413,7 +413,7 @@ ${indent(esmFactories.join(",\n"), 2)}
 ${rspackOverride}
 export function invalidateBundler(path) { __bundlerInvalidate?.(path); }
 Object.freeze(cjsFactories);
-`;
+`);
   const factoryPath = path.join(outputRoot, "cli-static-factories.mjs");
   fs.writeFileSync(factoryPath, factorySource);
   const manifest = {
@@ -595,4 +595,14 @@ function bindingNameContains(binding: ts.BindingName, name: string): boolean {
   return binding.elements.some((element) => !ts.isOmittedExpression(element) && bindingNameContains(element.name, name));
 }
 function indent(value: string, spaces: number): string { const prefix = " ".repeat(spaces); return value.split("\n").map((line) => `${prefix}${line}`).join("\n"); }
+function normalizeGeneratedText(value: string): string {
+  const normalized = value
+    .replace(/\r\n?/g, "\n")
+    .split("\n")
+    .map((line) => line
+      .replace(/^[\t ]+/, (indentation) => indentation.replace(/ +(?=\t)/g, ""))
+      .replace(/[\t ]+$/g, ""))
+    .join("\n");
+  return normalized.endsWith("\n") ? normalized : `${normalized}\n`;
+}
 function sha256(value: crypto.BinaryLike): string { return crypto.createHash("sha256").update(value).digest("hex"); }

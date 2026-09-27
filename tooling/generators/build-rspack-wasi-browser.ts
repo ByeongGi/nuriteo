@@ -123,6 +123,7 @@ class TextDecoder extends __CargoNativeTextDecoder {
   }
 }
 ${source}`;
+  source = normalizeGeneratedText(source);
   fs.writeFileSync(generated, source);
 }
 
@@ -142,4 +143,15 @@ function walkFiles(root: string): string[] {
     const file = path.join(root, entry.name);
     return entry.isDirectory() ? walkFiles(file) : [file];
   }).sort();
+}
+
+function normalizeGeneratedText(value: string): string {
+  const normalized = value
+    .replace(/\r\n?/g, "\n")
+    .split("\n")
+    .map((line) => line
+      .replace(/^[\t ]+/, (indentation) => indentation.replace(/ +(?=\t)/g, ""))
+      .replace(/[\t ]+$/g, ""))
+    .join("\n");
+  return normalized.endsWith("\n") ? normalized : `${normalized}\n`;
 }
