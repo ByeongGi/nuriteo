@@ -61,15 +61,15 @@ try {
 
   await page.getByRole("button", { name: "Run and Extensions" }).click();
   await page.getByText("Workspace Tools · active").waitFor({ timeout: 15_000 });
-  await page.getByLabel("commands.register").uncheck();
-  await page.getByText("grants: languages.diagnostics").waitFor({ timeout: 15_000 });
+  await page.getByLabel("cargo.builtin.workspace-tools commands.register").uncheck();
+  await page.getByText("grants: workspace.read, workspace.write", { exact: false }).waitFor({ timeout: 15_000 });
   assert.equal(await page.locator("#extension-run-command").isDisabled(), true);
   await page.getByRole("button", { name: "Explorer" }).click();
   await page.getByRole("button", { name: "Run and Extensions" }).click();
   await page.getByText("Workspace Tools · active").waitFor({ timeout: 15_000 });
-  assert.equal(await page.getByLabel("commands.register").isChecked(), false);
-  await page.getByLabel("commands.register").check();
-  await page.getByText("grants: languages.diagnostics, commands.register").waitFor({ timeout: 15_000 });
+  assert.equal(await page.getByLabel("cargo.builtin.workspace-tools commands.register").isChecked(), false);
+  await page.getByLabel("cargo.builtin.workspace-tools commands.register").check();
+  await page.getByText("grants: workspace.read, workspace.write, commands.register", { exact: false }).waitFor({ timeout: 15_000 });
   await page.locator("#extension-run-command").click();
   await page.getByText("Hello from isolated Workspace Tools").waitFor();
   await page.locator("#extension-crash-recover").click();

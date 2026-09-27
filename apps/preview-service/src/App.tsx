@@ -54,7 +54,7 @@ export default function App() {
       case "settings":
         return feature("Settings", <SettingsPanel model={model} />, "Loading settings…");
       case "developer-tools":
-        return feature("Run and Extensions", <DeveloperToolsPanel />, "Loading developer tools…");
+        return feature("Run and Extensions", <DeveloperToolsPanel model={model} />, "Loading developer tools…");
       case "explorer":
       default:
         return <FileTree model={model} />;

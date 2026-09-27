@@ -1,11 +1,13 @@
-import { JsonRpcClient } from "./jsonRpcClient.ts";
-import type { JsonRpcTransport } from "./jsonRpcClient.ts";
+import type { ExtensionCapability, SignedExtensionManifest } from "./extensionManifest.ts";
+import { verifyExtensionManifest } from "./extensionManifest.ts";
+import type {
+  ExtensionActivationResult,
+  ExtensionCommandResult,
+  ExtensionDiagnosticsResult,
+  ExtensionDocument
+} from "./extensionRuntimeProtocol.ts";
 import { HostProcessJsonRpcTransport } from "./hostProcessJsonRpcTransport.ts";
-import {
-  verifyExtensionManifest,
-  type ExtensionCapability,
-  type SignedExtensionManifest
-} from "./extensionManifest.ts";
+import { JsonRpcClient, type JsonRpcTransport } from "./jsonRpcClient.ts";
 
 export type ExtensionHostState = "stopped" | "verifying" | "active" | "recovering" | "failed";
 
@@ -17,6 +19,7 @@ export class BrowserExtensionHost {
   #state: ExtensionHostState = "stopped";
   #recoveryCount = 0;
   #disposed = false;
+  #activation: ExtensionActivationResult | null = null;
 
   constructor(
     manifest: SignedExtensionManifest,
@@ -38,6 +41,14 @@ export class BrowserExtensionHost {
     this.#createTransport = createTransport;
   }
 
+  get id(): string {
+    return this.#manifest.id;
+  }
+
+  get manifest(): SignedExtensionManifest {
+    return this.#manifest;
+  }
+
   get state(): ExtensionHostState {
     return this.#state;
   }
@@ -46,22 +57,46 @@ export class BrowserExtensionHost {
     return this.#recoveryCount;
   }
 
-  async activate(): Promise<void> {
-    this.#state = "verifying";
-    await verifyExtensionManifest(this.#manifest);
-    if (this.#disposed) return;
-    await this.#spawnAndActivate();
-    this.#state = "active";
+  get grants(): readonly ExtensionCapability[] {
+    return this.#grantedCapabilities;
   }
 
-  async executeHelloCommand(): Promise<string> {
-    if (!this.#grantedCapabilities.includes("commands.register")) {
-      throw new Error(`Extension ${this.#manifest.id} was not granted commands.register.`);
+  hasCapability(capability: ExtensionCapability): boolean {
+    return this.#grantedCapabilities.includes(capability);
+  }
+
+  async activate(): Promise<ExtensionActivationResult> {
+    if (this.#activation && this.#state === "active") return this.#activation;
+    this.#state = "verifying";
+    try {
+      await verifyExtensionManifest(this.#manifest);
+      if (this.#disposed) throw new Error("Extension host is disposed.");
+      this.#activation = await this.#spawnAndActivate();
+      this.#state = "active";
+      return this.#activation;
+    } catch (error) {
+      this.#state = "failed";
+      throw error;
     }
-    const result = await this.#request<{ message: string }>("workspace/executeCommand", {
-      command: "cargo.workspaceTools.hello"
-    });
-    return result.message;
+  }
+
+  async executeCommand(command: string, document?: ExtensionDocument): Promise<ExtensionCommandResult> {
+    this.#requireCapability("commands.register");
+    if (!this.#manifest.contributes.commands?.some((contribution) => contribution.command === command)) {
+      throw new Error(`Extension ${this.id} does not contribute ${command}.`);
+    }
+    return this.#request("workspace/executeCommand", { command, ...(document ? { document } : {}) });
+  }
+
+  async provideDiagnostics(document: ExtensionDocument): Promise<ExtensionDiagnosticsResult> {
+    this.#requireCapability("languages.diagnostics");
+    this.#requireCapability("workspace.read");
+    if (!this.#manifest.contributes.languages?.includes(document.languageId)) return { diagnostics: [] };
+    return this.#request("languages/provideDiagnostics", { document });
+  }
+
+  executeHelloCommand(): Promise<string> {
+    return this.executeCommand("cargo.workspaceTools.hello").then((result) => result.message ?? "");
   }
 
   async simulateCrashAndRecover(): Promise<void> {
@@ -73,8 +108,9 @@ export class BrowserExtensionHost {
       this.#state = "recovering";
       this.#client?.dispose("Extension worker crashed.");
       this.#client = null;
+      this.#activation = null;
       this.#recoveryCount += 1;
-      await this.#spawnAndActivate();
+      this.#activation = await this.#spawnAndActivate();
       this.#state = "active";
     }
   }
@@ -83,6 +119,7 @@ export class BrowserExtensionHost {
     this.#disposed = true;
     const client = this.#client;
     this.#client = null;
+    this.#activation = null;
     if (client) {
       try {
         await client.request("extensionHost/deactivate", {}, 1_000);
@@ -93,11 +130,11 @@ export class BrowserExtensionHost {
     this.#state = "stopped";
   }
 
-  async #spawnAndActivate(): Promise<void> {
+  async #spawnAndActivate(): Promise<ExtensionActivationResult> {
     if (this.#disposed) throw new Error("Extension host is disposed.");
     const client = new JsonRpcClient(await this.#createTransport());
     this.#client = client;
-    await client.request("extensionHost/activate", {
+    return client.request("extensionHost/activate", {
       id: this.#manifest.id,
       entrypoint: this.#manifest.entrypoint,
       capabilities: this.#grantedCapabilities
@@ -105,7 +142,11 @@ export class BrowserExtensionHost {
   }
 
   #request<T>(method: string, params: unknown, timeoutMs?: number): Promise<T> {
-    if (!this.#client) return Promise.reject(new Error("Extension host is not active."));
+    if (!this.#client || this.#state !== "active") return Promise.reject(new Error("Extension host is not active."));
     return this.#client.request<T>(method, params, timeoutMs);
+  }
+
+  #requireCapability(capability: ExtensionCapability): void {
+    if (!this.hasCapability(capability)) throw new Error(`Extension ${this.id} was not granted ${capability}.`);
   }
 }
