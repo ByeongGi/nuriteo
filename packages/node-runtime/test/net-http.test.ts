@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 
-import { createHttpBuiltin, createLoopbackNetwork } from "../../node-runtime/src/index.ts";
+import { createHttpBuiltin, createLoopbackNetwork, netBuiltin } from "../../node-runtime/src/index.ts";
 
 const net = createLoopbackNetwork({ maxBytes: 128 * 1024 });
 const server = net.listen(4173, async (request) => {
@@ -100,5 +100,18 @@ await Promise.resolve();
 assert.equal(JSON.stringify(upgradeEvents), JSON.stringify(["/:vite-hmr", "hello"]));
 assert.equal(JSON.stringify(upgradedMessages), JSON.stringify(["welcome"]));
 upgradeServer.close();
+
+const optionsNetwork = createLoopbackNetwork();
+const optionsHttp = createHttpBuiltin(undefined, "http:", optionsNetwork);
+const optionsServer = optionsHttp.createServer({}, (_request, response) => response.end("options"));
+optionsServer.listen({ host: "127.0.0.1", port: 5301 });
+assert.equal((await optionsNetwork.fetch("http://127.0.0.1:5301/")).body, "options");
+optionsServer.close();
+
+const probeServer = netBuiltin.createServer();
+probeServer.listen({ host: "127.0.0.1", port: 5302 });
+await Promise.resolve();
+assert.deepEqual(probeServer.address(), { address: "127.0.0.1", family: "IPv4", port: 5302 });
+probeServer.close();
 
 console.log("node runtime net http test ok");

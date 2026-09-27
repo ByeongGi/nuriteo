@@ -1,0 +1,20 @@
+{
+  "bundler": "webpack",
+  "version": "5.111.0",
+  "packages": 277,
+  "placements": 311,
+  "workspaceFiles": 5082,
+  "cjsFactories": 3823,
+  "esmFactories": 115,
+  "skippedModules": [],
+  "assets": {
+    "factory": {
+      "bytes": 33238184,
+      "sha256": "ffe5da97377b1679e71f1c5087bac1e2ce221a9befd4bbe8fd0e70f2fa29a69d"
+    },
+    "workspace": {
+      "bytes": 9624683,
+      "sha256": "7e2a5bc5ffc0a89711509d8c63f19eb1fea287095a0f9a028302b60c6141d0ec"
+    }
+  }
+}

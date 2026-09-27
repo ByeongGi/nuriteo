@@ -304,9 +304,16 @@ export class Server extends EventEmitter {
     return this;
   }
 
-  listen(portOrCallback?: number | string | (() => void), hostnameOrCallback?: string | (() => void), callback?: () => void): this {
+  listen(
+    portOrCallback?: number | string | { host?: string; hostname?: string; port?: number | string } | (() => void),
+    hostnameOrCallback?: string | (() => void),
+    callback?: () => void
+  ): this {
     if (typeof portOrCallback === "function") {
       callback = portOrCallback;
+    } else if (portOrCallback && typeof portOrCallback === "object") {
+      if (portOrCallback.port !== undefined) this.port = Number(portOrCallback.port);
+      this.hostname = portOrCallback.host || portOrCallback.hostname || this.hostname;
     } else if (portOrCallback !== undefined) {
       this.port = Number(portOrCallback);
     }
@@ -364,11 +371,14 @@ export class Server extends EventEmitter {
     });
     const rawSocket = new LoopbackUpgradeSocket(socket);
     incoming.socket = rawSocket;
-    if (!this.emit("upgrade", incoming, rawSocket, BrowserBuffer.alloc(0))) socket.close();
+    const handled = this.emit("upgrade", incoming, rawSocket, BrowserBuffer.alloc(0));
+    if (!handled) socket.close();
   }
 }
 
 class LoopbackUpgradeSocket extends EventEmitter {
+  readonly OPEN = 1;
+  readyState = 1;
   authorized = false;
   encrypted = false;
   readable = true;
@@ -439,6 +449,23 @@ class LoopbackUpgradeSocket extends EventEmitter {
     this.runtimeSocket.close();
     this.emit("close", !!error);
     return this;
+  }
+
+  close(): void {
+    this.destroy();
+  }
+
+  ping(callback?: (error?: Error) => void): void {
+    callback?.();
+    queueMicrotask(() => this.emit("pong"));
+  }
+
+  send(data: string): void {
+    if (!this.destroyed) this.runtimeSocket.send(data);
+  }
+
+  terminate(): void {
+    this.destroy();
   }
 
   private forwardServerFrames(bytes: Uint8Array): void {
@@ -560,6 +587,7 @@ export interface HttpBuiltin {
   ServerResponse: typeof ServerResponse;
   STATUS_CODES: Record<number, string>;
   createServer(listener?: HttpRequestListener): Server;
+  createServer(options: Record<string, unknown>, listener?: HttpRequestListener): Server;
   get(options: string | URL | HttpRequestOptions, callback?: HttpRequestCallback): ClientRequest;
   get(url: string | URL, options: HttpRequestOptions, callback?: HttpRequestCallback): ClientRequest;
   request(options: string | URL | HttpRequestOptions, callback?: HttpRequestCallback): ClientRequest;
@@ -601,7 +629,10 @@ export function createHttpBuiltin(clientOrFetcher?: RuntimeHttpClient | RuntimeF
     Server,
     ServerResponse,
     STATUS_CODES,
-    createServer: (listener?: HttpRequestListener) => new Server(listener, serverNetwork),
+    createServer: (optionsOrListener?: Record<string, unknown> | HttpRequestListener, listener?: HttpRequestListener) => new Server(
+      typeof optionsOrListener === "function" ? optionsOrListener : listener,
+      serverNetwork
+    ),
     get,
     request
   });

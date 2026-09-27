@@ -67,6 +67,10 @@ export class BrowserBuffer extends Uint8Array {
     return value instanceof BrowserBuffer;
   }
 
+  static isEncoding(encoding: string): encoding is BufferEncoding {
+    return ["utf8", "utf-8", "hex", "base64", "ascii", "binary", "latin1"].includes(encoding.toLowerCase());
+  }
+
   toString(encoding: BufferEncoding = "utf8", start = 0, end = this.byteLength): string {
     const view = this.subarray(start, end);
     if (encoding === "hex") return encodeHex(view);

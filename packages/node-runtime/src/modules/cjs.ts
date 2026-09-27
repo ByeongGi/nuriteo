@@ -874,7 +874,9 @@ function rewriteDynamicImports(source: string): string {
       }
     }
 
-    if (source.startsWith("import", index) && !/[\w$\.]/.test(source[index - 1] || "")) {
+    if (source.startsWith("import", index)
+      && !/[\w$\.]/.test(source[index - 1] || "")
+      && !/\basync\s*$/.test(source.slice(Math.max(0, index - 24), index))) {
       let cursor = index + "import".length;
       while (/\s/.test(source[cursor] || "")) cursor += 1;
       if (source[cursor] === "(") {

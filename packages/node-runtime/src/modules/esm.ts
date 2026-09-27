@@ -120,6 +120,7 @@ export function cjsNamespace(exports: RuntimeValue): RuntimeNamespace {
   });
   if ((typeof exports === "object" || typeof exports === "function") && exports) {
     for (const key of Object.keys(exports)) {
+      if (key === "default") continue;
       Object.defineProperty(namespace, key, {
         enumerable: true,
         value: (exports as Record<string, unknown>)[key]
@@ -667,7 +668,20 @@ function unescapeJsString(value: string): string {
 
 function declaresLexicalBinding(source: string, name: string): boolean {
   const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return new RegExp(`(?:^|[\\n;])\\s*(?:const|let|var|class|function)\\s+${escaped}(?![$\\w])`).test(source);
+  if (new RegExp(`(?:^|[\\n;])\\s*(?:const|let|var|class|function)\\s+${escaped}(?![$\\w])`).test(source)) return true;
+  for (const match of source.matchAll(/(?:^|[\n;])\s*(?:const|let|var)\s*\{([^}]*)\}/g)) {
+    const bindings = match[1] || "";
+    if (new RegExp(`(?:^|,)\\s*${escaped}\\s*(?:=|,|$)`).test(bindings)) return true;
+    if (new RegExp(`(?:^|,)\\s*[$\\w]+\\s*:\\s*${escaped}\\s*(?:=|,|$)`).test(bindings)) return true;
+  }
+  if (new RegExp(`(?:^|\\n)\\s*import\\s+(?:type\\s+)?${escaped}(?:\\s*,|\\s+from\\b)`).test(source)) return true;
+  if (new RegExp(`(?:^|\\n)\\s*import\\s+\\*\\s+as\\s+${escaped}\\s+from\\b`).test(source)) return true;
+  for (const match of source.matchAll(/(?:^|\n)\s*import\s+(?:type\s+)?\{([\s\S]*?)\}\s+from\b/g)) {
+    const bindings = match[1] || "";
+    if (new RegExp(`(?:^|,)\\s*${escaped}\\s*(?:,|$)`).test(bindings)) return true;
+    if (new RegExp(`\\bas\\s+${escaped}\\s*(?:,|$)`).test(bindings)) return true;
+  }
+  return false;
 }
 
 type ImportMetaRewriteMode = "preserve-string-literals" | "vite-bundle";
@@ -697,7 +711,7 @@ function prepareEsmSource(source: string, importMetaRewriteMode: ImportMetaRewri
     })
     .replace(/^[ \t]*import\s+([A-Za-z_$][\w$]*)\s+from\s+["']([^"']+)["'];?[ \t]*$/gm, "const $1 = (await __import(\"$2\")).default;")
     .replace(/^[ \t]*import\s+["']([^"']+)["'];?[ \t]*$/gm, "await __import(\"$1\");")
-    .replace(/\bimport\s*\(/g, "__import(")
+    .replace(/(?<![.$\w])import\s*\(/g, "__import(")
     .replace(/^[ \t]*export\s+const\s+\{([^}]+)\}\s*=\s*([^;\n]+);?[ \t]*$/gm, (_match, destructuring: string, expression: string) => {
       return rewriteDestructuredConstExport(destructuring, expression);
     })

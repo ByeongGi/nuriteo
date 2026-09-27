@@ -16,11 +16,28 @@ const ROLLDOWN_WASI_BINDING_SHA256 = "b1a16143d4991cc6f4ff6a3043d40a2b757d74746e
 const ROLLDOWN_WASI_MODULE_SHA256 = "ce4821fa65dcc84f641980889d175fecbdf9fc108ed438c5ab363802a681fce1";
 const ROLLDOWN_WASI_WORKER_PATH = "assets/wasi-worker-browser-IL7bwx-u.js";
 const ROLLDOWN_WASI_WORKER_SHA256 = "cca841fe347316a6512d885211fc9604d819a06082a4c3eb710e0673cb5a1983";
+const BUNDLER_ASSETS = Object.freeze({
+  webpack: {
+    version: "5.111.0",
+    factorySha256: "ffe5da97377b1679e71f1c5087bac1e2ce221a9befd4bbe8fd0e70f2fa29a69d",
+    workspaceSha256: "7e2a5bc5ffc0a89711509d8c63f19eb1fea287095a0f9a028302b60c6141d0ec"
+  },
+  rspack: {
+    version: "2.2.4",
+    factorySha256: "79e720c3e30ab37d79ee861babf954f827c1e8958f097d07b414c62ea849f730",
+    workspaceSha256: "dde01ba66a703c2ac0186412fddcf3bf004a599824fd3edc96dcef5743e25823",
+    bindingSha256: "a0dbff6f0abde0062a9e44ce366f71b93a307b32f5e4543e9582d5bfd4e5d4e5",
+    wasmSha256: "99425ddaffe461d35421208867c36c7b1edf2166c293a6425f3dc7f653b57055",
+    workerSha256: "32c8dd24f1bb60f9f258c450810a5382d7919e3de315b63f924b7cc38518290b"
+  }
+});
 
 let systemPort = null;
 let syncChannel = null;
 let nextRequestId = 1;
 const cliHttpBridges = new Map();
+const cliBundlerInvalidators = new Map();
+const cliWasiFileWriters = new Map();
 const cliWebSockets = new Map();
 const processRuntime = createProcessWorkerRuntime({
   postMessage(message) {
@@ -119,6 +136,8 @@ function runProgram(message) {
 
 async function evaluateCli(message) {
   let response;
+  cliBundlerInvalidators.delete(message.id);
+  cliWasiFileWriters.delete(message.id);
   try {
     const pinnedRuntime = message.request?.entry?.name === "yarn"
       ? { precompiledCjsFactories: await loadPinnedYarnFactories(message) }
@@ -126,8 +145,12 @@ async function evaluateCli(message) {
         ? await loadPinnedNextFactories(message)
       : isPinnedViteEntrypoint(message.request?.entry)
         ? await loadPinnedViteFactories(message)
+      : isPinnedBundlerEntrypoint(message.request?.entry)
+        ? await loadPinnedBundlerFactories(message)
         : {};
-    const { readRolldownWasiDirectory, ...pinnedFactories } = pinnedRuntime;
+    const { invalidateBundler, readRolldownWasiDirectory, readRspackWasiDirectory, writeRspackWasiFile, ...pinnedFactories } = pinnedRuntime;
+    if (invalidateBundler) cliBundlerInvalidators.set(message.id, invalidateBundler);
+    if (writeRspackWasiFile) cliWasiFileWriters.set(message.id, writeRspackWasiFile);
     const httpBridge = message.bridgeLoopbackServer ? createCliEvaluationHttpBridge() : null;
     response = await evaluateCliModuleWorkerMessage(message, {
       ...(httpBridge ? { httpBridge } : {}),
@@ -149,6 +172,11 @@ async function evaluateCli(message) {
       for (const file of readRolldownWasiDirectory(message.request.cwd)) workspace.writeBytes(file.path, file.data);
       response.result.workspaceSnapshot = workspace.snapshot();
     }
+    if (readRspackWasiDirectory && response.result?.workspaceSnapshot) {
+      const workspace = MemoryPackageManagerWorkspace.fromSnapshot(response.result.workspaceSnapshot);
+      for (const file of readRspackWasiDirectory(message.request.cwd)) workspace.writeBytes(file.path, file.data);
+      response.result.workspaceSnapshot = workspace.snapshot();
+    }
     if (httpBridge && response.result?.bridgedServerPorts?.length) {
       cliHttpBridges.set(message.id, httpBridge);
       if (message.request?.entry?.name === "next" && message.request?.args?.[0] !== "build") {
@@ -159,6 +187,85 @@ async function evaluateCli(message) {
     response = { id: message.id, error: error instanceof Error ? error.message : String(error), type: "cli:result" };
   }
   self.postMessage(response);
+}
+
+function isPinnedBundlerEntrypoint(entry) {
+  return (entry?.name === "webpack" && entry.entry?.endsWith("/node_modules/webpack-cli/bin/cli.js"))
+    || (entry?.name === "rspack" && entry.entry?.endsWith("/node_modules/@rspack/cli/bin/rspack.js"));
+}
+
+async function loadPinnedBundlerFactories(message) {
+  const lane = message.request.entry.name;
+  const expected = BUNDLER_ASSETS[lane];
+  if (!expected || message.request.entry.version !== expected.version) {
+    throw new Error(`ERR_${String(lane).toUpperCase()}_CSP_UNSUPPORTED_VERSION`);
+  }
+  const assetRoot = new URL(`/vendor/${lane}-${expected.version}/`, self.location.origin);
+  const factoryUrl = new URL("cli-static-factories.mjs", assetRoot);
+  const workspaceUrl = new URL("package-workspace.bin", assetRoot);
+  await verifyStaticAsset(factoryUrl, expected.factorySha256, `ERR_${lane.toUpperCase()}_CSP_FACTORY_INTEGRITY`);
+  const workspaceResponse = await fetch(workspaceUrl, { cache: "no-store" });
+  const workspaceBytes = new Uint8Array(await workspaceResponse.arrayBuffer());
+  if (!workspaceResponse.ok || await sha256(workspaceBytes) !== expected.workspaceSha256) {
+    throw new Error(`ERR_${lane.toUpperCase()}_CSP_WORKSPACE_INTEGRITY`);
+  }
+  if (lane === "rspack") {
+    await verifyStaticAsset(new URL("rspack-wasi-binding.mjs", assetRoot), expected.bindingSha256, "ERR_RSPACK_WASI_BINDING_INTEGRITY");
+    await verifyStaticAsset(new URL("assets/rspack.wasm", assetRoot), expected.wasmSha256, "ERR_RSPACK_WASI_MODULE_INTEGRITY");
+    await verifyStaticAsset(new URL("assets/wasi-worker-browser.mjs", assetRoot), expected.workerSha256, "ERR_RSPACK_WASI_WORKER_INTEGRITY");
+    message.request.env = { ...(message.request.env || {}), RSPACK_BINDING: "@rspack/binding-wasm32-wasi" };
+  } else {
+    message.request.env = {
+      ...(message.request.env || {}),
+      SKIP_VALIDATION: "y",
+      WEBPACK_CLI_SKIP_IMPORT_LOCAL: "1"
+    };
+  }
+  const factories = await import(/* @vite-ignore */ factoryUrl.href);
+  if (factories.bundler !== lane || factories.version !== expected.version || factories.snapshotSha256 !== expected.workspaceSha256) {
+    throw new Error(`ERR_${lane.toUpperCase()}_CSP_FACTORY_MISMATCH`);
+  }
+  if (factories.skippedModules?.length !== 0 || typeof factories.cjsFactories !== "object" || typeof factories.esmFactories !== "object") {
+    throw new Error(`ERR_${lane.toUpperCase()}_CSP_FACTORY_EXPORTS`);
+  }
+  if (typeof factories.invalidateBundler !== "function") throw new Error(`ERR_${lane.toUpperCase()}_CSP_FACTORY_EXPORTS`);
+  const packageSnapshot = JSON.parse(await gunzipUtf8(workspaceBytes));
+  const workspace = MemoryPackageManagerWorkspace.fromSnapshot(message.workspaceSnapshot);
+  for (const directory of packageSnapshot.directories) workspace.mkdir(directory);
+  for (const file of packageSnapshot.files) workspace.writeBytes(file.path, decodeBase64(file.data));
+  for (const [path, expectedHash] of Object.entries(factories.sourceSha256 || {})) {
+    if (await sha256(workspace.readBytes(path)) !== expectedHash) throw new Error(`ERR_${lane.toUpperCase()}_CSP_SOURCE_INTEGRITY: ${path}`);
+  }
+  message.workspaceSnapshot = workspace.snapshot();
+  if (lane === "rspack") {
+    if (typeof factories.mountWorkspaceIntoRspackWasi !== "function"
+      || typeof factories.readRspackWasiDirectory !== "function"
+      || typeof factories.writeRspackWasiFile !== "function") {
+      throw new Error("ERR_RSPACK_WASI_FS_BRIDGE");
+    }
+    factories.mountWorkspaceIntoRspackWasi(message.workspaceSnapshot);
+  }
+  return {
+    precompiledCjsFactories: factories.cjsFactories,
+    precompiledEsmFactories: factories.esmFactories,
+    invalidateBundler: factories.invalidateBundler,
+    ...(lane === "rspack" ? {
+      readRspackWasiDirectory: factories.readRspackWasiDirectory,
+      writeRspackWasiFile: factories.writeRspackWasiFile
+    } : {})
+  };
+}
+
+async function gunzipUtf8(bytes) {
+  const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("gzip"));
+  return new TextDecoder().decode(await new Response(stream).arrayBuffer());
+}
+
+function decodeBase64(value) {
+  const binary = atob(value);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+  return bytes;
 }
 
 async function loadPinnedNextFactories(message) {
@@ -288,7 +395,7 @@ async function handleCliHttpRequest(message) {
     });
   } catch (error) {
     self.postMessage({
-      error: error instanceof Error ? error.message : String(error),
+      error: error instanceof Error ? error.stack || error.message : String(error),
       evaluationId: message.evaluationId,
       id: message.id,
       type: "cli:http:response"
@@ -300,7 +407,9 @@ async function handleCliFsWrite(message) {
   const bridge = cliHttpBridges.get(message.evaluationId);
   try {
     if (!bridge?.writeFile) throw new Error(`missing CLI fs bridge: ${message.evaluationId}`);
+    cliWasiFileWriters.get(message.evaluationId)?.(message.path, message.data);
     const result = bridge.writeFile(message.path, message.data);
+    cliBundlerInvalidators.get(message.evaluationId)?.(message.path);
     await new Promise((resolve) => setTimeout(resolve, 1000));
     self.postMessage({
       evaluationId: message.evaluationId,
