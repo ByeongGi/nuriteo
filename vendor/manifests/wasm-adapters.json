@@ -12,14 +12,15 @@
       "status": "supported",
       "kind": "rust-wasm",
       "path": "target/wasm32-unknown-unknown/debug/system_wasm.wasm",
-      "sha256": "5d9ff6df00ea9a7d763d266020cd315c8e76cee814e8acedb2c4eb2ffb08ad2c",
+      "sha256": "17f34609269b06311a350f06fd1c74b450d1723987a1189508f3bf76ee2083d1",
       "exports": {
         "cargo_container_abi_version": "function",
         "memory": "memory"
       },
       "usedFor": [
         "Rust/WASM VFS and syscall kernel fixture",
-        "browser-compatible WASM loader verification"
+        "browser-compatible WASM loader verification",
+        "preview terminal virtual POSIX PTY"
       ],
       "fallbackPolicy": "deny-native"
     }

@@ -5,6 +5,8 @@ import { runNodeProgram } from "../packages/node-runtime/src/bootstrap.ts";
 import { createCliEvaluationHttpBridge, evaluateCliModuleWorkerMessage } from "../packages/node-runtime/src/package-managers/cli-evaluator.ts";
 import { MemoryPackageManagerWorkspace } from "../packages/node-runtime/src/package-managers/workspace.ts";
 import { createProcessWorkerRuntime } from "../packages/browser-host/src/process/worker-runtime.ts";
+import { SystemWasmClient } from "../packages/browser-host/src/process/system-wasm-client.ts";
+import { SystemWasmVirtualPty } from "../packages/browser-host/src/process/virtual-pty.ts";
 
 const YARN_BUNDLE_SHA256 = "443ed69e76443b89afddccfc9faec1ff16eb5e500979cc079c696dec4c3d94ee";
 const YARN_ENTRY_SHA256 = "148e19db309ec9eaf7720b28df811337906eea8a1758deaa54afee60a6305e04";
@@ -39,21 +41,60 @@ const cliHttpBridges = new Map();
 const cliBundlerInvalidators = new Map();
 const cliWasiFileWriters = new Map();
 const cliWebSockets = new Map();
+const pendingSystemMessages = [];
+let systemWasm = null;
+let systemWasmError = null;
+void SystemWasmClient.load(new URL("/runtime/system_wasm.wasm", self.location.origin))
+  .then((client) => {
+    systemWasm = client;
+    for (const message of pendingSystemMessages.splice(0)) handleWorkerMessage(message);
+  })
+  .catch((error) => {
+    systemWasmError = error instanceof Error ? error : new Error(String(error));
+    for (const message of pendingSystemMessages.splice(0)) {
+      postSystemWasmFailure(message, systemWasmError);
+    }
+  });
 const processRuntime = createProcessWorkerRuntime({
+  createVirtualPty(mode, size) {
+    if (!systemWasm) throw new Error("system WASM is not ready");
+    return new SystemWasmVirtualPty(systemWasm, mode, size);
+  },
   postMessage(message) {
     self.postMessage(message);
   }
 });
 
 self.addEventListener("message", (event) => {
-  if (processRuntime.handleMessage(event.data)) {
+  if (systemWasmError) {
+    postSystemWasmFailure(event.data, systemWasmError);
     return;
-  } else if (event.data?.type === "boot") {
+  }
+  if (!systemWasm) {
+    pendingSystemMessages.push(event.data);
+    return;
+  }
+  handleWorkerMessage(event.data);
+});
+
+function postSystemWasmFailure(message, error) {
+  self.postMessage({
+    type: "failed",
+    pid: message?.pid,
+    generation: message?.generation,
+    error: error.message
+  });
+}
+
+function handleWorkerMessage(message) {
+  if (processRuntime.handleMessage(message)) {
+    return;
+  } else if (message?.type === "boot") {
     try {
-      if (event.data.fail) throw new Error("forced process boot failure");
-      systemPort = event.data.port;
+      if (message.fail) throw new Error("forced process boot failure");
+      systemPort = message.port;
       if (!systemPort) throw new Error("missing system message port");
-      syncChannel = event.data.syncChannel;
+      syncChannel = message.syncChannel;
       systemPort.start();
       systemPort.onmessage = (portEvent) => {
         if (portEvent.data?.type === "ping") {
@@ -75,22 +116,22 @@ self.addEventListener("message", (event) => {
     } catch (error) {
       self.postMessage(createFailedMessage("process", error));
     }
-  } else if (event.data?.type === "run") {
-    runProgram(event.data);
-  } else if (event.data?.type === "cli:evaluate") {
-    evaluateCli(event.data);
-  } else if (event.data?.type === "cli:http:request") {
-    handleCliHttpRequest(event.data);
-  } else if (event.data?.type === "cli:fs:write") {
-    handleCliFsWrite(event.data);
-  } else if (event.data?.type === "cli:ws:connect") {
-    handleCliWebSocketConnect(event.data);
-  } else if (event.data?.type === "cli:ws:message") {
-    handleCliWebSocketMessage(event.data);
-  } else if (event.data?.type === "cli:ws:close") {
-    handleCliWebSocketClose(event.data);
+  } else if (message?.type === "run") {
+    runProgram(message);
+  } else if (message?.type === "cli:evaluate") {
+    evaluateCli(message);
+  } else if (message?.type === "cli:http:request") {
+    handleCliHttpRequest(message);
+  } else if (message?.type === "cli:fs:write") {
+    handleCliFsWrite(message);
+  } else if (message?.type === "cli:ws:connect") {
+    handleCliWebSocketConnect(message);
+  } else if (message?.type === "cli:ws:message") {
+    handleCliWebSocketMessage(message);
+  } else if (message?.type === "cli:ws:close") {
+    handleCliWebSocketClose(message);
   }
-});
+}
 
 async function runSyscallPing(message) {
   if (!syncChannel) throw new Error("missing sync channel");

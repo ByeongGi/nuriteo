@@ -7,10 +7,12 @@ function assert(condition, message) {
 const contract = JSON.parse(fs.readFileSync("compat/terminal-process-control.json", "utf8"));
 const document = fs.readFileSync("docs/productization/terminal-process-control.md", "utf8");
 
-assert(contract.schemaVersion === 3, "unexpected terminal/process contract schema");
+assert(contract.schemaVersion === 4, "unexpected terminal/process contract schema");
 assert(contract.status === "partial", "terminal/process status must remain partial while kernel PTY semantics are unsupported");
-assert(contract.runtimeModel === "browser-worker-virtual-process", "runtime model must be explicit");
-assert(contract.posixPty?.status === "unsupported", "kernel POSIX PTY must not be claimed in a browser runtime");
+assert(contract.runtimeModel === "browser-worker-rust-wasm-virtual-posix", "runtime model must be explicit");
+assert(contract.posixPty?.status === "partial", "virtual and host POSIX PTY scope must remain distinct");
+assert(contract.posixPty?.virtual?.status === "supported", "Rust virtual POSIX PTY must be documented");
+assert(contract.posixPty?.hostKernel?.status === "unsupported", "host kernel POSIX PTY must not be claimed in a browser runtime");
 assert(contract.security?.executionModel === "parsed-argv-allowlist", "command execution must use parsed argv and an allowlist");
 assert(contract.security?.nativeShell === false, "native shell execution must remain disabled");
 
@@ -37,7 +39,7 @@ for (const capability of requiredCapabilities) {
   assert(typeof entry.semantics === "string" && entry.semantics.length > 20, `missing terminal semantics: ${capability}`);
   assert(document.includes(`\`${capability}\``), `terminal documentation missing capability: ${capability}`);
 }
-for (const signal of ["SIGINT", "SIGTERM", "SIGKILL"]) {
+for (const signal of ["SIGINT", "SIGTERM", "SIGKILL", "SIGWINCH"]) {
   assert(contract.capabilities.signals.values.includes(signal), `missing signal contract: ${signal}`);
   assert(document.includes(signal), `terminal documentation missing signal: ${signal}`);
 }
@@ -45,7 +47,8 @@ for (const [name, value] of Object.entries(contract.limits)) {
   assert(Number.isSafeInteger(value) && value > 0, `invalid terminal/process limit: ${name}`);
 }
 assert(contract.shellGrammar.diagnosticCode === "ERR_CARGO_CONTAINER_UNSUPPORTED_SHELL_SYNTAX", "shell diagnostic code changed");
-assert(contract.posixPty.unsupported.length >= 5, "POSIX PTY limitations are incomplete");
+assert(contract.posixPty.virtual.features.length >= 8, "virtual POSIX PTY evidence is incomplete");
+assert(contract.posixPty.hostKernel.unsupported.length >= 5, "host POSIX PTY limitations are incomplete");
 assert(document.includes("HostProcessTable/createHostProcessShellCommand가 preview production shell의 제한된 Worker command에 연결된다"), "production Worker integration must stay documented");
 
 const tests = new Set(contract.tests);
@@ -73,6 +76,15 @@ assert(shell.includes("outputTruncatedBytes"), "bounded shell transcript evidenc
 assert(shell.includes("ERR_CARGO_CONTAINER_UNSUPPORTED_SHELL_SYNTAX"), "shell injection diagnostic evidence missing");
 const workerRuntime = fs.readFileSync("packages/browser-host/src/process/worker-runtime.ts", "utf8");
 assert(workerRuntime.includes("writeTerminalInput"), "PTY line discipline implementation missing");
-assert(workerRuntime.includes("\\x03") && workerRuntime.includes("\\x04"), "PTY control-character handling missing");
+assert(workerRuntime.includes("createVirtualPty"), "system WASM PTY integration missing");
+const virtualPty = fs.readFileSync("packages/browser-host/src/process/virtual-pty.ts", "utf8");
+for (const operation of ["pty.open", "pty.attach", "pty.read", "pty.write", "pty.ioctl", "pty.poll", "pty.dispatchEvent"]) {
+  assert(virtualPty.includes(operation), `system WASM PTY operation missing: ${operation}`);
+}
+const wasi = fs.readFileSync("packages/node-runtime/src/builtins/wasi.ts", "utf8");
+assert(wasi.includes("_fdRead") && wasi.includes("_fdWrite") && wasi.includes("WasiStdio"), "WASI terminal stdio bridge missing");
+const processWorker = fs.readFileSync("workers/process-worker.ts", "utf8");
+assert(processWorker.includes("/runtime/system_wasm.wasm"), "production process Worker does not load system WASM");
+assert(fs.existsSync("apps/preview-service/public/runtime/system_wasm.wasm"), "preview system WASM asset missing");
 
-console.log("terminal/process control contract ok (partial browser-worker semantics; POSIX PTY unsupported)");
+console.log("terminal/process control contract ok (Rust/WASM virtual POSIX supported; host kernel PTY unsupported)");

@@ -322,6 +322,35 @@ assert.equal(runtimeWasi.wasiImport.random_get(0, 8), 0);
 assert.equal(new Uint8Array(wasiMemory.buffer, 0, 8).some((value) => value !== 0), true);
 assert.equal(runtimeWasi.start({ exports: { memory: wasiMemory } }), 0);
 
+const wasiOutput = [];
+const wasiInput = [new TextEncoder().encode("terminal input")];
+const terminalWasi = new wasi.WASI({
+  returnOnExit: true,
+  stdio: {
+    read: () => wasiInput.shift() ?? null,
+    write: (stream, data) => {
+      wasiOutput.push([stream, new TextDecoder().decode(data)]);
+    }
+  }
+});
+terminalWasi.initialize({ exports: { memory: wasiMemory } });
+const wasiView = new DataView(wasiMemory.buffer);
+const wasiHeap = new Uint8Array(wasiMemory.buffer);
+wasiView.setUint32(64, 128, true);
+wasiView.setUint32(68, 8, true);
+wasiView.setUint32(72, 136, true);
+wasiView.setUint32(76, 8, true);
+assert.equal(terminalWasi.wasiImport.fd_read(0, 64, 2, 32), 0);
+assert.equal(wasiView.getUint32(32, true), 14);
+assert.equal(new TextDecoder().decode(wasiHeap.subarray(128, 142)), "terminal input");
+const encodedOutput = new TextEncoder().encode("WASI output\n");
+wasiHeap.set(encodedOutput, 160);
+wasiView.setUint32(80, 160, true);
+wasiView.setUint32(84, encodedOutput.byteLength, true);
+assert.equal(terminalWasi.wasiImport.fd_write(1, 80, 1, 36), 0);
+assert.equal(wasiView.getUint32(36, true), encodedOutput.byteLength);
+assert.deepEqual(wasiOutput, [["stdout", "WASI output\n"]]);
+
 const perfHooks = requireBuiltin("node:perf_hooks");
 const mark = perfHooks.performance.mark("vite-start");
 assert.equal(mark.entryType, "mark");

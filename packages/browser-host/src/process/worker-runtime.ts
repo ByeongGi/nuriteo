@@ -1,5 +1,6 @@
 import { BrowserProcess } from "../../../node-runtime/src/builtins/process.ts";
 import type { HostProcessTerminalMode } from "./types.ts";
+import type { VirtualPtyWriteResult } from "./virtual-pty.ts";
 
 export type ProcessWorkerSignal = "SIGINT" | "SIGTERM" | "SIGKILL";
 
@@ -24,7 +25,15 @@ export type ProcessWorkerControlMessage =
   | { type: "output-ack"; pid: number; generation: number; bytes: number };
 
 export interface ProcessWorkerRuntimeOptions {
+  createVirtualPty?: (mode: HostProcessTerminalMode, size: { cols: number; rows: number }) => ProcessWorkerVirtualPty;
   postMessage(message: unknown): void;
+}
+
+export interface ProcessWorkerVirtualPty {
+  close(exitCode?: number): void;
+  resize(size: { cols: number; rows: number }): void;
+  write(data: string): VirtualPtyWriteResult;
+  writeOutput(data: string): { output: string };
 }
 
 interface OutputWaiter {
@@ -44,6 +53,7 @@ interface ActiveProcess {
   stdinDrain: Promise<void>;
   stdinWindowBytes: number;
   terminalMode: HostProcessTerminalMode;
+  virtualPty: ProcessWorkerVirtualPty | null;
   canonicalInput: string;
   finished: boolean;
 }
@@ -61,6 +71,7 @@ export function createProcessWorkerRuntime(options: ProcessWorkerRuntimeOptions)
   const finish = (entry: ActiveProcess, code: number): void => {
     if (entry.finished) return;
     entry.finished = true;
+    entry.virtualPty?.close(code);
     options.postMessage({
       type: "exit",
       pid: entry.pid,
@@ -100,6 +111,13 @@ export function createProcessWorkerRuntime(options: ProcessWorkerRuntimeOptions)
       terminal: true,
       terminalSize: validated.terminal
     });
+    let virtualPty: ProcessWorkerVirtualPty | null;
+    try {
+      virtualPty = options.createVirtualPty?.(validated.terminalMode, validated.terminal) || null;
+    } catch (error) {
+      failStart(options, message, error instanceof Error ? error.message : String(error));
+      return;
+    }
     const entry: ActiveProcess = {
       abort,
       generation: validated.generation,
@@ -110,6 +128,7 @@ export function createProcessWorkerRuntime(options: ProcessWorkerRuntimeOptions)
       stdinDrain: Promise.resolve(),
       stdinWindowBytes: validated.stdinWindowBytes,
       terminalMode: { ...validated.terminalMode },
+      virtualPty,
       canonicalInput: "",
       finished: false
     };
@@ -146,7 +165,12 @@ export function createProcessWorkerRuntime(options: ProcessWorkerRuntimeOptions)
       return true;
     }
     if (value.type === "resize") {
-      active.process.resizeTerminal(positiveInteger(value.cols, "terminal columns"), positiveInteger(value.rows, "terminal rows"));
+      const size = {
+        cols: positiveInteger(value.cols, "terminal columns"),
+        rows: positiveInteger(value.rows, "terminal rows")
+      };
+      active.virtualPty?.resize(size);
+      active.process.resizeTerminal(size.cols, size.rows);
       return true;
     }
     if (value.type === "signal") {
@@ -161,22 +185,28 @@ export function createProcessWorkerRuntime(options: ProcessWorkerRuntimeOptions)
     const bytes = byteLength(data);
     if (bytes === 0 || bytes > active.stdinWindowBytes || value.bytes !== bytes) return true;
     const entry = active;
-    entry.stdinChain = entry.stdinChain.then(async () => {
-      if (entry.finished) return;
-      const signal = await writeTerminalInput(entry, data);
-      await entry.stdinDrain;
-      options.postMessage({
-        type: "stdin-ack",
-        pid: entry.pid,
-        generation: entry.generation,
-        bytes
+    entry.stdinChain = entry.stdinChain
+      .then(async () => {
+        if (entry.finished) return;
+        const signal = await writeTerminalInput(entry, data);
+        await entry.stdinDrain;
+        options.postMessage({
+          type: "stdin-ack",
+          pid: entry.pid,
+          generation: entry.generation,
+          bytes
+        });
+        if (signal && !entry.finished) {
+          entry.process.signal(signal);
+          entry.abort.abort(signal);
+          finish(entry, signalExitCode(signal));
+        }
+      })
+      .catch(async (error) => {
+        if (entry.finished) return;
+        await entry.output.write("stderr", `${error instanceof Error ? error.message : String(error)}\n`);
+        finish(entry, 1);
       });
-      if (signal && !entry.finished) {
-        entry.process.signal(signal);
-        entry.abort.abort(signal);
-        finish(entry, signalExitCode(signal));
-      }
-    });
     return true;
   };
 
@@ -184,6 +214,13 @@ export function createProcessWorkerRuntime(options: ProcessWorkerRuntimeOptions)
 }
 
 async function writeTerminalInput(entry: ActiveProcess, data: string): Promise<ProcessWorkerSignal | null> {
+  if (entry.virtualPty) {
+    const result = entry.virtualPty.write(data);
+    if (result.echo) await entry.output.write("stdout", result.echo);
+    if (result.input) entry.process.writeStdin(result.input);
+    if (result.eof) entry.process.endStdin();
+    return result.interrupt ? "SIGINT" : null;
+  }
   if (!entry.terminalMode.canonical) {
     if (entry.terminalMode.echo) await entry.output.write("stdout", data);
     entry.process.writeStdin(data);
@@ -240,17 +277,17 @@ async function executeArgv(entry: ActiveProcess): Promise<number> {
   switch (command) {
     case "echo":
     case "/bin/echo":
-      await entry.output.write("stdout", `${args.join(" ")}\n`);
+      await writeProcessStdout(entry, `${args.join(" ")}\n`);
       return 0;
     case "pwd":
     case "/bin/pwd":
       if (args.length > 0) return usageError(entry, "pwd: arguments are not supported");
-      await entry.output.write("stdout", `${entry.process.cwd()}\n`);
+      await writeProcessStdout(entry, `${entry.process.cwd()}\n`);
       return 0;
     case "env":
     case "/usr/bin/env":
       if (args.length > 0) return usageError(entry, "env: command execution is not supported");
-      await entry.output.write("stdout", `${Object.entries(entry.process.env).map(([name, value]) => `${name}=${value}`).join("\n")}\n`);
+      await writeProcessStdout(entry, `${Object.entries(entry.process.env).map(([name, value]) => `${name}=${value}`).join("\n")}\n`);
       return 0;
     case "true":
     case "/bin/true":
@@ -262,7 +299,7 @@ async function executeArgv(entry: ActiveProcess): Promise<number> {
     case "/usr/bin/node":
     case "/usr/local/bin/node":
       if (args.length === 1 && (args[0] === "--version" || args[0] === "-v")) {
-        await entry.output.write("stdout", `${NODE_VERSION}\n`);
+        await writeProcessStdout(entry, `${NODE_VERSION}\n`);
         return 0;
       }
       return usageError(entry, "node: only --version is allowed by the browser process policy");
@@ -285,7 +322,7 @@ async function runCat(entry: ActiveProcess): Promise<number> {
   let chain = Promise.resolve();
   const onData = (chunk: unknown): void => {
     const data = typeof chunk === "string" ? chunk : String(chunk);
-    chain = chain.then(() => entry.output.write("stdout", data));
+    chain = chain.then(() => writeProcessStdout(entry, data));
     entry.stdinDrain = chain;
   };
   entry.process.stdin.on("data", onData);
@@ -302,13 +339,13 @@ async function runCat(entry: ActiveProcess): Promise<number> {
 }
 
 async function runTerminalSize(entry: ActiveProcess, watch: boolean): Promise<number> {
-  let chain = entry.output.write("stdout", `${entry.process.stdout.columns}x${entry.process.stdout.rows}\n`);
+  let chain = writeProcessStdout(entry, `${entry.process.stdout.columns}x${entry.process.stdout.rows}\n`);
   if (!watch) {
     await chain;
     return 0;
   }
   const onResize = (): void => {
-    chain = chain.then(() => entry.output.write("stdout", `${entry.process.stdout.columns}x${entry.process.stdout.rows}\n`));
+    chain = chain.then(() => writeProcessStdout(entry, `${entry.process.stdout.columns}x${entry.process.stdout.rows}\n`));
   };
   entry.process.on("SIGWINCH", onResize);
   try {
@@ -323,6 +360,11 @@ async function runTerminalSize(entry: ActiveProcess, watch: boolean): Promise<nu
 async function usageError(entry: ActiveProcess, message: string): Promise<number> {
   await entry.output.write("stderr", `${message}\n`);
   return 2;
+}
+
+async function writeProcessStdout(entry: ActiveProcess, data: string): Promise<void> {
+  const output = entry.virtualPty?.writeOutput(data).output ?? data;
+  await entry.output.write("stdout", output);
 }
 
 class ProcessOutputWindow {

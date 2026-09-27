@@ -6,7 +6,7 @@
     "rustc": "1.97.1",
     "target": "wasm32-unknown-unknown",
     "profile": "debug",
-    "sha256": "3726e4726748f300833f0d882c2210ccb255588377249a0044880d553103b1ad",
+    "sha256": "17f34609269b06311a350f06fd1c74b450d1723987a1189508f3bf76ee2083d1",
     "exports": ["cargo_container_abi_version", "memory"],
     "rebuildHashStable": true,
     "result": "pass"

@@ -4,7 +4,17 @@ export interface WasiOptions {
   preopens?: Record<string, string>;
   returnOnExit?: boolean;
   version?: "preview1" | string;
+  stdio?: WasiStdio;
 }
+
+export interface WasiStdio {
+  read(maxBytes: number): Uint8Array | null | undefined;
+  write(stream: "stdout" | "stderr", data: Uint8Array): number | void;
+}
+
+const WASI_ERRNO_AGAIN = 6;
+const WASI_ERRNO_BADF = 8;
+const WASI_ERRNO_FAULT = 21;
 
 export class WASI {
   readonly args: string[];
@@ -13,8 +23,10 @@ export class WASI {
   readonly returnOnExit: boolean;
   readonly version: string;
   readonly wasiImport: Record<string, unknown>;
+  readonly #stdio: WasiStdio | null;
   #exitCode = 0;
   #memory: WebAssembly.Memory | null = null;
+  #stdinRemainder = new Uint8Array();
 
   constructor(options: WasiOptions = {}) {
     this.args = [...(options.args || [])];
@@ -22,6 +34,7 @@ export class WASI {
     this.preopens = { ...(options.preopens || {}) };
     this.returnOnExit = options.returnOnExit ?? false;
     this.version = options.version || "preview1";
+    this.#stdio = options.stdio ?? null;
     this.wasiImport = createWasiPreview1Import(this);
   }
 
@@ -71,6 +84,52 @@ export class WASI {
     throw Object.assign(new Error(`WASI proc_exit(${this.#exitCode})`), { code: this.#exitCode });
   }
 
+  _fdRead(fd: number, iovs: number, iovsLen: number, read: number): number {
+    if (fd !== 0) return WASI_ERRNO_BADF;
+    try {
+      let total = 0;
+      for (let index = 0; index < iovsLen; index += 1) {
+        const pointer = this.#view().getUint32(iovs + index * 8, true);
+        const length = this.#view().getUint32(iovs + index * 8 + 4, true);
+        const destination = this.#heapU8(pointer, length);
+        if (destination.byteLength === 0) continue;
+        const input = this.#takeStdin(destination.byteLength);
+        if (input === undefined) {
+          if (total === 0) return WASI_ERRNO_AGAIN;
+          break;
+        }
+        if (input === null || input.byteLength === 0) break;
+        destination.set(input);
+        total += input.byteLength;
+        if (input.byteLength < destination.byteLength) break;
+      }
+      this.#view().setUint32(read, total, true);
+      return 0;
+    } catch {
+      return WASI_ERRNO_FAULT;
+    }
+  }
+
+  _fdWrite(fd: number, iovs: number, iovsLen: number, written: number): number {
+    if (fd !== 1 && fd !== 2) return WASI_ERRNO_BADF;
+    try {
+      let total = 0;
+      for (let index = 0; index < iovsLen; index += 1) {
+        const pointer = this.#view().getUint32(iovs + index * 8, true);
+        const length = this.#view().getUint32(iovs + index * 8 + 4, true);
+        const bytes = this.#heapU8(pointer, length).slice();
+        const accepted = this.#stdio?.write(fd === 1 ? "stdout" : "stderr", bytes);
+        const count = accepted === undefined ? bytes.byteLength : Math.max(0, Math.min(bytes.byteLength, accepted));
+        total += count;
+        if (count < bytes.byteLength) break;
+      }
+      this.#view().setUint32(written, total, true);
+      return 0;
+    } catch {
+      return WASI_ERRNO_FAULT;
+    }
+  }
+
   _writeUint32(offset: number, value: number): number {
     try {
       this.#view().setUint32(Number(offset), value, true);
@@ -102,6 +161,19 @@ export class WASI {
   #view(): DataView {
     if (!this.#memory) throw new Error("WASI memory is not initialized");
     return new DataView(this.#memory.buffer);
+  }
+
+  #takeStdin(maxBytes: number): Uint8Array | null | undefined {
+    if (this.#stdinRemainder.byteLength > 0) {
+      const chunk = this.#stdinRemainder.slice(0, maxBytes);
+      this.#stdinRemainder = this.#stdinRemainder.slice(chunk.byteLength);
+      return chunk;
+    }
+    if (!this.#stdio) return null;
+    const input = this.#stdio.read(maxBytes);
+    if (input === null || input === undefined || input.byteLength <= maxBytes) return input;
+    this.#stdinRemainder = input.slice(maxBytes);
+    return input.slice(0, maxBytes);
   }
 
   #writeSizes(countPtr: number, sizePtr: number, values: string[]): number {
@@ -141,9 +213,9 @@ function createWasiPreview1Import(wasi: WASI): Record<string, unknown> {
     fd_filestat_get: () => 8,
     fd_prestat_get: () => 8,
     fd_prestat_dir_name: () => 8,
-    fd_read: () => 0,
+    fd_read: (fd, iovs, iovsLen, read) => wasi._fdRead(fd, iovs, iovsLen, read),
     fd_seek: () => 0,
-    fd_write: (_fd, _iovs, _iovsLen, written) => wasi._writeUint32(written, 0),
+    fd_write: (fd, iovs, iovsLen, written) => wasi._fdWrite(fd, iovs, iovsLen, written),
     path_open: () => 8,
     poll_oneoff: () => 8,
     proc_exit: (code) => wasi._procExit(code),

@@ -12,6 +12,8 @@ const isolationHeaders = {
   "Cross-Origin-Resource-Policy": "same-origin"
 };
 
+const productionCsp = "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; connect-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; frame-src 'self' blob:";
+
 function serviceWorkerHeaders() {
   return {
     name: "preview-sw-headers",
@@ -64,7 +66,10 @@ export default defineConfig({
     host: "127.0.0.1",
     port: 5180,
     strictPort: true,
-    headers: isolationHeaders
+    headers: {
+      ...isolationHeaders,
+      "Content-Security-Policy": productionCsp
+    }
   },
   worker: {
     format: "es"

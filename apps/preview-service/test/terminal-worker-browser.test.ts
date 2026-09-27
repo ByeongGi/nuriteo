@@ -11,10 +11,19 @@ const chromePath = process.env.CHROME_PATH || "/Applications/Google Chrome.app/C
 const port = 20_000 + (process.pid % 20_000);
 const baseUrl = `http://127.0.0.1:${port}`;
 const viteEntry = path.join(appRoot, "node_modules/vite/bin/vite.js");
+const useProductionBuild = process.env.PREVIEW_PRODUCTION === "1";
 
 assert.ok(fs.existsSync(chromePath), `Chrome not found at ${chromePath}`);
 
-const server = spawn(process.execPath, [viteEntry, "--host", "127.0.0.1", "--port", String(port), "--strictPort"], {
+const server = spawn(process.execPath, [
+  viteEntry,
+  ...(useProductionBuild ? ["preview"] : []),
+  "--host",
+  "127.0.0.1",
+  "--port",
+  String(port),
+  "--strictPort"
+], {
   cwd: appRoot,
   detached: process.platform !== "win32",
   env: { ...process.env },
@@ -26,11 +35,22 @@ await waitForServer();
 const browser = await chromium.launch({ executablePath: chromePath, headless: true });
 const page = await browser.newPage();
 const cdp = await browser.newBrowserCDPSession();
+const cspViolations: string[] = [];
 const pageErrors: string[] = [];
-page.on("pageerror", (error) => pageErrors.push(error.message));
+page.on("pageerror", (error) => pageErrors.push(error.stack || error.message));
+page.on("console", (message) => {
+  if (message.type() === "error" && message.text().includes("Content Security Policy")) {
+    cspViolations.push(message.text());
+  }
+});
 
 try {
-  await page.goto(baseUrl, { waitUntil: "networkidle" });
+  const documentResponse = await page.goto(baseUrl, { waitUntil: "networkidle" });
+  if (useProductionBuild) {
+    const csp = documentResponse?.headers()["content-security-policy"] || "";
+    assert.match(csp, /script-src 'self' 'wasm-unsafe-eval'/);
+    assert.match(csp, /worker-src 'self'/);
+  }
   await page.waitForFunction(() => Boolean(globalThis.__previewService), null, { timeout: 30_000 });
   await page.evaluate(() => globalThis.__previewService.loadTemplate("vite-react"));
   await page.waitForFunction(() => globalThis.__previewService.snapshot().phase === "template_loaded");
@@ -55,9 +75,23 @@ try {
   // the public controller so multi-session process assertions are not coupled to
   // browser focus timing between two xterm helper textareas.
   await submitTerminalCommand("term-1", "worker-cat");
-  await page.waitForFunction(() => globalThis.__previewService.controller
-    .listShellProcesses()
-    .some((entry) => entry.terminalId === "term-1" && entry.status === "ready"));
+  const firstStart = await page.evaluate(async () => {
+    const deadline = Date.now() + 10_000;
+    while (Date.now() < deadline) {
+      const process = globalThis.__previewService.controller.listShellProcesses()
+        .find((entry) => entry.terminalId === "term-1");
+      if (process && process.status !== "prepared" && process.status !== "starting") {
+        return { process, logs: globalThis.__previewService.snapshot().logs.slice(-10) };
+      }
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    return {
+      process: globalThis.__previewService.controller.listShellProcesses()
+        .find((entry) => entry.terminalId === "term-1"),
+      logs: globalThis.__previewService.snapshot().logs.slice(-10)
+    };
+  });
+  assert.equal(firstStart.process?.status, "ready", `first terminal failed during startup: ${JSON.stringify(firstStart)}`);
   const secondStart = await page.evaluate(async () => {
     const controller = globalThis.__previewService.controller;
     let outcome: { exitCode?: number; stderr?: string; error?: string } | null = null;
@@ -253,7 +287,12 @@ try {
       if (!controller.writeShellInput(chunk, "pressure")) throw new Error(`stdin chunk ${index} rejected`);
       deadline = Date.now() + 10_000;
       while (streamedBytes < expected) {
-        if (Date.now() >= deadline) throw new Error(`stdin chunk ${index} did not drain`);
+        if (Date.now() >= deadline) {
+          throw new Error(`stdin chunk ${index} did not drain: ${JSON.stringify({
+            processes: controller.listShellProcesses(),
+            streamedBytes
+          })}`);
+        }
         await new Promise((resolve) => setTimeout(resolve, 10));
       }
     }
@@ -289,7 +328,15 @@ try {
 
   await page.waitForFunction(() => globalThis.__previewService.controller.listShellProcesses().length === 0);
   await waitForWorkerTargets(baselineWorkers);
-  assert.deepEqual(pageErrors, []);
+  assert.deepEqual(
+    cspViolations.filter((message) => /process-worker|system_wasm|WebAssembly/i.test(message)),
+    []
+  );
+  if (useProductionBuild) {
+    assert.ok(pageErrors.every((message) => message === "Event"), `unexpected production page errors: ${pageErrors.join(" | ")}`);
+  } else {
+    assert.deepEqual(pageErrors, []);
+  }
   console.log("preview terminal production Worker browser e2e ok");
 } finally {
   await browser.close();

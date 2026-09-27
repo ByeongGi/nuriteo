@@ -1,6 +1,7 @@
 import "./process-lifecycle.test.ts";
 import "./process-terminal-command.test.ts";
 import "./process-worker-runtime.test.ts";
+import "./system-wasm-virtual-pty.test.ts";
 import "./permission-model.test.ts";
 import "./permission-diagnostics.test.ts";
 import "./credential-safety.test.ts";

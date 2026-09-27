@@ -28,6 +28,6 @@ export { domainToASCII, domainToUnicode, fileURLToPath, pathToFileURL, URL, urlB
 export { utilBuiltin, callbackify, debuglog, deprecate, format, formatWithOptions, inherits, inspect, parseEnv, promisify, styleText, types as utilTypes } from "./util.ts";
 export { Script as VmScript, createContext as createVmContext, isContext as isVmContext, runInContext, runInNewContext, runInThisContext, vmBuiltin } from "./vm.ts";
 export { getHeapSpaceStatistics, getHeapStatistics, type HeapStatistics, v8Builtin } from "./v8.ts";
-export { WASI, wasiBuiltin, type WasiOptions } from "./wasi.ts";
+export { WASI, wasiBuiltin, type WasiOptions, type WasiStdio } from "./wasi.ts";
 export { isMainThread, MessageChannel, MessagePort, parentPort, SHARE_ENV, threadId, UnsupportedWorkerThreadError, Worker, workerData, workerThreadsBuiltin } from "./worker-threads-builtin.ts";
 export { BrotliCompress, BrotliDecompress, createBrotliCompress, createBrotliDecompress, createDeflate, createDeflateRaw, createGunzip, createGzip, createInflate, createInflateRaw, createUnzip, Deflate, DeflateRaw, deflateRawSync, Gunzip, gunzipSync, Gzip, gzipSync, Inflate, inflateRawSync, InflateRaw, Unzip, Z_BEST_SPEED, Z_SYNC_FLUSH, zlibBuiltin } from "./zlib.ts";

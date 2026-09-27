@@ -44,6 +44,7 @@
     "check:framework-support": "node tooling/checks/check-framework-product-support.ts",
     "check:yarn-v1-support": "node tooling/checks/check-yarn-v1-product-support.ts",
     "check:terminal-process-control": "node tooling/checks/check-terminal-process-control.ts",
+    "check:system-wasm-terminal": "node tooling/checks/check-system-wasm-terminal.ts && node packages/browser-host/test/system-wasm-virtual-pty.test.ts",
     "check:ide-polish": "node tooling/checks/check-ide-polish.ts",
     "check:full-ide-product-stage": "node tooling/checks/check-full-ide-product-stage.ts",
     "test:vite-vue-svelte-actual": "node tests/compatibility/frameworks/vite/vite-vue-svelte-actual.test.ts",
