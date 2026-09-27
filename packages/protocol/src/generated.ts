@@ -18,11 +18,26 @@ export const OPCODES = Object.freeze({
   "fs.write": 18,
   "fs.close": 19,
   "fs.stat": 20,
-  "fs.mkdir": 21
+  "fs.mkdir": 21,
+  "process.register": 32,
+  "process.signal.take": 33,
+  "process.exit": 34,
+  "pty.open": 48,
+  "pty.read": 49,
+  "pty.write": 50,
+  "pty.close": 51,
+  "pty.ioctl": 52,
+  "pty.poll": 53,
+  "pty.attach": 54,
+  "pty.setForeground": 55,
+  "pty.dispatchEvent": 56
 });
 
 export const ERROR_CODES = Object.freeze({
+  "EIO": 5,
   "E2BIG": 7,
+  "EBADF": 9,
+  "EAGAIN": 11,
   "EINVAL": 22,
   "ENOSYS": 38,
   "EBADMSG": 74

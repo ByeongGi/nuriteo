@@ -54,6 +54,18 @@ fn known_opcode(opcode: u16) -> bool {
             | opcodes::FS_CLOSE
             | opcodes::FS_STAT
             | opcodes::FS_MKDIR
+            | opcodes::PROCESS_REGISTER
+            | opcodes::PROCESS_SIGNAL_TAKE
+            | opcodes::PROCESS_EXIT
+            | opcodes::PTY_OPEN
+            | opcodes::PTY_READ
+            | opcodes::PTY_WRITE
+            | opcodes::PTY_CLOSE
+            | opcodes::PTY_IOCTL
+            | opcodes::PTY_POLL
+            | opcodes::PTY_ATTACH
+            | opcodes::PTY_SETFOREGROUND
+            | opcodes::PTY_DISPATCHEVENT
     )
 }
 
