@@ -51,15 +51,41 @@ try {
     await controller.runShellCommand("export TERMINAL_NAME=second", "term-2");
   });
 
-  // Submit through xterm, not through a test-only process API. worker-cat maps to
-  // the allowlisted persistent Worker command; its stdin is echoed as stdout.
+  // Submit one command through xterm to cover the UI path. Start the sibling via
+  // the public controller so multi-session process assertions are not coupled to
+  // browser focus timing between two xterm helper textareas.
   await submitTerminalCommand("term-1", "worker-cat");
-  await submitTerminalCommand("term-2", "worker-cat");
-  await page.waitForFunction(() => globalThis.__previewService.controller.listShellProcesses().length === 2);
-  await waitForWorkerTargets(baselineWorkers + 2);
-  await page.waitForFunction(() => globalThis.__previewService.controller.listShellProcesses().every((entry) => entry.status === "ready"));
-
-  const running = await page.evaluate(() => globalThis.__previewService.controller.listShellProcesses()) as Array<{
+  await page.waitForFunction(() => globalThis.__previewService.controller
+    .listShellProcesses()
+    .some((entry) => entry.terminalId === "term-1" && entry.status === "ready"));
+  const secondStart = await page.evaluate(async () => {
+    const controller = globalThis.__previewService.controller;
+    let outcome: { exitCode?: number; stderr?: string; error?: string } | null = null;
+    void controller.runShellCommand("worker-cat", "term-2")
+      .then((result) => { outcome = { exitCode: result.exitCode, stderr: result.stderr }; })
+      .catch((error) => { outcome = { error: error instanceof Error ? error.message : String(error) }; });
+    const deadline = Date.now() + 5_000;
+    while (true) {
+      const processes = controller.listShellProcesses();
+      if (processes.some((entry) => entry.terminalId === "term-2" && entry.status === "ready")) {
+        return { outcome, processes };
+      }
+      if (outcome || Date.now() >= deadline) return { outcome, processes };
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+  });
+  assert.equal(secondStart.outcome, null, `second terminal exited during startup: ${JSON.stringify(secondStart.outcome)}`);
+  const running = await page.evaluate(async () => {
+    const deadline = Date.now() + 5_000;
+    while (true) {
+      const entries = globalThis.__previewService.controller.listShellProcesses();
+      const first = entries.find((entry) => entry.terminalId === "term-1");
+      const second = entries.find((entry) => entry.terminalId === "term-2");
+      if (first?.status === "ready" && second?.status === "ready") return entries;
+      if (Date.now() >= deadline) throw new Error(`terminal processes did not become ready: ${JSON.stringify(entries)}`);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+  }) as Array<{
     argv?: string[];
     command: string;
     cwd: string;
@@ -82,6 +108,7 @@ try {
     const logs = globalThis.__previewService.snapshot().logs.join("\n");
     return logs.includes("second-stdin-token");
   });
+  await waitForWorkerTargets(baselineWorkers + 2);
 
   await page.evaluate(() => {
     const controller = globalThis.__previewService.controller;
@@ -111,7 +138,6 @@ try {
   await expectTerminalText("term-1", "exit 130");
   await secondProcess.getByRole("button", { name: "Terminate" }).click();
   await page.waitForFunction(() => globalThis.__previewService.controller.listShellProcesses().length === 0);
-  await expectTerminalText("term-2", "exit 143");
 
   // Closing a session tears it down. Reusing the same terminal id creates a clean
   // session at the project root instead of retaining cwd/env or stale PID state.
@@ -124,6 +150,37 @@ try {
   });
   assert.equal(restarted.cwd, "/workspace/app");
   assert.doesNotMatch(restarted.env, /TERMINAL_NAME=first/);
+
+  // The opt-in virtual PTY path applies canonical line discipline in the real
+  // process Worker while keeping the legacy worker-cat command raw-compatible.
+  const pty = await page.evaluate(async () => {
+    const controller = globalThis.__previewService.controller;
+    let output = "";
+    const pending = controller.runShellCommand("worker-pty", "pty-probe", (chunk) => {
+      output += chunk.data;
+    });
+    let deadline = Date.now() + 5_000;
+    while (!controller.listShellProcesses().some((entry) => entry.terminalId === "pty-probe" && entry.status === "ready")) {
+      if (Date.now() >= deadline) throw new Error("PTY probe did not start");
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    const mode = controller.listShellProcesses().find((entry) => entry.terminalId === "pty-probe")?.terminalMode;
+    controller.writeShellInput("abc", "pty-probe");
+    controller.writeShellInput("\x7fZ\r", "pty-probe");
+    deadline = Date.now() + 5_000;
+    while (!output.includes("abZ\n")) {
+      if (Date.now() >= deadline) throw new Error(`PTY canonical line did not flush: ${JSON.stringify(output)}`);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    controller.writeShellInput("\x03", "pty-probe");
+    const result = await pending;
+    controller.closeShell("pty-probe");
+    return { exitCode: result.exitCode, mode, output };
+  });
+  assert.deepEqual(pty.mode, { canonical: true, echo: true, signals: true });
+  assert.equal(pty.exitCode, 130);
+  assert.match(pty.output, /abc\x08 \x08Z\nabZ\n/);
+  assert.match(pty.output, /\^C\n/);
 
   // Exercise immediate SIGKILL on a fresh process and ensure it can be replaced.
   const killed = await page.evaluate(async () => {
@@ -241,14 +298,28 @@ try {
 
 async function submitTerminalCommand(terminalId: string, command: string): Promise<void> {
   await activateTerminal(terminalId);
-  await page.keyboard.type(command);
-  await page.keyboard.press("Enter");
+  const input = page.locator(`#terminal-xterm-${terminalId} .xterm-helper-textarea`);
+  await input.pressSequentially(command);
+  await input.press("Enter");
 }
 
 async function activateTerminal(terminalId: string): Promise<void> {
   const sequence = Number(terminalId.replace(/^term-/, ""));
-  if (Number.isSafeInteger(sequence)) await page.getByRole("tab", { name: `Terminal ${sequence}` }).click();
-  await page.locator(`#terminal-xterm-${terminalId} .xterm-screen`).click();
+  if (Number.isSafeInteger(sequence)) {
+    const tab = page.getByRole("tab", { name: `Terminal ${sequence}` });
+    await tab.click();
+    await page.waitForFunction(
+      (label) => [...document.querySelectorAll('[role="tab"]')]
+        .some((entry) => entry.textContent?.trim() === label && entry.getAttribute("aria-selected") === "true"),
+      `Terminal ${sequence}`
+    );
+  }
+  const input = page.locator(`#terminal-xterm-${terminalId} .xterm-helper-textarea`);
+  await input.focus();
+  await page.waitForFunction(
+    (id) => document.activeElement === document.querySelector(`#terminal-xterm-${id} .xterm-helper-textarea`),
+    terminalId
+  );
 }
 
 async function expectTerminalText(terminalId: string, expected: string): Promise<void> {

@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "updatedAt": "2026-09-27",
   "status": "partial",
   "runtimeModel": "browser-worker-virtual-process",
@@ -7,6 +7,7 @@
     "isolatedSessions": { "status": "supported", "semantics": "Each preview terminal id owns an independent shell runtime, cwd, environment, transcript, foreground command, input listeners, and terminal size." },
     "cwdAndEnvironment": { "status": "supported", "semantics": "Session-local cd/export/unset state; host process start messages carry an absolute normalized cwd and validated environment names." },
     "streamingStdio": { "status": "supported", "semantics": "Allowlisted production Worker commands stream separate stdout/stderr chunks through HostProcessTable into the preview xterm; package workflow commands remain direct workflow adapters." },
+    "ptyLineDiscipline": { "status": "supported", "semantics": "Worker processes can opt into bounded canonical input, local echo, backspace and line-kill editing, Ctrl-D EOF, and Ctrl-C virtual SIGINT; legacy raw streaming remains the default." },
     "terminalResize": { "status": "partial", "semantics": "Resize is retained per session and delivered through the host protocol, but no kernel ioctl/termios PTY exists." },
     "foregroundProcess": { "status": "partial", "semantics": "One active command per terminal is tracked and receives stdin/resize/signal events; process groups and job control are unsupported." },
     "exitStatus": { "status": "supported", "semantics": "Completion records exit code; virtual SIGINT/SIGTERM/SIGKILL fallbacks use 130/143/137." },
@@ -50,6 +51,7 @@
     "packages/node-runtime/test/secondary-builtins.test.ts",
     "packages/browser-host/test/process-lifecycle.test.ts",
     "packages/browser-host/test/process-terminal-command.test.ts",
+    "packages/browser-host/test/process-worker-runtime.test.ts",
     "tests/compatibility/package-managers/terminal-commands.test.ts",
     "apps/preview-service/test/terminal-session-control.test.ts",
     "apps/preview-service/test/terminal-worker-browser.test.ts"
@@ -60,6 +62,7 @@
     "node packages/node-runtime/test/scheduler.test.ts",
     "node packages/browser-host/test/process-lifecycle.test.ts",
     "node packages/browser-host/test/process-terminal-command.test.ts",
+    "node packages/browser-host/test/process-worker-runtime.test.ts",
     "node apps/preview-service/test/terminal-session-control.test.ts",
     "node apps/preview-service/test/terminal-worker-browser.test.ts",
     "pnpm test:browser-host",

@@ -1,5 +1,5 @@
 import { WorkerRegistry } from "./worker-registry.ts";
-import type { HostProcessOutputChunk, HostProcessPrepareOptions, HostProcessRecord, HostProcessResize, HostProcessSignal, HostProcessSnapshot, HostProcessStatus, HostProcessTableOptions, HostWorkerLike } from "./types.ts";
+import type { HostProcessOutputChunk, HostProcessPrepareOptions, HostProcessRecord, HostProcessResize, HostProcessSignal, HostProcessSnapshot, HostProcessStatus, HostProcessTableOptions, HostProcessTerminalMode, HostWorkerLike } from "./types.ts";
 import type { RuntimeTraceSink } from "../observability/index.ts";
 import {
   assertAbuseAllowed,
@@ -30,6 +30,7 @@ export class HostProcessTable {
   maxOutputBytes: number;
   maxOutputChunks: number;
   stdinWindowBytes: number;
+  startupTimeoutMs: number;
   signalGraceMs: number;
 
   constructor(options: HostProcessTableOptions = {}) {
@@ -47,6 +48,7 @@ export class HostProcessTable {
     this.maxOutputBytes = positiveLimit(options.maxOutputBytes, 1024 * 1024, "maxOutputBytes");
     this.maxOutputChunks = positiveLimit(options.maxOutputChunks, 1024, "maxOutputChunks");
     this.stdinWindowBytes = positiveLimit(options.stdinWindowBytes, 64 * 1024, "stdinWindowBytes");
+    this.startupTimeoutMs = nonNegativeLimit(options.startupTimeoutMs, 5000, "startupTimeoutMs");
     this.signalGraceMs = nonNegativeLimit(options.signalGraceMs, 500, "signalGraceMs");
   }
 
@@ -96,6 +98,7 @@ export class HostProcessTable {
       outputDroppedBytes: 0,
       stdinPendingBytes: 0,
       signal: null,
+      terminalMode: normalizeTerminalMode(options.terminalMode),
       terminalSize: { cols: 80, rows: 24 },
       waiters: [],
       resourcesReleased: false
@@ -134,7 +137,7 @@ export class HostProcessTable {
           return;
         }
         resolveOnce(this.#finish(record, "failed", 1, "startup timeout"));
-      }, 1000);
+      }, this.startupTimeoutMs);
       const onMessage = (event: Event) => {
         const data = "data" in event ? event.data as { type?: string; error?: string; code?: number; data?: string; bytes?: number; pid?: number; generation?: number } : {};
         if ((data.pid !== undefined && data.pid !== record.pid) ||
@@ -185,6 +188,7 @@ export class HostProcessTable {
           cwd: record.cwd,
           env: record.env,
           argv: [...record.argv],
+          terminalMode: { ...record.terminalMode },
           terminal: { ...record.terminalSize },
           outputWindowBytes: this.maxOutputBytes,
           stdinWindowBytes: this.stdinWindowBytes
@@ -385,6 +389,7 @@ function snapshot(record: HostProcessRecord): HostProcessSnapshot {
     outputDroppedBytes: record.outputDroppedBytes,
     stdinPendingBytes: record.stdinPendingBytes,
     signal: record.signal,
+    terminalMode: { ...record.terminalMode },
     terminalSize: { ...record.terminalSize },
     resourcesReleased: Boolean(record.resourcesReleased)
   };
@@ -409,6 +414,14 @@ function nonNegativeLimit(value: number | undefined, fallback: number, name: str
   const resolved = value ?? fallback;
   if (!Number.isSafeInteger(resolved) || resolved < 0) throw new RangeError(`${name} must be a non-negative safe integer`);
   return resolved;
+}
+
+function normalizeTerminalMode(mode: Partial<HostProcessTerminalMode> | undefined): HostProcessTerminalMode {
+  return {
+    canonical: mode?.canonical ?? false,
+    echo: mode?.echo ?? false,
+    signals: mode?.signals ?? true
+  };
 }
 
 function validateCwd(cwd: string): string {

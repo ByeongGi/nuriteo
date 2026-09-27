@@ -11,7 +11,14 @@ export interface HostProcessPrepareOptions {
   env?: HostProcessEnv;
   argv?: string[];
   projectId?: string;
+  terminalMode?: Partial<HostProcessTerminalMode>;
   url?: string | URL | undefined;
+}
+
+export interface HostProcessTerminalMode {
+  canonical: boolean;
+  echo: boolean;
+  signals: boolean;
 }
 
 export interface HostProcessRecord {
@@ -33,6 +40,7 @@ export interface HostProcessRecord {
   outputDroppedBytes: number;
   stdinPendingBytes: number;
   signal: HostProcessSignal | null;
+  terminalMode: HostProcessTerminalMode;
   terminalSize: HostProcessResize;
   waiters: Array<(snapshot: HostProcessSnapshot) => void>;
   resourcesReleased: boolean;
@@ -57,6 +65,7 @@ export interface HostProcessSnapshot {
   outputDroppedBytes: number;
   stdinPendingBytes: number;
   signal: HostProcessSignal | null;
+  terminalMode: HostProcessTerminalMode;
   terminalSize: HostProcessResize;
   resourcesReleased: boolean;
 }
@@ -102,6 +111,7 @@ export interface HostProcessTableOptions {
   maxOutputBytes?: number;
   maxOutputChunks?: number;
   stdinWindowBytes?: number;
+  startupTimeoutMs?: number;
   signalGraceMs?: number;
 }
 
@@ -112,6 +122,7 @@ export interface HostProcessShellCommandOptions {
   url: string | URL;
   waitForExit?: boolean;
   releaseOnExit?: boolean;
+  terminalMode?: Partial<HostProcessTerminalMode>;
 }
 
 export interface HostProcessShellCommandContext {

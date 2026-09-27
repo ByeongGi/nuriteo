@@ -1,4 +1,5 @@
 import { BrowserProcess } from "../../../node-runtime/src/builtins/process.ts";
+import type { HostProcessTerminalMode } from "./types.ts";
 
 export type ProcessWorkerSignal = "SIGINT" | "SIGTERM" | "SIGKILL";
 
@@ -9,6 +10,7 @@ export interface ProcessWorkerStartMessage {
   argv: string[];
   cwd: string;
   env: Record<string, string>;
+  terminalMode: HostProcessTerminalMode;
   terminal: { cols: number; rows: number };
   outputWindowBytes: number;
   stdinWindowBytes: number;
@@ -41,6 +43,8 @@ interface ActiveProcess {
   stdinChain: Promise<void>;
   stdinDrain: Promise<void>;
   stdinWindowBytes: number;
+  terminalMode: HostProcessTerminalMode;
+  canonicalInput: string;
   finished: boolean;
 }
 
@@ -105,6 +109,8 @@ export function createProcessWorkerRuntime(options: ProcessWorkerRuntimeOptions)
       stdinChain: Promise.resolve(),
       stdinDrain: Promise.resolve(),
       stdinWindowBytes: validated.stdinWindowBytes,
+      terminalMode: { ...validated.terminalMode },
+      canonicalInput: "",
       finished: false
     };
     active = entry;
@@ -157,7 +163,7 @@ export function createProcessWorkerRuntime(options: ProcessWorkerRuntimeOptions)
     const entry = active;
     entry.stdinChain = entry.stdinChain.then(async () => {
       if (entry.finished) return;
-      entry.process.writeStdin(data);
+      const signal = await writeTerminalInput(entry, data);
       await entry.stdinDrain;
       options.postMessage({
         type: "stdin-ack",
@@ -165,11 +171,68 @@ export function createProcessWorkerRuntime(options: ProcessWorkerRuntimeOptions)
         generation: entry.generation,
         bytes
       });
+      if (signal && !entry.finished) {
+        entry.process.signal(signal);
+        entry.abort.abort(signal);
+        finish(entry, signalExitCode(signal));
+      }
     });
     return true;
   };
 
   return { handleMessage };
+}
+
+async function writeTerminalInput(entry: ActiveProcess, data: string): Promise<ProcessWorkerSignal | null> {
+  if (!entry.terminalMode.canonical) {
+    if (entry.terminalMode.echo) await entry.output.write("stdout", data);
+    entry.process.writeStdin(data);
+    return null;
+  }
+
+  for (const input of data) {
+    if (entry.terminalMode.signals && input === "\x03") {
+      entry.canonicalInput = "";
+      if (entry.terminalMode.echo) await entry.output.write("stdout", "^C\n");
+      return "SIGINT";
+    }
+    if (input === "\x04") {
+      if (entry.canonicalInput) flushCanonicalInput(entry);
+      else entry.process.endStdin();
+      continue;
+    }
+    if (input === "\x7f" || input === "\b") {
+      const characters = Array.from(entry.canonicalInput);
+      if (characters.length > 0) {
+        characters.pop();
+        entry.canonicalInput = characters.join("");
+        if (entry.terminalMode.echo) await entry.output.write("stdout", "\b \b");
+      }
+      continue;
+    }
+    if (input === "\x15") {
+      const erased = Array.from(entry.canonicalInput).length;
+      entry.canonicalInput = "";
+      if (entry.terminalMode.echo && erased > 0) await entry.output.write("stdout", "\b \b".repeat(erased));
+      continue;
+    }
+
+    const normalized = input === "\r" ? "\n" : input;
+    if (byteLength(entry.canonicalInput) + byteLength(normalized) > entry.stdinWindowBytes) {
+      if (entry.terminalMode.echo) await entry.output.write("stdout", "\x07");
+      continue;
+    }
+    entry.canonicalInput += normalized;
+    if (entry.terminalMode.echo) await entry.output.write("stdout", normalized);
+    if (normalized === "\n") flushCanonicalInput(entry);
+  }
+  return null;
+}
+
+function flushCanonicalInput(entry: ActiveProcess): void {
+  const input = entry.canonicalInput;
+  entry.canonicalInput = "";
+  if (input) entry.process.writeStdin(input);
 }
 
 async function executeArgv(entry: ActiveProcess): Promise<number> {
@@ -345,9 +408,19 @@ function validateStartMessage(message: ProcessWorkerStartMessage): ProcessWorker
   if (envBytes > MAX_PROTOCOL_BYTES) throw new Error("process environment exceeds 65536 bytes");
   positiveInteger(message.terminal?.cols, "terminal columns");
   positiveInteger(message.terminal?.rows, "terminal rows");
+  validateTerminalMode(message.terminalMode);
   positiveInteger(message.outputWindowBytes, "output window");
   positiveInteger(message.stdinWindowBytes, "stdin window");
   return message;
+}
+
+function validateTerminalMode(mode: unknown): asserts mode is HostProcessTerminalMode {
+  if (!isRecord(mode)
+    || typeof mode.canonical !== "boolean"
+    || typeof mode.echo !== "boolean"
+    || typeof mode.signals !== "boolean") {
+    throw new Error("process terminal mode must define canonical, echo, and signals booleans");
+  }
 }
 
 function failStart(options: ProcessWorkerRuntimeOptions, message: Partial<ProcessWorkerStartMessage>, error: string): void {

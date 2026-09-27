@@ -36,6 +36,7 @@ type PreviewShellProcess = {
   argv?: string[];
   cwd: string;
   status: "running" | HostProcessStatus;
+  terminalMode?: { canonical: boolean; echo: boolean; signals: boolean };
   terminalSize?: { cols: number; rows: number };
 };
 
@@ -163,6 +164,7 @@ export function createPreviewShellLifecycle(
           argv: [...process.argv],
           cwd: process.cwd,
           status: process.status,
+          terminalMode: { ...process.terminalMode },
           terminalSize: { ...process.terminalSize }
         });
       }
@@ -200,9 +202,17 @@ function createTerminalProcessCommands(table: HostProcessTable, terminalId: stri
     releaseOnExit: true,
     url: "worker://cargo-container/process-worker"
   });
+  const ptyCommand = createHostProcessShellCommand({
+    table,
+    projectId: terminalId,
+    releaseOnExit: true,
+    terminalMode: { canonical: true, echo: true, signals: true },
+    url: "worker://cargo-container/process-worker"
+  });
   return {
     "worker-cat": (context: Parameters<typeof command>[0]) => command({ ...context, argv: ["cat", ...context.argv.slice(1)] }),
     "worker-env": (context: Parameters<typeof command>[0]) => command({ ...context, argv: ["env", ...context.argv.slice(1)] }),
+    "worker-pty": (context: Parameters<typeof ptyCommand>[0]) => ptyCommand({ ...context, argv: ["cat", ...context.argv.slice(1)] }),
     "worker-pwd": (context: Parameters<typeof command>[0]) => command({ ...context, argv: ["pwd", ...context.argv.slice(1)] }),
     "worker-tty": (context: Parameters<typeof command>[0]) => command({ ...context, argv: ["terminal-size", ...context.argv.slice(1)] })
   };

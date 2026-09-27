@@ -10,6 +10,7 @@ export function createHostProcessShellCommand(options: HostProcessShellCommandOp
       argv,
       cwd: options.cwd || cwd,
       env,
+      ...(options.terminalMode ? { terminalMode: options.terminalMode } : {}),
       ...(options.projectId ? { projectId: options.projectId } : {}),
       url: options.url
     });
@@ -38,7 +39,7 @@ export function createHostProcessShellCommand(options: HostProcessShellCommandOp
       return {
         argv: [...argv],
         exitCode: final.exitCode ?? 0,
-        stderr: final.stderr,
+        stderr: final.stderr || (final.error ? `${final.error}\n` : ""),
         stdout: final.stdout,
         ...(final.outputDroppedBytes > 0 ? { outputTruncatedBytes: final.outputDroppedBytes } : {})
       };

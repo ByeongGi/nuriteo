@@ -7,7 +7,7 @@ function assert(condition, message) {
 const contract = JSON.parse(fs.readFileSync("compat/terminal-process-control.json", "utf8"));
 const document = fs.readFileSync("docs/productization/terminal-process-control.md", "utf8");
 
-assert(contract.schemaVersion === 2, "unexpected terminal/process contract schema");
+assert(contract.schemaVersion === 3, "unexpected terminal/process contract schema");
 assert(contract.status === "partial", "terminal/process status must remain partial while kernel PTY semantics are unsupported");
 assert(contract.runtimeModel === "browser-worker-virtual-process", "runtime model must be explicit");
 assert(contract.posixPty?.status === "unsupported", "kernel POSIX PTY must not be claimed in a browser runtime");
@@ -18,6 +18,7 @@ const requiredCapabilities = [
   "isolatedSessions",
   "cwdAndEnvironment",
   "streamingStdio",
+  "ptyLineDiscipline",
   "terminalResize",
   "foregroundProcess",
   "exitStatus",
@@ -57,7 +58,7 @@ for (const name of ["shell.test.ts", "scheduler.test.ts", "secondary-builtins.te
   assert(nodeRunner.includes(name), `node runtime suite does not include ${name}`);
 }
 const hostRunner = fs.readFileSync("packages/browser-host/test/run.ts", "utf8");
-for (const name of ["process-lifecycle.test.ts", "process-terminal-command.test.ts"]) {
+for (const name of ["process-lifecycle.test.ts", "process-terminal-command.test.ts", "process-worker-runtime.test.ts"]) {
   assert(hostRunner.includes(name), `browser host suite does not include ${name}`);
 }
 const previewRunner = fs.readFileSync("apps/preview-service/test/run.ts", "utf8");
@@ -70,5 +71,8 @@ assert(lifecycle.includes("generation + 1"), "stale generation evidence missing"
 const shell = fs.readFileSync("packages/node-runtime/test/shell.test.ts", "utf8");
 assert(shell.includes("outputTruncatedBytes"), "bounded shell transcript evidence missing");
 assert(shell.includes("ERR_CARGO_CONTAINER_UNSUPPORTED_SHELL_SYNTAX"), "shell injection diagnostic evidence missing");
+const workerRuntime = fs.readFileSync("packages/browser-host/src/process/worker-runtime.ts", "utf8");
+assert(workerRuntime.includes("writeTerminalInput"), "PTY line discipline implementation missing");
+assert(workerRuntime.includes("\\x03") && workerRuntime.includes("\\x04"), "PTY control-character handling missing");
 
 console.log("terminal/process control contract ok (partial browser-worker semantics; POSIX PTY unsupported)");

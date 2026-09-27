@@ -42,6 +42,7 @@ const HELP = [
   "",
   "Worker processes (browser virtual process):",
   "  worker-cat           Echo stdin until interrupted",
+  "  worker-pty           Canonical PTY-like input with echo/control keys",
   "  worker-pwd           Print the Worker process cwd",
   "  worker-env           Print the Worker process environment",
   "  worker-tty [--watch] Print or watch the Worker TTY size",

@@ -112,4 +112,27 @@ assert.equal(cancelled.entry.status, "cancelled");
 assert.equal(cancelled.exitCode, 130);
 assert.equal(cancelWorkers[0].terminated, true);
 
+const timeoutTable = new HostProcessTable({
+  startupTimeoutMs: 0,
+  workerFactory() {
+    const worker = new TerminalWorker();
+    worker.postMessage = function postMessage(message) {
+      this.messages.push(message);
+    };
+    return worker;
+  }
+});
+const timeoutCommand = createHostProcessShellCommand({
+  table: timeoutTable,
+  url: "/workers/slow-process.js"
+});
+const timedOut = await timeoutCommand({
+  argv: ["slow"],
+  cwd: "/workspace",
+  env: {},
+  stdin: ""
+});
+assert.equal(timedOut.exitCode, 1);
+assert.equal(timedOut.stderr, "startup timeout\n");
+
 console.log("browser host process terminal command test ok");
