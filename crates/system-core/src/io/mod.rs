@@ -6,6 +6,7 @@ pub mod termios;
 
 pub use kernel::{
     IoError, IoRead, IoResult, IoctlRequest, IoctlResponse, KernelIo, PollState, PtyId, PtyPair,
+    TerminalControl,
 };
 pub use pipe::{Pipe, PipeError, PipeResult};
 pub use pty::{

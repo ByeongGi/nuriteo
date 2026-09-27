@@ -7,6 +7,9 @@ use std::{
 use crate::{
     fs::{Fd, FsError, OpenOptions, Pid, SystemFs},
     io::{PtyError, PtyEvent, PtyLimits, TerminalSize, Termios, VirtualPty},
+    process::{
+        ProcessError, ProcessGroupId, ProcessTable, SessionId, SignalDelivery, VirtualSignal,
+    },
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -34,6 +37,12 @@ pub struct PollState {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TerminalControl {
+    pub session: SessionId,
+    pub foreground_process_group: ProcessGroupId,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum IoctlRequest {
     GetTermios,
     SetTermios(Termios),
@@ -53,7 +62,9 @@ pub enum IoError {
     DescriptorExhausted,
     Fs(FsError),
     InvalidFd,
+    NoControllingTerminal,
     NotTerminal,
+    Process(ProcessError),
     Pty(PtyError),
     PtyExhausted,
 }
@@ -64,7 +75,9 @@ impl Display for IoError {
             Self::DescriptorExhausted => formatter.write_str("file descriptor space exhausted"),
             Self::Fs(error) => write!(formatter, "filesystem error: {error:?}"),
             Self::InvalidFd => formatter.write_str("invalid file descriptor"),
+            Self::NoControllingTerminal => formatter.write_str("PTY has no controlling session"),
             Self::NotTerminal => formatter.write_str("file descriptor is not a terminal"),
+            Self::Process(error) => write!(formatter, "process error: {error:?}"),
             Self::Pty(error) => write!(formatter, "PTY error: {error}"),
             Self::PtyExhausted => formatter.write_str("PTY identifier space exhausted"),
         }
@@ -82,6 +95,12 @@ impl From<FsError> for IoError {
 impl From<PtyError> for IoError {
     fn from(error: PtyError) -> Self {
         Self::Pty(error)
+    }
+}
+
+impl From<ProcessError> for IoError {
+    fn from(error: ProcessError) -> Self {
+        Self::Process(error)
     }
 }
 
@@ -146,6 +165,7 @@ pub struct KernelIo {
     fs: SystemFs,
     descriptors: BTreeMap<Pid, DescriptorTable>,
     ptys: BTreeMap<PtyId, VirtualPty>,
+    terminal_controls: BTreeMap<PtyId, TerminalControl>,
     next_pty: u32,
 }
 
@@ -155,6 +175,7 @@ impl Default for KernelIo {
             fs: SystemFs::new(),
             descriptors: BTreeMap::new(),
             ptys: BTreeMap::new(),
+            terminal_controls: BTreeMap::new(),
             next_pty: 1,
         }
     }
@@ -314,6 +335,70 @@ impl KernelIo {
         Ok(self.pty_mut(id)?.next_event())
     }
 
+    pub fn attach_controlling_terminal(
+        &mut self,
+        processes: &ProcessTable,
+        pid: Pid,
+        id: PtyId,
+    ) -> IoResult<TerminalControl> {
+        if !self.ptys.contains_key(&id) {
+            return Err(IoError::InvalidFd);
+        }
+        if self.terminal_controls.contains_key(&id) {
+            return Err(IoError::Process(ProcessError::InvalidSession));
+        }
+        let process = processes.get(pid)?;
+        let control = TerminalControl {
+            session: process.session,
+            foreground_process_group: process.process_group,
+        };
+        self.terminal_controls.insert(id, control);
+        Ok(control)
+    }
+
+    pub fn terminal_control(&self, id: PtyId) -> IoResult<TerminalControl> {
+        self.terminal_controls
+            .get(&id)
+            .copied()
+            .ok_or(IoError::NoControllingTerminal)
+    }
+
+    pub fn set_foreground_process_group(
+        &mut self,
+        processes: &ProcessTable,
+        pid: Pid,
+        id: PtyId,
+        process_group: ProcessGroupId,
+    ) -> IoResult<TerminalControl> {
+        let control = self.terminal_control(id)?;
+        let process = processes.get(pid)?;
+        if process.session != control.session || !processes.same_session(pid, process_group)? {
+            return Err(IoError::Process(ProcessError::InvalidProcessGroup));
+        }
+        let control = TerminalControl {
+            foreground_process_group: process_group,
+            ..control
+        };
+        self.terminal_controls.insert(id, control);
+        Ok(control)
+    }
+
+    pub fn dispatch_terminal_event(
+        &mut self,
+        processes: &mut ProcessTable,
+        id: PtyId,
+    ) -> IoResult<Vec<SignalDelivery>> {
+        let Some(event) = self.next_pty_event(id)? else {
+            return Ok(Vec::new());
+        };
+        let control = self.terminal_control(id)?;
+        let signal = match event {
+            PtyEvent::Interrupt => VirtualSignal::Interrupt,
+            PtyEvent::Resize(_) => VirtualSignal::WindowChanged,
+        };
+        Ok(processes.signal_process_group(control.foreground_process_group, signal)?)
+    }
+
     pub fn close(&mut self, pid: Pid, fd: Fd) -> IoResult<()> {
         let descriptor = self
             .descriptors
@@ -333,6 +418,7 @@ impl KernelIo {
                 };
                 if fully_closed {
                     self.ptys.remove(&id);
+                    self.terminal_controls.remove(&id);
                 }
             }
         }
@@ -375,6 +461,8 @@ impl KernelIo {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
+
     use super::*;
 
     const HOST: Pid = Pid(1);
@@ -488,6 +576,49 @@ mod tests {
         assert_eq!(
             io.ioctl(HOST, file, IoctlRequest::GetTermios).unwrap_err(),
             IoError::NotTerminal
+        );
+    }
+
+    #[test]
+    fn routes_terminal_events_to_the_foreground_process_group() {
+        let mut processes = ProcessTable::default();
+        let shell = processes.prepare(None, "/workspace", BTreeMap::new());
+        let command = processes.prepare(Some(shell.pid), "/workspace", BTreeMap::new());
+        let command = processes
+            .set_process_group(command.pid, ProcessGroupId(command.pid.0))
+            .unwrap();
+        let mut io = KernelIo::new();
+        let pair = io
+            .open_pty(HOST, shell.pid, PtyLimits::default(), Termios::default())
+            .unwrap();
+
+        let control = io
+            .attach_controlling_terminal(&processes, shell.pid, pair.id)
+            .unwrap();
+        assert_eq!(control.foreground_process_group, shell.process_group);
+        io.set_foreground_process_group(&processes, shell.pid, pair.id, command.process_group)
+            .unwrap();
+
+        io.write(HOST, pair.master_fd, b"\x03").unwrap();
+        let deliveries = io.dispatch_terminal_event(&mut processes, pair.id).unwrap();
+        assert_eq!(deliveries.len(), 1);
+        assert_eq!(deliveries[0].pid, command.pid);
+        assert_eq!(deliveries[0].signal, VirtualSignal::Interrupt);
+        assert_eq!(
+            processes.take_signal(command.pid).unwrap(),
+            Some(VirtualSignal::Interrupt)
+        );
+        assert_eq!(processes.take_signal(shell.pid).unwrap(), None);
+
+        io.ioctl(
+            HOST,
+            pair.master_fd,
+            IoctlRequest::SetTerminalSize(TerminalSize::new(100, 30).unwrap()),
+        )
+        .unwrap();
+        assert_eq!(
+            io.dispatch_terminal_event(&mut processes, pair.id).unwrap()[0].signal,
+            VirtualSignal::WindowChanged
         );
     }
 }
