@@ -14,6 +14,7 @@ export interface JsonRpcTransport {
 }
 
 type PendingRequest = {
+  cleanupAbort: () => void;
   resolve: (value: unknown) => void;
   reject: (error: Error) => void;
   timeout: ReturnType<typeof setTimeout>;
@@ -32,15 +33,29 @@ export class JsonRpcClient {
     this.#unsubscribe = transport.subscribe((message) => this.#receive(message));
   }
 
-  request<T>(method: string, params?: unknown, timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS): Promise<T> {
+  request<T>(method: string, params?: unknown, timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS, signal?: AbortSignal): Promise<T> {
     if (this.#disposed) return Promise.reject(new Error("JSON-RPC client is disposed."));
+    if (signal?.aborted) return Promise.reject(signal.reason instanceof Error ? signal.reason : new Error("JSON-RPC request aborted."));
     const id = this.#nextId++;
     return new Promise<T>((resolve, reject) => {
       const timeout = setTimeout(() => {
         this.#pending.delete(id);
+        cleanupAbort();
         reject(new Error(`JSON-RPC request timed out: ${method}`));
       }, timeoutMs);
+      const abort = () => {
+        const pending = this.#pending.get(id);
+        if (!pending) return;
+        clearTimeout(pending.timeout);
+        this.#pending.delete(id);
+        pending.cleanupAbort();
+        this.notify("$/cancelRequest", { id });
+        reject(signal?.reason instanceof Error ? signal.reason : new Error(`JSON-RPC request aborted: ${method}`));
+      };
+      const cleanupAbort = () => signal?.removeEventListener("abort", abort);
+      signal?.addEventListener("abort", abort, { once: true });
       this.#pending.set(id, {
+        cleanupAbort,
         resolve: (value) => resolve(value as T),
         reject,
         timeout
@@ -66,6 +81,7 @@ export class JsonRpcClient {
     this.#transport.dispose();
     for (const request of this.#pending.values()) {
       clearTimeout(request.timeout);
+      request.cleanupAbort();
       request.reject(new Error(reason));
     }
     this.#pending.clear();
@@ -77,6 +93,7 @@ export class JsonRpcClient {
       const pending = typeof message.id === "number" ? this.#pending.get(message.id) : undefined;
       if (!pending) return;
       clearTimeout(pending.timeout);
+      pending.cleanupAbort();
       this.#pending.delete(message.id as number);
       if (message.error) pending.reject(new Error(`${message.error.code}: ${message.error.message}`));
       else pending.resolve(message.result);

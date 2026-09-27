@@ -45,11 +45,16 @@ try {
   await editor.click({ position: { x: 240, y: 160 } });
   await page.keyboard.press("ControlOrMeta+End");
   await page.keyboard.insertText("\n// FIXME");
-  await page.waitForFunction(
-    () => document.querySelector("#editor-statusbar [aria-label]")?.getAttribute("aria-label") === "0 errors and 1 warnings",
-    null,
-    { timeout: 15_000 }
-  );
+  try {
+    await page.waitForFunction(
+      () => document.querySelector("#editor-statusbar [aria-label]")?.getAttribute("aria-label") === "0 errors and 1 warnings",
+      null,
+      { timeout: 15_000 }
+    );
+  } catch {
+    await page.getByRole("tab", { name: /^Problems/ }).click();
+    assert.fail(`LSP diagnostics did not settle: status=${await page.locator("#editor-statusbar").textContent()} problems=${await page.getByRole("tabpanel").textContent()} errors=${JSON.stringify(pageErrors)}`);
+  }
 
   await page.getByRole("tab", { name: /^Problems/ }).click();
   await page.getByText("FIXME marker requires attention.").waitFor({ timeout: 15_000 });

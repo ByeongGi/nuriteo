@@ -1,10 +1,17 @@
 import { JsonRpcClient, type JsonRpcTransport } from "./jsonRpcClient.ts";
 import { HostProcessJsonRpcTransport } from "./hostProcessJsonRpcTransport.ts";
 import type {
+  LspCodeAction,
   LspCompletionItem,
+  LspDocumentSymbol,
+  LspHover,
   LspLocation,
   LspPosition,
   LspPublishDiagnosticsParams,
+  LspRange,
+  LspSemanticTokens,
+  LspSignatureHelp,
+  LspTextEdit,
   LspWorkspaceEdit
 } from "./lspProtocol.ts";
 
@@ -66,10 +73,10 @@ export class BrowserLanguageServer {
     this.#client?.notify("textDocument/didOpen", { textDocument: document });
   }
 
-  change(document: LanguageServerDocument): void {
+  change(document: LanguageServerDocument, contentChanges: Array<{ range?: LspRange; text: string }> = [{ text: document.text }]): void {
     this.#client?.notify("textDocument/didChange", {
       textDocument: { uri: document.uri, version: document.version },
-      contentChanges: [{ text: document.text }]
+      contentChanges
     });
   }
 
@@ -77,16 +84,52 @@ export class BrowserLanguageServer {
     this.#client?.notify("textDocument/didClose", { textDocument: { uri } });
   }
 
-  completion(uri: string, position: LspPosition): Promise<LspCompletionItem[]> {
-    return this.#request("textDocument/completion", { textDocument: { uri }, position });
+  completion(uri: string, position: LspPosition, signal?: AbortSignal): Promise<LspCompletionItem[]> {
+    return this.#request("textDocument/completion", { textDocument: { uri }, position }, signal);
   }
 
   definition(uri: string, position: LspPosition): Promise<LspLocation[]> {
     return this.#request("textDocument/definition", { textDocument: { uri }, position });
   }
 
+  references(uri: string, position: LspPosition): Promise<LspLocation[]> {
+    return this.#request("textDocument/references", { textDocument: { uri }, position, context: { includeDeclaration: true } });
+  }
+
+  hover(uri: string, position: LspPosition): Promise<LspHover | null> {
+    return this.#request("textDocument/hover", { textDocument: { uri }, position });
+  }
+
+  signatureHelp(uri: string, position: LspPosition): Promise<LspSignatureHelp | null> {
+    return this.#request("textDocument/signatureHelp", { textDocument: { uri }, position });
+  }
+
+  prepareRename(uri: string, position: LspPosition): Promise<{ range: LspRange; placeholder: string } | null> {
+    return this.#request("textDocument/prepareRename", { textDocument: { uri }, position });
+  }
+
   rename(uri: string, position: LspPosition, newName: string): Promise<LspWorkspaceEdit> {
     return this.#request("textDocument/rename", { textDocument: { uri }, position, newName });
+  }
+
+  documentSymbols(uri: string): Promise<LspDocumentSymbol[]> {
+    return this.#request("textDocument/documentSymbol", { textDocument: { uri } });
+  }
+
+  workspaceSymbols(query: string): Promise<Array<LspDocumentSymbol & { location: LspLocation }>> {
+    return this.#request("workspace/symbol", { query });
+  }
+
+  format(uri: string): Promise<LspTextEdit[]> {
+    return this.#request("textDocument/formatting", { textDocument: { uri }, options: { tabSize: 2, insertSpaces: true } });
+  }
+
+  codeActions(uri: string, range: LspRange, diagnostics: LspDiagnosticCode[]): Promise<LspCodeAction[]> {
+    return this.#request("textDocument/codeAction", { textDocument: { uri }, range, context: { diagnostics } });
+  }
+
+  semanticTokens(uri: string): Promise<LspSemanticTokens> {
+    return this.#request("textDocument/semanticTokens/full", { textDocument: { uri } });
   }
 
   async stop(): Promise<void> {
@@ -102,10 +145,12 @@ export class BrowserLanguageServer {
     }
   }
 
-  #request<T>(method: string, params: unknown): Promise<T> {
+  #request<T>(method: string, params: unknown, signal?: AbortSignal): Promise<T> {
     if (!this.#client || this.#state !== "ready") {
       return Promise.reject(new Error("Language server is not ready."));
     }
-    return this.#client.request<T>(method, params);
+    return this.#client.request<T>(method, params, 10_000, signal);
   }
 }
+
+type LspDiagnosticCode = { code?: string | number };

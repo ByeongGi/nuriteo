@@ -49,7 +49,44 @@ export interface LspCompletionItem {
   label: string;
   kind?: number;
   detail?: string;
+  documentation?: string;
   insertText?: string;
+}
+
+export interface LspHover {
+  contents: { kind: "markdown" | "plaintext"; value: string };
+  range?: LspRange;
+}
+
+export interface LspSignatureInformation {
+  label: string;
+  documentation?: string;
+  parameters?: Array<{ label: string; documentation?: string }>;
+}
+
+export interface LspSignatureHelp {
+  signatures: LspSignatureInformation[];
+  activeSignature: number;
+  activeParameter: number;
+}
+
+export interface LspDocumentSymbol {
+  name: string;
+  detail?: string;
+  kind: number;
+  range: LspRange;
+  selectionRange: LspRange;
+  children?: LspDocumentSymbol[];
+}
+
+export interface LspCodeAction {
+  title: string;
+  kind?: string;
+  edit?: LspWorkspaceEdit;
+}
+
+export interface LspSemanticTokens {
+  data: number[];
 }
 
 export interface LspTextEdit {
@@ -63,7 +100,14 @@ export interface LspWorkspaceEdit {
 
 export interface LspPublishDiagnosticsParams {
   uri: string;
+  version?: number;
   diagnostics: LspDiagnostic[];
+}
+
+export interface LspContentChange {
+  range?: LspRange;
+  rangeLength?: number;
+  text: string;
 }
 
 export function isJsonRpcResponse(message: JsonRpcMessage): message is JsonRpcResponse {
