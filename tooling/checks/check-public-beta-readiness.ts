@@ -28,7 +28,7 @@ const publicCohortBrowserHold = decision.supportMatrix.publicFixtureBrowserWorke
 const unresolved = heldFixtureIds.size > 0 || browserHolds.length > 0 || publicCohortBrowserHold;
 
 assert.equal(browserSmoke.results.edge.status, "pass", "supported Edge grade requires passing smoke evidence");
-assert.equal(browserSmoke.results.safari.status, "hold", "Safari evidence must remain hold until validated");
+assert.equal(browserSmoke.results.safari.status, "pass", "supported Safari grade requires passing smoke evidence");
 
 if (unresolved) {
   assert.notEqual(decision.decision, "public-beta-ready", "unresolved fixture/browser holds forbid public-beta-ready");

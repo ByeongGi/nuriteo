@@ -76,6 +76,7 @@
     "dev:preview": "pnpm --filter @cargo-container/preview-service-app dev",
     "build:preview": "pnpm --filter @cargo-container/preview-service-app build",
     "test:preview-service": "node apps/preview-service/test/run.ts",
+    "test:safari-browser": "node apps/preview-service/test/safari-browser-smoke.test.ts",
     "test:next-full-runtime": "node --experimental-strip-types apps/preview-service/test/next-full-runtime.test.ts",
     "test:next-browser-worker": "node --experimental-strip-types apps/preview-service/test/next-browser-worker.test.ts",
     "check:nextjs-runtime": "node tooling/checks/check-nextjs-runtime.ts",

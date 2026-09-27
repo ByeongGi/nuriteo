@@ -57,8 +57,16 @@ assert(
   browserSmoke.results.edge.evidence.includes("apps/preview-service/test/edge-browser-smoke.test.ts"),
   "Edge smoke evidence must reference its executable test"
 );
-assert(browserSmoke.results.safari.status === "hold", "Safari smoke evidence must remain hold until validated");
-assert(["hold", "unsupported"].includes(policy.browserGrades.safari), "Safari must be hold or unsupported until SAB validation");
+assert(policy.browserGrades.safari === "supported", "Safari must be supported after the desktop product smoke gate");
+assert(browserSmoke.results.safari.status === "pass", "Safari support requires passing browser smoke evidence");
+assert(
+  browserSmoke.results.safari.evidence.includes("apps/preview-service/test/safari-browser-smoke.test.ts"),
+  "Safari smoke evidence must reference its executable test"
+);
+assert(
+  browserSmoke.results.safari.limitations.some((limitation) => limitation.includes("iOS")),
+  "Safari evidence must keep the mobile coverage limitation explicit"
+);
 assert(Array.isArray(policy.holdFixtures), "policy must list current held public fixtures");
 assert(
   policy.holdFixtures.map((fixture) => fixture.id).sort().join(",") === actualFixtures.results.filter((result) => result.status === "hold").map((result) => result.id).sort().join(","),
@@ -76,6 +84,7 @@ assert(browserGrades.includes("SharedArrayBuffer"), "browser grades doc must dis
 assert(fs.existsSync("packages/browser-host/test/large-node-modules-stress.test.ts"), "large node_modules stress test missing");
 assert(fs.existsSync("apps/preview-service/test/workflow-soak.test.ts"), "workflow soak test missing");
 assert(fs.existsSync("apps/preview-service/test/edge-browser-smoke.test.ts"), "Edge browser smoke test missing");
+assert(fs.existsSync("apps/preview-service/test/safari-browser-smoke.test.ts"), "Safari browser smoke test missing");
 
 console.log(
   `runtime reliability policy ok chrome=${policy.browserGrades.chrome} edge=${policy.browserGrades.edge} safari=${policy.browserGrades.safari}`
