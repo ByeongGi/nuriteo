@@ -27,6 +27,10 @@ export class HostProcessTable {
   now: () => number;
   onOutput: ((chunk: HostProcessOutputChunk) => void) | null;
   outputListeners: Set<(chunk: HostProcessOutputChunk) => void>;
+  maxOutputBytes: number;
+  maxOutputChunks: number;
+  stdinWindowBytes: number;
+  signalGraceMs: number;
 
   constructor(options: HostProcessTableOptions = {}) {
     this.nextPid = 1;
@@ -40,9 +44,16 @@ export class HostProcessTable {
     this.now = options.now || Date.now;
     this.onOutput = options.onOutput || null;
     this.outputListeners = new Set();
+    this.maxOutputBytes = positiveLimit(options.maxOutputBytes, 1024 * 1024, "maxOutputBytes");
+    this.maxOutputChunks = positiveLimit(options.maxOutputChunks, 1024, "maxOutputChunks");
+    this.stdinWindowBytes = positiveLimit(options.stdinWindowBytes, 64 * 1024, "stdinWindowBytes");
+    this.signalGraceMs = nonNegativeLimit(options.signalGraceMs, 500, "signalGraceMs");
   }
 
   prepare(options: HostProcessPrepareOptions = {}): HostProcessSnapshot {
+    const cwd = validateCwd(options.cwd || "/workspace");
+    const argv = validateArgv(options.argv || []);
+    const env = validateEnv(options.env || {});
     const span = this.trace?.startSpan({
       category: "process",
       name: "host-process.prepare",
@@ -71,8 +82,9 @@ export class HostProcessTable {
       pid: this.nextPid++,
       generation: this.nextGeneration++,
       parent: options.parent || null,
-      cwd: options.cwd || "/workspace",
-      env: { ...(options.env || {}) },
+      cwd,
+      env,
+      argv,
       ...(options.projectId ? { projectId: options.projectId } : {}),
       url: options.url,
       status: "prepared",
@@ -80,6 +92,11 @@ export class HostProcessTable {
       output: [],
       stdout: "",
       stderr: "",
+      outputBytes: 0,
+      outputDroppedBytes: 0,
+      stdinPendingBytes: 0,
+      signal: null,
+      terminalSize: { cols: 80, rows: 24 },
       waiters: [],
       resourcesReleased: false
     };
@@ -119,13 +136,23 @@ export class HostProcessTable {
         resolveOnce(this.#finish(record, "failed", 1, "startup timeout"));
       }, 1000);
       const onMessage = (event: Event) => {
-        const data = "data" in event ? event.data as { type?: string; error?: string; code?: number; data?: string } : {};
+        const data = "data" in event ? event.data as { type?: string; error?: string; code?: number; data?: string; bytes?: number; pid?: number; generation?: number } : {};
+        if ((data.pid !== undefined && data.pid !== record.pid) ||
+            (data.generation !== undefined && data.generation !== record.generation)) return;
         if (data?.type === "ready") {
-          record.status = "ready";
+          if (!record.signal) record.status = "ready";
           clearTimeout(timeout);
           resolveOnce(snapshot(record));
         } else if (data?.type === "stdout" || data?.type === "stderr") {
           this.#appendOutput(record, data.type, data.data || "");
+          worker.postMessage?.({
+            type: "output-ack",
+            pid: record.pid,
+            generation: record.generation,
+            bytes: byteLength(data.data || "")
+          });
+        } else if (data?.type === "stdin-ack") {
+          record.stdinPendingBytes = Math.max(0, record.stdinPendingBytes - Math.max(0, data.bytes || 0));
         } else if (data?.type === "failed") {
           resolveOnce(this.#finish(record, "failed", 1, data.error || "startup failed"));
         } else if (data?.type === "exit") {
@@ -156,7 +183,11 @@ export class HostProcessTable {
           pid: record.pid,
           generation: record.generation,
           cwd: record.cwd,
-          env: record.env
+          env: record.env,
+          argv: [...record.argv],
+          terminal: { ...record.terminalSize },
+          outputWindowBytes: this.maxOutputBytes,
+          stdinWindowBytes: this.stdinWindowBytes
         });
       } catch (error) {
         resolveOnce(this.#finish(record, "failed", 1, error instanceof Error ? error.message : String(error)));
@@ -182,6 +213,12 @@ export class HostProcessTable {
       .map(snapshot);
   }
 
+  release(pid: number): boolean {
+    const record = this.#record(pid);
+    if (!isTerminal(record.status)) return false;
+    return this.records.delete(pid);
+  }
+
   subscribeOutput(listener: (chunk: HostProcessOutputChunk) => void): () => void {
     this.outputListeners.add(listener);
     return () => {
@@ -194,7 +231,16 @@ export class HostProcessTable {
     if (isTerminal(record.status)) return false;
     const worker = this.registry.get(record.pid, record.generation);
     if (!worker?.postMessage) return false;
-    worker.postMessage({ type: "stdin", pid: record.pid, generation: record.generation, data });
+    const bytes = byteLength(data);
+    if (bytes === 0) return true;
+    if (bytes > this.stdinWindowBytes || record.stdinPendingBytes + bytes > this.stdinWindowBytes) return false;
+    record.stdinPendingBytes += bytes;
+    try {
+      worker.postMessage({ type: "stdin", pid: record.pid, generation: record.generation, data, bytes });
+    } catch (error) {
+      record.stdinPendingBytes -= bytes;
+      throw error;
+    }
     return true;
   }
 
@@ -206,6 +252,7 @@ export class HostProcessTable {
     if (isTerminal(record.status)) return false;
     const worker = this.registry.get(record.pid, record.generation);
     if (!worker?.postMessage) return false;
+    record.terminalSize = { ...size };
     worker.postMessage({ type: "resize", pid: record.pid, generation: record.generation, ...size });
     return true;
   }
@@ -214,10 +261,17 @@ export class HostProcessTable {
     const record = this.#record(pid);
     if (isTerminal(record.status)) return snapshot(record);
     const worker = this.registry.get(record.pid, record.generation);
+    if (record.signalTimer) clearTimeout(record.signalTimer);
+    delete record.signalTimer;
+    record.signal = signal;
     worker?.postMessage?.({ type: "signal", pid: record.pid, generation: record.generation, signal });
-    if (signal === "SIGINT") return this.#finish(record, "exited", 130);
-    if (signal === "SIGTERM") return this.#finish(record, "exited", 143);
-    return this.#finish(record, "killed", 137);
+    if (signal === "SIGKILL") return this.#finish(record, "killed", 137);
+    record.status = "stopping";
+    const exitCode = signal === "SIGINT" ? 130 : 143;
+    record.signalTimer = setTimeout(() => {
+      if (!isTerminal(record.status)) this.#finish(record, "exited", exitCode);
+    }, this.signalGraceMs);
+    return snapshot(record);
   }
 
   stop(pid: number, code = 0): HostProcessSnapshot {
@@ -242,12 +296,15 @@ export class HostProcessTable {
   }
 
   #finish(record: HostProcessRecord, status: HostProcessStatus, exitCode: number, error: string | null = null): HostProcessSnapshot {
+    if (record.signalTimer) clearTimeout(record.signalTimer);
+    delete record.signalTimer;
     record.cleanup?.();
     delete record.cleanup;
     record.status = status;
     record.exitCode = exitCode;
     record.error = error;
     record.resourcesReleased = true;
+    record.stdinPendingBytes = 0;
     try {
       this.registry.terminate(record.pid, record.generation);
     } catch (error) {
@@ -268,8 +325,25 @@ export class HostProcessTable {
       at: this.now()
     };
     record.output.push(chunk);
-    if (stream === "stdout") record.stdout += data;
-    else record.stderr += data;
+    record.outputBytes += byteLength(data);
+    while (record.output.length > this.maxOutputChunks || record.outputBytes > this.maxOutputBytes) {
+      const first = record.output[0];
+      if (!first) break;
+      const overflow = Math.max(0, record.outputBytes - this.maxOutputBytes);
+      const firstBytes = byteLength(first.data);
+      if (record.output.length <= this.maxOutputChunks && overflow > 0 && overflow < firstBytes) {
+        const retained = utf8Tail(first.data, firstBytes - overflow);
+        record.outputDroppedBytes += firstBytes - byteLength(retained);
+        record.outputBytes -= firstBytes - byteLength(retained);
+        first.data = retained;
+        break;
+      }
+      record.output.shift();
+      record.outputBytes -= firstBytes;
+      record.outputDroppedBytes += firstBytes;
+    }
+    record.stdout = record.output.filter((item) => item.stream === "stdout").map((item) => item.data).join("");
+    record.stderr = record.output.filter((item) => item.stream === "stderr").map((item) => item.data).join("");
     this.onOutput?.({ ...chunk });
     for (const listener of this.outputListeners) listener({ ...chunk });
   }
@@ -299,13 +373,78 @@ function snapshot(record: HostProcessRecord): HostProcessSnapshot {
     generation: record.generation,
     parent: record.parent,
     cwd: record.cwd,
-    env: { ...record.env },
+    env: redactEnv(record.env),
+    argv: [...record.argv],
     ...(record.projectId ? { projectId: record.projectId } : {}),
     status: record.status,
     exitCode: record.exitCode,
     error: record.error || null,
     stdout: record.stdout,
     stderr: record.stderr,
+    outputBytes: record.outputBytes,
+    outputDroppedBytes: record.outputDroppedBytes,
+    stdinPendingBytes: record.stdinPendingBytes,
+    signal: record.signal,
+    terminalSize: { ...record.terminalSize },
     resourcesReleased: Boolean(record.resourcesReleased)
   };
+}
+
+function byteLength(value: string): number {
+  return new TextEncoder().encode(value).byteLength;
+}
+
+function utf8Tail(value: string, maxBytes: number): string {
+  const bytes = new TextEncoder().encode(value);
+  return new TextDecoder().decode(bytes.slice(Math.max(0, bytes.byteLength - maxBytes)));
+}
+
+function positiveLimit(value: number | undefined, fallback: number, name: string): number {
+  const resolved = value ?? fallback;
+  if (!Number.isSafeInteger(resolved) || resolved < 1) throw new RangeError(`${name} must be a positive safe integer`);
+  return resolved;
+}
+
+function nonNegativeLimit(value: number | undefined, fallback: number, name: string): number {
+  const resolved = value ?? fallback;
+  if (!Number.isSafeInteger(resolved) || resolved < 0) throw new RangeError(`${name} must be a non-negative safe integer`);
+  return resolved;
+}
+
+function validateCwd(cwd: string): string {
+  const segments = cwd.split("/");
+  if (!cwd.startsWith("/") || cwd.includes("\0") || segments.includes("..") || segments.includes(".")) {
+    throw new HostProcessError("process cwd must be an absolute normalized path");
+  }
+  return cwd.replace(/\/{2,}/g, "/").replace(/\/$/, "") || "/";
+}
+
+function validateArgv(argv: string[]): string[] {
+  if (!Array.isArray(argv) || argv.length > 256) throw new HostProcessError("process argv exceeds 256 entries");
+  let bytes = 0;
+  const clone = argv.map((value) => {
+    if (typeof value !== "string" || value.includes("\0")) throw new HostProcessError("process argv must contain NUL-free strings");
+    bytes += byteLength(value);
+    return value;
+  });
+  if (bytes > 64 * 1024) throw new HostProcessError("process argv exceeds 65536 bytes");
+  return clone;
+}
+
+function validateEnv(env: Record<string, string>): Record<string, string> {
+  const clone: Record<string, string> = {};
+  for (const [name, value] of Object.entries(env)) {
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name) || typeof value !== "string" || value.includes("\0")) {
+      throw new HostProcessError(`invalid process environment entry: ${name}`);
+    }
+    clone[name] = value;
+  }
+  return clone;
+}
+
+function redactEnv(env: Record<string, string>): Record<string, string> {
+  return Object.fromEntries(Object.entries(env).map(([name, value]) => [
+    name,
+    /(SECRET|TOKEN|PASSWORD|PASSWD|API_KEY|AUTH|COOKIE)/i.test(name) ? "[REDACTED]" : value
+  ]));
 }

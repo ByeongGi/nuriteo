@@ -5,6 +5,17 @@ import type { LivenessHandle, RuntimeTaskCallback } from "./types.ts";
 interface RuntimeSchedulerOptions {
   process?: RuntimeProcess;
   liveness?: LivenessTracker;
+  maxCallbacksPerRun?: number;
+  yieldEveryCallbacks?: number;
+}
+
+export class SchedulerLimitError extends Error {
+  code = "ERR_CARGO_CONTAINER_SCHEDULER_LIMIT";
+
+  constructor(limit: number) {
+    super(`runtime scheduler exceeded ${limit} callbacks without becoming idle`);
+    this.name = "SchedulerLimitError";
+  }
 }
 
 interface ScheduledTimer {
@@ -29,6 +40,9 @@ export class RuntimeScheduler {
   immediates: ScheduledImmediate[];
   now: number;
   sequence: number;
+  maxCallbacksPerRun: number;
+  yieldEveryCallbacks: number;
+  callbacksRun: number;
 
   constructor(options: RuntimeSchedulerOptions = {}) {
     this.process = options.process || new RuntimeProcess();
@@ -39,6 +53,9 @@ export class RuntimeScheduler {
     this.immediates = [];
     this.now = 0;
     this.sequence = 0;
+    this.maxCallbacksPerRun = positiveInteger(options.maxCallbacksPerRun, 100_000, "maxCallbacksPerRun");
+    this.yieldEveryCallbacks = positiveInteger(options.yieldEveryCallbacks, 1024, "yieldEveryCallbacks");
+    this.callbacksRun = 0;
   }
 
   nextTick(callback: RuntimeTaskCallback): void {
@@ -71,6 +88,7 @@ export class RuntimeScheduler {
   }
 
   async runUntilIdle(): Promise<{ exitCode: number; exited: boolean; uncaughtException: unknown }> {
+    this.callbacksRun = 0;
     while (!this.process.exited) {
       await this.drainMicrotasks();
       if (this.process.exited) break;
@@ -134,11 +152,24 @@ export class RuntimeScheduler {
 
   async invoke(callback: RuntimeTaskCallback): Promise<void> {
     try {
+      this.callbacksRun += 1;
+      if (this.callbacksRun > this.maxCallbacksPerRun) throw new SchedulerLimitError(this.maxCallbacksPerRun);
       await callback();
+      if (this.callbacksRun % this.yieldEveryCallbacks === 0) await yieldToHost();
     } catch (error) {
       this.process.captureUncaught(error);
     }
   }
+}
+
+function positiveInteger(value: number | undefined, fallback: number, name: string): number {
+  const resolved = value ?? fallback;
+  if (!Number.isSafeInteger(resolved) || resolved < 1) throw new RangeError(`${name} must be a positive safe integer`);
+  return resolved;
+}
+
+function yieldToHost(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
 export function createScheduler(options: RuntimeSchedulerOptions = {}): RuntimeScheduler {

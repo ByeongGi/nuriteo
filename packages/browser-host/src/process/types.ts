@@ -1,4 +1,4 @@
-export type HostProcessStatus = "prepared" | "starting" | "ready" | "failed" | "exited" | "killed";
+export type HostProcessStatus = "prepared" | "starting" | "ready" | "stopping" | "failed" | "exited" | "killed";
 export type HostProcessOutputStream = "stdout" | "stderr";
 
 export interface HostProcessEnv {
@@ -9,6 +9,7 @@ export interface HostProcessPrepareOptions {
   parent?: number | null;
   cwd?: string;
   env?: HostProcessEnv;
+  argv?: string[];
   projectId?: string;
   url?: string | URL | undefined;
 }
@@ -19,6 +20,7 @@ export interface HostProcessRecord {
   parent: number | null;
   cwd: string;
   env: HostProcessEnv;
+  argv: string[];
   projectId?: string;
   url?: string | URL | undefined;
   status: HostProcessStatus;
@@ -27,9 +29,15 @@ export interface HostProcessRecord {
   output: HostProcessOutputChunk[];
   stdout: string;
   stderr: string;
+  outputBytes: number;
+  outputDroppedBytes: number;
+  stdinPendingBytes: number;
+  signal: HostProcessSignal | null;
+  terminalSize: HostProcessResize;
   waiters: Array<(snapshot: HostProcessSnapshot) => void>;
   resourcesReleased: boolean;
   cleanup?: () => void;
+  signalTimer?: ReturnType<typeof setTimeout>;
 }
 
 export interface HostProcessSnapshot {
@@ -38,12 +46,18 @@ export interface HostProcessSnapshot {
   parent: number | null;
   cwd: string;
   env: HostProcessEnv;
+  argv: string[];
   projectId?: string;
   status: HostProcessStatus;
   exitCode: number | null;
   error: string | null;
   stdout: string;
   stderr: string;
+  outputBytes: number;
+  outputDroppedBytes: number;
+  stdinPendingBytes: number;
+  signal: HostProcessSignal | null;
+  terminalSize: HostProcessResize;
   resourcesReleased: boolean;
 }
 
@@ -85,6 +99,10 @@ export interface HostProcessTableOptions {
   trace?: import("../observability/index.ts").RuntimeTraceSink;
   now?: () => number;
   onOutput?: (chunk: HostProcessOutputChunk) => void;
+  maxOutputBytes?: number;
+  maxOutputChunks?: number;
+  stdinWindowBytes?: number;
+  signalGraceMs?: number;
 }
 
 export interface HostProcessShellCommandOptions {
@@ -93,6 +111,7 @@ export interface HostProcessShellCommandOptions {
   table: import("./spawn.ts").HostProcessTable;
   url: string | URL;
   waitForExit?: boolean;
+  releaseOnExit?: boolean;
 }
 
 export interface HostProcessShellCommandContext {
@@ -110,6 +129,7 @@ export interface HostProcessShellCommandResult {
   exitCode: number;
   stderr: string;
   stdout: string;
+  outputTruncatedBytes?: number;
 }
 
 export type HostProcessShellCommand = (

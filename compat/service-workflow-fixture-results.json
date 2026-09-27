@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-09-23",
+  "updatedAt": "2026-09-27",
   "scope": {
     "goal": "SG25 service workflow fixture set (20) with pass or documented hold counts",
     "total": 20,
@@ -144,8 +144,8 @@
       "id": "webpack-rspack-dev-candidate",
       "status": "hold",
       "score": 25,
-      "source": "compat/framework-actual-validation.json",
-      "notes": "Documented hold/candidate evaluation only; not product-supported."
+      "source": "compat/bundler-dev-workflow-results.json",
+      "notes": "Webpack and Rspack now have separate exact-revision, integrity-pinned product candidate measurements. Install and recovery diagnostics pass, but strict-CSP CLI bootstrap remains blocked; Rspack also retains an unvalidated WASI binding path. Not product-supported."
     },
     {
       "id": "next-static-export-candidate",

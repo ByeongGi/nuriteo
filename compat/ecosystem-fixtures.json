@@ -390,20 +390,20 @@
     {
       "id": "webpack-rspack-dev-candidate",
       "name": "Webpack/Rspack dev workflow candidate",
-      "repository": "local://docs/productization/non-js-tooling-candidates.md#webpack-rspack",
-      "license": "n/a",
+      "repository": "local://compat/bundler-dev-workflow-results.json",
+      "license": "MIT",
       "packageManager": "npm",
-      "lockfile": "none",
+      "lockfile": "exact-version-and-sri-candidate-manifest",
       "expectedCommands": {
         "install": "npm install",
         "dev": "webpack serve",
         "build": "webpack"
       },
       "nativeDependencyRisk": "high",
-      "riskNotes": "Evaluated as candidate only; not part of product-supported workflow.",
+      "riskNotes": "Separate exact-revision Webpack and Rspack product probes fail closed at strict-CSP CLI bootstrap; Rspack WASI remains unvalidated. Candidate only, not product-supported.",
       "status": "selected",
       "cohort": "bundler-candidate",
-      "source": "docs/productization"
+      "source": "compat/bundler-dev-workflow-results.json"
     },
     {
       "id": "next-static-export-candidate",

@@ -180,6 +180,30 @@ assert.throws(() => new BrowserProcess().exit(3), /process\.exit\(3\)/);
 const capturedProcess = new BrowserProcess({ exitMode: "capture" });
 assert.equal(capturedProcess.exit(4), undefined);
 assert.equal(capturedProcess.exitCode, 4);
+const terminalProcess = new BrowserProcess({
+  exitMode: "capture",
+  terminal: true,
+  terminalSize: { cols: 100, rows: 30 },
+  writeStdout: () => false
+});
+const terminalInput = [];
+terminalProcess.stdin.on("data", (chunk) => terminalInput.push(chunk));
+assert.equal(terminalProcess.stdin.isTTY, true);
+assert.equal(terminalProcess.stdout.columns, 100);
+assert.equal(terminalProcess.writeStdin("hello\n"), true);
+assert.deepEqual(terminalInput, ["hello\n"]);
+assert.equal(terminalProcess.stdout.write("backpressure"), false);
+let drained = false;
+terminalProcess.stdout.once("drain", () => { drained = true; });
+terminalProcess.notifyDrain("stdout");
+assert.equal(drained, true);
+let resized = false;
+terminalProcess.once("SIGWINCH", () => { resized = true; });
+terminalProcess.resizeTerminal(120, 40);
+assert.equal(resized, true);
+assert.equal(terminalProcess.stdout.rows, 40);
+terminalProcess.signal("SIGTERM");
+assert.equal(terminalProcess.exitCode, 143);
 
 const events = requireBuiltin("node:events");
 const emitter = new events.EventEmitter();

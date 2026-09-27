@@ -18,12 +18,17 @@ const mime = {
   ".json": "application/json; charset=utf-8"
 };
 
-export function startHarnessServer() {
+export interface HarnessServerOptions {
+  files?: Readonly<Record<string, { path: string; contentType?: string }>>;
+}
+
+export function startHarnessServer(options: HarnessServerOptions = {}) {
   const server = http.createServer((req, res) => {
     const url = new URL(req.url || "/", "http://127.0.0.1");
     const pathname = url.pathname === "/" ? "/tests/harness/browser-runner.html" : url.pathname;
-    const file = path.join(repoRoot, pathname.slice(1));
-    if (!file.startsWith(repoRoot + path.sep)) {
+    const mapped = options.files?.[pathname];
+    const file = mapped?.path ?? path.join(repoRoot, pathname.slice(1));
+    if (!mapped && !file.startsWith(repoRoot + path.sep)) {
       res.writeHead(403, { "Content-Type": "text/plain" });
       res.end("Forbidden");
       return;
@@ -36,9 +41,10 @@ export function startHarnessServer() {
       }
       res.writeHead(200, {
         ...isolationHeaders,
-        "Content-Type": mime[path.extname(file)] || "application/octet-stream"
+        "Content-Type": mapped?.contentType ?? mime[path.extname(file)] ?? "application/octet-stream",
+        "Content-Length": String(bytes.byteLength)
       });
-      res.end(bytes);
+      res.end(req.method === "HEAD" ? undefined : bytes);
     });
   });
 

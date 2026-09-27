@@ -15,17 +15,34 @@ export function PortsPanel({ model }: { model: PreviewControllerModel }) {
         ) : (
           <ul className="mb-3 space-y-1">
             {model.processes.map((process) => (
-              <li key={process.terminalId} className="rounded-md border border-cargo-line bg-cargo-panel px-2.5 py-2">
+              <li key={`${process.terminalId}:${process.pid}`} className="rounded-md border border-cargo-line bg-cargo-panel px-2.5 py-2">
                 <div className="flex items-center justify-between gap-2">
                   <span className="truncate font-mono text-xs text-cargo-ink">{process.command}</span>
-                  <button
-                    type="button"
-                    className="text-[10px] text-red-400 hover:text-red-300"
-                    onClick={() => model.controller.signalShell("SIGKILL", process.terminalId)}
-                  >
-                    Kill
-                  </button>
+                  <span className="flex gap-1">
+                    <button
+                      type="button"
+                      className="text-[10px] text-cargo-warn hover:text-cargo-ink"
+                      onClick={() => model.controller.signalShell("SIGINT", process.terminalId)}
+                    >
+                      Interrupt
+                    </button>
+                    <button
+                      type="button"
+                      className="text-[10px] text-cargo-warn hover:text-cargo-ink"
+                      onClick={() => model.controller.signalShell("SIGTERM", process.terminalId)}
+                    >
+                      Terminate
+                    </button>
+                    <button
+                      type="button"
+                      className="text-[10px] text-red-400 hover:text-red-300"
+                      onClick={() => model.controller.signalShell("SIGKILL", process.terminalId)}
+                    >
+                      Kill
+                    </button>
+                  </span>
                 </div>
+                <span className="block truncate font-mono text-[10px] text-cargo-muted">PID {process.pid} · {process.terminalId} · {process.status}</span>
                 <span className="block truncate font-mono text-[10px] text-cargo-muted">{process.cwd}</span>
               </li>
             ))}

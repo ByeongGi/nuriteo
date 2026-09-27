@@ -4,6 +4,7 @@ import { requestSync } from "../packages/protocol/src/sync-client.ts";
 import { runNodeProgram } from "../packages/node-runtime/src/bootstrap.ts";
 import { createCliEvaluationHttpBridge, evaluateCliModuleWorkerMessage } from "../packages/node-runtime/src/package-managers/cli-evaluator.ts";
 import { MemoryPackageManagerWorkspace } from "../packages/node-runtime/src/package-managers/workspace.ts";
+import { createProcessWorkerRuntime } from "../packages/browser-host/src/process/worker-runtime.ts";
 
 const YARN_BUNDLE_SHA256 = "443ed69e76443b89afddccfc9faec1ff16eb5e500979cc079c696dec4c3d94ee";
 const YARN_ENTRY_SHA256 = "148e19db309ec9eaf7720b28df811337906eea8a1758deaa54afee60a6305e04";
@@ -21,9 +22,16 @@ let syncChannel = null;
 let nextRequestId = 1;
 const cliHttpBridges = new Map();
 const cliWebSockets = new Map();
+const processRuntime = createProcessWorkerRuntime({
+  postMessage(message) {
+    self.postMessage(message);
+  }
+});
 
 self.addEventListener("message", (event) => {
-  if (event.data?.type === "boot") {
+  if (processRuntime.handleMessage(event.data)) {
+    return;
+  } else if (event.data?.type === "boot") {
     try {
       if (event.data.fail) throw new Error("forced process boot failure");
       systemPort = event.data.port;

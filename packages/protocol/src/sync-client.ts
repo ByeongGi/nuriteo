@@ -9,7 +9,8 @@ export const SYNC_STATE = Object.freeze({
   request: 1,
   response: 2,
   failed: 3,
-  terminal: 4
+  terminal: 4,
+  writing: 5
 });
 export type SyncState = (typeof SYNC_STATE)[keyof typeof SYNC_STATE];
 
@@ -55,7 +56,7 @@ export function requestSync(channel: SharedArrayBuffer, request: Parameters<type
   const deadline = Date.now() + timeoutMs;
 
   assertCapacity(opened, frame.byteLength);
-  if (Atomics.compareExchange(opened.control, INDEX_STATE, SYNC_STATE.idle, SYNC_STATE.request) !== SYNC_STATE.idle) {
+  if (Atomics.compareExchange(opened.control, INDEX_STATE, SYNC_STATE.idle, SYNC_STATE.writing) !== SYNC_STATE.idle) {
     throw new SyncChannelError(ERROR_CODES.EBADMSG, "sync channel already has an in-flight request");
   }
 
@@ -64,6 +65,10 @@ export function requestSync(channel: SharedArrayBuffer, request: Parameters<type
   Atomics.store(opened.control, INDEX_RESPONSE_LENGTH, 0);
   Atomics.store(opened.control, INDEX_GENERATION, generation);
   Atomics.store(opened.control, INDEX_ERROR_CODE, 0);
+  const publishedState = Atomics.compareExchange(opened.control, INDEX_STATE, SYNC_STATE.writing, SYNC_STATE.request);
+  if (publishedState !== SYNC_STATE.writing) {
+    throw new SyncChannelError(ERROR_CODES.EBADMSG, "sync channel terminated while publishing request");
+  }
   Atomics.notify(opened.control, INDEX_STATE);
 
   let state = Atomics.load(opened.control, INDEX_STATE);
@@ -105,19 +110,17 @@ export function requestSync(channel: SharedArrayBuffer, request: Parameters<type
 export function waitForRequest(channel: SharedArrayBuffer, options: SyncRequestOptions = {}): DecodedFrame {
   const opened = openSyncChannel(channel);
   const timeoutMs = options.timeoutMs ?? 1000;
+  const deadline = Date.now() + timeoutMs;
   let state = Atomics.load(opened.control, INDEX_STATE);
 
-  if (state === SYNC_STATE.response) {
-    Atomics.wait(opened.control, INDEX_STATE, SYNC_STATE.response, timeoutMs);
+  while (state === SYNC_STATE.idle || state === SYNC_STATE.response || state === SYNC_STATE.writing) {
+    const remainingMs = deadline - Date.now();
+    if (remainingMs <= 0) break;
+    Atomics.wait(opened.control, INDEX_STATE, state, remainingMs);
     state = Atomics.load(opened.control, INDEX_STATE);
   }
 
-  if (state === SYNC_STATE.idle) {
-    Atomics.wait(opened.control, INDEX_STATE, SYNC_STATE.idle, timeoutMs);
-    state = Atomics.load(opened.control, INDEX_STATE);
-  }
-
-  if (state === SYNC_STATE.idle) {
+  if (state === SYNC_STATE.idle || state === SYNC_STATE.response || state === SYNC_STATE.writing) {
     throw new SyncChannelError(ERROR_CODES.EBADMSG, "timed out waiting for request");
   }
   if (state === SYNC_STATE.terminal) {

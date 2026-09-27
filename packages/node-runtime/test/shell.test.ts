@@ -80,11 +80,21 @@ const bin = await shell.run("hello");
 assert.equal(bin.stdout, "from-bin\n");
 
 await assert.rejects(() => shell.run("echo ok || echo nope"), ShellSyntaxError);
+for (const command of [
+  "echo ok; echo injected",
+  "echo ok & echo background",
+  "echo ok >> stolen",
+  "echo ok < secret",
+  "echo `pwd`"
+]) {
+  await assert.rejects(() => shell.run(command), ShellSyntaxError);
+}
 await assert.rejects(
   () => shell.run("echo $(pwd)"),
   (error) => error instanceof ShellSyntaxError && error.code === "ERR_CARGO_CONTAINER_UNSUPPORTED_SHELL_SYNTAX" && /command substitution/.test(error.message)
 );
 assert.equal((await shell.run("echo '$() & ; ||'" )).stdout, "$() & ; ||\n");
+assert.equal((await shell.run("echo 'value;not-an-operator'" )).stdout, "value;not-an-operator\n");
 
 await shell.run("cd packages/../src");
 await shell.run("export MODE=development");
@@ -115,6 +125,11 @@ const terminal = createTerminalSession({
           { once: true }
         );
       });
+    },
+    streamonly({ output }) {
+      output?.({ stream: "stdout", data: "first\n" });
+      output?.({ stream: "stderr", data: "second\n" });
+      return { stdout: "", stderr: "", exitCode: 0 };
     }
   }
 });
@@ -127,6 +142,10 @@ assert.equal(terminalRun.entry.exitCode, 0);
 assert.deepEqual(terminal.history(), ["echo terminal"]);
 assert.equal(terminal.transcript()[0].stdout, "terminal\n");
 assert.deepEqual(chunks, [{ entryId: 1, stream: "stdout", data: "terminal\n" }]);
+
+const streamOnlyRun = await terminal.run("streamonly");
+assert.equal(streamOnlyRun.entry.stdout, "first\n");
+assert.equal(streamOnlyRun.entry.stderr, "second\n");
 
 const pendingRun = terminal.run("wait");
 assert.equal(terminal.activeEntry?.command, "wait");
@@ -194,5 +213,28 @@ assert.equal(isolated.snapshot().cwd, "/workspace/two/child");
 assert.equal(isolated.snapshot().env.FLAG, "yes");
 assert.equal(interactive.snapshot().cwd, "/workspace/one");
 assert.equal(interactive.snapshot().env.FLAG, undefined);
+
+const bounded = createTerminalSession({
+  maxInputChunkBytes: 4,
+  maxOutputBytes: 8,
+  commands: {
+    flood({ terminal, signal }) {
+      terminal?.onInput(() => undefined);
+      return new Promise((resolve) => signal?.addEventListener("abort", () => resolve({
+        stdout: "1234567890",
+        stderr: "",
+        exitCode: 130
+      }), { once: true }));
+    }
+  }
+});
+const boundedRun = bounded.run("flood");
+assert.equal(bounded.write("1234"), true);
+assert.equal(bounded.write("12345"), false);
+bounded.cancel();
+const boundedResult = await boundedRun;
+assert.equal(new TextEncoder().encode(boundedResult.stdout).byteLength, 8);
+assert.equal(boundedResult.outputTruncatedBytes, 9);
+assert.equal(boundedResult.entry.outputTruncatedBytes, 9);
 
 console.log("node shell test ok");

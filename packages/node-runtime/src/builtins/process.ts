@@ -7,8 +7,14 @@ type ProcessWriteCallback = () => void;
 type ProcessWriteEncoding = BufferEncoding | string;
 
 class ProcessReadableStdio extends EventEmitter {
-  isTTY = false;
+  isTTY: boolean;
   readable = true;
+  isRaw = false;
+
+  constructor(isTTY = false) {
+    super();
+    this.isTTY = isTTY;
+  }
 
   pause(): this {
     return this;
@@ -26,8 +32,22 @@ class ProcessReadableStdio extends EventEmitter {
     return this;
   }
 
-  setRawMode(_mode: boolean): this {
+  setRawMode(mode: boolean): this {
+    this.isRaw = mode;
     return this;
+  }
+
+  push(chunk: unknown): boolean {
+    if (!this.readable) return false;
+    this.emit("data", chunk);
+    return true;
+  }
+
+  end(): void {
+    if (!this.readable) return;
+    this.readable = false;
+    this.emit("end");
+    this.emit("close");
   }
 
   unref(): this {
@@ -36,21 +56,24 @@ class ProcessReadableStdio extends EventEmitter {
 }
 
 class ProcessWritableStdio extends EventEmitter {
-  isTTY = false;
+  isTTY: boolean;
   writable = true;
-  #writeChunk: (chunk: unknown) => void;
+  columns = 80;
+  rows = 24;
+  #writeChunk: (chunk: unknown) => boolean | void;
 
-  constructor(writeChunk: (chunk: unknown) => void) {
+  constructor(writeChunk: (chunk: unknown) => boolean | void, isTTY = false) {
     super();
     this.#writeChunk = writeChunk;
+    this.isTTY = isTTY;
   }
 
   write(chunk: unknown, encodingOrCallback?: ProcessWriteEncoding | ProcessWriteCallback, callback?: ProcessWriteCallback): boolean {
-    this.#writeChunk(chunk);
+    const accepted = this.#writeChunk(chunk);
     this.emit("data", chunk);
     const writeCallback = typeof encodingOrCallback === "function" ? encodingOrCallback : callback;
     writeCallback?.();
-    return true;
+    return accepted !== false;
   }
 
   end(chunk?: unknown, callback?: ProcessWriteCallback): this {
@@ -76,6 +99,10 @@ export interface ProcessBuiltinOptions {
   env?: Record<string, string>;
   exitMode?: ProcessExitMode;
   pid?: number;
+  terminal?: boolean;
+  terminalSize?: { cols: number; rows: number };
+  writeStdout?: (chunk: unknown) => boolean | void;
+  writeStderr?: (chunk: unknown) => boolean | void;
 }
 
 export class BrowserProcess extends EventEmitter {
@@ -111,9 +138,9 @@ export class BrowserProcess extends EventEmitter {
       sharedObjects: []
     })
   };
-  stdin = new ProcessReadableStdio();
-  stdout = new ProcessWritableStdio((chunk) => this.emit("stdout", chunk));
-  stderr = new ProcessWritableStdio((chunk) => this.emit("stderr", chunk));
+  stdin: ProcessReadableStdio;
+  stdout: ProcessWritableStdio;
+  stderr: ProcessWritableStdio;
   #cwd: string;
   #emitExitInCapture: boolean;
   #exitMode: ProcessExitMode;
@@ -129,6 +156,17 @@ export class BrowserProcess extends EventEmitter {
     this.#cwd = options.cwd || "/workspace";
     this.#emitExitInCapture = options.emitExitInCapture ?? false;
     this.#exitMode = options.exitMode || "throw";
+    const terminal = options.terminal ?? false;
+    this.stdin = new ProcessReadableStdio(terminal);
+    this.stdout = new ProcessWritableStdio((chunk) => {
+      this.emit("stdout", chunk);
+      return options.writeStdout?.(chunk);
+    }, terminal);
+    this.stderr = new ProcessWritableStdio((chunk) => {
+      this.emit("stderr", chunk);
+      return options.writeStderr?.(chunk);
+    }, terminal);
+    if (options.terminalSize) this.resizeTerminal(options.terminalSize.cols, options.terminalSize.rows);
   }
 
   binding(name: string): unknown {
@@ -206,6 +244,34 @@ export class BrowserProcess extends EventEmitter {
 
   nextTick(callback: (...args: unknown[]) => void, ...args: unknown[]): void {
     queueMicrotask(() => callback(...args));
+  }
+
+  writeStdin(chunk: unknown): boolean {
+    return this.stdin.push(chunk);
+  }
+
+  endStdin(): void {
+    this.stdin.end();
+  }
+
+  resizeTerminal(cols: number, rows: number): void {
+    if (!Number.isInteger(cols) || !Number.isInteger(rows) || cols < 1 || rows < 1) {
+      throw new RangeError("terminal size must use positive integer columns and rows");
+    }
+    this.stdout.columns = cols;
+    this.stdout.rows = rows;
+    this.stderr.columns = cols;
+    this.stderr.rows = rows;
+    this.emit("SIGWINCH");
+  }
+
+  notifyDrain(stream: "stdout" | "stderr"): void {
+    this[stream].emit("drain");
+  }
+
+  signal(signal: "SIGINT" | "SIGTERM" | "SIGKILL"): void {
+    this.emit(signal);
+    if (this.exitCode === undefined) this.exitCode = signal === "SIGINT" ? 130 : signal === "SIGTERM" ? 143 : 137;
   }
 
   uptime(): number {

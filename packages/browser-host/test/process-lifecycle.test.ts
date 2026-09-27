@@ -24,9 +24,15 @@ class MockWorker {
       this.stdin = `${this.stdin || ""}${message.data}`;
       return;
     }
+    if (message.type === "signal" && this.mode === "graceful") {
+      queueMicrotask(() => this.emit("message", {
+        data: { type: "exit", code: 0, pid: message.pid, generation: message.generation }
+      }));
+      return;
+    }
     if (this.mode === "hang") return;
     queueMicrotask(() => {
-      if (this.mode === "ready") this.emit("message", { data: { type: "ready" } });
+      if (this.mode === "ready" || this.mode === "graceful") this.emit("message", { data: { type: "ready" } });
       if (this.mode === "failed") this.emit("message", { data: { type: "failed", error: "boom" } });
       if (this.mode === "exit") this.emit("message", { data: { type: "exit", code: 9 } });
     });
@@ -47,6 +53,7 @@ function createTable(mode) {
   const table = new HostProcessTable({
     now: () => 1234,
     onOutput: (chunk) => output.push(chunk),
+    signalGraceMs: 0,
     workerFactory() {
       const worker = new MockWorker(mode);
       workers.push(worker);
@@ -120,14 +127,26 @@ assert.notEqual(replacement.pid, waitPrepared.pid);
 assert.notEqual(replacement.generation, waitPrepared.generation);
 const signalStart = waitCase.table.start(replacement.pid);
 const interrupted = waitCase.table.signal(replacement.pid, "SIGINT");
-assert.equal(interrupted.exitCode, 130);
+assert.equal(interrupted.status, "stopping");
+assert.equal(interrupted.exitCode, null);
 assert.deepEqual(waitCase.workers.at(-1).messages.at(-1), {
   type: "signal",
   pid: replacement.pid,
   generation: replacement.generation,
   signal: "SIGINT"
 });
-await signalStart;
+assert.equal((await signalStart).exitCode, 130);
+
+const gracefulCase = createTable("graceful");
+gracefulCase.table.signalGraceMs = 100;
+const gracefulPrepared = gracefulCase.table.prepare({ url: "/workers/process-worker.ts" });
+await gracefulCase.table.start(gracefulPrepared.pid);
+const gracefulWait = gracefulCase.table.wait(gracefulPrepared.pid);
+assert.equal(gracefulCase.table.signal(gracefulPrepared.pid, "SIGTERM").status, "stopping");
+const gracefulExit = await gracefulWait;
+assert.equal(gracefulExit.exitCode, 0);
+assert.equal(gracefulExit.signal, "SIGTERM");
+assert.equal(gracefulCase.workers[0].terminated, true);
 
 const teardownCase = createTable("hang");
 const teardownPrepared = teardownCase.table.prepare({ url: "/workers/process-worker.ts" });
@@ -170,5 +189,42 @@ const failedSend = failedPost.prepare({ url: "/workers/process-worker.ts" });
 assert.equal((await failedPost.start(failedSend.pid)).status, "failed");
 assert.equal((await failedPost.wait(failedSend.pid)).resourcesReleased, true);
 assert.equal(failedPost.registry.size(), 0);
+
+const boundedCase = createTable("ready");
+boundedCase.table.maxOutputBytes = 8;
+boundedCase.table.maxOutputChunks = 2;
+boundedCase.table.stdinWindowBytes = 4;
+const boundedPrepared = boundedCase.table.prepare({
+  argv: ["node", "script.js", "value;not-shell"],
+  cwd: "/workspace/app",
+  env: { SAFE_VALUE: "yes", API_TOKEN: "secret" },
+  url: "/workers/process-worker.ts"
+});
+await boundedCase.table.start(boundedPrepared.pid);
+assert.deepEqual(boundedCase.workers.at(-1).messages[0].argv, ["node", "script.js", "value;not-shell"]);
+assert.equal(boundedCase.workers.at(-1).messages[0].env.API_TOKEN, "secret");
+assert.equal(boundedCase.table.list().at(-1).env.API_TOKEN, "[REDACTED]");
+boundedCase.workers.at(-1).emit("message", { data: { type: "stdout", data: "123456", pid: boundedPrepared.pid, generation: boundedPrepared.generation } });
+boundedCase.workers.at(-1).emit("message", { data: { type: "stderr", data: "abcdef", pid: boundedPrepared.pid, generation: boundedPrepared.generation } });
+const boundedSnapshot = boundedCase.table.list().at(-1);
+assert.equal(boundedSnapshot.outputBytes <= 8, true);
+assert.equal(boundedSnapshot.outputDroppedBytes, 4);
+assert.equal(boundedCase.table.output(boundedPrepared.pid).length <= 2, true);
+assert.equal(boundedCase.table.writeStdin(boundedPrepared.pid, "1234"), true);
+assert.equal(boundedCase.table.writeStdin(boundedPrepared.pid, "5"), false);
+boundedCase.workers.at(-1).emit("message", { data: { type: "stdin-ack", bytes: 4, pid: boundedPrepared.pid, generation: boundedPrepared.generation } });
+assert.equal(boundedCase.table.writeStdin(boundedPrepared.pid, "5"), true);
+boundedCase.workers.at(-1).emit("message", { data: { type: "stdout", data: "stale", pid: boundedPrepared.pid, generation: boundedPrepared.generation + 1 } });
+assert.equal(boundedCase.table.list().at(-1).stdout.includes("stale"), false);
+boundedCase.table.teardown();
+
+assert.throws(
+  () => new HostProcessTable().prepare({ cwd: "/workspace/../escape", url: "/workers/process-worker.ts" }),
+  /absolute normalized path/
+);
+assert.throws(
+  () => new HostProcessTable().prepare({ argv: ["ok", "bad\0arg"], url: "/workers/process-worker.ts" }),
+  /NUL-free/
+);
 
 console.log("browser host process lifecycle test ok");

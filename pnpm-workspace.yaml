@@ -4,5 +4,6 @@ packages:
   - "apps/*"
 
 allowBuilds:
+  bufferutil: false
   esbuild: true
   sharp: false
