@@ -85,19 +85,19 @@
   "bundlerCandidates": [
     {
       "id": "webpack-dev-workflow",
-      "grade": "candidate",
-      "productSupport": false,
-      "blocker": "The exact-revision fixture and integrity-pinned toolchain reach CLI bootstrap, then fail closed because no strict-CSP precompiled webpack CLI factory exists.",
-      "diagnosticCodes": ["ERR_BUNDLER_STRICT_CSP_FACTORY_MISSING"],
-      "evidence": ["compat/bundler-dev-workflow-results.json", "tests/compatibility/frameworks/bundlers/bundler-candidate-workflow.test.ts"]
+      "grade": "supported",
+      "productSupport": true,
+      "blocker": "",
+      "diagnosticCodes": ["ERR_WEBPACK_CSP_FACTORY_INTEGRITY", "ERR_WEBPACK_CSP_WORKSPACE_INTEGRITY"],
+      "evidence": ["compat/bundler-dev-workflow-results.json", "tests/compatibility/frameworks/bundlers/bundler-candidate-workflow.test.ts", "apps/preview-service/test/bundler-browser-worker.test.ts"]
     },
     {
       "id": "rspack-dev-workflow",
-      "grade": "candidate",
-      "productSupport": false,
-      "blocker": "The exact-revision fixture and integrity-pinned toolchain reach CLI bootstrap, then fail closed: no strict-CSP precompiled CLI factory exists and the pinned WASI binding has not passed the browser-worker gate.",
-      "diagnosticCodes": ["ERR_BUNDLER_STRICT_CSP_FACTORY_MISSING", "ERR_BUNDLER_WASM_RUNTIME_UNVALIDATED"],
-      "evidence": ["compat/bundler-dev-workflow-results.json", "tests/compatibility/frameworks/bundlers/bundler-candidate-workflow.test.ts"]
+      "grade": "supported",
+      "productSupport": true,
+      "blocker": "",
+      "diagnosticCodes": ["ERR_RSPACK_CSP_FACTORY_INTEGRITY", "ERR_RSPACK_WASI_MODULE_INTEGRITY", "ERR_RSPACK_WASI_WORKER_INTEGRITY"],
+      "evidence": ["compat/bundler-dev-workflow-results.json", "tests/compatibility/frameworks/bundlers/bundler-candidate-workflow.test.ts", "apps/preview-service/test/bundler-browser-worker.test.ts"]
     }
   ],
   "gate": {

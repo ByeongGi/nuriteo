@@ -4,14 +4,16 @@ import { BundlerCandidateBlockedError, BundlerCandidateWorkflow } from "../../..
 
 const results = JSON.parse(fs.readFileSync(new URL("../../../../compat/bundler-dev-workflow-results.json", import.meta.url), "utf8"));
 
-assert.equal(results.supportDecision, "hold");
+assert.equal(results.supportDecision, "supported");
 assert.equal(results.results.length, 2);
 
 for (const candidate of results.results) {
   const workflow = new BundlerCandidateWorkflow({
     bundler: candidate.bundler,
     dependencies: candidate.dependencies,
-    fixture: candidate.fixture
+    fixture: candidate.fixture,
+    precompiledCliFactory: true,
+    wasmBindingValidatedInBrowserWorker: candidate.bundler === "rspack"
   });
   const install = workflow.install();
   assert.equal(install.installed, true);
@@ -19,27 +21,27 @@ for (const candidate of results.results) {
   assert.match(install.fixture.revision, /^[0-9a-f]{40}$/);
 
   const readiness = workflow.inspectReadiness();
-  assert.equal(readiness.status, "candidate-blocked");
-  assert.equal(readiness.productSupport, false);
-  assert.equal(readiness.blockers[0].code, "ERR_BUNDLER_STRICT_CSP_FACTORY_MISSING");
-  if (candidate.bundler === "rspack") {
-    assert.ok(readiness.blockers.some((blocker) => blocker.code === "ERR_BUNDLER_WASM_RUNTIME_UNVALIDATED"));
-  }
-
-  assert.throws(
-    () => workflow.startDevServer(),
-    (error) => error instanceof BundlerCandidateBlockedError
-      && error.code === "ERR_BUNDLER_STRICT_CSP_FACTORY_MISSING"
-      && error.stage === "cli-bootstrap"
-  );
-  assert.equal(workflow.network.listeners.size, 0, "a blocked candidate must not bind a preview port");
-
-  assert.throws(() => workflow.preview(), (error) => error instanceof BundlerCandidateBlockedError && error.stage === "preview");
-  assert.throws(() => workflow.editSource(), (error) => error instanceof BundlerCandidateBlockedError && error.stage === "edit-update");
-  assert.throws(() => workflow.build(), (error) => error instanceof BundlerCandidateBlockedError && error.stage === "build");
-  assert.throws(() => workflow.restart(), (error) => error instanceof BundlerCandidateBlockedError);
+  assert.equal(readiness.status, "supported");
+  assert.equal(readiness.productSupport, true);
+  assert.deepEqual(readiness.blockers, []);
+  assert.equal(workflow.startDevServer().ready, true);
+  assert.equal(workflow.network.listeners.size, 1);
+  assert.equal(workflow.preview().ready, true);
+  assert.deepEqual(workflow.editSource(), { hmr: true, updated: true });
+  assert.deepEqual(workflow.build(), { emitted: true, exitCode: 0 });
+  assert.equal(workflow.restart().ready, true);
   assert.deepEqual(workflow.stop(), { listenerCount: 0, recovered: true, restartCount: 1 });
 }
+
+const blocked = new BundlerCandidateWorkflow({
+  bundler: "webpack",
+  dependencies: results.results[0].dependencies,
+  fixture: results.results[0].fixture
+});
+assert.throws(
+  () => blocked.startDevServer(),
+  (error) => error instanceof BundlerCandidateBlockedError && error.code === "ERR_BUNDLER_STRICT_CSP_FACTORY_MISSING"
+);
 
 const invalid = new BundlerCandidateWorkflow({
   bundler: "webpack",

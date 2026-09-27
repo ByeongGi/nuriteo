@@ -115,6 +115,19 @@ export class BrowserProcess extends EventEmitter {
   platform = "linux";
   arch = "x64";
   version = "v22.23.0";
+  features = Object.freeze({
+    cached_builtins: false,
+    debug: false,
+    inspector: false,
+    ipv6: true,
+    require_module: true,
+    tls: false,
+    tls_alpn: false,
+    tls_ocsp: false,
+    tls_sni: false,
+    typescript: false,
+    uv: true
+  });
   versions = Object.freeze({
     node: "22.23.0",
     v8: "browser",

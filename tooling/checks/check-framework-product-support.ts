@@ -49,24 +49,27 @@ for (const entry of support.failureTaxonomy) {
 }
 
 for (const candidate of support.bundlerCandidates) {
-  assert(candidate.grade === "candidate", `${candidate.id} must remain candidate`);
-  assert(candidate.productSupport === false, `${candidate.id} must not claim product support`);
-  assert(candidate.blocker.length > 0, `${candidate.id} must name a blocker`);
+  assert(candidate.grade === "supported", `${candidate.id} must be supported`);
+  assert(candidate.productSupport === true, `${candidate.id} must claim product support`);
+  assert(candidate.blocker.length === 0, `${candidate.id} must not retain a blocker`);
   assert(candidate.diagnosticCodes.length > 0, `${candidate.id} must name typed diagnostics`);
   for (const evidence of candidate.evidence) {
     assert(fs.existsSync(path.join(root, evidence)), `${candidate.id} evidence missing: ${evidence}`);
   }
 }
 
-assert(bundlerResults.supportDecision === "hold", "bundler candidates must remain hold");
+assert(bundlerResults.supportDecision === "supported", "bundler workflows must be promoted after browser gates pass");
 for (const bundler of ["webpack", "rspack"]) {
   const result = bundlerResults.results.find((candidate) => candidate.bundler === bundler);
-  assert(result?.grade === "candidate", `${bundler} result must remain candidate`);
-  assert(result.productSupport === false, `${bundler} must not claim product support`);
+  assert(result?.grade === "supported", `${bundler} result must be supported`);
+  assert(result.productSupport === true, `${bundler} must claim product support`);
   assert(/^[0-9a-f]{40}$/.test(result.fixture.revision), `${bundler} fixture revision must be exact`);
   assert(result.measurements.install === "pass-exact-version-and-sri", `${bundler} install pin validation must pass`);
-  assert(result.measurements.devServer === "blocked-before-port-bind", `${bundler} must fail before binding a port`);
-  assert(result.measurements.teardown === "pass-no-listener-leak", `${bundler} teardown must be recoverable`);
+  assert(result.measurements.devServer === "pass-loopback-port-bind", `${bundler} dev server must bind through loopback`);
+  assert(result.measurements.update === "pass-invalid-hash-ok-and-updated-asset", `${bundler} HMR evidence is incomplete`);
+  assert(result.measurements.productionBuild.startsWith("pass-real"), `${bundler} build output must be real`);
+  assert(result.measurements.teardown === "pass-no-worker-target-or-listener-leak", `${bundler} teardown must be leak-free`);
+  assert(result.blockers.length === 0, `${bundler} must not retain blockers`);
   assert(result.dependencies.every((dependency) => /^\d+\.\d+\.\d+/.test(dependency.version)), `${bundler} dependencies must use exact versions`);
   assert(result.dependencies.every((dependency) => /^sha512-/.test(dependency.integrity)), `${bundler} dependencies must pin integrity`);
 }

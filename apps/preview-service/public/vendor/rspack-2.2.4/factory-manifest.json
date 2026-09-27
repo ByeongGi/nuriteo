@@ -1,0 +1,20 @@
+{
+  "bundler": "rspack",
+  "version": "2.2.4",
+  "packages": 205,
+  "placements": 238,
+  "workspaceFiles": 2903,
+  "cjsFactories": 1899,
+  "esmFactories": 96,
+  "skippedModules": [],
+  "assets": {
+    "factory": {
+      "bytes": 25792576,
+      "sha256": "f7ba4be8f06325962935d7937759c6a4f9a618d29a955df0b75bb252e82b168d"
+    },
+    "workspace": {
+      "bytes": 19903960,
+      "sha256": "dde01ba66a703c2ac0186412fddcf3bf004a599824fd3edc96dcef5743e25823"
+    }
+  }
+}

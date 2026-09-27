@@ -42,8 +42,9 @@ export class Readable extends Stream {
   __browserReadableQueue: RuntimeValue[];
   __browserReadableEnded = false;
   __browserReadableEndEmitted = false;
-  _readableState: { encoding: BufferEncoding | null; objectMode: boolean } = {
+  _readableState: { encoding: BufferEncoding | null; highWaterMark: number; objectMode: boolean } = {
     encoding: null,
+    highWaterMark: 16 * 1024,
     objectMode: false
   };
   #queue: RuntimeValue[] = [];
@@ -53,10 +54,11 @@ export class Readable extends Stream {
   #encoding: BufferEncoding | null = null;
   #readScheduled = false;
 
-  constructor(options: { objectMode?: boolean } = {}) {
+  constructor(options: { highWaterMark?: number; objectMode?: boolean } = {}) {
     super();
     this.__browserReadableQueue = this.#queue;
     this._readableState.objectMode = options.objectMode === true;
+    if (typeof options.highWaterMark === "number") this._readableState.highWaterMark = options.highWaterMark;
   }
 
   static from(iterable: Iterable<RuntimeValue> | AsyncIterable<RuntimeValue>): Readable {
@@ -89,7 +91,10 @@ export class Readable extends Stream {
       return false;
     }
     const value = normalizeReadableChunk(chunk, this.#encoding);
-    if (this.listenerCount("data") > 0) this.emit("data", value);
+    if (this.listenerCount("data") > 0) {
+      this.emit("data", value);
+      this.#scheduleRead();
+    }
     else {
       this.#queue.push(value);
       if (this.listenerCount("readable") > 0) this.#scheduleRead();
@@ -377,12 +382,13 @@ export const promises = Object.freeze({
 });
 
 const legacyStream = createLegacyStreamConstructor();
+const legacyReadable = createLegacyReadableConstructor();
 const legacyTransform = createLegacyTransformConstructor(legacyStream);
 
 export const streamBuiltin = Object.assign(legacyStream, {
   Duplex,
   PassThrough,
-  Readable,
+  Readable: legacyReadable,
   Stream: legacyStream,
   Transform: legacyTransform,
   Writable,
@@ -554,6 +560,54 @@ function createLegacyStreamConstructor(): typeof Stream {
   LegacyStream.prototype.pipe = Stream.prototype.pipe;
   LegacyStream.prototype.unpipe = Stream.prototype.unpipe;
   return LegacyStream;
+}
+
+function createLegacyReadableConstructor(): typeof Readable {
+  const LegacyReadable = function ReadableConstructor(this: Readable, options: { highWaterMark?: number; objectMode?: boolean } = {}) {
+    const target = this as unknown as Record<string, unknown>;
+    const inheritedRead = typeof target._read === "function" ? target._read as (size?: number) => void : undefined;
+    const delegate = new Readable(options);
+    if (inheritedRead) {
+      (delegate as unknown as Record<string, unknown>)._read = (size?: number) => inheritedRead.call(target, size);
+    }
+    bindLegacyReadable(target, delegate);
+    return target;
+  } as unknown as typeof Readable;
+  LegacyReadable.prototype = Readable.prototype;
+  Object.setPrototypeOf(LegacyReadable, Readable);
+  return LegacyReadable;
+}
+
+function bindLegacyReadable(target: Record<string, unknown>, delegate: Readable): void {
+  for (const name of Reflect.ownKeys(delegate)) {
+    Object.defineProperty(target, name, {
+      configurable: true,
+      enumerable: true,
+      get: () => Reflect.get(delegate, name),
+      set: (value) => { Reflect.set(delegate, name, value); }
+    });
+  }
+  let prototype = Readable.prototype as object | null;
+  while (prototype && prototype !== Object.prototype) {
+    for (const name of Reflect.ownKeys(prototype)) {
+      if (name === "constructor" || Object.hasOwn(target, name)) continue;
+      const descriptor = Object.getOwnPropertyDescriptor(prototype, name);
+      if (typeof descriptor?.value === "function") {
+        Object.defineProperty(target, name, {
+          configurable: true,
+          value: descriptor.value.bind(delegate),
+          writable: true
+        });
+      } else if (descriptor?.get || descriptor?.set) {
+        Object.defineProperty(target, name, {
+          configurable: true,
+          ...(descriptor.get ? { get: descriptor.get.bind(delegate) } : {}),
+          ...(descriptor.set ? { set: descriptor.set.bind(delegate) } : {})
+        });
+      }
+    }
+    prototype = Object.getPrototypeOf(prototype);
+  }
 }
 
 function createLegacyTransformConstructor(LegacyStream: typeof Stream): typeof Transform {

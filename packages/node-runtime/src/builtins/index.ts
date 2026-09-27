@@ -30,4 +30,4 @@ export { Script as VmScript, createContext as createVmContext, isContext as isVm
 export { getHeapSpaceStatistics, getHeapStatistics, type HeapStatistics, v8Builtin } from "./v8.ts";
 export { WASI, wasiBuiltin, type WasiOptions } from "./wasi.ts";
 export { isMainThread, MessageChannel, MessagePort, parentPort, SHARE_ENV, threadId, UnsupportedWorkerThreadError, Worker, workerData, workerThreadsBuiltin } from "./worker-threads-builtin.ts";
-export { BrotliCompress, BrotliDecompress, createBrotliDecompress, createDeflateRaw, createGunzip, createGzip, createInflate, createInflateRaw, createUnzip, DeflateRaw, deflateRawSync, Gunzip, gunzipSync, Gzip, gzipSync, Inflate, inflateRawSync, InflateRaw, Unzip, Z_SYNC_FLUSH, zlibBuiltin } from "./zlib.ts";
+export { BrotliCompress, BrotliDecompress, createBrotliDecompress, createDeflate, createDeflateRaw, createGunzip, createGzip, createInflate, createInflateRaw, createUnzip, Deflate, DeflateRaw, deflateRawSync, Gunzip, gunzipSync, Gzip, gzipSync, Inflate, inflateRawSync, InflateRaw, Unzip, Z_SYNC_FLUSH, zlibBuiltin } from "./zlib.ts";

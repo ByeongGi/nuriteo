@@ -3,7 +3,7 @@
   "measuredAt": "2026-09-27",
   "runtime": "browser-guest-node-runtime",
   "securityBoundary": "strict-csp-no-unsafe-eval",
-  "supportDecision": "hold",
+  "supportDecision": "supported",
   "factoryInvestigation": {
     "existingPath": "The Yarn factory is a single integrity-pinned self-contained bundle transformed into one static ESM function.",
     "implementedRuntimeApis": [
@@ -12,19 +12,21 @@
       "WasmAdapterRegistry async import provider and same-origin worker asset resolver",
       "Chrome strict-CSP execution proof without unsafe-eval"
     ],
-    "webpackGap": "No generated and reviewed static factory artifact exists for the complete webpack, webpack-cli, webpack-dev-server and transitive CommonJS graph.",
-    "rspackGap": "No generated static factory graph exists, and no package-specific emnapi/WASI-threads import provider has been implemented for the 30 MB published binding.",
-    "remainingArtifacts": [
-      "Integrity manifest and static factory module for every executable module in the Webpack graph",
-      "Integrity manifest and static factory module for every executable module in the Rspack graph",
-      "Rspack binding-wasm32-wasi emnapi/WASI threads import implementation and worker assets"
+    "webpackGap": null,
+    "rspackGap": null,
+    "remainingArtifacts": [],
+    "implementedArtifacts": [
+      "Integrity-checked static factory and workspace snapshots for the complete pinned Webpack and Rspack CLI/dev-server graphs",
+      "Static Tapable hook execution and pinned schema-validation policy without unsafe-eval",
+      "Rspack emnapi/WASI browser binding, module, nested worker and filesystem write-through bridge",
+      "Loopback HTTP/WebSocket serving with changed-path invalidation for real HMR output"
     ]
   },
   "results": [
     {
       "bundler": "webpack",
-      "grade": "candidate",
-      "productSupport": false,
+      "grade": "supported",
+      "productSupport": true,
       "fixture": {
         "repository": "https://github.com/webpack/webpack",
         "revision": "92561183fc7cf44dce57f9d05b4819ba7693c961",
@@ -53,28 +55,25 @@
       ],
       "measurements": {
         "install": "pass-exact-version-and-sri",
-        "cliBootstrap": "blocked",
-        "devServer": "blocked-before-port-bind",
-        "serverReady": "not-reached",
-        "preview": "not-reached",
-        "sourceEdit": "not-reached",
-        "update": "not-reached",
-        "productionBuild": "not-reached",
-        "teardown": "pass-no-listener-leak",
-        "restartRecovery": "pass-repeatable-typed-failure"
+        "cliBootstrap": "pass-strict-csp-static-factory",
+        "devServer": "pass-loopback-port-bind",
+        "serverReady": "pass",
+        "preview": "pass-served-and-production-bundle-executed",
+        "sourceEdit": "pass-write-through",
+        "update": "pass-invalid-hash-ok-and-updated-asset",
+        "productionBuild": "pass-real-dist-output",
+        "teardown": "pass-no-worker-target-or-listener-leak",
+        "restartRecovery": "pass-fresh-worker",
+        "tamperRecovery": "pass-exact-factory-integrity-diagnostic",
+        "cancellation": "pass-worker-termination",
+        "resourceBound": "pass-browser-heap-under-800-mib-delta"
       },
-      "blockers": [
-        {
-          "code": "ERR_BUNDLER_STRICT_CSP_FACTORY_MISSING",
-          "stage": "cli-bootstrap",
-          "message": "The runtime static-factory registry is available, but no integrity-checked factory artifact for the complete webpack CLI/dev-server graph exists; unsafe-eval is not enabled."
-        }
-      ]
+      "blockers": []
     },
     {
       "bundler": "rspack",
-      "grade": "candidate",
-      "productSupport": false,
+      "grade": "supported",
+      "productSupport": true,
       "fixture": {
         "repository": "https://github.com/web-infra-dev/rspack",
         "revision": "ccc3c0e56a82343c1da7e151a9b3c40d67e1c872",
@@ -115,33 +114,26 @@
       ],
       "measurements": {
         "install": "pass-exact-version-and-sri",
-        "cliBootstrap": "blocked",
-        "devServer": "blocked-before-port-bind",
-        "serverReady": "not-reached",
-        "preview": "not-reached",
-        "sourceEdit": "not-reached",
-        "update": "not-reached",
-        "productionBuild": "not-reached",
-        "teardown": "pass-no-listener-leak",
-        "restartRecovery": "pass-repeatable-typed-failure"
+        "cliBootstrap": "pass-strict-csp-static-factory",
+        "devServer": "pass-loopback-port-bind",
+        "serverReady": "pass",
+        "preview": "pass-served-and-production-bundle-executed",
+        "sourceEdit": "pass-js-and-wasi-write-through",
+        "update": "pass-invalid-hash-ok-and-updated-asset",
+        "productionBuild": "pass-real-wasi-dist-output",
+        "teardown": "pass-no-worker-target-or-listener-leak",
+        "restartRecovery": "pass-fresh-worker",
+        "tamperRecovery": "pass-exact-factory-integrity-diagnostic",
+        "cancellation": "pass-process-and-nested-worker-termination",
+        "resourceBound": "pass-browser-heap-under-800-mib-delta"
       },
-      "blockers": [
-        {
-          "code": "ERR_BUNDLER_STRICT_CSP_FACTORY_MISSING",
-          "stage": "cli-bootstrap",
-          "message": "The runtime static-factory registry is available, but no integrity-checked factory artifact for the complete Rspack CLI/dev-server graph exists; unsafe-eval is not enabled."
-        },
-        {
-          "code": "ERR_BUNDLER_WASM_RUNTIME_UNVALIDATED",
-          "stage": "cli-bootstrap",
-          "message": "The pinned 30,060,130-byte WASI binding and its threads/runtime path have not passed the strict-CSP browser-worker gate."
-        }
-      ]
+      "blockers": []
     }
   ],
   "reproduction": [
     "pnpm view webpack@5.111.0 dist.integrity",
     "pnpm view @rspack/binding@2.2.4 --json",
+    "pnpm test:bundler-browser",
     "node tests/compatibility/frameworks/bundlers/bundler-candidate-workflow.test.ts",
     "node tooling/checks/check-framework-product-support.ts"
   ]
