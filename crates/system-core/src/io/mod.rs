@@ -1,8 +1,12 @@
 pub mod pipe;
+pub mod pty;
 pub mod stdio;
+pub mod termios;
 
 pub use pipe::{Pipe, PipeError, PipeResult};
+pub use pty::{PtyError, PtyEvent, PtyLimits, PtyRead, PtyResult, TerminalSize, VirtualPty};
 pub use stdio::Stdio;
+pub use termios::{ControlCharacters, Termios};
 
 #[cfg(test)]
 mod tests {
