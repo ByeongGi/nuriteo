@@ -158,7 +158,7 @@
     ],
     "remainingBacklog": [
       "The ten public Vite React fixtures pass in a Node worker; browser-worker cohort validation remains separate",
-      "Pinned Next.js 15.1 full runtime is candidate after guest-runtime validation; browser-worker/release promotion and native-addon boundaries remain",
+      "Pinned Next.js 15.5.26 full runtime passes strict-CSP browser-worker and release-security gates; native addons remain outside scope",
       "External stable publish still requires one final release checklist reconfirmation at publish time"
     ],
     "evidence": ["docs/archive/productization-2026-09-16/evidence/P20-04.md"]

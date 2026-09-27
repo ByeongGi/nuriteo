@@ -218,8 +218,8 @@ fs.copyFileSync(
   path.join(packageRoot, "vendor/yarn-cli-1.22.22.mjs")
 );
 fs.copyFileSync(
-  path.join(root, "apps/preview-service/public/vendor/next-cli-15.1.9.mjs"),
-  path.join(packageRoot, "vendor/next-cli-15.1.9.mjs")
+  path.join(root, "apps/preview-service/public/vendor/next-cli-15.5.26.mjs"),
+  path.join(packageRoot, "vendor/next-cli-15.5.26.mjs")
 );
 fs.cpSync(
   path.join(root, "apps/preview-service/public/vendor/vite-8.2.0"),
@@ -231,7 +231,7 @@ if (sha256(path.join(packageRoot, "vendor/yarn-cli-1.22.22.mjs")) !== yarnGate.a
   throw new Error("SDK Yarn Classic factory differs from the pinned product support asset");
 }
 const nextBrowserWorker = readJson(path.join(root, "compat/nextjs-browser-worker-results.json"));
-if (sha256(path.join(packageRoot, "vendor/next-cli-15.1.9.mjs")) !== nextBrowserWorker.nextCliFactorySha256) {
+if (sha256(path.join(packageRoot, "vendor/next-cli-15.5.26.mjs")) !== nextBrowserWorker.nextCliFactorySha256) {
   throw new Error("SDK Next.js factory differs from the pinned browser-worker evidence");
 }
 
@@ -324,7 +324,7 @@ Content-Security-Policy: default-src 'self'; script-src 'self' 'wasm-unsafe-eval
 \`\`\`
 
 Serve \`assets/system_wasm.wasm\` as \`application/wasm\`.
-Serve \`vendor/yarn-cli-1.22.22.mjs\` and \`vendor/next-cli-15.1.9.mjs\` as \`text/javascript\` beside the workers; the process worker verifies their SHA-256 values before loading the pinned CLI factories.
+Serve \`vendor/yarn-cli-1.22.22.mjs\` and \`vendor/next-cli-15.5.26.mjs\` as \`text/javascript\` beside the workers; the process worker verifies their SHA-256 values before loading the pinned CLI factories.
 Serve \`vendor/vite-8.2.0/**\` beside the workers; the process worker verifies the static graph, Rolldown browser binding, nested Worker, and WASM hashes before loading them.
 
 Asset base path for this package: \`${sdkBasePath}\`
@@ -376,8 +376,8 @@ writeFile("asset-manifest.json", `${JSON.stringify({
       sha256: sha256(path.join(packageRoot, "vendor/yarn-cli-1.22.22.mjs"))
     },
     nextCliFactory: {
-      path: "vendor/next-cli-15.1.9.mjs",
-      sha256: sha256(path.join(packageRoot, "vendor/next-cli-15.1.9.mjs"))
+      path: "vendor/next-cli-15.5.26.mjs",
+      sha256: sha256(path.join(packageRoot, "vendor/next-cli-15.5.26.mjs"))
     },
     viteStaticFactories: {
       path: "vendor/vite-8.2.0/vite-cli-static-factories.mjs",

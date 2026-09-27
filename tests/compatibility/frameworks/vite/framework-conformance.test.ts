@@ -51,7 +51,7 @@ assert.equal(byFramework.get("vite-vue")?.grade, "supported");
 assert.equal(byFramework.get("vite-svelte")?.grade, "supported");
 assert.equal(byFramework.get("nextjs")?.grade, "product-preview");
 assert.equal(byFramework.get("nextjs")?.validation, "product-preview-adapter");
-assert.equal(byFramework.get("nextjs-full-runtime")?.grade, "candidate");
+assert.equal(byFramework.get("nextjs-full-runtime")?.grade, "product-supported");
 assert.equal(byFramework.get("nextjs-full-runtime")?.validation, "actual-guest-runtime");
 assert.equal(actual.gate.status, "pass");
 

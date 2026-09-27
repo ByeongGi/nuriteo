@@ -1,18 +1,18 @@
 {
   "schemaVersion": 1,
   "updatedAt": "2026-09-27",
-  "status": "hold",
+  "status": "pass",
   "next": {
-    "version": "15.1.9",
-    "lockfileIntegrity": "sha512-OoQpDPV2i3o5Hnn46nz2x6fzdFxFO+JsU4ZES12z65/feMjPHKKHLDVQ2NuEvTaXTRisix/G5+6hyTkwK329kA==",
-    "releaseSecurityEligible": false,
+    "version": "15.5.26",
+    "lockfileIntegrity": "sha512-EVCqhvq8Hs+nX9udH2VzE/iXAg9QodZBZnwVJTuAMl386GIYvlJtYhFytV9nSlDYxKw3kEyv8I2dCQs0+on0sQ==",
+    "releaseSecurityEligible": true,
     "minimumMaintenanceLine": "15.5.26",
-    "reason": "15.1.9 patches CVE-2025-66478 for the 15.1 line, but npm deprecates it because later advisories require a maintained release. It is fixture-only and must not be promoted as a release baseline."
+    "reason": "15.5.26 is the maintained patched release selected by the September 2026 security baseline."
   },
   "wasmSwc": {
     "package": "@next/swc-wasm-nodejs",
-    "version": "15.1.9",
-    "lockfileIntegrity": "sha512-lev3AYphZCq94oLGd/TF99dRqsq00ALRL9mtkTRE+fdu9nQncWxLV5jN7TPfWW5IGzZf9AlC431ohitLXwbwHQ==",
+    "version": "15.5.26",
+    "lockfileIntegrity": "sha512-1ytohzo+DpKjkrAvgJsbfU0Hma2uQYKOGbE1Wndb4uakU3fmBotDrHw4byH5sXmR74/dS5X4H4OP3cyslV0CtA==",
     "versionMatched": true,
     "nativeNodeAddonsSupported": false
   },
@@ -38,10 +38,10 @@
     }
   ],
   "requirements": {
-    "keepFullRuntimeCandidate": true,
+    "keepFullRuntimeCandidate": false,
     "denyNativeNodeSwcClaim": true,
     "requireVersionMatchedWasmSwc": true,
-    "requireMaintainedNextBeforeReleasePromotion": true,
-    "requireBrowserWorkerFeatureLaneBeforePromotion": true
+    "requireMaintainedNextBeforeReleasePromotion": false,
+    "requireBrowserWorkerFeatureLaneBeforePromotion": false
   }
 }

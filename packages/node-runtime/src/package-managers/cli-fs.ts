@@ -326,7 +326,7 @@ export function createWorkspaceFsFacade(
       facade.utimesSync(path, atime, mtime);
     },
     lstat(path: string, callback: (error: Error | null, stats?: ReturnType<RuntimeFsBinding["statSync"]>) => void): void {
-      callWithFsCallback(() => statFromReader(reader, resolvePath(path)), callback);
+      callWithFsCallback(() => facade.statSync(path) as ReturnType<RuntimeFsBinding["statSync"]>, callback);
     },
     link(source: string, target: string, callback: (error?: Error | null) => void = () => undefined): void {
       try {
@@ -767,7 +767,13 @@ export function createWorkspaceFsFacade(
       }
       const listeners = statWatchers.get(normalized);
       if (!listeners) return;
-      const current = safeStatFromReader(reader, normalized);
+      const current = (() => {
+        try {
+          return facade.statSync(normalized);
+        } catch {
+          return undefined;
+        }
+      })();
       for (const watcher of listeners) {
         if (!watcher.closed) watcher.listener(current, watcher.previous);
         watcher.previous = current;
@@ -792,7 +798,15 @@ export function createWorkspaceFsFacade(
   }
 
   function touchPath(path: string): void {
-    modifiedTimes.set(normalize(path), nextModifiedTime++);
+    nextModifiedTime = Math.max(nextModifiedTime, Date.now());
+    let current = normalize(path);
+    while (true) {
+      modifiedTimes.set(current, nextModifiedTime++);
+      if (current === "/") break;
+      const parent = normalize(join(current, ".."));
+      if (parent === current) break;
+      current = parent;
+    }
   }
 
   function withModifiedTime<T extends ReturnType<RuntimeFsBinding["statSync"]>>(path: string, stats: T): T {
@@ -1121,14 +1135,6 @@ function basenameOf(path: string): string {
   const normalized = normalize(path);
   const index = normalized.lastIndexOf("/");
   return index === -1 ? normalized : normalized.slice(index + 1);
-}
-
-function safeStatFromReader(reader: WorkspaceModuleReader, path: string): CliFsStat | undefined {
-  try {
-    return statFromReader(reader, path);
-  } catch {
-    return undefined;
-  }
 }
 
 function statFromReader(reader: WorkspaceModuleReader, path: string): ReturnType<RuntimeFsBinding["statSync"]> {

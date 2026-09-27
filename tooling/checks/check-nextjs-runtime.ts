@@ -20,7 +20,7 @@ const installedNextEntrySha256 = createHash("sha256")
   .update(fs.readFileSync(path.join(nextPackageRoot, "dist/bin/next")))
   .digest("hex");
 const installedNextFactorySha256 = createHash("sha256")
-  .update(fs.readFileSync("apps/preview-service/public/vendor/next-cli-15.1.9.mjs"))
+  .update(fs.readFileSync("apps/preview-service/public/vendor/next-cli-15.5.26.mjs"))
   .digest("hex");
 
 assert.equal(rootManifest.devDependencies.next, compatibility.nextVersion);
@@ -40,32 +40,32 @@ assert.equal(browserWorker.nextVersion, compatibility.nextVersion);
 assert.match(browserWorker.nextCliEntrySha256, /^[a-f0-9]{64}$/);
 assert.equal(browserWorker.nextCliEntrySha256, installedNextEntrySha256);
 assert.equal(browserWorker.nextCliFactorySha256, installedNextFactorySha256);
-assert.equal(browserWorker.status, "hold");
-assert.equal(browserWorker.preflight.code, "ECLICSPUNSUPPORTED");
+assert.equal(browserWorker.status, "pass");
+assert.equal(browserWorker.preflight.status, "pass");
 assert.equal(browserWorker.preflight.coveredModule, "/workspace/app/node_modules/next/dist/bin/next");
-assert.equal(browserWorker.preflight.module, "/workspace/app/node_modules/next/dist/server/require-hook.js");
 assert.deepEqual(browserWorker.commands, ["next dev", "next build", "next start"]);
 assert.equal(browserWorker.lifecycle.factoryIntegrityRejection, "pass");
 assert.equal(browserWorker.lifecycle.workerTeardown, "pass");
-assert.equal(browserWorker.lifecycle.recoveryAttempt, "pass-with-same-explicit-blocker");
+assert.equal(browserWorker.lifecycle.recoveryAttempt, "pass");
 assert.equal(browserWorker.lifecycle.crossOriginIsolationAfterRecovery, true);
+assert.equal(browserWorker.lifecycle.heapBudget, "pass");
 
-assert.equal(security.status, "hold");
-assert.equal(security.next.releaseSecurityEligible, false);
-assert.equal(security.requirements.keepFullRuntimeCandidate, true);
+assert.equal(security.status, "pass");
+assert.equal(security.next.releaseSecurityEligible, true);
+assert.equal(security.requirements.keepFullRuntimeCandidate, false);
 assert.equal(security.requirements.denyNativeNodeSwcClaim, true);
-assert.equal(security.requirements.requireMaintainedNextBeforeReleasePromotion, true);
+assert.equal(security.requirements.requireMaintainedNextBeforeReleasePromotion, false);
 assert.ok(security.advisories.some((entry: { id: string }) => entry.id === "CVE-2025-66478"));
 assert.ok(security.advisories.some((entry: { id: string }) => entry.id === "2025-12-11-nextjs-security-update"));
 assert.ok(security.advisories.some((entry: { id: string }) => entry.id === "2026-09-22-nextjs-security-update"));
 
-assert.equal(compatibility.fullRuntimeGrade, "candidate");
-assert.equal(compatibility.browserWorker.status, "hold");
-assert.equal(compatibility.security.status, "hold");
+assert.equal(compatibility.fullRuntimeGrade, "product-supported");
+assert.equal(compatibility.browserWorker.status, "pass");
+assert.equal(compatibility.security.status, "pass");
 assert.equal(compatibility.packageFacts.nativeAddonPolicy, "unsupported");
 assert.equal(compatibility.packageFacts.wasmSwcIntegrity, security.wasmSwc.lockfileIntegrity);
 
-console.log("Next.js runtime candidate gate ok: guest evidence retained; browser-worker and security promotion remain hold");
+console.log("Next.js runtime product gate ok: maintained release, strict-CSP browser worker, and security evidence pass");
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");

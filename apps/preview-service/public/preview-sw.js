@@ -10,9 +10,26 @@ self.addEventListener("activate", (event) => {
 
 self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
+  if (url.pathname.startsWith("/__cargo_runtime_module/")) {
+    event.respondWith(routeRuntimeModule(event.request));
+    return;
+  }
   if (!url.pathname.startsWith("/__preview/")) return;
   event.respondWith(routePreview(event.request));
 });
+
+async function routeRuntimeModule(request) {
+  const response = await caches.match(request);
+  if (response) return response;
+  return new Response("Runtime module was not published.", {
+    status: 404,
+    headers: {
+      "content-type": "text/plain; charset=utf-8",
+      "Cross-Origin-Resource-Policy": "same-origin",
+      "Cross-Origin-Embedder-Policy": "require-corp"
+    }
+  });
+}
 
 async function routePreview(request) {
   const clients = await self.clients.matchAll({ type: "window", includeUncontrolled: true });

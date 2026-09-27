@@ -1,6 +1,7 @@
 import type { RuntimeFsBinding, RuntimeFsData } from "../types.ts";
 
 export interface FsPromisesBuiltin {
+  access(path: string, mode?: number): Promise<void>;
   appendFile(path: string, data: RuntimeFsData): Promise<void>;
   chmod(path: string, mode: number | string): Promise<void>;
   chown(path: string, uid: number, gid: number): Promise<void>;
@@ -31,6 +32,12 @@ export interface FsPromisesBuiltin {
 
 export function createFsPromisesBuiltin(fs: RuntimeFsBinding): FsPromisesBuiltin {
   return Object.freeze({
+    async access(path: string, _mode?: number): Promise<void> {
+      const maybeAccessSync = (fs as RuntimeFsBinding & { accessSync?: (path: string, mode?: number) => void }).accessSync;
+      if (maybeAccessSync) maybeAccessSync(path, _mode);
+      else fs.statSync(path);
+    },
+
     async appendFile(path: string, data: RuntimeFsData): Promise<void> {
       const maybeAppendFileSync = (fs as RuntimeFsBinding & {
         appendFileSync?: (path: string, data: RuntimeFsData) => void;

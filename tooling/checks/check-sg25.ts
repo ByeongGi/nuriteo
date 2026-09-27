@@ -44,14 +44,14 @@ assert(vue?.grade === "supported", "Vue must be supported");
 assert(svelte?.grade === "supported", "Svelte must be supported");
 assert(next?.grade === "product-preview", "Next.js public grade must record the adapter preview claim");
 assert(nextjs.publicGrade === "product-preview", "nextjs-compatibility publicGrade must be product-preview");
-assert(nextjs.fullRuntimeGrade === "candidate", "full Next.js runtime must remain candidate until browser-worker promotion");
+assert(nextjs.fullRuntimeGrade === "product-supported", "full Next.js runtime must remain product-supported");
 assert(nextjs.productSupportClaim === true, "Next.js adapter product support must be claimed");
-assert(nextjs.browserWorker.status === "hold", "full Next.js runtime must retain the measured browser-worker hold");
-assert(nextBrowserWorker.preflight.code === "ECLICSPUNSUPPORTED", "Next.js browser-worker blocker must remain explicit");
-assert(nextSecurity.status === "hold" && nextSecurity.next.releaseSecurityEligible === false, "vulnerable Next.js fixture must not become a release baseline");
+assert(nextjs.browserWorker.status === "pass", "full Next.js runtime must retain strict-CSP browser-worker evidence");
+assert(nextBrowserWorker.preflight.status === "pass", "Next.js browser-worker preflight must pass");
+assert(nextSecurity.status === "pass" && nextSecurity.next.releaseSecurityEligible === true, "Next.js fixture must remain on the maintained security baseline");
 assert(
-  nextjs.capabilities.some((entry) => entry.id === "next-app-router-dev" && entry.status === "candidate"),
-  "full Next.js CLI dev evidence must remain candidate until browser-worker and security promotion"
+  nextjs.capabilities.some((entry) => entry.id === "next-app-router-dev" && entry.status === "supported"),
+  "full Next.js CLI dev evidence must remain supported"
 );
 
 const vueMatrix = publicMatrix.frameworks.find((entry) => entry.name === "Vite Vue runtime");

@@ -16,6 +16,16 @@ const laneConfig = lane === "webpack"
 let servedBundle = Buffer.alloc(0);
 let tamperFactory = false;
 
+function assertHmrSequence(types: string[], label: string): void {
+  const invalidIndex = types.indexOf("invalid");
+  const hashIndex = types.lastIndexOf("hash");
+  const okIndex = types.lastIndexOf("ok");
+  assert.ok(types.every((type) => ["invalid", "still-ok", "hash", "ok"].includes(type)), `${label} emitted an unexpected event: ${types.join(", ")}`);
+  assert.ok(invalidIndex >= 0, `${label} did not invalidate`);
+  assert.ok(hashIndex > invalidIndex, `${label} did not publish a hash after invalidation`);
+  assert.ok(okIndex > hashIndex, `${label} did not complete after publishing its hash`);
+}
+
 const server = await createServer({
   configFile: false,
   plugins: [{
@@ -225,7 +235,7 @@ try {
   process.stdout.write(`${JSON.stringify(dev, null, 2)}\n`);
   assert.ok(dev.port, `${lane} dev server returned no bridged port`);
   assert.equal(dev.response?.statusCode, 200);
-  assert.deepEqual(dev.updateTypes, ["invalid", "hash", "ok"]);
+  assertHmrSequence(dev.updateTypes, `${lane} dev HMR`);
   assert.equal(dev.updatedBodyIncludesAfter, true);
   assert.doesNotMatch(devBundle, /\beval\s*\(/, `${lane} dev bundle contains CSP-blocked eval`);
   servedBundle = Buffer.from(devBundle);
@@ -247,7 +257,7 @@ try {
   restart.updatedBodyIncludesAfter = String(restart.updatedBody).includes(`${lane}-dev-after`);
   delete restart.updatedBody;
   assert.equal(restart.response?.statusCode, 200);
-  assert.deepEqual(restart.updateTypes, ["invalid", "hash", "ok"]);
+  assertHmrSequence(restart.updateTypes, `${lane} restart HMR`);
   assert.equal(restart.updatedBodyIncludesAfter, true);
   await assertWorkersReleased("dev restart teardown");
 

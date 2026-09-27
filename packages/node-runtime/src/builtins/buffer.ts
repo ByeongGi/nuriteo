@@ -282,7 +282,10 @@ function decodeHex(value: string): Uint8Array {
 }
 
 function encodeBase64(bytes: Uint8Array): string {
-  if (globalThis.Buffer) return globalThis.Buffer.from(bytes).toString("base64");
+  const nativeBuffer = globalThis.Buffer as unknown;
+  if (nativeBuffer && nativeBuffer !== BrowserBuffer && nativeBuffer !== Buffer) {
+    return globalThis.Buffer.from(bytes).toString("base64");
+  }
   const encoded: string[] = [];
   const chunkSize = 24_576;
   for (let offset = 0; offset < bytes.byteLength; offset += chunkSize) {
@@ -292,7 +295,10 @@ function encodeBase64(bytes: Uint8Array): string {
 }
 
 function decodeBase64(value: string): Uint8Array {
-  if (globalThis.Buffer) return new Uint8Array(globalThis.Buffer.from(value, "base64"));
+  const nativeBuffer = globalThis.Buffer as unknown;
+  if (nativeBuffer && nativeBuffer !== BrowserBuffer && nativeBuffer !== Buffer) {
+    return new Uint8Array(globalThis.Buffer.from(value, "base64"));
+  }
   const alphabet = value.replaceAll("-", "+").replaceAll("_", "/").replace(/[^A-Za-z0-9+/]/g, "");
   const normalized = alphabet.length % 4 === 1 ? alphabet.slice(0, -1) : alphabet;
   const binary = atob(normalized);

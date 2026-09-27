@@ -98,7 +98,7 @@
       "supportContract": "The fixture tied to the pinned Vite template-svelte upstream passes npm/pnpm install, plugin-backed worker dev/preview, edit-HMR with state preservation, build/dist smoke, and reload recovery within the W6 performance budget."
     },
     {
-      "id": "nextjs-full-runtime-candidate",
+      "id": "nextjs-full-runtime",
       "framework": "nextjs",
       "template": "app-router",
       "runtime": "browser-guest-node-runtime",
@@ -108,7 +108,7 @@
         "compat/nextjs-compatibility.json",
         "docs/productization/nextjs-product-support-target.md"
       ],
-      "supportContract": "Pinned Next 15.1.9 real CLI dev/build/start, WASM SWC, RSC/Server Actions, Middleware/Edge, ISR, Image Optimization, binary HTTP responses, and lifecycle teardown pass; public promotion remains candidate pending browser-worker and release/security gates."
+      "supportContract": "Pinned Next 15.5.26 real CLI dev/HMR/build/start/restart, App/Pages Router, config/plugin, WASM SWC, RSC/Server Actions, Middleware/Edge, ISR, Image Optimization, binary HTTP responses, lifecycle teardown, and heap budget pass under strict CSP."
     }
   ],
   "gate": {

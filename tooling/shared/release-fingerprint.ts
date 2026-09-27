@@ -69,7 +69,7 @@ export function collectSdkFingerprint({
   const systemWorkerPath = path.join(packageRoot, "workers/system-worker.ts");
   const processWorkerPath = path.join(packageRoot, "workers/process-worker.ts");
   const yarnClassicFactoryPath = path.join(packageRoot, "vendor/yarn-cli-1.22.22.mjs");
-  const nextCliFactoryPath = path.join(packageRoot, "vendor/next-cli-15.1.9.mjs");
+  const nextCliFactoryPath = path.join(packageRoot, "vendor/next-cli-15.5.26.mjs");
 
   for (const file of [assetManifestPath, wasmPath, systemWorkerPath, processWorkerPath, yarnClassicFactoryPath, nextCliFactoryPath, tarballPath]) {
     if (!fs.existsSync(file)) {
@@ -174,7 +174,7 @@ export function verifyReleaseArtifacts({ root = process.cwd() } = {}) {
     "SDK Yarn Classic factory fingerprint mismatch"
   );
   assertFingerprint(
-    assetManifest.assets.nextCliFactory?.sha256 === sha256File(path.join(packageRoot, "vendor/next-cli-15.1.9.mjs")),
+    assetManifest.assets.nextCliFactory?.sha256 === sha256File(path.join(packageRoot, "vendor/next-cli-15.5.26.mjs")),
     "SDK Next.js factory fingerprint mismatch"
   );
   assertFingerprint(

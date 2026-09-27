@@ -418,7 +418,7 @@
         "build": "next build"
       },
       "nativeDependencyRisk": "high",
-      "riskNotes": "Static export remains candidate; app-router dev stays hold.",
+      "riskNotes": "Static export remains a separately scoped candidate; maintained App Router and Pages Router dev/build/start workflows are product-supported under the documented strict CSP.",
       "status": "selected",
       "cohort": "nextjs",
       "source": "compat/nextjs-compatibility.json"

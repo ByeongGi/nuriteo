@@ -205,6 +205,16 @@ export class ServerResponse extends Writable {
     return this.headers[normalizeHeaderName(name)];
   }
 
+  appendHeader(name: string, value: string | readonly string[]): this {
+    const key = normalizeHeaderName(name);
+    const previous = this.headers[key];
+    const appended = Array.isArray(value) ? value : [value];
+    this.headers[key] = previous === undefined
+      ? appended
+      : [...(Array.isArray(previous) ? previous : [previous]), ...appended];
+    return this;
+  }
+
   getHeaderNames(): string[] {
     return Object.keys(this.headers);
   }
