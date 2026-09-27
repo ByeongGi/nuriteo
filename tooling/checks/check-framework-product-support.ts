@@ -8,6 +8,7 @@ const fixtures = readJson("compat/ecosystem-fixtures.json");
 const validation = readJson("compat/framework-actual-validation.json");
 const publicMatrix = readJson("compat/public-compatibility-matrix.json");
 const bundlerResults = readJson("compat/bundler-dev-workflow-results.json");
+const serviceResults = readJson("compat/service-workflow-fixture-results.json");
 
 assert(support.schemaVersion === 1, "unexpected framework support schema");
 assert(support.gate?.status === "pass", "framework promotion gate must pass");
@@ -61,8 +62,15 @@ for (const candidate of support.bundlerCandidates) {
 assert(bundlerResults.supportDecision === "supported", "bundler workflows must be promoted after browser gates pass");
 for (const bundler of ["webpack", "rspack"]) {
   const result = bundlerResults.results.find((candidate) => candidate.bundler === bundler);
+  const actual = validation.results.find((candidate) => candidate.framework === `${bundler}-dev-workflow`);
+  const publicName = bundler === "webpack" ? "Webpack 5.111.0 dev workflow" : "Rspack 2.2.4 dev workflow";
+  const matrix = publicMatrix.frameworks.find((candidate) => candidate.name === publicName);
   assert(result?.grade === "supported", `${bundler} result must be supported`);
   assert(result.productSupport === true, `${bundler} must claim product support`);
+  assert(actual?.grade === "supported", `${bundler} actual validation must be supported`);
+  assert(actual.validation === "actual-browser-worker", `${bundler} must retain browser-worker validation`);
+  assert(actual.status === "pass", `${bundler} actual validation must pass`);
+  assert(matrix?.status === "supported", `${bundler} public matrix must be supported`);
   assert(/^[0-9a-f]{40}$/.test(result.fixture.revision), `${bundler} fixture revision must be exact`);
   assert(result.measurements.install === "pass-exact-version-and-sri", `${bundler} install pin validation must pass`);
   assert(result.measurements.devServer === "pass-loopback-port-bind", `${bundler} dev server must bind through loopback`);
@@ -74,7 +82,18 @@ for (const bundler of ["webpack", "rspack"]) {
   assert(result.dependencies.every((dependency) => /^sha512-/.test(dependency.integrity)), `${bundler} dependencies must pin integrity`);
 }
 
-console.log(`framework product support ok supported=${support.frameworks.length} candidates=${support.bundlerCandidates.length}`);
+const bundlerFixture = fixtures.fixtures.find((candidate) => candidate.id === "webpack-rspack-dev-workflow");
+assert(bundlerFixture?.cohort === "bundler-supported", "bundler fixture must remain in the supported cohort");
+assert(!/candidate|blocked|unvalidated|not product-supported/i.test(bundlerFixture.riskNotes), "bundler fixture retains stale hold language");
+const bundlerService = serviceResults.results.find((candidate) => candidate.id === "webpack-rspack-dev-workflow");
+assert(bundlerService?.status === "pass" && bundlerService.score === 100, "bundler service workflow must pass");
+assert(serviceResults.summary.pass === 19 && serviceResults.summary.hold === 1, "service workflow summary is stale");
+
+const supportDoc = fs.readFileSync(path.join(root, "docs/release/support-matrix.md"), "utf8");
+assert(!/Webpack dev workflow[^\n]*candidate hold/.test(supportDoc), "Webpack release matrix retains candidate hold language");
+assert(!/Rspack dev workflow[^\n]*candidate hold/.test(supportDoc), "Rspack release matrix retains candidate hold language");
+
+console.log(`framework product support ok frameworks=${support.frameworks.length} bundlers=${support.bundlerCandidates.length}`);
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);

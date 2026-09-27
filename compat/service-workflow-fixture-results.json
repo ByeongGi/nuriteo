@@ -8,8 +8,8 @@
   },
   "summary": {
     "total": 20,
-    "pass": 18,
-    "hold": 2,
+    "pass": 19,
+    "hold": 1,
     "passOrHold": 20,
     "sg25": "pass"
   },
@@ -141,11 +141,11 @@
       "notes": "Local service-workflow / adapter validation pass."
     },
     {
-      "id": "webpack-rspack-dev-candidate",
-      "status": "hold",
-      "score": 25,
+      "id": "webpack-rspack-dev-workflow",
+      "status": "pass",
+      "score": 100,
       "source": "compat/bundler-dev-workflow-results.json",
-      "notes": "Webpack and Rspack now have separate exact-revision, integrity-pinned product candidate measurements. Install and recovery diagnostics pass, but strict-CSP CLI bootstrap remains blocked; Rspack also retains an unvalidated WASI binding path. Not product-supported."
+      "notes": "Pinned Webpack and Rspack pass strict-CSP Chrome build, dev-server, HMR, restart, integrity recovery, teardown, and heap-budget gates; Rspack uses the validated WASI browser binding."
     },
     {
       "id": "next-static-export-candidate",

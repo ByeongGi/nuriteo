@@ -114,10 +114,11 @@
   "gate": {
     "id": "SG25",
     "status": "pass",
-    "reason": "Vite React, Vue, and Svelte have worker-backed product support evidence. Webpack and Rspack remain separately documented candidates.",
+    "reason": "Vite React, Vue, and Svelte have worker-backed product support evidence. Pinned Webpack and Rspack workflows have separate strict-CSP Chrome product evidence.",
     "requiredToPass": [
       "Keep Vite React product-supported evidence green",
       "Keep Vue and Svelte exact-revision worker-backed support gates green",
+      "Keep Webpack and Rspack strict-CSP browser-worker support gates green",
       "Keep Next.js grade explicit without overstating support"
     ]
   }

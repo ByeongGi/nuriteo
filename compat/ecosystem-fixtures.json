@@ -388,21 +388,21 @@
       "source": "packages/browser-host/src/onboarding/templates.ts"
     },
     {
-      "id": "webpack-rspack-dev-candidate",
-      "name": "Webpack/Rspack dev workflow candidate",
+      "id": "webpack-rspack-dev-workflow",
+      "name": "Webpack/Rspack dev workflow",
       "repository": "local://compat/bundler-dev-workflow-results.json",
       "license": "MIT",
       "packageManager": "npm",
-      "lockfile": "exact-version-and-sri-candidate-manifest",
+      "lockfile": "exact-version-and-sri-manifest",
       "expectedCommands": {
         "install": "npm install",
         "dev": "webpack serve",
         "build": "webpack"
       },
       "nativeDependencyRisk": "high",
-      "riskNotes": "Separate exact-revision Webpack and Rspack product probes fail closed at strict-CSP CLI bootstrap; Rspack WASI remains unvalidated. Candidate only, not product-supported.",
+      "riskNotes": "Pinned Webpack and Rspack workflows pass real strict-CSP Chrome build/dev/HMR/recovery gates. Rspack uses the integrity-pinned WASI binding; native bindings and arbitrary versions remain outside support.",
       "status": "selected",
-      "cohort": "bundler-candidate",
+      "cohort": "bundler-supported",
       "source": "compat/bundler-dev-workflow-results.json"
     },
     {
