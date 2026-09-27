@@ -10,9 +10,10 @@ mod watch;
 
 use std::collections::BTreeMap;
 
+pub use crate::process::Pid;
 pub use error::{FsError, FsResult};
 use fd_table::FdTable;
-pub use ids::{Fd, InodeId, Pid};
+pub use ids::{Fd, InodeId};
 pub use inode::{FileType, Metadata, Node};
 pub use links::LinkKind;
 pub use open_file::{OpenFile, OpenOptions};

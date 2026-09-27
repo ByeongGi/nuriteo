@@ -1,10 +1,16 @@
+pub mod kernel;
 pub mod pipe;
 pub mod pty;
 pub mod stdio;
 pub mod termios;
 
+pub use kernel::{
+    IoError, IoRead, IoResult, IoctlRequest, IoctlResponse, KernelIo, PollState, PtyId, PtyPair,
+};
 pub use pipe::{Pipe, PipeError, PipeResult};
-pub use pty::{PtyError, PtyEvent, PtyLimits, PtyRead, PtyResult, TerminalSize, VirtualPty};
+pub use pty::{
+    PtyError, PtyEvent, PtyLimits, PtyRead, PtyReady, PtyResult, TerminalSize, VirtualPty,
+};
 pub use stdio::Stdio;
 pub use termios::{ControlCharacters, Termios};
 

@@ -75,6 +75,14 @@ pub struct PtyRead {
     pub eof: bool,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PtyReady {
+    pub readable: bool,
+    pub writable: bool,
+    pub hangup: bool,
+    pub event: bool,
+}
+
 impl PtyRead {
     fn data(bytes: Vec<u8>) -> Self {
         Self { bytes, eof: false }
@@ -178,6 +186,45 @@ impl VirtualPty {
 
     pub fn next_event(&mut self) -> Option<PtyEvent> {
         self.events.pop_front()
+    }
+
+    pub fn master_ready(&self) -> PtyReady {
+        let input_available = self
+            .limits
+            .input_bytes
+            .saturating_sub(self.slave_input.len())
+            .saturating_sub(self.canonical_input.len());
+        let output_available = self
+            .limits
+            .output_bytes
+            .saturating_sub(self.master_output.len());
+        PtyReady {
+            readable: self.master_open && (!self.master_output.is_empty() || !self.slave_open),
+            writable: self.master_open
+                && self.slave_open
+                && input_available > 0
+                && (!self.termios.echo || output_available > 0),
+            hangup: !self.slave_open,
+            event: false,
+        }
+    }
+
+    pub fn slave_ready(&self) -> PtyReady {
+        PtyReady {
+            readable: self.slave_open
+                && (!self.slave_input.is_empty()
+                    || self.eof_markers.front() == Some(&0)
+                    || !self.master_open),
+            writable: self.slave_open
+                && self.master_open
+                && self.master_output.len() < self.limits.output_bytes,
+            hangup: !self.master_open,
+            event: !self.events.is_empty(),
+        }
+    }
+
+    pub fn is_fully_closed(&self) -> bool {
+        !self.master_open && !self.slave_open
     }
 
     pub fn master_write(&mut self, bytes: &[u8]) -> PtyResult<usize> {
