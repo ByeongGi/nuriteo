@@ -1,6 +1,6 @@
 import * as monaco from "monaco-editor";
 import { BrowserLanguageServer, type LanguageServerState } from "./browserLanguageServer";
-import type { LspDiagnostic, LspDocumentSymbol, LspPosition, LspPublishDiagnosticsParams, LspRange } from "./lspProtocol";
+import type { LspDiagnostic, LspDocumentSymbol, LspPosition, LspPublishDiagnosticsParams, LspRange, LspWorkspaceEdit } from "./lspProtocol";
 import { monacoModelPath } from "./monacoProjectSync";
 
 const LSP_OWNER = "cargo-lsp";
@@ -10,15 +10,20 @@ type SyncedDocument = { version: number; text: string; languageId: string };
 
 export class MonacoLspBridge {
   readonly #server: BrowserLanguageServer;
+  readonly #applyWorkspaceEdit: ((edit: LspWorkspaceEdit) => void | Promise<void>) | undefined;
   readonly #documents = new Map<string, SyncedDocument>();
   readonly #registrations: monaco.IDisposable[] = [];
   #statusListener: (state: LanguageServerState) => void = () => undefined;
   #startTask: Promise<void> | null = null;
   #disposed = false;
 
-  constructor(server = new BrowserLanguageServer()) {
-    this.#server = server;
-    server.onDiagnostics((params) => this.#publishDiagnostics(params));
+  constructor(options: {
+    server?: BrowserLanguageServer;
+    applyWorkspaceEdit?: (edit: LspWorkspaceEdit) => void | Promise<void>;
+  } = {}) {
+    this.#server = options.server ?? new BrowserLanguageServer();
+    this.#applyWorkspaceEdit = options.applyWorkspaceEdit;
+    this.#server.onDiagnostics((params) => this.#publishDiagnostics(params));
   }
 
   get state(): LanguageServerState {
@@ -211,6 +216,10 @@ export class MonacoLspBridge {
           provideRenameEdits: async (model, position, newName) => {
             if (!this.#isSynced(model)) return { edits: [] };
             const edit = await this.#server.rename(model.uri.toString(), toLspPosition(position), newName);
+            if (this.#applyWorkspaceEdit) {
+              await this.#applyWorkspaceEdit(edit);
+              return { edits: [] };
+            }
             return {
               edits: Object.entries(edit.changes || {}).flatMap(([uri, edits]) =>
                 edits.map((entry) => ({
@@ -320,7 +329,7 @@ function toLspRange(range: monaco.IRange): LspRange {
   };
 }
 
-function toMonacoWorkspaceEdit(edit: import("./lspProtocol").LspWorkspaceEdit | undefined): monaco.languages.WorkspaceEdit | undefined {
+function toMonacoWorkspaceEdit(edit: LspWorkspaceEdit | undefined): monaco.languages.WorkspaceEdit | undefined {
   if (!edit) return undefined;
   return {
     edits: Object.entries(edit.changes ?? {}).flatMap(([uri, entries]) => entries.map((entry) => ({

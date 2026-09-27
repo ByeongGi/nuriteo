@@ -1,6 +1,6 @@
 /// <reference lib="webworker" />
 
-import { FixtureDebugAdapter } from "../lib/dapServer";
+import { WorkspaceDebugAdapter } from "../lib/dapServer";
 import type { DapRequest } from "../lib/dapProtocol";
 
 type HostMessage =
@@ -9,7 +9,7 @@ type HostMessage =
   | { type: "signal"; signal: string };
 
 const workerScope: DedicatedWorkerGlobalScope = self as unknown as DedicatedWorkerGlobalScope;
-const adapter = new FixtureDebugAdapter((message) => workerScope.postMessage({ type: "dap", message }));
+const adapter = new WorkspaceDebugAdapter((message) => workerScope.postMessage({ type: "dap", message }));
 
 workerScope.addEventListener("message", (event: MessageEvent<HostMessage>) => {
   if (event.data.type === "start") {

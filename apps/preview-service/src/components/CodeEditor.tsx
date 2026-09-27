@@ -12,6 +12,7 @@ import { EditorBreadcrumbs } from "./EditorBreadcrumbs";
 import { monacoTheme } from "../lib/settings";
 import { MonacoLspBridge } from "../lib/monacoLspBridge";
 import type { LanguageServerState } from "../lib/browserLanguageServer";
+import { applyLspWorkspaceEdit } from "../lib/workspaceEdit";
 
 loader.config({ monaco });
 
@@ -69,6 +70,8 @@ export function CodeEditor({ model }: { model: PreviewControllerModel }) {
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const editorSubscriptionsRef = useRef<monaco.IDisposable[]>([]);
   const lspBridgeRef = useRef<MonacoLspBridge | null>(null);
+  const modelRef = useRef(model);
+  modelRef.current = model;
   const language = useMemo(() => (selectedPath ? languageForPath(selectedPath) : "plaintext"), [selectedPath]);
 
   useEffect(() => {
@@ -87,7 +90,19 @@ export function CodeEditor({ model }: { model: PreviewControllerModel }) {
   }, []);
 
   useEffect(() => {
-    const bridge = new MonacoLspBridge();
+    const bridge = new MonacoLspBridge({
+      applyWorkspaceEdit: (edit) => {
+        const current = modelRef.current;
+        const project = current.snapshot.project;
+        const editor = current.snapshot.editor;
+        if (!project || !editor) throw new Error("Workspace is not ready for a rename edit.");
+        applyLspWorkspaceEdit(edit, {
+          root: project.root,
+          read: (path) => editor.openFile(path).data,
+          write: (path, text) => current.editFile(path, text)
+        });
+      }
+    });
     lspBridgeRef.current = bridge;
     bridge.onStatus(setLspState);
     void bridge.start("file:///workspace").catch((error: unknown) => console.error(error));

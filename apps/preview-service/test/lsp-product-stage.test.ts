@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { JsonRpcClient, type JsonRpcTransport } from "../src/lib/jsonRpcClient.ts";
 import type { JsonRpcMessage, JsonRpcNotification, JsonRpcResponse } from "../src/lib/lspProtocol.ts";
 import { BrowserLspServer } from "../src/lib/lspServer.ts";
+import { applyLspWorkspaceEdit } from "../src/lib/workspaceEdit.ts";
 
 const output: JsonRpcMessage[] = [];
 const server = new BrowserLspServer((message) => output.push(message));
@@ -94,6 +95,17 @@ const rename = await request(7, "textDocument/rename", {
 const changes = (rename.result as { changes: Record<string, unknown[]> }).changes;
 assert.ok((changes["file:///workspace/source.ts"]?.length ?? 0) >= 1);
 assert.ok((changes["file:///workspace/consumer.ts"]?.length ?? 0) >= 1);
+const workspaceFiles = new Map([
+  ["/workspace/source.ts", "export const cargoAnswer: number = 42; // FIXME\nexport function add(left: number, right: number) { return left + right; }\n"],
+  ["/workspace/consumer.ts", "import { add, cargoAnswer } from './source';\nconst value: string = cargoAnswer;\nadd(1, 2);\ncar"]
+]);
+assert.deepEqual(applyLspWorkspaceEdit(rename.result as { changes: Record<string, never[]> }, {
+  root: "/workspace",
+  read: (path) => workspaceFiles.get(path) ?? assert.fail(`missing ${path}`),
+  write: (path, text) => workspaceFiles.set(path, text)
+}).sort(), ["/workspace/consumer.ts", "/workspace/source.ts"]);
+assert.match(workspaceFiles.get("/workspace/source.ts") ?? "", /renamedAnswer/);
+assert.match(workspaceFiles.get("/workspace/consumer.ts") ?? "", /renamedAnswer/);
 
 const symbols = await request(8, "textDocument/documentSymbol", {
   textDocument: { uri: "file:///workspace/source.ts" }

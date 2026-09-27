@@ -77,26 +77,25 @@ try {
 
   await page.locator("#debug-start").click();
   await page.getByText("paused · breakpoint · line 3").waitFor({ timeout: 15_000 });
-  assert.equal(await page.locator("#debug-stack").textContent(), "guestMain:3");
-  assert.equal(await page.locator("#debug-scopes").textContent(), "Locals");
-  assert.equal(await page.locator("#debug-variables").textContent(), "counter=2");
+  assert.equal(await page.locator("#debug-stack").textContent(), "module:3");
+  assert.equal(await page.locator("#debug-scopes").textContent(), "Module");
+  assert.equal(await page.locator("#debug-variables").textContent(), "counter=1");
   await page.locator("#debug-step").click();
   await page.getByText("paused · step · line 4").waitFor({ timeout: 15_000 });
-  await page.locator("#debug-continue").click();
-  await page.getByText("paused · breakpoint · line 4").waitFor({ timeout: 15_000 });
   await page.locator("#debug-watch").click();
-  await page.getByText("counter + 1=5").waitFor({ timeout: 15_000 });
+  await page.getByText("counter + 1=3").waitFor({ timeout: 15_000 });
   await page.locator("#debug-console-run").click();
   await page.getByText("counter=7").waitFor({ timeout: 15_000 });
-  await page.locator("#debug-terminate").click();
-  await page.getByText("terminated · breakpoint · line 4").waitFor({ timeout: 15_000 });
+  await page.locator("#debug-continue").click();
+  await page.getByText("terminated · line 4").waitFor({ timeout: 15_000 });
+  await page.waitForFunction(() => document.querySelector("#debug-console-output")?.textContent?.endsWith("8"));
 
   for (const workerName of ["languageServerProcess.worker", "extensionHost.worker", "debugRuntimeProcess.worker"]) {
     assert.ok(workerRequests.some((url) => url.includes(workerName)), `${workerName} must be requested`);
   }
   assert.ok(workerRequests.every((url) => new URL(url).origin === baseUrl), "IDE protocol workers must remain same-origin");
   assert.deepEqual(pageErrors, []);
-  console.log("preview-service browser IDE protocol vertical slices ok");
+  console.log("preview-service browser IDE product paths ok");
 } finally {
   await browser.close();
   server.kill("SIGTERM");

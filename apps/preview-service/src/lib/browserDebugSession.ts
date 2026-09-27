@@ -13,6 +13,7 @@ export interface DebugSnapshot {
   variables: Array<{ name: string; value: string; type?: string }>;
   watches: Array<{ expression: string; value: string }>;
   console: string[];
+  sourceUri: string | null;
 }
 
 const EMPTY_SNAPSHOT: DebugSnapshot = {
@@ -23,8 +24,16 @@ const EMPTY_SNAPSHOT: DebugSnapshot = {
   scopes: [],
   variables: [],
   watches: [],
-  console: []
+  console: [],
+  sourceUri: null
 };
+
+export interface DebugLaunchOptions {
+  program: string;
+  source: string;
+  breakpoints?: Array<{ line: number; condition?: string }>;
+  stopOnEntry?: boolean;
+}
 
 export class BrowserDebugSession {
   readonly #createTransport: () => Promise<DapTransport>;
@@ -49,7 +58,7 @@ export class BrowserDebugSession {
     };
   }
 
-  async start(options: { breakpointLine?: number; condition?: string } = {}): Promise<void> {
+  async start(options: DebugLaunchOptions): Promise<void> {
     await this.dispose();
     this.#publish({ ...EMPTY_SNAPSHOT, state: "starting" });
     const client = new DapClient(await this.#createTransport());
@@ -64,14 +73,19 @@ export class BrowserDebugSession {
         this.#terminatedResolver?.();
         this.#terminatedResolver = null;
       }
+      if (event.event === "output") {
+        const output = (event.body as { output?: string } | undefined)?.output?.replace(/\n$/, "");
+        if (output) this.#publish({ ...this.#snapshot, console: [...this.#snapshot.console, output] });
+      }
     });
     try {
-      await client.request("initialize", { clientID: "cargo-container", adapterID: "cargo-fixture" });
-      await client.request("launch", { program: "file:///workspace/debug-fixture.ts", noDebug: false });
+      await client.request("initialize", { clientID: "cargo-container", adapterID: "cargo-browser-runtime" });
+      await client.request("launch", { program: options.program, source: options.source, stopOnEntry: options.stopOnEntry === true, noDebug: false });
       await client.request("setBreakpoints", {
-        source: { path: "file:///workspace/debug-fixture.ts" },
-        breakpoints: [{ line: options.breakpointLine || 3, ...(options.condition ? { condition: options.condition } : {}) }]
+        source: { path: options.program },
+        breakpoints: options.breakpoints ?? []
       });
+      this.#publish({ ...this.#snapshot, sourceUri: options.program });
       await client.request("configurationDone");
     } catch (error) {
       this.#publish({ ...this.#snapshot, state: "failed", reason: error instanceof Error ? error.message : String(error) });
@@ -115,7 +129,7 @@ export class BrowserDebugSession {
   async evaluateConsole(expression: string): Promise<void> {
     const response = await this.#request<{ result: string }>("evaluate", { expression, context: "repl", frameId: 100 });
     this.#publish({ ...this.#snapshot, console: [...this.#snapshot.console, `> ${expression}`, response.result] });
-    if (/^counter\s*=/.test(expression)) await this.#refreshPaused(this.#snapshot.reason || "paused");
+    await this.#refreshPaused(this.#snapshot.reason || "paused");
   }
 
   async dispose(): Promise<void> {
@@ -146,7 +160,8 @@ export class BrowserDebugSession {
       scopes: scopes.scopes.map((entry) => entry.name),
       variables: variables.variables,
       watches: this.#snapshot.watches,
-      console: this.#snapshot.console
+      console: this.#snapshot.console,
+      sourceUri: this.#snapshot.sourceUri
     });
   }
 

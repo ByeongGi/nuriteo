@@ -1,16 +1,19 @@
 import type { DapEvent, DapRequest, DapResponse } from "./dapProtocol.ts";
-import { DEBUG_FIXTURE_SOURCE_MAP, DEBUG_FIXTURE_SOURCE_URI, RuntimeSourceMap } from "./sourceMap.ts";
+import { formatRuntimeValue, SafeJavaScriptRuntime } from "./safeJavaScriptRuntime.ts";
 
-type RuntimeBreakpoint = { sourceLine: number; generatedLine: number; condition?: string };
+type RuntimeBreakpoint = { requestedLine: number; line: number; instruction: number; condition?: string };
 
-export class FixtureDebugAdapter {
+export class WorkspaceDebugAdapter {
   readonly #send: (message: DapResponse | DapEvent) => void;
   #sequence = 1;
-  readonly #sourceMap = new RuntimeSourceMap(DEBUG_FIXTURE_SOURCE_MAP);
-  #generatedLine = 3;
+  #runtime: SafeJavaScriptRuntime | null = null;
+  #programUri = "";
+  #instruction = 0;
   #breakpoints: RuntimeBreakpoint[] = [];
-  #launched = false;
-  #counter = 0;
+  #paused = false;
+  #reason = "";
+  #exception = "";
+  #stopOnEntry = false;
 
   constructor(send: (message: DapResponse | DapEvent) => void) {
     this.#send = send;
@@ -35,70 +38,194 @@ export class FixtureDebugAdapter {
     switch (request.command) {
       case "initialize":
         queueMicrotask(() => this.#event("initialized"));
-        return { supportsTerminateRequest: true, supportsConfigurationDoneRequest: true };
-      case "launch":
-        this.#launched = true;
-        this.#generatedLine = 3;
-        this.#counter = 0;
-        return {};
-      case "setBreakpoints": {
-        const args = request.arguments as { source?: { path?: string }; breakpoints?: Array<{ line: number; condition?: string }> };
-        const sourceUri = args.source?.path || DEBUG_FIXTURE_SOURCE_URI;
-        this.#breakpoints = (args.breakpoints || []).flatMap((breakpoint) => {
-          const generated = this.#sourceMap.generatedPositionFor(sourceUri, breakpoint.line);
-          return generated ? [{ sourceLine: breakpoint.line, generatedLine: generated.line, ...(breakpoint.condition ? { condition: breakpoint.condition } : {}) }] : [];
-        });
         return {
-          breakpoints: (args.breakpoints || []).map((breakpoint) => ({
-            verified: this.#breakpoints.some((entry) => entry.sourceLine === breakpoint.line),
-            line: breakpoint.line,
-            source: { path: sourceUri }
-          }))
+          supportsConditionalBreakpoints: true,
+          supportsConfigurationDoneRequest: true,
+          supportsEvaluateForHovers: true,
+          supportsSetVariable: true,
+          supportsTerminateRequest: true
         };
-      }
+      case "launch":
+        return this.#launch(request.arguments);
+      case "setBreakpoints":
+        return this.#setBreakpoints(request.arguments);
       case "configurationDone":
-        this.#assertLaunched();
-        this.#generatedLine = this.#breakpoints[0]?.generatedLine || 5;
-        this.#satisfyBreakpointCondition(this.#breakpoints[0]);
-        queueMicrotask(() => this.#event("stopped", { reason: "breakpoint", threadId: 1 }));
+        this.#requiredRuntime();
+        if (this.#stopOnEntry) this.#stop("entry");
+        else this.#runUntilStop();
         return {};
       case "continue":
-        this.#assertLaunched();
-        this.#counter += 1;
-        this.#satisfyBreakpointCondition(this.#breakpoints[0]);
-        queueMicrotask(() => this.#event("stopped", { reason: "breakpoint", threadId: 1 }));
+        if (this.#resumeCurrentInstruction()) this.#runUntilStop();
         return { allThreadsContinued: true };
       case "next":
       case "stepIn":
       case "stepOut":
-        this.#assertLaunched();
-        this.#generatedLine += 1;
-        this.#counter += 1;
-        queueMicrotask(() => this.#event("stopped", { reason: "step", threadId: 1 }));
+        if (this.#resumeCurrentInstruction()) {
+          if (this.#instruction < this.#requiredRuntime().instructions.length) this.#stop("step");
+          else this.#terminate();
+        }
         return {};
       case "threads":
-        return { threads: [{ id: 1, name: "main" }] };
+        return { threads: [{ id: 1, name: "browser-runtime" }] };
       case "stackTrace":
         return this.#stackTrace();
       case "scopes":
-        return {
-          scopes: [{ name: "Locals", variablesReference: 200, expensive: false }]
-        };
+        this.#assertPaused();
+        return { scopes: [{ name: "Module", variablesReference: 200, expensive: false }] };
       case "variables":
-        return { variables: [{ name: "counter", value: String(this.#counter), type: "number", variablesReference: 0 }] };
-      case "evaluate": {
-        const args = request.arguments as { expression?: string; context?: string };
-        const result = this.#evaluate(args.expression || "", args.context === "repl");
-        return { result, type: "number", variablesReference: 0 };
-      }
+        this.#assertPaused();
+        return { variables: this.#requiredRuntime().variables() };
+      case "evaluate":
+        return this.#evaluate(request.arguments);
+      case "setVariable":
+        return this.#setVariable(request.arguments);
+      case "source":
+        return { content: this.#requiredRuntime().source, mimeType: "text/typescript" };
+      case "exceptionInfo":
+        return { exceptionId: "BrowserRuntimeError", description: this.#exception, breakMode: "always" };
       case "terminate":
       case "disconnect":
-        this.#launched = false;
-        queueMicrotask(() => this.#event("terminated"));
+        this.#terminate();
         return {};
       default:
         throw new Error(`Unsupported DAP command: ${request.command}`);
     }
+  }
+
+  #launch(args: unknown): Record<string, never> {
+    const launch = args as { program?: string; source?: string; stopOnEntry?: boolean };
+    if (!launch.program || launch.source === undefined) throw new Error("DAP launch requires workspace program and source text.");
+    this.#programUri = launch.program;
+    this.#runtime = new SafeJavaScriptRuntime(launch.program, launch.source, (output) => {
+      this.#event("output", { category: "stdout", output: `${output}\n` });
+    });
+    this.#instruction = 0;
+    this.#breakpoints = [];
+    this.#paused = false;
+    this.#reason = "";
+    this.#exception = "";
+    this.#stopOnEntry = launch.stopOnEntry === true;
+    return {};
+  }
+
+  #setBreakpoints(args: unknown): { breakpoints: Array<{ verified: boolean; line: number; message?: string; source: { path: string } }> } {
+    const runtime = this.#requiredRuntime();
+    const params = args as { source?: { path?: string }; breakpoints?: Array<{ line: number; condition?: string }> };
+    const sourceUri = params.source?.path || this.#programUri;
+    if (sourceUri !== this.#programUri) {
+      return { breakpoints: (params.breakpoints ?? []).map((breakpoint) => ({ verified: false, line: breakpoint.line, message: "Source is not loaded.", source: { path: sourceUri } })) };
+    }
+    this.#breakpoints = (params.breakpoints ?? []).flatMap((breakpoint) => {
+      const instruction = runtime.instructions.findIndex((candidate) => candidate.line >= breakpoint.line);
+      if (instruction < 0) return [];
+      const resolved = runtime.instructions[instruction];
+      return resolved ? [{ requestedLine: breakpoint.line, line: resolved.line, instruction, ...(breakpoint.condition ? { condition: breakpoint.condition } : {}) }] : [];
+    });
+    return {
+      breakpoints: (params.breakpoints ?? []).map((breakpoint) => {
+        const resolved = this.#breakpoints.find((candidate) => candidate.requestedLine === breakpoint.line);
+        return resolved
+          ? { verified: true, line: resolved.line, source: { path: sourceUri } }
+          : { verified: false, line: breakpoint.line, message: "No executable statement at or after this line.", source: { path: sourceUri } };
+      })
+    };
+  }
+
+  #runUntilStop(): void {
+    const runtime = this.#requiredRuntime();
+    this.#paused = false;
+    while (this.#instruction < runtime.instructions.length) {
+      const breakpoint = this.#breakpoints.find((candidate) => candidate.instruction === this.#instruction);
+      if (breakpoint && this.#breakpointMatches(breakpoint)) {
+        this.#stop("breakpoint");
+        return;
+      }
+      if (!this.#executeCurrent()) return;
+    }
+    this.#terminate();
+  }
+
+  #resumeCurrentInstruction(): boolean {
+    this.#assertPaused();
+    this.#paused = false;
+    return this.#executeCurrent();
+  }
+
+  #executeCurrent(): boolean {
+    const runtime = this.#requiredRuntime();
+    if (this.#instruction >= runtime.instructions.length) return true;
+    try {
+      runtime.execute(this.#instruction);
+      this.#instruction += 1;
+      return true;
+    } catch (error) {
+      this.#exception = error instanceof Error ? error.message : String(error);
+      this.#stop("exception", this.#exception);
+      return false;
+    }
+  }
+
+  #breakpointMatches(breakpoint: RuntimeBreakpoint): boolean {
+    if (!breakpoint.condition) return true;
+    try {
+      return Boolean(this.#requiredRuntime().evaluate(breakpoint.condition, false));
+    } catch (error) {
+      this.#exception = `Breakpoint condition failed: ${error instanceof Error ? error.message : String(error)}`;
+      return true;
+    }
+  }
+
+  #evaluate(args: unknown): { result: string; type: string; variablesReference: number } {
+    this.#assertPaused();
+    const params = args as { expression?: string; context?: string };
+    const value = this.#requiredRuntime().evaluate(params.expression ?? "", params.context === "repl");
+    return { result: formatRuntimeValue(value), type: value === null ? "null" : typeof value, variablesReference: 0 };
+  }
+
+  #setVariable(args: unknown): { value: string; type: string; variablesReference: number } {
+    this.#assertPaused();
+    const params = args as { name?: string; value?: string };
+    if (!params.name || params.value === undefined) throw new Error("setVariable requires name and value.");
+    const value = this.#requiredRuntime().setVariable(params.name, params.value);
+    return { value: formatRuntimeValue(value), type: value === null ? "null" : typeof value, variablesReference: 0 };
+  }
+
+  #stackTrace(): unknown {
+    this.#assertPaused();
+    const runtime = this.#requiredRuntime();
+    const instruction = runtime.instructions[Math.min(this.#instruction, runtime.instructions.length - 1)];
+    if (!instruction) throw new Error("Debug program has no current source location.");
+    return {
+      stackFrames: [{
+        id: 100,
+        name: "module",
+        line: instruction.line,
+        column: 1,
+        source: { name: this.#programUri.split("/").at(-1), path: this.#programUri },
+        presentationHint: "normal"
+      }],
+      totalFrames: 1
+    };
+  }
+
+  #stop(reason: string, text?: string): void {
+    this.#paused = true;
+    this.#reason = reason;
+    queueMicrotask(() => this.#event("stopped", { reason, threadId: 1, allThreadsStopped: true, ...(text ? { text } : {}) }));
+  }
+
+  #terminate(): void {
+    this.#paused = false;
+    queueMicrotask(() => this.#event("terminated"));
+  }
+
+  #assertPaused(): void {
+    if (!this.#paused) throw new Error("Debug runtime is not paused.");
+  }
+
+  #requiredRuntime(): SafeJavaScriptRuntime {
+    if (!this.#runtime) throw new Error("Workspace debug program has not been launched.");
+    return this.#runtime;
   }
 
   #respond(request: DapRequest, body: unknown): void {
@@ -107,57 +234,5 @@ export class FixtureDebugAdapter {
 
   #event(event: string, body?: unknown): void {
     this.#send({ seq: this.#sequence++, type: "event", event, ...(body === undefined ? {} : { body }) });
-  }
-
-  #assertLaunched(): void {
-    if (!this.#launched) throw new Error("Debug fixture has not been launched.");
-  }
-
-  #stackTrace(): unknown {
-    const original = this.#sourceMap.originalPositionFor(this.#generatedLine);
-    if (!original) throw new Error("Generated location has no source-map entry.");
-    return {
-      stackFrames: [{
-        id: 100,
-        name: "guestMain",
-        line: original.line,
-        column: original.column + 1,
-        source: { name: "debug-fixture.ts", path: original.uri },
-        presentationHint: "normal"
-      }],
-      totalFrames: 1
-    };
-  }
-
-  #satisfyBreakpointCondition(breakpoint: RuntimeBreakpoint | undefined): void {
-    if (!breakpoint?.condition) return;
-    for (let attempt = 0; attempt < 100 && this.#evaluate(breakpoint.condition, false) !== "true"; attempt += 1) {
-      this.#counter += 1;
-    }
-    if (this.#evaluate(breakpoint.condition, false) !== "true") throw new Error("Conditional breakpoint did not converge.");
-  }
-
-  #evaluate(expression: string, allowAssignment: boolean): string {
-    const input = expression.trim();
-    const assignment = /^counter\s*=\s*(-?\d+)$/.exec(input);
-    if (assignment) {
-      if (!allowAssignment) throw new Error("Assignment is only allowed in the debug console.");
-      this.#counter = Number(assignment[1]);
-      return String(this.#counter);
-    }
-    if (input === "counter") return String(this.#counter);
-    const addition = /^counter\s*\+\s*(-?\d+)$/.exec(input);
-    if (addition) return String(this.#counter + Number(addition[1]));
-    const comparison = /^counter\s*(>=|<=|===|>|<)\s*(-?\d+)$/.exec(input);
-    if (comparison) {
-      const right = Number(comparison[2]);
-      const result = comparison[1] === ">=" ? this.#counter >= right
-        : comparison[1] === "<=" ? this.#counter <= right
-          : comparison[1] === "===" ? this.#counter === right
-            : comparison[1] === ">" ? this.#counter > right
-              : this.#counter < right;
-      return String(result);
-    }
-    throw new Error("Debug expression is outside the safe counter expression grammar.");
   }
 }

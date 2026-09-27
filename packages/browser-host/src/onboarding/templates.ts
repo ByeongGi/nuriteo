@@ -377,6 +377,17 @@ function createViteReactTemplate(): ProjectTemplate {
         data: "export const label = \"cargo\";\n"
       },
       {
+        path: "src/debug.ts",
+        data: [
+          "let counter = 0;",
+          "counter += 1;",
+          "counter += 1;",
+          "counter += 1;",
+          "console.log(counter);",
+          ""
+        ].join("\n")
+      },
+      {
         path: "src/App.css",
         data: [
           "#app {",

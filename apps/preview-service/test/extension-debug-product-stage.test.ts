@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 
 import { BrowserExtensionHost } from "../src/lib/browserExtensionHost.ts";
 import { BrowserExtensionManager } from "../src/lib/browserExtensionManager.ts";
-import { FixtureDebugAdapter } from "../src/lib/dapServer.ts";
+import { WorkspaceDebugAdapter } from "../src/lib/dapServer.ts";
 import type { DapEvent, DapRequest, DapResponse } from "../src/lib/dapProtocol.ts";
 import { ExtensionWorkerServer } from "../src/lib/extensionWorkerServer.ts";
 import {
@@ -97,7 +97,16 @@ assert.equal(manager.snapshot.extensions.find((extension) => extension.id === BU
 await manager.dispose();
 
 const dapOutput: Array<DapResponse | DapEvent> = [];
-const adapter = new FixtureDebugAdapter((message) => dapOutput.push(message));
+const adapter = new WorkspaceDebugAdapter((message) => dapOutput.push(message));
+const debugProgram = "file:///workspace/src/debug.ts";
+const debugSource = [
+  "let counter = 0;",
+  "counter += 1;",
+  "counter += 1;",
+  "counter += 1;",
+  "console.log(counter);",
+  ""
+].join("\n");
 let sequence = 1;
 const request = (command: string, args?: unknown) => {
   const message: DapRequest = { seq: sequence++, type: "request", command, ...(args === undefined ? {} : { arguments: args }) };
@@ -105,10 +114,10 @@ const request = (command: string, args?: unknown) => {
 };
 
 request("initialize");
-request("launch", { program: "file:///workspace/debug-fixture.ts" });
+request("launch", { program: debugProgram, source: debugSource });
 request("setBreakpoints", {
-  source: { path: DEBUG_FIXTURE_SOURCE_URI },
-  breakpoints: [{ line: 3, condition: "counter >= 2" }]
+  source: { path: debugProgram },
+  breakpoints: [{ line: 3, condition: "counter >= 1" }, { line: 5 }]
 });
 request("configurationDone");
 await new Promise((resolve) => setTimeout(resolve, 0));
@@ -120,20 +129,26 @@ assert.equal(
   3
 );
 request("scopes", { frameId: 100 });
-assert.equal(((dapOutput.at(-1) as DapResponse).body as { scopes: Array<{ name: string }> }).scopes[0]?.name, "Locals");
+assert.equal(((dapOutput.at(-1) as DapResponse).body as { scopes: Array<{ name: string }> }).scopes[0]?.name, "Module");
 request("variables", { variablesReference: 200 });
-assert.equal(((dapOutput.at(-1) as DapResponse).body as { variables: Array<{ value: string }> }).variables[0]?.value, "2");
+assert.equal(((dapOutput.at(-1) as DapResponse).body as { variables: Array<{ value: string }> }).variables[0]?.value, "1");
 request("evaluate", { expression: "counter + 1", context: "watch" });
-assert.equal(((dapOutput.at(-1) as DapResponse).body as { result: string }).result, "3");
+assert.equal(((dapOutput.at(-1) as DapResponse).body as { result: string }).result, "2");
 request("next", { threadId: 1 });
 request("stackTrace", { threadId: 1 });
 assert.equal(((dapOutput.at(-1) as DapResponse).body as { stackFrames: Array<{ line: number }> }).stackFrames[0]?.line, 4);
-request("evaluate", { expression: "counter = 7", context: "repl" });
-assert.equal(((dapOutput.at(-1) as DapResponse).body as { result: string }).result, "7");
+request("setVariable", { variablesReference: 200, name: "counter", value: "7" });
+assert.equal(((dapOutput.at(-1) as DapResponse).body as { value: string }).value, "7");
 request("continue", { threadId: 1 });
-request("terminate");
+await new Promise((resolve) => setTimeout(resolve, 0));
+request("stackTrace", { threadId: 1 });
+assert.equal(((dapOutput.at(-1) as DapResponse).body as { stackFrames: Array<{ line: number }> }).stackFrames[0]?.line, 5);
+request("evaluate", { expression: "counter + 1", context: "watch" });
+assert.equal(((dapOutput.at(-1) as DapResponse).body as { result: string }).result, "9");
+request("continue", { threadId: 1 });
 await new Promise((resolve) => setTimeout(resolve, 0));
 assert.ok(dapOutput.some((message) => message.type === "event" && message.event === "terminated"));
+assert.ok(dapOutput.some((message) => message.type === "event" && message.event === "output" && (message.body as { output: string }).output === "8\n"));
 
 const sourceMap = new RuntimeSourceMap(DEBUG_FIXTURE_SOURCE_MAP);
 assert.deepEqual(sourceMap.generatedPositionFor(DEBUG_FIXTURE_SOURCE_URI, 3), { line: 5, column: 0 });
