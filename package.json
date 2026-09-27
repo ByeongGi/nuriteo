@@ -75,11 +75,11 @@
     "test:preview-service": "node apps/preview-service/test/run.ts",
     "test:next-full-runtime": "node --experimental-strip-types apps/preview-service/test/next-full-runtime.test.ts",
     "test:next-browser-worker": "node --experimental-strip-types apps/preview-service/test/next-browser-worker.test.ts",
-    "check:nextjs-runtime-candidate": "node tooling/checks/check-nextjs-runtime-candidate.ts",
+    "check:nextjs-runtime": "node tooling/checks/check-nextjs-runtime.ts",
     "test:browser": "node tests/system/browser/run.ts"
   },
   "devDependencies": {
-    "@next/swc-wasm-nodejs": "15.1.9",
+    "@next/swc-wasm-nodejs": "15.5.26",
     "@playwright/test": "1.63.0",
     "@sqlite.org/sqlite-wasm": "3.53.4-build1",
     "@types/node": "^22.20.2",
@@ -87,7 +87,7 @@
     "@wasmer/sdk": "0.18.0",
     "client-only": "0.0.1",
     "jq-wasm": "3.0.0-jq-1.8.2",
-    "next": "15.1.9",
+    "next": "15.5.26",
     "react": "19.0.0",
     "react-dom": "19.0.0",
     "typescript": "6.0.3",

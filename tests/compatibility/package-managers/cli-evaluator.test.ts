@@ -201,7 +201,11 @@ const workspace = new MemoryPackageManagerWorkspace([
         const fileWatcher = fs.watchFile(process.cwd() + '/watched.txt', (_current, previous) => {
           fileEvents.push(previous === undefined ? 'created' : 'changed');
         });
+        const cwdModifiedBeforeWrite = fs.statSync(process.cwd()).mtimeMs;
         fs.writeFileSync(process.cwd() + '/sync.txt', 'sync');
+        if (fs.statSync(process.cwd()).mtimeMs <= cwdModifiedBeforeWrite) {
+          throw new Error('parent directory mtime did not advance after a file write');
+        }
         fs.writeFileSync(process.cwd() + '/watched.txt', 'one');
         fs.writeFileSync(process.cwd() + '/watched.txt', 'two');
         await Promise.resolve();
@@ -1193,6 +1197,8 @@ const httpServerBridgeWorkspace = new MemoryPackageManagerWorkspace([
       const http = require('node:http');
       const server = http.createServer((request, response) => {
         response.setHeader('x-cli-server', 'loopback');
+        response.appendHeader('x-cli-values', 'one');
+        response.appendHeader('x-cli-values', ['two', 'three']);
         response.end('served:' + request.method + ':' + request.url);
       });
       server.listen(6123, '127.0.0.1', () => process.stdout.write('listening'));
@@ -1225,6 +1231,7 @@ assert.equal(httpServerBridgeResult.stdout, "listening");
 const httpServerResponse = await httpServerNetwork.fetch("http://127.0.0.1:6123/src/main.js", { method: "POST", body: "body" });
 assert.equal(httpServerResponse.statusCode, 200);
 assert.equal(httpServerResponse.headers?.["x-cli-server"], "loopback");
+assert.equal(httpServerResponse.headers?.["x-cli-values"], "one, two, three");
 assert.equal(httpServerResponse.body, "served:POST:/src/main.js");
 
 const workerHttpServerNetwork = createLoopbackNetwork();

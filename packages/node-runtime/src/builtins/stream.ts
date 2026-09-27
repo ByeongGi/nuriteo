@@ -638,6 +638,21 @@ function createLegacyTransformConstructor(LegacyStream: typeof Stream): typeof T
     return this;
   };
   LegacyTransform.prototype.addListener = LegacyTransform.prototype.on;
+  LegacyTransform.prototype[Symbol.asyncIterator] = async function* asyncIterator(
+    this: Transform & LegacyTransformState
+  ): AsyncIterableIterator<RuntimeValue> {
+    while (true) {
+      while (this.__browserReadableQueue.length > 0) yield this.__browserReadableQueue.shift();
+      if (this.__browserReadableEnded) return;
+      const event = await waitReadableEvent(this);
+      if (event.kind === "data") {
+        yield event.chunk;
+        continue;
+      }
+      if (event.kind === "end") return;
+      throw event.error;
+    }
+  };
   LegacyTransform.prototype.write = function write(
     this: Transform & LegacyTransformState,
     chunk: RuntimeValue,

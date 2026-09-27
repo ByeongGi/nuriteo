@@ -102,6 +102,14 @@ try {
   globalThis.Buffer = hostBuffer;
 }
 
+try {
+  globalThis.Buffer = RuntimeBuffer;
+  assert.equal(RuntimeBuffer.from("self-hosted").toString("base64"), "c2VsZi1ob3N0ZWQ=");
+  assert.equal(RuntimeBuffer.from("c2VsZi1ob3N0ZWQ=", "base64").toString(), "self-hosted");
+} finally {
+  globalThis.Buffer = hostBuffer;
+}
+
 const requireBuiltin = createBuiltinLoader({});
 const bufferBuiltin = requireBuiltin("node:buffer");
 assert.equal(bufferBuiltin.Buffer.from("ok").toString(), "ok");

@@ -18,9 +18,10 @@ export class AsyncLocalStorage<T = unknown> {
       try {
         const result = callback(...args);
         if (isPromiseLike(result)) {
-          return Promise.resolve(result).finally(() => {
-            for (const [storage, store] of previous) storage.#store = store;
-          }) as R;
+          // Browsers do not expose promise lifecycle hooks. Keep the captured
+          // stores active for lazy work spawned by the returned promise; the
+          // next explicit run/exit call establishes the following scope.
+          return result;
         }
         for (const [storage, store] of previous) storage.#store = store;
         return result;
@@ -43,9 +44,17 @@ export class AsyncLocalStorage<T = unknown> {
     const previous = this.#store;
     this.#store = undefined;
     try {
-      return callback(...args);
-    } finally {
+      const result = callback(...args);
+      if (isPromiseLike(result)) {
+        return Promise.resolve(result).finally(() => {
+          if (this.#store === undefined) this.#store = previous;
+        }) as R;
+      }
       this.#store = previous;
+      return result;
+    } catch (error) {
+      this.#store = previous;
+      throw error;
     }
   }
 
@@ -59,9 +68,9 @@ export class AsyncLocalStorage<T = unknown> {
     try {
       const result = callback(...args);
       if (isPromiseLike(result)) {
-        return Promise.resolve(result).finally(() => {
-          this.#store = previous;
-        }) as R;
+        // Async renderers can return a promise before all lazily-consumed work
+        // has completed. Restoring here would erase that work's request scope.
+        return result;
       }
       this.#store = previous;
       return result;

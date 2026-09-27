@@ -55,19 +55,20 @@
         "tests/compatibility/frameworks/vite/nextjs-compatibility.test.ts",
         "docs/productization/public-compatibility-matrix.md"
       ],
-      "notes": "App Router preview adapter is product-supported; the separate pinned full-runtime lane is candidate-grade."
+      "notes": "App Router preview adapter remains product-supported alongside the pinned full-runtime lane."
     },
     {
       "framework": "nextjs-full-runtime",
-      "grade": "candidate",
+      "grade": "product-supported",
       "validation": "actual-guest-runtime",
       "status": "pass",
       "evidence": [
         "compat/nextjs-compatibility.json",
         "apps/preview-service/test/next-full-runtime.test.ts",
+        "apps/preview-service/test/next-browser-worker.test.ts",
         "docs/productization/nextjs-product-support-target.md"
       ],
-      "notes": "Pinned Next 15.1.9 real CLI dev/build/start and App Router server capabilities pass with version-matched WASM SWC; browser-worker promotion and a maintained release baseline remain pending."
+      "notes": "Pinned Next 15.5.26 real CLI dev/HMR/build/start/restart and full feature coverage pass in strict-CSP Chrome with version-matched WASM SWC."
     },
     {
       "framework": "webpack-dev-workflow",
@@ -99,7 +100,7 @@
       "vite-react remains supported",
       "vue and svelte both have actual worker-backed validation records",
       "vue and svelte are product-supported through fixtures tied to exact-revision public template upstreams",
-      "nextjs preview-adapter grade and full-runtime candidate grade are explicit"
+      "nextjs preview-adapter and pinned full-runtime product grades are explicit"
     ]
   }
 }

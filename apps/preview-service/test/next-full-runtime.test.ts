@@ -27,11 +27,9 @@ const packageRoot = (name) => {
 const dependencyNames = [
   "@next/env",
   "@next/swc-wasm-nodejs",
-  "@swc/counter",
   "@swc/helpers",
   "@types/node",
   "@types/react",
-  "busboy",
   "caniuse-lite",
   "client-only",
   "nanoid",

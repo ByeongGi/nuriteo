@@ -110,7 +110,22 @@ assert.equal(vmContext.add(2, 3), 5);
 vm.runInContext("runtimeEntries = { page: true }", vmContext);
 assert.deepEqual(vmContext.runtimeEntries, { page: true });
 
+const stream = requireBuiltin("node:stream");
+const transformed = stream.pipeline(
+  stream.Readable.from([new TextEncoder().encode("action-body")]),
+  new stream.Transform({ transform(chunk, _encoding, callback) { callback(null, chunk); } }),
+  () => {}
+);
+const transformedChunks = [];
+for await (const chunk of transformed) transformedChunks.push(chunk);
+assert.equal(new TextDecoder().decode(transformedChunks[0]), "action-body");
+
 const zlib = requireBuiltin("node:zlib");
+assert.equal(typeof zlib.Deflate, "function");
+assert.equal(typeof zlib.createDeflate, "function");
+assert.equal(zlib.constants.Z_BEST_SPEED, 1);
+const deflated = zlib.createDeflate()._handle._processChunk(new TextEncoder().encode("deflate-ok"))[0];
+assert.equal(new TextDecoder().decode(zlib.createInflate()._handle._processChunk(deflated)[0]), "deflate-ok");
 const compressed = zlib.gzipSync(new TextEncoder().encode("zip-ok"));
 const unzip = zlib.createUnzip();
 assert.equal(typeof unzip._handle._processChunk, "function");

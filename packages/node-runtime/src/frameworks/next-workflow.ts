@@ -744,7 +744,7 @@ export class NextProductWorkflow {
     if (pkg === "next") {
       this.workspace.writeText(join(packageRoot, "package.json"), JSON.stringify({
         name: "next",
-        version: "15.1.9",
+        version: "15.5.26",
         type: "module",
         bin: { next: "dist/bin/next.cjs" },
         exports: {
@@ -902,7 +902,7 @@ function createNextMounts(projectRoot: string, title: string) {
           start: "next start"
         },
         dependencies: {
-          next: "15.1.9",
+          next: "15.5.26",
           react: "^19.0.0",
           "react-dom": "^19.0.0"
         },

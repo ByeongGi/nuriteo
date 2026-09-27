@@ -9,8 +9,8 @@ import { createProcessWorkerRuntime } from "../packages/browser-host/src/process
 const YARN_BUNDLE_SHA256 = "443ed69e76443b89afddccfc9faec1ff16eb5e500979cc079c696dec4c3d94ee";
 const YARN_ENTRY_SHA256 = "148e19db309ec9eaf7720b28df811337906eea8a1758deaa54afee60a6305e04";
 const YARN_FACTORY_SHA256 = "e6f01b28a30aae3d6bd6cf78302d0b1ba1f5e6e8d2f6f918989b6cd7f2a428a0";
-const NEXT_ENTRY_SHA256 = "90ff5ff3414148edecac938f64d64d596076b0ff2b11eaa6b9fcaf754a73f7e9";
-const NEXT_FACTORY_SHA256 = "9c56ecb503686a9815b2b86a3d9f4b3b49a00dcf4821950da951a93354233f68";
+const NEXT_ENTRY_SHA256 = "a18774eab8037f10a2ab76c233a225c4a76dbcdc0e59c216508fd0888fa42b03";
+const NEXT_FACTORY_SHA256 = "0c80f579cc4b21846c13c5786fa3228bc722361a32f70f49c4bbbb964262e201";
 const VITE_FACTORY_SHA256 = "a349825dafc4ab5b2ad3a9fa4489965bda62cb8f47bc5a9fa84f200ea1bfa2aa";
 const ROLLDOWN_WASI_BINDING_SHA256 = "b1a16143d4991cc6f4ff6a3043d40a2b757d74746ebe408298b1a2d4b5cb0606";
 const ROLLDOWN_WASI_MODULE_SHA256 = "ce4821fa65dcc84f641980889d175fecbdf9fc108ed438c5ab363802a681fce1";
@@ -123,7 +123,7 @@ async function evaluateCli(message) {
     const pinnedRuntime = message.request?.entry?.name === "yarn"
       ? { precompiledCjsFactories: await loadPinnedYarnFactories(message) }
       : message.request?.entry?.name === "next"
-        ? { precompiledCjsFactories: await loadPinnedNextFactories(message) }
+        ? await loadPinnedNextFactories(message)
       : isPinnedViteEntrypoint(message.request?.entry)
         ? await loadPinnedViteFactories(message)
         : {};
@@ -149,7 +149,12 @@ async function evaluateCli(message) {
       for (const file of readRolldownWasiDirectory(message.request.cwd)) workspace.writeBytes(file.path, file.data);
       response.result.workspaceSnapshot = workspace.snapshot();
     }
-    if (httpBridge && response.result?.bridgedServerPorts?.length) cliHttpBridges.set(message.id, httpBridge);
+    if (httpBridge && response.result?.bridgedServerPorts?.length) {
+      cliHttpBridges.set(message.id, httpBridge);
+      if (message.request?.entry?.name === "next" && message.request?.args?.[0] !== "build") {
+        delete response.result.workspaceSnapshot;
+      }
+    }
   } catch (error) {
     response = { id: message.id, error: error instanceof Error ? error.message : String(error), type: "cli:result" };
   }
@@ -157,23 +162,31 @@ async function evaluateCli(message) {
 }
 
 async function loadPinnedNextFactories(message) {
-  if (message.request.entry.version !== "15.1.9") throw new Error("ERR_NEXT_CSP_UNSUPPORTED_VERSION");
+  if (message.request.entry.version !== "15.5.26") throw new Error("ERR_NEXT_CSP_UNSUPPORTED_VERSION");
   const entry = message.request.entry.entry;
   if (!entry.endsWith("/dist/bin/next")) throw new Error("ERR_NEXT_CSP_UNEXPECTED_ENTRY");
   const workspace = MemoryPackageManagerWorkspace.fromSnapshot(message.workspaceSnapshot);
   if (await sha256(workspace.readBytes(entry)) !== NEXT_ENTRY_SHA256) {
     throw new Error("ERR_NEXT_CSP_ENTRY_INTEGRITY");
   }
-  const factoryUrl = new URL("../vendor/next-cli-15.1.9.mjs", self.location.href);
+  const factoryUrl = new URL("../vendor/next-cli-15.5.26.mjs", self.location.href);
   const factoryResponse = await fetch(factoryUrl, { cache: "no-store" });
   if (!factoryResponse.ok || await sha256(new Uint8Array(await factoryResponse.arrayBuffer())) !== NEXT_FACTORY_SHA256) {
     throw new Error("ERR_NEXT_CSP_FACTORY_INTEGRITY");
   }
-  const { sourceSha256, evaluateNextCjs } = await import(/* @vite-ignore */ factoryUrl.href);
-  if (sourceSha256 !== NEXT_ENTRY_SHA256 || typeof evaluateNextCjs !== "function") {
+  const factories = await import(/* @vite-ignore */ factoryUrl.href);
+  if (factories.nextVersion !== "15.5.26" || typeof factories.sourceSha256 !== "object" ||
+      typeof factories.cjsFactories !== "object" || typeof factories.esmFactories !== "object") {
     throw new Error("ERR_NEXT_CSP_FACTORY_MISMATCH");
   }
-  return { [entry]: evaluateNextCjs };
+  for (const [path, expected] of Object.entries(factories.sourceSha256)) {
+    const actual = await sha256(workspace.readBytes(path));
+    if (actual !== expected) throw new Error(`ERR_NEXT_CSP_SOURCE_INTEGRITY: ${path} expected=${expected} actual=${actual}`);
+  }
+  return {
+    precompiledCjsFactories: factories.cjsFactories,
+    precompiledEsmFactories: factories.esmFactories
+  };
 }
 
 function isPinnedViteEntrypoint(entry) {
@@ -265,10 +278,12 @@ async function handleCliHttpRequest(message) {
     return;
   }
   try {
+    const response = await bridge.handleRequest(message.port, message.request);
     self.postMessage({
       evaluationId: message.evaluationId,
       id: message.id,
-      response: await bridge.handleRequest(message.port, message.request),
+      ...(bridge.getOutput ? { output: bridge.getOutput() } : {}),
+      response,
       type: "cli:http:response"
     });
   } catch (error) {

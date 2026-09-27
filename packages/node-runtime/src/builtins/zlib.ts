@@ -3,7 +3,9 @@ import {
   deflateSync as fflateDeflateSync,
   gunzipSync as fflateGunzipSync,
   gzipSync as fflateGzipSync,
-  inflateSync as fflateInflateSync
+  inflateSync as fflateInflateSync,
+  unzlibSync as fflateUnzlibSync,
+  zlibSync as fflateZlibSync
 } from "fflate";
 
 import type { RuntimeValue } from "../types.ts";
@@ -11,6 +13,7 @@ import { BrowserBuffer } from "./buffer.ts";
 import { PassThrough } from "./stream.ts";
 
 export const Z_SYNC_FLUSH = 2;
+export const Z_BEST_SPEED = 1;
 const MAX_STREAM_INPUT_BYTES = 32 * 1024 * 1024;
 const MAX_STREAM_OUTPUT_BYTES = 128 * 1024 * 1024;
 
@@ -82,6 +85,11 @@ export class ZlibPassThrough extends PassThrough {
 
 export class BrotliCompress extends ZlibPassThrough {}
 export class BrotliDecompress extends ZlibPassThrough {}
+export class Deflate extends ZlibPassThrough {
+  constructor(options: Record<string, RuntimeValue> = {}) {
+    super({ ...options, mode: "deflate" });
+  }
+}
 export class DeflateRaw extends ZlibPassThrough {
   constructor(options: Record<string, RuntimeValue> = {}) {
     super({ ...options, mode: "deflateRaw" });
@@ -115,6 +123,14 @@ export class Unzip extends ZlibPassThrough {
 
 export function createBrotliDecompress(options?: Record<string, RuntimeValue>): BrotliDecompress {
   return new BrotliDecompress(options);
+}
+
+export function createBrotliCompress(options?: Record<string, RuntimeValue>): BrotliCompress {
+  return new BrotliCompress(options);
+}
+
+export function createDeflate(options?: Record<string, RuntimeValue>): Deflate {
+  return new Deflate(options);
 }
 
 export function createDeflateRaw(options?: Record<string, RuntimeValue>): DeflateRaw {
@@ -161,8 +177,10 @@ function createProcessChunk(mode: RuntimeValue): (chunk: Uint8Array) => Uint8Arr
   if (mode === "unzip") return (chunk) => processNonEmpty(chunk, decompressSync);
   if (mode === "gunzip") return (chunk) => processNonEmpty(chunk, fflateGunzipSync);
   if (mode === "gzip") return (chunk) => processNonEmpty(chunk, fflateGzipSync);
-  if (mode === "deflate" || mode === "deflateRaw") return (chunk) => processNonEmpty(chunk, fflateDeflateSync);
-  if (mode === "inflate" || mode === "inflateRaw") return (chunk) => processNonEmpty(chunk, fflateInflateSync);
+  if (mode === "deflate") return (chunk) => processNonEmpty(chunk, fflateZlibSync);
+  if (mode === "deflateRaw") return (chunk) => processNonEmpty(chunk, fflateDeflateSync);
+  if (mode === "inflate") return (chunk) => processNonEmpty(chunk, fflateUnzlibSync);
+  if (mode === "inflateRaw") return (chunk) => processNonEmpty(chunk, fflateInflateSync);
   return (chunk) => chunk;
 }
 
@@ -182,14 +200,19 @@ export interface ZlibNativeHandle {
 export const zlibBuiltin = Object.freeze({
   BrotliCompress,
   BrotliDecompress,
+  Deflate,
   DeflateRaw,
   Gunzip,
   Gzip,
   Inflate,
   InflateRaw,
   Unzip,
+  Z_BEST_SPEED,
   Z_SYNC_FLUSH,
+  constants: Object.freeze({ Z_BEST_SPEED, Z_SYNC_FLUSH }),
+  createBrotliCompress,
   createBrotliDecompress,
+  createDeflate,
   createDeflateRaw,
   createGunzip,
   createGzip,
@@ -197,8 +220,12 @@ export const zlibBuiltin = Object.freeze({
   createInflateRaw,
   createUnzip,
   default: {
+    Z_BEST_SPEED,
     Z_SYNC_FLUSH,
+    constants: Object.freeze({ Z_BEST_SPEED, Z_SYNC_FLUSH }),
+    createBrotliCompress,
     createBrotliDecompress,
+    createDeflate,
     createDeflateRaw,
     createGunzip,
     createGzip,

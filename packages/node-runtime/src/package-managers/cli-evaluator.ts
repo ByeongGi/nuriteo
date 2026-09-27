@@ -679,6 +679,14 @@ function startCliModuleEvaluation(
     resolveExited();
   });
   let runtime: ModuleRuntime | undefined;
+  const generatedModuleBridge = createGeneratedCjsModuleBridge({
+    getRuntime: () => {
+      if (!runtime) throw new Error("ERR_CLI_MODULE_RUNTIME_NOT_READY");
+      return runtime;
+    },
+    reader: options.reader,
+    root: options.root || "/workspace"
+  });
   const globalObject: Record<string, unknown> = {
     AbortController,
     AbortSignal,
@@ -706,6 +714,10 @@ function startCliModuleEvaluation(
     WebAssembly,
     WritableStream,
     __dynamicImport: createCliDynamicImport(() => runtime, options.root || "/workspace"),
+    __cargoImportGeneratedModule: generatedModuleBridge.importModule,
+    __cargoImportEdgeModule: generatedModuleBridge.importEdgeModule,
+    __cargoImportWorkspaceModule: generatedModuleBridge.importWorkspaceModule,
+    __cargoParseWebpackMagicComment: parseWebpackMagicComment,
     atob,
     btoa,
     clearImmediate: timerScope.clearImmediate,
@@ -803,6 +815,15 @@ function startCliModuleEvaluation(
       });
     } else {
       runtime.requireSync(request.entry.entry, request.entry.entry);
+      const cjsReady = globalObject.__cargoCliReady;
+      if (cjsReady && typeof (cjsReady as PromiseLike<unknown>).then === "function") {
+        const trackedReady = Promise.resolve(cjsReady).then(() => undefined, (error) => {
+          asyncExitCode = 1;
+          stderr = appendCliOutput(stderr, `${errorMessage(error)}\n`);
+        });
+        if (request.args[0] === "dev" || request.args[0] === "start") trackedReady.catch(() => undefined);
+        else ready = trackedReady;
+      }
     }
   } catch (error) {
     const message = errorMessage(error);
@@ -836,6 +857,235 @@ function startCliModuleEvaluation(
       return result;
     }
   };
+}
+
+function parseWebpackMagicComment(source: string): Record<string, RuntimeValue> {
+  const options: Record<string, RuntimeValue> = {};
+  const pattern = /(?:^|,)\s*([A-Za-z_$][\w$]*)\s*:\s*("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|true|false|-?\d+(?:\.\d+)?)/g;
+  for (const match of source.matchAll(pattern)) {
+    const key = match[1]!;
+    const literal = match[2]!;
+    if (literal === "true" || literal === "false") options[key] = literal === "true";
+    else if (literal.startsWith('"')) options[key] = JSON.parse(literal);
+    else if (literal.startsWith("'")) options[key] = literal.slice(1, -1).replace(/\\'/g, "'").replace(/\\\\/g, "\\");
+    else options[key] = Number(literal);
+  }
+  return options;
+}
+
+interface GeneratedCjsModuleBridgeOptions {
+  getRuntime(): ModuleRuntime;
+  reader: WorkspaceModuleReader;
+  root: string;
+}
+
+interface GeneratedCjsModuleRecord {
+  exports: RuntimeValue;
+  loaded: boolean;
+}
+
+function createGeneratedCjsModuleBridge(options: GeneratedCjsModuleBridgeOptions): {
+  importEdgeModule(path: string, context: Record<string, RuntimeValue>): Promise<void>;
+  importModule(path: string): Promise<RuntimeValue>;
+  importWorkspaceModule(path: string): Promise<RuntimeValue>;
+} {
+  const hostGlobal = globalThis as unknown as Record<string, unknown>;
+  const bridges = hostGlobal.__cargoGeneratedModuleBridges instanceof Map
+    ? hostGlobal.__cargoGeneratedModuleBridges as Map<string, unknown>
+    : new Map<string, unknown>();
+  hostGlobal.__cargoGeneratedModuleBridges = bridges;
+  const token = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+  const factories = new Map<string, (...args: RuntimeValue[]) => void>();
+  const cache = new Map<string, GeneratedCjsModuleRecord>();
+  let edgeImportSequence = 0;
+  const bridge: {
+    edgeContext?: Record<string, RuntimeValue>;
+    edgeRequire?: (specifier: string) => RuntimeValue;
+    register(path: string, factory: (...args: RuntimeValue[]) => void): void;
+  } = {
+    register(path: string, factory: (...args: RuntimeValue[]) => void): void {
+      factories.set(path, factory);
+    }
+  };
+  bridges.set(token, bridge);
+
+  const execute = (path: string): RuntimeValue => {
+    const existing = cache.get(path);
+    if (existing) return existing.exports;
+    const factory = factories.get(path);
+    if (!factory) throw new Error(`ERR_CLI_GENERATED_MODULE_NOT_REGISTERED: ${path}`);
+    const module: GeneratedCjsModuleRecord = { exports: {}, loaded: false };
+    cache.set(path, module);
+    const runtime = options.getRuntime();
+    const require = Object.assign(
+      (specifier: string): RuntimeValue => {
+        if (builtinModules.includes(specifier)) return runtime.requireSync(specifier, path);
+        const resolved = runtime.resolve(specifier, path);
+        return factories.has(resolved) ? execute(resolved) : runtime.requireSync(specifier, path);
+      },
+      {
+        cache: new Proxy(Object.create(null) as Record<string, GeneratedCjsModuleRecord>, {
+          deleteProperty(_target, property) {
+            if (typeof property === "string") cache.delete(property);
+            return true;
+          },
+          get(_target, property) {
+            return typeof property === "string" ? cache.get(property) : undefined;
+          },
+          has(_target, property) {
+            return typeof property === "string" && cache.has(property);
+          },
+          ownKeys() {
+            return [...cache.keys()];
+          },
+          getOwnPropertyDescriptor(_target, property) {
+            const value = typeof property === "string" ? cache.get(property) : undefined;
+            return value ? { configurable: true, enumerable: true, value } : undefined;
+          }
+        }),
+        resolve: (specifier: string): string => runtime.resolve(specifier, path)
+      }
+    );
+    const globals = runtime.globals;
+    try {
+      factory.call(
+        module.exports,
+        module.exports,
+        require,
+        module,
+        path,
+        dirname(path),
+        globals.process,
+        globals.global,
+        globals.console ?? console,
+        globals.Buffer,
+        (globals.global as Record<string, RuntimeValue> | undefined)?.setTimeout,
+        (globals.global as Record<string, RuntimeValue> | undefined)?.clearTimeout,
+        (globals.global as Record<string, RuntimeValue> | undefined)?.setInterval,
+        (globals.global as Record<string, RuntimeValue> | undefined)?.clearInterval,
+        (globals.global as Record<string, RuntimeValue> | undefined)?.setImmediate,
+        (globals.global as Record<string, RuntimeValue> | undefined)?.clearImmediate
+      );
+      module.loaded = true;
+      return module.exports;
+    } catch (error) {
+      cache.delete(path);
+      throw error;
+    }
+  };
+
+  const importSource = async (source: string): Promise<void> => {
+    if (typeof caches === "undefined") {
+      throw new Error("ECLICSPUNSUPPORTED: Cache Storage is required for generated CommonJS modules");
+    }
+    const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(source));
+    const hash = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+    const url = new URL(`/__cargo_runtime_module/${token}/${hash}.mjs`, location.origin).href;
+    const storage = await caches.open("cargo-runtime-modules-v1");
+    await storage.put(url, new Response(source, {
+      headers: {
+        "Content-Type": "text/javascript; charset=utf-8",
+        "Cross-Origin-Resource-Policy": "same-origin",
+        "Cross-Origin-Embedder-Policy": "require-corp"
+      }
+    }));
+    await import(/* @vite-ignore */ url);
+    await storage.delete(url);
+  };
+
+  const registerFiles = async (files: string[]): Promise<void> => {
+    await importSource(createGeneratedCjsModuleSource(token, files, options.reader));
+  };
+
+  return {
+    async importEdgeModule(path: string, context: Record<string, RuntimeValue>): Promise<void> {
+      const normalized = normalize(path);
+      const hadHostBuffer = Object.hasOwn(hostGlobal, "Buffer");
+      const hadHostProcess = Object.hasOwn(hostGlobal, "process");
+      const previousHostBuffer = hostGlobal.Buffer;
+      const previousHostProcess = hostGlobal.process;
+      bridge.edgeContext = context;
+      bridge.edgeRequire = (specifier: string) => options.getRuntime().requireSync(specifier, normalized);
+      const edgeSource = options.reader.readText(normalized);
+      const source = `const __cargoBridge = globalThis.__cargoGeneratedModuleBridges.get(${JSON.stringify(token)});\nconst __cargoContext = __cargoBridge.edgeContext;\nglobalThis.process = __cargoContext.process;\nglobalThis.Buffer = __cargoContext.Buffer;\nglobalThis.AsyncLocalStorage = __cargoContext.AsyncLocalStorage;\nglobalThis._ENTRIES = __cargoContext._ENTRIES || {};\nglobalThis.webpackChunk_N_E = __cargoContext.webpackChunk_N_E || [];\nconst self = globalThis;\nconst global = __cargoContext;\nconst process = __cargoContext.process;\nconst Buffer = __cargoContext.Buffer;\nconst require = __cargoBridge.edgeRequire;\n${edgeSource}\nconst __cargoEntries = Object.assign(globalThis._ENTRIES, typeof _ENTRIES === "undefined" ? {} : _ENTRIES, __cargoContext._ENTRIES || {});\n__cargoContext._ENTRIES = __cargoEntries;\n__cargoContext.webpackChunk_N_E = globalThis.webpackChunk_N_E;\nexport default true;\n//# cargoEdgeImport=${edgeImportSequence++}\n//# sourceURL=${normalized}\n`;
+      try {
+        await importSource(source);
+      } finally {
+        if (hadHostBuffer) hostGlobal.Buffer = previousHostBuffer;
+        else delete hostGlobal.Buffer;
+        if (hadHostProcess) hostGlobal.process = previousHostProcess;
+        else delete hostGlobal.process;
+        delete bridge.edgeContext;
+        delete bridge.edgeRequire;
+      }
+    },
+    async importModule(path: string): Promise<RuntimeValue> {
+      const files = listGeneratedCjsFiles(options.reader, generatedServerRoot(path));
+      if (!files.includes(path)) files.push(path);
+      await registerFiles(files);
+      for (const file of files) cache.delete(file);
+      const serverRoot = generatedServerRoot(path);
+      const webpackRuntimePath = `${serverRoot}/webpack-runtime.js`;
+      if (factories.has(webpackRuntimePath)) {
+        const webpackRuntime = execute(webpackRuntimePath) as { C?: (chunk: RuntimeValue) => void };
+        if (typeof webpackRuntime.C === "function") {
+          for (const file of files) {
+            if (!file.startsWith(`${serverRoot}/vendor-chunks/`) && !file.startsWith(`${serverRoot}/chunks/`)) continue;
+            webpackRuntime.C(execute(file));
+          }
+        }
+      }
+      return execute(path);
+    },
+    async importWorkspaceModule(path: string): Promise<RuntimeValue> {
+      const normalized = normalize(path);
+      await registerFiles([normalized]);
+      cache.delete(normalized);
+      return execute(normalized);
+    }
+  };
+}
+
+function generatedServerRoot(path: string): string {
+  const marker = "/.next/server/";
+  const index = path.indexOf(marker);
+  if (index < 0) throw new Error(`ERR_CLI_GENERATED_MODULE_OUTSIDE_NEXT_SERVER: ${path}`);
+  return path.slice(0, index + marker.length - 1);
+}
+
+function listGeneratedCjsFiles(reader: WorkspaceModuleReader, root: string): string[] {
+  const files: string[] = [];
+  const visit = (directory: string): void => {
+    for (const entry of reader.listDir(directory)) {
+      const path = join(directory, entry);
+      if (reader.isFile?.(path)) {
+        if (path.endsWith(".js") || path.endsWith(".cjs")) files.push(path);
+        continue;
+      }
+      try {
+        visit(path);
+      } catch {
+        // Concurrent dev rebuilds can replace a directory between listing and reading.
+      }
+    }
+  };
+  visit(root);
+  return files.sort();
+}
+
+function createGeneratedCjsModuleSource(token: string, paths: readonly string[], reader: WorkspaceModuleReader): string {
+  const prelude = `const __cargoBridge = globalThis.__cargoGeneratedModuleBridges.get(${JSON.stringify(token)});\n`;
+  return prelude + paths.map((path) => {
+    let source = reader.readText(path).replace(/^#![^\n]*(?:\n|$)/, "");
+    if (path.endsWith("/webpack-runtime.js")) {
+      const invocation = "__webpack_modules__[moduleId](module, module.exports, __webpack_require__);";
+      source = source.replace(invocation, `if (typeof __webpack_modules__[moduleId] !== "function") {
+        throw new TypeError("ERR_NEXT_WEBPACK_MODULE_MISSING: " + moduleId);
+      }
+      ${invocation}`);
+    }
+    return `// ${path}\n__cargoBridge.register(${JSON.stringify(path)}, function(exports, require, module, __filename, __dirname, process, global, console, Buffer, setTimeout, clearTimeout, setInterval, clearInterval, setImmediate, clearImmediate) {\n${source}\n});\n`;
+  }).join("") + "export default true;\n";
 }
 
 function createCliModuleBuiltin(getRuntime: () => ModuleRuntime): RuntimeNamespace {
@@ -1563,7 +1813,8 @@ function createWorkerContextBuiltin(parentPort: RuntimeValue, threadId: number, 
 
 export function createCliNestedWorkerRuntime(
   request: CliNestedWorkerRequest,
-  bridge: { postMessage(value: unknown): void }
+  bridge: { postMessage(value: unknown): void },
+  options: Pick<CliModuleEvaluatorOptions, "precompiledCjsFactories" | "precompiledEsmFactories"> = {}
 ): { postMessage(value: unknown): void; ready: Promise<void> } {
   const workspace = MemoryPackageManagerWorkspace.fromSnapshot(request.workspaceSnapshot);
   const process = new BrowserProcess({
@@ -1646,6 +1897,12 @@ export function createCliNestedWorkerRuntime(
     }),
     globals: workerGlobal
   });
+  for (const [path, factory] of Object.entries(options.precompiledCjsFactories || {})) {
+    runtime.register(path, { kind: "cjs", factory: (context) => factory(context, runtime!.globals) });
+  }
+  for (const [path, factory] of Object.entries(options.precompiledEsmFactories || {})) {
+    runtime.register(path, { kind: "esm", factory: (context) => factory(context, runtime!.globals) });
+  }
   const pending: unknown[] = [];
   let initialized = false;
   const ready = runtime.importModule(request.filename, request.filename).then(() => {
