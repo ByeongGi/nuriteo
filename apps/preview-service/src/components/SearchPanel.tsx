@@ -62,11 +62,11 @@ export function SearchPanel({ model }: { model: PreviewControllerModel }) {
   };
 
   return (
-    <aside className="flex h-full min-h-0 min-w-0 flex-col border-r border-cargo-line bg-cargo-elevated/60" aria-label="Search">
-      <div className="border-b border-cargo-line px-3 py-2">
-        <h2 className="text-[11px] font-semibold tracking-[0.14em] text-cargo-muted uppercase">Search</h2>
+    <aside className="flex h-full min-h-0 min-w-0 flex-col border-r border-nuriteo-line bg-nuriteo-elevated/60" aria-label="Search">
+      <div className="border-b border-nuriteo-line px-3 py-2">
+        <h2 className="text-[11px] font-semibold tracking-[0.14em] text-nuriteo-muted uppercase">Search</h2>
       </div>
-      <div className="space-y-2 border-b border-cargo-line px-2 py-2">
+      <div className="space-y-2 border-b border-nuriteo-line px-2 py-2">
         <input
           id="search-query"
           type="search"
@@ -74,7 +74,7 @@ export function SearchPanel({ model }: { model: PreviewControllerModel }) {
           placeholder="Search in files"
           aria-label="Search in files"
           onChange={(event) => setQuery(event.target.value)}
-          className="w-full rounded-md border border-cargo-line bg-cargo-panel px-2.5 py-1.5 text-xs text-cargo-ink outline-none focus:border-cargo-accent"
+          className="w-full rounded-md border border-nuriteo-line bg-nuriteo-panel px-2.5 py-1.5 text-xs text-nuriteo-ink outline-none focus:border-nuriteo-accent"
         />
         <input
           id="search-replace"
@@ -83,7 +83,7 @@ export function SearchPanel({ model }: { model: PreviewControllerModel }) {
           placeholder="Replace"
           aria-label="Replace"
           onChange={(event) => setReplace(event.target.value)}
-          className="w-full rounded-md border border-cargo-line bg-cargo-panel px-2.5 py-1.5 text-xs text-cargo-ink outline-none focus:border-cargo-accent"
+          className="w-full rounded-md border border-nuriteo-line bg-nuriteo-panel px-2.5 py-1.5 text-xs text-nuriteo-ink outline-none focus:border-nuriteo-accent"
         />
         <div className="grid grid-cols-2 gap-2">
           <input
@@ -92,7 +92,7 @@ export function SearchPanel({ model }: { model: PreviewControllerModel }) {
             aria-label="Include glob"
             title="Include"
             onChange={(event) => setIncludeGlob(event.target.value)}
-            className="w-full rounded-md border border-cargo-line bg-cargo-panel px-2 py-1 text-[11px] text-cargo-ink outline-none"
+            className="w-full rounded-md border border-nuriteo-line bg-nuriteo-panel px-2 py-1 text-[11px] text-nuriteo-ink outline-none"
           />
           <input
             type="text"
@@ -100,10 +100,10 @@ export function SearchPanel({ model }: { model: PreviewControllerModel }) {
             aria-label="Exclude glob"
             title="Exclude"
             onChange={(event) => setExcludeGlob(event.target.value)}
-            className="w-full rounded-md border border-cargo-line bg-cargo-panel px-2 py-1 text-[11px] text-cargo-ink outline-none"
+            className="w-full rounded-md border border-nuriteo-line bg-nuriteo-panel px-2 py-1 text-[11px] text-nuriteo-ink outline-none"
           />
         </div>
-        <div className="flex flex-wrap items-center gap-3 text-[11px] text-cargo-muted">
+        <div className="flex flex-wrap items-center gap-3 text-[11px] text-nuriteo-muted">
           <label className="inline-flex items-center gap-1.5">
             <input type="checkbox" checked={caseSensitive} onChange={(e) => setCaseSensitive(e.target.checked)} />
             Case
@@ -116,23 +116,23 @@ export function SearchPanel({ model }: { model: PreviewControllerModel }) {
             Replace all
           </button>
         </div>
-        {status ? <p className="text-[11px] text-cargo-accent-strong">{status}</p> : null}
+        {status ? <p className="text-[11px] text-nuriteo-accent-strong">{status}</p> : null}
       </div>
       <ol className="min-h-0 flex-1 space-y-1 overflow-auto p-2" aria-label="Search results">
         {matches.length === 0 ? (
-          <li className="px-2 py-3 text-xs text-cargo-muted">{query ? "No matches" : "Type to search"}</li>
+          <li className="px-2 py-3 text-xs text-nuriteo-muted">{query ? "No matches" : "Type to search"}</li>
         ) : (
           matches.map((match) => (
             <li key={`${match.path}:${match.line}:${match.column}`}>
               <button
                 type="button"
-                className="w-full rounded-md px-2 py-1.5 text-left hover:bg-cargo-panel-2"
+                className="w-full rounded-md px-2 py-1.5 text-left hover:bg-nuriteo-panel-2"
                 onClick={() => model.openFile(match.path)}
               >
-                <div className="truncate font-mono text-[11px] text-cargo-accent-strong">
+                <div className="truncate font-mono text-[11px] text-nuriteo-accent-strong">
                   {model.displayPath(match.path)}:{match.line}
                 </div>
-                <div className="truncate text-xs text-cargo-muted">{match.snippet}</div>
+                <div className="truncate text-xs text-nuriteo-muted">{match.snippet}</div>
               </button>
             </li>
           ))

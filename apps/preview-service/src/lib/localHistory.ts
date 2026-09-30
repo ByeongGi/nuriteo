@@ -20,7 +20,7 @@ export interface LocalHistoryRevision {
   content: string;
 }
 
-const STORAGE_KEY = "cargo.preview-service.local-history";
+const STORAGE_KEY = "nuriteo.preview-service.local-history";
 const MAX_REVISIONS_PER_FILE = 20;
 const MAX_REVISIONS_PER_PROJECT = 100;
 const EDIT_CHECKPOINT_WINDOW_MS = 1_500;

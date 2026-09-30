@@ -91,7 +91,7 @@ workflow.stopDevServer();
 
 workflow.workspace.writeText(
   "/workspace/app/middleware.js",
-  "import { NextResponse } from 'next/server'; export function middleware(request) { const response = NextResponse.next(); response.headers.set('x-cargo-middleware', request.nextUrl.pathname); return response; } export const config = { matcher: ['/about'] };"
+  "import { NextResponse } from 'next/server'; export function middleware(request) { const response = NextResponse.next(); response.headers.set('x-nuriteo-middleware', request.nextUrl.pathname); return response; } export const config = { matcher: ['/about'] };"
 );
 workflow.workspace.writeText(
   "/workspace/app/app/about/page.js",
@@ -138,7 +138,7 @@ try {
   const origin = `http://127.0.0.1:${production.port}`;
   const about = await workflow.fetch(`${origin}/about`);
   assert.equal(about.status, 200);
-  assert.equal(about.headers.get("x-cargo-middleware"), "/about");
+  assert.equal(about.headers.get("x-nuriteo-middleware"), "/about");
 
   const edge = await workflow.fetch(`${origin}/api/edge`);
   assert.equal(edge.status, 200);

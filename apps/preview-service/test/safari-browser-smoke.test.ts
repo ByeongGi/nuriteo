@@ -116,7 +116,7 @@ try {
     const done = arguments[arguments.length - 1];
     (async () => {
       const root = await navigator.storage.getDirectory();
-      const name = "cargo-safari-smoke-" + Date.now() + ".txt";
+      const name = "nuriteo-safari-smoke-" + Date.now() + ".txt";
       const handle = await root.getFileHandle(name, { create: true });
       const writable = await handle.createWritable();
       await writable.write("opfs-safari-ok");

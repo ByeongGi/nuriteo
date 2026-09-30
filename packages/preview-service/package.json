@@ -1,7 +1,8 @@
 {
-  "name": "@cargo-container/preview-service",
+  "name": "@nuriteo/preview-service",
   "version": "0.0.0",
   "private": true,
+  "license": "Apache-2.0",
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
@@ -9,8 +10,8 @@
     "./observability": "./src/observability.ts"
   },
   "dependencies": {
-    "@cargo-container/browser-host": "workspace:*",
-    "@cargo-container/node-runtime": "workspace:*",
-    "@cargo-container/preview": "workspace:*"
+    "@nuriteo/browser-host": "workspace:*",
+    "@nuriteo/node-runtime": "workspace:*",
+    "@nuriteo/preview": "workspace:*"
   }
 }

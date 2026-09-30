@@ -9,5 +9,5 @@ const runtime = createCliNestedWorkerRuntime(workerData, {
 
 parentPort.on("message", (value) => runtime.postMessage(value));
 runtime.ready.catch((error) => {
-  parentPort.postMessage({ __cargoNestedWorkerError: error instanceof Error ? error.stack || error.message : String(error) });
+  parentPort.postMessage({ __nuriteoNestedWorkerError: error instanceof Error ? error.stack || error.message : String(error) });
 });

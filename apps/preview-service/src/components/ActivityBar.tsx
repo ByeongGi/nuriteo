@@ -24,7 +24,7 @@ export function ActivityBar({
     <nav
       id="activity-bar"
       aria-label="Activity bar"
-      className="flex w-12 shrink-0 flex-col items-center gap-1 border-r border-cargo-line bg-cargo-elevated/80 py-2"
+      className="flex w-12 shrink-0 flex-col items-center gap-1 border-r border-nuriteo-line bg-nuriteo-elevated/80 py-2"
     >
       {ITEMS.map((item) => {
         const Icon = item.icon;
@@ -40,8 +40,8 @@ export function ActivityBar({
             className={clsx(
               "flex size-9 items-center justify-center rounded-md border",
               selected
-                ? "border-cargo-accent/50 bg-cargo-accent/15 text-cargo-accent-strong"
-                : "border-transparent text-cargo-muted hover:bg-cargo-panel-2 hover:text-cargo-ink"
+                ? "border-nuriteo-accent/50 bg-nuriteo-accent/15 text-nuriteo-accent-strong"
+                : "border-transparent text-nuriteo-muted hover:bg-nuriteo-panel-2 hover:text-nuriteo-ink"
             )}
             onClick={() => onSelect(item.id)}
           >

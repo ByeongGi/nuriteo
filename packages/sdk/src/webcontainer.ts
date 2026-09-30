@@ -1,67 +1,67 @@
 import {
-  CargoContainerServices,
+  NuriteoServices,
   SdkError,
-  type CargoContainerServicesOptions,
-  type CargoFileEntry,
-  type CargoFileWatchEvent,
-  type CargoPreviewEvent,
-  type CargoProcessHandle
+  type NuriteoServicesOptions,
+  type NuriteoFileEntry,
+  type NuriteoFileWatchEvent,
+  type NuriteoPreviewEvent,
+  type NuriteoProcessHandle
 } from "./services.ts";
 
-export type CargoCoepMode = "require-corp" | "credentialless" | "none";
+export type NuriteoCoepMode = "require-corp" | "credentialless" | "none";
 
-export interface CargoWebContainerOptions {
-  coep?: CargoCoepMode;
-  lifecycle?: CargoWebContainerLifecycle;
-  services?: CargoContainerServices | CargoContainerServicesOptions;
+export interface NuriteoWebContainerOptions {
+  coep?: NuriteoCoepMode;
+  lifecycle?: NuriteoWebContainerLifecycle;
+  services?: NuriteoServices | NuriteoServicesOptions;
   workdirName?: string;
 }
 
-export interface CargoWebContainerLifecycle {
+export interface NuriteoWebContainerLifecycle {
   boot(): Promise<unknown>;
   teardown(): Promise<void>;
 }
 
-export interface CargoFileSystemTree {
-  [name: string]: CargoFileSystemTreeNode;
+export interface NuriteoFileSystemTree {
+  [name: string]: NuriteoFileSystemTreeNode;
 }
 
-export type CargoFileSystemTreeNode =
+export type NuriteoFileSystemTreeNode =
   | { file: { contents: string | Uint8Array } }
-  | { directory: CargoFileSystemTree }
+  | { directory: NuriteoFileSystemTree }
   | { symlink: string };
 
-export interface CargoMountSnapshot {
+export interface NuriteoMountSnapshot {
   schemaVersion: 1;
-  format: "cargo-container-mount";
+  format: "nuriteo-mount";
   files: Array<{ path: string; contents: string }>;
 }
 
-export type CargoWebContainerEventName = "port" | "server-ready" | "server-close";
+export type NuriteoWebContainerEventName = "port" | "server-ready" | "server-close";
 
-export interface CargoSpawnOptions {
+export interface NuriteoSpawnOptions {
   cwd?: string;
   env?: Record<string, string>;
 }
 
-export class CargoWebContainer {
-  readonly coep: CargoCoepMode;
+export class NuriteoWebContainer {
+  readonly coep: NuriteoCoepMode;
   readonly workdir: string;
-  readonly services: CargoContainerServices;
-  readonly fs: CargoWebContainerFileSystem;
-  readonly lifecycle: CargoWebContainerLifecycle | undefined;
+  readonly services: NuriteoServices;
+  readonly fs: NuriteoWebContainerFileSystem;
+  readonly lifecycle: NuriteoWebContainerLifecycle | undefined;
   #booted = false;
   #previewUnsubscribe: (() => void) | null = null;
-  #listeners = new Map<CargoWebContainerEventName, Set<(event: CargoPreviewEvent) => void>>();
+  #listeners = new Map<NuriteoWebContainerEventName, Set<(event: NuriteoPreviewEvent) => void>>();
 
-  constructor(options: CargoWebContainerOptions = {}) {
+  constructor(options: NuriteoWebContainerOptions = {}) {
     this.coep = options.coep || "require-corp";
     this.workdir = `/${normalizeSegment(options.workdirName || "workspace")}`;
     this.lifecycle = options.lifecycle;
-    this.services = options.services instanceof CargoContainerServices
+    this.services = options.services instanceof NuriteoServices
       ? options.services
-      : new CargoContainerServices(options.services);
-    this.fs = new CargoWebContainerFileSystem(this.services);
+      : new NuriteoServices(options.services);
+    this.fs = new NuriteoWebContainerFileSystem(this.services);
   }
 
   async boot(): Promise<this> {
@@ -84,7 +84,7 @@ export class CargoWebContainer {
     return this;
   }
 
-  async mount(input: CargoFileSystemTree | CargoMountSnapshot, options: { mountPoint?: string } = {}): Promise<void> {
+  async mount(input: NuriteoFileSystemTree | NuriteoMountSnapshot, options: { mountPoint?: string } = {}): Promise<void> {
     const root = normalizePath(options.mountPoint || this.workdir);
     if (isSnapshot(input)) {
       for (const file of input.files) {
@@ -101,7 +101,7 @@ export class CargoWebContainer {
     await mountTree(this.fs, root, input);
   }
 
-  async spawn(command: string, args: string[] = [], options: CargoSpawnOptions = {}): Promise<CargoProcessHandle> {
+  async spawn(command: string, args: string[] = [], options: NuriteoSpawnOptions = {}): Promise<NuriteoProcessHandle> {
     return this.services.processes.spawn({
       command,
       args: [...args],
@@ -114,7 +114,7 @@ export class CargoWebContainer {
     return this.services.preview.setPreviewScript(script);
   }
 
-  on(event: CargoWebContainerEventName, listener: (event: CargoPreviewEvent) => void): () => void {
+  on(event: NuriteoWebContainerEventName, listener: (event: NuriteoPreviewEvent) => void): () => void {
     const listeners = this.#listeners.get(event) || new Set();
     listeners.add(listener);
     this.#listeners.set(event, listeners);
@@ -130,15 +130,15 @@ export class CargoWebContainer {
     await this.lifecycle?.teardown();
   }
 
-  #emit(event: CargoPreviewEvent): void {
+  #emit(event: NuriteoPreviewEvent): void {
     for (const listener of this.#listeners.get(event.type) || []) listener({ ...event });
   }
 }
 
-export class CargoWebContainerFileSystem {
-  private readonly services: CargoContainerServices;
+export class NuriteoWebContainerFileSystem {
+  private readonly services: NuriteoServices;
 
-  constructor(services: CargoContainerServices) {
+  constructor(services: NuriteoServices) {
     this.services = services;
   }
 
@@ -152,7 +152,7 @@ export class CargoWebContainerFileSystem {
     await this.services.fs.writeFile(normalized, data);
   }
 
-  readdir(path: string): Promise<CargoFileEntry[]> {
+  readdir(path: string): Promise<NuriteoFileEntry[]> {
     return this.services.fs.readdir(normalizePath(path));
   }
 
@@ -164,26 +164,26 @@ export class CargoWebContainerFileSystem {
     return this.services.fs.rm(normalizePath(path), options);
   }
 
-  watch(path: string, listener: (event: CargoFileWatchEvent) => void): () => void {
+  watch(path: string, listener: (event: NuriteoFileWatchEvent) => void): () => void {
     return this.services.fs.watch(normalizePath(path), listener);
   }
 }
 
-export function createCargoWebContainer(options: CargoWebContainerOptions = {}): CargoWebContainer {
-  return new CargoWebContainer(options);
+export function createNuriteoWebContainer(options: NuriteoWebContainerOptions = {}): NuriteoWebContainer {
+  return new NuriteoWebContainer(options);
 }
 
-export function createCargoMountSnapshot(files: Record<string, string>): CargoMountSnapshot {
+export function createNuriteoMountSnapshot(files: Record<string, string>): NuriteoMountSnapshot {
   return {
     schemaVersion: 1,
-    format: "cargo-container-mount",
+    format: "nuriteo-mount",
     files: Object.entries(files)
       .map(([path, contents]) => ({ path: normalizePath(path).replace(/^\/+/, ""), contents }))
       .sort((left, right) => left.path.localeCompare(right.path))
   };
 }
 
-async function mountTree(fs: CargoWebContainerFileSystem, root: string, tree: CargoFileSystemTree): Promise<void> {
+async function mountTree(fs: NuriteoWebContainerFileSystem, root: string, tree: NuriteoFileSystemTree): Promise<void> {
   await fs.mkdir(root, { recursive: true });
   for (const [name, node] of Object.entries(tree)) {
     if (!node || typeof node !== "object") {
@@ -196,16 +196,16 @@ async function mountTree(fs: CargoWebContainerFileSystem, root: string, tree: Ca
   }
 }
 
-function isSnapshot(value: CargoFileSystemTree | CargoMountSnapshot): value is CargoMountSnapshot {
+function isSnapshot(value: NuriteoFileSystemTree | NuriteoMountSnapshot): value is NuriteoMountSnapshot {
   return "schemaVersion" in value
     && value.schemaVersion === 1
     && "format" in value
-    && value.format === "cargo-container-mount"
+    && value.format === "nuriteo-mount"
     && "files" in value
     && Array.isArray(value.files);
 }
 
-function isSnapshotLike(value: CargoFileSystemTree | CargoMountSnapshot): boolean {
+function isSnapshotLike(value: NuriteoFileSystemTree | NuriteoMountSnapshot): boolean {
   return "schemaVersion" in value || "format" in value || "files" in value;
 }
 

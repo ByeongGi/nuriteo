@@ -3,11 +3,11 @@ import clsx from "clsx";
 type Tone = "neutral" | "busy" | "ready" | "failed" | "muted";
 
 const toneClass: Record<Tone, string> = {
-  neutral: "border-cargo-line bg-cargo-panel text-cargo-ink",
-  busy: "border-amber-700/50 bg-amber-950/40 text-cargo-warn",
-  ready: "border-emerald-700/40 bg-emerald-950/35 text-cargo-ok",
-  failed: "border-rose-700/40 bg-rose-950/40 text-cargo-bad",
-  muted: "border-cargo-line bg-cargo-elevated text-cargo-muted"
+  neutral: "border-nuriteo-line bg-nuriteo-panel text-nuriteo-ink",
+  busy: "border-amber-700/50 bg-amber-950/40 text-nuriteo-warn",
+  ready: "border-emerald-700/40 bg-emerald-950/35 text-nuriteo-ok",
+  failed: "border-rose-700/40 bg-rose-950/40 text-nuriteo-bad",
+  muted: "border-nuriteo-line bg-nuriteo-elevated text-nuriteo-muted"
 };
 
 export function StatusPill({

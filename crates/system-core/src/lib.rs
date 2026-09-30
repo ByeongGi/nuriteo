@@ -16,7 +16,7 @@ pub const ABI_VERSION: u32 = 1;
 pub fn kernel_info() -> KernelInfo {
     KernelInfo {
         abi_version: ABI_VERSION,
-        name: "cargo-container-system",
+        name: "nuriteo-system",
     }
 }
 
@@ -29,6 +29,6 @@ mod tests {
         let info = kernel_info();
 
         assert_eq!(info.abi_version, 1);
-        assert_eq!(info.name, "cargo-container-system");
+        assert_eq!(info.name, "nuriteo-system");
     }
 }

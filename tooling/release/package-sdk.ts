@@ -19,7 +19,7 @@ const packageRoot = path.join(outRoot, "package");
 const wasmSource = path.join(root, "target/wasm32-unknown-unknown/debug/system_wasm.wasm");
 const sdkManifest = JSON.parse(fs.readFileSync(path.join(root, "packages/sdk/package.json"), "utf8"));
 const sdkVersion = sdkManifest.version;
-const packageTarballName = `cargo-container-sdk-${sdkVersion}.tgz`;
+const packageTarballName = `nuriteo-sdk-${sdkVersion}.tgz`;
 const sdkBasePath = resolveSdkBasePath();
 const writeFingerprintFlag = shouldWriteFingerprint();
 const sdkBaseUrl = (suffix) => new URL(suffix, `https://example.invalid${sdkBasePath}`).pathname;
@@ -110,16 +110,18 @@ function emitDeclarations() {
 
 function rewritePackagedDeclarations() {
   rewritePackagedSource("types/packages/sdk/src/container.d.ts", [
-    ['"@cargo-container/browser-host/supervisor"', '"../../browser-host/src/supervisor"'],
-    ['"@cargo-container/protocol"', '"../../protocol/src/index"']
+    ['"@nuriteo/browser-host/supervisor"', '"../../browser-host/src/supervisor"'],
+    ['"@nuriteo/protocol"', '"../../protocol/src/index"']
   ]);
   rewritePackagedSource("types/packages/sdk/src/index.d.ts", [
-    ['"@cargo-container/protocol"', '"../../protocol/src/index"']
+    ['"@nuriteo/protocol"', '"../../protocol/src/index"']
   ]);
 }
 
 function emitCommonjsRuntime() {
   const inputs = [
+    "packages/browser-host/src/resources/browser-resource-policy.ts",
+    "packages/browser-host/src/resources/index.ts",
     "packages/browser-host/src/supervisor.ts",
     "packages/sdk/src/container.ts",
     "packages/sdk/src/services.ts",
@@ -200,6 +202,8 @@ if (build.status !== 0) {
 
 fs.rmSync(outRoot, { recursive: true, force: true });
 fs.mkdirSync(packageRoot, { recursive: true });
+fs.copyFileSync(path.join(root, "LICENSE"), path.join(packageRoot, "LICENSE"));
+fs.copyFileSync(path.join(root, "NOTICE"), path.join(packageRoot, "NOTICE"));
 
 for (const dir of [
   "packages/sdk",
@@ -236,17 +240,20 @@ if (sha256(path.join(packageRoot, "vendor/next-cli-15.5.26.mjs")) !== nextBrowse
 }
 
 rewritePackagedSource("packages/sdk/src/container.ts", [
-  ['"@cargo-container/browser-host/supervisor"', '"../../browser-host/src/supervisor.ts"'],
-  ['"@cargo-container/protocol"', '"../../protocol/src/index.ts"']
+  ['"@nuriteo/browser-host/supervisor"', '"../../browser-host/src/supervisor.ts"'],
+  ['"@nuriteo/protocol"', '"../../protocol/src/index.ts"']
 ]);
 rewritePackagedSource("packages/sdk/src/index.ts", [
-  ['"@cargo-container/protocol"', '"../../protocol/src/index.ts"']
+  ['"@nuriteo/protocol"', '"../../protocol/src/index.ts"']
 ]);
 rewritePackagedSource("packages/node-runtime/src/transforms/typescript.ts", [
   ['"typescript"', '"../../../../shims/typescript.js"']
 ]);
 rewritePackagedSource("packages/node-runtime/src/builtins/zlib.ts", [
   ['"fflate"', '"../../../../node_modules/fflate/esm/browser.js"']
+]);
+rewritePackagedSource("workers/process-worker.ts", [
+  ['new URL("/runtime/system_wasm.wasm", self.location.origin)', 'new URL("../assets/system_wasm.wasm", self.location.href)']
 ]);
 writeFile("shims/typescript.js", browserTypescriptShim());
 writeFile("node_modules/fflate/esm/browser.js", fs.readFileSync(path.join(root, "node_modules/fflate/esm/browser.js"), "utf8"));
@@ -259,20 +266,20 @@ fs.mkdirSync(path.join(packageRoot, "assets"), { recursive: true });
 fs.copyFileSync(wasmSource, path.join(packageRoot, "assets/system_wasm.wasm"));
 
 writeFile("index.js", [
-  "export { CargoContainer, createContainer } from './packages/sdk/src/container.ts';",
-  "export { CargoContainerServices, CargoFileSystemApi, CargoPackageManagerApi, CargoPreviewApi, CargoProcessApi, CargoProjectApi, registerCargoPreviewServiceWorker, resolveCargoWorkerAssets, SdkError } from './packages/sdk/src/services.ts';",
-  "export { CargoWebContainer, CargoWebContainerFileSystem, createCargoMountSnapshot, createCargoWebContainer } from './packages/sdk/src/webcontainer.ts';",
+  "export { Nuriteo, createContainer } from './packages/sdk/src/container.ts';",
+  "export { NuriteoServices, NuriteoFileSystemApi, NuriteoPackageManagerApi, NuriteoPreviewApi, NuriteoProcessApi, NuriteoProjectApi, registerNuriteoPreviewServiceWorker, resolveNuriteoWorkerAssets, SdkError } from './packages/sdk/src/services.ts';",
+  "export { NuriteoWebContainer, NuriteoWebContainerFileSystem, createNuriteoMountSnapshot, createNuriteoWebContainer } from './packages/sdk/src/webcontainer.ts';",
   "export { createPreviewRelay, createPreviewServiceWorker, createPreviewSessionRegistry, createHmrClient } from './packages/preview/src/index.ts';",
   "export { protocolVersion } from './packages/protocol/src/messages.ts';",
   ""
 ].join("\n"));
 
 writeFile("index.d.ts", [
-  "export { CargoContainer, createContainer } from './types/packages/sdk/src/container';",
-  "export { CargoContainerServices, CargoFileSystemApi, CargoPackageManagerApi, CargoPreviewApi, CargoProcessApi, CargoProjectApi, registerCargoPreviewServiceWorker, resolveCargoWorkerAssets, SdkError } from './types/packages/sdk/src/services';",
-  "export type { CargoCommandResult, CargoContainerServicesOptions, CargoFileEntry, CargoFileSystemAdapter, CargoFileWatchEvent, CargoPackageCommandOptions, CargoPackageManagerAdapter, CargoPreviewAdapter, CargoPreviewEvent, CargoPreviewPort, CargoProcessAdapter, CargoProcessHandle, CargoProcessSpawnOptions, CargoProjectAdapter, CargoSdkTraceEvent, CargoWorkerAssets, RegisterCargoPreviewServiceWorkerOptions, SdkErrorCode } from './types/packages/sdk/src/services';",
-  "export { CargoWebContainer, CargoWebContainerFileSystem, createCargoMountSnapshot, createCargoWebContainer } from './types/packages/sdk/src/webcontainer';",
-  "export type { CargoCoepMode, CargoFileSystemTree, CargoFileSystemTreeNode, CargoMountSnapshot, CargoSpawnOptions, CargoWebContainerEventName, CargoWebContainerLifecycle, CargoWebContainerOptions } from './types/packages/sdk/src/webcontainer';",
+  "export { Nuriteo, createContainer } from './types/packages/sdk/src/container';",
+  "export { NuriteoServices, NuriteoFileSystemApi, NuriteoPackageManagerApi, NuriteoPreviewApi, NuriteoProcessApi, NuriteoProjectApi, registerNuriteoPreviewServiceWorker, resolveNuriteoWorkerAssets, SdkError } from './types/packages/sdk/src/services';",
+  "export type { NuriteoCommandResult, NuriteoServicesOptions, NuriteoFileEntry, NuriteoFileSystemAdapter, NuriteoFileWatchEvent, NuriteoPackageCommandOptions, NuriteoPackageManagerAdapter, NuriteoPreviewAdapter, NuriteoPreviewEvent, NuriteoPreviewPort, NuriteoProcessAdapter, NuriteoProcessHandle, NuriteoProcessSpawnOptions, NuriteoProjectAdapter, NuriteoSdkTraceEvent, NuriteoWorkerAssets, RegisterNuriteoPreviewServiceWorkerOptions, SdkErrorCode } from './types/packages/sdk/src/services';",
+  "export { NuriteoWebContainer, NuriteoWebContainerFileSystem, createNuriteoMountSnapshot, createNuriteoWebContainer } from './types/packages/sdk/src/webcontainer';",
+  "export type { NuriteoCoepMode, NuriteoFileSystemTree, NuriteoFileSystemTreeNode, NuriteoMountSnapshot, NuriteoSpawnOptions, NuriteoWebContainerEventName, NuriteoWebContainerLifecycle, NuriteoWebContainerOptions } from './types/packages/sdk/src/webcontainer';",
   "export { createPreviewRelay, createPreviewServiceWorker, createPreviewSessionRegistry, createHmrClient } from './types/packages/preview/src/index';",
   "export { protocolVersion } from './types/packages/protocol/src/messages';",
   ""
@@ -289,8 +296,9 @@ writeFile("index.cjs", [
 ].join("\n"));
 
 writeFile("package.json", `${JSON.stringify({
-  name: "@cargo-container/sdk",
+  name: "@nuriteo/sdk",
   version: sdkVersion,
+  license: sdkManifest.license,
   publishConfig: sdkManifest.publishConfig,
   type: "module",
   types: "./index.d.ts",
@@ -303,14 +311,16 @@ writeFile("package.json", `${JSON.stringify({
   }
 }, null, 2)}\n`);
 
-writeFile("README.md", `# Cargo Container SDK
+writeFile("README.md", `# NURITEO SDK
 
-Browser-native runtime SDK for booting the Cargo Container workers, running programs, and wiring preview primitives.
+Browser-native runtime SDK for booting NURITEO workers, running programs, and wiring preview primitives.
+
+Licensed under the Apache License, Version 2.0. See \`LICENSE\` and \`NOTICE\` in the package.
 
 ## Install
 
 \`\`\`sh
-npm install ./cargo-container-sdk-${sdkVersion}.tgz
+npm install ./nuriteo-sdk-${sdkVersion}.tgz
 \`\`\`
 
 ## Browser Headers
@@ -328,12 +338,12 @@ Serve \`vendor/yarn-cli-1.22.22.mjs\` and \`vendor/next-cli-15.5.26.mjs\` as \`t
 Serve \`vendor/vite-8.2.0/**\` beside the workers; the process worker verifies the static graph, Rolldown browser binding, nested Worker, and WASM hashes before loading them.
 
 Asset base path for this package: \`${sdkBasePath}\`
-Override at package time with \`--base-path=/your/deploy/path/\` or \`CARGO_CONTAINER_SDK_BASE_PATH\`.
+Override at package time with \`--base-path=/your/deploy/path/\` or \`NURITEO_SDK_BASE_PATH\`.
 
 ## Usage
 
 \`\`\`ts
-import { createContainer } from "@cargo-container/sdk";
+import { createContainer } from "@nuriteo/sdk";
 
 const container = createContainer({
   systemWorkerUrl: new URL(${JSON.stringify(sdkBaseUrl("workers/system-worker.ts"))}, location.href),
@@ -402,7 +412,7 @@ writeFile("examples/sdk-consumer/public/index.html", `<!doctype html>
 <html>
   <head>
     <meta charset="utf-8">
-    <title>Cargo Container SDK Consumer</title>
+    <title>NURITEO SDK Consumer</title>
   </head>
   <body>
     <pre id="status">loading</pre>
@@ -411,7 +421,7 @@ writeFile("examples/sdk-consumer/public/index.html", `<!doctype html>
 </html>
 `);
 
-writeFile("examples/sdk-consumer/public/app.js", `import { CargoContainerServices, createContainer, resolveCargoWorkerAssets } from ${JSON.stringify(sdkBaseUrl("index.js"))};
+writeFile("examples/sdk-consumer/public/app.js", `import { NuriteoServices, createContainer, resolveNuriteoWorkerAssets } from ${JSON.stringify(sdkBaseUrl("index.js"))};
 
 const status = document.getElementById("status");
 
@@ -422,8 +432,8 @@ function write(value) {
 globalThis.__sdkConsumer = {
   async bootAndRun() {
     if (!crossOriginIsolated) throw new Error("cross-origin isolation missing");
-    const assets = resolveCargoWorkerAssets(${JSON.stringify(sdkBasePath)});
-    const services = new CargoContainerServices();
+    const assets = resolveNuriteoWorkerAssets(${JSON.stringify(sdkBasePath)});
+    const services = new NuriteoServices();
     const container = createContainer({
       systemWorkerUrl: assets.systemWorkerUrl,
       processWorkerUrl: assets.processWorkerUrl,
@@ -442,7 +452,7 @@ globalThis.__sdkConsumer = {
 write("ready");
 `);
 
-const packCache = fs.mkdtempSync(path.join(os.tmpdir(), "cargo-container-sdk-pack-"));
+const packCache = fs.mkdtempSync(path.join(os.tmpdir(), "nuriteo-sdk-pack-"));
 try {
   const pack = spawnSync("npm", [
     "pack",

@@ -13,7 +13,7 @@ import {
 let clock = 1_700_000_100_000;
 resetIdSequence(0);
 
-const persistPath = path.join(os.tmpdir(), `cargo-service-backend-${process.pid}.json`);
+const persistPath = path.join(os.tmpdir(), `nuriteo-service-backend-${process.pid}.json`);
 try {
   fs.unlinkSync(persistPath);
 } catch {

@@ -5,7 +5,7 @@
   "executionHost": "strict-csp-headless-chrome",
   "nextVersion": "15.5.26",
   "nextCliEntrySha256": "a18774eab8037f10a2ab76c233a225c4a76dbcdc0e59c216508fd0888fa42b03",
-  "nextCliFactorySha256": "0c80f579cc4b21846c13c5786fa3228bc722361a32f70f49c4bbbb964262e201",
+  "nextCliFactorySha256": "0c103d7af3c610283437fd6f326f5b6b9aa8aa53880926a7e509d2433c515224",
   "commands": ["next dev", "next build", "next start"],
   "preflight": {
     "status": "pass",

@@ -6,7 +6,7 @@ import { spawnSync } from "node:child_process";
 
 const packageRoot = path.resolve("dist/sdk/package");
 const sourceManifest = JSON.parse(fs.readFileSync("packages/sdk/package.json", "utf8"));
-const packageTarball = path.resolve(`dist/sdk/cargo-container-sdk-${sourceManifest.version}.tgz`);
+const packageTarball = path.resolve(`dist/sdk/nuriteo-sdk-${sourceManifest.version}.tgz`);
 const packagedManifest = JSON.parse(fs.readFileSync(path.join(packageRoot, "package.json"), "utf8"));
 
 assert.match(sourceManifest.version, /^0\.1\.0-beta\.\d+$/, "SDK source version must use the beta channel");
@@ -20,7 +20,7 @@ assert.equal(packagedManifest.version, sourceManifest.version);
 assert.equal(packagedManifest.private, undefined, "packaged SDK must be publishable");
 assert.ok(fs.existsSync(packageTarball), "packaged SDK tarball is required");
 
-const cache = fs.mkdtempSync(path.join(os.tmpdir(), "cargo-container-sdk-publish-"));
+const cache = fs.mkdtempSync(path.join(os.tmpdir(), "nuriteo-sdk-publish-"));
 try {
   const rehearsal = spawnSync("npm", [
     "pack",
@@ -35,7 +35,7 @@ try {
   ], { encoding: "utf8", env: { ...process.env, npm_config_loglevel: "error" }, timeout: 30_000 });
   assert.equal(rehearsal.status, 0, rehearsal.stderr || rehearsal.stdout);
   const [output] = JSON.parse(rehearsal.stdout);
-  assert.equal(output.name, "@cargo-container/sdk");
+  assert.equal(output.name, "@nuriteo/sdk");
   assert.equal(output.version, sourceManifest.version);
   assert.ok(output.files.some((file) => file.path === "index.js"));
   assert.ok(output.files.some((file) => file.path === "index.cjs"));

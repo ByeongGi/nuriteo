@@ -123,20 +123,20 @@ export function createBoundedWebAssemblyMemoryConstructor(
 export function installWebAssemblyMemoryLimit(
   limitBytes = DEFAULT_BROWSER_WASM_MEMORY_LIMIT_BYTES
 ): { limitBytes: number; maximumPages: number } {
-  const current = WebAssembly.Memory as typeof WebAssembly.Memory & { __cargoContainerLimitBytes?: number };
-  if (current.__cargoContainerLimitBytes !== undefined) {
-    if (current.__cargoContainerLimitBytes !== limitBytes) {
+  const current = WebAssembly.Memory as typeof WebAssembly.Memory & { __nuriteoLimitBytes?: number };
+  if (current.__nuriteoLimitBytes !== undefined) {
+    if (current.__nuriteoLimitBytes !== limitBytes) {
       throw new BrowserRuntimeResourceError(
-        `WebAssembly memory limit is already installed at ${current.__cargoContainerLimitBytes} bytes.`,
+        `WebAssembly memory limit is already installed at ${current.__nuriteoLimitBytes} bytes.`,
         "ERUNTIME_WASM_MEMORY",
-        current.__cargoContainerLimitBytes,
+        current.__nuriteoLimitBytes,
         limitBytes
       );
     }
     return { limitBytes, maximumPages: Math.floor(limitBytes / WASM_PAGE_BYTES) };
   }
   const bounded = createBoundedWebAssemblyMemoryConstructor(limitBytes, current) as typeof current;
-  Object.defineProperty(bounded, "__cargoContainerLimitBytes", { value: limitBytes });
+  Object.defineProperty(bounded, "__nuriteoLimitBytes", { value: limitBytes });
   Object.defineProperty(WebAssembly, "Memory", {
     ...Object.getOwnPropertyDescriptor(WebAssembly, "Memory"),
     value: bounded

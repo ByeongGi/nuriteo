@@ -26,7 +26,7 @@ function feature(name: string, child: ReactNode, fallback = "Loading…") {
   return (
     <LazyFeatureBoundary
       name={name}
-      fallback={<div className="flex h-full items-center justify-center p-4 text-xs text-cargo-muted">{fallback}</div>}
+      fallback={<div className="flex h-full items-center justify-center p-4 text-xs text-nuriteo-muted">{fallback}</div>}
     >
       {child}
     </LazyFeatureBoundary>
@@ -76,7 +76,7 @@ export default function App() {
     >
       {model.zenMode ? null : <TopBar model={model} />}
       {model.zenMode ? (
-        <div className="flex items-center justify-between border-b border-cargo-line px-3 py-1 text-xs text-cargo-muted">
+        <div className="flex items-center justify-between border-b border-nuriteo-line px-3 py-1 text-xs text-nuriteo-muted">
           <span>Zen mode</span>
           <button type="button" className="btn-small" onClick={() => model.toggleZenMode()}>Exit Zen</button>
         </div>
@@ -109,7 +109,7 @@ export default function App() {
               <Panel id="editor" minSize="20%" defaultSize={showPreview && !model.diffView ? "44%" : "82%"} className="min-w-0">
                 {model.selectedPath
                   ? feature("Code editor", <CodeEditor model={model} />, "Starting editor…")
-                  : <section className="flex h-full items-center justify-center px-6 text-sm text-cargo-muted" aria-label="Editor">Select a file from the sidebar to edit.</section>}
+                  : <section className="flex h-full items-center justify-center px-6 text-sm text-nuriteo-muted" aria-label="Editor">Select a file from the sidebar to edit.</section>}
               </Panel>
               {model.diffView ? (
                 <>

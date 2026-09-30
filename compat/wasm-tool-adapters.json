@@ -6,8 +6,8 @@
     "rustc": "1.97.1",
     "target": "wasm32-unknown-unknown",
     "profile": "debug",
-    "sha256": "17f34609269b06311a350f06fd1c74b450d1723987a1189508f3bf76ee2083d1",
-    "exports": ["cargo_container_abi_version", "memory"],
+    "sha256": "005ac1c5684f190df6be50f722059a59cd04a8c07b666ae5b3dfe58277fa278e",
+    "exports": ["nuriteo_abi_version", "memory"],
     "rebuildHashStable": true,
     "result": "pass"
   },

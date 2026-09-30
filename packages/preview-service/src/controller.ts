@@ -338,7 +338,7 @@ export function createPreviewWorkflowController(
     materialized: MaterializedProject,
     loadOptions: { label?: string; templateId?: TemplateId; workflowTemplate?: "react" | "vanilla" | "next" } = {}
   ): PreviewWorkflowSnapshot {
-    const label = loadOptions.label ?? "cargo";
+    const label = loadOptions.label ?? "nuriteo";
     clearRuntime();
     state.health = materialized.health;
     state.source = materialized.source;
@@ -376,7 +376,7 @@ export function createPreviewWorkflowController(
         manager,
         projectId: materialized.store.projectId || "preview-service",
         projectRoot: materialized.store.root || "/workspace/app",
-        initialTitle: label === "cargo" ? "Next.js" : label,
+        initialTitle: label === "nuriteo" ? "Next.js" : label,
         port: options.previewPort ?? 3000
       })
       : new ViteProductWorkflow({

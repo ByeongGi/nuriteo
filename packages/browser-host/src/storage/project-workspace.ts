@@ -79,7 +79,7 @@ export class ProjectWorkspaceStore {
     const snapshot = this.snapshot();
     return {
       schemaVersion: 1,
-      format: "cargo-container-project-archive",
+      format: "nuriteo-project-archive",
       exportedAt,
       integrity: digestSnapshot(snapshot),
       snapshot
@@ -190,7 +190,7 @@ function assertProjectWorkspaceArchive(value: JsonValue): ProjectWorkspaceArchiv
     throw new Error("Invalid project workspace archive");
   }
   const archive = value as Partial<ProjectWorkspaceArchive>;
-  if (archive.schemaVersion !== 1 || archive.format !== "cargo-container-project-archive") {
+  if (archive.schemaVersion !== 1 || archive.format !== "nuriteo-project-archive") {
     throw new Error("Invalid project workspace archive header");
   }
   const snapshot = migrateProjectWorkspaceSnapshot(archive.snapshot || null);
@@ -201,7 +201,7 @@ function assertProjectWorkspaceArchive(value: JsonValue): ProjectWorkspaceArchiv
   }
   return {
     schemaVersion: 1,
-    format: "cargo-container-project-archive",
+    format: "nuriteo-project-archive",
     exportedAt: typeof archive.exportedAt === "number" ? archive.exportedAt : 0,
     ...(typeof archive.integrity === "string" ? { integrity: archive.integrity } : {}),
     snapshot

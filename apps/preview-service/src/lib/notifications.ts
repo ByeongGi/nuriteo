@@ -1,4 +1,4 @@
-import type { PreviewWorkflowEvent } from "@cargo-container/preview-service";
+import type { PreviewWorkflowEvent } from "@nuriteo/preview-service";
 
 export type NotificationLevel = "info" | "success" | "warning" | "error";
 

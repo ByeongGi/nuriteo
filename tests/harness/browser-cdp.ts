@@ -83,7 +83,7 @@ function createCdp(wsUrl) {
 export async function withChromePage(callback) {
   if (!fs.existsSync(chromePath)) throw new Error(`Chrome not found at ${chromePath}`);
   const debugPort = 9500 + (process.pid % 1000);
-  const userDataDir = path.join("/private/tmp", `cargo-container-harness-${process.pid}-${Date.now()}`);
+  const userDataDir = path.join("/private/tmp", `nuriteo-harness-${process.pid}-${Date.now()}`);
   const chrome = spawn(chromePath, [
     "--headless=new",
     `--remote-debugging-port=${debugPort}`,

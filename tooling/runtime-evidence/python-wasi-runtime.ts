@@ -17,7 +17,7 @@ const PYTHON_PACKAGE = "python/python@=3.13.18";
 const PYTHON_PACKAGE_SHA256 = "0464f16f1ad0ce4d1ab4266b057b62accd5b4123995a08103897699aefc92a54";
 const PYTHON_PACKAGE_BYTES = 157_272_498;
 const SDK_WASM_SHA256 = "eb00b569d1f5dc4cdb23f8986a6b812158eb7a01845000af14ae564fea050397";
-const cacheRoot = process.env.PYTHON_WASI_CACHE_DIR || path.join(os.tmpdir(), "cargo-container-python-wasi");
+const cacheRoot = process.env.PYTHON_WASI_CACHE_DIR || path.join(os.tmpdir(), "nuriteo-python-wasi");
 const packagePath = path.join(cacheRoot, "cache-v1", "packages", `${PYTHON_PACKAGE_SHA256}.bin`);
 const sdkEntry = fileURLToPath(import.meta.resolve("@wasmer/sdk/node"));
 const sdkWasmPath = path.join(path.dirname(path.dirname(sdkEntry)), "pkg", "wasmer_sdk_js_bg.wasm");

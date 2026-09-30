@@ -20,24 +20,24 @@
   },
   "r09WebContainerFacade": {
     "status": "pass",
-    "compatibility": "cargo-specific-facade-not-drop-in-webcontainer-api",
+    "compatibility": "nuriteo-specific-facade-not-drop-in-webcontainer-api",
     "surfaces": [
       "boot",
       "coep-workdirName",
       "mount-filesystem-tree",
-      "mount-cargo-snapshot",
+      "mount-nuriteo-snapshot",
       "filesystem-watch",
       "process-spawn",
       "setPreviewScript",
       "port-server-ready-server-close-events",
       "teardown"
     ],
-    "snapshotDecision": "CargoMountSnapshot is versioned and intentionally not claimed as a WebContainer snapshot format.",
+    "snapshotDecision": "NuriteoMountSnapshot is versioned and intentionally not claimed as a WebContainer snapshot format.",
     "symlinkDecision": "Tree shape is accepted but mount rejects with ESDK_SYMLINK_UNSUPPORTED until the host filesystem adapter defines symlink semantics."
   },
   "r12Publish": {
     "status": "rehearsal-pass-external-publish-not-authorized",
-    "artifact": "dist/sdk/cargo-container-sdk-0.1.0-beta.1.tgz",
+    "artifact": "dist/sdk/nuriteo-sdk-0.1.0-beta.1.tgz",
     "exports": ["esm", "commonjs", "types"],
     "provenance": "npm provenance required",
     "rollback": "repoint beta dist-tag to the previously verified beta artifact",

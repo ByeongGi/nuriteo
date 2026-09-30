@@ -14,7 +14,7 @@ class FakeWorker {
         id: message.id,
         ok: true,
         rows: message.values || ["persisted"],
-        databasePath: `/cargo-container-${message.projectId}-${message.database}.sqlite3`,
+        databasePath: `/nuriteo-${message.projectId}-${message.database}.sqlite3`,
         sqliteVersion: "3.53.4"
       };
       for (const listener of this.listeners.message) listener({ data: response });
@@ -35,7 +35,7 @@ const client = createSqliteProjectClient({
 });
 const write = await client.replaceValues(["committed"]);
 assert.deepEqual(write.rows, ["committed"]);
-assert.equal(write.databasePath, "/cargo-container-project-a-app.sqlite3");
+assert.equal(write.databasePath, "/nuriteo-project-a-app.sqlite3");
 const read = await client.readValues();
 assert.deepEqual(read.rows, ["persisted"]);
 assert.ok(worker.messages.every((message) => message.projectId === "project-a" && message.database === "app"));

@@ -81,7 +81,7 @@ importers:
       '@base-ui/react':
         specifier: ^1.8.0
         version: 1.8.0(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
-      '@cargo-container/preview-service':
+      '@nuriteo/preview-service':
         specifier: workspace:*
         version: link:../../packages/preview-service
       '@monaco-editor/react':
@@ -147,31 +147,31 @@ importers:
 
   packages/browser-host:
     dependencies:
-      '@cargo-container/protocol':
+      '@nuriteo/protocol':
         specifier: workspace:*
         version: link:../protocol
 
   packages/node-runtime:
     dependencies:
-      '@cargo-container/protocol':
+      '@nuriteo/protocol':
         specifier: workspace:*
         version: link:../protocol
 
   packages/preview:
     dependencies:
-      '@cargo-container/protocol':
+      '@nuriteo/protocol':
         specifier: workspace:*
         version: link:../protocol
 
   packages/preview-service:
     dependencies:
-      '@cargo-container/browser-host':
+      '@nuriteo/browser-host':
         specifier: workspace:*
         version: link:../browser-host
-      '@cargo-container/node-runtime':
+      '@nuriteo/node-runtime':
         specifier: workspace:*
         version: link:../node-runtime
-      '@cargo-container/preview':
+      '@nuriteo/preview':
         specifier: workspace:*
         version: link:../preview
 
@@ -179,10 +179,10 @@ importers:
 
   packages/sdk:
     dependencies:
-      '@cargo-container/browser-host':
+      '@nuriteo/browser-host':
         specifier: workspace:*
         version: link:../browser-host
-      '@cargo-container/protocol':
+      '@nuriteo/protocol':
         specifier: workspace:*
         version: link:../protocol
 

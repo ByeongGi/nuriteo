@@ -1,5 +1,5 @@
 import { FolderInput, Rocket } from "lucide-react";
-import type { TemplateId } from "@cargo-container/browser-host";
+import type { TemplateId } from "@nuriteo/browser-host";
 import type { PreviewControllerModel } from "../hooks/usePreviewController";
 
 const TEMPLATES: Array<{ id: TemplateId; title: string; blurb: string }> = [
@@ -26,18 +26,18 @@ export function WelcomeOverlay({ model }: { model: PreviewControllerModel }) {
         void model.handleDroppedFiles(event.dataTransfer.files);
       }}
     >
-      <div className="w-full max-w-2xl rounded-2xl border border-cargo-line bg-cargo-panel/95 p-8 shadow-[var(--shadow)]">
+      <div className="w-full max-w-2xl rounded-2xl border border-nuriteo-line bg-nuriteo-panel/95 p-8 shadow-[var(--shadow)]">
         <div
           aria-hidden
-          className="mb-5 size-10 border-2 border-cargo-accent"
+          className="mb-5 size-10 border-2 border-nuriteo-accent"
           style={{
             background:
               "linear-gradient(135deg, transparent 46%, var(--accent) 46% 54%, transparent 54%), linear-gradient(45deg, transparent 46%, var(--accent) 46% 54%, transparent 54%)"
           }}
         />
-        <h1 className="text-2xl font-semibold tracking-tight text-cargo-ink">Build in the browser</h1>
-        <p className="mt-3 text-sm leading-relaxed text-cargo-muted">
-          Cargo Container runs a Node-compatible workspace in Chrome — install, dev server,
+        <h1 className="text-2xl font-semibold tracking-tight text-nuriteo-ink">Build in the browser</h1>
+        <p className="mt-3 text-sm leading-relaxed text-nuriteo-muted">
+          NURITEO runs a Node-compatible workspace in Chrome — install, dev server,
           live preview, and edits with HMR.
         </p>
 
@@ -47,15 +47,15 @@ export function WelcomeOverlay({ model }: { model: PreviewControllerModel }) {
               key={template.id}
               type="button"
               data-template={template.id}
-              className="rounded-xl border border-cargo-line bg-cargo-elevated/80 px-3 py-3 text-left hover:border-cargo-accent/50 hover:bg-cargo-accent/10"
+              className="rounded-xl border border-nuriteo-line bg-nuriteo-elevated/80 px-3 py-3 text-left hover:border-nuriteo-accent/50 hover:bg-nuriteo-accent/10"
               onClick={() => {
                 model.loadTemplate(template.id);
                 model.focusTerminal();
                 void model.runPreview().catch(() => undefined);
               }}
             >
-              <div className="text-sm font-semibold text-cargo-ink">{template.title}</div>
-              <div className="mt-1 text-xs text-cargo-muted">{template.blurb}</div>
+              <div className="text-sm font-semibold text-nuriteo-ink">{template.title}</div>
+              <div className="mt-1 text-xs text-nuriteo-muted">{template.blurb}</div>
             </button>
           ))}
         </div>
@@ -80,7 +80,7 @@ export function WelcomeOverlay({ model }: { model: PreviewControllerModel }) {
             Import project
           </button>
         </div>
-        <p className="mt-4 text-xs text-cargo-muted">
+        <p className="mt-4 text-xs text-nuriteo-muted">
           Drop a <code className="font-mono">.zip</code> or files into Explorer. Deep links:
           <code className="mx-1 font-mono">?file=src/main.tsx&amp;terminal=dev</code>
           ·

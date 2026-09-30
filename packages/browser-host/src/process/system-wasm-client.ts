@@ -13,11 +13,11 @@ import {
 
 interface SystemWasmExports extends WebAssembly.Exports {
   memory: WebAssembly.Memory;
-  cargo_container_abi_version(): number;
-  cargo_container_dispatch(length: number): number;
-  cargo_container_request_buffer(length: number): number;
-  cargo_container_reset(): void;
-  cargo_container_response_buffer(): number;
+  nuriteo_abi_version(): number;
+  nuriteo_dispatch(length: number): number;
+  nuriteo_request_buffer(length: number): number;
+  nuriteo_reset(): void;
+  nuriteo_response_buffer(): number;
 }
 
 export class SystemWasmError extends Error {
@@ -44,14 +44,14 @@ export class SystemWasmClient {
     const instantiated = await WebAssembly.instantiate(await response.arrayBuffer(), {});
     const exports = instantiated.instance.exports as unknown as SystemWasmExports;
     assertExports(exports);
-    if (exports.cargo_container_abi_version() !== ABI_VERSION) {
+    if (exports.nuriteo_abi_version() !== ABI_VERSION) {
       throw new SystemWasmError(ERROR_CODES.EBADMSG, "system WASM ABI version mismatch");
     }
     return new SystemWasmClient(exports);
   }
 
   reset(): void {
-    this.#exports.cargo_container_reset();
+    this.#exports.nuriteo_reset();
     this.#nextRequestId = 1;
   }
 
@@ -66,15 +66,15 @@ export class SystemWasmClient {
     if (request.byteLength > HEADER_LENGTH + MAX_PAYLOAD_LENGTH) {
       throw new SystemWasmError(ERROR_CODES.E2BIG, "system WASM request exceeds the protocol limit");
     }
-    const requestPointer = this.#exports.cargo_container_request_buffer(request.byteLength);
+    const requestPointer = this.#exports.nuriteo_request_buffer(request.byteLength);
     if (requestPointer === 0) throw new SystemWasmError(ERROR_CODES.E2BIG, "system WASM rejected the request buffer");
     new Uint8Array(this.#exports.memory.buffer, requestPointer, request.byteLength).set(request);
 
-    const responseLength = this.#exports.cargo_container_dispatch(request.byteLength);
+    const responseLength = this.#exports.nuriteo_dispatch(request.byteLength);
     if (responseLength < HEADER_LENGTH || responseLength > HEADER_LENGTH + MAX_PAYLOAD_LENGTH) {
       throw new SystemWasmError(ERROR_CODES.EBADMSG, "system WASM response length is invalid");
     }
-    const responsePointer = this.#exports.cargo_container_response_buffer();
+    const responsePointer = this.#exports.nuriteo_response_buffer();
     const responseBytes = new Uint8Array(this.#exports.memory.buffer, responsePointer, responseLength).slice();
     return unwrapResponse(decodeResponse(responseBytes), { ...options, requestId });
   }
@@ -82,11 +82,11 @@ export class SystemWasmClient {
 
 function assertExports(exports: Partial<SystemWasmExports>): asserts exports is SystemWasmExports {
   if (!(exports.memory instanceof WebAssembly.Memory)
-    || typeof exports.cargo_container_abi_version !== "function"
-    || typeof exports.cargo_container_dispatch !== "function"
-    || typeof exports.cargo_container_request_buffer !== "function"
-    || typeof exports.cargo_container_reset !== "function"
-    || typeof exports.cargo_container_response_buffer !== "function") {
+    || typeof exports.nuriteo_abi_version !== "function"
+    || typeof exports.nuriteo_dispatch !== "function"
+    || typeof exports.nuriteo_request_buffer !== "function"
+    || typeof exports.nuriteo_reset !== "function"
+    || typeof exports.nuriteo_response_buffer !== "function") {
     throw new SystemWasmError(ERROR_CODES.EIO, "system WASM exports are incomplete");
   }
 }

@@ -15,7 +15,7 @@ assert.equal(packageJson.version, "2.2.4");
 
 const outputRoot = path.join(repositoryRoot, "apps/preview-service/public/vendor/rspack-2.2.4");
 const sharedBufferDecoderPlugin = {
-  name: "cargo-rspack-copy-shared-textdecoder-input",
+  name: "nuriteo-rspack-copy-shared-textdecoder-input",
   enforce: "pre" as const,
   transform(source: string, id: string) {
     const wasiLogDecode = "new TextDecoder().decode(buffer.subarray(lastBegin, index))";
@@ -39,7 +39,7 @@ await build({
   publicDir: false,
   root: packageRoot,
   plugins: [sharedBufferDecoderPlugin, {
-    name: "cargo-rspack-wasi-static-assets",
+    name: "nuriteo-rspack-wasi-static-assets",
     enforce: "pre",
     transform(source, id) {
       if (id !== path.join(packageRoot, "rspack.wasi-browser.js")) return null;
@@ -111,8 +111,8 @@ for (const generated of [
   const expression = "? e.slice(t, n) : e.subarray(t, n)";
   assert.equal(source.split(expression).length - 1, 1, `unexpected WASI unsharedSlice output: ${generated}`);
   source = source.replace(expression, "? new Uint8Array(e.subarray(t, n)) : e.subarray(t, n)");
-  source = `const __CargoNativeTextDecoder = globalThis.TextDecoder;
-class TextDecoder extends __CargoNativeTextDecoder {
+  source = `const __NuriteoNativeTextDecoder = globalThis.TextDecoder;
+class TextDecoder extends __NuriteoNativeTextDecoder {
   decode(input, options) {
     const sharedView = input && ArrayBuffer.isView(input) && (input.buffer instanceof SharedArrayBuffer || Object.prototype.toString.call(input.buffer) === "[object SharedArrayBuffer]");
     const sharedBuffer = input && (input instanceof SharedArrayBuffer || Object.prototype.toString.call(input) === "[object SharedArrayBuffer]");

@@ -19,11 +19,11 @@
     "types": ["vite/client"],
     "baseUrl": ".",
     "paths": {
-      "@cargo-container/preview-service": ["../../packages/preview-service/src/index.ts"],
-      "@cargo-container/browser-host": ["../../packages/browser-host/src/index.ts"],
-      "@cargo-container/preview": ["../../packages/preview/src/index.ts"],
-      "@cargo-container/node-runtime": ["../../packages/node-runtime/src/index.ts"],
-      "@cargo-container/protocol": ["../../packages/protocol/src/index.ts"]
+      "@nuriteo/preview-service": ["../../packages/preview-service/src/index.ts"],
+      "@nuriteo/browser-host": ["../../packages/browser-host/src/index.ts"],
+      "@nuriteo/preview": ["../../packages/preview/src/index.ts"],
+      "@nuriteo/node-runtime": ["../../packages/node-runtime/src/index.ts"],
+      "@nuriteo/protocol": ["../../packages/protocol/src/index.ts"]
     }
   },
   "include": ["src"]

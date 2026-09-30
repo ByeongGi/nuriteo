@@ -181,7 +181,7 @@ export class ProjectService {
     const metadata = this.#requireOwned(actor, projectId);
     return {
       schemaVersion: SERVICE_BACKEND_SCHEMA_VERSION,
-      kind: "cargo-container.project-export",
+      kind: "nuriteo.project-export",
       exportedAt: this.#store.isoNow(),
       metadata,
       snapshot: this.#store.getSnapshot(projectId)
@@ -193,7 +193,7 @@ export class ProjectService {
     bundle: ProjectExportBundle,
     options: { name?: string } = {}
   ): { metadata: ProjectMetadata; snapshot: ProjectSnapshot | null } {
-    if (bundle.kind !== "cargo-container.project-export") {
+    if (bundle.kind !== "nuriteo.project-export") {
       throw new ServiceBackendError("invalid export bundle kind", "EINVALID");
     }
     if (bundle.schemaVersion !== SERVICE_BACKEND_SCHEMA_VERSION) {

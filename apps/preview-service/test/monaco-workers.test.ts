@@ -76,7 +76,7 @@ try {
   });
 
   assert.ok(
-    languageFeatures.definitionFiles.some((file) => file.endsWith("/__cargo_language_probe__/answer.ts")),
+    languageFeatures.definitionFiles.some((file) => file.endsWith("/__nuriteo_language_probe__/answer.ts")),
     `Definition provider must resolve a project file; saw ${JSON.stringify(languageFeatures.definitionFiles)}`
   );
   assert.ok(languageFeatures.quickInfoKind, "Hover/quick-info provider must return symbol information");

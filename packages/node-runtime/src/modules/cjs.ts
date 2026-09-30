@@ -420,8 +420,8 @@ function createEmptyCallableBuiltinPlugin(): RuntimeNamespace {
 
 function debugAsyncEsmBinding(message: string): void {
   const debug = (globalThis as { process?: { env?: { DEBUG?: string } } }).process?.env?.DEBUG;
-  if (!debug?.split(",").some((scope) => scope === "cargo:binding" || scope === "cargo:*")) return;
-  console.error(`cargo:binding ${message}`);
+  if (!debug?.split(",").some((scope) => scope === "nuriteo:binding" || scope === "nuriteo:*")) return;
+  console.error(`nuriteo:binding ${message}`);
 }
 
 function createViteResolveBuiltinPlugin(runtime: ModuleRuntime, options: RuntimeNamespace): RuntimeNamespace {

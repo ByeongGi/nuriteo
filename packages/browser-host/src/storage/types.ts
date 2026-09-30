@@ -80,7 +80,7 @@ export interface ProjectWorkspaceSnapshot {
 export interface ProjectWorkspaceArchive {
   [key: string]: JsonValue;
   schemaVersion: 1;
-  format: "cargo-container-project-archive";
+  format: "nuriteo-project-archive";
   exportedAt: number;
   integrity?: string;
   snapshot: ProjectWorkspaceSnapshot;

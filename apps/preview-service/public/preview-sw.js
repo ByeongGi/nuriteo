@@ -10,7 +10,7 @@ self.addEventListener("activate", (event) => {
 
 self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
-  if (url.pathname.startsWith("/__cargo_runtime_module/")) {
+  if (url.pathname.startsWith("/__nuriteo_runtime_module/")) {
     event.respondWith(routeRuntimeModule(event.request));
     return;
   }

@@ -26,7 +26,7 @@ export const DEFAULT_SETTINGS: IdeSettings = {
   showSidebar: true
 };
 
-const STORAGE_KEY = "cargo.preview-service.settings";
+const STORAGE_KEY = "nuriteo.preview-service.settings";
 
 export function loadSettings(): IdeSettings {
   try {

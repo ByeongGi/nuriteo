@@ -69,7 +69,7 @@ export interface ShareLink {
 
 export interface ProjectExportBundle {
   schemaVersion: typeof SERVICE_BACKEND_SCHEMA_VERSION;
-  kind: "cargo-container.project-export";
+  kind: "nuriteo.project-export";
   exportedAt: string;
   metadata: ProjectMetadata;
   snapshot: ProjectSnapshot | null;

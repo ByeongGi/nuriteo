@@ -121,7 +121,7 @@ assert.throws(
 );
 
 const exported = backend.projects.export(actor, projectB.id);
-assert.equal(exported.kind, "cargo-container.project-export");
+assert.equal(exported.kind, "nuriteo.project-export");
 const imported = backend.projects.import(actor, exported, { name: "Beta imported" });
 assert.equal(imported.metadata.name, "Beta imported");
 

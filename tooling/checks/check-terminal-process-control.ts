@@ -46,7 +46,7 @@ for (const signal of ["SIGINT", "SIGTERM", "SIGKILL", "SIGWINCH"]) {
 for (const [name, value] of Object.entries(contract.limits)) {
   assert(Number.isSafeInteger(value) && value > 0, `invalid terminal/process limit: ${name}`);
 }
-assert(contract.shellGrammar.diagnosticCode === "ERR_CARGO_CONTAINER_UNSUPPORTED_SHELL_SYNTAX", "shell diagnostic code changed");
+assert(contract.shellGrammar.diagnosticCode === "ERR_NURITEO_UNSUPPORTED_SHELL_SYNTAX", "shell diagnostic code changed");
 assert(contract.posixPty.virtual.features.length >= 8, "virtual POSIX PTY evidence is incomplete");
 assert(contract.posixPty.hostKernel.unsupported.length >= 5, "host POSIX PTY limitations are incomplete");
 assert(document.includes("HostProcessTable/createHostProcessShellCommand가 preview production shell의 제한된 Worker command에 연결된다"), "production Worker integration must stay documented");
@@ -73,7 +73,7 @@ assert(lifecycle.includes("stdin-ack"), "stdin credit evidence missing");
 assert(lifecycle.includes("generation + 1"), "stale generation evidence missing");
 const shell = fs.readFileSync("packages/node-runtime/test/shell.test.ts", "utf8");
 assert(shell.includes("outputTruncatedBytes"), "bounded shell transcript evidence missing");
-assert(shell.includes("ERR_CARGO_CONTAINER_UNSUPPORTED_SHELL_SYNTAX"), "shell injection diagnostic evidence missing");
+assert(shell.includes("ERR_NURITEO_UNSUPPORTED_SHELL_SYNTAX"), "shell injection diagnostic evidence missing");
 const workerRuntime = fs.readFileSync("packages/browser-host/src/process/worker-runtime.ts", "utf8");
 assert(workerRuntime.includes("writeTerminalInput"), "PTY line discipline implementation missing");
 assert(workerRuntime.includes("createVirtualPty"), "system WASM PTY integration missing");

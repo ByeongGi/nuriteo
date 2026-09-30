@@ -15,7 +15,7 @@ const output = path.resolve(valueAfter("--output") || defaultReviewOutput);
 const explicitWorkdir = valueAfter("--workdir");
 assertSubset(selectedIds, config.publicFixtureIds);
 
-const runRoot = explicitWorkdir ? path.resolve(explicitWorkdir) : fs.mkdtempSync(path.join(os.tmpdir(), "cargo-container-public-rescore-"));
+const runRoot = explicitWorkdir ? path.resolve(explicitWorkdir) : fs.mkdtempSync(path.join(os.tmpdir(), "nuriteo-public-rescore-"));
 const checkoutRoot = path.join(runRoot, "fixtures");
 const toolchainRoot = path.join(runRoot, "toolchain");
 const stagingOutput = path.join(path.dirname(output), `.${path.basename(output)}.${process.pid}.tmp`);
@@ -42,7 +42,7 @@ try {
   } else {
     fs.mkdirSync(toolchainRoot, { recursive: true });
     fs.writeFileSync(path.join(toolchainRoot, "package.json"), `${JSON.stringify({
-      name: "cargo-container-fixture-rescore-toolchain",
+      name: "nuriteo-fixture-rescore-toolchain",
       private: true,
       version: "0.0.0",
       dependencies: {

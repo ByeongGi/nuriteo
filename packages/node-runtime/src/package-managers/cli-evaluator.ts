@@ -720,10 +720,10 @@ function startCliModuleEvaluation(
     WebAssembly,
     WritableStream,
     __dynamicImport: createCliDynamicImport(() => runtime, options.root || "/workspace", request.entry.entry),
-    __cargoImportGeneratedModule: generatedModuleBridge.importModule,
-    __cargoImportEdgeModule: generatedModuleBridge.importEdgeModule,
-    __cargoImportWorkspaceModule: generatedModuleBridge.importWorkspaceModule,
-    __cargoParseWebpackMagicComment: parseWebpackMagicComment,
+    __nuriteoImportGeneratedModule: generatedModuleBridge.importModule,
+    __nuriteoImportEdgeModule: generatedModuleBridge.importEdgeModule,
+    __nuriteoImportWorkspaceModule: generatedModuleBridge.importWorkspaceModule,
+    __nuriteoParseWebpackMagicComment: parseWebpackMagicComment,
     atob,
     btoa,
     clearImmediate: timerScope.clearImmediate,
@@ -823,7 +823,7 @@ function startCliModuleEvaluation(
       const entryExports = runtime.requireSync(request.entry.entry, request.entry.entry);
       const pendingReady: Promise<unknown>[] = [];
       if (isPromiseLike(entryExports)) pendingReady.push(Promise.resolve(entryExports));
-      const cjsReady = globalObject.__cargoCliReady;
+      const cjsReady = globalObject.__nuriteoCliReady;
       if (isPromiseLike(cjsReady)) pendingReady.push(Promise.resolve(cjsReady));
       if (pendingReady.length > 0) {
         const trackedReady = Promise.all(pendingReady).then(() => undefined, (error) => {
@@ -899,10 +899,10 @@ function createGeneratedCjsModuleBridge(options: GeneratedCjsModuleBridgeOptions
   importWorkspaceModule(path: string): Promise<RuntimeValue>;
 } {
   const hostGlobal = globalThis as unknown as Record<string, unknown>;
-  const bridges = hostGlobal.__cargoGeneratedModuleBridges instanceof Map
-    ? hostGlobal.__cargoGeneratedModuleBridges as Map<string, unknown>
+  const bridges = hostGlobal.__nuriteoGeneratedModuleBridges instanceof Map
+    ? hostGlobal.__nuriteoGeneratedModuleBridges as Map<string, unknown>
     : new Map<string, unknown>();
-  hostGlobal.__cargoGeneratedModuleBridges = bridges;
+  hostGlobal.__nuriteoGeneratedModuleBridges = bridges;
   const token = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
   const factories = new Map<string, (...args: RuntimeValue[]) => void>();
   const cache = new Map<string, GeneratedCjsModuleRecord>();
@@ -989,8 +989,8 @@ function createGeneratedCjsModuleBridge(options: GeneratedCjsModuleBridgeOptions
     }
     const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(source));
     const hash = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
-    const url = new URL(`/__cargo_runtime_module/${token}/${hash}.mjs`, location.origin).href;
-    const storage = await caches.open("cargo-runtime-modules-v1");
+    const url = new URL(`/__nuriteo_runtime_module/${token}/${hash}.mjs`, location.origin).href;
+    const storage = await caches.open("nuriteo-runtime-modules-v1");
     await storage.put(url, new Response(source, {
       headers: {
         "Content-Type": "text/javascript; charset=utf-8",
@@ -1016,7 +1016,7 @@ function createGeneratedCjsModuleBridge(options: GeneratedCjsModuleBridgeOptions
       bridge.edgeContext = context;
       bridge.edgeRequire = (specifier: string) => options.getRuntime().requireSync(specifier, normalized);
       const edgeSource = options.reader.readText(normalized);
-      const source = `const __cargoBridge = globalThis.__cargoGeneratedModuleBridges.get(${JSON.stringify(token)});\nconst __cargoContext = __cargoBridge.edgeContext;\nglobalThis.process = __cargoContext.process;\nglobalThis.Buffer = __cargoContext.Buffer;\nglobalThis.AsyncLocalStorage = __cargoContext.AsyncLocalStorage;\nglobalThis._ENTRIES = __cargoContext._ENTRIES || {};\nglobalThis.webpackChunk_N_E = __cargoContext.webpackChunk_N_E || [];\nconst self = globalThis;\nconst global = __cargoContext;\nconst process = __cargoContext.process;\nconst Buffer = __cargoContext.Buffer;\nconst require = __cargoBridge.edgeRequire;\n${edgeSource}\nconst __cargoEntries = Object.assign(globalThis._ENTRIES, typeof _ENTRIES === "undefined" ? {} : _ENTRIES, __cargoContext._ENTRIES || {});\n__cargoContext._ENTRIES = __cargoEntries;\n__cargoContext.webpackChunk_N_E = globalThis.webpackChunk_N_E;\nexport default true;\n//# cargoEdgeImport=${edgeImportSequence++}\n//# sourceURL=${normalized}\n`;
+      const source = `const __nuriteoBridge = globalThis.__nuriteoGeneratedModuleBridges.get(${JSON.stringify(token)});\nconst __nuriteoContext = __nuriteoBridge.edgeContext;\nglobalThis.process = __nuriteoContext.process;\nglobalThis.Buffer = __nuriteoContext.Buffer;\nglobalThis.AsyncLocalStorage = __nuriteoContext.AsyncLocalStorage;\nglobalThis._ENTRIES = __nuriteoContext._ENTRIES || {};\nglobalThis.webpackChunk_N_E = __nuriteoContext.webpackChunk_N_E || [];\nconst self = globalThis;\nconst global = __nuriteoContext;\nconst process = __nuriteoContext.process;\nconst Buffer = __nuriteoContext.Buffer;\nconst require = __nuriteoBridge.edgeRequire;\n${edgeSource}\nconst __nuriteoEntries = Object.assign(globalThis._ENTRIES, typeof _ENTRIES === "undefined" ? {} : _ENTRIES, __nuriteoContext._ENTRIES || {});\n__nuriteoContext._ENTRIES = __nuriteoEntries;\n__nuriteoContext.webpackChunk_N_E = globalThis.webpackChunk_N_E;\nexport default true;\n//# nuriteoEdgeImport=${edgeImportSequence++}\n//# sourceURL=${normalized}\n`;
       try {
         await importSource(source);
       } finally {
@@ -1083,7 +1083,7 @@ function listGeneratedCjsFiles(reader: WorkspaceModuleReader, root: string): str
 }
 
 function createGeneratedCjsModuleSource(token: string, paths: readonly string[], reader: WorkspaceModuleReader): string {
-  const prelude = `const __cargoBridge = globalThis.__cargoGeneratedModuleBridges.get(${JSON.stringify(token)});\n`;
+  const prelude = `const __nuriteoBridge = globalThis.__nuriteoGeneratedModuleBridges.get(${JSON.stringify(token)});\n`;
   return prelude + paths.map((path) => {
     let source = reader.readText(path).replace(/^#![^\n]*(?:\n|$)/, "");
     if (path.endsWith("/webpack-runtime.js")) {
@@ -1093,7 +1093,7 @@ function createGeneratedCjsModuleSource(token: string, paths: readonly string[],
       }
       ${invocation}`);
     }
-    return `// ${path}\n__cargoBridge.register(${JSON.stringify(path)}, function(exports, require, module, __filename, __dirname, process, global, console, Buffer, setTimeout, clearTimeout, setInterval, clearInterval, setImmediate, clearImmediate) {\n${source}\n});\n`;
+    return `// ${path}\n__nuriteoBridge.register(${JSON.stringify(path)}, function(exports, require, module, __filename, __dirname, process, global, console, Buffer, setTimeout, clearTimeout, setInterval, clearInterval, setImmediate, clearImmediate) {\n${source}\n});\n`;
   }).join("") + "export default true;\n";
 }
 
@@ -1657,8 +1657,8 @@ function createCliWorkerThreadsBuiltin(options: {
         });
         this.#port.onMessage((value) => {
           if (this.#terminated) return;
-          if (value && typeof value === "object" && "__cargoNestedWorkerError" in value) {
-            this.#fail(new Error(String(value.__cargoNestedWorkerError)));
+          if (value && typeof value === "object" && "__nuriteoNestedWorkerError" in value) {
+            this.#fail(new Error(String(value.__nuriteoNestedWorkerError)));
             return;
           }
           this.onmessage?.({ data: value });

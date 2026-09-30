@@ -143,8 +143,8 @@ export class BrowserRuntimeSupervisor {
     }
 
     this.#status = "booting";
-    const systemWorker = this.#createWorker(this.#options.systemWorkerUrl, "cargo-container-system");
-    const processWorker = this.#createWorker(this.#options.processWorkerUrl, "cargo-container-process-0");
+    const systemWorker = this.#createWorker(this.#options.systemWorkerUrl, "nuriteo-system");
+    const processWorker = this.#createWorker(this.#options.processWorkerUrl, "nuriteo-process-0");
     const channel = new MessageChannel();
     const syncChannel = this.#createSyncChannel(bootOptions);
 

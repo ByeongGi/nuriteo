@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 
 export async function runReferenceNode(source, options = {}) {
-  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "cargo-container-ref-node-"));
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "nuriteo-ref-node-"));
   const entry = path.join(cwd, "entry.mjs");
   fs.writeFileSync(entry, source);
 

@@ -1,11 +1,11 @@
-export const PREVIEW_ERROR_BRIDGE_MESSAGE_TYPE = "cargo-preview-error";
+export const PREVIEW_ERROR_BRIDGE_MESSAGE_TYPE = "nuriteo-preview-error";
 
 export const PREVIEW_ERROR_BRIDGE_SCRIPT = [
   "(function(){",
-  "if(window.__cargoPreviewErrorBridge)return;",
-  "window.__cargoPreviewErrorBridge=true;",
+  "if(window.__nuriteoPreviewErrorBridge)return;",
+  "window.__nuriteoPreviewErrorBridge=true;",
   "function send(payload){",
-  "try{parent.postMessage(Object.assign({type:'cargo-preview-error'},payload),'*');}catch(_){}",
+  "try{parent.postMessage(Object.assign({type:'nuriteo-preview-error'},payload),'*');}catch(_){}",
   "}",
   "window.addEventListener('error',function(event){",
   "send({source:'error',message:event.message||String(event.error||'error'),filename:event.filename,lineno:event.lineno,colno:event.colno,stack:event.error&&event.error.stack});",
@@ -29,7 +29,7 @@ export const PREVIEW_ERROR_BRIDGE_SCRIPT = [
 ].join("");
 
 export function injectPreviewErrorBridge(html: string): string {
-  const tag = `<script data-cargo-preview-error-bridge="1">${PREVIEW_ERROR_BRIDGE_SCRIPT}</script>`;
+  const tag = `<script data-nuriteo-preview-error-bridge="1">${PREVIEW_ERROR_BRIDGE_SCRIPT}</script>`;
   const lower = html.toLowerCase();
   const bodyClose = lower.lastIndexOf("</body>");
   if (bodyClose >= 0) return `${html.slice(0, bodyClose)}${tag}${html.slice(bodyClose)}`;

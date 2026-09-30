@@ -9,7 +9,7 @@ import { loadExtensionPermissions, saveExtensionPermissions } from "../lib/exten
 import type { LspDiagnostic } from "../lib/lspProtocol";
 import { monacoModelPath } from "../lib/monacoProjectSync";
 
-const DIAGNOSTIC_OWNER = "cargo-extension-host";
+const DIAGNOSTIC_OWNER = "nuriteo-extension-host";
 const EMPTY_SNAPSHOT: ExtensionManagerSnapshot = { extensions: [] };
 
 export function ExtensionHostPanel({ model, onError }: { model: PreviewControllerModel; onError: (message: string) => void }) {
@@ -90,24 +90,24 @@ export function ExtensionHostPanel({ model, onError }: { model: PreviewControlle
   const workspaceGrants = permissions[BUILTIN_WORKSPACE_TOOLS_MANIFEST.id] ?? [];
 
   return (
-    <section className="border-b border-cargo-line px-3 py-2" aria-label="Isolated extension hosts">
-      <p className="text-[11px] font-semibold tracking-wide text-cargo-muted uppercase">Isolated extension hosts</p>
+    <section className="border-b border-nuriteo-line px-3 py-2" aria-label="Isolated extension hosts">
+      <p className="text-[11px] font-semibold tracking-wide text-nuriteo-muted uppercase">Isolated extension hosts</p>
       <div className="mt-1 space-y-1">
         {snapshot.extensions.map((extension) => (
-          <p key={extension.id} className="text-sm text-cargo-ink">
+          <p key={extension.id} className="text-sm text-nuriteo-ink">
             <span className="font-medium">{extension.name}</span> · {extension.state}
             {extension.error ? <span className="text-red-400"> · {extension.error}</span> : null}
           </p>
         ))}
       </div>
-      <p className="mt-1 text-[11px] text-cargo-muted">worker-per-extension · signed · integrity pinned · capability brokered</p>
+      <p className="mt-1 text-[11px] text-nuriteo-muted">worker-per-extension · signed · integrity pinned · capability brokered</p>
       <div className="mt-2 flex flex-wrap gap-1.5">
         <button
           id="extension-run-command"
           type="button"
           className="btn-small"
           disabled={workspaceStatus?.state !== "active" || !workspaceGrants.includes("commands.register")}
-          onClick={() => void executeCommand("cargo.workspaceTools.hello")}
+          onClick={() => void executeCommand("nuriteo.workspaceTools.hello")}
         >
           Run command
         </button>
@@ -116,7 +116,7 @@ export function ExtensionHostPanel({ model, onError }: { model: PreviewControlle
           type="button"
           className="btn-small btn-ghost"
           disabled={workspaceStatus?.state !== "active" || !selectedDocument || !workspaceGrants.includes("workspace.write")}
-          onClick={() => void executeCommand("cargo.workspaceTools.sortLines")}
+          onClick={() => void executeCommand("nuriteo.workspaceTools.sortLines")}
         >
           Sort lines
         </button>
@@ -130,10 +130,10 @@ export function ExtensionHostPanel({ model, onError }: { model: PreviewControlle
           Crash + recover
         </button>
       </div>
-      <div className="mt-2 space-y-2 text-[11px] text-cargo-muted">
+      <div className="mt-2 space-y-2 text-[11px] text-nuriteo-muted">
         {BUILTIN_EXTENSION_MANIFESTS.map((manifest) => (
-          <fieldset key={manifest.id} className="rounded border border-cargo-line p-2">
-            <legend className="px-1 font-medium text-cargo-ink">{manifest.id}</legend>
+          <fieldset key={manifest.id} className="rounded border border-nuriteo-line p-2">
+            <legend className="px-1 font-medium text-nuriteo-ink">{manifest.id}</legend>
             {manifest.capabilities.map((capability) => (
               <label key={capability} className="flex items-center gap-2">
                 <input
@@ -148,8 +148,8 @@ export function ExtensionHostPanel({ model, onError }: { model: PreviewControlle
           </fieldset>
         ))}
       </div>
-      {message ? <p id="extension-command-result" className="mt-2 text-xs text-cargo-accent-strong">{message}</p> : null}
-      <p id="extension-grants" className="mt-2 font-mono text-[10px] text-cargo-muted">
+      {message ? <p id="extension-command-result" className="mt-2 text-xs text-nuriteo-accent-strong">{message}</p> : null}
+      <p id="extension-grants" className="mt-2 font-mono text-[10px] text-nuriteo-muted">
         grants: {workspaceGrants.join(", ") || "none"} · recoveries {workspaceStatus?.recoveryCount ?? 0}/1
       </p>
     </section>

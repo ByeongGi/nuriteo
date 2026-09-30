@@ -272,11 +272,11 @@ assert.deepEqual(await dns.promises.lookup("localhost"), { address: "127.0.0.1",
 assert.equal(await requireBuiltin("node:dns/promises").lookup("example.test", { family: 4 }), "0.0.0.0");
 
 const querystring = requireBuiltin("querystring");
-assert.deepEqual({ ...querystring.parse("name=cargo+container&tag=web&tag=runtime") }, {
-  name: "cargo container",
+assert.deepEqual({ ...querystring.parse("name=nuriteo+runtime&tag=web&tag=runtime") }, {
+  name: "nuriteo runtime",
   tag: ["web", "runtime"]
 });
-assert.equal(querystring.stringify({ name: "cargo container", tag: ["web", "runtime"] }), "name=cargo%20container&tag=web&tag=runtime");
+assert.equal(querystring.stringify({ name: "nuriteo runtime", tag: ["web", "runtime"] }), "name=nuriteo%20runtime&tag=web&tag=runtime");
 
 const { StringDecoder } = requireBuiltin("node:string_decoder");
 const decoder = new StringDecoder("utf8");

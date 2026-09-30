@@ -5,7 +5,7 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 
 const root = new URL("../../..", import.meta.url).pathname;
-const packageTarball = path.join(root, "dist/sdk/cargo-container-sdk-0.1.0-beta.1.tgz");
+const packageTarball = path.join(root, "dist/sdk/nuriteo-sdk-0.1.0-beta.1.tgz");
 
 if (!fs.existsSync(packageTarball)) {
   throw new Error("SDK package tarball missing; run tooling/release/package-sdk.ts first");
@@ -19,7 +19,7 @@ try {
       build: "next build"
     },
     dependencies: {
-      "@cargo-container/sdk": packageTarball,
+      "@nuriteo/sdk": packageTarball,
       "next": "16.3.5",
       "react": "19.3.0",
       "react-dom": "19.3.0"
@@ -27,7 +27,7 @@ try {
   }, null, 2)}\n`);
   fs.writeFileSync(path.join(workdir, "next.config.mjs"), [
     "const nextConfig = {",
-    "  transpilePackages: ['@cargo-container/sdk']",
+    "  transpilePackages: ['@nuriteo/sdk']",
     "};",
     "",
     "export default nextConfig;",
@@ -49,7 +49,7 @@ try {
   fs.writeFileSync(path.join(workdir, "app/page.jsx"), [
     '"use client";',
     "",
-    'import { createContainer, protocolVersion } from "@cargo-container/sdk";',
+    'import { createContainer, protocolVersion } from "@nuriteo/sdk";',
     "",
     "export default function Page() {",
     "  const status = typeof window === 'undefined'",

@@ -53,12 +53,12 @@ export function ContextMenu({
       ref={ref}
       role="menu"
       aria-label="Context menu"
-      className="fixed z-[80] min-w-[160px] overflow-hidden rounded-lg border border-cargo-line bg-cargo-panel py-1 shadow-[var(--shadow)]"
+      className="fixed z-[80] min-w-[160px] overflow-hidden rounded-lg border border-nuriteo-line bg-nuriteo-panel py-1 shadow-[var(--shadow)]"
       style={{ left, top }}
     >
       {items.map((item) => {
         if (item.separator) {
-          return <div key={item.id} className="my-1 border-t border-cargo-line" role="separator" />;
+          return <div key={item.id} className="my-1 border-t border-nuriteo-line" role="separator" />;
         }
         return (
           <button
@@ -67,7 +67,7 @@ export function ContextMenu({
             role="menuitem"
             disabled={item.disabled}
             className={`flex w-full px-3 py-1.5 text-left text-xs ${
-              item.danger ? "text-cargo-bad hover:bg-cargo-bad/10" : "text-cargo-ink hover:bg-cargo-panel-2"
+              item.danger ? "text-nuriteo-bad hover:bg-nuriteo-bad/10" : "text-nuriteo-ink hover:bg-nuriteo-panel-2"
             } disabled:opacity-40`}
             onClick={() => {
               if (item.disabled) return;

@@ -56,13 +56,13 @@ export function CommandPalette({
         if (event.target === event.currentTarget) onClose();
       }}
     >
-      <div className="w-full max-w-xl overflow-hidden rounded-xl border border-cargo-line bg-cargo-panel shadow-[var(--shadow)]">
+      <div className="w-full max-w-xl overflow-hidden rounded-xl border border-nuriteo-line bg-nuriteo-panel shadow-[var(--shadow)]">
         <input
           autoFocus
           id="command-palette-input"
           value={query}
           placeholder={mode === "files" ? "Go to file…" : "Type a command…"}
-          className="w-full border-b border-cargo-line bg-transparent px-4 py-3 text-sm text-cargo-ink outline-none"
+          className="w-full border-b border-nuriteo-line bg-transparent px-4 py-3 text-sm text-nuriteo-ink outline-none"
           onChange={(event) => setQuery(event.target.value)}
           onKeyDown={(event) => {
             if (event.key === "Escape") {
@@ -92,14 +92,14 @@ export function CommandPalette({
         />
         <ul className="max-h-80 overflow-auto py-1">
           {items.length === 0 ? (
-            <li className="px-4 py-3 text-sm text-cargo-muted">No matches</li>
+            <li className="px-4 py-3 text-sm text-nuriteo-muted">No matches</li>
           ) : (
             items.map((item, itemIndex) => (
               <li key={item.id}>
                 <button
                   type="button"
                   className={`flex w-full items-center justify-between px-4 py-2 text-left text-sm ${
-                    itemIndex === index ? "bg-cargo-accent/15 text-cargo-accent-strong" : "text-cargo-ink hover:bg-cargo-panel-2"
+                    itemIndex === index ? "bg-nuriteo-accent/15 text-nuriteo-accent-strong" : "text-nuriteo-ink hover:bg-nuriteo-panel-2"
                   }`}
                   onMouseEnter={() => setIndex(itemIndex)}
                   onClick={() => {
@@ -109,7 +109,7 @@ export function CommandPalette({
                   }}
                 >
                   <span>{item.label}</span>
-                  {item.shortcut ? <span className="font-mono text-[11px] text-cargo-muted">{item.shortcut}</span> : null}
+                  {item.shortcut ? <span className="font-mono text-[11px] text-nuriteo-muted">{item.shortcut}</span> : null}
                 </button>
               </li>
             ))

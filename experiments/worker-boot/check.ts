@@ -146,7 +146,7 @@ async function main() {
   });
   const [serverLine] = await once(server.stdout, "data");
   const baseUrl = String(serverLine).trim();
-  const userDataDir = path.join("/private/tmp", `cargo-container-worker-boot-${process.pid}`);
+  const userDataDir = path.join("/private/tmp", `nuriteo-worker-boot-${process.pid}`);
   const debugPort = 9400 + (process.pid % 1000);
   const chrome = spawn(chromePath, [
     "--headless=new",

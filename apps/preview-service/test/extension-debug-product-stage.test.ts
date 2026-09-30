@@ -45,13 +45,13 @@ extensionServer.receive({
 });
 assert.deepEqual(
   ((extensionOutput.at(-1) as JsonRpcResponse).result as { contributions: { commands: string[] } }).contributions.commands,
-  ["cargo.workspaceTools.hello", "cargo.workspaceTools.sortLines"]
+  ["nuriteo.workspaceTools.hello", "nuriteo.workspaceTools.sortLines"]
 );
 extensionServer.receive({
   jsonrpc: "2.0",
   id: 2,
   method: "workspace/executeCommand",
-  params: { command: "cargo.workspaceTools.hello" }
+  params: { command: "nuriteo.workspaceTools.hello" }
 });
 assert.match(((extensionOutput.at(-1) as JsonRpcResponse).result as { message: string }).message, /isolated Workspace Tools/);
 extensionServer.receive({
@@ -59,7 +59,7 @@ extensionServer.receive({
   id: 3,
   method: "workspace/executeCommand",
   params: {
-    command: "cargo.workspaceTools.sortLines",
+    command: "nuriteo.workspaceTools.sortLines",
     document: { uri: "file:///workspace/example.ts", languageId: "typescript", version: 1, text: "z\na\n" }
   }
 });
@@ -82,7 +82,7 @@ const manager = new BrowserExtensionManager(
 await manager.start();
 assert.equal(manager.snapshot.extensions.find((extension) => extension.id === BUILTIN_WORKSPACE_TOOLS_MANIFEST.id)?.state, "active");
 assert.equal(manager.snapshot.extensions.find((extension) => extension.id === BUILTIN_CODE_HEALTH_MANIFEST.id)?.state, "stopped");
-const hello = await manager.executeCommand("cargo.workspaceTools.hello");
+const hello = await manager.executeCommand("nuriteo.workspaceTools.hello");
 assert.match(hello.message ?? "", /isolated Workspace Tools/);
 const extensionDiagnostics = await manager.provideDiagnostics({
   uri: "file:///workspace/example.ts",
@@ -90,7 +90,7 @@ const extensionDiagnostics = await manager.provideDiagnostics({
   version: 1,
   text: "console.log('remove me');\n"
 });
-assert.equal(extensionDiagnostics[0]?.code, "cargo-code-health-console");
+assert.equal(extensionDiagnostics[0]?.code, "nuriteo-code-health-console");
 assert.equal(manager.snapshot.extensions.find((extension) => extension.id === BUILTIN_CODE_HEALTH_MANIFEST.id)?.state, "active");
 await manager.recover(BUILTIN_WORKSPACE_TOOLS_MANIFEST.id);
 assert.equal(manager.snapshot.extensions.find((extension) => extension.id === BUILTIN_WORKSPACE_TOOLS_MANIFEST.id)?.recoveryCount, 1);

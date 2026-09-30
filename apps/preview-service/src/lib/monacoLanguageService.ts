@@ -15,7 +15,7 @@ export interface LanguageProblem {
   endColumn: number;
 }
 
-const INTERNAL_MODEL_PREFIXES = ["/__cargo_", "/__cargo_split__"];
+const INTERNAL_MODEL_PREFIXES = ["/__nuriteo_", "/__nuriteo_split__"];
 
 function problemSeverity(
   severity: monaco.MarkerSeverity,

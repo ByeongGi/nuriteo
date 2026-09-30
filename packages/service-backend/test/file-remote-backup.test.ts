@@ -11,7 +11,7 @@ import {
 import type { ProjectSnapshot } from "../src/index.ts";
 
 const testDirectory = fs.mkdtempSync(
-  path.join(os.tmpdir(), "cargo-file-remote-backup-")
+  path.join(os.tmpdir(), "nuriteo-file-remote-backup-")
 );
 const persistPath = path.join(testDirectory, "nested", "remote-backup.json");
 
@@ -87,7 +87,7 @@ try {
     entries: Array<{ projectId: string }>;
   };
   assert.equal(persisted.schemaVersion, FILE_REMOTE_BACKUP_SCHEMA_VERSION);
-  assert.equal(persisted.kind, "cargo-container.remote-backup");
+  assert.equal(persisted.kind, "nuriteo.remote-backup");
   assert.deepEqual(persisted.entries.map((entry) => entry.projectId), ["project-a"]);
 
   const corruptPath = path.join(testDirectory, "corrupt.json");
@@ -105,7 +105,7 @@ try {
     unsupportedPath,
     JSON.stringify({
       schemaVersion: 999,
-      kind: "cargo-container.remote-backup",
+      kind: "nuriteo.remote-backup",
       entries: []
     }),
     "utf8"

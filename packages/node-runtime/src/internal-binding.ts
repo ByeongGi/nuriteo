@@ -5,14 +5,14 @@ type BindingProfile = { status: string; source: string; [key: string]: unknown }
 type BindingMap = Record<string, RuntimeValue>;
 
 export class UnsupportedBindingError extends Error {
-  code: "ERR_CARGO_CONTAINER_UNSUPPORTED_BINDING";
+  code: "ERR_NURITEO_UNSUPPORTED_BINDING";
   binding: string;
   profile: BindingProfile;
 
   constructor(name: string, profile: BindingProfile) {
     super(`Unsupported Node internal binding: ${name}`);
     this.name = "UnsupportedBindingError";
-    this.code = "ERR_CARGO_CONTAINER_UNSUPPORTED_BINDING";
+    this.code = "ERR_NURITEO_UNSUPPORTED_BINDING";
     this.binding = name;
     this.profile = profile;
   }

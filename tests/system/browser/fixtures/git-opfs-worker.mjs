@@ -36,7 +36,7 @@ async function createRuntime() {
       print,
       printErr
     },
-    user: "Cargo Container",
+    user: "NURITEO",
     email: "runtime@example.test"
   });
   git.capture = capture;
@@ -162,7 +162,7 @@ function validateRepository(git, dir) {
 
 function safeProject(value) {
   if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/.test(value || "")) throw coded("EGITPROJECT", "Invalid Git project ID");
-  return `cargo-container-${value}`;
+  return `nuriteo-${value}`;
 }
 
 function safePath(value) {

@@ -1,5 +1,5 @@
 {
-  "name": "cargo-container-wire",
+  "name": "nuriteo-wire",
   "abiVersion": 1,
   "magic": "CCON",
   "endianness": "little",

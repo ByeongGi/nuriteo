@@ -13,7 +13,7 @@ self.addEventListener("message", (event: MessageEvent) => {
     if (data?.type === "cli:nested:init" && data.request && !initializing) {
       initializing = true;
       initialize(data.request).catch((error) => {
-        self.postMessage({ __cargoNestedWorkerError: error instanceof Error ? error.stack || error.message : String(error) });
+        self.postMessage({ __nuriteoNestedWorkerError: error instanceof Error ? error.stack || error.message : String(error) });
       });
     } else {
       queuedMessages.push(event.data);
@@ -39,7 +39,7 @@ async function loadPinnedNextFactories() {
   const factoryUrl = new URL("../vendor/next-cli-15.5.26.mjs", self.location.href);
   const response = await fetch(factoryUrl, { cache: "no-store" });
   const bytes = new Uint8Array(await response.arrayBuffer());
-  if (!response.ok || await sha256(bytes) !== "0c80f579cc4b21846c13c5786fa3228bc722361a32f70f49c4bbbb964262e201") {
+  if (!response.ok || await sha256(bytes) !== "0c103d7af3c610283437fd6f326f5b6b9aa8aa53880926a7e509d2433c515224") {
     throw new Error("ERR_NEXT_CSP_NESTED_FACTORY_INTEGRITY");
   }
   const factories = await import(/* @vite-ignore */ factoryUrl.href);

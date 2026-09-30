@@ -45,7 +45,7 @@ validateWasiFilesystemAccess(boundary, jqFixturePath, "read");
 const jqInput = JSON.parse(fs.readFileSync(jqFixturePath, "utf8"));
 assert.deepEqual(
   jqRuntime.json(jqInput, '[.packages[] | select(.kind == "runtime" and .supported) | .name]'),
-  [["@cargo-container/runtime", "@cargo-container/preview"]]
+  [["@nuriteo/runtime", "@nuriteo/preview"]]
 );
 assert.ok(jqColdStartMs <= jq.performance.coldStartBudgetMs, `jq cold start exceeded budget: ${jqColdStartMs}`);
 assert.throws(() => validateWasiFilesystemAccess(boundary, path.resolve(root, "../credential.txt"), "read"), { code: "EWASIPATH" });

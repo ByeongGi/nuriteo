@@ -13,7 +13,7 @@
       "assets/system_wasm.wasm",
       "workers/system-worker.ts",
       "workers/process-worker.ts",
-      "cargo-container-sdk.tgz"
+      "nuriteo-sdk.tgz"
     ]
   },
   "cacheHeaders": {

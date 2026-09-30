@@ -119,9 +119,9 @@ function runPlan(extraArgs) {
 
 function verifyFailedRunPreservesCanonicalAndCleansUp() {
   const canonicalBefore = fs.readFileSync(canonicalPath);
-  const tempPrefix = "cargo-container-public-rescore-";
+  const tempPrefix = "nuriteo-public-rescore-";
   const workdirsBefore = new Set(fs.readdirSync(os.tmpdir()).filter((entry) => entry.startsWith(tempPrefix)));
-  const testRoot = fs.mkdtempSync(path.join(os.tmpdir(), "cargo-container-rescore-safety-test-"));
+  const testRoot = fs.mkdtempSync(path.join(os.tmpdir(), "nuriteo-rescore-safety-test-"));
   const existingOutput = path.join(testRoot, "existing.json");
   const sentinel = "existing-review-artifact\n";
   fs.writeFileSync(existingOutput, sentinel);

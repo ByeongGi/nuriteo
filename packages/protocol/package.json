@@ -1,7 +1,8 @@
 {
-  "name": "@cargo-container/protocol",
+  "name": "@nuriteo/protocol",
   "version": "0.0.0",
   "private": true,
+  "license": "Apache-2.0",
   "type": "module",
   "exports": {
     ".": "./src/index.ts"

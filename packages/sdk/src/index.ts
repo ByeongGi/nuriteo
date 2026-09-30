@@ -1,44 +1,44 @@
-export { protocolVersion } from "@cargo-container/protocol";
-export { CargoContainer, createContainer } from "./container.ts";
+export { protocolVersion } from "@nuriteo/protocol";
+export { Nuriteo, createContainer } from "./container.ts";
 export {
-  CargoContainerServices,
-  CargoFileSystemApi,
-  CargoPackageManagerApi,
-  CargoPreviewApi,
-  CargoProcessApi,
-  CargoProjectApi,
-  registerCargoPreviewServiceWorker,
-  resolveCargoWorkerAssets,
+  NuriteoServices,
+  NuriteoFileSystemApi,
+  NuriteoPackageManagerApi,
+  NuriteoPreviewApi,
+  NuriteoProcessApi,
+  NuriteoProjectApi,
+  registerNuriteoPreviewServiceWorker,
+  resolveNuriteoWorkerAssets,
   SdkError
 } from "./services.ts";
-export { CargoWebContainer, CargoWebContainerFileSystem, createCargoMountSnapshot, createCargoWebContainer } from "./webcontainer.ts";
+export { NuriteoWebContainer, NuriteoWebContainerFileSystem, createNuriteoMountSnapshot, createNuriteoWebContainer } from "./webcontainer.ts";
 export type {
-  CargoCoepMode,
-  CargoFileSystemTree,
-  CargoFileSystemTreeNode,
-  CargoMountSnapshot,
-  CargoSpawnOptions,
-  CargoWebContainerEventName,
-  CargoWebContainerLifecycle,
-  CargoWebContainerOptions
+  NuriteoCoepMode,
+  NuriteoFileSystemTree,
+  NuriteoFileSystemTreeNode,
+  NuriteoMountSnapshot,
+  NuriteoSpawnOptions,
+  NuriteoWebContainerEventName,
+  NuriteoWebContainerLifecycle,
+  NuriteoWebContainerOptions
 } from "./webcontainer.ts";
 export type {
-  CargoCommandResult,
-  CargoContainerServicesOptions,
-  CargoFileEntry,
-  CargoFileSystemAdapter,
-  CargoFileWatchEvent,
-  CargoPackageCommandOptions,
-  CargoPackageManagerAdapter,
-  CargoPreviewAdapter,
-  CargoPreviewEvent,
-  CargoPreviewPort,
-  CargoProcessAdapter,
-  CargoProcessHandle,
-  CargoProcessSpawnOptions,
-  CargoProjectAdapter,
-  CargoSdkTraceEvent,
-  CargoWorkerAssets,
-  RegisterCargoPreviewServiceWorkerOptions,
+  NuriteoCommandResult,
+  NuriteoServicesOptions,
+  NuriteoFileEntry,
+  NuriteoFileSystemAdapter,
+  NuriteoFileWatchEvent,
+  NuriteoPackageCommandOptions,
+  NuriteoPackageManagerAdapter,
+  NuriteoPreviewAdapter,
+  NuriteoPreviewEvent,
+  NuriteoPreviewPort,
+  NuriteoProcessAdapter,
+  NuriteoProcessHandle,
+  NuriteoProcessSpawnOptions,
+  NuriteoProjectAdapter,
+  NuriteoSdkTraceEvent,
+  NuriteoWorkerAssets,
+  RegisterNuriteoPreviewServiceWorkerOptions,
   SdkErrorCode
 } from "./services.ts";

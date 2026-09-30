@@ -22,7 +22,7 @@ const internalBinding = createInternalBindingRegistry({});
 assert.throws(
   () => internalBinding("stream_wrap"),
   (error) => error instanceof UnsupportedBindingError
-    && error.code === "ERR_CARGO_CONTAINER_UNSUPPORTED_BINDING"
+    && error.code === "ERR_NURITEO_UNSUPPORTED_BINDING"
     && error.binding === "stream_wrap"
     && error.profile.status === "unknown"
 );

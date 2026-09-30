@@ -23,23 +23,23 @@ export function TopBar({ model }: { model: PreviewControllerModel }) {
     : "No project open";
 
   return (
-    <header className="grid h-14 shrink-0 grid-cols-[minmax(180px,1fr)_auto_minmax(160px,1fr)] items-center gap-3 border-b border-cargo-line bg-cargo-elevated/95 px-3.5">
+    <header className="grid h-14 shrink-0 grid-cols-[minmax(180px,1fr)_auto_minmax(160px,1fr)] items-center gap-3 border-b border-nuriteo-line bg-nuriteo-elevated/95 px-3.5">
       <div className="flex min-w-0 items-center gap-2.5">
         <span
           aria-hidden
-          className="size-7 shrink-0 border-2 border-cargo-accent"
+          className="size-7 shrink-0 border-2 border-nuriteo-accent"
           style={{
             background:
               "linear-gradient(135deg, transparent 46%, var(--accent) 46% 54%, transparent 54%), linear-gradient(45deg, transparent 46%, var(--accent) 46% 54%, transparent 54%)"
           }}
         />
         <div className="flex min-w-0 flex-col gap-0.5">
-          <strong className="text-sm font-semibold text-cargo-ink">Cargo Container</strong>
-          <span id="project-meta" className="truncate font-mono text-[11px] font-medium text-cargo-muted">
+          <strong className="text-sm font-semibold text-nuriteo-ink">NURITEO</strong>
+          <span id="project-meta" className="truncate font-mono text-[11px] font-medium text-nuriteo-muted">
             {meta}
           </span>
         </div>
-        <div className="ml-1 shrink-0 border-l border-cargo-line pl-1">
+        <div className="ml-1 shrink-0 border-l border-nuriteo-line pl-1">
           <AppMenuBar
             hasProject={hasProject}
             hasSelectedFile={Boolean(model.selectedPath)}
@@ -129,7 +129,7 @@ export function TopBar({ model }: { model: PreviewControllerModel }) {
 
       <div className="flex items-center justify-end gap-2" aria-live="polite">
         <NotificationCenter model={model} />
-        <span className="hidden font-mono text-[11px] text-cargo-muted sm:inline">
+        <span className="hidden font-mono text-[11px] text-nuriteo-muted sm:inline">
           dirty {changeStatus.dirty.length}
         </span>
         <button type="button" className="btn" title="Zen mode" onClick={() => toggleZenMode()}>

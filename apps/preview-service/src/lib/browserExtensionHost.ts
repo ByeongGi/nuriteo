@@ -27,7 +27,7 @@ export class BrowserExtensionHost {
     createTransport = () => HostProcessJsonRpcTransport.start(
       "file:///workspace",
       {
-        resource: `worker://cargo/extensions/${manifest.id}`,
+        resource: `worker://nuriteo/extensions/${manifest.id}`,
         projectId: manifest.id,
         createWorker: () => new Worker(
           new URL("../workers/extensionHost.worker.ts", import.meta.url),
@@ -96,7 +96,7 @@ export class BrowserExtensionHost {
   }
 
   executeHelloCommand(): Promise<string> {
-    return this.executeCommand("cargo.workspaceTools.hello").then((result) => result.message ?? "");
+    return this.executeCommand("nuriteo.workspaceTools.hello").then((result) => result.message ?? "");
   }
 
   async simulateCrashAndRecover(): Promise<void> {

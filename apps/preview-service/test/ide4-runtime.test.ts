@@ -49,9 +49,9 @@ assert.ok(
 
 const html = "<html><body><h1>preview</h1></body></html>";
 const injected = injectPreviewErrorBridge(html);
-assert.match(injected, /cargo-preview-error/);
+assert.match(injected, /nuriteo-preview-error/);
 assert.match(injected, new RegExp(PREVIEW_ERROR_BRIDGE_MESSAGE_TYPE));
-assert.ok(injected.indexOf("data-cargo-preview-error-bridge") < injected.toLowerCase().indexOf("</body>"));
+assert.ok(injected.indexOf("data-nuriteo-preview-error-bridge") < injected.toLowerCase().indexOf("</body>"));
 
 controller.setPreviewErrorBridge(true);
 const pathZip = controller.exportPathZip("src");

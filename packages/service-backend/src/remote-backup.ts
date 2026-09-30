@@ -79,7 +79,7 @@ interface FileRemoteBackupEntry {
 
 interface FileRemoteBackupState {
   schemaVersion: typeof FILE_REMOTE_BACKUP_SCHEMA_VERSION;
-  kind: "cargo-container.remote-backup";
+  kind: "nuriteo.remote-backup";
   entries: FileRemoteBackupEntry[];
 }
 
@@ -172,7 +172,7 @@ export class FileRemoteBackup implements RemoteBackupAdapter {
   #dump(): FileRemoteBackupState {
     return {
       schemaVersion: FILE_REMOTE_BACKUP_SCHEMA_VERSION,
-      kind: "cargo-container.remote-backup",
+      kind: "nuriteo.remote-backup",
       entries: [...this.#byProject.entries()]
         .map(([projectId, snapshot]) => ({
           projectId,
@@ -265,8 +265,8 @@ function validateState(value: unknown, persistPath: string): FileRemoteBackupSta
       `unsupported schemaVersion ${String(value.schemaVersion)}`
     );
   }
-  if (value.kind !== "cargo-container.remote-backup") {
-    throw invalidBackup(persistPath, "kind must be cargo-container.remote-backup");
+  if (value.kind !== "nuriteo.remote-backup") {
+    throw invalidBackup(persistPath, "kind must be nuriteo.remote-backup");
   }
   if (!Array.isArray(value.entries)) {
     throw invalidBackup(persistPath, "entries must be an array");

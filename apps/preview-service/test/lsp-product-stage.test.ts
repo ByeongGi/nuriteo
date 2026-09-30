@@ -31,7 +31,7 @@ server.receive({
       uri: "file:///workspace/source.ts",
       languageId: "typescript",
       version: 1,
-      text: "export const cargoAnswer: number = 42; // FIXME\nexport function add(left: number, right: number) { return left + right; }\n"
+      text: "export const nuriteoAnswer: number = 42; // FIXME\nexport function add(left: number, right: number) { return left + right; }\n"
     }
   }
 });
@@ -43,7 +43,7 @@ server.receive({
       uri: "file:///workspace/consumer.ts",
       languageId: "typescript",
       version: 1,
-      text: "import { add, cargoAnswer } from './source';\nconst value: string = cargoAnswer;\nadd(1, 2);\ncar"
+      text: "import { add, nuriteoAnswer } from './source';\nconst value: string = nuriteoAnswer;\nadd(1, 2);\ncar"
     }
   }
 });
@@ -52,7 +52,7 @@ const published = output.filter(
   (message): message is JsonRpcNotification => "method" in message && message.method === "textDocument/publishDiagnostics"
 );
 const sourceDiagnostics = published.find((message) => (message.params as { uri: string }).uri.endsWith("source.ts"));
-assert.ok((sourceDiagnostics?.params as { diagnostics: Array<{ code: string }> }).diagnostics.some((entry) => entry.code === "cargo-lsp-fixme"));
+assert.ok((sourceDiagnostics?.params as { diagnostics: Array<{ code: string }> }).diagnostics.some((entry) => entry.code === "nuriteo-lsp-fixme"));
 const consumerDiagnostics = published.find((message) => (message.params as { uri: string }).uri.endsWith("consumer.ts"));
 assert.ok((consumerDiagnostics?.params as { diagnostics: Array<{ code: number }> }).diagnostics.some((entry) => entry.code === 2322));
 
@@ -60,7 +60,7 @@ const completion = await request(2, "textDocument/completion", {
   textDocument: { uri: "file:///workspace/consumer.ts" },
   position: { line: 3, character: 3 }
 });
-assert.ok((completion.result as Array<{ label: string }>).some((item) => item.label === "cargoAnswer"));
+assert.ok((completion.result as Array<{ label: string }>).some((item) => item.label === "nuriteoAnswer"));
 
 const definition = await request(3, "textDocument/definition", {
   textDocument: { uri: "file:///workspace/consumer.ts" },
@@ -79,7 +79,7 @@ const hover = await request(5, "textDocument/hover", {
   textDocument: { uri: "file:///workspace/consumer.ts" },
   position: { line: 1, character: 24 }
 });
-assert.match((hover.result as { contents: { value: string } }).contents.value, /cargoAnswer/);
+assert.match((hover.result as { contents: { value: string } }).contents.value, /nuriteoAnswer/);
 
 const signature = await request(6, "textDocument/signatureHelp", {
   textDocument: { uri: "file:///workspace/consumer.ts" },
@@ -96,8 +96,8 @@ const changes = (rename.result as { changes: Record<string, unknown[]> }).change
 assert.ok((changes["file:///workspace/source.ts"]?.length ?? 0) >= 1);
 assert.ok((changes["file:///workspace/consumer.ts"]?.length ?? 0) >= 1);
 const workspaceFiles = new Map([
-  ["/workspace/source.ts", "export const cargoAnswer: number = 42; // FIXME\nexport function add(left: number, right: number) { return left + right; }\n"],
-  ["/workspace/consumer.ts", "import { add, cargoAnswer } from './source';\nconst value: string = cargoAnswer;\nadd(1, 2);\ncar"]
+  ["/workspace/source.ts", "export const nuriteoAnswer: number = 42; // FIXME\nexport function add(left: number, right: number) { return left + right; }\n"],
+  ["/workspace/consumer.ts", "import { add, nuriteoAnswer } from './source';\nconst value: string = nuriteoAnswer;\nadd(1, 2);\ncar"]
 ]);
 assert.deepEqual(applyLspWorkspaceEdit(rename.result as { changes: Record<string, never[]> }, {
   root: "/workspace",
@@ -156,7 +156,7 @@ server.receive({
 });
 const clearedDiagnostics = output.at(-1) as JsonRpcNotification;
 assert.equal((clearedDiagnostics.params as { version: number }).version, 2);
-assert.ok(!(clearedDiagnostics.params as { diagnostics: Array<{ code: string }> }).diagnostics.some((entry) => entry.code === "cargo-lsp-fixme"));
+assert.ok(!(clearedDiagnostics.params as { diagnostics: Array<{ code: string }> }).diagnostics.some((entry) => entry.code === "nuriteo-lsp-fixme"));
 
 server.receive({
   jsonrpc: "2.0",
@@ -185,7 +185,7 @@ class LoopbackTransport implements JsonRpcTransport {
 
   send(message: JsonRpcMessage): void {
     this.messages.push(message);
-    if (!("id" in message) || !("method" in message) || message.method === "cargo/slow") return;
+    if (!("id" in message) || !("method" in message) || message.method === "nuriteo/slow") return;
     queueMicrotask(() => this.listener?.({ jsonrpc: "2.0", id: message.id, result: message.method }));
   }
 
@@ -203,9 +203,9 @@ class LoopbackTransport implements JsonRpcTransport {
 
 const transport = new LoopbackTransport();
 const client = new JsonRpcClient(transport);
-assert.equal(await client.request("cargo/ping"), "cargo/ping");
+assert.equal(await client.request("nuriteo/ping"), "nuriteo/ping");
 const abort = new AbortController();
-const slow = client.request("cargo/slow", {}, 10_000, abort.signal);
+const slow = client.request("nuriteo/slow", {}, 10_000, abort.signal);
 abort.abort(new Error("cancelled by test"));
 await assert.rejects(slow, /cancelled by test/);
 assert.ok(transport.messages.some((message) => "method" in message && message.method === "$/cancelRequest"));

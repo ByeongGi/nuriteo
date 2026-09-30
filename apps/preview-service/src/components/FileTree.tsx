@@ -1,7 +1,7 @@
 import { useMemo, useState, type DragEvent, type MouseEvent } from "react";
 import clsx from "clsx";
 import { Braces, ChevronDown, ChevronRight, File, FileCode2, FileJson, FilePlus2, FileText, Folder, FolderPlus, Copy, Eye, EyeOff, FoldVertical, Palette, RefreshCw } from "lucide-react";
-import type { ProjectWorkspaceTreeNode } from "@cargo-container/browser-host";
+import type { ProjectWorkspaceTreeNode } from "@nuriteo/browser-host";
 import type { PreviewControllerModel } from "../hooks/usePreviewController";
 import { createGitignoreMatcher, type GitignoreMatcher } from "../lib/gitignore";
 import { ContextMenu, type ContextMenuItem } from "./ContextMenu";
@@ -17,7 +17,7 @@ type DragPayload = {
   isDirectory: boolean;
 };
 
-const DRAG_MIME = "application/x-cargo-path";
+const DRAG_MIME = "application/x-nuriteo-path";
 
 function filterTree(nodes: ProjectWorkspaceTreeNode[], query: string): ProjectWorkspaceTreeNode[] {
   if (!query) return nodes;
@@ -100,7 +100,7 @@ function TreeNodes({
   depth?: number;
 }) {
   return (
-    <ul className={clsx("space-y-0.5", depth === 0 ? "" : "ml-3 border-l border-cargo-line/70 pl-2")}>
+    <ul className={clsx("space-y-0.5", depth === 0 ? "" : "ml-3 border-l border-nuriteo-line/70 pl-2")}>
       {nodes.map((node) => (
         <TreeNode
           key={`${node.path}:${collapseToken}`}
@@ -156,8 +156,8 @@ function TreeNode({
         <div
           className={clsx(
             "group flex items-center gap-0.5 rounded-md",
-            isDrop && "bg-cargo-accent/20 ring-1 ring-cargo-accent/50",
-            multiSelected && "bg-cargo-accent/10"
+            isDrop && "bg-nuriteo-accent/20 ring-1 ring-nuriteo-accent/50",
+            multiSelected && "bg-nuriteo-accent/10"
           )}
           draggable
           onDragStart={(event) => onDragStartNode(event, { path: node.path, isDirectory: true })}
@@ -167,7 +167,7 @@ function TreeNode({
         >
           <button
             type="button"
-            className="flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-2 py-1 text-left text-xs text-cargo-muted hover:bg-cargo-panel-2 hover:text-cargo-ink"
+            className="flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-2 py-1 text-left text-xs text-nuriteo-muted hover:bg-nuriteo-panel-2 hover:text-nuriteo-ink"
             onClick={(event) => {
               onOpen(node.path, event);
               setOpen((value) => !value);
@@ -211,8 +211,8 @@ function TreeNode({
           data-path={node.path}
           aria-current={node.path === selectedPath ? "true" : undefined}
           className={clsx(
-            "flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-2 py-1 text-left text-xs hover:bg-cargo-panel-2",
-            active ? "bg-cargo-accent/15 text-cargo-accent-strong" : "text-cargo-ink"
+            "flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-2 py-1 text-left text-xs hover:bg-nuriteo-panel-2",
+            active ? "bg-nuriteo-accent/15 text-nuriteo-accent-strong" : "text-nuriteo-ink"
           )}
           onClick={(event) => onOpen(node.path, event)}
           onDoubleClick={(event) => onOpen(node.path, event)}
@@ -420,8 +420,8 @@ export function FileTree({ model }: { model: PreviewControllerModel }) {
   return (
     <aside
       className={clsx(
-        "flex h-full min-h-0 min-w-0 flex-col border-r border-cargo-line bg-cargo-elevated/60",
-        dropTarget === (projectRoot || "__root__") && "ring-1 ring-inset ring-cargo-accent/40"
+        "flex h-full min-h-0 min-w-0 flex-col border-r border-nuriteo-line bg-nuriteo-elevated/60",
+        dropTarget === (projectRoot || "__root__") && "ring-1 ring-inset ring-nuriteo-accent/40"
       )}
       aria-label="Project files"
       onContextMenu={(event) => openContext(event, { kind: "blank" })}
@@ -429,8 +429,8 @@ export function FileTree({ model }: { model: PreviewControllerModel }) {
       onDragLeave={() => setDropTarget(null)}
       onDrop={onRootDrop}
     >
-      <div className="flex items-center justify-between gap-2 border-b border-cargo-line px-2 py-2">
-        <h2 className="px-1 text-[11px] font-semibold tracking-[0.14em] text-cargo-muted uppercase">Explorer</h2>
+      <div className="flex items-center justify-between gap-2 border-b border-nuriteo-line px-2 py-2">
+        <h2 className="px-1 text-[11px] font-semibold tracking-[0.14em] text-nuriteo-muted uppercase">Explorer</h2>
         <div className="flex items-center gap-0.5">
           <button
             id="file-new"
@@ -505,7 +505,7 @@ export function FileTree({ model }: { model: PreviewControllerModel }) {
           </button>
         </div>
       </div>
-      <div className="border-b border-cargo-line px-2 py-2">
+      <div className="border-b border-nuriteo-line px-2 py-2">
         <input
           id="file-filter"
           type="search"
@@ -513,12 +513,12 @@ export function FileTree({ model }: { model: PreviewControllerModel }) {
           aria-label="Filter files"
           value={filter}
           onChange={(event) => setFilter(event.target.value)}
-          className="w-full rounded-md border border-cargo-line bg-cargo-panel px-2.5 py-1.5 text-xs text-cargo-ink outline-none placeholder:text-cargo-muted focus:border-cargo-accent"
+          className="w-full rounded-md border border-nuriteo-line bg-nuriteo-panel px-2.5 py-1.5 text-xs text-nuriteo-ink outline-none placeholder:text-nuriteo-muted focus:border-nuriteo-accent"
         />
       </div>
       <div className="min-h-0 flex-1 overflow-auto p-2">
         {tree.length === 0 ? (
-          <p className="px-2 py-3 text-xs text-cargo-muted">
+          <p className="px-2 py-3 text-xs text-nuriteo-muted">
             No project files yet. Right-click to create one, or drop files here.
           </p>
         ) : (

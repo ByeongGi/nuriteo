@@ -54,9 +54,9 @@ const dependencyArtifacts = dependencyNames.map((name) => createNextDependencyAr
 const workflow = new NextProductWorkflow({ dependencyArtifacts, manager: "pnpm", nextPackageArtifact, port: 3045 });
 workflow.install();
 workflow.workspace.writeText("/workspace/app/app/layout.js", "export default function RootLayout({ children }) { return <html><body>{children}</body></html> }");
-workflow.workspace.writeText("/workspace/app/app/page.js", "export default function Page() { return <main><h1>Strict CSP Next Runtime</h1><p>{process.env.CARGO_PLUGIN_PROOF}</p></main> }");
-workflow.workspace.writeText("/workspace/app/next.config.js", "module.exports = { poweredByHeader: false, webpack(config, { webpack }) { config.plugins.push(new webpack.DefinePlugin({ 'process.env.CARGO_PLUGIN_PROOF': JSON.stringify('config-plugin-ran') })); return config; } };");
-workflow.workspace.writeText("/workspace/app/middleware.js", "import { NextResponse } from 'next/server'; export function middleware(request) { const response = NextResponse.next(); response.headers.set('x-cargo-middleware', request.nextUrl.pathname); return response; } export const config = { matcher: ['/about'] };");
+workflow.workspace.writeText("/workspace/app/app/page.js", "export default function Page() { return <main><h1>Strict CSP Next Runtime</h1><p>{process.env.NURITEO_PLUGIN_PROOF}</p></main> }");
+workflow.workspace.writeText("/workspace/app/next.config.js", "module.exports = { poweredByHeader: false, webpack(config, { webpack }) { config.plugins.push(new webpack.DefinePlugin({ 'process.env.NURITEO_PLUGIN_PROOF': JSON.stringify('config-plugin-ran') })); return config; } };");
+workflow.workspace.writeText("/workspace/app/middleware.js", "import { NextResponse } from 'next/server'; export function middleware(request) { const response = NextResponse.next(); response.headers.set('x-nuriteo-middleware', request.nextUrl.pathname); return response; } export const config = { matcher: ['/about'] };");
 workflow.workspace.writeText("/workspace/app/app/about/page.js", "export default function AboutPage() { return <main><h1>About Runtime</h1></main> }");
 workflow.workspace.writeText("/workspace/app/app/action/page.js", "import { redirect } from 'next/navigation'; export default function ActionPage() { async function submit() { 'use server'; redirect('/action?message=hello'); } return <form action={submit}><button type='submit'>Send</button></form>; }");
 workflow.workspace.writeText("/workspace/app/app/api/edge/route.js", "export const runtime = 'edge'; export async function GET() { return Response.json({ runtime: 'edge', ok: true }); }");
@@ -538,7 +538,7 @@ try {
   }
   const featureResponses = productionLifecycle.firstStart?.responses || {};
   assert.equal(featureResponses.about?.status, 200, featureResponses.about?.output?.stderr);
-  assert.equal(featureResponses.about?.headers?.["x-cargo-middleware"], "/about");
+  assert.equal(featureResponses.about?.headers?.["x-nuriteo-middleware"], "/about");
   assert.equal(featureResponses.legacy?.status, 200, featureResponses.legacy?.output?.stderr);
   assert.match(featureResponses.legacy?.body || "", /Pages Router Runtime/);
   assert.equal(featureResponses.edge?.status, 200, featureResponses.edge?.output?.stderr);

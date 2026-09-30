@@ -1,6 +1,6 @@
 # Preview Service App
 
-Product IDE for Cargo Container, built like a WebContainers-style workspace.
+Product IDE for NURITEO, built like a WebContainers-style workspace.
 
 ## Stack
 
@@ -11,7 +11,7 @@ Product IDE for Cargo Container, built like a WebContainers-style workspace.
 - **xterm** (`@xterm/xterm`) interactive terminal
 - **react-resizable-panels** for IDE layout
 - **lucide-react** icons
-- Workflow engine: `@cargo-container/preview-service`
+- Workflow engine: `@nuriteo/preview-service`
 
 ## IDE capabilities (IDE-1…4)
 

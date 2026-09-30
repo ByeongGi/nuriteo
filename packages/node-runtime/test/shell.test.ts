@@ -6,7 +6,7 @@ const shell = createShellRuntime({
   cwd: "/workspace/my app",
   env: {
     PATH: "/workspace/my app/node_modules/.bin:/bin",
-    NAME: "cargo"
+    NAME: "nuriteo"
   },
   files: {
     "/workspace/my app/node_modules/.bin/hello": "#!/usr/bin/env node\nconsole.log('from-bin')\n"
@@ -48,7 +48,7 @@ assert.equal(redirected.stdout, "");
 assert.equal(redirected.files["/workspace/my app/out file.txt"], "ok\n");
 
 const env = await shell.run("envcheck");
-assert.equal(env.stdout, "cargo:/workspace/my app\n");
+assert.equal(env.stdout, "nuriteo:/workspace/my app\n");
 
 const failed = await shell.run("false && echo skipped");
 assert.equal(failed.exitCode, 2);
@@ -91,7 +91,7 @@ for (const command of [
 }
 await assert.rejects(
   () => shell.run("echo $(pwd)"),
-  (error) => error instanceof ShellSyntaxError && error.code === "ERR_CARGO_CONTAINER_UNSUPPORTED_SHELL_SYNTAX" && /command substitution/.test(error.message)
+  (error) => error instanceof ShellSyntaxError && error.code === "ERR_NURITEO_UNSUPPORTED_SHELL_SYNTAX" && /command substitution/.test(error.message)
 );
 assert.equal((await shell.run("echo '$() & ; ||'" )).stdout, "$() & ; ||\n");
 assert.equal((await shell.run("echo 'value;not-an-operator'" )).stdout, "value;not-an-operator\n");

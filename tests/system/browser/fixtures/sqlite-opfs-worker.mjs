@@ -6,7 +6,7 @@ self.addEventListener("message", async (event) => {
     if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/.test(projectId) || !/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/.test(database)) {
       throw new Error("Invalid project-scoped SQLite namespace");
     }
-    const databasePath = `/cargo-container-${projectId}-${database}.sqlite3`;
+    const databasePath = `/nuriteo-${projectId}-${database}.sqlite3`;
     const diagnostics = [];
     const originalWarn = console.warn;
     const originalError = console.error;

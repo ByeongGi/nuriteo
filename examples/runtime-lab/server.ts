@@ -32,11 +32,11 @@ const mime: Record<string, string> = {
 };
 
 const browserImportAliases = new Map([
-  ["@cargo-container/browser-host", "/packages/browser-host/src/index.ts"],
-  ["@cargo-container/browser-host/supervisor", "/packages/browser-host/src/supervisor.ts"],
-  ["@cargo-container/preview", "/packages/preview/src/index.ts"],
-  ["@cargo-container/protocol", "/packages/protocol/src/index.ts"],
-  ["@cargo-container/sdk", "/packages/sdk/src/index.ts"],
+  ["@nuriteo/browser-host", "/packages/browser-host/src/index.ts"],
+  ["@nuriteo/browser-host/supervisor", "/packages/browser-host/src/supervisor.ts"],
+  ["@nuriteo/preview", "/packages/preview/src/index.ts"],
+  ["@nuriteo/protocol", "/packages/protocol/src/index.ts"],
+  ["@nuriteo/sdk", "/packages/sdk/src/index.ts"],
   ["fflate", "/node_modules/fflate/esm/browser.js"],
   ["typescript", "/shims/typescript.js"]
 ]);

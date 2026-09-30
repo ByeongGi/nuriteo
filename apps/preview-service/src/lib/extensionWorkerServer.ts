@@ -7,8 +7,8 @@ import type {
 } from "./extensionRuntimeProtocol.ts";
 import type { JsonRpcMessage, JsonRpcRequest, LspDiagnostic } from "./lspProtocol.ts";
 
-const HELLO_COMMAND = "cargo.workspaceTools.hello";
-const SORT_LINES_COMMAND = "cargo.workspaceTools.sortLines";
+const HELLO_COMMAND = "nuriteo.workspaceTools.hello";
+const SORT_LINES_COMMAND = "nuriteo.workspaceTools.sortLines";
 
 interface BuiltinImplementation {
   commands?: string[];
@@ -130,8 +130,8 @@ function consoleDiagnostics(text: string): LspDiagnostic[] {
         end: { line, character: character + match[0].length }
       },
       severity: 3,
-      code: "cargo-code-health-console",
-      source: "cargo-code-health",
+      code: "nuriteo-code-health-console",
+      source: "nuriteo-code-health",
       message: "Remove console output before shipping."
     });
   }

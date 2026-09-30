@@ -21,7 +21,7 @@ export function EditorBreadcrumbs({ path, displayPath }: EditorBreadcrumbsProps)
   return (
     <nav
       id="editor-breadcrumbs"
-      className="min-w-0 flex-1 overflow-x-auto font-mono text-cargo-muted"
+      className="min-w-0 flex-1 overflow-x-auto font-mono text-nuriteo-muted"
       aria-label="Editor breadcrumbs"
       title={relativePath || "Open a file"}
     >
@@ -37,7 +37,7 @@ export function EditorBreadcrumbs({ path, displayPath }: EditorBreadcrumbsProps)
                 <span
                   ref={isCurrentFile ? currentFileRef : undefined}
                   aria-current={isCurrentFile ? "page" : undefined}
-                  className={isCurrentFile ? "font-medium text-cargo-ink" : undefined}
+                  className={isCurrentFile ? "font-medium text-nuriteo-ink" : undefined}
                 >
                   {part}
                 </span>

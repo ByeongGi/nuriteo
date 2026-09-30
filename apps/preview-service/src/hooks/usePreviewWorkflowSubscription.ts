@@ -3,7 +3,7 @@ import {
   PHASES,
   type PreviewWorkflowController,
   type PreviewWorkflowSnapshot
-} from "@cargo-container/preview-service";
+} from "@nuriteo/preview-service";
 import { CloudProjectsClient } from "../lib/cloudProjects";
 import {
   notificationForWorkflowEvent,
@@ -32,7 +32,7 @@ export function usePreviewWorkflowSubscription(
       const notification = notificationForWorkflowEvent(event);
       if (notification) callbacks.pushNotification(notification);
 
-      const cloudToken = localStorage.getItem("cargo-container.cloud-session") || "";
+      const cloudToken = localStorage.getItem("nuriteo.cloud-session") || "";
       if (cloudToken && event.type === "phase" && event.detail.phase === PHASES.installed) {
         void new CloudProjectsClient({ token: () => cloudToken }).ingestUsage({
           id: `install:${event.snapshot.projectId || "project"}:${crypto.randomUUID()}`,

@@ -12,7 +12,7 @@ import { startHarnessServer } from "../../harness/browser-server.ts";
 const PACKAGE = "python/python@=3.13.18";
 const PACKAGE_SHA256 = "0464f16f1ad0ce4d1ab4266b057b62accd5b4123995a08103897699aefc92a54";
 const PACKAGE_BYTES = 157_272_498;
-const cacheRoot = process.env.PYTHON_WASI_CACHE_DIR || path.join(os.tmpdir(), "cargo-container-python-wasi");
+const cacheRoot = process.env.PYTHON_WASI_CACHE_DIR || path.join(os.tmpdir(), "nuriteo-python-wasi");
 const packagePath = path.join(cacheRoot, "cache-v1", "packages", `${PACKAGE_SHA256}.bin`);
 const chromePath = process.env.CHROME_PATH || "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 

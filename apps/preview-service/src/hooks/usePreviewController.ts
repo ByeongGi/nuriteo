@@ -20,8 +20,8 @@ import {
   PHASES,
   type PreviewWorkflowController,
   type PreviewWorkflowSnapshot
-} from "@cargo-container/preview-service";
-import { HostProcessTable, type SupportedPackageManager, type TemplateId } from "@cargo-container/browser-host";
+} from "@nuriteo/preview-service";
+import { HostProcessTable, type SupportedPackageManager, type TemplateId } from "@nuriteo/browser-host";
 import type { DockTab, PreviewServiceApi } from "../lib/types";
 import type { CommandId } from "../lib/commands";
 import { applySettingsToDocument, loadSettings, saveSettings, type IdeSettings } from "../lib/settings";
@@ -48,7 +48,7 @@ export function usePreviewController() {
       terminalProcessTable: new HostProcessTable({
         workerFactory: () => new Worker(
           new URL("../../../../workers/process-worker.ts", import.meta.url),
-          { type: "module", name: "cargo-terminal-process" }
+          { type: "module", name: "nuriteo-terminal-process" }
         )
       })
     });
@@ -1181,7 +1181,7 @@ export function usePreviewController() {
         message?: string;
         stack?: string;
       } | null;
-      if (!data || data.type !== "cargo-preview-error") return;
+      if (!data || data.type !== "nuriteo-preview-error") return;
       const message = data.message || "unknown";
       controller.log(`preview error: ${message}`);
       notificationCenter.pushNotification({

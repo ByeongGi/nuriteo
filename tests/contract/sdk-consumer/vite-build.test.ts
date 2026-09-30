@@ -5,7 +5,7 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 
 const root = new URL("../../..", import.meta.url).pathname;
-const packageTarball = path.join(root, "dist/sdk/cargo-container-sdk-0.1.0-beta.1.tgz");
+const packageTarball = path.join(root, "dist/sdk/nuriteo-sdk-0.1.0-beta.1.tgz");
 
 if (!fs.existsSync(packageTarball)) {
   throw new Error("SDK package tarball missing; run tooling/release/package-sdk.ts first");
@@ -20,7 +20,7 @@ try {
       build: "vite build"
     },
     dependencies: {
-      "@cargo-container/sdk": packageTarball,
+      "@nuriteo/sdk": packageTarball,
       "vite": "8.2.0",
       "typescript": "6.0.3"
     },
@@ -43,7 +43,7 @@ try {
   ].join("\n"));
   fs.mkdirSync(path.join(workdir, "src"), { recursive: true });
   fs.writeFileSync(path.join(workdir, "src/main.ts"), [
-    'import { createContainer, createPreviewSessionRegistry, protocolVersion } from "@cargo-container/sdk";',
+    'import { createContainer, createPreviewSessionRegistry, protocolVersion } from "@nuriteo/sdk";',
     "",
     "const container = createContainer({",
     '  systemWorkerUrl: new URL("/sdk/workers/system-worker.ts", import.meta.url),',

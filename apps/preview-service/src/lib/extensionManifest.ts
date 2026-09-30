@@ -26,8 +26,8 @@ export interface SignedExtensionManifest {
 const TRUSTED_EXTENSION_KEY: JsonWebKey = {
   kty: "EC",
   crv: "P-256",
-  x: "6E5T3wYV--Cr2LmATPXJvpCFw_R1SbX6e8WmHTEns1A",
-  y: "SmbCszoY7kcaAR0Zmj4IItpT-UDO2UYWINmbLvmRpdA"
+  x: "EGQNwRG05-Z6fsQslHzRUI4cTsYPtszJeH_CDeTiVt0",
+  y: "Mu3T9WG9L0ow1804ocAn4YhFbvKxy45E9iE8f74Q3bQ"
 };
 
 const BUILTIN_IMPLEMENTATIONS: Record<string, string> = {
@@ -44,31 +44,31 @@ const ALLOWED_CAPABILITIES = new Set<ExtensionCapability>([
 
 export const BUILTIN_WORKSPACE_TOOLS_MANIFEST: SignedExtensionManifest = {
   schemaVersion: 1,
-  id: "cargo.builtin.workspace-tools",
+  id: "nuriteo.builtin.workspace-tools",
   version: "2.0.0",
   entrypoint: "builtin:workspace-tools",
   integrity: "sha256-TU4sNVSkYwPTmKS4NqoXln1MddWuxlBzJ2BrbvT1DK8",
-  activationEvents: ["onStartup", "onCommand:cargo.workspaceTools.hello", "onCommand:cargo.workspaceTools.sortLines"],
+  activationEvents: ["onStartup", "onCommand:nuriteo.workspaceTools.hello", "onCommand:nuriteo.workspaceTools.sortLines"],
   capabilities: ["commands.register", "workspace.read", "workspace.write"],
   contributes: {
     commands: [
-      { command: "cargo.workspaceTools.hello", title: "Workspace Tools: Hello" },
-      { command: "cargo.workspaceTools.sortLines", title: "Workspace Tools: Sort Lines" }
+      { command: "nuriteo.workspaceTools.hello", title: "Workspace Tools: Hello" },
+      { command: "nuriteo.workspaceTools.sortLines", title: "Workspace Tools: Sort Lines" }
     ]
   },
-  signature: "AB9a1NEDS8QU3-Mzv2_VgW1CyxFTE86jeFgjHRGccHU1y6nJOhcZ3D7mO800HJIZLF8DfhlMTyK5jmbWYF14Mg"
+  signature: "qGfOvEe9_a4RuHQAj5-n7A88Wx-vr5L0rau3y4YeZTSV542-boS_dEqiZHKZZ3tYnGGrw30jSTAvLRydAKBHpg"
 };
 
 export const BUILTIN_CODE_HEALTH_MANIFEST: SignedExtensionManifest = {
   schemaVersion: 1,
-  id: "cargo.builtin.code-health",
+  id: "nuriteo.builtin.code-health",
   version: "1.0.0",
   entrypoint: "builtin:code-health",
   integrity: "sha256-FhpitzNAbP3pj4iaXhTrtnfUx5fYAzD7Pfnehg9YjTI",
   activationEvents: ["onLanguage:typescript", "onLanguage:javascript"],
   capabilities: ["languages.diagnostics", "workspace.read"],
   contributes: { languages: ["typescript", "javascript"] },
-  signature: "A8K-xqKgnEf5nRf2--GhTlCFZjY9aqqmN0vNYztOP5gxLtcWrXWu_AlVIR8NfuYf9pi5Bwvjlnhhje0Y71GdXA"
+  signature: "QZs6kDz_6FODkrN5OhaK0qPkASFDxU03HhjlV38PsuP-DnpvlhJ1h2tzb3GqCu9FURBlFYFWE9w9-1diai37_Q"
 };
 
 export const BUILTIN_EXTENSION_MANIFESTS = [BUILTIN_WORKSPACE_TOOLS_MANIFEST, BUILTIN_CODE_HEALTH_MANIFEST] as const;

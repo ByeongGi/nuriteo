@@ -25,7 +25,7 @@ const args = new Set(process.argv.slice(2));
 const planOnly = args.has("--plan");
 const mode = valueAfter("--mode") || "reference";
 const selectedIds = valueAfter("--fixtures")?.split(",").filter(Boolean) || matrix.fixtures.map((fixture) => fixture.id);
-const workdir = valueAfter("--workdir") || path.join(os.tmpdir(), "cargo-container-ecosystem-fixtures");
+const workdir = valueAfter("--workdir") || path.join(os.tmpdir(), "nuriteo-ecosystem-fixtures");
 const outputPath = valueAfter("--output") || path.join(root, defaultOutputForMode(mode));
 const actualVitePackageRoot = valueAfter("--vite-package-root");
 const actualNodeModulesRoot = valueAfter("--node-modules-root");
@@ -468,16 +468,16 @@ function mountProjectDirectory(workflow, projectDir) {
     importedBytes += file.size;
     if (!editablePath && isEditableSource(file.relativePath)) editablePath = target;
   }
-  const hmrProbePath = `${workflow.projectRoot}/src/__cargo_hmr_probe.js`;
+  const hmrProbePath = `${workflow.projectRoot}/src/__nuriteo_hmr_probe.js`;
   workflow.workspace.writeText(
     hmrProbePath,
-    "export const cargoContainerHmrProbe = 'initial';\nif (import.meta.hot) import.meta.hot.accept();\n"
+    "export const nuriteoHmrProbe = 'initial';\nif (import.meta.hot) import.meta.hot.accept();\n"
   );
   const indexPath = `${workflow.projectRoot}/index.html`;
   if (workflow.workspace.exists(indexPath)) {
     const html = workflow.workspace.readText(indexPath);
-    if (!html.includes("/src/__cargo_hmr_probe.js")) {
-      workflow.workspace.writeText(indexPath, html.replace("</body>", "    <script type=\"module\" src=\"/src/__cargo_hmr_probe.js\"></script>\n  </body>"));
+    if (!html.includes("/src/__nuriteo_hmr_probe.js")) {
+      workflow.workspace.writeText(indexPath, html.replace("</body>", "    <script type=\"module\" src=\"/src/__nuriteo_hmr_probe.js\"></script>\n  </body>"));
     }
   }
   return {
@@ -788,7 +788,7 @@ async function runActualHmrEdit(workflow, execution, editablePath, port) {
   }
   const relative = editablePath.slice(`${workflow.projectRoot}/`.length);
   const original = workflow.workspace.readText(editablePath);
-  const marker = `\n// cargo-container-product-actual-hmr-${Date.now()}\n`;
+  const marker = `\n// nuriteo-product-actual-hmr-${Date.now()}\n`;
   const messages = [];
   let socket = null;
   let write = null;
@@ -1103,7 +1103,7 @@ async function runEditHmr(previewUrl, cwd) {
     };
   }
   const original = fs.readFileSync(target, "utf8");
-  const marker = `\n// cargo-container-hmr-${Date.now()}\n`;
+  const marker = `\n// nuriteo-hmr-${Date.now()}\n`;
   const hmrUrl = await resolveHmrUrl(previewUrl);
   const moduleUrl = sourceModuleUrl(previewUrl, path.relative(cwd, target));
   let socket;

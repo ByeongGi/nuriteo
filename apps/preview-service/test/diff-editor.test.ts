@@ -23,7 +23,7 @@ const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
 
 try {
   await page.addInitScript(() => {
-    localStorage.setItem("cargo.preview-service.settings", JSON.stringify({ saveTrigger: "manual" }));
+    localStorage.setItem("nuriteo.preview-service.settings", JSON.stringify({ saveTrigger: "manual" }));
   });
   await page.goto(baseUrl, { waitUntil: "networkidle" });
   await page.waitForFunction(() => Boolean(globalThis.__previewService));

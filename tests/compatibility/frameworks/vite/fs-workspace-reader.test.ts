@@ -9,7 +9,7 @@ import {
 } from "../../../../packages/node-runtime/src/index.ts";
 import { createFallbackWorkspaceReader, createNodeFsWorkspaceReader } from "../../../../tooling/shared/fs-workspace-reader.ts";
 
-const root = mkdtempSync(join(tmpdir(), "cargo-container-fs-reader-"));
+const root = mkdtempSync(join(tmpdir(), "nuriteo-fs-reader-"));
 const viteRoot = join(root, "vite");
 const dependencyRoot = join(root, "node_modules", "picomatch");
 mkdirSync(join(viteRoot, "bin"), { recursive: true });

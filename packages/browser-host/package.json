@@ -1,13 +1,14 @@
 {
-  "name": "@cargo-container/browser-host",
+  "name": "@nuriteo/browser-host",
   "version": "0.0.0",
   "private": true,
+  "license": "Apache-2.0",
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
     "./supervisor": "./src/supervisor.ts"
   },
   "dependencies": {
-    "@cargo-container/protocol": "workspace:*"
+    "@nuriteo/protocol": "workspace:*"
   }
 }

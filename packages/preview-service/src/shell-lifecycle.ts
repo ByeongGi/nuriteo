@@ -200,14 +200,14 @@ function createTerminalProcessCommands(table: HostProcessTable, terminalId: stri
     table,
     projectId: terminalId,
     releaseOnExit: true,
-    url: "worker://cargo-container/process-worker"
+    url: "worker://nuriteo/process-worker"
   });
   const ptyCommand = createHostProcessShellCommand({
     table,
     projectId: terminalId,
     releaseOnExit: true,
     terminalMode: { canonical: true, echo: true, signals: true },
-    url: "worker://cargo-container/process-worker"
+    url: "worker://nuriteo/process-worker"
   });
   return {
     "worker-cat": (context: Parameters<typeof command>[0]) => command({ ...context, argv: ["cat", ...context.argv.slice(1)] }),

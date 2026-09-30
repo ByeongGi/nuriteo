@@ -7,24 +7,24 @@ import {
   type RuntimeRunResult,
   type RuntimeStatus,
   type RuntimeSystemMetricsOptions
-} from "@cargo-container/browser-host/supervisor";
-import type { MessageDetails, ReadyMessage } from "@cargo-container/protocol";
-import { CargoContainerServices, type CargoContainerServicesOptions } from "./services.ts";
+} from "@nuriteo/browser-host/supervisor";
+import type { MessageDetails, ReadyMessage } from "@nuriteo/protocol";
+import { NuriteoServices, type NuriteoServicesOptions } from "./services.ts";
 
-export type CargoContainerOptions = BrowserRuntimeSupervisorOptions & {
-  services?: CargoContainerServicesOptions;
+export type NuriteoOptions = BrowserRuntimeSupervisorOptions & {
+  services?: NuriteoServicesOptions;
 };
-export type CargoContainerBootOptions = RuntimeBootOptions;
-export type CargoContainerRunOptions = RuntimeRunOptions;
+export type NuriteoBootOptions = RuntimeBootOptions;
+export type NuriteoRunOptions = RuntimeRunOptions;
 
-export class CargoContainer {
+export class Nuriteo {
   #supervisor: BrowserRuntimeSupervisor;
-  readonly services: CargoContainerServices;
+  readonly services: NuriteoServices;
 
-  constructor(options: CargoContainerOptions) {
+  constructor(options: NuriteoOptions) {
     const { services, ...supervisorOptions } = options;
     this.#supervisor = new BrowserRuntimeSupervisor(supervisorOptions);
-    this.services = new CargoContainerServices(services);
+    this.services = new NuriteoServices(services);
   }
 
   get status(): RuntimeStatus {
@@ -35,7 +35,7 @@ export class CargoContainer {
     return this.#supervisor.metrics;
   }
 
-  boot(options: CargoContainerBootOptions = {}): Promise<ReadyMessage> {
+  boot(options: NuriteoBootOptions = {}): Promise<ReadyMessage> {
     return this.#supervisor.boot(options);
   }
 
@@ -43,7 +43,7 @@ export class CargoContainer {
     return this.#supervisor.teardown();
   }
 
-  run(source: string, options: CargoContainerRunOptions = {}): Promise<RuntimeRunResult> {
+  run(source: string, options: NuriteoRunOptions = {}): Promise<RuntimeRunResult> {
     return this.#supervisor.run(source, options);
   }
 
@@ -52,6 +52,6 @@ export class CargoContainer {
   }
 }
 
-export function createContainer(options: CargoContainerOptions): CargoContainer {
-  return new CargoContainer(options);
+export function createContainer(options: NuriteoOptions): Nuriteo {
+  return new Nuriteo(options);
 }

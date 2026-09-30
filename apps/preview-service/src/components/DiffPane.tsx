@@ -58,9 +58,9 @@ export function DiffPane({ model }: { model: PreviewControllerModel }) {
   if (!diff) return null;
 
   return (
-    <section className="flex h-full min-h-0 flex-col border-l border-cargo-line bg-cargo-bg" aria-label="Diff editor">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-cargo-line px-3 py-1.5 text-xs">
-        <div className="min-w-0 truncate font-mono text-cargo-muted">
+    <section className="flex h-full min-h-0 flex-col border-l border-nuriteo-line bg-nuriteo-bg" aria-label="Diff editor">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-nuriteo-line px-3 py-1.5 text-xs">
+        <div className="min-w-0 truncate font-mono text-nuriteo-muted">
           Diff · {model.displayPath(diff.path)}
         </div>
         <div className="flex flex-wrap items-center justify-end gap-1">
@@ -105,10 +105,10 @@ export function DiffPane({ model }: { model: PreviewControllerModel }) {
           </button>
         </div>
       </div>
-      <div className="flex items-center gap-3 border-b border-cargo-line px-3 py-1 font-mono text-[11px] text-cargo-muted" aria-live="polite">
-        <span className="text-cargo-ok">+{summary.added}</span>
-        <span className="text-cargo-bad">−{summary.removed}</span>
-        <span className="text-cargo-warn">~{summary.changed}</span>
+      <div className="flex items-center gap-3 border-b border-nuriteo-line px-3 py-1 font-mono text-[11px] text-nuriteo-muted" aria-live="polite">
+        <span className="text-nuriteo-ok">+{summary.added}</span>
+        <span className="text-nuriteo-bad">−{summary.removed}</span>
+        <span className="text-nuriteo-warn">~{summary.changed}</span>
         <span>{summary.hunks} {summary.hunks === 1 ? "change" : "changes"}</span>
         {summary.hunks > 0 ? <span>Viewing {activeChange + 1} of {summary.hunks}</span> : null}
       </div>

@@ -899,8 +899,8 @@ function restoreImportMetaInStringLiterals(source: string): string {
 }
 
 function protectImportExportLinesInsideLiterals(source: string): { restore: (value: string) => string; source: string } {
-  const importToken = "__CARGO_CONTAINER_LITERAL_IMPORT__";
-  const exportToken = "__CARGO_CONTAINER_LITERAL_EXPORT__";
+  const importToken = "__NURITEO_LITERAL_IMPORT__";
+  const exportToken = "__NURITEO_LITERAL_EXPORT__";
   const literalLineStarts = literalLineStartMask(source);
   const lines = source.split("\n");
   return {

@@ -79,7 +79,7 @@ export class BrowserDebugSession {
       }
     });
     try {
-      await client.request("initialize", { clientID: "cargo-container", adapterID: "cargo-browser-runtime" });
+      await client.request("initialize", { clientID: "nuriteo", adapterID: "nuriteo-browser-runtime" });
       await client.request("launch", { program: options.program, source: options.source, stopOnEntry: options.stopOnEntry === true, noDebug: false });
       await client.request("setBreakpoints", {
         source: { path: options.program },

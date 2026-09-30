@@ -31,7 +31,7 @@ const page = await browser.newPage();
 
 try {
   await page.addInitScript(() => {
-    localStorage.setItem("cargo.preview-service.settings", JSON.stringify({ saveTrigger: "manual" }));
+    localStorage.setItem("nuriteo.preview-service.settings", JSON.stringify({ saveTrigger: "manual" }));
   });
   await page.goto(baseUrl, { waitUntil: "networkidle" });
   await page.click("#welcome-start");
@@ -68,7 +68,7 @@ try {
   }, fixture);
   await timeline.getByText("Saved", { exact: false }).first().waitFor();
 
-  const persisted = await page.evaluate(() => JSON.parse(localStorage.getItem("cargo.preview-service.local-history")));
+  const persisted = await page.evaluate(() => JSON.parse(localStorage.getItem("nuriteo.preview-service.local-history")));
   assert.equal(persisted.v, 1);
   const storedRevision = Object.values(Object.values(persisted.p)[0])[0][0];
   assert.deepEqual(Object.keys(storedRevision).sort(), ["c", "k", "t"]);

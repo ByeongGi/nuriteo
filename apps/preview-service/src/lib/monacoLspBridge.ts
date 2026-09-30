@@ -3,7 +3,7 @@ import { BrowserLanguageServer, type LanguageServerState } from "./browserLangua
 import type { LspDiagnostic, LspDocumentSymbol, LspPosition, LspPublishDiagnosticsParams, LspRange, LspWorkspaceEdit } from "./lspProtocol";
 import { monacoModelPath } from "./monacoProjectSync";
 
-const LSP_OWNER = "cargo-lsp";
+const LSP_OWNER = "nuriteo-lsp";
 const SUPPORTED_LANGUAGES = ["typescript", "javascript"] as const;
 
 type SyncedDocument = { version: number; text: string; languageId: string };

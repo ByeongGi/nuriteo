@@ -44,7 +44,7 @@ assert.equal(matrix.gate.status, "pass");
 assert.ok(provenance.ci.requiredCommands.includes("node tooling/checks/check-sdk-publish-rehearsal.ts"));
 
 const apiDoc = fs.readFileSync("docs/productization/sdk-api-freeze-rfc.md", "utf8");
-assert.match(apiDoc, /CargoMountSnapshot/);
+assert.match(apiDoc, /NuriteoMountSnapshot/);
 assert.match(apiDoc, /not a drop-in|drop-in replacement/i);
 const publishDoc = fs.readFileSync("docs/release/sdk-publish-rehearsal.md", "utf8");
 assert.match(publishDoc, /0\.1\.0-beta\.1/);

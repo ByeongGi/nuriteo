@@ -1,4 +1,4 @@
-const STORAGE_KEY = "cargo-container.debug-breakpoints.v1";
+const STORAGE_KEY = "nuriteo.debug-breakpoints.v1";
 
 export interface PersistedBreakpoint {
   line: number;

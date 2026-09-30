@@ -36,7 +36,7 @@ export class HostProcessJsonRpcTransport implements JsonRpcTransport {
       createWorker?: () => Worker;
     } = {}
   ): Promise<HostProcessJsonRpcTransport> {
-    const resource = options.resource || "worker://cargo/language-server";
+    const resource = options.resource || "worker://nuriteo/language-server";
     const permissions = createPermissionManager({
       defaultDecision: "deny",
       rules: [{ scope: "process", action: "prepare", resourcePrefix: resource, decision: "allow" }]
@@ -45,7 +45,7 @@ export class HostProcessJsonRpcTransport implements JsonRpcTransport {
       permissions,
       workerFactory: options.createWorker || (() => new Worker(
         new URL("../workers/languageServerProcess.worker.ts", import.meta.url),
-        { type: "module", name: "cargo-language-server-process" }
+        { type: "module", name: "nuriteo-language-server-process" }
       ))
     });
     const prepared = table.prepare({

@@ -11,7 +11,7 @@ verifyWasmAdapterManifest(manifest);
 const loaded = await registry.instantiate("system-wasm");
 
 assert.equal(loaded.hash, registry.resolve("system-wasm").sha256);
-assert.equal(loaded.instance.exports.cargo_container_abi_version(), 1);
+assert.equal(loaded.instance.exports.nuriteo_abi_version(), 1);
 assert.ok(loaded.instance.exports.memory instanceof WebAssembly.Memory);
 
 const browserLike = createWasmAdapterRegistry(manifest, {
@@ -24,7 +24,7 @@ const browserLike = createWasmAdapterRegistry(manifest, {
     return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
   }
 });
-assert.equal((await browserLike.instantiate("system-wasm")).instance.exports.cargo_container_abi_version(), 1);
+assert.equal((await browserLike.instantiate("system-wasm")).instance.exports.nuriteo_abi_version(), 1);
 
 let importProviderCalled = false;
 const asyncImports = createWasmAdapterRegistry(manifest, {
@@ -35,7 +35,7 @@ const asyncImports = createWasmAdapterRegistry(manifest, {
   },
   resolveWorkerAsset: (assetPath) => `https://example.test/vendor/${assetPath}`
 });
-assert.equal((await asyncImports.instantiate("system-wasm")).instance.exports.cargo_container_abi_version(), 1);
+assert.equal((await asyncImports.instantiate("system-wasm")).instance.exports.nuriteo_abi_version(), 1);
 assert.equal(importProviderCalled, true);
 assert.equal((await asyncImports.workerAsset("system-wasm", "thread-worker.js")).href, "https://example.test/vendor/thread-worker.js");
 await assert.rejects(

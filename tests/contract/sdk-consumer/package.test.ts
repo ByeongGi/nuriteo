@@ -8,7 +8,7 @@ import { MemoryPackageManagerWorkspace } from "../../../packages/node-runtime/sr
 
 const root = new URL("../../..", import.meta.url).pathname;
 const packageRoot = path.join(root, "dist/sdk/package");
-const packageTarball = path.join(root, "dist/sdk/cargo-container-sdk-0.1.0-beta.1.tgz");
+const packageTarball = path.join(root, "dist/sdk/nuriteo-sdk-0.1.0-beta.1.tgz");
 const publicRoot = path.join(packageRoot, "examples/sdk-consumer/public");
 const chromePath = process.env.CHROME_PATH || "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 
@@ -159,9 +159,9 @@ try {
   assertCommonjsEntry();
 
   const types = fs.readFileSync(path.join(packageRoot, "index.d.ts"), "utf8");
-  if (!types.includes("CargoContainer")) throw new Error("SDK root types do not export CargoContainer");
-  if (!types.includes("CargoContainerServices")) throw new Error("SDK root types do not export service APIs");
-  if (!types.includes("createCargoWebContainer")) throw new Error("SDK root types do not export WebContainer facade");
+  if (!types.includes("Nuriteo")) throw new Error("SDK root types do not export Nuriteo");
+  if (!types.includes("NuriteoServices")) throw new Error("SDK root types do not export service APIs");
+  if (!types.includes("createNuriteoWebContainer")) throw new Error("SDK root types do not export WebContainer facade");
   if (!types.includes("createPreviewRelay")) throw new Error("SDK root types do not export preview API");
   const readme = fs.readFileSync(path.join(packageRoot, "README.md"), "utf8");
   if (!readme.includes("Cross-Origin-Opener-Policy")) throw new Error("SDK README missing hosting headers");
@@ -222,21 +222,21 @@ console.log("sdk consumer package test ok");
 function assertSdkTypesCompile() {
   const workdir = fs.mkdtempSync(path.join(os.tmpdir(), "sdk-types-consumer-"));
   try {
-    const scope = path.join(workdir, "node_modules/@cargo-container");
+    const scope = path.join(workdir, "node_modules/@nuriteo");
     fs.mkdirSync(scope, { recursive: true });
     fs.symlinkSync(packageRoot, path.join(scope, "sdk"), "dir");
     fs.writeFileSync(path.join(workdir, "index.ts"), [
-      'import { CargoContainer, CargoContainerServices, SdkError, createCargoMountSnapshot, createCargoWebContainer, createContainer, createPreviewRelay, createPreviewSessionRegistry, protocolVersion, resolveCargoWorkerAssets } from "@cargo-container/sdk";',
+      'import { Nuriteo, NuriteoServices, SdkError, createNuriteoMountSnapshot, createNuriteoWebContainer, createContainer, createPreviewRelay, createPreviewSessionRegistry, protocolVersion, resolveNuriteoWorkerAssets } from "@nuriteo/sdk";',
       "",
-      "const container: CargoContainer = createContainer({",
+      "const container: Nuriteo = createContainer({",
       '  systemWorkerUrl: new URL("http://127.0.0.1/system-worker.ts"),',
       '  processWorkerUrl: new URL("http://127.0.0.1/process-worker.ts")',
       "});",
       "const sessions = createPreviewSessionRegistry();",
-      "const services = new CargoContainerServices();",
-      'const assets = resolveCargoWorkerAssets("https://cdn.example/sdk/");',
-      'const facade = createCargoWebContainer({ services, workdirName: "project" });',
-      'const mount = createCargoMountSnapshot({ "README.md": "hello" });',
+      "const services = new NuriteoServices();",
+      'const assets = resolveNuriteoWorkerAssets("https://cdn.example/sdk/");',
+      'const facade = createNuriteoWebContainer({ services, workdirName: "project" });',
+      'const mount = createNuriteoMountSnapshot({ "README.md": "hello" });',
       'const error: SdkError | null = null;',
       "createPreviewRelay({ sessions });",
       "const version: number = protocolVersion;",
@@ -309,17 +309,17 @@ function assertSdkTarballInstalls() {
       throw new Error(`SDK tarball install failed:\n${install.stdout}\n${install.stderr}`);
     }
     fs.writeFileSync(path.join(workdir, "index.ts"), [
-      'import { CargoContainer, CargoContainerServices, SdkError, createCargoMountSnapshot, createCargoWebContainer, createContainer, protocolVersion, resolveCargoWorkerAssets } from "@cargo-container/sdk";',
+      'import { Nuriteo, NuriteoServices, SdkError, createNuriteoMountSnapshot, createNuriteoWebContainer, createContainer, protocolVersion, resolveNuriteoWorkerAssets } from "@nuriteo/sdk";',
       "",
-      "const container: CargoContainer = createContainer({",
+      "const container: Nuriteo = createContainer({",
       '  systemWorkerUrl: new URL("http://127.0.0.1/system-worker.ts"),',
       '  processWorkerUrl: new URL("http://127.0.0.1/process-worker.ts")',
       "});",
       "const version: number = protocolVersion;",
-      "const services = new CargoContainerServices();",
-      'const assets = resolveCargoWorkerAssets("https://cdn.example/sdk/");',
-      'const facade = createCargoWebContainer({ services, workdirName: "project" });',
-      'const mount = createCargoMountSnapshot({ "README.md": "hello" });',
+      "const services = new NuriteoServices();",
+      'const assets = resolveNuriteoWorkerAssets("https://cdn.example/sdk/");',
+      'const facade = createNuriteoWebContainer({ services, workdirName: "project" });',
+      'const mount = createNuriteoMountSnapshot({ "README.md": "hello" });',
       'const error: SdkError | null = null;',
       "void container;",
       "void services;",
@@ -379,12 +379,12 @@ function assertSdkTarballInstalls() {
       throw new Error("Installed SDK tarball consumer build did not emit dist/index.js");
     }
     fs.writeFileSync(path.join(workdir, "consumer.cjs"), [
-      'const sdk = require("@cargo-container/sdk");',
+      'const sdk = require("@nuriteo/sdk");',
       'if (typeof sdk.createContainer !== "function") throw new Error("missing createContainer");',
       'if (typeof sdk.createPreviewRelay !== "function") throw new Error("missing createPreviewRelay");',
-      'if (typeof sdk.CargoContainerServices !== "function") throw new Error("missing CargoContainerServices");',
-      'if (typeof sdk.resolveCargoWorkerAssets !== "function") throw new Error("missing resolveCargoWorkerAssets");',
-      'if (typeof sdk.createCargoWebContainer !== "function") throw new Error("missing createCargoWebContainer");',
+      'if (typeof sdk.NuriteoServices !== "function") throw new Error("missing NuriteoServices");',
+      'if (typeof sdk.resolveNuriteoWorkerAssets !== "function") throw new Error("missing resolveNuriteoWorkerAssets");',
+      'if (typeof sdk.createNuriteoWebContainer !== "function") throw new Error("missing createNuriteoWebContainer");',
       'if (typeof sdk.SdkError !== "function") throw new Error("missing SdkError");',
       'if (sdk.protocolVersion !== 1) throw new Error("protocol version mismatch");',
       ""
@@ -406,9 +406,9 @@ function assertCommonjsEntry() {
     `const sdk = require(${JSON.stringify(path.join(packageRoot, "index.cjs"))});`,
     'if (typeof sdk.createContainer !== "function") throw new Error("missing createContainer");',
     'if (typeof sdk.createPreviewRelay !== "function") throw new Error("missing createPreviewRelay");',
-    'if (typeof sdk.CargoContainerServices !== "function") throw new Error("missing CargoContainerServices");',
-    'if (typeof sdk.resolveCargoWorkerAssets !== "function") throw new Error("missing resolveCargoWorkerAssets");',
-    'if (typeof sdk.createCargoWebContainer !== "function") throw new Error("missing createCargoWebContainer");',
+    'if (typeof sdk.NuriteoServices !== "function") throw new Error("missing NuriteoServices");',
+    'if (typeof sdk.resolveNuriteoWorkerAssets !== "function") throw new Error("missing resolveNuriteoWorkerAssets");',
+    'if (typeof sdk.createNuriteoWebContainer !== "function") throw new Error("missing createNuriteoWebContainer");',
     'if (typeof sdk.SdkError !== "function") throw new Error("missing SdkError");',
     'if (sdk.protocolVersion !== 1) throw new Error("protocol version mismatch");'
   ].join("")], {

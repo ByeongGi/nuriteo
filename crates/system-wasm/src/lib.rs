@@ -18,19 +18,19 @@ thread_local! {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn cargo_container_abi_version() -> u32 {
+pub extern "C" fn nuriteo_abi_version() -> u32 {
     ABI_VERSION
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn cargo_container_reset() {
+pub extern "C" fn nuriteo_reset() {
     SYSTEM.with(|system| *system.borrow_mut() = SystemDispatcher::default());
     REQUEST.with(|request| request.borrow_mut().clear());
     RESPONSE.with(|response| response.borrow_mut().clear());
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn cargo_container_request_buffer(length: u32) -> u32 {
+pub extern "C" fn nuriteo_request_buffer(length: u32) -> u32 {
     let Ok(length) = usize::try_from(length) else {
         return 0;
     };
@@ -45,7 +45,7 @@ pub extern "C" fn cargo_container_request_buffer(length: u32) -> u32 {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn cargo_container_dispatch(length: u32) -> u32 {
+pub extern "C" fn nuriteo_dispatch(length: u32) -> u32 {
     let request = REQUEST.with(|request| {
         let request = request.borrow();
         usize::try_from(length)
@@ -70,7 +70,7 @@ pub extern "C" fn cargo_container_dispatch(length: u32) -> u32 {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn cargo_container_response_buffer() -> u32 {
+pub extern "C" fn nuriteo_response_buffer() -> u32 {
     RESPONSE.with(|response| response.borrow().as_ptr() as usize as u32)
 }
 
@@ -144,7 +144,7 @@ mod tests {
 
     #[test]
     fn exports_core_abi_version() {
-        assert_eq!(cargo_container_abi_version(), 1);
+        assert_eq!(nuriteo_abi_version(), 1);
     }
 
     #[test]

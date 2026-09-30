@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import {
-  CargoContainerServices,
-  registerCargoPreviewServiceWorker,
-  resolveCargoWorkerAssets,
+  NuriteoServices,
+  registerNuriteoPreviewServiceWorker,
+  resolveNuriteoWorkerAssets,
   SdkError
 } from "../../../packages/sdk/src/services.ts";
-import { createCargoMountSnapshot, createCargoWebContainer } from "../../../packages/sdk/src/webcontainer.ts";
+import { createNuriteoMountSnapshot, createNuriteoWebContainer } from "../../../packages/sdk/src/webcontainer.ts";
 
 const files = new Map([["/workspace/a.txt", "alpha"]]);
 const calls = [];
@@ -13,7 +13,7 @@ const traceEvents = [];
 const subscriptionEvents = [];
 let previewScript = null;
 
-const services = new CargoContainerServices({
+const services = new NuriteoServices({
   now: (() => {
     let value = 100;
     return () => value++;
@@ -83,7 +83,7 @@ assert.equal(traceEvents.filter((event) => event.phase === "start").length, 11);
 assert.equal(subscriptionEvents.length, 2);
 
 const lifecycle = [];
-const webContainer = createCargoWebContainer({
+const webContainer = createNuriteoWebContainer({
   services,
   workdirName: "project",
   coep: "credentialless",
@@ -97,7 +97,7 @@ await webContainer.mount({
   src: { directory: { "main.ts": { file: { contents: "export const value = 1;" } } } }
 });
 assert.equal(await webContainer.fs.readFile("/project/src/main.ts"), "export const value = 1;");
-await webContainer.mount(createCargoMountSnapshot({ "README.md": "hello" }));
+await webContainer.mount(createNuriteoMountSnapshot({ "README.md": "hello" }));
 assert.equal(await webContainer.fs.readFile("/project/README.md"), "hello");
 assert.equal((await webContainer.spawn("vite", ["--host"])).pid, 7);
 assert.equal(webContainer.coep, "credentialless");
@@ -107,11 +107,11 @@ await webContainer.teardown();
 assert.deepEqual(lifecycle, ["boot", "teardown"]);
 
 await assert.rejects(
-  () => webContainer.mount({ schemaVersion: 1, format: "cargo-container-mount", files: [{ path: "../escape.txt", contents: "no" }] }),
+  () => webContainer.mount({ schemaVersion: 1, format: "nuriteo-mount", files: [{ path: "../escape.txt", contents: "no" }] }),
   (error) => error instanceof SdkError && error.code === "ESDK_PATH_INVALID"
 );
 await assert.rejects(
-  () => webContainer.mount({ schemaVersion: 1, format: "cargo-container-mount", files: [{ path: "invalid", contents: 1 }] }),
+  () => webContainer.mount({ schemaVersion: 1, format: "nuriteo-mount", files: [{ path: "invalid", contents: 1 }] }),
   (error) => error instanceof SdkError && error.code === "ESDK_INVALID_ARGUMENT"
 );
 await assert.rejects(
@@ -119,13 +119,13 @@ await assert.rejects(
   (error) => error instanceof SdkError && error.code === "ESDK_SYMLINK_UNSUPPORTED"
 );
 await assert.rejects(
-  () => webContainer.mount({ schemaVersion: 2, format: "cargo-container-mount", files: [] }),
+  () => webContainer.mount({ schemaVersion: 2, format: "nuriteo-mount", files: [] }),
   (error) => error instanceof SdkError && error.code === "ESDK_INVALID_ARGUMENT"
 );
 
 let recoveredSubscriptions = 0;
-const recovering = createCargoWebContainer({
-  services: new CargoContainerServices({
+const recovering = createNuriteoWebContainer({
+  services: new NuriteoServices({
     preview: {
       async listPorts() { return []; },
       subscribe() {
@@ -145,13 +145,13 @@ await recovering.boot();
 await recovering.teardown();
 assert.equal(recoveredSubscriptions, 2);
 
-const assets = resolveCargoWorkerAssets("https://cdn.example/sdk/");
+const assets = resolveNuriteoWorkerAssets("https://cdn.example/sdk/");
 assert.equal(assets.systemWorkerUrl.href, "https://cdn.example/sdk/workers/system-worker.ts");
 assert.equal(assets.processWorkerUrl.href, "https://cdn.example/sdk/workers/process-worker.ts");
 assert.equal(assets.systemWasmUrl.href, "https://cdn.example/sdk/assets/system_wasm.wasm");
 
 const registration = { scope: "/preview/" };
-assert.equal(await registerCargoPreviewServiceWorker({
+assert.equal(await registerNuriteoPreviewServiceWorker({
   scriptUrl: "/preview-sw.js",
   scope: "/preview/",
   navigator: {
@@ -165,7 +165,7 @@ assert.equal(await registerCargoPreviewServiceWorker({
   }
 }), registration);
 
-const missing = new CargoContainerServices();
+const missing = new NuriteoServices();
 await assert.rejects(() => missing.fs.readFile("/x"), (error) => error instanceof SdkError && error.code === "ESDK_ADAPTER_MISSING");
 await assert.rejects(() => missing.packages.run(""), (error) => error instanceof SdkError && error.code === "ESDK_ADAPTER_MISSING");
 

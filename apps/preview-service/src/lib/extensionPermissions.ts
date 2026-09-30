@@ -1,6 +1,6 @@
 import type { ExtensionCapability, SignedExtensionManifest } from "./extensionManifest.ts";
 
-const STORAGE_KEY = "cargo-container.extension-permissions.v1";
+const STORAGE_KEY = "nuriteo.extension-permissions.v1";
 
 type PermissionState = { schemaVersion: 1; grants: Record<string, ExtensionCapability[]> };
 

@@ -160,7 +160,7 @@ export function createMonacoTypeLibraries(files: Array<{ path: string; data: str
     .join("\n");
   if (fallbackDeclarations) {
     libraries.push({
-      path: "file:///node_modules/@types/__cargo_dependencies/index.d.ts",
+      path: "file:///node_modules/@types/__nuriteo_dependencies/index.d.ts",
       data: `${fallbackDeclarations}\n`
     });
   }

@@ -38,14 +38,14 @@ const mime: Record<string, string> = {
 };
 
 const browserImportAliases = new Map([
-  ["@cargo-container/browser-host", "/packages/browser-host/src/index.ts"],
-  ["@cargo-container/browser-host/supervisor", "/packages/browser-host/src/supervisor.ts"],
-  ["@cargo-container/node-runtime", "/packages/node-runtime/src/index.ts"],
-  ["@cargo-container/preview", "/packages/preview/src/index.ts"],
-  ["@cargo-container/preview-service", "/packages/preview-service/src/index.ts"],
-  ["@cargo-container/preview-service/controller", "/packages/preview-service/src/controller.ts"],
-  ["@cargo-container/protocol", "/packages/protocol/src/index.ts"],
-  ["@cargo-container/sdk", "/packages/sdk/src/index.ts"],
+  ["@nuriteo/browser-host", "/packages/browser-host/src/index.ts"],
+  ["@nuriteo/browser-host/supervisor", "/packages/browser-host/src/supervisor.ts"],
+  ["@nuriteo/node-runtime", "/packages/node-runtime/src/index.ts"],
+  ["@nuriteo/preview", "/packages/preview/src/index.ts"],
+  ["@nuriteo/preview-service", "/packages/preview-service/src/index.ts"],
+  ["@nuriteo/preview-service/controller", "/packages/preview-service/src/controller.ts"],
+  ["@nuriteo/protocol", "/packages/protocol/src/index.ts"],
+  ["@nuriteo/sdk", "/packages/sdk/src/index.ts"],
   ["fflate", "/node_modules/fflate/esm/browser.js"],
   ["typescript", "/shims/typescript.js"]
 ]);

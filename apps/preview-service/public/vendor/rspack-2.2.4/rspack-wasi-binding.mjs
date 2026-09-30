@@ -1,5 +1,5 @@
-const __CargoNativeTextDecoder = globalThis.TextDecoder;
-class TextDecoder extends __CargoNativeTextDecoder {
+const __NuriteoNativeTextDecoder = globalThis.TextDecoder;
+class TextDecoder extends __NuriteoNativeTextDecoder {
   decode(input, options) {
     const sharedView = input && ArrayBuffer.isView(input) && (input.buffer instanceof SharedArrayBuffer || Object.prototype.toString.call(input.buffer) === "[object SharedArrayBuffer]");
     const sharedBuffer = input && (input instanceof SharedArrayBuffer || Object.prototype.toString.call(input) === "[object SharedArrayBuffer]");

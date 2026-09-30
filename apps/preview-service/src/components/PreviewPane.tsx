@@ -61,17 +61,17 @@ export function PreviewPane({ model }: { model: PreviewControllerModel }) {
   const tabs = model.ports;
 
   return (
-    <section className="flex h-full min-h-0 min-w-0 flex-col bg-cargo-panel" aria-label="Live preview">
+    <section className="flex h-full min-h-0 min-w-0 flex-col bg-nuriteo-panel" aria-label="Live preview">
       {tabs.length > 1 ? (
-        <div className="flex items-center gap-1 overflow-x-auto border-b border-cargo-line px-2 py-1" aria-label="Preview tabs">
+        <div className="flex items-center gap-1 overflow-x-auto border-b border-nuriteo-line px-2 py-1" aria-label="Preview tabs">
           {tabs.map((tab) => (
             <button
               key={tab.id}
               type="button"
               className={`rounded-md px-2 py-1 text-[11px] ${
                 model.activePortId === tab.id
-                  ? "bg-cargo-accent/15 text-cargo-accent-strong"
-                  : "text-cargo-muted hover:bg-cargo-panel-2"
+                  ? "bg-nuriteo-accent/15 text-nuriteo-accent-strong"
+                  : "text-nuriteo-muted hover:bg-nuriteo-panel-2"
               }`}
               onClick={() => model.selectPort(tab.id)}
             >
@@ -81,7 +81,7 @@ export function PreviewPane({ model }: { model: PreviewControllerModel }) {
         </div>
       ) : null}
 
-      <div className="flex items-center gap-2 border-b border-cargo-line bg-cargo-elevated/80 px-2 py-1.5">
+      <div className="flex items-center gap-2 border-b border-nuriteo-line bg-nuriteo-elevated/80 px-2 py-1.5">
         <button
           id="preview-refresh"
           type="button"
@@ -108,7 +108,7 @@ export function PreviewPane({ model }: { model: PreviewControllerModel }) {
             value={pathDraft}
             disabled={!previewUrl}
             onChange={(event) => setPathDraft(event.target.value)}
-            className="min-w-0 flex-1 rounded-md border border-cargo-line bg-cargo-bg px-2.5 py-1.5 font-mono text-xs text-cargo-ink outline-none focus:border-cargo-accent"
+            className="min-w-0 flex-1 rounded-md border border-nuriteo-line bg-nuriteo-bg px-2.5 py-1.5 font-mono text-xs text-nuriteo-ink outline-none focus:border-nuriteo-accent"
           />
         </form>
         <a
@@ -137,9 +137,9 @@ export function PreviewPane({ model }: { model: PreviewControllerModel }) {
         />
         {!frameSrc ? (
           <div className="absolute inset-0 flex items-center justify-center p-6" id="preview-empty">
-            <div className="max-w-sm rounded-2xl border border-cargo-line bg-cargo-elevated/90 px-5 py-4 text-center shadow-[var(--shadow)]">
-              <strong className="text-sm text-cargo-ink">Live preview</strong>
-              <p className="mt-2 text-xs leading-relaxed text-cargo-muted">
+            <div className="max-w-sm rounded-2xl border border-nuriteo-line bg-nuriteo-elevated/90 px-5 py-4 text-center shadow-[var(--shadow)]">
+              <strong className="text-sm text-nuriteo-ink">Live preview</strong>
+              <p className="mt-2 text-xs leading-relaxed text-nuriteo-muted">
                 Run the project to see your app here with HMR.
               </p>
             </div>

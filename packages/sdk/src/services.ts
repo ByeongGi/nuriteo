@@ -19,87 +19,87 @@ export class SdkError extends Error {
   }
 }
 
-export interface CargoFileEntry {
+export interface NuriteoFileEntry {
   path: string;
   type: "file" | "directory" | "symlink";
   size?: number;
 }
 
-export interface CargoFileSystemAdapter {
+export interface NuriteoFileSystemAdapter {
   readFile(path: string): Promise<Uint8Array | string>;
   writeFile(path: string, data: Uint8Array | string): Promise<void>;
-  readdir(path: string): Promise<CargoFileEntry[]>;
+  readdir(path: string): Promise<NuriteoFileEntry[]>;
   mkdir?(path: string, options?: { recursive?: boolean }): Promise<void>;
   rm?(path: string, options?: { force?: boolean; recursive?: boolean }): Promise<void>;
-  watch?(path: string, listener: (event: CargoFileWatchEvent) => void): () => void;
+  watch?(path: string, listener: (event: NuriteoFileWatchEvent) => void): () => void;
 }
 
-export interface CargoFileWatchEvent {
+export interface NuriteoFileWatchEvent {
   path: string;
   type: "create" | "change" | "delete" | "rename";
 }
 
-export interface CargoPackageCommandOptions {
+export interface NuriteoPackageCommandOptions {
   args?: string[];
   cwd?: string;
   env?: Record<string, string>;
   signal?: AbortSignal;
 }
 
-export interface CargoCommandResult {
+export interface NuriteoCommandResult {
   command: string;
   exitCode: number;
   stderr: string;
   stdout: string;
 }
 
-export interface CargoPackageManagerAdapter {
-  install(options?: CargoPackageCommandOptions & { packageManager?: "npm" | "pnpm" | "yarn" }): Promise<CargoCommandResult>;
-  run(script: string, options?: CargoPackageCommandOptions): Promise<CargoCommandResult>;
-  exec(binary: string, options?: CargoPackageCommandOptions): Promise<CargoCommandResult>;
+export interface NuriteoPackageManagerAdapter {
+  install(options?: NuriteoPackageCommandOptions & { packageManager?: "npm" | "pnpm" | "yarn" }): Promise<NuriteoCommandResult>;
+  run(script: string, options?: NuriteoPackageCommandOptions): Promise<NuriteoCommandResult>;
+  exec(binary: string, options?: NuriteoPackageCommandOptions): Promise<NuriteoCommandResult>;
 }
 
-export interface CargoPreviewPort {
+export interface NuriteoPreviewPort {
   port: number;
   protocol: "http" | "https";
   url: string;
   label?: string;
 }
 
-export interface CargoPreviewAdapter {
-  listPorts(): Promise<CargoPreviewPort[]>;
+export interface NuriteoPreviewAdapter {
+  listPorts(): Promise<NuriteoPreviewPort[]>;
   setPreviewScript?(script: string | null): Promise<void> | void;
-  subscribe?(listener: (event: CargoPreviewEvent) => void): () => void;
+  subscribe?(listener: (event: NuriteoPreviewEvent) => void): () => void;
 }
 
-export interface CargoPreviewEvent {
+export interface NuriteoPreviewEvent {
   type: "port" | "server-ready" | "server-close";
   port: number;
   url?: string;
 }
 
-export interface CargoProjectAdapter {
+export interface NuriteoProjectAdapter {
   exportProject(): Promise<Uint8Array>;
   importProject(archive: Uint8Array | ArrayBuffer | string): Promise<void>;
 }
 
-export interface CargoProcessSpawnOptions extends CargoPackageCommandOptions {
+export interface NuriteoProcessSpawnOptions extends NuriteoPackageCommandOptions {
   command: string;
 }
 
-export interface CargoProcessHandle {
+export interface NuriteoProcessHandle {
   readonly pid: number;
   kill(signal?: "SIGINT" | "SIGTERM" | "SIGKILL"): Promise<void> | void;
   resize?(columns: number, rows: number): Promise<void> | void;
   write?(data: string): Promise<void> | void;
-  wait(): Promise<CargoCommandResult>;
+  wait(): Promise<NuriteoCommandResult>;
 }
 
-export interface CargoProcessAdapter {
-  spawn(options: CargoProcessSpawnOptions): Promise<CargoProcessHandle>;
+export interface NuriteoProcessAdapter {
+  spawn(options: NuriteoProcessSpawnOptions): Promise<NuriteoProcessHandle>;
 }
 
-export interface CargoSdkTraceEvent {
+export interface NuriteoSdkTraceEvent {
   category: "filesystem" | "package-manager" | "preview" | "project" | "process";
   operation: string;
   phase: "start" | "success" | "error";
@@ -107,41 +107,41 @@ export interface CargoSdkTraceEvent {
   error?: string;
 }
 
-export interface CargoContainerServicesOptions {
-  filesystem?: CargoFileSystemAdapter;
-  packageManager?: CargoPackageManagerAdapter;
-  preview?: CargoPreviewAdapter;
-  project?: CargoProjectAdapter;
-  process?: CargoProcessAdapter;
+export interface NuriteoServicesOptions {
+  filesystem?: NuriteoFileSystemAdapter;
+  packageManager?: NuriteoPackageManagerAdapter;
+  preview?: NuriteoPreviewAdapter;
+  project?: NuriteoProjectAdapter;
+  process?: NuriteoProcessAdapter;
   now?: () => number;
 }
 
-export class CargoContainerServices {
-  readonly fs: CargoFileSystemApi;
-  readonly packages: CargoPackageManagerApi;
-  readonly preview: CargoPreviewApi;
-  readonly projects: CargoProjectApi;
-  readonly processes: CargoProcessApi;
-  #listeners = new Set<(event: CargoSdkTraceEvent) => void>();
+export class NuriteoServices {
+  readonly fs: NuriteoFileSystemApi;
+  readonly packages: NuriteoPackageManagerApi;
+  readonly preview: NuriteoPreviewApi;
+  readonly projects: NuriteoProjectApi;
+  readonly processes: NuriteoProcessApi;
+  #listeners = new Set<(event: NuriteoSdkTraceEvent) => void>();
   #now: () => number;
 
-  constructor(options: CargoContainerServicesOptions = {}) {
+  constructor(options: NuriteoServicesOptions = {}) {
     this.#now = options.now || Date.now;
-    const trace = <T>(category: CargoSdkTraceEvent["category"], operation: string, task: () => Promise<T>) =>
+    const trace = <T>(category: NuriteoSdkTraceEvent["category"], operation: string, task: () => Promise<T>) =>
       this.#trace(category, operation, task);
-    this.fs = new CargoFileSystemApi(options.filesystem, trace);
-    this.packages = new CargoPackageManagerApi(options.packageManager, trace);
-    this.preview = new CargoPreviewApi(options.preview, trace);
-    this.projects = new CargoProjectApi(options.project, trace);
-    this.processes = new CargoProcessApi(options.process, trace);
+    this.fs = new NuriteoFileSystemApi(options.filesystem, trace);
+    this.packages = new NuriteoPackageManagerApi(options.packageManager, trace);
+    this.preview = new NuriteoPreviewApi(options.preview, trace);
+    this.projects = new NuriteoProjectApi(options.project, trace);
+    this.processes = new NuriteoProcessApi(options.process, trace);
   }
 
-  onTrace(listener: (event: CargoSdkTraceEvent) => void): () => void {
+  onTrace(listener: (event: NuriteoSdkTraceEvent) => void): () => void {
     this.#listeners.add(listener);
     return () => this.#listeners.delete(listener);
   }
 
-  async #trace<T>(category: CargoSdkTraceEvent["category"], operation: string, task: () => Promise<T>): Promise<T> {
+  async #trace<T>(category: NuriteoSdkTraceEvent["category"], operation: string, task: () => Promise<T>): Promise<T> {
     this.#emit({ category, operation, phase: "start", timestamp: this.#now() });
     try {
       const result = await task();
@@ -159,18 +159,18 @@ export class CargoContainerServices {
     }
   }
 
-  #emit(event: CargoSdkTraceEvent): void {
+  #emit(event: NuriteoSdkTraceEvent): void {
     for (const listener of this.#listeners) listener({ ...event });
   }
 }
 
-type Trace = <T>(category: CargoSdkTraceEvent["category"], operation: string, task: () => Promise<T>) => Promise<T>;
+type Trace = <T>(category: NuriteoSdkTraceEvent["category"], operation: string, task: () => Promise<T>) => Promise<T>;
 
-export class CargoFileSystemApi {
-  private readonly adapter: CargoFileSystemAdapter | undefined;
+export class NuriteoFileSystemApi {
+  private readonly adapter: NuriteoFileSystemAdapter | undefined;
   private readonly trace: Trace;
 
-  constructor(adapter: CargoFileSystemAdapter | undefined, trace: Trace) {
+  constructor(adapter: NuriteoFileSystemAdapter | undefined, trace: Trace) {
     this.adapter = adapter;
     this.trace = trace;
   }
@@ -183,7 +183,7 @@ export class CargoFileSystemApi {
     return this.trace("filesystem", "writeFile", () => this.#adapter().writeFile(required(path, "path"), data));
   }
 
-  readdir(path: string): Promise<CargoFileEntry[]> {
+  readdir(path: string): Promise<NuriteoFileEntry[]> {
     return this.trace("filesystem", "readdir", () => this.#adapter().readdir(required(path, "path")));
   }
 
@@ -195,51 +195,51 @@ export class CargoFileSystemApi {
     return this.trace("filesystem", "rm", () => optional(this.#adapter().rm, "filesystem.rm")(required(path, "path"), options));
   }
 
-  watch(path: string, listener: (event: CargoFileWatchEvent) => void): () => void {
+  watch(path: string, listener: (event: NuriteoFileWatchEvent) => void): () => void {
     return optional(this.#adapter().watch, "filesystem.watch")(required(path, "path"), listener);
   }
 
-  #adapter(): CargoFileSystemAdapter {
+  #adapter(): NuriteoFileSystemAdapter {
     return requiredAdapter(this.adapter, "filesystem");
   }
 }
 
-export class CargoPackageManagerApi {
-  private readonly adapter: CargoPackageManagerAdapter | undefined;
+export class NuriteoPackageManagerApi {
+  private readonly adapter: NuriteoPackageManagerAdapter | undefined;
   private readonly trace: Trace;
 
-  constructor(adapter: CargoPackageManagerAdapter | undefined, trace: Trace) {
+  constructor(adapter: NuriteoPackageManagerAdapter | undefined, trace: Trace) {
     this.adapter = adapter;
     this.trace = trace;
   }
 
-  install(options: CargoPackageCommandOptions & { packageManager?: "npm" | "pnpm" | "yarn" } = {}): Promise<CargoCommandResult> {
+  install(options: NuriteoPackageCommandOptions & { packageManager?: "npm" | "pnpm" | "yarn" } = {}): Promise<NuriteoCommandResult> {
     return this.trace("package-manager", "install", () => this.#adapter().install(cloneCommandOptions(options)));
   }
 
-  run(script: string, options: CargoPackageCommandOptions = {}): Promise<CargoCommandResult> {
+  run(script: string, options: NuriteoPackageCommandOptions = {}): Promise<NuriteoCommandResult> {
     return this.trace("package-manager", "run", () => this.#adapter().run(required(script, "script"), cloneCommandOptions(options)));
   }
 
-  exec(binary: string, options: CargoPackageCommandOptions = {}): Promise<CargoCommandResult> {
+  exec(binary: string, options: NuriteoPackageCommandOptions = {}): Promise<NuriteoCommandResult> {
     return this.trace("package-manager", "exec", () => this.#adapter().exec(required(binary, "binary"), cloneCommandOptions(options)));
   }
 
-  #adapter(): CargoPackageManagerAdapter {
+  #adapter(): NuriteoPackageManagerAdapter {
     return requiredAdapter(this.adapter, "package-manager");
   }
 }
 
-export class CargoPreviewApi {
-  private readonly adapter: CargoPreviewAdapter | undefined;
+export class NuriteoPreviewApi {
+  private readonly adapter: NuriteoPreviewAdapter | undefined;
   private readonly trace: Trace;
 
-  constructor(adapter: CargoPreviewAdapter | undefined, trace: Trace) {
+  constructor(adapter: NuriteoPreviewAdapter | undefined, trace: Trace) {
     this.adapter = adapter;
     this.trace = trace;
   }
 
-  ports(): Promise<CargoPreviewPort[]> {
+  ports(): Promise<NuriteoPreviewPort[]> {
     return this.trace("preview", "ports", async () => (await this.#adapter().listPorts()).map((port) => ({ ...port })));
   }
 
@@ -249,20 +249,20 @@ export class CargoPreviewApi {
     });
   }
 
-  subscribe(listener: (event: CargoPreviewEvent) => void): () => void {
+  subscribe(listener: (event: NuriteoPreviewEvent) => void): () => void {
     return optional(this.#adapter().subscribe, "preview.subscribe")(listener);
   }
 
-  #adapter(): CargoPreviewAdapter {
+  #adapter(): NuriteoPreviewAdapter {
     return requiredAdapter(this.adapter, "preview");
   }
 }
 
-export class CargoProjectApi {
-  private readonly adapter: CargoProjectAdapter | undefined;
+export class NuriteoProjectApi {
+  private readonly adapter: NuriteoProjectAdapter | undefined;
   private readonly trace: Trace;
 
-  constructor(adapter: CargoProjectAdapter | undefined, trace: Trace) {
+  constructor(adapter: NuriteoProjectAdapter | undefined, trace: Trace) {
     this.adapter = adapter;
     this.trace = trace;
   }
@@ -275,39 +275,39 @@ export class CargoProjectApi {
     return this.trace("project", "import", () => this.#adapter().importProject(archive));
   }
 
-  #adapter(): CargoProjectAdapter {
+  #adapter(): NuriteoProjectAdapter {
     return requiredAdapter(this.adapter, "project");
   }
 }
 
-export class CargoProcessApi {
-  private readonly adapter: CargoProcessAdapter | undefined;
+export class NuriteoProcessApi {
+  private readonly adapter: NuriteoProcessAdapter | undefined;
   private readonly trace: Trace;
 
-  constructor(adapter: CargoProcessAdapter | undefined, trace: Trace) {
+  constructor(adapter: NuriteoProcessAdapter | undefined, trace: Trace) {
     this.adapter = adapter;
     this.trace = trace;
   }
 
-  spawn(options: CargoProcessSpawnOptions): Promise<CargoProcessHandle> {
+  spawn(options: NuriteoProcessSpawnOptions): Promise<NuriteoProcessHandle> {
     return this.trace("process", "spawn", () => this.#adapter().spawn({
       ...cloneCommandOptions(options),
       command: required(options.command, "command")
     }));
   }
 
-  #adapter(): CargoProcessAdapter {
+  #adapter(): NuriteoProcessAdapter {
     return requiredAdapter(this.adapter, "process");
   }
 }
 
-export interface CargoWorkerAssets {
+export interface NuriteoWorkerAssets {
   processWorkerUrl: URL;
   systemWasmUrl: URL;
   systemWorkerUrl: URL;
 }
 
-export function resolveCargoWorkerAssets(baseUrl: string | URL): CargoWorkerAssets {
+export function resolveNuriteoWorkerAssets(baseUrl: string | URL): NuriteoWorkerAssets {
   const base = new URL(String(baseUrl), typeof location === "undefined" ? "http://localhost/" : location.href);
   const normalized = new URL(base.href.endsWith("/") ? base.href : `${base.href}/`);
   return {
@@ -317,14 +317,14 @@ export function resolveCargoWorkerAssets(baseUrl: string | URL): CargoWorkerAsse
   };
 }
 
-export interface RegisterCargoPreviewServiceWorkerOptions {
+export interface RegisterNuriteoPreviewServiceWorkerOptions {
   scriptUrl: string | URL;
   scope?: string;
   navigator?: Pick<Navigator, "serviceWorker">;
 }
 
-export async function registerCargoPreviewServiceWorker(
-  options: RegisterCargoPreviewServiceWorkerOptions
+export async function registerNuriteoPreviewServiceWorker(
+  options: RegisterNuriteoPreviewServiceWorkerOptions
 ): Promise<ServiceWorkerRegistration> {
   const serviceWorker = options.navigator?.serviceWorker
     || (typeof navigator !== "undefined" ? navigator.serviceWorker : undefined);
@@ -353,7 +353,7 @@ function optional<T extends (...args: never[]) => unknown>(value: T | undefined,
   return value;
 }
 
-function cloneCommandOptions<T extends CargoPackageCommandOptions>(options: T): T {
+function cloneCommandOptions<T extends NuriteoPackageCommandOptions>(options: T): T {
   return {
     ...options,
     ...(options.args ? { args: [...options.args] } : {}),

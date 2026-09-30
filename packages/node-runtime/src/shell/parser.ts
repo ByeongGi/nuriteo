@@ -1,10 +1,10 @@
 export class ShellSyntaxError extends Error {
-  code: "ERR_CARGO_CONTAINER_UNSUPPORTED_SHELL_SYNTAX";
+  code: "ERR_NURITEO_UNSUPPORTED_SHELL_SYNTAX";
 
   constructor(message: string) {
     super(message);
     this.name = "ShellSyntaxError";
-    this.code = "ERR_CARGO_CONTAINER_UNSUPPORTED_SHELL_SYNTAX";
+    this.code = "ERR_NURITEO_UNSUPPORTED_SHELL_SYNTAX";
   }
 }
 

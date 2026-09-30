@@ -1,6 +1,7 @@
 {
-  "name": "@cargo-container/sdk",
+  "name": "@nuriteo/sdk",
   "version": "0.1.0-beta.1",
+  "license": "Apache-2.0",
   "publishConfig": {
     "access": "public",
     "provenance": true,
@@ -11,7 +12,7 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@cargo-container/browser-host": "workspace:*",
-    "@cargo-container/protocol": "workspace:*"
+    "@nuriteo/browser-host": "workspace:*",
+    "@nuriteo/protocol": "workspace:*"
   }
 }

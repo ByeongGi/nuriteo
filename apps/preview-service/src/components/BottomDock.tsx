@@ -20,13 +20,13 @@ export function BottomDock({ model }: { model: PreviewControllerModel }) {
   const problemCount = diagnostics.length + languageProblems.length + (snapshot.lastError ? 1 : 0);
 
   return (
-    <div className="flex h-full min-h-0 flex-col border-t border-cargo-line bg-cargo-elevated/90" data-panel="dock">
+    <div className="flex h-full min-h-0 flex-col border-t border-nuriteo-line bg-nuriteo-elevated/90" data-panel="dock">
       <Tabs.Root
         value={dockTab}
         onValueChange={(value) => setDockTab(value === "diagnostics" ? "diagnostics" : "terminal")}
         className="flex min-h-0 flex-1 flex-col"
       >
-        <div className="flex items-center gap-1 border-b border-cargo-line px-2">
+        <div className="flex items-center gap-1 border-b border-nuriteo-line px-2">
           <Tabs.List className="flex items-center gap-1 py-1" aria-label="Bottom panels">
             <Tabs.Tab value="terminal" className={({ active }) => `dock-tab${active ? " is-active" : ""}`}>
               Terminal
@@ -36,21 +36,21 @@ export function BottomDock({ model }: { model: PreviewControllerModel }) {
             </Tabs.Tab>
           </Tabs.List>
           <div className="flex-1" />
-          <p id="terminal-status" className="px-2 text-[11px] text-cargo-muted">
+          <p id="terminal-status" className="px-2 text-[11px] text-nuriteo-muted">
             {snapshot.phase.replaceAll("_", " ")}
           </p>
         </div>
 
         <div className="min-h-0 flex-1 overflow-hidden">
           <Tabs.Panel value="terminal" className="flex h-full min-h-0 flex-col" id="dock-terminal">
-            <div className="flex items-center gap-1 border-b border-cargo-line px-2 py-1">
+            <div className="flex items-center gap-1 border-b border-nuriteo-line px-2 py-1">
               {terminals.map((terminal) => (
                 <div
                   key={terminal.id}
                   className={`flex items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] ${
                     activeTerminalId === terminal.id
-                      ? "border-cargo-accent/50 bg-cargo-accent/10 text-cargo-accent-strong"
-                      : "border-transparent text-cargo-muted hover:bg-cargo-panel-2"
+                      ? "border-nuriteo-accent/50 bg-nuriteo-accent/10 text-nuriteo-accent-strong"
+                      : "border-transparent text-nuriteo-muted hover:bg-nuriteo-panel-2"
                   }`}
                 >
                   <button
@@ -95,22 +95,22 @@ export function BottomDock({ model }: { model: PreviewControllerModel }) {
 
           <Tabs.Panel value="diagnostics" className="flex h-full min-h-0 flex-col" id="dock-diagnostics">
             <div className="flex items-baseline justify-between gap-3 px-3 pt-2 text-xs">
-              <p id="diagnostics-status" className="font-medium text-cargo-ink">
+              <p id="diagnostics-status" className="font-medium text-nuriteo-ink">
                 {problemCount > 0 ? (snapshot.phase === "failed" ? "needs attention" : "attention") : "idle"}
               </p>
-              <p className="text-cargo-muted">Runtime and language-service diagnostics</p>
+              <p className="text-nuriteo-muted">Runtime and language-service diagnostics</p>
             </div>
             <div className="grid min-h-0 flex-1 grid-cols-1 gap-2 overflow-auto p-3 md:grid-cols-2">
               <ol id="diagnostics-user" aria-label="User-facing diagnostics" className="space-y-2">
                 {diagnostics.length === 0 && languageProblems.length === 0 && !snapshot.lastError ? (
-                  <li className="text-xs text-cargo-muted">No problems reported.</li>
+                  <li className="text-xs text-nuriteo-muted">No problems reported.</li>
                 ) : (
                   <>
                     {languageProblems.map((problem) => (
                       <li key={problem.id}>
                         <button
                           type="button"
-                          className="w-full rounded-lg border border-cargo-line bg-cargo-panel px-3 py-2 text-left hover:border-cargo-accent/50"
+                          className="w-full rounded-lg border border-nuriteo-line bg-nuriteo-panel px-3 py-2 text-left hover:border-nuriteo-accent/50"
                           onClick={() => model.openLanguageProblem(problem)}
                         >
                           <span className="flex items-center justify-between gap-2 font-mono text-[10px] tracking-wide uppercase">
@@ -119,30 +119,30 @@ export function BottomDock({ model }: { model: PreviewControllerModel }) {
                                 problem.severity === "error"
                                   ? "text-red-400"
                                   : problem.severity === "warning"
-                                    ? "text-cargo-warn"
-                                    : "text-cargo-accent"
+                                    ? "text-nuriteo-warn"
+                                    : "text-nuriteo-accent"
                               }
                             >
                               {problem.severity} · {problem.source}
                               {problem.code ? ` ${problem.code}` : ""}
                             </span>
-                            <span className="text-cargo-muted">
+                            <span className="text-nuriteo-muted">
                               {model.displayPath(problem.path)}:{problem.line}:{problem.column}
                             </span>
                           </span>
-                          <span className="mt-1 block text-sm text-cargo-ink">{problem.message}</span>
+                          <span className="mt-1 block text-sm text-nuriteo-ink">{problem.message}</span>
                         </button>
                       </li>
                     ))}
                     {diagnostics.map((diagnostic, index) => (
                       <li
                         key={`${diagnostic.code || "diag"}-${index}`}
-                        className="rounded-lg border border-cargo-line bg-cargo-panel px-3 py-2"
+                        className="rounded-lg border border-nuriteo-line bg-nuriteo-panel px-3 py-2"
                       >
-                        <div className="code font-mono text-[10px] tracking-wide text-cargo-accent uppercase">
+                        <div className="code font-mono text-[10px] tracking-wide text-nuriteo-accent uppercase">
                           {diagnostic.code || "DIAG"}
                         </div>
-                        <p className="mt-1 text-sm text-cargo-ink">{diagnostic.message}</p>
+                        <p className="mt-1 text-sm text-nuriteo-ink">{diagnostic.message}</p>
                         {diagnostic.recoveryActions?.length ? (
                           <div className="mt-2 flex flex-wrap gap-1.5">
                             {diagnostic.recoveryActions.map((action) => (
@@ -162,11 +162,11 @@ export function BottomDock({ model }: { model: PreviewControllerModel }) {
                   </>
                 )}
               </ol>
-              <div className="rounded-lg border border-cargo-line bg-cargo-panel p-3">
-                <p className="text-[11px] font-semibold tracking-wide text-cargo-muted uppercase">Last error</p>
+              <div className="rounded-lg border border-nuriteo-line bg-nuriteo-panel p-3">
+                <p className="text-[11px] font-semibold tracking-wide text-nuriteo-muted uppercase">Last error</p>
                 <pre
                   id="diagnostics-detail"
-                  className="mt-2 overflow-auto font-mono text-[11px] leading-relaxed text-cargo-ink/90"
+                  className="mt-2 overflow-auto font-mono text-[11px] leading-relaxed text-nuriteo-ink/90"
                 >
                   {snapshot.lastError
                     ? `${snapshot.lastError.source}: ${snapshot.lastError.message}${snapshot.lastError.stack ? `\n${snapshot.lastError.stack}` : ""}`

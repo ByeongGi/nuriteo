@@ -16,7 +16,7 @@ import { applyLspWorkspaceEdit } from "../lib/workspaceEdit";
 
 loader.config({ monaco });
 
-const TAB_MIME = "application/x-cargo-tab";
+const TAB_MIME = "application/x-nuriteo-tab";
 
 function languageForPath(path: string): string {
   const lower = path.toLowerCase();
@@ -202,17 +202,17 @@ export function CodeEditor({ model }: { model: PreviewControllerModel }) {
 
   return (
     <section
-      className="flex h-full min-h-0 min-w-0 flex-col border-r border-cargo-line bg-cargo-bg"
+      className="flex h-full min-h-0 min-w-0 flex-col border-r border-nuriteo-line bg-nuriteo-bg"
       aria-label="Editor"
     >
-      <div className="flex items-center gap-2 border-b border-cargo-line bg-cargo-elevated/80 px-2">
+      <div className="flex items-center gap-2 border-b border-nuriteo-line bg-nuriteo-elevated/80 px-2">
         <div
           id="editor-tabs"
           className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto py-1.5"
           aria-label="Open files"
         >
           {openPaths.length === 0 ? (
-            <span className="px-2 text-xs text-cargo-muted">No open files</span>
+            <span className="px-2 text-xs text-nuriteo-muted">No open files</span>
           ) : (
             openPaths.map((path) => {
               const active = path === selectedPath;
@@ -230,9 +230,9 @@ export function CodeEditor({ model }: { model: PreviewControllerModel }) {
                   className={clsx(
                     "group flex max-w-[180px] items-center gap-1 rounded-md border px-2 py-1 text-xs",
                     active
-                      ? "border-cargo-accent/50 bg-cargo-accent/10 text-cargo-accent-strong"
-                      : "border-transparent text-cargo-muted hover:bg-cargo-panel-2 hover:text-cargo-ink",
-                    dragOverTab === path && "ring-1 ring-cargo-accent/60"
+                      ? "border-nuriteo-accent/50 bg-nuriteo-accent/10 text-nuriteo-accent-strong"
+                      : "border-transparent text-nuriteo-muted hover:bg-nuriteo-panel-2 hover:text-nuriteo-ink",
+                    dragOverTab === path && "ring-1 ring-nuriteo-accent/60"
                   )}
                   onContextMenu={(event: MouseEvent) => {
                     event.preventDefault();
@@ -245,7 +245,7 @@ export function CodeEditor({ model }: { model: PreviewControllerModel }) {
                   </button>
                   <button
                     type="button"
-                    className="rounded p-0.5 opacity-60 hover:bg-cargo-line/60 hover:opacity-100"
+                    className="rounded p-0.5 opacity-60 hover:bg-nuriteo-line/60 hover:opacity-100"
                     aria-label={`Close ${displayPath(path)}`}
                     onClick={() => closeTab(path)}
                   >
@@ -306,13 +306,13 @@ export function CodeEditor({ model }: { model: PreviewControllerModel }) {
         </div>
       </div>
 
-      <div className="flex items-center justify-between gap-3 border-b border-cargo-line px-3 py-1.5 text-xs">
+      <div className="flex items-center justify-between gap-3 border-b border-nuriteo-line px-3 py-1.5 text-xs">
         <EditorBreadcrumbs path={selectedPath || null} displayPath={displayPath} />
         <span
           id="editor-status"
           className={clsx(
             "rounded-full border px-2 py-0.5 font-medium",
-            editorFile?.dirty ? "border-amber-700/40 text-cargo-warn" : "border-cargo-line text-cargo-muted"
+            editorFile?.dirty ? "border-amber-700/40 text-nuriteo-warn" : "border-nuriteo-line text-nuriteo-muted"
           )}
         >
           {!selectedPath
@@ -354,7 +354,7 @@ export function CodeEditor({ model }: { model: PreviewControllerModel }) {
               }}
             />
           ) : (
-            <div className="flex h-full items-center justify-center px-6 text-sm text-cargo-muted">
+            <div className="flex h-full items-center justify-center px-6 text-sm text-nuriteo-muted">
               {selectedPath && workerState === "failed"
                 ? "Editor language workers failed to start. Check the built Monaco worker assets."
                 : selectedPath && workerState === "starting"
@@ -364,8 +364,8 @@ export function CodeEditor({ model }: { model: PreviewControllerModel }) {
           )}
         </div>
         {splitPath && splitFile ? (
-          <div className="flex min-h-0 min-w-0 flex-col border-l border-cargo-line">
-            <div className="flex shrink-0 items-center justify-between border-b border-cargo-line px-2 py-1 text-[11px] text-cargo-muted">
+          <div className="flex min-h-0 min-w-0 flex-col border-l border-nuriteo-line">
+            <div className="flex shrink-0 items-center justify-between border-b border-nuriteo-line px-2 py-1 text-[11px] text-nuriteo-muted">
               <span className="truncate font-mono">{displayPath(splitPath)}{splitFile.dirty ? " •" : ""}</span>
               <div className="flex items-center gap-1">
                 <button type="button" className="btn-small" disabled={!splitFile.dirty} onClick={() => saveFile(splitPath)}>
@@ -401,7 +401,7 @@ export function CodeEditor({ model }: { model: PreviewControllerModel }) {
 
       <div
         id="editor-statusbar"
-        className="flex items-center justify-between gap-3 border-t border-cargo-line px-3 py-1 font-mono text-[11px] text-cargo-muted"
+        className="flex items-center justify-between gap-3 border-t border-nuriteo-line px-3 py-1 font-mono text-[11px] text-nuriteo-muted"
       >
         <span>
           {selectedPath

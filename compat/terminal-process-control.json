@@ -31,7 +31,7 @@
   },
   "shellGrammar": {
     "supported": ["quoted argv", "pipeline", "AND operator", "stdout overwrite"],
-    "diagnosticCode": "ERR_CARGO_CONTAINER_UNSUPPORTED_SHELL_SYNTAX",
+    "diagnosticCode": "ERR_NURITEO_UNSUPPORTED_SHELL_SYNTAX",
     "unsupported": ["background jobs", "command substitution", "OR operator", "command lists", "heredoc", "append redirect", "stdin redirect", "shell blocks"]
   },
   "posixPty": {
@@ -50,7 +50,7 @@
     "nativeShell": false,
     "workerUrlPolicy": "permission-manager",
     "workspaceCwd": "absolute-normalized",
-    "unsupportedSyntaxDiagnostic": "ERR_CARGO_CONTAINER_UNSUPPORTED_SHELL_SYNTAX"
+    "unsupportedSyntaxDiagnostic": "ERR_NURITEO_UNSUPPORTED_SHELL_SYNTAX"
   },
   "tests": [
     "packages/node-runtime/test/shell.test.ts",
@@ -83,6 +83,6 @@
     "pnpm test:preview-service",
     "pnpm test:browser",
     "pnpm check:types",
-    "pnpm --filter @cargo-container/preview-service-app build"
+    "pnpm --filter @nuriteo/preview-service-app build"
   ]
 }

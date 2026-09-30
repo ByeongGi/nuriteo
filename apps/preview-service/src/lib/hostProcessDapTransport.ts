@@ -26,7 +26,7 @@ export class HostProcessDapTransport implements DapTransport {
   }
 
   static async start(): Promise<HostProcessDapTransport> {
-    const resource = "worker://cargo/debug-runtime";
+    const resource = "worker://nuriteo/debug-runtime";
     const permissions = createPermissionManager({
       defaultDecision: "deny",
       rules: [{ scope: "process", action: "prepare", resourcePrefix: resource, decision: "allow" }]
@@ -35,7 +35,7 @@ export class HostProcessDapTransport implements DapTransport {
       permissions,
       workerFactory: () => new Worker(
         new URL("../workers/debugRuntimeProcess.worker.ts", import.meta.url),
-        { type: "module", name: "cargo-debug-runtime-process" }
+        { type: "module", name: "nuriteo-debug-runtime-process" }
       )
     });
     const prepared = table.prepare({ cwd: "/workspace", projectId: "debug-session", url: resource });

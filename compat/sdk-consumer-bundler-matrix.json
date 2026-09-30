@@ -3,7 +3,7 @@
   "updatedAt": "2026-09-22",
   "scope": {
     "goal": "Track SDK consumer bundler compatibility for productization.",
-    "packageArtifact": "dist/sdk/cargo-container-sdk-0.1.0-beta.1.tgz",
+    "packageArtifact": "dist/sdk/nuriteo-sdk-0.1.0-beta.1.tgz",
     "stableApi": "docs/productization/sdk-api-freeze-rfc.md"
   },
   "cases": [
@@ -13,7 +13,7 @@
       "command": "node tests/contract/sdk-consumer/services.test.ts",
       "status": "pass",
       "evidence": ["tests/contract/sdk-consumer/services.test.ts", "compat/sdk-public-release.json"],
-      "notes": "Validates typed errors, filesystem/package/process/project/preview adapters, trace events, mount-root containment, lifecycle retry and teardown, and the Cargo WebContainer-style facade."
+      "notes": "Validates typed errors, filesystem/package/process/project/preview adapters, trace events, mount-root containment, lifecycle retry and teardown, and the NURITEO WebContainer-style facade."
     },
     {
       "id": "typescript-bundler-resolution",
@@ -21,12 +21,12 @@
       "command": "tsc --noEmit with moduleResolution Bundler",
       "status": "pass",
       "evidence": ["tests/contract/sdk-consumer/package.test.ts"],
-      "notes": "Tarball-installed consumer imports @cargo-container/sdk root types and validates stable API surface."
+      "notes": "Tarball-installed consumer imports @nuriteo/sdk root types and validates stable API surface."
     },
     {
       "id": "node-commonjs-require",
       "bundler": "node-cjs",
-      "command": "require('@cargo-container/sdk')",
+      "command": "require('@nuriteo/sdk')",
       "status": "pass",
       "evidence": ["tests/contract/sdk-consumer/package.test.ts"],
       "notes": "Tarball-installed consumer verifies CommonJS conditional export exposes createContainer, createPreviewRelay, and protocolVersion."

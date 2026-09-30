@@ -1,4 +1,4 @@
-import type { TemplateId } from "@cargo-container/browser-host";
+import type { TemplateId } from "@nuriteo/browser-host";
 
 export interface DeepLinkIntent {
   template?: TemplateId;

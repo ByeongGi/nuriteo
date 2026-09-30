@@ -6,15 +6,15 @@ export function SettingsPanel({ model }: { model: PreviewControllerModel }) {
   const { settings, updateSettings, changeStatus } = model;
 
   return (
-    <aside className="flex h-full min-h-0 min-w-0 flex-col border-r border-cargo-line bg-cargo-elevated/60" aria-label="Settings">
-      <div className="border-b border-cargo-line px-3 py-2">
-        <h2 className="text-[11px] font-semibold tracking-[0.14em] text-cargo-muted uppercase">Settings</h2>
+    <aside className="flex h-full min-h-0 min-w-0 flex-col border-r border-nuriteo-line bg-nuriteo-elevated/60" aria-label="Settings">
+      <div className="border-b border-nuriteo-line px-3 py-2">
+        <h2 className="text-[11px] font-semibold tracking-[0.14em] text-nuriteo-muted uppercase">Settings</h2>
       </div>
       <div className="min-h-0 flex-1 space-y-4 overflow-auto p-3 text-xs">
         <label className="block space-y-1">
-          <span className="text-cargo-muted">Theme</span>
+          <span className="text-nuriteo-muted">Theme</span>
           <select
-            className="w-full rounded-md border border-cargo-line bg-cargo-panel px-2 py-1.5 text-cargo-ink"
+            className="w-full rounded-md border border-nuriteo-line bg-nuriteo-panel px-2 py-1.5 text-nuriteo-ink"
             value={settings.theme}
             onChange={(event) => updateSettings({ theme: event.target.value as ColorTheme })}
           >
@@ -25,9 +25,9 @@ export function SettingsPanel({ model }: { model: PreviewControllerModel }) {
         </label>
 
         <label className="block space-y-1">
-          <span className="text-cargo-muted">File icon theme</span>
+          <span className="text-nuriteo-muted">File icon theme</span>
           <select
-            className="w-full rounded-md border border-cargo-line bg-cargo-panel px-2 py-1.5 text-cargo-ink"
+            className="w-full rounded-md border border-nuriteo-line bg-nuriteo-panel px-2 py-1.5 text-nuriteo-ink"
             value={settings.iconTheme}
             onChange={(event) => updateSettings({ iconTheme: event.target.value as IconTheme })}
           >
@@ -37,7 +37,7 @@ export function SettingsPanel({ model }: { model: PreviewControllerModel }) {
         </label>
 
         <label className="block space-y-1">
-          <span className="text-cargo-muted">Editor font size</span>
+          <span className="text-nuriteo-muted">Editor font size</span>
           <input
             type="range"
             min={11}
@@ -46,11 +46,11 @@ export function SettingsPanel({ model }: { model: PreviewControllerModel }) {
             onChange={(event) => updateSettings({ fontSize: Number(event.target.value) })}
             className="w-full"
           />
-          <span className="font-mono text-cargo-ink">{settings.fontSize}px</span>
+          <span className="font-mono text-nuriteo-ink">{settings.fontSize}px</span>
         </label>
 
         <label className="flex items-center justify-between gap-3">
-          <span className="text-cargo-muted">Editor minimap</span>
+          <span className="text-nuriteo-muted">Editor minimap</span>
           <input
             type="checkbox"
             checked={settings.editorMinimap}
@@ -59,7 +59,7 @@ export function SettingsPanel({ model }: { model: PreviewControllerModel }) {
         </label>
 
         <label className="flex items-center justify-between gap-3">
-          <span className="text-cargo-muted">Word wrap</span>
+          <span className="text-nuriteo-muted">Word wrap</span>
           <input
             type="checkbox"
             checked={settings.wordWrap}
@@ -68,9 +68,9 @@ export function SettingsPanel({ model }: { model: PreviewControllerModel }) {
         </label>
 
         <label className="block space-y-1">
-          <span className="text-cargo-muted">Save trigger</span>
+          <span className="text-nuriteo-muted">Save trigger</span>
           <select
-            className="w-full rounded-md border border-cargo-line bg-cargo-panel px-2 py-1.5 text-cargo-ink"
+            className="w-full rounded-md border border-nuriteo-line bg-nuriteo-panel px-2 py-1.5 text-nuriteo-ink"
             value={settings.saveTrigger}
             onChange={(event) => updateSettings({ saveTrigger: event.target.value as SaveTrigger })}
           >
@@ -79,21 +79,21 @@ export function SettingsPanel({ model }: { model: PreviewControllerModel }) {
           </select>
         </label>
 
-        <div className="rounded-lg border border-cargo-line bg-cargo-panel p-3">
-          <p className="font-semibold tracking-wide text-cargo-muted uppercase">Application menu scope</p>
+        <div className="rounded-lg border border-nuriteo-line bg-nuriteo-panel p-3">
+          <p className="font-semibold tracking-wide text-nuriteo-muted uppercase">Application menu scope</p>
           {Object.entries(MENU_SUPPORT_SCOPE).map(([menu, actions]) => (
-            <p key={menu} className="mt-1 text-cargo-ink"><strong>{menu}:</strong> {actions.join(", ")}</p>
+            <p key={menu} className="mt-1 text-nuriteo-ink"><strong>{menu}:</strong> {actions.join(", ")}</p>
           ))}
-          <p className="mt-2 text-cargo-muted">Excluded: {MENU_EXCLUDED_SCOPE.join(", ")}.</p>
+          <p className="mt-2 text-nuriteo-muted">Excluded: {MENU_EXCLUDED_SCOPE.join(", ")}.</p>
         </div>
 
-        <div className="rounded-lg border border-cargo-line bg-cargo-panel p-3">
-          <p className="font-semibold tracking-wide text-cargo-muted uppercase">Working tree</p>
-          <p className="mt-1 text-cargo-ink">
+        <div className="rounded-lg border border-nuriteo-line bg-nuriteo-panel p-3">
+          <p className="font-semibold tracking-wide text-nuriteo-muted uppercase">Working tree</p>
+          <p className="mt-1 text-nuriteo-ink">
             {changeStatus.hasGitMarker ? "Git marker present" : "No .git marker (local dirty tracking)"}
           </p>
-          <p className="mt-2 text-cargo-muted">Dirty files: {changeStatus.dirty.length}</p>
-          <ul className="mt-1 max-h-32 space-y-0.5 overflow-auto font-mono text-[10px] text-cargo-ink">
+          <p className="mt-2 text-nuriteo-muted">Dirty files: {changeStatus.dirty.length}</p>
+          <ul className="mt-1 max-h-32 space-y-0.5 overflow-auto font-mono text-[10px] text-nuriteo-ink">
             {changeStatus.dirty.map((path) => (
               <li key={path}>{model.displayPath(path)}</li>
             ))}

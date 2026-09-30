@@ -82,8 +82,8 @@ export async function probeMonacoTypeScriptWorker(): Promise<MonacoWorkerStatus>
 /** Verify the semantic features used by completion, hover, and go-to-definition. */
 export async function probeMonacoLanguageFeatures(): Promise<MonacoLanguageFeatureStatus> {
   await configureMonacoWorkers();
-  const definitionUri = monaco.Uri.parse("file:///__cargo_language_probe__/answer.ts");
-  const consumerUri = monaco.Uri.parse("file:///__cargo_language_probe__/consumer.ts");
+  const definitionUri = monaco.Uri.parse("file:///__nuriteo_language_probe__/answer.ts");
+  const consumerUri = monaco.Uri.parse("file:///__nuriteo_language_probe__/consumer.ts");
   const definitionModel = monaco.editor.createModel("export const answer: number = 42;\n", "typescript", definitionUri);
   const consumerSource = ['import { answer } from "./answer";', "answer.toFixed(2);", "answer."].join("\n");
   const consumerModel = monaco.editor.createModel(consumerSource, "typescript", consumerUri);
@@ -118,9 +118,9 @@ async function runTypeScriptWorkerProbe(): Promise<MonacoWorkerStatus> {
   let loader: MonacoWorkerStatus["loader"] = "bundler";
   if (typeof env?.getWorker === "function") loader = "getWorker";
   else if (typeof env?.getWorkerUrl === "function") loader = "getWorkerUrl";
-  const uri = monaco.Uri.parse("file:///__cargo_monaco_worker_probe__.ts");
+  const uri = monaco.Uri.parse("file:///__nuriteo_monaco_worker_probe__.ts");
   const existing = monaco.editor.getModel(uri);
-  const model = existing || monaco.editor.createModel("const cargoProbe: string = 42;\n", "typescript", uri);
+  const model = existing || monaco.editor.createModel("const nuriteoProbe: string = 42;\n", "typescript", uri);
 
   try {
     const getWorker = await getRegisteredTypeScriptWorker();

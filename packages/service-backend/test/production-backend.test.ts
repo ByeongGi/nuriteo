@@ -13,7 +13,7 @@ import {
 } from "../src/index.ts";
 import type { UsageEvent } from "../src/index.ts";
 
-const root = fs.mkdtempSync(path.join(os.tmpdir(), "cargo-production-backend-"));
+const root = fs.mkdtempSync(path.join(os.tmpdir(), "nuriteo-production-backend-"));
 const databasePath = path.join(root, "database.json");
 const objectRoot = path.join(root, "objects");
 let clock = 1_800_000_000_000;

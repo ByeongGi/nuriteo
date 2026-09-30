@@ -435,7 +435,7 @@ Object.freeze(cjsFactories);
 }
 
 function loadPackage(name: string, from: string, nodes: Map<string, PackageNode>): PackageNode {
-  const require = createRequire(path.join(from, "__cargo_resolve.cjs"));
+  const require = createRequire(path.join(from, "__nuriteo_resolve.cjs"));
   let manifestPath: string;
   try {
     manifestPath = require.resolve(`${name}/package.json`);

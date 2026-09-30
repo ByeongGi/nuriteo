@@ -1,6 +1,7 @@
 {
-  "name": "cargo-container",
+  "name": "nuriteo",
   "private": true,
+  "license": "Apache-2.0",
   "type": "module",
   "packageManager": "pnpm@11.15.1",
   "engines": {
@@ -73,8 +74,8 @@
     "test:worker-boot": "node experiments/worker-boot/check.ts",
     "test:harness": "node tests/harness/self-test.ts",
     "dev:lab": "node examples/runtime-lab/server.ts",
-    "dev:preview": "pnpm --filter @cargo-container/preview-service-app dev",
-    "build:preview": "pnpm --filter @cargo-container/preview-service-app build",
+    "dev:preview": "pnpm --filter @nuriteo/preview-service-app dev",
+    "build:preview": "pnpm --filter @nuriteo/preview-service-app build",
     "test:preview-service": "node apps/preview-service/test/run.ts",
     "test:safari-browser": "node apps/preview-service/test/safari-browser-smoke.test.ts",
     "test:next-full-runtime": "node --experimental-strip-types apps/preview-service/test/next-full-runtime.test.ts",

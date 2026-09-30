@@ -72,6 +72,6 @@ const enqueueForever = () => boundedScheduler.nextTick(enqueueForever);
 boundedScheduler.nextTick(enqueueForever);
 const boundedResult = await boundedScheduler.runUntilIdle();
 assert.equal(boundedResult.exitCode, 1);
-assert.equal(boundedResult.uncaughtException.code, "ERR_CARGO_CONTAINER_SCHEDULER_LIMIT");
+assert.equal(boundedResult.uncaughtException.code, "ERR_NURITEO_SCHEDULER_LIMIT");
 
 console.log("node scheduler test ok");

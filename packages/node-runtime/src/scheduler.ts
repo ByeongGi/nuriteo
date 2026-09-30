@@ -10,7 +10,7 @@ interface RuntimeSchedulerOptions {
 }
 
 export class SchedulerLimitError extends Error {
-  code = "ERR_CARGO_CONTAINER_SCHEDULER_LIMIT";
+  code = "ERR_NURITEO_SCHEDULER_LIMIT";
 
   constructor(limit: number) {
     super(`runtime scheduler exceeded ${limit} callbacks without becoming idle`);

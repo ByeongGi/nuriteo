@@ -5,7 +5,7 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 
 const root = new URL("../../..", import.meta.url).pathname;
-const packageTarball = path.join(root, "dist/sdk/cargo-container-sdk-0.1.0-beta.1.tgz");
+const packageTarball = path.join(root, "dist/sdk/nuriteo-sdk-0.1.0-beta.1.tgz");
 
 if (!fs.existsSync(packageTarball)) {
   throw new Error("SDK package tarball missing; run tooling/release/package-sdk.ts first");
@@ -19,7 +19,7 @@ try {
       build: "rspack build --mode=production"
     },
     dependencies: {
-      "@cargo-container/sdk": packageTarball,
+      "@nuriteo/sdk": packageTarball,
       "@rspack/cli": "2.2.4",
       "@rspack/core": "2.2.4"
     }
@@ -39,7 +39,7 @@ try {
   ].join("\n"));
   fs.mkdirSync(path.join(workdir, "src"), { recursive: true });
   fs.writeFileSync(path.join(workdir, "src/main.js"), [
-    'import { createContainer, protocolVersion } from "@cargo-container/sdk";',
+    'import { createContainer, protocolVersion } from "@nuriteo/sdk";',
     "",
     "const container = createContainer({",
     '  systemWorkerUrl: new URL("/sdk/workers/system-worker.ts", globalThis.location.href),',

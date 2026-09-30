@@ -25,7 +25,7 @@ interface ProjectDocument {
 }
 
 const ROOT_PATH = "/workspace";
-const VIRTUAL_LIB_PATH = "/__cargo__/lib.d.ts";
+const VIRTUAL_LIB_PATH = "/__nuriteo__/lib.d.ts";
 const FORMAT_OPTIONS: ts.FormatCodeSettings = {
   convertTabsToSpaces: true,
   indentSize: 2,

@@ -56,7 +56,7 @@ export class BrowserLanguageServer {
       await client.request("initialize", {
         processId: null,
         rootUri,
-        clientInfo: { name: "cargo-container-preview", version: "0.1" },
+        clientInfo: { name: "nuriteo-preview", version: "0.1" },
         capabilities: { workspace: { workspaceEdit: { documentChanges: false } } }
       });
       client.notify("initialized", {});

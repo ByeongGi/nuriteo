@@ -17,7 +17,7 @@ source.writeText("package.json", "{\"name\":\"exported\"}\n");
 source.writeText("src/main.js", "console.log(\"exported\")\n");
 const archive = source.exportArchive(1234);
 assert.equal(archive.schemaVersion, 1);
-assert.equal(archive.format, "cargo-container-project-archive");
+assert.equal(archive.format, "nuriteo-project-archive");
 assert.equal(archive.exportedAt, 1234);
 assert.equal(archive.snapshot.files.length, 2);
 
@@ -77,7 +77,7 @@ const legacyImport = createProjectWorkspaceStore({
 });
 legacyImport.importArchive({
   schemaVersion: 1,
-  format: "cargo-container-project-archive",
+  format: "nuriteo-project-archive",
   exportedAt: 1235,
   snapshot: {
     projectId: "legacy-project",

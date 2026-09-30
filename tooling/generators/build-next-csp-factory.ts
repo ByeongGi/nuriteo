@@ -198,7 +198,7 @@ function transformNextCliEntry(source: string): string {
   const transformed = source
     .replace(/\bimport\((['"][^'"]+['"])\)/g, "Promise.resolve(require($1))")
     .replace(devDispatch, `return ${devDispatch}`)
-    .replace(parseCall, "global.__cargoCliReady = program.parseAsync(process.argv);");
+    .replace(parseCall, "global.__nuriteoCliReady = program.parseAsync(process.argv);");
   assert.equal(transformed.split(`return ${devDispatch}`).length - 1, 1, "Unexpected Next dev dispatch");
   return transformed;
 }
@@ -209,7 +209,7 @@ function transformRelativeDynamicImports(source: string): string {
 
 function transformNextServerRequire(source: string): string {
   const original = "const mod = process.env.NEXT_MINIMAL ? __non_webpack_require__(pagePath) : require(pagePath);";
-  const replacement = "const mod = process.env.NEXT_MINIMAL ? __non_webpack_require__(pagePath) : await global.__cargoImportGeneratedModule(pagePath);";
+  const replacement = "const mod = process.env.NEXT_MINIMAL ? __non_webpack_require__(pagePath) : await global.__nuriteoImportGeneratedModule(pagePath);";
   assert.equal(source.split(original).length - 1, 1, "Unexpected Next server requirePage implementation");
   return source.replace(original, replacement);
 }
@@ -241,7 +241,7 @@ function transformNextManifestLoader(source: string): string {
 function transformNextConfigLoader(source: string): string {
   const original = "userConfigModule = await import((0, _url.pathToFileURL)(path).href);";
   assert.equal(source.split(original).length - 1, 1, "Unexpected Next config loader implementation");
-  return source.replace(original, "userConfigModule = await global.__cargoImportWorkspaceModule(path);");
+  return source.replace(original, "userConfigModule = await global.__nuriteoImportWorkspaceModule(path);");
 }
 
 function transformNextEdgeSandboxContext(source: string): string {
@@ -264,7 +264,7 @@ function transformNextEdgeSandboxContext(source: string): string {
   const replacement = `const evaluateInContext = async (filepath)=>{
         if (!moduleContext.paths.has(filepath)) {
             try {
-                await global.__cargoImportEdgeModule(filepath, moduleContext.runtime.context);
+                await global.__nuriteoImportEdgeModule(filepath, moduleContext.runtime.context);
                 moduleContext.paths.set(filepath, filepath);
             } catch (error) {
                 if (options.useCache) {
@@ -361,8 +361,8 @@ function transformWebpackBundle(source: string): string {
   assert.equal(source.split(dynamicCompiler).length - 1, 1, "Unexpected webpack binary-search compiler");
   const withoutBinarySearchCompiler = source
     .replace(dynamicCompiler, staticSearch)
-    .replaceAll('R.runInContext(`(function(){return {${I}};})()`,this.magicCommentContext)', 'global.__cargoParseWebpackMagicComment(I)')
-    .replaceAll('K.runInContext(`(function(){return {${I}};})()`,this.magicCommentContext)', 'global.__cargoParseWebpackMagicComment(I)');
+    .replaceAll('R.runInContext(`(function(){return {${I}};})()`,this.magicCommentContext)', 'global.__nuriteoParseWebpackMagicComment(I)')
+    .replaceAll('K.runInContext(`(function(){return {${I}};})()`,this.magicCommentContext)', 'global.__nuriteoParseWebpackMagicComment(I)');
   assert.equal(withoutBinarySearchCompiler.includes('runInContext(`(function(){return {${I}};})()`'), false, "Webpack magic comments still use VM evaluation");
   const factoryStart = withoutBinarySearchCompiler.indexOf("class HookCodeFactory{");
   const createStart = withoutBinarySearchCompiler.indexOf("create(v){", factoryStart);

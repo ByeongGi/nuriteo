@@ -374,7 +374,7 @@ function createViteReactTemplate(): ProjectTemplate {
       },
       {
         path: "src/message.ts",
-        data: "export const label = \"cargo\";\n"
+        data: "export const label = \"nuriteo\";\n"
       },
       {
         path: "src/debug.ts",
@@ -560,7 +560,7 @@ function createViteTsTemplate(): ProjectTemplate {
       },
       {
         path: "src/message.ts",
-        data: "export const label = \"cargo-ts\";\n"
+        data: "export const label = \"nuriteo-ts\";\n"
       },
       {
         path: "src/style.css",

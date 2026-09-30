@@ -59,7 +59,7 @@ export class BrowserLspServer {
     if (method === "initialize") {
       this.#initialized = true;
       return {
-        serverInfo: { name: "cargo-typescript-lsp", version: "1.0" },
+        serverInfo: { name: "nuriteo-typescript-lsp", version: "1.0" },
         capabilities: {
           textDocumentSync: { openClose: true, change: 2, save: { includeText: false } },
           completionProvider: { resolveProvider: false, triggerCharacters: [".", "\"", "'", "/", "@", "<"] },
@@ -185,8 +185,8 @@ function fixmeDiagnostics(text: string): LspDiagnostic[] {
   return [...text.matchAll(FIXME_PATTERN)].map((match) => ({
     range: rangeForOffset(text, match.index, match[0].length),
     severity: 2,
-    code: "cargo-lsp-fixme",
-    source: "cargo-lsp",
+    code: "nuriteo-lsp-fixme",
+    source: "nuriteo-lsp",
     message: "FIXME marker requires attention."
   }));
 }

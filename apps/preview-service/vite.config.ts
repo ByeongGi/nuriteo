@@ -46,11 +46,11 @@ export default defineConfig({
   ],
   resolve: {
     alias: {
-      "@cargo-container/preview-service": path.resolve(repoRoot, "packages/preview-service/src/index.ts"),
-      "@cargo-container/browser-host": path.resolve(repoRoot, "packages/browser-host/src/index.ts"),
-      "@cargo-container/preview": path.resolve(repoRoot, "packages/preview/src/index.ts"),
-      "@cargo-container/node-runtime": path.resolve(repoRoot, "packages/node-runtime/src/index.ts"),
-      "@cargo-container/protocol": path.resolve(repoRoot, "packages/protocol/src/index.ts")
+      "@nuriteo/preview-service": path.resolve(repoRoot, "packages/preview-service/src/index.ts"),
+      "@nuriteo/browser-host": path.resolve(repoRoot, "packages/browser-host/src/index.ts"),
+      "@nuriteo/preview": path.resolve(repoRoot, "packages/preview/src/index.ts"),
+      "@nuriteo/node-runtime": path.resolve(repoRoot, "packages/node-runtime/src/index.ts"),
+      "@nuriteo/protocol": path.resolve(repoRoot, "packages/protocol/src/index.ts")
     }
   },
   server: {

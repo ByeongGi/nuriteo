@@ -80,7 +80,7 @@ try {
   const frame = page.frameLocator("#preview-frame");
   await frame.locator("#app").waitFor({ timeout: 20_000 });
   const before = await frame.locator("#app").innerText();
-  assert.match(before, /cargo:\d+/);
+  assert.match(before, /nuriteo:\d+/);
 
   const messagePath = await page.evaluate(() => {
     const files = globalThis.__previewService.snapshot().project.listFiles();

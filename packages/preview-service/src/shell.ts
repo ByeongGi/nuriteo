@@ -24,7 +24,7 @@ export interface PreviewShellSession {
 }
 
 const HELP = [
-  "Cargo Container shell",
+  "NURITEO shell",
   "",
   "Built-ins:",
   "  help                 Show this help",
@@ -122,7 +122,7 @@ async function runPackageManager(
 
   if (!command && manager === "yarn") return toResult(argv, await abortable(handlers.install(), signal));
   if (!command || command === "--version" || command === "-v" || command === "version") {
-    return ok(argv, `${manager} (cargo-container preview shell)\n`);
+    return ok(argv, `${manager} (nuriteo preview shell)\n`);
   }
 
   if (command === "install" || command === "i" || command === "add") {

@@ -17,10 +17,10 @@ import {
 import { createFallbackWorkspaceReader, createNodeFsWorkspaceReader } from "../shared/fs-workspace-reader.ts";
 
 const repositoryRoot = path.resolve(new URL("../..", import.meta.url).pathname);
-const preparedRoot = process.env.CARGO_FIXTURE_PREP_ROOT
-  ? path.resolve(process.env.CARGO_FIXTURE_PREP_ROOT)
+const preparedRoot = process.env.NURITEO_FIXTURE_PREP_ROOT
+  ? path.resolve(process.env.NURITEO_FIXTURE_PREP_ROOT)
   : "";
-if (!preparedRoot) throw new Error("CARGO_FIXTURE_PREP_ROOT is required");
+if (!preparedRoot) throw new Error("NURITEO_FIXTURE_PREP_ROOT is required");
 
 const fixtureRevision = "1544bb1b7ac92f775e9d0dea97954c99cc6cbd43";
 const viteVersion = "8.2.0";
@@ -158,7 +158,7 @@ await build({
   publicDir: false,
   root: bindingRoot,
   plugins: [{
-    name: "cargo-rolldown-wasi-static-url",
+    name: "nuriteo-rolldown-wasi-static-url",
     enforce: "pre",
     transform(source, id) {
       if (id !== path.join(bindingRoot, "rolldown-binding.wasi-browser.js")) return null;

@@ -114,28 +114,28 @@ function AppMenu({
 } & AppMenuBarProps) {
   return (
     <Menu.Root>
-      <Menu.Trigger className="rounded px-2 py-1 text-xs text-cargo-muted outline-none hover:bg-cargo-panel-2 hover:text-cargo-ink focus-visible:ring-2 focus-visible:ring-cargo-focus data-[popup-open]:bg-cargo-panel-2 data-[popup-open]:text-cargo-ink">
+      <Menu.Trigger className="rounded px-2 py-1 text-xs text-nuriteo-muted outline-none hover:bg-nuriteo-panel-2 hover:text-nuriteo-ink focus-visible:ring-2 focus-visible:ring-nuriteo-focus data-[popup-open]:bg-nuriteo-panel-2 data-[popup-open]:text-nuriteo-ink">
         {definition.label}
       </Menu.Trigger>
       <Menu.Portal>
         <Menu.Positioner side="bottom" align="start" sideOffset={4} className="z-[90] outline-none">
-          <Menu.Popup className="min-w-56 rounded-lg border border-cargo-line bg-cargo-panel py-1 shadow-[var(--shadow)] outline-none">
+          <Menu.Popup className="min-w-56 rounded-lg border border-nuriteo-line bg-nuriteo-panel py-1 shadow-[var(--shadow)] outline-none">
             {definition.items.map((item, index) => {
               if (item.kind === "separator") {
-                return <Menu.Separator key={`separator-${index}`} className="my-1 h-px bg-cargo-line" />;
+                return <Menu.Separator key={`separator-${index}`} className="my-1 h-px bg-nuriteo-line" />;
               }
               if (item.kind === "command-palette") {
                 return (
                   <Menu.Item
                     key={item.kind}
-                    className="flex cursor-default items-center justify-between gap-5 px-3 py-1.5 text-xs text-cargo-ink outline-none data-[highlighted]:bg-cargo-panel-2"
+                    className="flex cursor-default items-center justify-between gap-5 px-3 py-1.5 text-xs text-nuriteo-ink outline-none data-[highlighted]:bg-nuriteo-panel-2"
                     onClick={() => {
                       setPaletteMode("commands");
                       setPaletteOpen(true);
                     }}
                   >
                     <span>{item.label}</span>
-                    <kbd className="font-mono text-[10px] text-cargo-muted">{item.shortcut}</kbd>
+                    <kbd className="font-mono text-[10px] text-nuriteo-muted">{item.shortcut}</kbd>
                   </Menu.Item>
                 );
               }
@@ -146,12 +146,12 @@ function AppMenu({
                 <Menu.Item
                   key={item.id}
                   disabled={isDisabled}
-                  className="flex cursor-default items-center justify-between gap-5 px-3 py-1.5 text-xs text-cargo-ink outline-none data-[disabled]:opacity-40 data-[highlighted]:bg-cargo-panel-2"
+                  className="flex cursor-default items-center justify-between gap-5 px-3 py-1.5 text-xs text-nuriteo-ink outline-none data-[disabled]:opacity-40 data-[highlighted]:bg-nuriteo-panel-2"
                   onClick={() => runCommand(item.id)}
                 >
                   <span>{item.label || command?.label || item.id}</span>
                   {command?.shortcut ? (
-                    <kbd className="font-mono text-[10px] text-cargo-muted">{command.shortcut}</kbd>
+                    <kbd className="font-mono text-[10px] text-nuriteo-muted">{command.shortcut}</kbd>
                   ) : null}
                 </Menu.Item>
               );
