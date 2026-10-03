@@ -13,7 +13,7 @@ use nuriteo_server::project::{
     ProjectRepository, ProjectRepositoryError, ProjectSlug,
 };
 use nuriteo_server::workspace::StorageScopeId;
-use sqlx::{Acquire, Executor};
+use sqlx::{Acquire, Executor, Postgres, Transaction};
 use tokio::sync::oneshot;
 use tokio::time;
 
@@ -342,14 +342,15 @@ async fn verify_lock_blocks_until_release(pool: &DatabasePool) {
         .begin()
         .await
         .expect("transaction must begin");
+    let holder_pid = backend_pid(&mut first_transaction).await;
     ProjectRepository::lock_by_id(&mut first_transaction, project_id(USER_PROJECT_ALPHA))
         .await
         .expect("first lock must succeed")
         .expect("locked Project must exist");
 
     let second_pool = pool.clone();
-    let (attempted_tx, attempted_rx) = oneshot::channel();
-    let mut second = tokio::spawn(async move {
+    let (pid_tx, pid_rx) = oneshot::channel();
+    let second = tokio::spawn(async move {
         let mut connection = second_pool
             .acquire()
             .await
@@ -358,9 +359,10 @@ async fn verify_lock_blocks_until_release(pool: &DatabasePool) {
             .begin()
             .await
             .expect("second transaction must begin");
-        attempted_tx
-            .send(())
-            .expect("lock-attempt observer must remain available");
+        let contender_pid = backend_pid(&mut transaction).await;
+        pid_tx
+            .send(contender_pid)
+            .expect("lock PID observer must remain available");
         let project =
             ProjectRepository::lock_by_id(&mut transaction, project_id(USER_PROJECT_ALPHA)).await;
         transaction
@@ -369,15 +371,18 @@ async fn verify_lock_blocks_until_release(pool: &DatabasePool) {
             .expect("second transaction must roll back");
         project
     });
-    attempted_rx
+    let contender_pid = pid_rx
         .await
-        .expect("second transaction must reach the lock attempt");
-    assert!(
-        time::timeout(Duration::from_millis(200), &mut second)
+        .expect("second transaction must report its backend PID");
+    if !wait_for_database_block(pool, holder_pid, contender_pid).await {
+        first_transaction
+            .rollback()
             .await
-            .is_err(),
-        "second lock must remain blocked while the first transaction owns the row"
-    );
+            .expect("first transaction must release lock after observation timeout");
+        second.abort();
+        let _ = second.await;
+        panic!("PostgreSQL must report the second lock as blocked by the first transaction");
+    }
     first_transaction
         .rollback()
         .await
@@ -399,6 +404,7 @@ async fn verify_concurrent_namespace_create(pool: &DatabasePool) {
         .begin()
         .await
         .expect("transaction must begin");
+    let holder_pid = backend_pid(&mut first_transaction).await;
     ProjectRepository::create(
         &mut first_transaction,
         &candidate(CONCURRENT_PROJECT_ONE, owner, USER_SCOPE_ONE, "concurrent"),
@@ -407,8 +413,8 @@ async fn verify_concurrent_namespace_create(pool: &DatabasePool) {
     .expect("first namespace create must succeed before commit");
 
     let second_pool = pool.clone();
-    let (attempted_tx, attempted_rx) = oneshot::channel();
-    let mut second = tokio::spawn(async move {
+    let (pid_tx, pid_rx) = oneshot::channel();
+    let second = tokio::spawn(async move {
         let mut connection = second_pool
             .acquire()
             .await
@@ -417,10 +423,11 @@ async fn verify_concurrent_namespace_create(pool: &DatabasePool) {
             .begin()
             .await
             .expect("concurrent transaction must begin");
+        let contender_pid = backend_pid(&mut transaction).await;
         let candidate = candidate(CONCURRENT_PROJECT_TWO, owner, USER_SCOPE_ONE, "concurrent");
-        attempted_tx
-            .send(())
-            .expect("create-attempt observer must remain available");
+        pid_tx
+            .send(contender_pid)
+            .expect("create PID observer must remain available");
         let result = ProjectRepository::create(&mut transaction, &candidate).await;
         transaction
             .rollback()
@@ -428,15 +435,18 @@ async fn verify_concurrent_namespace_create(pool: &DatabasePool) {
             .expect("losing transaction must roll back");
         result
     });
-    attempted_rx
+    let contender_pid = pid_rx
         .await
-        .expect("second transaction must reach the create attempt");
-    assert!(
-        time::timeout(Duration::from_millis(200), &mut second)
+        .expect("second transaction must report its backend PID");
+    if !wait_for_database_block(pool, holder_pid, contender_pid).await {
+        first_transaction
+            .rollback()
             .await
-            .is_err(),
-        "same-namespace create must wait for the first transaction"
-    );
+            .expect("first namespace transaction must roll back after observation timeout");
+        second.abort();
+        let _ = second.await;
+        panic!("PostgreSQL must report the concurrent namespace create as blocked");
+    }
     first_transaction
         .commit()
         .await
@@ -450,6 +460,39 @@ async fn verify_concurrent_namespace_create(pool: &DatabasePool) {
             ProjectConflict::NamespaceUnavailable
         ))
     );
+}
+
+async fn backend_pid(transaction: &mut Transaction<'_, Postgres>) -> i32 {
+    sqlx::query_scalar("SELECT pg_backend_pid()")
+        .fetch_one(&mut **transaction)
+        .await
+        .expect("transaction backend PID must be available")
+}
+
+async fn wait_for_database_block(pool: &DatabasePool, holder_pid: i32, contender_pid: i32) -> bool {
+    let deadline = time::Instant::now() + Duration::from_secs(2);
+    let mut observer = pool
+        .acquire()
+        .await
+        .expect("blocking observer connection must be acquired");
+
+    loop {
+        let holder_blocks_contender: bool =
+            sqlx::query_scalar("SELECT $1::integer = ANY(pg_blocking_pids($2::integer))")
+                .bind(holder_pid)
+                .bind(contender_pid)
+                .fetch_one(&mut *observer)
+                .await
+                .expect("blocking relationship must be observable");
+
+        if holder_blocks_contender {
+            return true;
+        }
+        if time::Instant::now() >= deadline {
+            return false;
+        }
+        time::sleep(Duration::from_millis(25)).await;
+    }
 }
 
 async fn verify_invalid_rows_fail_closed(pool: &DatabasePool) {
