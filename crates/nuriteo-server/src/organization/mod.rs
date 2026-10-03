@@ -1,10 +1,16 @@
 mod model;
+mod service;
 mod types;
 
 use std::fmt;
 
 pub use model::{
     Organization, OrganizationFields, OrganizationMembership, OrganizationMembershipFields,
+};
+pub use service::{
+    MembershipAddResult, MembershipChangeResult, MembershipRemoveResult, OrganizationAuditContext,
+    OrganizationPrincipal, OrganizationService, OrganizationServiceError,
+    OrganizationServicePolicy,
 };
 pub use types::{OrganizationId, OrganizationRole, OrganizationStatus, OrganizationVersion};
 
