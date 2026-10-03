@@ -26,6 +26,9 @@ const ORGANIZATION_TWO_PROJECT: &str = "0199ee6c-c777-7000-8000-000000001044";
 const RECREATED_USER_PROJECT: &str = "0199ee6c-c777-7000-8000-000000001045";
 const CONCURRENT_ORGANIZATION_PROJECT: &str = "0199ee6c-c777-7000-8000-000000001046";
 const MISMATCHED_TOMBSTONE_PROJECT: &str = "0199ee6c-c777-7000-8000-000000001047";
+const RENAMED_NAMESPACE_PROJECT: &str = "0199ee6c-c777-7000-8000-000000001048";
+const PAST_TIMESTAMP_PROJECT: &str = "0199ee6c-c777-7000-8000-000000001049";
+const FUTURE_TIMESTAMP_PROJECT: &str = "0199ee6c-c777-7000-8000-000000001050";
 
 #[tokio::test]
 #[ignore = "requires the pinned PostgreSQL TLS fixture; run tests/fixtures/postgres-project/run.sh"]
@@ -36,32 +39,34 @@ async fn project_schema_enforces_owner_scope_slug_lifecycle_and_tombstones() {
         check_schema_readiness(&pool).await.unwrap(),
         SchemaReadiness::Pending {
             current: None,
-            target: 11
+            target: 12
         }
     );
     let first = migrate(&pool).await;
     assert_eq!(
         first,
         MigrationReport {
-            latest_version: Some(11),
-            known_migrations: 11
+            latest_version: Some(12),
+            known_migrations: 12
         }
     );
     assert_eq!(migrate(&pool).await, first);
     assert_eq!(
         check_schema_readiness(&pool).await.unwrap(),
-        SchemaReadiness::Ready { version: 11 }
+        SchemaReadiness::Ready { version: 12 }
     );
 
     seed_owners_and_scopes(&pool).await;
     verify_valid_owners_and_slug_namespaces(&pool).await;
     verify_project_constraints(&pool).await;
     verify_project_truncate_is_rejected(&pool).await;
+    verify_managed_namespace_mutation_boundary(&pool).await;
     verify_archive_and_version_contract(&pool).await;
+    verify_database_owned_deletion_timestamp(&pool).await;
     verify_tombstone_reservation(&pool).await;
     verify_bare_delete_and_immutable_tombstone(&pool).await;
     verify_tombstone_identity_matching(&pool).await;
-    verify_delete_validates_legacy_tombstone(&pool).await;
+    verify_delete_validates_pre_release_mismatched_tombstone(&pool).await;
     verify_concurrent_delete_and_create(&pool).await;
     verify_transaction_rollback(&pool).await;
     verify_schema_shape(&pool).await;
@@ -192,10 +197,145 @@ async fn verify_project_truncate_is_rejected(pool: &DatabasePool) {
     );
 }
 
+async fn verify_managed_namespace_mutation_boundary(pool: &DatabasePool) {
+    let cases = [
+        (
+            "slug",
+            "UPDATE projects SET slug = 'attempted-slug', updated_at = CURRENT_TIMESTAMP, \
+             lock_version = lock_version + 1 \
+             WHERE id = '0199ee6c-c777-7000-8000-000000001041'::uuid",
+        ),
+        (
+            "storage scope",
+            "UPDATE projects SET storage_scope_id = \
+             '0199ee6c-c777-7000-8000-000000001012'::uuid, \
+             updated_at = CURRENT_TIMESTAMP, lock_version = lock_version + 1 \
+             WHERE id = '0199ee6c-c777-7000-8000-000000001041'::uuid",
+        ),
+        (
+            "User owner",
+            "UPDATE projects SET owner_user_id = \
+             '0199ee6c-c777-7000-8000-000000001002'::uuid, storage_scope_id = \
+             '0199ee6c-c777-7000-8000-000000001012'::uuid, \
+             updated_at = CURRENT_TIMESTAMP, lock_version = lock_version + 1 \
+             WHERE id = '0199ee6c-c777-7000-8000-000000001041'::uuid",
+        ),
+        (
+            "Organization owner",
+            "UPDATE projects SET owner_user_id = NULL, owner_organization_id = \
+             '0199ee6c-c777-7000-8000-000000001022'::uuid, storage_scope_id = \
+             '0199ee6c-c777-7000-8000-000000001032'::uuid, \
+             updated_at = CURRENT_TIMESTAMP, lock_version = lock_version + 1 \
+             WHERE id = '0199ee6c-c777-7000-8000-000000001041'::uuid",
+        ),
+    ];
+    for (contract, statement) in cases {
+        assert_rejected(pool, statement, contract).await;
+        assert_eq!(
+            project_namespace(pool, USER_PROJECT).await,
+            (
+                Some(USER_ONE.to_owned()),
+                None,
+                USER_SCOPE_ONE.to_owned(),
+                "shared".to_owned(),
+                1,
+            ),
+            "rejected {contract} mutation must preserve the complete old namespace"
+        );
+    }
+
+    assert_rejected(
+        pool,
+        "INSERT INTO projects (id, owner_user_id, storage_scope_id, slug, name) \
+         VALUES ('0199ee6c-c777-7000-8000-000000001051', \
+                 '0199ee6c-c777-7000-8000-000000001001', \
+                 '0199ee6c-c777-7000-8000-000000001011', 'shared', 'Old Namespace')",
+        "old namespace after rejected mutation",
+    )
+    .await;
+    insert_user_project(
+        pool,
+        RENAMED_NAMESPACE_PROJECT,
+        USER_ONE,
+        USER_SCOPE_ONE,
+        "attempted-slug",
+        "Independent Project",
+    )
+    .await;
+    assert!(project_exists(pool, RENAMED_NAMESPACE_PROJECT).await);
+}
+
 async fn verify_archive_and_version_contract(pool: &DatabasePool) {
     assert_rejected(pool, "UPDATE projects SET name = 'Unversioned' WHERE id = '0199ee6c-c777-7000-8000-000000001041'::uuid", "version advance").await;
     execute(pool, "UPDATE projects SET state = 'archived', archived_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP, lock_version = lock_version + 1 WHERE id = '0199ee6c-c777-7000-8000-000000001041'::uuid").await;
     assert_rejected(pool, "INSERT INTO projects (id, owner_user_id, storage_scope_id, slug, name) VALUES ('0199ee6c-c777-7000-8000-000000001067', '0199ee6c-c777-7000-8000-000000001001', '0199ee6c-c777-7000-8000-000000001011', 'shared', 'Archived Collision')", "archived slug reservation").await;
+}
+
+async fn verify_database_owned_deletion_timestamp(pool: &DatabasePool) {
+    for (project_id, slug, supplied_deleted_at) in [
+        (PAST_TIMESTAMP_PROJECT, "timestamp-past", 0_i64),
+        (
+            FUTURE_TIMESTAMP_PROJECT,
+            "timestamp-future",
+            4_102_444_800_i64,
+        ),
+    ] {
+        insert_user_project(
+            pool,
+            project_id,
+            USER_ONE,
+            USER_SCOPE_ONE,
+            slug,
+            "Timestamp Project",
+        )
+        .await;
+
+        let mut connection = acquire(pool).await;
+        let mut transaction = connection.begin().await.unwrap();
+        let transaction_time: ::time::OffsetDateTime =
+            sqlx::query_scalar("SELECT transaction_timestamp()")
+                .fetch_one(&mut *transaction)
+                .await
+                .unwrap();
+        let supplied_deleted_at =
+            ::time::OffsetDateTime::from_unix_timestamp(supplied_deleted_at).unwrap();
+        sqlx::query(
+            "INSERT INTO project_tombstones \
+             (former_project_id, owner_user_id, slug, deleted_at) \
+             VALUES ($1::uuid, $2::uuid, $3, $4)",
+        )
+        .bind(project_id)
+        .bind(USER_ONE)
+        .bind(slug)
+        .bind(supplied_deleted_at)
+        .execute(&mut *transaction)
+        .await
+        .unwrap();
+
+        let normalized_deleted_at: ::time::OffsetDateTime = sqlx::query_scalar(
+            "SELECT deleted_at FROM project_tombstones WHERE former_project_id = $1::uuid",
+        )
+        .bind(project_id)
+        .fetch_one(&mut *transaction)
+        .await
+        .unwrap();
+        let project_updated_at: ::time::OffsetDateTime =
+            sqlx::query_scalar("SELECT updated_at FROM projects WHERE id = $1::uuid")
+                .bind(project_id)
+                .fetch_one(&mut *transaction)
+                .await
+                .unwrap();
+        assert_eq!(normalized_deleted_at, transaction_time);
+        assert!(normalized_deleted_at >= project_updated_at);
+        assert_ne!(normalized_deleted_at, supplied_deleted_at);
+
+        sqlx::query("DELETE FROM projects WHERE id = $1::uuid")
+            .bind(project_id)
+            .execute(&mut *transaction)
+            .await
+            .unwrap();
+        transaction.commit().await.unwrap();
+    }
 }
 
 async fn verify_tombstone_reservation(pool: &DatabasePool) {
@@ -311,7 +451,7 @@ async fn verify_tombstone_identity_matching(pool: &DatabasePool) {
     );
 }
 
-async fn verify_delete_validates_legacy_tombstone(pool: &DatabasePool) {
+async fn verify_delete_validates_pre_release_mismatched_tombstone(pool: &DatabasePool) {
     execute(
         pool,
         "ALTER TABLE project_tombstones \
@@ -321,7 +461,7 @@ async fn verify_delete_validates_legacy_tombstone(pool: &DatabasePool) {
     sqlx::query(
         "INSERT INTO project_tombstones \
          (former_project_id, owner_organization_id, slug) \
-         VALUES ($1::uuid, $2::uuid, 'legacy-mismatch')",
+         VALUES ($1::uuid, $2::uuid, 'pre-release-mismatch')",
     )
     .bind(ORGANIZATION_TWO_PROJECT)
     .bind(ORGANIZATION_ONE)
@@ -494,6 +634,21 @@ async fn project_count(pool: &DatabasePool) -> i64 {
         .fetch_one(&mut *acquire(pool).await)
         .await
         .unwrap()
+}
+
+async fn project_namespace(
+    pool: &DatabasePool,
+    project_id: &str,
+) -> (Option<String>, Option<String>, String, String, i64) {
+    sqlx::query_as(
+        "SELECT owner_user_id::text, owner_organization_id::text, \
+                storage_scope_id::text, slug, lock_version \
+         FROM projects WHERE id = $1::uuid",
+    )
+    .bind(project_id)
+    .fetch_one(&mut *acquire(pool).await)
+    .await
+    .unwrap()
 }
 
 async fn project_exists(pool: &DatabasePool, project_id: &str) -> bool {
