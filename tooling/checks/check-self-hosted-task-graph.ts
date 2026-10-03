@@ -16,7 +16,7 @@ const status = fs.readFileSync(statusPath, "utf8");
 
 assert(graph.schemaVersion === 1, "unexpected task graph schema version");
 assert(Array.isArray(graph.nodes), "task graph nodes must be an array");
-assert(graph.nodes.length === 84, `expected 84 task nodes, got ${graph.nodes.length}`);
+assert(graph.nodes.length === 85, `expected 85 task nodes, got ${graph.nodes.length}`);
 
 const allowedMilestones = new Set(["M0", "M1", "M2", "M3", "M4"]);
 const allowedLanes = new Set(["L0", "L1", "L2", "L3", "L4", "L5", "L6", "L7"]);
@@ -84,7 +84,7 @@ for (const id of nodesById.keys()) {
   assert(graphDocument.includes(id), `${id}: missing from TASK-GRAPH.md`);
 }
 
-assert(status.includes("전체 84개 작업"), "STATUS.md must declare the complete task graph");
+assert(status.includes("전체 85개 작업"), "STATUS.md must declare the complete task graph");
 
 const counts = Object.fromEntries(
   [...allowedMilestones].map((milestone) => [milestone, graph.nodes.filter((node) => node.milestone === milestone).length])
