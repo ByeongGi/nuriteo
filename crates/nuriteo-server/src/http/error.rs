@@ -12,6 +12,10 @@ const MAX_FIELD_ERRORS: usize = 32;
 enum ProblemKind {
     NotFound,
     MethodNotAllowed,
+    Authentication,
+    Forbidden,
+    PayloadTooLarge,
+    UnsupportedMediaType,
     Validation,
     Internal,
 }
@@ -21,6 +25,10 @@ impl ProblemKind {
         match self {
             Self::NotFound => StatusCode::NOT_FOUND,
             Self::MethodNotAllowed => StatusCode::METHOD_NOT_ALLOWED,
+            Self::Authentication => StatusCode::UNAUTHORIZED,
+            Self::Forbidden => StatusCode::FORBIDDEN,
+            Self::PayloadTooLarge => StatusCode::PAYLOAD_TOO_LARGE,
+            Self::UnsupportedMediaType => StatusCode::UNSUPPORTED_MEDIA_TYPE,
             Self::Validation => StatusCode::UNPROCESSABLE_ENTITY,
             Self::Internal => StatusCode::INTERNAL_SERVER_ERROR,
         }
@@ -30,6 +38,10 @@ impl ProblemKind {
         match self {
             Self::NotFound => "/docs/problems/route-not-found",
             Self::MethodNotAllowed => "/docs/problems/method-not-allowed",
+            Self::Authentication => "/docs/problems/authentication-failed",
+            Self::Forbidden => "/docs/problems/request-forbidden",
+            Self::PayloadTooLarge => "/docs/problems/payload-too-large",
+            Self::UnsupportedMediaType => "/docs/problems/unsupported-media-type",
             Self::Validation => "/docs/problems/validation-failed",
             Self::Internal => "/docs/problems/internal-server-error",
         }
@@ -39,6 +51,10 @@ impl ProblemKind {
         match self {
             Self::NotFound => "Resource not found",
             Self::MethodNotAllowed => "Method not allowed",
+            Self::Authentication => "Authentication failed",
+            Self::Forbidden => "Request forbidden",
+            Self::PayloadTooLarge => "Payload too large",
+            Self::UnsupportedMediaType => "Unsupported media type",
             Self::Validation => "Validation failed",
             Self::Internal => "Internal server error",
         }
@@ -48,6 +64,10 @@ impl ProblemKind {
         match self {
             Self::NotFound => "ROUTE_NOT_FOUND",
             Self::MethodNotAllowed => "METHOD_NOT_ALLOWED",
+            Self::Authentication => "AUTHENTICATION_FAILED",
+            Self::Forbidden => "REQUEST_FORBIDDEN",
+            Self::PayloadTooLarge => "PAYLOAD_TOO_LARGE",
+            Self::UnsupportedMediaType => "UNSUPPORTED_MEDIA_TYPE",
             Self::Validation => "VALIDATION_FAILED",
             Self::Internal => "INTERNAL_SERVER_ERROR",
         }
@@ -57,6 +77,10 @@ impl ProblemKind {
         match self {
             Self::NotFound => "The requested resource does not exist.",
             Self::MethodNotAllowed => "The requested method is not supported for this resource.",
+            Self::Authentication => "The supplied authentication could not be accepted.",
+            Self::Forbidden => "The request did not satisfy the required security policy.",
+            Self::PayloadTooLarge => "The request body exceeds the allowed size.",
+            Self::UnsupportedMediaType => "The request body must use application/json.",
             Self::Validation => "One or more fields are invalid.",
             Self::Internal => "The server could not complete the request.",
         }
@@ -112,6 +136,41 @@ impl HttpError {
     #[must_use]
     pub fn internal(request_id: RequestId, instance: impl Into<String>) -> Self {
         Self::new(ProblemKind::Internal, request_id, instance, Vec::new())
+    }
+
+    #[must_use]
+    pub fn authentication(request_id: RequestId, instance: impl Into<String>) -> Self {
+        Self::new(
+            ProblemKind::Authentication,
+            request_id,
+            instance,
+            Vec::new(),
+        )
+    }
+
+    #[must_use]
+    pub fn forbidden(request_id: RequestId, instance: impl Into<String>) -> Self {
+        Self::new(ProblemKind::Forbidden, request_id, instance, Vec::new())
+    }
+
+    #[must_use]
+    pub fn payload_too_large(request_id: RequestId, instance: impl Into<String>) -> Self {
+        Self::new(
+            ProblemKind::PayloadTooLarge,
+            request_id,
+            instance,
+            Vec::new(),
+        )
+    }
+
+    #[must_use]
+    pub fn unsupported_media_type(request_id: RequestId, instance: impl Into<String>) -> Self {
+        Self::new(
+            ProblemKind::UnsupportedMediaType,
+            request_id,
+            instance,
+            Vec::new(),
+        )
     }
 
     #[must_use]

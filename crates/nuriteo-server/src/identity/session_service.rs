@@ -194,6 +194,19 @@ pub enum SessionRevokeResult {
     AlreadyInactive,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct SessionAuditIdentity {
+    pub(crate) session_id: SessionId,
+    pub(crate) user_id: UserId,
+    pub(crate) display_name: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct TransactionRevocation {
+    pub(crate) result: SessionRevokeResult,
+    pub(crate) identity: Option<SessionAuditIdentity>,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SessionServiceError {
     InvalidToken,
@@ -303,8 +316,44 @@ impl SessionService {
             .begin()
             .await
             .map_err(|_| SessionServiceError::DatabaseUnavailable)?;
-        lock_active_user(&mut transaction, user_id).await?;
-        enforce_session_limit(&mut transaction, user_id).await?;
+        let issued = self
+            .issue_in_transaction_with_values(&mut transaction, user_id, session_id, token)
+            .await?;
+        transaction
+            .commit()
+            .await
+            .map_err(|_| SessionServiceError::DatabaseUnavailable)?;
+        Ok(issued)
+    }
+
+    /// Inserts a new Session in a caller-owned transaction.
+    ///
+    /// AUTH-001 uses this narrow adapter to commit Session issuance and its
+    /// audit event atomically. The caller owns the operation deadline and must
+    /// commit or roll back the transaction.
+    pub(crate) async fn issue_in_transaction(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+    ) -> Result<IssuedSession, SessionServiceError> {
+        self.issue_in_transaction_with_values(
+            transaction,
+            user_id,
+            SessionId::new(),
+            SessionToken::generate()?,
+        )
+        .await
+    }
+
+    async fn issue_in_transaction_with_values(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+        session_id: SessionId,
+        token: SessionToken,
+    ) -> Result<IssuedSession, SessionServiceError> {
+        lock_active_user(transaction, user_id).await?;
+        enforce_session_limit(transaction, user_id).await?;
 
         let row = sqlx::query(
             "INSERT INTO sessions \
@@ -322,14 +371,10 @@ impl SessionService {
         .bind(token.digest().as_slice())
         .bind(duration_seconds(self.policy.idle_timeout)?)
         .bind(duration_seconds(self.policy.absolute_timeout)?)
-        .fetch_one(&mut *transaction)
+        .fetch_one(&mut **transaction)
         .await
         .map_err(|_| SessionServiceError::DatabaseUnavailable)?;
         let session = session_from_row(&row)?;
-        transaction
-            .commit()
-            .await
-            .map_err(|_| SessionServiceError::DatabaseUnavailable)?;
         Ok(IssuedSession { token, session })
     }
 
@@ -462,19 +507,85 @@ impl SessionService {
             .acquire()
             .await
             .map_err(|_| SessionServiceError::DatabaseUnavailable)?;
-        let result = sqlx::query(
-            "UPDATE sessions SET revoked_at = transaction_timestamp(), \
-                     revocation_reason = 'user_revoked' \
-             WHERE token_hash = $1 AND revoked_at IS NULL",
+        let mut transaction = connection
+            .begin()
+            .await
+            .map_err(|_| SessionServiceError::DatabaseUnavailable)?;
+        let revocation = self
+            .revoke_in_transaction_by_digest(&mut transaction, digest)
+            .await?;
+        transaction
+            .commit()
+            .await
+            .map_err(|_| SessionServiceError::DatabaseUnavailable)?;
+        Ok(revocation.result)
+    }
+
+    /// Revokes one Session in a caller-owned transaction and returns safe
+    /// identity metadata for an audit event. Unknown tokens remain
+    /// indistinguishable from already inactive Sessions.
+    pub(crate) async fn revoke_in_transaction(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        token: &SessionToken,
+    ) -> Result<TransactionRevocation, SessionServiceError> {
+        self.revoke_in_transaction_by_digest(transaction, &token.digest())
+            .await
+    }
+
+    async fn revoke_in_transaction_by_digest(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        digest: &[u8; TOKEN_DIGEST_BYTES],
+    ) -> Result<TransactionRevocation, SessionServiceError> {
+        let row = sqlx::query(
+            "SELECT s.id::text AS session_id, s.user_id::text AS user_id, \
+                    u.display_name, s.revoked_at \
+             FROM sessions s JOIN users u ON u.id = s.user_id \
+             WHERE s.token_hash = $1 FOR UPDATE OF s",
         )
         .bind(digest.as_slice())
-        .execute(&mut *connection)
+        .fetch_optional(&mut **transaction)
         .await
         .map_err(|_| SessionServiceError::DatabaseUnavailable)?;
-        Ok(if result.rows_affected() == 1 {
-            SessionRevokeResult::Revoked
-        } else {
+        let Some(row) = row else {
+            return Ok(TransactionRevocation {
+                result: SessionRevokeResult::AlreadyInactive,
+                identity: None,
+            });
+        };
+        let session_id: SessionId = parse_id(&row, "session_id")?;
+        let user_id: UserId = parse_id(&row, "user_id")?;
+        let display_name = row
+            .try_get("display_name")
+            .map_err(|_| SessionServiceError::InvariantViolation)?;
+        let revoked_at: Option<OffsetDateTime> = row
+            .try_get("revoked_at")
+            .map_err(|_| SessionServiceError::InvariantViolation)?;
+        let result = if revoked_at.is_some() {
             SessionRevokeResult::AlreadyInactive
+        } else {
+            let changed = sqlx::query(
+                "UPDATE sessions SET revoked_at = transaction_timestamp(), \
+                         revocation_reason = 'user_revoked' \
+                 WHERE id = $1::uuid AND revoked_at IS NULL",
+            )
+            .bind(session_id.to_string())
+            .execute(&mut **transaction)
+            .await
+            .map_err(|_| SessionServiceError::DatabaseUnavailable)?;
+            if changed.rows_affected() != 1 {
+                return Err(SessionServiceError::InvariantViolation);
+            }
+            SessionRevokeResult::Revoked
+        };
+        Ok(TransactionRevocation {
+            result,
+            identity: Some(SessionAuditIdentity {
+                session_id,
+                user_id,
+                display_name,
+            }),
         })
     }
 

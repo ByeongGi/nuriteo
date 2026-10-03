@@ -1,3 +1,4 @@
+use crate::auth::AuthService;
 use crate::health::HealthService;
 use crate::http::{HttpError, RequestId, propagate_request_id};
 use crate::openapi;
@@ -7,11 +8,15 @@ use axum::http::Uri;
 use axum::middleware;
 
 pub fn build_router() -> Router {
-    build_router_with_health(HealthService::unconfigured())
+    build_router_with_services(HealthService::unconfigured(), AuthService::unconfigured())
 }
 
 pub fn build_router_with_health(health: HealthService) -> Router {
-    openapi::router()
+    build_router_with_services(health, AuthService::unconfigured())
+}
+
+pub fn build_router_with_services(health: HealthService, auth: AuthService) -> Router {
+    openapi::router(auth)
         .merge(health.router())
         .fallback(not_found)
         .method_not_allowed_fallback(method_not_allowed)

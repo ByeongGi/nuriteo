@@ -24,6 +24,7 @@ pub use password::{
     PasswordVerification, PasswordVerifyError, StoredPasswordHash,
 };
 pub use session::{Session, SessionFields};
+pub(crate) use session_service::TransactionRevocation;
 pub use session_service::{
     IssuedSession, SessionPolicy, SessionPolicyError, SessionRevokeResult, SessionRotationKind,
     SessionService, SessionServiceError, SessionToken,

@@ -1,12 +1,14 @@
 use std::fmt;
 use std::num::NonZeroUsize;
 
+use crate::auth::{AuthPolicy, AuthService};
 use crate::config::{Config, Environment, FileReader};
 use crate::database::{DatabasePool, DatabaseRuntimeConfig};
 use crate::health::{HealthPolicy, HealthService};
+use crate::identity::SessionPolicy;
 use crate::object_storage::{ObjectStorageConfig, OperationLimits, S3ObjectStore};
 
-use super::{Supervisor, SupervisorConfig, WorkerError, build_router_with_health};
+use super::{Supervisor, SupervisorConfig, WorkerError, build_router_with_services};
 
 const HTTP_WORKERS: NonZeroUsize = NonZeroUsize::MIN;
 
@@ -17,6 +19,7 @@ pub(crate) enum ServeError {
     DatabaseConnectivity,
     StorageConfiguration,
     StorageInitialization,
+    AuthenticationConfiguration,
     Bind,
     Lifecycle,
     DatabaseClose,
@@ -30,6 +33,7 @@ impl ServeError {
             Self::DatabaseConnectivity => "database-connectivity",
             Self::StorageConfiguration => "storage-configuration",
             Self::StorageInitialization => "storage-initialization",
+            Self::AuthenticationConfiguration => "authentication-configuration",
             Self::Bind => "bind",
             Self::Lifecycle => "lifecycle",
             Self::DatabaseClose => "database-close",
@@ -76,8 +80,20 @@ pub(crate) async fn run_server(
         }
     };
 
+    let auth = match AuthService::production(
+        pool.clone(),
+        &global.public.external_url,
+        AuthPolicy::default(),
+        SessionPolicy::default(),
+    ) {
+        Ok(auth) => auth,
+        Err(_) => {
+            close_pool(pool, close_timeout).await?;
+            return Err(ServeError::AuthenticationConfiguration);
+        }
+    };
     let health = HealthService::production(pool.clone(), store, HealthPolicy::default());
-    let router = build_router_with_health(health);
+    let router = build_router_with_services(health, auth);
     let mut supervisor = Supervisor::new(SupervisorConfig::new(
         global.server.shutdown_drain_timeout,
         HTTP_WORKERS,
@@ -122,6 +138,10 @@ mod tests {
             (ServeError::DatabaseConnectivity, "database-connectivity"),
             (ServeError::StorageConfiguration, "storage-configuration"),
             (ServeError::StorageInitialization, "storage-initialization"),
+            (
+                ServeError::AuthenticationConfiguration,
+                "authentication-configuration",
+            ),
             (ServeError::Bind, "bind"),
             (ServeError::Lifecycle, "lifecycle"),
             (ServeError::DatabaseClose, "database-close"),

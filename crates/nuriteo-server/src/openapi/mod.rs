@@ -1,10 +1,11 @@
 use axum::{Json, Router};
 use serde::Serialize;
 use utoipa::{OpenApi, ToSchema};
-use utoipa_axum::{router::OpenApiRouter, routes};
+use utoipa_axum::routes;
 use utoipa_swagger_ui::{Config, SwaggerUi};
 
 use crate::VERSION;
+use crate::auth::{self, AuthService};
 
 pub const DOCUMENT_PATH: &str = "/api/openapi.json";
 pub const DOCS_PATH: &str = "/api/docs";
@@ -17,7 +18,10 @@ pub const DOCS_PATH: &str = "/api/docs";
         description = "Versioned public REST API for a self-hosted NURITEO instance."
     ),
     components(schemas(VersionResponse, ProblemDetails, FieldViolation)),
-    tags((name = "system", description = "Public instance compatibility information")),
+    tags(
+        (name = "system", description = "Public instance compatibility information"),
+        (name = "authentication", description = "Local browser Session lifecycle")
+    ),
     servers((url = "/", description = "Current self-hosted instance"))
 )]
 struct ApiDocument;
@@ -39,7 +43,7 @@ struct FieldViolation {
 }
 
 #[derive(Debug, Serialize, ToSchema)]
-struct ProblemDetails {
+pub(crate) struct ProblemDetails {
     #[serde(rename = "type")]
     #[schema(example = "/docs/problems/validation-failed")]
     type_uri: String,
@@ -95,11 +99,11 @@ async fn version() -> Json<VersionResponse> {
 
 #[must_use]
 pub fn document() -> utoipa::openapi::OpenApi {
-    openapi_parts().1
+    openapi_parts(AuthService::unconfigured()).1
 }
 
-pub fn router() -> Router {
-    let (api_routes, document) = openapi_parts();
+pub fn router(auth: AuthService) -> Router {
+    let (api_routes, document) = openapi_parts(auth);
     let config = Config::new([DOCUMENT_PATH]).validator_url("none");
     let docs = SwaggerUi::new(DOCS_PATH)
         .url(DOCUMENT_PATH, document)
@@ -108,8 +112,9 @@ pub fn router() -> Router {
     api_routes.merge(Router::from(docs))
 }
 
-fn openapi_parts() -> (Router, utoipa::openapi::OpenApi) {
-    OpenApiRouter::with_openapi(ApiDocument::openapi())
+fn openapi_parts(auth: AuthService) -> (Router, utoipa::openapi::OpenApi) {
+    auth::openapi_router(ApiDocument::openapi())
         .routes(routes!(version))
+        .with_state(auth)
         .split_for_parts()
 }
