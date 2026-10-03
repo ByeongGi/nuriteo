@@ -3,6 +3,7 @@
 //! This module owns pool creation and transport policy only. Schema migrations,
 //! entities, and repositories deliberately live outside this boundary.
 
+mod migrations;
 mod tls;
 
 use std::fmt;
@@ -16,6 +17,7 @@ use sqlx::{PgPool, Postgres};
 use tokio::time;
 use url::Url;
 
+pub use migrations::{MigrationError, MigrationOptions, MigrationReport, run_embedded_migrations};
 pub use tls::{ClientIdentity, DatabaseTlsConfig, TlsConfigError};
 
 pub const MIN_CONNECTION_LIMIT: u32 = 0;

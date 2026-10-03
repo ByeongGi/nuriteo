@@ -1,0 +1,303 @@
+use std::borrow::Cow;
+use std::fmt;
+use std::time::Duration;
+
+use sqlx::SqlSafeStr;
+use sqlx::migrate::{MigrateError, Migration, MigrationType, Migrator};
+use sqlx::pool::PoolConnection;
+use sqlx::{PgConnection, Postgres};
+use tokio::time::{self, Instant};
+
+use super::{DatabaseError, DatabaseErrorCategory, DatabasePool, classify_error};
+
+const FRAMEWORK_BASELINE_SQL: &str = include_str!("../../migrations/0001_framework_baseline.sql");
+
+// Two-key advisory locks use a namespace distinct from PostgreSQL's one-key
+// bigint locks. 0x4e555249 is the ASCII representation of "NURI".
+const ADVISORY_LOCK_NAMESPACE: i32 = 0x4e55_5249;
+const ADVISORY_LOCK_KEY: i32 = 2;
+const LOCK_POLL_INTERVAL: Duration = Duration::from_millis(25);
+const LOCK_RELEASE_TIMEOUT: Duration = Duration::from_secs(5);
+const MIN_LOCK_WAIT_TIMEOUT: Duration = Duration::from_millis(100);
+const MAX_LOCK_WAIT_TIMEOUT: Duration = Duration::from_secs(300);
+const MIN_EXECUTION_TIMEOUT: Duration = Duration::from_secs(1);
+const MAX_EXECUTION_TIMEOUT: Duration = Duration::from_secs(60 * 60);
+
+/// Bounded runtime policy for one explicit migration invocation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MigrationOptions {
+    lock_wait_timeout: Duration,
+    execution_timeout: Duration,
+}
+
+impl MigrationOptions {
+    pub fn new(
+        lock_wait_timeout: Duration,
+        execution_timeout: Duration,
+    ) -> Result<Self, MigrationError> {
+        if !(MIN_LOCK_WAIT_TIMEOUT..=MAX_LOCK_WAIT_TIMEOUT).contains(&lock_wait_timeout) {
+            return Err(MigrationError::InvalidLockWaitTimeout);
+        }
+        if !(MIN_EXECUTION_TIMEOUT..=MAX_EXECUTION_TIMEOUT).contains(&execution_timeout) {
+            return Err(MigrationError::InvalidExecutionTimeout);
+        }
+        Ok(Self {
+            lock_wait_timeout,
+            execution_timeout,
+        })
+    }
+}
+
+/// Stable result returned by the explicit migration boundary.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MigrationReport {
+    pub latest_version: Option<i64>,
+    pub known_migrations: usize,
+}
+
+/// Applies the migrations embedded in the server binary.
+///
+/// This function is intentionally not called by the application `serve` path.
+/// Deployment orchestration must invoke it through the dedicated migration
+/// command before rolling out application replicas.
+pub async fn run_embedded_migrations(
+    pool: &DatabasePool,
+    options: MigrationOptions,
+) -> Result<MigrationReport, MigrationError> {
+    let migrator = embedded_migrator();
+    run_migrator(pool, options, &migrator).await
+}
+
+fn embedded_migrator() -> Migrator {
+    migrator_without_driver_lock(vec![Migration::new(
+        1,
+        Cow::Borrowed("framework baseline"),
+        MigrationType::Simple,
+        FRAMEWORK_BASELINE_SQL.into_sql_str(),
+        false,
+    )])
+}
+
+fn migrator_without_driver_lock(migrations: Vec<sqlx::migrate::Migration>) -> Migrator {
+    let mut migrator = Migrator::with_migrations(migrations);
+    // NURITEO owns locking below so the namespace, deadline, cancellation and
+    // connection ownership contract remain stable across SQLx releases.
+    migrator.set_locking(false);
+    migrator
+}
+
+async fn run_migrator(
+    pool: &DatabasePool,
+    options: MigrationOptions,
+    migrator: &Migrator,
+) -> Result<MigrationReport, MigrationError> {
+    let connection = pool.acquire().await.map_err(MigrationError::Database)?;
+    let mut lock = AdvisoryLock::new(connection);
+    lock.acquire(options.lock_wait_timeout).await?;
+
+    let migration_result = time::timeout(
+        options.execution_timeout,
+        migrator.run_direct(None, lock.connection(), false),
+    )
+    .await;
+
+    let migration_result = match migration_result {
+        Ok(result) => result.map_err(map_migration_error),
+        Err(_) => return Err(MigrationError::ExecutionTimeout),
+    };
+
+    lock.release().await?;
+    migration_result?;
+
+    Ok(MigrationReport {
+        latest_version: migrator.iter().map(|migration| migration.version).max(),
+        known_migrations: migrator.iter().count(),
+    })
+}
+
+struct AdvisoryLock {
+    connection: PoolConnection<Postgres>,
+    possibly_owns_lock: bool,
+}
+
+impl AdvisoryLock {
+    const fn new(connection: PoolConnection<Postgres>) -> Self {
+        Self {
+            connection,
+            possibly_owns_lock: false,
+        }
+    }
+
+    fn connection(&mut self) -> &mut PgConnection {
+        &mut self.connection
+    }
+
+    async fn acquire(&mut self, wait_timeout: Duration) -> Result<(), MigrationError> {
+        let deadline = Instant::now() + wait_timeout;
+        loop {
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                return Err(MigrationError::LockWaitTimeout);
+            }
+
+            // If this future is cancelled after PostgreSQL grants the lock but
+            // before the response is observed, the connection must be closed.
+            self.possibly_owns_lock = true;
+            let acquired = time::timeout(
+                remaining,
+                sqlx::query_scalar::<_, bool>("SELECT pg_try_advisory_lock($1, $2)")
+                    .bind(ADVISORY_LOCK_NAMESPACE)
+                    .bind(ADVISORY_LOCK_KEY)
+                    .fetch_one(&mut *self.connection),
+            )
+            .await
+            .map_err(|_| MigrationError::LockOperationTimeout)?
+            .map_err(|error| MigrationError::LockFailed(classify_error(&error)))?;
+
+            if acquired {
+                return Ok(());
+            }
+            self.possibly_owns_lock = false;
+
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                return Err(MigrationError::LockWaitTimeout);
+            }
+            time::sleep(LOCK_POLL_INTERVAL.min(remaining)).await;
+        }
+    }
+
+    async fn release(mut self) -> Result<(), MigrationError> {
+        let released = time::timeout(
+            LOCK_RELEASE_TIMEOUT,
+            sqlx::query_scalar::<_, bool>("SELECT pg_advisory_unlock($1, $2)")
+                .bind(ADVISORY_LOCK_NAMESPACE)
+                .bind(ADVISORY_LOCK_KEY)
+                .fetch_one(&mut *self.connection),
+        )
+        .await
+        .map_err(|_| MigrationError::LockReleaseFailed)?
+        .map_err(|_| MigrationError::LockReleaseFailed)?;
+
+        if !released {
+            return Err(MigrationError::LockOwnershipLost);
+        }
+        self.possibly_owns_lock = false;
+        Ok(())
+    }
+}
+
+impl Drop for AdvisoryLock {
+    fn drop(&mut self) {
+        if self.possibly_owns_lock {
+            // A session-level advisory lock survives transaction rollback. A
+            // possibly owning connection must never return to the pool.
+            self.connection.close_on_drop();
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MigrationError {
+    InvalidLockWaitTimeout,
+    InvalidExecutionTimeout,
+    Database(DatabaseError),
+    LockWaitTimeout,
+    LockOperationTimeout,
+    LockFailed(DatabaseErrorCategory),
+    LockReleaseFailed,
+    LockOwnershipLost,
+    ExecutionTimeout,
+    ExecutionFailed {
+        version: Option<i64>,
+        category: DatabaseErrorCategory,
+    },
+    ChecksumMismatch {
+        version: i64,
+    },
+    AppliedVersionMissing {
+        version: i64,
+    },
+    DirtyVersion {
+        version: i64,
+    },
+    InvalidHistory {
+        version: i64,
+    },
+    Internal,
+}
+
+impl fmt::Display for MigrationError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::InvalidLockWaitTimeout => {
+                formatter.write_str("migration lock wait timeout is invalid")
+            }
+            Self::InvalidExecutionTimeout => {
+                formatter.write_str("migration execution timeout is invalid")
+            }
+            Self::Database(error) => write!(formatter, "migration database access failed: {error}"),
+            Self::LockWaitTimeout => formatter.write_str("migration advisory lock wait timed out"),
+            Self::LockOperationTimeout => {
+                formatter.write_str("migration advisory lock operation timed out")
+            }
+            Self::LockFailed(category) => {
+                write!(formatter, "migration advisory lock failed ({category})")
+            }
+            Self::LockReleaseFailed => {
+                formatter.write_str("migration advisory lock release failed")
+            }
+            Self::LockOwnershipLost => {
+                formatter.write_str("migration advisory lock ownership was lost")
+            }
+            Self::ExecutionTimeout => formatter.write_str("migration execution timed out"),
+            Self::ExecutionFailed { version, category } => match version {
+                Some(version) => write!(
+                    formatter,
+                    "migration {version} execution failed ({category})"
+                ),
+                None => write!(formatter, "migration execution failed ({category})"),
+            },
+            Self::ChecksumMismatch { version } => {
+                write!(formatter, "migration {version} checksum does not match")
+            }
+            Self::AppliedVersionMissing { version } => write!(
+                formatter,
+                "applied migration {version} is missing from this binary"
+            ),
+            Self::DirtyVersion { version } => {
+                write!(formatter, "migration {version} is marked incomplete")
+            }
+            Self::InvalidHistory { version } => write!(
+                formatter,
+                "migration history is invalid at version {version}"
+            ),
+            Self::Internal => formatter.write_str("migration failed due to an internal error"),
+        }
+    }
+}
+
+impl std::error::Error for MigrationError {}
+
+fn map_migration_error(error: MigrateError) -> MigrationError {
+    match error {
+        MigrateError::Execute(source) => MigrationError::ExecutionFailed {
+            version: None,
+            category: classify_error(&source),
+        },
+        MigrateError::ExecuteMigration(source, version) => MigrationError::ExecutionFailed {
+            version: Some(version),
+            category: classify_error(&source),
+        },
+        MigrateError::VersionMismatch(version) => MigrationError::ChecksumMismatch { version },
+        MigrateError::VersionMissing(version) => MigrationError::AppliedVersionMissing { version },
+        MigrateError::Dirty(version) => MigrationError::DirtyVersion { version },
+        MigrateError::VersionNotPresent(version)
+        | MigrateError::VersionTooOld(version, _)
+        | MigrateError::VersionTooNew(version, _) => MigrationError::InvalidHistory { version },
+        _ => MigrationError::Internal,
+    }
+}
+
+#[cfg(test)]
+mod tests;
