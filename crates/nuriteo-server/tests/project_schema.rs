@@ -56,6 +56,7 @@ async fn project_schema_enforces_owner_scope_slug_lifecycle_and_tombstones() {
     seed_owners_and_scopes(&pool).await;
     verify_valid_owners_and_slug_namespaces(&pool).await;
     verify_project_constraints(&pool).await;
+    verify_project_truncate_is_rejected(&pool).await;
     verify_archive_and_version_contract(&pool).await;
     verify_tombstone_reservation(&pool).await;
     verify_bare_delete_and_immutable_tombstone(&pool).await;
@@ -179,6 +180,16 @@ async fn verify_project_constraints(pool: &DatabasePool) {
     for (contract, statement) in cases {
         assert_rejected(pool, statement, contract).await;
     }
+}
+
+async fn verify_project_truncate_is_rejected(pool: &DatabasePool) {
+    let before = project_count(pool).await;
+    assert_rejected(pool, "TRUNCATE TABLE projects", "Project truncation").await;
+    assert_eq!(
+        project_count(pool).await,
+        before,
+        "rejected TRUNCATE must preserve every live Project row"
+    );
 }
 
 async fn verify_archive_and_version_contract(pool: &DatabasePool) {

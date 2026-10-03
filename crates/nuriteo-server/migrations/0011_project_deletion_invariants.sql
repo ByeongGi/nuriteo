@@ -77,6 +77,21 @@ CREATE TRIGGER projects_require_delete_tombstone
     FOR EACH ROW
     EXECUTE FUNCTION ensure_project_delete_tombstone();
 
+CREATE OR REPLACE FUNCTION reject_project_truncate()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    RAISE EXCEPTION 'projects cannot be truncated'
+        USING ERRCODE = '23514';
+END;
+$$;
+
+CREATE TRIGGER projects_no_truncate
+    BEFORE TRUNCATE ON projects
+    FOR EACH STATEMENT
+    EXECUTE FUNCTION reject_project_truncate();
+
 CREATE OR REPLACE FUNCTION reject_project_tombstone_delete()
 RETURNS trigger
 LANGUAGE plpgsql
