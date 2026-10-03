@@ -11,6 +11,8 @@ use tokio::time::{self, Instant};
 use super::{DatabaseError, DatabaseErrorCategory, DatabasePool, classify_error};
 
 const FRAMEWORK_BASELINE_SQL: &str = include_str!("../../migrations/0001_framework_baseline.sql");
+const IDENTITY_CORE_SQL: &str = include_str!("../../migrations/0002_identity_core.sql");
+const SESSIONS_AND_AUDIT_SQL: &str = include_str!("../../migrations/0003_sessions_and_audit.sql");
 
 // Two-key advisory locks use a namespace distinct from PostgreSQL's one-key
 // bigint locks. 0x4e555249 is the ASCII representation of "NURI".
@@ -69,13 +71,29 @@ pub async fn run_embedded_migrations(
 }
 
 pub(super) fn embedded_migrator() -> Migrator {
-    migrator_without_driver_lock(vec![Migration::new(
-        1,
-        Cow::Borrowed("framework baseline"),
-        MigrationType::Simple,
-        FRAMEWORK_BASELINE_SQL.into_sql_str(),
-        false,
-    )])
+    migrator_without_driver_lock(vec![
+        Migration::new(
+            1,
+            Cow::Borrowed("framework baseline"),
+            MigrationType::Simple,
+            FRAMEWORK_BASELINE_SQL.into_sql_str(),
+            false,
+        ),
+        Migration::new(
+            2,
+            Cow::Borrowed("identity core"),
+            MigrationType::Simple,
+            IDENTITY_CORE_SQL.into_sql_str(),
+            false,
+        ),
+        Migration::new(
+            3,
+            Cow::Borrowed("sessions and audit"),
+            MigrationType::Simple,
+            SESSIONS_AND_AUDIT_SQL.into_sql_str(),
+            false,
+        ),
+    ])
 }
 
 fn migrator_without_driver_lock(migrations: Vec<sqlx::migrate::Migration>) -> Migrator {

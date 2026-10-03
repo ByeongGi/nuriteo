@@ -21,31 +21,28 @@ async fn migrate_subprocess_enforces_schema_readiness_and_redaction() {
     let ca =
         fs::read(&ca_path).unwrap_or_else(|error| panic!("fixture CA must be readable: {error}"));
     let pool = fixture_pool(database_url.clone(), ca).await;
-    reset_history(&pool).await;
+    reset_schema(&pool).await;
 
     assert_eq!(
         check_schema_readiness(&pool).await.unwrap(),
         SchemaReadiness::Pending {
             current: None,
-            target: 1
+            target: 3
         }
     );
     assert_success(&run_migrate(&database_url, &ca_path, None));
     assert_eq!(
         check_schema_readiness(&pool).await.unwrap(),
-        SchemaReadiness::Ready { version: 1 }
+        SchemaReadiness::Ready { version: 3 }
     );
     assert_success(&run_migrate(&database_url, &ca_path, None));
 
-    sqlx::query("DELETE FROM _sqlx_migrations")
-        .execute(&mut *pool.acquire().await.unwrap())
-        .await
-        .unwrap();
+    reset_schema(&pool).await;
     assert_eq!(
         check_schema_readiness(&pool).await.unwrap(),
         SchemaReadiness::Pending {
             current: None,
-            target: 1
+            target: 3
         }
     );
     let url_file = temporary_url_file(&database_url);
@@ -105,7 +102,7 @@ async fn migrate_subprocess_enforces_schema_readiness_and_redaction() {
         &database_url,
     );
 
-    reset_history(&pool).await;
+    reset_schema(&pool).await;
     pool.close(Duration::from_secs(2)).await.unwrap();
     fs::remove_file(url_file).unwrap();
 }
@@ -136,7 +133,7 @@ fn assert_success(output: &Output) {
     assert_eq!(output.status.code(), Some(0));
     assert_eq!(
         output.stdout,
-        b"database migration complete: schema=ready version=1\n"
+        b"database migration complete: schema=ready version=3\n"
     );
     assert!(output.stderr.is_empty());
 }
@@ -169,11 +166,22 @@ async fn fixture_pool(database_url: String, ca: Vec<u8>) -> DatabasePool {
     DatabasePool::connect(config).await.unwrap()
 }
 
-async fn reset_history(pool: &DatabasePool) {
-    sqlx::query("DROP TABLE IF EXISTS _sqlx_migrations")
-        .execute(&mut *pool.acquire().await.unwrap())
-        .await
-        .unwrap();
+async fn reset_schema(pool: &DatabasePool) {
+    let mut connection = pool.acquire().await.unwrap();
+    for statement in [
+        "DROP TABLE IF EXISTS audit_events",
+        "DROP TABLE IF EXISTS sessions",
+        "DROP TABLE IF EXISTS oidc_identities",
+        "DROP TABLE IF EXISTS oidc_providers",
+        "DROP TABLE IF EXISTS local_password_credentials",
+        "DROP TABLE IF EXISTS users",
+        "DROP TABLE IF EXISTS _sqlx_migrations",
+    ] {
+        sqlx::query(statement)
+            .execute(&mut *connection)
+            .await
+            .unwrap();
+    }
 }
 
 fn temporary_url_file(database_url: &str) -> PathBuf {
