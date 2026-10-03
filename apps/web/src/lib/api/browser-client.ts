@@ -12,6 +12,7 @@ export function createBrowserApiClient(options: BrowserApiClientOptions = {}): A
   return createApiClient({
     ...options,
     baseUrl: "",
-    credentials: "same-origin"
+    credentials: "same-origin",
+    fetch: options.fetch ?? globalThis.fetch.bind(globalThis)
   });
 }

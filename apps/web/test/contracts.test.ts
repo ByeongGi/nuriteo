@@ -29,7 +29,13 @@ function testStandaloneAndDependencyContract(): void {
 }
 
 function testServerFirstBoundaries(): void {
-  for (const serverFile of ["src/app/layout.tsx", "src/app/page.tsx", "src/app/loading.tsx"] as const) {
+  for (const serverFile of [
+    "src/app/layout.tsx",
+    "src/app/page.tsx",
+    "src/app/loading.tsx",
+    "src/app/setup/page.tsx",
+    "src/app/sign-in/page.tsx"
+  ] as const) {
     assert.doesNotMatch(read(serverFile), /["']use client["']/u, `${serverFile} must stay server-first`);
   }
   const clientFiles = findFiles("src").filter((file) => /["']use client["']/u.test(read(file)));
@@ -37,6 +43,7 @@ function testServerFirstBoundaries(): void {
     "src/app/_components/error-view.tsx",
     "src/app/error.tsx",
     "src/app/global-error.tsx",
+    "src/app/sign-in/sign-in-form.tsx",
     "src/components/theme-selector.tsx",
     "src/components/ui/button.tsx",
     "src/lib/api/browser-client.ts"
