@@ -14,6 +14,10 @@ try {
   await testOriginAndBodyRejection();
   await testCurrentUserCookieAllowlist();
   await testBoundedSafeUpstreamFailure();
+  await testLoginDeadlineCancelsNeverYieldingBody();
+  await testRequestAbortCancelsSlowLoginBody();
+  await testRemainingDeadlineReachesUpstreamFetch();
+  await testRequestAbortCancelsUpstreamResponse();
 } finally {
   globalThis.fetch = originalFetch;
   if (originalInternalUrl === undefined) {
@@ -159,4 +163,135 @@ async function testBoundedSafeUpstreamFailure(): Promise<void> {
   assert.equal(response.status, 502);
   const text = await response.text();
   assert.doesNotMatch(text, /secret|do-not-log|core\.internal/u);
+}
+
+async function testLoginDeadlineCancelsNeverYieldingBody(): Promise<void> {
+  const timeout = new AbortController();
+  let cancelled = false;
+  let fetchCalled = false;
+  const body = new ReadableStream<Uint8Array>({
+    cancel() {
+      cancelled = true;
+    },
+    pull() {
+      timeout.abort();
+      return new Promise<void>(() => undefined);
+    }
+  });
+  globalThis.fetch = async () => {
+    fetchCalled = true;
+    return new Response();
+  };
+
+  const response = await forwardCreateSession(streamingLoginRequest(body), timeout.signal);
+
+  assert.equal(response.status, 504);
+  assert.equal(cancelled, true);
+  assert.equal(fetchCalled, false);
+  assert.equal(response.headers.get("content-type"), "application/problem+json");
+  assert.doesNotMatch(await response.text(), /password|core\.internal/u);
+}
+
+async function testRequestAbortCancelsSlowLoginBody(): Promise<void> {
+  const requestAbort = new AbortController();
+  let pulls = 0;
+  let cancelled = false;
+  const body = new ReadableStream<Uint8Array>({
+    cancel() {
+      cancelled = true;
+    },
+    pull(controller) {
+      pulls += 1;
+      if (pulls === 1) {
+        controller.enqueue(new TextEncoder().encode("{"));
+        return;
+      }
+      requestAbort.abort();
+      return new Promise<void>(() => undefined);
+    }
+  });
+
+  const response = await forwardCreateSession(
+    streamingLoginRequest(body, requestAbort.signal),
+    new AbortController().signal
+  );
+
+  assert.equal(response.status, 408);
+  assert.equal(cancelled, true);
+  assert.equal(response.headers.get("content-type"), "application/problem+json");
+}
+
+async function testRemainingDeadlineReachesUpstreamFetch(): Promise<void> {
+  const timeout = new AbortController();
+  let forwardedSignal: AbortSignal | null | undefined;
+  globalThis.fetch = async (_input, init) => {
+    forwardedSignal = init?.signal;
+    timeout.abort();
+    throw timeout.signal.reason;
+  };
+
+  const response = await forwardCreateSession(new Request(
+    "https://nuriteo.example.test/api/v1/auth/sessions",
+    {
+      body: "{}",
+      headers: {
+        "content-type": "application/json",
+        host: "nuriteo.example.test",
+        origin: "https://nuriteo.example.test"
+      },
+      method: "POST"
+    }
+  ), timeout.signal);
+
+  assert.equal(response.status, 504);
+  assert.equal(forwardedSignal?.aborted, true);
+  assert.equal(response.headers.get("content-type"), "application/problem+json");
+}
+
+async function testRequestAbortCancelsUpstreamResponse(): Promise<void> {
+  const requestAbort = new AbortController();
+  let cancelled = false;
+  let forwardedSignal: AbortSignal | null | undefined;
+  globalThis.fetch = async (_input, init) => {
+    forwardedSignal = init?.signal;
+    return new Response(new ReadableStream<Uint8Array>({
+      cancel() {
+        cancelled = true;
+      },
+      pull() {
+        requestAbort.abort();
+        return new Promise<void>(() => undefined);
+      }
+    }));
+  };
+
+  const response = await forwardCurrentUser(new Request(
+    "https://nuriteo.example.test/api/v1/me",
+    {
+      headers: { cookie: "nrt_session=do-not-log" },
+      signal: requestAbort.signal
+    }
+  ), new AbortController().signal);
+
+  assert.equal(response.status, 408);
+  assert.equal(cancelled, true);
+  assert.equal(forwardedSignal?.aborted, true);
+  assert.doesNotMatch(await response.text(), /do-not-log|core\.internal/u);
+}
+
+function streamingLoginRequest(
+  body: ReadableStream<Uint8Array>,
+  signal?: AbortSignal
+): Request {
+  return new Request("https://nuriteo.example.test/api/v1/auth/sessions", {
+    body,
+    duplex: "half",
+    headers: {
+      "content-type": "application/json",
+      host: "nuriteo.example.test",
+      origin: "https://nuriteo.example.test"
+    },
+    method: "POST",
+    signal
+  } as RequestInit & { duplex: "half" });
 }

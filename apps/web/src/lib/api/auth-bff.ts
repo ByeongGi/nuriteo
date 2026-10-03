@@ -15,9 +15,25 @@ const UPSTREAM_TIMEOUT_MS = 15_000;
 const REQUEST_ID_PATTERN = /^[A-Za-z0-9._:-]{1,128}$/u;
 
 type AuthBffPath = typeof LOGIN_PATH | typeof ME_PATH;
+type StreamFailure = "aborted" | "read_error" | "too_large";
+type StreamResult =
+  | { bytes: Uint8Array; ok: true }
+  | { ok: false; reason: StreamFailure };
 
-export async function forwardCreateSession(request: Request): Promise<Response> {
+interface RequestDeadline {
+  signal: AbortSignal;
+  timedOut(): boolean;
+}
+
+export async function forwardCreateSession(
+  request: Request,
+  timeoutSignal = AbortSignal.timeout(UPSTREAM_TIMEOUT_MS)
+): Promise<Response> {
   const requestId = requestIdFor(request);
+  const deadline = requestDeadline(request.signal, timeoutSignal);
+  if (deadline.signal.aborted) {
+    return abortProblem(deadline, requestId, LOGIN_PATH);
+  }
   const origin = sameOriginHeader(request);
   if (origin === undefined) {
     return problem(403, "BFF_ORIGIN_REJECTED", requestId, LOGIN_PATH);
@@ -27,22 +43,28 @@ export async function forwardCreateSession(request: Request): Promise<Response> 
     return problem(415, "BFF_CONTENT_TYPE_REJECTED", requestId, LOGIN_PATH);
   }
 
-  const body = await readBoundedBody(request, MAX_LOGIN_BODY_BYTES);
-  if (body === undefined) {
-    return problem(413, "BFF_BODY_TOO_LARGE", requestId, LOGIN_PATH);
+  const body = await readBoundedBody(request, MAX_LOGIN_BODY_BYTES, deadline.signal);
+  if (!body.ok) {
+    return body.reason === "too_large"
+      ? problem(413, "BFF_BODY_TOO_LARGE", requestId, LOGIN_PATH)
+      : streamFailureProblem(body.reason, deadline, requestId, LOGIN_PATH, false);
   }
 
   const headers = correlationHeaders(request);
   headers.set("content-type", "application/json");
   headers.set("origin", origin);
   return forward(LOGIN_PATH, {
-    body: toArrayBuffer(body),
+    body: toArrayBuffer(body.bytes),
     headers,
     method: "POST"
-  }, requestId, true);
+  }, requestId, true, deadline);
 }
 
-export async function forwardCurrentUser(request: Request): Promise<Response> {
+export async function forwardCurrentUser(
+  request: Request,
+  timeoutSignal = AbortSignal.timeout(UPSTREAM_TIMEOUT_MS)
+): Promise<Response> {
+  const deadline = requestDeadline(request.signal, timeoutSignal);
   return forward(
     ME_PATH,
     {
@@ -50,7 +72,8 @@ export async function forwardCurrentUser(request: Request): Promise<Response> {
       method: "GET"
     },
     requestIdFor(request),
-    false
+    false,
+    deadline
   );
 }
 
@@ -58,9 +81,13 @@ async function forward(
   path: AuthBffPath,
   init: RequestInit,
   requestId: string,
-  forwardSetCookie: boolean
+  forwardSetCookie: boolean,
+  deadline: RequestDeadline
 ): Promise<Response> {
   let internalApiUrl: string;
+  if (deadline.signal.aborted) {
+    return abortProblem(deadline, requestId, path);
+  }
   try {
     internalApiUrl = validateInternalApiUrl(process.env.NURITEO_INTERNAL_API_URL);
   } catch {
@@ -74,15 +101,17 @@ async function forward(
       cache: "no-store",
       credentials: "omit",
       redirect: "error",
-      signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS)
+      signal: deadline.signal
     });
   } catch {
-    return problem(502, "BFF_UPSTREAM_UNAVAILABLE", requestId, path);
+    return deadline.signal.aborted
+      ? abortProblem(deadline, requestId, path)
+      : problem(502, "BFF_UPSTREAM_UNAVAILABLE", requestId, path);
   }
 
-  const body = await readBoundedResponse(upstream, MAX_RESPONSE_BYTES);
-  if (body === undefined) {
-    return problem(502, "BFF_UPSTREAM_RESPONSE_REJECTED", requestId, path);
+  const body = await readBoundedResponse(upstream, MAX_RESPONSE_BYTES, deadline.signal);
+  if (!body.ok) {
+    return streamFailureProblem(body.reason, deadline, requestId, path, true);
   }
 
   const headers = new Headers({ "cache-control": "no-store" });
@@ -94,7 +123,7 @@ async function forward(
     }
   }
 
-  return new Response(hasResponseBody(upstream.status) ? toArrayBuffer(body) : null, {
+  return new Response(hasResponseBody(upstream.status) ? toArrayBuffer(body.bytes) : null, {
     headers,
     status: upstream.status
   });
@@ -158,65 +187,80 @@ function isJsonContentType(value: string | null): boolean {
 
 async function readBoundedBody(
   request: Request,
-  maximum: number
-): Promise<Uint8Array | undefined> {
+  maximum: number,
+  signal: AbortSignal
+): Promise<StreamResult> {
   const declaredLength = request.headers.get("content-length");
   if (
     declaredLength !== null &&
     (!/^\d+$/u.test(declaredLength) || Number(declaredLength) > maximum)
   ) {
-    await cancel(request.body);
-    return undefined;
+    cancel(request.body);
+    return { ok: false, reason: "too_large" };
   }
-  return readBoundedStream(request.body, maximum);
+  return readBoundedStream(request.body, maximum, signal);
 }
 
 async function readBoundedResponse(
   response: Response,
-  maximum: number
-): Promise<Uint8Array | undefined> {
+  maximum: number,
+  signal: AbortSignal
+): Promise<StreamResult> {
   const declaredLength = response.headers.get("content-length");
   if (
     declaredLength !== null &&
     (!/^\d+$/u.test(declaredLength) || Number(declaredLength) > maximum)
   ) {
-    await cancel(response.body);
-    return undefined;
+    cancel(response.body);
+    return { ok: false, reason: "too_large" };
   }
-  return readBoundedStream(response.body, maximum);
+  return readBoundedStream(response.body, maximum, signal);
 }
 
 async function readBoundedStream(
   stream: ReadableStream<Uint8Array> | null,
-  maximum: number
-): Promise<Uint8Array | undefined> {
+  maximum: number,
+  signal: AbortSignal
+): Promise<StreamResult> {
   if (stream === null) {
-    return new Uint8Array();
+    return { bytes: new Uint8Array(), ok: true };
   }
   const reader = stream.getReader();
   const chunks: Uint8Array[] = [];
   let length = 0;
+  const abortRead = (): void => {
+    cancelReader(reader);
+  };
+  signal.addEventListener("abort", abortRead, { once: true });
   try {
+    if (signal.aborted) {
+      cancelReader(reader);
+      return { ok: false, reason: "aborted" };
+    }
     while (true) {
       const { done, value } = await reader.read();
+      if (signal.aborted) {
+        cancelReader(reader);
+        return { ok: false, reason: "aborted" };
+      }
       if (done) {
         break;
       }
       length += value.byteLength;
       if (length > maximum) {
-        await reader.cancel();
-        return undefined;
+        cancelReader(reader);
+        return { ok: false, reason: "too_large" };
       }
       chunks.push(value);
     }
   } catch {
-    try {
-      await reader.cancel();
-    } catch {
-      // The bounded safe response remains authoritative.
-    }
-    return undefined;
+    cancelReader(reader);
+    return {
+      ok: false,
+      reason: signal.aborted ? "aborted" : "read_error"
+    };
   } finally {
+    signal.removeEventListener("abort", abortRead);
     reader.releaseLock();
   }
 
@@ -226,15 +270,15 @@ async function readBoundedStream(
     result.set(chunk, offset);
     offset += chunk.byteLength;
   }
-  return result;
+  return { bytes: result, ok: true };
 }
 
-async function cancel(stream: ReadableStream<Uint8Array> | null): Promise<void> {
-  try {
-    await stream?.cancel();
-  } catch {
-    // The bounded safe response remains authoritative.
-  }
+function cancelReader(reader: ReadableStreamDefaultReader<Uint8Array>): void {
+  void reader.cancel().catch(() => undefined);
+}
+
+function cancel(stream: ReadableStream<Uint8Array> | null): void {
+  void stream?.cancel().catch(() => undefined);
 }
 
 function copyResponseHeader(source: Headers, destination: Headers, name: string): void {
@@ -246,6 +290,42 @@ function copyResponseHeader(source: Headers, destination: Headers, name: string)
 
 function hasResponseBody(status: number): boolean {
   return status !== 204 && status !== 205 && status !== 304;
+}
+
+function requestDeadline(requestSignal: AbortSignal, timeoutSignal: AbortSignal): RequestDeadline {
+  const signal = AbortSignal.any([requestSignal, timeoutSignal]);
+  return {
+    signal,
+    timedOut: () => timeoutSignal.aborted && signal.reason === timeoutSignal.reason
+  };
+}
+
+function abortProblem(
+  deadline: RequestDeadline,
+  requestId: string,
+  path: AuthBffPath
+): Response {
+  return deadline.timedOut()
+    ? problem(504, "BFF_DEADLINE_EXCEEDED", requestId, path)
+    : problem(408, "BFF_REQUEST_ABORTED", requestId, path);
+}
+
+function streamFailureProblem(
+  reason: StreamFailure,
+  deadline: RequestDeadline,
+  requestId: string,
+  path: AuthBffPath,
+  upstream: boolean
+): Response {
+  if (reason === "aborted") {
+    return abortProblem(deadline, requestId, path);
+  }
+  return problem(
+    upstream ? 502 : 400,
+    upstream ? "BFF_UPSTREAM_RESPONSE_REJECTED" : "BFF_BODY_REJECTED",
+    requestId,
+    path
+  );
 }
 
 function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
