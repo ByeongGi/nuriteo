@@ -4,13 +4,16 @@ import {
   ApiConfigurationError,
   ApiError,
   ApiInvalidResponseError,
+  ApiResponseTooLargeError,
   ApiSerializationError,
   ApiTimeoutError,
   ApiTransportError
 } from "./errors.ts";
 import {
   API_PREFIX,
+  DEFAULT_MAX_RESPONSE_BYTES,
   DEFAULT_REQUEST_TIMEOUT_MS,
+  MAX_RESPONSE_BYTES,
   MAX_REQUEST_TIMEOUT_MS,
   REQUEST_ID_HEADER
 } from "./types.ts";
@@ -32,6 +35,7 @@ interface PreparedClientOptions {
   readonly credentials: RequestCredentials | undefined;
   readonly defaultHeaders: HeadersInit | undefined;
   readonly fetch: typeof globalThis.fetch;
+  readonly maxResponseBytes: number;
   readonly timeoutMs: number;
 }
 
@@ -75,6 +79,9 @@ async function requestApi<TResponse, TBody>(
   requestOptions: ApiRequestOptions<TBody>
 ): Promise<ApiResponse<TResponse>> {
   const timeoutMs = normalizeTimeout(requestOptions.timeoutMs ?? clientOptions.timeoutMs);
+  const maxResponseBytes = normalizeMaxResponseBytes(
+    requestOptions.maxResponseBytes ?? clientOptions.maxResponseBytes
+  );
   const externalSignal = requestOptions.signal;
   if (externalSignal?.aborted) {
     throw new ApiAbortError();
@@ -115,7 +122,7 @@ async function requestApi<TResponse, TBody>(
     if (abortSource !== undefined) {
       throw createAbortError(abortSource, timeoutMs);
     }
-    return await parseResponse<TResponse>(response);
+    return await parseResponse<TResponse>(response, maxResponseBytes);
   } catch (error) {
     if (abortSource !== undefined) {
       throw createAbortError(abortSource, timeoutMs);
@@ -136,8 +143,24 @@ function prepareClientOptions(options: ApiClientOptions): PreparedClientOptions 
     credentials: options.credentials,
     defaultHeaders: options.defaultHeaders,
     fetch: options.fetch ?? globalThis.fetch,
+    maxResponseBytes: normalizeMaxResponseBytes(
+      options.maxResponseBytes ?? DEFAULT_MAX_RESPONSE_BYTES
+    ),
     timeoutMs: normalizeTimeout(options.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS)
   };
+}
+
+function normalizeMaxResponseBytes(maxResponseBytes: number): number {
+  if (
+    !Number.isInteger(maxResponseBytes) ||
+    maxResponseBytes < 1 ||
+    maxResponseBytes > MAX_RESPONSE_BYTES
+  ) {
+    throw new ApiConfigurationError(
+      `The API response limit must be an integer from 1 to ${MAX_RESPONSE_BYTES} bytes.`
+    );
+  }
+  return maxResponseBytes;
 }
 
 function normalizeBaseUrl(baseUrl: string | undefined): string {
@@ -238,13 +261,17 @@ function serializeBody(body: unknown): string | undefined {
   }
 }
 
-async function parseResponse<TResponse>(response: Response): Promise<ApiResponse<TResponse>> {
+async function parseResponse<TResponse>(
+  response: Response,
+  maxResponseBytes: number
+): Promise<ApiResponse<TResponse>> {
   const requestId = readRequestId(response.headers);
   if (response.status === 204) {
     return createResponse(undefined as TResponse, response, requestId);
   }
 
-  const text = await response.text();
+  await rejectOversizedContentLength(response, requestId, maxResponseBytes);
+  const text = await readBoundedText(response, requestId, maxResponseBytes);
   const isJson = isJsonContentType(response.headers.get("content-type"));
   if (!response.ok) {
     const problem = isJson ? parseProblemDetails(text, response.status) : undefined;
@@ -258,6 +285,78 @@ async function parseResponse<TResponse>(response: Response): Promise<ApiResponse
     return createResponse(JSON.parse(text) as TResponse, response, requestId);
   } catch {
     throw new ApiInvalidResponseError(response.status, requestId);
+  }
+}
+
+async function rejectOversizedContentLength(
+  response: Response,
+  requestId: string | undefined,
+  maxResponseBytes: number
+): Promise<void> {
+  const contentLength = response.headers.get("content-length");
+  if (contentLength === null || !/^\d+$/u.test(contentLength)) {
+    return;
+  }
+  if (BigInt(contentLength) > BigInt(maxResponseBytes)) {
+    await cancelBody(response.body);
+    throw new ApiResponseTooLargeError(response.status, requestId, maxResponseBytes);
+  }
+}
+
+async function readBoundedText(
+  response: Response,
+  requestId: string | undefined,
+  maxResponseBytes: number
+): Promise<string> {
+  if (response.body === null) {
+    return "";
+  }
+
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let receivedBytes = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        break;
+      }
+      receivedBytes += value.byteLength;
+      if (receivedBytes > maxResponseBytes) {
+        await cancelReader(reader);
+        throw new ApiResponseTooLargeError(response.status, requestId, maxResponseBytes);
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  const bytes = new Uint8Array(receivedBytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder().decode(bytes);
+}
+
+async function cancelBody(body: ReadableStream<Uint8Array> | null): Promise<void> {
+  if (body === null) {
+    return;
+  }
+  try {
+    await body.cancel();
+  } catch {
+    // The bounded typed error remains authoritative if cancellation also fails.
+  }
+}
+
+async function cancelReader(reader: ReadableStreamDefaultReader<Uint8Array>): Promise<void> {
+  try {
+    await reader.cancel();
+  } catch {
+    // The bounded typed error remains authoritative if cancellation also fails.
   }
 }
 

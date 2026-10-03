@@ -5,6 +5,7 @@ export type ApiClientErrorKind =
   | "configuration"
   | "http"
   | "invalid-response"
+  | "response-too-large"
   | "serialization"
   | "timeout"
   | "transport";
@@ -40,6 +41,20 @@ export class ApiInvalidResponseError extends ApiClientError {
   constructor(status: number, requestId: string | undefined) {
     super("invalid-response", "The API returned an invalid JSON response.");
     this.name = "ApiInvalidResponseError";
+    this.status = status;
+    this.requestId = requestId;
+  }
+}
+
+export class ApiResponseTooLargeError extends ApiClientError {
+  readonly maxResponseBytes: number;
+  readonly status: number;
+  readonly requestId: string | undefined;
+
+  constructor(status: number, requestId: string | undefined, maxResponseBytes: number) {
+    super("response-too-large", "The API response exceeded the configured size limit.");
+    this.name = "ApiResponseTooLargeError";
+    this.maxResponseBytes = maxResponseBytes;
     this.status = status;
     this.requestId = requestId;
   }

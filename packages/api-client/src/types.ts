@@ -1,6 +1,8 @@
 export const API_PREFIX = "/api/v1";
 export const DEFAULT_REQUEST_TIMEOUT_MS = 15_000;
 export const MAX_REQUEST_TIMEOUT_MS = 120_000;
+export const DEFAULT_MAX_RESPONSE_BYTES = 1_048_576;
+export const MAX_RESPONSE_BYTES = 16_777_216;
 export const REQUEST_ID_HEADER = "x-request-id";
 
 export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
@@ -32,6 +34,7 @@ export interface ApiResponse<T> {
 export interface ApiRequestOptions<TBody = unknown> {
   readonly body?: TBody | undefined;
   readonly headers?: HeadersInit;
+  readonly maxResponseBytes?: number;
   readonly signal?: AbortSignal;
   readonly timeoutMs?: number;
 }
@@ -43,6 +46,7 @@ export interface ApiClientOptions {
   readonly credentials?: RequestCredentials;
   readonly defaultHeaders?: HeadersInit;
   readonly fetch?: typeof globalThis.fetch;
+  readonly maxResponseBytes?: number;
   readonly timeoutMs?: number;
 }
 

@@ -5,6 +5,7 @@ export {
   ApiConfigurationError,
   ApiError,
   ApiInvalidResponseError,
+  ApiResponseTooLargeError,
   ApiSerializationError,
   ApiTimeoutError,
   ApiTransportError
@@ -12,7 +13,9 @@ export {
 export { getVersion } from "./system.ts";
 export {
   API_PREFIX,
+  DEFAULT_MAX_RESPONSE_BYTES,
   DEFAULT_REQUEST_TIMEOUT_MS,
+  MAX_RESPONSE_BYTES,
   MAX_REQUEST_TIMEOUT_MS,
   REQUEST_ID_HEADER
 } from "./types.ts";

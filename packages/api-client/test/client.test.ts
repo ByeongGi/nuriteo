@@ -6,6 +6,7 @@ import {
   ApiConfigurationError,
   ApiError,
   ApiInvalidResponseError,
+  ApiResponseTooLargeError,
   ApiTimeoutError,
   ApiTransportError,
   createApiClient,
@@ -16,6 +17,7 @@ import type { ProblemDetails } from "../src/index.ts";
 await testUrlHeadersJsonBodyAndRequestId();
 await testResponseParsing();
 await testProblemDetailsAndSafeErrors();
+await testBoundedResponseBodies();
 await testTimeoutAndExternalAbort();
 await testTimerAndListenerCleanup();
 await testConfigurationBoundaries();
@@ -159,6 +161,48 @@ async function testTimeoutAndExternalAbort(): Promise<void> {
   assert.doesNotMatch(String(abortError), /credential-like|reason/u);
 }
 
+async function testBoundedResponseBodies(): Promise<void> {
+  let contentLengthBodyCancelled = false;
+  const declaredOversizedBody = new ReadableStream<Uint8Array>({
+    cancel() {
+      contentLengthBodyCancelled = true;
+    }
+  });
+  const declaredOversizedClient = createApiClient({
+    maxResponseBytes: 4,
+    fetch: async () =>
+      new Response(declaredOversizedBody, {
+        headers: { "content-length": "5", "x-request-id": "declared-large" }
+      })
+  });
+  const declaredError = await captureError(declaredOversizedClient.get("/projects"));
+  assert.ok(declaredError instanceof ApiResponseTooLargeError);
+  assert.equal(declaredError.maxResponseBytes, 4);
+  assert.equal(declaredError.requestId, "declared-large");
+  assert.equal(contentLengthBodyCancelled, true);
+
+  let streamedBodyCancelled = false;
+  const streamedBody = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(new Uint8Array([1, 2, 3]));
+      controller.enqueue(new Uint8Array([4, 5, 6]));
+    },
+    cancel() {
+      streamedBodyCancelled = true;
+    }
+  });
+  const streamedClient = createApiClient({
+    fetch: async () => new Response(streamedBody)
+  });
+  const streamedError = await captureError(
+    streamedClient.get("/projects?credential=do-not-leak", { maxResponseBytes: 4 })
+  );
+  assert.ok(streamedError instanceof ApiResponseTooLargeError);
+  assert.equal(streamedError.maxResponseBytes, 4);
+  assert.equal(streamedBodyCancelled, true);
+  assert.doesNotMatch(String(streamedError), /credential|do-not-leak|projects/u);
+}
+
 async function testTimerAndListenerCleanup(): Promise<void> {
   const externalController = new AbortController();
   let internalSignal: AbortSignal | undefined;
@@ -182,6 +226,10 @@ async function testConfigurationBoundaries(): Promise<void> {
     ApiConfigurationError
   );
   assert.throws(() => createApiClient({ timeoutMs: 0 }), ApiConfigurationError);
+  assert.throws(
+    () => createApiClient({ maxResponseBytes: 16_777_217 }),
+    ApiConfigurationError
+  );
 
   const client = createApiClient({ fetch: async () => Response.json({}) });
   await assert.rejects(
