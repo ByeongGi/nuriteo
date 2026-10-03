@@ -38,7 +38,8 @@ function testServerFirstBoundaries(): void {
     "src/app/error.tsx",
     "src/app/global-error.tsx",
     "src/components/theme-selector.tsx",
-    "src/components/ui/button.tsx"
+    "src/components/ui/button.tsx",
+    "src/lib/api/browser-client.ts"
   ]);
 }
 
