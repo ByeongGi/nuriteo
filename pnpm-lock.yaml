@@ -145,6 +145,8 @@ importers:
 
   examples/runtime-lab: {}
 
+  packages/api-client: {}
+
   packages/browser-host:
     dependencies:
       '@nuriteo/protocol':
