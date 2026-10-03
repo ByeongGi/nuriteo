@@ -42,7 +42,11 @@ const fn field(
     }
 }
 
-const fn secret_field(environment: &'static str, validation: &'static str) -> ConfigField {
+const fn secret_field(
+    environment: &'static str,
+    validation: &'static str,
+    helm_mapping: &'static str,
+) -> ConfigField {
     ConfigField {
         environment,
         file_key: None,
@@ -52,7 +56,7 @@ const fn secret_field(environment: &'static str, validation: &'static str) -> Co
         reloadable: false,
         validation,
         compose_mapping: environment,
-        helm_mapping: "objectStorage.credentials",
+        helm_mapping,
     }
 }
 
@@ -165,26 +169,32 @@ pub const CONFIG_FIELDS: &[ConfigField] = &[
     secret_field(
         "NURITEO_S3_ACCESS_KEY_ID",
         "static provider credential; exclusive with _FILE",
+        "objectStorage.credentials",
     ),
     secret_field(
         "NURITEO_S3_ACCESS_KEY_ID_FILE",
         "bounded mounted secret file; exclusive with direct value",
+        "objectStorage.credentials",
     ),
     secret_field(
         "NURITEO_S3_SECRET_ACCESS_KEY",
         "static provider credential; exclusive with _FILE",
+        "objectStorage.credentials",
     ),
     secret_field(
         "NURITEO_S3_SECRET_ACCESS_KEY_FILE",
         "bounded mounted secret file; exclusive with direct value",
+        "objectStorage.credentials",
     ),
     secret_field(
         "NURITEO_S3_SESSION_TOKEN",
         "optional static provider credential; exclusive with _FILE",
+        "objectStorage.credentials",
     ),
     secret_field(
         "NURITEO_S3_SESSION_TOKEN_FILE",
         "bounded mounted secret file; exclusive with direct value",
+        "objectStorage.credentials",
     ),
     field(
         "NURITEO_INSTANCE_CA_FILE",
@@ -201,5 +211,100 @@ pub const CONFIG_FIELDS: &[ConfigField] = &[
         None,
         "bounded integration PEM bundle containing CA certificates only",
         "objectStorage.tls.ca.existingFile",
+    ),
+    secret_field(
+        "NURITEO_DATABASE_URL",
+        "PostgreSQL URL; exclusive with _FILE and always redacted",
+        "database.url",
+    ),
+    secret_field(
+        "NURITEO_DATABASE_URL_FILE",
+        "bounded mounted PostgreSQL URL file; exclusive with direct value",
+        "database.urlExistingSecret",
+    ),
+    field(
+        "NURITEO_DATABASE_MIN_CONNECTIONS",
+        None,
+        "integer",
+        Some("0"),
+        "integer from 0 through max connections",
+        "database.pool.minConnections",
+    ),
+    field(
+        "NURITEO_DATABASE_MAX_CONNECTIONS",
+        None,
+        "integer",
+        Some("10"),
+        "integer from 1 through 64",
+        "database.pool.maxConnections",
+    ),
+    field(
+        "NURITEO_DATABASE_CONNECT_TIMEOUT_MS",
+        None,
+        "milliseconds",
+        Some("5000"),
+        "integer from 100 through 60000",
+        "database.pool.connectTimeoutMs",
+    ),
+    field(
+        "NURITEO_DATABASE_ACQUIRE_TIMEOUT_MS",
+        None,
+        "milliseconds",
+        Some("2000"),
+        "integer from 100 through 60000",
+        "database.pool.acquireTimeoutMs",
+    ),
+    field(
+        "NURITEO_DATABASE_CLOSE_TIMEOUT_MS",
+        None,
+        "milliseconds",
+        Some("5000"),
+        "integer from 100 through 60000",
+        "database.pool.closeTimeoutMs",
+    ),
+    field(
+        "NURITEO_DATABASE_MIGRATION_LOCK_TIMEOUT_MS",
+        None,
+        "milliseconds",
+        Some("30000"),
+        "integer from 100 through 300000",
+        "database.migration.lockTimeoutMs",
+    ),
+    field(
+        "NURITEO_DATABASE_MIGRATION_TIMEOUT_MS",
+        None,
+        "milliseconds",
+        Some("300000"),
+        "integer from 1000 through 3600000",
+        "database.migration.executionTimeoutMs",
+    ),
+    field(
+        "NURITEO_DATABASE_TLS_MODE",
+        None,
+        "enum",
+        Some("verify-full"),
+        "verify-full only",
+        "database.tls.mode",
+    ),
+    field(
+        "NURITEO_DATABASE_CA_FILE",
+        None,
+        "path",
+        None,
+        "bounded PEM bundle containing CA certificates only",
+        "database.tls.ca.existingFile",
+    ),
+    field(
+        "NURITEO_DATABASE_CLIENT_CERT_FILE",
+        None,
+        "path",
+        None,
+        "bounded PEM client certificate chain; requires client key",
+        "database.tls.clientCertificate.existingSecret",
+    ),
+    secret_field(
+        "NURITEO_DATABASE_CLIENT_KEY_FILE",
+        "bounded PEM client private key; requires client certificate",
+        "database.tls.clientKey.existingSecret",
     ),
 ];

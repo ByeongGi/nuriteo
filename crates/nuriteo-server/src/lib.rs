@@ -28,7 +28,7 @@ impl CommandStatus {
     }
 }
 
-pub use cli::run;
+pub use cli::{run, run_async};
 
 #[cfg(test)]
 mod tests {

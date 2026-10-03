@@ -4,6 +4,11 @@ use std::io::{self, Write};
 use clap::error::ErrorKind;
 use clap::{Arg, ArgAction, ArgMatches, Command};
 
+use crate::config::{Config, SystemEnvironment, SystemFileReader};
+use crate::database::{
+    DatabasePool, DatabaseRuntimeConfig, SchemaReadiness, check_schema_readiness,
+    run_embedded_migrations,
+};
 use crate::{CommandStatus, VERSION};
 
 const BINARY_NAME: &str = "nuriteo-server";
@@ -116,6 +121,112 @@ where
             Ok(CommandStatus::UsageError)
         }
     }
+}
+
+/// Parses synchronously, then dispatches operational work across an explicit
+/// async boundary. Help, version and usage rendering remain deterministic and
+/// do not initialize a Tokio runtime or any external dependency.
+pub async fn run_async<I, S, O, E>(
+    args: I,
+    stdout: &mut O,
+    stderr: &mut E,
+) -> io::Result<CommandStatus>
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<OsStr>,
+    O: Write,
+    E: Write,
+{
+    match parse(args) {
+        Ok(CliAction::Version) => {
+            writeln!(stdout, "{BINARY_NAME} {VERSION}")?;
+            Ok(CommandStatus::Success)
+        }
+        Ok(CliAction::Operational(OperationalCommand::Migrate)) => migrate(stdout, stderr).await,
+        Ok(CliAction::Operational(command)) => unavailable(command, stderr),
+        Err(error) if is_successful_display(error.kind()) => {
+            write!(stdout, "{error}")?;
+            Ok(CommandStatus::Success)
+        }
+        Err(error) => {
+            write!(stderr, "{error}")?;
+            Ok(CommandStatus::UsageError)
+        }
+    }
+}
+
+async fn migrate<O: Write, E: Write>(stdout: &mut O, stderr: &mut E) -> io::Result<CommandStatus> {
+    let environment = SystemEnvironment;
+    let files = SystemFileReader;
+    if Config::load(&environment, &files).is_err() {
+        return migration_failure(stderr, "configuration");
+    }
+    let config = match DatabaseRuntimeConfig::load(&environment, &files) {
+        Ok(config) => config,
+        Err(_) => return migration_failure(stderr, "database-configuration"),
+    };
+    let pool = match DatabasePool::connect(config.pool_config()).await {
+        Ok(pool) => pool,
+        Err(_) => return migration_failure(stderr, "database-connectivity"),
+    };
+
+    let result = execute_migration(&pool, &config).await;
+    let close_result = pool.close(config.close_timeout()).await;
+    match (result, close_result) {
+        (Ok(readiness), Ok(())) => {
+            writeln!(
+                stdout,
+                "database migration complete: {}",
+                readiness.summary()
+            )?;
+            Ok(CommandStatus::Success)
+        }
+        (Err(MigrationCommandError::Readiness(readiness)), _) => {
+            writeln!(
+                stderr,
+                "{BINARY_NAME}: migrate refused: {}",
+                readiness.summary()
+            )?;
+            Ok(CommandStatus::Failure)
+        }
+        (Err(MigrationCommandError::ReadinessQuery), _)
+        | (Err(MigrationCommandError::Migration), _)
+        | (Ok(_), Err(_)) => migration_failure(stderr, "database-operation"),
+    }
+}
+
+async fn execute_migration(
+    pool: &DatabasePool,
+    config: &DatabaseRuntimeConfig,
+) -> Result<SchemaReadiness, MigrationCommandError> {
+    let before = check_schema_readiness(pool)
+        .await
+        .map_err(|_| MigrationCommandError::ReadinessQuery)?;
+    if !before.allows_migration() {
+        return Err(MigrationCommandError::Readiness(before));
+    }
+    run_embedded_migrations(pool, config.migration_options())
+        .await
+        .map_err(|_| MigrationCommandError::Migration)?;
+    let after = check_schema_readiness(pool)
+        .await
+        .map_err(|_| MigrationCommandError::ReadinessQuery)?;
+    if matches!(after, SchemaReadiness::Ready { .. }) {
+        Ok(after)
+    } else {
+        Err(MigrationCommandError::Readiness(after))
+    }
+}
+
+enum MigrationCommandError {
+    Readiness(SchemaReadiness),
+    ReadinessQuery,
+    Migration,
+}
+
+fn migration_failure<E: Write>(stderr: &mut E, category: &str) -> io::Result<CommandStatus> {
+    writeln!(stderr, "{BINARY_NAME}: migrate failed ({category})")?;
+    Ok(CommandStatus::Failure)
 }
 
 fn command_from_matches(matches: &ArgMatches) -> Result<CliAction, clap::Error> {

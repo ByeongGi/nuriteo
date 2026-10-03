@@ -50,7 +50,7 @@ fn invalid_invocations_are_usage_errors() {
 
 #[test]
 fn unavailable_commands_fail_closed() {
-    for command in ["serve", "migrate", "bootstrap-admin", "healthcheck"] {
+    for command in ["serve", "bootstrap-admin", "healthcheck"] {
         let output = run(&[command]);
 
         assert_eq!(output.status.code(), Some(1), "command: {command}");
@@ -60,4 +60,22 @@ fn unavailable_commands_fail_closed() {
             format!("nuriteo-server: `{command}` is not available in this build\n")
         );
     }
+}
+
+#[test]
+fn migrate_fails_closed_without_configuration() {
+    let output = Command::new(env!("CARGO_BIN_EXE_nuriteo-server"))
+        .arg("migrate")
+        .env_remove("NURITEO_EXTERNAL_URL")
+        .env_remove("NURITEO_DATABASE_URL")
+        .env_remove("NURITEO_DATABASE_URL_FILE")
+        .output()
+        .expect("nuriteo-server binary should start");
+
+    assert_eq!(output.status.code(), Some(1));
+    assert!(output.stdout.is_empty());
+    assert_eq!(
+        output.stderr,
+        b"nuriteo-server: migrate failed (configuration)\n"
+    );
 }
