@@ -1,4 +1,5 @@
 mod id;
+mod password;
 mod session;
 mod timestamp;
 mod user;
@@ -6,6 +7,10 @@ mod user;
 use std::fmt;
 
 pub use id::{SessionId, UserId};
+pub use password::{
+    PasswordHashError, PasswordHashInputError, PasswordPolicy, PasswordService,
+    PasswordVerification, PasswordVerifyError, StoredPasswordHash,
+};
 pub use session::{Session, SessionFields};
 pub use timestamp::Timestamp;
 pub use user::{User, UserFields, UserStatus};
