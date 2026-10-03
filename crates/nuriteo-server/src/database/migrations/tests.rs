@@ -29,13 +29,13 @@ fn validates_migration_deadlines() {
 fn embedded_baseline_is_forward_only_and_framework_scoped() {
     let embedded = embedded_migrator();
     let migrations: Vec<_> = embedded.iter().collect();
-    assert_eq!(migrations.len(), 7);
+    assert_eq!(migrations.len(), 8);
     assert_eq!(
         migrations
             .iter()
             .map(|migration| migration.version)
             .collect::<Vec<_>>(),
-        vec![1, 2, 3, 4, 5, 6, 7]
+        vec![1, 2, 3, 4, 5, 6, 7, 8]
     );
     assert_eq!(migrations[0].version, 1);
     assert_eq!(migrations[0].migration_type, MigrationType::Simple);
@@ -48,13 +48,13 @@ fn embedded_baseline_is_forward_only_and_framework_scoped() {
 #[test]
 fn migration_errors_expose_only_stable_categories() {
     let error = MigrationError::ExecutionFailed {
-        version: Some(7),
+        version: Some(8),
         category: DatabaseErrorCategory::Internal,
     };
     let rendered = format!("{error:?} {error}");
     assert!(!rendered.contains("postgres://"));
     assert!(!rendered.contains("credential"));
-    assert_eq!(error.to_string(), "migration 7 execution failed (internal)");
+    assert_eq!(error.to_string(), "migration 8 execution failed (internal)");
 }
 
 #[tokio::test]
@@ -101,8 +101,8 @@ async fn real_postgres_serializes_validates_rolls_back_and_retries() {
         .unwrap_or_else(|error| panic!("second runner task must join: {error}"))
         .unwrap_or_else(|error| panic!("second runner must succeed: {error}"));
     assert_eq!(first_report, second_report);
-    assert_eq!(first_report.latest_version, Some(7));
-    assert_eq!(first_report.known_migrations, 7);
+    assert_eq!(first_report.latest_version, Some(8));
+    assert_eq!(first_report.known_migrations, 8);
     for version in 1..=7 {
         assert_eq!(migration_row_count(&pool, version).await, 1);
     }

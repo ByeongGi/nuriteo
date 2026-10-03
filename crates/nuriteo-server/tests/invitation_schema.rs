@@ -30,21 +30,21 @@ async fn activation_invitation_schema_enforces_hash_only_lifecycle() {
         readiness(&pool).await,
         SchemaReadiness::Pending {
             current: None,
-            target: 7
+            target: 8
         }
     );
     let first_report = migrate(&pool).await;
     assert_eq!(
         first_report,
         MigrationReport {
-            latest_version: Some(7),
-            known_migrations: 7
+            latest_version: Some(8),
+            known_migrations: 8
         }
     );
     assert_eq!(migrate(&pool).await, first_report);
     assert_eq!(
         readiness(&pool).await,
-        SchemaReadiness::Ready { version: 7 }
+        SchemaReadiness::Ready { version: 8 }
     );
 
     insert_inviter(&pool).await;

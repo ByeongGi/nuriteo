@@ -32,7 +32,7 @@ async fn identity_session_and_audit_schema_enforces_contracts() {
         readiness(&pool).await,
         SchemaReadiness::Pending {
             current: None,
-            target: 7
+            target: 8
         }
     );
     verify_failed_migration_rolls_back(&pool).await;
@@ -40,7 +40,7 @@ async fn identity_session_and_audit_schema_enforces_contracts() {
         readiness(&pool).await,
         SchemaReadiness::Pending {
             current: None,
-            target: 7
+            target: 8
         }
     );
 
@@ -49,14 +49,14 @@ async fn identity_session_and_audit_schema_enforces_contracts() {
     assert_eq!(
         first_report,
         MigrationReport {
-            latest_version: Some(7),
-            known_migrations: 7
+            latest_version: Some(8),
+            known_migrations: 8
         }
     );
     assert_eq!(repeated_report, first_report);
     assert_eq!(
         readiness(&pool).await,
-        SchemaReadiness::Ready { version: 7 }
+        SchemaReadiness::Ready { version: 8 }
     );
 
     verify_user_and_identity_constraints(&pool).await;
