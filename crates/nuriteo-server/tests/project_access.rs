@@ -50,6 +50,7 @@ async fn direct_project_roles_are_isolated_effective_and_serialized() {
     verify_typed_grant_revoke_and_constraints(&pool).await;
     verify_owner_demotion_reactivates_direct_grant(&pool).await;
     verify_membership_role_and_effective_races(&pool).await;
+    verify_role_change_and_membership_removal_races(&pool).await;
     verify_concurrent_same_pair_grant(&pool).await;
     verify_membership_delete_blocks_grant(&pool).await;
     verify_concurrent_grant_and_membership_delete(&pool).await;
@@ -318,6 +319,127 @@ async fn verify_membership_role_and_effective_races(pool: &DatabasePool) {
            AND user_id='0199ee6c-c777-7000-8000-000000005002'::uuid",
     )
     .await;
+}
+
+async fn verify_role_change_and_membership_removal_races(pool: &DatabasePool) {
+    let mut role_change_connection = pool.acquire().await.unwrap();
+    let mut role_change = role_change_connection.begin().await.unwrap();
+    let role_change_pid = backend_pid(&mut role_change).await;
+    assert!(
+        ProjectAccessRepository::revoke(
+            &mut role_change,
+            project_id(ORGANIZATION_PROJECT),
+            user_id(MEMBER),
+        )
+        .await
+        .unwrap()
+    );
+    ProjectAccessRepository::grant(
+        &mut role_change,
+        project_id(ORGANIZATION_PROJECT),
+        user_id(MEMBER),
+        ProjectRole::Admin,
+        now(),
+    )
+    .await
+    .unwrap();
+
+    let removal_pool = pool.clone();
+    let (pid_tx, pid_rx) = oneshot::channel();
+    let removal = tokio::spawn(async move {
+        let mut connection = removal_pool.acquire().await.unwrap();
+        let mut transaction = connection.begin().await.unwrap();
+        pid_tx.send(backend_pid(&mut transaction).await).unwrap();
+        lock_organization_for_update(&mut transaction).await;
+        sqlx::query(
+            "DELETE FROM organization_memberships \
+             WHERE organization_id=$1::uuid AND user_id=$2::uuid",
+        )
+        .bind(ORGANIZATION)
+        .bind(MEMBER)
+        .execute(&mut *transaction)
+        .await
+        .unwrap();
+        transaction.commit().await.unwrap();
+    });
+    let removal_pid = pid_rx.await.unwrap();
+    if !wait_for_database_block(pool, role_change_pid, removal_pid).await {
+        role_change.rollback().await.unwrap();
+        removal.abort();
+        let _ = removal.await;
+        panic!("membership removal must wait for the role-change transaction");
+    }
+    role_change.commit().await.unwrap();
+    time::timeout(Duration::from_secs(2), removal)
+        .await
+        .expect("membership removal must proceed after role-change commit")
+        .expect("membership removal task must join");
+    assert_eq!(role_count(pool, ORGANIZATION_PROJECT, MEMBER).await, 0);
+    assert_eq!(
+        effective(pool, ORGANIZATION_PROJECT, MEMBER).await,
+        EffectiveProjectRole::None
+    );
+    insert_membership(pool, MEMBER, "member").await;
+    grant(pool, ORGANIZATION_PROJECT, MEMBER, ProjectRole::Read).await;
+
+    let mut removal_connection = pool.acquire().await.unwrap();
+    let mut removal = removal_connection.begin().await.unwrap();
+    let removal_pid = backend_pid(&mut removal).await;
+    lock_organization_for_update(&mut removal).await;
+    sqlx::query(
+        "DELETE FROM organization_memberships \
+         WHERE organization_id=$1::uuid AND user_id=$2::uuid",
+    )
+    .bind(ORGANIZATION)
+    .bind(MEMBER)
+    .execute(&mut *removal)
+    .await
+    .unwrap();
+
+    let role_change_pool = pool.clone();
+    let (pid_tx, pid_rx) = oneshot::channel();
+    let role_change = tokio::spawn(async move {
+        let mut connection = role_change_pool.acquire().await.unwrap();
+        let mut transaction = connection.begin().await.unwrap();
+        pid_tx.send(backend_pid(&mut transaction).await).unwrap();
+        let revoked = ProjectAccessRepository::revoke(
+            &mut transaction,
+            project_id(ORGANIZATION_PROJECT),
+            user_id(MEMBER),
+        )
+        .await;
+        let granted = ProjectAccessRepository::grant(
+            &mut transaction,
+            project_id(ORGANIZATION_PROJECT),
+            user_id(MEMBER),
+            ProjectRole::Write,
+            now(),
+        )
+        .await;
+        transaction.rollback().await.unwrap();
+        (revoked, granted)
+    });
+    let role_change_pid = pid_rx.await.unwrap();
+    if !wait_for_database_block(pool, removal_pid, role_change_pid).await {
+        removal.rollback().await.unwrap();
+        role_change.abort();
+        let _ = role_change.await;
+        panic!("role change must wait for membership removal");
+    }
+    removal.commit().await.unwrap();
+    let (revoked, granted) = time::timeout(Duration::from_secs(2), role_change)
+        .await
+        .expect("role change must resolve after membership removal")
+        .expect("role-change task must join");
+    assert_eq!(revoked, Ok(false));
+    assert_eq!(granted, Err(ProjectAccessError::MemberUnavailable));
+    assert_eq!(role_count(pool, ORGANIZATION_PROJECT, MEMBER).await, 0);
+    assert_eq!(
+        effective(pool, ORGANIZATION_PROJECT, MEMBER).await,
+        EffectiveProjectRole::None
+    );
+    insert_membership(pool, MEMBER, "member").await;
+    grant(pool, ORGANIZATION_PROJECT, MEMBER, ProjectRole::Write).await;
 }
 
 async fn verify_membership_delete_blocks_grant(pool: &DatabasePool) {

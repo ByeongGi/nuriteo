@@ -224,6 +224,9 @@ impl ProjectAccessRepository {
     /// Removes one direct role while preserving transaction ownership for the
     /// authorization and audit caller. Missing roles are idempotent, and target
     /// membership or User activity is deliberately not required for cleanup.
+    /// Existing User and membership rows are nevertheless locked, without
+    /// validating their state, to preserve the global Organization -> Project
+    /// -> User -> membership -> grant order used by grant and resolution.
     pub async fn revoke(
         transaction: &mut Transaction<'_, Postgres>,
         project_id: ProjectId,
@@ -231,6 +234,8 @@ impl ProjectAccessRepository {
     ) -> Result<bool, ProjectAccessError> {
         let organization_id =
             lock_organization_project(transaction, project_id, LockMode::Update, false).await?;
+        lock_user_if_present(transaction, user_id).await?;
+        let _ = lock_membership_role(transaction, organization_id, user_id).await?;
         let deleted = sqlx::query_scalar::<_, String>(
             "DELETE FROM project_user_roles \
              WHERE project_id = $1::uuid AND organization_id = $2::uuid AND user_id = $3::uuid \
@@ -423,6 +428,18 @@ async fn lock_active_user(
         Some("disabled") | None => Ok(false),
         Some(_) => Err(ProjectAccessError::InvalidPersistedState),
     }
+}
+
+async fn lock_user_if_present(
+    transaction: &mut Transaction<'_, Postgres>,
+    user_id: UserId,
+) -> Result<(), ProjectAccessError> {
+    sqlx::query_scalar::<_, String>("SELECT id::text FROM users WHERE id = $1::uuid FOR SHARE")
+        .bind(user_id.to_string())
+        .fetch_optional(&mut **transaction)
+        .await
+        .map_err(|_| ProjectAccessError::PersistenceUnavailable)?;
+    Ok(())
 }
 
 async fn lock_organization_status(
