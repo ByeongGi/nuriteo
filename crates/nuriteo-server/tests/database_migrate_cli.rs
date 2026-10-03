@@ -27,13 +27,13 @@ async fn migrate_subprocess_enforces_schema_readiness_and_redaction() {
         check_schema_readiness(&pool).await.unwrap(),
         SchemaReadiness::Pending {
             current: None,
-            target: 4
+            target: 7
         }
     );
     assert_success(&run_migrate(&database_url, &ca_path, None));
     assert_eq!(
         check_schema_readiness(&pool).await.unwrap(),
-        SchemaReadiness::Ready { version: 6 }
+        SchemaReadiness::Ready { version: 7 }
     );
     assert_success(&run_migrate(&database_url, &ca_path, None));
 
@@ -42,7 +42,7 @@ async fn migrate_subprocess_enforces_schema_readiness_and_redaction() {
         check_schema_readiness(&pool).await.unwrap(),
         SchemaReadiness::Pending {
             current: None,
-            target: 4
+            target: 7
         }
     );
     let url_file = temporary_url_file(&database_url);
@@ -133,7 +133,7 @@ fn assert_success(output: &Output) {
     assert_eq!(output.status.code(), Some(0));
     assert_eq!(
         output.stdout,
-        b"database migration complete: schema=ready version=6\n"
+        b"database migration complete: schema=ready version=7\n"
     );
     assert!(output.stderr.is_empty());
 }
@@ -169,6 +169,8 @@ async fn fixture_pool(database_url: String, ca: Vec<u8>) -> DatabasePool {
 async fn reset_schema(pool: &DatabasePool) {
     let mut connection = pool.acquire().await.unwrap();
     for statement in [
+        "DROP TABLE IF EXISTS organization_memberships",
+        "DROP TABLE IF EXISTS organizations",
         "DROP TABLE IF EXISTS storage_scopes",
         "DROP TABLE IF EXISTS local_auth_failures",
         "DROP TABLE IF EXISTS activation_invitations",

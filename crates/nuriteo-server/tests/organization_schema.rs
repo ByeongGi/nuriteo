@@ -6,7 +6,7 @@ use nuriteo_server::database::{
     DatabasePool, DatabasePoolConfig, DatabaseTlsConfig, MigrationOptions, SchemaReadiness,
     check_schema_readiness, run_embedded_migrations,
 };
-use sqlx::{Executor, Postgres, QueryBuilder};
+use sqlx::Executor;
 
 const DATABASE_URL_ENV: &str = "NURITEO_TEST_DATABASE_URL";
 const DATABASE_CA_ENV: &str = "NURITEO_TEST_DATABASE_CA";
@@ -291,27 +291,16 @@ async fn verify_schema_objects(pool: &DatabasePool) {
 }
 
 async fn insert_users(pool: &DatabasePool) {
-    let mut query = QueryBuilder::<Postgres>::new(
-        "INSERT INTO users (id, email, normalized_email, display_name) ",
-    );
-    query.push_values(
-        [
-            (OWNER_ID, "owner@example.test", "Organization Owner"),
-            (MEMBER_ID, "member@example.test", "Organization Member"),
-        ],
-        |mut row, (id, email, name)| {
-            row.push_bind(id)
-                .push("::uuid")
-                .push_bind(email)
-                .push_bind(email)
-                .push_bind(name);
-        },
-    );
-    query
-        .build()
-        .execute(&mut *acquire(pool).await)
-        .await
-        .unwrap_or_else(|_| panic!("fixture users must insert"));
+    sqlx::query(
+        "INSERT INTO users (id, email, normalized_email, display_name) VALUES \
+         ($1::uuid, 'owner@example.test', 'owner@example.test', 'Organization Owner'), \
+         ($2::uuid, 'member@example.test', 'member@example.test', 'Organization Member')",
+    )
+    .bind(OWNER_ID)
+    .bind(MEMBER_ID)
+    .execute(&mut *acquire(pool).await)
+    .await
+    .unwrap_or_else(|error| panic!("fixture users must insert: {error}"));
 }
 
 async fn insert_organization(pool: &DatabasePool, id: &str, slug: &str, name: &str) {

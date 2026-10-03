@@ -18,6 +18,7 @@ const ACTIVATION_INVITATIONS_SQL: &str =
 const AUTH_LOCKOUT_SQL: &str = include_str!("../../migrations/0005_auth_lockout.sql");
 const PERSONAL_STORAGE_SCOPES_SQL: &str =
     include_str!("../../migrations/0006_personal_storage_scopes.sql");
+const ORGANIZATIONS_SQL: &str = include_str!("../../migrations/0007_organizations.sql");
 
 // Two-key advisory locks use a namespace distinct from PostgreSQL's one-key
 // bigint locks. 0x4e555249 is the ASCII representation of "NURI".
@@ -117,6 +118,13 @@ pub(super) fn embedded_migrator() -> Migrator {
             Cow::Borrowed("personal storage scopes"),
             MigrationType::Simple,
             PERSONAL_STORAGE_SCOPES_SQL.into_sql_str(),
+            false,
+        ),
+        Migration::new(
+            7,
+            Cow::Borrowed("organizations"),
+            MigrationType::Simple,
+            ORGANIZATIONS_SQL.into_sql_str(),
             false,
         ),
     ])

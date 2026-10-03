@@ -282,6 +282,8 @@ async fn assert_hash_only_persistence(pool: &DatabasePool, token: &SessionToken)
 async fn reset_fixture(pool: &DatabasePool) {
     let mut connection = pool.acquire().await.unwrap();
     for statement in [
+        "DROP TABLE IF EXISTS organization_memberships CASCADE",
+        "DROP TABLE IF EXISTS organizations CASCADE",
         "DROP TABLE IF EXISTS storage_scopes CASCADE",
         "DROP TABLE IF EXISTS local_auth_failures CASCADE",
         "DROP TABLE IF EXISTS audit_events CASCADE",
