@@ -4,6 +4,7 @@ use std::io::{self, Write};
 use clap::error::ErrorKind;
 use clap::{Arg, ArgAction, ArgMatches, Command};
 
+use crate::app::run_server;
 use crate::config::{Config, SystemEnvironment, SystemFileReader};
 use crate::database::{
     DatabasePool, DatabaseRuntimeConfig, SchemaReadiness, check_schema_readiness,
@@ -143,6 +144,7 @@ where
             writeln!(stdout, "{BINARY_NAME} {VERSION}")?;
             Ok(CommandStatus::Success)
         }
+        Ok(CliAction::Operational(OperationalCommand::Serve)) => serve(stderr).await,
         Ok(CliAction::Operational(OperationalCommand::Migrate)) => migrate(stdout, stderr).await,
         Ok(CliAction::Operational(OperationalCommand::Healthcheck)) => {
             healthcheck(stdout, stderr).await
@@ -155,6 +157,16 @@ where
         Err(error) => {
             write!(stderr, "{error}")?;
             Ok(CommandStatus::UsageError)
+        }
+    }
+}
+
+async fn serve<E: Write>(stderr: &mut E) -> io::Result<CommandStatus> {
+    match run_server(&SystemEnvironment, &SystemFileReader).await {
+        Ok(()) => Ok(CommandStatus::Success),
+        Err(error) => {
+            writeln!(stderr, "{BINARY_NAME}: serve failed ({})", error.category())?;
+            Ok(CommandStatus::Failure)
         }
     }
 }

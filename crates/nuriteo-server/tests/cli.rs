@@ -49,17 +49,33 @@ fn invalid_invocations_are_usage_errors() {
 }
 
 #[test]
-fn unavailable_commands_fail_closed() {
-    for command in ["serve", "bootstrap-admin"] {
-        let output = run(&[command]);
+fn unavailable_command_fails_closed() {
+    let output = run(&["bootstrap-admin"]);
 
-        assert_eq!(output.status.code(), Some(1), "command: {command}");
-        assert!(output.stdout.is_empty(), "command: {command}");
-        assert_eq!(
-            String::from_utf8(output.stderr).unwrap(),
-            format!("nuriteo-server: `{command}` is not available in this build\n")
-        );
-    }
+    assert_eq!(output.status.code(), Some(1));
+    assert!(output.stdout.is_empty());
+    assert_eq!(
+        output.stderr,
+        b"nuriteo-server: `bootstrap-admin` is not available in this build\n"
+    );
+}
+
+#[test]
+fn serve_fails_closed_before_binding_without_configuration() {
+    let output = Command::new(env!("CARGO_BIN_EXE_nuriteo-server"))
+        .arg("serve")
+        .env_remove("NURITEO_EXTERNAL_URL")
+        .env_remove("NURITEO_DATABASE_URL")
+        .env_remove("NURITEO_DATABASE_URL_FILE")
+        .output()
+        .expect("nuriteo-server binary should start");
+
+    assert_eq!(output.status.code(), Some(1));
+    assert!(output.stdout.is_empty());
+    assert_eq!(
+        output.stderr,
+        b"nuriteo-server: serve failed (configuration)\n"
+    );
 }
 
 #[test]
