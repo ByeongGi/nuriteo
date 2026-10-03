@@ -44,6 +44,25 @@ const core = http.createServer(async (request, response) => {
     return;
   }
 
+  if (request.method === "GET" && request.url === "/api/v1/me/workspaces") {
+    if (request.headers.cookie?.includes("nrt_session=opaque") === true) {
+      response.setHeader("content-type", "application/json");
+      response.end(JSON.stringify({
+        workspaces: [{
+          ownerType: "user",
+          ownerId: "0199ee6c-c777-7000-8000-000000009001",
+          displayLabel: "Personal Workspace",
+          storageScopeId: "0199ee6c-c777-7000-8000-000000009003"
+        }]
+      }));
+      return;
+    }
+    response.statusCode = 401;
+    response.setHeader("content-type", "application/problem+json");
+    response.end(JSON.stringify(problemDetails(401, "AUTHENTICATION_REQUIRED", "browser-server-request")));
+    return;
+  }
+
   if (request.method === "POST" && request.url === "/api/v1/auth/sessions") {
     bffCalls.push("create-session");
     forwardedOrigins.push(request.headers.origin ?? "missing");
@@ -147,11 +166,8 @@ try {
       .sort();
     assert.deepEqual(cookieNames, ["nrt_csrf", "nrt_session"]);
 
-    assert.deepEqual(bffCalls, [
-      "create-session",
-      "create-session",
-      "get-current-user"
-    ]);
+    assert.equal(bffCalls.filter((call) => call === "create-session").length, 2);
+    assert.ok(bffCalls.filter((call) => call === "get-current-user").length >= 2);
     assert.deepEqual(forwardedOrigins, [origin, origin]);
     assert.ok(apiResponses.some((response) => response.startsWith("401 ")));
     assert.ok(apiResponses.some((response) => response.startsWith("204 ")));

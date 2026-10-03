@@ -11,6 +11,7 @@
     "start": "next start",
     "test": "node --conditions=react-server test/run.ts",
     "test:browser-entry": "node test/browser-entry.test.ts",
+    "test:browser-shell": "node test/authenticated-shell-browser.test.ts",
     "test:bundle-boundary": "node test/bundle-boundary.test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
