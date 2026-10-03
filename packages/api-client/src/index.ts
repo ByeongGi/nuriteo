@@ -11,6 +11,7 @@ export {
   ApiTransportError
 } from "./errors.ts";
 export { getVersion } from "./system.ts";
+export { getSetupStatus } from "./setup.ts";
 export { createSession, deleteSession, getCurrentUser } from "./auth.ts";
 export { getCurrentWorkspaces } from "./workspaces.ts";
 export {
@@ -41,6 +42,7 @@ export type {
 } from "./auth.ts";
 export type { ApiEmptyResult, ApiResult, DomainRequestOptions } from "./domain.ts";
 export type { VersionResponse } from "./system.ts";
+export type { SetupStatus } from "./setup.ts";
 export type {
   OrganizationWorkspace,
   PersonalWorkspace,
