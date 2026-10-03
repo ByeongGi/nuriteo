@@ -8,6 +8,7 @@ Set these variables to absolute paths before rendering or starting the stack:
 
 - `NURITEO_POSTGRES_PASSWORD_FILE`: PostgreSQL application password
 - `NURITEO_DATABASE_URL_FILE`: complete `postgres://` URL for Core
+- `NURITEO_DATABASE_CA_FILE`: CA certificate that verifies the PostgreSQL service identity
 - `NURITEO_RUSTFS_ACCESS_KEY_FILE`: non-default RustFS access key
 - `NURITEO_RUSTFS_SECRET_KEY_FILE`: non-default RustFS secret key
 - `NURITEO_RUSTFS_CA_FILE`: CA certificate trusted by Core
@@ -36,4 +37,6 @@ The fixture creates temporary credentials and a private test CA, builds both app
 
 ## CMP-002 handoff
 
-Core's `serve` listener is not wired in the current baseline, so this topology intentionally has no fake shell/log healthcheck and no `depends_on` readiness ordering. The `x-nuriteo-cmp-002-readiness` extension records the accepted HLT-001 `/health/live`, `/health/ready`, and CLI contracts. CMP-002 must add migration/bootstrap one-shot services and health-based startup ordering after production `serve` composes the real database pool, S3 adapter, and `HealthService`.
+Core's production `serve` listener is wired and the actual fixture verifies `/health/live` plus the expected `schema-pending` `/health/ready` response over Web-to-Core Compose DNS. The fixture explicitly creates the configured `nuriteo` bucket before Core starts; `serve` does not mutate storage. This topology intentionally has no fake shell/log healthcheck and no `depends_on` readiness ordering. The `x-nuriteo-cmp-002-readiness` extension records the accepted HLT-001 `/health/live`, `/health/ready`, and CLI contracts.
+
+CMP-002 must add migration/bootstrap one-shot services, verify the healthy-ready transition, and then add health-based startup ordering. Its bundled RustFS initialization one-shot owns idempotent creation and preflight of the application bucket. External S3 buckets remain operator-prepared: Nuriteo must not create, delete, or change their policies.

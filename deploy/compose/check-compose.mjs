@@ -61,6 +61,7 @@ function validate(source) {
     "RUSTFS_ACCESS_KEY_FILE: /run/secrets/rustfs_access_key",
     "RUSTFS_SECRET_KEY_FILE: /run/secrets/rustfs_secret_key",
     "NURITEO_DATABASE_URL_FILE: /run/secrets/database_url",
+    "NURITEO_DATABASE_CA_FILE: /run/secrets/database_ca",
     "NURITEO_S3_ACCESS_KEY_ID_FILE: /run/secrets/rustfs_access_key",
     "NURITEO_S3_SECRET_ACCESS_KEY_FILE: /run/secrets/rustfs_secret_key"
   ]) {
@@ -99,6 +100,10 @@ function verifyDriftDetection() {
     compose.replace(
       "      RUSTFS_ACCESS_KEY_FILE: /run/secrets/rustfs_access_key",
       "      RUSTFS_ACCESS_KEY: unsafe-default"
+    ),
+    compose.replace(
+      "      NURITEO_DATABASE_CA_FILE: /run/secrets/database_ca",
+      "      NURITEO_DATABASE_TLS_MODE: disable"
     ),
     compose.replace("docker.io/library/postgres@sha256:", "docker.io/library/postgres:"),
     compose.replace("rustfs_data:/data", "postgres_data:/data"),

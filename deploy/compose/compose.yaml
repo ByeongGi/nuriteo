@@ -3,7 +3,7 @@ x-nuriteo-cmp-002-readiness:
     live: http://127.0.0.1:8080/health/live
     ready: http://127.0.0.1:8080/health/ready
     command: ["/usr/local/bin/nuriteo-server", "healthcheck"]
-  note: Add migration/bootstrap jobs and health-based startup ordering only after serve wiring lands.
+  note: CMP-002 owns migration/bootstrap jobs, healthy-ready transition, and health-based startup ordering.
 
 services:
   postgres:
@@ -56,6 +56,7 @@ services:
       NURITEO_EXTERNAL_URL: ${NURITEO_EXTERNAL_URL:?set NURITEO_EXTERNAL_URL}
       NURITEO_HTTP_LISTEN_ADDR: 0.0.0.0:8080
       NURITEO_DATABASE_URL_FILE: /run/secrets/database_url
+      NURITEO_DATABASE_CA_FILE: /run/secrets/database_ca
       NURITEO_S3_ENDPOINT: https://rustfs:9000
       NURITEO_S3_REGION: us-east-1
       NURITEO_S3_BUCKET: nuriteo
@@ -66,6 +67,7 @@ services:
       NURITEO_S3_CA_FILE: /run/secrets/rustfs_ca
     secrets:
       - database_url
+      - database_ca
       - rustfs_access_key
       - rustfs_secret_key
       - rustfs_ca
@@ -115,6 +117,8 @@ secrets:
     file: ${NURITEO_POSTGRES_PASSWORD_FILE:?set NURITEO_POSTGRES_PASSWORD_FILE}
   database_url:
     file: ${NURITEO_DATABASE_URL_FILE:?set NURITEO_DATABASE_URL_FILE}
+  database_ca:
+    file: ${NURITEO_DATABASE_CA_FILE:?set NURITEO_DATABASE_CA_FILE}
   rustfs_access_key:
     file: ${NURITEO_RUSTFS_ACCESS_KEY_FILE:?set NURITEO_RUSTFS_ACCESS_KEY_FILE}
   rustfs_secret_key:
