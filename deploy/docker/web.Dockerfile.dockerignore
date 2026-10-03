@@ -14,3 +14,9 @@
 !apps/web/public/**
 !apps/web/src/
 !apps/web/src/**
+!packages/
+!packages/api-client/
+!packages/api-client/package.json
+!packages/api-client/tsconfig.json
+!packages/api-client/src/
+!packages/api-client/src/**

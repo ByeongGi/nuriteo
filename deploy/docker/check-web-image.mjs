@@ -33,6 +33,11 @@ function validateDockerfile(source) {
     instructions.includes("RUN pnpm --filter @nuriteo/web build"),
     "builder must run the Web production build"
   );
+  assert(
+    instructions.includes("COPY packages/api-client/package.json packages/api-client/package.json") &&
+      instructions.includes("COPY packages/api-client packages/api-client"),
+    "the Web image must include its workspace API client dependency"
+  );
 
   const runtimeStart = instructions.indexOf(fromInstructions[2]);
   const runtimeInstructions = instructions.slice(runtimeStart + 1);
@@ -84,7 +89,13 @@ function validateBuildContext() {
     "!apps/web/public/",
     "!apps/web/public/**",
     "!apps/web/src/",
-    "!apps/web/src/**"
+    "!apps/web/src/**",
+    "!packages/",
+    "!packages/api-client/",
+    "!packages/api-client/package.json",
+    "!packages/api-client/tsconfig.json",
+    "!packages/api-client/src/",
+    "!packages/api-client/src/**"
   ];
   assert.deepEqual(ignoreRules, expectedIgnoreRules);
 
@@ -95,7 +106,9 @@ function validateBuildContext() {
     "tsconfig.base.json",
     "apps/web/package.json",
     "apps/web/next.config.ts",
-    "apps/web/src"
+    "apps/web/src",
+    "packages/api-client/package.json",
+    "packages/api-client/src"
   ]) {
     assert(fs.existsSync(requiredPath), `missing build input: ${requiredPath}`);
   }
