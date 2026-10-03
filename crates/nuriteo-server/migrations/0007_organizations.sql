@@ -84,6 +84,11 @@ BEGIN
             USING ERRCODE = '23514';
     END IF;
 
+    IF NEW.lock_version <> OLD.lock_version + 1 THEN
+        RAISE EXCEPTION 'organization update must advance lock version exactly once'
+            USING ERRCODE = '23514';
+    END IF;
+
     RETURN NEW;
 END;
 $$;

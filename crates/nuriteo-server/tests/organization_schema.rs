@@ -137,6 +137,20 @@ async fn verify_slug_immutability_and_no_reuse(pool: &DatabasePool) {
 
 async fn verify_optimistic_lock_shape(pool: &DatabasePool) {
     insert_organization(pool, EMPTY_ORGANIZATION_ID, "empty-team", "Empty Team").await;
+    assert_rejected(
+        pool,
+        "UPDATE organizations SET display_name = 'Unversioned Team' \
+         WHERE id = '0199ee6c-c777-7000-8000-000000000722'::uuid",
+        "organization mutation without version advance",
+    )
+    .await;
+    assert_rejected(
+        pool,
+        "UPDATE organizations SET display_name = 'Skipped Team', lock_version = lock_version + 2 \
+         WHERE id = '0199ee6c-c777-7000-8000-000000000722'::uuid",
+        "organization mutation with skipped version",
+    )
+    .await;
     let first = sqlx::query(
         "UPDATE organizations SET display_name = 'Updated Team', \
          updated_at = CURRENT_TIMESTAMP, lock_version = lock_version + 1 \
