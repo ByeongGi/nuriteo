@@ -5,6 +5,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use uuid::{Uuid, Version};
 
 use crate::identity::{Timestamp, UserId};
+use crate::organization::OrganizationId;
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct StorageScopeId(Uuid);
@@ -130,6 +131,7 @@ impl PersonalStorageScope {
 #[serde(rename_all = "snake_case")]
 pub enum WorkspaceOwnerType {
     User,
+    Organization,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -147,12 +149,7 @@ impl PersonalWorkspace {
         display_label: String,
         storage_scope_id: StorageScopeId,
     ) -> Result<Self, WorkspaceDomainError> {
-        if display_label.trim() != display_label
-            || display_label.chars().any(char::is_control)
-            || !(1..=200).contains(&display_label.chars().count())
-        {
-            return Err(WorkspaceDomainError::InvalidDisplayLabel);
-        }
+        validate_display_label(&display_label)?;
         Ok(Self {
             owner_type: WorkspaceOwnerType::User,
             owner_id,
@@ -180,6 +177,104 @@ impl PersonalWorkspace {
     pub const fn storage_scope_id(&self) -> StorageScopeId {
         self.storage_scope_id
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OrganizationStorageScope {
+    id: StorageScopeId,
+    owner_organization_id: OrganizationId,
+    created_at: Timestamp,
+    updated_at: Timestamp,
+}
+
+impl OrganizationStorageScope {
+    pub fn new(
+        id: StorageScopeId,
+        owner_organization_id: OrganizationId,
+        created_at: Timestamp,
+        updated_at: Timestamp,
+    ) -> Result<Self, WorkspaceDomainError> {
+        if updated_at < created_at {
+            return Err(WorkspaceDomainError::InvalidTimestampOrder);
+        }
+        Ok(Self {
+            id,
+            owner_organization_id,
+            created_at,
+            updated_at,
+        })
+    }
+
+    #[must_use]
+    pub const fn id(&self) -> StorageScopeId {
+        self.id
+    }
+
+    #[must_use]
+    pub const fn owner_organization_id(&self) -> OrganizationId {
+        self.owner_organization_id
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OrganizationWorkspace {
+    owner_type: WorkspaceOwnerType,
+    owner_id: OrganizationId,
+    display_label: String,
+    storage_scope_id: StorageScopeId,
+}
+
+impl OrganizationWorkspace {
+    pub fn new(
+        owner_id: OrganizationId,
+        display_label: String,
+        storage_scope_id: StorageScopeId,
+    ) -> Result<Self, WorkspaceDomainError> {
+        validate_display_label(&display_label)?;
+        Ok(Self {
+            owner_type: WorkspaceOwnerType::Organization,
+            owner_id,
+            display_label,
+            storage_scope_id,
+        })
+    }
+
+    #[must_use]
+    pub const fn owner_type(&self) -> WorkspaceOwnerType {
+        self.owner_type
+    }
+
+    #[must_use]
+    pub const fn owner_id(&self) -> OrganizationId {
+        self.owner_id
+    }
+
+    #[must_use]
+    pub fn display_label(&self) -> &str {
+        &self.display_label
+    }
+
+    #[must_use]
+    pub const fn storage_scope_id(&self) -> StorageScopeId {
+        self.storage_scope_id
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Workspace {
+    Personal(PersonalWorkspace),
+    Organization(OrganizationWorkspace),
+}
+
+fn validate_display_label(display_label: &str) -> Result<(), WorkspaceDomainError> {
+    if display_label.trim() != display_label
+        || display_label.chars().any(char::is_control)
+        || !(1..=200).contains(&display_label.chars().count())
+    {
+        return Err(WorkspaceDomainError::InvalidDisplayLabel);
+    }
+    Ok(())
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

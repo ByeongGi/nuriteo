@@ -3,9 +3,9 @@ set -euo pipefail
 
 runtime="${CONTAINER_RUNTIME:-podman}"
 image="docker.io/library/postgres@sha256:f3bd19c606e442c3d7bdfa8002e03fe260a1023351e0ea4598032022b68dd6e3"
-container="nuriteo-ws-003-${RANDOM}"
+container="nuriteo-ws-002-${RANDOM}"
 port="${NURITEO_TEST_DATABASE_PORT:-55443}"
-fixture_dir="$(mktemp -d "${TMPDIR:-/tmp}/nuriteo-ws-003.XXXXXX")"
+fixture_dir="$(mktemp -d "${TMPDIR:-/tmp}/nuriteo-ws-002.XXXXXX")"
 database_password="$(openssl rand -hex 24)"
 
 cleanup() {
@@ -14,7 +14,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-echo "WS-003 fixture: generating ephemeral TLS material"
+echo "WS-002 fixture: generating ephemeral TLS material"
 openssl req -x509 -newkey rsa:2048 -nodes -days 2 \
   -subj '/CN=Nuriteo Workspace Test CA' \
   -addext 'basicConstraints=critical,CA:TRUE' \
@@ -30,7 +30,7 @@ openssl x509 -req -days 2 -in "$fixture_dir/server.csr" \
   -CA "$fixture_dir/ca.crt" -CAkey "$fixture_dir/ca.key" -CAcreateserial \
   -extfile "$fixture_dir/server.ext" -out "$fixture_dir/server.crt" >/dev/null 2>&1
 
-echo "WS-003 fixture: starting pinned PostgreSQL"
+echo "WS-002 fixture: starting pinned PostgreSQL"
 "$runtime" run --detach --name "$container" \
   --publish "127.0.0.1:${port}:5432" \
   --env POSTGRES_DB=nuriteo \
@@ -46,7 +46,7 @@ for _ in $(seq 1 60); do
 done
 "$runtime" exec "$container" pg_isready -U nuriteo -d nuriteo >/dev/null
 
-echo "WS-003 fixture: enabling custom-CA PostgreSQL TLS"
+echo "WS-002 fixture: enabling custom-CA PostgreSQL TLS"
 "$runtime" cp "$fixture_dir/server.crt" "$container:/var/lib/postgresql/server.crt"
 "$runtime" cp "$fixture_dir/server.key" "$container:/var/lib/postgresql/server.key"
 "$runtime" exec --user root "$container" chown postgres:postgres \
@@ -66,10 +66,10 @@ for _ in $(seq 1 60); do
 done
 "$runtime" exec "$container" pg_isready -U nuriteo -d nuriteo >/dev/null
 
-echo "WS-003 fixture: running authenticated Workspace HTTP assertions"
+echo "WS-002 fixture: running authenticated Workspace HTTP assertions"
 NURITEO_TEST_DATABASE_URL="postgres://nuriteo:${database_password}@localhost:${port}/nuriteo" \
 NURITEO_TEST_DATABASE_CA="$fixture_dir/ca.crt" \
-CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-/private/tmp/nuriteo-ws003-target}" \
+CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-/private/tmp/nuriteo-ws002-target}" \
 cargo test -p nuriteo-server --test workspaces_http \
-  personal_workspace_http_route_is_authenticated_and_fail_closed \
+  workspace_http_route_projects_personal_and_organizations_fail_closed \
   -- --ignored --exact --nocapture

@@ -4,10 +4,11 @@ use serde_json::json;
 use uuid::Uuid;
 
 use crate::identity::{Timestamp, UserId};
+use crate::organization::OrganizationId;
 
 use super::{
-    PersonalStorageScope, PersonalWorkspace, StorageScopeId, WorkspaceDomainError,
-    WorkspaceOwnerType,
+    OrganizationStorageScope, OrganizationWorkspace, PersonalStorageScope, PersonalWorkspace,
+    StorageScopeId, WorkspaceDomainError, WorkspaceOwnerType,
 };
 
 #[test]
@@ -26,6 +27,37 @@ fn storage_scope_identifiers_are_uuid_v7_and_serialize_stably() {
     assert_eq!(
         StorageScopeId::from_uuid(Uuid::new_v4()),
         Err(WorkspaceDomainError::IdentifierMustBeVersion7)
+    );
+}
+
+#[test]
+fn organization_scope_and_projection_enforce_safe_boundaries() {
+    let owner = OrganizationId::new();
+    let scope_id = StorageScopeId::new();
+    let created = Timestamp::from_unix_timestamp(1_700_000_000).expect("timestamp must parse");
+    let earlier = Timestamp::from_unix_timestamp(1_699_999_999).expect("timestamp must parse");
+    assert_eq!(
+        OrganizationStorageScope::new(scope_id, owner, created, earlier),
+        Err(WorkspaceDomainError::InvalidTimestampOrder)
+    );
+    let scope = OrganizationStorageScope::new(scope_id, owner, created, created)
+        .expect("valid organization scope must construct");
+    assert_eq!(scope.id(), scope_id);
+    assert_eq!(scope.owner_organization_id(), owner);
+
+    let projection = OrganizationWorkspace::new(owner, "Platform Team".into(), scope_id)
+        .expect("valid organization projection must construct");
+    assert_eq!(projection.owner_type(), WorkspaceOwnerType::Organization);
+    assert_eq!(projection.owner_id(), owner);
+    assert_eq!(projection.storage_scope_id(), scope_id);
+    assert_eq!(
+        serde_json::to_value(&projection).expect("projection must serialize"),
+        json!({
+            "ownerType": "organization",
+            "ownerId": owner.to_string(),
+            "displayLabel": "Platform Team",
+            "storageScopeId": scope_id.to_string()
+        })
     );
 }
 

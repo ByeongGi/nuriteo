@@ -87,7 +87,7 @@ async fn personal_scope_migration_backfill_and_provision_are_atomic() {
     reset_fixture(&pool).await;
     migrate(&pool).await;
     migrate(&pool).await;
-    assert_eq!(latest_migration(&pool).await, 6);
+    assert_eq!(latest_migration(&pool).await, 9);
 
     let concurrent_owner = UserId::new();
     insert_user(

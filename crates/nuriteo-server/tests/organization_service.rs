@@ -43,6 +43,10 @@ async fn organization_service_is_atomic_authorized_and_serialized() {
         .unwrap_or_else(|error| panic!("organization create must succeed: {error}"));
     let organization_id = organization.id();
     assert_eq!(owner_count(&pool, &organization_id.to_string()).await, 1);
+    assert_eq!(
+        organization_scope_count(&pool, &organization_id.to_string()).await,
+        1
+    );
     assert_eq!(audit_count(&pool, "organization.created").await, 1);
 
     assert_eq!(
@@ -69,6 +73,10 @@ async fn organization_service_is_atomic_authorized_and_serialized() {
         Err(OrganizationServiceError::AuditUnavailable)
     );
     assert_eq!(organization_count(&pool, "rolled-back-team").await, 0);
+    assert_eq!(
+        organization_scope_count_by_slug(&pool, "rolled-back-team").await,
+        0
+    );
 
     assert_eq!(
         service
@@ -440,6 +448,25 @@ async fn organization_count(pool: &DatabasePool, slug: &str) -> i64 {
         .fetch_one(&mut *acquire(pool).await)
         .await
         .unwrap_or_else(|_| panic!("organization count must read"))
+}
+
+async fn organization_scope_count(pool: &DatabasePool, organization_id: &str) -> i64 {
+    sqlx::query_scalar("SELECT COUNT(*) FROM storage_scopes WHERE owner_organization_id = $1::uuid")
+        .bind(organization_id)
+        .fetch_one(&mut *acquire(pool).await)
+        .await
+        .unwrap_or_else(|_| panic!("organization scope count must read"))
+}
+
+async fn organization_scope_count_by_slug(pool: &DatabasePool, slug: &str) -> i64 {
+    sqlx::query_scalar(
+        "SELECT COUNT(*) FROM storage_scopes s \
+         JOIN organizations o ON o.id = s.owner_organization_id WHERE o.slug = $1",
+    )
+    .bind(slug)
+    .fetch_one(&mut *acquire(pool).await)
+    .await
+    .unwrap_or_else(|_| panic!("organization scope count must read"))
 }
 
 async fn audit_count(pool: &DatabasePool, action: &str) -> i64 {

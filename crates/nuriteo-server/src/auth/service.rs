@@ -269,10 +269,10 @@ impl AuthService {
         runtime.load_me(session).await
     }
 
-    pub(crate) async fn personal_workspaces(
+    pub(crate) async fn workspaces(
         &self,
         request: BrowserRequestHeaders<'_>,
-    ) -> Result<Vec<crate::workspace::PersonalWorkspace>, AuthServiceError> {
+    ) -> Result<Vec<crate::workspace::Workspace>, AuthServiceError> {
         let runtime = self.runtime()?;
         let token = runtime
             .cookies
@@ -286,7 +286,7 @@ impl AuthService {
             .map_err(map_session_authentication)?;
         runtime
             .workspaces
-            .list_personal(session.user_id())
+            .list_for_user(session.user_id())
             .await
             .map_err(map_workspace_query)
     }

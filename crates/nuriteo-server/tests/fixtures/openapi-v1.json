@@ -864,7 +864,8 @@
       "WorkspaceOwnerView": {
         "type": "string",
         "enum": [
-          "user"
+          "user",
+          "organization"
         ]
       },
       "WorkspaceView": {

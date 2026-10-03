@@ -7,8 +7,9 @@ use tokio::time;
 
 use crate::database::DatabasePool;
 use crate::identity::UserId;
+use crate::organization::OrganizationId;
 
-use super::{PersonalWorkspace, StorageScopeId};
+use super::{OrganizationWorkspace, PersonalWorkspace, StorageScopeId, Workspace};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum WorkspaceQueryError {
@@ -46,70 +47,124 @@ impl WorkspaceQueryService {
         }
     }
 
-    pub(crate) async fn list_personal(
+    pub(crate) async fn list_for_user(
         &self,
         user_id: UserId,
-    ) -> Result<Vec<PersonalWorkspace>, WorkspaceQueryError> {
-        time::timeout(self.operation_deadline, self.load_personal(user_id))
+    ) -> Result<Vec<Workspace>, WorkspaceQueryError> {
+        time::timeout(self.operation_deadline, self.load_for_user(user_id))
             .await
             .map_err(|_| WorkspaceQueryError::OperationTimeout)?
     }
 
-    async fn load_personal(
-        &self,
-        user_id: UserId,
-    ) -> Result<Vec<PersonalWorkspace>, WorkspaceQueryError> {
+    async fn load_for_user(&self, user_id: UserId) -> Result<Vec<Workspace>, WorkspaceQueryError> {
         let mut connection = self
             .pool
             .acquire()
             .await
             .map_err(|_| WorkspaceQueryError::PersistenceUnavailable)?;
         let rows = sqlx::query(
-            "SELECT u.id::text AS owner_id, u.display_name, u.status, \
-                    s.id::text AS storage_scope_id \
+            "SELECT 'user' AS owner_type, u.id::text AS owner_id, \
+                    u.display_name AS display_label, u.status AS owner_status, \
+                    NULL::text AS membership_role, s.id::text AS storage_scope_id, \
+                    0 AS owner_rank, '' AS sort_key \
              FROM users u \
              LEFT JOIN storage_scopes s ON s.owner_user_id = u.id \
              WHERE u.id = $1::uuid \
-             ORDER BY s.id ASC",
+             UNION ALL \
+             SELECT 'organization', o.id::text, o.display_name, o.status, m.role, \
+                    s.id::text, 1, o.slug \
+             FROM organization_memberships m \
+             LEFT JOIN organizations o ON o.id = m.organization_id \
+             LEFT JOIN storage_scopes s ON s.owner_organization_id = o.id \
+             WHERE m.user_id = $1::uuid \
+             ORDER BY owner_rank, sort_key, owner_id, storage_scope_id",
         )
         .bind(user_id.to_string())
         .fetch_all(&mut *connection)
         .await
         .map_err(|_| WorkspaceQueryError::PersistenceUnavailable)?;
 
-        let [row] = rows.as_slice() else {
-            return if rows.is_empty() {
-                Err(WorkspaceQueryError::UserUnavailable)
-            } else {
-                Err(WorkspaceQueryError::InvalidPersistedState)
-            };
-        };
-        let status: String = row
-            .try_get("status")
-            .map_err(|_| WorkspaceQueryError::InvalidPersistedState)?;
-        if status != "active" {
+        let mut rows = rows.into_iter();
+        let personal = rows.next().ok_or(WorkspaceQueryError::UserUnavailable)?;
+        let owner_type: String = read(&personal, "owner_type")?;
+        let status: String = read(&personal, "owner_status")?;
+        if owner_type != "user" || status != "active" {
             return Err(WorkspaceQueryError::UserUnavailable);
         }
-        let owner_id: String = row
-            .try_get("owner_id")
-            .map_err(|_| WorkspaceQueryError::InvalidPersistedState)?;
-        let owner_id =
-            UserId::from_str(&owner_id).map_err(|_| WorkspaceQueryError::InvalidPersistedState)?;
-        if owner_id != user_id {
+        let personal_owner = parse_user(read(&personal, "owner_id")?)?;
+        if personal_owner != user_id {
             return Err(WorkspaceQueryError::InvalidPersistedState);
         }
-        let scope_id: Option<String> = row
-            .try_get("storage_scope_id")
-            .map_err(|_| WorkspaceQueryError::InvalidPersistedState)?;
-        let scope_id = scope_id
-            .ok_or(WorkspaceQueryError::InvalidPersistedState)?
-            .parse::<StorageScopeId>()
-            .map_err(|_| WorkspaceQueryError::InvalidPersistedState)?;
-        let display_label = row
-            .try_get("display_name")
-            .map_err(|_| WorkspaceQueryError::InvalidPersistedState)?;
-        let workspace = PersonalWorkspace::new(owner_id, display_label, scope_id)
-            .map_err(|_| WorkspaceQueryError::InvalidPersistedState)?;
-        Ok(vec![workspace])
+        let personal_scope = parse_scope(read_optional(&personal, "storage_scope_id")?)?;
+        let personal_label = read(&personal, "display_label")?;
+        let mut workspaces = vec![Workspace::Personal(
+            PersonalWorkspace::new(personal_owner, personal_label, personal_scope)
+                .map_err(|_| WorkspaceQueryError::InvalidPersistedState)?,
+        )];
+
+        let mut previous_organization = None;
+        for row in rows {
+            let owner_type: String = read(&row, "owner_type")?;
+            if owner_type != "organization" {
+                return Err(WorkspaceQueryError::InvalidPersistedState);
+            }
+            let organization_id = parse_organization(read(&row, "owner_id")?)?;
+            if previous_organization == Some(organization_id) {
+                return Err(WorkspaceQueryError::InvalidPersistedState);
+            }
+            previous_organization = Some(organization_id);
+            let role: Option<String> = read_optional(&row, "membership_role")?;
+            if !matches!(role.as_deref(), Some("owner" | "member")) {
+                return Err(WorkspaceQueryError::InvalidPersistedState);
+            }
+            let scope_id = parse_scope(read_optional(&row, "storage_scope_id")?)?;
+            let status: String = read(&row, "owner_status")?;
+            match status.as_str() {
+                "active" => {
+                    let label = read(&row, "display_label")?;
+                    workspaces.push(Workspace::Organization(
+                        OrganizationWorkspace::new(organization_id, label, scope_id)
+                            .map_err(|_| WorkspaceQueryError::InvalidPersistedState)?,
+                    ));
+                }
+                "archived" => {}
+                _ => return Err(WorkspaceQueryError::InvalidPersistedState),
+            }
+        }
+        Ok(workspaces)
     }
+}
+
+fn read<T>(row: &sqlx::postgres::PgRow, column: &str) -> Result<T, WorkspaceQueryError>
+where
+    for<'r> T: sqlx::Decode<'r, sqlx::Postgres> + sqlx::Type<sqlx::Postgres>,
+{
+    row.try_get(column)
+        .map_err(|_| WorkspaceQueryError::InvalidPersistedState)
+}
+
+fn read_optional<T>(
+    row: &sqlx::postgres::PgRow,
+    column: &str,
+) -> Result<Option<T>, WorkspaceQueryError>
+where
+    for<'r> T: sqlx::Decode<'r, sqlx::Postgres> + sqlx::Type<sqlx::Postgres>,
+{
+    row.try_get(column)
+        .map_err(|_| WorkspaceQueryError::InvalidPersistedState)
+}
+
+fn parse_user(value: String) -> Result<UserId, WorkspaceQueryError> {
+    UserId::from_str(&value).map_err(|_| WorkspaceQueryError::InvalidPersistedState)
+}
+
+fn parse_organization(value: String) -> Result<OrganizationId, WorkspaceQueryError> {
+    OrganizationId::from_str(&value).map_err(|_| WorkspaceQueryError::InvalidPersistedState)
+}
+
+fn parse_scope(value: Option<String>) -> Result<StorageScopeId, WorkspaceQueryError> {
+    value
+        .ok_or(WorkspaceQueryError::InvalidPersistedState)?
+        .parse()
+        .map_err(|_| WorkspaceQueryError::InvalidPersistedState)
 }

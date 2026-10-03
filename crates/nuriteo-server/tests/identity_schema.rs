@@ -49,8 +49,8 @@ async fn identity_session_and_audit_schema_enforces_contracts() {
     assert_eq!(
         first_report,
         MigrationReport {
-            latest_version: Some(8),
-            known_migrations: 8
+            latest_version: Some(9),
+            known_migrations: 9
         }
     );
     assert_eq!(repeated_report, first_report);

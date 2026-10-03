@@ -14,6 +14,7 @@ use crate::audit::{
 };
 use crate::database::DatabasePool;
 use crate::identity::{Timestamp, UserId};
+use crate::workspace::{OrganizationStorageScopeRepository, StorageScopeRepositoryError};
 
 use super::{
     Organization, OrganizationFields, OrganizationId, OrganizationRole, OrganizationStatus,
@@ -339,13 +340,28 @@ impl OrganizationService {
         .await
         .map_err(|_| OrganizationServiceError::DatabaseUnavailable)?;
 
+        OrganizationStorageScopeRepository::provision(&mut transaction, fields.id, now)
+            .await
+            .map_err(|error| match error {
+                StorageScopeRepositoryError::PersistenceUnavailable => {
+                    OrganizationServiceError::DatabaseUnavailable
+                }
+                StorageScopeRepositoryError::InvalidPersistedState => {
+                    OrganizationServiceError::InvariantViolation
+                }
+            })?;
+
         append_audit(
             &mut transaction,
             audit,
             now,
             fields.id,
             "organization.created",
-            vec!["organization".into(), "membership.owner".into()],
+            vec![
+                "organization".into(),
+                "membership.owner".into(),
+                "storage_scope".into(),
+            ],
         )
         .await?;
         commit(transaction).await?;

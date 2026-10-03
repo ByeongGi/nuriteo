@@ -4,10 +4,12 @@ mod routes;
 mod service;
 
 pub use personal::{
-    PersonalStorageScope, PersonalWorkspace, StorageScopeId, WorkspaceDomainError,
-    WorkspaceOwnerType,
+    OrganizationStorageScope, OrganizationWorkspace, PersonalStorageScope, PersonalWorkspace,
+    StorageScopeId, Workspace, WorkspaceDomainError, WorkspaceOwnerType,
 };
-pub use repository::{PersonalStorageScopeRepository, StorageScopeRepositoryError};
+pub use repository::{
+    OrganizationStorageScopeRepository, PersonalStorageScopeRepository, StorageScopeRepositoryError,
+};
 pub(crate) use routes::openapi_router;
 pub(crate) use service::{WorkspaceQueryError, WorkspaceQueryService};
 

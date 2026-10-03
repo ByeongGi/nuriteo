@@ -29,7 +29,7 @@ async fn organization_schema_enforces_identity_lifecycle_and_membership() {
         }
     );
     let first_report = migrate(&pool).await;
-    assert_eq!(first_report.latest_version, Some(8));
+    assert_eq!(first_report.latest_version, Some(9));
     assert_eq!(migrate(&pool).await, first_report);
     assert_eq!(
         readiness(&pool).await,

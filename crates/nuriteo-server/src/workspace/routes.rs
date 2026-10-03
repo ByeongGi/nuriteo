@@ -9,7 +9,7 @@ use crate::auth::{AuthService, AuthServiceError};
 use crate::http::{HttpError, RequestId};
 use crate::identity::{BrowserMethod, BrowserRequestHeaders};
 
-use super::{PersonalWorkspace, WorkspaceOwnerType};
+use super::{OrganizationWorkspace, PersonalWorkspace, Workspace, WorkspaceOwnerType};
 
 const WORKSPACES_PATH: &str = "/api/v1/me/workspaces";
 
@@ -24,9 +24,9 @@ pub(crate) struct WorkspaceCollectionView {
 }
 
 impl WorkspaceCollectionView {
-    fn personal(workspace: PersonalWorkspace) -> Self {
+    fn new(workspaces: Vec<Workspace>) -> Self {
         Self {
-            workspaces: vec![WorkspaceView::from(workspace)],
+            workspaces: workspaces.into_iter().map(WorkspaceView::from).collect(),
         }
     }
 }
@@ -44,6 +44,7 @@ impl From<PersonalWorkspace> for WorkspaceView {
     fn from(workspace: PersonalWorkspace) -> Self {
         let owner_type = match workspace.owner_type() {
             WorkspaceOwnerType::User => WorkspaceOwnerView::User,
+            WorkspaceOwnerType::Organization => WorkspaceOwnerView::Organization,
         };
         Self {
             owner_type,
@@ -54,10 +55,35 @@ impl From<PersonalWorkspace> for WorkspaceView {
     }
 }
 
+impl From<OrganizationWorkspace> for WorkspaceView {
+    fn from(workspace: OrganizationWorkspace) -> Self {
+        let owner_type = match workspace.owner_type() {
+            WorkspaceOwnerType::Organization => WorkspaceOwnerView::Organization,
+            WorkspaceOwnerType::User => WorkspaceOwnerView::User,
+        };
+        Self {
+            owner_type,
+            owner_id: workspace.owner_id().to_string(),
+            display_label: workspace.display_label().to_owned(),
+            storage_scope_id: workspace.storage_scope_id().to_string(),
+        }
+    }
+}
+
+impl From<Workspace> for WorkspaceView {
+    fn from(workspace: Workspace) -> Self {
+        match workspace {
+            Workspace::Personal(workspace) => workspace.into(),
+            Workspace::Organization(workspace) => workspace.into(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum WorkspaceOwnerView {
     User,
+    Organization,
 }
 
 #[utoipa::path(
@@ -90,7 +116,7 @@ pub(crate) async fn current_workspaces(
         .collect::<Result<Vec<_>, _>>()
         .map_err(|_| HttpError::authentication(request_id.clone(), WORKSPACES_PATH))?;
     let workspaces = service
-        .personal_workspaces(BrowserRequestHeaders {
+        .workspaces(BrowserRequestHeaders {
             method: BrowserMethod::Get,
             origins: &[],
             cookie_headers: &cookies,
@@ -98,10 +124,7 @@ pub(crate) async fn current_workspaces(
         })
         .await
         .map_err(|error| map_service_error(error, request_id.clone()))?;
-    let [workspace] = workspaces
-        .try_into()
-        .map_err(|_| HttpError::internal(request_id.clone(), WORKSPACES_PATH))?;
-    Ok(Json(WorkspaceCollectionView::personal(workspace)))
+    Ok(Json(WorkspaceCollectionView::new(workspaces)))
 }
 
 fn map_service_error(error: AuthServiceError, request_id: RequestId) -> HttpError {
