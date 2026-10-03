@@ -1,0 +1,56 @@
+mod id;
+mod session;
+mod timestamp;
+mod user;
+
+use std::fmt;
+
+pub use id::{SessionId, UserId};
+pub use session::{Session, SessionFields};
+pub use timestamp::Timestamp;
+pub use user::{User, UserFields, UserStatus};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum IdentityError {
+    InvalidIdentifier,
+    NilIdentifier,
+    IdentifierMustBeVersion7,
+    TimestampOutOfRange,
+    InvalidEmail,
+    InvalidNormalizedEmail,
+    InvalidDisplayName,
+    InvalidUserLifecycle,
+    InvalidUserTimestampOrder,
+    InvalidSessionTimestampOrder,
+    InvalidSessionReauthentication,
+    InvalidSessionRevocation,
+    InvalidSessionRevocationReason,
+    InvalidSessionRotation,
+}
+
+impl fmt::Display for IdentityError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self {
+            Self::InvalidIdentifier => "identifier is not a valid UUID",
+            Self::NilIdentifier => "identifier must not be nil",
+            Self::IdentifierMustBeVersion7 => "identifier must be UUID version 7",
+            Self::TimestampOutOfRange => "timestamp must be a serializable UTC instant",
+            Self::InvalidEmail => "email does not satisfy the identity contract",
+            Self::InvalidNormalizedEmail => "normalized email does not match email",
+            Self::InvalidDisplayName => "display name does not satisfy the identity contract",
+            Self::InvalidUserLifecycle => "user lifecycle state is invalid",
+            Self::InvalidUserTimestampOrder => "user timestamps are out of order",
+            Self::InvalidSessionTimestampOrder => "session timestamps are out of order",
+            Self::InvalidSessionReauthentication => "session reauthentication time is invalid",
+            Self::InvalidSessionRevocation => "session revocation state is invalid",
+            Self::InvalidSessionRevocationReason => "session revocation reason is invalid",
+            Self::InvalidSessionRotation => "session rotation state is invalid",
+        })
+    }
+}
+
+impl std::error::Error for IdentityError {}
+
+#[cfg(test)]
+mod tests;

@@ -4,6 +4,7 @@ pub mod config;
 pub mod database;
 pub mod health;
 pub mod http;
+pub mod identity;
 pub mod object_storage;
 pub mod observability;
 pub mod openapi;
