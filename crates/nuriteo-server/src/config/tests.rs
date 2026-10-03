@@ -400,3 +400,28 @@ fn configuration_registry_is_complete_unique_and_never_defaults_secrets() {
         assert!(!field.helm_mapping.is_empty());
     }
 }
+
+#[test]
+fn strict_registry_accepts_bootstrap_command_inputs_without_loading_secrets() {
+    let report = load(
+        &[
+            (EXTERNAL_URL, "http://127.0.0.1:3000"),
+            ("NURITEO_BOOTSTRAP_ADMIN_EMAIL", "admin@example.test"),
+            ("NURITEO_BOOTSTRAP_ADMIN_NAME", "Instance Admin"),
+            (
+                "NURITEO_BOOTSTRAP_ADMIN_PASSWORD_FILE",
+                "/run/secrets/bootstrap-password",
+            ),
+        ],
+        &TestFiles::default(),
+    )
+    .unwrap();
+
+    assert!(report.warnings.is_empty());
+    let password_fields: Vec<_> = CONFIG_FIELDS
+        .iter()
+        .filter(|field| field.environment.contains("BOOTSTRAP_ADMIN_PASSWORD"))
+        .collect();
+    assert_eq!(password_fields.len(), 2);
+    assert!(password_fields.iter().all(|field| field.secret));
+}

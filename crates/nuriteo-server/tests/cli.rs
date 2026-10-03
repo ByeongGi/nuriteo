@@ -49,15 +49,68 @@ fn invalid_invocations_are_usage_errors() {
 }
 
 #[test]
-fn unavailable_command_fails_closed() {
-    let output = run(&["bootstrap-admin"]);
+fn bootstrap_admin_fails_closed_without_global_configuration() {
+    let output = Command::new(env!("CARGO_BIN_EXE_nuriteo-server"))
+        .arg("bootstrap-admin")
+        .env_clear()
+        .output()
+        .expect("nuriteo-server binary should start");
 
     assert_eq!(output.status.code(), Some(1));
     assert!(output.stdout.is_empty());
     assert_eq!(
         output.stderr,
-        b"nuriteo-server: `bootstrap-admin` is not available in this build\n"
+        b"nuriteo-server: bootstrap-admin failed (configuration)\n"
     );
+}
+
+#[test]
+fn bootstrap_admin_fails_closed_without_command_input() {
+    let output = Command::new(env!("CARGO_BIN_EXE_nuriteo-server"))
+        .arg("bootstrap-admin")
+        .env_clear()
+        .env("NURITEO_EXTERNAL_URL", "http://127.0.0.1:3000")
+        .output()
+        .expect("nuriteo-server binary should start");
+
+    assert_eq!(output.status.code(), Some(1));
+    assert!(output.stdout.is_empty());
+    assert_eq!(
+        output.stderr,
+        b"nuriteo-server: bootstrap-admin failed (input)\n"
+    );
+}
+
+#[test]
+fn bootstrap_admin_strict_configuration_rejects_unknown_names_without_values() {
+    let secret = "never-print-this";
+    let output = Command::new(env!("CARGO_BIN_EXE_nuriteo-server"))
+        .arg("bootstrap-admin")
+        .env_clear()
+        .env("NURITEO_EXTERNAL_URL", "http://127.0.0.1:3000")
+        .env("NURITEO_BOOTSTRAP_ADMIN_EMAIL", "admin@example.test")
+        .env("NURITEO_BOOTSTRAP_ADMIN_NAME", "Admin")
+        .env("NURITEO_BOOTSTRAP_ADMIN_PASSWORD", secret)
+        .env("NURITEO_BOOTSTRAP_ADMIN_TYPO", secret)
+        .output()
+        .expect("nuriteo-server binary should start");
+
+    assert_eq!(output.status.code(), Some(1));
+    assert!(output.stdout.is_empty());
+    assert_eq!(
+        output.stderr,
+        b"nuriteo-server: bootstrap-admin failed (configuration)\n"
+    );
+    assert!(!String::from_utf8_lossy(&output.stderr).contains(secret));
+}
+
+#[test]
+fn bootstrap_admin_rejects_cli_secret_arguments_without_echoing_the_value() {
+    let output = run(&["bootstrap-admin", "--password", "never-print-this"]);
+
+    assert_eq!(output.status.code(), Some(2));
+    assert!(output.stdout.is_empty());
+    assert!(!String::from_utf8_lossy(&output.stderr).contains("never-print-this"));
 }
 
 #[test]

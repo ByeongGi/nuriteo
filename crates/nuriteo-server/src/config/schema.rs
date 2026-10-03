@@ -127,6 +127,32 @@ pub const CONFIG_FIELDS: &[ConfigField] = &[
         "preview.baseDomain",
     ),
     field(
+        "NURITEO_BOOTSTRAP_ADMIN_EMAIL",
+        None,
+        "email",
+        None,
+        "3-320 character administrator email; normalized by the bootstrap command",
+        "bootstrapAdmin.email",
+    ),
+    field(
+        "NURITEO_BOOTSTRAP_ADMIN_NAME",
+        None,
+        "string",
+        None,
+        "1-200 character administrator display name",
+        "bootstrapAdmin.name",
+    ),
+    secret_field(
+        "NURITEO_BOOTSTRAP_ADMIN_PASSWORD",
+        "compatibility-only password; exclusive with _FILE and always redacted",
+        "bootstrapAdmin.password",
+    ),
+    secret_field(
+        "NURITEO_BOOTSTRAP_ADMIN_PASSWORD_FILE",
+        "bounded mounted password file; exclusive with direct value",
+        "bootstrapAdmin.passwordExistingSecret",
+    ),
+    field(
         "NURITEO_S3_ENDPOINT",
         None,
         "URL",

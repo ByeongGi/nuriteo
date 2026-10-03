@@ -5,6 +5,9 @@ use clap::error::ErrorKind;
 use clap::{Arg, ArgAction, ArgMatches, Command};
 
 use crate::app::run_server;
+use crate::bootstrap::{
+    BootstrapAdminInput, BootstrapErrorCategory, BootstrapOutcome, bootstrap_administrator,
+};
 use crate::config::{Config, SystemEnvironment, SystemFileReader};
 use crate::database::{
     DatabasePool, DatabaseRuntimeConfig, SchemaReadiness, check_schema_readiness,
@@ -154,13 +157,15 @@ where
         }
         Ok(CliAction::Operational(OperationalCommand::Serve)) => serve(stderr).await,
         Ok(CliAction::Operational(OperationalCommand::Migrate)) => migrate(stdout, stderr).await,
+        Ok(CliAction::Operational(OperationalCommand::BootstrapAdmin)) => {
+            bootstrap_admin(stdout, stderr).await
+        }
         Ok(CliAction::Operational(OperationalCommand::Healthcheck)) => {
             healthcheck(stdout, stderr).await
         }
         Ok(CliAction::Operational(OperationalCommand::StorageCheck)) => {
             storage_check(stdout, stderr).await
         }
-        Ok(CliAction::Operational(command)) => unavailable(command, stderr),
         Err(error) if is_successful_display(error.kind()) => {
             write!(stdout, "{error}")?;
             Ok(CommandStatus::Success)
@@ -170,6 +175,59 @@ where
             Ok(CommandStatus::UsageError)
         }
     }
+}
+
+async fn bootstrap_admin<O: Write, E: Write>(
+    stdout: &mut O,
+    stderr: &mut E,
+) -> io::Result<CommandStatus> {
+    let environment = SystemEnvironment;
+    let files = SystemFileReader;
+    if Config::load(&environment, &files).is_err() {
+        return bootstrap_failure(stderr, "configuration");
+    }
+    let input = match BootstrapAdminInput::load(&environment) {
+        Ok(input) => input,
+        Err(_) => return bootstrap_failure(stderr, "input"),
+    };
+    let config = match DatabaseRuntimeConfig::load(&environment, &files) {
+        Ok(config) => config,
+        Err(_) => return bootstrap_failure(stderr, "database-configuration"),
+    };
+    let pool = match DatabasePool::connect(config.pool_config()).await {
+        Ok(pool) => pool,
+        Err(_) => return bootstrap_failure(stderr, "database-connectivity"),
+    };
+
+    let result = bootstrap_administrator(&pool, input, &files).await;
+    let close_result = pool.close(config.close_timeout()).await;
+    match (result, close_result) {
+        (Ok(BootstrapOutcome::Created), Ok(())) => {
+            writeln!(stdout, "bootstrap-admin created")?;
+            Ok(CommandStatus::Success)
+        }
+        (Ok(BootstrapOutcome::AlreadyInitialized), Ok(())) => {
+            writeln!(stdout, "bootstrap-admin already-initialized")?;
+            Ok(CommandStatus::Success)
+        }
+        (Err(error), _) => bootstrap_failure(stderr, bootstrap_category(error.category())),
+        (Ok(_), Err(_)) => bootstrap_failure(stderr, "database-operation"),
+    }
+}
+
+const fn bootstrap_category(category: BootstrapErrorCategory) -> &'static str {
+    match category {
+        BootstrapErrorCategory::Input => "input",
+        BootstrapErrorCategory::SchemaNotReady => "schema-not-ready",
+        BootstrapErrorCategory::DatabaseOperation => "database-operation",
+        BootstrapErrorCategory::PasswordHashing => "password-hashing",
+        BootstrapErrorCategory::Audit => "audit",
+    }
+}
+
+fn bootstrap_failure<E: Write>(stderr: &mut E, category: &str) -> io::Result<CommandStatus> {
+    writeln!(stderr, "{BINARY_NAME}: bootstrap-admin failed ({category})")?;
+    Ok(CommandStatus::Failure)
 }
 
 async fn serve<E: Write>(stderr: &mut E) -> io::Result<CommandStatus> {
