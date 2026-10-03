@@ -15,11 +15,37 @@ Set these variables to absolute paths before rendering or starting the stack:
 - `NURITEO_RUSTFS_SECRET_KEY_FILE`: non-default RustFS secret key
 - `NURITEO_RUSTFS_CA_FILE`: CA certificate trusted by Core
 - `NURITEO_RUSTFS_TLS_DIR`: directory containing `ca.crt`, `rustfs_cert.pem`, and `rustfs_key.pem`
+- `NURITEO_BOOTSTRAP_ADMIN_EMAIL`: normalized email for the first Instance Administrator
+- `NURITEO_BOOTSTRAP_ADMIN_NAME`: display name for the first Instance Administrator
+- `NURITEO_BOOTSTRAP_ADMIN_PASSWORD_FILE`: password file for the first Instance Administrator
 - `NURITEO_EXTERNAL_URL`: canonical browser origin
 
 The Compose file has no credential defaults. Protect every credential and private-key file with owner-only permissions. A minimal PostgreSQL derivative copies its mounted certificate and key into a private runtime path before delegating to the upstream entrypoint with TLS enabled. The Dockerfile build context allowlists only that wrapper. The database URL, database CA, PostgreSQL identity, and RustFS credentials are mounted as Compose secrets; RustFS TLS material is mounted read-only. Core always verifies the PostgreSQL hostname and CA; this topology does not claim that PostgreSQL rejects every non-TLS client.
 
 Optional settings are `NURITEO_WEB_BIND_IP` (default `127.0.0.1`), `NURITEO_WEB_PORT` (default `3000`), `NURITEO_POSTGRES_IMAGE`, `NURITEO_SERVER_IMAGE`, and `NURITEO_WEB_IMAGE`.
+
+## Startup lifecycle
+
+`compose up` enforces this order:
+
+1. PostgreSQL and bundled RustFS become healthy.
+2. `storage-init` idempotently creates the bundled private bucket, while `migrate` applies forward-only database migrations.
+3. `storage-check` validates the bucket and `bootstrap-admin` atomically creates the first administrator, local credential, and audit event.
+4. Core starts only after every required one-shot succeeds, then Web starts only after Core reports ready.
+
+All operational commands use the same Server image as `serve`. One-shots have no restart policy, and a failed one-shot keeps Core and Web gated. Re-running the stack against the same named volumes is safe: bucket creation, migration, and administrator bootstrap are idempotent. `compose down` preserves data; use `compose down --volumes` only when intentionally deleting this installation.
+
+The bootstrap password is accepted only through its mounted file. It is not placed in the command, environment, rendered Compose configuration, or image. After the initial install, rotate or remove the host-side bootstrap password file according to local secret-management policy; an already-initialized bootstrap run does not rewrite the credential.
+
+## External S3 preflight
+
+External S3 is an explicit, separate operator-preflight path. Configure `NURITEO_EXTERNAL_URL`, `NURITEO_S3_ENDPOINT`, `NURITEO_S3_REGION`, `NURITEO_S3_BUCKET`, `NURITEO_S3_ACCESS_KEY_FILE`, `NURITEO_S3_SECRET_KEY_FILE`, and `NURITEO_S3_CA_FILE`, then run:
+
+```sh
+docker compose -f deploy/compose/compose.external-s3.yaml run --rm storage-check
+```
+
+The bucket must already exist. This path contains only the Server `storage-check` command: it does not run bundled storage initialization, create or delete buckets, change policies, or fall back to RustFS. An external deployment overlay can reuse the validated settings for Core without changing that ownership boundary.
 
 ## Validation
 
@@ -35,10 +61,4 @@ Run the destructive local fixture against disposable project-scoped volumes:
 deploy/compose/test-compose.sh
 ```
 
-The fixture creates temporary credentials and a private test CA, builds both application images, starts PostgreSQL, RustFS, and Web, writes metadata and object sentinels, stops and restarts the services, verifies persistence, and removes its containers, networks, volumes, and temporary files. If Docker Compose or a configured Podman Compose provider is unavailable, an isolated test provider can be selected with `NURITEO_COMPOSE_PROVIDER=uvx`.
-
-## CMP-002 handoff
-
-Core's production `serve` listener is wired and the actual fixture verifies `/health/live` plus the expected `schema-pending` `/health/ready` response over Web-to-Core Compose DNS. The fixture explicitly creates the configured `nuriteo` bucket before Core starts; `serve` does not mutate storage. This topology intentionally has no fake shell/log healthcheck and no `depends_on` readiness ordering. The `x-nuriteo-cmp-002-readiness` extension records the accepted HLT-001 `/health/live`, `/health/ready`, and CLI contracts.
-
-CMP-002 must add migration/bootstrap one-shot services, verify the healthy-ready transition, and then add health-based startup ordering. Its bundled RustFS initialization one-shot owns idempotent creation and preflight of the application bucket. External S3 buckets remain operator-prepared: Nuriteo must not create, delete, or change their policies.
+The fixture creates temporary credentials and private test CAs, renders the configuration and scans it for secret values, builds the application images, and exercises a clean-volume installation. It verifies ready Core/Web, the administrator/credential/audit transaction, migration readiness, database and object persistence, idempotent same-volume restart, and failed-bootstrap gating. It removes its project-scoped containers, networks, volumes, and temporary files. Set `NURITEO_COMPOSE_KEEP=1` only for local failure diagnosis. If Docker Compose or a configured Podman Compose provider is unavailable, select the pinned isolated provider with `NURITEO_COMPOSE_PROVIDER=uvx`.

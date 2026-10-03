@@ -3,25 +3,27 @@ set -Eeuo pipefail
 
 repository_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 compose_file="$repository_root/deploy/compose/compose.yaml"
-project="nuriteo-cmp-001-${RANDOM}"
-fixture_root="$(mktemp -d "${TMPDIR:-/tmp}/nuriteo-cmp-001.XXXXXX")"
+project="nuriteo-cmp-002-${RANDOM}"
+failure_project="${project}-failure"
+fixture_root="$(mktemp -d "${TMPDIR:-/tmp}/nuriteo-cmp-002.XXXXXX")"
 web_port="${NURITEO_COMPOSE_SMOKE_PORT:-19303}"
 rendered="$fixture_root/compose.rendered.yaml"
+bootstrap_password='compose-bootstrap-secret-7e3bc2f41a'
 
 select_compose() {
   case "${NURITEO_COMPOSE_PROVIDER:-auto}" in
-    docker) compose_command=(docker compose) ;;
-    podman) compose_command=(podman compose) ;;
-    uvx) compose_command=(uvx --from podman-compose==1.5.0 podman-compose) ;;
+    docker) compose_command=(docker compose); engine=docker ;;
+    podman) compose_command=(podman compose); engine=podman ;;
+    uvx) compose_command=(uvx --from podman-compose==1.5.0 podman-compose); engine=podman ;;
     auto)
       if docker compose version >/dev/null 2>&1; then
-        compose_command=(docker compose)
+        compose_command=(docker compose); engine=docker
       elif podman compose version >/dev/null 2>&1; then
-        compose_command=(podman compose)
+        compose_command=(podman compose); engine=podman
       elif command -v podman-compose >/dev/null 2>&1; then
-        compose_command=(podman-compose)
+        compose_command=(podman-compose); engine=podman
       else
-        echo "no Compose provider found; set NURITEO_COMPOSE_PROVIDER=uvx for the isolated test provider" >&2
+        echo "no Compose provider found" >&2
         exit 1
       fi
       ;;
@@ -29,66 +31,82 @@ select_compose() {
   esac
 }
 
-compose() {
-  "${compose_command[@]}" --file "$compose_file" --project-name "$project" "$@"
-}
+compose() { "${compose_command[@]}" --file "$compose_file" --project-name "$project" "$@"; }
+failure_compose() { "${compose_command[@]}" --file "$compose_file" --project-name "$failure_project" "$@"; }
 
 cleanup() {
+  if [ "${NURITEO_COMPOSE_KEEP:-0}" = 1 ]; then
+    echo "preserving Compose projects: $project $failure_project" >&2
+    return
+  fi
   compose down --volumes --remove-orphans >/dev/null 2>&1 || true
+  failure_compose down --volumes --remove-orphans >/dev/null 2>&1 || true
   rm -rf -- "$fixture_root"
+}
+
+wait_for_web() {
+  local attempt=0
+  until curl --fail --silent "http://127.0.0.1:${web_port}/" >"$fixture_root/web.html"; do
+    attempt=$((attempt + 1))
+    if [ "$attempt" -ge 120 ]; then compose ps >&2 || true; return 1; fi
+    sleep 1
+  done
+}
+
+wait_for_job() {
+  local service="$1" expected="$2" attempt=0 container status
+  until container="$(compose ps -q "$service")" && [ -n "$container" ]; do
+    attempt=$((attempt + 1)); [ "$attempt" -lt 120 ] || return 1; sleep 1
+  done
+  while :; do
+    status="$($engine inspect --format '{{.State.Status}} {{.State.ExitCode}}' "$container")"
+    case "$status" in
+      "exited $expected") return 0 ;;
+      exited\ *) echo "$service exited unexpectedly: $status" >&2; compose logs "$service" >&2; return 1 ;;
+    esac
+    attempt=$((attempt + 1)); [ "$attempt" -lt 120 ] || return 1; sleep 1
+  done
+}
+
+query() {
+  compose exec -T postgres psql --username nuriteo --dbname nuriteo --tuples-only --no-align --set ON_ERROR_STOP=1 --command "$1"
 }
 
 select_compose
 trap cleanup EXIT HUP INT TERM
-trap 'status=$?; echo "compose smoke failed at line ${BASH_LINENO[0]} (status ${status})" >&2' ERR
+trap 'status=$?; echo "compose acceptance failed at line ${BASH_LINENO[0]} (status ${status})" >&2' ERR
 
 mkdir -p "$fixture_root/postgres-tls" "$fixture_root/rustfs-tls"
 printf '%s\n' 'compose-db-password-7e3bc2' >"$fixture_root/postgres-password"
 printf '%s\n' 'COMPOSEACCESS7E3BC2' >"$fixture_root/rustfs-access-key"
 printf '%s\n' 'compose-rustfs-secret-7e3bc2f41a' >"$fixture_root/rustfs-secret-key"
-printf '%s\n' \
-  'postgres://nuriteo:compose-db-password-7e3bc2@postgres:5432/nuriteo' \
-  >"$fixture_root/database-url"
+printf '%s\n' "$bootstrap_password" >"$fixture_root/bootstrap-password"
+printf '%s\n' 'postgres://nuriteo:compose-db-password-7e3bc2@postgres:5432/nuriteo' >"$fixture_root/database-url"
 chmod 644 "$fixture_root/postgres-password" "$fixture_root/rustfs-access-key" \
-  "$fixture_root/rustfs-secret-key" "$fixture_root/database-url"
+  "$fixture_root/rustfs-secret-key" "$fixture_root/bootstrap-password" "$fixture_root/database-url"
 
-openssl req -x509 -newkey rsa:2048 -nodes \
-  -keyout "$fixture_root/postgres-tls/ca.key" -out "$fixture_root/postgres-tls/ca.crt" -days 2 \
-  -subj '/CN=nuriteo-cmp-001-postgres-ca' \
-  -addext 'basicConstraints=critical,CA:TRUE' \
-  -addext 'keyUsage=critical,keyCertSign,cRLSign' >/dev/null 2>&1
-openssl req -newkey rsa:2048 -nodes \
-  -keyout "$fixture_root/postgres-tls/server.key" -out "$fixture_root/postgres-tls/server.csr" \
-  -subj '/CN=postgres' >/dev/null 2>&1
-printf '%s\n' \
-  'subjectAltName=DNS:postgres' \
-  'basicConstraints=critical,CA:FALSE' \
-  'keyUsage=critical,digitalSignature,keyEncipherment' \
-  'extendedKeyUsage=serverAuth' >"$fixture_root/postgres-tls/server.ext"
-openssl x509 -req -in "$fixture_root/postgres-tls/server.csr" \
-  -CA "$fixture_root/postgres-tls/ca.crt" -CAkey "$fixture_root/postgres-tls/ca.key" -CAcreateserial \
-  -out "$fixture_root/postgres-tls/server.crt" -days 2 \
-  -extfile "$fixture_root/postgres-tls/server.ext" >/dev/null 2>&1
-chmod 644 "$fixture_root/postgres-tls/ca.crt"
+openssl req -x509 -newkey rsa:2048 -nodes -keyout "$fixture_root/postgres-tls/ca.key" \
+  -out "$fixture_root/postgres-tls/ca.crt" -days 2 -subj '/CN=nuriteo-compose-postgres-ca' \
+  -addext 'basicConstraints=critical,CA:TRUE' -addext 'keyUsage=critical,keyCertSign,cRLSign' >/dev/null 2>&1
+openssl req -newkey rsa:2048 -nodes -keyout "$fixture_root/postgres-tls/server.key" \
+  -out "$fixture_root/postgres-tls/server.csr" -subj '/CN=postgres' >/dev/null 2>&1
+printf '%s\n' 'subjectAltName=DNS:postgres' 'basicConstraints=critical,CA:FALSE' \
+  'keyUsage=critical,digitalSignature,keyEncipherment' 'extendedKeyUsage=serverAuth' >"$fixture_root/postgres-tls/server.ext"
+openssl x509 -req -in "$fixture_root/postgres-tls/server.csr" -CA "$fixture_root/postgres-tls/ca.crt" \
+  -CAkey "$fixture_root/postgres-tls/ca.key" -CAcreateserial -out "$fixture_root/postgres-tls/server.crt" \
+  -days 2 -extfile "$fixture_root/postgres-tls/server.ext" >/dev/null 2>&1
 
-openssl req -x509 -newkey rsa:2048 -nodes \
-  -keyout "$fixture_root/ca.key" -out "$fixture_root/rustfs-tls/ca.crt" -days 2 \
-  -subj '/CN=nuriteo-cmp-001-test-ca' \
-  -addext 'basicConstraints=critical,CA:TRUE' \
-  -addext 'keyUsage=critical,keyCertSign,cRLSign' >/dev/null 2>&1
-openssl req -newkey rsa:2048 -nodes \
-  -keyout "$fixture_root/rustfs-tls/rustfs_key.pem" -out "$fixture_root/server.csr" \
-  -subj '/CN=rustfs' >/dev/null 2>&1
-printf '%s\n' \
-  'subjectAltName=DNS:rustfs' \
-  'basicConstraints=critical,CA:FALSE' \
-  'keyUsage=critical,digitalSignature,keyEncipherment' \
-  'extendedKeyUsage=serverAuth' >"$fixture_root/server.ext"
-openssl x509 -req -in "$fixture_root/server.csr" \
-  -CA "$fixture_root/rustfs-tls/ca.crt" -CAkey "$fixture_root/ca.key" -CAcreateserial \
-  -out "$fixture_root/rustfs-tls/rustfs_cert.pem" -days 2 -extfile "$fixture_root/server.ext" \
-  >/dev/null 2>&1
-chmod 600 "$fixture_root/rustfs-tls/rustfs_key.pem"
+openssl req -x509 -newkey rsa:2048 -nodes -keyout "$fixture_root/rustfs-ca.key" \
+  -out "$fixture_root/rustfs-tls/ca.crt" -days 2 -subj '/CN=nuriteo-compose-rustfs-ca' \
+  -addext 'basicConstraints=critical,CA:TRUE' -addext 'keyUsage=critical,keyCertSign,cRLSign' >/dev/null 2>&1
+openssl req -newkey rsa:2048 -nodes -keyout "$fixture_root/rustfs-tls/rustfs_key.pem" \
+  -out "$fixture_root/rustfs-server.csr" -subj '/CN=rustfs' >/dev/null 2>&1
+printf '%s\n' 'subjectAltName=DNS:rustfs' 'basicConstraints=critical,CA:FALSE' \
+  'keyUsage=critical,digitalSignature,keyEncipherment' 'extendedKeyUsage=serverAuth' >"$fixture_root/rustfs-server.ext"
+openssl x509 -req -in "$fixture_root/rustfs-server.csr" -CA "$fixture_root/rustfs-tls/ca.crt" \
+  -CAkey "$fixture_root/rustfs-ca.key" -CAcreateserial -out "$fixture_root/rustfs-tls/rustfs_cert.pem" \
+  -days 2 -extfile "$fixture_root/rustfs-server.ext" >/dev/null 2>&1
+chmod 600 "$fixture_root/postgres-tls/server.key" "$fixture_root/rustfs-tls/rustfs_key.pem"
 
 export NURITEO_POSTGRES_PASSWORD_FILE="$fixture_root/postgres-password"
 export NURITEO_POSTGRES_SERVER_CERT_FILE="$fixture_root/postgres-tls/server.crt"
@@ -99,195 +117,93 @@ export NURITEO_RUSTFS_ACCESS_KEY_FILE="$fixture_root/rustfs-access-key"
 export NURITEO_RUSTFS_SECRET_KEY_FILE="$fixture_root/rustfs-secret-key"
 export NURITEO_RUSTFS_CA_FILE="$fixture_root/rustfs-tls/ca.crt"
 export NURITEO_RUSTFS_TLS_DIR="$fixture_root/rustfs-tls"
+export NURITEO_BOOTSTRAP_ADMIN_PASSWORD_FILE="$fixture_root/bootstrap-password"
+export NURITEO_BOOTSTRAP_ADMIN_EMAIL='admin@example.invalid'
+export NURITEO_BOOTSTRAP_ADMIN_NAME='Compose Administrator'
 export NURITEO_EXTERNAL_URL="http://127.0.0.1:${web_port}"
 export NURITEO_WEB_PORT="$web_port"
-export NURITEO_POSTGRES_IMAGE="localhost/nuriteo-postgres:cmp-001"
-export NURITEO_SERVER_IMAGE="localhost/nuriteo-server:cmp-001"
-export NURITEO_WEB_IMAGE="localhost/nuriteo-web:cmp-001"
+export NURITEO_POSTGRES_IMAGE='localhost/nuriteo-postgres:cmp-002'
+export NURITEO_SERVER_IMAGE='localhost/nuriteo-server:cmp-002'
+export NURITEO_WEB_IMAGE='localhost/nuriteo-web:cmp-002'
 
 compose config >"$rendered"
-if grep -Fq 'compose-db-password-7e3bc2' "$rendered" || \
-  grep -Fq 'COMPOSEACCESS7E3BC2' "$rendered" || \
-  grep -Fq 'compose-rustfs-secret-7e3bc2f41a' "$rendered"; then
-  echo "rendered Compose configuration exposed a credential" >&2
-  exit 1
-fi
+for secret in 'compose-db-password-7e3bc2' 'COMPOSEACCESS7E3BC2' 'compose-rustfs-secret-7e3bc2f41a' "$bootstrap_password"; do
+  if grep -Fq "$secret" "$rendered"; then echo "rendered Compose exposed a secret" >&2; exit 1; fi
+done
 
 compose build postgres core web
-compose up --no-start --no-build core
-compose up --detach postgres rustfs web
-
-attempt=0
-until compose exec -T postgres pg_isready --username nuriteo --dbname nuriteo >/dev/null 2>&1; do
-  attempt=$((attempt + 1))
-  if [ "$attempt" -ge 60 ]; then
-    compose ps >&2 || true
-    echo "PostgreSQL readiness timed out" >&2
-    exit 1
-  fi
-  sleep 1
-done
-postgres_tls="$(compose exec -T postgres /bin/sh -eu -c '
-  PGPASSWORD="$(cat /run/secrets/postgres_password)" \
-    psql --host postgres --username nuriteo --dbname nuriteo \
-      --tuples-only --no-align \
-      --command "SELECT ssl FROM pg_stat_ssl WHERE pid = pg_backend_pid();"
-')"
-test "$postgres_tls" = "t"
-
-attempt=0
-until compose exec -T rustfs curl --fail --silent --cacert /etc/rustfs/tls/ca.crt \
-  https://rustfs:9000/health >/dev/null 2>&1; do
-  attempt=$((attempt + 1))
-  if [ "$attempt" -ge 60 ]; then
-    compose ps >&2 || true
-    echo "RustFS readiness timed out" >&2
-    exit 1
-  fi
-  sleep 1
-done
-
-attempt=0
-until curl --fail --silent "http://127.0.0.1:${web_port}/" >"$fixture_root/web.html"; do
-  attempt=$((attempt + 1))
-  if [ "$attempt" -ge 60 ]; then
-    compose ps >&2 || true
-    echo "Web readiness timed out" >&2
-    exit 1
-  fi
-  sleep 1
-done
+if ! compose up --detach --no-build; then
+  # podman-compose 1.5.0 can return an internal dependency-start error after
+  # Core becomes healthy. Verify that gate, then start only its already-created
+  # leaf container without asking the provider to traverse dependencies again.
+  core_container="$(compose ps -q core)"
+  test -n "$core_container"
+  attempt=0
+  until [ "$($engine inspect --format '{{.State.Health.Status}}' "$core_container")" = healthy ]; do
+    attempt=$((attempt + 1)); [ "$attempt" -lt 60 ] || exit 1; sleep 1
+  done
+  web_container="$(compose ps -q web)"
+  test -n "$web_container"
+  "$engine" start "$web_container" >/dev/null
+fi
+for job in storage-init storage-check migrate bootstrap-admin; do wait_for_job "$job" 0; done
+wait_for_web
 grep -q 'Web shell running' "$fixture_root/web.html"
-css_path="$(grep -Eo '/_next/static/css/[^" ]+\.css' "$fixture_root/web.html" | sed -n '1p')"
-test -n "$css_path"
-test "$(curl --silent --output /dev/null --write-out '%{http_code}' "http://127.0.0.1:${web_port}${css_path}")" = "200"
+compose exec -T web /nodejs/bin/node -e '
+  Promise.all(["live", "ready"].map((kind) => fetch(`http://core:8080/health/${kind}`)))
+    .then(async ([live, ready]) => {
+      const liveBody = await live.json(); const readyBody = await ready.json();
+      if (live.status !== 200 || liveBody.status !== "live" || ready.status !== 200 || readyBody.status !== "ready") process.exit(1);
+    }).catch(() => process.exit(1));
+'
+test "$(query "SELECT COUNT(*) FROM users WHERE is_instance_admin;")" = '1'
+test "$(query "SELECT COUNT(*) FROM local_password_credentials;")" = '1'
+test "$(query "SELECT COUNT(*) FROM audit_events WHERE action_code = 'instance_admin.bootstrap_created';")" = '1'
+test "$(query "SELECT COUNT(*) FROM _sqlx_migrations WHERE success;")" = "$(query "SELECT COUNT(*) FROM _sqlx_migrations;")"
 
-compose exec -T postgres psql --username nuriteo --dbname nuriteo --set ON_ERROR_STOP=1 \
-  --command 'CREATE TABLE compose_sentinel (value text PRIMARY KEY);' >/dev/null
-compose exec -T postgres psql --username nuriteo --dbname nuriteo --set ON_ERROR_STOP=1 \
-  --command "INSERT INTO compose_sentinel VALUES ('metadata-survived');" >/dev/null
-
+query "CREATE TABLE compose_sentinel (value text PRIMARY KEY); INSERT INTO compose_sentinel VALUES ('metadata-survived');" >/dev/null
 compose exec -T rustfs /bin/sh -eu -c '
-  access="$(cat /run/secrets/rustfs_access_key)"
-  secret="$(cat /run/secrets/rustfs_secret_key)"
-  auth="${access}:${secret}"
-  bucket_status="$(curl --silent --output /dev/null --write-out "%{http_code}" \
-    --cacert /etc/rustfs/tls/ca.crt \
-    --aws-sigv4 aws:amz:us-east-1:s3 --user "$auth" \
-    --request PUT https://rustfs:9000/nuriteo)"
-  test "$bucket_status" = "200" || {
-    echo "RustFS bucket create returned HTTP ${bucket_status}" >&2
-    exit 1
-  }
-  object_status="$(curl --silent --output /dev/null \
-    --write-out "%{http_code}" --cacert /etc/rustfs/tls/ca.crt \
-    --aws-sigv4 aws:amz:us-east-1:s3 --user "$auth" \
-    --request PUT --header "Content-Length: 15" --data-binary object-survived \
-    https://rustfs:9000/nuriteo/sentinel.txt)"
-  test "$object_status" = "200" || {
-    echo "RustFS object put returned HTTP ${object_status}" >&2
-    exit 1
-  }
+  access="$(cat /run/secrets/rustfs_access_key)"; secret="$(cat /run/secrets/rustfs_secret_key)"
+  status="$(curl --silent --output /dev/null --write-out "%{http_code}" --cacert /etc/rustfs/tls/ca.crt \
+    --aws-sigv4 aws:amz:us-east-1:s3 --user "${access}:${secret}" --request PUT \
+    --header "Content-Length: 15" --data-binary object-survived https://rustfs:9000/nuriteo/sentinel.txt)"
+  test "$status" = 200
 '
 
-compose start core
-attempt=0
-until compose exec -T web /nodejs/bin/node -e '
-  fetch("http://core:8080/health/live")
-    .then(async (response) => {
-      const body = await response.text();
-      if (response.status !== 200 || body !== "{\"status\":\"live\"}") process.exit(1);
-    })
-    .catch(() => process.exit(1));
-'; do
-  attempt=$((attempt + 1))
-  if [ "$attempt" -ge 60 ]; then
-    compose ps >&2 || true
-    compose logs core 2>&1 | sed -n '/nuriteo-server: serve failed (/p' >&2 || true
-    echo "Core liveness timed out" >&2
-    exit 1
-  fi
-  sleep 1
-done
-compose exec -T web /nodejs/bin/node -e '
-  fetch("http://core:8080/health/ready")
-    .then(async (response) => {
-      const body = await response.json();
-      if (
-        response.status !== 503 ||
-        body.status !== "unavailable" ||
-        body.category !== "schema-pending" ||
-        Object.keys(body).length !== 2
-      ) process.exit(1);
-    })
-    .catch(() => process.exit(1));
-'
-
-compose stop core web rustfs postgres
-compose start postgres rustfs web
-
-attempt=0
-until compose exec -T postgres pg_isready --username nuriteo --dbname nuriteo >/dev/null 2>&1; do
-  attempt=$((attempt + 1))
-  if [ "$attempt" -ge 60 ]; then
-    compose ps >&2 || true
-    echo "PostgreSQL restart timed out" >&2
-    exit 1
-  fi
-  sleep 1
-done
-
-attempt=0
-until compose exec -T rustfs curl --fail --silent --cacert /etc/rustfs/tls/ca.crt \
-  https://rustfs:9000/health >/dev/null 2>&1; do
-  attempt=$((attempt + 1))
-  if [ "$attempt" -ge 60 ]; then
-    compose ps >&2 || true
-    echo "RustFS restart timed out" >&2
-    exit 1
-  fi
-  sleep 1
-done
-
-metadata="$(compose exec -T postgres psql --username nuriteo --dbname nuriteo \
-  --tuples-only --no-align --command 'SELECT value FROM compose_sentinel;')"
-test "$metadata" = "metadata-survived"
-
+compose down
+compose up --detach --no-build
+for job in storage-init storage-check migrate bootstrap-admin; do wait_for_job "$job" 0; done
+wait_for_web
+test "$(query 'SELECT value FROM compose_sentinel;')" = 'metadata-survived'
+test "$(query "SELECT COUNT(*) FROM users WHERE is_instance_admin;")" = '1'
+test "$(query "SELECT COUNT(*) FROM audit_events WHERE action_code = 'instance_admin.bootstrap_created';")" = '1'
+compose logs bootstrap-admin | grep -q 'bootstrap-admin already-initialized'
 object="$(compose exec -T rustfs /bin/sh -eu -c '
-  access="$(cat /run/secrets/rustfs_access_key)"
-  secret="$(cat /run/secrets/rustfs_secret_key)"
-  curl --fail --silent --cacert /etc/rustfs/tls/ca.crt \
-    --aws-sigv4 aws:amz:us-east-1:s3 --user "${access}:${secret}" \
-    https://rustfs:9000/nuriteo/sentinel.txt
+  access="$(cat /run/secrets/rustfs_access_key)"; secret="$(cat /run/secrets/rustfs_secret_key)"
+  curl --fail --silent --cacert /etc/rustfs/tls/ca.crt --aws-sigv4 aws:amz:us-east-1:s3 \
+    --user "${access}:${secret}" https://rustfs:9000/nuriteo/sentinel.txt
 ')"
-test "$object" = "object-survived"
+test "$object" = 'object-survived'
+if compose logs 2>&1 | grep -Fq "$bootstrap_password"; then echo "logs exposed bootstrap password" >&2; exit 1; fi
 
-curl --fail --silent "http://127.0.0.1:${web_port}/" >/dev/null
-compose start core
+printf '\n' >"$fixture_root/bootstrap-password"
+export NURITEO_WEB_PORT="$((web_port + 1))"
+failure_compose up --detach --no-build || true
 attempt=0
-until compose exec -T web /nodejs/bin/node -e '
-  fetch("http://core:8080/health/live")
-    .then((response) => process.exit(response.status === 200 ? 0 : 1))
-    .catch(() => process.exit(1));
-'; do
-  attempt=$((attempt + 1))
-  if [ "$attempt" -ge 60 ]; then
-    compose ps >&2 || true
-    compose logs core 2>&1 | sed -n '/nuriteo-server: serve failed (/p' >&2 || true
-    echo "Core restart liveness timed out" >&2
-    exit 1
+while :; do
+  container="$(failure_compose ps -q bootstrap-admin 2>/dev/null || true)"
+  if [ -n "$container" ]; then
+    state="$($engine inspect --format '{{.State.Status}} {{.State.ExitCode}}' "$container")"
+    case "$state" in exited\ 0) echo 'failure bootstrap unexpectedly succeeded' >&2; exit 1 ;; exited\ *) break ;; esac
   fi
-  sleep 1
+  attempt=$((attempt + 1)); [ "$attempt" -lt 120 ] || { echo 'failure bootstrap timed out' >&2; exit 1; }; sleep 1
 done
-compose exec -T web /nodejs/bin/node -e '
-  fetch("http://core:8080/health/ready")
-    .then(async (response) => {
-      const body = await response.json();
-      process.exit(
-        response.status === 503 && body.category === "schema-pending" ? 0 : 1
-      );
-    })
-    .catch(() => process.exit(1));
-'
+failure_compose logs bootstrap-admin 2>&1 | grep -q 'bootstrap-admin failed (input)'
+for service in core web; do
+  container="$(failure_compose ps -q "$service" 2>/dev/null || true)"
+  if [ -n "$container" ] && [ "$($engine inspect --format '{{.State.Running}}' "$container")" = true ]; then
+    echo "$service ran after failed one-shot" >&2; exit 1
+  fi
+done
 
-echo "compose smoke ok (Web/Core DNS, expected pending readiness, persistence across stop/start)"
+echo 'compose acceptance ok (clean install, idempotent restart, persistence, failed-one-shot gate)'
