@@ -53,15 +53,19 @@ remove_compatibility_web() {
 }
 
 start_stack() {
-  local core_container web_container compatibility_web attempt
+  local core_container web_container compatibility_web attempt job
   if compose up --detach --no-build; then
     return
   fi
 
   # podman-compose 1.5.0 can return an internal dependency-start error after
-  # Core becomes healthy. Verify that gate, then recreate only the Web leaf via
-  # the provider's explicit no-deps path so completed one-shots are not started.
+  # Core becomes healthy. Recheck every one-shot before using the explicit
+  # no-deps Web leaf path because this provider does not distinguish a stopped
+  # dependency from one that completed successfully.
   [ "$engine" = podman ] || return 1
+  for job in storage-init storage-check migrate bootstrap-admin; do
+    wait_for_job "$job" 0
+  done
   core_container="$(service_container "$project" core)"
   attempt=0
   until [ "$($engine inspect --format '{{.State.Health.Status}}' "$core_container")" = healthy ]; do

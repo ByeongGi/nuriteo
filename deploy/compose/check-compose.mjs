@@ -6,12 +6,13 @@ const external = fs.readFileSync("deploy/compose/compose.external-s3.yaml", "utf
 const init = fs.readFileSync("deploy/compose/rustfs-init.sh", "utf8");
 const postgresDockerfile = fs.readFileSync("deploy/compose/postgres.Dockerfile", "utf8");
 const postgresEntrypoint = fs.readFileSync("deploy/compose/postgres-tls-entrypoint.sh", "utf8");
+const acceptance = fs.readFileSync("deploy/compose/test-compose.sh", "utf8");
 
-validate(compose, external, init);
+validate(compose, external, init, acceptance);
 verifyDriftDetection();
 console.log("compose clean-install contract ok (ordered one-shots, private persistence, external preflight only)");
 
-function validate(source, externalSource, initSource) {
+function validate(source, externalSource, initSource, acceptanceSource) {
   const services = Object.fromEntries(
     ["postgres", "rustfs", "storage-init", "storage-check", "migrate", "bootstrap-admin", "core", "web"]
       .map((name) => [name, serviceBlock(source, name)])
@@ -76,6 +77,27 @@ function validate(source, externalSource, initSource) {
   assert.match(externalCheck, /NURITEO_S3_BUCKET: \$\{NURITEO_S3_BUCKET:\?set NURITEO_S3_BUCKET\}/u);
   assert.match(externalCheck, /NURITEO_S3_ACCESS_KEY_ID_FILE: \/run\/secrets\/s3_access_key/u);
   assert.doesNotMatch(externalSource, /storage-init|rustfs|migrate|bootstrap-admin|command:.*(?:create|delete)/iu);
+
+  const startStack = shellFunction(acceptanceSource, "start_stack");
+  const oneShotGate = 'for job in storage-init storage-check migrate bootstrap-admin; do';
+  const oneShotCheck = 'wait_for_job "$job" 0';
+  assert.match(startStack, new RegExp(oneShotGate, "u"));
+  assert.match(startStack, /wait_for_job "\$job" 0/u);
+  assert.ok(
+    startStack.indexOf(oneShotGate) < startStack.indexOf(oneShotCheck) &&
+      startStack.indexOf(oneShotCheck) < startStack.indexOf('core_container="$(service_container'),
+    "the Podman Web compatibility path must verify every one-shot before Core health"
+  );
+  assert.ok(
+    startStack.indexOf('core_container="$(service_container') < startStack.indexOf("run --no-deps"),
+    "the Podman Web compatibility path must verify Core before bypassing dependency traversal"
+  );
+}
+
+function shellFunction(source, name) {
+  const match = new RegExp(`^${name}\\(\\) \\{\\n([\\s\\S]*?)^\\}`, "mu").exec(source);
+  assert(match, `missing shell function: ${name}`);
+  return match[0];
 }
 
 function serviceBlock(source, name) {
@@ -89,12 +111,13 @@ function serviceBlock(source, name) {
 
 function verifyDriftDetection() {
   const mutations = [
-    [compose.replace("condition: service_completed_successfully", "condition: service_started"), external, init],
-    [compose.replace('command: ["migrate"]', 'command: ["serve"]'), external, init],
-    [compose.replace("NURITEO_BOOTSTRAP_ADMIN_PASSWORD_FILE", "NURITEO_BOOTSTRAP_ADMIN_PASSWORD"), external, init],
-    [compose.replace("  data:\n    internal: true", "  data:"), external, init],
-    [compose, external.replace('command: ["storage-check"]', 'command: ["storage-init"]'), init],
-    [compose, external, init.replace("--head", "--request DELETE")]
+    [compose.replace("condition: service_completed_successfully", "condition: service_started"), external, init, acceptance],
+    [compose.replace('command: ["migrate"]', 'command: ["serve"]'), external, init, acceptance],
+    [compose.replace("NURITEO_BOOTSTRAP_ADMIN_PASSWORD_FILE", "NURITEO_BOOTSTRAP_ADMIN_PASSWORD"), external, init, acceptance],
+    [compose.replace("  data:\n    internal: true", "  data:"), external, init, acceptance],
+    [compose, external.replace('command: ["storage-check"]', 'command: ["storage-init"]'), init, acceptance],
+    [compose, external, init.replace("--head", "--request DELETE"), acceptance],
+    [compose, external, init, acceptance.replace("wait_for_job \"$job\" 0", ":")]
   ];
   for (const [index, args] of mutations.entries()) {
     assert.throws(() => validate(...args), `compose drift mutation ${index + 1} was not rejected`);
