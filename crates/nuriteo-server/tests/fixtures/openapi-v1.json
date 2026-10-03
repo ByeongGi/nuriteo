@@ -1,0 +1,175 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "NURITEO Public API",
+    "description": "Versioned public REST API for a self-hosted NURITEO instance.",
+    "license": {
+      "name": "Apache-2.0",
+      "identifier": "Apache-2.0"
+    },
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "/",
+      "description": "Current self-hosted instance"
+    }
+  ],
+  "paths": {
+    "/api/v1/version": {
+      "get": {
+        "tags": [
+          "system"
+        ],
+        "operationId": "version",
+        "parameters": [
+          {
+            "name": "x-request-id",
+            "in": "header",
+            "description": "Optional caller correlation ID. Invalid or duplicate values are replaced.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Server release version",
+            "headers": {
+              "x-request-id": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Validated or server-generated correlation ID"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VersionResponse"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed",
+            "headers": {
+              "x-request-id": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Validated or server-generated correlation ID"
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "FieldViolation": {
+        "type": "object",
+        "required": [
+          "path",
+          "code",
+          "detail"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "example": "INVALID"
+          },
+          "detail": {
+            "type": "string",
+            "example": "The field is invalid."
+          },
+          "path": {
+            "type": "string",
+            "example": "name"
+          }
+        }
+      },
+      "ProblemDetails": {
+        "type": "object",
+        "required": [
+          "type",
+          "title",
+          "status",
+          "detail",
+          "instance",
+          "code",
+          "request_id",
+          "errors"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "example": "VALIDATION_FAILED"
+          },
+          "detail": {
+            "type": "string",
+            "example": "One or more fields are invalid."
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FieldViolation"
+            }
+          },
+          "instance": {
+            "type": "string",
+            "example": "/api/v1/projects"
+          },
+          "request_id": {
+            "type": "string",
+            "example": "0199ee6c-c777-7000-8000-000000000001"
+          },
+          "status": {
+            "type": "integer",
+            "format": "int32",
+            "example": 422,
+            "minimum": 0
+          },
+          "title": {
+            "type": "string",
+            "example": "Validation failed"
+          },
+          "type": {
+            "type": "string",
+            "example": "/docs/problems/validation-failed"
+          }
+        }
+      },
+      "VersionResponse": {
+        "type": "object",
+        "required": [
+          "version"
+        ],
+        "properties": {
+          "version": {
+            "type": "string",
+            "example": "0.1.0"
+          }
+        }
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "system",
+      "description": "Public instance compatibility information"
+    }
+  ]
+}

@@ -3,6 +3,7 @@ pub mod cli;
 pub mod config;
 pub mod http;
 pub mod observability;
+pub mod openapi;
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const USAGE: &str = "Usage: nuriteo-server <COMMAND>";
