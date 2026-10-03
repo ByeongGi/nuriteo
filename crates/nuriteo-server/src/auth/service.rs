@@ -23,6 +23,7 @@ use crate::identity::{
     SessionServiceError, SessionToken, StoredPasswordHash, Timestamp, TransactionRevocation,
     UserId,
 };
+use crate::workspace::{WorkspaceQueryError, WorkspaceQueryService};
 
 use super::lockout::{self, FailureAccounting, LoginLockoutPolicy};
 
@@ -128,6 +129,7 @@ struct AuthRuntime {
     password: PasswordExecutor,
     lockout: LoginLockoutPolicy,
     operation_deadline: Duration,
+    workspaces: WorkspaceQueryService,
 }
 
 impl fmt::Debug for AuthService {
@@ -172,12 +174,13 @@ impl AuthService {
         let sessions = SessionService::new(pool.clone(), session_policy);
         Ok(Self {
             runtime: Some(Arc::new(AuthRuntime {
-                pool,
+                pool: pool.clone(),
                 sessions,
                 cookies,
                 password: PasswordExecutor::new(auth_policy),
                 lockout: lockout_policy,
                 operation_deadline: auth_policy.operation_deadline,
+                workspaces: WorkspaceQueryService::new(pool, auth_policy.operation_deadline),
             })),
         })
     }
@@ -264,6 +267,28 @@ impl AuthService {
             .await
             .map_err(map_session_authentication)?;
         runtime.load_me(session).await
+    }
+
+    pub(crate) async fn personal_workspaces(
+        &self,
+        request: BrowserRequestHeaders<'_>,
+    ) -> Result<Vec<crate::workspace::PersonalWorkspace>, AuthServiceError> {
+        let runtime = self.runtime()?;
+        let token = runtime
+            .cookies
+            .validate(request)
+            .map_err(|_| AuthServiceError::AuthenticationFailed)?
+            .into_session_token();
+        let session = runtime
+            .sessions
+            .authenticate(&token)
+            .await
+            .map_err(map_session_authentication)?;
+        runtime
+            .workspaces
+            .list_personal(session.user_id())
+            .await
+            .map_err(map_workspace_query)
     }
 
     fn runtime(&self) -> Result<&AuthRuntime, AuthServiceError> {
@@ -773,5 +798,14 @@ fn map_session_internal(error: SessionServiceError) -> AuthServiceError {
         SessionServiceError::OperationTimeout => AuthServiceError::OperationTimeout,
         SessionServiceError::DatabaseUnavailable => AuthServiceError::Unavailable,
         _ => AuthServiceError::Internal,
+    }
+}
+
+fn map_workspace_query(error: WorkspaceQueryError) -> AuthServiceError {
+    match error {
+        WorkspaceQueryError::UserUnavailable => AuthServiceError::AuthenticationFailed,
+        WorkspaceQueryError::PersistenceUnavailable => AuthServiceError::Unavailable,
+        WorkspaceQueryError::OperationTimeout => AuthServiceError::OperationTimeout,
+        WorkspaceQueryError::InvalidPersistedState => AuthServiceError::Internal,
     }
 }

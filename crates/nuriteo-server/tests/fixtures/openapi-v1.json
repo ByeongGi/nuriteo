@@ -173,6 +173,60 @@
         }
       }
     },
+    "/api/v1/me/workspaces": {
+      "get": {
+        "tags": [
+          "workspaces"
+        ],
+        "operationId": "current_workspaces",
+        "parameters": [
+          {
+            "name": "x-request-id",
+            "in": "header",
+            "description": "Optional caller correlation ID. Invalid or duplicate values are replaced.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Workspaces visible to the current active User",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceCollectionView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Session is missing, invalid, expired or revoked, or its User is unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Workspace persistence invariants could not be satisfied",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/version": {
       "get": {
         "tags": [
@@ -401,6 +455,49 @@
             "example": "0.1.0"
           }
         }
+      },
+      "WorkspaceCollectionView": {
+        "type": "object",
+        "required": [
+          "workspaces"
+        ],
+        "properties": {
+          "workspaces": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkspaceView"
+            }
+          }
+        }
+      },
+      "WorkspaceOwnerView": {
+        "type": "string",
+        "enum": [
+          "user"
+        ]
+      },
+      "WorkspaceView": {
+        "type": "object",
+        "required": [
+          "ownerType",
+          "ownerId",
+          "displayLabel",
+          "storageScopeId"
+        ],
+        "properties": {
+          "displayLabel": {
+            "type": "string"
+          },
+          "ownerId": {
+            "type": "string"
+          },
+          "ownerType": {
+            "$ref": "#/components/schemas/WorkspaceOwnerView"
+          },
+          "storageScopeId": {
+            "type": "string"
+          }
+        }
       }
     }
   },
@@ -412,6 +509,10 @@
     {
       "name": "authentication",
       "description": "Local browser Session lifecycle"
+    },
+    {
+      "name": "workspaces",
+      "description": "Authenticated Workspace projections"
     }
   ]
 }

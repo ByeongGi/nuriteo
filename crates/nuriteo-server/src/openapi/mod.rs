@@ -6,6 +6,7 @@ use utoipa_swagger_ui::{Config, SwaggerUi};
 
 use crate::VERSION;
 use crate::auth::{self, AuthService};
+use crate::workspace;
 
 pub const DOCUMENT_PATH: &str = "/api/openapi.json";
 pub const DOCS_PATH: &str = "/api/docs";
@@ -20,7 +21,8 @@ pub const DOCS_PATH: &str = "/api/docs";
     components(schemas(VersionResponse, ProblemDetails, FieldViolation)),
     tags(
         (name = "system", description = "Public instance compatibility information"),
-        (name = "authentication", description = "Local browser Session lifecycle")
+        (name = "authentication", description = "Local browser Session lifecycle"),
+        (name = "workspaces", description = "Authenticated Workspace projections")
     ),
     servers((url = "/", description = "Current self-hosted instance"))
 )]
@@ -113,7 +115,7 @@ pub fn router(auth: AuthService) -> Router {
 }
 
 fn openapi_parts(auth: AuthService) -> (Router, utoipa::openapi::OpenApi) {
-    auth::openapi_router(ApiDocument::openapi())
+    workspace::openapi_router(auth::openapi_router(ApiDocument::openapi()))
         .routes(routes!(version))
         .with_state(auth)
         .split_for_parts()

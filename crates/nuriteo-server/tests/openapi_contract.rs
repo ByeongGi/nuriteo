@@ -42,8 +42,14 @@ async fn serves_the_versioned_document_from_the_application_router() {
             "/api/v1/auth/session",
             "/api/v1/auth/sessions",
             "/api/v1/me",
+            "/api/v1/me/workspaces",
             "/api/v1/version"
         ]
+    );
+    assert_eq!(
+        document["paths"]["/api/v1/me/workspaces"]["get"]["responses"]["200"]["content"]["application/json"]
+            ["schema"]["$ref"],
+        "#/components/schemas/WorkspaceCollectionView"
     );
 }
 
