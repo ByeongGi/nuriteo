@@ -63,7 +63,13 @@ fn project_reconstruction_rejects_non_rfc_owner_and_scope_ids() {
         .unwrap_or_else(|error| panic!("user project fixture: {error}"));
     let mut invalid_user_owner =
         serde_json::to_value(&user_project).unwrap_or_else(|error| panic!("serialize: {error}"));
-    invalid_user_owner["owner"]["User"] = json!(non_rfc_uuid_v7(USER_ID).to_string());
+    let encoded_user_id = invalid_user_owner
+        .get_mut("owner")
+        .and_then(Value::as_object_mut)
+        .and_then(|owner| owner.get_mut("user"))
+        .expect("snake_case user owner must exist");
+    assert_eq!(encoded_user_id.as_str(), Some(USER_ID));
+    *encoded_user_id = json!(non_rfc_uuid_v7(USER_ID).to_string());
     assert!(serde_json::from_value::<Project>(invalid_user_owner).is_err());
 
     let organization_project =
@@ -71,13 +77,22 @@ fn project_reconstruction_rejects_non_rfc_owner_and_scope_ids() {
             .unwrap_or_else(|error| panic!("organization project fixture: {error}"));
     let mut invalid_organization_owner = serde_json::to_value(&organization_project)
         .unwrap_or_else(|error| panic!("serialize: {error}"));
-    invalid_organization_owner["owner"]["Organization"] =
-        json!(non_rfc_uuid_v7(ORGANIZATION_ID).to_string());
+    let encoded_organization_id = invalid_organization_owner
+        .get_mut("owner")
+        .and_then(Value::as_object_mut)
+        .and_then(|owner| owner.get_mut("organization"))
+        .expect("snake_case organization owner must exist");
+    assert_eq!(encoded_organization_id.as_str(), Some(ORGANIZATION_ID));
+    *encoded_organization_id = json!(non_rfc_uuid_v7(ORGANIZATION_ID).to_string());
     assert!(serde_json::from_value::<Project>(invalid_organization_owner).is_err());
 
     let mut invalid_scope =
         serde_json::to_value(&user_project).unwrap_or_else(|error| panic!("serialize: {error}"));
-    invalid_scope["storage_scope_id"] = json!(non_rfc_uuid_v7(STORAGE_SCOPE_ID).to_string());
+    let encoded_scope_id = invalid_scope
+        .get_mut("storage_scope_id")
+        .expect("storage_scope_id must exist");
+    assert_eq!(encoded_scope_id.as_str(), Some(STORAGE_SCOPE_ID));
+    *encoded_scope_id = json!(non_rfc_uuid_v7(STORAGE_SCOPE_ID).to_string());
     assert!(serde_json::from_value::<Project>(invalid_scope).is_err());
 }
 
