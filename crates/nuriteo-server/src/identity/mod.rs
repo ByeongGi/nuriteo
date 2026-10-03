@@ -1,3 +1,4 @@
+mod browser_security;
 mod id;
 mod password;
 mod session;
@@ -7,6 +8,10 @@ mod user;
 
 use std::fmt;
 
+pub use browser_security::{
+    BrowserCookieBoundary, BrowserCookieError, BrowserMethod, BrowserRequestHeaders,
+    CookieLifetime, IssuedBrowserCookies, SetCookieHeader, ValidatedBrowserSession,
+};
 pub use id::{SessionId, UserId};
 pub use password::{
     PasswordHashError, PasswordHashInputError, PasswordPolicy, PasswordService,
