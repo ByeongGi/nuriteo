@@ -1,6 +1,28 @@
 # Preview Service App
 
+> **Lifecycle: REFERENCE-ONLY.** This Vite application is retained as the UI,
+> accessibility, error-handling, and browser-test reference for the Self-hosted
+> transition. Do not add new product features or import this application from
+> new production code.
+
 Product IDE for NURITEO, built like a WebContainers-style workspace.
+
+## Reference-only contract
+
+Allowed changes are limited to regression fixes needed to keep the canonical
+suite trustworthy and extracting behavior, scenarios, or fixtures into the new
+implementation. New product UI belongs in `apps/web`; shared browser Runtime
+behavior belongs in the existing Runtime packages rather than in this app.
+
+The app, its source files, server and Vite configuration, tests, and checked-in
+public assets remain available as transition evidence. Existing checks and
+packaging tools may continue to read them. New production code in `apps/web`,
+`packages/api-client`, or `crates/nuriteo-server` must not import or take a path
+dependency on `apps/preview-service` or `@nuriteo/preview-service-app`.
+
+Removal is allowed only after the replacement Next.js journeys and their G4
+acceptance evidence cover the required behavior and remaining public assets
+have an explicit production-owned location.
 
 ## Stack
 
