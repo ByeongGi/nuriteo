@@ -48,6 +48,28 @@ export function validatedResult<T>(
   }
 }
 
+export function validatedResultForStatus<T>(
+  response: ApiResponse<unknown>,
+  status: number,
+  validate: (value: unknown) => T
+): ApiResult<T> {
+  if (response.status !== status) {
+    throw invalidResponse(response);
+  }
+  try {
+    return {
+      data: validate(response.data),
+      status: response.status,
+      requestId: response.requestId
+    };
+  } catch (error) {
+    if (error instanceof ApiInvalidResponseError) {
+      throw error;
+    }
+    throw invalidResponse(response);
+  }
+}
+
 export function invalidResponse(response: ApiResponse<unknown>): ApiInvalidResponseError {
   return new ApiInvalidResponseError(response.status, response.requestId);
 }

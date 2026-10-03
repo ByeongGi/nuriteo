@@ -1,4 +1,5 @@
-import { ApiConfigurationError } from "./errors.ts";
+import { mutationOptions } from "./browser-mutation.ts";
+import type { BrowserMutationOptions } from "./browser-mutation.ts";
 import {
   type ApiEmptyResult,
   type ApiResult,
@@ -15,16 +16,12 @@ import {
   readUuidV7
 } from "./validation.ts";
 
-const MAX_CSRF_BYTES = 512;
-
 export interface CreateSessionInput {
   readonly email: string;
   readonly password: string;
 }
 
-export interface DeleteSessionOptions extends DomainRequestOptions {
-  readonly csrfToken: string;
-}
+export type DeleteSessionOptions = BrowserMutationOptions;
 
 export interface MeView {
   readonly user: MeUser;
@@ -62,11 +59,10 @@ export async function deleteSession(
   client: ApiClient,
   { csrfToken, ...options }: DeleteSessionOptions
 ): Promise<ApiEmptyResult> {
-  validateCsrfToken(csrfToken);
-  const response = await client.delete<unknown>("/auth/session", {
-    ...options,
-    headers: { "x-csrf-token": csrfToken }
-  });
+  const response = await client.delete<unknown>(
+    "/auth/session",
+    mutationOptions({ csrfToken, ...options })
+  );
   return requireNoContent(response);
 }
 
@@ -121,15 +117,4 @@ function parseMeSession(value: unknown): MeSession {
     throw new TypeError("invalid Session order");
   }
   return result;
-}
-
-function validateCsrfToken(value: string): void {
-  if (
-    typeof value !== "string" ||
-    value.length === 0 ||
-    new TextEncoder().encode(value).byteLength > MAX_CSRF_BYTES ||
-    /[\u0000-\u001f\u007f]/u.test(value)
-  ) {
-    throw new ApiConfigurationError("The CSRF credential is invalid.");
-  }
 }

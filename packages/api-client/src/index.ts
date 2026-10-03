@@ -13,6 +13,28 @@ export {
 export { getVersion } from "./system.ts";
 export { getSetupStatus } from "./setup.ts";
 export { createSession, deleteSession, getCurrentUser } from "./auth.ts";
+export {
+  activateAccount,
+  issueActivationInvitation,
+  listActivationInvitations,
+  reissueActivationInvitation,
+  revokeActivationInvitation
+} from "./activation-invitations.ts";
+export {
+  acceptOrganizationInvitation,
+  archiveOrganization,
+  changeOrganizationMemberRole,
+  createOrganization,
+  declineOrganizationInvitation,
+  getOrganization,
+  issueOrganizationInvitation,
+  listOrganizationInvitations,
+  listOrganizationMembers,
+  reissueOrganizationInvitation,
+  removeOrganizationMember,
+  revokeOrganizationInvitation,
+  updateOrganization
+} from "./organizations.ts";
 export { getCurrentWorkspaces } from "./workspaces.ts";
 export {
   API_PREFIX,
@@ -41,6 +63,37 @@ export type {
   MeView
 } from "./auth.ts";
 export type { ApiEmptyResult, ApiResult, DomainRequestOptions } from "./domain.ts";
+export type { BrowserMutationOptions } from "./browser-mutation.ts";
+export { OneTimeUrl } from "./one-time-url.ts";
+export type {
+  ActivateAccountInput,
+  ActivationInvitation,
+  ActivationInvitationCollection,
+  ActivationInvitationStatus,
+  IssueActivationInvitationInput,
+  IssuedActivationInvitation,
+  ReissueActivationInvitationInput
+} from "./activation-invitations.ts";
+export type {
+  ArchiveOrganizationInput,
+  ChangeOrganizationMemberRoleInput,
+  CreateOrganizationInput,
+  IssueOrganizationInvitationInput,
+  IssuedOrganizationInvitation,
+  Organization,
+  OrganizationInvitation,
+  OrganizationInvitationCollection,
+  OrganizationInvitationInput,
+  OrganizationInvitationStatus,
+  OrganizationMember,
+  OrganizationMemberCollection,
+  OrganizationMemberInput,
+  OrganizationResult,
+  OrganizationRole,
+  OrganizationStatus,
+  ReissueOrganizationInvitationInput,
+  UpdateOrganizationInput
+} from "./organizations.ts";
 export type { VersionResponse } from "./system.ts";
 export type { SetupStatus } from "./setup.ts";
 export type {
