@@ -1,5 +1,5 @@
-mod browser_security;
 mod activation_invitation;
+mod browser_security;
 mod id;
 mod password;
 mod session;
