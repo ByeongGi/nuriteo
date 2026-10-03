@@ -81,12 +81,12 @@ importers:
       '@base-ui/react':
         specifier: ^1.8.0
         version: 1.8.0(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
-      '@nuriteo/preview-service':
-        specifier: workspace:*
-        version: link:../../packages/preview-service
       '@monaco-editor/react':
         specifier: ^4.7.0
         version: 4.7.0(monaco-editor@0.56.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+      '@nuriteo/preview-service':
+        specifier: workspace:*
+        version: link:../../packages/preview-service
       '@xterm/addon-fit':
         specifier: ^0.11.0
         version: 0.11.0
@@ -148,6 +148,9 @@ importers:
       '@base-ui/react':
         specifier: 1.8.0
         version: 1.8.0(@types/react@19.0.3)(react-dom@19.0.0(react@19.0.0))(react@19.0.0)
+      '@nuriteo/api-client':
+        specifier: workspace:*
+        version: link:../../packages/api-client
       class-variance-authority:
         specifier: 0.7.1
         version: 0.7.1
@@ -163,6 +166,9 @@ importers:
       react-dom:
         specifier: 19.0.0
         version: 19.0.0(react@19.0.0)
+      server-only:
+        specifier: 0.0.1
+        version: 0.0.1
       tailwind-merge:
         specifier: 3.7.0
         version: 3.7.0
@@ -2405,6 +2411,9 @@ packages:
   serve-static@1.16.3:
     resolution: {integrity: sha512-x0RTqQel6g5SY7Lg6ZreMmsOzncHFU7nhnRWkKgWuMTu5NN0DR5oruckMqRvacAN9d5w6ARnRBXl9xhDCgfMeA==}
     engines: {node: '>= 0.8.0'}
+
+  server-only@0.0.1:
+    resolution: {integrity: sha512-qepMx2JxAa5jjfzxG79yPPq+8BuFToHd1hm7kI+Z4zAq1ftQiP7HcxMhDDItrbtwVeLg/cY2JnKnrcFkmiswNA==}
 
   setprototypeof@1.2.0:
     resolution: {integrity: sha512-E5LDX7Wrp85Kil5bhZv46j8jOeboKq5JMmYM3gVGdGH8xFpPWXUMsNrlODCrkoxMEeNi/XZIwuRvY4XNwYMJpw==}
@@ -4679,6 +4688,8 @@ snapshots:
       send: 0.19.2(supports-color@8.1.1)
     transitivePeerDependencies:
       - supports-color
+
+  server-only@0.0.1: {}
 
   setprototypeof@1.2.0: {}
 
