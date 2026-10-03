@@ -34,6 +34,20 @@ select_compose() {
 compose() { "${compose_command[@]}" --file "$compose_file" --project-name "$project" "$@"; }
 failure_compose() { "${compose_command[@]}" --file "$compose_file" --project-name "$failure_project" "$@"; }
 
+service_container() {
+  local project_name="$1" service="$2" containers
+  containers="$($engine ps --all \
+    --filter "label=com.docker.compose.project=${project_name}" \
+    --filter "label=com.docker.compose.service=${service}" \
+    --format '{{.ID}}')"
+  [ -n "$containers" ] || return 1
+  if [[ "$containers" == *$'\n'* ]]; then
+    echo "multiple containers found for ${project_name}/${service}" >&2
+    return 1
+  fi
+  printf '%s\n' "$containers"
+}
+
 cleanup() {
   if [ "${NURITEO_COMPOSE_KEEP:-0}" = 1 ]; then
     echo "preserving Compose projects: $project $failure_project" >&2
@@ -55,7 +69,7 @@ wait_for_web() {
 
 wait_for_job() {
   local service="$1" expected="$2" attempt=0 container status
-  until container="$(compose ps -q "$service")" && [ -n "$container" ]; do
+  until container="$(service_container "$project" "$service")"; do
     attempt=$((attempt + 1)); [ "$attempt" -lt 120 ] || return 1; sleep 1
   done
   while :; do
@@ -136,13 +150,13 @@ if ! compose up --detach --no-build; then
   # podman-compose 1.5.0 can return an internal dependency-start error after
   # Core becomes healthy. Verify that gate, then start only its already-created
   # leaf container without asking the provider to traverse dependencies again.
-  core_container="$(compose ps -q core)"
+  core_container="$(service_container "$project" core)"
   test -n "$core_container"
   attempt=0
   until [ "$($engine inspect --format '{{.State.Health.Status}}' "$core_container")" = healthy ]; do
     attempt=$((attempt + 1)); [ "$attempt" -lt 60 ] || exit 1; sleep 1
   done
-  web_container="$(compose ps -q web)"
+  web_container="$(service_container "$project" web)"
   test -n "$web_container"
   "$engine" start "$web_container" >/dev/null
 fi
@@ -191,7 +205,7 @@ export NURITEO_WEB_PORT="$((web_port + 1))"
 failure_compose up --detach --no-build || true
 attempt=0
 while :; do
-  container="$(failure_compose ps -q bootstrap-admin 2>/dev/null || true)"
+  container="$(service_container "$failure_project" bootstrap-admin 2>/dev/null || true)"
   if [ -n "$container" ]; then
     state="$($engine inspect --format '{{.State.Status}} {{.State.ExitCode}}' "$container")"
     case "$state" in exited\ 0) echo 'failure bootstrap unexpectedly succeeded' >&2; exit 1 ;; exited\ *) break ;; esac
@@ -200,7 +214,7 @@ while :; do
 done
 failure_compose logs bootstrap-admin 2>&1 | grep -q 'bootstrap-admin failed (input)'
 for service in core web; do
-  container="$(failure_compose ps -q "$service" 2>/dev/null || true)"
+  container="$(service_container "$failure_project" "$service" 2>/dev/null || true)"
   if [ -n "$container" ] && [ "$($engine inspect --format '{{.State.Running}}' "$container")" = true ]; then
     echo "$service ran after failed one-shot" >&2; exit 1
   fi
