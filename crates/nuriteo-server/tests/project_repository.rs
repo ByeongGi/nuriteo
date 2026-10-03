@@ -477,13 +477,23 @@ async fn wait_for_database_block(pool: &DatabasePool, holder_pid: i32, contender
         .expect("blocking observer connection must be acquired");
 
     loop {
-        let holder_blocks_contender: bool =
+        let remaining = deadline.saturating_duration_since(time::Instant::now());
+        if remaining.is_zero() {
+            return false;
+        }
+        let observation = time::timeout(
+            remaining,
             sqlx::query_scalar("SELECT $1::integer = ANY(pg_blocking_pids($2::integer))")
                 .bind(holder_pid)
                 .bind(contender_pid)
-                .fetch_one(&mut *observer)
-                .await
-                .expect("blocking relationship must be observable");
+                .fetch_one(&mut *observer),
+        )
+        .await;
+        let Ok(observation) = observation else {
+            return false;
+        };
+        let holder_blocks_contender: bool =
+            observation.expect("blocking relationship query must succeed before the deadline");
 
         if holder_blocks_contender {
             return true;
