@@ -9,6 +9,7 @@ use crate::database::{
     DatabasePool, DatabaseRuntimeConfig, SchemaReadiness, check_schema_readiness,
     run_embedded_migrations,
 };
+use crate::health::run_http_healthcheck;
 use crate::{CommandStatus, VERSION};
 
 const BINARY_NAME: &str = "nuriteo-server";
@@ -143,6 +144,9 @@ where
             Ok(CommandStatus::Success)
         }
         Ok(CliAction::Operational(OperationalCommand::Migrate)) => migrate(stdout, stderr).await,
+        Ok(CliAction::Operational(OperationalCommand::Healthcheck)) => {
+            healthcheck(stdout, stderr).await
+        }
         Ok(CliAction::Operational(command)) => unavailable(command, stderr),
         Err(error) if is_successful_display(error.kind()) => {
             write!(stdout, "{error}")?;
@@ -152,6 +156,19 @@ where
             write!(stderr, "{error}")?;
             Ok(CommandStatus::UsageError)
         }
+    }
+}
+
+async fn healthcheck<O: Write, E: Write>(
+    stdout: &mut O,
+    stderr: &mut E,
+) -> io::Result<CommandStatus> {
+    if run_http_healthcheck(&SystemEnvironment).await {
+        writeln!(stdout, "healthcheck ready")?;
+        Ok(CommandStatus::Success)
+    } else {
+        writeln!(stderr, "{BINARY_NAME}: healthcheck unavailable")?;
+        Ok(CommandStatus::Failure)
     }
 }
 

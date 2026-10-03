@@ -307,4 +307,20 @@ pub const CONFIG_FIELDS: &[ConfigField] = &[
         "bounded PEM client private key; requires client certificate",
         "database.tls.clientKey.existingSecret",
     ),
+    field(
+        "NURITEO_HEALTHCHECK_URL",
+        None,
+        "URL",
+        Some("http://127.0.0.1:8080/health/ready"),
+        "exact /health/ready URL; HTTPS except loopback HTTP",
+        "server.healthcheck.url",
+    ),
+    field(
+        "NURITEO_HEALTHCHECK_TIMEOUT_MS",
+        None,
+        "milliseconds",
+        Some("2000"),
+        "integer from 100 through 10000",
+        "server.healthcheck.timeoutMs",
+    ),
 ];

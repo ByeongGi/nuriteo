@@ -15,6 +15,7 @@ pub enum ObjectOperation {
     MultipartUpload,
     MultipartComplete,
     MultipartAbort,
+    Readiness,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

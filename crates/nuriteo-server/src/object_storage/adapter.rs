@@ -236,6 +236,18 @@ impl S3ObjectStore {
         Ok(())
     }
 
+    /// Performs the smallest read-only request that proves the configured
+    /// bucket is reachable and authorized. It never lists keys or mutates data.
+    pub async fn check_readiness(&self) -> Result<(), ObjectStoreError> {
+        self.client
+            .head_bucket()
+            .bucket(&self.bucket)
+            .send()
+            .await
+            .map_err(|error| classify_sdk_error(ObjectOperation::Readiness, &error))?;
+        Ok(())
+    }
+
     pub async fn list(&self, request: ListRequest) -> Result<ListPage, ObjectStoreError> {
         request
             .validate(&self.limits)

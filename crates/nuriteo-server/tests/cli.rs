@@ -50,7 +50,7 @@ fn invalid_invocations_are_usage_errors() {
 
 #[test]
 fn unavailable_commands_fail_closed() {
-    for command in ["serve", "bootstrap-admin", "healthcheck"] {
+    for command in ["serve", "bootstrap-admin"] {
         let output = run(&[command]);
 
         assert_eq!(output.status.code(), Some(1), "command: {command}");
@@ -60,6 +60,20 @@ fn unavailable_commands_fail_closed() {
             format!("nuriteo-server: `{command}` is not available in this build\n")
         );
     }
+}
+
+#[test]
+fn healthcheck_fails_closed_when_the_endpoint_is_unavailable() {
+    let output = Command::new(env!("CARGO_BIN_EXE_nuriteo-server"))
+        .arg("healthcheck")
+        .env("NURITEO_HEALTHCHECK_URL", "http://127.0.0.1:9/health/ready")
+        .env("NURITEO_HEALTHCHECK_TIMEOUT_MS", "100")
+        .output()
+        .expect("nuriteo-server binary should start");
+
+    assert_eq!(output.status.code(), Some(1));
+    assert!(output.stdout.is_empty());
+    assert_eq!(output.stderr, b"nuriteo-server: healthcheck unavailable\n");
 }
 
 #[test]
