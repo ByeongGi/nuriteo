@@ -1,6 +1,7 @@
 mod id;
 mod password;
 mod session;
+mod session_service;
 mod timestamp;
 mod user;
 
@@ -12,6 +13,10 @@ pub use password::{
     PasswordVerification, PasswordVerifyError, StoredPasswordHash,
 };
 pub use session::{Session, SessionFields};
+pub use session_service::{
+    IssuedSession, SessionPolicy, SessionPolicyError, SessionRevokeResult, SessionRotationKind,
+    SessionService, SessionServiceError, SessionToken,
+};
 pub use timestamp::Timestamp;
 pub use user::{User, UserFields, UserStatus};
 
