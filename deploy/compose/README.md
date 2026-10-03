@@ -7,6 +7,8 @@ This directory contains the official single-host topology for NURITEO. Only the 
 Set these variables to absolute paths before rendering or starting the stack:
 
 - `NURITEO_POSTGRES_PASSWORD_FILE`: PostgreSQL application password
+- `NURITEO_POSTGRES_SERVER_CERT_FILE`: PostgreSQL server certificate with `DNS:postgres`
+- `NURITEO_POSTGRES_SERVER_KEY_FILE`: matching PostgreSQL private key
 - `NURITEO_DATABASE_URL_FILE`: complete `postgres://` URL for Core
 - `NURITEO_DATABASE_CA_FILE`: CA certificate that verifies the PostgreSQL service identity
 - `NURITEO_RUSTFS_ACCESS_KEY_FILE`: non-default RustFS access key
@@ -15,9 +17,9 @@ Set these variables to absolute paths before rendering or starting the stack:
 - `NURITEO_RUSTFS_TLS_DIR`: directory containing `ca.crt`, `rustfs_cert.pem`, and `rustfs_key.pem`
 - `NURITEO_EXTERNAL_URL`: canonical browser origin
 
-The Compose file has no credential defaults. Protect every credential and private-key file with owner-only permissions. The database URL and RustFS credentials are mounted as Compose secrets; RustFS TLS material is mounted read-only.
+The Compose file has no credential defaults. Protect every credential and private-key file with owner-only permissions. A minimal PostgreSQL derivative copies its mounted certificate and key into a private runtime path before delegating to the upstream entrypoint with TLS enabled. The Dockerfile build context allowlists only that wrapper. The database URL, database CA, PostgreSQL identity, and RustFS credentials are mounted as Compose secrets; RustFS TLS material is mounted read-only. Core always verifies the PostgreSQL hostname and CA; this topology does not claim that PostgreSQL rejects every non-TLS client.
 
-Optional settings are `NURITEO_WEB_BIND_IP` (default `127.0.0.1`), `NURITEO_WEB_PORT` (default `3000`), `NURITEO_SERVER_IMAGE`, and `NURITEO_WEB_IMAGE`.
+Optional settings are `NURITEO_WEB_BIND_IP` (default `127.0.0.1`), `NURITEO_WEB_PORT` (default `3000`), `NURITEO_POSTGRES_IMAGE`, `NURITEO_SERVER_IMAGE`, and `NURITEO_WEB_IMAGE`.
 
 ## Validation
 

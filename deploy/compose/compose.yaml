@@ -7,13 +7,26 @@ x-nuriteo-cmp-002-readiness:
 
 services:
   postgres:
-    image: docker.io/library/postgres@sha256:f3bd19c606e442c3d7bdfa8002e03fe260a1023351e0ea4598032022b68dd6e3
+    image: ${NURITEO_POSTGRES_IMAGE:-localhost/nuriteo-postgres:cmp-001}
+    build:
+      context: ../..
+      dockerfile: deploy/compose/postgres.Dockerfile
+    command:
+      - postgres
+      - -c
+      - ssl=on
+      - -c
+      - ssl_cert_file=/var/lib/postgresql/tls/server.crt
+      - -c
+      - ssl_key_file=/var/lib/postgresql/tls/server.key
     environment:
       POSTGRES_DB: nuriteo
       POSTGRES_USER: nuriteo
       POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
     secrets:
       - postgres_password
+      - postgres_server_cert
+      - postgres_server_key
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
@@ -115,6 +128,10 @@ volumes:
 secrets:
   postgres_password:
     file: ${NURITEO_POSTGRES_PASSWORD_FILE:?set NURITEO_POSTGRES_PASSWORD_FILE}
+  postgres_server_cert:
+    file: ${NURITEO_POSTGRES_SERVER_CERT_FILE:?set NURITEO_POSTGRES_SERVER_CERT_FILE}
+  postgres_server_key:
+    file: ${NURITEO_POSTGRES_SERVER_KEY_FILE:?set NURITEO_POSTGRES_SERVER_KEY_FILE}
   database_url:
     file: ${NURITEO_DATABASE_URL_FILE:?set NURITEO_DATABASE_URL_FILE}
   database_ca:

@@ -91,6 +91,8 @@ openssl x509 -req -in "$fixture_root/server.csr" \
 chmod 600 "$fixture_root/rustfs-tls/rustfs_key.pem"
 
 export NURITEO_POSTGRES_PASSWORD_FILE="$fixture_root/postgres-password"
+export NURITEO_POSTGRES_SERVER_CERT_FILE="$fixture_root/postgres-tls/server.crt"
+export NURITEO_POSTGRES_SERVER_KEY_FILE="$fixture_root/postgres-tls/server.key"
 export NURITEO_DATABASE_URL_FILE="$fixture_root/database-url"
 export NURITEO_DATABASE_CA_FILE="$fixture_root/postgres-tls/ca.crt"
 export NURITEO_RUSTFS_ACCESS_KEY_FILE="$fixture_root/rustfs-access-key"
@@ -99,6 +101,7 @@ export NURITEO_RUSTFS_CA_FILE="$fixture_root/rustfs-tls/ca.crt"
 export NURITEO_RUSTFS_TLS_DIR="$fixture_root/rustfs-tls"
 export NURITEO_EXTERNAL_URL="http://127.0.0.1:${web_port}"
 export NURITEO_WEB_PORT="$web_port"
+export NURITEO_POSTGRES_IMAGE="localhost/nuriteo-postgres:cmp-001"
 export NURITEO_SERVER_IMAGE="localhost/nuriteo-server:cmp-001"
 export NURITEO_WEB_IMAGE="localhost/nuriteo-web:cmp-001"
 
@@ -110,7 +113,7 @@ if grep -Fq 'compose-db-password-7e3bc2' "$rendered" || \
   exit 1
 fi
 
-compose build core web
+compose build postgres core web
 compose up --no-start --no-build core
 compose up --detach postgres rustfs web
 
@@ -124,31 +127,13 @@ until compose exec -T postgres pg_isready --username nuriteo --dbname nuriteo >/
   fi
   sleep 1
 done
-
-compose exec -T --user root postgres /bin/sh -c \
-  'umask 077; cat > /var/lib/postgresql/server.crt' \
-  <"$fixture_root/postgres-tls/server.crt"
-compose exec -T --user root postgres /bin/sh -c \
-  'umask 077; cat > /var/lib/postgresql/server.key' \
-  <"$fixture_root/postgres-tls/server.key"
-compose exec -T --user root postgres chown postgres:postgres \
-  /var/lib/postgresql/server.crt /var/lib/postgresql/server.key
-compose exec -T --user root postgres chmod 600 /var/lib/postgresql/server.key
-compose exec -T postgres psql --username nuriteo --dbname nuriteo --set ON_ERROR_STOP=1 \
-  --command "ALTER SYSTEM SET ssl = 'on'" \
-  --command "ALTER SYSTEM SET ssl_cert_file = '/var/lib/postgresql/server.crt'" \
-  --command "ALTER SYSTEM SET ssl_key_file = '/var/lib/postgresql/server.key'" >/dev/null
-compose restart postgres
-attempt=0
-until compose exec -T postgres pg_isready --username nuriteo --dbname nuriteo >/dev/null 2>&1; do
-  attempt=$((attempt + 1))
-  if [ "$attempt" -ge 60 ]; then
-    compose ps >&2 || true
-    echo "TLS PostgreSQL restart timed out" >&2
-    exit 1
-  fi
-  sleep 1
-done
+postgres_tls="$(compose exec -T postgres /bin/sh -eu -c '
+  PGPASSWORD="$(cat /run/secrets/postgres_password)" \
+    psql --host postgres --username nuriteo --dbname nuriteo \
+      --tuples-only --no-align \
+      --command "SELECT ssl FROM pg_stat_ssl WHERE pid = pg_backend_pid();"
+')"
+test "$postgres_tls" = "t"
 
 attempt=0
 until compose exec -T rustfs curl --fail --silent --cacert /etc/rustfs/tls/ca.crt \

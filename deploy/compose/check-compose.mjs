@@ -3,24 +3,50 @@ import fs from "node:fs";
 
 const composePath = "deploy/compose/compose.yaml";
 const compose = fs.readFileSync(composePath, "utf8");
+const postgresDockerfile = fs.readFileSync("deploy/compose/postgres.Dockerfile", "utf8");
+const postgresEntrypoint = fs.readFileSync(
+  "deploy/compose/postgres-tls-entrypoint.sh",
+  "utf8"
+);
+const postgresDockerignore = fs.readFileSync(
+  "deploy/compose/postgres.Dockerfile.dockerignore",
+  "utf8"
+);
 
-validate(compose);
+validate(compose, postgresDockerfile, postgresEntrypoint);
 verifyDriftDetection();
 
 console.log(
   "compose topology contract ok (Web-only publish, internal data plane, file secrets, persistent volumes)"
 );
 
-function validate(source) {
+function validate(source, dockerfile = postgresDockerfile, entrypoint = postgresEntrypoint) {
   const postgres = serviceBlock(source, "postgres");
   const rustfs = serviceBlock(source, "rustfs");
   const core = serviceBlock(source, "core");
   const web = serviceBlock(source, "web");
 
+  assert.match(postgres, /image: \$\{NURITEO_POSTGRES_IMAGE:-localhost\/nuriteo-postgres:cmp-001\}/u);
+  assert.match(postgres, /dockerfile: deploy\/compose\/postgres\.Dockerfile/u);
   assert.match(
-    postgres,
-    /image: docker\.io\/library\/postgres@sha256:f3bd19c606e442c3d7bdfa8002e03fe260a1023351e0ea4598032022b68dd6e3/u
+    dockerfile,
+    /^FROM docker\.io\/library\/postgres@sha256:f3bd19c606e442c3d7bdfa8002e03fe260a1023351e0ea4598032022b68dd6e3$/mu
   );
+  assert.match(dockerfile, /ENTRYPOINT \["\/usr\/local\/bin\/nuriteo-postgres-entrypoint"\]/u);
+  assert.equal(
+    postgresDockerignore,
+    "**\n!deploy/\n!deploy/compose/\n!deploy/compose/postgres-tls-entrypoint.sh\n"
+  );
+  for (const argument of [
+    "ssl=on",
+    "ssl_cert_file=/var/lib/postgresql/tls/server.crt",
+    "ssl_key_file=/var/lib/postgresql/tls/server.key"
+  ]) {
+    assert(postgres.includes(`      - ${argument}`), `missing PostgreSQL TLS argument: ${argument}`);
+  }
+  assert.match(entrypoint, /install -d -m 0700 -o postgres -g postgres/u);
+  assert.match(entrypoint, /install -m 0600 -o postgres -g postgres/u);
+  assert.match(entrypoint, /exec \/usr\/local\/bin\/docker-entrypoint\.sh "\$@"/u);
   assert.match(
     rustfs,
     /image: docker\.io\/rustfs\/rustfs@sha256:42edb61d588775f9431ff436216d14392d2234d4eb2ed68321569fbf7245b36b/u
@@ -67,6 +93,10 @@ function validate(source) {
   ]) {
     assert(source.includes(contract), `missing file-secret contract: ${contract}`);
   }
+  for (const secret of ["postgres_server_cert", "postgres_server_key"]) {
+    assert(postgres.includes(`      - ${secret}`), `missing PostgreSQL TLS secret: ${secret}`);
+    assert.match(source, new RegExp(`^  ${secret}:\\n    file: \\u0024\\{NURITEO_`, "mu"));
+  }
   assert.doesNotMatch(
     source,
     /^\s+(?:POSTGRES_PASSWORD|RUSTFS_ACCESS_KEY|RUSTFS_SECRET_KEY|NURITEO_DATABASE_URL|NURITEO_S3_ACCESS_KEY_ID|NURITEO_S3_SECRET_ACCESS_KEY):/mu,
@@ -105,11 +135,15 @@ function verifyDriftDetection() {
       "      NURITEO_DATABASE_CA_FILE: /run/secrets/database_ca",
       "      NURITEO_DATABASE_TLS_MODE: disable"
     ),
-    compose.replace("docker.io/library/postgres@sha256:", "docker.io/library/postgres:"),
+    postgresDockerfile.replace("docker.io/library/postgres@sha256:", "docker.io/library/postgres:"),
     compose.replace("rustfs_data:/data", "postgres_data:/data"),
     compose.replace("  data:\n    internal: true", "  data:")
   ];
   for (const [index, mutation] of mutations.entries()) {
-    assert.throws(() => validate(mutation), `compose drift mutation ${index + 1} was not rejected`);
+    const isDockerfileMutation = index === 3;
+    assert.throws(
+      () => validate(isDockerfileMutation ? compose : mutation, isDockerfileMutation ? mutation : postgresDockerfile),
+      `compose drift mutation ${index + 1} was not rejected`
+    );
   }
 }
