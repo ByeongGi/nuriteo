@@ -1,3 +1,5 @@
+mod invitation;
+mod invitation_service;
 mod model;
 mod service;
 mod types;
@@ -48,3 +50,13 @@ impl std::error::Error for OrganizationError {}
 
 #[cfg(test)]
 mod tests;
+pub use invitation::{
+    OrganizationInvitation, OrganizationInvitationError, OrganizationInvitationFields,
+    OrganizationInvitationId, OrganizationInvitationStatus, OrganizationInvitationToken,
+};
+pub use invitation_service::{
+    IssuedOrganizationInvitation, OrganizationInvitationActor, OrganizationInvitationAuditContext,
+    OrganizationInvitationInvitee, OrganizationInvitationPolicy,
+    OrganizationInvitationRevokeResult, OrganizationInvitationService,
+    OrganizationInvitationServiceError,
+};
