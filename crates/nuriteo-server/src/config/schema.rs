@@ -1,152 +1,111 @@
-/// Operational metadata for one environment input.
+/// Deployment metadata for one startup configuration field.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ConfigField {
-    pub name: &'static str,
+    pub environment: &'static str,
+    pub file_key: Option<&'static str>,
     pub value_type: &'static str,
     pub default_value: Option<&'static str>,
     pub secret: bool,
     pub reloadable: bool,
     pub validation: &'static str,
+    pub compose_mapping: &'static str,
+    pub helm_mapping: &'static str,
 }
 
+pub(super) const CONFIG_FILE: &str = "NURITEO_CONFIG_FILE";
 pub(super) const STRICT: &str = "NURITEO_CONFIG_STRICT";
-pub(super) const LISTEN_ADDR: &str = "NURITEO_LISTEN_ADDR";
+pub(super) const LISTEN_ADDR: &str = "NURITEO_HTTP_LISTEN_ADDR";
+pub(super) const SHUTDOWN_DRAIN_TIMEOUT_MS: &str = "NURITEO_SHUTDOWN_DRAIN_TIMEOUT_MS";
 pub(super) const LOG_FORMAT: &str = "NURITEO_LOG_FORMAT";
 pub(super) const LOG_LEVEL: &str = "NURITEO_LOG_LEVEL";
 pub(super) const EXTERNAL_URL: &str = "NURITEO_EXTERNAL_URL";
 pub(super) const PREVIEW_BASE_DOMAIN: &str = "NURITEO_PREVIEW_BASE_DOMAIN";
-pub(super) const DATABASE_URL: &str = "NURITEO_DATABASE_URL";
-pub(super) const DATABASE_URL_FILE: &str = "NURITEO_DATABASE_URL_FILE";
-pub(super) const S3_ENDPOINT: &str = "NURITEO_S3_ENDPOINT";
-pub(super) const S3_REGION: &str = "NURITEO_S3_REGION";
-pub(super) const S3_BUCKET: &str = "NURITEO_S3_BUCKET";
-pub(super) const S3_PATH_STYLE: &str = "NURITEO_S3_PATH_STYLE";
-pub(super) const S3_ACCESS_KEY_ID: &str = "NURITEO_S3_ACCESS_KEY_ID";
-pub(super) const S3_ACCESS_KEY_ID_FILE: &str = "NURITEO_S3_ACCESS_KEY_ID_FILE";
-pub(super) const S3_SECRET_ACCESS_KEY: &str = "NURITEO_S3_SECRET_ACCESS_KEY";
-pub(super) const S3_SECRET_ACCESS_KEY_FILE: &str = "NURITEO_S3_SECRET_ACCESS_KEY_FILE";
-pub(super) const MASTER_KEY_FILE: &str = "NURITEO_MASTER_KEY_FILE";
-pub(super) const SESSION_KEY_FILE: &str = "NURITEO_SESSION_KEY_FILE";
 
 const fn field(
-    name: &'static str,
+    environment: &'static str,
+    file_key: Option<&'static str>,
     value_type: &'static str,
     default_value: Option<&'static str>,
-    secret: bool,
     validation: &'static str,
+    helm_mapping: &'static str,
 ) -> ConfigField {
     ConfigField {
-        name,
+        environment,
+        file_key,
         value_type,
         default_value,
-        secret,
+        secret: false,
         reloadable: false,
         validation,
+        compose_mapping: environment,
+        helm_mapping,
     }
 }
 
-/// The M0 configuration registry used for typo detection and deployment mapping.
+/// The M0 registry used for typo detection and deployment documentation.
 pub const CONFIG_FIELDS: &[ConfigField] = &[
-    field(STRICT, "boolean", Some("true"), false, "true or false"),
+    field(
+        CONFIG_FILE,
+        None,
+        "path",
+        None,
+        "readable UTF-8 TOML file no larger than 64 KiB",
+        "server.config.existingFile",
+    ),
+    field(
+        STRICT,
+        Some("config.strict_environment"),
+        "boolean",
+        Some("true"),
+        "true or false",
+        "server.config.strictEnvironment",
+    ),
     field(
         LISTEN_ADDR,
+        Some("server.listen_address"),
         "socket address",
-        Some("0.0.0.0:8080"),
-        false,
-        "IP address and port",
+        Some("127.0.0.1:8080"),
+        "literal IP address and non-zero port",
+        "server.listenAddress",
     ),
-    field(LOG_FORMAT, "enum", Some("json"), false, "text or json"),
+    field(
+        SHUTDOWN_DRAIN_TIMEOUT_MS,
+        Some("server.shutdown_drain_timeout_ms"),
+        "milliseconds",
+        Some("30000"),
+        "integer from 1000 through 300000",
+        "server.shutdownDrainTimeoutMs",
+    ),
+    field(
+        LOG_FORMAT,
+        Some("logging.format"),
+        "enum",
+        Some("json"),
+        "text or json",
+        "observability.logFormat",
+    ),
     field(
         LOG_LEVEL,
+        Some("logging.level"),
         "enum",
         Some("info"),
-        false,
         "error, warn, info, or debug",
+        "observability.logLevel",
     ),
     field(
         EXTERNAL_URL,
+        Some("public.external_url"),
         "URL",
         None,
-        false,
-        "HTTPS origin; HTTP only for loopback development",
+        "root HTTPS origin; HTTP only for loopback development",
+        "global.externalUrl",
     ),
     field(
         PREVIEW_BASE_DOMAIN,
+        Some("public.preview_base_domain"),
         "DNS domain",
         None,
-        false,
-        "domain without scheme, port, or wildcard",
-    ),
-    field(
-        DATABASE_URL,
-        "PostgreSQL URL",
-        None,
-        true,
-        "postgres/postgresql URL with host, user, and database",
-    ),
-    field(
-        DATABASE_URL_FILE,
-        "secret file path",
-        None,
-        true,
-        "readable non-empty UTF-8 file; exclusive with NURITEO_DATABASE_URL",
-    ),
-    field(S3_ENDPOINT, "URL", None, false, "HTTP or HTTPS URL"),
-    field(
-        S3_REGION,
-        "string",
-        None,
-        false,
-        "1-63 safe identifier characters",
-    ),
-    field(S3_BUCKET, "string", None, false, "valid S3 bucket name"),
-    field(
-        S3_PATH_STYLE,
-        "boolean",
-        Some("false"),
-        false,
-        "true or false",
-    ),
-    field(
-        S3_ACCESS_KEY_ID,
-        "string",
-        None,
-        true,
-        "non-empty credential",
-    ),
-    field(
-        S3_ACCESS_KEY_ID_FILE,
-        "secret file path",
-        None,
-        true,
-        "readable non-empty UTF-8 file; exclusive with direct value",
-    ),
-    field(
-        S3_SECRET_ACCESS_KEY,
-        "string",
-        None,
-        true,
-        "non-empty credential",
-    ),
-    field(
-        S3_SECRET_ACCESS_KEY_FILE,
-        "secret file path",
-        None,
-        true,
-        "readable non-empty UTF-8 file; exclusive with direct value",
-    ),
-    field(
-        MASTER_KEY_FILE,
-        "secret file path",
-        None,
-        true,
-        "readable UTF-8 file containing at least 32 bytes",
-    ),
-    field(
-        SESSION_KEY_FILE,
-        "secret file path",
-        None,
-        true,
-        "readable UTF-8 file containing a distinct value of at least 32 bytes",
+        "optional ASCII domain without scheme, port, wildcard, or trailing dot",
+        "preview.baseDomain",
     ),
 ];

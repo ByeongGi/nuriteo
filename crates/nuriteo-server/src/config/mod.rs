@@ -6,8 +6,9 @@ mod validation;
 use std::fmt;
 use std::io;
 use std::net::SocketAddr;
+use std::time::Duration;
 
-pub use load::{Environment, FileReader, SystemEnvironment, SystemFileReader};
+pub use load::{Environment, FileReader, SystemEnvironment, SystemFileReader, load_secret};
 pub use redaction::SecretString;
 pub use schema::{CONFIG_FIELDS, ConfigField};
 use url::Url;
@@ -16,27 +17,36 @@ use url::Url;
 pub struct Config {
     pub server: ServerConfig,
     pub public: PublicConfig,
-    pub database: DatabaseConfig,
-    pub object_storage: ObjectStorageConfig,
-    pub crypto: CryptoConfig,
 }
 
 impl Config {
-    /// Loads, validates, and returns the complete startup configuration.
+    /// Loads and validates startup configuration from TOML and environment sources.
     ///
-    /// Loading is side-effect free when callers provide injected sources. Use
-    /// [`SystemEnvironment`] and [`SystemFileReader`] at the binary boundary.
+    /// Environment values override TOML values. Callers receive unknown-variable
+    /// warnings when strict environment checking is disabled.
     pub fn load(
         environment: &impl Environment,
         files: &impl FileReader,
-    ) -> Result<Self, ConfigError> {
+    ) -> Result<LoadReport, ConfigError> {
         load::from_sources(environment, files)
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LoadReport {
+    pub config: Config,
+    pub warnings: Vec<ConfigWarning>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ConfigWarning {
+    UnknownEnvironmentVariable { name: String },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ServerConfig {
     pub listen_addr: SocketAddr,
+    pub shutdown_drain_timeout: Duration,
     pub log_format: LogFormat,
     pub log_level: LogLevel,
 }
@@ -58,28 +68,7 @@ pub enum LogLevel {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PublicConfig {
     pub external_url: Url,
-    pub preview_base_domain: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct DatabaseConfig {
-    pub url: SecretString,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ObjectStorageConfig {
-    pub endpoint: Url,
-    pub region: String,
-    pub bucket: String,
-    pub path_style: bool,
-    pub access_key_id: SecretString,
-    pub secret_access_key: SecretString,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct CryptoConfig {
-    pub master_key: SecretString,
-    pub session_key: SecretString,
+    pub preview_base_domain: Option<String>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -89,13 +78,6 @@ pub enum ConfigError {
     },
     Empty {
         name: &'static str,
-    },
-    EmptySecretFile {
-        name: &'static str,
-    },
-    ConflictingSources {
-        name: &'static str,
-        file_name: &'static str,
     },
     Duplicate {
         name: String,
@@ -111,9 +93,27 @@ pub enum ConfigError {
         name: &'static str,
         reason: &'static str,
     },
-    ReadSecret {
+    ReadFile {
         name: &'static str,
         kind: io::ErrorKind,
+    },
+    FileTooLarge {
+        name: &'static str,
+        limit: usize,
+    },
+    InvalidUtf8 {
+        name: &'static str,
+    },
+    InvalidToml,
+    ConflictingSecretSources {
+        name: &'static str,
+        file_name: &'static str,
+    },
+    EmptySecretFile {
+        name: &'static str,
+    },
+    InvalidSecretFile {
+        name: &'static str,
     },
 }
 
@@ -128,16 +128,6 @@ impl fmt::Display for ConfigError {
         match self {
             Self::Missing { name } => write!(formatter, "required configuration {name} is missing"),
             Self::Empty { name } => write!(formatter, "configuration {name} must not be empty"),
-            Self::EmptySecretFile { name } => {
-                write!(
-                    formatter,
-                    "secret file referenced by {name} must not be empty"
-                )
-            }
-            Self::ConflictingSources { name, file_name } => write!(
-                formatter,
-                "configuration {name} and {file_name} cannot both be set"
-            ),
             Self::Duplicate { name } => {
                 write!(formatter, "configuration {name} is set more than once")
             }
@@ -153,12 +143,33 @@ impl fmt::Display for ConfigError {
                 write!(formatter, "configuration {name} is not valid Unicode")
             }
             Self::Invalid { name, reason } => write!(formatter, "configuration {name} {reason}"),
-            Self::ReadSecret { name, kind } => {
+            Self::ReadFile { name, kind } => {
                 write!(
                     formatter,
-                    "could not read secret file referenced by {name}: {kind}"
+                    "could not read file referenced by {name}: {kind}"
                 )
             }
+            Self::FileTooLarge { name, limit } => {
+                write!(formatter, "file referenced by {name} exceeds {limit} bytes")
+            }
+            Self::InvalidUtf8 { name } => {
+                write!(formatter, "file referenced by {name} is not valid UTF-8")
+            }
+            Self::InvalidToml => formatter.write_str("NURITEO configuration file is invalid"),
+            Self::ConflictingSecretSources { name, file_name } => write!(
+                formatter,
+                "configuration {name} and {file_name} cannot both be set"
+            ),
+            Self::EmptySecretFile { name } => {
+                write!(
+                    formatter,
+                    "secret file referenced by {name} must not be empty"
+                )
+            }
+            Self::InvalidSecretFile { name } => write!(
+                formatter,
+                "secret file referenced by {name} contains an invalid value"
+            ),
         }
     }
 }

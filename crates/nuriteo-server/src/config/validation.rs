@@ -1,14 +1,32 @@
 use std::net::{IpAddr, SocketAddr};
 use std::str::FromStr;
+use std::time::Duration;
 
 use url::{Host, Url};
 
 use super::{ConfigError, LogFormat, LogLevel};
 
 pub(super) fn socket_addr(name: &'static str, value: &str) -> Result<SocketAddr, ConfigError> {
-    value
+    let address: SocketAddr = value
         .parse()
-        .map_err(|_| ConfigError::invalid(name, "must be an IP address and port"))
+        .map_err(|_| ConfigError::invalid(name, "must be an IP address and port"))?;
+    if address.port() == 0 {
+        return Err(ConfigError::invalid(name, "must use a non-zero port"));
+    }
+    Ok(address)
+}
+
+pub(super) fn drain_timeout(name: &'static str, value: &str) -> Result<Duration, ConfigError> {
+    let milliseconds: u64 = value
+        .parse()
+        .map_err(|_| ConfigError::invalid(name, "must be an integer number of milliseconds"))?;
+    if !(1_000..=300_000).contains(&milliseconds) {
+        return Err(ConfigError::invalid(
+            name,
+            "must be between 1000 and 300000 milliseconds",
+        ));
+    }
+    Ok(Duration::from_millis(milliseconds))
 }
 
 pub(super) fn log_format(name: &'static str, value: &str) -> Result<LogFormat, ConfigError> {
@@ -41,11 +59,16 @@ pub(super) fn boolean(name: &'static str, value: &str) -> Result<bool, ConfigErr
 }
 
 pub(super) fn external_url(name: &'static str, value: &str) -> Result<Url, ConfigError> {
-    let url = absolute_url(name, value)?;
+    let url = Url::parse(value).map_err(|_| ConfigError::invalid(name, "must be a valid URL"))?;
+    if url.cannot_be_a_base() || !url.username().is_empty() || url.password().is_some() {
+        return Err(ConfigError::invalid(
+            name,
+            "must be an absolute URL without credentials",
+        ));
+    }
     let host = url
         .host()
         .ok_or_else(|| ConfigError::invalid(name, "must include a host"))?;
-
     if url.scheme() != "https" && !(url.scheme() == "http" && host_is_loopback(&host)) {
         return Err(ConfigError::invalid(
             name,
@@ -56,58 +79,6 @@ pub(super) fn external_url(name: &'static str, value: &str) -> Result<Url, Confi
         return Err(ConfigError::invalid(
             name,
             "must be an origin without a path, query, or fragment",
-        ));
-    }
-
-    Ok(url)
-}
-
-pub(super) fn endpoint_url(name: &'static str, value: &str) -> Result<Url, ConfigError> {
-    let url = absolute_url(name, value)?;
-    if !matches!(url.scheme(), "http" | "https") {
-        return Err(ConfigError::invalid(name, "must use http or https"));
-    }
-    if url.query().is_some() || url.fragment().is_some() {
-        return Err(ConfigError::invalid(
-            name,
-            "must not include a query or fragment",
-        ));
-    }
-    Ok(url)
-}
-
-pub(super) fn database_url(name: &'static str, value: &str) -> Result<(), ConfigError> {
-    let url = Url::parse(value).map_err(|_| ConfigError::invalid(name, "must be a valid URL"))?;
-    if url.cannot_be_a_base() {
-        return Err(ConfigError::invalid(name, "must be an absolute URL"));
-    }
-    if !matches!(url.scheme(), "postgres" | "postgresql") {
-        return Err(ConfigError::invalid(
-            name,
-            "must use postgres or postgresql",
-        ));
-    }
-    if url.host().is_none() {
-        return Err(ConfigError::invalid(name, "must include a database host"));
-    }
-    if url.username().is_empty() {
-        return Err(ConfigError::invalid(name, "must include a database user"));
-    }
-    if url.path().trim_matches('/').is_empty() {
-        return Err(ConfigError::invalid(name, "must include a database name"));
-    }
-    if url.fragment().is_some() {
-        return Err(ConfigError::invalid(name, "must not include a fragment"));
-    }
-    Ok(())
-}
-
-fn absolute_url(name: &'static str, value: &str) -> Result<Url, ConfigError> {
-    let url = Url::parse(value).map_err(|_| ConfigError::invalid(name, "must be a valid URL"))?;
-    if url.cannot_be_a_base() || url.username() != "" || url.password().is_some() {
-        return Err(ConfigError::invalid(
-            name,
-            "must be an absolute URL without credentials",
         ));
     }
     Ok(url)
@@ -122,19 +93,22 @@ fn host_is_loopback(host: &Host<&str>) -> bool {
 }
 
 pub(super) fn preview_domain(name: &'static str, value: &str) -> Result<String, ConfigError> {
-    let value = value.trim().trim_end_matches('.').to_ascii_lowercase();
-    if value.is_empty()
+    let normalized = value.to_ascii_lowercase();
+    if normalized != value
+        || value.is_empty()
         || value.len() > 253
+        || value.ends_with('.')
         || value.contains(['/', ':', '*'])
-        || IpAddr::from_str(&value).is_ok()
+        || IpAddr::from_str(value).is_ok()
+        || !value.contains('.')
         || !value.split('.').all(valid_dns_label)
     {
         return Err(ConfigError::invalid(
             name,
-            "must be a valid DNS domain without a wildcard",
+            "must be a lowercase ASCII DNS domain without a wildcard",
         ));
     }
-    Ok(value)
+    Ok(normalized)
 }
 
 fn valid_dns_label(label: &str) -> bool {
@@ -144,43 +118,5 @@ fn valid_dns_label(label: &str) -> bool {
         && !label.ends_with('-')
         && label
             .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
-}
-
-pub(super) fn region(name: &'static str, value: &str) -> Result<String, ConfigError> {
-    let value = value.trim();
-    if value.is_empty()
-        || value.len() > 63
-        || !value
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
-    {
-        return Err(ConfigError::invalid(
-            name,
-            "must be a non-empty region identifier",
-        ));
-    }
-    Ok(value.to_owned())
-}
-
-pub(super) fn bucket(name: &'static str, value: &str) -> Result<String, ConfigError> {
-    let value = value.trim();
-    let valid = (3..=63).contains(&value.len())
-        && value.bytes().all(|byte| {
-            byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'.' | b'-')
-        })
-        && value
-            .as_bytes()
-            .first()
-            .is_some_and(u8::is_ascii_alphanumeric)
-        && value
-            .as_bytes()
-            .last()
-            .is_some_and(u8::is_ascii_alphanumeric)
-        && !value.contains("..")
-        && IpAddr::from_str(value).is_err();
-    if !valid {
-        return Err(ConfigError::invalid(name, "must be a valid S3 bucket name"));
-    }
-    Ok(value.to_owned())
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
 }
