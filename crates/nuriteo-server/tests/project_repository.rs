@@ -1,6 +1,7 @@
 use std::env;
 use std::fs;
 use std::str::FromStr;
+use std::sync::Arc;
 use std::time::Duration;
 
 use nuriteo_server::database::{
@@ -9,11 +10,13 @@ use nuriteo_server::database::{
 use nuriteo_server::identity::{Timestamp, UserId};
 use nuriteo_server::organization::OrganizationId;
 use nuriteo_server::project::{
-    NewProject, ProjectConflict, ProjectId, ProjectName, ProjectOwner, ProjectRepository,
-    ProjectRepositoryError, ProjectSlug,
+    NewProject, ProjectConflict, ProjectId, ProjectName, ProjectOwner, ProjectPageLimit,
+    ProjectRepository, ProjectRepositoryError, ProjectSlug,
 };
 use nuriteo_server::workspace::StorageScopeId;
 use sqlx::{Acquire, Executor};
+use tokio::sync::{Barrier, oneshot};
+use tokio::time;
 
 const DATABASE_URL_ENV: &str = "NURITEO_TEST_DATABASE_URL";
 const DATABASE_CA_ENV: &str = "NURITEO_TEST_DATABASE_CA";
@@ -27,9 +30,12 @@ const USER_PROJECT_ALPHA: &str = "0199ee6c-c777-7000-8000-000000003041";
 const USER_PROJECT_ZETA: &str = "0199ee6c-c777-7000-8000-000000003042";
 const USER_TWO_PROJECT: &str = "0199ee6c-c777-7000-8000-000000003043";
 const ORGANIZATION_PROJECT: &str = "0199ee6c-c777-7000-8000-000000003044";
+const ORGANIZATION_PROJECT_ZETA: &str = "0199ee6c-c777-7000-8000-000000003048";
 const ROLLED_BACK_PROJECT: &str = "0199ee6c-c777-7000-8000-000000003045";
 const TOMBSTONED_PROJECT: &str = "0199ee6c-c777-7000-8000-000000003046";
 const REUSED_PROJECT: &str = "0199ee6c-c777-7000-8000-000000003047";
+const CONCURRENT_PROJECT_ONE: &str = "0199ee6c-c777-7000-8000-000000003049";
+const CONCURRENT_PROJECT_TWO: &str = "0199ee6c-c777-7000-8000-000000003050";
 
 #[tokio::test]
 #[ignore = "requires the pinned custom-CA PostgreSQL fixture; run tests/fixtures/postgres-project-repository/run.sh"]
@@ -48,6 +54,8 @@ async fn project_repository_is_owner_isolated_transactional_and_fail_closed() {
     verify_create_get_list_and_owner_isolation(&pool).await;
     verify_caller_transaction_rollback(&pool).await;
     verify_typed_conflicts(&pool).await;
+    verify_lock_blocks_until_release(&pool).await;
+    verify_concurrent_namespace_create(&pool).await;
     verify_invalid_rows_fail_closed(&pool).await;
 
     reset_fixture(&pool).await;
@@ -82,6 +90,15 @@ async fn verify_create_get_list_and_owner_isolation(pool: &DatabasePool) {
             ),
             organization,
         ),
+        (
+            candidate(
+                ORGANIZATION_PROJECT_ZETA,
+                organization,
+                ORGANIZATION_SCOPE_ONE,
+                "zeta",
+            ),
+            organization,
+        ),
     ] {
         let project = create_and_commit(pool, &candidate)
             .await
@@ -99,16 +116,75 @@ async fn verify_create_get_list_and_owner_isolation(pool: &DatabasePool) {
 
     let mut connection = pool.acquire().await.expect("connection must be acquired");
     let mut transaction = connection.begin().await.expect("transaction must begin");
-    let listed = ProjectRepository::list_by_owner(&mut transaction, user_one)
-        .await
-        .expect("owner list must load");
+    let first_user_page = ProjectRepository::list_page(
+        &mut transaction,
+        user_one,
+        ProjectPageLimit::new(1).expect("page limit must validate"),
+        None,
+    )
+    .await
+    .expect("owner list must load");
     assert_eq!(
-        listed
+        first_user_page
+            .projects()
             .iter()
             .map(|project| project.slug().as_str())
             .collect::<Vec<_>>(),
-        ["alpha", "zeta"]
+        ["alpha"]
     );
+    assert!(first_user_page.has_more());
+    let second_user_page = ProjectRepository::list_page(
+        &mut transaction,
+        user_one,
+        ProjectPageLimit::new(1).expect("page limit must validate"),
+        first_user_page.next_key(),
+    )
+    .await
+    .expect("second owner page must load");
+    assert_eq!(
+        second_user_page
+            .projects()
+            .iter()
+            .map(|project| project.slug().as_str())
+            .collect::<Vec<_>>(),
+        ["zeta"]
+    );
+    assert!(!second_user_page.has_more());
+
+    let first_organization_page = ProjectRepository::list_page(
+        &mut transaction,
+        organization,
+        ProjectPageLimit::new(1).expect("page limit must validate"),
+        None,
+    )
+    .await
+    .expect("Organization page must load");
+    assert_eq!(
+        first_organization_page
+            .projects()
+            .iter()
+            .map(|project| project.slug().as_str())
+            .collect::<Vec<_>>(),
+        ["alpha"]
+    );
+    assert!(first_organization_page.has_more());
+    let second_organization_page = ProjectRepository::list_page(
+        &mut transaction,
+        organization,
+        ProjectPageLimit::new(1).expect("page limit must validate"),
+        first_organization_page.next_key(),
+    )
+    .await
+    .expect("second Organization page must load");
+    assert_eq!(
+        second_organization_page
+            .projects()
+            .iter()
+            .map(|project| project.slug().as_str())
+            .collect::<Vec<_>>(),
+        ["zeta"]
+    );
+    assert!(!second_organization_page.has_more());
     assert!(
         ProjectRepository::get_by_id(&mut transaction, user_one, project_id(USER_TWO_PROJECT),)
             .await
@@ -120,6 +196,32 @@ async fn verify_create_get_list_and_owner_isolation(pool: &DatabasePool) {
             .await
             .expect("owner lookup must complete")
             .is_some()
+    );
+    assert!(
+        ProjectRepository::get_by_id(&mut transaction, user_one, project_id(ORGANIZATION_PROJECT),)
+            .await
+            .expect("User-to-Organization isolation lookup must complete")
+            .is_none()
+    );
+    assert!(
+        ProjectRepository::get_by_id(
+            &mut transaction,
+            organization,
+            project_id(USER_PROJECT_ALPHA),
+        )
+        .await
+        .expect("Organization-to-User isolation lookup must complete")
+        .is_none()
+    );
+    assert!(
+        ProjectRepository::get_by_id(
+            &mut transaction,
+            organization,
+            project_id(ORGANIZATION_PROJECT),
+        )
+        .await
+        .expect("Organization lookup must complete")
+        .is_some()
     );
     transaction
         .rollback()
@@ -175,6 +277,21 @@ async fn verify_typed_conflicts(pool: &DatabasePool) {
     assert_eq!(
         create_and_rollback(
             pool,
+            &candidate(
+                REUSED_PROJECT,
+                ProjectOwner::Organization(organization_id(ORGANIZATION_ONE)),
+                USER_SCOPE_ONE,
+                "organization-wrong-scope",
+            ),
+        )
+        .await,
+        Err(ProjectRepositoryError::Conflict(
+            ProjectConflict::OwnerScopeMismatch
+        ))
+    );
+    assert_eq!(
+        create_and_rollback(
+            pool,
             &candidate(REUSED_PROJECT, owner, USER_SCOPE_ONE, "alpha"),
         )
         .await,
@@ -220,45 +337,189 @@ async fn verify_typed_conflicts(pool: &DatabasePool) {
     );
 }
 
+async fn verify_lock_blocks_until_release(pool: &DatabasePool) {
+    let mut first_connection = pool.acquire().await.expect("connection must be acquired");
+    let mut first_transaction = first_connection
+        .begin()
+        .await
+        .expect("transaction must begin");
+    ProjectRepository::lock_by_id(&mut first_transaction, project_id(USER_PROJECT_ALPHA))
+        .await
+        .expect("first lock must succeed")
+        .expect("locked Project must exist");
+
+    let second_pool = pool.clone();
+    let (attempted_tx, attempted_rx) = oneshot::channel();
+    let mut second = tokio::spawn(async move {
+        let mut connection = second_pool
+            .acquire()
+            .await
+            .expect("second connection must be acquired");
+        let mut transaction = connection
+            .begin()
+            .await
+            .expect("second transaction must begin");
+        attempted_tx
+            .send(())
+            .expect("lock-attempt observer must remain available");
+        let project =
+            ProjectRepository::lock_by_id(&mut transaction, project_id(USER_PROJECT_ALPHA)).await;
+        transaction
+            .rollback()
+            .await
+            .expect("second transaction must roll back");
+        project
+    });
+    attempted_rx
+        .await
+        .expect("second transaction must reach the lock attempt");
+    assert!(
+        time::timeout(Duration::from_millis(200), &mut second)
+            .await
+            .is_err(),
+        "second lock must remain blocked while the first transaction owns the row"
+    );
+    first_transaction
+        .rollback()
+        .await
+        .expect("first transaction must release lock");
+    assert!(
+        time::timeout(Duration::from_secs(2), second)
+            .await
+            .expect("second lock must proceed after release")
+            .expect("second lock task must join")
+            .expect("second lock query must succeed")
+            .is_some()
+    );
+}
+
+async fn verify_concurrent_namespace_create(pool: &DatabasePool) {
+    let barrier = Arc::new(Barrier::new(3));
+    let mut tasks = Vec::new();
+    for id in [CONCURRENT_PROJECT_ONE, CONCURRENT_PROJECT_TWO] {
+        let task_pool = pool.clone();
+        let task_barrier = Arc::clone(&barrier);
+        tasks.push(tokio::spawn(async move {
+            let mut connection = task_pool
+                .acquire()
+                .await
+                .expect("concurrent connection must be acquired");
+            let mut transaction = connection
+                .begin()
+                .await
+                .expect("concurrent transaction must begin");
+            let candidate = candidate(
+                id,
+                ProjectOwner::User(user_id(USER_ONE)),
+                USER_SCOPE_ONE,
+                "concurrent",
+            );
+            task_barrier.wait().await;
+            match ProjectRepository::create(&mut transaction, &candidate).await {
+                Ok(project) => {
+                    transaction
+                        .commit()
+                        .await
+                        .expect("winning transaction must commit");
+                    Ok(project.id())
+                }
+                Err(error) => {
+                    transaction
+                        .rollback()
+                        .await
+                        .expect("losing transaction must roll back");
+                    Err(error)
+                }
+            }
+        }));
+    }
+    barrier.wait().await;
+    let first = tasks
+        .remove(0)
+        .await
+        .expect("first concurrent task must join");
+    let second = tasks
+        .remove(0)
+        .await
+        .expect("second concurrent task must join");
+    let successes = [&first, &second]
+        .into_iter()
+        .filter(|result| result.is_ok())
+        .count();
+    let conflicts = [first, second]
+        .into_iter()
+        .filter(|result| {
+            *result
+                == Err(ProjectRepositoryError::Conflict(
+                    ProjectConflict::NamespaceUnavailable,
+                ))
+        })
+        .count();
+    assert_eq!(successes, 1);
+    assert_eq!(conflicts, 1);
+}
+
 async fn verify_invalid_rows_fail_closed(pool: &DatabasePool) {
     assert_corrupt_locked_row(
         pool,
-        "ALTER TABLE projects DROP CONSTRAINT projects_exactly_one_owner_check",
+        &["ALTER TABLE projects DROP CONSTRAINT projects_exactly_one_owner_check"],
         "UPDATE projects SET owner_user_id = NULL WHERE id = \
          '0199ee6c-c777-7000-8000-000000003041'::uuid",
     )
     .await;
     assert_corrupt_locked_row(
         pool,
-        "ALTER TABLE projects DROP CONSTRAINT projects_slug_check",
+        &[
+            "ALTER TABLE projects DROP CONSTRAINT projects_exactly_one_owner_check",
+            "ALTER TABLE projects DROP CONSTRAINT projects_organization_scope_fk",
+            "ALTER TABLE projects DROP CONSTRAINT projects_organization_slug_unique",
+        ],
+        "UPDATE projects SET owner_organization_id = \
+         '0199ee6c-c777-7000-8000-000000003021'::uuid WHERE id = \
+         '0199ee6c-c777-7000-8000-000000003041'::uuid",
+    )
+    .await;
+    assert_corrupt_locked_row(
+        pool,
+        &["ALTER TABLE projects DROP CONSTRAINT projects_slug_check"],
         "UPDATE projects SET slug = 'Invalid' WHERE id = \
          '0199ee6c-c777-7000-8000-000000003041'::uuid",
     )
     .await;
     assert_corrupt_locked_row(
         pool,
-        "ALTER TABLE projects DROP CONSTRAINT projects_name_check",
+        &["ALTER TABLE projects DROP CONSTRAINT projects_name_check"],
         "UPDATE projects SET name = ' Padded' WHERE id = \
          '0199ee6c-c777-7000-8000-000000003041'::uuid",
     )
     .await;
     assert_corrupt_locked_row(
         pool,
-        "ALTER TABLE projects DROP CONSTRAINT projects_lifecycle_check",
+        &["ALTER TABLE projects DROP CONSTRAINT projects_lifecycle_check"],
         "UPDATE projects SET state = 'archived', archived_at = NULL WHERE id = \
          '0199ee6c-c777-7000-8000-000000003041'::uuid",
     )
     .await;
     assert_corrupt_locked_row(
         pool,
-        "ALTER TABLE projects DROP CONSTRAINT projects_timestamps_check",
+        &[
+            "ALTER TABLE projects DROP CONSTRAINT projects_state_check",
+            "ALTER TABLE projects DROP CONSTRAINT projects_lifecycle_check",
+        ],
+        "UPDATE projects SET state = 'unknown' WHERE id = \
+         '0199ee6c-c777-7000-8000-000000003041'::uuid",
+    )
+    .await;
+    assert_corrupt_locked_row(
+        pool,
+        &["ALTER TABLE projects DROP CONSTRAINT projects_timestamps_check"],
         "UPDATE projects SET updated_at = created_at - INTERVAL '1 second' WHERE id = \
          '0199ee6c-c777-7000-8000-000000003041'::uuid",
     )
     .await;
     assert_corrupt_locked_row(
         pool,
-        "ALTER TABLE projects DROP CONSTRAINT projects_lock_version_check",
+        &["ALTER TABLE projects DROP CONSTRAINT projects_lock_version_check"],
         "UPDATE projects SET lock_version = 0 WHERE id = \
          '0199ee6c-c777-7000-8000-000000003041'::uuid",
     )
@@ -281,8 +542,13 @@ async fn verify_invalid_rows_fail_closed(pool: &DatabasePool) {
         .await
         .expect("fixture must insert non-RFC UUIDv7");
     assert_eq!(
-        ProjectRepository::list_by_owner(&mut transaction, ProjectOwner::User(user_id(USER_ONE)),)
-            .await,
+        ProjectRepository::list_page(
+            &mut transaction,
+            ProjectOwner::User(user_id(USER_ONE)),
+            ProjectPageLimit::default(),
+            None,
+        )
+        .await,
         Err(ProjectRepositoryError::InvalidPersistedState)
     );
     transaction
@@ -293,7 +559,7 @@ async fn verify_invalid_rows_fail_closed(pool: &DatabasePool) {
 
 async fn assert_corrupt_locked_row(
     pool: &DatabasePool,
-    drop_constraint: &'static str,
+    relaxations: &[&'static str],
     mutation: &'static str,
 ) {
     let mut connection = pool.acquire().await.expect("connection must be acquired");
@@ -302,10 +568,12 @@ async fn assert_corrupt_locked_row(
         .execute("ALTER TABLE projects DISABLE TRIGGER USER")
         .await
         .expect("fixture must disable mutation triggers");
-    transaction
-        .execute(drop_constraint)
-        .await
-        .expect("fixture must relax one constraint");
+    for relaxation in relaxations {
+        transaction
+            .execute(*relaxation)
+            .await
+            .expect("fixture must relax one constraint");
+    }
     transaction
         .execute(mutation)
         .await

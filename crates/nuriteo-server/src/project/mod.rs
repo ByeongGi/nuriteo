@@ -7,7 +7,10 @@ use std::fmt;
 pub use model::Project;
 #[cfg(test)]
 pub(crate) use model::ProjectFields;
-pub use repository::{NewProject, ProjectConflict, ProjectRepository, ProjectRepositoryError};
+pub use repository::{
+    DEFAULT_PROJECT_PAGE_SIZE, MAX_PROJECT_PAGE_SIZE, NewProject, ProjectConflict, ProjectPage,
+    ProjectPageKey, ProjectPageLimit, ProjectRepository, ProjectRepositoryError,
+};
 pub use types::{ProjectId, ProjectName, ProjectOwner, ProjectSlug, ProjectState, ProjectVersion};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

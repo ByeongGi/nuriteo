@@ -24,6 +24,9 @@ type ProjectRow = (
     i64,
 );
 
+pub const DEFAULT_PROJECT_PAGE_SIZE: u16 = 50;
+pub const MAX_PROJECT_PAGE_SIZE: u16 = 100;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ProjectConflict {
     IdentifierExists,
@@ -35,6 +38,7 @@ pub enum ProjectConflict {
 #[non_exhaustive]
 pub enum ProjectRepositoryError {
     Conflict(ProjectConflict),
+    InvalidPageLimit,
     InvalidPersistedState,
     PersistenceUnavailable,
 }
@@ -51,6 +55,7 @@ impl fmt::Display for ProjectRepositoryError {
             Self::Conflict(ProjectConflict::OwnerScopeMismatch) => {
                 "project owner and storage scope do not match"
             }
+            Self::InvalidPageLimit => "project page limit is invalid",
             Self::InvalidPersistedState => "persisted project state is invalid",
             Self::PersistenceUnavailable => "project persistence is unavailable",
         })
@@ -58,6 +63,84 @@ impl fmt::Display for ProjectRepositoryError {
 }
 
 impl std::error::Error for ProjectRepositoryError {}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ProjectPageLimit(u16);
+
+impl ProjectPageLimit {
+    pub fn new(value: u16) -> Result<Self, ProjectRepositoryError> {
+        if !(1..=MAX_PROJECT_PAGE_SIZE).contains(&value) {
+            return Err(ProjectRepositoryError::InvalidPageLimit);
+        }
+        Ok(Self(value))
+    }
+
+    #[must_use]
+    pub const fn get(self) -> u16 {
+        self.0
+    }
+
+    fn fetch_count(self) -> i64 {
+        i64::from(self.0) + 1
+    }
+}
+
+impl Default for ProjectPageLimit {
+    fn default() -> Self {
+        Self(DEFAULT_PROJECT_PAGE_SIZE)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProjectPageKey {
+    slug: ProjectSlug,
+    id: ProjectId,
+}
+
+impl ProjectPageKey {
+    #[must_use]
+    pub const fn new(slug: ProjectSlug, id: ProjectId) -> Self {
+        Self { slug, id }
+    }
+
+    #[must_use]
+    pub fn slug(&self) -> &ProjectSlug {
+        &self.slug
+    }
+
+    #[must_use]
+    pub const fn id(&self) -> ProjectId {
+        self.id
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProjectPage {
+    projects: Vec<Project>,
+    next_key: Option<ProjectPageKey>,
+}
+
+impl ProjectPage {
+    #[must_use]
+    pub fn projects(&self) -> &[Project] {
+        &self.projects
+    }
+
+    #[must_use]
+    pub const fn next_key(&self) -> Option<&ProjectPageKey> {
+        self.next_key.as_ref()
+    }
+
+    #[must_use]
+    pub const fn has_more(&self) -> bool {
+        self.next_key.is_some()
+    }
+
+    #[must_use]
+    pub fn into_projects(self) -> Vec<Project> {
+        self.projects
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NewProject {
@@ -161,11 +244,17 @@ impl ProjectRepository {
         row.map(decode_project).transpose()
     }
 
-    /// Lists one owner's Projects in canonical `(slug, id)` order.
-    pub async fn list_by_owner(
+    /// Lists one bounded owner page in canonical `(slug, id)` order. The
+    /// exclusive key is decoded from and encoded into an opaque signed cursor
+    /// by PRJ-005; this boundary never interprets cursor credentials.
+    pub async fn list_page(
         transaction: &mut Transaction<'_, Postgres>,
         owner: ProjectOwner,
-    ) -> Result<Vec<Project>, ProjectRepositoryError> {
+        limit: ProjectPageLimit,
+        after: Option<&ProjectPageKey>,
+    ) -> Result<ProjectPage, ProjectRepositoryError> {
+        let after_slug = after.map(|key| key.slug.as_str().to_owned());
+        let after_id = after.map(|key| key.id.to_string());
         let rows = match owner {
             ProjectOwner::User(owner_id) => {
                 sqlx::query_as::<_, ProjectRow>(
@@ -173,9 +262,13 @@ impl ProjectRepository {
                             storage_scope_id::text, slug, name, state, created_at, updated_at, \
                             archived_at, lock_version FROM projects \
                      WHERE owner_user_id = $1::uuid AND owner_organization_id IS NULL \
-                     ORDER BY slug ASC, id ASC",
+                       AND ($2::text IS NULL OR (slug, id) > ($2::text, $3::uuid)) \
+                     ORDER BY slug ASC, id ASC LIMIT $4",
                 )
                 .bind(owner_id.to_string())
+                .bind(&after_slug)
+                .bind(&after_id)
+                .bind(limit.fetch_count())
                 .fetch_all(&mut **transaction)
                 .await
             }
@@ -185,15 +278,19 @@ impl ProjectRepository {
                             storage_scope_id::text, slug, name, state, created_at, updated_at, \
                             archived_at, lock_version FROM projects \
                      WHERE owner_organization_id = $1::uuid AND owner_user_id IS NULL \
-                     ORDER BY slug ASC, id ASC",
+                       AND ($2::text IS NULL OR (slug, id) > ($2::text, $3::uuid)) \
+                     ORDER BY slug ASC, id ASC LIMIT $4",
                 )
                 .bind(owner_id.to_string())
+                .bind(&after_slug)
+                .bind(&after_id)
+                .bind(limit.fetch_count())
                 .fetch_all(&mut **transaction)
                 .await
             }
         }
         .map_err(|_| ProjectRepositoryError::PersistenceUnavailable)?;
-        rows.into_iter().map(decode_project).collect()
+        decode_page(rows, limit)
     }
 
     /// Locks one Project for a caller that will perform authorization and audit
@@ -214,6 +311,27 @@ impl ProjectRepository {
         .map_err(|_| ProjectRepositoryError::PersistenceUnavailable)?;
         row.map(decode_project).transpose()
     }
+}
+
+fn decode_page(
+    rows: Vec<ProjectRow>,
+    limit: ProjectPageLimit,
+) -> Result<ProjectPage, ProjectRepositoryError> {
+    let mut projects = rows
+        .into_iter()
+        .map(decode_project)
+        .collect::<Result<Vec<_>, _>>()?;
+    let has_more = projects.len() > usize::from(limit.get());
+    projects.truncate(usize::from(limit.get()));
+    let next_key = if has_more {
+        let last = projects
+            .last()
+            .ok_or(ProjectRepositoryError::InvalidPersistedState)?;
+        Some(ProjectPageKey::new(last.slug().clone(), last.id()))
+    } else {
+        None
+    };
+    Ok(ProjectPage { projects, next_key })
 }
 
 fn owner_columns(owner: ProjectOwner) -> (Option<String>, Option<String>) {

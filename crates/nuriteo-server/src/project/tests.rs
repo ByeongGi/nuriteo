@@ -131,6 +131,24 @@ fn owner_is_exactly_one_typed_identity() {
 }
 
 #[test]
+fn page_limits_match_the_public_api_policy() {
+    assert_eq!(ProjectPageLimit::default().get(), DEFAULT_PROJECT_PAGE_SIZE);
+    assert_eq!(ProjectPageLimit::new(1).map(ProjectPageLimit::get), Ok(1));
+    assert_eq!(
+        ProjectPageLimit::new(MAX_PROJECT_PAGE_SIZE).map(ProjectPageLimit::get),
+        Ok(MAX_PROJECT_PAGE_SIZE)
+    );
+    assert_eq!(
+        ProjectPageLimit::new(0),
+        Err(ProjectRepositoryError::InvalidPageLimit)
+    );
+    assert_eq!(
+        ProjectPageLimit::new(MAX_PROJECT_PAGE_SIZE + 1),
+        Err(ProjectRepositoryError::InvalidPageLimit)
+    );
+}
+
+#[test]
 fn slug_rules_match_the_database_grammar() {
     let cases = [
         ("a".to_owned(), true),
