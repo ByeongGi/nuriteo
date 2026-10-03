@@ -1,0 +1,16 @@
+**
+!package.json
+!pnpm-lock.yaml
+!pnpm-workspace.yaml
+!tsconfig.base.json
+!apps/
+!apps/web/
+!apps/web/package.json
+!apps/web/next.config.ts
+!apps/web/next-env.d.ts
+!apps/web/postcss.config.mjs
+!apps/web/tsconfig.json
+!apps/web/public/
+!apps/web/public/**
+!apps/web/src/
+!apps/web/src/**
