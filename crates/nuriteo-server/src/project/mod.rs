@@ -1,4 +1,5 @@
 mod model;
+mod repository;
 mod types;
 
 use std::fmt;
@@ -6,6 +7,7 @@ use std::fmt;
 pub use model::Project;
 #[cfg(test)]
 pub(crate) use model::ProjectFields;
+pub use repository::{NewProject, ProjectConflict, ProjectRepository, ProjectRepositoryError};
 pub use types::{ProjectId, ProjectName, ProjectOwner, ProjectSlug, ProjectState, ProjectVersion};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
