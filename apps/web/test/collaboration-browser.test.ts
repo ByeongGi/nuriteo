@@ -7,6 +7,9 @@ import { fileURLToPath } from "node:url";
 
 import { chromium } from "@playwright/test";
 
+import { createSecretChunkScanner } from "./secret-chunk-scanner.ts";
+import type { SecretChunkScanner } from "./secret-chunk-scanner.ts";
+
 const webRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const standaloneWeb = path.join(webRoot, ".next/standalone/apps/web");
 const serverEntry = path.join(standaloneWeb, "server.js");
@@ -43,6 +46,12 @@ const forbiddenServerValues = new Set([
   csrfToken,
   "correct horse battery staple"
 ]);
+const serverOutputScanners: SecretChunkScanner[] = [];
+
+function addForbiddenServerValue(value: string): void {
+  forbiddenServerValues.add(value);
+  for (const scanner of serverOutputScanners) scanner.add(value);
+}
 
 const core = http.createServer(async (request, response) => {
   const requestPath = request.url ?? "/";
@@ -205,13 +214,12 @@ const web = spawn(process.execPath, [serverEntry], {
   stdio: ["ignore", "pipe", "pipe"]
 });
 let serverOutput = "";
-let serverOutputLeakDetected = false;
 for (const stream of [web.stdout, web.stderr]) {
+  const scanner = createSecretChunkScanner(forbiddenServerValues);
+  serverOutputScanners.push(scanner);
   stream.on("data", (chunk: Buffer) => {
     const text = chunk.toString("utf8");
-    if ([...forbiddenServerValues].some((value) => text.includes(value))) {
-      serverOutputLeakDetected = true;
-    }
+    scanner.scan(text);
     serverOutput = `${serverOutput}${text}`.slice(-4_000);
   });
 }
@@ -348,10 +356,11 @@ try {
     await adminPage.getByText("Invited Teammate", { exact: true }).waitFor({ state: "detached" });
     assert.ok(observedMutationCookies.some((value) => value.endsWith(":admin")));
     assert.ok(observedMutationCookies.some((value) => value.endsWith(":invitee")));
-    assert.equal(serverOutputLeakDetected, false);
-    assert.equal(serverOutput.includes(activationToken), false);
-    for (const item of organizationInvitations) {
-      assert.equal(serverOutput.includes(invitationToken(item)), false);
+    for (const scanner of serverOutputScanners) {
+      assert.equal(scanner.detected, false);
+    }
+    for (const value of forbiddenServerValues) {
+      assert.equal(serverOutput.includes(value), false);
     }
     await admin.close();
     await invitee.close();
@@ -409,7 +418,7 @@ function invitationToken(invitation: OrganizationInvitation): string {
 
 function issuedOrganizationInvitation(invitation: OrganizationInvitation) {
   const token = invitationToken(invitation);
-  forbiddenServerValues.add(token);
+  addForbiddenServerValue(token);
   return { ...invitation, acceptUrl: `${publicOrigin}/organization-invitations/accept?token=${token}` };
 }
 

@@ -12,6 +12,7 @@ import {
   uuidPathSegment
 } from "../src/lib/api/collaboration-bff.ts";
 import { DELETE as revokeActivationRoute } from "../src/app/api/v1/admin/activation-invitations/[invitationId]/route.ts";
+import { createSecretChunkScanner } from "./secret-chunk-scanner.ts";
 
 const webRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const originalFetch = globalThis.fetch;
@@ -22,11 +23,23 @@ try {
   await testExactBoundedForwarding();
   await testDeadlineAbortAndEarlyCancellation();
   await testInvalidRouteIsProblemDetails();
+  testSplitSecretScanner();
   testUxSourceContracts();
 } finally {
   globalThis.fetch = originalFetch;
   if (originalUrl === undefined) delete process.env.NURITEO_INTERNAL_API_URL;
   else process.env.NURITEO_INTERNAL_API_URL = originalUrl;
+}
+
+function testSplitSecretScanner() {
+  const scanner = createSecretChunkScanner(["nrt_org_inv_split-secret"]);
+  assert.equal(scanner.scan("safe output nrt_org_inv_split-"), false);
+  assert.equal(scanner.scan("secret safe output"), true);
+  assert.equal(scanner.detected, true);
+
+  const clean = createSecretChunkScanner(["never-visible"]);
+  assert.equal(clean.scan("ordinary output"), false);
+  assert.equal(clean.detected, false);
 }
 
 function testSafeErrorClassification() {
