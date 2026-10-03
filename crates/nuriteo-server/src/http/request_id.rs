@@ -2,12 +2,15 @@ use axum::extract::Request;
 use axum::http::{HeaderName, HeaderValue};
 use axum::middleware::Next;
 use axum::response::Response;
-use uuid::{Uuid, Variant};
+use uuid::Uuid;
 
 pub const REQUEST_ID_HEADER: HeaderName = HeaderName::from_static("x-request-id");
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RequestId(HeaderValue);
+pub struct RequestId {
+    text: String,
+    header: HeaderValue,
+}
 
 impl RequestId {
     fn from_headers(headers: &axum::http::HeaderMap) -> Option<Self> {
@@ -18,28 +21,35 @@ impl RequestId {
         }
 
         let text = value.to_str().ok()?;
-        let uuid = Uuid::try_parse(text).ok()?;
-        if uuid.is_nil()
-            || uuid.get_variant() != Variant::RFC4122
-            || uuid.hyphenated().to_string() != text
+        if text.is_empty()
+            || text.len() > 128
+            || !text.bytes().all(|byte| {
+                byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b':' | b'-')
+            })
         {
             return None;
         }
 
-        Some(Self(value.clone()))
+        Some(Self {
+            text: text.to_owned(),
+            header: value.clone(),
+        })
     }
 
     fn generate() -> Self {
-        let value = HeaderValue::from_str(&Uuid::new_v4().hyphenated().to_string())
-            .expect("a formatted UUID is always a valid HTTP header value");
-        Self(value)
+        let text = Uuid::new_v4().hyphenated().to_string();
+        match HeaderValue::from_str(&text) {
+            Ok(header) => Self { text, header },
+            Err(_) => Self {
+                text: "00000000-0000-4000-8000-000000000000".to_owned(),
+                header: HeaderValue::from_static("00000000-0000-4000-8000-000000000000"),
+            },
+        }
     }
 
     #[must_use]
     pub fn as_str(&self) -> &str {
-        self.0
-            .to_str()
-            .expect("RequestId only contains validated ASCII UUID values")
+        &self.text
     }
 }
 
@@ -50,57 +60,47 @@ pub async fn propagate_request_id(mut request: Request, next: Next) -> Response 
     let mut response = next.run(request).await;
     response
         .headers_mut()
-        .insert(REQUEST_ID_HEADER, request_id.0);
+        .insert(REQUEST_ID_HEADER, request_id.header);
     response
 }
 
 #[cfg(test)]
 mod tests {
     use axum::http::{HeaderMap, HeaderValue};
-    use uuid::Version;
 
     use super::*;
 
     #[test]
-    fn accepts_one_canonical_rfc_uuid() {
+    fn accepts_one_bounded_safe_identifier() {
         let mut headers = HeaderMap::new();
         headers.insert(
             &REQUEST_ID_HEADER,
-            HeaderValue::from_static("018f47a2-9d3c-7b21-a848-123456789abc"),
+            HeaderValue::from_static("edge:trace-01"),
         );
 
         let request_id = RequestId::from_headers(&headers).unwrap();
 
-        assert_eq!(request_id.as_str(), "018f47a2-9d3c-7b21-a848-123456789abc");
+        assert_eq!(request_id.as_str(), "edge:trace-01");
     }
 
     #[test]
-    fn rejects_ambiguous_or_noncanonical_values() {
-        let invalid_values = [
-            "018F47A2-9D3C-7B21-A848-123456789ABC",
-            "018f47a29d3c7b21a848123456789abc",
-            "00000000-0000-0000-0000-000000000000",
-            "not-a-request-id",
-        ];
-
-        for value in invalid_values {
+    fn rejects_ambiguous_or_unsafe_values() {
+        for value in ["contains a space", "contains/slash", "contains,comma"] {
             let mut headers = HeaderMap::new();
             headers.insert(&REQUEST_ID_HEADER, HeaderValue::from_str(value).unwrap());
-            assert!(
-                RequestId::from_headers(&headers).is_none(),
-                "accepted {value}"
-            );
+            assert!(RequestId::from_headers(&headers).is_none());
         }
 
+        let mut oversized = HeaderMap::new();
+        oversized.insert(
+            &REQUEST_ID_HEADER,
+            HeaderValue::from_str(&"x".repeat(129)).unwrap(),
+        );
+        assert!(RequestId::from_headers(&oversized).is_none());
+
         let mut duplicate = HeaderMap::new();
-        duplicate.append(
-            &REQUEST_ID_HEADER,
-            HeaderValue::from_static("018f47a2-9d3c-7b21-a848-123456789abc"),
-        );
-        duplicate.append(
-            &REQUEST_ID_HEADER,
-            HeaderValue::from_static("018f47a2-9d3c-7b21-a848-123456789abd"),
-        );
+        duplicate.append(&REQUEST_ID_HEADER, HeaderValue::from_static("trace-01"));
+        duplicate.append(&REQUEST_ID_HEADER, HeaderValue::from_static("trace-02"));
         assert!(RequestId::from_headers(&duplicate).is_none());
     }
 
@@ -109,7 +109,6 @@ mod tests {
         let request_id = RequestId::generate();
         let uuid = Uuid::try_parse(request_id.as_str()).unwrap();
 
-        assert_eq!(uuid.get_version(), Some(Version::Random));
-        assert_eq!(uuid.get_variant(), Variant::RFC4122);
+        assert_eq!(uuid.get_version(), Some(uuid::Version::Random));
     }
 }
