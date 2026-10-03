@@ -649,6 +649,7 @@ async fn reset_fixture(pool: &DatabasePool) {
         .unwrap_or_else(|_| panic!("fixture acquire"));
     for statement in [
         "DROP TABLE IF EXISTS storage_scopes CASCADE",
+        "DROP TABLE IF EXISTS local_auth_failures CASCADE",
         "DROP TABLE IF EXISTS activation_invitations CASCADE",
         "DROP TABLE IF EXISTS audit_events CASCADE",
         "DROP TABLE IF EXISTS sessions CASCADE",

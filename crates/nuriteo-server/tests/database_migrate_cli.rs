@@ -170,6 +170,7 @@ async fn reset_schema(pool: &DatabasePool) {
     let mut connection = pool.acquire().await.unwrap();
     for statement in [
         "DROP TABLE IF EXISTS storage_scopes",
+        "DROP TABLE IF EXISTS local_auth_failures",
         "DROP TABLE IF EXISTS activation_invitations",
         "DROP TABLE IF EXISTS audit_events",
         "DROP TABLE IF EXISTS sessions",

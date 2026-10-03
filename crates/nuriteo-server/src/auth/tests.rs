@@ -23,6 +23,39 @@ fn policy_bounds_blocking_work_and_deadlines() {
 }
 
 #[test]
+fn lockout_policy_has_bounded_defaults_and_validation() {
+    assert_eq!(
+        LoginLockoutPolicy::default(),
+        LoginLockoutPolicy::new(
+            5,
+            Duration::from_secs(15 * 60),
+            Duration::from_secs(15 * 60),
+        )
+        .unwrap()
+    );
+    assert_eq!(
+        LoginLockoutPolicy::new(2, Duration::from_secs(60), Duration::from_secs(60)),
+        Err(LoginLockoutPolicyError::InvalidThreshold)
+    );
+    assert_eq!(
+        LoginLockoutPolicy::new(21, Duration::from_secs(60), Duration::from_secs(60)),
+        Err(LoginLockoutPolicyError::InvalidThreshold)
+    );
+    assert_eq!(
+        LoginLockoutPolicy::new(5, Duration::from_secs(59), Duration::from_secs(60)),
+        Err(LoginLockoutPolicyError::InvalidWindow)
+    );
+    assert_eq!(
+        LoginLockoutPolicy::new(
+            5,
+            Duration::from_secs(60),
+            Duration::from_secs(24 * 60 * 60 + 1),
+        ),
+        Err(LoginLockoutPolicyError::InvalidLockDuration)
+    );
+}
+
+#[test]
 fn service_errors_are_stable_and_secret_free() {
     for (error, expected) in [
         (

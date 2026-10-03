@@ -24,6 +24,8 @@ use crate::identity::{
     UserId,
 };
 
+use super::lockout::{self, FailureAccounting, LoginLockoutPolicy};
+
 const DUMMY_PASSWORD_HASH: &str = "$argon2id$v=19$m=19456,t=2,p=1$a25vd24tc2FsdC12YWx1ZQ$yERZcGD1B/gLkNTYDHwutSjFbbs93oG/oqH/OErHrm0";
 const DEFAULT_BLOCKING_CONCURRENCY: usize = 4;
 const DEFAULT_PASSWORD_DEADLINE: Duration = Duration::from_secs(5);
@@ -124,6 +126,7 @@ struct AuthRuntime {
     sessions: SessionService,
     cookies: BrowserCookieBoundary,
     password: PasswordExecutor,
+    lockout: LoginLockoutPolicy,
     operation_deadline: Duration,
 }
 
@@ -148,6 +151,22 @@ impl AuthService {
         auth_policy: AuthPolicy,
         session_policy: SessionPolicy,
     ) -> Result<Self, AuthServiceError> {
+        Self::production_with_lockout_policy(
+            pool,
+            external_url,
+            auth_policy,
+            LoginLockoutPolicy::default(),
+            session_policy,
+        )
+    }
+
+    pub fn production_with_lockout_policy(
+        pool: DatabasePool,
+        external_url: &Url,
+        auth_policy: AuthPolicy,
+        lockout_policy: LoginLockoutPolicy,
+        session_policy: SessionPolicy,
+    ) -> Result<Self, AuthServiceError> {
         let cookies =
             BrowserCookieBoundary::new(external_url).map_err(|_| AuthServiceError::Internal)?;
         let sessions = SessionService::new(pool.clone(), session_policy);
@@ -157,6 +176,7 @@ impl AuthService {
                 sessions,
                 cookies,
                 password: PasswordExecutor::new(auth_policy),
+                lockout: lockout_policy,
                 operation_deadline: auth_policy.operation_deadline,
             })),
         })
@@ -176,6 +196,10 @@ impl AuthService {
             .map_err(|_| AuthServiceError::RequestForbidden)?;
         let candidate = runtime.load_candidate(&email).await?;
         let eligible = candidate.as_ref().is_some_and(LoginCandidate::eligible);
+        let failure_user_id = candidate
+            .as_ref()
+            .filter(|candidate| candidate.eligible())
+            .map(|candidate| candidate.user_id);
         let verifier = match candidate.as_ref().filter(|candidate| candidate.eligible()) {
             Some(candidate) => StoredPasswordHash::new(candidate.password_verifier.clone())
                 .map_err(|_| AuthServiceError::Internal)?,
@@ -184,7 +208,9 @@ impl AuthService {
         };
         let verification = runtime.password.verify(password, verifier).await?;
         if !eligible || verification != PasswordVerification::Match {
-            runtime.record_login_failure(correlation_id).await?;
+            runtime
+                .record_login_failure(failure_user_id, correlation_id)
+                .await?;
             return Err(AuthServiceError::AuthenticationFailed);
         }
         let candidate = candidate.ok_or(AuthServiceError::Internal)?;
@@ -194,7 +220,9 @@ impl AuthService {
         {
             Ok(result) => Ok(result),
             Err(AuthServiceError::AuthenticationFailed) => {
-                runtime.record_login_failure(correlation_id).await?;
+                runtime
+                    .record_login_failure(Some(candidate.user_id), correlation_id)
+                    .await?;
                 Err(AuthServiceError::AuthenticationFailed)
             }
             Err(error) => Err(error),
@@ -341,6 +369,15 @@ impl AuthRuntime {
                 .begin()
                 .await
                 .map_err(|_| AuthServiceError::Unavailable)?;
+            if !lockout::lock_eligible_user_for_update(&mut transaction, user_id)
+                .await
+                .map_err(|_| AuthServiceError::Unavailable)?
+                || lockout::is_locked_for_update(&mut transaction, user_id)
+                    .await
+                    .map_err(|_| AuthServiceError::Unavailable)?
+            {
+                return Err(AuthServiceError::AuthenticationFailed);
+            }
             let issued = self
                 .sessions
                 .issue_in_transaction(&mut transaction, user_id)
@@ -363,6 +400,9 @@ impl AuthRuntime {
                 session_fields.created_at,
                 correlation_id,
             )?;
+            lockout::clear(&mut transaction, user_id)
+                .await
+                .map_err(|_| AuthServiceError::Unavailable)?;
             AuditWriter::append(&mut transaction, &event)
                 .await
                 .map_err(|_| AuthServiceError::Unavailable)?;
@@ -375,7 +415,11 @@ impl AuthRuntime {
         .await
     }
 
-    async fn record_login_failure(&self, correlation_id: &str) -> Result<(), AuthServiceError> {
+    async fn record_login_failure(
+        &self,
+        user_id: Option<UserId>,
+        correlation_id: &str,
+    ) -> Result<(), AuthServiceError> {
         self.within_deadline(async {
             let mut connection = self
                 .pool
@@ -390,10 +434,23 @@ impl AuthRuntime {
                 .fetch_one(&mut *transaction)
                 .await
                 .map_err(|_| AuthServiceError::Unavailable)?;
+            let accounting = match user_id {
+                Some(user_id) => lockout::record_failure(&mut transaction, user_id, self.lockout)
+                    .await
+                    .map_err(|_| AuthServiceError::Unavailable)?,
+                None => FailureAccounting::NotTracked,
+            };
             let event = login_failure_event(timestamp(now)?, correlation_id)?;
             AuditWriter::append(&mut transaction, &event)
                 .await
                 .map_err(|_| AuthServiceError::Unavailable)?;
+            if accounting == FailureAccounting::LockStarted {
+                let user_id = user_id.ok_or(AuthServiceError::Internal)?;
+                let event = login_locked_event(user_id, timestamp(now)?, correlation_id)?;
+                AuditWriter::append(&mut transaction, &event)
+                    .await
+                    .map_err(|_| AuthServiceError::Unavailable)?;
+            }
             transaction
                 .commit()
                 .await
@@ -633,6 +690,40 @@ fn login_failure_event(
         },
         result: AuditResult::Denied,
         reason_code: Some("INVALID_CREDENTIALS".into()),
+        correlation_id: correlation_id.into(),
+        source_ip: None,
+        schema_version: 1,
+        changed_fields: vec![],
+        metadata: empty_metadata()?,
+    })
+    .map_err(|_| AuthServiceError::Internal)
+}
+
+fn login_locked_event(
+    user_id: UserId,
+    occurred_at: Timestamp,
+    correlation_id: &str,
+) -> Result<AuditEvent, AuthServiceError> {
+    AuditEvent::new(AuditEventFields {
+        id: AuditEventId::new(),
+        occurred_at,
+        actor: AuditActor {
+            kind: ActorType::System,
+            id: "local-auth".into(),
+            user_id: None,
+            display_name: None,
+        },
+        action_code: "auth.login_locked".into(),
+        target: AuditTarget {
+            kind: "user".into(),
+            id: user_id.to_string(),
+        },
+        scope: AuditScope {
+            kind: ScopeType::User,
+            id: user_id.to_string(),
+        },
+        result: AuditResult::Denied,
+        reason_code: Some("FAILED_LOGIN_THRESHOLD".into()),
         correlation_id: correlation_id.into(),
         source_ip: None,
         schema_version: 1,
