@@ -16,6 +16,7 @@ use base64::engine::general_purpose::STANDARD as BASE64;
 use bytes::Bytes;
 use tokio::io::AsyncReadExt;
 
+use super::capability_types::BackendIdentifier;
 use super::config::{AddressingStyle, CredentialProvider, ObjectStorageConfig, TlsTrust};
 use super::error::{ObjectOperation, ObjectStoreError, ObjectStoreErrorKind, classify_sdk_error};
 use super::types::{
@@ -27,9 +28,11 @@ const MAX_CONNECTIONS_PER_HOST: usize = 32;
 
 #[derive(Clone)]
 pub struct S3ObjectStore {
-    client: Client,
-    bucket: String,
-    limits: OperationLimits,
+    pub(super) client: Client,
+    pub(super) bucket: String,
+    pub(super) limits: OperationLimits,
+    pub(super) presigned_client: reqwest::Client,
+    pub(super) backend_identifier: BackendIdentifier,
 }
 
 impl fmt::Debug for S3ObjectStore {
@@ -52,6 +55,8 @@ impl S3ObjectStore {
             .map_err(|_| ObjectStoreBuildError::InvalidLimits)?;
 
         let http_client = build_http_client(config.tls_trust())?;
+        let presigned_client = build_presigned_client(config.tls_trust(), &limits)?;
+        let backend_identifier = BackendIdentifier::from_endpoint(config.endpoint().as_str());
         let region = Region::new(config.region().to_owned());
         let provider_config = ProviderConfig::without_region()
             .with_region(Some(region.clone()))
@@ -104,6 +109,8 @@ impl S3ObjectStore {
             client: Client::from_conf(builder.build()),
             bucket: config.bucket().to_owned(),
             limits,
+            presigned_client,
+            backend_identifier,
         })
     }
 
@@ -321,6 +328,30 @@ fn build_http_client(trust: &TlsTrust) -> Result<PoolClient, ObjectStoreBuildErr
         .build_https()
         .map_err(|_| ObjectStoreBuildError::TlsClient)?;
     PoolClient::new(&pool).map_err(|_| ObjectStoreBuildError::TlsClient)
+}
+
+fn build_presigned_client(
+    trust: &TlsTrust,
+    limits: &OperationLimits,
+) -> Result<reqwest::Client, ObjectStoreBuildError> {
+    let mut builder = reqwest::Client::builder()
+        .no_proxy()
+        .redirect(reqwest::redirect::Policy::none())
+        .connect_timeout(limits.connect_timeout)
+        .timeout(limits.request_timeout);
+    for certificate in trust
+        .instance_ca()
+        .into_iter()
+        .chain(trust.integration_ca())
+        .flat_map(super::config::CaBundle::certificates_der)
+    {
+        let certificate = reqwest::Certificate::from_der(certificate)
+            .map_err(|_| ObjectStoreBuildError::TlsClient)?;
+        builder = builder.add_root_certificate(certificate);
+    }
+    builder
+        .build()
+        .map_err(|_| ObjectStoreBuildError::TlsClient)
 }
 
 fn der_to_pem(certificate: &[u8]) -> Vec<u8> {

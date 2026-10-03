@@ -9,6 +9,12 @@ pub enum ObjectOperation {
     Head,
     Delete,
     List,
+    Presign,
+    Checksum,
+    MultipartCreate,
+    MultipartUpload,
+    MultipartComplete,
+    MultipartAbort,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -22,6 +28,8 @@ pub enum ObjectStoreErrorKind {
     Timeout,
     Unavailable,
     ResponseTooLarge,
+    Unsupported,
+    Integrity,
     Internal,
 }
 
@@ -111,7 +119,7 @@ where
 
 fn classify_service_code(operation: ObjectOperation, code: Option<&str>) -> ObjectStoreError {
     let (kind, retryable) = match code.unwrap_or_default() {
-        "NoSuchKey" | "NoSuchBucket" | "NotFound" | "404" => {
+        "NoSuchKey" | "NoSuchBucket" | "NoSuchUpload" | "NotFound" | "404" => {
             (ObjectStoreErrorKind::NotFound, false)
         }
         "InvalidAccessKeyId" | "InvalidToken" | "ExpiredToken" | "SignatureDoesNotMatch" => {
@@ -127,6 +135,9 @@ fn classify_service_code(operation: ObjectOperation, code: Option<&str>) -> Obje
         }
         "InternalError" | "RequestTimeout" | "ServiceUnavailable" => {
             (ObjectStoreErrorKind::Unavailable, true)
+        }
+        "NotImplemented" | "NotSupported" | "UnsupportedOperation" => {
+            (ObjectStoreErrorKind::Unsupported, false)
         }
         _ => (ObjectStoreErrorKind::Internal, false),
     };

@@ -17,6 +17,10 @@ impl SensitiveUrl {
         }
         Ok(Self(url))
     }
+
+    pub(crate) const fn expose_bearer_url(&self) -> &Url {
+        &self.0
+    }
 }
 
 impl fmt::Debug for SensitiveUrl {
