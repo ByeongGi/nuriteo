@@ -1,6 +1,7 @@
 mod activation_invitation;
 mod browser_security;
 mod id;
+mod invitation_service;
 mod password;
 mod session;
 mod session_service;
@@ -19,6 +20,12 @@ pub use browser_security::{
     CookieLifetime, IssuedBrowserCookies, SetCookieHeader, ValidatedBrowserSession,
 };
 pub use id::{ActivationInvitationId, SessionId, UserId};
+pub use invitation_service::{
+    InvitationActivationError, InvitationActivationFuture, InvitationActivator,
+    InvitationAuditContext, InvitationRevokeResult, InvitationService, InvitationServiceError,
+    InvitationServicePolicy, InvitationServicePolicyError, IssuedActivationInvitation,
+    PendingInvitationActivation,
+};
 pub use password::{
     PasswordHashError, PasswordHashInputError, PasswordPolicy, PasswordService,
     PasswordVerification, PasswordVerifyError, StoredPasswordHash,
