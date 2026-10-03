@@ -99,6 +99,7 @@ const core = http.createServer(async (request, response) => {
     return sendJson(response, { items: members });
   }
   if (request.method === "GET" && requestPath === `/api/v1/organizations/${organizationId}/invitations`) {
+    if (session !== "admin") return sendProblem(response, 403, "FORBIDDEN");
     return sendJson(response, { items: organizationInvitations });
   }
   if (request.method === "POST" && requestPath === `/api/v1/organizations/${organizationId}/invitations`) {
@@ -208,6 +209,8 @@ try {
     await inviteePage.waitForURL("**/workspaces");
     await inviteePage.getByText("Invitee Personal", { exact: true }).waitFor();
     assert.equal(await inviteePage.getByText("Alpha Organization", { exact: true }).count(), 0);
+    await inviteePage.goto(`${publicOrigin}/admin/invitations`, { waitUntil: "networkidle" });
+    await inviteePage.getByRole("heading", { name: "Administrator access required" }).waitFor();
 
     await adminPage.goto(`${publicOrigin}/organizations`, { waitUntil: "networkidle" });
     await adminPage.getByLabel("Slug").fill("alpha");
@@ -239,6 +242,11 @@ try {
       shared.click()
     ]);
     assert.equal(await shared.getAttribute("aria-current"), "page");
+    await inviteePage.goto(`${publicOrigin}/organizations?organization=${organizationId}`, {
+      waitUntil: "networkidle"
+    });
+    await inviteePage.getByText("Member access is read-only. The server enforces every mutation.").waitFor();
+    assert.equal(await inviteePage.getByRole("heading", { name: "Invite member" }).count(), 0);
     assert.ok(observedMutationCookies.some((value) => value.endsWith(":admin")));
     assert.ok(observedMutationCookies.some((value) => value.endsWith(":invitee")));
     assert.equal(serverOutput.includes(activationToken), false);

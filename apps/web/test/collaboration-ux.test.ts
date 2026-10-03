@@ -8,8 +8,10 @@ import { ApiError } from "@nuriteo/api-client";
 import { collaborationError } from "../src/lib/api/browser-security.ts";
 import {
   forwardCollaborationMutation,
+  invalidCollaborationRoute,
   uuidPathSegment
 } from "../src/lib/api/collaboration-bff.ts";
+import { DELETE as revokeActivationRoute } from "../src/app/api/v1/admin/activation-invitations/[invitationId]/route.ts";
 
 const webRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const originalFetch = globalThis.fetch;
@@ -18,6 +20,8 @@ const originalUrl = process.env.NURITEO_INTERNAL_API_URL;
 try {
   testSafeErrorClassification();
   await testExactBoundedForwarding();
+  await testDeadlineAbortAndEarlyCancellation();
+  await testInvalidRouteIsProblemDetails();
   testUxSourceContracts();
 } finally {
   globalThis.fetch = originalFetch;
@@ -30,7 +34,7 @@ function testSafeErrorClassification() {
   assert.match(collaborationError(new ApiError(409, "safe", undefined)), /expired, used, revoked/u);
   assert.doesNotMatch(collaborationError(new Error("token=nrt_org_inv_secret")), /secret|token/u);
   assert.equal(uuidPathSegment("0199ee6c-c777-7000-8000-000000005001"), "0199ee6c-c777-7000-8000-000000005001");
-  assert.throws(() => uuidPathSegment("../open-proxy"));
+  assert.equal(uuidPathSegment("../open-proxy"), undefined);
 }
 
 async function testExactBoundedForwarding() {
@@ -49,6 +53,7 @@ async function testExactBoundedForwarding() {
   assert.equal(new Headers(received?.init?.headers).has("authorization"), false);
   assert.equal(response.status, 201);
   assert.equal(response.headers.get("etag"), '"org-v1"');
+  assert.equal(response.headers.get("location"), "/api/v1/organizations/0199ee6c-c777-7000-8000-000000005001");
 
   const oversized = await forwardCollaborationMutation(new Request(
     "https://nuriteo.example.test/api/v1/organizations",
@@ -56,6 +61,65 @@ async function testExactBoundedForwarding() {
   ), { method: "POST", path: "/api/v1/organizations", requireCsrf: true, withBody: true });
   assert.equal(oversized.status, 413);
   assert.equal(oversized.headers.get("content-type"), "application/problem+json");
+
+  globalThis.fetch = async () => Response.json({ ok: true }, {
+    headers: { location: "http://core.internal:8080/private" },
+    status: 201
+  });
+  const unsafeLocation = await forwardCollaborationMutation(jsonRequest(), {
+    method: "POST", path: "/api/v1/organizations", requireCsrf: true, withBody: true
+  });
+  assert.equal(unsafeLocation.headers.has("location"), false);
+}
+
+async function testDeadlineAbortAndEarlyCancellation() {
+  const timeout = new AbortController();
+  timeout.abort();
+  const timedOut = await forwardCollaborationMutation(jsonRequest(), {
+    method: "POST", path: "/api/v1/organizations", requireCsrf: true, withBody: true
+  }, timeout.signal);
+  assert.equal(timedOut.status, 504);
+
+  const caller = new AbortController();
+  caller.abort();
+  const aborted = await forwardCollaborationMutation(jsonRequest(caller.signal), {
+    method: "POST", path: "/api/v1/organizations", requireCsrf: true, withBody: true
+  }, new AbortController().signal);
+  assert.equal(aborted.status, 408);
+
+  let cancelled = false;
+  const stream = new ReadableStream<Uint8Array>({ cancel() { cancelled = true; } });
+  const rejected = await forwardCollaborationMutation(new Request(
+    "https://nuriteo.example.test/api/v1/organizations",
+    { body: stream, headers: { host: "nuriteo.example.test", "content-type": "text/plain" }, method: "POST", duplex: "half" } as RequestInit & { duplex: "half" }
+  ), { method: "POST", path: "/api/v1/organizations", requireCsrf: false, withBody: true });
+  assert.equal(rejected.status, 415);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(cancelled, true);
+}
+
+async function testInvalidRouteIsProblemDetails() {
+  const request = new Request("https://nuriteo.example.test/api/v1/admin/activation-invitations/not-a-uuid", { method: "DELETE" });
+  const response = await revokeActivationRoute(request, { params: Promise.resolve({ invitationId: "../not-safe" }) });
+  assert.equal(response.status, 400);
+  assert.equal(response.headers.get("content-type"), "application/problem+json");
+  assert.doesNotMatch(await response.text(), /not-safe/u);
+
+  const direct = invalidCollaborationRoute(request);
+  assert.equal(direct.status, 400);
+}
+
+function jsonRequest(signal?: AbortSignal): Request {
+  return new Request("https://nuriteo.example.test/api/v1/organizations", {
+    body: "{}",
+    headers: {
+      "content-type": "application/json",
+      host: "nuriteo.example.test",
+      "x-csrf-token": `nrt_csrf_${"a".repeat(43)}`
+    },
+    method: "POST",
+    ...(signal === undefined ? {} : { signal })
+  });
 }
 
 function testUxSourceContracts() {

@@ -1,5 +1,6 @@
 import {
   forwardCollaborationMutation,
+  invalidCollaborationRoute,
   uuidPathSegment
 } from "../../../../../../../../lib/api/collaboration-bff.ts";
 
@@ -10,9 +11,14 @@ export async function POST(
   { params }: { params: Promise<{ organizationId: string; invitationId: string }> }
 ) {
   const { organizationId, invitationId } = await params;
+  const safeOrganizationId = uuidPathSegment(organizationId);
+  const safeInvitationId = uuidPathSegment(invitationId);
+  if (safeOrganizationId === undefined || safeInvitationId === undefined) {
+    return invalidCollaborationRoute(request);
+  }
   return forwardCollaborationMutation(request, {
     method: "POST",
-    path: `/api/v1/organizations/${uuidPathSegment(organizationId)}/invitations/${uuidPathSegment(invitationId)}/reissue`,
+    path: `/api/v1/organizations/${safeOrganizationId}/invitations/${safeInvitationId}/reissue`,
     requireCsrf: true,
     withBody: true
   });

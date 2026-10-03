@@ -1,5 +1,6 @@
 import {
   forwardCollaborationMutation,
+  invalidCollaborationRoute,
   uuidPathSegment
 } from "../../../../../../lib/api/collaboration-bff.ts";
 
@@ -10,9 +11,11 @@ export async function DELETE(
   { params }: { params: Promise<{ invitationId: string }> }
 ) {
   const { invitationId } = await params;
+  const safeInvitationId = uuidPathSegment(invitationId);
+  if (safeInvitationId === undefined) return invalidCollaborationRoute(request);
   return forwardCollaborationMutation(request, {
     method: "DELETE",
-    path: `/api/v1/admin/activation-invitations/${uuidPathSegment(invitationId)}`,
+    path: `/api/v1/admin/activation-invitations/${safeInvitationId}`,
     requireCsrf: true,
     withBody: false
   });
