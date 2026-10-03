@@ -1,0 +1,14 @@
+NURITEO self-hosted core API server
+
+Usage: nuriteo-server <COMMAND>
+
+Commands:
+  serve            Run the API server
+  migrate          Apply forward-only database migrations
+  bootstrap-admin  Create the first instance administrator when none exists
+  healthcheck      Check deployment readiness
+  help             Print this message or the help of the given subcommand(s)
+
+Options:
+  -V, --version  Print version
+  -h, --help     Print help

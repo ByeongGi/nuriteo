@@ -1,14 +1,13 @@
-use std::ffi::OsStr;
-use std::io::{self, Write};
-
 pub mod app;
+pub mod cli;
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
-pub const USAGE: &str = "usage: nuriteo-server --version";
+pub const USAGE: &str = "Usage: nuriteo-server <COMMAND>";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CommandStatus {
     Success,
+    Failure,
     UsageError,
 }
 
@@ -17,36 +16,16 @@ impl CommandStatus {
     pub const fn exit_code(self) -> u8 {
         match self {
             Self::Success => 0,
+            Self::Failure => 1,
             Self::UsageError => 2,
         }
     }
 }
 
-pub fn run<I, S, O, E>(args: I, stdout: &mut O, stderr: &mut E) -> io::Result<CommandStatus>
-where
-    I: IntoIterator<Item = S>,
-    S: AsRef<OsStr>,
-    O: Write,
-    E: Write,
-{
-    let mut args = args.into_iter();
-
-    match (args.next(), args.next()) {
-        (Some(argument), None) if argument.as_ref() == "--version" => {
-            writeln!(stdout, "nuriteo-server {VERSION}")?;
-            Ok(CommandStatus::Success)
-        }
-        _ => {
-            writeln!(stderr, "{USAGE}")?;
-            Ok(CommandStatus::UsageError)
-        }
-    }
-}
+pub use cli::run;
 
 #[cfg(test)]
 mod tests {
-    use std::ffi::OsString;
-
     use super::*;
 
     #[test]
@@ -55,36 +34,9 @@ mod tests {
     }
 
     #[test]
-    fn writes_the_version_to_standard_output() {
-        let mut stdout = Vec::new();
-        let mut stderr = Vec::new();
-
-        let status = run(["--version"], &mut stdout, &mut stderr).unwrap();
-
-        assert_eq!(status, CommandStatus::Success);
-        assert_eq!(status.exit_code(), 0);
-        assert_eq!(stdout, b"nuriteo-server 0.1.0\n");
-        assert!(stderr.is_empty());
-    }
-
-    #[test]
-    fn rejects_missing_unknown_and_extra_arguments() {
-        let cases = [
-            Vec::<OsString>::new(),
-            vec![OsString::from("serve")],
-            vec![OsString::from("--version"), OsString::from("extra")],
-        ];
-
-        for args in cases {
-            let mut stdout = Vec::new();
-            let mut stderr = Vec::new();
-
-            let status = run(args, &mut stdout, &mut stderr).unwrap();
-
-            assert_eq!(status, CommandStatus::UsageError);
-            assert_eq!(status.exit_code(), 2);
-            assert!(stdout.is_empty());
-            assert_eq!(stderr, b"usage: nuriteo-server --version\n");
-        }
+    fn exposes_stable_exit_codes() {
+        assert_eq!(CommandStatus::Success.exit_code(), 0);
+        assert_eq!(CommandStatus::Failure.exit_code(), 1);
+        assert_eq!(CommandStatus::UsageError.exit_code(), 2);
     }
 }
