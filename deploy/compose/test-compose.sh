@@ -14,7 +14,7 @@ select_compose() {
   case "${NURITEO_COMPOSE_PROVIDER:-auto}" in
     docker) compose_command=(docker compose); engine=docker ;;
     podman) compose_command=(podman compose); engine=podman ;;
-    uvx) compose_command=(uvx --from podman-compose==1.5.0 podman-compose); engine=podman ;;
+    uvx) compose_command=(uvx --from podman-compose==1.5.0 podman-compose --in-pod false); engine=podman ;;
     auto)
       if docker compose version >/dev/null 2>&1; then
         compose_command=(docker compose); engine=docker
@@ -48,11 +48,38 @@ service_container() {
   printf '%s\n' "$containers"
 }
 
+remove_compatibility_web() {
+  "$engine" rm --force "${project}-web-compat" >/dev/null 2>&1 || true
+}
+
+start_stack() {
+  local core_container web_container compatibility_web attempt
+  if compose up --detach --no-build; then
+    return
+  fi
+
+  # podman-compose 1.5.0 can return an internal dependency-start error after
+  # Core becomes healthy. Verify that gate, then recreate only the Web leaf via
+  # the provider's explicit no-deps path so completed one-shots are not started.
+  [ "$engine" = podman ] || return 1
+  core_container="$(service_container "$project" core)"
+  attempt=0
+  until [ "$($engine inspect --format '{{.State.Health.Status}}' "$core_container")" = healthy ]; do
+    attempt=$((attempt + 1)); [ "$attempt" -lt 60 ] || return 1; sleep 1
+  done
+  web_container="$(service_container "$project" web)"
+  "$engine" rm --force "$web_container" >/dev/null
+  compatibility_web="${project}-web-compat"
+  remove_compatibility_web
+  compose run --no-deps --detach --service-ports --name "$compatibility_web" web >/dev/null
+}
+
 cleanup() {
   if [ "${NURITEO_COMPOSE_KEEP:-0}" = 1 ]; then
     echo "preserving Compose projects: $project $failure_project" >&2
     return
   fi
+  remove_compatibility_web
   compose down --volumes --remove-orphans >/dev/null 2>&1 || true
   failure_compose down --volumes --remove-orphans >/dev/null 2>&1 || true
   rm -rf -- "$fixture_root"
@@ -146,24 +173,12 @@ for secret in 'compose-db-password-7e3bc2' 'COMPOSEACCESS7E3BC2' 'compose-rustfs
 done
 
 compose build postgres core web
-if ! compose up --detach --no-build; then
-  # podman-compose 1.5.0 can return an internal dependency-start error after
-  # Core becomes healthy. Verify that gate, then start only its already-created
-  # leaf container without asking the provider to traverse dependencies again.
-  core_container="$(service_container "$project" core)"
-  test -n "$core_container"
-  attempt=0
-  until [ "$($engine inspect --format '{{.State.Health.Status}}' "$core_container")" = healthy ]; do
-    attempt=$((attempt + 1)); [ "$attempt" -lt 60 ] || exit 1; sleep 1
-  done
-  web_container="$(service_container "$project" web)"
-  test -n "$web_container"
-  "$engine" start "$web_container" >/dev/null
-fi
+start_stack
 for job in storage-init storage-check migrate bootstrap-admin; do wait_for_job "$job" 0; done
 wait_for_web
 grep -q 'Web shell running' "$fixture_root/web.html"
-compose exec -T web /nodejs/bin/node -e '
+web_container="$(service_container "$project" web)"
+"$engine" exec "$web_container" /nodejs/bin/node -e '
   Promise.all(["live", "ready"].map((kind) => fetch(`http://core:8080/health/${kind}`)))
     .then(async ([live, ready]) => {
       const liveBody = await live.json(); const readyBody = await ready.json();
@@ -184,8 +199,9 @@ compose exec -T rustfs /bin/sh -eu -c '
   test "$status" = 200
 '
 
+remove_compatibility_web
 compose down
-compose up --detach --no-build
+start_stack
 for job in storage-init storage-check migrate bootstrap-admin; do wait_for_job "$job" 0; done
 wait_for_web
 test "$(query 'SELECT value FROM compose_sentinel;')" = 'metadata-survived'
