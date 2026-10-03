@@ -6,6 +6,7 @@ use utoipa_swagger_ui::{Config, SwaggerUi};
 
 use crate::VERSION;
 use crate::auth::{self, AuthService};
+use crate::invitations::{self, InvitationHttpService};
 use crate::workspace;
 
 pub const DOCUMENT_PATH: &str = "/api/openapi.json";
@@ -22,7 +23,8 @@ pub const DOCS_PATH: &str = "/api/docs";
     tags(
         (name = "system", description = "Public instance compatibility information"),
         (name = "authentication", description = "Local browser Session lifecycle"),
-        (name = "workspaces", description = "Authenticated Workspace projections")
+        (name = "workspaces", description = "Authenticated Workspace projections"),
+        (name = "invitations", description = "Administrator invitation and public account activation lifecycle")
     ),
     servers((url = "/", description = "Current self-hosted instance"))
 )]
@@ -101,11 +103,15 @@ async fn version() -> Json<VersionResponse> {
 
 #[must_use]
 pub fn document() -> utoipa::openapi::OpenApi {
-    openapi_parts(AuthService::unconfigured()).1
+    openapi_parts(
+        AuthService::unconfigured(),
+        InvitationHttpService::unconfigured(),
+    )
+    .1
 }
 
-pub fn router(auth: AuthService) -> Router {
-    let (api_routes, document) = openapi_parts(auth);
+pub fn router(auth: AuthService, invitations: InvitationHttpService) -> Router {
+    let (api_routes, document) = openapi_parts(auth, invitations);
     let config = Config::new([DOCUMENT_PATH]).validator_url("none");
     let docs = SwaggerUi::new(DOCS_PATH)
         .url(DOCUMENT_PATH, document)
@@ -114,9 +120,17 @@ pub fn router(auth: AuthService) -> Router {
     api_routes.merge(Router::from(docs))
 }
 
-fn openapi_parts(auth: AuthService) -> (Router, utoipa::openapi::OpenApi) {
-    workspace::openapi_router(auth::openapi_router(ApiDocument::openapi()))
+fn openapi_parts(
+    auth: AuthService,
+    invitations: InvitationHttpService,
+) -> (Router, utoipa::openapi::OpenApi) {
+    let (auth_routes, document) =
+        workspace::openapi_router(auth::openapi_router(ApiDocument::openapi()))
+            .with_state::<()>(auth)
+            .split_for_parts();
+    let (invitation_routes, document) = invitations::openapi_router(document)
         .routes(routes!(version))
-        .with_state(auth)
-        .split_for_parts()
+        .with_state(invitations)
+        .split_for_parts();
+    (auth_routes.merge(invitation_routes), document)
 }

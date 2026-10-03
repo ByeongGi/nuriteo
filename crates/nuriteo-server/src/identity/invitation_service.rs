@@ -302,6 +302,16 @@ impl InvitationService {
             .await
     }
 
+    /// Returns bounded safe invitation metadata for an active instance
+    /// administrator. Bearer credentials and digests are never selected.
+    pub async fn list(
+        &self,
+        administrator_id: UserId,
+    ) -> Result<Vec<ActivationInvitation>, InvitationServiceError> {
+        self.within_deadline(self.list_inner(administrator_id))
+            .await
+    }
+
     /// Accepts an invitation only after the supplied activator has completed
     /// User and credential persistence in this same transaction.
     pub async fn accept<A>(
@@ -638,6 +648,34 @@ impl InvitationService {
             .acquire()
             .await
             .map_err(|_| InvitationServiceError::DatabaseUnavailable)
+    }
+
+    async fn list_inner(
+        &self,
+        administrator_id: UserId,
+    ) -> Result<Vec<ActivationInvitation>, InvitationServiceError> {
+        let mut connection = self.acquire().await?;
+        let mut transaction = connection.begin().await.map_err(database_error)?;
+        require_admin_id(&mut transaction, administrator_id).await?;
+        let rows = sqlx::query(
+            "SELECT id::text, normalized_email, invited_by_user_id::text, \
+                    CASE WHEN status = 'pending' AND expires_at <= transaction_timestamp() \
+                         THEN 'expired' ELSE status END AS status, \
+                    created_at, expires_at, accepted_at, \
+                    CASE WHEN status = 'pending' AND expires_at <= transaction_timestamp() \
+                         THEN expires_at ELSE expired_at END AS expired_at, \
+                    revoked_at, superseded_at, replaced_by_invitation_id::text \
+             FROM activation_invitations ORDER BY created_at DESC, id DESC LIMIT 100",
+        )
+        .fetch_all(&mut *transaction)
+        .await
+        .map_err(database_error)?;
+        let invitations = rows
+            .iter()
+            .map(invitation_from_row)
+            .collect::<Result<Vec<_>, _>>()?;
+        transaction.commit().await.map_err(database_error)?;
+        Ok(invitations)
     }
 }
 

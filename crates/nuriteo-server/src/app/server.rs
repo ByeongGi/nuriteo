@@ -6,9 +6,10 @@ use crate::config::{Config, Environment, FileReader};
 use crate::database::{DatabasePool, DatabaseRuntimeConfig};
 use crate::health::{HealthPolicy, HealthService};
 use crate::identity::SessionPolicy;
+use crate::invitations::{InvitationHttpPolicy, InvitationHttpService};
 use crate::object_storage::{ObjectStorageConfig, OperationLimits, S3ObjectStore};
 
-use super::{Supervisor, SupervisorConfig, WorkerError, build_router_with_services};
+use super::{Supervisor, SupervisorConfig, WorkerError, build_router_with_all_services};
 
 const HTTP_WORKERS: NonZeroUsize = NonZeroUsize::MIN;
 
@@ -20,6 +21,7 @@ pub(crate) enum ServeError {
     StorageConfiguration,
     StorageInitialization,
     AuthenticationConfiguration,
+    InvitationConfiguration,
     Bind,
     Lifecycle,
     DatabaseClose,
@@ -34,6 +36,7 @@ impl ServeError {
             Self::StorageConfiguration => "storage-configuration",
             Self::StorageInitialization => "storage-initialization",
             Self::AuthenticationConfiguration => "authentication-configuration",
+            Self::InvitationConfiguration => "invitation-configuration",
             Self::Bind => "bind",
             Self::Lifecycle => "lifecycle",
             Self::DatabaseClose => "database-close",
@@ -92,8 +95,20 @@ pub(crate) async fn run_server(
             return Err(ServeError::AuthenticationConfiguration);
         }
     };
+    let invitations = match InvitationHttpService::production(
+        pool.clone(),
+        &global.public.external_url,
+        InvitationHttpPolicy::default(),
+        SessionPolicy::default(),
+    ) {
+        Ok(invitations) => invitations,
+        Err(_) => {
+            close_pool(pool, close_timeout).await?;
+            return Err(ServeError::InvitationConfiguration);
+        }
+    };
     let health = HealthService::production(pool.clone(), store, HealthPolicy::default());
-    let router = build_router_with_services(health, auth);
+    let router = build_router_with_all_services(health, auth, invitations);
     let mut supervisor = Supervisor::new(SupervisorConfig::new(
         global.server.shutdown_drain_timeout,
         HTTP_WORKERS,
@@ -141,6 +156,10 @@ mod tests {
             (
                 ServeError::AuthenticationConfiguration,
                 "authentication-configuration",
+            ),
+            (
+                ServeError::InvitationConfiguration,
+                "invitation-configuration",
             ),
             (ServeError::Bind, "bind"),
             (ServeError::Lifecycle, "lifecycle"),

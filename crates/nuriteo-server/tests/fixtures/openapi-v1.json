@@ -16,6 +16,242 @@
     }
   ],
   "paths": {
+    "/api/v1/admin/activation-invitations": {
+      "get": {
+        "tags": [
+          "invitations"
+        ],
+        "operationId": "list_invitations",
+        "responses": {
+          "200": {
+            "description": "Bounded safe invitation metadata without activation credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvitationListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Active Session required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Instance Administrator required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "invitations"
+        ],
+        "operationId": "issue_invitation",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IssueRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Invitation issued; activation URL is returned once",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssuedInvitationView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Active Session required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Instance Administrator, exact Origin and CSRF required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid or conflicting invitation request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/activation-invitations/{invitation_id}": {
+      "delete": {
+        "tags": [
+          "invitations"
+        ],
+        "operationId": "revoke_invitation",
+        "parameters": [
+          {
+            "name": "invitation_id",
+            "in": "path",
+            "description": "UUIDv7 invitation identifier",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Invitation revoked or already inactive"
+          },
+          "403": {
+            "description": "Administrator browser security policy rejected the request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/activation-invitations/{invitation_id}/reissue": {
+      "post": {
+        "tags": [
+          "invitations"
+        ],
+        "operationId": "reissue_invitation",
+        "parameters": [
+          {
+            "name": "invitation_id",
+            "in": "path",
+            "description": "UUIDv7 invitation identifier",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReissueRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Replacement issued; activation URL is returned once",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssuedInvitationView"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Administrator browser security policy rejected the request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invitation is inactive or request is invalid",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/activation": {
+      "post": {
+        "tags": [
+          "invitations"
+        ],
+        "operationId": "activate_invitation",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ActivationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Account and Personal Workspace activated; no Session is created"
+          },
+          "403": {
+            "description": "Exact canonical Origin required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Activation input or invitation is invalid",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/auth/session": {
       "delete": {
         "tags": [
@@ -290,6 +526,38 @@
   },
   "components": {
     "schemas": {
+      "ActivationRequest": {
+        "type": "object",
+        "required": [
+          "token",
+          "email",
+          "display_name",
+          "password"
+        ],
+        "properties": {
+          "display_name": {
+            "type": "string",
+            "example": "Invited member",
+            "maxLength": 200
+          },
+          "email": {
+            "type": "string",
+            "example": "member@example.test",
+            "maxLength": 320
+          },
+          "password": {
+            "type": "string",
+            "format": "password",
+            "maxLength": 1024
+          },
+          "token": {
+            "type": "string",
+            "format": "password",
+            "maxLength": 51
+          }
+        },
+        "additionalProperties": false
+      },
       "FieldViolation": {
         "type": "object",
         "required": [
@@ -311,6 +579,113 @@
             "example": "name"
           }
         }
+      },
+      "InvitationListResponse": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InvitationView"
+            }
+          }
+        }
+      },
+      "InvitationView": {
+        "type": "object",
+        "required": [
+          "id",
+          "email",
+          "status",
+          "created_at",
+          "expires_at"
+        ],
+        "properties": {
+          "accepted_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "expires_at": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "replacement_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "revoked_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "type": "string"
+          },
+          "superseded_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "IssueRequest": {
+        "type": "object",
+        "required": [
+          "email"
+        ],
+        "properties": {
+          "email": {
+            "type": "string",
+            "example": "member@example.test",
+            "maxLength": 320
+          },
+          "expires_in_seconds": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "example": 604800,
+            "maximum": 2592000,
+            "minimum": 3600
+          }
+        },
+        "additionalProperties": false
+      },
+      "IssuedInvitationView": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/InvitationView"
+          },
+          {
+            "type": "object",
+            "required": [
+              "activation_url"
+            ],
+            "properties": {
+              "activation_url": {
+                "type": "string"
+              }
+            }
+          }
+        ]
       },
       "LoginRequest": {
         "type": "object",
@@ -444,6 +819,22 @@
           }
         }
       },
+      "ReissueRequest": {
+        "type": "object",
+        "properties": {
+          "expires_in_seconds": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "example": 604800,
+            "maximum": 2592000,
+            "minimum": 3600
+          }
+        },
+        "additionalProperties": false
+      },
       "VersionResponse": {
         "type": "object",
         "required": [
@@ -513,6 +904,10 @@
     {
       "name": "workspaces",
       "description": "Authenticated Workspace projections"
+    },
+    {
+      "name": "invitations",
+      "description": "Administrator invitation and public account activation lifecycle"
     }
   ]
 }

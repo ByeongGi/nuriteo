@@ -8,6 +8,7 @@ pub mod database;
 pub mod health;
 pub mod http;
 pub mod identity;
+pub mod invitations;
 pub mod object_storage;
 pub mod observability;
 pub mod openapi;

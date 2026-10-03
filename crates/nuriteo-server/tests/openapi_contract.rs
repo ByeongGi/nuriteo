@@ -39,6 +39,10 @@ async fn serves_the_versioned_document_from_the_application_router() {
             .keys()
             .collect::<Vec<_>>(),
         vec![
+            "/api/v1/admin/activation-invitations",
+            "/api/v1/admin/activation-invitations/{invitation_id}",
+            "/api/v1/admin/activation-invitations/{invitation_id}/reissue",
+            "/api/v1/auth/activation",
             "/api/v1/auth/session",
             "/api/v1/auth/sessions",
             "/api/v1/me",
