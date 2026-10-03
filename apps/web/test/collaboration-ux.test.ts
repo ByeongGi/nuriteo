@@ -1,0 +1,87 @@
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+import { ApiError } from "@nuriteo/api-client";
+
+import { collaborationError } from "../src/lib/api/browser-security.ts";
+import {
+  forwardCollaborationMutation,
+  uuidPathSegment
+} from "../src/lib/api/collaboration-bff.ts";
+
+const webRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const originalFetch = globalThis.fetch;
+const originalUrl = process.env.NURITEO_INTERNAL_API_URL;
+
+try {
+  testSafeErrorClassification();
+  await testExactBoundedForwarding();
+  testUxSourceContracts();
+} finally {
+  globalThis.fetch = originalFetch;
+  if (originalUrl === undefined) delete process.env.NURITEO_INTERNAL_API_URL;
+  else process.env.NURITEO_INTERNAL_API_URL = originalUrl;
+}
+
+function testSafeErrorClassification() {
+  assert.match(collaborationError(new ApiError(412, "safe", undefined)), /Reload/u);
+  assert.match(collaborationError(new ApiError(409, "safe", undefined)), /expired, used, revoked/u);
+  assert.doesNotMatch(collaborationError(new Error("token=nrt_org_inv_secret")), /secret|token/u);
+  assert.equal(uuidPathSegment("0199ee6c-c777-7000-8000-000000005001"), "0199ee6c-c777-7000-8000-000000005001");
+  assert.throws(() => uuidPathSegment("../open-proxy"));
+}
+
+async function testExactBoundedForwarding() {
+  process.env.NURITEO_INTERNAL_API_URL = "http://core.internal:8080";
+  let received: { url: string; init: RequestInit | undefined } | undefined;
+  globalThis.fetch = async (input, init) => {
+    received = { url: String(input), init };
+    return Response.json({ ok: true }, { headers: { etag: '"org-v1"', location: "/api/v1/organizations/0199ee6c-c777-7000-8000-000000005001" }, status: 201 });
+  };
+  const response = await forwardCollaborationMutation(new Request(
+    "https://nuriteo.example.test/api/v1/organizations",
+    { body: "{}", headers: { cookie: "session=safe", "content-type": "application/json", host: "nuriteo.example.test", origin: "https://nuriteo.example.test", "x-csrf-token": `nrt_csrf_${"a".repeat(43)}` }, method: "POST" }
+  ), { method: "POST", path: "/api/v1/organizations", requireCsrf: true, withBody: true });
+  assert.equal(received?.url, "http://core.internal:8080/api/v1/organizations");
+  assert.equal(new Headers(received?.init?.headers).get("cookie"), "session=safe");
+  assert.equal(new Headers(received?.init?.headers).has("authorization"), false);
+  assert.equal(response.status, 201);
+  assert.equal(response.headers.get("etag"), '"org-v1"');
+
+  const oversized = await forwardCollaborationMutation(new Request(
+    "https://nuriteo.example.test/api/v1/organizations",
+    { body: "x".repeat(16_385), headers: { "content-type": "application/json", host: "nuriteo.example.test", "x-csrf-token": `nrt_csrf_${"a".repeat(43)}` }, method: "POST" }
+  ), { method: "POST", path: "/api/v1/organizations", requireCsrf: true, withBody: true });
+  assert.equal(oversized.status, 413);
+  assert.equal(oversized.headers.get("content-type"), "application/problem+json");
+}
+
+function testUxSourceContracts() {
+  const activation = read("src/app/activate/activation-form.tsx");
+  const admin = read("src/app/(authenticated)/admin/invitations/activation-invitations.tsx");
+  const organizations = read("src/app/(authenticated)/organizations/organization-console.tsx");
+  const accept = read("src/app/(authenticated)/organization-invitations/accept/accept-invitation.tsx");
+  assert.match(activation, /useSearchParams\(\)/u);
+  assert.match(activation, /router\.replace\("\/sign-in\?activated=1"\)/u);
+  assert.match(admin, /activationUrl\.consume\(\)/u);
+  assert.match(organizations, /acceptUrl\.consume\(\)/u);
+  assert.match(accept, /router\.replace\(action === "accept" \? "\/workspaces\?joined=1"/u);
+  assert.doesNotMatch(`${activation}\n${admin}\n${organizations}\n${accept}`, /localStorage|sessionStorage|console\./u);
+  for (const file of findRoutes("src/app/api/v1")) {
+    assert.doesNotMatch(file, /\[\.\.\./u);
+  }
+}
+
+function findRoutes(directory: string): string[] {
+  const absolute = path.join(webRoot, directory);
+  return fs.readdirSync(absolute, { withFileTypes: true }).flatMap((entry) => {
+    const relative = path.posix.join(directory, entry.name);
+    return entry.isDirectory() ? findRoutes(relative) : entry.name === "route.ts" ? [relative] : [];
+  });
+}
+
+function read(relative: string): string {
+  return fs.readFileSync(path.join(webRoot, relative), "utf8");
+}

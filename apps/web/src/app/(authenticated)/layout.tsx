@@ -1,4 +1,5 @@
 import { getCurrentUser } from "@nuriteo/api-client";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
 
@@ -27,6 +28,13 @@ export default async function AuthenticatedLayout({
           </div>
           <p className="authenticated-shell__email">{current.data.user.email}</p>
         </header>
+        <nav className="authenticated-shell__navigation" aria-label="Account navigation">
+          <Link href="/workspaces">Workspaces</Link>
+          <Link href="/organizations">Organizations</Link>
+          {current.data.user.is_instance_admin ? (
+            <Link href="/admin/invitations">Activation invitations</Link>
+          ) : null}
+        </nav>
         {children}
       </div>
     );

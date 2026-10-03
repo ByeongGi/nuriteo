@@ -40,13 +40,18 @@ function testServerFirstBoundaries(): void {
   }
   const clientFiles = findFiles("src").filter((file) => /["']use client["']/u.test(read(file)));
   assert.deepEqual(clientFiles.sort(), [
+    "src/app/(authenticated)/admin/invitations/activation-invitations.tsx",
+    "src/app/(authenticated)/organization-invitations/accept/accept-invitation.tsx",
+    "src/app/(authenticated)/organizations/organization-console.tsx",
     "src/app/_components/error-view.tsx",
+    "src/app/activate/activation-form.tsx",
     "src/app/error.tsx",
     "src/app/global-error.tsx",
     "src/app/sign-in/sign-in-form.tsx",
     "src/components/theme-selector.tsx",
     "src/components/ui/button.tsx",
-    "src/lib/api/browser-client.ts"
+    "src/lib/api/browser-client.ts",
+    "src/lib/api/browser-security.ts"
   ]);
 }
 
