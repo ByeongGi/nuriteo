@@ -68,7 +68,7 @@ pub async fn run_embedded_migrations(
     run_migrator(pool, options, &migrator).await
 }
 
-fn embedded_migrator() -> Migrator {
+pub(super) fn embedded_migrator() -> Migrator {
     migrator_without_driver_lock(vec![Migration::new(
         1,
         Cow::Borrowed("framework baseline"),

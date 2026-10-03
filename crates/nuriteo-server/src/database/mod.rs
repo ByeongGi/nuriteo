@@ -1,9 +1,12 @@
-//! PostgreSQL connectivity boundary.
+//! PostgreSQL operational boundary.
 //!
-//! This module owns pool creation and transport policy only. Schema migrations,
-//! entities, and repositories deliberately live outside this boundary.
+//! This module owns bounded pool/TLS configuration, explicit migrations and
+//! schema readiness. Domain entities and repositories deliberately live outside
+//! this boundary, and application startup never runs migrations implicitly.
 
+mod config;
 mod migrations;
+mod readiness;
 mod tls;
 
 use std::fmt;
@@ -17,7 +20,9 @@ use sqlx::{PgPool, Postgres};
 use tokio::time;
 use url::Url;
 
+pub use config::{DatabaseRuntimeConfig, DatabaseRuntimeConfigError};
 pub use migrations::{MigrationError, MigrationOptions, MigrationReport, run_embedded_migrations};
+pub use readiness::{SchemaReadiness, SchemaReadinessError, check_schema_readiness};
 pub use tls::{ClientIdentity, DatabaseTlsConfig, TlsConfigError};
 
 pub const MIN_CONNECTION_LIMIT: u32 = 0;
@@ -198,9 +203,25 @@ fn reject_ambient_driver_configuration(
     // SQLx initializes these libpq-compatible options from process variables.
     // They are outside NURITEO's declared precedence and must not silently
     // replace explicit trust or session policy.
-    if ["PGPASSWORD", "PGSSLCERT", "PGSSLKEY", "PGOPTIONS"]
-        .into_iter()
-        .any(|name| environment(name).is_some())
+    if [
+        "PGPASSWORD",
+        "PGPASSFILE",
+        "PGSSLMODE",
+        "PGSSLROOTCERT",
+        "PGSSLCERT",
+        "PGSSLKEY",
+        "PGHOST",
+        "PGHOSTADDR",
+        "PGPORT",
+        "PGUSER",
+        "PGDATABASE",
+        "PGAPPNAME",
+        "PGOPTIONS",
+        "PGSERVICE",
+        "PGSERVICEFILE",
+    ]
+    .into_iter()
+    .any(|name| environment(name).is_some())
     {
         return Err(DatabaseConfigError::ConflictingDriverEnvironment);
     }

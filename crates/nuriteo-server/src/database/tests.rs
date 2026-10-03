@@ -73,7 +73,23 @@ fn errors_never_include_connection_credentials() {
 
 #[test]
 fn rejects_undeclared_libpq_secret_and_session_environment() {
-    for forbidden in ["PGPASSWORD", "PGSSLCERT", "PGSSLKEY", "PGOPTIONS"] {
+    for forbidden in [
+        "PGPASSWORD",
+        "PGPASSFILE",
+        "PGSSLMODE",
+        "PGSSLROOTCERT",
+        "PGSSLCERT",
+        "PGSSLKEY",
+        "PGHOST",
+        "PGHOSTADDR",
+        "PGPORT",
+        "PGUSER",
+        "PGDATABASE",
+        "PGAPPNAME",
+        "PGOPTIONS",
+        "PGSERVICE",
+        "PGSERVICEFILE",
+    ] {
         let result = connect_options_with_environment(&valid_config(), |name| {
             (name == forbidden).then(|| "must-not-leak".into())
         });
