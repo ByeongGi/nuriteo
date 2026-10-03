@@ -1,0 +1,101 @@
+name: CI / Integration
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/ci-integration.yml"
+      - "apps/**"
+      - "compat/**"
+      - "crates/**"
+      - "packages/**"
+      - "tests/**"
+      - "vendor/**"
+      - "workers/**"
+      - "Cargo.lock"
+      - "Cargo.toml"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "rust-toolchain.toml"
+      - "tsconfig*.json"
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/ci-integration.yml"
+      - "apps/**"
+      - "compat/**"
+      - "crates/**"
+      - "packages/**"
+      - "tests/**"
+      - "vendor/**"
+      - "workers/**"
+      - "Cargo.lock"
+      - "Cargo.toml"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "rust-toolchain.toml"
+      - "tsconfig*.json"
+  schedule:
+    - cron: "31 3 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-integration-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  integration:
+    name: Runtime and browser (serial)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.15.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.23.0
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.97.1
+          targets: wasm32-unknown-unknown
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm build:wasm
+      - run: pnpm check:system-wasm-terminal
+      - run: pnpm test:browser-host
+      - run: pnpm test:package-managers
+      - run: pnpm test:vite
+      - run: pnpm test:bundler-candidates
+      - run: pnpm test:preview-service
+      - run: pnpm test:browser
+
+  extended:
+    name: Extended runtime evidence (serial)
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.15.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.23.0
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.97.1
+          targets: wasm32-unknown-unknown
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm build:wasm
+      - run: pnpm test:bundler-browser
+      - run: pnpm test:non-js-tooling
+      - run: pnpm test:workflow-soak

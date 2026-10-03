@@ -1,24 +1,30 @@
-name: Release provenance
+name: CI / Release
 
 on:
   workflow_dispatch:
-  pull_request:
-    paths:
-      - ".github/workflows/release-provenance.yml"
-      - "compat/**"
-      - "apps/preview-service/**"
-      - "docs/release/**"
-      - "dist/sdk/package/**"
-      - "packages/**"
-      - "scripts/**"
-      - "workers/**"
-      - "package.json"
-      - "pnpm-lock.yaml"
-      - "Cargo.lock"
+    inputs:
+      channel:
+        description: Validation channel; this workflow never publishes
+        required: true
+        default: internal
+        type: choice
+        options:
+          - internal
+          - beta-candidate
+          - stable
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
-  release-provenance:
+  release:
+    name: Validate ${{ inputs.channel }} candidate
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -37,7 +43,7 @@ jobs:
       - run: node tooling/checks/check-release-policy.ts
       - run: node tooling/checks/check-performance-baseline.ts
       - run: node tooling/checks/check-soak-baseline.ts
-      - run: node tooling/release/package-sdk.ts
+      - run: node tooling/release/package-sdk.ts --write-fingerprint
       - run: node tooling/checks/check-sdk-public-release.ts
       - run: node tooling/checks/check-sdk-publish-rehearsal.ts
       - run: node tooling/checks/check-release-readiness.ts
@@ -45,3 +51,11 @@ jobs:
       - run: node tooling/checks/check-public-beta-readiness.ts
       - run: node tooling/checks/check-release-provenance.ts
       - run: node tooling/checks/check-workspace.ts
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nuriteo-release-candidate-${{ github.sha }}
+          path: |
+            dist/sdk
+            docs/release/fingerprint.json
+          if-no-files-found: error
+          retention-days: 14
