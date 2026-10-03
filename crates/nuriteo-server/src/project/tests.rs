@@ -38,10 +38,16 @@ fn identifiers_are_uuid_v7_and_serialize_canonically() {
 
     let mut non_rfc_bytes = project_id().into_uuid().into_bytes();
     non_rfc_bytes[8] &= 0x3f;
+    let non_rfc = Uuid::from_bytes(non_rfc_bytes);
     assert_eq!(
-        ProjectId::from_uuid(Uuid::from_bytes(non_rfc_bytes)),
+        ProjectId::from_uuid(non_rfc),
         Err(ProjectError::IdentifierMustBeVersion7)
     );
+    assert_eq!(
+        non_rfc.to_string().parse::<ProjectId>(),
+        Err(ProjectError::IdentifierMustBeVersion7)
+    );
+    assert!(serde_json::from_value::<ProjectId>(json!(non_rfc.to_string())).is_err());
 
     let encoded = serde_json::to_string(&project_id()).unwrap_or_else(|error| panic!("{error}"));
     assert_eq!(encoded, format!("\"{PROJECT_ID}\""));
@@ -49,6 +55,30 @@ fn identifiers_are_uuid_v7_and_serialize_canonically() {
         serde_json::from_str::<ProjectId>(&encoded).unwrap_or_else(|error| panic!("{error}")),
         project_id()
     );
+}
+
+#[test]
+fn project_reconstruction_rejects_non_rfc_owner_and_scope_ids() {
+    let user_project = reconstruct(active_fields(ProjectOwner::User(user_id())))
+        .unwrap_or_else(|error| panic!("user project fixture: {error}"));
+    let mut invalid_user_owner =
+        serde_json::to_value(&user_project).unwrap_or_else(|error| panic!("serialize: {error}"));
+    invalid_user_owner["owner"]["User"] = json!(non_rfc_uuid_v7(USER_ID).to_string());
+    assert!(serde_json::from_value::<Project>(invalid_user_owner).is_err());
+
+    let organization_project =
+        reconstruct(active_fields(ProjectOwner::Organization(organization_id())))
+            .unwrap_or_else(|error| panic!("organization project fixture: {error}"));
+    let mut invalid_organization_owner = serde_json::to_value(&organization_project)
+        .unwrap_or_else(|error| panic!("serialize: {error}"));
+    invalid_organization_owner["owner"]["Organization"] =
+        json!(non_rfc_uuid_v7(ORGANIZATION_ID).to_string());
+    assert!(serde_json::from_value::<Project>(invalid_organization_owner).is_err());
+
+    let mut invalid_scope =
+        serde_json::to_value(&user_project).unwrap_or_else(|error| panic!("serialize: {error}"));
+    invalid_scope["storage_scope_id"] = json!(non_rfc_uuid_v7(STORAGE_SCOPE_ID).to_string());
+    assert!(serde_json::from_value::<Project>(invalid_scope).is_err());
 }
 
 #[test]
@@ -326,6 +356,14 @@ fn organization_id() -> OrganizationId {
 
 fn storage_scope_id() -> StorageScopeId {
     StorageScopeId::from_str(STORAGE_SCOPE_ID).unwrap_or_else(|error| panic!("{error}"))
+}
+
+fn non_rfc_uuid_v7(value: &str) -> Uuid {
+    let mut bytes = Uuid::parse_str(value)
+        .unwrap_or_else(|error| panic!("UUID fixture: {error}"))
+        .into_bytes();
+    bytes[8] &= 0x3f;
+    Uuid::from_bytes(bytes)
 }
 
 fn timestamp(seconds: i64) -> Timestamp {

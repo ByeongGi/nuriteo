@@ -1,11 +1,11 @@
 use std::str::FromStr;
 
 use serde_json::{Value, json};
-use uuid::{Uuid, Version};
+use uuid::{Uuid, Variant, Version};
 
 use super::{
-    IdentityError, Session, SessionFields, SessionId, Timestamp, User, UserFields, UserId,
-    UserStatus,
+    ActivationInvitationId, IdentityError, Session, SessionFields, SessionId, Timestamp, User,
+    UserFields, UserId, UserStatus,
 };
 
 const USER_ID: &str = "01890f3e-0000-7000-8000-000000000001";
@@ -18,6 +18,7 @@ fn generated_and_parsed_identifiers_are_non_nil_version_7() {
         let user_id = UserId::new();
         assert!(!user_id.into_uuid().is_nil());
         assert_eq!(user_id.into_uuid().get_version(), Some(Version::SortRand));
+        assert_eq!(user_id.into_uuid().get_variant(), Variant::RFC4122);
         assert_eq!(
             UserId::from_str(&user_id.to_string()).unwrap_or_else(|error| panic!("{error}")),
             user_id
@@ -36,6 +37,40 @@ fn generated_and_parsed_identifiers_are_non_nil_version_7() {
         UserId::from_str("not-a-uuid"),
         Err(IdentityError::InvalidIdentifier)
     );
+}
+
+#[test]
+fn persisted_identity_ids_reject_non_rfc_uuid_v7_at_every_input_boundary() {
+    for generated in [
+        UserId::new().into_uuid(),
+        SessionId::new().into_uuid(),
+        ActivationInvitationId::new().into_uuid(),
+    ] {
+        assert_eq!(generated.get_version(), Some(Version::SortRand));
+        assert_eq!(generated.get_variant(), Variant::RFC4122);
+    }
+
+    let invalid = non_rfc_uuid_v7(USER_ID);
+    assert_eq!(invalid.get_version(), Some(Version::SortRand));
+    assert_ne!(invalid.get_variant(), Variant::RFC4122);
+
+    macro_rules! assert_rejected {
+        ($id:ty) => {
+            assert_eq!(
+                <$id>::from_uuid(invalid),
+                Err(IdentityError::IdentifierMustBeVersion7)
+            );
+            assert_eq!(
+                invalid.to_string().parse::<$id>(),
+                Err(IdentityError::IdentifierMustBeVersion7)
+            );
+            assert!(serde_json::from_value::<$id>(json!(invalid.to_string())).is_err());
+        };
+    }
+
+    assert_rejected!(UserId);
+    assert_rejected!(SessionId);
+    assert_rejected!(ActivationInvitationId);
 }
 
 #[test]
@@ -321,4 +356,12 @@ fn session_id() -> SessionId {
 
 fn replacement_session_id() -> SessionId {
     SessionId::from_str(REPLACEMENT_SESSION_ID).unwrap_or_else(|error| panic!("{error}"))
+}
+
+fn non_rfc_uuid_v7(value: &str) -> Uuid {
+    let mut bytes = Uuid::parse_str(value)
+        .unwrap_or_else(|error| panic!("UUID fixture: {error}"))
+        .into_bytes();
+    bytes[8] &= 0x3f;
+    Uuid::from_bytes(bytes)
 }

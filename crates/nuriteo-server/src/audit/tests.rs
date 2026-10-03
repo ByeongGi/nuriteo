@@ -2,7 +2,7 @@ use std::net::{IpAddr, Ipv4Addr};
 use std::str::FromStr;
 
 use serde_json::json;
-use uuid::Uuid;
+use uuid::{Uuid, Variant, Version};
 
 use super::{
     ActorType, AuditActor, AuditEvent, AuditEventFields, AuditEventId, AuditMetadata, AuditResult,
@@ -15,7 +15,9 @@ const USER_ID: &str = "01890f3e-0000-7000-8000-000000000001";
 
 #[test]
 fn event_identifiers_require_non_nil_uuid_v7() {
-    assert!(AuditEventId::new().into_uuid().get_version_num() == 7);
+    let generated = AuditEventId::new().into_uuid();
+    assert_eq!(generated.get_version(), Some(Version::SortRand));
+    assert_eq!(generated.get_variant(), Variant::RFC4122);
     assert_eq!(
         AuditEventId::from_uuid(Uuid::nil()),
         Err(AuditValidationError::InvalidIdentifier)
@@ -26,6 +28,20 @@ fn event_identifiers_require_non_nil_uuid_v7() {
     );
     assert_eq!(
         AuditEventId::from_str("not-a-uuid"),
+        Err(AuditValidationError::InvalidIdentifier)
+    );
+
+    let mut bytes = generated.into_bytes();
+    bytes[8] &= 0x3f;
+    let invalid = Uuid::from_bytes(bytes);
+    assert_eq!(invalid.get_version(), Some(Version::SortRand));
+    assert_ne!(invalid.get_variant(), Variant::RFC4122);
+    assert_eq!(
+        AuditEventId::from_uuid(invalid),
+        Err(AuditValidationError::InvalidIdentifier)
+    );
+    assert_eq!(
+        AuditEventId::from_str(&invalid.to_string()),
         Err(AuditValidationError::InvalidIdentifier)
     );
 }

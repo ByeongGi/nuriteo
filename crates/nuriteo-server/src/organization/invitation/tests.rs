@@ -1,4 +1,35 @@
 use super::*;
+use uuid::{Uuid, Variant, Version};
+
+#[test]
+fn invitation_ids_reject_non_rfc_uuid_v7_at_every_input_boundary() {
+    let id = OrganizationInvitationId::new();
+    assert_eq!(
+        Uuid::parse_str(&id.to_string())
+            .unwrap_or_else(|error| panic!("generated UUID: {error}"))
+            .get_variant(),
+        Variant::RFC4122
+    );
+    let mut bytes = Uuid::parse_str(&id.to_string())
+        .unwrap_or_else(|error| panic!("generated UUID: {error}"))
+        .into_bytes();
+    bytes[8] &= 0x3f;
+    let invalid = Uuid::from_bytes(bytes);
+    assert_eq!(invalid.get_version(), Some(Version::SortRand));
+    assert_ne!(invalid.get_variant(), Variant::RFC4122);
+    assert_eq!(
+        OrganizationInvitationId::from_uuid(invalid),
+        Err(OrganizationInvitationError::InvalidIdentifier)
+    );
+    assert_eq!(
+        invalid.to_string().parse::<OrganizationInvitationId>(),
+        Err(OrganizationInvitationError::InvalidIdentifier)
+    );
+    assert!(
+        serde_json::from_value::<OrganizationInvitationId>(serde_json::json!(invalid.to_string()))
+            .is_err()
+    );
+}
 
 #[test]
 fn token_is_distinct_bounded_canonical_and_redacted() {

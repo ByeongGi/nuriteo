@@ -3,7 +3,7 @@ use std::str::FromStr;
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use utoipa::ToSchema;
-use uuid::{Uuid, Version};
+use uuid::{Uuid, Variant, Version};
 
 use super::OrganizationError;
 
@@ -26,7 +26,8 @@ impl OrganizationId {
         if value.is_nil() {
             return Err(OrganizationError::NilIdentifier);
         }
-        if value.get_version() != Some(Version::SortRand) {
+        if value.get_version() != Some(Version::SortRand) || value.get_variant() != Variant::RFC4122
+        {
             return Err(OrganizationError::IdentifierMustBeVersion7);
         }
         Ok(Self(value))

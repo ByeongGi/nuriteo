@@ -2,7 +2,7 @@ use std::fmt;
 use std::str::FromStr;
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use uuid::{Uuid, Version};
+use uuid::{Uuid, Variant, Version};
 
 use super::IdentityError;
 
@@ -25,7 +25,9 @@ macro_rules! uuid_v7_id {
                 if value.is_nil() {
                     return Err(IdentityError::NilIdentifier);
                 }
-                if value.get_version() != Some(Version::SortRand) {
+                if value.get_version() != Some(Version::SortRand)
+                    || value.get_variant() != Variant::RFC4122
+                {
                     return Err(IdentityError::IdentifierMustBeVersion7);
                 }
                 Ok(Self(value))

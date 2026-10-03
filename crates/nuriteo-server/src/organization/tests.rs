@@ -1,7 +1,7 @@
 use std::str::FromStr;
 
 use serde_json::{Value, json};
-use uuid::{Uuid, Version};
+use uuid::{Uuid, Variant, Version};
 
 use super::*;
 use crate::identity::{Timestamp, UserId};
@@ -14,6 +14,7 @@ fn identifiers_are_uuid_v7_and_serialize_canonically() {
     for _ in 0..128 {
         let id = OrganizationId::new();
         assert_eq!(id.into_uuid().get_version(), Some(Version::SortRand));
+        assert_eq!(id.into_uuid().get_variant(), Variant::RFC4122);
         assert_eq!(id.to_string().parse(), Ok(id));
     }
     assert_eq!(
@@ -29,6 +30,19 @@ fn identifiers_are_uuid_v7_and_serialize_canonically() {
         Err(OrganizationError::InvalidIdentifier)
     );
 
+    let invalid = non_rfc_uuid_v7(organization_id().into_uuid());
+    assert_eq!(invalid.get_version(), Some(Version::SortRand));
+    assert_ne!(invalid.get_variant(), Variant::RFC4122);
+    assert_eq!(
+        OrganizationId::from_uuid(invalid),
+        Err(OrganizationError::IdentifierMustBeVersion7)
+    );
+    assert_eq!(
+        invalid.to_string().parse::<OrganizationId>(),
+        Err(OrganizationError::IdentifierMustBeVersion7)
+    );
+    assert!(serde_json::from_value::<OrganizationId>(json!(invalid.to_string())).is_err());
+
     let id = organization_id();
     let encoded = serde_json::to_string(&id).unwrap_or_else(|error| panic!("{error}"));
     assert_eq!(encoded, format!("\"{ORGANIZATION_ID}\""));
@@ -36,6 +50,12 @@ fn identifiers_are_uuid_v7_and_serialize_canonically() {
         serde_json::from_str::<OrganizationId>(&encoded).unwrap_or_else(|error| panic!("{error}")),
         id
     );
+}
+
+fn non_rfc_uuid_v7(value: Uuid) -> Uuid {
+    let mut bytes = value.into_bytes();
+    bytes[8] &= 0x3f;
+    Uuid::from_bytes(bytes)
 }
 
 #[test]

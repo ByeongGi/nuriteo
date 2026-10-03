@@ -2,7 +2,7 @@ use std::fmt;
 use std::str::FromStr;
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use uuid::{Uuid, Version};
+use uuid::{Uuid, Variant, Version};
 
 use crate::identity::{Timestamp, UserId};
 use crate::organization::OrganizationId;
@@ -24,7 +24,8 @@ impl StorageScopeId {
         if value.is_nil() {
             return Err(WorkspaceDomainError::NilIdentifier);
         }
-        if value.get_version() != Some(Version::SortRand) {
+        if value.get_version() != Some(Version::SortRand) || value.get_variant() != Variant::RFC4122
+        {
             return Err(WorkspaceDomainError::IdentifierMustBeVersion7);
         }
         Ok(Self(value))

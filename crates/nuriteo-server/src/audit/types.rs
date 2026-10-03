@@ -4,7 +4,7 @@ use std::net::IpAddr;
 use std::str::FromStr;
 
 use serde_json::Value;
-use uuid::{Uuid, Version};
+use uuid::{Uuid, Variant, Version};
 
 use crate::identity::{Timestamp, UserId};
 
@@ -30,7 +30,8 @@ impl AuditEventId {
         if value.is_nil() {
             return Err(AuditValidationError::InvalidIdentifier);
         }
-        if value.get_version() != Some(Version::SortRand) {
+        if value.get_version() != Some(Version::SortRand) || value.get_variant() != Variant::RFC4122
+        {
             return Err(AuditValidationError::InvalidIdentifier);
         }
         Ok(Self(value))

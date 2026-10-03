@@ -1,7 +1,7 @@
 use std::str::FromStr;
 
 use serde_json::json;
-use uuid::Uuid;
+use uuid::{Uuid, Variant, Version};
 
 use crate::identity::{Timestamp, UserId};
 use crate::organization::OrganizationId;
@@ -15,6 +15,7 @@ use super::{
 fn storage_scope_identifiers_are_uuid_v7_and_serialize_stably() {
     let id = StorageScopeId::new();
     assert_eq!(id.into_uuid().get_version_num(), 7);
+    assert_eq!(id.into_uuid().get_variant(), Variant::RFC4122);
     let json = serde_json::to_string(&id).expect("scope ID must serialize");
     assert_eq!(
         serde_json::from_str::<StorageScopeId>(&json).expect("scope ID must deserialize"),
@@ -28,6 +29,25 @@ fn storage_scope_identifiers_are_uuid_v7_and_serialize_stably() {
         StorageScopeId::from_uuid(Uuid::new_v4()),
         Err(WorkspaceDomainError::IdentifierMustBeVersion7)
     );
+
+    let invalid = non_rfc_uuid_v7(id.into_uuid());
+    assert_eq!(invalid.get_version(), Some(Version::SortRand));
+    assert_ne!(invalid.get_variant(), Variant::RFC4122);
+    assert_eq!(
+        StorageScopeId::from_uuid(invalid),
+        Err(WorkspaceDomainError::IdentifierMustBeVersion7)
+    );
+    assert_eq!(
+        invalid.to_string().parse::<StorageScopeId>(),
+        Err(WorkspaceDomainError::IdentifierMustBeVersion7)
+    );
+    assert!(serde_json::from_value::<StorageScopeId>(json!(invalid.to_string())).is_err());
+}
+
+fn non_rfc_uuid_v7(value: Uuid) -> Uuid {
+    let mut bytes = value.into_bytes();
+    bytes[8] &= 0x3f;
+    Uuid::from_bytes(bytes)
 }
 
 #[test]

@@ -7,7 +7,7 @@ use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use sha2::{Digest, Sha256};
 use utoipa::ToSchema;
-use uuid::{Uuid, Version};
+use uuid::{Uuid, Variant, Version};
 
 use crate::identity::{InvitationExpiryPolicy, NormalizedEmail, Timestamp, UserId};
 
@@ -36,7 +36,8 @@ impl OrganizationInvitationId {
         if value.is_nil() {
             return Err(OrganizationInvitationError::InvalidIdentifier);
         }
-        if value.get_version() != Some(Version::SortRand) {
+        if value.get_version() != Some(Version::SortRand) || value.get_variant() != Variant::RFC4122
+        {
             return Err(OrganizationInvitationError::InvalidIdentifier);
         }
         Ok(Self(value))
