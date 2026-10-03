@@ -12,3 +12,6 @@ path = "src/lib.rs"
 [[bin]]
 name = "nuriteo-server"
 path = "src/main.rs"
+
+[dependencies]
+tokio = { version = "1.48.0", features = ["macros", "rt", "signal", "sync", "time"] }

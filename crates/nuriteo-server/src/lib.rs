@@ -1,6 +1,8 @@
 use std::ffi::OsStr;
 use std::io::{self, Write};
 
+pub mod app;
+
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const USAGE: &str = "usage: nuriteo-server --version";
 
