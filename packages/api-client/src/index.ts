@@ -11,6 +11,8 @@ export {
   ApiTransportError
 } from "./errors.ts";
 export { getVersion } from "./system.ts";
+export { createSession, deleteSession, getCurrentUser } from "./auth.ts";
+export { getCurrentWorkspaces } from "./workspaces.ts";
 export {
   API_PREFIX,
   DEFAULT_MAX_RESPONSE_BYTES,
@@ -30,4 +32,19 @@ export type {
   ProblemDetails
 } from "./types.ts";
 export type { ApiClientErrorKind } from "./errors.ts";
+export type {
+  CreateSessionInput,
+  DeleteSessionOptions,
+  MeSession,
+  MeUser,
+  MeView
+} from "./auth.ts";
+export type { ApiEmptyResult, ApiResult, DomainRequestOptions } from "./domain.ts";
 export type { VersionResponse } from "./system.ts";
+export type {
+  OrganizationWorkspace,
+  PersonalWorkspace,
+  Workspace,
+  WorkspaceCollection,
+  WorkspaceOwnerType
+} from "./workspaces.ts";
