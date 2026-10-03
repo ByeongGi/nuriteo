@@ -446,4 +446,31 @@ mod tests {
         assert!(!serialized.contains("X-Amz-Signature"));
         assert!(!serialized.contains("object"));
     }
+
+    #[test]
+    fn cleanup_failure_or_orphan_always_fails_compatibility() {
+        let compatible = CapabilityReport {
+            backend: BackendIdentifier::from_endpoint("https://safe.example.test"),
+            checked_at_unix_seconds: 1,
+            server_release: "test".to_owned(),
+            checksum: CapabilityState::Supported,
+            presigned_get: CapabilityState::Supported,
+            presigned_put: CapabilityState::Supported,
+            multipart_complete: CapabilityState::Supported,
+            multipart_abort: CapabilityState::Supported,
+            cleanup: CapabilityState::Supported,
+            orphan_warning: false,
+        };
+        assert!(compatible.is_compatible());
+
+        for (cleanup, orphan_warning) in [
+            (CapabilityState::Failed, false),
+            (CapabilityState::Supported, true),
+        ] {
+            let mut report = compatible.clone();
+            report.cleanup = cleanup;
+            report.orphan_warning = orphan_warning;
+            assert!(!report.is_compatible());
+        }
+    }
 }

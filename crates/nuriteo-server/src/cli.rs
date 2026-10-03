@@ -11,6 +11,7 @@ use crate::database::{
     run_embedded_migrations,
 };
 use crate::health::run_http_healthcheck;
+use crate::storage_check;
 use crate::{CommandStatus, VERSION};
 
 const BINARY_NAME: &str = "nuriteo-server";
@@ -21,6 +22,7 @@ pub enum OperationalCommand {
     Migrate,
     BootstrapAdmin,
     Healthcheck,
+    StorageCheck,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -37,6 +39,7 @@ impl OperationalCommand {
             Self::Migrate => "migrate",
             Self::BootstrapAdmin => "bootstrap-admin",
             Self::Healthcheck => "healthcheck",
+            Self::StorageCheck => "storage-check",
         }
     }
 }
@@ -72,6 +75,11 @@ pub fn root_command() -> Command {
         .subcommand(
             Command::new("healthcheck")
                 .about("Check deployment readiness")
+                .disable_version_flag(true),
+        )
+        .subcommand(
+            Command::new("storage-check")
+                .about("Check configured object storage capabilities")
                 .disable_version_flag(true),
         )
 }
@@ -149,6 +157,9 @@ where
         Ok(CliAction::Operational(OperationalCommand::Healthcheck)) => {
             healthcheck(stdout, stderr).await
         }
+        Ok(CliAction::Operational(OperationalCommand::StorageCheck)) => {
+            storage_check(stdout, stderr).await
+        }
         Ok(CliAction::Operational(command)) => unavailable(command, stderr),
         Err(error) if is_successful_display(error.kind()) => {
             write!(stdout, "{error}")?;
@@ -182,6 +193,29 @@ async fn healthcheck<O: Write, E: Write>(
         writeln!(stderr, "{BINARY_NAME}: healthcheck unavailable")?;
         Ok(CommandStatus::Failure)
     }
+}
+
+async fn storage_check<O: Write, E: Write>(
+    stdout: &mut O,
+    stderr: &mut E,
+) -> io::Result<CommandStatus> {
+    match storage_check::execute(&SystemEnvironment, &SystemFileReader).await {
+        Ok(report) => {
+            serde_json::to_writer(&mut *stdout, &report).map_err(io::Error::other)?;
+            writeln!(stdout)?;
+            if report.is_compatible() {
+                Ok(CommandStatus::Success)
+            } else {
+                storage_check_failure(stderr, "incompatible")
+            }
+        }
+        Err(error) => storage_check_failure(stderr, error.category()),
+    }
+}
+
+fn storage_check_failure<E: Write>(stderr: &mut E, category: &str) -> io::Result<CommandStatus> {
+    writeln!(stderr, "{BINARY_NAME}: storage-check failed ({category})")?;
+    Ok(CommandStatus::Failure)
 }
 
 async fn migrate<O: Write, E: Write>(stdout: &mut O, stderr: &mut E) -> io::Result<CommandStatus> {
@@ -264,6 +298,7 @@ fn command_from_matches(matches: &ArgMatches) -> Result<CliAction, clap::Error> 
         Some("migrate") => Ok(CliAction::Operational(OperationalCommand::Migrate)),
         Some("bootstrap-admin") => Ok(CliAction::Operational(OperationalCommand::BootstrapAdmin)),
         Some("healthcheck") => Ok(CliAction::Operational(OperationalCommand::Healthcheck)),
+        Some("storage-check") => Ok(CliAction::Operational(OperationalCommand::StorageCheck)),
         _ => Err(root_command().error(
             ErrorKind::MissingSubcommand,
             "an operational command is required",
@@ -295,6 +330,7 @@ mod tests {
             ("migrate", OperationalCommand::Migrate),
             ("bootstrap-admin", OperationalCommand::BootstrapAdmin),
             ("healthcheck", OperationalCommand::Healthcheck),
+            ("storage-check", OperationalCommand::StorageCheck),
         ];
 
         for (argument, expected) in cases {
@@ -320,7 +356,13 @@ mod tests {
 
     #[test]
     fn operational_commands_fail_closed_until_their_handlers_exist() {
-        for argument in ["serve", "migrate", "bootstrap-admin", "healthcheck"] {
+        for argument in [
+            "serve",
+            "migrate",
+            "bootstrap-admin",
+            "healthcheck",
+            "storage-check",
+        ] {
             let mut stdout = Vec::new();
             let mut stderr = Vec::new();
             let status = run([argument], &mut stdout, &mut stderr).unwrap();
