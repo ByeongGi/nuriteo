@@ -35,7 +35,7 @@ async fn production_binary_serves_drains_and_never_mutates_backends() {
     let s3_ca = fs::read(&s3_ca_path).unwrap();
     let pool = database_pool(database_url.clone(), database_ca).await;
     reset_history(&pool).await;
-    migrate(&pool).await;
+    let migration_report = migrate(&pool).await;
 
     let s3 = fixture_s3_client(&s3_endpoint, &s3_ca);
     create_bucket(&s3).await;
@@ -69,7 +69,10 @@ async fn production_binary_serves_drains_and_never_mutates_backends() {
     wait_for_live(&mut server, &live_url).await;
     assert_response(&ready_url, 200, json!({"status": "ready"})).await;
     assert_healthcheck_success(run_healthcheck(ready_url.clone()).await);
-    assert_eq!(migration_rows(&pool).await, 1);
+    assert_eq!(
+        migration_rows(&pool).await,
+        i64::try_from(migration_report.known_migrations).unwrap()
+    );
     assert!(list_objects(&s3).await.is_empty());
 
     s3.delete_bucket().bucket(BUCKET).send().await.unwrap();
@@ -332,13 +335,13 @@ async fn database_pool(database_url: String, ca: Vec<u8>) -> DatabasePool {
     DatabasePool::connect(config).await.unwrap()
 }
 
-async fn migrate(pool: &DatabasePool) {
+async fn migrate(pool: &DatabasePool) -> nuriteo_server::database::MigrationReport {
     run_embedded_migrations(
         pool,
         MigrationOptions::new(Duration::from_secs(2), Duration::from_secs(10)).unwrap(),
     )
     .await
-    .unwrap();
+    .unwrap()
 }
 
 async fn reset_history(pool: &DatabasePool) {
