@@ -13,6 +13,8 @@ use super::{DatabaseError, DatabaseErrorCategory, DatabasePool, classify_error};
 const FRAMEWORK_BASELINE_SQL: &str = include_str!("../../migrations/0001_framework_baseline.sql");
 const IDENTITY_CORE_SQL: &str = include_str!("../../migrations/0002_identity_core.sql");
 const SESSIONS_AND_AUDIT_SQL: &str = include_str!("../../migrations/0003_sessions_and_audit.sql");
+const ACTIVATION_INVITATIONS_SQL: &str =
+    include_str!("../../migrations/0004_activation_invitations.sql");
 
 // Two-key advisory locks use a namespace distinct from PostgreSQL's one-key
 // bigint locks. 0x4e555249 is the ASCII representation of "NURI".
@@ -91,6 +93,13 @@ pub(super) fn embedded_migrator() -> Migrator {
             Cow::Borrowed("sessions and audit"),
             MigrationType::Simple,
             SESSIONS_AND_AUDIT_SQL.into_sql_str(),
+            false,
+        ),
+        Migration::new(
+            4,
+            Cow::Borrowed("activation invitations"),
+            MigrationType::Simple,
+            ACTIVATION_INVITATIONS_SQL.into_sql_str(),
             false,
         ),
     ])

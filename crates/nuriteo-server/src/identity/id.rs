@@ -93,3 +93,4 @@ macro_rules! uuid_v7_id {
 
 uuid_v7_id!(UserId);
 uuid_v7_id!(SessionId);
+uuid_v7_id!(ActivationInvitationId);

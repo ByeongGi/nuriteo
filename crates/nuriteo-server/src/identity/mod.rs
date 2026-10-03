@@ -1,4 +1,5 @@
 mod browser_security;
+mod activation_invitation;
 mod id;
 mod password;
 mod session;
@@ -8,11 +9,16 @@ mod user;
 
 use std::fmt;
 
+pub use activation_invitation::{
+    ActivationInvitation, ActivationInvitationFields, ActivationInvitationStatus, ActivationToken,
+    ActivationTokenDigest, ActivationTokenError, InvitationExpiryPolicy, InvitationPolicyError,
+    NormalizedEmail,
+};
 pub use browser_security::{
     BrowserCookieBoundary, BrowserCookieError, BrowserMethod, BrowserRequestHeaders,
     CookieLifetime, IssuedBrowserCookies, SetCookieHeader, ValidatedBrowserSession,
 };
-pub use id::{SessionId, UserId};
+pub use id::{ActivationInvitationId, SessionId, UserId};
 pub use password::{
     PasswordHashError, PasswordHashInputError, PasswordPolicy, PasswordService,
     PasswordVerification, PasswordVerifyError, StoredPasswordHash,
@@ -42,6 +48,10 @@ pub enum IdentityError {
     InvalidSessionRevocation,
     InvalidSessionRevocationReason,
     InvalidSessionRotation,
+    InvalidInvitationEmail,
+    InvalidInvitationExpiry,
+    InvalidInvitationLifecycle,
+    InvalidInvitationLineage,
 }
 
 impl fmt::Display for IdentityError {
@@ -61,6 +71,10 @@ impl fmt::Display for IdentityError {
             Self::InvalidSessionRevocation => "session revocation state is invalid",
             Self::InvalidSessionRevocationReason => "session revocation reason is invalid",
             Self::InvalidSessionRotation => "session rotation state is invalid",
+            Self::InvalidInvitationEmail => "invitation email is invalid",
+            Self::InvalidInvitationExpiry => "invitation expiry is invalid",
+            Self::InvalidInvitationLifecycle => "invitation lifecycle state is invalid",
+            Self::InvalidInvitationLineage => "invitation replacement lineage is invalid",
         })
     }
 }

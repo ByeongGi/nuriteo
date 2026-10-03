@@ -32,7 +32,7 @@ async fn identity_session_and_audit_schema_enforces_contracts() {
         readiness(&pool).await,
         SchemaReadiness::Pending {
             current: None,
-            target: 3
+            target: 4
         }
     );
     verify_failed_migration_rolls_back(&pool).await;
@@ -40,7 +40,7 @@ async fn identity_session_and_audit_schema_enforces_contracts() {
         readiness(&pool).await,
         SchemaReadiness::Pending {
             current: None,
-            target: 3
+            target: 4
         }
     );
 
@@ -49,14 +49,14 @@ async fn identity_session_and_audit_schema_enforces_contracts() {
     assert_eq!(
         first_report,
         MigrationReport {
-            latest_version: Some(3),
-            known_migrations: 3
+            latest_version: Some(4),
+            known_migrations: 4
         }
     );
     assert_eq!(repeated_report, first_report);
     assert_eq!(
         readiness(&pool).await,
-        SchemaReadiness::Ready { version: 3 }
+        SchemaReadiness::Ready { version: 4 }
     );
 
     verify_user_and_identity_constraints(&pool).await;
@@ -528,6 +528,7 @@ async fn fixture_pool() -> DatabasePool {
 async fn reset_fixture(pool: &DatabasePool) {
     let mut connection = acquire(pool).await;
     for statement in [
+        "DROP TABLE IF EXISTS activation_invitations",
         "DROP TABLE IF EXISTS audit_events",
         "DROP TABLE IF EXISTS sessions",
         "DROP TABLE IF EXISTS oidc_identities",
