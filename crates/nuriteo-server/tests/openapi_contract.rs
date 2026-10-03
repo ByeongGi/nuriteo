@@ -13,7 +13,14 @@ const SNAPSHOT: &str = include_str!("fixtures/openapi-v1.json");
 #[test]
 fn versioned_document_matches_the_reviewed_snapshot() {
     let document = serde_json::to_string_pretty(&openapi::document()).unwrap();
-    assert_eq!(format!("{document}\n"), SNAPSHOT);
+    let document = format!("{document}\n");
+    if std::env::var_os("NURITEO_UPDATE_OPENAPI_SNAPSHOT").is_some() {
+        let path =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/openapi-v1.json");
+        std::fs::write(path, &document).unwrap();
+        return;
+    }
+    assert_eq!(document, SNAPSHOT);
 }
 
 #[tokio::test]
@@ -31,7 +38,12 @@ async fn serves_the_versioned_document_from_the_application_router() {
             .unwrap()
             .keys()
             .collect::<Vec<_>>(),
-        vec!["/api/v1/version"]
+        vec![
+            "/api/v1/auth/session",
+            "/api/v1/auth/sessions",
+            "/api/v1/me",
+            "/api/v1/version"
+        ]
     );
 }
 

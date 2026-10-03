@@ -16,6 +16,142 @@
     }
   ],
   "paths": {
+    "/api/v1/auth/session": {
+      "delete": {
+        "tags": [
+          "authentication"
+        ],
+        "operationId": "delete_session",
+        "parameters": [
+          {
+            "name": "Origin",
+            "in": "header",
+            "description": "Exact configured canonical origin",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "description": "Exact double-submit CSRF credential",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Session revoked or already inactive; returns separate deletion Set-Cookie headers"
+          },
+          "403": {
+            "description": "Origin, CSRF or cookie security policy rejected the request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/sessions": {
+      "post": {
+        "tags": [
+          "authentication"
+        ],
+        "operationId": "create_session",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Session created; returns separate Session and CSRF Set-Cookie headers"
+          },
+          "401": {
+            "description": "Generic local authentication failure",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Request body exceeds the bounded limit",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Request is not singular application/json",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request fields are invalid",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/me": {
+      "get": {
+        "tags": [
+          "authentication"
+        ],
+        "operationId": "current_user",
+        "responses": {
+          "200": {
+            "description": "Current active User and safe Session metadata",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Session is missing, invalid, expired or revoked",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/version": {
       "get": {
         "tags": [
@@ -101,6 +237,87 @@
           }
         }
       },
+      "LoginRequest": {
+        "type": "object",
+        "required": [
+          "email",
+          "password"
+        ],
+        "properties": {
+          "email": {
+            "type": "string",
+            "example": "admin@example.test",
+            "maxLength": 320
+          },
+          "password": {
+            "type": "string",
+            "format": "password",
+            "maxLength": 1024
+          }
+        },
+        "additionalProperties": false
+      },
+      "MeSession": {
+        "type": "object",
+        "required": [
+          "id",
+          "last_seen_at",
+          "idle_expires_at",
+          "absolute_expires_at"
+        ],
+        "properties": {
+          "absolute_expires_at": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "idle_expires_at": {
+            "type": "string"
+          },
+          "last_seen_at": {
+            "type": "string"
+          }
+        }
+      },
+      "MeUser": {
+        "type": "object",
+        "required": [
+          "id",
+          "email",
+          "display_name",
+          "is_instance_admin"
+        ],
+        "properties": {
+          "display_name": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "is_instance_admin": {
+            "type": "boolean"
+          }
+        }
+      },
+      "MeView": {
+        "type": "object",
+        "required": [
+          "user",
+          "session"
+        ],
+        "properties": {
+          "session": {
+            "$ref": "#/components/schemas/MeSession"
+          },
+          "user": {
+            "$ref": "#/components/schemas/MeUser"
+          }
+        }
+      },
       "ProblemDetails": {
         "type": "object",
         "required": [
@@ -170,6 +387,10 @@
     {
       "name": "system",
       "description": "Public instance compatibility information"
+    },
+    {
+      "name": "authentication",
+      "description": "Local browser Session lifecycle"
     }
   ]
 }
