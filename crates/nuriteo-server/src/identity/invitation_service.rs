@@ -177,7 +177,9 @@ pub type InvitationActivationFuture<'a> =
 
 /// Performs caller-owned User and credential activation inside the invitation
 /// transaction. Implementations should precompute expensive credential work and
-/// only persist the validated result here.
+/// only persist the validated result here. User-creating implementations must
+/// also provision the Personal storage scope through the transaction-bound
+/// `crate::workspace::PersonalStorageScopeRepository` before returning.
 pub trait InvitationActivator: Send + Sync {
     fn activate<'a>(
         &'a self,

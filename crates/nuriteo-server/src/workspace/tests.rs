@@ -1,0 +1,63 @@
+use std::str::FromStr;
+
+use serde_json::json;
+use uuid::Uuid;
+
+use crate::identity::{Timestamp, UserId};
+
+use super::{
+    PersonalStorageScope, PersonalWorkspace, StorageScopeId, WorkspaceDomainError,
+    WorkspaceOwnerType,
+};
+
+#[test]
+fn storage_scope_identifiers_are_uuid_v7_and_serialize_stably() {
+    let id = StorageScopeId::new();
+    assert_eq!(id.into_uuid().get_version_num(), 7);
+    let json = serde_json::to_string(&id).expect("scope ID must serialize");
+    assert_eq!(
+        serde_json::from_str::<StorageScopeId>(&json).expect("scope ID must deserialize"),
+        id
+    );
+    assert_eq!(
+        StorageScopeId::from_str("00000000-0000-0000-0000-000000000000"),
+        Err(WorkspaceDomainError::NilIdentifier)
+    );
+    assert_eq!(
+        StorageScopeId::from_uuid(Uuid::new_v4()),
+        Err(WorkspaceDomainError::IdentifierMustBeVersion7)
+    );
+}
+
+#[test]
+fn personal_scope_and_projection_enforce_safe_boundaries() {
+    let owner = UserId::new();
+    let scope_id = StorageScopeId::new();
+    let created = Timestamp::from_unix_timestamp(1_700_000_000).expect("timestamp must parse");
+    let earlier = Timestamp::from_unix_timestamp(1_699_999_999).expect("timestamp must parse");
+    assert_eq!(
+        PersonalStorageScope::new(scope_id, owner, created, earlier),
+        Err(WorkspaceDomainError::InvalidTimestampOrder)
+    );
+
+    let projection = PersonalWorkspace::new(owner, "Ada Lovelace".into(), scope_id)
+        .expect("valid projection must construct");
+    assert_eq!(projection.owner_type(), WorkspaceOwnerType::User);
+    assert_eq!(projection.owner_id(), owner);
+    assert_eq!(projection.storage_scope_id(), scope_id);
+    assert_eq!(
+        serde_json::to_value(&projection).expect("projection must serialize"),
+        json!({
+            "ownerType": "user",
+            "ownerId": owner.to_string(),
+            "displayLabel": "Ada Lovelace",
+            "storageScopeId": scope_id.to_string()
+        })
+    );
+    for invalid in ["", " padded", "padded ", "control\nlabel"] {
+        assert_eq!(
+            PersonalWorkspace::new(owner, invalid.into(), scope_id),
+            Err(WorkspaceDomainError::InvalidDisplayLabel)
+        );
+    }
+}

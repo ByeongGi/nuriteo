@@ -12,6 +12,7 @@ pub mod object_storage;
 pub mod observability;
 pub mod openapi;
 mod storage_check;
+pub mod workspace;
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const USAGE: &str = "Usage: nuriteo-server <COMMAND>";

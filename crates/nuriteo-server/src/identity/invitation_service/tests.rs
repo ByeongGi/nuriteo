@@ -7,6 +7,7 @@ use std::sync::Arc;
 use crate::database::{
     DatabasePoolConfig, DatabaseTlsConfig, MigrationOptions, run_embedded_migrations,
 };
+use crate::workspace::PersonalStorageScopeRepository;
 
 const DATABASE_URL_ENV: &str = "NURITEO_TEST_DATABASE_URL";
 const DATABASE_CA_ENV: &str = "NURITEO_TEST_DATABASE_CA";
@@ -179,6 +180,7 @@ async fn verify_activation_and_audit_rollback(
     );
     assert_eq!(status(pool, id).await, "pending");
     assert!(!user_exists(pool, user_id).await);
+    assert!(!scope_exists(pool, user_id).await);
 
     let duplicate_audit_id = AuditEventId::new();
     seed_audit_event(pool, duplicate_audit_id).await;
@@ -198,6 +200,7 @@ async fn verify_activation_and_audit_rollback(
     );
     assert_eq!(status(pool, id).await, "pending");
     assert!(!user_exists(pool, user_id).await);
+    assert!(!scope_exists(pool, user_id).await);
 
     let accepted = service
         .accept(
@@ -210,6 +213,7 @@ async fn verify_activation_and_audit_rollback(
     assert_eq!(accepted.status(), ActivationInvitationStatus::Accepted);
     assert!(user_exists(pool, user_id).await);
     assert!(credential_exists(pool, user_id).await);
+    assert!(scope_exists(pool, user_id).await);
     assert_eq!(status(pool, id).await, "accepted");
     assert_secret_absent(pool, issued.token()).await;
 
@@ -379,6 +383,11 @@ impl InvitationActivator for UserCredentialActivator {
             .execute(&mut **transaction)
             .await
             .map_err(|_| InvitationActivationError::DatabaseUnavailable)?;
+            let now = Timestamp::from_datetime(OffsetDateTime::now_utc())
+                .map_err(|_| InvitationActivationError::InvariantViolation)?;
+            PersonalStorageScopeRepository::provision(transaction, self.user_id, now)
+                .await
+                .map_err(|_| InvitationActivationError::DatabaseUnavailable)?;
             if self.fail_after_write {
                 return Err(InvitationActivationError::Rejected);
             }
@@ -578,6 +587,19 @@ async fn user_exists(pool: &DatabasePool, id: UserId) -> bool {
         .unwrap_or_else(|_| panic!("user existence must be readable"))
 }
 
+async fn scope_exists(pool: &DatabasePool, id: UserId) -> bool {
+    sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM storage_scopes WHERE owner_user_id = $1::uuid)")
+        .bind(id.to_string())
+        .fetch_one(
+            &mut *pool
+                .acquire()
+                .await
+                .unwrap_or_else(|_| panic!("fixture acquire")),
+        )
+        .await
+        .unwrap_or_else(|_| panic!("scope existence must be readable"))
+}
+
 async fn credential_exists(pool: &DatabasePool, id: UserId) -> bool {
     sqlx::query_scalar(
         "SELECT EXISTS(SELECT 1 FROM local_password_credentials WHERE user_id = $1::uuid)",
@@ -626,6 +648,7 @@ async fn reset_fixture(pool: &DatabasePool) {
         .await
         .unwrap_or_else(|_| panic!("fixture acquire"));
     for statement in [
+        "DROP TABLE IF EXISTS storage_scopes CASCADE",
         "DROP TABLE IF EXISTS activation_invitations CASCADE",
         "DROP TABLE IF EXISTS audit_events CASCADE",
         "DROP TABLE IF EXISTS sessions CASCADE",

@@ -49,8 +49,8 @@ async fn identity_session_and_audit_schema_enforces_contracts() {
     assert_eq!(
         first_report,
         MigrationReport {
-            latest_version: Some(4),
-            known_migrations: 4
+            latest_version: Some(6),
+            known_migrations: 5
         }
     );
     assert_eq!(repeated_report, first_report);
@@ -528,6 +528,7 @@ async fn fixture_pool() -> DatabasePool {
 async fn reset_fixture(pool: &DatabasePool) {
     let mut connection = acquire(pool).await;
     for statement in [
+        "DROP TABLE IF EXISTS storage_scopes",
         "DROP TABLE IF EXISTS activation_invitations",
         "DROP TABLE IF EXISTS audit_events",
         "DROP TABLE IF EXISTS sessions",

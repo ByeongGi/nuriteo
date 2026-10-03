@@ -11,6 +11,7 @@ use crate::audit::{
 use crate::config::FileReader;
 use crate::database::{DatabasePool, SchemaReadiness, check_schema_readiness};
 use crate::identity::{PasswordService, Timestamp, User, UserFields, UserId, UserStatus};
+use crate::workspace::PersonalStorageScopeRepository;
 
 use super::input::{BootstrapAdminInput, BootstrapInputError};
 
@@ -164,6 +165,10 @@ pub async fn bootstrap_administrator(
     .await
     .map_err(|_| BootstrapError::new(BootstrapErrorCategory::DatabaseOperation))?;
 
+    PersonalStorageScopeRepository::provision(&mut transaction, user.id, user.created_at)
+        .await
+        .map_err(|_| BootstrapError::new(BootstrapErrorCategory::DatabaseOperation))?;
+
     sqlx::query(
         "INSERT INTO local_password_credentials \
          (user_id, password_verifier, created_at, updated_at) \
@@ -200,7 +205,11 @@ pub async fn bootstrap_administrator(
         correlation_id: format!("bootstrap:{event_id}"),
         source_ip: None,
         schema_version: 1,
-        changed_fields: vec!["is_instance_admin".into(), "local_credential".into()],
+        changed_fields: vec![
+            "is_instance_admin".into(),
+            "local_credential".into(),
+            "personal_storage_scope".into(),
+        ],
         metadata: AuditMetadata::new(json!({"method": "bootstrap-admin"}))
             .map_err(|_| BootstrapError::new(BootstrapErrorCategory::Audit))?,
     })

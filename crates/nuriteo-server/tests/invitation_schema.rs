@@ -37,14 +37,14 @@ async fn activation_invitation_schema_enforces_hash_only_lifecycle() {
     assert_eq!(
         first_report,
         MigrationReport {
-            latest_version: Some(4),
-            known_migrations: 4
+            latest_version: Some(6),
+            known_migrations: 5
         }
     );
     assert_eq!(migrate(&pool).await, first_report);
     assert_eq!(
         readiness(&pool).await,
-        SchemaReadiness::Ready { version: 4 }
+        SchemaReadiness::Ready { version: 6 }
     );
 
     insert_inviter(&pool).await;
@@ -382,6 +382,7 @@ async fn fixture_pool() -> DatabasePool {
 async fn reset_fixture(pool: &DatabasePool) {
     let mut connection = acquire(pool).await;
     for statement in [
+        "DROP TABLE IF EXISTS storage_scopes",
         "DROP TABLE IF EXISTS activation_invitations",
         "DROP TABLE IF EXISTS audit_events",
         "DROP TABLE IF EXISTS sessions",

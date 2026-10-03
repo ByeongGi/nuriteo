@@ -51,7 +51,7 @@ async fn bootstrap_cli_is_serialized_atomic_and_secret_safe() {
         assert_secret_free(output);
     }
 
-    assert_counts(&pool, 1, 1, 1).await;
+    assert_counts(&pool, 1, 1, 1, 1).await;
     let (email, normalized, display_name, verifier): (String, String, String, String) =
         sqlx::query_as(
             "SELECT u.email, u.normalized_email, u.display_name, c.password_verifier \
@@ -87,7 +87,7 @@ async fn bootstrap_cli_is_serialized_atomic_and_secret_safe() {
         missing_password_path,
     );
     assert_success(&repeated, "bootstrap-admin already-initialized\n");
-    assert_counts(&pool, 1, 1, 1).await;
+    assert_counts(&pool, 1, 1, 1, 1).await;
     assert_eq!(stored_verifier(&pool).await, verifier);
 
     sqlx::query(
@@ -99,20 +99,26 @@ async fn bootstrap_cli_is_serialized_atomic_and_secret_safe() {
     .expect("fixture administrator must be disabled");
     let disabled = run_cli("second@example.test", "Second Admin", missing_password_path);
     assert_success(&disabled, "bootstrap-admin already-initialized\n");
-    assert_counts(&pool, 1, 1, 1).await;
+    assert_counts(&pool, 1, 1, 1, 1).await;
     assert_eq!(stored_verifier(&pool).await, verifier);
 
     reset_rows(&pool).await;
     install_credential_failure(&pool).await;
     let credential_failure = run_cli("admin@example.test", "Initial Admin", &password_file());
     assert_failure(&credential_failure, "database-operation");
-    assert_counts(&pool, 0, 0, 0).await;
+    assert_counts(&pool, 0, 0, 0, 0).await;
+    remove_failure_hooks(&pool).await;
+
+    install_scope_failure(&pool).await;
+    let scope_failure = run_cli("admin@example.test", "Initial Admin", &password_file());
+    assert_failure(&scope_failure, "database-operation");
+    assert_counts(&pool, 0, 0, 0, 0).await;
     remove_failure_hooks(&pool).await;
 
     install_audit_failure(&pool).await;
     let audit_failure = run_cli("admin@example.test", "Initial Admin", &password_file());
     assert_failure(&audit_failure, "audit");
-    assert_counts(&pool, 0, 0, 0).await;
+    assert_counts(&pool, 0, 0, 0, 0).await;
     remove_failure_hooks(&pool).await;
 
     reset_fixture(&pool).await;
@@ -179,12 +185,19 @@ fn assert_secret_free(output: &Output) {
     }
 }
 
-async fn assert_counts(pool: &DatabasePool, users: i64, credentials: i64, audits: i64) {
+async fn assert_counts(
+    pool: &DatabasePool,
+    users: i64,
+    credentials: i64,
+    scopes: i64,
+    audits: i64,
+) {
     assert_eq!(row_count(pool, "users").await, users);
     assert_eq!(
         row_count(pool, "local_password_credentials").await,
         credentials
     );
+    assert_eq!(row_count(pool, "storage_scopes").await, scopes);
     assert_eq!(row_count(pool, "audit_events").await, audits);
 }
 
@@ -192,6 +205,7 @@ async fn row_count(pool: &DatabasePool, table: &str) -> i64 {
     let query = match table {
         "users" => "SELECT COUNT(*) FROM users",
         "local_password_credentials" => "SELECT COUNT(*) FROM local_password_credentials",
+        "storage_scopes" => "SELECT COUNT(*) FROM storage_scopes",
         "audit_events" => "SELECT COUNT(*) FROM audit_events",
         _ => panic!("fixture row count table must be allowlisted"),
     };
@@ -250,11 +264,30 @@ async fn install_audit_failure(pool: &DatabasePool) {
     .expect("audit failure trigger must install");
 }
 
+async fn install_scope_failure(pool: &DatabasePool) {
+    sqlx::query(
+        "CREATE FUNCTION reject_bootstrap_scope() RETURNS trigger AS $$ \
+         BEGIN RAISE EXCEPTION 'fixture scope rejection'; END; $$ LANGUAGE plpgsql",
+    )
+    .execute(&mut *acquire(pool).await)
+    .await
+    .expect("scope failure function must install");
+    sqlx::query(
+        "CREATE TRIGGER reject_bootstrap_scope BEFORE INSERT ON storage_scopes \
+         FOR EACH ROW EXECUTE FUNCTION reject_bootstrap_scope()",
+    )
+    .execute(&mut *acquire(pool).await)
+    .await
+    .expect("scope failure trigger must install");
+}
+
 async fn remove_failure_hooks(pool: &DatabasePool) {
     let mut connection = acquire(pool).await;
     for statement in [
         "DROP TRIGGER IF EXISTS reject_bootstrap_credential ON local_password_credentials",
         "DROP FUNCTION IF EXISTS reject_bootstrap_credential()",
+        "DROP TRIGGER IF EXISTS reject_bootstrap_scope ON storage_scopes",
+        "DROP FUNCTION IF EXISTS reject_bootstrap_scope()",
         "DROP TRIGGER IF EXISTS reject_bootstrap_audit ON audit_events",
         "DROP FUNCTION IF EXISTS reject_bootstrap_audit()",
     ] {
@@ -266,7 +299,7 @@ async fn remove_failure_hooks(pool: &DatabasePool) {
 }
 
 async fn reset_rows(pool: &DatabasePool) {
-    sqlx::query("TRUNCATE audit_events, local_password_credentials, users CASCADE")
+    sqlx::query("TRUNCATE audit_events, storage_scopes, local_password_credentials, users CASCADE")
         .execute(&mut *acquire(pool).await)
         .await
         .expect("fixture identity rows must reset");
@@ -303,6 +336,7 @@ async fn fixture_pool() -> DatabasePool {
 async fn reset_fixture(pool: &DatabasePool) {
     let mut connection = acquire(pool).await;
     for statement in [
+        "DROP TABLE IF EXISTS storage_scopes",
         "DROP TABLE IF EXISTS activation_invitations",
         "DROP TABLE IF EXISTS audit_events",
         "DROP TABLE IF EXISTS sessions",
