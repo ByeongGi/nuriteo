@@ -110,6 +110,12 @@ function testProductionBoundary(): void {
       assert.doesNotMatch(source, /#[\da-f]{3,8}\b/iu, `${file} bypasses semantic tokens`);
     }
   }
+
+  const loginRoute = read("src/app/api/v1/auth/sessions/route.ts");
+  const meRoute = read("src/app/api/v1/me/route.ts");
+  assert.match(loginRoute, /forwardCreateSession/u);
+  assert.match(meRoute, /forwardCurrentUser/u);
+  assert.doesNotMatch(`${loginRoute}\n${meRoute}`, /\[\.\.\.|params|pathname/u);
 }
 
 function findFiles(directory: string): string[] {

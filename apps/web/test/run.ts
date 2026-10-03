@@ -1,3 +1,4 @@
+import "./auth-bff.test.ts";
 import "./browser-client.test.ts";
 import "./contracts.test.ts";
 import "./entry-flow.test.ts";

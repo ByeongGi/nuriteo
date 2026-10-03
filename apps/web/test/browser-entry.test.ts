@@ -19,7 +19,9 @@ fs.cpSync(path.join(webRoot, ".next/static"), path.join(standaloneWeb, ".next/st
 });
 
 let bootstrapRequired = true;
-const core = http.createServer((request, response) => {
+const bffCalls: string[] = [];
+const forwardedOrigins: string[] = [];
+const core = http.createServer(async (request, response) => {
   response.setHeader("cache-control", "no-store");
   response.setHeader("x-request-id", "browser-server-request");
 
@@ -30,14 +32,35 @@ const core = http.createServer((request, response) => {
   }
 
   if (request.method === "GET" && request.url === "/api/v1/me") {
+    if (request.headers.cookie?.includes("nrt_session=opaque") === true) {
+      bffCalls.push("get-current-user");
+      response.setHeader("content-type", "application/json");
+      response.end(JSON.stringify(currentUser()));
+      return;
+    }
     response.statusCode = 401;
     response.setHeader("content-type", "application/problem+json");
-    response.end(JSON.stringify({
-      type: "about:blank",
-      title: "Authentication required",
-      status: 401,
-      code: "AUTHENTICATION_REQUIRED"
-    }));
+    response.end(JSON.stringify(problemDetails(401, "AUTHENTICATION_REQUIRED", "browser-server-request")));
+    return;
+  }
+
+  if (request.method === "POST" && request.url === "/api/v1/auth/sessions") {
+    bffCalls.push("create-session");
+    forwardedOrigins.push(request.headers.origin ?? "missing");
+    const body = JSON.parse(await readRequestBody(request)) as { email?: unknown };
+    if (body.email !== "admin@example.test") {
+      response.statusCode = 401;
+      response.setHeader("content-type", "application/problem+json");
+      response.setHeader("x-request-id", "browser-invalid-login");
+      response.end(JSON.stringify(problemDetails(401, "AUTHENTICATION_FAILED", "browser-invalid-login")));
+      return;
+    }
+    response.statusCode = 204;
+    response.setHeader("set-cookie", [
+      "nrt_session=opaque; Path=/; HttpOnly; SameSite=Lax",
+      "nrt_csrf=opaque-csrf; Path=/; SameSite=Lax"
+    ]);
+    response.end();
     return;
   }
 
@@ -74,61 +97,21 @@ try {
   const browser = await chromium.launch({ headless: true });
   try {
     const page = await browser.newPage();
-    const browserCalls: string[] = [];
     const apiResponses: string[] = [];
     const pageErrors: string[] = [];
-    let validCredentials = false;
+    const browserRequestOrigins: Array<string | undefined> = [];
 
     page.on("pageerror", (error) => pageErrors.push(String(error)));
+    page.on("request", (request) => {
+      if (request.url().includes("/api/v1/auth/sessions")) {
+        browserRequestOrigins.push(request.headers().origin);
+      }
+    });
 
     page.on("response", (response) => {
       if (response.url().includes("/api/v1/")) {
         apiResponses.push(`${response.status()} ${response.url()}`);
       }
-    });
-
-    await page.route("**/api/v1/auth/sessions", async (route) => {
-      browserCalls.push("create-session");
-      if (!validCredentials) {
-        await route.fulfill({
-          body: JSON.stringify({
-            type: "about:blank",
-            title: "Authentication failed",
-            status: 401,
-            code: "AUTHENTICATION_FAILED"
-          }),
-          contentType: "application/problem+json",
-          headers: { "x-request-id": "browser-invalid-login" },
-          status: 401
-        });
-        return;
-      }
-      await route.fulfill({
-        headers: { "set-cookie": "nrt_session=opaque; Path=/; HttpOnly; SameSite=Lax" },
-        status: 204
-      });
-    });
-    await page.route("**/api/v1/me", async (route) => {
-      browserCalls.push("get-current-user");
-      await route.fulfill({
-        body: JSON.stringify({
-          user: {
-            id: "0199ee6c-c777-7000-8000-000000009001",
-            email: "admin@example.test",
-            display_name: "Instance Administrator",
-            is_instance_admin: true
-          },
-          session: {
-            id: "0199ee6c-c777-7000-8000-000000009002",
-            last_seen_at: "2026-10-04T00:00:00.000Z",
-            idle_expires_at: "2026-10-04T01:00:00.000Z",
-            absolute_expires_at: "2026-10-05T00:00:00.000Z"
-          }
-        }),
-        contentType: "application/json",
-        headers: { "x-request-id": "browser-session-check" },
-        status: 200
-      });
     });
 
     await page.goto(origin, { waitUntil: "networkidle" });
@@ -149,22 +132,30 @@ try {
     assert.equal(
       await signInError.textContent(),
       "The email or password is incorrect.Request reference: browser-invalid-login",
-      JSON.stringify({ apiResponses, browserCalls, pageErrors })
+      JSON.stringify({ apiResponses, bffCalls, browserRequestOrigins, pageErrors })
     );
     assert.equal(await page.getByLabel("Password").inputValue(), "");
     assert.equal(await page.getByLabel("Password").evaluate((element) => element === document.activeElement), true);
 
-    validCredentials = true;
     await page.getByLabel("Email").fill("admin@example.test");
     await page.getByLabel("Password").fill("correct-password");
     await page.getByRole("button", { name: "Sign in" }).click();
     await page.waitForURL("**/workspaces");
 
-    assert.deepEqual(browserCalls, [
+    const cookieNames = (await page.context().cookies(origin))
+      .map((cookie) => cookie.name)
+      .sort();
+    assert.deepEqual(cookieNames, ["nrt_csrf", "nrt_session"]);
+
+    assert.deepEqual(bffCalls, [
       "create-session",
       "create-session",
       "get-current-user"
     ]);
+    assert.deepEqual(forwardedOrigins, [origin, origin]);
+    assert.ok(apiResponses.some((response) => response.startsWith("401 ")));
+    assert.ok(apiResponses.some((response) => response.startsWith("204 ")));
+    assert.deepEqual(pageErrors, []);
   } finally {
     await browser.close();
   }
@@ -210,4 +201,42 @@ async function waitUntilReady(origin: string): Promise<void> {
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
   throw new Error("standalone server did not become ready");
+}
+
+function problemDetails(status: number, code: string, requestId: string) {
+  return {
+    type: "about:blank",
+    title: "Authentication failed",
+    status,
+    detail: "The request could not be authenticated.",
+    instance: "/api/v1/auth/sessions",
+    code,
+    request_id: requestId,
+    errors: []
+  };
+}
+
+function currentUser() {
+  return {
+    user: {
+      id: "0199ee6c-c777-7000-8000-000000009001",
+      email: "admin@example.test",
+      display_name: "Instance Administrator",
+      is_instance_admin: true
+    },
+    session: {
+      id: "0199ee6c-c777-7000-8000-000000009002",
+      last_seen_at: "2026-10-04T00:00:00.000Z",
+      idle_expires_at: "2026-10-04T01:00:00.000Z",
+      absolute_expires_at: "2026-10-05T00:00:00.000Z"
+    }
+  };
+}
+
+async function readRequestBody(request: http.IncomingMessage): Promise<string> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of request) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+  return Buffer.concat(chunks).toString("utf8");
 }
