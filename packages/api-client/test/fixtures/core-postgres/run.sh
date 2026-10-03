@@ -140,10 +140,6 @@ export NURITEO_S3_CA_FILE="$rustfs_tls/ca.crt"
 cargo build --quiet -p nuriteo-server --bin nuriteo-server
 server_binary="$target_dir/debug/nuriteo-server"
 "$server_binary" migrate >/dev/null
-NURITEO_BOOTSTRAP_ADMIN_EMAIL=admin@example.test \
-NURITEO_BOOTSTRAP_ADMIN_NAME='Fixture Administrator' \
-NURITEO_BOOTSTRAP_ADMIN_PASSWORD_FILE="$fixture_dir/admin-password" \
-  "$server_binary" bootstrap-admin >/dev/null
 "$server_binary" serve >"$fixture_dir/server.stdout" 2>"$fixture_dir/server.stderr" &
 server_pid=$!
 
@@ -160,6 +156,19 @@ for _ in $(seq 1 80); do
 done
 curl --fail --silent --show-error \
   "http://127.0.0.1:${core_port}/health/ready" >/dev/null
+
+NURITEO_CLIENT_TEST_BASE_URL="http://127.0.0.1:${core_port}" \
+NURITEO_CLIENT_TEST_BOOTSTRAP_REQUIRED=true \
+  mise exec node@22.23.0 -- node packages/api-client/test/setup-live-contract.ts
+
+NURITEO_BOOTSTRAP_ADMIN_EMAIL=admin@example.test \
+NURITEO_BOOTSTRAP_ADMIN_NAME='Fixture Administrator' \
+NURITEO_BOOTSTRAP_ADMIN_PASSWORD_FILE="$fixture_dir/admin-password" \
+  "$server_binary" bootstrap-admin >/dev/null
+
+NURITEO_CLIENT_TEST_BASE_URL="http://127.0.0.1:${core_port}" \
+NURITEO_CLIENT_TEST_BOOTSTRAP_REQUIRED=false \
+  mise exec node@22.23.0 -- node packages/api-client/test/setup-live-contract.ts
 
 NURITEO_CLIENT_TEST_BASE_URL="http://127.0.0.1:${core_port}" \
 NURITEO_CLIENT_TEST_EMAIL=admin@example.test \

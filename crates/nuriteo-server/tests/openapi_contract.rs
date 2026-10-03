@@ -57,6 +57,7 @@ async fn serves_the_versioned_document_from_the_application_router() {
             "/api/v1/organizations/{organization_id}/invitations/{invitation_id}/reissue",
             "/api/v1/organizations/{organization_id}/members",
             "/api/v1/organizations/{organization_id}/members/{user_id}",
+            "/api/v1/setup/status",
             "/api/v1/version"
         ]
     );
@@ -64,6 +65,28 @@ async fn serves_the_versioned_document_from_the_application_router() {
         document["paths"]["/api/v1/me/workspaces"]["get"]["responses"]["200"]["content"]["application/json"]
             ["schema"]["$ref"],
         "#/components/schemas/WorkspaceCollectionView"
+    );
+    let setup = &document["paths"]["/api/v1/setup/status"]["get"];
+    assert!(setup.get("security").is_none());
+    assert_eq!(
+        setup["responses"]["200"]["content"]["application/json"]["schema"]["$ref"],
+        "#/components/schemas/SetupStatus"
+    );
+    assert_eq!(
+        setup["responses"]["200"]["headers"]["cache-control"]["description"],
+        "Always no-store"
+    );
+    assert_eq!(
+        document["components"]["schemas"]["SetupStatus"]["required"],
+        json!(["bootstrapRequired"])
+    );
+    assert_eq!(
+        document["components"]["schemas"]["SetupStatus"]["properties"]
+            .as_object()
+            .expect("setup properties must be an object")
+            .keys()
+            .collect::<Vec<_>>(),
+        vec!["bootstrapRequired"]
     );
 }
 

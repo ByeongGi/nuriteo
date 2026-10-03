@@ -1,10 +1,10 @@
 # CLIENT-002 Core/PostgreSQL live contract fixture
 
-`run.sh` starts pinned PostgreSQL 17.6 with an ephemeral custom CA and pinned RustFS with HTTPS, runs the real migration and `bootstrap-admin` commands, and starts the production Core binary. The TypeScript fixture then exercises only the public API client operations:
+`run.sh` starts pinned PostgreSQL 17.6 with an ephemeral custom CA and pinned RustFS with HTTPS, runs the real migration and starts the production Core binary. It verifies public setup status before and after the real CLI-only `bootstrap-admin` command, then exercises the authenticated API client operations:
 
-`createSession` → `getCurrentUser` → `getCurrentWorkspaces` → `deleteSession` → rejected `getCurrentUser`.
+`getSetupStatus(true)` → CLI bootstrap → `getSetupStatus(false)` → `createSession` → `getCurrentUser` → `getCurrentWorkspaces` → `deleteSession` → rejected `getCurrentUser`.
 
-The fixture keeps the cookie jar and CSRF credential inside its browser-boundary adapter. Domain operation results never contain response headers, cookies, passwords, or CSRF values.
+The setup assertion also checks the actual HTTP `Cache-Control: no-store`, JSON content type, and exact one-boolean response. The fixture keeps the cookie jar and CSRF credential inside its browser-boundary adapter. Domain operation results never contain response headers, cookies, passwords, or CSRF values.
 
 Run from the repository root:
 

@@ -9,8 +9,9 @@ use crate::identity::SessionPolicy;
 use crate::invitations::{InvitationHttpPolicy, InvitationHttpService};
 use crate::object_storage::{ObjectStorageConfig, OperationLimits, S3ObjectStore};
 use crate::organization::{OrganizationHttpPolicy, OrganizationHttpService};
+use crate::setup::{SetupStatusPolicy, SetupStatusService};
 
-use super::{Supervisor, SupervisorConfig, WorkerError, build_router_with_http_services};
+use super::{Supervisor, SupervisorConfig, WorkerError, build_router_with_setup_service};
 
 const HTTP_WORKERS: NonZeroUsize = NonZeroUsize::MIN;
 
@@ -123,7 +124,8 @@ pub(crate) async fn run_server(
             return Err(ServeError::OrganizationConfiguration);
         }
     };
-    let router = build_router_with_http_services(health, auth, invitations, organizations);
+    let setup = SetupStatusService::production(pool.clone(), SetupStatusPolicy::default());
+    let router = build_router_with_setup_service(health, auth, invitations, organizations, setup);
     let mut supervisor = Supervisor::new(SupervisorConfig::new(
         global.server.shutdown_drain_timeout,
         HTTP_WORKERS,

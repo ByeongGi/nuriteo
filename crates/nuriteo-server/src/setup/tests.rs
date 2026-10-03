@@ -1,9 +1,17 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use axum::body::{Body, to_bytes};
+use axum::http::header::{CACHE_CONTROL, CONTENT_TYPE};
+use axum::http::{Request, StatusCode};
+use axum::middleware;
 use serde_json::json;
+use tower::ServiceExt;
+
+use crate::http::{REQUEST_ID_HEADER, propagate_request_id};
 
 use super::repository::SetupStatusRepositoryError;
+use super::routes::openapi_router;
 use super::service::{RepositoryFuture, SetupStatusReader};
 use super::{
     SetupStatusPolicy, SetupStatusPolicyError, SetupStatusService, SetupStatusServiceError,
@@ -85,4 +93,70 @@ fn policy_and_unconfigured_service_fail_closed() {
         format!("{service:?}"),
         "SetupStatusService { configured: false, policy: SetupStatusPolicy { operation_timeout: 2s } }"
     );
+}
+
+#[tokio::test]
+async fn public_route_is_exact_secret_free_and_never_cacheable() {
+    let service = SetupStatusService::from_reader(
+        Arc::new(FixedReader(Ok(false))),
+        SetupStatusPolicy::default(),
+    );
+    let (router, _) = openapi_router(utoipa::openapi::OpenApi::default())
+        .with_state::<()>(service)
+        .split_for_parts();
+    let response = router
+        .layer(middleware::from_fn(propagate_request_id))
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/setup/status")
+                .header(REQUEST_ID_HEADER, "setup-route-test")
+                .body(Body::empty())
+                .expect("request must build"),
+        )
+        .await
+        .expect("route must respond");
+
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(response.headers()[CACHE_CONTROL], "no-store");
+    assert_eq!(response.headers()[CONTENT_TYPE], "application/json");
+    assert_eq!(response.headers()[REQUEST_ID_HEADER], "setup-route-test");
+    let body = to_bytes(response.into_body(), 1024)
+        .await
+        .expect("body must be bounded");
+    assert_eq!(
+        serde_json::from_slice::<serde_json::Value>(&body).expect("body must be JSON"),
+        json!({"bootstrapRequired": true})
+    );
+}
+
+#[tokio::test]
+async fn public_route_maps_repository_failure_to_safe_no_store_problem() {
+    let service = SetupStatusService::from_reader(
+        Arc::new(FixedReader(Err(SetupStatusRepositoryError::Unavailable))),
+        SetupStatusPolicy::default(),
+    );
+    let (router, _) = openapi_router(utoipa::openapi::OpenApi::default())
+        .with_state::<()>(service)
+        .split_for_parts();
+    let response = router
+        .layer(middleware::from_fn(propagate_request_id))
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/setup/status?database=must-not-escape")
+                .body(Body::empty())
+                .expect("request must build"),
+        )
+        .await
+        .expect("route must respond");
+
+    assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    assert_eq!(response.headers()[CACHE_CONTROL], "no-store");
+    assert_eq!(response.headers()[CONTENT_TYPE], "application/problem+json");
+    let body = to_bytes(response.into_body(), 4096)
+        .await
+        .expect("body must be bounded");
+    let serialized = String::from_utf8(body.to_vec()).expect("body must be UTF-8");
+    assert!(!serialized.contains("database"));
+    assert!(!serialized.contains("must-not-escape"));
+    assert!(!serialized.contains("SELECT"));
 }

@@ -1144,6 +1144,78 @@
         }
       }
     },
+    "/api/v1/setup/status": {
+      "get": {
+        "tags": [
+          "setup"
+        ],
+        "operationId": "setup_status",
+        "parameters": [
+          {
+            "name": "x-request-id",
+            "in": "header",
+            "description": "Optional caller correlation ID. Invalid or duplicate values are replaced.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Whether the CLI-only Instance Administrator bootstrap is required",
+            "headers": {
+              "cache-control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-store"
+              },
+              "x-request-id": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Validated or server-generated correlation ID"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SetupStatus"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Setup status could not be determined safely",
+            "headers": {
+              "cache-control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-store"
+              },
+              "x-request-id": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Validated or server-generated correlation ID"
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/version": {
       "get": {
         "tags": [
@@ -1746,6 +1818,17 @@
         },
         "additionalProperties": false
       },
+      "SetupStatus": {
+        "type": "object",
+        "required": [
+          "bootstrapRequired"
+        ],
+        "properties": {
+          "bootstrapRequired": {
+            "type": "boolean"
+          }
+        }
+      },
       "TokenRequest": {
         "type": "object",
         "required": [
@@ -1836,6 +1919,10 @@
     {
       "name": "system",
       "description": "Public instance compatibility information"
+    },
+    {
+      "name": "setup",
+      "description": "Public secret-free instance setup state"
     },
     {
       "name": "authentication",

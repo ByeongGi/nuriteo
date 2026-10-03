@@ -8,6 +8,7 @@ use crate::VERSION;
 use crate::auth::{self, AuthService};
 use crate::invitations::{self, InvitationHttpService};
 use crate::organization::{self, OrganizationHttpService};
+use crate::setup::{self, SetupStatusService};
 use crate::workspace;
 
 pub const DOCUMENT_PATH: &str = "/api/openapi.json";
@@ -23,6 +24,7 @@ pub const DOCS_PATH: &str = "/api/docs";
     components(schemas(VersionResponse, ProblemDetails, FieldViolation)),
     tags(
         (name = "system", description = "Public instance compatibility information"),
+        (name = "setup", description = "Public secret-free instance setup state"),
         (name = "authentication", description = "Local browser Session lifecycle"),
         (name = "workspaces", description = "Authenticated Workspace projections"),
         (name = "invitations", description = "Administrator invitation and public account activation lifecycle"),
@@ -110,6 +112,7 @@ pub fn document() -> utoipa::openapi::OpenApi {
         AuthService::unconfigured(),
         InvitationHttpService::unconfigured(),
         OrganizationHttpService::unconfigured(),
+        SetupStatusService::unconfigured(),
     )
     .1
 }
@@ -118,8 +121,9 @@ pub fn router(
     auth: AuthService,
     invitations: InvitationHttpService,
     organizations: OrganizationHttpService,
+    setup: SetupStatusService,
 ) -> Router {
-    let (api_routes, document) = openapi_parts(auth, invitations, organizations);
+    let (api_routes, document) = openapi_parts(auth, invitations, organizations, setup);
     let config = Config::new([DOCUMENT_PATH]).validator_url("none");
     let docs = SwaggerUi::new(DOCS_PATH)
         .url(DOCUMENT_PATH, document)
@@ -132,6 +136,7 @@ fn openapi_parts(
     auth: AuthService,
     invitations: InvitationHttpService,
     organizations: OrganizationHttpService,
+    setup: SetupStatusService,
 ) -> (Router, utoipa::openapi::OpenApi) {
     let (auth_routes, document) =
         workspace::openapi_router(auth::openapi_router(ApiDocument::openapi()))
@@ -144,10 +149,14 @@ fn openapi_parts(
     let (organization_routes, document) = organization::openapi_router(document)
         .with_state(organizations)
         .split_for_parts();
+    let (setup_routes, document) = setup::openapi_router(document)
+        .with_state(setup)
+        .split_for_parts();
     (
         auth_routes
             .merge(invitation_routes)
-            .merge(organization_routes),
+            .merge(organization_routes)
+            .merge(setup_routes),
         document,
     )
 }
