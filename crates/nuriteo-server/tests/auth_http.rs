@@ -95,6 +95,19 @@ async fn verify_bounded_json_contract(router: &Router) {
     )
     .await;
 
+    let cross_origin = Request::builder()
+        .method(Method::POST)
+        .uri("/api/v1/auth/sessions")
+        .header("x-request-id", REQUEST_ID)
+        .header(CONTENT_TYPE, "application/json")
+        .header(ORIGIN, "https://preview.example.test")
+        .body(Body::from(
+            serde_json::to_vec(&json!({"email": "admin@example.test", "password": PASSWORD}))
+                .unwrap(),
+        ))
+        .unwrap();
+    assert_problem(send(router, cross_origin).await, StatusCode::FORBIDDEN).await;
+
     let invalid = post_login_raw(router, br#"{"email":"admin@example.test"}"#.to_vec()).await;
     assert_problem(invalid, StatusCode::UNPROCESSABLE_ENTITY).await;
 
@@ -354,6 +367,7 @@ async fn post_login_raw(router: &Router, body: Vec<u8>) -> Response<Body> {
             .uri("/api/v1/auth/sessions")
             .header("x-request-id", REQUEST_ID)
             .header(CONTENT_TYPE, "application/json")
+            .header(ORIGIN, ORIGIN_VALUE)
             .body(Body::from(body))
             .unwrap(),
     )

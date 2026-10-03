@@ -65,6 +65,17 @@
           "authentication"
         ],
         "operationId": "create_session",
+        "parameters": [
+          {
+            "name": "Origin",
+            "in": "header",
+            "description": "Exact configured canonical origin",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -81,6 +92,16 @@
           },
           "401": {
             "description": "Generic local authentication failure",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Origin security policy rejected the request",
             "content": {
               "application/problem+json": {
                 "schema": {

@@ -160,6 +160,16 @@ impl BrowserCookieBoundary {
         Ok(())
     }
 
+    /// Validates an unsafe browser request that does not yet have a Session,
+    /// such as local login. This keeps the exact canonical Origin contract in
+    /// the same boundary as cookie-authenticated mutation validation.
+    pub(crate) fn validate_unauthenticated_origin(
+        &self,
+        origins: &[&str],
+    ) -> Result<(), BrowserCookieError> {
+        self.validate_origin(origins)
+    }
+
     const fn session_cookie_name(&self) -> &'static str {
         match self.mode {
             CookieMode::ProductionHttps => PRODUCTION_SESSION_COOKIE,

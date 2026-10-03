@@ -166,9 +166,14 @@ impl AuthService {
         &self,
         email: String,
         password: Vec<u8>,
+        origins: &[&str],
         correlation_id: &str,
     ) -> Result<LoginResult, AuthServiceError> {
         let runtime = self.runtime()?;
+        runtime
+            .cookies
+            .validate_unauthenticated_origin(origins)
+            .map_err(|_| AuthServiceError::RequestForbidden)?;
         let candidate = runtime.load_candidate(&email).await?;
         let eligible = candidate.as_ref().is_some_and(LoginCandidate::eligible);
         let verifier = match candidate.as_ref().filter(|candidate| candidate.eligible()) {

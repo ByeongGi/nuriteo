@@ -43,9 +43,11 @@ pub(crate) struct LoginRequest {
     path = "/api/v1/auth/sessions",
     tag = "authentication",
     request_body(content = LoginRequest, content_type = "application/json"),
+    params(("Origin" = String, Header, description = "Exact configured canonical origin")),
     responses(
         (status = 204, description = "Session created; returns separate Session and CSRF Set-Cookie headers"),
         (status = 401, description = "Generic local authentication failure", body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+        (status = 403, description = "Origin security policy rejected the request", body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
         (status = 413, description = "Request body exceeds the bounded limit", body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
         (status = 415, description = "Request is not singular application/json", body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
         (status = 422, description = "Request fields are invalid", body = crate::openapi::ProblemDetails, content_type = "application/problem+json")
@@ -56,8 +58,11 @@ pub(crate) async fn create_session(
     Extension(request_id): Extension<RequestId>,
     request: Request,
 ) -> Result<Response, HttpError> {
-    require_json(request.headers(), &request_id, CREATE_SESSION_PATH)?;
-    let body = to_bytes(request.into_body(), MAX_LOGIN_BODY_BYTES)
+    let (parts, body) = request.into_parts();
+    require_json(&parts.headers, &request_id, CREATE_SESSION_PATH)?;
+    let origins = header_values(&parts.headers, &ORIGIN)
+        .map_err(|_| HttpError::forbidden(request_id.clone(), CREATE_SESSION_PATH))?;
+    let body = to_bytes(body, MAX_LOGIN_BODY_BYTES)
         .await
         .map_err(|_| HttpError::payload_too_large(request_id.clone(), CREATE_SESSION_PATH))?;
     let input: LoginRequest = serde_json::from_slice(&body).map_err(|_| {
@@ -73,7 +78,7 @@ pub(crate) async fn create_session(
     })?;
     let (email, password) = validate_login(input, &request_id)?;
     let result = service
-        .login(email, password, request_id.as_str())
+        .login(email, password, &origins, request_id.as_str())
         .await
         .map_err(|error| map_service_error(error, request_id.clone(), CREATE_SESSION_PATH))?;
     response_with_cookies(
