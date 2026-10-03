@@ -39,21 +39,21 @@ async fn project_schema_enforces_owner_scope_slug_lifecycle_and_tombstones() {
         check_schema_readiness(&pool).await.unwrap(),
         SchemaReadiness::Pending {
             current: None,
-            target: 12
+            target: 13
         }
     );
     let first = migrate(&pool).await;
     assert_eq!(
         first,
         MigrationReport {
-            latest_version: Some(12),
-            known_migrations: 12
+            latest_version: Some(13),
+            known_migrations: 13
         }
     );
     assert_eq!(migrate(&pool).await, first);
     assert_eq!(
         check_schema_readiness(&pool).await.unwrap(),
-        SchemaReadiness::Ready { version: 12 }
+        SchemaReadiness::Ready { version: 13 }
     );
 
     seed_owners_and_scopes(&pool).await;

@@ -37,8 +37,8 @@ async fn organization_invitations_are_role_bound_atomic_and_single_use() {
     let pool = fixture_pool().await;
     reset_fixture(&pool).await;
     let report = migrate(&pool).await;
-    assert_eq!(report.latest_version, Some(12));
-    assert_eq!(report.known_migrations, 12);
+    assert_eq!(report.latest_version, Some(13));
+    assert_eq!(report.known_migrations, 13);
     insert_fixture(&pool).await;
     verify_schema_rejects_invalid_rows(&pool).await;
 

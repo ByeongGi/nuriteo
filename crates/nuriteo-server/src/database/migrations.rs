@@ -28,6 +28,7 @@ const PROJECT_DELETION_INVARIANTS_SQL: &str =
     include_str!("../../migrations/0011_project_deletion_invariants.sql");
 const PROJECT_MUTATION_INVARIANTS_SQL: &str =
     include_str!("../../migrations/0012_project_mutation_invariants.sql");
+const PROJECT_USER_ROLES_SQL: &str = include_str!("../../migrations/0013_project_user_roles.sql");
 
 // Two-key advisory locks use a namespace distinct from PostgreSQL's one-key
 // bigint locks. 0x4e555249 is the ASCII representation of "NURI".
@@ -169,6 +170,13 @@ pub(super) fn embedded_migrator() -> Migrator {
             Cow::Borrowed("project mutation invariants"),
             MigrationType::Simple,
             PROJECT_MUTATION_INVARIANTS_SQL.into_sql_str(),
+            false,
+        ),
+        Migration::new(
+            13,
+            Cow::Borrowed("project user roles"),
+            MigrationType::Simple,
+            PROJECT_USER_ROLES_SQL.into_sql_str(),
             false,
         ),
     ])

@@ -1,9 +1,14 @@
+mod access;
 mod model;
 mod repository;
 mod types;
 
 use std::fmt;
 
+pub use access::{
+    DirectProjectRoleGrant, EffectiveProjectRole, ProjectAccessError, ProjectAccessRepository,
+    ProjectRole, ProjectRoleVersion,
+};
 pub use model::Project;
 #[cfg(test)]
 pub(crate) use model::ProjectFields;
