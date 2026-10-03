@@ -30,9 +30,13 @@ try {
 }
 
 function testSafeErrorClassification() {
-  assert.match(collaborationError(new ApiError(412, "safe", undefined)), /Reload/u);
-  assert.match(collaborationError(new ApiError(409, "safe", undefined)), /expired, used, revoked/u);
-  assert.doesNotMatch(collaborationError(new Error("token=nrt_org_inv_secret")), /secret|token/u);
+  assert.match(collaborationError(new ApiError(412, "safe", undefined), "organization-profile"), /Reload/u);
+  assert.match(collaborationError(new ApiError(410, "safe", undefined), "organization-invitation-terminal"), /expired, used, revoked/u);
+  assert.match(collaborationError(new ApiError(409, "safe", undefined), "organization-create"), /slug is already in use/u);
+  assert.match(collaborationError(new ApiError(409, "safe", undefined), "organization-member"), /last Organization Owner/u);
+  assert.match(collaborationError(new ApiError(422, "safe", undefined), "organization-create"), /submitted values are invalid/u);
+  assert.match(collaborationError(new ApiError(422, "safe", undefined), "organization-invitation-issue"), /submitted values are invalid/u);
+  assert.doesNotMatch(collaborationError(new Error("token=nrt_org_inv_secret"), "organization-invitation-terminal"), /secret|token/u);
   assert.equal(uuidPathSegment("0199ee6c-c777-7000-8000-000000005001"), "0199ee6c-c777-7000-8000-000000005001");
   assert.equal(uuidPathSegment("../open-proxy"), undefined);
 }
@@ -54,6 +58,12 @@ async function testExactBoundedForwarding() {
   assert.equal(response.status, 201);
   assert.equal(response.headers.get("etag"), '"org-v1"');
   assert.equal(response.headers.get("location"), "/api/v1/organizations/0199ee6c-c777-7000-8000-000000005001");
+
+  await forwardCollaborationMutation(new Request(
+    "https://nuriteo.example.test/api/v1/organizations/0199ee6c-c777-7000-8000-000000005001",
+    { body: "{}", headers: { "content-type": "application/json", host: "nuriteo.example.test", "if-match": '"org-v7"', "x-csrf-token": `nrt_csrf_${"a".repeat(43)}` }, method: "PATCH" }
+  ), { method: "PATCH", path: "/api/v1/organizations/0199ee6c-c777-7000-8000-000000005001", requireCsrf: true, withBody: true, withEtag: true });
+  assert.equal(new Headers(received?.init?.headers).get("if-match"), '"org-v7"');
 
   const oversized = await forwardCollaborationMutation(new Request(
     "https://nuriteo.example.test/api/v1/organizations",
@@ -127,11 +137,17 @@ function testUxSourceContracts() {
   const admin = read("src/app/(authenticated)/admin/invitations/activation-invitations.tsx");
   const organizations = read("src/app/(authenticated)/organizations/organization-console.tsx");
   const accept = read("src/app/(authenticated)/organization-invitations/accept/accept-invitation.tsx");
+  const organizationPage = read("src/app/(authenticated)/organizations/page.tsx");
+  const guard = read("src/lib/use-exclusive-mutation.ts");
   assert.match(activation, /useSearchParams\(\)/u);
   assert.match(activation, /router\.replace\("\/sign-in\?activated=1"\)/u);
   assert.match(admin, /activationUrl\.consume\(\)/u);
   assert.match(organizations, /acceptUrl\.consume\(\)/u);
   assert.match(accept, /router\.replace\(action === "accept" \? "\/workspaces\?joined=1"/u);
+  assert.match(organizationPage, /error instanceof ApiError && error\.status === 403/u);
+  assert.match(organizationPage, /canManage=\{canManage\}/u);
+  assert.match(guard, /if \(locked\.current\) return false/u);
+  assert.match(guard, /finally/u);
   assert.doesNotMatch(`${activation}\n${admin}\n${organizations}\n${accept}`, /localStorage|sessionStorage|console\./u);
   for (const file of findRoutes("src/app/api/v1")) {
     assert.doesNotMatch(file, /\[\.\.\./u);

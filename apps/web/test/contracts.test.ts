@@ -51,7 +51,8 @@ function testServerFirstBoundaries(): void {
     "src/components/theme-selector.tsx",
     "src/components/ui/button.tsx",
     "src/lib/api/browser-client.ts",
-    "src/lib/api/browser-security.ts"
+    "src/lib/api/browser-security.ts",
+    "src/lib/use-exclusive-mutation.ts"
   ]);
 }
 

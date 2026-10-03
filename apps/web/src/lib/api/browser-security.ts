@@ -5,6 +5,15 @@ import { ApiError } from "@nuriteo/api-client";
 const CSRF_NAMES = ["__Host-nuriteo_csrf", "nuriteo_dev_csrf"] as const;
 const SAFE_CREDENTIAL = /^nrt_csrf_[A-Za-z0-9_-]{43}$/u;
 
+export type CollaborationOperation =
+  | "activation-invitation-issue"
+  | "activation-invitation-terminal"
+  | "organization-create"
+  | "organization-invitation-issue"
+  | "organization-invitation-terminal"
+  | "organization-member"
+  | "organization-profile";
+
 export function readCsrfCredential(): string {
   for (const pair of document.cookie.split(";")) {
     const separator = pair.indexOf("=");
@@ -17,14 +26,30 @@ export function readCsrfCredential(): string {
   throw new Error("Browser security credential is unavailable.");
 }
 
-export function collaborationError(error: unknown): string {
+export function collaborationError(
+  error: unknown,
+  operation: CollaborationOperation
+): string {
   if (error instanceof ApiError) {
     if (error.status === 403) return "You do not have permission for this action.";
     if (error.status === 412 || error.status === 428) {
       return "This Organization changed. Reload the latest version before trying again.";
     }
-    if (error.status === 409 || error.status === 410 || error.status === 422) {
+    if (
+      (operation === "activation-invitation-terminal" ||
+        operation === "organization-invitation-terminal") &&
+      (error.status === 409 || error.status === 410 || error.status === 422)
+    ) {
       return "This invitation is no longer usable. It may be expired, used, revoked, or replaced.";
+    }
+    if (operation === "organization-create" && error.status === 409) {
+      return "That Organization slug is already in use. Choose another slug.";
+    }
+    if (operation === "organization-member" && error.status === 409) {
+      return "The last Organization Owner cannot be changed or removed.";
+    }
+    if (error.status === 400 || error.status === 422) {
+      return "Some submitted values are invalid. Review the form and try again.";
     }
   }
   return "The request could not be completed. Check the service and try again.";

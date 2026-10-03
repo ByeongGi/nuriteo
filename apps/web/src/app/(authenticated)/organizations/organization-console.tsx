@@ -21,10 +21,16 @@ import { useState } from "react";
 import type { FormEvent } from "react";
 
 import { Button } from "../../../components/ui/button.tsx";
-import { collaborationError, readCsrfCredential } from "../../../lib/api/browser-security.ts";
+import {
+  collaborationError,
+  readCsrfCredential
+} from "../../../lib/api/browser-security.ts";
+import type { CollaborationOperation } from "../../../lib/api/browser-security.ts";
 import { createBrowserApiClient } from "../../../lib/api/browser-client.ts";
+import { useExclusiveMutation } from "../../../lib/use-exclusive-mutation.ts";
 
 interface OrganizationConsoleProps {
+  readonly canManage: boolean;
   readonly currentUserId: string;
   readonly etag?: string;
   readonly invitations?: readonly OrganizationInvitation[];
@@ -35,21 +41,38 @@ interface OrganizationConsoleProps {
 
 export function OrganizationConsole(props: OrganizationConsoleProps) {
   const router = useRouter();
+  const mutation = useExclusiveMutation();
   const [oneTimeUrl, setOneTimeUrl] = useState<string>();
   const [error, setError] = useState<string>();
-  const isOwner = props.members?.some((member) => member.userId === props.currentUserId && member.role === "owner") === true;
 
-  async function mutate(action: () => Promise<unknown>) {
-    setError(undefined);
-    setOneTimeUrl(undefined);
-    try { await action(); router.refresh(); } catch (cause) { setError(collaborationError(cause)); }
+  async function mutate(
+    operation: CollaborationOperation,
+    action: () => Promise<void>
+  ) {
+    await mutation.run(async () => {
+      setError(undefined);
+      setOneTimeUrl(undefined);
+      try {
+        await action();
+        router.refresh();
+      } catch (cause) {
+        setError(collaborationError(cause, operation));
+      }
+    });
   }
 
   async function create(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
-    await mutate(async () => {
-      const result = await createOrganization(createBrowserApiClient(), { slug: String(data.get("slug") ?? ""), displayName: String(data.get("displayName") ?? "") }, { csrfToken: readCsrfCredential() });
+    await mutate("organization-create", async () => {
+      const result = await createOrganization(
+        createBrowserApiClient(),
+        {
+          slug: String(data.get("slug") ?? ""),
+          displayName: String(data.get("displayName") ?? "")
+        },
+        { csrfToken: readCsrfCredential() }
+      );
       router.replace(`/organizations?organization=${result.data.id}`);
     });
   }
@@ -58,35 +81,169 @@ export function OrganizationConsole(props: OrganizationConsoleProps) {
     event.preventDefault();
     if (!props.organization || !props.etag) return;
     const data = new FormData(event.currentTarget);
-    await mutate(() => updateOrganization(createBrowserApiClient(), { organizationId: props.organization!.id, displayName: String(data.get("displayName") ?? ""), etag: props.etag! }, { csrfToken: readCsrfCredential() }));
+    await mutate("organization-profile", async () => {
+      await updateOrganization(
+        createBrowserApiClient(),
+        {
+          organizationId: props.organization!.id,
+          displayName: String(data.get("displayName") ?? ""),
+          etag: props.etag!
+        },
+        { csrfToken: readCsrfCredential() }
+      );
+    });
   }
 
   async function invite(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!props.organization) return;
     const data = new FormData(event.currentTarget);
-    await mutate(async () => {
-      const result = await issueOrganizationInvitation(createBrowserApiClient(), { organizationId: props.organization!.id, inviteeUserId: String(data.get("inviteeUserId") ?? ""), role: String(data.get("role")) === "owner" ? "owner" : "member" }, { csrfToken: readCsrfCredential() });
+    await mutate("organization-invitation-issue", async () => {
+      const result = await issueOrganizationInvitation(
+        createBrowserApiClient(),
+        {
+          organizationId: props.organization!.id,
+          inviteeUserId: String(data.get("inviteeUserId") ?? ""),
+          role: String(data.get("role")) === "owner" ? "owner" : "member"
+        },
+        { csrfToken: readCsrfCredential() }
+      );
       setOneTimeUrl(result.data.acceptUrl.consume());
     });
   }
 
   async function reissue(invitation: OrganizationInvitation) {
     if (!props.organization) return;
-    await mutate(async () => {
-      const result = await reissueOrganizationInvitation(createBrowserApiClient(), { organizationId: props.organization!.id, invitationId: invitation.id, role: invitation.proposedRole }, { csrfToken: readCsrfCredential() });
+    await mutate("organization-invitation-terminal", async () => {
+      const result = await reissueOrganizationInvitation(
+        createBrowserApiClient(),
+        {
+          organizationId: props.organization!.id,
+          invitationId: invitation.id,
+          role: invitation.proposedRole
+        },
+        { csrfToken: readCsrfCredential() }
+      );
       setOneTimeUrl(result.data.acceptUrl.consume());
+    });
+  }
+
+  async function changeRole(member: OrganizationMember) {
+    if (!props.organization) return;
+    await mutate("organization-member", async () => {
+      await changeOrganizationMemberRole(
+        createBrowserApiClient(),
+        {
+          organizationId: props.organization!.id,
+          userId: member.userId,
+          role: member.role === "owner" ? "member" : "owner"
+        },
+        { csrfToken: readCsrfCredential() }
+      );
+    });
+  }
+
+  async function remove(member: OrganizationMember) {
+    if (!props.organization) return;
+    await mutate("organization-member", async () => {
+      await removeOrganizationMember(
+        createBrowserApiClient(),
+        { organizationId: props.organization!.id, userId: member.userId },
+        { csrfToken: readCsrfCredential() }
+      );
     });
   }
 
   return (
     <main id="main-content" className="workspace-page">
-      <header className="workspace-page__intro"><p className="eyebrow">Collaboration</p><h1>Organizations</h1><p>Create a shared Workspace, then manage members and invitations.</p></header>
-      <nav className="organization-tabs" aria-label="Organizations"><Link href="/organizations" aria-current={!props.organization ? "page" : undefined}>Create new</Link>{props.workspaces.filter((workspace) => workspace.ownerType === "organization").map((workspace) => <Link key={workspace.ownerId} href={`/organizations?organization=${workspace.ownerId}`} aria-current={props.organization?.id === workspace.ownerId ? "page" : undefined}>{workspace.displayLabel}</Link>)}</nav>
-      {oneTimeUrl ? <section className="one-time-panel" aria-live="polite"><h2>Copy this invitation link now</h2><output>{oneTimeUrl}</output><Button type="button" onClick={() => setOneTimeUrl(undefined)}>Clear link</Button></section> : null}
+      <header className="workspace-page__intro">
+        <p className="eyebrow">Collaboration</p>
+        <h1>Organizations</h1>
+        <p>Create a shared Workspace, then manage members and invitations.</p>
+      </header>
+      <nav className="organization-tabs" aria-label="Organizations">
+        <Link href="/organizations" aria-current={!props.organization ? "page" : undefined}>Create new</Link>
+        {props.workspaces.filter((workspace) => workspace.ownerType === "organization").map((workspace) => (
+          <Link key={workspace.ownerId} href={`/organizations?organization=${workspace.ownerId}`} aria-current={props.organization?.id === workspace.ownerId ? "page" : undefined}>
+            {workspace.displayLabel}
+          </Link>
+        ))}
+      </nav>
+      {oneTimeUrl ? (
+        <section className="one-time-panel" aria-live="polite">
+          <h2>Copy this invitation link now</h2>
+          <output>{oneTimeUrl}</output>
+          <Button type="button" disabled={mutation.isPending} onClick={() => setOneTimeUrl(undefined)}>Clear link</Button>
+        </section>
+      ) : null}
       {error ? <p className="form-error" role="alert">{error}</p> : null}
-      {!props.organization ? <form className="collaboration-form" onSubmit={create}><h2>Create Organization</h2><label className="field-group">Slug<input name="slug" required pattern="[a-z0-9][a-z0-9-]*" maxLength={63} /></label><label className="field-group">Display name<input name="displayName" required maxLength={200} /></label><Button type="submit" variant="primary">Create Organization</Button></form> : null}
-      {props.organization ? <section className="collaboration-grid"><div><h2>{props.organization.displayName}</h2><p>Status: {props.organization.status} · version {props.organization.version}</p>{isOwner ? <form className="collaboration-form" onSubmit={rename}><label className="field-group">Display name<input name="displayName" defaultValue={props.organization.displayName} required /></label><Button type="submit">Save name</Button></form> : <p>Member access is read-only. The server enforces every mutation.</p>}</div><div><h2>Members</h2><ul className="record-list">{props.members?.map((member) => <li key={member.userId}><div><strong>{member.displayName}</strong><span>{member.role}</span></div>{isOwner && member.userId !== props.currentUserId ? <div className="record-actions"><Button type="button" onClick={() => void mutate(() => changeOrganizationMemberRole(createBrowserApiClient(), { organizationId: props.organization!.id, userId: member.userId, role: member.role === "owner" ? "member" : "owner" }, { csrfToken: readCsrfCredential() }))}>Make {member.role === "owner" ? "member" : "owner"}</Button><Button type="button" onClick={() => void mutate(() => removeOrganizationMember(createBrowserApiClient(), { organizationId: props.organization!.id, userId: member.userId }, { csrfToken: readCsrfCredential() }))}>Remove</Button></div> : null}</li>)}</ul></div>{isOwner ? <div><h2>Invite member</h2><form className="collaboration-form" onSubmit={invite}><label className="field-group">Invitee user ID<input name="inviteeUserId" required /></label><label className="field-group">Role<select name="role"><option value="member">Member</option><option value="owner">Owner</option></select></label><Button type="submit" variant="primary">Issue Organization invitation</Button></form><ul className="record-list" aria-label="Organization invitations">{props.invitations?.map((invitation) => <li key={invitation.id}><div><strong>{invitation.proposedRole}</strong><span>{invitation.status} · expires {invitation.expiresAt}</span></div>{invitation.status === "pending" ? <div className="record-actions"><Button type="button" onClick={() => void reissue(invitation)}>Reissue</Button><Button type="button" onClick={() => void mutate(() => revokeOrganizationInvitation(createBrowserApiClient(), { organizationId: props.organization!.id, invitationId: invitation.id }, { csrfToken: readCsrfCredential() }))}>Revoke</Button></div> : null}</li>)}</ul></div> : null}</section> : null}
+      {!props.organization ? (
+        <form className="collaboration-form" onSubmit={create} aria-busy={mutation.isPending}>
+          <h2>Create Organization</h2>
+          <label className="field-group">Slug<input name="slug" required pattern="[a-z0-9][a-z0-9-]*" maxLength={63} disabled={mutation.isPending} /></label>
+          <label className="field-group">Display name<input name="displayName" required maxLength={200} disabled={mutation.isPending} /></label>
+          <Button type="submit" variant="primary" disabled={mutation.isPending}>Create Organization</Button>
+        </form>
+      ) : null}
+      {props.organization ? (
+        <section className="collaboration-grid">
+          <div>
+            <h2>{props.organization.displayName}</h2>
+            <p>Status: {props.organization.status} · version {props.organization.version}</p>
+            {props.canManage ? (
+              <form className="collaboration-form" onSubmit={rename} aria-busy={mutation.isPending}>
+                <label className="field-group">Display name<input name="displayName" defaultValue={props.organization.displayName} required disabled={mutation.isPending} /></label>
+                <Button type="submit" disabled={mutation.isPending}>Save name</Button>
+              </form>
+            ) : <p>Member access is read-only. The server enforces every mutation.</p>}
+          </div>
+          <div>
+            <h2>Members</h2>
+            <ul className="record-list">
+              {props.members?.map((member) => (
+                <li key={member.userId}>
+                  <div><strong>{member.displayName}</strong><span>{member.role}</span></div>
+                  {props.canManage && member.userId !== props.currentUserId ? (
+                    <div className="record-actions">
+                      <Button type="button" disabled={mutation.isPending} onClick={() => void changeRole(member)}>Make {member.role === "owner" ? "member" : "owner"}</Button>
+                      <Button type="button" disabled={mutation.isPending} onClick={() => void remove(member)}>Remove</Button>
+                    </div>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          </div>
+          {props.canManage ? (
+            <div>
+              <h2>Invite member</h2>
+              <form className="collaboration-form" onSubmit={invite} aria-busy={mutation.isPending}>
+                <label className="field-group">Invitee user ID<input name="inviteeUserId" required disabled={mutation.isPending} /></label>
+                <label className="field-group">Role<select name="role" disabled={mutation.isPending}><option value="member">Member</option><option value="owner">Owner</option></select></label>
+                <Button type="submit" variant="primary" disabled={mutation.isPending}>Issue Organization invitation</Button>
+              </form>
+              <ul className="record-list" aria-label="Organization invitations">
+                {props.invitations?.map((invitation) => (
+                  <li key={invitation.id}>
+                    <div><strong>{invitation.proposedRole}</strong><span>{invitation.status} · expires {invitation.expiresAt}</span></div>
+                    {invitation.status === "pending" ? (
+                      <div className="record-actions">
+                        <Button type="button" disabled={mutation.isPending} onClick={() => void reissue(invitation)}>Reissue</Button>
+                        <Button type="button" disabled={mutation.isPending} onClick={() => void mutate("organization-invitation-terminal", async () => {
+                          await revokeOrganizationInvitation(
+                            createBrowserApiClient(),
+                            { organizationId: props.organization!.id, invitationId: invitation.id },
+                            { csrfToken: readCsrfCredential() }
+                          );
+                        })}>Revoke</Button>
+                      </div>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+        </section>
+      ) : null}
     </main>
   );
 }

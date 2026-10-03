@@ -29,9 +29,16 @@ let publicOrigin = "http://127.0.0.1";
 let activated = false;
 let organizationCreated = false;
 let invitationSequence = 0;
+let activationIssueCount = 0;
+let observedIfMatch: string | undefined;
 const organizationInvitations: OrganizationInvitation[] = [];
-const members = [{ userId: adminId, displayName: "Instance Administrator", role: "owner" }];
+const members: OrganizationMember[] = [{ userId: adminId, displayName: "Instance Administrator", role: "owner" }];
 const observedMutationCookies: string[] = [];
+const forbiddenServerValues = new Set([
+  activationToken,
+  csrfToken,
+  "correct horse battery staple"
+]);
 
 const core = http.createServer(async (request, response) => {
   const requestPath = request.url ?? "/";
@@ -82,6 +89,8 @@ const core = http.createServer(async (request, response) => {
   }
   if (request.method === "POST" && requestPath === "/api/v1/admin/activation-invitations") {
     if (session !== "admin") return sendProblem(response, 403, "FORBIDDEN");
+    activationIssueCount += 1;
+    await new Promise((resolve) => setTimeout(resolve, 75));
     return sendJson(response, { ...activationRecord(), activation_url: `${publicOrigin}/activate?token=${activationToken}` }, 201);
   }
   if (request.method === "POST" && requestPath === "/api/v1/organizations") {
@@ -96,7 +105,7 @@ const core = http.createServer(async (request, response) => {
     return sendJson(response, organization());
   }
   if (request.method === "GET" && requestPath === `/api/v1/organizations/${organizationId}/members`) {
-    return sendJson(response, { items: members });
+    return sendJson(response, { items: visibleMemberPage() });
   }
   if (request.method === "GET" && requestPath === `/api/v1/organizations/${organizationId}/invitations`) {
     if (session !== "admin") return sendProblem(response, 403, "FORBIDDEN");
@@ -104,6 +113,28 @@ const core = http.createServer(async (request, response) => {
   }
   if (request.method === "POST" && requestPath === `/api/v1/organizations/${organizationId}/invitations`) {
     return issueOrganizationInvitation(response);
+  }
+  if (request.method === "PATCH" && requestPath === `/api/v1/organizations/${organizationId}`) {
+    observedIfMatch = request.headers["if-match"];
+    return sendProblem(response, 412, "ORGANIZATION_VERSION_STALE");
+  }
+  const memberMutation = requestPath.match(new RegExp(`^/api/v1/organizations/${organizationId}/members/([^/]+)$`, "u"));
+  if (memberMutation?.[1] && request.method === "PATCH") {
+    const body = await jsonBody(request);
+    const member = members.find((item) => item.userId === memberMutation[1]);
+    assert.ok(member);
+    member.role = body.role === "owner" ? "owner" : "member";
+    response.statusCode = 204;
+    response.end();
+    return;
+  }
+  if (memberMutation?.[1] && request.method === "DELETE") {
+    const index = members.findIndex((item) => item.userId === memberMutation[1]);
+    assert.notEqual(index, -1);
+    members.splice(index, 1);
+    response.statusCode = 204;
+    response.end();
+    return;
   }
   const reissue = requestPath.match(new RegExp(`^/api/v1/organizations/${organizationId}/invitations/([^/]+)/reissue$`, "u"));
   if (request.method === "POST" && reissue?.[1]) {
@@ -136,6 +167,15 @@ const core = http.createServer(async (request, response) => {
     members.push({ userId: inviteeId, displayName: "Invited Teammate", role: existing.proposedRole });
     return sendJson(response, existing);
   }
+  if (request.method === "POST" && requestPath === "/api/v1/me/organization-invitations/decline") {
+    assert.equal(session, "invitee");
+    const body = await jsonBody(request);
+    const existing = organizationInvitations.find((item) => invitationToken(item) === body.token);
+    if (!existing || existing.status !== "pending") return sendProblem(response, 410, "INVITATION_UNUSABLE");
+    existing.status = "declined";
+    existing.declinedAt = now;
+    return sendJson(response, existing);
+  }
 
   response.statusCode = 404;
   response.end();
@@ -157,9 +197,14 @@ const web = spawn(process.execPath, [serverEntry], {
   stdio: ["ignore", "pipe", "pipe"]
 });
 let serverOutput = "";
+let serverOutputLeakDetected = false;
 for (const stream of [web.stdout, web.stderr]) {
   stream.on("data", (chunk: Buffer) => {
-    serverOutput = `${serverOutput}${chunk.toString("utf8")}`.slice(-4_000);
+    const text = chunk.toString("utf8");
+    if ([...forbiddenServerValues].some((value) => text.includes(value))) {
+      serverOutputLeakDetected = true;
+    }
+    serverOutput = `${serverOutput}${text}`.slice(-4_000);
   });
 }
 
@@ -175,9 +220,13 @@ try {
     const adminPage = await admin.newPage();
     await adminPage.goto(`${publicOrigin}/admin/invitations`, { waitUntil: "networkidle" });
     await adminPage.getByLabel("Invitee email").fill("invitee@example.test");
-    await adminPage.getByRole("button", { name: "Issue invitation" }).click();
+    await adminPage.locator("form").evaluate((form: HTMLFormElement) => {
+      form.requestSubmit();
+      form.requestSubmit();
+    });
     const activationOutput = adminPage.locator("output");
     await activationOutput.waitFor();
+    assert.equal(activationIssueCount, 1);
     const activationUrl = await activationOutput.textContent();
     assert.ok(activationUrl?.includes("/activate?token=nrt_inv_"));
     await adminPage.getByRole("button", { name: "Clear link" }).click();
@@ -217,16 +266,28 @@ try {
     await adminPage.getByLabel("Display name").fill("Alpha Organization");
     await adminPage.getByRole("button", { name: "Create Organization" }).click();
     await adminPage.waitForURL(`**/organizations?organization=${organizationId}`);
+    assert.equal(await adminPage.getByRole("heading", { name: "Invite member" }).count(), 1);
+    await adminPage.getByLabel("Display name").fill("Alpha Organization Renamed");
+    await adminPage.getByRole("button", { name: "Save name" }).click();
+    await adminPage.getByRole("alert").filter({ hasText: "Reload the latest version" }).waitFor();
+    assert.equal(observedIfMatch, '"org-v1"');
     await adminPage.getByLabel("Invitee user ID").fill(inviteeId);
     await adminPage.getByRole("button", { name: "Issue Organization invitation" }).click();
     let invitationUrl = await visibleOneTimeUrl(adminPage);
     await adminPage.getByRole("button", { name: "Reissue" }).click();
     const reissuedUrl = await visibleOneTimeUrl(adminPage);
     assert.notEqual(reissuedUrl, invitationUrl);
-    invitationUrl = reissuedUrl;
+    const revokedUrl = reissuedUrl;
     await adminPage.getByRole("button", { name: "Revoke" }).click();
     await adminPage.getByText(/revoked · expires/u).waitFor();
 
+    await inviteePage.goto(revokedUrl, { waitUntil: "networkidle" });
+    await inviteePage.getByRole("button", { name: "Accept invitation" }).click();
+    const terminalError = inviteePage.getByRole("alert").filter({ hasText: "expired, used, revoked, or replaced" });
+    await terminalError.waitFor();
+    assert.equal((await terminalError.textContent())?.includes("nrt_org_inv_"), false);
+
+    await adminPage.getByLabel("Invitee user ID").fill(inviteeId);
     await adminPage.getByRole("button", { name: "Issue Organization invitation" }).click();
     invitationUrl = await visibleOneTimeUrl(adminPage);
     await inviteePage.goto(invitationUrl, { waitUntil: "networkidle" });
@@ -247,8 +308,25 @@ try {
     });
     await inviteePage.getByText("Member access is read-only. The server enforces every mutation.").waitFor();
     assert.equal(await inviteePage.getByRole("heading", { name: "Invite member" }).count(), 0);
+
+    await adminPage.goto(`${publicOrigin}/organizations?organization=${organizationId}`, { waitUntil: "networkidle" });
+    await adminPage.getByLabel("Invitee user ID").fill(inviteeId);
+    await adminPage.getByRole("button", { name: "Issue Organization invitation" }).click();
+    const declineUrl = await visibleOneTimeUrl(adminPage);
+    await inviteePage.goto(declineUrl, { waitUntil: "networkidle" });
+    await inviteePage.getByRole("button", { name: "Decline" }).click();
+    await inviteePage.waitForURL("**/workspaces");
+    assert.equal(inviteePage.url().includes("token="), false);
+
+    await adminPage.goto(`${publicOrigin}/organizations?organization=${organizationId}`, { waitUntil: "networkidle" });
+    const inviteeMember = adminPage.locator(".record-list li").filter({ hasText: "Invited Teammate" });
+    await inviteeMember.getByRole("button", { name: "Make owner" }).click();
+    await inviteeMember.getByRole("button", { name: "Make member" }).waitFor();
+    await inviteeMember.getByRole("button", { name: "Remove" }).click();
+    await adminPage.getByText("Invited Teammate", { exact: true }).waitFor({ state: "detached" });
     assert.ok(observedMutationCookies.some((value) => value.endsWith(":admin")));
     assert.ok(observedMutationCookies.some((value) => value.endsWith(":invitee")));
+    assert.equal(serverOutputLeakDetected, false);
     assert.equal(serverOutput.includes(activationToken), false);
     for (const item of organizationInvitations) {
       assert.equal(serverOutput.includes(invitationToken(item)), false);
@@ -268,11 +346,16 @@ try {
 console.log("web collaboration browser journey ok");
 
 type Session = "admin" | "invitee";
-type InvitationStatus = "pending" | "accepted" | "revoked" | "superseded";
+type InvitationStatus = "pending" | "accepted" | "declined" | "revoked" | "superseded";
+interface OrganizationMember {
+  userId: string;
+  displayName: string;
+  role: "owner" | "member";
+}
 interface OrganizationInvitation {
   acceptedAt: string | null;
   createdAt: string;
-  declinedAt: null;
+  declinedAt: string | null;
   expiredAt: null;
   expiresAt: string;
   id: string;
@@ -303,7 +386,9 @@ function invitationToken(invitation: OrganizationInvitation): string {
 }
 
 function issuedOrganizationInvitation(invitation: OrganizationInvitation) {
-  return { ...invitation, acceptUrl: `${publicOrigin}/organization-invitations/accept?token=${invitationToken(invitation)}` };
+  const token = invitationToken(invitation);
+  forbiddenServerValues.add(token);
+  return { ...invitation, acceptUrl: `${publicOrigin}/organization-invitations/accept?token=${token}` };
 }
 
 function issueOrganizationInvitation(response: http.ServerResponse) {
@@ -329,6 +414,16 @@ function workspaces(session: Session) {
   if (!organizationCreated) return [personal];
   if (session === "admin" || members.some((member) => member.userId === inviteeId)) return [personal, shared];
   return [personal];
+}
+
+function visibleMemberPage(): OrganizationMember[] {
+  const fillers: OrganizationMember[] = Array.from({ length: 100 }, (_, index) => ({
+    userId: `0199ee6c-c777-7000-8000-${String(100_000 + index).padStart(12, "0")}`,
+    displayName: `Member ${index + 1}`,
+    role: "member"
+  }));
+  const invitee = members.find((member) => member.userId === inviteeId);
+  return invitee === undefined ? fillers : [invitee, ...fillers.slice(0, 99)];
 }
 
 async function visibleOneTimeUrl(page: import("@playwright/test").Page): Promise<string> {

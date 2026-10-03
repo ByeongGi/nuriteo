@@ -1,4 +1,5 @@
 import {
+  ApiError,
   getCurrentUser,
   getCurrentWorkspaces,
   getOrganization,
@@ -28,19 +29,24 @@ export default async function OrganizationsPage({
       (workspace) => workspace.ownerType === "organization" && workspace.ownerId === requested
     ) ? requested : undefined;
     if (organizationId === undefined) {
-      return <OrganizationConsole currentUserId={current.data.user.id} workspaces={collection.data.workspaces} />;
+      return <OrganizationConsole canManage currentUserId={current.data.user.id} workspaces={collection.data.workspaces} />;
     }
     const [organization, members] = await Promise.all([
       getOrganization(client, organizationId),
       listOrganizationMembers(client, organizationId)
     ]);
-    const isOwner = members.data.items.some(
-      (member) => member.userId === current.data.user.id && member.role === "owner"
-    );
-    const invitations = isOwner
-      ? (await listOrganizationInvitations(client, organizationId)).data.items
-      : undefined;
-    return <OrganizationConsole currentUserId={current.data.user.id} workspaces={collection.data.workspaces} organization={organization.data} etag={organization.etag} members={members.data.items} {...(invitations === undefined ? {} : { invitations })} />;
+    let invitations;
+    let canManage = true;
+    try {
+      invitations = (await listOrganizationInvitations(client, organizationId)).data.items;
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 403) {
+        canManage = false;
+      } else {
+        throw error;
+      }
+    }
+    return <OrganizationConsole canManage={canManage} currentUserId={current.data.user.id} workspaces={collection.data.workspaces} organization={organization.data} etag={organization.etag} members={members.data.items} {...(invitations === undefined ? {} : { invitations })} />;
   } catch (error) {
     return <EntryUnavailable title="Organizations are temporarily unavailable" description="Organization collaboration data could not be loaded safely." reference={safeRequestReference(error)} retryHref="/organizations" />;
   }
