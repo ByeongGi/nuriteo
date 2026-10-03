@@ -7,6 +7,7 @@ use utoipa_swagger_ui::{Config, SwaggerUi};
 use crate::VERSION;
 use crate::auth::{self, AuthService};
 use crate::invitations::{self, InvitationHttpService};
+use crate::organization::{self, OrganizationHttpService};
 use crate::workspace;
 
 pub const DOCUMENT_PATH: &str = "/api/openapi.json";
@@ -24,7 +25,9 @@ pub const DOCS_PATH: &str = "/api/docs";
         (name = "system", description = "Public instance compatibility information"),
         (name = "authentication", description = "Local browser Session lifecycle"),
         (name = "workspaces", description = "Authenticated Workspace projections"),
-        (name = "invitations", description = "Administrator invitation and public account activation lifecycle")
+        (name = "invitations", description = "Administrator invitation and public account activation lifecycle"),
+        (name = "organizations", description = "Authenticated Organization lifecycle and membership administration"),
+        (name = "organization-invitations", description = "Role-bound Organization invitation lifecycle")
     ),
     servers((url = "/", description = "Current self-hosted instance"))
 )]
@@ -106,12 +109,17 @@ pub fn document() -> utoipa::openapi::OpenApi {
     openapi_parts(
         AuthService::unconfigured(),
         InvitationHttpService::unconfigured(),
+        OrganizationHttpService::unconfigured(),
     )
     .1
 }
 
-pub fn router(auth: AuthService, invitations: InvitationHttpService) -> Router {
-    let (api_routes, document) = openapi_parts(auth, invitations);
+pub fn router(
+    auth: AuthService,
+    invitations: InvitationHttpService,
+    organizations: OrganizationHttpService,
+) -> Router {
+    let (api_routes, document) = openapi_parts(auth, invitations, organizations);
     let config = Config::new([DOCUMENT_PATH]).validator_url("none");
     let docs = SwaggerUi::new(DOCS_PATH)
         .url(DOCUMENT_PATH, document)
@@ -123,6 +131,7 @@ pub fn router(auth: AuthService, invitations: InvitationHttpService) -> Router {
 fn openapi_parts(
     auth: AuthService,
     invitations: InvitationHttpService,
+    organizations: OrganizationHttpService,
 ) -> (Router, utoipa::openapi::OpenApi) {
     let (auth_routes, document) =
         workspace::openapi_router(auth::openapi_router(ApiDocument::openapi()))
@@ -132,5 +141,13 @@ fn openapi_parts(
         .routes(routes!(version))
         .with_state(invitations)
         .split_for_parts();
-    (auth_routes.merge(invitation_routes), document)
+    let (organization_routes, document) = organization::openapi_router(document)
+        .with_state(organizations)
+        .split_for_parts();
+    (
+        auth_routes
+            .merge(invitation_routes)
+            .merge(organization_routes),
+        document,
+    )
 }

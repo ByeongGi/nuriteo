@@ -1,3 +1,5 @@
+mod http_routes;
+mod http_service;
 mod invitation;
 mod invitation_service;
 mod model;
@@ -50,6 +52,8 @@ impl std::error::Error for OrganizationError {}
 
 #[cfg(test)]
 mod tests;
+pub(crate) use http_routes::openapi_router;
+pub use http_service::{OrganizationHttpError, OrganizationHttpPolicy, OrganizationHttpService};
 pub use invitation::{
     OrganizationInvitation, OrganizationInvitationError, OrganizationInvitationFields,
     OrganizationInvitationId, OrganizationInvitationStatus, OrganizationInvitationToken,

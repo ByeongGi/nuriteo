@@ -17,6 +17,9 @@ enum ProblemKind {
     PayloadTooLarge,
     UnsupportedMediaType,
     Validation,
+    Conflict,
+    PreconditionRequired,
+    PreconditionFailed,
     Internal,
 }
 
@@ -30,6 +33,9 @@ impl ProblemKind {
             Self::PayloadTooLarge => StatusCode::PAYLOAD_TOO_LARGE,
             Self::UnsupportedMediaType => StatusCode::UNSUPPORTED_MEDIA_TYPE,
             Self::Validation => StatusCode::UNPROCESSABLE_ENTITY,
+            Self::Conflict => StatusCode::CONFLICT,
+            Self::PreconditionRequired => StatusCode::PRECONDITION_REQUIRED,
+            Self::PreconditionFailed => StatusCode::PRECONDITION_FAILED,
             Self::Internal => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
@@ -43,6 +49,9 @@ impl ProblemKind {
             Self::PayloadTooLarge => "/docs/problems/payload-too-large",
             Self::UnsupportedMediaType => "/docs/problems/unsupported-media-type",
             Self::Validation => "/docs/problems/validation-failed",
+            Self::Conflict => "/docs/problems/resource-conflict",
+            Self::PreconditionRequired => "/docs/problems/precondition-required",
+            Self::PreconditionFailed => "/docs/problems/precondition-failed",
             Self::Internal => "/docs/problems/internal-server-error",
         }
     }
@@ -56,6 +65,9 @@ impl ProblemKind {
             Self::PayloadTooLarge => "Payload too large",
             Self::UnsupportedMediaType => "Unsupported media type",
             Self::Validation => "Validation failed",
+            Self::Conflict => "Resource conflict",
+            Self::PreconditionRequired => "Precondition required",
+            Self::PreconditionFailed => "Precondition failed",
             Self::Internal => "Internal server error",
         }
     }
@@ -69,6 +81,9 @@ impl ProblemKind {
             Self::PayloadTooLarge => "PAYLOAD_TOO_LARGE",
             Self::UnsupportedMediaType => "UNSUPPORTED_MEDIA_TYPE",
             Self::Validation => "VALIDATION_FAILED",
+            Self::Conflict => "RESOURCE_CONFLICT",
+            Self::PreconditionRequired => "PRECONDITION_REQUIRED",
+            Self::PreconditionFailed => "PRECONDITION_FAILED",
             Self::Internal => "INTERNAL_SERVER_ERROR",
         }
     }
@@ -82,6 +97,9 @@ impl ProblemKind {
             Self::PayloadTooLarge => "The request body exceeds the allowed size.",
             Self::UnsupportedMediaType => "The request body must use application/json.",
             Self::Validation => "One or more fields are invalid.",
+            Self::Conflict => "The resource state conflicts with the request.",
+            Self::PreconditionRequired => "A current resource validator is required.",
+            Self::PreconditionFailed => "The supplied resource validator is not current.",
             Self::Internal => "The server could not complete the request.",
         }
     }
@@ -184,6 +202,31 @@ impl HttpError {
             request_id,
             instance,
             errors.into_iter().take(MAX_FIELD_ERRORS).collect(),
+        )
+    }
+
+    #[must_use]
+    pub fn conflict(request_id: RequestId, instance: impl Into<String>) -> Self {
+        Self::new(ProblemKind::Conflict, request_id, instance, Vec::new())
+    }
+
+    #[must_use]
+    pub fn precondition_required(request_id: RequestId, instance: impl Into<String>) -> Self {
+        Self::new(
+            ProblemKind::PreconditionRequired,
+            request_id,
+            instance,
+            Vec::new(),
+        )
+    }
+
+    #[must_use]
+    pub fn precondition_failed(request_id: RequestId, instance: impl Into<String>) -> Self {
+        Self::new(
+            ProblemKind::PreconditionFailed,
+            request_id,
+            instance,
+            Vec::new(),
         )
     }
 

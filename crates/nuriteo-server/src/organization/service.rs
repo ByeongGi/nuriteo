@@ -409,12 +409,12 @@ impl OrganizationService {
         display_name: String,
         audit: &OrganizationAuditContext,
     ) -> Result<Organization, OrganizationServiceError> {
-        let now = now()?;
         let mut connection = self.acquire().await?;
         let mut transaction = connection
             .begin()
             .await
             .map_err(|_| OrganizationServiceError::DatabaseUnavailable)?;
+        let now = transaction_now(&mut transaction).await?;
         let locked = lock_and_authorize_owner(&mut transaction, principal, organization_id).await?;
         ensure_active_and_version(&locked, expected_version)?;
         let candidate = Organization::new(OrganizationFields {
@@ -455,12 +455,12 @@ impl OrganizationService {
         expected_version: OrganizationVersion,
         audit: &OrganizationAuditContext,
     ) -> Result<Organization, OrganizationServiceError> {
-        let now = now()?;
         let mut connection = self.acquire().await?;
         let mut transaction = connection
             .begin()
             .await
             .map_err(|_| OrganizationServiceError::DatabaseUnavailable)?;
+        let now = transaction_now(&mut transaction).await?;
         let locked = lock_and_authorize_owner(&mut transaction, principal, organization_id).await?;
         ensure_active_and_version(&locked, expected_version)?;
         let next_version = expected_version
@@ -509,12 +509,12 @@ impl OrganizationService {
         role: OrganizationRole,
         audit: &OrganizationAuditContext,
     ) -> Result<MembershipAddResult, OrganizationServiceError> {
-        let now = now()?;
         let mut connection = self.acquire().await?;
         let mut transaction = connection
             .begin()
             .await
             .map_err(|_| OrganizationServiceError::DatabaseUnavailable)?;
+        let now = transaction_now(&mut transaction).await?;
         let locked = lock_and_authorize_owner(&mut transaction, principal, organization_id).await?;
         ensure_active(&locked)?;
         if membership_role(&mut transaction, organization_id, user_id)
@@ -558,12 +558,12 @@ impl OrganizationService {
         role: OrganizationRole,
         audit: &OrganizationAuditContext,
     ) -> Result<MembershipChangeResult, OrganizationServiceError> {
-        let now = now()?;
         let mut connection = self.acquire().await?;
         let mut transaction = connection
             .begin()
             .await
             .map_err(|_| OrganizationServiceError::DatabaseUnavailable)?;
+        let now = transaction_now(&mut transaction).await?;
         let locked = lock_and_authorize_owner(&mut transaction, principal, organization_id).await?;
         ensure_active(&locked)?;
         require_active_user(&mut transaction, user_id, false).await?;
@@ -608,12 +608,12 @@ impl OrganizationService {
         user_id: UserId,
         audit: &OrganizationAuditContext,
     ) -> Result<MembershipRemoveResult, OrganizationServiceError> {
-        let now = now()?;
         let mut connection = self.acquire().await?;
         let mut transaction = connection
             .begin()
             .await
             .map_err(|_| OrganizationServiceError::DatabaseUnavailable)?;
+        let now = transaction_now(&mut transaction).await?;
         let locked = lock_and_authorize_owner(&mut transaction, principal, organization_id).await?;
         ensure_active(&locked)?;
         let Some(current) = membership_role(&mut transaction, organization_id, user_id).await?
@@ -982,6 +982,16 @@ fn parse_role(role: &str) -> Result<OrganizationRole, OrganizationServiceError> 
 fn now() -> Result<Timestamp, OrganizationServiceError> {
     Timestamp::from_datetime(OffsetDateTime::now_utc())
         .map_err(|_| OrganizationServiceError::InvariantViolation)
+}
+
+async fn transaction_now(
+    transaction: &mut Transaction<'_, Postgres>,
+) -> Result<Timestamp, OrganizationServiceError> {
+    let value: OffsetDateTime = sqlx::query_scalar("SELECT transaction_timestamp()")
+        .fetch_one(&mut **transaction)
+        .await
+        .map_err(|_| OrganizationServiceError::DatabaseUnavailable)?;
+    Timestamp::from_datetime(value).map_err(|_| OrganizationServiceError::InvariantViolation)
 }
 
 fn is_unique_violation(error: &sqlx::Error) -> bool {

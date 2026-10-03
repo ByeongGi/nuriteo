@@ -46,7 +46,17 @@ async fn serves_the_versioned_document_from_the_application_router() {
             "/api/v1/auth/session",
             "/api/v1/auth/sessions",
             "/api/v1/me",
+            "/api/v1/me/organization-invitations/accept",
+            "/api/v1/me/organization-invitations/decline",
             "/api/v1/me/workspaces",
+            "/api/v1/organizations",
+            "/api/v1/organizations/{organization_id}",
+            "/api/v1/organizations/{organization_id}/archive",
+            "/api/v1/organizations/{organization_id}/invitations",
+            "/api/v1/organizations/{organization_id}/invitations/{invitation_id}",
+            "/api/v1/organizations/{organization_id}/invitations/{invitation_id}/reissue",
+            "/api/v1/organizations/{organization_id}/members",
+            "/api/v1/organizations/{organization_id}/members/{user_id}",
             "/api/v1/version"
         ]
     );

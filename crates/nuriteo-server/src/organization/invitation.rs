@@ -6,6 +6,7 @@ use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use sha2::{Digest, Sha256};
+use utoipa::ToSchema;
 use uuid::{Uuid, Version};
 
 use crate::identity::{InvitationExpiryPolicy, NormalizedEmail, Timestamp, UserId};
@@ -87,7 +88,7 @@ impl<'de> Deserialize<'de> for OrganizationInvitationId {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum OrganizationInvitationStatus {
     Pending,

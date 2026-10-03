@@ -8,8 +8,9 @@ use crate::health::{HealthPolicy, HealthService};
 use crate::identity::SessionPolicy;
 use crate::invitations::{InvitationHttpPolicy, InvitationHttpService};
 use crate::object_storage::{ObjectStorageConfig, OperationLimits, S3ObjectStore};
+use crate::organization::{OrganizationHttpPolicy, OrganizationHttpService};
 
-use super::{Supervisor, SupervisorConfig, WorkerError, build_router_with_all_services};
+use super::{Supervisor, SupervisorConfig, WorkerError, build_router_with_http_services};
 
 const HTTP_WORKERS: NonZeroUsize = NonZeroUsize::MIN;
 
@@ -22,6 +23,7 @@ pub(crate) enum ServeError {
     StorageInitialization,
     AuthenticationConfiguration,
     InvitationConfiguration,
+    OrganizationConfiguration,
     Bind,
     Lifecycle,
     DatabaseClose,
@@ -37,6 +39,7 @@ impl ServeError {
             Self::StorageInitialization => "storage-initialization",
             Self::AuthenticationConfiguration => "authentication-configuration",
             Self::InvitationConfiguration => "invitation-configuration",
+            Self::OrganizationConfiguration => "organization-configuration",
             Self::Bind => "bind",
             Self::Lifecycle => "lifecycle",
             Self::DatabaseClose => "database-close",
@@ -108,7 +111,19 @@ pub(crate) async fn run_server(
         }
     };
     let health = HealthService::production(pool.clone(), store, HealthPolicy::default());
-    let router = build_router_with_all_services(health, auth, invitations);
+    let organizations = match OrganizationHttpService::production(
+        pool.clone(),
+        &global.public.external_url,
+        OrganizationHttpPolicy::default(),
+        SessionPolicy::default(),
+    ) {
+        Ok(organizations) => organizations,
+        Err(_) => {
+            close_pool(pool, close_timeout).await?;
+            return Err(ServeError::OrganizationConfiguration);
+        }
+    };
+    let router = build_router_with_http_services(health, auth, invitations, organizations);
     let mut supervisor = Supervisor::new(SupervisorConfig::new(
         global.server.shutdown_drain_timeout,
         HTTP_WORKERS,
@@ -160,6 +175,10 @@ mod tests {
             (
                 ServeError::InvitationConfiguration,
                 "invitation-configuration",
+            ),
+            (
+                ServeError::OrganizationConfiguration,
+                "organization-configuration",
             ),
             (ServeError::Bind, "bind"),
             (ServeError::Lifecycle, "lifecycle"),
