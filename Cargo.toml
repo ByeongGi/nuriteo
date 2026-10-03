@@ -1,5 +1,6 @@
 [workspace]
 members = [
+  "crates/nuriteo-server",
   "crates/system-core",
   "crates/system-wasm"
 ]
