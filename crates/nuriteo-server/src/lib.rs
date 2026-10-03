@@ -11,6 +11,7 @@ pub mod identity;
 pub mod object_storage;
 pub mod observability;
 pub mod openapi;
+pub mod organization;
 mod storage_check;
 pub mod workspace;
 
