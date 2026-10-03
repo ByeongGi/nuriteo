@@ -1,0 +1,375 @@
+use std::env;
+use std::fs;
+use std::time::Duration;
+
+use nuriteo_server::database::{
+    DatabasePool, DatabasePoolConfig, DatabaseTlsConfig, MigrationOptions, MigrationReport,
+    SchemaReadiness, check_schema_readiness, run_embedded_migrations,
+};
+use sqlx::{Acquire, Executor};
+
+const DATABASE_URL_ENV: &str = "NURITEO_TEST_DATABASE_URL";
+const DATABASE_CA_ENV: &str = "NURITEO_TEST_DATABASE_CA";
+const USER_ONE: &str = "0199ee6c-c777-7000-8000-000000001001";
+const USER_TWO: &str = "0199ee6c-c777-7000-8000-000000001002";
+const USER_SCOPE_ONE: &str = "0199ee6c-c777-7000-8000-000000001011";
+const USER_SCOPE_TWO: &str = "0199ee6c-c777-7000-8000-000000001012";
+const ORGANIZATION_ONE: &str = "0199ee6c-c777-7000-8000-000000001021";
+const ORGANIZATION_TWO: &str = "0199ee6c-c777-7000-8000-000000001022";
+const ORGANIZATION_SCOPE_ONE: &str = "0199ee6c-c777-7000-8000-000000001031";
+const ORGANIZATION_SCOPE_TWO: &str = "0199ee6c-c777-7000-8000-000000001032";
+const USER_PROJECT: &str = "0199ee6c-c777-7000-8000-000000001041";
+const USER_TWO_PROJECT: &str = "0199ee6c-c777-7000-8000-000000001042";
+const ORGANIZATION_PROJECT: &str = "0199ee6c-c777-7000-8000-000000001043";
+const ORGANIZATION_TWO_PROJECT: &str = "0199ee6c-c777-7000-8000-000000001044";
+
+#[tokio::test]
+#[ignore = "requires the pinned PostgreSQL TLS fixture; run tests/fixtures/postgres-project/run.sh"]
+async fn project_schema_enforces_owner_scope_slug_lifecycle_and_tombstones() {
+    let pool = fixture_pool().await;
+    reset_fixture(&pool).await;
+    assert_eq!(
+        check_schema_readiness(&pool).await.unwrap(),
+        SchemaReadiness::Pending {
+            current: None,
+            target: 10
+        }
+    );
+    let first = migrate(&pool).await;
+    assert_eq!(
+        first,
+        MigrationReport {
+            latest_version: Some(10),
+            known_migrations: 10
+        }
+    );
+    assert_eq!(migrate(&pool).await, first);
+    assert_eq!(
+        check_schema_readiness(&pool).await.unwrap(),
+        SchemaReadiness::Ready { version: 10 }
+    );
+
+    seed_owners_and_scopes(&pool).await;
+    verify_valid_owners_and_slug_namespaces(&pool).await;
+    verify_project_constraints(&pool).await;
+    verify_archive_and_version_contract(&pool).await;
+    verify_tombstone_reservation(&pool).await;
+    verify_transaction_rollback(&pool).await;
+    verify_schema_shape(&pool).await;
+
+    reset_fixture(&pool).await;
+    pool.close(Duration::from_secs(2)).await.unwrap();
+}
+
+async fn verify_valid_owners_and_slug_namespaces(pool: &DatabasePool) {
+    insert_user_project(
+        pool,
+        USER_PROJECT,
+        USER_ONE,
+        USER_SCOPE_ONE,
+        "shared",
+        "User Project",
+    )
+    .await;
+    insert_user_project(
+        pool,
+        USER_TWO_PROJECT,
+        USER_TWO,
+        USER_SCOPE_TWO,
+        "shared",
+        "Other User Project",
+    )
+    .await;
+    insert_organization_project(
+        pool,
+        ORGANIZATION_PROJECT,
+        ORGANIZATION_ONE,
+        ORGANIZATION_SCOPE_ONE,
+        "shared",
+        "Organization Project",
+    )
+    .await;
+    insert_organization_project(
+        pool,
+        ORGANIZATION_TWO_PROJECT,
+        ORGANIZATION_TWO,
+        ORGANIZATION_SCOPE_TWO,
+        "shared",
+        "Other Organization Project",
+    )
+    .await;
+    assert_eq!(project_count(pool).await, 4);
+}
+
+async fn verify_project_constraints(pool: &DatabasePool) {
+    let cases = [
+        (
+            "UUIDv7 ID",
+            "INSERT INTO projects (id, owner_user_id, storage_scope_id, slug, name) VALUES ('0199ee6c-c777-4000-8000-000000001051', '0199ee6c-c777-7000-8000-000000001001', '0199ee6c-c777-7000-8000-000000001011', 'invalid-id', 'Invalid ID')",
+        ),
+        (
+            "one owner required",
+            "INSERT INTO projects (id, storage_scope_id, slug, name) VALUES ('0199ee6c-c777-7000-8000-000000001052', '0199ee6c-c777-7000-8000-000000001011', 'no-owner', 'No Owner')",
+        ),
+        (
+            "two owners rejected",
+            "INSERT INTO projects (id, owner_user_id, owner_organization_id, storage_scope_id, slug, name) VALUES ('0199ee6c-c777-7000-8000-000000001053', '0199ee6c-c777-7000-8000-000000001001', '0199ee6c-c777-7000-8000-000000001021', '0199ee6c-c777-7000-8000-000000001011', 'two-owners', 'Two Owners')",
+        ),
+        (
+            "cross-user scope",
+            "INSERT INTO projects (id, owner_user_id, storage_scope_id, slug, name) VALUES ('0199ee6c-c777-7000-8000-000000001054', '0199ee6c-c777-7000-8000-000000001001', '0199ee6c-c777-7000-8000-000000001012', 'wrong-scope', 'Wrong Scope')",
+        ),
+        (
+            "cross-organization scope",
+            "INSERT INTO projects (id, owner_organization_id, storage_scope_id, slug, name) VALUES ('0199ee6c-c777-7000-8000-000000001055', '0199ee6c-c777-7000-8000-000000001021', '0199ee6c-c777-7000-8000-000000001032', 'wrong-scope', 'Wrong Scope')",
+        ),
+        (
+            "cross-type scope",
+            "INSERT INTO projects (id, owner_organization_id, storage_scope_id, slug, name) VALUES ('0199ee6c-c777-7000-8000-000000001056', '0199ee6c-c777-7000-8000-000000001021', '0199ee6c-c777-7000-8000-000000001011', 'wrong-type', 'Wrong Type')",
+        ),
+        (
+            "missing scope",
+            "INSERT INTO projects (id, owner_user_id, storage_scope_id, slug, name) VALUES ('0199ee6c-c777-7000-8000-000000001057', '0199ee6c-c777-7000-8000-000000001001', '0199ee6c-c777-7000-8000-000000001099', 'missing-scope', 'Missing Scope')",
+        ),
+        (
+            "canonical slug",
+            "INSERT INTO projects (id, owner_user_id, storage_scope_id, slug, name) VALUES ('0199ee6c-c777-7000-8000-000000001058', '0199ee6c-c777-7000-8000-000000001001', '0199ee6c-c777-7000-8000-000000001011', 'Uppercase', 'Bad Slug')",
+        ),
+        (
+            "bounded slug",
+            "INSERT INTO projects (id, owner_user_id, storage_scope_id, slug, name) VALUES ('0199ee6c-c777-7000-8000-000000001059', '0199ee6c-c777-7000-8000-000000001001', '0199ee6c-c777-7000-8000-000000001011', repeat('a', 64), 'Bad Slug')",
+        ),
+        (
+            "bounded name",
+            "INSERT INTO projects (id, owner_user_id, storage_scope_id, slug, name) VALUES ('0199ee6c-c777-7000-8000-000000001060', '0199ee6c-c777-7000-8000-000000001001', '0199ee6c-c777-7000-8000-000000001011', 'bad-name', ' Padded')",
+        ),
+        (
+            "known state",
+            "INSERT INTO projects (id, owner_user_id, storage_scope_id, slug, name, state) VALUES ('0199ee6c-c777-7000-8000-000000001061', '0199ee6c-c777-7000-8000-000000001001', '0199ee6c-c777-7000-8000-000000001011', 'bad-state', 'Bad State', 'deleted')",
+        ),
+        (
+            "archived timestamp",
+            "INSERT INTO projects (id, owner_user_id, storage_scope_id, slug, name, state) VALUES ('0199ee6c-c777-7000-8000-000000001062', '0199ee6c-c777-7000-8000-000000001001', '0199ee6c-c777-7000-8000-000000001011', 'bad-archive', 'Bad Archive', 'archived')",
+        ),
+        (
+            "timestamp order",
+            "INSERT INTO projects (id, owner_user_id, storage_scope_id, slug, name, created_at, updated_at) VALUES ('0199ee6c-c777-7000-8000-000000001063', '0199ee6c-c777-7000-8000-000000001001', '0199ee6c-c777-7000-8000-000000001011', 'bad-time', 'Bad Time', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP - INTERVAL '1 second')",
+        ),
+        (
+            "positive version",
+            "INSERT INTO projects (id, owner_user_id, storage_scope_id, slug, name, lock_version) VALUES ('0199ee6c-c777-7000-8000-000000001064', '0199ee6c-c777-7000-8000-000000001001', '0199ee6c-c777-7000-8000-000000001011', 'bad-version', 'Bad Version', 0)",
+        ),
+        (
+            "User slug uniqueness",
+            "INSERT INTO projects (id, owner_user_id, storage_scope_id, slug, name) VALUES ('0199ee6c-c777-7000-8000-000000001065', '0199ee6c-c777-7000-8000-000000001001', '0199ee6c-c777-7000-8000-000000001011', 'shared', 'Duplicate')",
+        ),
+        (
+            "Organization slug uniqueness",
+            "INSERT INTO projects (id, owner_organization_id, storage_scope_id, slug, name) VALUES ('0199ee6c-c777-7000-8000-000000001066', '0199ee6c-c777-7000-8000-000000001021', '0199ee6c-c777-7000-8000-000000001031', 'shared', 'Duplicate')",
+        ),
+    ];
+    for (contract, statement) in cases {
+        assert_rejected(pool, statement, contract).await;
+    }
+}
+
+async fn verify_archive_and_version_contract(pool: &DatabasePool) {
+    assert_rejected(pool, "UPDATE projects SET name = 'Unversioned' WHERE id = '0199ee6c-c777-7000-8000-000000001041'::uuid", "version advance").await;
+    execute(pool, "UPDATE projects SET state = 'archived', archived_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP, lock_version = lock_version + 1 WHERE id = '0199ee6c-c777-7000-8000-000000001041'::uuid").await;
+    assert_rejected(pool, "INSERT INTO projects (id, owner_user_id, storage_scope_id, slug, name) VALUES ('0199ee6c-c777-7000-8000-000000001067', '0199ee6c-c777-7000-8000-000000001001', '0199ee6c-c777-7000-8000-000000001011', 'shared', 'Archived Collision')", "archived slug reservation").await;
+}
+
+async fn verify_tombstone_reservation(pool: &DatabasePool) {
+    let mut connection = acquire(pool).await;
+    let mut transaction = connection.begin().await.unwrap();
+    sqlx::query("INSERT INTO project_tombstones (former_project_id, owner_user_id, slug) VALUES ($1::uuid, $2::uuid, 'shared')")
+        .bind(USER_PROJECT).bind(USER_ONE).execute(&mut *transaction).await.unwrap();
+    sqlx::query("DELETE FROM projects WHERE id = $1::uuid")
+        .bind(USER_PROJECT)
+        .execute(&mut *transaction)
+        .await
+        .unwrap();
+    transaction.commit().await.unwrap();
+
+    assert_rejected(pool, "INSERT INTO projects (id, owner_user_id, storage_scope_id, slug, name) VALUES ('0199ee6c-c777-7000-8000-000000001068', '0199ee6c-c777-7000-8000-000000001001', '0199ee6c-c777-7000-8000-000000001011', 'shared', 'Hijack')", "tombstone URL reservation").await;
+    assert_rejected(pool, "UPDATE project_tombstones SET slug = 'changed' WHERE former_project_id = '0199ee6c-c777-7000-8000-000000001041'::uuid", "immutable tombstone").await;
+    assert_rejected(pool, "INSERT INTO project_tombstones (former_project_id, owner_user_id, slug) VALUES ('0199ee6c-c777-4000-8000-000000001069', '0199ee6c-c777-7000-8000-000000001001', 'bad-id')", "tombstone UUIDv7").await;
+    assert_rejected(pool, "INSERT INTO project_tombstones (former_project_id, owner_user_id, owner_organization_id, slug) VALUES ('0199ee6c-c777-7000-8000-000000001070', '0199ee6c-c777-7000-8000-000000001001', '0199ee6c-c777-7000-8000-000000001021', 'two-owners')", "tombstone exactly one owner").await;
+    assert_rejected(pool, "INSERT INTO project_tombstones (former_project_id, slug) VALUES ('0199ee6c-c777-7000-8000-000000001073', 'no-owner')", "tombstone requires an owner").await;
+    assert_rejected(pool, "INSERT INTO project_tombstones (former_project_id, owner_user_id, slug) VALUES ('0199ee6c-c777-7000-8000-000000001074', '0199ee6c-c777-7000-8000-000000001099', 'missing-owner')", "tombstone owner FK").await;
+    assert_rejected(pool, "INSERT INTO project_tombstones (former_project_id, owner_user_id, slug) VALUES ('0199ee6c-c777-7000-8000-000000001075', '0199ee6c-c777-7000-8000-000000001001', 'Uppercase')", "tombstone canonical slug").await;
+
+    let mut connection = acquire(pool).await;
+    let mut transaction = connection.begin().await.unwrap();
+    sqlx::query("INSERT INTO project_tombstones (former_project_id, owner_organization_id, slug) VALUES ($1::uuid, $2::uuid, 'shared')")
+        .bind(ORGANIZATION_PROJECT).bind(ORGANIZATION_ONE)
+        .execute(&mut *transaction).await.unwrap();
+    assert!(
+        transaction.commit().await.is_err(),
+        "live Project must reject tombstone commit"
+    );
+    let count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM project_tombstones WHERE former_project_id = $1::uuid",
+    )
+    .bind(ORGANIZATION_PROJECT)
+    .fetch_one(&mut *acquire(pool).await)
+    .await
+    .unwrap();
+    assert_eq!(count, 0);
+}
+
+async fn verify_transaction_rollback(pool: &DatabasePool) {
+    let mut connection = acquire(pool).await;
+    let mut transaction = connection.begin().await.unwrap();
+    sqlx::query("INSERT INTO projects (id, owner_user_id, storage_scope_id, slug, name) VALUES ('0199ee6c-c777-7000-8000-000000001071', $1::uuid, $2::uuid, 'rollback-ok', 'Rollback')")
+        .bind(USER_ONE).bind(USER_SCOPE_ONE).execute(&mut *transaction).await.unwrap();
+    let invalid = sqlx::query("INSERT INTO projects (id, owner_user_id, storage_scope_id, slug, name) VALUES ('0199ee6c-c777-7000-8000-000000001072', $1::uuid, $2::uuid, 'Uppercase', 'Rollback')")
+        .bind(USER_ONE).bind(USER_SCOPE_ONE).execute(&mut *transaction).await;
+    assert!(invalid.is_err());
+    transaction.rollback().await.unwrap();
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM projects WHERE slug = 'rollback-ok'")
+        .fetch_one(&mut *acquire(pool).await)
+        .await
+        .unwrap();
+    assert_eq!(count, 0);
+}
+
+async fn verify_schema_shape(pool: &DatabasePool) {
+    let working_head: bool = sqlx::query_scalar(
+        "SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'projects' AND column_name = 'working_head_bundle_id')",
+    ).fetch_one(&mut *acquire(pool).await).await.unwrap();
+    assert!(!working_head);
+    for constraint in [
+        "projects_exactly_one_owner_check",
+        "projects_user_scope_fk",
+        "projects_organization_scope_fk",
+        "projects_user_slug_unique",
+        "projects_organization_slug_unique",
+        "project_tombstones_exactly_one_owner_check",
+    ] {
+        let exists: bool =
+            sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = $1)")
+                .bind(constraint)
+                .fetch_one(&mut *acquire(pool).await)
+                .await
+                .unwrap();
+        assert!(exists, "missing constraint {constraint}");
+    }
+}
+
+async fn seed_owners_and_scopes(pool: &DatabasePool) {
+    execute(pool, "INSERT INTO users (id, email, normalized_email, display_name) VALUES ('0199ee6c-c777-7000-8000-000000001001', 'one@example.test', 'one@example.test', 'User One'), ('0199ee6c-c777-7000-8000-000000001002', 'two@example.test', 'two@example.test', 'User Two')").await;
+    execute(pool, "INSERT INTO organizations (id, slug, display_name) VALUES ('0199ee6c-c777-7000-8000-000000001021', 'org-one', 'Organization One'), ('0199ee6c-c777-7000-8000-000000001022', 'org-two', 'Organization Two')").await;
+    for (scope, owner) in [(USER_SCOPE_ONE, USER_ONE), (USER_SCOPE_TWO, USER_TWO)] {
+        sqlx::query("INSERT INTO storage_scopes (id, owner_user_id) VALUES ($1::uuid, $2::uuid)")
+            .bind(scope)
+            .bind(owner)
+            .execute(&mut *acquire(pool).await)
+            .await
+            .unwrap();
+    }
+    for (scope, owner) in [
+        (ORGANIZATION_SCOPE_ONE, ORGANIZATION_ONE),
+        (ORGANIZATION_SCOPE_TWO, ORGANIZATION_TWO),
+    ] {
+        sqlx::query(
+            "INSERT INTO storage_scopes (id, owner_organization_id) VALUES ($1::uuid, $2::uuid)",
+        )
+        .bind(scope)
+        .bind(owner)
+        .execute(&mut *acquire(pool).await)
+        .await
+        .unwrap();
+    }
+}
+
+async fn insert_user_project(
+    pool: &DatabasePool,
+    id: &str,
+    owner: &str,
+    scope: &str,
+    slug: &str,
+    name: &str,
+) {
+    sqlx::query("INSERT INTO projects (id, owner_user_id, storage_scope_id, slug, name) VALUES ($1::uuid, $2::uuid, $3::uuid, $4, $5)")
+        .bind(id).bind(owner).bind(scope).bind(slug).bind(name)
+        .execute(&mut *acquire(pool).await).await.unwrap();
+}
+
+async fn insert_organization_project(
+    pool: &DatabasePool,
+    id: &str,
+    owner: &str,
+    scope: &str,
+    slug: &str,
+    name: &str,
+) {
+    sqlx::query("INSERT INTO projects (id, owner_organization_id, storage_scope_id, slug, name) VALUES ($1::uuid, $2::uuid, $3::uuid, $4, $5)")
+        .bind(id).bind(owner).bind(scope).bind(slug).bind(name)
+        .execute(&mut *acquire(pool).await).await.unwrap();
+}
+
+async fn project_count(pool: &DatabasePool) -> i64 {
+    sqlx::query_scalar("SELECT COUNT(*) FROM projects")
+        .fetch_one(&mut *acquire(pool).await)
+        .await
+        .unwrap()
+}
+
+async fn assert_rejected(pool: &DatabasePool, statement: &'static str, contract: &str) {
+    assert!(
+        sqlx::query(statement)
+            .execute(&mut *acquire(pool).await)
+            .await
+            .is_err(),
+        "{contract} must reject invalid state"
+    );
+}
+
+async fn execute(pool: &DatabasePool, statement: &'static str) {
+    sqlx::query(statement)
+        .execute(&mut *acquire(pool).await)
+        .await
+        .unwrap();
+}
+
+async fn migrate(pool: &DatabasePool) -> MigrationReport {
+    run_embedded_migrations(
+        pool,
+        MigrationOptions::new(Duration::from_secs(5), Duration::from_secs(30)).unwrap(),
+    )
+    .await
+    .unwrap()
+}
+
+async fn reset_fixture(pool: &DatabasePool) {
+    let mut connection = acquire(pool).await;
+    connection
+        .execute("DROP SCHEMA public CASCADE")
+        .await
+        .unwrap();
+    connection.execute("CREATE SCHEMA public").await.unwrap();
+}
+
+async fn fixture_pool() -> DatabasePool {
+    let database_url = env::var(DATABASE_URL_ENV).unwrap();
+    let ca = fs::read(env::var(DATABASE_CA_ENV).unwrap()).unwrap();
+    let tls = DatabaseTlsConfig::verify_full(None, Some(ca), None).unwrap();
+    DatabasePool::connect(
+        DatabasePoolConfig::new(
+            database_url,
+            0,
+            8,
+            Duration::from_secs(5),
+            Duration::from_secs(2),
+            tls,
+        )
+        .unwrap(),
+    )
+    .await
+    .unwrap()
+}
+
+async fn acquire(pool: &DatabasePool) -> sqlx::pool::PoolConnection<sqlx::Postgres> {
+    pool.acquire().await.unwrap()
+}
