@@ -1,7 +1,6 @@
 use std::env;
 use std::fs;
 use std::str::FromStr;
-use std::sync::Arc;
 use std::time::Duration;
 
 use nuriteo_server::database::{
@@ -15,7 +14,7 @@ use nuriteo_server::project::{
 };
 use nuriteo_server::workspace::StorageScopeId;
 use sqlx::{Acquire, Executor};
-use tokio::sync::{Barrier, oneshot};
+use tokio::sync::oneshot;
 use tokio::time;
 
 const DATABASE_URL_ENV: &str = "NURITEO_TEST_DATABASE_URL";
@@ -394,69 +393,63 @@ async fn verify_lock_blocks_until_release(pool: &DatabasePool) {
 }
 
 async fn verify_concurrent_namespace_create(pool: &DatabasePool) {
-    let barrier = Arc::new(Barrier::new(3));
-    let mut tasks = Vec::new();
-    for id in [CONCURRENT_PROJECT_ONE, CONCURRENT_PROJECT_TWO] {
-        let task_pool = pool.clone();
-        let task_barrier = Arc::clone(&barrier);
-        tasks.push(tokio::spawn(async move {
-            let mut connection = task_pool
-                .acquire()
-                .await
-                .expect("concurrent connection must be acquired");
-            let mut transaction = connection
-                .begin()
-                .await
-                .expect("concurrent transaction must begin");
-            let candidate = candidate(
-                id,
-                ProjectOwner::User(user_id(USER_ONE)),
-                USER_SCOPE_ONE,
-                "concurrent",
-            );
-            task_barrier.wait().await;
-            match ProjectRepository::create(&mut transaction, &candidate).await {
-                Ok(project) => {
-                    transaction
-                        .commit()
-                        .await
-                        .expect("winning transaction must commit");
-                    Ok(project.id())
-                }
-                Err(error) => {
-                    transaction
-                        .rollback()
-                        .await
-                        .expect("losing transaction must roll back");
-                    Err(error)
-                }
-            }
-        }));
-    }
-    barrier.wait().await;
-    let first = tasks
-        .remove(0)
+    let owner = ProjectOwner::User(user_id(USER_ONE));
+    let mut first_connection = pool.acquire().await.expect("connection must be acquired");
+    let mut first_transaction = first_connection
+        .begin()
         .await
-        .expect("first concurrent task must join");
-    let second = tasks
-        .remove(0)
+        .expect("transaction must begin");
+    ProjectRepository::create(
+        &mut first_transaction,
+        &candidate(CONCURRENT_PROJECT_ONE, owner, USER_SCOPE_ONE, "concurrent"),
+    )
+    .await
+    .expect("first namespace create must succeed before commit");
+
+    let second_pool = pool.clone();
+    let (attempted_tx, attempted_rx) = oneshot::channel();
+    let mut second = tokio::spawn(async move {
+        let mut connection = second_pool
+            .acquire()
+            .await
+            .expect("concurrent connection must be acquired");
+        let mut transaction = connection
+            .begin()
+            .await
+            .expect("concurrent transaction must begin");
+        let candidate = candidate(CONCURRENT_PROJECT_TWO, owner, USER_SCOPE_ONE, "concurrent");
+        attempted_tx
+            .send(())
+            .expect("create-attempt observer must remain available");
+        let result = ProjectRepository::create(&mut transaction, &candidate).await;
+        transaction
+            .rollback()
+            .await
+            .expect("losing transaction must roll back");
+        result
+    });
+    attempted_rx
         .await
-        .expect("second concurrent task must join");
-    let successes = [&first, &second]
-        .into_iter()
-        .filter(|result| result.is_ok())
-        .count();
-    let conflicts = [first, second]
-        .into_iter()
-        .filter(|result| {
-            *result
-                == Err(ProjectRepositoryError::Conflict(
-                    ProjectConflict::NamespaceUnavailable,
-                ))
-        })
-        .count();
-    assert_eq!(successes, 1);
-    assert_eq!(conflicts, 1);
+        .expect("second transaction must reach the create attempt");
+    assert!(
+        time::timeout(Duration::from_millis(200), &mut second)
+            .await
+            .is_err(),
+        "same-namespace create must wait for the first transaction"
+    );
+    first_transaction
+        .commit()
+        .await
+        .expect("first namespace create must commit");
+    assert_eq!(
+        time::timeout(Duration::from_secs(2), second)
+            .await
+            .expect("second create must resolve after commit")
+            .expect("second create task must join"),
+        Err(ProjectRepositoryError::Conflict(
+            ProjectConflict::NamespaceUnavailable
+        ))
+    );
 }
 
 async fn verify_invalid_rows_fail_closed(pool: &DatabasePool) {
