@@ -42,6 +42,20 @@ const fn field(
     }
 }
 
+const fn secret_field(environment: &'static str, validation: &'static str) -> ConfigField {
+    ConfigField {
+        environment,
+        file_key: None,
+        value_type: "secret",
+        default_value: None,
+        secret: true,
+        reloadable: false,
+        validation,
+        compose_mapping: environment,
+        helm_mapping: "objectStorage.credentials",
+    }
+}
+
 /// The M0 registry used for typo detection and deployment documentation.
 pub const CONFIG_FIELDS: &[ConfigField] = &[
     field(
@@ -107,5 +121,85 @@ pub const CONFIG_FIELDS: &[ConfigField] = &[
         None,
         "optional ASCII domain without scheme, port, wildcard, or trailing dot",
         "preview.baseDomain",
+    ),
+    field(
+        "NURITEO_S3_ENDPOINT",
+        None,
+        "URL",
+        None,
+        "root HTTPS origin; HTTP only for loopback development",
+        "objectStorage.endpoint",
+    ),
+    field(
+        "NURITEO_S3_REGION",
+        None,
+        "string",
+        None,
+        "1-63 character provider region identifier",
+        "objectStorage.region",
+    ),
+    field(
+        "NURITEO_S3_BUCKET",
+        None,
+        "string",
+        None,
+        "DNS-compatible S3 bucket name",
+        "objectStorage.bucket",
+    ),
+    field(
+        "NURITEO_S3_ADDRESSING_STYLE",
+        None,
+        "enum",
+        None,
+        "path or virtual-hosted",
+        "objectStorage.addressingStyle",
+    ),
+    field(
+        "NURITEO_S3_CREDENTIAL_PROVIDER",
+        None,
+        "enum",
+        None,
+        "static, workload, or default; no implicit fallback",
+        "objectStorage.credentials.provider",
+    ),
+    secret_field(
+        "NURITEO_S3_ACCESS_KEY_ID",
+        "static provider credential; exclusive with _FILE",
+    ),
+    secret_field(
+        "NURITEO_S3_ACCESS_KEY_ID_FILE",
+        "bounded mounted secret file; exclusive with direct value",
+    ),
+    secret_field(
+        "NURITEO_S3_SECRET_ACCESS_KEY",
+        "static provider credential; exclusive with _FILE",
+    ),
+    secret_field(
+        "NURITEO_S3_SECRET_ACCESS_KEY_FILE",
+        "bounded mounted secret file; exclusive with direct value",
+    ),
+    secret_field(
+        "NURITEO_S3_SESSION_TOKEN",
+        "optional static provider credential; exclusive with _FILE",
+    ),
+    secret_field(
+        "NURITEO_S3_SESSION_TOKEN_FILE",
+        "bounded mounted secret file; exclusive with direct value",
+    ),
+    field(
+        "NURITEO_INSTANCE_CA_FILE",
+        None,
+        "path",
+        None,
+        "bounded PEM bundle containing CA certificates only",
+        "global.trust.instanceCa.existingFile",
+    ),
+    field(
+        "NURITEO_S3_CA_FILE",
+        None,
+        "path",
+        None,
+        "bounded integration PEM bundle containing CA certificates only",
+        "objectStorage.tls.ca.existingFile",
     ),
 ];

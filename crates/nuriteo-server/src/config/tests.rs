@@ -381,7 +381,7 @@ fn secret_sources_fail_closed_table() {
 }
 
 #[test]
-fn configuration_registry_is_complete_unique_and_non_secret_for_m0() {
+fn configuration_registry_is_complete_unique_and_never_defaults_secrets() {
     let mut environment_names = std::collections::BTreeSet::new();
     let mut file_keys = std::collections::BTreeSet::new();
 
@@ -391,7 +391,9 @@ fn configuration_registry_is_complete_unique_and_non_secret_for_m0() {
             assert!(file_keys.insert(file_key));
         }
         assert!(field.environment.starts_with("NURITEO_"));
-        assert!(!field.secret);
+        if field.secret {
+            assert_eq!(field.default_value, None);
+        }
         assert!(!field.reloadable);
         assert!(!field.validation.is_empty());
         assert!(!field.compose_mapping.is_empty());

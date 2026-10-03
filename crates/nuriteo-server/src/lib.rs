@@ -2,6 +2,7 @@ pub mod app;
 pub mod cli;
 pub mod config;
 pub mod http;
+pub mod object_storage;
 pub mod observability;
 pub mod openapi;
 
