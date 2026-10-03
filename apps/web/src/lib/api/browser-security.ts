@@ -35,10 +35,13 @@ export function collaborationError(
     if (error.status === 412 || error.status === 428) {
       return "This Organization changed. Reload the latest version before trying again.";
     }
+    const terminalValidation = error.status === 422 && error.fieldErrors.some(
+      (field) => field.path === "invitation" || field.path === "token"
+    );
     if (
       (operation === "activation-invitation-terminal" ||
         operation === "organization-invitation-terminal") &&
-      (error.status === 409 || error.status === 410 || error.status === 422)
+      (error.status === 409 || error.status === 410 || terminalValidation)
     ) {
       return "This invitation is no longer usable. It may be expired, used, revoked, or replaced.";
     }

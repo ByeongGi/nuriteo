@@ -30,6 +30,10 @@ let activated = false;
 let organizationCreated = false;
 let invitationSequence = 0;
 let activationIssueCount = 0;
+let memberDeleteCount = 0;
+let organizationIssueCount = 0;
+let organizationReissueCount = 0;
+let organizationRevokeCount = 0;
 let observedIfMatch: string | undefined;
 const organizationInvitations: OrganizationInvitation[] = [];
 const members: OrganizationMember[] = [{ userId: adminId, displayName: "Instance Administrator", role: "owner" }];
@@ -132,6 +136,7 @@ const core = http.createServer(async (request, response) => {
     const index = members.findIndex((item) => item.userId === memberMutation[1]);
     assert.notEqual(index, -1);
     members.splice(index, 1);
+    memberDeleteCount += 1;
     response.statusCode = 204;
     response.end();
     return;
@@ -145,14 +150,17 @@ const core = http.createServer(async (request, response) => {
     existing.supersededAt = now;
     existing.replacementId = replacement.id;
     organizationInvitations.push(replacement);
+    organizationReissueCount += 1;
     return sendJson(response, issuedOrganizationInvitation(replacement));
   }
   const revoke = requestPath.match(new RegExp(`^/api/v1/organizations/${organizationId}/invitations/([^/]+)$`, "u"));
   if (request.method === "DELETE" && revoke?.[1]) {
     const existing = organizationInvitations.find((item) => item.id === revoke[1]);
     assert.ok(existing);
+    if (existing.status !== "pending") return sendProblem(response, 409, "INVITATION_UNUSABLE");
     existing.status = "revoked";
     existing.revokedAt = now;
+    organizationRevokeCount += 1;
     response.statusCode = 204;
     response.end();
     return;
@@ -274,15 +282,27 @@ try {
     await adminPage.getByLabel("Invitee user ID").fill(inviteeId);
     await adminPage.getByRole("button", { name: "Issue Organization invitation" }).click();
     let invitationUrl = await visibleOneTimeUrl(adminPage);
+    await waitForCondition(() => organizationIssueCount === 1);
+    await adminPage.reload({ waitUntil: "networkidle" });
     await adminPage.getByRole("button", { name: "Reissue" }).click();
     const reissuedUrl = await visibleOneTimeUrl(adminPage);
     assert.notEqual(reissuedUrl, invitationUrl);
     const revokedUrl = reissuedUrl;
-    await adminPage.getByRole("button", { name: "Revoke" }).click();
+    await waitForCondition(() => organizationReissueCount === 1);
+    await adminPage.reload({ waitUntil: "networkidle" });
+    await adminPage.getByText(/superseded · expires/u).waitFor();
+    const pendingInvitation = adminPage.getByRole("list", { name: "Organization invitations" }).locator("li").filter({ hasText: "pending" });
+    await pendingInvitation.getByRole("button", { name: "Revoke" }).click();
+    await waitForCondition(() => organizationRevokeCount === 1);
+    await adminPage.reload({ waitUntil: "networkidle" });
     await adminPage.getByText(/revoked · expires/u).waitFor();
 
     await inviteePage.goto(revokedUrl, { waitUntil: "networkidle" });
-    await inviteePage.getByRole("button", { name: "Accept invitation" }).click();
+    const revokedAccept = inviteePage.getByRole("button", { name: "Accept invitation" });
+    if (await revokedAccept.count() !== 1) {
+      throw new Error(`revoked invitation page did not render: ${inviteePage.url()} ${await inviteePage.locator("body").innerText()}`);
+    }
+    await revokedAccept.click();
     const terminalError = inviteePage.getByRole("alert").filter({ hasText: "expired, used, revoked, or replaced" });
     await terminalError.waitFor();
     assert.equal((await terminalError.textContent())?.includes("nrt_org_inv_"), false);
@@ -323,6 +343,8 @@ try {
     await inviteeMember.getByRole("button", { name: "Make owner" }).click();
     await inviteeMember.getByRole("button", { name: "Make member" }).waitFor();
     await inviteeMember.getByRole("button", { name: "Remove" }).click();
+    await waitForCondition(() => memberDeleteCount === 1);
+    await adminPage.reload({ waitUntil: "networkidle" });
     await adminPage.getByText("Invited Teammate", { exact: true }).waitFor({ state: "detached" });
     assert.ok(observedMutationCookies.some((value) => value.endsWith(":admin")));
     assert.ok(observedMutationCookies.some((value) => value.endsWith(":invitee")));
@@ -394,6 +416,7 @@ function issuedOrganizationInvitation(invitation: OrganizationInvitation) {
 function issueOrganizationInvitation(response: http.ServerResponse) {
   const invitation = newOrganizationInvitation();
   organizationInvitations.push(invitation);
+  organizationIssueCount += 1;
   return sendJson(response, issuedOrganizationInvitation(invitation), 201);
 }
 
@@ -477,4 +500,13 @@ async function waitUntilReady(origin: string): Promise<void> {
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
   throw new Error("standalone server did not become ready");
+}
+
+async function waitForCondition(predicate: () => boolean): Promise<void> {
+  const deadline = Date.now() + 5_000;
+  while (Date.now() < deadline) {
+    if (predicate()) return;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  throw new Error("browser fixture condition was not observed");
 }

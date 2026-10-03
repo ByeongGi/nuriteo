@@ -32,6 +32,10 @@ try {
 function testSafeErrorClassification() {
   assert.match(collaborationError(new ApiError(412, "safe", undefined), "organization-profile"), /Reload/u);
   assert.match(collaborationError(new ApiError(410, "safe", undefined), "organization-invitation-terminal"), /expired, used, revoked/u);
+  assert.match(collaborationError(apiValidationError("invitation"), "activation-invitation-terminal"), /expired, used, revoked/u);
+  assert.match(collaborationError(apiValidationError("token"), "activation-invitation-terminal"), /expired, used, revoked/u);
+  assert.match(collaborationError(apiValidationError("email"), "activation-invitation-terminal"), /submitted values are invalid/u);
+  assert.match(collaborationError(apiValidationError("password"), "activation-invitation-terminal"), /submitted values are invalid/u);
   assert.match(collaborationError(new ApiError(409, "safe", undefined), "organization-create"), /slug is already in use/u);
   assert.match(collaborationError(new ApiError(409, "safe", undefined), "organization-member"), /last Organization Owner/u);
   assert.match(collaborationError(new ApiError(422, "safe", undefined), "organization-create"), /submitted values are invalid/u);
@@ -39,6 +43,19 @@ function testSafeErrorClassification() {
   assert.doesNotMatch(collaborationError(new Error("token=nrt_org_inv_secret"), "organization-invitation-terminal"), /secret|token/u);
   assert.equal(uuidPathSegment("0199ee6c-c777-7000-8000-000000005001"), "0199ee6c-c777-7000-8000-000000005001");
   assert.equal(uuidPathSegment("../open-proxy"), undefined);
+}
+
+function apiValidationError(path: string): ApiError {
+  return new ApiError(422, "safe", {
+    type: "about:blank",
+    title: "Validation failed",
+    status: 422,
+    detail: "The request was invalid.",
+    instance: "/api/v1/auth/activation",
+    code: "VALIDATION_FAILED",
+    request_id: "safe",
+    errors: [{ path, code: "INVALID", detail: "Invalid value." }]
+  });
 }
 
 async function testExactBoundedForwarding() {
