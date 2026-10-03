@@ -24,6 +24,8 @@ const ORGANIZATION_INVITATIONS_SQL: &str =
 const ORGANIZATION_STORAGE_SCOPES_SQL: &str =
     include_str!("../../migrations/0009_organization_storage_scopes.sql");
 const PROJECTS_SQL: &str = include_str!("../../migrations/0010_projects.sql");
+const PROJECT_DELETION_INVARIANTS_SQL: &str =
+    include_str!("../../migrations/0011_project_deletion_invariants.sql");
 
 // Two-key advisory locks use a namespace distinct from PostgreSQL's one-key
 // bigint locks. 0x4e555249 is the ASCII representation of "NURI".
@@ -151,6 +153,13 @@ pub(super) fn embedded_migrator() -> Migrator {
             Cow::Borrowed("projects"),
             MigrationType::Simple,
             PROJECTS_SQL.into_sql_str(),
+            false,
+        ),
+        Migration::new(
+            11,
+            Cow::Borrowed("project deletion invariants"),
+            MigrationType::Simple,
+            PROJECT_DELETION_INVARIANTS_SQL.into_sql_str(),
             false,
         ),
     ])

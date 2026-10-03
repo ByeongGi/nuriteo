@@ -7,6 +7,7 @@ use nuriteo_server::database::{
     SchemaReadiness, check_schema_readiness, run_embedded_migrations,
 };
 use sqlx::{Acquire, Executor};
+use tokio::time;
 
 const DATABASE_URL_ENV: &str = "NURITEO_TEST_DATABASE_URL";
 const DATABASE_CA_ENV: &str = "NURITEO_TEST_DATABASE_CA";
@@ -22,6 +23,9 @@ const USER_PROJECT: &str = "0199ee6c-c777-7000-8000-000000001041";
 const USER_TWO_PROJECT: &str = "0199ee6c-c777-7000-8000-000000001042";
 const ORGANIZATION_PROJECT: &str = "0199ee6c-c777-7000-8000-000000001043";
 const ORGANIZATION_TWO_PROJECT: &str = "0199ee6c-c777-7000-8000-000000001044";
+const RECREATED_USER_PROJECT: &str = "0199ee6c-c777-7000-8000-000000001045";
+const CONCURRENT_ORGANIZATION_PROJECT: &str = "0199ee6c-c777-7000-8000-000000001046";
+const MISMATCHED_TOMBSTONE_PROJECT: &str = "0199ee6c-c777-7000-8000-000000001047";
 
 #[tokio::test]
 #[ignore = "requires the pinned PostgreSQL TLS fixture; run tests/fixtures/postgres-project/run.sh"]
@@ -32,21 +36,21 @@ async fn project_schema_enforces_owner_scope_slug_lifecycle_and_tombstones() {
         check_schema_readiness(&pool).await.unwrap(),
         SchemaReadiness::Pending {
             current: None,
-            target: 10
+            target: 11
         }
     );
     let first = migrate(&pool).await;
     assert_eq!(
         first,
         MigrationReport {
-            latest_version: Some(10),
-            known_migrations: 10
+            latest_version: Some(11),
+            known_migrations: 11
         }
     );
     assert_eq!(migrate(&pool).await, first);
     assert_eq!(
         check_schema_readiness(&pool).await.unwrap(),
-        SchemaReadiness::Ready { version: 10 }
+        SchemaReadiness::Ready { version: 11 }
     );
 
     seed_owners_and_scopes(&pool).await;
@@ -54,6 +58,10 @@ async fn project_schema_enforces_owner_scope_slug_lifecycle_and_tombstones() {
     verify_project_constraints(&pool).await;
     verify_archive_and_version_contract(&pool).await;
     verify_tombstone_reservation(&pool).await;
+    verify_bare_delete_and_immutable_tombstone(&pool).await;
+    verify_tombstone_identity_matching(&pool).await;
+    verify_delete_validates_legacy_tombstone(&pool).await;
+    verify_concurrent_delete_and_create(&pool).await;
     verify_transaction_rollback(&pool).await;
     verify_schema_shape(&pool).await;
 
@@ -218,6 +226,167 @@ async fn verify_tombstone_reservation(pool: &DatabasePool) {
     assert_eq!(count, 0);
 }
 
+async fn verify_bare_delete_and_immutable_tombstone(pool: &DatabasePool) {
+    sqlx::query("DELETE FROM projects WHERE id = $1::uuid")
+        .bind(USER_TWO_PROJECT)
+        .execute(&mut *acquire(pool).await)
+        .await
+        .unwrap();
+
+    assert!(
+        tombstone_matches(pool, USER_TWO_PROJECT, Some(USER_TWO), None, "shared").await,
+        "bare delete must create the exact immutable tombstone"
+    );
+    assert_rejected(
+        pool,
+        "DELETE FROM project_tombstones WHERE former_project_id = '0199ee6c-c777-7000-8000-000000001042'::uuid",
+        "tombstone deletion",
+    )
+    .await;
+    assert_rejected(
+        pool,
+        "TRUNCATE TABLE project_tombstones",
+        "tombstone truncation",
+    )
+    .await;
+
+    let recreate = sqlx::query(
+        "INSERT INTO projects (id, owner_user_id, storage_scope_id, slug, name) \
+         VALUES ($1::uuid, $2::uuid, $3::uuid, 'shared', 'Recreated Project')",
+    )
+    .bind(RECREATED_USER_PROJECT)
+    .bind(USER_TWO)
+    .bind(USER_SCOPE_TWO)
+    .execute(&mut *acquire(pool).await)
+    .await;
+    assert!(
+        recreate.is_err(),
+        "bare delete must permanently reserve the URL"
+    );
+}
+
+async fn verify_tombstone_identity_matching(pool: &DatabasePool) {
+    let cases = [
+        (
+            "former Project ID",
+            "INSERT INTO project_tombstones (former_project_id, owner_organization_id, slug) \
+             VALUES ('0199ee6c-c777-7000-8000-000000001047', \
+                     '0199ee6c-c777-7000-8000-000000001022', 'shared')",
+        ),
+        (
+            "former owner",
+            "INSERT INTO project_tombstones (former_project_id, owner_organization_id, slug) \
+             VALUES ('0199ee6c-c777-7000-8000-000000001044', \
+                     '0199ee6c-c777-7000-8000-000000001021', 'shared')",
+        ),
+        (
+            "former slug",
+            "INSERT INTO project_tombstones (former_project_id, owner_organization_id, slug) \
+             VALUES ('0199ee6c-c777-7000-8000-000000001044', \
+                     '0199ee6c-c777-7000-8000-000000001022', 'mismatched')",
+        ),
+    ];
+    for (contract, statement) in cases {
+        assert_rejected(pool, statement, contract).await;
+    }
+
+    assert!(
+        project_exists(pool, ORGANIZATION_TWO_PROJECT).await,
+        "mismatched tombstones must not mutate the live Project"
+    );
+    assert!(
+        !tombstone_exists(pool, MISMATCHED_TOMBSTONE_PROJECT).await,
+        "mismatched former identity must not persist"
+    );
+}
+
+async fn verify_delete_validates_legacy_tombstone(pool: &DatabasePool) {
+    execute(
+        pool,
+        "ALTER TABLE project_tombstones \
+         DISABLE TRIGGER project_tombstones_slug_reservation",
+    )
+    .await;
+    sqlx::query(
+        "INSERT INTO project_tombstones \
+         (former_project_id, owner_organization_id, slug) \
+         VALUES ($1::uuid, $2::uuid, 'legacy-mismatch')",
+    )
+    .bind(ORGANIZATION_TWO_PROJECT)
+    .bind(ORGANIZATION_ONE)
+    .execute(&mut *acquire(pool).await)
+    .await
+    .unwrap();
+    execute(
+        pool,
+        "ALTER TABLE project_tombstones \
+         ENABLE TRIGGER project_tombstones_slug_reservation",
+    )
+    .await;
+
+    let delete = sqlx::query("DELETE FROM projects WHERE id = $1::uuid")
+        .bind(ORGANIZATION_TWO_PROJECT)
+        .execute(&mut *acquire(pool).await)
+        .await;
+    assert!(
+        delete.is_err(),
+        "delete must reject a pre-existing tombstone with mismatched owner or slug"
+    );
+    assert!(project_exists(pool, ORGANIZATION_TWO_PROJECT).await);
+}
+
+async fn verify_concurrent_delete_and_create(pool: &DatabasePool) {
+    let mut delete_connection = acquire(pool).await;
+    let mut delete_transaction = delete_connection.begin().await.unwrap();
+    sqlx::query("DELETE FROM projects WHERE id = $1::uuid")
+        .bind(ORGANIZATION_PROJECT)
+        .execute(&mut *delete_transaction)
+        .await
+        .unwrap();
+
+    let create_pool = pool.clone();
+    let concurrent_create = tokio::spawn(async move {
+        let mut connection = create_pool.acquire().await.unwrap();
+        sqlx::query(
+            "INSERT INTO projects \
+             (id, owner_organization_id, storage_scope_id, slug, name) \
+             VALUES ($1::uuid, $2::uuid, $3::uuid, 'shared', 'Concurrent Hijack')",
+        )
+        .bind(CONCURRENT_ORGANIZATION_PROJECT)
+        .bind(ORGANIZATION_ONE)
+        .bind(ORGANIZATION_SCOPE_ONE)
+        .execute(&mut *connection)
+        .await
+    });
+
+    time::sleep(Duration::from_millis(150)).await;
+    assert!(
+        !concurrent_create.is_finished(),
+        "same owner/slug create must wait for the deleting transaction"
+    );
+    delete_transaction.commit().await.unwrap();
+
+    let create_result = time::timeout(Duration::from_secs(2), concurrent_create)
+        .await
+        .expect("concurrent create must finish after the delete commits")
+        .expect("concurrent create task must join");
+    assert!(
+        create_result.is_err(),
+        "concurrent create must observe the committed tombstone and fail closed"
+    );
+    assert!(
+        tombstone_matches(
+            pool,
+            ORGANIZATION_PROJECT,
+            None,
+            Some(ORGANIZATION_ONE),
+            "shared"
+        )
+        .await
+    );
+    assert!(!project_exists(pool, CONCURRENT_ORGANIZATION_PROJECT).await);
+}
+
 async fn verify_transaction_rollback(pool: &DatabasePool) {
     let mut connection = acquire(pool).await;
     let mut transaction = connection.begin().await.unwrap();
@@ -314,6 +483,49 @@ async fn project_count(pool: &DatabasePool) -> i64 {
         .fetch_one(&mut *acquire(pool).await)
         .await
         .unwrap()
+}
+
+async fn project_exists(pool: &DatabasePool, project_id: &str) -> bool {
+    sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM projects WHERE id = $1::uuid)")
+        .bind(project_id)
+        .fetch_one(&mut *acquire(pool).await)
+        .await
+        .unwrap()
+}
+
+async fn tombstone_exists(pool: &DatabasePool, project_id: &str) -> bool {
+    sqlx::query_scalar(
+        "SELECT EXISTS (SELECT 1 FROM project_tombstones WHERE former_project_id = $1::uuid)",
+    )
+    .bind(project_id)
+    .fetch_one(&mut *acquire(pool).await)
+    .await
+    .unwrap()
+}
+
+async fn tombstone_matches(
+    pool: &DatabasePool,
+    project_id: &str,
+    owner_user_id: Option<&str>,
+    owner_organization_id: Option<&str>,
+    slug: &str,
+) -> bool {
+    sqlx::query_scalar(
+        "SELECT EXISTS (\
+             SELECT 1 FROM project_tombstones \
+             WHERE former_project_id = $1::uuid \
+               AND owner_user_id IS NOT DISTINCT FROM $2::uuid \
+               AND owner_organization_id IS NOT DISTINCT FROM $3::uuid \
+               AND slug = $4\
+         )",
+    )
+    .bind(project_id)
+    .bind(owner_user_id)
+    .bind(owner_organization_id)
+    .bind(slug)
+    .fetch_one(&mut *acquire(pool).await)
+    .await
+    .unwrap()
 }
 
 async fn assert_rejected(pool: &DatabasePool, statement: &'static str, contract: &str) {

@@ -565,8 +565,8 @@ async fn migrate(pool: &DatabasePool) {
     )
     .await
     .unwrap();
-    assert_eq!(report.latest_version, Some(10));
-    assert_eq!(report.known_migrations, 10);
+    assert_eq!(report.latest_version, Some(11));
+    assert_eq!(report.known_migrations, 11);
 }
 
 async fn reset_fixture(pool: &DatabasePool) {

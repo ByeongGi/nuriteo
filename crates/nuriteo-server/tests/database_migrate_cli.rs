@@ -27,13 +27,13 @@ async fn migrate_subprocess_enforces_schema_readiness_and_redaction() {
         check_schema_readiness(&pool).await.unwrap(),
         SchemaReadiness::Pending {
             current: None,
-            target: 10
+            target: 11
         }
     );
     assert_success(&run_migrate(&database_url, &ca_path, None));
     assert_eq!(
         check_schema_readiness(&pool).await.unwrap(),
-        SchemaReadiness::Ready { version: 10 }
+        SchemaReadiness::Ready { version: 11 }
     );
     assert_success(&run_migrate(&database_url, &ca_path, None));
 
@@ -42,7 +42,7 @@ async fn migrate_subprocess_enforces_schema_readiness_and_redaction() {
         check_schema_readiness(&pool).await.unwrap(),
         SchemaReadiness::Pending {
             current: None,
-            target: 10
+            target: 11
         }
     );
     let url_file = temporary_url_file(&database_url);
