@@ -240,6 +240,7 @@ export async function createSaveSession(
   const physicalBytes = readTransferSize(input.physicalBytes, "physical byte count", false);
   const logicalBytes = readTransferSize(input.logicalBytes, "logical byte count", true);
   const fileCount = readCount(input.fileCount, 100_000, "file count", true);
+  const bundleChecksum = hexToBase64(validateSha256Hex(input.sha256));
   const parts = validateParts(input.parts ?? [], physicalBytes);
   const wantsSingle = physicalBytes <= SAVE_SINGLE_PUT_THRESHOLD_BYTES;
   if (wantsSingle !== (parts.length === 0)) {
@@ -251,7 +252,7 @@ export async function createSaveSession(
       physicalBytes,
       logicalBytes,
       fileCount,
-      sha256: hexToBase64(validateSha256Hex(input.sha256)),
+      sha256: bundleChecksum,
       parts: parts.map(partRequest)
     },
     mutationOptions(options, {
@@ -260,7 +261,7 @@ export async function createSaveSession(
     })
   );
   if (response.status !== 200 && response.status !== 201) throw invalidResponse(response);
-  const data = parseSaveSession(response, physicalBytes, parts.length);
+  const data = parseSaveSession(response, physicalBytes, parts.length, bundleChecksum);
   if ((response.status === 200) !== data.idempotentRetry) throw invalidResponse(response);
   return {
     data,
@@ -288,7 +289,13 @@ export async function issueSaveParts(
     }
     return Object.freeze(value.map((item, index) => {
       const capability = parseUploadCapability(item);
-      if (capability.expectedBytes !== parts[index]?.expectedBytes) throw invalidResponse(response);
+      const part = parts[index];
+      if (
+        part === undefined || capability.expectedBytes !== part.expectedBytes ||
+        uploadCapabilityChecksum(capability) !== hexToBase64(part.sha256)
+      ) {
+        throw invalidResponse(response);
+      }
       return capability;
     }));
   });
@@ -414,6 +421,10 @@ export async function uploadSaveCapability(
       if (signal.aborted) throw transferAbortError("upload", signal);
       throw new ProjectTransferError("upload", "transport", { retryable: true });
     }
+    if (signal.aborted) {
+      await cancelBody(response.body);
+      throw transferAbortError("upload", signal);
+    }
     if (!response.ok) {
       await cancelBody(response.body);
       throw new ProjectTransferError("upload", "rejected", {
@@ -467,8 +478,17 @@ export async function downloadProjectContent<Result>(
         if (signal.aborted) throw transferAbortError("download", signal);
         throw new ProjectTransferError("download", "transport", { retryable: true });
       }
+      if (signal.aborted) {
+        await cancelBody(response.body);
+        throw transferAbortError("download", signal);
+      }
       if (!response.ok) throw await apiErrorFromRawResponse(response);
-      validateDownloadResponse(response, descriptor, maxBytes);
+      try {
+        validateDownloadResponse(response, descriptor, maxBytes);
+      } catch (error) {
+        await cancelBody(response.body);
+        throw error;
+      }
       if (response.body === null) throw new ProjectTransferError("download", "invalid-response");
       reader = response.body.getReader();
       sinkStarted = true;
@@ -519,19 +539,16 @@ export async function downloadProjectContent<Result>(
     });
   } catch (error) {
     const transferError = normalizeTransferFailure(error);
+    const deadlineFailure = transferError.kind === "aborted" || transferError.kind === "timeout";
     if (reader !== undefined) {
-      try {
-        await reader.cancel();
-      } catch {
-        // The stable failure remains authoritative.
-      }
+      const cancellation = cancelReader(reader);
+      if (deadlineFailure) void cancellation;
+      else await cancellation;
     }
     if (sinkStarted) {
-      try {
-        await sink.abort(transferError);
-      } catch {
-        // The stable failure remains authoritative.
-      }
+      const abortion = abortSink(sink, transferError);
+      if (deadlineFailure) void abortion;
+      else await abortion;
     }
     throw error instanceof ApiError ? error : transferError;
   }
@@ -685,7 +702,8 @@ function partRequest(part: SavePart): { partNumber: number; expectedBytes: numbe
 function parseSaveSession(
   response: ApiResponse<unknown>,
   physicalBytes: number,
-  plannedParts: number
+  plannedParts: number,
+  requestedChecksum: string
 ): SaveSession {
   try {
     const record = readExactRecord(response.data, [
@@ -696,7 +714,10 @@ function parseSaveSession(
     const partCount = readPositiveInteger(record, "partCount", SAVE_MAX_PARTS);
     const upload = record.upload === null ? null : parseUploadCapability(record.upload);
     if (
-      (uploadMode === "single" && (partCount !== 1 || upload === null || upload.expectedBytes !== physicalBytes)) ||
+      (uploadMode === "single" && (
+        partCount !== 1 || upload === null || upload.expectedBytes !== physicalBytes ||
+        uploadCapabilityChecksum(upload) !== requestedChecksum
+      )) ||
       (uploadMode === "multipart" && (partCount !== plannedParts || upload !== null))
     ) {
       throw new TypeError("invalid upload contract");
@@ -756,7 +777,7 @@ function validateUploadCapabilityInput(value: unknown): SaveUploadCapability {
 function validateCapabilityUrl(value: string): void {
   const url = new URL(value);
   if (
-    !["http:", "https:"].includes(url.protocol) || url.username !== "" || url.password !== "" ||
+    url.protocol !== "https:" || url.username !== "" || url.password !== "" ||
     url.hash !== ""
   ) {
     throw new TypeError("invalid capability URL");
@@ -927,30 +948,38 @@ async function withTransferDeadline<Result>(
   if (externalSignal?.aborted) throw new ProjectTransferError(phase, "aborted");
   const controller = new AbortController();
   let source: "external" | "timeout" | undefined;
-  const onAbort = () => {
+  let rejectDeadline: (reason: ProjectTransferError) => void = () => undefined;
+  const deadline = new Promise<never>((_resolve, reject) => {
+    rejectDeadline = reject;
+  });
+  const stop = (nextSource: "external" | "timeout") => {
     if (source === undefined) {
-      source = "external";
+      source = nextSource;
       controller.abort();
+      rejectDeadline(transferAbortError(phase, controller.signal, nextSource));
     }
   };
+  const onAbort = () => stop("external");
   externalSignal?.addEventListener("abort", onAbort, { once: true });
-  const timer = setTimeout(() => {
-    if (source === undefined) {
-      source = "timeout";
-      controller.abort();
-    }
-  }, timeoutMs);
+  const timer = setTimeout(() => stop("timeout"), timeoutMs);
+  const operationPromise = Promise.resolve().then(
+    () => operation(controller.signal, options.fetch ?? globalThis.fetch)
+  );
+  // The deadline may win while an injected fetch or sink ignores AbortSignal.
+  // Keep a rejection observer attached until that untrusted operation eventually settles.
+  void operationPromise.catch(() => undefined);
   try {
-    const result = await operation(controller.signal, options.fetch ?? globalThis.fetch);
-    if (source !== undefined) throw transferAbortError(phase, controller.signal, source);
-    return result;
-  } catch (error) {
-    if (source !== undefined) throw transferAbortError(phase, controller.signal, source);
-    throw error;
+    return await Promise.race([operationPromise, deadline]);
   } finally {
     clearTimeout(timer);
     externalSignal?.removeEventListener("abort", onAbort);
   }
+}
+
+function uploadCapabilityChecksum(capability: SaveUploadCapability): string | undefined {
+  return capability.headers.find(
+    (header) => header.name === "x-amz-checksum-sha256"
+  )?.value;
 }
 
 function transferAbortError(
@@ -1075,6 +1104,25 @@ async function cancelBody(body: ReadableStream<Uint8Array> | null): Promise<void
     await body.cancel();
   } catch {
     // Response cleanup must not replace the stable transfer result.
+  }
+}
+
+async function cancelReader(reader: ReadableStreamDefaultReader<Uint8Array>): Promise<void> {
+  try {
+    await reader.cancel();
+  } catch {
+    // The stable transfer failure remains authoritative.
+  }
+}
+
+async function abortSink<Result>(
+  sink: ProjectContentSink<Result>,
+  reason: ProjectTransferError
+): Promise<void> {
+  try {
+    await sink.abort(reason);
+  } catch {
+    // The stable transfer failure remains authoritative.
   }
 }
 

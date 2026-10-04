@@ -33,11 +33,13 @@ const OWNER: ProjectOwner = { ownerType: "user", ownerId: USER_ID };
 const CSRF = "nrt_csrf_save-client";
 const DIGEST_HEX = createHash("sha256").update("bundle").digest("hex");
 const DIGEST_BASE64 = Buffer.from(DIGEST_HEX, "hex").toString("base64");
+const OTHER_DIGEST_BASE64 = Buffer.alloc(32, 1).toString("base64");
 const PROJECT_PATH = `/api/v1/workspaces/users/${USER_ID}/projects/${PROJECT_ID}`;
 
 await testSaveLifecycleWireContract();
 await testMultipartWireContract();
 await testUploadCapabilityBoundary();
+await testHardTransferDeadlines();
 await testBoundedVerifiedDownload();
 await testDownloadFailuresAndCoreErrors();
 await testInputAndResponseValidation();
@@ -184,6 +186,20 @@ async function testMultipartWireContract(): Promise<void> {
   })));
   assert.equal(calls[1]?.url, `${PROJECT_PATH}/save-sessions/${SESSION_ID}/parts`);
   assert.equal(calls[2]?.url, `${PROJECT_PATH}/save-sessions/${SESSION_ID}/parts/receipts`);
+
+  const mismatchedCapability = createApiClient({
+    fetch: async () => jsonResponse(capabilities.map((item, index) =>
+      index === 0 ? capability(item.expectedBytes, OTHER_DIGEST_BASE64) : item
+    ))
+  });
+  await assert.rejects(
+    issueSaveParts(
+      mismatchedCapability,
+      { owner: OWNER, projectId: PROJECT_ID, sessionId: SESSION_ID, parts },
+      { csrfToken: CSRF }
+    ),
+    ApiInvalidResponseError
+  );
 }
 
 async function testUploadCapabilityBoundary(): Promise<void> {
@@ -231,10 +247,88 @@ async function testUploadCapabilityBoundary(): Promise<void> {
   assert.ok(ambiguousEtag instanceof ProjectTransferError);
   assert.equal(ambiguousEtag.kind, "invalid-response");
 
+  const mismatchedResponseChecksum = await captureError(uploadSaveCapability(signed, part, body, {
+    fetch: async () => new Response(null, {
+      status: 200,
+      headers: { etag: '"object-etag"', "x-amz-checksum-sha256": OTHER_DIGEST_BASE64 }
+    })
+  }));
+  assert.ok(mismatchedResponseChecksum instanceof ProjectTransferError);
+  assert.equal(mismatchedResponseChecksum.kind, "integrity");
+
   await assert.rejects(
     uploadSaveCapability(signed, { ...part, sha256: "0".repeat(64) }, body),
     ApiConfigurationError
   );
+
+  for (const url of [
+    "http://storage.example.test/bucket?signature=secret",
+    "http://localhost:9000/bucket?signature=secret",
+    "http://127.0.0.1:9000/bucket?signature=secret"
+  ]) {
+    await assert.rejects(
+      uploadSaveCapability({ ...signed, url }, part, body, {
+        fetch: async () => assert.fail("plaintext bearer capability reached fetch")
+      }),
+      ApiConfigurationError
+    );
+  }
+}
+
+async function testHardTransferDeadlines(): Promise<void> {
+  const body = new Blob(["bundle"]);
+  const part: SavePart = { partNumber: 1, expectedBytes: body.size, sha256: DIGEST_HEX };
+  let resolveUpload: (response: Response) => void = () => undefined;
+  let uploadBodyCancelled = false;
+  const uploadFetch = new Promise<Response>((resolve) => { resolveUpload = resolve; });
+  const uploadError = await captureWithin(uploadSaveCapability(
+    capability(body.size, DIGEST_BASE64),
+    part,
+    body,
+    { timeoutMs: 10, fetch: () => uploadFetch }
+  ));
+  assert.ok(uploadError instanceof ProjectTransferError);
+  assert.equal(uploadError.kind, "timeout");
+  resolveUpload(new Response(new ReadableStream<Uint8Array>({
+    cancel() { uploadBodyCancelled = true; }
+  }), {
+    status: 200,
+    headers: { etag: '"late-upload"' }
+  }));
+  await nextTurn();
+  assert.equal(uploadBodyCancelled, true, "a late upload response body must be cancelled");
+
+  const bytes = new TextEncoder().encode("downloaded project bundle");
+  const descriptor = contentDescriptor(bytes);
+  let rejectFetch: (reason: unknown) => void = () => undefined;
+  const ignoredDownloadFetch = new Promise<Response>((_resolve, reject) => { rejectFetch = reject; });
+  const fetchTimeout = await captureWithin(downloadProjectContent(descriptor, {
+    timeoutMs: 10,
+    sink: noOpSink(),
+    fetch: () => ignoredDownloadFetch
+  }));
+  assert.ok(fetchTimeout instanceof ProjectTransferError);
+  assert.equal(fetchTimeout.kind, "timeout");
+  rejectFetch(new Error("late fetch rejection"));
+  await nextTurn();
+
+  let sinkAbortCalled = false;
+  const sinkTimeout = await captureWithin(downloadProjectContent(descriptor, {
+    timeoutMs: 10,
+    sink: {
+      async write() { return new Promise<void>(() => undefined); },
+      async complete() {},
+      async abort() {
+        sinkAbortCalled = true;
+        return new Promise<void>(() => undefined);
+      }
+    },
+    fetch: async () => binaryResponse(bytes, descriptor)
+  }));
+  assert.ok(sinkTimeout instanceof ProjectTransferError);
+  assert.equal(sinkTimeout.kind, "timeout");
+  await nextTurn();
+  assert.equal(sinkAbortCalled, true, "deadline cleanup must start without delaying the caller");
 }
 
 async function testBoundedVerifiedDownload(): Promise<void> {
@@ -323,6 +417,25 @@ async function testDownloadFailuresAndCoreErrors(): Promise<void> {
   assert.equal(coreError.code, "COMMIT_OUTCOME_UNKNOWN");
   assert.equal(coreError.retryable, true);
 
+  let invalidMetadataBodyCancelled = false;
+  const invalidMetadata = await captureError(downloadProjectContent(descriptor, {
+    sink,
+    fetch: async () => new Response(new ReadableStream<Uint8Array>({
+      start(controller) { controller.enqueue(Uint8Array.from(bytes)); },
+      cancel() { invalidMetadataBodyCancelled = true; }
+    }), {
+      status: 200,
+      headers: {
+        "content-type": "text/plain",
+        "content-length": String(bytes.byteLength),
+        etag: descriptor.etag
+      }
+    })
+  }));
+  assert.ok(invalidMetadata instanceof ProjectTransferError);
+  assert.equal(invalidMetadata.kind, "invalid-response");
+  assert.equal(invalidMetadataBodyCancelled, true);
+
   const controller = new AbortController();
   const pending = downloadProjectContent(descriptor, {
     sink,
@@ -371,6 +484,31 @@ async function testInputAndResponseValidation(): Promise<void> {
   });
   await assert.rejects(
     createSaveSession(malformedSession, baseInput, { csrfToken: CSRF }),
+    ApiInvalidResponseError
+  );
+
+  const mismatchedSingleCapability = createApiClient({
+    fetch: async () => jsonResponse(
+      saveSession("single", capability(6, OTHER_DIGEST_BASE64)),
+      201
+    )
+  });
+  await assert.rejects(
+    createSaveSession(mismatchedSingleCapability, baseInput, { csrfToken: CSRF }),
+    ApiInvalidResponseError
+  );
+
+  const plaintextSingleCapability = createApiClient({
+    fetch: async () => jsonResponse(
+      saveSession("single", {
+        ...capability(6, DIGEST_BASE64),
+        url: "http://127.0.0.1:9000/bucket?signature=secret"
+      }),
+      201
+    )
+  });
+  await assert.rejects(
+    createSaveSession(plaintextSingleCapability, baseInput, { csrfToken: CSRF }),
     ApiInvalidResponseError
   );
 
@@ -496,4 +634,30 @@ async function captureError(promise: Promise<unknown>): Promise<unknown> {
   } catch (error) {
     return error;
   }
+}
+
+async function captureWithin(promise: Promise<unknown>, maximumMs = 500): Promise<unknown> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      captureError(promise),
+      new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(() => reject(new Error("transfer did not settle by its hard deadline")), maximumMs);
+      })
+    ]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
+
+function noOpSink(): ProjectContentSink<void> {
+  return {
+    async write() {},
+    async complete() {},
+    async abort() {}
+  };
+}
+
+async function nextTurn(): Promise<void> {
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
 }
