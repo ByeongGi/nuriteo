@@ -40,8 +40,8 @@ async fn project_service_is_authorized_versioned_audited_and_atomic() {
     )
     .await
     .unwrap();
-    assert_eq!(report.latest_version, Some(13));
-    assert_eq!(report.known_migrations, 13);
+    assert_eq!(report.latest_version, Some(14));
+    assert_eq!(report.known_migrations, 14);
     seed_fixture(&pool).await;
 
     let service = ProjectService::new(pool.clone(), ProjectServicePolicy::default());
