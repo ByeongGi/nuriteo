@@ -10,11 +10,19 @@ use crate::quota::EffectiveQuota;
 pub const IDEMPOTENCY_SECRET: &str = "NURITEO_SAVE_IDEMPOTENCY_SECRET";
 pub const IDEMPOTENCY_SECRET_FILE: &str = "NURITEO_SAVE_IDEMPOTENCY_SECRET_FILE";
 pub const DEFAULT_QUOTA_BYTES: &str = "NURITEO_SAVE_DEFAULT_QUOTA_BYTES";
+pub const UPLOAD_TRANSPORT: &str = "NURITEO_SAVE_UPLOAD_TRANSPORT";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SaveUploadTransport {
+    Relay,
+    Direct,
+}
 
 #[derive(Clone)]
 pub struct SaveHttpConfig {
     idempotency_secret: IdempotencySecret,
     effective_quota: EffectiveQuota,
+    upload_transport: SaveUploadTransport,
 }
 
 impl SaveHttpConfig {
@@ -62,9 +70,23 @@ impl SaveHttpConfig {
             )
             .map_err(|_| SaveHttpConfigError::InvalidQuota)?
         };
+        let upload_transport = environment
+            .entries()
+            .into_iter()
+            .find(|(name, _)| name == UPLOAD_TRANSPORT)
+            .ok_or(SaveHttpConfigError::MissingUploadTransport)?
+            .1
+            .into_string()
+            .map_err(|_| SaveHttpConfigError::InvalidUploadTransport)
+            .and_then(|value| match value.as_str() {
+                "relay" => Ok(SaveUploadTransport::Relay),
+                "direct" => Ok(SaveUploadTransport::Direct),
+                _ => Err(SaveHttpConfigError::InvalidUploadTransport),
+            })?;
         Ok(Self {
             idempotency_secret,
             effective_quota,
+            upload_transport,
         })
     }
 
@@ -77,6 +99,11 @@ impl SaveHttpConfig {
     pub const fn effective_quota(&self) -> EffectiveQuota {
         self.effective_quota
     }
+
+    #[must_use]
+    pub const fn upload_transport(&self) -> SaveUploadTransport {
+        self.upload_transport
+    }
 }
 
 impl fmt::Debug for SaveHttpConfig {
@@ -85,6 +112,7 @@ impl fmt::Debug for SaveHttpConfig {
             .debug_struct("SaveHttpConfig")
             .field("idempotency_secret", &"[REDACTED]")
             .field("effective_quota", &self.effective_quota)
+            .field("upload_transport", &self.upload_transport)
             .finish()
     }
 }
@@ -97,6 +125,8 @@ pub enum SaveHttpConfigError {
     InvalidSecret,
     MissingQuota,
     InvalidQuota,
+    MissingUploadTransport,
+    InvalidUploadTransport,
 }
 
 impl fmt::Display for SaveHttpConfigError {
@@ -112,6 +142,8 @@ impl fmt::Display for SaveHttpConfigError {
             }
             Self::MissingQuota => "Save default quota is missing",
             Self::InvalidQuota => "Save default quota must be unlimited or a positive byte count",
+            Self::MissingUploadTransport => "Save upload transport is missing",
+            Self::InvalidUploadTransport => "Save upload transport must be relay or direct",
         })
     }
 }
@@ -180,6 +212,7 @@ mod tests {
             &environment(&[
                 (IDEMPOTENCY_SECRET_FILE, "/run/secrets/save".to_owned()),
                 (DEFAULT_QUOTA_BYTES, "10737418240".to_owned()),
+                (UPLOAD_TRANSPORT, "relay".to_owned()),
             ]),
             &files,
         )
@@ -188,6 +221,7 @@ mod tests {
             config.effective_quota().limit_bytes(),
             Some(10 * 1024 * 1024 * 1024)
         );
+        assert_eq!(config.upload_transport(), SaveUploadTransport::Relay);
         let debug = format!("{config:?}");
         assert!(debug.contains("[REDACTED]"));
         assert!(!debug.contains(&encoded));
@@ -210,6 +244,7 @@ mod tests {
                 vec![
                     (IDEMPOTENCY_SECRET_FILE, "/secret".to_owned()),
                     (DEFAULT_QUOTA_BYTES, "0".to_owned()),
+                    (UPLOAD_TRANSPORT, "relay".to_owned()),
                 ],
                 SaveHttpConfigError::InvalidQuota,
             ),
@@ -217,6 +252,7 @@ mod tests {
                 vec![
                     (IDEMPOTENCY_SECRET_FILE, "/zeros".to_owned()),
                     (DEFAULT_QUOTA_BYTES, "10".to_owned()),
+                    (UPLOAD_TRANSPORT, "relay".to_owned()),
                 ],
                 SaveHttpConfigError::InvalidSecret,
             ),
@@ -224,6 +260,7 @@ mod tests {
                 vec![
                     (IDEMPOTENCY_SECRET_FILE, "/secret".to_owned()),
                     (DEFAULT_QUOTA_BYTES, (i64::MAX as u64 + 1).to_string()),
+                    (UPLOAD_TRANSPORT, "relay".to_owned()),
                 ],
                 SaveHttpConfigError::InvalidQuota,
             ),
@@ -236,6 +273,7 @@ mod tests {
             &environment(&[
                 (IDEMPOTENCY_SECRET, valid),
                 (DEFAULT_QUOTA_BYTES, "unlimited".to_owned()),
+                (UPLOAD_TRANSPORT, "direct".to_owned()),
             ]),
             &files,
         )
@@ -244,5 +282,31 @@ mod tests {
             direct,
             SaveHttpConfigError::DirectSecretUnsupported
         ));
+
+        let missing_transport = SaveHttpConfig::load(
+            &environment(&[
+                (IDEMPOTENCY_SECRET_FILE, "/secret".to_owned()),
+                (DEFAULT_QUOTA_BYTES, "unlimited".to_owned()),
+            ]),
+            &files,
+        )
+        .unwrap_err();
+        assert!(matches!(
+            missing_transport,
+            SaveHttpConfigError::MissingUploadTransport
+        ));
+
+        for invalid in ["", "DIRECT", "presigned", "relay "] {
+            let error = SaveHttpConfig::load(
+                &environment(&[
+                    (IDEMPOTENCY_SECRET_FILE, "/secret".to_owned()),
+                    (DEFAULT_QUOTA_BYTES, "unlimited".to_owned()),
+                    (UPLOAD_TRANSPORT, invalid.to_owned()),
+                ]),
+                &files,
+            )
+            .unwrap_err();
+            assert!(matches!(error, SaveHttpConfigError::InvalidUploadTransport));
+        }
     }
 }

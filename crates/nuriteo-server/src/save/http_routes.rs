@@ -1,14 +1,23 @@
+use std::io;
+use std::pin::Pin;
 use std::str::FromStr;
+use std::task::{Context, Poll};
 
 use axum::Json;
 use axum::body::{Body, to_bytes};
 use axum::extract::{Extension, Path, Request, State};
-use axum::http::header::{CACHE_CONTROL, CONTENT_TYPE, COOKIE, ETAG, IF_MATCH};
+use axum::http::header::{
+    CACHE_CONTROL, CONTENT_ENCODING, CONTENT_LENGTH, CONTENT_TYPE, COOKIE, ETAG, IF_MATCH,
+    TRANSFER_ENCODING,
+};
 use axum::http::{HeaderMap, HeaderName, HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Response};
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD as BASE64;
+use bytes::{Buf, Bytes};
+use http_body::Body as HttpBody;
 use serde::{Deserialize, de::DeserializeOwned};
+use tokio::io::{AsyncRead, ReadBuf};
 use utoipa::ToSchema;
 use utoipa_axum::{router::OpenApiRouter, routes};
 
@@ -20,8 +29,9 @@ use crate::quota::SaveSessionId;
 
 use super::IdempotencyKey;
 use super::http_service::{
-    CommitView, ReconcileView, SaveCreateInput, SaveHttpError, SaveHttpService, SavePartInput,
-    SaveReceiptInput, SaveSessionView, UploadCapabilityView,
+    CommitView, ReconcileView, RelayPartUploadInput, RelaySingleUploadInput, SaveCreateInput,
+    SaveHttpError, SaveHttpService, SavePartInput, SaveReceiptInput, SaveSessionView,
+    UploadCapabilityView,
 };
 
 const COLLECTION: &str =
@@ -32,10 +42,32 @@ const PARTS: &str = "/api/v1/workspaces/{owner_type}/{owner_id}/projects/{projec
 const RECEIPTS: &str = "/api/v1/workspaces/{owner_type}/{owner_id}/projects/{project_id}/save-sessions/{session_id}/parts/receipts";
 const COMPLETE: &str = "/api/v1/workspaces/{owner_type}/{owner_id}/projects/{project_id}/save-sessions/{session_id}/complete";
 const RECONCILE: &str = "/api/v1/workspaces/{owner_type}/{owner_id}/projects/{project_id}/save-sessions/{session_id}/reconcile";
+const SINGLE_UPLOAD: &str = "/api/v1/workspaces/{owner_type}/{owner_id}/projects/{project_id}/save-sessions/{session_id}/upload";
+const PART_UPLOAD: &str = "/api/v1/workspaces/{owner_type}/{owner_id}/projects/{project_id}/save-sessions/{session_id}/upload/parts/{part_number}";
 const MAX_BODY: usize = 64 * 1024;
 const ORIGIN: HeaderName = HeaderName::from_static("origin");
 const CSRF: HeaderName = HeaderName::from_static("x-csrf-token");
 const IDEMPOTENCY_KEY: HeaderName = HeaderName::from_static("idempotency-key");
+const RELAY_CHECKSUM: HeaderName = HeaderName::from_static("x-nuriteo-content-sha256");
+const BUNDLE_CONTENT_TYPE: &str = "application/vnd.nuriteo.project-bundle";
+const MAX_RELAY_BODY_BYTES: u64 = 64 * 1024 * 1024;
+
+struct RelayProjectBundleBinary;
+
+impl utoipa::PartialSchema for RelayProjectBundleBinary {
+    fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
+        use utoipa::openapi::schema::{KnownFormat, ObjectBuilder, Schema, SchemaFormat, Type};
+
+        utoipa::openapi::RefOr::T(Schema::Object(
+            ObjectBuilder::new()
+                .schema_type(Type::String)
+                .format(Some(SchemaFormat::KnownFormat(KnownFormat::Binary)))
+                .build(),
+        ))
+    }
+}
+
+impl ToSchema for RelayProjectBundleBinary {}
 
 pub(crate) fn openapi_router(document: utoipa::openapi::OpenApi) -> OpenApiRouter<SaveHttpService> {
     OpenApiRouter::with_openapi(document)
@@ -44,6 +76,8 @@ pub(crate) fn openapi_router(document: utoipa::openapi::OpenApi) -> OpenApiRoute
         .routes(routes!(record_receipts))
         .routes(routes!(complete_session))
         .routes(routes!(reconcile_session))
+        .routes(routes!(relay_single_upload))
+        .routes(routes!(relay_part_upload))
         .routes(routes!(abort_session))
 }
 
@@ -92,6 +126,12 @@ struct CompleteRequest {
 enum UploadMode {
     Single,
     Multipart,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct RelayBodyMetadata {
+    length: u64,
+    checksum: [u8; 32],
 }
 
 #[utoipa::path(post, path = COLLECTION, tag = "save", security(("projectSessionCookie" = [])),
@@ -221,6 +261,93 @@ async fn record_receipts(
         )
         .await
         .map_err(|e| map_error(e, request_id.clone(), RECEIPTS))?;
+    Ok(private_response(StatusCode::NO_CONTENT.into_response()))
+}
+
+#[utoipa::path(put, path = SINGLE_UPLOAD, tag = "save", security(("projectSessionCookie" = [])),
+    params(("owner_type" = String, Path), ("owner_id" = String, Path), ("project_id" = String, Path),
+      ("session_id" = String, Path), ("Content-Length" = u64, Header),
+      ("X-Nuriteo-Content-SHA256" = String, Header), ("Origin" = String, Header),
+      ("X-CSRF-Token" = String, Header)),
+    request_body(content = inline(RelayProjectBundleBinary), content_type = "application/vnd.nuriteo.project-bundle"),
+    responses((status = 204, headers(("Cache-Control" = String))),
+    (status = 401, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+    (status = 403, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+    (status = 404, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+    (status = 409, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+    (status = 413, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+    (status = 415, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+    (status = 422, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+    (status = 503, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+    (status = 504, body = crate::openapi::ProblemDetails, content_type = "application/problem+json")))]
+async fn relay_single_upload(
+    State(service): State<SaveHttpService>,
+    Extension(request_id): Extension<RequestId>,
+    Path(path): Path<(String, String, String, String)>,
+    request: Request,
+) -> Result<Response, HttpError> {
+    let (head, body) = request.into_parts();
+    let browser = BrowserHeaders::read(&head.headers, &request_id, SINGLE_UPLOAD)?;
+    let metadata = relay_body_metadata(&head.headers, &request_id, SINGLE_UPLOAD)?;
+    service
+        .relay_single_upload(RelaySingleUploadInput {
+            browser: browser.request(BrowserMethod::Put),
+            owner: parse_owner(&path.0, &path.1, &request_id, SINGLE_UPLOAD)?,
+            project_id: parse_project(&path.2, &request_id, SINGLE_UPLOAD)?,
+            session_id: parse_session(&path.3, &request_id, SINGLE_UPLOAD)?,
+            declared_bytes: metadata.length,
+            checksum: crate::object_storage::Sha256Checksum::from_bytes(metadata.checksum),
+            reader: RequestBodyReader::new(body),
+        })
+        .await
+        .map_err(|error| map_error(error, request_id, SINGLE_UPLOAD))?;
+    Ok(private_response(StatusCode::NO_CONTENT.into_response()))
+}
+
+#[utoipa::path(put, path = PART_UPLOAD, tag = "save", security(("projectSessionCookie" = [])),
+    params(("owner_type" = String, Path), ("owner_id" = String, Path), ("project_id" = String, Path),
+      ("session_id" = String, Path), ("part_number" = u16, Path),
+      ("Content-Length" = u64, Header), ("X-Nuriteo-Content-SHA256" = String, Header),
+      ("Origin" = String, Header), ("X-CSRF-Token" = String, Header)),
+    request_body(content = inline(RelayProjectBundleBinary), content_type = "application/vnd.nuriteo.project-bundle"),
+    responses((status = 204, headers(("Cache-Control" = String))),
+    (status = 401, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+    (status = 403, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+    (status = 404, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+    (status = 409, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+    (status = 413, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+    (status = 415, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+    (status = 422, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+    (status = 503, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+    (status = 504, body = crate::openapi::ProblemDetails, content_type = "application/problem+json")))]
+async fn relay_part_upload(
+    State(service): State<SaveHttpService>,
+    Extension(request_id): Extension<RequestId>,
+    Path(path): Path<(String, String, String, String, String)>,
+    request: Request,
+) -> Result<Response, HttpError> {
+    let (head, body) = request.into_parts();
+    let browser = BrowserHeaders::read(&head.headers, &request_id, PART_UPLOAD)?;
+    let metadata = relay_body_metadata(&head.headers, &request_id, PART_UPLOAD)?;
+    let part_number = path
+        .4
+        .parse::<u16>()
+        .ok()
+        .filter(|part| *part != 0)
+        .ok_or_else(|| validation(&request_id, PART_UPLOAD, "partNumber"))?;
+    service
+        .relay_part_upload(RelayPartUploadInput {
+            browser: browser.request(BrowserMethod::Put),
+            owner: parse_owner(&path.0, &path.1, &request_id, PART_UPLOAD)?,
+            project_id: parse_project(&path.2, &request_id, PART_UPLOAD)?,
+            session_id: parse_session(&path.3, &request_id, PART_UPLOAD)?,
+            part_number,
+            declared_bytes: metadata.length,
+            checksum: crate::object_storage::Sha256Checksum::from_bytes(metadata.checksum),
+            reader: RequestBodyReader::new(body),
+        })
+        .await
+        .map_err(|error| map_error(error, request_id, PART_UPLOAD))?;
     Ok(private_response(StatusCode::NO_CONTENT.into_response()))
 }
 
@@ -387,6 +514,107 @@ async fn json_body<T: DeserializeOwned>(
         .map_err(|_| HttpError::payload_too_large(id.clone(), path))?;
     serde_json::from_slice(&bytes).map_err(|_| validation(id, path, "body"))
 }
+
+fn relay_body_metadata(
+    headers: &HeaderMap,
+    id: &RequestId,
+    path: &str,
+) -> Result<RelayBodyMetadata, HttpError> {
+    if headers.get_all(CONTENT_TYPE).iter().count() != 1
+        || headers
+            .get(CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok())
+            != Some(BUNDLE_CONTENT_TYPE)
+        || headers.get_all(CONTENT_ENCODING).iter().next().is_some()
+        || headers.get_all(TRANSFER_ENCODING).iter().next().is_some()
+    {
+        return Err(HttpError::unsupported_media_type(id.clone(), path));
+    }
+    let lengths = headers.get_all(CONTENT_LENGTH).iter().collect::<Vec<_>>();
+    if lengths.len() != 1 {
+        return Err(validation(id, path, "contentLength"));
+    }
+    let raw_length = lengths[0]
+        .to_str()
+        .map_err(|_| validation(id, path, "contentLength"))?;
+    let length = raw_length
+        .parse::<u64>()
+        .ok()
+        .filter(|value| *value != 0 && value.to_string() == raw_length)
+        .ok_or_else(|| validation(id, path, "contentLength"))?;
+    if length > MAX_RELAY_BODY_BYTES {
+        return Err(HttpError::payload_too_large(id.clone(), path));
+    }
+    let checksums = headers.get_all(RELAY_CHECKSUM).iter().collect::<Vec<_>>();
+    if checksums.len() != 1 {
+        return Err(validation(id, path, "checksum"));
+    }
+    let raw_checksum = checksums[0]
+        .to_str()
+        .map_err(|_| validation(id, path, "checksum"))?;
+    let decoded = BASE64
+        .decode(raw_checksum)
+        .ok()
+        .and_then(|bytes| <[u8; 32]>::try_from(bytes).ok())
+        .filter(|bytes| BASE64.encode(bytes) == raw_checksum)
+        .ok_or_else(|| validation(id, path, "checksum"))?;
+    Ok(RelayBodyMetadata {
+        length,
+        checksum: decoded,
+    })
+}
+
+struct RequestBodyReader {
+    body: Pin<Box<Body>>,
+    current: Bytes,
+    complete: bool,
+}
+
+impl RequestBodyReader {
+    fn new(body: Body) -> Self {
+        Self {
+            body: Box::pin(body),
+            current: Bytes::new(),
+            complete: false,
+        }
+    }
+}
+
+impl AsyncRead for RequestBodyReader {
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        output: &mut ReadBuf<'_>,
+    ) -> Poll<io::Result<()>> {
+        if self.complete || output.remaining() == 0 {
+            return Poll::Ready(Ok(()));
+        }
+        loop {
+            if !self.current.is_empty() {
+                let count = self.current.len().min(output.remaining());
+                output.put_slice(&self.current[..count]);
+                self.current.advance(count);
+                return Poll::Ready(Ok(()));
+            }
+            match self.body.as_mut().poll_frame(cx) {
+                Poll::Pending => return Poll::Pending,
+                Poll::Ready(None) => {
+                    self.complete = true;
+                    return Poll::Ready(Ok(()));
+                }
+                Poll::Ready(Some(Err(_))) => {
+                    self.complete = true;
+                    return Poll::Ready(Err(io::Error::other("request body stream failed")));
+                }
+                Poll::Ready(Some(Ok(frame))) => {
+                    if let Ok(data) = frame.into_data() {
+                        self.current = data;
+                    }
+                }
+            }
+        }
+    }
+}
 fn parse_owner(t: &str, raw: &str, id: &RequestId, path: &str) -> Result<ProjectOwner, HttpError> {
     match t {
         "users" => UserId::from_str(raw)
@@ -515,5 +743,78 @@ fn map_error(e: SaveHttpError, id: RequestId, path: &str) -> HttpError {
         SaveHttpError::OperationTimeout => HttpError::operation_timeout(id, path),
         SaveHttpError::Unavailable => HttpError::service_unavailable(id, path),
         SaveHttpError::Internal => HttpError::internal(id, path),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn valid_headers() -> HeaderMap {
+        let mut headers = HeaderMap::new();
+        headers.insert(CONTENT_TYPE, HeaderValue::from_static(BUNDLE_CONTENT_TYPE));
+        headers.insert(CONTENT_LENGTH, HeaderValue::from_static("1024"));
+        headers.insert(
+            &RELAY_CHECKSUM,
+            HeaderValue::from_str(&BASE64.encode([0x42; 32])).unwrap(),
+        );
+        headers
+    }
+
+    fn status(headers: &HeaderMap) -> StatusCode {
+        relay_body_metadata(headers, &RequestId::generate(), SINGLE_UPLOAD)
+            .unwrap_err()
+            .into_response()
+            .status()
+    }
+
+    #[test]
+    fn relay_headers_are_exact_and_bounded_before_body_admission() {
+        let valid = valid_headers();
+        let metadata = relay_body_metadata(&valid, &RequestId::generate(), SINGLE_UPLOAD).unwrap();
+        assert_eq!(metadata.length, 1024);
+        assert_eq!(metadata.checksum, [0x42; 32]);
+
+        let mut cases = Vec::new();
+        let mut missing_length = valid.clone();
+        missing_length.remove(CONTENT_LENGTH);
+        cases.push((missing_length, StatusCode::UNPROCESSABLE_ENTITY));
+        let mut duplicate_length = valid.clone();
+        duplicate_length.append(CONTENT_LENGTH, HeaderValue::from_static("1024"));
+        cases.push((duplicate_length, StatusCode::UNPROCESSABLE_ENTITY));
+        let mut leading_zero_length = valid.clone();
+        leading_zero_length.insert(CONTENT_LENGTH, HeaderValue::from_static("01024"));
+        cases.push((leading_zero_length, StatusCode::UNPROCESSABLE_ENTITY));
+        let mut oversized = valid.clone();
+        oversized.insert(
+            CONTENT_LENGTH,
+            HeaderValue::from_str(&(MAX_RELAY_BODY_BYTES + 1).to_string()).unwrap(),
+        );
+        cases.push((oversized, StatusCode::PAYLOAD_TOO_LARGE));
+        let mut encoded = valid.clone();
+        encoded.insert(CONTENT_ENCODING, HeaderValue::from_static("gzip"));
+        cases.push((encoded, StatusCode::UNSUPPORTED_MEDIA_TYPE));
+        let mut chunked = valid.clone();
+        chunked.insert(TRANSFER_ENCODING, HeaderValue::from_static("chunked"));
+        cases.push((chunked, StatusCode::UNSUPPORTED_MEDIA_TYPE));
+        let mut wrong_type = valid.clone();
+        wrong_type.insert(
+            CONTENT_TYPE,
+            HeaderValue::from_static("application/octet-stream"),
+        );
+        cases.push((wrong_type, StatusCode::UNSUPPORTED_MEDIA_TYPE));
+        let mut malformed_checksum = valid.clone();
+        malformed_checksum.insert(&RELAY_CHECKSUM, HeaderValue::from_static("not-base64"));
+        cases.push((malformed_checksum, StatusCode::UNPROCESSABLE_ENTITY));
+        let mut duplicate_checksum = valid;
+        duplicate_checksum.append(
+            &RELAY_CHECKSUM,
+            HeaderValue::from_str(&BASE64.encode([0x42; 32])).unwrap(),
+        );
+        cases.push((duplicate_checksum, StatusCode::UNPROCESSABLE_ENTITY));
+
+        for (headers, expected) in cases {
+            assert_eq!(status(&headers), expected);
+        }
     }
 }

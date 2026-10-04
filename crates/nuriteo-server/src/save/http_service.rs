@@ -4,6 +4,7 @@ use std::time::Duration;
 
 use serde::Serialize;
 use sqlx::{Acquire, Postgres, Transaction};
+use tokio::io::AsyncRead;
 use tokio::time;
 use utoipa::ToSchema;
 
@@ -18,6 +19,8 @@ use crate::project::{
 };
 use crate::quota::{EffectiveQuota, SaveSessionId};
 
+use super::http_config::SaveUploadTransport;
+use super::relay::{RelayUploadError, RelayUploadService};
 use super::{
     AbortSaveSession, CleanupError, CleanupService, CleanupWorkerPolicy, CommitWorkingHeadOutcome,
     CreateMultipartSession, CreateSinglePutSession, IdempotencyKey, IdempotencySecret,
@@ -27,6 +30,9 @@ use super::{
     VerifyStagingBundle, WorkingHeadCommitError, WorkingHeadCommitPolicy, WorkingHeadCommitService,
 };
 
+const BUNDLE_CONTENT_TYPE: &str = "application/vnd.nuriteo.project-bundle";
+const RELAY_CHECKSUM_HEADER: &str = "X-Nuriteo-Content-SHA256";
+
 #[derive(Debug, Clone, Copy)]
 pub struct SaveHttpPolicy {
     operation_timeout: Duration,
@@ -35,6 +41,8 @@ pub struct SaveHttpPolicy {
     single_put_threshold_bytes: u64,
     multipart_part_bytes: u64,
     multipart_issue_batch: u16,
+    relay_idle_timeout: Duration,
+    relay_total_timeout: Duration,
 }
 
 impl Default for SaveHttpPolicy {
@@ -46,6 +54,8 @@ impl Default for SaveHttpPolicy {
             single_put_threshold_bytes: 64 * 1024 * 1024,
             multipart_part_bytes: 16 * 1024 * 1024,
             multipart_issue_batch: 16,
+            relay_idle_timeout: Duration::from_secs(5),
+            relay_total_timeout: Duration::from_secs(30),
         }
     }
 }
@@ -98,11 +108,13 @@ struct Runtime {
     projects: ProjectHttpService,
     single: SinglePutService,
     multipart: MultipartService,
+    relay: RelayUploadService,
     verifier: StagingVerifier,
     commit: WorkingHeadCommitService,
     cleanup: CleanupService,
     effective_quota: EffectiveQuota,
     single_put_threshold_bytes: u64,
+    upload_transport: SaveUploadTransport,
 }
 impl fmt::Debug for SaveHttpService {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -128,6 +140,7 @@ impl SaveHttpService {
         store: S3ObjectStore,
         secret: IdempotencySecret,
         effective_quota: EffectiveQuota,
+        upload_transport: SaveUploadTransport,
         policy: SaveHttpPolicy,
         cleanup_policy: CleanupWorkerPolicy,
     ) -> Result<Self, SaveHttpError> {
@@ -153,24 +166,32 @@ impl SaveHttpService {
             .validate_idempotency_configuration()
             .await
             .map_err(map_single)?;
+        let multipart =
+            MultipartService::new(pool.clone(), store.clone(), multipart_policy, secret)
+                .map_err(|_| SaveHttpError::InvalidInput)?;
+        let relay = RelayUploadService::new(
+            pool.clone(),
+            store.clone(),
+            multipart.clone(),
+            policy.operation_timeout,
+            policy.relay_idle_timeout,
+            policy.relay_total_timeout,
+        )
+        .map_err(map_relay)?;
         Ok(Self {
             runtime: Some(Arc::new(Runtime {
                 pool: pool.clone(),
                 operation_timeout: policy.operation_timeout,
                 projects,
                 single,
-                multipart: MultipartService::new(
-                    pool.clone(),
-                    store.clone(),
-                    multipart_policy,
-                    secret,
-                )
-                .map_err(|_| SaveHttpError::InvalidInput)?,
+                multipart,
+                relay,
                 verifier: StagingVerifier::new(pool.clone(), store.clone(), verifier_policy),
                 commit: WorkingHeadCommitService::new(pool.clone(), store.clone(), commit_policy),
                 cleanup: CleanupService::new(pool, store, cleanup_policy),
                 effective_quota,
                 single_put_threshold_bytes: policy.single_put_threshold_bytes,
+                upload_transport,
             })),
         })
     }
@@ -198,29 +219,45 @@ impl SaveHttpService {
             return Err(SaveHttpError::InvalidInput);
         }
         if input.parts.is_empty() {
-            let session = runtime
-                .single
-                .create(CreateSinglePutSession {
-                    storage_scope_id: context.storage_scope_id,
-                    project_id,
-                    actor_user_id: context.actor_user_id,
-                    expected_project_version: expected_version,
-                    expected_physical_bytes: input.physical_bytes,
-                    expected_logical_bytes: input.logical_bytes,
-                    expected_file_count: input.file_count,
-                    expected_sha256: checksum,
-                    effective_quota: runtime.effective_quota,
-                    idempotency_key,
-                })
-                .await
-                .map_err(map_single)?;
+            let request = CreateSinglePutSession {
+                storage_scope_id: context.storage_scope_id,
+                project_id,
+                actor_user_id: context.actor_user_id,
+                expected_project_version: expected_version,
+                expected_physical_bytes: input.physical_bytes,
+                expected_logical_bytes: input.logical_bytes,
+                expected_file_count: input.file_count,
+                expected_sha256: checksum.clone(),
+                effective_quota: runtime.effective_quota,
+                idempotency_key,
+            };
+            if runtime.upload_transport == SaveUploadTransport::Relay {
+                let session = runtime
+                    .single
+                    .create_relay(request)
+                    .await
+                    .map_err(map_single)?;
+                return Ok(SaveSessionView {
+                    session_id: session.session_id().to_string(),
+                    upload_mode: "single",
+                    expires_at: session.expires_at().to_string(),
+                    part_count: 1,
+                    idempotent_retry: session.is_idempotent_retry(),
+                    upload: Some(relay_capability(
+                        relay_single_path(owner, project_id, session.session_id()),
+                        input.physical_bytes,
+                        &checksum,
+                    )),
+                });
+            }
+            let session = runtime.single.create(request).await.map_err(map_single)?;
             return Ok(SaveSessionView {
                 session_id: session.session_id().to_string(),
                 upload_mode: "single",
                 expires_at: session.expires_at().to_string(),
                 part_count: 1,
                 idempotent_retry: session.is_idempotent_retry(),
-                upload: Some(capability_view(
+                upload: Some(direct_capability_view(
                     session.capability().request(),
                     input.physical_bytes,
                 )?),
@@ -268,7 +305,32 @@ impl SaveHttpService {
     ) -> Result<Vec<UploadCapabilityView>, SaveHttpError> {
         let runtime = self.runtime()?;
         let context = authorize(runtime, browser, owner, project_id).await?;
-        let sizes = parts.iter().map(|p| p.expected_bytes).collect::<Vec<_>>();
+        if runtime.upload_transport == SaveUploadTransport::Relay {
+            let plans = parts
+                .iter()
+                .cloned()
+                .map(SavePartInput::into_plan)
+                .collect();
+            runtime
+                .multipart
+                .validate_relay_parts(multipart_context(context, session_id), plans)
+                .await
+                .map_err(map_multipart)?;
+            return Ok(parts
+                .into_iter()
+                .map(|part| {
+                    relay_capability(
+                        relay_part_path(owner, project_id, session_id, part.part_number),
+                        part.expected_bytes,
+                        &Sha256Checksum::from_bytes(part.sha256),
+                    )
+                })
+                .collect());
+        }
+        let sizes = parts
+            .iter()
+            .map(|part| part.expected_bytes)
+            .collect::<Vec<_>>();
         let plans = parts.into_iter().map(SavePartInput::into_plan).collect();
         runtime
             .multipart
@@ -277,8 +339,55 @@ impl SaveHttpService {
             .map_err(map_multipart)?
             .into_iter()
             .zip(sizes)
-            .map(|(capability, bytes)| capability_view(capability.request(), bytes))
+            .map(|(capability, bytes)| direct_capability_view(capability.request(), bytes))
             .collect()
+    }
+
+    pub(crate) async fn relay_single_upload<R>(
+        &self,
+        input: RelaySingleUploadInput<'_, R>,
+    ) -> Result<(), SaveHttpError>
+    where
+        R: AsyncRead + Send + 'static,
+    {
+        let runtime = self.runtime()?;
+        require_relay(runtime)?;
+        let context = authorize(runtime, input.browser, input.owner, input.project_id).await?;
+        runtime
+            .relay
+            .upload_single(
+                context,
+                input.session_id,
+                input.declared_bytes,
+                input.checksum,
+                input.reader,
+            )
+            .await
+            .map_err(map_relay)
+    }
+
+    pub(crate) async fn relay_part_upload<R>(
+        &self,
+        input: RelayPartUploadInput<'_, R>,
+    ) -> Result<(), SaveHttpError>
+    where
+        R: AsyncRead + Send + 'static,
+    {
+        let runtime = self.runtime()?;
+        require_relay(runtime)?;
+        let context = authorize(runtime, input.browser, input.owner, input.project_id).await?;
+        runtime
+            .relay
+            .upload_part(
+                context,
+                input.session_id,
+                input.part_number,
+                input.declared_bytes,
+                input.checksum,
+                input.reader,
+            )
+            .await
+            .map_err(map_relay)
     }
 
     pub(crate) async fn record_receipts(
@@ -514,13 +623,44 @@ pub(crate) struct SaveReceiptInput {
     pub etag: String,
 }
 
+pub(crate) struct RelaySingleUploadInput<'a, R> {
+    pub browser: BrowserRequestHeaders<'a>,
+    pub owner: ProjectOwner,
+    pub project_id: ProjectId,
+    pub session_id: SaveSessionId,
+    pub declared_bytes: u64,
+    pub checksum: Sha256Checksum,
+    pub reader: R,
+}
+
+pub(crate) struct RelayPartUploadInput<'a, R> {
+    pub browser: BrowserRequestHeaders<'a>,
+    pub owner: ProjectOwner,
+    pub project_id: ProjectId,
+    pub session_id: SaveSessionId,
+    pub part_number: u16,
+    pub declared_bytes: u64,
+    pub checksum: Sha256Checksum,
+    pub reader: R,
+}
+
 #[derive(Debug, Clone, Serialize, ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct UploadCapabilityView {
-    pub method: &'static str,
-    pub url: String,
-    pub headers: Vec<UploadHeaderView>,
-    pub expected_bytes: u64,
+#[serde(tag = "transport", rename_all = "snake_case")]
+pub(crate) enum UploadCapabilityView {
+    Direct {
+        method: &'static str,
+        url: String,
+        headers: Vec<UploadHeaderView>,
+        #[serde(rename = "expectedBytes")]
+        expected_bytes: u64,
+    },
+    Relay {
+        method: &'static str,
+        path: String,
+        headers: Vec<UploadHeaderView>,
+        #[serde(rename = "expectedBytes")]
+        expected_bytes: u64,
+    },
 }
 #[derive(Debug, Clone, Serialize, ToSchema)]
 pub(crate) struct UploadHeaderView {
@@ -567,14 +707,14 @@ pub(crate) enum ReconcileView {
     NotCommitted,
 }
 
-fn capability_view(
+fn direct_capability_view(
     r: &BoundedPresignedRequest,
     expected_bytes: u64,
 ) -> Result<UploadCapabilityView, SaveHttpError> {
     if r.operation() != PresignedOperation::Put {
         return Err(SaveHttpError::Internal);
     }
-    Ok(UploadCapabilityView {
+    Ok(UploadCapabilityView::Direct {
         method: "PUT",
         url: r.expose_bearer_url().to_owned(),
         headers: r
@@ -586,6 +726,66 @@ fn capability_view(
             .collect(),
         expected_bytes,
     })
+}
+
+fn relay_capability(
+    path: String,
+    expected_bytes: u64,
+    checksum: &Sha256Checksum,
+) -> UploadCapabilityView {
+    UploadCapabilityView::Relay {
+        method: "PUT",
+        path,
+        headers: vec![
+            UploadHeaderView {
+                name: "Content-Type".to_owned(),
+                value: BUNDLE_CONTENT_TYPE.to_owned(),
+            },
+            UploadHeaderView {
+                name: RELAY_CHECKSUM_HEADER.to_owned(),
+                value: checksum.base64(),
+            },
+        ],
+        expected_bytes,
+    }
+}
+
+fn relay_single_path(
+    owner: ProjectOwner,
+    project_id: ProjectId,
+    session_id: SaveSessionId,
+) -> String {
+    let (owner_type, owner_id) = owner_path(owner);
+    format!(
+        "/api/v1/workspaces/{owner_type}/{owner_id}/projects/{project_id}/save-sessions/{session_id}/upload"
+    )
+}
+
+fn relay_part_path(
+    owner: ProjectOwner,
+    project_id: ProjectId,
+    session_id: SaveSessionId,
+    part_number: u16,
+) -> String {
+    format!(
+        "{}/parts/{part_number}",
+        relay_single_path(owner, project_id, session_id)
+    )
+}
+
+fn owner_path(owner: ProjectOwner) -> (&'static str, String) {
+    match owner {
+        ProjectOwner::User(id) => ("users", id.to_string()),
+        ProjectOwner::Organization(id) => ("organizations", id.to_string()),
+    }
+}
+
+fn require_relay(runtime: &Runtime) -> Result<(), SaveHttpError> {
+    if runtime.upload_transport == SaveUploadTransport::Relay {
+        Ok(())
+    } else {
+        Err(SaveHttpError::NotFound)
+    }
 }
 
 fn map_project(e: ProjectHttpError) -> SaveHttpError {
@@ -702,6 +902,19 @@ fn map_cleanup(e: CleanupError) -> SaveHttpError {
         CleanupError::DatabaseUnavailable => SaveHttpError::Unavailable,
         CleanupError::CommitOutcomeUnknown => SaveHttpError::CommitOutcomeUnknown,
         CleanupError::InvariantViolation => SaveHttpError::Internal,
+    }
+}
+
+fn map_relay(error: RelayUploadError) -> SaveHttpError {
+    match error {
+        RelayUploadError::NotFound => SaveHttpError::NotFound,
+        RelayUploadError::InvalidInput => SaveHttpError::InvalidInput,
+        RelayUploadError::Conflict => SaveHttpError::Conflict,
+        RelayUploadError::SessionExpired => SaveHttpError::SessionExpired,
+        RelayUploadError::OperationTimeout => SaveHttpError::OperationTimeout,
+        RelayUploadError::Unavailable => SaveHttpError::Unavailable,
+        RelayUploadError::ReconciliationRequired => SaveHttpError::ReconciliationRequired,
+        RelayUploadError::Internal => SaveHttpError::Internal,
     }
 }
 

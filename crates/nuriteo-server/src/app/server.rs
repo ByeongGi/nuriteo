@@ -12,7 +12,7 @@ use crate::organization::{OrganizationHttpPolicy, OrganizationHttpService};
 use crate::project::{ProjectHttpPolicy, ProjectHttpService};
 use crate::save::{
     CleanupOperationsPolicy, CleanupOperationsService, CleanupService, ContentServicePolicy,
-    SaveHttpConfig, SaveHttpPolicy, SaveHttpService, WorkerShutdown,
+    SaveHttpConfig, SaveHttpPolicy, SaveHttpService, SaveUploadTransport, WorkerShutdown,
 };
 use crate::setup::{SetupStatusPolicy, SetupStatusService};
 
@@ -94,10 +94,11 @@ pub(crate) async fn run_server(
             return Err(ServeError::StorageInitialization);
         }
     };
-    if store
-        .check_browser_upload_cors(&global.public.external_url)
-        .await
-        .is_err()
+    if save_config.upload_transport() == SaveUploadTransport::Direct
+        && store
+            .check_browser_upload_cors(&global.public.external_url)
+            .await
+            .is_err()
     {
         close_pool(pool, close_timeout).await?;
         return Err(ServeError::StorageInitialization);
@@ -176,6 +177,7 @@ pub(crate) async fn run_server(
         store.clone(),
         save_config.idempotency_secret(),
         save_config.effective_quota(),
+        save_config.upload_transport(),
         SaveHttpPolicy::default(),
         global.cleanup.worker_policy,
     )

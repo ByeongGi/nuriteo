@@ -124,6 +124,42 @@ pub struct SinglePutSession {
     capability: SinglePutUploadCapability,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct RelaySinglePutSession {
+    session_id: SaveSessionId,
+    expires_at: OffsetDateTime,
+    idempotent_retry: bool,
+}
+
+impl RelaySinglePutSession {
+    pub(crate) const fn new(
+        session_id: SaveSessionId,
+        expires_at: OffsetDateTime,
+        idempotent_retry: bool,
+    ) -> Self {
+        Self {
+            session_id,
+            expires_at,
+            idempotent_retry,
+        }
+    }
+
+    #[must_use]
+    pub const fn session_id(self) -> SaveSessionId {
+        self.session_id
+    }
+
+    #[must_use]
+    pub const fn expires_at(self) -> OffsetDateTime {
+        self.expires_at
+    }
+
+    #[must_use]
+    pub const fn is_idempotent_retry(self) -> bool {
+        self.idempotent_retry
+    }
+}
+
 impl SinglePutSession {
     pub(crate) const fn new(
         session_id: SaveSessionId,

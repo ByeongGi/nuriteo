@@ -20,8 +20,8 @@ use crate::quota::{
 };
 
 use super::types::{
-    CreateSinglePutSession, IdempotencySecret, ReconciliationState, SinglePutSession,
-    SinglePutUploadCapability,
+    CreateSinglePutSession, IdempotencySecret, ReconciliationState, RelaySinglePutSession,
+    SinglePutSession, SinglePutUploadCapability,
 };
 
 const CONTENT_TYPE: &str = "application/vnd.nuriteo.project-bundle";
@@ -212,6 +212,26 @@ impl<S: PutPresigner> SinglePutService<S> {
                 Err(failure)
             }
         }
+    }
+
+    /// Persists the same Save session contract without minting a bearer URL.
+    /// The authenticated HTTP relay validates and streams the body later.
+    pub async fn create_relay(
+        &self,
+        request: CreateSinglePutSession,
+    ) -> Result<RelaySinglePutSession, SinglePutServiceError> {
+        validate_request(&request)?;
+        let deadline = Deadline::new(self.policy.operation_timeout);
+        let digest = idempotency_digest(&self.idempotency_secret, &request);
+        let persisted = self.persist_session(&request, &digest, deadline).await?;
+        // Preserve direct mode's near-expiry capability boundary on idempotent
+        // replay even though relay mode does not mint a presigned URL.
+        let _ = persisted.presign_expiry(self.policy.presign_minutes)?;
+        Ok(RelaySinglePutSession::new(
+            persisted.session_id,
+            persisted.expires_at,
+            persisted.idempotent_retry,
+        ))
     }
 
     /// Establishes or verifies the persisted fingerprint for the configured

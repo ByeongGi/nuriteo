@@ -1,7 +1,9 @@
 use std::env;
 use std::ffi::OsString;
 use std::fs;
+use std::pin::Pin;
 use std::str::FromStr;
+use std::task::Poll;
 use std::time::Duration;
 
 use aws_sdk_s3::config::{BehaviorVersion, Credentials, Region};
@@ -38,16 +40,17 @@ use nuriteo_server::project::{
 };
 use nuriteo_server::quota::EffectiveQuota;
 use nuriteo_server::save::{
-    CleanupWorkerPolicy, CreateMultipartSession, CreateProjectVersion, CreateSinglePutSession,
-    HistoricalReferenceKind, IdempotencyKey, IdempotencySecret, MultipartPartPlan,
-    MultipartPartReceipt, MultipartService, MultipartServiceError, MultipartServicePolicy,
-    MultipartSessionContext, MultipartStore, ProjectHistoryError, ProjectHistoryService,
-    ProjectHistoryServicePolicy, ProjectVersionError, ProjectVersionName, ProjectVersionPageLimit,
-    ProjectVersionService, ProjectVersionServicePolicy, PromoteHistoricalReference, PutPresigner,
-    RecoveryCheckpoint, SaveHttpError, SaveHttpPolicy, SaveHttpService, SinglePutService,
-    SinglePutServiceError, SinglePutServicePolicy, StagingVerifier, StagingVerifierPolicy,
-    VerificationError, VerifiedStagingBundle, VerifyStagingBundle, WorkingHeadCommitError,
-    WorkingHeadCommitPolicy, WorkingHeadCommitReconciliation, WorkingHeadCommitService,
+    CleanupWorkerPolicy, ContentServicePolicy, CreateMultipartSession, CreateProjectVersion,
+    CreateSinglePutSession, HistoricalReferenceKind, IdempotencyKey, IdempotencySecret,
+    MultipartPartPlan, MultipartPartReceipt, MultipartService, MultipartServiceError,
+    MultipartServicePolicy, MultipartSessionContext, MultipartStore, ProjectHistoryError,
+    ProjectHistoryService, ProjectHistoryServicePolicy, ProjectVersionError, ProjectVersionName,
+    ProjectVersionPageLimit, ProjectVersionService, ProjectVersionServicePolicy,
+    PromoteHistoricalReference, PutPresigner, RecoveryCheckpoint, SaveHttpError, SaveHttpPolicy,
+    SaveHttpService, SaveUploadTransport, SinglePutService, SinglePutServiceError,
+    SinglePutServicePolicy, StagingVerifier, StagingVerifierPolicy, VerificationError,
+    VerifiedStagingBundle, VerifyStagingBundle, WorkingHeadCommitError, WorkingHeadCommitPolicy,
+    WorkingHeadCommitReconciliation, WorkingHeadCommitService,
 };
 use nuriteo_server::setup::SetupStatusService;
 use nuriteo_server::workspace::StorageScopeId;
@@ -1146,6 +1149,398 @@ async fn save_http_is_authorized_restart_stable_and_commits_the_working_head() {
     for secret_value in [SECRET_KEY, "save-http-outsider-0001", "X-Amz-Signature"] {
         assert!(!serialized.contains(secret_value));
     }
+}
+
+#[tokio::test]
+#[ignore = "requires tests/fixtures/authenticated-upload-relay/run.sh"]
+async fn authenticated_upload_relay_streams_single_and_multipart_without_bearer_exposure() {
+    let pool = fixture_pool().await;
+    reset_and_seed(&pool).await;
+    let endpoint = env::var(S3_ENDPOINT_ENV).unwrap();
+    let ca_file = env::var(S3_CA_ENV).unwrap();
+    create_bucket(&endpoint, &ca_file).await;
+    let config = ObjectStorageConfig::load(
+        &FixtureEnvironment {
+            endpoint: endpoint.clone(),
+            ca_file,
+        },
+        &SystemFileReader,
+    )
+    .unwrap();
+    let store = S3ObjectStore::new(&config, OperationLimits::default())
+        .await
+        .unwrap();
+    for user in [USER, OUTSIDER] {
+        sqlx::query(
+            "INSERT INTO local_password_credentials (user_id,password_verifier) VALUES ($1::uuid,$2)",
+        )
+        .bind(user)
+        .bind(TEST_PASSWORD_HASH)
+        .execute(&mut *pool.acquire().await.unwrap())
+        .await
+        .unwrap();
+    }
+
+    let secret = IdempotencySecret::new([0x7b; 32]).unwrap();
+    let router = save_http_router_with_transport(
+        pool.clone(),
+        store.clone(),
+        secret.clone(),
+        SaveUploadTransport::Relay,
+    )
+    .await
+    .unwrap();
+    let owner = version_login(&router, "save@example.test").await;
+    let outsider = version_login(&router, "outside@example.test").await;
+
+    let content = b"private relay single\n";
+    let single_bundle = canonical_test_bundle(PROJECT_A, SCOPE, "single.txt", content);
+    let single_collection =
+        format!("/api/v1/workspaces/users/{USER}/projects/{PROJECT_A}/save-sessions");
+    let single_created = version_json_request(
+        &router,
+        &owner,
+        Method::POST,
+        &single_collection,
+        Some("\"project-v1\""),
+        Some("relay-single-create-0001"),
+        json!({
+            "physicalBytes": single_bundle.len(),
+            "logicalBytes": content.len(),
+            "fileCount": 1,
+            "sha256": BASE64.encode(Sha256::digest(&single_bundle)),
+            "parts": []
+        }),
+    )
+    .await;
+    assert_eq!(single_created.status(), StatusCode::CREATED);
+    let single_created = version_response_json(single_created).await;
+    let single_session = single_created["sessionId"].as_str().unwrap();
+    let single_capability = &single_created["upload"];
+    assert_eq!(single_capability["transport"], "relay");
+    assert_eq!(single_capability["method"], "PUT");
+    assert!(single_capability.get("url").is_none());
+    assert_eq!(single_capability["expectedBytes"], single_bundle.len());
+    assert_relay_projection_is_private(
+        &single_created,
+        &[
+            &endpoint, ACCESS_KEY, SECRET_KEY, SCOPE, "staging/", "X-Amz-",
+        ],
+    );
+
+    // Authorization, transport mode, metadata, and session state are all
+    // rejected before the request body can be polled.
+    let wrong_length = relay_put_request(
+        single_capability,
+        &owner,
+        Body::new(NeverReadBody),
+        Some((single_bundle.len() as u64).saturating_add(1)),
+        None,
+    );
+    assert_eq!(
+        router.clone().oneshot(wrong_length).await.unwrap().status(),
+        StatusCode::UNPROCESSABLE_ENTITY
+    );
+    let wrong_checksum = relay_put_request(
+        single_capability,
+        &owner,
+        Body::new(NeverReadBody),
+        None,
+        Some(BASE64.encode([0x99; 32])),
+    );
+    assert_eq!(
+        router
+            .clone()
+            .oneshot(wrong_checksum)
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::UNPROCESSABLE_ENTITY
+    );
+    let cross_actor = relay_put_request(
+        single_capability,
+        &outsider,
+        Body::new(NeverReadBody),
+        None,
+        None,
+    );
+    assert_eq!(
+        router.clone().oneshot(cross_actor).await.unwrap().status(),
+        StatusCode::NOT_FOUND
+    );
+    let direct_router = save_http_router_with_transport(
+        pool.clone(),
+        store.clone(),
+        secret.clone(),
+        SaveUploadTransport::Direct,
+    )
+    .await
+    .unwrap();
+    let direct_mode = relay_put_request(
+        single_capability,
+        &owner,
+        Body::new(NeverReadBody),
+        None,
+        None,
+    );
+    assert_eq!(
+        direct_router.oneshot(direct_mode).await.unwrap().status(),
+        StatusCode::NOT_FOUND
+    );
+
+    let uploaded = router
+        .clone()
+        .oneshot(relay_put_request(
+            single_capability,
+            &owner,
+            Body::from(single_bundle.clone()),
+            None,
+            None,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(uploaded.status(), StatusCode::NO_CONTENT);
+    let single_completed = version_json_request(
+        &router,
+        &owner,
+        Method::POST,
+        &format!("{single_collection}/{single_session}/complete"),
+        None,
+        None,
+        json!({"uploadMode":"single"}),
+    )
+    .await;
+    assert_eq!(single_completed.status(), StatusCode::OK);
+    assert_eq!(
+        download_current_content(&router, &owner, PROJECT_A, single_bundle.len()).await,
+        single_bundle
+    );
+    let terminal_retry = relay_put_request(
+        single_capability,
+        &owner,
+        Body::new(NeverReadBody),
+        None,
+        None,
+    );
+    assert_eq!(
+        router
+            .clone()
+            .oneshot(terminal_retry)
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::CONFLICT
+    );
+
+    let multipart_files = (0..5)
+        .map(|index| {
+            (
+                format!("part-{index:02}.bin"),
+                vec![0x4d_u8.saturating_add(index); 13 * 1024 * 1024],
+            )
+        })
+        .collect::<Vec<_>>();
+    let multipart_logical_bytes = multipart_files
+        .iter()
+        .map(|(_, body)| body.len())
+        .sum::<usize>();
+    let multipart_bundle = canonical_multi_file_bundle(PROJECT_B, SCOPE, &multipart_files);
+    let multipart_parts = multipart_bundle
+        .chunks(16 * 1024 * 1024)
+        .enumerate()
+        .map(|(index, body)| {
+            json!({
+                "partNumber": index + 1,
+                "expectedBytes": body.len(),
+                "sha256": BASE64.encode(Sha256::digest(body))
+            })
+        })
+        .collect::<Vec<_>>();
+    let multipart_collection =
+        format!("/api/v1/workspaces/users/{USER}/projects/{PROJECT_B}/save-sessions");
+    let multipart_created = version_json_request(
+        &router,
+        &owner,
+        Method::POST,
+        &multipart_collection,
+        Some("\"project-v1\""),
+        Some("relay-multipart-create-0001"),
+        json!({
+            "physicalBytes": multipart_bundle.len(),
+            "logicalBytes": multipart_logical_bytes,
+            "fileCount": multipart_files.len(),
+            "sha256": BASE64.encode(Sha256::digest(&multipart_bundle)),
+            "parts": multipart_parts
+        }),
+    )
+    .await;
+    assert_eq!(multipart_created.status(), StatusCode::CREATED);
+    let multipart_created = version_response_json(multipart_created).await;
+    assert!(multipart_created["upload"].is_null());
+    let multipart_session = multipart_created["sessionId"].as_str().unwrap();
+    let issue_uri = format!("{multipart_collection}/{multipart_session}/parts");
+    let capabilities = version_json_request(
+        &router,
+        &owner,
+        Method::POST,
+        &issue_uri,
+        None,
+        None,
+        json!({"parts": multipart_parts}),
+    )
+    .await;
+    assert_eq!(capabilities.status(), StatusCode::OK);
+    let capabilities = version_response_json(capabilities).await;
+    let capabilities = capabilities.as_array().unwrap();
+    assert_eq!(capabilities.len(), multipart_parts.len());
+    assert_relay_projection_is_private(
+        &Value::Array(capabilities.clone()),
+        &[
+            &endpoint, ACCESS_KEY, SECRET_KEY, SCOPE, "staging/", "X-Amz-",
+        ],
+    );
+    let mut wrong_part = capabilities[0].clone();
+    let wrong_part_path = wrong_part["path"]
+        .as_str()
+        .unwrap()
+        .rsplit_once('/')
+        .map(|(prefix, _)| format!("{prefix}/99"))
+        .unwrap();
+    wrong_part["path"] = Value::String(wrong_part_path);
+    assert_eq!(
+        router
+            .clone()
+            .oneshot(relay_put_request(
+                &wrong_part,
+                &owner,
+                Body::new(NeverReadBody),
+                None,
+                None,
+            ))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::NOT_FOUND
+    );
+    for (capability, body) in capabilities
+        .iter()
+        .zip(multipart_bundle.chunks(16 * 1024 * 1024))
+    {
+        assert_eq!(capability["transport"], "relay");
+        let response = router
+            .clone()
+            .oneshot(relay_put_request(
+                capability,
+                &owner,
+                Body::from(body.to_vec()),
+                None,
+                None,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::NO_CONTENT);
+    }
+    let multipart_completed = version_json_request(
+        &router,
+        &owner,
+        Method::POST,
+        &format!("{multipart_collection}/{multipart_session}/complete"),
+        None,
+        None,
+        json!({"uploadMode":"multipart"}),
+    )
+    .await;
+    assert_eq!(multipart_completed.status(), StatusCode::OK);
+    assert_eq!(
+        download_current_content(&router, &owner, PROJECT_B, multipart_bundle.len()).await,
+        multipart_bundle
+    );
+
+    let archived_content = b"archived relay\n";
+    let archived_bundle =
+        canonical_test_bundle(PROJECT_TIMEOUT, SCOPE, "archived.txt", archived_content);
+    let archived_collection =
+        format!("/api/v1/workspaces/users/{USER}/projects/{PROJECT_TIMEOUT}/save-sessions");
+    let archived = version_json_request(
+        &router,
+        &owner,
+        Method::POST,
+        &archived_collection,
+        Some("\"project-v1\""),
+        Some("relay-archived-create-0001"),
+        json!({
+            "physicalBytes": archived_bundle.len(),
+            "logicalBytes": archived_content.len(),
+            "fileCount": 1,
+            "sha256": BASE64.encode(Sha256::digest(&archived_bundle)),
+            "parts": []
+        }),
+    )
+    .await;
+    assert_eq!(archived.status(), StatusCode::CREATED);
+    let archived = version_response_json(archived).await;
+    sqlx::query(
+        "UPDATE projects SET state='archived',archived_at=transaction_timestamp(), \
+         updated_at=transaction_timestamp(),lock_version=lock_version+1 WHERE id=$1::uuid",
+    )
+    .bind(PROJECT_TIMEOUT)
+    .execute(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+    assert_eq!(
+        router
+            .clone()
+            .oneshot(relay_put_request(
+                &archived["upload"],
+                &owner,
+                Body::new(NeverReadBody),
+                None,
+                None,
+            ))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::CONFLICT
+    );
+
+    let expired_content = b"expired relay\n";
+    let expired_bundle = canonical_test_bundle(PROJECT_FAIL, SCOPE, "expired.txt", expired_content);
+    let expired_collection =
+        format!("/api/v1/workspaces/users/{USER}/projects/{PROJECT_FAIL}/save-sessions");
+    let expired = version_json_request(
+        &router,
+        &owner,
+        Method::POST,
+        &expired_collection,
+        Some("\"project-v1\""),
+        Some("relay-expired-create-0001"),
+        json!({
+            "physicalBytes": expired_bundle.len(),
+            "logicalBytes": expired_content.len(),
+            "fileCount": 1,
+            "sha256": BASE64.encode(Sha256::digest(&expired_bundle)),
+            "parts": []
+        }),
+    )
+    .await;
+    let expired = version_response_json(expired).await;
+    force_session_expiry(
+        &pool,
+        expired["sessionId"].as_str().unwrap(),
+        "created_at + interval '1 microsecond'",
+    )
+    .await;
+    let expired_retry = relay_put_request(
+        &expired["upload"],
+        &owner,
+        Body::new(NeverReadBody),
+        None,
+        None,
+    );
+    assert_eq!(
+        router.oneshot(expired_retry).await.unwrap().status(),
+        StatusCode::CONFLICT
+    );
 }
 
 #[tokio::test]
@@ -3438,6 +3833,47 @@ fn canonical_test_bundle(project: &str, scope: &str, path: &str, content: &[u8])
     archive
 }
 
+fn canonical_multi_file_bundle(project: &str, scope: &str, files: &[(String, Vec<u8>)]) -> Vec<u8> {
+    let logical_bytes = files
+        .iter()
+        .map(|(_, content)| content.len())
+        .sum::<usize>();
+    let manifest_files = files
+        .iter()
+        .map(|(path, content)| {
+            format!(
+                "{{\"path\":\"{path}\",\"kind\":\"binary\",\"mode\":\"0644\",\"sizeBytes\":{},\"sha256\":\"{}\"}}",
+                content.len(),
+                hex_digest(content)
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(",");
+    let manifest = format!(
+        "{{\"format\":\"project-bundle-v1\",\"schemaVersion\":1,\"project\":{{\"id\":\"{project}\",\"storageScopeId\":\"{scope}\"}},\"fileCount\":{},\"logicalBytes\":{logical_bytes},\"files\":[{manifest_files}]}}\n",
+        files.len()
+    );
+    let mut archive = test_tar_entry("manifest.json", b'0', 0o644, manifest.as_bytes());
+    for (index, (path, content)) in files.iter().enumerate() {
+        let sequence = format!("{index:08}");
+        let pax = test_pax_record(&format!("files/{path}"));
+        archive.extend(test_tar_entry(
+            &format!("PaxHeaders/{sequence}"),
+            b'x',
+            0o644,
+            pax.as_bytes(),
+        ));
+        archive.extend(test_tar_entry(
+            &format!("files/{sequence}"),
+            b'0',
+            0o644,
+            content,
+        ));
+    }
+    archive.extend([0_u8; 1024]);
+    archive
+}
+
 fn test_tar_entry(name: &str, kind: u8, mode: u64, content: &[u8]) -> Vec<u8> {
     let mut header = [0_u8; 512];
     header[..name.len()].copy_from_slice(name.as_bytes());
@@ -3740,12 +4176,23 @@ async fn save_http_service(
     store: S3ObjectStore,
     secret: IdempotencySecret,
 ) -> Result<(ProjectHttpService, SaveHttpService), SaveHttpError> {
+    save_http_service_with_transport(pool, store, secret, SaveUploadTransport::Direct).await
+}
+
+async fn save_http_service_with_transport(
+    pool: DatabasePool,
+    store: S3ObjectStore,
+    secret: IdempotencySecret,
+    transport: SaveUploadTransport,
+) -> Result<(ProjectHttpService, SaveHttpService), SaveHttpError> {
     let external_url = Url::parse(WEB_ORIGIN).unwrap();
-    let projects = ProjectHttpService::production(
+    let projects = ProjectHttpService::production_with_content(
         pool.clone(),
         &external_url,
         ProjectHttpPolicy::default(),
         SessionPolicy::default(),
+        store.clone(),
+        ContentServicePolicy::default(),
     )
     .unwrap();
     let save = SaveHttpService::production(
@@ -3754,11 +4201,38 @@ async fn save_http_service(
         store,
         secret,
         EffectiveQuota::limited(10 * 1024 * 1024 * 1024).unwrap(),
+        transport,
         SaveHttpPolicy::default(),
         CleanupWorkerPolicy::default(),
     )
     .await?;
     Ok((projects, save))
+}
+
+async fn save_http_router_with_transport(
+    pool: DatabasePool,
+    store: S3ObjectStore,
+    secret: IdempotencySecret,
+    transport: SaveUploadTransport,
+) -> Result<Router, SaveHttpError> {
+    let external_url = Url::parse(WEB_ORIGIN).unwrap();
+    let auth = AuthService::production(
+        pool.clone(),
+        &external_url,
+        AuthPolicy::default(),
+        SessionPolicy::default(),
+    )
+    .unwrap();
+    let (projects, save) = save_http_service_with_transport(pool, store, secret, transport).await?;
+    Ok(build_router_with_save_service(
+        HealthService::unconfigured(),
+        auth,
+        InvitationHttpService::unconfigured(),
+        OrganizationHttpService::unconfigured(),
+        projects,
+        save,
+        SetupStatusService::unconfigured(),
+    ))
 }
 
 async fn save_http_router(
@@ -3888,6 +4362,95 @@ async fn version_empty_request(
 
 async fn version_response_json(response: Response<Body>) -> Value {
     serde_json::from_slice(&to_bytes(response.into_body(), 256 * 1024).await.unwrap()).unwrap()
+}
+
+fn relay_put_request(
+    capability: &Value,
+    browser: &VersionBrowser,
+    body: Body,
+    length_override: Option<u64>,
+    checksum_override: Option<String>,
+) -> Request<Body> {
+    let mut builder = Request::builder()
+        .method(Method::PUT)
+        .uri(capability["path"].as_str().unwrap())
+        .header(ORIGIN, WEB_ORIGIN)
+        .header(COOKIE, &browser.cookie)
+        .header("x-csrf-token", &browser.csrf)
+        .header(
+            "content-length",
+            length_override.unwrap_or_else(|| capability["expectedBytes"].as_u64().unwrap()),
+        );
+    for header in capability["headers"].as_array().unwrap() {
+        let name = header["name"].as_str().unwrap();
+        let value = if name.eq_ignore_ascii_case("x-nuriteo-content-sha256") {
+            checksum_override
+                .as_deref()
+                .unwrap_or_else(|| header["value"].as_str().unwrap())
+        } else {
+            header["value"].as_str().unwrap()
+        };
+        builder = builder.header(name, value);
+    }
+    builder.body(body).unwrap()
+}
+
+async fn download_current_content(
+    router: &Router,
+    browser: &VersionBrowser,
+    project_id: &str,
+    maximum: usize,
+) -> Vec<u8> {
+    let descriptor_response = version_empty_request(
+        router,
+        browser,
+        &format!("/api/v1/workspaces/users/{USER}/projects/{project_id}/content"),
+    )
+    .await;
+    assert_eq!(descriptor_response.status(), StatusCode::OK);
+    let descriptor = version_response_json(descriptor_response).await;
+    let response = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::GET)
+                .uri(descriptor["downloadUrl"].as_str().unwrap())
+                .header(COOKIE, &browser.cookie)
+                .header(IF_MATCH, descriptor["etag"].as_str().unwrap())
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    to_bytes(response.into_body(), maximum + 1)
+        .await
+        .unwrap()
+        .to_vec()
+}
+
+fn assert_relay_projection_is_private(value: &Value, prohibited: &[&str]) {
+    let serialized = value.to_string();
+    for prohibited in prohibited {
+        assert!(
+            !serialized.contains(prohibited),
+            "relay projection leaked prohibited material"
+        );
+    }
+}
+
+struct NeverReadBody;
+
+impl http_body::Body for NeverReadBody {
+    type Data = Bytes;
+    type Error = std::convert::Infallible;
+
+    fn poll_frame(
+        self: Pin<&mut Self>,
+        _cx: &mut std::task::Context<'_>,
+    ) -> Poll<Option<Result<http_body::Frame<Self::Data>, Self::Error>>> {
+        panic!("relay request body was polled before validation completed")
+    }
 }
 
 async fn reset_and_seed(pool: &DatabasePool) {

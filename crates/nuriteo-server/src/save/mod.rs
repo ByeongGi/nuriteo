@@ -10,6 +10,7 @@ mod http_service;
 mod multipart_service;
 mod multipart_types;
 mod operations;
+mod relay;
 mod service;
 mod types;
 mod verifier;
@@ -31,7 +32,7 @@ pub use history::{
     ProjectHistoryService, ProjectHistoryServicePolicy, PromoteHistoricalReference,
     RecoveryCheckpoint,
 };
-pub use http_config::{SaveHttpConfig, SaveHttpConfigError};
+pub use http_config::{SaveHttpConfig, SaveHttpConfigError, SaveUploadTransport};
 pub(crate) use http_routes::openapi_router;
 pub use http_service::{SaveHttpError, SaveHttpPolicy, SaveHttpService};
 pub use multipart_service::{
@@ -48,7 +49,7 @@ pub use operations::{
 pub use service::{PutPresigner, SinglePutService, SinglePutServiceError, SinglePutServicePolicy};
 pub use types::{
     CreateSinglePutSession, IdempotencyKey, IdempotencySecret, ReconciliationState,
-    SinglePutSession, SinglePutUploadCapability,
+    RelaySinglePutSession, SinglePutSession, SinglePutUploadCapability,
 };
 pub use verifier::{
     StagingVerifier, StagingVerifierPolicy, VerificationError, VerifiedStagingBundle,

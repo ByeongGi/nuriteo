@@ -239,6 +239,7 @@ fn spawn_server(
         .env("NURITEO_S3_CA_FILE", s3_ca_path)
         .env("NURITEO_SAVE_IDEMPOTENCY_SECRET_FILE", save_secret_path)
         .env("NURITEO_SAVE_DEFAULT_QUOTA_BYTES", "10737418240")
+        .env("NURITEO_SAVE_UPLOAD_TRANSPORT", "direct")
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()

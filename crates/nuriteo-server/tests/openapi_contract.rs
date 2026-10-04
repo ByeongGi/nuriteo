@@ -75,6 +75,8 @@ async fn serves_the_versioned_document_from_the_application_router() {
             "/api/v1/workspaces/{owner_type}/{owner_id}/projects/{project_id}/save-sessions/{session_id}/parts",
             "/api/v1/workspaces/{owner_type}/{owner_id}/projects/{project_id}/save-sessions/{session_id}/parts/receipts",
             "/api/v1/workspaces/{owner_type}/{owner_id}/projects/{project_id}/save-sessions/{session_id}/reconcile",
+            "/api/v1/workspaces/{owner_type}/{owner_id}/projects/{project_id}/save-sessions/{session_id}/upload",
+            "/api/v1/workspaces/{owner_type}/{owner_id}/projects/{project_id}/save-sessions/{session_id}/upload/parts/{part_number}",
             "/api/v1/workspaces/{owner_type}/{owner_id}/projects/{project_id}/versions"
         ]
     );
@@ -377,10 +379,60 @@ fn save_http_exposes_bounded_restart_safe_workflow() {
     for header in ["If-Match", "Idempotency-Key", "Origin", "X-CSRF-Token"] {
         assert!(required_headers.contains(&header));
     }
+    let capabilities = document["components"]["schemas"]["UploadCapabilityView"]["oneOf"]
+        .as_array()
+        .unwrap();
+    assert_eq!(capabilities.len(), 2);
     assert_eq!(
-        document["components"]["schemas"]["UploadCapabilityView"]["required"],
-        json!(["method", "url", "headers", "expectedBytes"])
+        capabilities[0]["required"],
+        json!(["method", "url", "headers", "expectedBytes", "transport"])
     );
+    assert_eq!(
+        capabilities[0]["properties"]["transport"]["enum"],
+        json!(["direct"])
+    );
+    assert_eq!(
+        capabilities[1]["required"],
+        json!(["method", "path", "headers", "expectedBytes", "transport"])
+    );
+    assert_eq!(
+        capabilities[1]["properties"]["transport"]["enum"],
+        json!(["relay"])
+    );
+    assert!(capabilities[1]["properties"].get("url").is_none());
+    for path in [
+        "/api/v1/workspaces/{owner_type}/{owner_id}/projects/{project_id}/save-sessions/{session_id}/upload",
+        "/api/v1/workspaces/{owner_type}/{owner_id}/projects/{project_id}/save-sessions/{session_id}/upload/parts/{part_number}",
+    ] {
+        let operation = &document["paths"][path]["put"];
+        assert_eq!(
+            operation["requestBody"]["content"]
+                .as_object()
+                .unwrap()
+                .keys()
+                .collect::<Vec<_>>(),
+            vec!["application/vnd.nuriteo.project-bundle"]
+        );
+        assert_eq!(
+            operation["requestBody"]["content"]["application/vnd.nuriteo.project-bundle"]["schema"],
+            json!({"type": "string", "format": "binary"})
+        );
+        let headers = operation["parameters"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|parameter| parameter["in"] == "header")
+            .map(|parameter| parameter["name"].as_str().unwrap())
+            .collect::<Vec<_>>();
+        for required in [
+            "Content-Length",
+            "X-Nuriteo-Content-SHA256",
+            "Origin",
+            "X-CSRF-Token",
+        ] {
+            assert!(headers.contains(&required));
+        }
+    }
     assert_eq!(
         document["components"]["schemas"]["ReconcileView"]["oneOf"][0]["required"],
         json!(["bundleId", "projectVersion", "state"])

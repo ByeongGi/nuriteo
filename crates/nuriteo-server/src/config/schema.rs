@@ -353,6 +353,14 @@ pub const CONFIG_FIELDS: &[ConfigField] = &[
         "save.defaultQuotaBytes",
     ),
     field(
+        "NURITEO_SAVE_UPLOAD_TRANSPORT",
+        None,
+        "enum",
+        None,
+        "required relay or direct browser upload transport; no implicit fallback",
+        "save.uploadTransport",
+    ),
+    field(
         "NURITEO_INSTANCE_CA_FILE",
         None,
         "path",

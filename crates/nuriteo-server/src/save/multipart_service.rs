@@ -302,6 +302,20 @@ impl<S: MultipartStore> MultipartService<S> {
         Ok(result)
     }
 
+    /// Validates a relay capability batch against the persisted multipart
+    /// plan without creating or exposing an object-store bearer capability.
+    pub async fn validate_relay_parts(
+        &self,
+        context: MultipartSessionContext,
+        requested: Vec<MultipartPartPlan>,
+    ) -> Result<(), MultipartServiceError> {
+        validate_part_batch(&requested, self.policy.issue_batch_limit)?;
+        let deadline = Deadline::new(self.policy.operation_timeout);
+        self.load_active(context, &requested, false, deadline)
+            .await
+            .map(|_| ())
+    }
+
     pub async fn record_receipts(
         &self,
         context: MultipartSessionContext,
