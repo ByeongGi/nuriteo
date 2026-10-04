@@ -3,6 +3,8 @@ import { spawn } from "node:child_process";
 const DEFAULT_TERMINATION_GRACE_MS = 5_000;
 const DEFAULT_KILL_GRACE_MS = 2_000;
 
+// cleanupFailed is independent of the leader result: callers must reject it even
+// when the preserved leader status is zero and timedOut is false.
 export async function runBoundedProcess(options) {
   if (process.platform === "win32") {
     throw new Error("bounded process groups require a POSIX host");
@@ -30,33 +32,42 @@ export async function runBoundedProcess(options) {
   executionDeadline.cancel();
 
   if (first !== timeout) {
-    return { ...first, launchError, timedOut: false };
+    const cleanup = await cleanupProcessGroup(
+      child.pid,
+      options.terminationGraceMs ?? DEFAULT_TERMINATION_GRACE_MS,
+      options.killGraceMs ?? DEFAULT_KILL_GRACE_MS
+    );
+    return { ...first, ...cleanup, launchError, timedOut: false };
   }
 
-  signalProcessGroup(child.pid, "SIGTERM");
   const terminationGraceMs = options.terminationGraceMs ?? DEFAULT_TERMINATION_GRACE_MS;
-  if (await waitForProcessGroupExit(child.pid, terminationGraceMs)) {
-    const afterTermination = await waitForLeaderClose(closed, terminationGraceMs, timeout);
-    return { ...afterTermination, launchError, timedOut: true };
-  }
-
-  signalProcessGroup(child.pid, "SIGKILL");
   const killGraceMs = options.killGraceMs ?? DEFAULT_KILL_GRACE_MS;
-  const groupExited = await waitForProcessGroupExit(child.pid, killGraceMs);
-  const afterKill = await waitForLeaderClose(closed, killGraceMs, timeout);
-  if (groupExited) {
-    return { ...afterKill, launchError, timedOut: true };
-  }
+  const cleanup = await cleanupProcessGroup(child.pid, terminationGraceMs, killGraceMs);
+  const afterCleanup = await readSettledLeaderResult(closed);
 
-  child.unref();
-  return { launchError, signal: "SIGKILL", status: null, timedOut: true };
+  if (cleanup.cleanupFailed) child.unref();
+  return { ...afterCleanup, ...cleanup, launchError, timedOut: true };
 }
 
-async function waitForLeaderClose(closed, milliseconds, timeout) {
-  const closeDeadline = deadline(milliseconds, timeout);
-  const result = await Promise.race([closed, closeDeadline.promise]);
-  closeDeadline.cancel();
-  return result === timeout ? { signal: "SIGKILL", status: null } : result;
+async function cleanupProcessGroup(pid, terminationGraceMs, killGraceMs) {
+  if (pid === undefined || !processGroupExists(pid)) {
+    return { cleanupEscalated: false, cleanupFailed: false };
+  }
+
+  signalProcessGroup(pid, "SIGTERM");
+  if (await waitForProcessGroupExit(pid, terminationGraceMs)) {
+    return { cleanupEscalated: false, cleanupFailed: false };
+  }
+
+  signalProcessGroup(pid, "SIGKILL");
+  const groupExited = await waitForProcessGroupExit(pid, killGraceMs);
+  return { cleanupEscalated: true, cleanupFailed: !groupExited };
+}
+
+async function readSettledLeaderResult(closed) {
+  const pending = Symbol("pending");
+  const result = await Promise.race([closed, Promise.resolve(pending)]);
+  return result === pending ? { signal: null, status: null } : result;
 }
 
 async function waitForProcessGroupExit(pid, milliseconds) {

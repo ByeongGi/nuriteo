@@ -93,6 +93,10 @@ for (const phase of phases) {
     console.error(`[g2] FAIL ${phase.name}: could not start`);
     process.exit(1);
   }
+  if (result.cleanupFailed) {
+    console.error(`[g2] FAIL ${phase.name}: process group survived bounded TERM/KILL cleanup`);
+    process.exit(1);
+  }
   if (result.timedOut) {
     console.error(`[g2] FAIL ${phase.name}: timed out and terminated its process group`);
     process.exit(1);
