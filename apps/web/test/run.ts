@@ -16,6 +16,7 @@ await import("./preview-binding-route.test.ts");
 await import("./preview-service-worker.test.ts");
 await import("./retryable-lazy-feature.test.ts");
 await import("./runtime-adapter.test.ts");
+await import("./workspace-start.test.ts");
 await import("./runtime-assets.test.ts");
 await import("./server-client.test.ts");
 

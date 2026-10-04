@@ -13,6 +13,7 @@ import type {
   RuntimeWorkspaceState
 } from "../../../runtime/runtime-adapter.ts";
 import { resolveRuntimeAssetRevision } from "../../../runtime/runtime-assets.ts";
+import { awaitWorkspaceStart } from "../../../runtime/workspace-start.ts";
 import { createSubdomainPreviewBridge } from "../../../runtime/subdomain-preview-bridge.ts";
 import type { PreviewOriginConfiguration } from "../../../runtime/preview-origin-contract.ts";
 import type { SubdomainPreviewBridge } from "../../../runtime/subdomain-preview-bridge.ts";
@@ -114,11 +115,11 @@ export function ProjectIdeShell({ assetRevision, previewBridgeFactory, previewCo
             storageScopeId: project.storageScopeId
           }, { signal: manifestAbort.signal }))
         : Promise.resolve(undefined);
-      const [{ createRuntimeAdapter }, revision, savedContent] = await Promise.all([
-        runtimePromise,
-        revisionPromise,
-        savedContentPromise
-      ]);
+      const [{ createRuntimeAdapter }, revision, savedContent] = await awaitWorkspaceStart(manifestAbort, {
+        runtime: runtimePromise,
+        revision: revisionPromise,
+        content: savedContentPromise
+      });
       if (unmountedRef.current) return;
       setResumeStatus(source === "saved" ? "Verified. Materializing the saved Project…" : "Materializing the starter template…");
       const adapter = createRuntimeAdapter();

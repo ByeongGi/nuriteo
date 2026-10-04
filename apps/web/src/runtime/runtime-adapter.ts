@@ -141,6 +141,7 @@ export interface RuntimeBundleFile {
 export interface RuntimeWorkspacePort {
   materializeTemplate(template: RuntimeStarterTemplate): Promise<RuntimeWorkspaceState>;
   materializeBundle(files: readonly RuntimeBundleFile[]): Promise<RuntimeWorkspaceState>;
+  exportBundleFiles(): readonly RuntimeBundleFile[];
   getState(): RuntimeWorkspaceState;
   readText(path: string): string;
   writeText(path: string, content: string): RuntimeViewState;
@@ -182,6 +183,7 @@ interface ControllerLike {
   stopPreviewPort: PreviewWorkflowController["stopPreviewPort"];
   loadTemplate: PreviewWorkflowController["loadTemplate"];
   importProjectFiles: PreviewWorkflowController["importProjectFiles"];
+  exportProjectFiles: PreviewWorkflowController["exportProjectFiles"];
   exportTreeJson: PreviewWorkflowController["exportTreeJson"];
   dispose: PreviewWorkflowController["dispose"];
 }
@@ -345,21 +347,22 @@ export function createRuntimeAdapter(dependencies: RuntimeAdapterDependencies = 
         root: projectRoot(current.projectId)
       };
       try {
-        const materializedFiles = decodeRuntimeBundleFiles(files);
-        current.controller.importProjectFiles(materializedFiles, current.displayName);
-        const materialized = flattenTemplateTree(current.controller.exportTreeJson());
-        const verifiedPaths = new Set(materializedFiles.map((file) => file.path));
-        if (
-          materialized.files.length !== materializedFiles.length
-          || materialized.files.some((file) => !verifiedPaths.has(file.path))
-        ) throw new Error("Runtime materialization changed the verified Project file set.");
-        workspaceText = materialized.text;
+        const decoded = decodeRuntimeBundleFiles(files);
+        current.controller.importProjectFiles(decoded.files, current.displayName);
+        const exported = current.controller.exportProjectFiles();
+        verifyRuntimeBundleRoundTrip(decoded.files, exported);
+        workspaceText = decoded.text;
         workspaceState = {
           status: "ready",
           projectId: current.projectId,
           root: projectRoot(current.projectId),
-          files: materialized.files,
-          totalBytes: materialized.totalBytes,
+          files: decoded.files.map((file) => ({
+            path: file.path,
+            name: file.path.split("/").at(-1) ?? file.path,
+            kind: file.kind,
+            sizeBytes: file.bytes.byteLength
+          })),
+          totalBytes: decoded.totalBytes,
           errorCode: null
         };
         return copyWorkspaceState(workspaceState);
@@ -379,6 +382,14 @@ export function createRuntimeAdapter(dependencies: RuntimeAdapterDependencies = 
       }
     },
     getState() { return copyWorkspaceState(workspaceState); },
+    exportBundleFiles() {
+      const current = requireReady();
+      return current.controller.exportProjectFiles().map((file) => ({
+        path: file.path,
+        kind: file.kind,
+        bytes: Uint8Array.from(file.bytes)
+      }));
+    },
     readText(path) {
       requireReady();
       const content = workspaceText.get(path);
@@ -747,16 +758,25 @@ function copyWorkspaceState(value: RuntimeWorkspaceState): RuntimeWorkspaceState
 
 function decodeRuntimeBundleFiles(
   files: readonly RuntimeBundleFile[]
-): Array<{ path: string; content: string }> {
-  if (files.length < 1 || files.length > MAX_TEMPLATE_FILES) {
+): {
+  files: Array<{ path: string; kind: "text" | "binary"; bytes: Uint8Array }>;
+  text: Map<string, string>;
+  totalBytes: number;
+} {
+  if (files.length > MAX_TEMPLATE_FILES) {
     throw new Error("Saved Project file count is outside the Runtime limit.");
   }
   const strictDecoder = new TextDecoder("utf-8", { fatal: true });
-  const decoded: Array<{ path: string; content: string }> = [];
+  const decoded: Array<{ path: string; kind: "text" | "binary"; bytes: Uint8Array }> = [];
+  const text = new Map<string, string>();
   let totalBytes = 0;
   let previousPath: string | undefined;
   for (const file of files) {
-    if (file.kind !== "text" || file.bytes.byteLength > MAX_TEMPLATE_FILE_BYTES) {
+    if (
+      !isSafeRuntimeBundlePath(file.path)
+      || (file.kind !== "text" && file.kind !== "binary")
+      || file.bytes.byteLength > MAX_TEMPLATE_FILE_BYTES
+    ) {
       throw new Error("Saved Project contains an unsupported Runtime file.");
     }
     totalBytes += file.bytes.byteLength;
@@ -766,10 +786,46 @@ function decodeRuntimeBundleFiles(
     if (previousPath !== undefined && compareUtf8Paths(previousPath, file.path) >= 0) {
       throw new Error("Saved Project paths are not unique and ordered.");
     }
-    decoded.push({ path: file.path, content: strictDecoder.decode(file.bytes) });
+    const bytes = Uint8Array.from(file.bytes);
+    decoded.push({ path: file.path, kind: file.kind, bytes });
+    if (file.kind === "text") text.set(file.path, strictDecoder.decode(bytes));
     previousPath = file.path;
   }
-  return decoded;
+  return { files: decoded, text, totalBytes };
+}
+
+function verifyRuntimeBundleRoundTrip(
+  expected: readonly { path: string; kind: "text" | "binary"; bytes: Uint8Array }[],
+  actual: readonly { path: string; kind: "text" | "binary"; bytes: Uint8Array }[]
+): void {
+  if (actual.length !== expected.length) throw new Error("Runtime materialization changed the verified Project file set.");
+  for (const [index, file] of expected.entries()) {
+    const candidate = actual[index];
+    if (
+      candidate?.path !== file.path
+      || candidate.kind !== file.kind
+      || candidate.bytes.byteLength !== file.bytes.byteLength
+      || candidate.bytes.some((byte, byteIndex) => byte !== file.bytes[byteIndex])
+    ) throw new Error("Runtime materialization changed verified Project bytes.");
+  }
+}
+
+function isSafeRuntimeBundlePath(path: string): boolean {
+  if (
+    path.length === 0
+    || path !== path.normalize("NFC")
+    || path.startsWith("/")
+    || path.includes("\\")
+    || /[\u0000-\u001f\u007f]/u.test(path)
+    || new TextEncoder().encode(path).byteLength > 512
+  ) return false;
+  const segments = path.split("/");
+  return segments.length <= 32 && segments.every((segment) =>
+    segment.length > 0
+    && segment !== "."
+    && segment !== ".."
+    && new TextEncoder().encode(segment).byteLength <= 255
+  );
 }
 
 function compareUtf8Paths(left: string, right: string): number {

@@ -68,6 +68,8 @@ import type {
   PreviewWorkflowLastError,
   PreviewWorkflowListener,
   PreviewWorkflowPhase,
+  PreviewProjectFile,
+  PreviewProjectFileInput,
   PreviewWorkflowSnapshot,
   PreviewWorkflowUiDiagnostic,
   ProductBuildResult,
@@ -86,6 +88,8 @@ export type {
   PreviewWorkflowLastError,
   PreviewWorkflowListener,
   PreviewWorkflowPhase,
+  PreviewProjectFile,
+  PreviewProjectFileInput,
   PreviewWorkflowSnapshot,
   PreviewWorkflowUiDiagnostic
 } from "./controller-contracts.ts";
@@ -93,6 +97,7 @@ export type {
 interface PreviewWorkflowState {
   phase: PreviewWorkflowPhase;
   project: ProjectWorkspaceStore | null;
+  projectFiles: PreviewProjectFile[];
   editor: ProjectWorkspaceEditorBridge | null;
   workflow: ProductWorkflow | null;
   install: ProductInstallResult | null;
@@ -140,6 +145,7 @@ export function createPreviewWorkflowController(
   const state: PreviewWorkflowState = {
     phase: PHASES.idle,
     project: null,
+    projectFiles: [],
     editor: null,
     workflow: null,
     install: null,
@@ -294,6 +300,7 @@ export function createPreviewWorkflowController(
     state.health = null;
     state.source = null;
     state.project = null;
+    state.projectFiles = [];
     state.editor = null;
     state.workflow = null;
   }
@@ -344,6 +351,11 @@ export function createPreviewWorkflowController(
   ): PreviewWorkflowSnapshot {
     const label = loadOptions.label ?? "nuriteo";
     clearRuntime();
+    state.projectFiles = materialized.files.map((file) => ({
+      path: file.path,
+      kind: "text",
+      bytes: new TextEncoder().encode(file.data)
+    }));
     state.health = materialized.health;
     state.source = materialized.source;
     state.diagnostics = materialized.health.diagnostics.map((entry) => {
@@ -581,7 +593,7 @@ export function createPreviewWorkflowController(
   const importSnapshot = bootSnapshot;
 
   function importProjectFiles(
-    files: Array<{ path: string; content: string }>,
+    files: readonly PreviewProjectFileInput[],
     name = "cloud project"
   ): PreviewWorkflowSnapshot {
     const root = options.workspaceRoot ?? "/workspace/app";
@@ -590,17 +602,53 @@ export function createPreviewWorkflowController(
       root,
       metadata: { name }
     });
-    const materializedFiles = files.map((file) => ({
-      path: file.path.replace(/^\/+/, "").replace(/^workspace\/app\//, ""),
-      data: file.content
-    }));
+    const decoder = new TextDecoder("utf-8", { fatal: true });
+    const projectFiles = files.map((file): PreviewProjectFile => {
+      const path = file.path.replace(/^\/+/, "").replace(/^workspace\/app\//, "");
+      return "content" in file
+        ? { path, kind: "text", bytes: new TextEncoder().encode(file.content) }
+        : { path, kind: file.kind, bytes: Uint8Array.from(file.bytes) };
+    });
+    const materializedFiles = projectFiles
+      .filter((file) => file.kind === "text")
+      .map((file) => ({ path: file.path, data: decoder.decode(file.bytes) }));
     for (const file of materializedFiles) store.writeText(`${root}/${file.path}`, file.data);
     const overrides = packageOverrides();
     const health = createProjectHealthCheck({
       files: materializedFiles,
       ...(overrides ? { overrides } : {})
     });
-    return applyMaterializedProject({ store, files: materializedFiles, health, source: "snapshot" }, { label: name });
+    const snapshot = applyMaterializedProject({ store, files: materializedFiles, health, source: "snapshot" }, { label: name });
+    state.projectFiles = projectFiles;
+    if (state.workflow) {
+      for (const file of projectFiles) {
+        if (file.kind === "binary") {
+          state.workflow.workspace.writeBytes(`${state.workflow.projectRoot}/${file.path}`, file.bytes);
+        }
+      }
+    }
+    return snapshot;
+  }
+
+  function exportProjectFiles(): readonly PreviewProjectFile[] {
+    if (!state.project) throw new Error("No project to export");
+    if (!state.workflow) {
+      return state.projectFiles.map((file) => ({ ...file, bytes: Uint8Array.from(file.bytes) }));
+    }
+    const prefix = `${state.workflow.projectRoot.replace(/\/+$/u, "")}/`;
+    const admittedKind = new Map(state.projectFiles.map((file) => [file.path, file.kind]));
+    return [...state.workflow.workspace.files.entries()]
+      .filter(([path]) => path.startsWith(prefix))
+      .map(([path, value]): PreviewProjectFile => {
+        const relative = path.slice(prefix.length);
+        const previousKind = admittedKind.get(relative);
+        return {
+          path: relative,
+          kind: previousKind === "binary" ? "binary" : classifyProjectBytes(value),
+          bytes: Uint8Array.from(value)
+        };
+      })
+      .sort((left, right) => compareUtf8Path(left.path, right.path));
   }
 
   function exportZip(): Uint8Array {
@@ -774,7 +822,9 @@ export function createPreviewWorkflowController(
         const preview = workflow.preview(`${url.pathname}${url.search}`);
         const headers = preview.headers || { "content-type": "text/html; charset=utf-8" };
         const contentType = headers["content-type"] || headers["Content-Type"];
-        const body = maybeInjectPreviewErrorBridge(preview.body || "", contentType);
+        const body = preview.body instanceof Uint8Array
+          ? Uint8Array.from(preview.body).buffer
+          : maybeInjectPreviewErrorBridge(preview.body || "", contentType);
         return new Response(body, {
           status: preview.statusCode,
           headers
@@ -914,6 +964,11 @@ export function createPreviewWorkflowController(
     if (disposed || !state.editor) throw new Error("Preview editor is unavailable");
     state.editor.editText(path, data);
     state.editor.saveFile(path);
+    const relative = relativeProjectPath(path, state.project?.root || "");
+    const index = state.projectFiles.findIndex((file) => file.path === relative);
+    const next = { path: relative, kind: "text" as const, bytes: new TextEncoder().encode(data) };
+    if (index === -1) state.projectFiles.push(next);
+    else state.projectFiles[index] = next;
     return getSnapshot();
   }
 
@@ -1193,6 +1248,7 @@ export function createPreviewWorkflowController(
     importGitHub,
     importSnapshot,
     importProjectFiles,
+    exportProjectFiles,
     bootSnapshot,
     exportZip,
     exportSnapshot,
@@ -1240,6 +1296,27 @@ function relativeProjectPath(path: string, root: string): string {
 function pathBasename(path: string): string {
   const parts = path.split("/").filter(Boolean);
   return parts.at(-1) || path;
+}
+
+function classifyProjectBytes(bytes: Uint8Array): "text" | "binary" {
+  try {
+    new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    return "text";
+  } catch {
+    return "binary";
+  }
+}
+
+function compareUtf8Path(left: string, right: string): number {
+  const encoder = new TextEncoder();
+  const leftBytes = encoder.encode(left);
+  const rightBytes = encoder.encode(right);
+  const length = Math.min(leftBytes.byteLength, rightBytes.byteLength);
+  for (let index = 0; index < length; index += 1) {
+    const difference = (leftBytes[index] ?? 0) - (rightBytes[index] ?? 0);
+    if (difference !== 0) return difference;
+  }
+  return leftBytes.byteLength - rightBytes.byteLength;
 }
 
 function insertFileSystemTreeEntry(tree: FileSystemTree, relativePath: string, contents: string): void {

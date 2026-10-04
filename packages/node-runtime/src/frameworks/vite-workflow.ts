@@ -257,7 +257,7 @@ export interface ViteProductHmrSocket {
 export interface ViteProductPreviewResult {
   statusCode: number;
   headers?: Record<string, string>;
-  body: string;
+  body: string | Uint8Array;
 }
 
 export interface ViteProductHmrResult {
@@ -722,9 +722,9 @@ export class ViteProductWorkflow {
 
   applySourceEdit(path: string, data: string): ViteProductSourceEditResult {
     const requestPath = normalizeServedPath(path);
-    const before = this.preview("/").body;
+    const before = previewBodyText(this.preview("/").body);
     this.workspace.writeText(join(this.projectRoot, requestPath), data);
-    const after = this.preview("/").body;
+    const after = previewBodyText(this.preview("/").body);
     const update = createViteHmrUpdate(requestPath, hmrLabelForSource(requestPath, data));
     this.#hmrUpdates.push(update);
     this.#sendHmrUpdate(update);
@@ -807,7 +807,7 @@ export class ViteProductWorkflow {
     this.#devServerCliEntrypoint = cliEntrypoint;
     return {
       restarted: true,
-      previewAfterRestart: this.preview("/").body
+      previewAfterRestart: previewBodyText(this.preview("/").body)
     };
   }
 
@@ -859,7 +859,10 @@ export class ViteProductWorkflow {
   #readServedSource(requestPath: string): ViteProductPreviewResult | null {
     const workspacePath = this.#resolveServedWorkspacePath(requestPath);
     if (!workspacePath) return null;
-    const body = this.workspace.readText(workspacePath);
+    const contentType = contentTypeForPath(requestPath);
+    const bytes = this.workspace.readBytes(workspacePath);
+    const body = decodePreviewText(bytes);
+    if (body === null) return { statusCode: 200, headers: { "content-type": contentType }, body: bytes };
     const transformPath = workspacePath.slice(this.projectRoot.length) || requestPath;
     return {
       statusCode: 200,
@@ -871,7 +874,10 @@ export class ViteProductWorkflow {
   async #readServedSourceAsync(requestPath: string): Promise<ViteProductPreviewResult | null> {
     const workspacePath = this.#resolveServedWorkspacePath(requestPath);
     if (!workspacePath) return null;
-    const body = this.workspace.readText(workspacePath);
+    const contentType = contentTypeForPath(requestPath);
+    const bytes = this.workspace.readBytes(workspacePath);
+    const body = decodePreviewText(bytes);
+    if (body === null) return { statusCode: 200, headers: { "content-type": contentType }, body: bytes };
     const transformPath = workspacePath.slice(this.projectRoot.length) || requestPath;
     return {
       statusCode: 200,
@@ -1822,6 +1828,19 @@ function toRuntimeHttpResponse(preview: ViteProductPreviewResult): RuntimeHttpRe
     headers: preview.headers || { "content-type": "text/html; charset=utf-8" },
     body: preview.body
   };
+}
+
+function previewBodyText(body: ViteProductPreviewResult["body"]): string {
+  if (typeof body !== "string") throw new Error("Expected a text Preview response");
+  return body;
+}
+
+function decodePreviewText(bytes: Uint8Array): string | null {
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch {
+    return null;
+  }
 }
 
 function toResponseBody(body: RuntimeHttpResponse["body"]): BodyInit {

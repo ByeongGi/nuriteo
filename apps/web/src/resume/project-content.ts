@@ -207,7 +207,7 @@ function parseDescriptor(value: unknown, identity: ProjectContentIdentity): Proj
     || etag[1] !== String(descriptor.projectVersion)
     || !isPositiveSafeInteger(descriptor.physicalBytes)
     || !isNonNegativeSafeInteger(descriptor.logicalBytes)
-    || !isPositiveSafeInteger(descriptor.fileCount)
+    || !isNonNegativeSafeInteger(descriptor.fileCount)
     || descriptor.format !== "project-bundle-v1"
     || descriptor.downloadUrl !== `${contentPath(identity)}/${descriptor.bundleId}`
   ) {
@@ -367,21 +367,13 @@ class TarReader {
     if (this.#offset + TAR_BLOCK_BYTES > this.#bytes.byteLength) integrityFailure();
     const header = this.#bytes.subarray(this.#offset, this.#offset + TAR_BLOCK_BYTES);
     if (header.every((byte) => byte === 0)) return null;
-    const checksumHeader = Uint8Array.from(header);
-    checksumHeader.fill(0x20, 148, 156);
-    if (
-      readOctal(header.subarray(148, 156)) !== checksumHeader.reduce((sum, byte) => sum + byte, 0)
-      || readOctal(header.subarray(108, 116)) !== 0
-      || readOctal(header.subarray(116, 124)) !== 0
-      || readOctal(header.subarray(136, 148)) !== 0
-      || readString(header.subarray(257, 263)) !== "ustar"
-      || readString(header.subarray(263, 265)) !== "00"
-    ) integrityFailure();
     const name = readString(header.subarray(0, 100));
     const mode = readOctal(header.subarray(100, 108));
     const size = readOctal(header.subarray(124, 136));
     const typeCode = header[156];
     if (!isNonNegativeSafeInteger(size) || (typeCode !== 0x30 && typeCode !== 0x78)) integrityFailure();
+    const type = typeCode === 0x30 ? "0" : "x";
+    if (!equalBytes(header, canonicalTarHeader(name, size, mode, type))) integrityFailure();
     const contentOffset = this.#offset + TAR_BLOCK_BYTES;
     const paddedBytes = Math.ceil(size / TAR_BLOCK_BYTES) * TAR_BLOCK_BYTES;
     const nextOffset = checkedAdd(contentOffset, paddedBytes);
@@ -389,12 +381,12 @@ class TarReader {
     const content = this.#bytes.subarray(contentOffset, contentOffset + size);
     if (!this.#bytes.subarray(contentOffset + size, nextOffset).every((byte) => byte === 0)) integrityFailure();
     this.#offset = nextOffset;
-    return { bytes: content, mode, name, type: typeCode === 0x30 ? "0" : "x" };
+    return { bytes: content, mode, name, type };
   }
 
   finish(): void {
     if (
-      this.#bytes.byteLength - this.#offset < TAR_BLOCK_BYTES * 2
+      this.#bytes.byteLength - this.#offset !== TAR_BLOCK_BYTES * 2
       || !this.#bytes.subarray(this.#offset).every((byte) => byte === 0)
     ) integrityFailure();
   }
@@ -541,6 +533,40 @@ function readOctal(bytes: Uint8Array): number {
   const parsed = Number.parseInt(value, 8);
   if (!Number.isSafeInteger(parsed)) integrityFailure();
   return parsed;
+}
+
+function canonicalTarHeader(name: string, size: number, mode: number, type: "0" | "x"): Uint8Array {
+  const header = new Uint8Array(TAR_BLOCK_BYTES);
+  const nameBytes = encoder.encode(name);
+  if (nameBytes.byteLength > 100) integrityFailure();
+  header.set(nameBytes, 0);
+  writeCanonicalOctal(header, 100, 8, mode);
+  writeCanonicalOctal(header, 108, 8, 0);
+  writeCanonicalOctal(header, 116, 8, 0);
+  writeCanonicalOctal(header, 124, 12, size);
+  writeCanonicalOctal(header, 136, 12, 0);
+  header.fill(0x20, 148, 156);
+  header[156] = type.charCodeAt(0);
+  header.set(encoder.encode("ustar\0"), 257);
+  header.set(encoder.encode("00"), 263);
+  const checksum = header.reduce((sum, byte) => sum + byte, 0);
+  const digits = checksum.toString(8).padStart(6, "0");
+  if (digits.length !== 6) integrityFailure();
+  header.set(encoder.encode(digits), 148);
+  header[154] = 0;
+  header[155] = 0x20;
+  return header;
+}
+
+function writeCanonicalOctal(target: Uint8Array, offset: number, length: number, value: number): void {
+  const digits = value.toString(8).padStart(length - 1, "0");
+  if (digits.length !== length - 1) integrityFailure();
+  target.set(encoder.encode(digits), offset);
+  target[offset + length - 1] = 0;
+}
+
+function equalBytes(left: Uint8Array, right: Uint8Array): boolean {
+  return left.byteLength === right.byteLength && left.every((byte, index) => byte === right[index]);
 }
 
 function decodePaxPath(bytes: Uint8Array): string {

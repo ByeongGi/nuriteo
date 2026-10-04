@@ -12,6 +12,8 @@ export type {
   PreviewWorkflowLastError,
   PreviewWorkflowListener,
   PreviewWorkflowPhase,
+  PreviewProjectFile,
+  PreviewProjectFileInput,
   PreviewWorkflowSnapshot,
   PreviewWorkflowUiDiagnostic
 } from "./controller.ts";

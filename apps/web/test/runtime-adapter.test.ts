@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 
+import { validateProjectBundleV1Projection } from "../src/bundles/project-bundle-v1-validation.ts";
 import {
   RuntimeAdapterError,
   createRuntimeAdapter,
@@ -8,6 +9,8 @@ import {
 import type { LocalDraftWriterLease } from "../src/runtime/local-draft-writer.ts";
 import type {
   FileSystemTree,
+  PreviewProjectFile,
+  PreviewProjectFileInput,
   PreviewWorkflowControllerOptions,
   PreviewWorkflowEvent,
   PreviewWorkflowListener,
@@ -67,7 +70,7 @@ class FakeController {
   terminals = new Set<string>();
   savedText: { path: string; data: string } | null = null;
   recoveryKinds: string[] = [];
-  importedFiles: Array<{ path: string; content: string }> | null = null;
+  importedFiles: PreviewProjectFile[] | null = null;
   readonly cleanup: string[];
 
   constructor(cleanup: string[]) { this.cleanup = cleanup; }
@@ -116,13 +119,20 @@ class FakeController {
     this.current = snapshot({ phase: "template_loaded" });
     return this.current;
   }
-  importProjectFiles(files: Array<{ path: string; content: string }>): PreviewWorkflowSnapshot {
-    this.importedFiles = files.map((file) => ({ ...file }));
+  importProjectFiles(files: readonly PreviewProjectFileInput[]): PreviewWorkflowSnapshot {
+    this.importedFiles = files.map((file) => "content" in file
+      ? { path: file.path, kind: "text", bytes: new TextEncoder().encode(file.content) }
+      : { path: file.path, kind: file.kind, bytes: Uint8Array.from(file.bytes) });
     this.current = snapshot({ phase: "template_loaded" });
     return this.current;
   }
+  exportProjectFiles(): readonly PreviewProjectFile[] {
+    return (this.importedFiles ?? []).map((file) => ({ ...file, bytes: Uint8Array.from(file.bytes) }));
+  }
   exportTreeJson(): FileSystemTree {
-    if (this.importedFiles !== null) return treeForFiles(this.importedFiles);
+    if (this.importedFiles !== null) return treeForFiles(this.importedFiles
+      .filter((file) => file.kind === "text")
+      .map((file) => ({ path: file.path, content: new TextDecoder().decode(file.bytes) })));
     return {
       src: { directory: { "main.tsx": { file: { contents: "export default function App() {}\n" } } } },
       "package.json": { file: { contents: "{\"scripts\":{\"dev\":\"vite\"}}\n" } }
@@ -221,10 +231,28 @@ function readyWriterLease(): LocalDraftWriterLease {
   assert.equal(adapter.workspace.readText("src/main.tsx"), "export default function App() {}\n");
   const resumed = await adapter.workspace.materializeBundle([
     { path: "package.json", kind: "text", bytes: new TextEncoder().encode("{\"scripts\":{\"dev\":\"vite\"}}\n") },
+    { path: "public/logo.bin", kind: "binary", bytes: Uint8Array.of(0, 255, 1, 128) },
     { path: "src/main.tsx", kind: "text", bytes: new TextEncoder().encode("export default function App() { return 'resumed'; }\n") }
   ]);
   assert.equal(resumed.status, "ready");
-  assert.deepEqual(controllers[0]?.importedFiles?.map((file) => file.path), ["package.json", "src/main.tsx"]);
+  assert.deepEqual(resumed.files.map((file) => [file.path, file.kind]), [
+    ["package.json", "text"], ["public/logo.bin", "binary"], ["src/main.tsx", "text"]
+  ]);
+  assert.deepEqual(controllers[0]?.exportProjectFiles()[1]?.bytes, Uint8Array.of(0, 255, 1, 128));
+  assert.deepEqual(adapter.workspace.exportBundleFiles()[1]?.bytes, Uint8Array.of(0, 255, 1, 128));
+  controllers[0]?.importedFiles?.push({
+    path: "node_modules/generated/cache.js",
+    kind: "text",
+    bytes: new TextEncoder().encode("generated cache\n")
+  });
+  const currentProjection = adapter.workspace.exportBundleFiles();
+  assert.equal(currentProjection.some((file) => file.path.startsWith("node_modules/")), true);
+  const admitted = validateProjectBundleV1Projection({
+    projectId: draftProjectId,
+    storageScopeId: scopeId,
+    files: currentProjection.map((file) => ({ ...file, executable: false }))
+  });
+  assert.equal(admitted.files.some((file) => file.path.startsWith("node_modules/")), false);
   assert.match(adapter.workspace.readText("src/main.tsx"), /resumed/u);
   const previewState = await adapter.workflow.start();
   assert.equal(previewState.workflowPhase, "hmr_connected");
@@ -249,6 +277,16 @@ function readyWriterLease(): LocalDraftWriterLease {
   assert.deepEqual(cleanup, ["unsubscribe", "controller", "process", "supervisor"]);
   assert.equal(adapter.terminal.activeCount(), 0);
   assert.equal(adapter.getState().lifecycle, "disposed");
+}
+
+{
+  const { adapter } = harness();
+  await adapter.mount(mountInput);
+  const empty = await adapter.workspace.materializeBundle([]);
+  assert.equal(empty.status, "ready");
+  assert.deepEqual(empty.files, []);
+  assert.equal(empty.totalBytes, 0);
+  await adapter.dispose();
 }
 
 {

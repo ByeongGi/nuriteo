@@ -29,8 +29,11 @@ const etag = `"content-v7-${checksum}"`;
 
 await resumesVerifiedCurrentHead();
 await retriesOneStaleDescriptor();
+await resumesCanonicalEmptyBundle();
 await rejectsOuterChecksumMismatch();
 await rejectsInnerChecksumMismatchEvenWithMatchingOuterDigest();
+await rejectsNonCanonicalTarHeaderEvenWithMatchingOuterDigest();
+await rejectsNonZeroTarPaddingEvenWithMatchingOuterDigest();
 await rejectsUnsafeDescriptorAndLimit();
 
 async function resumesVerifiedCurrentHead(): Promise<void> {
@@ -71,6 +74,29 @@ async function retriesOneStaleDescriptor(): Promise<void> {
   assert.equal(downloads, 2);
 }
 
+async function resumesCanonicalEmptyBundle(): Promise<void> {
+  const emptyArchive = await writeValidatedProjectBundleV1(validateProjectBundleV1Projection({
+    projectId,
+    storageScopeId,
+    files: []
+  }));
+  const emptyChecksum = sha256Base64Url(emptyArchive.bytes);
+  const emptyDescriptor = descriptor({
+    checksum: emptyChecksum,
+    physicalBytes: emptyArchive.bytes.byteLength,
+    logicalBytes: 0,
+    fileCount: 0
+  });
+  const result = await resumeProjectContent(identity(), {
+    fetch: responseSequence(
+      descriptorResponse(emptyDescriptor),
+      bundleResponse(emptyArchive.bytes, emptyDescriptor)
+    )
+  });
+  assert.deepEqual(result.files, []);
+  assert.equal(result.descriptor.fileCount, 0);
+}
+
 async function rejectsOuterChecksumMismatch(): Promise<void> {
   const corrupted = Uint8Array.from(archive.bytes);
   corrupted[corrupted.byteLength - 1] = 1;
@@ -84,6 +110,28 @@ async function rejectsInnerChecksumMismatchEvenWithMatchingOuterDigest(): Promis
   const markerOffset = indexOf(corrupted, bytes("restored"));
   assert.ok(markerOffset >= 0);
   corrupted[markerOffset] = "R".charCodeAt(0);
+  const changed = descriptor({ checksum: sha256Base64Url(corrupted) });
+  await expectCode(() => resumeProjectContent(identity(), {
+    fetch: responseSequence(descriptorResponse(changed), bundleResponse(corrupted, changed))
+  }), "RESUME_INTEGRITY_FAILED");
+}
+
+async function rejectsNonCanonicalTarHeaderEvenWithMatchingOuterDigest(): Promise<void> {
+  const corrupted = Uint8Array.from(archive.bytes);
+  corrupted[157] = 1;
+  rewriteTarChecksum(corrupted, 0);
+  const changed = descriptor({ checksum: sha256Base64Url(corrupted) });
+  await expectCode(() => resumeProjectContent(identity(), {
+    fetch: responseSequence(descriptorResponse(changed), bundleResponse(corrupted, changed))
+  }), "RESUME_INTEGRITY_FAILED");
+}
+
+async function rejectsNonZeroTarPaddingEvenWithMatchingOuterDigest(): Promise<void> {
+  const corrupted = Uint8Array.from(archive.bytes);
+  const manifestBytes = bytes(`${JSON.stringify(archive.manifest)}\n`).byteLength;
+  const firstPaddingByte = 512 + manifestBytes;
+  assert.notEqual(firstPaddingByte % 512, 0);
+  corrupted[firstPaddingByte] = 1;
   const changed = descriptor({ checksum: sha256Base64Url(corrupted) });
   await expectCode(() => resumeProjectContent(identity(), {
     fetch: responseSequence(descriptorResponse(changed), bundleResponse(corrupted, changed))
@@ -151,4 +199,13 @@ function indexOf(haystack: Uint8Array, needle: Uint8Array): number {
     return offset;
   }
   return -1;
+}
+
+function rewriteTarChecksum(bytes: Uint8Array, headerOffset: number): void {
+  const header = bytes.subarray(headerOffset, headerOffset + 512);
+  header.fill(0x20, 148, 156);
+  const checksum = header.reduce((sum, byte) => sum + byte, 0);
+  header.set(new TextEncoder().encode(checksum.toString(8).padStart(6, "0")), 148);
+  header[154] = 0;
+  header[155] = 0x20;
 }

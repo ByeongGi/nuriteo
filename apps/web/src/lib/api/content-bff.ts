@@ -6,14 +6,21 @@ import { selectForwardedHeaders, validateInternalApiUrl } from "./server-policy.
 
 const MAX_RESUME_PHYSICAL_BYTES = 16 * 1024 * 1024;
 const RESPONSE_HEADER_TIMEOUT_MS = 15_000;
+const RESPONSE_BODY_IDLE_TIMEOUT_MS = 60_000;
+const RESPONSE_BODY_TOTAL_TIMEOUT_MS = 10 * 60_000;
 const CONTENT_ETAG = /^"content-v[1-9]\d*-[A-Za-z0-9_-]{43}"$/u;
 const REQUEST_ID = /^[A-Za-z0-9._:-]{1,128}$/u;
 
 export async function forwardProjectContentDownload(
   request: Request,
   path: `/api/v1/workspaces/${string}`,
-  headerTimeout: AbortSignal = AbortSignal.timeout(RESPONSE_HEADER_TIMEOUT_MS)
+  options: {
+    readonly bodyIdleTimeoutMs?: number;
+    readonly bodyTotalTimeout?: AbortSignal;
+    readonly headerTimeout?: AbortSignal;
+  } = {}
 ): Promise<Response> {
+  const headerTimeout = options.headerTimeout ?? AbortSignal.timeout(RESPONSE_HEADER_TIMEOUT_MS);
   const requestId = requestIdFor(request);
   const etag = request.headers.get("if-match");
   const origin = sameOrigin(request);
@@ -86,7 +93,10 @@ export async function forwardProjectContentDownload(
     return problem(502, "BFF_UPSTREAM_RESPONSE_REJECTED", requestId, path);
   }
 
-  const body = boundedStream(upstream.body, declaredLength, request.signal);
+  const body = boundedStream(upstream.body, declaredLength, request.signal, {
+    idleTimeoutMs: options.bodyIdleTimeoutMs ?? RESPONSE_BODY_IDLE_TIMEOUT_MS,
+    totalTimeout: options.bodyTotalTimeout ?? AbortSignal.timeout(RESPONSE_BODY_TOTAL_TIMEOUT_MS)
+  });
   return new Response(body, {
     headers: {
       "cache-control": "private, no-store",
@@ -104,27 +114,40 @@ export async function forwardProjectContentDownload(
 function boundedStream(
   source: ReadableStream<Uint8Array>,
   expectedBytes: number,
-  requestSignal: AbortSignal
+  requestSignal: AbortSignal,
+  deadline: { readonly idleTimeoutMs: number; readonly totalTimeout: AbortSignal }
 ): ReadableStream<Uint8Array> {
   const reader = source.getReader();
   let received = 0;
   let closed = false;
+  let idleTimer: ReturnType<typeof setTimeout> | undefined;
   const release = () => {
+    if (idleTimer !== undefined) clearTimeout(idleTimer);
     requestSignal.removeEventListener("abort", abortForRequest);
+    deadline.totalTimeout.removeEventListener("abort", abortForDeadline);
     reader.releaseLock();
   };
   let streamController: ReadableStreamDefaultController<Uint8Array> | undefined;
-  const abortForRequest = () => {
+  const abortStream = (reason: unknown) => {
     if (closed) return;
     closed = true;
-    void reader.cancel(requestSignal.reason).finally(release);
-    streamController?.error(new DOMException("The request was aborted.", "AbortError"));
+    void reader.cancel(reason).finally(release);
+    streamController?.error(new DOMException("The content stream deadline was exceeded.", "TimeoutError"));
+  };
+  const abortForRequest = () => abortStream(requestSignal.reason);
+  const abortForDeadline = () => abortStream(deadline.totalTimeout.reason);
+  const resetIdleTimer = () => {
+    if (idleTimer !== undefined) clearTimeout(idleTimer);
+    idleTimer = setTimeout(() => abortStream(new DOMException("The content stream was idle.", "TimeoutError")), deadline.idleTimeoutMs);
   };
   return new ReadableStream<Uint8Array>({
     start(controller) {
       streamController = controller;
       requestSignal.addEventListener("abort", abortForRequest, { once: true });
+      deadline.totalTimeout.addEventListener("abort", abortForDeadline, { once: true });
       if (requestSignal.aborted) abortForRequest();
+      else if (deadline.totalTimeout.aborted) abortForDeadline();
+      else resetIdleTimer();
     },
     async pull(controller) {
       try {
@@ -140,6 +163,7 @@ function boundedStream(
           }
           return;
         }
+        resetIdleTimer();
         received += result.value.byteLength;
         if (received > expectedBytes) {
           await reader.cancel();

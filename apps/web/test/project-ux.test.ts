@@ -107,10 +107,67 @@ async function testContentStreamForwarding() {
   } });
   const slowResponse = await forwardProjectContentDownload(new Request(`https://nuriteo.test${contentPath}`, {
     headers: { host: "nuriteo.test", "if-match": etag, origin: "https://nuriteo.test" }
-  }), contentPath, headerDeadline.signal);
+  }), contentPath, {
+    bodyIdleTimeoutMs: 100,
+    bodyTotalTimeout: AbortSignal.timeout(500),
+    headerTimeout: headerDeadline.signal
+  });
   headerDeadline.abort();
-  releaseSlowBody();
+  setTimeout(releaseSlowBody, 20);
   assert.deepEqual([...new Uint8Array(await slowResponse.arrayBuffer())], [4, 5]);
+
+  let stalledCancelled = false;
+  globalThis.fetch = async () => new Response(new ReadableStream<Uint8Array>({
+    start(controller) { controller.enqueue(Uint8Array.of(6)); },
+    cancel() { stalledCancelled = true; }
+  }), { headers: {
+    "content-length": "2",
+    "content-type": "application/octet-stream",
+    etag,
+    "x-content-type-options": "nosniff"
+  } });
+  const stalled = await forwardProjectContentDownload(new Request(`https://nuriteo.test${contentPath}`, {
+    headers: { host: "nuriteo.test", "if-match": etag, origin: "https://nuriteo.test" }
+  }), contentPath, { bodyIdleTimeoutMs: 5, bodyTotalTimeout: AbortSignal.timeout(500) });
+  await assert.rejects(stalled.arrayBuffer());
+  assert.equal(stalledCancelled, true, "an idle upstream body must be cancelled");
+
+  const totalDeadline = new AbortController();
+  let totalCancelled = false;
+  globalThis.fetch = async () => new Response(new ReadableStream<Uint8Array>({
+    start(controller) { controller.enqueue(Uint8Array.of(8)); },
+    cancel() { totalCancelled = true; }
+  }), { headers: {
+    "content-length": "2",
+    "content-type": "application/octet-stream",
+    etag,
+    "x-content-type-options": "nosniff"
+  } });
+  const totalBounded = await forwardProjectContentDownload(new Request(`https://nuriteo.test${contentPath}`, {
+    headers: { host: "nuriteo.test", "if-match": etag, origin: "https://nuriteo.test" }
+  }), contentPath, { bodyIdleTimeoutMs: 500, bodyTotalTimeout: totalDeadline.signal });
+  totalDeadline.abort();
+  await assert.rejects(totalBounded.arrayBuffer());
+  assert.equal(totalCancelled, true, "the total body deadline must cancel the upstream body");
+
+  const requestAbort = new AbortController();
+  let requestCancelled = false;
+  globalThis.fetch = async () => new Response(new ReadableStream<Uint8Array>({
+    start(controller) { controller.enqueue(Uint8Array.of(7)); },
+    cancel() { requestCancelled = true; }
+  }), { headers: {
+    "content-length": "2",
+    "content-type": "application/octet-stream",
+    etag,
+    "x-content-type-options": "nosniff"
+  } });
+  const aborted = await forwardProjectContentDownload(new Request(`https://nuriteo.test${contentPath}`, {
+    headers: { host: "nuriteo.test", "if-match": etag, origin: "https://nuriteo.test" },
+    signal: requestAbort.signal
+  }), contentPath, { bodyIdleTimeoutMs: 500, bodyTotalTimeout: AbortSignal.timeout(1_000) });
+  requestAbort.abort();
+  await assert.rejects(aborted.arrayBuffer());
+  assert.equal(requestCancelled, true, "a disconnected request must cancel the upstream body");
 
   globalThis.fetch = async () => new Response(Uint8Array.of(1), { headers: {
     "content-length": String(16 * 1024 * 1024 + 1),

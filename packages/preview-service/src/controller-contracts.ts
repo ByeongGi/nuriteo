@@ -41,6 +41,17 @@ export type FileSystemTree = {
   [name: string]: { file: { contents: string } } | { directory: FileSystemTree };
 };
 
+export interface PreviewProjectFile {
+  readonly path: string;
+  readonly kind: "text" | "binary";
+  readonly bytes: Uint8Array;
+}
+
+export type PreviewProjectFileInput = PreviewProjectFile | {
+  readonly path: string;
+  readonly content: string;
+};
+
 export interface PreviewChangeStatus {
   dirty: string[];
   untrackedHint: string;
@@ -131,7 +142,8 @@ export interface PreviewWorkflowController {
   importZipFile(file: Blob): Promise<PreviewWorkflowSnapshot>;
   importGitHub(url: string): Promise<PreviewWorkflowSnapshot>;
   importSnapshot(snapshot: Blob | Uint8Array | ArrayBuffer | string): Promise<PreviewWorkflowSnapshot>;
-  importProjectFiles(files: Array<{ path: string; content: string }>, name?: string): PreviewWorkflowSnapshot;
+  importProjectFiles(files: readonly PreviewProjectFileInput[], name?: string): PreviewWorkflowSnapshot;
+  exportProjectFiles(): readonly PreviewProjectFile[];
   bootSnapshot(snapshot: Blob | Uint8Array | ArrayBuffer | string): Promise<PreviewWorkflowSnapshot>;
   exportZip(): Uint8Array;
   exportSnapshot(): Uint8Array;

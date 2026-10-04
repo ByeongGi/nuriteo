@@ -25,6 +25,7 @@ const archive = await writeValidatedProjectBundleV1(validateProjectBundleV1Proje
   storageScopeId: scopeId,
   files: [
     { path: "package.json", kind: "text", executable: false, bytes: encode("{\"scripts\":{\"dev\":\"vite\"},\"dependencies\":{\"vite\":\"6.1.0\"}}\n") },
+    { path: "public/logo.bin", kind: "binary", executable: false, bytes: Uint8Array.of(0, 255, 1, 128) },
     { path: "src/main.tsx", kind: "text", executable: false, bytes: encode("document.querySelector('#app')!.textContent = 'resumed in a new context';\n") }
   ]
 }));
@@ -111,6 +112,8 @@ try {
     await page.getByRole("button", { name: "src/main.tsx" }).click();
     await page.getByLabel("Editor for src/main.tsx").waitFor();
     assert.match(await page.getByLabel("Editor for src/main.tsx").inputValue(), /resumed in a new context/u);
+    await page.getByRole("button", { name: "public/logo.bin" }).click();
+    await page.getByText("Binary and unsupported files cannot be opened in the text editor.").waitFor();
     assert.equal(await page.getByText(/failed integrity verification/u).count(), 0);
     await newContext.close();
   } finally {
