@@ -15,7 +15,8 @@ use aws_smithy_http_client::tls::rustls_provider::CryptoMode;
 use aws_smithy_http_client::tls::{self, TlsContext, TrustStore};
 use nuriteo_server::config::{Environment, SystemFileReader};
 use nuriteo_server::database::{
-    DatabasePool, DatabasePoolConfig, DatabaseTlsConfig, MigrationOptions, run_embedded_migrations,
+    DatabasePool, DatabasePoolConfig, DatabaseTlsConfig, MigrationOptions, MigrationReport,
+    run_embedded_migrations,
 };
 use nuriteo_server::object_storage::{ObjectStorageConfig, OperationLimits, S3ObjectStore};
 use reqwest::header::{CONTENT_TYPE, COOKIE, ETAG, IF_MATCH, LOCATION, ORIGIN, SET_COOKIE};
@@ -54,10 +55,7 @@ async fn collaboration_gate_runs_actual_core_postgres_and_rustfs_journey() {
     )
     .await
     .unwrap();
-    assert_eq!(
-        migration.known_migrations, 15,
-        "G2 requires clean migrations 1..15"
-    );
+    assert_current_embedded_migrations(migration);
     assert_eq!(active_administrator_count(&pool).await, 0);
 
     let address = available_address();
@@ -462,10 +460,7 @@ async fn project_runtime_gate_runs_actual_core_and_browser_journey() {
     )
     .await
     .unwrap();
-    assert_eq!(
-        migration.known_migrations, 18,
-        "GATE-003 requires migrations 1..18"
-    );
+    assert_current_embedded_migrations(migration);
 
     let core_address = available_address();
     let web_address = available_address();
@@ -1146,4 +1141,18 @@ async fn create_bucket(client: &aws_sdk_s3::Client) {
 
 fn required_env(name: &str) -> String {
     env::var(name).unwrap_or_else(|_| panic!("{name} must be set by the GATE-002 fixture"))
+}
+
+fn assert_current_embedded_migrations(report: MigrationReport) {
+    let expected_latest = i64::try_from(report.known_migrations)
+        .expect("embedded migration count must fit in a PostgreSQL migration version");
+    assert!(
+        expected_latest > 0,
+        "the embedded migration set must not be empty"
+    );
+    assert_eq!(
+        report.latest_version,
+        Some(expected_latest),
+        "the gate requires the complete, contiguous embedded migration set"
+    );
 }
