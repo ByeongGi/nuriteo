@@ -411,6 +411,38 @@ CREATE TABLE gc_candidates (
 CREATE INDEX gc_candidates_work_idx
     ON gc_candidates (status, eligible_at, retry_at, object_key);
 
+CREATE OR REPLACE FUNCTION reject_bundle_persistence_truncate()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    RAISE EXCEPTION 'Bundle persistence relations cannot be truncated'
+        USING ERRCODE = '23514';
+END;
+$$;
+
+CREATE TRIGGER bundles_no_truncate
+    BEFORE TRUNCATE ON bundles
+    FOR EACH STATEMENT EXECUTE FUNCTION reject_bundle_persistence_truncate();
+CREATE TRIGGER save_sessions_no_truncate
+    BEFORE TRUNCATE ON save_sessions
+    FOR EACH STATEMENT EXECUTE FUNCTION reject_bundle_persistence_truncate();
+CREATE TRIGGER storage_reservations_no_truncate
+    BEFORE TRUNCATE ON storage_reservations
+    FOR EACH STATEMENT EXECUTE FUNCTION reject_bundle_persistence_truncate();
+CREATE TRIGGER project_bundle_admissions_no_truncate
+    BEFORE TRUNCATE ON project_bundle_admissions
+    FOR EACH STATEMENT EXECUTE FUNCTION reject_bundle_persistence_truncate();
+CREATE TRIGGER multipart_parts_no_truncate
+    BEFORE TRUNCATE ON multipart_parts
+    FOR EACH STATEMENT EXECUTE FUNCTION reject_bundle_persistence_truncate();
+CREATE TRIGGER project_bundle_refs_no_truncate
+    BEFORE TRUNCATE ON project_bundle_refs
+    FOR EACH STATEMENT EXECUTE FUNCTION reject_bundle_persistence_truncate();
+CREATE TRIGGER gc_candidates_no_truncate
+    BEFORE TRUNCATE ON gc_candidates
+    FOR EACH STATEMENT EXECUTE FUNCTION reject_bundle_persistence_truncate();
+
 -- Object lifecycle operations share an advisory namespace. Hash collisions may
 -- serialize unrelated keys but cannot weaken reference/deletion safety.
 CREATE OR REPLACE FUNCTION lock_bundle_object_lifecycle(candidate_object_key text)
@@ -454,6 +486,42 @@ BEGIN
         PERFORM pg_advisory_xact_lock(1347566129, second_lock_key);
         PERFORM pg_advisory_xact_lock(1347566129, first_lock_key);
     END IF;
+END;
+$$;
+
+-- Canonical Save commit/admission/head operations lock in one global order:
+-- Project row first, then the current/incoming object advisory keys sorted.
+-- GC never takes a Project row lock, so it cannot form the reverse edge.
+CREATE OR REPLACE FUNCTION lock_project_bundle_transition(
+    candidate_project_id uuid,
+    candidate_bundle_id uuid
+)
+RETURNS void
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    current_object_key text;
+    incoming_object_key text;
+BEGIN
+    SELECT bundle.object_key INTO incoming_object_key
+    FROM bundles bundle
+    WHERE bundle.id = candidate_bundle_id;
+    IF incoming_object_key IS NULL THEN
+        RAISE EXCEPTION 'incoming Bundle is unavailable'
+            USING ERRCODE = '23514';
+    END IF;
+
+    SELECT current_bundle.object_key INTO current_object_key
+    FROM projects project
+    LEFT JOIN bundles current_bundle ON current_bundle.id = project.working_head_bundle_id
+    WHERE project.id = candidate_project_id
+    FOR UPDATE OF project;
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'Project is unavailable for Bundle transition'
+            USING ERRCODE = '23514';
+    END IF;
+
+    PERFORM lock_bundle_object_lifecycles(current_object_key, incoming_object_key);
 END;
 $$;
 
@@ -508,9 +576,6 @@ CREATE OR REPLACE FUNCTION enforce_project_working_head()
 RETURNS trigger
 LANGUAGE plpgsql
 AS $$
-DECLARE
-    old_object_key text;
-    new_object_key text;
 BEGIN
     IF NEW.working_head_bundle_id IS NOT NULL
         AND (
@@ -518,15 +583,7 @@ BEGIN
             OR NEW.working_head_bundle_id IS DISTINCT FROM OLD.working_head_bundle_id
         )
     THEN
-        IF TG_OP = 'UPDATE' AND OLD.working_head_bundle_id IS NOT NULL THEN
-            SELECT bundle.object_key INTO old_object_key
-            FROM bundles bundle
-            WHERE bundle.id = OLD.working_head_bundle_id;
-        END IF;
-        SELECT bundle.object_key INTO new_object_key
-        FROM bundles bundle
-        WHERE bundle.id = NEW.working_head_bundle_id;
-        PERFORM lock_bundle_object_lifecycles(old_object_key, new_object_key);
+        PERFORM lock_project_bundle_transition(NEW.id, NEW.working_head_bundle_id);
         PERFORM assert_bundle_referenceable(
             NEW.id,
             NEW.storage_scope_id,
@@ -702,7 +759,7 @@ BEGIN
             RAISE EXCEPTION 'committed Bundle does not match the verified Save payload'
                 USING ERRCODE = '23514';
         END IF;
-        PERFORM lock_bundle_object_lifecycle(committed_bundle.object_key);
+        PERFORM lock_project_bundle_transition(NEW.project_id, NEW.committed_bundle_id);
         IF EXISTS (
             SELECT 1 FROM gc_candidates candidate
             WHERE candidate.object_key = committed_bundle.object_key
@@ -747,7 +804,7 @@ BEGIN
         RAISE EXCEPTION 'Project Bundle admission requires a verified Bundle'
             USING ERRCODE = '23514';
     END IF;
-    PERFORM lock_bundle_object_lifecycle(candidate_object_key);
+    PERFORM lock_project_bundle_transition(NEW.project_id, NEW.bundle_id);
     IF EXISTS (
         SELECT 1 FROM gc_candidates candidate
         WHERE candidate.object_key = candidate_object_key
