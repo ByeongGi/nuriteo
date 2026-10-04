@@ -71,8 +71,9 @@ impl CleanupWorkerPolicy {
             .checked_add(u32::from(concurrency) - 1)
             .and_then(|rounded| rounded.checked_div(u32::from(concurrency)))
             .ok_or(CleanupError::InvalidPolicy)?;
-        let minimum_lease = item_timeout
-            .checked_add(operation_timeout)
+        let minimum_lease = operation_timeout
+            .checked_mul(2)
+            .and_then(|database_time| item_timeout.checked_add(database_time))
             .and_then(|per_wave| per_wave.checked_mul(processing_waves))
             .and_then(|batch| batch.checked_add(SQL_TIMEOUT_MARGIN))
             .ok_or(CleanupError::InvalidPolicy)?;
@@ -101,7 +102,7 @@ impl Default for CleanupWorkerPolicy {
             max_attempts: 8,
             operation_timeout: Duration::from_secs(5),
             item_timeout: Duration::from_secs(30),
-            lease_duration: Duration::from_secs(5 * 60),
+            lease_duration: Duration::from_secs(6 * 60),
             poll_interval: Duration::from_secs(2),
             base_backoff: Duration::from_secs(2),
             max_backoff: Duration::from_secs(15 * 60),
@@ -197,6 +198,7 @@ pub struct CleanupTarget {
     kind: CleanupKind,
     object_key: ObjectKey,
     multipart_upload_id: Option<String>,
+    prior_absence: bool,
 }
 
 impl fmt::Debug for CleanupTarget {
@@ -215,7 +217,7 @@ impl fmt::Debug for CleanupTarget {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum CleanupKind {
-    SingleDelete,
+    ObjectDelete,
     MultipartAbort,
     MultipartReconcile,
     MultipartCompleteReconcile,
@@ -234,7 +236,7 @@ pub enum CleanupBackendOutcome {
 impl CleanupBackend for S3ObjectStore {
     async fn cleanup(&self, target: CleanupTarget) -> CleanupBackendOutcome {
         let result = match target.kind {
-            CleanupKind::SingleDelete => self.delete(&target.object_key).await,
+            CleanupKind::ObjectDelete => self.delete(&target.object_key).await,
             CleanupKind::MultipartAbort => {
                 let Some(upload_id) = target.multipart_upload_id else {
                     return CleanupBackendOutcome::Permanent;
@@ -259,18 +261,29 @@ impl CleanupBackend for S3ObjectStore {
                 return match self.head(&target.object_key).await {
                     Ok(_) => CleanupBackendOutcome::Completed,
                     Err(error) if error.kind() == ObjectStoreErrorKind::NotFound => {
+                        if !target.prior_absence {
+                            return CleanupBackendOutcome::Missing;
+                        }
                         let Some(upload_id) = target.multipart_upload_id else {
                             return CleanupBackendOutcome::Permanent;
                         };
                         match classify_backend_result(
                             self.abort_multipart(&MultipartUpload {
-                                key: target.object_key,
+                                key: target.object_key.clone(),
                                 upload_id,
                             })
                             .await,
                         ) {
                             CleanupBackendOutcome::Completed | CleanupBackendOutcome::Missing => {
-                                CleanupBackendOutcome::Missing
+                                match self.head(&target.object_key).await {
+                                    Ok(_) => CleanupBackendOutcome::Completed,
+                                    Err(error)
+                                        if error.kind() == ObjectStoreErrorKind::NotFound =>
+                                    {
+                                        CleanupBackendOutcome::Missing
+                                    }
+                                    Err(error) => classify_backend_result(Err(error)),
+                                }
                             }
                             outcome => outcome,
                         }
@@ -601,6 +614,7 @@ impl<B: CleanupBackend> CleanupService<B> {
             .map_err(map_sql_error)?;
         configure_transaction(&mut transaction, deadline).await?;
         let Some((scope_id, project_id)) = identity else {
+            assert_active_claim(&mut transaction, owner, job.session_id, deadline).await?;
             commit(transaction, deadline).await?;
             return Ok(ReconcilePreparation::Proceed);
         };
@@ -611,6 +625,7 @@ impl<B: CleanupBackend> CleanupService<B> {
             .await?
             .map_err(map_sql_error)?;
         if !scope_locked {
+            assert_active_claim(&mut transaction, owner, job.session_id, deadline).await?;
             commit(transaction, deadline).await?;
             return Ok(ReconcilePreparation::Proceed);
         }
@@ -625,6 +640,7 @@ impl<B: CleanupBackend> CleanupService<B> {
             .rows_affected()
             == 1;
         if !project_locked {
+            assert_active_claim(&mut transaction, owner, job.session_id, deadline).await?;
             commit(transaction, deadline).await?;
             return Ok(ReconcilePreparation::Proceed);
         }
@@ -688,6 +704,7 @@ impl<B: CleanupBackend> CleanupService<B> {
         {
             return Err(CleanupError::InvariantViolation);
         }
+        assert_active_claim(&mut transaction, owner, job.session_id, deadline).await?;
         commit(transaction, deadline).await?;
         Ok(ReconcilePreparation::Proceed)
     }
@@ -764,7 +781,7 @@ impl<B: CleanupBackend> CleanupService<B> {
         job: ClaimedJob,
         outcome: CleanupBackendOutcome,
     ) -> Result<(), CleanupError> {
-        if job.target.kind == CleanupKind::SingleDelete {
+        if job.target.kind == CleanupKind::ObjectDelete {
             return self
                 .update_claim(
                     owner,
@@ -835,7 +852,7 @@ impl<B: CleanupBackend> CleanupService<B> {
                             )
                             .await?;
                         }
-                        CleanupKind::SingleDelete => {
+                        CleanupKind::ObjectDelete => {
                             return Err(CleanupError::InvariantViolation);
                         }
                     }
@@ -843,7 +860,13 @@ impl<B: CleanupBackend> CleanupService<B> {
             }
         }
 
-        complete_claim(&mut transaction, owner, job.session_id, deadline).await?;
+        if job.target.kind == CleanupKind::MultipartCompleteReconcile
+            && outcome == CleanupBackendOutcome::Completed
+        {
+            delete_claim(&mut transaction, owner, job.session_id, deadline).await?;
+        } else {
+            complete_claim(&mut transaction, owner, job.session_id, deadline).await?;
+        }
         commit(transaction, deadline).await
     }
 
@@ -1178,7 +1201,7 @@ impl<B: CleanupBackend> CleanupService<B> {
                          retry_at=transaction_timestamp(),last_failure_category='unknown',\
                          lease_owner=NULL,lease_expires_at=NULL,updated_at=transaction_timestamp() \
                      WHERE save_session_id = ANY($1::text[]::uuid[]) AND status='running' \
-                       AND lease_owner=$2::uuid",
+                       AND lease_owner=$2::uuid AND lease_expires_at > clock_timestamp()",
                 )
                 .bind(session_ids)
                 .bind(owner.to_string())
@@ -1205,7 +1228,8 @@ impl<B: CleanupBackend> CleanupService<B> {
         let sql = format!(
             "UPDATE save_cleanup_jobs SET {assignment},lease_owner=NULL,lease_expires_at=NULL,\
              updated_at=transaction_timestamp() WHERE save_session_id=$1::uuid \
-             AND status='running' AND lease_owner=$2::uuid"
+             AND status='running' AND lease_owner=$2::uuid \
+             AND lease_expires_at > clock_timestamp()"
         );
         let mut query = sqlx::query(sqlx::AssertSqlSafe(sql))
             .bind(session_id.to_string())
@@ -1286,7 +1310,7 @@ fn decode_job(
 ) -> Result<ClaimedJob, CleanupError> {
     let session_id = parse_session_id(&row.0)?;
     let kind = match row.1.as_str() {
-        "single_delete" if row.3.is_none() => CleanupKind::SingleDelete,
+        "object_delete" if row.3.is_none() => CleanupKind::ObjectDelete,
         "multipart_abort" if row.3.is_some() => CleanupKind::MultipartAbort,
         "multipart_reconcile" if row.3.is_none() => CleanupKind::MultipartReconcile,
         "multipart_complete_reconcile" if row.3.is_some() => {
@@ -1307,6 +1331,7 @@ fn decode_job(
             kind,
             object_key,
             multipart_upload_id: row.3,
+            prior_absence: row.5 == 1,
         },
         attempts: row.4,
         absence_count: row.5,
@@ -1436,7 +1461,8 @@ async fn complete_claim(
                 "UPDATE save_cleanup_jobs SET status='completed',\
                      completed_at=transaction_timestamp(),last_failure_category=NULL,\
                      lease_owner=NULL,lease_expires_at=NULL,updated_at=transaction_timestamp() \
-                 WHERE save_session_id=$1::uuid AND status='running' AND lease_owner=$2::uuid",
+                 WHERE save_session_id=$1::uuid AND status='running' AND lease_owner=$2::uuid \
+                   AND lease_expires_at > clock_timestamp()",
             )
             .bind(session_id.to_string())
             .bind(owner.to_string())
@@ -1446,6 +1472,32 @@ async fn complete_claim(
         .map_err(map_sql_error)?
         .rows_affected();
     if affected == 1 {
+        Ok(())
+    } else {
+        Err(CleanupError::InvariantViolation)
+    }
+}
+
+async fn assert_active_claim(
+    transaction: &mut Transaction<'_, Postgres>,
+    owner: Uuid,
+    session_id: SaveSessionId,
+    deadline: Deadline,
+) -> Result<(), CleanupError> {
+    let active = deadline
+        .run(
+            sqlx::query_scalar::<_, bool>(
+                "SELECT EXISTS(SELECT 1 FROM save_cleanup_jobs \
+                 WHERE save_session_id=$1::uuid AND status='running' \
+                   AND lease_owner=$2::uuid AND lease_expires_at > clock_timestamp())",
+            )
+            .bind(session_id.to_string())
+            .bind(owner.to_string())
+            .fetch_one(&mut **transaction),
+        )
+        .await?
+        .map_err(map_sql_error)?;
+    if active {
         Ok(())
     } else {
         Err(CleanupError::InvariantViolation)
@@ -1462,7 +1514,8 @@ async fn delete_claim(
         .run(
             sqlx::query(
                 "DELETE FROM save_cleanup_jobs WHERE save_session_id=$1::uuid \
-                 AND status='running' AND lease_owner=$2::uuid",
+                 AND status='running' AND lease_owner=$2::uuid \
+                   AND lease_expires_at > clock_timestamp()",
             )
             .bind(session_id.to_string())
             .bind(owner.to_string())
@@ -1564,6 +1617,34 @@ mod tests {
             ),
             Err(CleanupError::InvalidPolicy)
         );
+        assert_eq!(
+            CleanupWorkerPolicy::new(
+                32,
+                4,
+                8,
+                Duration::from_secs(5),
+                Duration::from_secs(30),
+                Duration::from_secs(5 * 60),
+                Duration::from_secs(1),
+                Duration::from_secs(1),
+                Duration::from_secs(2)
+            ),
+            Err(CleanupError::InvalidPolicy)
+        );
+        assert!(
+            CleanupWorkerPolicy::new(
+                32,
+                4,
+                8,
+                Duration::from_secs(5),
+                Duration::from_secs(30),
+                Duration::from_secs(321),
+                Duration::from_secs(1),
+                Duration::from_secs(1),
+                Duration::from_secs(2)
+            )
+            .is_ok()
+        );
         let policy = CleanupWorkerPolicy::default();
         for attempts in [1, 2, 8, i16::MAX] {
             let delay = retry_delay(policy, SaveSessionId::new(), attempts).unwrap();
@@ -1578,6 +1659,7 @@ mod tests {
             kind: CleanupKind::MultipartAbort,
             object_key: ObjectKey::parse("staging/private/key").unwrap(),
             multipart_upload_id: Some("private-upload-identity".to_owned()),
+            prior_absence: false,
         };
         let rendered = format!("{target:?}");
         assert!(!rendered.contains("staging/private/key"));

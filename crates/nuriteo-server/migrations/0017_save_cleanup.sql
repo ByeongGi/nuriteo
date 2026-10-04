@@ -22,7 +22,7 @@ CREATE TABLE save_cleanup_jobs (
     updated_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT save_cleanup_jobs_kind_check
         CHECK (cleanup_kind IN (
-            'single_delete', 'multipart_abort', 'multipart_reconcile',
+            'object_delete', 'multipart_abort', 'multipart_reconcile',
             'multipart_complete_reconcile'
         )),
     CONSTRAINT save_cleanup_jobs_object_key_check
@@ -34,7 +34,7 @@ CREATE TABLE save_cleanup_jobs (
         ),
     CONSTRAINT save_cleanup_jobs_multipart_shape_check
         CHECK (
-            (cleanup_kind = 'single_delete' AND multipart_upload_id IS NULL)
+            (cleanup_kind = 'object_delete' AND multipart_upload_id IS NULL)
             OR (
                 cleanup_kind = 'multipart_abort'
                 AND multipart_upload_id IS NOT NULL
@@ -310,21 +310,32 @@ CREATE OR REPLACE FUNCTION enqueue_terminal_save_cleanup()
 RETURNS trigger
 LANGUAGE plpgsql
 AS $$
+DECLARE
+    completed_multipart boolean;
 BEGIN
     IF OLD.state IN ('created', 'uploading', 'verifying')
         AND NEW.state IN ('aborted', 'expired', 'failed')
     THEN
+        SELECT EXISTS (
+            SELECT 1 FROM multipart_lifecycles lifecycle
+            WHERE lifecycle.save_session_id=NEW.id
+              AND lifecycle.create_status='ready'
+              AND lifecycle.complete_status='completed'
+        ) INTO completed_multipart;
         INSERT INTO save_cleanup_jobs (
             save_session_id, cleanup_kind, object_key, multipart_upload_id, eligible_at
         ) VALUES (
             NEW.id,
             CASE
-                WHEN NEW.upload_mode = 'single' THEN 'single_delete'
+                WHEN NEW.upload_mode = 'single' OR completed_multipart THEN 'object_delete'
                 WHEN NEW.multipart_upload_id IS NOT NULL THEN 'multipart_abort'
                 ELSE 'multipart_reconcile'
             END,
             NEW.staging_object_key,
-            NEW.multipart_upload_id,
+            CASE
+                WHEN NEW.upload_mode = 'single' OR completed_multipart THEN NULL
+                ELSE NEW.multipart_upload_id
+            END,
             CASE
                 -- A presigned single-PUT bearer cannot be revoked. Deleting
                 -- before it expires would allow a late upload to recreate an
@@ -354,18 +365,24 @@ INSERT INTO save_cleanup_jobs (
 SELECT
     session.id,
     CASE
-        WHEN session.upload_mode = 'single' THEN 'single_delete'
+        WHEN session.upload_mode = 'single'
+             OR lifecycle.complete_status='completed' THEN 'object_delete'
         WHEN session.multipart_upload_id IS NOT NULL THEN 'multipart_abort'
         ELSE 'multipart_reconcile'
     END,
     session.staging_object_key,
-    session.multipart_upload_id,
+    CASE
+        WHEN session.upload_mode = 'single'
+             OR lifecycle.complete_status='completed' THEN NULL
+        ELSE session.multipart_upload_id
+    END,
     CASE
         WHEN session.upload_mode = 'single'
             THEN GREATEST(session.expires_at, transaction_timestamp())
         ELSE transaction_timestamp()
     END
 FROM save_sessions session
+LEFT JOIN multipart_lifecycles lifecycle ON lifecycle.save_session_id=session.id
 WHERE session.state IN ('aborted', 'expired', 'failed')
 ON CONFLICT (save_session_id) DO NOTHING;
 

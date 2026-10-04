@@ -46,6 +46,7 @@ const RACED_PROJECT: &str = "0199ee6c-c777-7000-8000-000000009025";
 const KNOWN_PROJECT: &str = "0199ee6c-c777-7000-8000-000000009026";
 const COMPLETE_PROJECT: &str = "0199ee6c-c777-7000-8000-000000009027";
 const COMPLETE_MISSING_PROJECT: &str = "0199ee6c-c777-7000-8000-000000009028";
+const NORMAL_COMPLETE_PROJECT: &str = "0199ee6c-c777-7000-8000-000000009029";
 
 struct FixtureEnvironment {
     endpoint: String,
@@ -86,7 +87,7 @@ async fn cleanup_is_bounded_persisted_redacted_and_restart_safe() {
         4,
         Duration::from_secs(10),
         Duration::from_millis(500),
-        Duration::from_secs(5 * 60),
+        Duration::from_secs(9 * 60),
         Duration::from_millis(20),
         Duration::from_millis(100),
         Duration::from_millis(200),
@@ -224,7 +225,7 @@ async fn cleanup_is_bounded_persisted_redacted_and_restart_safe() {
         "INSERT INTO save_cleanup_jobs \
          (save_session_id,cleanup_kind,object_key,status,attempts,eligible_at,lease_owner,\
           lease_expires_at,started_at,created_at,updated_at) VALUES \
-         ($1::uuid,'single_delete','staging/crashed-final-attempt','running',4,\
+         ($1::uuid,'object_delete','staging/crashed-final-attempt','running',4,\
           transaction_timestamp()-interval '20 seconds',\
           '0199ee6c-c777-7000-8000-000000009998'::uuid,\
           transaction_timestamp()-interval '1 second',\
@@ -248,6 +249,66 @@ async fn cleanup_is_bounded_persisted_redacted_and_restart_safe() {
     .await
     .unwrap();
     assert_eq!(wrong_owner.rows_affected(), 0);
+    let stale_owner_session = SaveSessionId::new();
+    let original_owner = "0199ee6c-c777-7000-8000-000000009095";
+    let replacement_owner = "0199ee6c-c777-7000-8000-000000009096";
+    sqlx::query(
+        "INSERT INTO save_cleanup_jobs \
+         (save_session_id,cleanup_kind,object_key,status,attempts,eligible_at,lease_owner,\
+          lease_expires_at,started_at,created_at,updated_at) VALUES \
+         ($1::uuid,'object_delete','staging/stale-owner','running',1,\
+          transaction_timestamp()-interval '20 seconds',$2::uuid,\
+          transaction_timestamp()-interval '1 second',\
+          transaction_timestamp()-interval '10 seconds',\
+          transaction_timestamp()-interval '20 seconds',transaction_timestamp()-interval '1 second')",
+    )
+    .bind(stale_owner_session.to_string())
+    .bind(original_owner)
+    .execute(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+    sqlx::query(
+        "UPDATE save_cleanup_jobs SET attempts=attempts+1,lease_owner=$2::uuid,\
+                lease_expires_at=transaction_timestamp()+interval '1 minute',\
+                updated_at=transaction_timestamp() \
+         WHERE save_session_id=$1::uuid AND status='running' \
+           AND lease_expires_at <= transaction_timestamp()",
+    )
+    .bind(stale_owner_session.to_string())
+    .bind(replacement_owner)
+    .execute(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+    let stale_finalize = sqlx::query(
+        "UPDATE save_cleanup_jobs SET status='completed',completed_at=transaction_timestamp(),\
+                lease_owner=NULL,lease_expires_at=NULL,updated_at=transaction_timestamp() \
+         WHERE save_session_id=$1::uuid AND status='running' AND lease_owner=$2::uuid \
+           AND lease_expires_at > clock_timestamp()",
+    )
+    .bind(stale_owner_session.to_string())
+    .bind(original_owner)
+    .execute(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+    assert_eq!(stale_finalize.rows_affected(), 0);
+    sqlx::query(
+        "UPDATE save_cleanup_jobs SET status='completed',completed_at=transaction_timestamp(),\
+                lease_owner=NULL,lease_expires_at=NULL,updated_at=transaction_timestamp() \
+         WHERE save_session_id=$1::uuid AND status='running' AND lease_owner=$2::uuid \
+           AND lease_expires_at > clock_timestamp()",
+    )
+    .bind(stale_owner_session.to_string())
+    .bind(replacement_owner)
+    .execute(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+    sqlx::query(
+        "DELETE FROM save_cleanup_jobs WHERE save_session_id=$1::uuid AND status='completed'",
+    )
+    .bind(stale_owner_session.to_string())
+    .execute(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
     assert!(
         sqlx::query(
             "UPDATE save_cleanup_jobs SET object_key='staging/tampered' \
@@ -344,7 +405,7 @@ async fn cleanup_is_bounded_persisted_redacted_and_restart_safe() {
         4,
         Duration::from_secs(10),
         Duration::from_millis(500),
-        Duration::from_secs(5 * 60),
+        Duration::from_secs(9 * 60),
         Duration::from_millis(20),
         Duration::from_secs(30),
         Duration::from_secs(30),
@@ -511,7 +572,7 @@ async fn cleanup_is_bounded_persisted_redacted_and_restart_safe() {
         4,
         Duration::from_secs(10),
         Duration::from_millis(500),
-        Duration::from_secs(5 * 60),
+        Duration::from_secs(9 * 60),
         Duration::from_millis(20),
         Duration::from_secs(30),
         Duration::from_secs(30),
@@ -526,9 +587,10 @@ async fn cleanup_is_bounded_persisted_redacted_and_restart_safe() {
             .await,
         WorkerShutdown::Drained
     );
-    // A late object appears after persisted first absence. The next poll must
-    // observe it and recover completion instead of declaring cleanup done.
-    put_backend_object(&endpoint, &ca_file, &missing_key).await;
+    assert!(backend_multipart_exists(&endpoint, &ca_file, &missing_key, &missing_upload_id).await);
+    // The first HEAD miss must not abort the upload. Completion wins after the
+    // persisted observation; the next poll must recover the resulting object.
+    complete_backend_multipart(&endpoint, &ca_file, &missing_key, &missing_upload_id).await;
     sqlx::query(
         "UPDATE save_cleanup_jobs SET retry_at=transaction_timestamp(),\
                 updated_at=transaction_timestamp() \
@@ -539,7 +601,8 @@ async fn cleanup_is_bounded_persisted_redacted_and_restart_safe() {
     .await
     .unwrap();
     let complete_worker = service.start_worker();
-    wait_for_count(&pool, "completed", 107).await;
+    wait_for_job_absent(&pool, complete_session).await;
+    wait_for_job_absent(&pool, missing_session).await;
     assert_eq!(
         complete_worker.shutdown(Duration::from_secs(3)).await,
         WorkerShutdown::Drained
@@ -573,6 +636,103 @@ async fn cleanup_is_bounded_persisted_redacted_and_restart_safe() {
     assert_eq!(
         recovered,
         ("verifying".to_owned(), "completed".to_owned(), 1)
+    );
+
+    // A recovered completed upload owns an object, not an incomplete upload.
+    // The reconcile guard must vacate its PK slot so a later abort can enqueue
+    // exact object deletion rather than a multipart abort.
+    assert_eq!(
+        service
+            .abort(AbortSaveSession {
+                storage_scope_id: scope(),
+                project_id: ProjectId::from_str(COMPLETE_PROJECT).unwrap(),
+                session_id: complete_session,
+                actor_user_id: UserId::from_str(USER).unwrap(),
+            })
+            .await
+            .unwrap(),
+        AbortSaveSessionResult::Aborted
+    );
+    let recovered_cleanup: (String, Option<String>) = sqlx::query_as(
+        "SELECT cleanup_kind,multipart_upload_id FROM save_cleanup_jobs \
+         WHERE save_session_id=$1::uuid",
+    )
+    .bind(complete_session.to_string())
+    .fetch_one(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+    assert_eq!(recovered_cleanup, ("object_delete".to_owned(), None));
+    let recovered_cleanup_worker = service.start_worker();
+    wait_for_count(&pool, "completed", 106).await;
+    assert_eq!(
+        recovered_cleanup_worker
+            .shutdown(Duration::from_secs(3))
+            .await,
+        WorkerShutdown::Drained
+    );
+    assert!(
+        store
+            .head(&ObjectKey::parse(complete_key.clone()).unwrap())
+            .await
+            .is_err()
+    );
+
+    // The ordinary successful complete path has the same terminal ownership:
+    // its finalized staging object is deleted, never treated as an upload ID.
+    let normal_session = insert_session(&pool, NORMAL_COMPLETE_PROJECT, "multipart", None).await;
+    let normal_key = session_key(&pool, normal_session).await;
+    let normal_upload_id = create_backend_multipart(&endpoint, &ca_file, &normal_key).await;
+    attach_upload_fixture(&pool, normal_session, &normal_upload_id).await;
+    mark_complete_started_fixture(&pool, normal_session).await;
+    complete_backend_multipart(&endpoint, &ca_file, &normal_key, &normal_upload_id).await;
+    mark_complete_finished_fixture(&pool, normal_session).await;
+    assert_eq!(
+        service
+            .abort(AbortSaveSession {
+                storage_scope_id: scope(),
+                project_id: ProjectId::from_str(NORMAL_COMPLETE_PROJECT).unwrap(),
+                session_id: normal_session,
+                actor_user_id: UserId::from_str(USER).unwrap(),
+            })
+            .await
+            .unwrap(),
+        AbortSaveSessionResult::Aborted
+    );
+    let normal_cleanup: (String, Option<String>) = sqlx::query_as(
+        "SELECT cleanup_kind,multipart_upload_id FROM save_cleanup_jobs \
+         WHERE save_session_id=$1::uuid",
+    )
+    .bind(normal_session.to_string())
+    .fetch_one(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+    assert_eq!(normal_cleanup, ("object_delete".to_owned(), None));
+    let normal_worker = service.start_worker();
+    wait_for_count(&pool, "completed", 107).await;
+    assert_eq!(
+        normal_worker.shutdown(Duration::from_secs(3)).await,
+        WorkerShutdown::Drained
+    );
+    let normal_final: (String, String, i64) = sqlx::query_as(
+        "SELECT session.state,lifecycle.complete_status,\
+                (SELECT COUNT(*) FROM storage_reservations reservation \
+                 WHERE reservation.save_session_id=session.id) \
+         FROM save_sessions session JOIN multipart_lifecycles lifecycle \
+           ON lifecycle.save_session_id=session.id WHERE session.id=$1::uuid",
+    )
+    .bind(normal_session.to_string())
+    .fetch_one(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+    assert_eq!(
+        normal_final,
+        ("aborted".to_owned(), "completed".to_owned(), 0)
+    );
+    assert!(
+        store
+            .head(&ObjectKey::parse(normal_key).unwrap())
+            .await
+            .is_err()
     );
 
     // Abort, expiry, Project deletion and the worker race on one session. The
@@ -796,16 +956,7 @@ async fn assert_multipart_finalized(
 }
 
 async fn mark_complete_unknown_fixture(pool: &DatabasePool, session: SaveSessionId) {
-    sqlx::query(
-        "UPDATE multipart_lifecycles SET complete_status='completing',\
-                updated_at=transaction_timestamp() \
-         WHERE save_session_id=$1::uuid AND create_status='ready' \
-           AND complete_status='pending'",
-    )
-    .bind(session.to_string())
-    .execute(&mut *pool.acquire().await.unwrap())
-    .await
-    .unwrap();
+    mark_complete_started_fixture(pool, session).await;
     sqlx::query(
         "UPDATE multipart_lifecycles SET complete_status='unknown',\
                 updated_at=transaction_timestamp() \
@@ -816,6 +967,43 @@ async fn mark_complete_unknown_fixture(pool: &DatabasePool, session: SaveSession
     .execute(&mut *pool.acquire().await.unwrap())
     .await
     .unwrap();
+}
+
+async fn mark_complete_started_fixture(pool: &DatabasePool, session: SaveSessionId) {
+    sqlx::query(
+        "UPDATE multipart_lifecycles SET complete_status='completing',\
+                updated_at=transaction_timestamp() \
+         WHERE save_session_id=$1::uuid AND create_status='ready' \
+           AND complete_status='pending'",
+    )
+    .bind(session.to_string())
+    .execute(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+}
+
+async fn mark_complete_finished_fixture(pool: &DatabasePool, session: SaveSessionId) {
+    let mut connection = pool.acquire().await.unwrap();
+    let mut transaction = connection.begin().await.unwrap();
+    sqlx::query(
+        "UPDATE save_sessions SET state='verifying',updated_at=transaction_timestamp() \
+         WHERE id=$1::uuid AND state='uploading'",
+    )
+    .bind(session.to_string())
+    .execute(&mut *transaction)
+    .await
+    .unwrap();
+    sqlx::query(
+        "UPDATE multipart_lifecycles SET complete_status='completed',\
+                updated_at=transaction_timestamp() \
+         WHERE save_session_id=$1::uuid AND create_status='ready' \
+           AND complete_status='completing'",
+    )
+    .bind(session.to_string())
+    .execute(&mut *transaction)
+    .await
+    .unwrap();
+    transaction.commit().await.unwrap();
 }
 
 async fn force_expired(pool: &DatabasePool, session: SaveSessionId) {
@@ -878,7 +1066,7 @@ async fn prove_forward_backfill(pool: &DatabasePool) {
     .fetch_one(&mut *connection)
     .await
     .unwrap();
-    assert_eq!(backfilled, ("single_delete".to_owned(), true));
+    assert_eq!(backfilled, ("object_delete".to_owned(), true));
     sqlx::query(
         "UPDATE save_cleanup_jobs SET status='running',attempts=1,\
                 lease_owner='0199ee6c-c777-7000-8000-000000009091'::uuid,\
@@ -1007,7 +1195,8 @@ async fn reset_and_seed(pool: &DatabasePool) {
              ('0199ee6c-c777-7000-8000-000000009025','0199ee6c-c777-7000-8000-000000009001','0199ee6c-c777-7000-8000-000000009010','raced','Raced'),\
              ('0199ee6c-c777-7000-8000-000000009026','0199ee6c-c777-7000-8000-000000009001','0199ee6c-c777-7000-8000-000000009010','known','Known'),\
              ('0199ee6c-c777-7000-8000-000000009027','0199ee6c-c777-7000-8000-000000009001','0199ee6c-c777-7000-8000-000000009010','complete','Complete'),\
-             ('0199ee6c-c777-7000-8000-000000009028','0199ee6c-c777-7000-8000-000000009001','0199ee6c-c777-7000-8000-000000009010','complete-missing','Complete Missing')",
+             ('0199ee6c-c777-7000-8000-000000009028','0199ee6c-c777-7000-8000-000000009001','0199ee6c-c777-7000-8000-000000009010','complete-missing','Complete Missing'),\
+             ('0199ee6c-c777-7000-8000-000000009029','0199ee6c-c777-7000-8000-000000009001','0199ee6c-c777-7000-8000-000000009010','normal-complete','Normal Complete')",
         )
         .await
         .unwrap();
@@ -1079,6 +1268,40 @@ async fn abort_backend_multipart(endpoint: &str, ca_file: &str, key: &str, uploa
         .bucket(BUCKET)
         .key(key)
         .upload_id(upload_id)
+        .send()
+        .await
+        .unwrap();
+}
+
+async fn complete_backend_multipart(endpoint: &str, ca_file: &str, key: &str, upload_id: &str) {
+    let client = aws_client(endpoint, ca_file);
+    let uploaded = client
+        .upload_part()
+        .bucket(BUCKET)
+        .key(key)
+        .upload_id(upload_id)
+        .part_number(1)
+        .body(aws_sdk_s3::primitives::ByteStream::from(vec![
+            b'x';
+            MIN_MULTIPART_PART_BYTES
+        ]))
+        .send()
+        .await
+        .unwrap();
+    let part = aws_sdk_s3::types::CompletedPart::builder()
+        .part_number(1)
+        .e_tag(uploaded.e_tag().unwrap())
+        .build();
+    client
+        .complete_multipart_upload()
+        .bucket(BUCKET)
+        .key(key)
+        .upload_id(upload_id)
+        .multipart_upload(
+            aws_sdk_s3::types::CompletedMultipartUpload::builder()
+                .parts(part)
+                .build(),
+        )
         .send()
         .await
         .unwrap();
