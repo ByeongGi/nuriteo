@@ -166,4 +166,7 @@ NURITEO_CLIENT_TEST_BASE_URL="http://127.0.0.1:${core_port}" \
 NURITEO_CLIENT_TEST_EMAIL=admin@example.test \
 NURITEO_CLIENT_TEST_PASSWORD_FILE="$fixture_dir/admin-password" \
 NURITEO_CLIENT_TEST_MEMBER_PASSWORD_FILE="$fixture_dir/member-password" \
-  mise exec node@22.23.0 -- node packages/api-client/test/organization-live-contract.ts
+NURITEO_CLIENT_TEST_CONTAINER_RUNTIME="$runtime" \
+NURITEO_CLIENT_TEST_POSTGRES_CONTAINER="$postgres_container" \
+  mise exec node@22.23.0 -- node \
+    "${CLIENT_LIVE_CONTRACT:-packages/api-client/test/organization-live-contract.ts}"

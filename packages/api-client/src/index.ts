@@ -37,6 +37,19 @@ export {
 } from "./organizations.ts";
 export { getCurrentWorkspaces } from "./workspaces.ts";
 export {
+  archiveProject,
+  changeDirectProjectRole,
+  createProject,
+  deleteProject,
+  getProject,
+  grantDirectProjectRole,
+  listDirectProjectRoles,
+  listProjects,
+  renameProject,
+  restoreProject,
+  revokeDirectProjectRole
+} from "./projects.ts";
+export {
   API_PREFIX,
   DEFAULT_MAX_RESPONSE_BYTES,
   DEFAULT_REQUEST_TIMEOUT_MS,
@@ -103,3 +116,28 @@ export type {
   WorkspaceCollection,
   WorkspaceOwnerType
 } from "./workspaces.ts";
+export type {
+  ChangeDirectProjectRoleInput,
+  CreateProjectInput,
+  DeleteProjectInput,
+  DirectProjectRole,
+  DirectProjectRoleCollection,
+  GrantDirectProjectRoleInput,
+  ListDirectProjectRolesInput,
+  ListProjectsInput,
+  OrganizationProjectOwner,
+  PersonalProjectOwner,
+  Project,
+  ProjectCollection,
+  ProjectInput,
+  ProjectListState,
+  ProjectOwner,
+  ProjectResult,
+  ProjectRole,
+  ProjectRoleMutation,
+  ProjectRoleMutationResult,
+  ProjectState,
+  RenameProjectInput,
+  RevokeDirectProjectRoleInput,
+  VersionedProjectInput
+} from "./projects.ts";
