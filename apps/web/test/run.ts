@@ -9,6 +9,7 @@ await import("./entry-flow.test.ts");
 await import("./project-ux.test.ts");
 await import("./project-bundle-v1-validation.test.ts");
 await import("./project-bundle-v1.test.ts");
+await import("./project-bundle-v1-stream.test.ts");
 await import("./runtime-adapter.test.ts");
 await import("./runtime-assets.test.ts");
 await import("./server-client.test.ts");

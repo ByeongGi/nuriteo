@@ -158,17 +158,24 @@ function paxRecord(key: string, value: string): string {
 }
 
 function tarEntry(name: string, content: Uint8Array, mode: number, type: "0" | "x"): Uint8Array {
-  const nameBytes = encoder.encode(name);
-  if (nameBytes.byteLength > 100) throw new RangeError("Canonical tar header name exceeds 100 bytes.");
+  const header = tarHeader(name, content.byteLength, mode, type);
   const contentBlocks = Math.ceil(content.byteLength / TAR_BLOCK_BYTES);
   const entry = new Uint8Array(TAR_BLOCK_BYTES + contentBlocks * TAR_BLOCK_BYTES);
-  const header = entry.subarray(0, TAR_BLOCK_BYTES);
+  entry.set(header, 0);
+  entry.set(content, TAR_BLOCK_BYTES);
+  return entry;
+}
+
+function tarHeader(name: string, contentBytes: number, mode: number, type: "0" | "x"): Uint8Array {
+  const nameBytes = encoder.encode(name);
+  if (nameBytes.byteLength > 100) throw new RangeError("Canonical tar header name exceeds 100 bytes.");
+  const header = new Uint8Array(TAR_BLOCK_BYTES);
 
   header.set(nameBytes, 0);
   writeOctal(header, 100, 8, mode);
   writeOctal(header, 108, 8, 0);
   writeOctal(header, 116, 8, 0);
-  writeOctal(header, 124, 12, content.byteLength);
+  writeOctal(header, 124, 12, contentBytes);
   writeOctal(header, 136, 12, 0);
   header.fill(0x20, 148, 156);
   header[156] = type.charCodeAt(0);
@@ -176,8 +183,7 @@ function tarEntry(name: string, content: Uint8Array, mode: number, type: "0" | "
   header.set(encoder.encode("00"), 263);
   const checksum = header.reduce((total, byte) => total + byte, 0);
   writeChecksum(header, checksum);
-  entry.set(content, TAR_BLOCK_BYTES);
-  return entry;
+  return header;
 }
 
 function writeOctal(target: Uint8Array, offset: number, length: number, value: number): void {
@@ -205,3 +211,525 @@ function concatenate(chunks: readonly Uint8Array[]): Uint8Array {
   }
   return output;
 }
+
+export const PROJECT_BUNDLE_MULTIPART_MIN_PART_BYTES = 5 * 1024 * 1024;
+export const PROJECT_BUNDLE_MULTIPART_MAX_PART_BYTES = 64 * 1024 * 1024;
+export const PROJECT_BUNDLE_MULTIPART_MAX_PARTS = 128;
+export const PROJECT_BUNDLE_MULTIPART_MAX_BYTES = 2 * 1024 * 1024 * 1024;
+export const PROJECT_BUNDLE_SINGLE_PUT_MAX_BYTES = 256 * 1024 * 1024;
+
+const DEFAULT_STREAM_CHUNK_BYTES = 64 * 1024;
+const BLOB_SEGMENT_BYTES = 64 * 1024;
+
+export interface ProjectBundleV1StreamMetadata {
+  readonly manifest: ProjectBundleV1Manifest;
+  readonly archiveSha256: string;
+  readonly physicalBytes: number;
+  readonly logicalBytes: number;
+}
+
+/**
+ * A sink owns all bytes after each awaited write returns. Implementations must
+ * not retain the borrowed view passed to write without copying it, and must
+ * settle an in-flight write when the supplied signal aborts. The writer calls
+ * abort only after that write has settled, so borrowed storage is never zeroed
+ * or reused while an upload still owns it.
+ */
+export interface ProjectBundleV1Sink<Result> {
+  write(bytes: Uint8Array, signal: AbortSignal | undefined): Promise<void>;
+  complete(metadata: ProjectBundleV1StreamMetadata, signal: AbortSignal | undefined): Promise<Result>;
+  abort(reason: unknown): Promise<void>;
+}
+
+export interface ProjectBundleV1StreamResult<Result> extends ProjectBundleV1StreamMetadata {
+  readonly sinkResult: Result;
+  readonly peakChunkBytes: number;
+}
+
+export interface ProjectBundleV1StreamOptions {
+  readonly chunkBytes?: number;
+  readonly signal?: AbortSignal;
+}
+
+export interface BoundedBlobResult {
+  readonly blob: Blob;
+  readonly peakBufferedBytes: number;
+}
+
+/** A bounded whole-body sink for the configured single-PUT path. */
+export class BoundedProjectBundleBlobSink implements ProjectBundleV1Sink<BoundedBlobResult> {
+  readonly #maximumBytes: number;
+  readonly #contentType: string;
+  #chunks: ArrayBuffer[] = [];
+  #pending = new Uint8Array(BLOB_SEGMENT_BYTES);
+  #pendingBytes = 0;
+  #bufferedBytes = 0;
+  #peakBufferedBytes = 0;
+  #finished = false;
+
+  constructor(maximumBytes: number, contentType = "application/vnd.nuriteo.project-bundle") {
+    if (!Number.isSafeInteger(maximumBytes) || maximumBytes < 1 || maximumBytes > PROJECT_BUNDLE_SINGLE_PUT_MAX_BYTES) {
+      throw new RangeError("Project Bundle Blob limit is outside the supported single-PUT range.");
+    }
+    this.#maximumBytes = maximumBytes;
+    this.#contentType = contentType;
+  }
+
+  async write(bytes: Uint8Array, signal: AbortSignal | undefined): Promise<void> {
+    this.#assertOpen();
+    assertNotAborted(signal);
+    const nextBytes = checkedAdd(this.#bufferedBytes, bytes.byteLength);
+    if (nextBytes > this.#maximumBytes) {
+      throw new RangeError("Project Bundle exceeds the configured single-PUT byte limit.");
+    }
+    let offset = 0;
+    while (offset < bytes.byteLength) {
+      const copied = Math.min(BLOB_SEGMENT_BYTES - this.#pendingBytes, bytes.byteLength - offset);
+      this.#pending.set(bytes.subarray(offset, offset + copied), this.#pendingBytes);
+      this.#pendingBytes += copied;
+      offset += copied;
+      if (this.#pendingBytes === BLOB_SEGMENT_BYTES) {
+        this.#chunks.push(this.#pending.buffer);
+        this.#pending = new Uint8Array(BLOB_SEGMENT_BYTES);
+        this.#pendingBytes = 0;
+      }
+    }
+    this.#bufferedBytes = nextBytes;
+    this.#peakBufferedBytes = Math.max(this.#peakBufferedBytes, nextBytes);
+  }
+
+  async complete(
+    metadata: ProjectBundleV1StreamMetadata,
+    signal: AbortSignal | undefined
+  ): Promise<BoundedBlobResult> {
+    this.#assertOpen();
+    assertNotAborted(signal);
+    if (metadata.physicalBytes !== this.#bufferedBytes) {
+      throw new Error("Project Bundle sink byte count does not match the streamed archive.");
+    }
+    const parts = [...this.#chunks];
+    if (this.#pendingBytes > 0) {
+      const finalSegment = new Uint8Array(this.#pendingBytes);
+      finalSegment.set(this.#pending.subarray(0, this.#pendingBytes));
+      parts.push(finalSegment.buffer);
+    }
+    const blob = new Blob(parts, { type: this.#contentType });
+    this.#finished = true;
+    for (const chunk of this.#chunks) new Uint8Array(chunk).fill(0);
+    this.#pending.fill(0);
+    this.#chunks = [];
+    this.#pendingBytes = 0;
+    this.#bufferedBytes = 0;
+    return { blob, peakBufferedBytes: this.#peakBufferedBytes };
+  }
+
+  async abort(_reason: unknown): Promise<void> {
+    if (this.#finished) return;
+    this.#finished = true;
+    for (const chunk of this.#chunks) new Uint8Array(chunk).fill(0);
+    this.#pending.fill(0);
+    this.#chunks = [];
+    this.#pendingBytes = 0;
+    this.#bufferedBytes = 0;
+  }
+
+  #assertOpen(): void {
+    if (this.#finished) throw new Error("Project Bundle sink is already closed.");
+  }
+}
+
+export interface ProjectBundleMultipartPart {
+  readonly number: number;
+  /** Borrowed only until the returned upload promise settles. */
+  readonly bytes: Uint8Array;
+  readonly sizeBytes: number;
+  readonly sha256: string;
+  /** Upload implementations must reject promptly when this signal aborts. */
+  readonly signal: AbortSignal | undefined;
+}
+
+export interface ProjectBundleMultipartPartResult<Receipt> {
+  readonly number: number;
+  readonly sizeBytes: number;
+  readonly sha256: string;
+  readonly receipt: Receipt;
+}
+
+export interface ProjectBundleMultipartResult<Receipt> {
+  readonly parts: readonly ProjectBundleMultipartPartResult<Receipt>[];
+  readonly peakBufferedBytes: number;
+}
+
+export interface ProjectBundleMultipartPlan {
+  readonly partCount: number;
+  readonly finalPartBytes: number;
+}
+
+export function planProjectBundleMultipart(
+  physicalBytes: number,
+  partSizeBytes: number
+): ProjectBundleMultipartPlan {
+  assertMultipartPartSize(partSizeBytes);
+  if (!Number.isSafeInteger(physicalBytes) || physicalBytes < 1) {
+    throw new RangeError("Project Bundle multipart payload size is invalid.");
+  }
+  const partCount = Math.ceil(physicalBytes / partSizeBytes);
+  if (physicalBytes > PROJECT_BUNDLE_MULTIPART_MAX_BYTES || partCount > PROJECT_BUNDLE_MULTIPART_MAX_PARTS) {
+    throw new RangeError("Project Bundle multipart stream exceeds the SAVE-004 payload or 128-part limit.");
+  }
+  const precedingBytes = (partCount - 1) * partSizeBytes;
+  return { partCount, finalPartBytes: physicalBytes - precedingBytes };
+}
+
+/**
+ * Slices the archive byte stream independently of file boundaries. Full parts
+ * are exactly partSizeBytes; only the final part may be smaller than 5 MiB.
+ */
+export class ProjectBundleMultipartSink<Receipt>
+  implements ProjectBundleV1Sink<ProjectBundleMultipartResult<Receipt>> {
+  readonly #partSizeBytes: number;
+  readonly #upload: (part: ProjectBundleMultipartPart) => Promise<Receipt>;
+  readonly #abortUpload: (reason: unknown) => Promise<void>;
+  readonly #buffer: Uint8Array;
+  readonly #parts: ProjectBundleMultipartPartResult<Receipt>[] = [];
+  #bufferedBytes = 0;
+  #physicalBytes = 0;
+  #finished = false;
+
+  constructor(
+    partSizeBytes: number,
+    upload: (part: ProjectBundleMultipartPart) => Promise<Receipt>,
+    abortUpload: (reason: unknown) => Promise<void>
+  ) {
+    assertMultipartPartSize(partSizeBytes);
+    this.#partSizeBytes = partSizeBytes;
+    this.#upload = upload;
+    this.#abortUpload = abortUpload;
+    this.#buffer = new Uint8Array(partSizeBytes);
+  }
+
+  async write(bytes: Uint8Array, signal: AbortSignal | undefined): Promise<void> {
+    this.#assertOpen();
+    assertNotAborted(signal);
+    const nextPhysicalBytes = checkedAdd(this.#physicalBytes, bytes.byteLength);
+    if (
+      nextPhysicalBytes > PROJECT_BUNDLE_MULTIPART_MAX_BYTES ||
+      nextPhysicalBytes > this.#partSizeBytes * PROJECT_BUNDLE_MULTIPART_MAX_PARTS
+    ) {
+      throw new RangeError("Project Bundle multipart stream exceeds the SAVE-004 payload or 128-part limit.");
+    }
+    this.#physicalBytes = nextPhysicalBytes;
+    let offset = 0;
+    while (offset < bytes.byteLength) {
+      assertNotAborted(signal);
+      const copied = Math.min(this.#partSizeBytes - this.#bufferedBytes, bytes.byteLength - offset);
+      this.#buffer.set(bytes.subarray(offset, offset + copied), this.#bufferedBytes);
+      this.#bufferedBytes += copied;
+      offset += copied;
+      if (this.#bufferedBytes === this.#partSizeBytes) await this.#flushPart(signal);
+    }
+  }
+
+  async complete(
+    metadata: ProjectBundleV1StreamMetadata,
+    signal: AbortSignal | undefined
+  ): Promise<ProjectBundleMultipartResult<Receipt>> {
+    this.#assertOpen();
+    assertNotAborted(signal);
+    if (metadata.physicalBytes !== this.#physicalBytes) {
+      throw new Error("Project Bundle sink byte count does not match the streamed archive.");
+    }
+    if (this.#bufferedBytes > 0) await this.#flushPart(signal);
+    if (this.#parts.length === 0) throw new Error("Project Bundle multipart stream is empty.");
+    this.#finished = true;
+    this.#buffer.fill(0);
+    return { parts: [...this.#parts], peakBufferedBytes: this.#partSizeBytes };
+  }
+
+  async abort(reason: unknown): Promise<void> {
+    if (this.#finished) return;
+    this.#finished = true;
+    this.#buffer.fill(0);
+    this.#bufferedBytes = 0;
+    this.#parts.length = 0;
+    await this.#abortUpload(reason);
+  }
+
+  async #flushPart(signal: AbortSignal | undefined): Promise<void> {
+    const number = this.#parts.length + 1;
+    if (number > PROJECT_BUNDLE_MULTIPART_MAX_PARTS) {
+      throw new RangeError("Project Bundle multipart stream exceeds the SAVE-004 payload or 128-part limit.");
+    }
+    const bytes = this.#buffer.subarray(0, this.#bufferedBytes);
+    const sha256 = incrementalSha256Hex(bytes);
+    const sizeBytes = bytes.byteLength;
+    const receipt = await this.#upload({ number, bytes, sizeBytes, sha256, signal });
+    assertNotAborted(signal);
+    this.#parts.push({ number, sizeBytes, sha256, receipt });
+    this.#buffer.fill(0, 0, this.#bufferedBytes);
+    this.#bufferedBytes = 0;
+  }
+
+  #assertOpen(): void {
+    if (this.#finished) throw new Error("Project Bundle sink is already closed.");
+  }
+}
+
+function assertMultipartPartSize(partSizeBytes: number): void {
+  if (
+    !Number.isSafeInteger(partSizeBytes) ||
+    partSizeBytes < PROJECT_BUNDLE_MULTIPART_MIN_PART_BYTES ||
+    partSizeBytes > PROJECT_BUNDLE_MULTIPART_MAX_PART_BYTES
+  ) {
+    throw new RangeError("Project Bundle multipart part size is outside the supported range.");
+  }
+}
+
+/**
+ * Emits the BND-001 canonical bytes while retaining at most one configured
+ * source view plus the sink's explicit buffer. A changed source fails closed
+ * after its streamed digest is compared with the manifest digest.
+ */
+export async function streamValidatedProjectBundleV1<Result>(
+  source: ValidatedProjectBundleV1Projection,
+  sink: ProjectBundleV1Sink<Result>,
+  options: ProjectBundleV1StreamOptions = {}
+): Promise<ProjectBundleV1StreamResult<Result>> {
+  const chunkBytes = options.chunkBytes ?? DEFAULT_STREAM_CHUNK_BYTES;
+  let archiveDigest: IncrementalSha256 | undefined;
+  let completed = false;
+  try {
+    if (!Number.isSafeInteger(chunkBytes) || chunkBytes < 1 || chunkBytes > PROJECT_BUNDLE_MULTIPART_MIN_PART_BYTES) {
+      throw new RangeError("Project Bundle stream chunk size is outside the supported range.");
+    }
+    assertNotAborted(options.signal);
+    const files = [...source.files].sort((left, right) => compareUtf8(left.path, right.path));
+    const manifestFiles: ProjectBundleV1ManifestFile[] = [];
+    let logicalBytes = 0;
+    for (const [index, file] of files.entries()) {
+      assertUnambiguousPath(file.path);
+      if (index > 0 && files[index - 1]?.path === file.path) {
+        throw new RangeError("Project Bundle contains a duplicate path.");
+      }
+      logicalBytes = checkedAdd(logicalBytes, file.bytes.byteLength);
+      manifestFiles.push({
+        path: file.path,
+        kind: file.kind,
+        mode: file.executable ? "0755" : "0644",
+        sizeBytes: file.bytes.byteLength,
+        sha256: incrementalSha256Hex(file.bytes)
+      });
+      assertNotAborted(options.signal);
+    }
+
+    const manifest: ProjectBundleV1Manifest = {
+      format: "project-bundle-v1",
+      schemaVersion: 1,
+      project: { id: source.projectId, storageScopeId: source.storageScopeId },
+      fileCount: manifestFiles.length,
+      logicalBytes,
+      files: manifestFiles
+    };
+    const manifestBytes = encoder.encode(`${JSON.stringify(manifest)}\n`);
+    archiveDigest = new IncrementalSha256();
+    let physicalBytes = 0;
+    let peakChunkBytes = 0;
+
+    const emit = async (bytes: Uint8Array): Promise<void> => {
+      for (let offset = 0; offset < bytes.byteLength; offset += chunkBytes) {
+        assertNotAborted(options.signal);
+        const chunk = bytes.subarray(offset, Math.min(offset + chunkBytes, bytes.byteLength));
+        physicalBytes = checkedAdd(physicalBytes, chunk.byteLength);
+        peakChunkBytes = Math.max(peakChunkBytes, chunk.byteLength);
+        archiveDigest?.update(chunk);
+        await sink.write(chunk, options.signal);
+      }
+    };
+    const emitEntry = async (
+      name: string,
+      content: Uint8Array,
+      mode: number,
+      type: "0" | "x",
+      expectedSha256?: string
+    ): Promise<void> => {
+      await emit(tarHeader(name, content.byteLength, mode, type));
+      const contentDigest = expectedSha256 === undefined ? undefined : new IncrementalSha256();
+      try {
+        for (let offset = 0; offset < content.byteLength; offset += chunkBytes) {
+          const chunk = content.subarray(offset, Math.min(offset + chunkBytes, content.byteLength));
+          contentDigest?.update(chunk);
+          await emit(chunk);
+        }
+        if (contentDigest !== undefined && contentDigest.finishHex() !== expectedSha256) {
+          throw new Error("Project Bundle source changed while the archive was streaming.");
+        }
+      } finally {
+        contentDigest?.dispose();
+      }
+      const paddingBytes = (TAR_BLOCK_BYTES - (content.byteLength % TAR_BLOCK_BYTES)) % TAR_BLOCK_BYTES;
+      if (paddingBytes > 0) await emit(new Uint8Array(paddingBytes));
+    };
+
+    await emitEntry("manifest.json", manifestBytes, FILE_MODE, "0");
+    for (const [index, file] of files.entries()) {
+      const archivePath = `files/${file.path}`;
+      const paxBytes = encoder.encode(paxRecord("path", archivePath));
+      const sequence = index.toString().padStart(8, "0");
+      await emitEntry(`PaxHeaders/${sequence}`, paxBytes, FILE_MODE, "x");
+      await emitEntry(
+        `files/${sequence}`,
+        file.bytes,
+        file.executable ? EXECUTABLE_FILE_MODE : FILE_MODE,
+        "0",
+        manifestFiles[index]?.sha256
+      );
+    }
+    await emit(new Uint8Array(TAR_BLOCK_BYTES * TAR_END_BLOCKS));
+    const archiveSha256 = archiveDigest.finishHex();
+    const metadata = { manifest, archiveSha256, physicalBytes, logicalBytes };
+    const sinkResult = await sink.complete(metadata, options.signal);
+    completed = true;
+    return { ...metadata, sinkResult, peakChunkBytes };
+  } catch (error) {
+    try {
+      await sink.abort(error);
+    } catch (abortError) {
+      throw new AggregateError([error, abortError], "Project Bundle streaming and sink abort both failed.");
+    }
+    throw error;
+  } finally {
+    archiveDigest?.dispose();
+    if (!completed) archiveDigest = undefined;
+  }
+}
+
+function assertNotAborted(signal: AbortSignal | undefined): void {
+  if (signal?.aborted) throw new Error("Project Bundle streaming was aborted.");
+}
+
+function incrementalSha256Hex(bytes: Uint8Array): string {
+  const digest = new IncrementalSha256();
+  try {
+    digest.update(bytes);
+    return digest.finishHex();
+  } finally {
+    digest.dispose();
+  }
+}
+
+class IncrementalSha256 {
+  readonly #state = new Uint32Array([
+    0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
+    0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19
+  ]);
+  readonly #buffer = new Uint8Array(64);
+  readonly #schedule = new Uint32Array(64);
+  #bufferedBytes = 0;
+  #totalBytes = 0;
+  #finished = false;
+
+  update(bytes: Uint8Array): void {
+    if (this.#finished) throw new Error("SHA-256 digest is already finished.");
+    this.#totalBytes = checkedAdd(this.#totalBytes, bytes.byteLength);
+    let offset = 0;
+    while (offset < bytes.byteLength) {
+      const copied = Math.min(64 - this.#bufferedBytes, bytes.byteLength - offset);
+      this.#buffer.set(bytes.subarray(offset, offset + copied), this.#bufferedBytes);
+      this.#bufferedBytes += copied;
+      offset += copied;
+      if (this.#bufferedBytes === 64) {
+        this.#compress(this.#buffer);
+        this.#bufferedBytes = 0;
+      }
+    }
+  }
+
+  finishHex(): string {
+    if (this.#finished) throw new Error("SHA-256 digest is already finished.");
+    const bitLength = BigInt(this.#totalBytes) * 8n;
+    this.#buffer[this.#bufferedBytes] = 0x80;
+    this.#bufferedBytes += 1;
+    if (this.#bufferedBytes > 56) {
+      this.#buffer.fill(0, this.#bufferedBytes);
+      this.#compress(this.#buffer);
+      this.#bufferedBytes = 0;
+    }
+    this.#buffer.fill(0, this.#bufferedBytes, 56);
+    for (let index = 0; index < 8; index += 1) {
+      this.#buffer[63 - index] = Number((bitLength >> BigInt(index * 8)) & 0xffn);
+    }
+    this.#compress(this.#buffer);
+    this.#finished = true;
+    return [...this.#state]
+      .map((word) => word.toString(16).padStart(8, "0"))
+      .join("");
+  }
+
+  dispose(): void {
+    this.#state.fill(0);
+    this.#buffer.fill(0);
+    this.#schedule.fill(0);
+    this.#bufferedBytes = 0;
+    this.#totalBytes = 0;
+    this.#finished = true;
+  }
+
+  #compress(block: Uint8Array): void {
+    for (let index = 0; index < 16; index += 1) {
+      const offset = index * 4;
+      this.#schedule[index] = (
+        ((block[offset] ?? 0) << 24) |
+        ((block[offset + 1] ?? 0) << 16) |
+        ((block[offset + 2] ?? 0) << 8) |
+        (block[offset + 3] ?? 0)
+      ) >>> 0;
+    }
+    for (let index = 16; index < 64; index += 1) {
+      const first = this.#schedule[index - 15] ?? 0;
+      const second = this.#schedule[index - 2] ?? 0;
+      const sigma0 = rotateRight(first, 7) ^ rotateRight(first, 18) ^ (first >>> 3);
+      const sigma1 = rotateRight(second, 17) ^ rotateRight(second, 19) ^ (second >>> 10);
+      this.#schedule[index] = (
+        (this.#schedule[index - 16] ?? 0) + sigma0 +
+        (this.#schedule[index - 7] ?? 0) + sigma1
+      ) >>> 0;
+    }
+
+    let [a, b, c, d, e, f, g, h] = this.#state;
+    for (let index = 0; index < 64; index += 1) {
+      const sum1 = rotateRight(e ?? 0, 6) ^ rotateRight(e ?? 0, 11) ^ rotateRight(e ?? 0, 25);
+      const choice = ((e ?? 0) & (f ?? 0)) ^ (~(e ?? 0) & (g ?? 0));
+      const temporary1 = ((h ?? 0) + sum1 + choice + SHA256_CONSTANTS[index]! + this.#schedule[index]!) >>> 0;
+      const sum0 = rotateRight(a ?? 0, 2) ^ rotateRight(a ?? 0, 13) ^ rotateRight(a ?? 0, 22);
+      const majority = ((a ?? 0) & (b ?? 0)) ^ ((a ?? 0) & (c ?? 0)) ^ ((b ?? 0) & (c ?? 0));
+      const temporary2 = (sum0 + majority) >>> 0;
+      h = g;
+      g = f;
+      f = e;
+      e = ((d ?? 0) + temporary1) >>> 0;
+      d = c;
+      c = b;
+      b = a;
+      a = (temporary1 + temporary2) >>> 0;
+    }
+    const values = [a, b, c, d, e, f, g, h];
+    for (let index = 0; index < 8; index += 1) {
+      this.#state[index] = ((this.#state[index] ?? 0) + (values[index] ?? 0)) >>> 0;
+    }
+  }
+}
+
+function rotateRight(value: number, amount: number): number {
+  return (value >>> amount) | (value << (32 - amount));
+}
+
+const SHA256_CONSTANTS = new Uint32Array([
+  0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+  0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+  0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+  0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+  0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+  0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+  0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+  0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
+]);
