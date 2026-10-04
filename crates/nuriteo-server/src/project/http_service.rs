@@ -7,6 +7,7 @@ use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use hmac::{Hmac, KeyInit, Mac};
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
+use sqlx::Acquire;
 use subtle::ConstantTimeEq;
 use time::OffsetDateTime;
 use url::Url;
@@ -19,6 +20,7 @@ use crate::identity::{
     SessionService, SessionServiceError, UserId,
 };
 use crate::object_storage::S3ObjectStore;
+use crate::project::{EffectiveProjectRole, ProjectAccessRepository};
 use crate::save::{
     ContentDescriptor, ContentDownload, ContentError, ContentService, ContentServicePolicy,
     CreateProjectVersion, ExplicitProjectVersion, ProjectVersionError, ProjectVersionName,
@@ -324,6 +326,56 @@ impl ProjectHttpService {
             .map_err(map_content_error)
     }
 
+    /// Authenticates the browser and establishes the exact active Project scope
+    /// for a Save mutation. Save domain services re-check this role under their
+    /// own transaction locks before every state or capability mutation.
+    pub(crate) async fn authorize_save(
+        &self,
+        request: BrowserRequestHeaders<'_>,
+        owner: ProjectOwner,
+        project_id: ProjectId,
+    ) -> Result<SaveProjectContext, ProjectHttpError> {
+        let runtime = self.runtime()?;
+        let identity = runtime.authenticate(request).await?;
+        let project = runtime
+            .projects
+            .get(identity.user_id, owner, project_id)
+            .await
+            .map_err(map_project_error)?;
+        if project.state() != ProjectState::Active {
+            return Err(ProjectHttpError::Conflict);
+        }
+        let mut connection = runtime
+            .pool
+            .acquire()
+            .await
+            .map_err(|_| ProjectHttpError::Unavailable)?;
+        let mut transaction = connection
+            .begin()
+            .await
+            .map_err(|_| ProjectHttpError::Unavailable)?;
+        let role = ProjectAccessRepository::resolve_effective_role(
+            &mut transaction,
+            project_id,
+            identity.user_id,
+        )
+        .await
+        .map_err(|_| ProjectHttpError::Unavailable)?;
+        transaction
+            .rollback()
+            .await
+            .map_err(|_| ProjectHttpError::Unavailable)?;
+        if role < EffectiveProjectRole::Write {
+            return Err(ProjectHttpError::Forbidden);
+        }
+        Ok(SaveProjectContext {
+            actor_user_id: identity.user_id,
+            project_id: project.id(),
+            storage_scope_id: project.storage_scope_id(),
+            project_version: project.lock_version(),
+        })
+    }
+
     pub(crate) async fn list(
         &self,
         request: BrowserRequestHeaders<'_>,
@@ -571,6 +623,14 @@ pub(crate) enum RoleOperation {
     Grant,
     Change,
     Revoke,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct SaveProjectContext {
+    pub(crate) actor_user_id: UserId,
+    pub(crate) project_id: ProjectId,
+    pub(crate) storage_scope_id: crate::workspace::StorageScopeId,
+    pub(crate) project_version: ProjectVersion,
 }
 
 struct BrowserIdentity {

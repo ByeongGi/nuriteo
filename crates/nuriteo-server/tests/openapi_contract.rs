@@ -67,6 +67,12 @@ async fn serves_the_versioned_document_from_the_application_router() {
             "/api/v1/workspaces/{owner_type}/{owner_id}/projects/{project_id}/restore",
             "/api/v1/workspaces/{owner_type}/{owner_id}/projects/{project_id}/roles",
             "/api/v1/workspaces/{owner_type}/{owner_id}/projects/{project_id}/roles/{user_id}",
+            "/api/v1/workspaces/{owner_type}/{owner_id}/projects/{project_id}/save-sessions",
+            "/api/v1/workspaces/{owner_type}/{owner_id}/projects/{project_id}/save-sessions/{session_id}",
+            "/api/v1/workspaces/{owner_type}/{owner_id}/projects/{project_id}/save-sessions/{session_id}/complete",
+            "/api/v1/workspaces/{owner_type}/{owner_id}/projects/{project_id}/save-sessions/{session_id}/parts",
+            "/api/v1/workspaces/{owner_type}/{owner_id}/projects/{project_id}/save-sessions/{session_id}/parts/receipts",
+            "/api/v1/workspaces/{owner_type}/{owner_id}/projects/{project_id}/save-sessions/{session_id}/reconcile",
             "/api/v1/workspaces/{owner_type}/{owner_id}/projects/{project_id}/versions"
         ]
     );
@@ -264,6 +270,39 @@ fn explicit_project_versions_expose_bounded_immutable_contract() {
             "fileCount",
             "format"
         ])
+    );
+}
+
+#[test]
+fn save_http_exposes_bounded_restart_safe_workflow() {
+    let document = serde_json::to_value(openapi::document()).unwrap();
+    let collection = &document["paths"]["/api/v1/workspaces/{owner_type}/{owner_id}/projects/{project_id}/save-sessions"]
+        ["post"];
+    assert_eq!(
+        collection["responses"]["201"]["content"]["application/json"]["schema"]["$ref"],
+        "#/components/schemas/SaveSessionView"
+    );
+    assert_eq!(
+        collection["responses"]["200"]["content"]["application/json"]["schema"]["$ref"],
+        "#/components/schemas/SaveSessionView"
+    );
+    let required_headers = collection["parameters"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|parameter| parameter["in"] == "header")
+        .map(|parameter| parameter["name"].as_str().unwrap())
+        .collect::<Vec<_>>();
+    for header in ["If-Match", "Idempotency-Key", "Origin", "X-CSRF-Token"] {
+        assert!(required_headers.contains(&header));
+    }
+    assert_eq!(
+        document["components"]["schemas"]["UploadCapabilityView"]["required"],
+        json!(["method", "url", "headers", "expectedBytes"])
+    );
+    assert_eq!(
+        document["components"]["schemas"]["ReconcileView"]["oneOf"][0]["required"],
+        json!(["bundleId", "projectVersion", "state"])
     );
 }
 

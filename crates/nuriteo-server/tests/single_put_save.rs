@@ -10,10 +10,12 @@ use aws_smithy_http_client::tls::rustls_provider::CryptoMode;
 use aws_smithy_http_client::tls::{self, TlsContext, TrustStore};
 use axum::Router;
 use axum::body::{Body, to_bytes};
-use axum::http::header::{CONTENT_TYPE, COOKIE, IF_MATCH, ORIGIN, SET_COOKIE};
+use axum::http::header::{CONTENT_TYPE, COOKIE, ETAG, IF_MATCH, ORIGIN, SET_COOKIE};
 use axum::http::{Method, Request, Response, StatusCode};
+use base64::Engine as _;
+use base64::engine::general_purpose::STANDARD as BASE64;
 use bytes::Bytes;
-use nuriteo_server::app::build_router_with_project_service;
+use nuriteo_server::app::{build_router_with_project_service, build_router_with_save_service};
 use nuriteo_server::auth::{AuthPolicy, AuthService};
 use nuriteo_server::config::{Environment, SystemFileReader};
 use nuriteo_server::database::{
@@ -34,14 +36,15 @@ use nuriteo_server::project::{
 };
 use nuriteo_server::quota::EffectiveQuota;
 use nuriteo_server::save::{
-    CreateMultipartSession, CreateProjectVersion, CreateSinglePutSession, IdempotencyKey,
-    IdempotencySecret, MultipartPartPlan, MultipartPartReceipt, MultipartService,
+    CleanupWorkerPolicy, CreateMultipartSession, CreateProjectVersion, CreateSinglePutSession,
+    IdempotencyKey, IdempotencySecret, MultipartPartPlan, MultipartPartReceipt, MultipartService,
     MultipartServiceError, MultipartServicePolicy, MultipartSessionContext, MultipartStore,
     ProjectVersionError, ProjectVersionName, ProjectVersionPageLimit, ProjectVersionService,
-    ProjectVersionServicePolicy, PutPresigner, SinglePutService, SinglePutServiceError,
-    SinglePutServicePolicy, StagingVerifier, StagingVerifierPolicy, VerificationError,
-    VerifiedStagingBundle, VerifyStagingBundle, WorkingHeadCommitError, WorkingHeadCommitPolicy,
-    WorkingHeadCommitReconciliation, WorkingHeadCommitService,
+    ProjectVersionServicePolicy, PutPresigner, SaveHttpError, SaveHttpPolicy, SaveHttpService,
+    SinglePutService, SinglePutServiceError, SinglePutServicePolicy, StagingVerifier,
+    StagingVerifierPolicy, VerificationError, VerifiedStagingBundle, VerifyStagingBundle,
+    WorkingHeadCommitError, WorkingHeadCommitPolicy, WorkingHeadCommitReconciliation,
+    WorkingHeadCommitService,
 };
 use nuriteo_server::setup::SetupStatusService;
 use nuriteo_server::workspace::StorageScopeId;
@@ -804,6 +807,165 @@ async fn working_head_commit_is_atomic_idempotent_and_fenced() {
     let (active_left, active_right) =
         tokio::join!(creator.create(active_left), creator.create(active_right));
     assert_ne!(active_left.is_ok(), active_right.is_ok());
+}
+
+#[tokio::test]
+#[ignore = "requires tests/fixtures/save-http/run.sh"]
+async fn save_http_is_authorized_restart_stable_and_commits_the_working_head() {
+    let pool = fixture_pool().await;
+    reset_and_seed(&pool).await;
+    let endpoint = env::var(S3_ENDPOINT_ENV).unwrap();
+    let ca_file = env::var(S3_CA_ENV).unwrap();
+    create_bucket(&endpoint, &ca_file).await;
+    let config = ObjectStorageConfig::load(
+        &FixtureEnvironment {
+            endpoint,
+            ca_file: ca_file.clone(),
+        },
+        &SystemFileReader,
+    )
+    .unwrap();
+    let store = S3ObjectStore::new(&config, OperationLimits::default())
+        .await
+        .unwrap();
+    for user in [USER, OUTSIDER] {
+        sqlx::query(
+            "INSERT INTO local_password_credentials (user_id,password_verifier) VALUES ($1::uuid,$2)",
+        )
+        .bind(user)
+        .bind(TEST_PASSWORD_HASH)
+        .execute(&mut *pool.acquire().await.unwrap())
+        .await
+        .unwrap();
+    }
+
+    let secret = IdempotencySecret::new([0x79; 32]).unwrap();
+    let router = save_http_router(pool.clone(), store.clone(), secret.clone())
+        .await
+        .unwrap();
+    let owner = version_login(&router, "save@example.test").await;
+    let outsider = version_login(&router, "outside@example.test").await;
+    let content = b"saved through HTTP\n";
+    let bundle = canonical_test_bundle(PROJECT_A, SCOPE, "saved.txt", content);
+    let uri = format!("/api/v1/workspaces/users/{USER}/projects/{PROJECT_A}/save-sessions");
+    let request_body = json!({
+        "physicalBytes": bundle.len(),
+        "logicalBytes": content.len(),
+        "fileCount": 1,
+        "sha256": BASE64.encode(Sha256::digest(&bundle)),
+        "parts": []
+    });
+    let created = version_json_request(
+        &router,
+        &owner,
+        Method::POST,
+        &uri,
+        Some("\"project-v1\""),
+        Some("save-http-restart-0001"),
+        request_body.clone(),
+    )
+    .await;
+    assert_eq!(created.status(), StatusCode::CREATED);
+    assert_eq!(created.headers()["cache-control"], "private, no-store");
+    let created = version_response_json(created).await;
+    assert_eq!(created["uploadMode"], "single");
+    assert_eq!(created["idempotentRetry"], false);
+    assert_eq!(created["partCount"], 1);
+    let session_id = created["sessionId"].as_str().unwrap().to_owned();
+
+    // Rebuild every HTTP service around the same persistent database and
+    // stable secret. The replay must resolve to the original session.
+    let restarted = save_http_router(pool.clone(), store.clone(), secret)
+        .await
+        .unwrap();
+    let replay = version_json_request(
+        &restarted,
+        &owner,
+        Method::POST,
+        &uri,
+        Some("\"project-v1\""),
+        Some("save-http-restart-0001"),
+        request_body.clone(),
+    )
+    .await;
+    assert_eq!(replay.status(), StatusCode::OK);
+    let replay = version_response_json(replay).await;
+    assert_eq!(replay["sessionId"], session_id);
+    assert_eq!(replay["idempotentRetry"], true);
+
+    // A changed secret is rejected while assembling the replacement service,
+    // before a router can accept traffic.
+    assert!(matches!(
+        save_http_service(
+            pool.clone(),
+            store.clone(),
+            IdempotencySecret::new([0x7a; 32]).unwrap()
+        )
+        .await,
+        Err(SaveHttpError::Internal)
+    ));
+
+    let upload = replay["upload"].as_object().unwrap();
+    let mut put = fixture_http_client(&ca_file)
+        .put(upload["url"].as_str().unwrap())
+        .header(ORIGIN, WEB_ORIGIN);
+    for header in upload["headers"].as_array().unwrap() {
+        put = put.header(
+            header["name"].as_str().unwrap(),
+            header["value"].as_str().unwrap(),
+        );
+    }
+    assert!(put.body(bundle).send().await.unwrap().status().is_success());
+
+    let complete_uri = format!("{uri}/{session_id}/complete");
+    let completed = version_json_request(
+        &restarted,
+        &owner,
+        Method::POST,
+        &complete_uri,
+        None,
+        None,
+        json!({"uploadMode":"single"}),
+    )
+    .await;
+    assert_eq!(completed.status(), StatusCode::OK);
+    assert_eq!(completed.headers()[ETAG], "\"project-v2\"");
+    assert_eq!(completed.headers()["cache-control"], "private, no-store");
+    let completed = version_response_json(completed).await;
+    assert_eq!(completed["projectVersion"], 2);
+    let committed_bundle = completed["bundleId"].as_str().unwrap().to_owned();
+
+    let reconciled = version_json_request(
+        &restarted,
+        &owner,
+        Method::POST,
+        &format!("{uri}/{session_id}/reconcile"),
+        None,
+        None,
+        json!({}),
+    )
+    .await;
+    assert_eq!(reconciled.status(), StatusCode::OK);
+    let reconciled = version_response_json(reconciled).await;
+    assert_eq!(reconciled["state"], "committed");
+    assert_eq!(reconciled["bundleId"], committed_bundle);
+    assert_eq!(reconciled["projectVersion"], 2);
+
+    let outsider_response = version_json_request(
+        &restarted,
+        &outsider,
+        Method::POST,
+        &uri,
+        Some("\"project-v2\""),
+        Some("save-http-outsider-0001"),
+        request_body,
+    )
+    .await;
+    assert_eq!(outsider_response.status(), StatusCode::NOT_FOUND);
+    let serialized = version_response_json(outsider_response).await.to_string();
+    for secret_value in [SECRET_KEY, "save-http-outsider-0001", "X-Amz-Signature"] {
+        assert!(!serialized.contains(secret_value));
+    }
 }
 
 #[tokio::test]
@@ -2591,6 +2753,57 @@ fn version_http_router(pool: DatabasePool) -> Router {
         projects,
         SetupStatusService::unconfigured(),
     )
+}
+
+async fn save_http_service(
+    pool: DatabasePool,
+    store: S3ObjectStore,
+    secret: IdempotencySecret,
+) -> Result<(ProjectHttpService, SaveHttpService), SaveHttpError> {
+    let external_url = Url::parse(WEB_ORIGIN).unwrap();
+    let projects = ProjectHttpService::production(
+        pool.clone(),
+        &external_url,
+        ProjectHttpPolicy::default(),
+        SessionPolicy::default(),
+    )
+    .unwrap();
+    let save = SaveHttpService::production(
+        pool,
+        projects.clone(),
+        store,
+        secret,
+        EffectiveQuota::limited(10 * 1024 * 1024 * 1024).unwrap(),
+        SaveHttpPolicy::default(),
+        CleanupWorkerPolicy::default(),
+    )
+    .await?;
+    Ok((projects, save))
+}
+
+async fn save_http_router(
+    pool: DatabasePool,
+    store: S3ObjectStore,
+    secret: IdempotencySecret,
+) -> Result<Router, SaveHttpError> {
+    let external_url = Url::parse(WEB_ORIGIN).unwrap();
+    let auth = AuthService::production(
+        pool.clone(),
+        &external_url,
+        AuthPolicy::default(),
+        SessionPolicy::default(),
+    )
+    .unwrap();
+    let (projects, save) = save_http_service(pool, store, secret).await?;
+    Ok(build_router_with_save_service(
+        HealthService::unconfigured(),
+        auth,
+        InvitationHttpService::unconfigured(),
+        OrganizationHttpService::unconfigured(),
+        projects,
+        save,
+        SetupStatusService::unconfigured(),
+    ))
 }
 
 async fn version_login(router: &Router, email: &str) -> VersionBrowser {

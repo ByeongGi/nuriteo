@@ -38,10 +38,16 @@ function validate(source, externalSource, initSource, acceptanceSource) {
   assert.match(services.web, /NURITEO_PREVIEW_SIGNING_KEY_FILE: \/run\/secrets\/preview_signing_key/u);
   assert.match(services.web, /secrets:\n      - preview_signing_key/u);
   assert.match(services.web, /NURITEO_PREVIEW_WILDCARD_READY: \$\{NURITEO_PREVIEW_WILDCARD_READY:-false\}/u);
+  assert.match(services.core, /NURITEO_SAVE_IDEMPOTENCY_SECRET_FILE: \/run\/secrets\/save_idempotency_secret/u);
+  assert.match(services.core, /NURITEO_SAVE_DEFAULT_QUOTA_BYTES: \$\{NURITEO_SAVE_DEFAULT_QUOTA_BYTES:-10737418240\}/u);
+  assert.match(services.core, /secrets:[\s\S]*- save_idempotency_secret/u);
   assert.match(acceptanceSource, /openssl rand -base64 32[\s\S]*preview-signing-key/u);
   assert.match(acceptanceSource, /chmod 600 "\$fixture_root\/preview-signing-key"/u);
   assert.match(acceptanceSource, /export NURITEO_PREVIEW_BASE_DOMAIN='preview\.localhost'/u);
   assert.match(acceptanceSource, /export NURITEO_PREVIEW_SIGNING_KEY_FILE="\$fixture_root\/preview-signing-key"/u);
+  assert.match(acceptanceSource, /openssl rand -base64 32 >"\$fixture_root\/save-idempotency-secret"/u);
+  assert.match(acceptanceSource, /chmod 600 "\$fixture_root\/save-idempotency-secret"/u);
+  assert.match(acceptanceSource, /export NURITEO_SAVE_IDEMPOTENCY_SECRET_FILE="\$fixture_root\/save-idempotency-secret"/u);
 
   for (const [name, command] of [["storage-check", "storage-check"], ["migrate", "migrate"], ["bootstrap-admin", "bootstrap-admin"], ["core", "serve"]]) {
     assert.match(services[name], /image: \$\{NURITEO_SERVER_IMAGE:-localhost\/nuriteo-server:cmp-002\}/u);
@@ -72,7 +78,8 @@ function validate(source, externalSource, initSource, acceptanceSource) {
     "POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password",
     "NURITEO_DATABASE_URL_FILE: /run/secrets/database_url",
     "NURITEO_S3_ACCESS_KEY_ID_FILE: /run/secrets/rustfs_access_key",
-    "NURITEO_BOOTSTRAP_ADMIN_PASSWORD_FILE: /run/secrets/bootstrap_admin_password"
+    "NURITEO_BOOTSTRAP_ADMIN_PASSWORD_FILE: /run/secrets/bootstrap_admin_password",
+    "NURITEO_SAVE_IDEMPOTENCY_SECRET_FILE: /run/secrets/save_idempotency_secret"
   ]) assert(source.includes(literal), `missing file-secret contract: ${literal}`);
   assert.doesNotMatch(source, /^\s+(?:POSTGRES_PASSWORD|NURITEO_DATABASE_URL|NURITEO_BOOTSTRAP_ADMIN_PASSWORD|NURITEO_S3_ACCESS_KEY_ID|NURITEO_S3_SECRET_ACCESS_KEY):/mu);
 
@@ -140,6 +147,7 @@ function verifyDriftDetection() {
     [compose.replace("  data:\n    internal: true", "  data:"), external, init, acceptance],
     [compose.replace("NURITEO_PREVIEW_WILDCARD_READY:-false", "NURITEO_PREVIEW_WILDCARD_READY:-true"), external, init, acceptance],
     [compose.replace("NURITEO_PREVIEW_SIGNING_KEY_FILE: /run/secrets/preview_signing_key", "NURITEO_PREVIEW_SIGNING_KEY: public"), external, init, acceptance],
+    [compose.replace("NURITEO_SAVE_IDEMPOTENCY_SECRET_FILE: /run/secrets/save_idempotency_secret", "NURITEO_SAVE_IDEMPOTENCY_SECRET: public"), external, init, acceptance],
     [compose, external.replace('command: ["storage-check"]', 'command: ["storage-init"]'), init, acceptance],
     [compose, external, init.replace("--head", "--request DELETE"), acceptance],
     [compose, external, init, acceptance.replace("wait_for_job \"$job\" 0", ":")]

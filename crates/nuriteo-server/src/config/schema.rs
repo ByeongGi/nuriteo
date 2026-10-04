@@ -339,6 +339,24 @@ pub const CONFIG_FIELDS: &[ConfigField] = &[
         "bounded mounted secret file; exclusive with direct value",
         "objectStorage.credentials",
     ),
+    secret_field(
+        "NURITEO_SAVE_IDEMPOTENCY_SECRET",
+        "base64-encoded 32-byte stable Save HMAC secret; exclusive with _FILE",
+        "save.idempotencySecret",
+    ),
+    secret_field(
+        "NURITEO_SAVE_IDEMPOTENCY_SECRET_FILE",
+        "bounded mounted stable Save HMAC secret; exclusive with direct value",
+        "save.idempotencySecretExistingSecret",
+    ),
+    field(
+        "NURITEO_SAVE_DEFAULT_QUOTA_BYTES",
+        None,
+        "bytes",
+        None,
+        "required positive Instance bootstrap quota in bytes or explicit unlimited",
+        "save.defaultQuotaBytes",
+    ),
     field(
         "NURITEO_INSTANCE_CA_FILE",
         None,

@@ -3,6 +3,9 @@ mod archive;
 mod cleanup;
 mod commit;
 mod content;
+mod http_config;
+mod http_routes;
+mod http_service;
 mod multipart_service;
 mod multipart_types;
 mod operations;
@@ -22,6 +25,9 @@ pub use commit::{
 pub use content::{
     ContentDescriptor, ContentDownload, ContentError, ContentService, ContentServicePolicy,
 };
+pub use http_config::{SaveHttpConfig, SaveHttpConfigError};
+pub(crate) use http_routes::openapi_router;
+pub use http_service::{SaveHttpError, SaveHttpPolicy, SaveHttpService};
 pub use multipart_service::{
     MultipartService, MultipartServiceError, MultipartServicePolicy, MultipartStore,
 };

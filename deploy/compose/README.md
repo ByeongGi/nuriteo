@@ -47,6 +47,8 @@ An example reverse-proxy shape is provided in `Caddyfile.preview.example`. Repla
 
 All operational commands use the same Server image as `serve`. One-shots have no restart policy, and a failed one-shot keeps Core and Web gated. Re-running the stack against the same named volumes is safe: bucket creation, migration, and administrator bootstrap are idempotent. `compose down` preserves data; use `compose down --volumes` only when intentionally deleting this installation.
 
+Core also requires `NURITEO_SAVE_IDEMPOTENCY_SECRET_FILE`, containing exactly 32 non-zero random bytes encoded as standard base64. Preserve this file across restarts; changing it makes earlier save idempotency keys intentionally fail closed. `NURITEO_SAVE_DEFAULT_QUOTA_BYTES` is the bootstrap Instance default for each Workspace (`10737418240`, 10 GiB, in the bundled Compose file). Set a positive decimal byte count up to the PostgreSQL `bigint` maximum or the explicit value `unlimited`.
+
 The bootstrap password is accepted only through its mounted file. It is not placed in the command, environment, rendered Compose configuration, or image. After the initial install, rotate or remove the host-side bootstrap password file according to local secret-management policy; an already-initialized bootstrap run does not rewrite the credential.
 
 ## External S3 preflight

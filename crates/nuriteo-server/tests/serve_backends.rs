@@ -23,6 +23,7 @@ const S3_ENDPOINT_ENV: &str = "NURITEO_TEST_S3_ENDPOINT";
 const S3_CA_ENV: &str = "NURITEO_TEST_S3_CA_FILE";
 const ACCESS_KEY: &str = "integration-access";
 const SECRET_KEY: &str = "integration-secret-0123456789";
+const SAVE_IDEMPOTENCY_SECRET: &str = "WlpaWlpaWlpaWlpaWlpaWlpaWlpaWlpaWlpaWlpaWlo=";
 const BUCKET: &str = "nuriteo-srv-004";
 
 #[tokio::test]
@@ -233,6 +234,8 @@ fn spawn_server(
         .env("NURITEO_S3_ACCESS_KEY_ID", ACCESS_KEY)
         .env("NURITEO_S3_SECRET_ACCESS_KEY", SECRET_KEY)
         .env("NURITEO_S3_CA_FILE", s3_ca_path)
+        .env("NURITEO_SAVE_IDEMPOTENCY_SECRET", SAVE_IDEMPOTENCY_SECRET)
+        .env("NURITEO_SAVE_DEFAULT_QUOTA_BYTES", "10737418240")
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
@@ -419,7 +422,11 @@ fn assert_healthcheck_failure(output: Output) {
 fn assert_redacted(output: &Output) {
     let mut bytes = output.stdout.clone();
     bytes.extend_from_slice(&output.stderr);
-    for secret in [SECRET_KEY.as_bytes(), b"nuriteo-test-password"] {
+    for secret in [
+        SECRET_KEY.as_bytes(),
+        SAVE_IDEMPOTENCY_SECRET.as_bytes(),
+        b"nuriteo-test-password",
+    ] {
         assert!(!bytes.windows(secret.len()).any(|window| window == secret));
     }
 }

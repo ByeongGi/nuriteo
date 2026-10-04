@@ -18,6 +18,8 @@ enum ProblemKind {
     UnsupportedMediaType,
     Validation,
     Conflict,
+    QuotaExceeded,
+    ReconciliationRequired,
     PreconditionRequired,
     PreconditionFailed,
     RangeNotSatisfiable,
@@ -37,13 +39,13 @@ impl ProblemKind {
             Self::PayloadTooLarge => StatusCode::PAYLOAD_TOO_LARGE,
             Self::UnsupportedMediaType => StatusCode::UNSUPPORTED_MEDIA_TYPE,
             Self::Validation => StatusCode::UNPROCESSABLE_ENTITY,
-            Self::Conflict => StatusCode::CONFLICT,
+            Self::Conflict | Self::QuotaExceeded => StatusCode::CONFLICT,
             Self::PreconditionRequired => StatusCode::PRECONDITION_REQUIRED,
             Self::PreconditionFailed => StatusCode::PRECONDITION_FAILED,
             Self::RangeNotSatisfiable => StatusCode::RANGE_NOT_SATISFIABLE,
-            Self::ServiceUnavailable | Self::CommitOutcomeUnknown => {
-                StatusCode::SERVICE_UNAVAILABLE
-            }
+            Self::ServiceUnavailable
+            | Self::ReconciliationRequired
+            | Self::CommitOutcomeUnknown => StatusCode::SERVICE_UNAVAILABLE,
             Self::OperationTimeout => StatusCode::GATEWAY_TIMEOUT,
             Self::Internal => StatusCode::INTERNAL_SERVER_ERROR,
         }
@@ -59,6 +61,8 @@ impl ProblemKind {
             Self::UnsupportedMediaType => "/docs/problems/unsupported-media-type",
             Self::Validation => "/docs/problems/validation-failed",
             Self::Conflict => "/docs/problems/resource-conflict",
+            Self::QuotaExceeded => "/docs/problems/quota-exceeded",
+            Self::ReconciliationRequired => "/docs/problems/reconciliation-required",
             Self::PreconditionRequired => "/docs/problems/precondition-required",
             Self::PreconditionFailed => "/docs/problems/precondition-failed",
             Self::RangeNotSatisfiable => "/docs/problems/range-not-satisfiable",
@@ -79,6 +83,8 @@ impl ProblemKind {
             Self::UnsupportedMediaType => "Unsupported media type",
             Self::Validation => "Validation failed",
             Self::Conflict => "Resource conflict",
+            Self::QuotaExceeded => "Storage quota exceeded",
+            Self::ReconciliationRequired => "Reconciliation required",
             Self::PreconditionRequired => "Precondition required",
             Self::PreconditionFailed => "Precondition failed",
             Self::RangeNotSatisfiable => "Range not satisfiable",
@@ -99,6 +105,8 @@ impl ProblemKind {
             Self::UnsupportedMediaType => "UNSUPPORTED_MEDIA_TYPE",
             Self::Validation => "VALIDATION_FAILED",
             Self::Conflict => "RESOURCE_CONFLICT",
+            Self::QuotaExceeded => "QUOTA_EXCEEDED",
+            Self::ReconciliationRequired => "RECONCILIATION_REQUIRED",
             Self::PreconditionRequired => "PRECONDITION_REQUIRED",
             Self::PreconditionFailed => "PRECONDITION_FAILED",
             Self::RangeNotSatisfiable => "RANGE_NOT_SATISFIABLE",
@@ -119,6 +127,10 @@ impl ProblemKind {
             Self::UnsupportedMediaType => "The request body must use application/json.",
             Self::Validation => "One or more fields are invalid.",
             Self::Conflict => "The resource state conflicts with the request.",
+            Self::QuotaExceeded => "The Workspace storage quota does not allow this Save.",
+            Self::ReconciliationRequired => {
+                "The operation outcome must be reconciled before retrying."
+            }
             Self::PreconditionRequired => "A current resource validator is required.",
             Self::PreconditionFailed => "The supplied resource validator is not current.",
             Self::RangeNotSatisfiable => "Byte-range downloads are not supported.",
@@ -235,6 +247,21 @@ impl HttpError {
     #[must_use]
     pub fn conflict(request_id: RequestId, instance: impl Into<String>) -> Self {
         Self::new(ProblemKind::Conflict, request_id, instance, Vec::new())
+    }
+
+    #[must_use]
+    pub fn quota_exceeded(request_id: RequestId, instance: impl Into<String>) -> Self {
+        Self::new(ProblemKind::QuotaExceeded, request_id, instance, Vec::new())
+    }
+
+    #[must_use]
+    pub fn reconciliation_required(request_id: RequestId, instance: impl Into<String>) -> Self {
+        Self::new(
+            ProblemKind::ReconciliationRequired,
+            request_id,
+            instance,
+            Vec::new(),
+        )
     }
 
     #[must_use]

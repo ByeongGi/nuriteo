@@ -128,9 +128,11 @@ printf '%s\n' 'compose-rustfs-secret-7e3bc2f41a' >"$fixture_root/rustfs-secret-k
 printf '%s\n' "$bootstrap_password" >"$fixture_root/bootstrap-password"
 printf '%s\n' 'postgres://nuriteo:compose-db-password-7e3bc2@postgres:5432/nuriteo' >"$fixture_root/database-url"
 openssl rand -base64 32 | tr '+/' '-_' | tr -d '=\n' >"$fixture_root/preview-signing-key"
+openssl rand -base64 32 >"$fixture_root/save-idempotency-secret"
 chmod 644 "$fixture_root/postgres-password" "$fixture_root/rustfs-access-key" \
   "$fixture_root/rustfs-secret-key" "$fixture_root/bootstrap-password" "$fixture_root/database-url"
 chmod 600 "$fixture_root/preview-signing-key"
+chmod 600 "$fixture_root/save-idempotency-secret"
 
 openssl req -x509 -newkey rsa:2048 -nodes -keyout "$fixture_root/postgres-tls/ca.key" \
   -out "$fixture_root/postgres-tls/ca.crt" -days 2 -subj '/CN=nuriteo-compose-postgres-ca' \
@@ -166,6 +168,8 @@ export NURITEO_RUSTFS_CA_FILE="$fixture_root/rustfs-tls/ca.crt"
 export NURITEO_RUSTFS_TLS_DIR="$fixture_root/rustfs-tls"
 export NURITEO_BOOTSTRAP_ADMIN_PASSWORD_FILE="$fixture_root/bootstrap-password"
 export NURITEO_PREVIEW_SIGNING_KEY_FILE="$fixture_root/preview-signing-key"
+export NURITEO_SAVE_IDEMPOTENCY_SECRET_FILE="$fixture_root/save-idempotency-secret"
+export NURITEO_SAVE_DEFAULT_QUOTA_BYTES='10737418240'
 export NURITEO_BOOTSTRAP_ADMIN_EMAIL='admin@example.invalid'
 export NURITEO_BOOTSTRAP_ADMIN_NAME='Compose Administrator'
 export NURITEO_EXTERNAL_URL="http://127.0.0.1:${web_port}"
@@ -177,7 +181,8 @@ export NURITEO_WEB_IMAGE='localhost/nuriteo-web:cmp-002'
 
 compose config >"$rendered"
 preview_signing_key="$(cat "$fixture_root/preview-signing-key")"
-for secret in 'compose-db-password-7e3bc2' 'COMPOSEACCESS7E3BC2' 'compose-rustfs-secret-7e3bc2f41a' "$bootstrap_password" "$preview_signing_key"; do
+save_idempotency_secret="$(cat "$fixture_root/save-idempotency-secret")"
+for secret in 'compose-db-password-7e3bc2' 'COMPOSEACCESS7E3BC2' 'compose-rustfs-secret-7e3bc2f41a' "$bootstrap_password" "$preview_signing_key" "$save_idempotency_secret"; do
   if grep -Fq "$secret" "$rendered"; then echo "rendered Compose exposed a secret" >&2; exit 1; fi
 done
 

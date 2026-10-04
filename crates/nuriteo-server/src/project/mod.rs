@@ -13,6 +13,7 @@ pub use access::{
     ProjectRole, ProjectRoleVersion,
 };
 pub(crate) use http_routes::openapi_router;
+pub(crate) use http_service::SaveProjectContext;
 pub use http_service::{ProjectHttpError, ProjectHttpPolicy, ProjectHttpService};
 pub use model::Project;
 #[cfg(test)]

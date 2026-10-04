@@ -214,6 +214,17 @@ impl<S: PutPresigner> SinglePutService<S> {
         }
     }
 
+    /// Establishes or verifies the persisted fingerprint for the configured
+    /// idempotency secret before the service accepts HTTP traffic.
+    pub async fn validate_idempotency_configuration(&self) -> Result<(), SinglePutServiceError> {
+        let deadline = Deadline::new(self.policy.operation_timeout);
+        let mut connection = deadline
+            .run(self.pool.acquire())
+            .await?
+            .map_err(map_database_error)?;
+        ensure_idempotency_configuration(&mut connection, &self.idempotency_secret, deadline).await
+    }
+
     pub async fn reconcile(
         &self,
         request: &CreateSinglePutSession,

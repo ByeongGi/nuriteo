@@ -5,6 +5,7 @@ use crate::invitations::InvitationHttpService;
 use crate::openapi;
 use crate::organization::OrganizationHttpService;
 use crate::project::ProjectHttpService;
+use crate::save::SaveHttpService;
 use crate::setup::SetupStatusService;
 use axum::Router;
 use axum::extract::Extension;
@@ -76,7 +77,27 @@ pub fn build_router_with_project_service(
     projects: ProjectHttpService,
     setup: SetupStatusService,
 ) -> Router {
-    openapi::router(auth, invitations, organizations, projects, setup)
+    build_router_with_save_service(
+        health,
+        auth,
+        invitations,
+        organizations,
+        projects,
+        SaveHttpService::unconfigured(),
+        setup,
+    )
+}
+
+pub fn build_router_with_save_service(
+    health: HealthService,
+    auth: AuthService,
+    invitations: InvitationHttpService,
+    organizations: OrganizationHttpService,
+    projects: ProjectHttpService,
+    save: SaveHttpService,
+    setup: SetupStatusService,
+) -> Router {
+    openapi::router(auth, invitations, organizations, projects, save, setup)
         .merge(health.router())
         .fallback(not_found)
         .method_not_allowed_fallback(method_not_allowed)

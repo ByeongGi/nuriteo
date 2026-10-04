@@ -210,12 +210,15 @@ services:
       NURITEO_S3_ACCESS_KEY_ID_FILE: /run/secrets/rustfs_access_key
       NURITEO_S3_SECRET_ACCESS_KEY_FILE: /run/secrets/rustfs_secret_key
       NURITEO_S3_CA_FILE: /run/secrets/rustfs_ca
+      NURITEO_SAVE_IDEMPOTENCY_SECRET_FILE: /run/secrets/save_idempotency_secret
+      NURITEO_SAVE_DEFAULT_QUOTA_BYTES: ${NURITEO_SAVE_DEFAULT_QUOTA_BYTES:-10737418240}
     secrets:
       - database_url
       - database_ca
       - rustfs_access_key
       - rustfs_secret_key
       - rustfs_ca
+      - save_idempotency_secret
     networks:
       - application
       - data
@@ -300,3 +303,5 @@ secrets:
     file: ${NURITEO_BOOTSTRAP_ADMIN_PASSWORD_FILE:?set NURITEO_BOOTSTRAP_ADMIN_PASSWORD_FILE}
   preview_signing_key:
     file: ${NURITEO_PREVIEW_SIGNING_KEY_FILE:?set NURITEO_PREVIEW_SIGNING_KEY_FILE}
+  save_idempotency_secret:
+    file: ${NURITEO_SAVE_IDEMPOTENCY_SECRET_FILE:?set NURITEO_SAVE_IDEMPOTENCY_SECRET_FILE}

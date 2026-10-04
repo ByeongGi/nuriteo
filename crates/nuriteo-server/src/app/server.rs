@@ -12,11 +12,11 @@ use crate::organization::{OrganizationHttpPolicy, OrganizationHttpService};
 use crate::project::{ProjectHttpPolicy, ProjectHttpService};
 use crate::save::{
     CleanupOperationsPolicy, CleanupOperationsService, CleanupService, ContentServicePolicy,
-    WorkerShutdown,
+    SaveHttpConfig, SaveHttpPolicy, SaveHttpService, WorkerShutdown,
 };
 use crate::setup::{SetupStatusPolicy, SetupStatusService};
 
-use super::{Supervisor, SupervisorConfig, WorkerError, build_router_with_project_service};
+use super::{Supervisor, SupervisorConfig, WorkerError, build_router_with_save_service};
 
 const PRODUCTION_WORKERS: NonZeroUsize = NonZeroUsize::new(3).unwrap();
 
@@ -31,6 +31,7 @@ pub(crate) enum ServeError {
     InvitationConfiguration,
     OrganizationConfiguration,
     ProjectConfiguration,
+    SaveConfiguration,
     CleanupConfiguration,
     Bind,
     ManagementBind,
@@ -50,6 +51,7 @@ impl ServeError {
             Self::InvitationConfiguration => "invitation-configuration",
             Self::OrganizationConfiguration => "organization-configuration",
             Self::ProjectConfiguration => "project-configuration",
+            Self::SaveConfiguration => "save-configuration",
             Self::CleanupConfiguration => "cleanup-configuration",
             Self::Bind => "bind",
             Self::ManagementBind => "management-bind",
@@ -78,6 +80,8 @@ pub(crate) async fn run_server(
         .map_err(|_| ServeError::DatabaseConfiguration)?;
     let storage = ObjectStorageConfig::load(environment, files)
         .map_err(|_| ServeError::StorageConfiguration)?;
+    let save_config =
+        SaveHttpConfig::load(environment, files).map_err(|_| ServeError::SaveConfiguration)?;
 
     let pool = DatabasePool::connect(database.pool_config())
         .await
@@ -166,6 +170,23 @@ pub(crate) async fn run_server(
             return Err(ServeError::ProjectConfiguration);
         }
     };
+    let save = match SaveHttpService::production(
+        pool.clone(),
+        projects.clone(),
+        store.clone(),
+        save_config.idempotency_secret(),
+        save_config.effective_quota(),
+        SaveHttpPolicy::default(),
+        global.cleanup.worker_policy,
+    )
+    .await
+    {
+        Ok(save) => save,
+        Err(_) => {
+            close_pool(pool, close_timeout).await?;
+            return Err(ServeError::SaveConfiguration);
+        }
+    };
     let operations_policy = match CleanupOperationsPolicy::new(
         global.cleanup.stale_threshold,
         global.cleanup.failed_threshold,
@@ -179,12 +200,13 @@ pub(crate) async fn run_server(
     };
     let operations = CleanupOperationsService::new(pool.clone(), operations_policy);
     let cleanup = CleanupService::new(pool.clone(), store, global.cleanup.worker_policy);
-    let router = build_router_with_project_service(
+    let router = build_router_with_save_service(
         health,
         auth,
         invitations,
         organizations,
         projects,
+        save,
         setup,
     );
     let management_router = operations.router();
@@ -280,7 +302,9 @@ mod tests {
                 ServeError::OrganizationConfiguration,
                 "organization-configuration",
             ),
+            (ServeError::ProjectConfiguration, "project-configuration"),
             (ServeError::CleanupConfiguration, "cleanup-configuration"),
+            (ServeError::SaveConfiguration, "save-configuration"),
             (ServeError::Bind, "bind"),
             (ServeError::ManagementBind, "management-bind"),
             (ServeError::Lifecycle, "lifecycle"),
