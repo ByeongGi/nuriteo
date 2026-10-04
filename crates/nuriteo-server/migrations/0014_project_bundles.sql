@@ -422,6 +422,41 @@ BEGIN
 END;
 $$;
 
+-- A Working Head replacement touches both the incoming and outgoing objects.
+-- Acquire their actual advisory keys in ascending order so concurrent A↔B
+-- swaps cannot each retain one key while waiting for the other.
+CREATE OR REPLACE FUNCTION lock_bundle_object_lifecycles(
+    first_object_key text,
+    second_object_key text
+)
+RETURNS void
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    first_lock_key integer;
+    second_lock_key integer;
+BEGIN
+    first_lock_key := CASE WHEN first_object_key IS NULL THEN NULL
+        ELSE hashtext('bundle-object:' || first_object_key) END;
+    second_lock_key := CASE WHEN second_object_key IS NULL THEN NULL
+        ELSE hashtext('bundle-object:' || second_object_key) END;
+
+    IF first_lock_key IS NULL THEN
+        PERFORM pg_advisory_xact_lock(1347566129, second_lock_key);
+    ELSIF second_lock_key IS NULL THEN
+        PERFORM pg_advisory_xact_lock(1347566129, first_lock_key);
+    ELSIF first_lock_key <= second_lock_key THEN
+        PERFORM pg_advisory_xact_lock(1347566129, first_lock_key);
+        IF first_lock_key <> second_lock_key THEN
+            PERFORM pg_advisory_xact_lock(1347566129, second_lock_key);
+        END IF;
+    ELSE
+        PERFORM pg_advisory_xact_lock(1347566129, second_lock_key);
+        PERFORM pg_advisory_xact_lock(1347566129, first_lock_key);
+    END IF;
+END;
+$$;
+
 CREATE OR REPLACE FUNCTION assert_bundle_referenceable(
     candidate_project_id uuid,
     candidate_storage_scope_id uuid,
@@ -473,6 +508,9 @@ CREATE OR REPLACE FUNCTION enforce_project_working_head()
 RETURNS trigger
 LANGUAGE plpgsql
 AS $$
+DECLARE
+    old_object_key text;
+    new_object_key text;
 BEGIN
     IF NEW.working_head_bundle_id IS NOT NULL
         AND (
@@ -480,6 +518,15 @@ BEGIN
             OR NEW.working_head_bundle_id IS DISTINCT FROM OLD.working_head_bundle_id
         )
     THEN
+        IF TG_OP = 'UPDATE' AND OLD.working_head_bundle_id IS NOT NULL THEN
+            SELECT bundle.object_key INTO old_object_key
+            FROM bundles bundle
+            WHERE bundle.id = OLD.working_head_bundle_id;
+        END IF;
+        SELECT bundle.object_key INTO new_object_key
+        FROM bundles bundle
+        WHERE bundle.id = NEW.working_head_bundle_id;
+        PERFORM lock_bundle_object_lifecycles(old_object_key, new_object_key);
         PERFORM assert_bundle_referenceable(
             NEW.id,
             NEW.storage_scope_id,
@@ -668,15 +715,6 @@ BEGIN
         -- before Working Head/history mutation in the same transaction.
     END IF;
 
-    IF NEW.state IN ('committed', 'aborted', 'expired', 'failed')
-        AND EXISTS (
-            SELECT 1 FROM storage_reservations reservation
-            WHERE reservation.save_session_id = OLD.id
-        )
-    THEN
-        RAISE EXCEPTION 'terminal Save transition requires reservation release in this transaction'
-            USING ERRCODE = '23514';
-    END IF;
     RETURN NEW;
 END;
 $$;
@@ -806,6 +844,44 @@ CREATE TRIGGER save_sessions_update_invariants
     FOR EACH ROW
     EXECUTE FUNCTION enforce_save_session_update();
 
+CREATE OR REPLACE FUNCTION release_terminal_save_reservation()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    IF OLD.state IN ('created', 'uploading', 'verifying')
+        AND NEW.state IN ('committed', 'aborted', 'expired', 'failed')
+    THEN
+        DELETE FROM storage_reservations
+        WHERE save_session_id = NEW.id;
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER save_sessions_terminal_reservation_release
+    AFTER UPDATE OF state ON save_sessions
+    FOR EACH ROW
+    EXECUTE FUNCTION release_terminal_save_reservation();
+
+CREATE OR REPLACE FUNCTION enforce_save_session_delete()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    IF OLD.state IN ('created', 'uploading', 'verifying') THEN
+        RAISE EXCEPTION 'active Save session cannot be deleted; transition it to a terminal state'
+            USING ERRCODE = '23514';
+    END IF;
+    RETURN OLD;
+END;
+$$;
+
+CREATE TRIGGER save_sessions_safe_delete
+    BEFORE DELETE ON save_sessions
+    FOR EACH ROW
+    EXECUTE FUNCTION enforce_save_session_delete();
+
 CREATE OR REPLACE FUNCTION enforce_storage_reservation_insert()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -850,6 +926,32 @@ CREATE TRIGGER storage_reservations_immutable
     BEFORE UPDATE ON storage_reservations
     FOR EACH ROW
     EXECUTE FUNCTION reject_storage_reservation_update();
+
+CREATE OR REPLACE FUNCTION enforce_storage_reservation_delete()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    parent_state text;
+BEGIN
+    SELECT session.state INTO parent_state
+    FROM save_sessions session
+    WHERE session.id = OLD.save_session_id;
+
+    -- A missing parent is only reachable through the FK's ON DELETE CASCADE;
+    -- active parent deletion is rejected by save_sessions_safe_delete first.
+    IF FOUND AND parent_state IN ('created', 'uploading', 'verifying') THEN
+        RAISE EXCEPTION 'active storage reservation is released only by a terminal Save transition'
+            USING ERRCODE = '23514';
+    END IF;
+    RETURN OLD;
+END;
+$$;
+
+CREATE TRIGGER storage_reservations_safe_delete
+    BEFORE DELETE ON storage_reservations
+    FOR EACH ROW
+    EXECUTE FUNCTION enforce_storage_reservation_delete();
 
 CREATE OR REPLACE FUNCTION enforce_multipart_part_write()
 RETURNS trigger

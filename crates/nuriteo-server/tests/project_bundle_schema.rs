@@ -40,6 +40,7 @@ async fn project_bundle_schema_is_verified_scoped_bounded_and_gc_safe() {
     verify_initial_save_and_working_head(&pool).await;
     verify_atomic_head_replacement_and_gc_fence(&pool).await;
     verify_completed_gc_metadata_cleanup_allows_verified_reupload(&pool).await;
+    verify_working_head_swap_uses_deterministic_object_lock_order(&pool).await;
     verify_scope_reference_and_metadata_constraints(&pool).await;
     verify_multipart_expiry_and_staging_gc(&pool).await;
     verify_project_delete_enqueues_without_dangling_references(&pool).await;
@@ -153,23 +154,28 @@ async fn verify_initial_save_and_working_head(pool: &DatabasePool) {
     .await;
     assert_rejected(
         pool,
-        "UPDATE save_sessions SET state='committed', \
-        committed_bundle_id='0199ee6c-c777-7000-8000-000000006050', \
-        terminal_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP \
-        WHERE id='0199ee6c-c777-7000-8000-000000006040'",
-        "terminal Save transition with a live reservation",
+        "DELETE FROM storage_reservations \
+         WHERE save_session_id='0199ee6c-c777-7000-8000-000000006040'",
+        "independent active reservation release",
+    )
+    .await;
+    assert_rejected(
+        pool,
+        "DELETE FROM save_sessions \
+         WHERE id='0199ee6c-c777-7000-8000-000000006040'",
+        "active Save session deletion",
+    )
+    .await;
+    assert_rejected(
+        pool,
+        "DELETE FROM projects \
+         WHERE id='0199ee6c-c777-7000-8000-000000006030'",
+        "Project cascade over an active Save session",
     )
     .await;
 
     let mut connection = pool.acquire().await.unwrap();
     let mut transaction = connection.begin().await.unwrap();
-    transaction
-        .execute(
-            "DELETE FROM storage_reservations \
-        WHERE save_session_id='0199ee6c-c777-7000-8000-000000006040'",
-        )
-        .await
-        .unwrap();
     transaction
         .execute(
             "UPDATE save_sessions SET state='committed', \
@@ -179,6 +185,17 @@ async fn verify_initial_save_and_working_head(pool: &DatabasePool) {
         )
         .await
         .unwrap();
+    let reservation_released: bool = sqlx::query_scalar(
+        "SELECT NOT EXISTS (SELECT 1 FROM storage_reservations \
+         WHERE save_session_id='0199ee6c-c777-7000-8000-000000006040')",
+    )
+    .fetch_one(&mut *transaction)
+    .await
+    .unwrap();
+    assert!(
+        reservation_released,
+        "terminal transition must atomically release its reservation"
+    );
     transaction
         .execute(
             "INSERT INTO project_bundle_admissions \
@@ -548,6 +565,127 @@ async fn verify_completed_gc_metadata_cleanup_allows_verified_reupload(pool: &Da
     );
 }
 
+async fn verify_working_head_swap_uses_deterministic_object_lock_order(pool: &DatabasePool) {
+    for statement in [
+        "INSERT INTO save_sessions \
+         (id,project_id,storage_scope_id,actor_user_id,expected_project_version, \
+          expected_bundle_sha256,expected_physical_bytes,expected_logical_bytes, \
+          expected_file_count,staging_object_key,upload_mode,expires_at) VALUES \
+         ('0199ee6c-c777-7000-8000-000000006047','0199ee6c-c777-7000-8000-000000006030', \
+          '0199ee6c-c777-7000-8000-000000006020','0199ee6c-c777-7000-8000-000000006001',3, \
+          decode(repeat('11',32),'hex'),1024,5,1,'staging/projects/6030/admit-6055','single', \
+          CURRENT_TIMESTAMP + INTERVAL '1 hour')",
+        "UPDATE save_sessions SET state='uploading',updated_at=CURRENT_TIMESTAMP \
+         WHERE id='0199ee6c-c777-7000-8000-000000006047'",
+        "UPDATE save_sessions SET state='verifying',updated_at=CURRENT_TIMESTAMP \
+         WHERE id='0199ee6c-c777-7000-8000-000000006047'",
+        "UPDATE save_sessions SET state='committed', \
+         committed_bundle_id='0199ee6c-c777-7000-8000-000000006055', \
+         terminal_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP \
+         WHERE id='0199ee6c-c777-7000-8000-000000006047'",
+        "INSERT INTO project_bundle_admissions \
+         (project_id,storage_scope_id,bundle_id,source_save_session_id,save_session_id) VALUES \
+         ('0199ee6c-c777-7000-8000-000000006030','0199ee6c-c777-7000-8000-000000006020', \
+          '0199ee6c-c777-7000-8000-000000006055','0199ee6c-c777-7000-8000-000000006047', \
+          '0199ee6c-c777-7000-8000-000000006047')",
+        "INSERT INTO save_sessions \
+         (id,project_id,storage_scope_id,actor_user_id,expected_project_version, \
+          expected_bundle_sha256,expected_physical_bytes,expected_logical_bytes, \
+          expected_file_count,staging_object_key,upload_mode,expires_at) VALUES \
+         ('0199ee6c-c777-7000-8000-000000006048','0199ee6c-c777-7000-8000-000000006032', \
+          '0199ee6c-c777-7000-8000-000000006021','0199ee6c-c777-7000-8000-000000006001',2, \
+          decode(repeat('22',32),'hex'),2048,8,2,'staging/projects/6032/admit-6051','single', \
+          CURRENT_TIMESTAMP + INTERVAL '1 hour')",
+        "UPDATE save_sessions SET state='uploading',updated_at=CURRENT_TIMESTAMP \
+         WHERE id='0199ee6c-c777-7000-8000-000000006048'",
+        "UPDATE save_sessions SET state='verifying',updated_at=CURRENT_TIMESTAMP \
+         WHERE id='0199ee6c-c777-7000-8000-000000006048'",
+        "UPDATE save_sessions SET state='committed', \
+         committed_bundle_id='0199ee6c-c777-7000-8000-000000006051', \
+         terminal_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP \
+         WHERE id='0199ee6c-c777-7000-8000-000000006048'",
+        "INSERT INTO project_bundle_admissions \
+         (project_id,storage_scope_id,bundle_id,source_save_session_id,save_session_id) VALUES \
+         ('0199ee6c-c777-7000-8000-000000006032','0199ee6c-c777-7000-8000-000000006021', \
+          '0199ee6c-c777-7000-8000-000000006051','0199ee6c-c777-7000-8000-000000006048', \
+          '0199ee6c-c777-7000-8000-000000006048')",
+    ] {
+        execute(pool, statement).await;
+    }
+
+    let mut blocker_connection = pool.acquire().await.unwrap();
+    let blocker_pid: i32 = sqlx::query_scalar("SELECT pg_backend_pid()")
+        .fetch_one(&mut *blocker_connection)
+        .await
+        .unwrap();
+    let mut blocker = blocker_connection.begin().await.unwrap();
+    blocker
+        .execute(
+            "SELECT pg_advisory_xact_lock(1347566129, LEAST( \
+             hashtext('bundle-object:staging/projects/6030/save-6041'), \
+             hashtext('bundle-object:staging/projects/6032/save-6044')))",
+        )
+        .await
+        .unwrap();
+
+    let mut first_connection = pool.acquire().await.unwrap();
+    let first_pid: i32 = sqlx::query_scalar("SELECT pg_backend_pid()")
+        .fetch_one(&mut *first_connection)
+        .await
+        .unwrap();
+    let first = tokio::spawn(async move {
+        let mut transaction = first_connection.begin().await?;
+        transaction.execute(
+            "UPDATE projects SET working_head_bundle_id='0199ee6c-c777-7000-8000-000000006055', \
+             updated_at=CURRENT_TIMESTAMP,lock_version=lock_version+1 \
+             WHERE id='0199ee6c-c777-7000-8000-000000006030'"
+        ).await?;
+        transaction.commit().await
+    });
+
+    let mut second_connection = pool.acquire().await.unwrap();
+    let second_pid: i32 = sqlx::query_scalar("SELECT pg_backend_pid()")
+        .fetch_one(&mut *second_connection)
+        .await
+        .unwrap();
+    let second = tokio::spawn(async move {
+        let mut transaction = second_connection.begin().await?;
+        transaction.execute(
+            "UPDATE projects SET working_head_bundle_id='0199ee6c-c777-7000-8000-000000006051', \
+             updated_at=CURRENT_TIMESTAMP,lock_version=lock_version+1 \
+             WHERE id='0199ee6c-c777-7000-8000-000000006032'"
+        ).await?;
+        transaction.commit().await
+    });
+
+    assert!(wait_for_database_block(pool, blocker_pid, first_pid).await);
+    assert!(wait_for_database_block(pool, blocker_pid, second_pid).await);
+
+    blocker.commit().await.unwrap();
+    time::timeout(Duration::from_secs(5), first)
+        .await
+        .expect("first Working Head swap must not deadlock")
+        .unwrap()
+        .unwrap();
+    time::timeout(Duration::from_secs(5), second)
+        .await
+        .expect("second Working Head swap must not deadlock")
+        .unwrap()
+        .unwrap();
+
+    let swapped: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM projects WHERE \
+         (id='0199ee6c-c777-7000-8000-000000006030' \
+          AND working_head_bundle_id='0199ee6c-c777-7000-8000-000000006055') \
+         OR (id='0199ee6c-c777-7000-8000-000000006032' \
+          AND working_head_bundle_id='0199ee6c-c777-7000-8000-000000006051')",
+    )
+    .fetch_one(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+    assert_eq!(swapped, 2);
+}
+
 async fn verify_scope_reference_and_metadata_constraints(pool: &DatabasePool) {
     execute(
         pool,
@@ -760,14 +898,19 @@ async fn verify_project_delete_enqueues_without_dangling_references(pool: &Datab
         WHERE id='0199ee6c-c777-7000-8000-000000006030'",
     )
     .await;
-    let dangling: i64 = sqlx::query_scalar("SELECT \
-        (SELECT count(*) FROM projects WHERE working_head_bundle_id='0199ee6c-c777-7000-8000-000000006051') + \
-        (SELECT count(*) FROM project_bundle_refs WHERE bundle_id='0199ee6c-c777-7000-8000-000000006051')")
-        .fetch_one(&mut *pool.acquire().await.unwrap()).await.unwrap();
+    let dangling: i64 = sqlx::query_scalar(
+        "SELECT \
+        (SELECT count(*) FROM projects WHERE id='0199ee6c-c777-7000-8000-000000006030') + \
+        (SELECT count(*) FROM project_bundle_refs \
+         WHERE project_id='0199ee6c-c777-7000-8000-000000006030')",
+    )
+    .fetch_one(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
     assert_eq!(dangling, 0);
     let queued: bool = sqlx::query_scalar(
         "SELECT EXISTS (SELECT 1 FROM gc_candidates \
-        WHERE object_key='staging/projects/6030/save-6041' AND status='queued')",
+        WHERE object_key='staging/projects/6032/save-6044' AND status='queued')",
     )
     .fetch_one(&mut *pool.acquire().await.unwrap())
     .await
@@ -839,8 +982,11 @@ async fn verify_schema_shape(pool: &DatabasePool) {
         "projects_deleted_head_gc_candidate",
         "save_sessions_insert_invariants",
         "save_sessions_update_invariants",
+        "save_sessions_terminal_reservation_release",
+        "save_sessions_safe_delete",
         "storage_reservations_active_session",
         "storage_reservations_immutable",
+        "storage_reservations_safe_delete",
         "project_bundle_admissions_committed_save",
         "project_bundle_admissions_immutable",
         "multipart_parts_write_invariants",
