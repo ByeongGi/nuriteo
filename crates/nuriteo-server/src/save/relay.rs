@@ -357,6 +357,18 @@ impl RelayUploadService {
         };
         if authorization != WriteAuthorization::Authorized || session.expired || !expected_state {
             release_lease_row(&mut transaction, session_id, lease, deadline).await?;
+            let sibling_active = lock_active_sibling_leases(
+                &mut transaction,
+                session_id,
+                lease.part_number,
+                deadline,
+            )
+            .await?;
+            let error = invalidated_session_error(&session, authorization);
+            if sibling_active {
+                commit(transaction, deadline).await?;
+                return Err(error);
+            }
             let error = fail_invalidated_session(
                 &mut transaction,
                 session_id,
@@ -562,7 +574,7 @@ async fn acquire_lease(
             sqlx::query_scalar(
                 "INSERT INTO save_upload_leases \
                  (save_session_id,part_number,generation,lease_token,lease_expires_at) \
-                 VALUES ($1::uuid,$2,1,$3::uuid,transaction_timestamp()+make_interval(secs=>$4)) \
+                 VALUES ($1::uuid,$2,1,$3::uuid,clock_timestamp()+make_interval(secs=>$4)) \
                  ON CONFLICT (save_session_id,part_number) DO UPDATE SET \
                    generation=save_upload_leases.generation+1,lease_token=EXCLUDED.lease_token,\
                    lease_expires_at=EXCLUDED.lease_expires_at,released_at=NULL \
@@ -700,6 +712,42 @@ async fn release_lease_row(
     }
 }
 
+async fn lock_active_sibling_leases(
+    transaction: &mut Transaction<'_, Postgres>,
+    session_id: SaveSessionId,
+    released_part_number: i16,
+    deadline: Deadline,
+) -> Result<bool, RelayUploadError> {
+    let siblings: Vec<i16> = deadline
+        .run(
+            sqlx::query_scalar(
+                "SELECT part_number FROM save_upload_leases \
+                 WHERE save_session_id=$1::uuid AND part_number<>$2 \
+                   AND released_at IS NULL AND lease_expires_at>clock_timestamp() \
+                 ORDER BY part_number FOR UPDATE",
+            )
+            .bind(session_id.to_string())
+            .bind(released_part_number)
+            .fetch_all(&mut **transaction),
+        )
+        .await?
+        .map_err(map_sql)?;
+    Ok(!siblings.is_empty())
+}
+
+fn invalidated_session_error(
+    session: &LockedSession,
+    authorization: WriteAuthorization,
+) -> RelayUploadError {
+    if session.expired {
+        RelayUploadError::SessionExpired
+    } else if authorization == WriteAuthorization::Denied {
+        RelayUploadError::NotFound
+    } else {
+        RelayUploadError::Conflict
+    }
+}
+
 async fn fail_invalidated_session(
     transaction: &mut Transaction<'_, Postgres>,
     session_id: SaveSessionId,
@@ -730,13 +778,7 @@ async fn fail_invalidated_session(
             return Err(RelayUploadError::ReconciliationRequired);
         }
     }
-    if session.expired {
-        Ok(RelayUploadError::SessionExpired)
-    } else if authorization == WriteAuthorization::Denied {
-        Ok(RelayUploadError::NotFound)
-    } else {
-        Ok(RelayUploadError::Conflict)
-    }
+    Ok(invalidated_session_error(session, authorization))
 }
 
 async fn update_single_to_uploading(

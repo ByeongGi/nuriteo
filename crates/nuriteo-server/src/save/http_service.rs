@@ -398,6 +398,7 @@ impl SaveHttpService {
         receipts: Vec<SaveReceiptInput>,
     ) -> Result<(), SaveHttpError> {
         let runtime = self.runtime()?;
+        require_direct(runtime)?;
         let context = authorize(runtime, browser, owner, project_id).await?;
         let receipts = receipts
             .into_iter()
@@ -781,6 +782,14 @@ fn owner_path(owner: ProjectOwner) -> (&'static str, String) {
 
 fn require_relay(runtime: &Runtime) -> Result<(), SaveHttpError> {
     if runtime.upload_transport == SaveUploadTransport::Relay {
+        Ok(())
+    } else {
+        Err(SaveHttpError::NotFound)
+    }
+}
+
+fn require_direct(runtime: &Runtime) -> Result<(), SaveHttpError> {
+    if runtime.upload_transport == SaveUploadTransport::Direct {
         Ok(())
     } else {
         Err(SaveHttpError::NotFound)
