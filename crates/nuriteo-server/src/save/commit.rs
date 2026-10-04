@@ -18,6 +18,7 @@ use super::VerifiedStagingBundle;
 const MIN_TIMEOUT: Duration = Duration::from_millis(100);
 const MAX_TIMEOUT: Duration = Duration::from_secs(600);
 const SQL_MARGIN: Duration = Duration::from_millis(25);
+const MAX_RECOVERY_CHECKPOINTS: usize = 3;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct WorkingHeadCommitPolicy {
@@ -149,11 +150,12 @@ impl WorkingHeadCommitService {
             return Err(WorkingHeadCommitError::SessionNotFound);
         }
 
-        type ProjectRow = (String, i64, Option<String>);
+        type ProjectRow = (String, i64, Option<String>, Option<String>);
         let project: Option<ProjectRow> = deadline
             .run(
                 sqlx::query_as(
-                    "SELECT state,lock_version,head.object_key FROM projects project \
+                    "SELECT state,lock_version,project.working_head_bundle_id::text,head.object_key \
+                     FROM projects project \
                      LEFT JOIN bundles head ON head.id=project.working_head_bundle_id \
                      WHERE project.id=$1::uuid AND project.storage_scope_id=$2::uuid \
                      FOR UPDATE OF project",
@@ -164,7 +166,7 @@ impl WorkingHeadCommitService {
             )
             .await?
             .map_err(map_sql_error)?;
-        let Some((project_state, project_version, old_object_key)) = project else {
+        let Some((project_state, project_version, old_bundle_id, old_object_key)) = project else {
             return Err(WorkingHeadCommitError::SessionNotFound);
         };
         if project_state != "active" {
@@ -424,6 +426,22 @@ impl WorkingHeadCommitService {
             .bind(&bundle.0).bind(capability.session_id().to_string()).execute(&mut *tx))
             .await?.map_err(map_sql_error)?;
 
+        let rotates_recovery = old_bundle_id
+            .as_deref()
+            .is_some_and(|old_bundle_id| old_bundle_id != bundle.0.as_str());
+        if rotates_recovery {
+            rotate_recovery_checkpoints(
+                &mut tx,
+                capability,
+                &session.7,
+                old_bundle_id
+                    .as_deref()
+                    .ok_or(WorkingHeadCommitError::InvariantViolation)?,
+                deadline,
+            )
+            .await?;
+        }
+
         let affected = deadline
             .run(
                 sqlx::query(
@@ -441,6 +459,10 @@ impl WorkingHeadCommitService {
             .rows_affected();
         if affected != 1 {
             return Err(WorkingHeadCommitError::StaleProjectVersion);
+        }
+
+        if rotates_recovery {
+            clear_live_reference_gc_candidates(&mut tx, capability, &bundle.0, deadline).await?;
         }
 
         if inserted == 0 && bundle.1 != session.1 {
@@ -594,6 +616,137 @@ impl WorkingHeadCommitService {
         commit_transaction(tx, deadline).await?;
         Ok(result)
     }
+}
+
+async fn rotate_recovery_checkpoints(
+    tx: &mut Transaction<'_, Postgres>,
+    capability: &VerifiedStagingBundle,
+    actor_user_id: &str,
+    previous_head_bundle_id: &str,
+    deadline: Deadline,
+) -> Result<(), WorkingHeadCommitError> {
+    type RecoveryRow = (String, i16);
+    let recovery_rows: Vec<RecoveryRow> = deadline
+        .run(
+            sqlx::query_as(
+                "SELECT id::text,recovery_position FROM project_bundle_refs \
+                 WHERE project_id=$1::uuid AND kind='recovery' \
+                 ORDER BY created_at,id FOR UPDATE",
+            )
+            .bind(capability.project_id().to_string())
+            .fetch_all(&mut **tx),
+        )
+        .await?
+        .map_err(map_sql_error)?;
+    if recovery_rows.len() > MAX_RECOVERY_CHECKPOINTS {
+        return Err(WorkingHeadCommitError::InvariantViolation);
+    }
+
+    let mut occupied = [false; MAX_RECOVERY_CHECKPOINTS];
+    for (_, position) in &recovery_rows {
+        let index = position
+            .checked_sub(1)
+            .and_then(|position| usize::try_from(position).ok())
+            .filter(|index| *index < occupied.len())
+            .ok_or(WorkingHeadCommitError::InvariantViolation)?;
+        if occupied[index] {
+            return Err(WorkingHeadCommitError::InvariantViolation);
+        }
+        occupied[index] = true;
+    }
+
+    let recovery_position = if recovery_rows.len() == occupied.len() {
+        let (oldest_id, oldest_position) = recovery_rows
+            .first()
+            .ok_or(WorkingHeadCommitError::InvariantViolation)?;
+        let deleted = deadline
+            .run(
+                sqlx::query(
+                    "DELETE FROM project_bundle_refs \
+                     WHERE id=$1::uuid AND project_id=$2::uuid AND kind='recovery'",
+                )
+                .bind(oldest_id)
+                .bind(capability.project_id().to_string())
+                .execute(&mut **tx),
+            )
+            .await?
+            .map_err(map_sql_error)?
+            .rows_affected();
+        if deleted != 1 {
+            return Err(WorkingHeadCommitError::InvariantViolation);
+        }
+        *oldest_position
+    } else {
+        occupied
+            .iter()
+            .position(|occupied| !occupied)
+            .and_then(|index| i16::try_from(index + 1).ok())
+            .ok_or(WorkingHeadCommitError::InvariantViolation)?
+    };
+
+    deadline
+        .run(
+            sqlx::query(
+                "INSERT INTO project_bundle_refs \
+                 (id,project_id,storage_scope_id,bundle_id,kind,recovery_position,actor_user_id) \
+                 VALUES ($1::uuid,$2::uuid,$3::uuid,$4::uuid,'recovery',$5,$6::uuid)",
+            )
+            .bind(Uuid::now_v7().to_string())
+            .bind(capability.project_id().to_string())
+            .bind(capability.storage_scope_id().to_string())
+            .bind(previous_head_bundle_id)
+            .bind(recovery_position)
+            .bind(actor_user_id)
+            .execute(&mut **tx),
+        )
+        .await?
+        .map_err(map_sql_error)?;
+    Ok(())
+}
+
+async fn clear_live_reference_gc_candidates(
+    tx: &mut Transaction<'_, Postgres>,
+    capability: &VerifiedStagingBundle,
+    incoming_bundle_id: &str,
+    deadline: Deadline,
+) -> Result<(), WorkingHeadCommitError> {
+    deadline
+        .run(
+            sqlx::query(
+                "DELETE FROM gc_candidates candidate USING bundles bundle \
+                 WHERE candidate.object_key=bundle.object_key \
+                   AND candidate.status IN ('queued','retry_wait','failed') \
+                   AND (bundle.id=$2::uuid OR EXISTS ( \
+                       SELECT 1 FROM project_bundle_refs reference \
+                       WHERE reference.project_id=$1::uuid AND reference.bundle_id=bundle.id))",
+            )
+            .bind(capability.project_id().to_string())
+            .bind(incoming_bundle_id)
+            .execute(&mut **tx),
+        )
+        .await?
+        .map_err(map_sql_error)?;
+
+    let protected_candidate_exists: bool = deadline
+        .run(
+            sqlx::query_scalar(
+                "SELECT EXISTS(SELECT 1 FROM gc_candidates candidate \
+                 JOIN bundles bundle ON bundle.object_key=candidate.object_key \
+                 WHERE candidate.status IN ('running','completed') \
+                   AND (bundle.id=$2::uuid OR EXISTS ( \
+                       SELECT 1 FROM project_bundle_refs reference \
+                       WHERE reference.project_id=$1::uuid AND reference.bundle_id=bundle.id)))",
+            )
+            .bind(capability.project_id().to_string())
+            .bind(incoming_bundle_id)
+            .fetch_one(&mut **tx),
+        )
+        .await?
+        .map_err(map_sql_error)?;
+    if protected_candidate_exists {
+        return Err(WorkingHeadCommitError::InvariantViolation);
+    }
+    Ok(())
 }
 
 type PersistedSession = (

@@ -26,8 +26,9 @@ use nuriteo_server::save::{
     MultipartPartPlan, MultipartPartReceipt, MultipartService, MultipartServiceError,
     MultipartServicePolicy, MultipartSessionContext, MultipartStore, PutPresigner,
     SinglePutService, SinglePutServiceError, SinglePutServicePolicy, StagingVerifier,
-    StagingVerifierPolicy, VerificationError, VerifyStagingBundle, WorkingHeadCommitError,
-    WorkingHeadCommitPolicy, WorkingHeadCommitReconciliation, WorkingHeadCommitService,
+    StagingVerifierPolicy, VerificationError, VerifiedStagingBundle, VerifyStagingBundle,
+    WorkingHeadCommitError, WorkingHeadCommitPolicy, WorkingHeadCommitReconciliation,
+    WorkingHeadCommitService,
 };
 use nuriteo_server::workspace::StorageScopeId;
 use sha2::{Digest, Sha256};
@@ -361,21 +362,23 @@ async fn working_head_commit_is_atomic_idempotent_and_fenced() {
     let second = committer.commit(&second_capability).await.unwrap();
     assert_ne!(second.bundle_id(), left.bundle_id());
     assert_eq!(second.project_version().get(), 3);
-    let replaced: (String, String, i64) = sqlx::query_as(
-        "SELECT working_head_bundle_id::text,candidate.status,lock_version FROM projects project \
-         JOIN bundles old_bundle ON old_bundle.id=$2::uuid \
-         JOIN gc_candidates candidate ON candidate.object_key=old_bundle.object_key \
-         WHERE project.id=$1::uuid",
+    let replaced: (String, i64, i64, bool, i64) = sqlx::query_as(
+        "SELECT working_head_bundle_id::text,lock_version, \
+         (SELECT COUNT(*) FROM project_bundle_refs reference \
+          WHERE reference.project_id=project.id AND reference.kind='recovery'), \
+         EXISTS(SELECT 1 FROM project_bundle_refs reference \
+          WHERE reference.project_id=project.id AND reference.kind='recovery' \
+            AND reference.bundle_id=$2::uuid), \
+         (SELECT COUNT(*) FROM gc_candidates candidate JOIN bundles bundle \
+          ON bundle.object_key=candidate.object_key WHERE bundle.id=$2::uuid) \
+         FROM projects project WHERE project.id=$1::uuid",
     )
     .bind(PROJECT_A)
     .bind(left.bundle_id().to_string())
     .fetch_one(&mut *pool.acquire().await.unwrap())
     .await
     .unwrap();
-    assert_eq!(
-        replaced,
-        (second.bundle_id().to_string(), "queued".to_owned(), 3)
-    );
+    assert_eq!(replaced, (second.bundle_id().to_string(), 3, 1, true, 0));
 
     let stale_body = canonical_test_bundle(PROJECT_B, SCOPE, "stale.txt", b"stale\n");
     let mut stale_request = request(PROJECT_B, "head-stale-000001", &stale_body);
@@ -601,9 +604,137 @@ async fn working_head_commit_is_atomic_idempotent_and_fenced() {
     .unwrap();
     assert_eq!(dedupe_state, (1, 1, "committed".to_owned()));
 
+    let third_capability = prepare_verified_head(
+        &creator,
+        &verifier,
+        &http,
+        ProjectVersion::new(4).unwrap(),
+        "head-rotation-third",
+        "third.txt",
+        b"third\n",
+    )
+    .await;
+    let third = committer.commit(&third_capability).await.unwrap();
+    assert_eq!(third.project_version().get(), 5);
+    let fourth_capability = prepare_verified_head(
+        &creator,
+        &verifier,
+        &http,
+        ProjectVersion::new(5).unwrap(),
+        "head-rotation-fourth",
+        "fourth.txt",
+        b"fourth\n",
+    )
+    .await;
+    let fourth = committer.commit(&fourth_capability).await.unwrap();
+    assert_eq!(fourth.project_version().get(), 6);
+    let fifth_capability = prepare_verified_head(
+        &creator,
+        &verifier,
+        &http,
+        ProjectVersion::new(6).unwrap(),
+        "head-rotation-fifth",
+        "fifth.txt",
+        b"fifth\n",
+    )
+    .await;
+    let (fifth_left, fifth_right) = tokio::join!(
+        committer.commit(&fifth_capability),
+        committer.commit(&fifth_capability),
+    );
+    let fifth = fifth_left.unwrap();
+    assert_eq!(fifth_right.unwrap(), fifth);
+    assert_eq!(committer.commit(&fifth_capability).await.unwrap(), fifth);
+    assert_eq!(fifth.project_version().get(), 7);
+
+    let recovery_rows: Vec<(String, i16)> = sqlx::query_as(
+        "SELECT bundle_id::text,recovery_position FROM project_bundle_refs \
+         WHERE project_id=$1::uuid AND kind='recovery' ORDER BY created_at,id",
+    )
+    .bind(PROJECT_A)
+    .fetch_all(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+    assert_eq!(recovery_rows.len(), 3);
+    let recovery_bundles: std::collections::BTreeSet<_> = recovery_rows
+        .iter()
+        .map(|(bundle_id, _)| bundle_id.as_str())
+        .collect();
+    assert_eq!(
+        recovery_bundles,
+        [
+            second.bundle_id().to_string(),
+            third.bundle_id().to_string(),
+            fourth.bundle_id().to_string(),
+        ]
+        .iter()
+        .map(String::as_str)
+        .collect()
+    );
+    assert_eq!(
+        recovery_rows
+            .iter()
+            .map(|(_, position)| *position)
+            .collect::<std::collections::BTreeSet<_>>(),
+        [1, 2, 3].into_iter().collect()
+    );
+    let retention_state: (i64, i64, String, i64) = sqlx::query_as(
+        "SELECT \
+         (SELECT COUNT(DISTINCT bundle_id) FROM ( \
+            SELECT working_head_bundle_id AS bundle_id FROM projects WHERE id=$1::uuid \
+            UNION SELECT bundle_id FROM project_bundle_refs WHERE project_id=$1::uuid) live), \
+         (SELECT COUNT(*) FROM project_bundle_refs WHERE project_id=$1::uuid \
+            AND bundle_id=$2::uuid), \
+         candidate.reason, \
+         (SELECT COUNT(*) FROM gc_candidates retained_candidate JOIN bundles retained_bundle \
+            ON retained_bundle.object_key=retained_candidate.object_key \
+          WHERE retained_bundle.id IN ($3::uuid,$4::uuid,$5::uuid,$6::uuid)) \
+         FROM gc_candidates candidate JOIN bundles removed_bundle \
+           ON removed_bundle.object_key=candidate.object_key \
+         WHERE removed_bundle.id=$2::uuid",
+    )
+    .bind(PROJECT_A)
+    .bind(left.bundle_id().to_string())
+    .bind(second.bundle_id().to_string())
+    .bind(third.bundle_id().to_string())
+    .bind(fourth.bundle_id().to_string())
+    .bind(fifth.bundle_id().to_string())
+    .fetch_one(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+    assert_eq!(retention_state, (4, 0, "reference_removed".to_owned(), 0));
+
+    sqlx::query(
+        "INSERT INTO gc_candidates \
+         (object_key,expected_sha256,expected_bytes,reason,eligible_at) \
+         SELECT object_key,sha256,physical_bytes,'reference_removed',transaction_timestamp() \
+         FROM bundles WHERE id=$1::uuid ON CONFLICT (object_key) DO NOTHING",
+    )
+    .bind(third.bundle_id().to_string())
+    .execute(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+    let retained_gc_attempt = sqlx::query(
+        "UPDATE gc_candidates SET status='running',attempts=attempts+1, \
+            started_at=transaction_timestamp(),updated_at=transaction_timestamp() \
+         WHERE object_key=(SELECT object_key FROM bundles WHERE id=$1::uuid)",
+    )
+    .bind(third.bundle_id().to_string())
+    .execute(&mut *pool.acquire().await.unwrap())
+    .await;
+    assert!(retained_gc_attempt.is_err());
+    sqlx::query(
+        "DELETE FROM gc_candidates WHERE object_key=(SELECT object_key FROM bundles WHERE id=$1::uuid) \
+         AND status='queued'",
+    )
+    .bind(third.bundle_id().to_string())
+    .execute(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+
     let race_body = canonical_test_bundle(PROJECT_A, SCOPE, "cleanup-race.txt", b"race\n");
     let mut race_request = request(PROJECT_A, "head-cleanup-race1", &race_body);
-    race_request.expected_project_version = ProjectVersion::new(4).unwrap();
+    race_request.expected_project_version = ProjectVersion::new(7).unwrap();
     race_request.expected_logical_bytes = 5;
     race_request.expected_file_count = 1;
     let race_session = creator.create(race_request).await.unwrap();
@@ -640,7 +771,7 @@ async fn working_head_commit_is_atomic_idempotent_and_fenced() {
             .fetch_one(&mut *pool.acquire().await.unwrap())
             .await
             .unwrap();
-    assert_eq!(fenced_head, second.bundle_id().to_string());
+    assert_eq!(fenced_head, fifth.bundle_id().to_string());
 
     let active_body = canonical_test_bundle(PROJECT_B, SCOPE, "active.txt", b"active\n");
     let mut active_left = request(PROJECT_B, "active-race-left01", &active_body);
@@ -652,6 +783,28 @@ async fn working_head_commit_is_atomic_idempotent_and_fenced() {
     let (active_left, active_right) =
         tokio::join!(creator.create(active_left), creator.create(active_right));
     assert_ne!(active_left.is_ok(), active_right.is_ok());
+}
+
+async fn prepare_verified_head(
+    creator: &SinglePutService,
+    verifier: &StagingVerifier,
+    http: &reqwest::Client,
+    expected_project_version: ProjectVersion,
+    idempotency_key: &str,
+    path: &str,
+    content: &[u8],
+) -> VerifiedStagingBundle {
+    let body = canonical_test_bundle(PROJECT_A, SCOPE, path, content);
+    let mut request = request(PROJECT_A, idempotency_key, &body);
+    request.expected_project_version = expected_project_version;
+    request.expected_logical_bytes = content.len() as u64;
+    request.expected_file_count = 1;
+    let session = creator.create(request).await.unwrap();
+    assert!(send_with_mutation(http, session.capability().request(), &body, None, None,).await);
+    verifier
+        .verify(verification_context(PROJECT_A, session.session_id()))
+        .await
+        .unwrap()
 }
 
 async fn verify_commit_permission_and_expiry(
