@@ -178,6 +178,22 @@ function harness(boot: Promise<unknown> = Promise.resolve({})) {
     status: "failed",
     totalBytes: 0
   });
+  controller.exportTreeJson = () => ({});
+  await assert.rejects(
+    adapter.workspace.materializeTemplate("vite-react"),
+    (error: unknown) => error instanceof RuntimeAdapterError
+      && error.code === "RUNTIME_MATERIALIZATION_FAILED"
+  );
+  controller.exportTreeJson = () => ({
+    "oversized.txt": { file: { contents: "x".repeat(1024 * 1024 + 1) } }
+  });
+  await assert.rejects(
+    adapter.workspace.materializeTemplate("vite-react"),
+    (error: unknown) => error instanceof RuntimeAdapterError
+      && error.code === "RUNTIME_MATERIALIZATION_FAILED"
+  );
+  assert.equal(adapter.workspace.getState().status, "failed");
+  assert.deepEqual(adapter.workspace.getState().files, []);
   await adapter.dispose();
 }
 

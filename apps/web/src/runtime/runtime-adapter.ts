@@ -558,6 +558,7 @@ function flattenTemplateTree(tree: FileSystemTree): {
   }
 
   visit(tree);
+  if (files.length === 0) throw new Error("template is empty");
   files.sort((left, right) => left.path.localeCompare(right.path));
   return { files, text, totalBytes };
 }
