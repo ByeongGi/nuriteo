@@ -1,9 +1,12 @@
+mod admission;
+mod archive;
 mod cleanup;
 mod multipart_service;
 mod multipart_types;
 mod operations;
 mod service;
 mod types;
+mod verifier;
 
 pub use cleanup::{
     AbortSaveSession, AbortSaveSessionResult, CleanupError, CleanupService, CleanupWorker,
@@ -24,6 +27,10 @@ pub use service::{PutPresigner, SinglePutService, SinglePutServiceError, SingleP
 pub use types::{
     CreateSinglePutSession, IdempotencyKey, IdempotencySecret, ReconciliationState,
     SinglePutSession, SinglePutUploadCapability,
+};
+pub use verifier::{
+    StagingVerifier, StagingVerifierPolicy, VerificationError, VerifiedStagingBundle,
+    VerifyStagingBundle,
 };
 
 #[cfg(test)]

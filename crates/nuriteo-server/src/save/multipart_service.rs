@@ -30,6 +30,8 @@ use super::{
 };
 
 const MAX_MULTIPART_BYTES: u64 = 2 * 1024 * 1024 * 1024;
+const MAX_LOGICAL_BYTES: u64 = 256 * 1024 * 1024;
+const MAX_FILES: u32 = 2_500;
 const MIN_OPERATION_TIMEOUT: Duration = Duration::from_millis(100);
 const MAX_OPERATION_TIMEOUT: Duration = Duration::from_secs(30);
 const SQL_TIMEOUT_MARGIN: Duration = Duration::from_millis(25);
@@ -497,8 +499,8 @@ impl<S: MultipartStore> MultipartService<S> {
                      (id,project_id,storage_scope_id,actor_user_id,expected_project_version, \
                       expected_bundle_sha256,expected_physical_bytes,expected_logical_bytes, \
                       expected_file_count,staging_object_key,upload_mode,expires_at,idempotency_digest) \
-                     VALUES ($1::uuid,$2::uuid,$3::uuid,$4::uuid,$5,$6,$7,0,0,$8,'multipart', \
-                             transaction_timestamp()+make_interval(mins=>$9),$10) \
+                     VALUES ($1::uuid,$2::uuid,$3::uuid,$4::uuid,$5,$6,$7,$8,$9,$10,'multipart', \
+                             transaction_timestamp()+make_interval(mins=>$11),$12) \
                      RETURNING expires_at,EXTRACT(EPOCH FROM (expires_at-transaction_timestamp()))::bigint",
                 )
                 .bind(session_id.to_string())
@@ -508,6 +510,8 @@ impl<S: MultipartStore> MultipartService<S> {
                 .bind(request.expected_project_version.get())
                 .bind(request.expected_sha256.as_bytes().as_slice())
                 .bind(i64::try_from(request.expected_physical_bytes).map_err(|_| MultipartServiceError::InvalidInput)?)
+                .bind(i64::try_from(request.expected_logical_bytes).map_err(|_| MultipartServiceError::InvalidInput)?)
+                .bind(i32::try_from(request.expected_file_count).map_err(|_| MultipartServiceError::InvalidInput)?)
                 .bind(&staging_object_key)
                 .bind(i32::from(session_minutes))
                 .bind(digest.as_slice())
@@ -976,6 +980,8 @@ struct ExistingMultipart {
     state: String,
     expected_project_version: i64,
     expected_physical_bytes: i64,
+    expected_logical_bytes: i64,
+    expected_file_count: i32,
     expected_sha256: Vec<u8>,
     expires_at: OffsetDateTime,
     staging_object_key: String,
@@ -1107,6 +1113,8 @@ fn validate_create(
 ) -> Result<(), MultipartServiceError> {
     if request.expected_physical_bytes <= policy.single_put_threshold_bytes
         || request.expected_physical_bytes > MAX_MULTIPART_BYTES
+        || request.expected_logical_bytes > MAX_LOGICAL_BYTES
+        || request.expected_file_count > MAX_FILES
         || request.parts.is_empty()
         || request.parts.len() > usize::from(MAX_MULTIPART_PARTS)
     {
@@ -1283,6 +1291,8 @@ async fn load_idempotent(
         String,
         i64,
         i64,
+        i64,
+        i32,
         Vec<u8>,
         OffsetDateTime,
         String,
@@ -1295,7 +1305,8 @@ async fn load_idempotent(
         .run(
             sqlx::query_as(
                 "SELECT session.id::text,session.state,session.expected_project_version, \
-                 session.expected_physical_bytes,session.expected_bundle_sha256,session.expires_at, \
+                 session.expected_physical_bytes,session.expected_logical_bytes,session.expected_file_count,\
+                 session.expected_bundle_sha256,session.expires_at, \
                  session.staging_object_key, \
                  GREATEST(0,EXTRACT(EPOCH FROM (session.expires_at-transaction_timestamp()))::bigint), \
                  lifecycle.part_size_bytes,lifecycle.part_count,lifecycle.create_status \
@@ -1316,13 +1327,15 @@ async fn load_idempotent(
         state: row.1,
         expected_project_version: row.2,
         expected_physical_bytes: row.3,
-        expected_sha256: row.4,
-        expires_at: row.5,
-        staging_object_key: row.6,
-        remaining_seconds: row.7,
-        part_size_bytes: row.8,
-        part_count: row.9,
-        create_status: row.10,
+        expected_logical_bytes: row.4,
+        expected_file_count: row.5,
+        expected_sha256: row.6,
+        expires_at: row.7,
+        staging_object_key: row.8,
+        remaining_seconds: row.9,
+        part_size_bytes: row.10,
+        part_count: row.11,
+        create_status: row.12,
     }))
 }
 
@@ -1334,6 +1347,9 @@ fn validate_existing(
     if existing.expected_project_version != request.expected_project_version.get()
         || u64::try_from(existing.expected_physical_bytes).ok()
             != Some(request.expected_physical_bytes)
+        || u64::try_from(existing.expected_logical_bytes).ok()
+            != Some(request.expected_logical_bytes)
+        || u32::try_from(existing.expected_file_count).ok() != Some(request.expected_file_count)
         || existing.expected_sha256.as_slice() != request.expected_sha256.as_bytes()
         || u64::try_from(existing.part_size_bytes).ok() != Some(policy.part_size_bytes)
         || usize::try_from(existing.part_count).ok() != Some(request.parts.len())
@@ -1618,6 +1634,8 @@ mod tests {
             actor_user_id: UserId::new(),
             expected_project_version: ProjectVersion::new(1).unwrap(),
             expected_physical_bytes: total,
+            expected_logical_bytes: 0,
+            expected_file_count: 0,
             expected_sha256: Sha256Checksum::from_bytes([7; 32]),
             effective_quota: EffectiveQuota::unlimited(),
             idempotency_key: IdempotencyKey::new("multipart-unit-key-0001".to_owned()).unwrap(),

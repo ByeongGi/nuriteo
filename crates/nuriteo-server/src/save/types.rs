@@ -79,6 +79,8 @@ pub struct CreateSinglePutSession {
     pub actor_user_id: UserId,
     pub expected_project_version: ProjectVersion,
     pub expected_physical_bytes: u64,
+    pub expected_logical_bytes: u64,
+    pub expected_file_count: u32,
     pub expected_sha256: Sha256Checksum,
     pub effective_quota: EffectiveQuota,
     pub idempotency_key: IdempotencyKey,

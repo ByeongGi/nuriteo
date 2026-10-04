@@ -25,9 +25,11 @@ use nuriteo_server::save::{
     CreateMultipartSession, CreateSinglePutSession, IdempotencyKey, IdempotencySecret,
     MultipartPartPlan, MultipartPartReceipt, MultipartService, MultipartServiceError,
     MultipartServicePolicy, MultipartSessionContext, MultipartStore, PutPresigner,
-    SinglePutService, SinglePutServiceError, SinglePutServicePolicy,
+    SinglePutService, SinglePutServiceError, SinglePutServicePolicy, StagingVerifier,
+    StagingVerifierPolicy, VerificationError, VerifyStagingBundle,
 };
 use nuriteo_server::workspace::StorageScopeId;
+use sha2::{Digest, Sha256};
 use sqlx::Executor;
 
 const DATABASE_URL_ENV: &str = "NURITEO_TEST_DATABASE_URL";
@@ -54,6 +56,192 @@ const ORG_PROJECT_READ: &str = "0199ee6c-c777-7000-8000-000000008041";
 const ORG_PROJECT_WRITE: &str = "0199ee6c-c777-7000-8000-000000008042";
 const ORG_PROJECT_MEMBER: &str = "0199ee6c-c777-7000-8000-000000008043";
 const ORG_PROJECT_OUTSIDER: &str = "0199ee6c-c777-7000-8000-000000008044";
+
+#[tokio::test]
+#[ignore = "requires tests/fixtures/staging-verifier/run.sh"]
+async fn staging_verifier_accepts_golden_and_rejects_malicious_objects() {
+    let pool = fixture_pool().await;
+    reset_and_seed(&pool).await;
+    let endpoint = env::var(S3_ENDPOINT_ENV).unwrap();
+    let ca_file = env::var(S3_CA_ENV).unwrap();
+    create_bucket(&endpoint, &ca_file).await;
+    let config = ObjectStorageConfig::load(
+        &FixtureEnvironment {
+            endpoint,
+            ca_file: ca_file.clone(),
+        },
+        &SystemFileReader,
+    )
+    .unwrap();
+    let store = S3ObjectStore::new(&config, OperationLimits::default())
+        .await
+        .unwrap();
+    let stream_store = S3ObjectStore::new(
+        &config,
+        OperationLimits {
+            max_body_bytes: 1_024,
+            max_range_bytes: 1_024,
+            ..OperationLimits::default()
+        },
+    )
+    .await
+    .unwrap();
+    let creator = SinglePutService::new(
+        pool.clone(),
+        store.clone(),
+        SinglePutServicePolicy::new(Duration::from_secs(5), 5).unwrap(),
+        IdempotencySecret::new([0x65; 32]).unwrap(),
+    )
+    .unwrap();
+    let http = fixture_http_client(&ca_file);
+    let golden = canonical_test_bundle(PROJECT_A, SCOPE, "README.md", b"verified staging bundle\n");
+    let mut creation = request(PROJECT_A, "staging-verify-good-01", &golden);
+    creation.expected_logical_bytes = 24;
+    creation.expected_file_count = 1;
+    let session = creator.create(creation).await.unwrap();
+    assert!(send_with_mutation(&http, session.capability().request(), &golden, None, None).await);
+
+    let verifier = StagingVerifier::new(
+        pool.clone(),
+        stream_store.clone(),
+        StagingVerifierPolicy::new(Duration::from_secs(5)).unwrap(),
+    );
+    let context = verification_context(PROJECT_A, session.session_id());
+    let (first, retried) = tokio::join!(verifier.verify(context), verifier.verify(context));
+    let first = first.unwrap();
+    let retried = retried.unwrap();
+    assert_eq!(first.archive_sha256(), retried.archive_sha256());
+    assert_eq!(
+        (
+            first.physical_bytes(),
+            first.logical_bytes(),
+            first.file_count()
+        ),
+        (golden.len() as u64, 24, 1)
+    );
+    let (state, reservations, bundles): (String, i64, i64) = sqlx::query_as(
+        "SELECT state,(SELECT COUNT(*) FROM storage_reservations WHERE save_session_id=session.id),\
+         (SELECT COUNT(*) FROM bundles) FROM save_sessions session WHERE id=$1::uuid",
+    )
+    .bind(session.session_id().to_string())
+    .fetch_one(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+    assert_eq!((state.as_str(), reservations, bundles), ("verifying", 1, 0));
+
+    let mut corrupt = canonical_test_bundle(PROJECT_B, SCOPE, "README.md", b"corrupt me\n");
+    corrupt[1023] = 1;
+    let mut bad_creation = request(PROJECT_B, "staging-verify-bad-001", &corrupt);
+    bad_creation.expected_logical_bytes = 11;
+    bad_creation.expected_file_count = 1;
+    let bad = creator.create(bad_creation).await.unwrap();
+    assert!(send_with_mutation(&http, bad.capability().request(), &corrupt, None, None).await);
+    assert_eq!(
+        verifier
+            .verify(verification_context(PROJECT_B, bad.session_id()))
+            .await
+            .unwrap_err(),
+        VerificationError::InvalidArchive
+    );
+    let (bad_state, bad_reservations, cleanup, head): (String, i64, i64, Option<String>) = sqlx::query_as(
+        "SELECT state,(SELECT COUNT(*) FROM storage_reservations WHERE save_session_id=session.id),\
+         (SELECT COUNT(*) FROM save_cleanup_jobs WHERE save_session_id=session.id),\
+         (SELECT working_head_bundle_id::text FROM projects WHERE id=session.project_id) \
+         FROM save_sessions session WHERE id=$1::uuid",
+    ).bind(bad.session_id().to_string()).fetch_one(&mut *pool.acquire().await.unwrap()).await.unwrap();
+    assert_eq!(
+        (bad_state.as_str(), bad_reservations, cleanup, head),
+        ("failed", 0, 1, None)
+    );
+
+    let base = canonical_test_bundle(PROJECT_FAIL, SCOPE, "safe.txt", b"matrix\n");
+    let mut checksum_header = base.clone();
+    checksum_header[148] ^= 1;
+    let mut manifest_count = base.clone();
+    let count_offset = find_bytes(&manifest_count, b"\"fileCount\":1").unwrap() + 12;
+    manifest_count[count_offset] = b'2';
+    let mut wrong_order = base.clone();
+    wrong_order[1024 + 156] = b'0';
+    let mut file_checksum = base.clone();
+    file_checksum[2560] ^= 1;
+    let mut trailing = base.clone();
+    trailing.push(0x5a);
+    let excluded = canonical_test_bundle(PROJECT_FAIL, SCOPE, ".env", b"secret\n");
+    for (index, (payload, logical)) in [
+        (checksum_header, 7_u64),
+        (manifest_count, 7),
+        (wrong_order, 7),
+        (file_checksum, 7),
+        (trailing, 7),
+        (excluded, 7),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let mut matrix_creation = request(
+            PROJECT_FAIL,
+            &format!("staging-matrix-{index:04}"),
+            &payload,
+        );
+        matrix_creation.expected_logical_bytes = logical;
+        matrix_creation.expected_file_count = 1;
+        let matrix = creator.create(matrix_creation).await.unwrap();
+        assert!(
+            send_with_mutation(&http, matrix.capability().request(), &payload, None, None,).await
+        );
+        assert!(matches!(
+            verifier
+                .verify(verification_context(PROJECT_FAIL, matrix.session_id()))
+                .await,
+            Err(VerificationError::InvalidArchive | VerificationError::ObjectMismatch)
+        ));
+    }
+
+    let timeout_bundle = canonical_test_bundle(PROJECT_TIMEOUT, SCOPE, "a.txt", b"timeout\n");
+    let mut timeout_creation = request(PROJECT_TIMEOUT, "staging-timeout-0001", &timeout_bundle);
+    timeout_creation.expected_logical_bytes = 8;
+    timeout_creation.expected_file_count = 1;
+    let timeout_session = creator.create(timeout_creation).await.unwrap();
+    assert!(
+        send_with_mutation(
+            &http,
+            timeout_session.capability().request(),
+            &timeout_bundle,
+            None,
+            None
+        )
+        .await
+    );
+    let mut lock = pool.acquire().await.unwrap();
+    lock.execute("BEGIN").await.unwrap();
+    sqlx::query("SELECT id FROM storage_scopes WHERE id=$1::uuid FOR UPDATE")
+        .bind(SCOPE)
+        .execute(&mut *lock)
+        .await
+        .unwrap();
+    let bounded = StagingVerifier::new(
+        pool.clone(),
+        stream_store,
+        StagingVerifierPolicy::new(Duration::from_millis(100)).unwrap(),
+    );
+    assert_eq!(
+        bounded
+            .verify(verification_context(
+                PROJECT_TIMEOUT,
+                timeout_session.session_id()
+            ))
+            .await
+            .unwrap_err(),
+        VerificationError::OperationTimeout
+    );
+    lock.execute("ROLLBACK").await.unwrap();
+    let preserved: String = sqlx::query_scalar("SELECT state FROM save_sessions WHERE id=$1::uuid")
+        .bind(timeout_session.session_id().to_string())
+        .fetch_one(&mut *pool.acquire().await.unwrap())
+        .await
+        .unwrap();
+    assert_eq!(preserved, "created");
+}
 
 struct FixtureEnvironment {
     endpoint: String,
@@ -894,6 +1082,95 @@ fn request(project: &str, idempotency: &str, body: &[u8]) -> CreateSinglePutSess
     request_for(SCOPE, project, USER, idempotency, body)
 }
 
+fn verification_context(
+    project: &str,
+    session_id: nuriteo_server::quota::SaveSessionId,
+) -> VerifyStagingBundle {
+    VerifyStagingBundle {
+        storage_scope_id: StorageScopeId::from_str(SCOPE).unwrap(),
+        project_id: ProjectId::from_str(project).unwrap(),
+        actor_user_id: UserId::from_str(USER).unwrap(),
+        session_id,
+    }
+}
+
+fn canonical_test_bundle(project: &str, scope: &str, path: &str, content: &[u8]) -> Vec<u8> {
+    let content_sha = hex_digest(content);
+    let manifest = format!(
+        "{{\"format\":\"project-bundle-v1\",\"schemaVersion\":1,\"project\":{{\"id\":\"{project}\",\"storageScopeId\":\"{scope}\"}},\"fileCount\":1,\"logicalBytes\":{},\"files\":[{{\"path\":\"{path}\",\"kind\":\"text\",\"mode\":\"0644\",\"sizeBytes\":{},\"sha256\":\"{content_sha}\"}}]}}\n",
+        content.len(),
+        content.len()
+    );
+    let mut archive = test_tar_entry("manifest.json", b'0', 0o644, manifest.as_bytes());
+    let pax = test_pax_record(&format!("files/{path}"));
+    archive.extend(test_tar_entry(
+        "PaxHeaders/00000000",
+        b'x',
+        0o644,
+        pax.as_bytes(),
+    ));
+    archive.extend(test_tar_entry("files/00000000", b'0', 0o644, content));
+    archive.extend([0_u8; 1024]);
+    archive
+}
+
+fn test_tar_entry(name: &str, kind: u8, mode: u64, content: &[u8]) -> Vec<u8> {
+    let mut header = [0_u8; 512];
+    header[..name.len()].copy_from_slice(name.as_bytes());
+    test_octal(&mut header[100..108], mode);
+    test_octal(&mut header[108..116], 0);
+    test_octal(&mut header[116..124], 0);
+    test_octal(&mut header[124..136], content.len() as u64);
+    test_octal(&mut header[136..148], 0);
+    header[148..156].fill(b' ');
+    header[156] = kind;
+    header[257..263].copy_from_slice(b"ustar\0");
+    header[263..265].copy_from_slice(b"00");
+    let checksum: u64 = header.iter().map(|byte| u64::from(*byte)).sum();
+    let checksum = format!("{checksum:06o}");
+    header[148..154].copy_from_slice(checksum.as_bytes());
+    header[154] = 0;
+    header[155] = b' ';
+    let mut entry = header.to_vec();
+    entry.extend(content);
+    entry.resize(entry.len() + ((512 - content.len() % 512) % 512), 0);
+    entry
+}
+
+fn test_octal(target: &mut [u8], value: u64) {
+    let digits = format!("{:0width$o}", value, width = target.len() - 1);
+    let count = target.len() - 1;
+    target[..count].copy_from_slice(digits.as_bytes());
+    target[count] = 0;
+}
+
+fn test_pax_record(path: &str) -> String {
+    let body = format!("path={path}\n");
+    let mut length = body.len() + 2;
+    loop {
+        let record = format!("{length} {body}");
+        if record.len() == length {
+            return record;
+        }
+        length = record.len();
+    }
+}
+
+fn hex_digest(bytes: &[u8]) -> String {
+    use std::fmt::Write as _;
+    let mut value = String::with_capacity(64);
+    for byte in Sha256::digest(bytes) {
+        let _ = write!(value, "{byte:02x}");
+    }
+    value
+}
+
+fn find_bytes(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+    haystack
+        .windows(needle.len())
+        .position(|window| window == needle)
+}
+
 fn multipart_request(project: &str, idempotency: &str, bodies: &[Bytes]) -> CreateMultipartSession {
     multipart_request_for_bodies(SCOPE, project, USER, idempotency, bodies)
 }
@@ -923,6 +1200,8 @@ fn multipart_request_for_bodies(
         actor_user_id: UserId::from_str(actor).unwrap(),
         expected_project_version: ProjectVersion::new(1).unwrap(),
         expected_physical_bytes: total,
+        expected_logical_bytes: 0,
+        expected_file_count: 0,
         expected_sha256: Sha256Checksum::from_bytes([0x73; 32]),
         effective_quota: EffectiveQuota::unlimited(),
         idempotency_key: IdempotencyKey::new(idempotency.to_owned()).unwrap(),
@@ -961,6 +1240,8 @@ fn multipart_boundary_request(project: &str, idempotency: &str) -> CreateMultipa
         actor_user_id: UserId::from_str(USER).unwrap(),
         expected_project_version: ProjectVersion::new(1).unwrap(),
         expected_physical_bytes: 2 * 1024 * 1024 * 1024,
+        expected_logical_bytes: 0,
+        expected_file_count: 0,
         expected_sha256: Sha256Checksum::from_bytes([0x74; 32]),
         effective_quota: EffectiveQuota::unlimited(),
         idempotency_key: IdempotencyKey::new(idempotency.to_owned()).unwrap(),
@@ -981,6 +1262,8 @@ fn request_for(
         actor_user_id: UserId::from_str(actor).unwrap(),
         expected_project_version: ProjectVersion::new(1).unwrap(),
         expected_physical_bytes: body.len() as u64,
+        expected_logical_bytes: 0,
+        expected_file_count: 0,
         expected_sha256: Sha256Checksum::calculate(body),
         effective_quota: EffectiveQuota::limited(1_000_000).unwrap(),
         idempotency_key: IdempotencyKey::new(idempotency.to_owned()).unwrap(),

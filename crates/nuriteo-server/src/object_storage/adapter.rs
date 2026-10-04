@@ -19,6 +19,7 @@ use tokio::io::AsyncReadExt;
 use super::capability_types::BackendIdentifier;
 use super::config::{AddressingStyle, CredentialProvider, ObjectStorageConfig, TlsTrust};
 use super::error::{ObjectOperation, ObjectStoreError, ObjectStoreErrorKind, classify_sdk_error};
+use super::types::ObjectStream;
 use super::types::{
     ByteRange, GetResult, ListPage, ListRequest, ObjectKey, ObjectMetadata, ObjectSummary,
     OperationLimits, PutRequest, RequestValidationError,
@@ -136,6 +137,52 @@ impl S3ObjectStore {
 
     pub async fn get(&self, key: &ObjectKey) -> Result<GetResult, ObjectStoreError> {
         self.get_inner(key, None, self.limits.max_body_bytes).await
+    }
+
+    /// Opens a bounded response body without buffering the object. Callers must
+    /// still enforce their semantic byte count while reading the stream.
+    pub(crate) async fn get_stream(
+        &self,
+        key: &ObjectKey,
+        maximum: u64,
+    ) -> Result<ObjectStream, ObjectStoreError> {
+        if maximum == 0 || maximum > self.limits.max_stream_bytes {
+            return Err(ObjectStoreError::new(
+                ObjectOperation::Get,
+                ObjectStoreErrorKind::InvalidRequest,
+                false,
+            ));
+        }
+        let output = self
+            .client
+            .get_object()
+            .bucket(&self.bucket)
+            .key(key.expose())
+            .send()
+            .await
+            .map_err(|error| classify_sdk_error(ObjectOperation::Get, &error))?;
+        let content_length = output
+            .content_length()
+            .and_then(|value| u64::try_from(value).ok())
+            .ok_or_else(|| {
+                ObjectStoreError::new(ObjectOperation::Get, ObjectStoreErrorKind::Internal, false)
+            })?;
+        if content_length > maximum {
+            return Err(ObjectStoreError::new(
+                ObjectOperation::Get,
+                ObjectStoreErrorKind::ResponseTooLarge,
+                false,
+            ));
+        }
+        Ok(ObjectStream {
+            metadata: ObjectMetadata { content_length },
+            reader: Box::pin(
+                output
+                    .body
+                    .into_async_read()
+                    .take(maximum.saturating_add(1)),
+            ),
+        })
     }
 
     pub async fn get_range(

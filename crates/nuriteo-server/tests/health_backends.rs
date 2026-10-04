@@ -221,6 +221,7 @@ async fn object_store(endpoint: &str, ca_path: &str) -> S3ObjectStore {
     let config = ObjectStorageConfig::load(&StorageEnvironment(values), &SystemFileReader).unwrap();
     let limits = OperationLimits {
         max_body_bytes: 1_024,
+        max_stream_bytes: 1_024,
         max_range_bytes: 1_024,
         max_list_page: NonZeroU16::new(1).unwrap(),
         connect_timeout: Duration::from_secs(1),

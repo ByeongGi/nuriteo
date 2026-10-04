@@ -1,8 +1,10 @@
 use std::fmt;
 use std::num::NonZeroU16;
+use std::pin::Pin;
 use std::time::Duration;
 
 use bytes::Bytes;
+use tokio::io::AsyncRead;
 
 const MAX_OBJECT_KEY_BYTES: usize = 1_024;
 const MAX_PREFIX_BYTES: usize = 1_024;
@@ -110,6 +112,9 @@ impl ByteRange {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct OperationLimits {
     pub max_body_bytes: u64,
+    /// Maximum object size accepted by streaming consumers. This remains
+    /// separate from buffered reads and presigned single-PUT capabilities.
+    pub max_stream_bytes: u64,
     pub max_range_bytes: u64,
     pub max_list_page: NonZeroU16,
     pub connect_timeout: Duration,
@@ -122,6 +127,7 @@ impl Default for OperationLimits {
     fn default() -> Self {
         Self {
             max_body_bytes: 128 * 1024 * 1024,
+            max_stream_bytes: 2 * 1024 * 1024 * 1024,
             max_range_bytes: 16 * 1024 * 1024,
             max_list_page: NonZeroU16::new(100).unwrap_or(NonZeroU16::MIN),
             connect_timeout: Duration::from_secs(5),
@@ -135,6 +141,11 @@ impl Default for OperationLimits {
 impl OperationLimits {
     pub fn validate(&self) -> Result<(), RequestValidationError> {
         if self.max_body_bytes == 0 || self.max_body_bytes > 2 * 1024 * 1024 * 1024 {
+            return Err(RequestValidationError::InvalidLimits);
+        }
+        if self.max_stream_bytes < self.max_body_bytes
+            || self.max_stream_bytes > 2 * 1024 * 1024 * 1024
+        {
             return Err(RequestValidationError::InvalidLimits);
         }
         if self.max_range_bytes == 0 || self.max_range_bytes > self.max_body_bytes {
@@ -216,6 +227,20 @@ pub struct ObjectMetadata {
 pub struct GetResult {
     pub body: Bytes,
     pub metadata: ObjectMetadata,
+}
+
+pub(crate) struct ObjectStream {
+    pub metadata: ObjectMetadata,
+    pub reader: Pin<Box<dyn AsyncRead + Send>>,
+}
+
+impl fmt::Debug for ObjectStream {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("ObjectStream")
+            .field("metadata", &self.metadata)
+            .finish_non_exhaustive()
+    }
 }
 
 impl fmt::Debug for GetResult {
@@ -349,6 +374,10 @@ mod tests {
         let invalid = [
             OperationLimits {
                 max_body_bytes: 0,
+                ..base.clone()
+            },
+            OperationLimits {
+                max_stream_bytes: base.max_body_bytes - 1,
                 ..base.clone()
             },
             OperationLimits {
