@@ -55,11 +55,25 @@ fn loads_safe_defaults_without_future_service_credentials() {
         "127.0.0.1:8080"
     );
     assert_eq!(
+        report.config.server.management_listen_addr.to_string(),
+        "127.0.0.1:9090"
+    );
+    assert_eq!(
         report.config.server.shutdown_drain_timeout,
         Duration::from_secs(30)
     );
     assert_eq!(report.config.server.log_format, LogFormat::Json);
     assert_eq!(report.config.server.log_level, LogLevel::Info);
+    assert_eq!(
+        report.config.cleanup.worker_policy,
+        CleanupWorkerPolicy::default()
+    );
+    assert_eq!(
+        report.config.cleanup.stale_threshold,
+        Duration::from_secs(900)
+    );
+    assert_eq!(report.config.cleanup.failed_threshold, 1);
+    assert_eq!(report.config.cleanup.status_timeout, Duration::from_secs(2));
     assert_eq!(
         report.config.public.external_url.as_str(),
         "http://127.0.0.1:3000/"
@@ -77,6 +91,9 @@ strict_environment = true
 [server]
 listen_address = "127.0.0.1:9090"
 shutdown_drain_timeout_ms = 45000
+
+[management]
+listen_address = "127.0.0.1:9191"
 
 [logging]
 format = "text"
@@ -184,6 +201,54 @@ fn rejects_invalid_configuration_table() {
         let error = load(&entries, &TestFiles::default()).unwrap_err();
         assert_eq!(error.to_string(), case.expected, "{}", case.name);
     }
+}
+
+#[test]
+fn cleanup_policy_configuration_fails_closed_before_startup() {
+    let error = load(
+        &[
+            (EXTERNAL_URL, "https://nuriteo.example.com"),
+            (CLEANUP_BATCH_SIZE, "100"),
+            (CLEANUP_CONCURRENCY, "1"),
+            (CLEANUP_LEASE_DURATION_MS, "100"),
+        ],
+        &TestFiles::default(),
+    )
+    .unwrap_err();
+    assert_eq!(
+        error.to_string(),
+        "configuration NURITEO_CLEANUP_LEASE_DURATION_MS does not safely cover the configured cleanup batch"
+    );
+
+    let error = load(
+        &[
+            (EXTERNAL_URL, "https://nuriteo.example.com"),
+            (CLEANUP_FAILED_THRESHOLD, "0"),
+        ],
+        &TestFiles::default(),
+    )
+    .unwrap_err();
+    assert_eq!(
+        error.to_string(),
+        "configuration NURITEO_CLEANUP_FAILED_THRESHOLD is outside the supported range"
+    );
+}
+
+#[test]
+fn management_listener_is_separate_from_the_public_application_listener() {
+    let error = load(
+        &[
+            (EXTERNAL_URL, "https://nuriteo.example.com"),
+            (LISTEN_ADDR, "127.0.0.1:8080"),
+            (MANAGEMENT_LISTEN_ADDR, "127.0.0.1:8080"),
+        ],
+        &TestFiles::default(),
+    )
+    .unwrap_err();
+    assert_eq!(
+        error.to_string(),
+        "configuration NURITEO_MANAGEMENT_LISTEN_ADDR must differ from the application listener"
+    );
 }
 
 #[test]

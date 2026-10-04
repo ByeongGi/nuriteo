@@ -8,6 +8,7 @@ use std::io;
 use std::net::SocketAddr;
 use std::time::Duration;
 
+use crate::save::CleanupWorkerPolicy;
 pub use load::{Environment, FileReader, SystemEnvironment, SystemFileReader, load_secret};
 pub use redaction::SecretString;
 pub use schema::{CONFIG_FIELDS, ConfigField};
@@ -17,6 +18,15 @@ use url::Url;
 pub struct Config {
     pub server: ServerConfig,
     pub public: PublicConfig,
+    pub cleanup: CleanupConfig,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CleanupConfig {
+    pub worker_policy: CleanupWorkerPolicy,
+    pub stale_threshold: Duration,
+    pub failed_threshold: u64,
+    pub status_timeout: Duration,
 }
 
 impl Config {
@@ -46,6 +56,7 @@ pub enum ConfigWarning {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ServerConfig {
     pub listen_addr: SocketAddr,
+    pub management_listen_addr: SocketAddr,
     pub shutdown_drain_timeout: Duration,
     pub log_format: LogFormat,
     pub log_level: LogLevel,

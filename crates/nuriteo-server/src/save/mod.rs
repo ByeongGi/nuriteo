@@ -1,6 +1,7 @@
 mod cleanup;
 mod multipart_service;
 mod multipart_types;
+mod operations;
 mod service;
 mod types;
 
@@ -14,6 +15,10 @@ pub use multipart_service::{
 pub use multipart_types::{
     CreateMultipartSession, MultipartCompleteResult, MultipartPartCapability, MultipartPartPlan,
     MultipartPartReceipt, MultipartSession, MultipartSessionContext,
+};
+pub use operations::{
+    CleanupOperationsError, CleanupOperationsPolicy, CleanupOperationsService,
+    CleanupOperationsSnapshot, CleanupOperatorState,
 };
 pub use service::{PutPresigner, SinglePutService, SinglePutServiceError, SinglePutServicePolicy};
 pub use types::{

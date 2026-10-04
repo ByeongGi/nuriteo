@@ -58,6 +58,21 @@ pub(super) fn boolean(name: &'static str, value: &str) -> Result<bool, ConfigErr
     }
 }
 
+pub(super) fn bounded_u64(
+    name: &'static str,
+    value: &str,
+    minimum: u64,
+    maximum: u64,
+) -> Result<u64, ConfigError> {
+    let parsed = value
+        .parse::<u64>()
+        .map_err(|_| ConfigError::invalid(name, "must be an integer"))?;
+    if !(minimum..=maximum).contains(&parsed) {
+        return Err(ConfigError::invalid(name, "is outside the supported range"));
+    }
+    Ok(parsed)
+}
+
 pub(super) fn external_url(name: &'static str, value: &str) -> Result<Url, ConfigError> {
     let url = Url::parse(value).map_err(|_| ConfigError::invalid(name, "must be a valid URL"))?;
     if url.cannot_be_a_base() || !url.username().is_empty() || url.password().is_some() {

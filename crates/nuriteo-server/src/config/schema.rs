@@ -15,11 +15,24 @@ pub struct ConfigField {
 pub(super) const CONFIG_FILE: &str = "NURITEO_CONFIG_FILE";
 pub(super) const STRICT: &str = "NURITEO_CONFIG_STRICT";
 pub(super) const LISTEN_ADDR: &str = "NURITEO_HTTP_LISTEN_ADDR";
+pub(super) const MANAGEMENT_LISTEN_ADDR: &str = "NURITEO_MANAGEMENT_LISTEN_ADDR";
 pub(super) const SHUTDOWN_DRAIN_TIMEOUT_MS: &str = "NURITEO_SHUTDOWN_DRAIN_TIMEOUT_MS";
 pub(super) const LOG_FORMAT: &str = "NURITEO_LOG_FORMAT";
 pub(super) const LOG_LEVEL: &str = "NURITEO_LOG_LEVEL";
 pub(super) const EXTERNAL_URL: &str = "NURITEO_EXTERNAL_URL";
 pub(super) const PREVIEW_BASE_DOMAIN: &str = "NURITEO_PREVIEW_BASE_DOMAIN";
+pub(super) const CLEANUP_BATCH_SIZE: &str = "NURITEO_CLEANUP_BATCH_SIZE";
+pub(super) const CLEANUP_CONCURRENCY: &str = "NURITEO_CLEANUP_CONCURRENCY";
+pub(super) const CLEANUP_MAX_ATTEMPTS: &str = "NURITEO_CLEANUP_MAX_ATTEMPTS";
+pub(super) const CLEANUP_OPERATION_TIMEOUT_MS: &str = "NURITEO_CLEANUP_OPERATION_TIMEOUT_MS";
+pub(super) const CLEANUP_ITEM_TIMEOUT_MS: &str = "NURITEO_CLEANUP_ITEM_TIMEOUT_MS";
+pub(super) const CLEANUP_LEASE_DURATION_MS: &str = "NURITEO_CLEANUP_LEASE_DURATION_MS";
+pub(super) const CLEANUP_POLL_INTERVAL_MS: &str = "NURITEO_CLEANUP_POLL_INTERVAL_MS";
+pub(super) const CLEANUP_BASE_BACKOFF_MS: &str = "NURITEO_CLEANUP_BASE_BACKOFF_MS";
+pub(super) const CLEANUP_MAX_BACKOFF_MS: &str = "NURITEO_CLEANUP_MAX_BACKOFF_MS";
+pub(super) const CLEANUP_STALE_THRESHOLD_SECONDS: &str = "NURITEO_CLEANUP_STALE_THRESHOLD_SECONDS";
+pub(super) const CLEANUP_FAILED_THRESHOLD: &str = "NURITEO_CLEANUP_FAILED_THRESHOLD";
+pub(super) const CLEANUP_STATUS_TIMEOUT_MS: &str = "NURITEO_CLEANUP_STATUS_TIMEOUT_MS";
 
 const fn field(
     environment: &'static str,
@@ -87,6 +100,14 @@ pub const CONFIG_FIELDS: &[ConfigField] = &[
         "server.listenAddress",
     ),
     field(
+        MANAGEMENT_LISTEN_ADDR,
+        Some("management.listen_address"),
+        "socket address",
+        Some("127.0.0.1:9090"),
+        "literal IP address and non-zero port, distinct from the application listener",
+        "observability.management.listenAddress",
+    ),
+    field(
         SHUTDOWN_DRAIN_TIMEOUT_MS,
         Some("server.shutdown_drain_timeout_ms"),
         "milliseconds",
@@ -125,6 +146,102 @@ pub const CONFIG_FIELDS: &[ConfigField] = &[
         None,
         "optional ASCII domain without scheme, port, wildcard, or trailing dot",
         "preview.baseDomain",
+    ),
+    field(
+        CLEANUP_BATCH_SIZE,
+        Some("cleanup.batch_size"),
+        "integer",
+        Some("32"),
+        "integer from 1 through 100",
+        "cleanup.batchSize",
+    ),
+    field(
+        CLEANUP_CONCURRENCY,
+        Some("cleanup.concurrency"),
+        "integer",
+        Some("4"),
+        "integer from 1 through 16",
+        "cleanup.concurrency",
+    ),
+    field(
+        CLEANUP_MAX_ATTEMPTS,
+        Some("cleanup.max_attempts"),
+        "integer",
+        Some("8"),
+        "integer from 2 through 16",
+        "cleanup.maxAttempts",
+    ),
+    field(
+        CLEANUP_OPERATION_TIMEOUT_MS,
+        Some("cleanup.operation_timeout_ms"),
+        "milliseconds",
+        Some("5000"),
+        "integer from 100 through 30000",
+        "cleanup.operationTimeoutMs",
+    ),
+    field(
+        CLEANUP_ITEM_TIMEOUT_MS,
+        Some("cleanup.item_timeout_ms"),
+        "milliseconds",
+        Some("30000"),
+        "integer from 100 through 120000",
+        "cleanup.itemTimeoutMs",
+    ),
+    field(
+        CLEANUP_LEASE_DURATION_MS,
+        Some("cleanup.lease_duration_ms"),
+        "milliseconds",
+        Some("360000"),
+        "worker-policy safe lower bound through 600000",
+        "cleanup.leaseDurationMs",
+    ),
+    field(
+        CLEANUP_POLL_INTERVAL_MS,
+        Some("cleanup.poll_interval_ms"),
+        "milliseconds",
+        Some("2000"),
+        "integer from 10 through 60000",
+        "cleanup.pollIntervalMs",
+    ),
+    field(
+        CLEANUP_BASE_BACKOFF_MS,
+        Some("cleanup.base_backoff_ms"),
+        "milliseconds",
+        Some("2000"),
+        "integer from 100 through 3600000",
+        "cleanup.baseBackoffMs",
+    ),
+    field(
+        CLEANUP_MAX_BACKOFF_MS,
+        Some("cleanup.max_backoff_ms"),
+        "milliseconds",
+        Some("900000"),
+        "base backoff through 86400000",
+        "cleanup.maxBackoffMs",
+    ),
+    field(
+        CLEANUP_STALE_THRESHOLD_SECONDS,
+        Some("cleanup.stale_threshold_seconds"),
+        "seconds",
+        Some("900"),
+        "integer from 60 through 86400",
+        "cleanup.staleThresholdSeconds",
+    ),
+    field(
+        CLEANUP_FAILED_THRESHOLD,
+        Some("cleanup.failed_threshold"),
+        "integer",
+        Some("1"),
+        "integer from 1 through 1000000",
+        "cleanup.failedThreshold",
+    ),
+    field(
+        CLEANUP_STATUS_TIMEOUT_MS,
+        Some("cleanup.status_timeout_ms"),
+        "milliseconds",
+        Some("2000"),
+        "integer from 100 through 10000",
+        "cleanup.statusTimeoutMs",
     ),
     field(
         "NURITEO_BOOTSTRAP_ADMIN_EMAIL",
