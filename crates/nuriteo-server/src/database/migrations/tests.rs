@@ -29,7 +29,7 @@ fn validates_migration_deadlines() {
 fn embedded_baseline_is_forward_only_and_framework_scoped() {
     let embedded = embedded_migrator();
     let migrations: Vec<_> = embedded.iter().collect();
-    assert_eq!(migrations.len(), 16);
+    assert_eq!(migrations.len(), 17);
     assert_eq!(
         migrations
             .iter()
