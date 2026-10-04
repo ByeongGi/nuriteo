@@ -178,9 +178,12 @@ with_placeholder_compose_environment() {
   NURITEO_RUSTFS_CA_FILE=/dev/null \
   NURITEO_RUSTFS_TLS_DIR=/tmp \
   NURITEO_BOOTSTRAP_ADMIN_PASSWORD_FILE=/dev/null \
+  NURITEO_PREVIEW_SIGNING_KEY_FILE=/dev/null \
+  NURITEO_SAVE_IDEMPOTENCY_SECRET_FILE=/dev/null \
   NURITEO_BOOTSTRAP_ADMIN_EMAIL=admin@example.invalid \
   NURITEO_BOOTSTRAP_ADMIN_NAME=Qualification \
   NURITEO_EXTERNAL_URL=http://127.0.0.1:19303 \
+  NURITEO_PREVIEW_BASE_DOMAIN=preview.example.invalid \
   NURITEO_POSTGRES_IMAGE=localhost/nuriteo-postgres:cmp-003 \
   NURITEO_SERVER_IMAGE=localhost/nuriteo-server:cmp-003 \
   NURITEO_WEB_IMAGE=localhost/nuriteo-web:cmp-003 \

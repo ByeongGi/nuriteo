@@ -4,6 +4,7 @@ import fs from "node:fs";
 const workflow = fs.readFileSync(".github/workflows/docker-compose-qualification.yml", "utf8");
 const runner = fs.readFileSync("deploy/compose/docker-qualification-ci.sh", "utf8");
 const fixture = fs.readFileSync("deploy/compose/test-compose.sh", "utf8");
+const compose = fs.readFileSync("deploy/compose/compose.yaml", "utf8");
 
 for (const trigger of ["pull_request:", "paths:", "workflow_dispatch:"]) {
   assert(workflow.includes(trigger), `qualification workflow missing trigger contract: ${trigger}`);
@@ -57,6 +58,21 @@ assert.match(runner, /run_bounded "\$diagnostics_timeout" collect-state/u);
 assert.match(runner, /run_bounded "\$cleanup_timeout" cleanup-internal/u);
 assert.doesNotMatch(runner, /docker (?:compose )?logs\b/u);
 assert.doesNotMatch(runner, /cat "\$raw_log"|tee .*raw/u);
+
+const placeholderStart = runner.indexOf("with_placeholder_compose_environment() {");
+const placeholderEnd = runner.indexOf("\n}\n\nself_test()", placeholderStart);
+assert(placeholderStart >= 0 && placeholderEnd > placeholderStart, "placeholder environment function is missing");
+const placeholderEnvironment = runner.slice(placeholderStart, placeholderEnd);
+const requiredComposeVariables = new Set(
+  [...compose.matchAll(/\$\{(NURITEO_[A-Z0-9_]+):\?/gu)].map((match) => match[1])
+);
+for (const variable of requiredComposeVariables) {
+  assert(
+    placeholderEnvironment.includes(`${variable}=`),
+    `qualification placeholder environment is missing required Compose variable: ${variable}`
+  );
+}
+
 assert.match(fixture, /run_browser_phase save/u);
 assert.match(fixture, /run_browser_phase resume/u);
 assert.match(fixture, /echo 'compose relay acceptance ok \(clean install, invite, organization workspace, isolated preview, save, restart, fresh-context resume, persistence, drifted CORS and failed-one-shot dependency gates\)'/u);
