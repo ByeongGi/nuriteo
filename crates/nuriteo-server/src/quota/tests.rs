@@ -3,6 +3,7 @@ use std::time::Duration;
 use crate::project::ProjectId;
 use crate::workspace::StorageScopeId;
 
+use super::service::map_commit_error;
 use super::{
     EffectiveQuota, QuotaProjection, QuotaServiceError, QuotaServicePolicy, ReservationRequest,
     SaveSessionId,
@@ -62,5 +63,18 @@ fn service_timeout_is_bounded() {
     assert_eq!(
         QuotaServicePolicy::new(Duration::from_secs(31)),
         Err(QuotaServiceError::InvalidInput)
+    );
+}
+
+#[test]
+fn terminal_transition_commit_response_loss_is_reported_as_unknown() {
+    let error = sqlx::Error::Io(std::io::Error::new(
+        std::io::ErrorKind::ConnectionReset,
+        "connection closed after commit request",
+    ));
+
+    assert_eq!(
+        map_commit_error(error),
+        QuotaServiceError::CommitOutcomeUnknown
     );
 }

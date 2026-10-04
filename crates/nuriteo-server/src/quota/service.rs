@@ -674,7 +674,7 @@ async fn commit(
 ) -> Result<(), QuotaServiceError> {
     match tokio_time::timeout_at(deadline.0, transaction.commit()).await {
         Ok(Ok(())) => Ok(()),
-        Ok(Err(error)) => Err(map_sql_error(error)),
+        Ok(Err(error)) => Err(map_commit_error(error)),
         Err(_) => Err(QuotaServiceError::CommitOutcomeUnknown),
     }
 }
@@ -700,5 +700,13 @@ fn map_sql_error(error: sqlx::Error) -> QuotaServiceError {
         Some("23505") => QuotaServiceError::ReservationConflict,
         Some("23503" | "23514") => QuotaServiceError::InvariantViolation,
         _ => QuotaServiceError::DatabaseUnavailable,
+    }
+}
+
+pub(super) fn map_commit_error(error: sqlx::Error) -> QuotaServiceError {
+    if error.as_database_error().is_none() {
+        QuotaServiceError::CommitOutcomeUnknown
+    } else {
+        map_sql_error(error)
     }
 }
