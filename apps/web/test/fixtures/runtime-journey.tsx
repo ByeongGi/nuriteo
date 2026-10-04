@@ -4,7 +4,7 @@ import { createRoot } from "react-dom/client";
 import { ProjectIdeShell } from "../../src/app/(authenticated)/projects/project-ide-shell.tsx";
 
 declare global {
-  interface Window { __nuriteoRuntimeProbe: { activeWorkers: number; createdWorkers: number } }
+  interface Window { __nuriteoRuntimeProbe: { activeWorkers: number; createdWorkers: number; committedVersion?: number; committedEtag?: string } }
 }
 
 const NativeWorker = globalThis.Worker;
@@ -61,6 +61,11 @@ createRoot(document.getElementById("root")!).render(
   <ProjectIdeShell
     previewConfiguration={previewConfiguration}
     project={project}
+    projectEtag='"project-v1"'
+    onProjectCommit={({ projectEtag, projectVersion }) => {
+      window.__nuriteoRuntimeProbe.committedEtag = projectEtag;
+      window.__nuriteoRuntimeProbe.committedVersion = projectVersion;
+    }}
     workspaceScope={project.ownerId}
   />
 );

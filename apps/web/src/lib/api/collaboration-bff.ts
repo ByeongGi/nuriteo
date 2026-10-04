@@ -5,11 +5,13 @@ import { randomUUID } from "node:crypto";
 import { selectForwardedHeaders, validateInternalApiUrl } from "./server-policy.ts";
 
 const MAX_BODY_BYTES = 16_384;
+const MAX_ALLOWED_BODY_BYTES = 65_536;
 const MAX_RESPONSE_BYTES = 1_048_576;
 const TIMEOUT_MS = 15_000;
 const UUID_V7 = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 const REQUEST_ID = /^[A-Za-z0-9._:-]{1,128}$/u;
 const SAFE_HEADER = /^[\x20-\x7e]{1,512}$/u;
+const IDEMPOTENCY_KEY = /^[A-Za-z0-9._-]{16,128}$/u;
 const STRONG_ETAG = /^"org-v[1-9]\d*"$/u;
 const PROJECT_ETAG = /^"project-v([1-9]\d*)"$/u;
 const MAX_PROJECT_VERSION = 9_223_372_036_854_775_806n;
@@ -26,10 +28,12 @@ interface RequestDeadline {
 export interface CollaborationForward {
   readonly commitOutcomeUnknown?: boolean;
   readonly method: "DELETE" | "GET" | "PATCH" | "POST";
+  readonly maxBodyBytes?: number;
   readonly path: `/api/v1/${string}`;
   readonly requireCsrf: boolean;
   readonly withBody: boolean;
   readonly withEtag?: boolean;
+  readonly withIdempotencyKey?: boolean;
   readonly etagKind?: "organization" | "project";
   readonly safeLocation?: (value: string) => boolean;
 }
@@ -94,6 +98,14 @@ export async function forwardCollaborationMutation(
     }
     headers.set("if-match", etag);
   }
+  if (spec.withIdempotencyKey) {
+    const key = request.headers.get("idempotency-key");
+    if (key === null || !IDEMPOTENCY_KEY.test(key)) {
+      cancel(request.body);
+      return problem(428, "BFF_IDEMPOTENCY_KEY_REQUIRED", requestId, spec.path);
+    }
+    headers.set("idempotency-key", key);
+  }
 
   let body: Uint8Array | undefined;
   if (spec.withBody) {
@@ -101,7 +113,12 @@ export async function forwardCollaborationMutation(
       cancel(request.body);
       return problem(415, "BFF_CONTENT_TYPE_REJECTED", requestId, spec.path);
     }
-    const bodyResult = await readBoundedBody(request, MAX_BODY_BYTES, deadline.signal);
+    const bodyMaximum = spec.maxBodyBytes ?? MAX_BODY_BYTES;
+    if (!Number.isSafeInteger(bodyMaximum) || bodyMaximum < 1 || bodyMaximum > MAX_ALLOWED_BODY_BYTES) {
+      cancel(request.body);
+      return problem(500, "BFF_POLICY_INVALID", requestId, spec.path);
+    }
+    const bodyResult = await readBoundedBody(request, bodyMaximum, deadline.signal);
     if (!bodyResult.ok) {
       return bodyResult.reason === "too_large"
         ? problem(413, "BFF_BODY_REJECTED", requestId, spec.path)

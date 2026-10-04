@@ -11,6 +11,7 @@ await import("./project-bundle-v1-validation.test.ts");
 await import("./project-bundle-v1.test.ts");
 await import("./project-bundle-v1-stream.test.ts");
 await import("./project-content-resume.test.ts");
+await import("./project-save.test.ts");
 await import("./preview-origin.test.ts");
 await import("./preview-binding-route.test.ts");
 await import("./preview-service-worker.test.ts");

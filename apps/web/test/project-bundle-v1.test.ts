@@ -139,6 +139,11 @@ for (const source of productionSources) {
     source.url.endsWith("/bundles/project-bundle-v1.ts")
     || source.url.endsWith("/bundles/project-bundle-v1-validation.ts")
   ) continue;
+  if (source.url.endsWith("/save/project-save.ts")) {
+    assert.match(source.contents, /validateProjectBundleV1Projection/u);
+    assert.match(source.contents, /const projection = projectCurrentTree\(input\)/u);
+    continue;
+  }
   assert.doesNotMatch(
     source.contents,
     /(?:from\s+["'][^"']*project-bundle-v1|writeValidatedProjectBundleV1)/u,

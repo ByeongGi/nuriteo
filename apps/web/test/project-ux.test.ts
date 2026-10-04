@@ -16,6 +16,8 @@ import {
   projectOwnerPath,
   projectRolePath
 } from "../src/lib/api/project-bff.ts";
+import { projectSaveSessionPath } from "../src/lib/api/project-bff.ts";
+import { forwardSaveSessionRequest } from "../src/lib/api/save-bff.ts";
 
 const OWNER_ID = "0199ee6c-c777-7000-8000-000000005001";
 const PROJECT_ID = "0199ee6c-c777-7000-8000-000000005002";
@@ -28,6 +30,7 @@ try {
   testExactPathsAndQueries();
   testReconciliationClassification();
   await testProjectForwardingBoundary();
+  await testSaveForwardingBoundary();
   await testPostDispatchCommitAmbiguity();
   await testContentStreamForwarding();
   testProjectSourceContracts();
@@ -44,6 +47,7 @@ function testExactPathsAndQueries() {
   assert.equal(projectContentPath("organizations", OWNER_ID, PROJECT_ID), `${collection}/${PROJECT_ID}/content`);
   assert.equal(projectContentPath("organizations", OWNER_ID, PROJECT_ID, USER_ID), `${collection}/${PROJECT_ID}/content/${USER_ID}`);
   assert.equal(projectRolePath("organizations", OWNER_ID, PROJECT_ID, USER_ID), `${collection}/${PROJECT_ID}/roles/${USER_ID}`);
+  assert.equal(projectSaveSessionPath("organizations", OWNER_ID, PROJECT_ID, USER_ID), `${collection}/${PROJECT_ID}/save-sessions/${USER_ID}`);
   assert.equal(projectRolePath("users", OWNER_ID, PROJECT_ID), undefined);
   assert.equal(projectOwnerPath("organizations", "../unsafe"), undefined);
   assert.equal(exactProjectListPath(request("?state=archived&pageSize=100&cursor=opaque_1"), collection, true), `${collection}?state=archived&pageSize=100&cursor=opaque_1`);
@@ -52,6 +56,35 @@ function testExactPathsAndQueries() {
   assert.equal(exactProjectListPath(request("?state=deleted"), collection, true), undefined);
   assert.equal(exactProjectListPath(request("?state=active"), `${collection}/${PROJECT_ID}/roles`, false), undefined);
   assert.equal(exactProjectListPath(request(`?cursor=${"x".repeat(2_049)}`), collection, true), undefined);
+}
+
+async function testSaveForwardingBoundary() {
+  process.env.NURITEO_INTERNAL_API_URL = "http://core.internal:8080";
+  let forwarded: RequestInit | undefined;
+  globalThis.fetch = async (_input, init) => {
+    forwarded = init;
+    return Response.json({ ok: true }, { status: 201 });
+  };
+  const path = `/api/v1/workspaces/organizations/${OWNER_ID}/projects/${PROJECT_ID}/save-sessions`;
+  const response = await forwardSaveSessionRequest(new Request(`https://nuriteo.test${path}`, {
+    method: "POST",
+    body: "{}",
+    headers: {
+      host: "nuriteo.test", origin: "https://nuriteo.test", "content-type": "application/json",
+      "x-csrf-token": "csrf-safe", "if-match": '"project-v1"', "idempotency-key": "bundle-0123456789abcdef"
+    }
+  }), { ownerType: "organizations", ownerId: OWNER_ID, projectId: PROJECT_ID }, "create");
+  assert.equal(response.status, 201);
+  const headers = new Headers(forwarded?.headers);
+  assert.equal(headers.get("if-match"), '"project-v1"');
+  assert.equal(headers.get("idempotency-key"), "bundle-0123456789abcdef");
+  const rejected = await forwardSaveSessionRequest(new Request(`https://nuriteo.test${path}`, {
+    method: "POST", body: "{}", headers: {
+      host: "nuriteo.test", origin: "https://nuriteo.test", "content-type": "application/json",
+      "x-csrf-token": "csrf-safe", "if-match": '"project-v1"'
+    }
+  }), { ownerType: "organizations", ownerId: OWNER_ID, projectId: PROJECT_ID }, "create");
+  await assertProblemCode(rejected, 428, "BFF_IDEMPOTENCY_KEY_REQUIRED");
 }
 
 async function testContentStreamForwarding() {

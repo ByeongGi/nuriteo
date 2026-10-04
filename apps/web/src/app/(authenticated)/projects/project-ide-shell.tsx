@@ -5,6 +5,8 @@ import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 
 import { Button } from "../../../components/ui/button.tsx";
+import { createBrowserApiClient } from "../../../lib/api/browser-client.ts";
+import { readCsrfCredential } from "../../../lib/api/browser-security.ts";
 import { createRetryableLazyFeature } from "../../../lib/retryable-lazy-feature.ts";
 import type {
   RuntimeAdapter,
@@ -43,6 +45,8 @@ type ResumeFeature = typeof import("../../../resume/project-content.ts");
 const resumeFeature = createRetryableLazyFeature<ResumeFeature>(
   () => import("../../../resume/project-content.ts")
 );
+type SaveFeature = typeof import("../../../save/project-save.ts");
+const saveFeature = createRetryableLazyFeature<SaveFeature>(() => import("../../../save/project-save.ts"));
 type WorkspaceSource = "saved" | "template";
 
 interface Props {
@@ -50,17 +54,20 @@ interface Props {
   readonly previewConfiguration: PreviewOriginConfiguration;
   readonly previewBridgeFactory?: typeof createSubdomainPreviewBridge;
   readonly project: Project;
+  readonly projectEtag?: string;
+  readonly onProjectCommit?: (result: { readonly projectEtag: string; readonly projectVersion: number }) => void;
   readonly runtimeFeatureLoader?: () => Promise<RuntimeFeature>;
   readonly workspaceScope: string;
 }
 
-export function ProjectIdeShell({ assetRevision, previewBridgeFactory, previewConfiguration, project, runtimeFeatureLoader, workspaceScope }: Props) {
+export function ProjectIdeShell({ assetRevision, onProjectCommit, previewBridgeFactory, previewConfiguration, project, projectEtag, runtimeFeatureLoader, workspaceScope }: Props) {
   const adapterRef = useRef<RuntimeAdapter | undefined>(undefined);
   const previewBridgeRef = useRef<SubdomainPreviewBridge | undefined>(undefined);
   const previewBridgeOperationRef = useRef(0);
   const previewRecoveryRef = useRef<Promise<void> | null>(null);
   const unsubscribeRef = useRef<() => void>(() => undefined);
   const manifestAbortRef = useRef<AbortController | null>(null);
+  const saveAbortRef = useRef<AbortController | null>(null);
   const unmountedRef = useRef(false);
   const [workspace, setWorkspace] = useState<RuntimeWorkspaceState>();
   const [selectedPath, setSelectedPath] = useState<string>();
@@ -72,6 +79,8 @@ export function ProjectIdeShell({ assetRevision, previewBridgeFactory, previewCo
   const [resumeStatus, setResumeStatus] = useState<string>();
   const [isRunningPreview, setIsRunningPreview] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isServerSaving, setIsServerSaving] = useState(false);
+  const [serverSaveStatus, setServerSaveStatus] = useState("Not saved to server in this session");
   const [recoveringAction, setRecoveringAction] = useState<RuntimeRecoveryActionKind>();
   const [confirmingWriterTakeover, setConfirmingWriterTakeover] = useState(false);
   const [isolatedPreviewUrl, setIsolatedPreviewUrl] = useState<string>();
@@ -84,6 +93,7 @@ export function ProjectIdeShell({ assetRevision, previewBridgeFactory, previewCo
       unmountedRef.current = true;
       previewBridgeOperationRef.current += 1;
       manifestAbortRef.current?.abort();
+      saveAbortRef.current?.abort();
       unsubscribeRef.current();
       const bridge = previewBridgeRef.current;
       previewBridgeRef.current = undefined;
@@ -91,6 +101,17 @@ export function ProjectIdeShell({ assetRevision, previewBridgeFactory, previewCo
       void adapterRef.current?.dispose();
     };
   }, []);
+
+  useEffect(() => {
+    const saveShortcut = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
+        event.preventDefault();
+        void saveToServer();
+      }
+    };
+    globalThis.addEventListener("keydown", saveShortcut);
+    return () => globalThis.removeEventListener("keydown", saveShortcut);
+  });
 
   async function startWorkspace(source: WorkspaceSource) {
     if (adapterRef.current !== undefined) {
@@ -364,7 +385,61 @@ export function ProjectIdeShell({ assetRevision, previewBridgeFactory, previewCo
     }
   }
 
+  async function saveToServer() {
+    const adapter = adapterRef.current;
+    if (!adapter || !projectEtag || isServerSaving || runtime.localDraftAccess !== "writer") return;
+    const controller = new AbortController();
+    saveAbortRef.current?.abort();
+    saveAbortRef.current = controller;
+    setError(undefined);
+    setIsServerSaving(true);
+    setServerSaveStatus("Planning canonical Server Save…");
+    try {
+      if (selectedPath && editorStatus === "Unsaved Local Draft") {
+        const next = adapter.workspace.writeText(selectedPath, editorContent);
+        setRuntime(next);
+        setWorkspace(adapter.workspace.getState());
+        previewBridgeRef.current?.hotUpdate(selectedPath);
+        setEditorStatus("Local Draft saved for Server Save");
+      }
+      const { saveCurrentProject } = await saveFeature.load();
+      const result = await saveCurrentProject({
+        client: createBrowserApiClient(),
+        csrfToken: readCsrfCredential(),
+        owner: { ownerType: project.ownerType, ownerId: project.ownerId },
+        projectId: project.id,
+        storageScopeId: project.storageScopeId,
+        projectEtag,
+        exportCurrentTree: () => adapter.workspace.exportBundleFiles(),
+        signal: controller.signal,
+        onProgress(progress) {
+          if (controller.signal.aborted) return;
+          const percentage = progress.totalBytes && progress.uploadedBytes > 0
+            ? ` ${Math.floor(progress.uploadedBytes * 100 / progress.totalBytes)}%`
+            : "";
+          setServerSaveStatus(`${progress.phase}${percentage} · Local Draft preserved`);
+        }
+      });
+      onProjectCommit?.({ projectEtag: result.projectEtag, projectVersion: result.projectVersion });
+      setServerSaveStatus(result.snapshotCurrent
+        ? `Server Save v${result.projectVersion} complete · Local Draft is current`
+        : `Server Save v${result.projectVersion} complete · newer Local Draft changes remain`);
+    } catch (cause) {
+      if (!controller.signal.aborted) {
+        const stale = cause instanceof Error && "status" in cause && (cause as { status?: unknown }).status === 412;
+        setError(stale
+          ? "The Server Project changed before this Save. Your Local Draft is preserved; reload the latest Project before retrying."
+          : "Server Save did not complete. Your Local Draft is preserved; retry when the service is available.");
+        setServerSaveStatus("Server Save failed · Local Draft preserved");
+      }
+    } finally {
+      if (saveAbortRef.current === controller) saveAbortRef.current = null;
+      if (!unmountedRef.current) setIsServerSaving(false);
+    }
+  }
+
   async function stopWorkspace() {
+    saveAbortRef.current?.abort();
     const adapter = adapterRef.current;
     await releaseAdapter();
     if (adapter?.getState().lifecycle === "failed") {
@@ -409,7 +484,7 @@ export function ProjectIdeShell({ assetRevision, previewBridgeFactory, previewCo
     <section className="mt-6 overflow-hidden rounded-lg border border-border bg-surface" aria-labelledby="project-ide-title">
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-muted-border bg-subtle px-4 py-3">
         <div><p className="m-0 text-xs text-muted-foreground">Browser workspace · {runtime.lifecycle}</p><h3 id="project-ide-title" className="m-0 text-sm font-semibold">{project.name} IDE</h3></div>
-        {hasWorkspace ? <Button type="button" size="sm" onClick={() => void stopWorkspace()}>Stop workspace</Button> : (
+        {hasWorkspace ? <div className="flex flex-wrap items-center gap-2"><span className="text-xs text-muted-foreground" role="status" aria-live="polite">{serverSaveStatus}</span><Button type="button" size="sm" variant="primary" disabled={isServerSaving || !projectEtag || !canWriteLocalDraft} onClick={() => void saveToServer()}>{isServerSaving ? "Saving…" : "Save to server"}</Button><Button type="button" size="sm" onClick={() => void stopWorkspace()}>Stop workspace</Button></div> : (
           <div className="flex flex-wrap gap-2">
             <Button type="button" size="sm" variant="primary" disabled={isStarting || project.state !== "active"} onClick={() => void startWorkspace("saved")}>{startingSource === "saved" ? "Resuming…" : "Resume saved Project"}</Button>
             <Button type="button" size="sm" disabled={isStarting || project.state !== "active"} onClick={() => void startWorkspace("template")}>{startingSource === "template" ? "Starting…" : "Start workspace from template"}</Button>

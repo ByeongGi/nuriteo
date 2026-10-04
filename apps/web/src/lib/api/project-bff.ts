@@ -14,9 +14,11 @@ export type ProjectOwnerSegment = "organizations" | "users";
 
 export interface ProjectForward {
   readonly method: "DELETE" | "GET" | "PATCH" | "POST";
+  readonly maxBodyBytes?: number;
   readonly path: `/api/v1/workspaces/${string}`;
   readonly withBody?: boolean;
   readonly withEtag?: boolean;
+  readonly withIdempotencyKey?: boolean;
   readonly locationPrefix?: string;
 }
 
@@ -118,10 +120,12 @@ export function forwardProjectRequest(request: Request, spec: ProjectForward): P
   return forwardCollaborationMutation(request, {
     commitOutcomeUnknown: spec.method !== "GET",
     method: spec.method,
+    ...(spec.maxBodyBytes === undefined ? {} : { maxBodyBytes: spec.maxBodyBytes }),
     path: spec.path,
     requireCsrf: spec.method !== "GET",
     withBody: spec.withBody ?? false,
     ...(spec.withEtag ? { withEtag: true, etagKind: "project" as const } : {}),
+    ...(spec.withIdempotencyKey ? { withIdempotencyKey: true } : {}),
     ...(spec.locationPrefix === undefined ? {} : {
       safeLocation: (value: string) => {
         const suffix = value.slice(spec.locationPrefix!.length);
@@ -130,4 +134,17 @@ export function forwardProjectRequest(request: Request, spec: ProjectForward): P
       }
     })
   });
+}
+
+export function projectSaveSessionPath(
+  ownerType: string,
+  ownerId: string,
+  projectId: string,
+  sessionId?: string
+): `/api/v1/workspaces/${string}` | undefined {
+  const project = projectItemPath(ownerType, ownerId, projectId);
+  if (project === undefined) return undefined;
+  if (sessionId === undefined) return `${project}/save-sessions`;
+  const session = uuidPathSegment(sessionId);
+  return session === undefined ? undefined : `${project}/save-sessions/${session}`;
 }
