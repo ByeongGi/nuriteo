@@ -29,6 +29,7 @@ trap cleanup EXIT INT TERM
 
 openssl rand -base64 32 >"$fixture_dir/admin-password"
 openssl rand -base64 32 >"$fixture_dir/member-password"
+openssl rand -base64 32 >"$fixture_dir/save-idempotency-secret"
 printf '%s' 'integration-access' >"$fixture_dir/s3-access-key"
 printf '%s' 'integration-secret-0123456789' >"$fixture_dir/s3-secret-key"
 database_password="$(openssl rand -hex 24)"
@@ -137,9 +138,12 @@ export NURITEO_S3_CREDENTIAL_PROVIDER=static
 export NURITEO_S3_ACCESS_KEY_ID_FILE="$fixture_dir/s3-access-key"
 export NURITEO_S3_SECRET_ACCESS_KEY_FILE="$fixture_dir/s3-secret-key"
 export NURITEO_S3_CA_FILE="$rustfs_tls/ca.crt"
+export NURITEO_SAVE_IDEMPOTENCY_SECRET_FILE="$fixture_dir/save-idempotency-secret"
+export NURITEO_SAVE_DEFAULT_QUOTA_BYTES=10737418240
 
 cargo build --quiet -p nuriteo-server --bin nuriteo-server
 server_binary="$target_dir/debug/nuriteo-server"
+"$server_binary" storage-configure-browser-upload-cors >/dev/null
 "$server_binary" migrate >/dev/null
 NURITEO_BOOTSTRAP_ADMIN_EMAIL=admin@example.test \
 NURITEO_BOOTSTRAP_ADMIN_NAME='Fixture Administrator' \
@@ -168,5 +172,6 @@ NURITEO_CLIENT_TEST_PASSWORD_FILE="$fixture_dir/admin-password" \
 NURITEO_CLIENT_TEST_MEMBER_PASSWORD_FILE="$fixture_dir/member-password" \
 NURITEO_CLIENT_TEST_CONTAINER_RUNTIME="$runtime" \
 NURITEO_CLIENT_TEST_POSTGRES_CONTAINER="$postgres_container" \
+NODE_EXTRA_CA_CERTS="$rustfs_tls/ca.crt" \
   mise exec node@22.23.0 -- node \
     "${CLIENT_LIVE_CONTRACT:-packages/api-client/test/organization-live-contract.ts}"
