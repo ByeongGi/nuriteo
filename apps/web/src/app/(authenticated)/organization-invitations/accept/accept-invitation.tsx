@@ -24,7 +24,11 @@ export function AcceptInvitation() {
         const options = { csrfToken: readCsrfCredential() };
         if (action === "accept") await acceptOrganizationInvitation(client, token, options);
         else await declineOrganizationInvitation(client, token, options);
-        router.replace(action === "accept" ? "/workspaces?joined=1" : "/workspaces");
+        router.replace(
+          action === "accept"
+            ? "/workspaces?joined=1"
+            : "/workspaces?invitation=declined"
+        );
         router.refresh();
       } catch (cause) {
         setError(collaborationError(cause, "organization-invitation-terminal"));

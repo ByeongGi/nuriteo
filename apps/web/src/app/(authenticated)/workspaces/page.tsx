@@ -19,11 +19,24 @@ export const metadata: Metadata = {
 };
 
 interface WorkspacesPageProps {
-  readonly searchParams: Promise<{ workspace?: string | string[] | undefined }>;
+  readonly searchParams: Promise<{
+    invitation?: string | string[] | undefined;
+    joined?: string | string[] | undefined;
+    workspace?: string | string[] | undefined;
+  }>;
 }
 
 export default async function WorkspacesPage({ searchParams }: WorkspacesPageProps) {
-  const { workspace: requestedScope } = await searchParams;
+  const {
+    invitation,
+    joined,
+    workspace: requestedScope
+  } = await searchParams;
+  const invitationStatus = joined === "1"
+    ? "Organization invitation accepted. The shared Workspace is now available."
+    : invitation === "declined"
+      ? "Organization invitation declined. No Workspace access was added."
+      : undefined;
   try {
     const client = await createServerApiClient();
     const result = await getCurrentWorkspaces(client);
@@ -57,6 +70,12 @@ export default async function WorkspacesPage({ searchParams }: WorkspacesPagePro
             Personal work stays with your account. Organization work is shared with its members.
           </p>
         </header>
+
+        {invitationStatus ? (
+          <p className="form-status" role="status" aria-live="polite">
+            {invitationStatus}
+          </p>
+        ) : null}
 
         <nav className="workspace-selector" aria-labelledby="workspace-selector-title">
           <h2 id="workspace-selector-title">Available Workspaces</h2>

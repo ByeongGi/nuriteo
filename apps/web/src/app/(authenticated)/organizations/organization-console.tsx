@@ -98,18 +98,20 @@ export function OrganizationConsole(props: OrganizationConsoleProps) {
   async function invite(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!props.organization) return;
+    const form = event.currentTarget;
     const data = new FormData(event.currentTarget);
     await mutate("organization-invitation-issue", async () => {
       const result = await issueOrganizationInvitation(
         createBrowserApiClient(),
         {
           organizationId: props.organization!.id,
-          inviteeUserId: String(data.get("inviteeUserId") ?? ""),
+          email: String(data.get("email") ?? ""),
           role: String(data.get("role")) === "owner" ? "owner" : "member"
         },
         { csrfToken: readCsrfCredential() }
       );
       setOneTimeUrl(result.data.acceptUrl.consume());
+      form.reset();
     });
   }
 
@@ -171,9 +173,10 @@ export function OrganizationConsole(props: OrganizationConsoleProps) {
         ))}
       </nav>
       {oneTimeUrl ? (
-        <section className="one-time-panel" aria-live="polite">
-          <h2>Copy this invitation link now</h2>
-          <output>{oneTimeUrl}</output>
+        <section className="one-time-panel" aria-labelledby="organization-invitation-link-title" aria-live="polite">
+          <h2 id="organization-invitation-link-title">Copy this invitation link now</h2>
+          <p>This one-time link will not be shown again after you leave or refresh this page.</p>
+          <output aria-labelledby="organization-invitation-link-title">{oneTimeUrl}</output>
           <Button type="button" disabled={mutation.isPending} onClick={() => setOneTimeUrl(undefined)}>Clear link</Button>
         </section>
       ) : null}
@@ -218,14 +221,14 @@ export function OrganizationConsole(props: OrganizationConsoleProps) {
             <div>
               <h2>Invite member</h2>
               <form className="collaboration-form" onSubmit={invite} aria-busy={mutation.isPending}>
-                <label className="field-group">Invitee user ID<input name="inviteeUserId" required disabled={mutation.isPending} /></label>
-                <label className="field-group">Role<select name="role" disabled={mutation.isPending}><option value="member">Member</option><option value="owner">Owner</option></select></label>
+                <label className="field-group">Invitee email<input name="email" type="email" inputMode="email" autoComplete="email" maxLength={320} required disabled={mutation.isPending} /></label>
+                <label className="field-group">Role<select name="role" required disabled={mutation.isPending}><option value="member">Member</option><option value="owner">Owner</option></select></label>
                 <Button type="submit" variant="primary" disabled={mutation.isPending}>Issue Organization invitation</Button>
               </form>
               <ul className="record-list" aria-label="Organization invitations">
                 {props.invitations?.map((invitation) => (
                   <li key={invitation.id}>
-                    <div><strong>{invitation.proposedRole}</strong><span>{invitation.status} · expires {invitation.expiresAt}</span></div>
+                    <div><strong>{invitation.proposedRole} invitation</strong><span>Invitation status: {invitation.status} · expires {invitation.expiresAt}</span></div>
                     {invitation.status === "pending" ? (
                       <div className="record-actions">
                         <Button type="button" disabled={mutation.isPending} onClick={() => void reissue(invitation)}>Reissue</Button>

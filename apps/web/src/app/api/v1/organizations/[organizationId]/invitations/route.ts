@@ -14,6 +14,7 @@ export async function POST(
   const safeOrganizationId = uuidPathSegment(organizationId);
   if (safeOrganizationId === undefined) return invalidCollaborationRoute(request);
   return forwardCollaborationMutation(request, {
+    jsonBodyPolicy: "organization-invitation-issue",
     method: "POST",
     path: `/api/v1/organizations/${safeOrganizationId}/invitations`,
     requireCsrf: true,

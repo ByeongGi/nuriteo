@@ -16,6 +16,7 @@ const STRONG_ETAG = /^"org-v[1-9]\d*"$/u;
 const PROJECT_ETAG = /^"project-v([1-9]\d*)"$/u;
 const MAX_PROJECT_VERSION = 9_223_372_036_854_775_806n;
 const SAFE_LOCATION = /^\/api\/v1\/organizations\/[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
+const ORGANIZATION_INVITATION_EMAIL_MAX_CHARACTERS = 320;
 
 type StreamFailure = "aborted" | "read_error" | "too_large";
 type StreamResult = { bytes: Uint8Array; ok: true } | { ok: false; reason: StreamFailure };
@@ -35,6 +36,7 @@ export interface CollaborationForward {
   readonly withEtag?: boolean;
   readonly withIdempotencyKey?: boolean;
   readonly etagKind?: "organization" | "project";
+  readonly jsonBodyPolicy?: "organization-invitation-issue";
   readonly safeLocation?: (value: string) => boolean;
 }
 
@@ -125,6 +127,13 @@ export async function forwardCollaborationMutation(
         : streamFailureProblem(bodyResult.reason, deadline, requestId, spec.path, false);
     }
     body = bodyResult.bytes;
+    if (spec.jsonBodyPolicy === "organization-invitation-issue") {
+      const projected = projectOrganizationInvitationIssueBody(body);
+      if (projected === undefined) {
+        return problem(400, "BFF_BODY_REJECTED", requestId, spec.path);
+      }
+      body = projected;
+    }
     headers.set("content-type", "application/json");
   } else {
     cancel(request.body);
@@ -178,6 +187,41 @@ export async function forwardCollaborationMutation(
     headers: responseHeaders,
     status: upstream.status
   });
+}
+
+function projectOrganizationInvitationIssueBody(bytes: Uint8Array): Uint8Array | undefined {
+  let value: unknown;
+  try {
+    value = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+  } catch {
+    return undefined;
+  }
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined;
+
+  const record = value as Record<string, unknown>;
+  const keys = Object.keys(record).toSorted();
+  if (keys.length !== 2 || keys[0] !== "email" || keys[1] !== "role") return undefined;
+  if (typeof record.email !== "string" || !validInvitationEmail(record.email)) return undefined;
+  if (record.role !== "member" && record.role !== "owner") return undefined;
+
+  return new TextEncoder().encode(JSON.stringify({ email: record.email, role: record.role }));
+}
+
+function validInvitationEmail(value: string): boolean {
+  if (value.startsWith(" ") || value.endsWith(" ")) return false;
+  let characters = 0;
+  for (const character of value) {
+    characters += 1;
+    const codePoint = character.codePointAt(0);
+    if (
+      characters > ORGANIZATION_INVITATION_EMAIL_MAX_CHARACTERS ||
+      /\p{Cc}/u.test(character) ||
+      (codePoint !== undefined && codePoint >= 0xd800 && codePoint <= 0xdfff)
+    ) {
+      return false;
+    }
+  }
+  return characters >= 3;
 }
 
 function commitOutcomeUnknownProblem(requestId: string, path: string): Response {

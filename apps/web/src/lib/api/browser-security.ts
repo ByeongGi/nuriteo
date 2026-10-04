@@ -61,6 +61,12 @@ export function collaborationError(
     if (operation === "organization-member" && error.status === 409) {
       return "The last Organization Owner cannot be changed or removed.";
     }
+    if (
+      operation === "organization-invitation-issue" &&
+      (error.status === 404 || error.status === 409)
+    ) {
+      return "This invitation could not be issued. The account may be unavailable, already invited, or already a member.";
+    }
     if (error.status === 400 || error.status === 422) {
       return "Some submitted values are invalid. Review the form and try again.";
     }

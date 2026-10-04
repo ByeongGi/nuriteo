@@ -12,6 +12,7 @@ import {
   uuidPathSegment
 } from "../src/lib/api/collaboration-bff.ts";
 import { DELETE as revokeActivationRoute } from "../src/app/api/v1/admin/activation-invitations/[invitationId]/route.ts";
+import { POST as issueOrganizationInvitationRoute } from "../src/app/api/v1/organizations/[organizationId]/invitations/route.ts";
 import { createSecretChunkScanner } from "./secret-chunk-scanner.ts";
 import { createSecretSafeOutputDiagnostics } from "./secret-safe-output.ts";
 
@@ -22,6 +23,7 @@ const originalUrl = process.env.NURITEO_INTERNAL_API_URL;
 try {
   testSafeErrorClassification();
   await testExactBoundedForwarding();
+  await testExactOrganizationInvitationIssueRoute();
   await testDeadlineAbortAndEarlyCancellation();
   await testInvalidRouteIsProblemDetails();
   testSplitSecretScanner();
@@ -82,6 +84,11 @@ function testSafeErrorClassification() {
   assert.match(collaborationError(new ApiError(409, "safe", undefined), "organization-member"), /last Organization Owner/u);
   assert.match(collaborationError(new ApiError(422, "safe", undefined), "organization-create"), /submitted values are invalid/u);
   assert.match(collaborationError(new ApiError(422, "safe", undefined), "organization-invitation-issue"), /submitted values are invalid/u);
+  const unavailable = collaborationError(new ApiError(404, "safe", undefined), "organization-invitation-issue");
+  const duplicate = collaborationError(new ApiError(409, "safe", undefined), "organization-invitation-issue");
+  assert.equal(unavailable, duplicate);
+  assert.match(unavailable, /unavailable, already invited, or already a member/u);
+  assert.doesNotMatch(unavailable, /member@example\.test|user ID|UUID/u);
   assert.doesNotMatch(collaborationError(new Error("token=nrt_org_inv_secret"), "organization-invitation-terminal"), /secret|token/u);
   assert.equal(uuidPathSegment("0199ee6c-c777-7000-8000-000000005001"), "0199ee6c-c777-7000-8000-000000005001");
   assert.equal(uuidPathSegment("../open-proxy"), undefined);
@@ -139,6 +146,81 @@ async function testExactBoundedForwarding() {
     method: "POST", path: "/api/v1/organizations", requireCsrf: true, withBody: true
   });
   assert.equal(unsafeLocation.headers.has("location"), false);
+}
+
+async function testExactOrganizationInvitationIssueRoute() {
+  process.env.NURITEO_INTERNAL_API_URL = "http://core.internal:8080";
+  const upstreamBodies: unknown[] = [];
+  let upstreamHeaders: Headers | undefined;
+  globalThis.fetch = async (_input, init) => {
+    upstreamHeaders = new Headers(init?.headers);
+    upstreamBodies.push(JSON.parse(Buffer.from(init?.body as ArrayBuffer).toString("utf8")));
+    return Response.json({ ok: true }, { status: 201 });
+  };
+
+  const organizationId = "0199ee6c-c777-7000-8000-000000005001";
+  const valid = await issueOrganizationInvitationRoute(invitationIssueRequest({
+    email: "member@example.test",
+    role: "member"
+  }), { params: Promise.resolve({ organizationId }) });
+  assert.equal(valid.status, 201);
+  assert.deepEqual(upstreamBodies, [{ email: "member@example.test", role: "member" }]);
+  assert.equal(upstreamHeaders?.get("cookie"), "session=safe");
+  assert.equal(upstreamHeaders?.get("origin"), "https://nuriteo.example.test");
+  assert.equal(upstreamHeaders?.get("x-csrf-token"), `nrt_csrf_${"a".repeat(43)}`);
+
+  const legacy = await issueOrganizationInvitationRoute(invitationIssueRequest({
+    email: "member@example.test",
+    inviteeUserId: organizationId,
+    role: "member"
+  }), { params: Promise.resolve({ organizationId }) });
+  assert.equal(legacy.status, 400);
+  assert.equal(upstreamBodies.length, 1);
+
+  const unexpected = await issueOrganizationInvitationRoute(invitationIssueRequest({
+    email: "member@example.test",
+    role: "member",
+    trace: "not-forwarded"
+  }), { params: Promise.resolve({ organizationId }) });
+  assert.equal(unexpected.status, 400);
+  assert.equal(upstreamBodies.length, 1);
+
+  for (const body of [
+    { email: `${"a".repeat(321)}@example.test`, role: "member" },
+    { email: "member\n@example.test", role: "member" },
+    { email: "\ud800@example.test", role: "member" },
+    { email: "member@example.test", role: "reader" }
+  ]) {
+    const invalid = await issueOrganizationInvitationRoute(invitationIssueRequest(body), {
+      params: Promise.resolve({ organizationId })
+    });
+    assert.equal(invalid.status, 400);
+  }
+  assert.equal(upstreamBodies.length, 1);
+
+  const crossOrigin = await issueOrganizationInvitationRoute(invitationIssueRequest(
+    { email: "member@example.test", role: "member" },
+    "https://attacker.example.test"
+  ), { params: Promise.resolve({ organizationId }) });
+  assert.equal(crossOrigin.status, 403);
+  assert.equal(upstreamBodies.length, 1);
+}
+
+function invitationIssueRequest(body: object, origin = "https://nuriteo.example.test"): Request {
+  return new Request(
+    "https://nuriteo.example.test/api/v1/organizations/0199ee6c-c777-7000-8000-000000005001/invitations",
+    {
+      body: JSON.stringify(body),
+      headers: {
+        cookie: "session=safe",
+        "content-type": "application/json",
+        host: "nuriteo.example.test",
+        origin,
+        "x-csrf-token": `nrt_csrf_${"a".repeat(43)}`
+      },
+      method: "POST"
+    }
+  );
 }
 
 async function testDeadlineAbortAndEarlyCancellation() {
@@ -202,7 +284,11 @@ function testUxSourceContracts() {
   assert.match(activation, /router\.replace\("\/sign-in\?activated=1"\)/u);
   assert.match(admin, /activationUrl\.consume\(\)/u);
   assert.match(organizations, /acceptUrl\.consume\(\)/u);
-  assert.match(accept, /router\.replace\(action === "accept" \? "\/workspaces\?joined=1"/u);
+  assert.match(organizations, /name="email" type="email"/u);
+  assert.match(organizations, /maxLength=\{320\}/u);
+  assert.doesNotMatch(organizations, /name="inviteeUserId"|Invitee user ID/u);
+  assert.match(accept, /\/workspaces\?joined=1/u);
+  assert.match(accept, /\/workspaces\?invitation=declined/u);
   assert.match(organizationPage, /error instanceof ApiError && error\.status === 403/u);
   assert.match(organizationPage, /canManage=\{canManage\}/u);
   assert.match(guard, /if \(locked\.current\) return false/u);
