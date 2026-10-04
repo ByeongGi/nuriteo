@@ -415,6 +415,8 @@ async fn project_service_is_authorized_versioned_audited_and_atomic() {
     );
 
     verify_audit_failure_rolls_back_and_denial_fails_closed(&pool, &service, owner).await;
+    verify_failure_audit_uses_single_deadline(&pool, &service, owner).await;
+    verify_commit_resolution_is_bounded_and_explicit(&pool, owner).await;
     verify_direct_role_pagination(
         &pool,
         &service,
@@ -440,6 +442,7 @@ async fn project_service_is_authorized_versioned_audited_and_atomic() {
         organization_owner,
     )
     .await;
+    verify_get_reloads_after_archive_race(&pool, &service, owner, organization_owner).await;
     verify_disabled_removed_and_archived_boundaries(&pool, &service, owner, organization_owner)
         .await;
 
@@ -587,6 +590,98 @@ async fn verify_audit_failure_rolls_back_and_denial_fails_closed(
     assert_eq!(project_name(pool, project.id()).await, "Denial Anchor");
 }
 
+async fn verify_failure_audit_uses_single_deadline(
+    pool: &DatabasePool,
+    service: &ProjectService,
+    owner: UserId,
+) {
+    let project = service
+        .create(
+            owner,
+            ProjectOwner::User(owner),
+            slug("audit-deadline"),
+            name("Audit Deadline"),
+            &audit(owner),
+        )
+        .await
+        .unwrap();
+    let mut holder_connection = pool.acquire().await.unwrap();
+    let mut holder = holder_connection.begin().await.unwrap();
+    holder
+        .execute("LOCK TABLE audit_events IN ACCESS EXCLUSIVE MODE")
+        .await
+        .unwrap();
+    let bounded = ProjectService::new(
+        pool.clone(),
+        ProjectServicePolicy::new(Duration::from_millis(200)).unwrap(),
+    );
+    let started = tokio_time::Instant::now();
+    let result = bounded
+        .rename(
+            user_id(OUTSIDER),
+            ProjectOwner::User(owner),
+            project.id(),
+            version(1),
+            name("Denied"),
+            &audit(user_id(OUTSIDER)),
+        )
+        .await;
+    let elapsed = started.elapsed();
+    holder.rollback().await.unwrap();
+    assert_eq!(result, Err(ProjectServiceError::AuditUnavailable));
+    assert!(
+        elapsed < Duration::from_millis(400),
+        "failure audit must share one absolute operation deadline: {elapsed:?}"
+    );
+    assert_eq!(project_name(pool, project.id()).await, "Audit Deadline");
+}
+
+async fn verify_commit_resolution_is_bounded_and_explicit(pool: &DatabasePool, owner: UserId) {
+    sqlx::query(
+        "CREATE OR REPLACE FUNCTION project_service_slow_commit() RETURNS trigger \
+         LANGUAGE plpgsql AS $$ BEGIN PERFORM pg_sleep(3); RETURN NEW; END $$",
+    )
+    .execute(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+    sqlx::query(
+        "CREATE CONSTRAINT TRIGGER project_service_slow_commit \
+         AFTER INSERT ON projects DEFERRABLE INITIALLY DEFERRED \
+         FOR EACH ROW EXECUTE FUNCTION project_service_slow_commit()",
+    )
+    .execute(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+    let bounded = ProjectService::new(
+        pool.clone(),
+        ProjectServicePolicy::new(Duration::from_millis(200)).unwrap(),
+    );
+    let started = tokio_time::Instant::now();
+    let result = bounded
+        .create(
+            owner,
+            ProjectOwner::User(owner),
+            slug("commit-deadline"),
+            name("Commit Deadline"),
+            &audit(owner),
+        )
+        .await;
+    let elapsed = started.elapsed();
+    sqlx::query("DROP TRIGGER project_service_slow_commit ON projects")
+        .execute(&mut *pool.acquire().await.unwrap())
+        .await
+        .unwrap();
+    sqlx::query("DROP FUNCTION project_service_slow_commit()")
+        .execute(&mut *pool.acquire().await.unwrap())
+        .await
+        .unwrap();
+    assert_eq!(result, Err(ProjectServiceError::CommitOutcomeUnknown));
+    assert!(
+        elapsed < Duration::from_millis(2_500),
+        "COMMIT response loss must have a bounded resolution grace: {elapsed:?}"
+    );
+}
+
 async fn verify_same_version_role_mutations_serialize(
     pool: &DatabasePool,
     service: &ProjectService,
@@ -707,6 +802,63 @@ async fn verify_update_authorization_blocks_without_lock_upgrade(
         .expect("Project mutation task must join")
         .expect("Project mutation must succeed");
     assert_eq!(renamed.lock_version(), version(2));
+}
+
+async fn verify_get_reloads_after_archive_race(
+    pool: &DatabasePool,
+    service: &ProjectService,
+    owner: UserId,
+    organization_owner: ProjectOwner,
+) {
+    let project = service
+        .create(
+            owner,
+            organization_owner,
+            slug("get-archive-race"),
+            name("Get Archive Race"),
+            &audit(owner),
+        )
+        .await
+        .unwrap();
+    let mut holder_connection = pool.acquire().await.unwrap();
+    let mut holder = holder_connection.begin().await.unwrap();
+    let holder_pid = backend_pid(&mut holder).await;
+    sqlx::query("SELECT id FROM projects WHERE id=$1::uuid FOR UPDATE")
+        .bind(project.id().to_string())
+        .execute(&mut *holder)
+        .await
+        .unwrap();
+
+    let reader_service = service.clone();
+    let project_id = project.id();
+    let reader = tokio::spawn(async move {
+        reader_service
+            .get(owner, organization_owner, project_id)
+            .await
+    });
+    if !wait_for_project_share_block(pool, holder_pid).await {
+        holder.rollback().await.unwrap();
+        reader.abort();
+        let _ = reader.await;
+        panic!("Project get must lock after its initial namespace probe");
+    }
+    sqlx::query(
+        "UPDATE projects SET state='archived', archived_at=CURRENT_TIMESTAMP, \
+         updated_at=CURRENT_TIMESTAMP, lock_version=lock_version+1 WHERE id=$1::uuid",
+    )
+    .bind(project.id().to_string())
+    .execute(&mut *holder)
+    .await
+    .unwrap();
+    holder.commit().await.unwrap();
+
+    let current = tokio_time::timeout(Duration::from_secs(2), reader)
+        .await
+        .expect("Project get must proceed after archive commit")
+        .expect("Project get task must join")
+        .expect("archived Project remains readable");
+    assert_eq!(current.state(), ProjectState::Archived);
+    assert_eq!(current.lock_version(), version(2));
 }
 
 async fn verify_disabled_removed_and_archived_boundaries(
@@ -947,6 +1099,36 @@ async fn wait_for_project_update_block(pool: &DatabasePool, holder_pid: i32) -> 
                  WHERE activity.pid <> $1 \
                    AND $1 = ANY(pg_blocking_pids(activity.pid)) \
                    AND activity.query LIKE '%FROM projects WHERE id = $1::uuid FOR UPDATE%')",
+            )
+            .bind(holder_pid)
+            .fetch_one(&mut *observer),
+        )
+        .await;
+        let Ok(Ok(blocked)) = observed else {
+            return false;
+        };
+        if blocked {
+            return true;
+        }
+        tokio_time::sleep(Duration::from_millis(25)).await;
+    }
+}
+
+async fn wait_for_project_share_block(pool: &DatabasePool, holder_pid: i32) -> bool {
+    let deadline = tokio_time::Instant::now() + Duration::from_secs(2);
+    let mut observer = pool.acquire().await.unwrap();
+    loop {
+        let remaining = deadline.saturating_duration_since(tokio_time::Instant::now());
+        if remaining.is_zero() {
+            return false;
+        }
+        let observed = tokio_time::timeout(
+            remaining,
+            sqlx::query_scalar::<_, bool>(
+                "SELECT EXISTS (SELECT 1 FROM pg_stat_activity activity \
+                 WHERE activity.pid <> $1 \
+                   AND $1 = ANY(pg_blocking_pids(activity.pid)) \
+                   AND activity.query LIKE '%FROM projects WHERE id = $1::uuid FOR SHARE%')",
             )
             .bind(holder_pid)
             .fetch_one(&mut *observer),

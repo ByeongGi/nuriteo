@@ -1,6 +1,10 @@
 use std::fmt;
 use std::future::Future;
 use std::net::IpAddr;
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+};
 use std::time::Duration;
 
 use serde_json::json;
@@ -27,6 +31,11 @@ use super::{
 const DEFAULT_OPERATION_TIMEOUT: Duration = Duration::from_secs(5);
 const MIN_OPERATION_TIMEOUT: Duration = Duration::from_millis(100);
 const MAX_OPERATION_TIMEOUT: Duration = Duration::from_secs(30);
+const MIN_DATABASE_TIMEOUT: Duration = Duration::from_millis(1);
+// COMMIT is a protocol boundary: after it is sent, a missing response does not
+// prove whether PostgreSQL committed. Keep this grace independent from the
+// operation budget so callers receive a bounded, honest outcome classification.
+const COMMIT_RESOLUTION_GRACE: Duration = Duration::from_secs(2);
 pub const DEFAULT_PROJECT_ROLE_PAGE_SIZE: u16 = 50;
 pub const MAX_PROJECT_ROLE_PAGE_SIZE: u16 = 100;
 
@@ -243,6 +252,7 @@ pub enum ProjectServiceError {
     AuditUnavailable,
     DatabaseUnavailable,
     OperationTimeout,
+    CommitOutcomeUnknown,
     InvariantViolation,
 }
 
@@ -263,6 +273,7 @@ impl fmt::Display for ProjectServiceError {
             Self::AuditUnavailable => "project audit persistence is unavailable",
             Self::DatabaseUnavailable => "project persistence is unavailable",
             Self::OperationTimeout => "project operation timed out",
+            Self::CommitOutcomeUnknown => "project commit outcome is unknown",
             Self::InvariantViolation => "project state is invalid",
         })
     }
@@ -274,6 +285,32 @@ impl std::error::Error for ProjectServiceError {}
 pub struct ProjectService {
     pool: DatabasePool,
     policy: ProjectServicePolicy,
+}
+
+#[derive(Clone)]
+struct MutationDeadline {
+    at: tokio_time::Instant,
+    commit_started: Arc<AtomicBool>,
+}
+
+impl MutationDeadline {
+    fn new(timeout: Duration) -> Self {
+        Self {
+            at: tokio_time::Instant::now() + timeout,
+            commit_started: Arc::new(AtomicBool::new(false)),
+        }
+    }
+
+    fn remaining(&self) -> Result<Duration, ProjectServiceError> {
+        let remaining = self
+            .at
+            .saturating_duration_since(tokio_time::Instant::now());
+        if remaining.is_zero() {
+            Err(ProjectServiceError::OperationTimeout)
+        } else {
+            Ok(remaining)
+        }
+    }
 }
 
 impl ProjectService {
@@ -292,10 +329,22 @@ impl ProjectService {
     ) -> Result<Project, ProjectServiceError> {
         self.ensure_audit_actor(actor_user_id, audit)?;
         let project_id = ProjectId::new();
+        let deadline = MutationDeadline::new(self.policy.operation_timeout);
         let result = self
-            .within_deadline(self.create_inner(actor_user_id, owner, project_id, slug, name, audit))
+            .within_mutation_deadline(
+                &deadline,
+                self.create_inner(
+                    actor_user_id,
+                    owner,
+                    project_id,
+                    slug,
+                    name,
+                    audit,
+                    &deadline,
+                ),
+            )
             .await;
-        self.finish_mutation(result, audit, project_id, "project.created")
+        self.finish_mutation(result, audit, project_id, "project.created", &deadline)
             .await
     }
 
@@ -348,17 +397,22 @@ impl ProjectService {
         audit: &ProjectAuditContext,
     ) -> Result<Project, ProjectServiceError> {
         self.ensure_audit_actor(actor_user_id, audit)?;
+        let deadline = MutationDeadline::new(self.policy.operation_timeout);
         let result = self
-            .within_deadline(self.rename_inner(
-                actor_user_id,
-                owner,
-                project_id,
-                expected_version,
-                name,
-                audit,
-            ))
+            .within_mutation_deadline(
+                &deadline,
+                self.rename_inner(
+                    actor_user_id,
+                    owner,
+                    project_id,
+                    expected_version,
+                    name,
+                    audit,
+                    &deadline,
+                ),
+            )
             .await;
-        self.finish_mutation(result, audit, project_id, "project.renamed")
+        self.finish_mutation(result, audit, project_id, "project.renamed", &deadline)
             .await
     }
 
@@ -371,17 +425,22 @@ impl ProjectService {
         audit: &ProjectAuditContext,
     ) -> Result<Project, ProjectServiceError> {
         self.ensure_audit_actor(actor_user_id, audit)?;
+        let deadline = MutationDeadline::new(self.policy.operation_timeout);
         let result = self
-            .within_deadline(self.set_archived_inner(
-                actor_user_id,
-                owner,
-                project_id,
-                expected_version,
-                true,
-                audit,
-            ))
+            .within_mutation_deadline(
+                &deadline,
+                self.set_archived_inner(
+                    actor_user_id,
+                    owner,
+                    project_id,
+                    expected_version,
+                    true,
+                    audit,
+                    &deadline,
+                ),
+            )
             .await;
-        self.finish_mutation(result, audit, project_id, "project.archived")
+        self.finish_mutation(result, audit, project_id, "project.archived", &deadline)
             .await
     }
 
@@ -394,17 +453,22 @@ impl ProjectService {
         audit: &ProjectAuditContext,
     ) -> Result<Project, ProjectServiceError> {
         self.ensure_audit_actor(actor_user_id, audit)?;
+        let deadline = MutationDeadline::new(self.policy.operation_timeout);
         let result = self
-            .within_deadline(self.set_archived_inner(
-                actor_user_id,
-                owner,
-                project_id,
-                expected_version,
-                false,
-                audit,
-            ))
+            .within_mutation_deadline(
+                &deadline,
+                self.set_archived_inner(
+                    actor_user_id,
+                    owner,
+                    project_id,
+                    expected_version,
+                    false,
+                    audit,
+                    &deadline,
+                ),
+            )
             .await;
-        self.finish_mutation(result, audit, project_id, "project.restored")
+        self.finish_mutation(result, audit, project_id, "project.restored", &deadline)
             .await
     }
 
@@ -422,17 +486,22 @@ impl ProjectService {
         audit: &ProjectAuditContext,
     ) -> Result<(), ProjectServiceError> {
         self.ensure_audit_actor(actor_user_id, audit)?;
+        let deadline = MutationDeadline::new(self.policy.operation_timeout);
         let result = self
-            .within_deadline(self.delete_inner(
-                actor_user_id,
-                owner,
-                project_id,
-                expected_version,
-                confirmation,
-                audit,
-            ))
+            .within_mutation_deadline(
+                &deadline,
+                self.delete_inner(
+                    actor_user_id,
+                    owner,
+                    project_id,
+                    expected_version,
+                    confirmation,
+                    audit,
+                    &deadline,
+                ),
+            )
             .await;
-        self.finish_mutation(result, audit, project_id, "project.deleted")
+        self.finish_mutation(result, audit, project_id, "project.deleted", &deadline)
             .await
     }
 
@@ -451,18 +520,23 @@ impl ProjectService {
         audit: &ProjectAuditContext,
     ) -> Result<DirectProjectRoleGrant, ProjectServiceError> {
         self.ensure_audit_actor(actor_user_id, audit)?;
+        let deadline = MutationDeadline::new(self.policy.operation_timeout);
         let result = self
-            .within_deadline(self.grant_role_inner(
-                actor_user_id,
-                owner,
-                project_id,
-                expected_project_version,
-                target_user_id,
-                role,
-                audit,
-            ))
+            .within_mutation_deadline(
+                &deadline,
+                self.grant_role_inner(
+                    actor_user_id,
+                    owner,
+                    project_id,
+                    expected_project_version,
+                    target_user_id,
+                    role,
+                    audit,
+                    &deadline,
+                ),
+            )
             .await;
-        self.finish_mutation(result, audit, project_id, "project.role_granted")
+        self.finish_mutation(result, audit, project_id, "project.role_granted", &deadline)
             .await
     }
 
@@ -481,18 +555,23 @@ impl ProjectService {
         audit: &ProjectAuditContext,
     ) -> Result<DirectProjectRoleGrant, ProjectServiceError> {
         self.ensure_audit_actor(actor_user_id, audit)?;
+        let deadline = MutationDeadline::new(self.policy.operation_timeout);
         let result = self
-            .within_deadline(self.change_role_inner(
-                actor_user_id,
-                owner,
-                project_id,
-                expected_project_version,
-                target_user_id,
-                role,
-                audit,
-            ))
+            .within_mutation_deadline(
+                &deadline,
+                self.change_role_inner(
+                    actor_user_id,
+                    owner,
+                    project_id,
+                    expected_project_version,
+                    target_user_id,
+                    role,
+                    audit,
+                    &deadline,
+                ),
+            )
             .await;
-        self.finish_mutation(result, audit, project_id, "project.role_changed")
+        self.finish_mutation(result, audit, project_id, "project.role_changed", &deadline)
             .await
     }
 
@@ -510,20 +589,29 @@ impl ProjectService {
         audit: &ProjectAuditContext,
     ) -> Result<ProjectRoleMutationResult, ProjectServiceError> {
         self.ensure_audit_actor(actor_user_id, audit)?;
+        let deadline = MutationDeadline::new(self.policy.operation_timeout);
         let result = self
-            .within_deadline(self.revoke_role_inner(
-                actor_user_id,
-                owner,
-                project_id,
-                expected_project_version,
-                target_user_id,
-                audit,
-            ))
+            .within_mutation_deadline(
+                &deadline,
+                self.revoke_role_inner(
+                    actor_user_id,
+                    owner,
+                    project_id,
+                    expected_project_version,
+                    target_user_id,
+                    audit,
+                    &deadline,
+                ),
+            )
             .await;
-        self.finish_mutation(result, audit, project_id, "project.role_revoked")
+        self.finish_mutation(result, audit, project_id, "project.role_revoked", &deadline)
             .await
     }
 
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "transactional project creation keeps authorization, audit, and deadline explicit"
+    )]
     async fn create_inner(
         &self,
         actor_user_id: UserId,
@@ -532,12 +620,14 @@ impl ProjectService {
         slug: ProjectSlug,
         name: ProjectName,
         audit: &ProjectAuditContext,
+        deadline: &MutationDeadline,
     ) -> Result<Project, ProjectServiceError> {
         let mut connection = self.acquire().await?;
         let mut transaction = connection
             .begin()
             .await
             .map_err(|_| ProjectServiceError::DatabaseUnavailable)?;
+        configure_transaction_deadline(&mut transaction, deadline).await?;
         let now = transaction_now(&mut transaction).await?;
         let storage_scope_id = authorize_create(&mut transaction, actor_user_id, owner).await?;
         let candidate = NewProject::new(project_id, owner, storage_scope_id, slug, name, now);
@@ -553,7 +643,7 @@ impl ProjectService {
             vec!["project".into(), "owner".into(), "storage_scope".into()],
         )
         .await?;
-        commit(transaction).await?;
+        commit(transaction, deadline).await?;
         Ok(project)
     }
 
@@ -568,10 +658,13 @@ impl ProjectService {
             .begin()
             .await
             .map_err(|_| ProjectServiceError::DatabaseUnavailable)?;
-        let project = ProjectRepository::get_by_id(&mut transaction, owner, project_id)
+        if ProjectRepository::get_by_id(&mut transaction, owner, project_id)
             .await
             .map_err(map_repository_error)?
-            .ok_or(ProjectServiceError::NotFound)?;
+            .is_none()
+        {
+            return Err(ProjectServiceError::NotFound);
+        }
         let role = ProjectAccessRepository::resolve_effective_role(
             &mut transaction,
             project_id,
@@ -582,6 +675,13 @@ impl ProjectService {
         if role < EffectiveProjectRole::Read {
             return Err(ProjectServiceError::NotFound);
         }
+        // Authorization holds the Project SHARE lock. Re-read the canonical row
+        // under that lock so an archive racing the initial namespace probe cannot
+        // return a stale lifecycle or lock_version projection.
+        let project = ProjectRepository::get_by_id(&mut transaction, owner, project_id)
+            .await
+            .map_err(map_repository_error)?
+            .ok_or(ProjectServiceError::NotFound)?;
         transaction
             .commit()
             .await
@@ -693,6 +793,10 @@ impl ProjectService {
         Ok(DirectProjectRolePage { grants, next_key })
     }
 
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "versioned rename keeps authorization, audit, and deadline explicit"
+    )]
     async fn rename_inner(
         &self,
         actor_user_id: UserId,
@@ -701,12 +805,14 @@ impl ProjectService {
         expected_version: ProjectVersion,
         name: ProjectName,
         audit: &ProjectAuditContext,
+        deadline: &MutationDeadline,
     ) -> Result<Project, ProjectServiceError> {
         let mut connection = self.acquire().await?;
         let mut transaction = connection
             .begin()
             .await
             .map_err(|_| ProjectServiceError::DatabaseUnavailable)?;
+        configure_transaction_deadline(&mut transaction, deadline).await?;
         let (project, now) = authorize_mutation(
             &mut transaction,
             actor_user_id,
@@ -740,7 +846,7 @@ impl ProjectService {
             vec!["name".into()],
         )
         .await?;
-        commit(transaction).await?;
+        commit(transaction, deadline).await?;
         Ok(next)
     }
 
@@ -756,12 +862,14 @@ impl ProjectService {
         expected_version: ProjectVersion,
         archive: bool,
         audit: &ProjectAuditContext,
+        deadline: &MutationDeadline,
     ) -> Result<Project, ProjectServiceError> {
         let mut connection = self.acquire().await?;
         let mut transaction = connection
             .begin()
             .await
             .map_err(|_| ProjectServiceError::DatabaseUnavailable)?;
+        configure_transaction_deadline(&mut transaction, deadline).await?;
         let (project, now) = authorize_mutation(
             &mut transaction,
             actor_user_id,
@@ -805,7 +913,7 @@ impl ProjectService {
             vec!["state".into(), "archived_at".into()],
         )
         .await?;
-        commit(transaction).await?;
+        commit(transaction, deadline).await?;
         Ok(next)
     }
 
@@ -821,12 +929,14 @@ impl ProjectService {
         expected_version: ProjectVersion,
         confirmation: &ProjectDeleteConfirmation,
         audit: &ProjectAuditContext,
+        deadline: &MutationDeadline,
     ) -> Result<(), ProjectServiceError> {
         let mut connection = self.acquire().await?;
         let mut transaction = connection
             .begin()
             .await
             .map_err(|_| ProjectServiceError::DatabaseUnavailable)?;
+        configure_transaction_deadline(&mut transaction, deadline).await?;
         let (project, now) = authorize_mutation(
             &mut transaction,
             actor_user_id,
@@ -855,7 +965,7 @@ impl ProjectService {
             vec!["project".into(), "project_roles".into()],
         )
         .await?;
-        commit(transaction).await
+        commit(transaction, deadline).await
     }
 
     #[allow(
@@ -871,12 +981,14 @@ impl ProjectService {
         target_user_id: UserId,
         role: ProjectRole,
         audit: &ProjectAuditContext,
+        deadline: &MutationDeadline,
     ) -> Result<DirectProjectRoleGrant, ProjectServiceError> {
         let mut connection = self.acquire().await?;
         let mut transaction = connection
             .begin()
             .await
             .map_err(|_| ProjectServiceError::DatabaseUnavailable)?;
+        configure_transaction_deadline(&mut transaction, deadline).await?;
         let now = authorize_role_management(
             &mut transaction,
             actor_user_id,
@@ -902,7 +1014,7 @@ impl ProjectService {
             vec!["role".into(), "project.lock_version".into()],
         )
         .await?;
-        commit(transaction).await?;
+        commit(transaction, deadline).await?;
         Ok(grant)
     }
 
@@ -919,12 +1031,14 @@ impl ProjectService {
         target_user_id: UserId,
         role: ProjectRole,
         audit: &ProjectAuditContext,
+        deadline: &MutationDeadline,
     ) -> Result<DirectProjectRoleGrant, ProjectServiceError> {
         let mut connection = self.acquire().await?;
         let mut transaction = connection
             .begin()
             .await
             .map_err(|_| ProjectServiceError::DatabaseUnavailable)?;
+        configure_transaction_deadline(&mut transaction, deadline).await?;
         let now = authorize_role_management(
             &mut transaction,
             actor_user_id,
@@ -956,7 +1070,7 @@ impl ProjectService {
             vec!["role".into(), "project.lock_version".into()],
         )
         .await?;
-        commit(transaction).await?;
+        commit(transaction, deadline).await?;
         Ok(grant)
     }
 
@@ -972,12 +1086,14 @@ impl ProjectService {
         expected_project_version: ProjectVersion,
         target_user_id: UserId,
         audit: &ProjectAuditContext,
+        deadline: &MutationDeadline,
     ) -> Result<ProjectRoleMutationResult, ProjectServiceError> {
         let mut connection = self.acquire().await?;
         let mut transaction = connection
             .begin()
             .await
             .map_err(|_| ProjectServiceError::DatabaseUnavailable)?;
+        configure_transaction_deadline(&mut transaction, deadline).await?;
         let now = authorize_role_management(
             &mut transaction,
             actor_user_id,
@@ -1008,7 +1124,7 @@ impl ProjectService {
             },
         )
         .await?;
-        commit(transaction).await?;
+        commit(transaction, deadline).await?;
         Ok(if changed {
             ProjectRoleMutationResult::Changed
         } else {
@@ -1032,6 +1148,25 @@ impl ProjectService {
             .map_err(|_| ProjectServiceError::OperationTimeout)?
     }
 
+    async fn within_mutation_deadline<T>(
+        &self,
+        deadline: &MutationDeadline,
+        future: impl Future<Output = Result<T, ProjectServiceError>>,
+    ) -> Result<T, ProjectServiceError> {
+        tokio::pin!(future);
+        tokio::select! {
+            biased;
+            _ = tokio_time::sleep_until(deadline.at) => {
+                if deadline.commit_started.load(Ordering::Acquire) {
+                    future.await
+                } else {
+                    Err(ProjectServiceError::OperationTimeout)
+                }
+            }
+            result = &mut future => result,
+        }
+    }
+
     fn ensure_audit_actor(
         &self,
         actor_user_id: UserId,
@@ -1049,11 +1184,16 @@ impl ProjectService {
         audit: &ProjectAuditContext,
         project_id: ProjectId,
         action: &str,
+        deadline: &MutationDeadline,
     ) -> Result<T, ProjectServiceError> {
         if let Err(error) = result {
             if error.requires_failure_audit() {
-                self.record_failure(audit, project_id, action, error)
-                    .await?;
+                self.within_mutation_deadline(
+                    deadline,
+                    self.record_failure(audit, project_id, action, error, deadline),
+                )
+                .await
+                .map_err(|_| ProjectServiceError::AuditUnavailable)?;
             }
             return Err(error);
         }
@@ -1066,31 +1206,30 @@ impl ProjectService {
         project_id: ProjectId,
         action: &str,
         error: ProjectServiceError,
+        deadline: &MutationDeadline,
     ) -> Result<(), ProjectServiceError> {
-        self.within_deadline(async {
-            let mut connection = self.acquire().await?;
-            let mut transaction = connection
-                .begin()
-                .await
-                .map_err(|_| ProjectServiceError::DatabaseUnavailable)?;
-            let now = transaction_now(&mut transaction).await?;
-            let event = build_audit_event(
-                audit,
-                now,
-                project_id,
-                action,
-                error.audit_result(),
-                Some(error.reason_code().into()),
-                vec![],
-                "project",
-                project_id.to_string(),
-            )?;
-            AuditWriter::append(&mut transaction, &event)
-                .await
-                .map_err(|_| ProjectServiceError::AuditUnavailable)?;
-            commit(transaction).await
-        })
-        .await
+        let mut connection = self.acquire().await?;
+        let mut transaction = connection
+            .begin()
+            .await
+            .map_err(|_| ProjectServiceError::DatabaseUnavailable)?;
+        configure_transaction_deadline(&mut transaction, deadline).await?;
+        let now = transaction_now(&mut transaction).await?;
+        let event = build_audit_event(
+            audit,
+            now,
+            project_id,
+            action,
+            error.audit_result(),
+            Some(error.reason_code().into()),
+            vec![],
+            "project",
+            project_id.to_string(),
+        )?;
+        AuditWriter::append(&mut transaction, &event)
+            .await
+            .map_err(|_| ProjectServiceError::AuditUnavailable)?;
+        commit(transaction, deadline).await
     }
 }
 
@@ -1138,6 +1277,7 @@ impl ProjectServiceError {
             Self::AuditUnavailable => "AUDIT_UNAVAILABLE",
             Self::DatabaseUnavailable => "DATABASE_UNAVAILABLE",
             Self::OperationTimeout => "OPERATION_TIMEOUT",
+            Self::CommitOutcomeUnknown => "COMMIT_OUTCOME_UNKNOWN",
             Self::InvariantViolation => "INVARIANT_VIOLATION",
         }
     }
@@ -1682,11 +1822,58 @@ async fn transaction_now(
     Timestamp::from_datetime(value).map_err(|_| ProjectServiceError::InvariantViolation)
 }
 
-async fn commit(transaction: Transaction<'_, Postgres>) -> Result<(), ProjectServiceError> {
-    transaction
-        .commit()
-        .await
-        .map_err(|_| ProjectServiceError::DatabaseUnavailable)
+async fn configure_transaction_deadline(
+    transaction: &mut Transaction<'_, Postgres>,
+    deadline: &MutationDeadline,
+) -> Result<(), ProjectServiceError> {
+    let timeout = postgres_timeout(deadline.remaining()?);
+    sqlx::query(
+        "SELECT set_config('statement_timeout', $1, true), \
+                set_config('lock_timeout', $1, true)",
+    )
+    .bind(timeout)
+    .execute(&mut **transaction)
+    .await
+    .map_err(|_| ProjectServiceError::DatabaseUnavailable)?;
+    Ok(())
+}
+
+fn postgres_timeout(remaining: Duration) -> String {
+    let millis = remaining
+        .max(MIN_DATABASE_TIMEOUT)
+        .as_millis()
+        .min(i32::MAX as u128);
+    format!("{millis}ms")
+}
+
+async fn commit(
+    mut transaction: Transaction<'_, Postgres>,
+    deadline: &MutationDeadline,
+) -> Result<(), ProjectServiceError> {
+    configure_transaction_deadline(&mut transaction, deadline).await?;
+    // Once COMMIT is sent, the operation deadline no longer cancels it: doing
+    // so could turn a committed mutation into an apparent rollback. A separate
+    // bounded resolution grace classifies response loss as unknown instead.
+    deadline.commit_started.store(true, Ordering::Release);
+    resolve_commit(transaction.commit(), COMMIT_RESOLUTION_GRACE).await
+}
+
+async fn resolve_commit(
+    commit: impl Future<Output = Result<(), sqlx::Error>>,
+    resolution_grace: Duration,
+) -> Result<(), ProjectServiceError> {
+    match tokio_time::timeout(resolution_grace, commit).await {
+        Ok(result) => result.map_err(map_commit_error),
+        Err(_) => Err(ProjectServiceError::CommitOutcomeUnknown),
+    }
+}
+
+fn map_commit_error(error: sqlx::Error) -> ProjectServiceError {
+    match error.as_database_error().and_then(|error| error.code()) {
+        Some(code) if code == "57014" || code == "55P03" => ProjectServiceError::OperationTimeout,
+        Some(_) => ProjectServiceError::DatabaseUnavailable,
+        None => ProjectServiceError::CommitOutcomeUnknown,
+    }
 }
 
 fn map_repository_error(error: ProjectRepositoryError) -> ProjectServiceError {

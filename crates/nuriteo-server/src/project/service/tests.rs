@@ -72,6 +72,10 @@ fn service_errors_are_context_free_and_audit_reasons_are_closed() {
             ProjectServiceError::DatabaseUnavailable,
             "project persistence is unavailable",
         ),
+        (
+            ProjectServiceError::CommitOutcomeUnknown,
+            "project commit outcome is unknown",
+        ),
     ];
     for (error, message) in cases {
         assert_eq!(error.to_string(), message);
@@ -83,4 +87,21 @@ fn service_errors_are_context_free_and_audit_reasons_are_closed() {
                 .all(|byte| { byte.is_ascii_uppercase() || byte.is_ascii_digit() || byte == b'_' })
         );
     }
+}
+
+#[tokio::test]
+async fn commit_resolution_is_bounded_and_never_claims_rollback() {
+    let started = tokio_time::Instant::now();
+    let result = resolve_commit(
+        std::future::pending::<Result<(), sqlx::Error>>(),
+        Duration::from_millis(10),
+    )
+    .await;
+
+    assert_eq!(result, Err(ProjectServiceError::CommitOutcomeUnknown));
+    assert!(started.elapsed() < Duration::from_millis(100));
+    assert_eq!(
+        resolve_commit(std::future::ready(Ok(())), Duration::from_secs(1)).await,
+        Ok(())
+    );
 }
