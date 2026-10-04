@@ -187,6 +187,19 @@ async fn project_http_journey_is_authorized_versioned_and_audited() {
     let page = response_json(page).await;
     let cursor = page["nextCursor"].as_str().unwrap();
     assert!(cursor.starts_with("nrt_project_cursor_"));
+    let first_id = page["items"][0]["id"].as_str().unwrap();
+    let continuation = empty_request(
+        &router,
+        &owner,
+        Method::GET,
+        &format!("{personal_collection}?state=all&pageSize=1&cursor={cursor}"),
+        None,
+    )
+    .await;
+    assert_eq!(continuation.status(), StatusCode::OK);
+    let continuation = response_json(continuation).await;
+    assert_eq!(continuation["items"].as_array().unwrap().len(), 1);
+    assert_ne!(continuation["items"][0]["id"], first_id);
     for uri in [
         format!("{personal_collection}?state=active&pageSize=1&cursor={cursor}"),
         format!("{personal_collection}?state=all&pageSize=2&cursor={cursor}"),
@@ -322,6 +335,20 @@ async fn project_http_journey_is_authorized_versioned_and_audited() {
     )
     .await;
 
+    assert_problem(
+        json_request(
+            &router,
+            Some(&owner),
+            Method::DELETE,
+            &personal_location,
+            json!({"name":"Personal Renamed"}),
+            Some("\"project-v4\""),
+        )
+        .await,
+        StatusCode::FORBIDDEN,
+        "REQUEST_FORBIDDEN",
+    )
+    .await;
     set_reauthenticated(&pool, fixture.owner).await;
     let deleted = json_request(
         &router,

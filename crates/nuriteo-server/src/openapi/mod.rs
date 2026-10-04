@@ -1,5 +1,7 @@
 use axum::{Json, Router};
 use serde::Serialize;
+use utoipa::Modify;
+use utoipa::openapi::security::{ApiKey, ApiKeyValue, SecurityScheme};
 use utoipa::{OpenApi, ToSchema};
 use utoipa_axum::routes;
 use utoipa_swagger_ui::{Config, SwaggerUi};
@@ -23,6 +25,7 @@ pub const DOCS_PATH: &str = "/api/docs";
         description = "Versioned public REST API for a self-hosted NURITEO instance."
     ),
     components(schemas(VersionResponse, ProblemDetails, FieldViolation)),
+    modifiers(&ProjectSessionSecurity),
     tags(
         (name = "system", description = "Public instance compatibility information"),
         (name = "setup", description = "Public secret-free instance setup state"),
@@ -37,6 +40,25 @@ pub const DOCS_PATH: &str = "/api/docs";
     servers((url = "/", description = "Current self-hosted instance"))
 )]
 struct ApiDocument;
+
+const PROJECT_SESSION_SCHEME: &str = "projectSessionCookie";
+
+struct ProjectSessionSecurity;
+
+impl Modify for ProjectSessionSecurity {
+    fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
+        let components = openapi.components.get_or_insert_default();
+        components.add_security_scheme(
+            PROJECT_SESSION_SCHEME,
+            SecurityScheme::ApiKey(ApiKey::Cookie(
+                ApiKeyValue::with_description(
+                    "__Host-nuriteo_session",
+                    "Host-only, Secure, HttpOnly browser Session cookie. Loopback development uses the equivalent nuriteo_dev_session cookie.",
+                ),
+            )),
+        );
+    }
+}
 
 #[derive(Debug, Serialize, ToSchema)]
 struct VersionResponse {

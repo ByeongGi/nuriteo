@@ -142,11 +142,28 @@ async fn problem_schema_tracks_the_actual_safe_error_shape() {
 #[test]
 fn project_openapi_declares_every_error_as_problem_json() {
     let document = serde_json::to_value(openapi::document()).unwrap();
+    let scheme = &document["components"]["securitySchemes"]["projectSessionCookie"];
+    assert_eq!(scheme["type"], "apiKey");
+    assert_eq!(scheme["in"], "cookie");
+    assert_eq!(scheme["name"], "__Host-nuriteo_session");
     for (path, item) in document["paths"].as_object().unwrap() {
         if !path.contains("/projects") {
             continue;
         }
         for operation in item.as_object().unwrap().values() {
+            assert_eq!(
+                operation["security"],
+                json!([{"projectSessionCookie": []}]),
+                "{path} must require the production host-only Session cookie"
+            );
+            if operation.get("requestBody").is_some() {
+                for status in ["413", "415"] {
+                    assert!(
+                        operation["responses"].get(status).is_some(),
+                        "{path} JSON-body operation must document {status}"
+                    );
+                }
+            }
             for (status, response) in operation["responses"].as_object().unwrap() {
                 if status.starts_with('2') {
                     continue;

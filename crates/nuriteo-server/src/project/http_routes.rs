@@ -80,6 +80,7 @@ struct ChangeRoleRequest {
 }
 
 #[utoipa::path(post, path = COLLECTION, tag = "projects",
+    security(("projectSessionCookie" = [])),
     params(("owner_type" = String, Path), ("owner_id" = String, Path)),
     request_body(content = CreateProjectRequest, content_type = "application/json"),
     responses((status = 201, body = ProjectView, headers(("Location" = String), ("ETag" = String))),
@@ -87,6 +88,8 @@ struct ChangeRoleRequest {
       (status = 403, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
       (status = 404, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
       (status = 409, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+      (status = 413, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+      (status = 415, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
       (status = 422, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
       (status = 503, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
       (status = 504, body = crate::openapi::ProblemDetails, content_type = "application/problem+json")))]
@@ -116,6 +119,7 @@ async fn create_project(
 }
 
 #[utoipa::path(get, path = COLLECTION, tag = "projects",
+    security(("projectSessionCookie" = [])),
     params(("owner_type" = String, Path), ("owner_id" = String, Path),
       ("state" = Option<String>, Query), ("pageSize" = Option<u16>, Query), ("cursor" = Option<String>, Query)),
     responses((status = 200, body = ProjectListView),
@@ -148,6 +152,7 @@ async fn list_projects(
 }
 
 #[utoipa::path(get, path = ITEM, tag = "projects",
+    security(("projectSessionCookie" = [])),
     params(("owner_type" = String, Path), ("owner_id" = String, Path), ("project_id" = String, Path)),
     responses((status = 200, body = ProjectView, headers(("ETag" = String))),
       (status = 401, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
@@ -174,6 +179,7 @@ async fn get_project(
 }
 
 #[utoipa::path(patch, path = ITEM, tag = "projects",
+    security(("projectSessionCookie" = [])),
     params(("owner_type" = String, Path), ("owner_id" = String, Path), ("project_id" = String, Path), ("If-Match" = String, Header)),
     request_body(content = RenameProjectRequest, content_type = "application/json"),
     responses((status = 200, body = ProjectView, headers(("ETag" = String))),
@@ -182,6 +188,8 @@ async fn get_project(
       (status = 404, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
       (status = 409, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
       (status = 412, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+      (status = 413, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+      (status = 415, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
       (status = 422, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
       (status = 428, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
       (status = 503, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
@@ -211,6 +219,7 @@ async fn rename_project(
 }
 
 #[utoipa::path(delete, path = ITEM, tag = "projects",
+    security(("projectSessionCookie" = [])),
     params(("owner_type" = String, Path), ("owner_id" = String, Path), ("project_id" = String, Path), ("If-Match" = String, Header)),
     request_body(content = DeleteProjectRequest, content_type = "application/json"),
     responses((status = 204),
@@ -219,6 +228,8 @@ async fn rename_project(
       (status = 404, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
       (status = 409, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
       (status = 412, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+      (status = 413, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+      (status = 415, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
       (status = 422, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
       (status = 428, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
       (status = 503, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
@@ -247,7 +258,7 @@ async fn delete_project(
     Ok(StatusCode::NO_CONTENT)
 }
 
-#[utoipa::path(post, path = ARCHIVE, tag = "projects", params(("owner_type" = String, Path), ("owner_id" = String, Path), ("project_id" = String, Path), ("If-Match" = String, Header)), responses((status = 200, body = ProjectView, headers(("ETag" = String))),
+#[utoipa::path(post, path = ARCHIVE, tag = "projects", security(("projectSessionCookie" = [])), params(("owner_type" = String, Path), ("owner_id" = String, Path), ("project_id" = String, Path), ("If-Match" = String, Header)), responses((status = 200, body = ProjectView, headers(("ETag" = String))),
     (status = 401, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
     (status = 403, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
     (status = 404, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
@@ -266,7 +277,7 @@ async fn archive_project(
     lifecycle(service, request_id, path, request, false, ARCHIVE).await
 }
 
-#[utoipa::path(post, path = RESTORE, tag = "projects", params(("owner_type" = String, Path), ("owner_id" = String, Path), ("project_id" = String, Path), ("If-Match" = String, Header)), responses((status = 200, body = ProjectView, headers(("ETag" = String))),
+#[utoipa::path(post, path = RESTORE, tag = "projects", security(("projectSessionCookie" = [])), params(("owner_type" = String, Path), ("owner_id" = String, Path), ("project_id" = String, Path), ("If-Match" = String, Header)), responses((status = 200, body = ProjectView, headers(("ETag" = String))),
     (status = 401, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
     (status = 403, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
     (status = 404, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
@@ -309,7 +320,7 @@ async fn lifecycle(
     project_response(StatusCode::OK, view, false, request_id, path)
 }
 
-#[utoipa::path(get, path = ROLES, tag = "project-roles", params(("owner_type" = String, Path), ("owner_id" = String, Path), ("project_id" = String, Path), ("pageSize" = Option<u16>, Query), ("cursor" = Option<String>, Query)), responses((status = 200, body = ProjectRoleListView),
+#[utoipa::path(get, path = ROLES, tag = "project-roles", security(("projectSessionCookie" = [])), params(("owner_type" = String, Path), ("owner_id" = String, Path), ("project_id" = String, Path), ("pageSize" = Option<u16>, Query), ("cursor" = Option<String>, Query)), responses((status = 200, body = ProjectRoleListView),
     (status = 401, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
     (status = 403, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
     (status = 404, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
@@ -341,12 +352,14 @@ async fn list_roles(
     Ok(Json(view))
 }
 
-#[utoipa::path(post, path = ROLES, tag = "project-roles", params(("owner_type" = String, Path), ("owner_id" = String, Path), ("project_id" = String, Path), ("If-Match" = String, Header)), request_body(content = GrantRoleRequest, content_type = "application/json"), responses((status = 201, body = ProjectRoleMutationView, headers(("ETag" = String))),
+#[utoipa::path(post, path = ROLES, tag = "project-roles", security(("projectSessionCookie" = [])), params(("owner_type" = String, Path), ("owner_id" = String, Path), ("project_id" = String, Path), ("If-Match" = String, Header)), request_body(content = GrantRoleRequest, content_type = "application/json"), responses((status = 201, body = ProjectRoleMutationView, headers(("ETag" = String))),
     (status = 401, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
     (status = 403, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
     (status = 404, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
     (status = 409, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
     (status = 412, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+    (status = 413, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+    (status = 415, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
     (status = 422, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
     (status = 428, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
     (status = 503, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
@@ -374,12 +387,14 @@ async fn grant_role(
     .await
 }
 
-#[utoipa::path(patch, path = ROLE, tag = "project-roles", params(("owner_type" = String, Path), ("owner_id" = String, Path), ("project_id" = String, Path), ("user_id" = String, Path), ("If-Match" = String, Header)), request_body(content = ChangeRoleRequest, content_type = "application/json"), responses((status = 200, body = ProjectRoleMutationView, headers(("ETag" = String))),
+#[utoipa::path(patch, path = ROLE, tag = "project-roles", security(("projectSessionCookie" = [])), params(("owner_type" = String, Path), ("owner_id" = String, Path), ("project_id" = String, Path), ("user_id" = String, Path), ("If-Match" = String, Header)), request_body(content = ChangeRoleRequest, content_type = "application/json"), responses((status = 200, body = ProjectRoleMutationView, headers(("ETag" = String))),
     (status = 401, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
     (status = 403, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
     (status = 404, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
     (status = 409, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
     (status = 412, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+    (status = 413, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+    (status = 415, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
     (status = 422, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
     (status = 428, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
     (status = 503, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
@@ -407,7 +422,7 @@ async fn change_role(
     .await
 }
 
-#[utoipa::path(delete, path = ROLE, tag = "project-roles", params(("owner_type" = String, Path), ("owner_id" = String, Path), ("project_id" = String, Path), ("user_id" = String, Path), ("If-Match" = String, Header)), responses((status = 200, body = ProjectRoleMutationView, headers(("ETag" = String))),
+#[utoipa::path(delete, path = ROLE, tag = "project-roles", security(("projectSessionCookie" = [])), params(("owner_type" = String, Path), ("owner_id" = String, Path), ("project_id" = String, Path), ("user_id" = String, Path), ("If-Match" = String, Header)), responses((status = 200, body = ProjectRoleMutationView, headers(("ETag" = String))),
     (status = 401, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
     (status = 403, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
     (status = 404, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
