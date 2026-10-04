@@ -28,7 +28,7 @@ impl ProjectRole {
         }
     }
 
-    fn parse(value: &str) -> Result<Self, ProjectAccessError> {
+    pub(crate) fn parse(value: &str) -> Result<Self, ProjectAccessError> {
         match value {
             "read" => Ok(Self::Read),
             "write" => Ok(Self::Write),
@@ -257,9 +257,32 @@ impl ProjectAccessRepository {
         project_id: ProjectId,
         user_id: UserId,
     ) -> Result<EffectiveProjectRole, ProjectAccessError> {
+        Self::resolve_effective_role_with_lock(transaction, project_id, user_id, LockMode::Share)
+            .await
+    }
+
+    /// Computes the effective role while taking an update lock on the Project.
+    /// Application services use this variant before a Project or direct-role
+    /// mutation so concurrent authorization checks cannot deadlock while both
+    /// transactions attempt to upgrade a shared Project lock.
+    pub async fn resolve_effective_role_for_update(
+        transaction: &mut Transaction<'_, Postgres>,
+        project_id: ProjectId,
+        user_id: UserId,
+    ) -> Result<EffectiveProjectRole, ProjectAccessError> {
+        Self::resolve_effective_role_with_lock(transaction, project_id, user_id, LockMode::Update)
+            .await
+    }
+
+    async fn resolve_effective_role_with_lock(
+        transaction: &mut Transaction<'_, Postgres>,
+        project_id: ProjectId,
+        user_id: UserId,
+        project_lock: LockMode,
+    ) -> Result<EffectiveProjectRole, ProjectAccessError> {
         match read_project_owner_hint(transaction, project_id).await? {
             ProjectOwner::User(owner_id) => {
-                let project = lock_project_owner(transaction, project_id, LockMode::Share).await?;
+                let project = lock_project_owner(transaction, project_id, project_lock).await?;
                 if project.owner != ProjectOwner::User(owner_id)
                     || !lock_active_user(transaction, user_id).await?
                 {
@@ -274,7 +297,7 @@ impl ProjectAccessRepository {
             ProjectOwner::Organization(organization_id) => {
                 let organization_status =
                     lock_organization_status(transaction, organization_id).await?;
-                let project = lock_project_owner(transaction, project_id, LockMode::Share).await?;
+                let project = lock_project_owner(transaction, project_id, project_lock).await?;
                 if project.owner != ProjectOwner::Organization(organization_id) {
                     return Err(ProjectAccessError::InvalidPersistedState);
                 }

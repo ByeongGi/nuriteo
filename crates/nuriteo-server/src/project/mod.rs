@@ -1,6 +1,7 @@
 mod access;
 mod model;
 mod repository;
+mod service;
 mod types;
 
 use std::fmt;
@@ -15,6 +16,12 @@ pub(crate) use model::ProjectFields;
 pub use repository::{
     DEFAULT_PROJECT_PAGE_SIZE, MAX_PROJECT_PAGE_SIZE, NewProject, ProjectConflict, ProjectPage,
     ProjectPageKey, ProjectPageLimit, ProjectRepository, ProjectRepositoryError,
+};
+pub use service::{
+    DEFAULT_PROJECT_ROLE_PAGE_SIZE, DirectProjectRolePage, MAX_PROJECT_ROLE_PAGE_SIZE,
+    ProjectAuditContext, ProjectDeleteConfirmation, ProjectListPage, ProjectRoleMutationResult,
+    ProjectRolePageKey, ProjectRolePageLimit, ProjectService, ProjectServiceError,
+    ProjectServicePolicy,
 };
 pub use types::{ProjectId, ProjectName, ProjectOwner, ProjectSlug, ProjectState, ProjectVersion};
 
