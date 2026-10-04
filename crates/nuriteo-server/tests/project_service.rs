@@ -417,6 +417,7 @@ async fn project_service_is_authorized_versioned_audited_and_atomic() {
 
     verify_audit_failure_rolls_back_and_denial_fails_closed(&pool, &service, owner).await;
     verify_persistence_timeouts_remain_typed(&pool, &service, owner, organization_owner).await;
+    verify_direct_service_query_timeout_remains_typed(&pool, &service, owner).await;
     verify_failure_audit_uses_single_deadline(&pool, &service, owner).await;
     verify_commit_resolution_is_bounded_and_explicit(&pool, owner).await;
     verify_direct_role_pagination(
@@ -790,6 +791,73 @@ async fn verify_persistence_timeouts_remain_typed(
         "service lock timeout must remain bounded"
     );
     holder.rollback().await.unwrap();
+}
+
+async fn verify_direct_service_query_timeout_remains_typed(
+    pool: &DatabasePool,
+    service: &ProjectService,
+    owner: UserId,
+) {
+    let project = service
+        .create(
+            owner,
+            ProjectOwner::User(owner),
+            slug("direct-query-timeout"),
+            name("Direct Query Timeout"),
+            &audit(owner),
+        )
+        .await
+        .unwrap();
+    sqlx::query(
+        "CREATE OR REPLACE FUNCTION project_service_slow_direct_update() RETURNS trigger \
+         LANGUAGE plpgsql AS $$ BEGIN PERFORM pg_sleep(1); RETURN NEW; END $$",
+    )
+    .execute(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+    sqlx::query(
+        "CREATE TRIGGER project_service_slow_direct_update \
+         BEFORE UPDATE OF name ON projects \
+         FOR EACH ROW WHEN (NEW.name = 'Must Time Out') \
+         EXECUTE FUNCTION project_service_slow_direct_update()",
+    )
+    .execute(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+    let bounded = ProjectService::new(
+        pool.clone(),
+        ProjectServicePolicy::new(Duration::from_millis(200)).unwrap(),
+    );
+    let started = tokio_time::Instant::now();
+    let result = bounded
+        .rename(
+            owner,
+            ProjectOwner::User(owner),
+            project.id(),
+            version(1),
+            name("Must Time Out"),
+            &audit(owner),
+        )
+        .await;
+    let elapsed = started.elapsed();
+    sqlx::query("DROP TRIGGER project_service_slow_direct_update ON projects")
+        .execute(&mut *pool.acquire().await.unwrap())
+        .await
+        .unwrap();
+    sqlx::query("DROP FUNCTION project_service_slow_direct_update()")
+        .execute(&mut *pool.acquire().await.unwrap())
+        .await
+        .unwrap();
+
+    assert_eq!(result, Err(ProjectServiceError::OperationTimeout));
+    assert!(
+        elapsed >= Duration::from_millis(125) && elapsed < Duration::from_millis(400),
+        "direct service UPDATE must preserve PostgreSQL statement timeout: {elapsed:?}"
+    );
+    assert_eq!(
+        project_name(pool, project.id()).await,
+        "Direct Query Timeout"
+    );
 }
 
 async fn verify_same_version_role_mutations_serialize(

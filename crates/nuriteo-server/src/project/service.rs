@@ -772,7 +772,7 @@ impl ProjectService {
         .bind(i64::from(limit.get()) + 1)
         .fetch_all(&mut *transaction)
         .await
-        .map_err(|_| ProjectServiceError::DatabaseUnavailable)?;
+        .map_err(map_service_query_error)?;
         let mut grants = rows
             .into_iter()
             .map(decode_grant)
@@ -838,7 +838,7 @@ impl ProjectService {
         .bind(now.to_string())
         .execute(&mut *transaction)
         .await
-        .map_err(|_| ProjectServiceError::DatabaseUnavailable)?;
+        .map_err(map_service_query_error)?;
         require_one_versioned_row(result.rows_affected())?;
         append_success_audit(
             &mut transaction,
@@ -905,7 +905,7 @@ impl ProjectService {
         .bind(now.to_string())
         .execute(&mut *transaction)
         .await
-        .map_err(|_| ProjectServiceError::DatabaseUnavailable)?;
+        .map_err(map_service_query_error)?;
         require_one_versioned_row(result.rows_affected())?;
         append_success_audit(
             &mut transaction,
@@ -957,7 +957,7 @@ impl ProjectService {
             .bind(expected_version.get())
             .execute(&mut *transaction)
             .await
-            .map_err(|_| ProjectServiceError::DatabaseUnavailable)?;
+            .map_err(map_service_query_error)?;
         require_one_versioned_row(result.rows_affected())?;
         append_success_audit(
             &mut transaction,
@@ -1422,7 +1422,7 @@ async fn require_active_user(
             .bind(user_id.to_string())
             .fetch_optional(&mut **transaction)
             .await
-            .map_err(|_| ProjectServiceError::DatabaseUnavailable)?;
+            .map_err(map_service_query_error)?;
     match status.as_deref() {
         Some("active") => Ok(()),
         Some("disabled") | None => Err(ProjectServiceError::UserUnavailable),
@@ -1439,7 +1439,7 @@ async fn require_active_organization(
             .bind(organization_id.to_string())
             .fetch_optional(&mut **transaction)
             .await
-            .map_err(|_| ProjectServiceError::DatabaseUnavailable)?;
+            .map_err(map_service_query_error)?;
     match status.as_deref() {
         Some("active") => Ok(()),
         Some("archived") => Err(ProjectServiceError::Archived),
@@ -1461,7 +1461,7 @@ async fn lock_membership_role(
     .bind(user_id.to_string())
     .fetch_optional(&mut **transaction)
     .await
-    .map_err(|_| ProjectServiceError::DatabaseUnavailable)
+    .map_err(map_service_query_error)
 }
 
 async fn storage_scope_for_owner(
@@ -1488,7 +1488,7 @@ async fn storage_scope_for_owner(
             .await
         }
     }
-    .map_err(|_| ProjectServiceError::DatabaseUnavailable)?;
+    .map_err(map_service_query_error)?;
     value
         .ok_or(ProjectServiceError::InvariantViolation)?
         .parse()
@@ -1561,7 +1561,7 @@ async fn query_authorized_page(
         }
         _ => return Err(ProjectServiceError::InvariantViolation),
     }
-    .map_err(|_| ProjectServiceError::DatabaseUnavailable)?;
+    .map_err(map_service_query_error)?;
     decode_list_page(rows, limit)
 }
 
@@ -1713,7 +1713,7 @@ async fn advance_project_version(
     .bind(now.to_string())
     .execute(&mut **transaction)
     .await
-    .map_err(|_| ProjectServiceError::DatabaseUnavailable)?;
+    .map_err(map_service_query_error)?;
     require_one_versioned_row(result.rows_affected())
 }
 
@@ -1821,7 +1821,7 @@ async fn transaction_now(
     let value: OffsetDateTime = sqlx::query_scalar("SELECT transaction_timestamp()")
         .fetch_one(&mut **transaction)
         .await
-        .map_err(|_| ProjectServiceError::DatabaseUnavailable)?;
+        .map_err(map_service_query_error)?;
     Timestamp::from_datetime(value).map_err(|_| ProjectServiceError::InvariantViolation)
 }
 
@@ -1837,7 +1837,7 @@ async fn configure_transaction_deadline(
     .bind(timeout)
     .execute(&mut **transaction)
     .await
-    .map_err(|_| ProjectServiceError::DatabaseUnavailable)?;
+    .map_err(map_service_query_error)?;
     Ok(())
 }
 
@@ -1877,6 +1877,13 @@ fn map_commit_error(error: sqlx::Error) -> ProjectServiceError {
         Some(code) if code == "57014" || code == "55P03" => ProjectServiceError::OperationTimeout,
         Some(_) => ProjectServiceError::DatabaseUnavailable,
         None => ProjectServiceError::CommitOutcomeUnknown,
+    }
+}
+
+fn map_service_query_error(error: sqlx::Error) -> ProjectServiceError {
+    match error.as_database_error().and_then(|error| error.code()) {
+        Some(code) if code == "57014" || code == "55P03" => ProjectServiceError::OperationTimeout,
+        _ => ProjectServiceError::DatabaseUnavailable,
     }
 }
 
