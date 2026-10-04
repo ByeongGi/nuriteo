@@ -6,14 +6,17 @@ import {
   type RuntimeMountInput
 } from "../src/runtime/runtime-adapter.ts";
 import type {
+  FileSystemTree,
   PreviewWorkflowEvent,
   PreviewWorkflowListener,
   PreviewWorkflowSnapshot
 } from "@nuriteo/preview-service";
 
 const hash = "a".repeat(64);
+const scopeId = "0199ee6c-c777-7000-8000-00000000a001";
+const draftProjectId = "0199ee6c-c777-7000-8000-00000000a002";
 const mountInput: RuntimeMountInput = {
-  project: { id: "project-a", localDraftKey: "draft-a", displayName: "Project A" },
+  project: { id: "project-a", localDraftKey: `${scopeId}:${draftProjectId}`, displayName: "Project A" },
   assets: {
     systemWorkerUrl: new URL(`/runtime/${hash}/system-worker.js`, "https://nuriteo.test"),
     processWorkerUrl: new URL(`/runtime/${hash}/process-worker.js`, "https://nuriteo.test"),
@@ -83,6 +86,16 @@ class FakeController {
   }
   async restartDev(): Promise<PreviewWorkflowSnapshot> { return this.current; }
   stopPreviewPort(): boolean { return true; }
+  loadTemplate(): PreviewWorkflowSnapshot {
+    this.current = snapshot({ phase: "template_loaded" });
+    return this.current;
+  }
+  exportTreeJson(): FileSystemTree {
+    return {
+      src: { directory: { "main.tsx": { file: { contents: "export default function App() {}\n" } } } },
+      "package.json": { file: { contents: "{\"scripts\":{\"dev\":\"vite\"}}\n" } }
+    };
+  }
   dispose(): void { this.disposed += 1; this.terminals.clear(); this.cleanup.push("controller"); }
 }
 
@@ -130,6 +143,10 @@ function harness(boot: Promise<unknown> = Promise.resolve({})) {
   assert.equal(adapter.getState().generation, 1);
   controllers[0]?.emit(snapshot({ phase: "preview_ready", previewUrl: "https://preview.test" }));
   assert.equal(adapter.getState().previewUrl, "https://preview.test");
+  const materialized = await adapter.workspace.materializeTemplate("vite-react");
+  assert.equal(materialized.status, "ready");
+  assert.deepEqual(materialized.files.map((file) => file.path), ["package.json", "src/main.tsx"]);
+  assert.equal(adapter.workspace.readText("src/main.tsx"), "export default function App() {}\n");
   await adapter.terminal.run("pnpm dev", "terminal-1");
   assert.equal(adapter.terminal.activeCount(), 1);
   const firstDispose = adapter.dispose();
@@ -139,6 +156,29 @@ function harness(boot: Promise<unknown> = Promise.resolve({})) {
   assert.deepEqual(cleanup, ["unsubscribe", "controller", "process", "supervisor"]);
   assert.equal(adapter.terminal.activeCount(), 0);
   assert.equal(adapter.getState().lifecycle, "disposed");
+}
+
+{
+  const { adapter, controllers } = harness();
+  await adapter.mount(mountInput);
+  const controller = controllers[0];
+  assert.ok(controller);
+  controller.exportTreeJson = () => ({ "..": { file: { contents: "not allowed" } } });
+  await assert.rejects(
+    adapter.workspace.materializeTemplate("vite-react"),
+    (error: unknown) => error instanceof RuntimeAdapterError
+      && error.code === "RUNTIME_MATERIALIZATION_FAILED"
+      && !String(error).includes("not allowed")
+  );
+  assert.deepEqual(adapter.workspace.getState(), {
+    errorCode: "RUNTIME_MATERIALIZATION_FAILED",
+    files: [],
+    projectId: "project-a",
+    root: "/workspace/projects/project-a",
+    status: "failed",
+    totalBytes: 0
+  });
+  await adapter.dispose();
 }
 
 {
@@ -189,6 +229,24 @@ function harness(boot: Promise<unknown> = Promise.resolve({})) {
   );
   assert.deepEqual(counts(), { supervisorCount: 0, processCount: 0 }, "invalid assets fail before resources are created");
   assert.equal(JSON.stringify(adapter.getState()).includes("evil.test"), false);
+}
+
+{
+  const { adapter, counts } = harness();
+  await assert.rejects(
+    adapter.mount({ ...mountInput, project: { ...mountInput.project, localDraftKey: `${scopeId}:../other` } }),
+    (error: unknown) => error instanceof RuntimeAdapterError && error.code === "RUNTIME_PROJECT_INVALID"
+  );
+  assert.deepEqual(counts(), { supervisorCount: 0, processCount: 0 }, "unsafe Local Draft keys fail before resource construction");
+}
+
+{
+  const { adapter, counts } = harness();
+  await assert.rejects(
+    adapter.mount({ ...mountInput, project: { ...mountInput.project, id: "../project-b" } }),
+    (error: unknown) => error instanceof RuntimeAdapterError && error.code === "RUNTIME_PROJECT_INVALID"
+  );
+  assert.deepEqual(counts(), { supervisorCount: 0, processCount: 0 }, "unsafe Project roots fail before resource construction");
 }
 
 {
@@ -336,7 +394,15 @@ function harness(boot: Promise<unknown> = Promise.resolve({})) {
     removeEventListener(type: string, listener: WorkerListener): void {
       this.listeners.set(type, (this.listeners.get(type) ?? []).filter((entry) => entry !== listener));
     }
-    postMessage(message: { type?: string; pid?: number; generation?: number }): void {
+    postMessage(message: {
+      type?: string;
+      pid?: number;
+      generation?: number;
+      argv?: string[];
+      cwd?: string;
+      env?: Record<string, string>;
+      systemWasmUrl?: string;
+    }): void {
       this.messages.push(message);
       if (message.type === "initialize-runtime") {
         queueMicrotask(() => this.emit({ data: { type: "runtime-initialized" } } as MessageEvent));
@@ -346,7 +412,10 @@ function harness(boot: Promise<unknown> = Promise.resolve({})) {
         queueMicrotask(() => {
           this.emit({ data: { type: "ready", pid: message.pid, generation: message.generation } } as MessageEvent);
           queueMicrotask(() => {
-            this.emit({ data: { type: "stdout", data: "/workspace/app\n", pid: message.pid, generation: message.generation } } as MessageEvent);
+            const data = message.argv?.[0] === "env"
+              ? `${Object.entries(message.env ?? {}).map(([name, value]) => `${name}=${value}`).join("\n")}\n`
+              : `${message.cwd}\n`;
+            this.emit({ data: { type: "stdout", data, pid: message.pid, generation: message.generation } } as MessageEvent);
             this.emit({ data: { type: "exit", code: 0, pid: message.pid, generation: message.generation } } as MessageEvent);
           });
         });
@@ -378,11 +447,16 @@ function harness(boot: Promise<unknown> = Promise.resolve({})) {
     await adapter.mount(mountInput);
     assert.equal(adapter.getState().lifecycle, "ready");
     assert.equal(ActualBoundaryWorker.instances.length, 2, "one system and one process supervisor Worker are created");
+    const workspace = await adapter.workspace.materializeTemplate("vite-react");
+    assert.equal(workspace.projectId, "project-a");
+    assert.equal(workspace.root, "/workspace/projects/project-a");
+    assert.ok(workspace.files.some((file) => file.path === "src/App.tsx"));
+    assert.match(adapter.workspace.readText("src/App.tsx"), /function App/u);
     const output: string[] = [];
     const result = await adapter.terminal.run("worker-pwd", "terminal-actual", (chunk) => output.push(chunk.data)) as { exitCode: number; stdout: string };
     assert.equal(result.exitCode, 0);
-    assert.equal(result.stdout, "/workspace/app\n");
-    assert.deepEqual(output, ["/workspace/app\n"]);
+    assert.equal(result.stdout, "/workspace/projects/project-a\n");
+    assert.deepEqual(output, ["/workspace/projects/project-a\n"]);
     assert.equal(ActualBoundaryWorker.instances.length, 3, "terminal command owns a third process Worker");
     assert.deepEqual(
       ActualBoundaryWorker.instances[2]?.messages.slice(0, 2).map((message) => message.type),
@@ -392,6 +466,14 @@ function harness(boot: Promise<unknown> = Promise.resolve({})) {
       ActualBoundaryWorker.instances[2]?.messages[0]?.systemWasmUrl,
       mountInput.assets.systemWasmUrl.toString()
     );
+    const envResult = await adapter.terminal.run("worker-env", "terminal-env") as { exitCode: number; stdout: string };
+    assert.equal(envResult.exitCode, 0);
+    assert.doesNotMatch(envResult.stdout, /cookie|credential|password|secret|token/iu);
+    assert.equal(ActualBoundaryWorker.instances.length, 4, "each terminal owns an isolated process Worker");
+    assert.equal(ActualBoundaryWorker.instances[3]?.messages[1]?.cwd, "/workspace/projects/project-a");
+    assert.deepEqual(ActualBoundaryWorker.instances[3]?.messages[1]?.env, {
+      PATH: "/workspace/node_modules/.bin:/bin"
+    });
     await adapter.dispose();
     assert.equal(adapter.getState().terminalProcessCount, 0);
     assert.equal(ActualBoundaryWorker.instances.every((worker) => worker.terminated), true);

@@ -30,6 +30,7 @@ import { projectError, readCsrfCredential } from "../../../lib/api/browser-secur
 import type { CollaborationOperation } from "../../../lib/api/browser-security.ts";
 import { createBrowserApiClient } from "../../../lib/api/browser-client.ts";
 import { useExclusiveMutation } from "../../../lib/use-exclusive-mutation.ts";
+import { ProjectIdeShell } from "./project-ide-shell.tsx";
 
 interface Props {
   readonly canManageRoles?: boolean;
@@ -37,6 +38,7 @@ interface Props {
   readonly initialGrants?: readonly DirectProjectRole[];
   readonly initialProject?: Project;
   readonly initialProjectEtag?: string;
+  readonly runtimeAssetRevision?: string;
   readonly selectedScope?: string;
   readonly selectedState?: ProjectListState;
   readonly workspaces: readonly Workspace[];
@@ -212,7 +214,12 @@ export function ProjectDashboard(props: Props) {
                 <header><p className="eyebrow">{project.state} · version {project.version}</p><h2>{project.name}</h2><p>{project.slug}</p></header>
                 <form className="collaboration-form" onSubmit={rename} aria-busy={mutation.isPending}><label className="field-group">Project name<input name="name" defaultValue={project.name} required maxLength={200} disabled={mutation.isPending} /></label><Button type="submit" disabled={mutation.isPending}>Save name</Button></form>
                 <section className="project-actions"><h3>Lifecycle</h3><Button type="button" disabled={mutation.isPending} onClick={() => void changeLifecycle(project.state === "active" ? "archive" : "restore")}>{project.state === "active" ? "Archive" : "Restore"}</Button><p>Archive hides a Project from the active list. Delete is immediate and irreversible.</p><form onSubmit={remove}><label className="field-group">Type <strong>{project.name}</strong> to delete<input name="confirmName" required disabled={mutation.isPending} /></label><Button type="submit" variant="danger" disabled={mutation.isPending}>Delete Project</Button></form></section>
-                <section className="project-placeholder"><h3>Runtime</h3><p>Runtime and preview controls will appear here after RT-002 is available.</p></section>
+                <ProjectIdeShell
+                  key={`${workspace.storageScopeId}:${project.id}`}
+                  {...(props.runtimeAssetRevision === undefined ? {} : { assetRevision: props.runtimeAssetRevision })}
+                  project={project}
+                  workspaceScope={workspace.storageScopeId}
+                />
                 {owner?.ownerType === "organization" ? <section><h3>Direct roles</h3>{props.canManageRoles ? <><form className="collaboration-form" onSubmit={addRole}><label className="field-group">Organization member user ID<input name="userId" required disabled={mutation.isPending} /></label><label className="field-group">Role<select name="role" disabled={mutation.isPending}><option value="read">Read</option><option value="write">Write</option><option value="admin">Admin</option></select></label><Button type="submit" disabled={mutation.isPending}>Grant role</Button></form><ul className="record-list">{grants.map((grant) => <li key={grant.userId}><div><strong>{grant.userId}</strong><span>{grant.role}</span></div><div className="record-actions"><select aria-label={`Role for ${grant.userId}`} value={grant.role} disabled={mutation.isPending} onChange={(event) => void updateRole(grant, roleValue(event.currentTarget.value))}><option value="read">Read</option><option value="write">Write</option><option value="admin">Admin</option></select><Button type="button" disabled={mutation.isPending} onClick={() => void updateRole(grant)}>Revoke</Button></div></li>)}</ul></> : <p>Only Organization Owners can inspect and manage direct Project roles.</p>}</section> : null}
               </>
             )}

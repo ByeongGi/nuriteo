@@ -499,8 +499,8 @@ export function createPreviewWorkflowController(
   ): PreviewWorkflowSnapshot {
     const overrides = packageOverrides();
     const materialized = materializeTemplate(templateId, {
-      projectId: "preview-service",
-      root: "/workspace/app",
+      projectId: options.workspaceProjectId ?? "preview-service",
+      root: options.workspaceRoot ?? "/workspace/app",
       ...(overrides ? { overrides } : {})
     });
     return applyMaterializedProject(materialized, {
@@ -517,8 +517,8 @@ export function createPreviewWorkflowController(
       assertOperationActive(operation);
       const overrides = packageOverrides();
       const materialized = materializeZip(bytes, {
-        projectId: "preview-service-zip",
-        root: "/workspace/app",
+        projectId: options.workspaceProjectId ?? "preview-service-zip",
+        root: options.workspaceRoot ?? "/workspace/app",
         ...(overrides ? { overrides } : {})
       });
       return applyMaterializedProject(materialized);
@@ -530,8 +530,8 @@ export function createPreviewWorkflowController(
     try {
       const overrides = packageOverrides();
       const materialized = await materializeGitHubUrl(url, {
-        projectId: "preview-service-github",
-        root: "/workspace/app",
+        projectId: options.workspaceProjectId ?? "preview-service-github",
+        root: options.workspaceRoot ?? "/workspace/app",
         ...(overrides ? { overrides } : {})
       });
       assertOperationActive(operation);

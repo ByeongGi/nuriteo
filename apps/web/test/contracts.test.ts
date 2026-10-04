@@ -44,6 +44,7 @@ function testServerFirstBoundaries(): void {
     "src/app/(authenticated)/organization-invitations/accept/accept-invitation.tsx",
     "src/app/(authenticated)/organizations/organization-console.tsx",
     "src/app/(authenticated)/projects/project-dashboard.tsx",
+    "src/app/(authenticated)/projects/project-ide-shell.tsx",
     "src/app/_components/error-view.tsx",
     "src/app/activate/activation-form.tsx",
     "src/app/error.tsx",

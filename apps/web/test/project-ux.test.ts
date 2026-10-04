@@ -217,6 +217,7 @@ async function assertProblemCode(response: Response, status: number, code: strin
 
 function testProjectSourceContracts() {
   const dashboard = read("src/app/(authenticated)/projects/project-dashboard.tsx");
+  const ideShell = read("src/app/(authenticated)/projects/project-ide-shell.tsx");
   const page = read("src/app/(authenticated)/projects/page.tsx");
   assert.match(dashboard, /createBrowserApiClient\(\)/u);
   assert.match(dashboard, /readCsrfCredential\(\)/u);
@@ -227,7 +228,15 @@ function testProjectSourceContracts() {
   assert.match(page, /listProjects/u);
   assert.match(page, /key=\{`\$\{workspace\.storageScopeId\}:\$\{state\}:/u);
   assert.match(page, /error\.status !== 403 && error\.status !== 404/u);
-  assert.doesNotMatch(`${dashboard}\n${page}`, /localStorage|sessionStorage|console\./u);
+  assert.match(dashboard, /<ProjectIdeShell/u);
+  assert.match(dashboard, /key=\{`\$\{workspace\.storageScopeId\}:\$\{project\.id\}`\}/u);
+  assert.match(ideShell, /aria-label="Project files"/u);
+  assert.match(ideShell, /aria-label="Text editor"/u);
+  assert.match(ideShell, /aria-label="Preview"/u);
+  assert.match(ideShell, /aria-label="Terminal"/u);
+  assert.match(ideShell, /createRuntimeAdapter/u);
+  assert.doesNotMatch(ideShell, /BrowserRuntimeSupervisor|HostProcessTable|createPreviewWorkflowController|service-backend/u);
+  assert.doesNotMatch(`${dashboard}\n${page}\n${ideShell}`, /localStorage|sessionStorage|console\./u);
 }
 
 function request(search: string): Request {

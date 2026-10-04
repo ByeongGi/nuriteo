@@ -6,6 +6,8 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./process": "./src/process/index.ts",
+    "./redaction": "./src/observability/support-bundle.ts",
     "./supervisor": "./src/supervisor.ts"
   },
   "dependencies": {

@@ -1,15 +1,18 @@
 import {
-  BrowserRuntimeSupervisor,
   HostProcessTable,
-  redactRuntimeLog,
-  type BrowserRuntimeSupervisorOptions,
   type HostProcessTableOptions
-} from "@nuriteo/browser-host";
+} from "@nuriteo/browser-host/process";
+import { redactRuntimeLog } from "@nuriteo/browser-host/redaction";
+import {
+  BrowserRuntimeSupervisor,
+  type BrowserRuntimeSupervisorOptions
+} from "@nuriteo/browser-host/supervisor";
 import {
   createPreviewWorkflowController,
   type PreviewWorkflowController,
   type PreviewWorkflowControllerOptions,
   type PreviewWorkflowEvent,
+  type FileSystemTree,
   type PreviewWorkflowPhase,
   type PreviewWorkflowSnapshot
 } from "@nuriteo/preview-service";
@@ -18,6 +21,12 @@ const MAX_DIAGNOSTICS = 20;
 const MAX_DIAGNOSTIC_LENGTH = 512;
 const DEFAULT_CLEANUP_TIMEOUT_MS = 2_000;
 const CONTENT_ADDRESSED_ASSET = /^\/runtime\/[0-9a-f]{64}\//u;
+const MAX_TEMPLATE_FILES = 256;
+const MAX_TEMPLATE_FILE_BYTES = 1024 * 1024;
+const MAX_TEMPLATE_TOTAL_BYTES = 8 * 1024 * 1024;
+const PROJECT_PATH_SEGMENT = /^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,126}[A-Za-z0-9])?$/u;
+const UUID_V7 = "[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}";
+const LOCAL_DRAFT_KEY = new RegExp(`^${UUID_V7}:${UUID_V7}$`, "u");
 
 export type RuntimeLifecycle =
   | "idle"
@@ -78,12 +87,37 @@ export interface RuntimeWorkflowPort {
   dispose(): Promise<void>;
 }
 
+export type RuntimeStarterTemplate = "vite-react" | "next-app";
+
+export interface RuntimeWorkspaceFile {
+  path: string;
+  name: string;
+  kind: "text" | "binary";
+  sizeBytes: number;
+}
+
+export interface RuntimeWorkspaceState {
+  status: "empty" | "materializing" | "ready" | "failed";
+  projectId: string | null;
+  root: string | null;
+  files: readonly RuntimeWorkspaceFile[];
+  totalBytes: number;
+  errorCode: string | null;
+}
+
+export interface RuntimeWorkspacePort {
+  materializeTemplate(template: RuntimeStarterTemplate): Promise<RuntimeWorkspaceState>;
+  getState(): RuntimeWorkspaceState;
+  readText(path: string): string;
+}
+
 export interface RuntimeAdapter {
   mount(input: RuntimeMountInput): Promise<void>;
   subscribe(listener: (state: RuntimeViewState) => void): () => void;
   getState(): RuntimeViewState;
   readonly terminal: RuntimeTerminalPort;
   readonly workflow: RuntimeWorkflowPort;
+  readonly workspace: RuntimeWorkspacePort;
   dispose(): Promise<void>;
 }
 
@@ -107,6 +141,8 @@ interface ControllerLike {
   listShellProcesses(): readonly unknown[];
   restartDev: PreviewWorkflowController["restartDev"];
   stopPreviewPort: PreviewWorkflowController["stopPreviewPort"];
+  loadTemplate: PreviewWorkflowController["loadTemplate"];
+  exportTreeJson: PreviewWorkflowController["exportTreeJson"];
   dispose: PreviewWorkflowController["dispose"];
 }
 
@@ -120,6 +156,8 @@ export interface RuntimeAdapterDependencies {
 
 interface OwnedRuntime {
   generation: number;
+  projectId: string;
+  displayName: string;
   abortController: AbortController;
   supervisor: SupervisorLike;
   processTable: ProcessTableLike;
@@ -134,6 +172,8 @@ export function createRuntimeAdapter(dependencies: RuntimeAdapterDependencies = 
   let owned: OwnedRuntime | null = null;
   let disposePromise: Promise<void> | null = null;
   let cleanupBlocked = false;
+  let workspaceState = createEmptyWorkspaceState();
+  let workspaceText = new Map<string, string>();
 
   const terminal: RuntimeTerminalPort = {
     run(command, terminalId, onOutput) {
@@ -169,6 +209,52 @@ export function createRuntimeAdapter(dependencies: RuntimeAdapterDependencies = 
     dispose
   };
 
+  const workspace: RuntimeWorkspacePort = {
+    async materializeTemplate(template) {
+      const current = requireReady();
+      workspaceState = {
+        ...createEmptyWorkspaceState(),
+        status: "materializing",
+        projectId: state.projectId,
+        root: projectRoot(current.projectId)
+      };
+      try {
+        current.controller.loadTemplate(template, { label: current.displayName });
+        const materialized = flattenTemplateTree(current.controller.exportTreeJson());
+        workspaceText = materialized.text;
+        workspaceState = {
+          status: "ready",
+          projectId: current.projectId,
+          root: projectRoot(current.projectId),
+          files: materialized.files,
+          totalBytes: materialized.totalBytes,
+          errorCode: null
+        };
+        return copyWorkspaceState(workspaceState);
+      } catch {
+        workspaceText = new Map();
+        workspaceState = {
+          ...createEmptyWorkspaceState(),
+          status: "failed",
+          projectId: current.projectId,
+          root: projectRoot(current.projectId),
+          errorCode: "RUNTIME_MATERIALIZATION_FAILED"
+        };
+        throw new RuntimeAdapterError(
+          "RUNTIME_MATERIALIZATION_FAILED",
+          "The starter template could not be materialized safely."
+        );
+      }
+    },
+    getState() { return copyWorkspaceState(workspaceState); },
+    readText(path) {
+      requireReady();
+      const content = workspaceText.get(path);
+      if (content === undefined) throw new RuntimeAdapterError("RUNTIME_FILE_UNAVAILABLE", "The selected text file is unavailable.");
+      return content;
+    }
+  };
+
   async function mount(input: RuntimeMountInput): Promise<void> {
     if (cleanupBlocked || owned || !isMountable(state.lifecycle)) {
       throw new Error(`Runtime cannot mount while lifecycle is ${state.lifecycle}`);
@@ -181,6 +267,8 @@ export function createRuntimeAdapter(dependencies: RuntimeAdapterDependencies = 
       lifecycle: "mounting",
       projectId: validateProject(input.project).id
     };
+    workspaceState = createEmptyWorkspaceState();
+    workspaceText = new Map();
     disposePromise = null;
     emit();
 
@@ -208,6 +296,8 @@ export function createRuntimeAdapter(dependencies: RuntimeAdapterDependencies = 
       const controller = (dependencies.createController ?? ((options) => createPreviewWorkflowController(options)))({
         terminalProcessTable: processTable as HostProcessTable,
         previewServiceWorkerUrl: assets.previewServiceWorkerUrl,
+        workspaceProjectId: input.project.localDraftKey,
+        workspaceRoot: projectRoot(input.project.id),
         relayTimeoutMs: input.policy.relayTimeoutMs
       });
       constructingController = controller;
@@ -219,7 +309,9 @@ export function createRuntimeAdapter(dependencies: RuntimeAdapterDependencies = 
         processTable,
         controller,
         unsubscribe: () => false,
-        reportDiagnostic: input.reportDiagnostic
+        reportDiagnostic: input.reportDiagnostic,
+        projectId: input.project.id,
+        displayName: input.project.displayName
       };
       current.unsubscribe = controller.on((event) => receiveEvent(current, event));
       owned = current;
@@ -271,6 +363,8 @@ export function createRuntimeAdapter(dependencies: RuntimeAdapterDependencies = 
       state = { ...state, lifecycle: "disposed", projectId: null, previewUrl: null, terminalProcessCount: 0 };
       emit();
       listeners.clear();
+      workspaceState = createEmptyWorkspaceState();
+      workspaceText = new Map();
       disposePromise = Promise.resolve();
       return disposePromise;
     }
@@ -389,7 +483,7 @@ export function createRuntimeAdapter(dependencies: RuntimeAdapterDependencies = 
     return { ...state, diagnostics: state.diagnostics.map((diagnostic) => ({ ...diagnostic })) };
   }
 
-  return { mount, subscribe, getState, terminal, workflow, dispose };
+  return { mount, subscribe, getState, terminal, workflow, workspace, dispose };
 }
 
 export class RuntimeAdapterError extends Error {
@@ -414,6 +508,60 @@ function createInitialState(): RuntimeViewState {
   };
 }
 
+function createEmptyWorkspaceState(): RuntimeWorkspaceState {
+  return {
+    status: "empty",
+    projectId: null,
+    root: null,
+    files: [],
+    totalBytes: 0,
+    errorCode: null
+  };
+}
+
+function copyWorkspaceState(value: RuntimeWorkspaceState): RuntimeWorkspaceState {
+  return { ...value, files: value.files.map((file) => ({ ...file })) };
+}
+
+function projectRoot(projectId: string): string {
+  return `/workspace/projects/${projectId}`;
+}
+
+function flattenTemplateTree(tree: FileSystemTree): {
+  files: RuntimeWorkspaceFile[];
+  text: Map<string, string>;
+  totalBytes: number;
+} {
+  const files: RuntimeWorkspaceFile[] = [];
+  const text = new Map<string, string>();
+  let totalBytes = 0;
+
+  function visit(entries: FileSystemTree, parent = ""): void {
+    for (const [name, entry] of Object.entries(entries)) {
+      if (!name || name === "." || name === ".." || name.includes("/") || name.includes("\\")) {
+        throw new Error("unsafe template path");
+      }
+      const path = parent ? `${parent}/${name}` : name;
+      if ("directory" in entry) {
+        visit(entry.directory, path);
+        continue;
+      }
+      const content = entry.file.contents;
+      const sizeBytes = new TextEncoder().encode(content).byteLength;
+      if (sizeBytes > MAX_TEMPLATE_FILE_BYTES) throw new Error("template file exceeds limit");
+      totalBytes += sizeBytes;
+      if (totalBytes > MAX_TEMPLATE_TOTAL_BYTES) throw new Error("template exceeds total limit");
+      files.push({ path, name, kind: "text", sizeBytes });
+      text.set(path, content);
+      if (files.length > MAX_TEMPLATE_FILES) throw new Error("template file count exceeds limit");
+    }
+  }
+
+  visit(tree);
+  files.sort((left, right) => left.path.localeCompare(right.path));
+  return { files, text, totalBytes };
+}
+
 function isMountable(lifecycle: RuntimeLifecycle): boolean {
   return lifecycle === "idle" || lifecycle === "disposed" || lifecycle === "failed";
 }
@@ -426,7 +574,13 @@ function browserOrigin(): string {
 }
 
 function validateProject(project: RuntimeMountInput["project"]): RuntimeMountInput["project"] {
-  if (!project.id.trim() || !project.localDraftKey.trim() || !project.displayName.trim()) {
+  if (
+    !PROJECT_PATH_SEGMENT.test(project.id)
+    || project.id === "."
+    || project.id === ".."
+    || !LOCAL_DRAFT_KEY.test(project.localDraftKey)
+    || !project.displayName.trim()
+  ) {
     throw new RuntimeAdapterError("RUNTIME_PROJECT_INVALID", "Runtime Project context is incomplete.");
   }
   return project;

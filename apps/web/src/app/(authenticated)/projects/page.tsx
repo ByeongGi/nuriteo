@@ -17,6 +17,7 @@ import { ProjectDashboard } from "./project-dashboard.tsx";
 export const metadata: Metadata = { title: "Projects" };
 
 const PROJECT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
+const CONTENT_HASH = /^[0-9a-f]{64}$/u;
 
 interface Props {
   readonly searchParams: Promise<{
@@ -64,6 +65,7 @@ export default async function ProjectsPage({ searchParams }: Props) {
         key={`${workspace.storageScopeId}:${state}:${projectResult?.data.id ?? "collection"}`}
         canManageRoles={canManageRoles}
         initialCollection={collection.data}
+        {...runtimeAssetRevisionProps()}
         {...(grants === undefined ? {} : { initialGrants: grants })}
         {...(projectResult === undefined ? {} : {
           initialProject: projectResult.data,
@@ -85,4 +87,11 @@ export default async function ProjectsPage({ searchParams }: Props) {
       />
     );
   }
+}
+
+function runtimeAssetRevisionProps(): { readonly runtimeAssetRevision?: string } {
+  const revision = process.env.NURITEO_RUNTIME_ASSET_REVISION;
+  return revision !== undefined && CONTENT_HASH.test(revision)
+    ? { runtimeAssetRevision: revision }
+    : {};
 }
