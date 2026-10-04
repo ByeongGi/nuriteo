@@ -128,6 +128,7 @@ export function createPreviewWorkflowController(
   options: PreviewWorkflowControllerOptions = {}
 ): PreviewWorkflowController {
   const listeners = new Set<PreviewWorkflowListener>();
+  let disposed = false;
   // Product sessions stay warm while the IDE tab is open. Short TTLs caused
   // intermittent "stale preview session" once the iframe went quiet.
   const sessions = createPreviewSessionRegistry({ ttlMs: options.ttlMs ?? 24 * 60 * 60 * 1000 });
@@ -662,7 +663,10 @@ export function createPreviewWorkflowController(
     if (!("serviceWorker" in navigator)) {
       throw new Error("Service workers are unavailable in this browser session");
     }
-    const registration = await navigator.serviceWorker.register("/preview-sw.js", { scope: "/" });
+    const registration = await navigator.serviceWorker.register(
+      options.previewServiceWorkerUrl ?? "/preview-sw.js",
+      { scope: "/" }
+    );
     await navigator.serviceWorker.ready;
     return registration;
   }
@@ -966,6 +970,7 @@ export function createPreviewWorkflowController(
   }
 
   function simulateQuotaPressure(bytes = 4096): void {
+    state.reliability.releaseWriter();
     state.reliability = createPreviewReliabilitySession({
       policy: {
         storage: {
@@ -1070,10 +1075,16 @@ export function createPreviewWorkflowController(
   } = shellLifecycle;
 
   function dispose(): void {
+    if (disposed) return;
+    disposed = true;
+    if (state.fetchBridgeBound && typeof navigator !== "undefined") {
+      navigator.serviceWorker?.removeEventListener("message", onServiceWorkerMessage);
+      state.fetchBridgeBound = false;
+    }
     disposeShellLifecycle();
-    stopSessionHeartbeat();
-    try { state.hmr?.close(); } catch { /* best-effort application teardown */ }
-    state.hmr = null;
+    clearRuntime();
+    state.reliability.releaseWriter();
+    listeners.clear();
   }
 
   function getSnapshot(): PreviewWorkflowSnapshot {
@@ -1101,6 +1112,7 @@ export function createPreviewWorkflowController(
 
   return {
     on(listener) {
+      if (disposed) return () => false;
       listeners.add(listener);
       return () => listeners.delete(listener);
     },

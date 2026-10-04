@@ -21,6 +21,7 @@ export interface RuntimeMetrics {
 export interface BrowserRuntimeSupervisorOptions {
   systemWorkerUrl?: string | URL | undefined;
   processWorkerUrl?: string | URL | undefined;
+  systemWasmUrl?: string | URL | undefined;
   memoryLimitBytes?: number;
   timeoutMs?: number;
 }
@@ -109,6 +110,7 @@ export class BrowserRuntimeSupervisor {
   #systemWorker: Worker | null = null;
   #processWorker: Worker | null = null;
   #status: RuntimeStatus = "idle";
+  #pendingCancellations = new Set<() => void>();
   #metrics: RuntimeMetrics = {
     bootCount: 0,
     teardownCount: 0,
@@ -158,7 +160,8 @@ export class BrowserRuntimeSupervisor {
         type: "boot",
         fail: Boolean(bootOptions.forceProcessFailure),
         port: channel.port2,
-        syncChannel
+        syncChannel,
+        systemWasmUrl: this.#options.systemWasmUrl ? String(this.#options.systemWasmUrl) : undefined
       }, [channel.port2]);
       const processResult = await processReady;
 
@@ -191,8 +194,14 @@ export class BrowserRuntimeSupervisor {
     const workers: Worker[] = [];
     if (this.#systemWorker) workers.push(this.#systemWorker);
     if (this.#processWorker) workers.push(this.#processWorker);
+    const cancellations = [...this.#pendingCancellations];
+    if (workers.length === 0 && cancellations.length === 0) {
+      this.#status = "stopped";
+      return;
+    }
     this.#systemWorker = null;
     this.#processWorker = null;
+    for (const cancel of cancellations) cancel();
     for (const worker of workers) worker.terminate();
     this.#metrics.activeWorkers = 0;
     this.#metrics.pendingRequests = 0;
@@ -260,6 +269,7 @@ export class BrowserRuntimeSupervisor {
 
       const cleanup = () => {
         clearTimeout(timeout);
+        this.#pendingCancellations.delete(cancel);
         worker.removeEventListener("message", onMessage);
         worker.removeEventListener("error", onError);
       };
@@ -285,6 +295,8 @@ export class BrowserRuntimeSupervisor {
 
       const onError = (event: ErrorEvent) => fail(new RuntimeBootError(event.message || `${role} worker error`));
 
+      const cancel = () => fail(new RuntimeBootError(`${role} worker boot cancelled`));
+      this.#pendingCancellations.add(cancel);
       worker.addEventListener("message", onMessage);
       worker.addEventListener("error", onError);
     });
@@ -303,6 +315,7 @@ export class BrowserRuntimeSupervisor {
       const timeout = setTimeout(() => fail(new RuntimeBootError("process worker request timeout"), true), timeoutMs);
       const cleanup = () => {
         clearTimeout(timeout);
+        this.#pendingCancellations.delete(cancel);
         this.#metrics.pendingRequests = Math.max(0, this.#metrics.pendingRequests - 1);
         worker.removeEventListener("message", onMessage);
         worker.removeEventListener("error", onError);
@@ -325,6 +338,8 @@ export class BrowserRuntimeSupervisor {
       };
       const onError = (event: ErrorEvent) => fail(new RuntimeBootError(event.message || "process worker error"), true);
 
+      const cancel = () => fail(new RuntimeBootError("process worker request cancelled"));
+      this.#pendingCancellations.add(cancel);
       worker.addEventListener("message", onMessage);
       worker.addEventListener("error", onError);
       try {
@@ -348,6 +363,7 @@ export class BrowserRuntimeSupervisor {
       const timeout = setTimeout(() => fail(new RuntimeBootError("system worker request timeout"), true), timeoutMs);
       const cleanup = () => {
         clearTimeout(timeout);
+        this.#pendingCancellations.delete(cancel);
         this.#metrics.pendingRequests = Math.max(0, this.#metrics.pendingRequests - 1);
         worker.removeEventListener("message", onMessage);
         worker.removeEventListener("error", onError);
@@ -368,6 +384,8 @@ export class BrowserRuntimeSupervisor {
       };
       const onError = (event: ErrorEvent) => fail(new RuntimeBootError(event.message || "system worker error"), true);
 
+      const cancel = () => fail(new RuntimeBootError("system worker request cancelled"));
+      this.#pendingCancellations.add(cancel);
       worker.addEventListener("message", onMessage);
       worker.addEventListener("error", onError);
       try {

@@ -47,7 +47,12 @@ const cliWebSockets = new Map();
 const pendingSystemMessages = [];
 let systemWasm = null;
 let systemWasmError = null;
-void SystemWasmClient.load(new URL("/runtime/system_wasm.wasm", self.location.origin))
+let systemWasmLoading = false;
+
+function loadSystemWasm(url) {
+  if (systemWasmLoading) return;
+  systemWasmLoading = true;
+  void SystemWasmClient.load(new URL(url || "/runtime/system_wasm.wasm", self.location.origin))
   .then((client) => {
     systemWasm = client;
     for (const message of pendingSystemMessages.splice(0)) handleWorkerMessage(message);
@@ -58,6 +63,7 @@ void SystemWasmClient.load(new URL("/runtime/system_wasm.wasm", self.location.or
       postSystemWasmFailure(message, systemWasmError);
     }
   });
+}
 const processRuntime = createProcessWorkerRuntime({
   createVirtualPty(mode, size) {
     if (!systemWasm) throw new Error("system WASM is not ready");
@@ -75,6 +81,7 @@ self.addEventListener("message", (event) => {
   }
   if (!systemWasm) {
     pendingSystemMessages.push(event.data);
+    if (event.data?.type === "boot") loadSystemWasm(event.data.systemWasmUrl);
     return;
   }
   handleWorkerMessage(event.data);

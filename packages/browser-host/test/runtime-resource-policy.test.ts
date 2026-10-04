@@ -41,7 +41,9 @@ type Listener = (event: MessageEvent | ErrorEvent) => void;
 
 class MockWorker {
   static instances: MockWorker[] = [];
+  static hangBoot = false;
   readonly listeners = new Map<string, Listener[]>();
+  readonly messages: Array<Record<string, unknown>> = [];
   readonly name: string;
   terminated = false;
   hangRuns = true;
@@ -59,8 +61,10 @@ class MockWorker {
     this.listeners.set(type, (this.listeners.get(type) || []).filter((entry) => entry !== listener));
   }
 
-  postMessage(message: { type?: string }): void {
+  postMessage(message: { type?: string; [key: string]: unknown }): void {
+    this.messages.push(message);
     if (message.type === "boot") {
+      if (MockWorker.hangBoot) return;
       queueMicrotask(() => this.emit("message", {
         data: {
           type: "ready",
@@ -92,9 +96,12 @@ try {
     memoryLimitBytes: 64,
     processWorkerUrl: "http://localhost/process-worker.ts",
     systemWorkerUrl: "http://localhost/system-worker.ts",
+    systemWasmUrl: "http://localhost/runtime/system.wasm",
     timeoutMs: 20
   });
   await supervisor.boot({ disableSyncChannel: true });
+  const processBoot = MockWorker.instances.find((worker) => worker.name.includes("process"))?.messages[0];
+  assert.equal(processBoot?.systemWasmUrl, "http://localhost/runtime/system.wasm");
   assert.throws(
     () => supervisor.run("12345", { resourceEstimate: { workspaceBytes: 60 } }),
     (error) => error instanceof BrowserRuntimeResourceError && error.code === "ERUNTIME_MEMORY_ADMISSION"
@@ -114,6 +121,19 @@ try {
   assert.equal(supervisor.status, "ready", "fresh workers must recover after watchdog termination");
   assert.equal(supervisor.metrics.lastAdmissionBytes, 32);
   await supervisor.teardown();
+
+  MockWorker.hangBoot = true;
+  const cancelled = new BrowserRuntimeSupervisor({
+    processWorkerUrl: "http://localhost/process-worker.ts",
+    systemWorkerUrl: "http://localhost/system-worker.ts",
+    timeoutMs: 60_000
+  });
+  const pendingBoot = cancelled.boot({ disableSyncChannel: true });
+  await cancelled.teardown();
+  await assert.rejects(pendingBoot, /boot cancelled/);
+  assert.equal(cancelled.metrics.teardownCount, 1, "boot catch must not double-count explicit teardown");
+  assert.equal(MockWorker.instances.slice(-2).every((worker) =>
+    [...worker.listeners.values()].every((listeners) => listeners.length === 0)), true);
 } finally {
   if (originalWorker) Object.defineProperty(globalThis, "Worker", { configurable: true, value: originalWorker });
   else Reflect.deleteProperty(globalThis, "Worker");

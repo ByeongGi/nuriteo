@@ -171,6 +171,7 @@ export interface PreviewWorkflowController {
 }
 
 export interface PreviewWorkflowControllerOptions {
+  previewServiceWorkerUrl?: string;
   ttlMs?: number;
   relayTimeoutMs?: number;
   previewPort?: number;
