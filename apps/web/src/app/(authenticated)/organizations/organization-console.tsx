@@ -47,14 +47,15 @@ export function OrganizationConsole(props: OrganizationConsoleProps) {
 
   async function mutate(
     operation: CollaborationOperation,
-    action: () => Promise<void>
+    action: () => Promise<void>,
+    refreshAfterSuccess = true
   ) {
     await mutation.run(async () => {
       setError(undefined);
       setOneTimeUrl(undefined);
       try {
         await action();
-        router.refresh();
+        if (refreshAfterSuccess) router.refresh();
       } catch (cause) {
         setError(collaborationError(cause, operation));
       }
@@ -74,7 +75,7 @@ export function OrganizationConsole(props: OrganizationConsoleProps) {
         { csrfToken: readCsrfCredential() }
       );
       router.replace(`/organizations?organization=${result.data.id}`);
-    });
+    }, false);
   }
 
   async function rename(event: FormEvent<HTMLFormElement>) {

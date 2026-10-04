@@ -34,6 +34,7 @@ let organizationCreated = false;
 let invitationSequence = 0;
 let activationIssueCount = 0;
 let memberDeleteCount = 0;
+let memberRoleChangeCount = 0;
 let organizationIssueCount = 0;
 let organizationReissueCount = 0;
 let organizationRevokeCount = 0;
@@ -137,6 +138,7 @@ const core = http.createServer(async (request, response) => {
     const member = members.find((item) => item.userId === memberMutation[1]);
     assert.ok(member);
     member.role = body.role === "owner" ? "owner" : "member";
+    memberRoleChangeCount += 1;
     response.statusCode = 204;
     response.end();
     return;
@@ -281,7 +283,12 @@ try {
     await adminPage.getByLabel("Slug").fill("alpha");
     await adminPage.getByLabel("Display name").fill("Alpha Organization");
     await adminPage.getByRole("button", { name: "Create Organization" }).click();
-    await adminPage.waitForURL(`**/organizations?organization=${organizationId}`);
+    await waitForCondition(() => organizationCreated);
+    try {
+      await adminPage.waitForURL(`**/organizations?organization=${organizationId}`);
+    } catch {
+      throw new Error(`Organization was created but navigation was not rendered: ${adminPage.url()} ${await adminPage.locator("body").innerText()}`);
+    }
     assert.equal(await adminPage.getByRole("heading", { name: "Invite member" }).count(), 1);
     await adminPage.getByLabel("Display name").fill("Alpha Organization Renamed");
     await adminPage.getByRole("button", { name: "Save name" }).click();
@@ -349,8 +356,18 @@ try {
     await adminPage.goto(`${publicOrigin}/organizations?organization=${organizationId}`, { waitUntil: "networkidle" });
     const inviteeMember = adminPage.locator(".record-list li").filter({ hasText: "Invited Teammate" });
     await inviteeMember.getByRole("button", { name: "Make owner" }).click();
-    await inviteeMember.getByRole("button", { name: "Make member" }).waitFor();
-    await inviteeMember.getByRole("button", { name: "Remove" }).click();
+    try {
+      await waitForCondition(() => memberRoleChangeCount === 1);
+    } catch {
+      throw new Error(`member role mutation did not reach Core: ${adminPage.url()} ${await adminPage.locator("body").innerText()}`);
+    }
+    await adminPage.reload({ waitUntil: "networkidle" });
+    const updatedInviteeMember = adminPage.locator(".record-list li").filter({ hasText: "Invited Teammate" });
+    const makeMember = updatedInviteeMember.getByRole("button", { name: "Make member" });
+    if (await makeMember.count() !== 1) {
+      throw new Error(`member role mutation was not rendered: ${adminPage.url()} ${await adminPage.locator("body").innerText()}`);
+    }
+    await updatedInviteeMember.getByRole("button", { name: "Remove" }).click();
     await waitForCondition(() => memberDeleteCount === 1);
     await adminPage.reload({ waitUntil: "networkidle" });
     await adminPage.getByText("Invited Teammate", { exact: true }).waitFor({ state: "detached" });
