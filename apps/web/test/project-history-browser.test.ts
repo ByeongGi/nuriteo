@@ -19,6 +19,7 @@ const projectId = "0199ee6c-c777-7000-8000-00000000d002";
 const versionId = "0199ee6c-c777-7000-8000-00000000d011";
 const nextVersionId = "0199ee6c-c777-7000-8000-00000000d012";
 const recoveryId = "0199ee6c-c777-7000-8000-00000000d021";
+const recoveryId2 = "0199ee6c-c777-7000-8000-00000000d022";
 const bundleId = "0199ee6c-c777-7000-8000-00000000d031";
 const userId = "0199ee6c-c777-7000-8000-00000000d041";
 const operationId = "0199ee6c-c777-7000-8000-00000000d051";
@@ -48,7 +49,7 @@ const server = http.createServer(async (request, response) => {
       return json(response, { items: [version(versionId, "Before refactor", 1)], nextCursor: url.searchParams.has("cursor") ? null : "next-page" });
     }
     if (request.method === "GET" && url.pathname === `${base}/recovery-checkpoints`) {
-      return json(response, { items: [recovery()] });
+      return json(response, { items: [recovery(recoveryId, 1, "2026-10-05T02:00:00.1Z"), recovery(recoveryId2, 2, "2026-10-05T02:00:00.100Z")] });
     }
     if (request.method === "POST" && url.pathname === `${base}/versions`) {
       assert.equal(request.headers["if-match"], '"project-v1"');
@@ -91,7 +92,8 @@ try {
   const pageErrors: string[] = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
   await page.goto(origin, { waitUntil: "networkidle" });
-  await page.getByText("1 Versions and 1 Recovery checkpoints loaded.").waitFor();
+  await page.getByText("1 Versions and 2 Recovery checkpoints loaded.").waitFor();
+  assert.equal(await page.getByRole("region", { name: "Recovery checkpoints" }).locator("li strong").first().textContent(), "Recovery 2");
 
   await page.getByRole("button", { name: "Load more Versions" }).click();
   await page.getByText("1 more Versions loaded.").waitFor();
@@ -112,6 +114,10 @@ try {
   await beforeRefactor.getByRole("button", { name: "Restore" }).click();
   const confirm = page.getByRole("button", { name: "Restore Server Working Head" });
   await confirm.waitFor();
+  assert.equal(await confirm.evaluate((element) => element === document.activeElement), true);
+  await page.keyboard.press("Shift+Tab");
+  assert.equal(await page.getByRole("button", { name: "Cancel" }).evaluate((element) => element === document.activeElement), true);
+  await page.keyboard.press("Tab");
   assert.equal(await confirm.evaluate((element) => element === document.activeElement), true);
   await page.keyboard.press("Escape");
   await confirm.waitFor({ state: "detached" });
@@ -147,7 +153,7 @@ try {
 function version(id: string, name: string, sourceProjectVersion: number) {
   return { id, projectId, bundleId, name, createdByUserId: userId, sourceProjectVersion, createdAt: "2026-10-05T01:00:00Z", sha256: "a".repeat(64), physicalBytes: 2048, logicalBytes: 1024, fileCount: 4, format: "project-bundle-v1" };
 }
-function recovery() { return { id: recoveryId, projectId, bundleId, position: 1, createdByUserId: userId, createdAt: "2026-10-05T02:00:00Z", sha256: "b".repeat(64), physicalBytes: 1024, logicalBytes: 512, fileCount: 2, format: "project-bundle-v1" }; }
+function recovery(id: string, position: number, createdAt: string) { return { id, projectId, bundleId, position, createdByUserId: userId, createdAt, sha256: "b".repeat(64), physicalBytes: 1024, logicalBytes: 512, fileCount: 2, format: "project-bundle-v1" }; }
 function promotion(referenceKind: "version" | "recovery", referenceId: string, projectVersion: number) { return { operationId, referenceKind, referenceId, bundleId, projectVersion, changed: true, idempotentRetry: false }; }
 function json(response: http.ServerResponse, value: unknown, status = 200) { response.statusCode = status; response.setHeader("content-type", "application/json"); response.end(JSON.stringify(value)); }
 function problem(response: http.ServerResponse, status: number, code: string) { response.statusCode = status; response.setHeader("content-type", "application/problem+json"); response.end(JSON.stringify({ type: "about:blank", title: "Rejected", status, detail: "Rejected.", instance: base, code, request_id: "history-browser", errors: [] })); }

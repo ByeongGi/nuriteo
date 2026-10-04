@@ -9,7 +9,7 @@ import { chromium } from "@playwright/test";
 import { build } from "esbuild";
 
 declare global {
-  interface Window { __nuriteoRuntimeProbe: { activeWorkers: number; createdWorkers: number; committedVersion?: number; committedEtag?: string; reloads: number } }
+  interface Window { __nuriteoRuntimeProbe: { activeWorkers: number; createdWorkers: number; committedVersion?: number; committedEtag?: string; reloads: number; restoreMode: "download-failure" | "intervening" | "materialization-failure" | "success" } }
 }
 
 const webRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");

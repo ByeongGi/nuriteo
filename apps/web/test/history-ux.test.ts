@@ -72,6 +72,8 @@ function testHistoryUiContract(): void {
   assert.match(panel, /aria-modal="true"/u);
   assert.match(panel, /confirmButtonRef\.current\?\.focus/u);
   assert.match(panel, /event\.key === "Escape"/u);
+  assert.match(panel, /event\.key !== "Tab"/u);
+  assert.match(panel, /Date\.parse\(right\.createdAt\) - Date\.parse\(left\.createdAt\)/u);
   assert.match(panel, /Local Draft was not replaced/u);
   assert.match(panel, /Archived · read-only/u);
   assert.match(panel, /reconcileProjectHistory/u);

@@ -19,7 +19,7 @@ import type {
   RecoveryCheckpoint
 } from "@nuriteo/api-client";
 import { useEffect, useRef, useState } from "react";
-import type { FormEvent } from "react";
+import type { FormEvent, KeyboardEvent as ReactKeyboardEvent } from "react";
 
 import { Button } from "../../../components/ui/button.tsx";
 import { createBrowserApiClient } from "../../../lib/api/browser-client.ts";
@@ -34,11 +34,16 @@ interface HistoryReference {
   readonly createdAt: string;
 }
 
+export interface RestoredProjectHead {
+  readonly projectEtag: string;
+  readonly projectVersion: number;
+}
+
 interface Props {
   readonly hasLocalDraft: boolean;
   readonly onProjectCommit: (result: { readonly projectEtag: string; readonly projectVersion: number }) => void;
   readonly onReloadProject: () => void;
-  readonly onResumeRestoredSave: () => void;
+  readonly onResumeRestoredSave: (head: RestoredProjectHead) => void;
   readonly project: Project;
   readonly projectEtag?: string;
 }
@@ -58,13 +63,14 @@ export function ProjectHistoryPanel({
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [isMutating, setIsMutating] = useState(false);
   const [pendingRestore, setPendingRestore] = useState<HistoryReference>();
-  const [restoredVersion, setRestoredVersion] = useState<number>();
+  const [restoredHead, setRestoredHead] = useState<RestoredProjectHead>();
   const [status, setStatus] = useState("Loading Version and Recovery history…");
   const [error, setError] = useState<string>();
   const [stale, setStale] = useState(false);
   const createAttempt = useRef<{ readonly key: string; readonly signature: string } | null>(null);
   const restoreAttemptKey = useRef<string | null>(null);
   const confirmButtonRef = useRef<HTMLButtonElement>(null);
+  const dialogRef = useRef<HTMLElement>(null);
   const restoreTriggerRef = useRef<HTMLButtonElement | null>(null);
   const owner = { ownerType: project.ownerType, ownerId: project.ownerId } as const;
 
@@ -83,7 +89,7 @@ export function ProjectHistoryPanel({
       if (controller.signal.aborted) return;
       setVersions(versionResult.data.items);
       setCursor(versionResult.data.nextCursor);
-      setRecovery(sortRecovery(recoveryResult.data.items));
+      setRecovery(sortRecoveryCheckpoints(recoveryResult.data.items));
       setStatus(historyLoadedStatus(versionResult.data.items.length, recoveryResult.data.items.length));
     }).catch((cause: unknown) => {
       if (!controller.signal.aborted) {
@@ -108,7 +114,7 @@ export function ProjectHistoryPanel({
 
   async function refreshRecovery(): Promise<void> {
     const result = await listRecoveryCheckpoints(createBrowserApiClient(), { owner, projectId: project.id });
-    setRecovery(sortRecovery(result.data.items));
+    setRecovery(sortRecoveryCheckpoints(result.data.items));
   }
 
   async function loadMore(): Promise<void> {
@@ -195,7 +201,7 @@ export function ProjectHistoryPanel({
         });
       }
       onProjectCommit({ projectEtag: result.projectEtag, projectVersion: result.data.projectVersion });
-      setRestoredVersion(result.data.projectVersion);
+      setRestoredHead({ projectEtag: result.projectEtag, projectVersion: result.data.projectVersion });
       restoreAttemptKey.current = null;
       restoreTriggerRef.current = null;
       setPendingRestore(undefined);
@@ -226,6 +232,23 @@ export function ProjectHistoryPanel({
     globalThis.requestAnimationFrame(() => trigger?.focus());
   }
 
+  function trapDialogFocus(event: ReactKeyboardEvent<HTMLElement>): void {
+    if (event.key !== "Tab") return;
+    const controls = [...(dialogRef.current?.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+    ) ?? [])].filter((element) => element.tabIndex >= 0);
+    const first = controls[0];
+    const last = controls.at(-1);
+    if (first === undefined || last === undefined) return;
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  }
+
   const archived = project.state === "archived";
   return (
     <section className="mt-4 rounded-lg border border-border bg-surface p-4" aria-labelledby={`history-title-${project.id}`}>
@@ -240,10 +263,10 @@ export function ProjectHistoryPanel({
 
       <p className="mt-3 text-sm text-muted-foreground" role="status" aria-live="polite">{status}</p>
       {error ? <div className="mt-3 rounded-md border border-danger p-3" role="alert"><p className="m-0 text-sm text-danger">{error}</p>{stale ? <Button className="mt-2" type="button" size="sm" onClick={onReloadProject}>Reload latest Project</Button> : null}</div> : null}
-      {restoredVersion !== undefined ? (
+      {restoredHead !== undefined ? (
         <div className="mt-3 rounded-md border border-warning bg-subtle p-3">
-          <p className="m-0 text-sm"><strong>Server v{restoredVersion} is restored.</strong> {hasLocalDraft ? "Your current Local Draft is still open and unchanged." : "No Local Draft is open."}</p>
-          {archived ? null : <Button className="mt-2" type="button" size="sm" variant="primary" onClick={onResumeRestoredSave}>Replace Local Draft with restored Server Save</Button>}
+          <p className="m-0 text-sm"><strong>Server v{restoredHead.projectVersion} is restored.</strong> {hasLocalDraft ? "Your current Local Draft is still open and unchanged." : "No Local Draft is open."}</p>
+          {archived ? null : <Button className="mt-2" type="button" size="sm" variant="primary" onClick={() => onResumeRestoredSave(restoredHead)}>Replace Local Draft with restored Server Save</Button>}
         </div>
       ) : null}
 
@@ -288,7 +311,7 @@ export function ProjectHistoryPanel({
 
       {pendingRestore ? (
         <div className="fixed inset-0 z-50 grid place-items-center bg-background/80 p-4" role="presentation">
-          <section className="max-w-lg rounded-lg border border-danger bg-surface p-5 shadow-lg" role="alertdialog" aria-modal="true" aria-labelledby={`restore-title-${pendingRestore.id}`} aria-describedby={`restore-description-${pendingRestore.id}`}>
+          <section ref={dialogRef} className="max-w-lg rounded-lg border border-danger bg-surface p-5 shadow-lg" role="alertdialog" aria-modal="true" aria-labelledby={`restore-title-${pendingRestore.id}`} aria-describedby={`restore-description-${pendingRestore.id}`} onKeyDown={trapDialogFocus}>
             <h4 id={`restore-title-${pendingRestore.id}`} className="m-0 text-base font-semibold">Restore {pendingRestore.label}?</h4>
             <p id={`restore-description-${pendingRestore.id}`} className="mt-2 text-sm text-muted-foreground">This promotes the selected snapshot to a new Server Working Head. {hasLocalDraft ? "Your open Local Draft remains unchanged until you explicitly replace it." : "The browser will not start or replace a Local Draft automatically."}</p>
             <div className="mt-4 flex flex-wrap gap-2">
@@ -337,10 +360,11 @@ function appendUniqueVersions(first: readonly ProjectVersion[], second: readonly
   return [...first, ...second].filter((item) => seen.has(item.id) ? false : (seen.add(item.id), true));
 }
 
-function sortRecovery(items: readonly RecoveryCheckpoint[]): readonly RecoveryCheckpoint[] {
-  return [...items].sort((left, right) =>
-    right.createdAt.localeCompare(left.createdAt) || right.id.localeCompare(left.id)
-  );
+export function sortRecoveryCheckpoints(items: readonly RecoveryCheckpoint[]): readonly RecoveryCheckpoint[] {
+  return [...items].sort((left, right) => {
+    const instantOrder = Date.parse(right.createdAt) - Date.parse(left.createdAt);
+    return instantOrder || right.id.localeCompare(left.id);
+  });
 }
 
 function staleProject(cause: unknown): boolean {

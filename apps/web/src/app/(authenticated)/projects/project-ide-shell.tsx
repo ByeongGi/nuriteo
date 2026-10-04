@@ -20,6 +20,7 @@ import { createSubdomainPreviewBridge } from "../../../runtime/subdomain-preview
 import type { PreviewOriginConfiguration } from "../../../runtime/preview-origin-contract.ts";
 import type { SubdomainPreviewBridge } from "../../../runtime/subdomain-preview-bridge.ts";
 import { ProjectHistoryPanel } from "./project-history-panel.tsx";
+import type { RestoredProjectHead } from "./project-history-panel.tsx";
 
 const EMPTY_RUNTIME_STATE: RuntimeViewState = {
   generation: 0,
@@ -58,11 +59,12 @@ interface Props {
   readonly projectEtag?: string;
   readonly onProjectCommit?: (result: { readonly projectEtag: string; readonly projectVersion: number }) => void;
   readonly onProjectReload?: () => void;
+  readonly resumeProjectContentLoader?: () => Promise<Pick<ResumeFeature, "resumeProjectContent">>;
   readonly runtimeFeatureLoader?: () => Promise<RuntimeFeature>;
   readonly workspaceScope: string;
 }
 
-export function ProjectIdeShell({ assetRevision, onProjectCommit, onProjectReload, previewBridgeFactory, previewConfiguration, project, projectEtag, runtimeFeatureLoader, workspaceScope }: Props) {
+export function ProjectIdeShell({ assetRevision, onProjectCommit, onProjectReload, previewBridgeFactory, previewConfiguration, project, projectEtag, resumeProjectContentLoader, runtimeFeatureLoader, workspaceScope }: Props) {
   const adapterRef = useRef<RuntimeAdapter | undefined>(undefined);
   const previewBridgeRef = useRef<SubdomainPreviewBridge | undefined>(undefined);
   const previewBridgeOperationRef = useRef(0);
@@ -70,6 +72,8 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, onProjectReloa
   const unsubscribeRef = useRef<() => void>(() => undefined);
   const manifestAbortRef = useRef<AbortController | null>(null);
   const saveAbortRef = useRef<AbortController | null>(null);
+  const replacementAbortRef = useRef<AbortController | null>(null);
+  const projectEtagRef = useRef(projectEtag);
   const unmountedRef = useRef(false);
   const [workspace, setWorkspace] = useState<RuntimeWorkspaceState>();
   const [selectedPath, setSelectedPath] = useState<string>();
@@ -82,6 +86,7 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, onProjectReloa
   const [isRunningPreview, setIsRunningPreview] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isServerSaving, setIsServerSaving] = useState(false);
+  const [isReplacingDraft, setIsReplacingDraft] = useState(false);
   const [serverSaveStatus, setServerSaveStatus] = useState("Not saved to server in this session");
   const [serverSaveFailure, setServerSaveFailure] = useState<"retry" | "stale">();
   const [recoveringAction, setRecoveringAction] = useState<RuntimeRecoveryActionKind>();
@@ -89,6 +94,7 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, onProjectReloa
   const [isolatedPreviewUrl, setIsolatedPreviewUrl] = useState<string>();
   const [editorStatus, setEditorStatus] = useState("Local Draft");
   const [runtime, setRuntime] = useState<RuntimeViewState>(EMPTY_RUNTIME_STATE);
+  projectEtagRef.current = projectEtag;
 
   useEffect(() => {
     unmountedRef.current = false;
@@ -97,6 +103,7 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, onProjectReloa
       previewBridgeOperationRef.current += 1;
       manifestAbortRef.current?.abort();
       saveAbortRef.current?.abort();
+      replacementAbortRef.current?.abort();
       unsubscribeRef.current();
       const bridge = previewBridgeRef.current;
       previewBridgeRef.current = undefined;
@@ -133,7 +140,7 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, onProjectReloa
       const runtimePromise = runtimeFeatureLoader?.() ?? runtimeFeature.load();
       const revisionPromise = resolveRuntimeAssetRevision(assetRevision, manifestAbort.signal);
       const savedContentPromise = source === "saved"
-        ? resumeFeature.load().then(({ resumeProjectContent }) => resumeProjectContent({
+        ? (resumeProjectContentLoader?.() ?? resumeFeature.load()).then(({ resumeProjectContent }) => resumeProjectContent({
             ownerType: project.ownerType,
             ownerId: project.ownerId,
             projectId: project.id,
@@ -391,7 +398,7 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, onProjectReloa
 
   async function saveToServer() {
     const adapter = adapterRef.current;
-    if (!adapter || !projectEtag || isServerSaving || runtime.localDraftAccess !== "writer") return;
+    if (!adapter || !projectEtag || isServerSaving || replacementAbortRef.current !== null || runtime.localDraftAccess !== "writer") return;
     const controller = new AbortController();
     saveAbortRef.current?.abort();
     saveAbortRef.current = controller;
@@ -461,11 +468,121 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, onProjectReloa
     setResumeStatus(undefined);
   }
 
-  async function resumeRestoredServerSave(): Promise<void> {
-    if (project.state !== "active" || isStarting || isServerSaving) return;
-    if (adapterRef.current !== undefined) await stopWorkspace();
-    if (adapterRef.current === undefined && !unmountedRef.current) {
-      await startWorkspace("saved");
+  async function replaceLocalDraftWithRestoredSave(head: RestoredProjectHead): Promise<void> {
+    if (
+      project.state !== "active" || isStarting || isServerSaving || replacementAbortRef.current !== null
+    ) return;
+    if (projectEtagRef.current !== head.projectEtag) {
+      setError("The Server Project changed after this restore. Your Local Draft is preserved; reload history before replacing it.");
+      return;
+    }
+
+    const controller = new AbortController();
+    replacementAbortRef.current = controller;
+    setIsReplacingDraft(true);
+    setError(undefined);
+    setResumeStatus(`Preparing exact restored Server Save v${head.projectVersion} without changing the Local Draft…`);
+    let stagedAdapter: RuntimeAdapter | undefined;
+    try {
+      const [feature, revision, savedContent] = await Promise.all([
+        runtimeFeatureLoader?.() ?? runtimeFeature.load(),
+        resolveRuntimeAssetRevision(assetRevision, controller.signal),
+        (resumeProjectContentLoader?.() ?? resumeFeature.load()).then(({ resumeProjectContent }) => resumeProjectContent({
+          ownerType: project.ownerType,
+          ownerId: project.ownerId,
+          projectId: project.id,
+          storageScopeId: project.storageScopeId
+        }, { signal: controller.signal }))
+      ]);
+      if (
+        controller.signal.aborted ||
+        savedContent.descriptor.projectVersion !== head.projectVersion ||
+        projectEtagRef.current !== head.projectEtag
+      ) {
+        throw new RestoredHeadChangedError();
+      }
+
+      stagedAdapter = feature.createRuntimeAdapter();
+      const origin = globalThis.location.origin;
+      const base = `/runtime/${revision}`;
+      await stagedAdapter.mount({
+        project: {
+          id: project.id,
+          storageScopeId: project.storageScopeId,
+          workspaceScopeId: workspaceScope,
+          displayName: project.name
+        },
+        assets: {
+          systemWorkerUrl: new URL(`${base}/system-worker.js`, origin),
+          processWorkerUrl: new URL(`${base}/process-worker.js`, origin),
+          systemWasmUrl: new URL(`${base}/system.wasm`, origin),
+          previewServiceWorkerUrl: new URL(`${base}/preview-sw.js`, origin)
+        },
+        policy: {
+          bootTimeoutMs: RUNTIME_BOOT_TIMEOUT_MS,
+          relayTimeoutMs: RUNTIME_RELAY_TIMEOUT_MS,
+          memoryLimitBytes: RUNTIME_MEMORY_LIMIT_BYTES
+        },
+        reportDiagnostic() { /* staged diagnostics are surfaced only if promotion fails */ }
+      });
+      const stagedWorkspace = await stagedAdapter.workspace.materializeBundle(savedContent.files);
+      if (
+        controller.signal.aborted ||
+        stagedWorkspace.status !== "ready" ||
+        savedContent.descriptor.projectVersion !== head.projectVersion ||
+        projectEtagRef.current !== head.projectEtag
+      ) {
+        throw new RestoredHeadChangedError();
+      }
+
+      const previousAdapter = adapterRef.current;
+      const previousUnsubscribe = unsubscribeRef.current;
+      const previousBridge = previewBridgeRef.current;
+      previewBridgeOperationRef.current += 1;
+      previewBridgeRef.current = undefined;
+      setIsolatedPreviewUrl(undefined);
+      previousUnsubscribe();
+
+      adapterRef.current = stagedAdapter;
+      stagedAdapter = undefined;
+      unsubscribeRef.current = adapterRef.current.subscribe(setRuntime);
+      setRuntime(adapterRef.current.getState());
+      setWorkspace(stagedWorkspace);
+      setTerminalOutput("");
+      const firstTextFile = stagedWorkspace.files.find((file) => file.kind === "text");
+      if (firstTextFile) selectFile(firstTextFile.path, stagedWorkspace);
+      else {
+        setSelectedPath(undefined);
+        setEditorContent("");
+      }
+      setEditorStatus(`Restored Server Save v${head.projectVersion} · Local Draft replaced by explicit choice`);
+      setResumeStatus(`Verified restored Server Save v${head.projectVersion} is now the Local Draft.`);
+
+      const cleanup = await Promise.allSettled([
+        previousBridge?.dispose() ?? Promise.resolve(),
+        previousAdapter?.dispose() ?? Promise.resolve()
+      ]);
+      if (cleanup.some((result) => result.status === "rejected")) {
+        setError("The restored Local Draft is ready, but the previous Runtime did not release cleanly. Reload before starting Preview.");
+      }
+      if (adapterRef.current.getState().localDraftAccess !== "writer") {
+        try {
+          setRuntime(await adapterRef.current.recovery.run("resolve-writer-conflict"));
+        } catch {
+          setError("The restored Local Draft is ready in read-only mode because its writer lease could not be acquired. Reload before editing.");
+        }
+      }
+    } catch (cause) {
+      await stagedAdapter?.dispose();
+      if (!controller.signal.aborted) {
+        setError(cause instanceof RestoredHeadChangedError
+          ? "The Server Project changed before the restored Save could be promoted. Your previous Local Draft is preserved."
+          : "The restored Server Save could not be fetched, verified, and materialized safely. Your previous Local Draft is preserved.");
+        setResumeStatus("Restored Save replacement stopped · previous Local Draft preserved");
+      }
+    } finally {
+      if (replacementAbortRef.current === controller) replacementAbortRef.current = null;
+      if (!unmountedRef.current) setIsReplacingDraft(false);
     }
   }
 
@@ -499,7 +616,7 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, onProjectReloa
     <section className="mt-6 overflow-hidden rounded-lg border border-border bg-surface" aria-labelledby="project-ide-title">
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-muted-border bg-subtle px-4 py-3">
         <div><p className="m-0 text-xs text-muted-foreground">Browser workspace · {runtime.lifecycle}</p><h3 id="project-ide-title" className="m-0 text-sm font-semibold">{project.name} IDE</h3></div>
-        {hasWorkspace ? <div className="flex flex-wrap items-center gap-2"><span className="text-xs text-muted-foreground" role="status" aria-live="polite">{serverSaveStatus}</span><Button type="button" size="sm" variant="primary" disabled={isServerSaving || !projectEtag || !canWriteLocalDraft} onClick={() => void saveToServer()}>{isServerSaving ? "Saving…" : "Save to server"}</Button><Button type="button" size="sm" onClick={() => void stopWorkspace()}>Stop workspace</Button></div> : (
+        {hasWorkspace ? <div className="flex flex-wrap items-center gap-2"><span className="text-xs text-muted-foreground" role="status" aria-live="polite">{isReplacingDraft ? "Preparing restored Save · current Local Draft preserved" : serverSaveStatus}</span><Button type="button" size="sm" variant="primary" disabled={isServerSaving || isReplacingDraft || !projectEtag || !canWriteLocalDraft} onClick={() => void saveToServer()}>{isServerSaving ? "Saving…" : "Save to server"}</Button><Button type="button" size="sm" disabled={isReplacingDraft} onClick={() => void stopWorkspace()}>Stop workspace</Button></div> : (
           <div className="flex flex-wrap gap-2">
             <Button type="button" size="sm" variant="primary" disabled={isStarting || project.state !== "active"} onClick={() => void startWorkspace("saved")}>{startingSource === "saved" ? "Resuming…" : "Resume saved Project"}</Button>
             <Button type="button" size="sm" disabled={isStarting || project.state !== "active"} onClick={() => void startWorkspace("template")}>{startingSource === "template" ? "Starting…" : "Start workspace from template"}</Button>
@@ -549,7 +666,7 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, onProjectReloa
           {...(projectEtag === undefined ? {} : { projectEtag })}
           onProjectCommit={(result) => onProjectCommit?.(result)}
           onReloadProject={() => onProjectReload?.()}
-          onResumeRestoredSave={() => void resumeRestoredServerSave()}
+          onResumeRestoredSave={(head) => void replaceLocalDraftWithRestoredSave(head)}
         />
       </div>
       {project.state !== "active" ? <p className="m-3 text-sm text-muted-foreground">This archived Project is read-only. Its Versions and Recovery checkpoints remain available for inspection; restore the Project before mutating history or starting its workspace.</p> : null}
@@ -609,3 +726,5 @@ function resumeErrorMessage(code: string): string {
   if (code === "RESUME_ABORTED") return "Project resume was cancelled. No Local Draft was replaced.";
   return "The current Server Save could not be resumed. No Local Draft was replaced; retry when the service is available.";
 }
+
+class RestoredHeadChangedError extends Error {}

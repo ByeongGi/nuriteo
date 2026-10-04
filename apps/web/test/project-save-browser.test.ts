@@ -9,7 +9,7 @@ import { chromium } from "@playwright/test";
 import { build } from "esbuild";
 
 declare global {
-  interface Window { __nuriteoRuntimeProbe: { activeWorkers: number; createdWorkers: number; committedVersion?: number; committedEtag?: string; reloads: number } }
+  interface Window { __nuriteoRuntimeProbe: { activeWorkers: number; createdWorkers: number; committedVersion?: number; committedEtag?: string; reloads: number; restoreMode: "download-failure" | "intervening" | "materialization-failure" | "success" } }
 }
 
 const webRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -29,6 +29,7 @@ fs.writeFileSync(path.join(fixtureRoot, "index.html"), '<!doctype html><meta cha
 const csrf = `nrt_csrf_${"s".repeat(43)}`;
 const saveSessionId = "0199ee6c-c777-7000-8000-00000000b003";
 const bundleId = "0199ee6c-c777-7000-8000-00000000b004";
+const historyVersionId = "0199ee6c-c777-7000-8000-00000000b006";
 const saveRequests: string[] = [];
 let createAttempts = 0;
 const server = http.createServer(async (request, response) => {
@@ -38,7 +39,7 @@ const server = http.createServer(async (request, response) => {
   const pathname = new URL(request.url ?? "/", "http://localhost").pathname;
   if (pathname.endsWith("/versions") && request.method === "GET") {
     response.setHeader("content-type", "application/json");
-    response.end(JSON.stringify({ items: [], nextCursor: null }));
+    response.end(JSON.stringify({ items: [{ id: historyVersionId, projectId: "0199ee6c-c777-7000-8000-00000000b002", bundleId, name: "Before refactor", createdByUserId: "0199ee6c-c777-7000-8000-00000000b001", sourceProjectVersion: 1, createdAt: "2026-10-04T00:00:00Z", sha256: "a".repeat(64), physicalBytes: 100, logicalBytes: 50, fileCount: 1, format: "project-bundle-v1" }], nextCursor: null }));
     return;
   }
   if (pathname.endsWith("/recovery-checkpoints") && request.method === "GET") {
@@ -76,6 +77,14 @@ const server = http.createServer(async (request, response) => {
       response.end(JSON.stringify({ state: "committed", bundleId, projectVersion: 2 }));
       return;
     }
+  }
+  if (pathname.endsWith("/history/restore") && request.method === "POST") {
+    assert.equal(request.headers["x-csrf-token"], csrf);
+    assert.equal(request.headers["if-match"], '"project-v2"');
+    response.setHeader("content-type", "application/json");
+    response.setHeader("etag", '"project-v3"');
+    response.end(JSON.stringify({ operationId: "0199ee6c-c777-7000-8000-00000000b007", referenceKind: "version", referenceId: historyVersionId, bundleId, projectVersion: 3, changed: true, idempotentRetry: false }));
+    return;
   }
   const root = pathname.startsWith("/runtime/") ? publicRoot : fixtureRoot;
   const relative = pathname === "/" ? "index.html" : pathname.slice(1);
@@ -145,11 +154,40 @@ try {
   await page.getByRole("button", { name: "Reload latest Project" }).click();
   assert.equal(await page.evaluate(() => window.__nuriteoRuntimeProbe.reloads), 1);
 
+  const historyVersion = page.locator("li", { hasText: "Before refactor" });
+  await historyVersion.getByRole("button", { name: "Restore" }).click();
+  await page.getByRole("button", { name: "Restore Server Working Head" }).click();
+  await page.getByText("Server Working Head is now v3. The browser Local Draft was not replaced.").waitFor();
+  const replaceDraft = page.getByRole("button", { name: "Replace Local Draft with restored Server Save" });
+
+  await page.evaluate(() => { window.__nuriteoRuntimeProbe.restoreMode = "intervening"; });
+  await replaceDraft.click();
+  await page.getByText(/Server Project changed before the restored Save could be promoted/u).waitFor();
+  assert.equal(await editor.inputValue(), 'export const label = "newer local draft";\n');
+
+  await page.evaluate(() => { window.__nuriteoRuntimeProbe.restoreMode = "download-failure"; });
+  await replaceDraft.click();
+  await page.getByText(/could not be fetched, verified, and materialized safely/u).waitFor();
+  assert.equal(await editor.inputValue(), 'export const label = "newer local draft";\n');
+
+  await page.evaluate(() => { window.__nuriteoRuntimeProbe.restoreMode = "materialization-failure"; });
+  await replaceDraft.click();
+  await page.getByText(/could not be fetched, verified, and materialized safely/u).waitFor();
+  assert.equal(await editor.inputValue(), 'export const label = "newer local draft";\n');
+  assert.equal(await page.evaluate(() => window.__nuriteoRuntimeProbe.activeWorkers), 2);
+
+  await page.evaluate(() => { window.__nuriteoRuntimeProbe.restoreMode = "success"; });
+  await replaceDraft.click();
+  await page.getByText("Verified restored Server Save v3 is now the Local Draft.").waitFor();
+  assert.equal(await editor.inputValue(), 'export const label = "restored exact head";\n');
+  assert.equal(await editor.isEditable(), true);
+  assert.equal(await page.evaluate(() => window.__nuriteoRuntimeProbe.activeWorkers), 2);
+
   await page.getByRole("button", { name: "Stop workspace" }).click();
   await page.getByRole("button", { name: "Start workspace from template", exact: true }).waitFor({ timeout: 10_000 });
   await page.waitForFunction(() => window.__nuriteoRuntimeProbe.activeWorkers === 0);
   assert.deepEqual(errors, []);
-  console.log("WEB-007 browser Save matrix ok (retry, unknown-outcome reconcile, 412, Local Draft, dispose)");
+  console.log("WEB-007 browser Save matrix ok (retry, reconcile, 412, exact atomic restore, failure preservation, dispose)");
 } finally {
   await browser.close();
   await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
