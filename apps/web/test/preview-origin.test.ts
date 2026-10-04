@@ -100,7 +100,9 @@ for (const attackerUrl of [
 
 const middleware = fs.readFileSync(new URL("../src/middleware.ts", import.meta.url), "utf8");
 assert.match(middleware, /matcher: \["\/:path\*"\]/u, "Preview host policy must cover Next internals and public assets");
-assert.match(middleware, /return new NextResponse\(null, \{ status: 404 \}\);/u);
+assert.match(middleware, /return previewResponse\(new NextResponse\(null, \{ status: 404 \}\)\);/u);
+assert.match(middleware, /Cross-Origin-Resource-Policy", "cross-origin"/u);
+assert.match(middleware, /Cross-Origin-Resource-Policy", "same-origin"/u);
 
 const bridge = fs.readFileSync(new URL("../src/runtime/subdomain-preview-bridge.ts", import.meta.url), "utf8");
 assert.match(bridge, /MAX_IN_FLIGHT_REQUESTS = 4/u);

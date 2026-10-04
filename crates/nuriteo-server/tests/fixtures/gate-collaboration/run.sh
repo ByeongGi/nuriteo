@@ -15,6 +15,7 @@ postgres_tls="$fixture_dir/postgres"
 rustfs_tls="$fixture_dir/rustfs"
 database_password="$(openssl rand -hex 24)"
 bootstrap_password_file="$fixture_dir/bootstrap-password"
+gate_test_name="${NURITEO_GATE_TEST_NAME:-collaboration_gate_runs_actual_core_postgres_and_rustfs_journey}"
 mkdir -p "$postgres_tls" "$rustfs_tls/certs"
 printf '%s' 'gate bootstrap password 0123456789' >"$bootstrap_password_file"
 chmod 600 "$bootstrap_password_file"
@@ -144,9 +145,11 @@ NURITEO_TEST_DATABASE_CA="$postgres_tls/ca.crt" \
 NURITEO_TEST_S3_ENDPOINT="https://127.0.0.1:${rustfs_port}" \
 NURITEO_TEST_S3_CA_FILE="$rustfs_tls/ca.crt" \
 NURITEO_TEST_BOOTSTRAP_PASSWORD_FILE="$bootstrap_password_file" \
+NURITEO_TEST_GATE_PROJECT_RUNTIME_BROWSER="${NURITEO_TEST_GATE_PROJECT_RUNTIME_BROWSER:-}" \
+NURITEO_TEST_NODE_EXECUTABLE="${NURITEO_TEST_NODE_EXECUTABLE:-node}" \
 CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-/private/tmp/nuriteo-gate002-target}" \
 cargo test -p nuriteo-server --test gate_collaboration --all-features \
-  collaboration_gate_runs_actual_core_postgres_and_rustfs_journey \
+  "$gate_test_name" \
   -- --ignored --exact --nocapture
 
 echo 'GATE-002 actual Core: PASS'

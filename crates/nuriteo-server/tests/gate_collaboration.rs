@@ -28,6 +28,8 @@ const DATABASE_CA_ENV: &str = "NURITEO_TEST_DATABASE_CA";
 const S3_ENDPOINT_ENV: &str = "NURITEO_TEST_S3_ENDPOINT";
 const S3_CA_ENV: &str = "NURITEO_TEST_S3_CA_FILE";
 const BOOTSTRAP_PASSWORD_FILE_ENV: &str = "NURITEO_TEST_BOOTSTRAP_PASSWORD_FILE";
+const GATE_PROJECT_RUNTIME_BROWSER_ENV: &str = "NURITEO_TEST_GATE_PROJECT_RUNTIME_BROWSER";
+const NODE_EXECUTABLE_ENV: &str = "NURITEO_TEST_NODE_EXECUTABLE";
 const BOOTSTRAP_PASSWORD: &str = "gate bootstrap password 0123456789";
 const INVITEE_PASSWORD: &str = "gate invitee password 0123456789";
 const ACCESS_KEY: &str = "integration-access";
@@ -80,6 +82,10 @@ async fn collaboration_gate_runs_actual_core_postgres_and_rustfs_journey() {
     create_bucket(&s3).await;
     let store = object_store(&s3_endpoint, &s3_ca_path).await;
     store.check_readiness().await.unwrap();
+    store
+        .configure_browser_upload_cors(&Url::parse(&external_url).unwrap())
+        .await
+        .unwrap();
 
     let mut server = spawn_server(
         address,
@@ -437,6 +443,115 @@ async fn collaboration_gate_runs_actual_core_postgres_and_rustfs_journey() {
     pool.close(Duration::from_secs(2)).await.unwrap();
 }
 
+#[tokio::test]
+#[ignore = "requires the GATE-003 custom-CA PostgreSQL, HTTPS RustFS, production Web build and Chromium fixture"]
+async fn project_runtime_gate_runs_actual_core_and_browser_journey() {
+    let database_url = required_env(DATABASE_URL_ENV);
+    let database_ca_path = required_env(DATABASE_CA_ENV);
+    let s3_endpoint = required_env(S3_ENDPOINT_ENV);
+    let s3_ca_path = required_env(S3_CA_ENV);
+    let password_file = required_env(BOOTSTRAP_PASSWORD_FILE_ENV);
+    let browser_fixture = required_env(GATE_PROJECT_RUNTIME_BROWSER_ENV);
+    let node_executable = required_env(NODE_EXECUTABLE_ENV);
+    let pool = database_pool(&database_url, &database_ca_path).await;
+
+    reset_schema(&pool).await;
+    let migration = run_embedded_migrations(
+        &pool,
+        MigrationOptions::new(Duration::from_secs(5), Duration::from_secs(30)).unwrap(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        migration.known_migrations, 18,
+        "GATE-003 requires migrations 1..18"
+    );
+
+    let core_address = available_address();
+    let web_address = available_address();
+    let core_url = format!("http://{core_address}");
+    let web_origin = format!("http://localhost:{}", web_address.port());
+    let created = bootstrap_admin(
+        &database_url,
+        &database_ca_path,
+        &password_file,
+        &web_origin,
+    );
+    assert_safe_bootstrap(&created, b"bootstrap-admin created\n");
+
+    let s3 = fixture_s3_client(&s3_endpoint, &fs::read(&s3_ca_path).unwrap());
+    create_bucket(&s3).await;
+    let store = object_store(&s3_endpoint, &s3_ca_path).await;
+    store.check_readiness().await.unwrap();
+    store
+        .configure_browser_upload_cors(&Url::parse(&web_origin).unwrap())
+        .await
+        .unwrap();
+
+    let mut server = spawn_server_with_external_url(
+        core_address,
+        &web_origin,
+        &database_url,
+        &database_ca_path,
+        &s3_endpoint,
+        &s3_ca_path,
+    );
+    let client = Client::builder()
+        .no_proxy()
+        .timeout(Duration::from_secs(5))
+        .build()
+        .unwrap();
+    wait_for_live(&mut server, &client, &core_url).await;
+
+    let browser = Command::new(node_executable)
+        .arg("--experimental-strip-types")
+        .arg(&browser_fixture)
+        .env("NURITEO_TEST_CORE_URL", &core_url)
+        .env("NURITEO_TEST_WEB_PORT", web_address.port().to_string())
+        .env("NURITEO_TEST_ADMIN_EMAIL", "admin@example.test")
+        .env("NURITEO_TEST_ADMIN_PASSWORD", BOOTSTRAP_PASSWORD)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+        .unwrap();
+    assert_process_output_secret_free(&browser, &[BOOTSTRAP_PASSWORD, &database_url, SECRET_KEY]);
+    assert!(
+        browser.status.success(),
+        "GATE-003 browser failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&browser.stdout),
+        String::from_utf8_lossy(&browser.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&browser.stdout)
+            .contains("GATE-003 actual aggregate browser journey ok"),
+        "browser fixture did not emit its terminal success marker"
+    );
+
+    let project: (String, String, String) = sqlx::query_as(
+        "SELECT project.name, project.slug, project.state::text FROM projects project \
+         JOIN users owner ON owner.id = project.owner_user_id \
+         WHERE owner.normalized_email = 'admin@example.test'",
+    )
+    .fetch_one(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+    assert_eq!(
+        project,
+        (
+            "GATE Runtime Project".into(),
+            "gate-runtime".into(),
+            "active".into()
+        )
+    );
+
+    let stopped = server.terminate(Duration::from_secs(5)).await;
+    assert!(stopped.status.success());
+    assert!(
+        !stopped.secret_detected,
+        "Core output leaked a fixture credential"
+    );
+}
+
 #[derive(Clone)]
 struct Browser {
     cookie: String,
@@ -607,7 +722,12 @@ fn bootstrap_admin(
 }
 
 fn assert_safe_bootstrap(output: &Output, expected: &[u8]) {
-    assert!(output.status.success());
+    assert!(
+        output.status.success(),
+        "bootstrap-admin failed with {}: {}",
+        output.status,
+        String::from_utf8_lossy(&output.stderr)
+    );
     assert_eq!(output.stdout, expected);
     assert!(output.stderr.is_empty());
     assert_process_output_secret_free(output, &[BOOTSTRAP_PASSWORD, "postgres://", SECRET_KEY]);
@@ -620,10 +740,28 @@ fn spawn_server(
     s3_endpoint: &str,
     s3_ca: &str,
 ) -> ChildGuard {
+    spawn_server_with_external_url(
+        address,
+        &format!("http://{address}"),
+        database_url,
+        database_ca,
+        s3_endpoint,
+        s3_ca,
+    )
+}
+
+fn spawn_server_with_external_url(
+    address: SocketAddr,
+    external_url: &str,
+    database_url: &str,
+    database_ca: &str,
+    s3_endpoint: &str,
+    s3_ca: &str,
+) -> ChildGuard {
     let child = Command::new(env!("CARGO_BIN_EXE_nuriteo-server"))
         .arg("serve")
         .env_clear()
-        .env("NURITEO_EXTERNAL_URL", format!("http://{address}"))
+        .env("NURITEO_EXTERNAL_URL", external_url)
         .env("NURITEO_HTTP_LISTEN_ADDR", address.to_string())
         .env("NURITEO_SHUTDOWN_DRAIN_TIMEOUT_MS", "2000")
         .env("NURITEO_DATABASE_URL", database_url)

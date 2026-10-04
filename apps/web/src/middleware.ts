@@ -15,32 +15,33 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
 
   if (configuration.status === "disabled") {
     return mightBePreview
-      ? new NextResponse("Preview wildcard DNS and TLS are not ready.", { status: 503 })
-      : NextResponse.next();
+      ? previewResponse(new NextResponse("Preview wildcard DNS and TLS are not ready.", { status: 503 }))
+      : applicationResponse(NextResponse.next());
   }
   const binding = parsePreviewHost(hostname, configuration.baseDomain);
   if (!binding) {
-    if (mightBePreview || request.nextUrl.pathname.startsWith(PREVIEW_ASSET_PREFIX)) return new NextResponse(null, { status: 404 });
-    return NextResponse.next();
+    if (mightBePreview) return previewResponse(new NextResponse(null, { status: 404 }));
+    if (request.nextUrl.pathname.startsWith(PREVIEW_ASSET_PREFIX)) return applicationResponse(new NextResponse(null, { status: 404 }));
+    return applicationResponse(NextResponse.next());
   }
   const verification = await verifySignedPreviewBinding(
     previewSigningKey() ?? "",
     binding.runtimeId,
     binding.port
   );
-  if (verification !== "valid") return new NextResponse(null, { status: verification === "expired" ? 410 : 404 });
+  if (verification !== "valid") return previewResponse(new NextResponse(null, { status: verification === "expired" ? 410 : 404 }));
   if (request.nextUrl.pathname === "/runtime-preview/bootstrap") {
-    return NextResponse.next();
+    return previewResponse(NextResponse.next());
   }
   if (request.nextUrl.pathname === "/runtime-preview/bootstrap.js" || request.nextUrl.pathname === "/runtime-preview/hmr.js") {
-    return NextResponse.next();
+    return previewResponse(NextResponse.next());
   }
   if (request.nextUrl.pathname === "/runtime-preview/sw.js") {
-    const response = NextResponse.next();
+    const response = previewResponse(NextResponse.next());
     response.headers.set("Service-Worker-Allowed", "/");
     return response;
   }
-  return new NextResponse(null, { status: 404 });
+  return previewResponse(new NextResponse(null, { status: 404 }));
 }
 
 export const config = {
@@ -51,4 +52,14 @@ export const config = {
 function requestHostname(host: string | null): string {
   if (!host) return "";
   return host.replace(/:\d+$/u, "").toLowerCase().replace(/\.$/u, "");
+}
+
+function applicationResponse(response: NextResponse): NextResponse {
+  response.headers.set("Cross-Origin-Resource-Policy", "same-origin");
+  return response;
+}
+
+function previewResponse(response: NextResponse): NextResponse {
+  response.headers.set("Cross-Origin-Resource-Policy", "cross-origin");
+  return response;
 }

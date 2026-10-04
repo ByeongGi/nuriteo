@@ -21,6 +21,7 @@
     "test:preview-browser": "node --experimental-strip-types test/preview-subdomain-browser.test.ts",
     "test:preview-next-browser": "node --experimental-strip-types test/preview-next-subdomain-browser.test.ts",
     "test:preview-standalone": "node --experimental-strip-types test/preview-standalone.test.ts",
+    "test:gate-project-runtime-browser": "node --experimental-strip-types test/gate-project-runtime-browser.test.ts",
     "test:bundle-boundary": "node test/bundle-boundary.test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
