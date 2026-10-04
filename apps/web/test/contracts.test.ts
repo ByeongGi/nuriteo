@@ -111,12 +111,15 @@ function testSafeAccessibleBoundaries(): void {
 function testProductionBoundary(): void {
   for (const file of findFiles("src")) {
     const source = read(file);
-    assert.doesNotMatch(source, /preview-service|service-backend/u, `${file} imports legacy code`);
+    assert.doesNotMatch(source, /apps\/preview-service|service-backend|@nuriteo\/preview-service\//u, `${file} imports legacy code or a package-internal path`);
     assert.doesNotMatch(source, /from ["'](?:postgres|sea-orm|sqlx|@aws-sdk\/client-s3)["']/iu, `${file} crosses service storage boundary`);
     if (file.endsWith(".tsx") && file !== "src/app/layout.tsx") {
       assert.doesNotMatch(source, /#[\da-f]{3,8}\b/iu, `${file} bypasses semantic tokens`);
     }
   }
+
+  const runtimeAdapter = read("src/runtime/runtime-adapter.ts");
+  assert.match(runtimeAdapter, /from "@nuriteo\/preview-service"/u);
 
   const loginRoute = read("src/app/api/v1/auth/sessions/route.ts");
   const meRoute = read("src/app/api/v1/me/route.ts");

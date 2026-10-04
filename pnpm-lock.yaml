@@ -151,6 +151,12 @@ importers:
       '@nuriteo/api-client':
         specifier: workspace:*
         version: link:../../packages/api-client
+      '@nuriteo/browser-host':
+        specifier: workspace:*
+        version: link:../../packages/browser-host
+      '@nuriteo/preview-service':
+        specifier: workspace:*
+        version: link:../../packages/preview-service
       class-variance-authority:
         specifier: 0.7.1
         version: 0.7.1
