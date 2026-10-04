@@ -40,17 +40,17 @@ export interface RuntimeMountInput {
     displayName: string;
   };
   assets: {
-    systemWorkerUrl: string;
-    processWorkerUrl: string;
-    systemWasmUrl: string;
-    previewServiceWorkerUrl: string;
+    systemWorkerUrl: URL;
+    processWorkerUrl: URL;
+    systemWasmUrl: URL;
+    previewServiceWorkerUrl: URL;
   };
-  policy?: {
-    bootTimeoutMs?: number;
-    relayTimeoutMs?: number;
-    memoryLimitBytes?: number;
+  policy: {
+    bootTimeoutMs: number;
+    relayTimeoutMs: number;
+    memoryLimitBytes: number;
   };
-  onDiagnostic?: (diagnostic: RuntimeDiagnostic) => void;
+  reportDiagnostic(diagnostic: RuntimeDiagnostic): void;
 }
 
 export interface RuntimeViewState {
@@ -60,7 +60,7 @@ export interface RuntimeViewState {
   workflowPhase: PreviewWorkflowPhase | "idle";
   previewUrl: string | null;
   diagnostics: readonly RuntimeDiagnostic[];
-  terminalCount: number;
+  terminalProcessCount: number;
 }
 
 export interface RuntimeTerminalPort {
@@ -79,8 +79,8 @@ export interface RuntimeWorkflowPort {
 }
 
 export interface RuntimeAdapter {
-  mount(input: RuntimeMountInput): Promise<RuntimeViewState>;
-  subscribe(listener: (state: RuntimeViewState) => void): () => boolean;
+  mount(input: RuntimeMountInput): Promise<void>;
+  subscribe(listener: (state: RuntimeViewState) => void): () => void;
   getState(): RuntimeViewState;
   readonly terminal: RuntimeTerminalPort;
   readonly workflow: RuntimeWorkflowPort;
@@ -125,7 +125,7 @@ interface OwnedRuntime {
   processTable: ProcessTableLike;
   controller: ControllerLike;
   unsubscribe: () => boolean;
-  onDiagnostic?: (diagnostic: RuntimeDiagnostic) => void;
+  reportDiagnostic: (diagnostic: RuntimeDiagnostic) => void;
 }
 
 export function createRuntimeAdapter(dependencies: RuntimeAdapterDependencies = {}): RuntimeAdapter {
@@ -168,7 +168,7 @@ export function createRuntimeAdapter(dependencies: RuntimeAdapterDependencies = 
     dispose
   };
 
-  async function mount(input: RuntimeMountInput): Promise<RuntimeViewState> {
+  async function mount(input: RuntimeMountInput): Promise<void> {
     if (!isMountable(state.lifecycle)) {
       throw new Error(`Runtime cannot mount while lifecycle is ${state.lifecycle}`);
     }
@@ -190,20 +190,21 @@ export function createRuntimeAdapter(dependencies: RuntimeAdapterDependencies = 
     try {
       const origin = dependencies.origin?.() ?? browserOrigin();
       const assets = validateAssets(input.assets, origin);
+      validatePolicy(input.policy);
       const processTable = (dependencies.createProcessTable ?? defaultProcessTableFactory(assets.processWorkerUrl))({});
       constructingProcessTable = processTable;
       const supervisor = (dependencies.createSupervisor ?? ((options) => new BrowserRuntimeSupervisor(options)))({
         systemWorkerUrl: assets.systemWorkerUrl,
         processWorkerUrl: assets.processWorkerUrl,
         systemWasmUrl: assets.systemWasmUrl,
-        ...(input.policy?.memoryLimitBytes === undefined ? {} : { memoryLimitBytes: input.policy.memoryLimitBytes }),
-        ...(input.policy?.bootTimeoutMs === undefined ? {} : { timeoutMs: input.policy.bootTimeoutMs })
+        memoryLimitBytes: input.policy.memoryLimitBytes,
+        timeoutMs: input.policy.bootTimeoutMs
       });
       constructingSupervisor = supervisor;
       const controller = (dependencies.createController ?? ((options) => createPreviewWorkflowController(options)))({
         terminalProcessTable: processTable as HostProcessTable,
         previewServiceWorkerUrl: assets.previewServiceWorkerUrl,
-        ...(input.policy?.relayTimeoutMs === undefined ? {} : { relayTimeoutMs: input.policy.relayTimeoutMs })
+        relayTimeoutMs: input.policy.relayTimeoutMs
       });
       constructingController = controller;
       const abortController = new AbortController();
@@ -214,7 +215,7 @@ export function createRuntimeAdapter(dependencies: RuntimeAdapterDependencies = 
         processTable,
         controller,
         unsubscribe: () => false,
-        ...(input.onDiagnostic ? { onDiagnostic: input.onDiagnostic } : {})
+        reportDiagnostic: input.reportDiagnostic
       };
       current.unsubscribe = controller.on((event) => receiveEvent(current, event));
       owned = current;
@@ -222,21 +223,18 @@ export function createRuntimeAdapter(dependencies: RuntimeAdapterDependencies = 
       constructingSupervisor = null;
       constructingController = null;
 
-      await raceAbort(supervisor.boot(
-        input.policy?.bootTimeoutMs === undefined ? {} : { timeoutMs: input.policy.bootTimeoutMs }
-      ), abortController.signal);
-      if (!isCurrent(current) || abortController.signal.aborted) return publicState();
+      await raceAbort(supervisor.boot({ timeoutMs: input.policy.bootTimeoutMs }), abortController.signal);
+      if (!isCurrent(current) || abortController.signal.aborted) return;
       state = { ...state, lifecycle: "ready" };
       applySnapshot(current, controller.getSnapshot());
-      return publicState();
     } catch (error) {
       if (state.lifecycle === "disposing" || state.lifecycle === "disposed") {
         await Promise.resolve();
         await disposePromise;
-        return publicState();
+        return;
       }
       const diagnostic = fixedDiagnostic("RUNTIME_BOOT_FAILED", "Runtime could not start. Dispose and retry this Project.");
-      appendDiagnostic(diagnostic, input.onDiagnostic);
+      appendDiagnostic(diagnostic, input.reportDiagnostic);
       state = { ...state, lifecycle: "failed" };
       emit();
       if (owned) await cleanupOwned(owned, false);
@@ -245,9 +243,9 @@ export function createRuntimeAdapter(dependencies: RuntimeAdapterDependencies = 
     }
   }
 
-  function subscribe(listener: (state: RuntimeViewState) => void): () => boolean {
+  function subscribe(listener: (state: RuntimeViewState) => void): () => void {
     listeners.add(listener);
-    return () => listeners.delete(listener);
+    return () => { listeners.delete(listener); };
   }
 
   function getState(): RuntimeViewState {
@@ -257,7 +255,7 @@ export function createRuntimeAdapter(dependencies: RuntimeAdapterDependencies = 
   function dispose(): Promise<void> {
     if (disposePromise) return disposePromise;
     if (!owned) {
-      state = { ...state, lifecycle: "disposed", projectId: null, previewUrl: null, terminalCount: 0 };
+      state = { ...state, lifecycle: "disposed", projectId: null, previewUrl: null, terminalProcessCount: 0 };
       emit();
       listeners.clear();
       disposePromise = Promise.resolve();
@@ -282,7 +280,7 @@ export function createRuntimeAdapter(dependencies: RuntimeAdapterDependencies = 
     try {
       await withTimeout(cleanup(), dependencies.cleanupTimeoutMs ?? DEFAULT_CLEANUP_TIMEOUT_MS);
     } catch {
-      appendDiagnostic(fixedDiagnostic("RUNTIME_CLEANUP_TIMEOUT", "Runtime cleanup exceeded its bounded deadline."), current.onDiagnostic);
+      appendDiagnostic(fixedDiagnostic("RUNTIME_CLEANUP_TIMEOUT", "Runtime cleanup exceeded its bounded deadline."), current.reportDiagnostic);
     }
     if (owned === current) owned = null;
     if (publishDisposed) {
@@ -292,7 +290,7 @@ export function createRuntimeAdapter(dependencies: RuntimeAdapterDependencies = 
         projectId: null,
         workflowPhase: "idle",
         previewUrl: null,
-        terminalCount: 0
+        terminalProcessCount: 0
       };
       emit();
       listeners.clear();
@@ -329,7 +327,7 @@ export function createRuntimeAdapter(dependencies: RuntimeAdapterDependencies = 
       workflowPhase: snapshot.phase,
       previewUrl: snapshot.previewUrl,
       diagnostics,
-      terminalCount: current.controller.listShellProcesses().length
+      terminalProcessCount: current.controller.listShellProcesses().length
     };
     emit();
   }
@@ -382,7 +380,7 @@ function createInitialState(): RuntimeViewState {
     workflowPhase: "idle",
     previewUrl: null,
     diagnostics: [],
-    terminalCount: 0
+    terminalProcessCount: 0
   };
 }
 
@@ -406,8 +404,8 @@ function validateProject(project: RuntimeMountInput["project"]): RuntimeMountInp
 
 function validateAssets(assets: RuntimeMountInput["assets"], origin: string): RuntimeMountInput["assets"] {
   for (const [name, value] of Object.entries(assets)) {
-    const url = new URL(value, origin);
-    if (url.origin !== origin || url.username || url.password || url.hash || url.search || !CONTENT_ADDRESSED_ASSET.test(url.pathname)) {
+    const url = value;
+    if (url.origin !== new URL(origin).origin || url.username || url.password || url.hash || url.search || !CONTENT_ADDRESSED_ASSET.test(url.pathname)) {
       throw new RuntimeAdapterError(
         "RUNTIME_ASSET_INVALID",
         `${name} must be a same-origin content-addressed /runtime/<sha256>/ asset URL.`
@@ -417,7 +415,15 @@ function validateAssets(assets: RuntimeMountInput["assets"], origin: string): Ru
   return assets;
 }
 
-function defaultProcessTableFactory(processWorkerUrl: string): (options: HostProcessTableOptions) => HostProcessTable {
+function validatePolicy(policy: RuntimeMountInput["policy"]): void {
+  for (const [name, value] of Object.entries(policy)) {
+    if (!Number.isSafeInteger(value) || value < 1) {
+      throw new RuntimeAdapterError("RUNTIME_POLICY_INVALID", `${name} must be a positive safe integer.`);
+    }
+  }
+}
+
+function defaultProcessTableFactory(processWorkerUrl: URL): (options: HostProcessTableOptions) => HostProcessTable {
   return (options) => new HostProcessTable({
     ...options,
     workerFactory: (record) => new Worker(processWorkerUrl, { type: "module", name: `nuriteo-process-${record.pid}` })

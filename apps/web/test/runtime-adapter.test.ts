@@ -15,11 +15,13 @@ const hash = "a".repeat(64);
 const mountInput: RuntimeMountInput = {
   project: { id: "project-a", localDraftKey: "draft-a", displayName: "Project A" },
   assets: {
-    systemWorkerUrl: `/runtime/${hash}/system-worker.js`,
-    processWorkerUrl: `/runtime/${hash}/process-worker.js`,
-    systemWasmUrl: `/runtime/${hash}/system.wasm`,
-    previewServiceWorkerUrl: `/runtime/${hash}/preview-sw.js`
-  }
+    systemWorkerUrl: new URL(`/runtime/${hash}/system-worker.js`, "https://nuriteo.test"),
+    processWorkerUrl: new URL(`/runtime/${hash}/process-worker.js`, "https://nuriteo.test"),
+    systemWasmUrl: new URL(`/runtime/${hash}/system.wasm`, "https://nuriteo.test"),
+    previewServiceWorkerUrl: new URL(`/runtime/${hash}/preview-sw.js`, "https://nuriteo.test")
+  },
+  policy: { bootTimeoutMs: 2_000, relayTimeoutMs: 2_000, memoryLimitBytes: 64 * 1024 * 1024 },
+  reportDiagnostic() {}
 };
 
 function snapshot(overrides: Partial<PreviewWorkflowSnapshot> = {}): PreviewWorkflowSnapshot {
@@ -122,10 +124,10 @@ function harness(boot: Promise<unknown> = Promise.resolve({})) {
   const { adapter, cleanup, controllers } = harness();
   assert.throws(() => adapter.terminal.input("before-ready"), (error: unknown) =>
     error instanceof RuntimeAdapterError && error.code === "RUNTIME_NOT_READY");
-  const mounted = await adapter.mount(mountInput);
-  assert.equal(mounted.lifecycle, "ready");
-  assert.equal(mounted.projectId, "project-a");
-  assert.equal(mounted.generation, 1);
+  await adapter.mount(mountInput);
+  assert.equal(adapter.getState().lifecycle, "ready");
+  assert.equal(adapter.getState().projectId, "project-a");
+  assert.equal(adapter.getState().generation, 1);
   controllers[0]?.emit(snapshot({ phase: "preview_ready", previewUrl: "https://preview.test" }));
   assert.equal(adapter.getState().previewUrl, "https://preview.test");
   await adapter.terminal.run("pnpm dev", "terminal-1");
@@ -142,7 +144,8 @@ function harness(boot: Promise<unknown> = Promise.resolve({})) {
 {
   const { adapter, cleanup } = harness();
   adapter.subscribe(() => { throw new Error("consumer failed"); });
-  assert.equal((await adapter.mount(mountInput)).lifecycle, "ready");
+  await adapter.mount(mountInput);
+  assert.equal(adapter.getState().lifecycle, "ready");
   await adapter.dispose();
   assert.deepEqual(cleanup, ["unsubscribe", "controller", "process", "supervisor"]);
   assert.equal(adapter.getState().lifecycle, "disposed");
@@ -154,7 +157,8 @@ function harness(boot: Promise<unknown> = Promise.resolve({})) {
   const mounting = adapter.mount(mountInput);
   await Promise.resolve();
   await adapter.dispose();
-  assert.equal((await mounting).lifecycle, "disposed");
+  await mounting;
+  assert.equal(adapter.getState().lifecycle, "disposed");
   boot.resolve({});
   controllers[0]?.emit(snapshot({ phase: "preview_ready", previewUrl: "https://stale.test" }));
   await Promise.resolve();
@@ -179,7 +183,7 @@ function harness(boot: Promise<unknown> = Promise.resolve({})) {
   await assert.rejects(
     adapter.mount({
       ...mountInput,
-      assets: { ...mountInput.assets, processWorkerUrl: "https://evil.test/process.js" }
+      assets: { ...mountInput.assets, processWorkerUrl: new URL("https://evil.test/process.js") }
     }),
     (error: unknown) => error instanceof RuntimeAdapterError && error.code === "RUNTIME_BOOT_FAILED"
   );
@@ -237,7 +241,7 @@ function harness(boot: Promise<unknown> = Promise.resolve({})) {
   await assert.rejects(
     adapter.mount({
       ...mountInput,
-      assets: { ...mountInput.assets, systemWasmUrl: `${mountInput.assets.systemWasmUrl}?variant=mutable` }
+      assets: { ...mountInput.assets, systemWasmUrl: new URL(`${mountInput.assets.systemWasmUrl}?variant=mutable`) }
     }),
     /Runtime could not start/u
   );
@@ -255,6 +259,59 @@ function harness(boot: Promise<unknown> = Promise.resolve({})) {
   assert.ok(diagnostic.message.length <= 512);
   assert.equal(diagnostic.message.includes("super-secret"), false);
   await adapter.dispose();
+}
+
+{
+  type WorkerListener = (event: MessageEvent | ErrorEvent) => void;
+  class ActualBoundaryWorker {
+    static instances: ActualBoundaryWorker[] = [];
+    readonly listeners = new Map<string, WorkerListener[]>();
+    readonly name: string;
+    terminated = false;
+
+    constructor(_url: string | URL, options?: WorkerOptions) {
+      this.name = options?.name ?? "worker";
+      ActualBoundaryWorker.instances.push(this);
+    }
+    addEventListener(type: string, listener: WorkerListener): void {
+      this.listeners.set(type, [...(this.listeners.get(type) ?? []), listener]);
+    }
+    removeEventListener(type: string, listener: WorkerListener): void {
+      this.listeners.set(type, (this.listeners.get(type) ?? []).filter((entry) => entry !== listener));
+    }
+    postMessage(message: { type?: string }): void {
+      if (message.type !== "boot") return;
+      queueMicrotask(() => {
+        const event = {
+          data: {
+            type: "ready",
+            protocolVersion: 1,
+            role: this.name.includes("system") ? "system" : "process",
+            details: {}
+          }
+        } as MessageEvent;
+        for (const listener of this.listeners.get("message") ?? []) listener(event);
+      });
+    }
+    terminate(): void { this.terminated = true; }
+  }
+
+  const originalWorker = globalThis.Worker;
+  Object.defineProperty(globalThis, "Worker", { configurable: true, value: ActualBoundaryWorker });
+  try {
+    const adapter = createRuntimeAdapter({ origin: () => "https://nuriteo.test" });
+    await adapter.mount(mountInput);
+    assert.equal(adapter.getState().lifecycle, "ready");
+    assert.equal(ActualBoundaryWorker.instances.length, 2, "one system and one process supervisor Worker are created");
+    await adapter.dispose();
+    assert.equal(adapter.getState().terminalProcessCount, 0);
+    assert.equal(ActualBoundaryWorker.instances.every((worker) => worker.terminated), true);
+    assert.equal(ActualBoundaryWorker.instances.every((worker) =>
+      [...worker.listeners.values()].every((listeners) => listeners.length === 0)), true);
+  } finally {
+    if (originalWorker) Object.defineProperty(globalThis, "Worker", { configurable: true, value: originalWorker });
+    else Reflect.deleteProperty(globalThis, "Worker");
+  }
 }
 
 console.log("runtime adapter tests ok");
