@@ -81,7 +81,7 @@ async fn cleanup_is_bounded_persisted_redacted_and_restart_safe() {
         4,
         Duration::from_secs(10),
         Duration::from_millis(500),
-        Duration::from_secs(2),
+        Duration::from_secs(5 * 60),
         Duration::from_millis(20),
         Duration::from_millis(100),
         Duration::from_millis(200),

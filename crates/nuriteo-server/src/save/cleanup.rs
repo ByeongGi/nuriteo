@@ -58,13 +58,23 @@ impl CleanupWorkerPolicy {
             || !(1..=MAX_ATTEMPTS).contains(&max_attempts)
             || !(Duration::from_millis(100)..=Duration::from_secs(30)).contains(&operation_timeout)
             || !(Duration::from_millis(100)..=Duration::from_secs(120)).contains(&item_timeout)
-            || lease_duration <= item_timeout
-            || lease_duration > Duration::from_secs(10 * 60)
             || !(Duration::from_millis(10)..=Duration::from_secs(60)).contains(&poll_interval)
             || !(Duration::from_millis(100)..=Duration::from_secs(60 * 60)).contains(&base_backoff)
             || base_backoff > max_backoff
             || max_backoff > Duration::from_secs(24 * 60 * 60)
         {
+            return Err(CleanupError::InvalidPolicy);
+        }
+        let processing_waves = u32::from(batch_size)
+            .checked_add(u32::from(concurrency) - 1)
+            .and_then(|rounded| rounded.checked_div(u32::from(concurrency)))
+            .ok_or(CleanupError::InvalidPolicy)?;
+        let minimum_lease = item_timeout
+            .checked_add(operation_timeout)
+            .and_then(|per_wave| per_wave.checked_mul(processing_waves))
+            .and_then(|batch| batch.checked_add(SQL_TIMEOUT_MARGIN))
+            .ok_or(CleanupError::InvalidPolicy)?;
+        if lease_duration <= minimum_lease || lease_duration > Duration::from_secs(10 * 60) {
             return Err(CleanupError::InvalidPolicy);
         }
         Ok(Self {
@@ -89,7 +99,7 @@ impl Default for CleanupWorkerPolicy {
             max_attempts: 8,
             operation_timeout: Duration::from_secs(5),
             item_timeout: Duration::from_secs(30),
-            lease_duration: Duration::from_secs(90),
+            lease_duration: Duration::from_secs(5 * 60),
             poll_interval: Duration::from_secs(2),
             base_backoff: Duration::from_secs(2),
             max_backoff: Duration::from_secs(15 * 60),
@@ -496,9 +506,8 @@ impl<B: CleanupBackend> CleanupService<B> {
             }
         }
         if *cancel.borrow() {
-            for job in pending {
-                self.release_claim(owner, job.session_id).await?;
-            }
+            self.release_claims(owner, pending.map(|job| job.session_id).collect())
+                .await?;
         }
         Ok(())
     }
@@ -532,7 +541,7 @@ impl<B: CleanupBackend> CleanupService<B> {
             .run(self.pool.acquire())
             .await?
             .map_err(map_database_error)?;
-        let lease_seconds = i64::try_from(self.policy.lease_duration.as_secs())
+        let lease_millis = i64::try_from(self.policy.lease_duration.as_millis())
             .map_err(|_| CleanupError::InvalidPolicy)?;
         let max_attempts =
             i16::try_from(self.policy.max_attempts).map_err(|_| CleanupError::InvalidPolicy)?;
@@ -567,7 +576,7 @@ impl<B: CleanupBackend> CleanupService<B> {
                         LIMIT $2 FOR UPDATE SKIP LOCKED\
                      ) UPDATE save_cleanup_jobs job SET status='running',attempts=attempts+1,\
                          retry_at=NULL,lease_owner=$3::uuid,\
-                         lease_expires_at=transaction_timestamp()+($4 * interval '1 second'),\
+                         lease_expires_at=transaction_timestamp()+($4 * interval '1 millisecond'),\
                          started_at=COALESCE(started_at,transaction_timestamp()),\
                          updated_at=transaction_timestamp() \
                      FROM selected WHERE job.save_session_id=selected.save_session_id \
@@ -577,7 +586,7 @@ impl<B: CleanupBackend> CleanupService<B> {
                 .bind(max_attempts)
                 .bind(i64::from(self.policy.batch_size))
                 .bind(owner.to_string())
-                .bind(lease_seconds)
+                .bind(lease_millis)
                 .fetch_all(&mut *connection),
             )
             .await?
@@ -635,19 +644,44 @@ impl<B: CleanupBackend> CleanupService<B> {
         .await
     }
 
-    async fn release_claim(
+    async fn release_claims(
         &self,
         owner: Uuid,
-        session_id: SaveSessionId,
+        session_ids: Vec<SaveSessionId>,
     ) -> Result<(), CleanupError> {
-        self.update_claim(
-            owner,
-            session_id,
-            "status='retry_wait',retry_at=transaction_timestamp(),last_failure_category='unknown'",
-            None,
-            None,
-        )
-        .await
+        if session_ids.is_empty() {
+            return Ok(());
+        }
+        let expected = u64::try_from(session_ids.len()).map_err(|_| CleanupError::InvalidPolicy)?;
+        let session_ids: Vec<String> = session_ids
+            .into_iter()
+            .map(|session_id| session_id.to_string())
+            .collect();
+        let deadline = Deadline::new(self.policy.operation_timeout);
+        let mut connection = deadline
+            .run(self.pool.acquire())
+            .await?
+            .map_err(map_database_error)?;
+        let result = deadline
+            .run(
+                sqlx::query(
+                    "UPDATE save_cleanup_jobs SET status='retry_wait',\
+                         retry_at=transaction_timestamp(),last_failure_category='unknown',\
+                         lease_owner=NULL,lease_expires_at=NULL,updated_at=transaction_timestamp() \
+                     WHERE save_session_id = ANY($1::text[]::uuid[]) AND status='running' \
+                       AND lease_owner=$2::uuid",
+                )
+                .bind(session_ids)
+                .bind(owner.to_string())
+                .execute(&mut *connection),
+            )
+            .await?
+            .map_err(map_sql_error)?;
+        if result.rows_affected() == expected {
+            Ok(())
+        } else {
+            Err(CleanupError::InvariantViolation)
+        }
     }
 
     async fn update_claim(
@@ -935,6 +969,20 @@ mod tests {
                 Duration::from_secs(1),
                 Duration::from_secs(1),
                 Duration::from_secs(2),
+                Duration::from_secs(1),
+                Duration::from_secs(1),
+                Duration::from_secs(2)
+            ),
+            Err(CleanupError::InvalidPolicy)
+        );
+        assert_eq!(
+            CleanupWorkerPolicy::new(
+                4,
+                1,
+                1,
+                Duration::from_secs(1),
+                Duration::from_secs(1),
+                Duration::from_secs(8),
                 Duration::from_secs(1),
                 Duration::from_secs(1),
                 Duration::from_secs(2)
