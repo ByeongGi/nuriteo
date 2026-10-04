@@ -51,7 +51,12 @@ const IDEMPOTENCY_KEY: HeaderName = HeaderName::from_static("idempotency-key");
 const RELAY_CHECKSUM: HeaderName = HeaderName::from_static("x-nuriteo-content-sha256");
 const BUNDLE_CONTENT_TYPE: &str = "application/vnd.nuriteo.project-bundle";
 const MAX_RELAY_BODY_BYTES: u64 = 64 * 1024 * 1024;
-const MAX_RELAY_INGRESS_FRAME_BYTES: usize = 64 * 1024;
+/// Maximum number of request-body bytes exposed by one `AsyncRead` poll.
+///
+/// Hyper owns the backing allocation for each frame. The relay retains only
+/// the current frame, advances it without copying, and does not poll the next
+/// frame until the current one has been consumed.
+const RELAY_READ_CHUNK_BYTES: usize = 64 * 1024;
 
 struct RelayProjectBundleBinary;
 
@@ -595,7 +600,11 @@ impl AsyncRead for RequestBodyReader {
         }
         loop {
             if !self.current.is_empty() {
-                let count = self.current.len().min(output.remaining());
+                let count = self
+                    .current
+                    .len()
+                    .min(output.remaining())
+                    .min(RELAY_READ_CHUNK_BYTES);
                 output.put_slice(&self.current[..count]);
                 self.current.advance(count);
                 return Poll::Ready(Ok(()));
@@ -612,12 +621,6 @@ impl AsyncRead for RequestBodyReader {
                 }
                 Poll::Ready(Some(Ok(frame))) => {
                     if let Ok(data) = frame.into_data() {
-                        if data.len() > MAX_RELAY_INGRESS_FRAME_BYTES {
-                            self.complete = true;
-                            return Poll::Ready(Err(io::Error::other(
-                                "request body frame exceeds the relay ingress bound",
-                            )));
-                        }
                         self.current = data;
                     }
                 }
@@ -758,8 +761,35 @@ fn map_error(e: SaveHttpError, id: RequestId, path: &str) -> HttpError {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::VecDeque;
+    use std::convert::Infallible;
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
     use super::*;
     use tokio::io::AsyncReadExt;
+
+    struct ObservedFrames {
+        frames: VecDeque<Bytes>,
+        polls: Arc<AtomicUsize>,
+    }
+
+    impl HttpBody for ObservedFrames {
+        type Data = Bytes;
+        type Error = Infallible;
+
+        fn poll_frame(
+            mut self: Pin<&mut Self>,
+            _cx: &mut Context<'_>,
+        ) -> Poll<Option<Result<http_body::Frame<Self::Data>, Self::Error>>> {
+            self.polls.fetch_add(1, Ordering::SeqCst);
+            Poll::Ready(
+                self.frames
+                    .pop_front()
+                    .map(|data| Ok(http_body::Frame::data(data))),
+            )
+        }
+    }
 
     fn valid_headers() -> HeaderMap {
         let mut headers = HeaderMap::new();
@@ -830,12 +860,36 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn relay_reader_rejects_one_oversized_upstream_frame() {
-        let mut reader =
-            RequestBodyReader::new(Body::from(vec![0x5a; MAX_RELAY_INGRESS_FRAME_BYTES + 1]));
-        let mut output = Vec::new();
-        let error = reader.read_to_end(&mut output).await.unwrap_err();
-        assert_eq!(error.kind(), io::ErrorKind::Other);
-        assert!(output.is_empty());
+    async fn relay_reader_slices_one_large_upstream_frame_without_rejecting_it() {
+        const FRAME_BYTES: usize = 16 * 1024 * 1024;
+
+        let polls = Arc::new(AtomicUsize::new(0));
+        let body = Body::new(ObservedFrames {
+            frames: VecDeque::from([
+                Bytes::from(vec![0x5a; FRAME_BYTES]),
+                Bytes::from_static(b"tail"),
+            ]),
+            polls: Arc::clone(&polls),
+        });
+        let mut reader = RequestBodyReader::new(body);
+        let mut output = vec![0; RELAY_READ_CHUNK_BYTES * 2];
+        let mut total = 0;
+        let mut reads = 0;
+        while total < FRAME_BYTES {
+            let count = reader.read(&mut output).await.unwrap();
+            assert!(count <= RELAY_READ_CHUNK_BYTES);
+            assert!(output[..count].iter().all(|byte| *byte == 0x5a));
+            total += count;
+            reads += 1;
+            assert_eq!(polls.load(Ordering::SeqCst), 1);
+        }
+        assert_eq!(total, FRAME_BYTES);
+        assert_eq!(reads, FRAME_BYTES / RELAY_READ_CHUNK_BYTES);
+
+        let count = reader.read(&mut output).await.unwrap();
+        assert_eq!(&output[..count], b"tail");
+        assert_eq!(polls.load(Ordering::SeqCst), 2);
+        assert_eq!(reader.read(&mut output).await.unwrap(), 0);
+        assert_eq!(polls.load(Ordering::SeqCst), 3);
     }
 }

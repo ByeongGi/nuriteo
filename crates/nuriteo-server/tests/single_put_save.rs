@@ -1563,32 +1563,50 @@ async fn authenticated_upload_relay_streams_single_and_multipart_without_bearer_
     )
     .await;
     let first_relay_body_polled = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let relay_address = listener.local_addr().unwrap();
+    let (relay_shutdown, relay_shutdown_rx) = tokio::sync::oneshot::channel();
+    let relay_server = tokio::spawn({
+        let router = router.clone();
+        async move {
+            axum::serve(listener, router)
+                .with_graceful_shutdown(async {
+                    let _ = relay_shutdown_rx.await;
+                })
+                .await
+        }
+    });
     for (index, (capability, body)) in capabilities
         .iter()
         .zip(multipart_bundle.chunks(16 * 1024 * 1024))
         .enumerate()
     {
         assert_eq!(capability["transport"], "relay");
-        let request_body = if index == 0 {
-            Body::new(ObservedFrameBody::new(
-                body,
-                first_relay_body_polled.clone(),
-            ))
+        let status = if index == 1 {
+            relay_put_over_http(relay_address, capability, &owner, body).await
         } else {
-            Body::new(BoundedFrameBody::new(body))
+            let request_body = if index == 0 {
+                Body::new(ObservedFrameBody::new(
+                    body,
+                    first_relay_body_polled.clone(),
+                ))
+            } else {
+                Body::new(BoundedFrameBody::new(body))
+            };
+            router
+                .clone()
+                .oneshot(relay_put_request(
+                    capability,
+                    &owner,
+                    request_body,
+                    None,
+                    None,
+                ))
+                .await
+                .unwrap()
+                .status()
         };
-        let response = router
-            .clone()
-            .oneshot(relay_put_request(
-                capability,
-                &owner,
-                request_body,
-                None,
-                None,
-            ))
-            .await
-            .unwrap();
-        assert_eq!(response.status(), StatusCode::NO_CONTENT);
+        assert_eq!(status, StatusCode::NO_CONTENT);
         if index == 0 {
             assert!(
                 first_relay_body_polled.load(std::sync::atomic::Ordering::SeqCst),
@@ -1670,6 +1688,8 @@ async fn authenticated_upload_relay_streams_single_and_multipart_without_bearer_
                 .unwrap();
         }
     }
+    relay_shutdown.send(()).unwrap();
+    relay_server.await.unwrap().unwrap();
     let multipart_completed = version_json_request(
         &router,
         &owner,
@@ -5250,6 +5270,35 @@ fn relay_put_request(
         builder = builder.header(name, value);
     }
     builder.body(body).unwrap()
+}
+
+async fn relay_put_over_http(
+    address: std::net::SocketAddr,
+    capability: &Value,
+    browser: &VersionBrowser,
+    body: &[u8],
+) -> StatusCode {
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(30))
+        .build()
+        .unwrap();
+    let mut request = client
+        .put(format!(
+            "http://{address}{}",
+            capability["path"].as_str().unwrap()
+        ))
+        .header(ORIGIN.as_str(), WEB_ORIGIN)
+        .header(COOKIE.as_str(), &browser.cookie)
+        .header("x-csrf-token", &browser.csrf)
+        .header("content-length", body.len());
+    for header in capability["headers"].as_array().unwrap() {
+        request = request.header(
+            header["name"].as_str().unwrap(),
+            header["value"].as_str().unwrap(),
+        );
+    }
+    let response = request.body(body.to_vec()).send().await.unwrap();
+    StatusCode::from_u16(response.status().as_u16()).unwrap()
 }
 
 async fn download_current_content(
