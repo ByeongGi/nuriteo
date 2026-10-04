@@ -67,6 +67,7 @@ class FakeController {
   terminals = new Set<string>();
   savedText: { path: string; data: string } | null = null;
   recoveryKinds: string[] = [];
+  importedFiles: Array<{ path: string; content: string }> | null = null;
   readonly cleanup: string[];
 
   constructor(cleanup: string[]) { this.cleanup = cleanup; }
@@ -115,13 +116,38 @@ class FakeController {
     this.current = snapshot({ phase: "template_loaded" });
     return this.current;
   }
+  importProjectFiles(files: Array<{ path: string; content: string }>): PreviewWorkflowSnapshot {
+    this.importedFiles = files.map((file) => ({ ...file }));
+    this.current = snapshot({ phase: "template_loaded" });
+    return this.current;
+  }
   exportTreeJson(): FileSystemTree {
+    if (this.importedFiles !== null) return treeForFiles(this.importedFiles);
     return {
       src: { directory: { "main.tsx": { file: { contents: "export default function App() {}\n" } } } },
       "package.json": { file: { contents: "{\"scripts\":{\"dev\":\"vite\"}}\n" } }
     };
   }
   dispose(): void { this.disposed += 1; this.terminals.clear(); this.cleanup.push("controller"); }
+}
+
+function treeForFiles(files: Array<{ path: string; content: string }>): FileSystemTree {
+  const tree: FileSystemTree = {};
+  for (const file of files) {
+    const segments = file.path.split("/");
+    let current = tree;
+    for (const segment of segments.slice(0, -1)) {
+      const existing = current[segment];
+      if (existing && "directory" in existing) current = existing.directory;
+      else {
+        const directory: FileSystemTree = {};
+        current[segment] = { directory };
+        current = directory;
+      }
+    }
+    current[segments.at(-1)!] = { file: { contents: file.content } };
+  }
+  return tree;
 }
 
 function deferred<T>(): { promise: Promise<T>; resolve(value: T): void; reject(error: unknown): void } {
@@ -193,6 +219,13 @@ function readyWriterLease(): LocalDraftWriterLease {
   assert.equal(materialized.status, "ready");
   assert.deepEqual(materialized.files.map((file) => file.path), ["package.json", "src/main.tsx"]);
   assert.equal(adapter.workspace.readText("src/main.tsx"), "export default function App() {}\n");
+  const resumed = await adapter.workspace.materializeBundle([
+    { path: "package.json", kind: "text", bytes: new TextEncoder().encode("{\"scripts\":{\"dev\":\"vite\"}}\n") },
+    { path: "src/main.tsx", kind: "text", bytes: new TextEncoder().encode("export default function App() { return 'resumed'; }\n") }
+  ]);
+  assert.equal(resumed.status, "ready");
+  assert.deepEqual(controllers[0]?.importedFiles?.map((file) => file.path), ["package.json", "src/main.tsx"]);
+  assert.match(adapter.workspace.readText("src/main.tsx"), /resumed/u);
   const previewState = await adapter.workflow.start();
   assert.equal(previewState.workflowPhase, "hmr_connected");
   assert.equal(previewState.hmrState, "connected");

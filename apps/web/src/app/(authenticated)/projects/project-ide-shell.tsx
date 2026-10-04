@@ -38,6 +38,11 @@ type RuntimeFeature = typeof import("../../../runtime/runtime-adapter.ts");
 const runtimeFeature = createRetryableLazyFeature<RuntimeFeature>(
   () => import("../../../runtime/runtime-adapter.ts")
 );
+type ResumeFeature = typeof import("../../../resume/project-content.ts");
+const resumeFeature = createRetryableLazyFeature<ResumeFeature>(
+  () => import("../../../resume/project-content.ts")
+);
+type WorkspaceSource = "saved" | "template";
 
 interface Props {
   readonly assetRevision?: string;
@@ -62,6 +67,8 @@ export function ProjectIdeShell({ assetRevision, previewBridgeFactory, previewCo
   const [terminalOutput, setTerminalOutput] = useState("");
   const [error, setError] = useState<string>();
   const [isStarting, setIsStarting] = useState(false);
+  const [startingSource, setStartingSource] = useState<WorkspaceSource>();
+  const [resumeStatus, setResumeStatus] = useState<string>();
   const [isRunningPreview, setIsRunningPreview] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [recoveringAction, setRecoveringAction] = useState<RuntimeRecoveryActionKind>();
@@ -84,20 +91,36 @@ export function ProjectIdeShell({ assetRevision, previewBridgeFactory, previewCo
     };
   }, []);
 
-  async function startWorkspace() {
+  async function startWorkspace(source: WorkspaceSource) {
     if (adapterRef.current !== undefined) {
       setError("Reload this Project before retrying an incompletely released workspace.");
       return;
     }
     setError(undefined);
     setIsStarting(true);
+    setStartingSource(source);
+    setResumeStatus(source === "saved" ? "Checking the current Server Save…" : "Preparing a new Local Draft…");
     try {
       manifestAbortRef.current?.abort();
       const manifestAbort = new AbortController();
       manifestAbortRef.current = manifestAbort;
-      const { createRuntimeAdapter } = await (runtimeFeatureLoader?.() ?? runtimeFeature.load());
-      const revision = await resolveRuntimeAssetRevision(assetRevision, manifestAbort.signal);
+      const runtimePromise = runtimeFeatureLoader?.() ?? runtimeFeature.load();
+      const revisionPromise = resolveRuntimeAssetRevision(assetRevision, manifestAbort.signal);
+      const savedContentPromise = source === "saved"
+        ? resumeFeature.load().then(({ resumeProjectContent }) => resumeProjectContent({
+            ownerType: project.ownerType,
+            ownerId: project.ownerId,
+            projectId: project.id,
+            storageScopeId: project.storageScopeId
+          }, { signal: manifestAbort.signal }))
+        : Promise.resolve(undefined);
+      const [{ createRuntimeAdapter }, revision, savedContent] = await Promise.all([
+        runtimePromise,
+        revisionPromise,
+        savedContentPromise
+      ]);
       if (unmountedRef.current) return;
+      setResumeStatus(source === "saved" ? "Verified. Materializing the saved Project…" : "Materializing the starter template…");
       const adapter = createRuntimeAdapter();
       adapterRef.current = adapter;
       unsubscribeRef.current();
@@ -126,17 +149,30 @@ export function ProjectIdeShell({ assetRevision, previewBridgeFactory, previewCo
           if (diagnostic.severity === "error") setError(diagnostic.message);
         }
       });
-      const materialized = await adapter.workspace.materializeTemplate("vite-react");
+      const materialized = savedContent === undefined
+        ? await adapter.workspace.materializeTemplate("vite-react")
+        : await adapter.workspace.materializeBundle(savedContent.files);
       const firstTextFile = materialized.files.find((file) => file.kind === "text");
       setWorkspace(materialized);
+      setEditorStatus(savedContent === undefined
+        ? "Local Draft"
+        : `Server Save v${savedContent.descriptor.projectVersion} restored`);
+      setResumeStatus(savedContent === undefined
+        ? "Starter template is ready in this browser."
+        : `Server Save v${savedContent.descriptor.projectVersion} is ready in this browser.`);
       if (firstTextFile) selectFile(firstTextFile.path, materialized);
     } catch (caught) {
-      const code = runtimeErrorCode(caught);
-      setError(`The browser workspace could not be started safely.${code ? ` (${code})` : ""}`);
+      const contentCode = projectContentErrorCode(caught);
+      const runtimeCode = runtimeErrorCode(caught);
+      setError(contentCode === null
+        ? `The browser workspace could not be started safely.${runtimeCode ? ` (${runtimeCode})` : ""}`
+        : resumeErrorMessage(contentCode));
+      setResumeStatus(undefined);
       await releaseAdapter();
     } finally {
       manifestAbortRef.current = null;
       setIsStarting(false);
+      setStartingSource(undefined);
     }
   }
 
@@ -339,6 +375,7 @@ export function ProjectIdeShell({ assetRevision, previewBridgeFactory, previewCo
     setEditorContent("");
     setTerminalOutput("");
     setEditorStatus("Local Draft");
+    setResumeStatus(undefined);
   }
 
   async function releaseAdapter() {
@@ -371,9 +408,15 @@ export function ProjectIdeShell({ assetRevision, previewBridgeFactory, previewCo
     <section className="mt-6 overflow-hidden rounded-lg border border-border bg-surface" aria-labelledby="project-ide-title">
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-muted-border bg-subtle px-4 py-3">
         <div><p className="m-0 text-xs text-muted-foreground">Browser workspace · {runtime.lifecycle}</p><h3 id="project-ide-title" className="m-0 text-sm font-semibold">{project.name} IDE</h3></div>
-        {hasWorkspace ? <Button type="button" size="sm" onClick={() => void stopWorkspace()}>Stop workspace</Button> : <Button type="button" size="sm" variant="primary" disabled={isStarting || project.state !== "active"} onClick={() => void startWorkspace()}>{isStarting ? "Starting…" : "Start workspace"}</Button>}
+        {hasWorkspace ? <Button type="button" size="sm" onClick={() => void stopWorkspace()}>Stop workspace</Button> : (
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" size="sm" variant="primary" disabled={isStarting || project.state !== "active"} onClick={() => void startWorkspace("saved")}>{startingSource === "saved" ? "Resuming…" : "Resume saved Project"}</Button>
+            <Button type="button" size="sm" disabled={isStarting || project.state !== "active"} onClick={() => void startWorkspace("template")}>{startingSource === "template" ? "Starting…" : "Start workspace from template"}</Button>
+          </div>
+        )}
       </header>
       {error ? <p className="m-3 rounded-md border border-danger p-3 text-sm text-danger" role="alert">{error}</p> : null}
+      {resumeStatus ? <p className="m-3 text-sm text-muted-foreground" role="status" aria-live="polite">{resumeStatus}</p> : null}
       {recoveryDiagnostics.length > 0 ? (
         <section className="m-3 rounded-md border border-warning bg-subtle p-3" aria-label="Workspace recovery">
           <h4 className="m-0 text-sm font-semibold">Workspace needs attention</h4>
@@ -428,7 +471,7 @@ export function ProjectIdeShell({ assetRevision, previewBridgeFactory, previewCo
             </section>
           </div>
         </div>
-      ) : <div className="p-6"><p className="m-0 text-sm text-muted-foreground">Start an isolated Local Draft to materialize the starter template. No server credential is passed to the browser runtime.</p></div>}
+      ) : <div className="p-6"><p className="m-0 text-sm text-muted-foreground">Resume the verified current Server Save, or start from the template only when this Project has not been saved yet. A failed integrity check never replaces the Local Draft.</p></div>}
     </section>
   );
 }
@@ -437,4 +480,30 @@ function runtimeErrorCode(value: unknown): string | null {
   if (!value || typeof value !== "object" || !("code" in value)) return null;
   const code = (value as { code?: unknown }).code;
   return typeof code === "string" && /^RUNTIME_[A-Z0-9_]{1,56}$/u.test(code) ? code : null;
+}
+
+function projectContentErrorCode(value: unknown): string | null {
+  if (!value || typeof value !== "object" || !("code" in value)) return null;
+  const code = (value as { code?: unknown }).code;
+  return typeof code === "string" && /^RESUME_[A-Z_]{1,48}$/u.test(code) ? code : null;
+}
+
+function resumeErrorMessage(code: string): string {
+  if (code === "RESUME_AUTHENTICATION_REQUIRED") {
+    return "Your session expired. Sign in again, then resume this Project. No Local Draft was replaced.";
+  }
+  if (code === "RESUME_NOT_SAVED") {
+    return "This Project has no current Server Save. Start from the template to create its first Local Draft.";
+  }
+  if (code === "RESUME_CONTENT_UNAVAILABLE") {
+    return "The current Server Save is no longer available to this account. No Local Draft was replaced.";
+  }
+  if (code === "RESUME_LIMIT_EXCEEDED") {
+    return "The current Server Save exceeds the browser workspace limit. No files were materialized.";
+  }
+  if (code === "RESUME_INTEGRITY_FAILED") {
+    return "The current Server Save failed integrity verification. No files were materialized; retry or ask an administrator to inspect storage.";
+  }
+  if (code === "RESUME_ABORTED") return "Project resume was cancelled. No Local Draft was replaced.";
+  return "The current Server Save could not be resumed. No Local Draft was replaced; retry when the service is available.";
 }

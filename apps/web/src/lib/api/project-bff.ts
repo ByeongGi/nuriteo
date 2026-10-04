@@ -57,6 +57,19 @@ export function projectRolePath(
   return user === undefined ? undefined : `${project}/roles/${user}`;
 }
 
+export function projectContentPath(
+  ownerType: string,
+  ownerId: string,
+  projectId: string,
+  bundleId?: string
+): `/api/v1/workspaces/${string}` | undefined {
+  const project = projectItemPath(ownerType, ownerId, projectId);
+  if (project === undefined) return undefined;
+  if (bundleId === undefined) return `${project}/content`;
+  const bundle = uuidPathSegment(bundleId);
+  return bundle === undefined ? undefined : `${project}/content/${bundle}`;
+}
+
 export function exactProjectListPath(
   request: Request,
   collection: `/api/v1/workspaces/${string}`,

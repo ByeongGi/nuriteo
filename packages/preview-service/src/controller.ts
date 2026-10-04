@@ -584,9 +584,9 @@ export function createPreviewWorkflowController(
     files: Array<{ path: string; content: string }>,
     name = "cloud project"
   ): PreviewWorkflowSnapshot {
-    const root = "/workspace/app";
+    const root = options.workspaceRoot ?? "/workspace/app";
     const store = new ProjectWorkspaceStore({
-      projectId: "preview-service-cloud",
+      projectId: options.workspaceProjectId ?? "preview-service-cloud",
       root,
       metadata: { name }
     });

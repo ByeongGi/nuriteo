@@ -7,9 +7,11 @@ import { ApiError } from "@nuriteo/api-client";
 
 import { projectError } from "../src/lib/api/browser-security.ts";
 import { forwardCollaborationMutation } from "../src/lib/api/collaboration-bff.ts";
+import { forwardProjectContentDownload } from "../src/lib/api/content-bff.ts";
 import {
   exactProjectListPath,
   forwardProjectRequest,
+  projectContentPath,
   projectItemPath,
   projectOwnerPath,
   projectRolePath
@@ -27,6 +29,7 @@ try {
   testReconciliationClassification();
   await testProjectForwardingBoundary();
   await testPostDispatchCommitAmbiguity();
+  await testContentStreamForwarding();
   testProjectSourceContracts();
 } finally {
   globalThis.fetch = originalFetch;
@@ -38,6 +41,8 @@ function testExactPathsAndQueries() {
   const collection = `/api/v1/workspaces/organizations/${OWNER_ID}/projects` as const;
   assert.equal(projectOwnerPath("organizations", OWNER_ID), `/api/v1/workspaces/organizations/${OWNER_ID}`);
   assert.equal(projectItemPath("organizations", OWNER_ID, PROJECT_ID), `${collection}/${PROJECT_ID}`);
+  assert.equal(projectContentPath("organizations", OWNER_ID, PROJECT_ID), `${collection}/${PROJECT_ID}/content`);
+  assert.equal(projectContentPath("organizations", OWNER_ID, PROJECT_ID, USER_ID), `${collection}/${PROJECT_ID}/content/${USER_ID}`);
   assert.equal(projectRolePath("organizations", OWNER_ID, PROJECT_ID, USER_ID), `${collection}/${PROJECT_ID}/roles/${USER_ID}`);
   assert.equal(projectRolePath("users", OWNER_ID, PROJECT_ID), undefined);
   assert.equal(projectOwnerPath("organizations", "../unsafe"), undefined);
@@ -47,6 +52,76 @@ function testExactPathsAndQueries() {
   assert.equal(exactProjectListPath(request("?state=deleted"), collection, true), undefined);
   assert.equal(exactProjectListPath(request("?state=active"), `${collection}/${PROJECT_ID}/roles`, false), undefined);
   assert.equal(exactProjectListPath(request(`?cursor=${"x".repeat(2_049)}`), collection, true), undefined);
+}
+
+async function testContentStreamForwarding() {
+  process.env.NURITEO_INTERNAL_API_URL = "http://core.internal:8080";
+  const etag = `"content-v2-${"a".repeat(43)}"`;
+  const contentPath = `/api/v1/workspaces/organizations/${OWNER_ID}/projects/${PROJECT_ID}/content/${USER_ID}` as const;
+  let receivedHeaders: Headers | undefined;
+  globalThis.fetch = async (_input, init) => {
+    receivedHeaders = new Headers(init?.headers);
+    return new Response(new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(Uint8Array.of(1, 2));
+        controller.enqueue(Uint8Array.of(3));
+        controller.close();
+      }
+    }), { headers: {
+      "cache-control": "private, no-store",
+      "content-length": "3",
+      "content-type": "application/octet-stream",
+      etag,
+      "x-content-type-options": "nosniff"
+    } });
+  };
+  const response = await forwardProjectContentDownload(new Request(`https://nuriteo.test${contentPath}`, {
+    headers: {
+      cookie: "__Host-nuriteo_session=safe",
+      host: "nuriteo.test",
+      "if-match": etag,
+      origin: "https://nuriteo.test"
+    }
+  }), contentPath);
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("cache-control"), "private, no-store");
+  assert.deepEqual([...new Uint8Array(await response.arrayBuffer())], [1, 2, 3]);
+  assert.equal(receivedHeaders?.get("cookie"), "__Host-nuriteo_session=safe");
+  assert.equal(receivedHeaders?.get("if-match"), etag);
+
+  const headerDeadline = new AbortController();
+  let releaseSlowBody!: () => void;
+  const slowBodyReady = new Promise<void>((resolve) => { releaseSlowBody = resolve; });
+  globalThis.fetch = async () => new Response(new ReadableStream<Uint8Array>({
+    async start(controller) {
+      controller.enqueue(Uint8Array.of(4));
+      await slowBodyReady;
+      controller.enqueue(Uint8Array.of(5));
+      controller.close();
+    }
+  }), { headers: {
+    "content-length": "2",
+    "content-type": "application/octet-stream",
+    etag,
+    "x-content-type-options": "nosniff"
+  } });
+  const slowResponse = await forwardProjectContentDownload(new Request(`https://nuriteo.test${contentPath}`, {
+    headers: { host: "nuriteo.test", "if-match": etag, origin: "https://nuriteo.test" }
+  }), contentPath, headerDeadline.signal);
+  headerDeadline.abort();
+  releaseSlowBody();
+  assert.deepEqual([...new Uint8Array(await slowResponse.arrayBuffer())], [4, 5]);
+
+  globalThis.fetch = async () => new Response(Uint8Array.of(1), { headers: {
+    "content-length": String(16 * 1024 * 1024 + 1),
+    "content-type": "application/octet-stream",
+    etag,
+    "x-content-type-options": "nosniff"
+  } });
+  const oversized = await forwardProjectContentDownload(new Request(`https://nuriteo.test${contentPath}`, {
+    headers: { host: "nuriteo.test", "if-match": etag, origin: "https://nuriteo.test" }
+  }), contentPath);
+  await assertProblemCode(oversized, 502, "BFF_UPSTREAM_RESPONSE_REJECTED");
 }
 
 function testReconciliationClassification() {

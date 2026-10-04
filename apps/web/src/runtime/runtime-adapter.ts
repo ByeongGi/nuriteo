@@ -132,8 +132,15 @@ export interface RuntimeWorkspaceState {
   errorCode: string | null;
 }
 
+export interface RuntimeBundleFile {
+  readonly path: string;
+  readonly kind: "text" | "binary";
+  readonly bytes: Uint8Array;
+}
+
 export interface RuntimeWorkspacePort {
   materializeTemplate(template: RuntimeStarterTemplate): Promise<RuntimeWorkspaceState>;
+  materializeBundle(files: readonly RuntimeBundleFile[]): Promise<RuntimeWorkspaceState>;
   getState(): RuntimeWorkspaceState;
   readText(path: string): string;
   writeText(path: string, content: string): RuntimeViewState;
@@ -174,6 +181,7 @@ interface ControllerLike {
   runRecoveryAction: PreviewWorkflowController["runRecoveryAction"];
   stopPreviewPort: PreviewWorkflowController["stopPreviewPort"];
   loadTemplate: PreviewWorkflowController["loadTemplate"];
+  importProjectFiles: PreviewWorkflowController["importProjectFiles"];
   exportTreeJson: PreviewWorkflowController["exportTreeJson"];
   dispose: PreviewWorkflowController["dispose"];
 }
@@ -325,6 +333,48 @@ export function createRuntimeAdapter(dependencies: RuntimeAdapterDependencies = 
         throw new RuntimeAdapterError(
           "RUNTIME_MATERIALIZATION_FAILED",
           "The starter template could not be materialized safely."
+        );
+      }
+    },
+    async materializeBundle(files) {
+      const current = requireReady();
+      workspaceState = {
+        ...createEmptyWorkspaceState(),
+        status: "materializing",
+        projectId: state.projectId,
+        root: projectRoot(current.projectId)
+      };
+      try {
+        const materializedFiles = decodeRuntimeBundleFiles(files);
+        current.controller.importProjectFiles(materializedFiles, current.displayName);
+        const materialized = flattenTemplateTree(current.controller.exportTreeJson());
+        const verifiedPaths = new Set(materializedFiles.map((file) => file.path));
+        if (
+          materialized.files.length !== materializedFiles.length
+          || materialized.files.some((file) => !verifiedPaths.has(file.path))
+        ) throw new Error("Runtime materialization changed the verified Project file set.");
+        workspaceText = materialized.text;
+        workspaceState = {
+          status: "ready",
+          projectId: current.projectId,
+          root: projectRoot(current.projectId),
+          files: materialized.files,
+          totalBytes: materialized.totalBytes,
+          errorCode: null
+        };
+        return copyWorkspaceState(workspaceState);
+      } catch {
+        workspaceText = new Map();
+        workspaceState = {
+          ...createEmptyWorkspaceState(),
+          status: "failed",
+          projectId: current.projectId,
+          root: projectRoot(current.projectId),
+          errorCode: "RUNTIME_MATERIALIZATION_FAILED"
+        };
+        throw new RuntimeAdapterError(
+          "RUNTIME_MATERIALIZATION_FAILED",
+          "The saved Project could not be materialized safely."
         );
       }
     },
@@ -693,6 +743,45 @@ function createEmptyWorkspaceState(): RuntimeWorkspaceState {
 
 function copyWorkspaceState(value: RuntimeWorkspaceState): RuntimeWorkspaceState {
   return { ...value, files: value.files.map((file) => ({ ...file })) };
+}
+
+function decodeRuntimeBundleFiles(
+  files: readonly RuntimeBundleFile[]
+): Array<{ path: string; content: string }> {
+  if (files.length < 1 || files.length > MAX_TEMPLATE_FILES) {
+    throw new Error("Saved Project file count is outside the Runtime limit.");
+  }
+  const strictDecoder = new TextDecoder("utf-8", { fatal: true });
+  const decoded: Array<{ path: string; content: string }> = [];
+  let totalBytes = 0;
+  let previousPath: string | undefined;
+  for (const file of files) {
+    if (file.kind !== "text" || file.bytes.byteLength > MAX_TEMPLATE_FILE_BYTES) {
+      throw new Error("Saved Project contains an unsupported Runtime file.");
+    }
+    totalBytes += file.bytes.byteLength;
+    if (!Number.isSafeInteger(totalBytes) || totalBytes > MAX_TEMPLATE_TOTAL_BYTES) {
+      throw new Error("Saved Project exceeds the Runtime byte limit.");
+    }
+    if (previousPath !== undefined && compareUtf8Paths(previousPath, file.path) >= 0) {
+      throw new Error("Saved Project paths are not unique and ordered.");
+    }
+    decoded.push({ path: file.path, content: strictDecoder.decode(file.bytes) });
+    previousPath = file.path;
+  }
+  return decoded;
+}
+
+function compareUtf8Paths(left: string, right: string): number {
+  const encoder = new TextEncoder();
+  const leftBytes = encoder.encode(left);
+  const rightBytes = encoder.encode(right);
+  const length = Math.min(leftBytes.byteLength, rightBytes.byteLength);
+  for (let index = 0; index < length; index += 1) {
+    const difference = (leftBytes[index] ?? 0) - (rightBytes[index] ?? 0);
+    if (difference !== 0) return difference;
+  }
+  return leftBytes.byteLength - rightBytes.byteLength;
 }
 
 function projectRoot(projectId: string): string {

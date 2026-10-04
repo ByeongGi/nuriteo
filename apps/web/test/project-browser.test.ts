@@ -151,15 +151,15 @@ try {
     const createResponse = admin.waitForResponse((response) => response.request().method() === "POST" && response.url().endsWith("/projects"));
     await admin.getByRole("button", { name: "Create Project" }).click();
     assert.equal((await createResponse).status(), 201);
-    await admin.getByRole("heading", { name: "Alpha Project" }).waitFor();
+    await admin.getByRole("heading", { name: "Alpha Project", exact: true }).waitFor();
     assert.equal(new URL(admin.url()).searchParams.get("project"), projectId);
 
     await admin.getByRole("link", { name: "Admin Personal" }).click();
     await admin.getByText("Select a Project").waitFor();
-    assert.equal(await admin.getByRole("heading", { name: "Alpha Project" }).count(), 0);
+    assert.equal(await admin.getByRole("heading", { name: "Alpha Project", exact: true }).count(), 0);
     await admin.getByRole("link", { name: "Alpha Organization" }).click();
     await admin.getByText("Alpha Project", { exact: true }).click();
-    await admin.getByRole("heading", { name: "Alpha Project" }).waitFor();
+    await admin.getByRole("heading", { name: "Alpha Project", exact: true }).waitFor();
 
     await admin.getByLabel("Project name").fill("Stale attempt");
     await admin.getByRole("button", { name: "Save name" }).click();
@@ -167,7 +167,7 @@ try {
     assert.equal(await admin.getByRole("button", { name: "Reload latest Project" }).count(), 1);
     await admin.getByLabel("Project name").fill("Renamed Project");
     await admin.getByRole("button", { name: "Save name" }).click();
-    await admin.getByRole("heading", { name: "Renamed Project" }).waitFor();
+    await admin.getByRole("heading", { name: "Renamed Project", exact: true }).waitFor();
 
     await admin.getByRole("button", { name: "Archive" }).click();
     await admin.getByRole("button", { name: "Restore" }).waitFor();
@@ -190,7 +190,7 @@ try {
 
     await member.reload({ waitUntil: "networkidle" });
     await member.getByText("Renamed Project", { exact: true }).click();
-    await member.getByRole("heading", { name: "Renamed Project" }).waitFor();
+    await member.getByRole("heading", { name: "Renamed Project", exact: true }).waitFor();
     assert.equal(await member.getByText(/Only Organization Owners/u).count(), 1);
 
     const memberGrant = admin.locator("li", { hasText: memberId });
