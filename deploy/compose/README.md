@@ -1,6 +1,6 @@
 # Single-host Compose topology
 
-This directory contains the official single-host topology for NURITEO. Only the Web service publishes a host port. Core API, PostgreSQL, and RustFS communicate through Compose DNS; the PostgreSQL and RustFS data plane uses an internal network.
+This directory contains the official single-host topology for NURITEO. Only the Web service publishes a host port. Browser Save traffic stays on the application origin and follows `Browser -> Web -> Core -> RustFS`; Web proxies the authenticated request and Core streams the bounded body to the private bucket. Core API, PostgreSQL, and RustFS communicate through Compose DNS; the PostgreSQL and RustFS data plane uses an internal network. Bundled RustFS has no browser-facing endpoint and does not require bucket CORS.
 
 ## Required files
 
@@ -41,11 +41,21 @@ An example reverse-proxy shape is provided in `Caddyfile.preview.example`. Repla
 `compose up` enforces this order:
 
 1. PostgreSQL and bundled RustFS become healthy.
-2. `storage-init` idempotently creates the bundled private bucket and installs the exact browser-upload CORS rule for `NURITEO_EXTERNAL_URL`, while `migrate` applies forward-only database migrations.
-3. `storage-check` read-checks that exact rule and proves single/multipart presigned uploads with real OPTIONS preflight before `bootstrap-admin` creates the first administrator.
+2. `storage-init` idempotently creates the bundled private bucket and enforces the no-CORS upgrade boundary, while `migrate` applies forward-only database migrations.
+3. After `storage-init`, bundled `storage-check` uses the literal `relay` transport and proves bucket readiness and the required object-storage capabilities without a browser CORS check or OPTIONS preflight. After `migrate`, `bootstrap-admin` creates the first administrator.
 4. Core starts only after every required one-shot succeeds, then Web starts only after Core reports ready.
 
 All operational commands use the same Server image as `serve`. One-shots have no restart policy, and a failed one-shot keeps Core and Web gated. Re-running the stack against the same named volumes is safe: bucket creation, migration, and administrator bootstrap are idempotent. `compose down` preserves data; use `compose down --volumes` only when intentionally deleting this installation.
+
+### Upgrading from the CMP-002 browser-upload topology
+
+CMP-003 changes only the bundled upload data path. Preserve the existing PostgreSQL and RustFS named volumes, TLS material, credentials, and save idempotency secret, then deploy the new Compose definition normally. On the first start, `storage-init` reads the bundled bucket CORS document before Core or Web can start:
+
+- No CORS document is already the desired state and is left unchanged.
+- The exact CMP-002 single rule for the current `NURITEO_EXTERNAL_URL` (`nuriteo-browser-upload-v1`, `PUT`, the three documented request headers, the two exposed response headers, and `MaxAgeSeconds=300`) is removed, and its absence is verified.
+- Any additional rule, wildcard, changed origin/header/method, or otherwise mixed/drifted document fails closed as `storage-init failed (legacy-cors-drift)`. The initializer does not guess which operator-owned rule is safe to delete, and Core and Web remain gated.
+
+When drift is reported, inspect and reconcile the bucket CORS document deliberately, retaining any independently owned rules as appropriate; do not replace or delete the entire document merely to make startup pass. Then rerun `docker compose up`. This cleanup applies only to the bundled bucket. It does not migrate an external S3 deployment, whose direct browser upload still requires its exact CORS contract.
 
 Core also requires `NURITEO_SAVE_IDEMPOTENCY_SECRET_FILE`, containing exactly 32 non-zero random bytes encoded as standard base64. Preserve this file across restarts; changing it makes earlier save idempotency keys intentionally fail closed. `NURITEO_SAVE_DEFAULT_QUOTA_BYTES` is the bootstrap Instance default for each Workspace (`10737418240`, 10 GiB, in the bundled Compose file). Set a positive decimal byte count up to the PostgreSQL `bigint` maximum or the explicit value `unlimited`.
 
@@ -59,7 +69,7 @@ External S3 is an explicit, separate operator-preflight path. Configure `NURITEO
 docker compose -f deploy/compose/compose.external-s3.yaml run --rm storage-check
 ```
 
-The bucket must already exist. The default `storage-check` path is read-only with respect to bucket policy: it refuses a missing, wildcard, extra, or drifted CORS document and never falls back to RustFS. It does use reserved probe objects/uploads and cleans them, as before.
+The bucket must already exist. This profile sets the literal `direct` transport. Its default `storage-check` path is read-only with respect to bucket policy: it refuses a missing, wildcard, extra, or drifted CORS document, performs real single/multipart presigned upload and OPTIONS checks, and never falls back to bundled RustFS or the relay. It uses reserved probe objects/uploads and cleans them.
 
 If the external bucket does not yet have the required policy, review the exact contract below and run the separate, explicit mutation once:
 
@@ -86,4 +96,6 @@ Run the destructive local fixture against disposable project-scoped volumes:
 deploy/compose/test-compose.sh
 ```
 
-The fixture creates temporary credentials and private test CAs, renders the configuration and scans it for secret values, builds the application images, and exercises a clean-volume installation. It verifies ready Core/Web, the administrator/credential/audit transaction, migration readiness, database and object persistence, idempotent same-volume restart, and failed-bootstrap gating. It removes its project-scoped containers, networks, volumes, and temporary files. Set `NURITEO_COMPOSE_KEEP=1` only for local failure diagnosis. If Docker Compose or a configured Podman Compose provider is unavailable, select the pinned isolated provider with `NURITEO_COMPOSE_PROVIDER=uvx`.
+The fixture creates temporary credentials and private test CAs, renders the configuration and scans it for secret values, builds the application images, and exercises a clean-volume installation. It verifies ready Core/Web, the administrator/credential/audit transaction, migration readiness, same-origin relay Save, no bundled browser storage exposure or CORS, database and object persistence, exact CMP-002 CORS removal on same-volume restart, fresh-browser-context Resume, and failed-one-shot gating. It removes its project-scoped containers, networks, volumes, and temporary files. Set `NURITEO_COMPOSE_KEEP=1` only for local failure diagnosis.
+
+Local runs may use Docker Compose, a configured Podman Compose provider, or the pinned isolated provider selected with `NURITEO_COMPOSE_PROVIDER=uvx`. Podman results are useful compatibility information, but they are not official release acceptance. The official acceptance boundary is the manual `Docker Compose v2 / Linux qualification` job in `.github/workflows/docker-compose-qualification.yml`, which requires Docker Compose v2 on a Linux Docker Engine and runs the bounded clean-install/restart/persistence/failure journey.
