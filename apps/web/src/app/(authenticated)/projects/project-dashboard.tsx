@@ -87,7 +87,6 @@ export function ProjectDashboard(props: Props) {
         name: String(data.get("name") ?? "")
       }, { csrfToken: readCsrfCredential() });
       router.replace(projectHref(workspace.storageScopeId, state, result.data.id));
-      router.refresh();
     });
   }
 
@@ -132,7 +131,6 @@ export function ProjectDashboard(props: Props) {
     await mutate("project-delete", async () => {
       await deleteProject(createBrowserApiClient(), { owner, projectId: project.id, etag, name }, { csrfToken: readCsrfCredential() });
       router.replace(projectHref(workspace.storageScopeId, state));
-      router.refresh();
     });
   }
 

@@ -24,6 +24,7 @@ interface RequestDeadline {
 }
 
 export interface CollaborationForward {
+  readonly commitOutcomeUnknown?: boolean;
   readonly method: "DELETE" | "GET" | "PATCH" | "POST";
   readonly path: `/api/v1/${string}`;
   readonly requireCsrf: boolean;
@@ -131,6 +132,9 @@ export async function forwardCollaborationMutation(
       signal: deadline.signal
     });
   } catch {
+    if (spec.commitOutcomeUnknown) {
+      return commitOutcomeUnknownProblem(requestId, spec.path);
+    }
     return deadline.signal.aborted
       ? abortProblem(deadline, requestId, spec.path)
       : problem(502, "BFF_UPSTREAM_UNAVAILABLE", requestId, spec.path);
@@ -138,6 +142,9 @@ export async function forwardCollaborationMutation(
 
   const responseBody = await readBoundedResponse(upstream, MAX_RESPONSE_BYTES, deadline.signal);
   if (!responseBody.ok) {
+    if (spec.commitOutcomeUnknown) {
+      return commitOutcomeUnknownProblem(requestId, spec.path);
+    }
     return streamFailureProblem(responseBody.reason, deadline, requestId, spec.path, true);
   }
   const responseHeaders = new Headers({ "cache-control": "no-store" });
@@ -154,6 +161,10 @@ export async function forwardCollaborationMutation(
     headers: responseHeaders,
     status: upstream.status
   });
+}
+
+function commitOutcomeUnknownProblem(requestId: string, path: string): Response {
+  return problem(503, "COMMIT_OUTCOME_UNKNOWN", requestId, path);
 }
 
 function isProjectEtag(value: string | null): value is string {

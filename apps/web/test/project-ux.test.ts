@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { ApiError } from "@nuriteo/api-client";
 
 import { projectError } from "../src/lib/api/browser-security.ts";
+import { forwardCollaborationMutation } from "../src/lib/api/collaboration-bff.ts";
 import {
   exactProjectListPath,
   forwardProjectRequest,
@@ -25,6 +26,7 @@ try {
   testExactPathsAndQueries();
   testReconciliationClassification();
   await testProjectForwardingBoundary();
+  await testPostDispatchCommitAmbiguity();
   testProjectSourceContracts();
 } finally {
   globalThis.fetch = originalFetch;
@@ -115,6 +117,104 @@ async function testProjectForwardingBoundary() {
   assert.equal(overflow.status, 428);
 }
 
+async function testPostDispatchCommitAmbiguity() {
+  const collection = `/api/v1/workspaces/organizations/${OWNER_ID}/projects` as const;
+  let applied = false;
+  globalThis.fetch = async () => {
+    applied = true;
+    throw new TypeError("response connection was lost");
+  };
+  const lost = await forwardProjectRequest(projectMutationRequest(collection), {
+    method: "POST",
+    path: collection,
+    withBody: true,
+    locationPrefix: collection
+  });
+  assert.equal(applied, true);
+  await assertProblemCode(lost, 503, "COMMIT_OUTCOME_UNKNOWN");
+
+  globalThis.fetch = async () => new Response(new Uint8Array(1_048_577), { status: 201 });
+  const rejectedResponse = await forwardProjectRequest(projectMutationRequest(collection), {
+    method: "POST",
+    path: collection,
+    withBody: true,
+    locationPrefix: collection
+  });
+  await assertProblemCode(rejectedResponse, 503, "COMMIT_OUTCOME_UNKNOWN");
+
+  globalThis.fetch = async () => new Response(new ReadableStream<Uint8Array>({
+    start(controller) { controller.error(new Error("response stream lost")); }
+  }), { status: 201 });
+  const unreadableResponse = await forwardProjectRequest(projectMutationRequest(collection), {
+    method: "POST",
+    path: collection,
+    withBody: true,
+    locationPrefix: collection
+  });
+  await assertProblemCode(unreadableResponse, 503, "COMMIT_OUTCOME_UNKNOWN");
+
+  const timeout = new AbortController();
+  let markDispatched!: () => void;
+  const dispatched = new Promise<void>((resolve) => { markDispatched = resolve; });
+  globalThis.fetch = async (_input, init) => new Promise<Response>((_resolve, reject) => {
+    markDispatched();
+    init?.signal?.addEventListener("abort", () => reject(new DOMException("timed out", "AbortError")), { once: true });
+  });
+  const pending = forwardCollaborationMutation(projectMutationRequest(collection), {
+    commitOutcomeUnknown: true,
+    method: "POST",
+    path: collection,
+    requireCsrf: true,
+    withBody: true
+  }, timeout.signal);
+  await dispatched;
+  timeout.abort();
+  await assertProblemCode(await pending, 503, "COMMIT_OUTCOME_UNKNOWN");
+
+  let invalidDispatched = false;
+  globalThis.fetch = async () => {
+    invalidDispatched = true;
+    return Response.json({});
+  };
+  const invalid = await forwardProjectRequest(new Request(`https://nuriteo.test${collection}/${PROJECT_ID}`, {
+    body: "{}",
+    headers: {
+      "content-type": "application/json",
+      host: "nuriteo.test",
+      origin: "https://nuriteo.test",
+      "x-csrf-token": `nrt_csrf_${"a".repeat(43)}`
+    },
+    method: "PATCH"
+  }), { method: "PATCH", path: `${collection}/${PROJECT_ID}`, withBody: true, withEtag: true });
+  assert.equal(invalidDispatched, false);
+  await assertProblemCode(invalid, 428, "BFF_PRECONDITION_REQUIRED");
+
+  globalThis.fetch = async () => { throw new TypeError("read failed"); };
+  const getFailure = await forwardProjectRequest(new Request(`https://nuriteo.test${collection}`, {
+    headers: { host: "nuriteo.test", origin: "https://nuriteo.test" },
+    method: "GET"
+  }), { method: "GET", path: collection });
+  await assertProblemCode(getFailure, 502, "BFF_UPSTREAM_UNAVAILABLE");
+}
+
+function projectMutationRequest(collection: string): Request {
+  return new Request(`https://nuriteo.test${collection}`, {
+    body: "{}",
+    headers: {
+      "content-type": "application/json",
+      host: "nuriteo.test",
+      origin: "https://nuriteo.test",
+      "x-csrf-token": `nrt_csrf_${"a".repeat(43)}`
+    },
+    method: "POST"
+  });
+}
+
+async function assertProblemCode(response: Response, status: number, code: string) {
+  assert.equal(response.status, status);
+  assert.equal((await response.json() as { code: string }).code, code);
+}
+
 function testProjectSourceContracts() {
   const dashboard = read("src/app/(authenticated)/projects/project-dashboard.tsx");
   const page = read("src/app/(authenticated)/projects/page.tsx");
@@ -122,6 +222,7 @@ function testProjectSourceContracts() {
   assert.match(dashboard, /readCsrfCredential\(\)/u);
   assert.match(dashboard, /useExclusiveMutation\(\)/u);
   assert.match(dashboard, /COMMIT_OUTCOME_UNKNOWN|needsReconciliation/u);
+  assert.doesNotMatch(dashboard, /router\.replace\([^;]+;\s*router\.refresh\(\)/u);
   assert.match(page, /createServerApiClient\(\)/u);
   assert.match(page, /listProjects/u);
   assert.match(page, /key=\{`\$\{workspace\.storageScopeId\}:\$\{state\}:/u);

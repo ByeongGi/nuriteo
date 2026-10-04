@@ -103,6 +103,7 @@ export function invalidProjectRoute(request: Request): Response {
 
 export function forwardProjectRequest(request: Request, spec: ProjectForward): Promise<Response> {
   return forwardCollaborationMutation(request, {
+    commitOutcomeUnknown: spec.method !== "GET",
     method: spec.method,
     path: spec.path,
     requireCsrf: spec.method !== "GET",
