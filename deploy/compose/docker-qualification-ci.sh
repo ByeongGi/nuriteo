@@ -160,10 +160,22 @@ compose_projects() {
 }
 
 pinned_build_images() {
-  awk '/^FROM / { print $2 }' \
-    "$repository_root/deploy/compose/postgres.Dockerfile" \
-    "$repository_root/deploy/docker/server.Dockerfile" \
-    "$repository_root/deploy/docker/web.Dockerfile" \
+  local files=(
+    "$repository_root/deploy/compose/postgres.Dockerfile"
+    "$repository_root/deploy/docker/server.Dockerfile"
+    "$repository_root/deploy/docker/web.Dockerfile"
+  )
+  [ "$#" -eq 0 ] || files=("$@")
+  awk '
+    FNR == 1 { delete aliases }
+    toupper($1) == "FROM" {
+      image = $2
+      if (!(image in aliases)) print image
+      for (field = 3; field < NF; field++) {
+        if (toupper($field) == "AS") aliases[$(field + 1)] = 1
+      }
+    }
+  ' "${files[@]}" \
     | sort -u
 }
 
@@ -191,7 +203,7 @@ with_placeholder_compose_environment() {
 }
 
 self_test() {
-  local self_test_root raw summary
+  local self_test_root raw summary pinned
   self_test_root="$(mktemp -d "${TMPDIR:-/tmp}/nuriteo-compose-qualification-self-test.XXXXXX")"
   raw="$self_test_root/raw"
   summary="$self_test_root/summary"
@@ -204,6 +216,18 @@ self_test() {
   grep -Fqx 'fixture_failure=compose acceptance failed at line 247 (status 1)' "$summary"
   grep -Fqx 'stable_category=bootstrap-admin failed (input)' "$summary"
   ! grep -Fq 'compose-bootstrap-secret-7e3bc2f41a' "$summary"
+  printf '%s\n' \
+    'FROM registry.example/base@sha256:111 AS dependencies' \
+    'FROM dependencies AS builder' \
+    'FROM registry.example/runtime@sha256:222 AS runtime' \
+    >"$self_test_root/Dockerfile.one"
+  printf '%s\n' \
+    'FROM registry.example/other@sha256:333 AS builder' \
+    'FROM builder AS runtime' \
+    >"$self_test_root/Dockerfile.two"
+  pinned="$(pinned_build_images \
+    "$self_test_root/Dockerfile.one" "$self_test_root/Dockerfile.two")"
+  [ "$pinned" = $'registry.example/base@sha256:111\nregistry.example/other@sha256:333\nregistry.example/runtime@sha256:222' ]
   rm -rf -- "$self_test_root"
   echo 'Docker qualification allowlisted summary self-test ok'
 }

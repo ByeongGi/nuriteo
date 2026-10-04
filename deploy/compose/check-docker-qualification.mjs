@@ -58,6 +58,9 @@ assert.match(runner, /run_bounded "\$diagnostics_timeout" collect-state/u);
 assert.match(runner, /run_bounded "\$cleanup_timeout" cleanup-internal/u);
 assert.doesNotMatch(runner, /docker (?:compose )?logs\b/u);
 assert.doesNotMatch(runner, /cat "\$raw_log"|tee .*raw/u);
+assert.match(runner, /FNR == 1 \{ delete aliases \}/u);
+assert.match(runner, /if \(!\(image in aliases\)\) print image/u);
+assert.match(runner, /pinned_build_images \\\n+    "\$self_test_root\/Dockerfile\.one" "\$self_test_root\/Dockerfile\.two"/u);
 
 const placeholderStart = runner.indexOf("with_placeholder_compose_environment() {");
 const placeholderEnd = runner.indexOf("\n}\n\nself_test()", placeholderStart);
