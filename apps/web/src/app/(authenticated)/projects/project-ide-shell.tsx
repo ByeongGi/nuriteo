@@ -19,6 +19,7 @@ import { awaitWorkspaceStart } from "../../../runtime/workspace-start.ts";
 import { createSubdomainPreviewBridge } from "../../../runtime/subdomain-preview-bridge.ts";
 import type { PreviewOriginConfiguration } from "../../../runtime/preview-origin-contract.ts";
 import type { SubdomainPreviewBridge } from "../../../runtime/subdomain-preview-bridge.ts";
+import { ProjectHistoryPanel } from "./project-history-panel.tsx";
 
 const EMPTY_RUNTIME_STATE: RuntimeViewState = {
   generation: 0,
@@ -56,11 +57,12 @@ interface Props {
   readonly project: Project;
   readonly projectEtag?: string;
   readonly onProjectCommit?: (result: { readonly projectEtag: string; readonly projectVersion: number }) => void;
+  readonly onProjectReload?: () => void;
   readonly runtimeFeatureLoader?: () => Promise<RuntimeFeature>;
   readonly workspaceScope: string;
 }
 
-export function ProjectIdeShell({ assetRevision, onProjectCommit, previewBridgeFactory, previewConfiguration, project, projectEtag, runtimeFeatureLoader, workspaceScope }: Props) {
+export function ProjectIdeShell({ assetRevision, onProjectCommit, onProjectReload, previewBridgeFactory, previewConfiguration, project, projectEtag, runtimeFeatureLoader, workspaceScope }: Props) {
   const adapterRef = useRef<RuntimeAdapter | undefined>(undefined);
   const previewBridgeRef = useRef<SubdomainPreviewBridge | undefined>(undefined);
   const previewBridgeOperationRef = useRef(0);
@@ -81,6 +83,7 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, previewBridgeF
   const [isSaving, setIsSaving] = useState(false);
   const [isServerSaving, setIsServerSaving] = useState(false);
   const [serverSaveStatus, setServerSaveStatus] = useState("Not saved to server in this session");
+  const [serverSaveFailure, setServerSaveFailure] = useState<"retry" | "stale">();
   const [recoveringAction, setRecoveringAction] = useState<RuntimeRecoveryActionKind>();
   const [confirmingWriterTakeover, setConfirmingWriterTakeover] = useState(false);
   const [isolatedPreviewUrl, setIsolatedPreviewUrl] = useState<string>();
@@ -119,6 +122,7 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, previewBridgeF
       return;
     }
     setError(undefined);
+    setServerSaveFailure(undefined);
     setIsStarting(true);
     setStartingSource(source);
     setResumeStatus(source === "saved" ? "Checking the current Server Save…" : "Preparing a new Local Draft…");
@@ -392,6 +396,7 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, previewBridgeF
     saveAbortRef.current?.abort();
     saveAbortRef.current = controller;
     setError(undefined);
+    setServerSaveFailure(undefined);
     setIsServerSaving(true);
     setServerSaveStatus("Planning canonical Server Save…");
     try {
@@ -428,6 +433,7 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, previewBridgeF
     } catch (cause) {
       if (!controller.signal.aborted) {
         const stale = cause instanceof Error && "status" in cause && (cause as { status?: unknown }).status === 412;
+        setServerSaveFailure(stale ? "stale" : "retry");
         setError(stale
           ? "The Server Project changed before this Save. Your Local Draft is preserved; reload the latest Project before retrying."
           : "Server Save did not complete. Your Local Draft is preserved; retry when the service is available.");
@@ -453,6 +459,14 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, previewBridgeF
     setTerminalOutput("");
     setEditorStatus("Local Draft");
     setResumeStatus(undefined);
+  }
+
+  async function resumeRestoredServerSave(): Promise<void> {
+    if (project.state !== "active" || isStarting || isServerSaving) return;
+    if (adapterRef.current !== undefined) await stopWorkspace();
+    if (adapterRef.current === undefined && !unmountedRef.current) {
+      await startWorkspace("saved");
+    }
   }
 
   async function releaseAdapter() {
@@ -493,6 +507,7 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, previewBridgeF
         )}
       </header>
       {error ? <p className="m-3 rounded-md border border-danger p-3 text-sm text-danger" role="alert">{error}</p> : null}
+      {serverSaveFailure ? <div className="mx-3 mt-3 flex flex-wrap gap-2" aria-label="Server Save recovery">{serverSaveFailure === "retry" ? <Button type="button" size="sm" disabled={isServerSaving || !canWriteLocalDraft} onClick={() => void saveToServer()}>Retry Server Save</Button> : <Button type="button" size="sm" onClick={() => onProjectReload?.()}>Reload latest Project</Button>}</div> : null}
       {resumeStatus ? <p className="m-3 text-sm text-muted-foreground" role="status" aria-live="polite">{resumeStatus}</p> : null}
       {recoveryDiagnostics.length > 0 ? (
         <section className="m-3 rounded-md border border-warning bg-subtle p-3" aria-label="Workspace recovery">
@@ -527,7 +542,17 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, previewBridgeF
           ) : null}
         </section>
       ) : null}
-      {project.state !== "active" ? <p className="m-3 text-sm text-muted-foreground">Restore this Project before starting its workspace.</p> : null}
+      <div className="px-3">
+        <ProjectHistoryPanel
+          hasLocalDraft={hasWorkspace}
+          project={project}
+          {...(projectEtag === undefined ? {} : { projectEtag })}
+          onProjectCommit={(result) => onProjectCommit?.(result)}
+          onReloadProject={() => onProjectReload?.()}
+          onResumeRestoredSave={() => void resumeRestoredServerSave()}
+        />
+      </div>
+      {project.state !== "active" ? <p className="m-3 text-sm text-muted-foreground">This archived Project is read-only. Its Versions and Recovery checkpoints remain available for inspection; restore the Project before mutating history or starting its workspace.</p> : null}
       {hasWorkspace ? (
         <div className="grid min-h-[34rem] grid-cols-1 lg:grid-cols-[14rem_minmax(0,1fr)_minmax(18rem,0.8fr)]">
           <nav className="border-b border-muted-border bg-sidebar p-3 lg:border-r lg:border-b-0" aria-label="Project files">

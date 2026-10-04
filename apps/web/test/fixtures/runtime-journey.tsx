@@ -1,10 +1,10 @@
-import React from "react";
+import React, { useState } from "react";
 import { createRoot } from "react-dom/client";
 
 import { ProjectIdeShell } from "../../src/app/(authenticated)/projects/project-ide-shell.tsx";
 
 declare global {
-  interface Window { __nuriteoRuntimeProbe: { activeWorkers: number; createdWorkers: number; committedVersion?: number; committedEtag?: string } }
+  interface Window { __nuriteoRuntimeProbe: { activeWorkers: number; createdWorkers: number; committedVersion?: number; committedEtag?: string; reloads: number } }
 }
 
 const NativeWorker = globalThis.Worker;
@@ -26,7 +26,7 @@ class TrackingWorker extends NativeWorker {
   }
 }
 
-window.__nuriteoRuntimeProbe = { activeWorkers: 0, createdWorkers: 0 };
+window.__nuriteoRuntimeProbe = { activeWorkers: 0, createdWorkers: 0, reloads: 0 };
 Object.defineProperty(globalThis, "Worker", { configurable: true, value: TrackingWorker });
 
 const project = {
@@ -57,15 +57,20 @@ const previewConfiguration = location.hostname === "app.localhost"
       message: "Preview origin configuration is invalid."
     };
 
-createRoot(document.getElementById("root")!).render(
-  <ProjectIdeShell
-    previewConfiguration={previewConfiguration}
-    project={project}
-    projectEtag='"project-v1"'
-    onProjectCommit={({ projectEtag, projectVersion }) => {
-      window.__nuriteoRuntimeProbe.committedEtag = projectEtag;
-      window.__nuriteoRuntimeProbe.committedVersion = projectVersion;
-    }}
-    workspaceScope={project.ownerId}
-  />
-);
+function Fixture() {
+  const [etag, setEtag] = useState('"project-v1"');
+  return <ProjectIdeShell
+      previewConfiguration={previewConfiguration}
+      project={project}
+      projectEtag={etag}
+      onProjectCommit={({ projectEtag, projectVersion }) => {
+        setEtag(projectEtag);
+        window.__nuriteoRuntimeProbe.committedEtag = projectEtag;
+        window.__nuriteoRuntimeProbe.committedVersion = projectVersion;
+      }}
+      onProjectReload={() => { window.__nuriteoRuntimeProbe.reloads += 1; }}
+      workspaceScope={project.ownerId}
+    />;
+}
+
+createRoot(document.getElementById("root")!).render(<Fixture />);

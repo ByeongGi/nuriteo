@@ -65,6 +65,14 @@ export function ProjectDashboard(props: Props) {
   const state = props.selectedState ?? "active";
 
   useEffect(() => () => paginationAbort.current?.abort(), []);
+  useEffect(() => {
+    setProjects(props.initialCollection?.items ?? []);
+    setCursor(props.initialCollection?.nextCursor ?? null);
+    setProject(props.initialProject);
+    setEtag(props.initialProjectEtag);
+    setGrants(props.initialGrants ?? []);
+    setNeedsReconciliation(false);
+  }, [props.initialCollection, props.initialGrants, props.initialProject, props.initialProjectEtag]);
 
   async function mutate(operation: CollaborationOperation, action: () => Promise<void>) {
     await mutation.run(async () => {
@@ -227,6 +235,7 @@ export function ProjectDashboard(props: Props) {
                     setProject((current) => current === undefined ? current : { ...current, version: result.projectVersion });
                     setProjects((items) => items.map((item) => item.id === project.id ? { ...item, version: result.projectVersion } : item));
                   }}
+                  onProjectReload={() => router.refresh()}
                   workspaceScope={workspace.storageScopeId}
                 />
                 {owner?.ownerType === "organization" ? <section><h3>Direct roles</h3>{props.canManageRoles ? <><form className="collaboration-form" onSubmit={addRole}><label className="field-group">Organization member user ID<input name="userId" required disabled={mutation.isPending} /></label><label className="field-group">Role<select name="role" disabled={mutation.isPending}><option value="read">Read</option><option value="write">Write</option><option value="admin">Admin</option></select></label><Button type="submit" disabled={mutation.isPending}>Grant role</Button></form><ul className="record-list">{grants.map((grant) => <li key={grant.userId}><div><strong>{grant.userId}</strong><span>{grant.role}</span></div><div className="record-actions"><select aria-label={`Role for ${grant.userId}`} value={grant.role} disabled={mutation.isPending} onChange={(event) => void updateRole(grant, roleValue(event.currentTarget.value))}><option value="read">Read</option><option value="write">Write</option><option value="admin">Admin</option></select><Button type="button" disabled={mutation.isPending} onClick={() => void updateRole(grant)}>Revoke</Button></div></li>)}</ul></> : <p>Only Organization Owners can inspect and manage direct Project roles.</p>}</section> : null}

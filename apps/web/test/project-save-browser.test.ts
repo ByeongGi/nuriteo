@@ -9,7 +9,7 @@ import { chromium } from "@playwright/test";
 import { build } from "esbuild";
 
 declare global {
-  interface Window { __nuriteoRuntimeProbe: { activeWorkers: number; createdWorkers: number; committedVersion?: number; committedEtag?: string } }
+  interface Window { __nuriteoRuntimeProbe: { activeWorkers: number; createdWorkers: number; committedVersion?: number; committedEtag?: string; reloads: number } }
 }
 
 const webRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -30,17 +30,31 @@ const csrf = `nrt_csrf_${"s".repeat(43)}`;
 const saveSessionId = "0199ee6c-c777-7000-8000-00000000b003";
 const bundleId = "0199ee6c-c777-7000-8000-00000000b004";
 const saveRequests: string[] = [];
+let createAttempts = 0;
 const server = http.createServer(async (request, response) => {
   response.setHeader("Cross-Origin-Embedder-Policy", "require-corp");
   response.setHeader("Cross-Origin-Opener-Policy", "same-origin");
   response.setHeader("Cross-Origin-Resource-Policy", "same-origin");
   const pathname = new URL(request.url ?? "/", "http://localhost").pathname;
+  if (pathname.endsWith("/versions") && request.method === "GET") {
+    response.setHeader("content-type", "application/json");
+    response.end(JSON.stringify({ items: [], nextCursor: null }));
+    return;
+  }
+  if (pathname.endsWith("/recovery-checkpoints") && request.method === "GET") {
+    response.setHeader("content-type", "application/json");
+    response.end(JSON.stringify({ items: [] }));
+    return;
+  }
   if (pathname.includes("/save-sessions")) {
     saveRequests.push(`${request.method} ${pathname}`);
     assert.equal(request.headers["x-csrf-token"], csrf);
     if (pathname.endsWith("/save-sessions") && request.method === "POST") {
-      assert.equal(request.headers["if-match"], '"project-v1"');
-      assert.match(String(request.headers["idempotency-key"]), /^bundle-v1-[0-9a-f]{64}$/u);
+      createAttempts += 1;
+      assert.equal(request.headers["if-match"], createAttempts < 3 ? '"project-v1"' : '"project-v2"');
+      assert.match(String(request.headers["idempotency-key"]), new RegExp(`^bundle-v${createAttempts < 3 ? 1 : 2}-[0-9a-f]{64}$`, "u"));
+      if (createAttempts === 1) return problem(response, 503, "SERVICE_UNAVAILABLE");
+      if (createAttempts === 3) return problem(response, 412, "PROJECT_VERSION_STALE");
       const body = await requestJson(request);
       response.statusCode = 201;
       response.setHeader("content-type", "application/json");
@@ -54,9 +68,12 @@ const server = http.createServer(async (request, response) => {
       return;
     }
     if (pathname.endsWith(`/${saveSessionId}/complete`) && request.method === "POST") {
+      problem(response, 503, "COMMIT_OUTCOME_UNKNOWN");
+      return;
+    }
+    if (pathname.endsWith(`/${saveSessionId}/reconcile`) && request.method === "POST") {
       response.setHeader("content-type", "application/json");
-      response.setHeader("etag", '"project-v2"');
-      response.end(JSON.stringify({ bundleId, projectVersion: 2 }));
+      response.end(JSON.stringify({ state: "committed", bundleId, projectVersion: 2 }));
       return;
     }
   }
@@ -102,7 +119,7 @@ try {
   await page.goto(`${applicationOrigin}/`, { waitUntil: "domcontentloaded" });
   assert.equal(await page.evaluate(() => globalThis.crossOriginIsolated), true);
 
-  await page.getByRole("button", { name: "Start workspace" }).click();
+  await page.getByRole("button", { name: "Start workspace from template", exact: true }).click();
   await page.getByRole("button", { name: "Run Preview" }).waitFor({ timeout: 20_000 });
   assert.equal(await page.evaluate(() => window.__nuriteoRuntimeProbe.createdWorkers), 2);
 
@@ -112,19 +129,27 @@ try {
   await page.getByRole("button", { name: "Apply to Local Draft" }).click();
   await page.getByText("Local Draft saved", { exact: false }).waitFor({ timeout: 10_000 });
   await page.getByRole("button", { name: "Save to server" }).click();
+  await page.getByText("Server Save failed · Local Draft preserved", { exact: true }).waitFor({ timeout: 20_000 });
+  await page.getByRole("button", { name: "Retry Server Save" }).click();
   await page.getByText("Server Save v2 complete · Local Draft is current", { exact: true }).waitFor({ timeout: 20_000 });
   assert.deepEqual(await page.evaluate(() => ({
     etag: window.__nuriteoRuntimeProbe.committedEtag,
     version: window.__nuriteoRuntimeProbe.committedVersion
   })), { etag: '"project-v2"', version: 2 });
-  assert.deepEqual(saveRequests.map((entry) => entry.split(" ")[0]), ["POST", "POST"]);
-  assert.match(saveRequests[1] ?? "", /\/complete$/u);
+  assert.ok(saveRequests.some((entry) => entry.endsWith("/reconcile")), "unknown Save completion must reconcile");
+
+  await editor.fill('export const label = "newer local draft";\n');
+  await page.getByRole("button", { name: "Apply to Local Draft" }).click();
+  await page.getByRole("button", { name: "Save to server" }).click();
+  await page.getByText(/Server Project changed before this Save/u).waitFor({ timeout: 20_000 });
+  await page.getByRole("button", { name: "Reload latest Project" }).click();
+  assert.equal(await page.evaluate(() => window.__nuriteoRuntimeProbe.reloads), 1);
 
   await page.getByRole("button", { name: "Stop workspace" }).click();
-  await page.getByRole("button", { name: "Start workspace" }).waitFor({ timeout: 10_000 });
+  await page.getByRole("button", { name: "Start workspace from template", exact: true }).waitFor({ timeout: 10_000 });
   await page.waitForFunction(() => window.__nuriteoRuntimeProbe.activeWorkers === 0);
   assert.deepEqual(errors, []);
-  console.log("WEB-006 actual browser Save journey ok (Runtime edit, canonical upload, commit ETag, dispose)");
+  console.log("WEB-007 browser Save matrix ok (retry, unknown-outcome reconcile, 412, Local Draft, dispose)");
 } finally {
   await browser.close();
   await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
@@ -143,4 +168,10 @@ async function requestJson(request: http.IncomingMessage): Promise<Record<string
   const chunks: Buffer[] = [];
   for await (const chunk of request) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
   return JSON.parse(Buffer.concat(chunks).toString("utf8")) as Record<string, unknown>;
+}
+
+function problem(response: http.ServerResponse, status: number, code: string): void {
+  response.statusCode = status;
+  response.setHeader("content-type", "application/problem+json");
+  response.end(JSON.stringify({ type: "about:blank", title: "Rejected", status, detail: "Rejected.", instance: "/api/v1", code, request_id: "save-browser", errors: [] }));
 }
