@@ -32,6 +32,7 @@ const PROJECT_USER_ROLES_SQL: &str = include_str!("../../migrations/0013_project
 const PROJECT_BUNDLES_SQL: &str = include_str!("../../migrations/0014_project_bundles.sql");
 const SINGLE_PUT_IDEMPOTENCY_SQL: &str =
     include_str!("../../migrations/0015_single_put_idempotency.sql");
+const MULTIPART_LIFECYCLE_SQL: &str = include_str!("../../migrations/0016_multipart_lifecycle.sql");
 
 // Two-key advisory locks use a namespace distinct from PostgreSQL's one-key
 // bigint locks. 0x4e555249 is the ASCII representation of "NURI".
@@ -194,6 +195,13 @@ pub(super) fn embedded_migrator() -> Migrator {
             Cow::Borrowed("single PUT idempotency"),
             MigrationType::Simple,
             SINGLE_PUT_IDEMPOTENCY_SQL.into_sql_str(),
+            false,
+        ),
+        Migration::new(
+            16,
+            Cow::Borrowed("multipart lifecycle"),
+            MigrationType::Simple,
+            MULTIPART_LIFECYCLE_SQL.into_sql_str(),
             false,
         ),
     ])
