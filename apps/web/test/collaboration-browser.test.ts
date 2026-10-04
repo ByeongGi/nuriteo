@@ -19,10 +19,13 @@ const organizationId = "0199ee6c-c777-7000-8000-000000009201";
 const activationId = "0199ee6c-c777-7000-8000-000000009301";
 const activationToken = `nrt_inv_${"a".repeat(43)}`;
 const csrfToken = `nrt_csrf_${"c".repeat(43)}`;
+const bmpUnicodeEmail = "사용자@example.test";
+const astralUnicodeEmail = `${"😀".repeat(313)}@x.test`;
 const now = "2026-10-04T00:00:00.000Z";
 const later = "2026-10-11T00:00:00.000Z";
 
 assert.ok(fs.existsSync(serverEntry), "Run the production build before this browser check.");
+assert.equal(Array.from(astralUnicodeEmail).length, 320);
 fs.cpSync(path.join(webRoot, ".next/static"), path.join(standaloneWeb, ".next/static"), {
   force: true,
   recursive: true
@@ -38,7 +41,10 @@ let memberRoleChangeCount = 0;
 let organizationIssueCount = 0;
 let organizationReissueCount = 0;
 let organizationRevokeCount = 0;
+let malformedAcceptOnce = false;
+let malformedDeclineOnce = false;
 let observedIfMatch: string | undefined;
+const observedUnavailableEmails: string[] = [];
 const organizationInvitations: OrganizationInvitation[] = [];
 const members: OrganizationMember[] = [{ userId: adminId, displayName: "Instance Administrator", role: "owner" }];
 const observedMutationCookies: string[] = [];
@@ -131,7 +137,12 @@ const core = http.createServer(async (request, response) => {
     if (session !== "admin") return sendProblem(response, 403, "FORBIDDEN");
     const body = await jsonBody(request);
     assert.deepEqual(Object.keys(body).toSorted(), ["email", "role"]);
-    if (body.email === "unavailable@example.test") {
+    if (
+      body.email === "unavailable@example.test" ||
+      body.email === bmpUnicodeEmail ||
+      body.email === astralUnicodeEmail
+    ) {
+      observedUnavailableEmails.push(body.email);
       return sendProblem(response, 404, "ORGANIZATION_NOT_FOUND");
     }
     assert.equal(body.email, "invitee@example.test");
@@ -193,6 +204,10 @@ const core = http.createServer(async (request, response) => {
     const body = await jsonBody(request);
     const existing = organizationInvitations.find((item) => invitationToken(item) === body.token);
     if (!existing || existing.status !== "pending") return sendProblem(response, 410, "INVITATION_UNUSABLE");
+    if (malformedAcceptOnce) {
+      malformedAcceptOnce = false;
+      return sendJson(response, existing);
+    }
     existing.status = "accepted";
     existing.acceptedAt = now;
     members.push({ userId: inviteeId, displayName: "Invited Teammate", role: existing.proposedRole });
@@ -203,6 +218,14 @@ const core = http.createServer(async (request, response) => {
     const body = await jsonBody(request);
     const existing = organizationInvitations.find((item) => invitationToken(item) === body.token);
     if (!existing || existing.status !== "pending") return sendProblem(response, 410, "INVITATION_UNUSABLE");
+    if (malformedDeclineOnce) {
+      malformedDeclineOnce = false;
+      return sendJson(response, {
+        ...existing,
+        acceptedAt: now,
+        status: "accepted"
+      });
+    }
     existing.status = "declined";
     existing.declinedAt = now;
     return sendJson(response, existing);
@@ -287,8 +310,11 @@ try {
     await adminPage.getByRole("alert").filter({ hasText: "Reload the latest version" }).waitFor();
     assert.equal(observedIfMatch, '"org-v1"');
     const inviteeEmail = adminPage.getByLabel("Invitee email");
-    assert.equal(await inviteeEmail.getAttribute("type"), "email");
-    assert.equal(await inviteeEmail.evaluate((input: HTMLInputElement) => input.maxLength), 320);
+    assert.equal(await inviteeEmail.getAttribute("type"), "text");
+    assert.equal(await inviteeEmail.getAttribute("inputmode"), "email");
+    assert.equal(await inviteeEmail.evaluate((input: HTMLInputElement) => input.maxLength), -1);
+    assert.equal(await inviteeEmail.getAttribute("aria-describedby"), "organization-invitation-email-help");
+    await adminPage.getByText("Enter the existing account email using 3 to 320 Unicode characters.", { exact: true }).waitFor();
     assert.equal(await adminPage.getByLabel("Invitee user ID").count(), 0);
 
     const legacyStatus = await adminPage.evaluate(async ({ csrfToken: csrf, inviteeId: userId, organizationId: id }) => {
@@ -303,18 +329,54 @@ try {
     assert.equal(legacyStatus, 400);
     assert.equal(organizationIssueCount, 0);
 
-    await inviteeEmail.fill("unavailable@example.test");
+    await adminPage.reload({ waitUntil: "networkidle" });
+    let invitationBffRequestCount = 0;
+    adminPage.on("request", (request) => {
+      if (
+        request.method() === "POST" &&
+        request.url().endsWith(`/api/v1/organizations/${organizationId}/invitations`)
+      ) {
+        invitationBffRequestCount += 1;
+      }
+    });
+    for (const invalidKind of ["too-long", "control"] as const) {
+      const requestsBefore = invitationBffRequestCount;
+      await adminPage.locator('input[name="email"]').evaluate((input: HTMLInputElement, kind) => {
+        input.value = kind === "too-long"
+          ? "x".repeat(321)
+          : `x${String.fromCharCode(1)}@example.test`;
+        input.form?.requestSubmit();
+      }, invalidKind);
+      await adminPage.getByRole("alert").filter({ hasText: "The request could not be completed" }).waitFor();
+      await adminPage.waitForTimeout(25);
+      assert.equal(invitationBffRequestCount, requestsBefore);
+      assert.equal(organizationIssueCount, 0);
+      await adminPage.reload({ waitUntil: "networkidle" });
+    }
+
+    for (const unicodeEmail of [bmpUnicodeEmail, astralUnicodeEmail]) {
+      const requestsBefore = invitationBffRequestCount;
+      await adminPage.getByLabel("Invitee email").fill(unicodeEmail);
+      await adminPage.getByRole("button", { name: "Issue Organization invitation" }).click();
+      await waitForCondition(() => observedUnavailableEmails.includes(unicodeEmail));
+      await adminPage.getByRole("alert").filter({ hasText: "unavailable, already invited, or already a member" }).waitFor();
+      assert.equal(invitationBffRequestCount, requestsBefore + 1);
+      assert.equal(organizationIssueCount, 0);
+      await adminPage.reload({ waitUntil: "networkidle" });
+    }
+
+    await adminPage.getByLabel("Invitee email").fill("unavailable@example.test");
     await adminPage.getByRole("button", { name: "Issue Organization invitation" }).click();
     const unavailableError = adminPage.getByRole("alert").filter({ hasText: "unavailable, already invited, or already a member" });
     await unavailableError.waitFor();
     assert.equal((await unavailableError.textContent())?.includes("unavailable@example.test"), false);
     assert.equal(organizationIssueCount, 0);
 
-    await inviteeEmail.fill("Invitee@Example.Test");
+    await adminPage.getByLabel("Invitee email").fill("Invitee@Example.Test");
     await adminPage.getByRole("button", { name: "Issue Organization invitation" }).click();
     let invitationUrl = await visibleOneTimeUrl(adminPage);
     await waitForCondition(() => organizationIssueCount === 1);
-    assert.equal(await inviteeEmail.inputValue(), "");
+    assert.equal(await adminPage.getByLabel("Invitee email").inputValue(), "");
     await adminPage.reload({ waitUntil: "networkidle" });
     await adminPage.getByRole("button", { name: "Reissue" }).click();
     const reissuedUrl = await visibleOneTimeUrl(adminPage);
@@ -341,8 +403,43 @@ try {
 
     await adminPage.getByLabel("Invitee email").fill("invitee@example.test");
     await adminPage.getByRole("button", { name: "Issue Organization invitation" }).click();
-    const declineUrl = await visibleOneTimeUrl(adminPage);
+    const malformedUrl = await visibleOneTimeUrl(adminPage);
     await waitForCondition(() => organizationIssueCount === 2);
+
+    malformedAcceptOnce = true;
+    await inviteePage.goto(malformedUrl, { waitUntil: "networkidle" });
+    await Promise.all([
+      inviteePage.waitForResponse((response) => response.url().endsWith("/api/v1/me/organization-invitations/accept")),
+      inviteePage.getByRole("button", { name: "Accept invitation" }).click()
+    ]);
+    await inviteePage.getByRole("alert").filter({ hasText: "The request could not be completed" }).waitFor();
+    assert.equal(inviteePage.url(), malformedUrl);
+    await inviteePage.goto(`${publicOrigin}/workspaces`, { waitUntil: "networkidle" });
+    assert.equal(await inviteePage.getByText("Alpha Organization", { exact: true }).count(), 0);
+    assert.equal(await inviteePage.getByText("Organization invitation accepted", { exact: false }).count(), 0);
+
+    malformedDeclineOnce = true;
+    await inviteePage.goto(malformedUrl, { waitUntil: "networkidle" });
+    await Promise.all([
+      inviteePage.waitForResponse((response) => response.url().endsWith("/api/v1/me/organization-invitations/decline")),
+      inviteePage.getByRole("button", { name: "Decline" }).click()
+    ]);
+    await inviteePage.getByRole("alert").filter({ hasText: "The request could not be completed" }).waitFor();
+    assert.equal(inviteePage.url(), malformedUrl);
+    await inviteePage.goto(`${publicOrigin}/workspaces`, { waitUntil: "networkidle" });
+    assert.equal(await inviteePage.getByText("Alpha Organization", { exact: true }).count(), 0);
+    assert.equal(await inviteePage.getByText("Organization invitation declined", { exact: false }).count(), 0);
+
+    await adminPage.reload({ waitUntil: "networkidle" });
+    const malformedPending = adminPage.getByRole("list", { name: "Organization invitations" }).locator("li").filter({ hasText: "pending" });
+    await malformedPending.getByRole("button", { name: "Revoke" }).click();
+    await waitForCondition(() => organizationRevokeCount === 2);
+    await adminPage.reload({ waitUntil: "networkidle" });
+
+    await adminPage.getByLabel("Invitee email").fill("invitee@example.test");
+    await adminPage.getByRole("button", { name: "Issue Organization invitation" }).click();
+    const declineUrl = await visibleOneTimeUrl(adminPage);
+    await waitForCondition(() => organizationIssueCount === 3);
     await inviteePage.goto(declineUrl, { waitUntil: "networkidle" });
     await inviteePage.getByRole("button", { name: "Decline" }).click();
     await inviteePage.waitForURL("**/workspaces?invitation=declined");
@@ -353,7 +450,7 @@ try {
     await adminPage.getByLabel("Invitee email").fill("invitee@example.test");
     await adminPage.getByRole("button", { name: "Issue Organization invitation" }).click();
     invitationUrl = await visibleOneTimeUrl(adminPage);
-    await waitForCondition(() => organizationIssueCount === 3);
+    await waitForCondition(() => organizationIssueCount === 4);
     await inviteePage.goto(invitationUrl, { waitUntil: "networkidle" });
     await inviteePage.getByRole("button", { name: "Accept invitation" }).click();
     await inviteePage.waitForURL("**/workspaces?joined=1");

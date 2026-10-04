@@ -262,6 +262,7 @@ async function testProjectForwardingBoundary() {
       "content-type": "application/json",
       host: "nuriteo.test",
       "if-match": '"project-v01"',
+      origin: "https://nuriteo.test",
       "x-csrf-token": `nrt_csrf_${"a".repeat(43)}`
     },
     method: "PATCH"
@@ -275,6 +276,7 @@ async function testProjectForwardingBoundary() {
       "content-type": "application/json",
       host: "nuriteo.test",
       "if-match": '"project-v9223372036854775807"',
+      origin: "https://nuriteo.test",
       "x-csrf-token": `nrt_csrf_${"a".repeat(43)}`
     },
     method: "PATCH"

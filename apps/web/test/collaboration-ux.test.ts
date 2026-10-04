@@ -24,6 +24,8 @@ try {
   testSafeErrorClassification();
   await testExactBoundedForwarding();
   await testExactOrganizationInvitationIssueRoute();
+  await testMissingOriginRejectsRepresentativePatch();
+  await testMissingOriginIsNotSynthesizedForSafeGet();
   await testDeadlineAbortAndEarlyCancellation();
   await testInvalidRouteIsProblemDetails();
   testSplitSecretScanner();
@@ -127,13 +129,13 @@ async function testExactBoundedForwarding() {
 
   await forwardCollaborationMutation(new Request(
     "https://nuriteo.example.test/api/v1/organizations/0199ee6c-c777-7000-8000-000000005001",
-    { body: "{}", headers: { "content-type": "application/json", host: "nuriteo.example.test", "if-match": '"org-v7"', "x-csrf-token": `nrt_csrf_${"a".repeat(43)}` }, method: "PATCH" }
+    { body: "{}", headers: { "content-type": "application/json", host: "nuriteo.example.test", "if-match": '"org-v7"', origin: "https://nuriteo.example.test", "x-csrf-token": `nrt_csrf_${"a".repeat(43)}` }, method: "PATCH" }
   ), { method: "PATCH", path: "/api/v1/organizations/0199ee6c-c777-7000-8000-000000005001", requireCsrf: true, withBody: true, withEtag: true });
   assert.equal(new Headers(received?.init?.headers).get("if-match"), '"org-v7"');
 
   const oversized = await forwardCollaborationMutation(new Request(
     "https://nuriteo.example.test/api/v1/organizations",
-    { body: "x".repeat(16_385), headers: { "content-type": "application/json", host: "nuriteo.example.test", "x-csrf-token": `nrt_csrf_${"a".repeat(43)}` }, method: "POST" }
+    { body: "x".repeat(16_385), headers: { "content-type": "application/json", host: "nuriteo.example.test", origin: "https://nuriteo.example.test", "x-csrf-token": `nrt_csrf_${"a".repeat(43)}` }, method: "POST" }
   ), { method: "POST", path: "/api/v1/organizations", requireCsrf: true, withBody: true });
   assert.equal(oversized.status, 413);
   assert.equal(oversized.headers.get("content-type"), "application/problem+json");
@@ -169,13 +171,28 @@ async function testExactOrganizationInvitationIssueRoute() {
   assert.equal(upstreamHeaders?.get("origin"), "https://nuriteo.example.test");
   assert.equal(upstreamHeaders?.get("x-csrf-token"), `nrt_csrf_${"a".repeat(43)}`);
 
+  const exactScalarBoundary = `${"😀".repeat(313)}@x.test`;
+  assert.equal(Array.from(exactScalarBoundary).length, 320);
+  for (const email of ["사용자@example.test", exactScalarBoundary]) {
+    const unicode = await issueOrganizationInvitationRoute(invitationIssueRequest({
+      email,
+      role: "member"
+    }), { params: Promise.resolve({ organizationId }) });
+    assert.equal(unicode.status, 201);
+  }
+  assert.deepEqual(upstreamBodies.slice(1), [
+    { email: "사용자@example.test", role: "member" },
+    { email: exactScalarBoundary, role: "member" }
+  ]);
+  const forwardedCount = upstreamBodies.length;
+
   const legacy = await issueOrganizationInvitationRoute(invitationIssueRequest({
     email: "member@example.test",
     inviteeUserId: organizationId,
     role: "member"
   }), { params: Promise.resolve({ organizationId }) });
   assert.equal(legacy.status, 400);
-  assert.equal(upstreamBodies.length, 1);
+  assert.equal(upstreamBodies.length, forwardedCount);
 
   const unexpected = await issueOrganizationInvitationRoute(invitationIssueRequest({
     email: "member@example.test",
@@ -183,7 +200,7 @@ async function testExactOrganizationInvitationIssueRoute() {
     trace: "not-forwarded"
   }), { params: Promise.resolve({ organizationId }) });
   assert.equal(unexpected.status, 400);
-  assert.equal(upstreamBodies.length, 1);
+  assert.equal(upstreamBodies.length, forwardedCount);
 
   for (const body of [
     { email: `${"a".repeat(321)}@example.test`, role: "member" },
@@ -196,17 +213,27 @@ async function testExactOrganizationInvitationIssueRoute() {
     });
     assert.equal(invalid.status, 400);
   }
-  assert.equal(upstreamBodies.length, 1);
+  assert.equal(upstreamBodies.length, forwardedCount);
 
-  const crossOrigin = await issueOrganizationInvitationRoute(invitationIssueRequest(
-    { email: "member@example.test", role: "member" },
+  for (const origin of [
+    null,
+    "https://nuriteo.example.test, https://attacker.example.test",
+    "not an origin",
     "https://attacker.example.test"
-  ), { params: Promise.resolve({ organizationId }) });
-  assert.equal(crossOrigin.status, 403);
-  assert.equal(upstreamBodies.length, 1);
+  ]) {
+    const rejectedOrigin = await issueOrganizationInvitationRoute(invitationIssueRequest(
+      { email: "member@example.test", role: "member" },
+      origin
+    ), { params: Promise.resolve({ organizationId }) });
+    assert.equal(rejectedOrigin.status, 403);
+  }
+  assert.equal(upstreamBodies.length, forwardedCount);
 }
 
-function invitationIssueRequest(body: object, origin = "https://nuriteo.example.test"): Request {
+function invitationIssueRequest(
+  body: object,
+  origin: string | null = "https://nuriteo.example.test"
+): Request {
   return new Request(
     "https://nuriteo.example.test/api/v1/organizations/0199ee6c-c777-7000-8000-000000005001/invitations",
     {
@@ -215,12 +242,67 @@ function invitationIssueRequest(body: object, origin = "https://nuriteo.example.
         cookie: "session=safe",
         "content-type": "application/json",
         host: "nuriteo.example.test",
-        origin,
+        ...(origin === null ? {} : { origin }),
         "x-csrf-token": `nrt_csrf_${"a".repeat(43)}`
       },
       method: "POST"
     }
   );
+}
+
+async function testMissingOriginRejectsRepresentativePatch() {
+  let dispatched = false;
+  globalThis.fetch = async () => {
+    dispatched = true;
+    return Response.json({});
+  };
+  const response = await forwardCollaborationMutation(new Request(
+    "https://nuriteo.example.test/api/v1/organizations/0199ee6c-c777-7000-8000-000000005001",
+    {
+      body: JSON.stringify({ displayName: "No Origin" }),
+      headers: {
+        "content-type": "application/json",
+        host: "nuriteo.example.test",
+        "if-match": '"org-v1"',
+        "x-csrf-token": `nrt_csrf_${"a".repeat(43)}`
+      },
+      method: "PATCH"
+    }
+  ), {
+    method: "PATCH",
+    path: "/api/v1/organizations/0199ee6c-c777-7000-8000-000000005001",
+    requireCsrf: true,
+    withBody: true,
+    withEtag: true
+  });
+  assert.equal(response.status, 403);
+  assert.equal(dispatched, false);
+}
+
+async function testMissingOriginIsNotSynthesizedForSafeGet() {
+  process.env.NURITEO_INTERNAL_API_URL = "http://core.internal:8080";
+  let upstreamHeaders: Headers | undefined;
+  globalThis.fetch = async (_input, init) => {
+    upstreamHeaders = new Headers(init?.headers);
+    return Response.json({ organizations: [] });
+  };
+  const response = await forwardCollaborationMutation(new Request(
+    "https://nuriteo.example.test/api/v1/organizations",
+    {
+      headers: {
+        cookie: "session=safe",
+        host: "nuriteo.example.test"
+      },
+      method: "GET"
+    }
+  ), {
+    method: "GET",
+    path: "/api/v1/organizations",
+    requireCsrf: false,
+    withBody: false
+  });
+  assert.equal(response.status, 200);
+  assert.equal(upstreamHeaders?.get("origin"), null);
 }
 
 async function testDeadlineAbortAndEarlyCancellation() {
@@ -242,7 +324,7 @@ async function testDeadlineAbortAndEarlyCancellation() {
   const stream = new ReadableStream<Uint8Array>({ cancel() { cancelled = true; } });
   const rejected = await forwardCollaborationMutation(new Request(
     "https://nuriteo.example.test/api/v1/organizations",
-    { body: stream, headers: { host: "nuriteo.example.test", "content-type": "text/plain" }, method: "POST", duplex: "half" } as RequestInit & { duplex: "half" }
+    { body: stream, headers: { host: "nuriteo.example.test", "content-type": "text/plain", origin: "https://nuriteo.example.test" }, method: "POST", duplex: "half" } as RequestInit & { duplex: "half" }
   ), { method: "POST", path: "/api/v1/organizations", requireCsrf: false, withBody: true });
   assert.equal(rejected.status, 415);
   await new Promise((resolve) => setTimeout(resolve, 0));
@@ -266,6 +348,7 @@ function jsonRequest(signal?: AbortSignal): Request {
     headers: {
       "content-type": "application/json",
       host: "nuriteo.example.test",
+      origin: "https://nuriteo.example.test",
       "x-csrf-token": `nrt_csrf_${"a".repeat(43)}`
     },
     method: "POST",
@@ -284,8 +367,9 @@ function testUxSourceContracts() {
   assert.match(activation, /router\.replace\("\/sign-in\?activated=1"\)/u);
   assert.match(admin, /activationUrl\.consume\(\)/u);
   assert.match(organizations, /acceptUrl\.consume\(\)/u);
-  assert.match(organizations, /name="email" type="email"/u);
-  assert.match(organizations, /maxLength=\{320\}/u);
+  assert.match(organizations, /name="email" type="text" inputMode="email"/u);
+  assert.match(organizations, /aria-describedby="organization-invitation-email-help"/u);
+  assert.doesNotMatch(organizations, /name="email"[^>]*maxLength/u);
   assert.doesNotMatch(organizations, /name="inviteeUserId"|Invitee user ID/u);
   assert.match(accept, /\/workspaces\?joined=1/u);
   assert.match(accept, /\/workspaces\?invitation=declined/u);

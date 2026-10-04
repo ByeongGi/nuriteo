@@ -49,6 +49,7 @@ assert.equal(issueInputKeysAreExact, true);
 
 await testActivationInvitationContracts();
 await testOrganizationContracts();
+await testUnicodeInvitationEmailContracts();
 await testFailClosedBoundaries();
 await testProblemAndCancellationPassthrough();
 
@@ -195,6 +196,27 @@ async function testOrganizationContracts(): Promise<void> {
   assert.deepEqual(Object.keys(requestBody(calls[8]) as object).toSorted(), ["email", "role"]);
 }
 
+async function testUnicodeInvitationEmailContracts(): Promise<void> {
+  const exactScalarBoundary = `${"😀".repeat(313)}@x.test`;
+  assert.equal(Array.from(exactScalarBoundary).length, 320);
+
+  for (const email of ["사용자@example.test", exactScalarBoundary]) {
+    let body: unknown;
+    const client = createApiClient({
+      fetch: async (_input, init) => {
+        body = JSON.parse(String(init?.body));
+        return jsonResponse(issuedOrganizationInvitation(), 201);
+      }
+    });
+    await issueOrganizationInvitation(
+      client,
+      { organizationId: ORGANIZATION_ID, email, role: "member" },
+      { csrfToken: CSRF }
+    );
+    assert.deepEqual(body, { email, role: "member" });
+  }
+}
+
 async function testFailClosedBoundaries(): Promise<void> {
   const invalidPayloads: Array<() => Promise<unknown>> = [
     () => listActivationInvitations(singleResponse({ items: [{ ...activationInvitation(), activation_url: "https://example.test/activate?token=secret" }] })),
@@ -223,7 +245,17 @@ async function testFailClosedBoundaries(): Promise<void> {
       status: "accepted",
       acceptedAt: "2026-10-04T01:00:00Z"
     }),
-    () => reissueWithResponse({ id: INVITATION_ID })
+    () => reissueWithResponse({ id: INVITATION_ID }),
+    () => acceptWithResponse({}),
+    () => acceptWithResponse({
+      status: "declined",
+      declinedAt: "2026-10-04T01:00:00Z"
+    }),
+    () => declineWithResponse({}),
+    () => declineWithResponse({
+      status: "accepted",
+      acceptedAt: "2026-10-04T01:00:00Z"
+    })
   ];
   for (const operation of malformedIssuedInvitations) {
     await assert.rejects(operation(), ApiInvalidResponseError);
@@ -394,6 +426,22 @@ function reissueWithResponse(overrides: Record<string, unknown>): Promise<unknow
   return reissueOrganizationInvitation(
     singleResponse(issuedOrganizationInvitation(overrides), 200),
     { organizationId: ORGANIZATION_ID, invitationId: INVITATION_ID, role: "member" },
+    { csrfToken: CSRF }
+  );
+}
+
+function acceptWithResponse(overrides: Record<string, unknown>): Promise<unknown> {
+  return acceptOrganizationInvitation(
+    singleResponse(organizationInvitation(overrides)),
+    ORGANIZATION_TOKEN,
+    { csrfToken: CSRF }
+  );
+}
+
+function declineWithResponse(overrides: Record<string, unknown>): Promise<unknown> {
+  return declineOrganizationInvitation(
+    singleResponse(organizationInvitation(overrides)),
+    ORGANIZATION_TOKEN,
     { csrfToken: CSRF }
   );
 }

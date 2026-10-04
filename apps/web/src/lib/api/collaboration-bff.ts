@@ -74,13 +74,13 @@ export async function forwardCollaborationMutation(
   }
 
   const origin = sameOrigin(request);
-  if (origin === undefined) {
+  if (origin === undefined || (origin === null && spec.method !== "GET")) {
     cancel(request.body);
     return problem(403, "BFF_ORIGIN_REJECTED", requestId, spec.path);
   }
 
   const headers = selectForwardedHeaders(request.headers);
-  headers.set("origin", origin);
+  if (origin !== null) headers.set("origin", origin);
   if (spec.requireCsrf) {
     const csrf = request.headers.get("x-csrf-token");
     if (csrf === null || !SAFE_HEADER.test(csrf)) {
@@ -297,13 +297,13 @@ async function readBoundedStream(
   return { bytes: result, ok: true };
 }
 
-function sameOrigin(request: Request): string | undefined {
+function sameOrigin(request: Request): string | null | undefined {
   const host = request.headers.get("host");
   const supplied = request.headers.get("origin");
   const protocol = request.headers.get("x-forwarded-proto") ?? new URL(request.url).protocol.slice(0, -1);
   if (host === null || host.length > 255 || host.includes(",") || !/^(?:http|https)$/u.test(protocol)) return undefined;
   const expected = `${protocol}://${host}`;
-  if (supplied === null) return expected;
+  if (supplied === null) return null;
   if (supplied.length > 512 || supplied.includes(",")) return undefined;
   try {
     return new URL(supplied).origin === supplied && supplied === expected ? supplied : undefined;

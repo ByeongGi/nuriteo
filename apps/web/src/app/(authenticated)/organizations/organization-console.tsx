@@ -221,7 +221,8 @@ export function OrganizationConsole(props: OrganizationConsoleProps) {
             <div>
               <h2>Invite member</h2>
               <form className="collaboration-form" onSubmit={invite} aria-busy={mutation.isPending}>
-                <label className="field-group">Invitee email<input name="email" type="email" inputMode="email" autoComplete="email" maxLength={320} required disabled={mutation.isPending} /></label>
+                <label className="field-group">Invitee email<input name="email" type="text" inputMode="email" autoComplete="email" autoCapitalize="none" spellCheck={false} aria-describedby="organization-invitation-email-help" required disabled={mutation.isPending} /></label>
+                <p id="organization-invitation-email-help">Enter the existing account email using 3 to 320 Unicode characters.</p>
                 <label className="field-group">Role<select name="role" required disabled={mutation.isPending}><option value="member">Member</option><option value="owner">Owner</option></select></label>
                 <Button type="submit" variant="primary" disabled={mutation.isPending}>Issue Organization invitation</Button>
               </form>

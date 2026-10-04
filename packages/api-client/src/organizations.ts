@@ -297,7 +297,14 @@ async function respondToInvitation(
     { token },
     mutationOptions(options)
   );
-  return validatedResult(response, parseInvitation);
+  const expectedStatus = action === "accept" ? "accepted" : "declined";
+  return validatedResult(response, (value) => {
+    const invitation = parseInvitation(value);
+    if (invitation.status !== expectedStatus) {
+      throw invalidResponse(response);
+    }
+    return invitation;
+  });
 }
 
 function organizationResult(
