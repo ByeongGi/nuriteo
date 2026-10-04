@@ -68,6 +68,7 @@ export interface RuntimeViewState {
   lifecycle: RuntimeLifecycle;
   projectId: string | null;
   workflowPhase: PreviewWorkflowPhase | "idle";
+  hmrState: PreviewWorkflowSnapshot["hmrState"];
   previewUrl: string | null;
   diagnostics: readonly RuntimeDiagnostic[];
   terminalProcessCount: number;
@@ -83,6 +84,7 @@ export interface RuntimeTerminalPort {
 }
 
 export interface RuntimeWorkflowPort {
+  start(): Promise<RuntimeViewState>;
   stopPreview(port?: number): boolean;
   restart(): Promise<RuntimeViewState>;
   dispose(): Promise<void>;
@@ -110,6 +112,7 @@ export interface RuntimeWorkspacePort {
   materializeTemplate(template: RuntimeStarterTemplate): Promise<RuntimeWorkspaceState>;
   getState(): RuntimeWorkspaceState;
   readText(path: string): string;
+  writeText(path: string, content: string): RuntimeViewState;
 }
 
 export interface RuntimeAdapter {
@@ -141,6 +144,8 @@ interface ControllerLike {
   closeShell: PreviewWorkflowController["closeShell"];
   listShellProcesses(): readonly unknown[];
   restartDev: PreviewWorkflowController["restartDev"];
+  runPreview: PreviewWorkflowController["runPreview"];
+  saveTextFile: PreviewWorkflowController["saveTextFile"];
   stopPreviewPort: PreviewWorkflowController["stopPreviewPort"];
   loadTemplate: PreviewWorkflowController["loadTemplate"];
   exportTreeJson: PreviewWorkflowController["exportTreeJson"];
@@ -198,6 +203,18 @@ export function createRuntimeAdapter(dependencies: RuntimeAdapterDependencies = 
   };
 
   const workflow: RuntimeWorkflowPort = {
+    async start() {
+      const current = requireReady();
+      try {
+        const snapshot = await raceAbort(current.controller.runPreview(), current.abortController.signal);
+        applySnapshot(current, snapshot);
+        return publicState();
+      } catch {
+        const diagnostic = fixedDiagnostic("RUNTIME_PREVIEW_FAILED", "The install and Preview journey did not complete.");
+        appendDiagnostic(diagnostic, current.reportDiagnostic);
+        throw new RuntimeAdapterError(diagnostic.code, diagnostic.message);
+      }
+    },
     stopPreview(port) {
       return requireReady().controller.stopPreviewPort(port);
     },
@@ -253,6 +270,32 @@ export function createRuntimeAdapter(dependencies: RuntimeAdapterDependencies = 
       const content = workspaceText.get(path);
       if (content === undefined) throw new RuntimeAdapterError("RUNTIME_FILE_UNAVAILABLE", "The selected text file is unavailable.");
       return content;
+    },
+    writeText(path, content) {
+      const current = requireReady();
+      const previous = workspaceText.get(path);
+      if (workspaceState.status !== "ready" || previous === undefined) {
+        throw new RuntimeAdapterError("RUNTIME_FILE_UNAVAILABLE", "The selected text file is unavailable.");
+      }
+      const sizeBytes = new TextEncoder().encode(content).byteLength;
+      const previousBytes = new TextEncoder().encode(previous).byteLength;
+      const nextTotal = workspaceState.totalBytes - previousBytes + sizeBytes;
+      if (sizeBytes > MAX_TEMPLATE_FILE_BYTES || nextTotal > MAX_TEMPLATE_TOTAL_BYTES) {
+        throw new RuntimeAdapterError("RUNTIME_EDIT_LIMIT_EXCEEDED", "The text edit exceeds the Local Draft limit.");
+      }
+      try {
+        const snapshot = current.controller.saveTextFile(path, content);
+        workspaceText.set(path, content);
+        workspaceState = {
+          ...workspaceState,
+          totalBytes: nextTotal,
+          files: workspaceState.files.map((file) => file.path === path ? { ...file, sizeBytes } : file)
+        };
+        applySnapshot(current, snapshot);
+        return publicState();
+      } catch {
+        throw new RuntimeAdapterError("RUNTIME_EDIT_FAILED", "The text edit could not be saved safely.");
+      }
     }
   };
 
@@ -451,6 +494,7 @@ export function createRuntimeAdapter(dependencies: RuntimeAdapterDependencies = 
     state = {
       ...state,
       workflowPhase: snapshot.phase,
+      hmrState: snapshot.hmrState,
       previewUrl: snapshot.previewUrl,
       diagnostics,
       terminalProcessCount: current.controller.listShellProcesses().length
@@ -504,6 +548,7 @@ function createInitialState(): RuntimeViewState {
     lifecycle: "idle",
     projectId: null,
     workflowPhase: "idle",
+    hmrState: "idle",
     previewUrl: null,
     diagnostics: [],
     terminalProcessCount: 0

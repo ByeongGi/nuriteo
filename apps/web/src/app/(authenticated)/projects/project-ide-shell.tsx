@@ -10,12 +10,14 @@ import type {
   RuntimeViewState,
   RuntimeWorkspaceState
 } from "../../../runtime/runtime-adapter.ts";
+import { resolveRuntimeAssetRevision } from "../../../runtime/runtime-assets.ts";
 
 const EMPTY_RUNTIME_STATE: RuntimeViewState = {
   generation: 0,
   lifecycle: "idle",
   projectId: null,
   workflowPhase: "idle",
+  hmrState: "idle",
   previewUrl: null,
   diagnostics: [],
   terminalProcessCount: 0
@@ -25,7 +27,6 @@ const MAX_TERMINAL_COMMAND_CHARS = 2_048;
 const RUNTIME_BOOT_TIMEOUT_MS = 10_000;
 const RUNTIME_RELAY_TIMEOUT_MS = 10_000;
 const RUNTIME_MEMORY_LIMIT_BYTES = 512 * 1024 * 1024;
-const CONTENT_HASH = /^[0-9a-f]{64}$/u;
 
 interface Props {
   readonly assetRevision?: string;
@@ -36,6 +37,7 @@ interface Props {
 export function ProjectIdeShell({ assetRevision, project, workspaceScope }: Props) {
   const adapterRef = useRef<RuntimeAdapter | undefined>(undefined);
   const unsubscribeRef = useRef<() => void>(() => undefined);
+  const manifestAbortRef = useRef<AbortController | null>(null);
   const unmountedRef = useRef(false);
   const [workspace, setWorkspace] = useState<RuntimeWorkspaceState>();
   const [selectedPath, setSelectedPath] = useState<string>();
@@ -43,12 +45,17 @@ export function ProjectIdeShell({ assetRevision, project, workspaceScope }: Prop
   const [terminalOutput, setTerminalOutput] = useState("");
   const [error, setError] = useState<string>();
   const [isStarting, setIsStarting] = useState(false);
+  const [isRunningPreview, setIsRunningPreview] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [previewRefresh, setPreviewRefresh] = useState(0);
+  const [editorStatus, setEditorStatus] = useState("Local Draft");
   const [runtime, setRuntime] = useState<RuntimeViewState>(EMPTY_RUNTIME_STATE);
 
   useEffect(() => {
     unmountedRef.current = false;
     return () => {
       unmountedRef.current = true;
+      manifestAbortRef.current?.abort();
       unsubscribeRef.current();
       void adapterRef.current?.dispose();
     };
@@ -59,21 +66,21 @@ export function ProjectIdeShell({ assetRevision, project, workspaceScope }: Prop
       setError("Reload this Project before retrying an incompletely released workspace.");
       return;
     }
-    if (!assetRevision || !CONTENT_HASH.test(assetRevision)) {
-      setError("Runtime assets are not configured for this installation.");
-      return;
-    }
     setError(undefined);
     setIsStarting(true);
     try {
+      manifestAbortRef.current?.abort();
+      const manifestAbort = new AbortController();
+      manifestAbortRef.current = manifestAbort;
       const { createRuntimeAdapter } = await import("../../../runtime/runtime-adapter.ts");
+      const revision = await resolveRuntimeAssetRevision(assetRevision, manifestAbort.signal);
       if (unmountedRef.current) return;
       const adapter = createRuntimeAdapter();
       adapterRef.current = adapter;
       unsubscribeRef.current();
       unsubscribeRef.current = adapter.subscribe(setRuntime);
       const origin = globalThis.location.origin;
-      const base = `/runtime/${assetRevision}`;
+      const base = `/runtime/${revision}`;
       await adapter.mount({
         project: {
           id: project.id,
@@ -104,6 +111,7 @@ export function ProjectIdeShell({ assetRevision, project, workspaceScope }: Prop
       setError("The browser workspace could not be started safely.");
       await releaseAdapter();
     } finally {
+      manifestAbortRef.current = null;
       setIsStarting(false);
     }
   }
@@ -150,6 +158,38 @@ export function ProjectIdeShell({ assetRevision, project, workspaceScope }: Prop
     }
   }
 
+  async function runPreview() {
+    const adapter = adapterRef.current;
+    if (!adapter) return;
+    setError(undefined);
+    setIsRunningPreview(true);
+    try {
+      await adapter.workflow.start();
+    } catch {
+      setError("The install and Preview journey did not complete.");
+    } finally {
+      setIsRunningPreview(false);
+    }
+  }
+
+  function saveSelectedFile() {
+    const adapter = adapterRef.current;
+    if (!adapter || !selectedPath) return;
+    setError(undefined);
+    setIsSaving(true);
+    try {
+      const next = adapter.workspace.writeText(selectedPath, editorContent);
+      setRuntime(next);
+      setWorkspace(adapter.workspace.getState());
+      setPreviewRefresh((value) => value + 1);
+      setEditorStatus(next.hmrState === "connected" ? "Local Draft saved · HMR applied" : "Local Draft saved · restart may be required");
+    } catch {
+      setError("The text edit could not be saved safely.");
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
   async function stopWorkspace() {
     const adapter = adapterRef.current;
     await releaseAdapter();
@@ -161,6 +201,7 @@ export function ProjectIdeShell({ assetRevision, project, workspaceScope }: Prop
     setSelectedPath(undefined);
     setEditorContent("");
     setTerminalOutput("");
+    setEditorStatus("Local Draft");
   }
 
   async function releaseAdapter() {
@@ -180,6 +221,7 @@ export function ProjectIdeShell({ assetRevision, project, workspaceScope }: Prop
   }
 
   const hasWorkspace = workspace?.status === "ready";
+  const hasIsolatedPreview = runtime.previewUrl ? new URL(runtime.previewUrl, globalThis.location.href).origin !== globalThis.location.origin : false;
 
   return (
     <section className="mt-6 overflow-hidden rounded-lg border border-border bg-surface" aria-labelledby="project-ide-title">
@@ -197,11 +239,11 @@ export function ProjectIdeShell({ assetRevision, project, workspaceScope }: Prop
           </nav>
           <section className="grid min-w-0 grid-rows-[auto_minmax(16rem,1fr)_auto] border-b border-muted-border lg:border-r lg:border-b-0" aria-label="Text editor">
             <div className="border-b border-muted-border bg-subtle px-3 py-2 font-mono text-xs text-muted-foreground">{selectedPath ?? "Select a file"}</div>
-            {selectedPath ? <textarea className="h-full min-h-64 w-full resize-none border-0 bg-surface p-4 font-mono text-sm leading-6 text-foreground outline-none" aria-label={`Editor for ${selectedPath}`} readOnly spellCheck={false} value={editorContent} /> : <p className="p-4 text-sm text-muted-foreground">Choose a text file from the tree.</p>}
-            <p className="m-0 border-t border-muted-border px-3 py-2 text-xs text-muted-foreground">Local Draft · {workspace.files.length} files · {workspace.totalBytes} bytes</p>
+            {selectedPath ? <textarea className="h-full min-h-64 w-full resize-none border-0 bg-surface p-4 font-mono text-sm leading-6 text-foreground outline-none" aria-label={`Editor for ${selectedPath}`} spellCheck={false} value={editorContent} onChange={(event) => { setEditorContent(event.currentTarget.value); setEditorStatus("Unsaved Local Draft"); }} /> : <p className="p-4 text-sm text-muted-foreground">Choose a text file from the tree.</p>}
+            <div className="flex items-center justify-between gap-3 border-t border-muted-border px-3 py-2 text-xs text-muted-foreground"><span>{editorStatus} · {workspace.files.length} files · {workspace.totalBytes} bytes</span><Button type="button" size="sm" disabled={!selectedPath || isSaving} onClick={saveSelectedFile}>{isSaving ? "Applying…" : "Apply to Local Draft"}</Button></div>
           </section>
           <div className="grid grid-rows-[minmax(12rem,1fr)_minmax(12rem,1fr)]">
-            <section className="border-b border-muted-border p-3" aria-label="Preview"><h4 className="m-0 text-sm font-semibold">Preview</h4><p className="text-sm text-muted-foreground">Preview starts with the install/dev journey in RT-004.</p></section>
+            <section className="grid min-h-0 grid-rows-[auto_1fr] border-b border-muted-border" aria-label="Preview" data-preview-url={runtime.previewUrl ?? undefined}><div className="flex items-center justify-between gap-3 border-b border-muted-border p-3"><div><h4 className="m-0 text-sm font-semibold">Preview</h4><p className="m-0 text-xs text-muted-foreground">{runtime.workflowPhase} · HMR {runtime.hmrState}</p></div>{runtime.previewUrl ? null : <Button type="button" size="sm" variant="primary" disabled={isRunningPreview} onClick={() => void runPreview()}>{isRunningPreview ? "Installing…" : "Run Preview"}</Button>}</div>{hasIsolatedPreview ? <iframe key={previewRefresh} title={`${project.name} Preview`} className="h-full min-h-0 w-full border-0 bg-white" src={runtime.previewUrl ?? undefined} sandbox="allow-scripts" referrerPolicy="no-referrer" /> : runtime.previewUrl ? <p className="p-3 text-sm text-muted-foreground" role="status">Preview isolation is not configured. Same-origin Preview is disabled.</p> : <p className="p-3 text-sm text-muted-foreground">Run bounded install and dev to open the isolated Preview.</p>}</section>
             <section className="grid min-h-0 grid-rows-[auto_minmax(8rem,1fr)_auto] bg-background" aria-label="Terminal">
               <h4 className="m-0 border-b border-muted-border px-3 py-2 text-sm font-semibold">Terminal</h4>
               <pre className="m-0 overflow-auto whitespace-pre-wrap p-3 font-mono text-xs" aria-live="polite">{terminalOutput || "Run a bounded browser command."}</pre>

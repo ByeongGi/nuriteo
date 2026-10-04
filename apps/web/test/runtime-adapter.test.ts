@@ -64,6 +64,7 @@ class FakeController {
   current = snapshot();
   disposed = 0;
   terminals = new Set<string>();
+  savedText: { path: string; data: string } | null = null;
   readonly cleanup: string[];
 
   constructor(cleanup: string[]) { this.cleanup = cleanup; }
@@ -93,6 +94,14 @@ class FakeController {
     return [...this.terminals].map((terminalId) => ({ terminalId }));
   }
   async restartDev(): Promise<PreviewWorkflowSnapshot> { return this.current; }
+  async runPreview(): Promise<PreviewWorkflowSnapshot> {
+    this.current = snapshot({ phase: "hmr_connected", hmrState: "connected", previewUrl: "https://nuriteo.test/previews/project/" });
+    return this.current;
+  }
+  saveTextFile(path: string, data: string): PreviewWorkflowSnapshot {
+    this.savedText = { path, data };
+    return this.current;
+  }
   stopPreviewPort(): boolean { return true; }
   loadTemplate(): PreviewWorkflowSnapshot {
     this.current = snapshot({ phase: "template_loaded" });
@@ -165,6 +174,20 @@ function harness(boot: Promise<unknown> = Promise.resolve({})) {
   assert.equal(materialized.status, "ready");
   assert.deepEqual(materialized.files.map((file) => file.path), ["package.json", "src/main.tsx"]);
   assert.equal(adapter.workspace.readText("src/main.tsx"), "export default function App() {}\n");
+  const previewState = await adapter.workflow.start();
+  assert.equal(previewState.workflowPhase, "hmr_connected");
+  assert.equal(previewState.hmrState, "connected");
+  const editedState = adapter.workspace.writeText("src/main.tsx", "export default function App() { return 'edited'; }\n");
+  assert.equal(editedState.hmrState, "connected");
+  assert.deepEqual(controllers[0]?.savedText, {
+    path: "src/main.tsx",
+    data: "export default function App() { return 'edited'; }\n"
+  });
+  assert.match(adapter.workspace.readText("src/main.tsx"), /edited/u);
+  assert.throws(
+    () => adapter.workspace.writeText("src/main.tsx", "x".repeat(1024 * 1024 + 1)),
+    (error: unknown) => error instanceof RuntimeAdapterError && error.code === "RUNTIME_EDIT_LIMIT_EXCEEDED"
+  );
   await adapter.terminal.run("pnpm dev", "terminal-1");
   assert.equal(adapter.terminal.activeCount(), 1);
   const firstDispose = adapter.dispose();

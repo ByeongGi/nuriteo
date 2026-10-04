@@ -910,6 +910,13 @@ export function createPreviewWorkflowController(
     }
   }
 
+  function saveTextFile(path: string, data: string): PreviewWorkflowSnapshot {
+    if (disposed || !state.editor) throw new Error("Preview editor is unavailable");
+    state.editor.editText(path, data);
+    state.editor.saveFile(path);
+    return getSnapshot();
+  }
+
   function beginOperation(): AbortController {
     if (disposed) throw new Error("Preview controller is disposed");
     const controller = new AbortController();
@@ -1194,6 +1201,7 @@ export function createPreviewWorkflowController(
     setPackageManagerOverride,
     setPreviewErrorBridge,
     getChangeStatus,
+    saveTextFile,
     runPreview,
     restartDev,
     reconnectHmr,

@@ -8,6 +8,7 @@
 /examples/*/node_modules/
 /apps/*/node_modules/
 /apps/*/dist/
+/apps/web/public/runtime/
 /tests/**/node_modules/
 
 .DS_Store

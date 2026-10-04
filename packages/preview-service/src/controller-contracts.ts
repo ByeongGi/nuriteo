@@ -140,6 +140,7 @@ export interface PreviewWorkflowController {
   setPackageManagerOverride(value: SupportedPackageManager | null | ""): void;
   setPreviewErrorBridge(enabled: boolean): void;
   getChangeStatus(): PreviewChangeStatus;
+  saveTextFile(path: string, data: string): PreviewWorkflowSnapshot;
   runPreview(): Promise<PreviewWorkflowSnapshot>;
   restartDev(): Promise<PreviewWorkflowSnapshot>;
   reconnectHmr(): Promise<HmrClientSnapshot>;

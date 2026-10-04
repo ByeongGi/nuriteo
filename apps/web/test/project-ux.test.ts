@@ -234,6 +234,10 @@ function testProjectSourceContracts() {
   assert.match(ideShell, /aria-label="Project files"/u);
   assert.match(ideShell, /aria-label="Text editor"/u);
   assert.match(ideShell, /aria-label="Preview"/u);
+  assert.match(ideShell, /Apply to Local Draft/u);
+  assert.match(ideShell, /Local Draft saved · HMR applied/u);
+  assert.match(ideShell, /Same-origin Preview is disabled/u);
+  assert.doesNotMatch(ideShell, />Save<|"Saved · HMR/u);
   assert.match(ideShell, /aria-label="Terminal"/u);
   assert.match(ideShell, /createRuntimeAdapter/u);
   assert.match(ideShell, /storageScopeId: project\.storageScopeId/u);
