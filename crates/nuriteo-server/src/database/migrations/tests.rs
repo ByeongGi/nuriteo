@@ -29,13 +29,13 @@ fn validates_migration_deadlines() {
 fn embedded_baseline_is_forward_only_and_framework_scoped() {
     let embedded = embedded_migrator();
     let migrations: Vec<_> = embedded.iter().collect();
-    assert_eq!(migrations.len(), 13);
+    assert_eq!(migrations.len(), 14);
     assert_eq!(
         migrations
             .iter()
             .map(|migration| migration.version)
             .collect::<Vec<_>>(),
-        vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]
+        vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
     );
     assert_eq!(migrations[0].version, 1);
     assert_eq!(migrations[0].migration_type, MigrationType::Simple);
@@ -63,6 +63,32 @@ async fn real_postgres_serializes_validates_rolls_back_and_retries() {
     let pool = fixture_pool().await;
     reset_fixture(&pool).await;
     let normal = options(Duration::from_secs(3), Duration::from_secs(10));
+
+    let project_bundle_rollback_probe = project_bundle_rollback_probe_migrator();
+    let rollback_failure = run_migrator(&pool, normal, &project_bundle_rollback_probe).await;
+    assert!(matches!(
+        rollback_failure,
+        Err(MigrationError::ExecutionFailed {
+            version: Some(14),
+            ..
+        })
+    ));
+    for relation in [
+        "bundles",
+        "save_sessions",
+        "storage_reservations",
+        "project_bundle_admissions",
+        "multipart_parts",
+        "project_bundle_refs",
+        "gc_candidates",
+    ] {
+        assert!(!relation_exists(&pool, relation).await);
+    }
+    assert!(!column_exists(&pool, "projects", "working_head_bundle_id").await);
+    assert!(!constraint_exists(&pool, "projects_storage_identity_unique").await);
+    assert!(!constraint_exists(&pool, "projects_working_head_bundle_fk").await);
+    assert!(!constraint_exists(&pool, "projects_working_head_admission_fk").await);
+    assert_eq!(migration_row_count(&pool, 14).await, 0);
 
     let mut blocker = pool
         .acquire()
@@ -101,9 +127,9 @@ async fn real_postgres_serializes_validates_rolls_back_and_retries() {
         .unwrap_or_else(|error| panic!("second runner task must join: {error}"))
         .unwrap_or_else(|error| panic!("second runner must succeed: {error}"));
     assert_eq!(first_report, second_report);
-    assert_eq!(first_report.latest_version, Some(13));
-    assert_eq!(first_report.known_migrations, 13);
-    for version in 1..=13 {
+    assert_eq!(first_report.latest_version, Some(14));
+    assert_eq!(first_report.known_migrations, 14);
+    for version in 1..=14 {
         assert_eq!(migration_row_count(&pool, version).await, 1);
     }
 
@@ -247,6 +273,24 @@ fn test_migrator(additional: Migration) -> Migrator {
     migrator_without_driver_lock(migrations)
 }
 
+fn project_bundle_rollback_probe_migrator() -> Migrator {
+    let mut migrations: Vec<_> = embedded_migrator()
+        .iter()
+        .filter(|migration| migration.version < 14)
+        .cloned()
+        .collect();
+    let rollback_sql: &'static str =
+        Box::leak(format!("{PROJECT_BUNDLES_SQL}\nSELECT 1 / 0;").into_boxed_str());
+    migrations.push(Migration::new(
+        14,
+        Cow::Borrowed("project bundles rollback probe"),
+        MigrationType::Simple,
+        rollback_sql.into_sql_str(),
+        false,
+    ));
+    migrator_without_driver_lock(migrations)
+}
+
 async fn fixture_pool() -> DatabasePool {
     let database_url = env::var(DATABASE_URL_ENV)
         .unwrap_or_else(|_| panic!("{DATABASE_URL_ENV} must be set by the fixture"));
@@ -309,6 +353,32 @@ async fn relation_exists(pool: &DatabasePool, relation: &str) -> bool {
         .await
         .unwrap_or_else(|error| panic!("relation query must succeed: {error}"))
         .is_some()
+}
+
+async fn column_exists(pool: &DatabasePool, relation: &str, column: &str) -> bool {
+    let mut connection = pool
+        .acquire()
+        .await
+        .unwrap_or_else(|error| panic!("column query must acquire a connection: {error}"));
+    sqlx::query_scalar(
+        "SELECT EXISTS (\
+             SELECT 1 FROM information_schema.columns \
+             WHERE table_schema = 'public' AND table_name = $1 AND column_name = $2\
+         )",
+    )
+    .bind(relation)
+    .bind(column)
+    .fetch_one(&mut *connection)
+    .await
+    .unwrap_or_else(|error| panic!("column query must succeed: {error}"))
+}
+
+async fn constraint_exists(pool: &DatabasePool, constraint: &str) -> bool {
+    sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = $1)")
+        .bind(constraint)
+        .fetch_one(&mut *pool.acquire().await.unwrap())
+        .await
+        .unwrap()
 }
 
 async fn drop_transaction_probe(pool: &DatabasePool) {

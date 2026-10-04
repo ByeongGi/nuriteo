@@ -27,13 +27,13 @@ async fn migrate_subprocess_enforces_schema_readiness_and_redaction() {
         check_schema_readiness(&pool).await.unwrap(),
         SchemaReadiness::Pending {
             current: None,
-            target: 13
+            target: 14
         }
     );
     assert_success(&run_migrate(&database_url, &ca_path, None));
     assert_eq!(
         check_schema_readiness(&pool).await.unwrap(),
-        SchemaReadiness::Ready { version: 13 }
+        SchemaReadiness::Ready { version: 14 }
     );
     assert_success(&run_migrate(&database_url, &ca_path, None));
 
@@ -42,7 +42,7 @@ async fn migrate_subprocess_enforces_schema_readiness_and_redaction() {
         check_schema_readiness(&pool).await.unwrap(),
         SchemaReadiness::Pending {
             current: None,
-            target: 13
+            target: 14
         }
     );
     let url_file = temporary_url_file(&database_url);
@@ -133,7 +133,7 @@ fn assert_success(output: &Output) {
     assert_eq!(output.status.code(), Some(0));
     assert_eq!(
         output.stdout,
-        b"database migration complete: schema=ready version=7\n"
+        b"database migration complete: schema=ready version=14\n"
     );
     assert!(output.stderr.is_empty());
 }
@@ -168,25 +168,14 @@ async fn fixture_pool(database_url: String, ca: Vec<u8>) -> DatabasePool {
 
 async fn reset_schema(pool: &DatabasePool) {
     let mut connection = pool.acquire().await.unwrap();
-    for statement in [
-        "DROP TABLE IF EXISTS organization_memberships",
-        "DROP TABLE IF EXISTS organizations",
-        "DROP TABLE IF EXISTS storage_scopes",
-        "DROP TABLE IF EXISTS local_auth_failures",
-        "DROP TABLE IF EXISTS activation_invitations",
-        "DROP TABLE IF EXISTS audit_events",
-        "DROP TABLE IF EXISTS sessions",
-        "DROP TABLE IF EXISTS oidc_identities",
-        "DROP TABLE IF EXISTS oidc_providers",
-        "DROP TABLE IF EXISTS local_password_credentials",
-        "DROP TABLE IF EXISTS users",
-        "DROP TABLE IF EXISTS _sqlx_migrations",
-    ] {
-        sqlx::query(statement)
-            .execute(&mut *connection)
-            .await
-            .unwrap();
-    }
+    sqlx::query("DROP SCHEMA public CASCADE")
+        .execute(&mut *connection)
+        .await
+        .unwrap();
+    sqlx::query("CREATE SCHEMA public")
+        .execute(&mut *connection)
+        .await
+        .unwrap();
 }
 
 fn temporary_url_file(database_url: &str) -> PathBuf {

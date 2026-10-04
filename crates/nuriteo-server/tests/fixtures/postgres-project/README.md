@@ -7,4 +7,5 @@ test against the actual TLS database.
 The fixture covers User and Organization owner/scope identity, independent slug
 namespaces, lifecycle/version/timestamp constraints, permanent tombstone URL
 reservation, transaction rollback, repeated migration, readiness, and the
-intentional absence of `working_head_bundle_id` before SAVE-001.
+nullable verified-Bundle `working_head_bundle_id` added by SAVE-001 without
+weakening the original Project invariants.

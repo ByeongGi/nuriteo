@@ -39,21 +39,21 @@ async fn project_schema_enforces_owner_scope_slug_lifecycle_and_tombstones() {
         check_schema_readiness(&pool).await.unwrap(),
         SchemaReadiness::Pending {
             current: None,
-            target: 13
+            target: 14
         }
     );
     let first = migrate(&pool).await;
     assert_eq!(
         first,
         MigrationReport {
-            latest_version: Some(13),
-            known_migrations: 13
+            latest_version: Some(14),
+            known_migrations: 14
         }
     );
     assert_eq!(migrate(&pool).await, first);
     assert_eq!(
         check_schema_readiness(&pool).await.unwrap(),
-        SchemaReadiness::Ready { version: 13 }
+        SchemaReadiness::Ready { version: 14 }
     );
 
     seed_owners_and_scopes(&pool).await;
@@ -558,7 +558,7 @@ async fn verify_schema_shape(pool: &DatabasePool) {
     let working_head: bool = sqlx::query_scalar(
         "SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'projects' AND column_name = 'working_head_bundle_id')",
     ).fetch_one(&mut *acquire(pool).await).await.unwrap();
-    assert!(!working_head);
+    assert!(working_head);
     for constraint in [
         "projects_exactly_one_owner_check",
         "projects_user_scope_fk",
