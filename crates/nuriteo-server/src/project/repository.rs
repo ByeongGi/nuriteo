@@ -255,8 +255,19 @@ impl ProjectRepository {
         limit: ProjectPageLimit,
         after: Option<&ProjectPageKey>,
     ) -> Result<ProjectPage, ProjectRepositoryError> {
+        Self::list_page_filtered(transaction, owner, limit, after, None).await
+    }
+
+    pub(crate) async fn list_page_filtered(
+        transaction: &mut Transaction<'_, Postgres>,
+        owner: ProjectOwner,
+        limit: ProjectPageLimit,
+        after: Option<&ProjectPageKey>,
+        state: Option<super::ProjectState>,
+    ) -> Result<ProjectPage, ProjectRepositoryError> {
         let after_slug = after.map(|key| key.slug.as_str().to_owned());
         let after_id = after.map(|key| key.id.to_string());
+        let state = state.map(super::ProjectState::as_str);
         let rows = match owner {
             ProjectOwner::User(owner_id) => {
                 sqlx::query_as::<_, ProjectRow>(
@@ -265,12 +276,14 @@ impl ProjectRepository {
                             archived_at, lock_version FROM projects \
                      WHERE owner_user_id = $1::uuid AND owner_organization_id IS NULL \
                        AND ($2::text IS NULL OR (slug, id) > ($2::text, $3::uuid)) \
+                       AND ($5::text IS NULL OR state = $5::text) \
                      ORDER BY slug ASC, id ASC LIMIT $4",
                 )
                 .bind(owner_id.to_string())
                 .bind(&after_slug)
                 .bind(&after_id)
                 .bind(limit.fetch_count())
+                .bind(state)
                 .fetch_all(&mut **transaction)
                 .await
             }
@@ -281,12 +294,14 @@ impl ProjectRepository {
                             archived_at, lock_version FROM projects \
                      WHERE owner_organization_id = $1::uuid AND owner_user_id IS NULL \
                        AND ($2::text IS NULL OR (slug, id) > ($2::text, $3::uuid)) \
+                       AND ($5::text IS NULL OR state = $5::text) \
                      ORDER BY slug ASC, id ASC LIMIT $4",
                 )
                 .bind(owner_id.to_string())
                 .bind(&after_slug)
                 .bind(&after_id)
                 .bind(limit.fetch_count())
+                .bind(state)
                 .fetch_all(&mut **transaction)
                 .await
             }

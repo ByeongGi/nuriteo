@@ -1,4 +1,6 @@
 mod access;
+mod http_routes;
+mod http_service;
 mod model;
 mod repository;
 mod service;
@@ -10,6 +12,8 @@ pub use access::{
     DirectProjectRoleGrant, EffectiveProjectRole, ProjectAccessError, ProjectAccessRepository,
     ProjectRole, ProjectRoleVersion,
 };
+pub(crate) use http_routes::openapi_router;
+pub use http_service::{ProjectHttpError, ProjectHttpPolicy, ProjectHttpService};
 pub use model::Project;
 #[cfg(test)]
 pub(crate) use model::ProjectFields;

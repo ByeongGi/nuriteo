@@ -1,0 +1,840 @@
+use std::str::FromStr;
+
+use axum::Json;
+use axum::body::{Body, to_bytes};
+use axum::extract::{Extension, Path, Request, State};
+use axum::http::header::{CONTENT_TYPE, COOKIE, ETAG, IF_MATCH, LOCATION};
+use axum::http::{HeaderMap, HeaderName, HeaderValue, StatusCode};
+use axum::response::{IntoResponse, Response};
+use serde::{Deserialize, de::DeserializeOwned};
+use utoipa::ToSchema;
+use utoipa_axum::{router::OpenApiRouter, routes};
+
+use crate::http::{FieldViolation, HttpError, RequestId};
+use crate::identity::{BrowserMethod, BrowserRequestHeaders, UserId};
+use crate::organization::OrganizationId;
+
+use super::http_service::{
+    ProjectHttpError, ProjectHttpService, ProjectListView, ProjectRoleListView,
+    ProjectRoleMutationView, ProjectView, RoleOperation,
+};
+use super::{
+    ProjectId, ProjectName, ProjectOwner, ProjectPageLimit, ProjectRole, ProjectRolePageLimit,
+    ProjectSlug, ProjectState, ProjectVersion,
+};
+
+const COLLECTION: &str = "/api/v1/workspaces/{owner_type}/{owner_id}/projects";
+const ITEM: &str = "/api/v1/workspaces/{owner_type}/{owner_id}/projects/{project_id}";
+const ARCHIVE: &str = "/api/v1/workspaces/{owner_type}/{owner_id}/projects/{project_id}/archive";
+const RESTORE: &str = "/api/v1/workspaces/{owner_type}/{owner_id}/projects/{project_id}/restore";
+const ROLES: &str = "/api/v1/workspaces/{owner_type}/{owner_id}/projects/{project_id}/roles";
+const ROLE: &str =
+    "/api/v1/workspaces/{owner_type}/{owner_id}/projects/{project_id}/roles/{user_id}";
+const MAX_BODY: usize = 4096;
+const MAX_QUERY: usize = 4096;
+const ORIGIN: HeaderName = HeaderName::from_static("origin");
+const CSRF: HeaderName = HeaderName::from_static("x-csrf-token");
+
+pub(crate) fn openapi_router(
+    document: utoipa::openapi::OpenApi,
+) -> OpenApiRouter<ProjectHttpService> {
+    OpenApiRouter::with_openapi(document)
+        .routes(routes!(create_project, list_projects))
+        .routes(routes!(get_project, rename_project, delete_project))
+        .routes(routes!(archive_project))
+        .routes(routes!(restore_project))
+        .routes(routes!(list_roles, grant_role))
+        .routes(routes!(change_role, revoke_role))
+}
+
+#[derive(Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
+struct CreateProjectRequest {
+    slug: String,
+    name: String,
+}
+
+#[derive(Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
+struct RenameProjectRequest {
+    name: String,
+}
+
+#[derive(Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
+struct DeleteProjectRequest {
+    name: String,
+}
+
+#[derive(Deserialize, ToSchema)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+struct GrantRoleRequest {
+    user_id: String,
+    role: ProjectRole,
+}
+
+#[derive(Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
+struct ChangeRoleRequest {
+    role: ProjectRole,
+}
+
+#[utoipa::path(post, path = COLLECTION, tag = "projects",
+    params(("owner_type" = String, Path), ("owner_id" = String, Path)),
+    request_body(content = CreateProjectRequest, content_type = "application/json"),
+    responses((status = 201, body = ProjectView, headers(("Location" = String), ("ETag" = String))),
+      (status = 401, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+      (status = 403, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+      (status = 404, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+      (status = 409, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+      (status = 422, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+      (status = 503, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+      (status = 504, body = crate::openapi::ProblemDetails, content_type = "application/problem+json")))]
+async fn create_project(
+    State(service): State<ProjectHttpService>,
+    Extension(request_id): Extension<RequestId>,
+    Path((owner_type, owner_id)): Path<(String, String)>,
+    request: Request,
+) -> Result<Response, HttpError> {
+    let (parts, body) = request.into_parts();
+    let headers = BrowserHeaders::read(&parts.headers, &request_id, COLLECTION)?;
+    let input: CreateProjectRequest =
+        json_body(&parts.headers, body, &request_id, COLLECTION).await?;
+    let view = service
+        .create(
+            headers.request(BrowserMethod::Post),
+            parse_owner(&owner_type, &owner_id, &request_id, COLLECTION)?,
+            ProjectSlug::new(input.slug)
+                .map_err(|_| validation(&request_id, COLLECTION, "slug"))?,
+            ProjectName::new(input.name)
+                .map_err(|_| validation(&request_id, COLLECTION, "name"))?,
+            request_id.as_str(),
+        )
+        .await
+        .map_err(|error| map_error(error, request_id.clone(), COLLECTION))?;
+    project_response(StatusCode::CREATED, view, true, request_id, COLLECTION)
+}
+
+#[utoipa::path(get, path = COLLECTION, tag = "projects",
+    params(("owner_type" = String, Path), ("owner_id" = String, Path),
+      ("state" = Option<String>, Query), ("pageSize" = Option<u16>, Query), ("cursor" = Option<String>, Query)),
+    responses((status = 200, body = ProjectListView),
+      (status = 401, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+      (status = 403, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+      (status = 404, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+      (status = 409, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+      (status = 422, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+      (status = 503, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+      (status = 504, body = crate::openapi::ProblemDetails, content_type = "application/problem+json")))]
+async fn list_projects(
+    State(service): State<ProjectHttpService>,
+    Extension(request_id): Extension<RequestId>,
+    Path((owner_type, owner_id)): Path<(String, String)>,
+    request: Request,
+) -> Result<Json<ProjectListView>, HttpError> {
+    let headers = BrowserHeaders::read(request.headers(), &request_id, COLLECTION)?;
+    let query = ListQuery::parse(request.uri().query(), &request_id, COLLECTION)?;
+    let view = service
+        .list(
+            headers.request(BrowserMethod::Get),
+            parse_owner(&owner_type, &owner_id, &request_id, COLLECTION)?,
+            query.state,
+            query.project_limit(&request_id, COLLECTION)?,
+            query.cursor.as_deref(),
+        )
+        .await
+        .map_err(|error| map_error(error, request_id, COLLECTION))?;
+    Ok(Json(view))
+}
+
+#[utoipa::path(get, path = ITEM, tag = "projects",
+    params(("owner_type" = String, Path), ("owner_id" = String, Path), ("project_id" = String, Path)),
+    responses((status = 200, body = ProjectView, headers(("ETag" = String))),
+      (status = 401, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+      (status = 404, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+      (status = 422, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+      (status = 503, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+      (status = 504, body = crate::openapi::ProblemDetails, content_type = "application/problem+json")))]
+async fn get_project(
+    State(service): State<ProjectHttpService>,
+    Extension(request_id): Extension<RequestId>,
+    Path((owner_type, owner_id, project_id)): Path<(String, String, String)>,
+    request: Request,
+) -> Result<Response, HttpError> {
+    let headers = BrowserHeaders::read(request.headers(), &request_id, ITEM)?;
+    let view = service
+        .get(
+            headers.request(BrowserMethod::Get),
+            parse_owner(&owner_type, &owner_id, &request_id, ITEM)?,
+            parse_project_id(&project_id, &request_id, ITEM)?,
+        )
+        .await
+        .map_err(|error| map_error(error, request_id.clone(), ITEM))?;
+    project_response(StatusCode::OK, view, false, request_id, ITEM)
+}
+
+#[utoipa::path(patch, path = ITEM, tag = "projects",
+    params(("owner_type" = String, Path), ("owner_id" = String, Path), ("project_id" = String, Path), ("If-Match" = String, Header)),
+    request_body(content = RenameProjectRequest, content_type = "application/json"),
+    responses((status = 200, body = ProjectView, headers(("ETag" = String))),
+      (status = 401, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+      (status = 403, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+      (status = 404, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+      (status = 409, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+      (status = 412, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+      (status = 422, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+      (status = 428, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+      (status = 503, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+      (status = 504, body = crate::openapi::ProblemDetails, content_type = "application/problem+json")))]
+async fn rename_project(
+    State(service): State<ProjectHttpService>,
+    Extension(request_id): Extension<RequestId>,
+    Path((owner_type, owner_id, project_id)): Path<(String, String, String)>,
+    request: Request,
+) -> Result<Response, HttpError> {
+    let (parts, body) = request.into_parts();
+    let headers = BrowserHeaders::read(&parts.headers, &request_id, ITEM)?;
+    let version = parse_if_match(&parts.headers, &request_id, ITEM)?;
+    let input: RenameProjectRequest = json_body(&parts.headers, body, &request_id, ITEM).await?;
+    let view = service
+        .rename(
+            headers.request(BrowserMethod::Patch),
+            parse_owner(&owner_type, &owner_id, &request_id, ITEM)?,
+            parse_project_id(&project_id, &request_id, ITEM)?,
+            version,
+            ProjectName::new(input.name).map_err(|_| validation(&request_id, ITEM, "name"))?,
+            request_id.as_str(),
+        )
+        .await
+        .map_err(|error| map_error(error, request_id.clone(), ITEM))?;
+    project_response(StatusCode::OK, view, false, request_id, ITEM)
+}
+
+#[utoipa::path(delete, path = ITEM, tag = "projects",
+    params(("owner_type" = String, Path), ("owner_id" = String, Path), ("project_id" = String, Path), ("If-Match" = String, Header)),
+    request_body(content = DeleteProjectRequest, content_type = "application/json"),
+    responses((status = 204),
+      (status = 401, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+      (status = 403, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+      (status = 404, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+      (status = 409, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+      (status = 412, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+      (status = 422, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+      (status = 428, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+      (status = 503, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+      (status = 504, body = crate::openapi::ProblemDetails, content_type = "application/problem+json")))]
+async fn delete_project(
+    State(service): State<ProjectHttpService>,
+    Extension(request_id): Extension<RequestId>,
+    Path((owner_type, owner_id, project_id)): Path<(String, String, String)>,
+    request: Request,
+) -> Result<StatusCode, HttpError> {
+    let (parts, body) = request.into_parts();
+    let headers = BrowserHeaders::read(&parts.headers, &request_id, ITEM)?;
+    let version = parse_if_match(&parts.headers, &request_id, ITEM)?;
+    let input: DeleteProjectRequest = json_body(&parts.headers, body, &request_id, ITEM).await?;
+    service
+        .delete(
+            headers.request(BrowserMethod::Delete),
+            parse_owner(&owner_type, &owner_id, &request_id, ITEM)?,
+            parse_project_id(&project_id, &request_id, ITEM)?,
+            version,
+            ProjectName::new(input.name).map_err(|_| validation(&request_id, ITEM, "name"))?,
+            request_id.as_str(),
+        )
+        .await
+        .map_err(|error| map_error(error, request_id, ITEM))?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[utoipa::path(post, path = ARCHIVE, tag = "projects", params(("owner_type" = String, Path), ("owner_id" = String, Path), ("project_id" = String, Path), ("If-Match" = String, Header)), responses((status = 200, body = ProjectView, headers(("ETag" = String))),
+    (status = 401, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+    (status = 403, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+    (status = 404, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+    (status = 409, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+    (status = 412, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+    (status = 422, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+    (status = 428, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+    (status = 503, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+    (status = 504, body = crate::openapi::ProblemDetails, content_type = "application/problem+json")))]
+async fn archive_project(
+    State(service): State<ProjectHttpService>,
+    Extension(request_id): Extension<RequestId>,
+    Path(path): Path<(String, String, String)>,
+    request: Request,
+) -> Result<Response, HttpError> {
+    lifecycle(service, request_id, path, request, false, ARCHIVE).await
+}
+
+#[utoipa::path(post, path = RESTORE, tag = "projects", params(("owner_type" = String, Path), ("owner_id" = String, Path), ("project_id" = String, Path), ("If-Match" = String, Header)), responses((status = 200, body = ProjectView, headers(("ETag" = String))),
+    (status = 401, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+    (status = 403, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+    (status = 404, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+    (status = 409, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+    (status = 412, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+    (status = 422, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+    (status = 428, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+    (status = 503, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+    (status = 504, body = crate::openapi::ProblemDetails, content_type = "application/problem+json")))]
+async fn restore_project(
+    State(service): State<ProjectHttpService>,
+    Extension(request_id): Extension<RequestId>,
+    Path(path): Path<(String, String, String)>,
+    request: Request,
+) -> Result<Response, HttpError> {
+    lifecycle(service, request_id, path, request, true, RESTORE).await
+}
+
+async fn lifecycle(
+    service: ProjectHttpService,
+    request_id: RequestId,
+    (owner_type, owner_id, project_id): (String, String, String),
+    request: Request,
+    restore: bool,
+    path: &'static str,
+) -> Result<Response, HttpError> {
+    let headers = BrowserHeaders::read(request.headers(), &request_id, path)?;
+    let version = parse_if_match(request.headers(), &request_id, path)?;
+    let view = service
+        .archive_or_restore(
+            headers.request(BrowserMethod::Post),
+            parse_owner(&owner_type, &owner_id, &request_id, path)?,
+            parse_project_id(&project_id, &request_id, path)?,
+            version,
+            restore,
+            request_id.as_str(),
+        )
+        .await
+        .map_err(|error| map_error(error, request_id.clone(), path))?;
+    project_response(StatusCode::OK, view, false, request_id, path)
+}
+
+#[utoipa::path(get, path = ROLES, tag = "project-roles", params(("owner_type" = String, Path), ("owner_id" = String, Path), ("project_id" = String, Path), ("pageSize" = Option<u16>, Query), ("cursor" = Option<String>, Query)), responses((status = 200, body = ProjectRoleListView),
+    (status = 401, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+    (status = 403, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+    (status = 404, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+    (status = 409, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+    (status = 422, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+    (status = 503, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+    (status = 504, body = crate::openapi::ProblemDetails, content_type = "application/problem+json")))]
+async fn list_roles(
+    State(service): State<ProjectHttpService>,
+    Extension(request_id): Extension<RequestId>,
+    Path((owner_type, owner_id, project_id)): Path<(String, String, String)>,
+    request: Request,
+) -> Result<Json<ProjectRoleListView>, HttpError> {
+    let headers = BrowserHeaders::read(request.headers(), &request_id, ROLES)?;
+    let query = ListQuery::parse(request.uri().query(), &request_id, ROLES)?;
+    if query.state_supplied {
+        return Err(validation(&request_id, ROLES, "state"));
+    }
+    let view = service
+        .list_roles(
+            headers.request(BrowserMethod::Get),
+            parse_owner(&owner_type, &owner_id, &request_id, ROLES)?,
+            parse_project_id(&project_id, &request_id, ROLES)?,
+            query.role_limit(&request_id, ROLES)?,
+            query.cursor.as_deref(),
+        )
+        .await
+        .map_err(|error| map_error(error, request_id, ROLES))?;
+    Ok(Json(view))
+}
+
+#[utoipa::path(post, path = ROLES, tag = "project-roles", params(("owner_type" = String, Path), ("owner_id" = String, Path), ("project_id" = String, Path), ("If-Match" = String, Header)), request_body(content = GrantRoleRequest, content_type = "application/json"), responses((status = 201, body = ProjectRoleMutationView, headers(("ETag" = String))),
+    (status = 401, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+    (status = 403, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+    (status = 404, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+    (status = 409, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+    (status = 412, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+    (status = 422, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+    (status = 428, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+    (status = 503, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+    (status = 504, body = crate::openapi::ProblemDetails, content_type = "application/problem+json")))]
+async fn grant_role(
+    State(service): State<ProjectHttpService>,
+    Extension(request_id): Extension<RequestId>,
+    Path(path): Path<(String, String, String)>,
+    request: Request,
+) -> Result<Response, HttpError> {
+    let (parts, body) = request.into_parts();
+    let input: GrantRoleRequest = json_body(&parts.headers, body, &request_id, ROLES).await?;
+    role_mutation(
+        service,
+        request_id,
+        path,
+        parts.headers,
+        input.user_id,
+        Some(input.role),
+        RoleOperation::Grant,
+        BrowserMethod::Post,
+        StatusCode::CREATED,
+        ROLES,
+    )
+    .await
+}
+
+#[utoipa::path(patch, path = ROLE, tag = "project-roles", params(("owner_type" = String, Path), ("owner_id" = String, Path), ("project_id" = String, Path), ("user_id" = String, Path), ("If-Match" = String, Header)), request_body(content = ChangeRoleRequest, content_type = "application/json"), responses((status = 200, body = ProjectRoleMutationView, headers(("ETag" = String))),
+    (status = 401, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+    (status = 403, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+    (status = 404, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+    (status = 409, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+    (status = 412, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+    (status = 422, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+    (status = 428, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+    (status = 503, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+    (status = 504, body = crate::openapi::ProblemDetails, content_type = "application/problem+json")))]
+async fn change_role(
+    State(service): State<ProjectHttpService>,
+    Extension(request_id): Extension<RequestId>,
+    Path((owner_type, owner_id, project_id, user_id)): Path<(String, String, String, String)>,
+    request: Request,
+) -> Result<Response, HttpError> {
+    let (parts, body) = request.into_parts();
+    let input: ChangeRoleRequest = json_body(&parts.headers, body, &request_id, ROLE).await?;
+    role_mutation(
+        service,
+        request_id,
+        (owner_type, owner_id, project_id),
+        parts.headers,
+        user_id,
+        Some(input.role),
+        RoleOperation::Change,
+        BrowserMethod::Patch,
+        StatusCode::OK,
+        ROLE,
+    )
+    .await
+}
+
+#[utoipa::path(delete, path = ROLE, tag = "project-roles", params(("owner_type" = String, Path), ("owner_id" = String, Path), ("project_id" = String, Path), ("user_id" = String, Path), ("If-Match" = String, Header)), responses((status = 200, body = ProjectRoleMutationView, headers(("ETag" = String))),
+    (status = 401, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+    (status = 403, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+    (status = 404, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+    (status = 409, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+    (status = 412, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+    (status = 422, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+    (status = 428, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+    (status = 503, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+    (status = 504, body = crate::openapi::ProblemDetails, content_type = "application/problem+json")))]
+async fn revoke_role(
+    State(service): State<ProjectHttpService>,
+    Extension(request_id): Extension<RequestId>,
+    Path((owner_type, owner_id, project_id, user_id)): Path<(String, String, String, String)>,
+    request: Request,
+) -> Result<Response, HttpError> {
+    let headers = request.headers().clone();
+    role_mutation(
+        service,
+        request_id,
+        (owner_type, owner_id, project_id),
+        headers,
+        user_id,
+        None,
+        RoleOperation::Revoke,
+        BrowserMethod::Delete,
+        StatusCode::OK,
+        ROLE,
+    )
+    .await
+}
+
+#[allow(
+    clippy::too_many_arguments,
+    reason = "role HTTP security inputs stay explicit"
+)]
+async fn role_mutation(
+    service: ProjectHttpService,
+    request_id: RequestId,
+    (owner_type, owner_id, project_id): (String, String, String),
+    headers: HeaderMap,
+    user_id: String,
+    role: Option<ProjectRole>,
+    operation: RoleOperation,
+    method: BrowserMethod,
+    status: StatusCode,
+    path: &'static str,
+) -> Result<Response, HttpError> {
+    let browser = BrowserHeaders::read(&headers, &request_id, path)?;
+    let version = parse_if_match(&headers, &request_id, path)?;
+    let view = service
+        .mutate_role(
+            browser.request(method),
+            parse_owner(&owner_type, &owner_id, &request_id, path)?,
+            parse_project_id(&project_id, &request_id, path)?,
+            version,
+            parse_user_id(&user_id, &request_id, path)?,
+            role,
+            operation,
+            request_id.as_str(),
+        )
+        .await
+        .map_err(|error| map_error(error, request_id.clone(), path))?;
+    role_response(status, view, request_id, path)
+}
+
+struct BrowserHeaders<'a> {
+    cookies: Vec<&'a str>,
+    origins: Vec<&'a str>,
+    csrf: Vec<&'a str>,
+}
+impl<'a> BrowserHeaders<'a> {
+    fn read(headers: &'a HeaderMap, request_id: &RequestId, path: &str) -> Result<Self, HttpError> {
+        fn values<'a>(
+            headers: &'a HeaderMap,
+            name: HeaderName,
+            request_id: &RequestId,
+            path: &str,
+        ) -> Result<Vec<&'a str>, HttpError> {
+            headers
+                .get_all(name)
+                .iter()
+                .map(|value| {
+                    value
+                        .to_str()
+                        .map_err(|_| validation(request_id, path, "headers"))
+                })
+                .collect()
+        }
+        Ok(Self {
+            cookies: values(headers, COOKIE, request_id, path)?,
+            origins: values(headers, ORIGIN, request_id, path)?,
+            csrf: values(headers, CSRF, request_id, path)?,
+        })
+    }
+    fn request(&self, method: BrowserMethod) -> BrowserRequestHeaders<'_> {
+        BrowserRequestHeaders {
+            method,
+            origins: &self.origins,
+            cookie_headers: &self.cookies,
+            csrf_headers: &self.csrf,
+        }
+    }
+}
+
+struct ListQuery {
+    state: Option<ProjectState>,
+    state_supplied: bool,
+    page_size: u16,
+    cursor: Option<String>,
+}
+impl ListQuery {
+    fn parse(raw: Option<&str>, request_id: &RequestId, path: &str) -> Result<Self, HttpError> {
+        let raw = raw.unwrap_or_default();
+        if raw.len() > MAX_QUERY {
+            return Err(validation(request_id, path, "query"));
+        }
+        let mut state = None;
+        let mut state_seen = false;
+        let mut page_size = None;
+        let mut cursor = None;
+        let mut cursor_seen = false;
+        for (key, value) in url::form_urlencoded::parse(raw.as_bytes()) {
+            match key.as_ref() {
+                "state" if !state_seen => {
+                    state_seen = true;
+                    state = Some(match value.as_ref() {
+                        "active" => ProjectState::Active,
+                        "archived" => ProjectState::Archived,
+                        "all" => {
+                            continue;
+                        }
+                        _ => return Err(validation(request_id, path, "state")),
+                    })
+                }
+                "pageSize" if page_size.is_none() => {
+                    page_size = Some(
+                        value
+                            .parse::<u16>()
+                            .map_err(|_| validation(request_id, path, "pageSize"))?,
+                    )
+                }
+                "cursor" if !cursor_seen && !value.is_empty() => {
+                    cursor_seen = true;
+                    cursor = Some(value.into_owned())
+                }
+                _ => return Err(validation(request_id, path, "query")),
+            }
+        }
+        Ok(Self {
+            state,
+            state_supplied: state_seen,
+            page_size: page_size.unwrap_or(50),
+            cursor,
+        })
+    }
+    fn project_limit(
+        &self,
+        request_id: &RequestId,
+        path: &str,
+    ) -> Result<ProjectPageLimit, HttpError> {
+        ProjectPageLimit::new(self.page_size).map_err(|_| {
+            HttpError::validation(
+                request_id.clone(),
+                path,
+                [FieldViolation::new(
+                    "pageSize",
+                    "INVALID",
+                    "The value is invalid.",
+                )],
+            )
+        })
+    }
+    fn role_limit(
+        &self,
+        request_id: &RequestId,
+        path: &str,
+    ) -> Result<ProjectRolePageLimit, HttpError> {
+        ProjectRolePageLimit::new(self.page_size).map_err(|_| {
+            HttpError::validation(
+                request_id.clone(),
+                path,
+                [FieldViolation::new(
+                    "pageSize",
+                    "INVALID",
+                    "The value is invalid.",
+                )],
+            )
+        })
+    }
+}
+
+async fn json_body<T: DeserializeOwned>(
+    headers: &HeaderMap,
+    body: Body,
+    request_id: &RequestId,
+    path: &str,
+) -> Result<T, HttpError> {
+    let content_types: Vec<_> = headers.get_all(CONTENT_TYPE).iter().collect();
+    if content_types.len() != 1
+        || content_types[0]
+            .to_str()
+            .ok()
+            .and_then(|value| value.split(';').next())
+            .map(str::trim)
+            != Some("application/json")
+    {
+        return Err(HttpError::unsupported_media_type(request_id.clone(), path));
+    }
+    let bytes = to_bytes(body, MAX_BODY)
+        .await
+        .map_err(|_| HttpError::payload_too_large(request_id.clone(), path))?;
+    serde_json::from_slice(&bytes).map_err(|_| validation(request_id, path, "body"))
+}
+
+fn parse_owner(
+    owner_type: &str,
+    owner_id: &str,
+    request_id: &RequestId,
+    path: &str,
+) -> Result<ProjectOwner, HttpError> {
+    match owner_type {
+        "users" => UserId::from_str(owner_id)
+            .map(ProjectOwner::User)
+            .map_err(|_| validation(request_id, path, "ownerId")),
+        "organizations" => OrganizationId::from_str(owner_id)
+            .map(ProjectOwner::Organization)
+            .map_err(|_| validation(request_id, path, "ownerId")),
+        _ => Err(validation(request_id, path, "ownerType")),
+    }
+}
+fn parse_project_id(
+    value: &str,
+    request_id: &RequestId,
+    path: &str,
+) -> Result<ProjectId, HttpError> {
+    value
+        .parse()
+        .map_err(|_| validation(request_id, path, "projectId"))
+}
+fn parse_user_id(value: &str, request_id: &RequestId, path: &str) -> Result<UserId, HttpError> {
+    value
+        .parse()
+        .map_err(|_| validation(request_id, path, "userId"))
+}
+
+fn parse_if_match(
+    headers: &HeaderMap,
+    request_id: &RequestId,
+    path: &str,
+) -> Result<ProjectVersion, HttpError> {
+    let values: Vec<_> = headers.get_all(IF_MATCH).iter().collect();
+    if values.is_empty() {
+        return Err(HttpError::precondition_required(request_id.clone(), path));
+    }
+    if values.len() != 1 {
+        return Err(HttpError::precondition_failed(request_id.clone(), path));
+    }
+    let raw = values[0]
+        .to_str()
+        .map_err(|_| HttpError::precondition_failed(request_id.clone(), path))?;
+    let number = raw
+        .strip_prefix("\"project-v")
+        .and_then(|value| value.strip_suffix('"'))
+        .and_then(|value| value.parse::<i64>().ok())
+        .ok_or_else(|| HttpError::precondition_failed(request_id.clone(), path))?;
+    let version = ProjectVersion::new(number)
+        .map_err(|_| HttpError::precondition_failed(request_id.clone(), path))?;
+    if raw != format!("\"project-v{}\"", version.get()) {
+        return Err(HttpError::precondition_failed(request_id.clone(), path));
+    }
+    Ok(version)
+}
+
+fn project_response(
+    status: StatusCode,
+    view: ProjectView,
+    location: bool,
+    request_id: RequestId,
+    path: &str,
+) -> Result<Response, HttpError> {
+    let mut response = (status, Json(view.clone())).into_response();
+    insert_etag(response.headers_mut(), view.version, &request_id, path)?;
+    if location {
+        response.headers_mut().insert(
+            LOCATION,
+            HeaderValue::from_str(&format!(
+                "/api/v1/workspaces/{}/{}/projects/{}",
+                if view.owner_type == "user" {
+                    "users"
+                } else {
+                    "organizations"
+                },
+                view.owner_id,
+                view.id
+            ))
+            .map_err(|_| HttpError::internal(request_id, path))?,
+        );
+    }
+    Ok(response)
+}
+fn role_response(
+    status: StatusCode,
+    view: ProjectRoleMutationView,
+    request_id: RequestId,
+    path: &str,
+) -> Result<Response, HttpError> {
+    let version = view.project_version;
+    let mut response = (status, Json(view)).into_response();
+    insert_etag(response.headers_mut(), version, &request_id, path)?;
+    Ok(response)
+}
+fn insert_etag(
+    headers: &mut HeaderMap,
+    version: i64,
+    request_id: &RequestId,
+    path: &str,
+) -> Result<(), HttpError> {
+    headers.insert(
+        ETAG,
+        HeaderValue::from_str(&format!("\"project-v{version}\""))
+            .map_err(|_| HttpError::internal(request_id.clone(), path))?,
+    );
+    Ok(())
+}
+
+fn validation(request_id: &RequestId, path: &str, field: &str) -> HttpError {
+    HttpError::validation(
+        request_id.clone(),
+        path,
+        [FieldViolation::new(
+            field,
+            "INVALID",
+            "The value is invalid.",
+        )],
+    )
+}
+fn map_error(error: ProjectHttpError, request_id: RequestId, path: &str) -> HttpError {
+    match error {
+        ProjectHttpError::AuthenticationFailed => HttpError::authentication(request_id, path),
+        ProjectHttpError::Forbidden | ProjectHttpError::ConfirmationRequired => {
+            HttpError::forbidden(request_id, path)
+        }
+        ProjectHttpError::NotFound => HttpError::not_found(request_id, path),
+        ProjectHttpError::InvalidInput => validation(&request_id, path, "request"),
+        ProjectHttpError::Conflict => HttpError::conflict(request_id, path),
+        ProjectHttpError::PreconditionFailed => HttpError::precondition_failed(request_id, path),
+        ProjectHttpError::AuditUnavailable | ProjectHttpError::Unavailable => {
+            HttpError::service_unavailable(request_id, path)
+        }
+        ProjectHttpError::OperationTimeout => HttpError::operation_timeout(request_id, path),
+        ProjectHttpError::CommitOutcomeUnknown => {
+            HttpError::commit_outcome_unknown(request_id, path)
+        }
+        ProjectHttpError::Internal => HttpError::internal(request_id, path),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn exceptional_service_failures_have_distinct_stable_problems() {
+        for (error, status, code) in [
+            (
+                ProjectHttpError::CommitOutcomeUnknown,
+                StatusCode::SERVICE_UNAVAILABLE,
+                "COMMIT_OUTCOME_UNKNOWN",
+            ),
+            (
+                ProjectHttpError::OperationTimeout,
+                StatusCode::GATEWAY_TIMEOUT,
+                "OPERATION_TIMEOUT",
+            ),
+            (
+                ProjectHttpError::AuditUnavailable,
+                StatusCode::SERVICE_UNAVAILABLE,
+                "SERVICE_UNAVAILABLE",
+            ),
+        ] {
+            let response = map_error(error, RequestId::generate(), ITEM).into_response();
+            assert_eq!(response.status(), status);
+            assert_eq!(response.headers()[CONTENT_TYPE], "application/problem+json");
+            let body = to_bytes(response.into_body(), MAX_BODY).await.unwrap();
+            let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
+            assert_eq!(body["code"], code);
+            assert!(!body.to_string().contains("postgres://"));
+        }
+    }
+
+    #[test]
+    fn strong_project_etag_parser_rejects_missing_weak_and_duplicate_values() {
+        let request_id = RequestId::generate();
+        assert!(parse_if_match(&HeaderMap::new(), &request_id, ITEM).is_err());
+        let mut weak = HeaderMap::new();
+        weak.insert(IF_MATCH, HeaderValue::from_static("W/\"project-v1\""));
+        assert!(parse_if_match(&weak, &request_id, ITEM).is_err());
+        let mut duplicate = HeaderMap::new();
+        duplicate.append(IF_MATCH, HeaderValue::from_static("\"project-v1\""));
+        duplicate.append(IF_MATCH, HeaderValue::from_static("\"project-v2\""));
+        assert!(parse_if_match(&duplicate, &request_id, ITEM).is_err());
+        for malformed in ["\"project-v+1\"", "\"project-v01\"", "\"project-v 1\""] {
+            let mut headers = HeaderMap::new();
+            headers.insert(IF_MATCH, HeaderValue::from_static(malformed));
+            assert!(parse_if_match(&headers, &request_id, ITEM).is_err());
+        }
+    }
+
+    #[test]
+    fn list_query_rejects_empty_and_duplicate_cursor_pollution() {
+        let request_id = RequestId::generate();
+        assert!(ListQuery::parse(Some("cursor="), &request_id, COLLECTION).is_err());
+        assert!(
+            ListQuery::parse(
+                Some("cursor=&cursor=nrt_project_cursor_value"),
+                &request_id,
+                COLLECTION,
+            )
+            .is_err()
+        );
+        assert!(
+            ListQuery::parse(
+                Some("cursor=nrt_project_cursor_one&cursor=nrt_project_cursor_two"),
+                &request_id,
+                COLLECTION,
+            )
+            .is_err()
+        );
+    }
+}

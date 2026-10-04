@@ -8,6 +8,7 @@ use crate::VERSION;
 use crate::auth::{self, AuthService};
 use crate::invitations::{self, InvitationHttpService};
 use crate::organization::{self, OrganizationHttpService};
+use crate::project::{self, ProjectHttpService};
 use crate::setup::{self, SetupStatusService};
 use crate::workspace;
 
@@ -30,6 +31,8 @@ pub const DOCS_PATH: &str = "/api/docs";
         (name = "invitations", description = "Administrator invitation and public account activation lifecycle"),
         (name = "organizations", description = "Authenticated Organization lifecycle and membership administration"),
         (name = "organization-invitations", description = "Role-bound Organization invitation lifecycle")
+        ,(name = "projects", description = "Workspace-owned Project lifecycle")
+        ,(name = "project-roles", description = "Organization Project direct role administration")
     ),
     servers((url = "/", description = "Current self-hosted instance"))
 )]
@@ -112,6 +115,7 @@ pub fn document() -> utoipa::openapi::OpenApi {
         AuthService::unconfigured(),
         InvitationHttpService::unconfigured(),
         OrganizationHttpService::unconfigured(),
+        ProjectHttpService::unconfigured(),
         SetupStatusService::unconfigured(),
     )
     .1
@@ -121,9 +125,10 @@ pub fn router(
     auth: AuthService,
     invitations: InvitationHttpService,
     organizations: OrganizationHttpService,
+    projects: ProjectHttpService,
     setup: SetupStatusService,
 ) -> Router {
-    let (api_routes, document) = openapi_parts(auth, invitations, organizations, setup);
+    let (api_routes, document) = openapi_parts(auth, invitations, organizations, projects, setup);
     let config = Config::new([DOCUMENT_PATH]).validator_url("none");
     let docs = SwaggerUi::new(DOCS_PATH)
         .url(DOCUMENT_PATH, document)
@@ -136,6 +141,7 @@ fn openapi_parts(
     auth: AuthService,
     invitations: InvitationHttpService,
     organizations: OrganizationHttpService,
+    projects: ProjectHttpService,
     setup: SetupStatusService,
 ) -> (Router, utoipa::openapi::OpenApi) {
     let (auth_routes, document) =
@@ -149,6 +155,9 @@ fn openapi_parts(
     let (organization_routes, document) = organization::openapi_router(document)
         .with_state(organizations)
         .split_for_parts();
+    let (project_routes, document) = project::openapi_router(document)
+        .with_state(projects)
+        .split_for_parts();
     let (setup_routes, document) = setup::openapi_router(document)
         .with_state(setup)
         .split_for_parts();
@@ -156,6 +165,7 @@ fn openapi_parts(
         auth_routes
             .merge(invitation_routes)
             .merge(organization_routes)
+            .merge(project_routes)
             .merge(setup_routes),
         document,
     )

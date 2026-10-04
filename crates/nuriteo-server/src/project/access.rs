@@ -3,6 +3,7 @@ use std::fmt;
 use serde::{Deserialize, Serialize};
 use sqlx::{Postgres, Transaction};
 use time::OffsetDateTime;
+use utoipa::ToSchema;
 
 use crate::identity::{Timestamp, UserId};
 use crate::organization::OrganizationId;
@@ -11,7 +12,7 @@ use super::{ProjectId, ProjectOwner};
 
 const MAX_ROLE_VERSION: i64 = i64::MAX - 1;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum ProjectRole {
     Read,

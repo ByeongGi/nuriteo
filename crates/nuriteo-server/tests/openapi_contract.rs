@@ -58,7 +58,13 @@ async fn serves_the_versioned_document_from_the_application_router() {
             "/api/v1/organizations/{organization_id}/members",
             "/api/v1/organizations/{organization_id}/members/{user_id}",
             "/api/v1/setup/status",
-            "/api/v1/version"
+            "/api/v1/version",
+            "/api/v1/workspaces/{owner_type}/{owner_id}/projects",
+            "/api/v1/workspaces/{owner_type}/{owner_id}/projects/{project_id}",
+            "/api/v1/workspaces/{owner_type}/{owner_id}/projects/{project_id}/archive",
+            "/api/v1/workspaces/{owner_type}/{owner_id}/projects/{project_id}/restore",
+            "/api/v1/workspaces/{owner_type}/{owner_id}/projects/{project_id}/roles",
+            "/api/v1/workspaces/{owner_type}/{owner_id}/projects/{project_id}/roles/{user_id}"
         ]
     );
     assert_eq!(
@@ -130,6 +136,35 @@ async fn problem_schema_tracks_the_actual_safe_error_shape() {
             !serialized.contains(secret),
             "problem response leaked {secret}"
         );
+    }
+}
+
+#[test]
+fn project_openapi_declares_every_error_as_problem_json() {
+    let document = serde_json::to_value(openapi::document()).unwrap();
+    for (path, item) in document["paths"].as_object().unwrap() {
+        if !path.contains("/projects") {
+            continue;
+        }
+        for operation in item.as_object().unwrap().values() {
+            for (status, response) in operation["responses"].as_object().unwrap() {
+                if status.starts_with('2') {
+                    continue;
+                }
+                let content = response["content"].as_object().unwrap_or_else(|| {
+                    panic!("{path} response {status} must declare Problem content")
+                });
+                assert_eq!(
+                    content.keys().collect::<Vec<_>>(),
+                    vec!["application/problem+json"],
+                    "{path} response {status} must be RFC 9457"
+                );
+                assert_eq!(
+                    content["application/problem+json"]["schema"]["$ref"],
+                    "#/components/schemas/ProblemDetails"
+                );
+            }
+        }
     }
 }
 

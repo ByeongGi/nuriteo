@@ -240,6 +240,15 @@ pub enum ProjectState {
     Archived,
 }
 
+impl ProjectState {
+    pub(crate) const fn as_str(self) -> &'static str {
+        match self {
+            Self::Active => "active",
+            Self::Archived => "archived",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(try_from = "i64", into = "i64")]
 pub struct ProjectVersion(i64);

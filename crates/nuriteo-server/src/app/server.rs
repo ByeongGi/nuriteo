@@ -9,9 +9,10 @@ use crate::identity::SessionPolicy;
 use crate::invitations::{InvitationHttpPolicy, InvitationHttpService};
 use crate::object_storage::{ObjectStorageConfig, OperationLimits, S3ObjectStore};
 use crate::organization::{OrganizationHttpPolicy, OrganizationHttpService};
+use crate::project::{ProjectHttpPolicy, ProjectHttpService};
 use crate::setup::{SetupStatusPolicy, SetupStatusService};
 
-use super::{Supervisor, SupervisorConfig, WorkerError, build_router_with_setup_service};
+use super::{Supervisor, SupervisorConfig, WorkerError, build_router_with_project_service};
 
 const HTTP_WORKERS: NonZeroUsize = NonZeroUsize::MIN;
 
@@ -25,6 +26,7 @@ pub(crate) enum ServeError {
     AuthenticationConfiguration,
     InvitationConfiguration,
     OrganizationConfiguration,
+    ProjectConfiguration,
     Bind,
     Lifecycle,
     DatabaseClose,
@@ -41,6 +43,7 @@ impl ServeError {
             Self::AuthenticationConfiguration => "authentication-configuration",
             Self::InvitationConfiguration => "invitation-configuration",
             Self::OrganizationConfiguration => "organization-configuration",
+            Self::ProjectConfiguration => "project-configuration",
             Self::Bind => "bind",
             Self::Lifecycle => "lifecycle",
             Self::DatabaseClose => "database-close",
@@ -125,7 +128,26 @@ pub(crate) async fn run_server(
         }
     };
     let setup = SetupStatusService::production(pool.clone(), SetupStatusPolicy::default());
-    let router = build_router_with_setup_service(health, auth, invitations, organizations, setup);
+    let projects = match ProjectHttpService::production(
+        pool.clone(),
+        &global.public.external_url,
+        ProjectHttpPolicy::default(),
+        SessionPolicy::default(),
+    ) {
+        Ok(projects) => projects,
+        Err(_) => {
+            close_pool(pool, close_timeout).await?;
+            return Err(ServeError::ProjectConfiguration);
+        }
+    };
+    let router = build_router_with_project_service(
+        health,
+        auth,
+        invitations,
+        organizations,
+        projects,
+        setup,
+    );
     let mut supervisor = Supervisor::new(SupervisorConfig::new(
         global.server.shutdown_drain_timeout,
         HTTP_WORKERS,

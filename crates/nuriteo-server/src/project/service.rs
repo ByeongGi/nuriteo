@@ -368,7 +368,19 @@ impl ProjectService {
         limit: ProjectPageLimit,
         after: Option<&ProjectPageKey>,
     ) -> Result<ProjectListPage, ProjectServiceError> {
-        self.within_deadline(self.list_inner(actor_user_id, owner, limit, after))
+        self.list_filtered(actor_user_id, owner, limit, after, None)
+            .await
+    }
+
+    pub async fn list_filtered(
+        &self,
+        actor_user_id: UserId,
+        owner: ProjectOwner,
+        limit: ProjectPageLimit,
+        after: Option<&ProjectPageKey>,
+        state: Option<ProjectState>,
+    ) -> Result<ProjectListPage, ProjectServiceError> {
+        self.within_deadline(self.list_inner(actor_user_id, owner, limit, after, state))
             .await
     }
 
@@ -698,6 +710,7 @@ impl ProjectService {
         owner: ProjectOwner,
         limit: ProjectPageLimit,
         after: Option<&ProjectPageKey>,
+        state: Option<ProjectState>,
     ) -> Result<ProjectListPage, ProjectServiceError> {
         let mut connection = self.acquire().await?;
         let mut transaction = connection
@@ -712,6 +725,7 @@ impl ProjectService {
             authorization,
             limit,
             after,
+            state,
         )
         .await?;
         transaction
@@ -1502,10 +1516,12 @@ async fn query_authorized_page(
     authorization: ListAuthorization,
     limit: ProjectPageLimit,
     after: Option<&ProjectPageKey>,
+    state: Option<ProjectState>,
 ) -> Result<ProjectListPage, ProjectServiceError> {
     let after_slug = after.map(|key| key.slug().as_str().to_owned());
     let after_id = after.map(|key| key.id().to_string());
     let fetch_count = i64::from(limit.get()) + 1;
+    let state = state.map(ProjectState::as_str);
     let rows = match (owner, authorization) {
         (ProjectOwner::User(owner_id), ListAuthorization::PersonalOwner) => {
             sqlx::query_as::<_, ProjectRow>(
@@ -1514,12 +1530,14 @@ async fn query_authorized_page(
                         archived_at, lock_version FROM projects \
                  WHERE owner_user_id=$1::uuid AND owner_organization_id IS NULL \
                    AND ($2::text IS NULL OR (slug,id)>($2::text,$3::uuid)) \
+                   AND ($5::text IS NULL OR state=$5::text) \
                  ORDER BY slug,id LIMIT $4",
             )
             .bind(owner_id.to_string())
             .bind(&after_slug)
             .bind(&after_id)
             .bind(fetch_count)
+            .bind(state)
             .fetch_all(&mut **transaction)
             .await
         }
@@ -1530,12 +1548,14 @@ async fn query_authorized_page(
                         archived_at, lock_version FROM projects \
                  WHERE owner_organization_id=$1::uuid AND owner_user_id IS NULL \
                    AND ($2::text IS NULL OR (slug,id)>($2::text,$3::uuid)) \
+                   AND ($5::text IS NULL OR state=$5::text) \
                  ORDER BY slug,id LIMIT $4",
             )
             .bind(owner_id.to_string())
             .bind(&after_slug)
             .bind(&after_id)
             .bind(fetch_count)
+            .bind(state)
             .fetch_all(&mut **transaction)
             .await
         }
@@ -1549,6 +1569,7 @@ async fn query_authorized_page(
                  WHERE p.owner_organization_id=$1::uuid AND p.owner_user_id IS NULL \
                    AND role.user_id=$2::uuid \
                    AND ($3::text IS NULL OR (p.slug,p.id)>($3::text,$4::uuid)) \
+                   AND ($6::text IS NULL OR p.state=$6::text) \
                  ORDER BY p.slug,p.id LIMIT $5",
             )
             .bind(owner_id.to_string())
@@ -1556,6 +1577,7 @@ async fn query_authorized_page(
             .bind(&after_slug)
             .bind(&after_id)
             .bind(fetch_count)
+            .bind(state)
             .fetch_all(&mut **transaction)
             .await
         }

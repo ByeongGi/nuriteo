@@ -20,6 +20,9 @@ enum ProblemKind {
     Conflict,
     PreconditionRequired,
     PreconditionFailed,
+    ServiceUnavailable,
+    OperationTimeout,
+    CommitOutcomeUnknown,
     Internal,
 }
 
@@ -36,6 +39,10 @@ impl ProblemKind {
             Self::Conflict => StatusCode::CONFLICT,
             Self::PreconditionRequired => StatusCode::PRECONDITION_REQUIRED,
             Self::PreconditionFailed => StatusCode::PRECONDITION_FAILED,
+            Self::ServiceUnavailable | Self::CommitOutcomeUnknown => {
+                StatusCode::SERVICE_UNAVAILABLE
+            }
+            Self::OperationTimeout => StatusCode::GATEWAY_TIMEOUT,
             Self::Internal => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
@@ -52,6 +59,9 @@ impl ProblemKind {
             Self::Conflict => "/docs/problems/resource-conflict",
             Self::PreconditionRequired => "/docs/problems/precondition-required",
             Self::PreconditionFailed => "/docs/problems/precondition-failed",
+            Self::ServiceUnavailable => "/docs/problems/service-unavailable",
+            Self::OperationTimeout => "/docs/problems/operation-timeout",
+            Self::CommitOutcomeUnknown => "/docs/problems/commit-outcome-unknown",
             Self::Internal => "/docs/problems/internal-server-error",
         }
     }
@@ -68,6 +78,9 @@ impl ProblemKind {
             Self::Conflict => "Resource conflict",
             Self::PreconditionRequired => "Precondition required",
             Self::PreconditionFailed => "Precondition failed",
+            Self::ServiceUnavailable => "Service unavailable",
+            Self::OperationTimeout => "Operation timed out",
+            Self::CommitOutcomeUnknown => "Commit outcome unknown",
             Self::Internal => "Internal server error",
         }
     }
@@ -84,6 +97,9 @@ impl ProblemKind {
             Self::Conflict => "RESOURCE_CONFLICT",
             Self::PreconditionRequired => "PRECONDITION_REQUIRED",
             Self::PreconditionFailed => "PRECONDITION_FAILED",
+            Self::ServiceUnavailable => "SERVICE_UNAVAILABLE",
+            Self::OperationTimeout => "OPERATION_TIMEOUT",
+            Self::CommitOutcomeUnknown => "COMMIT_OUTCOME_UNKNOWN",
             Self::Internal => "INTERNAL_SERVER_ERROR",
         }
     }
@@ -100,6 +116,11 @@ impl ProblemKind {
             Self::Conflict => "The resource state conflicts with the request.",
             Self::PreconditionRequired => "A current resource validator is required.",
             Self::PreconditionFailed => "The supplied resource validator is not current.",
+            Self::ServiceUnavailable => "The service is temporarily unavailable.",
+            Self::OperationTimeout => "The operation did not complete before its deadline.",
+            Self::CommitOutcomeUnknown => {
+                "The mutation may have committed. Re-read the resource before retrying."
+            }
             Self::Internal => "The server could not complete the request.",
         }
     }
@@ -224,6 +245,36 @@ impl HttpError {
     pub fn precondition_failed(request_id: RequestId, instance: impl Into<String>) -> Self {
         Self::new(
             ProblemKind::PreconditionFailed,
+            request_id,
+            instance,
+            Vec::new(),
+        )
+    }
+
+    #[must_use]
+    pub fn service_unavailable(request_id: RequestId, instance: impl Into<String>) -> Self {
+        Self::new(
+            ProblemKind::ServiceUnavailable,
+            request_id,
+            instance,
+            Vec::new(),
+        )
+    }
+
+    #[must_use]
+    pub fn operation_timeout(request_id: RequestId, instance: impl Into<String>) -> Self {
+        Self::new(
+            ProblemKind::OperationTimeout,
+            request_id,
+            instance,
+            Vec::new(),
+        )
+    }
+
+    #[must_use]
+    pub fn commit_outcome_unknown(request_id: RequestId, instance: impl Into<String>) -> Self {
+        Self::new(
+            ProblemKind::CommitOutcomeUnknown,
             request_id,
             instance,
             Vec::new(),

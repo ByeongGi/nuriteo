@@ -36,7 +36,7 @@ impl RequestId {
         })
     }
 
-    fn generate() -> Self {
+    pub(crate) fn generate() -> Self {
         let text = Uuid::new_v4().hyphenated().to_string();
         match HeaderValue::from_str(&text) {
             Ok(header) => Self { text, header },

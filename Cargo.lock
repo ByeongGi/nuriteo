@@ -1822,6 +1822,7 @@ dependencies = [
  "bytes",
  "clap",
  "getrandom 0.4.3",
+ "hmac",
  "percent-encoding",
  "regex",
  "reqwest",
