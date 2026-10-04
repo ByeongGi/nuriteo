@@ -75,9 +75,10 @@ impl CleanupWorkerPolicy {
             .checked_mul(2)
             .and_then(|database_time| item_timeout.checked_add(database_time))
             .and_then(|per_wave| per_wave.checked_mul(processing_waves))
+            .and_then(|processing| processing.checked_add(operation_timeout))
             .and_then(|batch| batch.checked_add(SQL_TIMEOUT_MARGIN))
             .ok_or(CleanupError::InvalidPolicy)?;
-        if lease_duration <= minimum_lease || lease_duration > Duration::from_secs(10 * 60) {
+        if lease_duration < minimum_lease || lease_duration > Duration::from_secs(10 * 60) {
             return Err(CleanupError::InvalidPolicy);
         }
         Ok(Self {
@@ -1638,12 +1639,26 @@ mod tests {
                 8,
                 Duration::from_secs(5),
                 Duration::from_secs(30),
-                Duration::from_secs(321),
+                Duration::from_millis(325_025),
                 Duration::from_secs(1),
                 Duration::from_secs(1),
                 Duration::from_secs(2)
             )
             .is_ok()
+        );
+        assert_eq!(
+            CleanupWorkerPolicy::new(
+                32,
+                4,
+                8,
+                Duration::from_secs(5),
+                Duration::from_secs(30),
+                Duration::from_millis(325_024),
+                Duration::from_secs(1),
+                Duration::from_secs(1),
+                Duration::from_secs(2)
+            ),
+            Err(CleanupError::InvalidPolicy)
         );
         let policy = CleanupWorkerPolicy::default();
         for attempts in [1, 2, 8, i16::MAX] {
