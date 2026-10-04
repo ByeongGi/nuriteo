@@ -3,6 +3,7 @@
 use std::env;
 use std::fs;
 use std::io::Read;
+use std::path::Path;
 use std::process::{Child, Command, ExitStatus, Output, Stdio};
 use std::time::{Duration, Instant};
 
@@ -209,6 +210,8 @@ fn spawn_server(
     s3_endpoint: &str,
     s3_ca_path: &str,
 ) -> ChildGuard {
+    let save_secret_path = Path::new(database_ca_path).with_file_name("save-idempotency-secret");
+    fs::write(&save_secret_path, format!("{SAVE_IDEMPOTENCY_SECRET}\n")).unwrap();
     let child = Command::new(env!("CARGO_BIN_EXE_nuriteo-server"))
         .arg("serve")
         .env_clear()
@@ -234,7 +237,7 @@ fn spawn_server(
         .env("NURITEO_S3_ACCESS_KEY_ID", ACCESS_KEY)
         .env("NURITEO_S3_SECRET_ACCESS_KEY", SECRET_KEY)
         .env("NURITEO_S3_CA_FILE", s3_ca_path)
-        .env("NURITEO_SAVE_IDEMPOTENCY_SECRET", SAVE_IDEMPOTENCY_SECRET)
+        .env("NURITEO_SAVE_IDEMPOTENCY_SECRET_FILE", save_secret_path)
         .env("NURITEO_SAVE_DEFAULT_QUOTA_BYTES", "10737418240")
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())

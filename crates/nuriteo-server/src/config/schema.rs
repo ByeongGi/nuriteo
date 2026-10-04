@@ -340,13 +340,8 @@ pub const CONFIG_FIELDS: &[ConfigField] = &[
         "objectStorage.credentials",
     ),
     secret_field(
-        "NURITEO_SAVE_IDEMPOTENCY_SECRET",
-        "base64-encoded 32-byte stable Save HMAC secret; exclusive with _FILE",
-        "save.idempotencySecret",
-    ),
-    secret_field(
         "NURITEO_SAVE_IDEMPOTENCY_SECRET_FILE",
-        "bounded mounted stable Save HMAC secret; exclusive with direct value",
+        "required bounded mounted stable Save HMAC secret",
         "save.idempotencySecretExistingSecret",
     ),
     field(

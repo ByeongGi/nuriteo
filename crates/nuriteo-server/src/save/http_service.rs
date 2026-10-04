@@ -3,6 +3,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use serde::Serialize;
+use sqlx::{Acquire, Postgres, Transaction};
+use tokio::time;
 use utoipa::ToSchema;
 
 use crate::database::DatabasePool;
@@ -40,9 +42,9 @@ impl Default for SaveHttpPolicy {
         Self {
             operation_timeout: Duration::from_secs(5),
             verification_timeout: Duration::from_secs(120),
-            presign_minutes: 5,
+            presign_minutes: 15,
             single_put_threshold_bytes: 64 * 1024 * 1024,
-            multipart_part_bytes: 8 * 1024 * 1024,
+            multipart_part_bytes: 16 * 1024 * 1024,
             multipart_issue_batch: 16,
         }
     }
@@ -92,6 +94,7 @@ pub struct SaveHttpService {
 }
 struct Runtime {
     pool: DatabasePool,
+    operation_timeout: Duration,
     projects: ProjectHttpService,
     single: SinglePutService,
     multipart: MultipartService,
@@ -99,6 +102,7 @@ struct Runtime {
     commit: WorkingHeadCommitService,
     cleanup: CleanupService,
     effective_quota: EffectiveQuota,
+    single_put_threshold_bytes: u64,
 }
 impl fmt::Debug for SaveHttpService {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -152,6 +156,7 @@ impl SaveHttpService {
         Ok(Self {
             runtime: Some(Arc::new(Runtime {
                 pool: pool.clone(),
+                operation_timeout: policy.operation_timeout,
                 projects,
                 single,
                 multipart: MultipartService::new(
@@ -165,6 +170,7 @@ impl SaveHttpService {
                 commit: WorkingHeadCommitService::new(pool.clone(), store.clone(), commit_policy),
                 cleanup: CleanupService::new(pool, store, cleanup_policy),
                 effective_quota,
+                single_put_threshold_bytes: policy.single_put_threshold_bytes,
             })),
         })
     }
@@ -184,6 +190,13 @@ impl SaveHttpService {
             return Err(SaveHttpError::StaleProjectVersion);
         }
         let checksum = Sha256Checksum::from_bytes(input.sha256);
+        if !upload_plan_matches_policy(
+            input.physical_bytes,
+            input.parts.is_empty(),
+            runtime.single_put_threshold_bytes,
+        ) {
+            return Err(SaveHttpError::InvalidInput);
+        }
         if input.parts.is_empty() {
             let session = runtime
                 .single
@@ -336,27 +349,46 @@ impl SaveHttpService {
     ) -> Result<ReconcileView, SaveHttpError> {
         let runtime = self.runtime()?;
         let context = authorize(runtime, browser, owner, project_id).await?;
-        let mut connection = runtime
-            .pool
-            .acquire()
+        time::timeout(runtime.operation_timeout, async {
+            let mut connection = runtime
+                .pool
+                .acquire()
+                .await
+                .map_err(|_| SaveHttpError::Unavailable)?;
+            let mut transaction = connection
+                .begin()
+                .await
+                .map_err(map_reconcile_query)?;
+            configure_reconcile_deadline(&mut transaction, runtime.operation_timeout).await?;
+            let row: Option<(String, Option<String>, i64)> = sqlx::query_as(
+                "SELECT save.state,save.committed_bundle_id::text,project.lock_version FROM save_sessions save \
+                 JOIN projects project ON project.id=save.project_id WHERE save.id=$1::uuid AND save.project_id=$2::uuid \
+                 AND save.storage_scope_id=$3::uuid AND save.actor_user_id=$4::uuid AND project.state='active'",
+            )
+            .bind(session_id.to_string())
+            .bind(project_id.to_string())
+            .bind(context.storage_scope_id.to_string())
+            .bind(context.actor_user_id.to_string())
+            .fetch_optional(&mut *transaction)
             .await
-            .map_err(|_| SaveHttpError::Unavailable)?;
-        let row: Option<(String, Option<String>, i64)> = sqlx::query_as(
-            "SELECT save.state,save.committed_bundle_id::text,project.lock_version FROM save_sessions save \
-             JOIN projects project ON project.id=save.project_id WHERE save.id=$1::uuid AND save.project_id=$2::uuid \
-             AND save.storage_scope_id=$3::uuid AND save.actor_user_id=$4::uuid AND project.state='active'")
-            .bind(session_id.to_string()).bind(project_id.to_string()).bind(context.storage_scope_id.to_string())
-            .bind(context.actor_user_id.to_string()).fetch_optional(&mut *connection).await.map_err(|_| SaveHttpError::Unavailable)?;
-        let Some((state, bundle_id, version)) = row else {
-            return Err(SaveHttpError::NotFound);
-        };
-        if state == "committed" {
-            return Ok(ReconcileView::Committed {
-                bundle_id: bundle_id.ok_or(SaveHttpError::Internal)?,
-                project_version: version,
-            });
-        }
-        Ok(ReconcileView::NotCommitted)
+            .map_err(map_reconcile_query)?;
+            transaction
+                .rollback()
+                .await
+                .map_err(map_reconcile_query)?;
+            let Some((state, bundle_id, version)) = row else {
+                return Err(SaveHttpError::NotFound);
+            };
+            if state == "committed" {
+                return Ok(ReconcileView::Committed {
+                    bundle_id: bundle_id.ok_or(SaveHttpError::Internal)?,
+                    project_version: version,
+                });
+            }
+            Ok(ReconcileView::NotCommitted)
+        })
+        .await
+        .map_err(|_| SaveHttpError::OperationTimeout)?
     }
 
     pub(crate) async fn abort(
@@ -633,5 +665,77 @@ fn map_cleanup(e: CleanupError) -> SaveHttpError {
         CleanupError::DatabaseUnavailable => SaveHttpError::Unavailable,
         CleanupError::CommitOutcomeUnknown => SaveHttpError::CommitOutcomeUnknown,
         CleanupError::InvariantViolation => SaveHttpError::Internal,
+    }
+}
+
+fn upload_plan_matches_policy(
+    physical_bytes: u64,
+    parts_are_empty: bool,
+    single_put_threshold_bytes: u64,
+) -> bool {
+    (physical_bytes <= single_put_threshold_bytes) == parts_are_empty
+}
+
+async fn configure_reconcile_deadline(
+    transaction: &mut Transaction<'_, Postgres>,
+    operation_timeout: Duration,
+) -> Result<(), SaveHttpError> {
+    let millis = operation_timeout
+        .saturating_sub(Duration::from_millis(25))
+        .max(Duration::from_millis(1))
+        .as_millis()
+        .min(i32::MAX as u128);
+    sqlx::query(
+        "SELECT set_config('statement_timeout', $1, true), \
+                set_config('lock_timeout', $1, true)",
+    )
+    .bind(format!("{millis}ms"))
+    .execute(&mut **transaction)
+    .await
+    .map_err(map_reconcile_query)?;
+    Ok(())
+}
+
+fn map_reconcile_query(error: sqlx::Error) -> SaveHttpError {
+    if error
+        .as_database_error()
+        .and_then(sqlx::error::DatabaseError::code)
+        .is_some_and(|code| matches!(code.as_ref(), "57014" | "55P03"))
+    {
+        SaveHttpError::OperationTimeout
+    } else {
+        SaveHttpError::Unavailable
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_upload_mode_is_server_enforced_at_the_policy_boundary() {
+        let policy = SaveHttpPolicy::default();
+        assert_eq!(policy.presign_minutes, 15);
+        assert_eq!(policy.multipart_part_bytes, 16 * 1024 * 1024);
+        assert!(upload_plan_matches_policy(
+            policy.single_put_threshold_bytes,
+            true,
+            policy.single_put_threshold_bytes
+        ));
+        assert!(!upload_plan_matches_policy(
+            policy.single_put_threshold_bytes,
+            false,
+            policy.single_put_threshold_bytes
+        ));
+        assert!(upload_plan_matches_policy(
+            policy.single_put_threshold_bytes + 1,
+            false,
+            policy.single_put_threshold_bytes
+        ));
+        assert!(!upload_plan_matches_policy(
+            policy.single_put_threshold_bytes + 1,
+            true,
+            policy.single_put_threshold_bytes
+        ));
     }
 }

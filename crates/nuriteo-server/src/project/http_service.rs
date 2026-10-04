@@ -7,9 +7,10 @@ use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use hmac::{Hmac, KeyInit, Mac};
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
-use sqlx::Acquire;
+use sqlx::{Acquire, Postgres, Transaction};
 use subtle::ConstantTimeEq;
 use time::OffsetDateTime;
+use tokio::time as tokio_time;
 use url::Url;
 use utoipa::ToSchema;
 
@@ -20,6 +21,7 @@ use crate::identity::{
     SessionService, SessionServiceError, UserId,
 };
 use crate::object_storage::S3ObjectStore;
+use crate::project::ProjectAccessError;
 use crate::project::{EffectiveProjectRole, ProjectAccessRepository};
 use crate::save::{
     ContentDescriptor, ContentDownload, ContentError, ContentService, ContentServicePolicy,
@@ -107,6 +109,7 @@ pub struct ProjectHttpService {
 
 struct Runtime {
     pool: DatabasePool,
+    operation_timeout: Duration,
     sessions: SessionService,
     cookies: BrowserCookieBoundary,
     projects: ProjectService,
@@ -147,6 +150,7 @@ impl ProjectHttpService {
         getrandom::fill(&mut key).map_err(|_| ProjectHttpError::Unavailable)?;
         Ok(Self {
             runtime: Some(Arc::new(Runtime {
+                operation_timeout: policy.operation_timeout,
                 sessions: SessionService::new(pool.clone(), session_policy),
                 projects: ProjectService::new(pool.clone(), project_policy),
                 pool: pool.clone(),
@@ -336,44 +340,53 @@ impl ProjectHttpService {
         project_id: ProjectId,
     ) -> Result<SaveProjectContext, ProjectHttpError> {
         let runtime = self.runtime()?;
-        let identity = runtime.authenticate(request).await?;
-        let project = runtime
-            .projects
-            .get(identity.user_id, owner, project_id)
+        tokio_time::timeout(runtime.operation_timeout, async {
+            let identity = runtime.authenticate(request).await?;
+            let project = runtime
+                .projects
+                .get(identity.user_id, owner, project_id)
+                .await
+                .map_err(map_project_error)?;
+            if project.state() != ProjectState::Active {
+                return Err(ProjectHttpError::Conflict);
+            }
+            let mut connection = runtime
+                .pool
+                .acquire()
+                .await
+                .map_err(|_| ProjectHttpError::Unavailable)?;
+            let mut transaction = connection
+                .begin()
+                .await
+                .map_err(map_save_authorization_query)?;
+            configure_save_authorization_deadline(&mut transaction, runtime.operation_timeout)
+                .await?;
+            let role = ProjectAccessRepository::resolve_effective_role(
+                &mut transaction,
+                project_id,
+                identity.user_id,
+            )
             .await
-            .map_err(map_project_error)?;
-        if project.state() != ProjectState::Active {
-            return Err(ProjectHttpError::Conflict);
-        }
-        let mut connection = runtime
-            .pool
-            .acquire()
-            .await
-            .map_err(|_| ProjectHttpError::Unavailable)?;
-        let mut transaction = connection
-            .begin()
-            .await
-            .map_err(|_| ProjectHttpError::Unavailable)?;
-        let role = ProjectAccessRepository::resolve_effective_role(
-            &mut transaction,
-            project_id,
-            identity.user_id,
-        )
-        .await
-        .map_err(|_| ProjectHttpError::Unavailable)?;
-        transaction
-            .rollback()
-            .await
-            .map_err(|_| ProjectHttpError::Unavailable)?;
-        if role < EffectiveProjectRole::Write {
-            return Err(ProjectHttpError::Forbidden);
-        }
-        Ok(SaveProjectContext {
-            actor_user_id: identity.user_id,
-            project_id: project.id(),
-            storage_scope_id: project.storage_scope_id(),
-            project_version: project.lock_version(),
+            .map_err(|error| match error {
+                ProjectAccessError::OperationTimeout => ProjectHttpError::OperationTimeout,
+                _ => ProjectHttpError::Unavailable,
+            })?;
+            transaction
+                .rollback()
+                .await
+                .map_err(map_save_authorization_query)?;
+            if role < EffectiveProjectRole::Write {
+                return Err(ProjectHttpError::Forbidden);
+            }
+            Ok(SaveProjectContext {
+                actor_user_id: identity.user_id,
+                project_id: project.id(),
+                storage_scope_id: project.storage_scope_id(),
+                project_version: project.lock_version(),
+            })
         })
+        .await
+        .map_err(|_| ProjectHttpError::OperationTimeout)?
     }
 
     pub(crate) async fn list(
@@ -1143,6 +1156,38 @@ fn hex_lower(bytes: &[u8]) -> String {
         let _ = write!(output, "{byte:02x}");
     }
     output
+}
+
+async fn configure_save_authorization_deadline(
+    transaction: &mut Transaction<'_, Postgres>,
+    operation_timeout: Duration,
+) -> Result<(), ProjectHttpError> {
+    let millis = operation_timeout
+        .saturating_sub(Duration::from_millis(25))
+        .max(Duration::from_millis(1))
+        .as_millis()
+        .min(i32::MAX as u128);
+    sqlx::query(
+        "SELECT set_config('statement_timeout', $1, true), \
+                set_config('lock_timeout', $1, true)",
+    )
+    .bind(format!("{millis}ms"))
+    .execute(&mut **transaction)
+    .await
+    .map_err(map_save_authorization_query)?;
+    Ok(())
+}
+
+fn map_save_authorization_query(error: sqlx::Error) -> ProjectHttpError {
+    if error
+        .as_database_error()
+        .and_then(sqlx::error::DatabaseError::code)
+        .is_some_and(|code| matches!(code.as_ref(), "57014" | "55P03"))
+    {
+        ProjectHttpError::OperationTimeout
+    } else {
+        ProjectHttpError::Unavailable
+    }
 }
 
 fn map_version_error(error: ProjectVersionError) -> ProjectHttpError {

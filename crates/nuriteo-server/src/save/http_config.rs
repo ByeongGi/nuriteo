@@ -22,6 +22,13 @@ impl SaveHttpConfig {
         environment: &impl Environment,
         files: &impl FileReader,
     ) -> Result<Self, SaveHttpConfigError> {
+        if environment
+            .entries()
+            .iter()
+            .any(|(name, _)| name.to_str() == Some(IDEMPOTENCY_SECRET))
+        {
+            return Err(SaveHttpConfigError::DirectSecretUnsupported);
+        }
         let encoded = load_secret(
             environment,
             files,
@@ -86,6 +93,7 @@ impl fmt::Debug for SaveHttpConfig {
 pub enum SaveHttpConfigError {
     Config(ConfigError),
     MissingSecret,
+    DirectSecretUnsupported,
     InvalidSecret,
     MissingQuota,
     InvalidQuota,
@@ -96,6 +104,9 @@ impl fmt::Display for SaveHttpConfigError {
         formatter.write_str(match self {
             Self::Config(_) => "Save HTTP secret source is invalid",
             Self::MissingSecret => "Save idempotency secret is missing",
+            Self::DirectSecretUnsupported => {
+                "Save idempotency secret must use the mounted secret file source"
+            }
             Self::InvalidSecret => {
                 "Save idempotency secret must be non-zero base64-encoded 32 bytes"
             }
@@ -186,10 +197,10 @@ mod tests {
     fn fails_closed_for_missing_changed_or_ambiguous_bootstrap_values() {
         let valid = BASE64.encode([0x33; 32]);
         let zeros = BASE64.encode([0; 32]);
-        let files = TestFiles(BTreeMap::from([(
-            "/secret".to_owned(),
-            valid.as_bytes().to_vec(),
-        )]));
+        let files = TestFiles(BTreeMap::from([
+            ("/secret".to_owned(), valid.as_bytes().to_vec()),
+            ("/zeros".to_owned(), zeros.as_bytes().to_vec()),
+        ]));
         for (entries, expected) in [
             (
                 vec![(DEFAULT_QUOTA_BYTES, "10".to_owned())],
@@ -197,21 +208,21 @@ mod tests {
             ),
             (
                 vec![
-                    (IDEMPOTENCY_SECRET, valid.clone()),
+                    (IDEMPOTENCY_SECRET_FILE, "/secret".to_owned()),
                     (DEFAULT_QUOTA_BYTES, "0".to_owned()),
                 ],
                 SaveHttpConfigError::InvalidQuota,
             ),
             (
                 vec![
-                    (IDEMPOTENCY_SECRET, zeros.clone()),
+                    (IDEMPOTENCY_SECRET_FILE, "/zeros".to_owned()),
                     (DEFAULT_QUOTA_BYTES, "10".to_owned()),
                 ],
                 SaveHttpConfigError::InvalidSecret,
             ),
             (
                 vec![
-                    (IDEMPOTENCY_SECRET, valid.clone()),
+                    (IDEMPOTENCY_SECRET_FILE, "/secret".to_owned()),
                     (DEFAULT_QUOTA_BYTES, (i64::MAX as u64 + 1).to_string()),
                 ],
                 SaveHttpConfigError::InvalidQuota,
@@ -221,15 +232,17 @@ mod tests {
             assert_eq!(error.to_string(), expected.to_string());
         }
 
-        let conflict = SaveHttpConfig::load(
+        let direct = SaveHttpConfig::load(
             &environment(&[
                 (IDEMPOTENCY_SECRET, valid),
-                (IDEMPOTENCY_SECRET_FILE, "/secret".to_owned()),
                 (DEFAULT_QUOTA_BYTES, "unlimited".to_owned()),
             ]),
             &files,
         )
         .unwrap_err();
-        assert!(matches!(conflict, SaveHttpConfigError::Config(_)));
+        assert!(matches!(
+            direct,
+            SaveHttpConfigError::DirectSecretUnsupported
+        ));
     }
 }
