@@ -42,6 +42,7 @@ type Listener = (event: MessageEvent | ErrorEvent) => void;
 class MockWorker {
   static instances: MockWorker[] = [];
   static hangBoot = false;
+  static throwOnName: string | null = null;
   readonly listeners = new Map<string, Listener[]>();
   readonly messages: Array<Record<string, unknown>> = [];
   readonly name: string;
@@ -50,6 +51,7 @@ class MockWorker {
 
   constructor(_url: string | URL, options?: WorkerOptions) {
     this.name = options?.name || "worker";
+    if (this.name === MockWorker.throwOnName) throw new Error(`constructor failed for ${this.name}`);
     MockWorker.instances.push(this);
   }
 
@@ -90,8 +92,32 @@ class MockWorker {
 }
 
 const originalWorker = globalThis.Worker;
+const originalSharedArrayBuffer = globalThis.SharedArrayBuffer;
 Object.defineProperty(globalThis, "Worker", { configurable: true, value: MockWorker });
 try {
+  Object.defineProperty(globalThis, "SharedArrayBuffer", { configurable: true, value: undefined });
+  const unavailable = new BrowserRuntimeSupervisor({
+    processWorkerUrl: "http://localhost/process-worker.ts",
+    systemWorkerUrl: "http://localhost/system-worker.ts"
+  });
+  await assert.rejects(unavailable.boot(), /SharedArrayBuffer is unavailable/);
+  assert.equal(MockWorker.instances.length, 0, "sync-channel preflight must happen before Worker acquisition");
+  assert.equal(unavailable.metrics.activeWorkers, 0);
+  Object.defineProperty(globalThis, "SharedArrayBuffer", { configurable: true, value: originalSharedArrayBuffer });
+
+  MockWorker.throwOnName = "nuriteo-process-0";
+  const partial = new BrowserRuntimeSupervisor({
+    processWorkerUrl: "http://localhost/process-worker.ts",
+    systemWorkerUrl: "http://localhost/system-worker.ts"
+  });
+  await assert.rejects(partial.boot(), /Runtime boot failed/);
+  const partiallyCreated = MockWorker.instances.at(-1)!;
+  assert.equal(partiallyCreated.name, "nuriteo-system");
+  assert.equal(partiallyCreated.terminated, true);
+  assert.equal([...partiallyCreated.listeners.values()].every((listeners) => listeners.length === 0), true);
+  assert.equal(partial.metrics.activeWorkers, 0);
+  MockWorker.throwOnName = null;
+
   const supervisor = new BrowserRuntimeSupervisor({
     memoryLimitBytes: 64,
     processWorkerUrl: "http://localhost/process-worker.ts",
@@ -135,6 +161,7 @@ try {
   assert.equal(MockWorker.instances.slice(-2).every((worker) =>
     [...worker.listeners.values()].every((listeners) => listeners.length === 0)), true);
 } finally {
+  Object.defineProperty(globalThis, "SharedArrayBuffer", { configurable: true, value: originalSharedArrayBuffer });
   if (originalWorker) Object.defineProperty(globalThis, "Worker", { configurable: true, value: originalWorker });
   else Reflect.deleteProperty(globalThis, "Worker");
 }

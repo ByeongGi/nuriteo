@@ -145,16 +145,21 @@ export class BrowserRuntimeSupervisor {
     }
 
     this.#status = "booting";
-    const systemWorker = this.#createWorker(this.#options.systemWorkerUrl, "nuriteo-system");
-    const processWorker = this.#createWorker(this.#options.processWorkerUrl, "nuriteo-process-0");
-    const channel = new MessageChannel();
-    const syncChannel = this.#createSyncChannel(bootOptions);
-
-    this.#systemWorker = systemWorker;
-    this.#processWorker = processWorker;
-    this.#metrics.activeWorkers = 2;
+    let channel: MessageChannel | null = null;
 
     try {
+      // Validate cross-origin isolation before acquiring any Worker. Each later
+      // resource is recorded on the instance immediately so teardown owns
+      // partial construction failures as well as a completed boot.
+      const syncChannel = this.#createSyncChannel(bootOptions);
+      const systemWorker = this.#createWorker(this.#options.systemWorkerUrl, "nuriteo-system");
+      this.#systemWorker = systemWorker;
+      this.#metrics.activeWorkers = 1;
+      const processWorker = this.#createWorker(this.#options.processWorkerUrl, "nuriteo-process-0");
+      this.#processWorker = processWorker;
+      this.#metrics.activeWorkers = 2;
+      channel = new MessageChannel();
+
       const processReady = this.#waitForWorker(processWorker, "process", bootOptions);
       processWorker.postMessage({
         type: "boot",
@@ -178,6 +183,7 @@ export class BrowserRuntimeSupervisor {
       this.#metrics.bootCount += 1;
       return result;
     } catch (error) {
+      closeMessageChannel(channel);
       this.#status = "failed";
       await this.teardown();
       throw error instanceof RuntimeBootError
@@ -395,4 +401,10 @@ export class BrowserRuntimeSupervisor {
       }
     });
   }
+}
+
+function closeMessageChannel(channel: MessageChannel | null): void {
+  if (!channel) return;
+  try { channel.port1.close(); } catch { /* a transferred port may already be detached */ }
+  try { channel.port2.close(); } catch { /* a transferred port may already be detached */ }
 }
