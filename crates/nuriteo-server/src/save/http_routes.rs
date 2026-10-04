@@ -244,6 +244,9 @@ async fn record_receipts(
     Path(path): Path<(String, String, String, String)>,
     request: Request,
 ) -> Result<Response, HttpError> {
+    service
+        .require_direct_receipts()
+        .map_err(|error| map_error(error, request_id.clone(), RECEIPTS))?;
     let (head, body) = request.into_parts();
     let browser = BrowserHeaders::read(&head.headers, &request_id, RECEIPTS)?;
     let input: ReceiptsRequest = json_body(&head.headers, body, &request_id, RECEIPTS).await?;

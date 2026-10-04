@@ -419,6 +419,10 @@ impl SaveHttpService {
             .map_err(map_multipart)
     }
 
+    pub(crate) fn require_direct_receipts(&self) -> Result<(), SaveHttpError> {
+        require_direct(self.runtime()?)
+    }
+
     pub(crate) async fn complete(
         &self,
         browser: BrowserRequestHeaders<'_>,

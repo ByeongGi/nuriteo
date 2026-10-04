@@ -123,6 +123,32 @@ CREATE TRIGGER save_upload_leases_no_truncate
     BEFORE TRUNCATE ON save_upload_leases
     FOR EACH STATEMENT EXECUTE FUNCTION reject_save_upload_lease_truncate();
 
+CREATE OR REPLACE FUNCTION enforce_save_upload_lease_delete()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    -- The FK cascade runs only after save_sessions_safe_delete has accepted a
+    -- terminal parent. At that point PostgreSQL no longer exposes the parent
+    -- row to this nested child trigger. Every direct row DELETE, including a
+    -- released generation under an active or terminal parent, remains denied.
+    IF pg_trigger_depth() > 1
+        AND NOT EXISTS (
+            SELECT 1 FROM save_sessions session
+            WHERE session.id = OLD.save_session_id
+        )
+    THEN
+        RETURN OLD;
+    END IF;
+    RAISE EXCEPTION 'relay upload lease generations are deleted only by terminal session cascade'
+        USING ERRCODE = '23514';
+END;
+$$;
+
+CREATE TRIGGER save_upload_leases_safe_delete
+    BEFORE DELETE ON save_upload_leases
+    FOR EACH ROW EXECUTE FUNCTION enforce_save_upload_lease_delete();
+
 CREATE OR REPLACE FUNCTION fence_save_session_state_during_relay_upload()
 RETURNS trigger
 LANGUAGE plpgsql

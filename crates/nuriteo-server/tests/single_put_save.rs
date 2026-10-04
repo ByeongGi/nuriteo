@@ -1505,21 +1505,24 @@ async fn authenticated_upload_relay_streams_single_and_multipart_without_bearer_
             &endpoint, ACCESS_KEY, SECRET_KEY, SCOPE, "staging/", "X-Amz-",
         ],
     );
-    let poisoned_receipt = version_json_request(
-        &router,
-        &owner,
-        Method::POST,
-        &format!("{multipart_collection}/{multipart_session}/parts/receipts"),
-        None,
-        None,
-        json!({"receipts": [{
-            "partNumber": multipart_parts[0]["partNumber"],
-            "expectedBytes": multipart_parts[0]["expectedBytes"],
-            "sha256": multipart_parts[0]["sha256"],
-            "etag": "attacker-controlled-etag"
-        }]}),
-    )
-    .await;
+    let poisoned_receipt = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri(format!(
+                    "{multipart_collection}/{multipart_session}/parts/receipts"
+                ))
+                .header(CONTENT_TYPE, "application/json")
+                .header("content-length", "999999999")
+                .header(ORIGIN, WEB_ORIGIN)
+                .header(COOKIE, &owner.cookie)
+                .header("x-csrf-token", &owner.csrf)
+                .body(Body::new(NeverReadBody))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
     capture_private_problem(
         poisoned_receipt,
         StatusCode::NOT_FOUND,

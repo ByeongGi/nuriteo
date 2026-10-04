@@ -134,6 +134,7 @@ async fn real_postgres_serializes_validates_rolls_back_and_retries() {
     for version in 1..=20 {
         assert_eq!(migration_row_count(&pool, version).await, 1);
     }
+    verify_save_upload_lease_delete_fence(&pool).await;
 
     let mut blocker = pool
         .acquire()
@@ -262,6 +263,139 @@ async fn real_postgres_serializes_validates_rolls_back_and_retries() {
     pool.close(Duration::from_secs(2))
         .await
         .unwrap_or_else(|error| panic!("fixture pool must close: {error}"));
+}
+
+async fn verify_save_upload_lease_delete_fence(pool: &DatabasePool) {
+    const USER: &str = "0199ee6c-c777-7000-8000-000000009001";
+    const SCOPE: &str = "0199ee6c-c777-7000-8000-000000009010";
+    const PROJECT: &str = "0199ee6c-c777-7000-8000-000000009020";
+    const SESSION: &str = "0199ee6c-c777-7000-8000-000000009030";
+    const FIRST_TOKEN: &str = "0199ee6c-c777-7000-8000-000000009040";
+    const SECOND_TOKEN: &str = "0199ee6c-c777-7000-8000-000000009041";
+
+    sqlx::query(
+        "INSERT INTO users (id,email,normalized_email,display_name) \
+         VALUES ($1::uuid,'lease-fence@example.test','lease-fence@example.test','Lease Fence')",
+    )
+    .bind(USER)
+    .execute(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+    sqlx::query("INSERT INTO storage_scopes (id,owner_user_id) VALUES ($1::uuid,$2::uuid)")
+        .bind(SCOPE)
+        .bind(USER)
+        .execute(&mut *pool.acquire().await.unwrap())
+        .await
+        .unwrap();
+    sqlx::query(
+        "INSERT INTO projects (id,owner_user_id,storage_scope_id,slug,name) \
+         VALUES ($1::uuid,$2::uuid,$3::uuid,'lease-fence','Lease Fence')",
+    )
+    .bind(PROJECT)
+    .bind(USER)
+    .bind(SCOPE)
+    .execute(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO save_sessions \
+         (id,project_id,storage_scope_id,actor_user_id,expected_project_version,\
+          expected_bundle_sha256,expected_physical_bytes,expected_logical_bytes,\
+          expected_file_count,staging_object_key,upload_mode,expires_at) \
+         VALUES ($1::uuid,$2::uuid,$3::uuid,$4::uuid,1,decode(repeat('42',32),'hex'),\
+                 1,0,0,'staging/lease-fence.bundle','single',clock_timestamp()+interval '1 hour')",
+    )
+    .bind(SESSION)
+    .bind(PROJECT)
+    .bind(SCOPE)
+    .bind(USER)
+    .execute(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO save_upload_leases \
+         (save_session_id,part_number,generation,lease_token,lease_expires_at) \
+         VALUES ($1::uuid,0,1,$2::uuid,clock_timestamp()+interval '5 minutes')",
+    )
+    .bind(SESSION)
+    .bind(FIRST_TOKEN)
+    .execute(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+
+    assert_constraint_rejected(
+        sqlx::query("DELETE FROM save_upload_leases WHERE save_session_id=$1::uuid")
+            .bind(SESSION)
+            .execute(&mut *pool.acquire().await.unwrap())
+            .await,
+    );
+    sqlx::query(
+        "UPDATE save_upload_leases SET released_at=transaction_timestamp(),updated_at=transaction_timestamp() \
+         WHERE save_session_id=$1::uuid",
+    )
+    .bind(SESSION)
+    .execute(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+    assert_constraint_rejected(
+        sqlx::query("DELETE FROM save_upload_leases WHERE save_session_id=$1::uuid")
+            .bind(SESSION)
+            .execute(&mut *pool.acquire().await.unwrap())
+            .await,
+    );
+
+    let next_generation: i64 = sqlx::query_scalar(
+        "INSERT INTO save_upload_leases \
+         (save_session_id,part_number,generation,lease_token,lease_expires_at) \
+         VALUES ($1::uuid,0,1,$2::uuid,clock_timestamp()+interval '5 minutes') \
+         ON CONFLICT (save_session_id,part_number) DO UPDATE SET \
+           generation=save_upload_leases.generation+1,lease_token=EXCLUDED.lease_token,\
+           lease_expires_at=EXCLUDED.lease_expires_at,released_at=NULL \
+         RETURNING generation",
+    )
+    .bind(SESSION)
+    .bind(SECOND_TOKEN)
+    .fetch_one(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+    assert_eq!(next_generation, 2);
+    sqlx::query(
+        "UPDATE save_upload_leases SET released_at=transaction_timestamp(),updated_at=transaction_timestamp() \
+         WHERE save_session_id=$1::uuid AND generation=2",
+    )
+    .bind(SESSION)
+    .execute(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+    sqlx::query(
+        "UPDATE save_sessions SET state='failed',terminal_at=clock_timestamp(),\
+         updated_at=clock_timestamp() WHERE id=$1::uuid",
+    )
+    .bind(SESSION)
+    .execute(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+    sqlx::query("DELETE FROM save_sessions WHERE id=$1::uuid")
+        .bind(SESSION)
+        .execute(&mut *pool.acquire().await.unwrap())
+        .await
+        .unwrap();
+    let lease_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM save_upload_leases WHERE save_session_id=$1::uuid",
+    )
+    .bind(SESSION)
+    .fetch_one(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+    assert_eq!(lease_count, 0);
+}
+
+fn assert_constraint_rejected(result: Result<sqlx::postgres::PgQueryResult, sqlx::Error>) {
+    let error = result.expect_err("direct lease deletion must be rejected");
+    assert_eq!(
+        error.as_database_error().and_then(|error| error.code()),
+        Some(Cow::Borrowed("23514"))
+    );
 }
 
 fn options(lock_wait_timeout: Duration, execution_timeout: Duration) -> MigrationOptions {
