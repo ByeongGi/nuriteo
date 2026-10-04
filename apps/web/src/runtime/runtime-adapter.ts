@@ -17,6 +17,12 @@ import {
   type PreviewWorkflowSnapshot
 } from "@nuriteo/preview-service";
 
+import {
+  createLocalDraftWriterLease,
+  type LocalDraftWriterLease,
+  type LocalDraftWriterLeaseOptions
+} from "./local-draft-writer.ts";
+
 const MAX_DIAGNOSTICS = 20;
 const MAX_DIAGNOSTIC_LENGTH = 512;
 const DEFAULT_CLEANUP_TIMEOUT_MS = 2_000;
@@ -40,6 +46,19 @@ export interface RuntimeDiagnostic {
   code: string;
   severity: "info" | "warning" | "error";
   message: string;
+  actions: readonly RuntimeRecoveryAction[];
+}
+
+export type RuntimeRecoveryActionKind =
+  | "clear-cache"
+  | "reset-runtime"
+  | "resolve-writer-conflict"
+  | "restart-dev-server"
+  | "retry";
+
+export interface RuntimeRecoveryAction {
+  kind: RuntimeRecoveryActionKind;
+  label: string;
 }
 
 export interface RuntimeMountInput {
@@ -71,6 +90,7 @@ export interface RuntimeViewState {
   hmrState: PreviewWorkflowSnapshot["hmrState"];
   previewUrl: string | null;
   diagnostics: readonly RuntimeDiagnostic[];
+  localDraftAccess: "none" | "writer" | "conflict" | "lost";
   terminalProcessCount: number;
 }
 
@@ -88,6 +108,10 @@ export interface RuntimeWorkflowPort {
   stopPreview(port?: number): boolean;
   restart(): Promise<RuntimeViewState>;
   dispose(): Promise<void>;
+}
+
+export interface RuntimeRecoveryPort {
+  run(kind: RuntimeRecoveryActionKind): Promise<RuntimeViewState>;
 }
 
 export type RuntimeStarterTemplate = "vite-react" | "next-app";
@@ -120,6 +144,7 @@ export interface RuntimeAdapter {
   subscribe(listener: (state: RuntimeViewState) => void): () => void;
   getState(): RuntimeViewState;
   readonly terminal: RuntimeTerminalPort;
+  readonly recovery: RuntimeRecoveryPort;
   readonly workflow: RuntimeWorkflowPort;
   readonly workspace: RuntimeWorkspacePort;
   dispose(): Promise<void>;
@@ -146,6 +171,7 @@ interface ControllerLike {
   restartDev: PreviewWorkflowController["restartDev"];
   runPreview: PreviewWorkflowController["runPreview"];
   saveTextFile: PreviewWorkflowController["saveTextFile"];
+  runRecoveryAction: PreviewWorkflowController["runRecoveryAction"];
   stopPreviewPort: PreviewWorkflowController["stopPreviewPort"];
   loadTemplate: PreviewWorkflowController["loadTemplate"];
   exportTreeJson: PreviewWorkflowController["exportTreeJson"];
@@ -157,6 +183,7 @@ export interface RuntimeAdapterDependencies {
   createSupervisor?: (options: BrowserRuntimeSupervisorOptions) => SupervisorLike;
   createProcessTable?: (options: HostProcessTableOptions) => ProcessTableLike;
   createController?: (options: PreviewWorkflowControllerOptions) => ControllerLike;
+  createWriterLease?: (options: LocalDraftWriterLeaseOptions) => LocalDraftWriterLease;
   cleanupTimeoutMs?: number;
 }
 
@@ -168,6 +195,7 @@ interface OwnedRuntime {
   supervisor: SupervisorLike;
   processTable: ProcessTableLike;
   controller: ControllerLike;
+  writerLease: LocalDraftWriterLease | null;
   unsubscribe: () => boolean;
   reportDiagnostic: (diagnostic: RuntimeDiagnostic) => void;
 }
@@ -178,6 +206,8 @@ export function createRuntimeAdapter(dependencies: RuntimeAdapterDependencies = 
   let owned: OwnedRuntime | null = null;
   let disposePromise: Promise<void> | null = null;
   let cleanupBlocked = false;
+  let adapterDiagnostics: RuntimeDiagnostic[] = [];
+  let workflowDiagnostics: RuntimeDiagnostic[] = [];
   let workspaceState = createEmptyWorkspaceState();
   let workspaceText = new Map<string, string>();
 
@@ -207,10 +237,15 @@ export function createRuntimeAdapter(dependencies: RuntimeAdapterDependencies = 
       const current = requireReady();
       try {
         const snapshot = await raceAbort(current.controller.runPreview(), current.abortController.signal);
+        removeAdapterDiagnostics("RUNTIME_PREVIEW_FAILED", "RUNTIME_RECOVERY_FAILED");
         applySnapshot(current, snapshot);
         return publicState();
       } catch {
-        const diagnostic = fixedDiagnostic("RUNTIME_PREVIEW_FAILED", "The install and Preview journey did not complete.");
+        const diagnostic = fixedDiagnostic(
+          "RUNTIME_PREVIEW_FAILED",
+          "The install and Preview journey did not complete.",
+          [{ kind: "retry", label: "Retry Preview" }]
+        );
         appendDiagnostic(diagnostic, current.reportDiagnostic);
         throw new RuntimeAdapterError(diagnostic.code, diagnostic.message);
       }
@@ -225,6 +260,35 @@ export function createRuntimeAdapter(dependencies: RuntimeAdapterDependencies = 
       return publicState();
     },
     dispose
+  };
+
+  const recovery: RuntimeRecoveryPort = {
+    async run(kind) {
+      const current = requireReady();
+      try {
+        if (kind === "resolve-writer-conflict") {
+          if (!current.writerLease) {
+            throw new Error("Local Draft writer coordination is unavailable.");
+          }
+          await current.writerLease.takeOver();
+          state = { ...state, localDraftAccess: "writer" };
+          removeAdapterDiagnostics("ELEASEHELD", "ELEASELOST");
+        }
+        const result = current.controller.runRecoveryAction(kind);
+        await raceAbort(Promise.resolve(result), current.abortController.signal);
+        removeAdapterDiagnostics("RUNTIME_PREVIEW_FAILED", "RUNTIME_RECOVERY_FAILED");
+        applySnapshot(current, current.controller.getSnapshot());
+        return publicState();
+      } catch {
+        const diagnostic = fixedDiagnostic(
+          "RUNTIME_RECOVERY_FAILED",
+          "The recovery action did not complete. Your Local Draft remains unchanged.",
+          [{ kind, label: recoveryLabel(kind) }]
+        );
+        appendDiagnostic(diagnostic, current.reportDiagnostic);
+        throw new RuntimeAdapterError(diagnostic.code, diagnostic.message);
+      }
+    }
   };
 
   const workspace: RuntimeWorkspacePort = {
@@ -273,6 +337,9 @@ export function createRuntimeAdapter(dependencies: RuntimeAdapterDependencies = 
     },
     writeText(path, content) {
       const current = requireReady();
+      if (state.localDraftAccess !== "writer") {
+        throw new RuntimeAdapterError("ELEASEHELD", "Another tab owns this Local Draft writer lease.");
+      }
       const previous = workspaceText.get(path);
       if (workspaceState.status !== "ready" || previous === undefined) {
         throw new RuntimeAdapterError("RUNTIME_FILE_UNAVAILABLE", "The selected text file is unavailable.");
@@ -314,17 +381,41 @@ export function createRuntimeAdapter(dependencies: RuntimeAdapterDependencies = 
     };
     workspaceState = createEmptyWorkspaceState();
     workspaceText = new Map();
+    adapterDiagnostics = [];
+    workflowDiagnostics = [];
     disposePromise = null;
     emit();
 
     let constructingProcessTable: ProcessTableLike | null = null;
     let constructingSupervisor: SupervisorLike | null = null;
     let constructingController: ControllerLike | null = null;
+    let constructingWriterLease: LocalDraftWriterLease | null = null;
 
     try {
       const origin = dependencies.origin?.() ?? browserOrigin();
       const assets = validateAssets(input.assets, origin);
       validatePolicy(input.policy);
+      let writerLease: LocalDraftWriterLease | null = null;
+      let hasWriter = false;
+      let currentForLease: OwnedRuntime | null = null;
+      try {
+        writerLease = (dependencies.createWriterLease ?? createLocalDraftWriterLease)({
+          namespace: localDraftNamespace(project),
+          onLost() {
+            if (!currentForLease || !isCurrent(currentForLease)) return;
+            state = { ...state, localDraftAccess: "lost" };
+            appendDiagnostic(writerConflictDiagnostic("ELEASELOST"), currentForLease.reportDiagnostic);
+          }
+        });
+        constructingWriterLease = writerLease;
+        hasWriter = await writerLease.acquire();
+      } catch {
+        writerLease = null;
+        appendDiagnostic(fixedDiagnostic(
+          "LOCAL_DRAFT_COORDINATION_UNAVAILABLE",
+          "This browser cannot coordinate Local Draft writers safely. Editing is disabled."
+        ), input.reportDiagnostic);
+      }
       const processTable = (dependencies.createProcessTable ?? defaultProcessTableFactory(
         assets.processWorkerUrl,
         assets.systemWasmUrl
@@ -353,16 +444,21 @@ export function createRuntimeAdapter(dependencies: RuntimeAdapterDependencies = 
         supervisor,
         processTable,
         controller,
+        writerLease,
         unsubscribe: () => false,
         reportDiagnostic: input.reportDiagnostic,
         projectId: project.id,
         displayName: project.displayName
       };
+      currentForLease = current;
+      state = { ...state, localDraftAccess: hasWriter ? "writer" : "conflict" };
+      if (!hasWriter && writerLease) appendDiagnostic(writerConflictDiagnostic("ELEASEHELD"), input.reportDiagnostic);
       current.unsubscribe = controller.on((event) => receiveEvent(current, event));
       owned = current;
       constructingProcessTable = null;
       constructingSupervisor = null;
       constructingController = null;
+      constructingWriterLease = null;
 
       await raceAbort(supervisor.boot({ timeoutMs: input.policy.bootTimeoutMs }), abortController.signal);
       if (!isCurrent(current) || abortController.signal.aborted) return;
@@ -382,7 +478,8 @@ export function createRuntimeAdapter(dependencies: RuntimeAdapterDependencies = 
       else cleanupBlocked = !(await rollbackConstruction(
         constructingController,
         constructingProcessTable,
-        constructingSupervisor
+        constructingSupervisor,
+        constructingWriterLease
       ));
       throw new RuntimeAdapterError(diagnostic.code, diagnostic.message);
     }
@@ -405,7 +502,14 @@ export function createRuntimeAdapter(dependencies: RuntimeAdapterDependencies = 
         emit();
         return Promise.resolve();
       }
-      state = { ...state, lifecycle: "disposed", projectId: null, previewUrl: null, terminalProcessCount: 0 };
+      state = {
+        ...state,
+        lifecycle: "disposed",
+        projectId: null,
+        previewUrl: null,
+        localDraftAccess: "none",
+        terminalProcessCount: 0
+      };
       emit();
       listeners.clear();
       workspaceState = createEmptyWorkspaceState();
@@ -430,6 +534,7 @@ export function createRuntimeAdapter(dependencies: RuntimeAdapterDependencies = 
     try { current.unsubscribe(); } catch { failures.push("subscription"); }
     try { current.controller.dispose(); } catch { failures.push("controller"); }
     try { current.processTable.teardown(); } catch { failures.push("process-table"); }
+    try { await current.writerLease?.release(); } catch { failures.push("local-draft-writer"); }
     try {
       await withTimeout(current.supervisor.teardown(), dependencies.cleanupTimeoutMs ?? DEFAULT_CLEANUP_TIMEOUT_MS);
     } catch {
@@ -454,6 +559,7 @@ export function createRuntimeAdapter(dependencies: RuntimeAdapterDependencies = 
         projectId: null,
         workflowPhase: "idle",
         previewUrl: null,
+        localDraftAccess: "none",
         terminalProcessCount: 0
       };
       emit();
@@ -465,7 +571,8 @@ export function createRuntimeAdapter(dependencies: RuntimeAdapterDependencies = 
   async function rollbackConstruction(
     controller: ControllerLike | null,
     processTable: ProcessTableLike | null,
-    supervisor: SupervisorLike | null
+    supervisor: SupervisorLike | null,
+    writerLease: LocalDraftWriterLease | null
   ): Promise<boolean> {
     const failures: string[] = [];
     if (controller) try { controller.dispose(); } catch { failures.push("controller"); }
@@ -473,6 +580,7 @@ export function createRuntimeAdapter(dependencies: RuntimeAdapterDependencies = 
       await withTimeout(supervisor.teardown(), dependencies.cleanupTimeoutMs ?? DEFAULT_CLEANUP_TIMEOUT_MS);
     } catch { failures.push("supervisor"); }
     if (processTable) try { processTable.teardown(); } catch { failures.push("process-table"); }
+    if (writerLease) try { await writerLease.release(); } catch { failures.push("local-draft-writer"); }
     if (failures.length === 0) return true;
     appendDiagnostic(fixedDiagnostic(
       "RUNTIME_CLEANUP_FAILED",
@@ -490,7 +598,8 @@ export function createRuntimeAdapter(dependencies: RuntimeAdapterDependencies = 
 
   function applySnapshot(current: OwnedRuntime, snapshot: PreviewWorkflowSnapshot): void {
     if (!isCurrent(current) || current.abortController.signal.aborted) return;
-    const diagnostics = snapshot.diagnostics.map(normalizeDiagnostic).slice(-MAX_DIAGNOSTICS);
+    workflowDiagnostics = snapshot.diagnostics.map(normalizeDiagnostic).slice(-MAX_DIAGNOSTICS);
+    const diagnostics = combinedDiagnostics();
     state = {
       ...state,
       workflowPhase: snapshot.phase,
@@ -503,8 +612,20 @@ export function createRuntimeAdapter(dependencies: RuntimeAdapterDependencies = 
   }
 
   function appendDiagnostic(diagnostic: RuntimeDiagnostic, callback?: (diagnostic: RuntimeDiagnostic) => void): void {
-    state = { ...state, diagnostics: [...state.diagnostics, diagnostic].slice(-MAX_DIAGNOSTICS) };
+    adapterDiagnostics = [...adapterDiagnostics.filter((entry) => entry.code !== diagnostic.code), diagnostic].slice(-MAX_DIAGNOSTICS);
+    state = { ...state, diagnostics: combinedDiagnostics() };
+    emit();
     try { callback?.(diagnostic); } catch { /* consumer diagnostics must not break cleanup */ }
+  }
+
+  function removeAdapterDiagnostics(...codes: string[]): void {
+    const removed = new Set(codes);
+    adapterDiagnostics = adapterDiagnostics.filter((diagnostic) => !removed.has(diagnostic.code));
+    state = { ...state, diagnostics: combinedDiagnostics() };
+  }
+
+  function combinedDiagnostics(): RuntimeDiagnostic[] {
+    return [...adapterDiagnostics, ...workflowDiagnostics].slice(-MAX_DIAGNOSTICS);
   }
 
   function isCurrent(current: OwnedRuntime): boolean {
@@ -526,10 +647,13 @@ export function createRuntimeAdapter(dependencies: RuntimeAdapterDependencies = 
   }
 
   function publicState(): RuntimeViewState {
-    return { ...state, diagnostics: state.diagnostics.map((diagnostic) => ({ ...diagnostic })) };
+    return {
+      ...state,
+      diagnostics: state.diagnostics.map((diagnostic) => ({ ...diagnostic, actions: [...diagnostic.actions] }))
+    };
   }
 
-  return { mount, subscribe, getState, terminal, workflow, workspace, dispose };
+  return { mount, subscribe, getState, terminal, recovery, workflow, workspace, dispose };
 }
 
 export class RuntimeAdapterError extends Error {
@@ -551,6 +675,7 @@ function createInitialState(): RuntimeViewState {
     hmrState: "idle",
     previewUrl: null,
     diagnostics: [],
+    localDraftAccess: "none",
     terminalProcessCount: 0
   };
 }
@@ -678,12 +803,52 @@ function normalizeDiagnostic(input: PreviewWorkflowSnapshot["diagnostics"][numbe
   return {
     code: boundedText(input.code ?? "RUNTIME_DIAGNOSTIC", 64),
     severity: level === "error" ? "error" : level === "warning" || level === "warn" ? "warning" : "info",
-    message: boundedText(redactRuntimeLog(input.message), MAX_DIAGNOSTIC_LENGTH)
+    message: boundedText(redactRuntimeLog(input.message), MAX_DIAGNOSTIC_LENGTH),
+    actions: normalizeRecoveryActions(input.recoveryActions)
   };
 }
 
-function fixedDiagnostic(code: string, message: string): RuntimeDiagnostic {
-  return { code, severity: "error", message };
+function fixedDiagnostic(code: string, message: string, actions: readonly RuntimeRecoveryAction[] = []): RuntimeDiagnostic {
+  return { code, severity: "error", message, actions };
+}
+
+function writerConflictDiagnostic(code: "ELEASEHELD" | "ELEASELOST"): RuntimeDiagnostic {
+  return fixedDiagnostic(
+    code,
+    code === "ELEASEHELD"
+      ? "Another tab owns this Local Draft writer lease. You can inspect files, but editing is disabled."
+      : "This tab released its Local Draft writer lease to another tab. Unsaved editor text is still visible here.",
+    [{ kind: "resolve-writer-conflict", label: "Take over writer lease" }]
+  );
+}
+
+function normalizeRecoveryActions(
+  actions: PreviewWorkflowSnapshot["diagnostics"][number]["recoveryActions"]
+): RuntimeRecoveryAction[] {
+  const supported = new Set<RuntimeRecoveryActionKind>([
+    "clear-cache",
+    "reset-runtime",
+    "resolve-writer-conflict",
+    "restart-dev-server",
+    "retry"
+  ]);
+  const seen = new Set<RuntimeRecoveryActionKind>();
+  const normalized: RuntimeRecoveryAction[] = [];
+  for (const action of actions ?? []) {
+    if (!supported.has(action.kind as RuntimeRecoveryActionKind)) continue;
+    const kind = action.kind as RuntimeRecoveryActionKind;
+    if (seen.has(kind)) continue;
+    seen.add(kind);
+    normalized.push({ kind, label: boundedText(redactRuntimeLog(action.label), 80) });
+  }
+  return normalized;
+}
+
+function recoveryLabel(kind: RuntimeRecoveryActionKind): string {
+  if (kind === "clear-cache") return "Retry cache cleanup";
+  if (kind === "resolve-writer-conflict") return "Retry writer takeover";
+  if (kind === "reset-runtime" || kind === "restart-dev-server") return "Retry dev server restart";
+  return "Retry Preview";
 }
 
 function boundedText(value: string, limit: number): string {

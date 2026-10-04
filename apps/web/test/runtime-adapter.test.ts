@@ -5,6 +5,7 @@ import {
   createRuntimeAdapter,
   type RuntimeMountInput
 } from "../src/runtime/runtime-adapter.ts";
+import type { LocalDraftWriterLease } from "../src/runtime/local-draft-writer.ts";
 import type {
   FileSystemTree,
   PreviewWorkflowControllerOptions,
@@ -65,6 +66,7 @@ class FakeController {
   disposed = 0;
   terminals = new Set<string>();
   savedText: { path: string; data: string } | null = null;
+  recoveryKinds: string[] = [];
   readonly cleanup: string[];
 
   constructor(cleanup: string[]) { this.cleanup = cleanup; }
@@ -101,6 +103,12 @@ class FakeController {
   saveTextFile(path: string, data: string): PreviewWorkflowSnapshot {
     this.savedText = { path, data };
     return this.current;
+  }
+  async runRecoveryAction(kind: string): Promise<unknown> {
+    this.recoveryKinds.push(kind);
+    if (kind === "retry") return this.runPreview();
+    this.current = snapshot({ phase: "template_loaded" });
+    return { recovered: kind };
   }
   stopPreviewPort(): boolean { return true; }
   loadTemplate(): PreviewWorkflowSnapshot {
@@ -147,7 +155,8 @@ function harness(boot: Promise<unknown> = Promise.resolve({})) {
       const controller = new FakeController(cleanup);
       controllers.push(controller);
       return controller;
-    }
+    },
+    createWriterLease: () => readyWriterLease()
   });
   return {
     adapter,
@@ -155,6 +164,15 @@ function harness(boot: Promise<unknown> = Promise.resolve({})) {
     controllers,
     controllerOptions,
     counts: () => ({ supervisorCount, processCount })
+  };
+}
+
+function readyWriterLease(): LocalDraftWriterLease {
+  return {
+    status: "writer",
+    async acquire() { return true; },
+    async takeOver() {},
+    async release() {}
   };
 }
 
@@ -166,6 +184,7 @@ function harness(boot: Promise<unknown> = Promise.resolve({})) {
   assert.equal(adapter.getState().lifecycle, "ready");
   assert.equal(adapter.getState().projectId, draftProjectId);
   assert.equal(adapter.getState().generation, 1);
+  assert.equal(adapter.getState().localDraftAccess, "writer");
   assert.equal(controllerOptions[0]?.workspaceProjectId, `${scopeId}:${draftProjectId}`);
   assert.equal(controllerOptions[0]?.workspaceRoot, `/workspace/projects/${draftProjectId}`);
   controllers[0]?.emit(snapshot({ phase: "preview_ready", previewUrl: "https://preview.test" }));
@@ -197,6 +216,70 @@ function harness(boot: Promise<unknown> = Promise.resolve({})) {
   assert.deepEqual(cleanup, ["unsubscribe", "controller", "process", "supervisor"]);
   assert.equal(adapter.terminal.activeCount(), 0);
   assert.equal(adapter.getState().lifecycle, "disposed");
+}
+
+{
+  const { adapter, controllers } = harness();
+  await adapter.mount(mountInput);
+  const controller = controllers[0];
+  assert.ok(controller);
+  await adapter.workspace.materializeTemplate("vite-react");
+  const original = adapter.workspace.readText("src/main.tsx");
+  controller.emit(snapshot({
+    phase: "failed",
+    diagnostics: [{
+      code: "EOPFSQUOTA",
+      level: "error",
+      message: "quota exceeded token=secret-value",
+      recoveryActions: [
+        { kind: "clear-cache", label: "Clear package cache" },
+        { kind: "retry", label: "Retry install" },
+        { kind: "export-support-bundle", label: "Export secret token=secret-value" }
+      ]
+    }]
+  }));
+  const diagnostic = adapter.getState().diagnostics[0];
+  assert.equal(diagnostic?.code, "EOPFSQUOTA");
+  assert.equal(diagnostic?.message.includes("secret-value"), false);
+  assert.deepEqual(diagnostic?.actions, [
+    { kind: "clear-cache", label: "Clear package cache" },
+    { kind: "retry", label: "Retry install" }
+  ]);
+  await adapter.recovery.run("clear-cache");
+  assert.deepEqual(controller.recoveryKinds, ["clear-cache"]);
+  assert.equal(adapter.workspace.readText("src/main.tsx"), original, "quota recovery must preserve Local Draft files");
+  await adapter.dispose();
+}
+
+{
+  let status: LocalDraftWriterLease["status"] = "conflict";
+  const controller = new FakeController([]);
+  const adapter = createRuntimeAdapter({
+    origin: () => "https://nuriteo.test",
+    createProcessTable: () => ({ teardown() {} }),
+    createSupervisor: () => ({ boot: async () => ({}), teardown: async () => undefined }),
+    createController: () => controller,
+    createWriterLease: () => ({
+      get status() { return status; },
+      async acquire() { return false; },
+      async takeOver() { status = "writer"; },
+      async release() { status = "released"; }
+    })
+  });
+  await adapter.mount(mountInput);
+  await adapter.workspace.materializeTemplate("vite-react");
+  assert.equal(adapter.getState().localDraftAccess, "conflict");
+  assert.equal(adapter.getState().diagnostics[0]?.code, "ELEASEHELD");
+  assert.throws(
+    () => adapter.workspace.writeText("src/main.tsx", "blocked"),
+    (error: unknown) => error instanceof RuntimeAdapterError && error.code === "ELEASEHELD"
+  );
+  await adapter.recovery.run("resolve-writer-conflict");
+  assert.equal(adapter.getState().localDraftAccess, "writer");
+  assert.equal(adapter.getState().diagnostics.some((entry) => entry.code === "ELEASEHELD"), false);
+  adapter.workspace.writeText("src/main.tsx", "writer takeover preserved this draft\n");
+  assert.match(adapter.workspace.readText("src/main.tsx"), /takeover preserved/u);
+  await adapter.dispose();
 }
 
 {

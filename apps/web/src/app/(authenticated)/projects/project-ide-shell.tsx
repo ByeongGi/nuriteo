@@ -5,8 +5,10 @@ import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 
 import { Button } from "../../../components/ui/button.tsx";
+import { createRetryableLazyFeature } from "../../../lib/retryable-lazy-feature.ts";
 import type {
   RuntimeAdapter,
+  RuntimeRecoveryActionKind,
   RuntimeViewState,
   RuntimeWorkspaceState
 } from "../../../runtime/runtime-adapter.ts";
@@ -23,6 +25,7 @@ const EMPTY_RUNTIME_STATE: RuntimeViewState = {
   hmrState: "idle",
   previewUrl: null,
   diagnostics: [],
+  localDraftAccess: "none",
   terminalProcessCount: 0
 };
 const MAX_TERMINAL_OUTPUT_CHARS = 64 * 1024;
@@ -31,16 +34,24 @@ const RUNTIME_BOOT_TIMEOUT_MS = 10_000;
 const RUNTIME_RELAY_TIMEOUT_MS = 10_000;
 const RUNTIME_MEMORY_LIMIT_BYTES = 512 * 1024 * 1024;
 
+type RuntimeFeature = typeof import("../../../runtime/runtime-adapter.ts");
+const runtimeFeature = createRetryableLazyFeature<RuntimeFeature>(
+  () => import("../../../runtime/runtime-adapter.ts")
+);
+
 interface Props {
   readonly assetRevision?: string;
   readonly previewConfiguration: PreviewOriginConfiguration;
+  readonly previewBridgeFactory?: typeof createSubdomainPreviewBridge;
   readonly project: Project;
+  readonly runtimeFeatureLoader?: () => Promise<RuntimeFeature>;
   readonly workspaceScope: string;
 }
 
-export function ProjectIdeShell({ assetRevision, previewConfiguration, project, workspaceScope }: Props) {
+export function ProjectIdeShell({ assetRevision, previewBridgeFactory, previewConfiguration, project, runtimeFeatureLoader, workspaceScope }: Props) {
   const adapterRef = useRef<RuntimeAdapter | undefined>(undefined);
   const previewBridgeRef = useRef<SubdomainPreviewBridge | undefined>(undefined);
+  const previewBridgeOperationRef = useRef(0);
   const previewRecoveryRef = useRef<Promise<void> | null>(null);
   const unsubscribeRef = useRef<() => void>(() => undefined);
   const manifestAbortRef = useRef<AbortController | null>(null);
@@ -53,6 +64,8 @@ export function ProjectIdeShell({ assetRevision, previewConfiguration, project, 
   const [isStarting, setIsStarting] = useState(false);
   const [isRunningPreview, setIsRunningPreview] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [recoveringAction, setRecoveringAction] = useState<RuntimeRecoveryActionKind>();
+  const [confirmingWriterTakeover, setConfirmingWriterTakeover] = useState(false);
   const [isolatedPreviewUrl, setIsolatedPreviewUrl] = useState<string>();
   const [editorStatus, setEditorStatus] = useState("Local Draft");
   const [runtime, setRuntime] = useState<RuntimeViewState>(EMPTY_RUNTIME_STATE);
@@ -61,9 +74,12 @@ export function ProjectIdeShell({ assetRevision, previewConfiguration, project, 
     unmountedRef.current = false;
     return () => {
       unmountedRef.current = true;
+      previewBridgeOperationRef.current += 1;
       manifestAbortRef.current?.abort();
       unsubscribeRef.current();
-      void previewBridgeRef.current?.dispose();
+      const bridge = previewBridgeRef.current;
+      previewBridgeRef.current = undefined;
+      void bridge?.dispose();
       void adapterRef.current?.dispose();
     };
   }, []);
@@ -79,7 +95,7 @@ export function ProjectIdeShell({ assetRevision, previewConfiguration, project, 
       manifestAbortRef.current?.abort();
       const manifestAbort = new AbortController();
       manifestAbortRef.current = manifestAbort;
-      const { createRuntimeAdapter } = await import("../../../runtime/runtime-adapter.ts");
+      const { createRuntimeAdapter } = await (runtimeFeatureLoader?.() ?? runtimeFeature.load());
       const revision = await resolveRuntimeAssetRevision(assetRevision, manifestAbort.signal);
       if (unmountedRef.current) return;
       const adapter = createRuntimeAdapter();
@@ -114,8 +130,9 @@ export function ProjectIdeShell({ assetRevision, previewConfiguration, project, 
       const firstTextFile = materialized.files.find((file) => file.kind === "text");
       setWorkspace(materialized);
       if (firstTextFile) selectFile(firstTextFile.path, materialized);
-    } catch {
-      setError("The browser workspace could not be started safely.");
+    } catch (caught) {
+      const code = runtimeErrorCode(caught);
+      setError(`The browser workspace could not be started safely.${code ? ` (${code})` : ""}`);
       await releaseAdapter();
     } finally {
       manifestAbortRef.current = null;
@@ -177,28 +194,63 @@ export function ProjectIdeShell({ assetRevision, previewConfiguration, project, 
     try {
       const next = await adapter.workflow.start();
       if (!next.previewUrl) throw new Error("Preview URL unavailable");
-      await previewBridgeRef.current?.dispose();
-      const bridge = await createPreviewBridge(next.previewUrl);
-      previewBridgeRef.current = bridge;
-      setIsolatedPreviewUrl(bridge.url);
+      await swapPreviewBridge(adapter, next.previewUrl);
     } catch {
-      setError("The install and Preview journey did not complete.");
+      if (!unmountedRef.current && adapterRef.current === adapter) {
+        setError("The install and Preview journey did not complete.");
+      }
     } finally {
-      setIsRunningPreview(false);
+      if (!unmountedRef.current) setIsRunningPreview(false);
+    }
+  }
+
+  async function executeRecovery(kind: RuntimeRecoveryActionKind) {
+    if (kind === "resolve-writer-conflict" && !confirmingWriterTakeover) {
+      setConfirmingWriterTakeover(true);
+      return;
+    }
+    const adapter = adapterRef.current;
+    if (!adapter || recoveringAction) return;
+    setError(undefined);
+    setRecoveringAction(kind);
+    try {
+      const next = await adapter.recovery.run(kind);
+      setRuntime(next);
+      setConfirmingWriterTakeover(false);
+      if (kind === "clear-cache") {
+        setEditorStatus("Package cache cleared · Local Draft preserved");
+      } else if (kind === "resolve-writer-conflict") {
+        setEditorStatus("Writer lease acquired · Local Draft preserved");
+      }
+      if (
+        next.previewUrl
+        && previewConfiguration.status === "enabled"
+        && (kind === "retry" || kind === "reset-runtime" || kind === "restart-dev-server")
+      ) {
+        await swapPreviewBridge(adapter, next.previewUrl);
+      }
+    } catch {
+      if (!unmountedRef.current && adapterRef.current === adapter) {
+        setError("Recovery did not complete. Your Local Draft remains available; review the action and retry.");
+      }
+    } finally {
+      if (!unmountedRef.current) setRecoveringAction(undefined);
     }
   }
 
   async function createPreviewBridge(internalPreviewUrl: string): Promise<SubdomainPreviewBridge> {
     if (previewConfiguration.status === "disabled") throw new Error("Preview unavailable");
     let created: SubdomainPreviewBridge | undefined;
-    created = await createSubdomainPreviewBridge({
+    created = await (previewBridgeFactory ?? createSubdomainPreviewBridge)({
       configuration: previewConfiguration,
       internalProjectIdentity: `${workspaceScope}:${project.id}`,
       internalPreviewUrl,
       ownerId: project.ownerId,
       ownerType: project.ownerType,
       projectId: project.id,
-      onDiagnostic() { setError("The isolated Preview relay was stopped safely."); },
+      onDiagnostic() {
+        if (!unmountedRef.current) setError("The isolated Preview relay was stopped safely.");
+      },
       onRecoveryRequired() {
         if (created) recoverPreview(created, internalPreviewUrl);
       }
@@ -206,20 +258,52 @@ export function ProjectIdeShell({ assetRevision, previewConfiguration, project, 
     return created;
   }
 
+  async function swapPreviewBridge(
+    adapter: RuntimeAdapter,
+    internalPreviewUrl: string,
+    expectedBridge?: SubdomainPreviewBridge
+  ): Promise<boolean> {
+    if (expectedBridge && previewBridgeRef.current !== expectedBridge) return false;
+
+    const operation = previewBridgeOperationRef.current + 1;
+    previewBridgeOperationRef.current = operation;
+    const previousBridge = previewBridgeRef.current;
+    previewBridgeRef.current = undefined;
+    if (!unmountedRef.current) setIsolatedPreviewUrl(undefined);
+    await previousBridge?.dispose();
+
+    if (
+      unmountedRef.current
+      || adapterRef.current !== adapter
+      || previewBridgeOperationRef.current !== operation
+    ) return false;
+
+    const createdBridge = await createPreviewBridge(internalPreviewUrl);
+    if (
+      unmountedRef.current
+      || adapterRef.current !== adapter
+      || previewBridgeOperationRef.current !== operation
+    ) {
+      await createdBridge.dispose();
+      return false;
+    }
+
+    previewBridgeRef.current = createdBridge;
+    setIsolatedPreviewUrl(createdBridge.url);
+    return true;
+  }
+
   function recoverPreview(staleBridge: SubdomainPreviewBridge, internalPreviewUrl: string): void {
     if (previewRecoveryRef.current || previewBridgeRef.current !== staleBridge || unmountedRef.current) return;
+    const adapter = adapterRef.current;
+    if (!adapter) return;
     const recovery = (async () => {
       try {
-        const freshBridge = await createPreviewBridge(internalPreviewUrl);
-        if (previewBridgeRef.current !== staleBridge || unmountedRef.current) {
-          void freshBridge.dispose();
-          return;
-        }
-        previewBridgeRef.current = freshBridge;
-        setIsolatedPreviewUrl(freshBridge.url);
-        void staleBridge.dispose();
+        await swapPreviewBridge(adapter, internalPreviewUrl, staleBridge);
       } catch {
-        setError("The isolated Preview could not recover. Run Preview again.");
+        if (!unmountedRef.current && adapterRef.current === adapter) {
+          setError("The isolated Preview could not recover. Run Preview again.");
+        }
       }
     })().finally(() => { previewRecoveryRef.current = null; });
     previewRecoveryRef.current = recovery;
@@ -258,9 +342,11 @@ export function ProjectIdeShell({ assetRevision, previewConfiguration, project, 
   }
 
   async function releaseAdapter() {
-    await previewBridgeRef.current?.dispose();
+    previewBridgeOperationRef.current += 1;
+    const bridge = previewBridgeRef.current;
     previewBridgeRef.current = undefined;
-    setIsolatedPreviewUrl(undefined);
+    if (!unmountedRef.current) setIsolatedPreviewUrl(undefined);
+    await bridge?.dispose();
     const adapter = adapterRef.current;
     if (!adapter) return;
     await adapter.dispose();
@@ -278,6 +364,8 @@ export function ProjectIdeShell({ assetRevision, previewConfiguration, project, 
 
   const hasWorkspace = workspace?.status === "ready";
   const hasIsolatedPreview = isolatedPreviewUrl !== undefined;
+  const canWriteLocalDraft = runtime.localDraftAccess === "writer";
+  const recoveryDiagnostics = runtime.diagnostics.filter((diagnostic) => diagnostic.actions.length > 0);
 
   return (
     <section className="mt-6 overflow-hidden rounded-lg border border-border bg-surface" aria-labelledby="project-ide-title">
@@ -286,6 +374,39 @@ export function ProjectIdeShell({ assetRevision, previewConfiguration, project, 
         {hasWorkspace ? <Button type="button" size="sm" onClick={() => void stopWorkspace()}>Stop workspace</Button> : <Button type="button" size="sm" variant="primary" disabled={isStarting || project.state !== "active"} onClick={() => void startWorkspace()}>{isStarting ? "Starting…" : "Start workspace"}</Button>}
       </header>
       {error ? <p className="m-3 rounded-md border border-danger p-3 text-sm text-danger" role="alert">{error}</p> : null}
+      {recoveryDiagnostics.length > 0 ? (
+        <section className="m-3 rounded-md border border-warning bg-subtle p-3" aria-label="Workspace recovery">
+          <h4 className="m-0 text-sm font-semibold">Workspace needs attention</h4>
+          {recoveryDiagnostics.map((diagnostic) => (
+            <div className="mt-2" key={diagnostic.code}>
+              <p className="m-0 text-sm"><span className="font-mono text-xs">{diagnostic.code}</span> · {diagnostic.message}</p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {diagnostic.actions.map((action) => (
+                  <Button
+                    type="button"
+                    size="sm"
+                    key={`${diagnostic.code}:${action.kind}`}
+                    disabled={recoveringAction !== undefined}
+                    onClick={() => void executeRecovery(action.kind)}
+                  >
+                    {recoveringAction === action.kind ? "Recovering…" : action.label}
+                  </Button>
+                ))}
+              </div>
+            </div>
+          ))}
+          {confirmingWriterTakeover ? (
+            <div className="mt-3 rounded-md border border-danger p-3" role="alertdialog" aria-labelledby="writer-takeover-title">
+              <p id="writer-takeover-title" className="m-0 text-sm font-semibold">Take over editing from the other tab?</p>
+              <p className="mb-3 mt-1 text-xs text-muted-foreground">The other tab becomes read-only. Its unsaved editor text stays visible, but only this tab may write the Local Draft.</p>
+              <div className="flex gap-2">
+                <Button type="button" size="sm" variant="primary" onClick={() => void executeRecovery("resolve-writer-conflict")}>Confirm writer takeover</Button>
+                <Button type="button" size="sm" onClick={() => setConfirmingWriterTakeover(false)}>Cancel</Button>
+              </div>
+            </div>
+          ) : null}
+        </section>
+      ) : null}
       {project.state !== "active" ? <p className="m-3 text-sm text-muted-foreground">Restore this Project before starting its workspace.</p> : null}
       {hasWorkspace ? (
         <div className="grid min-h-[34rem] grid-cols-1 lg:grid-cols-[14rem_minmax(0,1fr)_minmax(18rem,0.8fr)]">
@@ -295,8 +416,8 @@ export function ProjectIdeShell({ assetRevision, previewConfiguration, project, 
           </nav>
           <section className="grid min-w-0 grid-rows-[auto_minmax(16rem,1fr)_auto] border-b border-muted-border lg:border-r lg:border-b-0" aria-label="Text editor">
             <div className="border-b border-muted-border bg-subtle px-3 py-2 font-mono text-xs text-muted-foreground">{selectedPath ?? "Select a file"}</div>
-            {selectedPath ? <textarea className="h-full min-h-64 w-full resize-none border-0 bg-surface p-4 font-mono text-sm leading-6 text-foreground outline-none" aria-label={`Editor for ${selectedPath}`} spellCheck={false} value={editorContent} onChange={(event) => { setEditorContent(event.currentTarget.value); setEditorStatus("Unsaved Local Draft"); }} /> : <p className="p-4 text-sm text-muted-foreground">Choose a text file from the tree.</p>}
-            <div className="flex items-center justify-between gap-3 border-t border-muted-border px-3 py-2 text-xs text-muted-foreground"><span>{editorStatus} · {workspace.files.length} files · {workspace.totalBytes} bytes</span><Button type="button" size="sm" disabled={!selectedPath || isSaving} onClick={saveSelectedFile}>{isSaving ? "Applying…" : "Apply to Local Draft"}</Button></div>
+            {selectedPath ? <textarea className="h-full min-h-64 w-full resize-none border-0 bg-surface p-4 font-mono text-sm leading-6 text-foreground outline-none read-only:cursor-not-allowed read-only:bg-subtle" aria-label={`Editor for ${selectedPath}`} spellCheck={false} readOnly={!canWriteLocalDraft} value={editorContent} onChange={(event) => { setEditorContent(event.currentTarget.value); setEditorStatus("Unsaved Local Draft"); }} /> : <p className="p-4 text-sm text-muted-foreground">Choose a text file from the tree.</p>}
+            <div className="flex items-center justify-between gap-3 border-t border-muted-border px-3 py-2 text-xs text-muted-foreground"><span>{editorStatus} · {canWriteLocalDraft ? "writer" : "read-only"} · {workspace.files.length} files · {workspace.totalBytes} bytes</span><Button type="button" size="sm" disabled={!selectedPath || isSaving || !canWriteLocalDraft} onClick={saveSelectedFile}>{isSaving ? "Applying…" : "Apply to Local Draft"}</Button></div>
           </section>
           <div className="grid grid-rows-[minmax(12rem,1fr)_minmax(12rem,1fr)]">
             <section className="grid min-h-0 grid-rows-[auto_1fr] border-b border-muted-border" aria-label="Preview" data-preview-url={isolatedPreviewUrl}><div className="flex items-center justify-between gap-3 border-b border-muted-border p-3"><div><h4 className="m-0 text-sm font-semibold">Preview</h4><p className="m-0 text-xs text-muted-foreground">{runtime.workflowPhase} · HMR {runtime.hmrState}</p></div>{hasIsolatedPreview ? null : <Button type="button" size="sm" variant="primary" disabled={isRunningPreview || previewConfiguration.status === "disabled"} onClick={() => void runPreview()}>{isRunningPreview ? "Installing…" : "Run Preview"}</Button>}</div>{hasIsolatedPreview ? <iframe ref={(frame) => previewBridgeRef.current?.attach(frame?.contentWindow ?? null)} title={`${project.name} Preview`} className="h-full min-h-0 w-full border-0 bg-white" src={isolatedPreviewUrl} sandbox="allow-scripts allow-same-origin" allow="cross-origin-isolated" referrerPolicy="no-referrer" /> : previewConfiguration.status === "disabled" ? <p className="p-3 text-sm text-muted-foreground" role="status">{previewConfiguration.message} Same-origin Preview is disabled.</p> : runtime.previewUrl ? <p className="p-3 text-sm text-muted-foreground" role="status">The isolated Preview connection is not ready. Same-origin Preview is disabled.</p> : <p className="p-3 text-sm text-muted-foreground">Run bounded install and dev to open the isolated Preview.</p>}</section>
@@ -310,4 +431,10 @@ export function ProjectIdeShell({ assetRevision, previewConfiguration, project, 
       ) : <div className="p-6"><p className="m-0 text-sm text-muted-foreground">Start an isolated Local Draft to materialize the starter template. No server credential is passed to the browser runtime.</p></div>}
     </section>
   );
+}
+
+function runtimeErrorCode(value: unknown): string | null {
+  if (!value || typeof value !== "object" || !("code" in value)) return null;
+  const code = (value as { code?: unknown }).code;
+  return typeof code === "string" && /^RUNTIME_[A-Z0-9_]{1,56}$/u.test(code) ? code : null;
 }

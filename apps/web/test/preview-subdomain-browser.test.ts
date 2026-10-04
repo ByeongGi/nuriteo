@@ -116,7 +116,11 @@ try {
   assert.equal(await page.evaluate(() => globalThis.crossOriginIsolated), true);
 
   await page.getByRole("button", { name: "Start workspace" }).click();
-  await page.getByRole("button", { name: "Run Preview" }).waitFor({ timeout: 20_000 });
+  try {
+    await page.getByRole("button", { name: "Run Preview" }).waitFor({ timeout: 20_000 });
+  } catch (error) {
+    throw new Error(`workspace did not start: ${await page.locator("body").innerText()} | ${errors.join(" | ")}`, { cause: error });
+  }
   await page.evaluate(() => {
     const nativeNow = Date.now;
     Object.defineProperty(window, "__nuriteoNativeDateNow", { configurable: true, value: nativeNow });
