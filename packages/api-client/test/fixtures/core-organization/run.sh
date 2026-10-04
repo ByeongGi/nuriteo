@@ -8,6 +8,18 @@ if [[ "$upload_transport" != "direct" && "$upload_transport" != "relay" ]]; then
   exit 2
 fi
 unset NURITEO_CLIENT_TEST_SAVE_UPLOAD_TRANSPORT
+external_url_override_set=false
+external_url_override=""
+if [[ -n "${NURITEO_CLIENT_TEST_EXTERNAL_URL+x}" ]]; then
+  external_url_override_set=true
+  if ! external_url_override="$(
+    mise exec node@22.23.0 -- node \
+      packages/api-client/test/fixtures/core-organization/validate-external-origin.mjs
+  )"; then
+    exit 2
+  fi
+fi
+unset NURITEO_CLIENT_TEST_EXTERNAL_URL
 postgres_image="docker.io/library/postgres@sha256:f3bd19c606e442c3d7bdfa8002e03fe260a1023351e0ea4598032022b68dd6e3"
 rustfs_image="docker.io/rustfs/rustfs@sha256:42edb61d588775f9431ff436216d14392d2234d4eb2ed68321569fbf7245b36b"
 postgres_container="nuriteo-client-005-postgres-${RANDOM}"
@@ -15,6 +27,10 @@ rustfs_container="nuriteo-client-005-rustfs-${RANDOM}"
 postgres_port="${NURITEO_TEST_DATABASE_PORT:-55451}"
 rustfs_port="${NURITEO_TEST_S3_PORT:-19011}"
 core_port="${NURITEO_TEST_CORE_PORT:-18091}"
+external_url="http://127.0.0.1:${core_port}"
+if [[ "$external_url_override_set" == true ]]; then
+  external_url="$external_url_override"
+fi
 fixture_dir="$(mktemp -d "${TMPDIR:-/tmp}/nuriteo-client-005.XXXXXX")"
 postgres_tls="$fixture_dir/postgres"
 rustfs_tls="$fixture_dir/rustfs"
@@ -147,7 +163,7 @@ if [[ "$bucket_ready" != true ]]; then
 fi
 
 export CARGO_TARGET_DIR="$target_dir"
-export NURITEO_EXTERNAL_URL="http://127.0.0.1:${core_port}"
+export NURITEO_EXTERNAL_URL="$external_url"
 export NURITEO_HTTP_LISTEN_ADDR="127.0.0.1:${core_port}"
 export NURITEO_SHUTDOWN_DRAIN_TIMEOUT_MS=2000
 export NURITEO_DATABASE_URL="postgres://nuriteo:${database_password}@localhost:${postgres_port}/nuriteo"
@@ -196,13 +212,19 @@ done
 curl --fail --silent --show-error \
   "http://127.0.0.1:${core_port}/health/ready" >/dev/null
 
-NURITEO_CLIENT_TEST_BASE_URL="http://127.0.0.1:${core_port}" \
-NURITEO_CLIENT_TEST_EMAIL=admin@example.test \
-NURITEO_CLIENT_TEST_PASSWORD_FILE="$fixture_dir/admin-password" \
-NURITEO_CLIENT_TEST_MEMBER_PASSWORD_FILE="$fixture_dir/member-password" \
-NURITEO_CLIENT_TEST_SAVE_UPLOAD_TRANSPORT="$upload_transport" \
-NURITEO_CLIENT_TEST_CONTAINER_RUNTIME="$runtime" \
-NURITEO_CLIENT_TEST_POSTGRES_CONTAINER="$postgres_container" \
-NODE_EXTRA_CA_CERTS="$rustfs_tls/ca.crt" \
+client_environment=(
+  "NURITEO_CLIENT_TEST_BASE_URL=http://127.0.0.1:${core_port}"
+  "NURITEO_CLIENT_TEST_EMAIL=admin@example.test"
+  "NURITEO_CLIENT_TEST_PASSWORD_FILE=$fixture_dir/admin-password"
+  "NURITEO_CLIENT_TEST_MEMBER_PASSWORD_FILE=$fixture_dir/member-password"
+  "NURITEO_CLIENT_TEST_SAVE_UPLOAD_TRANSPORT=$upload_transport"
+  "NURITEO_CLIENT_TEST_CONTAINER_RUNTIME=$runtime"
+  "NURITEO_CLIENT_TEST_POSTGRES_CONTAINER=$postgres_container"
+  "NODE_EXTRA_CA_CERTS=$rustfs_tls/ca.crt"
+)
+if [[ "$external_url_override_set" == true ]]; then
+  client_environment+=("NURITEO_CLIENT_TEST_EXTERNAL_URL=$external_url_override")
+fi
+env "${client_environment[@]}" \
   mise exec node@22.23.0 -- node \
     "${CLIENT_LIVE_CONTRACT:-packages/api-client/test/organization-live-contract.ts}"
