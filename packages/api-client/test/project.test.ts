@@ -25,6 +25,7 @@ const USER_ID = "018f22c4-3cb2-7cc8-98d8-b4f7f753f7bb";
 const ORGANIZATION_ID = "018f22c4-3cb5-7ac7-b464-8214f90ad21a";
 const MEMBER_ID = "018f22c4-3cb6-7819-a58e-a5831700f999";
 const PROJECT_ID = "018f22c4-3cb8-7f31-b579-f044c9502bb7";
+const OTHER_PROJECT_ID = "018f22c4-3cb9-7ce8-9e53-798892f5b1f3";
 const STORAGE_SCOPE_ID = "018f22c4-3cb4-70c0-8f01-7252dd5c2d61";
 const CSRF = "nrt_csrf_project-client";
 const PERSONAL_OWNER: ProjectOwner = { ownerType: "user", ownerId: USER_ID };
@@ -222,6 +223,48 @@ async function testListAndRuntimeValidation(): Promise<void> {
       ApiInvalidResponseError
     );
   }
+  await assert.rejects(
+    getProject(
+      responseClient(projectResponse({ ...project(1), id: OTHER_PROJECT_ID }, 200, '"project-v1"')),
+      { owner: PERSONAL_OWNER, projectId: PROJECT_ID }
+    ),
+    ApiInvalidResponseError
+  );
+  await assert.rejects(
+    renameProject(
+      responseClient(projectResponse({ ...project(2), id: OTHER_PROJECT_ID }, 200, '"project-v2"')),
+      {
+        owner: PERSONAL_OWNER,
+        projectId: PROJECT_ID,
+        name: "Renamed",
+        etag: '"project-v1"'
+      },
+      { csrfToken: CSRF }
+    ),
+    ApiInvalidResponseError
+  );
+  const archivedThenUpdated = await getProject(
+    responseClient(projectResponse({
+      ...project(3),
+      state: "archived",
+      archivedAt: "2026-10-04T01:00:00Z",
+      updatedAt: "2026-10-04T02:00:00Z"
+    }, 200, '"project-v3"')),
+    { owner: PERSONAL_OWNER, projectId: PROJECT_ID }
+  );
+  assert.equal(archivedThenUpdated.data.updatedAt, "2026-10-04T02:00:00Z");
+  await assert.rejects(
+    getProject(
+      responseClient(projectResponse({
+        ...project(3),
+        state: "archived",
+        archivedAt: "2026-10-04T02:00:00Z",
+        updatedAt: "2026-10-04T01:00:00Z"
+      }, 200, '"project-v3"')),
+      { owner: PERSONAL_OWNER, projectId: PROJECT_ID }
+    ),
+    ApiInvalidResponseError
+  );
   for (const response of invalidResponses.slice(4, 6)) {
     await assert.rejects(
       listProjects(responseClient(response), { owner: PERSONAL_OWNER }),

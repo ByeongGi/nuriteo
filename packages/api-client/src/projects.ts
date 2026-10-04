@@ -175,8 +175,9 @@ export async function getProject(
   options: DomainRequestOptions = {}
 ): Promise<ProjectResult> {
   const owner = validateOwner(input.owner);
-  const response = await client.get<unknown>(projectPath(owner, input.projectId), options);
-  return projectResult(response, 200, owner, false);
+  const projectId = validateId(input.projectId);
+  const response = await client.get<unknown>(projectPath(owner, projectId), options);
+  return projectResult(response, 200, owner, false, projectId);
 }
 
 export async function renameProject(
@@ -185,12 +186,13 @@ export async function renameProject(
   options: BrowserMutationOptions
 ): Promise<ProjectResult> {
   const owner = validateOwner(input.owner);
+  const projectId = validateId(input.projectId);
   const response = await client.patch<unknown, unknown>(
-    projectPath(owner, input.projectId),
+    projectPath(owner, projectId),
     { name: validateName(input.name) },
     mutationOptions(options, { "if-match": validateProjectEtag(input.etag) })
   );
-  return projectResult(response, 200, owner, false);
+  return projectResult(response, 200, owner, false, projectId);
 }
 
 export function archiveProject(
@@ -302,21 +304,26 @@ async function changeProjectLifecycle(
   action: "archive" | "restore"
 ): Promise<ProjectResult> {
   const owner = validateOwner(input.owner);
+  const projectId = validateId(input.projectId);
   const response = await client.post<unknown, undefined>(
-    `${projectPath(owner, input.projectId)}/${action}`,
+    `${projectPath(owner, projectId)}/${action}`,
     undefined,
     mutationOptions(options, { "if-match": validateProjectEtag(input.etag) })
   );
-  return projectResult(response, 200, owner, false);
+  return projectResult(response, 200, owner, false, projectId);
 }
 
 function projectResult(
   response: ApiResponse<unknown>,
   status: 200 | 201,
   owner: ProjectOwner,
-  requireLocation: boolean
+  requireLocation: boolean,
+  expectedProjectId?: string
 ): ProjectResult {
   const parsed = validatedResultForStatus(response, status, (value) => parseProject(value, owner));
+  if (expectedProjectId !== undefined && parsed.data.id !== expectedProjectId) {
+    throw invalidResponse(response);
+  }
   const etag = validateResponseEtag(response, parsed.data.version);
   const location = response.headers.get("location");
   const expectedLocation = `/api/v1${projectPath(owner, parsed.data.id)}`;
@@ -369,7 +376,7 @@ function parseProject(value: unknown, expectedOwner?: ProjectOwner): Project {
     !ownerMatches ||
     !lifecycleMatches ||
     Date.parse(result.createdAt) > Date.parse(result.updatedAt) ||
-    (result.archivedAt !== null && Date.parse(result.updatedAt) > Date.parse(result.archivedAt))
+    (result.archivedAt !== null && Date.parse(result.updatedAt) < Date.parse(result.archivedAt))
   ) {
     throw new TypeError("invalid Project");
   }
