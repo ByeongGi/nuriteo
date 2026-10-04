@@ -150,7 +150,7 @@ fn project_openapi_declares_every_error_as_problem_json() {
         if !path.contains("/projects") {
             continue;
         }
-        for operation in item.as_object().unwrap().values() {
+        for (method, operation) in item.as_object().unwrap() {
             assert_eq!(
                 operation["security"],
                 json!([{"projectSessionCookie": []}]),
@@ -163,6 +163,29 @@ fn project_openapi_declares_every_error_as_problem_json() {
                         "{path} JSON-body operation must document {status}"
                     );
                 }
+            }
+            let required_headers = operation["parameters"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter(|parameter| parameter["in"] == "header")
+                .map(|parameter| {
+                    assert_eq!(parameter["required"], true);
+                    parameter["name"].as_str().unwrap()
+                })
+                .collect::<Vec<_>>();
+            if method == "get" {
+                assert!(!required_headers.contains(&"Origin"));
+                assert!(!required_headers.contains(&"X-CSRF-Token"));
+            } else {
+                assert!(
+                    required_headers.contains(&"Origin"),
+                    "{method} {path} must require Origin"
+                );
+                assert!(
+                    required_headers.contains(&"X-CSRF-Token"),
+                    "{method} {path} must require X-CSRF-Token"
+                );
             }
             for (status, response) in operation["responses"].as_object().unwrap() {
                 if status.starts_with('2') {

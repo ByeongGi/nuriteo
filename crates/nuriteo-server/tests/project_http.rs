@@ -335,6 +335,7 @@ async fn project_http_journey_is_authorized_versioned_and_audited() {
     )
     .await;
 
+    set_stale_reauthentication(&pool, fixture.owner).await;
     assert_problem(
         json_request(
             &router,
@@ -596,7 +597,12 @@ async fn seed_fixture(pool: &DatabasePool) -> Fixture {
 }
 
 async fn set_reauthenticated(pool: &DatabasePool, user_id: UserId) {
-    sqlx::query("UPDATE sessions SET last_seen_at=transaction_timestamp(), last_reauthenticated_at=created_at WHERE user_id=$1::uuid AND revoked_at IS NULL")
+    sqlx::query("UPDATE sessions SET last_seen_at=transaction_timestamp(), last_reauthenticated_at=transaction_timestamp() WHERE user_id=$1::uuid AND revoked_at IS NULL")
+        .bind(user_id.to_string()).execute(&mut *acquire(pool).await).await.unwrap();
+}
+
+async fn set_stale_reauthentication(pool: &DatabasePool, user_id: UserId) {
+    sqlx::query("UPDATE sessions SET created_at=created_at - INTERVAL '20 minutes', last_seen_at=transaction_timestamp(), last_reauthenticated_at=transaction_timestamp() - INTERVAL '16 minutes' WHERE user_id=$1::uuid AND revoked_at IS NULL")
         .bind(user_id.to_string()).execute(&mut *acquire(pool).await).await.unwrap();
 }
 
