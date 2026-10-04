@@ -12,8 +12,10 @@ const SESSION_ID = "0199ee6c-c777-7000-8000-000000006004";
 const BUNDLE_ID = "0199ee6c-c777-7000-8000-000000006005";
 
 await testSingleSaveAndRevisionFence();
+await testRelaySingleSaveWithoutReceipt();
 await testEmptyCurrentTree();
 await testMultipartSave();
+await testRelayMultipartSaveWithoutReceipts();
 await testCancelledUploadAbortsSession();
 await testIdempotencyKeyScopesBaseRevision();
 await testAmbiguousCompleteReconciles();
@@ -42,6 +44,7 @@ async function testSingleSaveAndRevisionFence() {
         sessionId: SESSION_ID,
         uploadMode: "single",
         upload: {
+          transport: "direct",
           method: "PUT",
           url: "https://storage.test/upload?signature=redacted",
           expectedBytes: physicalBytes,
@@ -91,6 +94,51 @@ async function testSingleSaveAndRevisionFence() {
   assert.equal(requests.filter((item) => item.url.startsWith("https://storage.test/")).length, 1);
 }
 
+async function testRelaySingleSaveWithoutReceipt() {
+  const requests: Array<{ credentials: RequestCredentials | undefined; headers: Headers; method: string; url: string }> = [];
+  let receiptRequests = 0;
+  const relayPath = `/api/v1/workspaces/users/${OWNER_ID}/projects/${PROJECT_ID}/save-sessions/${SESSION_ID}/upload`;
+  const fetchMock = async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    const body = typeof init?.body === "string" ? JSON.parse(init.body) as Record<string, unknown> : undefined;
+    requests.push({ credentials: init?.credentials, headers: new Headers(init?.headers), method: String(init?.method), url });
+    if (url.endsWith("/save-sessions")) {
+      const checksum = String(body?.sha256);
+      return Response.json({
+        expiresAt: "2026-10-04T12:00:00Z", idempotentRetry: false, partCount: 1,
+        sessionId: SESSION_ID, uploadMode: "single", upload: {
+          transport: "relay", method: "PUT", path: relayPath, expectedBytes: Number(body?.physicalBytes),
+          headers: [
+            { name: "Content-Type", value: "application/vnd.nuriteo.project-bundle" },
+            { name: "X-Nuriteo-Content-SHA256", value: checksum }
+          ]
+        }
+      }, { status: 201 });
+    }
+    if (url === relayPath) return new Response(null, { status: 204 });
+    if (url.endsWith("/parts/receipts")) {
+      receiptRequests += 1;
+      return new Response(null, { status: 204 });
+    }
+    if (url.endsWith(`/save-sessions/${SESSION_ID}/complete`)) {
+      return Response.json({ bundleId: BUNDLE_ID, projectVersion: 2 }, { headers: { etag: '"project-v2"' } });
+    }
+    throw new Error(`unexpected request ${url}`);
+  };
+  const result = await saveCurrentProject({
+    client: createApiClient({ baseUrl: "https://nuriteo.test", fetch: fetchMock }),
+    csrfToken: "csrf-safe", owner: { ownerType: "user", ownerId: OWNER_ID },
+    projectId: PROJECT_ID, storageScopeId: SCOPE_ID, projectEtag: '"project-v1"',
+    snapshotCurrentTree: () => ({ revision: 1, files: [] }), currentRevision: () => 1,
+    transferFetch: fetchMock
+  });
+  assert.equal(result.projectEtag, '"project-v2"');
+  const upload = requests.find((request) => request.url === relayPath);
+  assert.equal(upload?.credentials, "same-origin");
+  assert.equal(upload?.headers.get("x-csrf-token"), "csrf-safe");
+  assert.equal(receiptRequests, 0, "relay uploads must not fabricate or submit storage receipts");
+}
+
 async function testEmptyCurrentTree() {
   const fetchMock = async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
@@ -98,6 +146,7 @@ async function testEmptyCurrentTree() {
     if (url.endsWith("/save-sessions")) return Response.json({
       expiresAt: "2026-10-04T12:00:00Z", idempotentRetry: false, partCount: 1,
       sessionId: SESSION_ID, uploadMode: "single", upload: {
+        transport: "direct",
         method: "PUT", url: "https://storage.test/empty", expectedBytes: Number(body?.physicalBytes),
         headers: [{ name: "x-amz-checksum-sha256", value: String(body?.sha256) }]
       }
@@ -143,6 +192,7 @@ async function testMultipartSave() {
       const parts = body?.parts as Array<{ expectedBytes: number; partNumber: number; sha256: string }>;
       assert.ok(parts.length <= 16);
       return Response.json(parts.map((part) => ({
+        transport: "direct",
         method: "PUT", url: `https://storage.test/part-${part.partNumber}`,
         expectedBytes: part.expectedBytes,
         headers: [{ name: "x-amz-checksum-sha256", value: part.sha256 }]
@@ -176,6 +226,66 @@ async function testMultipartSave() {
   assert.equal(snapshotCalls, 1, "the legal 128 MiB tree must be exported once without completion re-cloning");
 }
 
+async function testRelayMultipartSaveWithoutReceipts() {
+  const sharedBytes = new Uint8Array(14 * 1024 * 1024).fill(9);
+  const files = Array.from({ length: 5 }, (_, index) => ({
+    path: `relay/part-${index}.bin`,
+    kind: "binary" as const,
+    bytes: sharedBytes
+  }));
+  let uploadedParts = 0;
+  let receiptRequests = 0;
+  const fetchMock = async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    const body = typeof init?.body === "string" ? JSON.parse(init.body) as Record<string, unknown> : undefined;
+    if (url.endsWith("/save-sessions")) {
+      const parts = body?.parts as unknown[];
+      assert.ok(parts.length > 1);
+      return Response.json({
+        expiresAt: "2026-10-04T12:00:00Z", idempotentRetry: false, partCount: parts.length,
+        sessionId: SESSION_ID, uploadMode: "multipart", upload: null
+      }, { status: 201 });
+    }
+    if (url.endsWith(`/save-sessions/${SESSION_ID}/parts`)) {
+      const parts = body?.parts as Array<{ expectedBytes: number; partNumber: number; sha256: string }>;
+      return Response.json(parts.map((part) => ({
+        transport: "relay",
+        method: "PUT",
+        path: `/api/v1/workspaces/users/${OWNER_ID}/projects/${PROJECT_ID}/save-sessions/${SESSION_ID}/upload/parts/${part.partNumber}`,
+        expectedBytes: part.expectedBytes,
+        headers: [
+          { name: "Content-Type", value: "application/vnd.nuriteo.project-bundle" },
+          { name: "X-Nuriteo-Content-SHA256", value: part.sha256 }
+        ]
+      })));
+    }
+    if (url.includes(`/save-sessions/${SESSION_ID}/upload/parts/`)) {
+      uploadedParts += 1;
+      assert.equal(init?.credentials, "same-origin");
+      assert.equal(new Headers(init?.headers).get("x-csrf-token"), "csrf-safe");
+      return new Response(null, { status: 204 });
+    }
+    if (url.endsWith(`/save-sessions/${SESSION_ID}/parts/receipts`)) {
+      receiptRequests += 1;
+      return new Response(null, { status: 204 });
+    }
+    if (url.endsWith(`/save-sessions/${SESSION_ID}/complete`)) {
+      return Response.json({ bundleId: BUNDLE_ID, projectVersion: 4 }, { headers: { etag: '"project-v4"' } });
+    }
+    throw new Error(`unexpected request ${url}`);
+  };
+  const result = await saveCurrentProject({
+    client: createApiClient({ baseUrl: "https://nuriteo.test", fetch: fetchMock }),
+    csrfToken: "csrf-safe", owner: { ownerType: "user", ownerId: OWNER_ID },
+    projectId: PROJECT_ID, storageScopeId: SCOPE_ID, projectEtag: '"project-v3"',
+    snapshotCurrentTree: () => ({ revision: 8, files }), currentRevision: () => 8,
+    transferFetch: fetchMock
+  });
+  assert.equal(result.projectEtag, '"project-v4"');
+  assert.ok(uploadedParts > 1);
+  assert.equal(receiptRequests, 0, "relay multipart parts must never submit direct storage receipts");
+}
+
 async function testCancelledUploadAbortsSession() {
   const controller = new AbortController();
   let abortedSession = false;
@@ -185,6 +295,7 @@ async function testCancelledUploadAbortsSession() {
     if (url.endsWith("/save-sessions")) return Response.json({
       expiresAt: "2026-10-04T12:00:00Z", idempotentRetry: false, partCount: 1,
       sessionId: SESSION_ID, uploadMode: "single", upload: {
+        transport: "direct",
         method: "PUT", url: "https://storage.test/cancel", expectedBytes: Number(body?.physicalBytes),
         headers: [{ name: "x-amz-checksum-sha256", value: String(body?.sha256) }]
       }
@@ -241,6 +352,7 @@ async function testAmbiguousCompleteReconciles() {
       if (url.endsWith("/save-sessions")) return Response.json({
         expiresAt: "2026-10-04T12:00:00Z", idempotentRetry: false, partCount: 1,
         sessionId: SESSION_ID, uploadMode: "single", upload: {
+          transport: "direct",
           method: "PUT", url: `https://storage.test/${mode}`, expectedBytes: Number(body?.physicalBytes),
           headers: [{ name: "x-amz-checksum-sha256", value: String(body?.sha256) }]
         }
@@ -281,6 +393,7 @@ async function testExplicitAbortDoesNotReconcile() {
     if (url.endsWith("/save-sessions")) return Response.json({
       expiresAt: "2026-10-04T12:00:00Z", idempotentRetry: false, partCount: 1,
       sessionId: SESSION_ID, uploadMode: "single", upload: {
+        transport: "direct",
         method: "PUT", url: "https://storage.test/user-abort", expectedBytes: Number(body?.physicalBytes),
         headers: [{ name: "x-amz-checksum-sha256", value: String(body?.sha256) }]
       }

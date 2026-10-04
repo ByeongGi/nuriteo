@@ -62,6 +62,7 @@ const server = http.createServer(async (request, response) => {
       response.end(JSON.stringify({
         expiresAt: "2026-10-04T12:00:00Z", idempotentRetry: false, partCount: 1,
         sessionId: saveSessionId, uploadMode: "single", upload: {
+          transport: "direct",
           method: "PUT", url: "https://storage.test/runtime-save", expectedBytes: body.physicalBytes,
           headers: [{ name: "x-amz-checksum-sha256", value: body.sha256 }]
         }

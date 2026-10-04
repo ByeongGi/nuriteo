@@ -114,11 +114,21 @@ export async function saveCurrentProject(input: ProjectSaveInput): Promise<Proje
       assertSamePass(plan, streamed);
       const capability = created.data.upload;
       if (capability === null) throw new Error("The single-upload Save session omitted its capability.");
-      await uploadSaveCapability(capability, {
+      const part = {
         partNumber: 1,
         expectedBytes: plan.metadata.physicalBytes,
         sha256: plan.metadata.archiveSha256
-      }, streamed.sinkResult.blob, transferOptions(input));
+      };
+      if (capability.transport === "direct") {
+        await uploadSaveCapability(capability, part, streamed.sinkResult.blob, transferOptions(input));
+      } else {
+        await uploadSaveCapability(capability, part, streamed.sinkResult.blob, {
+          ...transferOptions(input),
+          ...session,
+          csrfToken: input.csrfToken,
+          uploadMode: "single"
+        });
+      }
       input.onProgress?.({
         phase: "uploading",
         uploadedBytes: plan.metadata.physicalBytes,
@@ -172,7 +182,7 @@ async function uploadMultipart(
     await recordSaveReceipts(input.client, { ...session, receipts }, mutationOptions(input));
     receipts = [];
   };
-  const sink = new ProjectBundleMultipartSink<SaveUploadReceipt>(
+  const sink = new ProjectBundleMultipartSink<void>(
     SAVE_MULTIPART_PART_BYTES,
     async (part) => {
       const expected = plan.parts[part.number - 1];
@@ -187,13 +197,21 @@ async function uploadMultipart(
       }
       const capability = capabilities[part.number - 1 - capabilityOffset];
       if (capability === undefined) throw new Error("The multipart capability batch was incomplete.");
-      const receipt = await uploadSaveCapability(
-        capability,
-        expected,
-        new Blob([part.bytes as Uint8Array<ArrayBuffer>], { type: "application/vnd.nuriteo.project-bundle" }),
-        transferOptions(input)
+      const body = new Blob(
+        [part.bytes as Uint8Array<ArrayBuffer>],
+        { type: "application/vnd.nuriteo.project-bundle" }
       );
-      receipts.push(receipt);
+      if (capability.transport === "direct") {
+        const result = await uploadSaveCapability(capability, expected, body, transferOptions(input));
+        receipts.push(result.receipt);
+      } else {
+        await uploadSaveCapability(capability, expected, body, {
+          ...transferOptions(input),
+          ...session,
+          csrfToken: input.csrfToken,
+          uploadMode: "multipart"
+        });
+      }
       uploadedBytes += part.sizeBytes;
       input.onProgress?.({
         phase: "uploading",
@@ -202,7 +220,7 @@ async function uploadMultipart(
         uploadedParts: part.number,
         totalParts: plan.parts.length
       });
-      return receipt;
+      return undefined;
     },
     async () => undefined
   );

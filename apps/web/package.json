@@ -19,6 +19,7 @@
     "test:runtime-recovery-browser": "node --experimental-strip-types test/runtime-recovery-browser.test.ts",
     "test:resume-browser": "node --experimental-strip-types test/resume-browser.test.ts",
     "test:history-browser": "node --experimental-strip-types test/project-history-browser.test.ts",
+    "test:relay-browser-actual": "test/fixtures/private-relay/run.sh",
     "test:local-draft-writer-browser": "node --experimental-strip-types test/local-draft-writer-browser.test.ts",
     "test:preview-browser": "node --experimental-strip-types test/preview-subdomain-browser.test.ts",
     "test:preview-next-browser": "node --experimental-strip-types test/preview-next-subdomain-browser.test.ts",
