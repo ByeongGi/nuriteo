@@ -132,6 +132,7 @@ pub enum OrganizationServiceError {
     Archived,
     DuplicateSlug,
     MemberNotFound,
+    MemberLimitReached,
     LastOwner,
     StaleVersion,
     AuditUnavailable,
@@ -150,6 +151,7 @@ impl fmt::Display for OrganizationServiceError {
             Self::Archived => "organization is archived",
             Self::DuplicateSlug => "organization slug already exists",
             Self::MemberNotFound => "organization member was not found",
+            Self::MemberLimitReached => "organization member limit was reached",
             Self::LastOwner => "organization must retain at least one owner",
             Self::StaleVersion => "organization version is stale",
             Self::AuditUnavailable => "organization audit persistence is unavailable",
@@ -288,7 +290,15 @@ impl OrganizationService {
         display_name: String,
         audit: &OrganizationAuditContext,
     ) -> Result<Organization, OrganizationServiceError> {
-        let now = now()?;
+        super::model::validate_slug(&slug).map_err(|_| OrganizationServiceError::InvalidInput)?;
+        super::model::validate_display_name(&display_name)
+            .map_err(|_| OrganizationServiceError::InvalidInput)?;
+        let mut connection = self.acquire().await?;
+        let mut transaction = connection
+            .begin()
+            .await
+            .map_err(|_| OrganizationServiceError::DatabaseUnavailable)?;
+        let now = transaction_now(&mut transaction).await?;
         let organization = Organization::new(OrganizationFields {
             id: OrganizationId::new(),
             slug,
@@ -302,11 +312,6 @@ impl OrganizationService {
         })
         .map_err(|_| OrganizationServiceError::InvalidInput)?;
         let fields = organization.clone().into_fields();
-        let mut connection = self.acquire().await?;
-        let mut transaction = connection
-            .begin()
-            .await
-            .map_err(|_| OrganizationServiceError::DatabaseUnavailable)?;
         require_active_user(&mut transaction, creator_user_id, false).await?;
 
         let insert = sqlx::query(
@@ -409,6 +414,8 @@ impl OrganizationService {
         display_name: String,
         audit: &OrganizationAuditContext,
     ) -> Result<Organization, OrganizationServiceError> {
+        super::model::validate_display_name(&display_name)
+            .map_err(|_| OrganizationServiceError::InvalidInput)?;
         let mut connection = self.acquire().await?;
         let mut transaction = connection
             .begin()
@@ -515,6 +522,7 @@ impl OrganizationService {
             .await
             .map_err(|_| OrganizationServiceError::DatabaseUnavailable)?;
         let now = transaction_now(&mut transaction).await?;
+        lock_membership_admission(&mut transaction, organization_id).await?;
         let locked = lock_and_authorize_owner(&mut transaction, principal, organization_id).await?;
         ensure_active(&locked)?;
         if membership_role(&mut transaction, organization_id, user_id)
@@ -524,6 +532,7 @@ impl OrganizationService {
             return Ok(MembershipAddResult::AlreadyMember);
         }
         require_active_user(&mut transaction, user_id, false).await?;
+        ensure_member_capacity(&mut transaction, organization_id).await?;
         sqlx::query(
             "INSERT INTO organization_memberships \
              (organization_id, user_id, role, created_at, updated_at) \
@@ -535,7 +544,7 @@ impl OrganizationService {
         .bind(now.to_string())
         .execute(&mut *transaction)
         .await
-        .map_err(|_| OrganizationServiceError::DatabaseUnavailable)?;
+        .map_err(membership_write_error)?;
         append_membership_audit(
             &mut transaction,
             audit,
@@ -775,6 +784,47 @@ async fn membership_role(
     role.map(|value| parse_role(&value)).transpose()
 }
 
+async fn lock_membership_admission(
+    transaction: &mut Transaction<'_, Postgres>,
+    organization_id: OrganizationId,
+) -> Result<(), OrganizationServiceError> {
+    sqlx::query("SELECT pg_advisory_xact_lock(1314212943, hashtext($1))")
+        .bind(organization_id.to_string())
+        .execute(&mut **transaction)
+        .await
+        .map_err(|_| OrganizationServiceError::DatabaseUnavailable)?;
+    Ok(())
+}
+
+async fn ensure_member_capacity(
+    transaction: &mut Transaction<'_, Postgres>,
+    organization_id: OrganizationId,
+) -> Result<(), OrganizationServiceError> {
+    let members: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM organization_memberships \
+         WHERE organization_id = $1::uuid",
+    )
+    .bind(organization_id.to_string())
+    .fetch_one(&mut **transaction)
+    .await
+    .map_err(|_| OrganizationServiceError::DatabaseUnavailable)?;
+    if members >= super::MAX_MEMBERS {
+        return Err(OrganizationServiceError::MemberLimitReached);
+    }
+    Ok(())
+}
+
+fn membership_write_error(error: sqlx::Error) -> OrganizationServiceError {
+    if error.as_database_error().is_some_and(|database| {
+        database.code().as_deref() == Some("23514")
+            && database.constraint() == Some("organization_member_limit")
+    }) {
+        OrganizationServiceError::MemberLimitReached
+    } else {
+        OrganizationServiceError::DatabaseUnavailable
+    }
+}
+
 async fn ensure_another_owner(
     transaction: &mut Transaction<'_, Postgres>,
     organization_id: OrganizationId,
@@ -977,11 +1027,6 @@ fn parse_role(role: &str) -> Result<OrganizationRole, OrganizationServiceError> 
         "member" => Ok(OrganizationRole::Member),
         _ => Err(OrganizationServiceError::InvariantViolation),
     }
-}
-
-fn now() -> Result<Timestamp, OrganizationServiceError> {
-    Timestamp::from_datetime(OffsetDateTime::now_utc())
-        .map_err(|_| OrganizationServiceError::InvariantViolation)
 }
 
 async fn transaction_now(

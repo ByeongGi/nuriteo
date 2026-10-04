@@ -1,5 +1,6 @@
 use std::env;
 use std::fs;
+use std::sync::Arc;
 use std::time::Duration;
 
 use nuriteo_server::audit::AuditEventId;
@@ -15,7 +16,8 @@ use nuriteo_server::organization::{
     OrganizationInvitationStatus, OrganizationInvitationToken, OrganizationRole,
 };
 use sha2::{Digest, Sha256};
-use sqlx::Executor;
+use sqlx::{Acquire, Executor};
+use tokio::sync::Barrier;
 
 const DATABASE_URL_ENV: &str = "NURITEO_TEST_DATABASE_URL";
 const DATABASE_CA_ENV: &str = "NURITEO_TEST_DATABASE_CA";
@@ -30,6 +32,8 @@ const OTHER_SESSION: &str = "0199ee6c-c777-7000-8000-000000000914";
 const MEMBER_SESSION: &str = "0199ee6c-c777-7000-8000-000000000915";
 const ORGANIZATION: &str = "0199ee6c-c777-7000-8000-000000000921";
 const SECOND_ORGANIZATION: &str = "0199ee6c-c777-7000-8000-000000000922";
+const CAPACITY_ORGANIZATION: &str = "0199ee6c-c777-7000-8000-000000000923";
+const CROSS_CAPACITY_ORGANIZATION: &str = "0199ee6c-c777-7000-8000-000000000924";
 
 #[tokio::test]
 #[ignore = "requires the pinned PostgreSQL TLS fixture; run tests/fixtures/postgres-organization-invitation/run.sh"]
@@ -46,6 +50,8 @@ async fn organization_invitations_are_role_bound_atomic_and_single_use() {
 
     let service =
         OrganizationInvitationService::new(pool.clone(), OrganizationInvitationPolicy::default());
+    verify_concurrent_accept_member_limit(&pool, &service).await;
+    verify_cross_path_member_limit(&pool, &service).await;
     let organization_id = organization_id(ORGANIZATION);
     let owner_recent = actor(OWNER, OWNER_RECENT_SESSION);
     let owner_stale = actor(OWNER, OWNER_STALE_SESSION);
@@ -405,6 +411,237 @@ async fn verify_terminal_race(
     assert!(membership_count(pool, ORGANIZATION, OTHER).await <= 1);
 }
 
+async fn verify_concurrent_accept_member_limit(
+    pool: &DatabasePool,
+    service: &OrganizationInvitationService,
+) {
+    sqlx::query(
+        "WITH inserted_users AS (\
+           INSERT INTO users (id, email, normalized_email, display_name) \
+           SELECT ('0199ee6c-c777-7000-8003-' || lpad(sequence::text, 12, '0'))::uuid, \
+                  'invitation-capacity-' || sequence || '@example.test', \
+                  'invitation-capacity-' || sequence || '@example.test', \
+                  'Invitation Capacity Member ' || sequence \
+           FROM generate_series(1, 98) AS generated(sequence) \
+           RETURNING id \
+         ) \
+         INSERT INTO organization_memberships (organization_id, user_id, role) \
+         SELECT $1::uuid, id, 'member' FROM inserted_users",
+    )
+    .bind(CAPACITY_ORGANIZATION)
+    .execute(&mut *acquire(pool).await)
+    .await
+    .unwrap_or_else(|error| panic!("capacity memberships must insert: {error}"));
+    assert_eq!(member_count(pool, CAPACITY_ORGANIZATION).await, 99);
+
+    let first = issue_member(
+        service,
+        organization_id(CAPACITY_ORGANIZATION),
+        actor(OWNER, OWNER_RECENT_SESSION),
+        "invitee@example.test",
+    )
+    .await;
+    let second = issue_member(
+        service,
+        organization_id(CAPACITY_ORGANIZATION),
+        actor(OWNER, OWNER_RECENT_SESSION),
+        "other@example.test",
+    )
+    .await;
+    let first_id = first.invitation().id().to_string();
+    let second_id = second.invitation().id().to_string();
+
+    let mut blocker_connection = acquire(pool).await;
+    let mut blocker = blocker_connection
+        .begin()
+        .await
+        .unwrap_or_else(|error| panic!("capacity blocker must begin: {error}"));
+    sqlx::query("SELECT pg_advisory_xact_lock(1314212943, hashtext($1))")
+        .bind(CAPACITY_ORGANIZATION)
+        .execute(&mut *blocker)
+        .await
+        .unwrap_or_else(|error| panic!("capacity blocker must lock organization: {error}"));
+
+    let barrier = Arc::new(Barrier::new(3));
+    let first_barrier = barrier.clone();
+    let first_service = service.clone();
+    let first_accept = tokio::spawn(async move {
+        first_barrier.wait().await;
+        first_service
+            .accept(
+                first.token(),
+                &invitee(INVITEE, INVITEE_SESSION, "invitee@example.test"),
+                &audit(INVITEE),
+            )
+            .await
+    });
+    let second_barrier = barrier.clone();
+    let second_service = service.clone();
+    let second_accept = tokio::spawn(async move {
+        second_barrier.wait().await;
+        second_service
+            .accept(
+                second.token(),
+                &invitee(OTHER, OTHER_SESSION, "other@example.test"),
+                &audit(OTHER),
+            )
+            .await
+    });
+    barrier.wait().await;
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    assert!(
+        !first_accept.is_finished(),
+        "first accept must wait on the held organization admission lock"
+    );
+    assert!(
+        !second_accept.is_finished(),
+        "second accept must wait on the held organization admission lock"
+    );
+    blocker
+        .commit()
+        .await
+        .unwrap_or_else(|error| panic!("capacity blocker must commit: {error}"));
+    let results = [
+        first_accept
+            .await
+            .unwrap_or_else(|_| panic!("first capacity acceptance must join")),
+        second_accept
+            .await
+            .unwrap_or_else(|_| panic!("second capacity acceptance must join")),
+    ];
+    assert_eq!(results.iter().filter(|result| result.is_ok()).count(), 1);
+    assert_eq!(
+        results
+            .iter()
+            .filter(|result| {
+                matches!(
+                    result,
+                    Err(OrganizationInvitationServiceError::MemberLimitReached)
+                )
+            })
+            .count(),
+        1
+    );
+    assert_eq!(member_count(pool, CAPACITY_ORGANIZATION).await, 100);
+    let statuses = [
+        status(pool, &first_id).await,
+        status(pool, &second_id).await,
+    ];
+    assert_eq!(
+        statuses.iter().filter(|value| *value == "accepted").count(),
+        1
+    );
+    assert_eq!(
+        statuses.iter().filter(|value| *value == "pending").count(),
+        1
+    );
+}
+
+async fn verify_cross_path_member_limit(
+    pool: &DatabasePool,
+    invitation_service: &OrganizationInvitationService,
+) {
+    sqlx::query(
+        "WITH inserted_users AS (\
+           INSERT INTO users (id, email, normalized_email, display_name) \
+           SELECT ('0199ee6c-c777-7000-8005-' || lpad(sequence::text, 12, '0'))::uuid, \
+                  'cross-capacity-' || sequence || '@example.test', \
+                  'cross-capacity-' || sequence || '@example.test', \
+                  'Cross Capacity Member ' || sequence \
+           FROM generate_series(1, 98) AS generated(sequence) \
+           RETURNING id \
+         ) \
+         INSERT INTO organization_memberships (organization_id, user_id, role) \
+         SELECT $1::uuid, id, 'member' FROM inserted_users",
+    )
+    .bind(CROSS_CAPACITY_ORGANIZATION)
+    .execute(&mut *acquire(pool).await)
+    .await
+    .unwrap_or_else(|error| panic!("cross-path capacity memberships must insert: {error}"));
+    assert_eq!(member_count(pool, CROSS_CAPACITY_ORGANIZATION).await, 99);
+
+    let issued = issue_member(
+        invitation_service,
+        organization_id(CROSS_CAPACITY_ORGANIZATION),
+        actor(OWNER, OWNER_RECENT_SESSION),
+        "invitee@example.test",
+    )
+    .await;
+    let invitation_id = issued.invitation().id().to_string();
+    let mut blocker_connection = acquire(pool).await;
+    let mut blocker = blocker_connection
+        .begin()
+        .await
+        .unwrap_or_else(|error| panic!("cross-path blocker must begin: {error}"));
+    sqlx::query("SELECT pg_advisory_xact_lock(1314212943, hashtext($1))")
+        .bind(CROSS_CAPACITY_ORGANIZATION)
+        .execute(&mut *blocker)
+        .await
+        .unwrap_or_else(|error| panic!("cross-path blocker must lock organization: {error}"));
+
+    let barrier = Arc::new(Barrier::new(2));
+    let raw_pool = pool.clone();
+    let raw_barrier = barrier.clone();
+    let raw_insert = tokio::spawn(async move {
+        raw_barrier.wait().await;
+        sqlx::query(
+            "INSERT INTO organization_memberships (organization_id, user_id, role) \
+             VALUES ($1::uuid, $2::uuid, 'member')",
+        )
+        .bind(CROSS_CAPACITY_ORGANIZATION)
+        .bind(MEMBER)
+        .execute(&mut *acquire(&raw_pool).await)
+        .await
+    });
+    barrier.wait().await;
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    assert!(
+        !raw_insert.is_finished(),
+        "raw insert must wait on the held organization admission lock"
+    );
+    let accept_service = invitation_service.clone();
+    let accept = tokio::spawn(async move {
+        accept_service
+            .accept(
+                issued.token(),
+                &invitee(INVITEE, INVITEE_SESSION, "invitee@example.test"),
+                &audit(INVITEE),
+            )
+            .await
+    });
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    assert!(
+        !accept.is_finished(),
+        "accept must queue behind the raw insert on the admission lock"
+    );
+    blocker
+        .commit()
+        .await
+        .unwrap_or_else(|error| panic!("cross-path blocker must commit: {error}"));
+
+    let accept = accept
+        .await
+        .unwrap_or_else(|_| panic!("cross-path accept must join"));
+    let raw_insert = raw_insert
+        .await
+        .unwrap_or_else(|_| panic!("cross-path raw insert must join"));
+    raw_insert.unwrap_or_else(|error| panic!("raw insert must win the queued race: {error}"));
+    assert_eq!(
+        accept,
+        Err(OrganizationInvitationServiceError::MemberLimitReached),
+        "the losing service admission must retain its typed conflict"
+    );
+    assert_eq!(member_count(pool, CROSS_CAPACITY_ORGANIZATION).await, 100);
+    assert_eq!(
+        status(pool, &invitation_id).await,
+        if accept.is_ok() {
+            "accepted"
+        } else {
+            "pending"
+        }
+    );
+}
+
 async fn issue_member(
     service: &OrganizationInvitationService,
     organization_id: OrganizationId,
@@ -521,22 +758,29 @@ async fn insert_fixture(pool: &DatabasePool) {
     sqlx::query(
         "INSERT INTO organizations (id, slug, display_name) VALUES \
          ($1::uuid, 'primary-org', 'Primary Organization'), \
-         ($2::uuid, 'second-org', 'Second Organization')",
+         ($2::uuid, 'second-org', 'Second Organization'), \
+         ($3::uuid, 'capacity-org', 'Capacity Organization'), \
+         ($4::uuid, 'cross-capacity-org', 'Cross Capacity Organization')",
     )
     .bind(ORGANIZATION)
     .bind(SECOND_ORGANIZATION)
+    .bind(CAPACITY_ORGANIZATION)
+    .bind(CROSS_CAPACITY_ORGANIZATION)
     .execute(&mut *acquire(pool).await)
     .await
     .unwrap_or_else(|error| panic!("fixture organizations must insert: {error}"));
     sqlx::query(
         "INSERT INTO organization_memberships (organization_id, user_id, role) VALUES \
          ($1::uuid, $3::uuid, 'owner'), ($2::uuid, $3::uuid, 'owner'), \
-         ($1::uuid, $4::uuid, 'member')",
+         ($1::uuid, $4::uuid, 'member'), ($5::uuid, $3::uuid, 'owner'), \
+         ($6::uuid, $3::uuid, 'owner')",
     )
     .bind(ORGANIZATION)
     .bind(SECOND_ORGANIZATION)
     .bind(OWNER)
     .bind(MEMBER)
+    .bind(CAPACITY_ORGANIZATION)
+    .bind(CROSS_CAPACITY_ORGANIZATION)
     .execute(&mut *acquire(pool).await)
     .await
     .unwrap_or_else(|error| panic!("fixture memberships must insert: {error}"));
@@ -646,6 +890,16 @@ async fn membership_count(pool: &DatabasePool, organization: &str, user: &str) -
     .fetch_one(&mut *acquire(pool).await)
     .await
     .unwrap_or_else(|_| panic!("membership count must read"))
+}
+
+async fn member_count(pool: &DatabasePool, organization: &str) -> i64 {
+    sqlx::query_scalar(
+        "SELECT COUNT(*) FROM organization_memberships WHERE organization_id = $1::uuid",
+    )
+    .bind(organization)
+    .fetch_one(&mut *acquire(pool).await)
+    .await
+    .unwrap_or_else(|_| panic!("member count must read"))
 }
 
 async fn fixture_pool() -> DatabasePool {

@@ -13,6 +13,10 @@ const serverEntry = path.join(standaloneWeb, "server.js");
 const adminId = "0199ee6c-c777-7000-8000-000000008001";
 const memberId = "0199ee6c-c777-7000-8000-000000008002";
 const unknownId = "0199ee6c-c777-7000-8000-000000008003";
+const duplicateMemberId = "0199ee6c-c777-7000-8000-000000008004";
+const duplicateMemberTwoId = "0199ee6c-c777-7000-8000-000000008005";
+const unavailableMemberId = "0199ee6c-c777-7000-8000-000000008006";
+const unavailableMemberTwoId = "0199ee6c-c777-7000-8000-000000008007";
 const organizationId = "0199ee6c-c777-7000-8000-000000008101";
 const scopeId = "0199ee6c-c777-7000-8000-000000008102";
 const personalScopeId = "0199ee6c-c777-7000-8000-000000008103";
@@ -26,7 +30,13 @@ fs.cpSync(path.join(webRoot, ".next/static"), path.join(standaloneWeb, ".next/st
 let project: ProjectRecord | undefined;
 let version = 0;
 let memberCanRead = false;
-const roles: RoleRecord[] = [];
+let unknownGrantAttempts = 0;
+const roles: RoleRecord[] = [
+  roleRecord(duplicateMemberId, "read"),
+  roleRecord(duplicateMemberTwoId, "read"),
+  roleRecord(unavailableMemberId, "read"),
+  roleRecord(unavailableMemberTwoId, "read")
+];
 const core = http.createServer(async (request, response) => {
   const requestPath = request.url ?? "/";
   const session = request.headers.cookie?.includes("nuriteo_dev_session=member") ? "member" : request.headers.cookie?.includes("nuriteo_dev_session=admin") ? "admin" : undefined;
@@ -39,6 +49,16 @@ const core = http.createServer(async (request, response) => {
   }
   if (request.method === "GET" && requestPath === "/api/v1/me") return json(response, me(session));
   if (request.method === "GET" && requestPath === "/api/v1/me/workspaces") return json(response, { workspaces: workspaces(session) });
+  if (request.method === "GET" && requestPath === `/api/v1/organizations/${organizationId}/members`) {
+    assert.equal(session, "admin");
+    return json(response, { items: [
+      { userId: adminId, displayName: "Admin", role: "owner" },
+      { userId: memberId, displayName: "Member", role: "member" },
+      { userId: duplicateMemberId, displayName: "Twin", role: "member" },
+      { userId: duplicateMemberTwoId, displayName: "Twin", role: "member" },
+      { userId: unknownId, displayName: "Uncertain Member", role: "member" }
+    ] });
+  }
 
   if (request.method === "GET" && requestPath.startsWith(`/api/v1/workspaces/users/${adminId}/projects?`)) {
     return json(response, { items: [], nextCursor: null });
@@ -93,7 +113,7 @@ const core = http.createServer(async (request, response) => {
   if (request.method === "POST" && requestPath === `${item}/roles`) {
     assertProjectMutation(request, session);
     const body = await bodyOf(request);
-    if (body.userId === unknownId) return problem(response, 503, "COMMIT_OUTCOME_UNKNOWN");
+    if (body.userId === unknownId && unknownGrantAttempts++ === 0) return problem(response, 503, "COMMIT_OUTCOME_UNKNOWN");
     version += 1;
     project = record(project!.name, project!.slug, project!.state);
     const role = roleRecord(String(body.userId), String(body.role));
@@ -176,15 +196,52 @@ try {
     await admin.getByRole("button", { name: "Archive" }).waitFor();
     await admin.locator(".project-sidebar .record-list").getByText("Renamed Project", { exact: true }).waitFor();
 
-    await admin.getByLabel("Organization member user ID").fill(unknownId);
+    const memberSelect = admin.getByLabel("Organization member", { exact: true });
+    assert.equal(await admin.getByLabel("Organization member user ID").count(), 0);
+    assert.equal(await memberSelect.count(), 1, await admin.locator("body").innerText());
+    assert.notEqual(await memberSelect.locator(`option[value="${adminId}"]`).getAttribute("disabled"), null);
+    assert.equal(await memberSelect.locator(`option[value="${memberId}"]`).textContent(), "Member · Organization member");
+    assert.equal(await memberSelect.locator(`option[value="${duplicateMemberId}"]`).textContent(), "Twin · Organization member");
+    assert.notEqual(await memberSelect.locator(`option[value="${duplicateMemberId}"]`).getAttribute("disabled"), null);
+    assert.notEqual(await memberSelect.locator(`option[value="${duplicateMemberTwoId}"]`).getAttribute("disabled"), null);
+    await admin.getByText(/same display name/u).waitFor();
+    await revokeNonActionableGrant(
+      admin,
+      roles,
+      duplicateMemberTwoId,
+      "Twin · Organization member · Ambiguous member · Grant 2 of 2"
+    );
+    await revokeNonActionableGrant(
+      admin,
+      roles,
+      duplicateMemberId,
+      "Twin · Organization member · Ambiguous member · Grant 1 of 1"
+    );
+    await revokeNonActionableGrant(
+      admin,
+      roles,
+      unavailableMemberTwoId,
+      "Unavailable Organization member · Grant 2 of 2"
+    );
+    await revokeNonActionableGrant(
+      admin,
+      roles,
+      unavailableMemberId,
+      "Unavailable Organization member · Grant 1 of 1"
+    );
+    await memberSelect.selectOption({ label: "Uncertain Member · Organization member" });
     await admin.getByRole("button", { name: "Grant role" }).click();
     await admin.getByText(/may have completed/u).waitFor();
-    await admin.getByLabel("Organization member user ID").fill(memberId);
+    await memberSelect.selectOption(memberId);
     await admin.getByRole("button", { name: "Grant role" }).click();
-    await admin.getByText(memberId, { exact: true }).waitFor();
+    const memberLabel = "Member · Organization member";
+    await admin.locator(".project-detail .record-list").getByText(memberLabel, { exact: true }).waitFor();
+    await admin.getByRole("status").getByText("Member now has read access.", { exact: true }).waitFor();
+    assert.equal(await memberSelect.inputValue(), "");
+    assert.notEqual(await memberSelect.locator(`option[value="${memberId}"]`).getAttribute("disabled"), null);
 
     const changeResponse = admin.waitForResponse((response) => response.request().method() === "PATCH" && response.url().endsWith(`/roles/${memberId}`));
-    await admin.getByLabel(`Role for ${memberId}`).selectOption("write");
+    await admin.getByLabel(`Role for ${memberLabel}`).selectOption("write");
     assert.equal((await changeResponse).status(), 200);
     assert.equal(roles.find((entry) => entry.userId === memberId)?.role, "write");
 
@@ -193,7 +250,9 @@ try {
     await member.getByRole("heading", { name: "Renamed Project", exact: true }).waitFor();
     assert.equal(await member.getByText(/Only Organization Owners/u).count(), 1);
 
-    const memberGrant = admin.locator("li", { hasText: memberId });
+    const memberGrant = admin.locator(".project-detail .record-list li").filter({
+      has: admin.getByText(memberLabel, { exact: true })
+    });
     const revokeResponsePromise = admin.waitForResponse((response) => response.request().method() === "DELETE" && response.url().endsWith(`/roles/${memberId}`));
     await memberGrant.getByRole("button", { name: "Revoke" }).click();
     const revokeResponse = await revokeResponsePromise;
@@ -202,6 +261,7 @@ try {
     const revoked = await revokeResponse.json() as { changed: boolean; projectVersion: number };
     assert.equal(revoked.changed, true);
     await memberGrant.waitFor({ state: "detached" });
+    assert.equal(await memberSelect.locator(`option[value="${memberId}"]`).getAttribute("disabled"), null);
 
     const noOp = await admin.evaluate(async ({ csrf, etag, organizationId, projectId, userId }) => {
       const response = await fetch(`/api/v1/workspaces/organizations/${organizationId}/projects/${projectId}/roles/${userId}`, {
@@ -214,6 +274,31 @@ try {
     assert.equal(noOp.body.changed, false);
     assert.equal(noOp.body.projectVersion, revoked.projectVersion);
     assert.equal(noOp.etag, revokedEtag);
+
+    for (const userId of [memberId, unknownId]) {
+      await memberSelect.selectOption(userId);
+      const grantResponse = admin.waitForResponse((response) => response.request().method() === "POST" && response.url().endsWith("/roles"));
+      await admin.getByRole("button", { name: "Grant role" }).click();
+      assert.equal((await grantResponse).status(), 201);
+      const expectedLabel = userId === unknownId
+        ? "Uncertain Member · Organization member"
+        : "Member · Organization member";
+      await admin.locator(".project-detail .record-list").getByText(expectedLabel, { exact: true }).waitFor();
+    }
+    await admin.getByText("No Organization members are available for a direct role.").waitFor();
+    assert.equal(await memberSelect.isDisabled(), true);
+    assert.equal(await admin.getByRole("button", { name: "Grant role" }).isDisabled(), true);
+
+    const currentMemberGrant = admin.locator(".project-detail .record-list li").filter({
+      has: admin.getByText(memberLabel, { exact: true })
+    });
+    const [finalRevokeResponse] = await Promise.all([
+      admin.waitForResponse((response) => response.request().method() === "DELETE" && response.url().endsWith(`/roles/${memberId}`)),
+      currentMemberGrant.getByRole("button", { name: "Revoke" }).click()
+    ]);
+    assert.equal(finalRevokeResponse.status(), 200);
+    await currentMemberGrant.waitFor({ state: "detached" });
+    assert.equal(await memberSelect.locator(`option[value="${memberId}"]`).getAttribute("disabled"), null);
 
     await member.goto(projectsUrl, { waitUntil: "networkidle" });
     assert.equal(await member.getByText("Renamed Project", { exact: true }).count(), 0);
@@ -235,6 +320,29 @@ try {
 } finally {
   await stopChild(standalone.child);
   await new Promise<void>((resolve) => core.close(() => resolve()));
+}
+
+async function revokeNonActionableGrant(
+  page: import("@playwright/test").Page,
+  currentRoles: readonly RoleRecord[],
+  userId: string,
+  label: string
+): Promise<void> {
+  const grant = page.locator(".project-detail .record-list li").filter({
+    has: page.getByText(label, { exact: true })
+  });
+  assert.equal(await grant.getByRole("combobox").isDisabled(), true);
+  const revoke = grant.getByRole("button", { name: `Revoke ${label}`, exact: true });
+  assert.equal(await revoke.isEnabled(), true);
+  const [response] = await Promise.all([
+    page.waitForResponse((candidate) =>
+      candidate.request().method() === "DELETE" && candidate.url().endsWith(`/roles/${userId}`)
+    ),
+    revoke.click()
+  ]);
+  assert.equal(response.status(), 200);
+  await grant.waitFor({ state: "detached" });
+  assert.equal(currentRoles.some((role) => role.userId === userId), false);
 }
 
 interface ProjectRecord { archivedAt: string | null; createdAt: string; id: string; name: string; ownerId: string; ownerType: "organization"; slug: string; state: "active" | "archived"; storageScopeId: string; updatedAt: string; version: number }

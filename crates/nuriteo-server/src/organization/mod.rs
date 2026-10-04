@@ -6,6 +6,8 @@ mod model;
 mod service;
 mod types;
 
+const MAX_MEMBERS: i64 = 100;
+
 use std::fmt;
 
 pub use model::{

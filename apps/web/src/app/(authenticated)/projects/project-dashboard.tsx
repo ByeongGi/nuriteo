@@ -13,6 +13,7 @@ import {
 } from "@nuriteo/api-client";
 import type {
   DirectProjectRole,
+  OrganizationRole,
   Project,
   ProjectCollection,
   ProjectListState,
@@ -39,11 +40,18 @@ interface Props {
   readonly initialGrants?: readonly DirectProjectRole[];
   readonly initialProject?: Project;
   readonly initialProjectEtag?: string;
+  readonly organizationMembers?: readonly OrganizationMemberOption[];
   readonly previewConfiguration: PreviewOriginConfiguration;
   readonly runtimeAssetRevision?: string;
   readonly selectedScope?: string;
   readonly selectedState?: ProjectListState;
   readonly workspaces: readonly Workspace[];
+}
+
+interface OrganizationMemberOption {
+  readonly userId: string;
+  readonly displayName: string;
+  readonly role: OrganizationRole;
 }
 
 export function ProjectDashboard(props: Props) {
@@ -54,6 +62,8 @@ export function ProjectDashboard(props: Props) {
   const [project, setProject] = useState(props.initialProject);
   const [etag, setEtag] = useState(props.initialProjectEtag);
   const [grants, setGrants] = useState<readonly DirectProjectRole[]>(props.initialGrants ?? []);
+  const [selectedMemberId, setSelectedMemberId] = useState("");
+  const [roleStatus, setRoleStatus] = useState<string>();
   const [error, setError] = useState<string>();
   const [needsReconciliation, setNeedsReconciliation] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
@@ -63,6 +73,25 @@ export function ProjectDashboard(props: Props) {
     ? undefined
     : { ownerType: workspace.ownerType, ownerId: workspace.ownerId };
   const state = props.selectedState ?? "active";
+  const grantedUserIds = new Set(grants.map((grant) => grant.userId));
+  const memberLabelCounts = new Map<string, number>();
+  for (const member of props.organizationMembers ?? []) {
+    const label = organizationMemberLabel(member);
+    memberLabelCounts.set(label, (memberLabelCounts.get(label) ?? 0) + 1);
+  }
+  const hasUniqueMemberLabel = (member: OrganizationMemberOption): boolean =>
+    memberLabelCounts.get(organizationMemberLabel(member)) === 1;
+  const hasAvailableMembers = props.organizationMembers?.some(
+    (member) => member.role !== "owner" &&
+      hasUniqueMemberLabel(member) &&
+      !grantedUserIds.has(member.userId)
+  ) ?? false;
+  const hasAmbiguousMembers = props.organizationMembers?.some(
+    (member) => member.role !== "owner" && !hasUniqueMemberLabel(member)
+  ) ?? false;
+  const memberByUserId = new Map(
+    props.organizationMembers?.map((member) => [member.userId, member] as const)
+  );
 
   useEffect(() => () => paginationAbort.current?.abort(), []);
   useEffect(() => {
@@ -71,6 +100,8 @@ export function ProjectDashboard(props: Props) {
     setProject(props.initialProject);
     setEtag(props.initialProjectEtag);
     setGrants(props.initialGrants ?? []);
+    setSelectedMemberId("");
+    setRoleStatus(undefined);
     setNeedsReconciliation(false);
   }, [props.initialCollection, props.initialGrants, props.initialProject, props.initialProjectEtag]);
 
@@ -150,18 +181,33 @@ export function ProjectDashboard(props: Props) {
     event.preventDefault();
     if (owner?.ownerType !== "organization" || project === undefined || etag === undefined) return;
     const data = new FormData(event.currentTarget);
-    const userId = String(data.get("userId") ?? "");
+    const selectedMember = props.organizationMembers?.find(
+      (member) => member.userId === selectedMemberId
+    );
+    if (selectedMember === undefined || selectedMember.role === "owner" ||
+      !hasUniqueMemberLabel(selectedMember) || grantedUserIds.has(selectedMember.userId)) {
+      setSelectedMemberId("");
+      return;
+    }
+    const userId = selectedMember.userId;
     const role = roleValue(data.get("role"));
+    setRoleStatus(undefined);
     await mutate("project-role", async () => {
       const result = await grantDirectProjectRole(createBrowserApiClient(), { owner, projectId: project.id, etag, userId, role }, { csrfToken: readCsrfCredential() });
       if (result.data.grant !== null) setGrants((items) => [...items, result.data.grant!]);
+      setSelectedMemberId("");
       setEtag(result.etag);
       setProject((current) => current === undefined ? current : { ...current, version: result.data.projectVersion });
+      setRoleStatus(`${selectedMember.displayName} now has ${role} access.`);
     });
   }
 
   async function updateRole(grant: DirectProjectRole, nextRole?: ProjectRole) {
     if (owner?.ownerType !== "organization" || project === undefined || etag === undefined) return;
+    const member = memberByUserId.get(grant.userId);
+    const memberIsActionable = member !== undefined && hasUniqueMemberLabel(member);
+    if (nextRole !== undefined && !memberIsActionable) return;
+    setRoleStatus(undefined);
     await mutate("project-role", async () => {
       const result = nextRole === undefined
         ? await revokeDirectProjectRole(createBrowserApiClient(), { owner, projectId: project.id, etag, userId: grant.userId }, { csrfToken: readCsrfCredential() })
@@ -171,6 +217,9 @@ export function ProjectDashboard(props: Props) {
         : items.map((item) => item.userId === grant.userId ? result.data.grant! : item));
       setEtag(result.etag);
       setProject((current) => current === undefined ? current : { ...current, version: result.data.projectVersion });
+      setRoleStatus(nextRole === undefined
+        ? `${member?.displayName ?? "Unavailable Organization member"} no longer has a direct role.`
+        : `${member?.displayName ?? "Organization member"} now has ${nextRole} access.`);
     });
   }
 
@@ -238,7 +287,7 @@ export function ProjectDashboard(props: Props) {
                   onProjectReload={() => router.refresh()}
                   workspaceScope={workspace.storageScopeId}
                 />
-                {owner?.ownerType === "organization" ? <section><h3>Direct roles</h3>{props.canManageRoles ? <><form className="collaboration-form" onSubmit={addRole}><label className="field-group">Organization member user ID<input name="userId" required disabled={mutation.isPending} /></label><label className="field-group">Role<select name="role" disabled={mutation.isPending}><option value="read">Read</option><option value="write">Write</option><option value="admin">Admin</option></select></label><Button type="submit" disabled={mutation.isPending}>Grant role</Button></form><ul className="record-list">{grants.map((grant) => <li key={grant.userId}><div><strong>{grant.userId}</strong><span>{grant.role}</span></div><div className="record-actions"><select aria-label={`Role for ${grant.userId}`} value={grant.role} disabled={mutation.isPending} onChange={(event) => void updateRole(grant, roleValue(event.currentTarget.value))}><option value="read">Read</option><option value="write">Write</option><option value="admin">Admin</option></select><Button type="button" disabled={mutation.isPending} onClick={() => void updateRole(grant)}>Revoke</Button></div></li>)}</ul></> : <p>Only Organization Owners can inspect and manage direct Project roles.</p>}</section> : null}
+                {owner?.ownerType === "organization" ? <section><h3>Direct roles</h3>{props.canManageRoles ? <><form className="collaboration-form" onSubmit={addRole}><label className="field-group">Organization member<select aria-label="Organization member" name="userId" required value={selectedMemberId} disabled={mutation.isPending || !hasAvailableMembers} onChange={(event) => setSelectedMemberId(event.currentTarget.value)}><option value="">Select a member</option>{props.organizationMembers?.map((member) => <option key={member.userId} value={member.userId} disabled={member.role === "owner" || !hasUniqueMemberLabel(member) || grantedUserIds.has(member.userId)}>{organizationMemberLabel(member)}</option>)}</select></label>{hasAmbiguousMembers ? <p>Members with the same display name and Organization role cannot receive a direct role until their display names are distinct.</p> : null}{hasAvailableMembers ? null : <p>No Organization members are available for a direct role.</p>}<label className="field-group">Role<select name="role" disabled={mutation.isPending || !hasAvailableMembers}><option value="read">Read</option><option value="write">Write</option><option value="admin">Admin</option></select></label><Button type="submit" disabled={mutation.isPending || selectedMemberId === ""}>Grant role</Button></form>{roleStatus === undefined ? null : <p role="status" aria-live="polite">{roleStatus}</p>}<ul className="record-list">{grants.map((grant, grantIndex) => { const member = memberByUserId.get(grant.userId); const memberIsActionable = member !== undefined && hasUniqueMemberLabel(member); const memberLabel = directGrantMemberLabel(grant, grantIndex, grants, memberByUserId, hasUniqueMemberLabel); return <li key={grant.userId}><div><strong>{memberLabel}</strong><span>{grant.role}{member === undefined ? "" : ` · Organization ${member.role}`}</span></div><div className="record-actions"><select aria-label={`Role for ${memberLabel}`} value={grant.role} disabled={mutation.isPending || !memberIsActionable} onChange={(event) => void updateRole(grant, roleValue(event.currentTarget.value))}><option value="read">Read</option><option value="write">Write</option><option value="admin">Admin</option></select><Button type="button" aria-label={`Revoke ${memberLabel}`} disabled={mutation.isPending} onClick={() => void updateRole(grant)}>Revoke</Button></div></li>; })}</ul></> : <p>Only Organization Owners can inspect and manage direct Project roles.</p>}</section> : null}
               </>
             )}
           </section>
@@ -250,6 +299,33 @@ export function ProjectDashboard(props: Props) {
 
 function roleValue(value: FormDataEntryValue | null): ProjectRole {
   return value === "admin" || value === "write" ? value : "read";
+}
+
+function organizationMemberLabel(member: OrganizationMemberOption): string {
+  return `${member.displayName} · Organization ${member.role}`;
+}
+
+function directGrantMemberLabel(
+  grant: DirectProjectRole,
+  grantIndex: number,
+  grants: readonly DirectProjectRole[],
+  memberByUserId: ReadonlyMap<string, OrganizationMemberOption>,
+  hasUniqueMemberLabel: (member: OrganizationMemberOption) => boolean
+): string {
+  const member = memberByUserId.get(grant.userId);
+  if (member !== undefined && hasUniqueMemberLabel(member)) return organizationMemberLabel(member);
+  const baseLabel = member === undefined
+    ? "Unavailable Organization member"
+    : `${organizationMemberLabel(member)} · Ambiguous member`;
+  const belongsToSameGroup = (candidate: DirectProjectRole): boolean => {
+    const candidateMember = memberByUserId.get(candidate.userId);
+    return member === undefined
+      ? candidateMember === undefined
+      : candidateMember !== undefined && organizationMemberLabel(candidateMember) === organizationMemberLabel(member);
+  };
+  const ordinal = grants.slice(0, grantIndex + 1).filter(belongsToSameGroup).length;
+  const total = grants.filter(belongsToSameGroup).length;
+  return `${baseLabel} · Grant ${ordinal} of ${total}`;
 }
 
 function projectHref(scope: string, state: ProjectListState, projectId?: string): string {

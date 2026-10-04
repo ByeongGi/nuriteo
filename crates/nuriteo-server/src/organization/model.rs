@@ -155,7 +155,7 @@ impl TryFrom<OrganizationMembershipFields> for OrganizationMembership {
     }
 }
 
-fn validate_slug(slug: &str) -> Result<(), OrganizationError> {
+pub(super) fn validate_slug(slug: &str) -> Result<(), OrganizationError> {
     let bytes = slug.as_bytes();
     if !(1..=63).contains(&bytes.len())
         || !bytes.first().is_some_and(u8::is_ascii_alphanumeric)
@@ -169,7 +169,7 @@ fn validate_slug(slug: &str) -> Result<(), OrganizationError> {
     Ok(())
 }
 
-fn validate_display_name(display_name: &str) -> Result<(), OrganizationError> {
+pub(super) fn validate_display_name(display_name: &str) -> Result<(), OrganizationError> {
     if display_name != display_name.trim_matches(' ')
         || !(1..=200).contains(&display_name.chars().count())
         || display_name.chars().any(char::is_control)

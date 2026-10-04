@@ -393,6 +393,10 @@ function testProjectSourceContracts() {
   assert.doesNotMatch(dashboard, /router\.replace\([^;]+;\s*router\.refresh\(\)/u);
   assert.match(page, /createServerApiClient\(\)/u);
   assert.match(page, /listProjects/u);
+  assert.match(page, /listOrganizationMembers/u);
+  assert.match(page, /roleManagementPromise/u);
+  assert.match(dashboard, /Organization member<select/u);
+  assert.doesNotMatch(dashboard, /Organization member user ID/u);
   assert.match(page, /key=\{`\$\{workspace\.storageScopeId\}:\$\{state\}:/u);
   assert.match(page, /error\.status !== 403 && error\.status !== 404/u);
   assert.match(dashboard, /<ProjectIdeShell/u);

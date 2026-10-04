@@ -12,6 +12,7 @@ const storageAccessKey = readSecret("NURITEO_COMPOSE_STORAGE_ACCESS_KEY_FILE");
 const storageSecretKey = readSecret("NURITEO_COMPOSE_STORAGE_SECRET_KEY_FILE");
 const privateStorageEndpoint = requiredEnvironment("NURITEO_COMPOSE_PRIVATE_STORAGE_ENDPOINT");
 const inviteeEmail = "cmp003-invitee@example.invalid";
+const inviteeDisplayName = "CMP 003 Invitee";
 const editedSource = 'export const label = "saved through the bundled relay";\n';
 let journeyStage = "launch";
 
@@ -82,21 +83,13 @@ async function saveJourney(
   journeyStage = "activation-accept";
   await inviteePage.goto(activationUrl, { waitUntil: "networkidle" });
   await inviteePage.getByLabel("Email").fill(inviteeEmail);
-  await inviteePage.getByLabel("Display name").fill("CMP 003 Invitee");
+  await inviteePage.getByLabel("Display name").fill(inviteeDisplayName);
   await inviteePage.getByLabel("Password").fill(inviteePassword);
   await inviteePage.getByRole("button", { name: "Activate account" }).click();
   await inviteePage.waitForURL("**/sign-in?activated=1");
   assert.equal(inviteePage.url().includes("token="), false);
   journeyStage = "invitee-sign-in";
   await signIn(inviteePage, inviteeEmail, inviteePassword, false);
-
-  journeyStage = "invitee-identity";
-  const me = await inviteePage.evaluate(async () => {
-    const response = await fetch("/api/v1/me", { credentials: "same-origin" });
-    if (!response.ok) throw new Error("current user lookup failed");
-    return response.json() as Promise<{ user: { id: string } }>;
-  });
-  assert.match(me.user.id, /^[0-9a-f-]{36}$/u);
 
   journeyStage = "organization-create";
   await adminPage.goto(`${origin}/organizations`, { waitUntil: "networkidle" });
@@ -143,10 +136,13 @@ async function saveJourney(
   assert.equal(new URL(projectUrl).searchParams.get("workspace"), storageScope);
   assert.match(new URL(projectUrl).searchParams.get("project") ?? "", /^[0-9a-f-]{36}$/u);
   journeyStage = "project-grant";
-  await adminPage.getByLabel("Organization member user ID").fill(me.user.id);
+  await adminPage.getByLabel("Organization member").selectOption({
+    label: `${inviteeDisplayName} · Organization member`
+  });
   await adminPage.getByLabel("Role").selectOption("write");
   await adminPage.getByRole("button", { name: "Grant role" }).click();
-  await adminPage.getByText(me.user.id, { exact: true }).waitFor();
+  await adminPage.locator("li", { hasText: inviteeDisplayName })
+    .getByText(`${inviteeDisplayName} · Organization member`, { exact: true }).waitFor();
 
   journeyStage = "project-open";
   await inviteePage.goto(projectUrl, { waitUntil: "networkidle" });

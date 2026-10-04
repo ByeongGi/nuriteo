@@ -77,7 +77,22 @@ function validate(
   assert.match(browserAcceptanceSource, /Issue Organization invitation/u);
   assert.match(browserAcceptanceSource, /Accept invitation/u);
   assert.match(browserAcceptanceSource, /CMP 003 Organization Organization Workspace/u);
-  assert.match(browserAcceptanceSource, /Grant role/u);
+  const projectGrantJourney = browserAcceptanceSource.slice(
+    browserAcceptanceSource.indexOf('journeyStage = "project-grant";'),
+    browserAcceptanceSource.indexOf('journeyStage = "project-open";')
+  );
+  assert.match(
+    projectGrantJourney,
+    /getByLabel\("Organization member"\)\.selectOption\(\{\s*label: `\$\{inviteeDisplayName\} · Organization member`\s*\}\)/u
+  );
+  assert.match(projectGrantJourney, /Grant role/u);
+  assert.match(
+    projectGrantJourney,
+    /getByText\(`\$\{inviteeDisplayName\} · Organization member`, \{ exact: true \}\)/u
+  );
+  assert.doesNotMatch(projectGrantJourney, /\.fill\(|user\s*id|uuid/iu);
+  assert.doesNotMatch(browserAcceptanceSource, /\/api\/v1\/me/u);
+  assert.doesNotMatch(browserAcceptanceSource, /Organization member user ID/u);
   assert.match(browserAcceptanceSource, /waitForPreviewFrame/u);
   assert.match(browserAcceptanceSource, /crossOriginIsolated/u);
   assert.match(browserAcceptanceSource, /Preview request carried an application cookie/u);
@@ -198,6 +213,9 @@ function verifyDriftDetection() {
     [compose, external, init.replace("--head", "--request DELETE"), acceptance],
     [compose, external, init, acceptance.replace("wait_for_job \"$job\" 0", ":"), browserAcceptance],
     [compose, external, init, acceptance, browserAcceptance.replace("Issue Organization invitation", "Issue invitation")],
+    [compose, external, init, acceptance, browserAcceptance.replace("Organization member", "Organization user")],
+    [compose, external, init, acceptance, browserAcceptance.replace("selectOption({", "fill(inviteeDisplayName); ({")],
+    [compose, external, init, acceptance, browserAcceptance.replace('journeyStage = "project-grant";', 'journeyStage = "project-grant"; fetch("/api/v1/me");')],
     [compose, external, init, acceptance, browserAcceptance.replaceAll("waitForPreviewFrame", "findPreviewUrl")],
     [compose, external, init, acceptance, browserAcceptance.replace("crossOriginIsolated", "isSecureContext")],
     [compose, external, init, acceptance, browserAcceptance.replace("Resume saved Project", "Start workspace from template")]

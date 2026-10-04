@@ -14,6 +14,7 @@ const OWNER_ID: &str = "0199ee6c-c777-7000-8000-000000000711";
 const MEMBER_ID: &str = "0199ee6c-c777-7000-8000-000000000712";
 const ORGANIZATION_ID: &str = "0199ee6c-c777-7000-8000-000000000721";
 const EMPTY_ORGANIZATION_ID: &str = "0199ee6c-c777-7000-8000-000000000722";
+const CAPACITY_ORGANIZATION_ID: &str = "0199ee6c-c777-7000-8000-000000000723";
 
 #[tokio::test]
 #[ignore = "requires the pinned PostgreSQL TLS fixture; run tests/fixtures/postgres-organization/run.sh"]
@@ -25,15 +26,16 @@ async fn organization_schema_enforces_identity_lifecycle_and_membership() {
         readiness(&pool).await,
         SchemaReadiness::Pending {
             current: None,
-            target: 14
+            target: 21
         }
     );
     let first_report = migrate(&pool).await;
-    assert_eq!(first_report.latest_version, Some(15));
+    assert_eq!(first_report.latest_version, Some(21));
+    assert_eq!(first_report.known_migrations, 21);
     assert_eq!(migrate(&pool).await, first_report);
     assert_eq!(
         readiness(&pool).await,
-        SchemaReadiness::Ready { version: 14 }
+        SchemaReadiness::Ready { version: 21 }
     );
 
     insert_users(&pool).await;
@@ -41,6 +43,7 @@ async fn organization_schema_enforces_identity_lifecycle_and_membership() {
     verify_slug_immutability_and_no_reuse(&pool).await;
     verify_optimistic_lock_shape(&pool).await;
     verify_membership_constraints_and_preservation(&pool).await;
+    verify_member_limit(&pool).await;
     verify_schema_objects(&pool).await;
 
     reset_fixture(&pool).await;
@@ -246,6 +249,96 @@ async fn verify_membership_constraints_and_preservation(pool: &DatabasePool) {
     .await;
 }
 
+async fn verify_member_limit(pool: &DatabasePool) {
+    insert_organization(
+        pool,
+        CAPACITY_ORGANIZATION_ID,
+        "capacity-team",
+        "Capacity Team",
+    )
+    .await;
+    execute(
+        pool,
+        "WITH inserted_users AS (\
+           INSERT INTO users (id, email, normalized_email, display_name) \
+           SELECT ('0199ee6c-c777-7000-8004-' || lpad(sequence::text, 12, '0'))::uuid, \
+                  'schema-capacity-' || sequence || '@example.test', \
+                  'schema-capacity-' || sequence || '@example.test', \
+                  'Schema Capacity Member ' || sequence \
+           FROM generate_series(1, 101) AS generated(sequence) \
+           RETURNING id \
+         ) \
+         INSERT INTO organization_memberships (organization_id, user_id, role) \
+         SELECT '0199ee6c-c777-7000-8000-000000000723'::uuid, id, 'member' \
+         FROM inserted_users \
+         WHERE id::text < '0199ee6c-c777-7000-8004-000000000101'",
+        "one hundred memberships",
+    )
+    .await;
+
+    assert_limit_rejected(
+        pool,
+        "INSERT INTO organization_memberships (organization_id, user_id, role) VALUES \
+         ('0199ee6c-c777-7000-8000-000000000723'::uuid, \
+          '0199ee6c-c777-7000-8004-000000000101'::uuid, 'member')",
+        "the 101st membership",
+    )
+    .await;
+
+    execute(
+        pool,
+        "UPDATE users SET status = 'disabled', disabled_at = CURRENT_TIMESTAMP, \
+         updated_at = CURRENT_TIMESTAMP \
+         WHERE id = '0199ee6c-c777-7000-8004-000000000101'::uuid",
+        "disable the overflow candidate",
+    )
+    .await;
+    assert_limit_rejected(
+        pool,
+        "INSERT INTO organization_memberships (organization_id, user_id, role) VALUES \
+         ('0199ee6c-c777-7000-8000-000000000723'::uuid, \
+          '0199ee6c-c777-7000-8004-000000000101'::uuid, 'member')",
+        "inactive users still count toward the membership cap",
+    )
+    .await;
+
+    execute(
+        pool,
+        "DROP TRIGGER organization_memberships_member_limit ON organization_memberships",
+        "remove the membership limit trigger",
+    )
+    .await;
+    execute(
+        pool,
+        "INSERT INTO organization_memberships (organization_id, user_id, role) VALUES \
+         ('0199ee6c-c777-7000-8000-000000000723'::uuid, \
+          '0199ee6c-c777-7000-8004-000000000101'::uuid, 'member')",
+        "construct legacy over-cap data",
+    )
+    .await;
+    let error = sqlx::raw_sql(include_str!(
+        "../migrations/0021_organization_member_limit.sql"
+    ))
+    .execute(&mut *acquire(pool).await)
+    .await
+    .unwrap_err();
+    assert_limit_database_error(&error, "migration 21 over-cap preflight");
+    execute(
+        pool,
+        "DELETE FROM organization_memberships \
+         WHERE organization_id = '0199ee6c-c777-7000-8000-000000000723'::uuid \
+           AND user_id = '0199ee6c-c777-7000-8004-000000000101'::uuid",
+        "repair legacy over-cap data",
+    )
+    .await;
+    sqlx::raw_sql(include_str!(
+        "../migrations/0021_organization_member_limit.sql"
+    ))
+    .execute(&mut *acquire(pool).await)
+    .await
+    .unwrap_or_else(|error| panic!("migration 21 must apply after data repair: {error}"));
+}
+
 async fn verify_schema_objects(pool: &DatabasePool) {
     let constraints: Vec<String> = sqlx::query_scalar(
         "SELECT conname FROM pg_constraint \
@@ -288,6 +381,19 @@ async fn verify_schema_objects(pool: &DatabasePool) {
             "missing {required}"
         );
     }
+
+    let triggers: Vec<String> = sqlx::query_scalar(
+        "SELECT tgname FROM pg_trigger \
+         WHERE NOT tgisinternal AND tgname = 'organization_memberships_member_limit' \
+         ORDER BY tgname",
+    )
+    .fetch_all(&mut *acquire(pool).await)
+    .await
+    .unwrap_or_else(|_| panic!("organization limit triggers must be inspectable"));
+    assert_eq!(
+        triggers,
+        vec!["organization_memberships_member_limit".to_owned()]
+    );
 }
 
 async fn insert_users(pool: &DatabasePool) {
@@ -384,4 +490,20 @@ async fn assert_rejected(pool: &DatabasePool, statement: &'static str, contract:
             .is_err(),
         "{contract} must reject invalid direct SQL"
     );
+}
+
+async fn assert_limit_rejected(pool: &DatabasePool, statement: &'static str, contract: &str) {
+    let error = sqlx::query(statement)
+        .execute(&mut *acquire(pool).await)
+        .await
+        .unwrap_err();
+    assert_limit_database_error(&error, contract);
+}
+
+fn assert_limit_database_error(error: &sqlx::Error, contract: &str) {
+    let database = error
+        .as_database_error()
+        .unwrap_or_else(|| panic!("{contract} must return a database constraint error"));
+    assert_eq!(database.code().as_deref(), Some("23514"));
+    assert_eq!(database.constraint(), Some("organization_member_limit"));
 }

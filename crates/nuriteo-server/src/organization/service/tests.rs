@@ -77,6 +77,10 @@ fn service_errors_have_stable_context_free_messages() {
             "organization member was not found",
         ),
         (
+            OrganizationServiceError::MemberLimitReached,
+            "organization member limit was reached",
+        ),
+        (
             OrganizationServiceError::LastOwner,
             "organization must retain at least one owner",
         ),

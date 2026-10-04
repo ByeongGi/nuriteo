@@ -27,7 +27,7 @@ use super::{
     OrganizationVersion,
 };
 
-const LIST_LIMIT: i64 = 100;
+const LIST_LIMIT: i64 = super::MAX_MEMBERS;
 
 #[derive(Debug, Clone, Copy)]
 pub struct OrganizationHttpPolicy {
@@ -821,6 +821,7 @@ fn map_organization_error(error: OrganizationServiceError) -> OrganizationHttpEr
         OrganizationServiceError::Unauthorized => OrganizationHttpError::Forbidden,
         OrganizationServiceError::Archived
         | OrganizationServiceError::DuplicateSlug
+        | OrganizationServiceError::MemberLimitReached
         | OrganizationServiceError::LastOwner => OrganizationHttpError::Conflict,
         OrganizationServiceError::StaleVersion => OrganizationHttpError::PreconditionFailed,
         OrganizationServiceError::DatabaseUnavailable
@@ -840,6 +841,7 @@ fn map_invitation_error(error: OrganizationInvitationServiceError) -> Organizati
         }
         OrganizationInvitationServiceError::AlreadyPending
         | OrganizationInvitationServiceError::AlreadyMember
+        | OrganizationInvitationServiceError::MemberLimitReached
         | OrganizationInvitationServiceError::InvalidInvitation
         | OrganizationInvitationServiceError::InvitationNotPending => {
             OrganizationHttpError::Conflict
@@ -849,5 +851,22 @@ fn map_invitation_error(error: OrganizationInvitationServiceError) -> Organizati
             OrganizationHttpError::Unavailable
         }
         _ => OrganizationHttpError::Internal,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn member_limit_errors_map_to_conflict() {
+        assert_eq!(
+            map_organization_error(OrganizationServiceError::MemberLimitReached),
+            OrganizationHttpError::Conflict
+        );
+        assert_eq!(
+            map_invitation_error(OrganizationInvitationServiceError::MemberLimitReached),
+            OrganizationHttpError::Conflict
+        );
     }
 }

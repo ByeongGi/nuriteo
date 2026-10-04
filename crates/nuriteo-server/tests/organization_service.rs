@@ -217,6 +217,7 @@ async fn organization_service_is_atomic_authorized_and_serialized() {
     assert_eq!(admin_updated.lock_version(), version(3));
 
     verify_audit_rollback(&pool, &service, organization_id).await;
+    verify_member_limit(&pool, &service).await;
     verify_concurrent_last_owner(&pool, &service).await;
 
     let archived = service
@@ -251,6 +252,43 @@ async fn organization_service_is_atomic_authorized_and_serialized() {
     pool.close(Duration::from_secs(2))
         .await
         .unwrap_or_else(|_| panic!("organization service fixture pool must close"));
+    assert_eq!(
+        service
+            .create(
+                user_id(OWNER_ONE),
+                "Invalid Slug".into(),
+                "Valid Display Name".into(),
+                &audit(OWNER_ONE),
+            )
+            .await,
+        Err(OrganizationServiceError::InvalidInput),
+        "slug validation must not acquire a database connection"
+    );
+    assert_eq!(
+        service
+            .create(
+                user_id(OWNER_ONE),
+                "valid-slug".into(),
+                " Invalid Display Name".into(),
+                &audit(OWNER_ONE),
+            )
+            .await,
+        Err(OrganizationServiceError::InvalidInput),
+        "display-name validation must not acquire a database connection"
+    );
+    assert_eq!(
+        service
+            .update_display_name(
+                OrganizationPrincipal::Owner(user_id(OWNER_ONE)),
+                organization_id,
+                version(4),
+                " Invalid Display Name".into(),
+                &audit(OWNER_ONE),
+            )
+            .await,
+        Err(OrganizationServiceError::InvalidInput),
+        "update display-name validation must not acquire a database connection"
+    );
 }
 
 async fn verify_audit_rollback(
@@ -377,6 +415,65 @@ async fn verify_concurrent_last_owner(pool: &DatabasePool, service: &Organizatio
             )
             .await,
         Err(OrganizationServiceError::LastOwner)
+    );
+}
+
+async fn verify_member_limit(pool: &DatabasePool, service: &OrganizationService) {
+    let organization = service
+        .create(
+            user_id(OWNER_ONE),
+            "capacity-team".into(),
+            "Capacity Team".into(),
+            &audit(OWNER_ONE),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("capacity organization must create: {error}"));
+    let organization_id = organization.id();
+    sqlx::query(
+        "WITH inserted_users AS (\
+           INSERT INTO users (id, email, normalized_email, display_name) \
+           SELECT ('0199ee6c-c777-7000-8002-' || lpad(sequence::text, 12, '0'))::uuid, \
+                  'capacity-' || sequence || '@example.test', \
+                  'capacity-' || sequence || '@example.test', \
+                  'Capacity Member ' || sequence \
+           FROM generate_series(1, 99) AS generated(sequence) \
+           RETURNING id \
+         ) \
+         INSERT INTO organization_memberships (organization_id, user_id, role) \
+         SELECT $1::uuid, id, 'member' FROM inserted_users",
+    )
+    .bind(organization_id.to_string())
+    .execute(&mut *acquire(pool).await)
+    .await
+    .unwrap_or_else(|error| panic!("capacity members must insert: {error}"));
+    assert_eq!(
+        membership_count(pool, &organization_id.to_string()).await,
+        100,
+        "the creating owner must count toward the member cap"
+    );
+    sqlx::query(
+        "UPDATE users SET status = 'disabled', disabled_at = CURRENT_TIMESTAMP, \
+         updated_at = CURRENT_TIMESTAMP \
+         WHERE id = '0199ee6c-c777-7000-8002-000000000001'::uuid",
+    )
+    .execute(&mut *acquire(pool).await)
+    .await
+    .unwrap_or_else(|error| panic!("capacity member must disable: {error}"));
+    assert_eq!(
+        service
+            .add_member(
+                OrganizationPrincipal::Owner(user_id(OWNER_ONE)),
+                organization_id,
+                user_id(OUTSIDER),
+                OrganizationRole::Member,
+                &audit(OWNER_ONE),
+            )
+            .await,
+        Err(OrganizationServiceError::MemberLimitReached)
+    );
+    assert_eq!(
+        membership_count(pool, &organization_id.to_string()).await,
+        100
     );
 }
 

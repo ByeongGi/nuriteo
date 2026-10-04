@@ -48,6 +48,7 @@ fn audit_context_and_errors_do_not_expose_request_context() {
         OrganizationInvitationServiceError::InvalidInput,
         OrganizationInvitationServiceError::AlreadyPending,
         OrganizationInvitationServiceError::AlreadyMember,
+        OrganizationInvitationServiceError::MemberLimitReached,
         OrganizationInvitationServiceError::NotFound,
         OrganizationInvitationServiceError::Unauthorized,
         OrganizationInvitationServiceError::ReauthenticationRequired,

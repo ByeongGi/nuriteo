@@ -39,6 +39,8 @@ const EXPLICIT_PROJECT_VERSIONS_SQL: &str =
 const PROJECT_HISTORY_PROMOTIONS_SQL: &str =
     include_str!("../../migrations/0019_project_history_promotions.sql");
 const SAVE_UPLOAD_LEASES_SQL: &str = include_str!("../../migrations/0020_save_upload_leases.sql");
+const ORGANIZATION_MEMBER_LIMIT_SQL: &str =
+    include_str!("../../migrations/0021_organization_member_limit.sql");
 
 // Two-key advisory locks use a namespace distinct from PostgreSQL's one-key
 // bigint locks. 0x4e555249 is the ASCII representation of "NURI".
@@ -236,6 +238,13 @@ pub(super) fn embedded_migrator() -> Migrator {
             Cow::Borrowed("save upload leases"),
             MigrationType::Simple,
             SAVE_UPLOAD_LEASES_SQL.into_sql_str(),
+            false,
+        ),
+        Migration::new(
+            21,
+            Cow::Borrowed("organization member limit"),
+            MigrationType::Simple,
+            ORGANIZATION_MEMBER_LIMIT_SQL.into_sql_str(),
             false,
         ),
     ])

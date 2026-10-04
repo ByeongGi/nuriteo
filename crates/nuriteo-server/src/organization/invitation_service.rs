@@ -194,6 +194,7 @@ pub enum OrganizationInvitationServiceError {
     InvalidInput,
     AlreadyPending,
     AlreadyMember,
+    MemberLimitReached,
     NotFound,
     Unauthorized,
     ReauthenticationRequired,
@@ -214,6 +215,7 @@ impl fmt::Display for OrganizationInvitationServiceError {
             Self::InvalidInput => "organization invitation input is invalid",
             Self::AlreadyPending => "a pending organization invitation already exists",
             Self::AlreadyMember => "the invitee is already an organization member",
+            Self::MemberLimitReached => "organization member limit was reached",
             Self::NotFound => "organization invitation was not found",
             Self::Unauthorized => "organization invitation operation is not authorized",
             Self::ReauthenticationRequired => "recent reauthentication is required",
@@ -573,6 +575,7 @@ impl OrganizationInvitationService {
         let organization_id = invitation_organization_by_digest(&mut transaction, digest)
             .await?
             .ok_or(OrganizationInvitationServiceError::InvalidInvitation)?;
+        lock_membership_admission(&mut transaction, organization_id).await?;
         lock_organization(&mut transaction, organization_id).await?;
         let row = lock_invitation_by_digest(&mut transaction, digest)
             .await?
@@ -594,6 +597,7 @@ impl OrganizationInvitationService {
         }
         verify_invitee(&mut transaction, &row, invitee).await?;
         ensure_not_member(&mut transaction, organization_id, invitee.user_id).await?;
+        ensure_member_capacity(&mut transaction, organization_id).await?;
         let role = parse_role(&required::<String>(&row, "proposed_role")?)?;
         sqlx::query(
             "INSERT INTO organization_memberships \
@@ -605,7 +609,7 @@ impl OrganizationInvitationService {
         .bind(role_name(role))
         .execute(&mut *transaction)
         .await
-        .map_err(database_error)?;
+        .map_err(membership_write_error)?;
         let accepted = transition_pending_returning(
             &mut transaction,
             invitation_id,
@@ -902,6 +906,47 @@ async fn ensure_not_member(
         return Err(OrganizationInvitationServiceError::AlreadyMember);
     }
     Ok(())
+}
+
+async fn lock_membership_admission(
+    transaction: &mut Transaction<'_, Postgres>,
+    organization_id: OrganizationId,
+) -> Result<(), OrganizationInvitationServiceError> {
+    sqlx::query("SELECT pg_advisory_xact_lock(1314212943, hashtext($1))")
+        .bind(organization_id.to_string())
+        .execute(&mut **transaction)
+        .await
+        .map_err(database_error)?;
+    Ok(())
+}
+
+async fn ensure_member_capacity(
+    transaction: &mut Transaction<'_, Postgres>,
+    organization_id: OrganizationId,
+) -> Result<(), OrganizationInvitationServiceError> {
+    let members: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM organization_memberships \
+         WHERE organization_id = $1::uuid",
+    )
+    .bind(organization_id.to_string())
+    .fetch_one(&mut **transaction)
+    .await
+    .map_err(database_error)?;
+    if members >= super::MAX_MEMBERS {
+        return Err(OrganizationInvitationServiceError::MemberLimitReached);
+    }
+    Ok(())
+}
+
+fn membership_write_error(error: sqlx::Error) -> OrganizationInvitationServiceError {
+    if error.as_database_error().is_some_and(|database| {
+        database.code().as_deref() == Some("23514")
+            && database.constraint() == Some("organization_member_limit")
+    }) {
+        OrganizationInvitationServiceError::MemberLimitReached
+    } else {
+        OrganizationInvitationServiceError::DatabaseUnavailable
+    }
 }
 
 async fn expire_pending(

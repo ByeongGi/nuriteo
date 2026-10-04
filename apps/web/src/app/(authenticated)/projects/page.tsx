@@ -3,6 +3,7 @@ import {
   getCurrentWorkspaces,
   getProject,
   listDirectProjectRoles,
+  listOrganizationMembers,
   listProjects
 } from "@nuriteo/api-client";
 import type { Metadata } from "next";
@@ -44,32 +45,43 @@ export default async function ProjectsPage({ searchParams }: Props) {
     const projectId = typeof query.project === "string" && PROJECT_ID.test(query.project)
       ? query.project
       : undefined;
-    const [collection, projectResult] = await Promise.all([
+    const roleManagementPromise = workspace.ownerType === "organization" && projectId !== undefined
+      ? (async () => {
+          try {
+            const grantCollection = await listDirectProjectRoles(client, {
+              owner,
+              projectId,
+              pageSize: 100
+            });
+            const memberCollection = await listOrganizationMembers(client, workspace.ownerId);
+            return {
+              grants: grantCollection.data.items,
+              organizationMembers: memberCollection.data.items.map(
+                ({ userId, displayName, role }) => ({ userId, displayName, role })
+              )
+            };
+          } catch (error) {
+            if (!(error instanceof ApiError) || (error.status !== 403 && error.status !== 404)) throw error;
+            return undefined;
+          }
+        })()
+      : Promise.resolve(undefined);
+    const [collection, projectResult, roleManagement] = await Promise.all([
       listProjects(client, { owner, state, pageSize: 50 }),
-      projectId === undefined ? Promise.resolve(undefined) : getProject(client, { owner, projectId })
+      projectId === undefined ? Promise.resolve(undefined) : getProject(client, { owner, projectId }),
+      roleManagementPromise
     ]);
-    let grants;
-    let canManageRoles = false;
-    if (workspace.ownerType === "organization" && projectResult !== undefined) {
-      try {
-        grants = (await listDirectProjectRoles(client, {
-          owner,
-          projectId: projectResult.data.id,
-          pageSize: 100
-        })).data.items;
-        canManageRoles = true;
-      } catch (error) {
-        if (!(error instanceof ApiError) || (error.status !== 403 && error.status !== 404)) throw error;
-      }
-    }
     return (
       <ProjectDashboard
         key={`${workspace.storageScopeId}:${state}:${projectResult?.data.id ?? "collection"}`}
-        canManageRoles={canManageRoles}
+        canManageRoles={roleManagement !== undefined}
         initialCollection={collection.data}
         previewConfiguration={previewConfiguration}
         {...runtimeAssetRevisionProps()}
-        {...(grants === undefined ? {} : { initialGrants: grants })}
+        {...(roleManagement === undefined ? {} : {
+          initialGrants: roleManagement.grants,
+          organizationMembers: roleManagement.organizationMembers
+        })}
         {...(projectResult === undefined ? {} : {
           initialProject: projectResult.data,
           initialProjectEtag: projectResult.etag
