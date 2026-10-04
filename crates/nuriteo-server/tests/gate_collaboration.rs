@@ -29,6 +29,7 @@ const DATABASE_CA_ENV: &str = "NURITEO_TEST_DATABASE_CA";
 const S3_ENDPOINT_ENV: &str = "NURITEO_TEST_S3_ENDPOINT";
 const S3_CA_ENV: &str = "NURITEO_TEST_S3_CA_FILE";
 const BOOTSTRAP_PASSWORD_FILE_ENV: &str = "NURITEO_TEST_BOOTSTRAP_PASSWORD_FILE";
+const SAVE_IDEMPOTENCY_SECRET_FILE_ENV: &str = "NURITEO_TEST_SAVE_IDEMPOTENCY_SECRET_FILE";
 const GATE_PROJECT_RUNTIME_BROWSER_ENV: &str = "NURITEO_TEST_GATE_PROJECT_RUNTIME_BROWSER";
 const NODE_EXECUTABLE_ENV: &str = "NURITEO_TEST_NODE_EXECUTABLE";
 const BOOTSTRAP_PASSWORD: &str = "gate bootstrap password 0123456789";
@@ -46,6 +47,7 @@ async fn collaboration_gate_runs_actual_core_postgres_and_rustfs_journey() {
     let s3_endpoint = required_env(S3_ENDPOINT_ENV);
     let s3_ca_path = required_env(S3_CA_ENV);
     let password_file = required_env(BOOTSTRAP_PASSWORD_FILE_ENV);
+    let save_secret_file = required_env(SAVE_IDEMPOTENCY_SECRET_FILE_ENV);
     let pool = database_pool(&database_url, &database_ca_path).await;
 
     reset_schema(&pool).await;
@@ -91,6 +93,7 @@ async fn collaboration_gate_runs_actual_core_postgres_and_rustfs_journey() {
         &database_ca_path,
         &s3_endpoint,
         &s3_ca_path,
+        &save_secret_file,
     );
     let client = Client::builder()
         .no_proxy()
@@ -316,7 +319,7 @@ async fn collaboration_gate_runs_actual_core_postgres_and_rustfs_journey() {
         Method::POST,
         &invitations_path,
         &admin,
-        Some(json!({"inviteeUserId":invitee_id,"role":"member"})),
+        Some(json!({"email":"member@example.test","role":"member"})),
         None,
     )
     .await;
@@ -398,11 +401,11 @@ async fn collaboration_gate_runs_actual_core_postgres_and_rustfs_journey() {
         Method::POST,
         &invitations_path,
         &invitee,
-        Some(json!({"inviteeUserId":admin_id,"role":"member"})),
+        Some(json!({"email":"admin@example.test","role":"member"})),
         None,
     )
     .await;
-    assert_safe_problem(forbidden, StatusCode::FORBIDDEN).await;
+    assert_safe_problem(forbidden, StatusCode::NOT_FOUND).await;
 
     let invitation_list = get_json(&client, &external_url, &invitations_path, &admin).await;
     let invitation_list = invitation_list.to_string();
@@ -449,6 +452,7 @@ async fn project_runtime_gate_runs_actual_core_and_browser_journey() {
     let s3_endpoint = required_env(S3_ENDPOINT_ENV);
     let s3_ca_path = required_env(S3_CA_ENV);
     let password_file = required_env(BOOTSTRAP_PASSWORD_FILE_ENV);
+    let save_secret_file = required_env(SAVE_IDEMPOTENCY_SECRET_FILE_ENV);
     let browser_fixture = required_env(GATE_PROJECT_RUNTIME_BROWSER_ENV);
     let node_executable = required_env(NODE_EXECUTABLE_ENV);
     let pool = database_pool(&database_url, &database_ca_path).await;
@@ -490,6 +494,7 @@ async fn project_runtime_gate_runs_actual_core_and_browser_journey() {
         &database_ca_path,
         &s3_endpoint,
         &s3_ca_path,
+        &save_secret_file,
     );
     let client = Client::builder()
         .no_proxy()
@@ -734,6 +739,7 @@ fn spawn_server(
     database_ca: &str,
     s3_endpoint: &str,
     s3_ca: &str,
+    save_secret_file: &str,
 ) -> ChildGuard {
     spawn_server_with_external_url(
         address,
@@ -742,6 +748,7 @@ fn spawn_server(
         database_ca,
         s3_endpoint,
         s3_ca,
+        save_secret_file,
     )
 }
 
@@ -752,7 +759,9 @@ fn spawn_server_with_external_url(
     database_ca: &str,
     s3_endpoint: &str,
     s3_ca: &str,
+    save_secret_file: &str,
 ) -> ChildGuard {
+    let save_secret = fs::read_to_string(save_secret_file).unwrap();
     let child = Command::new(env!("CARGO_BIN_EXE_nuriteo-server"))
         .arg("serve")
         .env_clear()
@@ -767,6 +776,9 @@ fn spawn_server_with_external_url(
         .env("NURITEO_DATABASE_CONNECT_TIMEOUT_MS", "3000")
         .env("NURITEO_DATABASE_ACQUIRE_TIMEOUT_MS", "1000")
         .env("NURITEO_DATABASE_CLOSE_TIMEOUT_MS", "2000")
+        .env("NURITEO_SAVE_IDEMPOTENCY_SECRET_FILE", save_secret_file)
+        .env("NURITEO_SAVE_DEFAULT_QUOTA_BYTES", "10737418240")
+        .env("NURITEO_SAVE_UPLOAD_TRANSPORT", "relay")
         .env("NURITEO_S3_ENDPOINT", s3_endpoint)
         .env("NURITEO_S3_REGION", "us-east-1")
         .env("NURITEO_S3_BUCKET", BUCKET)
@@ -788,6 +800,7 @@ fn spawn_server_with_external_url(
             "nrt_org_inv_",
             SECRET_KEY,
             database_url,
+            &save_secret,
         ],
     )
 }

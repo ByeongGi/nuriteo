@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+umask 077
 
 runtime="${CONTAINER_RUNTIME:-podman}"
 postgres_image="docker.io/library/postgres@sha256:f3bd19c606e442c3d7bdfa8002e03fe260a1023351e0ea4598032022b68dd6e3"
@@ -11,14 +12,6 @@ rustfs_requested_port="${NURITEO_TEST_S3_PORT:-}"
 postgres_publish="127.0.0.1:${postgres_requested_port}:5432"
 rustfs_publish="127.0.0.1:${rustfs_requested_port}:9000"
 fixture_dir="$(mktemp -d "${TMPDIR:-/tmp}/nuriteo-gate-002.XXXXXX")"
-postgres_tls="$fixture_dir/postgres"
-rustfs_tls="$fixture_dir/rustfs"
-database_password="$(openssl rand -hex 24)"
-bootstrap_password_file="$fixture_dir/bootstrap-password"
-gate_test_name="${NURITEO_GATE_TEST_NAME:-collaboration_gate_runs_actual_core_postgres_and_rustfs_journey}"
-mkdir -p "$postgres_tls" "$rustfs_tls/certs"
-printf '%s' 'gate bootstrap password 0123456789' >"$bootstrap_password_file"
-chmod 600 "$bootstrap_password_file"
 
 cleanup() {
   "$runtime" rm --force "$postgres_container" >/dev/null 2>&1 || true
@@ -36,6 +29,18 @@ exit_after_cleanup() {
 trap cleanup EXIT
 trap 'exit_after_cleanup 130' INT
 trap 'exit_after_cleanup 143' TERM
+
+postgres_tls="$fixture_dir/postgres"
+rustfs_tls="$fixture_dir/rustfs"
+database_password="$(openssl rand -hex 24)"
+bootstrap_password_file="$fixture_dir/bootstrap-password"
+save_idempotency_secret_file="$fixture_dir/save-idempotency-secret"
+gate_test_name="${NURITEO_GATE_TEST_NAME:-collaboration_gate_runs_actual_core_postgres_and_rustfs_journey}"
+
+mkdir -p "$postgres_tls" "$rustfs_tls/certs"
+printf '%s' 'gate bootstrap password 0123456789' >"$bootstrap_password_file"
+openssl rand -base64 32 | tr -d '\n' >"$save_idempotency_secret_file"
+chmod 600 "$bootstrap_password_file" "$save_idempotency_secret_file"
 
 bound_port() {
   local container="$1"
@@ -145,6 +150,7 @@ NURITEO_TEST_DATABASE_CA="$postgres_tls/ca.crt" \
 NURITEO_TEST_S3_ENDPOINT="https://127.0.0.1:${rustfs_port}" \
 NURITEO_TEST_S3_CA_FILE="$rustfs_tls/ca.crt" \
 NURITEO_TEST_BOOTSTRAP_PASSWORD_FILE="$bootstrap_password_file" \
+NURITEO_TEST_SAVE_IDEMPOTENCY_SECRET_FILE="$save_idempotency_secret_file" \
 NURITEO_TEST_GATE_PROJECT_RUNTIME_BROWSER="${NURITEO_TEST_GATE_PROJECT_RUNTIME_BROWSER:-}" \
 NURITEO_TEST_NODE_EXECUTABLE="${NURITEO_TEST_NODE_EXECUTABLE:-node}" \
 CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-/private/tmp/nuriteo-gate002-target}" \
