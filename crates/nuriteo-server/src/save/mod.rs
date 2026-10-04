@@ -1,6 +1,7 @@
 mod admission;
 mod archive;
 mod cleanup;
+mod commit;
 mod multipart_service;
 mod multipart_types;
 mod operations;
@@ -11,6 +12,10 @@ mod verifier;
 pub use cleanup::{
     AbortSaveSession, AbortSaveSessionResult, CleanupError, CleanupService, CleanupWorker,
     CleanupWorkerPolicy, ExpirySweepReport, WorkerShutdown,
+};
+pub use commit::{
+    CommitWorkingHeadOutcome, WorkingHeadCommitError, WorkingHeadCommitPolicy,
+    WorkingHeadCommitReconciliation, WorkingHeadCommitService,
 };
 pub use multipart_service::{
     MultipartService, MultipartServiceError, MultipartServicePolicy, MultipartStore,
