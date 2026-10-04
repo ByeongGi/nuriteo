@@ -72,8 +72,10 @@ for (const [milestone, gateId] of gateByMilestone) {
     .filter((node) => node.milestone === milestone && node.id !== gateId)
     .map((node) => node.id)
     .sort();
+  if (gateId === "GATE-004") expected.push("GATE-001", "GATE-002", "GATE-003");
+  expected.sort();
   const actual = [...nodesById.get(gateId).dependsOn].sort();
-  assert(JSON.stringify(actual) === JSON.stringify(expected), `${gateId}: gate dependencies are incomplete`);
+  assert(JSON.stringify(actual) === JSON.stringify(expected), `${gateId}: gate dependencies are incomplete or unexpected`);
 }
 
 const catalog = blueprint.split("## 6. Task Catalog")[1]?.split("## 7. 권장 Merge Batch")[0] ?? "";
