@@ -320,18 +320,35 @@ impl SaveHttpService {
     ) -> Result<CommitView, SaveHttpError> {
         let runtime = self.runtime()?;
         let context = authorize(runtime, browser, owner, project_id).await?;
-        if multipart {
-            runtime
+        if let Some(committed) = load_committed_outcome(runtime, context, session_id).await? {
+            return Ok(committed);
+        }
+        if multipart
+            && let Err(error) = runtime
                 .multipart
                 .complete(multipart_context(context, session_id))
                 .await
-                .map_err(map_multipart)?;
+        {
+            if let Some(committed) = load_committed_outcome(runtime, context, session_id).await? {
+                return Ok(committed);
+            }
+            return Err(map_multipart(error));
         }
-        let verified = runtime
+        let verified = match runtime
             .verifier
             .verify(verify_context(context, session_id))
             .await
-            .map_err(map_verification)?;
+        {
+            Ok(verified) => verified,
+            Err(error) => {
+                if let Some(committed) =
+                    load_committed_outcome(runtime, context, session_id).await?
+                {
+                    return Ok(committed);
+                }
+                return Err(map_verification(error));
+            }
+        };
         runtime
             .commit
             .commit(&verified)
@@ -349,46 +366,14 @@ impl SaveHttpService {
     ) -> Result<ReconcileView, SaveHttpError> {
         let runtime = self.runtime()?;
         let context = authorize(runtime, browser, owner, project_id).await?;
-        time::timeout(runtime.operation_timeout, async {
-            let mut connection = runtime
-                .pool
-                .acquire()
-                .await
-                .map_err(|_| SaveHttpError::Unavailable)?;
-            let mut transaction = connection
-                .begin()
-                .await
-                .map_err(map_reconcile_query)?;
-            configure_reconcile_deadline(&mut transaction, runtime.operation_timeout).await?;
-            let row: Option<(String, Option<String>, i64)> = sqlx::query_as(
-                "SELECT save.state,save.committed_bundle_id::text,project.lock_version FROM save_sessions save \
-                 JOIN projects project ON project.id=save.project_id WHERE save.id=$1::uuid AND save.project_id=$2::uuid \
-                 AND save.storage_scope_id=$3::uuid AND save.actor_user_id=$4::uuid AND project.state='active'",
-            )
-            .bind(session_id.to_string())
-            .bind(project_id.to_string())
-            .bind(context.storage_scope_id.to_string())
-            .bind(context.actor_user_id.to_string())
-            .fetch_optional(&mut *transaction)
-            .await
-            .map_err(map_reconcile_query)?;
-            transaction
-                .rollback()
-                .await
-                .map_err(map_reconcile_query)?;
-            let Some((state, bundle_id, version)) = row else {
-                return Err(SaveHttpError::NotFound);
-            };
-            if state == "committed" {
-                return Ok(ReconcileView::Committed {
-                    bundle_id: bundle_id.ok_or(SaveHttpError::Internal)?,
-                    project_version: version,
-                });
-            }
-            Ok(ReconcileView::NotCommitted)
-        })
-        .await
-        .map_err(|_| SaveHttpError::OperationTimeout)?
+        load_committed_outcome(runtime, context, session_id)
+            .await?
+            .map_or(Ok(ReconcileView::NotCommitted), |committed| {
+                Ok(ReconcileView::Committed {
+                    bundle_id: committed.bundle_id,
+                    project_version: committed.project_version,
+                })
+            })
     }
 
     pub(crate) async fn abort(
@@ -415,6 +400,58 @@ impl SaveHttpService {
     fn runtime(&self) -> Result<&Runtime, SaveHttpError> {
         self.runtime.as_deref().ok_or(SaveHttpError::Unavailable)
     }
+}
+
+async fn load_committed_outcome(
+    runtime: &Runtime,
+    context: SaveProjectContext,
+    session_id: SaveSessionId,
+) -> Result<Option<CommitView>, SaveHttpError> {
+    time::timeout(runtime.operation_timeout, async {
+        let mut connection = runtime
+            .pool
+            .acquire()
+            .await
+            .map_err(|_| SaveHttpError::Unavailable)?;
+        let mut transaction = connection
+            .begin()
+            .await
+            .map_err(map_reconcile_query)?;
+        configure_reconcile_deadline(&mut transaction, runtime.operation_timeout).await?;
+        let row: Option<(String, Option<String>, i64)> = sqlx::query_as(
+            "SELECT save.state,save.committed_bundle_id::text,save.expected_project_version \
+             FROM save_sessions save JOIN projects project ON project.id=save.project_id \
+             WHERE save.id=$1::uuid AND save.project_id=$2::uuid AND save.storage_scope_id=$3::uuid \
+               AND save.actor_user_id=$4::uuid AND project.state='active'",
+        )
+        .bind(session_id.to_string())
+        .bind(context.project_id.to_string())
+        .bind(context.storage_scope_id.to_string())
+        .bind(context.actor_user_id.to_string())
+        .fetch_optional(&mut *transaction)
+        .await
+        .map_err(map_reconcile_query)?;
+        transaction
+            .rollback()
+            .await
+            .map_err(map_reconcile_query)?;
+        let Some((state, bundle_id, expected_project_version)) = row else {
+            return Err(SaveHttpError::NotFound);
+        };
+        if state != "committed" {
+            return Ok(None);
+        }
+        let project_version = expected_project_version
+            .checked_add(1)
+            .and_then(|value| ProjectVersion::new(value).ok())
+            .ok_or(SaveHttpError::Internal)?;
+        Ok(Some(CommitView {
+            bundle_id: bundle_id.ok_or(SaveHttpError::Internal)?,
+            project_version: project_version.get(),
+        }))
+    })
+    .await
+    .map_err(|_| SaveHttpError::OperationTimeout)?
 }
 
 async fn authorize(

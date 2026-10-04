@@ -875,7 +875,7 @@ async fn save_http_is_authorized_restart_stable_and_commits_the_working_head() {
 
     // Rebuild every HTTP service around the same persistent database and
     // stable secret. The replay must resolve to the original session.
-    let restarted = save_http_router(pool.clone(), store.clone(), secret)
+    let restarted = save_http_router(pool.clone(), store.clone(), secret.clone())
         .await
         .unwrap();
     let replay = version_json_request(
@@ -935,6 +935,80 @@ async fn save_http_is_authorized_restart_stable_and_commits_the_working_head() {
     assert_eq!(completed["projectVersion"], 2);
     let committed_bundle = completed["bundleId"].as_str().unwrap().to_owned();
 
+    let completed_retry = version_json_request(
+        &restarted,
+        &owner,
+        Method::POST,
+        &complete_uri,
+        None,
+        None,
+        json!({"uploadMode":"single"}),
+    )
+    .await;
+    assert_eq!(completed_retry.status(), StatusCode::OK);
+    assert_eq!(completed_retry.headers()[ETAG], "\"project-v2\"");
+    assert_eq!(version_response_json(completed_retry).await, completed);
+
+    // Advance the Project after the first Save. Reconciliation of that older
+    // session must still return the version produced by the session, not the
+    // Project's newer lock version.
+    let next_content = b"saved through HTTP again\n";
+    let next_bundle = canonical_test_bundle(PROJECT_A, SCOPE, "saved-again.txt", next_content);
+    let next_request_body = json!({
+        "physicalBytes": next_bundle.len(),
+        "logicalBytes": next_content.len(),
+        "fileCount": 1,
+        "sha256": BASE64.encode(Sha256::digest(&next_bundle)),
+        "parts": []
+    });
+    let next_created = version_json_request(
+        &restarted,
+        &owner,
+        Method::POST,
+        &uri,
+        Some("\"project-v2\""),
+        Some("save-http-advance-0001"),
+        next_request_body,
+    )
+    .await;
+    assert_eq!(next_created.status(), StatusCode::CREATED);
+    let next_created = version_response_json(next_created).await;
+    let next_session_id = next_created["sessionId"].as_str().unwrap();
+    let next_upload = next_created["upload"].as_object().unwrap();
+    let mut next_put = fixture_http_client(&ca_file)
+        .put(next_upload["url"].as_str().unwrap())
+        .header(ORIGIN, WEB_ORIGIN);
+    for header in next_upload["headers"].as_array().unwrap() {
+        next_put = next_put.header(
+            header["name"].as_str().unwrap(),
+            header["value"].as_str().unwrap(),
+        );
+    }
+    assert!(
+        next_put
+            .body(next_bundle)
+            .send()
+            .await
+            .unwrap()
+            .status()
+            .is_success()
+    );
+    let next_completed = version_json_request(
+        &restarted,
+        &owner,
+        Method::POST,
+        &format!("{uri}/{next_session_id}/complete"),
+        None,
+        None,
+        json!({"uploadMode":"single"}),
+    )
+    .await;
+    assert_eq!(next_completed.status(), StatusCode::OK);
+    assert_eq!(
+        version_response_json(next_completed).await["projectVersion"],
+        3
+    );
+
     let reconciled = version_json_request(
         &restarted,
         &owner,
@@ -950,6 +1024,106 @@ async fn save_http_is_authorized_restart_stable_and_commits_the_working_head() {
     assert_eq!(reconciled["state"], "committed");
     assert_eq!(reconciled["bundleId"], committed_bundle);
     assert_eq!(reconciled["projectVersion"], 2);
+
+    // Exercise the same retry contract for a multipart session. The domain
+    // setup uses the production 8 MiB part floor to keep this live fixture
+    // bounded; HTTP owns multipart completion, verification, and commit.
+    let multipart_content = vec![0x6d; 8 * 1024 * 1024];
+    let multipart_bundle =
+        canonical_test_bundle(PROJECT_B, SCOPE, "multipart.bin", &multipart_content);
+    let multipart_bodies = multipart_bundle
+        .chunks(8 * 1024 * 1024)
+        .map(Bytes::copy_from_slice)
+        .collect::<Vec<_>>();
+    let mut multipart_request =
+        multipart_request(PROJECT_B, "save-http-multipart-0001", &multipart_bodies);
+    multipart_request.expected_logical_bytes = multipart_content.len() as u64;
+    multipart_request.expected_file_count = 1;
+    multipart_request.expected_sha256 = Sha256Checksum::calculate(&multipart_bundle);
+    multipart_request.effective_quota = EffectiveQuota::limited(10 * 1024 * 1024 * 1024).unwrap();
+    let multipart_plans = multipart_request.parts.clone();
+    let multipart_service = MultipartService::new(
+        pool.clone(),
+        store,
+        MultipartServicePolicy::new(
+            Duration::from_secs(10),
+            5,
+            8 * 1024 * 1024,
+            8 * 1024 * 1024,
+            4,
+        )
+        .unwrap(),
+        secret,
+    )
+    .unwrap();
+    let multipart_session = multipart_service.create(multipart_request).await.unwrap();
+    let multipart_context = MultipartSessionContext {
+        storage_scope_id: StorageScopeId::from_str(SCOPE).unwrap(),
+        project_id: ProjectId::from_str(PROJECT_B).unwrap(),
+        actor_user_id: UserId::from_str(USER).unwrap(),
+        session_id: multipart_session.session_id(),
+    };
+    let multipart_capabilities = multipart_service
+        .issue_parts(multipart_context, multipart_plans.clone())
+        .await
+        .unwrap();
+    let multipart_client = fixture_http_client(&ca_file);
+    let mut multipart_receipts = Vec::new();
+    for ((capability, plan), body) in multipart_capabilities
+        .iter()
+        .zip(&multipart_plans)
+        .zip(&multipart_bodies)
+    {
+        let etag = send_multipart_part(&multipart_client, capability.request(), body)
+            .await
+            .unwrap();
+        multipart_receipts.push(
+            MultipartPartReceipt::new(
+                plan.part_number(),
+                plan.expected_bytes(),
+                plan.expected_sha256().clone(),
+                etag,
+            )
+            .unwrap(),
+        );
+    }
+    multipart_service
+        .record_receipts(multipart_context, multipart_receipts)
+        .await
+        .unwrap();
+    let multipart_complete_uri = format!(
+        "/api/v1/workspaces/users/{USER}/projects/{PROJECT_B}/save-sessions/{}/complete",
+        multipart_session.session_id()
+    );
+    let multipart_completed = version_json_request(
+        &restarted,
+        &owner,
+        Method::POST,
+        &multipart_complete_uri,
+        None,
+        None,
+        json!({"uploadMode":"multipart"}),
+    )
+    .await;
+    assert_eq!(multipart_completed.status(), StatusCode::OK);
+    assert_eq!(multipart_completed.headers()[ETAG], "\"project-v2\"");
+    let multipart_completed = version_response_json(multipart_completed).await;
+    let multipart_completed_retry = version_json_request(
+        &restarted,
+        &owner,
+        Method::POST,
+        &multipart_complete_uri,
+        None,
+        None,
+        json!({"uploadMode":"multipart"}),
+    )
+    .await;
+    assert_eq!(multipart_completed_retry.status(), StatusCode::OK);
+    assert_eq!(multipart_completed_retry.headers()[ETAG], "\"project-v2\"");
+    assert_eq!(
+        version_response_json(multipart_completed_retry).await,
+        multipart_completed
+    );
 
     let outsider_response = version_json_request(
         &restarted,
