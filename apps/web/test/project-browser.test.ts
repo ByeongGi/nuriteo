@@ -148,9 +148,11 @@ try {
 
     await admin.getByLabel("Slug").fill("alpha-project");
     await admin.getByLabel("Name", { exact: true }).fill("Alpha Project");
+    const createResponse = admin.waitForResponse((response) => response.request().method() === "POST" && response.url().endsWith("/projects"));
     await admin.getByRole("button", { name: "Create Project" }).click();
-    await admin.waitForURL((url) => url.searchParams.get("project") === projectId);
+    assert.equal((await createResponse).status(), 201);
     await admin.getByRole("heading", { name: "Alpha Project" }).waitFor();
+    assert.equal(new URL(admin.url()).searchParams.get("project"), projectId);
 
     await admin.getByRole("link", { name: "Admin Personal" }).click();
     await admin.getByText("Select a Project").waitFor();
@@ -169,8 +171,10 @@ try {
 
     await admin.getByRole("button", { name: "Archive" }).click();
     await admin.getByRole("button", { name: "Restore" }).waitFor();
+    assert.equal(await admin.locator(".project-sidebar .record-list").getByText("Renamed Project", { exact: true }).count(), 0);
     await admin.getByRole("button", { name: "Restore" }).click();
     await admin.getByRole("button", { name: "Archive" }).waitFor();
+    await admin.locator(".project-sidebar .record-list").getByText("Renamed Project", { exact: true }).waitFor();
 
     await admin.getByLabel("Organization member user ID").fill(unknownId);
     await admin.getByRole("button", { name: "Grant role" }).click();
@@ -179,17 +183,52 @@ try {
     await admin.getByRole("button", { name: "Grant role" }).click();
     await admin.getByText(memberId, { exact: true }).waitFor();
 
+    const changeResponse = admin.waitForResponse((response) => response.request().method() === "PATCH" && response.url().endsWith(`/roles/${memberId}`));
+    await admin.getByLabel(`Role for ${memberId}`).selectOption("write");
+    assert.equal((await changeResponse).status(), 200);
+    assert.equal(roles.find((entry) => entry.userId === memberId)?.role, "write");
+
     await member.reload({ waitUntil: "networkidle" });
     await member.getByText("Renamed Project", { exact: true }).click();
     await member.getByRole("heading", { name: "Renamed Project" }).waitFor();
     assert.equal(await member.getByText(/Only Organization Owners/u).count(), 1);
 
+    const memberGrant = admin.locator("li", { hasText: memberId });
+    const revokeResponsePromise = admin.waitForResponse((response) => response.request().method() === "DELETE" && response.url().endsWith(`/roles/${memberId}`));
+    await memberGrant.getByRole("button", { name: "Revoke" }).click();
+    const revokeResponse = await revokeResponsePromise;
+    const revokedEtag = revokeResponse.headers().etag;
+    assert.ok(revokedEtag);
+    const revoked = await revokeResponse.json() as { changed: boolean; projectVersion: number };
+    assert.equal(revoked.changed, true);
+    await memberGrant.waitFor({ state: "detached" });
+
+    const noOp = await admin.evaluate(async ({ csrf, etag, organizationId, projectId, userId }) => {
+      const response = await fetch(`/api/v1/workspaces/organizations/${organizationId}/projects/${projectId}/roles/${userId}`, {
+        headers: { "if-match": etag, "x-csrf-token": csrf },
+        method: "DELETE"
+      });
+      return { body: await response.json() as { changed: boolean; projectVersion: number }, etag: response.headers.get("etag"), status: response.status };
+    }, { csrf, etag: revokedEtag, organizationId, projectId, userId: memberId });
+    assert.equal(noOp.status, 200);
+    assert.equal(noOp.body.changed, false);
+    assert.equal(noOp.body.projectVersion, revoked.projectVersion);
+    assert.equal(noOp.etag, revokedEtag);
+
+    await member.goto(projectsUrl, { waitUntil: "networkidle" });
+    assert.equal(await member.getByText("Renamed Project", { exact: true }).count(), 0);
+    await member.goto(`${projectsUrl}&project=${projectId}`, { waitUntil: "networkidle" });
+    assert.equal(await member.getByText("Renamed Project", { exact: true }).count(), 0);
+
+    await admin.getByRole("link", { name: "all", exact: true }).click();
+    await admin.locator(".project-sidebar .record-list").getByText("Renamed Project", { exact: true }).click();
     await admin.getByRole("button", { name: "Archive" }).click();
+    await admin.locator(".project-sidebar .record-list li", { hasText: "Renamed Project" }).getByText(/archived/u).waitFor();
     await admin.getByLabel(/Type Renamed Project to delete/u).fill("Renamed Project");
     await admin.getByRole("button", { name: "Delete Project" }).click();
     await admin.waitForURL((url) => !url.searchParams.has("project"));
     assert.equal(project, undefined);
-    assert.equal(memberCanRead, true);
+    assert.equal(memberCanRead, false);
   } finally {
     await browser.close();
   }
