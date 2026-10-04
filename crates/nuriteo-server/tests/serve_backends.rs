@@ -7,6 +7,7 @@ use std::process::{Child, Command, ExitStatus, Output, Stdio};
 use std::time::{Duration, Instant};
 
 use aws_sdk_s3::config::{BehaviorVersion, Credentials, Region};
+use aws_sdk_s3::types::{CorsConfiguration, CorsRule};
 use aws_smithy_http_client::pool::{Client as PoolClient, ConnectionPool};
 use aws_smithy_http_client::tls::rustls_provider::CryptoMode;
 use aws_smithy_http_client::tls::{self, TlsContext, TrustStore};
@@ -44,6 +45,7 @@ async fn production_binary_serves_drains_and_never_mutates_backends() {
     let occupied = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let occupied_address = occupied.local_addr().unwrap();
     let bind_failure_management = available_address();
+    configure_browser_upload_cors(&s3, occupied_address).await;
     let bind_failure = spawn_server(
         occupied_address,
         bind_failure_management,
@@ -62,6 +64,7 @@ async fn production_binary_serves_drains_and_never_mutates_backends() {
     let occupied_management = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let occupied_management_address = occupied_management.local_addr().unwrap();
     let management_bind_application = available_address();
+    configure_browser_upload_cors(&s3, management_bind_application).await;
     let management_bind_failure = spawn_server(
         management_bind_application,
         occupied_management_address,
@@ -84,6 +87,7 @@ async fn production_binary_serves_drains_and_never_mutates_backends() {
     drop(occupied_management);
 
     let (address, management_address) = available_address_pair();
+    configure_browser_upload_cors(&s3, address).await;
     let mut server = spawn_server(
         address,
         management_address,
@@ -160,6 +164,7 @@ async fn production_binary_serves_drains_and_never_mutates_backends() {
         SchemaReadiness::Pending { .. }
     ));
     let (pending_address, pending_management_address) = available_address_pair();
+    configure_browser_upload_cors(&s3, pending_address).await;
     let mut pending = spawn_server(
         pending_address,
         pending_management_address,
@@ -542,6 +547,33 @@ fn fixture_s3_client(endpoint: &str, ca_pem: &[u8]) -> aws_sdk_s3::Client {
 
 async fn create_bucket(client: &aws_sdk_s3::Client) {
     client.create_bucket().bucket(BUCKET).send().await.unwrap();
+}
+
+async fn configure_browser_upload_cors(client: &aws_sdk_s3::Client, address: std::net::SocketAddr) {
+    let rule = CorsRule::builder()
+        .id("nuriteo-browser-upload-v1")
+        .allowed_origins(format!("http://{address}"))
+        .allowed_methods("PUT")
+        .allowed_headers("content-type")
+        .allowed_headers("x-amz-checksum-sha256")
+        .allowed_headers("x-amz-sdk-checksum-algorithm")
+        .expose_headers("etag")
+        .expose_headers("x-amz-checksum-sha256")
+        .max_age_seconds(300)
+        .build()
+        .unwrap();
+    client
+        .put_bucket_cors()
+        .bucket(BUCKET)
+        .cors_configuration(
+            CorsConfiguration::builder()
+                .cors_rules(rule)
+                .build()
+                .unwrap(),
+        )
+        .send()
+        .await
+        .unwrap();
 }
 
 async fn list_objects(client: &aws_sdk_s3::Client) -> Vec<aws_sdk_s3::types::Object> {

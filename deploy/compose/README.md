@@ -41,8 +41,8 @@ An example reverse-proxy shape is provided in `Caddyfile.preview.example`. Repla
 `compose up` enforces this order:
 
 1. PostgreSQL and bundled RustFS become healthy.
-2. `storage-init` idempotently creates the bundled private bucket, while `migrate` applies forward-only database migrations.
-3. `storage-check` validates the bucket and `bootstrap-admin` atomically creates the first administrator, local credential, and audit event.
+2. `storage-init` idempotently creates the bundled private bucket and installs the exact browser-upload CORS rule for `NURITEO_EXTERNAL_URL`, while `migrate` applies forward-only database migrations.
+3. `storage-check` read-checks that exact rule and proves single/multipart presigned uploads with real OPTIONS preflight before `bootstrap-admin` creates the first administrator.
 4. Core starts only after every required one-shot succeeds, then Web starts only after Core reports ready.
 
 All operational commands use the same Server image as `serve`. One-shots have no restart policy, and a failed one-shot keeps Core and Web gated. Re-running the stack against the same named volumes is safe: bucket creation, migration, and administrator bootstrap are idempotent. `compose down` preserves data; use `compose down --volumes` only when intentionally deleting this installation.
@@ -57,7 +57,18 @@ External S3 is an explicit, separate operator-preflight path. Configure `NURITEO
 docker compose -f deploy/compose/compose.external-s3.yaml run --rm storage-check
 ```
 
-The bucket must already exist. This path contains only the Server `storage-check` command: it does not run bundled storage initialization, create or delete buckets, change policies, or fall back to RustFS. An external deployment overlay can reuse the validated settings for Core without changing that ownership boundary.
+The bucket must already exist. The default `storage-check` path is read-only with respect to bucket policy: it refuses a missing, wildcard, extra, or drifted CORS document and never falls back to RustFS. It does use reserved probe objects/uploads and cleans them, as before.
+
+If the external bucket does not yet have the required policy, review the exact contract below and run the separate, explicit mutation once:
+
+```sh
+docker compose -f deploy/compose/compose.external-s3.yaml \
+  --profile configure-browser-upload-cors \
+  run --rm storage-configure-browser-upload-cors
+docker compose -f deploy/compose/compose.external-s3.yaml run --rm storage-check
+```
+
+The configure command replaces the bucket CORS document with one rule: the canonical application origin only, `PUT` only, request headers `content-type`, `x-amz-checksum-sha256`, and the multipart signer-required `x-amz-sdk-checksum-algorithm`, exposed response headers `etag` and `x-amz-checksum-sha256`, and a 300-second preflight cache. It never enables credentials or wildcard origin/header. Because replacement can remove unrelated rules, operators must use a dedicated NURITEO bucket or explicitly accept that ownership before running it. Core only performs the read-only exact check at startup.
 
 ## Validation
 

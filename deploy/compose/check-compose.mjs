@@ -79,8 +79,22 @@ function validate(source, externalSource, initSource, acceptanceSource) {
   assert.match(initSource, /--request PUT "\$endpoint"/u);
   assert.match(initSource, /BucketAlreadyOwnedByYou/u);
   assert.match(initSource, /--head "\$endpoint"/u);
+  assert.match(initSource, /--request PUT --data-binary "@\$cors_file" "\$endpoint\?cors"/u);
+  for (const literal of [
+    "nuriteo-browser-upload-v1",
+    "<AllowedMethod>PUT</AllowedMethod>",
+    "<AllowedHeader>content-type</AllowedHeader>",
+    "<AllowedHeader>x-amz-checksum-sha256</AllowedHeader>",
+    "<AllowedHeader>x-amz-sdk-checksum-algorithm</AllowedHeader>",
+    "<ExposeHeader>etag</ExposeHeader>",
+    "<ExposeHeader>x-amz-checksum-sha256</ExposeHeader>"
+  ]) assert(initSource.includes(literal), `missing bundled browser CORS contract: ${literal}`);
+  assert.doesNotMatch(initSource, /<AllowedOrigin>\*<\/AllowedOrigin>|<AllowedHeader>\*<\/AllowedHeader>/u);
   assert.doesNotMatch(initSource, /--request (?:DELETE|POST|PATCH)/u);
 
+  const externalConfigure = serviceBlock(externalSource, "storage-configure-browser-upload-cors");
+  assert.match(externalConfigure, /command: \["storage-configure-browser-upload-cors"\]/u);
+  assert.match(externalConfigure, /profiles: \["configure-browser-upload-cors"\]/u);
   const externalCheck = serviceBlock(externalSource, "storage-check");
   assert.match(externalCheck, /command: \["storage-check"\]/u);
   assert.match(externalCheck, /NURITEO_S3_BUCKET: \$\{NURITEO_S3_BUCKET:\?set NURITEO_S3_BUCKET\}/u);

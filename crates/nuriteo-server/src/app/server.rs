@@ -90,6 +90,14 @@ pub(crate) async fn run_server(
             return Err(ServeError::StorageInitialization);
         }
     };
+    if store
+        .check_browser_upload_cors(&global.public.external_url)
+        .await
+        .is_err()
+    {
+        close_pool(pool, close_timeout).await?;
+        return Err(ServeError::StorageInitialization);
+    }
     let listener = match tokio::net::TcpListener::bind(global.server.listen_addr).await {
         Ok(listener) => listener,
         Err(_) => {

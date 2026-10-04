@@ -17,6 +17,7 @@ pub enum ObjectOperation {
     MultipartAbort,
     MultipartReconcile,
     Readiness,
+    BrowserUploadCors,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

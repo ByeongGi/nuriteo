@@ -16,6 +16,7 @@ pub(crate) enum StorageCheckError {
     Timeout,
     Unavailable,
     Storage,
+    CorsMismatch,
 }
 
 impl StorageCheckError {
@@ -30,6 +31,7 @@ impl StorageCheckError {
             Self::Timeout => "timeout",
             Self::Unavailable => "unavailable",
             Self::Storage => "storage",
+            Self::CorsMismatch => "browser-upload-cors-mismatch",
         }
     }
 }
@@ -38,7 +40,9 @@ pub(crate) async fn execute(
     environment: &impl Environment,
     files: &impl FileReader,
 ) -> Result<CapabilityReport, StorageCheckError> {
-    Config::load(environment, files).map_err(|_| StorageCheckError::Configuration)?;
+    let global = Config::load(environment, files)
+        .map_err(|_| StorageCheckError::Configuration)?
+        .config;
     let config = ObjectStorageConfig::load(environment, files)
         .map_err(|_| StorageCheckError::StorageConfiguration)?;
     let store = S3ObjectStore::new(&config, OperationLimits::default())
@@ -48,10 +52,41 @@ pub(crate) async fn execute(
         .check_readiness()
         .await
         .map_err(|error| readiness_error(error.kind()))?;
+    store
+        .check_browser_upload_cors(&global.public.external_url)
+        .await
+        .map_err(|_| StorageCheckError::CorsMismatch)?;
 
-    Ok(store
-        .probe_capabilities(&ProbePrefix::new(Uuid::new_v4()))
-        .await)
+    let prefix = ProbePrefix::new(Uuid::new_v4());
+    store
+        .probe_browser_upload_cors(&global.public.external_url, &prefix)
+        .await
+        .map_err(|_| StorageCheckError::CorsMismatch)?;
+
+    Ok(store.probe_capabilities(&prefix).await)
+}
+
+pub(crate) async fn configure_browser_upload_cors(
+    environment: &impl Environment,
+    files: &impl FileReader,
+) -> Result<(), StorageCheckError> {
+    let global = Config::load(environment, files)
+        .map_err(|_| StorageCheckError::Configuration)?
+        .config;
+    let config = ObjectStorageConfig::load(environment, files)
+        .map_err(|_| StorageCheckError::StorageConfiguration)?;
+    let store = S3ObjectStore::new(&config, OperationLimits::default())
+        .await
+        .map_err(|_| StorageCheckError::StorageInitialization)?;
+    store
+        .check_readiness()
+        .await
+        .map_err(|error| readiness_error(error.kind()))?;
+    store
+        .configure_browser_upload_cors(&global.public.external_url)
+        .await
+        .map_err(|_| StorageCheckError::CorsMismatch)?;
+    Ok(())
 }
 
 const fn readiness_error(kind: ObjectStoreErrorKind) -> StorageCheckError {

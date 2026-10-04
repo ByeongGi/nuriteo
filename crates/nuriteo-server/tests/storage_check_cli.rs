@@ -2,6 +2,7 @@ use std::fs;
 use std::process::{Command, Output};
 
 use aws_sdk_s3::config::{BehaviorVersion, Credentials, Region};
+use aws_sdk_s3::types::{CorsConfiguration, CorsRule};
 use aws_smithy_http_client::pool::{Client as PoolClient, ConnectionPool};
 use aws_smithy_http_client::tls::rustls_provider::CryptoMode;
 use aws_smithy_http_client::tls::{self, TlsContext, TrustStore};
@@ -23,9 +24,15 @@ async fn storage_check_subprocess_is_safe_and_leaves_no_probe_objects() {
         std::env::var("NURITEO_TEST_S3_CA_FILE").expect("fixture provides its private CA");
     let client = client(&endpoint, &ca_file, SECRET_KEY).await;
     create_bucket(&client).await;
+    configure_browser_upload_cors(&client).await;
 
     let compatible = run(&endpoint, &ca_file, BUCKET, SECRET_KEY);
-    assert_eq!(compatible.status.code(), Some(0));
+    assert_eq!(
+        compatible.status.code(),
+        Some(0),
+        "storage-check stderr: {}",
+        String::from_utf8_lossy(&compatible.stderr)
+    );
     assert!(compatible.stderr.is_empty());
     let report: Value = serde_json::from_slice(&compatible.stdout).expect("report is valid JSON");
     let fields = report.as_object().expect("report is a JSON object");
@@ -49,6 +56,43 @@ async fn storage_check_subprocess_is_safe_and_leaves_no_probe_objects() {
         assert_eq!(report[capability], "supported");
     }
     assert_safe(&compatible, &endpoint, &ca_file);
+    assert_probe_namespace_empty(&client).await;
+
+    configure_drifted_browser_upload_cors(&client).await;
+    let drifted = run(&endpoint, &ca_file, BUCKET, SECRET_KEY);
+    assert_eq!(drifted.status.code(), Some(1));
+    assert!(drifted.stdout.is_empty());
+    assert_eq!(
+        drifted.stderr,
+        b"nuriteo-server: storage-check failed (browser-upload-cors-mismatch)\n"
+    );
+    assert_safe(&drifted, &endpoint, &ca_file);
+    let drifted_policy = client
+        .get_bucket_cors()
+        .bucket(BUCKET)
+        .send()
+        .await
+        .expect("drifted policy remains readable");
+    assert_eq!(drifted_policy.cors_rules()[0].allowed_methods().len(), 2);
+
+    let configured = run_command(
+        "storage-configure-browser-upload-cors",
+        &endpoint,
+        &ca_file,
+        BUCKET,
+        SECRET_KEY,
+    );
+    assert_eq!(configured.status.code(), Some(0));
+    assert_eq!(
+        configured.stdout,
+        b"browser upload CORS configured and verified\n"
+    );
+    assert!(configured.stderr.is_empty());
+    assert_safe(&configured, &endpoint, &ca_file);
+    let restored = run(&endpoint, &ca_file, BUCKET, SECRET_KEY);
+    assert_eq!(restored.status.code(), Some(0));
+    assert!(restored.stderr.is_empty());
+    assert_safe(&restored, &endpoint, &ca_file);
     assert_probe_namespace_empty(&client).await;
 
     let missing = run(&endpoint, &ca_file, MISSING_BUCKET, SECRET_KEY);
@@ -80,8 +124,12 @@ async fn storage_check_subprocess_is_safe_and_leaves_no_probe_objects() {
 }
 
 fn run(endpoint: &str, ca_file: &str, bucket: &str, secret: &str) -> Output {
+    run_command("storage-check", endpoint, ca_file, bucket, secret)
+}
+
+fn run_command(command: &str, endpoint: &str, ca_file: &str, bucket: &str, secret: &str) -> Output {
     Command::new(env!("CARGO_BIN_EXE_nuriteo-server"))
-        .arg("storage-check")
+        .arg(command)
         .env_clear()
         .env("NURITEO_EXTERNAL_URL", "http://127.0.0.1:8080")
         .env("NURITEO_S3_ENDPOINT", endpoint)
@@ -149,6 +197,61 @@ async fn create_bucket(client: &aws_sdk_s3::Client) {
             .is_some_and(|code| matches!(code, "BucketAlreadyExists" | "BucketAlreadyOwnedByYou"));
         assert!(existing, "bucket fixture setup failed");
     }
+}
+
+async fn configure_browser_upload_cors(client: &aws_sdk_s3::Client) {
+    let rule = CorsRule::builder()
+        .id("nuriteo-browser-upload-v1")
+        .allowed_origins("http://127.0.0.1:8080")
+        .allowed_methods("PUT")
+        .allowed_headers("content-type")
+        .allowed_headers("x-amz-checksum-sha256")
+        .allowed_headers("x-amz-sdk-checksum-algorithm")
+        .expose_headers("etag")
+        .expose_headers("x-amz-checksum-sha256")
+        .max_age_seconds(300)
+        .build()
+        .unwrap();
+    client
+        .put_bucket_cors()
+        .bucket(BUCKET)
+        .cors_configuration(
+            CorsConfiguration::builder()
+                .cors_rules(rule)
+                .build()
+                .unwrap(),
+        )
+        .send()
+        .await
+        .expect("fixture CORS can be configured");
+}
+
+async fn configure_drifted_browser_upload_cors(client: &aws_sdk_s3::Client) {
+    let rule = CorsRule::builder()
+        .id("nuriteo-browser-upload-v1")
+        .allowed_origins("http://127.0.0.1:8080")
+        .allowed_methods("PUT")
+        .allowed_methods("GET")
+        .allowed_headers("content-type")
+        .allowed_headers("x-amz-checksum-sha256")
+        .allowed_headers("x-amz-sdk-checksum-algorithm")
+        .expose_headers("etag")
+        .expose_headers("x-amz-checksum-sha256")
+        .max_age_seconds(300)
+        .build()
+        .unwrap();
+    client
+        .put_bucket_cors()
+        .bucket(BUCKET)
+        .cors_configuration(
+            CorsConfiguration::builder()
+                .cors_rules(rule)
+                .build()
+                .unwrap(),
+        )
+        .send()
+        .await
+        .expect("fixture drifted CORS can be configured");
 }
 
 async fn assert_probe_namespace_empty(client: &aws_sdk_s3::Client) {

@@ -69,6 +69,7 @@ services:
     entrypoint: ["/bin/sh", "/usr/local/bin/nuriteo-rustfs-init"]
     environment:
       NURITEO_BUNDLED_S3_BUCKET: ${NURITEO_S3_BUCKET:-nuriteo}
+      NURITEO_EXTERNAL_URL: ${NURITEO_EXTERNAL_URL:?set NURITEO_EXTERNAL_URL}
     secrets:
       - rustfs_access_key
       - rustfs_secret_key

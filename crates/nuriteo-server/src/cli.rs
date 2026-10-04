@@ -26,6 +26,7 @@ pub enum OperationalCommand {
     BootstrapAdmin,
     Healthcheck,
     StorageCheck,
+    StorageConfigureBrowserUploadCors,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -43,6 +44,7 @@ impl OperationalCommand {
             Self::BootstrapAdmin => "bootstrap-admin",
             Self::Healthcheck => "healthcheck",
             Self::StorageCheck => "storage-check",
+            Self::StorageConfigureBrowserUploadCors => "storage-configure-browser-upload-cors",
         }
     }
 }
@@ -83,6 +85,11 @@ pub fn root_command() -> Command {
         .subcommand(
             Command::new("storage-check")
                 .about("Check configured object storage capabilities")
+                .disable_version_flag(true),
+        )
+        .subcommand(
+            Command::new("storage-configure-browser-upload-cors")
+                .about("Explicitly replace bucket CORS with the NURITEO browser upload policy")
                 .disable_version_flag(true),
         )
 }
@@ -166,6 +173,9 @@ where
         Ok(CliAction::Operational(OperationalCommand::StorageCheck)) => {
             storage_check(stdout, stderr).await
         }
+        Ok(CliAction::Operational(OperationalCommand::StorageConfigureBrowserUploadCors)) => {
+            storage_configure_browser_upload_cors(stdout, stderr).await
+        }
         Err(error) if is_successful_display(error.kind()) => {
             write!(stdout, "{error}")?;
             Ok(CommandStatus::Success)
@@ -173,6 +183,27 @@ where
         Err(error) => {
             write!(stderr, "{error}")?;
             Ok(CommandStatus::UsageError)
+        }
+    }
+}
+
+async fn storage_configure_browser_upload_cors<O: Write, E: Write>(
+    stdout: &mut O,
+    stderr: &mut E,
+) -> io::Result<CommandStatus> {
+    match storage_check::configure_browser_upload_cors(&SystemEnvironment, &SystemFileReader).await
+    {
+        Ok(()) => {
+            writeln!(stdout, "browser upload CORS configured and verified")?;
+            Ok(CommandStatus::Success)
+        }
+        Err(error) => {
+            writeln!(
+                stderr,
+                "{BINARY_NAME}: storage-configure-browser-upload-cors failed ({})",
+                error.category()
+            )?;
+            Ok(CommandStatus::Failure)
         }
     }
 }
@@ -357,6 +388,9 @@ fn command_from_matches(matches: &ArgMatches) -> Result<CliAction, clap::Error> 
         Some("bootstrap-admin") => Ok(CliAction::Operational(OperationalCommand::BootstrapAdmin)),
         Some("healthcheck") => Ok(CliAction::Operational(OperationalCommand::Healthcheck)),
         Some("storage-check") => Ok(CliAction::Operational(OperationalCommand::StorageCheck)),
+        Some("storage-configure-browser-upload-cors") => Ok(CliAction::Operational(
+            OperationalCommand::StorageConfigureBrowserUploadCors,
+        )),
         _ => Err(root_command().error(
             ErrorKind::MissingSubcommand,
             "an operational command is required",
@@ -389,6 +423,10 @@ mod tests {
             ("bootstrap-admin", OperationalCommand::BootstrapAdmin),
             ("healthcheck", OperationalCommand::Healthcheck),
             ("storage-check", OperationalCommand::StorageCheck),
+            (
+                "storage-configure-browser-upload-cors",
+                OperationalCommand::StorageConfigureBrowserUploadCors,
+            ),
         ];
 
         for (argument, expected) in cases {
@@ -420,6 +458,7 @@ mod tests {
             "bootstrap-admin",
             "healthcheck",
             "storage-check",
+            "storage-configure-browser-upload-cors",
         ] {
             let mut stdout = Vec::new();
             let mut stderr = Vec::new();

@@ -2,6 +2,7 @@ mod adapter;
 mod capability;
 mod capability_types;
 mod config;
+mod cors;
 mod error;
 mod redaction;
 mod types;
@@ -19,6 +20,7 @@ pub use config::{
     AddressingStyle, CaBundle, CredentialProvider, ObjectStorageConfig, ObjectStorageConfigError,
     ObjectStorageConfigSnapshot, StaticCredentials, TlsTrust,
 };
+pub use cors::{BrowserUploadCorsCheck, BrowserUploadCorsError};
 pub use error::{ObjectOperation, ObjectStoreError, ObjectStoreErrorKind};
 pub use redaction::SensitiveUrl;
 pub use types::{
