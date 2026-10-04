@@ -6,6 +6,7 @@ use std::fs;
 use std::io::Read;
 use std::net::{SocketAddr, TcpListener};
 use std::process::{Child, Command, ExitStatus, Output, Stdio};
+use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
 use aws_sdk_s3::config::{BehaviorVersion, Credentials, Region};
@@ -32,6 +33,7 @@ const INVITEE_PASSWORD: &str = "gate invitee password 0123456789";
 const ACCESS_KEY: &str = "integration-access";
 const SECRET_KEY: &str = "integration-secret-0123456789";
 const BUCKET: &str = "nuriteo-gate-002";
+const MAX_PROCESS_OUTPUT_BYTES: usize = 1024 * 1024;
 
 #[tokio::test]
 #[ignore = "requires the GATE-002 custom-CA PostgreSQL and HTTPS RustFS fixture"]
@@ -660,13 +662,19 @@ fn spawn_server(
 struct ChildGuard {
     child: Child,
     reaped: bool,
+    stderr: Option<JoinHandle<std::io::Result<Vec<u8>>>>,
+    stdout: Option<JoinHandle<std::io::Result<Vec<u8>>>>,
 }
 
 impl ChildGuard {
-    fn new(child: Child) -> Self {
+    fn new(mut child: Child) -> Self {
+        let stdout = spawn_output_reader(child.stdout.take().unwrap());
+        let stderr = spawn_output_reader(child.stderr.take().unwrap());
         Self {
             child,
             reaped: false,
+            stderr: Some(stderr),
+            stdout: Some(stdout),
         }
     }
 
@@ -689,7 +697,11 @@ impl ChildGuard {
             assert!(Instant::now() < deadline, "server shutdown timed out");
             tokio::time::sleep(Duration::from_millis(20)).await;
         };
-        read_output(&mut self.child, status)
+        read_output(
+            status,
+            self.stdout.take().unwrap(),
+            self.stderr.take().unwrap(),
+        )
     }
 }
 
@@ -699,28 +711,44 @@ impl Drop for ChildGuard {
             let _ = self.child.kill();
             let _ = self.child.wait();
         }
+        drain_output_reader(self.stdout.take());
+        drain_output_reader(self.stderr.take());
     }
 }
 
-fn read_output(child: &mut Child, status: ExitStatus) -> Output {
-    let mut stdout = Vec::new();
-    let mut stderr = Vec::new();
-    child
-        .stdout
-        .take()
-        .unwrap()
-        .read_to_end(&mut stdout)
-        .unwrap();
-    child
-        .stderr
-        .take()
-        .unwrap()
-        .read_to_end(&mut stderr)
-        .unwrap();
+fn spawn_output_reader(
+    mut stream: impl Read + Send + 'static,
+) -> JoinHandle<std::io::Result<Vec<u8>>> {
+    thread::spawn(move || {
+        let mut output = Vec::new();
+        let mut chunk = [0_u8; 8192];
+        loop {
+            let read = stream.read(&mut chunk)?;
+            if read == 0 {
+                break;
+            }
+            let remaining = MAX_PROCESS_OUTPUT_BYTES.saturating_sub(output.len());
+            output.extend_from_slice(&chunk[..read.min(remaining)]);
+        }
+        Ok(output)
+    })
+}
+
+fn drain_output_reader(reader: Option<JoinHandle<std::io::Result<Vec<u8>>>>) {
+    if let Some(reader) = reader {
+        let _ = reader.join();
+    }
+}
+
+fn read_output(
+    status: ExitStatus,
+    stdout: JoinHandle<std::io::Result<Vec<u8>>>,
+    stderr: JoinHandle<std::io::Result<Vec<u8>>>,
+) -> Output {
     Output {
         status,
-        stdout,
-        stderr,
+        stdout: stdout.join().unwrap().unwrap(),
+        stderr: stderr.join().unwrap().unwrap(),
     }
 }
 

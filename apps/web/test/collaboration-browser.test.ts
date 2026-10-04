@@ -7,8 +7,8 @@ import { fileURLToPath } from "node:url";
 
 import { chromium } from "@playwright/test";
 
-import { createSecretChunkScanner } from "./secret-chunk-scanner.ts";
-import type { SecretChunkScanner } from "./secret-chunk-scanner.ts";
+import { createSecretSafeOutputDiagnostics } from "./secret-safe-output.ts";
+import type { OutputStreamName } from "./secret-safe-output.ts";
 
 const webRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const standaloneWeb = path.join(webRoot, ".next/standalone/apps/web");
@@ -45,13 +45,15 @@ const observedMutationCookies: string[] = [];
 const forbiddenServerValues = new Set([
   activationToken,
   csrfToken,
-  "correct horse battery staple"
+  "correct horse battery staple",
+  "nuriteo_dev_session=admin",
+  "nuriteo_dev_session=invitee"
 ]);
-const serverOutputScanners: SecretChunkScanner[] = [];
+const serverOutput = createSecretSafeOutputDiagnostics(forbiddenServerValues);
 
 function addForbiddenServerValue(value: string): void {
   forbiddenServerValues.add(value);
-  for (const scanner of serverOutputScanners) scanner.add(value);
+  serverOutput.add(value);
 }
 
 const core = http.createServer(async (request, response) => {
@@ -215,14 +217,9 @@ const web = spawn(process.execPath, [serverEntry], {
   },
   stdio: ["ignore", "pipe", "pipe"]
 });
-let serverOutput = "";
-for (const stream of [web.stdout, web.stderr]) {
-  const scanner = createSecretChunkScanner(forbiddenServerValues);
-  serverOutputScanners.push(scanner);
+for (const [name, stream] of [["stdout", web.stdout], ["stderr", web.stderr]] as const) {
   stream.on("data", (chunk: Buffer) => {
-    const text = chunk.toString("utf8");
-    scanner.scan(text);
-    serverOutput = `${serverOutput}${text}`.slice(-4_000);
+    serverOutput.record(name satisfies OutputStreamName, chunk);
   });
 }
 
@@ -373,19 +370,17 @@ try {
     await adminPage.getByText("Invited Teammate", { exact: true }).waitFor({ state: "detached" });
     assert.ok(observedMutationCookies.some((value) => value.endsWith(":admin")));
     assert.ok(observedMutationCookies.some((value) => value.endsWith(":invitee")));
-    for (const scanner of serverOutputScanners) {
-      assert.equal(scanner.detected, false);
-    }
-    for (const value of forbiddenServerValues) {
-      assert.equal(serverOutput.includes(value), false);
-    }
+    assert.equal(serverOutput.detected, false);
     await admin.close();
     await invitee.close();
   } finally {
     await browser.close();
   }
 } catch (error) {
-  throw new Error(`collaboration browser journey failed; server output: ${serverOutput}`, { cause: error });
+  const causeName = error instanceof Error ? "Error" : "NonError";
+  throw new Error(
+    `collaboration browser journey failed (${causeName}); secret-safe server output: ${serverOutput.render()}`
+  );
 } finally {
   web.kill("SIGTERM");
   core.close();

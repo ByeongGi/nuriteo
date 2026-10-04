@@ -1,15 +1,23 @@
-import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
+
+import { runBoundedProcess } from "./lib/bounded-process.ts";
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const node = process.execPath;
 const tsc = path.join(repositoryRoot, "node_modules/typescript/bin/tsc");
 const next = path.join(repositoryRoot, "node_modules/next/dist/bin/next");
-const nodeMajor = Number.parseInt(process.versions.node.split(".")[0] ?? "", 10);
+const nodeVersion = process.versions.node.split(".").map((part) => Number.parseInt(part, 10));
+const [nodeMajor, nodeMinor, nodePatch] = nodeVersion;
+const diffBase = process.env.NURITEO_G2_DIFF_BASE ?? "main";
 
-if (nodeMajor !== 22) {
-  console.error(`[g2] FAIL runtime: Node 22 is required, received ${process.versions.node}`);
+if (
+  nodeMajor !== 22 ||
+  nodeMinor === undefined ||
+  nodePatch === undefined ||
+  nodeMinor < 23
+) {
+  console.error(`[g2] FAIL runtime: Node >=22.23.0 <23 is required, received ${process.versions.node}`);
   process.exit(1);
 }
 
@@ -23,6 +31,7 @@ const commonEnvironment = {
 };
 
 const phases = [
+  nodePhase("bounded process-group runner regression", "tooling/checks/test/bounded-process.test.ts"),
   commandPhase(
     "ACTUAL CORE: bootstrap-to-collaboration with custom-CA PostgreSQL and HTTPS RustFS",
     "./crates/nuriteo-server/tests/fixtures/gate-collaboration/run.sh",
@@ -63,7 +72,8 @@ const phases = [
   commandPhase("Web server/client bundle boundary", node, ["test/bundle-boundary.test.ts"], 60_000, "apps/web"),
   nodePhase("workspace consistency", "tooling/checks/check-workspace.ts"),
   nodePhase("self-hosted task graph", "tooling/checks/check-self-hosted-task-graph.ts"),
-  commandPhase("checked diff", "git", ["diff", "--check", "HEAD"], 60_000)
+  commandPhase("committed diff", "git", ["log", "--check", "--oneline", `${diffBase}..HEAD`], 60_000),
+  commandPhase("working-tree diff", "git", ["diff", "--check", "HEAD"], 60_000)
 ];
 
 console.log("[g2] Evidence classes are intentionally separate:");
@@ -72,15 +82,19 @@ console.log("[g2] - STATEFUL MOCK WEB runs real Next.js/BFF/Chromium against a b
 
 for (const phase of phases) {
   process.stdout.write(`\n[g2] ${phase.name}\n`);
-  const result = spawnSync(phase.command, phase.arguments, {
-    cwd: path.join(repositoryRoot, phase.workingDirectory),
-    env: commonEnvironment,
-    stdio: "inherit",
-    timeout: phase.timeoutMs
+  const result = await runBoundedProcess({
+    arguments: phase.arguments,
+    command: phase.command,
+    environment: commonEnvironment,
+    timeoutMs: phase.timeoutMs,
+    workingDirectory: path.join(repositoryRoot, phase.workingDirectory)
   });
-  if (result.error) {
-    const reason = result.error.code === "ETIMEDOUT" ? "timed out" : "could not start";
-    console.error(`[g2] FAIL ${phase.name}: ${reason}`);
+  if (result.launchError) {
+    console.error(`[g2] FAIL ${phase.name}: could not start`);
+    process.exit(1);
+  }
+  if (result.timedOut) {
+    console.error(`[g2] FAIL ${phase.name}: timed out and terminated its process group`);
     process.exit(1);
   }
   if (result.status !== 0) {

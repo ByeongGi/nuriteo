@@ -13,6 +13,7 @@ import {
 } from "../src/lib/api/collaboration-bff.ts";
 import { DELETE as revokeActivationRoute } from "../src/app/api/v1/admin/activation-invitations/[invitationId]/route.ts";
 import { createSecretChunkScanner } from "./secret-chunk-scanner.ts";
+import { createSecretSafeOutputDiagnostics } from "./secret-safe-output.ts";
 
 const webRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const originalFetch = globalThis.fetch;
@@ -24,6 +25,7 @@ try {
   await testDeadlineAbortAndEarlyCancellation();
   await testInvalidRouteIsProblemDetails();
   testSplitSecretScanner();
+  testSecretSafeOutputDiagnostics();
   testUxSourceContracts();
 } finally {
   globalThis.fetch = originalFetch;
@@ -40,6 +42,19 @@ function testSplitSecretScanner() {
   const clean = createSecretChunkScanner(["never-visible"]);
   assert.equal(clean.scan("ordinary output"), false);
   assert.equal(clean.detected, false);
+}
+
+function testSecretSafeOutputDiagnostics() {
+  const secret = "nrt_org_inv_split-secret";
+  const diagnostics = createSecretSafeOutputDiagnostics([secret]);
+  diagnostics.record("stdout", Buffer.from("safe output nrt_org_inv_split-"));
+  diagnostics.record("stdout", Buffer.from("secret trailing output"));
+  diagnostics.record("stderr", Buffer.from("ordinary diagnostic"));
+
+  assert.equal(diagnostics.detected, true);
+  assert.match(diagnostics.render(), /stdout=52 bytes\/2 chunks/u);
+  assert.match(diagnostics.render(), /stderr=19 bytes\/1 chunks/u);
+  assert.doesNotMatch(diagnostics.render(), /nrt_org_inv_|split-secret|ordinary diagnostic/u);
 }
 
 function testSafeErrorClassification() {

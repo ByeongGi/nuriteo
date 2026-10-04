@@ -6,8 +6,10 @@ postgres_image="docker.io/library/postgres@sha256:f3bd19c606e442c3d7bdfa8002e03f
 rustfs_image="docker.io/rustfs/rustfs@sha256:42edb61d588775f9431ff436216d14392d2234d4eb2ed68321569fbf7245b36b"
 postgres_container="nuriteo-gate-002-postgres-${RANDOM}"
 rustfs_container="nuriteo-gate-002-rustfs-${RANDOM}"
-postgres_port="${NURITEO_TEST_DATABASE_PORT:-55454}"
-rustfs_port="${NURITEO_TEST_S3_PORT:-19004}"
+postgres_requested_port="${NURITEO_TEST_DATABASE_PORT:-}"
+rustfs_requested_port="${NURITEO_TEST_S3_PORT:-}"
+postgres_publish="127.0.0.1:${postgres_requested_port}:5432"
+rustfs_publish="127.0.0.1:${rustfs_requested_port}:9000"
 fixture_dir="$(mktemp -d "${TMPDIR:-/tmp}/nuriteo-gate-002.XXXXXX")"
 postgres_tls="$fixture_dir/postgres"
 rustfs_tls="$fixture_dir/rustfs"
@@ -22,7 +24,36 @@ cleanup() {
   "$runtime" rm --force "$rustfs_container" >/dev/null 2>&1 || true
   rm -rf -- "$fixture_dir"
 }
-trap cleanup EXIT INT TERM
+
+exit_after_cleanup() {
+  local status="$1"
+  trap - EXIT INT TERM
+  cleanup
+  exit "$status"
+}
+
+trap cleanup EXIT
+trap 'exit_after_cleanup 130' INT
+trap 'exit_after_cleanup 143' TERM
+
+bound_port() {
+  local container="$1"
+  local container_port="$2"
+  local requested_port="$3"
+  if [[ -n "$requested_port" ]]; then
+    printf '%s' "$requested_port"
+    return
+  fi
+  local binding
+  local selected_port
+  binding="$("$runtime" port "$container" "${container_port}/tcp")"
+  selected_port="${binding##*:}"
+  if [[ ! "$selected_port" =~ ^[0-9]+$ ]]; then
+    echo "could not resolve ephemeral host port for ${container}:${container_port}" >&2
+    return 1
+  fi
+  printf '%s' "$selected_port"
+}
 
 command -v "$runtime" >/dev/null
 command -v openssl >/dev/null
@@ -45,11 +76,12 @@ openssl x509 -req -days 2 -in "$postgres_tls/server.csr" \
   -extfile "$postgres_tls/server.ext" -out "$postgres_tls/server.crt" >/dev/null 2>&1
 
 "$runtime" run --detach --name "$postgres_container" \
-  --publish "127.0.0.1:${postgres_port}:5432" \
+  --publish "$postgres_publish" \
   --env POSTGRES_DB=nuriteo \
   --env POSTGRES_USER=nuriteo \
   --env POSTGRES_PASSWORD="$database_password" \
   "$postgres_image" >/dev/null
+postgres_port="$(bound_port "$postgres_container" 5432 "$postgres_requested_port")"
 for _ in $(seq 1 60); do
   "$runtime" exec "$postgres_container" pg_isready -U nuriteo -d nuriteo >/dev/null 2>&1 && break
   sleep 1
@@ -89,12 +121,13 @@ openssl x509 -req -days 2 -in "$rustfs_tls/server.csr" \
 "$runtime" run --rm --volume "$rustfs_tls/certs:/certs:ro" --entrypoint rustfs \
   "$rustfs_image" tls inspect --path /certs >/dev/null
 "$runtime" run --detach --name "$rustfs_container" \
-  --publish "127.0.0.1:${rustfs_port}:9000" \
+  --publish "$rustfs_publish" \
   --volume "$rustfs_tls/certs:/certs:ro" \
   --env RUSTFS_TLS_PATH=/certs \
   --env RUSTFS_ACCESS_KEY=integration-access \
   --env RUSTFS_SECRET_KEY=integration-secret-0123456789 \
   "$rustfs_image" >/dev/null
+rustfs_port="$(bound_port "$rustfs_container" 9000 "$rustfs_requested_port")"
 for _ in $(seq 1 60); do
   if curl --fail --silent --show-error --cacert "$rustfs_tls/ca.crt" \
     "https://127.0.0.1:${rustfs_port}/health" >/dev/null 2>&1; then
