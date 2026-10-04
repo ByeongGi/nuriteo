@@ -19,10 +19,22 @@ Set these variables to absolute paths before rendering or starting the stack:
 - `NURITEO_BOOTSTRAP_ADMIN_NAME`: display name for the first Instance Administrator
 - `NURITEO_BOOTSTRAP_ADMIN_PASSWORD_FILE`: password file for the first Instance Administrator
 - `NURITEO_EXTERNAL_URL`: canonical browser origin
+- `NURITEO_PREVIEW_BASE_DOMAIN`: dedicated wildcard Preview base domain (for example `preview.example.com`)
+- `NURITEO_PREVIEW_SIGNING_KEY_FILE`: file containing an independently generated 32-byte base64url key used only for short-lived Preview host capabilities
 
 The Compose file has no credential defaults. Protect every credential and private-key file with owner-only permissions. A minimal PostgreSQL derivative copies its mounted certificate and key into a private runtime path before delegating to the upstream entrypoint with TLS enabled. The Dockerfile build context allowlists only that wrapper. The database URL, database CA, PostgreSQL identity, and RustFS credentials are mounted as Compose secrets; RustFS TLS material is mounted read-only. Core always verifies the PostgreSQL hostname and CA; this topology does not claim that PostgreSQL rejects every non-TLS client.
 
 Optional settings are `NURITEO_WEB_BIND_IP` (default `127.0.0.1`), `NURITEO_WEB_PORT` (default `3000`), `NURITEO_POSTGRES_IMAGE`, `NURITEO_SERVER_IMAGE`, and `NURITEO_WEB_IMAGE`.
+
+## Isolated Preview origin
+
+Production Preview requires wildcard DNS and TLS for `*.${NURITEO_PREVIEW_BASE_DOMAIN}` at the reverse proxy. The proxy must preserve the original `Host` header and route both the application origin and the wildcard Preview hosts to Web. Set `NURITEO_PREVIEW_WILDCARD_READY=true` only after independently verifying that DNS, the wildcard certificate, and proxy routing work end to end. This flag is an explicit operator acknowledgement; Nuriteo does not infer or provision those external resources.
+
+Generate the content of `NURITEO_PREVIEW_SIGNING_KEY_FILE` from 32 random bytes encoded as unpadded base64url, mount it as the Compose secret, and keep it private. Preview host capabilities expire within five seconds and bind the opaque runtime token to the internal dev-server port; tampered, expired, or wrong-port hosts are rejected. Rotating the file and restarting Web immediately invalidates outstanding Preview hosts and requires users to run Preview again.
+
+The default is `false`. Missing acknowledgement, non-HTTPS application URLs, invalid hostnames, or unmatched Preview hosts fail closed: the product does not fall back to a same-origin Preview. Local qualification may use `app.localhost` with a `preview.localhost` base domain over loopback HTTP; this exception is not a production readiness claim.
+
+An example reverse-proxy shape is provided in `Caddyfile.preview.example`. Replace both example domains and mount a certificate covering the application host and wildcard Preview host. Automated wildcard certificate issuance requires a DNS provider integration and remains operator-owned.
 
 ## Startup lifecycle
 

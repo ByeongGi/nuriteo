@@ -81,9 +81,11 @@ self.addEventListener("message", (event) => {
   }
   if (!systemWasm) {
     pendingSystemMessages.push(event.data);
-    if (event.data?.type === "boot" || event.data?.type === "initialize-runtime" || event.data?.type === "start") {
-      loadSystemWasm(event.data.systemWasmUrl);
-    }
+    // Legacy and direct CLI consumers may not send an explicit initialization
+    // message. The content-addressed production fallback is therefore loaded
+    // on the first queued message, while explicit producers can still override
+    // it with systemWasmUrl.
+    loadSystemWasm(event.data?.systemWasmUrl);
     return;
   }
   handleWorkerMessage(event.data);

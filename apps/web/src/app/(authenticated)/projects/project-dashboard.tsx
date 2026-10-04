@@ -30,6 +30,7 @@ import { projectError, readCsrfCredential } from "../../../lib/api/browser-secur
 import type { CollaborationOperation } from "../../../lib/api/browser-security.ts";
 import { createBrowserApiClient } from "../../../lib/api/browser-client.ts";
 import { useExclusiveMutation } from "../../../lib/use-exclusive-mutation.ts";
+import type { PreviewOriginConfiguration } from "../../../runtime/preview-origin-contract.ts";
 import { ProjectIdeShell } from "./project-ide-shell.tsx";
 
 interface Props {
@@ -38,6 +39,7 @@ interface Props {
   readonly initialGrants?: readonly DirectProjectRole[];
   readonly initialProject?: Project;
   readonly initialProjectEtag?: string;
+  readonly previewConfiguration: PreviewOriginConfiguration;
   readonly runtimeAssetRevision?: string;
   readonly selectedScope?: string;
   readonly selectedState?: ProjectListState;
@@ -217,6 +219,7 @@ export function ProjectDashboard(props: Props) {
                 <ProjectIdeShell
                   key={`${workspace.storageScopeId}:${project.id}:${project.state}`}
                   {...(props.runtimeAssetRevision === undefined ? {} : { assetRevision: props.runtimeAssetRevision })}
+                  previewConfiguration={props.previewConfiguration}
                   project={project}
                   workspaceScope={workspace.storageScopeId}
                 />

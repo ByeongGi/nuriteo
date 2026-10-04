@@ -246,6 +246,12 @@ services:
       dockerfile: deploy/docker/web.Dockerfile
     environment:
       NURITEO_INTERNAL_API_URL: http://core:8080
+      NURITEO_EXTERNAL_URL: ${NURITEO_EXTERNAL_URL:?set NURITEO_EXTERNAL_URL}
+      NURITEO_PREVIEW_BASE_DOMAIN: ${NURITEO_PREVIEW_BASE_DOMAIN:?set NURITEO_PREVIEW_BASE_DOMAIN}
+      NURITEO_PREVIEW_SIGNING_KEY_FILE: /run/secrets/preview_signing_key
+      NURITEO_PREVIEW_WILDCARD_READY: ${NURITEO_PREVIEW_WILDCARD_READY:-false}
+    secrets:
+      - preview_signing_key
     ports:
       - ${NURITEO_WEB_BIND_IP:-127.0.0.1}:${NURITEO_WEB_PORT:-3000}:3000
     networks:
@@ -291,3 +297,5 @@ secrets:
     file: ${NURITEO_RUSTFS_CA_FILE:?set NURITEO_RUSTFS_CA_FILE}
   bootstrap_admin_password:
     file: ${NURITEO_BOOTSTRAP_ADMIN_PASSWORD_FILE:?set NURITEO_BOOTSTRAP_ADMIN_PASSWORD_FILE}
+  preview_signing_key:
+    file: ${NURITEO_PREVIEW_SIGNING_KEY_FILE:?set NURITEO_PREVIEW_SIGNING_KEY_FILE}

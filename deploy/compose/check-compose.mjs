@@ -33,6 +33,15 @@ function validate(source, externalSource, initSource, acceptanceSource) {
   assert.match(services.core, /bootstrap-admin:[\s\S]*condition: service_completed_successfully/u);
   assert.match(services.core, /storage-check:[\s\S]*condition: service_completed_successfully/u);
   assert.match(services.web, /core:[\s\S]*condition: service_healthy/u);
+  assert.match(services.web, /NURITEO_EXTERNAL_URL: \$\{NURITEO_EXTERNAL_URL:\?set NURITEO_EXTERNAL_URL\}/u);
+  assert.match(services.web, /NURITEO_PREVIEW_BASE_DOMAIN: \$\{NURITEO_PREVIEW_BASE_DOMAIN:\?set NURITEO_PREVIEW_BASE_DOMAIN\}/u);
+  assert.match(services.web, /NURITEO_PREVIEW_SIGNING_KEY_FILE: \/run\/secrets\/preview_signing_key/u);
+  assert.match(services.web, /secrets:\n      - preview_signing_key/u);
+  assert.match(services.web, /NURITEO_PREVIEW_WILDCARD_READY: \$\{NURITEO_PREVIEW_WILDCARD_READY:-false\}/u);
+  assert.match(acceptanceSource, /openssl rand -base64 32[\s\S]*preview-signing-key/u);
+  assert.match(acceptanceSource, /chmod 600 "\$fixture_root\/preview-signing-key"/u);
+  assert.match(acceptanceSource, /export NURITEO_PREVIEW_BASE_DOMAIN='preview\.localhost'/u);
+  assert.match(acceptanceSource, /export NURITEO_PREVIEW_SIGNING_KEY_FILE="\$fixture_root\/preview-signing-key"/u);
 
   for (const [name, command] of [["storage-check", "storage-check"], ["migrate", "migrate"], ["bootstrap-admin", "bootstrap-admin"], ["core", "serve"]]) {
     assert.match(services[name], /image: \$\{NURITEO_SERVER_IMAGE:-localhost\/nuriteo-server:cmp-002\}/u);
@@ -115,6 +124,8 @@ function verifyDriftDetection() {
     [compose.replace('command: ["migrate"]', 'command: ["serve"]'), external, init, acceptance],
     [compose.replace("NURITEO_BOOTSTRAP_ADMIN_PASSWORD_FILE", "NURITEO_BOOTSTRAP_ADMIN_PASSWORD"), external, init, acceptance],
     [compose.replace("  data:\n    internal: true", "  data:"), external, init, acceptance],
+    [compose.replace("NURITEO_PREVIEW_WILDCARD_READY:-false", "NURITEO_PREVIEW_WILDCARD_READY:-true"), external, init, acceptance],
+    [compose.replace("NURITEO_PREVIEW_SIGNING_KEY_FILE: /run/secrets/preview_signing_key", "NURITEO_PREVIEW_SIGNING_KEY: public"), external, init, acceptance],
     [compose, external.replace('command: ["storage-check"]', 'command: ["storage-init"]'), init, acceptance],
     [compose, external, init.replace("--head", "--request DELETE"), acceptance],
     [compose, external, init, acceptance.replace("wait_for_job \"$job\" 0", ":")]

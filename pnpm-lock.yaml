@@ -163,6 +163,9 @@ importers:
       clsx:
         specifier: 2.1.1
         version: 2.1.1
+      es-module-lexer:
+        specifier: 2.3.2
+        version: 2.3.2
       next:
         specifier: 15.5.26
         version: 15.5.26(@playwright/test@1.63.0)(@types/node@22.20.2)(react-dom@19.0.0(react@19.0.0))(react@19.0.0)

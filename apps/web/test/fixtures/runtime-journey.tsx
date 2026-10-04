@@ -43,6 +43,24 @@ const project = {
   version: 1
 };
 
+const previewConfiguration = location.hostname === "app.localhost"
+  ? {
+      status: "enabled" as const,
+      applicationOrigin: location.origin,
+      baseDomain: "preview.localhost",
+      protocol: location.protocol as "http:" | "https:",
+      publicPort: location.port
+    }
+  : {
+      status: "disabled" as const,
+      code: "PREVIEW_CONFIGURATION_INVALID" as const,
+      message: "Preview origin configuration is invalid."
+    };
+
 createRoot(document.getElementById("root")!).render(
-  <ProjectIdeShell project={project} workspaceScope={project.ownerId} />
+  <ProjectIdeShell
+    previewConfiguration={previewConfiguration}
+    project={project}
+    workspaceScope={project.ownerId}
+  />
 );

@@ -11,6 +11,9 @@ import type {
   RuntimeWorkspaceState
 } from "../../../runtime/runtime-adapter.ts";
 import { resolveRuntimeAssetRevision } from "../../../runtime/runtime-assets.ts";
+import { createSubdomainPreviewBridge } from "../../../runtime/subdomain-preview-bridge.ts";
+import type { PreviewOriginConfiguration } from "../../../runtime/preview-origin-contract.ts";
+import type { SubdomainPreviewBridge } from "../../../runtime/subdomain-preview-bridge.ts";
 
 const EMPTY_RUNTIME_STATE: RuntimeViewState = {
   generation: 0,
@@ -30,12 +33,15 @@ const RUNTIME_MEMORY_LIMIT_BYTES = 512 * 1024 * 1024;
 
 interface Props {
   readonly assetRevision?: string;
+  readonly previewConfiguration: PreviewOriginConfiguration;
   readonly project: Project;
   readonly workspaceScope: string;
 }
 
-export function ProjectIdeShell({ assetRevision, project, workspaceScope }: Props) {
+export function ProjectIdeShell({ assetRevision, previewConfiguration, project, workspaceScope }: Props) {
   const adapterRef = useRef<RuntimeAdapter | undefined>(undefined);
+  const previewBridgeRef = useRef<SubdomainPreviewBridge | undefined>(undefined);
+  const previewRecoveryRef = useRef<Promise<void> | null>(null);
   const unsubscribeRef = useRef<() => void>(() => undefined);
   const manifestAbortRef = useRef<AbortController | null>(null);
   const unmountedRef = useRef(false);
@@ -47,7 +53,7 @@ export function ProjectIdeShell({ assetRevision, project, workspaceScope }: Prop
   const [isStarting, setIsStarting] = useState(false);
   const [isRunningPreview, setIsRunningPreview] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [previewRefresh, setPreviewRefresh] = useState(0);
+  const [isolatedPreviewUrl, setIsolatedPreviewUrl] = useState<string>();
   const [editorStatus, setEditorStatus] = useState("Local Draft");
   const [runtime, setRuntime] = useState<RuntimeViewState>(EMPTY_RUNTIME_STATE);
 
@@ -57,6 +63,7 @@ export function ProjectIdeShell({ assetRevision, project, workspaceScope }: Prop
       unmountedRef.current = true;
       manifestAbortRef.current?.abort();
       unsubscribeRef.current();
+      void previewBridgeRef.current?.dispose();
       void adapterRef.current?.dispose();
     };
   }, []);
@@ -161,15 +168,61 @@ export function ProjectIdeShell({ assetRevision, project, workspaceScope }: Prop
   async function runPreview() {
     const adapter = adapterRef.current;
     if (!adapter) return;
+    if (previewConfiguration.status === "disabled") {
+      setError(previewConfiguration.message);
+      return;
+    }
     setError(undefined);
     setIsRunningPreview(true);
     try {
-      await adapter.workflow.start();
+      const next = await adapter.workflow.start();
+      if (!next.previewUrl) throw new Error("Preview URL unavailable");
+      await previewBridgeRef.current?.dispose();
+      const bridge = await createPreviewBridge(next.previewUrl);
+      previewBridgeRef.current = bridge;
+      setIsolatedPreviewUrl(bridge.url);
     } catch {
       setError("The install and Preview journey did not complete.");
     } finally {
       setIsRunningPreview(false);
     }
+  }
+
+  async function createPreviewBridge(internalPreviewUrl: string): Promise<SubdomainPreviewBridge> {
+    if (previewConfiguration.status === "disabled") throw new Error("Preview unavailable");
+    let created: SubdomainPreviewBridge | undefined;
+    created = await createSubdomainPreviewBridge({
+      configuration: previewConfiguration,
+      internalProjectIdentity: `${workspaceScope}:${project.id}`,
+      internalPreviewUrl,
+      ownerId: project.ownerId,
+      ownerType: project.ownerType,
+      projectId: project.id,
+      onDiagnostic() { setError("The isolated Preview relay was stopped safely."); },
+      onRecoveryRequired() {
+        if (created) recoverPreview(created, internalPreviewUrl);
+      }
+    });
+    return created;
+  }
+
+  function recoverPreview(staleBridge: SubdomainPreviewBridge, internalPreviewUrl: string): void {
+    if (previewRecoveryRef.current || previewBridgeRef.current !== staleBridge || unmountedRef.current) return;
+    const recovery = (async () => {
+      try {
+        const freshBridge = await createPreviewBridge(internalPreviewUrl);
+        if (previewBridgeRef.current !== staleBridge || unmountedRef.current) {
+          void freshBridge.dispose();
+          return;
+        }
+        previewBridgeRef.current = freshBridge;
+        setIsolatedPreviewUrl(freshBridge.url);
+        void staleBridge.dispose();
+      } catch {
+        setError("The isolated Preview could not recover. Run Preview again.");
+      }
+    })().finally(() => { previewRecoveryRef.current = null; });
+    previewRecoveryRef.current = recovery;
   }
 
   function saveSelectedFile() {
@@ -181,7 +234,7 @@ export function ProjectIdeShell({ assetRevision, project, workspaceScope }: Prop
       const next = adapter.workspace.writeText(selectedPath, editorContent);
       setRuntime(next);
       setWorkspace(adapter.workspace.getState());
-      setPreviewRefresh((value) => value + 1);
+      previewBridgeRef.current?.hotUpdate(selectedPath);
       setEditorStatus(next.hmrState === "connected" ? "Local Draft saved · HMR applied" : "Local Draft saved · restart may be required");
     } catch {
       setError("The text edit could not be saved safely.");
@@ -205,6 +258,9 @@ export function ProjectIdeShell({ assetRevision, project, workspaceScope }: Prop
   }
 
   async function releaseAdapter() {
+    await previewBridgeRef.current?.dispose();
+    previewBridgeRef.current = undefined;
+    setIsolatedPreviewUrl(undefined);
     const adapter = adapterRef.current;
     if (!adapter) return;
     await adapter.dispose();
@@ -221,7 +277,7 @@ export function ProjectIdeShell({ assetRevision, project, workspaceScope }: Prop
   }
 
   const hasWorkspace = workspace?.status === "ready";
-  const hasIsolatedPreview = runtime.previewUrl ? new URL(runtime.previewUrl, globalThis.location.href).origin !== globalThis.location.origin : false;
+  const hasIsolatedPreview = isolatedPreviewUrl !== undefined;
 
   return (
     <section className="mt-6 overflow-hidden rounded-lg border border-border bg-surface" aria-labelledby="project-ide-title">
@@ -243,7 +299,7 @@ export function ProjectIdeShell({ assetRevision, project, workspaceScope }: Prop
             <div className="flex items-center justify-between gap-3 border-t border-muted-border px-3 py-2 text-xs text-muted-foreground"><span>{editorStatus} · {workspace.files.length} files · {workspace.totalBytes} bytes</span><Button type="button" size="sm" disabled={!selectedPath || isSaving} onClick={saveSelectedFile}>{isSaving ? "Applying…" : "Apply to Local Draft"}</Button></div>
           </section>
           <div className="grid grid-rows-[minmax(12rem,1fr)_minmax(12rem,1fr)]">
-            <section className="grid min-h-0 grid-rows-[auto_1fr] border-b border-muted-border" aria-label="Preview" data-preview-url={runtime.previewUrl ?? undefined}><div className="flex items-center justify-between gap-3 border-b border-muted-border p-3"><div><h4 className="m-0 text-sm font-semibold">Preview</h4><p className="m-0 text-xs text-muted-foreground">{runtime.workflowPhase} · HMR {runtime.hmrState}</p></div>{runtime.previewUrl ? null : <Button type="button" size="sm" variant="primary" disabled={isRunningPreview} onClick={() => void runPreview()}>{isRunningPreview ? "Installing…" : "Run Preview"}</Button>}</div>{hasIsolatedPreview ? <iframe key={previewRefresh} title={`${project.name} Preview`} className="h-full min-h-0 w-full border-0 bg-white" src={runtime.previewUrl ?? undefined} sandbox="allow-scripts" referrerPolicy="no-referrer" /> : runtime.previewUrl ? <p className="p-3 text-sm text-muted-foreground" role="status">Preview isolation is not configured. Same-origin Preview is disabled.</p> : <p className="p-3 text-sm text-muted-foreground">Run bounded install and dev to open the isolated Preview.</p>}</section>
+            <section className="grid min-h-0 grid-rows-[auto_1fr] border-b border-muted-border" aria-label="Preview" data-preview-url={isolatedPreviewUrl}><div className="flex items-center justify-between gap-3 border-b border-muted-border p-3"><div><h4 className="m-0 text-sm font-semibold">Preview</h4><p className="m-0 text-xs text-muted-foreground">{runtime.workflowPhase} · HMR {runtime.hmrState}</p></div>{hasIsolatedPreview ? null : <Button type="button" size="sm" variant="primary" disabled={isRunningPreview || previewConfiguration.status === "disabled"} onClick={() => void runPreview()}>{isRunningPreview ? "Installing…" : "Run Preview"}</Button>}</div>{hasIsolatedPreview ? <iframe ref={(frame) => previewBridgeRef.current?.attach(frame?.contentWindow ?? null)} title={`${project.name} Preview`} className="h-full min-h-0 w-full border-0 bg-white" src={isolatedPreviewUrl} sandbox="allow-scripts allow-same-origin" allow="cross-origin-isolated" referrerPolicy="no-referrer" /> : previewConfiguration.status === "disabled" ? <p className="p-3 text-sm text-muted-foreground" role="status">{previewConfiguration.message} Same-origin Preview is disabled.</p> : runtime.previewUrl ? <p className="p-3 text-sm text-muted-foreground" role="status">The isolated Preview connection is not ready. Same-origin Preview is disabled.</p> : <p className="p-3 text-sm text-muted-foreground">Run bounded install and dev to open the isolated Preview.</p>}</section>
             <section className="grid min-h-0 grid-rows-[auto_minmax(8rem,1fr)_auto] bg-background" aria-label="Terminal">
               <h4 className="m-0 border-b border-muted-border px-3 py-2 text-sm font-semibold">Terminal</h4>
               <pre className="m-0 overflow-auto whitespace-pre-wrap p-3 font-mono text-xs" aria-live="polite">{terminalOutput || "Run a bounded browser command."}</pre>

@@ -11,6 +11,7 @@ import { redirect } from "next/navigation";
 import { EntryUnavailable } from "../../_components/entry-unavailable.tsx";
 import { isExplicitlySignedOut, safeRequestReference } from "../../../lib/api/presentation-error.ts";
 import { createServerApiClient } from "../../../lib/api/server-client.ts";
+import { previewOriginConfiguration } from "../../../lib/preview/config.ts";
 import { resolveWorkspaceSelection } from "../../../lib/workspace-selection.ts";
 import { ProjectDashboard } from "./project-dashboard.tsx";
 
@@ -29,13 +30,14 @@ interface Props {
 
 export default async function ProjectsPage({ searchParams }: Props) {
   const query = await searchParams;
+  const previewConfiguration = previewOriginConfiguration();
   try {
     const client = await createServerApiClient();
     const workspaces = (await getCurrentWorkspaces(client)).data.workspaces;
     const selectedScope = resolveWorkspaceSelection(workspaces, query.workspace);
     const workspace = workspaces.find((item) => item.storageScopeId === selectedScope);
     if (workspace === undefined) {
-      return <ProjectDashboard workspaces={workspaces} />;
+      return <ProjectDashboard previewConfiguration={previewConfiguration} workspaces={workspaces} />;
     }
     const owner = { ownerType: workspace.ownerType, ownerId: workspace.ownerId } as const;
     const state = query.state === "archived" || query.state === "all" ? query.state : "active";
@@ -65,6 +67,7 @@ export default async function ProjectsPage({ searchParams }: Props) {
         key={`${workspace.storageScopeId}:${state}:${projectResult?.data.id ?? "collection"}`}
         canManageRoles={canManageRoles}
         initialCollection={collection.data}
+        previewConfiguration={previewConfiguration}
         {...runtimeAssetRevisionProps()}
         {...(grants === undefined ? {} : { initialGrants: grants })}
         {...(projectResult === undefined ? {} : {

@@ -1,0 +1,6 @@
+https://nuriteo.example.com, https://*.preview.nuriteo.example.com {
+	tls /run/tls/fullchain.pem /run/tls/private-key.pem
+	reverse_proxy web:3000 {
+		header_up Host {host}
+	}
+}

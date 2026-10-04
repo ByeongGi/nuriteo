@@ -127,8 +127,10 @@ printf '%s\n' 'COMPOSEACCESS7E3BC2' >"$fixture_root/rustfs-access-key"
 printf '%s\n' 'compose-rustfs-secret-7e3bc2f41a' >"$fixture_root/rustfs-secret-key"
 printf '%s\n' "$bootstrap_password" >"$fixture_root/bootstrap-password"
 printf '%s\n' 'postgres://nuriteo:compose-db-password-7e3bc2@postgres:5432/nuriteo' >"$fixture_root/database-url"
+openssl rand -base64 32 | tr '+/' '-_' | tr -d '=\n' >"$fixture_root/preview-signing-key"
 chmod 644 "$fixture_root/postgres-password" "$fixture_root/rustfs-access-key" \
   "$fixture_root/rustfs-secret-key" "$fixture_root/bootstrap-password" "$fixture_root/database-url"
+chmod 600 "$fixture_root/preview-signing-key"
 
 openssl req -x509 -newkey rsa:2048 -nodes -keyout "$fixture_root/postgres-tls/ca.key" \
   -out "$fixture_root/postgres-tls/ca.crt" -days 2 -subj '/CN=nuriteo-compose-postgres-ca' \
@@ -163,16 +165,19 @@ export NURITEO_RUSTFS_SECRET_KEY_FILE="$fixture_root/rustfs-secret-key"
 export NURITEO_RUSTFS_CA_FILE="$fixture_root/rustfs-tls/ca.crt"
 export NURITEO_RUSTFS_TLS_DIR="$fixture_root/rustfs-tls"
 export NURITEO_BOOTSTRAP_ADMIN_PASSWORD_FILE="$fixture_root/bootstrap-password"
+export NURITEO_PREVIEW_SIGNING_KEY_FILE="$fixture_root/preview-signing-key"
 export NURITEO_BOOTSTRAP_ADMIN_EMAIL='admin@example.invalid'
 export NURITEO_BOOTSTRAP_ADMIN_NAME='Compose Administrator'
 export NURITEO_EXTERNAL_URL="http://127.0.0.1:${web_port}"
+export NURITEO_PREVIEW_BASE_DOMAIN='preview.localhost'
 export NURITEO_WEB_PORT="$web_port"
 export NURITEO_POSTGRES_IMAGE='localhost/nuriteo-postgres:cmp-002'
 export NURITEO_SERVER_IMAGE='localhost/nuriteo-server:cmp-002'
 export NURITEO_WEB_IMAGE='localhost/nuriteo-web:cmp-002'
 
 compose config >"$rendered"
-for secret in 'compose-db-password-7e3bc2' 'COMPOSEACCESS7E3BC2' 'compose-rustfs-secret-7e3bc2f41a' "$bootstrap_password"; do
+preview_signing_key="$(cat "$fixture_root/preview-signing-key")"
+for secret in 'compose-db-password-7e3bc2' 'COMPOSEACCESS7E3BC2' 'compose-rustfs-secret-7e3bc2f41a' "$bootstrap_password" "$preview_signing_key"; do
   if grep -Fq "$secret" "$rendered"; then echo "rendered Compose exposed a secret" >&2; exit 1; fi
 done
 
@@ -218,7 +223,9 @@ object="$(compose exec -T rustfs /bin/sh -eu -c '
     --user "${access}:${secret}" https://rustfs:9000/nuriteo/sentinel.txt
 ')"
 test "$object" = 'object-survived'
-if compose logs 2>&1 | grep -Fq "$bootstrap_password"; then echo "logs exposed bootstrap password" >&2; exit 1; fi
+for secret in "$bootstrap_password" "$preview_signing_key"; do
+  if compose logs 2>&1 | grep -Fq "$secret"; then echo "logs exposed a secret" >&2; exit 1; fi
+done
 
 printf '\n' >"$fixture_root/bootstrap-password"
 export NURITEO_WEB_PORT="$((web_port + 1))"
