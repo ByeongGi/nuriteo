@@ -26,7 +26,7 @@ import {
   revokeOrganizationInvitation,
   updateOrganization
 } from "../src/index.ts";
-import type { ProblemDetails } from "../src/index.ts";
+import type { IssueOrganizationInvitationInput, ProblemDetails } from "../src/index.ts";
 
 const ORGANIZATION_ID = "018f22c4-3cb5-7ac7-b464-8214f90ad21a";
 const USER_ID = "018f22c4-3cb2-7cc8-98d8-b4f7f753f7bb";
@@ -34,6 +34,16 @@ const INVITATION_ID = "018f22c4-3cb7-7ee1-936c-4a54190dc872";
 const CSRF = "nrt_csrf_client005";
 const ACTIVATION_TOKEN = `nrt_inv_${"A".repeat(43)}`;
 const ORGANIZATION_TOKEN = `nrt_org_inv_${"B".repeat(43)}`;
+const MEMBER_EMAIL = "member@example.test";
+
+type Equal<Left, Right> =
+  (<Value>() => Value extends Left ? 1 : 2) extends
+  (<Value>() => Value extends Right ? 1 : 2) ? true : false;
+const issueInputKeysAreExact: Equal<
+  keyof IssueOrganizationInvitationInput,
+  "email" | "organizationId" | "role"
+> = true;
+assert.equal(issueInputKeysAreExact, true);
 
 await testActivationInvitationContracts();
 await testOrganizationContracts();
@@ -145,7 +155,7 @@ async function testOrganizationContracts(): Promise<void> {
   assert.doesNotMatch(JSON.stringify(invitations), /acceptUrl|token|digest/u);
   const issued = await issueOrganizationInvitation(
     client,
-    { organizationId: ORGANIZATION_ID, inviteeUserId: USER_ID, role: "member" },
+    { organizationId: ORGANIZATION_ID, email: "Member@Example.Test", role: "member" },
     { csrfToken: CSRF }
   );
   assert.doesNotMatch(JSON.stringify(issued), /nrt_org_inv_/u);
@@ -173,6 +183,8 @@ async function testOrganizationContracts(): Promise<void> {
   }
   assert.equal(new Headers(calls[2]?.init?.headers).get("if-match"), '"org-v1"');
   assert.equal(new Headers(calls[3]?.init?.headers).get("if-match"), '"org-v2"');
+  assert.deepEqual(requestBody(calls[8]), { email: MEMBER_EMAIL, role: "member" });
+  assert.deepEqual(Object.keys(requestBody(calls[8]) as object).toSorted(), ["email", "role"]);
 }
 
 async function testFailClosedBoundaries(): Promise<void> {
@@ -181,7 +193,7 @@ async function testFailClosedBoundaries(): Promise<void> {
     () => listActivationInvitations(singleResponse({ items: Array.from({ length: 101 }, activationInvitation) })),
     () => listOrganizationMembers(singleResponse({ items: [{ userId: USER_ID, displayName: "x".repeat(201), role: "owner" }] }), ORGANIZATION_ID),
     () => listOrganizationInvitations(singleResponse({ items: [{ ...organizationInvitation(), token_digest: "secret" }] }), ORGANIZATION_ID),
-    () => issueOrganizationInvitation(singleResponse({ ...issuedOrganizationInvitation(), acceptUrl: "https://example.test/wrong?token=secret" }, 201), { organizationId: ORGANIZATION_ID, inviteeUserId: USER_ID, role: "member" }, { csrfToken: CSRF }),
+    () => issueOrganizationInvitation(singleResponse({ ...issuedOrganizationInvitation(), acceptUrl: "https://example.test/wrong?token=secret" }, 201), { organizationId: ORGANIZATION_ID, email: MEMBER_EMAIL, role: "member" }, { csrfToken: CSRF }),
     () => getOrganization(singleResponse(organization(1), 200, { etag: 'W/"org-v1"' }), ORGANIZATION_ID),
     () => getOrganization(singleResponse(organization(1)), ORGANIZATION_ID)
   ];
@@ -209,9 +221,79 @@ async function testFailClosedBoundaries(): Promise<void> {
     createOrganization(singleResponse(organization(1)), { slug: "x", displayName: "X" }, { csrfToken: "line\nbreak" }),
     ApiConfigurationError
   );
+
+  for (const email of [" x@example.test", "x@example.test ", "ab", "x".repeat(321), "x\u0085@example.test"]) {
+    let requested = false;
+    const client = createApiClient({
+      fetch: async () => {
+        requested = true;
+        throw new Error("invalid invitation input must not reach fetch");
+      }
+    });
+    await assert.rejects(
+      issueOrganizationInvitation(
+        client,
+        { organizationId: ORGANIZATION_ID, email, role: "member" },
+        { csrfToken: CSRF }
+      ),
+      ApiConfigurationError
+    );
+    assert.equal(requested, false);
+  }
+
+  let legacyRequested = false;
+  const legacyClient = createApiClient({
+    fetch: async () => {
+      legacyRequested = true;
+      throw new Error("legacy invitation input must not reach fetch");
+    }
+  });
+  await assert.rejects(
+    issueOrganizationInvitation(
+      legacyClient,
+      {
+        organizationId: ORGANIZATION_ID,
+        email: MEMBER_EMAIL,
+        inviteeUserId: USER_ID,
+        role: "member"
+      } as unknown as IssueOrganizationInvitationInput,
+      { csrfToken: CSRF }
+    ),
+    ApiConfigurationError
+  );
+  assert.equal(legacyRequested, false);
 }
 
 async function testProblemAndCancellationPassthrough(): Promise<void> {
+  for (const status of [401, 403, 404, 409, 422]) {
+    const problem: ProblemDetails = {
+      type: "/docs/problems/organization-invitation",
+      title: "Organization invitation unavailable",
+      status,
+      detail: "The requested operation is unavailable.",
+      instance: `/api/v1/organizations/${ORGANIZATION_ID}/invitations`,
+      code: `STATUS_${status}`,
+      request_id: `request-${status}`,
+      errors: []
+    };
+    await assert.rejects(
+      issueOrganizationInvitation(
+        singleResponse(problem, status),
+        { organizationId: ORGANIZATION_ID, email: "Private.Member@Example.Test", role: "member" },
+        { csrfToken: CSRF }
+      ),
+      (error) => {
+        assert.ok(error instanceof ApiError);
+        assert.equal(error.status, status);
+        assert.equal(error.problem?.code, problem.code);
+        assert.doesNotMatch(String(error), /private|member@example|token|credential/ui);
+        assert.doesNotMatch(JSON.stringify(error), /private|member@example|token|credential/ui);
+        assert.doesNotMatch(JSON.stringify(error.problem), /private|member@example|token|credential/ui);
+        return true;
+      }
+    );
+  }
+
   for (const status of [409, 412, 428]) {
     const problem: ProblemDetails = {
       type: "/docs/problems/precondition",
@@ -262,6 +344,11 @@ function singleResponse(body: unknown, status = 200, headers?: HeadersInit) {
 
 function jsonResponse(body: unknown, status = 200, headers?: HeadersInit): Response {
   return Response.json(body, { status, ...(headers === undefined ? {} : { headers }) });
+}
+
+function requestBody(call: RequestCall | undefined): unknown {
+  assert.ok(call?.init?.body !== undefined);
+  return JSON.parse(String(call.init.body)) as unknown;
 }
 
 function organizationResponse(

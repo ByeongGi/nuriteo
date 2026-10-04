@@ -31,6 +31,7 @@ import { validateProjectBundleV1Projection } from "../../../apps/web/src/bundles
 import { writeValidatedProjectBundleV1 } from "../../../apps/web/src/bundles/project-bundle-v1.ts";
 
 const baseUrl = requiredEnvironment("NURITEO_CLIENT_TEST_BASE_URL");
+const memberEmail = "history-member@example.test";
 const adminPassword = await readSecret("NURITEO_CLIENT_TEST_PASSWORD_FILE");
 const memberPassword = await readSecret("NURITEO_CLIENT_TEST_MEMBER_PASSWORD_FILE");
 const adminBrowser = createFixtureBrowser(baseUrl);
@@ -46,16 +47,16 @@ await createSession(admin, {
 });
 const activation = await issueActivationInvitation(
   admin,
-  { email: "history-member@example.test" },
+  { email: memberEmail },
   { csrfToken: adminBrowser.csrfToken() }
 );
 await activateAccount(publicClient, {
   token: tokenFrom(activation.data.activationUrl.consume(), "/activate"),
-  email: "history-member@example.test",
+  email: memberEmail,
   displayName: "History Member",
   password: memberPassword
 });
-await createSession(member, { email: "history-member@example.test", password: memberPassword });
+await createSession(member, { email: memberEmail, password: memberPassword });
 const memberIdentity = await getCurrentUser(member);
 
 const organization = await createOrganization(
@@ -67,7 +68,7 @@ const invitation = await issueOrganizationInvitation(
   admin,
   {
     organizationId: organization.data.id,
-    inviteeUserId: memberIdentity.data.user.id,
+    email: memberEmail,
     role: "member"
   },
   { csrfToken: adminBrowser.csrfToken() }

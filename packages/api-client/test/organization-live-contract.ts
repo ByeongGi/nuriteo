@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
 import {
+  ApiError,
   acceptOrganizationInvitation,
   activateAccount,
   changeOrganizationMemberRole,
@@ -66,9 +67,12 @@ assert.equal(organization.location, `/api/v1/organizations/${organization.data.i
 
 const firstInvitation = await issueOrganizationInvitation(
   admin,
-  { organizationId: organization.data.id, inviteeUserId: memberIdentity.data.user.id, role: "member" },
+  { organizationId: organization.data.id, email: "MeMbEr@Example.Test", role: "member" },
   { csrfToken: adminBrowser.csrfToken() }
 );
+assert.equal(firstInvitation.data.organizationId, organization.data.id);
+assert.equal(firstInvitation.data.inviteeUserId, memberIdentity.data.user.id);
+assert.equal(firstInvitation.data.proposedRole, "member");
 const firstAcceptToken = tokenFrom(firstInvitation.data.acceptUrl.consume(), "/organization-invitations/accept");
 const replacementInvitation = await reissueOrganizationInvitation(
   admin,
@@ -95,6 +99,24 @@ await changeOrganizationMemberRole(
   { csrfToken: adminBrowser.csrfToken() }
 );
 
+const unavailable = await safeInvitationProblem(
+  issueOrganizationInvitation(
+    admin,
+    { organizationId: organization.data.id, email: "Missing.Member@Example.Test", role: "member" },
+    { csrfToken: adminBrowser.csrfToken() }
+  ),
+  ["missing.member@example.test"]
+);
+const unauthorized = await safeInvitationProblem(
+  issueOrganizationInvitation(
+    member,
+    { organizationId: organization.data.id, email: "Outsider@Example.Test", role: "member" },
+    { csrfToken: memberBrowser.csrfToken() }
+  ),
+  ["outsider@example.test"]
+);
+assert.deepEqual(unavailable, unauthorized);
+
 const declineOrganization = await createOrganization(
   admin,
   { slug: "client005-decline", displayName: "Client 005 Decline" },
@@ -102,7 +124,7 @@ const declineOrganization = await createOrganization(
 );
 const declineInvitation = await issueOrganizationInvitation(
   admin,
-  { organizationId: declineOrganization.data.id, inviteeUserId: memberIdentity.data.user.id, role: "member" },
+  { organizationId: declineOrganization.data.id, email: memberEmail, role: "member" },
   { csrfToken: adminBrowser.csrfToken() }
 );
 const declineToken = tokenFrom(declineInvitation.data.acceptUrl.consume(), "/organization-invitations/accept");
@@ -158,6 +180,34 @@ function tokenFrom(value: string, path: string): string {
   const token = url.searchParams.get("token");
   assert.ok(token);
   return token;
+}
+
+async function safeInvitationProblem(
+  request: Promise<unknown>,
+  privateValues: readonly string[]
+): Promise<Omit<NonNullable<ApiError["problem"]>, "request_id">> {
+  let captured: unknown;
+  try {
+    await request;
+  } catch (error) {
+    captured = error;
+  }
+  assert.ok(captured instanceof ApiError);
+  assert.equal(captured.status, 404);
+  assert.ok(captured.problem);
+  assert.equal(typeof captured.problem.request_id, "string");
+  const rendered = JSON.stringify(captured.problem);
+  for (const privateValue of [...privateValues, "nrt_org_inv_", "postgres://"]) {
+    assert.doesNotMatch(rendered, new RegExp(escapeRegExp(privateValue), "u"));
+  }
+  assert.doesNotMatch(String(captured), /missing\.member|outsider|nrt_org_inv_|postgres:\/\//u);
+  assert.doesNotMatch(JSON.stringify(captured), /missing\.member|outsider|nrt_org_inv_|postgres:\/\//u);
+  const { request_id: _requestId, ...comparable } = captured.problem;
+  return comparable;
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 }
 
 async function readSecret(name: string): Promise<string> {

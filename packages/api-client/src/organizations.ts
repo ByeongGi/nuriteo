@@ -118,7 +118,7 @@ export interface ChangeOrganizationMemberRoleInput extends OrganizationMemberInp
 
 export interface IssueOrganizationInvitationInput {
   readonly organizationId: string;
-  readonly inviteeUserId: string;
+  readonly email: string;
   readonly role: OrganizationRole;
 }
 
@@ -229,9 +229,10 @@ export async function issueOrganizationInvitation(
   input: IssueOrganizationInvitationInput,
   options: BrowserMutationOptions
 ): Promise<ApiResult<IssuedOrganizationInvitation>> {
+  rejectLegacyInvitationInput(input);
   const response = await client.post<unknown, unknown>(
     `${organizationPath(input.organizationId)}/invitations`,
-    { inviteeUserId: validatedId(input.inviteeUserId), role: validateRole(input.role) },
+    { email: normalizeInvitationEmail(input.email), role: validateRole(input.role) },
     mutationOptions(options)
   );
   return issuedInvitationResult(response, 201);
@@ -470,6 +471,29 @@ function validateRole(value: OrganizationRole): OrganizationRole {
     throw new ApiConfigurationError("The Organization role is invalid.");
   }
   return value;
+}
+
+function rejectLegacyInvitationInput(input: IssueOrganizationInvitationInput): void {
+  if ("inviteeUserId" in input) {
+    throw new ApiConfigurationError("The invitation input is invalid.");
+  }
+}
+
+function normalizeInvitationEmail(value: string): string {
+  if (typeof value !== "string" || value.startsWith(" ") || value.endsWith(" ")) {
+    throw new ApiConfigurationError("The invitation email is invalid.");
+  }
+  let characters = 0;
+  for (const character of value) {
+    characters += 1;
+    if (characters > 320 || /\p{Cc}/u.test(character)) {
+      throw new ApiConfigurationError("The invitation email is invalid.");
+    }
+  }
+  if (characters < 3) {
+    throw new ApiConfigurationError("The invitation email is invalid.");
+  }
+  return value.toLowerCase();
 }
 
 function validateToken(value: string): void {

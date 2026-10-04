@@ -137,7 +137,7 @@ const invitation = await issueOrganizationInvitation(
   admin,
   {
     organizationId: organization.data.id,
-    inviteeUserId: memberIdentity.data.user.id,
+    email: memberEmail,
     role: "member"
   },
   { csrfToken: adminBrowser.csrfToken() }
