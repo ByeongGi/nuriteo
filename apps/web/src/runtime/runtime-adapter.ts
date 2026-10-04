@@ -138,10 +138,17 @@ export interface RuntimeBundleFile {
   readonly bytes: Uint8Array;
 }
 
+export interface RuntimeWorkspaceSnapshot {
+  readonly revision: number;
+  readonly files: readonly RuntimeBundleFile[];
+}
+
 export interface RuntimeWorkspacePort {
   materializeTemplate(template: RuntimeStarterTemplate): Promise<RuntimeWorkspaceState>;
   materializeBundle(files: readonly RuntimeBundleFile[]): Promise<RuntimeWorkspaceState>;
   exportBundleFiles(): readonly RuntimeBundleFile[];
+  snapshotBundleFiles(): RuntimeWorkspaceSnapshot;
+  currentRevision(): number;
   getState(): RuntimeWorkspaceState;
   readText(path: string): string;
   writeText(path: string, content: string): RuntimeViewState;
@@ -220,13 +227,18 @@ export function createRuntimeAdapter(dependencies: RuntimeAdapterDependencies = 
   let workflowDiagnostics: RuntimeDiagnostic[] = [];
   let workspaceState = createEmptyWorkspaceState();
   let workspaceText = new Map<string, string>();
+  let workspaceRevision = 0;
 
   const terminal: RuntimeTerminalPort = {
-    run(command, terminalId, onOutput) {
-      return requireReady().controller.runShellCommand(command, terminalId, onOutput);
+    async run(command, terminalId, onOutput) {
+      const controller = requireReady().controller;
+      markWorkspaceMutation();
+      return controller.runShellCommand(command, terminalId, onOutput);
     },
     input(data, terminalId) {
-      return requireReady().controller.writeShellInput(data, terminalId);
+      const accepted = requireReady().controller.writeShellInput(data, terminalId);
+      if (accepted) markWorkspaceMutation();
+      return accepted;
     },
     resize(cols, rows, terminalId) {
       requireReady().controller.resizeShell(cols, rows, terminalId);
@@ -322,6 +334,7 @@ export function createRuntimeAdapter(dependencies: RuntimeAdapterDependencies = 
           totalBytes: materialized.totalBytes,
           errorCode: null
         };
+        markWorkspaceMutation();
         return copyWorkspaceState(workspaceState);
       } catch {
         workspaceText = new Map();
@@ -365,6 +378,7 @@ export function createRuntimeAdapter(dependencies: RuntimeAdapterDependencies = 
           totalBytes: decoded.totalBytes,
           errorCode: null
         };
+        markWorkspaceMutation();
         return copyWorkspaceState(workspaceState);
       } catch {
         workspaceText = new Map();
@@ -384,12 +398,12 @@ export function createRuntimeAdapter(dependencies: RuntimeAdapterDependencies = 
     getState() { return copyWorkspaceState(workspaceState); },
     exportBundleFiles() {
       const current = requireReady();
-      return current.controller.exportProjectFiles().map((file) => ({
-        path: file.path,
-        kind: file.kind,
-        bytes: Uint8Array.from(file.bytes)
-      }));
+      return current.controller.exportProjectFiles();
     },
+    snapshotBundleFiles() {
+      return { revision: workspaceRevision, files: workspace.exportBundleFiles() };
+    },
+    currentRevision() { return workspaceRevision; },
     readText(path) {
       requireReady();
       const content = workspaceText.get(path);
@@ -419,6 +433,7 @@ export function createRuntimeAdapter(dependencies: RuntimeAdapterDependencies = 
           totalBytes: nextTotal,
           files: workspaceState.files.map((file) => file.path === path ? { ...file, sizeBytes } : file)
         };
+        markWorkspaceMutation();
         applySnapshot(current, snapshot);
         return publicState();
       } catch {
@@ -442,6 +457,7 @@ export function createRuntimeAdapter(dependencies: RuntimeAdapterDependencies = 
     };
     workspaceState = createEmptyWorkspaceState();
     workspaceText = new Map();
+    workspaceRevision = 0;
     adapterDiagnostics = [];
     workflowDiagnostics = [];
     disposePromise = null;
@@ -575,6 +591,7 @@ export function createRuntimeAdapter(dependencies: RuntimeAdapterDependencies = 
       listeners.clear();
       workspaceState = createEmptyWorkspaceState();
       workspaceText = new Map();
+      workspaceRevision = 0;
       disposePromise = Promise.resolve();
       return disposePromise;
     }
@@ -587,6 +604,13 @@ export function createRuntimeAdapter(dependencies: RuntimeAdapterDependencies = 
     });
     disposePromise = pending;
     return disposePromise;
+  }
+
+  function markWorkspaceMutation(): void {
+    if (workspaceRevision >= Number.MAX_SAFE_INTEGER) {
+      throw new RuntimeAdapterError("RUNTIME_REVISION_EXHAUSTED", "The Local Draft revision limit was reached.");
+    }
+    workspaceRevision += 1;
   }
 
   async function cleanupOwned(current: OwnedRuntime, publishDisposed: boolean): Promise<boolean> {

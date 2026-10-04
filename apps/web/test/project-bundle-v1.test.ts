@@ -141,7 +141,7 @@ for (const source of productionSources) {
   ) continue;
   if (source.url.endsWith("/save/project-save.ts")) {
     assert.match(source.contents, /validateProjectBundleV1Projection/u);
-    assert.match(source.contents, /const projection = projectCurrentTree\(input\)/u);
+    assert.match(source.contents, /const projection = projectCurrentTree\(input, currentTree\.files\)/u);
     continue;
   }
   assert.doesNotMatch(

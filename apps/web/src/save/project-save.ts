@@ -1,5 +1,9 @@
 import {
   ApiError,
+  ApiInvalidResponseError,
+  ApiResponseTooLargeError,
+  ApiTimeoutError,
+  ApiTransportError,
   SAVE_MULTIPART_PART_BYTES,
   SAVE_PART_BATCH_LIMIT,
   SAVE_SINGLE_PUT_THRESHOLD_BYTES,
@@ -50,7 +54,8 @@ export interface ProjectSaveInput {
   readonly projectId: string;
   readonly storageScopeId: string;
   readonly projectEtag: string;
-  readonly exportCurrentTree: () => readonly RuntimeBundleFile[];
+  readonly snapshotCurrentTree: () => { readonly revision: number; readonly files: readonly RuntimeBundleFile[] };
+  readonly currentRevision: () => number;
   readonly signal?: AbortSignal;
   readonly transferFetch?: typeof globalThis.fetch;
   readonly onProgress?: (progress: ProjectSaveProgress) => void;
@@ -66,6 +71,7 @@ export interface ProjectSaveResult {
 }
 
 interface BundlePlan {
+  readonly localRevision: number;
   readonly projection: ValidatedProjectBundleV1Projection;
   readonly metadata: ProjectBundleV1StreamMetadata;
   readonly parts: readonly SavePart[];
@@ -73,13 +79,16 @@ interface BundlePlan {
 
 export async function saveCurrentProject(input: ProjectSaveInput): Promise<ProjectSaveResult> {
   input.onProgress?.(progress("planning"));
-  const projection = projectCurrentTree(input);
+  const currentTree = input.snapshotCurrentTree();
+  const projection = projectCurrentTree(input, currentTree.files);
   const planner = new BundlePlanningSink(SAVE_MULTIPART_PART_BYTES);
   const planned = await streamValidatedProjectBundleV1(projection, planner, streamOptions(input));
-  const plan: BundlePlan = { projection, metadata: planned, parts: planned.sinkResult };
+  const plan: BundlePlan = { localRevision: currentTree.revision, projection, metadata: planned, parts: planned.sinkResult };
   const multipart = plan.metadata.physicalBytes > SAVE_SINGLE_PUT_THRESHOLD_BYTES;
   const requestParts = multipart ? plan.parts : [];
-  const idempotencyKey = `bundle-${plan.metadata.archiveSha256}`;
+  const baseVersion = input.projectEtag.match(/^"project-v([1-9]\d*)"$/u)?.[1];
+  if (baseVersion === undefined) throw new Error("The Save base Project ETag is invalid.");
+  const idempotencyKey = `bundle-v${baseVersion}-${plan.metadata.archiveSha256}`;
   input.onProgress?.(progress("creating", plan));
 
   const created = await createSaveSession(input.client, {
@@ -128,9 +137,9 @@ export async function saveCurrentProject(input: ProjectSaveInput): Promise<Proje
       committed = true;
       return saveResult(input, plan, result.data.bundleId, result.data.projectVersion, result.projectEtag);
     } catch (error) {
-      if (!(error instanceof ApiError) || error.code !== "COMMIT_OUTCOME_UNKNOWN") throw error;
+      if (!requiresReconciliation(error)) throw error;
       input.onProgress?.(progress("reconciling", plan));
-      const reconciliation = await reconcileSaveSession(input.client, session, mutationOptions(input));
+      const reconciliation = await reconcileSaveSession(input.client, session, { csrfToken: input.csrfToken });
       if (reconciliation.data.state !== "committed") throw error;
       committed = true;
       return saveResult(
@@ -181,7 +190,7 @@ async function uploadMultipart(
       const receipt = await uploadSaveCapability(
         capability,
         expected,
-        new Blob([Uint8Array.from(part.bytes)], { type: "application/vnd.nuriteo.project-bundle" }),
+        new Blob([part.bytes as Uint8Array<ArrayBuffer>], { type: "application/vnd.nuriteo.project-bundle" }),
         transferOptions(input)
       );
       receipts.push(receipt);
@@ -251,12 +260,15 @@ class BundlePlanningSink implements ProjectBundleV1Sink<readonly SavePart[]> {
   }
 }
 
-function projectCurrentTree(input: ProjectSaveInput): ValidatedProjectBundleV1Projection {
-  const files = input.exportCurrentTree().map((file) => ({
+function projectCurrentTree(
+  input: ProjectSaveInput,
+  currentFiles: readonly RuntimeBundleFile[]
+): ValidatedProjectBundleV1Projection {
+  const files = currentFiles.map((file) => ({
     path: file.path,
     kind: file.kind,
     executable: false,
-    bytes: Uint8Array.from(file.bytes)
+    bytes: file.bytes
   }));
   return validateProjectBundleV1Projection({
     projectId: input.projectId,
@@ -272,25 +284,26 @@ function saveResult(
   projectVersion: number,
   projectEtag: string
 ): ProjectSaveResult {
-  let snapshotCurrent = false;
-  try { snapshotCurrent = sameProjection(plan.projection, projectCurrentTree(input)); } catch { /* changed/invalid tree stays dirty */ }
   return {
     bundleId,
     projectVersion,
     projectEtag,
-    snapshotCurrent,
+    snapshotCurrent: input.currentRevision() === plan.localRevision,
     archiveSha256: plan.metadata.archiveSha256,
     physicalBytes: plan.metadata.physicalBytes
   };
 }
 
-function sameProjection(left: ValidatedProjectBundleV1Projection, right: ValidatedProjectBundleV1Projection): boolean {
-  if (left.files.length !== right.files.length) return false;
-  return left.files.every((file, index) => {
-    const other = right.files[index];
-    if (other === undefined || file.path !== other.path || file.kind !== other.kind || file.bytes.byteLength !== other.bytes.byteLength) return false;
-    return file.bytes.every((byte, byteIndex) => byte === other.bytes[byteIndex]);
-  });
+function requiresReconciliation(error: unknown): boolean {
+  return (
+    error instanceof ApiTimeoutError ||
+    error instanceof ApiTransportError ||
+    error instanceof ApiInvalidResponseError ||
+    error instanceof ApiResponseTooLargeError ||
+    (error instanceof ApiError && (
+      error.code === "COMMIT_OUTCOME_UNKNOWN" || error.code === "RECONCILIATION_REQUIRED"
+    ))
+  );
 }
 
 function assertSamePass(plan: BundlePlan, actual: ProjectBundleV1StreamMetadata): void {

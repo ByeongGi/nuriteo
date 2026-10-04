@@ -175,6 +175,10 @@ function createRecoveryFixtureAdapter(initialDraftAccess: "conflict" | "writer")
     },
     workspace: {
       materializeTemplate: async () => workspaceState(),
+      materializeBundle: async () => workspaceState(),
+      exportBundleFiles: () => [],
+      snapshotBundleFiles: () => ({ revision: 0, files: [] }),
+      currentRevision: () => 0,
       getState: workspaceState,
       readText(path) {
         const content = workspaceText.get(path);

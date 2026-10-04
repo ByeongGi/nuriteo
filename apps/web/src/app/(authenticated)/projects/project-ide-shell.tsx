@@ -410,7 +410,8 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, previewBridgeF
         projectId: project.id,
         storageScopeId: project.storageScopeId,
         projectEtag,
-        exportCurrentTree: () => adapter.workspace.exportBundleFiles(),
+        snapshotCurrentTree: () => adapter.workspace.snapshotBundleFiles(),
+        currentRevision: () => adapter.workspace.currentRevision(),
         signal: controller.signal,
         onProgress(progress) {
           if (controller.signal.aborted) return;

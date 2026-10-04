@@ -40,7 +40,7 @@ const server = http.createServer(async (request, response) => {
     assert.equal(request.headers["x-csrf-token"], csrf);
     if (pathname.endsWith("/save-sessions") && request.method === "POST") {
       assert.equal(request.headers["if-match"], '"project-v1"');
-      assert.match(String(request.headers["idempotency-key"]), /^bundle-[0-9a-f]{64}$/u);
+      assert.match(String(request.headers["idempotency-key"]), /^bundle-v1-[0-9a-f]{64}$/u);
       const body = await requestJson(request);
       response.statusCode = 201;
       response.setHeader("content-type", "application/json");

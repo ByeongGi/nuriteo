@@ -226,6 +226,7 @@ function readyWriterLease(): LocalDraftWriterLease {
   controllers[0]?.emit(snapshot({ phase: "preview_ready", previewUrl: "https://preview.test" }));
   assert.equal(adapter.getState().previewUrl, "https://preview.test");
   const materialized = await adapter.workspace.materializeTemplate("vite-react");
+  assert.equal(adapter.workspace.currentRevision(), 1);
   assert.equal(materialized.status, "ready");
   assert.deepEqual(materialized.files.map((file) => file.path), ["package.json", "src/main.tsx"]);
   assert.equal(adapter.workspace.readText("src/main.tsx"), "export default function App() {}\n");
@@ -235,6 +236,7 @@ function readyWriterLease(): LocalDraftWriterLease {
     { path: "src/main.tsx", kind: "text", bytes: new TextEncoder().encode("export default function App() { return 'resumed'; }\n") }
   ]);
   assert.equal(resumed.status, "ready");
+  assert.equal(adapter.workspace.currentRevision(), 2);
   assert.deepEqual(resumed.files.map((file) => [file.path, file.kind]), [
     ["package.json", "text"], ["public/logo.bin", "binary"], ["src/main.tsx", "text"]
   ]);
@@ -253,11 +255,14 @@ function readyWriterLease(): LocalDraftWriterLease {
     files: currentProjection.map((file) => ({ ...file, executable: false }))
   });
   assert.equal(admitted.files.some((file) => file.path.startsWith("node_modules/")), false);
+  const currentSnapshot = adapter.workspace.snapshotBundleFiles();
+  assert.equal(currentSnapshot.revision, 2);
   assert.match(adapter.workspace.readText("src/main.tsx"), /resumed/u);
   const previewState = await adapter.workflow.start();
   assert.equal(previewState.workflowPhase, "hmr_connected");
   assert.equal(previewState.hmrState, "connected");
   const editedState = adapter.workspace.writeText("src/main.tsx", "export default function App() { return 'edited'; }\n");
+  assert.equal(adapter.workspace.currentRevision(), 3);
   assert.equal(editedState.hmrState, "connected");
   assert.deepEqual(controllers[0]?.savedText, {
     path: "src/main.tsx",
@@ -269,6 +274,7 @@ function readyWriterLease(): LocalDraftWriterLease {
     (error: unknown) => error instanceof RuntimeAdapterError && error.code === "RUNTIME_EDIT_LIMIT_EXCEEDED"
   );
   await adapter.terminal.run("pnpm dev", "terminal-1");
+  assert.equal(adapter.workspace.currentRevision(), 4, "shell command dispatch conservatively advances the Local Draft revision");
   assert.equal(adapter.terminal.activeCount(), 1);
   const firstDispose = adapter.dispose();
   const secondDispose = adapter.dispose();
