@@ -19,6 +19,7 @@
     "check:self-hosted-baseline": "node tooling/checks/check-self-hosted-baseline.ts",
     "check:self-hosted-task-graph": "node tooling/checks/check-self-hosted-task-graph.ts",
     "check:self-hosted-g0": "node tooling/checks/check-self-hosted-g0.ts",
+    "check:self-hosted-g2": "node tooling/checks/check-self-hosted-g2.ts",
     "check:node-upgrade": "node tooling/checks/check-node-upgrade.ts",
     "check:package-manager-upgrade": "node tooling/checks/check-package-manager-upgrade.ts",
     "check:performance-baseline": "node tooling/checks/check-performance-baseline.ts",
