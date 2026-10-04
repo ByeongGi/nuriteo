@@ -14,6 +14,7 @@ pub mod observability;
 pub mod openapi;
 pub mod organization;
 pub mod project;
+pub mod quota;
 pub mod setup;
 mod storage_check;
 pub mod workspace;
