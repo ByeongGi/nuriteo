@@ -81,7 +81,9 @@ self.addEventListener("message", (event) => {
   }
   if (!systemWasm) {
     pendingSystemMessages.push(event.data);
-    if (event.data?.type === "boot") loadSystemWasm(event.data.systemWasmUrl);
+    if (event.data?.type === "boot" || event.data?.type === "initialize-runtime" || event.data?.type === "start") {
+      loadSystemWasm(event.data.systemWasmUrl);
+    }
     return;
   }
   handleWorkerMessage(event.data);
@@ -128,6 +130,8 @@ function handleWorkerMessage(message) {
     } catch (error) {
       self.postMessage(createFailedMessage("process", error));
     }
+  } else if (message?.type === "initialize-runtime") {
+    self.postMessage({ type: "runtime-initialized" });
   } else if (message?.type === "run") {
     runProgram(message);
   } else if (message?.type === "resource-policy-probe") {

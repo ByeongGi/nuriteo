@@ -198,9 +198,65 @@ function harness(boot: Promise<unknown> = Promise.resolve({})) {
     createProcessTable: () => ({ teardown: () => { rollback.push("process"); } }),
     createSupervisor: () => { throw new Error("supervisor factory failed with secret=hidden"); }
   });
-  await assert.rejects(adapter.mount(mountInput), /Runtime could not start/u);
+  let publicError: unknown;
+  try { await adapter.mount(mountInput); } catch (error) { publicError = error; }
+  assert.ok(publicError instanceof RuntimeAdapterError);
+  assert.equal(publicError.cause, undefined);
+  assert.equal(String(publicError).includes("hidden"), false);
   assert.deepEqual(rollback, ["process"]);
   assert.equal(JSON.stringify(adapter.getState()).includes("secret"), false);
+}
+
+{
+  const calls = { subscription: 0, controller: 0, process: 0, supervisor: 0 };
+  const controller = new FakeController([]);
+  controller.on = () => () => {
+    calls.subscription += 1;
+    if (calls.subscription === 1) throw new Error("unsubscribe cleanup failed");
+    return true;
+  };
+  controller.dispose = () => {
+    calls.controller += 1;
+    if (calls.controller === 1) throw new Error("controller cleanup failed secret=hidden");
+  };
+  const adapter = createRuntimeAdapter({
+    origin: () => "https://nuriteo.test",
+    createProcessTable: () => ({ teardown() {
+      calls.process += 1;
+      if (calls.process === 1) throw new Error("process cleanup failed");
+    } }),
+    createSupervisor: () => ({
+      boot: async () => ({}),
+      async teardown() {
+        calls.supervisor += 1;
+        if (calls.supervisor === 1) throw new Error("supervisor cleanup failed");
+      }
+    }),
+    createController: () => controller
+  });
+  await adapter.mount(mountInput);
+  await adapter.dispose();
+  assert.deepEqual(calls, { subscription: 1, controller: 1, process: 1, supervisor: 1 }, "cleanup must continue after every failure");
+  assert.equal(adapter.getState().lifecycle, "failed");
+  assert.equal(adapter.getState().diagnostics.at(-1)?.code, "RUNTIME_CLEANUP_FAILED");
+  assert.equal(JSON.stringify(adapter.getState()).includes("hidden"), false);
+  await assert.rejects(adapter.mount(mountInput), /cannot mount/u);
+  await adapter.dispose();
+  assert.deepEqual(calls, { subscription: 2, controller: 2, process: 2, supervisor: 2 });
+  assert.equal(adapter.getState().lifecycle, "disposed");
+}
+
+{
+  const adapter = createRuntimeAdapter({
+    origin: () => "https://nuriteo.test",
+    createProcessTable: () => ({ teardown() { throw new Error("rollback failed"); } }),
+    createSupervisor: () => { throw new Error("construction failed"); }
+  });
+  await assert.rejects(adapter.mount(mountInput), /Runtime could not start/u);
+  assert.equal(adapter.getState().lifecycle, "failed");
+  await adapter.dispose();
+  assert.equal(adapter.getState().lifecycle, "failed", "unreleased construction resources require reload");
+  await assert.rejects(adapter.mount(mountInput), /cannot mount/u);
 }
 
 {
@@ -268,6 +324,7 @@ function harness(boot: Promise<unknown> = Promise.resolve({})) {
     readonly listeners = new Map<string, WorkerListener[]>();
     readonly name: string;
     terminated = false;
+    readonly messages: Array<Record<string, unknown>> = [];
 
     constructor(_url: string | URL, options?: WorkerOptions) {
       this.name = options?.name ?? "worker";
@@ -279,7 +336,22 @@ function harness(boot: Promise<unknown> = Promise.resolve({})) {
     removeEventListener(type: string, listener: WorkerListener): void {
       this.listeners.set(type, (this.listeners.get(type) ?? []).filter((entry) => entry !== listener));
     }
-    postMessage(message: { type?: string }): void {
+    postMessage(message: { type?: string; pid?: number; generation?: number }): void {
+      this.messages.push(message);
+      if (message.type === "initialize-runtime") {
+        queueMicrotask(() => this.emit({ data: { type: "runtime-initialized" } } as MessageEvent));
+        return;
+      }
+      if (message.type === "start") {
+        queueMicrotask(() => {
+          this.emit({ data: { type: "ready", pid: message.pid, generation: message.generation } } as MessageEvent);
+          queueMicrotask(() => {
+            this.emit({ data: { type: "stdout", data: "/workspace/app\n", pid: message.pid, generation: message.generation } } as MessageEvent);
+            this.emit({ data: { type: "exit", code: 0, pid: message.pid, generation: message.generation } } as MessageEvent);
+          });
+        });
+        return;
+      }
       if (message.type !== "boot") return;
       queueMicrotask(() => {
         const event = {
@@ -293,6 +365,9 @@ function harness(boot: Promise<unknown> = Promise.resolve({})) {
         for (const listener of this.listeners.get("message") ?? []) listener(event);
       });
     }
+    emit(event: MessageEvent): void {
+      for (const listener of this.listeners.get("message") ?? []) listener(event);
+    }
     terminate(): void { this.terminated = true; }
   }
 
@@ -303,6 +378,20 @@ function harness(boot: Promise<unknown> = Promise.resolve({})) {
     await adapter.mount(mountInput);
     assert.equal(adapter.getState().lifecycle, "ready");
     assert.equal(ActualBoundaryWorker.instances.length, 2, "one system and one process supervisor Worker are created");
+    const output: string[] = [];
+    const result = await adapter.terminal.run("worker-pwd", "terminal-actual", (chunk) => output.push(chunk.data)) as { exitCode: number; stdout: string };
+    assert.equal(result.exitCode, 0);
+    assert.equal(result.stdout, "/workspace/app\n");
+    assert.deepEqual(output, ["/workspace/app\n"]);
+    assert.equal(ActualBoundaryWorker.instances.length, 3, "terminal command owns a third process Worker");
+    assert.deepEqual(
+      ActualBoundaryWorker.instances[2]?.messages.slice(0, 2).map((message) => message.type),
+      ["initialize-runtime", "start"]
+    );
+    assert.equal(
+      ActualBoundaryWorker.instances[2]?.messages[0]?.systemWasmUrl,
+      mountInput.assets.systemWasmUrl.toString()
+    );
     await adapter.dispose();
     assert.equal(adapter.getState().terminalProcessCount, 0);
     assert.equal(ActualBoundaryWorker.instances.every((worker) => worker.terminated), true);

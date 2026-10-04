@@ -129,6 +129,9 @@ export function createPreviewWorkflowController(
 ): PreviewWorkflowController {
   const listeners = new Set<PreviewWorkflowListener>();
   let disposed = false;
+  let disposeComplete = false;
+  let operationGeneration = 0;
+  const operationControllers = new Set<AbortController>();
   // Product sessions stay warm while the IDE tab is open. Short TTLs caused
   // intermittent "stale preview session" once the iframe went quiet.
   const sessions = createPreviewSessionRegistry({ ttlMs: options.ttlMs ?? 24 * 60 * 60 * 1000 });
@@ -508,30 +511,41 @@ export function createPreviewWorkflowController(
   }
 
   async function importZipFile(file: Blob): Promise<PreviewWorkflowSnapshot> {
-    const bytes = new Uint8Array(await file.arrayBuffer());
-    const overrides = packageOverrides();
-    const materialized = materializeZip(bytes, {
-      projectId: "preview-service-zip",
-      root: "/workspace/app",
-      ...(overrides ? { overrides } : {})
-    });
-    return applyMaterializedProject(materialized);
+    const operation = beginOperation();
+    try {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      assertOperationActive(operation);
+      const overrides = packageOverrides();
+      const materialized = materializeZip(bytes, {
+        projectId: "preview-service-zip",
+        root: "/workspace/app",
+        ...(overrides ? { overrides } : {})
+      });
+      return applyMaterializedProject(materialized);
+    } finally { operationControllers.delete(operation); }
   }
 
   async function importGitHub(url: string): Promise<PreviewWorkflowSnapshot> {
-    const overrides = packageOverrides();
-    const materialized = await materializeGitHubUrl(url, {
-      projectId: "preview-service-github",
-      root: "/workspace/app",
-      ...(overrides ? { overrides } : {})
-    });
-    return applyMaterializedProject(materialized);
+    const operation = beginOperation();
+    try {
+      const overrides = packageOverrides();
+      const materialized = await materializeGitHubUrl(url, {
+        projectId: "preview-service-github",
+        root: "/workspace/app",
+        ...(overrides ? { overrides } : {})
+      });
+      assertOperationActive(operation);
+      return applyMaterializedProject(materialized);
+    } finally { operationControllers.delete(operation); }
   }
 
   async function bootSnapshot(
     input: Blob | Uint8Array | ArrayBuffer | string
   ): Promise<PreviewWorkflowSnapshot> {
+    const operation = beginOperation();
+    try {
     const bytes = input instanceof Blob ? new Uint8Array(await input.arrayBuffer()) : input;
+    assertOperationActive(operation);
     const archive = decodeProjectWorkspaceArchive(bytes);
     const restored = new ProjectWorkspaceStore({
       projectId: archive.snapshot.projectId,
@@ -561,6 +575,7 @@ export function createPreviewWorkflowController(
     }, {
       label: typeof restored.metadata.name === "string" ? restored.metadata.name : "snapshot"
     });
+    } finally { operationControllers.delete(operation); }
   }
 
   const importSnapshot = bootSnapshot;
@@ -663,12 +678,17 @@ export function createPreviewWorkflowController(
     if (!("serviceWorker" in navigator)) {
       throw new Error("Service workers are unavailable in this browser session");
     }
-    const registration = await navigator.serviceWorker.register(
-      options.previewServiceWorkerUrl ?? "/preview-sw.js",
-      { scope: "/" }
-    );
-    await navigator.serviceWorker.ready;
-    return registration;
+    const operation = beginOperation();
+    try {
+      const registration = await navigator.serviceWorker.register(
+        options.previewServiceWorkerUrl ?? "/preview-sw.js",
+        { scope: "/" }
+      );
+      assertOperationActive(operation);
+      await navigator.serviceWorker.ready;
+      assertOperationActive(operation);
+      return registration;
+    } finally { operationControllers.delete(operation); }
   }
 
   function bindPreviewFetchBridge(): void {
@@ -678,10 +698,12 @@ export function createPreviewWorkflowController(
   }
 
   async function onServiceWorkerMessage(event: MessageEvent): Promise<void> {
+    if (disposed) return;
     const data = event.data as { type?: string; path?: string; method?: string } | null;
     if (data?.type !== "preview-sw:fetch") return;
     const port = event.ports[0];
     if (!port) return;
+    const operation = beginOperation();
     try {
       if (!state.workflow) {
         port.postMessage({
@@ -702,6 +724,7 @@ export function createPreviewWorkflowController(
           path: previewPath,
           method: data.method || "GET"
         });
+        assertOperationActive(operation);
       } catch (error) {
         if (!(error instanceof PreviewRelayError) || error.code !== "ESTALESESSION") throw error;
         const rebound = ensureLiveSession();
@@ -712,16 +735,20 @@ export function createPreviewWorkflowController(
           path: stripPreviewPrefix(data.path || "/", rebound),
           method: data.method || "GET"
         });
+        assertOperationActive(operation);
       }
-      port.postMessage(await normalizeRelayResponse(response));
+      const normalized = await normalizeRelayResponse(response);
+      assertOperationActive(operation);
+      port.postMessage(normalized);
     } catch (error) {
+      if (operation.signal.aborted || disposed) return;
       const diagnostic = setError(error, "preview");
       port.postMessage({
         status: 502,
         headers: { "content-type": "text/plain; charset=utf-8" },
         body: diagnostic.message
       });
-    }
+    } finally { operationControllers.delete(operation); }
   }
 
   function stripPreviewPrefix(pathname: string, session: PreviewSession): string {
@@ -852,6 +879,7 @@ export function createPreviewWorkflowController(
           || "Project health check failed"
       );
     }
+    const operation = beginOperation();
     try {
       setPhase(PHASES.installing);
       log("install start");
@@ -864,21 +892,40 @@ export function createPreviewWorkflowController(
       log(`dev server ready :${dev.port}`);
 
       await ensureServiceWorker();
+      assertOperationActive(operation);
       bindPreviewFetchBridge();
 
       bindPreviewSession(dev.port);
       setPhase(PHASES.previewReady);
       await connectHmr();
+      assertOperationActive(operation);
       emit("preview-ready", { previewUrl: state.previewUrl, sessionId: state.session?.sessionId });
       return getSnapshot();
     } catch (error) {
+      if (operation.signal.aborted || disposed) throw new Error("Preview controller operation cancelled");
       setError(error, "preview");
       throw error;
+    } finally {
+      operationControllers.delete(operation);
+    }
+  }
+
+  function beginOperation(): AbortController {
+    if (disposed) throw new Error("Preview controller is disposed");
+    const controller = new AbortController();
+    operationControllers.add(controller);
+    return controller;
+  }
+
+  function assertOperationActive(operation: AbortController): void {
+    if (disposed || operation.signal.aborted || operationGeneration !== 0) {
+      throw new Error("Preview controller operation cancelled");
     }
   }
 
   async function restartDev(): Promise<PreviewWorkflowSnapshot> {
     if (!state.workflow) throw new Error("No running workflow to restart");
+    const operation = beginOperation();
     try {
       setPhase(PHASES.startingDev);
       const recovery = state.workflow.restart();
@@ -903,18 +950,24 @@ export function createPreviewWorkflowController(
       }
       setPhase(PHASES.previewReady);
       await connectHmr();
+      assertOperationActive(operation);
       emit("preview-ready", { previewUrl: state.previewUrl, restarted: true });
       return getSnapshot();
     } catch (error) {
+      if (operation.signal.aborted || disposed) throw new Error("Preview controller operation cancelled");
       setError(error, "preview");
       throw error;
-    }
+    } finally { operationControllers.delete(operation); }
   }
 
   async function reconnectHmr(): Promise<HmrClientSnapshot> {
-    const snapshot = await connectHmr();
-    log(`hmr reconnect -> ${snapshot.state}`);
-    return snapshot;
+    const operation = beginOperation();
+    try {
+      const snapshot = await connectHmr();
+      assertOperationActive(operation);
+      log(`hmr reconnect -> ${snapshot.state}`);
+      return snapshot;
+    } finally { operationControllers.delete(operation); }
   }
 
   async function runBuild(): Promise<PreviewWorkflowSnapshot> {
@@ -1075,16 +1128,26 @@ export function createPreviewWorkflowController(
   } = shellLifecycle;
 
   function dispose(): void {
-    if (disposed) return;
-    disposed = true;
-    if (state.fetchBridgeBound && typeof navigator !== "undefined") {
-      navigator.serviceWorker?.removeEventListener("message", onServiceWorkerMessage);
-      state.fetchBridgeBound = false;
+    if (disposeComplete) return;
+    if (!disposed) {
+      disposed = true;
+      operationGeneration += 1;
+      for (const controller of operationControllers) controller.abort();
+      operationControllers.clear();
     }
-    disposeShellLifecycle();
-    clearRuntime();
-    state.reliability.releaseWriter();
+    const failures: unknown[] = [];
+    try {
+      if (state.fetchBridgeBound && typeof navigator !== "undefined") {
+        navigator.serviceWorker?.removeEventListener("message", onServiceWorkerMessage);
+        state.fetchBridgeBound = false;
+      }
+    } catch (error) { failures.push(error); }
+    try { disposeShellLifecycle(); } catch (error) { failures.push(error); }
+    try { clearRuntime(); } catch (error) { failures.push(error); }
+    try { state.reliability.releaseWriter(); } catch (error) { failures.push(error); }
     listeners.clear();
+    if (failures.length > 0) throw new AggregateError(failures, "Preview controller cleanup failed");
+    disposeComplete = true;
   }
 
   function getSnapshot(): PreviewWorkflowSnapshot {

@@ -61,4 +61,70 @@ assert.equal((await pendingStart).status, "killed");
 assert.equal(workers.every((worker) => worker.terminated), true);
 assert.equal(controller.on(() => undefined)(), false, "disposed controller must reject new listeners");
 
+{
+  let resolveBuffer!: (value: ArrayBuffer) => void;
+  const arrayBuffer = new Promise<ArrayBuffer>((resolve) => { resolveBuffer = resolve; });
+  const importing = createPreviewWorkflowController();
+  const pendingImport = importing.importZipFile({ arrayBuffer: () => arrayBuffer } as Blob);
+  importing.dispose();
+  resolveBuffer(new ArrayBuffer(0));
+  await assert.rejects(pendingImport, /operation cancelled/u);
+  assert.equal(importing.getSnapshot().project, null, "late import completion must not recreate Project state");
+}
+
+{
+  const originalLocation = Object.getOwnPropertyDescriptor(globalThis, "location");
+  Object.defineProperty(globalThis, "location", { configurable: true, value: { origin: "https://nuriteo.test" } });
+  const restarting = createPreviewWorkflowController();
+  try {
+    restarting.loadViteReactTemplate();
+    restarting.getSnapshot().workflow?.install();
+    const pendingRestart = restarting.restartDev();
+    restarting.dispose();
+    await assert.rejects(pendingRestart, /operation cancelled/u);
+    assert.equal(restarting.getSnapshot().session, null);
+    assert.equal(restarting.getSnapshot().workflow, null);
+  } finally {
+    if (originalLocation) Object.defineProperty(globalThis, "location", originalLocation);
+    else Reflect.deleteProperty(globalThis, "location");
+  }
+}
+
+{
+  let resolveReady!: (value: ServiceWorkerRegistration) => void;
+  const ready = new Promise<ServiceWorkerRegistration>((resolve) => { resolveReady = resolve; });
+  let added = 0;
+  let removed = 0;
+  const registration = {} as ServiceWorkerRegistration;
+  const originalNavigator = Object.getOwnPropertyDescriptor(globalThis, "navigator");
+  Object.defineProperty(globalThis, "navigator", {
+    configurable: true,
+    value: {
+      serviceWorker: {
+        addEventListener() { added += 1; },
+        removeEventListener() { removed += 1; },
+        register: async () => registration,
+        ready
+      }
+    }
+  });
+  try {
+    const deferredPreview = createPreviewWorkflowController();
+    deferredPreview.loadViteReactTemplate();
+    const pendingPreview = deferredPreview.runPreview();
+    await Promise.resolve();
+    await Promise.resolve();
+    deferredPreview.dispose();
+    resolveReady(registration);
+    await assert.rejects(pendingPreview, /operation cancelled/u);
+    assert.equal(added, 0, "disposed operation must not bind a late Service Worker listener");
+    assert.equal(removed, 0);
+    assert.equal(deferredPreview.getSnapshot().session, null);
+    assert.equal(deferredPreview.getSnapshot().workflow, null);
+  } finally {
+    if (originalNavigator) Object.defineProperty(globalThis, "navigator", originalNavigator);
+    else Reflect.deleteProperty(globalThis, "navigator");
+  }
+}
+
 console.log("preview controller dispose test ok");

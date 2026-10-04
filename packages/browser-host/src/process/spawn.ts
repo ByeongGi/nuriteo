@@ -32,6 +32,7 @@ export class HostProcessTable {
   stdinWindowBytes: number;
   startupTimeoutMs: number;
   signalGraceMs: number;
+  workerInitialization: HostProcessTableOptions["workerInitialization"];
 
   constructor(options: HostProcessTableOptions = {}) {
     this.nextPid = 1;
@@ -50,6 +51,7 @@ export class HostProcessTable {
     this.stdinWindowBytes = positiveLimit(options.stdinWindowBytes, 64 * 1024, "stdinWindowBytes");
     this.startupTimeoutMs = nonNegativeLimit(options.startupTimeoutMs, 5000, "startupTimeoutMs");
     this.signalGraceMs = nonNegativeLimit(options.signalGraceMs, 500, "signalGraceMs");
+    this.workerInitialization = options.workerInitialization;
   }
 
   prepare(options: HostProcessPrepareOptions = {}): HostProcessSnapshot {
@@ -142,7 +144,9 @@ export class HostProcessTable {
         const data = "data" in event ? event.data as { type?: string; error?: string; code?: number; data?: string; bytes?: number; pid?: number; generation?: number } : {};
         if ((data.pid !== undefined && data.pid !== record.pid) ||
             (data.generation !== undefined && data.generation !== record.generation)) return;
-        if (data?.type === "ready") {
+        if (data?.type === "runtime-initialized") {
+          postStart();
+        } else if (data?.type === "ready") {
           if (!record.signal) record.status = "ready";
           clearTimeout(timeout);
           resolveOnce(snapshot(record));
@@ -180,19 +184,31 @@ export class HostProcessTable {
       record.cleanup = cleanup;
       worker.addEventListener?.("message", onMessage);
       worker.addEventListener?.("error", onError);
+      const postStart = () => {
+        try {
+          worker.postMessage?.({
+            type: "start",
+            pid: record.pid,
+            generation: record.generation,
+            cwd: record.cwd,
+            env: record.env,
+            argv: [...record.argv],
+            terminalMode: { ...record.terminalMode },
+            terminal: { ...record.terminalSize },
+            outputWindowBytes: this.maxOutputBytes,
+            stdinWindowBytes: this.stdinWindowBytes
+          });
+        } catch (error) {
+          resolveOnce(this.#finish(record, "failed", 1, error instanceof Error ? error.message : String(error)));
+        }
+      };
       try {
-        worker.postMessage?.({
-          type: "start",
-          pid: record.pid,
-          generation: record.generation,
-          cwd: record.cwd,
-          env: record.env,
-          argv: [...record.argv],
-          terminalMode: { ...record.terminalMode },
-          terminal: { ...record.terminalSize },
-          outputWindowBytes: this.maxOutputBytes,
-          stdinWindowBytes: this.stdinWindowBytes
-        });
+        if (this.workerInitialization) {
+          worker.postMessage?.({
+            type: "initialize-runtime",
+            systemWasmUrl: String(this.workerInitialization.systemWasmUrl)
+          });
+        } else postStart();
       } catch (error) {
         resolveOnce(this.#finish(record, "failed", 1, error instanceof Error ? error.message : String(error)));
       }

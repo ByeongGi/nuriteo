@@ -133,6 +133,7 @@ export function createRuntimeAdapter(dependencies: RuntimeAdapterDependencies = 
   let state = createInitialState();
   let owned: OwnedRuntime | null = null;
   let disposePromise: Promise<void> | null = null;
+  let cleanupBlocked = false;
 
   const terminal: RuntimeTerminalPort = {
     run(command, terminalId, onOutput) {
@@ -169,7 +170,7 @@ export function createRuntimeAdapter(dependencies: RuntimeAdapterDependencies = 
   };
 
   async function mount(input: RuntimeMountInput): Promise<void> {
-    if (!isMountable(state.lifecycle)) {
+    if (cleanupBlocked || owned || !isMountable(state.lifecycle)) {
       throw new Error(`Runtime cannot mount while lifecycle is ${state.lifecycle}`);
     }
 
@@ -191,7 +192,10 @@ export function createRuntimeAdapter(dependencies: RuntimeAdapterDependencies = 
       const origin = dependencies.origin?.() ?? browserOrigin();
       const assets = validateAssets(input.assets, origin);
       validatePolicy(input.policy);
-      const processTable = (dependencies.createProcessTable ?? defaultProcessTableFactory(assets.processWorkerUrl))({});
+      const processTable = (dependencies.createProcessTable ?? defaultProcessTableFactory(
+        assets.processWorkerUrl,
+        assets.systemWasmUrl
+      ))({});
       constructingProcessTable = processTable;
       const supervisor = (dependencies.createSupervisor ?? ((options) => new BrowserRuntimeSupervisor(options)))({
         systemWorkerUrl: assets.systemWorkerUrl,
@@ -238,8 +242,12 @@ export function createRuntimeAdapter(dependencies: RuntimeAdapterDependencies = 
       state = { ...state, lifecycle: "failed" };
       emit();
       if (owned) await cleanupOwned(owned, false);
-      else await rollbackConstruction(constructingController, constructingProcessTable, constructingSupervisor);
-      throw new RuntimeAdapterError(diagnostic.code, diagnostic.message, error);
+      else cleanupBlocked = !(await rollbackConstruction(
+        constructingController,
+        constructingProcessTable,
+        constructingSupervisor
+      ));
+      throw new RuntimeAdapterError(diagnostic.code, diagnostic.message);
     }
   }
 
@@ -255,6 +263,11 @@ export function createRuntimeAdapter(dependencies: RuntimeAdapterDependencies = 
   function dispose(): Promise<void> {
     if (disposePromise) return disposePromise;
     if (!owned) {
+      if (cleanupBlocked) {
+        state = { ...state, lifecycle: "failed" };
+        emit();
+        return Promise.resolve();
+      }
       state = { ...state, lifecycle: "disposed", projectId: null, previewUrl: null, terminalProcessCount: 0 };
       emit();
       listeners.clear();
@@ -265,23 +278,35 @@ export function createRuntimeAdapter(dependencies: RuntimeAdapterDependencies = 
     const current = owned;
     state = { ...state, lifecycle: "disposing" };
     emit();
-    disposePromise = cleanupOwned(current, true);
+    const pending = cleanupOwned(current, true).then((cleaned) => {
+      if (!cleaned) disposePromise = null;
+    });
+    disposePromise = pending;
     return disposePromise;
   }
 
-  async function cleanupOwned(current: OwnedRuntime, publishDisposed: boolean): Promise<void> {
+  async function cleanupOwned(current: OwnedRuntime, publishDisposed: boolean): Promise<boolean> {
     current.abortController.abort();
-    current.unsubscribe();
-    const cleanup = async () => {
-      safely(() => current.controller.dispose());
-      safely(() => current.processTable.teardown());
-      await safelyAsync(() => current.supervisor.teardown());
-    };
+    const failures: string[] = [];
+    try { current.unsubscribe(); } catch { failures.push("subscription"); }
+    try { current.controller.dispose(); } catch { failures.push("controller"); }
+    try { current.processTable.teardown(); } catch { failures.push("process-table"); }
     try {
-      await withTimeout(cleanup(), dependencies.cleanupTimeoutMs ?? DEFAULT_CLEANUP_TIMEOUT_MS);
+      await withTimeout(current.supervisor.teardown(), dependencies.cleanupTimeoutMs ?? DEFAULT_CLEANUP_TIMEOUT_MS);
     } catch {
-      appendDiagnostic(fixedDiagnostic("RUNTIME_CLEANUP_TIMEOUT", "Runtime cleanup exceeded its bounded deadline."), current.reportDiagnostic);
+      failures.push("supervisor");
     }
+    if (failures.length > 0) {
+      cleanupBlocked = true;
+      appendDiagnostic(fixedDiagnostic(
+        "RUNTIME_CLEANUP_FAILED",
+        `Runtime cleanup did not release: ${failures.join(", ")}. Retry disposal before mounting another Project.`
+      ), current.reportDiagnostic);
+      state = { ...state, lifecycle: "failed" };
+      emit();
+      return false;
+    }
+    cleanupBlocked = false;
     if (owned === current) owned = null;
     if (publishDisposed) {
       state = {
@@ -295,23 +320,28 @@ export function createRuntimeAdapter(dependencies: RuntimeAdapterDependencies = 
       emit();
       listeners.clear();
     }
+    return true;
   }
 
   async function rollbackConstruction(
     controller: ControllerLike | null,
     processTable: ProcessTableLike | null,
     supervisor: SupervisorLike | null
-  ): Promise<void> {
-    const rollback = async () => {
-      if (controller) safely(() => controller.dispose());
-      if (supervisor) await safelyAsync(() => supervisor.teardown());
-      if (processTable) safely(() => processTable.teardown());
-    };
-    try {
-      await withTimeout(rollback(), dependencies.cleanupTimeoutMs ?? DEFAULT_CLEANUP_TIMEOUT_MS);
-    } catch {
-      appendDiagnostic(fixedDiagnostic("RUNTIME_CLEANUP_TIMEOUT", "Runtime construction rollback exceeded its bounded deadline."));
-    }
+  ): Promise<boolean> {
+    const failures: string[] = [];
+    if (controller) try { controller.dispose(); } catch { failures.push("controller"); }
+    if (supervisor) try {
+      await withTimeout(supervisor.teardown(), dependencies.cleanupTimeoutMs ?? DEFAULT_CLEANUP_TIMEOUT_MS);
+    } catch { failures.push("supervisor"); }
+    if (processTable) try { processTable.teardown(); } catch { failures.push("process-table"); }
+    if (failures.length === 0) return true;
+    appendDiagnostic(fixedDiagnostic(
+      "RUNTIME_CLEANUP_FAILED",
+      `Runtime construction rollback did not release: ${failures.join(", ")}. Reload before mounting another Project.`
+    ));
+    state = { ...state, lifecycle: "failed" };
+    emit();
+    return false;
   }
 
   function receiveEvent(current: OwnedRuntime, event: PreviewWorkflowEvent): void {
@@ -365,8 +395,8 @@ export function createRuntimeAdapter(dependencies: RuntimeAdapterDependencies = 
 export class RuntimeAdapterError extends Error {
   readonly code: string;
 
-  constructor(code: string, message: string, options?: unknown) {
-    super(message, options === undefined ? undefined : { cause: options });
+  constructor(code: string, message: string) {
+    super(message);
     this.name = "RuntimeAdapterError";
     this.code = code;
   }
@@ -423,9 +453,13 @@ function validatePolicy(policy: RuntimeMountInput["policy"]): void {
   }
 }
 
-function defaultProcessTableFactory(processWorkerUrl: URL): (options: HostProcessTableOptions) => HostProcessTable {
+function defaultProcessTableFactory(
+  processWorkerUrl: URL,
+  systemWasmUrl: URL
+): (options: HostProcessTableOptions) => HostProcessTable {
   return (options) => new HostProcessTable({
     ...options,
+    workerInitialization: { systemWasmUrl },
     workerFactory: (record) => new Worker(processWorkerUrl, { type: "module", name: `nuriteo-process-${record.pid}` })
   });
 }
@@ -457,14 +491,6 @@ function raceAbort<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
       (error) => { signal.removeEventListener("abort", onAbort); reject(error); }
     );
   });
-}
-
-function safely(action: () => void): void {
-  try { action(); } catch { /* cleanup continues through every owned resource */ }
-}
-
-async function safelyAsync(action: () => Promise<void>): Promise<void> {
-  try { await action(); } catch { /* cleanup continues through every owned resource */ }
 }
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {

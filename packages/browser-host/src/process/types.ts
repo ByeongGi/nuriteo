@@ -113,6 +113,9 @@ export interface HostProcessTableOptions {
   stdinWindowBytes?: number;
   startupTimeoutMs?: number;
   signalGraceMs?: number;
+  workerInitialization?: {
+    systemWasmUrl: string | URL;
+  };
 }
 
 export interface HostProcessShellCommandOptions {
