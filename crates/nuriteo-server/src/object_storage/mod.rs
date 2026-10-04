@@ -5,6 +5,7 @@ mod config;
 mod cors;
 mod error;
 mod redaction;
+mod streaming;
 mod types;
 
 pub use adapter::{ObjectStoreBuildError, S3ObjectStore};
@@ -23,6 +24,10 @@ pub use config::{
 pub use cors::{BrowserUploadCorsCheck, BrowserUploadCorsError};
 pub use error::{ObjectOperation, ObjectStoreError, ObjectStoreErrorKind};
 pub use redaction::SensitiveUrl;
+pub use streaming::{
+    MAX_STREAMING_SINGLE_PUT_BYTES, StreamingMultipartPartRequest, StreamingPutRequest,
+    UploadAbortHandle, UploadAbortSignal, UploadBody, UploadDeadlines, upload_abort_pair,
+};
 pub use types::{
     ByteRange, ContinuationToken, GetResult, ListPage, ListRequest, ObjectKey, ObjectMetadata,
     ObjectPrefix, ObjectSummary, OperationLimits, PutRequest, RequestValidationError,

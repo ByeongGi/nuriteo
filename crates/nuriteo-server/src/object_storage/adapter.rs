@@ -30,6 +30,9 @@ const MAX_CONNECTIONS_PER_HOST: usize = 32;
 #[derive(Clone)]
 pub struct S3ObjectStore {
     pub(super) client: Client,
+    /// Dedicated client for non-replayable request bodies. The retry budget is
+    /// fixed at one attempt because the producer cannot be rewound safely.
+    pub(super) streaming_client: Client,
     pub(super) bucket: String,
     pub(super) limits: OperationLimits,
     pub(super) presigned_client: reqwest::Client,
@@ -106,8 +109,15 @@ impl S3ObjectStore {
             }
         };
 
+        let sdk_config = builder.build();
+        let streaming_config = sdk_config
+            .to_builder()
+            .retry_config(RetryConfig::standard().with_max_attempts(1))
+            .build();
+
         Ok(Self {
-            client: Client::from_conf(builder.build()),
+            client: Client::from_conf(sdk_config),
+            streaming_client: Client::from_conf(streaming_config),
             bucket: config.bucket().to_owned(),
             limits,
             presigned_client,

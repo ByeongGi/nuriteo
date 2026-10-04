@@ -1823,6 +1823,7 @@ dependencies = [
  "clap",
  "getrandom 0.4.3",
  "hmac",
+ "http-body",
  "percent-encoding",
  "regex",
  "reqwest",
