@@ -11,8 +11,8 @@ pub use capability_types::{
     BackendIdentifier, BoundedPresignedRequest, CapabilityReport, CapabilityState,
     CapabilityValidationError, MAX_MULTIPART_PART_BYTES, MAX_MULTIPART_PARTS,
     MIN_MULTIPART_PART_BYTES, MultipartLimits, MultipartPartRequest, MultipartUpload,
-    PresignExpiry, PresignedOperation, PresignedPutRequest, ProbePrefix, Sha256Checksum,
-    UploadedPart,
+    PresignExpiry, PresignedMultipartPartRequest, PresignedOperation, PresignedPutRequest,
+    ProbePrefix, Sha256Checksum, UploadedPart,
 };
 pub use config::{
     AddressingStyle, CaBundle, CredentialProvider, ObjectStorageConfig, ObjectStorageConfigError,

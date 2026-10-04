@@ -8,8 +8,8 @@ use bytes::{Bytes, BytesMut};
 use super::capability_types::{
     BoundedPresignedRequest, CapabilityReport, CapabilityState, CapabilityValidationError,
     MAX_MULTIPART_PARTS, MIN_MULTIPART_PART_BYTES, MultipartLimits, MultipartPartRequest,
-    MultipartUpload, PresignExpiry, PresignedOperation, PresignedPutRequest, ProbePrefix,
-    Sha256Checksum, UploadedPart,
+    MultipartUpload, PresignExpiry, PresignedMultipartPartRequest, PresignedOperation,
+    PresignedPutRequest, ProbePrefix, Sha256Checksum, UploadedPart,
 };
 use super::error::{ObjectOperation, ObjectStoreError, ObjectStoreErrorKind, classify_sdk_error};
 use super::{ObjectKey, PutRequest, S3ObjectStore, SensitiveUrl};
@@ -107,6 +107,7 @@ impl S3ObjectStore {
             PresignedOperation::Get,
             None,
             self.limits.max_body_bytes,
+            &[],
         )
     }
 
@@ -135,6 +136,7 @@ impl S3ObjectStore {
             PresignedOperation::Put,
             Some(request.content_length),
             0,
+            &["content-length", "content-type", "x-amz-checksum-sha256"],
         )
     }
 
@@ -250,6 +252,36 @@ impl S3ObjectStore {
             e_tag,
             checksum: request.checksum,
         })
+    }
+
+    pub async fn presign_multipart_part(
+        &self,
+        request: PresignedMultipartPartRequest,
+    ) -> Result<BoundedPresignedRequest, ObjectStoreError> {
+        let content_length = i64::try_from(request.content_length)
+            .map_err(|_| invalid(ObjectOperation::MultipartUpload))?;
+        let config = PresigningConfig::expires_in(request.expiry.duration())
+            .map_err(|_| invalid(ObjectOperation::MultipartUpload))?;
+        let signed = self
+            .client
+            .upload_part()
+            .bucket(&self.bucket)
+            .key(request.upload.key.expose())
+            .upload_id(&request.upload.upload_id)
+            .part_number(i32::from(request.part_number))
+            .content_length(content_length)
+            .checksum_algorithm(ChecksumAlgorithm::Sha256)
+            .checksum_sha256(request.checksum.base64())
+            .presigned(config)
+            .await
+            .map_err(|error| classify_sdk_error(ObjectOperation::MultipartUpload, &error))?;
+        bounded_presigned(
+            signed,
+            PresignedOperation::Put,
+            Some(request.content_length),
+            0,
+            &["content-length", "x-amz-checksum-sha256"],
+        )
     }
 
     pub async fn complete_multipart(
@@ -518,6 +550,7 @@ fn bounded_presigned(
     expected_operation: PresignedOperation,
     expected_body_bytes: Option<u64>,
     maximum_response_bytes: u64,
+    required_put_headers: &[&str],
 ) -> Result<BoundedPresignedRequest, ObjectStoreError> {
     let actual = match request.method() {
         "GET" => PresignedOperation::Get,
@@ -533,13 +566,11 @@ fn bounded_presigned(
         .map(|(name, value)| (name.to_owned(), value.to_owned()))
         .collect::<Vec<_>>();
     if matches!(actual, PresignedOperation::Put)
-        && !["content-length", "content-type", "x-amz-checksum-sha256"]
-            .iter()
-            .all(|required| {
-                headers
-                    .iter()
-                    .any(|(name, _)| name.eq_ignore_ascii_case(required))
-            })
+        && !required_put_headers.iter().all(|required| {
+            headers
+                .iter()
+                .any(|(name, _)| name.eq_ignore_ascii_case(required))
+        })
     {
         return Err(unsupported(ObjectOperation::Presign));
     }

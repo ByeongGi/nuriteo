@@ -201,6 +201,53 @@ pub struct MultipartPartRequest {
     pub checksum: Sha256Checksum,
 }
 
+#[derive(Clone)]
+pub struct PresignedMultipartPartRequest {
+    pub(crate) upload: MultipartUpload,
+    pub(crate) part_number: u16,
+    pub(crate) content_length: u64,
+    pub(crate) checksum: Sha256Checksum,
+    pub(crate) expiry: PresignExpiry,
+}
+
+impl PresignedMultipartPartRequest {
+    pub(crate) fn new(
+        upload: MultipartUpload,
+        part_number: u16,
+        content_length: u64,
+        checksum: Sha256Checksum,
+        expiry: PresignExpiry,
+    ) -> Result<Self, CapabilityValidationError> {
+        if part_number == 0
+            || part_number > MAX_MULTIPART_PARTS
+            || content_length == 0
+            || content_length > MAX_MULTIPART_PART_BYTES as u64
+        {
+            return Err(CapabilityValidationError::InvalidPartSize);
+        }
+        Ok(Self {
+            upload,
+            part_number,
+            content_length,
+            checksum,
+            expiry,
+        })
+    }
+}
+
+impl fmt::Debug for PresignedMultipartPartRequest {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("PresignedMultipartPartRequest")
+            .field("upload", &self.upload)
+            .field("part_number", &self.part_number)
+            .field("content_length", &self.content_length)
+            .field("checksum", &self.checksum)
+            .field("expiry", &self.expiry)
+            .finish()
+    }
+}
+
 impl fmt::Debug for MultipartPartRequest {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter

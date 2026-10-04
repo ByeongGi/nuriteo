@@ -15,14 +15,17 @@ use nuriteo_server::database::{
 };
 use nuriteo_server::identity::UserId;
 use nuriteo_server::object_storage::{
-    BoundedPresignedRequest, ObjectStorageConfig, OperationLimits, PresignedPutRequest,
-    S3ObjectStore, Sha256Checksum,
+    BoundedPresignedRequest, MultipartUpload, ObjectKey, ObjectStorageConfig, OperationLimits,
+    PresignedMultipartPartRequest, PresignedPutRequest, S3ObjectStore, Sha256Checksum,
+    UploadedPart,
 };
 use nuriteo_server::project::{ProjectId, ProjectVersion};
 use nuriteo_server::quota::EffectiveQuota;
 use nuriteo_server::save::{
-    CreateSinglePutSession, IdempotencyKey, IdempotencySecret, PutPresigner, SinglePutService,
-    SinglePutServiceError, SinglePutServicePolicy,
+    CreateMultipartSession, CreateSinglePutSession, IdempotencyKey, IdempotencySecret,
+    MultipartPartPlan, MultipartPartReceipt, MultipartService, MultipartServiceError,
+    MultipartServicePolicy, MultipartSessionContext, MultipartStore, PutPresigner,
+    SinglePutService, SinglePutServiceError, SinglePutServicePolicy,
 };
 use nuriteo_server::workspace::StorageScopeId;
 use sqlx::Executor;
@@ -362,6 +365,503 @@ async fn single_put_is_atomic_idempotent_bounded_and_compensated() {
     pool.close(Duration::from_secs(2)).await.unwrap();
 }
 
+#[tokio::test]
+#[ignore = "requires tests/fixtures/multipart-save/run.sh"]
+async fn multipart_save_is_bounded_exact_and_reconcilable() {
+    let pool = fixture_pool().await;
+    reset_and_seed(&pool).await;
+    let endpoint = env::var(S3_ENDPOINT_ENV).unwrap();
+    let ca_file = env::var(S3_CA_ENV).unwrap();
+    create_bucket(&endpoint, &ca_file).await;
+    let config = ObjectStorageConfig::load(
+        &FixtureEnvironment {
+            endpoint: endpoint.clone(),
+            ca_file: ca_file.clone(),
+        },
+        &SystemFileReader,
+    )
+    .unwrap();
+    let store = S3ObjectStore::new(&config, OperationLimits::default())
+        .await
+        .unwrap();
+    let single = SinglePutService::new(
+        pool.clone(),
+        store.clone(),
+        SinglePutServicePolicy::new(Duration::from_secs(5), 5).unwrap(),
+        IdempotencySecret::new([0x5a; 32]).unwrap(),
+    )
+    .unwrap();
+    let single_request = request(
+        PROJECT_TIMEOUT,
+        "single-before-multipart",
+        b"same-secret-bootstrap",
+    );
+    let single_session = single.create(single_request.clone()).await.unwrap();
+    force_session_expiry(
+        &pool,
+        &single_session.session_id().to_string(),
+        "created_at + interval '1 microsecond'",
+    )
+    .await;
+    assert_eq!(
+        single.create(single_request).await.unwrap_err(),
+        SinglePutServiceError::SessionTerminal
+    );
+    let policy = MultipartServicePolicy::new(
+        Duration::from_secs(10),
+        5,
+        8 * 1024 * 1024,
+        8 * 1024 * 1024,
+        4,
+    )
+    .unwrap();
+    let service = MultipartService::new(
+        pool.clone(),
+        store.clone(),
+        policy,
+        IdempotencySecret::new([0x5a; 32]).unwrap(),
+    )
+    .unwrap();
+
+    let first_body = Bytes::from(vec![0x31; 8 * 1024 * 1024]);
+    let second_body = Bytes::from(vec![0x32; 1024]);
+    let request = multipart_request(
+        PROJECT_A,
+        "multipart-happy-0001",
+        &[first_body.clone(), second_body.clone()],
+    );
+    let plans = request.parts.clone();
+    let created = service.create(request.clone()).await.unwrap();
+    assert_eq!(created.part_count(), 2);
+    let restarted = MultipartService::new(
+        pool.clone(),
+        store.clone(),
+        policy,
+        IdempotencySecret::new([0x5a; 32]).unwrap(),
+    )
+    .unwrap();
+    let retried = restarted.create(request).await.unwrap();
+    assert!(retried.is_idempotent_retry());
+    assert_eq!(retried.session_id(), created.session_id());
+    assert_eq!(
+        reservation_count(&pool, created.session_id().to_string()).await,
+        1
+    );
+
+    let context = MultipartSessionContext {
+        storage_scope_id: StorageScopeId::from_str(SCOPE).unwrap(),
+        project_id: ProjectId::from_str(PROJECT_A).unwrap(),
+        actor_user_id: UserId::from_str(USER).unwrap(),
+        session_id: created.session_id(),
+    };
+    assert_eq!(
+        service.complete(context).await.unwrap_err(),
+        MultipartServiceError::PartsIncomplete
+    );
+    let capabilities = service.issue_parts(context, plans.clone()).await.unwrap();
+    assert_eq!(capabilities.len(), 2);
+    let client = fixture_http_client(&ca_file);
+    let tampered = Bytes::from(vec![0x44; first_body.len()]);
+    assert!(
+        send_multipart_part(&client, capabilities[0].request(), &tampered)
+            .await
+            .is_none()
+    );
+    let first_etag = send_multipart_part(&client, capabilities[0].request(), &first_body)
+        .await
+        .unwrap();
+    let second_etag = send_multipart_part(&client, capabilities[1].request(), &second_body)
+        .await
+        .unwrap();
+    let wrong = MultipartPartReceipt::new(
+        1,
+        plans[0].expected_bytes(),
+        Sha256Checksum::from_bytes([0xff; 32]),
+        first_etag.clone(),
+    )
+    .unwrap();
+    assert_eq!(
+        service
+            .record_receipts(context, vec![wrong])
+            .await
+            .unwrap_err(),
+        MultipartServiceError::PartConflict
+    );
+    let receipts = vec![
+        MultipartPartReceipt::new(
+            1,
+            plans[0].expected_bytes(),
+            plans[0].expected_sha256().clone(),
+            first_etag,
+        )
+        .unwrap(),
+        MultipartPartReceipt::new(
+            2,
+            plans[1].expected_bytes(),
+            plans[1].expected_sha256().clone(),
+            second_etag,
+        )
+        .unwrap(),
+    ];
+    service
+        .record_receipts(context, receipts.clone())
+        .await
+        .unwrap();
+    service.record_receipts(context, receipts).await.unwrap();
+    assert!(
+        !service
+            .complete(context)
+            .await
+            .unwrap()
+            .is_idempotent_retry()
+    );
+    assert!(
+        service
+            .complete(context)
+            .await
+            .unwrap()
+            .is_idempotent_retry()
+    );
+    let state: String = sqlx::query_scalar("SELECT state FROM save_sessions WHERE id=$1::uuid")
+        .bind(created.session_id().to_string())
+        .fetch_one(&mut *pool.acquire().await.unwrap())
+        .await
+        .unwrap();
+    assert_eq!(state, "verifying");
+
+    let boundary_service = MultipartService::new(
+        pool.clone(),
+        store,
+        MultipartServicePolicy::new(
+            Duration::from_secs(10),
+            5,
+            8 * 1024 * 1024,
+            16 * 1024 * 1024,
+            4,
+        )
+        .unwrap(),
+        IdempotencySecret::new([0x5a; 32]).unwrap(),
+    )
+    .unwrap();
+    let boundary = multipart_boundary_request(PROJECT_B, "multipart-boundary-01");
+    let boundary_session = boundary_service.create(boundary).await.unwrap();
+    assert_eq!(boundary_session.part_count(), 128);
+    let boundary_context = MultipartSessionContext {
+        storage_scope_id: StorageScopeId::from_str(SCOPE).unwrap(),
+        project_id: ProjectId::from_str(PROJECT_B).unwrap(),
+        actor_user_id: UserId::from_str(USER).unwrap(),
+        session_id: boundary_session.session_id(),
+    };
+    boundary_service.abort(boundary_context).await.unwrap();
+    assert_eq!(
+        reservation_count(&pool, boundary_session.session_id().to_string()).await,
+        0
+    );
+
+    verify_attach_failure_compensation(&pool, &config).await;
+    verify_complete_response_loss(&pool, &config, &ca_file).await;
+
+    let rendered = format!("{created:?} {capabilities:?}");
+    for prohibited in [
+        endpoint.as_str(),
+        ca_file.as_str(),
+        ACCESS_KEY,
+        SECRET_KEY,
+        "X-Amz-Signature",
+        "multipart-happy-0001",
+    ] {
+        assert!(!rendered.contains(prohibited));
+    }
+    pool.close(Duration::from_secs(2)).await.unwrap();
+}
+
+#[derive(Clone, Copy)]
+enum AbortBehavior {
+    Confirmed,
+    Failed,
+    Hanging,
+}
+
+#[derive(Clone)]
+struct AttachFailureStore {
+    inner: S3ObjectStore,
+    pool: DatabasePool,
+    project_id: ProjectId,
+    abort_behavior: AbortBehavior,
+}
+
+impl MultipartStore for AttachFailureStore {
+    type Error = ();
+
+    async fn create(&self, key: ObjectKey) -> Result<MultipartUpload, Self::Error> {
+        let upload = self.inner.create_multipart(key).await.map_err(|_| ())?;
+        sqlx::query(
+            "UPDATE projects SET state='archived',archived_at=transaction_timestamp(), \
+             updated_at=transaction_timestamp(),lock_version=lock_version+1 WHERE id=$1::uuid",
+        )
+        .bind(self.project_id.to_string())
+        .execute(&mut *self.pool.acquire().await.map_err(|_| ())?)
+        .await
+        .map_err(|_| ())?;
+        Ok(upload)
+    }
+
+    async fn presign_part(
+        &self,
+        request: PresignedMultipartPartRequest,
+    ) -> Result<BoundedPresignedRequest, Self::Error> {
+        self.inner
+            .presign_multipart_part(request)
+            .await
+            .map_err(|_| ())
+    }
+
+    async fn complete(
+        &self,
+        upload: &MultipartUpload,
+        parts: Vec<UploadedPart>,
+    ) -> Result<(), Self::Error> {
+        self.inner
+            .complete_multipart(upload, parts)
+            .await
+            .map_err(|_| ())
+    }
+
+    async fn abort(&self, upload: &MultipartUpload) -> Result<(), Self::Error> {
+        match self.abort_behavior {
+            AbortBehavior::Confirmed => self.inner.abort_multipart(upload).await.map_err(|_| ()),
+            AbortBehavior::Failed => Err(()),
+            AbortBehavior::Hanging => std::future::pending().await,
+        }
+    }
+}
+
+#[derive(Clone)]
+struct LostCompleteStore(S3ObjectStore);
+
+impl MultipartStore for LostCompleteStore {
+    type Error = ();
+
+    async fn create(&self, key: ObjectKey) -> Result<MultipartUpload, Self::Error> {
+        self.0.create_multipart(key).await.map_err(|_| ())
+    }
+
+    async fn presign_part(
+        &self,
+        request: PresignedMultipartPartRequest,
+    ) -> Result<BoundedPresignedRequest, Self::Error> {
+        self.0.presign_multipart_part(request).await.map_err(|_| ())
+    }
+
+    async fn complete(
+        &self,
+        upload: &MultipartUpload,
+        parts: Vec<UploadedPart>,
+    ) -> Result<(), Self::Error> {
+        self.0
+            .complete_multipart(upload, parts)
+            .await
+            .map_err(|_| ())?;
+        Err(())
+    }
+
+    async fn abort(&self, upload: &MultipartUpload) -> Result<(), Self::Error> {
+        self.0.abort_multipart(upload).await.map_err(|_| ())
+    }
+}
+
+async fn verify_attach_failure_compensation(pool: &DatabasePool, config: &ObjectStorageConfig) {
+    for (project, scope, actor, key, behavior, timeout) in [
+        (
+            PROJECT_FAIL,
+            SCOPE,
+            USER,
+            "multipart-attach-abort-ok",
+            AbortBehavior::Confirmed,
+            Duration::from_secs(5),
+        ),
+        (
+            PROJECT_TIMEOUT,
+            SCOPE,
+            USER,
+            "multipart-attach-abort-fail",
+            AbortBehavior::Failed,
+            Duration::from_secs(5),
+        ),
+        (
+            ORG_PROJECT_OWNER,
+            ORG_SCOPE,
+            ORG_OWNER,
+            "multipart-attach-abort-hang",
+            AbortBehavior::Hanging,
+            Duration::from_millis(500),
+        ),
+    ] {
+        let inner = S3ObjectStore::new(config, OperationLimits::default())
+            .await
+            .unwrap();
+        let service = MultipartService::new(
+            pool.clone(),
+            AttachFailureStore {
+                inner,
+                pool: pool.clone(),
+                project_id: ProjectId::from_str(project).unwrap(),
+                abort_behavior: behavior,
+            },
+            MultipartServicePolicy::new(timeout, 5, 8 * 1024 * 1024, 8 * 1024 * 1024, 4).unwrap(),
+            IdempotencySecret::new([0x5a; 32]).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            service
+                .create(multipart_request_for(scope, project, actor, key))
+                .await
+                .unwrap_err(),
+            MultipartServiceError::CreateReconciliationRequired
+        );
+        let (session_id, state, create_status, reservations): (String, String, String, i64) =
+            sqlx::query_as(
+                "SELECT session.id::text,session.state,lifecycle.create_status, \
+                 (SELECT COUNT(*) FROM storage_reservations reservation \
+                  WHERE reservation.save_session_id=session.id) \
+                 FROM save_sessions session JOIN multipart_lifecycles lifecycle \
+                   ON lifecycle.save_session_id=session.id WHERE session.project_id=$1::uuid \
+                   AND session.upload_mode='multipart'",
+            )
+            .bind(project)
+            .fetch_one(&mut *pool.acquire().await.unwrap())
+            .await
+            .unwrap();
+        match behavior {
+            AbortBehavior::Confirmed => assert_eq!(
+                (state.as_str(), create_status.as_str(), reservations),
+                ("failed", "cleaned", 0)
+            ),
+            AbortBehavior::Failed | AbortBehavior::Hanging => {
+                let expected_marker = match behavior {
+                    AbortBehavior::Failed => "unknown",
+                    AbortBehavior::Hanging => "creating",
+                    AbortBehavior::Confirmed => unreachable!(),
+                };
+                assert_eq!(
+                    (state.as_str(), create_status.as_str(), reservations),
+                    ("created", expected_marker, 1)
+                );
+                assert!(
+                    sqlx::query(
+                        "UPDATE save_sessions SET state='failed',terminal_at=transaction_timestamp(), \
+                         updated_at=transaction_timestamp() WHERE id=$1::uuid",
+                    )
+                    .bind(session_id)
+                    .execute(&mut *pool.acquire().await.unwrap())
+                    .await
+                    .is_err()
+                );
+            }
+        }
+    }
+}
+
+async fn verify_complete_response_loss(
+    pool: &DatabasePool,
+    config: &ObjectStorageConfig,
+    ca_file: &str,
+) {
+    let store = S3ObjectStore::new(config, OperationLimits::default())
+        .await
+        .unwrap();
+    let service = MultipartService::new(
+        pool.clone(),
+        LostCompleteStore(store),
+        MultipartServicePolicy::new(
+            Duration::from_secs(10),
+            5,
+            8 * 1024 * 1024,
+            8 * 1024 * 1024,
+            4,
+        )
+        .unwrap(),
+        IdempotencySecret::new([0x5a; 32]).unwrap(),
+    )
+    .unwrap();
+    let first = Bytes::from(vec![0x61; 8 * 1024 * 1024]);
+    let second = Bytes::from_static(b"response-loss-tail");
+    let request = multipart_request_for_bodies(
+        ORG_SCOPE,
+        ORG_PROJECT_WRITE,
+        ORG_WRITE,
+        "multipart-complete-loss",
+        &[first.clone(), second.clone()],
+    );
+    let plans = request.parts.clone();
+    let session = service.create(request).await.unwrap();
+    let context = MultipartSessionContext {
+        storage_scope_id: StorageScopeId::from_str(ORG_SCOPE).unwrap(),
+        project_id: ProjectId::from_str(ORG_PROJECT_WRITE).unwrap(),
+        actor_user_id: UserId::from_str(ORG_WRITE).unwrap(),
+        session_id: session.session_id(),
+    };
+    let capabilities = service.issue_parts(context, plans.clone()).await.unwrap();
+    let client = fixture_http_client(ca_file);
+    let first_etag = send_multipart_part(&client, capabilities[0].request(), &first)
+        .await
+        .unwrap();
+    let second_etag = send_multipart_part(&client, capabilities[1].request(), &second)
+        .await
+        .unwrap();
+    service
+        .record_receipts(
+            context,
+            vec![
+                MultipartPartReceipt::new(
+                    1,
+                    plans[0].expected_bytes(),
+                    plans[0].expected_sha256().clone(),
+                    first_etag,
+                )
+                .unwrap(),
+                MultipartPartReceipt::new(
+                    2,
+                    plans[1].expected_bytes(),
+                    plans[1].expected_sha256().clone(),
+                    second_etag,
+                )
+                .unwrap(),
+            ],
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        service.complete(context).await.unwrap_err(),
+        MultipartServiceError::CompleteReconciliationRequired
+    );
+    let (state, complete_status, reservations): (String, String, i64) = sqlx::query_as(
+        "SELECT session.state,lifecycle.complete_status, \
+         (SELECT COUNT(*) FROM storage_reservations reservation \
+          WHERE reservation.save_session_id=session.id) \
+         FROM save_sessions session JOIN multipart_lifecycles lifecycle \
+           ON lifecycle.save_session_id=session.id WHERE session.id=$1::uuid",
+    )
+    .bind(session.session_id().to_string())
+    .fetch_one(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+    assert_eq!(
+        (state.as_str(), complete_status.as_str(), reservations),
+        ("uploading", "unknown", 1)
+    );
+    assert!(
+        sqlx::query(
+            "UPDATE save_sessions SET state='failed',terminal_at=transaction_timestamp(), \
+         updated_at=transaction_timestamp() WHERE id=$1::uuid",
+        )
+        .bind(session.session_id().to_string())
+        .execute(&mut *pool.acquire().await.unwrap())
+        .await
+        .is_err()
+    );
+}
+
 #[derive(Clone)]
 struct FailingPresigner;
 
@@ -392,6 +892,80 @@ impl PutPresigner for HangingPresigner {
 
 fn request(project: &str, idempotency: &str, body: &[u8]) -> CreateSinglePutSession {
     request_for(SCOPE, project, USER, idempotency, body)
+}
+
+fn multipart_request(project: &str, idempotency: &str, bodies: &[Bytes]) -> CreateMultipartSession {
+    multipart_request_for_bodies(SCOPE, project, USER, idempotency, bodies)
+}
+
+fn multipart_request_for_bodies(
+    scope: &str,
+    project: &str,
+    actor: &str,
+    idempotency: &str,
+    bodies: &[Bytes],
+) -> CreateMultipartSession {
+    let parts = bodies
+        .iter()
+        .enumerate()
+        .map(|(index, body)| {
+            MultipartPartPlan::new(
+                u16::try_from(index + 1).unwrap(),
+                body.len() as u64,
+                Sha256Checksum::calculate(body),
+            )
+        })
+        .collect::<Vec<_>>();
+    let total = parts.iter().map(MultipartPartPlan::expected_bytes).sum();
+    CreateMultipartSession {
+        storage_scope_id: StorageScopeId::from_str(scope).unwrap(),
+        project_id: ProjectId::from_str(project).unwrap(),
+        actor_user_id: UserId::from_str(actor).unwrap(),
+        expected_project_version: ProjectVersion::new(1).unwrap(),
+        expected_physical_bytes: total,
+        expected_sha256: Sha256Checksum::from_bytes([0x73; 32]),
+        effective_quota: EffectiveQuota::unlimited(),
+        idempotency_key: IdempotencyKey::new(idempotency.to_owned()).unwrap(),
+        parts,
+    }
+}
+
+fn multipart_request_for(
+    scope: &str,
+    project: &str,
+    actor: &str,
+    idempotency: &str,
+) -> CreateMultipartSession {
+    let first = Bytes::from(vec![0x51; 8 * 1024 * 1024]);
+    let second = Bytes::from_static(b"attach-failure-tail");
+    let mut request = multipart_request(project, idempotency, &[first, second]);
+    request.storage_scope_id = StorageScopeId::from_str(scope).unwrap();
+    request.actor_user_id = UserId::from_str(actor).unwrap();
+    request
+}
+
+fn multipart_boundary_request(project: &str, idempotency: &str) -> CreateMultipartSession {
+    let part_size = 16 * 1024 * 1024_u64;
+    let parts = (1..=128)
+        .map(|number| {
+            MultipartPartPlan::new(
+                number,
+                part_size,
+                Sha256Checksum::from_bytes([u8::try_from(number).unwrap(); 32]),
+            )
+        })
+        .collect();
+    CreateMultipartSession {
+        storage_scope_id: StorageScopeId::from_str(SCOPE).unwrap(),
+        project_id: ProjectId::from_str(project).unwrap(),
+        actor_user_id: UserId::from_str(USER).unwrap(),
+        expected_project_version: ProjectVersion::new(1).unwrap(),
+        expected_physical_bytes: 2 * 1024 * 1024 * 1024,
+        expected_sha256: Sha256Checksum::from_bytes([0x74; 32]),
+        effective_quota: EffectiveQuota::unlimited(),
+        idempotency_key: IdempotencyKey::new(idempotency.to_owned()).unwrap(),
+        parts,
+    }
 }
 
 fn request_for(
@@ -491,6 +1065,26 @@ async fn send_with_mutation(
         .await
         .map(|response| response.status().is_success())
         .unwrap_or(false)
+}
+
+async fn send_multipart_part(
+    client: &reqwest::Client,
+    capability: &BoundedPresignedRequest,
+    body: &[u8],
+) -> Option<String> {
+    let mut request = client.put(capability.expose_bearer_url());
+    for (name, value) in capability.signed_headers() {
+        request = request.header(name, value);
+    }
+    let response = request.body(body.to_vec()).send().await.ok()?;
+    if !response.status().is_success() {
+        return None;
+    }
+    response
+        .headers()
+        .get(reqwest::header::ETAG)
+        .and_then(|value| value.to_str().ok())
+        .map(str::to_owned)
 }
 
 fn fixture_http_client(ca_file: &str) -> reqwest::Client {
