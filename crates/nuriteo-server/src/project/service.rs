@@ -32,6 +32,9 @@ const DEFAULT_OPERATION_TIMEOUT: Duration = Duration::from_secs(5);
 const MIN_OPERATION_TIMEOUT: Duration = Duration::from_millis(100);
 const MAX_OPERATION_TIMEOUT: Duration = Duration::from_secs(30);
 const MIN_DATABASE_TIMEOUT: Duration = Duration::from_millis(1);
+// Leave a small application-resolution window so PostgreSQL can return its
+// typed timeout before the absolute Tokio deadline cancels the transaction.
+const DATABASE_TIMEOUT_RESOLUTION_MARGIN: Duration = Duration::from_millis(25);
 // COMMIT is a protocol boundary: after it is sent, a missing response does not
 // prove whether PostgreSQL committed. Keep this grace independent from the
 // operation budget so callers receive a bounded, honest outcome classification.
@@ -1840,6 +1843,7 @@ async fn configure_transaction_deadline(
 
 fn postgres_timeout(remaining: Duration) -> String {
     let millis = remaining
+        .saturating_sub(DATABASE_TIMEOUT_RESOLUTION_MARGIN)
         .max(MIN_DATABASE_TIMEOUT)
         .as_millis()
         .min(i32::MAX as u128);
@@ -1886,6 +1890,7 @@ fn map_repository_error(error: ProjectRepositoryError) -> ProjectServiceError {
         )
         | ProjectRepositoryError::InvalidPersistedState => ProjectServiceError::InvariantViolation,
         ProjectRepositoryError::InvalidPageLimit => ProjectServiceError::InvalidInput,
+        ProjectRepositoryError::OperationTimeout => ProjectServiceError::OperationTimeout,
         ProjectRepositoryError::PersistenceUnavailable => ProjectServiceError::DatabaseUnavailable,
     }
 }
@@ -1897,6 +1902,7 @@ fn map_access_error(error: ProjectAccessError) -> ProjectServiceError {
         ProjectAccessError::MemberUnavailable => ProjectServiceError::MemberUnavailable,
         ProjectAccessError::AlreadyGranted => ProjectServiceError::RoleAlreadyExists,
         ProjectAccessError::InvalidPersistedState => ProjectServiceError::InvariantViolation,
+        ProjectAccessError::OperationTimeout => ProjectServiceError::OperationTimeout,
         ProjectAccessError::PersistenceUnavailable => ProjectServiceError::DatabaseUnavailable,
     }
 }

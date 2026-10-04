@@ -40,6 +40,7 @@ pub enum ProjectRepositoryError {
     Conflict(ProjectConflict),
     InvalidPageLimit,
     InvalidPersistedState,
+    OperationTimeout,
     PersistenceUnavailable,
 }
 
@@ -57,6 +58,7 @@ impl fmt::Display for ProjectRepositoryError {
             }
             Self::InvalidPageLimit => "project page limit is invalid",
             Self::InvalidPersistedState => "persisted project state is invalid",
+            Self::OperationTimeout => "project persistence operation timed out",
             Self::PersistenceUnavailable => "project persistence is unavailable",
         })
     }
@@ -240,7 +242,7 @@ impl ProjectRepository {
                 .await
             }
         }
-        .map_err(|_| ProjectRepositoryError::PersistenceUnavailable)?;
+        .map_err(map_query_error)?;
         row.map(decode_project).transpose()
     }
 
@@ -289,7 +291,7 @@ impl ProjectRepository {
                 .await
             }
         }
-        .map_err(|_| ProjectRepositoryError::PersistenceUnavailable)?;
+        .map_err(map_query_error)?;
         decode_page(rows, limit)
     }
 
@@ -308,7 +310,7 @@ impl ProjectRepository {
         .bind(project_id.to_string())
         .fetch_optional(&mut **transaction)
         .await
-        .map_err(|_| ProjectRepositoryError::PersistenceUnavailable)?;
+        .map_err(map_query_error)?;
         row.map(decode_project).transpose()
     }
 }
@@ -398,6 +400,9 @@ fn decode_project(row: ProjectRow) -> Result<Project, ProjectRepositoryError> {
 }
 
 fn map_insert_error(error: sqlx::Error) -> ProjectRepositoryError {
+    if is_timeout_error(&error) {
+        return ProjectRepositoryError::OperationTimeout;
+    }
     let sqlx::Error::Database(database) = &error else {
         return ProjectRepositoryError::PersistenceUnavailable;
     };
@@ -411,4 +416,19 @@ fn map_insert_error(error: sqlx::Error) -> ProjectRepositoryError {
         (Some("23503"), _) => ProjectRepositoryError::Conflict(ProjectConflict::OwnerScopeMismatch),
         _ => ProjectRepositoryError::PersistenceUnavailable,
     }
+}
+
+fn map_query_error(error: sqlx::Error) -> ProjectRepositoryError {
+    if is_timeout_error(&error) {
+        ProjectRepositoryError::OperationTimeout
+    } else {
+        ProjectRepositoryError::PersistenceUnavailable
+    }
+}
+
+fn is_timeout_error(error: &sqlx::Error) -> bool {
+    matches!(
+        error.as_database_error().and_then(|error| error.code()),
+        Some(code) if code == "57014" || code == "55P03"
+    )
 }

@@ -16,6 +16,8 @@ fn operation_timeout_policy_is_bounded() {
     assert_eq!(ProjectRolePageLimit::default().get(), 50);
     assert_eq!(ProjectRolePageLimit::new(100).unwrap().get(), 100);
     assert!(ProjectRolePageLimit::new(101).is_err());
+    assert_eq!(postgres_timeout(Duration::from_millis(100)), "75ms");
+    assert_eq!(postgres_timeout(Duration::from_millis(10)), "1ms");
 }
 
 #[test]

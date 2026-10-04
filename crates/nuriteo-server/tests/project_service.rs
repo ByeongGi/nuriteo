@@ -9,8 +9,9 @@ use nuriteo_server::database::{
 use nuriteo_server::identity::UserId;
 use nuriteo_server::organization::OrganizationId;
 use nuriteo_server::project::{
-    EffectiveProjectRole, ProjectAccessRepository, ProjectAuditContext, ProjectDeleteConfirmation,
-    ProjectId, ProjectName, ProjectOwner, ProjectPageLimit, ProjectRole, ProjectRoleMutationResult,
+    EffectiveProjectRole, ProjectAccessError, ProjectAccessRepository, ProjectAuditContext,
+    ProjectDeleteConfirmation, ProjectId, ProjectName, ProjectOwner, ProjectPageLimit,
+    ProjectRepository, ProjectRepositoryError, ProjectRole, ProjectRoleMutationResult,
     ProjectRolePageLimit, ProjectService, ProjectServiceError, ProjectServicePolicy, ProjectSlug,
     ProjectState, ProjectVersion,
 };
@@ -415,6 +416,7 @@ async fn project_service_is_authorized_versioned_audited_and_atomic() {
     );
 
     verify_audit_failure_rolls_back_and_denial_fails_closed(&pool, &service, owner).await;
+    verify_persistence_timeouts_remain_typed(&pool, &service, owner, organization_owner).await;
     verify_failure_audit_uses_single_deadline(&pool, &service, owner).await;
     verify_commit_resolution_is_bounded_and_explicit(&pool, owner).await;
     verify_direct_role_pagination(
@@ -611,29 +613,51 @@ async fn verify_failure_audit_uses_single_deadline(
         .execute("LOCK TABLE audit_events IN ACCESS EXCLUSIVE MODE")
         .await
         .unwrap();
+    let mut project_holder_connection = pool.acquire().await.unwrap();
+    let mut project_holder = project_holder_connection.begin().await.unwrap();
+    let project_holder_pid = backend_pid(&mut project_holder).await;
+    sqlx::query("SELECT id FROM projects WHERE id=$1::uuid FOR UPDATE")
+        .bind(project.id().to_string())
+        .execute(&mut *project_holder)
+        .await
+        .unwrap();
     let bounded = ProjectService::new(
         pool.clone(),
-        ProjectServicePolicy::new(Duration::from_millis(200)).unwrap(),
+        ProjectServicePolicy::new(Duration::from_millis(300)).unwrap(),
     );
+    let project_id = project.id();
     let started = tokio_time::Instant::now();
-    let result = bounded
-        .rename(
-            user_id(OUTSIDER),
-            ProjectOwner::User(owner),
-            project.id(),
-            version(1),
-            name("Denied"),
-            &audit(user_id(OUTSIDER)),
-        )
-        .await;
+    let contender = tokio::spawn(async move {
+        bounded
+            .rename(
+                user_id(OUTSIDER),
+                ProjectOwner::User(owner),
+                project_id,
+                version(1),
+                name("Denied"),
+                &audit(user_id(OUTSIDER)),
+            )
+            .await
+    });
+    assert!(
+        wait_for_project_update_block(pool, project_holder_pid).await,
+        "primary denial must first consume the shared deadline on authorization"
+    );
+    tokio_time::sleep(Duration::from_millis(150)).await;
+    project_holder.rollback().await.unwrap();
+    let result = contender.await.unwrap();
     let elapsed = started.elapsed();
     holder.rollback().await.unwrap();
     assert_eq!(result, Err(ProjectServiceError::AuditUnavailable));
     assert!(
-        elapsed < Duration::from_millis(400),
-        "failure audit must share one absolute operation deadline: {elapsed:?}"
+        elapsed >= Duration::from_millis(250),
+        "failure audit must consume the remainder of the original budget: {elapsed:?}"
     );
-    assert_eq!(project_name(pool, project.id()).await, "Audit Deadline");
+    assert!(
+        elapsed < Duration::from_millis(400),
+        "failure audit must not receive a fresh operation budget: {elapsed:?}"
+    );
+    assert_eq!(project_name(pool, project_id).await, "Audit Deadline");
 }
 
 async fn verify_commit_resolution_is_bounded_and_explicit(pool: &DatabasePool, owner: UserId) {
@@ -677,9 +701,95 @@ async fn verify_commit_resolution_is_bounded_and_explicit(pool: &DatabasePool, o
         .unwrap();
     assert_eq!(result, Err(ProjectServiceError::CommitOutcomeUnknown));
     assert!(
-        elapsed < Duration::from_millis(2_500),
+        elapsed >= Duration::from_millis(1_800),
+        "COMMIT must wait near the configured resolution grace: {elapsed:?}"
+    );
+    assert!(
+        elapsed < Duration::from_millis(2_750),
         "COMMIT response loss must have a bounded resolution grace: {elapsed:?}"
     );
+}
+
+async fn verify_persistence_timeouts_remain_typed(
+    pool: &DatabasePool,
+    service: &ProjectService,
+    owner: UserId,
+    organization_owner: ProjectOwner,
+) {
+    let project = service
+        .create(
+            owner,
+            organization_owner,
+            slug("typed-timeout"),
+            name("Typed Timeout"),
+            &audit(owner),
+        )
+        .await
+        .unwrap();
+    let mut holder_connection = pool.acquire().await.unwrap();
+    let mut holder = holder_connection.begin().await.unwrap();
+    sqlx::query("SELECT id FROM projects WHERE id=$1::uuid FOR UPDATE")
+        .bind(project.id().to_string())
+        .execute(&mut *holder)
+        .await
+        .unwrap();
+
+    let mut access_connection = pool.acquire().await.unwrap();
+    let mut access_transaction = access_connection.begin().await.unwrap();
+    access_transaction
+        .execute("SET LOCAL lock_timeout = '100ms'")
+        .await
+        .unwrap();
+    assert_eq!(
+        ProjectAccessRepository::resolve_effective_role_for_update(
+            &mut access_transaction,
+            project.id(),
+            owner,
+        )
+        .await,
+        Err(ProjectAccessError::OperationTimeout)
+    );
+    access_transaction.rollback().await.unwrap();
+
+    let mut repository_connection = pool.acquire().await.unwrap();
+    let mut repository_transaction = repository_connection.begin().await.unwrap();
+    repository_transaction
+        .execute("SET LOCAL lock_timeout = 0")
+        .await
+        .unwrap();
+    repository_transaction
+        .execute("SET LOCAL statement_timeout = '100ms'")
+        .await
+        .unwrap();
+    assert_eq!(
+        ProjectRepository::lock_by_id(&mut repository_transaction, project.id()).await,
+        Err(ProjectRepositoryError::OperationTimeout)
+    );
+    repository_transaction.rollback().await.unwrap();
+
+    let bounded = ProjectService::new(
+        pool.clone(),
+        ProjectServicePolicy::new(Duration::from_millis(200)).unwrap(),
+    );
+    let started = tokio_time::Instant::now();
+    assert_eq!(
+        bounded
+            .rename(
+                owner,
+                organization_owner,
+                project.id(),
+                version(1),
+                name("Must Time Out"),
+                &audit(owner),
+            )
+            .await,
+        Err(ProjectServiceError::OperationTimeout)
+    );
+    assert!(
+        started.elapsed() < Duration::from_millis(400),
+        "service lock timeout must remain bounded"
+    );
+    holder.rollback().await.unwrap();
 }
 
 async fn verify_same_version_role_mutations_serialize(

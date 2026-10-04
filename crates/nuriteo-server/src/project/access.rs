@@ -157,6 +157,7 @@ pub enum ProjectAccessError {
     MemberUnavailable,
     AlreadyGranted,
     InvalidPersistedState,
+    OperationTimeout,
     PersistenceUnavailable,
 }
 
@@ -168,6 +169,7 @@ impl fmt::Display for ProjectAccessError {
             Self::MemberUnavailable => "project role member is unavailable",
             Self::AlreadyGranted => "project role already exists",
             Self::InvalidPersistedState => "persisted project role state is invalid",
+            Self::OperationTimeout => "project role persistence operation timed out",
             Self::PersistenceUnavailable => "project role persistence is unavailable",
         })
     }
@@ -246,7 +248,7 @@ impl ProjectAccessRepository {
         .bind(user_id.to_string())
         .fetch_optional(&mut **transaction)
         .await
-        .map_err(|_| ProjectAccessError::PersistenceUnavailable)?;
+        .map_err(map_query_error)?;
         Ok(deleted.is_some())
     }
 
@@ -327,7 +329,7 @@ impl ProjectAccessRepository {
                 .bind(user_id.to_string())
                 .fetch_optional(&mut **transaction)
                 .await
-                .map_err(|_| ProjectAccessError::PersistenceUnavailable)?;
+                .map_err(map_query_error)?;
                 role.map(|value| ProjectRole::parse(&value).map(Into::into))
                     .transpose()
                     .map(|role| role.unwrap_or(EffectiveProjectRole::None))
@@ -383,7 +385,7 @@ async fn read_project_owner_hint(
     .bind(project_id.to_string())
     .fetch_optional(&mut **transaction)
     .await
-    .map_err(|_| ProjectAccessError::PersistenceUnavailable)?;
+    .map_err(map_query_error)?;
     let Some((owner_user_id, owner_organization_id)) = row else {
         return Err(ProjectAccessError::ProjectUnavailable);
     };
@@ -409,7 +411,7 @@ async fn lock_project_owner(
         .bind(project_id.to_string())
         .fetch_optional(&mut **transaction)
         .await
-        .map_err(|_| ProjectAccessError::PersistenceUnavailable)?;
+        .map_err(map_query_error)?;
     let Some((owner_user_id, owner_organization_id, state)) = row else {
         return Err(ProjectAccessError::ProjectUnavailable);
     };
@@ -445,7 +447,7 @@ async fn lock_active_user(
             .bind(user_id.to_string())
             .fetch_optional(&mut **transaction)
             .await
-            .map_err(|_| ProjectAccessError::PersistenceUnavailable)?;
+            .map_err(map_query_error)?;
     match status.as_deref() {
         Some("active") => Ok(true),
         Some("disabled") | None => Ok(false),
@@ -461,7 +463,7 @@ async fn lock_user_if_present(
         .bind(user_id.to_string())
         .fetch_optional(&mut **transaction)
         .await
-        .map_err(|_| ProjectAccessError::PersistenceUnavailable)?;
+        .map_err(map_query_error)?;
     Ok(())
 }
 
@@ -474,7 +476,7 @@ async fn lock_organization_status(
             .bind(organization_id.to_string())
             .fetch_optional(&mut **transaction)
             .await
-            .map_err(|_| ProjectAccessError::PersistenceUnavailable)?;
+            .map_err(map_query_error)?;
     let Some(status) = status else {
         return Err(ProjectAccessError::ProjectUnavailable);
     };
@@ -512,7 +514,7 @@ async fn lock_membership_role(
     .bind(user_id.to_string())
     .fetch_optional(&mut **transaction)
     .await
-    .map_err(|_| ProjectAccessError::PersistenceUnavailable)
+    .map_err(map_query_error)
 }
 
 fn decode_grant(row: GrantRow) -> Result<DirectProjectRoleGrant, ProjectAccessError> {
@@ -534,11 +536,29 @@ fn decode_grant(row: GrantRow) -> Result<DirectProjectRoleGrant, ProjectAccessEr
 }
 
 fn map_grant_error(error: sqlx::Error) -> ProjectAccessError {
+    if is_timeout_error(&error) {
+        return ProjectAccessError::OperationTimeout;
+    }
     match error.as_database_error().and_then(|error| error.code()) {
         Some(code) if code == "23505" => ProjectAccessError::AlreadyGranted,
         Some(code) if code == "23503" || code == "23514" => ProjectAccessError::MemberUnavailable,
         _ => ProjectAccessError::PersistenceUnavailable,
     }
+}
+
+fn map_query_error(error: sqlx::Error) -> ProjectAccessError {
+    if is_timeout_error(&error) {
+        ProjectAccessError::OperationTimeout
+    } else {
+        ProjectAccessError::PersistenceUnavailable
+    }
+}
+
+fn is_timeout_error(error: &sqlx::Error) -> bool {
+    matches!(
+        error.as_database_error().and_then(|error| error.code()),
+        Some(code) if code == "57014" || code == "55P03"
+    )
 }
 
 #[cfg(test)]
