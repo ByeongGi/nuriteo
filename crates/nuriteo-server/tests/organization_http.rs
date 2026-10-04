@@ -121,12 +121,25 @@ async fn organization_http_journey_is_authorized_versioned_and_secret_free() {
     .await;
 
     let invitations_path = format!("{location}/invitations");
+    assert_problem(
+        json_request(
+            &router,
+            Some(&owner),
+            Method::POST,
+            &invitations_path,
+            json!({"email":" member@example.test","role":"member"}),
+            None,
+        )
+        .await,
+        StatusCode::UNPROCESSABLE_ENTITY,
+    )
+    .await;
     let issued = json_request(
         &router,
         Some(&owner),
         Method::POST,
         &invitations_path,
-        json!({"inviteeUserId":users.member.to_string(),"role":"member"}),
+        json!({"email":"MeMbEr@Example.Test","role":"member"}),
         None,
     )
     .await;
@@ -139,6 +152,73 @@ async fn organization_http_journey_is_authorized_versioned_and_secret_free() {
             .unwrap()
             .starts_with("http://localhost:3000/organization-invitations/accept?token=")
     );
+    assert_problem(
+        json_request(
+            &router,
+            Some(&owner),
+            Method::POST,
+            &invitations_path,
+            json!({"email":"member@example.test","role":"member"}),
+            None,
+        )
+        .await,
+        StatusCode::CONFLICT,
+    )
+    .await;
+    assert_problem(
+        json_request(
+            &router,
+            Some(&owner),
+            Method::POST,
+            &invitations_path,
+            json!({"inviteeUserId":users.outsider.to_string(),"role":"member"}),
+            None,
+        )
+        .await,
+        StatusCode::UNPROCESSABLE_ENTITY,
+    )
+    .await;
+    assert_problem(
+        json_request(
+            &router,
+            Some(&owner),
+            Method::POST,
+            &invitations_path,
+            json!({"email":"owner@example.test","role":"member"}),
+            None,
+        )
+        .await,
+        StatusCode::CONFLICT,
+    )
+    .await;
+
+    let missing_problem = safe_problem(
+        json_request(
+            &router,
+            Some(&owner),
+            Method::POST,
+            &invitations_path,
+            json!({"email":"missing@example.test","role":"member"}),
+            None,
+        )
+        .await,
+        StatusCode::NOT_FOUND,
+    )
+    .await;
+    let inactive_problem = safe_problem(
+        json_request(
+            &router,
+            Some(&owner),
+            Method::POST,
+            &invitations_path,
+            json!({"email":"inactive@example.test","role":"member"}),
+            None,
+        )
+        .await,
+        StatusCode::NOT_FOUND,
+    )
+    .await;
+    assert_eq!(missing_problem, inactive_problem);
 
     let listed = empty_request(&router, &owner, Method::GET, &invitations_path, None).await;
     assert_eq!(listed.status(), StatusCode::OK);
@@ -191,19 +271,20 @@ async fn organization_http_journey_is_authorized_versioned_and_secret_free() {
     let members = response_json(members).await.to_string();
     assert!(members.contains("Member"));
     assert!(!members.contains("@example.test"));
-    assert_problem(
+    let unauthorized_problem = safe_problem(
         json_request(
             &router,
             Some(&member),
             Method::POST,
             &invitations_path,
-            json!({"inviteeUserId":users.outsider.to_string(),"role":"member"}),
+            json!({"email":"outsider@example.test","role":"member"}),
             None,
         )
         .await,
-        StatusCode::FORBIDDEN,
+        StatusCode::NOT_FOUND,
     )
     .await;
+    assert_eq!(missing_problem, unauthorized_problem);
 
     let owner_item = format!("{members_path}/{}", users.owner);
     assert_problem(
@@ -244,7 +325,7 @@ async fn organization_http_journey_is_authorized_versioned_and_secret_free() {
         Some(&owner),
         Method::POST,
         &invitations_path,
-        json!({"inviteeUserId":users.outsider.to_string(),"role":"member"}),
+        json!({"email":"outsider@example.test","role":"member"}),
         None,
     )
     .await;
@@ -317,7 +398,7 @@ async fn organization_http_journey_is_authorized_versioned_and_secret_free() {
             Some(&owner),
             Method::POST,
             &invitations_path,
-            json!({"inviteeUserId":users.owner_two.to_string(),"role":"owner"}),
+            json!({"email":"owner-two@example.test","role":"owner"}),
             None,
         )
         .await,
@@ -330,7 +411,7 @@ async fn organization_http_journey_is_authorized_versioned_and_secret_free() {
         Some(&owner),
         Method::POST,
         &invitations_path,
-        json!({"inviteeUserId":users.owner_two.to_string(),"role":"owner"}),
+        json!({"email":"owner-two@example.test","role":"owner"}),
         None,
     )
     .await;
@@ -368,7 +449,7 @@ async fn organization_http_journey_is_authorized_versioned_and_secret_free() {
             Some(&owner),
             Method::POST,
             &invitations_path,
-            json!({"inviteeUserId":users.outsider.to_string(),"role":"member"}),
+            json!({"email":"outsider@example.test","role":"member"}),
             None,
         )
         .await,
@@ -381,6 +462,7 @@ async fn organization_http_journey_is_authorized_versioned_and_secret_free() {
         &[&token, &owner_token, &old_token, &replacement_token],
     )
     .await;
+    verify_issue_audit(&pool, invitation_id).await;
     reset_fixture(&pool).await;
     pool.close(Duration::from_secs(2)).await.unwrap();
 }
@@ -396,6 +478,7 @@ struct Users {
     member: UserId,
     owner_two: UserId,
     outsider: UserId,
+    inactive: UserId,
 }
 
 fn router(pool: DatabasePool) -> Router {
@@ -521,6 +604,25 @@ async fn assert_problem(response: Response<Body>, status: StatusCode) {
     }
 }
 
+async fn safe_problem(response: Response<Body>, status: StatusCode) -> Value {
+    assert_eq!(response.status(), status);
+    assert_eq!(response.headers()[CONTENT_TYPE], "application/problem+json");
+    let problem = response_json(response).await;
+    let rendered = problem.to_string();
+    for private_value in [
+        PASSWORD,
+        PASSWORD_HASH,
+        "nrt_org_inv_",
+        "postgres://",
+        "missing@example.test",
+        "inactive@example.test",
+        "outsider@example.test",
+    ] {
+        assert!(!rendered.contains(private_value));
+    }
+    problem
+}
+
 fn invitation_token(url: &str) -> String {
     Url::parse(url)
         .unwrap()
@@ -535,6 +637,7 @@ async fn seed_users(pool: &DatabasePool) -> Users {
         member: UserId::new(),
         owner_two: UserId::new(),
         outsider: UserId::new(),
+        inactive: UserId::new(),
     };
     for (id, email, display) in [
         (users.owner, "owner@example.test", "Owner"),
@@ -553,6 +656,15 @@ async fn seed_users(pool: &DatabasePool) -> Users {
         .unwrap();
         sqlx::query("INSERT INTO local_password_credentials (user_id,password_verifier) VALUES ($1::uuid,$2)").bind(id.to_string()).bind(PASSWORD_HASH).execute(&mut *acquire(pool).await).await.unwrap();
     }
+    sqlx::query(
+        "INSERT INTO users \
+         (id,email,normalized_email,display_name,status,disabled_at) \
+         VALUES ($1::uuid,'inactive@example.test','inactive@example.test','Inactive','disabled',transaction_timestamp())",
+    )
+    .bind(users.inactive.to_string())
+    .execute(&mut *acquire(pool).await)
+    .await
+    .unwrap();
     users
 }
 
@@ -564,6 +676,23 @@ async fn verify_no_secret_persistence(pool: &DatabasePool, secrets: &[&str]) {
     let durable: String = sqlx::query_scalar("SELECT COALESCE((SELECT string_agg(row_to_json(i)::text,'') FROM organization_invitations i),'') || COALESCE((SELECT string_agg(row_to_json(a)::text,'') FROM audit_events a),'')").fetch_one(&mut *acquire(pool).await).await.unwrap();
     for secret in secrets {
         assert!(!durable.contains(*secret), "durable state leaked token");
+    }
+}
+
+async fn verify_issue_audit(pool: &DatabasePool, invitation_id: &str) {
+    let (action, result, metadata): (String, String, String) = sqlx::query_as(
+        "SELECT action_code, result, metadata::text FROM audit_events \
+         WHERE target_type='organization_invitation' AND target_id=$1 \
+           AND action_code='organization.invitation_issued'",
+    )
+    .bind(invitation_id)
+    .fetch_one(&mut *acquire(pool).await)
+    .await
+    .unwrap();
+    assert_eq!(action, "organization.invitation_issued");
+    assert_eq!(result, "succeeded");
+    for private_identity in ["outsider@example.test", "invitee_user_id"] {
+        assert!(!metadata.contains(private_identity));
     }
 }
 

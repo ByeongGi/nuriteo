@@ -37,8 +37,10 @@ async fn organization_invitations_are_role_bound_atomic_and_single_use() {
     let pool = fixture_pool().await;
     reset_fixture(&pool).await;
     let report = migrate(&pool).await;
-    assert_eq!(report.latest_version, Some(15));
-    assert_eq!(report.known_migrations, 15);
+    let expected_latest = i64::try_from(report.known_migrations)
+        .unwrap_or_else(|_| panic!("embedded migration count must fit in i64"));
+    assert!(expected_latest > 0);
+    assert_eq!(report.latest_version, Some(expected_latest));
     insert_fixture(&pool).await;
     verify_schema_rejects_invalid_rows(&pool).await;
 
@@ -53,7 +55,7 @@ async fn organization_invitations_are_role_bound_atomic_and_single_use() {
         .issue(
             organization_id,
             owner_stale,
-            user_id(INVITEE),
+            email("invitee@example.test"),
             OrganizationRole::Member,
             &first_audit,
         )
@@ -76,20 +78,20 @@ async fn organization_invitations_are_role_bound_atomic_and_single_use() {
             .issue(
                 organization_id,
                 actor(MEMBER, MEMBER_SESSION),
-                user_id(OTHER),
+                email("other@example.test"),
                 OrganizationRole::Member,
                 &audit(MEMBER),
             )
             .await
             .map(|_| ()),
-        Err(OrganizationInvitationServiceError::Unauthorized)
+        Err(OrganizationInvitationServiceError::InviteeUnavailable)
     );
     assert_eq!(
         service
             .issue(
                 organization_id,
                 owner_recent,
-                user_id(INVITEE),
+                email("invitee@example.test"),
                 OrganizationRole::Member,
                 &audit(OWNER),
             )
@@ -176,7 +178,7 @@ async fn organization_invitations_are_role_bound_atomic_and_single_use() {
             .issue(
                 organization_id,
                 owner_recent,
-                user_id(INVITEE),
+                email("invitee@example.test"),
                 OrganizationRole::Member,
                 &audit(OWNER),
             )
@@ -207,7 +209,7 @@ async fn verify_audit_rollbacks(
             .issue(
                 organization_id(SECOND_ORGANIZATION),
                 owner,
-                user_id(OTHER),
+                email("other@example.test"),
                 OrganizationRole::Member,
                 reused_audit,
             )
@@ -217,7 +219,13 @@ async fn verify_audit_rollbacks(
     );
     assert_eq!(pending_count(pool, SECOND_ORGANIZATION, OTHER).await, 0);
 
-    let issued = issue_member(service, organization_id(SECOND_ORGANIZATION), owner, OTHER).await;
+    let issued = issue_member(
+        service,
+        organization_id(SECOND_ORGANIZATION),
+        owner,
+        "other@example.test",
+    )
+    .await;
     let duplicate_accept_audit = audit(OTHER);
     let declined = service
         .decline(
@@ -228,7 +236,13 @@ async fn verify_audit_rollbacks(
         .await
         .unwrap_or_else(|error| panic!("setup decline must succeed: {error}"));
     assert_eq!(declined.status(), OrganizationInvitationStatus::Declined);
-    let second = issue_member(service, organization_id(SECOND_ORGANIZATION), owner, OTHER).await;
+    let second = issue_member(
+        service,
+        organization_id(SECOND_ORGANIZATION),
+        owner,
+        "other@example.test",
+    )
+    .await;
     assert_eq!(
         service
             .accept(
@@ -256,7 +270,13 @@ async fn verify_decline(
     service: &OrganizationInvitationService,
     owner: OrganizationInvitationActor,
 ) {
-    let issued = issue_member(service, organization_id(SECOND_ORGANIZATION), owner, OTHER).await;
+    let issued = issue_member(
+        service,
+        organization_id(SECOND_ORGANIZATION),
+        owner,
+        "other@example.test",
+    )
+    .await;
     let declined = service
         .decline(
             issued.token(),
@@ -307,7 +327,13 @@ async fn verify_terminal_race(
     service: &OrganizationInvitationService,
     owner: OrganizationInvitationActor,
 ) {
-    let issued = issue_member(service, organization_id(ORGANIZATION), owner, OTHER).await;
+    let issued = issue_member(
+        service,
+        organization_id(ORGANIZATION),
+        owner,
+        "other@example.test",
+    )
+    .await;
     let invitation_id = issued.invitation().id();
     let wire = issued.token().expose().to_owned();
 
@@ -383,13 +409,13 @@ async fn issue_member(
     service: &OrganizationInvitationService,
     organization_id: OrganizationId,
     owner: OrganizationInvitationActor,
-    invitee_user_id: &str,
+    invitee_email: &str,
 ) -> IssuedOrganizationInvitation {
     service
         .issue(
             organization_id,
             owner,
-            user_id(invitee_user_id),
+            email(invitee_email),
             OrganizationRole::Member,
             &audit(OWNER),
         )
@@ -436,6 +462,11 @@ fn invitee(user: &str, session: &str, email: &str) -> OrganizationInvitationInvi
         NormalizedEmail::from_email(email)
             .unwrap_or_else(|error| panic!("fixture email must normalize: {error}")),
     )
+}
+
+fn email(value: &str) -> NormalizedEmail {
+    NormalizedEmail::from_email(value)
+        .unwrap_or_else(|error| panic!("fixture email must normalize: {error}"))
 }
 
 fn audit(actor: &str) -> OrganizationInvitationAuditContext {

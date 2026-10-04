@@ -248,7 +248,7 @@ impl OrganizationInvitationService {
         &self,
         organization_id: OrganizationId,
         actor: OrganizationInvitationActor,
-        invitee_user_id: UserId,
+        invitee_email: NormalizedEmail,
         proposed_role: OrganizationRole,
         audit: &OrganizationInvitationAuditContext,
     ) -> Result<IssuedOrganizationInvitation, OrganizationInvitationServiceError> {
@@ -262,7 +262,7 @@ impl OrganizationInvitationService {
         self.within_deadline(self.issue_inner(
             organization_id,
             actor,
-            invitee_user_id,
+            invitee_email,
             proposed_role,
             OrganizationInvitationId::new(),
             token,
@@ -342,7 +342,7 @@ impl OrganizationInvitationService {
         &self,
         organization_id: OrganizationId,
         actor: OrganizationInvitationActor,
-        invitee_user_id: UserId,
+        invitee_email: NormalizedEmail,
         proposed_role: OrganizationRole,
         invitation_id: OrganizationInvitationId,
         token: OrganizationInvitationToken,
@@ -357,8 +357,10 @@ impl OrganizationInvitationService {
             proposed_role == OrganizationRole::Owner,
             self.policy.reauthentication_max_age,
         )
-        .await?;
-        let email = require_active_invitee(&mut transaction, invitee_user_id).await?;
+        .await
+        .map_err(enumeration_safe_issue_error)?;
+        let (invitee_user_id, email) =
+            resolve_active_invitee(&mut transaction, &invitee_email).await?;
         ensure_not_member(&mut transaction, organization_id, invitee_user_id).await?;
         expire_pending(&mut transaction, organization_id, invitee_user_id).await?;
         if pending_exists(&mut transaction, organization_id, invitee_user_id).await? {
@@ -453,7 +455,7 @@ impl OrganizationInvitationService {
             return Err(OrganizationInvitationServiceError::InvitationNotPending);
         }
         let invitee_user_id = parse_id(&row, "invitee_user_id")?;
-        let email = require_active_invitee(&mut transaction, invitee_user_id).await?;
+        let email = require_active_invitee_by_id(&mut transaction, invitee_user_id).await?;
         ensure_not_member(&mut transaction, organization_id, invitee_user_id).await?;
 
         let updated = sqlx::query(
@@ -741,15 +743,15 @@ async fn authorize_owner(
 ) -> Result<(), OrganizationInvitationServiceError> {
     let reauth_seconds = i64::try_from(reauthentication_max_age.as_secs())
         .map_err(|_| OrganizationInvitationServiceError::InvalidInput)?;
-    let row: Option<(Option<OffsetDateTime>,)> = sqlx::query_as(
-        "SELECT session.last_reauthenticated_at \
+    let row: Option<(String, Option<OffsetDateTime>)> = sqlx::query_as(
+        "SELECT organization.status, session.last_reauthenticated_at \
          FROM organizations organization \
          JOIN organization_memberships membership \
            ON membership.organization_id = organization.id \
           AND membership.user_id = $2::uuid AND membership.role = 'owner' \
          JOIN users actor ON actor.id = membership.user_id AND actor.status = 'active' \
          JOIN sessions session ON session.id = $3::uuid AND session.user_id = actor.id \
-         WHERE organization.id = $1::uuid AND organization.status = 'active' \
+         WHERE organization.id = $1::uuid \
            AND session.revoked_at IS NULL \
            AND session.idle_expires_at > transaction_timestamp() \
            AND session.absolute_expires_at > transaction_timestamp() \
@@ -761,9 +763,12 @@ async fn authorize_owner(
     .fetch_optional(&mut **transaction)
     .await
     .map_err(database_error)?;
-    let Some((reauthenticated_at,)) = row else {
+    let Some((organization_status, reauthenticated_at)) = row else {
         return Err(OrganizationInvitationServiceError::Unauthorized);
     };
+    if organization_status != "active" {
+        return Err(OrganizationInvitationServiceError::InvalidInvitation);
+    }
     if require_recent_reauthentication {
         let now = transaction_now_datetime(transaction).await?;
         let cutoff = now - time::Duration::seconds(reauth_seconds);
@@ -791,7 +796,7 @@ async fn lock_organization(
     Ok(())
 }
 
-async fn require_active_invitee(
+async fn require_active_invitee_by_id(
     transaction: &mut Transaction<'_, Postgres>,
     invitee_user_id: UserId,
 ) -> Result<NormalizedEmail, OrganizationInvitationServiceError> {
@@ -809,6 +814,43 @@ async fn require_active_invitee(
             NormalizedEmail::parse(value)
                 .map_err(|_| OrganizationInvitationServiceError::InvariantViolation)
         })
+}
+
+async fn resolve_active_invitee(
+    transaction: &mut Transaction<'_, Postgres>,
+    invitee_email: &NormalizedEmail,
+) -> Result<(UserId, NormalizedEmail), OrganizationInvitationServiceError> {
+    let row: Option<(String, String)> = sqlx::query_as(
+        "SELECT id::text, normalized_email FROM users \
+         WHERE normalized_email = $1 AND status = 'active' FOR UPDATE",
+    )
+    .bind(invitee_email.as_str())
+    .fetch_optional(&mut **transaction)
+    .await
+    .map_err(database_error)?;
+    let Some((user_id, stored_email)) = row else {
+        return Err(OrganizationInvitationServiceError::InviteeUnavailable);
+    };
+    let user_id = user_id
+        .parse()
+        .map_err(|_| OrganizationInvitationServiceError::InvariantViolation)?;
+    let stored_email = NormalizedEmail::parse(stored_email)
+        .map_err(|_| OrganizationInvitationServiceError::InvariantViolation)?;
+    if stored_email != *invitee_email {
+        return Err(OrganizationInvitationServiceError::InvariantViolation);
+    }
+    Ok((user_id, stored_email))
+}
+
+fn enumeration_safe_issue_error(
+    error: OrganizationInvitationServiceError,
+) -> OrganizationInvitationServiceError {
+    match error {
+        OrganizationInvitationServiceError::Unauthorized => {
+            OrganizationInvitationServiceError::InviteeUnavailable
+        }
+        other => other,
+    }
 }
 
 async fn verify_invitee(

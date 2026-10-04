@@ -286,21 +286,18 @@ impl OrganizationHttpService {
         &self,
         request: BrowserRequestHeaders<'_>,
         organization_id: OrganizationId,
-        invitee_user_id: UserId,
+        invitee_email: NormalizedEmail,
         role: OrganizationRole,
         correlation_id: &str,
     ) -> Result<IssuedOrganizationInvitationView, OrganizationHttpError> {
         let runtime = self.runtime()?;
         let identity = runtime.authenticate(request).await?;
-        runtime
-            .ensure_active_organization(&identity, organization_id)
-            .await?;
         let issued = runtime
             .invitations
             .issue(
                 organization_id,
                 identity.invitation_actor(),
-                invitee_user_id,
+                invitee_email,
                 role,
                 &identity.invitation_audit(correlation_id),
             )
@@ -457,25 +454,6 @@ impl BrowserIdentity {
 }
 
 impl Runtime {
-    async fn ensure_active_organization(
-        &self,
-        identity: &BrowserIdentity,
-        organization_id: OrganizationId,
-    ) -> Result<(), OrganizationHttpError> {
-        let organization = self
-            .organizations
-            .get(
-                OrganizationPrincipal::Owner(identity.user_id),
-                organization_id,
-            )
-            .await
-            .map_err(map_organization_error)?;
-        if organization.status() == super::OrganizationStatus::Archived {
-            return Err(OrganizationHttpError::Conflict);
-        }
-        Ok(())
-    }
-
     async fn authenticate(
         &self,
         request: BrowserRequestHeaders<'_>,
@@ -854,7 +832,8 @@ fn map_organization_error(error: OrganizationServiceError) -> OrganizationHttpEr
 fn map_invitation_error(error: OrganizationInvitationServiceError) -> OrganizationHttpError {
     match error {
         OrganizationInvitationServiceError::InvalidInput => OrganizationHttpError::InvalidInput,
-        OrganizationInvitationServiceError::NotFound => OrganizationHttpError::NotFound,
+        OrganizationInvitationServiceError::NotFound
+        | OrganizationInvitationServiceError::InviteeUnavailable => OrganizationHttpError::NotFound,
         OrganizationInvitationServiceError::Unauthorized => OrganizationHttpError::Forbidden,
         OrganizationInvitationServiceError::ReauthenticationRequired => {
             OrganizationHttpError::ReauthenticationRequired

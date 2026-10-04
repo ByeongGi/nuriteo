@@ -235,6 +235,26 @@ fn project_content_download_is_declared_as_binary_octets() {
 }
 
 #[test]
+fn organization_invitation_issue_is_email_addressed_and_enumeration_safe() {
+    let document = serde_json::to_value(openapi::document()).unwrap();
+    let operation =
+        &document["paths"]["/api/v1/organizations/{organization_id}/invitations"]["post"];
+    assert_eq!(
+        operation["requestBody"]["content"]["application/json"]["schema"]["$ref"],
+        "#/components/schemas/IssueInvitationRequest"
+    );
+    let schema = &document["components"]["schemas"]["IssueInvitationRequest"];
+    assert_eq!(schema["required"], json!(["email", "role"]));
+    assert_eq!(schema["properties"]["email"]["type"], "string");
+    assert_eq!(schema["properties"]["email"]["maxLength"], 320);
+    assert!(schema["properties"].get("inviteeUserId").is_none());
+    assert_eq!(
+        operation["responses"]["404"]["content"]["application/problem+json"]["schema"]["$ref"],
+        "#/components/schemas/ProblemDetails"
+    );
+}
+
+#[test]
 fn explicit_project_versions_expose_bounded_immutable_contract() {
     let document = serde_json::to_value(openapi::document()).unwrap();
     let operation = &document["paths"]["/api/v1/workspaces/{owner_type}/{owner_id}/projects/{project_id}/versions"];

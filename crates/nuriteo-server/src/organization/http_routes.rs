@@ -11,7 +11,7 @@ use utoipa::ToSchema;
 use utoipa_axum::{router::OpenApiRouter, routes};
 
 use crate::http::{FieldViolation, HttpError, RequestId};
-use crate::identity::{BrowserMethod, BrowserRequestHeaders, UserId};
+use crate::identity::{BrowserMethod, BrowserRequestHeaders, NormalizedEmail, UserId};
 
 use super::http_service::{
     IssuedOrganizationInvitationView, MemberView, OrganizationHttpError, OrganizationHttpService,
@@ -77,7 +77,8 @@ struct RoleRequest {
 #[derive(Deserialize, ToSchema)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 struct IssueInvitationRequest {
-    invitee_user_id: String,
+    #[schema(max_length = 320, example = "member@example.test")]
+    email: String,
     role: OrganizationRole,
 }
 
@@ -295,8 +296,11 @@ async fn list_invitations(
 #[utoipa::path(post, path = "/api/v1/organizations/{organization_id}/invitations", tag = "organization-invitations",
     params(("organization_id" = String, Path)), request_body(content = IssueInvitationRequest, content_type = "application/json"),
     responses((status = 201, description = "Invitation issued; accept URL is returned once", body = IssuedOrganizationInvitationView),
-      (status = 403, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
-      (status = 409, body = crate::openapi::ProblemDetails, content_type = "application/problem+json")))]
+      (status = 401, description = "Active Session required", body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+      (status = 403, description = "Exact Origin, CSRF, or recent reauthentication required", body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+      (status = 404, description = "Owner authorization or active invitee is unavailable", body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+      (status = 409, description = "Invitee is already a member or already has a pending invitation", body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+      (status = 422, description = "Request validation failed", body = crate::openapi::ProblemDetails, content_type = "application/problem+json")))]
 async fn issue_invitation(
     State(service): State<OrganizationHttpService>,
     Extension(request_id): Extension<RequestId>,
@@ -307,11 +311,13 @@ async fn issue_invitation(
     let headers = BrowserHeaders::read(&parts.headers, &request_id, INVITATIONS)?;
     let input: IssueInvitationRequest =
         json_body(&parts.headers, body, &request_id, INVITATIONS).await?;
+    let invitee_email = NormalizedEmail::from_email(&input.email)
+        .map_err(|_| validation(&request_id, INVITATIONS, "email"))?;
     let view = service
         .issue_invitation(
             headers.request(BrowserMethod::Post),
             parse_org_id(&id, &request_id, INVITATIONS)?,
-            parse_user_id(&input.invitee_user_id, &request_id, INVITATIONS)?,
+            invitee_email,
             input.role,
             request_id.as_str(),
         )

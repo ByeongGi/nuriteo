@@ -897,7 +897,28 @@
               }
             }
           },
+          "401": {
+            "description": "Active Session required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
           "403": {
+            "description": "Exact Origin, CSRF, or recent reauthentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Owner authorization or active invitee is unavailable",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -907,6 +928,17 @@
             }
           },
           "409": {
+            "description": "Invitee is already a member or already has a pending invitation",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request validation failed",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -5448,12 +5480,14 @@
       "IssueInvitationRequest": {
         "type": "object",
         "required": [
-          "inviteeUserId",
+          "email",
           "role"
         ],
         "properties": {
-          "inviteeUserId": {
-            "type": "string"
+          "email": {
+            "type": "string",
+            "example": "member@example.test",
+            "maxLength": 320
           },
           "role": {
             "$ref": "#/components/schemas/OrganizationRole"
