@@ -213,8 +213,8 @@ $$;
 -- Every multipart create begins with an expiry-delayed reconcile guard. A
 -- process can disappear after the backend accepted create but before the
 -- response or DB attach was observed. The guard is deleted only by the same
--- transaction that persists `ready`; an explicit unknown result makes it
--- eligible immediately.
+-- transaction that persists `ready`; ambiguous work waits for both session
+-- expiry and the operation quarantine.
 CREATE OR REPLACE FUNCTION maintain_multipart_create_cleanup_guard()
 RETURNS trigger
 LANGUAGE plpgsql
