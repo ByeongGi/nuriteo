@@ -56,7 +56,7 @@ impl CleanupWorkerPolicy {
     ) -> Result<Self, CleanupError> {
         if !(1..=MAX_BATCH_SIZE).contains(&batch_size)
             || !(1..=MAX_CONCURRENCY).contains(&concurrency)
-            || !(1..=MAX_ATTEMPTS).contains(&max_attempts)
+            || !(2..=MAX_ATTEMPTS).contains(&max_attempts)
             || !(Duration::from_millis(100)..=Duration::from_secs(30)).contains(&operation_timeout)
             || !(Duration::from_millis(100)..=Duration::from_secs(120)).contains(&item_timeout)
             || !(Duration::from_millis(10)..=Duration::from_secs(60)).contains(&poll_interval)
@@ -217,6 +217,7 @@ enum CleanupKind {
     SingleDelete,
     MultipartAbort,
     MultipartReconcile,
+    MultipartCompleteReconcile,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -246,6 +247,29 @@ impl CleanupBackend for S3ObjectStore {
             CleanupKind::MultipartReconcile => {
                 self.reconcile_multipart_for_exact_key(&target.object_key)
                     .await
+            }
+            CleanupKind::MultipartCompleteReconcile => {
+                return match self.head(&target.object_key).await {
+                    Ok(_) => CleanupBackendOutcome::Completed,
+                    Err(error) if error.kind() == ObjectStoreErrorKind::NotFound => {
+                        let Some(upload_id) = target.multipart_upload_id else {
+                            return CleanupBackendOutcome::Permanent;
+                        };
+                        match classify_backend_result(
+                            self.abort_multipart(&MultipartUpload {
+                                key: target.object_key,
+                                upload_id,
+                            })
+                            .await,
+                        ) {
+                            CleanupBackendOutcome::Completed | CleanupBackendOutcome::Missing => {
+                                CleanupBackendOutcome::Missing
+                            }
+                            outcome => outcome,
+                        }
+                    }
+                    Err(error) => classify_backend_result(Err(error)),
+                };
             }
         };
         classify_backend_result(result)
@@ -514,6 +538,11 @@ impl<B: CleanupBackend> CleanupService<B> {
     }
 
     async fn process_job(&self, owner: Uuid, job: ClaimedJob) -> Result<(), CleanupError> {
+        if job.target.kind == CleanupKind::MultipartReconcile
+            && self.prepare_reconcile(owner, &job).await? == ReconcilePreparation::StaleReady
+        {
+            return Ok(());
+        }
         let outcome = match time::timeout(
             self.policy.item_timeout,
             self.backend.cleanup(job.target.clone()),
@@ -524,9 +553,11 @@ impl<B: CleanupBackend> CleanupService<B> {
             Err(_) => CleanupBackendOutcome::Timeout,
         };
         match outcome {
-            CleanupBackendOutcome::Completed | CleanupBackendOutcome::Missing => {
-                self.finish_job(owner, job).await
+            CleanupBackendOutcome::Completed => self.finish_job(owner, job, outcome).await,
+            CleanupBackendOutcome::Missing if job.absence_count == 0 => {
+                self.observe_absence(owner, job).await
             }
+            CleanupBackendOutcome::Missing => self.finish_job(owner, job, outcome).await,
             CleanupBackendOutcome::Timeout => self.retry_job(owner, job, "timeout").await,
             CleanupBackendOutcome::Retryable => self.retry_job(owner, job, "retryable").await,
             CleanupBackendOutcome::Unknown => self.retry_job(owner, job, "unknown").await,
@@ -534,6 +565,124 @@ impl<B: CleanupBackend> CleanupService<B> {
                 self.fail_job(owner, job.session_id, "permanent").await
             }
         }
+    }
+
+    async fn prepare_reconcile(
+        &self,
+        owner: Uuid,
+        job: &ClaimedJob,
+    ) -> Result<ReconcilePreparation, CleanupError> {
+        let deadline = Deadline::new(self.policy.operation_timeout);
+        let mut connection = deadline
+            .run(self.pool.acquire())
+            .await?
+            .map_err(map_database_error)?;
+        let identity: Option<(String, String)> = deadline
+            .run(
+                sqlx::query_as(
+                    "SELECT storage_scope_id::text,project_id::text FROM save_sessions \
+                     WHERE id=$1::uuid",
+                )
+                .bind(job.session_id.to_string())
+                .fetch_optional(&mut *connection),
+            )
+            .await?
+            .map_err(map_sql_error)?;
+        let mut transaction = deadline
+            .run(connection.begin())
+            .await?
+            .map_err(map_sql_error)?;
+        configure_transaction(&mut transaction, deadline).await?;
+        let Some((scope_id, project_id)) = identity else {
+            commit(transaction, deadline).await?;
+            return Ok(ReconcilePreparation::Proceed);
+        };
+        let scope =
+            StorageScopeId::from_str(&scope_id).map_err(|_| CleanupError::InvariantViolation)?;
+        let scope_locked = deadline
+            .run(QuotaRepository::lock_storage_scope(&mut transaction, scope))
+            .await?
+            .map_err(map_sql_error)?;
+        if !scope_locked {
+            commit(transaction, deadline).await?;
+            return Ok(ReconcilePreparation::Proceed);
+        }
+        let project_locked = deadline
+            .run(
+                sqlx::query("SELECT 1 FROM projects WHERE id=$1::uuid FOR UPDATE")
+                    .bind(project_id)
+                    .execute(&mut *transaction),
+            )
+            .await?
+            .map_err(map_sql_error)?
+            .rows_affected()
+            == 1;
+        if !project_locked {
+            commit(transaction, deadline).await?;
+            return Ok(ReconcilePreparation::Proceed);
+        }
+        type SessionRow = (String, String, Option<String>, String, Option<String>);
+        let row: Option<SessionRow> = deadline
+            .run(
+                sqlx::query_as(
+                    "SELECT session.state,session.upload_mode,session.multipart_upload_id,\
+                            session.staging_object_key,lifecycle.create_status \
+                     FROM save_sessions session \
+                     LEFT JOIN multipart_lifecycles lifecycle \
+                       ON lifecycle.save_session_id=session.id \
+                     WHERE session.id=$1::uuid FOR UPDATE OF session",
+                )
+                .bind(job.session_id.to_string())
+                .fetch_optional(&mut *transaction),
+            )
+            .await?
+            .map_err(map_sql_error)?;
+        let Some((state, mode, upload_id, object_key, create_status)) = row else {
+            commit(transaction, deadline).await?;
+            return Ok(ReconcilePreparation::Proceed);
+        };
+        if mode != "multipart" || object_key != job.target.object_key.expose() {
+            return Err(CleanupError::InvariantViolation);
+        }
+        if state == "uploading" && upload_id.is_some() && create_status.as_deref() == Some("ready")
+        {
+            delete_claim(&mut transaction, owner, job.session_id, deadline).await?;
+            commit(transaction, deadline).await?;
+            return Ok(ReconcilePreparation::StaleReady);
+        }
+        if state == "created" && upload_id.is_none() {
+            match create_status.as_deref() {
+                Some("creating") => {
+                    let affected = deadline
+                        .run(
+                            sqlx::query(
+                                "UPDATE multipart_lifecycles SET create_status='unknown',\
+                                     updated_at=transaction_timestamp() \
+                                 WHERE save_session_id=$1::uuid AND create_status='creating' \
+                                   AND complete_status='pending'",
+                            )
+                            .bind(job.session_id.to_string())
+                            .execute(&mut *transaction),
+                        )
+                        .await?
+                        .map_err(map_sql_error)?
+                        .rows_affected();
+                    if affected != 1 {
+                        return Err(CleanupError::InvariantViolation);
+                    }
+                }
+                Some("unknown" | "cleaned") => {}
+                _ => return Err(CleanupError::InvariantViolation),
+            }
+        } else if !(state == "uploading"
+            && upload_id.is_some()
+            && create_status.as_deref() == Some("cleaned"))
+            && !matches!(state.as_str(), "aborted" | "expired" | "failed")
+        {
+            return Err(CleanupError::InvariantViolation);
+        }
+        commit(transaction, deadline).await?;
+        Ok(ReconcilePreparation::Proceed)
     }
 
     async fn claim(&self, owner: Uuid) -> Result<Vec<ClaimedJob>, CleanupError> {
@@ -552,18 +701,25 @@ impl<B: CleanupBackend> CleanupService<B> {
         deadline
             .run(
                 sqlx::query(
-                    "UPDATE save_cleanup_jobs SET status='failed',retry_at=NULL,\
+                    "WITH expired AS (\
+                        SELECT save_session_id FROM save_cleanup_jobs \
+                        WHERE status='running' \
+                          AND lease_expires_at <= transaction_timestamp() \
+                          AND attempts >= $1 \
+                        ORDER BY lease_expires_at,save_session_id LIMIT $2 \
+                        FOR UPDATE SKIP LOCKED\
+                     ) UPDATE save_cleanup_jobs job SET status='failed',retry_at=NULL,\
                          lease_owner=NULL,lease_expires_at=NULL,last_failure_category='unknown',\
                          updated_at=transaction_timestamp() \
-                     WHERE status='running' AND lease_expires_at <= transaction_timestamp() \
-                       AND attempts >= $1",
+                     FROM expired WHERE job.save_session_id=expired.save_session_id",
                 )
                 .bind(max_attempts)
+                .bind(i64::from(self.policy.batch_size))
                 .execute(&mut *connection),
             )
             .await?
             .map_err(map_sql_error)?;
-        type JobRow = (String, String, String, Option<String>, i16);
+        type JobRow = (String, String, String, Option<String>, i16, i16);
         let rows: Vec<JobRow> = deadline
             .run(
                 sqlx::query_as(
@@ -582,7 +738,7 @@ impl<B: CleanupBackend> CleanupService<B> {
                          updated_at=transaction_timestamp() \
                      FROM selected WHERE job.save_session_id=selected.save_session_id \
                      RETURNING job.save_session_id::text,job.cleanup_kind,job.object_key,\
-                               job.multipart_upload_id,job.attempts",
+                               job.multipart_upload_id,job.attempts,job.absence_count",
                 )
                 .bind(max_attempts)
                 .bind(i64::from(self.policy.batch_size))
@@ -595,7 +751,12 @@ impl<B: CleanupBackend> CleanupService<B> {
         rows.into_iter().map(decode_job).collect()
     }
 
-    async fn finish_job(&self, owner: Uuid, job: ClaimedJob) -> Result<(), CleanupError> {
+    async fn finish_job(
+        &self,
+        owner: Uuid,
+        job: ClaimedJob,
+        outcome: CleanupBackendOutcome,
+    ) -> Result<(), CleanupError> {
         if job.target.kind == CleanupKind::SingleDelete {
             return self
                 .update_claim(
@@ -658,6 +819,15 @@ impl<B: CleanupBackend> CleanupService<B> {
                             self.finish_known_multipart(&mut transaction, &job, deadline)
                                 .await?;
                         }
+                        CleanupKind::MultipartCompleteReconcile => {
+                            self.finish_complete_reconcile(
+                                &mut transaction,
+                                &job,
+                                outcome,
+                                deadline,
+                            )
+                            .await?;
+                        }
                         CleanupKind::SingleDelete => {
                             return Err(CleanupError::InvariantViolation);
                         }
@@ -676,12 +846,13 @@ impl<B: CleanupBackend> CleanupService<B> {
         job: &ClaimedJob,
         deadline: Deadline,
     ) -> Result<(), CleanupError> {
-        type SessionRow = (String, String, Option<String>, String, Option<String>);
+        type SessionRow = (String, String, Option<String>, String, Option<String>, bool);
         let row: Option<SessionRow> = deadline
             .run(
                 sqlx::query_as(
                     "SELECT session.state,session.upload_mode,session.multipart_upload_id,\
-                            session.staging_object_key,lifecycle.create_status \
+                            session.staging_object_key,lifecycle.create_status,\
+                            session.expires_at <= transaction_timestamp() \
                      FROM save_sessions session \
                      LEFT JOIN multipart_lifecycles lifecycle \
                        ON lifecycle.save_session_id=session.id \
@@ -692,15 +863,11 @@ impl<B: CleanupBackend> CleanupService<B> {
             )
             .await?
             .map_err(map_sql_error)?;
-        let Some((state, mode, upload_id, object_key, create_status)) = row else {
+        let Some((state, mode, upload_id, object_key, create_status, expired)) = row else {
             return Ok(());
         };
         if mode != "multipart" || object_key != job.target.object_key.expose() {
-            return if matches!(state.as_str(), "aborted" | "expired" | "failed") {
-                Ok(())
-            } else {
-                Err(CleanupError::InvariantViolation)
-            };
+            return Err(CleanupError::InvariantViolation);
         }
         if !matches!(
             create_status.as_deref(),
@@ -745,7 +912,8 @@ impl<B: CleanupBackend> CleanupService<B> {
                 return Err(CleanupError::InvariantViolation);
             }
         }
-        transition_session(transaction, job.session_id, "failed", deadline).await
+        let terminal_state = if expired { "expired" } else { "failed" };
+        transition_session(transaction, job.session_id, terminal_state, deadline).await
     }
 
     async fn finish_known_multipart(
@@ -822,6 +990,105 @@ impl<B: CleanupBackend> CleanupService<B> {
         }
     }
 
+    async fn finish_complete_reconcile(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        job: &ClaimedJob,
+        outcome: CleanupBackendOutcome,
+        deadline: Deadline,
+    ) -> Result<(), CleanupError> {
+        type SessionRow = (String, Option<String>, String, String, String, bool);
+        let row: Option<SessionRow> = deadline
+            .run(
+                sqlx::query_as(
+                    "SELECT session.state,session.multipart_upload_id,session.staging_object_key,\
+                            lifecycle.create_status,lifecycle.complete_status,\
+                            session.expires_at <= transaction_timestamp() \
+                     FROM save_sessions session JOIN multipart_lifecycles lifecycle \
+                       ON lifecycle.save_session_id=session.id \
+                     WHERE session.id=$1::uuid FOR UPDATE OF session",
+                )
+                .bind(job.session_id.to_string())
+                .fetch_optional(&mut **transaction),
+            )
+            .await?
+            .map_err(map_sql_error)?;
+        let Some((state, upload_id, object_key, create_status, complete_status, expired)) = row
+        else {
+            return Ok(());
+        };
+        if !matches!(state.as_str(), "uploading" | "verifying")
+            || upload_id.as_deref() != job.target.multipart_upload_id.as_deref()
+            || object_key != job.target.object_key.expose()
+            || create_status != "ready"
+            || !matches!(complete_status.as_str(), "completing" | "unknown")
+        {
+            return Err(CleanupError::InvariantViolation);
+        }
+        match outcome {
+            CleanupBackendOutcome::Completed => {
+                if state == "uploading" {
+                    let affected = deadline
+                        .run(
+                            sqlx::query(
+                                "UPDATE save_sessions SET state='verifying',\
+                                     updated_at=transaction_timestamp() \
+                                 WHERE id=$1::uuid AND state='uploading'",
+                            )
+                            .bind(job.session_id.to_string())
+                            .execute(&mut **transaction),
+                        )
+                        .await?
+                        .map_err(map_sql_error)?
+                        .rows_affected();
+                    if affected != 1 {
+                        return Err(CleanupError::InvariantViolation);
+                    }
+                }
+                let affected = deadline
+                    .run(
+                        sqlx::query(
+                            "UPDATE multipart_lifecycles SET complete_status='completed',\
+                                 updated_at=transaction_timestamp() \
+                             WHERE save_session_id=$1::uuid AND create_status='ready' \
+                               AND complete_status IN ('completing','unknown')",
+                        )
+                        .bind(job.session_id.to_string())
+                        .execute(&mut **transaction),
+                    )
+                    .await?
+                    .map_err(map_sql_error)?
+                    .rows_affected();
+                if affected != 1 {
+                    return Err(CleanupError::InvariantViolation);
+                }
+                Ok(())
+            }
+            CleanupBackendOutcome::Missing => {
+                let affected = deadline
+                    .run(
+                        sqlx::query(
+                            "UPDATE multipart_lifecycles SET create_status='cleaned',\
+                                 updated_at=transaction_timestamp() \
+                             WHERE save_session_id=$1::uuid AND create_status='ready' \
+                               AND complete_status IN ('completing','unknown')",
+                        )
+                        .bind(job.session_id.to_string())
+                        .execute(&mut **transaction),
+                    )
+                    .await?
+                    .map_err(map_sql_error)?
+                    .rows_affected();
+                if affected != 1 {
+                    return Err(CleanupError::InvariantViolation);
+                }
+                let terminal_state = if expired { "expired" } else { "failed" };
+                transition_session(transaction, job.session_id, terminal_state, deadline).await
+            }
+            _ => Err(CleanupError::InvariantViolation),
+        }
+    }
+
     async fn retry_job(
         &self,
         owner: Uuid,
@@ -840,6 +1107,24 @@ impl<B: CleanupBackend> CleanupService<B> {
             job.session_id,
             "status='retry_wait',retry_at=transaction_timestamp()+($4 * interval '1 millisecond'),last_failure_category=$3",
             Some(category),
+            Some(delay_millis),
+        )
+        .await
+    }
+
+    async fn observe_absence(&self, owner: Uuid, job: ClaimedJob) -> Result<(), CleanupError> {
+        let attempts = u16::try_from(job.attempts).map_err(|_| CleanupError::InvariantViolation)?;
+        if attempts >= self.policy.max_attempts {
+            return self.fail_job(owner, job.session_id, "absent").await;
+        }
+        let delay = retry_delay(self.policy, job.session_id, job.attempts)?;
+        let delay_millis =
+            i64::try_from(delay.as_millis()).map_err(|_| CleanupError::InvalidPolicy)?;
+        self.update_claim(
+            owner,
+            job.session_id,
+            "status='retry_wait',retry_at=transaction_timestamp()+($4 * interval '1 millisecond'),last_failure_category=$3,absence_count=1,absence_observed_at=transaction_timestamp()",
+            Some("absent"),
             Some(delay_millis),
         )
         .await
@@ -980,21 +1265,32 @@ struct ClaimedJob {
     session_id: SaveSessionId,
     target: CleanupTarget,
     attempts: i16,
+    absence_count: i16,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ReconcilePreparation {
+    Proceed,
+    StaleReady,
 }
 
 fn decode_job(
-    row: (String, String, String, Option<String>, i16),
+    row: (String, String, String, Option<String>, i16, i16),
 ) -> Result<ClaimedJob, CleanupError> {
     let session_id = parse_session_id(&row.0)?;
     let kind = match row.1.as_str() {
         "single_delete" if row.3.is_none() => CleanupKind::SingleDelete,
         "multipart_abort" if row.3.is_some() => CleanupKind::MultipartAbort,
         "multipart_reconcile" if row.3.is_none() => CleanupKind::MultipartReconcile,
+        "multipart_complete_reconcile" if row.3.is_some() => {
+            CleanupKind::MultipartCompleteReconcile
+        }
         _ => return Err(CleanupError::InvariantViolation),
     };
     let object_key = ObjectKey::parse(row.2).map_err(|_| CleanupError::InvariantViolation)?;
     if !(1..=i16::try_from(MAX_ATTEMPTS).map_err(|_| CleanupError::InvariantViolation)?)
         .contains(&row.4)
+        || !(0..=1).contains(&row.5)
     {
         return Err(CleanupError::InvariantViolation);
     }
@@ -1006,6 +1302,7 @@ fn decode_job(
             multipart_upload_id: row.3,
         },
         attempts: row.4,
+        absence_count: row.5,
     })
 }
 
@@ -1133,6 +1430,32 @@ async fn complete_claim(
                      completed_at=transaction_timestamp(),last_failure_category=NULL,\
                      lease_owner=NULL,lease_expires_at=NULL,updated_at=transaction_timestamp() \
                  WHERE save_session_id=$1::uuid AND status='running' AND lease_owner=$2::uuid",
+            )
+            .bind(session_id.to_string())
+            .bind(owner.to_string())
+            .execute(&mut **transaction),
+        )
+        .await?
+        .map_err(map_sql_error)?
+        .rows_affected();
+    if affected == 1 {
+        Ok(())
+    } else {
+        Err(CleanupError::InvariantViolation)
+    }
+}
+
+async fn delete_claim(
+    transaction: &mut Transaction<'_, Postgres>,
+    owner: Uuid,
+    session_id: SaveSessionId,
+    deadline: Deadline,
+) -> Result<(), CleanupError> {
+    let affected = deadline
+        .run(
+            sqlx::query(
+                "DELETE FROM save_cleanup_jobs WHERE save_session_id=$1::uuid \
+                 AND status='running' AND lease_owner=$2::uuid",
             )
             .bind(session_id.to_string())
             .bind(owner.to_string())
