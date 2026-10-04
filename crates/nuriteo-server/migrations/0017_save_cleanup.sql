@@ -96,6 +96,63 @@ CREATE INDEX save_cleanup_jobs_claim_idx
     ON save_cleanup_jobs (eligible_at, retry_at, save_session_id)
     WHERE status IN ('queued', 'retry_wait', 'running');
 
+-- Every multipart create begins with an expiry-delayed reconcile guard. A
+-- process can disappear after the backend accepted create but before the
+-- response or DB attach was observed. The guard is deleted only by the same
+-- transaction that persists `ready`; an explicit unknown result makes it
+-- eligible immediately.
+CREATE OR REPLACE FUNCTION maintain_multipart_create_cleanup_guard()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    parent save_sessions%ROWTYPE;
+BEGIN
+    SELECT * INTO parent
+    FROM save_sessions session
+    WHERE session.id = NEW.save_session_id;
+
+    IF NOT FOUND THEN
+        RETURN NEW;
+    END IF;
+
+    IF NEW.create_status IN ('creating', 'unknown', 'cleaned') THEN
+        INSERT INTO save_cleanup_jobs (
+            save_session_id, cleanup_kind, object_key, eligible_at
+        ) VALUES (
+            parent.id,
+            'multipart_reconcile',
+            parent.staging_object_key,
+            CASE
+                WHEN NEW.create_status IN ('unknown', 'cleaned') THEN transaction_timestamp()
+                ELSE GREATEST(parent.expires_at, transaction_timestamp())
+            END
+        )
+        ON CONFLICT (save_session_id) DO UPDATE
+        SET eligible_at = LEAST(save_cleanup_jobs.eligible_at, EXCLUDED.eligible_at),
+            updated_at = transaction_timestamp()
+        WHERE save_cleanup_jobs.cleanup_kind = 'multipart_reconcile'
+          AND save_cleanup_jobs.status = 'queued';
+    ELSIF OLD.create_status = 'creating' AND NEW.create_status = 'ready' THEN
+        DELETE FROM save_cleanup_jobs
+        WHERE save_session_id = NEW.save_session_id
+          AND cleanup_kind = 'multipart_reconcile'
+          AND status = 'queued';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER multipart_lifecycle_cleanup_guard_insert
+    AFTER INSERT ON multipart_lifecycles
+    FOR EACH ROW
+    EXECUTE FUNCTION maintain_multipart_create_cleanup_guard();
+
+CREATE TRIGGER multipart_lifecycle_cleanup_guard_update
+    AFTER UPDATE OF create_status ON multipart_lifecycles
+    FOR EACH ROW
+    EXECUTE FUNCTION maintain_multipart_create_cleanup_guard();
+
 CREATE OR REPLACE FUNCTION enqueue_terminal_save_cleanup()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -157,6 +214,27 @@ SELECT
     END
 FROM save_sessions session
 WHERE session.state IN ('aborted', 'expired', 'failed')
+ON CONFLICT (save_session_id) DO NOTHING;
+
+-- Forward upgrades and a process crash before the application records an
+-- ambiguous create still need a restart-safe cleanup owner. `creating` waits
+-- for session expiry; `unknown` is immediately eligible.
+INSERT INTO save_cleanup_jobs (
+    save_session_id, cleanup_kind, object_key, eligible_at
+)
+SELECT
+    session.id,
+    'multipart_reconcile',
+    session.staging_object_key,
+    CASE
+        WHEN lifecycle.create_status = 'unknown' THEN transaction_timestamp()
+        ELSE GREATEST(session.expires_at, transaction_timestamp())
+    END
+FROM save_sessions session
+JOIN multipart_lifecycles lifecycle ON lifecycle.save_session_id = session.id
+WHERE session.state = 'created'
+  AND session.multipart_upload_id IS NULL
+  AND lifecycle.create_status IN ('creating', 'unknown')
 ON CONFLICT (save_session_id) DO NOTHING;
 
 CREATE TRIGGER save_cleanup_jobs_no_truncate

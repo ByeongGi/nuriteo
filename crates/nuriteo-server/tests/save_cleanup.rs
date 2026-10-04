@@ -25,7 +25,7 @@ use nuriteo_server::save::{
     AbortSaveSession, AbortSaveSessionResult, CleanupService, CleanupWorkerPolicy, WorkerShutdown,
 };
 use nuriteo_server::workspace::StorageScopeId;
-use sqlx::Executor;
+use sqlx::{Acquire, Executor};
 
 const DATABASE_URL_ENV: &str = "NURITEO_TEST_DATABASE_URL";
 const DATABASE_CA_ENV: &str = "NURITEO_TEST_DATABASE_CA";
@@ -178,10 +178,19 @@ async fn cleanup_is_bounded_persisted_redacted_and_restart_safe() {
         session_id: multipart_session,
         actor_user_id: UserId::from_str(USER).unwrap(),
     };
-    assert_eq!(
-        service.abort(multipart_abort).await.unwrap(),
-        AbortSaveSessionResult::Aborted
-    );
+    // Simulate a backend create response/attach loss. The lifecycle update
+    // atomically makes the expiry guard immediately eligible without first
+    // terminalizing (which the multipart fence correctly rejects).
+    sqlx::query(
+        "UPDATE multipart_lifecycles SET create_status='unknown',\
+                updated_at=transaction_timestamp() \
+         WHERE save_session_id=$1::uuid AND create_status='creating'",
+    )
+    .bind(multipart_session.to_string())
+    .execute(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+    assert!(service.abort(multipart_abort).await.is_err());
     let kind: String = sqlx::query_scalar(
         "SELECT cleanup_kind FROM save_cleanup_jobs WHERE save_session_id=$1::uuid",
     )
@@ -251,6 +260,78 @@ async fn cleanup_is_bounded_persisted_redacted_and_restart_safe() {
             .is_err()
     );
     assert!(store.upload_part(part_request, &limits).await.is_err());
+    let reconciled: (String, String, i64) = sqlx::query_as(
+        "SELECT session.state,lifecycle.create_status,\
+                (SELECT COUNT(*) FROM storage_reservations reservation \
+                 WHERE reservation.save_session_id=session.id) \
+         FROM save_sessions session JOIN multipart_lifecycles lifecycle \
+           ON lifecycle.save_session_id=session.id \
+         WHERE session.id=$1::uuid",
+    )
+    .bind(multipart_session.to_string())
+    .fetch_one(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+    assert_eq!(reconciled, ("failed".to_owned(), "cleaned".to_owned(), 0));
+
+    // If attach committed, ready and guard deletion are atomic. A caller that
+    // lost the commit response must not reconcile/abort the live upload.
+    let attached_session = insert_session(&pool, MULTIPART_PROJECT, "multipart", None).await;
+    let attached_key = session_key(&pool, attached_session).await;
+    let attached_upload_id = create_backend_multipart(&endpoint, &ca_file, &attached_key).await;
+    attach_upload_fixture(&pool, attached_session, &attached_upload_id).await;
+    let attached_jobs: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM save_cleanup_jobs WHERE save_session_id=$1::uuid")
+            .bind(attached_session.to_string())
+            .fetch_one(&mut *pool.acquire().await.unwrap())
+            .await
+            .unwrap();
+    assert_eq!(attached_jobs, 0);
+
+    // Construct the response-loss boundary after a confirmed backend abort:
+    // lifecycle cleaned committed, but the terminal/quota transaction did
+    // not. The durable guard must finish all DB state atomically.
+    abort_backend_multipart(&endpoint, &ca_file, &attached_key, &attached_upload_id).await;
+    sqlx::query(
+        "UPDATE multipart_lifecycles SET create_status='cleaned',\
+                updated_at=transaction_timestamp() \
+         WHERE save_session_id=$1::uuid AND create_status='ready'",
+    )
+    .bind(attached_session.to_string())
+    .execute(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+    let split_worker = service.start_worker();
+    wait_for_count(&pool, "completed", 104).await;
+    assert_eq!(
+        split_worker.shutdown(Duration::from_secs(3)).await,
+        WorkerShutdown::Drained
+    );
+    assert_multipart_finalized(&pool, attached_session, "failed").await;
+
+    // A known-ID terminal cleanup persists ready -> cleaned in the same
+    // transaction that completes its cleanup claim.
+    let known_session = insert_session(&pool, MULTIPART_PROJECT, "multipart", None).await;
+    let known_key = session_key(&pool, known_session).await;
+    let known_upload_id = create_backend_multipart(&endpoint, &ca_file, &known_key).await;
+    attach_upload_fixture(&pool, known_session, &known_upload_id).await;
+    let known_abort = AbortSaveSession {
+        storage_scope_id: scope(),
+        project_id: ProjectId::from_str(MULTIPART_PROJECT).unwrap(),
+        session_id: known_session,
+        actor_user_id: UserId::from_str(USER).unwrap(),
+    };
+    assert_eq!(
+        service.abort(known_abort).await.unwrap(),
+        AbortSaveSessionResult::Aborted
+    );
+    let known_worker = service.start_worker();
+    wait_for_count(&pool, "completed", 105).await;
+    assert_eq!(
+        known_worker.shutdown(Duration::from_secs(3)).await,
+        WorkerShutdown::Drained
+    );
+    assert_multipart_finalized(&pool, known_session, "aborted").await;
 
     // Abort, expiry, Project deletion and the worker race on one session. The
     // first delete may fail closed while the session is active; retry after the
@@ -294,7 +375,7 @@ async fn cleanup_is_bounded_persisted_redacted_and_restart_safe() {
         .execute(&mut *pool.acquire().await.unwrap())
         .await
         .unwrap();
-    wait_for_count(&pool, "completed", 104).await;
+    wait_for_count(&pool, "completed", 106).await;
     assert_eq!(
         race_worker.shutdown(Duration::from_secs(3)).await,
         WorkerShutdown::Drained
@@ -390,6 +471,17 @@ async fn insert_session(
     .execute(&mut *pool.acquire().await.unwrap())
     .await
     .unwrap();
+    if mode == "multipart" {
+        sqlx::query(
+            "INSERT INTO multipart_lifecycles \
+             (save_session_id,part_size_bytes,part_count,create_status,complete_status) \
+             VALUES ($1::uuid,8388608,1,'creating','pending')",
+        )
+        .bind(session.to_string())
+        .execute(&mut *pool.acquire().await.unwrap())
+        .await
+        .unwrap();
+    }
     sqlx::query(
         "INSERT INTO storage_reservations \
          (save_session_id,storage_scope_id,reserved_bytes,expires_at) \
@@ -409,6 +501,56 @@ async fn session_key(pool: &DatabasePool, session: SaveSessionId) -> String {
         .fetch_one(&mut *pool.acquire().await.unwrap())
         .await
         .unwrap()
+}
+
+async fn attach_upload_fixture(pool: &DatabasePool, session: SaveSessionId, upload_id: &str) {
+    let mut connection = pool.acquire().await.unwrap();
+    let mut transaction = connection.begin().await.unwrap();
+    let session_affected = sqlx::query(
+        "UPDATE save_sessions SET multipart_upload_id=$2,state='uploading',\
+                updated_at=transaction_timestamp() \
+         WHERE id=$1::uuid AND state='created' AND multipart_upload_id IS NULL",
+    )
+    .bind(session.to_string())
+    .bind(upload_id)
+    .execute(&mut *transaction)
+    .await
+    .unwrap()
+    .rows_affected();
+    assert_eq!(session_affected, 1);
+    let lifecycle_affected = sqlx::query(
+        "UPDATE multipart_lifecycles SET create_status='ready',\
+                updated_at=transaction_timestamp() \
+         WHERE save_session_id=$1::uuid AND create_status='creating' \
+           AND complete_status='pending'",
+    )
+    .bind(session.to_string())
+    .execute(&mut *transaction)
+    .await
+    .unwrap()
+    .rows_affected();
+    assert_eq!(lifecycle_affected, 1);
+    transaction.commit().await.unwrap();
+}
+
+async fn assert_multipart_finalized(
+    pool: &DatabasePool,
+    session: SaveSessionId,
+    expected_state: &str,
+) {
+    let row: (String, String, i64) = sqlx::query_as(
+        "SELECT session.state,lifecycle.create_status,\
+                (SELECT COUNT(*) FROM storage_reservations reservation \
+                 WHERE reservation.save_session_id=session.id) \
+         FROM save_sessions session JOIN multipart_lifecycles lifecycle \
+           ON lifecycle.save_session_id=session.id \
+         WHERE session.id=$1::uuid",
+    )
+    .bind(session.to_string())
+    .fetch_one(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+    assert_eq!(row, (expected_state.to_owned(), "cleaned".to_owned(), 0));
 }
 
 async fn force_expired(pool: &DatabasePool, session: SaveSessionId) {
@@ -434,6 +576,13 @@ async fn force_expired(pool: &DatabasePool, session: SaveSessionId) {
 async fn prove_forward_backfill(pool: &DatabasePool) {
     let session = insert_session(pool, BACKFILL_PROJECT, "single", None).await;
     let mut connection = pool.acquire().await.unwrap();
+    connection
+        .execute(
+            "DROP TRIGGER multipart_lifecycle_cleanup_guard_insert ON multipart_lifecycles;\
+             DROP TRIGGER multipart_lifecycle_cleanup_guard_update ON multipart_lifecycles",
+        )
+        .await
+        .unwrap();
     connection
         .execute("DROP TRIGGER save_sessions_terminal_cleanup_enqueue ON save_sessions")
         .await
@@ -559,6 +708,41 @@ async fn object_store(endpoint: String, ca_file: String) -> S3ObjectStore {
 }
 
 async fn create_bucket(endpoint: &str, ca_file: &str) {
+    let client = aws_client(endpoint, ca_file);
+    if let Err(error) = client.create_bucket().bucket(BUCKET).send().await {
+        let exists = error
+            .as_service_error()
+            .and_then(aws_sdk_s3::error::ProvideErrorMetadata::code)
+            .is_some_and(|code| matches!(code, "BucketAlreadyExists" | "BucketAlreadyOwnedByYou"));
+        assert!(exists);
+    }
+}
+
+async fn create_backend_multipart(endpoint: &str, ca_file: &str, key: &str) -> String {
+    aws_client(endpoint, ca_file)
+        .create_multipart_upload()
+        .bucket(BUCKET)
+        .key(key)
+        .send()
+        .await
+        .unwrap()
+        .upload_id()
+        .unwrap()
+        .to_owned()
+}
+
+async fn abort_backend_multipart(endpoint: &str, ca_file: &str, key: &str, upload_id: &str) {
+    aws_client(endpoint, ca_file)
+        .abort_multipart_upload()
+        .bucket(BUCKET)
+        .key(key)
+        .upload_id(upload_id)
+        .send()
+        .await
+        .unwrap();
+}
+
+fn aws_client(endpoint: &str, ca_file: &str) -> aws_sdk_s3::Client {
     let context = TlsContext::builder()
         .with_trust_store(TrustStore::default().with_pem_certificate(fs::read(ca_file).unwrap()))
         .build()
@@ -568,7 +752,7 @@ async fn create_bucket(endpoint: &str, ca_file: &str) {
         .tls_context(context)
         .build_https()
         .unwrap();
-    let client = aws_sdk_s3::Client::from_conf(
+    aws_sdk_s3::Client::from_conf(
         aws_sdk_s3::Config::builder()
             .behavior_version(BehaviorVersion::latest())
             .endpoint_url(endpoint)
@@ -583,12 +767,5 @@ async fn create_bucket(endpoint: &str, ca_file: &str) {
             ))
             .http_client(PoolClient::new(&pool).unwrap())
             .build(),
-    );
-    if let Err(error) = client.create_bucket().bucket(BUCKET).send().await {
-        let exists = error
-            .as_service_error()
-            .and_then(aws_sdk_s3::error::ProvideErrorMetadata::code)
-            .is_some_and(|code| matches!(code, "BucketAlreadyExists" | "BucketAlreadyOwnedByYou"));
-        assert!(exists);
-    }
+    )
 }

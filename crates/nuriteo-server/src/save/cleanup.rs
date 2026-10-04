@@ -1,5 +1,6 @@
 use std::fmt;
 use std::future::Future;
+use std::str::FromStr;
 use std::time::Duration;
 
 use sqlx::{Acquire, Postgres, Transaction};
@@ -524,7 +525,7 @@ impl<B: CleanupBackend> CleanupService<B> {
         };
         match outcome {
             CleanupBackendOutcome::Completed | CleanupBackendOutcome::Missing => {
-                self.finish_job(owner, job.session_id).await
+                self.finish_job(owner, job).await
             }
             CleanupBackendOutcome::Timeout => self.retry_job(owner, job, "timeout").await,
             CleanupBackendOutcome::Retryable => self.retry_job(owner, job, "retryable").await,
@@ -594,15 +595,231 @@ impl<B: CleanupBackend> CleanupService<B> {
         rows.into_iter().map(decode_job).collect()
     }
 
-    async fn finish_job(&self, owner: Uuid, session_id: SaveSessionId) -> Result<(), CleanupError> {
-        self.update_claim(
-            owner,
-            session_id,
-            "status='completed',completed_at=transaction_timestamp(),last_failure_category=NULL",
-            None,
-            None,
-        )
-        .await
+    async fn finish_job(&self, owner: Uuid, job: ClaimedJob) -> Result<(), CleanupError> {
+        if job.target.kind == CleanupKind::SingleDelete {
+            return self
+                .update_claim(
+                    owner,
+                    job.session_id,
+                    "status='completed',completed_at=transaction_timestamp(),last_failure_category=NULL",
+                    None,
+                    None,
+                )
+                .await;
+        }
+
+        let deadline = Deadline::new(self.policy.operation_timeout);
+        let mut connection = deadline
+            .run(self.pool.acquire())
+            .await?
+            .map_err(map_database_error)?;
+        let identity: Option<(String, String)> = deadline
+            .run(
+                sqlx::query_as(
+                    "SELECT storage_scope_id::text,project_id::text FROM save_sessions \
+                     WHERE id=$1::uuid",
+                )
+                .bind(job.session_id.to_string())
+                .fetch_optional(&mut *connection),
+            )
+            .await?
+            .map_err(map_sql_error)?;
+        let mut transaction = deadline
+            .run(connection.begin())
+            .await?
+            .map_err(map_sql_error)?;
+        configure_transaction(&mut transaction, deadline).await?;
+
+        if let Some((scope_id, project_id)) = identity {
+            let scope = StorageScopeId::from_str(&scope_id)
+                .map_err(|_| CleanupError::InvariantViolation)?;
+            if deadline
+                .run(QuotaRepository::lock_storage_scope(&mut transaction, scope))
+                .await?
+                .map_err(map_sql_error)?
+            {
+                let project_locked = deadline
+                    .run(
+                        sqlx::query("SELECT 1 FROM projects WHERE id=$1::uuid FOR UPDATE")
+                            .bind(project_id)
+                            .execute(&mut *transaction),
+                    )
+                    .await?
+                    .map_err(map_sql_error)?
+                    .rows_affected()
+                    == 1;
+                if project_locked {
+                    match job.target.kind {
+                        CleanupKind::MultipartReconcile => {
+                            self.finish_ambiguous_multipart(&mut transaction, &job, deadline)
+                                .await?;
+                        }
+                        CleanupKind::MultipartAbort => {
+                            self.finish_known_multipart(&mut transaction, &job, deadline)
+                                .await?;
+                        }
+                        CleanupKind::SingleDelete => {
+                            return Err(CleanupError::InvariantViolation);
+                        }
+                    }
+                }
+            }
+        }
+
+        complete_claim(&mut transaction, owner, job.session_id, deadline).await?;
+        commit(transaction, deadline).await
+    }
+
+    async fn finish_ambiguous_multipart(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        job: &ClaimedJob,
+        deadline: Deadline,
+    ) -> Result<(), CleanupError> {
+        type SessionRow = (String, String, Option<String>, String, Option<String>);
+        let row: Option<SessionRow> = deadline
+            .run(
+                sqlx::query_as(
+                    "SELECT session.state,session.upload_mode,session.multipart_upload_id,\
+                            session.staging_object_key,lifecycle.create_status \
+                     FROM save_sessions session \
+                     LEFT JOIN multipart_lifecycles lifecycle \
+                       ON lifecycle.save_session_id=session.id \
+                     WHERE session.id=$1::uuid FOR UPDATE OF session",
+                )
+                .bind(job.session_id.to_string())
+                .fetch_optional(&mut **transaction),
+            )
+            .await?
+            .map_err(map_sql_error)?;
+        let Some((state, mode, upload_id, object_key, create_status)) = row else {
+            return Ok(());
+        };
+        if mode != "multipart" || object_key != job.target.object_key.expose() {
+            return if matches!(state.as_str(), "aborted" | "expired" | "failed") {
+                Ok(())
+            } else {
+                Err(CleanupError::InvariantViolation)
+            };
+        }
+        if !matches!(
+            create_status.as_deref(),
+            Some("creating" | "unknown" | "cleaned")
+        ) {
+            return Err(CleanupError::InvariantViolation);
+        }
+        if matches!(state.as_str(), "aborted" | "expired" | "failed")
+            && create_status.as_deref() == Some("cleaned")
+        {
+            return Ok(());
+        }
+        let ambiguous_create = state == "created"
+            && upload_id.is_none()
+            && matches!(
+                create_status.as_deref(),
+                Some("creating" | "unknown" | "cleaned")
+            );
+        let confirmed_abort = state == "uploading"
+            && upload_id.is_some()
+            && create_status.as_deref() == Some("cleaned");
+        if !ambiguous_create && !confirmed_abort {
+            return Err(CleanupError::InvariantViolation);
+        }
+        if create_status.as_deref() != Some("cleaned") {
+            let affected = deadline
+                .run(
+                    sqlx::query(
+                        "UPDATE multipart_lifecycles SET create_status='cleaned',\
+                             updated_at=transaction_timestamp() \
+                         WHERE save_session_id=$1::uuid \
+                           AND create_status IN ('creating','unknown') \
+                           AND complete_status='pending'",
+                    )
+                    .bind(job.session_id.to_string())
+                    .execute(&mut **transaction),
+                )
+                .await?
+                .map_err(map_sql_error)?
+                .rows_affected();
+            if affected != 1 {
+                return Err(CleanupError::InvariantViolation);
+            }
+        }
+        transition_session(transaction, job.session_id, "failed", deadline).await
+    }
+
+    async fn finish_known_multipart(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        job: &ClaimedJob,
+        deadline: Deadline,
+    ) -> Result<(), CleanupError> {
+        type SessionRow = (
+            String,
+            String,
+            Option<String>,
+            String,
+            Option<String>,
+            Option<String>,
+        );
+        let row: Option<SessionRow> = deadline
+            .run(
+                sqlx::query_as(
+                    "SELECT session.state,session.upload_mode,session.multipart_upload_id,\
+                            session.staging_object_key,lifecycle.create_status,\
+                            lifecycle.complete_status \
+                     FROM save_sessions session \
+                     LEFT JOIN multipart_lifecycles lifecycle \
+                       ON lifecycle.save_session_id=session.id \
+                     WHERE session.id=$1::uuid FOR UPDATE OF session",
+                )
+                .bind(job.session_id.to_string())
+                .fetch_optional(&mut **transaction),
+            )
+            .await?
+            .map_err(map_sql_error)?;
+        let Some((state, mode, upload_id, object_key, create_status, complete_status)) = row else {
+            return Ok(());
+        };
+        if !matches!(state.as_str(), "aborted" | "expired" | "failed")
+            || mode != "multipart"
+            || upload_id.as_deref() != job.target.multipart_upload_id.as_deref()
+            || object_key != job.target.object_key.expose()
+        {
+            return Err(CleanupError::InvariantViolation);
+        }
+        // Sessions created before the lifecycle migration have no marker.
+        if create_status.is_none() && complete_status.is_none() {
+            return Ok(());
+        }
+        if complete_status.as_deref() != Some("pending") {
+            return Err(CleanupError::InvariantViolation);
+        }
+        match create_status.as_deref() {
+            Some("cleaned") => Ok(()),
+            Some("ready") => {
+                let affected = deadline
+                    .run(
+                        sqlx::query(
+                            "UPDATE multipart_lifecycles SET create_status='cleaned',\
+                                 updated_at=transaction_timestamp() \
+                             WHERE save_session_id=$1::uuid AND create_status='ready' \
+                               AND complete_status='pending'",
+                        )
+                        .bind(job.session_id.to_string())
+                        .execute(&mut **transaction),
+                    )
+                    .await?
+                    .map_err(map_sql_error)?
+                    .rows_affected();
+                if affected == 1 {
+                    Ok(())
+                } else {
+                    Err(CleanupError::InvariantViolation)
+                }
+            }
+            _ => Err(CleanupError::InvariantViolation),
+        }
     }
 
     async fn retry_job(
@@ -897,6 +1114,34 @@ async fn transition_session(
     let result = deadline.run(sqlx::query("UPDATE save_sessions SET state=$2,terminal_at=transaction_timestamp(),updated_at=transaction_timestamp() WHERE id=$1::uuid")
         .bind(session_id.to_string()).bind(state).execute(&mut **transaction)).await?.map_err(map_sql_error)?;
     if result.rows_affected() == 1 {
+        Ok(())
+    } else {
+        Err(CleanupError::InvariantViolation)
+    }
+}
+
+async fn complete_claim(
+    transaction: &mut Transaction<'_, Postgres>,
+    owner: Uuid,
+    session_id: SaveSessionId,
+    deadline: Deadline,
+) -> Result<(), CleanupError> {
+    let affected = deadline
+        .run(
+            sqlx::query(
+                "UPDATE save_cleanup_jobs SET status='completed',\
+                     completed_at=transaction_timestamp(),last_failure_category=NULL,\
+                     lease_owner=NULL,lease_expires_at=NULL,updated_at=transaction_timestamp() \
+                 WHERE save_session_id=$1::uuid AND status='running' AND lease_owner=$2::uuid",
+            )
+            .bind(session_id.to_string())
+            .bind(owner.to_string())
+            .execute(&mut **transaction),
+        )
+        .await?
+        .map_err(map_sql_error)?
+        .rows_affected();
+    if affected == 1 {
         Ok(())
     } else {
         Err(CleanupError::InvariantViolation)

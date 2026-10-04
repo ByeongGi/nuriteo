@@ -256,6 +256,10 @@ impl<S: MultipartStore> MultipartService<S> {
         match self.attach_upload(&persisted, &upload, deadline).await {
             Ok(()) => Ok(persisted.public()),
             Err(MultipartServiceError::CommitOutcomeUnknown) => {
+                // A fresh connection observes either the committed `ready`
+                // attach or the rolled-back `creating` marker. Only the
+                // latter may become `unknown` and enqueue reconciliation.
+                let _ = self.mark_create_unknown(&persisted, deadline).await;
                 Err(MultipartServiceError::CommitOutcomeUnknown)
             }
             Err(_) => {
@@ -610,7 +614,8 @@ impl<S: MultipartStore> MultipartService<S> {
                 sqlx::query(
                     "UPDATE save_sessions SET multipart_upload_id=$2,state='uploading', \
                      updated_at=transaction_timestamp() WHERE id=$1::uuid AND state='created' \
-                     AND multipart_upload_id IS NULL",
+                     AND multipart_upload_id IS NULL \
+                     AND expires_at > transaction_timestamp()",
                 )
                 .bind(persisted.session_id.to_string())
                 .bind(&upload.upload_id)
