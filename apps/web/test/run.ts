@@ -7,6 +7,7 @@ await import("./browser-client.test.ts");
 await import("./contracts.test.ts");
 await import("./entry-flow.test.ts");
 await import("./project-ux.test.ts");
+await import("./project-bundle-v1-validation.test.ts");
 await import("./project-bundle-v1.test.ts");
 await import("./runtime-adapter.test.ts");
 await import("./runtime-assets.test.ts");

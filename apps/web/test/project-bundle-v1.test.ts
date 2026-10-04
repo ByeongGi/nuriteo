@@ -4,9 +4,9 @@ import { readdir, readFile } from "node:fs/promises";
 
 import {
   writeValidatedProjectBundleV1,
-  type ProjectBundleV1SourceFile,
-  type ValidatedProjectBundleV1Projection
+  type ProjectBundleV1SourceFile
 } from "../src/bundles/project-bundle-v1.ts";
+import { validateProjectBundleV1Projection } from "../src/bundles/project-bundle-v1-validation.ts";
 
 const decoder = new TextDecoder();
 const encoder = new TextEncoder();
@@ -38,7 +38,7 @@ const rawFixtureSource = {
   storageScopeId,
   files: fixtureFiles
 };
-const fixtureSource = rawFixtureSource as unknown as ValidatedProjectBundleV1Projection;
+const fixtureSource = validateProjectBundleV1Projection(rawFixtureSource);
 
 const canonical = await writeValidatedProjectBundleV1(fixtureSource);
 const reordered = await writeValidatedProjectBundleV1({
@@ -135,7 +135,10 @@ void compileTimeValidatedBoundary;
 
 const productionSources = await readTypeScriptFiles(new URL("../src/", import.meta.url));
 for (const source of productionSources) {
-  if (source.url.endsWith("/bundles/project-bundle-v1.ts")) continue;
+  if (
+    source.url.endsWith("/bundles/project-bundle-v1.ts")
+    || source.url.endsWith("/bundles/project-bundle-v1-validation.ts")
+  ) continue;
   assert.doesNotMatch(
     source.contents,
     /(?:from\s+["'][^"']*project-bundle-v1|writeValidatedProjectBundleV1)/u,
