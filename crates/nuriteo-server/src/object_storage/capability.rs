@@ -16,6 +16,12 @@ use super::{ObjectKey, PutRequest, S3ObjectStore, SensitiveUrl};
 
 const PROBE_CONTENT_TYPE: &str = "application/octet-stream";
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum MultipartReconcileOutcome {
+    Aborted,
+    Missing,
+}
+
 impl S3ObjectStore {
     pub async fn put_with_checksum(
         &self,
@@ -346,7 +352,7 @@ impl S3ObjectStore {
     pub(crate) async fn reconcile_multipart_for_exact_key(
         &self,
         key: &ObjectKey,
-    ) -> Result<(), ObjectStoreError> {
+    ) -> Result<MultipartReconcileOutcome, ObjectStoreError> {
         const MAX_MATCHES: usize = 8;
         let output = self
             .client
@@ -371,6 +377,9 @@ impl S3ObjectStore {
                 false,
             ));
         }
+        if matching.is_empty() {
+            return Ok(MultipartReconcileOutcome::Missing);
+        }
         for upload_id in matching.drain(..) {
             self.abort_multipart(&MultipartUpload {
                 key: key.clone(),
@@ -378,7 +387,7 @@ impl S3ObjectStore {
             })
             .await?;
         }
-        Ok(())
+        Ok(MultipartReconcileOutcome::Aborted)
     }
 
     pub async fn probe_capabilities(&self, prefix: &ProbePrefix) -> CapabilityReport {

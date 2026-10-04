@@ -239,7 +239,7 @@ BEGIN
             parent.staging_object_key,
             CASE
                 WHEN NEW.create_status = 'cleaned' THEN transaction_timestamp()
-                ELSE LEAST(
+                ELSE GREATEST(
                     parent.expires_at,
                     transaction_timestamp() + interval '2 minutes'
                 )
@@ -287,7 +287,7 @@ BEGIN
             save_session_id,cleanup_kind,object_key,multipart_upload_id,eligible_at
         ) VALUES (
             parent.id,'multipart_complete_reconcile',parent.staging_object_key,
-            parent.multipart_upload_id,LEAST(
+            parent.multipart_upload_id,GREATEST(
                 parent.expires_at,
                 transaction_timestamp() + interval '2 minutes'
             )
@@ -373,7 +373,7 @@ INSERT INTO save_cleanup_jobs (
     save_session_id,cleanup_kind,object_key,multipart_upload_id,eligible_at
 )
 SELECT session.id,'multipart_complete_reconcile',session.staging_object_key,
-       session.multipart_upload_id,LEAST(
+       session.multipart_upload_id,GREATEST(
            session.expires_at,
            transaction_timestamp() + interval '2 minutes'
        )
@@ -386,8 +386,8 @@ WHERE session.state IN ('uploading','verifying')
 ON CONFLICT (save_session_id) DO NOTHING;
 
 -- Forward upgrades and a process crash before the application records an
--- ambiguous create still need a restart-safe cleanup owner. `creating` waits
--- for session expiry; `unknown` is immediately eligible.
+-- ambiguous create still need a restart-safe cleanup owner. Both states wait
+-- until the session has expired and the operation quarantine has elapsed.
 INSERT INTO save_cleanup_jobs (
     save_session_id, cleanup_kind, object_key, eligible_at
 )
@@ -397,7 +397,7 @@ SELECT
     session.staging_object_key,
     CASE
         WHEN lifecycle.create_status = 'cleaned' THEN transaction_timestamp()
-        ELSE LEAST(
+        ELSE GREATEST(
             session.expires_at,
             transaction_timestamp() + interval '2 minutes'
         )

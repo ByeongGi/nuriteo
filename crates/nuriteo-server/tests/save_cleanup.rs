@@ -316,6 +316,76 @@ async fn cleanup_is_bounded_persisted_redacted_and_restart_safe() {
     .unwrap();
     assert_eq!(reconciled, ("failed".to_owned(), "cleaned".to_owned(), 0));
 
+    // LIST returning zero exact-key uploads is not a successful abort. It is
+    // persisted as the first absence observation, and a late upload created
+    // before the second poll must still be discovered and aborted.
+    let absent_create_session = insert_session(&pool, MULTIPART_PROJECT, "multipart", None).await;
+    let absent_create_key = session_key(&pool, absent_create_session).await;
+    sqlx::query(
+        "UPDATE multipart_lifecycles SET create_status='unknown',\
+                updated_at=transaction_timestamp() \
+         WHERE save_session_id=$1::uuid AND create_status='creating'",
+    )
+    .bind(absent_create_session.to_string())
+    .execute(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+    sqlx::query(
+        "UPDATE save_cleanup_jobs SET eligible_at=transaction_timestamp() \
+         WHERE save_session_id=$1::uuid AND status='queued'",
+    )
+    .bind(absent_create_session.to_string())
+    .execute(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+    let absence_policy = CleanupWorkerPolicy::new(
+        100,
+        4,
+        4,
+        Duration::from_secs(10),
+        Duration::from_millis(500),
+        Duration::from_secs(5 * 60),
+        Duration::from_millis(20),
+        Duration::from_secs(30),
+        Duration::from_secs(30),
+    )
+    .unwrap();
+    let absence_service = CleanupService::new(pool.clone(), store.clone(), absence_policy);
+    let absence_worker = absence_service.start_worker();
+    wait_for_absence_observation(&pool, absent_create_session).await;
+    assert_eq!(
+        absence_worker.shutdown(Duration::from_secs(3)).await,
+        WorkerShutdown::Drained
+    );
+    let late_upload_id = create_backend_multipart(&endpoint, &ca_file, &absent_create_key).await;
+    sqlx::query(
+        "UPDATE save_cleanup_jobs SET retry_at=transaction_timestamp(),\
+                updated_at=transaction_timestamp() \
+         WHERE save_session_id=$1::uuid AND status='retry_wait' AND absence_count=1",
+    )
+    .bind(absent_create_session.to_string())
+    .execute(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+    let late_upload_worker = service.start_worker();
+    wait_for_count(&pool, "completed", 104).await;
+    assert_eq!(
+        late_upload_worker.shutdown(Duration::from_secs(3)).await,
+        WorkerShutdown::Drained
+    );
+    assert!(
+        !backend_multipart_exists(&endpoint, &ca_file, &absent_create_key, &late_upload_id).await
+    );
+    assert_multipart_finalized(&pool, absent_create_session, "failed").await;
+    sqlx::query(
+        "DELETE FROM save_cleanup_jobs \
+         WHERE save_session_id=$1::uuid AND status='completed'",
+    )
+    .bind(absent_create_session.to_string())
+    .execute(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+
     // If attach committed, ready and guard deletion are atomic. A caller that
     // lost the commit response must not reconcile/abort the live upload.
     let attached_session = insert_session(&pool, ATTACHED_PROJECT, "multipart", None).await;

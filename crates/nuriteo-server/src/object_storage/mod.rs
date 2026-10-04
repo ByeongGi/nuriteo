@@ -7,6 +7,7 @@ mod redaction;
 mod types;
 
 pub use adapter::{ObjectStoreBuildError, S3ObjectStore};
+pub(crate) use capability::MultipartReconcileOutcome;
 pub use capability_types::{
     BackendIdentifier, BoundedPresignedRequest, CapabilityReport, CapabilityState,
     CapabilityValidationError, MAX_MULTIPART_PART_BYTES, MAX_MULTIPART_PARTS,

@@ -12,7 +12,8 @@ use uuid::Uuid;
 use crate::database::{DatabaseError, DatabasePool};
 use crate::identity::UserId;
 use crate::object_storage::{
-    MultipartUpload, ObjectKey, ObjectStoreError, ObjectStoreErrorKind, S3ObjectStore,
+    MultipartReconcileOutcome, MultipartUpload, ObjectKey, ObjectStoreError, ObjectStoreErrorKind,
+    S3ObjectStore,
 };
 use crate::project::{
     EffectiveProjectRole, ProjectAccessError, ProjectAccessRepository, ProjectId,
@@ -245,8 +246,14 @@ impl CleanupBackend for S3ObjectStore {
                 .await
             }
             CleanupKind::MultipartReconcile => {
-                self.reconcile_multipart_for_exact_key(&target.object_key)
+                return match self
+                    .reconcile_multipart_for_exact_key(&target.object_key)
                     .await
+                {
+                    Ok(MultipartReconcileOutcome::Aborted) => CleanupBackendOutcome::Completed,
+                    Ok(MultipartReconcileOutcome::Missing) => CleanupBackendOutcome::Missing,
+                    Err(error) => classify_backend_result(Err(error)),
+                };
             }
             CleanupKind::MultipartCompleteReconcile => {
                 return match self.head(&target.object_key).await {
