@@ -75,7 +75,12 @@ export function ProjectIdeShell({ assetRevision, project, workspaceScope }: Prop
       const origin = globalThis.location.origin;
       const base = `/runtime/${assetRevision}`;
       await adapter.mount({
-        project: { id: project.id, localDraftKey: `${workspaceScope}:${project.id}`, displayName: project.name },
+        project: {
+          id: project.id,
+          storageScopeId: project.storageScopeId,
+          workspaceScopeId: workspaceScope,
+          displayName: project.name
+        },
         assets: {
           systemWorkerUrl: new URL(`${base}/system-worker.js`, origin),
           processWorkerUrl: new URL(`${base}/process-worker.js`, origin),

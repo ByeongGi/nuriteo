@@ -7,6 +7,7 @@ import {
 } from "../src/runtime/runtime-adapter.ts";
 import type {
   FileSystemTree,
+  PreviewWorkflowControllerOptions,
   PreviewWorkflowEvent,
   PreviewWorkflowListener,
   PreviewWorkflowSnapshot
@@ -15,8 +16,15 @@ import type {
 const hash = "a".repeat(64);
 const scopeId = "0199ee6c-c777-7000-8000-00000000a001";
 const draftProjectId = "0199ee6c-c777-7000-8000-00000000a002";
+const otherProjectId = "0199ee6c-c777-7000-8000-00000000a003";
+const otherScopeId = "0199ee6c-c777-7000-8000-00000000a004";
 const mountInput: RuntimeMountInput = {
-  project: { id: "project-a", localDraftKey: `${scopeId}:${draftProjectId}`, displayName: "Project A" },
+  project: {
+    id: draftProjectId,
+    storageScopeId: scopeId,
+    workspaceScopeId: scopeId,
+    displayName: "Project A"
+  },
   assets: {
     systemWorkerUrl: new URL(`/runtime/${hash}/system-worker.js`, "https://nuriteo.test"),
     processWorkerUrl: new URL(`/runtime/${hash}/process-worker.js`, "https://nuriteo.test"),
@@ -109,6 +117,7 @@ function deferred<T>(): { promise: Promise<T>; resolve(value: T): void; reject(e
 function harness(boot: Promise<unknown> = Promise.resolve({})) {
   const cleanup: string[] = [];
   const controllers: FakeController[] = [];
+  const controllerOptions: PreviewWorkflowControllerOptions[] = [];
   let supervisorCount = 0;
   let processCount = 0;
   const adapter = createRuntimeAdapter({
@@ -124,23 +133,32 @@ function harness(boot: Promise<unknown> = Promise.resolve({})) {
       processCount += 1;
       return { teardown() { cleanup.push("process"); } };
     },
-    createController() {
+    createController(options) {
+      controllerOptions.push(options);
       const controller = new FakeController(cleanup);
       controllers.push(controller);
       return controller;
     }
   });
-  return { adapter, cleanup, controllers, counts: () => ({ supervisorCount, processCount }) };
+  return {
+    adapter,
+    cleanup,
+    controllers,
+    controllerOptions,
+    counts: () => ({ supervisorCount, processCount })
+  };
 }
 
 {
-  const { adapter, cleanup, controllers } = harness();
+  const { adapter, cleanup, controllers, controllerOptions } = harness();
   assert.throws(() => adapter.terminal.input("before-ready"), (error: unknown) =>
     error instanceof RuntimeAdapterError && error.code === "RUNTIME_NOT_READY");
   await adapter.mount(mountInput);
   assert.equal(adapter.getState().lifecycle, "ready");
-  assert.equal(adapter.getState().projectId, "project-a");
+  assert.equal(adapter.getState().projectId, draftProjectId);
   assert.equal(adapter.getState().generation, 1);
+  assert.equal(controllerOptions[0]?.workspaceProjectId, `${scopeId}:${draftProjectId}`);
+  assert.equal(controllerOptions[0]?.workspaceRoot, `/workspace/projects/${draftProjectId}`);
   controllers[0]?.emit(snapshot({ phase: "preview_ready", previewUrl: "https://preview.test" }));
   assert.equal(adapter.getState().previewUrl, "https://preview.test");
   const materialized = await adapter.workspace.materializeTemplate("vite-react");
@@ -173,8 +191,8 @@ function harness(boot: Promise<unknown> = Promise.resolve({})) {
   assert.deepEqual(adapter.workspace.getState(), {
     errorCode: "RUNTIME_MATERIALIZATION_FAILED",
     files: [],
-    projectId: "project-a",
-    root: "/workspace/projects/project-a",
+    projectId: draftProjectId,
+    root: `/workspace/projects/${draftProjectId}`,
     status: "failed",
     totalBytes: 0
   });
@@ -226,10 +244,10 @@ function harness(boot: Promise<unknown> = Promise.resolve({})) {
   await adapter.mount(mountInput);
   const staleController = controllers[0];
   await adapter.dispose();
-  await adapter.mount({ ...mountInput, project: { ...mountInput.project, id: "project-b" } });
+  await adapter.mount({ ...mountInput, project: { ...mountInput.project, id: otherProjectId } });
   staleController?.emit(snapshot({ phase: "preview_ready", previewUrl: "https://stale.test" }));
   assert.equal(adapter.getState().generation, 2);
-  assert.equal(adapter.getState().projectId, "project-b");
+  assert.equal(adapter.getState().projectId, otherProjectId);
   assert.equal(adapter.getState().previewUrl, null);
   await adapter.dispose();
 }
@@ -249,11 +267,27 @@ function harness(boot: Promise<unknown> = Promise.resolve({})) {
 
 {
   const { adapter, counts } = harness();
+  const crossProject = {
+    ...mountInput.project,
+    localDraftKey: `${scopeId}:${otherProjectId}`
+  } as unknown as RuntimeMountInput["project"];
   await assert.rejects(
-    adapter.mount({ ...mountInput, project: { ...mountInput.project, localDraftKey: `${scopeId}:../other` } }),
+    adapter.mount({ ...mountInput, project: crossProject }),
     (error: unknown) => error instanceof RuntimeAdapterError && error.code === "RUNTIME_PROJECT_INVALID"
   );
-  assert.deepEqual(counts(), { supervisorCount: 0, processCount: 0 }, "unsafe Local Draft keys fail before resource construction");
+  assert.deepEqual(counts(), { supervisorCount: 0, processCount: 0 }, "cross-Project legacy namespace fails before resource construction");
+}
+
+{
+  const { adapter, counts } = harness();
+  await assert.rejects(
+    adapter.mount({
+      ...mountInput,
+      project: { ...mountInput.project, workspaceScopeId: otherScopeId }
+    }),
+    (error: unknown) => error instanceof RuntimeAdapterError && error.code === "RUNTIME_PROJECT_INVALID"
+  );
+  assert.deepEqual(counts(), { supervisorCount: 0, processCount: 0 }, "cross-Workspace context fails before resource construction");
 }
 
 {
@@ -464,15 +498,15 @@ function harness(boot: Promise<unknown> = Promise.resolve({})) {
     assert.equal(adapter.getState().lifecycle, "ready");
     assert.equal(ActualBoundaryWorker.instances.length, 2, "one system and one process supervisor Worker are created");
     const workspace = await adapter.workspace.materializeTemplate("vite-react");
-    assert.equal(workspace.projectId, "project-a");
-    assert.equal(workspace.root, "/workspace/projects/project-a");
+    assert.equal(workspace.projectId, draftProjectId);
+    assert.equal(workspace.root, `/workspace/projects/${draftProjectId}`);
     assert.ok(workspace.files.some((file) => file.path === "src/App.tsx"));
     assert.match(adapter.workspace.readText("src/App.tsx"), /function App/u);
     const output: string[] = [];
     const result = await adapter.terminal.run("worker-pwd", "terminal-actual", (chunk) => output.push(chunk.data)) as { exitCode: number; stdout: string };
     assert.equal(result.exitCode, 0);
-    assert.equal(result.stdout, "/workspace/projects/project-a\n");
-    assert.deepEqual(output, ["/workspace/projects/project-a\n"]);
+    assert.equal(result.stdout, `/workspace/projects/${draftProjectId}\n`);
+    assert.deepEqual(output, [`/workspace/projects/${draftProjectId}\n`]);
     assert.equal(ActualBoundaryWorker.instances.length, 3, "terminal command owns a third process Worker");
     assert.deepEqual(
       ActualBoundaryWorker.instances[2]?.messages.slice(0, 2).map((message) => message.type),
@@ -486,7 +520,7 @@ function harness(boot: Promise<unknown> = Promise.resolve({})) {
     assert.equal(envResult.exitCode, 0);
     assert.doesNotMatch(envResult.stdout, /cookie|credential|password|secret|token/iu);
     assert.equal(ActualBoundaryWorker.instances.length, 4, "each terminal owns an isolated process Worker");
-    assert.equal(ActualBoundaryWorker.instances[3]?.messages[1]?.cwd, "/workspace/projects/project-a");
+    assert.equal(ActualBoundaryWorker.instances[3]?.messages[1]?.cwd, `/workspace/projects/${draftProjectId}`);
     assert.deepEqual(ActualBoundaryWorker.instances[3]?.messages[1]?.env, {
       PATH: "/workspace/node_modules/.bin:/bin"
     });

@@ -236,6 +236,9 @@ function testProjectSourceContracts() {
   assert.match(ideShell, /aria-label="Preview"/u);
   assert.match(ideShell, /aria-label="Terminal"/u);
   assert.match(ideShell, /createRuntimeAdapter/u);
+  assert.match(ideShell, /storageScopeId: project\.storageScopeId/u);
+  assert.match(ideShell, /workspaceScopeId: workspaceScope/u);
+  assert.doesNotMatch(ideShell, /localDraftKey/u);
   assert.doesNotMatch(ideShell, /BrowserRuntimeSupervisor|HostProcessTable|createPreviewWorkflowController|service-backend/u);
   assert.doesNotMatch(`${dashboard}\n${page}\n${ideShell}`, /localStorage|sessionStorage|console\./u);
 }

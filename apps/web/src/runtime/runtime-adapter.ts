@@ -24,9 +24,9 @@ const CONTENT_ADDRESSED_ASSET = /^\/runtime\/[0-9a-f]{64}\//u;
 const MAX_TEMPLATE_FILES = 256;
 const MAX_TEMPLATE_FILE_BYTES = 1024 * 1024;
 const MAX_TEMPLATE_TOTAL_BYTES = 8 * 1024 * 1024;
-const PROJECT_PATH_SEGMENT = /^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,126}[A-Za-z0-9])?$/u;
 const UUID_V7 = "[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}";
-const LOCAL_DRAFT_KEY = new RegExp(`^${UUID_V7}:${UUID_V7}$`, "u");
+const UUID_V7_VALUE = new RegExp(`^${UUID_V7}$`, "u");
+const PROJECT_CONTEXT_KEYS = ["displayName", "id", "storageScopeId", "workspaceScopeId"] as const;
 
 export type RuntimeLifecycle =
   | "idle"
@@ -45,7 +45,8 @@ export interface RuntimeDiagnostic {
 export interface RuntimeMountInput {
   project: {
     id: string;
-    localDraftKey: string;
+    storageScopeId: string;
+    workspaceScopeId: string;
     displayName: string;
   };
   assets: {
@@ -260,12 +261,13 @@ export function createRuntimeAdapter(dependencies: RuntimeAdapterDependencies = 
       throw new Error(`Runtime cannot mount while lifecycle is ${state.lifecycle}`);
     }
 
+    const project = validateProject(input.project);
     const generation = state.generation + 1;
     state = {
       ...createInitialState(),
       generation,
       lifecycle: "mounting",
-      projectId: validateProject(input.project).id
+      projectId: project.id
     };
     workspaceState = createEmptyWorkspaceState();
     workspaceText = new Map();
@@ -296,8 +298,8 @@ export function createRuntimeAdapter(dependencies: RuntimeAdapterDependencies = 
       const controller = (dependencies.createController ?? ((options) => createPreviewWorkflowController(options)))({
         terminalProcessTable: processTable as HostProcessTable,
         previewServiceWorkerUrl: assets.previewServiceWorkerUrl,
-        workspaceProjectId: input.project.localDraftKey,
-        workspaceRoot: projectRoot(input.project.id),
+        workspaceProjectId: localDraftNamespace(project),
+        workspaceRoot: projectRoot(project.id),
         relayTimeoutMs: input.policy.relayTimeoutMs
       });
       constructingController = controller;
@@ -310,8 +312,8 @@ export function createRuntimeAdapter(dependencies: RuntimeAdapterDependencies = 
         controller,
         unsubscribe: () => false,
         reportDiagnostic: input.reportDiagnostic,
-        projectId: input.project.id,
-        displayName: input.project.displayName
+        projectId: project.id,
+        displayName: project.displayName
       };
       current.unsubscribe = controller.on((event) => receiveEvent(current, event));
       owned = current;
@@ -575,16 +577,23 @@ function browserOrigin(): string {
 }
 
 function validateProject(project: RuntimeMountInput["project"]): RuntimeMountInput["project"] {
+  const keys = Object.keys(project).sort();
   if (
-    !PROJECT_PATH_SEGMENT.test(project.id)
-    || project.id === "."
-    || project.id === ".."
-    || !LOCAL_DRAFT_KEY.test(project.localDraftKey)
+    keys.length !== PROJECT_CONTEXT_KEYS.length
+    || keys.some((key, index) => key !== PROJECT_CONTEXT_KEYS[index])
+    || !UUID_V7_VALUE.test(project.id)
+    || !UUID_V7_VALUE.test(project.storageScopeId)
+    || !UUID_V7_VALUE.test(project.workspaceScopeId)
+    || project.storageScopeId !== project.workspaceScopeId
     || !project.displayName.trim()
   ) {
     throw new RuntimeAdapterError("RUNTIME_PROJECT_INVALID", "Runtime Project context is incomplete.");
   }
   return project;
+}
+
+function localDraftNamespace(project: RuntimeMountInput["project"]): string {
+  return `${project.workspaceScopeId}:${project.id}`;
 }
 
 function validateAssets(assets: RuntimeMountInput["assets"], origin: string): RuntimeMountInput["assets"] {
