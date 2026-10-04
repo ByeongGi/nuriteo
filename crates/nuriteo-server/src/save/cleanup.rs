@@ -1271,6 +1271,31 @@ impl fmt::Debug for CleanupWorker {
 }
 
 impl CleanupWorker {
+    pub async fn run_until<F>(mut self, shutdown: F, deadline: Duration) -> WorkerShutdown
+    where
+        F: Future<Output = ()>,
+    {
+        tokio::pin!(shutdown);
+        tokio::select! {
+            result = &mut self.join => match result {
+                Ok(Ok(())) => WorkerShutdown::Drained,
+                _ => WorkerShutdown::WorkerFailed,
+            },
+            () = &mut shutdown => {
+                let _ = self.cancel.send(true);
+                match time::timeout(deadline, &mut self.join).await {
+                    Ok(Ok(Ok(()))) => WorkerShutdown::Drained,
+                    Ok(_) => WorkerShutdown::WorkerFailed,
+                    Err(_) => {
+                        self.join.abort();
+                        let _ = (&mut self.join).await;
+                        WorkerShutdown::DeadlineExceeded
+                    }
+                }
+            }
+        }
+    }
+
     pub async fn shutdown(mut self, deadline: Duration) -> WorkerShutdown {
         let _ = self.cancel.send(true);
         match time::timeout(deadline, &mut self.join).await {
@@ -1724,5 +1749,18 @@ mod tests {
             "sensitive backend response detail",
         ));
         assert_eq!(map_commit_error(lost), CleanupError::CommitOutcomeUnknown);
+    }
+
+    #[tokio::test]
+    async fn supervised_worker_forces_a_bounded_shutdown_and_joins() {
+        let (cancel, _) = watch::channel(false);
+        let worker = CleanupWorker {
+            cancel,
+            join: tokio::spawn(std::future::pending()),
+        };
+        assert_eq!(
+            worker.run_until(async {}, Duration::from_millis(10)).await,
+            WorkerShutdown::DeadlineExceeded
+        );
     }
 }

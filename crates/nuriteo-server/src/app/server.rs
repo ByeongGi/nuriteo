@@ -10,11 +10,14 @@ use crate::invitations::{InvitationHttpPolicy, InvitationHttpService};
 use crate::object_storage::{ObjectStorageConfig, OperationLimits, S3ObjectStore};
 use crate::organization::{OrganizationHttpPolicy, OrganizationHttpService};
 use crate::project::{ProjectHttpPolicy, ProjectHttpService};
+use crate::save::{
+    CleanupOperationsPolicy, CleanupOperationsService, CleanupService, WorkerShutdown,
+};
 use crate::setup::{SetupStatusPolicy, SetupStatusService};
 
 use super::{Supervisor, SupervisorConfig, WorkerError, build_router_with_project_service};
 
-const HTTP_WORKERS: NonZeroUsize = NonZeroUsize::MIN;
+const PRODUCTION_WORKERS: NonZeroUsize = NonZeroUsize::new(3).unwrap();
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ServeError {
@@ -27,7 +30,9 @@ pub(crate) enum ServeError {
     InvitationConfiguration,
     OrganizationConfiguration,
     ProjectConfiguration,
+    CleanupConfiguration,
     Bind,
+    ManagementBind,
     Lifecycle,
     DatabaseClose,
 }
@@ -44,7 +49,9 @@ impl ServeError {
             Self::InvitationConfiguration => "invitation-configuration",
             Self::OrganizationConfiguration => "organization-configuration",
             Self::ProjectConfiguration => "project-configuration",
+            Self::CleanupConfiguration => "cleanup-configuration",
             Self::Bind => "bind",
+            Self::ManagementBind => "management-bind",
             Self::Lifecycle => "lifecycle",
             Self::DatabaseClose => "database-close",
         }
@@ -89,6 +96,14 @@ pub(crate) async fn run_server(
             return Err(ServeError::Bind);
         }
     };
+    let management_listener =
+        match tokio::net::TcpListener::bind(global.server.management_listen_addr).await {
+            Ok(listener) => listener,
+            Err(_) => {
+                close_pool(pool, close_timeout).await?;
+                return Err(ServeError::ManagementBind);
+            }
+        };
 
     let auth = match AuthService::production(
         pool.clone(),
@@ -114,7 +129,7 @@ pub(crate) async fn run_server(
             return Err(ServeError::InvitationConfiguration);
         }
     };
-    let health = HealthService::production(pool.clone(), store, HealthPolicy::default());
+    let health = HealthService::production(pool.clone(), store.clone(), HealthPolicy::default());
     let organizations = match OrganizationHttpService::production(
         pool.clone(),
         &global.public.external_url,
@@ -140,6 +155,19 @@ pub(crate) async fn run_server(
             return Err(ServeError::ProjectConfiguration);
         }
     };
+    let operations_policy = match CleanupOperationsPolicy::new(
+        global.cleanup.stale_threshold,
+        global.cleanup.failed_threshold,
+        global.cleanup.status_timeout,
+    ) {
+        Ok(policy) => policy,
+        Err(_) => {
+            close_pool(pool, close_timeout).await?;
+            return Err(ServeError::CleanupConfiguration);
+        }
+    };
+    let operations = CleanupOperationsService::new(pool.clone(), operations_policy);
+    let cleanup = CleanupService::new(pool.clone(), store, global.cleanup.worker_policy);
     let router = build_router_with_project_service(
         health,
         auth,
@@ -148,9 +176,14 @@ pub(crate) async fn run_server(
         projects,
         setup,
     );
+    let management_router = operations.router();
+    let cleanup_drain_timeout = global
+        .server
+        .shutdown_drain_timeout
+        .saturating_sub(std::time::Duration::from_millis(100));
     let mut supervisor = Supervisor::new(SupervisorConfig::new(
         global.server.shutdown_drain_timeout,
-        HTTP_WORKERS,
+        PRODUCTION_WORKERS,
     ));
     if supervisor
         .register("http", move |mut shutdown| async move {
@@ -158,6 +191,38 @@ pub(crate) async fn run_server(
                 .with_graceful_shutdown(async move { shutdown.requested().await })
                 .await
                 .map_err(|_| WorkerError::new("http-server"))
+        })
+        .is_err()
+    {
+        close_pool(pool, close_timeout).await?;
+        return Err(ServeError::Lifecycle);
+    }
+    if supervisor
+        .register("management-http", move |mut shutdown| async move {
+            axum::serve(management_listener, management_router)
+                .with_graceful_shutdown(async move { shutdown.requested().await })
+                .await
+                .map_err(|_| WorkerError::new("management-http-server"))
+        })
+        .is_err()
+    {
+        close_pool(pool, close_timeout).await?;
+        return Err(ServeError::Lifecycle);
+    }
+    if supervisor
+        .register("save-cleanup", move |mut shutdown| async move {
+            let worker = cleanup.start_worker();
+            match worker
+                .run_until(
+                    async move { shutdown.requested().await },
+                    cleanup_drain_timeout,
+                )
+                .await
+            {
+                WorkerShutdown::Drained => Ok(()),
+                WorkerShutdown::DeadlineExceeded => Err(WorkerError::new("cleanup-drain-timeout")),
+                WorkerShutdown::WorkerFailed => Err(WorkerError::new("cleanup-worker-failed")),
+            }
         })
         .is_err()
     {
@@ -204,7 +269,9 @@ mod tests {
                 ServeError::OrganizationConfiguration,
                 "organization-configuration",
             ),
+            (ServeError::CleanupConfiguration, "cleanup-configuration"),
             (ServeError::Bind, "bind"),
+            (ServeError::ManagementBind, "management-bind"),
             (ServeError::Lifecycle, "lifecycle"),
             (ServeError::DatabaseClose, "database-close"),
         ];
