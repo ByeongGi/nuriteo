@@ -36,14 +36,17 @@ async fn production_binary_serves_drains_and_never_mutates_backends() {
     let pool = database_pool(database_url.clone(), database_ca).await;
     reset_history(&pool).await;
     let migration_report = migrate(&pool).await;
+    seed_cleanup_backlog(&pool).await;
 
     let s3 = fixture_s3_client(&s3_endpoint, &s3_ca);
     create_bucket(&s3).await;
 
     let occupied = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let occupied_address = occupied.local_addr().unwrap();
+    let bind_failure_management = available_address();
     let bind_failure = spawn_server(
         occupied_address,
+        bind_failure_management,
         &database_url,
         &database_ca_path,
         &s3_endpoint,
@@ -56,9 +59,34 @@ async fn production_binary_serves_drains_and_never_mutates_backends() {
     assert_redacted(&output);
     drop(occupied);
 
-    let address = available_address();
+    let occupied_management = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let occupied_management_address = occupied_management.local_addr().unwrap();
+    let management_bind_application = available_address();
+    let management_bind_failure = spawn_server(
+        management_bind_application,
+        occupied_management_address,
+        &database_url,
+        &database_ca_path,
+        &s3_endpoint,
+        &s3_ca_path,
+    );
+    let output = management_bind_failure
+        .wait_for_exit(Duration::from_secs(8))
+        .await;
+    assert_eq!(output.status.code(), Some(1));
+    assert!(output.stdout.is_empty());
+    assert_eq!(
+        output.stderr,
+        b"nuriteo-server: serve failed (management-bind)\n"
+    );
+    assert_redacted(&output);
+    assert_port_closed(management_bind_application).await;
+    drop(occupied_management);
+
+    let (address, management_address) = available_address_pair();
     let mut server = spawn_server(
         address,
+        management_address,
         &database_url,
         &database_ca_path,
         &s3_endpoint,
@@ -66,9 +94,42 @@ async fn production_binary_serves_drains_and_never_mutates_backends() {
     );
     let live_url = format!("http://{address}/health/live");
     let ready_url = format!("http://{address}/health/ready");
+    let cleanup_url = format!("http://{management_address}/health/cleanup");
+    let metrics_url = format!("http://{management_address}/metrics");
     wait_for_live(&mut server, &live_url).await;
     assert_response(&ready_url, 200, json!({"status": "ready"})).await;
     assert_healthcheck_success(run_healthcheck(ready_url.clone()).await);
+    assert_response(
+        &cleanup_url,
+        200,
+        json!({
+            "state": "nominal",
+            "queue_depth": 1,
+            "oldest_eligible_age_seconds": null,
+            "running_count": 0,
+            "retry_count": 0,
+            "failed_count": 0
+        }),
+    )
+    .await;
+    assert_metrics(&metrics_url).await;
+    assert_status(&format!("http://{address}/metrics"), 404).await;
+    assert_status(&format!("http://{address}/health/cleanup"), 404).await;
+    seed_failed_cleanup(&pool).await;
+    assert_response(
+        &cleanup_url,
+        200,
+        json!({
+            "state": "degraded",
+            "queue_depth": 1,
+            "oldest_eligible_age_seconds": null,
+            "running_count": 0,
+            "retry_count": 0,
+            "failed_count": 1
+        }),
+    )
+    .await;
+    assert_response(&ready_url, 200, json!({"status": "ready"})).await;
     assert_eq!(
         migration_rows(&pool).await,
         i64::try_from(migration_report.known_migrations).unwrap()
@@ -90,6 +151,7 @@ async fn production_binary_serves_drains_and_never_mutates_backends() {
     assert!(output.stdout.is_empty());
     assert!(output.stderr.is_empty());
     assert_port_closed(address).await;
+    assert_port_closed(management_address).await;
 
     create_bucket(&s3).await;
     reset_history(&pool).await;
@@ -97,9 +159,10 @@ async fn production_binary_serves_drains_and_never_mutates_backends() {
         check_schema_readiness(&pool).await.unwrap(),
         SchemaReadiness::Pending { .. }
     ));
-    let pending_address = available_address();
+    let (pending_address, pending_management_address) = available_address_pair();
     let mut pending = spawn_server(
         pending_address,
+        pending_management_address,
         &database_url,
         &database_ca_path,
         &s3_endpoint,
@@ -125,6 +188,7 @@ async fn production_binary_serves_drains_and_never_mutates_backends() {
     assert!(output.stdout.is_empty());
     assert!(output.stderr.is_empty());
     assert_port_closed(pending_address).await;
+    assert_port_closed(pending_management_address).await;
 
     s3.delete_bucket().bucket(BUCKET).send().await.unwrap();
     reset_history(&pool).await;
@@ -133,6 +197,7 @@ async fn production_binary_serves_drains_and_never_mutates_backends() {
 
 fn spawn_server(
     address: std::net::SocketAddr,
+    management_address: std::net::SocketAddr,
     database_url: &str,
     database_ca_path: &str,
     s3_endpoint: &str,
@@ -143,6 +208,10 @@ fn spawn_server(
         .env_clear()
         .env("NURITEO_EXTERNAL_URL", format!("http://{address}"))
         .env("NURITEO_HTTP_LISTEN_ADDR", address.to_string())
+        .env(
+            "NURITEO_MANAGEMENT_LISTEN_ADDR",
+            management_address.to_string(),
+        )
         .env("NURITEO_SHUTDOWN_DRAIN_TIMEOUT_MS", "2000")
         .env("NURITEO_DATABASE_URL", database_url)
         .env("NURITEO_DATABASE_CA_FILE", database_ca_path)
@@ -271,6 +340,51 @@ async fn assert_response(url: &str, status: u16, expected: Value) {
     );
 }
 
+async fn assert_status(url: &str, status: u16) {
+    let response = reqwest::Client::builder()
+        .no_proxy()
+        .build()
+        .unwrap()
+        .get(url)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status().as_u16(), status);
+}
+
+async fn assert_metrics(url: &str) {
+    let response = reqwest::Client::builder()
+        .no_proxy()
+        .build()
+        .unwrap()
+        .get(url)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), reqwest::StatusCode::OK);
+    assert_eq!(
+        response
+            .headers()
+            .get(reqwest::header::CONTENT_TYPE)
+            .unwrap(),
+        "text/plain; version=0.0.4"
+    );
+    let body = response.text().await.unwrap();
+    for metric in [
+        "nuriteo_cleanup_queue_depth 1",
+        "nuriteo_cleanup_oldest_eligible_age_seconds 0",
+        "nuriteo_cleanup_running_count 0",
+        "nuriteo_cleanup_retry_count 0",
+        "nuriteo_cleanup_failed_count 0",
+        "nuriteo_cleanup_degraded 0",
+    ] {
+        assert!(body.contains(metric), "missing metric: {metric}");
+    }
+    for prohibited in [ACCESS_KEY, SECRET_KEY, BUCKET, "object_key", "session_id"] {
+        assert!(!body.contains(prohibited));
+    }
+}
+
 async fn run_healthcheck(url: String) -> Output {
     tokio::task::spawn_blocking(move || {
         Command::new(env!("CARGO_BIN_EXE_nuriteo-server"))
@@ -308,6 +422,17 @@ fn assert_redacted(output: &Output) {
 fn available_address() -> std::net::SocketAddr {
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     listener.local_addr().unwrap()
+}
+
+fn available_address_pair() -> (std::net::SocketAddr, std::net::SocketAddr) {
+    let application = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let management = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let pair = (
+        application.local_addr().unwrap(),
+        management.local_addr().unwrap(),
+    );
+    assert_ne!(pair.0, pair.1);
+    pair
 }
 
 async fn assert_port_closed(address: std::net::SocketAddr) {
@@ -349,6 +474,33 @@ async fn reset_history(pool: &DatabasePool) {
         .execute(&mut *pool.acquire().await.unwrap())
         .await
         .unwrap();
+}
+
+async fn seed_cleanup_backlog(pool: &DatabasePool) {
+    sqlx::query(
+        "INSERT INTO save_cleanup_jobs \
+         (save_session_id,cleanup_kind,object_key,status,eligible_at,created_at,updated_at) VALUES \
+         ('0199ee6c-c777-7000-8000-000000004001'::uuid,'object_delete',\
+          'staging/serve-future','queued',transaction_timestamp()+interval '1 hour',\
+          transaction_timestamp(),transaction_timestamp())",
+    )
+    .execute(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+}
+
+async fn seed_failed_cleanup(pool: &DatabasePool) {
+    sqlx::query(
+        "INSERT INTO save_cleanup_jobs \
+         (save_session_id,cleanup_kind,object_key,status,attempts,eligible_at,started_at,\
+          last_failure_category,created_at,updated_at) VALUES \
+         ('0199ee6c-c777-7000-8000-000000004002'::uuid,'object_delete',\
+          'staging/serve-failed','failed',8,transaction_timestamp(),transaction_timestamp(),\
+          'permanent',transaction_timestamp(),transaction_timestamp())",
+    )
+    .execute(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
 }
 
 async fn migration_rows(pool: &DatabasePool) -> i64 {

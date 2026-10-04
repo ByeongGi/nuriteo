@@ -22,7 +22,8 @@ use nuriteo_server::object_storage::{
 use nuriteo_server::project::ProjectId;
 use nuriteo_server::quota::SaveSessionId;
 use nuriteo_server::save::{
-    AbortSaveSession, AbortSaveSessionResult, CleanupService, CleanupWorkerPolicy, WorkerShutdown,
+    AbortSaveSession, AbortSaveSessionResult, CleanupOperationsPolicy, CleanupOperationsService,
+    CleanupOperatorState, CleanupService, CleanupWorkerPolicy, WorkerShutdown,
 };
 use nuriteo_server::workspace::StorageScopeId;
 use sqlx::{Acquire, Executor};
@@ -108,6 +109,71 @@ async fn cleanup_is_bounded_persisted_redacted_and_restart_safe() {
     .await
     .unwrap();
     assert_eq!((expired, reservations, queued), (101, 0, 101));
+
+    // Operational aggregation uses retry_at, rather than the original
+    // eligible_at, for retry_wait. A future retry is backlog but not yet stale.
+    let retry_session = "0199ee6c-c777-7000-8000-000000009093";
+    sqlx::query(
+        "INSERT INTO save_cleanup_jobs \
+         (save_session_id,cleanup_kind,object_key,status,attempts,eligible_at,retry_at,\
+          started_at,last_failure_category,created_at,updated_at) VALUES \
+         ($1::uuid,'object_delete','staging/operations-retry','retry_wait',1,\
+          transaction_timestamp()-interval '2 hours',\
+          transaction_timestamp()+interval '1 hour',\
+          transaction_timestamp()-interval '2 hours','retryable',\
+          transaction_timestamp()-interval '2 hours',transaction_timestamp())",
+    )
+    .bind(retry_session)
+    .execute(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+    let operations = CleanupOperationsService::new(
+        pool.clone(),
+        CleanupOperationsPolicy::new(Duration::from_secs(60), 1, Duration::from_secs(2)).unwrap(),
+    );
+    let future_retry = operations.snapshot().await.unwrap();
+    assert_eq!(future_retry.queue_depth, 102);
+    assert_eq!(future_retry.retry_count, 1);
+    assert!(future_retry.oldest_eligible_age_seconds.unwrap() < 60);
+    assert_eq!(future_retry.state, CleanupOperatorState::Nominal);
+    sqlx::query(
+        "UPDATE save_cleanup_jobs SET retry_at=transaction_timestamp()-interval '2 minutes',\
+                updated_at=transaction_timestamp() WHERE save_session_id=$1::uuid",
+    )
+    .bind(retry_session)
+    .execute(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+    let overdue_retry = operations.snapshot().await.unwrap();
+    assert_eq!(overdue_retry.retry_count, 1);
+    assert!(overdue_retry.oldest_eligible_age_seconds.unwrap() >= 120);
+    assert_eq!(overdue_retry.state, CleanupOperatorState::Degraded);
+    sqlx::query(
+        "UPDATE save_cleanup_jobs SET status='running',retry_at=NULL,attempts=2,\
+                lease_owner='0199ee6c-c777-7000-8000-000000009094'::uuid,\
+                lease_expires_at=transaction_timestamp()+interval '10 minutes',\
+                updated_at=transaction_timestamp() WHERE save_session_id=$1::uuid",
+    )
+    .bind(retry_session)
+    .execute(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+    sqlx::query(
+        "UPDATE save_cleanup_jobs SET status='completed',lease_owner=NULL,lease_expires_at=NULL,\
+                completed_at=transaction_timestamp(),last_failure_category=NULL,\
+                updated_at=transaction_timestamp() WHERE save_session_id=$1::uuid",
+    )
+    .bind(retry_session)
+    .execute(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+    sqlx::query(
+        "DELETE FROM save_cleanup_jobs WHERE save_session_id=$1::uuid AND status='completed'",
+    )
+    .bind(retry_session)
+    .execute(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
 
     let abort_session = insert_session(&pool, ABORT_PROJECT, "single", None).await;
     let abort_key = session_key(&pool, abort_session).await;
@@ -801,6 +867,16 @@ async fn cleanup_is_bounded_persisted_redacted_and_restart_safe() {
     ] {
         assert!(!rendered.contains(prohibited));
     }
+    let supervised_worker = service.start_worker();
+    assert_eq!(
+        supervised_worker
+            .run_until(
+                tokio::time::sleep(Duration::from_millis(50)),
+                Duration::from_secs(3),
+            )
+            .await,
+        WorkerShutdown::Drained
+    );
     pool.close(Duration::from_secs(2)).await.unwrap();
 }
 
