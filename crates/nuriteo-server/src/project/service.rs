@@ -986,6 +986,11 @@ impl ProjectService {
         if !confirmation.recently_reauthenticated || confirmation.name != *project.name() {
             return Err(ProjectServiceError::ConfirmationRequired);
         }
+        sqlx::query("SELECT set_config('nuriteo.project_delete_id',$1,true)")
+            .bind(project_id.to_string())
+            .execute(&mut *transaction)
+            .await
+            .map_err(map_service_query_error)?;
         let result = sqlx::query("DELETE FROM projects WHERE id=$1::uuid AND lock_version=$2")
             .bind(project_id.to_string())
             .bind(expected_version.get())

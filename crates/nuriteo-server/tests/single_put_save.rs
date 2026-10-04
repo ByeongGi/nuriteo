@@ -33,8 +33,8 @@ use nuriteo_server::object_storage::{
 };
 use nuriteo_server::organization::{OrganizationHttpService, OrganizationId};
 use nuriteo_server::project::{
-    ProjectAuditContext, ProjectHttpPolicy, ProjectHttpService, ProjectId, ProjectOwner,
-    ProjectVersion,
+    ProjectAuditContext, ProjectDeleteConfirmation, ProjectHttpPolicy, ProjectHttpService,
+    ProjectId, ProjectName, ProjectOwner, ProjectService, ProjectServicePolicy, ProjectVersion,
 };
 use nuriteo_server::quota::EffectiveQuota;
 use nuriteo_server::save::{
@@ -44,18 +44,19 @@ use nuriteo_server::save::{
     MultipartSessionContext, MultipartStore, ProjectHistoryError, ProjectHistoryService,
     ProjectHistoryServicePolicy, ProjectVersionError, ProjectVersionName, ProjectVersionPageLimit,
     ProjectVersionService, ProjectVersionServicePolicy, PromoteHistoricalReference, PutPresigner,
-    SaveHttpError, SaveHttpPolicy, SaveHttpService, SinglePutService, SinglePutServiceError,
-    SinglePutServicePolicy, StagingVerifier, StagingVerifierPolicy, VerificationError,
-    VerifiedStagingBundle, VerifyStagingBundle, WorkingHeadCommitError, WorkingHeadCommitPolicy,
-    WorkingHeadCommitReconciliation, WorkingHeadCommitService,
+    RecoveryCheckpoint, SaveHttpError, SaveHttpPolicy, SaveHttpService, SinglePutService,
+    SinglePutServiceError, SinglePutServicePolicy, StagingVerifier, StagingVerifierPolicy,
+    VerificationError, VerifiedStagingBundle, VerifyStagingBundle, WorkingHeadCommitError,
+    WorkingHeadCommitPolicy, WorkingHeadCommitReconciliation, WorkingHeadCommitService,
 };
 use nuriteo_server::setup::SetupStatusService;
 use nuriteo_server::workspace::StorageScopeId;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
-use sqlx::Executor;
+use sqlx::{Acquire, Executor};
 use tower::ServiceExt as _;
 use url::Url;
+use uuid::Uuid;
 
 const DATABASE_URL_ENV: &str = "NURITEO_TEST_DATABASE_URL";
 const DATABASE_CA_ENV: &str = "NURITEO_TEST_DATABASE_CA";
@@ -73,6 +74,8 @@ const PROJECT_A: &str = "0199ee6c-c777-7000-8000-000000008020";
 const PROJECT_B: &str = "0199ee6c-c777-7000-8000-000000008021";
 const PROJECT_FAIL: &str = "0199ee6c-c777-7000-8000-000000008022";
 const PROJECT_TIMEOUT: &str = "0199ee6c-c777-7000-8000-000000008023";
+const PROJECT_HISTORY_LEFT: &str = "0199ee6c-c777-7000-8000-000000008024";
+const PROJECT_HISTORY_RIGHT: &str = "0199ee6c-c777-7000-8000-000000008025";
 const OUTSIDER: &str = "0199ee6c-c777-7000-8000-000000008002";
 const ORG_OWNER: &str = "0199ee6c-c777-7000-8000-000000008003";
 const ORG_READ: &str = "0199ee6c-c777-7000-8000-000000008004";
@@ -1934,6 +1937,195 @@ async fn project_history_promotes_atomically_and_replays_durable_outcomes() {
             .all(|outcome| outcome.project_version().get() == 7)
     );
 
+    let project_b = ProjectId::from_str(PROJECT_B).unwrap();
+    let mut sequence_heads = Vec::new();
+    for (index, label) in ["x", "y", "z", "h"].into_iter().enumerate() {
+        let expected = ProjectVersion::new(i64::try_from(index).unwrap() + 1).unwrap();
+        let capability = prepare_verified_head_for(
+            &creator,
+            &verifier,
+            &http,
+            SCOPE,
+            PROJECT_B,
+            USER,
+            expected,
+            &format!("history-sequence-{label}-01"),
+            &format!("sequence-{label}.txt"),
+            format!("sequence {label}\n").as_bytes(),
+        )
+        .await;
+        sequence_heads.push(committer.commit(&capability).await.unwrap().bundle_id());
+    }
+    let sequence_recoveries = history
+        .list_recovery_checkpoints(actor, owner, project_b)
+        .await
+        .unwrap();
+    assert_eq!(sequence_recoveries[1].bundle_id(), sequence_heads[1]);
+    history
+        .promote(PromoteHistoricalReference {
+            owner,
+            project_id: project_b,
+            actor_user_id: actor,
+            expected_project_version: ProjectVersion::new(5).unwrap(),
+            reference_kind: HistoricalReferenceKind::Recovery,
+            reference_id: sequence_recoveries[1].id(),
+            idempotency_key: IdempotencyKey::new("history-sequence-restore-y".to_owned()).unwrap(),
+            audit: history_audit(actor, "history-sequence-restore-y"),
+        })
+        .await
+        .unwrap();
+    for (version, label) in [(6, "n"), (7, "m")] {
+        let capability = prepare_verified_head_for(
+            &creator,
+            &verifier,
+            &http,
+            SCOPE,
+            PROJECT_B,
+            USER,
+            ProjectVersion::new(version).unwrap(),
+            &format!("history-sequence-{label}-01"),
+            &format!("sequence-{label}.txt"),
+            format!("sequence {label}\n").as_bytes(),
+        )
+        .await;
+        sequence_heads.push(committer.commit(&capability).await.unwrap().bundle_id());
+    }
+    let refreshed = history
+        .list_recovery_checkpoints(actor, owner, project_b)
+        .await
+        .unwrap();
+    assert_eq!(
+        refreshed
+            .iter()
+            .map(RecoveryCheckpoint::bundle_id)
+            .collect::<Vec<_>>(),
+        vec![sequence_heads[4], sequence_heads[1], sequence_heads[3]]
+    );
+
+    sqlx::query(
+        "INSERT INTO projects (id,owner_user_id,storage_scope_id,slug,name) VALUES \
+         ($1::uuid,$3::uuid,$4::uuid,'history-left','History Left'),\
+         ($2::uuid,$3::uuid,$4::uuid,'history-right','History Right')",
+    )
+    .bind(PROJECT_HISTORY_LEFT)
+    .bind(PROJECT_HISTORY_RIGHT)
+    .bind(USER)
+    .bind(SCOPE)
+    .execute(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+    let mut left_heads = Vec::new();
+    let mut right_heads = Vec::new();
+    for (index, label) in ["one", "two", "three", "four"].into_iter().enumerate() {
+        let expected = ProjectVersion::new(i64::try_from(index).unwrap() + 1).unwrap();
+        for (project, side, heads) in [
+            (PROJECT_HISTORY_LEFT, "left", &mut left_heads),
+            (PROJECT_HISTORY_RIGHT, "right", &mut right_heads),
+        ] {
+            let capability = prepare_verified_head_for(
+                &creator,
+                &verifier,
+                &http,
+                SCOPE,
+                project,
+                USER,
+                expected,
+                &format!("history-cross-{side}-{label}"),
+                &format!("{side}-{label}.txt"),
+                format!("{side} {label}\n").as_bytes(),
+            )
+            .await;
+            heads.push(committer.commit(&capability).await.unwrap().bundle_id());
+        }
+    }
+    let left_own =
+        admit_bundle_version_for_fixture(&pool, PROJECT_HISTORY_LEFT, left_heads[3], "Left own")
+            .await;
+    let left_cross = admit_bundle_version_for_fixture(
+        &pool,
+        PROJECT_HISTORY_LEFT,
+        right_heads[3],
+        "Right shared",
+    )
+    .await;
+    let right_own =
+        admit_bundle_version_for_fixture(&pool, PROJECT_HISTORY_RIGHT, right_heads[3], "Right own")
+            .await;
+    let right_cross = admit_bundle_version_for_fixture(
+        &pool,
+        PROJECT_HISTORY_RIGHT,
+        left_heads[3],
+        "Left shared",
+    )
+    .await;
+    let left_project = ProjectId::from_str(PROJECT_HISTORY_LEFT).unwrap();
+    let right_project = ProjectId::from_str(PROJECT_HISTORY_RIGHT).unwrap();
+    for round in 0..6 {
+        let (left_target, right_target) = if round % 2 == 0 {
+            (left_cross, right_cross)
+        } else {
+            (left_own, right_own)
+        };
+        let expected = ProjectVersion::new(5 + round).unwrap();
+        let left = history.promote(PromoteHistoricalReference {
+            owner,
+            project_id: left_project,
+            actor_user_id: actor,
+            expected_project_version: expected,
+            reference_kind: HistoricalReferenceKind::Version,
+            reference_id: left_target,
+            idempotency_key: IdempotencyKey::new(format!("history-cross-left-{round:02}")).unwrap(),
+            audit: history_audit(actor, &format!("history-cross-left-{round:02}")),
+        });
+        let right = history.promote(PromoteHistoricalReference {
+            owner,
+            project_id: right_project,
+            actor_user_id: actor,
+            expected_project_version: expected,
+            reference_kind: HistoricalReferenceKind::Version,
+            reference_id: right_target,
+            idempotency_key: IdempotencyKey::new(format!("history-cross-right-{round:02}"))
+                .unwrap(),
+            audit: history_audit(actor, &format!("history-cross-right-{round:02}")),
+        });
+        let (left, right) = tokio::join!(left, right);
+        assert!(
+            left.is_ok(),
+            "left cross-project promotion {round}: {left:?}"
+        );
+        assert!(
+            right.is_ok(),
+            "right cross-project promotion {round}: {right:?}"
+        );
+    }
+
+    assert!(
+        sqlx::query("DELETE FROM project_history_promotions WHERE project_id=$1::uuid")
+            .bind(PROJECT_A)
+            .execute(&mut *pool.acquire().await.unwrap())
+            .await
+            .is_err()
+    );
+    ProjectService::new(pool.clone(), ProjectServicePolicy::default())
+        .delete(
+            actor,
+            owner,
+            project_b,
+            ProjectVersion::new(8).unwrap(),
+            &ProjectDeleteConfirmation::new(ProjectName::new("Save B".to_owned()).unwrap(), true),
+            &history_audit(actor, "history-project-delete-cascade"),
+        )
+        .await
+        .unwrap();
+    let deleted_history: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM project_history_promotions WHERE project_id=$1::uuid",
+    )
+    .bind(PROJECT_B)
+    .fetch_one(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+    assert_eq!(deleted_history, 0);
+
     let org_body = canonical_test_bundle(
         ORG_PROJECT_READ,
         ORG_SCOPE,
@@ -2110,17 +2302,163 @@ async fn prepare_verified_head(
     path: &str,
     content: &[u8],
 ) -> VerifiedStagingBundle {
-    let body = canonical_test_bundle(PROJECT_A, SCOPE, path, content);
-    let mut request = request(PROJECT_A, idempotency_key, &body);
+    prepare_verified_head_for(
+        creator,
+        verifier,
+        http,
+        SCOPE,
+        PROJECT_A,
+        USER,
+        expected_project_version,
+        idempotency_key,
+        path,
+        content,
+    )
+    .await
+}
+
+#[allow(
+    clippy::too_many_arguments,
+    reason = "actual fixture keeps Project and Bundle identity inputs explicit"
+)]
+async fn prepare_verified_head_for(
+    creator: &SinglePutService,
+    verifier: &StagingVerifier,
+    http: &reqwest::Client,
+    storage_scope: &str,
+    project: &str,
+    actor: &str,
+    expected_project_version: ProjectVersion,
+    idempotency_key: &str,
+    path: &str,
+    content: &[u8],
+) -> VerifiedStagingBundle {
+    let body = canonical_test_bundle(project, storage_scope, path, content);
+    let mut request = request_for(storage_scope, project, actor, idempotency_key, &body);
     request.expected_project_version = expected_project_version;
     request.expected_logical_bytes = content.len() as u64;
     request.expected_file_count = 1;
     let session = creator.create(request).await.unwrap();
     assert!(send_with_mutation(http, session.capability().request(), &body, None, None,).await);
     verifier
-        .verify(verification_context(PROJECT_A, session.session_id()))
+        .verify(VerifyStagingBundle {
+            storage_scope_id: StorageScopeId::from_str(storage_scope).unwrap(),
+            project_id: ProjectId::from_str(project).unwrap(),
+            actor_user_id: UserId::from_str(actor).unwrap(),
+            session_id: session.session_id(),
+        })
         .await
         .unwrap()
+}
+
+async fn admit_bundle_version_for_fixture(
+    pool: &DatabasePool,
+    project: &str,
+    bundle: Uuid,
+    version_name: &str,
+) -> Uuid {
+    let mut connection = pool.acquire().await.unwrap();
+    let mut transaction = connection.begin().await.unwrap();
+    let admitted: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM project_bundle_admissions \
+         WHERE project_id=$1::uuid AND bundle_id=$2::uuid)",
+    )
+    .bind(project)
+    .bind(bundle.to_string())
+    .fetch_one(&mut *transaction)
+    .await
+    .unwrap();
+    let expected_version: i64 =
+        sqlx::query_scalar("SELECT lock_version FROM projects WHERE id=$1::uuid")
+            .bind(project)
+            .fetch_one(&mut *transaction)
+            .await
+            .unwrap();
+    if !admitted {
+        let metadata: (Vec<u8>, i64, i64, i32) = sqlx::query_as(
+            "SELECT sha256,physical_bytes,logical_bytes,file_count FROM bundles WHERE id=$1::uuid",
+        )
+        .bind(bundle.to_string())
+        .fetch_one(&mut *transaction)
+        .await
+        .unwrap();
+        let session_id = Uuid::now_v7();
+        sqlx::query(
+            "INSERT INTO save_sessions \
+             (id,project_id,storage_scope_id,actor_user_id,expected_project_version,\
+              expected_bundle_sha256,expected_physical_bytes,expected_logical_bytes,\
+              expected_file_count,staging_object_key,upload_mode,expires_at) \
+             VALUES ($1::uuid,$2::uuid,$3::uuid,$4::uuid,$5,$6,$7,$8,$9,$10,'single',\
+                     transaction_timestamp()+INTERVAL '1 hour')",
+        )
+        .bind(session_id.to_string())
+        .bind(project)
+        .bind(SCOPE)
+        .bind(USER)
+        .bind(expected_version)
+        .bind(metadata.0)
+        .bind(metadata.1)
+        .bind(metadata.2)
+        .bind(metadata.3)
+        .bind(format!("staging/history-cross/{}.bundle", Uuid::now_v7()))
+        .execute(&mut *transaction)
+        .await
+        .unwrap();
+        for state in ["uploading", "verifying"] {
+            sqlx::query(
+                "UPDATE save_sessions SET state=$2,updated_at=transaction_timestamp() \
+                 WHERE id=$1::uuid",
+            )
+            .bind(session_id.to_string())
+            .bind(state)
+            .execute(&mut *transaction)
+            .await
+            .unwrap();
+        }
+        sqlx::query(
+            "UPDATE save_sessions SET state='committed',committed_bundle_id=$2::uuid,\
+                    terminal_at=transaction_timestamp(),updated_at=transaction_timestamp() \
+             WHERE id=$1::uuid",
+        )
+        .bind(session_id.to_string())
+        .bind(bundle.to_string())
+        .execute(&mut *transaction)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO project_bundle_admissions \
+             (project_id,storage_scope_id,bundle_id,source_save_session_id,save_session_id) \
+             VALUES ($1::uuid,$2::uuid,$3::uuid,$4::uuid,$4::uuid)",
+        )
+        .bind(project)
+        .bind(SCOPE)
+        .bind(bundle.to_string())
+        .bind(session_id.to_string())
+        .execute(&mut *transaction)
+        .await
+        .unwrap();
+    }
+    let reference_id = Uuid::now_v7();
+    let idempotency_digest = Sha256::digest(format!("{project}:{version_name}").as_bytes());
+    sqlx::query(
+        "INSERT INTO project_bundle_refs \
+         (id,project_id,storage_scope_id,bundle_id,kind,version_name,actor_user_id,\
+          idempotency_digest,source_project_version) \
+         VALUES ($1::uuid,$2::uuid,$3::uuid,$4::uuid,'version',$5,$6::uuid,$7,$8)",
+    )
+    .bind(reference_id.to_string())
+    .bind(project)
+    .bind(SCOPE)
+    .bind(bundle.to_string())
+    .bind(version_name)
+    .bind(USER)
+    .bind(idempotency_digest.as_slice())
+    .bind(expected_version)
+    .execute(&mut *transaction)
+    .await
+    .unwrap();
+    transaction.commit().await.unwrap();
+    reference_id
 }
 
 async fn verify_commit_permission_and_expiry(

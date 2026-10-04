@@ -399,6 +399,7 @@ impl ProjectHistoryService {
                 scope,
                 request.actor_user_id,
                 current_bundle,
+                target_bundle,
                 deadline,
             )
             .await?;
@@ -693,6 +694,7 @@ async fn rotate_recovery_checkpoints(
     scope: StorageScopeId,
     actor: UserId,
     previous_head: Uuid,
+    target_bundle: Uuid,
     deadline: Deadline,
 ) -> Result<(), ProjectHistoryError> {
     type Row = (String, i16, String);
@@ -701,9 +703,6 @@ async fn rotate_recovery_checkpoints(
     ).bind(project_id.to_string()).fetch_all(&mut **tx)).await?.map_err(map_sql_error)?;
     if rows.len() > MAX_RECOVERY_CHECKPOINTS {
         return Err(ProjectHistoryError::InvariantViolation);
-    }
-    if rows.iter().any(|row| row.2 == previous_head.to_string()) {
-        return Ok(());
     }
     let mut occupied = [false; MAX_RECOVERY_CHECKPOINTS];
     for (_, position, _) in &rows {
@@ -717,28 +716,69 @@ async fn rotate_recovery_checkpoints(
         }
         occupied[index] = true;
     }
-    let position = if rows.len() == MAX_RECOVERY_CHECKPOINTS {
-        let (id, position, _) = rows
+    let existing = rows.iter().find(|row| row.2 == previous_head.to_string());
+    let (position, deleted) = if let Some((id, position, bundle_id)) = existing {
+        (*position, Some((id.as_str(), bundle_id.as_str())))
+    } else if rows.len() == MAX_RECOVERY_CHECKPOINTS {
+        let (id, position, bundle_id) = rows
             .first()
             .ok_or(ProjectHistoryError::InvariantViolation)?;
+        (*position, Some((id.as_str(), bundle_id.as_str())))
+    } else {
+        (
+            occupied
+                .iter()
+                .position(|value| !value)
+                .and_then(|index| i16::try_from(index + 1).ok())
+                .ok_or(ProjectHistoryError::InvariantViolation)?,
+            None,
+        )
+    };
+    let deleted_bundle = deleted
+        .map(|(_, bundle_id)| {
+            Uuid::parse_str(bundle_id).map_err(|_| ProjectHistoryError::InvariantViolation)
+        })
+        .transpose()?;
+    lock_history_object_lifecycles(tx, previous_head, target_bundle, deleted_bundle, deadline)
+        .await?;
+    if let Some((id, _)) = deleted {
         let affected = deadline.run(sqlx::query(
             "DELETE FROM project_bundle_refs WHERE id=$1::uuid AND project_id=$2::uuid AND kind='recovery'"
         ).bind(id).bind(project_id.to_string()).execute(&mut **tx)).await?.map_err(map_sql_error)?.rows_affected();
         if affected != 1 {
             return Err(ProjectHistoryError::InvariantViolation);
         }
-        *position
-    } else {
-        occupied
-            .iter()
-            .position(|value| !value)
-            .and_then(|index| i16::try_from(index + 1).ok())
-            .ok_or(ProjectHistoryError::InvariantViolation)?
-    };
+    }
     deadline.run(sqlx::query(
         "INSERT INTO project_bundle_refs (id,project_id,storage_scope_id,bundle_id,kind,recovery_position,actor_user_id) VALUES ($1::uuid,$2::uuid,$3::uuid,$4::uuid,'recovery',$5,$6::uuid)"
     ).bind(Uuid::now_v7().to_string()).bind(project_id.to_string()).bind(scope.to_string())
         .bind(previous_head.to_string()).bind(position).bind(actor.to_string()).execute(&mut **tx)).await?.map_err(map_sql_error)?;
+    Ok(())
+}
+
+async fn lock_history_object_lifecycles(
+    tx: &mut Transaction<'_, Postgres>,
+    previous_head: Uuid,
+    target_bundle: Uuid,
+    deleted_bundle: Option<Uuid>,
+    deadline: Deadline,
+) -> Result<(), ProjectHistoryError> {
+    deadline
+        .run(
+            sqlx::query(
+                "SELECT pg_advisory_xact_lock(1347566129, lifecycle.lock_key) \
+                 FROM (SELECT DISTINCT hashtext('bundle-object:' || bundle.object_key) AS lock_key \
+                       FROM bundles bundle \
+                       WHERE bundle.id IN ($1::uuid,$2::uuid,$3::uuid)) lifecycle \
+                 ORDER BY lifecycle.lock_key",
+            )
+            .bind(previous_head.to_string())
+            .bind(target_bundle.to_string())
+            .bind(deleted_bundle.map(|bundle_id| bundle_id.to_string()))
+            .execute(&mut **tx),
+        )
+        .await?
+        .map_err(map_sql_error)?;
     Ok(())
 }
 

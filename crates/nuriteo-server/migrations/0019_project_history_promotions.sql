@@ -50,11 +50,18 @@ RETURNS trigger
 LANGUAGE plpgsql
 AS $$
 BEGIN
+    IF TG_OP = 'DELETE'
+        AND pg_trigger_depth() > 1
+        AND current_setting('nuriteo.project_delete_id', true) = OLD.project_id::text
+        AND NOT EXISTS (SELECT 1 FROM projects WHERE id = OLD.project_id)
+    THEN
+        RETURN OLD;
+    END IF;
     RAISE EXCEPTION 'project history promotion outcomes are immutable'
         USING ERRCODE = '23514';
 END;
 $$;
 
 CREATE TRIGGER project_history_promotions_immutable
-    BEFORE UPDATE ON project_history_promotions
+    BEFORE UPDATE OR DELETE ON project_history_promotions
     FOR EACH ROW EXECUTE FUNCTION project_history_promotions_immutable_guard();
