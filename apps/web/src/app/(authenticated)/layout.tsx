@@ -30,6 +30,7 @@ export default async function AuthenticatedLayout({
         </header>
         <nav className="authenticated-shell__navigation" aria-label="Account navigation">
           <Link href="/workspaces">Workspaces</Link>
+          <Link href="/projects">Projects</Link>
           <Link href="/organizations">Organizations</Link>
           {current.data.user.is_instance_admin ? (
             <Link href="/admin/invitations">Activation invitations</Link>

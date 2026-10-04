@@ -11,6 +11,8 @@ const UUID_V7 = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f
 const REQUEST_ID = /^[A-Za-z0-9._:-]{1,128}$/u;
 const SAFE_HEADER = /^[\x20-\x7e]{1,512}$/u;
 const STRONG_ETAG = /^"org-v[1-9]\d*"$/u;
+const PROJECT_ETAG = /^"project-v([1-9]\d*)"$/u;
+const MAX_PROJECT_VERSION = 9_223_372_036_854_775_806n;
 const SAFE_LOCATION = /^\/api\/v1\/organizations\/[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 
 type StreamFailure = "aborted" | "read_error" | "too_large";
@@ -22,24 +24,29 @@ interface RequestDeadline {
 }
 
 export interface CollaborationForward {
-  readonly method: "DELETE" | "PATCH" | "POST";
+  readonly method: "DELETE" | "GET" | "PATCH" | "POST";
   readonly path: `/api/v1/${string}`;
   readonly requireCsrf: boolean;
   readonly withBody: boolean;
   readonly withEtag?: boolean;
+  readonly etagKind?: "organization" | "project";
+  readonly safeLocation?: (value: string) => boolean;
 }
 
 export function uuidPathSegment(value: string): string | undefined {
   return UUID_V7.test(value) ? value : undefined;
 }
 
-export function invalidCollaborationRoute(request: Request): Response {
+export function invalidCollaborationRoute(
+  request: Request,
+  instance = "/api/v1/collaboration"
+): Response {
   cancel(request.body);
   return problem(
     400,
     "BFF_ROUTE_PARAMETER_REJECTED",
     requestIdFor(request),
-    "/api/v1/collaboration"
+    instance
   );
 }
 
@@ -77,7 +84,10 @@ export async function forwardCollaborationMutation(
   }
   if (spec.withEtag) {
     const etag = request.headers.get("if-match");
-    if (etag === null || !STRONG_ETAG.test(etag)) {
+    const validEtag = spec.etagKind === "project"
+      ? isProjectEtag(etag)
+      : etag !== null && STRONG_ETAG.test(etag);
+    if (!validEtag || etag === null) {
       cancel(request.body);
       return problem(428, "BFF_PRECONDITION_REQUIRED", requestId, spec.path);
     }
@@ -136,11 +146,22 @@ export async function forwardCollaborationMutation(
     if (value !== null) responseHeaders.set(name, value);
   }
   const location = upstream.headers.get("location");
-  if (location !== null && SAFE_LOCATION.test(location)) responseHeaders.set("location", location);
+  const locationIsSafe = location !== null && (
+    spec.safeLocation?.(location) ?? SAFE_LOCATION.test(location)
+  );
+  if (locationIsSafe) responseHeaders.set("location", location);
   return new Response(hasBody(upstream.status) ? copyBuffer(responseBody.bytes) : null, {
     headers: responseHeaders,
     status: upstream.status
   });
+}
+
+function isProjectEtag(value: string | null): value is string {
+  if (value === null || value.length > 32) return false;
+  const match = value.match(PROJECT_ETAG);
+  if (match === null) return false;
+  const version = BigInt(match[1] as string);
+  return version <= MAX_PROJECT_VERSION && value === `"project-v${version}"`;
 }
 
 async function readBoundedBody(

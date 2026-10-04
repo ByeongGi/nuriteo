@@ -12,7 +12,17 @@ export type CollaborationOperation =
   | "organization-invitation-issue"
   | "organization-invitation-terminal"
   | "organization-member"
-  | "organization-profile";
+  | "organization-profile"
+  | "project-create"
+  | "project-delete"
+  | "project-lifecycle"
+  | "project-profile"
+  | "project-role";
+
+export interface ProjectFailure {
+  readonly message: string;
+  readonly reconcile: boolean;
+}
 
 export function readCsrfCredential(): string {
   for (const pair of document.cookie.split(";")) {
@@ -56,4 +66,37 @@ export function collaborationError(
     }
   }
   return "The request could not be completed. Check the service and try again.";
+}
+
+export function projectError(error: unknown, operation: CollaborationOperation): ProjectFailure {
+  if (error instanceof ApiError) {
+    if (error.code === "COMMIT_OUTCOME_UNKNOWN") {
+      return {
+        message: "The server may have completed this change. Reload the Project before taking another action.",
+        reconcile: true
+      };
+    }
+    if (error.status === 412 || error.status === 428) {
+      return {
+        message: "This Project changed. Reload its latest version before trying again.",
+        reconcile: true
+      };
+    }
+    if (error.status === 403) {
+      return { message: "You do not have permission for this action.", reconcile: false };
+    }
+    if (operation === "project-create" && error.status === 409) {
+      return { message: "That Project slug is already in use in this Workspace.", reconcile: false };
+    }
+    if ((operation === "project-lifecycle" || operation === "project-delete") && error.status === 409) {
+      return { message: "The Project state no longer allows this action. Reload and review it.", reconcile: true };
+    }
+    if (error.status === 400 || error.status === 422) {
+      return { message: "Some submitted values are invalid. Review the form and try again.", reconcile: false };
+    }
+  }
+  return {
+    message: "The request could not be completed. Check the service and try again.",
+    reconcile: false
+  };
 }
