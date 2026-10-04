@@ -6,7 +6,7 @@ compose_file="$repository_root/deploy/compose/compose.yaml"
 script_path="$repository_root/deploy/compose/docker-qualification-ci.sh"
 artifact_root="${NURITEO_QUALIFICATION_ARTIFACTS:-$repository_root/artifacts/docker-compose}"
 temporary_root="${NURITEO_QUALIFICATION_TMP_ROOT:-${TMPDIR:-/tmp}/nuriteo-compose-qualification}"
-expected_success='compose acceptance ok (clean install, idempotent restart, persistence, failed-one-shot gate)'
+expected_success='compose relay acceptance ok (clean install, invite, organization workspace, isolated preview, save, restart, fresh-context resume, persistence, drifted CORS and failed-one-shot dependency gates)'
 
 readonly pull_timeout=10m
 readonly build_timeout=35m
@@ -110,7 +110,7 @@ collect_state() {
   while IFS= read -r container; do
     project="$(docker inspect --format '{{index .Config.Labels "com.docker.compose.project"}}' "$container")"
     service="$(docker inspect --format '{{index .Config.Labels "com.docker.compose.service"}}' "$container")"
-    [[ "$project" =~ ^nuriteo-cmp-002-[0-9]+(-failure)?$ ]] || continue
+    [[ "$project" =~ ^nuriteo-cmp-003-[0-9]+(-failure)?$ ]] || continue
     case "$service" in
       postgres|rustfs|storage-init|storage-check|migrate|bootstrap-admin|core|web) ;;
       *) continue ;;
@@ -125,14 +125,14 @@ collect_state() {
       >>"$artifact_root/service-state.tsv"
     found=1
   done < <(docker ps --all --quiet)
-  [ "$found" -eq 1 ] || echo 'no CMP-002 Compose project reached container creation' >"$artifact_root/no-projects.txt"
+  [ "$found" -eq 1 ] || echo 'no CMP-003 Compose project reached container creation' >"$artifact_root/no-projects.txt"
 }
 
 cleanup_impl() {
   local project
   set +e
   while IFS= read -r project; do
-    [[ "$project" =~ ^nuriteo-cmp-002-[0-9]+(-failure)?$ ]] || continue
+    [[ "$project" =~ ^nuriteo-cmp-003-[0-9]+(-failure)?$ ]] || continue
     timeout --signal=TERM --kill-after=10s 3m \
       bash -c 'docker ps --all --quiet --filter "label=com.docker.compose.project=$1" | xargs --no-run-if-empty docker rm --force' _ "$project"
     with_placeholder_compose_environment \
@@ -140,11 +140,11 @@ cleanup_impl() {
       docker compose --file "$compose_file" --project-name "$project" down --volumes --remove-orphans
   done < <(compose_projects)
   timeout --signal=TERM --kill-after=10s 3m \
-    docker image rm --force localhost/nuriteo-postgres:cmp-002 \
-      localhost/nuriteo-server:cmp-002 localhost/nuriteo-web:cmp-002
+    docker image rm --force localhost/nuriteo-postgres:cmp-003 \
+      localhost/nuriteo-server:cmp-003 localhost/nuriteo-web:cmp-003
   timeout --signal=TERM --kill-after=10s 5m docker builder prune --all --force
   rm -f -- "$temporary_root/acceptance.raw.log"
-  find "$temporary_root" -mindepth 1 -maxdepth 1 -name 'nuriteo-cmp-002.*' -exec rm -rf -- {} +
+  find "$temporary_root" -mindepth 1 -maxdepth 1 -name 'nuriteo-cmp-003.*' -exec rm -rf -- {} +
   docker system df || true
   set -e
 }
@@ -156,7 +156,7 @@ compose_projects() {
     docker network ls --format '{{.Label "com.docker.compose.project"}}'
   } \
     | sort -u \
-    | grep '^nuriteo-cmp-002-' || true
+    | grep '^nuriteo-cmp-003-' || true
 }
 
 pinned_build_images() {
@@ -181,9 +181,9 @@ with_placeholder_compose_environment() {
   NURITEO_BOOTSTRAP_ADMIN_EMAIL=admin@example.invalid \
   NURITEO_BOOTSTRAP_ADMIN_NAME=Qualification \
   NURITEO_EXTERNAL_URL=http://127.0.0.1:19303 \
-  NURITEO_POSTGRES_IMAGE=localhost/nuriteo-postgres:cmp-002 \
-  NURITEO_SERVER_IMAGE=localhost/nuriteo-server:cmp-002 \
-  NURITEO_WEB_IMAGE=localhost/nuriteo-web:cmp-002 \
+  NURITEO_POSTGRES_IMAGE=localhost/nuriteo-postgres:cmp-003 \
+  NURITEO_SERVER_IMAGE=localhost/nuriteo-server:cmp-003 \
+  NURITEO_WEB_IMAGE=localhost/nuriteo-web:cmp-003 \
     "$@"
 }
 

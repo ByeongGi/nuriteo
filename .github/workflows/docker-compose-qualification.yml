@@ -47,6 +47,17 @@ jobs:
       NURITEO_QUALIFICATION_TMP_ROOT: ${{ runner.temp }}/nuriteo-compose
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.15.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.23.0
+          cache: pnpm
+      - name: Install browser fixture dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Install pinned Chromium runtime
+        run: pnpm exec playwright install --with-deps chromium
       - name: Verify official Docker Compose v2 on Linux
         run: deploy/compose/docker-qualification-ci.sh preflight
       - name: Pull pinned images

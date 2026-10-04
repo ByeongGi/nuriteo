@@ -1,6 +1,6 @@
 services:
   storage-configure-browser-upload-cors:
-    image: ${NURITEO_SERVER_IMAGE:-localhost/nuriteo-server:cmp-002}
+    image: ${NURITEO_SERVER_IMAGE:-localhost/nuriteo-server:cmp-003}
     build:
       context: ../..
       dockerfile: deploy/docker/server.Dockerfile
@@ -25,13 +25,14 @@ services:
     restart: "no"
 
   storage-check:
-    image: ${NURITEO_SERVER_IMAGE:-localhost/nuriteo-server:cmp-002}
+    image: ${NURITEO_SERVER_IMAGE:-localhost/nuriteo-server:cmp-003}
     build:
       context: ../..
       dockerfile: deploy/docker/server.Dockerfile
     command: ["storage-check"]
     environment:
       NURITEO_EXTERNAL_URL: ${NURITEO_EXTERNAL_URL:?set NURITEO_EXTERNAL_URL}
+      NURITEO_SAVE_UPLOAD_TRANSPORT: direct
       NURITEO_S3_ENDPOINT: ${NURITEO_S3_ENDPOINT:?set NURITEO_S3_ENDPOINT}
       NURITEO_S3_REGION: ${NURITEO_S3_REGION:?set NURITEO_S3_REGION}
       NURITEO_S3_BUCKET: ${NURITEO_S3_BUCKET:?set NURITEO_S3_BUCKET}

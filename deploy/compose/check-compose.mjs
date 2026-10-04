@@ -7,12 +7,19 @@ const init = fs.readFileSync("deploy/compose/rustfs-init.sh", "utf8");
 const postgresDockerfile = fs.readFileSync("deploy/compose/postgres.Dockerfile", "utf8");
 const postgresEntrypoint = fs.readFileSync("deploy/compose/postgres-tls-entrypoint.sh", "utf8");
 const acceptance = fs.readFileSync("deploy/compose/test-compose.sh", "utf8");
+const browserAcceptance = fs.readFileSync("deploy/compose/relay-save-resume-browser.ts", "utf8");
 
-validate(compose, external, init, acceptance);
+validate(compose, external, init, acceptance, browserAcceptance);
 verifyDriftDetection();
-console.log("compose clean-install contract ok (ordered one-shots, private persistence, external preflight only)");
+console.log("compose relay contract ok (private bundled storage, direct external preflight, ordered one-shots)");
 
-function validate(source, externalSource, initSource, acceptanceSource) {
+function validate(
+  source,
+  externalSource,
+  initSource,
+  acceptanceSource,
+  browserAcceptanceSource = browserAcceptance
+) {
   const services = Object.fromEntries(
     ["postgres", "rustfs", "storage-init", "storage-check", "migrate", "bootstrap-admin", "core", "web"]
       .map((name) => [name, serviceBlock(source, name)])
@@ -40,6 +47,10 @@ function validate(source, externalSource, initSource, acceptanceSource) {
   assert.match(services.web, /NURITEO_PREVIEW_WILDCARD_READY: \$\{NURITEO_PREVIEW_WILDCARD_READY:-false\}/u);
   assert.match(services.core, /NURITEO_SAVE_IDEMPOTENCY_SECRET_FILE: \/run\/secrets\/save_idempotency_secret/u);
   assert.match(services.core, /NURITEO_SAVE_DEFAULT_QUOTA_BYTES: \$\{NURITEO_SAVE_DEFAULT_QUOTA_BYTES:-10737418240\}/u);
+  assert.match(services.core, /^      NURITEO_SAVE_UPLOAD_TRANSPORT: relay$/mu);
+  assert.match(services["storage-check"], /^      NURITEO_SAVE_UPLOAD_TRANSPORT: relay$/mu);
+  assert.match(services["storage-init"], /NURITEO_LEGACY_BROWSER_CORS_ORIGIN: \$\{NURITEO_EXTERNAL_URL:\?set NURITEO_EXTERNAL_URL\}/u);
+  assert.doesNotMatch(services["storage-init"], /^      NURITEO_EXTERNAL_URL:|NURITEO_SAVE_UPLOAD_TRANSPORT/mu);
   assert.match(services.core, /secrets:[\s\S]*- save_idempotency_secret/u);
   assert.match(acceptanceSource, /openssl rand -base64 32[\s\S]*preview-signing-key/u);
   assert.match(acceptanceSource, /chmod 600 "\$fixture_root\/preview-signing-key"/u);
@@ -48,9 +59,37 @@ function validate(source, externalSource, initSource, acceptanceSource) {
   assert.match(acceptanceSource, /openssl rand -base64 32 >"\$fixture_root\/save-idempotency-secret"/u);
   assert.match(acceptanceSource, /chmod 600 "\$fixture_root\/save-idempotency-secret"/u);
   assert.match(acceptanceSource, /export NURITEO_SAVE_IDEMPOTENCY_SECRET_FILE="\$fixture_root\/save-idempotency-secret"/u);
+  assert.match(acceptanceSource, /install_exact_legacy_cors/u);
+  assert.match(acceptanceSource, /install_drifted_legacy_cors/u);
+  assert.match(acceptanceSource, /wait_for_job storage-init 1/u);
+  assert.match(acceptanceSource, /storage-init failed \(legacy-cors-drift\)/u);
+  assert.match(acceptanceSource, /cmp "\$fixture_root\/drift-cors-before\.xml" "\$fixture_root\/drift-cors-after\.xml"/u);
+  assert.match(acceptanceSource, /for service in core web; do assert_service_not_running "\$project" "\$service" \|\| exit \$\?; done/u);
+  assert.doesNotMatch(acceptanceSource, /compose ps --status running --services/u);
+  assert.match(
+    acceptanceSource,
+    /if \[ "\$engine" = podman \]; then[\s\S]*failure_compose up --detach --no-build bootstrap-admin \|\| true[\s\S]*else\s+failure_compose up --detach --no-build \|\| true/u
+  );
+  assert.match(acceptanceSource, /for service in core web; do assert_service_not_running "\$failure_project" "\$service" \|\| exit \$\?; done/u);
+  assert.match(acceptanceSource, /grep -q '<title>NURITEO<\/title>' "\$fixture_root\/web\.html"/u);
+  assert.match(browserAcceptanceSource, /Issue invitation/u);
+  assert.match(browserAcceptanceSource, /Activate account/u);
+  assert.match(browserAcceptanceSource, /Issue Organization invitation/u);
+  assert.match(browserAcceptanceSource, /Accept invitation/u);
+  assert.match(browserAcceptanceSource, /CMP 003 Organization Organization Workspace/u);
+  assert.match(browserAcceptanceSource, /Grant role/u);
+  assert.match(browserAcceptanceSource, /waitForPreviewFrame/u);
+  assert.match(browserAcceptanceSource, /crossOriginIsolated/u);
+  assert.match(browserAcceptanceSource, /Preview request carried an application cookie/u);
+  assert.match(browserAcceptanceSource, /NURITEO_COMPOSE_STORAGE_SECRET_KEY_FILE/u);
+  assert.match(browserAcceptanceSource, /assertNoPrivateStorageMaterial\(JSON\.stringify/u);
+  assert.match(browserAcceptanceSource, /\.catch\(\(error: unknown\) => recordLedgerError/u);
+  assert.match(browserAcceptanceSource, /await drainLedger\(ledger\)/u);
+  assert.match(browserAcceptanceSource, /ledger\.closingContexts\.has\(context\).*isTargetClosed\(error\)/u);
+  assert.match(browserAcceptanceSource, /Resume saved Project/u);
 
   for (const [name, command] of [["storage-check", "storage-check"], ["migrate", "migrate"], ["bootstrap-admin", "bootstrap-admin"], ["core", "serve"]]) {
-    assert.match(services[name], /image: \$\{NURITEO_SERVER_IMAGE:-localhost\/nuriteo-server:cmp-002\}/u);
+    assert.match(services[name], /image: \$\{NURITEO_SERVER_IMAGE:-localhost\/nuriteo-server:cmp-003\}/u);
     assert.match(services[name], new RegExp(`command: \\["${command}"\\]`, "u"));
   }
   assert.match(services["bootstrap-admin"], /NURITEO_BOOTSTRAP_ADMIN_PASSWORD_FILE: \/run\/secrets\/bootstrap_admin_password/u);
@@ -86,24 +125,21 @@ function validate(source, externalSource, initSource, acceptanceSource) {
   assert.match(initSource, /--request PUT "\$endpoint"/u);
   assert.match(initSource, /BucketAlreadyOwnedByYou/u);
   assert.match(initSource, /--head "\$endpoint"/u);
-  assert.match(initSource, /--request PUT --data-binary "@\$cors_file" "\$endpoint\?cors"/u);
-  for (const literal of [
-    "nuriteo-browser-upload-v1",
-    "<AllowedMethod>PUT</AllowedMethod>",
-    "<AllowedHeader>content-type</AllowedHeader>",
-    "<AllowedHeader>x-amz-checksum-sha256</AllowedHeader>",
-    "<AllowedHeader>x-amz-sdk-checksum-algorithm</AllowedHeader>",
-    "<ExposeHeader>etag</ExposeHeader>",
-    "<ExposeHeader>x-amz-checksum-sha256</ExposeHeader>"
-  ]) assert(initSource.includes(literal), `missing bundled browser CORS contract: ${literal}`);
+  assert.match(initSource, /NURITEO_LEGACY_BROWSER_CORS_ORIGIN/u);
+  assert.match(initSource, /NoSuchCORSConfiguration/u);
+  assert.match(initSource, /legacy_cors_is_exact \|\|/u);
+  assert.match(initSource, /nuriteo-browser-upload-v1/u);
+  assert.match(initSource, /--request DELETE "\$endpoint\?cors"/u);
+  assert.doesNotMatch(initSource, /--request PUT[\s\S]{0,200}\?cors/u);
   assert.doesNotMatch(initSource, /<AllowedOrigin>\*<\/AllowedOrigin>|<AllowedHeader>\*<\/AllowedHeader>/u);
-  assert.doesNotMatch(initSource, /--request (?:DELETE|POST|PATCH)/u);
+  assert.doesNotMatch(initSource, /--request (?:POST|PATCH)/u);
 
   const externalConfigure = serviceBlock(externalSource, "storage-configure-browser-upload-cors");
   assert.match(externalConfigure, /command: \["storage-configure-browser-upload-cors"\]/u);
   assert.match(externalConfigure, /profiles: \["configure-browser-upload-cors"\]/u);
   const externalCheck = serviceBlock(externalSource, "storage-check");
   assert.match(externalCheck, /command: \["storage-check"\]/u);
+  assert.match(externalCheck, /^      NURITEO_SAVE_UPLOAD_TRANSPORT: direct$/mu);
   assert.match(externalCheck, /NURITEO_S3_BUCKET: \$\{NURITEO_S3_BUCKET:\?set NURITEO_S3_BUCKET\}/u);
   assert.match(externalCheck, /NURITEO_S3_ACCESS_KEY_ID_FILE: \/run\/secrets\/s3_access_key/u);
   assert.doesNotMatch(externalSource, /storage-init|rustfs|migrate|bootstrap-admin|command:.*(?:create|delete)/iu);
@@ -111,6 +147,8 @@ function validate(source, externalSource, initSource, acceptanceSource) {
   const startStack = shellFunction(acceptanceSource, "start_stack");
   const oneShotGate = 'for job in storage-init storage-check migrate bootstrap-admin; do';
   const oneShotCheck = 'wait_for_job "$job" 0';
+  assert.match(startStack, /set \+e\s+compose_status=0\s+compose up --detach --no-build \|\| compose_status=\$\?\s+set -e/u);
+  assert.match(startStack, /if \[ "\$compose_status" -eq 0 \]; then\s+return 0/u);
   assert.match(startStack, new RegExp(oneShotGate, "u"));
   assert.match(startStack, /wait_for_job "\$job" 0/u);
   assert.ok(
@@ -122,6 +160,9 @@ function validate(source, externalSource, initSource, acceptanceSource) {
     startStack.indexOf('core_container="$(service_container') < startStack.indexOf("run --no-deps"),
     "the Podman Web compatibility path must verify Core before bypassing dependency traversal"
   );
+  assert.match(startStack, /if web_container="\$\(service_container "\$project" web\)"; then/u);
+  assert.match(startStack, /web_status="\$\(\$engine inspect --format '\{\{\.State\.Status\}\}' "\$web_container"\)"/u);
+  assert.match(startStack, /if \[ "\$web_status" = running \]; then\s+return 0/u);
 }
 
 function shellFunction(source, name) {
@@ -148,9 +189,18 @@ function verifyDriftDetection() {
     [compose.replace("NURITEO_PREVIEW_WILDCARD_READY:-false", "NURITEO_PREVIEW_WILDCARD_READY:-true"), external, init, acceptance],
     [compose.replace("NURITEO_PREVIEW_SIGNING_KEY_FILE: /run/secrets/preview_signing_key", "NURITEO_PREVIEW_SIGNING_KEY: public"), external, init, acceptance],
     [compose.replace("NURITEO_SAVE_IDEMPOTENCY_SECRET_FILE: /run/secrets/save_idempotency_secret", "NURITEO_SAVE_IDEMPOTENCY_SECRET: public"), external, init, acceptance],
+    [compose.replace("NURITEO_SAVE_UPLOAD_TRANSPORT: relay", "NURITEO_SAVE_UPLOAD_TRANSPORT: direct"), external, init, acceptance],
+    [compose.replace("NURITEO_LEGACY_BROWSER_CORS_ORIGIN", "NURITEO_EXTERNAL_URL"), external, init, acceptance],
+    [compose, external.replace("NURITEO_SAVE_UPLOAD_TRANSPORT: direct", "NURITEO_SAVE_UPLOAD_TRANSPORT: relay"), init, acceptance],
     [compose, external.replace('command: ["storage-check"]', 'command: ["storage-init"]'), init, acceptance],
+    [compose, external, init.replace('--request DELETE "$endpoint?cors"', '--request PUT "$endpoint?cors"'), acceptance],
+    [compose, external, init.replace("legacy_cors_is_exact ||", ": ||"), acceptance],
     [compose, external, init.replace("--head", "--request DELETE"), acceptance],
-    [compose, external, init, acceptance.replace("wait_for_job \"$job\" 0", ":")]
+    [compose, external, init, acceptance.replace("wait_for_job \"$job\" 0", ":"), browserAcceptance],
+    [compose, external, init, acceptance, browserAcceptance.replace("Issue Organization invitation", "Issue invitation")],
+    [compose, external, init, acceptance, browserAcceptance.replaceAll("waitForPreviewFrame", "findPreviewUrl")],
+    [compose, external, init, acceptance, browserAcceptance.replace("crossOriginIsolated", "isSecureContext")],
+    [compose, external, init, acceptance, browserAcceptance.replace("Resume saved Project", "Start workspace from template")]
   ];
   for (const [index, args] of mutations.entries()) {
     assert.throws(() => validate(...args), `compose drift mutation ${index + 1} was not rejected`);

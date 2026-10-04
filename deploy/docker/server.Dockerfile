@@ -4,6 +4,7 @@ WORKDIR /build
 
 COPY Cargo.toml Cargo.lock ./
 COPY crates ./crates
+COPY compat ./compat
 
 RUN cargo build --locked --release --package nuriteo-server --bin nuriteo-server
 

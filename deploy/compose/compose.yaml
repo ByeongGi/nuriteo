@@ -69,7 +69,7 @@ services:
     entrypoint: ["/bin/sh", "/usr/local/bin/nuriteo-rustfs-init"]
     environment:
       NURITEO_BUNDLED_S3_BUCKET: ${NURITEO_S3_BUCKET:-nuriteo}
-      NURITEO_EXTERNAL_URL: ${NURITEO_EXTERNAL_URL:?set NURITEO_EXTERNAL_URL}
+      NURITEO_LEGACY_BROWSER_CORS_ORIGIN: ${NURITEO_EXTERNAL_URL:?set NURITEO_EXTERNAL_URL}
     secrets:
       - rustfs_access_key
       - rustfs_secret_key
@@ -97,13 +97,13 @@ services:
     restart: "no"
 
   storage-check:
-    image: ${NURITEO_SERVER_IMAGE:-localhost/nuriteo-server:cmp-002}
+    image: ${NURITEO_SERVER_IMAGE:-localhost/nuriteo-server:cmp-003}
     build:
       context: ../..
       dockerfile: deploy/docker/server.Dockerfile
     command: ["storage-check"]
     environment:
-      NURITEO_EXTERNAL_URL: ${NURITEO_EXTERNAL_URL:?set NURITEO_EXTERNAL_URL}
+      NURITEO_SAVE_UPLOAD_TRANSPORT: relay
       NURITEO_S3_ENDPOINT: https://rustfs:9000
       NURITEO_S3_REGION: us-east-1
       NURITEO_S3_BUCKET: ${NURITEO_S3_BUCKET:-nuriteo}
@@ -132,7 +132,7 @@ services:
     restart: "no"
 
   migrate:
-    image: ${NURITEO_SERVER_IMAGE:-localhost/nuriteo-server:cmp-002}
+    image: ${NURITEO_SERVER_IMAGE:-localhost/nuriteo-server:cmp-003}
     build:
       context: ../..
       dockerfile: deploy/docker/server.Dockerfile
@@ -160,7 +160,7 @@ services:
     restart: "no"
 
   bootstrap-admin:
-    image: ${NURITEO_SERVER_IMAGE:-localhost/nuriteo-server:cmp-002}
+    image: ${NURITEO_SERVER_IMAGE:-localhost/nuriteo-server:cmp-003}
     build:
       context: ../..
       dockerfile: deploy/docker/server.Dockerfile
@@ -192,7 +192,7 @@ services:
     restart: "no"
 
   core:
-    image: ${NURITEO_SERVER_IMAGE:-localhost/nuriteo-server:cmp-002}
+    image: ${NURITEO_SERVER_IMAGE:-localhost/nuriteo-server:cmp-003}
     build:
       context: ../..
       dockerfile: deploy/docker/server.Dockerfile
@@ -212,6 +212,7 @@ services:
       NURITEO_S3_CA_FILE: /run/secrets/rustfs_ca
       NURITEO_SAVE_IDEMPOTENCY_SECRET_FILE: /run/secrets/save_idempotency_secret
       NURITEO_SAVE_DEFAULT_QUOTA_BYTES: ${NURITEO_SAVE_DEFAULT_QUOTA_BYTES:-10737418240}
+      NURITEO_SAVE_UPLOAD_TRANSPORT: relay
     secrets:
       - database_url
       - database_ca
@@ -244,7 +245,7 @@ services:
     restart: unless-stopped
 
   web:
-    image: ${NURITEO_WEB_IMAGE:-localhost/nuriteo-web:cmp-002}
+    image: ${NURITEO_WEB_IMAGE:-localhost/nuriteo-web:cmp-003}
     build:
       context: ../..
       dockerfile: deploy/docker/web.Dockerfile

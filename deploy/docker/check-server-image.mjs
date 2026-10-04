@@ -6,6 +6,7 @@ function assert(condition, message) {
 
 const dockerfilePath = "deploy/docker/server.Dockerfile";
 const ignorePath = `${dockerfilePath}.dockerignore`;
+const migrationsSourcePath = "crates/nuriteo-server/src/database/migrations.rs";
 const dockerfile = fs.readFileSync(dockerfilePath, "utf8");
 const instructions = dockerfile
   .split("\n")
@@ -31,6 +32,10 @@ assert(
     "RUN cargo build --locked --release --package nuriteo-server --bin nuriteo-server"
   ),
   "release build must use Cargo.lock and select only the server binary"
+);
+assert(
+  instructions.includes("COPY compat ./compat"),
+  "builder must copy the compile-time Project Bundle admission contract"
 );
 assert(
   instructions.includes(
@@ -66,19 +71,46 @@ const expectedIgnoreRules = [
   "**",
   "!Cargo.toml",
   "!Cargo.lock",
+  "!compat/",
+  "!compat/project-bundle-admission-v1.json",
   "!crates/",
   "!crates/**/",
   "!crates/**/Cargo.toml",
   "!crates/**/src/",
-  "!crates/**/src/**"
+  "!crates/**/src/**",
+  "!crates/nuriteo-server/migrations/",
+  "!crates/nuriteo-server/migrations/*.sql"
 ];
 assert(
   JSON.stringify(ignoreRules) === JSON.stringify(expectedIgnoreRules),
   "server build context must remain an exact Cargo source allowlist"
 );
 
-for (const requiredPath of ["Cargo.toml", "Cargo.lock", "crates/nuriteo-server/Cargo.toml"]) {
+for (const requiredPath of [
+  "Cargo.toml",
+  "Cargo.lock",
+  "compat/project-bundle-admission-v1.json",
+  "crates/nuriteo-server/Cargo.toml"
+]) {
   assert(fs.existsSync(requiredPath), `missing build input: ${requiredPath}`);
 }
 
-console.log("server image contract ok (pinned multi-stage, non-root distroless runtime, allowlisted context)");
+const migrationIncludes = [...fs.readFileSync(migrationsSourcePath, "utf8").matchAll(
+  /include_str!\("\.\.\/\.\.\/migrations\/(\d{4}_[a-z0-9_]+\.sql)"\)/gu
+)].map((match) => match[1]);
+const migrationFiles = fs.readdirSync("crates/nuriteo-server/migrations")
+  .filter((name) => name.endsWith(".sql"))
+  .sort();
+assert(migrationIncludes.length === 20, "server must embed the exact 20-migration baseline");
+assert(
+  JSON.stringify([...migrationIncludes].sort()) === JSON.stringify(migrationFiles),
+  "every migration SQL build input must be embedded and allowlisted"
+);
+for (const migration of migrationIncludes) {
+  assert(
+    fs.existsSync(`crates/nuriteo-server/migrations/${migration}`),
+    `missing compile-time migration input: ${migration}`
+  );
+}
+
+console.log("server image contract ok (pinned multi-stage, non-root runtime, compile-time inputs allowlisted)");

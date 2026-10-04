@@ -4,7 +4,9 @@ import { createPreviewWorkflowController } from "../../../packages/preview-servi
 
 const controller = createPreviewWorkflowController();
 const snapshot = controller.importProjectFiles([
+  { path: "LICENSE", content: "Apache-2.0\n" },
   { path: "package.json", kind: "text", bytes: new TextEncoder().encode('{"scripts":{"dev":"vite"},"dependencies":{"vite":"latest"}}\n') },
+  { path: "pnpm-lock.yaml", content: "lockfileVersion: '9.0'\n" },
   { path: "public/logo.bin", kind: "binary", bytes: Uint8Array.of(0, 255, 1, 128) },
   { path: "src/main.ts", kind: "text", bytes: new TextEncoder().encode("export const resumed = true\n") }
 ], "Remote project");
@@ -12,6 +14,8 @@ const snapshot = controller.importProjectFiles([
 assert.equal(snapshot.source, "snapshot");
 assert.equal(snapshot.project?.readText("/workspace/app/src/main.ts"), "export const resumed = true\n");
 assert.equal(snapshot.project?.metadata.name, "Remote project");
+assert.equal(snapshot.workflow?.workspace.readText("/workspace/app/LICENSE"), "Apache-2.0\n");
+assert.equal(snapshot.workflow?.workspace.readText("/workspace/app/pnpm-lock.yaml"), "lockfileVersion: '9.0'\n");
 assert.deepEqual(
   snapshot.workflow?.workspace.readBytes("/workspace/app/public/logo.bin"),
   Uint8Array.of(0, 255, 1, 128),
@@ -34,4 +38,37 @@ const renamed = roundTrip.find((file) => file.path === "public/renamed.bin");
 assert.deepEqual(renamed?.bytes, Uint8Array.of(0, 255, 1, 128));
 renamed?.bytes.fill(7);
 assert.deepEqual(controller.exportProjectFiles().find((file) => file.path === "public/renamed.bin")?.bytes, Uint8Array.of(0, 255, 1, 128));
+
+for (const path of [
+  "../escape",
+  "/absolute",
+  "nested\\escape",
+  "./dot",
+  "nested//empty",
+  "control\u0000byte",
+  "e\u0301.txt",
+  `${Array.from({ length: 33 }, () => "segment").join("/")}/file.txt`
+]) {
+  assert.throws(
+    () => controller.importProjectFiles([{ path, content: "unsafe\n" }]),
+    /unsafe or duplicate path/u,
+    `unsafe imported path must be rejected: ${JSON.stringify(path)}`
+  );
+}
+assert.throws(
+  () => controller.importProjectFiles([{ path: "large.txt", content: "x".repeat(1024 * 1024 + 1) }]),
+  /per-file limit/u
+);
+assert.throws(
+  () => controller.importProjectFiles(Array.from({ length: 257 }, (_, index) => ({ path: `file-${index}`, content: "" }))),
+  /file limit/u
+);
+assert.throws(
+  () => controller.importProjectFiles(Array.from({ length: 9 }, (_, index) => ({ path: `large-${index}`, content: "x".repeat(1024 * 1024) }))),
+  /byte limit/u
+);
+assert.throws(
+  () => controller.importProjectFiles([{ path: "duplicate", content: "a" }, { path: "duplicate", content: "b" }]),
+  /unsafe or duplicate path/u
+);
 console.log("preview-service cloud project resume test ok");

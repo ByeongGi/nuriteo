@@ -127,7 +127,12 @@ interface NormalizedRelayResponse {
   body: string;
 }
 
-const SOURCE_FILE_RE = /\.(?:jsx?|tsx?|css|html|json|md|svelte|vue)$/;
+const MAX_IMPORTED_PROJECT_FILES = 256;
+const MAX_IMPORTED_PROJECT_FILE_BYTES = 1024 * 1024;
+const MAX_IMPORTED_PROJECT_TOTAL_BYTES = 8 * 1024 * 1024;
+const MAX_IMPORTED_PROJECT_PATH_BYTES = 512;
+const MAX_IMPORTED_PROJECT_PATH_SEGMENTS = 32;
+const MAX_IMPORTED_PROJECT_PATH_SEGMENT_BYTES = 255;
 
 export function createPreviewWorkflowController(
   options: PreviewWorkflowControllerOptions = {}
@@ -408,15 +413,6 @@ export function createPreviewWorkflowController(
     removeConflictingScaffoldFiles(workflow, materialized.files.map((file) => file.path));
 
     for (const file of materialized.files) {
-      if (
-        !SOURCE_FILE_RE.test(file.path)
-        && file.path !== "package.json"
-        && file.path !== "index.html"
-        && !file.path.endsWith(".js")
-        && !file.path.endsWith(".css")
-      ) {
-        continue;
-      }
       try {
         workflow.workspace.writeText(`${workflow.projectRoot}/${file.path}`, file.data);
       } catch {
@@ -603,12 +599,7 @@ export function createPreviewWorkflowController(
       metadata: { name }
     });
     const decoder = new TextDecoder("utf-8", { fatal: true });
-    const projectFiles = files.map((file): PreviewProjectFile => {
-      const path = file.path.replace(/^\/+/, "").replace(/^workspace\/app\//, "");
-      return "content" in file
-        ? { path, kind: "text", bytes: new TextEncoder().encode(file.content) }
-        : { path, kind: file.kind, bytes: Uint8Array.from(file.bytes) };
-    });
+    const projectFiles = validateImportedProjectFiles(files);
     const materializedFiles = projectFiles
       .filter((file) => file.kind === "text")
       .map((file) => ({ path: file.path, data: decoder.decode(file.bytes) }));
@@ -1283,6 +1274,65 @@ export function createPreviewWorkflowController(
 function normalizeExportPrefix(path?: string): string {
   if (!path) return "";
   return path.replace(/^\/+|\/+$/g, "").replace(/^\.\//, "");
+}
+
+function validateImportedProjectFiles(
+  files: readonly PreviewProjectFileInput[]
+): PreviewProjectFile[] {
+  if (files.length > MAX_IMPORTED_PROJECT_FILES) {
+    throw new Error("Imported Project exceeds the Runtime file limit");
+  }
+  const encoder = new TextEncoder();
+  const paths = new Set<string>();
+  const validated: PreviewProjectFile[] = [];
+  let totalBytes = 0;
+  for (const input of files) {
+    if (!isSafeImportedProjectPath(input.path) || paths.has(input.path)) {
+      throw new Error("Imported Project contains an unsafe or duplicate path");
+    }
+    paths.add(input.path);
+    let file: PreviewProjectFile;
+    if ("content" in input) {
+      if (typeof input.content !== "string") {
+        throw new Error("Imported Project contains invalid text content");
+      }
+      file = { path: input.path, kind: "text", bytes: encoder.encode(input.content) };
+    } else {
+      if ((input.kind !== "text" && input.kind !== "binary") || !(input.bytes instanceof Uint8Array)) {
+        throw new Error("Imported Project contains an invalid file");
+      }
+      file = { path: input.path, kind: input.kind, bytes: Uint8Array.from(input.bytes) };
+    }
+    if (file.bytes.byteLength > MAX_IMPORTED_PROJECT_FILE_BYTES) {
+      throw new Error("Imported Project exceeds the Runtime per-file limit");
+    }
+    totalBytes += file.bytes.byteLength;
+    if (!Number.isSafeInteger(totalBytes) || totalBytes > MAX_IMPORTED_PROJECT_TOTAL_BYTES) {
+      throw new Error("Imported Project exceeds the Runtime byte limit");
+    }
+    validated.push(file);
+  }
+  return validated;
+}
+
+function isSafeImportedProjectPath(path: unknown): path is string {
+  if (
+    typeof path !== "string"
+    || path.length === 0
+    || path !== path.normalize("NFC")
+    || path.startsWith("/")
+    || path.includes("\\")
+    || /[\u0000-\u001f\u007f]/u.test(path)
+  ) return false;
+  const encoder = new TextEncoder();
+  if (encoder.encode(path).byteLength > MAX_IMPORTED_PROJECT_PATH_BYTES) return false;
+  const segments = path.split("/");
+  return segments.length <= MAX_IMPORTED_PROJECT_PATH_SEGMENTS && segments.every((segment) =>
+    segment.length > 0
+    && segment !== "."
+    && segment !== ".."
+    && encoder.encode(segment).byteLength <= MAX_IMPORTED_PROJECT_PATH_SEGMENT_BYTES
+  );
 }
 
 function relativeProjectPath(path: string, root: string): string {

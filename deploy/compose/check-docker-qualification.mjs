@@ -22,6 +22,10 @@ assert.match(workflow, /^concurrency:\n  group: docker-compose-qualification-/mu
 assert.match(workflow, /if: github\.event_name == 'workflow_dispatch'/u);
 assert.match(workflow, /runs-on: ubuntu-24\.04/u);
 assert.match(workflow, /timeout-minutes: 75/u);
+assert.match(workflow, /pnpm\/action-setup@v4[\s\S]*version: 11\.15\.1/u);
+assert.match(workflow, /actions\/setup-node@v4[\s\S]*node-version: 22\.23\.0/u);
+assert.match(workflow, /pnpm install --frozen-lockfile/u);
+assert.match(workflow, /pnpm exec playwright install --with-deps chromium/u);
 assert.match(workflow, /if: failure\(\)[\s\S]*docker-qualification-ci\.sh diagnostics/u);
 assert.match(workflow, /if: always\(\)[\s\S]*docker-qualification-ci\.sh cleanup/u);
 assert.match(workflow, /if: steps\.cleanup\.outcome == 'failure'[\s\S]*docker-qualification-ci\.sh diagnostics/u);
@@ -53,6 +57,9 @@ assert.match(runner, /run_bounded "\$diagnostics_timeout" collect-state/u);
 assert.match(runner, /run_bounded "\$cleanup_timeout" cleanup-internal/u);
 assert.doesNotMatch(runner, /docker (?:compose )?logs\b/u);
 assert.doesNotMatch(runner, /cat "\$raw_log"|tee .*raw/u);
-assert.match(fixture, /echo 'compose acceptance ok \(clean install, idempotent restart, persistence, failed-one-shot gate\)'/u);
+assert.match(fixture, /run_browser_phase save/u);
+assert.match(fixture, /run_browser_phase resume/u);
+assert.match(fixture, /echo 'compose relay acceptance ok \(clean install, invite, organization workspace, isolated preview, save, restart, fresh-context resume, persistence, drifted CORS and failed-one-shot dependency gates\)'/u);
+assert.match(fixture, /echo 'compose relay acceptance ok \(clean install, invite, organization workspace, isolated preview, save, restart, fresh-context resume, persistence, targeted drifted-CORS and failed-one-shot rejection \(provider compatibility\)\)'/u);
 
 console.log("Docker Compose v2 qualification workflow contract ok (manual actual lane, bounded allowlisted diagnostics)");

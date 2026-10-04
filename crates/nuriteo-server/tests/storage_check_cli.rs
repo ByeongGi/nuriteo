@@ -24,17 +24,16 @@ async fn storage_check_subprocess_is_safe_and_leaves_no_probe_objects() {
         std::env::var("NURITEO_TEST_S3_CA_FILE").expect("fixture provides its private CA");
     let client = client(&endpoint, &ca_file, SECRET_KEY).await;
     create_bucket(&client).await;
-    configure_browser_upload_cors(&client).await;
 
-    let compatible = run(&endpoint, &ca_file, BUCKET, SECRET_KEY);
+    let relay = run(&endpoint, &ca_file, BUCKET, SECRET_KEY, "relay");
     assert_eq!(
-        compatible.status.code(),
+        relay.status.code(),
         Some(0),
         "storage-check stderr: {}",
-        String::from_utf8_lossy(&compatible.stderr)
+        String::from_utf8_lossy(&relay.stderr)
     );
-    assert!(compatible.stderr.is_empty());
-    let report: Value = serde_json::from_slice(&compatible.stdout).expect("report is valid JSON");
+    assert!(relay.stderr.is_empty());
+    let report: Value = serde_json::from_slice(&relay.stdout).expect("report is valid JSON");
     let fields = report.as_object().expect("report is a JSON object");
     assert_eq!(fields.len(), 10);
     assert!(
@@ -55,11 +54,26 @@ async fn storage_check_subprocess_is_safe_and_leaves_no_probe_objects() {
     ] {
         assert_eq!(report[capability], "supported");
     }
-    assert_safe(&compatible, &endpoint, &ca_file);
+    assert_safe(&relay, &endpoint, &ca_file);
     assert_probe_namespace_empty(&client).await;
 
+    let direct_without_cors = run(&endpoint, &ca_file, BUCKET, SECRET_KEY, "direct");
+    assert_eq!(direct_without_cors.status.code(), Some(1));
+    assert!(direct_without_cors.stdout.is_empty());
+    assert_eq!(
+        direct_without_cors.stderr,
+        b"nuriteo-server: storage-check failed (browser-upload-cors-mismatch)\n"
+    );
+    assert_safe(&direct_without_cors, &endpoint, &ca_file);
+
     configure_drifted_browser_upload_cors(&client).await;
-    let drifted = run(&endpoint, &ca_file, BUCKET, SECRET_KEY);
+    let relay_with_drift = run(&endpoint, &ca_file, BUCKET, SECRET_KEY, "relay");
+    assert_eq!(relay_with_drift.status.code(), Some(0));
+    assert!(relay_with_drift.stderr.is_empty());
+    assert_safe(&relay_with_drift, &endpoint, &ca_file);
+    assert_probe_namespace_empty(&client).await;
+
+    let drifted = run(&endpoint, &ca_file, BUCKET, SECRET_KEY, "direct");
     assert_eq!(drifted.status.code(), Some(1));
     assert!(drifted.stdout.is_empty());
     assert_eq!(
@@ -89,13 +103,13 @@ async fn storage_check_subprocess_is_safe_and_leaves_no_probe_objects() {
     );
     assert!(configured.stderr.is_empty());
     assert_safe(&configured, &endpoint, &ca_file);
-    let restored = run(&endpoint, &ca_file, BUCKET, SECRET_KEY);
+    let restored = run(&endpoint, &ca_file, BUCKET, SECRET_KEY, "direct");
     assert_eq!(restored.status.code(), Some(0));
     assert!(restored.stderr.is_empty());
     assert_safe(&restored, &endpoint, &ca_file);
     assert_probe_namespace_empty(&client).await;
 
-    let missing = run(&endpoint, &ca_file, MISSING_BUCKET, SECRET_KEY);
+    let missing = run(&endpoint, &ca_file, MISSING_BUCKET, SECRET_KEY, "relay");
     assert_eq!(missing.status.code(), Some(1));
     assert!(missing.stdout.is_empty());
     assert_eq!(
@@ -112,7 +126,7 @@ async fn storage_check_subprocess_is_safe_and_leaves_no_probe_objects() {
             .is_err()
     );
 
-    let wrong_credential = run(&endpoint, &ca_file, BUCKET, WRONG_SECRET);
+    let wrong_credential = run(&endpoint, &ca_file, BUCKET, WRONG_SECRET, "relay");
     assert_eq!(wrong_credential.status.code(), Some(1));
     assert!(wrong_credential.stdout.is_empty());
     assert_eq!(
@@ -121,14 +135,51 @@ async fn storage_check_subprocess_is_safe_and_leaves_no_probe_objects() {
     );
     assert_safe(&wrong_credential, &endpoint, &ca_file);
     assert_probe_namespace_empty(&client).await;
+
+    for transport in [None, Some(""), Some("Relay"), Some("unknown")] {
+        let invalid = run_with_transport(
+            "storage-check",
+            &endpoint,
+            &ca_file,
+            BUCKET,
+            SECRET_KEY,
+            transport,
+        );
+        assert_eq!(invalid.status.code(), Some(1));
+        assert!(invalid.stdout.is_empty());
+        assert_eq!(
+            invalid.stderr,
+            b"nuriteo-server: storage-check failed (configuration)\n"
+        );
+        assert_safe(&invalid, &endpoint, &ca_file);
+    }
 }
 
-fn run(endpoint: &str, ca_file: &str, bucket: &str, secret: &str) -> Output {
-    run_command("storage-check", endpoint, ca_file, bucket, secret)
+fn run(endpoint: &str, ca_file: &str, bucket: &str, secret: &str, transport: &str) -> Output {
+    run_with_transport(
+        "storage-check",
+        endpoint,
+        ca_file,
+        bucket,
+        secret,
+        Some(transport),
+    )
 }
 
 fn run_command(command: &str, endpoint: &str, ca_file: &str, bucket: &str, secret: &str) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_nuriteo-server"))
+    run_with_transport(command, endpoint, ca_file, bucket, secret, None)
+}
+
+fn run_with_transport(
+    command: &str,
+    endpoint: &str,
+    ca_file: &str,
+    bucket: &str,
+    secret: &str,
+    transport: Option<&str>,
+) -> Output {
+    let mut process = Command::new(env!("CARGO_BIN_EXE_nuriteo-server"));
+    process
         .arg(command)
         .env_clear()
         .env("NURITEO_EXTERNAL_URL", "http://127.0.0.1:8080")
@@ -139,9 +190,11 @@ fn run_command(command: &str, endpoint: &str, ca_file: &str, bucket: &str, secre
         .env("NURITEO_S3_CREDENTIAL_PROVIDER", "static")
         .env("NURITEO_S3_ACCESS_KEY_ID", ACCESS_KEY)
         .env("NURITEO_S3_SECRET_ACCESS_KEY", secret)
-        .env("NURITEO_S3_CA_FILE", ca_file)
-        .output()
-        .expect("storage-check subprocess starts")
+        .env("NURITEO_S3_CA_FILE", ca_file);
+    if let Some(transport) = transport {
+        process.env("NURITEO_SAVE_UPLOAD_TRANSPORT", transport);
+    }
+    process.output().expect("storage-check subprocess starts")
 }
 
 fn assert_safe(output: &Output, endpoint: &str, ca_file: &str) {
@@ -197,33 +250,6 @@ async fn create_bucket(client: &aws_sdk_s3::Client) {
             .is_some_and(|code| matches!(code, "BucketAlreadyExists" | "BucketAlreadyOwnedByYou"));
         assert!(existing, "bucket fixture setup failed");
     }
-}
-
-async fn configure_browser_upload_cors(client: &aws_sdk_s3::Client) {
-    let rule = CorsRule::builder()
-        .id("nuriteo-browser-upload-v1")
-        .allowed_origins("http://127.0.0.1:8080")
-        .allowed_methods("PUT")
-        .allowed_headers("content-type")
-        .allowed_headers("x-amz-checksum-sha256")
-        .allowed_headers("x-amz-sdk-checksum-algorithm")
-        .expose_headers("etag")
-        .expose_headers("x-amz-checksum-sha256")
-        .max_age_seconds(300)
-        .build()
-        .unwrap();
-    client
-        .put_bucket_cors()
-        .bucket(BUCKET)
-        .cors_configuration(
-            CorsConfiguration::builder()
-                .cors_rules(rule)
-                .build()
-                .unwrap(),
-        )
-        .send()
-        .await
-        .expect("fixture CORS can be configured");
 }
 
 async fn configure_drifted_browser_upload_cors(client: &aws_sdk_s3::Client) {

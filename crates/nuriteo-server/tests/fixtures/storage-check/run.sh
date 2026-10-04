@@ -56,5 +56,6 @@ done
 
 NURITEO_TEST_S3_ENDPOINT='https://127.0.0.1:19004' \
 NURITEO_TEST_S3_CA_FILE="$fixture_root/ca.crt" \
+CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$fixture_root/target}" \
 cargo test -p nuriteo-server --test storage_check_cli --all-features -- \
   --ignored --exact storage_check_subprocess_is_safe_and_leaves_no_probe_objects
