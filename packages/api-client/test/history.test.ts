@@ -80,7 +80,7 @@ async function testHistoryWireContract(): Promise<void> {
   assert.equal(versions.data.items[0]?.projectId, PROJECT_ID);
   assert.equal(versions.data.nextCursor, "nrt_project_cursor_next");
   const checkpoints = await listRecoveryCheckpoints(client, { owner: OWNER, projectId: PROJECT_ID });
-  assert.equal(checkpoints.data.items[0]?.position, 0);
+  assert.equal(checkpoints.data.items[0]?.position, 1);
 
   const restored = await restoreProjectHistory(client, {
     owner: OWNER,
@@ -124,12 +124,43 @@ async function testStrictRuntimeValidation(): Promise<void> {
     { items: [version(), version(), version(), version()] },
     { items: [{ ...recovery(), format: "zip" }] },
     { items: [{ ...recovery(), projectId: OWNER_ID }] },
-    { items: [{ ...recovery(), position: 3 }] },
+    { items: [{ ...recovery(), position: 0 }] },
+    { items: [{ ...recovery(), position: 4 }] },
     { items: [{ ...recovery() }, { ...recovery(), id: VERSION_ID }] }
   ]) {
     const client = createApiClient({ fetch: async () => jsonResponse(body) });
     await assert.rejects(
       listRecoveryCheckpoints(client, { owner: OWNER, projectId: PROJECT_ID }),
+      ApiInvalidResponseError
+    );
+  }
+
+  const oversizedPage = createApiClient({
+    fetch: async () => jsonResponse({
+      items: [version(), { ...version(), id: RECOVERY_ID }],
+      nextCursor: null
+    })
+  });
+  await assert.rejects(
+    listProjectVersions(oversizedPage, { owner: OWNER, projectId: PROJECT_ID, pageSize: 1 }),
+    ApiInvalidResponseError
+  );
+
+  for (const responseVersion of [
+    { ...version(), name: "Unexpected name" },
+    { ...version(), sourceProjectVersion: 3 }
+  ]) {
+    const mismatchedCreate = createApiClient({
+      fetch: async () => jsonResponse({ version: responseVersion, idempotentRetry: false }, 201)
+    });
+    await assert.rejects(
+      createProjectVersion(mismatchedCreate, {
+        owner: OWNER,
+        projectId: PROJECT_ID,
+        name: "Release 1",
+        projectEtag: '"project-v2"',
+        idempotencyKey: KEY
+      }, { csrfToken: CSRF }),
       ApiInvalidResponseError
     );
   }
@@ -188,12 +219,18 @@ async function testRequestBoundsBeforeNetwork(): Promise<void> {
     restoreProjectHistory(client, { ...restoreBase, referenceId: BUNDLE_ID.replace("7d1f", "4d1f"), idempotencyKey: KEY }, { csrfToken: CSRF }),
     ApiConfigurationError
   );
-  await assert.rejects(
-    createProjectVersion(client, {
-      owner: OWNER, projectId: PROJECT_ID, name: "e\u0301", projectEtag: 'W/"project-v2"', idempotencyKey: KEY
-    }, { csrfToken: CSRF }),
-    ApiConfigurationError
-  );
+  for (const name of ["e\u0301", "unsafe\u0085name"]) {
+    await assert.rejects(
+      createProjectVersion(client, {
+        owner: OWNER,
+        projectId: PROJECT_ID,
+        name,
+        projectEtag: '"project-v2"',
+        idempotencyKey: KEY
+      }, { csrfToken: CSRF }),
+      ApiConfigurationError
+    );
+  }
   assert.equal(calls, 0);
 }
 
@@ -240,7 +277,7 @@ function version() {
 
 function recovery() {
   const { name: _name, sourceProjectVersion: _version, ...base } = version();
-  return { ...base, id: RECOVERY_ID, position: 0 };
+  return { ...base, id: RECOVERY_ID, position: 1 };
 }
 
 function promotion(

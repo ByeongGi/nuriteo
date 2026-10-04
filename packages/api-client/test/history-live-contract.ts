@@ -124,6 +124,8 @@ const secondVersion = await createProjectVersion(member, {
   projectEtag: second.etag,
   idempotencyKey: "client-006-version-live-0002"
 }, { csrfToken: memberBrowser.csrfToken() });
+const third = await saveBundle(owner, project.data.id, project.data.storageScopeId, second.etag, 3);
+const fourth = await saveBundle(owner, project.data.id, project.data.storageScopeId, third.etag, 4);
 const firstPage = await listProjectVersions(member, {
   owner,
   projectId: project.data.id,
@@ -142,15 +144,20 @@ assert.equal(secondPage.data.items.length, 1);
 assert.equal(secondPage.data.items[0]?.id, createdVersion.data.version.id);
 assert.equal(secondPage.data.nextCursor, null);
 const beforeRestore = await listRecoveryCheckpoints(member, { owner, projectId: project.data.id });
-assert.equal(beforeRestore.data.items.length, 1);
-assert.equal(beforeRestore.data.items[0]?.bundleId, first.bundleId);
+assert.equal(beforeRestore.data.items.length, 3);
+assert.deepEqual(
+  beforeRestore.data.items.map((checkpoint) => checkpoint.position).toSorted(),
+  [1, 2, 3]
+);
+assert.equal(beforeRestore.data.items.some((checkpoint) => checkpoint.position === 3), true);
+assert.equal(beforeRestore.data.items.some((checkpoint) => checkpoint.bundleId === first.bundleId), true);
 
 const restoreInput = {
   owner,
   projectId: project.data.id,
   referenceKind: "version" as const,
   referenceId: createdVersion.data.version.id,
-  projectEtag: second.etag,
+  projectEtag: fourth.etag,
   idempotencyKey: "client-006-restore-live-0001"
 };
 const restoredVersion = await restoreProjectHistory(member, restoreInput, {
@@ -158,7 +165,7 @@ const restoredVersion = await restoreProjectHistory(member, restoreInput, {
 });
 assert.equal(restoredVersion.data.changed, true);
 assert.equal(restoredVersion.data.bundleId, first.bundleId);
-assert.equal(restoredVersion.data.projectVersion, second.version + 1);
+assert.equal(restoredVersion.data.projectVersion, fourth.version + 1);
 const replayedRestore = await restoreProjectHistory(member, restoreInput, {
   csrfToken: memberBrowser.csrfToken()
 });

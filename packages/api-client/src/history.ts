@@ -129,16 +129,25 @@ export async function createProjectVersion(
   options: BrowserMutationOptions
 ): Promise<ProjectVersionCreateResult> {
   const context = historyContext(input);
+  const name = validateVersionName(input.name);
+  const projectEtag = validateProjectEtag(input.projectEtag);
   const response = await client.post<unknown, unknown>(
     `${context.path}/versions`,
-    { name: validateVersionName(input.name) },
+    { name },
     mutationOptions(options, {
-      "if-match": validateProjectEtag(input.projectEtag),
+      "if-match": projectEtag,
       "idempotency-key": validateIdempotencyKey(input.idempotencyKey)
     })
   );
   if (response.status !== 200 && response.status !== 201) throw invalidResponse(response);
-  const result = parseResponse(response, (value) => parseProjectVersionCreate(value, context.projectId));
+  const result = parseResponse(response, (value) =>
+    parseProjectVersionCreate(
+      value,
+      context.projectId,
+      name,
+      projectVersionFromEtag(projectEtag)
+    )
+  );
   if ((response.status === 200) !== result.data.idempotentRetry) throw invalidResponse(response);
   return { ...result, replayed: response.status === 200 };
 }
@@ -149,10 +158,13 @@ export async function listProjectVersions(
   options: DomainRequestOptions = {}
 ): Promise<ApiResult<ProjectVersionCollection>> {
   const context = historyContext(input);
-  const query = new URLSearchParams({ pageSize: String(validatePageSize(input.pageSize)) });
+  const pageSize = validatePageSize(input.pageSize);
+  const query = new URLSearchParams({ pageSize: String(pageSize) });
   if (input.cursor !== undefined) query.set("cursor", validateCursor(input.cursor));
   const response = await client.get<unknown>(`${context.path}/versions?${query.toString()}`, options);
-  return validatedResult(response, (value) => parseProjectVersionCollection(value, context.projectId));
+  return validatedResult(response, (value) =>
+    parseProjectVersionCollection(value, context.projectId, pageSize)
+  );
 }
 
 export async function listRecoveryCheckpoints(
@@ -216,18 +228,34 @@ function promotionResult(
   return { ...result, projectEtag };
 }
 
-function parseProjectVersionCreate(value: unknown, projectId: string): ProjectVersionCreate {
+function parseProjectVersionCreate(
+  value: unknown,
+  projectId: string,
+  expectedName: string,
+  expectedSourceProjectVersion: bigint
+): ProjectVersionCreate {
   const record = readExactRecord(value, ["idempotentRetry", "version"]);
+  const version = parseProjectVersion(record.version, projectId);
+  if (
+    version.name !== expectedName ||
+    BigInt(version.sourceProjectVersion) !== expectedSourceProjectVersion
+  ) {
+    throw new TypeError("mismatched Project Version create response");
+  }
   return {
-    version: parseProjectVersion(record.version, projectId),
+    version,
     idempotentRetry: readBoolean(record, "idempotentRetry")
   };
 }
 
-function parseProjectVersionCollection(value: unknown, projectId: string): ProjectVersionCollection {
+function parseProjectVersionCollection(
+  value: unknown,
+  projectId: string,
+  pageSize: number
+): ProjectVersionCollection {
   const record = readExactRecord(value, ["items", "nextCursor"]);
   return {
-    items: readBoundedArray(record, "items", MAX_PAGE_SIZE).map((item) =>
+    items: readBoundedArray(record, "items", pageSize).map((item) =>
       parseProjectVersion(item, projectId)
     ),
     nextCursor: readNullableCursor(record, "nextCursor")
@@ -279,7 +307,7 @@ function parseRecoveryCheckpoint(value: unknown, projectId: string): RecoveryChe
     id: readUuidV7(record, "id"),
     projectId: readUuidV7(record, "projectId"),
     bundleId: readUuidV7(record, "bundleId"),
-    position: readNonNegativeInteger(record, "position", MAX_RECOVERY_CHECKPOINTS - 1),
+    position: readPositiveInteger(record, "position", MAX_RECOVERY_CHECKPOINTS),
     createdByUserId: readUuidV7(record, "createdByUserId"),
     createdAt: readUtcTimestamp(record, "createdAt"),
     sha256: readSha256(record),
@@ -361,6 +389,12 @@ function validateProjectEtag(value: string): string {
   return value;
 }
 
+function projectVersionFromEtag(value: string): bigint {
+  const match = value.match(PROJECT_ETAG);
+  if (match === null) throw new ApiConfigurationError("The Project validator is invalid.");
+  return BigInt(match[1] as string);
+}
+
 function validateIdempotencyKey(value: string): string {
   if (typeof value !== "string" || !IDEMPOTENCY_KEY.test(value)) {
     throw new ApiConfigurationError("The idempotency key is invalid.");
@@ -377,7 +411,7 @@ function validateVersionName(value: string): string {
 
 function validVersionName(value: unknown): value is string {
   return typeof value === "string" && value === value.normalize("NFC") && value === value.trim() &&
-    [...value].length >= 1 && [...value].length <= 200 && !/[\u0000-\u001f\u007f]/u.test(value);
+    [...value].length >= 1 && [...value].length <= 200 && !/\p{Cc}/u.test(value);
 }
 
 function validateReferenceKind(value: HistoricalReferenceKind): HistoricalReferenceKind {
