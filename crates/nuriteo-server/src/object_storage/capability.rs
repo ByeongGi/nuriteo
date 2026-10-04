@@ -347,13 +347,13 @@ impl S3ObjectStore {
         &self,
         key: &ObjectKey,
     ) -> Result<(), ObjectStoreError> {
-        const MAX_MATCHES: i32 = 8;
+        const MAX_MATCHES: usize = 8;
         let output = self
             .client
             .list_multipart_uploads()
             .bucket(&self.bucket)
             .prefix(key.expose())
-            .max_uploads(MAX_MATCHES + 1)
+            .max_uploads(9)
             .send()
             .await
             .map_err(|error| classify_sdk_error(ObjectOperation::MultipartReconcile, &error))?;
@@ -364,9 +364,7 @@ impl S3ObjectStore {
             .map(|upload| upload.upload_id().map(str::to_owned))
             .collect::<Option<Vec<_>>>()
             .ok_or_else(|| internal(ObjectOperation::MultipartReconcile))?;
-        if matching.len() > usize::try_from(MAX_MATCHES).unwrap_or(usize::MAX)
-            || output.is_truncated().unwrap_or(false)
-        {
+        if matching.len() > MAX_MATCHES || matches!(output.is_truncated(), Some(true)) {
             return Err(ObjectStoreError::new(
                 ObjectOperation::MultipartReconcile,
                 ObjectStoreErrorKind::Conflict,

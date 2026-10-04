@@ -407,7 +407,10 @@ impl<B: CleanupBackend> CleanupService<B> {
             let session_id = match parse_session_id(&id) {
                 Ok(id) => id,
                 Err(_) => {
-                    report.failed = report.failed.saturating_add(1);
+                    report.failed = report
+                        .failed
+                        .checked_add(1)
+                        .ok_or(CleanupError::InvariantViolation)?;
                     continue;
                 }
             };
@@ -421,14 +424,20 @@ impl<B: CleanupBackend> CleanupService<B> {
                         .run(savepoint.commit())
                         .await?
                         .map_err(map_sql_error)?;
-                    report.expired = report.expired.saturating_add(1);
+                    report.expired = report
+                        .expired
+                        .checked_add(1)
+                        .ok_or(CleanupError::InvariantViolation)?;
                 }
                 Err(_) => {
                     deadline
                         .run(savepoint.rollback())
                         .await?
                         .map_err(map_sql_error)?;
-                    report.failed = report.failed.saturating_add(1);
+                    report.failed = report
+                        .failed
+                        .checked_add(1)
+                        .ok_or(CleanupError::InvariantViolation)?;
                 }
             }
         }
@@ -593,10 +602,11 @@ impl<B: CleanupBackend> CleanupService<B> {
         job: ClaimedJob,
         category: &'static str,
     ) -> Result<(), CleanupError> {
-        if u16::try_from(job.attempts).unwrap_or(u16::MAX) >= self.policy.max_attempts {
+        let attempts = u16::try_from(job.attempts).map_err(|_| CleanupError::InvariantViolation)?;
+        if attempts >= self.policy.max_attempts {
             return self.fail_job(owner, job.session_id, category).await;
         }
-        let delay = retry_delay(self.policy, job.session_id, job.attempts);
+        let delay = retry_delay(self.policy, job.session_id, job.attempts)?;
         let delay_millis =
             i64::try_from(delay.as_millis()).map_err(|_| CleanupError::InvalidPolicy)?;
         self.update_claim(
@@ -700,10 +710,17 @@ impl CleanupWorker {
             Ok(_) => WorkerShutdown::WorkerFailed,
             Err(_) => {
                 self.join.abort();
-                let _ = self.join.await;
+                let _ = (&mut self.join).await;
                 WorkerShutdown::DeadlineExceeded
             }
         }
+    }
+}
+
+impl Drop for CleanupWorker {
+    fn drop(&mut self) {
+        let _ = self.cancel.send(true);
+        self.join.abort();
     }
 }
 
@@ -725,6 +742,11 @@ fn decode_job(
         _ => return Err(CleanupError::InvariantViolation),
     };
     let object_key = ObjectKey::parse(row.2).map_err(|_| CleanupError::InvariantViolation)?;
+    if !(1..=i16::try_from(MAX_ATTEMPTS).map_err(|_| CleanupError::InvariantViolation)?)
+        .contains(&row.4)
+    {
+        return Err(CleanupError::InvariantViolation);
+    }
     Ok(ClaimedJob {
         session_id,
         target: CleanupTarget {
@@ -736,26 +758,35 @@ fn decode_job(
     })
 }
 
-fn retry_delay(policy: CleanupWorkerPolicy, session_id: SaveSessionId, attempts: i16) -> Duration {
-    let exponent = u32::from(u16::try_from(attempts.saturating_sub(1)).unwrap_or(u16::MAX)).min(20);
-    let factor = 1_u32.checked_shl(exponent).unwrap_or(u32::MAX);
+fn retry_delay(
+    policy: CleanupWorkerPolicy,
+    session_id: SaveSessionId,
+    attempts: i16,
+) -> Result<Duration, CleanupError> {
+    let prior_attempts = attempts
+        .checked_sub(1)
+        .and_then(|value| u32::try_from(value).ok())
+        .ok_or(CleanupError::InvariantViolation)?;
+    let factor = 1_u32
+        .checked_shl(prior_attempts.min(20))
+        .ok_or(CleanupError::InvariantViolation)?;
     let exponential = policy
         .base_backoff
-        .saturating_mul(factor)
-        .min(policy.max_backoff);
-    let jitter_window = exponential.as_millis().checked_div(4).unwrap_or(0);
+        .checked_mul(factor)
+        .map_or(policy.max_backoff, |value| value.min(policy.max_backoff));
+    let jitter_window = exponential.as_millis() / 4;
     if jitter_window == 0 {
-        return exponential;
+        return Ok(exponential);
     }
     let session_uuid = session_id.into_uuid();
     let bytes = session_uuid.as_bytes();
     let seed = u32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]) as u128;
     let jitter = seed % jitter_window;
-    exponential
-        .saturating_add(Duration::from_millis(
-            u64::try_from(jitter).unwrap_or(u64::MAX),
-        ))
-        .min(policy.max_backoff)
+    let jitter =
+        Duration::from_millis(u64::try_from(jitter).map_err(|_| CleanupError::InvariantViolation)?);
+    Ok(exponential
+        .checked_add(jitter)
+        .map_or(policy.max_backoff, |value| value.min(policy.max_backoff)))
 }
 
 #[derive(Clone, Copy)]
@@ -844,11 +875,16 @@ async fn commit(
 ) -> Result<(), CleanupError> {
     match time::timeout_at(deadline.0, transaction.commit()).await {
         Ok(Ok(())) => Ok(()),
-        Ok(Err(error)) if error.as_database_error().is_none() => {
-            Err(CleanupError::CommitOutcomeUnknown)
-        }
-        Ok(Err(error)) => Err(map_sql_error(error)),
+        Ok(Err(error)) => Err(map_commit_error(error)),
         Err(_) => Err(CleanupError::CommitOutcomeUnknown),
+    }
+}
+
+fn map_commit_error(error: sqlx::Error) -> CleanupError {
+    if error.as_database_error().is_none() {
+        CleanupError::CommitOutcomeUnknown
+    } else {
+        map_sql_error(error)
     }
 }
 
@@ -907,7 +943,7 @@ mod tests {
         );
         let policy = CleanupWorkerPolicy::default();
         for attempts in [1, 2, 8, i16::MAX] {
-            let delay = retry_delay(policy, SaveSessionId::new(), attempts);
+            let delay = retry_delay(policy, SaveSessionId::new(), attempts).unwrap();
             assert!(delay <= policy.max_backoff);
             assert!(delay >= policy.base_backoff);
         }
@@ -923,5 +959,50 @@ mod tests {
         let rendered = format!("{target:?}");
         assert!(!rendered.contains("staging/private/key"));
         assert!(!rendered.contains("private-upload-identity"));
+    }
+
+    #[test]
+    fn backend_categories_and_commit_response_loss_are_stable() {
+        for (kind, retryable, expected) in [
+            (
+                ObjectStoreErrorKind::NotFound,
+                false,
+                CleanupBackendOutcome::Missing,
+            ),
+            (
+                ObjectStoreErrorKind::Timeout,
+                true,
+                CleanupBackendOutcome::Timeout,
+            ),
+            (
+                ObjectStoreErrorKind::ResponseUnknown,
+                true,
+                CleanupBackendOutcome::Unknown,
+            ),
+            (
+                ObjectStoreErrorKind::Authorization,
+                false,
+                CleanupBackendOutcome::Permanent,
+            ),
+            (
+                ObjectStoreErrorKind::Unavailable,
+                true,
+                CleanupBackendOutcome::Retryable,
+            ),
+        ] {
+            assert_eq!(
+                classify_backend_result(Err(ObjectStoreError::new(
+                    crate::object_storage::ObjectOperation::Delete,
+                    kind,
+                    retryable,
+                ))),
+                expected
+            );
+        }
+        let lost = sqlx::Error::Io(std::io::Error::new(
+            std::io::ErrorKind::ConnectionReset,
+            "sensitive backend response detail",
+        ));
+        assert_eq!(map_commit_error(lost), CleanupError::CommitOutcomeUnknown);
     }
 }
