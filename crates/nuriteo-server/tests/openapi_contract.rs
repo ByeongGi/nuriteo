@@ -62,6 +62,8 @@ async fn serves_the_versioned_document_from_the_application_router() {
             "/api/v1/workspaces/{owner_type}/{owner_id}/projects",
             "/api/v1/workspaces/{owner_type}/{owner_id}/projects/{project_id}",
             "/api/v1/workspaces/{owner_type}/{owner_id}/projects/{project_id}/archive",
+            "/api/v1/workspaces/{owner_type}/{owner_id}/projects/{project_id}/content",
+            "/api/v1/workspaces/{owner_type}/{owner_id}/projects/{project_id}/content/{bundle_id}",
             "/api/v1/workspaces/{owner_type}/{owner_id}/projects/{project_id}/restore",
             "/api/v1/workspaces/{owner_type}/{owner_id}/projects/{project_id}/roles",
             "/api/v1/workspaces/{owner_type}/{owner_id}/projects/{project_id}/roles/{user_id}"
@@ -206,6 +208,21 @@ fn project_openapi_declares_every_error_as_problem_json() {
             }
         }
     }
+}
+
+#[test]
+fn project_content_download_is_declared_as_binary_octets() {
+    let document = serde_json::to_value(openapi::document()).unwrap();
+    let response = &document["paths"]["/api/v1/workspaces/{owner_type}/{owner_id}/projects/{project_id}/content/{bundle_id}"]
+        ["get"]["responses"]["200"];
+    assert_eq!(
+        response["content"]["application/octet-stream"]["schema"],
+        json!({"type": "string", "format": "binary"})
+    );
+    assert!(
+        response["content"].get("text/plain").is_none(),
+        "Project Bundle bytes must never be modeled as text"
+    );
 }
 
 #[tokio::test]

@@ -2,6 +2,7 @@ mod admission;
 mod archive;
 mod cleanup;
 mod commit;
+mod content;
 mod multipart_service;
 mod multipart_types;
 mod operations;
@@ -16,6 +17,9 @@ pub use cleanup::{
 pub use commit::{
     CommitWorkingHeadOutcome, WorkingHeadCommitError, WorkingHeadCommitPolicy,
     WorkingHeadCommitReconciliation, WorkingHeadCommitService,
+};
+pub use content::{
+    ContentDescriptor, ContentDownload, ContentError, ContentService, ContentServicePolicy,
 };
 pub use multipart_service::{
     MultipartService, MultipartServiceError, MultipartServicePolicy, MultipartStore,

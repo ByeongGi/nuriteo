@@ -18,6 +18,10 @@ use crate::identity::{
     BrowserCookieBoundary, BrowserCookieError, BrowserRequestHeaders, SessionPolicy,
     SessionService, SessionServiceError, UserId,
 };
+use crate::object_storage::S3ObjectStore;
+use crate::save::{
+    ContentDescriptor, ContentDownload, ContentError, ContentService, ContentServicePolicy,
+};
 
 use super::{
     DirectProjectRoleGrant, Project, ProjectAuditContext, ProjectDeleteConfirmation, ProjectId,
@@ -102,6 +106,7 @@ struct Runtime {
     cookies: BrowserCookieBoundary,
     projects: ProjectService,
     cursor: CursorSigner,
+    content: Option<ContentService>,
 }
 
 impl fmt::Debug for ProjectHttpService {
@@ -141,8 +146,27 @@ impl ProjectHttpService {
                 pool,
                 cookies,
                 cursor: CursorSigner::new(key),
+                content: None,
             })),
         })
+    }
+
+    pub fn production_with_content(
+        pool: DatabasePool,
+        external_url: &Url,
+        policy: ProjectHttpPolicy,
+        session_policy: SessionPolicy,
+        store: S3ObjectStore,
+        content_policy: ContentServicePolicy,
+    ) -> Result<Self, ProjectHttpError> {
+        let mut service = Self::production(pool.clone(), external_url, policy, session_policy)?;
+        let runtime = service
+            .runtime
+            .as_mut()
+            .and_then(Arc::get_mut)
+            .ok_or(ProjectHttpError::Internal)?;
+        runtime.content = Some(ContentService::new(pool, store, content_policy));
+        Ok(service)
     }
 
     pub(crate) async fn create(
@@ -183,6 +207,42 @@ impl ProjectHttpService {
             .await
             .map(ProjectView::from)
             .map_err(map_project_error)
+    }
+
+    pub(crate) async fn content_descriptor(
+        &self,
+        request: BrowserRequestHeaders<'_>,
+        owner: ProjectOwner,
+        project_id: ProjectId,
+    ) -> Result<ContentDescriptor, ProjectHttpError> {
+        let runtime = self.runtime()?;
+        let identity = runtime.authenticate(request).await?;
+        runtime
+            .content
+            .as_ref()
+            .ok_or(ProjectHttpError::Unavailable)?
+            .describe(identity.user_id, owner, project_id)
+            .await
+            .map_err(map_content_error)
+    }
+
+    pub(crate) async fn download_content(
+        &self,
+        request: BrowserRequestHeaders<'_>,
+        owner: ProjectOwner,
+        project_id: ProjectId,
+        bundle_id: &str,
+        etag: &str,
+    ) -> Result<ContentDownload, ProjectHttpError> {
+        let runtime = self.runtime()?;
+        let identity = runtime.authenticate(request).await?;
+        runtime
+            .content
+            .as_ref()
+            .ok_or(ProjectHttpError::Unavailable)?
+            .download(identity.user_id, owner, project_id, bundle_id, etag)
+            .await
+            .map_err(map_content_error)
     }
 
     pub(crate) async fn list(
@@ -845,6 +905,26 @@ fn map_project_error(error: ProjectServiceError) -> ProjectHttpError {
         ProjectServiceError::OperationTimeout => ProjectHttpError::OperationTimeout,
         ProjectServiceError::CommitOutcomeUnknown => ProjectHttpError::CommitOutcomeUnknown,
         ProjectServiceError::InvariantViolation => ProjectHttpError::Internal,
+    }
+}
+
+fn map_content_error(error: ContentError) -> ProjectHttpError {
+    match error {
+        ContentError::InvalidInput => ProjectHttpError::InvalidInput,
+        // Read endpoints preserve the Project GET enumeration boundary: an
+        // authenticated non-member cannot distinguish a private Project from
+        // an absent one. Mutation authorization continues to use Forbidden.
+        ContentError::Unauthorized => ProjectHttpError::NotFound,
+        ContentError::NotFound | ContentError::NoWorkingHead => ProjectHttpError::NotFound,
+        ContentError::ProjectUnavailable | ContentError::ObjectMismatch => {
+            ProjectHttpError::Conflict
+        }
+        ContentError::StaleDescriptor => ProjectHttpError::PreconditionFailed,
+        ContentError::ObjectUnavailable | ContentError::PersistenceUnavailable => {
+            ProjectHttpError::Unavailable
+        }
+        ContentError::OperationTimeout => ProjectHttpError::OperationTimeout,
+        ContentError::InvariantViolation => ProjectHttpError::Internal,
     }
 }
 

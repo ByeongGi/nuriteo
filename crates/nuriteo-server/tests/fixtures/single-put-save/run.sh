@@ -4,6 +4,8 @@ set -euo pipefail
 runtime="${CONTAINER_RUNTIME:-podman}"
 fixture_label="${SAVE_FIXTURE_LABEL:-SAVE-003}"
 test_name="${SAVE_TEST_NAME:-single_put_is_atomic_idempotent_bounded_and_compensated}"
+test_target="${SAVE_TEST_TARGET:-single_put_save}"
+test_description="${SAVE_TEST_DESCRIPTION:-atomic session and bounded bearer assertions}"
 postgres_image="docker.io/library/postgres@sha256:f3bd19c606e442c3d7bdfa8002e03fe260a1023351e0ea4598032022b68dd6e3"
 rustfs_image="docker.io/rustfs/rustfs@sha256:42edb61d588775f9431ff436216d14392d2234d4eb2ed68321569fbf7245b36b"
 suffix="${RANDOM}"
@@ -97,11 +99,11 @@ done
 curl --fail --silent --cacert "$fixture_dir/rustfs/ca.crt" \
   "https://127.0.0.1:${rustfs_port}/health" >/dev/null
 
-echo "${fixture_label} fixture: running atomic session and bounded bearer assertions"
+echo "${fixture_label} fixture: running ${test_description}"
 NURITEO_TEST_DATABASE_URL="postgres://nuriteo:${postgres_password}@localhost:${postgres_port}/nuriteo" \
 NURITEO_TEST_DATABASE_CA="$fixture_dir/postgres/ca.crt" \
 NURITEO_TEST_S3_ENDPOINT="https://127.0.0.1:${rustfs_port}" \
 NURITEO_TEST_S3_CA_FILE="$fixture_dir/rustfs/ca.crt" \
 CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-/private/tmp/nuriteo-save003-target}" \
-cargo test -p nuriteo-server --test single_put_save \
+cargo test -p nuriteo-server --test "$test_target" \
   "$test_name" -- --ignored --exact --nocapture

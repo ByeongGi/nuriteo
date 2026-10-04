@@ -3,16 +3,18 @@ use std::str::FromStr;
 use axum::Json;
 use axum::body::{Body, to_bytes};
 use axum::extract::{Extension, Path, Request, State};
-use axum::http::header::{CONTENT_TYPE, COOKIE, ETAG, IF_MATCH, LOCATION};
+use axum::http::header::{CACHE_CONTROL, CONTENT_TYPE, COOKIE, ETAG, IF_MATCH, LOCATION, RANGE};
 use axum::http::{HeaderMap, HeaderName, HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Response};
 use serde::{Deserialize, de::DeserializeOwned};
+use tokio_util::io::ReaderStream;
 use utoipa::ToSchema;
 use utoipa_axum::{router::OpenApiRouter, routes};
 
 use crate::http::{FieldViolation, HttpError, RequestId};
 use crate::identity::{BrowserMethod, BrowserRequestHeaders, UserId};
 use crate::organization::OrganizationId;
+use crate::save::ContentDescriptor;
 
 use super::http_service::{
     ProjectHttpError, ProjectHttpService, ProjectListView, ProjectRoleListView,
@@ -30,6 +32,9 @@ const RESTORE: &str = "/api/v1/workspaces/{owner_type}/{owner_id}/projects/{proj
 const ROLES: &str = "/api/v1/workspaces/{owner_type}/{owner_id}/projects/{project_id}/roles";
 const ROLE: &str =
     "/api/v1/workspaces/{owner_type}/{owner_id}/projects/{project_id}/roles/{user_id}";
+const CONTENT: &str = "/api/v1/workspaces/{owner_type}/{owner_id}/projects/{project_id}/content";
+const CONTENT_DOWNLOAD: &str =
+    "/api/v1/workspaces/{owner_type}/{owner_id}/projects/{project_id}/content/{bundle_id}";
 const MAX_BODY: usize = 4096;
 const MAX_QUERY: usize = 4096;
 const ORIGIN: HeaderName = HeaderName::from_static("origin");
@@ -45,7 +50,158 @@ pub(crate) fn openapi_router(
         .routes(routes!(restore_project))
         .routes(routes!(list_roles, grant_role))
         .routes(routes!(change_role, revoke_role))
+        .routes(routes!(get_content_descriptor))
+        .routes(routes!(download_content))
 }
+
+#[utoipa::path(get, path = CONTENT, tag = "projects",
+    security(("projectSessionCookie" = [])),
+    params(("owner_type" = String, Path), ("owner_id" = String, Path), ("project_id" = String, Path)),
+    responses((status = 200, body = ContentDescriptor, headers(("ETag" = String), ("Cache-Control" = String))),
+      (status = 401, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+      (status = 404, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+      (status = 409, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+      (status = 503, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+      (status = 504, body = crate::openapi::ProblemDetails, content_type = "application/problem+json")))]
+async fn get_content_descriptor(
+    State(service): State<ProjectHttpService>,
+    Extension(request_id): Extension<RequestId>,
+    Path((owner_type, owner_id, project_id)): Path<(String, String, String)>,
+    request: Request,
+) -> Result<Response, HttpError> {
+    let headers = BrowserHeaders::read(request.headers(), &request_id, CONTENT)?;
+    let descriptor = service
+        .content_descriptor(
+            headers.request(BrowserMethod::Get),
+            parse_owner(&owner_type, &owner_id, &request_id, CONTENT)?,
+            parse_project_id(&project_id, &request_id, CONTENT)?,
+        )
+        .await
+        .map_err(|error| map_error(error, request_id.clone(), CONTENT))?;
+    let etag = HeaderValue::from_str(descriptor.etag())
+        .map_err(|_| HttpError::internal(request_id.clone(), CONTENT))?;
+    let mut response = (StatusCode::OK, Json(descriptor)).into_response();
+    response.headers_mut().insert(ETAG, etag);
+    response
+        .headers_mut()
+        .insert(CACHE_CONTROL, HeaderValue::from_static("private, no-store"));
+    Ok(response)
+}
+
+#[utoipa::path(get, path = CONTENT_DOWNLOAD, tag = "projects",
+    security(("projectSessionCookie" = [])),
+    params(("owner_type" = String, Path), ("owner_id" = String, Path), ("project_id" = String, Path),
+      ("bundle_id" = String, Path), ("If-Match" = String, Header)),
+    responses((status = 200, description = "Same-origin bounded verified Project Bundle stream", body = inline(ProjectBundleBinary), content_type = "application/octet-stream", headers(("ETag" = String), ("Content-Length" = String), ("Cache-Control" = String))),
+      (status = 401, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+      (status = 404, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+      (status = 409, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+      (status = 412, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+      (status = 416, description = "Byte ranges are deliberately unsupported for Alpha Project Bundles", body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+      (status = 428, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+      (status = 503, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+      (status = 504, body = crate::openapi::ProblemDetails, content_type = "application/problem+json")))]
+async fn download_content(
+    State(service): State<ProjectHttpService>,
+    Extension(request_id): Extension<RequestId>,
+    Path((owner_type, owner_id, project_id, bundle_id)): Path<(String, String, String, String)>,
+    request: Request,
+) -> Result<Response, HttpError> {
+    let headers = BrowserHeaders::read(request.headers(), &request_id, CONTENT_DOWNLOAD)?;
+    let range_requested = request.headers().contains_key(RANGE);
+    let etag = parse_content_if_match(request.headers(), &request_id, CONTENT_DOWNLOAD)?;
+    let download = service
+        .download_content(
+            headers.request(BrowserMethod::Get),
+            parse_owner(&owner_type, &owner_id, &request_id, CONTENT_DOWNLOAD)?,
+            parse_project_id(&project_id, &request_id, CONTENT_DOWNLOAD)?,
+            &bundle_id,
+            &etag,
+        )
+        .await
+        .map_err(|error| map_error(error, request_id.clone(), CONTENT_DOWNLOAD))?;
+    if range_requested {
+        // Authorization and every Project/Working-Head fence above still run before
+        // an unsupported Range is rejected. Dropping an unpolled ContentDownload
+        // drops the SDK byte stream immediately; no background buffer is retained.
+        drop(download);
+        return Err(HttpError::range_not_satisfiable(
+            request_id,
+            CONTENT_DOWNLOAD,
+        ));
+    }
+    let (descriptor, reader) = download.into_parts();
+    let mut response = Response::new(Body::from_stream(ReaderStream::new(reader)));
+    *response.status_mut() = StatusCode::OK;
+    response.headers_mut().insert(
+        CONTENT_TYPE,
+        HeaderValue::from_static("application/octet-stream"),
+    );
+    response.headers_mut().insert(
+        axum::http::header::CONTENT_LENGTH,
+        HeaderValue::from_str(&descriptor.physical_bytes().to_string())
+            .map_err(|_| HttpError::internal(request_id.clone(), CONTENT_DOWNLOAD))?,
+    );
+    response.headers_mut().insert(
+        ETAG,
+        HeaderValue::from_str(descriptor.etag())
+            .map_err(|_| HttpError::internal(request_id.clone(), CONTENT_DOWNLOAD))?,
+    );
+    response
+        .headers_mut()
+        .insert(CACHE_CONTROL, HeaderValue::from_static("private, no-store"));
+    response.headers_mut().insert(
+        axum::http::header::CONTENT_DISPOSITION,
+        HeaderValue::from_static("attachment; filename=\"nuriteo-project-bundle.tar\""),
+    );
+    response.headers_mut().insert(
+        HeaderName::from_static("x-content-type-options"),
+        HeaderValue::from_static("nosniff"),
+    );
+    Ok(response)
+}
+
+fn parse_content_if_match(
+    headers: &HeaderMap,
+    request_id: &RequestId,
+    path: &str,
+) -> Result<String, HttpError> {
+    let values = headers.get_all(IF_MATCH).iter().collect::<Vec<_>>();
+    if values.is_empty() {
+        return Err(HttpError::precondition_required(request_id.clone(), path));
+    }
+    if values.len() != 1 {
+        return Err(HttpError::precondition_failed(request_id.clone(), path));
+    }
+    let value = values[0]
+        .to_str()
+        .map_err(|_| HttpError::precondition_failed(request_id.clone(), path))?;
+    if value.len() > 128
+        || !value.starts_with("\"content-v")
+        || !value.ends_with('"')
+        || value.chars().any(char::is_control)
+    {
+        return Err(HttpError::precondition_failed(request_id.clone(), path));
+    }
+    Ok(value.to_owned())
+}
+
+struct ProjectBundleBinary;
+
+impl utoipa::PartialSchema for ProjectBundleBinary {
+    fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
+        use utoipa::openapi::schema::{KnownFormat, ObjectBuilder, Schema, SchemaFormat, Type};
+
+        utoipa::openapi::RefOr::T(Schema::Object(
+            ObjectBuilder::new()
+                .schema_type(Type::String)
+                .format(Some(SchemaFormat::KnownFormat(KnownFormat::Binary)))
+                .build(),
+        ))
+    }
+}
+
+impl ToSchema for ProjectBundleBinary {}
 
 #[derive(Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]

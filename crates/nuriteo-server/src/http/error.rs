@@ -20,6 +20,7 @@ enum ProblemKind {
     Conflict,
     PreconditionRequired,
     PreconditionFailed,
+    RangeNotSatisfiable,
     ServiceUnavailable,
     OperationTimeout,
     CommitOutcomeUnknown,
@@ -39,6 +40,7 @@ impl ProblemKind {
             Self::Conflict => StatusCode::CONFLICT,
             Self::PreconditionRequired => StatusCode::PRECONDITION_REQUIRED,
             Self::PreconditionFailed => StatusCode::PRECONDITION_FAILED,
+            Self::RangeNotSatisfiable => StatusCode::RANGE_NOT_SATISFIABLE,
             Self::ServiceUnavailable | Self::CommitOutcomeUnknown => {
                 StatusCode::SERVICE_UNAVAILABLE
             }
@@ -59,6 +61,7 @@ impl ProblemKind {
             Self::Conflict => "/docs/problems/resource-conflict",
             Self::PreconditionRequired => "/docs/problems/precondition-required",
             Self::PreconditionFailed => "/docs/problems/precondition-failed",
+            Self::RangeNotSatisfiable => "/docs/problems/range-not-satisfiable",
             Self::ServiceUnavailable => "/docs/problems/service-unavailable",
             Self::OperationTimeout => "/docs/problems/operation-timeout",
             Self::CommitOutcomeUnknown => "/docs/problems/commit-outcome-unknown",
@@ -78,6 +81,7 @@ impl ProblemKind {
             Self::Conflict => "Resource conflict",
             Self::PreconditionRequired => "Precondition required",
             Self::PreconditionFailed => "Precondition failed",
+            Self::RangeNotSatisfiable => "Range not satisfiable",
             Self::ServiceUnavailable => "Service unavailable",
             Self::OperationTimeout => "Operation timed out",
             Self::CommitOutcomeUnknown => "Commit outcome unknown",
@@ -97,6 +101,7 @@ impl ProblemKind {
             Self::Conflict => "RESOURCE_CONFLICT",
             Self::PreconditionRequired => "PRECONDITION_REQUIRED",
             Self::PreconditionFailed => "PRECONDITION_FAILED",
+            Self::RangeNotSatisfiable => "RANGE_NOT_SATISFIABLE",
             Self::ServiceUnavailable => "SERVICE_UNAVAILABLE",
             Self::OperationTimeout => "OPERATION_TIMEOUT",
             Self::CommitOutcomeUnknown => "COMMIT_OUTCOME_UNKNOWN",
@@ -116,6 +121,7 @@ impl ProblemKind {
             Self::Conflict => "The resource state conflicts with the request.",
             Self::PreconditionRequired => "A current resource validator is required.",
             Self::PreconditionFailed => "The supplied resource validator is not current.",
+            Self::RangeNotSatisfiable => "Byte-range downloads are not supported.",
             Self::ServiceUnavailable => "The service is temporarily unavailable.",
             Self::OperationTimeout => "The operation did not complete before its deadline.",
             Self::CommitOutcomeUnknown => {
@@ -245,6 +251,16 @@ impl HttpError {
     pub fn precondition_failed(request_id: RequestId, instance: impl Into<String>) -> Self {
         Self::new(
             ProblemKind::PreconditionFailed,
+            request_id,
+            instance,
+            Vec::new(),
+        )
+    }
+
+    #[must_use]
+    pub fn range_not_satisfiable(request_id: RequestId, instance: impl Into<String>) -> Self {
+        Self::new(
+            ProblemKind::RangeNotSatisfiable,
             request_id,
             instance,
             Vec::new(),

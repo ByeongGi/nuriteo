@@ -2191,6 +2191,271 @@
         ]
       }
     },
+    "/api/v1/workspaces/{owner_type}/{owner_id}/projects/{project_id}/content": {
+      "get": {
+        "tags": [
+          "projects"
+        ],
+        "operationId": "get_content_descriptor",
+        "parameters": [
+          {
+            "name": "owner_type",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "owner_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContentDescriptor"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "504": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "projectSessionCookie": []
+          }
+        ]
+      }
+    },
+    "/api/v1/workspaces/{owner_type}/{owner_id}/projects/{project_id}/content/{bundle_id}": {
+      "get": {
+        "tags": [
+          "projects"
+        ],
+        "operationId": "download_content",
+        "parameters": [
+          {
+            "name": "owner_type",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "owner_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "bundle_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Same-origin bounded verified Project Bundle stream",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Content-Length": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "412": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "416": {
+            "description": "Byte ranges are deliberately unsupported for Alpha Project Bundles",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "428": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "504": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "projectSessionCookie": []
+          }
+        ]
+      }
+    },
     "/api/v1/workspaces/{owner_type}/{owner_id}/projects/{project_id}/restore": {
       "post": {
         "tags": [
@@ -3084,6 +3349,64 @@
           }
         },
         "additionalProperties": false
+      },
+      "ContentDescriptor": {
+        "type": "object",
+        "required": [
+          "projectId",
+          "projectVersion",
+          "bundleId",
+          "etag",
+          "checksumAlgorithm",
+          "checksum",
+          "physicalBytes",
+          "logicalBytes",
+          "fileCount",
+          "format",
+          "downloadUrl"
+        ],
+        "properties": {
+          "bundleId": {
+            "type": "string"
+          },
+          "checksum": {
+            "type": "string"
+          },
+          "checksumAlgorithm": {
+            "type": "string"
+          },
+          "downloadUrl": {
+            "type": "string"
+          },
+          "etag": {
+            "type": "string"
+          },
+          "fileCount": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "format": {
+            "type": "string"
+          },
+          "logicalBytes": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "physicalBytes": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "projectId": {
+            "type": "string"
+          },
+          "projectVersion": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
       },
       "CreateOrganizationRequest": {
         "type": "object",

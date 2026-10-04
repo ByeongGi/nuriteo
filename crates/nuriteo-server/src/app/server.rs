@@ -11,7 +11,8 @@ use crate::object_storage::{ObjectStorageConfig, OperationLimits, S3ObjectStore}
 use crate::organization::{OrganizationHttpPolicy, OrganizationHttpService};
 use crate::project::{ProjectHttpPolicy, ProjectHttpService};
 use crate::save::{
-    CleanupOperationsPolicy, CleanupOperationsService, CleanupService, WorkerShutdown,
+    CleanupOperationsPolicy, CleanupOperationsService, CleanupService, ContentServicePolicy,
+    WorkerShutdown,
 };
 use crate::setup::{SetupStatusPolicy, SetupStatusService};
 
@@ -143,11 +144,13 @@ pub(crate) async fn run_server(
         }
     };
     let setup = SetupStatusService::production(pool.clone(), SetupStatusPolicy::default());
-    let projects = match ProjectHttpService::production(
+    let projects = match ProjectHttpService::production_with_content(
         pool.clone(),
         &global.public.external_url,
         ProjectHttpPolicy::default(),
         SessionPolicy::default(),
+        store.clone(),
+        ContentServicePolicy::default(),
     ) {
         Ok(projects) => projects,
         Err(_) => {
