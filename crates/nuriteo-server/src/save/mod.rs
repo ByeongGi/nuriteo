@@ -9,6 +9,7 @@ mod operations;
 mod service;
 mod types;
 mod verifier;
+mod version;
 
 pub use cleanup::{
     AbortSaveSession, AbortSaveSessionResult, CleanupError, CleanupService, CleanupWorker,
@@ -40,6 +41,12 @@ pub use types::{
 pub use verifier::{
     StagingVerifier, StagingVerifierPolicy, VerificationError, VerifiedStagingBundle,
     VerifyStagingBundle,
+};
+pub use version::{
+    CreateProjectVersion, CreateProjectVersionOutcome, DEFAULT_PROJECT_VERSION_PAGE_SIZE,
+    ExplicitProjectVersion, MAX_PROJECT_VERSION_PAGE_SIZE, ProjectVersionError, ProjectVersionId,
+    ProjectVersionName, ProjectVersionPage, ProjectVersionPageKey, ProjectVersionPageLimit,
+    ProjectVersionService, ProjectVersionServicePolicy,
 };
 
 #[cfg(test)]

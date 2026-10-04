@@ -21,6 +21,9 @@ use crate::identity::{
 use crate::object_storage::S3ObjectStore;
 use crate::save::{
     ContentDescriptor, ContentDownload, ContentError, ContentService, ContentServicePolicy,
+    CreateProjectVersion, ExplicitProjectVersion, ProjectVersionError, ProjectVersionName,
+    ProjectVersionPageKey, ProjectVersionPageLimit, ProjectVersionService,
+    ProjectVersionServicePolicy,
 };
 
 use super::{
@@ -107,6 +110,7 @@ struct Runtime {
     projects: ProjectService,
     cursor: CursorSigner,
     content: Option<ContentService>,
+    versions: ProjectVersionService,
 }
 
 impl fmt::Debug for ProjectHttpService {
@@ -143,10 +147,15 @@ impl ProjectHttpService {
             runtime: Some(Arc::new(Runtime {
                 sessions: SessionService::new(pool.clone(), session_policy),
                 projects: ProjectService::new(pool.clone(), project_policy),
-                pool,
+                pool: pool.clone(),
                 cookies,
                 cursor: CursorSigner::new(key),
                 content: None,
+                versions: ProjectVersionService::new(
+                    pool.clone(),
+                    ProjectVersionServicePolicy::new(policy.operation_timeout)
+                        .map_err(|_| ProjectHttpError::InvalidInput)?,
+                ),
             })),
         })
     }
@@ -224,6 +233,76 @@ impl ProjectHttpService {
             .describe(identity.user_id, owner, project_id)
             .await
             .map_err(map_content_error)
+    }
+
+    pub(crate) async fn create_version(
+        &self,
+        request: BrowserRequestHeaders<'_>,
+        owner: ProjectOwner,
+        project_id: ProjectId,
+        expected_project_version: ProjectVersion,
+        name: ProjectVersionName,
+        idempotency_key: crate::save::IdempotencyKey,
+    ) -> Result<ProjectVersionCreateView, ProjectHttpError> {
+        let runtime = self.runtime()?;
+        let identity = runtime.authenticate(request).await?;
+        let outcome = runtime
+            .versions
+            .create(CreateProjectVersion {
+                owner,
+                project_id,
+                actor_user_id: identity.user_id,
+                expected_project_version,
+                name,
+                idempotency_key,
+            })
+            .await
+            .map_err(map_version_error)?;
+        Ok(ProjectVersionCreateView {
+            version: ProjectVersionView::from(outcome.version()),
+            idempotent_retry: outcome.is_idempotent_retry(),
+        })
+    }
+
+    pub(crate) async fn list_versions(
+        &self,
+        request: BrowserRequestHeaders<'_>,
+        owner: ProjectOwner,
+        project_id: ProjectId,
+        limit: ProjectVersionPageLimit,
+        cursor: Option<&str>,
+    ) -> Result<ProjectVersionListView, ProjectHttpError> {
+        let runtime = self.runtime()?;
+        let identity = runtime.authenticate(request).await?;
+        let binding = CursorBinding::versions(identity.user_id, owner, project_id, limit.get());
+        let after = cursor
+            .map(|value| {
+                runtime
+                    .cursor
+                    .decode_version(value, &binding, OffsetDateTime::now_utc())
+            })
+            .transpose()?;
+        let page = runtime
+            .versions
+            .list(identity.user_id, owner, project_id, limit, after)
+            .await
+            .map_err(map_version_error)?;
+        let next_cursor = page
+            .next_key()
+            .map(|key| {
+                runtime
+                    .cursor
+                    .encode_version(key, &binding, OffsetDateTime::now_utc())
+            })
+            .transpose()?;
+        Ok(ProjectVersionListView {
+            items: page
+                .versions()
+                .iter()
+                .map(ProjectVersionView::from)
+                .collect(),
+            next_cursor,
+        })
     }
 
     pub(crate) async fn download_content(
@@ -648,6 +727,56 @@ pub(crate) struct ProjectRoleMutationView {
     pub(crate) project_version: i64,
 }
 
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ProjectVersionView {
+    id: String,
+    project_id: String,
+    bundle_id: String,
+    name: String,
+    created_by_user_id: String,
+    source_project_version: i64,
+    created_at: String,
+    sha256: String,
+    physical_bytes: u64,
+    logical_bytes: u64,
+    file_count: u32,
+    format: String,
+}
+
+impl From<&ExplicitProjectVersion> for ProjectVersionView {
+    fn from(version: &ExplicitProjectVersion) -> Self {
+        Self {
+            id: version.id().to_string(),
+            project_id: version.project_id().to_string(),
+            bundle_id: version.bundle_id().to_string(),
+            name: version.name().as_str().to_owned(),
+            created_by_user_id: version.actor_user_id().to_string(),
+            source_project_version: version.source_project_version().get(),
+            created_at: version.created_at().to_string(),
+            sha256: hex_lower(version.sha256()),
+            physical_bytes: version.physical_bytes(),
+            logical_bytes: version.logical_bytes(),
+            file_count: version.file_count(),
+            format: version.format().to_owned(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ProjectVersionCreateView {
+    pub(crate) version: ProjectVersionView,
+    pub(crate) idempotent_retry: bool,
+}
+
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ProjectVersionListView {
+    pub(crate) items: Vec<ProjectVersionView>,
+    pub(crate) next_cursor: Option<String>,
+}
+
 #[derive(Clone)]
 struct CursorSigner {
     key: [u8; CURSOR_KEY_BYTES],
@@ -667,6 +796,8 @@ struct CursorClaims {
     after_slug: Option<String>,
     after_project_id: Option<String>,
     after_user_id: Option<String>,
+    after_version_created_at: Option<i128>,
+    after_version_id: Option<String>,
 }
 
 struct CursorBinding {
@@ -677,6 +808,12 @@ struct CursorBinding {
     project_id: Option<String>,
     state: &'static str,
     page_size: u16,
+}
+
+enum CursorPosition {
+    Project { slug: String, id: String },
+    Role { user_id: String },
+    Version { created_at: i128, id: String },
 }
 
 impl CursorBinding {
@@ -713,6 +850,18 @@ impl CursorBinding {
             page_size,
         }
     }
+    fn versions(actor: UserId, owner: ProjectOwner, project: ProjectId, page_size: u16) -> Self {
+        let (owner_type, owner_id) = owner_parts(owner);
+        Self {
+            kind: "versions",
+            actor_id: actor.to_string(),
+            owner_type,
+            owner_id,
+            project_id: Some(project.to_string()),
+            state: "versions",
+            page_size,
+        }
+    }
 }
 
 fn owner_parts(owner: ProjectOwner) -> (&'static str, String) {
@@ -736,9 +885,10 @@ impl CursorSigner {
         self.encode(
             binding,
             now,
-            Some(key.slug().to_string()),
-            Some(key.id().to_string()),
-            None,
+            CursorPosition::Project {
+                slug: key.slug().to_string(),
+                id: key.id().to_string(),
+            },
         )
     }
     fn encode_role(
@@ -747,16 +897,48 @@ impl CursorSigner {
         binding: &CursorBinding,
         now: OffsetDateTime,
     ) -> Result<String, ProjectHttpError> {
-        self.encode(binding, now, None, None, Some(key.user_id().to_string()))
+        self.encode(
+            binding,
+            now,
+            CursorPosition::Role {
+                user_id: key.user_id().to_string(),
+            },
+        )
+    }
+    fn encode_version(
+        &self,
+        key: ProjectVersionPageKey,
+        binding: &CursorBinding,
+        now: OffsetDateTime,
+    ) -> Result<String, ProjectHttpError> {
+        self.encode(
+            binding,
+            now,
+            CursorPosition::Version {
+                created_at: key.created_at().unix_timestamp_nanos(),
+                id: key.id().to_string(),
+            },
+        )
     }
     fn encode(
         &self,
         binding: &CursorBinding,
         now: OffsetDateTime,
-        after_slug: Option<String>,
-        after_project_id: Option<String>,
-        after_user_id: Option<String>,
+        position: CursorPosition,
     ) -> Result<String, ProjectHttpError> {
+        let (
+            after_slug,
+            after_project_id,
+            after_user_id,
+            after_version_created_at,
+            after_version_id,
+        ) = match position {
+            CursorPosition::Project { slug, id } => (Some(slug), Some(id), None, None, None),
+            CursorPosition::Role { user_id } => (None, None, Some(user_id), None, None),
+            CursorPosition::Version { created_at, id } => {
+                (None, None, None, Some(created_at), Some(id))
+            }
+        };
         let claims = CursorClaims {
             version: 1,
             kind: binding.kind.into(),
@@ -770,6 +952,8 @@ impl CursorSigner {
             after_slug,
             after_project_id,
             after_user_id,
+            after_version_created_at,
+            after_version_id,
         };
         let payload = serde_json::to_vec(&claims).map_err(|_| ProjectHttpError::Internal)?;
         let signature = hmac_sha256(&self.key, &payload);
@@ -811,6 +995,28 @@ impl CursorSigner {
             claims.after_user_id,
         ) {
             (None, None, Some(id)) => Ok(ProjectRolePageKey::new(
+                id.parse().map_err(|_| ProjectHttpError::InvalidInput)?,
+            )),
+            _ => Err(ProjectHttpError::InvalidInput),
+        }
+    }
+    fn decode_version(
+        &self,
+        value: &str,
+        binding: &CursorBinding,
+        now: OffsetDateTime,
+    ) -> Result<ProjectVersionPageKey, ProjectHttpError> {
+        let claims = self.decode(value, binding, now)?;
+        match (
+            claims.after_slug,
+            claims.after_project_id,
+            claims.after_user_id,
+            claims.after_version_created_at,
+            claims.after_version_id,
+        ) {
+            (None, None, None, Some(created_at), Some(id)) => Ok(ProjectVersionPageKey::new(
+                OffsetDateTime::from_unix_timestamp_nanos(created_at)
+                    .map_err(|_| ProjectHttpError::InvalidInput)?,
                 id.parse().map_err(|_| ProjectHttpError::InvalidInput)?,
             )),
             _ => Err(ProjectHttpError::InvalidInput),
@@ -867,6 +1073,33 @@ fn hmac_sha256(key: &[u8], message: &[u8]) -> [u8; 32] {
         .expect("HMAC-SHA256 accepts a key of any bounded length");
     mac.update(message);
     mac.finalize().into_bytes().into()
+}
+
+fn hex_lower(bytes: &[u8]) -> String {
+    use std::fmt::Write as _;
+
+    let mut output = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        let _ = write!(output, "{byte:02x}");
+    }
+    output
+}
+
+fn map_version_error(error: ProjectVersionError) -> ProjectHttpError {
+    match error {
+        ProjectVersionError::InvalidInput => ProjectHttpError::InvalidInput,
+        ProjectVersionError::NotFound => ProjectHttpError::NotFound,
+        ProjectVersionError::Forbidden => ProjectHttpError::Forbidden,
+        ProjectVersionError::ProjectUnavailable
+        | ProjectVersionError::WorkingHeadUnavailable
+        | ProjectVersionError::IdempotencyConflict
+        | ProjectVersionError::NameConflict => ProjectHttpError::Conflict,
+        ProjectVersionError::StaleProjectVersion => ProjectHttpError::PreconditionFailed,
+        ProjectVersionError::OperationTimeout => ProjectHttpError::OperationTimeout,
+        ProjectVersionError::DatabaseUnavailable => ProjectHttpError::Unavailable,
+        ProjectVersionError::CommitOutcomeUnknown => ProjectHttpError::CommitOutcomeUnknown,
+        ProjectVersionError::InvariantViolation => ProjectHttpError::Internal,
+    }
 }
 
 fn map_session_error(error: SessionServiceError) -> ProjectHttpError {

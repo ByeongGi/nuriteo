@@ -14,11 +14,12 @@ use utoipa_axum::{router::OpenApiRouter, routes};
 use crate::http::{FieldViolation, HttpError, RequestId};
 use crate::identity::{BrowserMethod, BrowserRequestHeaders, UserId};
 use crate::organization::OrganizationId;
-use crate::save::ContentDescriptor;
+use crate::save::{ContentDescriptor, IdempotencyKey, ProjectVersionName, ProjectVersionPageLimit};
 
 use super::http_service::{
     ProjectHttpError, ProjectHttpService, ProjectListView, ProjectRoleListView,
-    ProjectRoleMutationView, ProjectView, RoleOperation,
+    ProjectRoleMutationView, ProjectVersionCreateView, ProjectVersionListView, ProjectView,
+    RoleOperation,
 };
 use super::{
     ProjectId, ProjectName, ProjectOwner, ProjectPageLimit, ProjectRole, ProjectRolePageLimit,
@@ -35,10 +36,12 @@ const ROLE: &str =
 const CONTENT: &str = "/api/v1/workspaces/{owner_type}/{owner_id}/projects/{project_id}/content";
 const CONTENT_DOWNLOAD: &str =
     "/api/v1/workspaces/{owner_type}/{owner_id}/projects/{project_id}/content/{bundle_id}";
+const VERSIONS: &str = "/api/v1/workspaces/{owner_type}/{owner_id}/projects/{project_id}/versions";
 const MAX_BODY: usize = 4096;
 const MAX_QUERY: usize = 4096;
 const ORIGIN: HeaderName = HeaderName::from_static("origin");
 const CSRF: HeaderName = HeaderName::from_static("x-csrf-token");
+const IDEMPOTENCY_KEY: HeaderName = HeaderName::from_static("idempotency-key");
 
 pub(crate) fn openapi_router(
     document: utoipa::openapi::OpenApi,
@@ -52,6 +55,104 @@ pub(crate) fn openapi_router(
         .routes(routes!(change_role, revoke_role))
         .routes(routes!(get_content_descriptor))
         .routes(routes!(download_content))
+        .routes(routes!(create_version, list_versions))
+}
+
+#[derive(Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
+struct CreateVersionRequest {
+    name: String,
+}
+
+#[utoipa::path(post, path = VERSIONS, tag = "project-versions",
+    security(("projectSessionCookie" = [])),
+    params(("owner_type" = String, Path), ("owner_id" = String, Path), ("project_id" = String, Path),
+      ("If-Match" = String, Header), ("Idempotency-Key" = String, Header),
+      ("Origin" = String, Header), ("X-CSRF-Token" = String, Header)),
+    request_body(content = CreateVersionRequest, content_type = "application/json"),
+    responses((status = 201, body = ProjectVersionCreateView, headers(("Cache-Control" = String))),
+      (status = 200, description = "Idempotent replay", body = ProjectVersionCreateView, headers(("Cache-Control" = String))),
+      (status = 401, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+      (status = 403, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+      (status = 404, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+      (status = 409, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+      (status = 412, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+      (status = 413, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+      (status = 415, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+      (status = 422, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+      (status = 428, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+      (status = 503, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+      (status = 504, body = crate::openapi::ProblemDetails, content_type = "application/problem+json")))]
+async fn create_version(
+    State(service): State<ProjectHttpService>,
+    Extension(request_id): Extension<RequestId>,
+    Path((owner_type, owner_id, project_id)): Path<(String, String, String)>,
+    request: Request,
+) -> Result<Response, HttpError> {
+    let (parts, body) = request.into_parts();
+    let browser = BrowserHeaders::read(&parts.headers, &request_id, VERSIONS)?;
+    let expected_version = parse_if_match(&parts.headers, &request_id, VERSIONS)?;
+    let idempotency_key = parse_idempotency_key(&parts.headers, &request_id, VERSIONS)?;
+    let input: CreateVersionRequest =
+        json_body(&parts.headers, body, &request_id, VERSIONS).await?;
+    let view = service
+        .create_version(
+            browser.request(BrowserMethod::Post),
+            parse_owner(&owner_type, &owner_id, &request_id, VERSIONS)?,
+            parse_project_id(&project_id, &request_id, VERSIONS)?,
+            expected_version,
+            ProjectVersionName::new(input.name)
+                .map_err(|_| validation(&request_id, VERSIONS, "name"))?,
+            idempotency_key,
+        )
+        .await
+        .map_err(|error| map_error(error, request_id.clone(), VERSIONS))?;
+    let status = if view.idempotent_retry {
+        StatusCode::OK
+    } else {
+        StatusCode::CREATED
+    };
+    let mut response = (status, Json(view)).into_response();
+    response
+        .headers_mut()
+        .insert(CACHE_CONTROL, HeaderValue::from_static("private, no-store"));
+    Ok(response)
+}
+
+#[utoipa::path(get, path = VERSIONS, tag = "project-versions",
+    security(("projectSessionCookie" = [])),
+    params(("owner_type" = String, Path), ("owner_id" = String, Path), ("project_id" = String, Path),
+      ("pageSize" = Option<u16>, Query), ("cursor" = Option<String>, Query)),
+    responses((status = 200, body = ProjectVersionListView, headers(("Cache-Control" = String))),
+      (status = 401, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+      (status = 404, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+      (status = 409, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+      (status = 422, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+      (status = 503, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+      (status = 504, body = crate::openapi::ProblemDetails, content_type = "application/problem+json")))]
+async fn list_versions(
+    State(service): State<ProjectHttpService>,
+    Extension(request_id): Extension<RequestId>,
+    Path((owner_type, owner_id, project_id)): Path<(String, String, String)>,
+    request: Request,
+) -> Result<Response, HttpError> {
+    let browser = BrowserHeaders::read(request.headers(), &request_id, VERSIONS)?;
+    let query = VersionListQuery::parse(request.uri().query(), &request_id, VERSIONS)?;
+    let view = service
+        .list_versions(
+            browser.request(BrowserMethod::Get),
+            parse_owner(&owner_type, &owner_id, &request_id, VERSIONS)?,
+            parse_project_id(&project_id, &request_id, VERSIONS)?,
+            query.limit(&request_id, VERSIONS)?,
+            query.cursor.as_deref(),
+        )
+        .await
+        .map_err(|error| map_error(error, request_id, VERSIONS))?;
+    let mut response = (StatusCode::OK, Json(view)).into_response();
+    response
+        .headers_mut()
+        .insert(CACHE_CONTROL, HeaderValue::from_static("private, no-store"));
+    Ok(response)
 }
 
 #[utoipa::path(get, path = CONTENT, tag = "projects",
@@ -773,6 +874,61 @@ impl ListQuery {
     }
 }
 
+struct VersionListQuery {
+    page_size: u16,
+    cursor: Option<String>,
+}
+
+impl VersionListQuery {
+    fn parse(raw: Option<&str>, request_id: &RequestId, path: &str) -> Result<Self, HttpError> {
+        let raw = raw.unwrap_or_default();
+        if raw.len() > MAX_QUERY {
+            return Err(validation(request_id, path, "query"));
+        }
+        let mut page_size = None;
+        let mut cursor = None;
+        let mut cursor_seen = false;
+        for (key, value) in url::form_urlencoded::parse(raw.as_bytes()) {
+            match key.as_ref() {
+                "pageSize" if page_size.is_none() => {
+                    page_size = Some(
+                        value
+                            .parse::<u16>()
+                            .map_err(|_| validation(request_id, path, "pageSize"))?,
+                    );
+                }
+                "cursor" if !cursor_seen && !value.is_empty() => {
+                    cursor_seen = true;
+                    cursor = Some(value.into_owned());
+                }
+                _ => return Err(validation(request_id, path, "query")),
+            }
+        }
+        Ok(Self {
+            page_size: page_size.unwrap_or(crate::save::DEFAULT_PROJECT_VERSION_PAGE_SIZE),
+            cursor,
+        })
+    }
+
+    fn limit(
+        &self,
+        request_id: &RequestId,
+        path: &str,
+    ) -> Result<ProjectVersionPageLimit, HttpError> {
+        ProjectVersionPageLimit::new(self.page_size).map_err(|_| {
+            HttpError::validation(
+                request_id.clone(),
+                path,
+                [FieldViolation::new(
+                    "pageSize",
+                    "INVALID",
+                    "The value is invalid.",
+                )],
+            )
+        })
+    }
+}
+
 async fn json_body<T: DeserializeOwned>(
     headers: &HeaderMap,
     body: Body,
@@ -853,6 +1009,22 @@ fn parse_if_match(
         return Err(HttpError::precondition_failed(request_id.clone(), path));
     }
     Ok(version)
+}
+
+fn parse_idempotency_key(
+    headers: &HeaderMap,
+    request_id: &RequestId,
+    path: &str,
+) -> Result<IdempotencyKey, HttpError> {
+    let values: Vec<_> = headers.get_all(IDEMPOTENCY_KEY).iter().collect();
+    if values.len() != 1 {
+        return Err(validation(request_id, path, "Idempotency-Key"));
+    }
+    let value = values[0]
+        .to_str()
+        .map_err(|_| validation(request_id, path, "Idempotency-Key"))?;
+    IdempotencyKey::new(value.to_owned())
+        .map_err(|_| validation(request_id, path, "Idempotency-Key"))
 }
 
 fn project_response(

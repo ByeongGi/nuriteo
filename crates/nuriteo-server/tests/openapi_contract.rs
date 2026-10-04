@@ -66,7 +66,8 @@ async fn serves_the_versioned_document_from_the_application_router() {
             "/api/v1/workspaces/{owner_type}/{owner_id}/projects/{project_id}/content/{bundle_id}",
             "/api/v1/workspaces/{owner_type}/{owner_id}/projects/{project_id}/restore",
             "/api/v1/workspaces/{owner_type}/{owner_id}/projects/{project_id}/roles",
-            "/api/v1/workspaces/{owner_type}/{owner_id}/projects/{project_id}/roles/{user_id}"
+            "/api/v1/workspaces/{owner_type}/{owner_id}/projects/{project_id}/roles/{user_id}",
+            "/api/v1/workspaces/{owner_type}/{owner_id}/projects/{project_id}/versions"
         ]
     );
     assert_eq!(
@@ -222,6 +223,47 @@ fn project_content_download_is_declared_as_binary_octets() {
     assert!(
         response["content"].get("text/plain").is_none(),
         "Project Bundle bytes must never be modeled as text"
+    );
+}
+
+#[test]
+fn explicit_project_versions_expose_bounded_immutable_contract() {
+    let document = serde_json::to_value(openapi::document()).unwrap();
+    let operation = &document["paths"]["/api/v1/workspaces/{owner_type}/{owner_id}/projects/{project_id}/versions"];
+    assert_eq!(
+        operation["post"]["responses"]["201"]["content"]["application/json"]["schema"]["$ref"],
+        "#/components/schemas/ProjectVersionCreateView"
+    );
+    assert_eq!(
+        operation["get"]["responses"]["200"]["content"]["application/json"]["schema"]["$ref"],
+        "#/components/schemas/ProjectVersionListView"
+    );
+    let post_headers = operation["post"]["parameters"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|parameter| parameter["in"] == "header")
+        .map(|parameter| parameter["name"].as_str().unwrap())
+        .collect::<Vec<_>>();
+    for required in ["If-Match", "Idempotency-Key", "Origin", "X-CSRF-Token"] {
+        assert!(post_headers.contains(&required));
+    }
+    assert_eq!(
+        document["components"]["schemas"]["ProjectVersionView"]["required"],
+        json!([
+            "id",
+            "projectId",
+            "bundleId",
+            "name",
+            "createdByUserId",
+            "sourceProjectVersion",
+            "createdAt",
+            "sha256",
+            "physicalBytes",
+            "logicalBytes",
+            "fileCount",
+            "format"
+        ])
     );
 }
 
