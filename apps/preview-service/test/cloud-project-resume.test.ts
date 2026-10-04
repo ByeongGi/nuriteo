@@ -5,6 +5,7 @@ import { createPreviewWorkflowController } from "../../../packages/preview-servi
 const controller = createPreviewWorkflowController();
 const snapshot = controller.importProjectFiles([
   { path: "LICENSE", content: "Apache-2.0\n" },
+  { path: "notes/🚀", content: "valid astral path\n" },
   { path: "package.json", kind: "text", bytes: new TextEncoder().encode('{"scripts":{"dev":"vite"},"dependencies":{"vite":"latest"}}\n') },
   { path: "pnpm-lock.yaml", content: "lockfileVersion: '9.0'\n" },
   { path: "public/logo.bin", kind: "binary", bytes: Uint8Array.of(0, 255, 1, 128) },
@@ -15,6 +16,7 @@ assert.equal(snapshot.source, "snapshot");
 assert.equal(snapshot.project?.readText("/workspace/app/src/main.ts"), "export const resumed = true\n");
 assert.equal(snapshot.project?.metadata.name, "Remote project");
 assert.equal(snapshot.workflow?.workspace.readText("/workspace/app/LICENSE"), "Apache-2.0\n");
+assert.equal(snapshot.workflow?.workspace.readText("/workspace/app/notes/🚀"), "valid astral path\n");
 assert.equal(snapshot.workflow?.workspace.readText("/workspace/app/pnpm-lock.yaml"), "lockfileVersion: '9.0'\n");
 assert.deepEqual(
   snapshot.workflow?.workspace.readBytes("/workspace/app/public/logo.bin"),
@@ -38,15 +40,22 @@ const renamed = roundTrip.find((file) => file.path === "public/renamed.bin");
 assert.deepEqual(renamed?.bytes, Uint8Array.of(0, 255, 1, 128));
 renamed?.bytes.fill(7);
 assert.deepEqual(controller.exportProjectFiles().find((file) => file.path === "public/renamed.bin")?.bytes, Uint8Array.of(0, 255, 1, 128));
+assert.equal(controller.exportProjectFiles().find((file) => file.path === "notes/🚀")?.path, "notes/🚀");
+
+const unpairedHighPath = `high-${String.fromCharCode(0xd800)}`;
+const unpairedLowPath = `low-${String.fromCharCode(0xdc00)}`;
 
 for (const path of [
   "../escape",
   "/absolute",
+  "C:/absolute",
   "nested\\escape",
   "./dot",
   "nested//empty",
   "control\u0000byte",
   "e\u0301.txt",
+  unpairedHighPath,
+  unpairedLowPath,
   `${Array.from({ length: 33 }, () => "segment").join("/")}/file.txt`
 ]) {
   assert.throws(

@@ -1321,8 +1321,10 @@ function isSafeImportedProjectPath(path: unknown): path is string {
     || path.length === 0
     || path !== path.normalize("NFC")
     || path.startsWith("/")
+    || /^[A-Za-z]:\//u.test(path)
     || path.includes("\\")
     || /[\u0000-\u001f\u007f]/u.test(path)
+    || hasUnpairedSurrogate(path)
   ) return false;
   const encoder = new TextEncoder();
   if (encoder.encode(path).byteLength > MAX_IMPORTED_PROJECT_PATH_BYTES) return false;
@@ -1333,6 +1335,20 @@ function isSafeImportedProjectPath(path: unknown): path is string {
     && segment !== ".."
     && encoder.encode(segment).byteLength <= MAX_IMPORTED_PROJECT_PATH_SEGMENT_BYTES
   );
+}
+
+function hasUnpairedSurrogate(value: string): boolean {
+  for (let index = 0; index < value.length; index += 1) {
+    const unit = value.charCodeAt(index);
+    if (unit >= 0xd800 && unit <= 0xdbff) {
+      const trailing = value.charCodeAt(index + 1);
+      if (!(trailing >= 0xdc00 && trailing <= 0xdfff)) return true;
+      index += 1;
+    } else if (unit >= 0xdc00 && unit <= 0xdfff) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function relativeProjectPath(path: string, root: string): string {
