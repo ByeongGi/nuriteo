@@ -113,6 +113,21 @@ impl S3ObjectStore {
         let streaming_config = sdk_config
             .to_builder()
             .retry_config(RetryConfig::standard().with_max_attempts(1))
+            // The relay owns the per-request total deadline. Retaining the
+            // regular operation-attempt timeout would cut off a productive,
+            // non-replayable body before that deadline. Keep only the bounded
+            // connection establishment timeout at the SDK layer.
+            .timeout_config(
+                TimeoutConfig::builder()
+                    .connect_timeout(limits.connect_timeout)
+                    // A service config cloned with `to_builder` merges timeout
+                    // settings. Explicitly disable both inherited ceilings;
+                    // merely omitting them leaves the regular client values in
+                    // place.
+                    .disable_operation_timeout()
+                    .disable_operation_attempt_timeout()
+                    .build(),
+            )
             .build();
 
         Ok(Self {

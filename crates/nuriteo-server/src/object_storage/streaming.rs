@@ -37,9 +37,21 @@ pub struct UploadDeadlines {
 }
 
 impl UploadDeadlines {
-    pub fn new(idle: Duration, total: Duration) -> Result<Self, ObjectStoreError> {
+    pub fn for_put(idle: Duration, total: Duration) -> Result<Self, ObjectStoreError> {
+        Self::new(ObjectOperation::Put, idle, total)
+    }
+
+    pub fn for_multipart_part(idle: Duration, total: Duration) -> Result<Self, ObjectStoreError> {
+        Self::new(ObjectOperation::MultipartUpload, idle, total)
+    }
+
+    fn new(
+        operation: ObjectOperation,
+        idle: Duration,
+        total: Duration,
+    ) -> Result<Self, ObjectStoreError> {
         if idle.is_zero() || total.is_zero() || idle > total {
-            return Err(invalid(ObjectOperation::Put));
+            return Err(invalid(operation));
         }
         Ok(Self { idle, total })
     }
@@ -698,5 +710,16 @@ mod tests {
         let debug = format!("{upload:?}");
         assert!(!debug.contains("secret-payload"));
         assert!(!debug.contains(&Sha256Checksum::calculate(secret).base64()));
+    }
+
+    #[test]
+    fn deadline_validation_preserves_the_requested_operation() {
+        let put = UploadDeadlines::for_put(Duration::ZERO, Duration::from_secs(1)).unwrap_err();
+        assert_eq!(put.operation(), ObjectOperation::Put);
+
+        let multipart =
+            UploadDeadlines::for_multipart_part(Duration::from_secs(2), Duration::from_secs(1))
+                .unwrap_err();
+        assert_eq!(multipart.operation(), ObjectOperation::MultipartUpload);
     }
 }

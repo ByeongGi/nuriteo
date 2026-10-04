@@ -72,6 +72,51 @@ async fn rustfs_non_replayable_streaming_contract() {
         .await
         .expect("custom-CA HTTPS adapter builds");
 
+    // A productive non-replayable stream must be governed by the relay total,
+    // not the regular SDK attempt timeout. This producer progresses inside the
+    // idle budget but deliberately runs longer than the configured 600 ms
+    // attempt timeout that the non-streaming client still uses.
+    let short_attempt_store = S3ObjectStore::new(
+        &config,
+        OperationLimits {
+            connect_timeout: Duration::from_millis(500),
+            attempt_timeout: Duration::from_millis(600),
+            request_timeout: Duration::from_secs(5),
+            ..OperationLimits::default()
+        },
+    )
+    .await
+    .expect("short-attempt fixture adapter builds");
+    let progress_key = ObjectKey::parse("streaming/progress-past-attempt").unwrap();
+    let (mut progress_writer, progress_reader) = tokio::io::duplex(1);
+    let progress_producer = tokio::spawn(async move {
+        for _ in 0..24 {
+            progress_writer.write_all(&[0]).await.unwrap();
+            tokio::time::sleep(Duration::from_millis(40)).await;
+        }
+    });
+    short_attempt_store
+        .put_stream_once(StreamingPutRequest {
+            key: progress_key.clone(),
+            body: UploadBody::from_reader(progress_reader, 24, zero_checksum(24)),
+            content_type: None,
+            deadlines: UploadDeadlines::for_put(Duration::from_millis(150), Duration::from_secs(2))
+                .unwrap(),
+            abort: upload_abort_pair().1,
+        })
+        .await
+        .expect("continuous progress survives the base attempt timeout");
+    progress_producer.await.unwrap();
+    assert_eq!(
+        short_attempt_store
+            .head(&progress_key)
+            .await
+            .unwrap()
+            .content_length,
+        24
+    );
+    short_attempt_store.delete(&progress_key).await.unwrap();
+
     let single_key = ObjectKey::parse("streaming/single-64m").unwrap();
     store
         .put_stream_once(StreamingPutRequest {
@@ -82,7 +127,7 @@ async fn rustfs_non_replayable_streaming_contract() {
                 zero_checksum(SINGLE_BYTES),
             ),
             content_type: Some("application/octet-stream".to_owned()),
-            deadlines: UploadDeadlines::new(Duration::from_secs(10), Duration::from_secs(120))
+            deadlines: UploadDeadlines::for_put(Duration::from_secs(10), Duration::from_secs(120))
                 .unwrap(),
             abort: upload_abort_pair().1,
         })
@@ -109,8 +154,11 @@ async fn rustfs_non_replayable_streaming_contract() {
                     zero_checksum(PART_BYTES),
                 ),
                 final_part: true,
-                deadlines: UploadDeadlines::new(Duration::from_secs(10), Duration::from_secs(120))
-                    .unwrap(),
+                deadlines: UploadDeadlines::for_multipart_part(
+                    Duration::from_secs(10),
+                    Duration::from_secs(120),
+                )
+                .unwrap(),
                 abort: upload_abort_pair().1,
             },
             &MultipartLimits::new(PART_BYTES as usize).unwrap(),
@@ -133,7 +181,7 @@ async fn rustfs_non_replayable_streaming_contract() {
             key: idle_key,
             body: UploadBody::from_reader(idle_reader, 1, Sha256Checksum::calculate(&[0])),
             content_type: None,
-            deadlines: UploadDeadlines::new(Duration::from_millis(25), Duration::from_secs(1))
+            deadlines: UploadDeadlines::for_put(Duration::from_millis(25), Duration::from_secs(1))
                 .unwrap(),
             abort: upload_abort_pair().1,
         })
@@ -156,8 +204,11 @@ async fn rustfs_non_replayable_streaming_contract() {
             key: ObjectKey::parse("streaming/total").unwrap(),
             body: UploadBody::from_reader(total_reader, 100, zero_checksum(100)),
             content_type: None,
-            deadlines: UploadDeadlines::new(Duration::from_millis(30), Duration::from_millis(50))
-                .unwrap(),
+            deadlines: UploadDeadlines::for_put(
+                Duration::from_millis(30),
+                Duration::from_millis(50),
+            )
+            .unwrap(),
             abort: upload_abort_pair().1,
         })
         .await
@@ -176,7 +227,7 @@ async fn rustfs_non_replayable_streaming_contract() {
                 key: ObjectKey::parse(format!("streaming/{suffix}")).unwrap(),
                 body: UploadBody::from_reader(std::io::Cursor::new(bytes), declared, checksum),
                 content_type: None,
-                deadlines: UploadDeadlines::new(Duration::from_secs(1), Duration::from_secs(5))
+                deadlines: UploadDeadlines::for_put(Duration::from_secs(1), Duration::from_secs(5))
                     .unwrap(),
                 abort: upload_abort_pair().1,
             })
@@ -196,8 +247,11 @@ async fn rustfs_non_replayable_streaming_contract() {
                 key: abort_key,
                 body: UploadBody::from_reader(abort_reader, 1, Sha256Checksum::calculate(&[0])),
                 content_type: None,
-                deadlines: UploadDeadlines::new(Duration::from_secs(10), Duration::from_secs(30))
-                    .unwrap(),
+                deadlines: UploadDeadlines::for_put(
+                    Duration::from_secs(10),
+                    Duration::from_secs(30),
+                )
+                .unwrap(),
                 abort: abort_signal,
             })
             .await
