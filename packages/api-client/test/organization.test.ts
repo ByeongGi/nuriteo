@@ -29,8 +29,10 @@ import {
 import type { IssueOrganizationInvitationInput, ProblemDetails } from "../src/index.ts";
 
 const ORGANIZATION_ID = "018f22c4-3cb5-7ac7-b464-8214f90ad21a";
+const OTHER_ORGANIZATION_ID = "018f22c4-3cb6-7f25-823e-649318d8e0b8";
 const USER_ID = "018f22c4-3cb2-7cc8-98d8-b4f7f753f7bb";
 const INVITATION_ID = "018f22c4-3cb7-7ee1-936c-4a54190dc872";
+const REPLACEMENT_INVITATION_ID = "018f22c4-3cb8-77f8-b711-415364ce1d14";
 const CSRF = "nrt_csrf_client005";
 const ACTIVATION_TOKEN = `nrt_inv_${"A".repeat(43)}`;
 const ORGANIZATION_TOKEN = `nrt_org_inv_${"B".repeat(43)}`;
@@ -114,7 +116,13 @@ async function testOrganizationContracts(): Promise<void> {
     new Response(null, { status: 204 }),
     jsonResponse({ items: [organizationInvitation()] }),
     jsonResponse(issuedOrganizationInvitation(), 201),
-    jsonResponse(issuedOrganizationInvitation(), 200),
+    jsonResponse(
+      issuedOrganizationInvitation({
+        id: REPLACEMENT_INVITATION_ID,
+        proposedRole: "owner"
+      }),
+      200
+    ),
     new Response(null, { status: 204 }),
     jsonResponse({ ...organizationInvitation(), status: "accepted", acceptedAt: "2026-10-04T01:00:00Z" }),
     jsonResponse({ ...organizationInvitation(), status: "declined", declinedAt: "2026-10-04T01:00:00Z" })
@@ -201,6 +209,26 @@ async function testFailClosedBoundaries(): Promise<void> {
     await assert.rejects(operation(), ApiInvalidResponseError);
   }
 
+  const malformedIssuedInvitations: Array<() => Promise<unknown>> = [
+    () => issueWithResponse({ organizationId: OTHER_ORGANIZATION_ID }),
+    () => issueWithResponse({ proposedRole: "owner" }),
+    () => issueWithResponse({ status: "accepted", acceptedAt: "2026-10-04T01:00:00Z" }),
+    () => reissueWithResponse({
+      id: REPLACEMENT_INVITATION_ID,
+      organizationId: OTHER_ORGANIZATION_ID
+    }),
+    () => reissueWithResponse({ id: REPLACEMENT_INVITATION_ID, proposedRole: "owner" }),
+    () => reissueWithResponse({
+      id: REPLACEMENT_INVITATION_ID,
+      status: "accepted",
+      acceptedAt: "2026-10-04T01:00:00Z"
+    }),
+    () => reissueWithResponse({ id: INVITATION_ID })
+  ];
+  for (const operation of malformedIssuedInvitations) {
+    await assert.rejects(operation(), ApiInvalidResponseError);
+  }
+
   const normalized = await listOrganizationInvitations(
     singleResponse({
       items: [{
@@ -222,7 +250,15 @@ async function testFailClosedBoundaries(): Promise<void> {
     ApiConfigurationError
   );
 
-  for (const email of [" x@example.test", "x@example.test ", "ab", "x".repeat(321), "x\u0085@example.test"]) {
+  for (const email of [
+    " x@example.test",
+    "x@example.test ",
+    "ab",
+    "x".repeat(321),
+    "x\u0085@example.test",
+    "x\ud800@example.test",
+    "x\udc00@example.test"
+  ]) {
     let requested = false;
     const client = createApiClient({
       fetch: async () => {
@@ -346,6 +382,22 @@ function jsonResponse(body: unknown, status = 200, headers?: HeadersInit): Respo
   return Response.json(body, { status, ...(headers === undefined ? {} : { headers }) });
 }
 
+function issueWithResponse(overrides: Record<string, unknown>): Promise<unknown> {
+  return issueOrganizationInvitation(
+    singleResponse(issuedOrganizationInvitation(overrides), 201),
+    { organizationId: ORGANIZATION_ID, email: MEMBER_EMAIL, role: "member" },
+    { csrfToken: CSRF }
+  );
+}
+
+function reissueWithResponse(overrides: Record<string, unknown>): Promise<unknown> {
+  return reissueOrganizationInvitation(
+    singleResponse(issuedOrganizationInvitation(overrides), 200),
+    { organizationId: ORGANIZATION_ID, invitationId: INVITATION_ID, role: "member" },
+    { csrfToken: CSRF }
+  );
+}
+
 function requestBody(call: RequestCall | undefined): unknown {
   assert.ok(call?.init?.body !== undefined);
   return JSON.parse(String(call.init.body)) as unknown;
@@ -397,7 +449,7 @@ function issuedActivation(): Record<string, unknown> {
   };
 }
 
-function organizationInvitation(): Record<string, unknown> {
+function organizationInvitation(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     id: INVITATION_ID,
     organizationId: ORGANIZATION_ID,
@@ -411,13 +463,16 @@ function organizationInvitation(): Record<string, unknown> {
     expiredAt: null,
     revokedAt: null,
     supersededAt: null,
-    replacementId: null
+    replacementId: null,
+    ...overrides
   };
 }
 
-function issuedOrganizationInvitation(): Record<string, unknown> {
+function issuedOrganizationInvitation(
+  overrides: Record<string, unknown> = {}
+): Record<string, unknown> {
   return {
-    ...organizationInvitation(),
+    ...organizationInvitation(overrides),
     acceptUrl: `https://example.test/organization-invitations/accept?token=${ORGANIZATION_TOKEN}`
   };
 }

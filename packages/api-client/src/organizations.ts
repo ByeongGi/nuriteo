@@ -230,12 +230,14 @@ export async function issueOrganizationInvitation(
   options: BrowserMutationOptions
 ): Promise<ApiResult<IssuedOrganizationInvitation>> {
   rejectLegacyInvitationInput(input);
+  const organizationId = validatedId(input.organizationId);
+  const role = validateRole(input.role);
   const response = await client.post<unknown, unknown>(
-    `${organizationPath(input.organizationId)}/invitations`,
-    { email: normalizeInvitationEmail(input.email), role: validateRole(input.role) },
+    `/organizations/${organizationId}/invitations`,
+    { email: normalizeInvitationEmail(input.email), role },
     mutationOptions(options)
   );
-  return issuedInvitationResult(response, 201);
+  return issuedInvitationResult(response, 201, { organizationId, role });
 }
 
 export async function reissueOrganizationInvitation(
@@ -243,12 +245,19 @@ export async function reissueOrganizationInvitation(
   input: ReissueOrganizationInvitationInput,
   options: BrowserMutationOptions
 ): Promise<ApiResult<IssuedOrganizationInvitation>> {
+  const organizationId = validatedId(input.organizationId);
+  const invitationId = validatedId(input.invitationId);
+  const role = validateRole(input.role);
   const response = await client.post<unknown, unknown>(
-    `${invitationPath(input)}/reissue`,
-    { role: validateRole(input.role) },
+    `/organizations/${organizationId}/invitations/${invitationId}/reissue`,
+    { role },
     mutationOptions(options)
   );
-  return issuedInvitationResult(response, 200);
+  return issuedInvitationResult(response, 200, {
+    organizationId,
+    role,
+    replacesInvitationId: invitationId
+  });
 }
 
 export async function revokeOrganizationInvitation(
@@ -365,12 +374,27 @@ function parseInvitationCollection(value: unknown): OrganizationInvitationCollec
 
 function issuedInvitationResult(
   response: ApiResponse<unknown>,
-  status: 200 | 201
+  status: 200 | 201,
+  expected: {
+    readonly organizationId: string;
+    readonly replacesInvitationId?: string;
+    readonly role: OrganizationRole;
+  }
 ): ApiResult<IssuedOrganizationInvitation> {
   return validatedResultForStatus(response, status, (value) => {
     const record = invitationRecord(value, ["acceptUrl"]);
+    const invitation = parseInvitationRecord(record);
+    if (
+      invitation.organizationId !== expected.organizationId ||
+      invitation.proposedRole !== expected.role ||
+      invitation.status !== "pending" ||
+      (expected.replacesInvitationId !== undefined &&
+        invitation.id === expected.replacesInvitationId)
+    ) {
+      throw new TypeError("invalid issued invitation identity");
+    }
     return {
-      ...parseInvitationRecord(record),
+      ...invitation,
       acceptUrl: OneTimeUrl.parse(
         record.acceptUrl,
         "/organization-invitations/accept",
@@ -486,7 +510,12 @@ function normalizeInvitationEmail(value: string): string {
   let characters = 0;
   for (const character of value) {
     characters += 1;
-    if (characters > 320 || /\p{Cc}/u.test(character)) {
+    const codePoint = character.codePointAt(0);
+    if (
+      characters > 320 ||
+      /\p{Cc}/u.test(character) ||
+      (codePoint !== undefined && codePoint >= 0xd800 && codePoint <= 0xdfff)
+    ) {
       throw new ApiConfigurationError("The invitation email is invalid.");
     }
   }

@@ -24,6 +24,8 @@ import {
 const baseUrl = requiredEnvironment("NURITEO_CLIENT_TEST_BASE_URL");
 const adminEmail = requiredEnvironment("NURITEO_CLIENT_TEST_EMAIL");
 const memberEmail = "member@example.test";
+const unavailableEmail = "Missing.Member@Example.Test";
+const unauthorizedTargetEmail = adminEmail.toUpperCase();
 const adminPassword = await readSecret("NURITEO_CLIENT_TEST_PASSWORD_FILE");
 const memberPassword = await readSecret("NURITEO_CLIENT_TEST_MEMBER_PASSWORD_FILE");
 const adminBrowser = createFixtureBrowser(baseUrl);
@@ -102,18 +104,18 @@ await changeOrganizationMemberRole(
 const unavailable = await safeInvitationProblem(
   issueOrganizationInvitation(
     admin,
-    { organizationId: organization.data.id, email: "Missing.Member@Example.Test", role: "member" },
+    { organizationId: organization.data.id, email: unavailableEmail, role: "member" },
     { csrfToken: adminBrowser.csrfToken() }
   ),
-  ["missing.member@example.test"]
+  [unavailableEmail, unavailableEmail.toLowerCase()]
 );
 const unauthorized = await safeInvitationProblem(
   issueOrganizationInvitation(
     member,
-    { organizationId: organization.data.id, email: "Outsider@Example.Test", role: "member" },
+    { organizationId: organization.data.id, email: unauthorizedTargetEmail, role: "member" },
     { csrfToken: memberBrowser.csrfToken() }
   ),
-  ["outsider@example.test"]
+  [unauthorizedTargetEmail, adminEmail.toLowerCase()]
 );
 assert.deepEqual(unavailable, unauthorized);
 
@@ -196,12 +198,13 @@ async function safeInvitationProblem(
   assert.equal(captured.status, 404);
   assert.ok(captured.problem);
   assert.equal(typeof captured.problem.request_id, "string");
-  const rendered = JSON.stringify(captured.problem);
+  const renderings = [JSON.stringify(captured.problem), String(captured), JSON.stringify(captured)];
   for (const privateValue of [...privateValues, "nrt_org_inv_", "postgres://"]) {
-    assert.doesNotMatch(rendered, new RegExp(escapeRegExp(privateValue), "u"));
+    const pattern = new RegExp(escapeRegExp(privateValue), "iu");
+    for (const rendering of renderings) {
+      assert.doesNotMatch(rendering, pattern);
+    }
   }
-  assert.doesNotMatch(String(captured), /missing\.member|outsider|nrt_org_inv_|postgres:\/\//u);
-  assert.doesNotMatch(JSON.stringify(captured), /missing\.member|outsider|nrt_org_inv_|postgres:\/\//u);
   const { request_id: _requestId, ...comparable } = captured.problem;
   return comparable;
 }
