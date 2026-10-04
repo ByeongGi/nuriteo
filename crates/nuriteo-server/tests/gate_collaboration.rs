@@ -427,19 +427,9 @@ async fn collaboration_gate_runs_actual_core_postgres_and_rustfs_journey() {
     assert!(output.status.success());
     assert!(output.stdout.is_empty());
     assert!(output.stderr.is_empty());
-    assert_process_output_secret_free(
-        &output,
-        &[
-            BOOTSTRAP_PASSWORD,
-            INVITEE_PASSWORD,
-            &activation_token,
-            &revoked_token,
-            &expired_token,
-            &first_org_token,
-            &replacement_token,
-            SECRET_KEY,
-            &database_url,
-        ],
+    assert!(
+        !output.secret_detected,
+        "actual Core output leaked a credential"
     );
 
     s3.delete_bucket().bucket(BUCKET).send().await.unwrap();
@@ -656,20 +646,46 @@ fn spawn_server(
         .stderr(Stdio::piped())
         .spawn()
         .unwrap();
-    ChildGuard::new(child)
+    ChildGuard::new(
+        child,
+        &[
+            BOOTSTRAP_PASSWORD,
+            INVITEE_PASSWORD,
+            "nrt_inv_",
+            "nrt_org_inv_",
+            SECRET_KEY,
+            database_url,
+        ],
+    )
+}
+
+struct CapturedProcessOutput {
+    status: ExitStatus,
+    stderr: Vec<u8>,
+    stdout: Vec<u8>,
+    secret_detected: bool,
+}
+
+struct CapturedStream {
+    diagnostic: Vec<u8>,
+    secret_detected: bool,
 }
 
 struct ChildGuard {
     child: Child,
     reaped: bool,
-    stderr: Option<JoinHandle<std::io::Result<Vec<u8>>>>,
-    stdout: Option<JoinHandle<std::io::Result<Vec<u8>>>>,
+    stderr: Option<JoinHandle<std::io::Result<CapturedStream>>>,
+    stdout: Option<JoinHandle<std::io::Result<CapturedStream>>>,
 }
 
 impl ChildGuard {
-    fn new(mut child: Child) -> Self {
-        let stdout = spawn_output_reader(child.stdout.take().unwrap());
-        let stderr = spawn_output_reader(child.stderr.take().unwrap());
+    fn new(mut child: Child, forbidden: &[&str]) -> Self {
+        let forbidden = forbidden
+            .iter()
+            .map(|value| value.as_bytes().to_vec())
+            .collect::<Vec<_>>();
+        let stdout = spawn_output_reader(child.stdout.take().unwrap(), forbidden.clone());
+        let stderr = spawn_output_reader(child.stderr.take().unwrap(), forbidden);
         Self {
             child,
             reaped: false,
@@ -678,7 +694,7 @@ impl ChildGuard {
         }
     }
 
-    async fn terminate(mut self, timeout: Duration) -> Output {
+    async fn terminate(mut self, timeout: Duration) -> CapturedProcessOutput {
         let status = Command::new("kill")
             .args(["-TERM", &self.child.id().to_string()])
             .status()
@@ -687,7 +703,7 @@ impl ChildGuard {
         self.wait_for_exit(timeout).await
     }
 
-    async fn wait_for_exit(&mut self, timeout: Duration) -> Output {
+    async fn wait_for_exit(&mut self, timeout: Duration) -> CapturedProcessOutput {
         let deadline = Instant::now() + timeout;
         let status = loop {
             if let Some(status) = self.child.try_wait().unwrap() {
@@ -718,23 +734,49 @@ impl Drop for ChildGuard {
 
 fn spawn_output_reader(
     mut stream: impl Read + Send + 'static,
-) -> JoinHandle<std::io::Result<Vec<u8>>> {
+    forbidden: Vec<Vec<u8>>,
+) -> JoinHandle<std::io::Result<CapturedStream>> {
     thread::spawn(move || {
-        let mut output = Vec::new();
+        let mut diagnostic = Vec::new();
         let mut chunk = [0_u8; 8192];
+        let maximum_secret_length = forbidden.iter().map(Vec::len).max().unwrap_or(0);
+        let mut suffix = Vec::new();
+        let mut secret_detected = false;
         loop {
             let read = stream.read(&mut chunk)?;
             if read == 0 {
                 break;
             }
-            let remaining = MAX_PROCESS_OUTPUT_BYTES.saturating_sub(output.len());
-            output.extend_from_slice(&chunk[..read.min(remaining)]);
+            let mut searchable = Vec::with_capacity(suffix.len() + read);
+            searchable.extend_from_slice(&suffix);
+            searchable.extend_from_slice(&chunk[..read]);
+            secret_detected |= forbidden
+                .iter()
+                .any(|secret| contains_bytes(&searchable, secret));
+            let suffix_length = maximum_secret_length
+                .saturating_sub(1)
+                .min(searchable.len());
+            suffix.clear();
+            suffix.extend_from_slice(&searchable[searchable.len() - suffix_length..]);
+
+            let remaining = MAX_PROCESS_OUTPUT_BYTES.saturating_sub(diagnostic.len());
+            diagnostic.extend_from_slice(&chunk[..read.min(remaining)]);
         }
-        Ok(output)
+        Ok(CapturedStream {
+            diagnostic,
+            secret_detected,
+        })
     })
 }
 
-fn drain_output_reader(reader: Option<JoinHandle<std::io::Result<Vec<u8>>>>) {
+fn contains_bytes(haystack: &[u8], needle: &[u8]) -> bool {
+    !needle.is_empty()
+        && haystack
+            .windows(needle.len())
+            .any(|window| window == needle)
+}
+
+fn drain_output_reader(reader: Option<JoinHandle<std::io::Result<CapturedStream>>>) {
     if let Some(reader) = reader {
         let _ = reader.join();
     }
@@ -742,14 +784,31 @@ fn drain_output_reader(reader: Option<JoinHandle<std::io::Result<Vec<u8>>>>) {
 
 fn read_output(
     status: ExitStatus,
-    stdout: JoinHandle<std::io::Result<Vec<u8>>>,
-    stderr: JoinHandle<std::io::Result<Vec<u8>>>,
-) -> Output {
-    Output {
+    stdout: JoinHandle<std::io::Result<CapturedStream>>,
+    stderr: JoinHandle<std::io::Result<CapturedStream>>,
+) -> CapturedProcessOutput {
+    let stdout = stdout.join().unwrap().unwrap();
+    let stderr = stderr.join().unwrap().unwrap();
+    CapturedProcessOutput {
         status,
-        stdout: stdout.join().unwrap().unwrap(),
-        stderr: stderr.join().unwrap().unwrap(),
+        secret_detected: stdout.secret_detected || stderr.secret_detected,
+        stdout: stdout.diagnostic,
+        stderr: stderr.diagnostic,
     }
+}
+
+#[test]
+fn process_output_scanner_reads_beyond_diagnostic_cap_and_across_chunks() {
+    let secret = b"nrt_inv_split-across-the-reader-boundary".to_vec();
+    let mut bytes = vec![b'x'; MAX_PROCESS_OUTPUT_BYTES + 8_175];
+    bytes.extend_from_slice(&secret);
+    let captured = spawn_output_reader(std::io::Cursor::new(bytes), vec![secret])
+        .join()
+        .unwrap()
+        .unwrap();
+
+    assert_eq!(captured.diagnostic.len(), MAX_PROCESS_OUTPUT_BYTES);
+    assert!(captured.secret_detected);
 }
 
 async fn wait_for_live(child: &mut ChildGuard, client: &Client, base: &str) {

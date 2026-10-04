@@ -8,13 +8,42 @@ import { runBoundedProcess } from "../lib/bounded-process.ts";
 const fixtureDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "nuriteo-bounded-process-"));
 const cleanupMarker = path.join(fixtureDirectory, "cleanup-marker");
 const processIds = path.join(fixtureDirectory, "process-ids.json");
+const mixedProcessIds = path.join(fixtureDirectory, "mixed-process-ids.json");
 
 try {
   await verifiesGracefulProcessGroupCleanup();
   await verifiesHardProcessGroupDeadline();
+  await verifiesClosedLeaderDoesNotHideTermIgnoringDescendant();
   console.log("bounded process runner tests ok");
 } finally {
   fs.rmSync(fixtureDirectory, { force: true, recursive: true });
+}
+
+async function verifiesClosedLeaderDoesNotHideTermIgnoringDescendant() {
+  const source = `
+    const { spawn } = require("node:child_process");
+    const fs = require("node:fs");
+    const descendant = spawn(process.execPath, ["-e", "process.on('SIGTERM', () => {}); setInterval(() => {}, 1000)"], { stdio: "ignore" });
+    fs.writeFileSync(${JSON.stringify(mixedProcessIds)}, JSON.stringify([process.pid, descendant.pid]));
+    process.on("SIGTERM", () => process.exit(0));
+    setInterval(() => {}, 1000);
+  `;
+  const startedAt = Date.now();
+  const result = await runBoundedProcess({
+    arguments: ["-e", source],
+    command: process.execPath,
+    environment: process.env,
+    killGraceMs: 500,
+    terminationGraceMs: 150,
+    timeoutMs: 100,
+    workingDirectory: fixtureDirectory
+  });
+
+  assert.equal(result.timedOut, true);
+  assert.ok(Date.now() - startedAt < 1_500, "mixed process cleanup exceeded its hard bound");
+  for (const pid of JSON.parse(fs.readFileSync(mixedProcessIds, "utf8"))) {
+    assert.equal(isAlive(pid), false, `process ${pid} survived mixed process-group termination`);
+  }
 }
 
 async function verifiesGracefulProcessGroupCleanup() {

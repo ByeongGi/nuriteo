@@ -73,7 +73,7 @@ const phases = [
   nodePhase("workspace consistency", "tooling/checks/check-workspace.ts"),
   nodePhase("self-hosted task graph", "tooling/checks/check-self-hosted-task-graph.ts"),
   commandPhase("committed diff", "git", ["log", "--check", "--oneline", `${diffBase}..HEAD`], 60_000),
-  commandPhase("working-tree diff", "git", ["diff", "--check", "HEAD"], 60_000)
+  nodePhase("working-tree diff", "tooling/checks/check-working-tree-diff.ts")
 ];
 
 console.log("[g2] Evidence classes are intentionally separate:");

@@ -34,32 +34,50 @@ export async function runBoundedProcess(options) {
   }
 
   signalProcessGroup(child.pid, "SIGTERM");
-  const terminationDeadline = deadline(
-    options.terminationGraceMs ?? DEFAULT_TERMINATION_GRACE_MS,
-    timeout
-  );
-  const afterTermination = await Promise.race([
-    closed,
-    terminationDeadline.promise
-  ]);
-  terminationDeadline.cancel();
-  if (afterTermination !== timeout) {
+  const terminationGraceMs = options.terminationGraceMs ?? DEFAULT_TERMINATION_GRACE_MS;
+  if (await waitForProcessGroupExit(child.pid, terminationGraceMs)) {
+    const afterTermination = await waitForLeaderClose(closed, terminationGraceMs, timeout);
     return { ...afterTermination, launchError, timedOut: true };
   }
 
   signalProcessGroup(child.pid, "SIGKILL");
-  const killDeadline = deadline(options.killGraceMs ?? DEFAULT_KILL_GRACE_MS, timeout);
-  const afterKill = await Promise.race([
-    closed,
-    killDeadline.promise
-  ]);
-  killDeadline.cancel();
-  if (afterKill !== timeout) {
+  const killGraceMs = options.killGraceMs ?? DEFAULT_KILL_GRACE_MS;
+  const groupExited = await waitForProcessGroupExit(child.pid, killGraceMs);
+  const afterKill = await waitForLeaderClose(closed, killGraceMs, timeout);
+  if (groupExited) {
     return { ...afterKill, launchError, timedOut: true };
   }
 
   child.unref();
   return { launchError, signal: "SIGKILL", status: null, timedOut: true };
+}
+
+async function waitForLeaderClose(closed, milliseconds, timeout) {
+  const closeDeadline = deadline(milliseconds, timeout);
+  const result = await Promise.race([closed, closeDeadline.promise]);
+  closeDeadline.cancel();
+  return result === timeout ? { signal: "SIGKILL", status: null } : result;
+}
+
+async function waitForProcessGroupExit(pid, milliseconds) {
+  if (pid === undefined) return true;
+  const expiresAt = Date.now() + milliseconds;
+  while (processGroupExists(pid)) {
+    if (Date.now() >= expiresAt) return false;
+    await new Promise((resolve) => setTimeout(resolve, Math.min(20, expiresAt - Date.now())));
+  }
+  return true;
+}
+
+function processGroupExists(pid) {
+  try {
+    process.kill(-pid, 0);
+    return true;
+  } catch (error) {
+    if (error?.code === "ESRCH") return false;
+    if (error?.code === "EPERM") return true;
+    throw error;
+  }
 }
 
 function signalProcessGroup(pid, signal) {

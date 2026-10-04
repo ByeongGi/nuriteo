@@ -1,3 +1,5 @@
+import { StringDecoder } from "node:string_decoder";
+
 import { createSecretChunkScanner } from "./secret-chunk-scanner.ts";
 
 export type OutputStreamName = "stdout" | "stderr";
@@ -6,6 +8,10 @@ export function createSecretSafeOutputDiagnostics(values: Iterable<string>) {
   const scanners = {
     stderr: createSecretChunkScanner(values),
     stdout: createSecretChunkScanner(values)
+  };
+  const decoders = {
+    stderr: new StringDecoder("utf8"),
+    stdout: new StringDecoder("utf8")
   };
   const counts = {
     stderr: { bytes: 0, chunks: 0 },
@@ -23,7 +29,7 @@ export function createSecretSafeOutputDiagnostics(values: Iterable<string>) {
     record(stream: OutputStreamName, chunk: Buffer) {
       counts[stream].bytes += chunk.byteLength;
       counts[stream].chunks += 1;
-      scanners[stream].scan(chunk.toString("utf8"));
+      scanners[stream].scan(decoders[stream].write(chunk));
     },
     render() {
       return ["stdout", "stderr"]

@@ -205,26 +205,11 @@ const core = http.createServer(async (request, response) => {
 await listen(core);
 const coreAddress = core.address();
 assert.ok(coreAddress && typeof coreAddress !== "string");
-const webPort = await reservePort();
-publicOrigin = `http://127.0.0.1:${webPort}`;
-const web = spawn(process.execPath, [serverEntry], {
-  cwd: standaloneWeb,
-  env: {
-    ...process.env,
-    HOSTNAME: "127.0.0.1",
-    NURITEO_INTERNAL_API_URL: `http://127.0.0.1:${coreAddress.port}`,
-    PORT: String(webPort)
-  },
-  stdio: ["ignore", "pipe", "pipe"]
-});
-for (const [name, stream] of [["stdout", web.stdout], ["stderr", web.stderr]] as const) {
-  stream.on("data", (chunk: Buffer) => {
-    serverOutput.record(name satisfies OutputStreamName, chunk);
-  });
-}
+const standalone = await startStandaloneWeb(coreAddress.port);
+const web = standalone.child;
+publicOrigin = standalone.origin;
 
 try {
-  await waitUntilReady(publicOrigin);
   const browser = await chromium.launch({ headless: true });
   try {
     const admin = await browser.newContext();
@@ -382,7 +367,7 @@ try {
     `collaboration browser journey failed (${causeName}); secret-safe server output: ${serverOutput.render()}`
   );
 } finally {
-  web.kill("SIGTERM");
+  await stopChild(web);
   core.close();
 }
 
@@ -511,9 +496,45 @@ async function reservePort(): Promise<number> {
   return address.port;
 }
 
-async function waitUntilReady(origin: string): Promise<void> {
+async function startStandaloneWeb(corePort: number) {
+  const maximumAttempts = 5;
+  for (let attempt = 1; attempt <= maximumAttempts; attempt += 1) {
+    const port = await reservePort();
+    const origin = `http://127.0.0.1:${port}`;
+    const child = spawn(process.execPath, [serverEntry], {
+      cwd: standaloneWeb,
+      env: {
+        ...process.env,
+        HOSTNAME: "127.0.0.1",
+        NURITEO_INTERNAL_API_URL: `http://127.0.0.1:${corePort}`,
+        PORT: String(port)
+      },
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+    for (const [name, stream] of [["stdout", child.stdout], ["stderr", child.stderr]] as const) {
+      stream.on("data", (chunk: Buffer) => {
+        serverOutput.record(name satisfies OutputStreamName, chunk);
+      });
+    }
+    try {
+      await waitUntilReady(origin, child);
+      return { child, origin };
+    } catch {
+      await stopChild(child);
+      if (attempt === maximumAttempts) {
+        throw new Error("standalone server did not become ready after bounded bind retries");
+      }
+    }
+  }
+  throw new Error("standalone server bind retry invariant failed");
+}
+
+async function waitUntilReady(origin: string, child: ReturnType<typeof spawn>): Promise<void> {
   const deadline = Date.now() + 15_000;
   while (Date.now() < deadline) {
+    if (child.exitCode !== null || child.signalCode !== null) {
+      throw new Error("standalone server exited before readiness");
+    }
     try {
       const response = await fetch(`${origin}/sign-in`, { redirect: "manual" });
       if (response.status < 500) return;
@@ -521,6 +542,15 @@ async function waitUntilReady(origin: string): Promise<void> {
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
   throw new Error("standalone server did not become ready");
+}
+
+async function stopChild(child: ReturnType<typeof spawn>): Promise<void> {
+  if (child.exitCode !== null || child.signalCode !== null) return;
+  child.kill("SIGTERM");
+  const exited = new Promise<boolean>((resolve) => child.once("exit", () => resolve(true)));
+  if (await Promise.race([exited, new Promise<false>((resolve) => setTimeout(() => resolve(false), 2_000))])) return;
+  child.kill("SIGKILL");
+  await Promise.race([exited, new Promise((resolve) => setTimeout(resolve, 1_000))]);
 }
 
 async function waitForCondition(predicate: () => boolean): Promise<void> {

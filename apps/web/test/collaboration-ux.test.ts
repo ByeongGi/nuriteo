@@ -26,11 +26,25 @@ try {
   await testInvalidRouteIsProblemDetails();
   testSplitSecretScanner();
   testSecretSafeOutputDiagnostics();
+  testSecretSafeOutputDiagnosticsAcrossUtf8Chunks();
   testUxSourceContracts();
 } finally {
   globalThis.fetch = originalFetch;
   if (originalUrl === undefined) delete process.env.NURITEO_INTERNAL_API_URL;
   else process.env.NURITEO_INTERNAL_API_URL = originalUrl;
+}
+
+function testSecretSafeOutputDiagnosticsAcrossUtf8Chunks() {
+  const secret = "초대-비밀";
+  const encoded = Buffer.from(`prefix ${secret} suffix`, "utf8");
+  const splitAt = Buffer.from("prefix 초", "utf8").length - 1;
+  const diagnostics = createSecretSafeOutputDiagnostics([secret]);
+  diagnostics.record("stdout", encoded.subarray(0, splitAt));
+  diagnostics.record("stdout", encoded.subarray(splitAt, splitAt + 2));
+  diagnostics.record("stdout", encoded.subarray(splitAt + 2));
+
+  assert.equal(diagnostics.detected, true);
+  assert.doesNotMatch(diagnostics.render(), /초대|비밀/u);
 }
 
 function testSplitSecretScanner() {
