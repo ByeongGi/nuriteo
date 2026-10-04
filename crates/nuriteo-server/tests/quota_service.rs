@@ -45,7 +45,7 @@ async fn quota_service_is_scope_serialized_deduplicated_and_fail_closed() {
     assert_eq!(user_usage.reserved_bytes(), 0);
     assert_eq!(user_usage.available_bytes(), Some(900));
     let org_usage = service
-        .projection(scope(ORG_SCOPE), EffectiveQuota::Unlimited)
+        .projection(scope(ORG_SCOPE), EffectiveQuota::unlimited())
         .await
         .unwrap();
     assert_eq!(org_usage.used_bytes(), 100);
@@ -282,7 +282,7 @@ async fn verify_retry_conflict_and_terminal_release(pool: &DatabasePool, service
         .unwrap();
     assert_eq!(
         service
-            .projection(scope(USER_SCOPE), EffectiveQuota::Unlimited)
+            .projection(scope(USER_SCOPE), EffectiveQuota::unlimited())
             .await
             .unwrap()
             .reserved_bytes(),

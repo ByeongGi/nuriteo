@@ -10,25 +10,40 @@ use super::QuotaServiceError;
 
 pub const MAX_RESERVATION_BYTES: u64 = 2 * 1024 * 1024 * 1024;
 
+/// A validated effective Workspace quota.
+///
+/// The representation is private so callers cannot bypass [`Self::limited`].
+///
+/// ```compile_fail
+/// use nuriteo_server::quota::EffectiveQuota;
+/// let _ = EffectiveQuota(Some(0));
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum EffectiveQuota {
-    Unlimited,
-    Limited(u64),
-}
+pub struct EffectiveQuota(Option<u64>);
 
 impl EffectiveQuota {
+    #[must_use]
+    pub const fn unlimited() -> Self {
+        Self(None)
+    }
+
     pub fn limited(bytes: u64) -> Result<Self, QuotaServiceError> {
         if bytes == 0 || bytes > i64::MAX as u64 {
             return Err(QuotaServiceError::InvalidInput);
         }
-        Ok(Self::Limited(bytes))
+        Ok(Self(Some(bytes)))
     }
 
     #[must_use]
     pub const fn limit_bytes(self) -> Option<u64> {
-        match self {
-            Self::Unlimited => None,
-            Self::Limited(bytes) => Some(bytes),
+        self.0
+    }
+
+    pub(crate) fn validate(self) -> Result<Self, QuotaServiceError> {
+        match self.0 {
+            None => Ok(self),
+            Some(bytes) if bytes > 0 && bytes <= i64::MAX as u64 => Ok(self),
+            Some(_) => Err(QuotaServiceError::InvalidInput),
         }
     }
 }
@@ -93,6 +108,7 @@ impl ReservationRequest {
         if !(1..=MAX_RESERVATION_BYTES).contains(&self.requested_bytes) {
             return Err(QuotaServiceError::InvalidInput);
         }
+        self.effective_quota.validate()?;
         Ok(self)
     }
 }
@@ -113,6 +129,7 @@ impl QuotaProjection {
         reserved_bytes: u64,
         quota: EffectiveQuota,
     ) -> Result<Self, QuotaServiceError> {
+        quota.validate()?;
         let committed = used_bytes
             .checked_add(reserved_bytes)
             .ok_or(QuotaServiceError::ArithmeticOverflow)?;

@@ -10,10 +10,14 @@ use super::{
 
 #[test]
 fn effective_quota_is_explicit_and_validated() {
-    assert_eq!(EffectiveQuota::Unlimited.limit_bytes(), None);
+    assert_eq!(EffectiveQuota::unlimited().limit_bytes(), None);
     assert_eq!(EffectiveQuota::limited(1).unwrap().limit_bytes(), Some(1));
     assert_eq!(
         EffectiveQuota::limited(0),
+        Err(QuotaServiceError::InvalidInput)
+    );
+    assert_eq!(
+        EffectiveQuota::limited(u64::MAX),
         Err(QuotaServiceError::InvalidInput)
     );
 }
@@ -25,7 +29,7 @@ fn reservation_size_is_bounded() {
         project_id: ProjectId::new(),
         save_session_id: SaveSessionId::new(),
         requested_bytes,
-        effective_quota: EffectiveQuota::Unlimited,
+        effective_quota: EffectiveQuota::unlimited(),
     };
     assert_eq!(request(0).validate(), Err(QuotaServiceError::InvalidInput));
     assert!(request(2 * 1024 * 1024 * 1024).validate().is_ok());
@@ -42,7 +46,7 @@ fn accounting_overflow_fails_closed() {
             StorageScopeId::new(),
             u64::MAX,
             1,
-            EffectiveQuota::Unlimited,
+            EffectiveQuota::unlimited(),
         ),
         Err(QuotaServiceError::ArithmeticOverflow)
     );

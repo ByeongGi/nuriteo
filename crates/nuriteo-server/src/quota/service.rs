@@ -139,6 +139,7 @@ impl QuotaService {
         storage_scope_id: StorageScopeId,
         effective_quota: EffectiveQuota,
     ) -> Result<QuotaProjection, QuotaServiceError> {
+        let effective_quota = effective_quota.validate()?;
         let deadline = OperationDeadline::new(self.policy.operation_timeout);
         let mut connection = deadline
             .run(self.pool.acquire())
