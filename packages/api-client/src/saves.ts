@@ -1,4 +1,5 @@
 import { mutationOptions } from "./browser-mutation.ts";
+import { validateHeaderValue } from "./browser-mutation.ts";
 import type { BrowserMutationOptions } from "./browser-mutation.ts";
 import {
   type ApiEmptyResult,
@@ -45,6 +46,7 @@ const MAX_TRANSFER_BYTES = 2 * 1024 * 1024 * 1024;
 const MAX_UPLOAD_HEADERS = 16;
 const MAX_HEADER_BYTES = 8_192;
 const MAX_CAPABILITY_URL_BYTES = 16_384;
+const MAX_CAPABILITY_PATH_BYTES = 2_048;
 const MAX_PROBLEM_BYTES = 64 * 1024;
 const encoder = new TextEncoder();
 
@@ -56,12 +58,17 @@ export const DEFAULT_PROJECT_TRANSFER_TIMEOUT_MS = 120_000;
 export const MAX_PROJECT_TRANSFER_TIMEOUT_MS = 600_000;
 export const DEFAULT_PROJECT_CONTENT_MAX_BYTES = 300 * 1024 * 1024;
 
-const SAFE_UPLOAD_HEADERS = new Set([
+const BUNDLE_CONTENT_TYPE = "application/vnd.nuriteo.project-bundle";
+const DIRECT_UPLOAD_HEADERS = new Set([
   "content-length",
   "content-type",
   "host",
   "x-amz-checksum-sha256",
   "x-amz-sdk-checksum-algorithm"
+]);
+const RELAY_UPLOAD_HEADERS = new Set([
+  "content-type",
+  "x-nuriteo-content-sha256"
 ]);
 const BROWSER_MANAGED_UPLOAD_HEADERS = new Set(["content-length", "host"]);
 
@@ -97,13 +104,27 @@ export interface SaveUploadHeader {
   readonly value: string;
 }
 
-export interface SaveUploadCapability {
+export interface DirectSaveUploadCapability {
+  readonly transport: "direct";
   readonly method: "PUT";
   /** Ephemeral bearer URL. Never persist or include it in diagnostics. */
   readonly url: string;
   readonly headers: readonly SaveUploadHeader[];
   readonly expectedBytes: number;
 }
+
+export interface RelaySaveUploadCapability {
+  readonly transport: "relay";
+  readonly method: "PUT";
+  /** Canonical same-origin path. It never contains a storage credential. */
+  readonly path: `/${string}`;
+  readonly headers: readonly SaveUploadHeader[];
+  readonly expectedBytes: number;
+}
+
+export type SaveUploadCapability =
+  | DirectSaveUploadCapability
+  | RelaySaveUploadCapability;
 
 export interface SaveSession {
   readonly sessionId: string;
@@ -204,7 +225,30 @@ export interface TransferRequestOptions {
   readonly timeoutMs?: number;
 }
 
-export interface UploadSaveCapabilityOptions extends TransferRequestOptions {}
+export interface RelayUploadIdentity extends SaveSessionInput {
+  readonly csrfToken: string;
+  readonly uploadMode: SaveUploadMode;
+}
+
+export type UploadSaveCapabilityOptions<
+  Capability extends SaveUploadCapability = SaveUploadCapability
+> = [Capability] extends [DirectSaveUploadCapability]
+  ? TransferRequestOptions
+  : TransferRequestOptions & RelayUploadIdentity;
+
+export interface DirectSaveUploadResult {
+  readonly transport: "direct";
+  readonly receipt: SaveUploadReceipt;
+}
+
+export interface RelaySaveUploadResult {
+  readonly transport: "relay";
+}
+
+export type SaveUploadResult<Capability extends SaveUploadCapability = SaveUploadCapability> =
+  Capability extends DirectSaveUploadCapability
+    ? DirectSaveUploadResult
+    : RelaySaveUploadResult;
 
 export interface DownloadProjectContentOptions<Result> extends TransferRequestOptions {
   readonly baseUrl?: string;
@@ -261,7 +305,13 @@ export async function createSaveSession(
     })
   );
   if (response.status !== 200 && response.status !== 201) throw invalidResponse(response);
-  const data = parseSaveSession(response, physicalBytes, parts.length, bundleChecksum);
+  const data = parseSaveSession(
+    response,
+    context,
+    physicalBytes,
+    parts.length,
+    bundleChecksum
+  );
   if ((response.status === 200) !== data.idempotentRetry) throw invalidResponse(response);
   return {
     data,
@@ -288,10 +338,16 @@ export async function issueSaveParts(
       throw invalidResponse(response);
     }
     return Object.freeze(value.map((item, index) => {
-      const capability = parseUploadCapability(item);
       const part = parts[index];
+      if (part === undefined) throw invalidResponse(response);
+      const capability = parseUploadCapability(item, {
+        context,
+        sessionId: context.sessionId,
+        partNumber: part.partNumber,
+        uploadKind: "part"
+      });
       if (
-        part === undefined || capability.expectedBytes !== part.expectedBytes ||
+        capability.expectedBytes !== part.expectedBytes ||
         uploadCapabilityChecksum(capability) !== hexToBase64(part.sha256)
       ) {
         throw invalidResponse(response);
@@ -382,41 +438,49 @@ export async function getProjectContentDescriptor(
   return { ...result, etag };
 }
 
-export async function uploadSaveCapability(
-  capabilityInput: SaveUploadCapability,
+export async function uploadSaveCapability<Capability extends SaveUploadCapability>(
+  capabilityInput: Capability,
   partInput: SavePart,
   body: Blob,
-  options: UploadSaveCapabilityOptions = {}
-): Promise<SaveUploadReceipt> {
-  const capability = validateUploadCapabilityInput(capabilityInput);
+  ...optionInput: [Capability] extends [DirectSaveUploadCapability]
+    ? [options?: UploadSaveCapabilityOptions<Capability>]
+    : [options: UploadSaveCapabilityOptions<Capability>]
+): Promise<SaveUploadResult<Capability>> {
+  const options = (optionInput[0] ?? {}) as UploadSaveCapabilityOptions;
   const part = validateUploadPart(partInput);
+  const expectedRelay = readRelayUploadExpectation(capabilityInput, part, options);
+  const capability = validateUploadCapabilityInput(capabilityInput, expectedRelay);
   if (
     part.expectedBytes !== capability.expectedBytes ||
-    hexToBase64(part.sha256) !== capability.headers.find(
-      (header) => header.name === "x-amz-checksum-sha256"
-    )?.value
+    hexToBase64(part.sha256) !== uploadCapabilityChecksum(capability)
   ) {
-    throw new ApiConfigurationError("The upload part does not match the signed capability.");
+    throw new ApiConfigurationError("The upload part does not match the upload capability.");
   }
   if (!(body instanceof Blob) || body.size !== capability.expectedBytes) {
-    throw new ApiConfigurationError("The upload body does not match the signed capability.");
+    throw new ApiConfigurationError("The upload body does not match the upload capability.");
   }
   return withTransferDeadline("upload", options, async (signal, fetchImplementation) => {
     const headers = new Headers();
     for (const header of capability.headers) {
       if (!BROWSER_MANAGED_UPLOAD_HEADERS.has(header.name)) headers.set(header.name, header.value);
     }
+    if (capability.transport === "relay") {
+      headers.set("x-csrf-token", expectedRelay?.csrfToken ?? "");
+    }
     let response: Response;
     try {
-      response = await fetchImplementation(capability.url, {
-        method: "PUT",
-        body,
-        headers,
-        credentials: "omit",
-        redirect: "error",
-        referrerPolicy: "no-referrer",
-        signal
-      });
+      response = await fetchImplementation(
+        capability.transport === "direct" ? capability.url : capability.path,
+        {
+          method: "PUT",
+          body,
+          headers,
+          credentials: capability.transport === "direct" ? "omit" : "same-origin",
+          redirect: "error",
+          referrerPolicy: "no-referrer",
+          signal
+        }
+      );
     } catch {
       if (signal.aborted) throw transferAbortError("upload", signal);
       throw new ProjectTransferError("upload", "transport", { retryable: true });
@@ -425,28 +489,36 @@ export async function uploadSaveCapability(
       await cancelBody(response.body);
       throw transferAbortError("upload", signal);
     }
-    if (!response.ok) {
+    const expectedStatus = capability.transport === "direct" ? 200 : 204;
+    if (response.status !== expectedStatus) {
+      if (capability.transport === "relay" && !response.ok) {
+        throw await apiErrorFromRawResponse(response);
+      }
       await cancelBody(response.body);
-      throw new ProjectTransferError("upload", "rejected", {
+      throw new ProjectTransferError("upload", response.ok ? "invalid-response" : "rejected", {
         status: response.status,
         retryable: isRetryableStatus(response.status)
       });
     }
     await cancelBody(response.body);
+    if (capability.transport === "relay") {
+      return { transport: "relay" } as SaveUploadResult<Capability>;
+    }
     let etag: string;
     try {
       etag = validateReceiptEtag(response.headers.get("etag"));
     } catch {
       throw new ProjectTransferError("upload", "invalid-response");
     }
-    const expectedChecksum = capability.headers.find(
-      (header) => header.name === "x-amz-checksum-sha256"
-    )?.value;
+    const expectedChecksum = uploadCapabilityChecksum(capability);
     const returnedChecksum = response.headers.get("x-amz-checksum-sha256");
     if (returnedChecksum !== null && expectedChecksum !== returnedChecksum) {
       throw new ProjectTransferError("upload", "integrity");
     }
-    return { ...part, etag };
+    return {
+      transport: "direct",
+      receipt: { ...part, etag }
+    } as SaveUploadResult<Capability>;
   });
 }
 
@@ -701,6 +773,7 @@ function partRequest(part: SavePart): { partNumber: number; expectedBytes: numbe
 
 function parseSaveSession(
   response: ApiResponse<unknown>,
+  context: ReturnType<typeof saveContext>,
   physicalBytes: number,
   plannedParts: number,
   requestedChecksum: string
@@ -711,8 +784,16 @@ function parseSaveSession(
     ]);
     const uploadMode = readBoundedString(record, "uploadMode", 16);
     if (uploadMode !== "single" && uploadMode !== "multipart") throw new TypeError("invalid mode");
+    const sessionId = readUuidV7(record, "sessionId");
     const partCount = readPositiveInteger(record, "partCount", SAVE_MAX_PARTS);
-    const upload = record.upload === null ? null : parseUploadCapability(record.upload);
+    const upload = record.upload === null
+      ? null
+      : parseUploadCapability(record.upload, {
+        context,
+        sessionId,
+        partNumber: 1,
+        uploadKind: "single"
+      });
     if (
       (uploadMode === "single" && (
         partCount !== 1 || upload === null || upload.expectedBytes !== physicalBytes ||
@@ -723,7 +804,7 @@ function parseSaveSession(
       throw new TypeError("invalid upload contract");
     }
     return {
-      sessionId: readUuidV7(record, "sessionId"),
+      sessionId,
       uploadMode,
       expiresAt: readUtcTimestamp(record, "expiresAt"),
       partCount,
@@ -736,25 +817,107 @@ function parseSaveSession(
   }
 }
 
-function parseUploadCapability(value: unknown): SaveUploadCapability {
-  const record = readExactRecord(value, ["expectedBytes", "headers", "method", "url"]);
+interface UploadCapabilityExpectation {
+  readonly context: ReturnType<typeof saveContext>;
+  readonly sessionId: string;
+  readonly partNumber: number;
+  readonly uploadKind: "single" | "part";
+}
+
+interface RelayUploadExpectation extends UploadCapabilityExpectation {
+  readonly csrfToken: string;
+}
+
+function parseUploadCapability(
+  value: unknown,
+  expectation?: UploadCapabilityExpectation
+): SaveUploadCapability {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new TypeError("invalid upload capability");
+  }
+  const transport = (value as Record<string, unknown>).transport;
+  if (transport === "direct") return parseDirectUploadCapability(value);
+  if (transport === "relay") return parseRelayUploadCapability(value, expectation);
+  throw new TypeError("invalid upload transport");
+}
+
+function parseDirectUploadCapability(value: unknown): DirectSaveUploadCapability {
+  const record = readExactRecord(value, [
+    "expectedBytes", "headers", "method", "transport", "url"
+  ]);
+  if (readBoundedString(record, "transport", 16) !== "direct") {
+    throw new TypeError("invalid upload transport");
+  }
   if (readBoundedString(record, "method", 8) !== "PUT") throw new TypeError("invalid method");
   const expectedBytes = readNonNegativeInteger(record, "expectedBytes", MAX_TRANSFER_BYTES);
   if (expectedBytes === 0) throw new TypeError("empty upload");
   const url = readBoundedString(record, "url", MAX_CAPABILITY_URL_BYTES);
-  validateCapabilityUrl(url);
+  const parsedUrl = validateCapabilityUrl(url);
+  const headers = parseUploadHeaders(record, DIRECT_UPLOAD_HEADERS);
+  validateDirectUploadHeaders(headers, expectedBytes, parsedUrl);
+  return Object.freeze({
+    transport: "direct",
+    method: "PUT",
+    url,
+    headers,
+    expectedBytes
+  });
+}
+
+function parseRelayUploadCapability(
+  value: unknown,
+  expectation?: UploadCapabilityExpectation
+): RelaySaveUploadCapability {
+  const record = readExactRecord(value, [
+    "expectedBytes", "headers", "method", "path", "transport"
+  ]);
+  if (readBoundedString(record, "transport", 16) !== "relay") {
+    throw new TypeError("invalid upload transport");
+  }
+  if (readBoundedString(record, "method", 8) !== "PUT") throw new TypeError("invalid method");
+  const expectedBytes = readNonNegativeInteger(record, "expectedBytes", MAX_TRANSFER_BYTES);
+  if (expectedBytes === 0) throw new TypeError("empty upload");
+  const path = readBoundedString(record, "path", MAX_CAPABILITY_PATH_BYTES);
+  validateRelayPath(path, expectation);
+  const headers = parseUploadHeaders(record, RELAY_UPLOAD_HEADERS);
+  validateRelayUploadHeaders(headers);
+  return Object.freeze({
+    transport: "relay",
+    method: "PUT",
+    path: path as `/${string}`,
+    headers,
+    expectedBytes
+  });
+}
+
+function parseUploadHeaders(
+  record: Record<string, unknown>,
+  allowed: ReadonlySet<string>
+): readonly SaveUploadHeader[] {
   const headerInputs = readBoundedArray(record, "headers", MAX_UPLOAD_HEADERS);
   const names = new Set<string>();
   const headers = headerInputs.map((headerInput) => {
     const header = readExactRecord(headerInput, ["name", "value"]);
-    const name = readBoundedString(header, "name", 128).toLowerCase();
+    const inputName = readBoundedString(header, "name", 128);
+    const name = inputName.toLowerCase();
     const value = readBoundedString(header, "value", MAX_HEADER_BYTES);
-    if (!HEADER_NAME.test(name) || !SAFE_UPLOAD_HEADERS.has(name) || names.has(name)) {
+    if (
+      !HEADER_NAME.test(inputName) ||
+      !allowed.has(name) || names.has(name)
+    ) {
       throw new TypeError("invalid signed header");
     }
     names.add(name);
     return Object.freeze({ name, value });
   });
+  return Object.freeze(headers);
+}
+
+function validateDirectUploadHeaders(
+  headers: readonly SaveUploadHeader[],
+  expectedBytes: number,
+  url: URL
+): void {
   const declaredLength = headers.find((header) => header.name === "content-length")?.value;
   if (declaredLength !== undefined && declaredLength !== String(expectedBytes)) {
     throw new TypeError("invalid signed content length");
@@ -763,24 +926,141 @@ function parseUploadCapability(value: unknown): SaveUploadCapability {
   if (checksum === undefined || decodeBase64Checksum(checksum) === undefined) {
     throw new TypeError("missing checksum");
   }
-  return Object.freeze({ method: "PUT", url, headers: Object.freeze(headers), expectedBytes });
+  const contentType = headers.find((header) => header.name === "content-type")?.value;
+  if (contentType !== undefined && contentType !== BUNDLE_CONTENT_TYPE) {
+    throw new TypeError("invalid signed content type");
+  }
+  const algorithm = headers.find(
+    (header) => header.name === "x-amz-sdk-checksum-algorithm"
+  )?.value;
+  if (algorithm !== undefined && algorithm !== "SHA256") {
+    throw new TypeError("invalid checksum algorithm");
+  }
+  const host = headers.find((header) => header.name === "host")?.value;
+  if (host !== undefined && host !== url.host) throw new TypeError("invalid signed host");
 }
 
-function validateUploadCapabilityInput(value: unknown): SaveUploadCapability {
-  try {
-    return parseUploadCapability(value);
-  } catch {
-    throw new ApiConfigurationError("The signed upload capability is invalid.");
+function validateRelayUploadHeaders(headers: readonly SaveUploadHeader[]): void {
+  if (headers.length !== RELAY_UPLOAD_HEADERS.size) {
+    throw new TypeError("invalid relay headers");
+  }
+  const contentType = headers.find((header) => header.name === "content-type")?.value;
+  const checksum = headers.find(
+    (header) => header.name === "x-nuriteo-content-sha256"
+  )?.value;
+  if (
+    contentType !== BUNDLE_CONTENT_TYPE || checksum === undefined ||
+    decodeBase64Checksum(checksum) === undefined
+  ) {
+    throw new TypeError("invalid relay headers");
   }
 }
 
-function validateCapabilityUrl(value: string): void {
-  const url = new URL(value);
+function validateUploadCapabilityInput(
+  value: unknown,
+  expectation?: UploadCapabilityExpectation
+): SaveUploadCapability {
+  try {
+    return parseUploadCapability(value, expectation);
+  } catch {
+    throw new ApiConfigurationError("The upload capability is invalid.");
+  }
+}
+
+function validateCapabilityUrl(value: string): URL {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new TypeError("invalid capability URL");
+  }
   if (
     url.protocol !== "https:" || url.username !== "" || url.password !== "" ||
     url.hash !== ""
   ) {
     throw new TypeError("invalid capability URL");
+  }
+  return url;
+}
+
+function validateRelayPath(
+  value: string,
+  expectation?: UploadCapabilityExpectation
+): void {
+  if (
+    !value.startsWith("/api/v1/workspaces/") || value.startsWith("//") ||
+    value.includes("?") || value.includes("#") || value.includes("%")
+  ) {
+    throw new TypeError("invalid relay path");
+  }
+  if (expectation !== undefined && value !== relayUploadPath(expectation)) {
+    throw new TypeError("mismatched relay path");
+  }
+}
+
+function relayUploadPath(expectation: UploadCapabilityExpectation): string {
+  const base = `/api/v1${expectation.context.path}/save-sessions/${expectation.sessionId}/upload`;
+  return expectation.uploadKind === "single"
+    ? base
+    : `${base}/parts/${expectation.partNumber}`;
+}
+
+function readRelayUploadExpectation(
+  capability: unknown,
+  part: SavePart,
+  options: UploadSaveCapabilityOptions
+): RelayUploadExpectation | undefined {
+  validateTransferOptionKeys(capability, options);
+  const transport = typeof capability === "object" && capability !== null
+    ? (capability as Record<string, unknown>).transport
+    : undefined;
+  if (transport !== "relay") return undefined;
+  const relayOptions = options as TransferRequestOptions & Partial<RelayUploadIdentity>;
+  try {
+    validateHeaderValue(relayOptions.csrfToken as string, "CSRF credential");
+    if (relayOptions.uploadMode !== "single" && relayOptions.uploadMode !== "multipart") {
+      throw new TypeError("invalid upload mode");
+    }
+    const context = saveSessionContext({
+      owner: relayOptions.owner as ProjectOwner,
+      projectId: relayOptions.projectId as string,
+      sessionId: relayOptions.sessionId as string
+    });
+    if (relayOptions.uploadMode === "single" && part.partNumber !== 1) {
+      throw new TypeError("invalid single upload part");
+    }
+    return {
+      context,
+      sessionId: context.sessionId,
+      partNumber: part.partNumber,
+      uploadKind: relayOptions.uploadMode === "single" ? "single" : "part",
+      csrfToken: relayOptions.csrfToken as string
+    };
+  } catch {
+    throw new ApiConfigurationError("The relay upload identity is invalid.");
+  }
+}
+
+function validateTransferOptionKeys(
+  capability: unknown,
+  options: UploadSaveCapabilityOptions
+): void {
+  if (typeof options !== "object" || options === null || Array.isArray(options)) {
+    throw new ApiConfigurationError("The upload request options are invalid.");
+  }
+  const transport = typeof capability === "object" && capability !== null
+    ? (capability as Record<string, unknown>).transport
+    : undefined;
+  const allowed = new Set(
+    transport === "relay"
+      ? ["csrfToken", "fetch", "owner", "projectId", "sessionId", "signal", "timeoutMs", "uploadMode"]
+      : ["fetch", "signal", "timeoutMs"]
+  );
+  if (Object.keys(options).some((key) => !allowed.has(key))) {
+    throw new ApiConfigurationError("The upload request options are invalid.");
+  }
+  if (options.fetch !== undefined && typeof options.fetch !== "function") {
+    throw new ApiConfigurationError("The upload request transport is invalid.");
   }
 }
 
@@ -978,7 +1258,11 @@ async function withTransferDeadline<Result>(
 
 function uploadCapabilityChecksum(capability: SaveUploadCapability): string | undefined {
   return capability.headers.find(
-    (header) => header.name === "x-amz-checksum-sha256"
+    (header) => header.name === (
+      capability.transport === "direct"
+        ? "x-amz-checksum-sha256"
+        : "x-nuriteo-content-sha256"
+    )
   )?.value;
 }
 

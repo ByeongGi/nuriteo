@@ -2,6 +2,12 @@
 set -euo pipefail
 
 runtime="${CONTAINER_RUNTIME:-podman}"
+upload_transport="${NURITEO_CLIENT_TEST_SAVE_UPLOAD_TRANSPORT:-direct}"
+if [[ "$upload_transport" != "direct" && "$upload_transport" != "relay" ]]; then
+  printf '%s\n' 'NURITEO_CLIENT_TEST_SAVE_UPLOAD_TRANSPORT must be direct or relay' >&2
+  exit 2
+fi
+unset NURITEO_CLIENT_TEST_SAVE_UPLOAD_TRANSPORT
 postgres_image="docker.io/library/postgres@sha256:f3bd19c606e442c3d7bdfa8002e03fe260a1023351e0ea4598032022b68dd6e3"
 rustfs_image="docker.io/rustfs/rustfs@sha256:42edb61d588775f9431ff436216d14392d2234d4eb2ed68321569fbf7245b36b"
 postgres_container="nuriteo-client-005-postgres-${RANDOM}"
@@ -17,9 +23,16 @@ server_pid=""
 mkdir -p "$postgres_tls" "$rustfs_tls/certs"
 
 cleanup() {
+  status=$?
   if [[ -n "$server_pid" ]]; then
     kill -TERM "$server_pid" >/dev/null 2>&1 || true
     wait "$server_pid" >/dev/null 2>&1 || true
+  fi
+  if [[ "$status" -ne 0 && -s "$fixture_dir/server.stderr" ]]; then
+    tail -n 80 "$fixture_dir/server.stderr" >&2
+  fi
+  if [[ "$status" -ne 0 && -s "$fixture_dir/server.stdout" ]]; then
+    tail -n 80 "$fixture_dir/server.stdout" >&2
   fi
   "$runtime" rm --force "$postgres_container" >/dev/null 2>&1 || true
   "$runtime" rm --force "$rustfs_container" >/dev/null 2>&1 || true
@@ -55,6 +68,7 @@ openssl x509 -req -days 2 -in "$postgres_tls/server.csr" \
   --env POSTGRES_USER=nuriteo \
   --env POSTGRES_PASSWORD="$database_password" \
   "$postgres_image" >/dev/null
+bucket_ready=false
 for _ in $(seq 1 60); do
   if "$runtime" exec "$postgres_container" pg_isready -U nuriteo -d nuriteo >/dev/null 2>&1; then
     break
@@ -113,11 +127,24 @@ for _ in $(seq 1 60); do
 done
 curl --fail --silent --show-error --cacert "$rustfs_tls/ca.crt" \
   "https://127.0.0.1:${rustfs_port}/health" >/dev/null
-curl --fail --silent --show-error --request PUT \
-  --aws-sigv4 'aws:amz:us-east-1:s3' \
-  --user 'integration-access:integration-secret-0123456789' \
-  --cacert "$rustfs_tls/ca.crt" \
-  "https://127.0.0.1:${rustfs_port}/nuriteo-client-005" >/dev/null
+for _ in $(seq 1 60); do
+  if curl --fail --silent --request PUT \
+    --aws-sigv4 'aws:amz:us-east-1:s3' \
+    --user 'integration-access:integration-secret-0123456789' \
+    --cacert "$rustfs_tls/ca.crt" \
+    "https://127.0.0.1:${rustfs_port}/nuriteo-client-005" >/dev/null 2>&1; then
+    bucket_ready=true
+    break
+  fi
+  sleep 0.2
+done
+if [[ "$bucket_ready" != true ]]; then
+  curl --fail --silent --show-error --request PUT \
+    --aws-sigv4 'aws:amz:us-east-1:s3' \
+    --user 'integration-access:integration-secret-0123456789' \
+    --cacert "$rustfs_tls/ca.crt" \
+    "https://127.0.0.1:${rustfs_port}/nuriteo-client-005" >/dev/null
+fi
 
 export CARGO_TARGET_DIR="$target_dir"
 export NURITEO_EXTERNAL_URL="http://127.0.0.1:${core_port}"
@@ -140,10 +167,13 @@ export NURITEO_S3_SECRET_ACCESS_KEY_FILE="$fixture_dir/s3-secret-key"
 export NURITEO_S3_CA_FILE="$rustfs_tls/ca.crt"
 export NURITEO_SAVE_IDEMPOTENCY_SECRET_FILE="$fixture_dir/save-idempotency-secret"
 export NURITEO_SAVE_DEFAULT_QUOTA_BYTES=10737418240
+export NURITEO_SAVE_UPLOAD_TRANSPORT="$upload_transport"
 
 cargo build --quiet -p nuriteo-server --bin nuriteo-server
 server_binary="$target_dir/debug/nuriteo-server"
-"$server_binary" storage-configure-browser-upload-cors >/dev/null
+if [[ "$upload_transport" == "direct" ]]; then
+  "$server_binary" storage-configure-browser-upload-cors >/dev/null
+fi
 "$server_binary" migrate >/dev/null
 NURITEO_BOOTSTRAP_ADMIN_EMAIL=admin@example.test \
 NURITEO_BOOTSTRAP_ADMIN_NAME='Fixture Administrator' \
@@ -170,6 +200,7 @@ NURITEO_CLIENT_TEST_BASE_URL="http://127.0.0.1:${core_port}" \
 NURITEO_CLIENT_TEST_EMAIL=admin@example.test \
 NURITEO_CLIENT_TEST_PASSWORD_FILE="$fixture_dir/admin-password" \
 NURITEO_CLIENT_TEST_MEMBER_PASSWORD_FILE="$fixture_dir/member-password" \
+NURITEO_CLIENT_TEST_SAVE_UPLOAD_TRANSPORT="$upload_transport" \
 NURITEO_CLIENT_TEST_CONTAINER_RUNTIME="$runtime" \
 NURITEO_CLIENT_TEST_POSTGRES_CONTAINER="$postgres_container" \
 NODE_EXTRA_CA_CERTS="$rustfs_tls/ca.crt" \

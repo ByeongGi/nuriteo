@@ -186,6 +186,8 @@ export {
 export type {
   CompleteSaveSessionInput,
   CreateSaveSessionInput,
+  DirectSaveUploadCapability,
+  DirectSaveUploadResult,
   DownloadProjectContentOptions,
   IssueSavePartsInput,
   ProjectContentDescriptor,
@@ -194,6 +196,9 @@ export type {
   ProjectContentSink,
   ProjectTransferErrorKind,
   ProjectTransferPhase,
+  RelaySaveUploadCapability,
+  RelaySaveUploadResult,
+  RelayUploadIdentity,
   RecordSaveReceiptsInput,
   SaveCommit,
   SaveCommitResult,
@@ -207,6 +212,7 @@ export type {
   SaveUploadHeader,
   SaveUploadMode,
   SaveUploadReceipt,
+  SaveUploadResult,
   TransferRequestOptions,
   UploadSaveCapabilityOptions
 } from "./saves.ts";

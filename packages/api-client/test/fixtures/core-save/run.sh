@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-export CLIENT_LIVE_CONTRACT=packages/api-client/test/save-live-contract.ts
-exec packages/api-client/test/fixtures/core-organization/run.sh
+for upload_transport in direct relay; do
+  CLIENT_LIVE_CONTRACT=packages/api-client/test/save-live-contract.ts \
+  NURITEO_CLIENT_TEST_SAVE_UPLOAD_TRANSPORT="$upload_transport" \
+    packages/api-client/test/fixtures/core-organization/run.sh
+done

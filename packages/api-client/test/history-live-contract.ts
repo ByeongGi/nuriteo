@@ -267,9 +267,20 @@ async function saveBundle(
   }, { csrfToken: memberBrowser.csrfToken() });
   assert.ok(created.data.upload);
   const part: SavePart = { partNumber: 1, expectedBytes: bundle.bytes.byteLength, sha256 };
-  await uploadSaveCapability(created.data.upload, part, blobFrom(bundle.bytes), {
-    fetch: storageBrowserFetch(baseUrl)
-  });
+  if (created.data.upload.transport === "direct") {
+    await uploadSaveCapability(created.data.upload, part, blobFrom(bundle.bytes), {
+      fetch: storageBrowserFetch(baseUrl)
+    });
+  } else {
+    await uploadSaveCapability(created.data.upload, part, blobFrom(bundle.bytes), {
+      owner,
+      projectId,
+      sessionId: created.data.sessionId,
+      uploadMode: "single",
+      csrfToken: memberBrowser.csrfToken(),
+      fetch: memberBrowser.fetch
+    });
+  }
   const completed = await completeSaveSession(member, {
     owner,
     projectId,

@@ -18,9 +18,11 @@ import {
   uploadSaveCapability
 } from "../src/index.ts";
 import type {
+  DirectSaveUploadCapability,
   ProjectContentDescriptor,
   ProjectContentSink,
   ProjectOwner,
+  RelaySaveUploadCapability,
   SavePart,
   SaveUploadCapability
 } from "../src/index.ts";
@@ -39,6 +41,7 @@ const PROJECT_PATH = `/api/v1/workspaces/users/${USER_ID}/projects/${PROJECT_ID}
 await testSaveLifecycleWireContract();
 await testMultipartWireContract();
 await testUploadCapabilityBoundary();
+await testRelayUploadCapabilityBoundary();
 await testHardTransferDeadlines();
 await testBoundedVerifiedDownload();
 await testDownloadFailuresAndCoreErrors();
@@ -76,7 +79,9 @@ async function testSaveLifecycleWireContract(): Promise<void> {
   );
   assert.equal(created.status, 201);
   assert.equal(created.replayed, false);
-  assert.equal(created.data.upload?.url, "https://storage.example.test/bucket?signature=secret");
+  assert.equal(created.data.upload?.transport, "direct");
+  if (created.data.upload?.transport !== "direct") assert.fail("expected direct capability");
+  assert.equal(created.data.upload.url, "https://storage.example.test/bucket?signature=secret");
 
   const completed = await completeSaveSession(
     client,
@@ -216,7 +221,10 @@ async function testUploadCapabilityBoundary(): Promise<void> {
       });
     }
   });
-  assert.deepEqual(receipt, { ...part, etag: '"object-etag"' });
+  assert.deepEqual(receipt, {
+    transport: "direct",
+    receipt: { ...part, etag: '"object-etag"' }
+  });
   assert.equal(receivedInit?.credentials, "omit");
   assert.equal(receivedInit?.redirect, "error");
   assert.equal(receivedInit?.referrerPolicy, "no-referrer");
@@ -273,6 +281,163 @@ async function testUploadCapabilityBoundary(): Promise<void> {
       ApiConfigurationError
     );
   }
+}
+
+async function testRelayUploadCapabilityBoundary(): Promise<void> {
+  const body = new Blob(["bundle"], { type: "application/vnd.nuriteo.project-bundle" });
+  const part: SavePart = { partNumber: 1, expectedBytes: body.size, sha256: DIGEST_HEX };
+  const relay = relayCapability("single", part, DIGEST_BASE64);
+  const relayOptions = {
+    owner: OWNER,
+    projectId: PROJECT_ID,
+    sessionId: SESSION_ID,
+    uploadMode: "single" as const,
+    csrfToken: CSRF
+  };
+  let calls = 0;
+  let receivedInput: RequestInfo | URL | undefined;
+  let receivedInit: RequestInit | undefined;
+  const result = await uploadSaveCapability(relay, part, body, {
+    ...relayOptions,
+    fetch: async (input, init) => {
+      calls += 1;
+      receivedInput = input;
+      receivedInit = init;
+      return new Response(null, { status: 204 });
+    }
+  });
+  assert.deepEqual(result, { transport: "relay" });
+  assert.equal(calls, 1);
+  assert.equal(receivedInput, relay.path);
+  assert.equal(receivedInit?.body, body, "the relay client must not copy or buffer the body");
+  assert.equal(receivedInit?.credentials, "same-origin");
+  assert.equal(receivedInit?.redirect, "error");
+  assert.equal(receivedInit?.referrerPolicy, "no-referrer");
+  const headers = new Headers(receivedInit?.headers);
+  assert.equal(headers.get("content-type"), "application/vnd.nuriteo.project-bundle");
+  assert.equal(headers.get("x-nuriteo-content-sha256"), DIGEST_BASE64);
+  assert.equal(headers.get("x-csrf-token"), CSRF);
+  assert.equal(headers.get("content-length"), null, "the Browser owns Content-Length");
+  assert.equal(headers.get("x-amz-checksum-sha256"), null);
+
+  const relayClient = createApiClient({
+    fetch: async () => jsonResponse(saveSession("single", relay), 201)
+  });
+  const created = await createSaveSession(relayClient, {
+    owner: OWNER,
+    projectId: PROJECT_ID,
+    projectEtag: '"project-v1"',
+    idempotencyKey: "save-client-relay-identity-0001",
+    physicalBytes: body.size,
+    logicalBytes: body.size,
+    fileCount: 1,
+    sha256: DIGEST_HEX
+  }, { csrfToken: CSRF });
+  assert.equal(created.data.upload?.transport, "relay");
+  assert.equal(created.data.upload?.path, relay.path);
+
+  const multipartPart = { ...part, partNumber: 3 };
+  const multipartCapability = relayCapability("part", multipartPart, DIGEST_BASE64);
+  const issueClient = createApiClient({
+    fetch: async () => jsonResponse([multipartCapability])
+  });
+  const issued = await issueSaveParts(issueClient, {
+    owner: OWNER,
+    projectId: PROJECT_ID,
+    sessionId: SESSION_ID,
+    parts: [multipartPart]
+  }, { csrfToken: CSRF });
+  assert.equal(issued.data[0]?.transport, "relay");
+  assert.equal(issued.data[0]?.path, multipartCapability.path);
+  assert.deepEqual(issued.data[0]?.headers.map((header) => header.name), [
+    "content-type",
+    "x-nuriteo-content-sha256"
+  ]);
+
+  let failedFetches = 0;
+  const neverFetch = async () => {
+    failedFetches += 1;
+    return new Response(null, { status: 204 });
+  };
+  const malformedCapabilities: unknown[] = [
+    { ...relay, transport: "direct" },
+    { ...relay, url: "https://storage.example.test/object?signature=secret" },
+    { ...relay, method: "POST" },
+    { ...relay, path: `${relay.path}?mixed=true` },
+    { ...relay, path: relay.path.replace(PROJECT_ID, USER_ID) },
+    { ...relay, expectedBytes: body.size + 1 },
+    { ...relay, headers: [...relay.headers, { name: "x-amz-checksum-sha256", value: DIGEST_BASE64 }] },
+    { ...relay, headers: relay.headers.map((header) => (
+      header.name.toLowerCase() === "x-nuriteo-content-sha256"
+        ? { ...header, value: OTHER_DIGEST_BASE64 }
+        : header
+    )) },
+    { ...relay, extra: true }
+  ];
+  for (const malformed of malformedCapabilities) {
+    await assert.rejects(
+      uploadSaveCapability(
+        malformed as RelaySaveUploadCapability,
+        part,
+        body,
+        { ...relayOptions, fetch: neverFetch }
+      ),
+      ApiConfigurationError
+    );
+  }
+  await assert.rejects(
+    uploadSaveCapability(relay, part, body, {
+      ...relayOptions,
+      csrfToken: "bad\ncsrf",
+      fetch: neverFetch
+    }),
+    ApiConfigurationError
+  );
+  await assert.rejects(
+    uploadSaveCapability(relay, part, body, {
+      ...relayOptions,
+      sessionId: USER_ID,
+      fetch: neverFetch
+    }),
+    ApiConfigurationError
+  );
+  await assert.rejects(
+    uploadSaveCapability(capability(body.size, DIGEST_BASE64), part, body, {
+      csrfToken: CSRF,
+      fetch: neverFetch
+    } as never),
+    ApiConfigurationError
+  );
+  assert.equal(failedFetches, 0, "malformed or mixed transport data must fail before fetch");
+
+  let rejectedCalls = 0;
+  const rejected = await captureError(uploadSaveCapability(relay, part, body, {
+    ...relayOptions,
+    fetch: async () => {
+      rejectedCalls += 1;
+      return Response.json({
+        type: "/docs/problems/upload",
+        title: "Upload rejected",
+        status: 503,
+        detail: "The relay is unavailable.",
+        instance: relay.path,
+        code: "UPLOAD_UNAVAILABLE",
+        request_id: "request-relay-upload",
+        errors: []
+      }, { status: 503, headers: { "content-type": "application/problem+json" } });
+    }
+  }));
+  assert.ok(rejected instanceof ApiError);
+  assert.equal(rejected.status, 503);
+  assert.equal(rejectedCalls, 1, "a non-replayable upload must never retry automatically");
+  assert.doesNotMatch(String(rejected), /csrf|checksum|signature|secret/iu);
+
+  const malformedSuccess = await captureError(uploadSaveCapability(relay, part, body, {
+    ...relayOptions,
+    fetch: async () => new Response(null, { status: 200 })
+  }));
+  assert.ok(malformedSuccess instanceof ProjectTransferError);
+  assert.equal(malformedSuccess.kind, "invalid-response");
 }
 
 async function testHardTransferDeadlines(): Promise<void> {
@@ -559,8 +724,9 @@ function saveSession(
   };
 }
 
-function capability(expectedBytes: number, checksum: string): SaveUploadCapability {
+function capability(expectedBytes: number, checksum: string): DirectSaveUploadCapability {
   return {
+    transport: "direct",
     method: "PUT",
     url: "https://storage.example.test/bucket?signature=secret",
     headers: [
@@ -569,6 +735,24 @@ function capability(expectedBytes: number, checksum: string): SaveUploadCapabili
       { name: "x-amz-checksum-sha256", value: checksum }
     ],
     expectedBytes
+  };
+}
+
+function relayCapability(
+  kind: "single" | "part",
+  part: SavePart,
+  checksum: string
+): RelaySaveUploadCapability {
+  const base = `${PROJECT_PATH}/save-sessions/${SESSION_ID}/upload`;
+  return {
+    transport: "relay",
+    method: "PUT",
+    path: (kind === "single" ? base : `${base}/parts/${part.partNumber}`) as `/${string}`,
+    headers: [
+      { name: "Content-Type", value: "application/vnd.nuriteo.project-bundle" },
+      { name: "X-Nuriteo-Content-SHA256", value: checksum }
+    ],
+    expectedBytes: part.expectedBytes
   };
 }
 
