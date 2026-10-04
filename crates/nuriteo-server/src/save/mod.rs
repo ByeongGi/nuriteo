@@ -1,8 +1,13 @@
+mod cleanup;
 mod multipart_service;
 mod multipart_types;
 mod service;
 mod types;
 
+pub use cleanup::{
+    AbortSaveSession, AbortSaveSessionResult, CleanupError, CleanupService, CleanupWorker,
+    CleanupWorkerPolicy, ExpirySweepReport, WorkerShutdown,
+};
 pub use multipart_service::{
     MultipartService, MultipartServiceError, MultipartServicePolicy, MultipartStore,
 };

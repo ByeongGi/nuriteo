@@ -15,6 +15,7 @@ pub enum ObjectOperation {
     MultipartUpload,
     MultipartComplete,
     MultipartAbort,
+    MultipartReconcile,
     Readiness,
 }
 
@@ -28,6 +29,7 @@ pub enum ObjectStoreErrorKind {
     Throttled,
     Timeout,
     Unavailable,
+    ResponseUnknown,
     ResponseTooLarge,
     Unsupported,
     Integrity,
@@ -107,8 +109,11 @@ where
         SdkError::DispatchFailure(failure) if failure.is_timeout() => {
             ObjectStoreError::new(operation, ObjectStoreErrorKind::Timeout, true)
         }
-        SdkError::DispatchFailure(_) | SdkError::ResponseError(_) => {
+        SdkError::DispatchFailure(_) => {
             ObjectStoreError::new(operation, ObjectStoreErrorKind::Unavailable, true)
+        }
+        SdkError::ResponseError(_) => {
+            ObjectStoreError::new(operation, ObjectStoreErrorKind::ResponseUnknown, true)
         }
         SdkError::ConstructionFailure(_) => {
             ObjectStoreError::new(operation, ObjectStoreErrorKind::Internal, false)

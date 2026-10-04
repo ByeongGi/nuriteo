@@ -338,6 +338,51 @@ impl S3ObjectStore {
         }
     }
 
+    /// Reconciles create-response loss without guessing an upload identity.
+    /// Only incomplete uploads whose key exactly matches the server-owned key
+    /// are aborted. The page is deliberately bounded; observing more matches
+    /// fails closed so an operator can investigate instead of issuing an
+    /// unbounded destructive sweep.
+    pub(crate) async fn reconcile_multipart_for_exact_key(
+        &self,
+        key: &ObjectKey,
+    ) -> Result<(), ObjectStoreError> {
+        const MAX_MATCHES: i32 = 8;
+        let output = self
+            .client
+            .list_multipart_uploads()
+            .bucket(&self.bucket)
+            .prefix(key.expose())
+            .max_uploads(MAX_MATCHES + 1)
+            .send()
+            .await
+            .map_err(|error| classify_sdk_error(ObjectOperation::MultipartReconcile, &error))?;
+        let mut matching = output
+            .uploads()
+            .iter()
+            .filter(|upload| upload.key() == Some(key.expose()))
+            .map(|upload| upload.upload_id().map(str::to_owned))
+            .collect::<Option<Vec<_>>>()
+            .ok_or_else(|| internal(ObjectOperation::MultipartReconcile))?;
+        if matching.len() > usize::try_from(MAX_MATCHES).unwrap_or(usize::MAX)
+            || output.is_truncated().unwrap_or(false)
+        {
+            return Err(ObjectStoreError::new(
+                ObjectOperation::MultipartReconcile,
+                ObjectStoreErrorKind::Conflict,
+                false,
+            ));
+        }
+        for upload_id in matching.drain(..) {
+            self.abort_multipart(&MultipartUpload {
+                key: key.clone(),
+                upload_id,
+            })
+            .await?;
+        }
+        Ok(())
+    }
+
     pub async fn probe_capabilities(&self, prefix: &ProbePrefix) -> CapabilityReport {
         let checked_at_unix_seconds = SystemTime::now()
             .duration_since(UNIX_EPOCH)

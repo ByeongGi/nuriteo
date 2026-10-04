@@ -60,9 +60,9 @@ const fn readiness_error(kind: ObjectStoreErrorKind) -> StorageCheckError {
         ObjectStoreErrorKind::Authentication => StorageCheckError::Authentication,
         ObjectStoreErrorKind::Authorization => StorageCheckError::Authorization,
         ObjectStoreErrorKind::Timeout => StorageCheckError::Timeout,
-        ObjectStoreErrorKind::Unavailable | ObjectStoreErrorKind::Throttled => {
-            StorageCheckError::Unavailable
-        }
+        ObjectStoreErrorKind::Unavailable
+        | ObjectStoreErrorKind::ResponseUnknown
+        | ObjectStoreErrorKind::Throttled => StorageCheckError::Unavailable,
         ObjectStoreErrorKind::InvalidRequest
         | ObjectStoreErrorKind::Conflict
         | ObjectStoreErrorKind::ResponseTooLarge
