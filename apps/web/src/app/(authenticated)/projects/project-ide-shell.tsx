@@ -21,6 +21,7 @@ const EMPTY_RUNTIME_STATE: RuntimeViewState = {
   terminalProcessCount: 0
 };
 const MAX_TERMINAL_OUTPUT_CHARS = 64 * 1024;
+const MAX_TERMINAL_COMMAND_CHARS = 2_048;
 const RUNTIME_BOOT_TIMEOUT_MS = 10_000;
 const RUNTIME_RELAY_TIMEOUT_MS = 10_000;
 const RUNTIME_MEMORY_LIMIT_BYTES = 512 * 1024 * 1024;
@@ -128,6 +129,10 @@ export function ProjectIdeShell({ assetRevision, project, workspaceScope }: Prop
     const form = event.currentTarget;
     const command = String(new FormData(form).get("command") ?? "").trim();
     if (!command) return;
+    if (command.length > MAX_TERMINAL_COMMAND_CHARS) {
+      setError("The terminal command is too long.");
+      return;
+    }
     setError(undefined);
     appendTerminal(`$ ${command}\n`);
     try {
@@ -195,7 +200,7 @@ export function ProjectIdeShell({ assetRevision, project, workspaceScope }: Prop
             <section className="grid min-h-0 grid-rows-[auto_minmax(8rem,1fr)_auto] bg-background" aria-label="Terminal">
               <h4 className="m-0 border-b border-muted-border px-3 py-2 text-sm font-semibold">Terminal</h4>
               <pre className="m-0 overflow-auto whitespace-pre-wrap p-3 font-mono text-xs" aria-live="polite">{terminalOutput || "Run a bounded browser command."}</pre>
-              <form className="flex gap-2 border-t border-muted-border p-2" onSubmit={runCommand}><label className="sr-only" htmlFor={`terminal-command-${project.id}`}>Terminal command</label><input id={`terminal-command-${project.id}`} name="command" className="min-w-0 flex-1 rounded-md border border-border bg-surface px-3 font-mono text-sm" autoComplete="off" /><Button type="submit" size="sm">Run</Button></form>
+              <form className="flex gap-2 border-t border-muted-border p-2" onSubmit={runCommand}><label className="sr-only" htmlFor={`terminal-command-${project.id}`}>Terminal command</label><input id={`terminal-command-${project.id}`} name="command" className="min-w-0 flex-1 rounded-md border border-border bg-surface px-3 font-mono text-sm" autoComplete="off" maxLength={MAX_TERMINAL_COMMAND_CHARS} /><Button type="submit" size="sm">Run</Button></form>
             </section>
           </div>
         </div>

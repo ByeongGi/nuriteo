@@ -229,7 +229,8 @@ function testProjectSourceContracts() {
   assert.match(page, /key=\{`\$\{workspace\.storageScopeId\}:\$\{state\}:/u);
   assert.match(page, /error\.status !== 403 && error\.status !== 404/u);
   assert.match(dashboard, /<ProjectIdeShell/u);
-  assert.match(dashboard, /key=\{`\$\{workspace\.storageScopeId\}:\$\{project\.id\}`\}/u);
+  assert.match(dashboard, /key=\{`\$\{workspace\.storageScopeId\}:\$\{project\.id\}:\$\{project\.state\}`\}/u);
+  assert.match(ideShell, /maxLength=\{MAX_TERMINAL_COMMAND_CHARS\}/u);
   assert.match(ideShell, /aria-label="Project files"/u);
   assert.match(ideShell, /aria-label="Text editor"/u);
   assert.match(ideShell, /aria-label="Preview"/u);

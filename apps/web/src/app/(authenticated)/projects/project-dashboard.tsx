@@ -215,7 +215,7 @@ export function ProjectDashboard(props: Props) {
                 <form className="collaboration-form" onSubmit={rename} aria-busy={mutation.isPending}><label className="field-group">Project name<input name="name" defaultValue={project.name} required maxLength={200} disabled={mutation.isPending} /></label><Button type="submit" disabled={mutation.isPending}>Save name</Button></form>
                 <section className="project-actions"><h3>Lifecycle</h3><Button type="button" disabled={mutation.isPending} onClick={() => void changeLifecycle(project.state === "active" ? "archive" : "restore")}>{project.state === "active" ? "Archive" : "Restore"}</Button><p>Archive hides a Project from the active list. Delete is immediate and irreversible.</p><form onSubmit={remove}><label className="field-group">Type <strong>{project.name}</strong> to delete<input name="confirmName" required disabled={mutation.isPending} /></label><Button type="submit" variant="danger" disabled={mutation.isPending}>Delete Project</Button></form></section>
                 <ProjectIdeShell
-                  key={`${workspace.storageScopeId}:${project.id}`}
+                  key={`${workspace.storageScopeId}:${project.id}:${project.state}`}
                   {...(props.runtimeAssetRevision === undefined ? {} : { assetRevision: props.runtimeAssetRevision })}
                   project={project}
                   workspaceScope={workspace.storageScopeId}
