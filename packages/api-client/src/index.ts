@@ -142,6 +142,29 @@ export type {
   VersionedProjectInput
 } from "./projects.ts";
 export {
+  createProjectVersion,
+  listProjectVersions,
+  listRecoveryCheckpoints,
+  reconcileProjectHistory,
+  restoreProjectHistory
+} from "./history.ts";
+export type {
+  CreateProjectVersionInput,
+  HistoricalReferenceKind,
+  ListProjectVersionsInput,
+  ProjectHistoryInput,
+  ProjectHistoryPromotion,
+  ProjectHistoryPromotionResult,
+  ProjectVersion,
+  ProjectVersionCollection,
+  ProjectVersionCreate,
+  ProjectVersionCreateResult,
+  ReconcileProjectHistoryInput,
+  RecoveryCheckpoint,
+  RecoveryCheckpointCollection,
+  RestoreProjectHistoryInput
+} from "./history.ts";
+export {
   DEFAULT_PROJECT_CONTENT_MAX_BYTES,
   DEFAULT_PROJECT_TRANSFER_TIMEOUT_MS,
   MAX_PROJECT_TRANSFER_TIMEOUT_MS,

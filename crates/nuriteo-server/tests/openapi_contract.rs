@@ -246,6 +246,14 @@ fn explicit_project_versions_expose_bounded_immutable_contract() {
         operation["get"]["responses"]["200"]["content"]["application/json"]["schema"]["$ref"],
         "#/components/schemas/ProjectVersionListView"
     );
+    let page_size = operation["get"]["parameters"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|parameter| parameter["name"] == "pageSize")
+        .expect("Version pageSize query parameter must be declared");
+    assert_eq!(page_size["schema"]["minimum"], 1);
+    assert_eq!(page_size["schema"]["maximum"], 100);
     let post_headers = operation["post"]["parameters"]
         .as_array()
         .unwrap()
