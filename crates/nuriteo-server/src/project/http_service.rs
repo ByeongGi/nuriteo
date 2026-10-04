@@ -25,9 +25,11 @@ use crate::project::ProjectAccessError;
 use crate::project::{EffectiveProjectRole, ProjectAccessRepository};
 use crate::save::{
     ContentDescriptor, ContentDownload, ContentError, ContentService, ContentServicePolicy,
-    CreateProjectVersion, ExplicitProjectVersion, ProjectVersionError, ProjectVersionName,
-    ProjectVersionPageKey, ProjectVersionPageLimit, ProjectVersionService,
-    ProjectVersionServicePolicy,
+    CreateProjectVersion, ExplicitProjectVersion, HistoricalPromotionOutcome,
+    HistoricalReferenceKind, ProjectHistoryError, ProjectHistoryService,
+    ProjectHistoryServicePolicy, ProjectVersionError, ProjectVersionName, ProjectVersionPageKey,
+    ProjectVersionPageLimit, ProjectVersionService, ProjectVersionServicePolicy,
+    PromoteHistoricalReference, RecoveryCheckpoint,
 };
 
 use super::{
@@ -116,6 +118,7 @@ struct Runtime {
     cursor: CursorSigner,
     content: Option<ContentService>,
     versions: ProjectVersionService,
+    history: ProjectHistoryService,
 }
 
 impl fmt::Debug for ProjectHttpService {
@@ -160,6 +163,11 @@ impl ProjectHttpService {
                 versions: ProjectVersionService::new(
                     pool.clone(),
                     ProjectVersionServicePolicy::new(policy.operation_timeout)
+                        .map_err(|_| ProjectHttpError::InvalidInput)?,
+                ),
+                history: ProjectHistoryService::new(
+                    pool,
+                    ProjectHistoryServicePolicy::new(policy.operation_timeout)
                         .map_err(|_| ProjectHttpError::InvalidInput)?,
                 ),
             })),
@@ -309,6 +317,75 @@ impl ProjectHttpService {
                 .collect(),
             next_cursor,
         })
+    }
+
+    pub(crate) async fn list_recovery_checkpoints(
+        &self,
+        request: BrowserRequestHeaders<'_>,
+        owner: ProjectOwner,
+        project_id: ProjectId,
+    ) -> Result<RecoveryCheckpointListView, ProjectHttpError> {
+        let runtime = self.runtime()?;
+        let identity = runtime.authenticate(request).await?;
+        let items = runtime
+            .history
+            .list_recovery_checkpoints(identity.user_id, owner, project_id)
+            .await
+            .map_err(map_history_error)?;
+        Ok(RecoveryCheckpointListView {
+            items: items.iter().map(RecoveryCheckpointView::from).collect(),
+        })
+    }
+
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "HTTP history mutation keeps preconditions explicit"
+    )]
+    pub(crate) async fn promote_history(
+        &self,
+        request: BrowserRequestHeaders<'_>,
+        owner: ProjectOwner,
+        project_id: ProjectId,
+        expected_project_version: ProjectVersion,
+        reference_kind: HistoricalReferenceKind,
+        reference_id: uuid::Uuid,
+        idempotency_key: crate::save::IdempotencyKey,
+        correlation_id: &str,
+    ) -> Result<HistoricalPromotionView, ProjectHttpError> {
+        let runtime = self.runtime()?;
+        let identity = runtime.authenticate(request).await?;
+        runtime
+            .history
+            .promote(PromoteHistoricalReference {
+                owner,
+                project_id,
+                actor_user_id: identity.user_id,
+                expected_project_version,
+                reference_kind,
+                reference_id,
+                idempotency_key,
+                audit: identity.audit(correlation_id),
+            })
+            .await
+            .map(HistoricalPromotionView::from)
+            .map_err(map_history_error)
+    }
+
+    pub(crate) async fn reconcile_history(
+        &self,
+        request: BrowserRequestHeaders<'_>,
+        owner: ProjectOwner,
+        project_id: ProjectId,
+        idempotency_key: &crate::save::IdempotencyKey,
+    ) -> Result<HistoricalPromotionView, ProjectHttpError> {
+        let runtime = self.runtime()?;
+        let identity = runtime.authenticate(request).await?;
+        runtime
+            .history
+            .reconcile(identity.user_id, owner, project_id, idempotency_key)
+            .await
+            .map(HistoricalPromotionView::from)
+            .map_err(map_history_error)
     }
 
     pub(crate) async fn download_content(
@@ -850,6 +927,72 @@ pub(crate) struct ProjectVersionListView {
     pub(crate) next_cursor: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct RecoveryCheckpointView {
+    id: String,
+    project_id: String,
+    bundle_id: String,
+    position: u8,
+    created_by_user_id: String,
+    created_at: String,
+    sha256: String,
+    physical_bytes: u64,
+    logical_bytes: u64,
+    file_count: u32,
+    format: String,
+}
+
+impl From<&RecoveryCheckpoint> for RecoveryCheckpointView {
+    fn from(checkpoint: &RecoveryCheckpoint) -> Self {
+        Self {
+            id: checkpoint.id().to_string(),
+            project_id: checkpoint.project_id().to_string(),
+            bundle_id: checkpoint.bundle_id().to_string(),
+            position: checkpoint.position(),
+            created_by_user_id: checkpoint.actor_user_id().to_string(),
+            created_at: checkpoint.created_at().to_string(),
+            sha256: hex_lower(checkpoint.sha256()),
+            physical_bytes: checkpoint.physical_bytes(),
+            logical_bytes: checkpoint.logical_bytes(),
+            file_count: checkpoint.file_count(),
+            format: checkpoint.format().to_owned(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct RecoveryCheckpointListView {
+    pub(crate) items: Vec<RecoveryCheckpointView>,
+}
+
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct HistoricalPromotionView {
+    operation_id: String,
+    reference_kind: String,
+    reference_id: String,
+    bundle_id: String,
+    pub(crate) project_version: i64,
+    changed: bool,
+    idempotent_retry: bool,
+}
+
+impl From<HistoricalPromotionOutcome> for HistoricalPromotionView {
+    fn from(outcome: HistoricalPromotionOutcome) -> Self {
+        Self {
+            operation_id: outcome.operation_id().to_string(),
+            reference_kind: outcome.reference_kind().as_str().to_owned(),
+            reference_id: outcome.reference_id().to_string(),
+            bundle_id: outcome.bundle_id().to_string(),
+            project_version: outcome.project_version().get(),
+            changed: outcome.changed(),
+            idempotent_retry: outcome.is_idempotent_retry(),
+        }
+    }
+}
+
 #[derive(Clone)]
 struct CursorSigner {
     key: [u8; CURSOR_KEY_BYTES],
@@ -1204,6 +1347,23 @@ fn map_version_error(error: ProjectVersionError) -> ProjectHttpError {
         ProjectVersionError::DatabaseUnavailable => ProjectHttpError::Unavailable,
         ProjectVersionError::CommitOutcomeUnknown => ProjectHttpError::CommitOutcomeUnknown,
         ProjectVersionError::InvariantViolation => ProjectHttpError::Internal,
+    }
+}
+
+fn map_history_error(error: ProjectHistoryError) -> ProjectHttpError {
+    match error {
+        ProjectHistoryError::InvalidInput => ProjectHttpError::InvalidInput,
+        ProjectHistoryError::NotFound => ProjectHttpError::NotFound,
+        ProjectHistoryError::Forbidden => ProjectHttpError::Forbidden,
+        ProjectHistoryError::ProjectUnavailable | ProjectHistoryError::IdempotencyConflict => {
+            ProjectHttpError::Conflict
+        }
+        ProjectHistoryError::StaleProjectVersion => ProjectHttpError::PreconditionFailed,
+        ProjectHistoryError::OperationTimeout => ProjectHttpError::OperationTimeout,
+        ProjectHistoryError::DatabaseUnavailable => ProjectHttpError::Unavailable,
+        ProjectHistoryError::AuditUnavailable => ProjectHttpError::AuditUnavailable,
+        ProjectHistoryError::CommitOutcomeUnknown => ProjectHttpError::CommitOutcomeUnknown,
+        ProjectHistoryError::InvariantViolation => ProjectHttpError::Internal,
     }
 }
 

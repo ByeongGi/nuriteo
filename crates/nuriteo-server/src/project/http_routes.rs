@@ -14,12 +14,15 @@ use utoipa_axum::{router::OpenApiRouter, routes};
 use crate::http::{FieldViolation, HttpError, RequestId};
 use crate::identity::{BrowserMethod, BrowserRequestHeaders, UserId};
 use crate::organization::OrganizationId;
-use crate::save::{ContentDescriptor, IdempotencyKey, ProjectVersionName, ProjectVersionPageLimit};
+use crate::save::{
+    ContentDescriptor, HistoricalReferenceKind, IdempotencyKey, ProjectVersionName,
+    ProjectVersionPageLimit,
+};
 
 use super::http_service::{
-    ProjectHttpError, ProjectHttpService, ProjectListView, ProjectRoleListView,
-    ProjectRoleMutationView, ProjectVersionCreateView, ProjectVersionListView, ProjectView,
-    RoleOperation,
+    HistoricalPromotionView, ProjectHttpError, ProjectHttpService, ProjectListView,
+    ProjectRoleListView, ProjectRoleMutationView, ProjectVersionCreateView, ProjectVersionListView,
+    ProjectView, RecoveryCheckpointListView, RoleOperation,
 };
 use super::{
     ProjectId, ProjectName, ProjectOwner, ProjectPageLimit, ProjectRole, ProjectRolePageLimit,
@@ -37,6 +40,10 @@ const CONTENT: &str = "/api/v1/workspaces/{owner_type}/{owner_id}/projects/{proj
 const CONTENT_DOWNLOAD: &str =
     "/api/v1/workspaces/{owner_type}/{owner_id}/projects/{project_id}/content/{bundle_id}";
 const VERSIONS: &str = "/api/v1/workspaces/{owner_type}/{owner_id}/projects/{project_id}/versions";
+const RECOVERY_CHECKPOINTS: &str =
+    "/api/v1/workspaces/{owner_type}/{owner_id}/projects/{project_id}/recovery-checkpoints";
+const HISTORY_RESTORE: &str =
+    "/api/v1/workspaces/{owner_type}/{owner_id}/projects/{project_id}/history/restore";
 const MAX_BODY: usize = 4096;
 const MAX_QUERY: usize = 4096;
 const ORIGIN: HeaderName = HeaderName::from_static("origin");
@@ -56,6 +63,8 @@ pub(crate) fn openapi_router(
         .routes(routes!(get_content_descriptor))
         .routes(routes!(download_content))
         .routes(routes!(create_version, list_versions))
+        .routes(routes!(list_recovery_checkpoints))
+        .routes(routes!(promote_history, reconcile_history))
 }
 
 #[derive(Deserialize, ToSchema)]
@@ -152,6 +161,131 @@ async fn list_versions(
     response
         .headers_mut()
         .insert(CACHE_CONTROL, HeaderValue::from_static("private, no-store"));
+    Ok(response)
+}
+
+#[derive(Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct PromoteHistoryRequest {
+    reference_kind: String,
+    reference_id: String,
+}
+
+#[utoipa::path(get, path = RECOVERY_CHECKPOINTS, tag = "project-history",
+    security(("projectSessionCookie" = [])),
+    params(("owner_type" = String, Path), ("owner_id" = String, Path), ("project_id" = String, Path)),
+    responses((status = 200, body = RecoveryCheckpointListView, headers(("Cache-Control" = String))),
+      (status = 401, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+      (status = 404, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+      (status = 409, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+      (status = 503, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+      (status = 504, body = crate::openapi::ProblemDetails, content_type = "application/problem+json")))]
+async fn list_recovery_checkpoints(
+    State(service): State<ProjectHttpService>,
+    Extension(request_id): Extension<RequestId>,
+    Path((owner_type, owner_id, project_id)): Path<(String, String, String)>,
+    request: Request,
+) -> Result<Response, HttpError> {
+    let browser = BrowserHeaders::read(request.headers(), &request_id, RECOVERY_CHECKPOINTS)?;
+    let view = service
+        .list_recovery_checkpoints(
+            browser.request(BrowserMethod::Get),
+            parse_owner(&owner_type, &owner_id, &request_id, RECOVERY_CHECKPOINTS)?,
+            parse_project_id(&project_id, &request_id, RECOVERY_CHECKPOINTS)?,
+        )
+        .await
+        .map_err(|error| map_error(error, request_id, RECOVERY_CHECKPOINTS))?;
+    Ok(private_no_store(Json(view).into_response()))
+}
+
+#[utoipa::path(post, path = HISTORY_RESTORE, tag = "project-history",
+    security(("projectSessionCookie" = [])),
+    params(("owner_type" = String, Path), ("owner_id" = String, Path), ("project_id" = String, Path),
+      ("If-Match" = String, Header), ("Idempotency-Key" = String, Header),
+      ("Origin" = String, Header), ("X-CSRF-Token" = String, Header)),
+    request_body(content = PromoteHistoryRequest, content_type = "application/json"),
+    responses((status = 200, body = HistoricalPromotionView, headers(("ETag" = String), ("Cache-Control" = String))),
+      (status = 401, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+      (status = 403, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+      (status = 404, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+      (status = 409, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+      (status = 412, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+      (status = 413, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+      (status = 415, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+      (status = 422, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+      (status = 428, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+      (status = 503, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+      (status = 504, body = crate::openapi::ProblemDetails, content_type = "application/problem+json")))]
+async fn promote_history(
+    State(service): State<ProjectHttpService>,
+    Extension(request_id): Extension<RequestId>,
+    Path((owner_type, owner_id, project_id)): Path<(String, String, String)>,
+    request: Request,
+) -> Result<Response, HttpError> {
+    let (parts, body) = request.into_parts();
+    let browser = BrowserHeaders::read(&parts.headers, &request_id, HISTORY_RESTORE)?;
+    let expected = parse_if_match(&parts.headers, &request_id, HISTORY_RESTORE)?;
+    let key = parse_idempotency_key(&parts.headers, &request_id, HISTORY_RESTORE)?;
+    let input: PromoteHistoryRequest =
+        json_body(&parts.headers, body, &request_id, HISTORY_RESTORE).await?;
+    let reference_kind = input
+        .reference_kind
+        .parse::<HistoricalReferenceKind>()
+        .map_err(|_| validation(&request_id, HISTORY_RESTORE, "referenceKind"))?;
+    let reference_id = uuid::Uuid::parse_str(&input.reference_id)
+        .map_err(|_| validation(&request_id, HISTORY_RESTORE, "referenceId"))?;
+    let view = service
+        .promote_history(
+            browser.request(BrowserMethod::Post),
+            parse_owner(&owner_type, &owner_id, &request_id, HISTORY_RESTORE)?,
+            parse_project_id(&project_id, &request_id, HISTORY_RESTORE)?,
+            expected,
+            reference_kind,
+            reference_id,
+            key,
+            request_id.as_str(),
+        )
+        .await
+        .map_err(|error| map_error(error, request_id.clone(), HISTORY_RESTORE))?;
+    let etag = HeaderValue::from_str(&format!("\"project-v{}\"", view.project_version))
+        .map_err(|_| HttpError::internal(request_id, HISTORY_RESTORE))?;
+    let mut response = private_no_store(Json(view).into_response());
+    response.headers_mut().insert(ETAG, etag);
+    Ok(response)
+}
+
+#[utoipa::path(get, path = HISTORY_RESTORE, tag = "project-history",
+    security(("projectSessionCookie" = [])),
+    params(("owner_type" = String, Path), ("owner_id" = String, Path), ("project_id" = String, Path),
+      ("Idempotency-Key" = String, Header)),
+    responses((status = 200, body = HistoricalPromotionView, headers(("ETag" = String), ("Cache-Control" = String))),
+      (status = 401, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+      (status = 404, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+      (status = 409, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+      (status = 422, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+      (status = 503, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+      (status = 504, body = crate::openapi::ProblemDetails, content_type = "application/problem+json")))]
+async fn reconcile_history(
+    State(service): State<ProjectHttpService>,
+    Extension(request_id): Extension<RequestId>,
+    Path((owner_type, owner_id, project_id)): Path<(String, String, String)>,
+    request: Request,
+) -> Result<Response, HttpError> {
+    let browser = BrowserHeaders::read(request.headers(), &request_id, HISTORY_RESTORE)?;
+    let key = parse_idempotency_key(request.headers(), &request_id, HISTORY_RESTORE)?;
+    let view = service
+        .reconcile_history(
+            browser.request(BrowserMethod::Get),
+            parse_owner(&owner_type, &owner_id, &request_id, HISTORY_RESTORE)?,
+            parse_project_id(&project_id, &request_id, HISTORY_RESTORE)?,
+            &key,
+        )
+        .await
+        .map_err(|error| map_error(error, request_id.clone(), HISTORY_RESTORE))?;
+    let etag = HeaderValue::from_str(&format!("\"project-v{}\"", view.project_version))
+        .map_err(|_| HttpError::internal(request_id, HISTORY_RESTORE))?;
+    let mut response = private_no_store(Json(view).into_response());
+    response.headers_mut().insert(ETAG, etag);
     Ok(response)
 }
 
@@ -1053,6 +1187,13 @@ fn project_response(
         );
     }
     Ok(response)
+}
+
+fn private_no_store(mut response: Response) -> Response {
+    response
+        .headers_mut()
+        .insert(CACHE_CONTROL, HeaderValue::from_static("private, no-store"));
+    response
 }
 fn role_response(
     status: StatusCode,

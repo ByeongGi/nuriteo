@@ -16,6 +16,7 @@ use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use bytes::Bytes;
 use nuriteo_server::app::{build_router_with_project_service, build_router_with_save_service};
+use nuriteo_server::audit::AuditEventId;
 use nuriteo_server::auth::{AuthPolicy, AuthService};
 use nuriteo_server::config::{Environment, SystemFileReader};
 use nuriteo_server::database::{
@@ -32,19 +33,21 @@ use nuriteo_server::object_storage::{
 };
 use nuriteo_server::organization::{OrganizationHttpService, OrganizationId};
 use nuriteo_server::project::{
-    ProjectHttpPolicy, ProjectHttpService, ProjectId, ProjectOwner, ProjectVersion,
+    ProjectAuditContext, ProjectHttpPolicy, ProjectHttpService, ProjectId, ProjectOwner,
+    ProjectVersion,
 };
 use nuriteo_server::quota::EffectiveQuota;
 use nuriteo_server::save::{
     CleanupWorkerPolicy, CreateMultipartSession, CreateProjectVersion, CreateSinglePutSession,
-    IdempotencyKey, IdempotencySecret, MultipartPartPlan, MultipartPartReceipt, MultipartService,
-    MultipartServiceError, MultipartServicePolicy, MultipartSessionContext, MultipartStore,
-    ProjectVersionError, ProjectVersionName, ProjectVersionPageLimit, ProjectVersionService,
-    ProjectVersionServicePolicy, PutPresigner, SaveHttpError, SaveHttpPolicy, SaveHttpService,
-    SinglePutService, SinglePutServiceError, SinglePutServicePolicy, StagingVerifier,
-    StagingVerifierPolicy, VerificationError, VerifiedStagingBundle, VerifyStagingBundle,
-    WorkingHeadCommitError, WorkingHeadCommitPolicy, WorkingHeadCommitReconciliation,
-    WorkingHeadCommitService,
+    HistoricalReferenceKind, IdempotencyKey, IdempotencySecret, MultipartPartPlan,
+    MultipartPartReceipt, MultipartService, MultipartServiceError, MultipartServicePolicy,
+    MultipartSessionContext, MultipartStore, ProjectHistoryError, ProjectHistoryService,
+    ProjectHistoryServicePolicy, ProjectVersionError, ProjectVersionName, ProjectVersionPageLimit,
+    ProjectVersionService, ProjectVersionServicePolicy, PromoteHistoricalReference, PutPresigner,
+    SaveHttpError, SaveHttpPolicy, SaveHttpService, SinglePutService, SinglePutServiceError,
+    SinglePutServicePolicy, StagingVerifier, StagingVerifierPolicy, VerificationError,
+    VerifiedStagingBundle, VerifyStagingBundle, WorkingHeadCommitError, WorkingHeadCommitPolicy,
+    WorkingHeadCommitReconciliation, WorkingHeadCommitService,
 };
 use nuriteo_server::setup::SetupStatusService;
 use nuriteo_server::workspace::StorageScopeId;
@@ -1631,6 +1634,471 @@ async fn explicit_project_versions_are_immutable_authorized_and_gc_safe() {
         versions.create(archived_create).await.unwrap_err(),
         ProjectVersionError::ProjectUnavailable
     );
+}
+
+#[tokio::test]
+#[ignore = "requires tests/fixtures/project-history/run.sh"]
+async fn project_history_promotes_atomically_and_replays_durable_outcomes() {
+    let pool = fixture_pool().await;
+    reset_and_seed(&pool).await;
+    let endpoint = env::var(S3_ENDPOINT_ENV).unwrap();
+    let ca_file = env::var(S3_CA_ENV).unwrap();
+    create_bucket(&endpoint, &ca_file).await;
+    let config = ObjectStorageConfig::load(
+        &FixtureEnvironment {
+            endpoint,
+            ca_file: ca_file.clone(),
+        },
+        &SystemFileReader,
+    )
+    .unwrap();
+    let store = S3ObjectStore::new(&config, OperationLimits::default())
+        .await
+        .unwrap();
+    let creator = SinglePutService::new(
+        pool.clone(),
+        store.clone(),
+        SinglePutServicePolicy::new(Duration::from_secs(5), 5).unwrap(),
+        IdempotencySecret::new([0x69; 32]).unwrap(),
+    )
+    .unwrap();
+    let verifier = StagingVerifier::new(
+        pool.clone(),
+        store.clone(),
+        StagingVerifierPolicy::new(Duration::from_secs(5)).unwrap(),
+    );
+    let committer = WorkingHeadCommitService::new(
+        pool.clone(),
+        store,
+        WorkingHeadCommitPolicy::new(Duration::from_secs(5)).unwrap(),
+    );
+    let history = ProjectHistoryService::new(
+        pool.clone(),
+        ProjectHistoryServicePolicy::new(Duration::from_secs(5)).unwrap(),
+    );
+    let versions = ProjectVersionService::new(
+        pool.clone(),
+        ProjectVersionServicePolicy::new(Duration::from_secs(5)).unwrap(),
+    );
+    let http = fixture_http_client(&ca_file);
+    let actor = UserId::from_str(USER).unwrap();
+    let project_id = ProjectId::from_str(PROJECT_A).unwrap();
+    let owner = ProjectOwner::User(actor);
+
+    let mut heads = Vec::new();
+    let mut first_version_id = None;
+    for index in 1_i64..=4 {
+        let capability = prepare_verified_head(
+            &creator,
+            &verifier,
+            &http,
+            ProjectVersion::new(index).unwrap(),
+            &format!("history-head-{index:04}"),
+            &format!("history-{index}.txt"),
+            format!("history {index}\n").as_bytes(),
+        )
+        .await;
+        let head = committer.commit(&capability).await.unwrap();
+        heads.push(head.bundle_id());
+        if index == 1 {
+            first_version_id = Some(
+                versions
+                    .create(CreateProjectVersion {
+                        owner,
+                        project_id,
+                        actor_user_id: actor,
+                        expected_project_version: ProjectVersion::new(2).unwrap(),
+                        name: ProjectVersionName::new("History anchor".to_owned()).unwrap(),
+                        idempotency_key: IdempotencyKey::new(
+                            "history-anchor-version-0001".to_owned(),
+                        )
+                        .unwrap(),
+                    })
+                    .await
+                    .unwrap()
+                    .version()
+                    .id()
+                    .to_string()
+                    .parse()
+                    .unwrap(),
+            );
+        }
+    }
+    let recoveries = history
+        .list_recovery_checkpoints(actor, owner, project_id)
+        .await
+        .unwrap();
+    assert_eq!(recoveries.len(), 3);
+    assert_eq!(recoveries[0].bundle_id(), heads[2]);
+    assert_eq!(recoveries[2].bundle_id(), heads[0]);
+
+    let selected = &recoveries[2];
+    sqlx::query(
+        "INSERT INTO gc_candidates \
+         (object_key,expected_sha256,expected_bytes,reason,eligible_at) \
+         SELECT object_key,sha256,physical_bytes,'reference_removed',transaction_timestamp() \
+         FROM bundles WHERE id=$1::uuid",
+    )
+    .bind(heads[0].to_string())
+    .execute(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+    assert!(
+        sqlx::query(
+            "UPDATE gc_candidates SET status='running',attempts=attempts+1,\
+                    started_at=transaction_timestamp(),updated_at=transaction_timestamp() \
+             WHERE object_key=(SELECT object_key FROM bundles WHERE id=$1::uuid)",
+        )
+        .bind(heads[0].to_string())
+        .execute(&mut *pool.acquire().await.unwrap())
+        .await
+        .is_err()
+    );
+    let key = IdempotencyKey::new("history-restore-oldest-0001".to_owned()).unwrap();
+    let request = PromoteHistoricalReference {
+        owner,
+        project_id,
+        actor_user_id: actor,
+        expected_project_version: ProjectVersion::new(5).unwrap(),
+        reference_kind: HistoricalReferenceKind::Recovery,
+        reference_id: selected.id(),
+        idempotency_key: key.clone(),
+        audit: history_audit(actor, "history-restore-live-01"),
+    };
+    let promoted = history.promote(request.clone()).await.unwrap();
+    assert!(promoted.changed());
+    assert_eq!(promoted.project_version().get(), 6);
+    assert_eq!(promoted.bundle_id(), heads[0]);
+    let target_gc_candidates: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM gc_candidates candidate JOIN bundles bundle \
+         ON bundle.object_key=candidate.object_key WHERE bundle.id=$1::uuid",
+    )
+    .bind(heads[0].to_string())
+    .fetch_one(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+    assert_eq!(target_gc_candidates, 0);
+    let replay = history.promote(request).await.unwrap();
+    assert!(replay.is_idempotent_retry());
+    assert_eq!(replay.operation_id(), promoted.operation_id());
+    assert_eq!(
+        history
+            .reconcile(actor, owner, project_id, &key)
+            .await
+            .unwrap(),
+        replay
+    );
+
+    let no_op = history
+        .promote(PromoteHistoricalReference {
+            owner,
+            project_id,
+            actor_user_id: actor,
+            expected_project_version: ProjectVersion::new(6).unwrap(),
+            reference_kind: HistoricalReferenceKind::Version,
+            reference_id: first_version_id.unwrap(),
+            idempotency_key: IdempotencyKey::new("history-restore-noop-0001".to_owned()).unwrap(),
+            audit: history_audit(actor, "history-restore-live-02"),
+        })
+        .await
+        .unwrap();
+    assert!(!no_op.changed());
+    assert_eq!(no_op.project_version().get(), 6);
+
+    let current: (String, i64, i64, i64) = sqlx::query_as(
+        "SELECT working_head_bundle_id::text,lock_version,\
+                (SELECT COUNT(*) FROM project_history_promotions WHERE project_id=projects.id),\
+                (SELECT COUNT(*) FROM audit_events WHERE scope_id=projects.id::text \
+                 AND action_code='project.history.promoted') \
+         FROM projects WHERE id=$1::uuid",
+    )
+    .bind(PROJECT_A)
+    .fetch_one(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+    assert_eq!(current, (heads[0].to_string(), 6, 2, 2));
+    let live: i64 = sqlx::query_scalar(
+        "SELECT COUNT(DISTINCT bundle_id) FROM (\
+           SELECT working_head_bundle_id AS bundle_id FROM projects WHERE id=$1::uuid \
+           UNION SELECT bundle_id FROM project_bundle_refs WHERE project_id=$1::uuid) refs",
+    )
+    .bind(PROJECT_A)
+    .fetch_one(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+    assert_eq!(live, 4);
+
+    let stale = history
+        .promote(PromoteHistoricalReference {
+            owner,
+            project_id,
+            actor_user_id: actor,
+            expected_project_version: ProjectVersion::new(5).unwrap(),
+            reference_kind: HistoricalReferenceKind::Recovery,
+            reference_id: recoveries[1].id(),
+            idempotency_key: IdempotencyKey::new("history-restore-stale-0001".to_owned()).unwrap(),
+            audit: history_audit(actor, "history-restore-live-03"),
+        })
+        .await
+        .unwrap_err();
+    assert_eq!(stale, ProjectHistoryError::StaleProjectVersion);
+
+    for user in [USER, OUTSIDER, ORG_OWNER, ORG_READ] {
+        sqlx::query(
+            "INSERT INTO local_password_credentials (user_id,password_verifier) VALUES ($1::uuid,$2)",
+        )
+        .bind(user)
+        .bind(TEST_PASSWORD_HASH)
+        .execute(&mut *pool.acquire().await.unwrap())
+        .await
+        .unwrap();
+    }
+    let router = version_http_router(pool.clone());
+    let owner_browser = version_login(&router, "save@example.test").await;
+    let outsider_browser = version_login(&router, "outside@example.test").await;
+    let recovery_uri =
+        format!("/api/v1/workspaces/users/{USER}/projects/{PROJECT_A}/recovery-checkpoints");
+    let listed = version_empty_request(&router, &owner_browser, &recovery_uri).await;
+    assert_eq!(listed.status(), StatusCode::OK);
+    assert_eq!(listed.headers()["cache-control"], "private, no-store");
+    assert_eq!(
+        version_response_json(listed).await["items"]
+            .as_array()
+            .unwrap()
+            .len(),
+        3
+    );
+    assert_eq!(
+        version_empty_request(&router, &outsider_browser, &recovery_uri)
+            .await
+            .status(),
+        StatusCode::NOT_FOUND
+    );
+    let history_uri =
+        format!("/api/v1/workspaces/users/{USER}/projects/{PROJECT_A}/history/restore");
+    let http_noop = version_json_request(
+        &router,
+        &owner_browser,
+        Method::POST,
+        &history_uri,
+        Some("\"project-v6\""),
+        Some("history-http-noop-0001"),
+        json!({"referenceKind":"version","referenceId":first_version_id.unwrap().to_string()}),
+    )
+    .await;
+    assert_eq!(http_noop.status(), StatusCode::OK);
+    assert_eq!(http_noop.headers()[ETAG], "\"project-v6\"");
+    assert_eq!(version_response_json(http_noop).await["changed"], false);
+    let reconciled = version_json_request(
+        &router,
+        &owner_browser,
+        Method::GET,
+        &history_uri,
+        None,
+        Some("history-http-noop-0001"),
+        json!({}),
+    )
+    .await;
+    assert_eq!(reconciled.status(), StatusCode::OK);
+    assert_eq!(
+        version_response_json(reconciled).await["idempotentRetry"],
+        true
+    );
+
+    let concurrent_left = history.promote(PromoteHistoricalReference {
+        owner,
+        project_id,
+        actor_user_id: actor,
+        expected_project_version: ProjectVersion::new(6).unwrap(),
+        reference_kind: HistoricalReferenceKind::Recovery,
+        reference_id: recoveries[0].id(),
+        idempotency_key: IdempotencyKey::new("history-concurrent-left-01".to_owned()).unwrap(),
+        audit: history_audit(actor, "history-restore-live-05"),
+    });
+    let concurrent_right = history.promote(PromoteHistoricalReference {
+        owner,
+        project_id,
+        actor_user_id: actor,
+        expected_project_version: ProjectVersion::new(6).unwrap(),
+        reference_kind: HistoricalReferenceKind::Recovery,
+        reference_id: recoveries[1].id(),
+        idempotency_key: IdempotencyKey::new("history-concurrent-right-1".to_owned()).unwrap(),
+        audit: history_audit(actor, "history-restore-live-06"),
+    });
+    let (left, right) = tokio::join!(concurrent_left, concurrent_right);
+    assert_eq!(usize::from(left.is_ok()) + usize::from(right.is_ok()), 1);
+    assert!(
+        [left, right]
+            .into_iter()
+            .flatten()
+            .all(|outcome| outcome.project_version().get() == 7)
+    );
+
+    let org_body = canonical_test_bundle(
+        ORG_PROJECT_READ,
+        ORG_SCOPE,
+        "history-read.txt",
+        b"read boundary\n",
+    );
+    let mut org_request = request_for(
+        ORG_SCOPE,
+        ORG_PROJECT_READ,
+        ORG_OWNER,
+        "history-org-head-0001",
+        &org_body,
+    );
+    org_request.expected_logical_bytes = 14;
+    org_request.expected_file_count = 1;
+    let org_session = creator.create(org_request).await.unwrap();
+    assert!(
+        send_with_mutation(
+            &http,
+            org_session.capability().request(),
+            &org_body,
+            None,
+            None,
+        )
+        .await
+    );
+    let org_capability = verifier
+        .verify(VerifyStagingBundle {
+            storage_scope_id: StorageScopeId::from_str(ORG_SCOPE).unwrap(),
+            project_id: ProjectId::from_str(ORG_PROJECT_READ).unwrap(),
+            actor_user_id: UserId::from_str(ORG_OWNER).unwrap(),
+            session_id: org_session.session_id(),
+        })
+        .await
+        .unwrap();
+    committer.commit(&org_capability).await.unwrap();
+    let org_project = ProjectId::from_str(ORG_PROJECT_READ).unwrap();
+    let org_owner = ProjectOwner::Organization(OrganizationId::from_str(ORG).unwrap());
+    let org_version = versions
+        .create(CreateProjectVersion {
+            owner: org_owner,
+            project_id: org_project,
+            actor_user_id: UserId::from_str(ORG_OWNER).unwrap(),
+            expected_project_version: ProjectVersion::new(2).unwrap(),
+            name: ProjectVersionName::new("Read boundary anchor".to_owned()).unwrap(),
+            idempotency_key: IdempotencyKey::new("history-org-version-001".to_owned()).unwrap(),
+        })
+        .await
+        .unwrap();
+    let read_user = UserId::from_str(ORG_READ).unwrap();
+    let read_browser = version_login(&router, "org-read@example.test").await;
+    let org_recovery_uri = format!(
+        "/api/v1/workspaces/organizations/{ORG}/projects/{ORG_PROJECT_READ}/recovery-checkpoints"
+    );
+    assert_eq!(
+        version_empty_request(&router, &read_browser, &org_recovery_uri)
+            .await
+            .status(),
+        StatusCode::OK
+    );
+    assert!(
+        history
+            .list_recovery_checkpoints(read_user, org_owner, org_project)
+            .await
+            .is_ok()
+    );
+    assert_eq!(
+        history
+            .promote(PromoteHistoricalReference {
+                owner: org_owner,
+                project_id: org_project,
+                actor_user_id: read_user,
+                expected_project_version: ProjectVersion::new(2).unwrap(),
+                reference_kind: HistoricalReferenceKind::Version,
+                reference_id: org_version.version().id().to_string().parse().unwrap(),
+                idempotency_key: IdempotencyKey::new("history-read-denied-001".to_owned()).unwrap(),
+                audit: history_audit(read_user, "history-restore-live-07"),
+            })
+            .await
+            .unwrap_err(),
+        ProjectHistoryError::Forbidden
+    );
+    let org_history_uri = format!(
+        "/api/v1/workspaces/organizations/{ORG}/projects/{ORG_PROJECT_READ}/history/restore"
+    );
+    assert_eq!(
+        version_json_request(
+            &router,
+            &read_browser,
+            Method::POST,
+            &org_history_uri,
+            Some("\"project-v2\""),
+            Some("history-http-read-denied"),
+            json!({
+                "referenceKind":"version",
+                "referenceId":org_version.version().id().to_string()
+            }),
+        )
+        .await
+        .status(),
+        StatusCode::FORBIDDEN
+    );
+    sqlx::query("DELETE FROM project_user_roles WHERE project_id=$1::uuid AND user_id=$2::uuid")
+        .bind(ORG_PROJECT_READ)
+        .bind(ORG_READ)
+        .execute(&mut *pool.acquire().await.unwrap())
+        .await
+        .unwrap();
+    assert_eq!(
+        history
+            .list_recovery_checkpoints(read_user, org_owner, org_project)
+            .await
+            .unwrap_err(),
+        ProjectHistoryError::NotFound
+    );
+    assert_eq!(
+        version_empty_request(&router, &read_browser, &org_recovery_uri)
+            .await
+            .status(),
+        StatusCode::NOT_FOUND
+    );
+
+    sqlx::query(
+        "UPDATE projects SET state='archived',archived_at=transaction_timestamp(),\
+                lock_version=lock_version+1,updated_at=transaction_timestamp() WHERE id=$1::uuid",
+    )
+    .bind(PROJECT_A)
+    .execute(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+    assert_eq!(
+        history
+            .list_recovery_checkpoints(actor, owner, project_id)
+            .await
+            .unwrap()
+            .len(),
+        3
+    );
+    assert_eq!(
+        history
+            .promote(PromoteHistoricalReference {
+                owner,
+                project_id,
+                actor_user_id: actor,
+                expected_project_version: ProjectVersion::new(8).unwrap(),
+                reference_kind: HistoricalReferenceKind::Recovery,
+                reference_id: recoveries[1].id(),
+                idempotency_key: IdempotencyKey::new("history-restore-archived-01".to_owned())
+                    .unwrap(),
+                audit: history_audit(actor, "history-restore-live-04"),
+            })
+            .await
+            .unwrap_err(),
+        ProjectHistoryError::ProjectUnavailable
+    );
+}
+
+fn history_audit(actor: UserId, correlation_id: &str) -> ProjectAuditContext {
+    ProjectAuditContext::new(
+        AuditEventId::new(),
+        actor,
+        Some("Save Fixture".to_owned()),
+        correlation_id.to_owned(),
+        None,
+    )
 }
 
 async fn prepare_verified_head(

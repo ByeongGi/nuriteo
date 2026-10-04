@@ -119,6 +119,26 @@ impl ProjectAuditContext {
             source_ip,
         }
     }
+
+    pub(crate) const fn event_id(&self) -> AuditEventId {
+        self.event_id
+    }
+
+    pub(crate) const fn actor_user_id(&self) -> UserId {
+        self.actor_user_id
+    }
+
+    pub(crate) fn actor_display_name(&self) -> Option<String> {
+        self.actor_display_name.clone()
+    }
+
+    pub(crate) fn correlation_id(&self) -> String {
+        self.correlation_id.clone()
+    }
+
+    pub(crate) const fn source_ip(&self) -> Option<IpAddr> {
+        self.source_ip
+    }
 }
 
 impl fmt::Debug for ProjectAuditContext {

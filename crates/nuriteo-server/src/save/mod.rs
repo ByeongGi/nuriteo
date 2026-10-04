@@ -3,6 +3,7 @@ mod archive;
 mod cleanup;
 mod commit;
 mod content;
+mod history;
 mod http_config;
 mod http_routes;
 mod http_service;
@@ -24,6 +25,11 @@ pub use commit::{
 };
 pub use content::{
     ContentDescriptor, ContentDownload, ContentError, ContentService, ContentServicePolicy,
+};
+pub use history::{
+    HistoricalPromotionOutcome, HistoricalReferenceKind, ProjectHistoryError,
+    ProjectHistoryService, ProjectHistoryServicePolicy, PromoteHistoricalReference,
+    RecoveryCheckpoint,
 };
 pub use http_config::{SaveHttpConfig, SaveHttpConfigError};
 pub(crate) use http_routes::openapi_router;

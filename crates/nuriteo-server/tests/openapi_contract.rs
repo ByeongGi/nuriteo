@@ -64,6 +64,8 @@ async fn serves_the_versioned_document_from_the_application_router() {
             "/api/v1/workspaces/{owner_type}/{owner_id}/projects/{project_id}/archive",
             "/api/v1/workspaces/{owner_type}/{owner_id}/projects/{project_id}/content",
             "/api/v1/workspaces/{owner_type}/{owner_id}/projects/{project_id}/content/{bundle_id}",
+            "/api/v1/workspaces/{owner_type}/{owner_id}/projects/{project_id}/history/restore",
+            "/api/v1/workspaces/{owner_type}/{owner_id}/projects/{project_id}/recovery-checkpoints",
             "/api/v1/workspaces/{owner_type}/{owner_id}/projects/{project_id}/restore",
             "/api/v1/workspaces/{owner_type}/{owner_id}/projects/{project_id}/roles",
             "/api/v1/workspaces/{owner_type}/{owner_id}/projects/{project_id}/roles/{user_id}",
@@ -269,6 +271,57 @@ fn explicit_project_versions_expose_bounded_immutable_contract() {
             "logicalBytes",
             "fileCount",
             "format"
+        ])
+    );
+}
+
+#[test]
+fn project_history_exposes_recovery_list_promotion_and_reconcile() {
+    let document = serde_json::to_value(openapi::document()).unwrap();
+    let recoveries = &document["paths"]["/api/v1/workspaces/{owner_type}/{owner_id}/projects/{project_id}/recovery-checkpoints"];
+    assert_eq!(
+        recoveries["get"]["responses"]["200"]["content"]["application/json"]["schema"]["$ref"],
+        "#/components/schemas/RecoveryCheckpointListView"
+    );
+    assert!(recoveries.get("post").is_none());
+
+    let history = &document["paths"]["/api/v1/workspaces/{owner_type}/{owner_id}/projects/{project_id}/history/restore"];
+    assert_eq!(
+        history["post"]["responses"]["200"]["content"]["application/json"]["schema"]["$ref"],
+        "#/components/schemas/HistoricalPromotionView"
+    );
+    assert_eq!(
+        history["get"]["responses"]["200"]["content"]["application/json"]["schema"]["$ref"],
+        "#/components/schemas/HistoricalPromotionView"
+    );
+    let post_headers = history["post"]["parameters"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|parameter| parameter["in"] == "header")
+        .map(|parameter| parameter["name"].as_str().unwrap())
+        .collect::<Vec<_>>();
+    for required in ["If-Match", "Idempotency-Key", "Origin", "X-CSRF-Token"] {
+        assert!(post_headers.contains(&required));
+    }
+    let reconcile_headers = history["get"]["parameters"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|parameter| parameter["in"] == "header")
+        .map(|parameter| parameter["name"].as_str().unwrap())
+        .collect::<Vec<_>>();
+    assert!(reconcile_headers.contains(&"Idempotency-Key"));
+    assert_eq!(
+        document["components"]["schemas"]["HistoricalPromotionView"]["required"],
+        json!([
+            "operationId",
+            "referenceKind",
+            "referenceId",
+            "bundleId",
+            "projectVersion",
+            "changed",
+            "idempotentRetry"
         ])
     );
 }

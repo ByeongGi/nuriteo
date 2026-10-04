@@ -38,6 +38,7 @@ pub const DOCS_PATH: &str = "/api/docs";
         ,(name = "projects", description = "Workspace-owned Project lifecycle")
         ,(name = "project-roles", description = "Organization Project direct role administration")
         ,(name = "project-versions", description = "Immutable named Project Working Head references")
+        ,(name = "project-history", description = "Recovery Checkpoints and atomic historical Working Head promotion")
         ,(name = "save", description = "Bounded Project Bundle Save session lifecycle")
     ),
     servers((url = "/", description = "Current self-hosted instance"))
