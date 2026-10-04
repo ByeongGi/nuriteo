@@ -3,6 +3,14 @@ import { StringDecoder } from "node:string_decoder";
 import { createSecretChunkScanner } from "./secret-chunk-scanner.ts";
 
 export type OutputStreamName = "stdout" | "stderr";
+export type SecretSafeFailureCategory = "assertion" | "error" | "non-error" | "timeout";
+
+export function secretSafeFailureCategory(error: unknown): SecretSafeFailureCategory {
+  if (!(error instanceof Error)) return "non-error";
+  if (error.name === "AssertionError") return "assertion";
+  if (error.name === "TimeoutError") return "timeout";
+  return "error";
+}
 
 export function createSecretSafeOutputDiagnostics(values: Iterable<string>) {
   const scanners = {

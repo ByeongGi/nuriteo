@@ -14,7 +14,10 @@ import {
 import { DELETE as revokeActivationRoute } from "../src/app/api/v1/admin/activation-invitations/[invitationId]/route.ts";
 import { POST as issueOrganizationInvitationRoute } from "../src/app/api/v1/organizations/[organizationId]/invitations/route.ts";
 import { createSecretChunkScanner } from "./secret-chunk-scanner.ts";
-import { createSecretSafeOutputDiagnostics } from "./secret-safe-output.ts";
+import {
+  createSecretSafeOutputDiagnostics,
+  secretSafeFailureCategory
+} from "./secret-safe-output.ts";
 
 const webRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const originalFetch = globalThis.fetch;
@@ -31,6 +34,7 @@ try {
   testSplitSecretScanner();
   testSecretSafeOutputDiagnostics();
   testSecretSafeOutputDiagnosticsAcrossUtf8Chunks();
+  testSecretSafeFailureCategories();
   testUxSourceContracts();
 } finally {
   globalThis.fetch = originalFetch;
@@ -73,6 +77,18 @@ function testSecretSafeOutputDiagnostics() {
   assert.match(diagnostics.render(), /stdout=52 bytes\/2 chunks/u);
   assert.match(diagnostics.render(), /stderr=19 bytes\/1 chunks/u);
   assert.doesNotMatch(diagnostics.render(), /nrt_org_inv_|split-secret|ordinary diagnostic/u);
+}
+
+function testSecretSafeFailureCategories() {
+  const assertion = new Error("sensitive assertion detail");
+  assertion.name = "AssertionError";
+  const timeout = new Error("sensitive timeout detail");
+  timeout.name = "TimeoutError";
+
+  assert.equal(secretSafeFailureCategory(assertion), "assertion");
+  assert.equal(secretSafeFailureCategory(timeout), "timeout");
+  assert.equal(secretSafeFailureCategory(new Error("sensitive error detail")), "error");
+  assert.equal(secretSafeFailureCategory("sensitive non-error detail"), "non-error");
 }
 
 function testSafeErrorClassification() {

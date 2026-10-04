@@ -7,7 +7,10 @@ import { fileURLToPath } from "node:url";
 
 import { chromium } from "@playwright/test";
 
-import { createSecretSafeOutputDiagnostics } from "./secret-safe-output.ts";
+import {
+  createSecretSafeOutputDiagnostics,
+  secretSafeFailureCategory
+} from "./secret-safe-output.ts";
 import type { OutputStreamName } from "./secret-safe-output.ts";
 
 const webRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -56,6 +59,7 @@ const forbiddenServerValues = new Set([
   "nuriteo_dev_session=invitee"
 ]);
 const serverOutput = createSecretSafeOutputDiagnostics(forbiddenServerValues);
+let journeyStage: CollaborationJourneyStage = "launch-browser";
 
 function addForbiddenServerValue(value: string): void {
   forbiddenServerValues.add(value);
@@ -243,8 +247,10 @@ const web = standalone.child;
 publicOrigin = standalone.origin;
 
 try {
+  journeyStage = "launch-browser";
   const browser = await chromium.launch({ headless: true });
   try {
+    journeyStage = "bootstrap-admin";
     const admin = await browser.newContext();
     await admin.addCookies([
       { name: "nuriteo_dev_session", value: "admin", url: publicOrigin },
@@ -273,6 +279,7 @@ try {
         inviteeApiResponses.push(`${response.status()} ${response.url()}`);
       }
     });
+    journeyStage = "activate-invitee";
     await inviteePage.goto(activationUrl!, { waitUntil: "networkidle" });
     await inviteePage.getByLabel("Email").fill("invitee@example.test");
     await inviteePage.getByLabel("Display name").fill("Invited Teammate");
@@ -285,6 +292,7 @@ try {
       })
     ]);
     assert.equal(inviteePage.url().includes("token="), false);
+    journeyStage = "authenticate-invitee";
     await inviteePage.getByLabel("Email").fill("invitee@example.test");
     await inviteePage.getByLabel("Password").fill("correct horse battery staple");
     await inviteePage.getByRole("button", { name: "Sign in" }).click();
@@ -294,6 +302,7 @@ try {
     await inviteePage.goto(`${publicOrigin}/admin/invitations`, { waitUntil: "networkidle" });
     await inviteePage.getByRole("heading", { name: "Administrator access required" }).waitFor();
 
+    journeyStage = "create-organization";
     await adminPage.goto(`${publicOrigin}/organizations`, { waitUntil: "networkidle" });
     await adminPage.getByLabel("Slug").fill("alpha");
     await adminPage.getByLabel("Display name").fill("Alpha Organization");
@@ -309,6 +318,7 @@ try {
     await adminPage.getByRole("button", { name: "Save name" }).click();
     await adminPage.getByRole("alert").filter({ hasText: "Reload the latest version" }).waitFor();
     assert.equal(observedIfMatch, '"org-v1"');
+    journeyStage = "validate-invitation-form";
     const inviteeEmail = adminPage.getByLabel("Invitee email");
     assert.equal(await inviteeEmail.getAttribute("type"), "text");
     assert.equal(await inviteeEmail.getAttribute("inputmode"), "email");
@@ -329,6 +339,7 @@ try {
     assert.equal(legacyStatus, 400);
     assert.equal(organizationIssueCount, 0);
 
+    journeyStage = "validate-client-rejection";
     await adminPage.reload({ waitUntil: "networkidle" });
     let invitationBffRequestCount = 0;
     adminPage.on("request", (request) => {
@@ -354,6 +365,7 @@ try {
       await adminPage.reload({ waitUntil: "networkidle" });
     }
 
+    journeyStage = "validate-unavailable-invitations";
     for (const unicodeEmail of [bmpUnicodeEmail, astralUnicodeEmail]) {
       const requestsBefore = invitationBffRequestCount;
       await adminPage.getByLabel("Invitee email").fill(unicodeEmail);
@@ -372,6 +384,7 @@ try {
     assert.equal((await unavailableError.textContent())?.includes("unavailable@example.test"), false);
     assert.equal(organizationIssueCount, 0);
 
+    journeyStage = "issue-and-revoke-invitation";
     await adminPage.getByLabel("Invitee email").fill("Invitee@Example.Test");
     await adminPage.getByRole("button", { name: "Issue Organization invitation" }).click();
     let invitationUrl = await visibleOneTimeUrl(adminPage);
@@ -391,6 +404,7 @@ try {
     await adminPage.reload({ waitUntil: "networkidle" });
     await adminPage.getByText(/revoked · expires/u).waitFor();
 
+    journeyStage = "validate-revoked-invitation";
     await inviteePage.goto(revokedUrl, { waitUntil: "networkidle" });
     const revokedAccept = inviteePage.getByRole("button", { name: "Accept invitation" });
     if (await revokedAccept.count() !== 1) {
@@ -401,6 +415,7 @@ try {
     await terminalError.waitFor();
     assert.equal((await terminalError.textContent())?.includes("nrt_org_inv_"), false);
 
+    journeyStage = "validate-malformed-terminal-responses";
     await adminPage.getByLabel("Invitee email").fill("invitee@example.test");
     await adminPage.getByRole("button", { name: "Issue Organization invitation" }).click();
     const malformedUrl = await visibleOneTimeUrl(adminPage);
@@ -436,17 +451,22 @@ try {
     await waitForCondition(() => organizationRevokeCount === 2);
     await adminPage.reload({ waitUntil: "networkidle" });
 
+    journeyStage = "decline-issue";
     await adminPage.getByLabel("Invitee email").fill("invitee@example.test");
     await adminPage.getByRole("button", { name: "Issue Organization invitation" }).click();
     const declineUrl = await visibleOneTimeUrl(adminPage);
     await waitForCondition(() => organizationIssueCount === 3);
+    journeyStage = "decline-open";
     await inviteePage.goto(declineUrl, { waitUntil: "networkidle" });
+    journeyStage = "decline-submit";
     await inviteePage.getByRole("button", { name: "Decline" }).click();
     await inviteePage.waitForURL("**/workspaces?invitation=declined");
     assert.equal(inviteePage.url().includes("token="), false);
+    journeyStage = "decline-workspace";
     await inviteePage.getByRole("status").filter({ hasText: "Organization invitation declined" }).waitFor();
     assert.equal(await inviteePage.getByText("Alpha Organization", { exact: true }).count(), 0);
 
+    journeyStage = "accept-invitation";
     await adminPage.getByLabel("Invitee email").fill("invitee@example.test");
     await adminPage.getByRole("button", { name: "Issue Organization invitation" }).click();
     invitationUrl = await visibleOneTimeUrl(adminPage);
@@ -471,6 +491,7 @@ try {
     await inviteePage.getByText("Member access is read-only. The server enforces every mutation.").waitFor();
     assert.equal(await inviteePage.getByRole("heading", { name: "Invite member" }).count(), 0);
 
+    journeyStage = "mutate-member";
     await adminPage.goto(`${publicOrigin}/organizations?organization=${organizationId}`, { waitUntil: "networkidle" });
     const inviteeMember = adminPage.locator(".record-list li").filter({ hasText: "Invited Teammate" });
     await inviteeMember.getByRole("button", { name: "Make owner" }).click();
@@ -491,16 +512,17 @@ try {
     await adminPage.getByText("Invited Teammate", { exact: true }).waitFor({ state: "detached" });
     assert.ok(observedMutationCookies.some((value) => value.endsWith(":admin")));
     assert.ok(observedMutationCookies.some((value) => value.endsWith(":invitee")));
+    journeyStage = "verify-secret-safety";
     assert.equal(serverOutput.detected, false);
+    journeyStage = "close-contexts";
     await admin.close();
     await invitee.close();
   } finally {
     await browser.close();
   }
 } catch (error) {
-  const causeName = error instanceof Error ? "Error" : "NonError";
   throw new Error(
-    `collaboration browser journey failed (${causeName}); secret-safe server output: ${serverOutput.render()}`
+    `collaboration browser journey failed at ${journeyStage} (${secretSafeFailureCategory(error)}); secret-safe server output: ${serverOutput.render()}`
   );
 } finally {
   await stopChild(web);
@@ -510,6 +532,26 @@ try {
 console.log("web collaboration browser journey ok");
 
 type Session = "admin" | "invitee";
+type CollaborationJourneyStage =
+  | "accept-invitation"
+  | "activate-invitee"
+  | "authenticate-invitee"
+  | "bootstrap-admin"
+  | "close-contexts"
+  | "create-organization"
+  | "decline-issue"
+  | "decline-open"
+  | "decline-submit"
+  | "decline-workspace"
+  | "issue-and-revoke-invitation"
+  | "launch-browser"
+  | "mutate-member"
+  | "validate-client-rejection"
+  | "validate-invitation-form"
+  | "validate-malformed-terminal-responses"
+  | "validate-revoked-invitation"
+  | "validate-unavailable-invitations"
+  | "verify-secret-safety";
 type InvitationStatus = "pending" | "accepted" | "declined" | "revoked" | "superseded";
 interface OrganizationMember {
   userId: string;
