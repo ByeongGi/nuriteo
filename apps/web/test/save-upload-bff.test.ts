@@ -9,6 +9,7 @@ const SESSION_ID = "0199ee6c-c777-7000-8000-000000009003";
 const PATH = `/api/v1/workspaces/users/${OWNER_ID}/projects/${PROJECT_ID}/save-sessions/${SESSION_ID}/upload`;
 const ORIGIN = "https://nuriteo.test";
 const CHECKSUM = Buffer.alloc(32).toString("base64");
+const CSRF = `nrt_csrf_${"s".repeat(43)}`;
 const CONTEXT = { ownerType: "users", ownerId: OWNER_ID, projectId: PROJECT_ID, sessionId: SESSION_ID };
 const originalFetch = globalThis.fetch;
 const originalUrl = process.env.NURITEO_INTERNAL_API_URL;
@@ -104,7 +105,7 @@ async function streamsWithoutBufferingOrAmbientHeaders(): Promise<void> {
   assert.equal(headers.get("content-length"), "3");
   assert.equal(headers.get("content-type"), "application/vnd.nuriteo.project-bundle");
   assert.equal(headers.get("origin"), ORIGIN);
-  assert.equal(headers.get("x-csrf-token"), "csrf-safe");
+  assert.equal(headers.get("x-csrf-token"), CSRF);
   assert.equal(headers.get("x-nuriteo-content-sha256"), CHECKSUM);
   assert.equal(headers.get("cookie"), "nuriteo_dev_session=opaque");
   assert.equal(headers.get("traceparent"), "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01");
@@ -136,6 +137,7 @@ async function rejectsBeforeReadingTheBody(): Promise<void> {
     uploadRequest(unread(), "03"),
     uploadRequest(unread(), "3", { origin: "https://attacker.test" }),
     uploadRequest(unread(), "3", { "x-csrf-token": "" }),
+    uploadRequest(unread(), "3", { "x-csrf-token": "csrf-safe" }),
     uploadRequest(unread(), "3", { "content-type": "application/octet-stream" }),
     uploadRequest(unread(), "3", { "x-nuriteo-content-sha256": "not-base64" }),
     uploadRequest(unread(), "3", { "content-encoding": "gzip" }),
@@ -334,7 +336,7 @@ function uploadHeaders(contentLength: string, overrides: Record<string, string> 
     "content-type": "application/vnd.nuriteo.project-bundle",
     host: "nuriteo.test",
     origin: ORIGIN,
-    "x-csrf-token": "csrf-safe",
+    "x-csrf-token": CSRF,
     "x-nuriteo-content-sha256": CHECKSUM,
     ...overrides
   });

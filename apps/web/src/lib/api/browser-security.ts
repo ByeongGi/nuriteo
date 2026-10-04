@@ -2,8 +2,9 @@
 
 import { ApiError } from "@nuriteo/api-client";
 
+import { isCanonicalCsrfCredential } from "./csrf-credential.ts";
+
 const CSRF_NAMES = ["__Host-nuriteo_csrf", "nuriteo_dev_csrf"] as const;
-const SAFE_CREDENTIAL = /^nrt_csrf_[A-Za-z0-9_-]{43}$/u;
 
 export type CollaborationOperation =
   | "activation-invitation-issue"
@@ -31,7 +32,7 @@ export function readCsrfCredential(): string {
     const name = pair.slice(0, separator).trim();
     if (!CSRF_NAMES.includes(name as (typeof CSRF_NAMES)[number])) continue;
     const value = pair.slice(separator + 1);
-    if (SAFE_CREDENTIAL.test(value)) return value;
+    if (isCanonicalCsrfCredential(value)) return value;
   }
   throw new Error("Browser security credential is unavailable.");
 }

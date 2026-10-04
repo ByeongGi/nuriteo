@@ -2,6 +2,7 @@ import "server-only";
 
 import { randomUUID } from "node:crypto";
 
+import { isCanonicalCsrfCredential } from "./csrf-credential.ts";
 import { selectForwardedHeaders, validateInternalApiUrl } from "./server-policy.ts";
 import { forwardProjectRequest, hasNoProjectQuery, invalidProjectRoute, projectSaveSessionPath } from "./project-bff.ts";
 
@@ -11,7 +12,6 @@ const MAX_RELAY_RESPONSE_BYTES = 64 * 1024;
 const RELAY_DEADLINE_MS = 45_000;
 const STREAM_CANCEL_WAIT_MS = 250;
 const REQUEST_ID = /^[A-Za-z0-9._:-]{1,128}$/u;
-const SAFE_HEADER = /^[\x20-\x7e]{1,512}$/u;
 const CANONICAL_LENGTH = /^(?:[1-9]\d{0,7})$/u;
 const CANONICAL_PART = /^(?:[1-9]\d{0,4})$/u;
 
@@ -275,7 +275,7 @@ function relayMetadata(headers: Headers): { checksum: string; csrf: string; leng
   if (
     length === null || !CANONICAL_LENGTH.test(length) || Number(length) > MAX_RELAY_BODY_BYTES ||
     checksum === null || !isCanonicalSha256(checksum) ||
-    csrf === null || !SAFE_HEADER.test(csrf)
+    !isCanonicalCsrfCredential(csrf)
   ) return undefined;
   return { checksum, csrf, length };
 }
