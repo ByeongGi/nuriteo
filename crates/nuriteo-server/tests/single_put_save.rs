@@ -77,6 +77,9 @@ const PROJECT_A: &str = "0199ee6c-c777-7000-8000-000000008020";
 const PROJECT_B: &str = "0199ee6c-c777-7000-8000-000000008021";
 const PROJECT_FAIL: &str = "0199ee6c-c777-7000-8000-000000008022";
 const PROJECT_TIMEOUT: &str = "0199ee6c-c777-7000-8000-000000008023";
+const PROJECT_LEASE_ABORT: &str = "0199ee6c-c777-7000-8000-000000008026";
+const PROJECT_LEASE_EXPIRE: &str = "0199ee6c-c777-7000-8000-000000008027";
+const PROJECT_LEASE_COMPLETE: &str = "0199ee6c-c777-7000-8000-000000008028";
 const PROJECT_HISTORY_LEFT: &str = "0199ee6c-c777-7000-8000-000000008024";
 const PROJECT_HISTORY_RIGHT: &str = "0199ee6c-c777-7000-8000-000000008025";
 const OUTSIDER: &str = "0199ee6c-c777-7000-8000-000000008002";
@@ -1154,6 +1157,13 @@ async fn save_http_is_authorized_restart_stable_and_commits_the_working_head() {
 #[tokio::test]
 #[ignore = "requires tests/fixtures/authenticated-upload-relay/run.sh"]
 async fn authenticated_upload_relay_streams_single_and_multipart_without_bearer_exposure() {
+    let captured_logs = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let log_subscriber = tracing_subscriber::fmt()
+        .with_ansi(false)
+        .with_writer(CapturedLogWriter(captured_logs.clone()))
+        .finish();
+    let _log_guard = tracing::subscriber::set_default(log_subscriber);
+    let mut failure_problems = Vec::new();
     let pool = fixture_pool().await;
     reset_and_seed(&pool).await;
     let endpoint = env::var(S3_ENDPOINT_ENV).unwrap();
@@ -1170,7 +1180,7 @@ async fn authenticated_upload_relay_streams_single_and_multipart_without_bearer_
     let store = S3ObjectStore::new(&config, OperationLimits::default())
         .await
         .unwrap();
-    for user in [USER, OUTSIDER] {
+    for user in [USER, OUTSIDER, ORG_OWNER, ORG_WRITE] {
         sqlx::query(
             "INSERT INTO local_password_credentials (user_id,password_verifier) VALUES ($1::uuid,$2)",
         )
@@ -1192,6 +1202,8 @@ async fn authenticated_upload_relay_streams_single_and_multipart_without_bearer_
     .unwrap();
     let owner = version_login(&router, "save@example.test").await;
     let outsider = version_login(&router, "outside@example.test").await;
+    let organization_owner = version_login(&router, "org-owner@example.test").await;
+    let organization_writer = version_login(&router, "org-write@example.test").await;
 
     let content = b"private relay single\n";
     let single_bundle = canonical_test_bundle(PROJECT_A, SCOPE, "single.txt", content);
@@ -1237,10 +1249,12 @@ async fn authenticated_upload_relay_streams_single_and_multipart_without_bearer_
         Some((single_bundle.len() as u64).saturating_add(1)),
         None,
     );
-    assert_eq!(
-        router.clone().oneshot(wrong_length).await.unwrap().status(),
-        StatusCode::UNPROCESSABLE_ENTITY
-    );
+    capture_private_problem(
+        router.clone().oneshot(wrong_length).await.unwrap(),
+        StatusCode::UNPROCESSABLE_ENTITY,
+        &mut failure_problems,
+    )
+    .await;
     let wrong_checksum = relay_put_request(
         single_capability,
         &owner,
@@ -1248,15 +1262,12 @@ async fn authenticated_upload_relay_streams_single_and_multipart_without_bearer_
         None,
         Some(BASE64.encode([0x99; 32])),
     );
-    assert_eq!(
-        router
-            .clone()
-            .oneshot(wrong_checksum)
-            .await
-            .unwrap()
-            .status(),
-        StatusCode::UNPROCESSABLE_ENTITY
-    );
+    capture_private_problem(
+        router.clone().oneshot(wrong_checksum).await.unwrap(),
+        StatusCode::UNPROCESSABLE_ENTITY,
+        &mut failure_problems,
+    )
+    .await;
     let cross_actor = relay_put_request(
         single_capability,
         &outsider,
@@ -1264,10 +1275,12 @@ async fn authenticated_upload_relay_streams_single_and_multipart_without_bearer_
         None,
         None,
     );
-    assert_eq!(
-        router.clone().oneshot(cross_actor).await.unwrap().status(),
-        StatusCode::NOT_FOUND
-    );
+    capture_private_problem(
+        router.clone().oneshot(cross_actor).await.unwrap(),
+        StatusCode::NOT_FOUND,
+        &mut failure_problems,
+    )
+    .await;
     let direct_router = save_http_router_with_transport(
         pool.clone(),
         store.clone(),
@@ -1283,10 +1296,88 @@ async fn authenticated_upload_relay_streams_single_and_multipart_without_bearer_
         None,
         None,
     );
-    assert_eq!(
-        direct_router.oneshot(direct_mode).await.unwrap().status(),
-        StatusCode::NOT_FOUND
+    capture_private_problem(
+        direct_router.oneshot(direct_mode).await.unwrap(),
+        StatusCode::NOT_FOUND,
+        &mut failure_problems,
+    )
+    .await;
+
+    let revoked = create_organization_relay_session(
+        &router,
+        &organization_writer,
+        ORG_PROJECT_WRITE,
+        "relay-role-race-000001",
+    )
+    .await;
+    let mut scope_blocker = pool.acquire().await.unwrap();
+    let mut scope_transaction = scope_blocker.begin().await.unwrap();
+    sqlx::query("SELECT id FROM storage_scopes WHERE id=$1::uuid FOR UPDATE")
+        .bind(ORG_SCOPE)
+        .execute(&mut *scope_transaction)
+        .await
+        .unwrap();
+    let revoked_request = relay_put_request(
+        &revoked["upload"],
+        &organization_writer,
+        Body::new(NeverReadBody),
+        None,
+        None,
     );
+    let revoked_upload = tokio::spawn(router.clone().oneshot(revoked_request));
+    wait_for_relay_scope_lock_wait(&pool).await;
+    sqlx::query("DELETE FROM project_user_roles WHERE project_id=$1::uuid AND user_id=$2::uuid")
+        .bind(ORG_PROJECT_WRITE)
+        .bind(ORG_WRITE)
+        .execute(&mut *pool.acquire().await.unwrap())
+        .await
+        .unwrap();
+    scope_transaction.commit().await.unwrap();
+    capture_private_problem(
+        revoked_upload.await.unwrap().unwrap(),
+        StatusCode::NOT_FOUND,
+        &mut failure_problems,
+    )
+    .await;
+
+    let archived_race = create_organization_relay_session(
+        &router,
+        &organization_owner,
+        ORG_PROJECT_OWNER,
+        "relay-archive-race-0001",
+    )
+    .await;
+    let mut scope_blocker = pool.acquire().await.unwrap();
+    let mut scope_transaction = scope_blocker.begin().await.unwrap();
+    sqlx::query("SELECT id FROM storage_scopes WHERE id=$1::uuid FOR UPDATE")
+        .bind(ORG_SCOPE)
+        .execute(&mut *scope_transaction)
+        .await
+        .unwrap();
+    let archived_request = relay_put_request(
+        &archived_race["upload"],
+        &organization_owner,
+        Body::new(NeverReadBody),
+        None,
+        None,
+    );
+    let archived_upload = tokio::spawn(router.clone().oneshot(archived_request));
+    wait_for_relay_scope_lock_wait(&pool).await;
+    sqlx::query(
+        "UPDATE projects SET state='archived',archived_at=transaction_timestamp(),\
+         updated_at=transaction_timestamp(),lock_version=lock_version+1 WHERE id=$1::uuid",
+    )
+    .bind(ORG_PROJECT_OWNER)
+    .execute(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+    scope_transaction.commit().await.unwrap();
+    capture_private_problem(
+        archived_upload.await.unwrap().unwrap(),
+        StatusCode::CONFLICT,
+        &mut failure_problems,
+    )
+    .await;
 
     let uploaded = router
         .clone()
@@ -1322,15 +1413,12 @@ async fn authenticated_upload_relay_streams_single_and_multipart_without_bearer_
         None,
         None,
     );
-    assert_eq!(
-        router
-            .clone()
-            .oneshot(terminal_retry)
-            .await
-            .unwrap()
-            .status(),
-        StatusCode::CONFLICT
-    );
+    capture_private_problem(
+        router.clone().oneshot(terminal_retry).await.unwrap(),
+        StatusCode::CONFLICT,
+        &mut failure_problems,
+    )
+    .await;
 
     let multipart_files = (0..5)
         .map(|index| {
@@ -1407,7 +1495,7 @@ async fn authenticated_upload_relay_streams_single_and_multipart_without_bearer_
         .map(|(prefix, _)| format!("{prefix}/99"))
         .unwrap();
     wrong_part["path"] = Value::String(wrong_part_path);
-    assert_eq!(
+    capture_private_problem(
         router
             .clone()
             .oneshot(relay_put_request(
@@ -1418,13 +1506,15 @@ async fn authenticated_upload_relay_streams_single_and_multipart_without_bearer_
                 None,
             ))
             .await
-            .unwrap()
-            .status(),
-        StatusCode::NOT_FOUND
-    );
-    for (capability, body) in capabilities
+            .unwrap(),
+        StatusCode::NOT_FOUND,
+        &mut failure_problems,
+    )
+    .await;
+    for (index, (capability, body)) in capabilities
         .iter()
         .zip(multipart_bundle.chunks(16 * 1024 * 1024))
+        .enumerate()
     {
         assert_eq!(capability["transport"], "relay");
         let response = router
@@ -1432,13 +1522,89 @@ async fn authenticated_upload_relay_streams_single_and_multipart_without_bearer_
             .oneshot(relay_put_request(
                 capability,
                 &owner,
-                Body::from(body.to_vec()),
+                Body::new(BoundedFrameBody::new(body)),
                 None,
                 None,
             ))
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::NO_CONTENT);
+        if index == 0 {
+            let original_etag: String = sqlx::query_scalar(
+                "SELECT object_etag FROM multipart_parts WHERE save_session_id=$1::uuid \
+                 AND part_number=1",
+            )
+            .bind(multipart_session)
+            .fetch_one(&mut *pool.acquire().await.unwrap())
+            .await
+            .unwrap();
+            let mut connection = pool.acquire().await.unwrap();
+            connection
+                .execute(
+                    "ALTER TABLE multipart_parts DISABLE TRIGGER multipart_parts_write_invariants",
+                )
+                .await
+                .unwrap();
+            sqlx::query(
+                "UPDATE multipart_parts SET object_etag='persisted-first-etag' \
+                 WHERE save_session_id=$1::uuid AND part_number=1",
+            )
+            .bind(multipart_session)
+            .execute(&mut *connection)
+            .await
+            .unwrap();
+            connection
+                .execute(
+                    "ALTER TABLE multipart_parts ENABLE TRIGGER multipart_parts_write_invariants",
+                )
+                .await
+                .unwrap();
+            assert_eq!(
+                router
+                    .clone()
+                    .oneshot(relay_put_request(
+                        capability,
+                        &owner,
+                        Body::new(NeverReadBody),
+                        None,
+                        None,
+                    ))
+                    .await
+                    .unwrap()
+                    .status(),
+                StatusCode::NO_CONTENT
+            );
+            let persisted_etag: String = sqlx::query_scalar(
+                "SELECT object_etag FROM multipart_parts WHERE save_session_id=$1::uuid \
+                 AND part_number=1",
+            )
+            .bind(multipart_session)
+            .fetch_one(&mut *pool.acquire().await.unwrap())
+            .await
+            .unwrap();
+            assert_eq!(persisted_etag, "persisted-first-etag");
+            connection
+                .execute(
+                    "ALTER TABLE multipart_parts DISABLE TRIGGER multipart_parts_write_invariants",
+                )
+                .await
+                .unwrap();
+            sqlx::query(
+                "UPDATE multipart_parts SET object_etag=$2 WHERE save_session_id=$1::uuid \
+                 AND part_number=1",
+            )
+            .bind(multipart_session)
+            .bind(original_etag)
+            .execute(&mut *connection)
+            .await
+            .unwrap();
+            connection
+                .execute(
+                    "ALTER TABLE multipart_parts ENABLE TRIGGER multipart_parts_write_invariants",
+                )
+                .await
+                .unwrap();
+        }
     }
     let multipart_completed = version_json_request(
         &router,
@@ -1455,6 +1621,174 @@ async fn authenticated_upload_relay_streams_single_and_multipart_without_bearer_
         download_current_content(&router, &owner, PROJECT_B, multipart_bundle.len()).await,
         multipart_bundle
     );
+
+    let restarted_router = save_http_router_with_transport(
+        pool.clone(),
+        store.clone(),
+        secret.clone(),
+        SaveUploadTransport::Relay,
+    )
+    .await
+    .unwrap();
+
+    let (abort_race, abort_bundle, abort_collection) = create_relay_single_session(
+        &router,
+        &owner,
+        PROJECT_LEASE_ABORT,
+        "relay-lease-abort-0001",
+        "abort.txt",
+    )
+    .await;
+    let abort_session = abort_race["sessionId"].as_str().unwrap().to_owned();
+    let (abort_sender, abort_body) = gated_frame_body(abort_bundle.len());
+    let abort_upload = tokio::spawn(router.clone().oneshot(relay_put_request(
+        &abort_race["upload"],
+        &owner,
+        abort_body,
+        None,
+        None,
+    )));
+    wait_for_active_relay_lease(&pool, &abort_session, 0).await;
+    let abort_while_uploading = version_empty_mutation(
+        &restarted_router,
+        &owner,
+        Method::DELETE,
+        &format!("{abort_collection}/{abort_session}"),
+    )
+    .await;
+    capture_private_problem(
+        abort_while_uploading,
+        StatusCode::CONFLICT,
+        &mut failure_problems,
+    )
+    .await;
+    send_bounded_frames(abort_sender, &abort_bundle).await;
+    assert_eq!(
+        abort_upload.await.unwrap().unwrap().status(),
+        StatusCode::NO_CONTENT
+    );
+    assert_released_relay_generation(&pool, &abort_session, 0, 1).await;
+    assert_eq!(
+        version_json_request(
+            &router,
+            &owner,
+            Method::POST,
+            &format!("{abort_collection}/{abort_session}/complete"),
+            None,
+            None,
+            json!({"uploadMode":"single"}),
+        )
+        .await
+        .status(),
+        StatusCode::OK
+    );
+
+    let (complete_race, complete_bundle, complete_collection) = create_relay_single_session(
+        &router,
+        &owner,
+        PROJECT_LEASE_COMPLETE,
+        "relay-lease-complete-01",
+        "complete.txt",
+    )
+    .await;
+    let complete_session = complete_race["sessionId"].as_str().unwrap().to_owned();
+    let (complete_sender, complete_body) = gated_frame_body(complete_bundle.len());
+    let complete_upload = tokio::spawn(router.clone().oneshot(relay_put_request(
+        &complete_race["upload"],
+        &owner,
+        complete_body,
+        None,
+        None,
+    )));
+    wait_for_active_relay_lease(&pool, &complete_session, 0).await;
+    capture_private_problem(
+        version_json_request(
+            &restarted_router,
+            &owner,
+            Method::POST,
+            &format!("{complete_collection}/{complete_session}/complete"),
+            None,
+            None,
+            json!({"uploadMode":"single"}),
+        )
+        .await,
+        StatusCode::CONFLICT,
+        &mut failure_problems,
+    )
+    .await;
+    send_bounded_frames(complete_sender, &complete_bundle).await;
+    assert_eq!(
+        complete_upload.await.unwrap().unwrap().status(),
+        StatusCode::NO_CONTENT
+    );
+    assert_eq!(
+        version_json_request(
+            &router,
+            &owner,
+            Method::POST,
+            &format!("{complete_collection}/{complete_session}/complete"),
+            None,
+            None,
+            json!({"uploadMode":"single"}),
+        )
+        .await
+        .status(),
+        StatusCode::OK
+    );
+
+    let (expiry_race, expiry_bundle, expiry_collection) = create_relay_single_session(
+        &router,
+        &owner,
+        PROJECT_LEASE_EXPIRE,
+        "relay-lease-expiry-0001",
+        "expiry.txt",
+    )
+    .await;
+    let expiry_session = expiry_race["sessionId"].as_str().unwrap().to_owned();
+    let (expiry_sender, expiry_body) = gated_frame_body(expiry_bundle.len());
+    let expiry_upload = tokio::spawn(router.clone().oneshot(relay_put_request(
+        &expiry_race["upload"],
+        &owner,
+        expiry_body,
+        None,
+        None,
+    )));
+    wait_for_active_relay_lease(&pool, &expiry_session, 0).await;
+    force_session_expiry(
+        &pool,
+        &expiry_session,
+        "created_at + interval '1 microsecond'",
+    )
+    .await;
+    capture_private_problem(
+        version_empty_mutation(
+            &restarted_router,
+            &owner,
+            Method::DELETE,
+            &format!("{expiry_collection}/{expiry_session}"),
+        )
+        .await,
+        StatusCode::CONFLICT,
+        &mut failure_problems,
+    )
+    .await;
+    send_bounded_frames(expiry_sender, &expiry_bundle).await;
+    capture_private_problem(
+        expiry_upload.await.unwrap().unwrap(),
+        StatusCode::CONFLICT,
+        &mut failure_problems,
+    )
+    .await;
+    let expiry_state: (String, i64) = sqlx::query_as(
+        "SELECT state,(SELECT COUNT(*) FROM save_cleanup_jobs job \
+         WHERE job.save_session_id=save_sessions.id) FROM save_sessions WHERE id=$1::uuid",
+    )
+    .bind(&expiry_session)
+    .fetch_one(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+    assert_eq!(expiry_state, ("expired".to_owned(), 1));
+    assert_released_relay_generation(&pool, &expiry_session, 0, 1).await;
 
     let archived_content = b"archived relay\n";
     let archived_bundle =
@@ -1487,7 +1821,7 @@ async fn authenticated_upload_relay_streams_single_and_multipart_without_bearer_
     .execute(&mut *pool.acquire().await.unwrap())
     .await
     .unwrap();
-    assert_eq!(
+    capture_private_problem(
         router
             .clone()
             .oneshot(relay_put_request(
@@ -1498,10 +1832,11 @@ async fn authenticated_upload_relay_streams_single_and_multipart_without_bearer_
                 None,
             ))
             .await
-            .unwrap()
-            .status(),
-        StatusCode::CONFLICT
-    );
+            .unwrap(),
+        StatusCode::CONFLICT,
+        &mut failure_problems,
+    )
+    .await;
 
     let expired_content = b"expired relay\n";
     let expired_bundle = canonical_test_bundle(PROJECT_FAIL, SCOPE, "expired.txt", expired_content);
@@ -1537,10 +1872,60 @@ async fn authenticated_upload_relay_streams_single_and_multipart_without_bearer_
         None,
         None,
     );
-    assert_eq!(
-        router.oneshot(expired_retry).await.unwrap().status(),
-        StatusCode::CONFLICT
+    capture_private_problem(
+        router.oneshot(expired_retry).await.unwrap(),
+        StatusCode::CONFLICT,
+        &mut failure_problems,
+    )
+    .await;
+
+    let sensitive_database_values: (String, String, String, String, String) = sqlx::query_as(
+        "SELECT single_session.staging_object_key,\
+         encode(single_session.idempotency_digest,'hex'),\
+         encode(single_session.expected_bundle_sha256,'hex'),\
+         multipart_session.multipart_upload_id,lease.lease_token::text \
+         FROM save_sessions single_session \
+         CROSS JOIN save_sessions multipart_session \
+         JOIN save_upload_leases lease ON lease.save_session_id=$3::uuid AND lease.part_number=0 \
+         WHERE single_session.id=$1::uuid AND multipart_session.id=$2::uuid",
+    )
+    .bind(single_session)
+    .bind(multipart_session)
+    .bind(&abort_session)
+    .fetch_one(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+    let sensitive = vec![
+        sensitive_database_values.0,
+        sensitive_database_values.1,
+        sensitive_database_values.2,
+        sensitive_database_values.3,
+        sensitive_database_values.4,
+        owner.cookie.clone(),
+        single_capability["headers"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|header| {
+                header["name"]
+                    .as_str()
+                    .is_some_and(|name| name.eq_ignore_ascii_case("x-nuriteo-content-sha256"))
+            })
+            .and_then(|header| header["value"].as_str())
+            .unwrap()
+            .to_owned(),
+        ACCESS_KEY.to_owned(),
+        SECRET_KEY.to_owned(),
+    ];
+    for problem in &failure_problems {
+        assert_no_normalized_sensitive_leak(problem, &sensitive);
+    }
+    let rendered_logs = String::from_utf8(captured_logs.lock().unwrap().clone()).unwrap();
+    assert!(
+        !rendered_logs.is_empty(),
+        "failure path must emit captured logs"
     );
+    assert_no_normalized_sensitive_leak(&rendered_logs, &sensitive);
 }
 
 #[tokio::test]
@@ -4360,6 +4745,88 @@ async fn version_empty_request(
         .unwrap()
 }
 
+async fn version_empty_mutation(
+    router: &Router,
+    browser: &VersionBrowser,
+    method: Method,
+    uri: &str,
+) -> Response<Body> {
+    router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(method)
+                .uri(uri)
+                .header(ORIGIN, WEB_ORIGIN)
+                .header(COOKIE, &browser.cookie)
+                .header("x-csrf-token", &browser.csrf)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap()
+}
+
+async fn create_relay_single_session(
+    router: &Router,
+    browser: &VersionBrowser,
+    project_id: &str,
+    idempotency_key: &str,
+    file_name: &str,
+) -> (Value, Vec<u8>, String) {
+    let content = format!("relay lease {project_id}\n").into_bytes();
+    let bundle = canonical_test_bundle(project_id, SCOPE, file_name, &content);
+    let collection = format!("/api/v1/workspaces/users/{USER}/projects/{project_id}/save-sessions");
+    let response = version_json_request(
+        router,
+        browser,
+        Method::POST,
+        &collection,
+        Some("\"project-v1\""),
+        Some(idempotency_key),
+        json!({
+            "physicalBytes": bundle.len(),
+            "logicalBytes": content.len(),
+            "fileCount": 1,
+            "sha256": BASE64.encode(Sha256::digest(&bundle)),
+            "parts": []
+        }),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::CREATED);
+    (version_response_json(response).await, bundle, collection)
+}
+
+async fn create_organization_relay_session(
+    router: &Router,
+    browser: &VersionBrowser,
+    project_id: &str,
+    idempotency_key: &str,
+) -> Value {
+    let content = format!("organization relay {project_id}\n").into_bytes();
+    let bundle = canonical_test_bundle(project_id, ORG_SCOPE, "race.txt", &content);
+    let collection =
+        format!("/api/v1/workspaces/organizations/{ORG}/projects/{project_id}/save-sessions");
+    let response = version_json_request(
+        router,
+        browser,
+        Method::POST,
+        &collection,
+        Some("\"project-v1\""),
+        Some(idempotency_key),
+        json!({
+            "physicalBytes": bundle.len(),
+            "logicalBytes": content.len(),
+            "fileCount": 1,
+            "sha256": BASE64.encode(Sha256::digest(&bundle)),
+            "parts": []
+        }),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::CREATED);
+    version_response_json(response).await
+}
+
 async fn version_response_json(response: Response<Body>) -> Value {
     serde_json::from_slice(&to_bytes(response.into_body(), 256 * 1024).await.unwrap()).unwrap()
 }
@@ -4439,6 +4906,69 @@ fn assert_relay_projection_is_private(value: &Value, prohibited: &[&str]) {
     }
 }
 
+async fn capture_private_problem(
+    response: Response<Body>,
+    expected_status: StatusCode,
+    captured: &mut Vec<String>,
+) {
+    assert_eq!(response.status(), expected_status);
+    assert_eq!(
+        response.headers().get(CONTENT_TYPE).unwrap(),
+        "application/problem+json"
+    );
+    captured.push(
+        String::from_utf8(
+            to_bytes(response.into_body(), 64 * 1024)
+                .await
+                .unwrap()
+                .to_vec(),
+        )
+        .unwrap(),
+    );
+}
+
+#[derive(Clone)]
+struct CapturedLogWriter(std::sync::Arc<std::sync::Mutex<Vec<u8>>>);
+
+impl std::io::Write for CapturedLogWriter {
+    fn write(&mut self, buffer: &[u8]) -> std::io::Result<usize> {
+        self.0.lock().unwrap().extend_from_slice(buffer);
+        Ok(buffer.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+impl<'writer> tracing_subscriber::fmt::MakeWriter<'writer> for CapturedLogWriter {
+    type Writer = Self;
+
+    fn make_writer(&'writer self) -> Self::Writer {
+        self.clone()
+    }
+}
+
+fn normalized_for_leak_scan(value: &str) -> String {
+    value
+        .chars()
+        .filter(|character| character.is_ascii_alphanumeric())
+        .flat_map(char::to_lowercase)
+        .collect()
+}
+
+fn assert_no_normalized_sensitive_leak(rendered: &str, sensitive: &[String]) {
+    let normalized = normalized_for_leak_scan(rendered);
+    for secret in sensitive {
+        let candidate = normalized_for_leak_scan(secret);
+        assert!(candidate.len() >= 12);
+        assert!(
+            !normalized.contains(&candidate),
+            "response or structured log leaked normalized sensitive material"
+        );
+    }
+}
+
 struct NeverReadBody;
 
 impl http_body::Body for NeverReadBody {
@@ -4450,6 +4980,153 @@ impl http_body::Body for NeverReadBody {
         _cx: &mut std::task::Context<'_>,
     ) -> Poll<Option<Result<http_body::Frame<Self::Data>, Self::Error>>> {
         panic!("relay request body was polled before validation completed")
+    }
+}
+
+struct BoundedFrameBody {
+    content: Bytes,
+    offset: usize,
+}
+
+struct GatedFrameBody {
+    receiver: tokio::sync::mpsc::Receiver<Bytes>,
+    remaining: u64,
+}
+
+fn gated_frame_body(expected_bytes: usize) -> (tokio::sync::mpsc::Sender<Bytes>, Body) {
+    let (sender, receiver) = tokio::sync::mpsc::channel(1);
+    (
+        sender,
+        Body::new(GatedFrameBody {
+            receiver,
+            remaining: expected_bytes as u64,
+        }),
+    )
+}
+
+impl http_body::Body for GatedFrameBody {
+    type Data = Bytes;
+    type Error = std::convert::Infallible;
+
+    fn poll_frame(
+        mut self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> Poll<Option<Result<http_body::Frame<Self::Data>, Self::Error>>> {
+        match self.receiver.poll_recv(cx) {
+            Poll::Ready(Some(frame)) => {
+                self.remaining = self.remaining.saturating_sub(frame.len() as u64);
+                Poll::Ready(Some(Ok(http_body::Frame::data(frame))))
+            }
+            Poll::Ready(None) => Poll::Ready(None),
+            Poll::Pending => Poll::Pending,
+        }
+    }
+
+    fn size_hint(&self) -> http_body::SizeHint {
+        http_body::SizeHint::with_exact(self.remaining)
+    }
+}
+
+async fn send_bounded_frames(sender: tokio::sync::mpsc::Sender<Bytes>, content: &[u8]) {
+    for frame in content.chunks(64 * 1024) {
+        sender.send(Bytes::copy_from_slice(frame)).await.unwrap();
+    }
+}
+
+async fn wait_for_active_relay_lease(pool: &DatabasePool, session_id: &str, part_number: i16) {
+    tokio::time::timeout(Duration::from_secs(2), async {
+        loop {
+            let active: bool = sqlx::query_scalar(
+                "SELECT EXISTS(SELECT 1 FROM save_upload_leases \
+                 WHERE save_session_id=$1::uuid AND part_number=$2 \
+                   AND released_at IS NULL AND lease_expires_at>clock_timestamp())",
+            )
+            .bind(session_id)
+            .bind(part_number)
+            .fetch_one(&mut *pool.acquire().await.unwrap())
+            .await
+            .unwrap();
+            if active {
+                return;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap();
+}
+
+async fn assert_released_relay_generation(
+    pool: &DatabasePool,
+    session_id: &str,
+    part_number: i16,
+    expected_generation: i64,
+) {
+    let persisted: (i64, bool) = sqlx::query_as(
+        "SELECT generation,released_at IS NOT NULL FROM save_upload_leases \
+         WHERE save_session_id=$1::uuid AND part_number=$2",
+    )
+    .bind(session_id)
+    .bind(part_number)
+    .fetch_one(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+    assert_eq!(persisted, (expected_generation, true));
+}
+
+async fn wait_for_relay_scope_lock_wait(pool: &DatabasePool) {
+    tokio::time::timeout(Duration::from_secs(2), async {
+        loop {
+            let waiting: bool = sqlx::query_scalar(
+                "SELECT EXISTS(SELECT 1 FROM pg_stat_activity \
+                 WHERE wait_event_type='Lock' \
+                   AND query LIKE 'SELECT id::text FROM storage_scopes WHERE id = $1::uuid FOR UPDATE%')",
+            )
+            .fetch_one(&mut *pool.acquire().await.unwrap())
+            .await
+            .unwrap();
+            if waiting {
+                return;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap();
+}
+
+impl BoundedFrameBody {
+    fn new(content: &[u8]) -> Self {
+        Self {
+            content: Bytes::copy_from_slice(content),
+            offset: 0,
+        }
+    }
+}
+
+impl http_body::Body for BoundedFrameBody {
+    type Data = Bytes;
+    type Error = std::convert::Infallible;
+
+    fn poll_frame(
+        mut self: Pin<&mut Self>,
+        _cx: &mut std::task::Context<'_>,
+    ) -> Poll<Option<Result<http_body::Frame<Self::Data>, Self::Error>>> {
+        if self.offset == self.content.len() {
+            return Poll::Ready(None);
+        }
+        let end = self
+            .offset
+            .saturating_add(64 * 1024)
+            .min(self.content.len());
+        let frame = self.content.slice(self.offset..end);
+        self.offset = end;
+        Poll::Ready(Some(Ok(http_body::Frame::data(frame))))
+    }
+
+    fn size_hint(&self) -> http_body::SizeHint {
+        let remaining = self.content.len().saturating_sub(self.offset) as u64;
+        http_body::SizeHint::with_exact(remaining)
     }
 }
 
@@ -4508,7 +5185,10 @@ async fn reset_and_seed(pool: &DatabasePool) {
         ('0199ee6c-c777-7000-8000-000000008020','0199ee6c-c777-7000-8000-000000008001','0199ee6c-c777-7000-8000-000000008010','save-a','Save A'),\
         ('0199ee6c-c777-7000-8000-000000008021','0199ee6c-c777-7000-8000-000000008001','0199ee6c-c777-7000-8000-000000008010','save-b','Save B'),\
         ('0199ee6c-c777-7000-8000-000000008022','0199ee6c-c777-7000-8000-000000008001','0199ee6c-c777-7000-8000-000000008010','save-fail','Save Fail'),\
-        ('0199ee6c-c777-7000-8000-000000008023','0199ee6c-c777-7000-8000-000000008001','0199ee6c-c777-7000-8000-000000008010','save-timeout','Save Timeout')").await.unwrap();
+        ('0199ee6c-c777-7000-8000-000000008023','0199ee6c-c777-7000-8000-000000008001','0199ee6c-c777-7000-8000-000000008010','save-timeout','Save Timeout'),\
+        ('0199ee6c-c777-7000-8000-000000008026','0199ee6c-c777-7000-8000-000000008001','0199ee6c-c777-7000-8000-000000008010','lease-abort','Lease Abort'),\
+        ('0199ee6c-c777-7000-8000-000000008027','0199ee6c-c777-7000-8000-000000008001','0199ee6c-c777-7000-8000-000000008010','lease-expire','Lease Expire'),\
+        ('0199ee6c-c777-7000-8000-000000008028','0199ee6c-c777-7000-8000-000000008001','0199ee6c-c777-7000-8000-000000008010','lease-complete','Lease Complete')").await.unwrap();
     connection.execute("INSERT INTO projects (id,owner_organization_id,storage_scope_id,slug,name) VALUES \
         ('0199ee6c-c777-7000-8000-000000008040','0199ee6c-c777-7000-8000-000000008030','0199ee6c-c777-7000-8000-000000008031','org-owner-save','Owner Save'),\
         ('0199ee6c-c777-7000-8000-000000008041','0199ee6c-c777-7000-8000-000000008030','0199ee6c-c777-7000-8000-000000008031','org-read-save','Read Save'),\

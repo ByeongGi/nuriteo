@@ -1,9 +1,11 @@
 use std::future::Future;
 use std::time::Duration;
 
+use ::time::OffsetDateTime;
 use sqlx::{Acquire, Postgres, Transaction};
 use tokio::io::AsyncRead;
 use tokio::time::{self, Instant};
+use uuid::Uuid;
 
 use crate::database::{DatabaseError, DatabasePool};
 use crate::object_storage::{
@@ -11,15 +13,14 @@ use crate::object_storage::{
     S3ObjectStore, Sha256Checksum, StreamingMultipartPartRequest, StreamingPutRequest, UploadBody,
     UploadDeadlines, upload_abort_pair,
 };
-use crate::project::SaveProjectContext;
-use crate::quota::SaveSessionId;
-
-use super::{
-    MultipartPartReceipt, MultipartService, MultipartServiceError, MultipartSessionContext,
+use crate::project::{
+    EffectiveProjectRole, ProjectAccessError, ProjectAccessRepository, SaveProjectContext,
 };
+use crate::quota::{QuotaRepository, SaveSessionId};
 
 const CONTENT_TYPE: &str = "application/vnd.nuriteo.project-bundle";
 const SQL_TIMEOUT_MARGIN: Duration = Duration::from_millis(25);
+const LEASE_GRACE: Duration = Duration::from_secs(5);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum RelayUploadError {
@@ -37,17 +38,16 @@ pub(crate) enum RelayUploadError {
 pub(crate) struct RelayUploadService {
     pool: DatabasePool,
     store: S3ObjectStore,
-    multipart: MultipartService,
     operation_timeout: Duration,
     idle_timeout: Duration,
     total_timeout: Duration,
+    lease_duration: Duration,
 }
 
 impl RelayUploadService {
     pub(crate) fn new(
         pool: DatabasePool,
         store: S3ObjectStore,
-        multipart: MultipartService,
         operation_timeout: Duration,
         idle_timeout: Duration,
         total_timeout: Duration,
@@ -56,13 +56,17 @@ impl RelayUploadService {
             .map_err(|_| RelayUploadError::InvalidInput)?;
         UploadDeadlines::for_multipart_part(idle_timeout, total_timeout)
             .map_err(|_| RelayUploadError::InvalidInput)?;
+        let lease_duration = total_timeout
+            .checked_add(operation_timeout)
+            .and_then(|duration| duration.checked_add(LEASE_GRACE))
+            .ok_or(RelayUploadError::InvalidInput)?;
         Ok(Self {
             pool,
             store,
-            multipart,
             operation_timeout,
             idle_timeout,
             total_timeout,
+            lease_duration,
         })
     }
 
@@ -77,18 +81,25 @@ impl RelayUploadService {
         let target = self
             .prepare_single(context, session_id, declared_bytes, &checksum)
             .await?;
-        let (_, abort) = upload_abort_pair();
-        self.store
+        let result = self
+            .store
             .put_stream_once(StreamingPutRequest {
-                key: target,
+                key: target.object_key,
                 body: UploadBody::from_reader(reader, declared_bytes, checksum),
                 content_type: Some(CONTENT_TYPE.to_owned()),
                 deadlines: UploadDeadlines::for_put(self.idle_timeout, self.total_timeout)
                     .map_err(|_| RelayUploadError::Internal)?,
-                abort,
+                abort: upload_abort_pair().1,
             })
+            .await;
+        if let Err(error) = result {
+            self.release_lease(context, session_id, target.lease)
+                .await
+                .map_err(|_| RelayUploadError::ReconciliationRequired)?;
+            return Err(map_object_store(error));
+        }
+        self.finalize_single(context, session_id, target.lease)
             .await
-            .map_err(map_object_store)
     }
 
     pub(crate) async fn upload_part(
@@ -100,40 +111,48 @@ impl RelayUploadService {
         checksum: Sha256Checksum,
         reader: impl AsyncRead + Send + 'static,
     ) -> Result<(), RelayUploadError> {
-        let target = self
+        let target = match self
             .prepare_part(context, session_id, part_number, declared_bytes, &checksum)
-            .await?;
-        let (_, abort) = upload_abort_pair();
+            .await?
+        {
+            PreparePart::AlreadyUploaded => return Ok(()),
+            PreparePart::Ready(target) => target,
+        };
         let uploaded = self
             .store
             .upload_part_stream_once(
                 StreamingMultipartPartRequest {
                     upload: target.upload,
                     part_number,
-                    body: UploadBody::from_reader(reader, declared_bytes, checksum.clone()),
+                    body: UploadBody::from_reader(reader, declared_bytes, checksum),
                     final_part: target.final_part,
                     deadlines: UploadDeadlines::for_multipart_part(
                         self.idle_timeout,
                         self.total_timeout,
                     )
                     .map_err(|_| RelayUploadError::Internal)?,
-                    abort,
+                    abort: upload_abort_pair().1,
                 },
                 &target.limits,
             )
-            .await
-            .map_err(map_object_store)?;
-        let receipt = MultipartPartReceipt::new(
-            uploaded.part_number,
+            .await;
+        let uploaded = match uploaded {
+            Ok(uploaded) => uploaded,
+            Err(error) => {
+                self.release_lease(context, session_id, target.lease)
+                    .await
+                    .map_err(|_| RelayUploadError::ReconciliationRequired)?;
+                return Err(map_object_store(error));
+            }
+        };
+        self.finalize_part(
+            context,
+            session_id,
+            target.lease,
             declared_bytes,
-            checksum,
             uploaded.e_tag,
         )
-        .map_err(map_multipart)?;
-        self.multipart
-            .record_receipts(multipart_context(context, session_id), vec![receipt])
-            .await
-            .map_err(map_multipart)
+        .await
     }
 
     async fn prepare_single(
@@ -142,7 +161,7 @@ impl RelayUploadService {
         session_id: SaveSessionId,
         declared_bytes: u64,
         checksum: &Sha256Checksum,
-    ) -> Result<ObjectKey, RelayUploadError> {
+    ) -> Result<RelaySingleTarget, RelayUploadError> {
         let deadline = Deadline::new(self.operation_timeout);
         let mut connection = deadline
             .run(self.pool.acquire())
@@ -150,12 +169,13 @@ impl RelayUploadService {
             .map_err(map_database)?;
         let mut transaction = deadline.run(connection.begin()).await?.map_err(map_sql)?;
         configure(&mut transaction, deadline).await?;
-        type SingleRow = (String, String, i64, Vec<u8>, bool);
+        require_write(&mut transaction, context, deadline).await?;
+        type SingleRow = (String, String, i64, Vec<u8>, bool, OffsetDateTime);
         let row: Option<SingleRow> = deadline
             .run(
                 sqlx::query_as(
                     "SELECT state,staging_object_key,expected_physical_bytes,\
-                     expected_bundle_sha256,expires_at<=transaction_timestamp() \
+                     expected_bundle_sha256,expires_at<=transaction_timestamp(),expires_at \
                      FROM save_sessions WHERE id=$1::uuid AND project_id=$2::uuid \
                      AND storage_scope_id=$3::uuid AND actor_user_id=$4::uuid \
                      AND upload_mode='single' FOR UPDATE",
@@ -168,34 +188,29 @@ impl RelayUploadService {
             )
             .await?
             .map_err(map_sql)?;
-        let Some((state, key, expected_bytes, expected_checksum, expired)) = row else {
+        let Some((state, key, expected_bytes, expected_checksum, expired, expires_at)) = row else {
             return Err(RelayUploadError::NotFound);
         };
         validate_session_state(&state, expired, &["created", "uploading"])?;
-        if u64::try_from(expected_bytes).ok() != Some(declared_bytes)
-            || expected_checksum.as_slice() != checksum.as_bytes()
-        {
-            return Err(RelayUploadError::InvalidInput);
-        }
+        validate_expected_payload(expected_bytes, &expected_checksum, declared_bytes, checksum)?;
+        ensure_lease_fits(expires_at, self.lease_duration)?;
         if state == "created" {
-            let affected = deadline
-                .run(
-                    sqlx::query(
-                        "UPDATE save_sessions SET state='uploading',updated_at=transaction_timestamp() \
-                         WHERE id=$1::uuid AND state='created' AND upload_mode='single'",
-                    )
-                    .bind(session_id.to_string())
-                    .execute(&mut *transaction),
-                )
-                .await?
-                .map_err(map_sql)?
-                .rows_affected();
-            if affected != 1 {
-                return Err(RelayUploadError::Conflict);
-            }
+            update_single_to_uploading(&mut transaction, session_id, deadline).await?;
         }
+        let lease = acquire_lease(
+            &mut transaction,
+            session_id,
+            0,
+            self.lease_duration,
+            deadline,
+        )
+        .await?;
+        ensure_relay_cleanup_guard(&mut transaction, session_id, deadline).await?;
         commit(transaction, deadline).await?;
-        ObjectKey::parse(key).map_err(|_| RelayUploadError::Internal)
+        Ok(RelaySingleTarget {
+            object_key: ObjectKey::parse(key).map_err(|_| RelayUploadError::Internal)?,
+            lease,
+        })
     }
 
     async fn prepare_part(
@@ -205,7 +220,7 @@ impl RelayUploadService {
         part_number: u16,
         declared_bytes: u64,
         checksum: &Sha256Checksum,
-    ) -> Result<RelayPartTarget, RelayUploadError> {
+    ) -> Result<PreparePart, RelayUploadError> {
         let deadline = Deadline::new(self.operation_timeout);
         let mut connection = deadline
             .run(self.pool.acquire())
@@ -213,11 +228,13 @@ impl RelayUploadService {
             .map_err(map_database)?;
         let mut transaction = deadline.run(connection.begin()).await?.map_err(map_sql)?;
         configure(&mut transaction, deadline).await?;
+        require_write(&mut transaction, context, deadline).await?;
         type PartRow = (
             String,
             String,
             Option<String>,
             bool,
+            OffsetDateTime,
             String,
             String,
             i64,
@@ -230,7 +247,7 @@ impl RelayUploadService {
             .run(
                 sqlx::query_as(
                     "SELECT save.state,save.staging_object_key,save.multipart_upload_id,\
-                     save.expires_at<=transaction_timestamp(),lifecycle.create_status,\
+                     save.expires_at<=transaction_timestamp(),save.expires_at,lifecycle.create_status,\
                      lifecycle.complete_status,lifecycle.part_size_bytes,lifecycle.part_count,\
                      part.expected_bytes,part.expected_sha256,part.state \
                      FROM save_sessions save JOIN multipart_lifecycles lifecycle \
@@ -238,7 +255,8 @@ impl RelayUploadService {
                      JOIN multipart_parts part ON part.save_session_id=save.id \
                      WHERE save.id=$1::uuid AND save.project_id=$2::uuid \
                        AND save.storage_scope_id=$3::uuid AND save.actor_user_id=$4::uuid \
-                       AND save.upload_mode='multipart' AND part.part_number=$5 FOR UPDATE OF save,lifecycle,part",
+                       AND save.upload_mode='multipart' AND part.part_number=$5 \
+                     FOR UPDATE OF save,lifecycle,part",
                 )
                 .bind(session_id.to_string())
                 .bind(context.project_id.to_string())
@@ -253,51 +271,521 @@ impl RelayUploadService {
             return Err(RelayUploadError::NotFound);
         };
         validate_session_state(&row.0, row.3, &["uploading"])?;
-        if row.4 != "ready"
-            || row.5 != "pending"
-            || !matches!(row.10.as_str(), "pending" | "uploaded")
-        {
+        if row.5 != "ready" || row.6 != "pending" {
             return Err(RelayUploadError::Conflict);
         }
-        let upload_id = row.2.ok_or(RelayUploadError::Internal)?;
-        if u64::try_from(row.8).ok() != Some(declared_bytes)
-            || row.9.as_slice() != checksum.as_bytes()
-        {
-            return Err(RelayUploadError::InvalidInput);
+        validate_expected_payload(row.9, &row.10, declared_bytes, checksum)?;
+        if row.11 == "uploaded" {
+            commit(transaction, deadline).await?;
+            return Ok(PreparePart::AlreadyUploaded);
         }
-        let part_size = usize::try_from(row.6).map_err(|_| RelayUploadError::Internal)?;
-        let part_count = u16::try_from(row.7).map_err(|_| RelayUploadError::Internal)?;
+        if row.11 != "pending" {
+            return Err(RelayUploadError::Internal);
+        }
+        ensure_lease_fits(row.4, self.lease_duration)?;
+        let part_count = u16::try_from(row.8).map_err(|_| RelayUploadError::Internal)?;
         if part_number == 0 || part_number > part_count {
             return Err(RelayUploadError::InvalidInput);
         }
+        let lease = acquire_lease(
+            &mut transaction,
+            session_id,
+            i16::try_from(part_number).map_err(|_| RelayUploadError::InvalidInput)?,
+            self.lease_duration,
+            deadline,
+        )
+        .await?;
+        ensure_relay_cleanup_guard(&mut transaction, session_id, deadline).await?;
         let target = RelayPartTarget {
             upload: MultipartUpload {
                 key: ObjectKey::parse(row.1).map_err(|_| RelayUploadError::Internal)?,
-                upload_id,
+                upload_id: row.2.ok_or(RelayUploadError::Internal)?,
             },
-            limits: MultipartLimits::new(part_size).map_err(|_| RelayUploadError::Internal)?,
+            limits: MultipartLimits::new(
+                usize::try_from(row.7).map_err(|_| RelayUploadError::Internal)?,
+            )
+            .map_err(|_| RelayUploadError::Internal)?,
             final_part: part_number == part_count,
+            lease,
         };
         commit(transaction, deadline).await?;
-        Ok(target)
+        Ok(PreparePart::Ready(target))
     }
+
+    async fn finalize_single(
+        &self,
+        context: SaveProjectContext,
+        session_id: SaveSessionId,
+        lease: RelayLease,
+    ) -> Result<(), RelayUploadError> {
+        self.finalize(context, session_id, lease, None).await
+    }
+
+    async fn finalize_part(
+        &self,
+        context: SaveProjectContext,
+        session_id: SaveSessionId,
+        lease: RelayLease,
+        declared_bytes: u64,
+        e_tag: String,
+    ) -> Result<(), RelayUploadError> {
+        self.finalize(context, session_id, lease, Some((declared_bytes, e_tag)))
+            .await
+    }
+
+    async fn finalize(
+        &self,
+        context: SaveProjectContext,
+        session_id: SaveSessionId,
+        lease: RelayLease,
+        part_receipt: Option<(u64, String)>,
+    ) -> Result<(), RelayUploadError> {
+        let deadline = Deadline::new(self.operation_timeout);
+        let mut connection = deadline
+            .run(self.pool.acquire())
+            .await?
+            .map_err(map_database)?;
+        let mut transaction = deadline.run(connection.begin()).await?.map_err(map_sql)?;
+        configure(&mut transaction, deadline).await?;
+        let authorization = read_write_authorization(&mut transaction, context, deadline).await?;
+        let session = lock_session(&mut transaction, context, session_id, deadline).await?;
+        require_matching_lease(&mut transaction, session_id, lease, deadline).await?;
+        let expected_state = if part_receipt.is_some() {
+            session.state == "uploading"
+        } else {
+            matches!(session.state.as_str(), "created" | "uploading")
+        };
+        if authorization != WriteAuthorization::Authorized || session.expired || !expected_state {
+            release_lease_row(&mut transaction, session_id, lease, deadline).await?;
+            let error = fail_invalidated_session(
+                &mut transaction,
+                session_id,
+                &session,
+                authorization,
+                deadline,
+            )
+            .await?;
+            commit(transaction, deadline).await?;
+            return Err(error);
+        }
+        if let Some((declared_bytes, e_tag)) = part_receipt {
+            let affected = deadline
+                .run(
+                    sqlx::query(
+                        "UPDATE multipart_parts SET state='uploaded',object_etag=$3,\
+                         uploaded_at=transaction_timestamp(),updated_at=transaction_timestamp() \
+                         WHERE save_session_id=$1::uuid AND part_number=$2 \
+                           AND expected_bytes=$4 AND state='pending'",
+                    )
+                    .bind(session_id.to_string())
+                    .bind(lease.part_number)
+                    .bind(e_tag)
+                    .bind(i64::try_from(declared_bytes).map_err(|_| RelayUploadError::Internal)?)
+                    .execute(&mut *transaction),
+                )
+                .await?
+                .map_err(map_sql)?
+                .rows_affected();
+            if affected != 1 {
+                return Err(RelayUploadError::ReconciliationRequired);
+            }
+        }
+        release_lease_row(&mut transaction, session_id, lease, deadline).await?;
+        remove_resolved_relay_cleanup_guard(&mut transaction, session_id, deadline).await?;
+        commit(transaction, deadline).await
+    }
+
+    async fn release_lease(
+        &self,
+        context: SaveProjectContext,
+        session_id: SaveSessionId,
+        lease: RelayLease,
+    ) -> Result<(), RelayUploadError> {
+        let deadline = Deadline::new(self.operation_timeout);
+        let mut connection = deadline
+            .run(self.pool.acquire())
+            .await?
+            .map_err(map_database)?;
+        let mut transaction = deadline.run(connection.begin()).await?.map_err(map_sql)?;
+        configure(&mut transaction, deadline).await?;
+        let _ = read_write_authorization(&mut transaction, context, deadline).await?;
+        let _ = lock_session(&mut transaction, context, session_id, deadline).await?;
+        release_lease_row(&mut transaction, session_id, lease, deadline).await?;
+        remove_resolved_relay_cleanup_guard(&mut transaction, session_id, deadline).await?;
+        commit(transaction, deadline).await
+    }
+}
+
+#[derive(Clone, Copy)]
+struct RelayLease {
+    token: Uuid,
+    generation: i64,
+    part_number: i16,
+}
+
+struct RelaySingleTarget {
+    object_key: ObjectKey,
+    lease: RelayLease,
+}
+
+enum PreparePart {
+    AlreadyUploaded,
+    Ready(RelayPartTarget),
 }
 
 struct RelayPartTarget {
     upload: MultipartUpload,
     limits: MultipartLimits,
     final_part: bool,
+    lease: RelayLease,
 }
 
-fn multipart_context(
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum WriteAuthorization {
+    Authorized,
+    Denied,
+    ProjectUnavailable,
+}
+
+struct LockedSession {
+    state: String,
+    expired: bool,
+}
+
+async fn read_write_authorization(
+    transaction: &mut Transaction<'_, Postgres>,
+    context: SaveProjectContext,
+    deadline: Deadline,
+) -> Result<WriteAuthorization, RelayUploadError> {
+    let scope = deadline
+        .run(QuotaRepository::lock_storage_scope(
+            transaction,
+            context.storage_scope_id,
+        ))
+        .await?
+        .map_err(map_sql)?;
+    if !scope {
+        return Ok(WriteAuthorization::Denied);
+    }
+    let role = match deadline
+        .run(ProjectAccessRepository::resolve_effective_role_for_update(
+            transaction,
+            context.project_id,
+            context.actor_user_id,
+        ))
+        .await?
+    {
+        Ok(role) => role,
+        Err(
+            ProjectAccessError::ProjectUnavailable
+            | ProjectAccessError::ProjectNotOrganizationOwned
+            | ProjectAccessError::MemberUnavailable,
+        ) => return Ok(WriteAuthorization::Denied),
+        Err(ProjectAccessError::OperationTimeout) => {
+            return Err(RelayUploadError::OperationTimeout);
+        }
+        Err(ProjectAccessError::PersistenceUnavailable) => {
+            return Err(RelayUploadError::Unavailable);
+        }
+        Err(ProjectAccessError::InvalidPersistedState | ProjectAccessError::AlreadyGranted) => {
+            return Err(RelayUploadError::Internal);
+        }
+    };
+    let project: Option<(String, String)> = deadline
+        .run(
+            sqlx::query_as("SELECT state,storage_scope_id::text FROM projects WHERE id=$1::uuid")
+                .bind(context.project_id.to_string())
+                .fetch_optional(&mut **transaction),
+        )
+        .await?
+        .map_err(map_sql)?;
+    let Some((state, scope_id)) = project else {
+        return Ok(WriteAuthorization::Denied);
+    };
+    if scope_id != context.storage_scope_id.to_string() || role < EffectiveProjectRole::Write {
+        Ok(WriteAuthorization::Denied)
+    } else if state != "active" {
+        Ok(WriteAuthorization::ProjectUnavailable)
+    } else {
+        Ok(WriteAuthorization::Authorized)
+    }
+}
+
+async fn require_write(
+    transaction: &mut Transaction<'_, Postgres>,
+    context: SaveProjectContext,
+    deadline: Deadline,
+) -> Result<(), RelayUploadError> {
+    match read_write_authorization(transaction, context, deadline).await? {
+        WriteAuthorization::Authorized => Ok(()),
+        WriteAuthorization::Denied => Err(RelayUploadError::NotFound),
+        WriteAuthorization::ProjectUnavailable => Err(RelayUploadError::Conflict),
+    }
+}
+
+async fn lock_session(
+    transaction: &mut Transaction<'_, Postgres>,
     context: SaveProjectContext,
     session_id: SaveSessionId,
-) -> MultipartSessionContext {
-    MultipartSessionContext {
-        storage_scope_id: context.storage_scope_id,
-        project_id: context.project_id,
-        actor_user_id: context.actor_user_id,
-        session_id,
+    deadline: Deadline,
+) -> Result<LockedSession, RelayUploadError> {
+    let row: Option<(String, bool)> = deadline
+        .run(
+            sqlx::query_as(
+                "SELECT state,expires_at<=transaction_timestamp() FROM save_sessions \
+                 WHERE id=$1::uuid AND project_id=$2::uuid AND storage_scope_id=$3::uuid \
+                   AND actor_user_id=$4::uuid FOR UPDATE",
+            )
+            .bind(session_id.to_string())
+            .bind(context.project_id.to_string())
+            .bind(context.storage_scope_id.to_string())
+            .bind(context.actor_user_id.to_string())
+            .fetch_optional(&mut **transaction),
+        )
+        .await?
+        .map_err(map_sql)?;
+    row.map(|(state, expired)| LockedSession { state, expired })
+        .ok_or(RelayUploadError::NotFound)
+}
+
+async fn acquire_lease(
+    transaction: &mut Transaction<'_, Postgres>,
+    session_id: SaveSessionId,
+    part_number: i16,
+    duration: Duration,
+    deadline: Deadline,
+) -> Result<RelayLease, RelayUploadError> {
+    let token = Uuid::now_v7();
+    let seconds = i64::try_from(duration.as_secs()).map_err(|_| RelayUploadError::Internal)?;
+    let generation: Option<i64> = deadline
+        .run(
+            sqlx::query_scalar(
+                "INSERT INTO save_upload_leases \
+                 (save_session_id,part_number,generation,lease_token,lease_expires_at) \
+                 VALUES ($1::uuid,$2,1,$3::uuid,transaction_timestamp()+make_interval(secs=>$4)) \
+                 ON CONFLICT (save_session_id,part_number) DO UPDATE SET \
+                   generation=save_upload_leases.generation+1,lease_token=EXCLUDED.lease_token,\
+                   lease_expires_at=EXCLUDED.lease_expires_at,released_at=NULL \
+                 WHERE save_upload_leases.released_at IS NOT NULL \
+                    OR save_upload_leases.lease_expires_at<=clock_timestamp() \
+                 RETURNING generation",
+            )
+            .bind(session_id.to_string())
+            .bind(part_number)
+            .bind(token.to_string())
+            .bind(seconds)
+            .fetch_optional(&mut **transaction),
+        )
+        .await?
+        .map_err(map_sql)?;
+    generation
+        .map(|generation| RelayLease {
+            token,
+            generation,
+            part_number,
+        })
+        .ok_or(RelayUploadError::Conflict)
+}
+
+async fn require_matching_lease(
+    transaction: &mut Transaction<'_, Postgres>,
+    session_id: SaveSessionId,
+    lease: RelayLease,
+    deadline: Deadline,
+) -> Result<(), RelayUploadError> {
+    let row: Option<(i64, String)> = deadline
+        .run(
+            sqlx::query_as(
+                "SELECT generation,lease_token::text FROM save_upload_leases \
+                 WHERE save_session_id=$1::uuid AND part_number=$2 \
+                   AND released_at IS NULL AND lease_expires_at>clock_timestamp() FOR UPDATE",
+            )
+            .bind(session_id.to_string())
+            .bind(lease.part_number)
+            .fetch_optional(&mut **transaction),
+        )
+        .await?
+        .map_err(map_sql)?;
+    if row.as_ref().is_some_and(|(generation, token)| {
+        *generation == lease.generation && token == &lease.token.to_string()
+    }) {
+        Ok(())
+    } else {
+        Err(RelayUploadError::Conflict)
+    }
+}
+
+async fn ensure_relay_cleanup_guard(
+    transaction: &mut Transaction<'_, Postgres>,
+    session_id: SaveSessionId,
+    deadline: Deadline,
+) -> Result<(), RelayUploadError> {
+    let affected = deadline
+        .run(
+            sqlx::query(
+                "INSERT INTO save_cleanup_jobs \
+                 (save_session_id,cleanup_kind,object_key,multipart_upload_id,eligible_at) \
+                 SELECT id,CASE WHEN upload_mode='single' THEN 'object_delete' \
+                                ELSE 'multipart_abort' END,staging_object_key,\
+                        CASE WHEN upload_mode='single' THEN NULL ELSE multipart_upload_id END,\
+                        expires_at \
+                 FROM save_sessions WHERE id=$1::uuid \
+                 ON CONFLICT (save_session_id) DO NOTHING",
+            )
+            .bind(session_id.to_string())
+            .execute(&mut **transaction),
+        )
+        .await?
+        .map_err(map_sql)?
+        .rows_affected();
+    if affected <= 1 {
+        Ok(())
+    } else {
+        Err(RelayUploadError::Internal)
+    }
+}
+
+async fn remove_resolved_relay_cleanup_guard(
+    transaction: &mut Transaction<'_, Postgres>,
+    session_id: SaveSessionId,
+    deadline: Deadline,
+) -> Result<(), RelayUploadError> {
+    deadline
+        .run(
+            sqlx::query(
+                "DELETE FROM save_cleanup_jobs job USING save_sessions session \
+                 WHERE job.save_session_id=$1::uuid AND session.id=job.save_session_id \
+                   AND job.status='queued' AND session.state IN ('created','uploading') \
+                   AND ((session.upload_mode='single' AND job.cleanup_kind='object_delete') \
+                     OR (session.upload_mode='multipart' AND job.cleanup_kind='multipart_abort')) \
+                   AND NOT EXISTS (SELECT 1 FROM save_upload_leases lease \
+                                   WHERE lease.save_session_id=session.id \
+                                     AND lease.released_at IS NULL)",
+            )
+            .bind(session_id.to_string())
+            .execute(&mut **transaction),
+        )
+        .await?
+        .map_err(map_sql)?;
+    Ok(())
+}
+
+async fn release_lease_row(
+    transaction: &mut Transaction<'_, Postgres>,
+    session_id: SaveSessionId,
+    lease: RelayLease,
+    deadline: Deadline,
+) -> Result<(), RelayUploadError> {
+    let affected = deadline
+        .run(
+            sqlx::query(
+                "UPDATE save_upload_leases SET released_at=transaction_timestamp(),\
+                 updated_at=transaction_timestamp() WHERE save_session_id=$1::uuid \
+                 AND part_number=$2 AND generation=$3 AND lease_token=$4::uuid \
+                 AND released_at IS NULL",
+            )
+            .bind(session_id.to_string())
+            .bind(lease.part_number)
+            .bind(lease.generation)
+            .bind(lease.token.to_string())
+            .execute(&mut **transaction),
+        )
+        .await?
+        .map_err(map_sql)?
+        .rows_affected();
+    if affected == 1 {
+        Ok(())
+    } else {
+        Err(RelayUploadError::Conflict)
+    }
+}
+
+async fn fail_invalidated_session(
+    transaction: &mut Transaction<'_, Postgres>,
+    session_id: SaveSessionId,
+    session: &LockedSession,
+    authorization: WriteAuthorization,
+    deadline: Deadline,
+) -> Result<RelayUploadError, RelayUploadError> {
+    if matches!(
+        session.state.as_str(),
+        "created" | "uploading" | "verifying"
+    ) {
+        let terminal = if session.expired { "expired" } else { "failed" };
+        let affected = deadline
+            .run(
+                sqlx::query(
+                    "UPDATE save_sessions SET state=$2,terminal_at=transaction_timestamp(),\
+                     updated_at=transaction_timestamp() WHERE id=$1::uuid \
+                     AND state IN ('created','uploading','verifying')",
+                )
+                .bind(session_id.to_string())
+                .bind(terminal)
+                .execute(&mut **transaction),
+            )
+            .await?
+            .map_err(map_sql)?
+            .rows_affected();
+        if affected != 1 {
+            return Err(RelayUploadError::ReconciliationRequired);
+        }
+    }
+    if session.expired {
+        Ok(RelayUploadError::SessionExpired)
+    } else if authorization == WriteAuthorization::Denied {
+        Ok(RelayUploadError::NotFound)
+    } else {
+        Ok(RelayUploadError::Conflict)
+    }
+}
+
+async fn update_single_to_uploading(
+    transaction: &mut Transaction<'_, Postgres>,
+    session_id: SaveSessionId,
+    deadline: Deadline,
+) -> Result<(), RelayUploadError> {
+    let affected = deadline
+        .run(
+            sqlx::query(
+                "UPDATE save_sessions SET state='uploading',updated_at=transaction_timestamp() \
+                 WHERE id=$1::uuid AND state='created' AND upload_mode='single'",
+            )
+            .bind(session_id.to_string())
+            .execute(&mut **transaction),
+        )
+        .await?
+        .map_err(map_sql)?
+        .rows_affected();
+    if affected == 1 {
+        Ok(())
+    } else {
+        Err(RelayUploadError::Conflict)
+    }
+}
+
+fn validate_expected_payload(
+    expected_bytes: i64,
+    expected_checksum: &[u8],
+    declared_bytes: u64,
+    checksum: &Sha256Checksum,
+) -> Result<(), RelayUploadError> {
+    if u64::try_from(expected_bytes).ok() == Some(declared_bytes)
+        && expected_checksum == checksum.as_bytes()
+    {
+        Ok(())
+    } else {
+        Err(RelayUploadError::InvalidInput)
+    }
+}
+
+fn ensure_lease_fits(
+    expires_at: OffsetDateTime,
+    lease_duration: Duration,
+) -> Result<(), RelayUploadError> {
+    if expires_at > OffsetDateTime::now_utc() + lease_duration {
+        Ok(())
+    } else {
+        Err(RelayUploadError::SessionExpired)
     }
 }
 
@@ -386,14 +874,14 @@ fn map_database(error: DatabaseError) -> RelayUploadError {
 }
 
 fn map_sql(error: sqlx::Error) -> RelayUploadError {
-    if error
+    match error
         .as_database_error()
-        .and_then(sqlx::error::DatabaseError::code)
-        .is_some_and(|code| matches!(code.as_ref(), "57014" | "55P03"))
+        .and_then(|error| error.code())
+        .as_deref()
     {
-        RelayUploadError::OperationTimeout
-    } else {
-        RelayUploadError::Unavailable
+        Some("57014" | "55P03") => RelayUploadError::OperationTimeout,
+        Some("23503" | "23505" | "23514") => RelayUploadError::Conflict,
+        _ => RelayUploadError::Unavailable,
     }
 }
 
@@ -414,33 +902,6 @@ fn map_object_store(error: ObjectStoreError) -> RelayUploadError {
         ObjectStoreErrorKind::ResponseTooLarge
         | ObjectStoreErrorKind::Unsupported
         | ObjectStoreErrorKind::Internal => RelayUploadError::Internal,
-    }
-}
-
-fn map_multipart(error: MultipartServiceError) -> RelayUploadError {
-    match error {
-        MultipartServiceError::InvalidInput
-        | MultipartServiceError::PartConflict
-        | MultipartServiceError::PartsIncomplete => RelayUploadError::InvalidInput,
-        MultipartServiceError::ScopeNotFound
-        | MultipartServiceError::ProjectNotFound
-        | MultipartServiceError::SessionNotFound => RelayUploadError::NotFound,
-        MultipartServiceError::ProjectUnavailable
-        | MultipartServiceError::ActiveSessionConflict
-        | MultipartServiceError::SessionTerminal
-        | MultipartServiceError::SessionNearExpiry
-        | MultipartServiceError::StaleProjectVersion
-        | MultipartServiceError::IdempotencyConflict => RelayUploadError::Conflict,
-        MultipartServiceError::SessionExpired => RelayUploadError::SessionExpired,
-        MultipartServiceError::OperationTimeout => RelayUploadError::OperationTimeout,
-        MultipartServiceError::DatabaseUnavailable
-        | MultipartServiceError::ObjectStorageUnavailable => RelayUploadError::Unavailable,
-        MultipartServiceError::CreateReconciliationRequired
-        | MultipartServiceError::CompleteReconciliationRequired
-        | MultipartServiceError::CommitOutcomeUnknown => RelayUploadError::ReconciliationRequired,
-        MultipartServiceError::IdempotencyConfigurationMismatch
-        | MultipartServiceError::InvariantViolation
-        | MultipartServiceError::QuotaExceeded => RelayUploadError::Internal,
     }
 }
 

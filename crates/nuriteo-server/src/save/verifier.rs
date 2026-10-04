@@ -232,11 +232,13 @@ impl StagingVerifier {
             .map_err(map_sql_error)?;
         configure(&mut tx, deadline).await?;
         authorize(&mut tx, request, deadline).await?;
-        type SessionRow = (String, String, Vec<u8>, i64, i64, i32, String, bool);
+        type SessionRow = (String, String, Vec<u8>, i64, i64, i32, String, bool, bool);
         let row: Option<SessionRow> = deadline.run(
             sqlx::query_as(
                 "SELECT state,staging_object_key,expected_bundle_sha256,expected_physical_bytes,\
-                 expected_logical_bytes,expected_file_count,upload_mode,expires_at<=transaction_timestamp() \
+                 expected_logical_bytes,expected_file_count,upload_mode,expires_at<=transaction_timestamp(),\
+                 EXISTS(SELECT 1 FROM save_upload_leases lease WHERE lease.save_session_id=save_sessions.id \
+                   AND lease.released_at IS NULL AND lease.lease_expires_at>clock_timestamp()) \
                  FROM save_sessions WHERE id=$1::uuid AND project_id=$2::uuid \
                  AND storage_scope_id=$3::uuid AND actor_user_id=$4::uuid FOR UPDATE"
             ).bind(request.session_id.to_string()).bind(request.project_id.to_string())
@@ -246,6 +248,9 @@ impl StagingVerifier {
         let Some(row) = row else {
             return Err(VerificationError::SessionNotFound);
         };
+        if row.8 {
+            return Err(VerificationError::SessionUnavailable);
+        }
         if row.7 {
             transition(&mut tx, request.session_id, "expired", deadline).await?;
             commit(tx, deadline).await?;

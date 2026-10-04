@@ -795,6 +795,21 @@ impl<S: MultipartStore> MultipartService<S> {
         configure_transaction(&mut tx, deadline).await?;
         lock_scope_and_authorize(&mut tx, context, deadline).await?;
         let session = load_session_for_update(&mut tx, context, deadline).await?;
+        let relay_upload_active: bool = deadline
+            .run(
+                sqlx::query_scalar(
+                    "SELECT EXISTS(SELECT 1 FROM save_upload_leases \
+                     WHERE save_session_id=$1::uuid AND released_at IS NULL \
+                       AND lease_expires_at>clock_timestamp())",
+                )
+                .bind(context.session_id.to_string())
+                .fetch_one(&mut *tx),
+            )
+            .await?
+            .map_err(map_sql_error)?;
+        if relay_upload_active {
+            return Err(MultipartServiceError::ActiveSessionConflict);
+        }
         let lifecycle: (String, String, i16) = deadline
             .run(
                 sqlx::query_as(

@@ -120,6 +120,7 @@ pub enum CleanupError {
     ProjectUnavailable,
     SessionNotFound,
     SessionTerminal,
+    UploadInProgress,
     OperationTimeout,
     CommitOutcomeUnknown,
     DatabaseUnavailable,
@@ -135,6 +136,7 @@ impl fmt::Display for CleanupError {
             Self::ProjectUnavailable => "project is unavailable",
             Self::SessionNotFound => "Save session was not found",
             Self::SessionTerminal => "Save session is already terminal",
+            Self::UploadInProgress => "Save session upload is in progress",
             Self::OperationTimeout => "Save cleanup operation timed out",
             Self::CommitOutcomeUnknown => "Save cleanup commit outcome is unknown",
             Self::DatabaseUnavailable => "Save cleanup persistence is unavailable",
@@ -381,6 +383,9 @@ impl<B: CleanupBackend> CleanupService<B> {
         {
             return Err(CleanupError::SessionNotFound);
         }
+        if active_relay_upload_exists(&mut transaction, request.session_id, deadline).await? {
+            return Err(CleanupError::UploadInProgress);
+        }
         let result = match state.as_str() {
             "aborted" => {
                 deadline
@@ -432,6 +437,10 @@ impl<B: CleanupBackend> CleanupService<B> {
                             WHERE session.storage_scope_id=$1::uuid \
                               AND session.state IN ('created','uploading','verifying') \
                               AND session.expires_at <= transaction_timestamp() \
+                              AND NOT EXISTS (SELECT 1 FROM save_upload_leases lease \
+                                  WHERE lease.save_session_id=session.id \
+                                    AND lease.released_at IS NULL \
+                                    AND lease.lease_expires_at>clock_timestamp()) \
                             ORDER BY session.expires_at,session.id LIMIT $2\
                         ) candidate\
                      ) ORDER BY project.id FOR UPDATE",
@@ -449,6 +458,10 @@ impl<B: CleanupBackend> CleanupService<B> {
                      WHERE session.storage_scope_id=$1::uuid \
                        AND session.state IN ('created','uploading','verifying') \
                        AND session.expires_at <= transaction_timestamp() \
+                       AND NOT EXISTS (SELECT 1 FROM save_upload_leases lease \
+                           WHERE lease.save_session_id=session.id \
+                             AND lease.released_at IS NULL \
+                             AND lease.lease_expires_at>clock_timestamp()) \
                      ORDER BY session.expires_at,session.id LIMIT $2 \
                      FOR UPDATE SKIP LOCKED",
                 )
@@ -1473,6 +1486,25 @@ async fn transition_session(
     } else {
         Err(CleanupError::InvariantViolation)
     }
+}
+
+async fn active_relay_upload_exists(
+    transaction: &mut Transaction<'_, Postgres>,
+    session_id: SaveSessionId,
+    deadline: Deadline,
+) -> Result<bool, CleanupError> {
+    deadline
+        .run(
+            sqlx::query_scalar(
+                "SELECT EXISTS(SELECT 1 FROM save_upload_leases \
+                 WHERE save_session_id=$1::uuid AND released_at IS NULL \
+                   AND lease_expires_at>clock_timestamp())",
+            )
+            .bind(session_id.to_string())
+            .fetch_one(&mut **transaction),
+        )
+        .await?
+        .map_err(map_sql_error)
 }
 
 async fn complete_claim(

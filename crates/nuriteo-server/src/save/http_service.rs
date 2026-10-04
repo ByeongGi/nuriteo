@@ -172,7 +172,6 @@ impl SaveHttpService {
         let relay = RelayUploadService::new(
             pool.clone(),
             store.clone(),
-            multipart.clone(),
             policy.operation_timeout,
             policy.relay_idle_timeout,
             policy.relay_total_timeout,
@@ -897,7 +896,9 @@ fn map_cleanup(e: CleanupError) -> SaveHttpError {
         CleanupError::ScopeNotFound
         | CleanupError::ProjectNotFound
         | CleanupError::SessionNotFound => SaveHttpError::NotFound,
-        CleanupError::ProjectUnavailable | CleanupError::SessionTerminal => SaveHttpError::Conflict,
+        CleanupError::ProjectUnavailable
+        | CleanupError::SessionTerminal
+        | CleanupError::UploadInProgress => SaveHttpError::Conflict,
         CleanupError::OperationTimeout => SaveHttpError::OperationTimeout,
         CleanupError::DatabaseUnavailable => SaveHttpError::Unavailable,
         CleanupError::CommitOutcomeUnknown => SaveHttpError::CommitOutcomeUnknown,

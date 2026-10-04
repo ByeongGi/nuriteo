@@ -51,6 +51,7 @@ const IDEMPOTENCY_KEY: HeaderName = HeaderName::from_static("idempotency-key");
 const RELAY_CHECKSUM: HeaderName = HeaderName::from_static("x-nuriteo-content-sha256");
 const BUNDLE_CONTENT_TYPE: &str = "application/vnd.nuriteo.project-bundle";
 const MAX_RELAY_BODY_BYTES: u64 = 64 * 1024 * 1024;
+const MAX_RELAY_INGRESS_FRAME_BYTES: usize = 64 * 1024;
 
 struct RelayProjectBundleBinary;
 
@@ -608,6 +609,12 @@ impl AsyncRead for RequestBodyReader {
                 }
                 Poll::Ready(Some(Ok(frame))) => {
                     if let Ok(data) = frame.into_data() {
+                        if data.len() > MAX_RELAY_INGRESS_FRAME_BYTES {
+                            self.complete = true;
+                            return Poll::Ready(Err(io::Error::other(
+                                "request body frame exceeds the relay ingress bound",
+                            )));
+                        }
                         self.current = data;
                     }
                 }
@@ -749,6 +756,7 @@ fn map_error(e: SaveHttpError, id: RequestId, path: &str) -> HttpError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tokio::io::AsyncReadExt;
 
     fn valid_headers() -> HeaderMap {
         let mut headers = HeaderMap::new();
@@ -816,5 +824,15 @@ mod tests {
         for (headers, expected) in cases {
             assert_eq!(status(&headers), expected);
         }
+    }
+
+    #[tokio::test]
+    async fn relay_reader_rejects_one_oversized_upstream_frame() {
+        let mut reader =
+            RequestBodyReader::new(Body::from(vec![0x5a; MAX_RELAY_INGRESS_FRAME_BYTES + 1]));
+        let mut output = Vec::new();
+        let error = reader.read_to_end(&mut output).await.unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::Other);
+        assert!(output.is_empty());
     }
 }
