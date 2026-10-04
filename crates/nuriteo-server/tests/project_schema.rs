@@ -46,8 +46,8 @@ async fn project_schema_enforces_owner_scope_slug_lifecycle_and_tombstones() {
     assert_eq!(
         first,
         MigrationReport {
-            latest_version: Some(14),
-            known_migrations: 14
+            latest_version: Some(15),
+            known_migrations: 15
         }
     );
     assert_eq!(migrate(&pool).await, first);

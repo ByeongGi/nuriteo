@@ -128,6 +128,17 @@ enum ReserveOutcome {
     Expired,
 }
 
+pub(crate) enum ReservationAdmission {
+    Reserved,
+    Expired,
+}
+
+impl ReservationAdmission {
+    pub(crate) const fn is_expired(&self) -> bool {
+        matches!(self, Self::Expired)
+    }
+}
+
 impl QuotaService {
     #[must_use]
     pub const fn new(pool: DatabasePool, policy: QuotaServicePolicy) -> Self {
@@ -219,7 +230,25 @@ impl QuotaService {
         save_session_id: SaveSessionId,
         state: TerminalSaveState,
     ) -> Result<(), QuotaServiceError> {
-        let deadline = OperationDeadline::new(self.policy.operation_timeout);
+        self.transition_terminal_before(
+            storage_scope_id,
+            project_id,
+            save_session_id,
+            state,
+            Instant::now() + self.policy.operation_timeout,
+        )
+        .await
+    }
+
+    pub(crate) async fn transition_terminal_before(
+        &self,
+        storage_scope_id: StorageScopeId,
+        project_id: ProjectId,
+        save_session_id: SaveSessionId,
+        state: TerminalSaveState,
+        absolute_deadline: Instant,
+    ) -> Result<(), QuotaServiceError> {
+        let deadline = OperationDeadline(absolute_deadline);
         let mut connection = deadline
             .run(self.pool.acquire())
             .await?
@@ -268,6 +297,23 @@ impl QuotaService {
             return Err(QuotaServiceError::InvariantViolation);
         }
         commit(transaction, deadline).await
+    }
+}
+
+/// Admits an already-inserted Save session inside its caller-owned transaction.
+/// SAVE services retain ownership of commit/rollback while reusing the quota
+/// serialization and checked accounting contract.
+pub(crate) async fn reserve_before_commit(
+    transaction: &mut Transaction<'_, Postgres>,
+    request: ReservationRequest,
+    absolute_deadline: Instant,
+) -> Result<ReservationAdmission, QuotaServiceError> {
+    let request = request.validate()?;
+    let deadline = OperationDeadline(absolute_deadline);
+    configure_transaction(transaction, deadline).await?;
+    match reserve_in_transaction(transaction, request, deadline).await? {
+        ReserveOutcome::Reserved(_) => Ok(ReservationAdmission::Reserved),
+        ReserveOutcome::Expired => Ok(ReservationAdmission::Expired),
     }
 }
 

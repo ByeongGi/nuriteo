@@ -37,8 +37,8 @@ async fn activation_invitation_schema_enforces_hash_only_lifecycle() {
     assert_eq!(
         first_report,
         MigrationReport {
-            latest_version: Some(14),
-            known_migrations: 14
+            latest_version: Some(15),
+            known_migrations: 15
         }
     );
     assert_eq!(migrate(&pool).await, first_report);

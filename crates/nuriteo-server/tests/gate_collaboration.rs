@@ -53,8 +53,8 @@ async fn collaboration_gate_runs_actual_core_postgres_and_rustfs_journey() {
     .await
     .unwrap();
     assert_eq!(
-        migration.known_migrations, 14,
-        "G2 requires clean migrations 1..14"
+        migration.known_migrations, 15,
+        "G2 requires clean migrations 1..15"
     );
     assert_eq!(active_administrator_count(&pool).await, 0);
 

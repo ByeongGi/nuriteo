@@ -22,6 +22,11 @@ pub struct Sha256Checksum([u8; 32]);
 
 impl Sha256Checksum {
     #[must_use]
+    pub const fn from_bytes(bytes: [u8; 32]) -> Self {
+        Self(bytes)
+    }
+
+    #[must_use]
     pub fn calculate(bytes: &[u8]) -> Self {
         Self(Sha256::digest(bytes).into())
     }
@@ -38,6 +43,10 @@ impl Sha256Checksum {
 
     pub(crate) fn base64(&self) -> String {
         BASE64.encode(self.0)
+    }
+
+    pub(crate) const fn as_bytes(&self) -> &[u8; 32] {
+        &self.0
     }
 }
 

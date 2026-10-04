@@ -133,7 +133,7 @@ fn assert_success(output: &Output) {
     assert_eq!(output.status.code(), Some(0));
     assert_eq!(
         output.stdout,
-        b"database migration complete: schema=ready version=14\n"
+        b"database migration complete: schema=ready version=15\n"
     );
     assert!(output.stderr.is_empty());
 }

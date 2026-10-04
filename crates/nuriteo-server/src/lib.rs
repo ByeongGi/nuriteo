@@ -15,6 +15,7 @@ pub mod openapi;
 pub mod organization;
 pub mod project;
 pub mod quota;
+pub mod save;
 pub mod setup;
 mod storage_check;
 pub mod workspace;

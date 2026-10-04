@@ -27,8 +27,8 @@ async fn project_bundle_schema_is_verified_scoped_bounded_and_gc_safe() {
     assert_eq!(
         migrate(&pool).await,
         MigrationReport {
-            latest_version: Some(14),
-            known_migrations: 14,
+            latest_version: Some(15),
+            known_migrations: 15,
         }
     );
     assert_eq!(
