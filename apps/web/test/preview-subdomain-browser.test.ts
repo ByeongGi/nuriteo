@@ -260,7 +260,10 @@ try {
   const workerVersionId = await waitForWorkerVersion(workerVersions, previewOrigin);
   await cdp.send("ServiceWorker.unregister", { scopeURL: `${previewOrigin}/` });
   await cdp.send("ServiceWorker.stopWorker", { versionId: workerVersionId });
-  await page.waitForFunction((oldUrl) => document.querySelector<HTMLElement>('[aria-label="Preview"]')?.dataset.previewUrl !== oldUrl, externalUrl, { timeout: 15_000 });
+  await page.waitForFunction((oldUrl) => {
+    const nextUrl = document.querySelector<HTMLElement>('[aria-label="Preview"]')?.dataset.previewUrl;
+    return Boolean(nextUrl && nextUrl !== oldUrl);
+  }, externalUrl, { timeout: 15_000 });
   const recoveredUrl = await previewRegion.getAttribute("data-preview-url");
   assert(recoveredUrl && recoveredUrl !== externalUrl, "lost Service Worker relay must rotate to a fresh signed host");
   const recoveredOrigin = new URL(recoveredUrl).origin;
