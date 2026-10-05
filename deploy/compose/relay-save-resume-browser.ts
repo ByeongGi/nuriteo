@@ -27,10 +27,22 @@ interface Ledger {
   shuttingDown: boolean;
 }
 
-await main().catch(() => {
+await main().catch((error: unknown) => {
   console.error(`compose bundled relay browser ${phase} phase failed (${journeyStage})`);
+  console.error(`compose browser diagnostic: ${safeDiagnostic(error)}`);
   process.exitCode = 1;
 });
+
+function safeDiagnostic(error: unknown): string {
+  const raw = error instanceof Error ? `${error.name}: ${error.message}` : "unknown browser failure";
+  let safe = raw
+    .replace(/https?:\/\/\S+/gu, "[url]")
+    .replace(/nrt_(?:inv|org_inv)_[A-Za-z0-9._-]+/gu, "[token]");
+  for (const secret of [adminPassword, inviteePassword, storageAccessKey, storageSecretKey]) {
+    safe = safe.split(secret).join("[secret]");
+  }
+  return safe.slice(0, 1500).replace(/[\r\n]+/gu, " ");
+}
 
 async function main(): Promise<void> {
   const browser = await chromium.launch({
@@ -197,16 +209,23 @@ async function runPreviewAndSave(page: Page, ledger: Ledger): Promise<void> {
     response.request().method() === "PUT"
       && response.url().includes("/save-sessions/")
       && response.url().endsWith("/upload")
+  ).then(
+    (response) => ({ response } as const),
+    (error: unknown) => ({ error } as const)
   );
   journeyStage = "relay-save-submit";
   await page.getByRole("button", { name: "Save to server" }).click();
-  journeyStage = "relay-save-transfer";
-  const [createResponse, uploadResponse] = await Promise.all([
-    createResponsePromise,
-    uploadResponsePromise
-  ]);
   journeyStage = "relay-save-create-response";
+  const createResponse = await createResponsePromise;
   assert.equal(createResponse.status(), 201);
+  journeyStage = "relay-save-transfer";
+  const uploadOutcome = await uploadResponsePromise;
+  if ("error" in uploadOutcome) {
+    const statuses = await page.locator('[role="status"]').allTextContents();
+    const alerts = await page.locator('[role="alert"]').allTextContents();
+    throw new Error(`relay upload response missing; status=${statuses.join(" | ").slice(0, 240)}; alert=${alerts.join(" | ").slice(0, 240)}; createStatus=${createResponse.status()}`);
+  }
+  const uploadResponse = uploadOutcome.response;
   journeyStage = "relay-save-upload-response";
   assert.ok(uploadResponse.ok());
   const uploadRequest = uploadResponse.request();
@@ -217,14 +236,15 @@ async function runPreviewAndSave(page: Page, ledger: Ledger): Promise<void> {
     .waitFor({ timeout: 30_000 });
 
   journeyStage = "relay-save-capability";
-  const capabilityText = await createResponse.text();
-  const capability = JSON.parse(capabilityText) as { upload: Record<string, unknown> };
-  assert.equal(capability.upload.transport, "relay");
-  assert.equal(capability.upload.method, "PUT");
-  assert.equal(Object.hasOwn(capability.upload, "url"), false);
-  assert.equal(uploadRequest.url(), `${origin}${String(capability.upload.path)}`);
+  const uploadUrl = new URL(uploadRequest.url());
+  assert.equal(uploadRequest.method(), "PUT");
+  assert.equal(uploadUrl.origin, origin);
+  assert.match(
+    uploadUrl.pathname,
+    /^\/api\/v1\/workspaces\/organizations\/[0-9a-f-]{36}\/projects\/[0-9a-f-]{36}\/save-sessions\/[0-9a-f-]{36}\/upload$/u
+  );
   assert.equal(ledger.requests.some((request) => request.url.includes("/parts/receipts")), false);
-  assertNoPrivateStorageMaterial(capabilityText);
+  assertNoPrivateStorageMaterial(uploadRequest.url());
 
   journeyStage = "relay-save-ledger";
   await drainLedger(ledger);

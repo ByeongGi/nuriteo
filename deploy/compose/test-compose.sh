@@ -248,8 +248,10 @@ openssl rand -base64 32 >"$fixture_root/save-idempotency-secret"
 chmod 644 "$fixture_root/postgres-password" "$fixture_root/rustfs-access-key" \
   "$fixture_root/rustfs-secret-key" "$fixture_root/bootstrap-password" "$fixture_root/database-url"
 chmod 600 "$fixture_root/invitee-password"
-chmod 600 "$fixture_root/preview-signing-key"
-chmod 600 "$fixture_root/save-idempotency-secret"
+# Docker Compose local file secrets preserve source readability. Core/Web run as uid 65532,
+# while the mode-0700 fixture root keeps these disposable values private from other host users.
+chmod 644 "$fixture_root/preview-signing-key"
+chmod 644 "$fixture_root/save-idempotency-secret"
 
 openssl req -x509 -newkey rsa:2048 -nodes -keyout "$fixture_root/postgres-tls/ca.key" \
   -out "$fixture_root/postgres-tls/ca.crt" -days 2 -subj '/CN=nuriteo-compose-postgres-ca' \
@@ -272,7 +274,10 @@ printf '%s\n' 'subjectAltName=DNS:rustfs' 'basicConstraints=critical,CA:FALSE' \
 openssl x509 -req -in "$fixture_root/rustfs-server.csr" -CA "$fixture_root/rustfs-tls/ca.crt" \
   -CAkey "$fixture_root/rustfs-ca.key" -CAcreateserial -out "$fixture_root/rustfs-tls/rustfs_cert.pem" \
   -days 2 -extfile "$fixture_root/rustfs-server.ext" >/dev/null 2>&1
-chmod 600 "$fixture_root/postgres-tls/server.key" "$fixture_root/rustfs-tls/rustfs_key.pem"
+chmod 600 "$fixture_root/postgres-tls/server.key"
+# RustFS runs as uid 10001 and reads this bind-mounted disposable key directly.
+# The fixture root remains mode 0700, so this does not expose the key outside the fixture owner.
+chmod 644 "$fixture_root/rustfs-tls/rustfs_key.pem"
 
 export NURITEO_POSTGRES_PASSWORD_FILE="$fixture_root/postgres-password"
 export NURITEO_POSTGRES_SERVER_CERT_FILE="$fixture_root/postgres-tls/server.crt"

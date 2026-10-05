@@ -2,6 +2,7 @@ use std::fmt;
 use std::sync::Arc;
 use std::time::Duration;
 
+use ::time::OffsetDateTime;
 use serde::Serialize;
 use sqlx::{Acquire, Postgres, Transaction};
 use tokio::io::AsyncRead;
@@ -9,7 +10,7 @@ use tokio::time;
 use utoipa::ToSchema;
 
 use crate::database::DatabasePool;
-use crate::identity::BrowserRequestHeaders;
+use crate::identity::{BrowserRequestHeaders, Timestamp};
 use crate::object_storage::{
     BoundedPresignedRequest, PresignedOperation, S3ObjectStore, Sha256Checksum,
 };
@@ -32,6 +33,12 @@ use super::{
 
 const BUNDLE_CONTENT_TYPE: &str = "application/vnd.nuriteo.project-bundle";
 const RELAY_CHECKSUM_HEADER: &str = "X-Nuriteo-Content-SHA256";
+
+fn save_session_expiry(value: OffsetDateTime) -> Result<String, SaveHttpError> {
+    Timestamp::from_datetime(value)
+        .map(|timestamp| timestamp.to_string())
+        .map_err(|_| SaveHttpError::Internal)
+}
 
 #[derive(Debug, Clone, Copy)]
 pub struct SaveHttpPolicy {
@@ -239,7 +246,7 @@ impl SaveHttpService {
                 return Ok(SaveSessionView {
                     session_id: session.session_id().to_string(),
                     upload_mode: "single",
-                    expires_at: session.expires_at().to_string(),
+                    expires_at: save_session_expiry(session.expires_at())?,
                     part_count: 1,
                     idempotent_retry: session.is_idempotent_retry(),
                     upload: Some(relay_capability(
@@ -253,7 +260,7 @@ impl SaveHttpService {
             return Ok(SaveSessionView {
                 session_id: session.session_id().to_string(),
                 upload_mode: "single",
-                expires_at: session.expires_at().to_string(),
+                expires_at: save_session_expiry(session.expires_at())?,
                 part_count: 1,
                 idempotent_retry: session.is_idempotent_retry(),
                 upload: Some(direct_capability_view(
@@ -287,7 +294,7 @@ impl SaveHttpService {
         Ok(SaveSessionView {
             session_id: session.session_id().to_string(),
             upload_mode: "multipart",
-            expires_at: session.expires_at().to_string(),
+            expires_at: save_session_expiry(session.expires_at())?,
             part_count: session.part_count(),
             idempotent_retry: session.is_idempotent_retry(),
             upload: None,

@@ -112,7 +112,7 @@ export function OrganizationConsole(props: OrganizationConsoleProps) {
       );
       setOneTimeUrl(result.data.acceptUrl.consume());
       form.reset();
-    });
+    }, false);
   }
 
   async function reissue(invitation: OrganizationInvitation) {
@@ -128,7 +128,7 @@ export function OrganizationConsole(props: OrganizationConsoleProps) {
         { csrfToken: readCsrfCredential() }
       );
       setOneTimeUrl(result.data.acceptUrl.consume());
-    });
+    }, false);
   }
 
   async function changeRole(member: OrganizationMember) {
@@ -177,7 +177,7 @@ export function OrganizationConsole(props: OrganizationConsoleProps) {
           <h2 id="organization-invitation-link-title">Copy this invitation link now</h2>
           <p>This one-time link will not be shown again after you leave or refresh this page.</p>
           <output aria-labelledby="organization-invitation-link-title">{oneTimeUrl}</output>
-          <Button type="button" disabled={mutation.isPending} onClick={() => setOneTimeUrl(undefined)}>Clear link</Button>
+          <Button type="button" onClick={() => { setOneTimeUrl(undefined); router.refresh(); }}>Clear link</Button>
         </section>
       ) : null}
       {error ? <p className="form-error" role="alert">{error}</p> : null}

@@ -53,12 +53,13 @@ function validate(
   assert.doesNotMatch(services["storage-init"], /^      NURITEO_EXTERNAL_URL:|NURITEO_SAVE_UPLOAD_TRANSPORT/mu);
   assert.match(services.core, /secrets:[\s\S]*- save_idempotency_secret/u);
   assert.match(acceptanceSource, /openssl rand -base64 32[\s\S]*preview-signing-key/u);
-  assert.match(acceptanceSource, /chmod 600 "\$fixture_root\/preview-signing-key"/u);
+  assert.match(acceptanceSource, /chmod 644 "\$fixture_root\/preview-signing-key"/u);
   assert.match(acceptanceSource, /export NURITEO_PREVIEW_BASE_DOMAIN='preview\.localhost'/u);
   assert.match(acceptanceSource, /export NURITEO_PREVIEW_SIGNING_KEY_FILE="\$fixture_root\/preview-signing-key"/u);
   assert.match(acceptanceSource, /openssl rand -base64 32 >"\$fixture_root\/save-idempotency-secret"/u);
-  assert.match(acceptanceSource, /chmod 600 "\$fixture_root\/save-idempotency-secret"/u);
+  assert.match(acceptanceSource, /chmod 644 "\$fixture_root\/save-idempotency-secret"/u);
   assert.match(acceptanceSource, /export NURITEO_SAVE_IDEMPOTENCY_SECRET_FILE="\$fixture_root\/save-idempotency-secret"/u);
+  assert.match(acceptanceSource, /chmod 644 "\$fixture_root\/rustfs-tls\/rustfs_key\.pem"/u);
   assert.match(acceptanceSource, /install_exact_legacy_cors/u);
   assert.match(acceptanceSource, /install_drifted_legacy_cors/u);
   assert.match(acceptanceSource, /wait_for_job storage-init 1/u);
