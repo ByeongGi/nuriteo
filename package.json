@@ -18,6 +18,7 @@
     "check:workspace": "node tooling/checks/check-workspace.ts",
     "check:self-hosted-baseline": "node tooling/checks/check-self-hosted-baseline.ts",
     "check:self-hosted-task-graph": "node tooling/checks/check-self-hosted-task-graph.ts",
+    "check:self-hosted-v1-task-graph": "node tooling/checks/check-self-hosted-v1-task-graph.ts",
     "check:self-hosted-g0": "node tooling/checks/check-self-hosted-g0.ts",
     "check:self-hosted-g2": "node tooling/checks/check-self-hosted-g2.ts",
     "check:node-upgrade": "node tooling/checks/check-node-upgrade.ts",
