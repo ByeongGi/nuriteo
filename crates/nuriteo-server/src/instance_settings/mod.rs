@@ -154,6 +154,10 @@ impl EffectiveInstanceSettings {
     pub fn is_empty(&self) -> bool {
         self.settings.is_empty()
     }
+
+    pub fn iter(&self) -> impl Iterator<Item = &EffectiveInstanceSetting> {
+        self.settings.values()
+    }
 }
 
 impl fmt::Debug for EffectiveInstanceSettings {

@@ -1,3 +1,4 @@
+use crate::admin::AdminHttpService;
 use crate::auth::AuthService;
 use crate::health::HealthService;
 use crate::http::{HttpError, RequestId, propagate_request_id};
@@ -97,11 +98,42 @@ pub fn build_router_with_save_service(
     save: SaveHttpService,
     setup: SetupStatusService,
 ) -> Router {
-    openapi::router(auth, invitations, organizations, projects, save, setup)
-        .merge(health.router())
-        .fallback(not_found)
-        .method_not_allowed_fallback(method_not_allowed)
-        .layer(middleware::from_fn(propagate_request_id))
+    build_router_with_admin_service(
+        health,
+        auth,
+        invitations,
+        organizations,
+        projects,
+        save,
+        setup,
+        AdminHttpService::unconfigured(),
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn build_router_with_admin_service(
+    health: HealthService,
+    auth: AuthService,
+    invitations: InvitationHttpService,
+    organizations: OrganizationHttpService,
+    projects: ProjectHttpService,
+    save: SaveHttpService,
+    setup: SetupStatusService,
+    admin: AdminHttpService,
+) -> Router {
+    openapi::router(
+        auth,
+        invitations,
+        organizations,
+        projects,
+        save,
+        setup,
+        admin,
+    )
+    .merge(health.router())
+    .fallback(not_found)
+    .method_not_allowed_fallback(method_not_allowed)
+    .layer(middleware::from_fn(propagate_request_id))
 }
 
 async fn not_found(uri: Uri, Extension(request_id): Extension<RequestId>) -> HttpError {

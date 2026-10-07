@@ -1,3 +1,6 @@
+mod http_routes;
+mod http_service;
+
 use std::fmt;
 use std::future::Future;
 use std::net::IpAddr;
@@ -14,6 +17,12 @@ use crate::audit::{
 };
 use crate::database::DatabasePool;
 use crate::identity::{SessionId, Timestamp, UserId, UserStatus};
+
+pub(crate) use http_routes::openapi_router;
+pub use http_service::{
+    AdminHttpPolicy, AdminHttpService, AdminHttpServiceError, AdminSettingListView,
+    AdminSettingView, AdminStatusView,
+};
 
 const DEFAULT_OPERATION_TIMEOUT: Duration = Duration::from_secs(5);
 const MIN_OPERATION_TIMEOUT: Duration = Duration::from_millis(100);

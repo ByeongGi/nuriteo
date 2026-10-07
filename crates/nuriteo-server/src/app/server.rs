@@ -2,6 +2,7 @@ use std::fmt;
 use std::num::NonZeroUsize;
 use std::time::Duration;
 
+use crate::admin::{AdminHttpPolicy, AdminHttpService};
 use crate::auth::{AuthPolicy, AuthService};
 use crate::config::{Config, Environment, FileReader};
 use crate::database::{
@@ -20,7 +21,7 @@ use crate::save::{
 };
 use crate::setup::{SetupStatusPolicy, SetupStatusService};
 
-use super::{Supervisor, SupervisorConfig, WorkerError, build_router_with_save_service};
+use super::{Supervisor, SupervisorConfig, WorkerError, build_router_with_admin_service};
 
 const PRODUCTION_WORKERS: NonZeroUsize = NonZeroUsize::new(3).unwrap();
 const INSTANCE_SETTINGS_STARTUP_TIMEOUT: Duration = Duration::from_secs(5);
@@ -34,6 +35,7 @@ pub(crate) enum ServeError {
     StorageConfiguration,
     StorageInitialization,
     AuthenticationConfiguration,
+    AdminConfiguration,
     InvitationConfiguration,
     OrganizationConfiguration,
     ProjectConfiguration,
@@ -55,6 +57,7 @@ impl ServeError {
             Self::StorageConfiguration => "storage-configuration",
             Self::StorageInitialization => "storage-initialization",
             Self::AuthenticationConfiguration => "authentication-configuration",
+            Self::AdminConfiguration => "admin-configuration",
             Self::InvitationConfiguration => "invitation-configuration",
             Self::OrganizationConfiguration => "organization-configuration",
             Self::ProjectConfiguration => "project-configuration",
@@ -98,26 +101,32 @@ pub(crate) async fn run_server(
         check_schema_readiness(&pool),
     )
     .await;
-    if matches!(schema_readiness, Ok(Ok(SchemaReadiness::Ready { .. }))) {
-        let instance_settings = match InstanceSettingsRepository::new(
-            pool.clone(),
-            INSTANCE_SETTINGS_STARTUP_TIMEOUT,
-        ) {
-            Ok(repository) => repository,
-            Err(_) => {
-                close_pool(pool, close_timeout).await?;
-                return Err(ServeError::InstanceSettings);
-            }
+    let effective_instance_settings =
+        if matches!(schema_readiness, Ok(Ok(SchemaReadiness::Ready { .. }))) {
+            let instance_settings = match InstanceSettingsRepository::new(
+                pool.clone(),
+                INSTANCE_SETTINGS_STARTUP_TIMEOUT,
+            ) {
+                Ok(repository) => repository,
+                Err(_) => {
+                    close_pool(pool, close_timeout).await?;
+                    return Err(ServeError::InstanceSettings);
+                }
+            };
+            let effective = match instance_settings
+                .materialize(&load_report.instance_settings)
+                .await
+            {
+                Ok(effective) => effective,
+                Err(_) => {
+                    close_pool(pool, close_timeout).await?;
+                    return Err(ServeError::InstanceSettings);
+                }
+            };
+            Some(effective)
+        } else {
+            None
         };
-        if instance_settings
-            .materialize(&load_report.instance_settings)
-            .await
-            .is_err()
-        {
-            close_pool(pool, close_timeout).await?;
-            return Err(ServeError::InstanceSettings);
-        }
-    }
     let store = match S3ObjectStore::new(&storage, OperationLimits::default()).await {
         Ok(store) => store,
         Err(_) => {
@@ -161,6 +170,22 @@ pub(crate) async fn run_server(
             close_pool(pool, close_timeout).await?;
             return Err(ServeError::AuthenticationConfiguration);
         }
+    };
+    let admin = match effective_instance_settings {
+        Some(settings) => match AdminHttpService::production(
+            pool.clone(),
+            &global.public.external_url,
+            AdminHttpPolicy::default(),
+            SessionPolicy::default(),
+            settings,
+        ) {
+            Ok(admin) => admin,
+            Err(_) => {
+                close_pool(pool, close_timeout).await?;
+                return Err(ServeError::AdminConfiguration);
+            }
+        },
+        None => AdminHttpService::unconfigured(),
     };
     let invitations = match InvitationHttpService::production(
         pool.clone(),
@@ -233,7 +258,7 @@ pub(crate) async fn run_server(
     };
     let operations = CleanupOperationsService::new(pool.clone(), operations_policy);
     let cleanup = CleanupService::new(pool.clone(), store, global.cleanup.worker_policy);
-    let router = build_router_with_save_service(
+    let router = build_router_with_admin_service(
         health,
         auth,
         invitations,
@@ -241,6 +266,7 @@ pub(crate) async fn run_server(
         projects,
         save,
         setup,
+        admin,
     );
     let management_router = operations.router();
     let cleanup_drain_timeout = global
