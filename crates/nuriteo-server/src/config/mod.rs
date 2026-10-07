@@ -1,3 +1,4 @@
+mod instance_settings;
 mod load;
 mod redaction;
 mod schema;
@@ -9,6 +10,11 @@ use std::net::SocketAddr;
 use std::time::Duration;
 
 use crate::save::CleanupWorkerPolicy;
+pub use instance_settings::{
+    INSTANCE_SETTING_DEFINITIONS, INSTANCE_SETTING_REGISTRY_VERSION, InstanceSettingDefinition,
+    InstanceSettingValidationError, SettingApplyMode, SettingConstraint, SettingSensitivity,
+    instance_setting_definition,
+};
 pub use load::{Environment, FileReader, SystemEnvironment, SystemFileReader, load_secret};
 pub use redaction::SecretString;
 pub use schema::{CONFIG_FIELDS, ConfigField};
