@@ -1,25 +1,36 @@
 use axum::Json;
 use axum::body::{Body, to_bytes};
-use axum::extract::{Extension, Path, Request, State};
-use axum::http::header::{CACHE_CONTROL, CONTENT_TYPE, COOKIE, ETAG, IF_MATCH};
-use axum::http::{HeaderMap, HeaderName, HeaderValue};
+use axum::extract::{Extension, Path, Query, Request, State};
+use axum::http::header::{
+    CACHE_CONTROL, CONTENT_DISPOSITION, CONTENT_TYPE, COOKIE, ETAG, IF_MATCH,
+};
+use axum::http::{HeaderMap, HeaderName, HeaderValue, Uri};
 use axum::response::{IntoResponse, Response};
 use serde::Deserialize;
+use serde::de::DeserializeOwned;
 use serde_json::Value;
 use utoipa::ToSchema;
 use utoipa_axum::{router::OpenApiRouter, routes};
 
+use crate::audit::AuditEventId;
 use crate::http::{FieldViolation, HttpError, RequestId};
 use crate::identity::{BrowserMethod, BrowserRequestHeaders};
 
 use super::{
-    AdminHttpService, AdminHttpServiceError, AdminSettingListView, AdminSettingView,
-    AdminStatusView,
+    AdminAuditEventCollectionView, AdminAuditEventView, AdminAuditExportFormat,
+    AdminAuditExportInput, AdminAuditListInput, AdminAuditRetentionPreview,
+    AdminAuditRetentionPruneView, AdminHttpService, AdminHttpServiceError, AdminSettingListView,
+    AdminSettingView, AdminStatusView,
 };
 
 const SETTINGS: &str = "/api/v1/admin/settings";
 const SETTING: &str = "/api/v1/admin/settings/{key}";
 const STATUS: &str = "/api/v1/admin/status";
+const AUDIT_EVENTS: &str = "/api/v1/admin/audit-events";
+const AUDIT_EVENT: &str = "/api/v1/admin/audit-events/{eventId}";
+const AUDIT_EXPORT: &str = "/api/v1/admin/audit-events/export";
+const AUDIT_RETENTION_PREVIEW: &str = "/api/v1/admin/audit-retention/preview";
+const AUDIT_RETENTION_PRUNE: &str = "/api/v1/admin/audit-retention/prune";
 const MAX_BODY_BYTES: usize = 2 * 1024;
 const ORIGIN: HeaderName = HeaderName::from_static("origin");
 const CSRF: HeaderName = HeaderName::from_static("x-csrf-token");
@@ -31,12 +42,54 @@ pub(crate) fn openapi_router(
         .routes(routes!(list_settings))
         .routes(routes!(update_setting))
         .routes(routes!(admin_status))
+        .routes(routes!(list_audit_events))
+        .routes(routes!(get_audit_event))
+        .routes(routes!(export_audit_events))
+        .routes(routes!(preview_audit_retention))
+        .routes(routes!(prune_audit_retention))
 }
 
 #[derive(Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
 struct UpdateSettingRequest {
     value: Value,
+}
+
+#[derive(Debug, Default, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+struct AuditFilterRequest {
+    from: Option<String>,
+    to: Option<String>,
+    actor_type: Option<String>,
+    actor_id: Option<String>,
+    action_code: Option<String>,
+    result: Option<String>,
+    scope_type: Option<String>,
+    scope_id: Option<String>,
+    target_type: Option<String>,
+    target_id: Option<String>,
+    cursor: Option<String>,
+    limit: Option<u16>,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+struct AuditExportRequest {
+    #[serde(flatten)]
+    filters: AuditFilterRequest,
+    format: AdminAuditExportFormat,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+struct AuditRetentionPreviewQuery {
+    retention_days: String,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
+struct AuditRetentionPruneRequest {
+    limit: Option<u16>,
 }
 
 #[utoipa::path(
@@ -137,6 +190,283 @@ async fn admin_status(
         .await
         .map_err(|error| map_error(error, request_id, STATUS))?;
     Ok(private_no_store(Json(view).into_response()))
+}
+
+#[utoipa::path(
+    get,
+    path = AUDIT_EVENTS,
+    tag = "administration",
+    security(("projectSessionCookie" = [])),
+    params(
+        ("from" = Option<String>, Query),
+        ("to" = Option<String>, Query),
+        ("actorType" = Option<String>, Query),
+        ("actorId" = Option<String>, Query),
+        ("actionCode" = Option<String>, Query),
+        ("result" = Option<String>, Query),
+        ("scopeType" = Option<String>, Query),
+        ("scopeId" = Option<String>, Query),
+        ("targetType" = Option<String>, Query),
+        ("targetId" = Option<String>, Query),
+        ("cursor" = Option<String>, Query),
+        ("limit" = Option<u16>, Query)
+    ),
+    responses(
+        (status = 200, body = AdminAuditEventCollectionView, headers(("Cache-Control" = String))),
+        (status = 401, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+        (status = 403, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+        (status = 422, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+        (status = 503, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+        (status = 504, body = crate::openapi::ProblemDetails, content_type = "application/problem+json")
+    )
+)]
+async fn list_audit_events(
+    State(service): State<AdminHttpService>,
+    Extension(request_id): Extension<RequestId>,
+    request: Request,
+) -> Result<Response, HttpError> {
+    let query = parse_query::<AuditFilterRequest>(request.uri(), &request_id, AUDIT_EVENTS)?;
+    let headers = BrowserHeaders::read(request.headers(), &request_id, AUDIT_EVENTS)?;
+    let input = audit_list_input(query, &request_id, AUDIT_EVENTS)?;
+    let view = service
+        .list_audit_events(headers.request(BrowserMethod::Get), input)
+        .await
+        .map_err(|error| map_error(error, request_id, AUDIT_EVENTS))?;
+    Ok(private_no_store(Json(view).into_response()))
+}
+
+#[utoipa::path(
+    get,
+    path = AUDIT_EVENT,
+    tag = "administration",
+    security(("projectSessionCookie" = [])),
+    params(("eventId" = String, Path)),
+    responses(
+        (status = 200, body = AdminAuditEventView, headers(("Cache-Control" = String))),
+        (status = 401, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+        (status = 403, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+        (status = 404, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+        (status = 503, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+        (status = 504, body = crate::openapi::ProblemDetails, content_type = "application/problem+json")
+    )
+)]
+async fn get_audit_event(
+    State(service): State<AdminHttpService>,
+    Extension(request_id): Extension<RequestId>,
+    Path(event_id): Path<String>,
+    request: Request,
+) -> Result<Response, HttpError> {
+    let headers = BrowserHeaders::read(request.headers(), &request_id, AUDIT_EVENT)?;
+    let event_id = event_id
+        .parse::<AuditEventId>()
+        .map_err(|_| validation(&request_id, AUDIT_EVENT, "eventId"))?;
+    let view = service
+        .get_audit_event(headers.request(BrowserMethod::Get), event_id)
+        .await
+        .map_err(|error| map_error(error, request_id, AUDIT_EVENT))?;
+    Ok(private_no_store(Json(view).into_response()))
+}
+
+#[utoipa::path(
+    post,
+    path = AUDIT_EXPORT,
+    tag = "administration",
+    security(("projectSessionCookie" = [])),
+    params(("Origin" = String, Header), ("X-CSRF-Token" = String, Header)),
+    request_body(content = AuditExportRequest, content_type = "application/json"),
+    responses(
+        (status = 200, description = "Bounded audit export page", content(
+            (String = "application/x-ndjson"),
+            (String = "text/csv")
+        ), headers(
+            ("Content-Disposition" = String),
+            ("X-Nuriteo-Next-Cursor" = String)
+        )),
+        (status = 401, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+        (status = 403, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+        (status = 413, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+        (status = 415, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+        (status = 422, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+        (status = 503, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+        (status = 504, body = crate::openapi::ProblemDetails, content_type = "application/problem+json")
+    )
+)]
+async fn export_audit_events(
+    State(service): State<AdminHttpService>,
+    Extension(request_id): Extension<RequestId>,
+    request: Request,
+) -> Result<Response, HttpError> {
+    let (parts, body) = request.into_parts();
+    let headers = BrowserHeaders::read(&parts.headers, &request_id, AUDIT_EXPORT)?;
+    let input: AuditExportRequest =
+        json_body(&parts.headers, body, &request_id, AUDIT_EXPORT).await?;
+    let query = audit_list_input(input.filters, &request_id, AUDIT_EXPORT)?;
+    let export = service
+        .export_audit_events(
+            headers.request(BrowserMethod::Post),
+            AdminAuditExportInput {
+                query,
+                format: input.format,
+            },
+            request_id.as_str(),
+        )
+        .await
+        .map_err(|error| map_error(error, request_id.clone(), AUDIT_EXPORT))?;
+    export_response(export, request_id)
+}
+
+#[utoipa::path(
+    get,
+    path = AUDIT_RETENTION_PREVIEW,
+    tag = "administration",
+    security(("projectSessionCookie" = [])),
+    params(("retentionDays" = String, Query, description = "30..3650 or unlimited")),
+    responses(
+        (status = 200, body = AdminAuditRetentionPreview, headers(("Cache-Control" = String))),
+        (status = 401, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+        (status = 403, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+        (status = 422, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+        (status = 503, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+        (status = 504, body = crate::openapi::ProblemDetails, content_type = "application/problem+json")
+    )
+)]
+async fn preview_audit_retention(
+    State(service): State<AdminHttpService>,
+    Extension(request_id): Extension<RequestId>,
+    request: Request,
+) -> Result<Response, HttpError> {
+    let query = parse_query::<AuditRetentionPreviewQuery>(
+        request.uri(),
+        &request_id,
+        AUDIT_RETENTION_PREVIEW,
+    )?;
+    let retention_days = if query.retention_days == "unlimited" {
+        None
+    } else {
+        Some(
+            query
+                .retention_days
+                .parse::<u16>()
+                .map_err(|_| validation(&request_id, AUDIT_RETENTION_PREVIEW, "retentionDays"))?,
+        )
+    };
+    let headers = BrowserHeaders::read(request.headers(), &request_id, AUDIT_RETENTION_PREVIEW)?;
+    let view = service
+        .preview_audit_retention(headers.request(BrowserMethod::Get), retention_days)
+        .await
+        .map_err(|error| map_error(error, request_id, AUDIT_RETENTION_PREVIEW))?;
+    Ok(private_no_store(Json(view).into_response()))
+}
+
+#[utoipa::path(
+    post,
+    path = AUDIT_RETENTION_PRUNE,
+    tag = "administration",
+    security(("projectSessionCookie" = [])),
+    params(("Origin" = String, Header), ("X-CSRF-Token" = String, Header)),
+    request_body(content = AuditRetentionPruneRequest, content_type = "application/json"),
+    responses(
+        (status = 200, body = AdminAuditRetentionPruneView, headers(("Cache-Control" = String))),
+        (status = 401, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+        (status = 403, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+        (status = 415, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+        (status = 422, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+        (status = 503, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+        (status = 504, body = crate::openapi::ProblemDetails, content_type = "application/problem+json")
+    )
+)]
+async fn prune_audit_retention(
+    State(service): State<AdminHttpService>,
+    Extension(request_id): Extension<RequestId>,
+    request: Request,
+) -> Result<Response, HttpError> {
+    let (parts, body) = request.into_parts();
+    let headers = BrowserHeaders::read(&parts.headers, &request_id, AUDIT_RETENTION_PRUNE)?;
+    let input: AuditRetentionPruneRequest =
+        json_body(&parts.headers, body, &request_id, AUDIT_RETENTION_PRUNE).await?;
+    let view = service
+        .prune_audit_retention(
+            headers.request(BrowserMethod::Post),
+            input.limit.unwrap_or(500),
+            request_id.as_str(),
+        )
+        .await
+        .map_err(|error| map_error(error, request_id, AUDIT_RETENTION_PRUNE))?;
+    Ok(private_no_store(Json(view).into_response()))
+}
+
+fn parse_query<T: DeserializeOwned>(
+    uri: &Uri,
+    request_id: &RequestId,
+    path: &str,
+) -> Result<T, HttpError> {
+    Query::<T>::try_from_uri(uri)
+        .map(|query| query.0)
+        .map_err(|_| validation(request_id, path, "query"))
+}
+
+fn audit_list_input(
+    request: AuditFilterRequest,
+    request_id: &RequestId,
+    path: &str,
+) -> Result<AdminAuditListInput, HttpError> {
+    let from = request
+        .from
+        .as_deref()
+        .map(str::parse)
+        .transpose()
+        .map_err(|_| validation(request_id, path, "from"))?;
+    let to = request
+        .to
+        .as_deref()
+        .map(str::parse)
+        .transpose()
+        .map_err(|_| validation(request_id, path, "to"))?;
+    Ok(AdminAuditListInput {
+        from,
+        to,
+        actor_type: request.actor_type,
+        actor_id: request.actor_id,
+        action_code: request.action_code,
+        result: request.result,
+        scope_type: request.scope_type,
+        scope_id: request.scope_id,
+        target_type: request.target_type,
+        target_id: request.target_id,
+        cursor: request.cursor,
+        limit: request.limit.unwrap_or(50),
+    })
+}
+
+fn export_response(
+    export: super::AdminAuditExportView,
+    request_id: RequestId,
+) -> Result<Response, HttpError> {
+    let disposition =
+        HeaderValue::from_str(&format!("attachment; filename=\"{}\"", export.filename))
+            .map_err(|_| HttpError::internal(request_id.clone(), AUDIT_EXPORT))?;
+    let content_type = HeaderValue::from_str(export.content_type)
+        .map_err(|_| HttpError::internal(request_id.clone(), AUDIT_EXPORT))?;
+    let mut response = Response::new(Body::from(export.bytes));
+    response
+        .headers_mut()
+        .insert(CACHE_CONTROL, HeaderValue::from_static("private, no-store"));
+    response.headers_mut().insert(CONTENT_TYPE, content_type);
+    response
+        .headers_mut()
+        .insert(CONTENT_DISPOSITION, disposition);
+    response.headers_mut().insert(
+        HeaderName::from_static("x-content-type-options"),
+        HeaderValue::from_static("nosniff"),
+    );
+    if let Some(cursor) = export.next_cursor {
+        response.headers_mut().insert(
+            HeaderName::from_static("x-nuriteo-next-cursor"),
+            HeaderValue::from_str(&cursor)
+                .map_err(|_| HttpError::internal(request_id, AUDIT_EXPORT))?,
+        );
+    }
+    Ok(response)
 }
 
 struct BrowserHeaders<'a> {
@@ -262,11 +592,17 @@ fn map_error(error: AdminHttpServiceError, request_id: RequestId, path: &str) ->
             HttpError::forbidden(request_id, path)
         }
         AdminHttpServiceError::InvalidSetting => validation(&request_id, path, "value"),
-        AdminHttpServiceError::SettingNotFound => HttpError::not_found(request_id, path),
+        AdminHttpServiceError::InvalidAuditQuery => validation(&request_id, path, "query"),
+        AdminHttpServiceError::SettingNotFound | AdminHttpServiceError::AuditEventNotFound => {
+            HttpError::not_found(request_id, path)
+        }
         AdminHttpServiceError::PreconditionFailed => {
             HttpError::precondition_failed(request_id, path)
         }
         AdminHttpServiceError::OperationTimeout => HttpError::operation_timeout(request_id, path),
+        AdminHttpServiceError::AuditExportTooLarge => {
+            HttpError::payload_too_large(request_id, path)
+        }
         AdminHttpServiceError::AuditUnavailable | AdminHttpServiceError::Unavailable => {
             HttpError::service_unavailable(request_id, path)
         }

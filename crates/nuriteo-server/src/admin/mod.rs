@@ -1,3 +1,4 @@
+mod audit_service;
 mod http_routes;
 mod http_service;
 
@@ -18,6 +19,11 @@ use crate::audit::{
 use crate::database::DatabasePool;
 use crate::identity::{SessionId, Timestamp, UserId, UserStatus};
 
+pub use audit_service::{
+    AdminAuditEventCollectionView, AdminAuditEventView, AdminAuditExportFormat,
+    AdminAuditExportInput, AdminAuditExportView, AdminAuditListInput, AdminAuditRetentionPreview,
+    AdminAuditRetentionPruneView,
+};
 pub(crate) use http_routes::openapi_router;
 pub use http_service::{
     AdminHttpPolicy, AdminHttpService, AdminHttpServiceError, AdminSettingListView,

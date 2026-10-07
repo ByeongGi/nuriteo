@@ -8,6 +8,7 @@ use axum::http::header::{CACHE_CONTROL, CONTENT_TYPE, COOKIE, ETAG, IF_MATCH, OR
 use axum::http::{Method, Request, Response, StatusCode};
 use nuriteo_server::admin::{AdminHttpPolicy, AdminHttpService};
 use nuriteo_server::app::build_router_with_admin_service;
+use nuriteo_server::audit::AuditEventId;
 use nuriteo_server::auth::{AuthPolicy, AuthService};
 use nuriteo_server::config::InstanceSettingBootstrap;
 use nuriteo_server::database::{
@@ -35,7 +36,7 @@ const SETTING_PATH: &str = "/api/v1/admin/settings/invitations.default_expiry_ho
 
 #[tokio::test]
 #[ignore = "requires the pinned custom-CA PostgreSQL fixture; run tests/fixtures/postgres-admin-http/run.sh"]
-async fn admin_settings_http_is_authorized_reauthenticated_versioned_and_audited() {
+async fn admin_settings_and_audit_http_are_authorized_versioned_and_transactional() {
     let pool = fixture_pool().await;
     reset_fixture(&pool).await;
     let report = run_embedded_migrations(
@@ -290,8 +291,373 @@ async fn admin_settings_http_is_authorized_reauthenticated_versioned_and_audited
     assert_eq!(status["settingCount"], 10);
     assert_eq!(status["restartRequired"], false);
 
+    verify_audit_query_export_and_retention(&router, &pool, &admin, &member, admin_id).await;
+
     reset_fixture(&pool).await;
     pool.close(Duration::from_secs(2)).await.unwrap();
+}
+
+async fn verify_audit_query_export_and_retention(
+    router: &Router,
+    pool: &DatabasePool,
+    admin: &Browser,
+    member: &Browser,
+    admin_id: UserId,
+) {
+    assert_problem(
+        request(
+            router,
+            Some(member),
+            Method::GET,
+            "/api/v1/admin/audit-events",
+            None,
+            None,
+        )
+        .await,
+        StatusCode::FORBIDDEN,
+    )
+    .await;
+
+    let mut ids = Vec::new();
+    for (index, target_id) in ["=formula", "safe-two", "safe-three"].iter().enumerate() {
+        let id = AuditEventId::new();
+        ids.push(id.to_string());
+        sqlx::query(
+            "INSERT INTO audit_events (id, occurred_at, actor_type, actor_id, actor_user_id, \
+             actor_display_name, action_code, target_type, target_id, scope_type, scope_id, \
+             result, correlation_id, metadata) VALUES ( \
+             $1::uuid, transaction_timestamp() - INTERVAL '400 days' + make_interval(secs => $2), \
+             'user', $3, $3::uuid, 'Fixture Administrator', 'fixture.audit', 'fixture', $4, \
+             'instance', 'instance', 'succeeded', $5, '{\"safe\":true}'::jsonb)",
+        )
+        .bind(id.to_string())
+        .bind(i32::try_from(index).unwrap())
+        .bind(admin_id.to_string())
+        .bind(target_id)
+        .bind(format!("fixture:audit-{index}"))
+        .execute(&mut *acquire(pool).await)
+        .await
+        .unwrap();
+    }
+    sqlx::query("UPDATE audit_events SET actor_user_id = NULL WHERE id = $1::uuid")
+        .bind(&ids[0])
+        .execute(&mut *acquire(pool).await)
+        .await
+        .unwrap();
+
+    let first = request(
+        router,
+        Some(admin),
+        Method::GET,
+        "/api/v1/admin/audit-events?actionCode=fixture.audit&limit=2",
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(first.status(), StatusCode::OK);
+    assert_eq!(first.headers()[CACHE_CONTROL], "private, no-store");
+    let first = json_body(first).await;
+    assert_eq!(first["items"].as_array().unwrap().len(), 2);
+    let cursor = first["nextCursor"].as_str().unwrap();
+    assert!(!cursor.contains('=') && !cursor.contains('/'));
+    let first_ids = first["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|item| item["id"].as_str().unwrap().to_owned())
+        .collect::<Vec<_>>();
+
+    let second = request(
+        router,
+        Some(admin),
+        Method::GET,
+        &format!("/api/v1/admin/audit-events?actionCode=fixture.audit&limit=2&cursor={cursor}"),
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(second.status(), StatusCode::OK);
+    let second = json_body(second).await;
+    assert_eq!(second["items"].as_array().unwrap().len(), 1);
+    assert!(second["nextCursor"].is_null());
+    let mut listed_ids = first_ids;
+    listed_ids.push(second["items"][0]["id"].as_str().unwrap().to_owned());
+    listed_ids.sort();
+    ids.sort();
+    assert_eq!(listed_ids, ids);
+
+    let detail = request(
+        router,
+        Some(admin),
+        Method::GET,
+        &format!("/api/v1/admin/audit-events/{}", ids[0]),
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(detail.status(), StatusCode::OK);
+    assert_eq!(json_body(detail).await["actionCode"], "fixture.audit");
+    assert_problem(
+        request(
+            router,
+            Some(admin),
+            Method::GET,
+            "/api/v1/admin/audit-events?cursor=not-canonical",
+            None,
+            None,
+        )
+        .await,
+        StatusCode::UNPROCESSABLE_ENTITY,
+    )
+    .await;
+
+    let unsafe_id = AuditEventId::new();
+    sqlx::query(
+        "INSERT INTO audit_events (id, actor_type, actor_id, action_code, target_type, target_id, \
+         scope_type, scope_id, result, correlation_id, metadata) VALUES ( \
+         $1::uuid, 'system', 'fixture', 'fixture.unsafe', 'fixture', 'fixture', 'instance', \
+         'instance', 'succeeded', 'fixture:unsafe', '{\"password\":\"must-not-leak\"}'::jsonb)",
+    )
+    .bind(unsafe_id.to_string())
+    .execute(&mut *acquire(pool).await)
+    .await
+    .unwrap();
+    let unsafe_response = request(
+        router,
+        Some(admin),
+        Method::GET,
+        "/api/v1/admin/audit-events?actionCode=fixture.unsafe",
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(unsafe_response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    let unsafe_body = to_bytes(unsafe_response.into_body(), 64 * 1024)
+        .await
+        .unwrap();
+    assert!(!String::from_utf8_lossy(&unsafe_body).contains("must-not-leak"));
+
+    let jsonl = request(
+        router,
+        Some(admin),
+        Method::POST,
+        "/api/v1/admin/audit-events/export",
+        Some(json!({"actionCode": "fixture.audit", "format": "jsonl"})),
+        None,
+    )
+    .await;
+    assert_eq!(jsonl.status(), StatusCode::OK);
+    assert_eq!(
+        jsonl.headers()[CONTENT_TYPE],
+        "application/x-ndjson; charset=utf-8"
+    );
+    assert_eq!(
+        jsonl.headers()["content-disposition"],
+        "attachment; filename=\"nuriteo-audit.jsonl\""
+    );
+    let jsonl_body = to_bytes(jsonl.into_body(), 1024 * 1024).await.unwrap();
+    let lines = String::from_utf8(jsonl_body.to_vec()).unwrap();
+    assert_eq!(lines.lines().count(), 3);
+    for line in lines.lines() {
+        let event: Value = serde_json::from_str(line).unwrap();
+        assert_eq!(event["actionCode"], "fixture.audit");
+        assert!(!line.contains(PASSWORD));
+    }
+
+    let csv = request(
+        router,
+        Some(admin),
+        Method::POST,
+        "/api/v1/admin/audit-events/export",
+        Some(json!({"actionCode": "fixture.audit", "format": "csv"})),
+        None,
+    )
+    .await;
+    assert_eq!(csv.status(), StatusCode::OK);
+    assert_eq!(csv.headers()[CONTENT_TYPE], "text/csv; charset=utf-8");
+    let csv_body = String::from_utf8(
+        to_bytes(csv.into_body(), 1024 * 1024)
+            .await
+            .unwrap()
+            .to_vec(),
+    )
+    .unwrap();
+    assert!(csv_body.contains("\"'=formula\""));
+    assert!(!csv_body.contains("\"=formula\""));
+    let exported_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM audit_events WHERE action_code = 'audit.exported'",
+    )
+    .fetch_one(&mut *acquire(pool).await)
+    .await
+    .unwrap();
+    assert_eq!(exported_count, 2);
+    sqlx::query(
+        "CREATE FUNCTION reject_audit_export() RETURNS trigger LANGUAGE plpgsql AS $$ \
+         BEGIN IF NEW.action_code = 'audit.exported' THEN RAISE EXCEPTION 'fixture rejection'; \
+         END IF; RETURN NEW; END $$",
+    )
+    .execute(&mut *acquire(pool).await)
+    .await
+    .unwrap();
+    sqlx::query(
+        "CREATE TRIGGER reject_audit_export BEFORE INSERT ON audit_events \
+         FOR EACH ROW EXECUTE FUNCTION reject_audit_export()",
+    )
+    .execute(&mut *acquire(pool).await)
+    .await
+    .unwrap();
+    assert_problem(
+        request(
+            router,
+            Some(admin),
+            Method::POST,
+            "/api/v1/admin/audit-events/export",
+            Some(json!({"actionCode": "fixture.audit", "format": "jsonl"})),
+            None,
+        )
+        .await,
+        StatusCode::SERVICE_UNAVAILABLE,
+    )
+    .await;
+    sqlx::query("DROP TRIGGER reject_audit_export ON audit_events")
+        .execute(&mut *acquire(pool).await)
+        .await
+        .unwrap();
+    sqlx::query("DROP FUNCTION reject_audit_export()")
+        .execute(&mut *acquire(pool).await)
+        .await
+        .unwrap();
+
+    let preview = request(
+        router,
+        Some(admin),
+        Method::GET,
+        "/api/v1/admin/audit-retention/preview?retentionDays=180",
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(preview.status(), StatusCode::OK);
+    let preview = json_body(preview).await;
+    assert_eq!(preview["retentionDays"], 180);
+    assert_eq!(preview["deleteCount"], 3);
+    assert_eq!(preview["shortRetentionWarning"], false);
+    let short_preview = request(
+        router,
+        Some(admin),
+        Method::GET,
+        "/api/v1/admin/audit-retention/preview?retentionDays=179",
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(
+        json_body(short_preview).await["shortRetentionWarning"],
+        true
+    );
+
+    assert_problem(
+        request(
+            router,
+            Some(admin),
+            Method::POST,
+            "/api/v1/admin/audit-retention/prune",
+            Some(json!({"limit": 2})),
+            None,
+        )
+        .await,
+        StatusCode::FORBIDDEN,
+    )
+    .await;
+
+    sqlx::query(
+        "UPDATE sessions SET last_seen_at = transaction_timestamp(), \
+         last_reauthenticated_at = transaction_timestamp() \
+         WHERE user_id = $1::uuid AND revoked_at IS NULL",
+    )
+    .bind(admin_id.to_string())
+    .execute(&mut *acquire(pool).await)
+    .await
+    .unwrap();
+    sqlx::query(
+        "CREATE FUNCTION reject_audit_prune() RETURNS trigger LANGUAGE plpgsql AS $$ \
+         BEGIN IF NEW.action_code = 'audit.retention_pruned' THEN RAISE EXCEPTION 'fixture rejection'; \
+         END IF; RETURN NEW; END $$",
+    )
+    .execute(&mut *acquire(pool).await)
+    .await
+    .unwrap();
+    sqlx::query(
+        "CREATE TRIGGER reject_audit_prune BEFORE INSERT ON audit_events \
+         FOR EACH ROW EXECUTE FUNCTION reject_audit_prune()",
+    )
+    .execute(&mut *acquire(pool).await)
+    .await
+    .unwrap();
+    assert_problem(
+        request(
+            router,
+            Some(admin),
+            Method::POST,
+            "/api/v1/admin/audit-retention/prune",
+            Some(json!({"limit": 2})),
+            None,
+        )
+        .await,
+        StatusCode::SERVICE_UNAVAILABLE,
+    )
+    .await;
+    let old_after_rollback: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM audit_events \
+         WHERE action_code = 'fixture.audit' AND occurred_at < transaction_timestamp() - INTERVAL '365 days'",
+    )
+    .fetch_one(&mut *acquire(pool).await)
+    .await
+    .unwrap();
+    assert_eq!(old_after_rollback, 3);
+    sqlx::query("DROP TRIGGER reject_audit_prune ON audit_events")
+        .execute(&mut *acquire(pool).await)
+        .await
+        .unwrap();
+    sqlx::query("DROP FUNCTION reject_audit_prune()")
+        .execute(&mut *acquire(pool).await)
+        .await
+        .unwrap();
+    let first_prune = request(
+        router,
+        Some(admin),
+        Method::POST,
+        "/api/v1/admin/audit-retention/prune",
+        Some(json!({"limit": 2})),
+        None,
+    )
+    .await;
+    assert_eq!(first_prune.status(), StatusCode::OK);
+    let first_prune = json_body(first_prune).await;
+    assert_eq!(first_prune["retentionDays"], 365);
+    assert_eq!(first_prune["deletedCount"], 2);
+    assert_eq!(first_prune["moreExpiredEvents"], true);
+
+    let final_prune = request(
+        router,
+        Some(admin),
+        Method::POST,
+        "/api/v1/admin/audit-retention/prune",
+        Some(json!({"limit": 1000})),
+        None,
+    )
+    .await;
+    assert_eq!(final_prune.status(), StatusCode::OK);
+    let final_prune = json_body(final_prune).await;
+    assert_eq!(final_prune["deletedCount"], 1);
+    assert_eq!(final_prune["moreExpiredEvents"], false);
+    let prune_audits: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM audit_events WHERE action_code = 'audit.retention_pruned'",
+    )
+    .fetch_one(&mut *acquire(pool).await)
+    .await
+    .unwrap();
+    assert_eq!(prune_audits, 2);
 }
 
 #[derive(Clone)]

@@ -31,7 +31,7 @@ const DEFAULT_OPERATION_TIMEOUT: Duration = Duration::from_secs(5);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct AdminHttpPolicy {
-    operation_timeout: Duration,
+    pub(super) operation_timeout: Duration,
 }
 
 impl AdminHttpPolicy {
@@ -57,8 +57,11 @@ pub enum AdminHttpServiceError {
     Forbidden,
     ReauthenticationRequired,
     InvalidSetting,
+    InvalidAuditQuery,
     SettingNotFound,
+    AuditEventNotFound,
     PreconditionFailed,
+    AuditExportTooLarge,
     AuditUnavailable,
     Unavailable,
     OperationTimeout,
@@ -73,8 +76,11 @@ impl fmt::Display for AdminHttpServiceError {
             Self::Forbidden => "administrator request was forbidden",
             Self::ReauthenticationRequired => "recent reauthentication is required",
             Self::InvalidSetting => "instance setting is invalid",
+            Self::InvalidAuditQuery => "audit query is invalid",
             Self::SettingNotFound => "instance setting was not found",
+            Self::AuditEventNotFound => "audit event was not found",
             Self::PreconditionFailed => "instance setting version is stale",
+            Self::AuditExportTooLarge => "audit export exceeds the response limit",
             Self::AuditUnavailable => "instance setting audit persistence is unavailable",
             Self::Unavailable => "administrator service is unavailable",
             Self::OperationTimeout => "administrator operation timed out",
@@ -117,12 +123,12 @@ pub struct AdminHttpService {
     runtime: Option<Arc<AdminRuntime>>,
 }
 
-struct AdminRuntime {
-    pool: DatabasePool,
+pub(super) struct AdminRuntime {
+    pub(super) pool: DatabasePool,
     sessions: SessionService,
     cookies: BrowserCookieBoundary,
     startup_settings: EffectiveInstanceSettings,
-    policy: AdminHttpPolicy,
+    pub(super) policy: AdminHttpPolicy,
 }
 
 impl fmt::Debug for AdminHttpService {
@@ -234,7 +240,7 @@ impl AdminHttpService {
             .await
     }
 
-    fn runtime(&self) -> Result<&AdminRuntime, AdminHttpServiceError> {
+    pub(super) fn runtime(&self) -> Result<&AdminRuntime, AdminHttpServiceError> {
         self.runtime
             .as_deref()
             .ok_or(AdminHttpServiceError::Unavailable)
@@ -242,13 +248,13 @@ impl AdminHttpService {
 }
 
 #[derive(Debug, Clone, Copy)]
-struct AdminSession {
-    user_id: UserId,
-    session_id: crate::identity::SessionId,
+pub(super) struct AdminSession {
+    pub(super) user_id: UserId,
+    pub(super) session_id: crate::identity::SessionId,
 }
 
 impl AdminRuntime {
-    async fn authenticate(
+    pub(super) async fn authenticate(
         &self,
         request: BrowserRequestHeaders<'_>,
     ) -> Result<AdminSession, AdminHttpServiceError> {
@@ -360,7 +366,7 @@ impl AdminRuntime {
         )
     }
 
-    async fn within_timeout<T>(
+    pub(super) async fn within_timeout<T>(
         &self,
         operation: impl Future<Output = Result<T, AdminHttpServiceError>>,
     ) -> Result<T, AdminHttpServiceError> {
@@ -370,13 +376,13 @@ impl AdminRuntime {
     }
 }
 
-struct AuditActorIdentity {
-    user_id: UserId,
-    display_name: String,
-    occurred_at: Timestamp,
+pub(super) struct AuditActorIdentity {
+    pub(super) user_id: UserId,
+    pub(super) display_name: String,
+    pub(super) occurred_at: Timestamp,
 }
 
-async fn authorize_recent_admin(
+pub(super) async fn authorize_recent_admin(
     transaction: &mut Transaction<'_, Postgres>,
     session: AdminSession,
 ) -> Result<AuditActorIdentity, AdminHttpServiceError> {

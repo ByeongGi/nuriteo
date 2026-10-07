@@ -41,7 +41,7 @@ pub const DOCS_PATH: &str = "/api/docs";
         ,(name = "project-versions", description = "Immutable named Project Working Head references")
         ,(name = "project-history", description = "Recovery Checkpoints and atomic historical Working Head promotion")
         ,(name = "save", description = "Bounded Project Bundle Save session lifecycle")
-        ,(name = "administration", description = "Instance administrator settings and operational status")
+        ,(name = "administration", description = "Instance administrator settings, operational status, and audit operations")
     ),
     servers((url = "/", description = "Current self-hosted instance"))
 )]

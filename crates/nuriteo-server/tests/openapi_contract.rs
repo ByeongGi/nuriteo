@@ -23,6 +23,75 @@ fn versioned_document_matches_the_reviewed_snapshot() {
     assert_eq!(document, SNAPSHOT);
 }
 
+#[test]
+fn audit_api_declares_cursor_export_and_retention_security_boundaries() {
+    let document = serde_json::to_value(openapi::document()).unwrap();
+    let list = &document["paths"]["/api/v1/admin/audit-events"]["get"];
+    let parameters = list["parameters"].as_array().unwrap();
+    for name in [
+        "from",
+        "to",
+        "actorType",
+        "actorId",
+        "actionCode",
+        "result",
+        "scopeType",
+        "scopeId",
+        "targetType",
+        "targetId",
+        "cursor",
+        "limit",
+    ] {
+        assert!(parameters.iter().any(|parameter| parameter["name"] == name));
+    }
+    assert_eq!(
+        list["responses"]["200"]["content"]["application/json"]["schema"]["$ref"],
+        "#/components/schemas/AdminAuditEventCollectionView"
+    );
+    for path in [
+        "/api/v1/admin/audit-events/export",
+        "/api/v1/admin/audit-retention/prune",
+    ] {
+        let operation = &document["paths"][path]["post"];
+        let headers = operation["parameters"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|parameter| parameter["name"].as_str().unwrap())
+            .collect::<Vec<_>>();
+        assert!(headers.contains(&"Origin"));
+        assert!(headers.contains(&"X-CSRF-Token"));
+        assert_eq!(operation["security"][0]["projectSessionCookie"], json!([]));
+    }
+    assert_eq!(
+        document["components"]["schemas"]["AdminAuditExportFormat"]["enum"],
+        json!(["jsonl", "csv"])
+    );
+    let export_response =
+        &document["paths"]["/api/v1/admin/audit-events/export"]["post"]["responses"]["200"];
+    assert!(
+        export_response["content"]
+            .get("application/x-ndjson")
+            .is_some()
+    );
+    assert!(export_response["content"].get("text/csv").is_some());
+    assert!(
+        export_response["content"]
+            .get("application/octet-stream")
+            .is_none()
+    );
+    assert!(
+        export_response["headers"]
+            .get("Content-Disposition")
+            .is_some()
+    );
+    assert!(
+        export_response["headers"]
+            .get("X-Nuriteo-Next-Cursor")
+            .is_some()
+    );
+}
+
 #[tokio::test]
 async fn serves_the_versioned_document_from_the_application_router() {
     let response = get(build_router(), DOCUMENT_PATH).await;
@@ -42,6 +111,11 @@ async fn serves_the_versioned_document_from_the_application_router() {
             "/api/v1/admin/activation-invitations",
             "/api/v1/admin/activation-invitations/{invitation_id}",
             "/api/v1/admin/activation-invitations/{invitation_id}/reissue",
+            "/api/v1/admin/audit-events",
+            "/api/v1/admin/audit-events/export",
+            "/api/v1/admin/audit-events/{eventId}",
+            "/api/v1/admin/audit-retention/preview",
+            "/api/v1/admin/audit-retention/prune",
             "/api/v1/admin/settings",
             "/api/v1/admin/settings/{key}",
             "/api/v1/admin/status",
