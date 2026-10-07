@@ -52,6 +52,21 @@ export {
   revokeDirectProjectRole
 } from "./projects.ts";
 export {
+  addTeamMember,
+  addTeamProjectRole,
+  changeTeamMemberRole,
+  changeTeamProjectRole,
+  createTeam,
+  deleteTeam,
+  getTeam,
+  listTeamMembers,
+  listTeamProjectRoles,
+  listTeams,
+  removeTeamMember,
+  removeTeamProjectRole,
+  renameTeam
+} from "./teams.ts";
+export {
   API_PREFIX,
   DEFAULT_MAX_RESPONSE_BYTES,
   DEFAULT_REQUEST_TIMEOUT_MS,
@@ -159,6 +174,31 @@ export type {
   RevokeDirectProjectRoleInput,
   VersionedProjectInput
 } from "./projects.ts";
+export type {
+  AddTeamMemberInput,
+  AddTeamProjectRoleInput,
+  ChangeTeamMemberRoleInput,
+  ChangeTeamProjectRoleInput,
+  CreateTeamInput,
+  DeleteTeamInput,
+  ListTeamChildrenInput,
+  ListTeamsInput,
+  RemoveTeamMemberInput,
+  RemoveTeamProjectRoleInput,
+  RenameTeamInput,
+  Team,
+  TeamCollection,
+  TeamInput,
+  TeamMember,
+  TeamMemberCollection,
+  TeamMemberResult,
+  TeamMutation,
+  TeamProjectRole,
+  TeamProjectRoleCollection,
+  TeamProjectRoleResult,
+  TeamResult,
+  TeamRole
+} from "./teams.ts";
 export {
   createProjectVersion,
   listProjectVersions,

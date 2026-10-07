@@ -172,6 +172,11 @@ export function OrganizationConsole(props: OrganizationConsoleProps) {
           </Link>
         ))}
       </nav>
+      {props.organization ? (
+        <nav className="organization-actions" aria-label={`${props.organization.displayName} settings`}>
+          <Link href={`/organizations/${props.organization.id}/teams`}>Manage Teams</Link>
+        </nav>
+      ) : null}
       {oneTimeUrl ? (
         <section className="one-time-panel" aria-labelledby="organization-invitation-link-title" aria-live="polite">
           <h2 id="organization-invitation-link-title">Copy this invitation link now</h2>

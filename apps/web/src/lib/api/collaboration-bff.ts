@@ -15,6 +15,9 @@ const IDEMPOTENCY_KEY = /^[A-Za-z0-9._-]{16,128}$/u;
 const STRONG_ETAG = /^"org-v[1-9]\d*"$/u;
 const PROJECT_ETAG = /^"project-v([1-9]\d*)"$/u;
 const SETTING_ETAG = /^"setting-v([1-9]\d*)"$/u;
+const TEAM_ETAG = /^"team-v([1-9]\d*)"$/u;
+const TEAM_MEMBER_ETAG = /^"team-member-v([1-9]\d*)"$/u;
+const TEAM_PROJECT_ROLE_ETAG = /^"team-project-role-v([1-9]\d*)"$/u;
 const MAX_PROJECT_VERSION = 9_223_372_036_854_775_806n;
 const SAFE_LOCATION = /^\/api\/v1\/organizations\/[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 const ORGANIZATION_INVITATION_EMAIL_MAX_CHARACTERS = 320;
@@ -36,7 +39,7 @@ export interface CollaborationForward {
   readonly withBody: boolean;
   readonly withEtag?: boolean;
   readonly withIdempotencyKey?: boolean;
-  readonly etagKind?: "organization" | "project" | "setting";
+  readonly etagKind?: "organization" | "project" | "setting" | "team" | "team-member" | "team-project-role";
   readonly jsonBodyPolicy?: "organization-invitation-issue";
   readonly safeLocation?: (value: string) => boolean;
 }
@@ -92,11 +95,7 @@ export async function forwardCollaborationMutation(
   }
   if (spec.withEtag) {
     const etag = request.headers.get("if-match");
-    const validEtag = spec.etagKind === "project"
-      ? isProjectEtag(etag)
-      : spec.etagKind === "setting"
-        ? isSettingEtag(etag)
-        : etag !== null && STRONG_ETAG.test(etag);
+    const validEtag = isEtagForKind(etag, spec.etagKind ?? "organization");
     if (!validEtag || etag === null) {
       cancel(request.body);
       return problem(428, "BFF_PRECONDITION_REQUIRED", requestId, spec.path);
@@ -245,6 +244,25 @@ function isSettingEtag(value: string | null): value is string {
   if (match === null) return false;
   const version = BigInt(match[1] as string);
   return version <= MAX_PROJECT_VERSION && value === `"setting-v${version}"`;
+}
+
+function isEtagForKind(
+  value: string | null,
+  kind: NonNullable<CollaborationForward["etagKind"]>
+): value is string {
+  if (kind === "project") return isProjectEtag(value);
+  if (kind === "setting") return isSettingEtag(value);
+  if (kind === "organization") return value !== null && STRONG_ETAG.test(value);
+  const pattern = kind === "team"
+    ? TEAM_ETAG
+    : kind === "team-member"
+      ? TEAM_MEMBER_ETAG
+      : TEAM_PROJECT_ROLE_ETAG;
+  if (value === null || value.length > 48) return false;
+  const match = value.match(pattern);
+  if (match === null) return false;
+  const version = BigInt(match[1] as string);
+  return version <= MAX_PROJECT_VERSION && value === `"${kind}-v${version}"`;
 }
 
 async function readBoundedBody(

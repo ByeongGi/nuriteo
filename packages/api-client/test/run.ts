@@ -7,5 +7,6 @@ import "./organization.test.ts";
 import "./project.test.ts";
 import "./save.test.ts";
 import "./setup.test.ts";
+import "./team.test.ts";
 
 console.log("api client tests ok");
