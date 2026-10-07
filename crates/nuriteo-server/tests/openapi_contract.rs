@@ -92,6 +92,31 @@ fn audit_api_declares_cursor_export_and_retention_security_boundaries() {
     );
 }
 
+#[test]
+fn operations_dashboard_is_admin_only_and_uses_safe_aggregate_schema() {
+    let document = serde_json::to_value(openapi::document()).unwrap();
+    let operation = &document["paths"]["/api/v1/admin/operations"]["get"];
+    assert_eq!(operation["security"][0]["projectSessionCookie"], json!([]));
+    assert_eq!(
+        operation["responses"]["200"]["content"]["application/json"]["schema"]["$ref"],
+        "#/components/schemas/AdminOperationsView"
+    );
+    let usage = &document["components"]["schemas"]["AdminUsageView"]["properties"];
+    for name in [
+        "activeUsers",
+        "activeOrganizations",
+        "activeProjects",
+        "verifiedBundles",
+        "trackedPhysicalBytes",
+        "reservedBytes",
+    ] {
+        assert!(usage.get(name).is_some());
+    }
+    for forbidden in ["objectKey", "endpoint", "credential", "error", "sql"] {
+        assert!(usage.get(forbidden).is_none());
+    }
+}
+
 #[tokio::test]
 async fn serves_the_versioned_document_from_the_application_router() {
     let response = get(build_router(), DOCUMENT_PATH).await;
@@ -116,6 +141,7 @@ async fn serves_the_versioned_document_from_the_application_router() {
             "/api/v1/admin/audit-events/{eventId}",
             "/api/v1/admin/audit-retention/preview",
             "/api/v1/admin/audit-retention/prune",
+            "/api/v1/admin/operations",
             "/api/v1/admin/settings",
             "/api/v1/admin/settings/{key}",
             "/api/v1/admin/status",

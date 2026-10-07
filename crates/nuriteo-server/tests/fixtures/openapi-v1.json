@@ -804,6 +804,73 @@
         ]
       }
     },
+    "/api/v1/admin/operations": {
+      "get": {
+        "tags": [
+          "administration"
+        ],
+        "operationId": "admin_operations",
+        "responses": {
+          "200": {
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminOperationsView"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "504": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "projectSessionCookie": []
+          }
+        ]
+      }
+    },
     "/api/v1/admin/settings": {
       "get": {
         "tags": [
@@ -6596,6 +6663,109 @@
           }
         }
       },
+      "AdminCleanupQueueView": {
+        "type": "object",
+        "required": [
+          "state"
+        ],
+        "properties": {
+          "failedCount": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "minimum": 0
+          },
+          "oldestEligibleAgeSeconds": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "minimum": 0
+          },
+          "queueDepth": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "minimum": 0
+          },
+          "retryCount": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "minimum": 0
+          },
+          "runningCount": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "minimum": 0
+          },
+          "state": {
+            "$ref": "#/components/schemas/AdminOperationsState"
+          }
+        }
+      },
+      "AdminDependencyStatusView": {
+        "type": "object",
+        "required": [
+          "state"
+        ],
+        "properties": {
+          "category": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "state": {
+            "$ref": "#/components/schemas/AdminOperationsState"
+          }
+        }
+      },
+      "AdminOperationsState": {
+        "type": "string",
+        "enum": [
+          "nominal",
+          "degraded",
+          "unavailable"
+        ]
+      },
+      "AdminOperationsView": {
+        "type": "object",
+        "required": [
+          "generatedAt",
+          "overallState",
+          "dependencies",
+          "cleanup",
+          "usage"
+        ],
+        "properties": {
+          "cleanup": {
+            "$ref": "#/components/schemas/AdminCleanupQueueView"
+          },
+          "dependencies": {
+            "$ref": "#/components/schemas/AdminDependencyStatusView"
+          },
+          "generatedAt": {
+            "type": "string"
+          },
+          "overallState": {
+            "$ref": "#/components/schemas/AdminOperationsState"
+          },
+          "usage": {
+            "$ref": "#/components/schemas/AdminUsageView"
+          }
+        }
+      },
       "AdminSettingListView": {
         "type": "object",
         "required": [
@@ -6666,6 +6836,61 @@
           "settingRegistryVersion": {
             "type": "integer",
             "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
+      "AdminUsageView": {
+        "type": "object",
+        "required": [
+          "state"
+        ],
+        "properties": {
+          "activeOrganizations": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "minimum": 0
+          },
+          "activeProjects": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "minimum": 0
+          },
+          "activeUsers": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "minimum": 0
+          },
+          "reservedBytes": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "state": {
+            "$ref": "#/components/schemas/AdminOperationsState"
+          },
+          "trackedPhysicalBytes": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "verifiedBundles": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
             "minimum": 0
           }
         }

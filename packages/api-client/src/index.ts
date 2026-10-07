@@ -13,6 +13,7 @@ export {
 export { getVersion } from "./system.ts";
 export { getSetupStatus } from "./setup.ts";
 export { getAdminStatus, listAdminSettings, updateAdminSetting } from "./admin.ts";
+export { getAdminOperations } from "./admin-operations.ts";
 export { createSession, deleteSession, getCurrentUser } from "./auth.ts";
 export {
   activateAccount,
@@ -86,6 +87,14 @@ export type {
   AdminStatus,
   UpdateAdminSettingInput
 } from "./admin.ts";
+export type {
+  AdminCleanupQueue,
+  AdminDependencyCategory,
+  AdminDependencyStatus,
+  AdminOperations,
+  AdminOperationsState,
+  AdminUsage
+} from "./admin-operations.ts";
 export { OneTimeUrl } from "./one-time-url.ts";
 export type {
   ActivateAccountInput,

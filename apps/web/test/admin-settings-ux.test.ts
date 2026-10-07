@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { PATCH as patchSetting } from "../src/app/api/v1/admin/settings/[key]/route.ts";
+import { GET as getOperations } from "../src/app/api/v1/admin/operations/route.ts";
 
 const webRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const originalFetch = globalThis.fetch;
@@ -11,11 +12,34 @@ const originalUrl = process.env.NURITEO_INTERNAL_API_URL;
 
 try {
   await settingBffContract();
+  await operationsBffContract();
   sourceContracts();
 } finally {
   globalThis.fetch = originalFetch;
   if (originalUrl === undefined) delete process.env.NURITEO_INTERNAL_API_URL;
   else process.env.NURITEO_INTERNAL_API_URL = originalUrl;
+}
+
+async function operationsBffContract(): Promise<void> {
+  let dispatched: { headers: Headers; method: string | undefined; url: string } | undefined;
+  globalThis.fetch = async (input, init) => {
+    dispatched = {
+      headers: new Headers(init?.headers),
+      method: init?.method,
+      url: String(input)
+    };
+    return Response.json({ state: "fixture" });
+  };
+  const response = await getOperations(new Request(
+    "https://nuriteo.example.test/api/v1/admin/operations",
+    { headers: { cookie: "nuriteo_dev_session=admin", host: "nuriteo.example.test" } }
+  ));
+  assert.equal(response.status, 200);
+  assert.equal(dispatched?.method, "GET");
+  assert.equal(dispatched?.url, "http://core.internal:8080/api/v1/admin/operations");
+  assert.equal(dispatched?.headers.get("cookie"), "nuriteo_dev_session=admin");
+  assert.equal(dispatched?.headers.get("origin"), null);
+  assert.equal(dispatched?.headers.get("x-csrf-token"), null);
 }
 
 async function settingBffContract(): Promise<void> {
@@ -64,6 +88,8 @@ function sourceContracts(): void {
   const page = read("src/app/(authenticated)/admin/settings/page.tsx");
   const settings = read("src/app/(authenticated)/admin/settings/admin-settings.tsx");
   const navigation = read("src/app/(authenticated)/admin/admin-navigation.tsx");
+  const operationsPage = read("src/app/(authenticated)/admin/operations/page.tsx");
+  const operationsDashboard = read("src/app/(authenticated)/admin/operations/operations-dashboard.tsx");
   const layout = read("src/app/(authenticated)/layout.tsx");
 
   assert.match(page, /is_instance_admin/u);
@@ -75,8 +101,16 @@ function sourceContracts(): void {
   assert.match(settings, /Recent administrator reauthentication is required/u);
   assert.match(settings, /aria-busy=\{mutation\.isPending\}/u);
   assert.match(navigation, /aria-current=\{pathname === destination\.href \? "page"/u);
+  assert.match(navigation, /href: "\/admin\/operations"/u);
+  assert.match(operationsPage, /is_instance_admin/u);
+  assert.match(operationsPage, /getAdminOperations\(client\)/u);
+  assert.match(operationsDashboard, /Detailed endpoints, credentials, and backend errors are never shown here/u);
+  assert.match(operationsDashboard, /aria-labelledby="dependency-health-title"/u);
   assert.match(layout, /href="\/admin\/settings">Administration/u);
-  assert.doesNotMatch(`${page}\n${settings}`, /dangerouslySetInnerHTML|localStorage|sessionStorage/u);
+  assert.doesNotMatch(
+    `${page}\n${settings}\n${operationsPage}\n${operationsDashboard}`,
+    /dangerouslySetInnerHTML|localStorage|sessionStorage/u
+  );
 }
 
 function settingRequest(etag: string | undefined): Request {

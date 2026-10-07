@@ -62,5 +62,5 @@ done
 NURITEO_TEST_DATABASE_URL="postgres://nuriteo:${database_password}@localhost:${port}/nuriteo" \
 NURITEO_TEST_DATABASE_CA="$fixture_dir/ca.crt" \
 cargo test -p nuriteo-server --test admin_http \
-  admin_settings_and_audit_http_are_authorized_versioned_and_transactional \
+  admin_settings_audit_and_operations_http_are_safe_and_transactional \
   -- --ignored --exact --nocapture

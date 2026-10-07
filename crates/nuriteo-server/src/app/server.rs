@@ -171,6 +171,19 @@ pub(crate) async fn run_server(
             return Err(ServeError::AuthenticationConfiguration);
         }
     };
+    let health = HealthService::production(pool.clone(), store.clone(), HealthPolicy::default());
+    let operations_policy = match CleanupOperationsPolicy::new(
+        global.cleanup.stale_threshold,
+        global.cleanup.failed_threshold,
+        global.cleanup.status_timeout,
+    ) {
+        Ok(policy) => policy,
+        Err(_) => {
+            close_pool(pool, close_timeout).await?;
+            return Err(ServeError::CleanupConfiguration);
+        }
+    };
+    let operations = CleanupOperationsService::new(pool.clone(), operations_policy);
     let admin = match effective_instance_settings {
         Some(settings) => match AdminHttpService::production(
             pool.clone(),
@@ -178,6 +191,8 @@ pub(crate) async fn run_server(
             AdminHttpPolicy::default(),
             SessionPolicy::default(),
             settings,
+            health.clone(),
+            operations.clone(),
         ) {
             Ok(admin) => admin,
             Err(_) => {
@@ -199,7 +214,6 @@ pub(crate) async fn run_server(
             return Err(ServeError::InvitationConfiguration);
         }
     };
-    let health = HealthService::production(pool.clone(), store.clone(), HealthPolicy::default());
     let organizations = match OrganizationHttpService::production(
         pool.clone(),
         &global.public.external_url,
@@ -245,18 +259,6 @@ pub(crate) async fn run_server(
             return Err(ServeError::SaveConfiguration);
         }
     };
-    let operations_policy = match CleanupOperationsPolicy::new(
-        global.cleanup.stale_threshold,
-        global.cleanup.failed_threshold,
-        global.cleanup.status_timeout,
-    ) {
-        Ok(policy) => policy,
-        Err(_) => {
-            close_pool(pool, close_timeout).await?;
-            return Err(ServeError::CleanupConfiguration);
-        }
-    };
-    let operations = CleanupOperationsService::new(pool.clone(), operations_policy);
     let cleanup = CleanupService::new(pool.clone(), store, global.cleanup.worker_policy);
     let router = build_router_with_admin_service(
         health,

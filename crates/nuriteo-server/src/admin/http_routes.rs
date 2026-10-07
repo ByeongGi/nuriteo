@@ -19,13 +19,14 @@ use crate::identity::{BrowserMethod, BrowserRequestHeaders};
 use super::{
     AdminAuditEventCollectionView, AdminAuditEventView, AdminAuditExportFormat,
     AdminAuditExportInput, AdminAuditListInput, AdminAuditRetentionPreview,
-    AdminAuditRetentionPruneView, AdminHttpService, AdminHttpServiceError, AdminSettingListView,
-    AdminSettingView, AdminStatusView,
+    AdminAuditRetentionPruneView, AdminHttpService, AdminHttpServiceError, AdminOperationsView,
+    AdminSettingListView, AdminSettingView, AdminStatusView,
 };
 
 const SETTINGS: &str = "/api/v1/admin/settings";
 const SETTING: &str = "/api/v1/admin/settings/{key}";
 const STATUS: &str = "/api/v1/admin/status";
+const OPERATIONS: &str = "/api/v1/admin/operations";
 const AUDIT_EVENTS: &str = "/api/v1/admin/audit-events";
 const AUDIT_EVENT: &str = "/api/v1/admin/audit-events/{eventId}";
 const AUDIT_EXPORT: &str = "/api/v1/admin/audit-events/export";
@@ -42,6 +43,7 @@ pub(crate) fn openapi_router(
         .routes(routes!(list_settings))
         .routes(routes!(update_setting))
         .routes(routes!(admin_status))
+        .routes(routes!(admin_operations))
         .routes(routes!(list_audit_events))
         .routes(routes!(get_audit_event))
         .routes(routes!(export_audit_events))
@@ -189,6 +191,32 @@ async fn admin_status(
         .status(headers.request(BrowserMethod::Get))
         .await
         .map_err(|error| map_error(error, request_id, STATUS))?;
+    Ok(private_no_store(Json(view).into_response()))
+}
+
+#[utoipa::path(
+    get,
+    path = OPERATIONS,
+    tag = "administration",
+    security(("projectSessionCookie" = [])),
+    responses(
+        (status = 200, body = AdminOperationsView, headers(("Cache-Control" = String))),
+        (status = 401, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+        (status = 403, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+        (status = 503, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+        (status = 504, body = crate::openapi::ProblemDetails, content_type = "application/problem+json")
+    )
+)]
+async fn admin_operations(
+    State(service): State<AdminHttpService>,
+    Extension(request_id): Extension<RequestId>,
+    request: Request,
+) -> Result<Response, HttpError> {
+    let headers = BrowserHeaders::read(request.headers(), &request_id, OPERATIONS)?;
+    let view = service
+        .operations(headers.request(BrowserMethod::Get))
+        .await
+        .map_err(|error| map_error(error, request_id, OPERATIONS))?;
     Ok(private_no_store(Json(view).into_response()))
 }
 

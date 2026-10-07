@@ -52,6 +52,31 @@ const core = http.createServer(async (request, response) => {
       restartRequired: false
     });
   }
+  if (request.method === "GET" && requestPath === "/api/v1/admin/operations") {
+    if (session !== "admin") return sendProblem(response, 403, "ADMIN_REQUIRED");
+    return sendJson(response, {
+      generatedAt: "2026-10-07T12:00:00Z",
+      overallState: "degraded",
+      dependencies: { state: "degraded", category: "object_storage" },
+      cleanup: {
+        state: "nominal",
+        queueDepth: 4,
+        oldestEligibleAgeSeconds: 75,
+        runningCount: 1,
+        retryCount: 2,
+        failedCount: 0
+      },
+      usage: {
+        state: "nominal",
+        activeUsers: 8,
+        activeOrganizations: 2,
+        activeProjects: 12,
+        verifiedBundles: 24,
+        trackedPhysicalBytes: "1073741824",
+        reservedBytes: "1048576"
+      }
+    });
+  }
   if (
     request.method === "PATCH" &&
     requestPath === "/api/v1/admin/settings/invitations.default_expiry_hours"
@@ -154,6 +179,20 @@ try {
     await conflict.getByRole("button", { name: "Reload latest" }).click();
     await assertEventually(async () => (await page.getByLabel("Invitation expiry").inputValue()) === "400");
 
+    await page.getByRole("navigation", { name: "Administration" })
+      .getByRole("link", { name: "Operations" })
+      .click();
+    await page.getByRole("heading", { level: 1, name: "Operations" }).waitFor();
+    assert.equal(await page.getByText("The object storage readiness probe failed.", { exact: true }).count(), 1);
+    assert.equal(await page.getByText("1 GiB", { exact: true }).count(), 1);
+    assert.equal(await page.getByText("1 MiB", { exact: true }).count(), 1);
+    assert.equal(
+      await page.getByRole("navigation", { name: "Administration" })
+        .getByRole("link", { name: "Operations" })
+        .getAttribute("aria-current"),
+      "page"
+    );
+    assert.doesNotMatch(await page.locator("main").innerText(), /s3:\/\/|postgres:\/\/|object_key=/u);
     await page.setViewportSize({ width: 390, height: 844 });
     assert.equal(
       await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
@@ -163,9 +202,9 @@ try {
     const member = await browser.newContext({ viewport: { width: 390, height: 844 } });
     await member.addCookies([{ name: "nuriteo_dev_session", value: "member", url: origin }]);
     const memberPage = await member.newPage();
-    await memberPage.goto(`${origin}/admin/settings`, { waitUntil: "networkidle" });
+    await memberPage.goto(`${origin}/admin/operations`, { waitUntil: "networkidle" });
     await memberPage.getByRole("heading", { name: "Administrator access required" }).waitFor();
-    assert.equal(await memberPage.getByText("Instance policy", { exact: true }).count(), 0);
+    assert.equal(await memberPage.getByText("Core dependencies", { exact: true }).count(), 0);
     await Promise.all([admin.close(), member.close()]);
   } finally {
     await browser.close();
@@ -179,7 +218,7 @@ try {
   await new Promise<void>((resolve) => core.close(() => resolve()));
 }
 
-console.log("web admin settings reconciliation journey ok");
+console.log("web admin settings and operations journey ok");
 
 function settings() {
   return [

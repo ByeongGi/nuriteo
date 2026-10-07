@@ -21,11 +21,13 @@ use crate::config::{
     instance_setting_definition,
 };
 use crate::database::{DatabasePool, SchemaReadiness, check_schema_readiness};
+use crate::health::HealthService;
 use crate::identity::{
     BrowserCookieBoundary, BrowserCookieError, BrowserRequestHeaders, SessionPolicy,
     SessionService, SessionServiceError, Timestamp, UserId,
 };
 use crate::instance_settings::{EffectiveInstanceSettings, InstanceSettingsRepository};
+use crate::save::CleanupOperationsService;
 
 const DEFAULT_OPERATION_TIMEOUT: Duration = Duration::from_secs(5);
 
@@ -129,6 +131,8 @@ pub(super) struct AdminRuntime {
     cookies: BrowserCookieBoundary,
     startup_settings: EffectiveInstanceSettings,
     pub(super) policy: AdminHttpPolicy,
+    pub(super) health: HealthService,
+    pub(super) cleanup: CleanupOperationsService,
 }
 
 impl fmt::Debug for AdminHttpService {
@@ -152,6 +156,8 @@ impl AdminHttpService {
         policy: AdminHttpPolicy,
         session_policy: SessionPolicy,
         startup_settings: EffectiveInstanceSettings,
+        health: HealthService,
+        cleanup: CleanupOperationsService,
     ) -> Result<Self, AdminHttpServiceError> {
         let cookies = BrowserCookieBoundary::new(external_url)
             .map_err(|_| AdminHttpServiceError::Configuration)?;
@@ -162,6 +168,8 @@ impl AdminHttpService {
                 cookies,
                 startup_settings,
                 policy,
+                health,
+                cleanup,
             })),
         })
     }

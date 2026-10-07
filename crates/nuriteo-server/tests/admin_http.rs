@@ -20,7 +20,7 @@ use nuriteo_server::instance_settings::InstanceSettingsRepository;
 use nuriteo_server::invitations::InvitationHttpService;
 use nuriteo_server::organization::OrganizationHttpService;
 use nuriteo_server::project::ProjectHttpService;
-use nuriteo_server::save::SaveHttpService;
+use nuriteo_server::save::{CleanupOperationsPolicy, CleanupOperationsService, SaveHttpService};
 use nuriteo_server::setup::SetupStatusService;
 use serde_json::{Value, json};
 use tower::ServiceExt;
@@ -36,7 +36,7 @@ const SETTING_PATH: &str = "/api/v1/admin/settings/invitations.default_expiry_ho
 
 #[tokio::test]
 #[ignore = "requires the pinned custom-CA PostgreSQL fixture; run tests/fixtures/postgres-admin-http/run.sh"]
-async fn admin_settings_and_audit_http_are_authorized_versioned_and_transactional() {
+async fn admin_settings_audit_and_operations_http_are_safe_and_transactional() {
     let pool = fixture_pool().await;
     reset_fixture(&pool).await;
     let report = run_embedded_migrations(
@@ -99,6 +99,48 @@ async fn admin_settings_and_audit_http_are_authorized_versioned_and_transactiona
     assert_eq!(listed["registryVersion"], 1);
     assert_eq!(listed["items"].as_array().unwrap().len(), 10);
     assert!(!listed.to_string().contains("password"));
+
+    assert_problem(
+        request(
+            &router,
+            Some(&member),
+            Method::GET,
+            "/api/v1/admin/operations",
+            None,
+            None,
+        )
+        .await,
+        StatusCode::FORBIDDEN,
+    )
+    .await;
+    let operations = request(
+        &router,
+        Some(&admin),
+        Method::GET,
+        "/api/v1/admin/operations",
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(operations.status(), StatusCode::OK);
+    assert_eq!(operations.headers()[CACHE_CONTROL], "private, no-store");
+    let operations = json_body(operations).await;
+    assert_eq!(operations["overallState"], "degraded");
+    assert_eq!(operations["dependencies"]["state"], "degraded");
+    assert_eq!(operations["dependencies"]["category"], "configuration");
+    assert_eq!(operations["cleanup"]["state"], "nominal");
+    assert_eq!(operations["cleanup"]["queueDepth"], 0);
+    assert_eq!(operations["usage"]["state"], "nominal");
+    assert_eq!(operations["usage"]["activeUsers"], 2);
+    assert_eq!(operations["usage"]["activeOrganizations"], 0);
+    assert_eq!(operations["usage"]["activeProjects"], 0);
+    assert_eq!(operations["usage"]["verifiedBundles"], 0);
+    assert_eq!(operations["usage"]["trackedPhysicalBytes"], "0");
+    assert_eq!(operations["usage"]["reservedBytes"], "0");
+    let serialized_operations = operations.to_string();
+    for forbidden in ["object_key", "endpoint", "credential", "sql", "password"] {
+        assert!(!serialized_operations.contains(forbidden));
+    }
 
     assert_problem(
         request(
@@ -678,16 +720,23 @@ fn router(
         SessionPolicy::default(),
     )
     .unwrap();
+    let health = HealthService::unconfigured();
+    let cleanup = CleanupOperationsService::new(
+        pool.clone(),
+        CleanupOperationsPolicy::new(Duration::from_secs(600), 2, Duration::from_secs(1)).unwrap(),
+    );
     let admin = AdminHttpService::production(
         pool,
         &external_url,
         AdminHttpPolicy::default(),
         SessionPolicy::default(),
         settings,
+        health.clone(),
+        cleanup,
     )
     .unwrap();
     build_router_with_admin_service(
-        HealthService::unconfigured(),
+        health,
         auth,
         InvitationHttpService::unconfigured(),
         OrganizationHttpService::unconfigured(),

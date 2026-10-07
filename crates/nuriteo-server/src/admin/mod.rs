@@ -1,6 +1,7 @@
 mod audit_service;
 mod http_routes;
 mod http_service;
+mod operations_service;
 
 use std::fmt;
 use std::future::Future;
@@ -28,6 +29,10 @@ pub(crate) use http_routes::openapi_router;
 pub use http_service::{
     AdminHttpPolicy, AdminHttpService, AdminHttpServiceError, AdminSettingListView,
     AdminSettingView, AdminStatusView,
+};
+pub use operations_service::{
+    AdminCleanupQueueView, AdminDependencyStatusView, AdminOperationsState, AdminOperationsView,
+    AdminUsageView,
 };
 
 const DEFAULT_OPERATION_TIMEOUT: Duration = Duration::from_secs(5);

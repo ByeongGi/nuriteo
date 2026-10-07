@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   ApiInvalidResponseError,
   createApiClient,
+  getAdminOperations,
   getAdminStatus,
   listAdminSettings,
   updateAdminSetting
@@ -24,6 +25,7 @@ async function contracts(): Promise<void> {
       settingCount: 10,
       restartRequired: false
     }),
+    json(operations()),
     json(setting(2, 336))
   ];
   const client = createApiClient({
@@ -39,6 +41,9 @@ async function contracts(): Promise<void> {
   assert.equal(listed.data.items[0]?.value, 168);
   const status = await getAdminStatus(client);
   assert.equal(status.data.settingCount, 10);
+  const operationsResult = await getAdminOperations(client);
+  assert.equal(operationsResult.data.dependencies.category, "object_storage");
+  assert.equal(operationsResult.data.usage.trackedPhysicalBytes, "1073741824");
   const updated = await updateAdminSetting(
     client,
     { key: "invitations.default_expiry_hours", value: 336, version: 1 },
@@ -49,12 +54,13 @@ async function contracts(): Promise<void> {
   assert.deepEqual(calls.map(({ input, init }) => [init?.method, String(input)]), [
     ["GET", "/api/v1/admin/settings"],
     ["GET", "/api/v1/admin/status"],
+    ["GET", "/api/v1/admin/operations"],
     ["PATCH", "/api/v1/admin/settings/invitations.default_expiry_hours"]
   ]);
-  const headers = new Headers(calls[2]?.init?.headers);
+  const headers = new Headers(calls[3]?.init?.headers);
   assert.equal(headers.get("x-csrf-token"), CSRF);
   assert.equal(headers.get("if-match"), '"setting-v1"');
-  assert.deepEqual(JSON.parse(String(calls[2]?.init?.body)), { value: 336 });
+  assert.deepEqual(JSON.parse(String(calls[3]?.init?.body)), { value: 336 });
 }
 
 async function rejectsMalformedResponses(): Promise<void> {
@@ -78,6 +84,20 @@ async function rejectsMalformedResponses(): Promise<void> {
     ApiInvalidResponseError
   );
   await assert.rejects(
+    () => getAdminOperations(single({
+      ...operations(),
+      usage: { ...operations().usage, trackedPhysicalBytes: "-1" }
+    })),
+    ApiInvalidResponseError
+  );
+  await assert.rejects(
+    () => getAdminOperations(single({
+      ...operations(),
+      dependencies: { state: "nominal", category: "object_storage" }
+    })),
+    ApiInvalidResponseError
+  );
+  await assert.rejects(
     () => updateAdminSetting(
       single(setting(1, 168)),
       { key: "../unsafe", value: 3, version: 1 },
@@ -85,6 +105,31 @@ async function rejectsMalformedResponses(): Promise<void> {
     ),
     /invalid setting key/u
   );
+}
+
+function operations() {
+  return {
+    generatedAt: "2026-10-07T12:00:00Z",
+    overallState: "degraded",
+    dependencies: { state: "degraded", category: "object_storage" },
+    cleanup: {
+      state: "nominal",
+      queueDepth: 2,
+      oldestEligibleAgeSeconds: 30,
+      runningCount: 1,
+      retryCount: 1,
+      failedCount: 0
+    },
+    usage: {
+      state: "nominal",
+      activeUsers: 3,
+      activeOrganizations: 1,
+      activeProjects: 4,
+      verifiedBundles: 8,
+      trackedPhysicalBytes: "1073741824",
+      reservedBytes: "1024"
+    }
+  };
 }
 
 function setting(version: number, value: unknown) {
