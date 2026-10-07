@@ -21,6 +21,7 @@ use crate::identity::{
     InvitationExpiryPolicy, InvitationService, InvitationServiceError, InvitationServicePolicy,
     NormalizedEmail, PasswordPolicy, PasswordService, SessionPolicy, SessionService,
     SessionServiceError, StoredPasswordHash, Timestamp, User, UserFields, UserId, UserStatus,
+    acquire_mfa_population_lock,
 };
 use crate::workspace::PersonalStorageScopeRepository;
 
@@ -486,6 +487,9 @@ impl InvitationActivator for AccountActivator {
             if invitation.normalized_email() != &self.normalized_email {
                 return Err(InvitationActivationError::Rejected);
             }
+            acquire_mfa_population_lock(transaction)
+                .await
+                .map_err(|_| InvitationActivationError::DatabaseUnavailable)?;
             let now: OffsetDateTime = sqlx::query_scalar("SELECT transaction_timestamp()")
                 .fetch_one(&mut **transaction)
                 .await

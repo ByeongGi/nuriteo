@@ -2,6 +2,7 @@ mod activation_invitation;
 mod browser_security;
 mod id;
 mod invitation_service;
+mod mfa_safety;
 mod password;
 mod session;
 mod session_service;
@@ -25,6 +26,9 @@ pub use invitation_service::{
     InvitationAuditContext, InvitationRevokeResult, InvitationService, InvitationServiceError,
     InvitationServicePolicy, InvitationServicePolicyError, IssuedActivationInvitation,
     PendingInvitationActivation,
+};
+pub(crate) use mfa_safety::{
+    acquire_mfa_population_lock, has_required_active_local_enrolled_admin,
 };
 pub use password::{
     PasswordHashError, PasswordHashInputError, PasswordPolicy, PasswordService,

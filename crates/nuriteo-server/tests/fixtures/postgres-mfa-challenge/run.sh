@@ -50,6 +50,14 @@ done
 
 NURITEO_TEST_DATABASE_URL="postgres://nuriteo:${database_password}@localhost:${port}/nuriteo" \
 NURITEO_TEST_DATABASE_CA="$fixture_dir/ca.crt" \
+RUST_MIN_STACK=8388608 \
 cargo test -p nuriteo-server --lib \
   mfa::service::tests::actual_mfa_challenge_replay_lockout_recovery_and_reset_are_atomic \
   -- --ignored --exact --nocapture
+
+NURITEO_TEST_DATABASE_URL="postgres://nuriteo:${database_password}@localhost:${port}/nuriteo" \
+NURITEO_TEST_DATABASE_CA="$fixture_dir/ca.crt" \
+RUST_MIN_STACK=8388608 \
+cargo test -p nuriteo-server --lib \
+  mfa::service::tests::actual_mfa_003_ \
+  -- --ignored --test-threads=1 --nocapture

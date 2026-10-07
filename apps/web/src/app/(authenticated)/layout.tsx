@@ -1,4 +1,4 @@
-import { getCurrentUser } from "@nuriteo/api-client";
+import { getCurrentUser, getMfaStatus } from "@nuriteo/api-client";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
@@ -13,32 +13,12 @@ import { createServerApiClient } from "../../lib/api/server-client.ts";
 export default async function AuthenticatedLayout({
   children
 }: Readonly<{ children: ReactNode }>) {
+  let current: Awaited<ReturnType<typeof getCurrentUser>>;
+  let mfa: Awaited<ReturnType<typeof getMfaStatus>>;
   try {
     const client = await createServerApiClient();
-    const current = await getCurrentUser(client);
-
-    return (
-      <div className="authenticated-shell">
-        <header className="authenticated-shell__header">
-          <div>
-            <p className="eyebrow">Authenticated workspace</p>
-            <p className="authenticated-shell__identity">
-              Signed in as <strong>{current.data.user.display_name}</strong>
-            </p>
-          </div>
-          <p className="authenticated-shell__email">{current.data.user.email}</p>
-        </header>
-        <nav className="authenticated-shell__navigation" aria-label="Account navigation">
-          <Link href="/workspaces">Workspaces</Link>
-          <Link href="/projects">Projects</Link>
-          <Link href="/organizations">Organizations</Link>
-          {current.data.user.is_instance_admin ? (
-            <Link href="/admin/settings">Administration</Link>
-          ) : null}
-        </nav>
-        {children}
-      </div>
-    );
+    current = await getCurrentUser(client);
+    mfa = await getMfaStatus(client);
   } catch (error) {
     if (isExplicitlySignedOut(error)) {
       redirect("/sign-in");
@@ -53,4 +33,27 @@ export default async function AuthenticatedLayout({
       />
     );
   }
+
+  if (mfa.data.restricted) redirect("/mfa");
+  return (
+    <div className="authenticated-shell">
+      <header className="authenticated-shell__header">
+        <div>
+          <p className="eyebrow">Authenticated workspace</p>
+          <p className="authenticated-shell__identity">
+            Signed in as <strong>{current.data.user.display_name}</strong>
+          </p>
+        </div>
+        <p className="authenticated-shell__email">{current.data.user.email}</p>
+      </header>
+      <nav className="authenticated-shell__navigation" aria-label="Account navigation">
+        <Link href="/workspaces">Workspaces</Link>
+        <Link href="/projects">Projects</Link>
+        <Link href="/organizations">Organizations</Link>
+        <Link href="/mfa">Security</Link>
+        {current.data.user.is_instance_admin ? <Link href="/admin/settings">Administration</Link> : null}
+      </nav>
+      {children}
+    </div>
+  );
 }

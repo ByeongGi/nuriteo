@@ -145,6 +145,7 @@ external_url = "https://nuriteo.example.com"
 "security.mfa_grace_period_days" = 14
 "tokens.default_expiry_days" = 120
 "audit.retention_days" = "unlimited"
+"workspace.personal_default_quota_bytes" = "unlimited"
 "#;
     let files = TestFiles(BTreeMap::from([(
         "/config/nuriteo.toml".into(),
@@ -187,10 +188,17 @@ external_url = "https://nuriteo.example.com"
             .unwrap(),
         (Value::Null, BootstrapSettingOrigin::File)
     );
+    assert_eq!(
+        report
+            .instance_settings
+            .resolve(instance_setting_definition("workspace.personal_default_quota_bytes").unwrap())
+            .unwrap(),
+        (Value::Null, BootstrapSettingOrigin::File)
+    );
 }
 
 #[test]
-fn instance_setting_bootstrap_rejects_unknown_invalid_and_secret_looking_values() {
+fn instance_setting_bootstrap_defers_unknown_and_invalid_values_without_leaking_them() {
     let files = TestFiles(BTreeMap::from([(
         "/config/nuriteo.toml".into(),
         br#"
@@ -201,18 +209,20 @@ external_url = "https://nuriteo.example.com"
 "#
         .to_vec(),
     )]));
-    let error = load(&[(CONFIG_FILE, "/config/nuriteo.toml")], &files).unwrap_err();
+    let report = load(&[(CONFIG_FILE, "/config/nuriteo.toml")], &files).unwrap();
+    let error = report.instance_settings.validate().unwrap_err();
     assert_eq!(error.to_string(), "unknown Instance setting key");
     assert!(!error.to_string().contains("must-not-appear"));
 
-    let error = load(
+    let report = load(
         &[
             (EXTERNAL_URL, "https://nuriteo.example.com"),
             ("NURITEO_MFA_ENFORCEMENT", "must-not-appear"),
         ],
         &TestFiles::default(),
     )
-    .unwrap_err();
+    .unwrap();
+    let error = report.instance_settings.validate().unwrap_err();
     assert!(!error.to_string().contains("must-not-appear"));
 }
 

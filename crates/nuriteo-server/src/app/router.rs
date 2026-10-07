@@ -2,7 +2,9 @@ use crate::admin::AdminHttpService;
 use crate::auth::AuthService;
 use crate::health::HealthService;
 use crate::http::{HttpError, RequestId, propagate_request_id};
+use crate::identity::{BrowserMethod, BrowserRequestHeaders};
 use crate::invitations::InvitationHttpService;
+use crate::mfa::{MfaHttpService, MfaHttpServiceError};
 use crate::openapi;
 use crate::organization::OrganizationHttpService;
 use crate::project::ProjectHttpService;
@@ -10,9 +12,10 @@ use crate::save::SaveHttpService;
 use crate::setup::SetupStatusService;
 use crate::team::TeamHttpService;
 use axum::Router;
-use axum::extract::Extension;
-use axum::http::Uri;
-use axum::middleware;
+use axum::extract::{Extension, Request};
+use axum::http::{StatusCode, Uri};
+use axum::middleware::{self, Next};
+use axum::response::{IntoResponse, Response};
 
 pub fn build_router() -> Router {
     build_router_with_services(HealthService::unconfigured(), AuthService::unconfigured())
@@ -147,7 +150,8 @@ pub fn build_router_with_team_service(
     admin: AdminHttpService,
     teams: TeamHttpService,
 ) -> Router {
-    openapi::router(
+    build_router_with_mfa_service(
+        health,
         auth,
         invitations,
         organizations,
@@ -156,11 +160,89 @@ pub fn build_router_with_team_service(
         setup,
         admin,
         teams,
+        MfaHttpService::unconfigured(),
     )
-    .merge(health.router())
-    .fallback(not_found)
-    .method_not_allowed_fallback(method_not_allowed)
-    .layer(middleware::from_fn(propagate_request_id))
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn build_router_with_mfa_service(
+    health: HealthService,
+    auth: AuthService,
+    invitations: InvitationHttpService,
+    organizations: OrganizationHttpService,
+    projects: ProjectHttpService,
+    save: SaveHttpService,
+    setup: SetupStatusService,
+    admin: AdminHttpService,
+    teams: TeamHttpService,
+    mfa: MfaHttpService,
+) -> Router {
+    let enforcement = mfa.clone();
+    let api = openapi::router(
+        auth,
+        invitations,
+        organizations,
+        projects,
+        save,
+        setup,
+        admin,
+        teams,
+        mfa,
+    )
+    .layer(middleware::from_fn(move |request, next| {
+        enforce_mfa_deadline(enforcement.clone(), request, next)
+    }));
+    api.merge(health.router())
+        .fallback(not_found)
+        .method_not_allowed_fallback(method_not_allowed)
+        .layer(middleware::from_fn(propagate_request_id))
+}
+
+async fn enforce_mfa_deadline(service: MfaHttpService, request: Request, next: Next) -> Response {
+    let path = request.uri().path();
+    let allowed =
+        path == "/api/v1/me" || path == "/api/v1/auth/session" || path.starts_with("/api/v1/mfa");
+    if allowed {
+        return next.run(request).await;
+    }
+    let cookies = match request
+        .headers()
+        .get_all(axum::http::header::COOKIE)
+        .iter()
+        .map(|value| value.to_str())
+        .collect::<Result<Vec<_>, _>>()
+    {
+        Ok(cookies) if !cookies.is_empty() => cookies,
+        _ => return next.run(request).await,
+    };
+    let status = service
+        .status(BrowserRequestHeaders {
+            method: BrowserMethod::Get,
+            origins: &[],
+            cookie_headers: &cookies,
+            csrf_headers: &[],
+        })
+        .await;
+    match status {
+        Ok(view) if view.restricted => (
+            StatusCode::FORBIDDEN,
+            [(axum::http::header::CACHE_CONTROL, "private, no-store")],
+            "MFA enrollment is required before accessing this resource.",
+        )
+            .into_response(),
+        Ok(_) => next.run(request).await,
+        Err(MfaHttpServiceError::AuthenticationFailed | MfaHttpServiceError::Forbidden) => {
+            // Missing, invalid, or expired authentication still belongs to the
+            // endpoint's normal authentication boundary.
+            next.run(request).await
+        }
+        Err(_) => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            [(axum::http::header::CACHE_CONTROL, "private, no-store")],
+            "MFA policy status is temporarily unavailable.",
+        )
+            .into_response(),
+    }
 }
 
 async fn not_found(uri: Uri, Extension(request_id): Extension<RequestId>) -> HttpError {
@@ -169,4 +251,30 @@ async fn not_found(uri: Uri, Extension(request_id): Extension<RequestId>) -> Htt
 
 async fn method_not_allowed(uri: Uri, Extension(request_id): Extension<RequestId>) -> HttpError {
     HttpError::method_not_allowed(request_id, uri.path())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::body::{Body, to_bytes};
+    use axum::http::{Request, header::CACHE_CONTROL};
+    use tower::ServiceExt;
+
+    #[tokio::test]
+    async fn authenticated_status_failure_blocks_protected_api_fail_closed() {
+        let response = build_router()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/me/workspaces")
+                    .header(axum::http::header::COOKIE, "nuriteo_dev_session=opaque")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(response.headers()[CACHE_CONTROL], "private, no-store");
+        let body = to_bytes(response.into_body(), 1024).await.unwrap();
+        assert_eq!(&body[..], b"MFA policy status is temporarily unavailable.");
+    }
 }

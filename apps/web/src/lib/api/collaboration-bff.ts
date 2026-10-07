@@ -15,6 +15,7 @@ const IDEMPOTENCY_KEY = /^[A-Za-z0-9._-]{16,128}$/u;
 const STRONG_ETAG = /^"org-v[1-9]\d*"$/u;
 const PROJECT_ETAG = /^"project-v([1-9]\d*)"$/u;
 const SETTING_ETAG = /^"setting-v([1-9]\d*)"$/u;
+const MFA_POLICY_ETAG = /^"mfa-policy-v([1-9]\d*)"$/u;
 const TEAM_ETAG = /^"team-v([1-9]\d*)"$/u;
 const TEAM_MEMBER_ETAG = /^"team-member-v([1-9]\d*)"$/u;
 const TEAM_PROJECT_ROLE_ETAG = /^"team-project-role-v([1-9]\d*)"$/u;
@@ -39,7 +40,8 @@ export interface CollaborationForward {
   readonly withBody: boolean;
   readonly withEtag?: boolean;
   readonly withIdempotencyKey?: boolean;
-  readonly etagKind?: "organization" | "project" | "setting" | "team" | "team-member" | "team-project-role";
+  readonly forwardSetCookie?: boolean;
+  readonly etagKind?: "mfa-policy" | "organization" | "project" | "setting" | "team" | "team-member" | "team-project-role";
   readonly jsonBodyPolicy?: "organization-invitation-issue";
   readonly safeLocation?: (value: string) => boolean;
 }
@@ -180,6 +182,9 @@ export async function forwardCollaborationMutation(
     const value = upstream.headers.get(name);
     if (value !== null) responseHeaders.set(name, value);
   }
+  if (spec.forwardSetCookie) {
+    for (const cookie of upstream.headers.getSetCookie()) responseHeaders.append("set-cookie", cookie);
+  }
   const location = upstream.headers.get("location");
   const locationIsSafe = location !== null && (
     spec.safeLocation?.(location) ?? SAFE_LOCATION.test(location)
@@ -252,6 +257,13 @@ function isEtagForKind(
 ): value is string {
   if (kind === "project") return isProjectEtag(value);
   if (kind === "setting") return isSettingEtag(value);
+  if (kind === "mfa-policy") {
+    if (value === null || value.length > 40) return false;
+    const match = value.match(MFA_POLICY_ETAG);
+    if (match === null) return false;
+    const version = BigInt(match[1] as string);
+    return version <= MAX_PROJECT_VERSION && value === `"mfa-policy-v${version}"`;
+  }
   if (kind === "organization") return value !== null && STRONG_ETAG.test(value);
   const pattern = kind === "team"
     ? TEAM_ETAG

@@ -7,6 +7,7 @@ use std::time::Duration;
 
 use ::time::OffsetDateTime;
 use hmac::{Hmac, KeyInit, Mac};
+use serde::{Deserialize, Deserializer, Serialize, Serializer, de::DeserializeOwned};
 use sha1::Sha1;
 use sqlx::{Acquire, Postgres, Row, Transaction};
 use subtle::ConstantTimeEq;
@@ -17,8 +18,9 @@ use zeroize::Zeroizing;
 
 use crate::database::DatabasePool;
 use crate::identity::{
-    IssuedSession, PasswordService, Session, SessionPolicy, SessionRotationKind, SessionService,
-    SessionServiceError, SessionToken, StoredPasswordHash, UserId,
+    IssuedSession, PasswordService, Session, SessionFields, SessionPolicy, SessionRotationKind,
+    SessionService, SessionServiceError, SessionToken, StoredPasswordHash, UserId,
+    acquire_mfa_population_lock, has_required_active_local_enrolled_admin,
 };
 use crate::integration::MasterKeyring;
 
@@ -43,6 +45,108 @@ const RECOVERY_CODE_COUNT: usize = 10;
 const RECOVERY_CODE_BYTES: usize = 16;
 const RECOVERY_CODE_ENCODED_BYTES: usize = 22;
 const ARGON2_CONCURRENCY: usize = 4;
+const RECEIPT_DOMAIN: &[u8] = b"nuriteo.mfa-operation-receipt.v1";
+const RECEIPT_REQUEST_DOMAIN: &[u8] = b"nuriteo.mfa-operation-request.v1";
+const RECEIPT_TTL_MINUTES: i32 = 15;
+const MAX_RECEIPTS_PER_USER: i64 = 32;
+
+#[derive(PartialEq, Eq)]
+pub(crate) struct MfaIdempotencyKey(String);
+
+impl MfaIdempotencyKey {
+    pub(crate) fn new(value: String) -> Result<Self, MfaServiceError> {
+        if !(16..=128).contains(&value.len())
+            || !value
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || b"._:-".contains(&byte))
+        {
+            return Err(MfaServiceError::InvalidInput);
+        }
+        Ok(Self(value))
+    }
+
+    fn expose(&self) -> &str {
+        &self.0
+    }
+}
+
+impl fmt::Debug for MfaIdempotencyKey {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("MfaIdempotencyKey([REDACTED])")
+    }
+}
+
+struct SecretBytes(Zeroizing<Vec<u8>>);
+
+impl SecretBytes {
+    fn new(value: Vec<u8>) -> Self {
+        Self(Zeroizing::new(value))
+    }
+}
+
+impl Serialize for SecretBytes {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_bytes(&self.0)
+    }
+}
+
+impl<'de> Deserialize<'de> for SecretBytes {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        Vec::<u8>::deserialize(deserializer).map(Self::new)
+    }
+}
+
+struct SecretToken(Zeroizing<String>);
+
+impl SecretToken {
+    fn new(value: String) -> Self {
+        Self(Zeroizing::new(value))
+    }
+}
+
+impl Serialize for SecretToken {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&self.0)
+    }
+}
+
+impl<'de> Deserialize<'de> for SecretToken {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        String::deserialize(deserializer).map(Self::new)
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+struct EnrollmentStartReceipt {
+    credential_id: String,
+    user_id: UserId,
+    secret_version: u64,
+    secret: SecretBytes,
+}
+
+#[derive(Serialize, Deserialize)]
+struct SessionReceipt {
+    token: SecretToken,
+    session: SessionFields,
+}
+
+#[derive(Serialize, Deserialize)]
+struct EnrollmentCompleteReceipt {
+    issued: SessionReceipt,
+    recovery_codes: Vec<SecretBytes>,
+}
 
 #[derive(PartialEq, Eq)]
 pub(crate) struct TotpCode(Zeroizing<[u8; 6]>);
@@ -148,6 +252,7 @@ pub(crate) struct MfaService {
     sessions: SessionService,
     passwords: MfaPasswordExecutor,
     policy: MfaChallengePolicy,
+    keyring: MasterKeyring,
 }
 
 impl fmt::Debug for MfaService {
@@ -167,17 +272,44 @@ impl MfaService {
         policy: MfaChallengePolicy,
     ) -> Self {
         Self {
-            repository: MfaRepository::new(pool.clone(), keyring),
+            repository: MfaRepository::new(pool.clone(), keyring.clone()),
             sessions: SessionService::new(pool.clone(), session_policy),
             passwords: MfaPasswordExecutor::new(ARGON2_CONCURRENCY),
             pool,
             policy,
+            keyring,
         }
     }
 
     pub(crate) async fn begin_enrollment(
         &self,
         token: &SessionToken,
+        correlation_id: &str,
+    ) -> Result<EnrollmentStart, MfaServiceError> {
+        self.begin_enrollment_once(token, None, correlation_id)
+            .await
+    }
+
+    pub(crate) async fn begin_enrollment_idempotent(
+        &self,
+        token: &SessionToken,
+        key: &MfaIdempotencyKey,
+        correlation_id: &str,
+    ) -> Result<EnrollmentStart, MfaServiceError> {
+        if let Some(receipt) = self
+            .load_receipt::<EnrollmentStartReceipt>(token, "begin", key, &[])
+            .await?
+        {
+            return receipt.into_result();
+        }
+        self.begin_enrollment_once(token, Some(key), correlation_id)
+            .await
+    }
+
+    async fn begin_enrollment_once(
+        &self,
+        token: &SessionToken,
+        receipt_key: Option<&MfaIdempotencyKey>,
         correlation_id: &str,
     ) -> Result<EnrollmentStart, MfaServiceError> {
         validate_correlation(correlation_id).map_err(map_storage_error)?;
@@ -190,6 +322,9 @@ impl MfaService {
                 .user_id();
             let mut connection = self.pool.acquire().await.map_err(database_unavailable)?;
             let mut tx = connection.begin().await.map_err(database_unavailable)?;
+            acquire_mfa_population_lock(&mut tx)
+                .await
+                .map_err(database_unavailable)?;
             lock_local_user(&mut tx, expected_user)
                 .await
                 .map_err(map_storage_error)?;
@@ -246,6 +381,25 @@ impl MfaService {
             )
             .await
             .map_err(map_storage_error)?;
+            if let Some(key) = receipt_key {
+                let receipt = EnrollmentStartReceipt {
+                    credential_id: id.to_string(),
+                    user_id: principal.user_id(),
+                    secret_version: version,
+                    secret: SecretBytes::new(secret.expose().to_vec()),
+                };
+                self.store_receipt(
+                    &mut tx,
+                    token,
+                    None,
+                    principal.user_id(),
+                    "begin",
+                    key,
+                    &[],
+                    &receipt,
+                )
+                .await?;
+            }
             tx.commit().await.map_err(database_unavailable)?;
             Ok(EnrollmentStart {
                 metadata: MfaCredentialMetadata {
@@ -266,6 +420,40 @@ impl MfaService {
         token: &SessionToken,
         credential_id: Uuid,
         code: &TotpCode,
+        correlation_id: &str,
+    ) -> Result<EnrollmentComplete, MfaServiceError> {
+        self.confirm_enrollment_once(token, credential_id, code, None, correlation_id)
+            .await
+    }
+
+    pub(crate) async fn confirm_enrollment_idempotent(
+        &self,
+        token: &SessionToken,
+        credential_id: Uuid,
+        code: &TotpCode,
+        key: &MfaIdempotencyKey,
+        correlation_id: &str,
+    ) -> Result<EnrollmentComplete, MfaServiceError> {
+        let request = [
+            credential_id.as_bytes().as_slice(),
+            code.expose().as_slice(),
+        ];
+        if let Some(receipt) = self
+            .load_receipt::<EnrollmentCompleteReceipt>(token, "confirm", key, &request)
+            .await?
+        {
+            return receipt.into_result();
+        }
+        self.confirm_enrollment_once(token, credential_id, code, Some(key), correlation_id)
+            .await
+    }
+
+    async fn confirm_enrollment_once(
+        &self,
+        token: &SessionToken,
+        credential_id: Uuid,
+        code: &TotpCode,
+        receipt_key: Option<&MfaIdempotencyKey>,
         correlation_id: &str,
     ) -> Result<EnrollmentComplete, MfaServiceError> {
         validate_correlation(correlation_id).map_err(map_storage_error)?;
@@ -338,6 +526,9 @@ impl MfaService {
             // revalidate every generation/challenge fence after CPU work.
             let mut connection = self.pool.acquire().await.map_err(database_unavailable)?;
             let mut tx = connection.begin().await.map_err(database_unavailable)?;
+            acquire_mfa_population_lock(&mut tx)
+                .await
+                .map_err(database_unavailable)?;
             lock_local_user(&mut tx, user_id)
                 .await
                 .map_err(map_storage_error)?;
@@ -406,6 +597,21 @@ impl MfaService {
             )
             .await
             .map_err(map_storage_error)?;
+            if let Some(key) = receipt_key {
+                let receipt = EnrollmentCompleteReceipt::from_result(&issued, &recovery_codes);
+                let request = [credential_id.as_bytes().as_slice(), code.expose().as_slice()];
+                self.store_receipt(
+                    &mut tx,
+                    token,
+                    Some(issued.token()),
+                    principal.user_id(),
+                    "confirm",
+                    key,
+                    &request,
+                    &receipt,
+                )
+                .await?;
+            }
             tx.commit().await.map_err(database_unavailable)?;
             Ok(EnrollmentComplete {
                 session: issued,
@@ -419,6 +625,35 @@ impl MfaService {
         &self,
         token: &SessionToken,
         code: &TotpCode,
+        correlation_id: &str,
+    ) -> Result<IssuedSession, MfaServiceError> {
+        self.verify_totp_once(token, code, None, correlation_id)
+            .await
+    }
+
+    pub(crate) async fn verify_totp_idempotent(
+        &self,
+        token: &SessionToken,
+        code: &TotpCode,
+        key: &MfaIdempotencyKey,
+        correlation_id: &str,
+    ) -> Result<IssuedSession, MfaServiceError> {
+        let request = [code.expose().as_slice()];
+        if let Some(receipt) = self
+            .load_receipt::<SessionReceipt>(token, "challenge", key, &request)
+            .await?
+        {
+            return receipt.into_result();
+        }
+        self.verify_totp_once(token, code, Some(key), correlation_id)
+            .await
+    }
+
+    async fn verify_totp_once(
+        &self,
+        token: &SessionToken,
+        code: &TotpCode,
+        receipt_key: Option<&MfaIdempotencyKey>,
         correlation_id: &str,
     ) -> Result<IssuedSession, MfaServiceError> {
         validate_correlation(correlation_id).map_err(map_storage_error)?;
@@ -478,6 +713,21 @@ impl MfaService {
             )
             .await
             .map_err(map_storage_error)?;
+            if let Some(key) = receipt_key {
+                let receipt = SessionReceipt::from_result(&issued);
+                let request = [code.expose().as_slice()];
+                self.store_receipt(
+                    &mut tx,
+                    token,
+                    Some(issued.token()),
+                    principal.user_id(),
+                    "challenge",
+                    key,
+                    &request,
+                    &receipt,
+                )
+                .await?;
+            }
             tx.commit().await.map_err(database_unavailable)?;
             Ok(issued)
         })
@@ -488,6 +738,35 @@ impl MfaService {
         &self,
         token: &SessionToken,
         code: RecoveryCode,
+        correlation_id: &str,
+    ) -> Result<IssuedSession, MfaServiceError> {
+        self.recover_once(token, code, None, correlation_id).await
+    }
+
+    pub(crate) async fn recover_idempotent(
+        &self,
+        token: &SessionToken,
+        code: RecoveryCode,
+        key: &MfaIdempotencyKey,
+        correlation_id: &str,
+    ) -> Result<IssuedSession, MfaServiceError> {
+        let request_copy = Zeroizing::new(code.expose().to_vec());
+        let request = [request_copy.as_slice()];
+        if let Some(receipt) = self
+            .load_receipt::<SessionReceipt>(token, "recovery", key, &request)
+            .await?
+        {
+            return receipt.into_result();
+        }
+        self.recover_once(token, code, Some((key, request_copy)), correlation_id)
+            .await
+    }
+
+    async fn recover_once(
+        &self,
+        token: &SessionToken,
+        code: RecoveryCode,
+        receipt: Option<(&MfaIdempotencyKey, Zeroizing<Vec<u8>>)>,
         correlation_id: &str,
     ) -> Result<IssuedSession, MfaServiceError> {
         validate_correlation(correlation_id).map_err(map_storage_error)?;
@@ -560,6 +839,21 @@ impl MfaService {
             )
             .await
             .map_err(map_storage_error)?;
+            if let Some((key, request_copy)) = receipt.as_ref() {
+                let response = SessionReceipt::from_result(&issued);
+                let request = [request_copy.as_slice()];
+                self.store_receipt(
+                    &mut tx,
+                    token,
+                    Some(issued.token()),
+                    user_id,
+                    "recovery",
+                    key,
+                    &request,
+                    &response,
+                )
+                .await?;
+            }
             tx.commit().await.map_err(database_unavailable)?;
             Ok(issued)
         })
@@ -570,9 +864,14 @@ impl MfaService {
         &self,
         token: &SessionToken,
         target: UserId,
+        credential_generation: Uuid,
+        confirmation: &str,
         correlation_id: &str,
     ) -> Result<(), MfaServiceError> {
         validate_correlation(correlation_id).map_err(map_storage_error)?;
+        if confirmation.len() > 320 || confirmation.chars().any(char::is_control) {
+            return Err(MfaServiceError::InvalidInput);
+        }
         self.bounded(async {
             let expected_actor = self
                 .sessions
@@ -585,10 +884,24 @@ impl MfaService {
             }
             let mut connection = self.pool.acquire().await.map_err(database_unavailable)?;
             let mut tx = connection.begin().await.map_err(database_unavailable)?;
+            acquire_mfa_population_lock(&mut tx)
+                .await
+                .map_err(database_unavailable)?;
             lock_admin_and_target(&mut tx, expected_actor, target).await?;
             let principal = self.authenticate(&mut tx, token, true).await?;
             if principal.user_id() != expected_actor {
                 return Err(MfaServiceError::Unauthorized);
+            }
+            let target_email: String = sqlx::query_scalar(
+                "SELECT email FROM users WHERE id=$1::uuid AND status='active' FOR UPDATE",
+            )
+            .bind(target.to_string())
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(database_unavailable)?
+            .ok_or(MfaServiceError::NotActive)?;
+            if confirmation != target_email {
+                return Err(MfaServiceError::InvalidInput);
             }
             sqlx::query("DELETE FROM mfa_recovery_codes WHERE user_id=$1::uuid")
                 .bind(target.to_string())
@@ -597,9 +910,10 @@ impl MfaService {
                 .map_err(database_unavailable)?;
             let active = sqlx::query(
                 "UPDATE mfa_totp_credentials SET state='disabled',terminal_at=transaction_timestamp(),
-                 updated_at=transaction_timestamp() WHERE user_id=$1::uuid AND state='active'",
+                 updated_at=transaction_timestamp() WHERE id=$2::uuid AND user_id=$1::uuid AND state='active'",
             )
             .bind(target.to_string())
+            .bind(credential_generation.to_string())
             .execute(&mut *tx)
             .await
             .map_err(database_unavailable)?
@@ -613,7 +927,13 @@ impl MfaService {
             .await
             .map_err(database_unavailable)?;
             if active != 1 {
-                return Err(MfaServiceError::NotActive);
+                return Err(MfaServiceError::Conflict);
+            }
+            if !has_required_active_local_enrolled_admin(&mut tx)
+                .await
+                .map_err(database_unavailable)?
+            {
+                return Err(MfaServiceError::Unauthorized);
             }
             revoke_all_sessions(&mut tx, target, "mfa_admin_reset").await?;
             append_audit(
@@ -629,6 +949,255 @@ impl MfaService {
             Ok(())
         })
         .await
+    }
+
+    pub(crate) async fn disable_self(
+        &self,
+        token: &SessionToken,
+        correlation_id: &str,
+    ) -> Result<IssuedSession, MfaServiceError> {
+        validate_correlation(correlation_id).map_err(map_storage_error)?;
+        self.bounded(async {
+            let expected_user = self
+                .sessions
+                .authenticate(token)
+                .await
+                .map_err(map_session_error)?
+                .user_id();
+            let mut connection = self.pool.acquire().await.map_err(database_unavailable)?;
+            let mut tx = connection.begin().await.map_err(database_unavailable)?;
+            acquire_mfa_population_lock(&mut tx)
+                .await
+                .map_err(database_unavailable)?;
+            lock_local_user(&mut tx, expected_user)
+                .await
+                .map_err(map_storage_error)?;
+            let principal = self.authenticate(&mut tx, token, true).await?;
+            if principal.user_id() != expected_user {
+                return Err(MfaServiceError::AuthenticationFailed);
+            }
+            let required: bool = sqlx::query_scalar(
+                "SELECT CASE policy.value #>> '{}' \
+                   WHEN 'all_local_users' THEN TRUE \
+                   WHEN 'administrators' THEN account.is_instance_admin \
+                   ELSE FALSE END \
+                 FROM users account CROSS JOIN instance_settings policy \
+                 WHERE account.id=$1::uuid AND policy.key='security.mfa_enforcement'",
+            )
+            .bind(expected_user.to_string())
+            .fetch_one(&mut *tx)
+            .await
+            .map_err(database_unavailable)?;
+            if required {
+                return Err(MfaServiceError::Unauthorized);
+            }
+            sqlx::query("DELETE FROM mfa_recovery_codes WHERE user_id=$1::uuid")
+                .bind(expected_user.to_string())
+                .execute(&mut *tx)
+                .await
+                .map_err(database_unavailable)?;
+            let changed = sqlx::query(
+                "UPDATE mfa_totp_credentials SET state='disabled',terminal_at=transaction_timestamp(), \
+                 updated_at=transaction_timestamp() WHERE user_id=$1::uuid AND state='active'",
+            )
+            .bind(expected_user.to_string())
+            .execute(&mut *tx)
+            .await
+            .map_err(database_unavailable)?
+            .rows_affected();
+            if changed != 1 {
+                return Err(MfaServiceError::NotActive);
+            }
+            if !has_required_active_local_enrolled_admin(&mut tx)
+                .await
+                .map_err(database_unavailable)?
+            {
+                return Err(MfaServiceError::Unauthorized);
+            }
+            let issued = self
+                .sessions
+                .rotate_in_transaction(&mut tx, token, SessionRotationKind::Login)
+                .await
+                .map_err(map_session_error)?;
+            revoke_other_sessions(&mut tx, expected_user, issued.session().id()).await?;
+            append_audit(
+                &mut tx,
+                expected_user,
+                expected_user,
+                "mfa.disabled",
+                correlation_id,
+            )
+            .await
+            .map_err(map_storage_error)?;
+            tx.commit().await.map_err(database_unavailable)?;
+            Ok(issued)
+        })
+        .await
+    }
+
+    async fn load_receipt<T: DeserializeOwned>(
+        &self,
+        token: &SessionToken,
+        operation: &'static str,
+        key: &MfaIdempotencyKey,
+        request_parts: &[&[u8]],
+    ) -> Result<Option<T>, MfaServiceError> {
+        let presented_binding = token.binding_digest();
+        let mut connection = self.pool.acquire().await.map_err(database_unavailable)?;
+        let mut rows = sqlx::query(
+            "SELECT session_binding,rotated_session_binding,request_key_version,request_attestation,response_key_version,response_nonce,response_ciphertext \
+             FROM mfa_operation_receipts WHERE (session_binding=$1 OR rotated_session_binding=$1) AND operation=$2 \
+             AND idempotency_key=$3 AND expires_at>transaction_timestamp() LIMIT 2",
+        )
+        .bind(presented_binding.as_slice())
+        .bind(operation)
+        .bind(key.expose())
+        .fetch_all(&mut *connection)
+        .await
+        .map_err(database_unavailable)?;
+        if rows.len() > 1 {
+            return Err(MfaServiceError::Conflict);
+        }
+        let Some(row) = rows.pop() else {
+            return Ok(None);
+        };
+        let binding: [u8; 32] = row
+            .get::<Vec<u8>, _>("session_binding")
+            .try_into()
+            .map_err(|_| MfaServiceError::Unavailable)?;
+        let rotated_binding = row
+            .get::<Option<Vec<u8>>, _>("rotated_session_binding")
+            .map(|binding| binding.try_into().map_err(|_| MfaServiceError::Unavailable))
+            .transpose()?;
+        let _authority =
+            receipt_binding_authority(&presented_binding, &binding, rotated_binding.as_ref())?;
+        let request_version = u32::try_from(row.get::<i32, _>("request_key_version"))
+            .map_err(|_| MfaServiceError::Unavailable)?;
+        let request_attestation: Vec<u8> = row.get("request_attestation");
+        let request_context = receipt_context(
+            &binding,
+            rotated_binding.as_ref(),
+            operation,
+            key,
+            request_parts,
+        );
+        self.keyring
+            .verify_scoped_attestation(
+                RECEIPT_REQUEST_DOMAIN,
+                &request_context,
+                request_version,
+                &request_attestation,
+            )
+            .map_err(|_| MfaServiceError::Conflict)?;
+        let response_version = u32::try_from(row.get::<i32, _>("response_key_version"))
+            .map_err(|_| MfaServiceError::Unavailable)?;
+        let nonce: Vec<u8> = row.get("response_nonce");
+        let ciphertext: Vec<u8> = row.get("response_ciphertext");
+        let envelope_context =
+            receipt_context(&binding, rotated_binding.as_ref(), operation, key, &[]);
+        let plaintext = self
+            .keyring
+            .open_scoped(
+                RECEIPT_DOMAIN,
+                &envelope_context,
+                response_version,
+                &nonce,
+                &ciphertext,
+            )
+            .map_err(|_| MfaServiceError::Unavailable)?;
+        serde_json::from_slice(&plaintext)
+            .map(Some)
+            .map_err(|_| MfaServiceError::Unavailable)
+    }
+
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "receipt security context is explicit"
+    )]
+    async fn store_receipt<T: Serialize>(
+        &self,
+        tx: &mut Transaction<'_, Postgres>,
+        token: &SessionToken,
+        rotated_token: Option<&SessionToken>,
+        user_id: UserId,
+        operation: &'static str,
+        key: &MfaIdempotencyKey,
+        request_parts: &[&[u8]],
+        response: &T,
+    ) -> Result<(), MfaServiceError> {
+        let binding = token.binding_digest();
+        let rotated_binding = rotated_token.map(SessionToken::binding_digest);
+        let request_context = receipt_context(
+            &binding,
+            rotated_binding.as_ref(),
+            operation,
+            key,
+            request_parts,
+        );
+        let (request_key_version, request_attestation) = self
+            .keyring
+            .attest_scoped(RECEIPT_REQUEST_DOMAIN, &request_context)
+            .map_err(|_| MfaServiceError::Unavailable)?;
+        let plaintext =
+            Zeroizing::new(serde_json::to_vec(response).map_err(|_| MfaServiceError::Unavailable)?);
+        let envelope_context =
+            receipt_context(&binding, rotated_binding.as_ref(), operation, key, &[]);
+        let envelope = self
+            .keyring
+            .seal_scoped(RECEIPT_DOMAIN, &envelope_context, &plaintext)
+            .map_err(|_| MfaServiceError::Unavailable)?;
+        sqlx::query("DELETE FROM mfa_operation_receipts WHERE expires_at<=transaction_timestamp()")
+            .execute(&mut **tx)
+            .await
+            .map_err(database_unavailable)?;
+        let count: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM mfa_operation_receipts WHERE user_id=$1::uuid",
+        )
+        .bind(user_id.to_string())
+        .fetch_one(&mut **tx)
+        .await
+        .map_err(database_unavailable)?;
+        if count >= MAX_RECEIPTS_PER_USER {
+            return Err(MfaServiceError::Unavailable);
+        }
+        sqlx::query(
+            "INSERT INTO mfa_operation_receipts(id,user_id,session_binding,rotated_session_binding,operation,idempotency_key, \
+             request_key_version,request_attestation,response_key_version,response_nonce,response_ciphertext,expires_at) \
+             VALUES($1::uuid,$2::uuid,$3,$4,$5,$6,$7,$8,$9,$10,$11, \
+                    transaction_timestamp()+make_interval(mins=>$12))",
+        )
+        .bind(Uuid::now_v7().to_string())
+        .bind(user_id.to_string())
+        .bind(binding.as_slice())
+        .bind(rotated_binding.as_ref().map(<[u8; 32]>::as_slice))
+        .bind(operation)
+        .bind(key.expose())
+        .bind(i32::try_from(request_key_version).map_err(|_| MfaServiceError::Unavailable)?)
+        .bind(request_attestation.as_slice())
+        .bind(i32::try_from(envelope.key_version).map_err(|_| MfaServiceError::Unavailable)?)
+        .bind(envelope.nonce)
+        .bind(envelope.ciphertext)
+        .bind(RECEIPT_TTL_MINUTES)
+        .execute(&mut **tx)
+        .await
+        .map_err(|error| {
+            if error
+                .as_database_error()
+                .and_then(|database| database.constraint())
+                .is_some_and(|constraint| {
+                    matches!(
+                        constraint,
+                        "mfa_operation_receipts_unique"
+                            | "mfa_operation_receipts_rotated_unique_idx"
+                    )
+                })
+            {
+                MfaServiceError::Conflict
+            } else {
+                database_unavailable(error)
+            }
+        })?;
+        Ok(())
     }
 
     async fn authenticate(
@@ -730,6 +1299,111 @@ impl MfaService {
             .await
             .map_err(|_| MfaServiceError::Unavailable)?
     }
+}
+
+impl EnrollmentStartReceipt {
+    fn into_result(self) -> Result<EnrollmentStart, MfaServiceError> {
+        Ok(EnrollmentStart {
+            metadata: MfaCredentialMetadata {
+                id: Uuid::parse_str(&self.credential_id)
+                    .map_err(|_| MfaServiceError::Unavailable)?,
+                user_id: self.user_id,
+                state: MfaCredentialState::Pending,
+                secret_version: self.secret_version,
+                recovery_codes: 0,
+            },
+            secret: TotpSecret::new(self.secret.0.to_vec()).map_err(map_storage_error)?,
+        })
+    }
+}
+
+impl SessionReceipt {
+    fn from_result(issued: &IssuedSession) -> Self {
+        Self {
+            token: SecretToken::new(issued.token().expose().to_owned()),
+            session: issued.session().clone().into_fields(),
+        }
+    }
+
+    fn into_result(self) -> Result<IssuedSession, MfaServiceError> {
+        let token = SessionToken::parse(self.token.0.to_string()).map_err(map_session_error)?;
+        let session = Session::new(self.session).map_err(|_| MfaServiceError::Unavailable)?;
+        Ok(IssuedSession::from_parts(token, session))
+    }
+}
+
+impl EnrollmentCompleteReceipt {
+    fn from_result(issued: &IssuedSession, recovery_codes: &[RecoveryCode]) -> Self {
+        Self {
+            issued: SessionReceipt::from_result(issued),
+            recovery_codes: recovery_codes
+                .iter()
+                .map(|code| SecretBytes::new(code.expose().to_vec()))
+                .collect(),
+        }
+    }
+
+    fn into_result(self) -> Result<EnrollmentComplete, MfaServiceError> {
+        Ok(EnrollmentComplete {
+            session: self.issued.into_result()?,
+            recovery_codes: self
+                .recovery_codes
+                .into_iter()
+                .map(|code| RecoveryCode::new(code.0.to_vec()).map_err(map_storage_error))
+                .collect::<Result<Vec<_>, _>>()?,
+        })
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ReceiptBindingAuthority {
+    Original,
+    Rotated,
+}
+
+fn receipt_binding_authority(
+    presented: &[u8; 32],
+    original: &[u8; 32],
+    rotated: Option<&[u8; 32]>,
+) -> Result<ReceiptBindingAuthority, MfaServiceError> {
+    let original_matches = bool::from(presented.ct_eq(original));
+    let rotated_matches = rotated.is_some_and(|binding| bool::from(presented.ct_eq(binding)));
+    match (original_matches, rotated_matches) {
+        (true, false) => Ok(ReceiptBindingAuthority::Original),
+        (false, true) => Ok(ReceiptBindingAuthority::Rotated),
+        _ => Err(MfaServiceError::Conflict),
+    }
+}
+
+fn receipt_context<'a>(
+    binding: &'a [u8; 32],
+    rotated_binding: Option<&'a [u8; 32]>,
+    operation: &'a str,
+    key: &'a MfaIdempotencyKey,
+    request_parts: &'a [&'a [u8]],
+) -> Vec<&'a [u8]> {
+    const ORIGINAL_BINDING_FIELD: &[u8] = b"original-session-binding";
+    const ROTATED_BINDING_PRESENT_FIELD: &[u8] = b"rotated-session-binding:present";
+    const ROTATED_BINDING_ABSENT_FIELD: &[u8] = b"rotated-session-binding:absent";
+    const OPERATION_FIELD: &[u8] = b"operation";
+    const IDEMPOTENCY_KEY_FIELD: &[u8] = b"idempotency-key";
+
+    let mut context = Vec::with_capacity(8 + request_parts.len());
+    context.push(ORIGINAL_BINDING_FIELD);
+    context.push(binding.as_slice());
+    match rotated_binding {
+        Some(rotated) => {
+            context.push(ROTATED_BINDING_PRESENT_FIELD);
+            context.push(rotated.as_slice());
+        }
+        None => context.push(ROTATED_BINDING_ABSENT_FIELD),
+    }
+    context.push(OPERATION_FIELD);
+    context.push(operation.as_bytes());
+    context.push(IDEMPOTENCY_KEY_FIELD);
+    context.push(key.expose().as_bytes());
+    context.extend_from_slice(request_parts);
+    context
 }
 
 struct ChallengeState {

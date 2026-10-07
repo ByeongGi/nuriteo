@@ -10,7 +10,9 @@ use crate::audit::{
 };
 use crate::config::FileReader;
 use crate::database::{DatabasePool, SchemaReadiness, check_schema_readiness};
-use crate::identity::{PasswordService, Timestamp, User, UserFields, UserId, UserStatus};
+use crate::identity::{
+    PasswordService, Timestamp, User, UserFields, UserId, UserStatus, acquire_mfa_population_lock,
+};
 use crate::workspace::PersonalStorageScopeRepository;
 
 use super::input::{BootstrapAdminInput, BootstrapInputError};
@@ -112,6 +114,9 @@ pub async fn bootstrap_administrator(
     sqlx::query("SELECT pg_advisory_xact_lock($1)")
         .bind(BOOTSTRAP_LOCK_KEY)
         .execute(&mut *transaction)
+        .await
+        .map_err(|_| BootstrapError::new(BootstrapErrorCategory::DatabaseOperation))?;
+    acquire_mfa_population_lock(&mut transaction)
         .await
         .map_err(|_| BootstrapError::new(BootstrapErrorCategory::DatabaseOperation))?;
 

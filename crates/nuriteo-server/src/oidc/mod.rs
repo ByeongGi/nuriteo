@@ -17,7 +17,10 @@ use crate::integration::{
     IntegrationRepository, SecretValue, ValidatedCaBundle, authorize_recent_admin,
 };
 
+mod login;
 mod protocol;
+#[allow(unused_imports, reason = "crate-private OIDC HTTP adapter handoff")]
+pub(crate) use login::{OidcAuthorizationRequest, OidcCallbackInput, OidcLoginService};
 pub use protocol::OidcEndpointValidator;
 use protocol::{OidcValidationProof, trust_fingerprint};
 

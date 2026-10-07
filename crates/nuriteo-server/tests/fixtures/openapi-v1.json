@@ -804,6 +804,254 @@
         ]
       }
     },
+    "/api/v1/admin/mfa-policy": {
+      "get": {
+        "tags": [
+          "mfa"
+        ],
+        "operationId": "policy",
+        "responses": {
+          "200": {
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MfaPolicyView"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "projectSessionCookie": []
+          }
+        ]
+      },
+      "patch": {
+        "tags": [
+          "mfa"
+        ],
+        "operationId": "update_policy",
+        "parameters": [
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PolicyUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MfaPolicyView"
+                }
+              }
+            }
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "projectSessionCookie": []
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/mfa-policy/preview": {
+      "post": {
+        "tags": [
+          "mfa"
+        ],
+        "operationId": "preview_policy",
+        "parameters": [
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PolicyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MfaPolicyImpactView"
+                }
+              }
+            }
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "projectSessionCookie": []
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/mfa-reset-targets": {
+      "get": {
+        "tags": [
+          "mfa"
+        ],
+        "operationId": "reset_targets",
+        "parameters": [
+          {
+            "name": "query",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MfaResetTargetCollectionView"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "projectSessionCookie": []
+          }
+        ]
+      }
+    },
     "/api/v1/admin/operations": {
       "get": {
         "tags": [
@@ -1166,6 +1414,76 @@
         ]
       }
     },
+    "/api/v1/admin/users/{userId}/mfa/reset": {
+      "post": {
+        "tags": [
+          "mfa"
+        ],
+        "operationId": "admin_reset",
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResetRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {},
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "projectSessionCookie": []
+          }
+        ]
+      }
+    },
     "/api/v1/auth/activation": {
       "post": {
         "tags": [
@@ -1494,6 +1812,330 @@
             }
           }
         }
+      }
+    },
+    "/api/v1/mfa": {
+      "get": {
+        "tags": [
+          "mfa"
+        ],
+        "operationId": "status",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MfaStatusView"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "projectSessionCookie": []
+          }
+        ]
+      }
+    },
+    "/api/v1/mfa/challenge": {
+      "post": {
+        "tags": [
+          "mfa"
+        ],
+        "operationId": "challenge",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CodeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {},
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "projectSessionCookie": []
+          }
+        ]
+      }
+    },
+    "/api/v1/mfa/enrollment": {
+      "post": {
+        "tags": [
+          "mfa"
+        ],
+        "operationId": "begin_enrollment",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MfaEnrollmentStartView"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "projectSessionCookie": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "mfa"
+        ],
+        "operationId": "disable",
+        "parameters": [
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {},
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "projectSessionCookie": []
+          }
+        ]
+      }
+    },
+    "/api/v1/mfa/enrollment/confirm": {
+      "post": {
+        "tags": [
+          "mfa"
+        ],
+        "operationId": "confirm_enrollment",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MfaEnrollmentCompleteView"
+                }
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "projectSessionCookie": []
+          }
+        ]
+      }
+    },
+    "/api/v1/mfa/recovery": {
+      "post": {
+        "tags": [
+          "mfa"
+        ],
+        "operationId": "recover",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CodeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {},
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "projectSessionCookie": []
+          }
+        ]
       }
     },
     "/api/v1/organizations": {
@@ -8783,6 +9425,179 @@
           }
         }
       },
+      "AdminSettingConstraintView": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "boolean"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "minimum",
+              "maximum",
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "unsigned_integer"
+                ]
+              },
+              "maximum": {
+                "type": "integer",
+                "format": "int64",
+                "minimum": 0
+              },
+              "minimum": {
+                "type": "integer",
+                "format": "int64",
+                "minimum": 0
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "minimum",
+              "maximum",
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "optional_unsigned_integer"
+                ]
+              },
+              "maximum": {
+                "type": "integer",
+                "format": "int64",
+                "minimum": 0
+              },
+              "minimum": {
+                "type": "integer",
+                "format": "int64",
+                "minimum": 0
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "allowed",
+              "kind"
+            ],
+            "properties": {
+              "allowed": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "enumeration"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "minimum",
+              "maximum",
+              "allow_unlimited",
+              "kind"
+            ],
+            "properties": {
+              "allow_unlimited": {
+                "type": "boolean"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "retention_days"
+                ]
+              },
+              "maximum": {
+                "type": "integer",
+                "format": "int64",
+                "minimum": 0
+              },
+              "minimum": {
+                "type": "integer",
+                "format": "int64",
+                "minimum": 0
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "ascii_hostname"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "email_address"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "minimum_bytes",
+              "maximum_bytes",
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "text"
+                ]
+              },
+              "maximum_bytes": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "minimum_bytes": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          }
+        ]
+      },
       "AdminSettingListView": {
         "type": "object",
         "required": [
@@ -8808,15 +9623,27 @@
         "required": [
           "key",
           "value",
+          "defaultValue",
           "version",
-          "applyMode"
+          "applyMode",
+          "constraint"
         ],
         "properties": {
           "applyMode": {
             "type": "string"
           },
+          "constraint": {
+            "$ref": "#/components/schemas/AdminSettingConstraintView"
+          },
+          "defaultValue": {},
           "key": {
             "type": "string"
+          },
+          "policyCategory": {
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "value": {},
           "version": {
@@ -9036,6 +9863,18 @@
         },
         "additionalProperties": false
       },
+      "CodeRequest": {
+        "type": "object",
+        "required": [
+          "code"
+        ],
+        "properties": {
+          "code": {
+            "$ref": "#/components/schemas/SecretInput"
+          }
+        },
+        "additionalProperties": false
+      },
       "CommitView": {
         "type": "object",
         "required": [
@@ -9060,6 +9899,22 @@
         "properties": {
           "uploadMode": {
             "$ref": "#/components/schemas/UploadMode"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ConfirmationRequest": {
+        "type": "object",
+        "required": [
+          "credentialId",
+          "code"
+        ],
+        "properties": {
+          "code": {
+            "$ref": "#/components/schemas/SecretInput"
+          },
+          "credentialId": {
+            "type": "string"
           }
         },
         "additionalProperties": false
@@ -9569,6 +10424,221 @@
           }
         }
       },
+      "MfaEnrollmentCompleteView": {
+        "type": "object",
+        "required": [
+          "recoveryCodes"
+        ],
+        "properties": {
+          "recoveryCodes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SecretText"
+            }
+          }
+        }
+      },
+      "MfaEnrollmentStartView": {
+        "type": "object",
+        "required": [
+          "credentialId",
+          "manualSecret",
+          "provisioningUri"
+        ],
+        "properties": {
+          "credentialId": {
+            "type": "string"
+          },
+          "manualSecret": {
+            "$ref": "#/components/schemas/SecretText"
+          },
+          "provisioningUri": {
+            "$ref": "#/components/schemas/SecretText"
+          }
+        }
+      },
+      "MfaPolicyImpactView": {
+        "type": "object",
+        "required": [
+          "mode",
+          "gracePeriodDays",
+          "policyVersion",
+          "affectedUsers",
+          "unenrolledUsers",
+          "immediatelyRestrictedUsers",
+          "enrolledLocalAdministrators",
+          "populationProof"
+        ],
+        "properties": {
+          "affectedUsers": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "enrolledLocalAdministrators": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "gracePeriodDays": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "immediatelyRestrictedUsers": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "mode": {
+            "type": "string"
+          },
+          "policyVersion": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "populationProof": {
+            "type": "string"
+          },
+          "unenrolledUsers": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          }
+        }
+      },
+      "MfaPolicyView": {
+        "type": "object",
+        "required": [
+          "mode",
+          "gracePeriodDays",
+          "version",
+          "affectedUsers",
+          "immediatelyRestrictedUsers",
+          "enrolledLocalAdministrators"
+        ],
+        "properties": {
+          "affectedUsers": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "enrolledLocalAdministrators": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "gracePeriodDays": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "immediatelyRestrictedUsers": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "mode": {
+            "type": "string"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          }
+        }
+      },
+      "MfaResetTargetCollectionView": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MfaResetTargetView"
+            }
+          }
+        }
+      },
+      "MfaResetTargetView": {
+        "type": "object",
+        "required": [
+          "userId",
+          "email",
+          "displayName",
+          "credentialGeneration"
+        ],
+        "properties": {
+          "credentialGeneration": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "userId": {
+            "type": "string"
+          }
+        }
+      },
+      "MfaStatusView": {
+        "type": "object",
+        "required": [
+          "localAccount",
+          "enrolled",
+          "pendingEnrollment",
+          "recoveryCodesRemaining",
+          "policyMode",
+          "gracePeriodDays",
+          "required",
+          "restricted",
+          "notificationState"
+        ],
+        "properties": {
+          "deadlineAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "enrolled": {
+            "type": "boolean"
+          },
+          "gracePeriodDays": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "localAccount": {
+            "type": "boolean"
+          },
+          "notificationState": {
+            "type": "string"
+          },
+          "pendingEnrollment": {
+            "type": "boolean"
+          },
+          "policyMode": {
+            "type": "string"
+          },
+          "recoveryCodesRemaining": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "restricted": {
+            "type": "boolean"
+          }
+        }
+      },
       "OrganizationInvitationStatus": {
         "type": "string",
         "enum": [
@@ -9735,6 +10805,46 @@
             "items": {
               "$ref": "#/components/schemas/PartRequest"
             }
+          }
+        },
+        "additionalProperties": false
+      },
+      "PolicyRequest": {
+        "type": "object",
+        "required": [
+          "mode",
+          "gracePeriodDays"
+        ],
+        "properties": {
+          "gracePeriodDays": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "mode": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PolicyUpdateRequest": {
+        "type": "object",
+        "required": [
+          "mode",
+          "gracePeriodDays",
+          "populationProof"
+        ],
+        "properties": {
+          "gracePeriodDays": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "mode": {
+            "type": "string"
+          },
+          "populationProof": {
+            "type": "string"
           }
         },
         "additionalProperties": false
@@ -10278,6 +11388,22 @@
         },
         "additionalProperties": false
       },
+      "ResetRequest": {
+        "type": "object",
+        "required": [
+          "credentialGeneration",
+          "confirmation"
+        ],
+        "properties": {
+          "confirmation": {
+            "type": "string"
+          },
+          "credentialGeneration": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
       "RoleRequest": {
         "type": "object",
         "required": [
@@ -10328,6 +11454,12 @@
             "type": "string"
           }
         }
+      },
+      "SecretInput": {
+        "type": "string"
+      },
+      "SecretText": {
+        "type": "string"
       },
       "SetupStatus": {
         "type": "object",
@@ -10750,6 +11882,10 @@
     {
       "name": "authentication",
       "description": "Local browser Session lifecycle"
+    },
+    {
+      "name": "mfa",
+      "description": "Local account multi-factor authentication and administrator enforcement policy"
     },
     {
       "name": "workspaces",

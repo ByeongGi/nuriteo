@@ -14,6 +14,19 @@ export { getVersion } from "./system.ts";
 export { getSetupStatus } from "./setup.ts";
 export { getAdminStatus, listAdminSettings, updateAdminSetting } from "./admin.ts";
 export { getAdminOperations } from "./admin-operations.ts";
+export {
+  beginMfaEnrollment,
+  challengeMfa,
+  confirmMfaEnrollment,
+  disableMfa,
+  getMfaPolicy,
+  getMfaStatus,
+  previewMfaPolicy,
+  recoverMfa,
+  resetUserMfa,
+  searchMfaResetTargets,
+  updateMfaPolicy
+} from "./mfa.ts";
 export { createSession, deleteSession, getCurrentUser } from "./auth.ts";
 export {
   activateAccount,
@@ -84,6 +97,17 @@ export type {
   HttpMethod,
   ProblemDetails
 } from "./types.ts";
+export type {
+  MfaEnrollmentComplete,
+  MfaEnrollmentStart,
+  MfaNotificationState,
+  MfaMutationOptions,
+  MfaPolicy,
+  MfaPolicyImpact,
+  MfaPolicyMode,
+  MfaResetTarget,
+  MfaStatus
+} from "./mfa.ts";
 export type { ApiClientErrorKind } from "./errors.ts";
 export type {
   CreateSessionInput,
@@ -98,6 +122,8 @@ export type {
   AdminSetting,
   AdminSettingApplyMode,
   AdminSettingCollection,
+  AdminSettingConstraint,
+  AdminSettingPolicyCategory,
   AdminSettingValue,
   AdminStatus,
   UpdateAdminSettingInput

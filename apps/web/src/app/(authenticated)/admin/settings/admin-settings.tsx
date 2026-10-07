@@ -7,6 +7,7 @@ import type {
   AdminSettingValue,
   AdminStatus
 } from "@nuriteo/api-client";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { FormEvent } from "react";
@@ -75,23 +76,6 @@ const DESCRIPTORS: Readonly<Record<string, SettingDescriptor>> = {
       { value: "runtime_offline", label: "Runtime offline" }
     ]
   },
-  "security.mfa_enforcement": {
-    kind: "select",
-    label: "MFA enforcement",
-    description: "Choose which local accounts must enroll in multi-factor authentication.",
-    options: [
-      { value: "off", label: "Optional" },
-      { value: "administrators", label: "Administrators" },
-      { value: "all_local_users", label: "All local users" }
-    ]
-  },
-  "security.mfa_grace_period_days": numberDescriptor(
-    "MFA grace period",
-    "Allow affected local accounts this long to complete enrollment.",
-    0,
-    30,
-    "days"
-  ),
   "security.reauthentication_window_minutes": numberDescriptor(
     "Reauthentication window",
     "Keep recent administrator verification valid for routine high-risk changes.",
@@ -163,6 +147,9 @@ export function AdminSettings({
         </div>
         <div className="admin-setting-list">
           {settings.items.map((setting) => {
+            if (setting.key === "security.mfa_enforcement" || setting.key === "security.mfa_grace_period_days") {
+              return <ManagedMfaSetting key={setting.key} setting={setting} />;
+            }
             const descriptor = DESCRIPTORS[setting.key];
             return descriptor === undefined ? (
               <UnsupportedSetting key={setting.key} setting={setting} />
@@ -178,6 +165,20 @@ export function AdminSettings({
         </div>
       </section>
     </main>
+  );
+}
+
+function ManagedMfaSetting({ setting }: { readonly setting: AdminSetting }) {
+  return (
+    <article className="admin-setting">
+      <div className="admin-setting__copy">
+        <strong>{setting.key === "security.mfa_enforcement" ? "MFA enforcement" : "MFA grace period"}</strong>
+        <p>This setting is managed with enrollment impact checks and active-administrator safety validation.</p>
+        <code>{setting.key}</code>
+        <span>{applyModeLabel(setting.applyMode)} · version {setting.version}</span>
+      </div>
+      <Link className="button button--sm" href="/admin/mfa">Manage MFA policy</Link>
+    </article>
   );
 }
 

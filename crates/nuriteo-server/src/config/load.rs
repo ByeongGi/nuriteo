@@ -14,8 +14,8 @@ use super::schema::*;
 use super::validation;
 use super::{
     CleanupConfig, Config, ConfigError, ConfigWarning, INSTANCE_SETTING_DEFINITIONS,
-    InstanceSettingBootstrap, InstanceSettingBootstrapError, InstanceSettingValidationError,
-    LoadReport, PublicConfig, ServerConfig, SettingConstraint, instance_setting_definition,
+    InstanceSettingBootstrap, LoadReport, PublicConfig, ServerConfig, SettingConstraint,
+    instance_setting_definition,
 };
 use crate::save::CleanupWorkerPolicy;
 
@@ -324,41 +324,12 @@ fn load_instance_setting_bootstrap(
         let Some(raw) = values.get(definition.bootstrap_environment) else {
             continue;
         };
-        let value = parse_instance_setting_environment(definition.key, definition.constraint, raw)
-            .map_err(ConfigError::InstanceSetting)?;
-        environment.insert(definition.key.to_owned(), value);
+        environment.insert(definition.key.to_owned(), raw.to_owned());
     }
-    InstanceSettingBootstrap::new(file, environment).map_err(ConfigError::InstanceSetting)
-}
-
-fn parse_instance_setting_environment(
-    key: &'static str,
-    constraint: SettingConstraint,
-    raw: &str,
-) -> Result<Value, InstanceSettingBootstrapError> {
-    let invalid = || {
-        InstanceSettingBootstrapError::Invalid(InstanceSettingValidationError {
-            key,
-            reason: "bootstrap environment value has invalid syntax",
-        })
-    };
-    match constraint {
-        SettingConstraint::Enumeration { .. }
-        | SettingConstraint::AsciiHostname
-        | SettingConstraint::EmailAddress
-        | SettingConstraint::Text { .. } => Ok(Value::String(raw.to_owned())),
-        SettingConstraint::Boolean => raw.parse::<bool>().map(Value::from).map_err(|_| invalid()),
-        SettingConstraint::UnsignedInteger { .. } => {
-            raw.parse::<u64>().map(Value::from).map_err(|_| invalid())
-        }
-        SettingConstraint::RetentionDays {
-            allow_unlimited: true,
-            ..
-        } if raw == "unlimited" => Ok(Value::Null),
-        SettingConstraint::RetentionDays { .. } => {
-            raw.parse::<u64>().map(Value::from).map_err(|_| invalid())
-        }
-    }
+    Ok(InstanceSettingBootstrap::from_raw_sources(
+        file,
+        environment,
+    ))
 }
 
 fn read_bounded(
@@ -522,10 +493,13 @@ impl FileConfig {
                 value.as_str(),
             ) {
                 (
-                    Some(SettingConstraint::RetentionDays {
-                        allow_unlimited: true,
-                        ..
-                    }),
+                    Some(
+                        SettingConstraint::RetentionDays {
+                            allow_unlimited: true,
+                            ..
+                        }
+                        | SettingConstraint::OptionalUnsignedInteger { .. },
+                    ),
                     Some("unlimited"),
                 ) => Value::Null,
                 _ => serde_json::to_value(value).map_err(|_| ConfigError::InvalidToml)?,

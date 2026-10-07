@@ -65,7 +65,7 @@ async function contracts(): Promise<void> {
 
 async function rejectsMalformedResponses(): Promise<void> {
   const badPayloads = [
-    { registryVersion: 1, items: [setting(1, true)] },
+    { registryVersion: 1, items: [{ ...setting(1, 168), constraint: { kind: "unsigned_integer", minimum: 10, maximum: 1 } }] },
     { registryVersion: 1, items: [{ ...setting(1, 168), secret: "no" }] },
     { registryVersion: 1, items: [setting(1, 168), setting(2, 336)] },
     { registryVersion: 0, items: [] }
@@ -136,8 +136,11 @@ function setting(version: number, value: unknown) {
   return {
     key: "invitations.default_expiry_hours",
     value,
+    defaultValue: 168,
     version,
-    applyMode: "live"
+    applyMode: "live",
+    constraint: { kind: "unsigned_integer", minimum: 1, maximum: 720 },
+    policyCategory: "identity"
   };
 }
 

@@ -18,7 +18,10 @@ use crate::audit::{
     AuditScope, AuditTarget, AuditWriter, ScopeType,
 };
 use crate::database::DatabasePool;
-use crate::identity::{SessionId, Timestamp, UserId, UserStatus};
+use crate::identity::{
+    SessionId, Timestamp, UserId, UserStatus, acquire_mfa_population_lock,
+    has_required_active_local_enrolled_admin,
+};
 
 pub use audit_service::{
     AdminAuditEventCollectionView, AdminAuditEventView, AdminAuditExportFormat,
@@ -27,8 +30,8 @@ pub use audit_service::{
 };
 pub(crate) use http_routes::openapi_router;
 pub use http_service::{
-    AdminHttpPolicy, AdminHttpService, AdminHttpServiceError, AdminSettingListView,
-    AdminSettingView, AdminStatusView,
+    AdminHttpPolicy, AdminHttpService, AdminHttpServiceError, AdminSettingConstraintView,
+    AdminSettingListView, AdminSettingView, AdminStatusView,
 };
 pub use operations_service::{
     AdminCleanupQueueView, AdminDependencyStatusView, AdminOperationsState, AdminOperationsView,
@@ -41,7 +44,6 @@ const MAX_OPERATION_TIMEOUT: Duration = Duration::from_secs(30);
 const DEFAULT_REAUTHENTICATION_MAX_AGE: Duration = Duration::from_secs(30 * 60);
 const MIN_REAUTHENTICATION_MAX_AGE: Duration = Duration::from_secs(15 * 60);
 const MAX_REAUTHENTICATION_MAX_AGE: Duration = Duration::from_secs(2 * 60 * 60);
-const ADMIN_LIFECYCLE_LOCK_NAMESPACE: i32 = 1_314_212_948;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct AdminLifecyclePolicy {
@@ -261,7 +263,9 @@ impl AdminLifecycleService {
             .begin()
             .await
             .map_err(|_| AdminLifecycleError::DatabaseUnavailable)?;
-        acquire_lifecycle_lock(&mut transaction).await?;
+        acquire_mfa_population_lock(&mut transaction)
+            .await
+            .map_err(|_| AdminLifecycleError::DatabaseUnavailable)?;
         let actor_display_name = authorize_actor(
             &mut transaction,
             actor,
@@ -291,6 +295,7 @@ impl AdminLifecycleService {
         if result.rows_affected() != 1 {
             return Err(AdminLifecycleError::InvariantViolation);
         }
+        ensure_mfa_admin_safety(&mut transaction).await?;
         let action = if enabled {
             "instance.administrator_promoted"
         } else {
@@ -328,7 +333,9 @@ impl AdminLifecycleService {
             .begin()
             .await
             .map_err(|_| AdminLifecycleError::DatabaseUnavailable)?;
-        acquire_lifecycle_lock(&mut transaction).await?;
+        acquire_mfa_population_lock(&mut transaction)
+            .await
+            .map_err(|_| AdminLifecycleError::DatabaseUnavailable)?;
         let actor_display_name = authorize_actor(
             &mut transaction,
             actor,
@@ -387,6 +394,7 @@ impl AdminLifecycleService {
         } else {
             0
         };
+        ensure_mfa_admin_safety(&mut transaction).await?;
         let action = match status {
             UserStatus::Active => "instance.user_reactivated",
             UserStatus::Disabled => "instance.user_disabled",
@@ -430,15 +438,17 @@ impl AdminLifecycleService {
     }
 }
 
-async fn acquire_lifecycle_lock(
+async fn ensure_mfa_admin_safety(
     transaction: &mut Transaction<'_, Postgres>,
 ) -> Result<(), AdminLifecycleError> {
-    sqlx::query("SELECT pg_advisory_xact_lock($1, 0)")
-        .bind(ADMIN_LIFECYCLE_LOCK_NAMESPACE)
-        .execute(&mut **transaction)
+    let safe = has_required_active_local_enrolled_admin(transaction)
         .await
         .map_err(|_| AdminLifecycleError::DatabaseUnavailable)?;
-    Ok(())
+    if safe {
+        Ok(())
+    } else {
+        Err(AdminLifecycleError::LastAdministrator)
+    }
 }
 
 async fn authorize_actor(

@@ -2,7 +2,11 @@ import http.server
 import json
 import os
 import ssl
+import subprocess
 import time
+import urllib.parse
+import base64
+import hashlib
 
 
 CONTROL = os.environ["OIDC_CONTROL_DIR"]
@@ -57,6 +61,78 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
         self.send_header("Cache-Control", "max-age=60")
+        self.send_header("Content-Length", str(len(encoded)))
+        self.end_headers()
+        self.wfile.write(encoded)
+
+    def do_POST(self):
+        with open(os.path.join(CONTROL, "requests"), "a", encoding="utf-8") as value:
+            value.write(self.path + "\n")
+        if self.path != "/token":
+            self.send_response(404)
+            self.end_headers()
+            return
+        length = int(self.headers.get("Content-Length", "0"))
+        if length <= 0 or length > 16384:
+            self.send_response(400)
+            self.end_headers()
+            return
+        form = urllib.parse.parse_qs(self.rfile.read(length).decode(), strict_parsing=True)
+        required = ["grant_type", "code", "redirect_uri", "client_id", "client_secret", "code_verifier"]
+        if any(len(form.get(key, [])) != 1 for key in required) or form["grant_type"][0] != "authorization_code":
+            self.send_response(400)
+            self.end_headers()
+            return
+        with open(os.path.join(CONTROL, "pkce_challenge"), encoding="utf-8") as value:
+            expected_challenge = value.read().strip()
+        observed_challenge = base64.urlsafe_b64encode(
+            hashlib.sha256(form["code_verifier"][0].encode()).digest()
+        ).rstrip(b"=").decode()
+        if (form["redirect_uri"][0] != ISSUER + "/callback"
+                or form["client_id"][0] != "protocol-client"
+                or form["client_secret"][0] != "protocol-secret"
+                or observed_challenge != expected_challenge):
+            self.send_response(400)
+            self.end_headers()
+            return
+        with open(os.path.join(CONTROL, "token_mode"), encoding="utf-8") as value:
+            mode = value.read().strip()
+        with open(os.path.join(CONTROL, "nonce"), encoding="utf-8") as value:
+            nonce = value.read().strip()
+        now = int(time.time())
+        header = {"alg": "none" if mode == "wrong-alg" else "RS256", "kid": "missing" if mode == "wrong-kid" else "fixture"}
+        claims = {
+            "iss": "https://wrong-issuer.example.test" if mode == "wrong-issuer" else ISSUER,
+            "sub": "fixture-subject",
+            "aud": "wrong-client" if mode == "wrong-aud" else "protocol-client",
+            "nonce": nonce,
+            "iat": now,
+            "exp": now + 300,
+        }
+        if mode == "wrong-azp":
+            claims["aud"] = ["protocol-client", "other-client"]
+            claims["azp"] = "other-client"
+        if mode == "future":
+            claims["iat"] = now + 300
+            claims["exp"] = now + 600
+        if mode == "expired":
+            claims["iat"] = now - 700
+            claims["exp"] = now - 400
+        def encode(value):
+            return base64.urlsafe_b64encode(json.dumps(value, separators=(",", ":")).encode()).rstrip(b"=").decode()
+        signing_input = (encode(header) + "." + encode(claims)).encode()
+        signature = subprocess.run(
+            ["openssl", "dgst", "-sha256", "-sign", os.path.join(CONTROL, "jwt.key")],
+            input=signing_input,
+            check=True,
+            capture_output=True,
+        ).stdout
+        if mode == "bad-signature":
+            signature = bytes([signature[0] ^ 1]) + signature[1:]
+        token = signing_input.decode() + "." + base64.urlsafe_b64encode(signature).rstrip(b"=").decode()
+        encoded = json.dumps({"id_token": token}, separators=(",", ":")).encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(encoded)))
         self.end_headers()
         self.wfile.write(encoded)

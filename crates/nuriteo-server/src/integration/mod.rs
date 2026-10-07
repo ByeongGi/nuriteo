@@ -458,6 +458,29 @@ impl IntegrationRepository {
             .verify_scoped_attestation(domain, context, key_version, attestation)
     }
 
+    #[allow(dead_code, reason = "crate-private OIDC login adapter handoff")]
+    pub(crate) fn seal_ephemeral(
+        &self,
+        domain: &[u8],
+        context: &[&[u8]],
+        plaintext: &[u8],
+    ) -> Result<EncryptedSecretEnvelope, IntegrationError> {
+        self.keyring.seal_scoped(domain, context, plaintext)
+    }
+
+    #[allow(dead_code, reason = "crate-private OIDC login adapter handoff")]
+    pub(crate) fn open_ephemeral(
+        &self,
+        domain: &[u8],
+        context: &[&[u8]],
+        key_version: u32,
+        nonce: &[u8],
+        ciphertext: &[u8],
+    ) -> Result<Zeroizing<Vec<u8>>, IntegrationError> {
+        self.keyring
+            .open_scoped(domain, context, key_version, nonce, ciphertext)
+    }
+
     pub(crate) async fn upsert_credential_in_transaction(
         &self,
         transaction: &mut Transaction<'_, Postgres>,

@@ -4,7 +4,7 @@ use std::fmt;
 use serde_json::Value;
 
 /// Version of the allowlisted Instance setting registry persisted beside setting values.
-pub const INSTANCE_SETTING_REGISTRY_VERSION: u16 = 2;
+pub const INSTANCE_SETTING_REGISTRY_VERSION: u16 = 3;
 
 /// How a validated setting becomes effective.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -29,6 +29,10 @@ pub enum SettingSensitivity {
 pub enum SettingConstraint {
     Boolean,
     UnsignedInteger {
+        minimum: u64,
+        maximum: u64,
+    },
+    OptionalUnsignedInteger {
         minimum: u64,
         maximum: u64,
     },
@@ -68,6 +72,12 @@ impl InstanceSettingDefinition {
             SettingConstraint::UnsignedInteger { minimum, maximum } => value
                 .as_u64()
                 .is_some_and(|number| (minimum..=maximum).contains(&number)),
+            SettingConstraint::OptionalUnsignedInteger { minimum, maximum } => {
+                value.is_null()
+                    || value
+                        .as_u64()
+                        .is_some_and(|number| (minimum..=maximum).contains(&number))
+            }
             SettingConstraint::Enumeration { allowed } => value
                 .as_str()
                 .is_some_and(|candidate| allowed.contains(&candidate)),
@@ -122,6 +132,9 @@ impl SettingConstraint {
         match self {
             Self::Boolean => "must be a boolean",
             Self::UnsignedInteger { .. } => "must be an unsigned integer inside the allowed range",
+            Self::OptionalUnsignedInteger { .. } => {
+                "must be null or an unsigned integer inside the allowed range"
+            }
             Self::Enumeration { .. } => "must be one of the allowed values",
             Self::RetentionDays {
                 allow_unlimited: true,
@@ -202,6 +215,42 @@ const fn unsigned(
     }
 }
 
+const fn policy_unsigned(
+    key: &'static str,
+    bootstrap_environment: &'static str,
+    default_json: &'static str,
+    minimum: u64,
+    maximum: u64,
+    apply_mode: SettingApplyMode,
+) -> InstanceSettingDefinition {
+    let mut definition = unsigned(
+        key,
+        bootstrap_environment,
+        default_json,
+        minimum,
+        maximum,
+        apply_mode,
+    );
+    definition.introduced_in = 3;
+    definition
+}
+
+const fn policy_boolean(
+    key: &'static str,
+    bootstrap_environment: &'static str,
+    default_json: &'static str,
+) -> InstanceSettingDefinition {
+    InstanceSettingDefinition {
+        key,
+        bootstrap_environment,
+        introduced_in: 3,
+        default_json: Some(default_json),
+        sensitivity: SettingSensitivity::Public,
+        apply_mode: SettingApplyMode::Live,
+        constraint: SettingConstraint::Boolean,
+    }
+}
+
 /// Sorted allowlist consumed by persistence, admin API and documentation generation.
 pub const INSTANCE_SETTING_DEFINITIONS: &[InstanceSettingDefinition] = &[
     InstanceSettingDefinition {
@@ -246,6 +295,119 @@ pub const INSTANCE_SETTING_DEFINITIONS: &[InstanceSettingDefinition] = &[
             allow_unlimited: true,
         },
     },
+    policy_boolean("object_storage.gc.enabled", "NURITEO_GC_ENABLED", "true"),
+    policy_unsigned(
+        "object_storage.gc.grace_period_hours",
+        "NURITEO_GC_GRACE_PERIOD_HOURS",
+        "24",
+        0,
+        720,
+        SettingApplyMode::Live,
+    ),
+    policy_unsigned(
+        "object_storage.gc.interval_hours",
+        "NURITEO_GC_INTERVAL_HOURS",
+        "24",
+        1,
+        168,
+        SettingApplyMode::Live,
+    ),
+    policy_unsigned(
+        "object_storage.multipart.browser_concurrency",
+        "NURITEO_MULTIPART_BROWSER_CONCURRENCY",
+        "4",
+        1,
+        8,
+        SettingApplyMode::Live,
+    ),
+    policy_unsigned(
+        "object_storage.multipart.incomplete_cleanup_hours",
+        "NURITEO_MULTIPART_INCOMPLETE_CLEANUP_HOURS",
+        "24",
+        1,
+        168,
+        SettingApplyMode::Live,
+    ),
+    policy_unsigned(
+        "object_storage.multipart.part_size_bytes",
+        "NURITEO_MULTIPART_PART_SIZE_BYTES",
+        "16777216",
+        8 * 1024 * 1024,
+        64 * 1024 * 1024,
+        SettingApplyMode::Live,
+    ),
+    policy_unsigned(
+        "object_storage.payload_max_bytes",
+        "NURITEO_PAYLOAD_MAX_BYTES",
+        "2147483648",
+        64 * 1024 * 1024,
+        2 * 1024 * 1024 * 1024,
+        SettingApplyMode::Live,
+    ),
+    policy_unsigned(
+        "object_storage.presign_download_expiry_minutes",
+        "NURITEO_PRESIGN_DOWNLOAD_EXPIRY_MINUTES",
+        "5",
+        1,
+        15,
+        SettingApplyMode::Live,
+    ),
+    policy_unsigned(
+        "object_storage.presign_upload_expiry_minutes",
+        "NURITEO_PRESIGN_UPLOAD_EXPIRY_MINUTES",
+        "15",
+        5,
+        60,
+        SettingApplyMode::Live,
+    ),
+    policy_unsigned(
+        "object_storage.single_put_max_bytes",
+        "NURITEO_SINGLE_PUT_MAX_BYTES",
+        "67108864",
+        16 * 1024 * 1024,
+        256 * 1024 * 1024,
+        SettingApplyMode::Live,
+    ),
+    policy_unsigned(
+        "projects.file_count_max",
+        "NURITEO_PROJECT_FILE_COUNT_MAX",
+        "2500",
+        1,
+        2_500,
+        SettingApplyMode::Live,
+    ),
+    policy_unsigned(
+        "projects.path_depth_max",
+        "NURITEO_PROJECT_PATH_DEPTH_MAX",
+        "32",
+        8,
+        64,
+        SettingApplyMode::Live,
+    ),
+    policy_unsigned(
+        "projects.path_length_max_bytes",
+        "NURITEO_PROJECT_PATH_LENGTH_MAX_BYTES",
+        "512",
+        256,
+        1_024,
+        SettingApplyMode::Live,
+    ),
+    policy_unsigned(
+        "projects.single_file_max_bytes",
+        "NURITEO_PROJECT_SINGLE_FILE_MAX_BYTES",
+        "16777216",
+        1,
+        16 * 1024 * 1024,
+        SettingApplyMode::Live,
+    ),
+    policy_unsigned(
+        "projects.source_max_bytes",
+        "NURITEO_PROJECT_SOURCE_MAX_BYTES",
+        "134217728",
+        16 * 1024 * 1024,
+        256 * 1024 * 1024,
+        SettingApplyMode::Live,
+    ),
     InstanceSettingDefinition {
         key: "runtime.network.default",
         bootstrap_environment: "NURITEO_RUNTIME_NETWORK_DEFAULT",
@@ -282,6 +444,22 @@ pub const INSTANCE_SETTING_DEFINITIONS: &[InstanceSettingDefinition] = &[
         "30",
         15,
         120,
+        SettingApplyMode::Live,
+    ),
+    policy_unsigned(
+        "sessions.absolute_timeout_minutes",
+        "NURITEO_SESSION_ABSOLUTE_TIMEOUT_MINUTES",
+        "43200",
+        60,
+        90 * 24 * 60,
+        SettingApplyMode::Live,
+    ),
+    policy_unsigned(
+        "sessions.idle_timeout_minutes",
+        "NURITEO_SESSION_IDLE_TIMEOUT_MINUTES",
+        "10080",
+        15,
+        30 * 24 * 60,
         SettingApplyMode::Live,
     ),
     InstanceSettingDefinition {
@@ -374,6 +552,54 @@ pub const INSTANCE_SETTING_DEFINITIONS: &[InstanceSettingDefinition] = &[
         365,
         SettingApplyMode::Live,
     ),
+    InstanceSettingDefinition {
+        key: "workspace.organization_default_quota_bytes",
+        bootstrap_environment: "NURITEO_ORGANIZATION_DEFAULT_QUOTA_BYTES",
+        introduced_in: 3,
+        default_json: Some("null"),
+        sensitivity: SettingSensitivity::Public,
+        apply_mode: SettingApplyMode::Live,
+        constraint: SettingConstraint::OptionalUnsignedInteger {
+            minimum: 1,
+            maximum: 9_007_199_254_740_991,
+        },
+    },
+    InstanceSettingDefinition {
+        key: "workspace.personal_default_quota_bytes",
+        bootstrap_environment: "NURITEO_PERSONAL_DEFAULT_QUOTA_BYTES",
+        introduced_in: 3,
+        default_json: Some("null"),
+        sensitivity: SettingSensitivity::Public,
+        apply_mode: SettingApplyMode::Live,
+        constraint: SettingConstraint::OptionalUnsignedInteger {
+            minimum: 1,
+            maximum: 9_007_199_254_740_991,
+        },
+    },
+    policy_unsigned(
+        "workspace.quota_critical_percent",
+        "NURITEO_WORKSPACE_QUOTA_CRITICAL_PERCENT",
+        "90",
+        1,
+        100,
+        SettingApplyMode::Live,
+    ),
+    policy_unsigned(
+        "workspace.quota_limit_percent",
+        "NURITEO_WORKSPACE_QUOTA_LIMIT_PERCENT",
+        "100",
+        1,
+        100,
+        SettingApplyMode::Live,
+    ),
+    policy_unsigned(
+        "workspace.quota_warning_percent",
+        "NURITEO_WORKSPACE_QUOTA_WARNING_PERCENT",
+        "80",
+        1,
+        100,
+        SettingApplyMode::Live,
+    ),
 ];
 
 /// Returns an allowlisted definition. Unknown keys fail closed at the caller.
@@ -407,8 +633,14 @@ impl BootstrapSettingOrigin {
 /// Validated first-install inputs. PostgreSQL supersedes this object after materialization.
 #[derive(Clone, PartialEq, Eq)]
 pub struct InstanceSettingBootstrap {
-    file: BTreeMap<&'static str, Value>,
-    environment: BTreeMap<&'static str, Value>,
+    file: BTreeMap<String, Value>,
+    environment: BTreeMap<String, BootstrapEnvironmentValue>,
+}
+
+#[derive(Clone, PartialEq, Eq)]
+enum BootstrapEnvironmentValue {
+    Parsed(Value),
+    Raw(String),
 }
 
 impl InstanceSettingBootstrap {
@@ -416,10 +648,30 @@ impl InstanceSettingBootstrap {
         file: BTreeMap<String, Value>,
         environment: BTreeMap<String, Value>,
     ) -> Result<Self, InstanceSettingBootstrapError> {
+        validate_bootstrap_map(&file)?;
+        validate_bootstrap_map(&environment)?;
         Ok(Self {
-            file: validate_bootstrap_map(file)?,
-            environment: validate_bootstrap_map(environment)?,
+            file,
+            environment: environment
+                .into_iter()
+                .map(|(key, value)| (key, BootstrapEnvironmentValue::Parsed(value)))
+                .collect(),
         })
+    }
+
+    /// Captures bounded startup inputs without interpreting them. The repository
+    /// validates these only if PostgreSQL has no materialized setting set.
+    pub(super) fn from_raw_sources(
+        file: BTreeMap<String, Value>,
+        environment: BTreeMap<String, String>,
+    ) -> Self {
+        Self {
+            file,
+            environment: environment
+                .into_iter()
+                .map(|(key, value)| (key, BootstrapEnvironmentValue::Raw(value)))
+                .collect(),
+        }
     }
 
     #[must_use]
@@ -435,9 +687,19 @@ impl InstanceSettingBootstrap {
         definition: &'static InstanceSettingDefinition,
     ) -> Result<(Value, BootstrapSettingOrigin), InstanceSettingBootstrapError> {
         if let Some(value) = self.environment.get(definition.key) {
-            return Ok((value.clone(), BootstrapSettingOrigin::Environment));
+            let value = match value {
+                BootstrapEnvironmentValue::Parsed(value) => value.clone(),
+                BootstrapEnvironmentValue::Raw(raw) => parse_environment_value(definition, raw)?,
+            };
+            definition
+                .validate(&value)
+                .map_err(InstanceSettingBootstrapError::Invalid)?;
+            return Ok((value, BootstrapSettingOrigin::Environment));
         }
         if let Some(value) = self.file.get(definition.key) {
+            definition
+                .validate(value)
+                .map_err(InstanceSettingBootstrapError::Invalid)?;
             return Ok((value.clone(), BootstrapSettingOrigin::File));
         }
         let value = definition
@@ -449,12 +711,33 @@ impl InstanceSettingBootstrap {
         Ok((value, BootstrapSettingOrigin::Default))
     }
 
-    pub fn file_keys(&self) -> impl Iterator<Item = &'static str> + '_ {
-        self.file.keys().copied()
+    pub fn file_keys(&self) -> impl Iterator<Item = &str> + '_ {
+        self.file.keys().map(String::as_str)
     }
 
-    pub fn environment_keys(&self) -> impl Iterator<Item = &'static str> + '_ {
-        self.environment.keys().copied()
+    pub fn environment_keys(&self) -> impl Iterator<Item = &str> + '_ {
+        self.environment.keys().map(String::as_str)
+    }
+
+    pub(crate) fn validate(&self) -> Result<(), InstanceSettingBootstrapError> {
+        validate_bootstrap_map(&self.file)?;
+        for (key, value) in &self.environment {
+            let definition = instance_setting_definition(key)
+                .ok_or(InstanceSettingBootstrapError::UnknownKey)?;
+            if definition.sensitivity == SettingSensitivity::Secret {
+                return Err(InstanceSettingBootstrapError::SecretSource {
+                    key: definition.key,
+                });
+            }
+            let value = match value {
+                BootstrapEnvironmentValue::Parsed(value) => value.clone(),
+                BootstrapEnvironmentValue::Raw(raw) => parse_environment_value(definition, raw)?,
+            };
+            definition
+                .validate(&value)
+                .map_err(InstanceSettingBootstrapError::Invalid)?;
+        }
+        Ok(())
     }
 }
 
@@ -500,23 +783,54 @@ impl fmt::Display for InstanceSettingBootstrapError {
 impl std::error::Error for InstanceSettingBootstrapError {}
 
 fn validate_bootstrap_map(
-    values: BTreeMap<String, Value>,
-) -> Result<BTreeMap<&'static str, Value>, InstanceSettingBootstrapError> {
-    let mut validated = BTreeMap::new();
+    values: &BTreeMap<String, Value>,
+) -> Result<(), InstanceSettingBootstrapError> {
     for (key, value) in values {
         let definition =
-            instance_setting_definition(&key).ok_or(InstanceSettingBootstrapError::UnknownKey)?;
+            instance_setting_definition(key).ok_or(InstanceSettingBootstrapError::UnknownKey)?;
         if definition.sensitivity == SettingSensitivity::Secret {
             return Err(InstanceSettingBootstrapError::SecretSource {
                 key: definition.key,
             });
         }
         definition
-            .validate(&value)
+            .validate(value)
             .map_err(InstanceSettingBootstrapError::Invalid)?;
-        validated.insert(definition.key, value);
     }
-    Ok(validated)
+    Ok(())
+}
+
+fn parse_environment_value(
+    definition: &'static InstanceSettingDefinition,
+    raw: &str,
+) -> Result<Value, InstanceSettingBootstrapError> {
+    let invalid = || {
+        InstanceSettingBootstrapError::Invalid(InstanceSettingValidationError {
+            key: definition.key,
+            reason: "bootstrap environment value has invalid syntax",
+        })
+    };
+    match definition.constraint {
+        SettingConstraint::Enumeration { .. }
+        | SettingConstraint::AsciiHostname
+        | SettingConstraint::EmailAddress
+        | SettingConstraint::Text { .. } => Ok(Value::String(raw.to_owned())),
+        SettingConstraint::Boolean => raw.parse::<bool>().map(Value::from).map_err(|_| invalid()),
+        SettingConstraint::UnsignedInteger { .. } => {
+            raw.parse::<u64>().map(Value::from).map_err(|_| invalid())
+        }
+        SettingConstraint::OptionalUnsignedInteger { .. } if raw == "unlimited" => Ok(Value::Null),
+        SettingConstraint::OptionalUnsignedInteger { .. } => {
+            raw.parse::<u64>().map(Value::from).map_err(|_| invalid())
+        }
+        SettingConstraint::RetentionDays {
+            allow_unlimited: true,
+            ..
+        } if raw == "unlimited" => Ok(Value::Null),
+        SettingConstraint::RetentionDays { .. } => {
+            raw.parse::<u64>().map(Value::from).map_err(|_| invalid())
+        }
+    }
 }
 
 #[cfg(test)]
@@ -551,7 +865,7 @@ mod tests {
             definition.validated_default().unwrap();
         }
 
-        assert_eq!(keys.len(), 17);
+        assert_eq!(keys.len(), 39);
     }
 
     #[test]
@@ -594,6 +908,63 @@ mod tests {
         let definition = instance_setting_definition("tokens.default_expiry_days").unwrap();
         for value in [json!(90.5), json!(-1), json!("90"), json!(true)] {
             assert!(definition.validate(&value).is_err());
+        }
+    }
+
+    #[test]
+    fn every_registry_constraint_accepts_its_edges_and_rejects_wrong_types() {
+        for definition in INSTANCE_SETTING_DEFINITIONS {
+            match definition.constraint {
+                SettingConstraint::Boolean => {
+                    assert!(definition.validate(&json!(true)).is_ok());
+                    assert!(definition.validate(&json!("true")).is_err());
+                }
+                SettingConstraint::UnsignedInteger { minimum, maximum } => {
+                    assert!(definition.validate(&json!(minimum)).is_ok());
+                    assert!(definition.validate(&json!(maximum)).is_ok());
+                    assert!(definition.validate(&json!("1")).is_err());
+                    if let Some(above) = maximum.checked_add(1) {
+                        assert!(definition.validate(&json!(above)).is_err());
+                    }
+                }
+                SettingConstraint::OptionalUnsignedInteger { minimum, maximum } => {
+                    assert!(definition.validate(&Value::Null).is_ok());
+                    assert!(definition.validate(&json!(minimum)).is_ok());
+                    assert!(definition.validate(&json!(maximum)).is_ok());
+                    assert!(definition.validate(&json!("unlimited")).is_err());
+                }
+                SettingConstraint::Enumeration { allowed } => {
+                    for value in allowed {
+                        assert!(definition.validate(&json!(value)).is_ok());
+                    }
+                    assert!(definition.validate(&json!("not-allowlisted")).is_err());
+                }
+                SettingConstraint::RetentionDays {
+                    minimum,
+                    maximum,
+                    allow_unlimited,
+                } => {
+                    assert!(definition.validate(&json!(minimum)).is_ok());
+                    assert!(definition.validate(&json!(maximum)).is_ok());
+                    assert_eq!(definition.validate(&Value::Null).is_ok(), allow_unlimited);
+                }
+                SettingConstraint::AsciiHostname => {
+                    assert!(definition.validate(&json!("service.internal")).is_ok());
+                    assert!(definition.validate(&json!("bad host")).is_err());
+                }
+                SettingConstraint::EmailAddress => {
+                    assert!(definition.validate(&json!("admin@example.test")).is_ok());
+                    assert!(definition.validate(&json!("not-an-email")).is_err());
+                }
+                SettingConstraint::Text { maximum_bytes, .. } => {
+                    assert!(definition.validate(&json!("safe")).is_ok());
+                    assert!(
+                        definition
+                            .validate(&json!("x".repeat(maximum_bytes + 1)))
+                            .is_err()
+                    );
+                }
+            }
         }
     }
 

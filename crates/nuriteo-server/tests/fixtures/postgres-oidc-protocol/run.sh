@@ -34,7 +34,13 @@ cp "$fixture_dir/server.key" "$fixture_dir/postgres.key"
 printf '%s' normal >"$fixture_dir/mode"
 printf '%s' 0 >"$fixture_dir/delay"
 touch "$fixture_dir/requests"
-printf '%s' '{"keys":[{"kty":"RSA","kid":"initial","n":"AQAB","e":"AQAB"}]}' >"$fixture_dir/jwks.json"
+printf '%s' normal >"$fixture_dir/token_mode"
+printf '%s' unused >"$fixture_dir/nonce"
+printf '%s' unused >"$fixture_dir/pkce_challenge"
+openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out "$fixture_dir/jwt.key" >/dev/null 2>&1
+modulus_hex="$(openssl rsa -in "$fixture_dir/jwt.key" -noout -modulus | cut -d= -f2)"
+modulus="$(python3 -c 'import base64,sys; print(base64.urlsafe_b64encode(bytes.fromhex(sys.argv[1])).rstrip(b"=").decode())' "$modulus_hex")"
+printf '%s' "{\"keys\":[{\"kty\":\"RSA\",\"use\":\"sig\",\"alg\":\"RS256\",\"kid\":\"fixture\",\"n\":\"${modulus}\",\"e\":\"AQAB\"}]}" >"$fixture_dir/jwks.json"
 
 issuer="https://localhost:${oidc_port}"
 OIDC_CONTROL_DIR="$fixture_dir" OIDC_ISSUER="$issuer" OIDC_PORT="$oidc_port" \
@@ -74,4 +80,15 @@ NURITEO_TEST_OIDC_CA="$fixture_dir/ca.crt" \
 NURITEO_TEST_OIDC_CONTROL_DIR="$fixture_dir" \
 cargo test -p nuriteo-server --lib \
   oidc::tests::actual_protocol_validation_is_pinned_bounded_and_generation_fenced \
+  -- --ignored --exact --nocapture
+printf '%s' "{\"keys\":[{\"kty\":\"RSA\",\"use\":\"sig\",\"alg\":\"RS256\",\"kid\":\"fixture\",\"n\":\"${modulus}\",\"e\":\"AQAB\"}]}" >"$fixture_dir/jwks.json"
+printf '%s' normal >"$fixture_dir/mode"
+printf '%s' normal >"$fixture_dir/token_mode"
+NURITEO_TEST_DATABASE_URL="postgres://nuriteo:${database_password}@localhost:${database_port}/nuriteo" \
+NURITEO_TEST_DATABASE_CA="$fixture_dir/ca.crt" \
+NURITEO_TEST_OIDC_ISSUER="$issuer" \
+NURITEO_TEST_OIDC_CA="$fixture_dir/ca.crt" \
+NURITEO_TEST_OIDC_CONTROL_DIR="$fixture_dir" \
+cargo test -p nuriteo-server --lib \
+  oidc::tests::actual_authorization_code_pkce_is_one_time_and_rotation_fenced \
   -- --ignored --exact --nocapture

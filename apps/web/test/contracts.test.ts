@@ -42,6 +42,7 @@ function testServerFirstBoundaries(): void {
   assert.deepEqual(clientFiles.sort(), [
     "src/app/(authenticated)/admin/admin-navigation.tsx",
     "src/app/(authenticated)/admin/invitations/activation-invitations.tsx",
+    "src/app/(authenticated)/admin/mfa/policy-editor.tsx",
     "src/app/(authenticated)/admin/settings/admin-settings.tsx",
     "src/app/(authenticated)/organization-invitations/accept/accept-invitation.tsx",
     "src/app/(authenticated)/organizations/[organizationId]/teams/team-console.tsx",
@@ -53,6 +54,7 @@ function testServerFirstBoundaries(): void {
     "src/app/activate/activation-form.tsx",
     "src/app/error.tsx",
     "src/app/global-error.tsx",
+    "src/app/mfa/security.tsx",
     "src/app/sign-in/sign-in-form.tsx",
     "src/components/theme-selector.tsx",
     "src/components/ui/button.tsx",

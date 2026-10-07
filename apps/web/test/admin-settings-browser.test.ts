@@ -241,11 +241,24 @@ function setting() {
 
 function valueSetting(
   key: string,
-  value: string | number | null,
+  value: string | number | boolean | null,
   applyMode = "live",
   version = 1
 ) {
-  return { key, value, version, applyMode };
+  const constraint = typeof value === "number"
+    ? { kind: "unsigned_integer", minimum: 1, maximum: 10_000 }
+    : typeof value === "boolean"
+      ? { kind: "boolean" }
+      : { kind: "enumeration", allowed: [String(value)] };
+  return {
+    key,
+    value,
+    defaultValue: value,
+    version,
+    applyMode,
+    constraint,
+    policyCategory: key.startsWith("smtp.") ? null : "identity"
+  };
 }
 
 function currentUser(session: "admin" | "member") {

@@ -42,7 +42,7 @@ async fn actual_mfa_secret_recovery_lifecycle_and_rotation_are_atomic() {
     )
     .await
     .unwrap();
-    assert_eq!(report.latest_version, Some(31));
+    assert_eq!(report.latest_version, Some(33));
     seed_users(&pool).await;
     let user_id = fixture_user();
     let old = MfaRepository::new(pool.clone(), keyring(1, [11; 32], &[]));

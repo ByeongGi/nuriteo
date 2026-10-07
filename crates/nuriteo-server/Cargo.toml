@@ -30,6 +30,7 @@ http-body = "1.1.0"
 percent-encoding = "2.3.2"
 regex = { version = "1.13.1", default-features = false, features = ["perf", "std", "unicode-case", "unicode-perl"] }
 reqwest = { version = "0.13.2", default-features = false, features = ["rustls"] }
+ring = "0.17.14"
 rustls-pemfile = { version = "2.2.0", default-features = false, features = ["std"] }
 rustls = { version = "0.23.45", default-features = false, features = ["ring", "std", "tls12"] }
 rustls-native-certs = "0.8.4"

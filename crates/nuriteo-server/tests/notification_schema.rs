@@ -28,21 +28,21 @@ async fn notification_outbox_is_transactional_bounded_and_secret_safe() {
         readiness(&pool).await,
         SchemaReadiness::Pending {
             current: None,
-            target: 31,
+            target: 33,
         }
     );
     let report = migrate(&pool).await;
     assert_eq!(
         report,
         MigrationReport {
-            latest_version: Some(31),
-            known_migrations: 31,
+            latest_version: Some(33),
+            known_migrations: 33,
         }
     );
     assert_eq!(migrate(&pool).await, report);
     assert_eq!(
         readiness(&pool).await,
-        SchemaReadiness::Ready { version: 31 }
+        SchemaReadiness::Ready { version: 33 }
     );
 
     seed_user(&pool).await;

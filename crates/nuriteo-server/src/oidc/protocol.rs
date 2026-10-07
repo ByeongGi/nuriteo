@@ -1,4 +1,5 @@
 //! OIDC discovery and JWKS validation boundary.
+#![allow(dead_code, reason = "crate-private OIDC protocol adapter handoff")]
 
 use std::collections::{HashMap, HashSet};
 use std::fmt;
@@ -6,15 +7,21 @@ use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use base64::Engine;
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+use bytes::Bytes;
 use reqwest::header::{CACHE_CONTROL, CONTENT_TYPE};
 use reqwest::{Certificate, Client, StatusCode};
+use ring::signature::{RSA_PKCS1_2048_8192_SHA256, RsaPublicKeyComponents};
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
+use subtle::ConstantTimeEq;
 use tokio::net::lookup_host;
 use tokio::sync::Mutex;
 use tokio::time as tokio_time;
 use url::Url;
 use uuid::Uuid;
+use zeroize::Zeroizing;
 
 use super::{OidcProviderError, OidcProviderMetadata, OidcProviderService, OidcRuntimeProvider};
 use crate::integration::{CaEndpointBinding, IntegrationAdminActor, ValidatedCaBundle};
@@ -29,6 +36,10 @@ const MIN_TIMEOUT: Duration = Duration::from_millis(250);
 const MAX_TIMEOUT: Duration = Duration::from_secs(30);
 const MAX_DNS_TIMEOUT: Duration = Duration::from_secs(3);
 const MAX_DNS_ADDRESSES: usize = 16;
+const TOKEN_RESPONSE_LIMIT: usize = 64 * 1024;
+const JWT_LIMIT: usize = 16 * 1024;
+const MAX_TOKEN_AGE_SECONDS: i64 = 10 * 60;
+const CLOCK_SKEW_SECONDS: i64 = 60;
 
 pub(super) struct RuntimeAccess(());
 
@@ -67,6 +78,141 @@ impl OidcProtocolRuntime {
     pub(super) fn secret_for_test(&self) -> &[u8] {
         self.provider.client_secret.expose()
     }
+
+    pub(super) fn authorization_request(
+        &self,
+        state: &str,
+        nonce: &str,
+        code_challenge: &str,
+    ) -> Result<AuthorizationRuntime, OidcProviderError> {
+        if !bounded_protocol_value(state, 128)
+            || !bounded_protocol_value(nonce, 128)
+            || !bounded_protocol_value(code_challenge, 128)
+        {
+            return Err(OidcProviderError::InvalidInput);
+        }
+        let mut url = self.authorization_endpoint.clone();
+        const RESERVED: &[&str] = &[
+            "response_type",
+            "scope",
+            "client_id",
+            "redirect_uri",
+            "state",
+            "nonce",
+            "code_challenge",
+            "code_challenge_method",
+        ];
+        if url
+            .query_pairs()
+            .any(|(key, _)| RESERVED.contains(&key.as_ref()))
+        {
+            return Err(OidcProviderError::ValidationFailed);
+        }
+        url.query_pairs_mut()
+            .append_pair("response_type", "code")
+            .append_pair("scope", "openid")
+            .append_pair("client_id", &self.provider.metadata.client_id)
+            .append_pair("redirect_uri", &self.provider.redirect_uri)
+            .append_pair("state", state)
+            .append_pair("nonce", nonce)
+            .append_pair("code_challenge", code_challenge)
+            .append_pair("code_challenge_method", "S256");
+        Ok(AuthorizationRuntime {
+            url: url.to_string(),
+            provider_id: self.provider.metadata.id,
+            config_version: self.provider.metadata.config_version,
+            secret_version: self.provider.metadata.secret_version,
+            redirect_uri: self.provider.redirect_uri.clone(),
+        })
+    }
+
+    pub(super) async fn exchange_and_validate(
+        &self,
+        code: &str,
+        verifier: &[u8],
+        expected_nonce_hash: &[u8; 32],
+        now: ::time::OffsetDateTime,
+    ) -> Result<VerifiedIdToken, OidcProviderError> {
+        if !bounded_protocol_value(code, 4096)
+            || !(43..=128).contains(&verifier.len())
+            || !verifier.iter().all(|byte| {
+                byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'.' | b'_' | b'~')
+            })
+        {
+            return Err(OidcProviderError::ValidationFailed);
+        }
+        let code = Zeroizing::new(code.to_owned());
+        let verifier = Zeroizing::new(
+            std::str::from_utf8(verifier)
+                .map_err(|_| OidcProviderError::ValidationFailed)?
+                .to_owned(),
+        );
+        let mut form = url::form_urlencoded::Serializer::new(String::new());
+        form.append_pair("grant_type", "authorization_code")
+            .append_pair("code", &code)
+            .append_pair("redirect_uri", &self.provider.redirect_uri)
+            .append_pair("client_id", &self.provider.metadata.client_id)
+            .append_pair(
+                "client_secret",
+                std::str::from_utf8(self.provider.client_secret.expose())
+                    .map_err(|_| OidcProviderError::CredentialUnavailable)?,
+            )
+            .append_pair("code_verifier", &verifier);
+        let body = Zeroizing::new(form.finish().into_bytes());
+        let request_body = Bytes::from_owner(ZeroizingRequestBody(body));
+        let response = self
+            .client
+            .post(self.token_endpoint.clone())
+            .header(CONTENT_TYPE, "application/x-www-form-urlencoded")
+            .body(request_body)
+            .send()
+            .await
+            .map_err(|_| OidcProviderError::ValidationFailed)?;
+        let token_bytes =
+            Zeroizing::new(bounded_json_response(response, TOKEN_RESPONSE_LIMIT).await?);
+        let token: TokenResponse = serde_json::from_slice(&token_bytes)
+            .map_err(|_| OidcProviderError::ValidationFailed)?;
+        let id_token = Zeroizing::new(token.id_token);
+        let jwks_response = self
+            .client
+            .get(self.jwks_uri.clone())
+            .send()
+            .await
+            .map_err(|_| OidcProviderError::ValidationFailed)?;
+        let jwks_bytes = Zeroizing::new(bounded_json_response(jwks_response, JWKS_LIMIT).await?);
+        let jwks: VerificationJwks =
+            serde_json::from_slice(&jwks_bytes).map_err(|_| OidcProviderError::ValidationFailed)?;
+        validate_verification_jwks(&jwks)?;
+        verify_id_token(
+            &id_token,
+            &jwks,
+            &self.provider.metadata.issuer,
+            &self.provider.metadata.client_id,
+            expected_nonce_hash,
+            now,
+        )
+    }
+}
+
+struct ZeroizingRequestBody(Zeroizing<Vec<u8>>);
+
+impl AsRef<[u8]> for ZeroizingRequestBody {
+    fn as_ref(&self) -> &[u8] {
+        self.0.as_slice()
+    }
+}
+
+pub(super) struct AuthorizationRuntime {
+    pub url: String,
+    pub provider_id: Uuid,
+    pub config_version: u64,
+    pub secret_version: u64,
+    pub redirect_uri: String,
+}
+
+pub(super) struct VerifiedIdToken {
+    pub issuer: String,
+    pub subject: String,
 }
 
 #[derive(Clone)]
@@ -230,9 +376,42 @@ impl OidcEndpointValidator {
         service: &OidcProviderService,
         provider_id: Uuid,
     ) -> Result<OidcProtocolRuntime, OidcProviderError> {
+        self.active_runtime_inner(service, provider_id, None).await
+    }
+
+    pub(crate) async fn active_runtime_for_generation(
+        &self,
+        service: &OidcProviderService,
+        provider_id: Uuid,
+        expected_config_version: u64,
+        expected_secret_version: u64,
+    ) -> Result<OidcProtocolRuntime, OidcProviderError> {
+        self.active_runtime_inner(
+            service,
+            provider_id,
+            Some((expected_config_version, expected_secret_version)),
+        )
+        .await
+    }
+
+    async fn active_runtime_inner(
+        &self,
+        service: &OidcProviderService,
+        provider_id: Uuid,
+        expected_generation: Option<(u64, u64)>,
+    ) -> Result<OidcProtocolRuntime, OidcProviderError> {
         let runtime = service
             .active_provider(&RUNTIME_ACCESS, provider_id)
             .await?;
+        if expected_generation.is_some_and(|expected| {
+            expected
+                != (
+                    runtime.metadata.config_version,
+                    runtime.metadata.secret_version,
+                )
+        }) {
+            return Err(OidcProviderError::Conflict);
+        }
         let issuer = validate_endpoint(&runtime.metadata.issuer, self.allow_test_addresses)?;
         let host = issuer
             .host_str()
@@ -481,6 +660,77 @@ struct JwkShape {
     kid: Option<String>,
 }
 
+#[derive(Deserialize)]
+struct TokenResponse {
+    id_token: String,
+}
+
+#[derive(Deserialize)]
+struct VerificationJwks {
+    keys: Vec<VerificationJwk>,
+}
+
+#[derive(Deserialize)]
+struct VerificationJwk {
+    kty: String,
+    kid: String,
+    #[serde(rename = "use")]
+    usage: Option<String>,
+    alg: Option<String>,
+    n: String,
+    e: String,
+}
+
+fn validate_verification_jwks(jwks: &VerificationJwks) -> Result<(), OidcProviderError> {
+    if jwks.keys.is_empty() || jwks.keys.len() > MAX_JWKS_KEYS {
+        return Err(OidcProviderError::ValidationFailed);
+    }
+    let mut kids = HashSet::new();
+    for key in &jwks.keys {
+        if !bounded_protocol_value(&key.kty, 32)
+            || !bounded_protocol_value(&key.kid, 256)
+            || !kids.insert(key.kid.as_str())
+            || key
+                .usage
+                .as_deref()
+                .is_some_and(|value| !bounded_protocol_value(value, 32))
+            || key
+                .alg
+                .as_deref()
+                .is_some_and(|value| !bounded_protocol_value(value, 32))
+            || !bounded_protocol_value(&key.n, 1_400)
+            || !bounded_protocol_value(&key.e, 16)
+        {
+            return Err(OidcProviderError::ValidationFailed);
+        }
+    }
+    Ok(())
+}
+
+#[derive(Deserialize)]
+struct JwtHeader {
+    alg: String,
+    kid: String,
+}
+
+#[derive(Deserialize)]
+struct IdTokenClaims {
+    iss: String,
+    sub: String,
+    aud: Audience,
+    azp: Option<String>,
+    nonce: String,
+    iat: i64,
+    exp: i64,
+}
+
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum Audience {
+    One(String),
+    Many(Vec<String>),
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct CacheKey {
     provider_id: Uuid,
@@ -696,6 +946,161 @@ fn validation_fingerprint(
     Sha256::digest(canonical).into()
 }
 
+fn bounded_protocol_value(value: &str, max: usize) -> bool {
+    !value.is_empty()
+        && value.len() <= max
+        && value.trim() == value
+        && !value.chars().any(char::is_control)
+}
+
+async fn bounded_json_response(
+    mut response: reqwest::Response,
+    limit: usize,
+) -> Result<Vec<u8>, OidcProviderError> {
+    if response.status() != StatusCode::OK
+        || !response
+            .headers()
+            .get(CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok())
+            .is_some_and(|value| value.split(';').next() == Some("application/json"))
+        || response
+            .content_length()
+            .is_some_and(|length| length > limit as u64)
+    {
+        return Err(OidcProviderError::ValidationFailed);
+    }
+    let mut body = Vec::new();
+    while let Some(chunk) = response
+        .chunk()
+        .await
+        .map_err(|_| OidcProviderError::ValidationFailed)?
+    {
+        if body
+            .len()
+            .checked_add(chunk.len())
+            .is_none_or(|length| length > limit)
+        {
+            return Err(OidcProviderError::ValidationFailed);
+        }
+        body.extend_from_slice(&chunk);
+    }
+    Ok(body)
+}
+
+fn verify_id_token(
+    compact: &str,
+    jwks: &VerificationJwks,
+    expected_issuer: &str,
+    expected_client_id: &str,
+    expected_nonce_hash: &[u8; 32],
+    now: ::time::OffsetDateTime,
+) -> Result<VerifiedIdToken, OidcProviderError> {
+    if compact.len() > JWT_LIMIT {
+        return Err(OidcProviderError::ValidationFailed);
+    }
+    let parts = compact.split('.').collect::<Vec<_>>();
+    let [encoded_header, encoded_claims, encoded_signature] = parts.as_slice() else {
+        return Err(OidcProviderError::ValidationFailed);
+    };
+    let header_bytes = URL_SAFE_NO_PAD
+        .decode(encoded_header)
+        .map_err(|_| OidcProviderError::ValidationFailed)?;
+    let header: JwtHeader =
+        serde_json::from_slice(&header_bytes).map_err(|_| OidcProviderError::ValidationFailed)?;
+    if header.alg != "RS256" || !bounded_protocol_value(&header.kid, 256) {
+        return Err(OidcProviderError::ValidationFailed);
+    }
+    let matching = jwks
+        .keys
+        .iter()
+        .filter(|key| {
+            key.kid == header.kid
+                && key.kty == "RSA"
+                && key.usage.as_deref().is_none_or(|value| value == "sig")
+                && key.alg.as_deref().is_none_or(|value| value == "RS256")
+        })
+        .collect::<Vec<_>>();
+    let [key] = matching.as_slice() else {
+        return Err(OidcProviderError::ValidationFailed);
+    };
+    let modulus = URL_SAFE_NO_PAD
+        .decode(&key.n)
+        .map_err(|_| OidcProviderError::ValidationFailed)?;
+    let exponent = URL_SAFE_NO_PAD
+        .decode(&key.e)
+        .map_err(|_| OidcProviderError::ValidationFailed)?;
+    let signature = URL_SAFE_NO_PAD
+        .decode(encoded_signature)
+        .map_err(|_| OidcProviderError::ValidationFailed)?;
+    if !(256..=1024).contains(&modulus.len()) || !(1..=8).contains(&exponent.len()) {
+        return Err(OidcProviderError::ValidationFailed);
+    }
+    let signed = format!("{encoded_header}.{encoded_claims}");
+    RsaPublicKeyComponents {
+        n: &modulus,
+        e: &exponent,
+    }
+    .verify(&RSA_PKCS1_2048_8192_SHA256, signed.as_bytes(), &signature)
+    .map_err(|_| OidcProviderError::ValidationFailed)?;
+
+    let claims_bytes = URL_SAFE_NO_PAD
+        .decode(encoded_claims)
+        .map_err(|_| OidcProviderError::ValidationFailed)?;
+    let claims: IdTokenClaims =
+        serde_json::from_slice(&claims_bytes).map_err(|_| OidcProviderError::ValidationFailed)?;
+    if claims.iss != expected_issuer || !bounded_protocol_value(&claims.sub, 1024) {
+        return Err(OidcProviderError::ValidationFailed);
+    }
+    let (audience_matches, multiple_audiences) = match &claims.aud {
+        Audience::One(value) => (value == expected_client_id, false),
+        Audience::Many(values) => (
+            !values.is_empty()
+                && values.len() <= 16
+                && values.iter().any(|value| value == expected_client_id),
+            values.len() > 1,
+        ),
+    };
+    if !audience_matches
+        || claims
+            .azp
+            .as_deref()
+            .is_some_and(|value| value != expected_client_id)
+        || (multiple_audiences && claims.azp.as_deref() != Some(expected_client_id))
+    {
+        return Err(OidcProviderError::ValidationFailed);
+    }
+    let nonce_hash: [u8; 32] = Sha256::digest(claims.nonce.as_bytes()).into();
+    if !bool::from(nonce_hash.ct_eq(expected_nonce_hash)) {
+        return Err(OidcProviderError::ValidationFailed);
+    }
+    let now = now.unix_timestamp();
+    let latest_iat = now
+        .checked_add(CLOCK_SKEW_SECONDS)
+        .ok_or(OidcProviderError::ValidationFailed)?;
+    let earliest_iat = now
+        .checked_sub(MAX_TOKEN_AGE_SECONDS)
+        .ok_or(OidcProviderError::ValidationFailed)?;
+    let earliest_exp = now
+        .checked_sub(CLOCK_SKEW_SECONDS)
+        .ok_or(OidcProviderError::ValidationFailed)?;
+    let latest_exp = claims
+        .iat
+        .checked_add(MAX_TOKEN_AGE_SECONDS)
+        .ok_or(OidcProviderError::ValidationFailed)?;
+    if claims.iat > latest_iat
+        || claims.iat < earliest_iat
+        || claims.exp < earliest_exp
+        || claims.exp <= claims.iat
+        || claims.exp > latest_exp
+    {
+        return Err(OidcProviderError::ValidationFailed);
+    }
+    Ok(VerifiedIdToken {
+        issuer: claims.iss,
+        subject: claims.sub,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -717,6 +1122,40 @@ mod tests {
         assert!(!is_public_ip("2002:7f00:1::".parse().unwrap()));
         assert!(!is_public_ip("100::1".parse().unwrap()));
         assert!(!is_public_ip("168.63.129.16".parse().unwrap()));
+    }
+
+    #[test]
+    fn runtime_jwks_requires_bounded_unique_key_shapes() {
+        assert_eq!(
+            validate_verification_jwks(&VerificationJwks { keys: vec![] }).unwrap_err(),
+            OidcProviderError::ValidationFailed
+        );
+        let key = || VerificationJwk {
+            kty: "RSA".into(),
+            kid: "fixture".into(),
+            usage: Some("sig".into()),
+            alg: Some("RS256".into()),
+            n: "bounded-modulus".into(),
+            e: "AQAB".into(),
+        };
+        let mut duplicate = key();
+        duplicate.kid = "fixture".into();
+        assert_eq!(
+            validate_verification_jwks(&VerificationJwks {
+                keys: vec![key(), duplicate],
+            })
+            .unwrap_err(),
+            OidcProviderError::ValidationFailed
+        );
+        let mut oversized = key();
+        oversized.n = "n".repeat(1_401);
+        assert_eq!(
+            validate_verification_jwks(&VerificationJwks {
+                keys: vec![oversized],
+            })
+            .unwrap_err(),
+            OidcProviderError::ValidationFailed
+        );
     }
 
     #[test]

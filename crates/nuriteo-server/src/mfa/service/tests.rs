@@ -14,7 +14,9 @@ use crate::config::{Environment, FileReader, InstanceSettingBootstrap};
 use crate::database::{
     DatabasePoolConfig, DatabaseTlsConfig, MigrationOptions, run_embedded_migrations,
 };
+use crate::identity::{BrowserMethod, BrowserRequestHeaders, acquire_mfa_population_lock};
 use crate::instance_settings::InstanceSettingsRepository;
+use crate::mfa::MfaHttpService;
 
 #[test]
 fn rfc_6238_sha1_window_and_redaction_are_stable() {
@@ -46,6 +48,228 @@ fn challenge_policy_is_bounded() {
 
 #[tokio::test]
 #[ignore = "requires tests/fixtures/postgres-mfa-challenge/run.sh"]
+async fn actual_mfa_003_receipt_replays_for_old_and_rotated_sessions_only() {
+    let pool = fixture_pool().await;
+    prepare_fixture(&pool).await;
+    let session_policy = SessionPolicy::default();
+    let sessions = SessionService::new(pool.clone(), session_policy);
+    let service = MfaService::new(
+        pool.clone(),
+        keyring([71; 32]),
+        session_policy,
+        MfaChallengePolicy::default(),
+    );
+    let stale = sessions.issue(local_user()).await.unwrap();
+    let fresh = sessions
+        .rotate(stale.token(), SessionRotationKind::Reauthentication)
+        .await
+        .unwrap();
+    let begin_key = MfaIdempotencyKey::new("mfa3-receipt-begin-0001".into()).unwrap();
+    let enrollment = service
+        .begin_enrollment_idempotent(fresh.token(), &begin_key, "mfa3:receipt-begin")
+        .await
+        .unwrap();
+    let now = database_time(&pool).await;
+    let counter = u64::try_from(now.unix_timestamp() / TOTP_STEP_SECONDS).unwrap();
+    let code = TotpCode::parse(&hotp(enrollment.secret.expose(), counter).unwrap()).unwrap();
+    let confirm_key = MfaIdempotencyKey::new("mfa3-receipt-confirm-0001".into()).unwrap();
+    let completed = service
+        .confirm_enrollment_idempotent(
+            fresh.token(),
+            enrollment.metadata.id,
+            &code,
+            &confirm_key,
+            "mfa3:receipt-confirm",
+        )
+        .await
+        .unwrap();
+    for (token, correlation) in [
+        (fresh.token(), "mfa3:receipt-old-cookie"),
+        (completed.session.token(), "mfa3:receipt-rotated-cookie"),
+    ] {
+        let replay = service
+            .confirm_enrollment_idempotent(
+                token,
+                enrollment.metadata.id,
+                &code,
+                &confirm_key,
+                correlation,
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            replay.session.token().expose(),
+            completed.session.token().expose()
+        );
+        assert!(
+            replay
+                .recovery_codes
+                .iter()
+                .zip(&completed.recovery_codes)
+                .all(|(left, right)| left.expose() == right.expose())
+        );
+    }
+    let unrelated_stale = sessions.issue(local_user()).await.unwrap();
+    let unrelated_browser = sessions
+        .rotate(
+            unrelated_stale.token(),
+            SessionRotationKind::Reauthentication,
+        )
+        .await
+        .unwrap();
+    assert!(matches!(
+        service
+            .confirm_enrollment_idempotent(
+                unrelated_browser.token(),
+                enrollment.metadata.id,
+                &code,
+                &confirm_key,
+                "mfa3:receipt-unrelated-browser",
+            )
+            .await,
+        Err(MfaServiceError::Conflict | MfaServiceError::NotActive)
+    ));
+    let begin_alias_error = sqlx::query(
+        "UPDATE mfa_operation_receipts SET rotated_session_binding=$1
+         WHERE operation='begin' AND idempotency_key=$2",
+    )
+    .bind(unrelated_browser.token().binding_digest().as_slice())
+    .bind(begin_key.expose())
+    .execute(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap_err();
+    assert_eq!(
+        begin_alias_error
+            .as_database_error()
+            .and_then(|error| error.constraint()),
+        Some("mfa_operation_receipts_rotation_check")
+    );
+    sqlx::query(
+        "UPDATE mfa_operation_receipts SET rotated_session_binding=$1
+         WHERE operation='confirm' AND idempotency_key=$2",
+    )
+    .bind(unrelated_browser.token().binding_digest().as_slice())
+    .bind(confirm_key.expose())
+    .execute(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+    assert_eq!(
+        service
+            .confirm_enrollment_idempotent(
+                unrelated_browser.token(),
+                enrollment.metadata.id,
+                &code,
+                &confirm_key,
+                "mfa3:receipt-tampered-alias",
+            )
+            .await
+            .unwrap_err(),
+        MfaServiceError::Conflict
+    );
+    assert_eq!(
+        service
+            .confirm_enrollment_idempotent(
+                fresh.token(),
+                enrollment.metadata.id,
+                &code,
+                &confirm_key,
+                "mfa3:receipt-tampered-original",
+            )
+            .await
+            .unwrap_err(),
+        MfaServiceError::Conflict
+    );
+    sqlx::query(
+        "UPDATE mfa_operation_receipts
+         SET created_at=transaction_timestamp()-interval '20 minutes',
+             expires_at=transaction_timestamp()-interval '1 second'
+         WHERE operation='confirm' AND idempotency_key=$1",
+    )
+    .bind(confirm_key.expose())
+    .execute(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+    assert!(matches!(
+        service
+            .confirm_enrollment_idempotent(
+                completed.session.token(),
+                enrollment.metadata.id,
+                &code,
+                &confirm_key,
+                "mfa3:receipt-expired",
+            )
+            .await,
+        Err(MfaServiceError::Conflict | MfaServiceError::NotActive)
+    ));
+    reset_fixture(&pool).await;
+    pool.close(Duration::from_secs(2)).await.unwrap();
+}
+
+#[tokio::test]
+#[ignore = "requires tests/fixtures/postgres-mfa-challenge/run.sh"]
+async fn actual_mfa_003_policy_population_proof_fences_stale_apply() {
+    let pool = fixture_pool().await;
+    prepare_fixture(&pool).await;
+    let session_policy = SessionPolicy::default();
+    let sessions = SessionService::new(pool.clone(), session_policy);
+    let service = MfaService::new(
+        pool.clone(),
+        keyring([71; 32]),
+        session_policy,
+        MfaChallengePolicy::default(),
+    );
+    let stale = sessions.issue(admin_user()).await.unwrap();
+    let admin = sessions
+        .rotate(stale.token(), SessionRotationKind::Reauthentication)
+        .await
+        .unwrap();
+    let enrollment = service
+        .begin_enrollment(admin.token(), "mfa3:proof-admin-begin")
+        .await
+        .unwrap();
+    let now = database_time(&pool).await;
+    let counter = u64::try_from(now.unix_timestamp() / TOTP_STEP_SECONDS).unwrap();
+    let code = TotpCode::parse(&hotp(enrollment.secret.expose(), counter).unwrap()).unwrap();
+    let admin = service
+        .confirm_enrollment(
+            admin.token(),
+            enrollment.metadata.id,
+            &code,
+            "mfa3:proof-admin-confirm",
+        )
+        .await
+        .unwrap()
+        .session;
+    let external_url = url::Url::parse("http://127.0.0.1:3000").unwrap();
+    let http = MfaHttpService::production(
+        pool.clone(),
+        &external_url,
+        keyring([71; 32]),
+        session_policy,
+    )
+    .unwrap();
+    let csrf = format!("nrt_csrf_{}", URL_SAFE_NO_PAD.encode([1_u8; 32]));
+    let cookie = format!(
+        "nuriteo_dev_session={}; nuriteo_dev_csrf={csrf}",
+        admin.token().expose()
+    );
+    let origins = ["http://127.0.0.1:3000"];
+    let cookie_headers = [cookie.as_str()];
+    let csrf_headers = [csrf.as_str()];
+    let request = BrowserRequestHeaders {
+        method: BrowserMethod::Patch,
+        origins: &origins,
+        cookie_headers: &cookie_headers,
+        csrf_headers: &csrf_headers,
+    };
+    Box::pin(assert_population_proof_stale(&pool, &http, request)).await;
+    assert_population_lock_fences_phantoms(&pool, &http, admin.token().expose()).await;
+    reset_fixture(&pool).await;
+    pool.close(Duration::from_secs(2)).await.unwrap();
+}
+
+#[tokio::test]
+#[ignore = "requires tests/fixtures/postgres-mfa-challenge/run.sh"]
 async fn actual_mfa_challenge_replay_lockout_recovery_and_reset_are_atomic() {
     let pool = fixture_pool().await;
     reset_fixture(&pool).await;
@@ -55,7 +279,7 @@ async fn actual_mfa_challenge_replay_lockout_recovery_and_reset_are_atomic() {
     )
     .await
     .unwrap();
-    assert_eq!(report.latest_version, Some(31));
+    assert_eq!(report.latest_version, Some(33));
     InstanceSettingsRepository::new(pool.clone(), Duration::from_secs(5))
         .unwrap()
         .materialize(&InstanceSettingBootstrap::empty())
@@ -85,10 +309,17 @@ async fn actual_mfa_challenge_replay_lockout_recovery_and_reset_are_atomic() {
         .await
         .unwrap();
     let other_session = sessions.issue(local_user()).await.unwrap();
+    let begin_key = MfaIdempotencyKey::new("mfa2-begin-receipt-0001".into()).unwrap();
     let enrollment = service
-        .begin_enrollment(fresh.token(), "mfa2:begin")
+        .begin_enrollment_idempotent(fresh.token(), &begin_key, "mfa2:begin")
         .await
         .unwrap();
+    let begin_replay = service
+        .begin_enrollment_idempotent(fresh.token(), &begin_key, "mfa2:begin-replay")
+        .await
+        .unwrap();
+    assert_eq!(begin_replay.metadata, enrollment.metadata);
+    assert_eq!(begin_replay.secret.expose(), enrollment.secret.expose());
     let now = database_time(&pool).await;
     let current = u64::try_from(now.unix_timestamp() / TOTP_STEP_SECONDS).unwrap();
     let confirmation_code = TotpCode::parse(
@@ -124,16 +355,39 @@ async fn actual_mfa_challenge_replay_lockout_recovery_and_reset_are_atomic() {
     );
     drop(saturated_permits);
 
+    let confirm_key = MfaIdempotencyKey::new("mfa2-confirm-receipt-0001".into()).unwrap();
     let completed = service
-        .confirm_enrollment(
+        .confirm_enrollment_idempotent(
             fresh.token(),
             enrollment.metadata.id,
             &confirmation_code,
+            &confirm_key,
             "mfa2:confirm",
         )
         .await
         .unwrap();
     assert_eq!(completed.recovery_codes.len(), RECOVERY_CODE_COUNT);
+    let completed_replay = service
+        .confirm_enrollment_idempotent(
+            fresh.token(),
+            enrollment.metadata.id,
+            &confirmation_code,
+            &confirm_key,
+            "mfa2:confirm-replay",
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        completed_replay.session.token().expose(),
+        completed.session.token().expose()
+    );
+    assert!(
+        completed_replay
+            .recovery_codes
+            .iter()
+            .zip(&completed.recovery_codes)
+            .all(|(left, right)| left.expose() == right.expose())
+    );
     assert_eq!(
         sessions
             .authenticate(other_session.token())
@@ -274,7 +528,13 @@ async fn actual_mfa_challenge_replay_lockout_recovery_and_reset_are_atomic() {
     let stale_admin = sessions.issue(admin_user()).await.unwrap();
     assert_eq!(
         service
-            .admin_reset(stale_admin.token(), local_user(), "mfa2:reset-stale")
+            .admin_reset(
+                stale_admin.token(),
+                local_user(),
+                enrollment.metadata.id,
+                "mfa2@example.test",
+                "mfa2:reset-stale",
+            )
             .await
             .unwrap_err(),
         MfaServiceError::ReauthenticationRequired
@@ -283,10 +543,129 @@ async fn actual_mfa_challenge_replay_lockout_recovery_and_reset_are_atomic() {
         .rotate(stale_admin.token(), SessionRotationKind::Reauthentication)
         .await
         .unwrap();
+    let admin_enrollment = service
+        .begin_enrollment(admin.token(), "mfa3:admin-begin")
+        .await
+        .unwrap();
+    let admin_now = database_time(&pool).await;
+    let admin_counter = u64::try_from(admin_now.unix_timestamp() / TOTP_STEP_SECONDS).unwrap();
+    let admin_code =
+        TotpCode::parse(&hotp(admin_enrollment.secret.expose(), admin_counter).unwrap()).unwrap();
+    let admin = service
+        .confirm_enrollment(
+            admin.token(),
+            admin_enrollment.metadata.id,
+            &admin_code,
+            "mfa3:admin-confirm",
+        )
+        .await
+        .unwrap()
+        .session;
+
+    let external_url = url::Url::parse("http://127.0.0.1:3000").unwrap();
+    let http = MfaHttpService::production(
+        pool.clone(),
+        &external_url,
+        keyring([71; 32]),
+        session_policy,
+    )
+    .unwrap();
+    let csrf = format!("nrt_csrf_{}", URL_SAFE_NO_PAD.encode([1_u8; 32]));
+    let cookie = format!(
+        "nuriteo_dev_session={}; nuriteo_dev_csrf={csrf}",
+        admin.token().expose()
+    );
+    let origins = ["http://127.0.0.1:3000"];
+    let cookie_headers = [cookie.as_str()];
+    let csrf_headers = [csrf.as_str()];
+    let request = BrowserRequestHeaders {
+        method: BrowserMethod::Patch,
+        origins: &origins,
+        cookie_headers: &cookie_headers,
+        csrf_headers: &csrf_headers,
+    };
+
+    let preview = http
+        .preview_policy(request, "administrators", 0, 1)
+        .await
+        .unwrap();
+    assert_eq!(preview.affected_users, 1);
+    assert_eq!(preview.unenrolled_users, 0);
+    assert_eq!(preview.immediately_restricted_users, 0);
+    let enforced = http
+        .update_policy(
+            request,
+            "administrators",
+            0,
+            1,
+            &preview.population_proof,
+            "mfa3:policy-enforce",
+        )
+        .await
+        .unwrap();
+    assert_eq!(enforced.mode, "administrators");
+    assert_eq!(enforced.grace_period_days, 0);
+    assert_eq!(enforced.enrolled_local_administrators, 1);
+    assert_eq!(
+        http.preview_policy(request, "all_local_users", 0, 1)
+            .await
+            .unwrap_err(),
+        crate::mfa::MfaHttpServiceError::Conflict
+    );
+    assert_eq!(
+        http.update_policy(
+            request,
+            "administrators",
+            31,
+            2,
+            &preview.population_proof,
+            "mfa3:invalid",
+        )
+        .await
+        .unwrap_err(),
+        crate::mfa::MfaHttpServiceError::InvalidInput
+    );
+    let relax_preview = http.preview_policy(request, "off", 7, 2).await.unwrap();
+    let relaxed = http
+        .update_policy(
+            request,
+            "off",
+            7,
+            2,
+            &relax_preview.population_proof,
+            "mfa3:policy-relax",
+        )
+        .await
+        .unwrap();
+    assert_eq!(relaxed.mode, "off");
+    assert!(active_mfa_exists(&pool, admin_user()).await);
+    let search_request = BrowserRequestHeaders {
+        method: BrowserMethod::Get,
+        origins: &[],
+        cookie_headers: &cookie_headers,
+        csrf_headers: &[],
+    };
+    let targets = http
+        .reset_targets(search_request, "mfa2@example.test")
+        .await
+        .unwrap();
+    assert_eq!(targets.items.len(), 1);
+    assert_eq!(targets.items[0].user_id, local_user().to_string());
+    assert_eq!(
+        targets.items[0].credential_generation,
+        enrollment.metadata.id.to_string()
+    );
+
     install_rejecting_audit_trigger(&pool).await;
     assert_eq!(
         service
-            .admin_reset(admin.token(), local_user(), "mfa2:reset-rollback")
+            .admin_reset(
+                admin.token(),
+                local_user(),
+                enrollment.metadata.id,
+                "mfa2@example.test",
+                "mfa2:reset-rollback",
+            )
             .await
             .unwrap_err(),
         MfaServiceError::Unavailable
@@ -316,7 +695,13 @@ async fn actual_mfa_challenge_replay_lockout_recovery_and_reset_are_atomic() {
             &replacement_code,
             "mfa2:confirm-reset-race"
         ),
-        resetting_service.admin_reset(admin.token(), local_user(), "mfa2:reset-race")
+        resetting_service.admin_reset(
+            admin.token(),
+            local_user(),
+            enrollment.metadata.id,
+            "mfa2@example.test",
+            "mfa2:reset-race",
+        )
     );
     resetting.unwrap();
     match confirming {
@@ -371,7 +756,13 @@ async fn actual_mfa_challenge_replay_lockout_recovery_and_reset_are_atomic() {
     });
     let cross_reset = tokio::spawn(async move {
         cross_reset_service
-            .admin_reset(admin.token(), disabled_race_user(), "mfa2:cross-reset")
+            .admin_reset(
+                admin.token(),
+                disabled_race_user(),
+                Uuid::now_v7(),
+                "mfa2-disabled@example.test",
+                "mfa2:cross-reset",
+            )
             .await
     });
     // At least one contender must reach the shared target-User lock before
@@ -382,7 +773,7 @@ async fn actual_mfa_challenge_replay_lockout_recovery_and_reset_are_atomic() {
     drop(cross_holder_connection);
     let (cross_begin, cross_reset) = (cross_begin.await.unwrap(), cross_reset.await.unwrap());
     assert!(cross_begin.is_ok());
-    assert_eq!(cross_reset.unwrap_err(), MfaServiceError::NotActive);
+    assert_eq!(cross_reset.unwrap_err(), MfaServiceError::Conflict);
     let disabled_session = sessions.issue(disabled_race_user()).await.unwrap();
     sqlx::query(
         "UPDATE users SET status='disabled',disabled_at=transaction_timestamp(),
@@ -398,6 +789,59 @@ async fn actual_mfa_challenge_replay_lockout_recovery_and_reset_are_atomic() {
             .await
             .unwrap_err(),
         MfaServiceError::AuthenticationFailed
+    );
+
+    // Enforcing the policy and removing the last enrolled local
+    // administrator serialize through the same advisory lock. Whichever wins,
+    // the committed state must retain the safety invariant.
+    let race_stale = sessions.issue(admin_user()).await.unwrap();
+    let race_admin = sessions
+        .rotate(race_stale.token(), SessionRotationKind::Reauthentication)
+        .await
+        .unwrap();
+    let race_cookie = format!(
+        "nuriteo_dev_session={}; nuriteo_dev_csrf={csrf}",
+        race_admin.token().expose()
+    );
+    let race_cookie_headers = [race_cookie.as_str()];
+    let race_request = BrowserRequestHeaders {
+        method: BrowserMethod::Patch,
+        origins: &origins,
+        cookie_headers: &race_cookie_headers,
+        csrf_headers: &csrf_headers,
+    };
+    let race_preview = http
+        .preview_policy(race_request, "administrators", 7, 3)
+        .await
+        .unwrap();
+    let disable_service = service.clone();
+    let enforce_http = http.clone();
+    let (disabled, enforced) = tokio::join!(
+        disable_service.disable_self(race_admin.token(), "mfa3:safety-race-disable"),
+        enforce_http.update_policy(
+            race_request,
+            "administrators",
+            7,
+            3,
+            &race_preview.population_proof,
+            "mfa3:safety-race-enforce"
+        )
+    );
+    assert!(disabled.is_ok() || enforced.is_ok());
+    let invariant_holds: bool = sqlx::query_scalar(
+        "SELECT CASE WHEN policy.value #>> '{}'='off' THEN TRUE ELSE EXISTS( \
+           SELECT 1 FROM users account \
+           JOIN local_password_credentials local ON local.user_id=account.id \
+           JOIN mfa_totp_credentials mfa ON mfa.user_id=account.id AND mfa.state='active' \
+           WHERE account.status='active' AND account.is_instance_admin) END \
+         FROM instance_settings policy WHERE policy.key='security.mfa_enforcement'",
+    )
+    .fetch_one(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+    assert!(
+        invariant_holds,
+        "MFA safety race committed an unsafe policy state"
     );
 
     let audit_dump: String = sqlx::query_scalar(
@@ -469,6 +913,224 @@ async fn active_mfa_exists(pool: &DatabasePool, user_id: UserId) -> bool {
     .unwrap()
 }
 
+async fn assert_population_proof_stale(
+    pool: &DatabasePool,
+    http: &MfaHttpService,
+    request: BrowserRequestHeaders<'_>,
+) {
+    let active_preview = http
+        .preview_policy(request, "all_local_users", 7, 1)
+        .await
+        .unwrap();
+    sqlx::query(
+        "UPDATE users SET status='disabled',disabled_at=transaction_timestamp(),updated_at=transaction_timestamp()
+         WHERE id=$1::uuid",
+    )
+    .bind(disabled_race_user().to_string())
+    .execute(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+    assert_eq!(
+        http.update_policy(
+            request,
+            "all_local_users",
+            7,
+            1,
+            &active_preview.population_proof,
+            "mfa3:stale-active-population",
+        )
+        .await
+        .unwrap_err(),
+        crate::mfa::MfaHttpServiceError::PreconditionFailed
+    );
+    restore_local_user_status(pool, disabled_race_user()).await;
+
+    let local_preview = http
+        .preview_policy(request, "all_local_users", 7, 1)
+        .await
+        .unwrap();
+    sqlx::query("DELETE FROM local_password_credentials WHERE user_id=$1::uuid")
+        .bind(disabled_race_user().to_string())
+        .execute(&mut *pool.acquire().await.unwrap())
+        .await
+        .unwrap();
+    assert_eq!(
+        http.update_policy(
+            request,
+            "all_local_users",
+            7,
+            1,
+            &local_preview.population_proof,
+            "mfa3:stale-local-population",
+        )
+        .await
+        .unwrap_err(),
+        crate::mfa::MfaHttpServiceError::PreconditionFailed
+    );
+    restore_local_credential(pool, disabled_race_user()).await;
+
+    let enrollment_preview = http
+        .preview_policy(request, "all_local_users", 7, 1)
+        .await
+        .unwrap();
+    sqlx::raw_sql(
+        "INSERT INTO mfa_totp_credentials
+         (id,user_id,state,secret_version,algorithm,key_version,nonce,ciphertext)
+         VALUES('0199ee6c-c777-7000-8000-000000009001',
+                '0199ee6c-c777-7000-8000-000000008003','pending',1,'aes-256-gcm-v1',1,
+                decode('010101010101010101010101','hex'),
+                decode('0202020202020202020202020202020202','hex'));
+         UPDATE mfa_totp_credentials SET state='active',activated_at=transaction_timestamp(),
+         updated_at=transaction_timestamp()
+         WHERE id='0199ee6c-c777-7000-8000-000000009001'::uuid;",
+    )
+    .execute(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+    assert_eq!(
+        http.update_policy(
+            request,
+            "all_local_users",
+            7,
+            1,
+            &enrollment_preview.population_proof,
+            "mfa3:stale-enrollment-population",
+        )
+        .await
+        .unwrap_err(),
+        crate::mfa::MfaHttpServiceError::PreconditionFailed
+    );
+}
+
+async fn assert_population_lock_fences_phantoms(
+    pool: &DatabasePool,
+    http: &MfaHttpService,
+    token: &str,
+) {
+    sqlx::raw_sql(
+        "INSERT INTO users(id,email,normalized_email,display_name,is_instance_admin) VALUES
+         ('0199ee6c-c777-7000-8000-000000008102','mfa3-credential@example.test','mfa3-credential@example.test','Credential Phantom',FALSE),
+         ('0199ee6c-c777-7000-8000-000000008103','mfa3-enrollment@example.test','mfa3-enrollment@example.test','Enrollment Phantom',FALSE);
+         INSERT INTO local_password_credentials(user_id,password_verifier)
+         VALUES('0199ee6c-c777-7000-8000-000000008103',
+         '$argon2id$v=19$m=19456,t=2,p=1$c2FsdHNhbHRzYWx0c2FsdA$5izDQ8GG3kr1hDx0wzfQt5n4kQ2DqVfvMXkZXS8RvlM');",
+    )
+    .execute(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+
+    let csrf = format!("nrt_csrf_{}", URL_SAFE_NO_PAD.encode([1_u8; 32]));
+    let cookie = format!("nuriteo_dev_session={token}; nuriteo_dev_csrf={csrf}");
+    let origins = ["http://127.0.0.1:3000"];
+    let cookie_headers = [cookie.as_str()];
+    let csrf_headers = [csrf.as_str()];
+    let request = BrowserRequestHeaders {
+        method: BrowserMethod::Patch,
+        origins: &origins,
+        cookie_headers: &cookie_headers,
+        csrf_headers: &csrf_headers,
+    };
+
+    for (correlation_id, mutation) in [
+        ("mfa3:phantom-user", "user"),
+        ("mfa3:phantom-credential", "credential"),
+        ("mfa3:phantom-enrollment", "enrollment"),
+    ] {
+        let preview = http
+            .preview_policy(request, "all_local_users", 7, 1)
+            .await
+            .unwrap();
+        let mut holder_connection = pool.acquire().await.unwrap();
+        let mut holder = holder_connection.begin().await.unwrap();
+        acquire_mfa_population_lock(&mut holder).await.unwrap();
+        let holder_pid: i32 = sqlx::query_scalar("SELECT pg_backend_pid()")
+            .fetch_one(&mut *holder)
+            .await
+            .unwrap();
+        match mutation {
+            "user" => {
+                sqlx::raw_sql(
+                    "INSERT INTO users(id,email,normalized_email,display_name,is_instance_admin) VALUES
+                     ('0199ee6c-c777-7000-8000-000000008101','mfa3-user@example.test','mfa3-user@example.test','User Phantom',FALSE);
+                     INSERT INTO local_password_credentials(user_id,password_verifier)
+                     VALUES('0199ee6c-c777-7000-8000-000000008101',
+                     '$argon2id$v=19$m=19456,t=2,p=1$c2FsdHNhbHRzYWx0c2FsdA$5izDQ8GG3kr1hDx0wzfQt5n4kQ2DqVfvMXkZXS8RvlM');",
+                )
+                .execute(&mut *holder)
+                .await
+                .unwrap();
+            }
+            "credential" => {
+                sqlx::query(
+                    "INSERT INTO local_password_credentials(user_id,password_verifier)
+                     VALUES('0199ee6c-c777-7000-8000-000000008102',
+                     '$argon2id$v=19$m=19456,t=2,p=1$c2FsdHNhbHRzYWx0c2FsdA$5izDQ8GG3kr1hDx0wzfQt5n4kQ2DqVfvMXkZXS8RvlM')",
+                )
+                .execute(&mut *holder)
+                .await
+                .unwrap();
+            }
+            "enrollment" => {
+                sqlx::raw_sql(
+                    "INSERT INTO mfa_totp_credentials
+                     (id,user_id,state,secret_version,algorithm,key_version,nonce,ciphertext)
+                     VALUES('0199ee6c-c777-7000-8000-000000009103',
+                     '0199ee6c-c777-7000-8000-000000008103','pending',1,'aes-256-gcm-v1',1,
+                     decode('030303030303030303030303','hex'),
+                     decode('0404040404040404040404040404040404','hex'));
+                     UPDATE mfa_totp_credentials SET state='active',activated_at=transaction_timestamp(),
+                     updated_at=transaction_timestamp()
+                     WHERE id='0199ee6c-c777-7000-8000-000000009103'::uuid;",
+                )
+                .execute(&mut *holder)
+                .await
+                .unwrap();
+            }
+            _ => unreachable!(),
+        }
+        let apply = tokio::spawn(apply_policy_for_test(
+            http.clone(),
+            token.to_owned(),
+            preview.population_proof,
+            correlation_id,
+        ));
+        wait_until_blocked(pool, holder_pid).await;
+        holder.commit().await.unwrap();
+        drop(holder_connection);
+        assert_eq!(
+            apply.await.unwrap().unwrap_err(),
+            crate::mfa::MfaHttpServiceError::PreconditionFailed
+        );
+    }
+}
+
+async fn apply_policy_for_test(
+    http: MfaHttpService,
+    token: String,
+    population_proof: String,
+    correlation_id: &'static str,
+) -> Result<crate::mfa::MfaPolicyView, crate::mfa::MfaHttpServiceError> {
+    let csrf = format!("nrt_csrf_{}", URL_SAFE_NO_PAD.encode([1_u8; 32]));
+    let cookie = format!("nuriteo_dev_session={token}; nuriteo_dev_csrf={csrf}");
+    let origins = ["http://127.0.0.1:3000"];
+    let cookie_headers = [cookie.as_str()];
+    let csrf_headers = [csrf.as_str()];
+    http.update_policy(
+        BrowserRequestHeaders {
+            method: BrowserMethod::Patch,
+            origins: &origins,
+            cookie_headers: &cookie_headers,
+            csrf_headers: &csrf_headers,
+        },
+        "all_local_users",
+        7,
+        1,
+        &population_proof,
+        correlation_id,
+    )
+    .await
+}
+
 async fn wait_until_blocked(pool: &DatabasePool, blocker_pid: i32) {
     wait_until_blocked_count(pool, blocker_pid, 1).await;
 }
@@ -493,29 +1155,57 @@ async fn wait_until_blocked_count(pool: &DatabasePool, blocker_pid: i32, expecte
         }
     })
     .await
-    .expect("MFA contender must block on the User row");
+    .expect("MFA contender must block on the canonical population/User lock");
 }
 
 async fn restore_local_user(pool: &DatabasePool, user_id: UserId) {
     let mut connection = pool.acquire().await.unwrap();
     let mut tx = connection.begin().await.unwrap();
+    restore_local_user_status_in(&mut tx, user_id).await;
+    insert_local_credential_in(&mut tx, user_id).await;
+    tx.commit().await.unwrap();
+}
+
+async fn restore_local_user_status(pool: &DatabasePool, user_id: UserId) {
+    let mut connection = pool.acquire().await.unwrap();
+    let mut tx = connection.begin().await.unwrap();
+    restore_local_user_status_in(&mut tx, user_id).await;
+    tx.commit().await.unwrap();
+}
+
+async fn restore_local_credential(pool: &DatabasePool, user_id: UserId) {
+    let mut connection = pool.acquire().await.unwrap();
+    let mut tx = connection.begin().await.unwrap();
+    insert_local_credential_in(&mut tx, user_id).await;
+    tx.commit().await.unwrap();
+}
+
+async fn restore_local_user_status_in(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    user_id: UserId,
+) {
     sqlx::query(
         "UPDATE users SET status='active',disabled_at=NULL,updated_at=transaction_timestamp()
          WHERE id=$1::uuid",
     )
     .bind(user_id.to_string())
-    .execute(&mut *tx)
+    .execute(&mut **tx)
     .await
     .unwrap();
+}
+
+async fn insert_local_credential_in(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    user_id: UserId,
+) {
     sqlx::query(
         "INSERT INTO local_password_credentials(user_id,password_verifier)
          VALUES($1::uuid,'$argon2id$v=19$m=19456,t=2,p=1$c2FsdHNhbHRzYWx0c2FsdA$5izDQ8GG3kr1hDx0wzfQt5n4kQ2DqVfvMXkZXS8RvlM')",
     )
     .bind(user_id.to_string())
-    .execute(&mut *tx)
+    .execute(&mut **tx)
     .await
     .unwrap();
-    tx.commit().await.unwrap();
 }
 
 async fn install_rejecting_audit_trigger(pool: &DatabasePool) {
@@ -607,4 +1297,21 @@ async fn reset_fixture(pool: &DatabasePool) {
         .execute(&mut *connection)
         .await
         .unwrap();
+}
+
+async fn prepare_fixture(pool: &DatabasePool) {
+    reset_fixture(pool).await;
+    let report = run_embedded_migrations(
+        pool,
+        MigrationOptions::new(Duration::from_secs(5), Duration::from_secs(30)).unwrap(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(report.latest_version, Some(33));
+    InstanceSettingsRepository::new(pool.clone(), Duration::from_secs(5))
+        .unwrap()
+        .materialize(&InstanceSettingBootstrap::empty())
+        .await
+        .unwrap();
+    seed_users(pool).await;
 }

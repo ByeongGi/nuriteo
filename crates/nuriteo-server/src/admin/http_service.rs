@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::fmt;
 use std::future::Future;
 use std::sync::Arc;
@@ -17,8 +18,7 @@ use crate::audit::{
     AuditScope, AuditTarget, AuditWriter, ScopeType,
 };
 use crate::config::{
-    INSTANCE_SETTING_REGISTRY_VERSION, SettingApplyMode, SettingSensitivity,
-    instance_setting_definition,
+    SettingApplyMode, SettingConstraint, SettingSensitivity, instance_setting_definition,
 };
 use crate::database::{DatabasePool, SchemaReadiness, check_schema_readiness};
 use crate::health::HealthService;
@@ -26,7 +26,11 @@ use crate::identity::{
     BrowserCookieBoundary, BrowserCookieError, BrowserRequestHeaders, SessionPolicy,
     SessionService, SessionServiceError, Timestamp, UserId,
 };
-use crate::instance_settings::{EffectiveInstanceSettings, InstanceSettingsRepository};
+use crate::instance_settings::{
+    EffectiveInstanceSettings, InstanceSettingsRepository, decode_complete_set,
+    validate_complete_values,
+};
+use crate::policy::{PolicyCategory, PolicyLookup, policy_lookup};
 use crate::save::CleanupOperationsService;
 
 const DEFAULT_OPERATION_TIMEOUT: Duration = Duration::from_secs(5);
@@ -99,8 +103,39 @@ impl std::error::Error for AdminHttpServiceError {}
 pub struct AdminSettingView {
     pub key: String,
     pub value: Value,
+    pub default_value: Value,
     pub version: u64,
     pub apply_mode: String,
+    pub constraint: AdminSettingConstraintView,
+    pub policy_category: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum AdminSettingConstraintView {
+    Boolean,
+    UnsignedInteger {
+        minimum: u64,
+        maximum: u64,
+    },
+    OptionalUnsignedInteger {
+        minimum: u64,
+        maximum: u64,
+    },
+    Enumeration {
+        allowed: Vec<String>,
+    },
+    RetentionDays {
+        minimum: u64,
+        maximum: u64,
+        allow_unlimited: bool,
+    },
+    AsciiHostname,
+    EmailAddress,
+    Text {
+        minimum_bytes: usize,
+        maximum_bytes: usize,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, ToSchema)]
@@ -230,6 +265,12 @@ impl AdminHttpService {
     ) -> Result<AdminSettingView, AdminHttpServiceError> {
         let runtime = self.runtime()?;
         let session = runtime.authenticate(request).await?;
+        if matches!(
+            key,
+            "security.mfa_enforcement" | "security.mfa_grace_period_days"
+        ) {
+            return Err(AdminHttpServiceError::InvalidSetting);
+        }
         let definition =
             instance_setting_definition(key).ok_or(AdminHttpServiceError::SettingNotFound)?;
         if definition.sensitivity != SettingSensitivity::Public
@@ -321,26 +362,33 @@ impl AdminRuntime {
             .await
             .map_err(|_| AdminHttpServiceError::Unavailable)?;
         let actor = authorize_recent_admin(&mut transaction, session).await?;
-        let row: Option<(i16, String, i64)> = sqlx::query_as(
-            "SELECT registry_version, value::text, lock_version FROM instance_settings \
-             WHERE key = $1 FOR UPDATE",
+        let rows: Vec<(String, i16, String, String, i64)> = sqlx::query_as(
+            "SELECT key, registry_version, value::text, bootstrap_origin, lock_version FROM instance_settings \
+             ORDER BY key FOR UPDATE",
         )
-        .bind(definition.key)
-        .fetch_optional(&mut *transaction)
+        .fetch_all(&mut *transaction)
         .await
         .map_err(|_| AdminHttpServiceError::Unavailable)?;
-        let (registry_version, current_json, lock_version) =
-            row.ok_or(AdminHttpServiceError::SettingNotFound)?;
-        if registry_version != i16::try_from(INSTANCE_SETTING_REGISTRY_VERSION).unwrap_or(-1) {
-            return Err(AdminHttpServiceError::Internal);
+        let decoded =
+            decode_complete_set(rows.clone()).map_err(|_| AdminHttpServiceError::Internal)?;
+        let mut current_values = decoded
+            .iter()
+            .map(|setting| (setting.key().to_owned(), setting.value().clone()))
+            .collect::<BTreeMap<_, _>>();
+        let mut target = None;
+        for (key, _registry_version, raw_value, _origin, lock_version) in rows {
+            if key == definition.key {
+                let current: Value = serde_json::from_str(&raw_value)
+                    .map_err(|_| AdminHttpServiceError::Internal)?;
+                target = Some((current, lock_version));
+            }
         }
+        let (current, lock_version) = target.ok_or(AdminHttpServiceError::SettingNotFound)?;
         let expected = i64::try_from(expected_version)
             .map_err(|_| AdminHttpServiceError::PreconditionFailed)?;
         if lock_version != expected {
             return Err(AdminHttpServiceError::PreconditionFailed);
         }
-        let current: Value =
-            serde_json::from_str(&current_json).map_err(|_| AdminHttpServiceError::Internal)?;
         if current == value {
             transaction
                 .commit()
@@ -348,6 +396,9 @@ impl AdminRuntime {
                 .map_err(|_| AdminHttpServiceError::Unavailable)?;
             return setting_view(definition, value, expected_version);
         }
+        current_values.insert(definition.key.to_owned(), value.clone());
+        validate_complete_values(&current_values)
+            .map_err(|_| AdminHttpServiceError::InvalidSetting)?;
         let row: (String, i64) = sqlx::query_as(
             "UPDATE instance_settings SET value = $2::jsonb, lock_version = lock_version + 1, \
              updated_at = transaction_timestamp() WHERE key = $1 AND lock_version = $3 \
@@ -520,9 +571,65 @@ fn setting_view(
     Ok(AdminSettingView {
         key: definition.key.into(),
         value,
+        default_value: definition
+            .validated_default()
+            .map_err(|_| AdminHttpServiceError::Internal)?
+            .ok_or(AdminHttpServiceError::Internal)?,
         version,
         apply_mode: apply_mode_name(definition.apply_mode).into(),
+        constraint: constraint_view(definition.constraint),
+        policy_category: match policy_lookup(definition.key) {
+            PolicyLookup::Mutable(policy) => Some(category_name(policy.category).into()),
+            PolicyLookup::Immutable(_) | PolicyLookup::Unknown => None,
+        },
     })
+}
+
+fn constraint_view(constraint: SettingConstraint) -> AdminSettingConstraintView {
+    match constraint {
+        SettingConstraint::Boolean => AdminSettingConstraintView::Boolean,
+        SettingConstraint::UnsignedInteger { minimum, maximum } => {
+            AdminSettingConstraintView::UnsignedInteger { minimum, maximum }
+        }
+        SettingConstraint::OptionalUnsignedInteger { minimum, maximum } => {
+            AdminSettingConstraintView::OptionalUnsignedInteger { minimum, maximum }
+        }
+        SettingConstraint::Enumeration { allowed } => AdminSettingConstraintView::Enumeration {
+            allowed: allowed.iter().map(|value| (*value).to_owned()).collect(),
+        },
+        SettingConstraint::RetentionDays {
+            minimum,
+            maximum,
+            allow_unlimited,
+        } => AdminSettingConstraintView::RetentionDays {
+            minimum,
+            maximum,
+            allow_unlimited,
+        },
+        SettingConstraint::AsciiHostname => AdminSettingConstraintView::AsciiHostname,
+        SettingConstraint::EmailAddress => AdminSettingConstraintView::EmailAddress,
+        SettingConstraint::Text {
+            minimum_bytes,
+            maximum_bytes,
+        } => AdminSettingConstraintView::Text {
+            minimum_bytes,
+            maximum_bytes,
+        },
+    }
+}
+
+fn category_name(category: PolicyCategory) -> &'static str {
+    match category {
+        PolicyCategory::Audit => "audit",
+        PolicyCategory::Identity => "identity",
+        PolicyCategory::Notification => "notification",
+        PolicyCategory::ObjectStorage => "object_storage",
+        PolicyCategory::Project => "project",
+        PolicyCategory::Runtime => "runtime",
+        PolicyCategory::Security => "security",
+        PolicyCategory::Token => "token",
+        PolicyCategory::Workspace => "workspace",
+    }
 }
 
 fn apply_mode_name(mode: SettingApplyMode) -> &'static str {
@@ -587,5 +694,21 @@ mod tests {
     fn bootstrap_type_remains_value_free_in_debug() {
         let bootstrap = crate::config::InstanceSettingBootstrap::empty();
         assert!(!format!("{bootstrap:?}").contains("password"));
+    }
+
+    #[test]
+    fn policy_setting_view_exposes_typed_metadata_without_mutable_minima() {
+        let definition = instance_setting_definition("sessions.idle_timeout_minutes").unwrap();
+        let view = setting_view(definition, json!(10_080), 1).unwrap();
+        assert_eq!(view.default_value, json!(10_080));
+        assert_eq!(view.policy_category.as_deref(), Some("identity"));
+        assert!(matches!(
+            view.constraint,
+            AdminSettingConstraintView::UnsignedInteger {
+                minimum: 15,
+                maximum: 43_200
+            }
+        ));
+        assert!(instance_setting_definition("security.tls_verification_required").is_none());
     }
 }

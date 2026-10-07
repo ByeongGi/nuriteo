@@ -19,6 +19,7 @@ pub mod observability;
 pub mod oidc;
 pub mod openapi;
 pub mod organization;
+pub mod policy;
 pub mod project;
 pub mod quota;
 pub mod save;

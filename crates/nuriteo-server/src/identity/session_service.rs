@@ -127,6 +127,11 @@ impl SessionToken {
         Sha256::digest(self.0.as_bytes()).into()
     }
 
+    #[must_use]
+    pub(crate) fn binding_digest(&self) -> [u8; TOKEN_DIGEST_BYTES] {
+        self.digest()
+    }
+
     /// Exposes the credential only to the in-crate HTTP cookie adapter.
     #[allow(
         dead_code,
@@ -156,6 +161,9 @@ pub struct IssuedSession {
 }
 
 impl IssuedSession {
+    pub(crate) const fn from_parts(token: SessionToken, session: Session) -> Self {
+        Self { token, session }
+    }
     #[must_use]
     pub const fn token(&self) -> &SessionToken {
         &self.token

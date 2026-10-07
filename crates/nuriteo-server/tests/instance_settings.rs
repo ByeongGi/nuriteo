@@ -1,10 +1,14 @@
 use std::collections::BTreeMap;
 use std::env;
+use std::ffi::OsString;
 use std::fs;
+use std::io;
+use std::path::Path;
 use std::time::Duration;
 
 use nuriteo_server::config::{
-    BootstrapSettingOrigin, INSTANCE_SETTING_DEFINITIONS, InstanceSettingBootstrap,
+    BootstrapSettingOrigin, Config, Environment, FileReader, INSTANCE_SETTING_DEFINITIONS,
+    INSTANCE_SETTING_REGISTRY_VERSION, InstanceSettingBootstrap,
 };
 use nuriteo_server::database::{
     DatabasePool, DatabasePoolConfig, DatabaseTlsConfig, MigrationOptions, run_embedded_migrations,
@@ -12,7 +16,7 @@ use nuriteo_server::database::{
 use nuriteo_server::instance_settings::{
     InstanceSettingsError, InstanceSettingsRepository, PersistedBootstrapOrigin,
 };
-use serde_json::json;
+use serde_json::{Value, json};
 use sqlx::Executor;
 
 const DATABASE_URL_ENV: &str = "NURITEO_TEST_DATABASE_URL";
@@ -29,7 +33,7 @@ async fn instance_settings_are_materialized_once_validated_and_database_authorit
     )
     .await
     .unwrap();
-    assert_eq!(report.latest_version, Some(31));
+    assert_eq!(report.latest_version, Some(33));
 
     let repository = InstanceSettingsRepository::new(pool.clone(), Duration::from_secs(5)).unwrap();
     let first_bootstrap = bootstrap(14, 3, 120);
@@ -71,6 +75,8 @@ async fn instance_settings_are_materialized_once_validated_and_database_authorit
     assert_eq!(repository.load().await.unwrap(), first);
 
     verify_v1_registry_upgrade(&pool).await;
+    verify_exact_v2_registry_upgrade(&pool).await;
+    verify_database_precedes_invalid_bootstrap(&pool).await;
     verify_concurrent_first_materialization_is_not_mixed(&pool).await;
     verify_corruption_fails_closed(&pool).await;
     verify_database_constraints(&pool).await;
@@ -79,11 +85,54 @@ async fn instance_settings_are_materialized_once_validated_and_database_authorit
     pool.close(Duration::from_secs(2)).await.unwrap();
 }
 
-async fn verify_v1_registry_upgrade(pool: &DatabasePool) {
-    sqlx::query("DELETE FROM instance_settings WHERE key LIKE 'smtp.%'")
+async fn verify_database_precedes_invalid_bootstrap(pool: &DatabasePool) {
+    let repository = InstanceSettingsRepository::new(pool.clone(), Duration::from_secs(5)).unwrap();
+    let report = Config::load(
+        &FixtureEnvironment(vec![
+            (
+                OsString::from("NURITEO_EXTERNAL_URL"),
+                OsString::from("https://nuriteo.example.test"),
+            ),
+            (
+                OsString::from("NURITEO_MFA_GRACE_PERIOD_DAYS"),
+                OsString::from("must-not-appear"),
+            ),
+        ]),
+        &NoFiles,
+    )
+    .unwrap();
+    assert!(
+        repository
+            .materialize(&report.instance_settings)
+            .await
+            .is_ok()
+    );
+
+    sqlx::query("TRUNCATE instance_settings")
         .execute(&mut *acquire(pool).await)
         .await
         .unwrap();
+    assert_eq!(
+        repository.materialize(&report.instance_settings).await,
+        Err(InstanceSettingsError::InvalidPersistedValue)
+    );
+    repository
+        .materialize(&InstanceSettingBootstrap::empty())
+        .await
+        .unwrap();
+}
+
+async fn verify_v1_registry_upgrade(pool: &DatabasePool) {
+    for definition in INSTANCE_SETTING_DEFINITIONS
+        .iter()
+        .filter(|definition| definition.introduced_in > 1)
+    {
+        sqlx::query("DELETE FROM instance_settings WHERE key = $1")
+            .bind(definition.key)
+            .execute(&mut *acquire(pool).await)
+            .await
+            .unwrap();
+    }
     sqlx::query("UPDATE instance_settings SET registry_version = 1")
         .execute(&mut *acquire(pool).await)
         .await
@@ -93,11 +142,21 @@ async fn verify_v1_registry_upgrade(pool: &DatabasePool) {
         .materialize(&InstanceSettingBootstrap::empty())
         .await
         .unwrap();
-    assert_eq!(upgraded.registry_version(), 2);
+    assert_eq!(
+        upgraded.registry_version(),
+        INSTANCE_SETTING_REGISTRY_VERSION
+    );
     assert_eq!(upgraded.get("smtp.enabled").unwrap().value(), &json!(false));
     assert_eq!(
         upgraded.get("smtp.host").unwrap().bootstrap_origin(),
         PersistedBootstrapOrigin::Default
+    );
+    assert_eq!(
+        upgraded
+            .get("sessions.absolute_timeout_minutes")
+            .unwrap()
+            .value(),
+        &json!(43_200)
     );
     assert_eq!(
         nuriteo_server::smtp::SmtpPublicSettings::from_effective(&upgraded).unwrap(),
@@ -112,6 +171,76 @@ async fn verify_v1_registry_upgrade(pool: &DatabasePool) {
         .unwrap()
         .unwrap();
     assert!(format!("{public:?}").contains("localhost"));
+}
+
+async fn verify_exact_v2_registry_upgrade(pool: &DatabasePool) {
+    sqlx::query(
+        "UPDATE instance_settings SET value = '444'::jsonb \
+         WHERE key = 'invitations.default_expiry_hours'",
+    )
+    .execute(&mut *acquire(pool).await)
+    .await
+    .unwrap();
+    for definition in INSTANCE_SETTING_DEFINITIONS
+        .iter()
+        .filter(|definition| definition.introduced_in > 2)
+    {
+        sqlx::query("DELETE FROM instance_settings WHERE key = $1")
+            .bind(definition.key)
+            .execute(&mut *acquire(pool).await)
+            .await
+            .unwrap();
+    }
+    sqlx::query("UPDATE instance_settings SET registry_version = 2")
+        .execute(&mut *acquire(pool).await)
+        .await
+        .unwrap();
+
+    let repository = InstanceSettingsRepository::new(pool.clone(), Duration::from_secs(5)).unwrap();
+    let upgraded = repository
+        .materialize(&InstanceSettingBootstrap::empty())
+        .await
+        .unwrap();
+    assert_eq!(
+        upgraded
+            .get("invitations.default_expiry_hours")
+            .unwrap()
+            .value(),
+        &json!(444)
+    );
+    assert_eq!(
+        upgraded
+            .get("workspace.personal_default_quota_bytes")
+            .unwrap()
+            .value(),
+        &Value::Null
+    );
+    assert_eq!(
+        upgraded
+            .get("workspace.personal_default_quota_bytes")
+            .unwrap()
+            .bootstrap_origin(),
+        PersistedBootstrapOrigin::Default
+    );
+}
+
+struct FixtureEnvironment(Vec<(OsString, OsString)>);
+
+impl Environment for FixtureEnvironment {
+    fn entries(&self) -> Vec<(OsString, OsString)> {
+        self.0.clone()
+    }
+}
+
+struct NoFiles;
+
+impl FileReader for NoFiles {
+    fn read(&self, _path: &Path, _limit: usize) -> io::Result<Vec<u8>> {
+        Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            "fixture has no files",
+        ))
+    }
 }
 
 fn bootstrap(file_grace: u64, environment_grace: u64, token_days: u64) -> InstanceSettingBootstrap {
@@ -202,7 +331,7 @@ async fn verify_corruption_fails_closed(pool: &DatabasePool) {
     sqlx::query(
         "INSERT INTO instance_settings \
          (key, registry_version, value, bootstrap_origin) \
-         VALUES ('tokens.default_expiry_days', 2, '90'::jsonb, 'default')",
+         VALUES ('tokens.default_expiry_days', 3, '90'::jsonb, 'default')",
     )
     .execute(&mut *acquire(pool).await)
     .await
@@ -220,7 +349,26 @@ async fn verify_corruption_fails_closed(pool: &DatabasePool) {
     );
 
     sqlx::query(
-        "UPDATE instance_settings SET value = '90'::jsonb, registry_version = 3 \
+        "UPDATE instance_settings SET value = '365'::jsonb \
+         WHERE key = 'tokens.default_expiry_days'",
+    )
+    .execute(&mut *acquire(pool).await)
+    .await
+    .unwrap();
+    sqlx::query(
+        "UPDATE instance_settings SET value = '30'::jsonb \
+         WHERE key = 'tokens.maximum_expiry_days'",
+    )
+    .execute(&mut *acquire(pool).await)
+    .await
+    .unwrap();
+    assert_eq!(
+        repository.load().await,
+        Err(InstanceSettingsError::InvalidPersistedValue)
+    );
+
+    sqlx::query(
+        "UPDATE instance_settings SET value = '90'::jsonb, registry_version = 4 \
          WHERE key = 'tokens.default_expiry_days'",
     )
     .execute(&mut *acquire(pool).await)

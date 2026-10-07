@@ -15,14 +15,25 @@ use uuid::Uuid;
 use zeroize::Zeroizing;
 
 use crate::database::DatabasePool;
-use crate::identity::{PasswordService, PasswordVerification, StoredPasswordHash, UserId};
+use crate::identity::{
+    PasswordService, PasswordVerification, StoredPasswordHash, UserId, acquire_mfa_population_lock,
+};
 use crate::integration::{IntegrationError, MasterKeyring};
 
+mod http_routes;
+mod http_service;
 mod service;
 
+pub(crate) use http_routes::openapi_router;
+pub(crate) use http_service::RotatedMfaResponse;
+pub use http_service::{
+    MfaEnrollmentCompleteView, MfaEnrollmentStartView, MfaHttpService, MfaHttpServiceError,
+    MfaPolicyImpactView, MfaPolicyView, MfaResetTargetCollectionView, MfaStatusView,
+};
 #[allow(unused_imports, reason = "crate-private MFA-003 HTTP adapter handoff")]
 pub(crate) use service::{
-    EnrollmentComplete, EnrollmentStart, MfaChallengePolicy, MfaService, MfaServiceError, TotpCode,
+    EnrollmentComplete, EnrollmentStart, MfaChallengePolicy, MfaIdempotencyKey, MfaService,
+    MfaServiceError, TotpCode,
 };
 
 const ENVELOPE_DOMAIN: &[u8] = b"nuriteo.mfa-totp-secret.v1";
@@ -49,6 +60,10 @@ impl TotpSecret {
     fn expose(&self) -> &[u8] {
         &self.0
     }
+
+    pub(crate) fn expose_to_http_adapter(&self) -> &[u8] {
+        self.expose()
+    }
 }
 
 impl fmt::Debug for TotpSecret {
@@ -71,6 +86,10 @@ impl RecoveryCode {
 
     fn expose(&self) -> &[u8] {
         &self.0
+    }
+
+    pub(crate) fn expose_to_http_adapter(&self) -> &[u8] {
+        self.expose()
     }
 }
 
@@ -277,6 +296,9 @@ impl MfaRepository {
                 .begin()
                 .await
                 .map_err(|_| MfaStorageError::Unavailable)?;
+            acquire_mfa_population_lock(&mut tx)
+                .await
+                .map_err(|_| MfaStorageError::Unavailable)?;
             lock_local_user(&mut tx, user_id).await?;
             sqlx::query(
                 "UPDATE mfa_totp_credentials SET state='replaced',terminal_at=CURRENT_TIMESTAMP,
@@ -344,6 +366,9 @@ impl MfaRepository {
                 .map_err(|_| MfaStorageError::Unavailable)?;
             let mut tx = connection
                 .begin()
+                .await
+                .map_err(|_| MfaStorageError::Unavailable)?;
+            acquire_mfa_population_lock(&mut tx)
                 .await
                 .map_err(|_| MfaStorageError::Unavailable)?;
             lock_local_user(&mut tx, confirmation.user_id).await?;
@@ -432,6 +457,9 @@ impl MfaRepository {
                 .map_err(|_| MfaStorageError::Unavailable)?;
             let mut tx = connection
                 .begin()
+                .await
+                .map_err(|_| MfaStorageError::Unavailable)?;
+            acquire_mfa_population_lock(&mut tx)
                 .await
                 .map_err(|_| MfaStorageError::Unavailable)?;
             lock_local_user(&mut tx, user_id).await?;
@@ -585,6 +613,9 @@ impl MfaRepository {
                 .map_err(|_| MfaStorageError::Unavailable)?;
             let mut tx = connection
                 .begin()
+                .await
+                .map_err(|_| MfaStorageError::Unavailable)?;
+            acquire_mfa_population_lock(&mut tx)
                 .await
                 .map_err(|_| MfaStorageError::Unavailable)?;
             lock_local_user(&mut tx, user_id).await?;
