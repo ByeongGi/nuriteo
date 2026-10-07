@@ -20,6 +20,7 @@ pub mod quota;
 pub mod save;
 pub mod setup;
 mod storage_check;
+pub mod team;
 pub mod workspace;
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
