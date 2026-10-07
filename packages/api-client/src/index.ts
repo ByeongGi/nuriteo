@@ -12,6 +12,7 @@ export {
 } from "./errors.ts";
 export { getVersion } from "./system.ts";
 export { getSetupStatus } from "./setup.ts";
+export { getAdminStatus, listAdminSettings, updateAdminSetting } from "./admin.ts";
 export { createSession, deleteSession, getCurrentUser } from "./auth.ts";
 export {
   activateAccount,
@@ -77,6 +78,14 @@ export type {
 } from "./auth.ts";
 export type { ApiEmptyResult, ApiResult, DomainRequestOptions } from "./domain.ts";
 export type { BrowserMutationOptions } from "./browser-mutation.ts";
+export type {
+  AdminSetting,
+  AdminSettingApplyMode,
+  AdminSettingCollection,
+  AdminSettingValue,
+  AdminStatus,
+  UpdateAdminSettingInput
+} from "./admin.ts";
 export { OneTimeUrl } from "./one-time-url.ts";
 export type {
   ActivateAccountInput,

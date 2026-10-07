@@ -1,4 +1,5 @@
 import "./client.test.ts";
+import "./admin.test.ts";
 import "./domain.test.ts";
 import "./fixture-environment.test.ts";
 import "./history.test.ts";

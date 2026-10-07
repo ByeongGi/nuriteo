@@ -40,7 +40,9 @@ function testServerFirstBoundaries(): void {
   }
   const clientFiles = findFiles("src").filter((file) => /["']use client["']/u.test(read(file)));
   assert.deepEqual(clientFiles.sort(), [
+    "src/app/(authenticated)/admin/admin-navigation.tsx",
     "src/app/(authenticated)/admin/invitations/activation-invitations.tsx",
+    "src/app/(authenticated)/admin/settings/admin-settings.tsx",
     "src/app/(authenticated)/organization-invitations/accept/accept-invitation.tsx",
     "src/app/(authenticated)/organizations/organization-console.tsx",
     "src/app/(authenticated)/projects/project-dashboard.tsx",

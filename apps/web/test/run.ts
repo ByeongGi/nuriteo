@@ -1,6 +1,7 @@
 export {};
 
 await import("./auth-bff.test.ts");
+await import("./admin-settings-ux.test.ts");
 await import("./authenticated-shell.test.ts");
 await import("./collaboration-ux.test.ts");
 await import("./browser-client.test.ts");

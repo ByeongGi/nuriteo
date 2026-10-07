@@ -33,7 +33,7 @@ export default async function AuthenticatedLayout({
           <Link href="/projects">Projects</Link>
           <Link href="/organizations">Organizations</Link>
           {current.data.user.is_instance_admin ? (
-            <Link href="/admin/invitations">Activation invitations</Link>
+            <Link href="/admin/settings">Administration</Link>
           ) : null}
         </nav>
         {children}

@@ -14,6 +14,7 @@ const SAFE_HEADER = /^[\x20-\x7e]{1,512}$/u;
 const IDEMPOTENCY_KEY = /^[A-Za-z0-9._-]{16,128}$/u;
 const STRONG_ETAG = /^"org-v[1-9]\d*"$/u;
 const PROJECT_ETAG = /^"project-v([1-9]\d*)"$/u;
+const SETTING_ETAG = /^"setting-v([1-9]\d*)"$/u;
 const MAX_PROJECT_VERSION = 9_223_372_036_854_775_806n;
 const SAFE_LOCATION = /^\/api\/v1\/organizations\/[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 const ORGANIZATION_INVITATION_EMAIL_MAX_CHARACTERS = 320;
@@ -35,7 +36,7 @@ export interface CollaborationForward {
   readonly withBody: boolean;
   readonly withEtag?: boolean;
   readonly withIdempotencyKey?: boolean;
-  readonly etagKind?: "organization" | "project";
+  readonly etagKind?: "organization" | "project" | "setting";
   readonly jsonBodyPolicy?: "organization-invitation-issue";
   readonly safeLocation?: (value: string) => boolean;
 }
@@ -93,7 +94,9 @@ export async function forwardCollaborationMutation(
     const etag = request.headers.get("if-match");
     const validEtag = spec.etagKind === "project"
       ? isProjectEtag(etag)
-      : etag !== null && STRONG_ETAG.test(etag);
+      : spec.etagKind === "setting"
+        ? isSettingEtag(etag)
+        : etag !== null && STRONG_ETAG.test(etag);
     if (!validEtag || etag === null) {
       cancel(request.body);
       return problem(428, "BFF_PRECONDITION_REQUIRED", requestId, spec.path);
@@ -234,6 +237,14 @@ function isProjectEtag(value: string | null): value is string {
   if (match === null) return false;
   const version = BigInt(match[1] as string);
   return version <= MAX_PROJECT_VERSION && value === `"project-v${version}"`;
+}
+
+function isSettingEtag(value: string | null): value is string {
+  if (value === null || value.length > 32) return false;
+  const match = value.match(SETTING_ETAG);
+  if (match === null) return false;
+  const version = BigInt(match[1] as string);
+  return version <= MAX_PROJECT_VERSION && value === `"setting-v${version}"`;
 }
 
 async function readBoundedBody(
