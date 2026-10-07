@@ -26,16 +26,16 @@ async fn organization_schema_enforces_identity_lifecycle_and_membership() {
         readiness(&pool).await,
         SchemaReadiness::Pending {
             current: None,
-            target: 24
+            target: 25
         }
     );
     let first_report = migrate(&pool).await;
-    assert_eq!(first_report.latest_version, Some(24));
-    assert_eq!(first_report.known_migrations, 24);
+    assert_eq!(first_report.latest_version, Some(25));
+    assert_eq!(first_report.known_migrations, 25);
     assert_eq!(migrate(&pool).await, first_report);
     assert_eq!(
         readiness(&pool).await,
-        SchemaReadiness::Ready { version: 24 }
+        SchemaReadiness::Ready { version: 25 }
     );
 
     insert_users(&pool).await;

@@ -29,7 +29,7 @@ async fn instance_settings_are_materialized_once_validated_and_database_authorit
     )
     .await
     .unwrap();
-    assert_eq!(report.latest_version, Some(24));
+    assert_eq!(report.latest_version, Some(25));
 
     let repository = InstanceSettingsRepository::new(pool.clone(), Duration::from_secs(5)).unwrap();
     let first_bootstrap = bootstrap(14, 3, 120);
@@ -70,12 +70,48 @@ async fn instance_settings_are_materialized_once_validated_and_database_authorit
     assert_eq!(database_wins, first);
     assert_eq!(repository.load().await.unwrap(), first);
 
+    verify_v1_registry_upgrade(&pool).await;
     verify_concurrent_first_materialization_is_not_mixed(&pool).await;
     verify_corruption_fails_closed(&pool).await;
     verify_database_constraints(&pool).await;
 
     reset_fixture(&pool).await;
     pool.close(Duration::from_secs(2)).await.unwrap();
+}
+
+async fn verify_v1_registry_upgrade(pool: &DatabasePool) {
+    sqlx::query("DELETE FROM instance_settings WHERE key LIKE 'smtp.%'")
+        .execute(&mut *acquire(pool).await)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE instance_settings SET registry_version = 1")
+        .execute(&mut *acquire(pool).await)
+        .await
+        .unwrap();
+    let repository = InstanceSettingsRepository::new(pool.clone(), Duration::from_secs(5)).unwrap();
+    let upgraded = repository
+        .materialize(&InstanceSettingBootstrap::empty())
+        .await
+        .unwrap();
+    assert_eq!(upgraded.registry_version(), 2);
+    assert_eq!(upgraded.get("smtp.enabled").unwrap().value(), &json!(false));
+    assert_eq!(
+        upgraded.get("smtp.host").unwrap().bootstrap_origin(),
+        PersistedBootstrapOrigin::Default
+    );
+    assert_eq!(
+        nuriteo_server::smtp::SmtpPublicSettings::from_effective(&upgraded).unwrap(),
+        None
+    );
+    sqlx::query("UPDATE instance_settings SET value = 'true'::jsonb WHERE key = 'smtp.enabled'")
+        .execute(&mut *acquire(pool).await)
+        .await
+        .unwrap();
+    let enabled = repository.load().await.unwrap();
+    let public = nuriteo_server::smtp::SmtpPublicSettings::from_effective(&enabled)
+        .unwrap()
+        .unwrap();
+    assert!(format!("{public:?}").contains("localhost"));
 }
 
 fn bootstrap(file_grace: u64, environment_grace: u64, token_days: u64) -> InstanceSettingBootstrap {
@@ -166,7 +202,7 @@ async fn verify_corruption_fails_closed(pool: &DatabasePool) {
     sqlx::query(
         "INSERT INTO instance_settings \
          (key, registry_version, value, bootstrap_origin) \
-         VALUES ('tokens.default_expiry_days', 1, '90'::jsonb, 'default')",
+         VALUES ('tokens.default_expiry_days', 2, '90'::jsonb, 'default')",
     )
     .execute(&mut *acquire(pool).await)
     .await
@@ -184,7 +220,7 @@ async fn verify_corruption_fails_closed(pool: &DatabasePool) {
     );
 
     sqlx::query(
-        "UPDATE instance_settings SET value = '90'::jsonb, registry_version = 2 \
+        "UPDATE instance_settings SET value = '90'::jsonb, registry_version = 3 \
          WHERE key = 'tokens.default_expiry_days'",
     )
     .execute(&mut *acquire(pool).await)

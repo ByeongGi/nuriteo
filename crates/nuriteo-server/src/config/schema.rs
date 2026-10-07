@@ -377,6 +377,34 @@ pub const CONFIG_FIELDS: &[ConfigField] = &[
         "objectStorage.tls.ca.existingFile",
     ),
     secret_field(
+        "NURITEO_SMTP_USERNAME",
+        "SMTP credential; exclusive with _FILE and always redacted",
+        "smtp.credentials",
+    ),
+    secret_field(
+        "NURITEO_SMTP_USERNAME_FILE",
+        "bounded mounted SMTP username file; exclusive with direct value",
+        "smtp.credentialsExistingSecret",
+    ),
+    secret_field(
+        "NURITEO_SMTP_PASSWORD",
+        "SMTP credential; exclusive with _FILE and always redacted",
+        "smtp.credentials",
+    ),
+    secret_field(
+        "NURITEO_SMTP_PASSWORD_FILE",
+        "bounded mounted SMTP password file; exclusive with direct value",
+        "smtp.credentialsExistingSecret",
+    ),
+    field(
+        "NURITEO_SMTP_CA_FILE",
+        None,
+        "path",
+        None,
+        "bounded integration PEM bundle containing CA certificates only",
+        "smtp.tls.ca.existingFile",
+    ),
+    secret_field(
         "NURITEO_DATABASE_URL",
         "PostgreSQL URL; exclusive with _FILE and always redacted",
         "database.url",

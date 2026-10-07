@@ -226,6 +226,8 @@ impl InstanceSettingsRepository {
         let rows = fetch_rows(&mut transaction).await?;
         let effective = if rows.is_empty() {
             insert_complete_set(&mut transaction, bootstrap).await?
+        } else if rows.iter().all(|row| row.1 == 1) && INSTANCE_SETTING_REGISTRY_VERSION == 2 {
+            upgrade_registry_v1_to_v2(&mut transaction, rows).await?
         } else {
             decode_complete_set(rows)?
         };
@@ -251,6 +253,40 @@ impl InstanceSettingsRepository {
         .map_err(|_| InstanceSettingsError::PersistenceUnavailable)?;
         decode_complete_set(rows)
     }
+}
+
+async fn upgrade_registry_v1_to_v2(
+    transaction: &mut Transaction<'_, Postgres>,
+    rows: Vec<SettingRow>,
+) -> Result<EffectiveInstanceSettings, InstanceSettingsError> {
+    decode_set_for_version(rows, 1)?;
+    for definition in INSTANCE_SETTING_DEFINITIONS
+        .iter()
+        .filter(|definition| definition.introduced_in == 2)
+    {
+        if definition.sensitivity == SettingSensitivity::Secret {
+            return Err(InstanceSettingsError::SecretPersistenceForbidden);
+        }
+        let value = definition
+            .validated_default()
+            .map_err(|_| InstanceSettingsError::InvalidPersistedValue)?
+            .ok_or(InstanceSettingsError::InvalidPersistedValue)?;
+        sqlx::query(
+            "INSERT INTO instance_settings \
+             (key, registry_version, value, bootstrap_origin) \
+             VALUES ($1, 2, $2::jsonb, 'default')",
+        )
+        .bind(definition.key)
+        .bind(value.to_string())
+        .execute(&mut **transaction)
+        .await
+        .map_err(|_| InstanceSettingsError::PersistenceUnavailable)?;
+    }
+    sqlx::query("UPDATE instance_settings SET registry_version = 2, updated_at = now()")
+        .execute(&mut **transaction)
+        .await
+        .map_err(|_| InstanceSettingsError::PersistenceUnavailable)?;
+    decode_complete_set(fetch_rows(transaction).await?)
 }
 
 fn validate_operation_timeout(timeout: Duration) -> Result<(), InstanceSettingsError> {
@@ -319,18 +355,32 @@ async fn insert_complete_set(
 fn decode_complete_set(
     rows: Vec<SettingRow>,
 ) -> Result<EffectiveInstanceSettings, InstanceSettingsError> {
-    if rows.len() != INSTANCE_SETTING_DEFINITIONS.len() {
+    decode_set_for_version(rows, INSTANCE_SETTING_REGISTRY_VERSION)
+}
+
+fn decode_set_for_version(
+    rows: Vec<SettingRow>,
+    registry_version: u16,
+) -> Result<EffectiveInstanceSettings, InstanceSettingsError> {
+    let expected_count = INSTANCE_SETTING_DEFINITIONS
+        .iter()
+        .filter(|definition| definition.introduced_in <= registry_version)
+        .count();
+    if rows.len() != expected_count {
         return Err(InstanceSettingsError::IncompletePersistedSet);
     }
     let mut seen = BTreeSet::new();
     let mut settings = BTreeMap::new();
-    for (key, registry_version, value, origin, lock_version) in rows {
+    for (key, row_registry_version, value, origin, lock_version) in rows {
         let definition =
             instance_setting_definition(&key).ok_or(InstanceSettingsError::UnknownPersistedKey)?;
+        if definition.introduced_in > registry_version {
+            return Err(InstanceSettingsError::UnsupportedRegistryVersion);
+        }
         if definition.sensitivity == SettingSensitivity::Secret {
             return Err(InstanceSettingsError::SecretPersistenceForbidden);
         }
-        if registry_version != i16::try_from(INSTANCE_SETTING_REGISTRY_VERSION).unwrap_or(-1) {
+        if row_registry_version != i16::try_from(registry_version).unwrap_or(-1) {
             return Err(InstanceSettingsError::UnsupportedRegistryVersion);
         }
         if lock_version < 1 || !seen.insert(definition.key) {
@@ -354,7 +404,7 @@ fn decode_complete_set(
         );
     }
     Ok(EffectiveInstanceSettings {
-        registry_version: INSTANCE_SETTING_REGISTRY_VERSION,
+        registry_version,
         settings,
     })
 }

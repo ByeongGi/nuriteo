@@ -343,7 +343,11 @@ fn parse_instance_setting_environment(
         })
     };
     match constraint {
-        SettingConstraint::Enumeration { .. } => Ok(Value::String(raw.to_owned())),
+        SettingConstraint::Enumeration { .. }
+        | SettingConstraint::AsciiHostname
+        | SettingConstraint::EmailAddress
+        | SettingConstraint::Text { .. } => Ok(Value::String(raw.to_owned())),
+        SettingConstraint::Boolean => raw.parse::<bool>().map(Value::from).map_err(|_| invalid()),
         SettingConstraint::UnsignedInteger { .. } => {
             raw.parse::<u64>().map(Value::from).map_err(|_| invalid())
         }

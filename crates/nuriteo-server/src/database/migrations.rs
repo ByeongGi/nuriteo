@@ -45,6 +45,7 @@ const INSTANCE_SETTINGS_SQL: &str = include_str!("../../migrations/0022_instance
 const ADMIN_LIFECYCLE_INVARIANTS_SQL: &str =
     include_str!("../../migrations/0023_admin_lifecycle_invariants.sql");
 const TEAM_CORE_SQL: &str = include_str!("../../migrations/0024_team_core.sql");
+const NOTIFICATIONS_SQL: &str = include_str!("../../migrations/0025_notifications.sql");
 
 // Two-key advisory locks use a namespace distinct from PostgreSQL's one-key
 // bigint locks. 0x4e555249 is the ASCII representation of "NURI".
@@ -270,6 +271,13 @@ pub(super) fn embedded_migrator() -> Migrator {
             Cow::Borrowed("team core"),
             MigrationType::Simple,
             TEAM_CORE_SQL.into_sql_str(),
+            false,
+        ),
+        Migration::new(
+            25,
+            Cow::Borrowed("notifications and email outbox"),
+            MigrationType::Simple,
+            NOTIFICATIONS_SQL.into_sql_str(),
             false,
         ),
     ])

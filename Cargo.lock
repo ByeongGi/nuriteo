@@ -1829,6 +1829,8 @@ dependencies = [
  "percent-encoding",
  "regex",
  "reqwest",
+ "rustls",
+ "rustls-native-certs",
  "rustls-pemfile",
  "sea-orm",
  "serde",
@@ -1838,6 +1840,7 @@ dependencies = [
  "subtle",
  "time",
  "tokio",
+ "tokio-rustls",
  "tokio-util",
  "toml",
  "tower",
@@ -1850,6 +1853,7 @@ dependencies = [
  "utoipa-swagger-ui",
  "uuid",
  "x509-parser",
+ "zeroize",
 ]
 
 [[package]]

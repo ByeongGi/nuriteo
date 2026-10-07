@@ -4,7 +4,7 @@ use std::fmt;
 use serde_json::Value;
 
 /// Version of the allowlisted Instance setting registry persisted beside setting values.
-pub const INSTANCE_SETTING_REGISTRY_VERSION: u16 = 1;
+pub const INSTANCE_SETTING_REGISTRY_VERSION: u16 = 2;
 
 /// How a validated setting becomes effective.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -27,6 +27,7 @@ pub enum SettingSensitivity {
 /// Machine-readable validation for a setting value.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SettingConstraint {
+    Boolean,
     UnsignedInteger {
         minimum: u64,
         maximum: u64,
@@ -38,6 +39,12 @@ pub enum SettingConstraint {
         minimum: u64,
         maximum: u64,
         allow_unlimited: bool,
+    },
+    AsciiHostname,
+    EmailAddress,
+    Text {
+        minimum_bytes: usize,
+        maximum_bytes: usize,
     },
 }
 
@@ -57,6 +64,7 @@ impl InstanceSettingDefinition {
     /// Validates decoded JSON without ever rendering the supplied value in an error.
     pub fn validate(&self, value: &Value) -> Result<(), InstanceSettingValidationError> {
         let valid = match self.constraint {
+            SettingConstraint::Boolean => value.is_boolean(),
             SettingConstraint::UnsignedInteger { minimum, maximum } => value
                 .as_u64()
                 .is_some_and(|number| (minimum..=maximum).contains(&number)),
@@ -73,6 +81,15 @@ impl InstanceSettingDefinition {
                         .as_u64()
                         .is_some_and(|days| (minimum..=maximum).contains(&days))
             }
+            SettingConstraint::AsciiHostname => value.as_str().is_some_and(valid_ascii_hostname),
+            SettingConstraint::EmailAddress => value.as_str().is_some_and(valid_email_address),
+            SettingConstraint::Text {
+                minimum_bytes,
+                maximum_bytes,
+            } => value.as_str().is_some_and(|text| {
+                (minimum_bytes..=maximum_bytes).contains(&text.len())
+                    && !text.chars().any(char::is_control)
+            }),
         };
 
         if valid {
@@ -103,6 +120,7 @@ impl InstanceSettingDefinition {
 impl SettingConstraint {
     const fn reason(self) -> &'static str {
         match self {
+            Self::Boolean => "must be a boolean",
             Self::UnsignedInteger { .. } => "must be an unsigned integer inside the allowed range",
             Self::Enumeration { .. } => "must be one of the allowed values",
             Self::RetentionDays {
@@ -113,8 +131,38 @@ impl SettingConstraint {
                 allow_unlimited: false,
                 ..
             } => "must be retention days inside the allowed range",
+            Self::AsciiHostname => "must be a valid ASCII DNS hostname",
+            Self::EmailAddress => "must be a valid email address",
+            Self::Text { .. } => "must be bounded text without control characters",
         }
     }
+}
+
+fn valid_ascii_hostname(value: &str) -> bool {
+    value.len() <= 253
+        && !value.starts_with('.')
+        && !value.ends_with('.')
+        && value.split('.').all(|label| {
+            !label.is_empty()
+                && label.len() <= 63
+                && !label.starts_with('-')
+                && !label.ends_with('-')
+                && label
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+        })
+}
+
+fn valid_email_address(value: &str) -> bool {
+    let Some((local, domain)) = value.rsplit_once('@') else {
+        return false;
+    };
+    !local.is_empty()
+        && local.len() <= 64
+        && value.len() <= 320
+        && !local.chars().any(char::is_control)
+        && !local.chars().any(char::is_whitespace)
+        && valid_ascii_hostname(domain)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -133,6 +181,7 @@ impl std::error::Error for InstanceSettingValidationError {}
 
 const MFA_ENFORCEMENT: &[&str] = &["off", "administrators", "all_local_users"];
 const RUNTIME_NETWORK: &[&str] = &["browser_direct", "runtime_offline"];
+const SMTP_SECURITY: &[&str] = &["implicit-tls", "starttls"];
 
 const fn unsigned(
     key: &'static str,
@@ -145,7 +194,7 @@ const fn unsigned(
     InstanceSettingDefinition {
         key,
         bootstrap_environment,
-        introduced_in: INSTANCE_SETTING_REGISTRY_VERSION,
+        introduced_in: 1,
         default_json: Some(default_json),
         sensitivity: SettingSensitivity::Public,
         apply_mode,
@@ -235,6 +284,80 @@ pub const INSTANCE_SETTING_DEFINITIONS: &[InstanceSettingDefinition] = &[
         120,
         SettingApplyMode::Live,
     ),
+    InstanceSettingDefinition {
+        key: "smtp.enabled",
+        bootstrap_environment: "NURITEO_SMTP_ENABLED",
+        introduced_in: 2,
+        default_json: Some("false"),
+        sensitivity: SettingSensitivity::Public,
+        apply_mode: SettingApplyMode::ServerRestart,
+        constraint: SettingConstraint::Boolean,
+    },
+    InstanceSettingDefinition {
+        key: "smtp.from_address",
+        bootstrap_environment: "NURITEO_SMTP_FROM_ADDRESS",
+        introduced_in: 2,
+        default_json: Some("\"noreply@localhost\""),
+        sensitivity: SettingSensitivity::Public,
+        apply_mode: SettingApplyMode::ServerRestart,
+        constraint: SettingConstraint::EmailAddress,
+    },
+    InstanceSettingDefinition {
+        key: "smtp.from_name",
+        bootstrap_environment: "NURITEO_SMTP_FROM_NAME",
+        introduced_in: 2,
+        default_json: Some("\"NURITEO\""),
+        sensitivity: SettingSensitivity::Public,
+        apply_mode: SettingApplyMode::ServerRestart,
+        constraint: SettingConstraint::Text {
+            minimum_bytes: 1,
+            maximum_bytes: 120,
+        },
+    },
+    InstanceSettingDefinition {
+        key: "smtp.host",
+        bootstrap_environment: "NURITEO_SMTP_HOST",
+        introduced_in: 2,
+        default_json: Some("\"localhost\""),
+        sensitivity: SettingSensitivity::Public,
+        apply_mode: SettingApplyMode::ServerRestart,
+        constraint: SettingConstraint::AsciiHostname,
+    },
+    InstanceSettingDefinition {
+        key: "smtp.port",
+        bootstrap_environment: "NURITEO_SMTP_PORT",
+        introduced_in: 2,
+        default_json: Some("587"),
+        sensitivity: SettingSensitivity::Public,
+        apply_mode: SettingApplyMode::ServerRestart,
+        constraint: SettingConstraint::UnsignedInteger {
+            minimum: 1,
+            maximum: 65_535,
+        },
+    },
+    InstanceSettingDefinition {
+        key: "smtp.preflight_timeout_ms",
+        bootstrap_environment: "NURITEO_SMTP_PREFLIGHT_TIMEOUT_MS",
+        introduced_in: 2,
+        default_json: Some("5000"),
+        sensitivity: SettingSensitivity::Public,
+        apply_mode: SettingApplyMode::ServerRestart,
+        constraint: SettingConstraint::UnsignedInteger {
+            minimum: 100,
+            maximum: 30_000,
+        },
+    },
+    InstanceSettingDefinition {
+        key: "smtp.security",
+        bootstrap_environment: "NURITEO_SMTP_SECURITY",
+        introduced_in: 2,
+        default_json: Some("\"starttls\""),
+        sensitivity: SettingSensitivity::Public,
+        apply_mode: SettingApplyMode::ServerRestart,
+        constraint: SettingConstraint::Enumeration {
+            allowed: SMTP_SECURITY,
+        },
+    },
     unsigned(
         "tokens.default_expiry_days",
         "NURITEO_TOKEN_DEFAULT_EXPIRY_DAYS",
@@ -428,7 +551,7 @@ mod tests {
             definition.validated_default().unwrap();
         }
 
-        assert_eq!(keys.len(), 10);
+        assert_eq!(keys.len(), 17);
     }
 
     #[test]
