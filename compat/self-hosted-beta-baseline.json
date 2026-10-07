@@ -1,0 +1,82 @@
+{
+  "schemaVersion": 1,
+  "taskId": "BETA-001",
+  "releaseLineage": "nuriteo-self-hosted-v1",
+  "baselineCommit": "e09c657bb3454891054e5293f1b3cb3a4f99f102",
+  "sourceGate": {
+    "id": "GATE-004",
+    "status": "PASS",
+    "implementationCommit": "6bea04e6"
+  },
+  "recordedAt": "2026-10-07",
+  "contracts": {
+    "migrationPrefix": { "first": 1, "last": 21 },
+    "openapi": { "specification": "3.1.0", "version": "1.0.0" },
+    "bundleFormat": "project-bundle-v1",
+    "acceptanceJourney": "A1-A9"
+  },
+  "groups": {
+    "migrations": {
+      "aggregateSha256": "54db83275c519ed5585eea5a1e5b3a74e07d40e1dda322234166c6f0cccb3b66",
+      "artifacts": [
+        { "path": "crates/nuriteo-server/migrations/0001_framework_baseline.sql", "sha256": "2f058a5d64a67cafc4b37b518b27ba42617d7de62c041f6de5b7f3b02660df1d" },
+        { "path": "crates/nuriteo-server/migrations/0002_identity_core.sql", "sha256": "35c8dae2b8d1287ac9bbf47cebd84d79fa8dbf3f32a21997174413750682d98e" },
+        { "path": "crates/nuriteo-server/migrations/0003_sessions_and_audit.sql", "sha256": "16b108e874428023cef29f29f83c3f4295112368272c4da5564ece31ef57ca5e" },
+        { "path": "crates/nuriteo-server/migrations/0004_activation_invitations.sql", "sha256": "dd0945b215037230e89be982e3d4a90aa910514abf6173e7b16ae2797d8038a6" },
+        { "path": "crates/nuriteo-server/migrations/0005_auth_lockout.sql", "sha256": "50285760c043613e450ca25d5924fd808fcf3ce65327ab039530fa88f5ce6361" },
+        { "path": "crates/nuriteo-server/migrations/0006_personal_storage_scopes.sql", "sha256": "8d3f0610e18930a215a27d44756e15087acdca98ba9f1f5202b615c15bdf4d2d" },
+        { "path": "crates/nuriteo-server/migrations/0007_organizations.sql", "sha256": "3b9479a5c29c986a7f9441fbde468b933e59d6fa9ba6d78e5c60903d501448f5" },
+        { "path": "crates/nuriteo-server/migrations/0008_organization_invitations.sql", "sha256": "2de97dd1060f6536304afda2e22c9455b12fe01325c96dd4591e767531c4ef29" },
+        { "path": "crates/nuriteo-server/migrations/0009_organization_storage_scopes.sql", "sha256": "023f5e5aca5cfdba5320392c69f8d127985d6bfe3a51038373a66c9ca845dfbc" },
+        { "path": "crates/nuriteo-server/migrations/0010_projects.sql", "sha256": "7f4a2387991b1ae94bedabbcd875d3aaf0fc290de3be610d4aa00a63de4ed3fe" },
+        { "path": "crates/nuriteo-server/migrations/0011_project_deletion_invariants.sql", "sha256": "f67f6d52ada0c3a655f07b2500355cee39ea68aedfcf3402a17213173932536a" },
+        { "path": "crates/nuriteo-server/migrations/0012_project_mutation_invariants.sql", "sha256": "43794f670592556d95d9341537a636597220686c170c9158a600d458177e0a5f" },
+        { "path": "crates/nuriteo-server/migrations/0013_project_user_roles.sql", "sha256": "7e723b6005aeeebcc8f543501b5f280f4008a85bec43de72d8fe71b01af277d4" },
+        { "path": "crates/nuriteo-server/migrations/0014_project_bundles.sql", "sha256": "d98c0a02bd6c5ad8660e986bddb5ab2ed7882418e35342344e9fe77d545eafe8" },
+        { "path": "crates/nuriteo-server/migrations/0015_single_put_idempotency.sql", "sha256": "483ba2ef86d7fd02e22c884fd71c8d3660391a34aff949dd40d677a11c69a12c" },
+        { "path": "crates/nuriteo-server/migrations/0016_multipart_lifecycle.sql", "sha256": "9b535074ffaf616c0ae4854b6d1fec07153c8205b500974607869e57e71cc6ce" },
+        { "path": "crates/nuriteo-server/migrations/0017_save_cleanup.sql", "sha256": "4b0642a4360d2f23a905e4331b40ee68884b52c8b85f85754535d897c58e9923" },
+        { "path": "crates/nuriteo-server/migrations/0018_explicit_project_versions.sql", "sha256": "e23296e4b6b90d5f68564b67b02e5a09f47f65a5b214cfdcf8a82e4871503d46" },
+        { "path": "crates/nuriteo-server/migrations/0019_project_history_promotions.sql", "sha256": "a854adbdc4a7dec0fc7c67976efa4c521990e376465f9f11efdc3f96b9b34660" },
+        { "path": "crates/nuriteo-server/migrations/0020_save_upload_leases.sql", "sha256": "b2fb0db650aac52c90f947a78d9d9a752777c6236965a60eeca5286f7e7f0edd" },
+        { "path": "crates/nuriteo-server/migrations/0021_organization_member_limit.sql", "sha256": "4020f64cd3e9edf791d7b3c001d21360f0f2cc6dab96e55e621e9ebf8e079135" }
+      ]
+    },
+    "api": {
+      "aggregateSha256": "3822f182439855b824614df0e431d96d4d02faf052f30108272d4486b471657a",
+      "artifacts": [
+        { "path": "crates/nuriteo-server/tests/fixtures/openapi-v1.json", "sha256": "34f8d103ebe8f258094def9a734c98a3d5afbed739327d5bd0940c72eafaa0fa" }
+      ]
+    },
+    "bundle": {
+      "aggregateSha256": "dde1cc7c6c094aa5213b1f5adafe3a33b0542ae8517ee426304a5f9741eef358",
+      "artifacts": [
+        { "path": "compat/project-bundle-admission-v1.json", "sha256": "88f0215ee638061b7a25623e077e11d118a94755aa8011202b0d1f0aa748bcf5" }
+      ]
+    },
+    "images": {
+      "aggregateSha256": "212e7257fca4e023271847ce9d29f7303c66f82d45202300e5225fa3f25471e5",
+      "artifacts": [
+        { "path": "Cargo.lock", "sha256": "d82e3593548d3935d4c6fa58fd1ad1b8663fa4fd4c222952e0a1c339db11e3d7" },
+        { "path": "pnpm-lock.yaml", "sha256": "f0e139a6921822d75795164e485fa97fe0532135aeb89f1b8a95dfe5cddb0cbb" },
+        { "path": "deploy/docker/server.Dockerfile", "sha256": "eddd5b0557ce21879badbfeef4cab46348d3189985ed9fe7960b8a23d70ec19b" },
+        { "path": "deploy/docker/server.Dockerfile.dockerignore", "sha256": "2f240ef8edf3ed15ee872b7eb95326c5a96f34de617a5b2a5b5fc997a6b59fae" },
+        { "path": "deploy/docker/web.Dockerfile", "sha256": "a3a3de4ffcb855d4e63efa6a04ba12f1e0a9ecc11b28a5592e8935a3423d27ef" },
+        { "path": "deploy/docker/web.Dockerfile.dockerignore", "sha256": "5ae4f23e4c60b0b7c167374dac6100df0e9166a5f84b58d61a39c17d951b6b71" },
+        { "path": "deploy/compose/compose.yaml", "sha256": "0c047625bc886a4ed7410097c8bd111252f8233defeb8261201dabb6b20e0cdc" },
+        { "path": "deploy/compose/compose.external-s3.yaml", "sha256": "80fd43444fe129fac7ae541c0584891955caa764fcc95ac56139e91c110a6be1" }
+      ]
+    },
+    "acceptance": {
+      "aggregateSha256": "fca7ef21032a5ff460f1cbc02690faa0caf5b232d77f43d0800bf9e89e8f7051",
+      "artifacts": [
+        { "path": "deploy/compose/check-compose.mjs", "sha256": "f89f150b5c022ff41a6fcb6091f425b13bdaeb6f18983041c915503634432a25" },
+        { "path": "deploy/compose/check-docker-qualification.mjs", "sha256": "ca888f6ea234a08f5680b1f356402e7105448917f3fce611f2d0431f6e1f0189" },
+        { "path": "deploy/compose/docker-qualification-ci.sh", "sha256": "cfccf33a937231aeb822b51e0803b96f6d6e7ffe1f0da9f7cf665087f2310206" },
+        { "path": "deploy/compose/test-compose.sh", "sha256": "6bbb411396f8c451ab50815bca9dde8e2b51bb57dcfe9acdfc534a3eea212753" },
+        { "path": "deploy/compose/relay-save-resume-browser.ts", "sha256": "7d3899c410dc2b3fc09c139e55b372f569dd76889f1367001344961115c6ae8b" },
+        { "path": "docs/implementation/self-hosted/evidence/GATE-004.md", "sha256": "f2da0afca75859c67029d9301aef415f428281b9dd1b94584b797667dfd95579" }
+      ]
+    }
+  }
+}
