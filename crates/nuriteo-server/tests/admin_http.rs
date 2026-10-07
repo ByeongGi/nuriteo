@@ -45,7 +45,7 @@ async fn admin_settings_audit_and_operations_http_are_safe_and_transactional() {
     )
     .await
     .unwrap();
-    assert_eq!(report.latest_version, Some(25));
+    assert_eq!(report.latest_version, Some(27));
     let admin_id = seed_user(&pool, "admin@example.test", true).await;
     seed_user(&pool, "member@example.test", false).await;
     let settings = InstanceSettingsRepository::new(pool.clone(), Duration::from_secs(5))
@@ -328,7 +328,7 @@ async fn admin_settings_audit_and_operations_http_are_safe_and_transactional() {
     .await;
     assert_eq!(status.status(), StatusCode::OK);
     let status = json_body(status).await;
-    assert_eq!(status["schemaVersion"], 25);
+    assert_eq!(status["schemaVersion"], 27);
     assert_eq!(status["settingRegistryVersion"], 2);
     assert_eq!(status["settingCount"], 17);
     assert_eq!(status["restartRequired"], false);

@@ -28,21 +28,21 @@ async fn notification_outbox_is_transactional_bounded_and_secret_safe() {
         readiness(&pool).await,
         SchemaReadiness::Pending {
             current: None,
-            target: 25,
+            target: 27,
         }
     );
     let report = migrate(&pool).await;
     assert_eq!(
         report,
         MigrationReport {
-            latest_version: Some(25),
-            known_migrations: 25,
+            latest_version: Some(27),
+            known_migrations: 27,
         }
     );
     assert_eq!(migrate(&pool).await, report);
     assert_eq!(
         readiness(&pool).await,
-        SchemaReadiness::Ready { version: 25 }
+        SchemaReadiness::Ready { version: 27 }
     );
 
     seed_user(&pool).await;
@@ -313,7 +313,8 @@ async fn verify_terminal_delivery_retention_and_state_machine(pool: &DatabasePoo
     sqlx::query(
         "UPDATE email_outbox SET state = 'sending', attempt_count = 1,
          first_attempt_at = clock_timestamp(), last_attempt_at = clock_timestamp(),
-         lease_owner = 'worker-1', lease_expires_at = clock_timestamp() + INTERVAL '30 seconds',
+         lease_owner = '0199ee6c-c777-7000-8000-000000003101', \
+         lease_expires_at = clock_timestamp() + INTERVAL '30 seconds',
          updated_at = clock_timestamp(), lock_version = lock_version + 1
          WHERE notification_id = $1::uuid",
     )
@@ -358,7 +359,8 @@ async fn verify_terminal_delivery_retention_and_state_machine(pool: &DatabasePoo
     sqlx::query(
         "UPDATE email_outbox SET state = 'sending', attempt_count = 1,
          first_attempt_at = clock_timestamp(), last_attempt_at = clock_timestamp(),
-         lease_owner = 'worker-1', lease_expires_at = clock_timestamp() + INTERVAL '30 seconds',
+         lease_owner = '0199ee6c-c777-7000-8000-000000003101', \
+         lease_expires_at = clock_timestamp() + INTERVAL '30 seconds',
          updated_at = clock_timestamp(), lock_version = lock_version + 1
          WHERE id = $1::uuid",
     )
@@ -379,7 +381,8 @@ async fn verify_terminal_delivery_retention_and_state_machine(pool: &DatabasePoo
     .expect("transient delivery failure must enter retry wait");
     sqlx::query(
         "UPDATE email_outbox SET state = 'sending', attempt_count = 2,
-         last_attempt_at = clock_timestamp(), lease_owner = 'worker-2',
+         last_attempt_at = clock_timestamp(), \
+         lease_owner = '0199ee6c-c777-7000-8000-000000003102',
          lease_expires_at = clock_timestamp() + INTERVAL '30 seconds',
          updated_at = clock_timestamp(), lock_version = lock_version + 1
          WHERE id = $1::uuid",

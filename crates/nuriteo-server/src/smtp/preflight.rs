@@ -12,7 +12,7 @@ use tokio::time;
 use tokio_rustls::TlsConnector;
 use zeroize::Zeroizing;
 
-use super::{SmtpConfig, SmtpSecurity};
+use super::{SmtpBootstrapConfig, SmtpConfig, SmtpSecurity};
 
 const MAX_REPLY_BYTES: usize = 16 * 1024;
 const MAX_REPLY_LINES: usize = 64;
@@ -114,10 +114,21 @@ pub struct SmtpPreflightReport {
     pub authenticated: bool,
 }
 
-pub async fn preflight(config: &SmtpConfig) -> Result<SmtpPreflightReport, SmtpPreflightError> {
+pub(crate) async fn preflight(
+    config: &SmtpConfig,
+) -> Result<SmtpPreflightReport, SmtpPreflightError> {
     time::timeout(config.preflight_timeout(), preflight_inner(config))
         .await
         .map_err(|_| SmtpPreflightError::retryable(SmtpFailureCategory::Timeout))?
+}
+
+/// Standalone deployment-file compatibility preflight. This boundary cannot
+/// create a delivery sender and therefore cannot bypass DB-authoritative runtime
+/// resolution after INT-001 adoption.
+pub async fn preflight_bootstrap(
+    config: &SmtpBootstrapConfig,
+) -> Result<SmtpPreflightReport, SmtpPreflightError> {
+    preflight(config.as_config()).await
 }
 
 async fn preflight_inner(config: &SmtpConfig) -> Result<SmtpPreflightReport, SmtpPreflightError> {
@@ -211,7 +222,7 @@ where
     })
 }
 
-fn supports_plain_auth(lines: &[String]) -> bool {
+pub(crate) fn supports_plain_auth(lines: &[String]) -> bool {
     lines.iter().any(|line| {
         let upper = line.to_ascii_uppercase();
         let capabilities = upper
@@ -225,7 +236,7 @@ fn supports_plain_auth(lines: &[String]) -> bool {
     })
 }
 
-fn tls_connector(config: &SmtpConfig) -> Result<TlsConnector, SmtpPreflightError> {
+pub(crate) fn tls_connector(config: &SmtpConfig) -> Result<TlsConnector, SmtpPreflightError> {
     let native = rustls_native_certs::load_native_certs();
     let mut roots = RootCertStore::empty();
     let (accepted, _) = roots.add_parsable_certificates(native.certs);
@@ -255,7 +266,7 @@ fn classify_tls_error(error: io::Error) -> SmtpPreflightError {
     }
 }
 
-async fn send_command(
+pub(crate) async fn send_command(
     stream: &mut (impl AsyncWrite + Unpin),
     command: &[u8],
 ) -> Result<(), SmtpPreflightError> {
@@ -296,12 +307,14 @@ fn ensure_success(
 }
 
 #[derive(Debug)]
-struct SmtpReply {
-    code: u16,
-    lines: Vec<String>,
+pub(crate) struct SmtpReply {
+    pub(crate) code: u16,
+    pub(crate) lines: Vec<String>,
 }
 
-async fn read_reply<S>(stream: &mut BufReader<S>) -> Result<SmtpReply, SmtpPreflightError>
+pub(crate) async fn read_reply<S>(
+    stream: &mut BufReader<S>,
+) -> Result<SmtpReply, SmtpPreflightError>
 where
     S: AsyncRead + AsyncWrite + Unpin,
 {

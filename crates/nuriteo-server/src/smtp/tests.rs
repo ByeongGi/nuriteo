@@ -7,6 +7,7 @@ use crate::config::{Environment, FileReader};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::TcpListener;
 
+use super::preflight::preflight;
 use super::*;
 
 #[derive(Default)]

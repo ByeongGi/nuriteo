@@ -1,12 +1,15 @@
 mod config;
+mod delivery;
 mod preflight;
 
 pub use config::{
-    SmtpConfig, SmtpConfigError, SmtpConfigSnapshot, SmtpCredentials, SmtpPublicSettings,
-    SmtpSecurity, SmtpTlsTrust,
+    SmtpBootstrapConfig, SmtpConfig, SmtpConfigError, SmtpConfigSnapshot, SmtpCredentials,
+    SmtpPublicSettings, SmtpSecurity, SmtpTlsTrust,
 };
+pub use delivery::SmtpEmailSender;
 pub use preflight::{
-    SmtpFailureCategory, SmtpFailureClass, SmtpPreflightError, SmtpPreflightReport, preflight,
+    SmtpFailureCategory, SmtpFailureClass, SmtpPreflightError, SmtpPreflightReport,
+    preflight_bootstrap,
 };
 
 #[cfg(test)]

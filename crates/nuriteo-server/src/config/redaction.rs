@@ -1,18 +1,19 @@
 use std::fmt;
+use zeroize::Zeroizing;
 
 /// An owned secret whose standard formatting cannot expose its value.
 #[derive(Clone, PartialEq, Eq)]
-pub struct SecretString(String);
+pub struct SecretString(Zeroizing<String>);
 
 impl SecretString {
-    pub(super) fn new(value: String) -> Self {
-        Self(value)
+    pub(crate) fn new(value: String) -> Self {
+        Self(Zeroizing::new(value))
     }
 
     /// Explicitly exposes the value to another server adapter.
     #[must_use]
     pub fn expose_secret(&self) -> &str {
-        &self.0
+        self.0.as_str()
     }
 }
 

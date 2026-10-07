@@ -36,7 +36,7 @@ async fn team_service_is_authorized_versioned_audited_and_concurrent() {
     )
     .await
     .unwrap();
-    assert_eq!(report.latest_version, Some(25));
+    assert_eq!(report.latest_version, Some(27));
     seed_fixture(&pool).await;
 
     let service = TeamService::new(pool.clone(), TeamServicePolicy::default());

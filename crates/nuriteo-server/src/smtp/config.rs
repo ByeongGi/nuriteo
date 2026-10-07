@@ -11,6 +11,7 @@ use x509_parser::prelude::{FromDer, X509Certificate};
 
 use crate::config::{Environment, FileReader, SecretString, load_secret};
 use crate::instance_settings::EffectiveInstanceSettings;
+use crate::integration::ValidatedCaBundle;
 
 const HOST: &str = "NURITEO_SMTP_HOST";
 const PORT: &str = "NURITEO_SMTP_PORT";
@@ -160,6 +161,39 @@ pub struct SmtpConfig {
     preflight_timeout: Duration,
 }
 
+/// Deployment-file compatibility input for the standalone bootstrap/preflight
+/// command. It cannot construct a runtime sender; application delivery must use
+/// `IntegrationRepository::smtp_config`.
+#[derive(Clone, PartialEq, Eq)]
+pub struct SmtpBootstrapConfig(SmtpConfig);
+
+impl SmtpBootstrapConfig {
+    pub fn load(
+        environment: &impl Environment,
+        files: &impl FileReader,
+    ) -> Result<Option<Self>, SmtpConfigError> {
+        SmtpConfig::load(environment, files).map(|config| config.map(Self))
+    }
+
+    pub(crate) const fn as_config(&self) -> &SmtpConfig {
+        &self.0
+    }
+
+    #[must_use]
+    pub fn snapshot(&self) -> SmtpConfigSnapshot {
+        self.0.snapshot()
+    }
+}
+
+impl fmt::Debug for SmtpBootstrapConfig {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_tuple("SmtpBootstrapConfig")
+            .field(&self.snapshot())
+            .finish()
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SmtpPublicSettings {
     host: String,
@@ -214,10 +248,25 @@ impl SmtpPublicSettings {
             preflight_timeout,
         }))
     }
+
+    #[must_use]
+    pub fn host(&self) -> &str {
+        &self.host
+    }
+
+    #[must_use]
+    pub const fn port(&self) -> u16 {
+        self.port
+    }
+
+    #[must_use]
+    pub const fn security(&self) -> SmtpSecurity {
+        self.security
+    }
 }
 
 impl SmtpConfig {
-    pub fn load(
+    pub(crate) fn load(
         environment: &impl Environment,
         files: &impl FileReader,
     ) -> Result<Option<Self>, SmtpConfigError> {
@@ -249,18 +298,26 @@ impl SmtpConfig {
         Self::finish(public, &values, environment, files).map(Some)
     }
 
-    /// Combines PostgreSQL-authoritative public settings with deployment-owned
-    /// secret sources. The credential moves to the shared envelope in INT-001.
-    pub fn from_effective_settings(
+    pub(crate) fn from_effective_settings_with_database_sources(
         settings: &EffectiveInstanceSettings,
         environment: &impl Environment,
         files: &impl FileReader,
+        database_ca: Option<&ValidatedCaBundle>,
+        database_credentials: Option<(&str, &str)>,
     ) -> Result<Option<Self>, SmtpConfigError> {
         let Some(public) = SmtpPublicSettings::from_effective(settings)? else {
             return Ok(None);
         };
         let values = Values::new(environment.entries())?;
-        Self::finish(public, &values, environment, files).map(Some)
+        Self::finish_with_database_ca(
+            public,
+            &values,
+            environment,
+            files,
+            database_ca,
+            database_credentials,
+        )
+        .map(Some)
     }
 
     fn finish(
@@ -269,22 +326,46 @@ impl SmtpConfig {
         environment: &impl Environment,
         files: &impl FileReader,
     ) -> Result<Self, SmtpConfigError> {
-        let username = secret(environment, files, USERNAME, USERNAME_FILE)?;
-        let password = secret(environment, files, PASSWORD, PASSWORD_FILE)?;
-        let credentials = match (username, password) {
-            (None, None) => None,
-            (Some(username), Some(password)) => Some(SmtpCredentials { username, password }),
-            _ => return Err(SmtpConfigError::IncompleteCredentials),
+        Self::finish_with_database_ca(public, values, environment, files, None, None)
+    }
+
+    fn finish_with_database_ca(
+        public: SmtpPublicSettings,
+        values: &Values,
+        environment: &impl Environment,
+        files: &impl FileReader,
+        database_ca: Option<&ValidatedCaBundle>,
+        database_credentials: Option<(&str, &str)>,
+    ) -> Result<Self, SmtpConfigError> {
+        let credentials = match database_credentials {
+            Some((username, password)) => Some(SmtpCredentials {
+                username: SecretString::new(username.to_owned()),
+                password: SecretString::new(password.to_owned()),
+            }),
+            None => {
+                let username = secret(environment, files, USERNAME, USERNAME_FILE)?;
+                let password = secret(environment, files, PASSWORD, PASSWORD_FILE)?;
+                match (username, password) {
+                    (None, None) => None,
+                    (Some(username), Some(password)) => {
+                        Some(SmtpCredentials { username, password })
+                    }
+                    _ => return Err(SmtpConfigError::IncompleteCredentials),
+                }
+            }
         };
         let tls_trust = SmtpTlsTrust {
             instance_ca: values
                 .optional(INSTANCE_CA_FILE)?
                 .map(|path| load_ca_bundle(files, Path::new(path), INSTANCE_CA_FILE))
                 .transpose()?,
-            integration_ca: values
-                .optional(SMTP_CA_FILE)?
-                .map(|path| load_ca_bundle(files, Path::new(path), SMTP_CA_FILE))
-                .transpose()?,
+            integration_ca: match database_ca {
+                Some(bundle) => Some(parse_ca_bundle(bundle.pem(), SMTP_CA_FILE)?),
+                None => values
+                    .optional(SMTP_CA_FILE)?
+                    .map(|path| load_ca_bundle(files, Path::new(path), SMTP_CA_FILE))
+                    .transpose()?,
+            },
         };
 
         Ok(Self {
@@ -619,6 +700,10 @@ fn load_ca_bundle(
     if bytes.len() > MAX_CA_BUNDLE_BYTES {
         return Err(SmtpConfigError::CaBundleTooLarge { name });
     }
+    parse_ca_bundle(&bytes, name)
+}
+
+fn parse_ca_bundle(bytes: &[u8], name: &'static str) -> Result<CaBundle, SmtpConfigError> {
     let mut certificates = Vec::new();
     for item in rustls_pemfile::read_all(&mut Cursor::new(bytes)) {
         let item = item.map_err(|_| SmtpConfigError::InvalidCaBundle { name })?;

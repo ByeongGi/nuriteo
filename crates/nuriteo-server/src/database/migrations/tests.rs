@@ -29,7 +29,7 @@ fn validates_migration_deadlines() {
 fn embedded_baseline_is_forward_only_and_framework_scoped() {
     let embedded = embedded_migrator();
     let migrations: Vec<_> = embedded.iter().collect();
-    assert_eq!(migrations.len(), 25);
+    assert_eq!(migrations.len(), 27);
     assert_eq!(
         migrations
             .iter()
@@ -37,7 +37,7 @@ fn embedded_baseline_is_forward_only_and_framework_scoped() {
             .collect::<Vec<_>>(),
         vec![
             1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
-            25
+            25, 26, 27
         ]
     );
     assert_eq!(migrations[0].version, 1);
@@ -130,9 +130,9 @@ async fn real_postgres_serializes_validates_rolls_back_and_retries() {
         .unwrap_or_else(|error| panic!("second runner task must join: {error}"))
         .unwrap_or_else(|error| panic!("second runner must succeed: {error}"));
     assert_eq!(first_report, second_report);
-    assert_eq!(first_report.latest_version, Some(25));
-    assert_eq!(first_report.known_migrations, 25);
-    for version in 1..=25 {
+    assert_eq!(first_report.latest_version, Some(27));
+    assert_eq!(first_report.known_migrations, 27);
+    for version in 1..=27 {
         assert_eq!(migration_row_count(&pool, version).await, 1);
     }
     verify_save_upload_lease_delete_fence(&pool).await;

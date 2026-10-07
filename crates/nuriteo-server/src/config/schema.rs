@@ -269,6 +269,34 @@ pub const CONFIG_FIELDS: &[ConfigField] = &[
         "bounded mounted password file; exclusive with direct value",
         "bootstrapAdmin.passwordExistingSecret",
     ),
+    secret_field(
+        "NURITEO_MASTER_KEY",
+        "base64-encoded 32-byte current envelope key; exclusive with _FILE",
+        "integrationSecrets.masterKey",
+    ),
+    secret_field(
+        "NURITEO_MASTER_KEY_FILE",
+        "bounded mounted current envelope key; exclusive with direct value",
+        "integrationSecrets.masterKeyExistingSecret",
+    ),
+    field(
+        "NURITEO_MASTER_KEY_VERSION",
+        None,
+        "integer",
+        None,
+        "positive current envelope-key version",
+        "integrationSecrets.masterKeyVersion",
+    ),
+    secret_field(
+        "NURITEO_PREVIOUS_MASTER_KEYS",
+        "JSON keyring with at most three previous versioned keys; exclusive with _FILE",
+        "integrationSecrets.previousKeys",
+    ),
+    secret_field(
+        "NURITEO_PREVIOUS_MASTER_KEYS_FILE",
+        "bounded mounted previous-key JSON keyring; exclusive with direct value",
+        "integrationSecrets.previousKeysExistingSecret",
+    ),
     field(
         "NURITEO_S3_ENDPOINT",
         None,

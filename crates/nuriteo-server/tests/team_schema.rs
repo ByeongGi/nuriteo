@@ -21,21 +21,21 @@ async fn team_schema_enforces_organization_membership_and_project_role_boundarie
         readiness(&pool).await,
         SchemaReadiness::Pending {
             current: None,
-            target: 25
+            target: 27
         }
     );
     let report = migrate(&pool).await;
     assert_eq!(
         report,
         MigrationReport {
-            latest_version: Some(25),
-            known_migrations: 25
+            latest_version: Some(27),
+            known_migrations: 27
         }
     );
     assert_eq!(migrate(&pool).await, report);
     assert_eq!(
         readiness(&pool).await,
-        SchemaReadiness::Ready { version: 25 }
+        SchemaReadiness::Ready { version: 27 }
     );
 
     seed_fixture(&pool).await;

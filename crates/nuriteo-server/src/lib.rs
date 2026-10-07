@@ -10,6 +10,7 @@ pub mod health;
 pub mod http;
 pub mod identity;
 pub mod instance_settings;
+pub mod integration;
 pub mod invitations;
 pub mod notification;
 pub mod object_storage;
