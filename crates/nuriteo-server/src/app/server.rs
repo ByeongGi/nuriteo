@@ -20,8 +20,9 @@ use crate::save::{
     SaveHttpConfig, SaveHttpPolicy, SaveHttpService, SaveUploadTransport, WorkerShutdown,
 };
 use crate::setup::{SetupStatusPolicy, SetupStatusService};
+use crate::team::{TeamHttpPolicy, TeamHttpService};
 
-use super::{Supervisor, SupervisorConfig, WorkerError, build_router_with_admin_service};
+use super::{Supervisor, SupervisorConfig, WorkerError, build_router_with_team_service};
 
 const PRODUCTION_WORKERS: NonZeroUsize = NonZeroUsize::new(3).unwrap();
 const INSTANCE_SETTINGS_STARTUP_TIMEOUT: Duration = Duration::from_secs(5);
@@ -39,6 +40,7 @@ pub(crate) enum ServeError {
     InvitationConfiguration,
     OrganizationConfiguration,
     ProjectConfiguration,
+    TeamConfiguration,
     SaveConfiguration,
     CleanupConfiguration,
     Bind,
@@ -61,6 +63,7 @@ impl ServeError {
             Self::InvitationConfiguration => "invitation-configuration",
             Self::OrganizationConfiguration => "organization-configuration",
             Self::ProjectConfiguration => "project-configuration",
+            Self::TeamConfiguration => "team-configuration",
             Self::SaveConfiguration => "save-configuration",
             Self::CleanupConfiguration => "cleanup-configuration",
             Self::Bind => "bind",
@@ -259,8 +262,20 @@ pub(crate) async fn run_server(
             return Err(ServeError::SaveConfiguration);
         }
     };
+    let teams = match TeamHttpService::production(
+        pool.clone(),
+        &global.public.external_url,
+        TeamHttpPolicy::default(),
+        SessionPolicy::default(),
+    ) {
+        Ok(teams) => teams,
+        Err(_) => {
+            close_pool(pool, close_timeout).await?;
+            return Err(ServeError::TeamConfiguration);
+        }
+    };
     let cleanup = CleanupService::new(pool.clone(), store, global.cleanup.worker_policy);
-    let router = build_router_with_admin_service(
+    let router = build_router_with_team_service(
         health,
         auth,
         invitations,
@@ -269,6 +284,7 @@ pub(crate) async fn run_server(
         save,
         setup,
         admin,
+        teams,
     );
     let management_router = operations.router();
     let cleanup_drain_timeout = global

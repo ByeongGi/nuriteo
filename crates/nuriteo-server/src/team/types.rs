@@ -2,6 +2,7 @@ use std::fmt;
 use std::str::FromStr;
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use utoipa::ToSchema;
 use uuid::{Uuid, Variant, Version};
 
 use crate::identity::UserId;
@@ -214,7 +215,7 @@ impl<'de> Deserialize<'de> for TeamDisplayName {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum TeamRole {
     Maintainer,

@@ -14,6 +14,7 @@ use crate::organization::{self, OrganizationHttpService};
 use crate::project::{self, ProjectHttpService};
 use crate::save::{self, SaveHttpService};
 use crate::setup::{self, SetupStatusService};
+use crate::team::{self, TeamHttpService};
 use crate::workspace;
 
 pub const DOCUMENT_PATH: &str = "/api/openapi.json";
@@ -42,6 +43,9 @@ pub const DOCS_PATH: &str = "/api/docs";
         ,(name = "project-history", description = "Recovery Checkpoints and atomic historical Working Head promotion")
         ,(name = "save", description = "Bounded Project Bundle Save session lifecycle")
         ,(name = "administration", description = "Instance administrator settings, operational status, and audit operations")
+        ,(name = "teams", description = "Organization Team lifecycle")
+        ,(name = "team-members", description = "Team membership administration")
+        ,(name = "team-project-roles", description = "Team-to-Project role administration")
     ),
     servers((url = "/", description = "Current self-hosted instance"))
 )]
@@ -147,10 +151,15 @@ pub fn document() -> utoipa::openapi::OpenApi {
         SaveHttpService::unconfigured(),
         SetupStatusService::unconfigured(),
         AdminHttpService::unconfigured(),
+        TeamHttpService::unconfigured(),
     )
     .1
 }
 
+#[allow(
+    clippy::too_many_arguments,
+    reason = "top-level composition keeps independently testable HTTP services explicit"
+)]
 pub fn router(
     auth: AuthService,
     invitations: InvitationHttpService,
@@ -159,6 +168,7 @@ pub fn router(
     save: SaveHttpService,
     setup: SetupStatusService,
     admin: AdminHttpService,
+    teams: TeamHttpService,
 ) -> Router {
     let (api_routes, document) = openapi_parts(
         auth,
@@ -168,6 +178,7 @@ pub fn router(
         save,
         setup,
         admin,
+        teams,
     );
     let config = Config::new([DOCUMENT_PATH]).validator_url("none");
     let docs = SwaggerUi::new(DOCS_PATH)
@@ -177,6 +188,10 @@ pub fn router(
     api_routes.merge(Router::from(docs))
 }
 
+#[allow(
+    clippy::too_many_arguments,
+    reason = "OpenAPI composition mirrors the explicit runtime service graph"
+)]
 fn openapi_parts(
     auth: AuthService,
     invitations: InvitationHttpService,
@@ -185,6 +200,7 @@ fn openapi_parts(
     save: SaveHttpService,
     setup: SetupStatusService,
     admin: AdminHttpService,
+    teams: TeamHttpService,
 ) -> (Router, utoipa::openapi::OpenApi) {
     let (auth_routes, document) =
         workspace::openapi_router(auth::openapi_router(ApiDocument::openapi()))
@@ -209,6 +225,9 @@ fn openapi_parts(
     let (admin_routes, document) = admin::openapi_router(document)
         .with_state(admin)
         .split_for_parts();
+    let (team_routes, document) = team::openapi_router(document)
+        .with_state(teams)
+        .split_for_parts();
     (
         auth_routes
             .merge(invitation_routes)
@@ -216,7 +235,8 @@ fn openapi_parts(
             .merge(project_routes)
             .merge(save_routes)
             .merge(setup_routes)
-            .merge(admin_routes),
+            .merge(admin_routes)
+            .merge(team_routes),
         document,
     )
 }

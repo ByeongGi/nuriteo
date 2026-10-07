@@ -160,6 +160,12 @@ async fn serves_the_versioned_document_from_the_application_router() {
             "/api/v1/organizations/{organization_id}/invitations/{invitation_id}/reissue",
             "/api/v1/organizations/{organization_id}/members",
             "/api/v1/organizations/{organization_id}/members/{user_id}",
+            "/api/v1/organizations/{organization_id}/teams",
+            "/api/v1/organizations/{organization_id}/teams/{team_id}",
+            "/api/v1/organizations/{organization_id}/teams/{team_id}/members",
+            "/api/v1/organizations/{organization_id}/teams/{team_id}/members/{user_id}",
+            "/api/v1/organizations/{organization_id}/teams/{team_id}/project-roles",
+            "/api/v1/organizations/{organization_id}/teams/{team_id}/project-roles/{project_id}",
             "/api/v1/setup/status",
             "/api/v1/version",
             "/api/v1/workspaces/{owner_type}/{owner_id}/projects",
@@ -210,6 +216,87 @@ async fn serves_the_versioned_document_from_the_application_router() {
             .collect::<Vec<_>>(),
         vec!["bootstrapRequired"]
     );
+}
+
+#[test]
+fn team_api_declares_session_csrf_etag_and_no_store_contracts() {
+    let document = serde_json::to_value(openapi::document()).unwrap();
+    for path in [
+        "/api/v1/organizations/{organization_id}/teams",
+        "/api/v1/organizations/{organization_id}/teams/{team_id}",
+        "/api/v1/organizations/{organization_id}/teams/{team_id}/members",
+        "/api/v1/organizations/{organization_id}/teams/{team_id}/members/{user_id}",
+        "/api/v1/organizations/{organization_id}/teams/{team_id}/project-roles",
+        "/api/v1/organizations/{organization_id}/teams/{team_id}/project-roles/{project_id}",
+    ] {
+        for (method, operation) in document["paths"][path].as_object().unwrap() {
+            assert_eq!(
+                operation["security"],
+                json!([{"projectSessionCookie": []}]),
+                "{method} {path} must require a browser Session"
+            );
+            let parameters = operation["parameters"].as_array().unwrap();
+            if method != "get" {
+                for header in ["Origin", "X-CSRF-Token"] {
+                    assert!(parameters.iter().any(|item| item["name"] == header));
+                }
+            }
+            for status in ["401", "403", "404", "422", "503", "504"] {
+                assert!(
+                    operation["responses"].get(status).is_some(),
+                    "{method} {path} must document runtime status {status}"
+                );
+            }
+            if operation.get("requestBody").is_some() {
+                for status in ["413", "415"] {
+                    assert!(
+                        operation["responses"].get(status).is_some(),
+                        "{method} {path} JSON body must document {status}"
+                    );
+                }
+            }
+            if method != "get" {
+                assert!(operation["responses"].get("409").is_some());
+            }
+            for response in operation["responses"].as_object().unwrap().values() {
+                if let Some(schema) = response
+                    .get("content")
+                    .and_then(|content| content.get("application/problem+json"))
+                {
+                    assert_eq!(
+                        schema["schema"]["$ref"],
+                        "#/components/schemas/ProblemDetails"
+                    );
+                }
+            }
+        }
+    }
+
+    for (path, method) in [
+        (
+            "/api/v1/organizations/{organization_id}/teams/{team_id}",
+            "patch",
+        ),
+        (
+            "/api/v1/organizations/{organization_id}/teams/{team_id}/members/{user_id}",
+            "patch",
+        ),
+        (
+            "/api/v1/organizations/{organization_id}/teams/{team_id}/project-roles/{project_id}",
+            "patch",
+        ),
+    ] {
+        let operation = &document["paths"][path][method];
+        assert!(
+            operation["parameters"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|item| item["name"] == "If-Match")
+        );
+        assert!(operation["responses"].get("412").is_some());
+        assert!(operation["responses"].get("428").is_some());
+    }
 }
 
 #[tokio::test]

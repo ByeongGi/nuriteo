@@ -30,6 +30,9 @@ const ORGANIZATION_PROJECT: &str = "0199ee6c-c777-7000-8000-000000005032";
 const ARCHIVED_ORGANIZATION_PROJECT: &str = "0199ee6c-c777-7000-8000-000000005033";
 const DELETION_PROJECT: &str = "0199ee6c-c777-7000-8000-000000005034";
 const CONCURRENT_DELETE_PROJECT: &str = "0199ee6c-c777-7000-8000-000000005035";
+const READ_TEAM: &str = "0199ee6c-c777-7000-8000-000000005060";
+const WRITE_TEAM: &str = "0199ee6c-c777-7000-8000-000000005061";
+const ADMIN_TEAM: &str = "0199ee6c-c777-7000-8000-000000005062";
 
 #[tokio::test]
 #[ignore = "requires the pinned custom-CA PostgreSQL fixture; run tests/fixtures/postgres-project-access/run.sh"]
@@ -42,11 +45,12 @@ async fn direct_project_roles_are_isolated_effective_and_serialized() {
     )
     .await
     .unwrap();
-    assert_eq!(report.latest_version, Some(15));
-    assert_eq!(report.known_migrations, 15);
+    assert_eq!(report.latest_version, Some(24));
+    assert_eq!(report.known_migrations, 24);
     seed_fixture(&pool).await;
 
     verify_effective_roles_and_archived_access(&pool).await;
+    verify_team_roles_compose_and_fail_closed(&pool).await;
     verify_typed_grant_revoke_and_constraints(&pool).await;
     verify_owner_demotion_reactivates_direct_grant(&pool).await;
     verify_membership_role_and_effective_races(&pool).await;
@@ -61,6 +65,172 @@ async fn direct_project_roles_are_isolated_effective_and_serialized() {
 
     reset_fixture(&pool).await;
     pool.close(Duration::from_secs(2)).await.unwrap();
+}
+
+async fn verify_team_roles_compose_and_fail_closed(pool: &DatabasePool) {
+    execute(
+        pool,
+        "INSERT INTO teams (id,organization_id,slug,display_name) VALUES \
+         ('0199ee6c-c777-7000-8000-000000005060'::uuid, \
+          '0199ee6c-c777-7000-8000-000000005010'::uuid,'readers','Readers'), \
+         ('0199ee6c-c777-7000-8000-000000005061'::uuid, \
+          '0199ee6c-c777-7000-8000-000000005010'::uuid,'writers','Writers'), \
+         ('0199ee6c-c777-7000-8000-000000005062'::uuid, \
+          '0199ee6c-c777-7000-8000-000000005010'::uuid,'admins','Admins')",
+    )
+    .await;
+    for (team, role) in [
+        (READ_TEAM, "member"),
+        (WRITE_TEAM, "maintainer"),
+        (ADMIN_TEAM, "member"),
+    ] {
+        sqlx::query(
+            "INSERT INTO team_memberships (team_id,organization_id,user_id,role) \
+             VALUES ($1::uuid,$2::uuid,$3::uuid,$4)",
+        )
+        .bind(team)
+        .bind(ORGANIZATION)
+        .bind(MEMBER)
+        .bind(role)
+        .execute(&mut *pool.acquire().await.unwrap())
+        .await
+        .unwrap();
+    }
+    for (team, role) in [
+        (READ_TEAM, "read"),
+        (WRITE_TEAM, "write"),
+        (ADMIN_TEAM, "admin"),
+    ] {
+        sqlx::query(
+            "INSERT INTO team_project_roles (team_id,organization_id,project_id,role) \
+             VALUES ($1::uuid,$2::uuid,$3::uuid,$4)",
+        )
+        .bind(team)
+        .bind(ORGANIZATION)
+        .bind(ORGANIZATION_PROJECT)
+        .bind(role)
+        .execute(&mut *pool.acquire().await.unwrap())
+        .await
+        .unwrap();
+    }
+
+    grant(pool, ORGANIZATION_PROJECT, MEMBER, ProjectRole::Write).await;
+    assert_eq!(
+        effective(pool, ORGANIZATION_PROJECT, MEMBER).await,
+        EffectiveProjectRole::Admin,
+        "the maximum direct or Team role must win"
+    );
+    assert_eq!(
+        effective(pool, PERSONAL_PROJECT, MEMBER).await,
+        EffectiveProjectRole::None,
+        "Organization Team roles must not affect a personal Project"
+    );
+    assert_eq!(
+        effective(pool, PERSONAL_PROJECT, OWNER).await,
+        EffectiveProjectRole::Admin,
+        "personal ownership semantics must remain unchanged"
+    );
+
+    delete_team_membership(pool, ADMIN_TEAM).await;
+    assert_eq!(
+        effective(pool, ORGANIZATION_PROJECT, MEMBER).await,
+        EffectiveProjectRole::Write,
+        "membership removal must fall back to remaining authority"
+    );
+    delete_team_membership(pool, WRITE_TEAM).await;
+    assert_eq!(
+        effective(pool, ORGANIZATION_PROJECT, MEMBER).await,
+        EffectiveProjectRole::Write,
+        "a direct role must remain after Team membership removal"
+    );
+    revoke(pool, ORGANIZATION_PROJECT, MEMBER).await;
+    assert_eq!(
+        effective(pool, ORGANIZATION_PROJECT, MEMBER).await,
+        EffectiveProjectRole::Read,
+        "revoking a direct role must reveal the remaining Team role"
+    );
+
+    execute(
+        pool,
+        "UPDATE projects SET state='archived', archived_at=CURRENT_TIMESTAMP, \
+         updated_at=CURRENT_TIMESTAMP, lock_version=lock_version+1 \
+         WHERE id='0199ee6c-c777-7000-8000-000000005032'::uuid",
+    )
+    .await;
+    assert_eq!(
+        effective(pool, ORGANIZATION_PROJECT, MEMBER).await,
+        EffectiveProjectRole::Read,
+        "an archived Project must preserve its existing Team role"
+    );
+    execute(
+        pool,
+        "UPDATE projects SET state='active', archived_at=NULL, \
+         updated_at=CURRENT_TIMESTAMP, lock_version=lock_version+1 \
+         WHERE id='0199ee6c-c777-7000-8000-000000005032'::uuid",
+    )
+    .await;
+
+    execute(
+        pool,
+        "UPDATE users SET status='disabled', disabled_at=CURRENT_TIMESTAMP, \
+         updated_at=CURRENT_TIMESTAMP \
+         WHERE id='0199ee6c-c777-7000-8000-000000005002'::uuid",
+    )
+    .await;
+    assert_eq!(
+        effective(pool, ORGANIZATION_PROJECT, MEMBER).await,
+        EffectiveProjectRole::None,
+        "a disabled User must never receive a preserved Team role"
+    );
+    execute(
+        pool,
+        "UPDATE users SET status='active', disabled_at=NULL, updated_at=CURRENT_TIMESTAMP \
+         WHERE id='0199ee6c-c777-7000-8000-000000005002'::uuid",
+    )
+    .await;
+
+    execute(
+        pool,
+        "UPDATE organizations SET status='archived', archived_at=CURRENT_TIMESTAMP, \
+         updated_at=CURRENT_TIMESTAMP, lock_version=lock_version+1 \
+         WHERE id='0199ee6c-c777-7000-8000-000000005010'::uuid",
+    )
+    .await;
+    assert_eq!(
+        effective(pool, ORGANIZATION_PROJECT, MEMBER).await,
+        EffectiveProjectRole::None,
+        "an archived Organization must suppress preserved Team roles"
+    );
+    execute(
+        pool,
+        "UPDATE organizations SET status='active', archived_at=NULL, \
+         updated_at=CURRENT_TIMESTAMP, lock_version=lock_version+1 \
+         WHERE id='0199ee6c-c777-7000-8000-000000005010'::uuid",
+    )
+    .await;
+
+    delete_team_membership(pool, READ_TEAM).await;
+    assert_eq!(
+        effective(pool, ORGANIZATION_PROJECT, MEMBER).await,
+        EffectiveProjectRole::None
+    );
+    execute(
+        pool,
+        "DELETE FROM teams WHERE organization_id='0199ee6c-c777-7000-8000-000000005010'::uuid",
+    )
+    .await;
+}
+
+async fn delete_team_membership(pool: &DatabasePool, team_id: &str) {
+    sqlx::query(
+        "DELETE FROM team_memberships \
+         WHERE team_id=$1::uuid AND user_id=$2::uuid",
+    )
+    .bind(team_id)
+    .bind(MEMBER)
+    .execute(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
 }
 
 async fn verify_effective_roles_and_archived_access(pool: &DatabasePool) {
@@ -1051,7 +1221,7 @@ async fn seed_fixture(pool: &DatabasePool) {
         (MEMBER, "member", "active"),
         (UNGRANTED, "ungranted", "active"),
         (OUTSIDER, "outsider", "active"),
-        (DISABLED, "disabled", "disabled"),
+        (DISABLED, "disabled", "active"),
     ] {
         let email = format!("{label}@example.test");
         sqlx::query(
@@ -1082,6 +1252,13 @@ async fn seed_fixture(pool: &DatabasePool) {
     ] {
         insert_membership(pool, user, role).await;
     }
+    execute(
+        pool,
+        "UPDATE users SET status='disabled', disabled_at=CURRENT_TIMESTAMP, \
+         updated_at=CURRENT_TIMESTAMP \
+         WHERE id='0199ee6c-c777-7000-8000-000000005005'::uuid",
+    )
+    .await;
     execute(
         pool,
         "INSERT INTO storage_scopes (id,owner_user_id) VALUES \

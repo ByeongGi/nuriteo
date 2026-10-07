@@ -8,6 +8,7 @@ use crate::organization::OrganizationHttpService;
 use crate::project::ProjectHttpService;
 use crate::save::SaveHttpService;
 use crate::setup::SetupStatusService;
+use crate::team::TeamHttpService;
 use axum::Router;
 use axum::extract::Extension;
 use axum::http::Uri;
@@ -121,6 +122,31 @@ pub fn build_router_with_admin_service(
     setup: SetupStatusService,
     admin: AdminHttpService,
 ) -> Router {
+    build_router_with_team_service(
+        health,
+        auth,
+        invitations,
+        organizations,
+        projects,
+        save,
+        setup,
+        admin,
+        TeamHttpService::unconfigured(),
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn build_router_with_team_service(
+    health: HealthService,
+    auth: AuthService,
+    invitations: InvitationHttpService,
+    organizations: OrganizationHttpService,
+    projects: ProjectHttpService,
+    save: SaveHttpService,
+    setup: SetupStatusService,
+    admin: AdminHttpService,
+    teams: TeamHttpService,
+) -> Router {
     openapi::router(
         auth,
         invitations,
@@ -129,6 +155,7 @@ pub fn build_router_with_admin_service(
         save,
         setup,
         admin,
+        teams,
     )
     .merge(health.router())
     .fallback(not_found)

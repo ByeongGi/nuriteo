@@ -7,6 +7,7 @@ use utoipa::ToSchema;
 
 use crate::identity::{Timestamp, UserId};
 use crate::organization::OrganizationId;
+use crate::team::TeamId;
 
 use super::{ProjectId, ProjectOwner};
 
@@ -320,7 +321,10 @@ impl ProjectAccessRepository {
                 if membership_role != "member" {
                     return Err(ProjectAccessError::InvalidPersistedState);
                 }
-                let role: Option<String> = sqlx::query_scalar(
+                let team_roles =
+                    lock_team_project_roles(transaction, organization_id, project_id, user_id)
+                        .await?;
+                let direct_role: Option<String> = sqlx::query_scalar(
                     "SELECT role FROM project_user_roles \
                      WHERE project_id = $1::uuid AND organization_id = $2::uuid \
                        AND user_id = $3::uuid FOR SHARE",
@@ -331,12 +335,116 @@ impl ProjectAccessRepository {
                 .fetch_optional(&mut **transaction)
                 .await
                 .map_err(map_query_error)?;
-                role.map(|value| ProjectRole::parse(&value).map(Into::into))
-                    .transpose()
-                    .map(|role| role.unwrap_or(EffectiveProjectRole::None))
+                let direct_role = direct_role
+                    .map(|value| ProjectRole::parse(&value))
+                    .transpose()?;
+                Ok(direct_role
+                    .into_iter()
+                    .chain(team_roles)
+                    .map(EffectiveProjectRole::from)
+                    .max()
+                    .unwrap_or(EffectiveProjectRole::None))
             }
         }
     }
+}
+
+/// Locks Team authority in the global Organization -> Project -> User ->
+/// Organization membership -> Team UUID -> Team membership -> grant order.
+///
+/// The first statement fixes the set of Teams visible to this resolution. A
+/// membership inserted after that snapshot may only cause a conservative
+/// denial until the next request; it can never introduce authority without
+/// its Team having been locked first.
+async fn lock_team_project_roles(
+    transaction: &mut Transaction<'_, Postgres>,
+    organization_id: OrganizationId,
+    project_id: ProjectId,
+    user_id: UserId,
+) -> Result<Vec<ProjectRole>, ProjectAccessError> {
+    let team_rows: Vec<String> = sqlx::query_scalar(
+        "SELECT team.id::text \
+         FROM teams team \
+         JOIN team_memberships membership \
+           ON membership.team_id = team.id \
+          AND membership.organization_id = team.organization_id \
+         WHERE team.organization_id = $1::uuid \
+           AND membership.user_id = $2::uuid \
+         ORDER BY team.id \
+         FOR SHARE OF team",
+    )
+    .bind(organization_id.to_string())
+    .bind(user_id.to_string())
+    .fetch_all(&mut **transaction)
+    .await
+    .map_err(map_query_error)?;
+
+    let team_ids = team_rows
+        .into_iter()
+        .map(|value| {
+            value
+                .parse::<TeamId>()
+                .map_err(|_| ProjectAccessError::InvalidPersistedState)
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    if team_ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    let team_id_values = team_ids.iter().map(ToString::to_string).collect::<Vec<_>>();
+
+    let membership_rows: Vec<(String, String)> = sqlx::query_as(
+        "SELECT team_id::text, role \
+         FROM team_memberships \
+         WHERE organization_id = $1::uuid \
+           AND user_id = $2::uuid \
+           AND team_id::text = ANY($3::text[]) \
+         ORDER BY team_id \
+         FOR SHARE",
+    )
+    .bind(organization_id.to_string())
+    .bind(user_id.to_string())
+    .bind(&team_id_values)
+    .fetch_all(&mut **transaction)
+    .await
+    .map_err(map_query_error)?;
+    if membership_rows.len() != team_ids.len() {
+        return Ok(Vec::new());
+    }
+    for ((team_id, role), expected_team_id) in membership_rows.iter().zip(&team_ids) {
+        let parsed_team_id = team_id
+            .parse::<TeamId>()
+            .map_err(|_| ProjectAccessError::InvalidPersistedState)?;
+        if parsed_team_id != *expected_team_id || !matches!(role.as_str(), "maintainer" | "member")
+        {
+            return Err(ProjectAccessError::InvalidPersistedState);
+        }
+    }
+
+    let grant_rows: Vec<(String, String)> = sqlx::query_as(
+        "SELECT team_id::text, role \
+         FROM team_project_roles \
+         WHERE organization_id = $1::uuid \
+           AND project_id = $2::uuid \
+           AND team_id::text = ANY($3::text[]) \
+         ORDER BY team_id \
+         FOR SHARE",
+    )
+    .bind(organization_id.to_string())
+    .bind(project_id.to_string())
+    .bind(&team_id_values)
+    .fetch_all(&mut **transaction)
+    .await
+    .map_err(map_query_error)?;
+
+    grant_rows
+        .into_iter()
+        .map(|(team_id, role)| {
+            team_id
+                .parse::<TeamId>()
+                .map_err(|_| ProjectAccessError::InvalidPersistedState)?;
+            ProjectRole::parse(&role)
+        })
+        .collect()
 }
 
 #[derive(Clone, Copy)]

@@ -1,9 +1,26 @@
+mod http_routes;
+mod http_service;
 mod model;
+mod repository;
+mod service;
 mod types;
 
 use std::fmt;
 
+pub(crate) use http_routes::openapi_router;
+pub use http_service::{TeamHttpError, TeamHttpPolicy, TeamHttpService};
+
 pub use model::{Team, TeamMembership, TeamProjectRoleGrant};
+pub use repository::{
+    DEFAULT_TEAM_PAGE_SIZE, MAX_TEAM_PAGE_SIZE, NewTeam, TeamConflict, TeamMemberPageKey,
+    TeamMemberPageLimit, TeamMembershipPage, TeamPage, TeamPageKey, TeamPageLimit,
+    TeamProjectRolePage, TeamProjectRolePageKey, TeamProjectRolePageLimit, TeamRepository,
+    TeamRepositoryError,
+};
+pub use service::{
+    TeamAuditContext, TeamMutationResult, TeamPrincipal, TeamService, TeamServiceError,
+    TeamServicePolicy,
+};
 pub use types::{
     TeamAction, TeamAuthorization, TeamAuthorizationPrincipal, TeamDisplayName, TeamId,
     TeamMembershipVersion, TeamOrganizationMembership, TeamProjectRoleVersion, TeamRole, TeamSlug,
