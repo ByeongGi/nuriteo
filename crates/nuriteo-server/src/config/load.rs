@@ -7,12 +7,15 @@ use std::path::Path;
 use std::time::Duration;
 
 use serde::Deserialize;
+use serde_json::Value;
 
 use super::redaction::SecretString;
 use super::schema::*;
 use super::validation;
 use super::{
-    CleanupConfig, Config, ConfigError, ConfigWarning, LoadReport, PublicConfig, ServerConfig,
+    CleanupConfig, Config, ConfigError, ConfigWarning, INSTANCE_SETTING_DEFINITIONS,
+    InstanceSettingBootstrap, InstanceSettingBootstrapError, InstanceSettingValidationError,
+    LoadReport, PublicConfig, ServerConfig, SettingConstraint, instance_setting_definition,
 };
 use crate::save::CleanupWorkerPolicy;
 
@@ -57,8 +60,8 @@ pub(super) fn from_sources(
     files: &impl FileReader,
 ) -> Result<LoadReport, ConfigError> {
     let values = Values::new(environment.entries())?;
-    let file_values = load_toml(&values, files)?;
-    let strict = resolve(&values, &file_values, STRICT, "true")
+    let file = load_toml(&values, files)?;
+    let strict = resolve(&values, &file.startup, STRICT, "true")
         .and_then(|value| validation::boolean(STRICT, &value))?;
     let unknown_names = unknown_names(&values);
     if strict && !unknown_names.is_empty() {
@@ -71,11 +74,11 @@ pub(super) fn from_sources(
         .map(|name| ConfigWarning::UnknownEnvironmentVariable { name })
         .collect();
 
-    let listen_addr = resolve(&values, &file_values, LISTEN_ADDR, "127.0.0.1:8080")
+    let listen_addr = resolve(&values, &file.startup, LISTEN_ADDR, "127.0.0.1:8080")
         .and_then(|value| validation::socket_addr(LISTEN_ADDR, &value))?;
     let management_listen_addr = resolve(
         &values,
-        &file_values,
+        &file.startup,
         MANAGEMENT_LISTEN_ADDR,
         "127.0.0.1:9090",
     )
@@ -86,15 +89,16 @@ pub(super) fn from_sources(
             "must differ from the application listener",
         ));
     }
-    let shutdown_drain_timeout = resolve(&values, &file_values, SHUTDOWN_DRAIN_TIMEOUT_MS, "30000")
-        .and_then(|value| validation::drain_timeout(SHUTDOWN_DRAIN_TIMEOUT_MS, &value))?;
-    let log_format = resolve(&values, &file_values, LOG_FORMAT, "json")
+    let shutdown_drain_timeout =
+        resolve(&values, &file.startup, SHUTDOWN_DRAIN_TIMEOUT_MS, "30000")
+            .and_then(|value| validation::drain_timeout(SHUTDOWN_DRAIN_TIMEOUT_MS, &value))?;
+    let log_format = resolve(&values, &file.startup, LOG_FORMAT, "json")
         .and_then(|value| validation::log_format(LOG_FORMAT, &value))?;
-    let log_level = resolve(&values, &file_values, LOG_LEVEL, "info")
+    let log_level = resolve(&values, &file.startup, LOG_LEVEL, "info")
         .and_then(|value| validation::log_level(LOG_LEVEL, &value))?;
-    let external_url = required(&values, &file_values, EXTERNAL_URL)
+    let external_url = required(&values, &file.startup, EXTERNAL_URL)
         .and_then(|value| validation::external_url(EXTERNAL_URL, &value))?;
-    let preview_base_domain = optional(&values, &file_values, PREVIEW_BASE_DOMAIN)?
+    let preview_base_domain = optional(&values, &file.startup, PREVIEW_BASE_DOMAIN)?
         .map(|value| validation::preview_domain(PREVIEW_BASE_DOMAIN, &value))
         .transpose()?;
     if preview_base_domain.as_deref() == external_url.host_str() {
@@ -103,7 +107,8 @@ pub(super) fn from_sources(
             "must be different from the application host",
         ));
     }
-    let cleanup = load_cleanup(&values, &file_values)?;
+    let cleanup = load_cleanup(&values, &file.startup)?;
+    let instance_settings = load_instance_setting_bootstrap(&values, file.instance_settings)?;
 
     Ok(LoadReport {
         config: Config {
@@ -120,6 +125,7 @@ pub(super) fn from_sources(
             },
             cleanup,
         },
+        instance_settings,
         warnings,
     })
 }
@@ -223,10 +229,15 @@ impl Values {
 }
 
 fn unknown_names(values: &Values) -> Vec<String> {
-    let known: BTreeSet<&str> = CONFIG_FIELDS
+    let mut known: BTreeSet<&str> = CONFIG_FIELDS
         .iter()
         .map(|field| field.environment)
         .collect();
+    known.extend(
+        INSTANCE_SETTING_DEFINITIONS
+            .iter()
+            .map(|definition| definition.bootstrap_environment),
+    );
     values
         .0
         .keys()
@@ -284,12 +295,9 @@ fn non_empty(name: &'static str, value: String) -> Result<String, ConfigError> {
     }
 }
 
-fn load_toml(
-    values: &Values,
-    files: &impl FileReader,
-) -> Result<BTreeMap<&'static str, String>, ConfigError> {
+fn load_toml(values: &Values, files: &impl FileReader) -> Result<LoadedFile, ConfigError> {
     let Some(path) = values.get(CONFIG_FILE) else {
-        return Ok(BTreeMap::new());
+        return Ok(LoadedFile::default());
     };
     if path.trim().is_empty() {
         return Err(ConfigError::Empty { name: CONFIG_FILE });
@@ -298,7 +306,55 @@ fn load_toml(
     let contents =
         std::str::from_utf8(&bytes).map_err(|_| ConfigError::InvalidUtf8 { name: CONFIG_FILE })?;
     let parsed: FileConfig = toml::from_str(contents).map_err(|_| ConfigError::InvalidToml)?;
-    Ok(parsed.into_values())
+    parsed.into_loaded_file()
+}
+
+#[derive(Default)]
+struct LoadedFile {
+    startup: BTreeMap<&'static str, String>,
+    instance_settings: BTreeMap<String, Value>,
+}
+
+fn load_instance_setting_bootstrap(
+    values: &Values,
+    file: BTreeMap<String, Value>,
+) -> Result<InstanceSettingBootstrap, ConfigError> {
+    let mut environment = BTreeMap::new();
+    for definition in INSTANCE_SETTING_DEFINITIONS {
+        let Some(raw) = values.get(definition.bootstrap_environment) else {
+            continue;
+        };
+        let value = parse_instance_setting_environment(definition.key, definition.constraint, raw)
+            .map_err(ConfigError::InstanceSetting)?;
+        environment.insert(definition.key.to_owned(), value);
+    }
+    InstanceSettingBootstrap::new(file, environment).map_err(ConfigError::InstanceSetting)
+}
+
+fn parse_instance_setting_environment(
+    key: &'static str,
+    constraint: SettingConstraint,
+    raw: &str,
+) -> Result<Value, InstanceSettingBootstrapError> {
+    let invalid = || {
+        InstanceSettingBootstrapError::Invalid(InstanceSettingValidationError {
+            key,
+            reason: "bootstrap environment value has invalid syntax",
+        })
+    };
+    match constraint {
+        SettingConstraint::Enumeration { .. } => Ok(Value::String(raw.to_owned())),
+        SettingConstraint::UnsignedInteger { .. } => {
+            raw.parse::<u64>().map(Value::from).map_err(|_| invalid())
+        }
+        SettingConstraint::RetentionDays {
+            allow_unlimited: true,
+            ..
+        } if raw == "unlimited" => Ok(Value::Null),
+        SettingConstraint::RetentionDays { .. } => {
+            raw.parse::<u64>().map(Value::from).map_err(|_| invalid())
+        }
+    }
 }
 
 fn read_bounded(
@@ -381,10 +437,11 @@ struct FileConfig {
     logging: FileLoggingSection,
     public: FilePublicSection,
     cleanup: FileCleanupSection,
+    instance_settings: BTreeMap<String, toml::Value>,
 }
 
 impl FileConfig {
-    fn into_values(self) -> BTreeMap<&'static str, String> {
+    fn into_loaded_file(self) -> Result<LoadedFile, ConfigError> {
         let mut values = BTreeMap::new();
         insert(&mut values, STRICT, self.config.strict_environment);
         insert(&mut values, LISTEN_ADDR, self.server.listen_address);
@@ -454,7 +511,27 @@ impl FileConfig {
             CLEANUP_STATUS_TIMEOUT_MS,
             self.cleanup.status_timeout_ms,
         );
-        values
+        let mut instance_settings = BTreeMap::new();
+        for (key, value) in self.instance_settings {
+            let value = match (
+                instance_setting_definition(&key).map(|definition| definition.constraint),
+                value.as_str(),
+            ) {
+                (
+                    Some(SettingConstraint::RetentionDays {
+                        allow_unlimited: true,
+                        ..
+                    }),
+                    Some("unlimited"),
+                ) => Value::Null,
+                _ => serde_json::to_value(value).map_err(|_| ConfigError::InvalidToml)?,
+            };
+            instance_settings.insert(key, value);
+        }
+        Ok(LoadedFile {
+            startup: values,
+            instance_settings,
+        })
     }
 }
 

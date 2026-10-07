@@ -1,11 +1,15 @@
 use std::fmt;
 use std::num::NonZeroUsize;
+use std::time::Duration;
 
 use crate::auth::{AuthPolicy, AuthService};
 use crate::config::{Config, Environment, FileReader};
-use crate::database::{DatabasePool, DatabaseRuntimeConfig};
+use crate::database::{
+    DatabasePool, DatabaseRuntimeConfig, SchemaReadiness, check_schema_readiness,
+};
 use crate::health::{HealthPolicy, HealthService};
 use crate::identity::SessionPolicy;
+use crate::instance_settings::InstanceSettingsRepository;
 use crate::invitations::{InvitationHttpPolicy, InvitationHttpService};
 use crate::object_storage::{ObjectStorageConfig, OperationLimits, S3ObjectStore};
 use crate::organization::{OrganizationHttpPolicy, OrganizationHttpService};
@@ -19,12 +23,14 @@ use crate::setup::{SetupStatusPolicy, SetupStatusService};
 use super::{Supervisor, SupervisorConfig, WorkerError, build_router_with_save_service};
 
 const PRODUCTION_WORKERS: NonZeroUsize = NonZeroUsize::new(3).unwrap();
+const INSTANCE_SETTINGS_STARTUP_TIMEOUT: Duration = Duration::from_secs(5);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ServeError {
     Configuration,
     DatabaseConfiguration,
     DatabaseConnectivity,
+    InstanceSettings,
     StorageConfiguration,
     StorageInitialization,
     AuthenticationConfiguration,
@@ -45,6 +51,7 @@ impl ServeError {
             Self::Configuration => "configuration",
             Self::DatabaseConfiguration => "database-configuration",
             Self::DatabaseConnectivity => "database-connectivity",
+            Self::InstanceSettings => "instance-settings",
             Self::StorageConfiguration => "storage-configuration",
             Self::StorageInitialization => "storage-initialization",
             Self::AuthenticationConfiguration => "authentication-configuration",
@@ -73,9 +80,8 @@ pub(crate) async fn run_server(
     environment: &impl Environment,
     files: &impl FileReader,
 ) -> Result<(), ServeError> {
-    let global = Config::load(environment, files)
-        .map_err(|_| ServeError::Configuration)?
-        .config;
+    let load_report = Config::load(environment, files).map_err(|_| ServeError::Configuration)?;
+    let global = load_report.config;
     let database = DatabaseRuntimeConfig::load(environment, files)
         .map_err(|_| ServeError::DatabaseConfiguration)?;
     let storage = ObjectStorageConfig::load(environment, files)
@@ -87,6 +93,31 @@ pub(crate) async fn run_server(
         .await
         .map_err(|_| ServeError::DatabaseConnectivity)?;
     let close_timeout = database.close_timeout();
+    let schema_readiness = tokio::time::timeout(
+        INSTANCE_SETTINGS_STARTUP_TIMEOUT,
+        check_schema_readiness(&pool),
+    )
+    .await;
+    if matches!(schema_readiness, Ok(Ok(SchemaReadiness::Ready { .. }))) {
+        let instance_settings = match InstanceSettingsRepository::new(
+            pool.clone(),
+            INSTANCE_SETTINGS_STARTUP_TIMEOUT,
+        ) {
+            Ok(repository) => repository,
+            Err(_) => {
+                close_pool(pool, close_timeout).await?;
+                return Err(ServeError::InstanceSettings);
+            }
+        };
+        if instance_settings
+            .materialize(&load_report.instance_settings)
+            .await
+            .is_err()
+        {
+            close_pool(pool, close_timeout).await?;
+            return Err(ServeError::InstanceSettings);
+        }
+    }
     let store = match S3ObjectStore::new(&storage, OperationLimits::default()).await {
         Ok(store) => store,
         Err(_) => {
@@ -290,6 +321,7 @@ mod tests {
             (ServeError::Configuration, "configuration"),
             (ServeError::DatabaseConfiguration, "database-configuration"),
             (ServeError::DatabaseConnectivity, "database-connectivity"),
+            (ServeError::InstanceSettings, "instance-settings"),
             (ServeError::StorageConfiguration, "storage-configuration"),
             (ServeError::StorageInitialization, "storage-initialization"),
             (

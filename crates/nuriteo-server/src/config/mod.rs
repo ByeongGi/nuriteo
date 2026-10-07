@@ -11,7 +11,8 @@ use std::time::Duration;
 
 use crate::save::CleanupWorkerPolicy;
 pub use instance_settings::{
-    INSTANCE_SETTING_DEFINITIONS, INSTANCE_SETTING_REGISTRY_VERSION, InstanceSettingDefinition,
+    BootstrapSettingOrigin, INSTANCE_SETTING_DEFINITIONS, INSTANCE_SETTING_REGISTRY_VERSION,
+    InstanceSettingBootstrap, InstanceSettingBootstrapError, InstanceSettingDefinition,
     InstanceSettingValidationError, SettingApplyMode, SettingConstraint, SettingSensitivity,
     instance_setting_definition,
 };
@@ -51,6 +52,7 @@ impl Config {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LoadReport {
     pub config: Config,
+    pub instance_settings: InstanceSettingBootstrap,
     pub warnings: Vec<ConfigWarning>,
 }
 
@@ -122,6 +124,7 @@ pub enum ConfigError {
         name: &'static str,
     },
     InvalidToml,
+    InstanceSetting(InstanceSettingBootstrapError),
     ConflictingSecretSources {
         name: &'static str,
         file_name: &'static str,
@@ -173,6 +176,7 @@ impl fmt::Display for ConfigError {
                 write!(formatter, "file referenced by {name} is not valid UTF-8")
             }
             Self::InvalidToml => formatter.write_str("NURITEO configuration file is invalid"),
+            Self::InstanceSetting(error) => error.fmt(formatter),
             Self::ConflictingSecretSources { name, file_name } => write!(
                 formatter,
                 "configuration {name} and {file_name} cannot both be set"

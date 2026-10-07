@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::fmt;
 
 use serde_json::Value;
@@ -44,6 +45,7 @@ pub enum SettingConstraint {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct InstanceSettingDefinition {
     pub key: &'static str,
+    pub bootstrap_environment: &'static str,
     pub introduced_in: u16,
     pub default_json: Option<&'static str>,
     pub sensitivity: SettingSensitivity,
@@ -134,6 +136,7 @@ const RUNTIME_NETWORK: &[&str] = &["browser_direct", "runtime_offline"];
 
 const fn unsigned(
     key: &'static str,
+    bootstrap_environment: &'static str,
     default_json: &'static str,
     minimum: u64,
     maximum: u64,
@@ -141,6 +144,7 @@ const fn unsigned(
 ) -> InstanceSettingDefinition {
     InstanceSettingDefinition {
         key,
+        bootstrap_environment,
         introduced_in: INSTANCE_SETTING_REGISTRY_VERSION,
         default_json: Some(default_json),
         sensitivity: SettingSensitivity::Public,
@@ -153,6 +157,7 @@ const fn unsigned(
 pub const INSTANCE_SETTING_DEFINITIONS: &[InstanceSettingDefinition] = &[
     InstanceSettingDefinition {
         key: "audit.retention_days",
+        bootstrap_environment: "NURITEO_AUDIT_RETENTION_DAYS",
         introduced_in: 1,
         default_json: Some("365"),
         sensitivity: SettingSensitivity::Public,
@@ -165,6 +170,7 @@ pub const INSTANCE_SETTING_DEFINITIONS: &[InstanceSettingDefinition] = &[
     },
     unsigned(
         "invitations.default_expiry_hours",
+        "NURITEO_INVITATION_DEFAULT_EXPIRY_HOURS",
         "168",
         1,
         720,
@@ -172,6 +178,7 @@ pub const INSTANCE_SETTING_DEFINITIONS: &[InstanceSettingDefinition] = &[
     ),
     unsigned(
         "notifications.general_retention_days",
+        "NURITEO_NOTIFICATION_GENERAL_RETENTION_DAYS",
         "90",
         30,
         365,
@@ -179,6 +186,7 @@ pub const INSTANCE_SETTING_DEFINITIONS: &[InstanceSettingDefinition] = &[
     ),
     InstanceSettingDefinition {
         key: "notifications.security_retention_days",
+        bootstrap_environment: "NURITEO_NOTIFICATION_SECURITY_RETENTION_DAYS",
         introduced_in: 1,
         default_json: Some("365"),
         sensitivity: SettingSensitivity::Public,
@@ -191,6 +199,7 @@ pub const INSTANCE_SETTING_DEFINITIONS: &[InstanceSettingDefinition] = &[
     },
     InstanceSettingDefinition {
         key: "runtime.network.default",
+        bootstrap_environment: "NURITEO_RUNTIME_NETWORK_DEFAULT",
         introduced_in: 1,
         default_json: Some("\"browser_direct\""),
         sensitivity: SettingSensitivity::Public,
@@ -201,6 +210,7 @@ pub const INSTANCE_SETTING_DEFINITIONS: &[InstanceSettingDefinition] = &[
     },
     InstanceSettingDefinition {
         key: "security.mfa_enforcement",
+        bootstrap_environment: "NURITEO_MFA_ENFORCEMENT",
         introduced_in: 1,
         default_json: Some("\"off\""),
         sensitivity: SettingSensitivity::Public,
@@ -211,6 +221,7 @@ pub const INSTANCE_SETTING_DEFINITIONS: &[InstanceSettingDefinition] = &[
     },
     unsigned(
         "security.mfa_grace_period_days",
+        "NURITEO_MFA_GRACE_PERIOD_DAYS",
         "7",
         0,
         30,
@@ -218,6 +229,7 @@ pub const INSTANCE_SETTING_DEFINITIONS: &[InstanceSettingDefinition] = &[
     ),
     unsigned(
         "security.reauthentication_window_minutes",
+        "NURITEO_REAUTHENTICATION_WINDOW_MINUTES",
         "30",
         15,
         120,
@@ -225,6 +237,7 @@ pub const INSTANCE_SETTING_DEFINITIONS: &[InstanceSettingDefinition] = &[
     ),
     unsigned(
         "tokens.default_expiry_days",
+        "NURITEO_TOKEN_DEFAULT_EXPIRY_DAYS",
         "90",
         1,
         365,
@@ -232,6 +245,7 @@ pub const INSTANCE_SETTING_DEFINITIONS: &[InstanceSettingDefinition] = &[
     ),
     unsigned(
         "tokens.maximum_expiry_days",
+        "NURITEO_TOKEN_MAXIMUM_EXPIRY_DAYS",
         "365",
         1,
         365,
@@ -248,6 +262,140 @@ pub fn instance_setting_definition(key: &str) -> Option<&'static InstanceSetting
         .map(|index| &INSTANCE_SETTING_DEFINITIONS[index])
 }
 
+/// Origin used only while materializing the first complete PostgreSQL setting set.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BootstrapSettingOrigin {
+    Default,
+    File,
+    Environment,
+}
+
+impl BootstrapSettingOrigin {
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Default => "default",
+            Self::File => "file",
+            Self::Environment => "environment",
+        }
+    }
+}
+
+/// Validated first-install inputs. PostgreSQL supersedes this object after materialization.
+#[derive(Clone, PartialEq, Eq)]
+pub struct InstanceSettingBootstrap {
+    file: BTreeMap<&'static str, Value>,
+    environment: BTreeMap<&'static str, Value>,
+}
+
+impl InstanceSettingBootstrap {
+    pub fn new(
+        file: BTreeMap<String, Value>,
+        environment: BTreeMap<String, Value>,
+    ) -> Result<Self, InstanceSettingBootstrapError> {
+        Ok(Self {
+            file: validate_bootstrap_map(file)?,
+            environment: validate_bootstrap_map(environment)?,
+        })
+    }
+
+    #[must_use]
+    pub fn empty() -> Self {
+        Self {
+            file: BTreeMap::new(),
+            environment: BTreeMap::new(),
+        }
+    }
+
+    pub fn resolve(
+        &self,
+        definition: &'static InstanceSettingDefinition,
+    ) -> Result<(Value, BootstrapSettingOrigin), InstanceSettingBootstrapError> {
+        if let Some(value) = self.environment.get(definition.key) {
+            return Ok((value.clone(), BootstrapSettingOrigin::Environment));
+        }
+        if let Some(value) = self.file.get(definition.key) {
+            return Ok((value.clone(), BootstrapSettingOrigin::File));
+        }
+        let value = definition
+            .validated_default()
+            .map_err(InstanceSettingBootstrapError::Invalid)?
+            .ok_or(InstanceSettingBootstrapError::MissingDefault {
+                key: definition.key,
+            })?;
+        Ok((value, BootstrapSettingOrigin::Default))
+    }
+
+    pub fn file_keys(&self) -> impl Iterator<Item = &'static str> + '_ {
+        self.file.keys().copied()
+    }
+
+    pub fn environment_keys(&self) -> impl Iterator<Item = &'static str> + '_ {
+        self.environment.keys().copied()
+    }
+}
+
+impl fmt::Debug for InstanceSettingBootstrap {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("InstanceSettingBootstrap")
+            .field("file_keys", &self.file.keys().collect::<Vec<_>>())
+            .field(
+                "environment_keys",
+                &self.environment.keys().collect::<Vec<_>>(),
+            )
+            .finish()
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InstanceSettingBootstrapError {
+    UnknownKey,
+    SecretSource { key: &'static str },
+    MissingDefault { key: &'static str },
+    Invalid(InstanceSettingValidationError),
+}
+
+impl fmt::Display for InstanceSettingBootstrapError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::UnknownKey => formatter.write_str("unknown Instance setting key"),
+            Self::SecretSource { key } => {
+                write!(
+                    formatter,
+                    "secret Instance setting {key} cannot use bootstrap JSON"
+                )
+            }
+            Self::MissingDefault { key } => {
+                write!(formatter, "Instance setting {key} has no bootstrap value")
+            }
+            Self::Invalid(error) => error.fmt(formatter),
+        }
+    }
+}
+
+impl std::error::Error for InstanceSettingBootstrapError {}
+
+fn validate_bootstrap_map(
+    values: BTreeMap<String, Value>,
+) -> Result<BTreeMap<&'static str, Value>, InstanceSettingBootstrapError> {
+    let mut validated = BTreeMap::new();
+    for (key, value) in values {
+        let definition =
+            instance_setting_definition(&key).ok_or(InstanceSettingBootstrapError::UnknownKey)?;
+        if definition.sensitivity == SettingSensitivity::Secret {
+            return Err(InstanceSettingBootstrapError::SecretSource {
+                key: definition.key,
+            });
+        }
+        definition
+            .validate(&value)
+            .map_err(InstanceSettingBootstrapError::Invalid)?;
+        validated.insert(definition.key, value);
+    }
+    Ok(validated)
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeSet;
@@ -259,6 +407,7 @@ mod tests {
     #[test]
     fn registry_is_sorted_unique_versioned_and_complete() {
         let mut keys = BTreeSet::new();
+        let mut environment_names = BTreeSet::new();
         let mut previous = None;
 
         for definition in INSTANCE_SETTING_DEFINITIONS {
@@ -268,6 +417,8 @@ mod tests {
             }
             previous = Some(definition.key);
             assert!(definition.key.is_ascii());
+            assert!(environment_names.insert(definition.bootstrap_environment));
+            assert!(definition.bootstrap_environment.starts_with("NURITEO_"));
             assert!(definition.introduced_in > 0);
             assert!(definition.introduced_in <= INSTANCE_SETTING_REGISTRY_VERSION);
             if definition.sensitivity == SettingSensitivity::Secret {
@@ -321,5 +472,55 @@ mod tests {
         for value in [json!(90.5), json!(-1), json!("90"), json!(true)] {
             assert!(definition.validate(&value).is_err());
         }
+    }
+
+    #[test]
+    fn bootstrap_precedence_is_environment_then_file_then_default() {
+        let bootstrap = InstanceSettingBootstrap::new(
+            BTreeMap::from([
+                ("security.mfa_grace_period_days".to_owned(), json!(14)),
+                ("tokens.default_expiry_days".to_owned(), json!(120)),
+            ]),
+            BTreeMap::from([("security.mfa_grace_period_days".to_owned(), json!(3))]),
+        )
+        .unwrap();
+
+        assert_eq!(
+            bootstrap
+                .resolve(instance_setting_definition("security.mfa_grace_period_days").unwrap())
+                .unwrap(),
+            (json!(3), BootstrapSettingOrigin::Environment)
+        );
+        assert_eq!(
+            bootstrap
+                .resolve(instance_setting_definition("tokens.default_expiry_days").unwrap())
+                .unwrap(),
+            (json!(120), BootstrapSettingOrigin::File)
+        );
+        assert_eq!(
+            bootstrap
+                .resolve(instance_setting_definition("audit.retention_days").unwrap())
+                .unwrap(),
+            (json!(365), BootstrapSettingOrigin::Default)
+        );
+    }
+
+    #[test]
+    fn bootstrap_rejects_unknown_or_invalid_values_without_echoing_them() {
+        assert_eq!(
+            InstanceSettingBootstrap::new(
+                BTreeMap::from([("security.unknown".to_owned(), json!("do-not-echo"))]),
+                BTreeMap::new(),
+            )
+            .unwrap_err(),
+            InstanceSettingBootstrapError::UnknownKey
+        );
+
+        let error = InstanceSettingBootstrap::new(
+            BTreeMap::new(),
+            BTreeMap::from([("security.mfa_enforcement".to_owned(), json!("do-not-echo"))]),
+        )
+        .unwrap_err();
+        assert!(!error.to_string().contains("do-not-echo"));
     }
 }

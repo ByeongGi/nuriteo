@@ -4,6 +4,8 @@ use std::io;
 use std::path::Path;
 use std::time::Duration;
 
+use serde_json::{Value, json};
+
 use super::load::load_secret;
 use super::schema::*;
 use super::*;
@@ -131,6 +133,87 @@ preview_base_domain = "preview.file.example.com"
         report.config.public.preview_base_domain.as_deref(),
         Some("preview.file.example.com")
     );
+}
+
+#[test]
+fn instance_setting_bootstrap_uses_environment_then_file_then_registry_default() {
+    let toml = br#"
+[public]
+external_url = "https://nuriteo.example.com"
+
+[instance_settings]
+"security.mfa_grace_period_days" = 14
+"tokens.default_expiry_days" = 120
+"audit.retention_days" = "unlimited"
+"#;
+    let files = TestFiles(BTreeMap::from([(
+        "/config/nuriteo.toml".into(),
+        toml.to_vec(),
+    )]));
+    let report = load(
+        &[
+            (CONFIG_FILE, "/config/nuriteo.toml"),
+            ("NURITEO_MFA_GRACE_PERIOD_DAYS", "3"),
+        ],
+        &files,
+    )
+    .unwrap();
+
+    assert_eq!(
+        report
+            .instance_settings
+            .resolve(instance_setting_definition("security.mfa_grace_period_days").unwrap())
+            .unwrap(),
+        (json!(3), BootstrapSettingOrigin::Environment)
+    );
+    assert_eq!(
+        report
+            .instance_settings
+            .resolve(instance_setting_definition("tokens.default_expiry_days").unwrap())
+            .unwrap(),
+        (json!(120), BootstrapSettingOrigin::File)
+    );
+    assert_eq!(
+        report
+            .instance_settings
+            .resolve(instance_setting_definition("runtime.network.default").unwrap())
+            .unwrap(),
+        (json!("browser_direct"), BootstrapSettingOrigin::Default)
+    );
+    assert_eq!(
+        report
+            .instance_settings
+            .resolve(instance_setting_definition("audit.retention_days").unwrap())
+            .unwrap(),
+        (Value::Null, BootstrapSettingOrigin::File)
+    );
+}
+
+#[test]
+fn instance_setting_bootstrap_rejects_unknown_invalid_and_secret_looking_values() {
+    let files = TestFiles(BTreeMap::from([(
+        "/config/nuriteo.toml".into(),
+        br#"
+[public]
+external_url = "https://nuriteo.example.com"
+[instance_settings]
+"security.unknown" = "must-not-appear"
+"#
+        .to_vec(),
+    )]));
+    let error = load(&[(CONFIG_FILE, "/config/nuriteo.toml")], &files).unwrap_err();
+    assert_eq!(error.to_string(), "unknown Instance setting key");
+    assert!(!error.to_string().contains("must-not-appear"));
+
+    let error = load(
+        &[
+            (EXTERNAL_URL, "https://nuriteo.example.com"),
+            ("NURITEO_MFA_ENFORCEMENT", "must-not-appear"),
+        ],
+        &TestFiles::default(),
+    )
+    .unwrap_err();
+    assert!(!error.to_string().contains("must-not-appear"));
 }
 
 #[test]
