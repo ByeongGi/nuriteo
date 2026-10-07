@@ -43,7 +43,7 @@ async fn encrypted_credentials_rotation_and_ca_activation_fail_closed() {
     )
     .await
     .unwrap();
-    assert_eq!(report.latest_version, Some(27));
+    assert_eq!(report.latest_version, Some(29));
     let settings_repository =
         InstanceSettingsRepository::new(pool.clone(), Duration::from_secs(5)).unwrap();
     settings_repository
@@ -89,7 +89,7 @@ async fn encrypted_credentials_rotation_and_ca_activation_fail_closed() {
         IntegrationError::InvalidInput
     );
     let identity =
-        CredentialIdentity::new("instance-01", "oidc", "default", "client_secret").unwrap();
+        CredentialIdentity::new("instance-01", "registry", "fixture", "access_token").unwrap();
     let first_admin = old_admin.clone();
     let second_admin = old_admin.clone();
     let first_identity = identity.clone();

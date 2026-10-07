@@ -82,6 +82,12 @@ pub struct MasterKeyring {
     keys: BTreeMap<u32, MasterKey>,
 }
 
+pub(crate) struct EncryptedSecretEnvelope {
+    pub(crate) key_version: u32,
+    pub(crate) nonce: Vec<u8>,
+    pub(crate) ciphertext: Vec<u8>,
+}
+
 impl fmt::Debug for MasterKeyring {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
@@ -171,6 +177,76 @@ impl MasterKeyring {
         self.current_version
     }
 
+    pub(crate) fn seal_scoped(
+        &self,
+        domain: &[u8],
+        context: &[&[u8]],
+        plaintext: &[u8],
+    ) -> Result<EncryptedSecretEnvelope, IntegrationError> {
+        if domain.is_empty() || plaintext.is_empty() || plaintext.len() > MAX_SECRET_BYTES {
+            return Err(IntegrationError::InvalidInput);
+        }
+        let key = self
+            .keys
+            .get(&self.current_version)
+            .ok_or(IntegrationError::KeyConfiguration)?;
+        let cipher = Aes256Gcm::new_from_slice(key.0.as_slice())
+            .map_err(|_| IntegrationError::KeyConfiguration)?;
+        let mut nonce = vec![0_u8; NONCE_BYTES];
+        getrandom::fill(&mut nonce).map_err(|_| IntegrationError::Unavailable)?;
+        let aad = scoped_aad(domain, context, self.current_version)?;
+        let ciphertext = cipher
+            .encrypt(
+                Nonce::from_slice(&nonce),
+                Payload {
+                    msg: plaintext,
+                    aad: &aad,
+                },
+            )
+            .map_err(|_| IntegrationError::CredentialUnavailable)?;
+        Ok(EncryptedSecretEnvelope {
+            key_version: self.current_version,
+            nonce,
+            ciphertext,
+        })
+    }
+
+    pub(crate) fn open_scoped(
+        &self,
+        domain: &[u8],
+        context: &[&[u8]],
+        key_version: u32,
+        nonce: &[u8],
+        ciphertext: &[u8],
+    ) -> Result<Zeroizing<Vec<u8>>, IntegrationError> {
+        if domain.is_empty() || nonce.len() != NONCE_BYTES {
+            return Err(IntegrationError::CredentialUnavailable);
+        }
+        let key = self
+            .keys
+            .get(&key_version)
+            .ok_or(IntegrationError::CredentialUnavailable)?;
+        let cipher = Aes256Gcm::new_from_slice(key.0.as_slice())
+            .map_err(|_| IntegrationError::CredentialUnavailable)?;
+        let aad = scoped_aad(domain, context, key_version)
+            .map_err(|_| IntegrationError::CredentialUnavailable)?;
+        let plaintext = Zeroizing::new(
+            cipher
+                .decrypt(
+                    Nonce::from_slice(nonce),
+                    Payload {
+                        msg: ciphertext,
+                        aad: &aad,
+                    },
+                )
+                .map_err(|_| IntegrationError::CredentialUnavailable)?,
+        );
+        if plaintext.is_empty() || plaintext.len() > MAX_SECRET_BYTES {
+            return Err(IntegrationError::CredentialUnavailable);
+        }
+        Ok(plaintext)
+    }
+
     #[cfg(test)]
     fn test(version: u32, entries: &[(u32, [u8; 32])]) -> Self {
         Self {
@@ -181,6 +257,23 @@ impl MasterKeyring {
                 .collect(),
         }
     }
+}
+
+fn scoped_aad(
+    domain: &[u8],
+    context: &[&[u8]],
+    key_version: u32,
+) -> Result<Vec<u8>, IntegrationError> {
+    let mut out = Vec::new();
+    for field in std::iter::once(domain)
+        .chain(context.iter().copied())
+        .chain([key_version.to_be_bytes().as_slice(), ALGORITHM.as_bytes()])
+    {
+        let length = u32::try_from(field.len()).map_err(|_| IntegrationError::InvalidInput)?;
+        out.extend_from_slice(&length.to_be_bytes());
+        out.extend_from_slice(field);
+    }
+    Ok(out)
 }
 
 fn decode_key(value: &str) -> Result<MasterKey, IntegrationError> {
@@ -280,6 +373,41 @@ impl IntegrationRepository {
         Ok(self)
     }
 
+    #[must_use]
+    pub(crate) const fn pool(&self) -> &DatabasePool {
+        &self.pool
+    }
+
+    pub(crate) async fn upsert_credential_in_transaction(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        identity: &CredentialIdentity,
+        secret: &SecretValue,
+    ) -> Result<CredentialMetadata, IntegrationError> {
+        upsert_credential(transaction, &self.keyring, identity, secret).await
+    }
+
+    pub(crate) async fn read_credential_by_id_in_transaction(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        id: Uuid,
+    ) -> Result<(CredentialIdentity, u64, SecretValue), IntegrationError> {
+        let row = sqlx::query(
+            "SELECT id::text,instance_id,integration_type,integration_id,credential_kind,
+              credential_version,algorithm,key_version,nonce,ciphertext
+             FROM integration_credentials WHERE id=$1::uuid",
+        )
+        .bind(id.to_string())
+        .fetch_optional(&mut **transaction)
+        .await
+        .map_err(|_| IntegrationError::Unavailable)?
+        .ok_or(IntegrationError::CredentialUnavailable)?;
+        let identity = identity_from_row(&row)?;
+        let logical_version = read_logical_version(&row)?;
+        let secret = open_row(&self.keyring, &identity, &row)?;
+        Ok((identity, logical_version, secret))
+    }
+
     async fn put_credential(
         &self,
         actor: IntegrationAdminActor,
@@ -287,7 +415,7 @@ impl IntegrationRepository {
         secret: &SecretValue,
         correlation_id: &str,
     ) -> Result<CredentialMetadata, IntegrationError> {
-        if is_smtp_default_credential(identity) {
+        if requires_integration_specific_admin(identity) {
             return Err(IntegrationError::InvalidInput);
         }
         if !valid_correlation(correlation_id) {
@@ -586,10 +714,11 @@ fn credential_lock_key(identity: &CredentialIdentity) -> i64 {
     )
 }
 
-fn is_smtp_default_credential(identity: &CredentialIdentity) -> bool {
-    identity.integration_type == "smtp"
+fn requires_integration_specific_admin(identity: &CredentialIdentity) -> bool {
+    (identity.integration_type == "smtp"
         && identity.integration_id == "default"
-        && matches!(identity.credential_kind.as_str(), "username" | "password")
+        && matches!(identity.credential_kind.as_str(), "username" | "password"))
+        || (identity.integration_type == "oidc" && identity.credential_kind == "client_secret")
 }
 
 struct Sealed {
@@ -911,7 +1040,7 @@ impl IntegrationAdminService {
         secret: &SecretValue,
         correlation_id: &str,
     ) -> Result<CredentialMetadata, IntegrationError> {
-        if is_smtp_default_credential(identity) {
+        if requires_integration_specific_admin(identity) {
             return Err(IntegrationError::InvalidInput);
         }
         self.repository
@@ -1425,7 +1554,7 @@ fn validate_stored_ca(row: &sqlx::postgres::PgRow) -> Result<ValidatedCaBundle, 
     Ok(parsed)
 }
 
-async fn authorize_recent_admin(
+pub(crate) async fn authorize_recent_admin(
     tx: &mut Transaction<'_, Postgres>,
     actor: IntegrationAdminActor,
 ) -> Result<(), IntegrationError> {

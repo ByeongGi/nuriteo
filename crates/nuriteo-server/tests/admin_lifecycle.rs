@@ -27,7 +27,7 @@ async fn admin_lifecycle_is_reauthenticated_serialized_and_session_safe() {
     )
     .await
     .unwrap();
-    assert_eq!(report.latest_version, Some(27));
+    assert_eq!(report.latest_version, Some(29));
 
     let admin = seed_user(&pool, "admin@example.test", true).await;
     let member = seed_user(&pool, "member@example.test", false).await;
