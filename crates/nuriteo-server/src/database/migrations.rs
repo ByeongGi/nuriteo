@@ -51,6 +51,9 @@ const NOTIFICATION_DELIVERY_WORKER_SQL: &str =
     include_str!("../../migrations/0027_notification_delivery_worker.sql");
 const OIDC_PROVIDERS_SQL: &str = include_str!("../../migrations/0028_oidc_providers.sql");
 const MFA_TOTP_SQL: &str = include_str!("../../migrations/0029_mfa_totp.sql");
+const OIDC_PROTOCOL_VALIDATION_SQL: &str =
+    include_str!("../../migrations/0030_oidc_protocol_validation.sql");
+const MFA_CHALLENGES_SQL: &str = include_str!("../../migrations/0031_mfa_challenges.sql");
 
 // Two-key advisory locks use a namespace distinct from PostgreSQL's one-key
 // bigint locks. 0x4e555249 is the ASCII representation of "NURI".
@@ -311,6 +314,20 @@ pub(super) fn embedded_migrator() -> Migrator {
             Cow::Borrowed("MFA TOTP credentials and recovery codes"),
             MigrationType::Simple,
             MFA_TOTP_SQL.into_sql_str(),
+            false,
+        ),
+        Migration::new(
+            30,
+            Cow::Borrowed("OIDC protocol validation proof"),
+            MigrationType::Simple,
+            OIDC_PROTOCOL_VALIDATION_SQL.into_sql_str(),
+            false,
+        ),
+        Migration::new(
+            31,
+            Cow::Borrowed("MFA challenge replay and lockout state"),
+            MigrationType::Simple,
+            MFA_CHALLENGES_SQL.into_sql_str(),
             false,
         ),
     ])

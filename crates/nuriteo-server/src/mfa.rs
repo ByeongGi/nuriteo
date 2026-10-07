@@ -18,6 +18,13 @@ use crate::database::DatabasePool;
 use crate::identity::{PasswordService, PasswordVerification, StoredPasswordHash, UserId};
 use crate::integration::{IntegrationError, MasterKeyring};
 
+mod service;
+
+#[allow(unused_imports, reason = "crate-private MFA-003 HTTP adapter handoff")]
+pub(crate) use service::{
+    EnrollmentComplete, EnrollmentStart, MfaChallengePolicy, MfaService, MfaServiceError, TotpCode,
+};
+
 const ENVELOPE_DOMAIN: &[u8] = b"nuriteo.mfa-totp-secret.v1";
 const ENVELOPE_ALGORITHM: &str = "aes-256-gcm-v1";
 const MIN_TOTP_SECRET_BYTES: usize = 20;
@@ -55,10 +62,11 @@ pub struct RecoveryCode(Zeroizing<Vec<u8>>);
 
 impl RecoveryCode {
     pub fn new(value: Vec<u8>) -> Result<Self, MfaStorageError> {
+        let value = Zeroizing::new(value);
         if !(MIN_RECOVERY_CODE_BYTES..=MAX_RECOVERY_CODE_BYTES).contains(&value.len()) {
             return Err(MfaStorageError::InvalidInput);
         }
-        Ok(Self(Zeroizing::new(value)))
+        Ok(Self(value))
     }
 
     fn expose(&self) -> &[u8] {

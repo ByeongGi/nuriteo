@@ -263,6 +263,18 @@ impl SessionService {
         self.within_deadline(self.authenticate_inner(&digest)).await
     }
 
+    /// Locks and validates an authenticated principal in a caller-owned
+    /// transaction. Security-sensitive services use this instead of carrying a
+    /// stale `Session` snapshot across their mutation transaction.
+    pub(crate) async fn authenticate_in_transaction(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        token: &SessionToken,
+    ) -> Result<Session, SessionServiceError> {
+        let (row, _) = load_active_session(transaction, &token.digest()).await?;
+        session_from_row(&row)
+    }
+
     pub async fn rotate(
         &self,
         token: &SessionToken,
@@ -277,6 +289,25 @@ impl SessionService {
             replacement_token,
             kind,
         ))
+        .await
+    }
+
+    /// Rotates one authenticated Session in a caller-owned transaction.
+    /// The caller owns the deadline and commits this alongside the privilege
+    /// change that required rotation.
+    pub(crate) async fn rotate_in_transaction(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        token: &SessionToken,
+        kind: SessionRotationKind,
+    ) -> Result<IssuedSession, SessionServiceError> {
+        self.rotate_in_transaction_with_values(
+            transaction,
+            &token.digest(),
+            SessionId::new(),
+            SessionToken::generate()?,
+            kind,
+        )
         .await
     }
 
@@ -440,7 +471,31 @@ impl SessionService {
             .begin()
             .await
             .map_err(|_| SessionServiceError::DatabaseUnavailable)?;
-        let (old, now) = load_active_session(&mut transaction, old_digest).await?;
+        let issued = self
+            .rotate_in_transaction_with_values(
+                &mut transaction,
+                old_digest,
+                replacement_id,
+                replacement_token,
+                kind,
+            )
+            .await?;
+        transaction
+            .commit()
+            .await
+            .map_err(|_| SessionServiceError::DatabaseUnavailable)?;
+        Ok(issued)
+    }
+
+    async fn rotate_in_transaction_with_values(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        old_digest: &[u8; TOKEN_DIGEST_BYTES],
+        replacement_id: SessionId,
+        replacement_token: SessionToken,
+        kind: SessionRotationKind,
+    ) -> Result<IssuedSession, SessionServiceError> {
+        let (old, now) = load_active_session(transaction, old_digest).await?;
         let old_id: String = old
             .try_get("id")
             .map_err(|_| SessionServiceError::InvariantViolation)?;
@@ -470,7 +525,7 @@ impl SessionService {
         .bind(duration_seconds(self.policy.idle_timeout)?)
         .bind(duration_seconds(self.policy.absolute_timeout)?)
         .bind(reauthenticated_at)
-        .fetch_one(&mut *transaction)
+        .fetch_one(&mut **transaction)
         .await
         .map_err(|_| SessionServiceError::DatabaseUnavailable)?;
         let changed = sqlx::query(
@@ -481,17 +536,13 @@ impl SessionService {
         .bind(old_id)
         .bind(now)
         .bind(replacement_id.to_string())
-        .execute(&mut *transaction)
+        .execute(&mut **transaction)
         .await
         .map_err(|_| SessionServiceError::DatabaseUnavailable)?;
         if changed.rows_affected() != 1 {
             return Err(SessionServiceError::InvalidToken);
         }
         let session = session_from_row(&replacement)?;
-        transaction
-            .commit()
-            .await
-            .map_err(|_| SessionServiceError::DatabaseUnavailable)?;
         Ok(IssuedSession {
             token: replacement_token,
             session,

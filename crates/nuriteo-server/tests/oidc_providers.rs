@@ -191,24 +191,59 @@ async fn oidc_provider_lifecycle_is_concurrent_audited_and_fail_closed() {
         "an adopted provider credential reference cannot be cleared"
     );
 
-    let activation_sql = "UPDATE oidc_providers SET status='active',disabled_at=NULL,
+    let unvalidated_activation_sql = "UPDATE oidc_providers SET status='active',disabled_at=NULL,
           config_version=config_version+1,updated_at=CURRENT_TIMESTAMP WHERE id=$1::uuid";
     assert!(
-        sqlx::query(activation_sql)
+        sqlx::query(unvalidated_activation_sql)
             .bind(created.id.to_string())
             .execute(&mut *pool.acquire().await.unwrap())
             .await
             .is_err(),
-        "OIDC-002 must be unable to activate without replacing the DB guard"
+        "OIDC activation must carry a complete validation proof"
     );
-    // Corruption-style setup solely to exercise the active -> disabled/delete
-    // guards while OIDC-002's proof-bearing activation migration does not exist.
+    let proof_id = Uuid::now_v7();
+    sqlx::query(
+        "INSERT INTO oidc_validation_proofs
+         (id,provider_id,config_version,secret_version,authorization_endpoint,token_endpoint,
+          jwks_uri,redirect_uri,validation_fingerprint,validation_ca_fingerprint,
+          jwks_fingerprint,expires_at,used_at,attestation_key_version,activation_attestation)
+         VALUES($1::uuid,$2::uuid,$3,$4,$5,$6,$7,$8,decode(repeat('11',32),'hex'),
+                decode(repeat('12',32),'hex'),decode(repeat('22',32),'hex'),
+                CURRENT_TIMESTAMP+INTERVAL '5 minutes',CURRENT_TIMESTAMP,
+                1,decode(repeat('33',32),'hex'))",
+    )
+    .bind(proof_id.to_string())
+    .bind(created.id.to_string())
+    .bind(i64::try_from(rotated.config_version).unwrap())
+    .bind(i64::try_from(rotated.secret_version).unwrap())
+    .bind("https://identity.example.test/authorize")
+    .bind("https://identity.example.test/token")
+    .bind("https://identity.example.test/jwks")
+    .bind("https://app.example.test/callback")
+    .execute(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+    let activation_sql = "UPDATE oidc_providers SET status='active',disabled_at=NULL,
+          config_version=config_version+1,
+          authorization_endpoint='https://identity.example.test/authorize',
+          token_endpoint='https://identity.example.test/token',
+          jwks_uri='https://identity.example.test/jwks',
+          redirect_uri='https://app.example.test/callback',
+          validation_config_version=config_version,validation_secret_version=secret_version,
+          validation_fingerprint=decode(repeat('11',32),'hex'),
+          validation_ca_fingerprint=decode(repeat('12',32),'hex'),
+          jwks_fingerprint=decode(repeat('22',32),'hex'),validation_proof_id=$2::uuid,
+          validated_at=CURRENT_TIMESTAMP,
+          updated_at=CURRENT_TIMESTAMP WHERE id=$1::uuid";
+    // Corruption-style setup solely to exercise active -> disabled/delete
+    // guards; supported activation always uses the proof-bearing service.
     sqlx::query("ALTER TABLE oidc_providers DISABLE TRIGGER oidc_providers_update_guard")
         .execute(&mut *pool.acquire().await.unwrap())
         .await
         .unwrap();
     sqlx::query(activation_sql)
         .bind(created.id.to_string())
+        .bind(proof_id.to_string())
         .execute(&mut *pool.acquire().await.unwrap())
         .await
         .unwrap();

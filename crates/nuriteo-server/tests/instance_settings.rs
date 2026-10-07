@@ -29,7 +29,7 @@ async fn instance_settings_are_materialized_once_validated_and_database_authorit
     )
     .await
     .unwrap();
-    assert_eq!(report.latest_version, Some(29));
+    assert_eq!(report.latest_version, Some(31));
 
     let repository = InstanceSettingsRepository::new(pool.clone(), Duration::from_secs(5)).unwrap();
     let first_bootstrap = bootstrap(14, 3, 120);

@@ -12,6 +12,7 @@ use aes_gcm::aead::{Aead, KeyInit, Payload};
 use aes_gcm::{Aes256Gcm, Nonce};
 use base64::Engine;
 use base64::engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD};
+use hmac::{Hmac, Mac};
 use rustls_pemfile::Item;
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
@@ -247,6 +248,45 @@ impl MasterKeyring {
         Ok(plaintext)
     }
 
+    pub(crate) fn attest_scoped(
+        &self,
+        domain: &[u8],
+        context: &[&[u8]],
+    ) -> Result<(u32, [u8; 32]), IntegrationError> {
+        let key = self
+            .keys
+            .get(&self.current_version)
+            .ok_or(IntegrationError::KeyConfiguration)?;
+        let input = scoped_attestation_input(domain, context, self.current_version)?;
+        let mut mac = <Hmac<Sha256> as hmac::digest::KeyInit>::new_from_slice(key.0.as_slice())
+            .map_err(|_| IntegrationError::KeyConfiguration)?;
+        mac.update(&input);
+        Ok((self.current_version, mac.finalize().into_bytes().into()))
+    }
+
+    pub(crate) fn verify_scoped_attestation(
+        &self,
+        domain: &[u8],
+        context: &[&[u8]],
+        key_version: u32,
+        attestation: &[u8],
+    ) -> Result<(), IntegrationError> {
+        if attestation.len() != 32 {
+            return Err(IntegrationError::CredentialUnavailable);
+        }
+        let key = self
+            .keys
+            .get(&key_version)
+            .ok_or(IntegrationError::CredentialUnavailable)?;
+        let input = scoped_attestation_input(domain, context, key_version)
+            .map_err(|_| IntegrationError::CredentialUnavailable)?;
+        let mut mac = <Hmac<Sha256> as hmac::digest::KeyInit>::new_from_slice(key.0.as_slice())
+            .map_err(|_| IntegrationError::CredentialUnavailable)?;
+        mac.update(&input);
+        mac.verify_slice(attestation)
+            .map_err(|_| IntegrationError::CredentialUnavailable)
+    }
+
     #[cfg(test)]
     fn test(version: u32, entries: &[(u32, [u8; 32])]) -> Self {
         Self {
@@ -257,6 +297,27 @@ impl MasterKeyring {
                 .collect(),
         }
     }
+}
+
+fn scoped_attestation_input(
+    domain: &[u8],
+    context: &[&[u8]],
+    key_version: u32,
+) -> Result<Vec<u8>, IntegrationError> {
+    if domain.is_empty() {
+        return Err(IntegrationError::InvalidInput);
+    }
+    let mut out = Vec::new();
+    for field in std::iter::once(b"nuriteo.hmac-attestation.v1".as_slice())
+        .chain(std::iter::once(domain))
+        .chain(context.iter().copied())
+        .chain([key_version.to_be_bytes().as_slice()])
+    {
+        let length = u32::try_from(field.len()).map_err(|_| IntegrationError::InvalidInput)?;
+        out.extend_from_slice(&length.to_be_bytes());
+        out.extend_from_slice(field);
+    }
+    Ok(out)
 }
 
 fn scoped_aad(
@@ -376,6 +437,25 @@ impl IntegrationRepository {
     #[must_use]
     pub(crate) const fn pool(&self) -> &DatabasePool {
         &self.pool
+    }
+
+    pub(crate) fn attest_scoped(
+        &self,
+        domain: &[u8],
+        context: &[&[u8]],
+    ) -> Result<(u32, [u8; 32]), IntegrationError> {
+        self.keyring.attest_scoped(domain, context)
+    }
+
+    pub(crate) fn verify_scoped_attestation(
+        &self,
+        domain: &[u8],
+        context: &[&[u8]],
+        key_version: u32,
+        attestation: &[u8],
+    ) -> Result<(), IntegrationError> {
+        self.keyring
+            .verify_scoped_attestation(domain, context, key_version, attestation)
     }
 
     pub(crate) async fn upsert_credential_in_transaction(
@@ -1149,6 +1229,15 @@ impl IntegrationRepository {
             .begin()
             .await
             .map_err(|_| IntegrationError::Unavailable)?;
+        sqlx::query("SELECT pg_advisory_xact_lock(1229870147, hashtext($1))")
+            .bind(format!(
+                "{}:{}",
+                endpoint.integration_type(),
+                endpoint.integration_id()
+            ))
+            .execute(&mut *tx)
+            .await
+            .map_err(|_| IntegrationError::Unavailable)?;
         authorize_recent_admin(&mut tx, actor).await?;
         sqlx::query("DELETE FROM integration_ca_bundles WHERE integration_type=$1 AND integration_id=$2 AND state='candidate'")
             .bind(integration_type).bind(integration_id).execute(&mut *tx).await.map_err(|_| IntegrationError::Unavailable)?;
@@ -1244,6 +1333,15 @@ impl IntegrationRepository {
             .map_err(|_| IntegrationError::Unavailable)?;
         let mut tx = connection
             .begin()
+            .await
+            .map_err(|_| IntegrationError::Unavailable)?;
+        sqlx::query("SELECT pg_advisory_xact_lock(1229870147, hashtext($1))")
+            .bind(format!(
+                "{}:{}",
+                endpoint.integration_type(),
+                endpoint.integration_id()
+            ))
+            .execute(&mut *tx)
             .await
             .map_err(|_| IntegrationError::Unavailable)?;
         authorize_recent_admin(&mut tx, actor).await?;
@@ -1368,7 +1466,7 @@ impl IntegrationRepository {
         .map_err(|_| IntegrationError::Unavailable)?
     }
 
-    async fn active_ca_for_endpoint(
+    pub(crate) async fn active_ca_for_endpoint(
         &self,
         endpoint: &CaEndpointBinding,
     ) -> Result<Option<ValidatedCaBundle>, IntegrationError> {
