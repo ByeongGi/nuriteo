@@ -15,7 +15,8 @@ use crate::setup::SetupStatusService;
 use crate::team::TeamHttpService;
 use axum::Router;
 use axum::extract::{Extension, Request};
-use axum::http::{StatusCode, Uri};
+use axum::http::Uri;
+use axum::http::header::{CACHE_CONTROL, HeaderValue};
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
 
@@ -167,7 +168,7 @@ pub fn build_router_with_team_service(
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn build_router_with_mfa_service(
+pub fn build_router_with_mfa_service(
     health: HealthService,
     auth: AuthService,
     invitations: InvitationHttpService,
@@ -263,7 +264,12 @@ pub(crate) fn build_router_with_access_token_service(
 }
 
 async fn enforce_mfa_deadline(service: MfaHttpService, request: Request, next: Next) -> Response {
-    let path = request.uri().path();
+    let path = request.uri().path().to_owned();
+    let request_id = request
+        .extensions()
+        .get::<RequestId>()
+        .cloned()
+        .unwrap_or_else(RequestId::generate);
     let allowed =
         path == "/api/v1/me" || path == "/api/v1/auth/session" || path.starts_with("/api/v1/mfa");
     if allowed {
@@ -288,25 +294,23 @@ async fn enforce_mfa_deadline(service: MfaHttpService, request: Request, next: N
         })
         .await;
     match status {
-        Ok(view) if view.restricted => (
-            StatusCode::FORBIDDEN,
-            [(axum::http::header::CACHE_CONTROL, "private, no-store")],
-            "MFA enrollment is required before accessing this resource.",
-        )
-            .into_response(),
+        Ok(view) if view.restricted => private_problem(HttpError::forbidden(request_id, path)),
         Ok(_) => next.run(request).await,
         Err(MfaHttpServiceError::AuthenticationFailed | MfaHttpServiceError::Forbidden) => {
             // Missing, invalid, or expired authentication still belongs to the
             // endpoint's normal authentication boundary.
             next.run(request).await
         }
-        Err(_) => (
-            StatusCode::SERVICE_UNAVAILABLE,
-            [(axum::http::header::CACHE_CONTROL, "private, no-store")],
-            "MFA policy status is temporarily unavailable.",
-        )
-            .into_response(),
+        Err(_) => private_problem(HttpError::service_unavailable(request_id, path)),
     }
+}
+
+fn private_problem(error: HttpError) -> Response {
+    let mut response = error.into_response();
+    response
+        .headers_mut()
+        .insert(CACHE_CONTROL, HeaderValue::from_static("private, no-store"));
+    response
 }
 
 async fn not_found(uri: Uri, Extension(request_id): Extension<RequestId>) -> HttpError {
@@ -321,7 +325,7 @@ async fn method_not_allowed(uri: Uri, Extension(request_id): Extension<RequestId
 mod tests {
     use super::*;
     use axum::body::{Body, to_bytes};
-    use axum::http::{Request, header::CACHE_CONTROL};
+    use axum::http::{Request, StatusCode, header::CACHE_CONTROL};
     use tower::ServiceExt;
 
     #[tokio::test]
@@ -338,7 +342,12 @@ mod tests {
             .unwrap();
         assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
         assert_eq!(response.headers()[CACHE_CONTROL], "private, no-store");
-        let body = to_bytes(response.into_body(), 1024).await.unwrap();
-        assert_eq!(&body[..], b"MFA policy status is temporarily unavailable.");
+        assert_eq!(
+            response.headers()[axum::http::header::CONTENT_TYPE],
+            "application/problem+json"
+        );
+        let body: serde_json::Value =
+            serde_json::from_slice(&to_bytes(response.into_body(), 1024).await.unwrap()).unwrap();
+        assert_eq!(body["code"], "SERVICE_UNAVAILABLE");
     }
 }

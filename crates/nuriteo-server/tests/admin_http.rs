@@ -1,27 +1,33 @@
 use std::env;
+use std::ffi::OsString;
 use std::fs;
+use std::io;
+use std::path::Path;
 use std::time::Duration;
 
 use axum::Router;
 use axum::body::{Body, to_bytes};
 use axum::http::header::{CACHE_CONTROL, CONTENT_TYPE, COOKIE, ETAG, IF_MATCH, ORIGIN, SET_COOKIE};
 use axum::http::{Method, Request, Response, StatusCode};
+use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use nuriteo_server::admin::{AdminHttpPolicy, AdminHttpService};
-use nuriteo_server::app::build_router_with_admin_service;
+use nuriteo_server::app::{MfaHttpService, build_router_with_mfa_service};
 use nuriteo_server::audit::AuditEventId;
 use nuriteo_server::auth::{AuthPolicy, AuthService};
-use nuriteo_server::config::InstanceSettingBootstrap;
+use nuriteo_server::config::{Environment, FileReader, InstanceSettingBootstrap};
 use nuriteo_server::database::{
     DatabasePool, DatabasePoolConfig, DatabaseTlsConfig, MigrationOptions, run_embedded_migrations,
 };
 use nuriteo_server::health::HealthService;
 use nuriteo_server::identity::{SessionPolicy, UserId};
 use nuriteo_server::instance_settings::InstanceSettingsRepository;
+use nuriteo_server::integration::MasterKeyring;
 use nuriteo_server::invitations::InvitationHttpService;
 use nuriteo_server::organization::OrganizationHttpService;
 use nuriteo_server::project::ProjectHttpService;
 use nuriteo_server::save::{CleanupOperationsPolicy, CleanupOperationsService, SaveHttpService};
 use nuriteo_server::setup::SetupStatusService;
+use nuriteo_server::team::TeamHttpService;
 use serde_json::{Value, json};
 use tower::ServiceExt;
 use url::Url;
@@ -194,7 +200,7 @@ async fn admin_settings_audit_and_operations_http_are_safe_and_transactional() {
             Some("\"setting-v9\""),
         )
         .await,
-        StatusCode::FORBIDDEN,
+        StatusCode::PRECONDITION_FAILED,
     )
     .await;
 
@@ -326,9 +332,9 @@ async fn admin_settings_audit_and_operations_http_are_safe_and_transactional() {
             &router,
             Some(&admin),
             Method::PATCH,
-            SETTING_PATH,
-            Some(json!({"value": 337})),
-            Some("\"setting-v2\""),
+            "/api/v1/admin/settings/security.reauthentication_window_minutes",
+            Some(json!({"value": 30})),
+            Some("\"setting-v1\""),
         )
         .await,
         StatusCode::FORBIDDEN,
@@ -346,7 +352,7 @@ async fn admin_settings_audit_and_operations_http_are_safe_and_transactional() {
     .await;
     assert_eq!(status.status(), StatusCode::OK);
     let status = json_body(status).await;
-    assert_eq!(status["schemaVersion"], 36);
+    assert_eq!(status["schemaVersion"], 38);
     assert_eq!(status["settingRegistryVersion"], 4);
     assert_eq!(status["settingCount"], 40);
     assert_eq!(status["restartRequired"], false);
@@ -378,7 +384,7 @@ async fn verify_complete_snapshot_validation(
             Some("\"setting-v2\""),
         )
         .await,
-        StatusCode::INTERNAL_SERVER_ERROR,
+        StatusCode::SERVICE_UNAVAILABLE,
     )
     .await;
     sqlx::query("UPDATE instance_settings SET value = '587'::jsonb WHERE key = 'smtp.port'")
@@ -400,12 +406,12 @@ async fn verify_complete_snapshot_validation(
             Some("\"setting-v2\""),
         )
         .await,
-        StatusCode::INTERNAL_SERVER_ERROR,
+        StatusCode::SERVICE_UNAVAILABLE,
     )
     .await;
     sqlx::query(
         "INSERT INTO instance_settings (key, registry_version, value, bootstrap_origin) \
-         VALUES ('smtp.port', 3, '587'::jsonb, 'default')",
+         VALUES ('smtp.port', 4, '587'::jsonb, 'default')",
     )
     .execute(&mut *acquire(pool).await)
     .await
@@ -413,7 +419,7 @@ async fn verify_complete_snapshot_validation(
 
     sqlx::query(
         "INSERT INTO instance_settings (key, registry_version, value, bootstrap_origin) \
-         VALUES ('unknown.fixture', 3, 'true'::jsonb, 'default')",
+         VALUES ('unknown.fixture', 4, 'true'::jsonb, 'default')",
     )
     .execute(&mut *acquire(pool).await)
     .await
@@ -428,7 +434,7 @@ async fn verify_complete_snapshot_validation(
             Some("\"setting-v2\""),
         )
         .await,
-        StatusCode::INTERNAL_SERVER_ERROR,
+        StatusCode::SERVICE_UNAVAILABLE,
     )
     .await;
     sqlx::query("DELETE FROM instance_settings WHERE key = 'unknown.fixture'")
@@ -937,7 +943,7 @@ fn router(
         CleanupOperationsPolicy::new(Duration::from_secs(600), 2, Duration::from_secs(1)).unwrap(),
     );
     let admin = AdminHttpService::production(
-        pool,
+        pool.clone(),
         &external_url,
         AdminHttpPolicy::default(),
         SessionPolicy::default(),
@@ -946,7 +952,14 @@ fn router(
         cleanup,
     )
     .unwrap();
-    build_router_with_admin_service(
+    let mfa = MfaHttpService::production(
+        pool,
+        &external_url,
+        fixture_keyring(),
+        SessionPolicy::default(),
+    )
+    .unwrap();
+    build_router_with_mfa_service(
         health,
         auth,
         InvitationHttpService::unconfigured(),
@@ -955,7 +968,40 @@ fn router(
         SaveHttpService::unconfigured(),
         SetupStatusService::unconfigured(),
         admin,
+        TeamHttpService::unconfigured(),
+        mfa,
     )
+}
+
+fn fixture_keyring() -> MasterKeyring {
+    MasterKeyring::load(
+        &TestEnvironment(vec![
+            (
+                "NURITEO_MASTER_KEY".into(),
+                URL_SAFE_NO_PAD.encode([91_u8; 32]).into(),
+            ),
+            ("NURITEO_MASTER_KEY_VERSION".into(), "1".into()),
+        ]),
+        &NoFiles,
+    )
+    .unwrap()
+}
+
+#[derive(Clone)]
+struct TestEnvironment(Vec<(OsString, OsString)>);
+
+impl Environment for TestEnvironment {
+    fn entries(&self) -> Vec<(OsString, OsString)> {
+        self.0.clone()
+    }
+}
+
+struct NoFiles;
+
+impl FileReader for NoFiles {
+    fn read(&self, _: &Path, _: usize) -> io::Result<Vec<u8>> {
+        Err(io::ErrorKind::NotFound.into())
+    }
 }
 
 async fn login(router: &Router, email: &str) -> Browser {
@@ -1037,9 +1083,17 @@ async fn send(router: &Router, request: Request<Body>) -> Response<Body> {
 }
 
 async fn assert_problem(response: Response<Body>, status: StatusCode) {
-    assert_eq!(response.status(), status);
-    assert_eq!(response.headers()[CONTENT_TYPE], "application/problem+json");
-    let body = json_body(response).await;
+    let actual = response.status();
+    let content_type = response.headers().get(CONTENT_TYPE).cloned();
+    let bytes = to_bytes(response.into_body(), 64 * 1024).await.unwrap();
+    let body = serde_json::from_slice::<Value>(&bytes)
+        .unwrap_or_else(|_| Value::String(String::from_utf8_lossy(&bytes).into_owned()));
+    assert_eq!(actual, status, "unexpected problem response: {body}");
+    assert_eq!(
+        content_type.as_ref().and_then(|value| value.to_str().ok()),
+        Some("application/problem+json"),
+        "unexpected problem response: {body}"
+    );
     assert_eq!(body["status"], status.as_u16());
     assert!(!body.to_string().contains(PASSWORD));
 }

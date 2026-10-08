@@ -27,6 +27,7 @@ const observedMutations: Array<{
   readonly etag: string | undefined;
   readonly origin: string | undefined;
 }> = [];
+const observedPreviews: unknown[] = [];
 
 const core = http.createServer(async (request, response) => {
   const requestPath = request.url ?? "/";
@@ -37,6 +38,23 @@ const core = http.createServer(async (request, response) => {
   if (session === undefined) return sendProblem(response, 401, "AUTHENTICATION_REQUIRED");
   if (request.method === "GET" && requestPath === "/api/v1/me") {
     return sendJson(response, currentUser(session));
+  }
+  if (request.method === "GET" && requestPath === "/api/v1/mfa") {
+    return sendJson(response, {
+      localAccount: true,
+      enrolled: false,
+      pendingEnrollment: false,
+      recoveryCodesRemaining: 0,
+      policyMode: "off",
+      gracePeriodDays: 7,
+      required: false,
+      deadlineAt: null,
+      restricted: false,
+      notificationState: "none"
+    });
+  }
+  if (request.method === "GET" && requestPath === "/api/v1/notifications?limit=1") {
+    return sendJson(response, { items: [], nextCursor: null, unreadCount: 0 });
   }
   if (request.method === "GET" && requestPath === "/api/v1/admin/settings") {
     if (session !== "admin") return sendProblem(response, 403, "ADMIN_REQUIRED");
@@ -50,6 +68,17 @@ const core = http.createServer(async (request, response) => {
       settingRegistryVersion: 1,
       settingCount: settings().length,
       restartRequired: false
+    });
+  }
+  if (request.method === "GET" && requestPath === "/api/v1/admin/policy-cleanup/preview?batchLimit=100") {
+    if (session !== "admin") return sendProblem(response, 403, "ADMIN_REQUIRED");
+    return sendJson(response, {
+      gcEnabled: true,
+      gracePeriodSeconds: 86_400,
+      eligibleCandidates: 3,
+      expectedReclaimBytes: "4096",
+      batchLimit: 100,
+      dryRun: true
     });
   }
   if (request.method === "GET" && requestPath === "/api/v1/admin/operations") {
@@ -75,6 +104,25 @@ const core = http.createServer(async (request, response) => {
         trackedPhysicalBytes: "1073741824",
         reservedBytes: "1048576"
       }
+    });
+  }
+  if (
+    request.method === "POST" &&
+    requestPath === "/api/v1/admin/settings/invitations.default_expiry_hours/impact"
+  ) {
+    const body = await jsonBody(request);
+    observedPreviews.push(body);
+    if (session !== "admin") return sendProblem(response, 403, "ADMIN_REQUIRED");
+    if (header(request, "x-csrf-token") !== csrfToken) return sendProblem(response, 403, "CSRF_REJECTED");
+    return sendJson(response, {
+      key: "invitations.default_expiry_hours",
+      direction: isRecord(body) && typeof body.value === "number" && body.value < settingValue ? "decrease" : "increase",
+      applyScope: "new_resources",
+      affectedResources: 4,
+      nonCompliantResources: 0,
+      gracePeriodSeconds: null,
+      requiresRecentReauthentication: false,
+      automaticallyDeletesExistingData: false
     });
   }
   if (
@@ -158,8 +206,16 @@ try {
     const invitationForm = page.locator("form").filter({ hasText: "Invitation expiry" });
     const expiry = invitationForm.getByLabel("Invitation expiry");
     assert.equal(await expiry.inputValue(), "168");
+    assert.equal(await page.getByText("3", { exact: true }).count() > 0, true);
+    await expiry.fill("0");
+    await invitationForm.getByRole("button", { name: "Review impact" }).click();
+    await invitationForm.getByRole("alert").filter({ hasText: "outside its allowed range" }).waitFor();
+    assert.equal(observedPreviews.length, 0);
     await expiry.fill("336");
-    await invitationForm.getByRole("button", { name: "Save" }).click();
+    assert.equal(await invitationForm.getByRole("button", { name: "Apply change" }).isDisabled(), true);
+    await invitationForm.getByRole("button", { name: "Review impact" }).click();
+    await invitationForm.getByText("Existing data will not be deleted automatically.").waitFor();
+    await invitationForm.getByRole("button", { name: "Apply change" }).click();
     await invitationForm.getByRole("status").filter({ hasText: "Invitation expiry saved." }).waitFor();
     assert.equal(settingValue, 336);
     assert.equal(settingVersion, 2);
@@ -168,16 +224,25 @@ try {
     assert.equal(observedMutations[0]?.csrf, csrfToken);
     assert.equal(observedMutations[0]?.origin, origin);
     assert.match(observedMutations[0]?.cookie ?? "", /nuriteo_dev_session=admin/u);
+    assert.deepEqual(observedPreviews[0], { value: 336 });
 
     settingValue = 400;
     settingVersion = 3;
     await expiry.fill("360");
-    await invitationForm.getByRole("button", { name: "Save" }).click();
+    await invitationForm.getByRole("button", { name: "Review impact" }).click();
+    await invitationForm.getByRole("button", { name: "Apply change" }).click();
     const conflict = invitationForm.getByRole("alert");
     await conflict.filter({ hasText: "changed elsewhere" }).waitFor();
     assert.equal(observedMutations[1]?.etag, '"setting-v2"');
     await conflict.getByRole("button", { name: "Reload latest" }).click();
     await assertEventually(async () => (await page.getByLabel("Invitation expiry").inputValue()) === "400");
+    const refreshedInvitationForm = page.locator("form").filter({ hasText: "Invitation expiry" });
+    await refreshedInvitationForm.getByRole("button", { name: "Reset to default" }).click();
+    await refreshedInvitationForm.getByText("Impact reviewed").waitFor();
+    assert.equal(await refreshedInvitationForm.getByLabel("Invitation expiry").inputValue(), "168");
+    await refreshedInvitationForm.getByRole("button", { name: "Apply change" }).click();
+    await refreshedInvitationForm.getByRole("status").filter({ hasText: "Invitation expiry saved." }).waitFor();
+    assert.equal(settingValue, 168);
 
     await page.getByRole("navigation", { name: "Administration" })
       .getByRole("link", { name: "Operations" })
@@ -236,14 +301,15 @@ function settings() {
 }
 
 function setting() {
-  return valueSetting("invitations.default_expiry_hours", settingValue, "live", settingVersion);
+  return valueSetting("invitations.default_expiry_hours", settingValue, "live", settingVersion, 168);
 }
 
 function valueSetting(
   key: string,
   value: string | number | boolean | null,
   applyMode = "live",
-  version = 1
+  version = 1,
+  defaultValue: string | number | boolean | null = value
 ) {
   const constraint = typeof value === "number"
     ? { kind: "unsigned_integer", minimum: 1, maximum: 10_000 }
@@ -253,7 +319,7 @@ function valueSetting(
   return {
     key,
     value,
-    defaultValue: value,
+    defaultValue,
     version,
     applyMode,
     constraint,

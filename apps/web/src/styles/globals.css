@@ -727,7 +727,8 @@
   }
 
   .admin-status,
-  .admin-settings {
+  .admin-settings,
+  .admin-policy-preview {
     margin-top: var(--n-ref-space-8);
     border: 1px solid var(--n-color-border-muted);
     border-radius: var(--n-radius-xl);
@@ -969,7 +970,9 @@
   }
 
   .admin-setting__control select,
-  .admin-setting__control input[type="number"] {
+  .admin-setting__control input[type="number"],
+  .admin-setting__control input[type="text"],
+  .admin-setting__control input[type="email"] {
     width: 100%;
     min-height: 2.5rem;
     border: 1px solid var(--n-color-border-default);
@@ -1007,6 +1010,70 @@
   .admin-unlimited-control input {
     width: 1rem;
     height: 1rem;
+  }
+
+  .admin-setting__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--n-ref-space-2);
+  }
+
+  .admin-policy-impact {
+    display: grid;
+    grid-column: 1 / -1;
+    gap: var(--n-ref-space-3);
+    border: 1px solid var(--n-color-border-default);
+    border-radius: var(--n-radius-md);
+    background: var(--n-color-bg-subtle);
+    padding: var(--n-ref-space-4);
+  }
+
+  .admin-policy-impact__heading {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--n-ref-space-3);
+  }
+
+  .admin-policy-impact__heading span,
+  .admin-policy-impact p,
+  .admin-policy-preview__note,
+  .admin-policy-preview__error {
+    margin: 0;
+    color: var(--n-color-fg-muted);
+    font-size: var(--n-font-size-sm);
+  }
+
+  .admin-policy-impact dl {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--n-ref-space-3);
+    margin: 0;
+  }
+
+  .admin-policy-impact dt,
+  .admin-policy-impact dd {
+    margin: 0;
+  }
+
+  .admin-policy-impact dt {
+    color: var(--n-color-fg-subtle);
+    font-size: var(--n-font-size-xs);
+  }
+
+  .admin-policy-impact dd {
+    margin-top: var(--n-ref-space-1);
+    font-family: var(--n-font-family-mono);
+  }
+
+  .admin-policy-impact__warning,
+  .admin-policy-preview__error {
+    color: var(--n-color-status-danger) !important;
+  }
+
+  .admin-policy-preview__note,
+  .admin-policy-preview__error {
+    border-top: 1px solid var(--n-color-border-muted);
+    padding: var(--n-ref-space-3) var(--n-ref-space-5);
   }
 
   .admin-setting__feedback {
@@ -1932,6 +1999,18 @@
   }
 
   .admin-setting {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .admin-setting__actions > [data-slot="button"] {
+    width: 100%;
+  }
+
+  .admin-policy-impact__heading {
+    flex-direction: column;
+  }
+
+  .admin-policy-impact dl {
     grid-template-columns: minmax(0, 1fr);
   }
 

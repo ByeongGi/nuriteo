@@ -1,7 +1,8 @@
 import {
   getAdminStatus,
   getCurrentUser,
-  listAdminSettings
+  listAdminSettings,
+  previewAdminPolicyCleanup
 } from "@nuriteo/api-client";
 import type { Metadata } from "next";
 
@@ -25,9 +26,10 @@ export default async function AdminSettingsPage() {
       );
     }
 
-    const [settings, status] = await Promise.all([
+    const [settings, status, cleanup] = await Promise.all([
       listAdminSettings(client),
-      getAdminStatus(client)
+      getAdminStatus(client),
+      previewAdminPolicyCleanup(client)
     ]);
     const reconciliationKey = settings.data.items
       .map((setting) => `${setting.key}:${setting.version}`)
@@ -35,6 +37,7 @@ export default async function AdminSettingsPage() {
     return (
       <AdminSettings
         key={reconciliationKey}
+        cleanup={cleanup.data}
         settings={settings.data}
         status={status.data}
       />
