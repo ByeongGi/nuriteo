@@ -25,10 +25,10 @@ trap cleanup EXIT HUP INT TERM
 
 if docker compose version >/dev/null 2>&1; then
   compose_command=(docker compose)
-elif podman compose version >/dev/null 2>&1; then
-  compose_command=(podman compose)
 elif command -v uvx >/dev/null 2>&1 && command -v podman >/dev/null 2>&1; then
   compose_command=(uvx --from podman-compose==1.5.0 podman-compose --in-pod false)
+elif podman compose version >/dev/null 2>&1; then
+  compose_command=(podman compose)
 else
   echo 'published-preview requires Docker Compose or Podman Compose' >&2
   exit 1

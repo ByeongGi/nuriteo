@@ -43,9 +43,9 @@ for name in "${required[@]}"; do
 done
 
 if docker compose version >/dev/null 2>&1; then compose_command=(docker compose)
-elif podman compose version >/dev/null 2>&1; then compose_command=(podman compose)
 elif command -v uvx >/dev/null 2>&1 && command -v podman >/dev/null 2>&1; then
   compose_command=(uvx --from podman-compose==1.5.0 podman-compose --in-pod false)
+elif podman compose version >/dev/null 2>&1; then compose_command=(podman compose)
 else echo 'Git/Registry stage requires Docker Compose or Podman Compose' >&2; exit 1; fi
 compose() { "${compose_command[@]}" -f "$compose_file" -f "$provider_file" --project-name "$project" "$@"; }
 query() { compose exec -T postgres psql -X --username nuriteo --dbname nuriteo --tuples-only --no-align --set ON_ERROR_STOP=1 --command "$1"; }

@@ -34,6 +34,10 @@ assert(
   "release build must use Cargo.lock and select only the server binary"
 );
 assert(
+  instructions.includes("ENV CARGO_BUILD_JOBS=2"),
+  "release build must remain viable on the documented small self-hosted builder"
+);
+assert(
   instructions.includes("COPY compat ./compat"),
   "builder must copy the compile-time Project Bundle admission contract"
 );

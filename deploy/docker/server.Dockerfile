@@ -6,6 +6,8 @@ RUN apt-get update \
 
 WORKDIR /build
 
+ENV CARGO_BUILD_JOBS=2
+
 COPY Cargo.toml Cargo.lock ./
 COPY crates ./crates
 COPY compat ./compat

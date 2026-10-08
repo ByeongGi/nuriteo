@@ -46,9 +46,9 @@ trap 'status=$?; echo "GATE-005 actual driver failed at line ${BASH_LINENO[0]} (
 
 select_compose() {
   if docker compose version >/dev/null 2>&1; then compose_command=(docker compose); engine=docker
-  elif podman compose version >/dev/null 2>&1; then compose_command=(podman compose); engine=podman
   elif command -v uvx >/dev/null 2>&1 && command -v podman >/dev/null 2>&1; then
     compose_command=(uvx --from podman-compose==1.5.0 podman-compose --in-pod false); engine=podman
+  elif podman compose version >/dev/null 2>&1; then compose_command=(podman compose); engine=podman
   else echo 'GATE-005 requires Docker Compose or Podman Compose' >&2; exit 1; fi
 }
 compose() { "${compose_command[@]}" -f "$compose_file" -f "$provider_file" --project-name "$project" "$@"; }
