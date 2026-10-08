@@ -359,7 +359,7 @@ impl SessionService {
             .await
             .map_err(|_| SessionServiceError::DatabaseUnavailable)?;
         let issued = self
-            .issue_in_transaction_with_values(&mut transaction, user_id, session_id, token)
+            .issue_in_transaction_with_values(&mut transaction, user_id, session_id, token, false)
             .await?;
         transaction
             .commit()
@@ -370,9 +370,11 @@ impl SessionService {
 
     /// Inserts a new Session in a caller-owned transaction.
     ///
-    /// AUTH-001 uses this narrow adapter to commit Session issuance and its
-    /// audit event atomically. The caller owns the operation deadline and must
-    /// commit or roll back the transaction.
+    /// Authentication flows use this narrow adapter to commit a freshly
+    /// verified Session and their audit event atomically. A successful fresh
+    /// login is also the initial recent-reauthentication proof for the new
+    /// Session. The caller owns the operation deadline and must commit or roll
+    /// back the transaction.
     pub(crate) async fn issue_in_transaction(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
@@ -383,6 +385,7 @@ impl SessionService {
             user_id,
             SessionId::new(),
             SessionToken::generate()?,
+            true,
         )
         .await
     }
@@ -393,6 +396,7 @@ impl SessionService {
         user_id: UserId,
         session_id: SessionId,
         token: SessionToken,
+        recently_reauthenticated: bool,
     ) -> Result<IssuedSession, SessionServiceError> {
         let policy = self.effective_policy(transaction).await?;
         lock_active_user(transaction, user_id).await?;
@@ -400,10 +404,12 @@ impl SessionService {
 
         let row = sqlx::query(
             "INSERT INTO sessions \
-             (id, user_id, token_hash, idle_expires_at, absolute_expires_at) \
+             (id, user_id, token_hash, idle_expires_at, absolute_expires_at, \
+              last_reauthenticated_at) \
              VALUES ($1::uuid, $2::uuid, $3, \
                      transaction_timestamp() + make_interval(secs => $4), \
-                     transaction_timestamp() + make_interval(secs => $5)) \
+                     transaction_timestamp() + make_interval(secs => $5), \
+                     CASE WHEN $6 THEN transaction_timestamp() END) \
              RETURNING id::text, user_id::text, created_at, last_seen_at, \
                        idle_expires_at, absolute_expires_at, last_reauthenticated_at, \
                        rotated_at, revoked_at, revocation_reason, \
@@ -414,6 +420,7 @@ impl SessionService {
         .bind(token.digest().as_slice())
         .bind(duration_seconds(policy.idle_timeout)?)
         .bind(duration_seconds(policy.absolute_timeout)?)
+        .bind(recently_reauthenticated)
         .fetch_one(&mut **transaction)
         .await
         .map_err(|_| SessionServiceError::DatabaseUnavailable)?;
