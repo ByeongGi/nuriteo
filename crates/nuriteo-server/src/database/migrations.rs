@@ -66,6 +66,7 @@ const POLICY_MAINTENANCE_WORKERS_SQL: &str =
 const ACCESS_TOKENS_SQL: &str = include_str!("../../migrations/0037_access_tokens.sql");
 const ACCESS_TOKEN_RUNTIME_SQL: &str =
     include_str!("../../migrations/0038_access_token_runtime.sql");
+const GIT_PROVIDERS_SQL: &str = include_str!("../../migrations/0039_git_providers.sql");
 
 // Two-key advisory locks use a namespace distinct from PostgreSQL's one-key
 // bigint locks. 0x4e555249 is the ASCII representation of "NURI".
@@ -389,6 +390,13 @@ pub(super) fn embedded_migrator() -> Migrator {
             Cow::Borrowed("access token runtime controls"),
             MigrationType::Simple,
             ACCESS_TOKEN_RUNTIME_SQL.into_sql_str(),
+            false,
+        ),
+        Migration::new(
+            39,
+            Cow::Borrowed("Git provider host bindings"),
+            MigrationType::Simple,
+            GIT_PROVIDERS_SQL.into_sql_str(),
             false,
         ),
     ])

@@ -7,6 +7,7 @@ pub mod bootstrap;
 pub mod cli;
 pub mod config;
 pub mod database;
+pub mod git_provider;
 pub mod health;
 pub mod http;
 pub mod identity;

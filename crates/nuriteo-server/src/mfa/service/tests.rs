@@ -279,7 +279,7 @@ async fn actual_mfa_challenge_replay_lockout_recovery_and_reset_are_atomic() {
     )
     .await
     .unwrap();
-    assert_eq!(report.latest_version, Some(38));
+    assert_eq!(report.latest_version, Some(39));
     InstanceSettingsRepository::new(pool.clone(), Duration::from_secs(5))
         .unwrap()
         .materialize(&InstanceSettingBootstrap::empty())
@@ -1307,7 +1307,7 @@ async fn prepare_fixture(pool: &DatabasePool) {
     )
     .await
     .unwrap();
-    assert_eq!(report.latest_version, Some(38));
+    assert_eq!(report.latest_version, Some(39));
     InstanceSettingsRepository::new(pool.clone(), Duration::from_secs(5))
         .unwrap()
         .materialize(&InstanceSettingBootstrap::empty())
