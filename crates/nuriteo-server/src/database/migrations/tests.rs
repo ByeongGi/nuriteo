@@ -480,6 +480,7 @@ async fn verify_access_token_invariants(pool: &DatabasePool) {
     );
 
     verify_access_token_runtime(pool, USER, PROJECT).await;
+    verify_access_token_management(pool, USER, PROJECT).await;
 
     sqlx::query(
         "UPDATE access_tokens SET state='revoked',secret_hash=NULL,revoked_at=clock_timestamp(),\
@@ -834,6 +835,214 @@ async fn verify_access_token_runtime(pool: &DatabasePool, user: &str, project: &
         IdempotencyReservation::Conflict
     );
     transaction.commit().await.unwrap();
+}
+
+async fn verify_access_token_management(pool: &DatabasePool, user: &str, project: &str) {
+    use crate::access_token::{
+        AccessTokenManagementError, AccessTokenManagementService, AccessTokenScope,
+        AccessTokenTarget,
+    };
+    use crate::config::InstanceSettingBootstrap;
+    use crate::identity::{
+        BrowserCookieBoundary, BrowserMethod, BrowserRequestHeaders, SessionPolicy, SessionService,
+        UserId,
+    };
+    use crate::instance_settings::InstanceSettingsRepository;
+    use crate::project::ProjectId;
+    use url::Url;
+    use uuid::Uuid;
+
+    let user_id = user.parse::<UserId>().unwrap();
+    let project_id = project.parse::<ProjectId>().unwrap();
+    InstanceSettingsRepository::new(pool.clone(), Duration::from_secs(5))
+        .unwrap()
+        .materialize(&InstanceSettingBootstrap::empty())
+        .await
+        .unwrap();
+    let issued_session = SessionService::new(pool.clone(), SessionPolicy::default())
+        .issue(user_id)
+        .await
+        .unwrap();
+    sqlx::query(
+        "UPDATE sessions SET last_reauthenticated_at=transaction_timestamp(),\
+         last_seen_at=transaction_timestamp() WHERE id=$1::uuid",
+    )
+    .bind(issued_session.session().id().to_string())
+    .execute(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+    let csrf = format!("nrt_csrf_{}", "A".repeat(43));
+    let cookies = format!(
+        "nuriteo_dev_session={}; nuriteo_dev_csrf={csrf}",
+        issued_session.token().expose()
+    );
+    let origins = ["http://127.0.0.1:8080"];
+    let cookie_headers = [cookies.as_str()];
+    let csrf_headers = [csrf.as_str()];
+    let request = |method| BrowserRequestHeaders {
+        method,
+        origins: &origins,
+        cookie_headers: &cookie_headers,
+        csrf_headers: &csrf_headers,
+    };
+    BrowserCookieBoundary::new(&Url::parse("http://127.0.0.1:8080").unwrap())
+        .unwrap()
+        .validate(request(BrowserMethod::Post))
+        .unwrap();
+    SessionService::new(pool.clone(), SessionPolicy::default())
+        .authenticate(issued_session.token())
+        .await
+        .unwrap();
+    let service = AccessTokenManagementService::production(
+        pool.clone(),
+        &Url::parse("http://127.0.0.1:8080").unwrap(),
+        SessionPolicy::default(),
+    )
+    .unwrap();
+
+    let issued = service
+        .issue(
+            request(BrowserMethod::Post),
+            AccessTokenTarget::Personal,
+            "Fixture CLI",
+            vec![AccessTokenScope::ProjectRead],
+            Some(30),
+            "token-management-fixture-issue",
+        )
+        .await
+        .unwrap();
+    assert!(issued.plaintext.starts_with("nur_pat_"));
+    assert!(!format!("{issued:?}").contains(&issued.plaintext));
+    let stored: (bool, i32) = sqlx::query_as(
+        "SELECT secret_hash IS NOT NULL,octet_length(secret_hash) FROM access_tokens WHERE id=$1::uuid",
+    )
+    .bind(&issued.token.id)
+    .fetch_one(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+    assert_eq!(stored, (true, 32));
+
+    let rotated = service
+        .rotate(
+            request(BrowserMethod::Post),
+            AccessTokenTarget::Personal,
+            Uuid::parse_str(&issued.token.id).unwrap(),
+            Some(7),
+            "token-management-fixture-rotate",
+        )
+        .await
+        .unwrap();
+    assert_ne!(rotated.plaintext, issued.plaintext);
+    let lineage: (String, bool, Option<String>) = sqlx::query_as(
+        "SELECT state,secret_hash IS NULL,rotated_from_id::text FROM access_tokens WHERE id=$1::uuid",
+    )
+    .bind(&rotated.token.id)
+    .fetch_one(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+    assert_eq!(lineage.0, "active");
+    assert!(!lineage.1);
+    assert_eq!(lineage.2.as_deref(), Some(issued.token.id.as_str()));
+    let old: (String, bool, String) = sqlx::query_as(
+        "SELECT state,secret_hash IS NULL,revoke_reason FROM access_tokens WHERE id=$1::uuid",
+    )
+    .bind(&issued.token.id)
+    .fetch_one(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+    assert_eq!(old, ("revoked".into(), true, "rotated".into()));
+
+    let project_token = service
+        .issue(
+            request(BrowserMethod::Post),
+            AccessTokenTarget::Project(project_id),
+            "Fixture Project CI",
+            vec![
+                AccessTokenScope::ProjectRead,
+                AccessTokenScope::ProjectWrite,
+            ],
+            None,
+            "token-management-fixture-project",
+        )
+        .await
+        .unwrap();
+    assert!(project_token.plaintext.starts_with("nur_prj_"));
+    let revoked = service
+        .revoke(
+            request(BrowserMethod::Delete),
+            AccessTokenTarget::Project(project_id),
+            Uuid::parse_str(&project_token.token.id).unwrap(),
+            "token-management-fixture-revoke",
+        )
+        .await
+        .unwrap();
+    assert_eq!(revoked.status, "revoked");
+
+    const OTHER_USER: &str = "0199ee6c-c777-7000-8000-000000009119";
+    const OTHER_TOKEN: &str = "0199ee6c-c777-7000-8000-000000009120";
+    sqlx::query(
+        "INSERT INTO users(id,email,normalized_email,display_name) VALUES \
+         ($1::uuid,'token-other@example.test','token-other@example.test','Other Token User')",
+    )
+    .bind(OTHER_USER)
+    .execute(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO access_tokens \
+         (id,kind,name,principal_id,owner_user_id,scopes,token_prefix,secret_hash,expires_at,rotation_family_id) \
+         VALUES($1::uuid,'personal','Not Mine',$2::uuid,$2::uuid,ARRAY['project:read'],$3,\
+                decode(repeat('88',32),'hex'),transaction_timestamp()+interval '30 days',$4::uuid)",
+    )
+    .bind(OTHER_TOKEN)
+    .bind(OTHER_USER)
+    .bind(format!("nur_pat_{OTHER_TOKEN}_"))
+    .bind(Uuid::now_v7().to_string())
+    .execute(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+    assert_eq!(
+        service
+            .revoke(
+                request(BrowserMethod::Delete),
+                AccessTokenTarget::Personal,
+                Uuid::parse_str(OTHER_TOKEN).unwrap(),
+                "token-management-fixture-cross-user",
+            )
+            .await,
+        Err(AccessTokenManagementError::NotFound)
+    );
+    let other_active: (String, bool) =
+        sqlx::query_as("SELECT state,secret_hash IS NOT NULL FROM access_tokens WHERE id=$1::uuid")
+            .bind(OTHER_TOKEN)
+            .fetch_one(&mut *pool.acquire().await.unwrap())
+            .await
+            .unwrap();
+    assert_eq!(other_active, ("active".into(), true));
+
+    let visible = service
+        .list(request(BrowserMethod::Get), AccessTokenTarget::Personal)
+        .await
+        .unwrap();
+    assert!(visible.iter().any(|token| token.id == rotated.token.id));
+    assert!(!visible.iter().any(|token| token.id == OTHER_TOKEN));
+    let audit_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM audit_events WHERE correlation_id LIKE 'token-management-fixture-%'",
+    )
+    .fetch_one(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+    assert_eq!(audit_count, 4);
+    let notification_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM notifications WHERE recipient_user_id=$1::uuid \
+         AND event_code IN ('access_token.created','access_token.rotated','access_token.revoked') \
+         AND resource_type='access_token' AND NOT notification_payload_has_sensitive_key(rendering_data)",
+    )
+    .bind(user)
+    .fetch_one(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+    assert_eq!(notification_count, 4);
 }
 
 fn assert_constraint_rejected(result: Result<sqlx::postgres::PgQueryResult, sqlx::Error>) {

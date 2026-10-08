@@ -13,6 +13,21 @@ export {
 export { getVersion } from "./system.ts";
 export { getSetupStatus } from "./setup.ts";
 export {
+  issueAccessToken,
+  listAccessTokens,
+  revokeAccessToken,
+  rotateAccessToken
+} from "./access-tokens.ts";
+export type {
+  AccessToken,
+  AccessTokenKind,
+  AccessTokenScope,
+  AccessTokenStatus,
+  AccessTokenTarget,
+  IssueAccessTokenInput,
+  IssuedAccessToken
+} from "./access-tokens.ts";
+export {
   getAdminStatus,
   listAdminSettings,
   previewAdminPolicyChange,

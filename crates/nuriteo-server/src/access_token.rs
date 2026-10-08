@@ -16,8 +16,16 @@ use subtle::ConstantTimeEq;
 use uuid::Uuid;
 use zeroize::Zeroizing;
 
+mod http_routes;
+mod management;
 mod service;
 
+pub(crate) use http_routes::openapi_router;
+#[allow(unused_imports, reason = "TOK-003 HTTP adapter handoff")]
+pub(crate) use management::{
+    AccessTokenManagementError, AccessTokenManagementService, AccessTokenTarget, AccessTokenView,
+    IssuedAccessTokenView,
+};
 #[allow(unused_imports, reason = "TOK-002 HTTP adapter handoff")]
 pub(crate) use service::{
     AccessTokenAuthenticator, AccessTokenPrincipal, AccessTokenRequest, AccessTokenServiceError,

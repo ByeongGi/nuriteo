@@ -2,6 +2,7 @@ use std::fmt;
 use std::num::NonZeroUsize;
 use std::time::Duration;
 
+use crate::access_token::AccessTokenManagementService;
 use crate::admin::{AdminHttpPolicy, AdminHttpService};
 use crate::auth::{AuthPolicy, AuthService};
 use crate::config::{Config, Environment, FileReader};
@@ -26,7 +27,7 @@ use crate::save::{
 use crate::setup::{SetupStatusPolicy, SetupStatusService};
 use crate::team::{TeamHttpPolicy, TeamHttpService};
 
-use super::{Supervisor, SupervisorConfig, WorkerError, build_router_with_notification_service};
+use super::{Supervisor, SupervisorConfig, WorkerError, build_router_with_access_token_service};
 
 const PRODUCTION_WORKERS: NonZeroUsize = NonZeroUsize::new(4).unwrap();
 const INSTANCE_SETTINGS_STARTUP_TIMEOUT: Duration = Duration::from_secs(5);
@@ -47,6 +48,7 @@ pub(crate) enum ServeError {
     TeamConfiguration,
     MfaConfiguration,
     NotificationConfiguration,
+    AccessTokenConfiguration,
     SaveConfiguration,
     CleanupConfiguration,
     Bind,
@@ -72,6 +74,7 @@ impl ServeError {
             Self::TeamConfiguration => "team-configuration",
             Self::MfaConfiguration => "mfa-configuration",
             Self::NotificationConfiguration => "notification-configuration",
+            Self::AccessTokenConfiguration => "access-token-configuration",
             Self::SaveConfiguration => "save-configuration",
             Self::CleanupConfiguration => "cleanup-configuration",
             Self::Bind => "bind",
@@ -312,6 +315,17 @@ pub(crate) async fn run_server(
             return Err(ServeError::NotificationConfiguration);
         }
     };
+    let access_tokens = match AccessTokenManagementService::production(
+        pool.clone(),
+        &global.public.external_url,
+        SessionPolicy::default(),
+    ) {
+        Ok(access_tokens) => access_tokens,
+        Err(_) => {
+            close_pool(pool, close_timeout).await?;
+            return Err(ServeError::AccessTokenConfiguration);
+        }
+    };
     let maintenance = PolicyMaintenanceWorker::new(
         pool.clone(),
         store.clone(),
@@ -319,7 +333,7 @@ pub(crate) async fn run_server(
     )
     .map_err(|_| ServeError::CleanupConfiguration)?;
     let cleanup = CleanupService::new(pool.clone(), store, global.cleanup.worker_policy);
-    let router = build_router_with_notification_service(
+    let router = build_router_with_access_token_service(
         health,
         auth,
         invitations,
@@ -331,6 +345,7 @@ pub(crate) async fn run_server(
         teams,
         mfa,
         notifications,
+        access_tokens,
     );
     let management_router = operations.router();
     let cleanup_drain_timeout = global

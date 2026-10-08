@@ -2,7 +2,7 @@ mod router;
 mod server;
 mod shutdown;
 
-pub(crate) use router::build_router_with_notification_service;
+pub(crate) use router::build_router_with_access_token_service;
 pub use router::{
     build_router, build_router_with_admin_service, build_router_with_all_services,
     build_router_with_health, build_router_with_http_services, build_router_with_project_service,

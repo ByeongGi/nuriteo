@@ -814,6 +814,18 @@ fn delivery_item(
 
 fn notification_copy(classification: &str, event_code: &str) -> (&'static str, &'static str) {
     match event_code {
+        "access_token.created" => (
+            "Access token issued",
+            "A new automation credential was issued. Review it if this was unexpected.",
+        ),
+        "access_token.rotated" => (
+            "Access token rotated",
+            "An automation credential was replaced and the previous value was revoked.",
+        ),
+        "access_token.revoked" => (
+            "Access token revoked",
+            "An automation credential was revoked and can no longer authenticate.",
+        ),
         "mfa.enrollment_required" => (
             "Multi-factor authentication required",
             "Complete enrollment before the displayed deadline.",

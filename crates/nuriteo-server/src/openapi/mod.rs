@@ -7,6 +7,7 @@ use utoipa_axum::routes;
 use utoipa_swagger_ui::{Config, SwaggerUi};
 
 use crate::VERSION;
+use crate::access_token::{self, AccessTokenManagementService};
 use crate::admin::{self, AdminHttpService};
 use crate::auth::{self, AuthService};
 use crate::invitations::{self, InvitationHttpService};
@@ -50,6 +51,7 @@ pub const DOCS_PATH: &str = "/api/docs";
         ,(name = "teams", description = "Organization Team lifecycle")
         ,(name = "team-members", description = "Team membership administration")
         ,(name = "team-project-roles", description = "Team-to-Project role administration")
+        ,(name = "access-tokens", description = "Copy-once Personal and Project Automation Token lifecycle")
     ),
     servers((url = "/", description = "Current self-hosted instance"))
 )]
@@ -158,6 +160,7 @@ pub fn document() -> utoipa::openapi::OpenApi {
         TeamHttpService::unconfigured(),
         MfaHttpService::unconfigured(),
         NotificationHttpService::unconfigured(),
+        AccessTokenManagementService::unconfigured(),
     )
     .1
 }
@@ -178,6 +181,38 @@ pub fn router(
     mfa: MfaHttpService,
     notifications: NotificationHttpService,
 ) -> Router {
+    router_with_access_tokens(
+        auth,
+        invitations,
+        organizations,
+        projects,
+        save,
+        setup,
+        admin,
+        teams,
+        mfa,
+        notifications,
+        AccessTokenManagementService::unconfigured(),
+    )
+}
+
+#[allow(
+    clippy::too_many_arguments,
+    reason = "top-level composition keeps independently testable HTTP services explicit"
+)]
+pub(crate) fn router_with_access_tokens(
+    auth: AuthService,
+    invitations: InvitationHttpService,
+    organizations: OrganizationHttpService,
+    projects: ProjectHttpService,
+    save: SaveHttpService,
+    setup: SetupStatusService,
+    admin: AdminHttpService,
+    teams: TeamHttpService,
+    mfa: MfaHttpService,
+    notifications: NotificationHttpService,
+    access_tokens: AccessTokenManagementService,
+) -> Router {
     let (api_routes, document) = openapi_parts(
         auth,
         invitations,
@@ -189,6 +224,7 @@ pub fn router(
         teams,
         mfa,
         notifications,
+        access_tokens,
     );
     let config = Config::new([DOCUMENT_PATH]).validator_url("none");
     let docs = SwaggerUi::new(DOCS_PATH)
@@ -213,6 +249,7 @@ fn openapi_parts(
     teams: TeamHttpService,
     mfa: MfaHttpService,
     notifications: NotificationHttpService,
+    access_tokens: AccessTokenManagementService,
 ) -> (Router, utoipa::openapi::OpenApi) {
     let (auth_routes, document) =
         workspace::openapi_router(auth::openapi_router(ApiDocument::openapi()))
@@ -246,6 +283,9 @@ fn openapi_parts(
     let (notification_routes, document) = notification::openapi_router(document)
         .with_state(notifications)
         .split_for_parts();
+    let (access_token_routes, document) = access_token::openapi_router(document)
+        .with_state(access_tokens)
+        .split_for_parts();
     (
         auth_routes
             .merge(invitation_routes)
@@ -256,7 +296,8 @@ fn openapi_parts(
             .merge(admin_routes)
             .merge(team_routes)
             .merge(mfa_routes)
-            .merge(notification_routes),
+            .merge(notification_routes)
+            .merge(access_token_routes),
         document,
     )
 }

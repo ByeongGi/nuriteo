@@ -133,6 +133,9 @@ async fn serves_the_versioned_document_from_the_application_router() {
             .keys()
             .collect::<Vec<_>>(),
         vec![
+            "/api/v1/access-tokens",
+            "/api/v1/access-tokens/{tokenId}",
+            "/api/v1/access-tokens/{tokenId}/rotate",
             "/api/v1/admin/activation-invitations",
             "/api/v1/admin/activation-invitations/{invitation_id}",
             "/api/v1/admin/activation-invitations/{invitation_id}/reissue",
@@ -183,6 +186,9 @@ async fn serves_the_versioned_document_from_the_application_router() {
             "/api/v1/organizations/{organization_id}/teams/{team_id}/members/{user_id}",
             "/api/v1/organizations/{organization_id}/teams/{team_id}/project-roles",
             "/api/v1/organizations/{organization_id}/teams/{team_id}/project-roles/{project_id}",
+            "/api/v1/projects/{projectId}/access-tokens",
+            "/api/v1/projects/{projectId}/access-tokens/{tokenId}",
+            "/api/v1/projects/{projectId}/access-tokens/{tokenId}/rotate",
             "/api/v1/setup/status",
             "/api/v1/version",
             "/api/v1/workspaces/{owner_type}/{owner_id}/projects",

@@ -1,3 +1,4 @@
+use crate::access_token::AccessTokenManagementService;
 use crate::admin::AdminHttpService;
 use crate::auth::AuthService;
 use crate::health::HealthService;
@@ -207,8 +208,8 @@ pub(crate) fn build_router_with_notification_service(
     mfa: MfaHttpService,
     notifications: NotificationHttpService,
 ) -> Router {
-    let enforcement = mfa.clone();
-    let api = openapi::router(
+    build_router_with_access_token_service(
+        health,
         auth,
         invitations,
         organizations,
@@ -219,6 +220,38 @@ pub(crate) fn build_router_with_notification_service(
         teams,
         mfa,
         notifications,
+        AccessTokenManagementService::unconfigured(),
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn build_router_with_access_token_service(
+    health: HealthService,
+    auth: AuthService,
+    invitations: InvitationHttpService,
+    organizations: OrganizationHttpService,
+    projects: ProjectHttpService,
+    save: SaveHttpService,
+    setup: SetupStatusService,
+    admin: AdminHttpService,
+    teams: TeamHttpService,
+    mfa: MfaHttpService,
+    notifications: NotificationHttpService,
+    access_tokens: AccessTokenManagementService,
+) -> Router {
+    let enforcement = mfa.clone();
+    let api = openapi::router_with_access_tokens(
+        auth,
+        invitations,
+        organizations,
+        projects,
+        save,
+        setup,
+        admin,
+        teams,
+        mfa,
+        notifications,
+        access_tokens,
     )
     .layer(middleware::from_fn(move |request, next| {
         enforce_mfa_deadline(enforcement.clone(), request, next)
