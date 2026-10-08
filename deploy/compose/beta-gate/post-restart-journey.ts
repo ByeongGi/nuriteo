@@ -130,15 +130,22 @@ try {
   assert.ok(persistedOidc.linkedIdentityCount >= 1);
   await activeCa(api, "oidc", oidc.id);
 
-  const deliveries = await api("GET", "/api/v1/admin/email-deliveries?limit=100");
-  assertRedacted(deliveries.json);
-  const deliveryBody = deliveries.json as {
+  const sentDeliveries = await api("GET", "/api/v1/admin/email-deliveries?state=sent&limit=100");
+  const deadLetterDeliveries = await api("GET", "/api/v1/admin/email-deliveries?state=dead_letter&limit=100");
+  assertRedacted(sentDeliveries.json);
+  assertRedacted(deadLetterDeliveries.json);
+  const sentBody = sentDeliveries.json as {
     items: Array<{ attemptCount: number; state: string }>;
     smtpConfigured: boolean;
   };
-  assert.equal(deliveryBody.smtpConfigured, true);
-  assert.ok(deliveryBody.items.some((item) => item.state === "sent" && item.attemptCount >= 2));
-  assert.ok(deliveryBody.items.some((item) => item.state === "dead_letter"));
+  const deadLetterBody = deadLetterDeliveries.json as {
+    items: Array<{ attemptCount: number; state: string }>;
+    smtpConfigured: boolean;
+  };
+  assert.equal(sentBody.smtpConfigured, true);
+  assert.equal(deadLetterBody.smtpConfigured, true);
+  assert.ok(sentBody.items.some((item) => item.state === "sent" && item.attemptCount >= 2));
+  assert.ok(deadLetterBody.items.some((item) => item.state === "dead_letter"));
   await admin.close();
 
   const oidcLogin = await browser.newContext({ ignoreHTTPSErrors: true });
