@@ -32,7 +32,16 @@ cleanup() {
   compose down --volumes --remove-orphans >/dev/null 2>&1 || true
   rm -rf -- "$run_root"
 }
-trap cleanup EXIT HUP INT TERM
+trap cleanup EXIT
+interrupted() {
+  local status="$1"
+  trap - EXIT HUP INT TERM
+  cleanup
+  exit "$status"
+}
+trap 'interrupted 129' HUP
+trap 'interrupted 130' INT
+trap 'interrupted 143' TERM
 trap 'status=$?; echo "GATE-005 actual driver failed at line ${BASH_LINENO[0]} (status ${status})" >&2' ERR
 
 select_compose() {
