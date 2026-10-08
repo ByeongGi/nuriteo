@@ -45,8 +45,8 @@ async fn direct_project_roles_are_isolated_effective_and_serialized() {
     )
     .await
     .unwrap();
-    assert_eq!(report.latest_version, Some(39));
-    assert_eq!(report.known_migrations, 39);
+    assert_eq!(report.latest_version, Some(40));
+    assert_eq!(report.known_migrations, 40);
     seed_fixture(&pool).await;
 
     verify_effective_roles_and_archived_access(&pool).await;

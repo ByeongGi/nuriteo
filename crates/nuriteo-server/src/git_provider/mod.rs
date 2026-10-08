@@ -1297,7 +1297,7 @@ mod tests {
         )
         .await
         .unwrap();
-        assert_eq!(report.latest_version, Some(39));
+        assert_eq!(report.latest_version, Some(40));
         InstanceSettingsRepository::new(pool.clone(), Duration::from_secs(5))
             .unwrap()
             .materialize(&InstanceSettingBootstrap::empty())

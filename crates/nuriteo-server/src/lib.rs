@@ -24,6 +24,7 @@ pub mod organization;
 pub mod policy;
 pub mod project;
 pub mod quota;
+pub mod registry_gateway;
 pub mod save;
 pub mod setup;
 pub mod smtp;
