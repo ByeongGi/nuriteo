@@ -75,6 +75,17 @@ raise SystemExit(result.returncode)
 PY
 }
 compose() { "${compose_command[@]}" -f "$compose_file" -f "$provider_file" --project-name "$project" "$@"; }
+collect_compose_logs() {
+  local output="$1" service
+  : >"$output"
+  for service in postgres rustfs storage-init migrate storage-check bootstrap-admin core web \
+    oidc-provider smtp-provider git-provider registry-exact-provider registry-default-provider; do
+    {
+      printf '===== %s =====\n' "$service"
+      compose logs "$service"
+    } >>"$output" 2>&1
+  done
+}
 container() {
   "$engine" ps --all --quiet \
     --filter "label=com.docker.compose.project=$project" \
@@ -323,7 +334,7 @@ fs.writeFileSync(journeyPath, `${JSON.stringify(journey, null, 2)}\n`, { mode: 0
 NODE
 node "$here/check-journey.mjs" "$run_root/journey.json"
 
-compose logs >"$run_root/compose-before-restart.log" 2>&1
+collect_compose_logs "$run_root/compose-before-restart.log"
 compose down
 compose up --detach --no-build --no-deps postgres rustfs oidc-provider smtp-provider \
   git-provider registry-exact-provider registry-default-provider >"$run_root/restart.log" 2>&1
@@ -383,7 +394,7 @@ for(const [stage,value] of Object.entries(stages))fs.writeFileSync(`${root}/${st
 NODE
 for stage in local-administrator oidc-provider-administration oidc-user mfa-policy team-collaboration instance-policy notifications audit-and-operations access-tokens git-integration registry-integration published-example published-preview; do record "$stage"; done
 
-compose logs >"$run_root/compose-after-restart.log" 2>&1
+collect_compose_logs "$run_root/compose-after-restart.log"
 scan_secrets() {
   local result
   local -a targets=("$@")

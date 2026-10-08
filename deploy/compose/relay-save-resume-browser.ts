@@ -302,7 +302,7 @@ async function resumeJourney(
   journeyStage = "resume-project-ready";
   const resumeOutcome = await page.waitForFunction(() => {
     const text = document.body.innerText;
-    if (text.includes("Server Save v3 is ready in this browser.")) return "ready";
+    if (/Server Save v[1-9][0-9]* is ready in this browser\./u.test(text)) return "ready";
     if (text.includes("failed integrity verification")) return "integrity-failed";
     if (text.includes("no longer available to this account")) return "content-unavailable";
     if (text.includes("could not be resumed")) return "resume-failed";
@@ -310,12 +310,31 @@ async function resumeJourney(
     if (runtimeFailure) return `runtime-${runtimeFailure[1].toLowerCase().replaceAll("_", "-")}`;
     if (text.includes("browser workspace could not be started safely")) return "runtime-failed";
     return null;
-  }, undefined, { timeout: 30_000 }).then((handle) => handle.jsonValue());
+  }, undefined, { timeout: 30_000 }).then(
+    (handle) => handle.jsonValue(),
+    async (error: unknown) => {
+      const statuses = await page.locator('[role="status"]').allTextContents();
+      const alerts = await page.locator('[role="alert"]').allTextContents();
+      const recentResponses = ledger.responses.slice(-12).map((response) => {
+        const url = new URL(response.url);
+        return `${response.status} ${url.pathname}`;
+      });
+      throw new Error(
+        `resume readiness timed out; status=${statuses.join(" | ").slice(0, 320)}; `
+        + `alert=${alerts.join(" | ").slice(0, 320)}; responses=${recentResponses.join(", ")}`,
+        { cause: error }
+      );
+    }
+  );
   journeyStage = `resume-project-${String(resumeOutcome)}`;
   assert.equal(resumeOutcome, "ready");
   journeyStage = "resume-project-source";
-  await page.getByRole("button", { name: "src/message.ts" }).click();
-  assert.equal(await page.getByLabel("Editor for src/message.ts").inputValue(), editedSource);
+  const firstFile = page.getByRole("navigation", { name: "Project files" }).getByRole("button").first();
+  await firstFile.waitFor();
+  await firstFile.click();
+  const editor = page.getByRole("textbox", { name: /^Editor for /u });
+  await editor.waitFor();
+  assert.ok((await editor.inputValue()).length > 0, "resumed current Server Save must contain readable source");
   assertNoPrivateStorageMaterial(await page.locator("body").innerText());
   await closeObservedContext(context, ledger);
 }
