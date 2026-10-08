@@ -398,8 +398,7 @@ collect_compose_logs "$run_root/compose-after-restart.log"
 scan_secrets() {
   local result
   local -a targets=("$@")
-  set +e
-  rg -n --hidden -F -f <(printf '%s\n' \
+  if rg -n --hidden -F -f <(printf '%s\n' \
     'gate-005-db-ephemeral' 'integration-secret-0123456789' 'gate-smtp-password-ephemeral' \
     'integration-access' 'gate-005-client-secret' "$admin_password" "$invitee_password" \
     "$(cat "$run_root/preview-signing-key")" "$(cat "$run_root/save-idempotency-secret")" \
@@ -407,15 +406,18 @@ scan_secrets() {
     "$(cat "$run_root/provider-tls/control/git-token")" \
     "$(cat "$run_root/provider-tls/control/registry-exact-token")" \
     "$(cat "$run_root/provider-tls/control/registry-default-token")") \
-    "${targets[@]}"
-  result=$?
-  set -e
+    "${targets[@]}"; then
+    result=0
+  else
+    result=$?
+  fi
   if [ "$result" -eq 0 ]; then echo 'GATE-005 secret scan found an ephemeral credential' >&2; return 1; fi
   if [ "$result" -ne 1 ]; then echo "GATE-005 literal secret scan failed (${result})" >&2; return 1; fi
-  set +e
-  rg -n '(nrt_(inv|org_inv)_[A-Za-z0-9._-]+|nur_(pat|prj)_[A-Za-z0-9._-]+|X-Amz-(Credential|Signature)|BEGIN .*PRIVATE KEY)' "${targets[@]}"
-  result=$?
-  set -e
+  if rg -n '(nrt_(inv|org_inv)_[A-Za-z0-9._-]+|nur_(pat|prj)_[A-Za-z0-9._-]+|X-Amz-(Credential|Signature)|BEGIN .*PRIVATE KEY)' "${targets[@]}"; then
+    result=0
+  else
+    result=$?
+  fi
   if [ "$result" -eq 0 ]; then echo 'GATE-005 secret scan found protected material' >&2; return 1; fi
   if [ "$result" -ne 1 ]; then echo "GATE-005 protected-material scan failed (${result})" >&2; return 1; fi
   return 0
@@ -428,7 +430,7 @@ record secret-scan
 
 node - "$engine" "$release_commit" "$run_root/images.json" postgres "$NURITEO_POSTGRES_IMAGE" server "$NURITEO_SERVER_IMAGE" web "$NURITEO_WEB_IMAGE" <<'NODE'
 const {execFileSync}=require('node:child_process');const fs=require('node:fs');const [engine,commit,out,...pairs]=process.argv.slice(2);const images=[];
-for(let i=0;i<pairs.length;i+=2){const [name,image]=[pairs[i],pairs[i+1]];const inspect=JSON.parse(execFileSync(engine,['image','inspect',image],{encoding:'utf8'}))[0];if(inspect.Config.Labels?.['org.opencontainers.image.revision']!==commit)throw new Error(`${name} revision label mismatch`);images.push({name,digest:inspect.Id,sourceCommit:commit,sourceCommitLabelVerified:true});}fs.writeFileSync(out,JSON.stringify(images));
+for(let i=0;i<pairs.length;i+=2){const [name,image]=[pairs[i],pairs[i+1]];const inspect=JSON.parse(execFileSync(engine,['image','inspect',image],{encoding:'utf8'}))[0];if(inspect.Config.Labels?.['org.opencontainers.image.revision']!==commit)throw new Error(`${name} revision label mismatch`);const digest=inspect.Id.startsWith('sha256:')?inspect.Id:`sha256:${inspect.Id}`;if(!/^sha256:[0-9a-f]{64}$/.test(digest))throw new Error(`${name} image digest is invalid`);images.push({name,digest,sourceCommit:commit,sourceCommitLabelVerified:true});}fs.writeFileSync(out,JSON.stringify(images));
 NODE
 "$engine" ps --all --quiet --filter "label=com.docker.compose.project=$project" \
   | sed '/^$/d' | sort -u \
