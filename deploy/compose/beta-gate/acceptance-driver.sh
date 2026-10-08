@@ -237,8 +237,8 @@ curl --fail --silent --cacert "$run_root/provider-tls/ca.crt" "https://localhost
 curl --silent --output /dev/null --cacert "$run_root/provider-tls/ca.crt" "https://localhost:${git_port}/missing"
 test "$($engine inspect --format '{{.State.Running}}' "$(container smtp-provider)")" = true
 compose exec -T web /nodejs/bin/node -e '
-  const tls=require("node:tls");const socket=tls.connect({host:"smtp-provider",port:8443,rejectUnauthorized:false},()=>socket.write("EHLO gate-005\r\nQUIT\r\n"));
-  let transcript="";socket.on("data",chunk=>transcript+=chunk);socket.on("close",()=>{if(!transcript.includes("220 gate-005")||!transcript.includes("221 bye"))process.exit(1)});socket.on("error",()=>process.exit(1));
+  const tls=require("node:tls");const socket=tls.connect({host:"smtp-provider",port:8443,rejectUnauthorized:false},()=>socket.write("EHLO gate-005\r\n"));
+  let transcript="";socket.on("data",chunk=>{transcript+=chunk;if(transcript.includes("250 AUTH PLAIN"))socket.end()});socket.on("close",()=>{if(!transcript.includes("220 gate-005")||!transcript.includes("250 AUTH PLAIN"))process.exit(1)});socket.on("error",()=>process.exit(1));
 '
 
 export NURITEO_BETA_GATE_COMPOSE_PROJECT="$project"
