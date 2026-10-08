@@ -75,7 +75,11 @@ raise SystemExit(result.returncode)
 PY
 }
 compose() { "${compose_command[@]}" -f "$compose_file" -f "$provider_file" --project-name "$project" "$@"; }
-container() { compose ps --all --quiet "$1" | head -n 1; }
+container() {
+  "$engine" ps --all --quiet \
+    --filter "label=com.docker.compose.project=$project" \
+    --filter "label=com.docker.compose.service=$1" | head -n 1
+}
 query() { compose exec -T postgres psql -X --username nuriteo --dbname nuriteo --tuples-only --no-align --set ON_ERROR_STOP=1 --command "$1"; }
 wait_job() {
   local service="$1" expected="${2:-0}" id state attempt=0
