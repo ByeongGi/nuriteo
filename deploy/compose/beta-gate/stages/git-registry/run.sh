@@ -50,7 +50,7 @@ else echo 'Git/Registry stage requires Docker Compose or Podman Compose' >&2; ex
 compose() { "${compose_command[@]}" -f "$compose_file" -f "$provider_file" --project-name "$project" "$@"; }
 query() { compose exec -T postgres psql -X --username nuriteo --dbname nuriteo --tuples-only --no-align --set ON_ERROR_STOP=1 --command "$1"; }
 harness() {
-  compose run --rm --no-deps -T \
+  compose --profile gate-harness run --rm --no-deps -T \
     -e "NURITEO_GATE_HARNESS_COMMAND=$1" \
     -e 'NURITEO_GATE_REGISTRY_PACKAGE=@gate/exact' \
     -e 'NURITEO_GATE_REGISTRY_METADATA_FILE=/run/gate-state/registry-metadata.json' \
