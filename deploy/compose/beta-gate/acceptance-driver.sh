@@ -323,7 +323,7 @@ fs.writeFileSync(journeyPath, `${JSON.stringify(journey, null, 2)}\n`, { mode: 0
 NODE
 node "$here/check-journey.mjs" "$run_root/journey.json"
 
-compose logs --no-color >"$run_root/compose-before-restart.log" 2>&1
+compose logs >"$run_root/compose-before-restart.log" 2>&1
 compose down
 compose up --detach --no-build --no-deps postgres rustfs oidc-provider smtp-provider \
   git-provider registry-exact-provider registry-default-provider >"$run_root/restart.log" 2>&1
@@ -383,7 +383,7 @@ for(const [stage,value] of Object.entries(stages))fs.writeFileSync(`${root}/${st
 NODE
 for stage in local-administrator oidc-provider-administration oidc-user mfa-policy team-collaboration instance-policy notifications audit-and-operations access-tokens git-integration registry-integration published-example published-preview; do record "$stage"; done
 
-compose logs --no-color >"$run_root/compose-after-restart.log" 2>&1
+compose logs >"$run_root/compose-after-restart.log" 2>&1
 scan_secrets() {
   local result
   local -a targets=("$@")
