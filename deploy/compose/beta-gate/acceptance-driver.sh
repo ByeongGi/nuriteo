@@ -362,7 +362,7 @@ export NURITEO_GATE_GIT_REGISTRY_STATE="$run_root/git-registry/git-registry-stat
 export NURITEO_GATE_OIDC_STATE_FILE="$run_root/oidc-notifications/oidc-state.json"
 export NURITEO_BETA_GATE_POST_RESTART_OUTPUT="$run_root/same-volume-restart.assertions.json"
 node --experimental-strip-types "$here/post-restart-journey.ts" >"$run_root/post-restart-browser.log" 2>&1
-compose run --rm --no-deps -T \
+  compose --profile gate-harness run --rm --no-deps -T \
   -e 'NURITEO_GATE_HARNESS_COMMAND=registry-fetch' \
   -e 'NURITEO_GATE_REGISTRY_PACKAGE=@gate/exact' \
   -e 'NURITEO_GATE_REGISTRY_METADATA_FILE=/run/gate-state/registry-metadata-after-restart.json' \
