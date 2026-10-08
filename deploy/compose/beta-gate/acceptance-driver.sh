@@ -45,11 +45,34 @@ trap 'interrupted 143' TERM
 trap 'status=$?; echo "GATE-005 actual driver failed at line ${BASH_LINENO[0]} (status ${status})" >&2' ERR
 
 select_compose() {
-  if docker compose version >/dev/null 2>&1; then compose_command=(docker compose); engine=docker
+  if command_succeeds_within docker compose version; then compose_command=(docker compose); engine=docker
   elif command -v uvx >/dev/null 2>&1 && command -v podman >/dev/null 2>&1; then
     compose_command=(uvx --from podman-compose==1.5.0 podman-compose --in-pod false); engine=podman
-  elif podman compose version >/dev/null 2>&1; then compose_command=(podman compose); engine=podman
+  elif command_succeeds_within podman compose version; then compose_command=(podman compose); engine=podman
   else echo 'GATE-005 requires Docker Compose or Podman Compose' >&2; exit 1; fi
+  command_succeeds_within "$engine" info || {
+    echo "GATE-005 ${engine} engine is unavailable or did not respond within 15 seconds" >&2
+    exit 1
+  }
+}
+command_succeeds_within() {
+  python3 - "$@" <<'PY'
+import subprocess
+import sys
+
+try:
+    result = subprocess.run(
+        sys.argv[1:],
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        timeout=15,
+        check=False,
+    )
+except (OSError, subprocess.TimeoutExpired):
+    raise SystemExit(1)
+raise SystemExit(result.returncode)
+PY
 }
 compose() { "${compose_command[@]}" -f "$compose_file" -f "$provider_file" --project-name "$project" "$@"; }
 container() { compose ps --all --quiet "$1" | head -n 1; }
