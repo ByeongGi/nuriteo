@@ -413,7 +413,7 @@ async fn seed_linked_identity(pool: &DatabasePool, provider_id: Uuid) {
     let user_id = "0199ee6c-c777-7000-8000-000000005010";
     sqlx::query("INSERT INTO users(id,email,normalized_email,display_name) VALUES($1::uuid,'linked@example.test','linked@example.test','Linked User')")
         .bind(user_id).execute(&mut *pool.acquire().await.unwrap()).await.unwrap();
-    sqlx::query("INSERT INTO oidc_identities(id,user_id,provider_id,subject) VALUES($1::uuid,$2::uuid,$3::uuid,'subject-1')")
+    sqlx::query("INSERT INTO oidc_identities(id,user_id,provider_id,subject,normalized_email_at_link,link_source) VALUES($1::uuid,$2::uuid,$3::uuid,'subject-1','linked@example.test','preexisting')")
         .bind(Uuid::now_v7().to_string()).bind(user_id).bind(provider_id.to_string())
         .execute(&mut *pool.acquire().await.unwrap()).await.unwrap();
 }

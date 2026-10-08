@@ -10,6 +10,7 @@ use time::OffsetDateTime;
 use tokio::time as tokio_time;
 
 use crate::database::DatabasePool;
+use crate::policy::EffectivePolicyEngine;
 
 use super::{Session, SessionFields, SessionId, Timestamp, UserId};
 
@@ -279,7 +280,9 @@ impl SessionService {
         transaction: &mut Transaction<'_, Postgres>,
         token: &SessionToken,
     ) -> Result<Session, SessionServiceError> {
-        let (row, _) = load_active_session(transaction, &token.digest()).await?;
+        let (row, now) = load_active_session(transaction, &token.digest()).await?;
+        let policy = self.effective_policy(transaction).await?;
+        ensure_within_effective_policy(&row, now, policy)?;
         session_from_row(&row)
     }
 
@@ -391,6 +394,7 @@ impl SessionService {
         session_id: SessionId,
         token: SessionToken,
     ) -> Result<IssuedSession, SessionServiceError> {
+        let policy = self.effective_policy(transaction).await?;
         lock_active_user(transaction, user_id).await?;
         enforce_session_limit(transaction, user_id).await?;
 
@@ -408,8 +412,8 @@ impl SessionService {
         .bind(session_id.to_string())
         .bind(user_id.to_string())
         .bind(token.digest().as_slice())
-        .bind(duration_seconds(self.policy.idle_timeout)?)
-        .bind(duration_seconds(self.policy.absolute_timeout)?)
+        .bind(duration_seconds(policy.idle_timeout)?)
+        .bind(duration_seconds(policy.absolute_timeout)?)
         .fetch_one(&mut **transaction)
         .await
         .map_err(|_| SessionServiceError::DatabaseUnavailable)?;
@@ -431,15 +435,13 @@ impl SessionService {
             .await
             .map_err(|_| SessionServiceError::DatabaseUnavailable)?;
         let (row, now) = load_active_session(&mut transaction, digest).await?;
-        let absolute_expires_at: OffsetDateTime = row
-            .try_get("absolute_expires_at")
-            .map_err(|_| SessionServiceError::InvariantViolation)?;
-        let next_idle = std::cmp::min(
-            now + time_duration(self.policy.idle_timeout)?,
-            absolute_expires_at,
-        );
+        let policy = self.effective_policy(&mut transaction).await?;
+        let absolute_expires_at = effective_absolute_expiry(&row, policy)?;
+        let idle_timeout = effective_idle_timeout(&row, policy)?;
+        ensure_within_effective_policy(&row, now, policy)?;
+        let next_idle = std::cmp::min(now + idle_timeout, absolute_expires_at);
         let updated = sqlx::query(
-            "UPDATE sessions SET last_seen_at = $2, idle_expires_at = $3 \
+            "UPDATE sessions SET last_seen_at = $2, idle_expires_at = $3, absolute_expires_at = $4 \
              WHERE id = $1::uuid \
              RETURNING id::text, user_id::text, created_at, last_seen_at, \
                        idle_expires_at, absolute_expires_at, last_reauthenticated_at, \
@@ -452,6 +454,7 @@ impl SessionService {
         )
         .bind(now)
         .bind(next_idle)
+        .bind(absolute_expires_at)
         .fetch_one(&mut *transaction)
         .await
         .map_err(|_| SessionServiceError::DatabaseUnavailable)?;
@@ -504,6 +507,8 @@ impl SessionService {
         kind: SessionRotationKind,
     ) -> Result<IssuedSession, SessionServiceError> {
         let (old, now) = load_active_session(transaction, old_digest).await?;
+        let policy = self.effective_policy(transaction).await?;
+        ensure_within_effective_policy(&old, now, policy)?;
         let old_id: String = old
             .try_get("id")
             .map_err(|_| SessionServiceError::InvariantViolation)?;
@@ -530,8 +535,8 @@ impl SessionService {
         .bind(&user_id)
         .bind(replacement_token.digest().as_slice())
         .bind(now)
-        .bind(duration_seconds(self.policy.idle_timeout)?)
-        .bind(duration_seconds(self.policy.absolute_timeout)?)
+        .bind(duration_seconds(policy.idle_timeout)?)
+        .bind(duration_seconds(policy.absolute_timeout)?)
         .bind(reauthenticated_at)
         .fetch_one(&mut **transaction)
         .await
@@ -555,6 +560,20 @@ impl SessionService {
             token: replacement_token,
             session,
         })
+    }
+
+    async fn effective_policy(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+    ) -> Result<SessionPolicy, SessionServiceError> {
+        EffectivePolicyEngine::load_optional_in_transaction(transaction)
+            .await
+            .and_then(|snapshot| {
+                snapshot.map_or(Ok(self.policy), |snapshot| {
+                    snapshot.session_policy(self.policy.operation_timeout)
+                })
+            })
+            .map_err(|_| SessionServiceError::InvariantViolation)
     }
 
     async fn revoke_inner(
@@ -868,6 +887,54 @@ fn duration_seconds(value: Duration) -> Result<i64, SessionServiceError> {
 
 fn time_duration(value: Duration) -> Result<time::Duration, SessionServiceError> {
     Ok(time::Duration::seconds(duration_seconds(value)?))
+}
+
+fn effective_absolute_expiry(
+    row: &sqlx::postgres::PgRow,
+    policy: SessionPolicy,
+) -> Result<OffsetDateTime, SessionServiceError> {
+    let created_at: OffsetDateTime = row
+        .try_get("created_at")
+        .map_err(|_| SessionServiceError::InvariantViolation)?;
+    let stored: OffsetDateTime = row
+        .try_get("absolute_expires_at")
+        .map_err(|_| SessionServiceError::InvariantViolation)?;
+    Ok(std::cmp::min(
+        stored,
+        created_at + time_duration(policy.absolute_timeout)?,
+    ))
+}
+
+fn effective_idle_timeout(
+    row: &sqlx::postgres::PgRow,
+    policy: SessionPolicy,
+) -> Result<time::Duration, SessionServiceError> {
+    let last_seen_at: OffsetDateTime = row
+        .try_get("last_seen_at")
+        .map_err(|_| SessionServiceError::InvariantViolation)?;
+    let stored_expiry: OffsetDateTime = row
+        .try_get("idle_expires_at")
+        .map_err(|_| SessionServiceError::InvariantViolation)?;
+    let stored = stored_expiry - last_seen_at;
+    if stored <= time::Duration::ZERO {
+        return Err(SessionServiceError::InvalidToken);
+    }
+    Ok(std::cmp::min(stored, time_duration(policy.idle_timeout)?))
+}
+
+fn ensure_within_effective_policy(
+    row: &sqlx::postgres::PgRow,
+    now: OffsetDateTime,
+    policy: SessionPolicy,
+) -> Result<(), SessionServiceError> {
+    let last_seen_at: OffsetDateTime = row
+        .try_get("last_seen_at")
+        .map_err(|_| SessionServiceError::InvariantViolation)?;
+    let idle_expires_at = last_seen_at + effective_idle_timeout(row, policy)?;
+    if now >= idle_expires_at || now >= effective_absolute_expiry(row, policy)? {
+        return Err(SessionServiceError::InvalidToken);
+    }
+    Ok(())
 }
 
 #[cfg(test)]

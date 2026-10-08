@@ -45,7 +45,7 @@ async fn admin_settings_audit_and_operations_http_are_safe_and_transactional() {
     )
     .await
     .unwrap();
-    assert_eq!(report.latest_version, Some(33));
+    assert_eq!(report.latest_version, Some(36));
     let admin_id = seed_user(&pool, "admin@example.test", true).await;
     seed_user(&pool, "member@example.test", false).await;
     let settings = InstanceSettingsRepository::new(pool.clone(), Duration::from_secs(5))
@@ -96,8 +96,8 @@ async fn admin_settings_audit_and_operations_http_are_safe_and_transactional() {
     assert_eq!(response.status(), StatusCode::OK);
     assert_eq!(response.headers()[CACHE_CONTROL], "private, no-store");
     let listed = json_body(response).await;
-    assert_eq!(listed["registryVersion"], 3);
-    assert_eq!(listed["items"].as_array().unwrap().len(), 39);
+    assert_eq!(listed["registryVersion"], 4);
+    assert_eq!(listed["items"].as_array().unwrap().len(), 40);
     let invitation_metadata = listed["items"]
         .as_array()
         .unwrap()
@@ -346,9 +346,9 @@ async fn admin_settings_audit_and_operations_http_are_safe_and_transactional() {
     .await;
     assert_eq!(status.status(), StatusCode::OK);
     let status = json_body(status).await;
-    assert_eq!(status["schemaVersion"], 33);
-    assert_eq!(status["settingRegistryVersion"], 3);
-    assert_eq!(status["settingCount"], 39);
+    assert_eq!(status["schemaVersion"], 36);
+    assert_eq!(status["settingRegistryVersion"], 4);
+    assert_eq!(status["settingCount"], 40);
     assert_eq!(status["restartRequired"], false);
 
     verify_audit_query_export_and_retention(&router, &pool, &admin, &member, admin_id).await;

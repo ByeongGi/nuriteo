@@ -28,6 +28,10 @@ const CONSTRAINT_KINDS = [
   "ascii_hostname", "email_address", "text"
 ] as const;
 const SETTING_KEY = /^[a-z][a-z0-9_.-]{0,127}$/u;
+const POLICY_DIRECTIONS = ["decrease", "increase", "unchanged", "changed"] as const;
+const POLICY_APPLY_SCOPES = [
+  "immediate", "new_operations", "new_resources", "next_sweep", "server_restart"
+] as const;
 
 export type AdminSettingApplyMode = (typeof APPLY_MODES)[number];
 export type AdminSettingValue = string | number | boolean | null;
@@ -68,6 +72,26 @@ export interface UpdateAdminSettingInput {
   readonly version: number;
 }
 
+export interface AdminPolicyImpact {
+  readonly key: string;
+  readonly direction: (typeof POLICY_DIRECTIONS)[number];
+  readonly applyScope: (typeof POLICY_APPLY_SCOPES)[number];
+  readonly affectedResources: number;
+  readonly nonCompliantResources: number;
+  readonly gracePeriodSeconds: number | null;
+  readonly requiresRecentReauthentication: boolean;
+  readonly automaticallyDeletesExistingData: false;
+}
+
+export interface AdminPolicyCleanupPreview {
+  readonly gcEnabled: boolean;
+  readonly gracePeriodSeconds: number;
+  readonly eligibleCandidates: number;
+  readonly expectedReclaimBytes: string;
+  readonly batchLimit: number;
+  readonly dryRun: true;
+}
+
 export async function listAdminSettings(
   client: ApiClient,
   options: DomainRequestOptions = {}
@@ -98,6 +122,31 @@ export async function updateAdminSetting(
     mutationOptions(options, { "if-match": `"setting-v${version}"` })
   );
   return validatedResult(response, parseSetting);
+}
+
+export async function previewAdminPolicyChange(
+  client: ApiClient,
+  key: string,
+  value: AdminSettingValue,
+  options: BrowserMutationOptions
+): Promise<ApiResult<AdminPolicyImpact>> {
+  const response = await client.post<unknown, { readonly value: AdminSettingValue }>(
+    `/admin/settings/${validatedSettingKey(key)}/impact`,
+    { value: validatedSettingValue(value) },
+    mutationOptions(options)
+  );
+  return validatedResult(response, parsePolicyImpact);
+}
+
+export async function previewAdminPolicyCleanup(
+  client: ApiClient,
+  batchLimit = 100,
+  options: DomainRequestOptions = {}
+): Promise<ApiResult<AdminPolicyCleanupPreview>> {
+  const limit = validatedPositiveInteger(batchLimit, "cleanup batch limit");
+  if (limit > 100) throw new TypeError("invalid cleanup batch limit");
+  const response = await client.get<unknown>(`/admin/policy-cleanup/preview?batchLimit=${limit}`, options);
+  return validatedResult(response, parsePolicyCleanupPreview);
 }
 
 function parseSettingCollection(value: unknown): AdminSettingCollection {
@@ -198,6 +247,56 @@ function parseStatus(value: unknown): AdminStatus {
     settingRegistryVersion: readPositiveInteger(record, "settingRegistryVersion", 65_535),
     settingCount: readNonNegativeInteger(record.settingCount, "setting count"),
     restartRequired: readBoolean(record, "restartRequired")
+  };
+}
+
+function parsePolicyImpact(value: unknown): AdminPolicyImpact {
+  const record = readExactRecord(value, [
+    "affectedResources",
+    "applyScope",
+    "automaticallyDeletesExistingData",
+    "direction",
+    "gracePeriodSeconds",
+    "key",
+    "nonCompliantResources",
+    "requiresRecentReauthentication"
+  ]);
+  const automaticallyDeletesExistingData = readBoolean(record, "automaticallyDeletesExistingData");
+  if (automaticallyDeletesExistingData) throw new TypeError("policy preview cannot delete data");
+  return {
+    key: validatedSettingKey(readBoundedString(record, "key", MAX_SETTING_KEY_BYTES)),
+    direction: readEnum(record, "direction", POLICY_DIRECTIONS),
+    applyScope: readEnum(record, "applyScope", POLICY_APPLY_SCOPES),
+    affectedResources: readNonNegativeInteger(record.affectedResources, "affected resources"),
+    nonCompliantResources: readNonNegativeInteger(record.nonCompliantResources, "non-compliant resources"),
+    gracePeriodSeconds: record.gracePeriodSeconds === null
+      ? null
+      : readNonNegativeInteger(record.gracePeriodSeconds, "grace period"),
+    requiresRecentReauthentication: readBoolean(record, "requiresRecentReauthentication"),
+    automaticallyDeletesExistingData: false
+  };
+}
+
+function parsePolicyCleanupPreview(value: unknown): AdminPolicyCleanupPreview {
+  const record = readExactRecord(value, [
+    "batchLimit", "dryRun", "eligibleCandidates", "expectedReclaimBytes", "gcEnabled",
+    "gracePeriodSeconds"
+  ]);
+  const dryRun = readBoolean(record, "dryRun");
+  if (!dryRun) throw new TypeError("policy cleanup preview must be a dry run");
+  const expectedReclaimBytes = readBoundedString(record, "expectedReclaimBytes", 20);
+  if (!/^(?:0|[1-9]\d{0,19})$/u.test(expectedReclaimBytes)) {
+    throw new TypeError("invalid expected reclaim bytes");
+  }
+  const batchLimit = readNonNegativeInteger(record.batchLimit, "cleanup batch limit");
+  if (batchLimit < 1 || batchLimit > 100) throw new TypeError("invalid cleanup batch limit");
+  return {
+    gcEnabled: readBoolean(record, "gcEnabled"),
+    gracePeriodSeconds: readNonNegativeInteger(record.gracePeriodSeconds, "grace period"),
+    eligibleCandidates: readNonNegativeInteger(record.eligibleCandidates, "eligible candidates"),
+    expectedReclaimBytes,
+    batchLimit,
+    dryRun: true
   };
 }
 

@@ -11,6 +11,7 @@ use crate::admin::{self, AdminHttpService};
 use crate::auth::{self, AuthService};
 use crate::invitations::{self, InvitationHttpService};
 use crate::mfa::{self, MfaHttpService};
+use crate::notification::{self, NotificationHttpService};
 use crate::organization::{self, OrganizationHttpService};
 use crate::project::{self, ProjectHttpService};
 use crate::save::{self, SaveHttpService};
@@ -35,6 +36,7 @@ pub const DOCS_PATH: &str = "/api/docs";
         (name = "setup", description = "Public secret-free instance setup state"),
         (name = "authentication", description = "Local browser Session lifecycle"),
         (name = "mfa", description = "Local account multi-factor authentication and administrator enforcement policy"),
+        (name = "notifications", description = "Notification inbox, channel preferences, and administrator delivery operations"),
         (name = "workspaces", description = "Authenticated Workspace projections"),
         (name = "invitations", description = "Administrator invitation and public account activation lifecycle"),
         (name = "organizations", description = "Authenticated Organization lifecycle and membership administration"),
@@ -155,6 +157,7 @@ pub fn document() -> utoipa::openapi::OpenApi {
         AdminHttpService::unconfigured(),
         TeamHttpService::unconfigured(),
         MfaHttpService::unconfigured(),
+        NotificationHttpService::unconfigured(),
     )
     .1
 }
@@ -173,6 +176,7 @@ pub fn router(
     admin: AdminHttpService,
     teams: TeamHttpService,
     mfa: MfaHttpService,
+    notifications: NotificationHttpService,
 ) -> Router {
     let (api_routes, document) = openapi_parts(
         auth,
@@ -184,6 +188,7 @@ pub fn router(
         admin,
         teams,
         mfa,
+        notifications,
     );
     let config = Config::new([DOCUMENT_PATH]).validator_url("none");
     let docs = SwaggerUi::new(DOCS_PATH)
@@ -207,6 +212,7 @@ fn openapi_parts(
     admin: AdminHttpService,
     teams: TeamHttpService,
     mfa: MfaHttpService,
+    notifications: NotificationHttpService,
 ) -> (Router, utoipa::openapi::OpenApi) {
     let (auth_routes, document) =
         workspace::openapi_router(auth::openapi_router(ApiDocument::openapi()))
@@ -237,6 +243,9 @@ fn openapi_parts(
     let (mfa_routes, document) = mfa::openapi_router(document)
         .with_state(mfa)
         .split_for_parts();
+    let (notification_routes, document) = notification::openapi_router(document)
+        .with_state(notifications)
+        .split_for_parts();
     (
         auth_routes
             .merge(invitation_routes)
@@ -246,7 +255,8 @@ fn openapi_parts(
             .merge(setup_routes)
             .merge(admin_routes)
             .merge(team_routes)
-            .merge(mfa_routes),
+            .merge(mfa_routes)
+            .merge(notification_routes),
         document,
     )
 }

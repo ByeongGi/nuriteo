@@ -12,7 +12,13 @@ export {
 } from "./errors.ts";
 export { getVersion } from "./system.ts";
 export { getSetupStatus } from "./setup.ts";
-export { getAdminStatus, listAdminSettings, updateAdminSetting } from "./admin.ts";
+export {
+  getAdminStatus,
+  listAdminSettings,
+  previewAdminPolicyChange,
+  previewAdminPolicyCleanup,
+  updateAdminSetting
+} from "./admin.ts";
 export { getAdminOperations } from "./admin-operations.ts";
 export {
   beginMfaEnrollment,
@@ -28,6 +34,15 @@ export {
   updateMfaPolicy
 } from "./mfa.ts";
 export { createSession, deleteSession, getCurrentUser } from "./auth.ts";
+export {
+  cancelEmailDelivery,
+  getNotificationPreferences,
+  listEmailDeliveries,
+  listNotifications,
+  retryEmailDelivery,
+  updateNotificationPreferences,
+  updateNotificationStatus
+} from "./notifications.ts";
 export {
   activateAccount,
   issueActivationInvitation,
@@ -119,6 +134,16 @@ export type {
 export type { ApiEmptyResult, ApiResult, DomainRequestOptions } from "./domain.ts";
 export type { BrowserMutationOptions } from "./browser-mutation.ts";
 export type {
+  EmailDelivery,
+  EmailDeliveryCollection,
+  EmailDeliveryState,
+  NotificationAdminMutationOptions,
+  NotificationInbox,
+  NotificationInboxItem,
+  NotificationPreferences,
+  NotificationStatus
+} from "./notifications.ts";
+export type {
   AdminSetting,
   AdminSettingApplyMode,
   AdminSettingCollection,
@@ -126,6 +151,8 @@ export type {
   AdminSettingPolicyCategory,
   AdminSettingValue,
   AdminStatus,
+  AdminPolicyCleanupPreview,
+  AdminPolicyImpact,
   UpdateAdminSettingInput
 } from "./admin.ts";
 export type {

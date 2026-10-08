@@ -10,7 +10,7 @@ use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use serde_json::json;
 use sha2::{Digest, Sha256};
-use sqlx::{Acquire, Row};
+use sqlx::{Acquire, Postgres, Row, Transaction};
 use subtle::ConstantTimeEq;
 use tokio::time;
 use uuid::Uuid;
@@ -22,7 +22,8 @@ use crate::audit::{
     AuditScope, AuditTarget, AuditWriter, ScopeType,
 };
 use crate::identity::{
-    IssuedSession, SessionService, SessionServiceError, SessionToken, Timestamp, UserId,
+    IssuedSession, NormalizedEmail, SessionRotationKind, SessionService, SessionServiceError,
+    SessionToken, Timestamp, UserId,
 };
 use crate::integration::IntegrationRepository;
 
@@ -253,7 +254,13 @@ impl OidcLoginService {
         if token.issuer != attempt.issuer {
             return Err(OidcProviderError::ValidationFailed);
         }
-        self.commit_login(&input, &attempt, &token.subject).await
+        self.commit_login(
+            &input,
+            &attempt,
+            &token.subject,
+            token.verified_email.as_deref(),
+        )
+        .await
     }
 
     async fn consume_attempt(
@@ -278,7 +285,7 @@ impl OidcLoginService {
             "SELECT attempt.id::text,attempt.provider_config_version,attempt.provider_secret_version,
                     attempt.nonce_hash,attempt.browser_binding_hash,
                     attempt.pkce_key_version,attempt.pkce_nonce,attempt.pkce_ciphertext,
-                    attempt.redirect_uri,provider.issuer
+                    attempt.redirect_uri,attempt.created_at,provider.issuer
              FROM oidc_login_attempts attempt
              JOIN oidc_providers provider ON provider.id=attempt.provider_id
              WHERE attempt.provider_id=$1::uuid AND attempt.state_hash=$2
@@ -321,6 +328,7 @@ impl OidcLoginService {
         input: &OidcCallbackInput<'_>,
         attempt: &LoginAttempt,
         subject: &str,
+        verified_email: Option<&str>,
     ) -> Result<IssuedSession, OidcProviderError> {
         let mut connection = self
             .integrations
@@ -349,6 +357,24 @@ impl OidcLoginService {
         {
             return Err(OidcProviderError::Conflict);
         }
+        acquire_identity_lock(&mut tx, input.provider_id, subject).await?;
+        let subject_hash: [u8; 32] = Sha256::digest(subject.as_bytes()).into();
+        let unlinked_after_attempt: bool = sqlx::query_scalar(
+            "SELECT EXISTS(
+                SELECT 1 FROM oidc_identity_unlink_tombstones
+                WHERE provider_id=$1::uuid AND subject_hash=$2
+                  AND last_unlinked_at >= $3
+             )",
+        )
+        .bind(input.provider_id.to_string())
+        .bind(subject_hash.to_vec())
+        .bind(attempt.created_at)
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(|_| OidcProviderError::Unavailable)?;
+        if unlinked_after_attempt {
+            return Err(OidcProviderError::ValidationFailed);
+        }
         let identity = sqlx::query(
             "SELECT identity.id::text,user_row.id::text AS user_id,user_row.display_name
              FROM oidc_identities identity JOIN users user_row ON user_row.id=identity.user_id
@@ -359,10 +385,23 @@ impl OidcLoginService {
         .bind(subject)
         .fetch_optional(&mut *tx)
         .await
-        .map_err(|_| OidcProviderError::Unavailable)?
-        .ok_or(OidcProviderError::ValidationFailed)?;
-        let user_id = UserId::from_str(&identity.get::<String, _>("user_id"))
-            .map_err(|_| OidcProviderError::Unavailable)?;
+        .map_err(|_| OidcProviderError::Unavailable)?;
+        let (identity_id, user_id, display_name) = if let Some(identity) = identity {
+            (
+                identity.get::<String, _>("id"),
+                UserId::from_str(&identity.get::<String, _>("user_id"))
+                    .map_err(|_| OidcProviderError::Unavailable)?,
+                identity.get::<String, _>("display_name"),
+            )
+        } else {
+            self.resolve_and_link_identity(
+                &mut tx,
+                input,
+                subject,
+                verified_email.ok_or(OidcProviderError::ValidationFailed)?,
+            )
+            .await?
+        };
         if let Some(existing) = input.existing_session {
             let authenticated = self
                 .sessions
@@ -386,7 +425,7 @@ impl OidcLoginService {
             "UPDATE oidc_identities SET last_authenticated_at=transaction_timestamp()
              WHERE id=$1::uuid",
         )
-        .bind(identity.get::<String, _>("id"))
+        .bind(&identity_id)
         .execute(&mut *tx)
         .await
         .map_err(|_| OidcProviderError::Unavailable)?;
@@ -406,7 +445,7 @@ impl OidcLoginService {
         append_login_audit(
             &mut tx,
             user_id,
-            &identity.get::<String, _>("display_name"),
+            &display_name,
             issued.session().id().to_string(),
             input.provider_id,
             input.correlation_id,
@@ -416,6 +455,186 @@ impl OidcLoginService {
             .await
             .map_err(|_| OidcProviderError::Unavailable)?;
         Ok(issued)
+    }
+
+    async fn resolve_and_link_identity(
+        &self,
+        tx: &mut Transaction<'_, Postgres>,
+        input: &OidcCallbackInput<'_>,
+        subject: &str,
+        email: &str,
+    ) -> Result<(String, UserId, String), OidcProviderError> {
+        let normalized = normalize_verified_email(email)?;
+        // Serialize all first-link decisions for this normalized address. The
+        // unique provider/subject and user/provider constraints remain the
+        // final database fence across different addresses and callbacks.
+        sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 1330200900))")
+            .bind(&normalized)
+            .execute(&mut **tx)
+            .await
+            .map_err(|_| OidcProviderError::Unavailable)?;
+        let existing = sqlx::query(
+            "SELECT id::text,display_name FROM users
+             WHERE normalized_email=$1 AND status='active' FOR UPDATE",
+        )
+        .bind(&normalized)
+        .fetch_optional(&mut **tx)
+        .await
+        .map_err(|_| OidcProviderError::Unavailable)?;
+        let invitation = sqlx::query(
+            "SELECT id::text FROM activation_invitations
+             WHERE normalized_email=$1 AND status='pending'
+               AND expires_at>transaction_timestamp() FOR UPDATE",
+        )
+        .bind(&normalized)
+        .fetch_optional(&mut **tx)
+        .await
+        .map_err(|_| OidcProviderError::Unavailable)?;
+        let (user_id, display_name, source, invitation_id) = match (existing, invitation.as_ref()) {
+            (Some(account), pending) => {
+                if let Some(pending) = pending {
+                    accept_invitation(tx, pending.get::<String, _>("id")).await?;
+                }
+                (
+                    UserId::from_str(&account.get::<String, _>("id"))
+                        .map_err(|_| OidcProviderError::Unavailable)?,
+                    account.get::<String, _>("display_name"),
+                    if pending.is_some() {
+                        "invitation"
+                    } else {
+                        "preexisting"
+                    },
+                    pending.map(|row| row.get::<String, _>("id")),
+                )
+            }
+            (None, Some(pending)) => {
+                let user_id = UserId::new();
+                let display_name: String = email.chars().take(200).collect();
+                sqlx::query(
+                    "INSERT INTO users(id,email,normalized_email,display_name,status,is_instance_admin)
+                     VALUES($1::uuid,$2,$3,$4,'active',FALSE)",
+                )
+                .bind(user_id.to_string())
+                .bind(email)
+                .bind(&normalized)
+                .bind(&display_name)
+                .execute(&mut **tx)
+                .await
+                .map_err(map_link_write_error)?;
+                accept_invitation(tx, pending.get::<String, _>("id")).await?;
+                (
+                    user_id,
+                    display_name,
+                    "invitation",
+                    Some(pending.get::<String, _>("id")),
+                )
+            }
+            (None, None) => return Err(OidcProviderError::ValidationFailed),
+        };
+        if let Some(existing_token) = input.existing_session {
+            let existing = self
+                .sessions
+                .authenticate_in_transaction(tx, existing_token)
+                .await
+                .map_err(map_session_error)?;
+            if existing.user_id() != user_id {
+                return Err(OidcProviderError::ValidationFailed);
+            }
+        }
+        let identity_id = Uuid::now_v7();
+        sqlx::query(
+            "INSERT INTO oidc_identities
+             (id,user_id,provider_id,subject,normalized_email_at_link,link_source,
+              activation_invitation_id)
+             VALUES($1::uuid,$2::uuid,$3::uuid,$4,$5,$6,$7::uuid)",
+        )
+        .bind(identity_id.to_string())
+        .bind(user_id.to_string())
+        .bind(input.provider_id.to_string())
+        .bind(subject)
+        .bind(&normalized)
+        .bind(source)
+        .bind(invitation_id)
+        .execute(&mut **tx)
+        .await
+        .map_err(map_link_write_error)?;
+        append_identity_audit(
+            tx,
+            user_id,
+            &display_name,
+            identity_id,
+            input.provider_id,
+            "auth.oidc_identity_linked",
+            input.correlation_id,
+        )
+        .await?;
+        Ok((identity_id.to_string(), user_id, display_name))
+    }
+
+    /// Removes the caller's own Provider link. A recent reauthentication and
+    /// another usable credential are mandatory; the DB trigger independently
+    /// enforces the credential and last-administrator invariants.
+    pub(crate) async fn unlink_self(
+        &self,
+        token: &SessionToken,
+        provider_id: Uuid,
+        correlation_id: &str,
+    ) -> Result<IssuedSession, OidcProviderError> {
+        validate_correlation(correlation_id)?;
+        time::timeout(self.timeout, async {
+            let mut connection = self.integrations.pool().acquire().await.map_err(|_| OidcProviderError::Unavailable)?;
+            let mut tx = connection.begin().await.map_err(|_| OidcProviderError::Unavailable)?;
+            let session = self.sessions.authenticate_in_transaction(&mut tx, token).await.map_err(map_session_error)?;
+            let fields = session.clone().into_fields();
+            let now: OffsetDateTime = sqlx::query_scalar("SELECT transaction_timestamp()")
+                .fetch_one(&mut *tx).await.map_err(|_| OidcProviderError::Unavailable)?;
+            let minutes: i32 = sqlx::query_scalar(
+                "SELECT (value #>> '{}')::integer FROM instance_settings
+                 WHERE key='security.reauthentication_window_minutes'",
+            ).fetch_one(&mut *tx).await.map_err(|_| OidcProviderError::Unavailable)?;
+            let recent = fields.last_reauthenticated_at.is_some_and(|value| {
+                let value = value.into_datetime();
+                (15..=120).contains(&minutes)
+                    && value <= now
+                    && value >= now - ::time::Duration::minutes(i64::from(minutes))
+            });
+            if !recent { return Err(OidcProviderError::ReauthenticationRequired); }
+            // Acquire the instance-wide usability fence before the identity
+            // fence. Provider disable takes the same first lock; this ordering
+            // avoids a provider -> identity -> safety deadlock and makes the
+            // DELETE statement observe any completed disable transaction.
+            sqlx::query("SELECT pg_advisory_xact_lock(1330200900, 0)")
+                .execute(&mut *tx).await.map_err(|_| OidcProviderError::Unavailable)?;
+            let identity = sqlx::query(
+                "SELECT id::text,subject FROM oidc_identities
+                 WHERE user_id=$1::uuid AND provider_id=$2::uuid",
+            ).bind(session.user_id().to_string()).bind(provider_id.to_string())
+             .fetch_optional(&mut *tx).await.map_err(|_| OidcProviderError::Unavailable)?
+             .ok_or(OidcProviderError::ValidationFailed)?;
+            let subject = identity.get::<String,_>("subject");
+            acquire_identity_lock(&mut tx, provider_id, &subject).await?;
+            let locked = sqlx::query_scalar::<_, String>(
+                "SELECT id::text FROM oidc_identities
+                 WHERE id=$1::uuid AND user_id=$2::uuid AND provider_id=$3::uuid AND subject=$4
+                 FOR UPDATE",
+            ).bind(identity.get::<String,_>("id"))
+             .bind(session.user_id().to_string()).bind(provider_id.to_string()).bind(&subject)
+             .fetch_optional(&mut *tx).await.map_err(|_| OidcProviderError::Unavailable)?
+             .ok_or(OidcProviderError::ValidationFailed)?;
+            sqlx::query("DELETE FROM oidc_identities WHERE id=$1::uuid")
+                .bind(&locked).execute(&mut *tx).await
+                .map_err(map_link_write_error)?;
+            let issued = self.sessions.rotate_in_transaction(&mut tx, token, SessionRotationKind::Login)
+                .await.map_err(map_session_error)?;
+            sqlx::query(
+                "UPDATE sessions SET revoked_at=transaction_timestamp(),revocation_reason='oidc_identity_unlinked'
+                 WHERE user_id=$1::uuid AND id<>$2::uuid AND revoked_at IS NULL",
+            ).bind(session.user_id().to_string()).bind(issued.session().id().to_string())
+             .execute(&mut *tx).await.map_err(|_| OidcProviderError::Unavailable)?;
+            append_identity_audit(&mut tx, session.user_id(), "OIDC user", Uuid::parse_str(&locked).map_err(|_| OidcProviderError::Unavailable)?, provider_id, "auth.oidc_identity_unlinked", correlation_id).await?;
+            tx.commit().await.map_err(|_| OidcProviderError::Unavailable)?;
+            Ok(issued)
+        }).await.map_err(|_| OidcProviderError::Unavailable)?
     }
 
     async fn database_time(&self) -> Result<OffsetDateTime, OidcProviderError> {
@@ -443,6 +662,7 @@ struct LoginAttempt {
     pkce_nonce: Vec<u8>,
     pkce_ciphertext: Vec<u8>,
     redirect_uri: String,
+    created_at: OffsetDateTime,
     issuer: String,
 }
 
@@ -468,6 +688,7 @@ impl LoginAttempt {
             pkce_nonce: row.get("pkce_nonce"),
             pkce_ciphertext: row.get("pkce_ciphertext"),
             redirect_uri: row.get("redirect_uri"),
+            created_at: row.get("created_at"),
             issuer: row.get("issuer"),
         })
     }
@@ -511,6 +732,124 @@ fn validate_callback_input(input: &OidcCallbackInput<'_>) -> Result<(), OidcProv
         return Err(OidcProviderError::InvalidInput);
     }
     Ok(())
+}
+
+fn validate_correlation(value: &str) -> Result<(), OidcProviderError> {
+    if value.is_empty()
+        || value.len() > 128
+        || value.trim() != value
+        || value.chars().any(char::is_control)
+    {
+        return Err(OidcProviderError::InvalidInput);
+    }
+    Ok(())
+}
+
+fn normalize_verified_email(value: &str) -> Result<String, OidcProviderError> {
+    NormalizedEmail::from_email(value)
+        .map(|email| email.as_str().to_owned())
+        .map_err(|_| OidcProviderError::ValidationFailed)
+}
+
+async fn acquire_identity_lock(
+    tx: &mut Transaction<'_, Postgres>,
+    provider_id: Uuid,
+    subject: &str,
+) -> Result<(), OidcProviderError> {
+    // UUID text has a fixed width, so the separator cannot make two
+    // (provider, subject) pairs ambiguous. This fence is shared by first-link,
+    // login, and unlink so an unlink cannot be silently undone by an in-flight
+    // callback using a stale identity observation.
+    sqlx::query(
+        "SELECT pg_advisory_xact_lock(
+             hashtextextended($1 || ':' || $2, 1330200901)
+         )",
+    )
+    .bind(provider_id.to_string())
+    .bind(subject)
+    .execute(&mut **tx)
+    .await
+    .map_err(|_| OidcProviderError::Unavailable)?;
+    Ok(())
+}
+
+async fn accept_invitation(
+    tx: &mut Transaction<'_, Postgres>,
+    invitation_id: String,
+) -> Result<(), OidcProviderError> {
+    let changed = sqlx::query(
+        "UPDATE activation_invitations
+         SET status='accepted',accepted_at=transaction_timestamp()
+         WHERE id=$1::uuid AND status='pending' AND expires_at>transaction_timestamp()",
+    )
+    .bind(invitation_id)
+    .execute(&mut **tx)
+    .await
+    .map_err(|_| OidcProviderError::Unavailable)?
+    .rows_affected();
+    if changed == 1 {
+        Ok(())
+    } else {
+        Err(OidcProviderError::ValidationFailed)
+    }
+}
+
+fn map_link_write_error(error: sqlx::Error) -> OidcProviderError {
+    if error
+        .as_database_error()
+        .and_then(|database| database.code())
+        .is_some_and(|code| matches!(code.as_ref(), "23505" | "23514" | "P0001"))
+    {
+        OidcProviderError::ValidationFailed
+    } else {
+        OidcProviderError::Unavailable
+    }
+}
+
+async fn append_identity_audit(
+    tx: &mut Transaction<'_, Postgres>,
+    user_id: UserId,
+    display_name: &str,
+    identity_id: Uuid,
+    provider_id: Uuid,
+    action: &str,
+    correlation_id: &str,
+) -> Result<(), OidcProviderError> {
+    let now: OffsetDateTime = sqlx::query_scalar("SELECT transaction_timestamp()")
+        .fetch_one(&mut **tx)
+        .await
+        .map_err(|_| OidcProviderError::Unavailable)?;
+    let event = AuditEvent::new(AuditEventFields {
+        id: AuditEventId::new(),
+        occurred_at: Timestamp::from_datetime(now).map_err(|_| OidcProviderError::Unavailable)?,
+        actor: AuditActor {
+            kind: ActorType::User,
+            id: user_id.to_string(),
+            user_id: Some(user_id),
+            display_name: Some(display_name.to_owned()),
+        },
+        action_code: action.into(),
+        target: AuditTarget {
+            kind: "oidc_identity".into(),
+            id: identity_id.to_string(),
+        },
+        scope: AuditScope {
+            kind: ScopeType::User,
+            id: user_id.to_string(),
+        },
+        result: AuditResult::Succeeded,
+        reason_code: None,
+        correlation_id: correlation_id.into(),
+        source_ip: None,
+        schema_version: 1,
+        changed_fields: vec!["oidc_identity".into()],
+        metadata: AuditMetadata::new(json!({"provider_id": provider_id.to_string()}))
+            .map_err(|_| OidcProviderError::Unavailable)?,
+    })
+    .map_err(|_| OidcProviderError::Unavailable)?;
+    AuditWriter::append(tx, &event)
+        .await
+        .map_err(|_| OidcProviderError::Unavailable)
 }
 
 async fn append_login_audit(

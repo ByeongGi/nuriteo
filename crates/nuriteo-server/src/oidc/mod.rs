@@ -331,9 +331,39 @@ impl OidcProviderService {
             authorize_recent_admin(&mut tx, actor)
                 .await
                 .map_err(map_integration_error)?;
+            // Shares the database unlink trigger's instance-wide safety fence:
+            // disabling a provider cannot race an unlink decision that counted
+            // this provider as another usable administrator credential.
+            sqlx::query("SELECT pg_advisory_xact_lock(1330200900, 0)")
+                .execute(&mut *tx)
+                .await
+                .map_err(|_| OidcProviderError::Unavailable)?;
             let current = lock_expected_version(&mut tx, id, expected_version).await?;
             if current == OidcProviderState::Disabled {
                 return Err(OidcProviderError::Conflict);
+            }
+            let administrator_survives: bool = sqlx::query_scalar(
+                "SELECT EXISTS(
+                    SELECT 1 FROM users administrator
+                    WHERE administrator.status='active' AND administrator.is_instance_admin
+                      AND (
+                        EXISTS(SELECT 1 FROM local_password_credentials local
+                               WHERE local.user_id=administrator.id)
+                        OR EXISTS(
+                            SELECT 1 FROM oidc_identities identity
+                            JOIN oidc_providers provider ON provider.id=identity.provider_id
+                            WHERE identity.user_id=administrator.id
+                              AND provider.status='active' AND provider.id<>$1::uuid
+                        )
+                      )
+                 )",
+            )
+            .bind(id.to_string())
+            .fetch_one(&mut *tx)
+            .await
+            .map_err(|_| OidcProviderError::Unavailable)?;
+            if !administrator_survives {
+                return Err(OidcProviderError::ValidationFailed);
             }
             sqlx::query(
                 "UPDATE oidc_providers SET status='disabled',disabled_at=CURRENT_TIMESTAMP,
@@ -1045,15 +1075,14 @@ fn validate_correlation(value: &str) -> Result<(), OidcProviderError> {
 }
 
 fn map_database_error(error: sqlx::Error) -> OidcProviderError {
-    if error
+    match error
         .as_database_error()
         .and_then(|database| database.code())
         .as_deref()
-        == Some("23505")
     {
-        OidcProviderError::Conflict
-    } else {
-        OidcProviderError::Unavailable
+        Some("23505") => OidcProviderError::Conflict,
+        Some("P0001") => OidcProviderError::ValidationFailed,
+        _ => OidcProviderError::Unavailable,
     }
 }
 

@@ -20,7 +20,7 @@ use crate::project::{
 };
 use crate::quota::{
     QuotaRepository, QuotaService, QuotaServiceError, QuotaServicePolicy, ReservationRequest,
-    SaveSessionId, TerminalSaveState, reserve_before_commit,
+    SaveSessionId, TerminalSaveState,
 };
 use crate::workspace::StorageScopeId;
 
@@ -213,10 +213,34 @@ impl<S: MultipartStore> MultipartService<S> {
         policy: MultipartServicePolicy,
         idempotency_secret: IdempotencySecret,
     ) -> Result<Self, MultipartServiceError> {
+        Self::new_with_quota_source(pool, store, policy, idempotency_secret, false)
+    }
+
+    pub(crate) fn new_live(
+        pool: DatabasePool,
+        store: S,
+        policy: MultipartServicePolicy,
+        idempotency_secret: IdempotencySecret,
+    ) -> Result<Self, MultipartServiceError> {
+        Self::new_with_quota_source(pool, store, policy, idempotency_secret, true)
+    }
+
+    fn new_with_quota_source(
+        pool: DatabasePool,
+        store: S,
+        policy: MultipartServicePolicy,
+        idempotency_secret: IdempotencySecret,
+        live_instance_defaults: bool,
+    ) -> Result<Self, MultipartServiceError> {
         let quota_policy = QuotaServicePolicy::new(policy.operation_timeout)
             .map_err(|_| MultipartServiceError::InvalidInput)?;
+        let quota = if live_instance_defaults {
+            QuotaService::new_live(pool.clone(), quota_policy)
+        } else {
+            QuotaService::new(pool.clone(), quota_policy)
+        };
         Ok(Self {
-            quota: QuotaService::new(pool.clone(), quota_policy),
+            quota,
             pool,
             store,
             policy,
@@ -580,19 +604,20 @@ impl<S: MultipartStore> MultipartService<S> {
                 .await?
                 .map_err(map_sql_error)?;
         }
-        reserve_before_commit(
-            &mut transaction,
-            ReservationRequest {
-                storage_scope_id: request.storage_scope_id,
-                project_id: request.project_id,
-                save_session_id: session_id,
-                requested_bytes: request.expected_physical_bytes,
-                effective_quota: request.effective_quota,
-            },
-            deadline.0,
-        )
-        .await
-        .map_err(map_quota_error)?;
+        self.quota
+            .reserve_before_commit(
+                &mut transaction,
+                ReservationRequest {
+                    storage_scope_id: request.storage_scope_id,
+                    project_id: request.project_id,
+                    save_session_id: session_id,
+                    requested_bytes: request.expected_physical_bytes,
+                    effective_quota: request.effective_quota,
+                },
+                deadline.0,
+            )
+            .await
+            .map_err(map_quota_error)?;
         commit(transaction, deadline).await?;
         Ok(PersistedMultipart {
             session_id,

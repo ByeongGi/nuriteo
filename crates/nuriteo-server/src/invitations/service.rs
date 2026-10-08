@@ -151,7 +151,7 @@ impl InvitationHttpService {
         &self,
         request: BrowserRequestHeaders<'_>,
         email: String,
-        expiry: Duration,
+        expiry: Option<Duration>,
         correlation_id: &str,
     ) -> Result<IssuedInvitationView, InvitationHttpServiceError> {
         let runtime = self.runtime()?;
@@ -181,7 +181,7 @@ impl InvitationHttpService {
         &self,
         request: BrowserRequestHeaders<'_>,
         id: ActivationInvitationId,
-        expiry: Duration,
+        expiry: Option<Duration>,
         correlation_id: &str,
     ) -> Result<IssuedInvitationView, InvitationHttpServiceError> {
         let runtime = self.runtime()?;
@@ -373,7 +373,16 @@ impl InvitationRuntime {
         .await
     }
 
-    fn lifecycle(&self, expiry: Duration) -> Result<InvitationService, InvitationHttpServiceError> {
+    fn lifecycle(
+        &self,
+        expiry: Option<Duration>,
+    ) -> Result<InvitationService, InvitationHttpServiceError> {
+        let Some(expiry) = expiry else {
+            return Ok(InvitationService::new_live_default(
+                self.pool.clone(),
+                self.operation_timeout,
+            ));
+        };
         let expiry = InvitationExpiryPolicy::new(expiry)
             .map_err(|_| InvitationHttpServiceError::Internal)?;
         let policy = InvitationServicePolicy::new(expiry, self.operation_timeout)

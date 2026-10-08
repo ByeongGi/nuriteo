@@ -14,6 +14,7 @@ use crate::audit::{
 };
 use crate::database::DatabasePool;
 use crate::identity::{InvitationExpiryPolicy, NormalizedEmail, SessionId, Timestamp, UserId};
+use crate::policy::EffectivePolicyEngine;
 
 use super::invitation::OrganizationInvitationTokenDigest;
 use super::{
@@ -238,12 +239,26 @@ impl std::error::Error for OrganizationInvitationServiceError {}
 pub struct OrganizationInvitationService {
     pool: DatabasePool,
     policy: OrganizationInvitationPolicy,
+    live_default_expiry: bool,
 }
 
 impl OrganizationInvitationService {
     #[must_use]
     pub const fn new(pool: DatabasePool, policy: OrganizationInvitationPolicy) -> Self {
-        Self { pool, policy }
+        Self {
+            pool,
+            policy,
+            live_default_expiry: false,
+        }
+    }
+
+    #[must_use]
+    pub const fn new_live(pool: DatabasePool, policy: OrganizationInvitationPolicy) -> Self {
+        Self {
+            pool,
+            policy,
+            live_default_expiry: true,
+        }
     }
 
     pub async fn issue(
@@ -381,9 +396,8 @@ impl OrganizationInvitationService {
             return Err(OrganizationInvitationServiceError::AlreadyPending);
         }
         let now = transaction_now(&mut transaction).await?;
-        let expires_at = self
-            .policy
-            .expiry
+        let expiry = self.effective_expiry(&mut transaction).await?;
+        let expires_at = expiry
             .expires_at(now)
             .map_err(|_| OrganizationInvitationServiceError::InvariantViolation)?;
         let row = insert_pending(
@@ -475,9 +489,8 @@ impl OrganizationInvitationService {
         }
         let created_at = Timestamp::from_datetime(now)
             .map_err(|_| OrganizationInvitationServiceError::InvariantViolation)?;
-        let expires_at = self
-            .policy
-            .expiry
+        let expiry = self.effective_expiry(&mut transaction).await?;
+        let expires_at = expiry
             .expires_at(created_at)
             .map_err(|_| OrganizationInvitationServiceError::InvariantViolation)?;
         let replacement = insert_pending(
@@ -509,6 +522,23 @@ impl OrganizationInvitationService {
         .await?;
         transaction.commit().await.map_err(database_error)?;
         Ok(IssuedOrganizationInvitation { invitation, token })
+    }
+
+    async fn effective_expiry(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+    ) -> Result<InvitationExpiryPolicy, OrganizationInvitationServiceError> {
+        if !self.live_default_expiry {
+            return Ok(self.policy.expiry);
+        }
+        EffectivePolicyEngine::load_optional_in_transaction(transaction)
+            .await
+            .and_then(|snapshot| {
+                snapshot.map_or(Ok(self.policy.expiry), |snapshot| {
+                    snapshot.invitation_expiry()
+                })
+            })
+            .map_err(|_| OrganizationInvitationServiceError::InvariantViolation)
     }
 
     async fn revoke_inner(

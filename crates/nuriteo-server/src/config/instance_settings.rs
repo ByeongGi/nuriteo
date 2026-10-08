@@ -4,7 +4,7 @@ use std::fmt;
 use serde_json::Value;
 
 /// Version of the allowlisted Instance setting registry persisted beside setting values.
-pub const INSTANCE_SETTING_REGISTRY_VERSION: u16 = 3;
+pub const INSTANCE_SETTING_REGISTRY_VERSION: u16 = 4;
 
 /// How a validated setting becomes effective.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -295,6 +295,18 @@ pub const INSTANCE_SETTING_DEFINITIONS: &[InstanceSettingDefinition] = &[
             allow_unlimited: true,
         },
     },
+    InstanceSettingDefinition {
+        key: "object_storage.gc.batch_size",
+        bootstrap_environment: "NURITEO_GC_BATCH_SIZE",
+        introduced_in: 4,
+        default_json: Some("32"),
+        sensitivity: SettingSensitivity::Public,
+        apply_mode: SettingApplyMode::Live,
+        constraint: SettingConstraint::UnsignedInteger {
+            minimum: 1,
+            maximum: 100,
+        },
+    },
     policy_boolean("object_storage.gc.enabled", "NURITEO_GC_ENABLED", "true"),
     policy_unsigned(
         "object_storage.gc.grace_period_hours",
@@ -318,7 +330,7 @@ pub const INSTANCE_SETTING_DEFINITIONS: &[InstanceSettingDefinition] = &[
         "4",
         1,
         8,
-        SettingApplyMode::Live,
+        SettingApplyMode::ServerRestart,
     ),
     policy_unsigned(
         "object_storage.multipart.incomplete_cleanup_hours",
@@ -326,7 +338,7 @@ pub const INSTANCE_SETTING_DEFINITIONS: &[InstanceSettingDefinition] = &[
         "24",
         1,
         168,
-        SettingApplyMode::Live,
+        SettingApplyMode::ServerRestart,
     ),
     policy_unsigned(
         "object_storage.multipart.part_size_bytes",
@@ -334,7 +346,7 @@ pub const INSTANCE_SETTING_DEFINITIONS: &[InstanceSettingDefinition] = &[
         "16777216",
         8 * 1024 * 1024,
         64 * 1024 * 1024,
-        SettingApplyMode::Live,
+        SettingApplyMode::ServerRestart,
     ),
     policy_unsigned(
         "object_storage.payload_max_bytes",
@@ -342,7 +354,7 @@ pub const INSTANCE_SETTING_DEFINITIONS: &[InstanceSettingDefinition] = &[
         "2147483648",
         64 * 1024 * 1024,
         2 * 1024 * 1024 * 1024,
-        SettingApplyMode::Live,
+        SettingApplyMode::ServerRestart,
     ),
     policy_unsigned(
         "object_storage.presign_download_expiry_minutes",
@@ -350,7 +362,7 @@ pub const INSTANCE_SETTING_DEFINITIONS: &[InstanceSettingDefinition] = &[
         "5",
         1,
         15,
-        SettingApplyMode::Live,
+        SettingApplyMode::ServerRestart,
     ),
     policy_unsigned(
         "object_storage.presign_upload_expiry_minutes",
@@ -358,7 +370,7 @@ pub const INSTANCE_SETTING_DEFINITIONS: &[InstanceSettingDefinition] = &[
         "15",
         5,
         60,
-        SettingApplyMode::Live,
+        SettingApplyMode::ServerRestart,
     ),
     policy_unsigned(
         "object_storage.single_put_max_bytes",
@@ -366,7 +378,7 @@ pub const INSTANCE_SETTING_DEFINITIONS: &[InstanceSettingDefinition] = &[
         "67108864",
         16 * 1024 * 1024,
         256 * 1024 * 1024,
-        SettingApplyMode::Live,
+        SettingApplyMode::ServerRestart,
     ),
     policy_unsigned(
         "projects.file_count_max",
@@ -374,7 +386,7 @@ pub const INSTANCE_SETTING_DEFINITIONS: &[InstanceSettingDefinition] = &[
         "2500",
         1,
         2_500,
-        SettingApplyMode::Live,
+        SettingApplyMode::ServerRestart,
     ),
     policy_unsigned(
         "projects.path_depth_max",
@@ -382,7 +394,7 @@ pub const INSTANCE_SETTING_DEFINITIONS: &[InstanceSettingDefinition] = &[
         "32",
         8,
         64,
-        SettingApplyMode::Live,
+        SettingApplyMode::ServerRestart,
     ),
     policy_unsigned(
         "projects.path_length_max_bytes",
@@ -390,7 +402,7 @@ pub const INSTANCE_SETTING_DEFINITIONS: &[InstanceSettingDefinition] = &[
         "512",
         256,
         1_024,
-        SettingApplyMode::Live,
+        SettingApplyMode::ServerRestart,
     ),
     policy_unsigned(
         "projects.single_file_max_bytes",
@@ -398,7 +410,7 @@ pub const INSTANCE_SETTING_DEFINITIONS: &[InstanceSettingDefinition] = &[
         "16777216",
         1,
         16 * 1024 * 1024,
-        SettingApplyMode::Live,
+        SettingApplyMode::ServerRestart,
     ),
     policy_unsigned(
         "projects.source_max_bytes",
@@ -406,7 +418,7 @@ pub const INSTANCE_SETTING_DEFINITIONS: &[InstanceSettingDefinition] = &[
         "134217728",
         16 * 1024 * 1024,
         256 * 1024 * 1024,
-        SettingApplyMode::Live,
+        SettingApplyMode::ServerRestart,
     ),
     InstanceSettingDefinition {
         key: "runtime.network.default",
@@ -582,7 +594,7 @@ pub const INSTANCE_SETTING_DEFINITIONS: &[InstanceSettingDefinition] = &[
         "90",
         1,
         100,
-        SettingApplyMode::Live,
+        SettingApplyMode::ServerRestart,
     ),
     policy_unsigned(
         "workspace.quota_limit_percent",
@@ -590,7 +602,7 @@ pub const INSTANCE_SETTING_DEFINITIONS: &[InstanceSettingDefinition] = &[
         "100",
         1,
         100,
-        SettingApplyMode::Live,
+        SettingApplyMode::ServerRestart,
     ),
     policy_unsigned(
         "workspace.quota_warning_percent",
@@ -598,7 +610,7 @@ pub const INSTANCE_SETTING_DEFINITIONS: &[InstanceSettingDefinition] = &[
         "80",
         1,
         100,
-        SettingApplyMode::Live,
+        SettingApplyMode::ServerRestart,
     ),
 ];
 
@@ -865,7 +877,7 @@ mod tests {
             definition.validated_default().unwrap();
         }
 
-        assert_eq!(keys.len(), 39);
+        assert_eq!(keys.len(), 40);
     }
 
     #[test]

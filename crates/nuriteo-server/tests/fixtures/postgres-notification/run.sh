@@ -68,3 +68,9 @@ NURITEO_TEST_DATABASE_CA="$fixture_dir/ca.crt" \
 cargo test -p nuriteo-server --test notification_schema \
   notification_outbox_is_transactional_bounded_and_secret_safe \
   -- --ignored --exact --nocapture
+
+NURITEO_TEST_DATABASE_URL="postgres://nuriteo:${database_password}@localhost:${port}/nuriteo" \
+NURITEO_TEST_DATABASE_CA="$fixture_dir/ca.crt" \
+cargo test -p nuriteo-server --lib \
+  notification::http_service_tests::actual_notification_http_is_tenant_safe_versioned_and_idempotent \
+  -- --ignored --exact --nocapture

@@ -14,6 +14,7 @@ use crate::audit::{
     AuditScope, AuditTarget, AuditWriter, ScopeType,
 };
 use crate::database::DatabasePool;
+use crate::policy::EffectivePolicyEngine;
 
 use super::{
     ActivationInvitation, ActivationInvitationFields, ActivationInvitationId,
@@ -246,12 +247,29 @@ impl std::error::Error for InvitationServiceError {}
 pub struct InvitationService {
     pool: DatabasePool,
     policy: InvitationServicePolicy,
+    live_default_expiry: bool,
 }
 
 impl InvitationService {
     #[must_use]
     pub const fn new(pool: DatabasePool, policy: InvitationServicePolicy) -> Self {
-        Self { pool, policy }
+        Self {
+            pool,
+            policy,
+            live_default_expiry: false,
+        }
+    }
+
+    #[must_use]
+    pub fn new_live_default(pool: DatabasePool, operation_timeout: Duration) -> Self {
+        Self {
+            pool,
+            policy: InvitationServicePolicy {
+                expiry: InvitationExpiryPolicy::default(),
+                operation_timeout,
+            },
+            live_default_expiry: true,
+        }
     }
 
     #[must_use]
@@ -337,6 +355,23 @@ impl InvitationService {
             .map_err(|_| InvitationServiceError::OperationTimeout)?
     }
 
+    async fn effective_expiry(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+    ) -> Result<InvitationExpiryPolicy, InvitationServiceError> {
+        if !self.live_default_expiry {
+            return Ok(self.policy.expiry);
+        }
+        EffectivePolicyEngine::load_optional_in_transaction(transaction)
+            .await
+            .and_then(|snapshot| {
+                snapshot.map_or(Ok(self.policy.expiry), |snapshot| {
+                    snapshot.invitation_expiry()
+                })
+            })
+            .map_err(|_| InvitationServiceError::InvariantViolation)
+    }
+
     async fn issue_inner(
         &self,
         email: NormalizedEmail,
@@ -368,8 +403,8 @@ impl InvitationService {
 
         let created_at = transaction_now(&mut transaction).await?;
         let expires_at = self
-            .policy
-            .expiry
+            .effective_expiry(&mut transaction)
+            .await?
             .expires_at(created_at)
             .map_err(|_| InvitationServiceError::InvariantViolation)?;
         let row = insert_pending(
@@ -461,8 +496,8 @@ impl InvitationService {
         let now = Timestamp::from_datetime(now)
             .map_err(|_| InvitationServiceError::InvariantViolation)?;
         let replacement_expiry = self
-            .policy
-            .expiry
+            .effective_expiry(&mut transaction)
+            .await?
             .expires_at(now)
             .map_err(|_| InvitationServiceError::InvariantViolation)?;
         let inviter = parse_id(&row, "invited_by_user_id")?;

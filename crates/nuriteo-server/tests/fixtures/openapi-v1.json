@@ -804,6 +804,213 @@
         ]
       }
     },
+    "/api/v1/admin/email-deliveries": {
+      "get": {
+        "tags": [
+          "notifications"
+        ],
+        "operationId": "deliveries",
+        "parameters": [
+          {
+            "name": "state",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmailDeliveryCollectionView"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "projectSessionCookie": []
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/email-deliveries/{deliveryId}/cancel": {
+      "post": {
+        "tags": [
+          "notifications"
+        ],
+        "operationId": "cancel_delivery",
+        "parameters": [
+          {
+            "name": "deliveryId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmailDeliveryView"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "projectSessionCookie": []
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/email-deliveries/{deliveryId}/retry": {
+      "post": {
+        "tags": [
+          "notifications"
+        ],
+        "operationId": "retry_delivery",
+        "parameters": [
+          {
+            "name": "deliveryId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmailDeliveryView"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "projectSessionCookie": []
+          }
+        ]
+      }
+    },
     "/api/v1/admin/mfa-policy": {
       "get": {
         "tags": [
@@ -1119,6 +1326,95 @@
         ]
       }
     },
+    "/api/v1/admin/policy-cleanup/preview": {
+      "get": {
+        "tags": [
+          "administration"
+        ],
+        "operationId": "preview_policy_cleanup",
+        "parameters": [
+          {
+            "name": "batchLimit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "maximum": 100,
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PolicyCleanupPreview"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "504": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "projectSessionCookie": []
+          }
+        ]
+      }
+    },
     "/api/v1/admin/settings": {
       "get": {
         "tags": [
@@ -1313,6 +1609,111 @@
             }
           },
           "428": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "504": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "projectSessionCookie": []
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/settings/{key}/impact": {
+      "post": {
+        "tags": [
+          "administration"
+        ],
+        "operationId": "preview_policy_change",
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PolicyImpactRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PolicyImpactPreview"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2122,6 +2523,265 @@
         "responses": {
           "204": {},
           "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "projectSessionCookie": []
+          }
+        ]
+      }
+    },
+    "/api/v1/notification-preferences": {
+      "get": {
+        "tags": [
+          "notifications"
+        ],
+        "operationId": "preferences",
+        "responses": {
+          "200": {
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationPreferencesView"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "projectSessionCookie": []
+          }
+        ]
+      },
+      "patch": {
+        "tags": [
+          "notifications"
+        ],
+        "operationId": "update_preferences",
+        "parameters": [
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NotificationPreferencesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationPreferencesView"
+                }
+              }
+            }
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "projectSessionCookie": []
+          }
+        ]
+      }
+    },
+    "/api/v1/notifications": {
+      "get": {
+        "tags": [
+          "notifications"
+        ],
+        "operationId": "inbox",
+        "parameters": [
+          {
+            "name": "archived",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationInboxView"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "projectSessionCookie": []
+          }
+        ]
+      }
+    },
+    "/api/v1/notifications/{notificationId}": {
+      "patch": {
+        "tags": [
+          "notifications"
+        ],
+        "operationId": "update_status",
+        "parameters": [
+          {
+            "name": "notificationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NotificationStatusRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationInboxItemView"
+                }
+              }
+            }
+          },
+          "412": {
             "content": {
               "application/json": {
                 "schema": {
@@ -10093,6 +10753,99 @@
         },
         "additionalProperties": false
       },
+      "EmailDeliveryCollectionView": {
+        "type": "object",
+        "required": [
+          "items",
+          "smtpConfigured"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EmailDeliveryView"
+            }
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "smtpConfigured": {
+            "type": "boolean"
+          }
+        }
+      },
+      "EmailDeliveryView": {
+        "type": "object",
+        "required": [
+          "id",
+          "recipientEmail",
+          "classification",
+          "templateId",
+          "resourceType",
+          "resourceId",
+          "state",
+          "attemptCount",
+          "availableAt",
+          "updatedAt",
+          "version"
+        ],
+        "properties": {
+          "attemptCount": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "availableAt": {
+            "type": "string"
+          },
+          "classification": {
+            "type": "string"
+          },
+          "errorClass": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "recipientEmail": {
+            "type": "string"
+          },
+          "resourceId": {
+            "type": "string"
+          },
+          "resourceType": {
+            "type": "string"
+          },
+          "smtpCode": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "minimum": 0
+          },
+          "state": {
+            "type": "string"
+          },
+          "templateId": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          }
+        }
+      },
       "FieldViolation": {
         "type": "object",
         "required": [
@@ -10639,6 +11392,148 @@
           }
         }
       },
+      "NotificationInboxItemView": {
+        "type": "object",
+        "required": [
+          "id",
+          "classification",
+          "eventCode",
+          "title",
+          "summary",
+          "status",
+          "actionState",
+          "occurrenceCount",
+          "occurredAt",
+          "version"
+        ],
+        "properties": {
+          "actionState": {
+            "type": "string"
+          },
+          "classification": {
+            "type": "string"
+          },
+          "eventCode": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "occurredAt": {
+            "type": "string"
+          },
+          "occurrenceCount": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "status": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          }
+        }
+      },
+      "NotificationInboxView": {
+        "type": "object",
+        "required": [
+          "items",
+          "unreadCount"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NotificationInboxItemView"
+            }
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "unreadCount": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          }
+        }
+      },
+      "NotificationPreferencesRequest": {
+        "type": "object",
+        "required": [
+          "accountAccess",
+          "collaboration",
+          "operations"
+        ],
+        "properties": {
+          "accountAccess": {
+            "type": "boolean"
+          },
+          "collaboration": {
+            "type": "boolean"
+          },
+          "operations": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "NotificationPreferencesView": {
+        "type": "object",
+        "required": [
+          "criticalSecurity",
+          "accountAccess",
+          "collaboration",
+          "operations",
+          "smtpConfigured",
+          "version"
+        ],
+        "properties": {
+          "accountAccess": {
+            "type": "boolean"
+          },
+          "collaboration": {
+            "type": "boolean"
+          },
+          "criticalSecurity": {
+            "type": "boolean"
+          },
+          "operations": {
+            "type": "boolean"
+          },
+          "smtpConfigured": {
+            "type": "boolean"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          }
+        }
+      },
+      "NotificationStatusRequest": {
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "properties": {
+          "status": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
       "OrganizationInvitationStatus": {
         "type": "string",
         "enum": [
@@ -10806,6 +11701,119 @@
               "$ref": "#/components/schemas/PartRequest"
             }
           }
+        },
+        "additionalProperties": false
+      },
+      "PolicyApplyScope": {
+        "type": "string",
+        "enum": [
+          "immediate",
+          "new_operations",
+          "new_resources",
+          "next_sweep",
+          "server_restart"
+        ]
+      },
+      "PolicyChangeDirection": {
+        "type": "string",
+        "enum": [
+          "decrease",
+          "increase",
+          "unchanged",
+          "changed"
+        ]
+      },
+      "PolicyCleanupPreview": {
+        "type": "object",
+        "required": [
+          "gcEnabled",
+          "gracePeriodSeconds",
+          "eligibleCandidates",
+          "expectedReclaimBytes",
+          "batchLimit",
+          "dryRun"
+        ],
+        "properties": {
+          "batchLimit": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "dryRun": {
+            "type": "boolean"
+          },
+          "eligibleCandidates": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "expectedReclaimBytes": {
+            "type": "string"
+          },
+          "gcEnabled": {
+            "type": "boolean"
+          },
+          "gracePeriodSeconds": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          }
+        }
+      },
+      "PolicyImpactPreview": {
+        "type": "object",
+        "required": [
+          "key",
+          "direction",
+          "applyScope",
+          "affectedResources",
+          "nonCompliantResources",
+          "requiresRecentReauthentication",
+          "automaticallyDeletesExistingData"
+        ],
+        "properties": {
+          "affectedResources": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "applyScope": {
+            "$ref": "#/components/schemas/PolicyApplyScope"
+          },
+          "automaticallyDeletesExistingData": {
+            "type": "boolean"
+          },
+          "direction": {
+            "$ref": "#/components/schemas/PolicyChangeDirection"
+          },
+          "gracePeriodSeconds": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "minimum": 0
+          },
+          "key": {
+            "type": "string"
+          },
+          "nonCompliantResources": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "requiresRecentReauthentication": {
+            "type": "boolean"
+          }
+        }
+      },
+      "PolicyImpactRequest": {
+        "type": "object",
+        "required": [
+          "value"
+        ],
+        "properties": {
+          "value": {}
         },
         "additionalProperties": false
       },
@@ -11886,6 +12894,10 @@
     {
       "name": "mfa",
       "description": "Local account multi-factor authentication and administrator enforcement policy"
+    },
+    {
+      "name": "notifications",
+      "description": "Notification inbox, channel preferences, and administrator delivery operations"
     },
     {
       "name": "workspaces",

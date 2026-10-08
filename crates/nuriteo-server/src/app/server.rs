@@ -14,8 +14,10 @@ use crate::instance_settings::InstanceSettingsRepository;
 use crate::integration::MasterKeyring;
 use crate::invitations::{InvitationHttpPolicy, InvitationHttpService};
 use crate::mfa::MfaHttpService;
+use crate::notification::NotificationHttpService;
 use crate::object_storage::{ObjectStorageConfig, OperationLimits, S3ObjectStore};
 use crate::organization::{OrganizationHttpPolicy, OrganizationHttpService};
+use crate::policy::PolicyMaintenanceWorker;
 use crate::project::{ProjectHttpPolicy, ProjectHttpService};
 use crate::save::{
     CleanupOperationsPolicy, CleanupOperationsService, CleanupService, ContentServicePolicy,
@@ -24,9 +26,9 @@ use crate::save::{
 use crate::setup::{SetupStatusPolicy, SetupStatusService};
 use crate::team::{TeamHttpPolicy, TeamHttpService};
 
-use super::{Supervisor, SupervisorConfig, WorkerError, build_router_with_mfa_service};
+use super::{Supervisor, SupervisorConfig, WorkerError, build_router_with_notification_service};
 
-const PRODUCTION_WORKERS: NonZeroUsize = NonZeroUsize::new(3).unwrap();
+const PRODUCTION_WORKERS: NonZeroUsize = NonZeroUsize::new(4).unwrap();
 const INSTANCE_SETTINGS_STARTUP_TIMEOUT: Duration = Duration::from_secs(5);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -44,6 +46,7 @@ pub(crate) enum ServeError {
     ProjectConfiguration,
     TeamConfiguration,
     MfaConfiguration,
+    NotificationConfiguration,
     SaveConfiguration,
     CleanupConfiguration,
     Bind,
@@ -68,6 +71,7 @@ impl ServeError {
             Self::ProjectConfiguration => "project-configuration",
             Self::TeamConfiguration => "team-configuration",
             Self::MfaConfiguration => "mfa-configuration",
+            Self::NotificationConfiguration => "notification-configuration",
             Self::SaveConfiguration => "save-configuration",
             Self::CleanupConfiguration => "cleanup-configuration",
             Self::Bind => "bind",
@@ -297,8 +301,25 @@ pub(crate) async fn run_server(
             return Err(ServeError::MfaConfiguration);
         }
     };
+    let notifications = match NotificationHttpService::production(
+        pool.clone(),
+        &global.public.external_url,
+        SessionPolicy::default(),
+    ) {
+        Ok(notifications) => notifications,
+        Err(_) => {
+            close_pool(pool, close_timeout).await?;
+            return Err(ServeError::NotificationConfiguration);
+        }
+    };
+    let maintenance = PolicyMaintenanceWorker::new(
+        pool.clone(),
+        store.clone(),
+        INSTANCE_SETTINGS_STARTUP_TIMEOUT,
+    )
+    .map_err(|_| ServeError::CleanupConfiguration)?;
     let cleanup = CleanupService::new(pool.clone(), store, global.cleanup.worker_policy);
-    let router = build_router_with_mfa_service(
+    let router = build_router_with_notification_service(
         health,
         auth,
         invitations,
@@ -309,6 +330,7 @@ pub(crate) async fn run_server(
         admin,
         teams,
         mfa,
+        notifications,
     );
     let management_router = operations.router();
     let cleanup_drain_timeout = global
@@ -357,6 +379,18 @@ pub(crate) async fn run_server(
                 WorkerShutdown::DeadlineExceeded => Err(WorkerError::new("cleanup-drain-timeout")),
                 WorkerShutdown::WorkerFailed => Err(WorkerError::new("cleanup-worker-failed")),
             }
+        })
+        .is_err()
+    {
+        close_pool(pool, close_timeout).await?;
+        return Err(ServeError::Lifecycle);
+    }
+    if supervisor
+        .register("policy-maintenance", move |mut shutdown| async move {
+            maintenance
+                .run_until(async move { shutdown.requested().await })
+                .await
+                .map_err(|_| WorkerError::new("policy-maintenance-failed"))
         })
         .is_err()
     {

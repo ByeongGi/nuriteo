@@ -15,6 +15,7 @@ use utoipa_axum::{router::OpenApiRouter, routes};
 use crate::audit::AuditEventId;
 use crate::http::{FieldViolation, HttpError, RequestId};
 use crate::identity::{BrowserMethod, BrowserRequestHeaders};
+use crate::policy::{PolicyCleanupPreview, PolicyImpactPreview};
 
 use super::{
     AdminAuditEventCollectionView, AdminAuditEventView, AdminAuditExportFormat,
@@ -25,6 +26,8 @@ use super::{
 
 const SETTINGS: &str = "/api/v1/admin/settings";
 const SETTING: &str = "/api/v1/admin/settings/{key}";
+const SETTING_IMPACT: &str = "/api/v1/admin/settings/{key}/impact";
+const POLICY_CLEANUP_PREVIEW: &str = "/api/v1/admin/policy-cleanup/preview";
 const STATUS: &str = "/api/v1/admin/status";
 const OPERATIONS: &str = "/api/v1/admin/operations";
 const AUDIT_EVENTS: &str = "/api/v1/admin/audit-events";
@@ -42,6 +45,8 @@ pub(crate) fn openapi_router(
     OpenApiRouter::with_openapi(document)
         .routes(routes!(list_settings))
         .routes(routes!(update_setting))
+        .routes(routes!(preview_policy_change))
+        .routes(routes!(preview_policy_cleanup))
         .routes(routes!(admin_status))
         .routes(routes!(admin_operations))
         .routes(routes!(list_audit_events))
@@ -55,6 +60,18 @@ pub(crate) fn openapi_router(
 #[serde(deny_unknown_fields)]
 struct UpdateSettingRequest {
     value: Value,
+}
+
+#[derive(Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
+struct PolicyImpactRequest {
+    value: Value,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+struct PolicyCleanupPreviewQuery {
+    batch_limit: Option<u16>,
 }
 
 #[derive(Debug, Default, Deserialize, ToSchema)]
@@ -166,6 +183,72 @@ async fn update_setting(
         .await
         .map_err(|error| map_error(error, request_id.clone(), SETTING))?;
     setting_response(view, request_id, SETTING)
+}
+
+#[utoipa::path(
+    post,
+    path = SETTING_IMPACT,
+    tag = "administration",
+    security(("projectSessionCookie" = [])),
+    params(("key" = String, Path)),
+    request_body(content = PolicyImpactRequest, content_type = "application/json"),
+    responses(
+        (status = 200, body = PolicyImpactPreview, headers(("Cache-Control" = String))),
+        (status = 401, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+        (status = 403, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+        (status = 404, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+        (status = 422, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+        (status = 503, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+        (status = 504, body = crate::openapi::ProblemDetails, content_type = "application/problem+json")
+    )
+)]
+async fn preview_policy_change(
+    State(service): State<AdminHttpService>,
+    Extension(request_id): Extension<RequestId>,
+    Path(key): Path<String>,
+    request: Request,
+) -> Result<Response, HttpError> {
+    let (parts, body) = request.into_parts();
+    let headers = BrowserHeaders::read(&parts.headers, &request_id, SETTING_IMPACT)?;
+    let input: PolicyImpactRequest =
+        json_body(&parts.headers, body, &request_id, SETTING_IMPACT).await?;
+    let view = service
+        .preview_policy_change(headers.request(BrowserMethod::Post), &key, input.value)
+        .await
+        .map_err(|error| map_error(error, request_id, SETTING_IMPACT))?;
+    Ok(private_no_store(Json(view).into_response()))
+}
+
+#[utoipa::path(
+    get,
+    path = POLICY_CLEANUP_PREVIEW,
+    tag = "administration",
+    security(("projectSessionCookie" = [])),
+    params(("batchLimit" = Option<u16>, Query, minimum = 1, maximum = 100)),
+    responses(
+        (status = 200, body = PolicyCleanupPreview, headers(("Cache-Control" = String))),
+        (status = 401, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+        (status = 403, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+        (status = 422, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+        (status = 503, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+        (status = 504, body = crate::openapi::ProblemDetails, content_type = "application/problem+json")
+    )
+)]
+async fn preview_policy_cleanup(
+    State(service): State<AdminHttpService>,
+    Extension(request_id): Extension<RequestId>,
+    Query(query): Query<PolicyCleanupPreviewQuery>,
+    request: Request,
+) -> Result<Response, HttpError> {
+    let headers = BrowserHeaders::read(request.headers(), &request_id, POLICY_CLEANUP_PREVIEW)?;
+    let view = service
+        .preview_policy_cleanup(
+            headers.request(BrowserMethod::Get),
+            query.batch_limit.unwrap_or(100),
+        )
+        .await
+        .map_err(|error| map_error(error, request_id, POLICY_CLEANUP_PREVIEW))?;
+    Ok(private_no_store(Json(view).into_response()))
 }
 
 #[utoipa::path(

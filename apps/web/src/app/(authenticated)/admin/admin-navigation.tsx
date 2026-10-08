@@ -7,7 +7,8 @@ const destinations = [
   { href: "/admin/operations", label: "Operations" },
   { href: "/admin/settings", label: "Settings" },
   { href: "/admin/invitations", label: "Activation invitations" },
-  { href: "/admin/mfa", label: "MFA policy" }
+  { href: "/admin/mfa", label: "MFA policy" },
+  { href: "/admin/notifications", label: "Email delivery" }
 ] as const;
 
 export function AdminNavigation() {

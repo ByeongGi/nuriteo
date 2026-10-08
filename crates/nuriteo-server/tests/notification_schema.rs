@@ -2,11 +2,13 @@ use std::env;
 use std::fs;
 use std::time::Duration;
 
+use nuriteo_server::config::InstanceSettingBootstrap;
 use nuriteo_server::database::{
     DatabasePool, DatabasePoolConfig, DatabaseTlsConfig, MigrationOptions, MigrationReport,
     SchemaReadiness, check_schema_readiness, run_embedded_migrations,
 };
 use nuriteo_server::identity::{NormalizedEmail, Timestamp, UserId};
+use nuriteo_server::instance_settings::InstanceSettingsRepository;
 use nuriteo_server::notification::{
     EmailChannelPreference, EmailOutboxId, Notification, NotificationClassification,
     NotificationDelivery, NotificationFields, NotificationId, NotificationPayload,
@@ -28,24 +30,31 @@ async fn notification_outbox_is_transactional_bounded_and_secret_safe() {
         readiness(&pool).await,
         SchemaReadiness::Pending {
             current: None,
-            target: 33,
+            target: 36,
         }
     );
     let report = migrate(&pool).await;
     assert_eq!(
         report,
         MigrationReport {
-            latest_version: Some(33),
-            known_migrations: 33,
+            latest_version: Some(36),
+            known_migrations: 36,
         }
     );
     assert_eq!(migrate(&pool).await, report);
     assert_eq!(
         readiness(&pool).await,
-        SchemaReadiness::Ready { version: 33 }
+        SchemaReadiness::Ready { version: 36 }
     );
 
     seed_user(&pool).await;
+    InstanceSettingsRepository::new(pool.clone(), Duration::from_secs(5))
+        .expect("settings repository")
+        .materialize(&InstanceSettingBootstrap::empty())
+        .await
+        .expect("settings materialization");
+    verify_authoritative_email_policy_and_preference_race(&pool).await;
+    set_smtp_enabled(&pool, true).await;
     verify_transaction_bound_enqueue(&pool).await;
     verify_failure_rolls_back_both_rows(&pool).await;
     verify_explicit_rollback(&pool).await;
@@ -59,6 +68,154 @@ async fn notification_outbox_is_transactional_bounded_and_secret_safe() {
     pool.close(Duration::from_secs(2))
         .await
         .unwrap_or_else(|_| panic!("notification fixture pool must close"));
+}
+
+async fn verify_authoritative_email_policy_and_preference_race(pool: &DatabasePool) {
+    let smtp_disabled = delivery(
+        NotificationId::new(),
+        EmailOutboxId::new(),
+        NotificationClassification::AccountAccess,
+    );
+    let smtp_disabled_id = smtp_disabled.notification().id().to_string();
+    enqueue_and_commit(pool, &smtp_disabled).await;
+    assert_eq!(count_for(pool, "notifications", &smtp_disabled_id).await, 1);
+    assert_eq!(count_for(pool, "email_outbox", &smtp_disabled_id).await, 0);
+
+    set_smtp_enabled(pool, true).await;
+    sqlx::query(
+        "INSERT INTO notification_email_preferences \
+         (user_id,account_access,collaboration,operations) VALUES ($1::uuid,FALSE,FALSE,FALSE)",
+    )
+    .bind(fixture_user_id().to_string())
+    .execute(&mut *acquire(pool).await)
+    .await
+    .expect("disabled preference must insert");
+
+    let account_disabled = delivery(
+        NotificationId::new(),
+        EmailOutboxId::new(),
+        NotificationClassification::AccountAccess,
+    );
+    let account_disabled_id = account_disabled.notification().id().to_string();
+    enqueue_and_commit(pool, &account_disabled).await;
+    assert_eq!(
+        count_for(pool, "email_outbox", &account_disabled_id).await,
+        0
+    );
+
+    let critical = delivery(
+        NotificationId::new(),
+        EmailOutboxId::new(),
+        NotificationClassification::CriticalSecurity,
+    );
+    let critical_id = critical.notification().id().to_string();
+    enqueue_and_commit(pool, &critical).await;
+    assert_eq!(count_for(pool, "email_outbox", &critical_id).await, 1);
+
+    let mut preference_connection = acquire(pool).await;
+    let mut preference_tx = preference_connection.begin().await.expect("preference tx");
+    sqlx::query(
+        "UPDATE notification_email_preferences SET collaboration=TRUE,\
+         updated_at=transaction_timestamp(),lock_version=lock_version+1 WHERE user_id=$1::uuid",
+    )
+    .bind(fixture_user_id().to_string())
+    .execute(&mut *preference_tx)
+    .await
+    .expect("preference update must hold serialization lock");
+    let collaboration = NotificationDelivery::new(
+        notification(
+            NotificationId::new(),
+            NotificationClassification::Collaboration,
+        ),
+        false,
+        EmailChannelPreference::Default,
+        None,
+        None,
+    )
+    .expect("caller may omit a disabled candidate channel");
+    let collaboration_id = collaboration.notification().id().to_string();
+    let writer_pool = pool.clone();
+    let writer = tokio::spawn(async move {
+        let mut connection = acquire(&writer_pool).await;
+        let mut tx = connection.begin().await.expect("writer tx");
+        NotificationWriter::enqueue(&mut tx, &collaboration)
+            .await
+            .expect("writer must reconcile authoritative preference");
+        tx.commit().await.expect("writer commit");
+    });
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    assert!(
+        !writer.is_finished(),
+        "enqueue must wait for the preference mutation"
+    );
+    preference_tx.commit().await.expect("preference commit");
+    writer.await.expect("writer task");
+    assert_eq!(count_for(pool, "email_outbox", &collaboration_id).await, 1);
+
+    let mut settings_connection = acquire(pool).await;
+    let mut settings_tx = settings_connection.begin().await.expect("settings tx");
+    sqlx::query(
+        "UPDATE instance_settings SET value='false'::jsonb,\
+         updated_at=transaction_timestamp(),lock_version=lock_version+1 WHERE key='smtp.enabled'",
+    )
+    .execute(&mut *settings_tx)
+    .await
+    .expect("SMTP update must hold its row lock");
+    let critical_after_disable = delivery(
+        NotificationId::new(),
+        EmailOutboxId::new(),
+        NotificationClassification::CriticalSecurity,
+    );
+    let critical_after_disable_id = critical_after_disable.notification().id().to_string();
+    let smtp_writer_pool = pool.clone();
+    let smtp_writer = tokio::spawn(async move {
+        let mut connection = acquire(&smtp_writer_pool).await;
+        let mut tx = connection.begin().await.expect("SMTP writer tx");
+        NotificationWriter::enqueue(&mut tx, &critical_after_disable)
+            .await
+            .expect("writer must reconcile authoritative SMTP state");
+        tx.commit().await.expect("SMTP writer commit");
+    });
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    assert!(
+        !smtp_writer.is_finished(),
+        "enqueue must wait for the SMTP setting mutation"
+    );
+    settings_tx.commit().await.expect("SMTP setting commit");
+    smtp_writer.await.expect("SMTP writer task");
+    assert_eq!(
+        count_for(pool, "email_outbox", &critical_after_disable_id).await,
+        0
+    );
+    set_smtp_enabled(pool, true).await;
+    sqlx::query(
+        "UPDATE notification_email_preferences SET account_access=TRUE,\
+         updated_at=transaction_timestamp(),lock_version=lock_version+1 WHERE user_id=$1::uuid",
+    )
+    .bind(fixture_user_id().to_string())
+    .execute(&mut *acquire(pool).await)
+    .await
+    .expect("account preference reset");
+}
+
+async fn enqueue_and_commit(pool: &DatabasePool, delivery: &NotificationDelivery) {
+    let mut connection = acquire(pool).await;
+    let mut tx = connection.begin().await.expect("enqueue tx");
+    NotificationWriter::enqueue(&mut tx, delivery)
+        .await
+        .expect("enqueue must succeed");
+    tx.commit().await.expect("enqueue commit");
+}
+
+async fn set_smtp_enabled(pool: &DatabasePool, enabled: bool) {
+    sqlx::query(
+        "UPDATE instance_settings SET value=to_jsonb($1::boolean),\
+         updated_at=transaction_timestamp(),lock_version=lock_version+1 WHERE key='smtp.enabled'",
+    )
+    .bind(enabled)
+    .execute(&mut *acquire(pool).await)
+    .await
+    .expect("SMTP setting must update");
 }
 
 async fn verify_transaction_bound_enqueue(pool: &DatabasePool) {

@@ -16,7 +16,7 @@ use crate::object_storage::{
 use crate::project::{EffectiveProjectRole, ProjectAccessError, ProjectAccessRepository};
 use crate::quota::{
     QuotaRepository, QuotaService, QuotaServiceError, QuotaServicePolicy, ReservationRequest,
-    SaveSessionId, TerminalSaveState, reserve_before_commit,
+    SaveSessionId, TerminalSaveState,
 };
 
 use super::types::{
@@ -156,10 +156,34 @@ impl<S: PutPresigner> SinglePutService<S> {
         policy: SinglePutServicePolicy,
         idempotency_secret: IdempotencySecret,
     ) -> Result<Self, SinglePutServiceError> {
+        Self::new_with_quota_source(pool, store, policy, idempotency_secret, false)
+    }
+
+    pub(crate) fn new_live(
+        pool: DatabasePool,
+        store: S,
+        policy: SinglePutServicePolicy,
+        idempotency_secret: IdempotencySecret,
+    ) -> Result<Self, SinglePutServiceError> {
+        Self::new_with_quota_source(pool, store, policy, idempotency_secret, true)
+    }
+
+    fn new_with_quota_source(
+        pool: DatabasePool,
+        store: S,
+        policy: SinglePutServicePolicy,
+        idempotency_secret: IdempotencySecret,
+        live_instance_defaults: bool,
+    ) -> Result<Self, SinglePutServiceError> {
         let quota_policy = QuotaServicePolicy::new(policy.operation_timeout)
             .map_err(|_| SinglePutServiceError::InvalidInput)?;
+        let quota = if live_instance_defaults {
+            QuotaService::new_live(pool.clone(), quota_policy)
+        } else {
+            QuotaService::new(pool.clone(), quota_policy)
+        };
         Ok(Self {
-            quota: QuotaService::new(pool.clone(), quota_policy),
+            quota,
             pool,
             store,
             policy,
@@ -311,13 +335,15 @@ impl<S: PutPresigner> SinglePutService<S> {
                 return Err(SinglePutServiceError::SessionTerminal);
             }
             let session_id = parse_session_id(&existing.id)?;
-            let admission = reserve_before_commit(
-                &mut transaction,
-                reservation(request, session_id),
-                deadline.0,
-            )
-            .await
-            .map_err(map_quota_error)?;
+            let admission = self
+                .quota
+                .reserve_before_commit(
+                    &mut transaction,
+                    reservation(request, session_id),
+                    deadline.0,
+                )
+                .await
+                .map_err(map_quota_error)?;
             commit(transaction, deadline).await?;
             if admission.is_expired() {
                 return Err(SinglePutServiceError::SessionTerminal);
@@ -390,13 +416,14 @@ impl<S: PutPresigner> SinglePutService<S> {
             )
             .await?
             .map_err(map_sql_error)?;
-        reserve_before_commit(
-            &mut transaction,
-            reservation(request, session_id),
-            deadline.0,
-        )
-        .await
-        .map_err(map_quota_error)?;
+        self.quota
+            .reserve_before_commit(
+                &mut transaction,
+                reservation(request, session_id),
+                deadline.0,
+            )
+            .await
+            .map_err(map_quota_error)?;
         commit(transaction, deadline).await?;
         Ok(PersistedSession {
             session_id,

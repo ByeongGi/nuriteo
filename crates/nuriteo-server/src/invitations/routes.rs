@@ -27,7 +27,6 @@ const MAX_ADMIN_BODY_BYTES: usize = 2 * 1024;
 const MAX_ACTIVATION_BODY_BYTES: usize = 4 * 1024;
 const MIN_EXPIRY_SECONDS: u64 = 60 * 60;
 const MAX_EXPIRY_SECONDS: u64 = 30 * 24 * 60 * 60;
-const DEFAULT_EXPIRY_SECONDS: u64 = 7 * 24 * 60 * 60;
 const ORIGIN: HeaderName = HeaderName::from_static("origin");
 const CSRF: HeaderName = HeaderName::from_static("x-csrf-token");
 
@@ -332,8 +331,14 @@ fn header_values<'a>(headers: &'a HeaderMap, name: &HeaderName) -> Result<Vec<&'
         .collect()
 }
 
-fn expiry(value: Option<u64>, request_id: &RequestId, path: &str) -> Result<Duration, HttpError> {
-    let seconds = value.unwrap_or(DEFAULT_EXPIRY_SECONDS);
+fn expiry(
+    value: Option<u64>,
+    request_id: &RequestId,
+    path: &str,
+) -> Result<Option<Duration>, HttpError> {
+    let Some(seconds) = value else {
+        return Ok(None);
+    };
     if !(MIN_EXPIRY_SECONDS..=MAX_EXPIRY_SECONDS).contains(&seconds) {
         return Err(HttpError::validation(
             request_id.clone(),
@@ -345,7 +350,7 @@ fn expiry(value: Option<u64>, request_id: &RequestId, path: &str) -> Result<Dura
             )],
         ));
     }
-    Ok(Duration::from_secs(seconds))
+    Ok(Some(Duration::from_secs(seconds)))
 }
 
 fn parse_id(

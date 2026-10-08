@@ -123,7 +123,7 @@ impl OrganizationHttpService {
                     pool.clone(),
                     OrganizationServicePolicy::default(),
                 ),
-                invitations: OrganizationInvitationService::new(
+                invitations: OrganizationInvitationService::new_live(
                     pool.clone(),
                     OrganizationInvitationPolicy::default(),
                 ),

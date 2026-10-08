@@ -11,6 +11,19 @@ use serde_json::Value;
 
 use crate::config::{InstanceSettingDefinition, instance_setting_definition};
 
+mod engine;
+mod maintenance;
+
+pub(crate) use engine::requires_recent_reauthentication;
+pub use engine::{
+    EffectivePolicyEngine, EffectivePolicyError, EffectivePolicySnapshot, PolicyApplyScope,
+    PolicyChangeDirection, PolicyCleanupPreview, PolicyImpactPreview,
+};
+pub use maintenance::{
+    ObjectDeleteOutcome, ObjectGcBackend, PolicyMaintenanceError, PolicyMaintenanceReport,
+    PolicyMaintenanceWorker,
+};
+
 const MIB: u64 = 1024 * 1024;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -68,6 +81,10 @@ pub const POLICY_DEFINITIONS: &[PolicyDefinition] = &[
     policy(
         "notifications.security_retention_days",
         PolicyCategory::Notification,
+    ),
+    policy(
+        "object_storage.gc.batch_size",
+        PolicyCategory::ObjectStorage,
     ),
     policy("object_storage.gc.enabled", PolicyCategory::ObjectStorage),
     policy(

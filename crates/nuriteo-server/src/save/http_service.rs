@@ -167,14 +167,14 @@ impl SaveHttpService {
         let commit_policy = WorkingHeadCommitPolicy::new(policy.verification_timeout)
             .map_err(|_| SaveHttpError::InvalidInput)?;
         let single =
-            SinglePutService::new(pool.clone(), store.clone(), single_policy, secret.clone())
+            SinglePutService::new_live(pool.clone(), store.clone(), single_policy, secret.clone())
                 .map_err(map_single)?;
         single
             .validate_idempotency_configuration()
             .await
             .map_err(map_single)?;
         let multipart =
-            MultipartService::new(pool.clone(), store.clone(), multipart_policy, secret)
+            MultipartService::new_live(pool.clone(), store.clone(), multipart_policy, secret)
                 .map_err(|_| SaveHttpError::InvalidInput)?;
         let relay = RelayUploadService::new(
             pool.clone(),

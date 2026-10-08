@@ -1,4 +1,4 @@
-import { getCurrentUser, getMfaStatus } from "@nuriteo/api-client";
+import { getCurrentUser, getMfaStatus, listNotifications } from "@nuriteo/api-client";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
@@ -15,10 +15,13 @@ export default async function AuthenticatedLayout({
 }: Readonly<{ children: ReactNode }>) {
   let current: Awaited<ReturnType<typeof getCurrentUser>>;
   let mfa: Awaited<ReturnType<typeof getMfaStatus>>;
+  let notifications: Awaited<ReturnType<typeof listNotifications>> | undefined;
   try {
     const client = await createServerApiClient();
+    const mfaRequest = getMfaStatus(client);
+    const notificationRequest = listNotifications(client, { limit: 1 }).catch(() => undefined);
     current = await getCurrentUser(client);
-    mfa = await getMfaStatus(client);
+    [mfa, notifications] = await Promise.all([mfaRequest, notificationRequest]);
   } catch (error) {
     if (isExplicitlySignedOut(error)) {
       redirect("/sign-in");
@@ -51,6 +54,10 @@ export default async function AuthenticatedLayout({
         <Link href="/projects">Projects</Link>
         <Link href="/organizations">Organizations</Link>
         <Link href="/mfa">Security</Link>
+        <Link href="/notifications" className="notification-navigation-link">
+          Notifications
+          {notifications !== undefined && notifications.data.unreadCount > 0 ? <span aria-label={`${notifications.data.unreadCount} unread notifications`}>{notifications.data.unreadCount > 99 ? "99+" : notifications.data.unreadCount}</span> : null}
+        </Link>
         {current.data.user.is_instance_admin ? <Link href="/admin/settings">Administration</Link> : null}
       </nav>
       {children}

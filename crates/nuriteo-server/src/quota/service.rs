@@ -7,6 +7,7 @@ use time::OffsetDateTime;
 use tokio::time::{self as tokio_time, Instant};
 
 use crate::database::{DatabaseError, DatabasePool};
+use crate::policy::EffectivePolicyEngine;
 use crate::project::ProjectId;
 use crate::workspace::StorageScopeId;
 
@@ -97,6 +98,7 @@ impl std::error::Error for QuotaServiceError {}
 pub struct QuotaService {
     pool: DatabasePool,
     policy: QuotaServicePolicy,
+    live_instance_defaults: bool,
 }
 
 #[derive(Clone, Copy)]
@@ -142,7 +144,20 @@ impl ReservationAdmission {
 impl QuotaService {
     #[must_use]
     pub const fn new(pool: DatabasePool, policy: QuotaServicePolicy) -> Self {
-        Self { pool, policy }
+        Self {
+            pool,
+            policy,
+            live_instance_defaults: false,
+        }
+    }
+
+    #[must_use]
+    pub const fn new_live(pool: DatabasePool, policy: QuotaServicePolicy) -> Self {
+        Self {
+            pool,
+            policy,
+            live_instance_defaults: true,
+        }
     }
 
     pub async fn projection(
@@ -162,6 +177,17 @@ impl QuotaService {
             .map_err(map_sql_error)?;
         configure_transaction(&mut transaction, deadline).await?;
         lock_scope(&mut transaction, storage_scope_id, deadline).await?;
+        let effective_quota = if self.live_instance_defaults {
+            live_quota(
+                &mut transaction,
+                storage_scope_id,
+                effective_quota,
+                deadline,
+            )
+            .await?
+        } else {
+            effective_quota
+        };
         let projection = load_projection(
             &mut transaction,
             storage_scope_id,
@@ -180,7 +206,7 @@ impl QuotaService {
         &self,
         request: ReservationRequest,
     ) -> Result<ReservationResult, QuotaServiceError> {
-        let request = request.validate()?;
+        let mut request = request.validate()?;
         let deadline = OperationDeadline::new(self.policy.operation_timeout);
         let mut connection = deadline
             .run(self.pool.acquire())
@@ -191,11 +217,48 @@ impl QuotaService {
             .await?
             .map_err(map_sql_error)?;
         configure_transaction(&mut transaction, deadline).await?;
+        if self.live_instance_defaults {
+            lock_scope(&mut transaction, request.storage_scope_id, deadline).await?;
+            request.effective_quota = live_quota(
+                &mut transaction,
+                request.storage_scope_id,
+                request.effective_quota,
+                deadline,
+            )
+            .await?;
+        }
         let outcome = reserve_in_transaction(&mut transaction, request, deadline).await?;
         commit(transaction, deadline).await?;
         match outcome {
             ReserveOutcome::Reserved(result) => Ok(result),
             ReserveOutcome::Expired => Err(QuotaServiceError::SessionExpired),
+        }
+    }
+
+    /// Admits a Save session inside its caller-owned transaction while
+    /// preserving the service's authoritative live-policy source.
+    pub(crate) async fn reserve_before_commit(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        mut request: ReservationRequest,
+        absolute_deadline: Instant,
+    ) -> Result<ReservationAdmission, QuotaServiceError> {
+        request = request.validate()?;
+        let deadline = OperationDeadline(absolute_deadline);
+        configure_transaction(transaction, deadline).await?;
+        if self.live_instance_defaults {
+            lock_scope(transaction, request.storage_scope_id, deadline).await?;
+            request.effective_quota = live_quota(
+                transaction,
+                request.storage_scope_id,
+                request.effective_quota,
+                deadline,
+            )
+            .await?;
+        }
+        match reserve_in_transaction(transaction, request, deadline).await? {
+            ReserveOutcome::Reserved(_) => Ok(ReservationAdmission::Reserved),
+            ReserveOutcome::Expired => Ok(ReservationAdmission::Expired),
         }
     }
 
@@ -297,23 +360,6 @@ impl QuotaService {
             return Err(QuotaServiceError::InvariantViolation);
         }
         commit(transaction, deadline).await
-    }
-}
-
-/// Admits an already-inserted Save session inside its caller-owned transaction.
-/// SAVE services retain ownership of commit/rollback while reusing the quota
-/// serialization and checked accounting contract.
-pub(crate) async fn reserve_before_commit(
-    transaction: &mut Transaction<'_, Postgres>,
-    request: ReservationRequest,
-    absolute_deadline: Instant,
-) -> Result<ReservationAdmission, QuotaServiceError> {
-    let request = request.validate()?;
-    let deadline = OperationDeadline(absolute_deadline);
-    configure_transaction(transaction, deadline).await?;
-    match reserve_in_transaction(transaction, request, deadline).await? {
-        ReserveOutcome::Reserved(_) => Ok(ReservationAdmission::Reserved),
-        ReserveOutcome::Expired => Ok(ReservationAdmission::Expired),
     }
 }
 
@@ -509,6 +555,36 @@ async fn lock_scope(
     } else {
         Err(QuotaServiceError::ScopeNotFound)
     }
+}
+
+async fn live_quota(
+    transaction: &mut Transaction<'_, Postgres>,
+    storage_scope_id: StorageScopeId,
+    fallback: EffectiveQuota,
+    deadline: OperationDeadline,
+) -> Result<EffectiveQuota, QuotaServiceError> {
+    let organization: bool = deadline
+        .run(
+            sqlx::query_scalar(
+                "SELECT owner_organization_id IS NOT NULL FROM storage_scopes WHERE id=$1::uuid",
+            )
+            .bind(storage_scope_id.to_string())
+            .fetch_optional(&mut **transaction),
+        )
+        .await?
+        .map_err(map_sql_error)?
+        .ok_or(QuotaServiceError::ScopeNotFound)?;
+    deadline
+        .run(EffectivePolicyEngine::load_optional_in_transaction(
+            transaction,
+        ))
+        .await?
+        .and_then(|snapshot| {
+            snapshot.map_or(Ok(fallback), |snapshot| {
+                snapshot.workspace_quota(organization)
+            })
+        })
+        .map_err(|_| QuotaServiceError::InvariantViolation)
 }
 
 async fn lock_project(

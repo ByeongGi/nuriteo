@@ -5,6 +5,7 @@ use crate::http::{HttpError, RequestId, propagate_request_id};
 use crate::identity::{BrowserMethod, BrowserRequestHeaders};
 use crate::invitations::InvitationHttpService;
 use crate::mfa::{MfaHttpService, MfaHttpServiceError};
+use crate::notification::NotificationHttpService;
 use crate::openapi;
 use crate::organization::OrganizationHttpService;
 use crate::project::ProjectHttpService;
@@ -177,6 +178,35 @@ pub(crate) fn build_router_with_mfa_service(
     teams: TeamHttpService,
     mfa: MfaHttpService,
 ) -> Router {
+    build_router_with_notification_service(
+        health,
+        auth,
+        invitations,
+        organizations,
+        projects,
+        save,
+        setup,
+        admin,
+        teams,
+        mfa,
+        NotificationHttpService::unconfigured(),
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn build_router_with_notification_service(
+    health: HealthService,
+    auth: AuthService,
+    invitations: InvitationHttpService,
+    organizations: OrganizationHttpService,
+    projects: ProjectHttpService,
+    save: SaveHttpService,
+    setup: SetupStatusService,
+    admin: AdminHttpService,
+    teams: TeamHttpService,
+    mfa: MfaHttpService,
+    notifications: NotificationHttpService,
+) -> Router {
     let enforcement = mfa.clone();
     let api = openapi::router(
         auth,
@@ -188,6 +218,7 @@ pub(crate) fn build_router_with_mfa_service(
         admin,
         teams,
         mfa,
+        notifications,
     )
     .layer(middleware::from_fn(move |request, next| {
         enforce_mfa_deadline(enforcement.clone(), request, next)

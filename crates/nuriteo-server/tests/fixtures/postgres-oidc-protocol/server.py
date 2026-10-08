@@ -83,7 +83,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send_response(400)
             self.end_headers()
             return
-        with open(os.path.join(CONTROL, "pkce_challenge"), encoding="utf-8") as value:
+        code = form["code"][0]
+        def control_path(name):
+            scoped = os.path.join(CONTROL, name + "-" + code)
+            return scoped if os.path.exists(scoped) else os.path.join(CONTROL, name)
+        with open(control_path("pkce_challenge"), encoding="utf-8") as value:
             expected_challenge = value.read().strip()
         observed_challenge = base64.urlsafe_b64encode(
             hashlib.sha256(form["code_verifier"][0].encode()).digest()
@@ -95,20 +99,32 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send_response(400)
             self.end_headers()
             return
-        with open(os.path.join(CONTROL, "token_mode"), encoding="utf-8") as value:
+        with open(control_path("token_mode"), encoding="utf-8") as value:
             mode = value.read().strip()
-        with open(os.path.join(CONTROL, "nonce"), encoding="utf-8") as value:
+        with open(control_path("nonce"), encoding="utf-8") as value:
             nonce = value.read().strip()
         now = int(time.time())
         header = {"alg": "none" if mode == "wrong-alg" else "RS256", "kid": "missing" if mode == "wrong-kid" else "fixture"}
+        subject_path = control_path("subject")
+        email_path = control_path("email")
+        subject = "fixture-subject"
+        if os.path.exists(subject_path):
+            with open(subject_path, encoding="utf-8") as value:
+                subject = value.read().strip()
         claims = {
             "iss": "https://wrong-issuer.example.test" if mode == "wrong-issuer" else ISSUER,
-            "sub": "fixture-subject",
+            "sub": subject,
             "aud": "wrong-client" if mode == "wrong-aud" else "protocol-client",
             "nonce": nonce,
             "iat": now,
             "exp": now + 300,
         }
+        if os.path.exists(email_path):
+            with open(email_path, encoding="utf-8") as value:
+                email = value.read().strip()
+            if email:
+                claims["email"] = email
+                claims["email_verified"] = mode != "unverified-email"
         if mode == "wrong-azp":
             claims["aud"] = ["protocol-client", "other-client"]
             claims["azp"] = "other-client"

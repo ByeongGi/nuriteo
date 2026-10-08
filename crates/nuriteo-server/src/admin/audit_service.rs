@@ -652,6 +652,7 @@ async fn authorize_admin(
             .try_get("display_name")
             .map_err(|_| AdminHttpServiceError::Internal)?,
         occurred_at: Timestamp::from_datetime(now).map_err(|_| AdminHttpServiceError::Internal)?,
+        last_reauthenticated_at: None,
     })
 }
 

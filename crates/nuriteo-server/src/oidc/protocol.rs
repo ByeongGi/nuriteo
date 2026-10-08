@@ -213,6 +213,7 @@ pub(super) struct AuthorizationRuntime {
 pub(super) struct VerifiedIdToken {
     pub issuer: String,
     pub subject: String,
+    pub verified_email: Option<String>,
 }
 
 #[derive(Clone)]
@@ -722,6 +723,9 @@ struct IdTokenClaims {
     nonce: String,
     iat: i64,
     exp: i64,
+    email: Option<String>,
+    #[serde(default)]
+    email_verified: bool,
 }
 
 #[derive(Deserialize)]
@@ -1095,10 +1099,23 @@ fn verify_id_token(
     {
         return Err(OidcProviderError::ValidationFailed);
     }
+    let verified_email = match (claims.email, claims.email_verified) {
+        (Some(email), true) if valid_verified_email(&email) => Some(email),
+        (None, false) | (Some(_), false) => None,
+        _ => return Err(OidcProviderError::ValidationFailed),
+    };
     Ok(VerifiedIdToken {
         issuer: claims.iss,
         subject: claims.sub,
+        verified_email,
     })
+}
+
+fn valid_verified_email(value: &str) -> bool {
+    value == value.trim()
+        && (3..=320).contains(&value.len())
+        && value.contains('@')
+        && !value.chars().any(char::is_control)
 }
 
 #[cfg(test)]

@@ -57,6 +57,12 @@ const MFA_CHALLENGES_SQL: &str = include_str!("../../migrations/0031_mfa_challen
 const OIDC_AUTHORIZATION_CODE_SQL: &str =
     include_str!("../../migrations/0032_oidc_authorization_code.sql");
 const MFA_POLICY_SQL: &str = include_str!("../../migrations/0033_mfa_policy.sql");
+const OIDC_IDENTITY_LINKING_SQL: &str =
+    include_str!("../../migrations/0034_oidc_identity_linking.sql");
+const NOTIFICATION_INBOX_PREFERENCES_SQL: &str =
+    include_str!("../../migrations/0035_notification_inbox_preferences.sql");
+const POLICY_MAINTENANCE_WORKERS_SQL: &str =
+    include_str!("../../migrations/0036_policy_maintenance_workers.sql");
 
 // Two-key advisory locks use a namespace distinct from PostgreSQL's one-key
 // bigint locks. 0x4e555249 is the ASCII representation of "NURI".
@@ -345,6 +351,27 @@ pub(super) fn embedded_migrator() -> Migrator {
             Cow::Borrowed("MFA enforcement policy and enrollment deadlines"),
             MigrationType::Simple,
             MFA_POLICY_SQL.into_sql_str(),
+            false,
+        ),
+        Migration::new(
+            34,
+            Cow::Borrowed("OIDC identity linking"),
+            MigrationType::Simple,
+            OIDC_IDENTITY_LINKING_SQL.into_sql_str(),
+            false,
+        ),
+        Migration::new(
+            35,
+            Cow::Borrowed("notification inbox preferences and administrator receipts"),
+            MigrationType::Simple,
+            NOTIFICATION_INBOX_PREFERENCES_SQL.into_sql_str(),
+            false,
+        ),
+        Migration::new(
+            36,
+            Cow::Borrowed("policy maintenance worker leases"),
+            MigrationType::Simple,
+            POLICY_MAINTENANCE_WORKERS_SQL.into_sql_str(),
             false,
         ),
     ])

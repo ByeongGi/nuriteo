@@ -10,6 +10,10 @@ retention fencing, detached preservation of sent/dead-letter/canceled history,
 the exact compact JSON 16 KiB boundary, and the absence of durable token/body
 columns.
 
+The same custom-CA PostgreSQL run also exercises the authenticated NOT-003
+inbox, preference, role isolation, optimistic concurrency, recent-reauth,
+redaction, safe retry/cancel, audit, and durable idempotency boundaries.
+
 ```sh
 ./crates/nuriteo-server/tests/fixtures/postgres-notification/run.sh
 ```

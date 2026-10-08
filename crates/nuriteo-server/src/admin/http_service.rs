@@ -30,7 +30,10 @@ use crate::instance_settings::{
     EffectiveInstanceSettings, InstanceSettingsRepository, decode_complete_set,
     validate_complete_values,
 };
-use crate::policy::{PolicyCategory, PolicyLookup, policy_lookup};
+use crate::policy::{
+    EffectivePolicyEngine, EffectivePolicyError, PolicyCategory, PolicyCleanupPreview,
+    PolicyImpactPreview, PolicyLookup, policy_lookup,
+};
 use crate::save::CleanupOperationsService;
 
 const DEFAULT_OPERATION_TIMEOUT: Duration = Duration::from_secs(5);
@@ -289,6 +292,35 @@ impl AdminHttpService {
             .await
     }
 
+    pub(crate) async fn preview_policy_change(
+        &self,
+        request: BrowserRequestHeaders<'_>,
+        key: &str,
+        value: Value,
+    ) -> Result<PolicyImpactPreview, AdminHttpServiceError> {
+        let runtime = self.runtime()?;
+        runtime.authenticate(request).await?;
+        EffectivePolicyEngine::new(runtime.pool.clone(), runtime.policy.operation_timeout)
+            .map_err(map_policy_error)?
+            .preview_change(key, value)
+            .await
+            .map_err(map_policy_error)
+    }
+
+    pub(crate) async fn preview_policy_cleanup(
+        &self,
+        request: BrowserRequestHeaders<'_>,
+        batch_limit: u16,
+    ) -> Result<PolicyCleanupPreview, AdminHttpServiceError> {
+        let runtime = self.runtime()?;
+        runtime.authenticate(request).await?;
+        EffectivePolicyEngine::new(runtime.pool.clone(), runtime.policy.operation_timeout)
+            .map_err(map_policy_error)?
+            .cleanup_preview(batch_limit)
+            .await
+            .map_err(map_policy_error)
+    }
+
     pub(super) fn runtime(&self) -> Result<&AdminRuntime, AdminHttpServiceError> {
         self.runtime
             .as_deref()
@@ -361,7 +393,7 @@ impl AdminRuntime {
             .begin()
             .await
             .map_err(|_| AdminHttpServiceError::Unavailable)?;
-        let actor = authorize_recent_admin(&mut transaction, session).await?;
+        let actor = authorize_admin(&mut transaction, session).await?;
         let rows: Vec<(String, i16, String, String, i64)> = sqlx::query_as(
             "SELECT key, registry_version, value::text, bootstrap_origin, lock_version FROM instance_settings \
              ORDER BY key FOR UPDATE",
@@ -395,6 +427,9 @@ impl AdminRuntime {
                 .await
                 .map_err(|_| AdminHttpServiceError::Unavailable)?;
             return setting_view(definition, value, expected_version);
+        }
+        if crate::policy::requires_recent_reauthentication(definition.key, Some(&current), &value) {
+            ensure_recent_admin(&mut transaction, &actor).await?;
         }
         current_values.insert(definition.key.to_owned(), value.clone());
         validate_complete_values(&current_values)
@@ -439,9 +474,19 @@ pub(super) struct AuditActorIdentity {
     pub(super) user_id: UserId,
     pub(super) display_name: String,
     pub(super) occurred_at: Timestamp,
+    pub(super) last_reauthenticated_at: Option<OffsetDateTime>,
 }
 
 pub(super) async fn authorize_recent_admin(
+    transaction: &mut Transaction<'_, Postgres>,
+    session: AdminSession,
+) -> Result<AuditActorIdentity, AdminHttpServiceError> {
+    let actor = authorize_admin(transaction, session).await?;
+    ensure_recent_admin(transaction, &actor).await?;
+    Ok(actor)
+}
+
+async fn authorize_admin(
     transaction: &mut Transaction<'_, Postgres>,
     session: AdminSession,
 ) -> Result<AuditActorIdentity, AdminHttpServiceError> {
@@ -464,9 +509,23 @@ pub(super) async fn authorize_recent_admin(
     let now: OffsetDateTime = row
         .try_get("now")
         .map_err(|_| AdminHttpServiceError::Internal)?;
-    let last: Option<OffsetDateTime> = row
+    let last_reauthenticated_at: Option<OffsetDateTime> = row
         .try_get("last_reauthenticated_at")
         .map_err(|_| AdminHttpServiceError::Internal)?;
+    Ok(AuditActorIdentity {
+        user_id: session.user_id,
+        display_name: row
+            .try_get("display_name")
+            .map_err(|_| AdminHttpServiceError::Internal)?,
+        occurred_at: Timestamp::from_datetime(now).map_err(|_| AdminHttpServiceError::Internal)?,
+        last_reauthenticated_at,
+    })
+}
+
+async fn ensure_recent_admin(
+    transaction: &mut Transaction<'_, Postgres>,
+    actor: &AuditActorIdentity,
+) -> Result<(), AdminHttpServiceError> {
     let policy_json: Option<String> = sqlx::query_scalar(
         "SELECT value::text FROM instance_settings \
          WHERE key = 'security.reauthentication_window_minutes' FOR SHARE",
@@ -492,16 +551,14 @@ pub(super) async fn authorize_recent_admin(
         .checked_mul(60)
         .and_then(|value| i64::try_from(value).ok())
         .ok_or(AdminHttpServiceError::Internal)?;
-    if !last.is_some_and(|value| value >= now - time::Duration::seconds(seconds) && value <= now) {
+    let now = actor.occurred_at.into_datetime();
+    if !actor
+        .last_reauthenticated_at
+        .is_some_and(|value| value >= now - time::Duration::seconds(seconds) && value <= now)
+    {
         return Err(AdminHttpServiceError::ReauthenticationRequired);
     }
-    Ok(AuditActorIdentity {
-        user_id: session.user_id,
-        display_name: row
-            .try_get("display_name")
-            .map_err(|_| AdminHttpServiceError::Internal)?,
-        occurred_at: Timestamp::from_datetime(now).map_err(|_| AdminHttpServiceError::Internal)?,
-    })
+    Ok(())
 }
 
 async fn append_setting_audit(
@@ -669,6 +726,19 @@ fn map_session_error(error: SessionServiceError) -> AdminHttpServiceError {
         SessionServiceError::OperationTimeout => AdminHttpServiceError::OperationTimeout,
         SessionServiceError::DatabaseUnavailable => AdminHttpServiceError::Unavailable,
         _ => AdminHttpServiceError::Internal,
+    }
+}
+
+fn map_policy_error(error: EffectivePolicyError) -> AdminHttpServiceError {
+    match error {
+        EffectivePolicyError::UnknownPolicy => AdminHttpServiceError::SettingNotFound,
+        EffectivePolicyError::InvalidCandidate => AdminHttpServiceError::InvalidSetting,
+        EffectivePolicyError::OperationTimeout => AdminHttpServiceError::OperationTimeout,
+        EffectivePolicyError::InvalidOperationTimeout => AdminHttpServiceError::Configuration,
+        EffectivePolicyError::PersistenceUnavailable => AdminHttpServiceError::Unavailable,
+        EffectivePolicyError::IncompleteSnapshot
+        | EffectivePolicyError::InvalidSnapshot
+        | EffectivePolicyError::ArithmeticOverflow => AdminHttpServiceError::Internal,
     }
 }
 

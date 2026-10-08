@@ -6,6 +6,8 @@ import {
   getAdminOperations,
   getAdminStatus,
   listAdminSettings,
+  previewAdminPolicyChange,
+  previewAdminPolicyCleanup,
   updateAdminSetting
 } from "../src/index.ts";
 
@@ -26,7 +28,9 @@ async function contracts(): Promise<void> {
       restartRequired: false
     }),
     json(operations()),
-    json(setting(2, 336))
+    json(setting(2, 336)),
+    json(policyImpact()),
+    json(cleanupPreview())
   ];
   const client = createApiClient({
     fetch: async (input, init) => {
@@ -50,12 +54,24 @@ async function contracts(): Promise<void> {
     { csrfToken: CSRF }
   );
   assert.equal(updated.data.version, 2);
+  const impact = await previewAdminPolicyChange(
+    client,
+    "workspace.personal_default_quota_bytes",
+    1_048_576,
+    { csrfToken: CSRF }
+  );
+  assert.equal(impact.data.nonCompliantResources, 2);
+  assert.equal(impact.data.automaticallyDeletesExistingData, false);
+  const cleanup = await previewAdminPolicyCleanup(client, 25);
+  assert.equal(cleanup.data.expectedReclaimBytes, "4096");
 
   assert.deepEqual(calls.map(({ input, init }) => [init?.method, String(input)]), [
     ["GET", "/api/v1/admin/settings"],
     ["GET", "/api/v1/admin/status"],
     ["GET", "/api/v1/admin/operations"],
-    ["PATCH", "/api/v1/admin/settings/invitations.default_expiry_hours"]
+    ["PATCH", "/api/v1/admin/settings/invitations.default_expiry_hours"],
+    ["POST", "/api/v1/admin/settings/workspace.personal_default_quota_bytes/impact"],
+    ["GET", "/api/v1/admin/policy-cleanup/preview?batchLimit=25"]
   ]);
   const headers = new Headers(calls[3]?.init?.headers);
   assert.equal(headers.get("x-csrf-token"), CSRF);
@@ -105,6 +121,43 @@ async function rejectsMalformedResponses(): Promise<void> {
     ),
     /invalid setting key/u
   );
+  await assert.rejects(
+    () => previewAdminPolicyChange(
+      single({ ...policyImpact(), automaticallyDeletesExistingData: true }),
+      "workspace.personal_default_quota_bytes",
+      1_048_576,
+      { csrfToken: CSRF }
+    ),
+    ApiInvalidResponseError
+  );
+  await assert.rejects(
+    () => previewAdminPolicyCleanup(single({ ...cleanupPreview(), dryRun: false })),
+    ApiInvalidResponseError
+  );
+}
+
+function policyImpact() {
+  return {
+    key: "workspace.personal_default_quota_bytes",
+    direction: "decrease",
+    applyScope: "new_operations",
+    affectedResources: 4,
+    nonCompliantResources: 2,
+    gracePeriodSeconds: 0,
+    requiresRecentReauthentication: true,
+    automaticallyDeletesExistingData: false
+  };
+}
+
+function cleanupPreview() {
+  return {
+    gcEnabled: true,
+    gracePeriodSeconds: 86_400,
+    eligibleCandidates: 3,
+    expectedReclaimBytes: "4096",
+    batchLimit: 25,
+    dryRun: true
+  };
 }
 
 function operations() {
