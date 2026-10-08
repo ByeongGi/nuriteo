@@ -418,6 +418,7 @@ scan_secrets() {
   set -e
   if [ "$result" -eq 0 ]; then echo 'GATE-005 secret scan found protected material' >&2; return 1; fi
   if [ "$result" -ne 1 ]; then echo "GATE-005 protected-material scan failed (${result})" >&2; return 1; fi
+  return 0
 }
 scan_targets=("$run_root"/*.log "$run_root"/*.json "$run_root/compose.rendered.yaml" \
   "$run_root/stages")
@@ -429,7 +430,9 @@ node - "$engine" "$release_commit" "$run_root/images.json" postgres "$NURITEO_PO
 const {execFileSync}=require('node:child_process');const fs=require('node:fs');const [engine,commit,out,...pairs]=process.argv.slice(2);const images=[];
 for(let i=0;i<pairs.length;i+=2){const [name,image]=[pairs[i],pairs[i+1]];const inspect=JSON.parse(execFileSync(engine,['image','inspect',image],{encoding:'utf8'}))[0];if(inspect.Config.Labels?.['org.opencontainers.image.revision']!==commit)throw new Error(`${name} revision label mismatch`);images.push({name,digest:inspect.Id,sourceCommit:commit,sourceCommitLabelVerified:true});}fs.writeFileSync(out,JSON.stringify(images));
 NODE
-compose ps --all --quiet | sed '/^$/d' | sort -u | node -e 'const fs=require("node:fs");const ids=fs.readFileSync(0,"utf8").trim().split(/\n/).filter(Boolean);fs.writeFileSync(process.argv[1],JSON.stringify(ids));' "$run_root/containers.json"
+"$engine" ps --all --quiet --filter "label=com.docker.compose.project=$project" \
+  | sed '/^$/d' | sort -u \
+  | node -e 'const fs=require("node:fs");const ids=fs.readFileSync(0,"utf8").trim().split(/\n/).filter(Boolean);fs.writeFileSync(process.argv[1],JSON.stringify(ids));' "$run_root/containers.json"
 export NURITEO_BETA_GATE_STAGE_RESULT_DIR="$run_root/stages"
 export NURITEO_BETA_GATE_IMAGE_LEDGER="$run_root/images.json"
 export NURITEO_BETA_GATE_CONTAINER_LEDGER="$run_root/containers.json"
