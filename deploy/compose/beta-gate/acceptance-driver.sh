@@ -263,7 +263,7 @@ export NURITEO_COMPOSE_PRIVATE_STORAGE_ENDPOINT='https://rustfs:9000'
 export NURITEO_COMPOSE_SMTP_CAPTURE_DIR="$run_root/provider-tls/control"
 node --experimental-strip-types "$repository_root/deploy/compose/relay-save-resume-browser.ts" >"$run_root/browser-save.log" 2>&1
 
-query "SELECT json_build_object('organizationId',o.id,'projectId',p.id,'projectVersionId',pv.id,'userId',admin.id,'inviteeUserId',invitee.id) FROM organizations o JOIN workspaces w ON w.organization_id=o.id JOIN projects p ON p.workspace_id=w.id JOIN project_versions pv ON pv.project_id=p.id JOIN users admin ON admin.email='admin@example.invalid' JOIN users invitee ON invitee.email='cmp003-invitee@example.invalid' ORDER BY pv.version_number DESC LIMIT 1;" >"$run_root/context.json"
+query "SELECT json_build_object('organizationId',o.id,'projectId',p.id,'userId',admin.id,'inviteeUserId',invitee.id) FROM organizations o JOIN projects p ON p.owner_organization_id=o.id JOIN users admin ON admin.email='admin@example.invalid' JOIN users invitee ON invitee.email='cmp003-invitee@example.invalid' ORDER BY p.created_at DESC LIMIT 1;" >"$run_root/context.json"
 export NURITEO_BETA_GATE_ORIGIN="$NURITEO_EXTERNAL_URL"
 export NURITEO_BETA_GATE_CORE_ORIGIN="http://127.0.0.1:${core_port}"
 export NURITEO_BETA_GATE_ADMIN_PASSWORD_FILE="$run_root/bootstrap-password"
@@ -325,8 +325,17 @@ node "$here/check-journey.mjs" "$run_root/journey.json"
 
 compose logs --no-color >"$run_root/compose-before-restart.log" 2>&1
 compose down
-compose up --detach --no-build >"$run_root/restart.log" 2>&1
-for job in storage-init storage-check migrate bootstrap-admin; do wait_job "$job"; done
+compose up --detach --no-build --no-deps postgres rustfs oidc-provider smtp-provider \
+  git-provider registry-exact-provider registry-default-provider >"$run_root/restart.log" 2>&1
+wait_healthy postgres
+wait_healthy rustfs
+for job in storage-init migrate storage-check bootstrap-admin; do
+  compose up --detach --no-build --no-deps "$job" >>"$run_root/restart.log" 2>&1
+  wait_job "$job"
+done
+compose up --detach --no-build --no-deps core >>"$run_root/restart.log" 2>&1
+wait_healthy core
+compose up --detach --no-build --no-deps web >>"$run_root/restart.log" 2>&1
 wait_web
 test "$(query "SELECT database_lineage::text FROM beta_gate_lineage;")" = "$NURITEO_BETA_GATE_DATABASE_LINEAGE"
 object_after_restart="$(compose exec -T rustfs /bin/sh -eu -c '

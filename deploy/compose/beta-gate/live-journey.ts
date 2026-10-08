@@ -5,7 +5,7 @@ import { chromium, type Page } from "@playwright/test";
 const origin = required("NURITEO_BETA_GATE_ORIGIN");
 const password = fs.readFileSync(required("NURITEO_BETA_GATE_ADMIN_PASSWORD_FILE"), "utf8").trim();
 const context = JSON.parse(fs.readFileSync(required("NURITEO_BETA_GATE_CONTEXT_FILE"), "utf8")) as {
-  organizationId: string; projectId: string; projectVersionId: string; userId: string; inviteeUserId: string;
+  organizationId: string; projectId: string; projectVersionId?: string; userId: string; inviteeUserId: string;
 };
 const output = required("NURITEO_BETA_GATE_JOURNEY_OUTPUT");
 const assertions: Record<string, Array<{ kind: string; name: string; status: "PASS" }>> = {};
@@ -164,9 +164,19 @@ try {
   await inviteeContext.close();
   pass("team-collaboration", "api", "invitee retained Project write access after the direct grant was removed, solely through live Team membership and Team Project role");
 
-  const owner = { ownerType: "organization", ownerId: context.organizationId };
+  const versionSource = await api("GET", projectPath);
+  assert.match(versionSource.etag ?? "", /^"project-v[1-9]\d*"$/u);
+  const explicitVersion = await api("POST", `${projectPath}/versions`, {
+    name: "GATE-005 Published Version"
+  }, {
+    "if-match": versionSource.etag!,
+    "idempotency-key": "gate-005-published-version"
+  });
+  const projectVersionId = (explicitVersion.json as { version: { id: string } }).version.id;
+  assert.match(projectVersionId, /^[0-9a-f-]{36}$/u);
+  context.projectVersionId = projectVersionId;
   const publication = await api("POST", `/api/v1/workspaces/organizations/${context.organizationId}/projects/${context.projectId}/published-examples`, {
-    projectVersionId: context.projectVersionId, name: "GATE-005 Example", visibility: "unlisted"
+    projectVersionId, name: "GATE-005 Example", visibility: "unlisted"
   });
   const created = publication.json as { example: { publicId: string }; version: { versionNumber: number } };
   await api("GET", `/api/v1/published-examples/${created.example.publicId}/versions/${created.version.versionNumber}`);
