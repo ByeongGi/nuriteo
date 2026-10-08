@@ -29,6 +29,7 @@ COPY packages/preview packages/preview
 COPY packages/preview-service packages/preview-service
 COPY packages/protocol packages/protocol
 COPY workers workers
+COPY vendor/cli/npm/10.9.2/package/node_modules/qrcode-terminal/vendor/QRCode vendor/cli/npm/10.9.2/package/node_modules/qrcode-terminal/vendor/QRCode
 COPY apps/preview-service/public/preview-sw.js apps/preview-service/public/preview-sw.js
 COPY apps/preview-service/public/runtime apps/preview-service/public/runtime
 COPY apps/preview-service/public/vendor/next-cli-15.5.26.mjs apps/preview-service/public/vendor/next-cli-15.5.26.mjs
