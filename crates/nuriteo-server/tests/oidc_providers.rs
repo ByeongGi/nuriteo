@@ -302,18 +302,47 @@ async fn oidc_provider_lifecycle_is_concurrent_audited_and_fail_closed() {
         .execute(&mut *pool.acquire().await.unwrap())
         .await
         .unwrap();
+    assert_eq!(
+        service
+            .delete_provider(
+                actor(),
+                created.id,
+                disabled.config_version,
+                "request:oidc-delete-tombstoned",
+            )
+            .await
+            .unwrap_err(),
+        OidcProviderError::LinkedIdentities,
+        "durable unlink generation fences must retain their Provider"
+    );
+
+    let disposable_input = OidcProviderInput::new(
+        "Disposable identity",
+        "https://disposable.example.test",
+        "disposable-client",
+    )
+    .unwrap();
+    let disposable = service
+        .create_provider(
+            actor(),
+            &disposable_input,
+            &secret("replacement-secret"),
+            "request:oidc-disposable-create",
+        )
+        .await
+        .unwrap();
     let retained_credential_id: String = sqlx::query_scalar(
         "SELECT client_secret_credential_id::text FROM oidc_providers WHERE id=$1::uuid",
     )
-    .bind(created.id.to_string())
+    .bind(disposable.id.to_string())
     .fetch_one(&mut *pool.acquire().await.unwrap())
     .await
     .unwrap();
     service
         .delete_provider(
             actor(),
-            created.id,
-            disabled.config_version,
+            disposable.id,
+            disposable.config_version,
             "request:oidc-delete",
         )
         .await
@@ -329,25 +358,6 @@ async fn oidc_provider_lifecycle_is_concurrent_audited_and_fail_closed() {
         retained,
         "encrypted credential tombstone must retain INT history"
     );
-
-    let replacement = service
-        .create_provider(
-            actor(),
-            &input,
-            &secret("replacement-secret"),
-            "request:oidc-recreate",
-        )
-        .await
-        .unwrap();
-    assert_ne!(replacement.id, created.id);
-    let replacement_credential_id: String = sqlx::query_scalar(
-        "SELECT client_secret_credential_id::text FROM oidc_providers WHERE id=$1::uuid",
-    )
-    .bind(replacement.id.to_string())
-    .fetch_one(&mut *pool.acquire().await.unwrap())
-    .await
-    .unwrap();
-    assert_ne!(replacement_credential_id, retained_credential_id);
 
     let audit_dump: String = sqlx::query_scalar(
         "SELECT string_agg(action_code || metadata::text || changed_fields::text, ' ') FROM audit_events WHERE action_code LIKE 'oidc.%'",
@@ -404,6 +414,8 @@ async fn seed_admins(pool: &DatabasePool) {
     ] {
         sqlx::query("INSERT INTO users(id,email,normalized_email,display_name,is_instance_admin) VALUES($1::uuid,$2,$2,'OIDC Admin',TRUE)")
             .bind(user_id).bind(email).execute(&mut *pool.acquire().await.unwrap()).await.unwrap();
+        sqlx::query("INSERT INTO local_password_credentials(user_id,password_verifier) VALUES($1::uuid,'$argon2id$fixture-not-used-by-this-test')")
+            .bind(user_id).execute(&mut *pool.acquire().await.unwrap()).await.unwrap();
         sqlx::query("INSERT INTO sessions(id,user_id,token_hash,created_at,last_seen_at,idle_expires_at,absolute_expires_at,last_reauthenticated_at) VALUES($1::uuid,$2::uuid,decode(repeat($3,32),'hex'),CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP+INTERVAL '1 hour',CURRENT_TIMESTAMP+INTERVAL '2 hour',CURRENT_TIMESTAMP)")
             .bind(session_id).bind(user_id).bind(token).execute(&mut *pool.acquire().await.unwrap()).await.unwrap();
     }
@@ -412,6 +424,8 @@ async fn seed_admins(pool: &DatabasePool) {
 async fn seed_linked_identity(pool: &DatabasePool, provider_id: Uuid) {
     let user_id = "0199ee6c-c777-7000-8000-000000005010";
     sqlx::query("INSERT INTO users(id,email,normalized_email,display_name) VALUES($1::uuid,'linked@example.test','linked@example.test','Linked User')")
+        .bind(user_id).execute(&mut *pool.acquire().await.unwrap()).await.unwrap();
+    sqlx::query("INSERT INTO local_password_credentials(user_id,password_verifier) VALUES($1::uuid,'$argon2id$fixture-not-used-by-this-test')")
         .bind(user_id).execute(&mut *pool.acquire().await.unwrap()).await.unwrap();
     sqlx::query("INSERT INTO oidc_identities(id,user_id,provider_id,subject,normalized_email_at_link,link_source) VALUES($1::uuid,$2::uuid,$3::uuid,'subject-1','linked@example.test','preexisting')")
         .bind(Uuid::now_v7().to_string()).bind(user_id).bind(provider_id.to_string())

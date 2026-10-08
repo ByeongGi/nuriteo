@@ -19,6 +19,7 @@ const MFA_POLICY_ETAG = /^"mfa-policy-v([1-9]\d*)"$/u;
 const NOTIFICATION_ETAG = /^"notification-v([1-9]\d*)"$/u;
 const NOTIFICATION_PREFERENCES_ETAG = /^"notification-preferences-v([1-9]\d*)"$/u;
 const EMAIL_DELIVERY_ETAG = /^"email-delivery-v([1-9]\d*)"$/u;
+const OIDC_PROVIDER_ETAG = /^"oidc-provider-v([1-9]\d*)"$/u;
 const TEAM_ETAG = /^"team-v([1-9]\d*)"$/u;
 const TEAM_MEMBER_ETAG = /^"team-member-v([1-9]\d*)"$/u;
 const TEAM_PROJECT_ROLE_ETAG = /^"team-project-role-v([1-9]\d*)"$/u;
@@ -44,7 +45,7 @@ export interface CollaborationForward {
   readonly withEtag?: boolean;
   readonly withIdempotencyKey?: boolean;
   readonly forwardSetCookie?: boolean;
-  readonly etagKind?: "email-delivery" | "mfa-policy" | "notification" | "notification-preferences" | "organization" | "project" | "setting" | "team" | "team-member" | "team-project-role";
+  readonly etagKind?: "email-delivery" | "mfa-policy" | "notification" | "notification-preferences" | "oidc-provider" | "organization" | "project" | "setting" | "team" | "team-member" | "team-project-role";
   readonly jsonBodyPolicy?: "organization-invitation-issue";
   readonly safeLocation?: (value: string) => boolean;
 }
@@ -64,6 +65,90 @@ export function invalidCollaborationRoute(
     requestIdFor(request),
     instance
   );
+}
+
+export async function forwardOidcNavigation(
+  request: Request,
+  path: `/api/v1/auth/oidc/${string}`,
+  destination: "provider" | "application",
+  timeoutSignal = AbortSignal.timeout(TIMEOUT_MS)
+): Promise<Response> {
+  const requestId = requestIdFor(request);
+  const deadline = requestDeadline(request.signal, timeoutSignal);
+  cancel(request.body);
+  if (request.method !== "GET") return problem(405, "BFF_REQUEST_REJECTED", requestId, path);
+  if (sameOrigin(request) === undefined) return problem(403, "BFF_ORIGIN_REJECTED", requestId, path);
+
+  let baseUrl: string;
+  try {
+    baseUrl = validateInternalApiUrl(process.env.NURITEO_INTERNAL_API_URL);
+  } catch {
+    return problem(503, "BFF_NOT_CONFIGURED", requestId, path);
+  }
+
+  let upstream: Response;
+  try {
+    upstream = await fetch(`${baseUrl}${path}`, {
+      cache: "no-store",
+      credentials: "omit",
+      headers: selectForwardedHeaders(request.headers),
+      method: "GET",
+      redirect: "manual",
+      signal: deadline.signal
+    });
+  } catch {
+    return deadline.signal.aborted
+      ? abortProblem(deadline, requestId, path)
+      : problem(502, "BFF_UPSTREAM_UNAVAILABLE", requestId, path);
+  }
+
+  const responseBody = await readBoundedResponse(upstream, MAX_RESPONSE_BYTES, deadline.signal);
+  if (!responseBody.ok) return streamFailureProblem(responseBody.reason, deadline, requestId, path, true);
+  if (upstream.status >= 400) {
+    return new Response(null, {
+      headers: {
+        "cache-control": "private, no-store",
+        location: "/sign-in?oidc=failed",
+        "x-request-id": upstream.headers.get("x-request-id") ?? requestId
+      },
+      status: 303
+    });
+  }
+  const responseHeaders = new Headers({ "cache-control": "private, no-store" });
+  for (const name of ["content-type", "x-request-id"] as const) {
+    const value = upstream.headers.get(name);
+    if (value !== null) responseHeaders.set(name, value);
+  }
+  for (const cookie of upstream.headers.getSetCookie()) {
+    if (safeOidcCookie(cookie)) responseHeaders.append("set-cookie", cookie);
+  }
+
+  if (upstream.status === 303) {
+    const location = upstream.headers.get("location");
+    const safe = destination === "provider"
+      ? safeOidcProviderLocation(location)
+      : location === "/workspaces";
+    if (!safe || location === null) return problem(502, "BFF_REDIRECT_REJECTED", requestId, path);
+    responseHeaders.set("location", location);
+  }
+  return new Response(hasBody(upstream.status) ? copyBuffer(responseBody.bytes) : null, {
+    headers: responseHeaders,
+    status: upstream.status
+  });
+}
+
+function safeOidcProviderLocation(value: string | null): boolean {
+  if (value === null || value.length > 4_096) return false;
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" && url.username === "" && url.password === "" && url.hash === "";
+  } catch {
+    return false;
+  }
+}
+
+function safeOidcCookie(value: string): boolean {
+  return value.length <= 4_096 && /^(?:__Host-nuriteo_(?:oidc_binding|session|csrf)|nuriteo_dev_(?:oidc_binding|session|csrf))=/u.test(value);
 }
 
 export async function forwardCollaborationMutation(
@@ -266,6 +351,13 @@ function isEtagForKind(
     if (match === null) return false;
     const version = BigInt(match[1] as string);
     return version <= MAX_PROJECT_VERSION && value === `"mfa-policy-v${version}"`;
+  }
+  if (kind === "oidc-provider") {
+    if (value === null || value.length > 48) return false;
+    const match = value.match(OIDC_PROVIDER_ETAG);
+    if (match === null) return false;
+    const version = BigInt(match[1] as string);
+    return version <= MAX_PROJECT_VERSION && value === `"oidc-provider-v${version}"`;
   }
   if (kind === "notification" || kind === "notification-preferences" || kind === "email-delivery") {
     if (value === null || value.length > 64) return false;

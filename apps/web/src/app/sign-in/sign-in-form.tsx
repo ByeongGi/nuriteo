@@ -1,6 +1,7 @@
 "use client";
 
 import { createSession, getCurrentUser } from "@nuriteo/api-client";
+import type { OidcLoginProvider } from "@nuriteo/api-client";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
@@ -17,7 +18,7 @@ interface SignInErrorState {
   readonly reference?: string | undefined;
 }
 
-export function SignInForm() {
+export function SignInForm({ providers = [], oidcFailed = false }: { readonly providers?: readonly OidcLoginProvider[]; readonly oidcFailed?: boolean }) {
   const router = useRouter();
   const passwordInput = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<SignInErrorState>();
@@ -74,6 +75,19 @@ export function SignInForm() {
         <p className="eyebrow">Welcome back</p>
         <h1 id="sign-in-title">Sign in to NURITEO</h1>
         <p className="entry-description">Use the local account provided by your administrator.</p>
+
+        {oidcFailed ? <div className="form-error" role="alert"><p>Identity-provider sign-in could not be completed. Try that Provider again or use your local account.</p></div> : null}
+
+        {providers.length > 0 ? (
+          <div className="sign-in-form" aria-label="Identity provider sign-in">
+            {providers.map((provider) => (
+              <Button key={provider.id} render={<a href={`/api/v1/auth/oidc/${provider.id}/begin`} />}>
+                Continue with {provider.displayName}
+              </Button>
+            ))}
+            <p className="entry-description">Or use your local account.</p>
+          </div>
+        ) : null}
 
         <form className="sign-in-form" onSubmit={handleSubmit} aria-busy={isPending}>
           <div className="field-group">

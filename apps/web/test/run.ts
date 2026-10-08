@@ -12,6 +12,7 @@ await import("./project-ux.test.ts");
 await import("./save-upload-bff.test.ts");
 await import("./history-ux.test.ts");
 await import("./mfa-ux.test.ts");
+await import("./oidc-bff.test.ts");
 await import("./team-bff.test.ts");
 await import("./project-bundle-v1-validation.test.ts");
 await import("./project-bundle-v1.test.ts");

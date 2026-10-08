@@ -17,8 +17,16 @@ use crate::integration::{
     IntegrationRepository, SecretValue, ValidatedCaBundle, authorize_recent_admin,
 };
 
+mod http_routes;
+mod http_service;
 mod login;
 mod protocol;
+pub(crate) use http_routes::openapi_router;
+pub use http_service::OidcHttpService;
+pub(crate) use http_service::{
+    OidcIdentityCollectionView, OidcLoginProviderCollectionView, OidcProviderCollectionView,
+    OidcProviderView,
+};
 #[allow(unused_imports, reason = "crate-private OIDC HTTP adapter handoff")]
 pub(crate) use login::{OidcAuthorizationRequest, OidcCallbackInput, OidcLoginService};
 pub use protocol::OidcEndpointValidator;
@@ -165,6 +173,43 @@ impl OidcProviderService {
         }
         self.timeout = timeout;
         Ok(self)
+    }
+
+    pub async fn list_providers(&self) -> Result<Vec<OidcProviderMetadata>, OidcProviderError> {
+        self.bounded(async {
+            let mut connection = self
+                .integrations
+                .pool()
+                .acquire()
+                .await
+                .map_err(|_| OidcProviderError::Unavailable)?;
+            let mut transaction = connection
+                .begin()
+                .await
+                .map_err(|_| OidcProviderError::Unavailable)?;
+            let ids: Vec<String> = sqlx::query_scalar(
+                "SELECT id::text FROM oidc_providers ORDER BY lower(display_name), id LIMIT 100",
+            )
+            .fetch_all(&mut *transaction)
+            .await
+            .map_err(|_| OidcProviderError::Unavailable)?;
+            let mut providers = Vec::with_capacity(ids.len());
+            for id in ids {
+                providers.push(
+                    load_metadata(
+                        &mut transaction,
+                        Uuid::from_str(&id).map_err(|_| OidcProviderError::Unavailable)?,
+                    )
+                    .await?,
+                );
+            }
+            transaction
+                .commit()
+                .await
+                .map_err(|_| OidcProviderError::Unavailable)?;
+            Ok(providers)
+        })
+        .await
     }
 
     pub async fn create_provider(
@@ -488,7 +533,8 @@ impl OidcProviderService {
                 return Err(OidcProviderError::MustDisable);
             }
             let linked: bool = sqlx::query_scalar(
-                "SELECT EXISTS(SELECT 1 FROM oidc_identities WHERE provider_id=$1::uuid)",
+                "SELECT EXISTS(SELECT 1 FROM oidc_identities WHERE provider_id=$1::uuid)
+                     OR EXISTS(SELECT 1 FROM oidc_identity_unlink_tombstones WHERE provider_id=$1::uuid)",
             )
             .bind(id.to_string())
             .fetch_one(&mut *tx)
@@ -1102,6 +1148,8 @@ const fn map_integration_error(error: IntegrationError) -> OidcProviderError {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OidcProviderError {
+    AuthenticationFailed,
+    Forbidden,
     InvalidInput,
     ReauthenticationRequired,
     NotFound,
@@ -1118,6 +1166,8 @@ pub enum OidcProviderError {
 impl fmt::Display for OidcProviderError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(match self {
+            Self::AuthenticationFailed => "OIDC authentication failed",
+            Self::Forbidden => "OIDC operation is forbidden",
             Self::InvalidInput => "OIDC provider input is invalid",
             Self::ReauthenticationRequired => "recent administrator reauthentication is required",
             Self::NotFound => "OIDC provider was not found",

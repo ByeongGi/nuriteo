@@ -7,6 +7,7 @@ use crate::identity::{BrowserMethod, BrowserRequestHeaders};
 use crate::invitations::InvitationHttpService;
 use crate::mfa::{MfaHttpService, MfaHttpServiceError};
 use crate::notification::NotificationHttpService;
+use crate::oidc::OidcHttpService;
 use crate::openapi;
 use crate::organization::OrganizationHttpService;
 use crate::project::ProjectHttpService;
@@ -240,8 +241,8 @@ pub(crate) fn build_router_with_access_token_service(
     notifications: NotificationHttpService,
     access_tokens: AccessTokenManagementService,
 ) -> Router {
-    let enforcement = mfa.clone();
-    let api = openapi::router_with_access_tokens(
+    build_router_with_oidc_service(
+        health,
         auth,
         invitations,
         organizations,
@@ -253,6 +254,40 @@ pub(crate) fn build_router_with_access_token_service(
         mfa,
         notifications,
         access_tokens,
+        OidcHttpService::unconfigured(),
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn build_router_with_oidc_service(
+    health: HealthService,
+    auth: AuthService,
+    invitations: InvitationHttpService,
+    organizations: OrganizationHttpService,
+    projects: ProjectHttpService,
+    save: SaveHttpService,
+    setup: SetupStatusService,
+    admin: AdminHttpService,
+    teams: TeamHttpService,
+    mfa: MfaHttpService,
+    notifications: NotificationHttpService,
+    access_tokens: AccessTokenManagementService,
+    oidc: OidcHttpService,
+) -> Router {
+    let enforcement = mfa.clone();
+    let api = openapi::router_with_oidc(
+        auth,
+        invitations,
+        organizations,
+        projects,
+        save,
+        setup,
+        admin,
+        teams,
+        mfa,
+        notifications,
+        access_tokens,
+        oidc,
     )
     .layer(middleware::from_fn(move |request, next| {
         enforce_mfa_deadline(enforcement.clone(), request, next)
@@ -270,8 +305,10 @@ async fn enforce_mfa_deadline(service: MfaHttpService, request: Request, next: N
         .get::<RequestId>()
         .cloned()
         .unwrap_or_else(RequestId::generate);
-    let allowed =
-        path == "/api/v1/me" || path == "/api/v1/auth/session" || path.starts_with("/api/v1/mfa");
+    let allowed = path == "/api/v1/me"
+        || path == "/api/v1/auth/session"
+        || path.starts_with("/api/v1/auth/oidc")
+        || path.starts_with("/api/v1/mfa");
     if allowed {
         return next.run(request).await;
     }

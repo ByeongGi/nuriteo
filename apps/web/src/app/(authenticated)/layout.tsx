@@ -54,6 +54,7 @@ export default async function AuthenticatedLayout({
         <Link href="/projects">Projects</Link>
         <Link href="/organizations">Organizations</Link>
         <Link href="/mfa">Security</Link>
+        <Link href="/identities">Connected identities</Link>
         <Link href="/access-tokens">Access tokens</Link>
         <Link href="/notifications" className="notification-navigation-link">
           Notifications

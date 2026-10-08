@@ -142,6 +142,25 @@ impl BrowserCookieBoundary {
         Ok(ValidatedBrowserSession { session })
     }
 
+    /// Parses an optional Session on a safe callback request. Missing is
+    /// allowed, while duplicate or malformed authentication cookies remain a
+    /// hard failure so account-switch protection cannot be bypassed.
+    pub(crate) fn validate_optional_safe_session(
+        &self,
+        cookie_headers: &[&str],
+    ) -> Result<Option<SessionToken>, BrowserCookieError> {
+        let cookies = ParsedAuthenticationCookies::parse(
+            cookie_headers,
+            self.session_cookie_name(),
+            self.csrf_cookie_name(),
+        )?;
+        cookies
+            .session
+            .map(SessionToken::parse)
+            .transpose()
+            .map_err(|_| BrowserCookieError::InvalidSessionCookie)
+    }
+
     fn validate_origin(&self, origins: &[&str]) -> Result<(), BrowserCookieError> {
         let [origin] = origins else {
             return Err(if origins.is_empty() {

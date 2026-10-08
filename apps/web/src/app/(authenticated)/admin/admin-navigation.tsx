@@ -8,6 +8,7 @@ const destinations = [
   { href: "/admin/settings", label: "Settings" },
   { href: "/admin/invitations", label: "Activation invitations" },
   { href: "/admin/mfa", label: "MFA policy" },
+  { href: "/admin/oidc", label: "Identity providers" },
   { href: "/admin/notifications", label: "Email delivery" }
 ] as const;
 

@@ -1,4 +1,4 @@
-import { getCurrentUser } from "@nuriteo/api-client";
+import { getCurrentUser, listOidcLoginProviders } from "@nuriteo/api-client";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
@@ -14,13 +14,19 @@ export const metadata: Metadata = {
   title: "Sign in"
 };
 
-export default async function SignInPage() {
+export default async function SignInPage({ searchParams }: { readonly searchParams: Promise<{ readonly oidc?: string }> }) {
+  const oidcFailed = (await searchParams).oidc === "failed";
   try {
     const client = await createServerApiClient();
     await getCurrentUser(client);
   } catch (error) {
     if (isExplicitlySignedOut(error)) {
-      return <SignInForm />;
+      try {
+        const providers = await listOidcLoginProviders(await createServerApiClient());
+        return <SignInForm providers={providers.data} oidcFailed={oidcFailed} />;
+      } catch {
+        return <SignInForm providers={[]} oidcFailed={oidcFailed} />;
+      }
     }
 
     return (

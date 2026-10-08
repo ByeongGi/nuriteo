@@ -147,18 +147,20 @@ impl OidcProtocolRuntime {
                 .map_err(|_| OidcProviderError::ValidationFailed)?
                 .to_owned(),
         );
-        let mut form = url::form_urlencoded::Serializer::new(String::new());
-        form.append_pair("grant_type", "authorization_code")
-            .append_pair("code", &code)
-            .append_pair("redirect_uri", &self.provider.redirect_uri)
-            .append_pair("client_id", &self.provider.metadata.client_id)
-            .append_pair(
-                "client_secret",
-                std::str::from_utf8(self.provider.client_secret.expose())
-                    .map_err(|_| OidcProviderError::CredentialUnavailable)?,
-            )
-            .append_pair("code_verifier", &verifier);
-        let body = Zeroizing::new(form.finish().into_bytes());
+        let body = Zeroizing::new({
+            let mut form = url::form_urlencoded::Serializer::new(String::new());
+            form.append_pair("grant_type", "authorization_code")
+                .append_pair("code", &code)
+                .append_pair("redirect_uri", &self.provider.redirect_uri)
+                .append_pair("client_id", &self.provider.metadata.client_id)
+                .append_pair(
+                    "client_secret",
+                    std::str::from_utf8(self.provider.client_secret.expose())
+                        .map_err(|_| OidcProviderError::CredentialUnavailable)?,
+                )
+                .append_pair("code_verifier", &verifier);
+            form.finish().into_bytes()
+        });
         let request_body = Bytes::from_owner(ZeroizingRequestBody(body));
         let response = self
             .client

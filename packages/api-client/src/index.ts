@@ -11,6 +11,26 @@ export {
   ApiTransportError
 } from "./errors.ts";
 export { getVersion } from "./system.ts";
+export {
+  activateOidcProvider,
+  createOidcProvider,
+  deleteOidcProvider,
+  disableOidcProvider,
+  listAdminOidcProviders,
+  listOidcIdentities,
+  listOidcLoginProviders,
+  rotateOidcProviderSecret,
+  unlinkOidcIdentity,
+  updateOidcProvider
+} from "./oidc.ts";
+export type {
+  CreateOidcProviderInput,
+  OidcIdentity,
+  OidcLoginProvider,
+  OidcProvider,
+  OidcProviderState,
+  UpdateOidcProviderInput
+} from "./oidc.ts";
 export { getSetupStatus } from "./setup.ts";
 export {
   issueAccessToken,
