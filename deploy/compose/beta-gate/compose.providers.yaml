@@ -122,7 +122,8 @@ services:
       - ${NURITEO_BETA_GATE_HARNESS_DIR}:/run/gate-state
     networks: [application, data]
     read_only: true
-    tmpfs: [/tmp:rw,noexec,nosuid,size=16777216,mode=1777]
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16777216,mode=1777
     user: "65532:65532"
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
