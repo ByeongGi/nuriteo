@@ -21,6 +21,7 @@ use crate::oidc::OidcHttpService;
 use crate::organization::{OrganizationHttpPolicy, OrganizationHttpService};
 use crate::policy::PolicyMaintenanceWorker;
 use crate::project::{ProjectHttpPolicy, ProjectHttpService};
+use crate::published_example::{PublishedExampleHttpService, PublishedExampleServicePolicy};
 use crate::registry_gateway::RegistryHttpService;
 use crate::save::{
     CleanupOperationsPolicy, CleanupOperationsService, CleanupService, ContentServicePolicy,
@@ -29,7 +30,9 @@ use crate::save::{
 use crate::setup::{SetupStatusPolicy, SetupStatusService};
 use crate::team::{TeamHttpPolicy, TeamHttpService};
 
-use super::{Supervisor, SupervisorConfig, WorkerError, build_router_with_registry_service};
+use super::{
+    Supervisor, SupervisorConfig, WorkerError, build_router_with_published_example_service,
+};
 
 const PRODUCTION_WORKERS: NonZeroUsize = NonZeroUsize::new(4).unwrap();
 const INSTANCE_SETTINGS_STARTUP_TIMEOUT: Duration = Duration::from_secs(5);
@@ -51,6 +54,7 @@ pub(crate) enum ServeError {
     MfaConfiguration,
     OidcConfiguration,
     RegistryConfiguration,
+    PublishedExampleConfiguration,
     NotificationConfiguration,
     AccessTokenConfiguration,
     SaveConfiguration,
@@ -79,6 +83,7 @@ impl ServeError {
             Self::MfaConfiguration => "mfa-configuration",
             Self::OidcConfiguration => "oidc-configuration",
             Self::RegistryConfiguration => "registry-configuration",
+            Self::PublishedExampleConfiguration => "published-example-configuration",
             Self::NotificationConfiguration => "notification-configuration",
             Self::AccessTokenConfiguration => "access-token-configuration",
             Self::SaveConfiguration => "save-configuration",
@@ -356,6 +361,18 @@ pub(crate) async fn run_server(
             return Err(ServeError::AccessTokenConfiguration);
         }
     };
+    let published_examples = match PublishedExampleHttpService::production(
+        pool.clone(),
+        &global.public.external_url,
+        PublishedExampleServicePolicy::default(),
+        SessionPolicy::default(),
+    ) {
+        Ok(service) => service,
+        Err(_) => {
+            close_pool(pool, close_timeout).await?;
+            return Err(ServeError::PublishedExampleConfiguration);
+        }
+    };
     let maintenance = PolicyMaintenanceWorker::new(
         pool.clone(),
         store.clone(),
@@ -363,7 +380,7 @@ pub(crate) async fn run_server(
     )
     .map_err(|_| ServeError::CleanupConfiguration)?;
     let cleanup = CleanupService::new(pool.clone(), store, global.cleanup.worker_policy);
-    let router = build_router_with_registry_service(
+    let router = build_router_with_published_example_service(
         health,
         auth,
         invitations,
@@ -378,6 +395,7 @@ pub(crate) async fn run_server(
         access_tokens,
         oidc,
         registry,
+        published_examples,
     );
     let management_router = operations.router();
     let cleanup_drain_timeout = global

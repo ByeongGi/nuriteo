@@ -1,12 +1,21 @@
 use std::borrow::Cow;
 use std::env;
 use std::fs;
+use std::str::FromStr;
 
 use sqlx::migrate::{Migration, MigrationType};
 use sqlx::{Acquire, SqlSafeStr};
 
 use super::*;
 use crate::database::{DatabasePoolConfig, DatabaseTlsConfig};
+use crate::identity::UserId;
+use crate::project::ProjectId;
+use crate::published_example::{
+    CreatePublishedExample, PublishedExampleDeleteConfirmation, PublishedExampleError,
+    PublishedExampleName, PublishedExampleService, PublishedExampleServicePolicy,
+    PublishedExampleState, PublishedExampleVisibility,
+};
+use crate::save::ProjectVersionId;
 
 const DATABASE_URL_ENV: &str = "NURITEO_TEST_DATABASE_URL";
 const DATABASE_CA_ENV: &str = "NURITEO_TEST_DATABASE_CA";
@@ -29,7 +38,7 @@ fn validates_migration_deadlines() {
 fn embedded_baseline_is_forward_only_and_framework_scoped() {
     let embedded = embedded_migrator();
     let migrations: Vec<_> = embedded.iter().collect();
-    assert_eq!(migrations.len(), 40);
+    assert_eq!(migrations.len(), 42);
     assert_eq!(
         migrations
             .iter()
@@ -37,7 +46,7 @@ fn embedded_baseline_is_forward_only_and_framework_scoped() {
             .collect::<Vec<_>>(),
         vec![
             1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
-            25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40
+            25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42
         ]
     );
     assert_eq!(migrations[0].version, 1);
@@ -130,12 +139,13 @@ async fn real_postgres_serializes_validates_rolls_back_and_retries() {
         .unwrap_or_else(|error| panic!("second runner task must join: {error}"))
         .unwrap_or_else(|error| panic!("second runner must succeed: {error}"));
     assert_eq!(first_report, second_report);
-    assert_eq!(first_report.latest_version, Some(40));
-    assert_eq!(first_report.known_migrations, 40);
-    for version in 1..=40 {
+    assert_eq!(first_report.latest_version, Some(42));
+    assert_eq!(first_report.known_migrations, 42);
+    for version in 1..=42 {
         assert_eq!(migration_row_count(&pool, version).await, 1);
     }
     verify_save_upload_lease_delete_fence(&pool).await;
+    verify_published_example_lifecycle(&pool).await;
     verify_access_token_invariants(&pool).await;
 
     let mut blocker = pool
@@ -267,6 +277,222 @@ async fn real_postgres_serializes_validates_rolls_back_and_retries() {
         .unwrap_or_else(|error| panic!("fixture pool must close: {error}"));
 }
 
+async fn verify_published_example_lifecycle(pool: &DatabasePool) {
+    const USER: &str = "0199ee6c-c777-7000-8000-000000008001";
+    const SCOPE: &str = "0199ee6c-c777-7000-8000-000000008010";
+    const PROJECT: &str = "0199ee6c-c777-7000-8000-000000008020";
+    const BUNDLE_ONE: &str = "0199ee6c-c777-7000-8000-000000008030";
+    const BUNDLE_TWO: &str = "0199ee6c-c777-7000-8000-000000008031";
+    const SESSION_ONE: &str = "0199ee6c-c777-7000-8000-000000008040";
+    const SESSION_TWO: &str = "0199ee6c-c777-7000-8000-000000008041";
+    const VERSION_ONE: &str = "0199ee6c-c777-7000-8000-000000008050";
+    const VERSION_TWO: &str = "0199ee6c-c777-7000-8000-000000008051";
+
+    sqlx::query(
+        "INSERT INTO users (id,email,normalized_email,display_name) \
+         VALUES ($1::uuid,'published@example.test','published@example.test','Publisher')",
+    )
+    .bind(USER)
+    .execute(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+    sqlx::query("INSERT INTO storage_scopes (id,owner_user_id) VALUES ($1::uuid,$2::uuid)")
+        .bind(SCOPE)
+        .bind(USER)
+        .execute(&mut *pool.acquire().await.unwrap())
+        .await
+        .unwrap();
+    sqlx::query(
+        "INSERT INTO projects (id,owner_user_id,storage_scope_id,slug,name) \
+         VALUES ($1::uuid,$2::uuid,$3::uuid,'published-example','Published Example')",
+    )
+    .bind(PROJECT)
+    .bind(USER)
+    .bind(SCOPE)
+    .execute(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+
+    for (session, bundle, checksum, staging) in [
+        (
+            SESSION_ONE,
+            BUNDLE_ONE,
+            "81",
+            "staging/published-one.bundle",
+        ),
+        (
+            SESSION_TWO,
+            BUNDLE_TWO,
+            "82",
+            "staging/published-two.bundle",
+        ),
+    ] {
+        sqlx::query(
+            "INSERT INTO save_sessions \
+             (id,project_id,storage_scope_id,actor_user_id,expected_project_version,expected_bundle_sha256,\
+              expected_physical_bytes,expected_logical_bytes,expected_file_count,staging_object_key,upload_mode,expires_at) \
+             VALUES ($1::uuid,$2::uuid,$3::uuid,$4::uuid,1,decode(repeat($5,32),'hex'),1,0,0,$6,'single',\
+                     transaction_timestamp()+interval '1 hour')",
+        )
+        .bind(session)
+        .bind(PROJECT)
+        .bind(SCOPE)
+        .bind(USER)
+        .bind(checksum)
+        .bind(staging)
+        .execute(&mut *pool.acquire().await.unwrap())
+        .await
+        .unwrap();
+        sqlx::query(
+            "UPDATE save_sessions SET state='uploading',updated_at=transaction_timestamp() \
+             WHERE id=$1::uuid AND state='created'",
+        )
+        .bind(session)
+        .execute(&mut *pool.acquire().await.unwrap())
+        .await
+        .unwrap();
+        sqlx::query(
+            "UPDATE save_sessions SET state='verifying',updated_at=transaction_timestamp() \
+             WHERE id=$1::uuid AND state='uploading'",
+        )
+        .bind(session)
+        .execute(&mut *pool.acquire().await.unwrap())
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO bundles \
+             (id,sha256,object_key,physical_bytes,logical_bytes,file_count,format,verified_at) \
+             VALUES ($1::uuid,decode(repeat($2,32),'hex'),$3,1,0,0,'project-bundle-v1',transaction_timestamp())",
+        )
+        .bind(bundle)
+        .bind(checksum)
+        .bind(staging)
+        .execute(&mut *pool.acquire().await.unwrap())
+        .await
+        .unwrap();
+        sqlx::query(
+            "UPDATE save_sessions SET state='committed',committed_bundle_id=$2::uuid,\
+             terminal_at=transaction_timestamp(),updated_at=transaction_timestamp() \
+             WHERE id=$1::uuid AND state='verifying'",
+        )
+        .bind(session)
+        .bind(bundle)
+        .execute(&mut *pool.acquire().await.unwrap())
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO project_bundle_admissions \
+             (project_id,storage_scope_id,bundle_id,source_save_session_id,save_session_id) \
+             VALUES ($1::uuid,$2::uuid,$3::uuid,$4::uuid,$4::uuid)",
+        )
+        .bind(PROJECT)
+        .bind(SCOPE)
+        .bind(bundle)
+        .bind(session)
+        .execute(&mut *pool.acquire().await.unwrap())
+        .await
+        .unwrap();
+    }
+    for (version, bundle, name) in [
+        (VERSION_ONE, BUNDLE_ONE, "Published v1"),
+        (VERSION_TWO, BUNDLE_TWO, "Published v2"),
+    ] {
+        sqlx::query(
+            "INSERT INTO project_bundle_refs \
+             (id,project_id,storage_scope_id,bundle_id,kind,version_name,actor_user_id,\
+              idempotency_digest,source_project_version) \
+             VALUES ($1::uuid,$2::uuid,$3::uuid,$4::uuid,'version',$5,$6::uuid,\
+                     decode(md5($1) || md5('published:' || $1),'hex'),1)",
+        )
+        .bind(version)
+        .bind(PROJECT)
+        .bind(SCOPE)
+        .bind(bundle)
+        .bind(name)
+        .bind(USER)
+        .execute(&mut *pool.acquire().await.unwrap())
+        .await
+        .unwrap();
+    }
+
+    let actor = UserId::from_str(USER).unwrap();
+    let project_id = ProjectId::from_str(PROJECT).unwrap();
+    let first_version = ProjectVersionId::from_str(VERSION_ONE).unwrap();
+    let second_version = ProjectVersionId::from_str(VERSION_TWO).unwrap();
+    let service =
+        PublishedExampleService::new(pool.clone(), PublishedExampleServicePolicy::default());
+    let (created, first) = service
+        .create(CreatePublishedExample {
+            actor_user_id: actor,
+            project_id,
+            project_version_id: first_version,
+            name: PublishedExampleName::new("Actual Published Example".into()).unwrap(),
+            visibility: PublishedExampleVisibility::Public,
+        })
+        .await
+        .unwrap();
+    assert_eq!(created.generation(), 1);
+    assert_eq!(service.list_public(100).await.unwrap().len(), 1);
+    let second = service
+        .add_version(actor, created.id(), second_version, 1)
+        .await
+        .unwrap();
+    assert_eq!(second.version_number(), 2);
+    let selected = service
+        .select_active_version(actor, created.id(), second.id(), 2)
+        .await
+        .unwrap();
+    assert_eq!(selected.active_version_id(), second.id());
+    assert_eq!(
+        service
+            .select_active_version(actor, created.id(), first.id(), 2)
+            .await,
+        Err(PublishedExampleError::StaleGeneration)
+    );
+    let unpublished = service.unpublish(actor, created.id(), 3).await.unwrap();
+    assert_eq!(unpublished.state(), PublishedExampleState::Unpublished);
+    assert_eq!(
+        service.resolve_public(created.public_id(), None).await,
+        Err(PublishedExampleError::NotFound)
+    );
+    let republished = service.republish(actor, created.id(), 4).await.unwrap();
+    assert_eq!(republished.state(), PublishedExampleState::Published);
+    assert_eq!(
+        service
+            .delete(
+                actor,
+                created.id(),
+                5,
+                &PublishedExampleDeleteConfirmation {
+                    name: PublishedExampleName::new("Actual Published Example".into()).unwrap(),
+                    recently_reauthenticated: false,
+                },
+            )
+            .await,
+        Err(PublishedExampleError::ConfirmationRequired)
+    );
+    let public_id = created.public_id().as_str().to_owned();
+    service
+        .delete(
+            actor,
+            created.id(),
+            5,
+            &PublishedExampleDeleteConfirmation {
+                name: PublishedExampleName::new("Actual Published Example".into()).unwrap(),
+                recently_reauthenticated: true,
+            },
+        )
+        .await
+        .unwrap();
+    let tombstones: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM published_example_tombstones WHERE public_id=$1")
+            .bind(public_id)
+            .fetch_one(&mut *pool.acquire().await.unwrap())
+            .await
+            .unwrap();
+    assert_eq!(tombstones, 1);
+}
+
 async fn verify_save_upload_lease_delete_fence(pool: &DatabasePool) {
     const USER: &str = "0199ee6c-c777-7000-8000-000000009001";
     const SCOPE: &str = "0199ee6c-c777-7000-8000-000000009010";
@@ -370,8 +596,8 @@ async fn verify_save_upload_lease_delete_fence(pool: &DatabasePool) {
     .await
     .unwrap();
     sqlx::query(
-        "UPDATE save_sessions SET state='failed',terminal_at=clock_timestamp(),\
-         updated_at=clock_timestamp() WHERE id=$1::uuid",
+        "UPDATE save_sessions SET state='failed',terminal_at=transaction_timestamp(),\
+         updated_at=transaction_timestamp() WHERE id=$1::uuid",
     )
     .bind(SESSION)
     .execute(&mut *pool.acquire().await.unwrap())

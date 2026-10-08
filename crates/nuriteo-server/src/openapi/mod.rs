@@ -16,6 +16,7 @@ use crate::notification::{self, NotificationHttpService};
 use crate::oidc::{self, OidcHttpService};
 use crate::organization::{self, OrganizationHttpService};
 use crate::project::{self, ProjectHttpService};
+use crate::published_example::{self, PublishedExampleHttpService};
 use crate::registry_gateway::{self, RegistryHttpService};
 use crate::save::{self, SaveHttpService};
 use crate::setup::{self, SetupStatusService};
@@ -57,6 +58,7 @@ pub const DOCS_PATH: &str = "/api/docs";
         ,(name = "oidc", description = "OIDC sign-in and linked identity lifecycle")
         ,(name = "oidc-administration", description = "Instance-wide OIDC Provider administration")
         ,(name = "registry-administration", description = "Instance-wide package registry routing and credential administration")
+        ,(name = "published-examples", description = "Immutable Project Version publication and public discovery")
     ),
     servers((url = "/", description = "Current self-hosted instance"))
 )]
@@ -168,6 +170,7 @@ pub fn document() -> utoipa::openapi::OpenApi {
         AccessTokenManagementService::unconfigured(),
         OidcHttpService::unconfigured(),
         RegistryHttpService::unconfigured(),
+        PublishedExampleHttpService::unconfigured(),
     )
     .1
 }
@@ -287,6 +290,41 @@ pub(crate) fn router_with_registry(
     oidc: OidcHttpService,
     registry: RegistryHttpService,
 ) -> Router {
+    router_with_published_examples(
+        auth,
+        invitations,
+        organizations,
+        projects,
+        save,
+        setup,
+        admin,
+        teams,
+        mfa,
+        notifications,
+        access_tokens,
+        oidc,
+        registry,
+        PublishedExampleHttpService::unconfigured(),
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn router_with_published_examples(
+    auth: AuthService,
+    invitations: InvitationHttpService,
+    organizations: OrganizationHttpService,
+    projects: ProjectHttpService,
+    save: SaveHttpService,
+    setup: SetupStatusService,
+    admin: AdminHttpService,
+    teams: TeamHttpService,
+    mfa: MfaHttpService,
+    notifications: NotificationHttpService,
+    access_tokens: AccessTokenManagementService,
+    oidc: OidcHttpService,
+    registry: RegistryHttpService,
+    published_examples: PublishedExampleHttpService,
+) -> Router {
     let (api_routes, document) = openapi_parts(
         auth,
         invitations,
@@ -301,6 +339,7 @@ pub(crate) fn router_with_registry(
         access_tokens,
         oidc,
         registry,
+        published_examples,
     );
     let config = Config::new([DOCUMENT_PATH]).validator_url("none");
     let docs = SwaggerUi::new(DOCS_PATH)
@@ -328,6 +367,7 @@ fn openapi_parts(
     access_tokens: AccessTokenManagementService,
     oidc: OidcHttpService,
     registry: RegistryHttpService,
+    published_examples: PublishedExampleHttpService,
 ) -> (Router, utoipa::openapi::OpenApi) {
     let (auth_routes, document) =
         workspace::openapi_router(auth::openapi_router(ApiDocument::openapi()))
@@ -370,6 +410,9 @@ fn openapi_parts(
     let (registry_routes, document) = registry_gateway::openapi_router(document)
         .with_state(registry)
         .split_for_parts();
+    let (published_example_routes, document) = published_example::openapi_router(document)
+        .with_state(published_examples)
+        .split_for_parts();
     (
         auth_routes
             .merge(invitation_routes)
@@ -383,7 +426,8 @@ fn openapi_parts(
             .merge(notification_routes)
             .merge(access_token_routes)
             .merge(oidc_routes)
-            .merge(registry_routes),
+            .merge(registry_routes)
+            .merge(published_example_routes),
         document,
     )
 }

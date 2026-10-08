@@ -10,6 +10,7 @@ import "./oidc.test.ts";
 import "./registries.test.ts";
 import "./organization.test.ts";
 import "./project.test.ts";
+import "./published-examples.test.ts";
 import "./save.test.ts";
 import "./setup.test.ts";
 import "./team.test.ts";

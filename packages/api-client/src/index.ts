@@ -130,6 +130,42 @@ export {
   renameTeam
 } from "./teams.ts";
 export {
+  addPublishedExampleVersion,
+  createPublishedExample,
+  deletePublishedExample,
+  getPublicPublishedExample,
+  getPublicPublishedExampleVersion,
+  listPublicPublishedExamples,
+  republishPublishedExample,
+  selectPublishedExampleActiveVersion,
+  setPublishedExampleVisibility,
+  unpublishPublishedExample
+} from "./published-examples.ts";
+export type {
+  AddPublishedExampleVersionInput,
+  CreatePublishedExampleInput,
+  DeletePublishedExampleInput,
+  ListPublicPublishedExamplesInput,
+  PublicPublishedExample,
+  PublicPublishedExampleCollection,
+  PublicPublishedExampleInput,
+  PublicPublishedExampleVersionInput,
+  PublishedExample,
+  PublishedExampleCreate,
+  PublishedExampleCreateResult,
+  PublishedExampleInput,
+  PublishedExampleProjectInput,
+  PublishedExampleResult,
+  PublishedExampleState,
+  PublishedExampleVersion,
+  PublishedExampleVersionMutation,
+  PublishedExampleVersionMutationResult,
+  PublishedExampleVisibility,
+  SelectPublishedExampleVersionInput,
+  SetPublishedExampleVisibilityInput,
+  VersionedPublishedExampleInput
+} from "./published-examples.ts";
+export {
   API_PREFIX,
   DEFAULT_MAX_RESPONSE_BYTES,
   DEFAULT_REQUEST_TIMEOUT_MS,

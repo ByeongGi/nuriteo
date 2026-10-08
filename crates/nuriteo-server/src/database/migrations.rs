@@ -68,6 +68,8 @@ const ACCESS_TOKEN_RUNTIME_SQL: &str =
     include_str!("../../migrations/0038_access_token_runtime.sql");
 const GIT_PROVIDERS_SQL: &str = include_str!("../../migrations/0039_git_providers.sql");
 const REGISTRY_GATEWAY_SQL: &str = include_str!("../../migrations/0040_registry_gateway.sql");
+const GIT_USER_OPERATIONS_SQL: &str = include_str!("../../migrations/0041_git_user_operations.sql");
+const PUBLISHED_EXAMPLES_SQL: &str = include_str!("../../migrations/0042_published_examples.sql");
 
 // Two-key advisory locks use a namespace distinct from PostgreSQL's one-key
 // bigint locks. 0x4e555249 is the ASCII representation of "NURI".
@@ -405,6 +407,20 @@ pub(super) fn embedded_migrator() -> Migrator {
             Cow::Borrowed("multi-registry gateway"),
             MigrationType::Simple,
             REGISTRY_GATEWAY_SQL.into_sql_str(),
+            false,
+        ),
+        Migration::new(
+            41,
+            Cow::Borrowed("user Git credentials and operations"),
+            MigrationType::Simple,
+            GIT_USER_OPERATIONS_SQL.into_sql_str(),
+            false,
+        ),
+        Migration::new(
+            42,
+            Cow::Borrowed("immutable Published Examples"),
+            MigrationType::Simple,
+            PUBLISHED_EXAMPLES_SQL.into_sql_str(),
             false,
         ),
     ])

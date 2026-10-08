@@ -11,6 +11,7 @@ use crate::oidc::OidcHttpService;
 use crate::openapi;
 use crate::organization::OrganizationHttpService;
 use crate::project::ProjectHttpService;
+use crate::published_example::PublishedExampleHttpService;
 use crate::registry_gateway::RegistryHttpService;
 use crate::save::SaveHttpService;
 use crate::setup::SetupStatusService;
@@ -310,8 +311,8 @@ pub(crate) fn build_router_with_registry_service(
     oidc: OidcHttpService,
     registry: RegistryHttpService,
 ) -> Router {
-    let enforcement = mfa.clone();
-    let api = openapi::router_with_registry(
+    build_router_with_published_example_service(
+        health,
         auth,
         invitations,
         organizations,
@@ -325,6 +326,44 @@ pub(crate) fn build_router_with_registry_service(
         access_tokens,
         oidc,
         registry,
+        PublishedExampleHttpService::unconfigured(),
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn build_router_with_published_example_service(
+    health: HealthService,
+    auth: AuthService,
+    invitations: InvitationHttpService,
+    organizations: OrganizationHttpService,
+    projects: ProjectHttpService,
+    save: SaveHttpService,
+    setup: SetupStatusService,
+    admin: AdminHttpService,
+    teams: TeamHttpService,
+    mfa: MfaHttpService,
+    notifications: NotificationHttpService,
+    access_tokens: AccessTokenManagementService,
+    oidc: OidcHttpService,
+    registry: RegistryHttpService,
+    published_examples: PublishedExampleHttpService,
+) -> Router {
+    let enforcement = mfa.clone();
+    let api = openapi::router_with_published_examples(
+        auth,
+        invitations,
+        organizations,
+        projects,
+        save,
+        setup,
+        admin,
+        teams,
+        mfa,
+        notifications,
+        access_tokens,
+        oidc,
+        registry,
+        published_examples,
     )
     .layer(middleware::from_fn(move |request, next| {
         enforce_mfa_deadline(enforcement.clone(), request, next)

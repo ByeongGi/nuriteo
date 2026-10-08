@@ -1043,7 +1043,9 @@ async fn load_metadata(
     metadata_from_row(&row)
 }
 
-fn metadata_from_row(row: &sqlx::postgres::PgRow) -> Result<GitProviderMetadata, GitProviderError> {
+pub(crate) fn metadata_from_database_row(
+    row: &sqlx::postgres::PgRow,
+) -> Result<GitProviderMetadata, GitProviderError> {
     Ok(GitProviderMetadata {
         id: Uuid::from_str(row.get::<String, _>("id").as_str())
             .map_err(|_| GitProviderError::Unavailable)?,
@@ -1065,6 +1067,10 @@ fn metadata_from_row(row: &sqlx::postgres::PgRow) -> Result<GitProviderMetadata,
         created_at: row.get("created_at"),
         updated_at: row.get("updated_at"),
     })
+}
+
+fn metadata_from_row(row: &sqlx::postgres::PgRow) -> Result<GitProviderMetadata, GitProviderError> {
+    metadata_from_database_row(row)
 }
 
 async fn append_audit(
