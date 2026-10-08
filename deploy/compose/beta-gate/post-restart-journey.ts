@@ -171,7 +171,7 @@ try {
     { kind: "api", name: "Registry default, exact scope, credentials and active CAs persisted and the exact Registry reactivated", status: "PASS" },
     { kind: "browser", name: "active OIDC provider and CA persisted and completed a fresh post-restart login", status: "PASS" },
     { kind: "database", name: "SMTP configuration and terminal sent, retry and dead-letter outcomes persisted", status: "PASS" },
-    { kind: "security", name: "post-restart administrative responses retained no-store caching and credential redaction", status: "PASS" },
+    { kind: "api", name: "post-restart administrative responses retained no-store caching and credential redaction", status: "PASS" },
   ])}\n`, { mode: 0o600 });
 } finally {
   await browser.close();

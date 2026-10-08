@@ -13,12 +13,13 @@ if (!/^[a-z0-9-]+$/u.test(stage ?? "")) throw new Error("canonical stage name is
 const reportFile = required("NURITEO_BETA_GATE_REPORT_FILE");
 const evidenceDirectory = path.join(path.dirname(reportFile), "evidence");
 const assertions = JSON.parse(fs.readFileSync(assertionsPath, "utf8"));
+const assertionKinds = new Set(["api", "browser", "container", "database", "object", "process", "source"]);
 if (!Array.isArray(assertions) || assertions.length === 0) throw new Error("runtime assertions are required");
 if (!assertions.some((item) => ["api", "browser", "container", "database", "object", "process"].includes(item?.kind))) {
   throw new Error("at least one runtime assertion is required");
 }
 for (const item of assertions) {
-  if (item?.status !== "PASS" || typeof item.name !== "string" || item.name.length === 0) {
+  if (item?.status !== "PASS" || typeof item.name !== "string" || item.name.length === 0 || !assertionKinds.has(item.kind)) {
     throw new Error("only named passing assertions may be recorded");
   }
 }
