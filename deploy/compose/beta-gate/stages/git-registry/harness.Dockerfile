@@ -6,7 +6,10 @@ RUN apt-get update \
 
 WORKDIR /source
 ENV CARGO_BUILD_JOBS=1
-COPY . .
+COPY Cargo.toml Cargo.toml
+COPY crates crates
+COPY compat compat
+COPY deploy/compose/beta-gate/stages/git-registry/harness deploy/compose/beta-gate/stages/git-registry/harness
 RUN cargo build --release --locked \
     --manifest-path deploy/compose/beta-gate/stages/git-registry/harness/Cargo.toml
 

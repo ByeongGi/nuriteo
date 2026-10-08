@@ -87,6 +87,18 @@ wait_job() {
     attempt=$((attempt+1)); [ "$attempt" -lt 180 ]; sleep 1
   done
 }
+wait_healthy() {
+  local service="$1" id status attempt=0
+  until id="$(container "$service")" && [ -n "$id" ]; do
+    attempt=$((attempt+1)); [ "$attempt" -lt 120 ]; sleep 1
+  done
+  while :; do
+    status="$($engine inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$id")"
+    [ "$status" = healthy ] && return
+    [ "$status" = exited ] && { compose logs "$service" >&2; return 1; }
+    attempt=$((attempt+1)); [ "$attempt" -lt 180 ] || { compose logs "$service" >&2; return 1; }; sleep 1
+  done
+}
 wait_web() {
   local attempt=0
   until curl --fail --silent "http://127.0.0.1:${web_port}/" >/dev/null; do
@@ -202,8 +214,17 @@ for image_service in postgres core web oidc-provider; do
   compose build "$image_service" >>"$run_root/build.log" 2>&1
 done
 compose --profile gate-harness build gate-harness >>"$run_root/build.log" 2>&1
-compose up --detach --no-build >"$run_root/up.log" 2>&1
-for job in storage-init storage-check migrate bootstrap-admin; do wait_job "$job"; done
+compose up --detach --no-build --no-deps postgres rustfs oidc-provider smtp-provider \
+  git-provider registry-exact-provider registry-default-provider >"$run_root/up.log" 2>&1
+wait_healthy postgres
+wait_healthy rustfs
+for job in storage-init migrate storage-check bootstrap-admin; do
+  compose up --detach --no-build --no-deps "$job" >>"$run_root/up.log" 2>&1
+  wait_job "$job"
+done
+compose up --detach --no-build --no-deps core >>"$run_root/up.log" 2>&1
+wait_healthy core
+compose up --detach --no-build --no-deps web >>"$run_root/up.log" 2>&1
 wait_web
 for provider in oidc-provider smtp-provider git-provider registry-exact-provider registry-default-provider; do
   test "$($engine inspect --format '{{.State.Running}}' "$(container "$provider")")" = true
