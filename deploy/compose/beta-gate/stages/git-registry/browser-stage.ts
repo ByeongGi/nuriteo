@@ -230,14 +230,14 @@ try {
     assert.equal(current.etag, `"integration-ca-v${currentBody.version}"`);
     const candidate = await api("POST", `${path}/candidates`, { pem: providerCa }, {
       "if-match": `"integration-ca-v${currentBody.version}"`,
-      "idempotency-key": `gate005:${type}:${id}:stage`,
+      "idempotency-key": `gate005-${type}-${id}-stage`,
     }, [201]);
     const candidateBody = candidate.json as { id: string; state: string; version: number };
     assert.equal(candidateBody.state, "candidate");
     assert.equal(candidate.etag, `"integration-ca-v${candidateBody.version}"`);
     const active = await api("POST", `${path}/candidates/${candidateBody.id}/activate`, undefined, {
       "if-match": `"integration-ca-v${candidateBody.version}"`,
-      "idempotency-key": `gate005:${type}:${id}:activate`,
+      "idempotency-key": `gate005-${type}-${id}-activate`,
     });
     const activeBody = active.json as { state: string; version: number };
     assert.equal(activeBody.state, "active");
