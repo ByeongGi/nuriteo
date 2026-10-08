@@ -13,6 +13,7 @@ if (!process.execArgv.some((argument) => argument === "--conditions=react-server
 }
 
 await import("./auth-bff.test.ts");
+await import("./audit-bff.test.ts");
 await import("./access-token-ux.test.ts");
 await import("./admin-settings-ux.test.ts");
 await import("./authenticated-shell.test.ts");
