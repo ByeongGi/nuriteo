@@ -187,7 +187,7 @@ async function activeCa(
 
 function assertRedacted(value: unknown): void {
   const serialized = JSON.stringify(value);
-  assert.ok(!/BEGIN (?:CERTIFICATE|(?:RSA |EC )?PRIVATE KEY)|\"(?:clientSecret|password|plaintext|privateKey|secret|token)\"\s*:/iu.test(serialized),
+  assert.ok(!/BEGIN (?:CERTIFICATE|(?:RSA |EC )?PRIVATE KEY)|"(?:clientSecret|password|plaintext|privateKey|secret|token)"\s*:/iu.test(serialized),
     `response exposed protected material: ${serialized}`);
 }
 

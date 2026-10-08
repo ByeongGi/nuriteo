@@ -270,6 +270,6 @@ function required(name: string): string {
 
 function assertRedacted(value: unknown): void {
   const serialized = JSON.stringify(value);
-  assert.ok(!/BEGIN (?:RSA |EC )?PRIVATE KEY|\"(?:clientSecret|password|plaintext|privateKey|secret|token)\"\s*:/iu.test(serialized),
+  assert.ok(!/BEGIN (?:RSA |EC )?PRIVATE KEY|"(?:clientSecret|password|plaintext|privateKey|secret|token)"\s*:/iu.test(serialized),
     `administrative response exposed a protected field: ${serialized}`);
 }

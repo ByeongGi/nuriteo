@@ -23,7 +23,7 @@ main() {
 }
 
 preflight() {
-  local release_commit
+  local release_commit script
   node "$checker" readiness
   release_commit="$(required_release_commit)"
   [ "$(git -C "$repository_root" rev-parse HEAD)" = "$release_commit" ] || {
@@ -37,6 +37,16 @@ preflight() {
   git -C "$repository_root" merge-base --is-ancestor \
     e09c657bb3454891054e5293f1b3cb3a4f99f102 "$release_commit"
   node "$repository_root/tooling/checks/check-self-hosted-beta-baseline.ts"
+  for script in \
+    "$repository_root/deploy/compose/relay-save-resume-browser.ts" \
+    "$script_root/live-journey.ts" \
+    "$script_root/post-restart-journey.ts" \
+    "$script_root/stages/git-registry/browser-stage.ts" \
+    "$script_root/stages/oidc-notifications/oidc-journey.ts" \
+    "$script_root/stages/published-preview/journey.ts"
+  do
+    node --experimental-strip-types --check "$script" >/dev/null
+  done
   echo "GATE-005 preflight ok (${release_commit})"
 }
 
