@@ -681,7 +681,7 @@ async fn fork_response(
     if version_number.is_some_and(|value| value < 1) {
         return Err(validation(&request_id, path, "versionNumber"));
     }
-    let destination_owner = parse_owner(
+    let destination_owner = parse_destination_owner(
         &input.destination_owner.owner_type,
         &input.destination_owner.owner_id,
         &request_id,
@@ -897,6 +897,23 @@ fn parse_owner(
             .map(ProjectOwner::User)
             .map_err(|_| validation(request_id, path, "ownerId")),
         "organizations" => OrganizationId::from_str(owner_id)
+            .map(ProjectOwner::Organization)
+            .map_err(|_| validation(request_id, path, "ownerId")),
+        _ => Err(validation(request_id, path, "ownerType")),
+    }
+}
+
+fn parse_destination_owner(
+    owner_type: &str,
+    owner_id: &str,
+    request_id: &RequestId,
+    path: &str,
+) -> Result<ProjectOwner, HttpError> {
+    match owner_type {
+        "user" => UserId::from_str(owner_id)
+            .map(ProjectOwner::User)
+            .map_err(|_| validation(request_id, path, "ownerId")),
+        "organization" => OrganizationId::from_str(owner_id)
             .map(ProjectOwner::Organization)
             .map_err(|_| validation(request_id, path, "ownerId")),
         _ => Err(validation(request_id, path, "ownerType")),
@@ -1147,5 +1164,32 @@ mod tests {
             HeaderValue::from_static("browser-fork-request-02"),
         );
         assert!(parse_idempotency_key(&valid, &request_id, PUBLIC_FORKS).is_err());
+    }
+
+    #[test]
+    fn fork_destination_owner_uses_domain_names_not_path_segments() {
+        let request_id = RequestId::generate();
+        let user_id = UserId::new();
+        let organization_id = OrganizationId::new();
+
+        assert_eq!(
+            parse_destination_owner("user", &user_id.to_string(), &request_id, PUBLIC_FORKS)
+                .unwrap(),
+            ProjectOwner::User(user_id)
+        );
+        assert_eq!(
+            parse_destination_owner(
+                "organization",
+                &organization_id.to_string(),
+                &request_id,
+                PUBLIC_FORKS
+            )
+            .unwrap(),
+            ProjectOwner::Organization(organization_id)
+        );
+        assert!(
+            parse_destination_owner("users", &user_id.to_string(), &request_id, PUBLIC_FORKS)
+                .is_err()
+        );
     }
 }
