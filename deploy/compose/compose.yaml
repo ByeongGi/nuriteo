@@ -211,6 +211,9 @@ services:
       NURITEO_S3_SECRET_ACCESS_KEY_FILE: /run/secrets/rustfs_secret_key
       NURITEO_S3_CA_FILE: /run/secrets/rustfs_ca
       NURITEO_SAVE_IDEMPOTENCY_SECRET_FILE: /run/secrets/save_idempotency_secret
+      NURITEO_MASTER_KEY_FILE: /run/secrets/master_key
+      NURITEO_MASTER_KEY_VERSION: ${NURITEO_MASTER_KEY_VERSION:-1}
+      NURITEO_PREVIEW_SIGNING_KEY_FILE: /run/secrets/preview_signing_key
       NURITEO_SAVE_DEFAULT_QUOTA_BYTES: ${NURITEO_SAVE_DEFAULT_QUOTA_BYTES:-10737418240}
       NURITEO_SAVE_UPLOAD_TRANSPORT: relay
     secrets:
@@ -220,6 +223,8 @@ services:
       - rustfs_secret_key
       - rustfs_ca
       - save_idempotency_secret
+      - master_key
+      - preview_signing_key
     networks:
       - application
       - data
@@ -275,7 +280,7 @@ services:
     restart: unless-stopped
 
 networks:
-  application:
+  application: {}
   data:
     internal: true
 
@@ -306,3 +311,5 @@ secrets:
     file: ${NURITEO_PREVIEW_SIGNING_KEY_FILE:?set NURITEO_PREVIEW_SIGNING_KEY_FILE}
   save_idempotency_secret:
     file: ${NURITEO_SAVE_IDEMPOTENCY_SECRET_FILE:?set NURITEO_SAVE_IDEMPOTENCY_SECRET_FILE}
+  master_key:
+    file: ${NURITEO_MASTER_KEY_FILE:?set NURITEO_MASTER_KEY_FILE}

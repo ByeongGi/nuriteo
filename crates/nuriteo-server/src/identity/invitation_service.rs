@@ -8,6 +8,7 @@ use serde_json::json;
 use sqlx::{Acquire, Postgres, Row, Transaction};
 use time::OffsetDateTime;
 use tokio::time as tokio_time;
+use uuid::Uuid;
 
 use crate::audit::{
     ActorType, AuditActor, AuditEvent, AuditEventFields, AuditEventId, AuditMetadata, AuditResult,
@@ -120,6 +121,7 @@ impl std::error::Error for InvitationServicePolicyError {}
 pub struct IssuedActivationInvitation {
     invitation: ActivationInvitation,
     token: ActivationToken,
+    email_delivery_queued: bool,
 }
 
 impl IssuedActivationInvitation {
@@ -131,6 +133,11 @@ impl IssuedActivationInvitation {
     #[must_use]
     pub const fn token(&self) -> &ActivationToken {
         &self.token
+    }
+
+    #[must_use]
+    pub const fn email_delivery_queued(&self) -> bool {
+        self.email_delivery_queued
     }
 
     #[must_use]
@@ -429,8 +436,13 @@ impl InvitationService {
             ),
         )
         .await?;
+        let email_delivery_queued = enqueue_activation_email(&mut transaction, id, &email).await?;
         transaction.commit().await.map_err(database_error)?;
-        Ok(IssuedActivationInvitation { invitation, token })
+        Ok(IssuedActivationInvitation {
+            invitation,
+            token,
+            email_delivery_queued,
+        })
     }
 
     async fn reissue_inner(
@@ -523,8 +535,14 @@ impl InvitationService {
             ),
         )
         .await?;
+        let email_delivery_queued =
+            enqueue_activation_email(&mut transaction, replacement_id, &email).await?;
         transaction.commit().await.map_err(database_error)?;
-        Ok(IssuedActivationInvitation { invitation, token })
+        Ok(IssuedActivationInvitation {
+            invitation,
+            token,
+            email_delivery_queued,
+        })
     }
 
     async fn revoke_inner(
@@ -943,6 +961,35 @@ async fn transaction_now(
 ) -> Result<Timestamp, InvitationServiceError> {
     Timestamp::from_datetime(transaction_now_datetime(transaction).await?)
         .map_err(|_| InvitationServiceError::InvariantViolation)
+}
+
+async fn enqueue_activation_email(
+    transaction: &mut Transaction<'_, Postgres>,
+    invitation_id: ActivationInvitationId,
+    email: &NormalizedEmail,
+) -> Result<bool, InvitationServiceError> {
+    let enabled: Option<bool> = sqlx::query_scalar(
+        "SELECT value='true'::jsonb FROM instance_settings WHERE key='smtp.enabled' FOR SHARE",
+    )
+    .fetch_optional(&mut **transaction)
+    .await
+    .map_err(database_error)?;
+    if enabled != Some(true) {
+        return Ok(false);
+    }
+    sqlx::query(
+        "INSERT INTO email_outbox
+         (id,recipient_email,classification,template_id,locale,resource_type,resource_id)
+         VALUES($1::uuid,$2,'account_access','activation.invited','en-US',
+                'activation_invitation',$3)",
+    )
+    .bind(Uuid::now_v7().to_string())
+    .bind(email.as_str())
+    .bind(invitation_id.to_string())
+    .execute(&mut **transaction)
+    .await
+    .map_err(database_error)?;
+    Ok(true)
 }
 
 async fn transaction_now_datetime(

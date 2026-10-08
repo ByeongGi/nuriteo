@@ -715,7 +715,11 @@ function concatBody(chunks: RuntimeValue[]): Uint8Array {
 function createGlobalFetcher(): RuntimeFetcher {
   return {
     async download(input, options = {}) {
-      const response = await fetch(input, options);
+      const response = await fetch(input, {
+        ...options,
+        credentials: "omit",
+        referrerPolicy: "no-referrer"
+      });
       return {
         body: new Uint8Array(await response.arrayBuffer()),
         headers: Object.fromEntries(response.headers.entries()),

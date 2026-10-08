@@ -17,7 +17,14 @@ export function SiteHeader({ themeMode }: SiteHeaderProps) {
           </span>
           <span>NURITEO</span>
         </Link>
-        <ThemeSelector initialMode={themeMode} />
+        <div className="flex items-center gap-4">
+          <nav aria-label="Public navigation">
+            <Link className="text-sm font-medium text-muted-foreground no-underline transition-colors hover:text-foreground" href="/examples">
+              Examples
+            </Link>
+          </nav>
+          <ThemeSelector initialMode={themeMode} />
+        </div>
       </div>
     </header>
   );

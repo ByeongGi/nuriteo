@@ -295,7 +295,7 @@ async fn list_invitations(
 
 #[utoipa::path(post, path = "/api/v1/organizations/{organization_id}/invitations", tag = "organization-invitations",
     params(("organization_id" = String, Path)), request_body(content = IssueInvitationRequest, content_type = "application/json"),
-    responses((status = 201, description = "Invitation issued; accept URL is returned once", body = IssuedOrganizationInvitationView),
+    responses((status = 201, description = "Invitation issued; delivery is either a copy-once accept URL or queued email", body = IssuedOrganizationInvitationView),
       (status = 401, description = "Active Session required", body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
       (status = 403, description = "Exact Origin, CSRF, or recent reauthentication required", body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
       (status = 404, description = "Owner authorization or active invitee is unavailable", body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
@@ -328,7 +328,7 @@ async fn issue_invitation(
 
 #[utoipa::path(post, path = "/api/v1/organizations/{organization_id}/invitations/{invitation_id}/reissue", tag = "organization-invitations",
     params(("organization_id" = String, Path), ("invitation_id" = String, Path)), request_body(content = RoleRequest, content_type = "application/json"),
-    responses((status = 200, description = "Replacement issued; accept URL is returned once", body = IssuedOrganizationInvitationView),
+    responses((status = 200, description = "Replacement issued; delivery is either a copy-once accept URL or queued email", body = IssuedOrganizationInvitationView),
       (status = 403, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
       (status = 409, body = crate::openapi::ProblemDetails, content_type = "application/problem+json")))]
 async fn reissue_invitation(

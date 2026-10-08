@@ -43,10 +43,59 @@ async fn invitation_http_slice_is_authorized_atomic_one_time_and_secret_free() {
     verify_expiry(&router, &pool, &admin).await;
     verify_forced_rollback(&router, &pool, &admin).await;
     verify_no_secret_persistence(&pool).await;
+    verify_email_queued_delivery_contract(&router, &pool, &admin).await;
 
     assert_eq!(user_exists(&pool, member_id).await, 1);
     reset_fixture(&pool).await;
     pool.close(Duration::from_secs(2)).await.unwrap();
+}
+
+async fn verify_email_queued_delivery_contract(
+    router: &Router,
+    pool: &DatabasePool,
+    admin: &Browser,
+) {
+    set_smtp_enabled(pool, true).await;
+    let issued = issue(router, admin, "mail-queued@example.test", 3_600).await;
+    assert_eq!(issued["delivery"], "email_queued");
+    assert!(issued["activation_url"].is_null());
+
+    let replacement = admin_json(
+        router,
+        Some(admin),
+        Method::POST,
+        &format!(
+            "/api/v1/admin/activation-invitations/{}/reissue",
+            issued["id"].as_str().unwrap()
+        ),
+        json!({"expires_in_seconds": 3600}),
+    )
+    .await;
+    assert_eq!(replacement.status(), StatusCode::OK);
+    let replacement = json_body(replacement).await;
+    assert_eq!(replacement["delivery"], "email_queued");
+    assert!(replacement["activation_url"].is_null());
+
+    let queued: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM email_outbox WHERE resource_type='activation_invitation'",
+    )
+    .fetch_one(&mut *acquire(pool).await)
+    .await
+    .unwrap();
+    assert_eq!(queued, 2);
+    set_smtp_enabled(pool, false).await;
+}
+
+async fn set_smtp_enabled(pool: &DatabasePool, enabled: bool) {
+    sqlx::query(
+        "UPDATE instance_settings SET value=to_jsonb($1::boolean), \
+         updated_at=transaction_timestamp(), lock_version=lock_version+1 \
+         WHERE key='smtp.enabled'",
+    )
+    .bind(enabled)
+    .execute(&mut *acquire(pool).await)
+    .await
+    .unwrap();
 }
 
 #[derive(Clone)]
@@ -430,7 +479,11 @@ async fn send(router: &Router, request: Request<Body>) -> Response<Body> {
 }
 
 async fn assert_problem(response: Response<Body>, status: StatusCode) {
-    assert_eq!(response.status(), status);
+    if response.status() != status {
+        let actual = response.status();
+        let body = json_body(response).await;
+        panic!("expected {status}, got {actual}: {body}");
+    }
     assert_eq!(response.headers()[CONTENT_TYPE], "application/problem+json");
     let body = json_body(response).await;
     assert_eq!(body["status"], status.as_u16());

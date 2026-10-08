@@ -372,6 +372,16 @@ pub const CONFIG_FIELDS: &[ConfigField] = &[
         "required bounded mounted stable Save HMAC secret",
         "save.idempotencySecretExistingSecret",
     ),
+    secret_field(
+        "NURITEO_PREVIEW_SIGNING_KEY",
+        "base64url 32-byte Preview admission key; exclusive with _FILE",
+        "preview.signingKey",
+    ),
+    secret_field(
+        "NURITEO_PREVIEW_SIGNING_KEY_FILE",
+        "bounded mounted Preview admission key; exclusive with direct value",
+        "preview.signingKeyExistingSecret",
+    ),
     field(
         "NURITEO_SAVE_DEFAULT_QUOTA_BYTES",
         None,

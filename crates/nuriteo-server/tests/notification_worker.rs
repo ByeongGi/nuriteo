@@ -6,19 +6,28 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use nuriteo_server::app::{ShutdownReason, Supervisor, SupervisorConfig};
+use nuriteo_server::audit::{ActorType, AuditActor, AuditEventId};
 use nuriteo_server::config::{InstanceSettingBootstrap, SystemEnvironment, SystemFileReader};
 use nuriteo_server::database::{
     DatabasePool, DatabasePoolConfig, DatabaseTlsConfig, MigrationOptions, run_embedded_migrations,
 };
+use nuriteo_server::identity::{
+    ActivationToken, InvitationActivationError, InvitationActivationFuture, InvitationActivator,
+    InvitationAuditContext, InvitationService, InvitationServiceError, InvitationServicePolicy,
+    PendingInvitationActivation,
+};
 use nuriteo_server::instance_settings::InstanceSettingsRepository;
 use nuriteo_server::integration::{IntegrationRepository, MasterKeyring};
 use nuriteo_server::notification::{
-    ClaimedEmail, DatabaseDeliveryEligibility, DeliveryBoundaryError, DeliveryEligibility,
-    DeliveryEligibilityDecision, EmailAttemptPreparer, EmailOutboxRepository, NotificationWorker,
-    NotificationWorkerPolicy, PreparedEmail,
+    ClaimedEmail, DatabaseDeliveryEligibility, DatabaseInvitationAttemptTokenIssuer,
+    DeliveryBoundaryError, DeliveryEligibility, DeliveryEligibilityDecision, EmailAttemptPreparer,
+    EmailOutboxRepository, InvitationAttemptContext, InvitationAttemptTokenIssuer,
+    NotificationWorker, NotificationWorkerPolicy, PreparedEmail, ProductionEmailAttemptPreparer,
 };
 use nuriteo_server::smtp::SmtpEmailSender;
-use sqlx::{Executor, Row};
+use sha2::{Digest, Sha256};
+use sqlx::{Executor, Postgres, Row, Transaction};
+use url::Url;
 
 const DATABASE_URL_ENV: &str = "NURITEO_TEST_DATABASE_URL";
 const DATABASE_CA_ENV: &str = "NURITEO_TEST_DATABASE_CA";
@@ -72,8 +81,11 @@ async fn worker_retries_dead_letters_recovers_and_drains_with_actual_tls_smtp() 
     )
     .await
     .unwrap();
-    assert_eq!(report.latest_version, Some(40));
-    assert_eq!(report.known_migrations, 40);
+    assert!(report.latest_version.is_some_and(|version| version >= 45));
+    assert_eq!(
+        report.latest_version,
+        i64::try_from(report.known_migrations).ok()
+    );
     let settings_repository =
         InstanceSettingsRepository::new(pool.clone(), Duration::from_secs(5)).unwrap();
     settings_repository
@@ -196,26 +208,36 @@ async fn verify_nullable_activation_eligibility(
     pool: &DatabasePool,
     repository: &EmailOutboxRepository,
 ) {
-    sqlx::query(
-        "INSERT INTO activation_invitations
-         (id,normalized_email,invited_by_user_id,token_hash,expires_at)
-         VALUES ('0199ee6c-c777-7000-8000-000000004151','new@example.test',
-                 '0199ee6c-c777-7000-8000-000000004001',decode(repeat('51',32),'hex'),
-                 clock_timestamp()+INTERVAL '7 days')",
+    let admin = id("4001").parse().unwrap();
+    let issued = InvitationService::new(pool.clone(), InvitationServicePolicy::default())
+        .issue(
+            "new@example.test",
+            admin,
+            &InvitationAuditContext::new(
+                AuditEventId::new(),
+                AuditActor {
+                    kind: ActorType::User,
+                    id: admin.to_string(),
+                    user_id: Some(admin),
+                    display_name: Some("Fixture admin".into()),
+                },
+                "notification-worker-invitation-issue".into(),
+                None,
+                "primary".into(),
+            ),
+        )
+        .await
+        .unwrap();
+    let invitation_id = issued.invitation().id().to_string();
+    let enqueued: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM email_outbox WHERE resource_type='activation_invitation'
+         AND resource_id=$1 AND recipient_email='new@example.test' AND state='pending')",
     )
-    .execute(&mut *pool.acquire().await.unwrap())
+    .bind(&invitation_id)
+    .fetch_one(&mut *pool.acquire().await.unwrap())
     .await
     .unwrap();
-    sqlx::query(
-        "INSERT INTO email_outbox
-         (id,recipient_email,classification,template_id,locale,resource_type,resource_id)
-         VALUES ('0199ee6c-c777-7000-8000-000000004152','new@example.test','account_access',
-                 'activation.invited','en-US','activation_invitation',
-                 '0199ee6c-c777-7000-8000-000000004151')",
-    )
-    .execute(&mut *pool.acquire().await.unwrap())
-    .await
-    .unwrap();
+    assert!(enqueued);
     let owner = "0199ee6c-c777-7000-8000-000000004153";
     let mut jobs = repository
         .claim(owner, 1, Duration::from_secs(3))
@@ -230,7 +252,101 @@ async fn verify_nullable_activation_eligibility(
             .unwrap(),
         DeliveryEligibilityDecision::Eligible
     );
+    let issuer = DatabaseInvitationAttemptTokenIssuer::new(pool.clone());
+    let context = InvitationAttemptContext {
+        invitation_id: job.resource_id().to_owned(),
+        resource_type: job.resource_type().to_owned(),
+        recipient_email: job.recipient_email().to_owned(),
+        attempt_count: job.attempt_count(),
+    };
+    let token = issuer.issue(&context).await.unwrap();
+    let first_plaintext = token.expose_for_message().to_owned();
+    let first_stored_digest: Vec<u8> =
+        sqlx::query_scalar("SELECT token_hash FROM activation_invitations WHERE id=$1::uuid")
+            .bind(job.resource_id())
+            .fetch_one(&mut *pool.acquire().await.unwrap())
+            .await
+            .unwrap();
+    assert_eq!(
+        first_stored_digest,
+        Sha256::digest(token.expose_for_message().as_bytes()).as_slice()
+    );
+    assert!(!String::from_utf8_lossy(&first_stored_digest).contains(token.expose_for_message()));
+    let token = issuer
+        .issue(&InvitationAttemptContext {
+            attempt_count: context.attempt_count + 1,
+            ..context.clone()
+        })
+        .await
+        .unwrap();
+    let second_stored_digest: Vec<u8> =
+        sqlx::query_scalar("SELECT token_hash FROM activation_invitations WHERE id=$1::uuid")
+            .bind(job.resource_id())
+            .fetch_one(&mut *pool.acquire().await.unwrap())
+            .await
+            .unwrap();
+    assert_ne!(first_stored_digest, second_stored_digest);
+    assert_eq!(
+        second_stored_digest,
+        Sha256::digest(token.expose_for_message().as_bytes()).as_slice()
+    );
+    let preparer =
+        ProductionEmailAttemptPreparer::new(Url::parse("https://nuriteo.example.test/").unwrap());
+    let message = preparer.prepare(&job, Some(&token)).await.unwrap();
+    let token_from_link = message
+        .body()
+        .lines()
+        .find_map(|line| line.split_once("?token=").map(|(_, token)| token))
+        .expect("invitation email must contain a tokenized activation link");
+    let service = InvitationService::new(pool.clone(), InvitationServicePolicy::default());
+    let stale_result = service
+        .accept(
+            &ActivationToken::parse(first_plaintext).unwrap(),
+            &activation_audit("notification-worker-stale-invitation"),
+            &NoopActivator,
+        )
+        .await;
+    assert!(matches!(
+        stale_result,
+        Err(InvitationServiceError::InvalidInvitation)
+    ));
+    let accepted = service
+        .accept(
+            &ActivationToken::parse(token_from_link.to_owned()).unwrap(),
+            &activation_audit("notification-worker-invitation-accept"),
+            &NoopActivator,
+        )
+        .await
+        .unwrap();
+    assert_eq!(accepted.id().to_string(), job.resource_id());
     repository.cancel(owner, &job).await.unwrap();
+}
+
+fn activation_audit(correlation_id: &str) -> InvitationAuditContext {
+    InvitationAuditContext::new(
+        AuditEventId::new(),
+        AuditActor {
+            kind: ActorType::System,
+            id: "notification-worker-fixture".into(),
+            user_id: None,
+            display_name: None,
+        },
+        correlation_id.into(),
+        None,
+        "primary".into(),
+    )
+}
+
+struct NoopActivator;
+
+impl InvitationActivator for NoopActivator {
+    fn activate<'a>(
+        &'a self,
+        _transaction: &'a mut Transaction<'_, Postgres>,
+        _invitation: &'a PendingInvitationActivation,
+    ) -> InvitationActivationFuture<'a> {
+        Box::pin(async { Ok::<_, InvitationActivationError>(()) })
+    }
 }
 
 async fn seed_users(pool: &DatabasePool) {
@@ -257,6 +373,11 @@ async fn seed_users(pool: &DatabasePool) {
         .await
         .unwrap();
     }
+    sqlx::query("UPDATE users SET is_instance_admin=true WHERE id=$1::uuid")
+        .bind(id("4001"))
+        .execute(&mut *pool.acquire().await.unwrap())
+        .await
+        .unwrap();
 }
 
 async fn verify_shutdown_drains_claimed_attempt(

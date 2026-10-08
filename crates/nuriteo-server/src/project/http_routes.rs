@@ -3,7 +3,9 @@ use std::str::FromStr;
 use axum::Json;
 use axum::body::{Body, to_bytes};
 use axum::extract::{Extension, Path, Request, State};
-use axum::http::header::{CACHE_CONTROL, CONTENT_TYPE, COOKIE, ETAG, IF_MATCH, LOCATION, RANGE};
+use axum::http::header::{
+    AUTHORIZATION, CACHE_CONTROL, CONTENT_TYPE, COOKIE, ETAG, IF_MATCH, LOCATION, RANGE,
+};
 use axum::http::{HeaderMap, HeaderName, HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Response};
 use serde::{Deserialize, de::DeserializeOwned};
@@ -28,6 +30,7 @@ use super::{
     ProjectId, ProjectName, ProjectOwner, ProjectPageLimit, ProjectRole, ProjectRolePageLimit,
     ProjectSlug, ProjectState, ProjectVersion,
 };
+use crate::access_token::{AccessTokenScope, ApiCategory};
 
 const COLLECTION: &str = "/api/v1/workspaces/{owner_type}/{owner_id}/projects";
 const ITEM: &str = "/api/v1/workspaces/{owner_type}/{owner_id}/projects/{project_id}";
@@ -46,6 +49,7 @@ const HISTORY_RESTORE: &str =
     "/api/v1/workspaces/{owner_type}/{owner_id}/projects/{project_id}/history/restore";
 const MAX_BODY: usize = 4096;
 const MAX_QUERY: usize = 4096;
+const MAX_AUTHORIZATION_BYTES: usize = 256;
 const ORIGIN: HeaderName = HeaderName::from_static("origin");
 const CSRF: HeaderName = HeaderName::from_static("x-csrf-token");
 const IDEMPOTENCY_KEY: HeaderName = HeaderName::from_static("idempotency-key");
@@ -545,11 +549,13 @@ async fn list_projects(
 }
 
 #[utoipa::path(get, path = ITEM, tag = "projects",
-    security(("projectSessionCookie" = [])),
+    description = "Reads one Project with either a browser Session, a project:read Personal Access Token intersected with the user's live Project role, or a project:read Project Automation Token bound to this exact Project.",
+    security(("projectSessionCookie" = []), ("accessTokenBearer" = [])),
     params(("owner_type" = String, Path), ("owner_id" = String, Path), ("project_id" = String, Path)),
     responses((status = 200, body = ProjectView, headers(("ETag" = String))),
       (status = 401, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
       (status = 404, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+      (status = 429, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
       (status = 422, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
       (status = 503, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
       (status = 504, body = crate::openapi::ProblemDetails, content_type = "application/problem+json")))]
@@ -559,15 +565,29 @@ async fn get_project(
     Path((owner_type, owner_id, project_id)): Path<(String, String, String)>,
     request: Request,
 ) -> Result<Response, HttpError> {
-    let headers = BrowserHeaders::read(request.headers(), &request_id, ITEM)?;
-    let view = service
-        .get(
-            headers.request(BrowserMethod::Get),
-            parse_owner(&owner_type, &owner_id, &request_id, ITEM)?,
-            parse_project_id(&project_id, &request_id, ITEM)?,
-        )
-        .await
-        .map_err(|error| map_error(error, request_id.clone(), ITEM))?;
+    let owner = parse_owner(&owner_type, &owner_id, &request_id, ITEM)?;
+    let project_id = parse_project_id(&project_id, &request_id, ITEM)?;
+    let view = if let Some(bearer) = bearer_token(request.headers(), &request_id, ITEM)? {
+        let identity = service
+            .authenticate_access_token(
+                bearer,
+                AccessTokenScope::ProjectRead,
+                project_id,
+                ApiCategory::Read,
+            )
+            .await
+            .map_err(|error| map_error(error, request_id.clone(), ITEM))?;
+        service
+            .get_as_access_token(&identity, owner, project_id)
+            .await
+            .map_err(|error| map_error(error, request_id.clone(), ITEM))?
+    } else {
+        let headers = BrowserHeaders::read(request.headers(), &request_id, ITEM)?;
+        service
+            .get(headers.request(BrowserMethod::Get), owner, project_id)
+            .await
+            .map_err(|error| map_error(error, request_id.clone(), ITEM))?
+    };
     project_response(StatusCode::OK, view, false, request_id, ITEM)
 }
 
@@ -653,11 +673,12 @@ async fn delete_project(
     Ok(StatusCode::NO_CONTENT)
 }
 
-#[utoipa::path(post, path = ARCHIVE, tag = "projects", security(("projectSessionCookie" = [])), params(("owner_type" = String, Path), ("owner_id" = String, Path), ("project_id" = String, Path), ("If-Match" = String, Header), ("Origin" = String, Header), ("X-CSRF-Token" = String, Header)), responses((status = 200, body = ProjectView, headers(("ETag" = String))),
+#[utoipa::path(post, path = ARCHIVE, tag = "projects", description = "Archives a Project with a browser Session or a project:write Personal Access Token. Origin and X-CSRF-Token are required for browser Session authentication and ignored for non-ambient Bearer authentication. Project Automation Tokens cannot perform lifecycle mutations because audit requires a live human actor.", security(("projectSessionCookie" = []), ("accessTokenBearer" = [])), params(("owner_type" = String, Path), ("owner_id" = String, Path), ("project_id" = String, Path), ("If-Match" = String, Header), ("Origin" = Option<String>, Header), ("X-CSRF-Token" = Option<String>, Header)), responses((status = 200, body = ProjectView, headers(("ETag" = String))),
     (status = 401, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
     (status = 403, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
     (status = 404, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
     (status = 409, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+    (status = 429, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
     (status = 412, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
     (status = 422, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
     (status = 428, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
@@ -672,11 +693,12 @@ async fn archive_project(
     lifecycle(service, request_id, path, request, false, ARCHIVE).await
 }
 
-#[utoipa::path(post, path = RESTORE, tag = "projects", security(("projectSessionCookie" = [])), params(("owner_type" = String, Path), ("owner_id" = String, Path), ("project_id" = String, Path), ("If-Match" = String, Header), ("Origin" = String, Header), ("X-CSRF-Token" = String, Header)), responses((status = 200, body = ProjectView, headers(("ETag" = String))),
+#[utoipa::path(post, path = RESTORE, tag = "projects", description = "Restores a Project with a browser Session or a project:write Personal Access Token. Origin and X-CSRF-Token are required for browser Session authentication and ignored for non-ambient Bearer authentication. Project Automation Tokens cannot perform lifecycle mutations because audit requires a live human actor.", security(("projectSessionCookie" = []), ("accessTokenBearer" = [])), params(("owner_type" = String, Path), ("owner_id" = String, Path), ("project_id" = String, Path), ("If-Match" = String, Header), ("Origin" = Option<String>, Header), ("X-CSRF-Token" = Option<String>, Header)), responses((status = 200, body = ProjectView, headers(("ETag" = String))),
     (status = 401, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
     (status = 403, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
     (status = 404, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
     (status = 409, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+    (status = 429, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
     (status = 412, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
     (status = 422, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
     (status = 428, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
@@ -699,13 +721,44 @@ async fn lifecycle(
     restore: bool,
     path: &'static str,
 ) -> Result<Response, HttpError> {
+    let owner = parse_owner(&owner_type, &owner_id, &request_id, path)?;
+    let project_id = parse_project_id(&project_id, &request_id, path)?;
+    if let Some(bearer) = bearer_token(request.headers(), &request_id, path)? {
+        // Authenticate scope before parsing mutation preconditions so a
+        // read-only token cannot use validation differences as an oracle.
+        let identity = service
+            .authenticate_access_token(
+                bearer,
+                AccessTokenScope::ProjectWrite,
+                project_id,
+                ApiCategory::Write,
+            )
+            .await
+            .map_err(|error| map_error(error, request_id.clone(), path))?;
+        if !identity.is_human_actor() {
+            return Err(HttpError::forbidden(request_id, path));
+        }
+        let version = parse_if_match(request.headers(), &request_id, path)?;
+        let view = service
+            .archive_or_restore_as_access_token(
+                &identity,
+                owner,
+                project_id,
+                version,
+                restore,
+                request_id.as_str(),
+            )
+            .await
+            .map_err(|error| map_error(error, request_id.clone(), path))?;
+        return project_response(StatusCode::OK, view, false, request_id, path);
+    }
     let headers = BrowserHeaders::read(request.headers(), &request_id, path)?;
     let version = parse_if_match(request.headers(), &request_id, path)?;
     let view = service
         .archive_or_restore(
             headers.request(BrowserMethod::Post),
-            parse_owner(&owner_type, &owner_id, &request_id, path)?,
-            parse_project_id(&project_id, &request_id, path)?,
+            owner,
+            project_id,
             version,
             restore,
             request_id.as_str(),
@@ -920,6 +973,33 @@ impl<'a> BrowserHeaders<'a> {
             csrf_headers: &self.csrf,
         }
     }
+}
+
+fn bearer_token<'a>(
+    headers: &'a HeaderMap,
+    request_id: &RequestId,
+    path: &str,
+) -> Result<Option<&'a str>, HttpError> {
+    let values = headers.get_all(AUTHORIZATION).iter().collect::<Vec<_>>();
+    if values.is_empty() {
+        return Ok(None);
+    }
+    if values.len() != 1 || headers.contains_key(COOKIE) {
+        return Err(HttpError::authentication(request_id.clone(), path));
+    }
+    let raw = values[0]
+        .to_str()
+        .map_err(|_| HttpError::authentication(request_id.clone(), path))?;
+    let token = raw
+        .strip_prefix("Bearer ")
+        .filter(|token| {
+            !token.is_empty()
+                && raw.len() <= MAX_AUTHORIZATION_BYTES
+                && !token.chars().any(char::is_whitespace)
+                && !token.chars().any(char::is_control)
+        })
+        .ok_or_else(|| HttpError::authentication(request_id.clone(), path))?;
+    Ok(Some(token))
 }
 
 struct ListQuery {
@@ -1245,6 +1325,7 @@ fn map_error(error: ProjectHttpError, request_id: RequestId, path: &str) -> Http
         ProjectHttpError::AuditUnavailable | ProjectHttpError::Unavailable => {
             HttpError::service_unavailable(request_id, path)
         }
+        ProjectHttpError::RateLimited => HttpError::rate_limited(request_id, path),
         ProjectHttpError::OperationTimeout => HttpError::operation_timeout(request_id, path),
         ProjectHttpError::CommitOutcomeUnknown => {
             HttpError::commit_outcome_unknown(request_id, path)
@@ -1274,6 +1355,11 @@ mod tests {
                 ProjectHttpError::AuditUnavailable,
                 StatusCode::SERVICE_UNAVAILABLE,
                 "SERVICE_UNAVAILABLE",
+            ),
+            (
+                ProjectHttpError::RateLimited,
+                StatusCode::TOO_MANY_REQUESTS,
+                "RATE_LIMITED",
             ),
         ] {
             let response = map_error(error, RequestId::generate(), ITEM).into_response();
@@ -1324,5 +1410,36 @@ mod tests {
             )
             .is_err()
         );
+    }
+
+    #[test]
+    fn bearer_parser_rejects_ambiguous_or_non_canonical_credentials() {
+        let request_id = RequestId::generate();
+        let mut valid = HeaderMap::new();
+        valid.insert(
+            AUTHORIZATION,
+            HeaderValue::from_static("Bearer nur_pat_token"),
+        );
+        assert_eq!(
+            bearer_token(&valid, &request_id, ITEM).unwrap(),
+            Some("nur_pat_token")
+        );
+
+        for value in ["bearer token", "Bearer", "Bearer ", "Bearer token extra"] {
+            let mut headers = HeaderMap::new();
+            headers.insert(AUTHORIZATION, HeaderValue::from_str(value).unwrap());
+            assert!(bearer_token(&headers, &request_id, ITEM).is_err());
+        }
+
+        valid.insert(
+            COOKIE,
+            HeaderValue::from_static("nuriteo_dev_session=value"),
+        );
+        assert!(bearer_token(&valid, &request_id, ITEM).is_err());
+
+        let mut duplicate = HeaderMap::new();
+        duplicate.append(AUTHORIZATION, HeaderValue::from_static("Bearer one"));
+        duplicate.append(AUTHORIZATION, HeaderValue::from_static("Bearer two"));
+        assert!(bearer_token(&duplicate, &request_id, ITEM).is_err());
     }
 }

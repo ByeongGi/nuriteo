@@ -103,3 +103,10 @@ NURITEO_TEST_S3_CA_FILE="$fixture_dir/rustfs/ca.crt" \
 CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-/private/tmp/nuriteo-save009-target}" \
 cargo test -p nuriteo-server --test save_cleanup \
   cleanup_is_bounded_persisted_redacted_and_restart_safe -- --ignored --exact --nocapture
+NURITEO_TEST_DATABASE_URL="postgres://nuriteo:${postgres_password}@localhost:${postgres_port}/nuriteo" \
+NURITEO_TEST_DATABASE_CA="$fixture_dir/postgres/ca.crt" \
+NURITEO_TEST_S3_ENDPOINT="https://127.0.0.1:${rustfs_port}" \
+NURITEO_TEST_S3_CA_FILE="$fixture_dir/rustfs/ca.crt" \
+CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-/private/tmp/nuriteo-save009-target}" \
+cargo test -p nuriteo-server --test save_cleanup \
+  stale_canonical_materialization_aborts_persisted_multipart -- --ignored --exact --nocapture

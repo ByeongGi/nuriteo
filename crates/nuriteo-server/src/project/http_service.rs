@@ -14,6 +14,10 @@ use tokio::time as tokio_time;
 use url::Url;
 use utoipa::ToSchema;
 
+use crate::access_token::{
+    AccessTokenAuthenticator, AccessTokenPrincipal, AccessTokenRequest, AccessTokenScope,
+    AccessTokenServiceError, ApiCategory,
+};
 use crate::audit::AuditEventId;
 use crate::database::DatabasePool;
 use crate::identity::{
@@ -34,7 +38,7 @@ use crate::save::{
 
 use super::{
     DirectProjectRoleGrant, Project, ProjectAuditContext, ProjectDeleteConfirmation, ProjectId,
-    ProjectName, ProjectOwner, ProjectPageKey, ProjectPageLimit, ProjectRole,
+    ProjectName, ProjectOwner, ProjectPageKey, ProjectPageLimit, ProjectRepository, ProjectRole,
     ProjectRoleMutationResult, ProjectRolePageKey, ProjectRolePageLimit, ProjectService,
     ProjectServiceError, ProjectServicePolicy, ProjectSlug, ProjectState, ProjectVersion,
 };
@@ -78,6 +82,7 @@ pub enum ProjectHttpError {
     ConfirmationRequired,
     AuditUnavailable,
     Unavailable,
+    RateLimited,
     OperationTimeout,
     CommitOutcomeUnknown,
     Internal,
@@ -95,6 +100,7 @@ impl fmt::Display for ProjectHttpError {
             Self::ConfirmationRequired => "project confirmation is required",
             Self::AuditUnavailable => "project audit is unavailable",
             Self::Unavailable => "project service is unavailable",
+            Self::RateLimited => "project API rate limit exceeded",
             Self::OperationTimeout => "project operation timed out",
             Self::CommitOutcomeUnknown => "project commit outcome is unknown",
             Self::Internal => "project operation failed",
@@ -115,6 +121,7 @@ struct Runtime {
     sessions: SessionService,
     cookies: BrowserCookieBoundary,
     projects: ProjectService,
+    access_tokens: AccessTokenAuthenticator,
     cursor: CursorSigner,
     content: Option<ContentService>,
     versions: ProjectVersionService,
@@ -156,6 +163,7 @@ impl ProjectHttpService {
                 operation_timeout: policy.operation_timeout,
                 sessions: SessionService::new(pool.clone(), session_policy),
                 projects: ProjectService::new(pool.clone(), project_policy),
+                access_tokens: AccessTokenAuthenticator::new(pool.clone()),
                 pool: pool.clone(),
                 cookies,
                 cursor: CursorSigner::new(key),
@@ -230,6 +238,133 @@ impl ProjectHttpService {
             .await
             .map(ProjectView::from)
             .map_err(map_project_error)
+    }
+
+    pub(crate) async fn authenticate_access_token(
+        &self,
+        bearer: &str,
+        required_scope: AccessTokenScope,
+        project_id: ProjectId,
+        category: ApiCategory,
+    ) -> Result<ProjectAccessTokenIdentity, ProjectHttpError> {
+        let runtime = self.runtime()?;
+        let principal = runtime
+            .access_tokens
+            .authenticate(AccessTokenRequest {
+                bearer,
+                required_scope,
+                project_id: Some(project_id),
+                source_ip: None,
+                category,
+            })
+            .await
+            .map_err(map_access_token_error)?;
+        match principal {
+            AccessTokenPrincipal::User(user_id) => {
+                let mut connection = runtime
+                    .pool
+                    .acquire()
+                    .await
+                    .map_err(|_| ProjectHttpError::Unavailable)?;
+                let row: Option<(String, String)> =
+                    sqlx::query_as("SELECT display_name,status FROM users WHERE id=$1::uuid")
+                        .bind(user_id.to_string())
+                        .fetch_optional(&mut *connection)
+                        .await
+                        .map_err(|_| ProjectHttpError::Unavailable)?;
+                let (display_name, status) = row.ok_or(ProjectHttpError::AuthenticationFailed)?;
+                if status != "active" {
+                    return Err(ProjectHttpError::AuthenticationFailed);
+                }
+                Ok(ProjectAccessTokenIdentity::User {
+                    user_id,
+                    display_name,
+                })
+            }
+            AccessTokenPrincipal::Project(bound_project_id) => {
+                Ok(ProjectAccessTokenIdentity::Project { bound_project_id })
+            }
+        }
+    }
+
+    pub(crate) async fn get_as_access_token(
+        &self,
+        identity: &ProjectAccessTokenIdentity,
+        owner: ProjectOwner,
+        project_id: ProjectId,
+    ) -> Result<ProjectView, ProjectHttpError> {
+        let runtime = self.runtime()?;
+        match identity {
+            ProjectAccessTokenIdentity::User { user_id, .. } => runtime
+                .projects
+                .get(*user_id, owner, project_id)
+                .await
+                .map(ProjectView::from)
+                .map_err(map_project_error),
+            ProjectAccessTokenIdentity::Project { bound_project_id }
+                if *bound_project_id == project_id =>
+            {
+                let mut connection = runtime
+                    .pool
+                    .acquire()
+                    .await
+                    .map_err(|_| ProjectHttpError::Unavailable)?;
+                let mut transaction = connection
+                    .begin()
+                    .await
+                    .map_err(|_| ProjectHttpError::Unavailable)?;
+                let project = ProjectRepository::get_by_id(&mut transaction, owner, project_id)
+                    .await
+                    .map_err(|_| ProjectHttpError::Unavailable)?
+                    .ok_or(ProjectHttpError::NotFound)?;
+                transaction
+                    .rollback()
+                    .await
+                    .map_err(|_| ProjectHttpError::Unavailable)?;
+                Ok(ProjectView::from(project))
+            }
+            ProjectAccessTokenIdentity::Project { .. } => Err(ProjectHttpError::Forbidden),
+        }
+    }
+
+    pub(crate) async fn archive_or_restore_as_access_token(
+        &self,
+        identity: &ProjectAccessTokenIdentity,
+        owner: ProjectOwner,
+        project_id: ProjectId,
+        version: ProjectVersion,
+        restore: bool,
+        correlation_id: &str,
+    ) -> Result<ProjectView, ProjectHttpError> {
+        let runtime = self.runtime()?;
+        let ProjectAccessTokenIdentity::User {
+            user_id,
+            display_name,
+        } = identity
+        else {
+            // Project Automation Tokens deliberately cannot perform lifecycle
+            // mutations because Project audit events require a live human actor.
+            return Err(ProjectHttpError::Forbidden);
+        };
+        let audit = ProjectAuditContext::new(
+            AuditEventId::new(),
+            *user_id,
+            Some(display_name.clone()),
+            correlation_id.to_owned(),
+            None,
+        );
+        let result = if restore {
+            runtime
+                .projects
+                .restore(*user_id, owner, project_id, version, &audit)
+                .await
+        } else {
+            runtime
+                .projects
+                .archive(*user_id, owner, project_id, version, &audit)
+                .await
+        };
+        result.map(ProjectView::from).map_err(map_project_error)
     }
 
     pub(crate) async fn content_descriptor(
@@ -727,6 +862,22 @@ struct BrowserIdentity {
     user_id: UserId,
     display_name: String,
     recently_reauthenticated: bool,
+}
+
+pub(crate) enum ProjectAccessTokenIdentity {
+    User {
+        user_id: UserId,
+        display_name: String,
+    },
+    Project {
+        bound_project_id: ProjectId,
+    },
+}
+
+impl ProjectAccessTokenIdentity {
+    pub(crate) const fn is_human_actor(&self) -> bool {
+        matches!(self, Self::User { .. })
+    }
 }
 
 impl BrowserIdentity {
@@ -1377,6 +1528,18 @@ fn map_session_error(error: SessionServiceError) -> ProjectHttpError {
         _ => ProjectHttpError::Internal,
     }
 }
+
+fn map_access_token_error(error: AccessTokenServiceError) -> ProjectHttpError {
+    match error {
+        AccessTokenServiceError::AuthenticationFailed => ProjectHttpError::AuthenticationFailed,
+        AccessTokenServiceError::Forbidden => ProjectHttpError::Forbidden,
+        AccessTokenServiceError::RateLimited => ProjectHttpError::RateLimited,
+        AccessTokenServiceError::OperationTimeout => ProjectHttpError::OperationTimeout,
+        AccessTokenServiceError::Unavailable => ProjectHttpError::Unavailable,
+        AccessTokenServiceError::InvalidPersistedState => ProjectHttpError::Internal,
+    }
+}
+
 fn map_browser_error(error: BrowserCookieError) -> ProjectHttpError {
     match error {
         BrowserCookieError::MissingSessionCookie | BrowserCookieError::InvalidSessionCookie => {

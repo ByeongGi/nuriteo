@@ -4,6 +4,7 @@
 //! decrypted HTTPS credential is handed directly to the in-process executor and
 //! is never represented by an API DTO.
 
+use std::any::Any;
 use std::fmt;
 use std::future::Future;
 use std::pin::Pin;
@@ -16,14 +17,27 @@ use sqlx::{Acquire, PgConnection, Postgres, Row, Transaction};
 use tokio::time;
 use uuid::Uuid;
 
+use crate::database::DatabasePool;
 use crate::git_provider::{
     GitProviderError, GitProviderMetadata, GitProviderService, GitProviderState,
 };
-use crate::identity::UserId;
+use crate::identity::{SessionId, UserId};
 use crate::integration::{
-    CredentialIdentity, IntegrationError, IntegrationRepository, SecretValue,
+    CredentialIdentity, IntegrationError, IntegrationRepository, MasterKeyring, SecretValue,
 };
+use crate::object_storage::S3ObjectStore;
 use crate::project::{EffectiveProjectRole, ProjectAccessRepository, ProjectId};
+use crate::quota::EffectiveQuota;
+use crate::workspace::StorageScopeId;
+
+pub mod embedded;
+mod http_routes;
+mod http_service;
+pub mod transport_security;
+pub mod working_head;
+
+pub(crate) use http_routes::openapi_router;
+pub use http_service::{GitHttpError, GitHttpService};
 
 const INSTANCE_ID: &str = "instance";
 const INTEGRATION_TYPE: &str = "git_user";
@@ -85,6 +99,7 @@ pub struct GitOperationOutcome {
     head_sha: String,
     changed_objects: u64,
     transferred_bytes: u64,
+    materialized_tree: Option<embedded::GitTreeSnapshot>,
 }
 
 impl GitOperationOutcome {
@@ -108,6 +123,7 @@ impl GitOperationOutcome {
             head_sha,
             changed_objects,
             transferred_bytes,
+            materialized_tree: None,
         })
     }
 
@@ -130,6 +146,17 @@ impl GitOperationOutcome {
     pub const fn transferred_bytes(&self) -> u64 {
         self.transferred_bytes
     }
+
+    #[must_use]
+    pub fn with_materialized_tree(mut self, tree: embedded::GitTreeSnapshot) -> Self {
+        self.materialized_tree = Some(tree);
+        self
+    }
+
+    #[must_use]
+    pub fn materialized_tree(&self) -> Option<&embedded::GitTreeSnapshot> {
+        self.materialized_tree.as_ref()
+    }
 }
 
 #[derive(Debug)]
@@ -150,6 +177,7 @@ pub struct GitUpdateExecution<'a> {
 pub struct GitPushExecution<'a> {
     pub update: GitUpdateExecution<'a>,
     pub commit_message: &'a str,
+    pub working_tree: &'a embedded::GitTreeSnapshot,
 }
 
 pub type GitExecutionFuture<'a> =
@@ -161,6 +189,89 @@ pub trait GitRemoteExecutor: Send + Sync {
     fn import<'a>(&'a self, input: GitExecution<'a>) -> GitExecutionFuture<'a>;
     fn pull<'a>(&'a self, input: GitUpdateExecution<'a>) -> GitExecutionFuture<'a>;
     fn commit_and_push<'a>(&'a self, input: GitPushExecution<'a>) -> GitExecutionFuture<'a>;
+}
+
+pub type GitWorkingHeadFuture<'a, T> =
+    Pin<Box<dyn Future<Output = Result<T, GitExecutorError>> + Send + 'a>>;
+
+pub struct GitWorkingHeadPrepare<'a> {
+    pub project_id: ProjectId,
+    pub storage_scope_id: StorageScopeId,
+    pub actor_user_id: UserId,
+    pub remote_head_sha: &'a str,
+    pub tree: &'a embedded::GitTreeSnapshot,
+}
+
+pub struct GitWorkingHeadPreparation(Box<dyn Any + Send>);
+
+impl fmt::Debug for GitWorkingHeadPreparation {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("GitWorkingHeadPreparation([OPAQUE])")
+    }
+}
+
+impl GitWorkingHeadPreparation {
+    pub(crate) fn new(value: impl Any + Send) -> Self {
+        Self(Box::new(value))
+    }
+
+    pub(crate) fn into_inner<T: Any + Send>(self) -> Result<T, GitExecutorError> {
+        self.0
+            .downcast::<T>()
+            .map(|value| *value)
+            .map_err(|_| GitExecutorError::Unavailable)
+    }
+}
+
+pub trait GitWorkingHeadStore: Send + Sync {
+    fn prepare<'a>(
+        &'a self,
+        input: GitWorkingHeadPrepare<'a>,
+    ) -> GitWorkingHeadFuture<'a, GitWorkingHeadPreparation>;
+
+    /// Finalizes a previously persisted Bundle. Implementations must not
+    /// perform object-storage or other network I/O through this boundary.
+    fn finalize<'a>(
+        &'a self,
+        connection: &'a mut PgConnection,
+        prepared: GitWorkingHeadPreparation,
+    ) -> GitWorkingHeadFuture<'a, ()>;
+
+    fn load<'a>(
+        &'a self,
+        connection: &'a mut PgConnection,
+        project_id: ProjectId,
+        actor_user_id: UserId,
+    ) -> GitWorkingHeadFuture<'a, embedded::GitTreeSnapshot>;
+}
+
+#[derive(Debug, Default, Clone, Copy)]
+pub struct UnavailableGitWorkingHeadStore;
+
+impl GitWorkingHeadStore for UnavailableGitWorkingHeadStore {
+    fn prepare<'a>(
+        &'a self,
+        _input: GitWorkingHeadPrepare<'a>,
+    ) -> GitWorkingHeadFuture<'a, GitWorkingHeadPreparation> {
+        Box::pin(async { Err(GitExecutorError::Unavailable) })
+    }
+
+    fn finalize<'a>(
+        &'a self,
+        _connection: &'a mut PgConnection,
+        _prepared: GitWorkingHeadPreparation,
+    ) -> GitWorkingHeadFuture<'a, ()> {
+        Box::pin(async { Err(GitExecutorError::Unavailable) })
+    }
+
+    fn load<'a>(
+        &'a self,
+        _connection: &'a mut PgConnection,
+        _project_id: ProjectId,
+        _actor_user_id: UserId,
+    ) -> GitWorkingHeadFuture<'a, embedded::GitTreeSnapshot> {
+        Box::pin(async { Err(GitExecutorError::Unavailable) })
+    }
 }
 
 /// Explicit fail-closed adapter used until a production HTTPS Git transport is
@@ -198,6 +309,7 @@ pub struct GitOperationService {
     integrations: IntegrationRepository,
     providers: GitProviderService,
     executor: Arc<dyn GitRemoteExecutor>,
+    working_heads: Arc<dyn GitWorkingHeadStore>,
     operation_timeout: Duration,
 }
 
@@ -211,14 +323,42 @@ impl fmt::Debug for GitOperationService {
 }
 
 impl GitOperationService {
+    /// Composes the production embedded HTTPS transport and canonical
+    /// S3-backed Working Head store. HTTP route layers should receive this
+    /// already-composed service rather than selecting transport defaults.
+    #[must_use]
+    pub fn production(
+        pool: DatabasePool,
+        keyring: MasterKeyring,
+        store: S3ObjectStore,
+        effective_quota: EffectiveQuota,
+    ) -> Self {
+        let integrations = IntegrationRepository::new(pool.clone(), keyring);
+        let guard = transport_security::GitHttpsTransportGuard::new(integrations.clone());
+        let executor = Arc::new(embedded::EmbeddedGitRemoteExecutor::new(guard));
+        let working_heads = Arc::new(working_head::S3GitWorkingHeadStore::new(
+            pool,
+            store,
+            effective_quota,
+        ));
+        Self::new(integrations, executor).with_working_head_store(working_heads)
+    }
+
     #[must_use]
     pub fn new(integrations: IntegrationRepository, executor: Arc<dyn GitRemoteExecutor>) -> Self {
         Self {
             providers: GitProviderService::new(integrations.clone()),
             integrations,
             executor,
+            working_heads: Arc::new(UnavailableGitWorkingHeadStore),
             operation_timeout: DEFAULT_OPERATION_TIMEOUT,
         }
+    }
+
+    #[must_use]
+    pub fn with_working_head_store(mut self, store: Arc<dyn GitWorkingHeadStore>) -> Self {
+        self.working_heads = store;
+        self
     }
 
     pub fn with_timeout(mut self, timeout: Duration) -> Result<Self, GitOperationError> {
@@ -227,6 +367,52 @@ impl GitOperationService {
         }
         self.operation_timeout = timeout;
         Ok(self)
+    }
+
+    /// Returns providers that an authenticated user can select for an import
+    /// or connection. Administrative endpoints should use `GitProviderService`
+    /// directly so disabled providers remain manageable there.
+    pub async fn list_available_providers(
+        &self,
+        user_id: UserId,
+    ) -> Result<Vec<GitProviderMetadata>, GitOperationError> {
+        let mut connection = self.acquire().await?;
+        ensure_active_user(&mut connection, user_id).await?;
+        self.providers
+            .list()
+            .await
+            .map_err(map_provider_error)
+            .map(|providers| {
+                providers
+                    .into_iter()
+                    .filter(|provider| {
+                        provider.state == GitProviderState::Active && provider.allows_read
+                    })
+                    .collect()
+            })
+    }
+
+    /// Loads the current remote binding after tenant-aware Project read
+    /// authorization. Credentials and provider secrets never cross this API.
+    pub async fn get_remote(
+        &self,
+        user_id: UserId,
+        project_id: ProjectId,
+    ) -> Result<GitRemoteBinding, GitOperationError> {
+        self.bounded(async {
+            let mut connection = self.acquire().await?;
+            let mut tx = connection
+                .begin()
+                .await
+                .map_err(|_| GitOperationError::Unavailable)?;
+            require_project_read(&mut tx, project_id, user_id).await?;
+            let remote = load_remote(&mut tx, project_id).await?;
+            tx.commit()
+                .await
+                .map_err(|_| GitOperationError::Unavailable)?;
+            Ok(remote)
+        })
+        .await
     }
 
     pub async fn list_connections(
@@ -253,6 +439,7 @@ impl GitOperationService {
     pub async fn connect(
         &self,
         user_id: UserId,
+        session_id: SessionId,
         provider_id: Uuid,
         token: &SecretValue,
         correlation_id: &str,
@@ -262,6 +449,7 @@ impl GitOperationService {
             let mut connection = self.acquire().await?;
             let mut tx = connection.begin().await.map_err(|_| GitOperationError::Unavailable)?;
             ensure_active_user(&mut tx, user_id).await?;
+            require_recent_reauthentication(&mut tx, user_id, session_id).await?;
             let provider = lock_provider(&mut tx, provider_id).await?;
             if provider.state != GitProviderState::Active || !provider.allows_read {
                 return Err(GitOperationError::ProviderUnavailable);
@@ -298,6 +486,7 @@ impl GitOperationService {
     pub async fn rotate(
         &self,
         user_id: UserId,
+        session_id: SessionId,
         connection_id: Uuid,
         expected_version: u64,
         token: &SecretValue,
@@ -311,6 +500,7 @@ impl GitOperationService {
                 .await
                 .map_err(|_| GitOperationError::Unavailable)?;
             ensure_active_user(&mut tx, user_id).await?;
+            require_recent_reauthentication(&mut tx, user_id, session_id).await?;
             let current =
                 lock_connection(&mut tx, user_id, connection_id, expected_version).await?;
             let credential = self
@@ -362,6 +552,7 @@ impl GitOperationService {
     pub async fn disconnect(
         &self,
         user_id: UserId,
+        session_id: SessionId,
         connection_id: Uuid,
         expected_version: u64,
         correlation_id: &str,
@@ -374,6 +565,7 @@ impl GitOperationService {
                 .await
                 .map_err(|_| GitOperationError::Unavailable)?;
             ensure_active_user(&mut tx, user_id).await?;
+            require_recent_reauthentication(&mut tx, user_id, session_id).await?;
             let current =
                 lock_connection(&mut tx, user_id, connection_id, expected_version).await?;
             let credential_id: String = sqlx::query_scalar(
@@ -433,12 +625,16 @@ impl GitOperationService {
                 .await
                 .map_err(|_| GitOperationError::Unavailable)?;
             require_project_write(&mut tx, project_id, user_id).await?;
+            let storage_scope_id = project_storage_scope(&mut tx, project_id).await?;
             lock_provider_generation(&mut tx, &provider, false).await?;
             if remote_exists(&mut tx, project_id).await? {
                 return Err(GitOperationError::AlreadyConnected);
             }
             let credential =
                 load_user_credential(&self.integrations, &mut tx, user_id, provider.id).await?;
+            tx.commit()
+                .await
+                .map_err(|_| GitOperationError::Unavailable)?;
             let outcome = self
                 .executor
                 .import(GitExecution {
@@ -450,6 +646,33 @@ impl GitOperationService {
                 .await
                 .map_err(map_executor_error)?;
             validate_import_outcome(&outcome)?;
+            let tree = outcome
+                .materialized_tree()
+                .ok_or(GitOperationError::Unavailable)?;
+            let prepared_head = self
+                .working_heads
+                .prepare(GitWorkingHeadPrepare {
+                    project_id,
+                    storage_scope_id,
+                    actor_user_id: user_id,
+                    remote_head_sha: outcome.head_sha(),
+                    tree,
+                })
+                .await
+                .map_err(map_executor_error)?;
+            let mut tx = connection
+                .begin()
+                .await
+                .map_err(|_| GitOperationError::Unavailable)?;
+            require_project_write(&mut tx, project_id, user_id).await?;
+            lock_provider_generation(&mut tx, &provider, false).await?;
+            if remote_exists(&mut tx, project_id).await? {
+                return Err(GitOperationError::AlreadyConnected);
+            }
+            self.working_heads
+                .finalize(&mut tx, prepared_head)
+                .await
+                .map_err(map_executor_error)?;
             let row = sqlx::query(
                 "INSERT INTO project_git_remotes(project_id,provider_id,repository_url,branch,
                  remote_head_sha,imported_by_user_id) VALUES($1::uuid,$2::uuid,$3,$4,$5,$6::uuid)
@@ -491,11 +714,10 @@ impl GitOperationService {
         correlation_id: &str,
     ) -> Result<(GitRemoteBinding, GitOperationOutcome), GitOperationError> {
         validate_expected_sha(expected_remote_head_sha)?;
-        self.update_remote(
+        self.pull_remote(
             user_id,
             project_id,
             expected_remote_head_sha,
-            None,
             correlation_id,
         )
         .await
@@ -511,38 +733,151 @@ impl GitOperationService {
     ) -> Result<(GitRemoteBinding, GitOperationOutcome), GitOperationError> {
         validate_expected_sha(expected_remote_head_sha)?;
         validate_commit_message(commit_message)?;
-        self.update_remote(
+        self.push_remote_two_phase(
             user_id,
             project_id,
             expected_remote_head_sha,
-            Some(commit_message),
+            commit_message,
             correlation_id,
         )
         .await
     }
 
-    async fn update_remote(
+    async fn push_remote_two_phase(
         &self,
         user_id: UserId,
         project_id: ProjectId,
         expected_head: &str,
-        commit_message: Option<&str>,
+        commit_message: &str,
         correlation_id: &str,
     ) -> Result<(GitRemoteBinding, GitOperationOutcome), GitOperationError> {
         validate_correlation(correlation_id)?;
-        self.bounded(async {
+        // Prepare: capture exact generations and credential, then release every
+        // database lock before S3 read or embedded Git I/O.
+        let mut connection = self.acquire().await?;
+        let mut tx = connection
+            .begin()
+            .await
+            .map_err(|_| GitOperationError::Unavailable)?;
+        require_project_write(&mut tx, project_id, user_id).await?;
+        let remote = lock_remote(&mut tx, project_id).await?;
+        if remote.remote_head_sha != expected_head {
+            return Err(GitOperationError::NonFastForward);
+        }
+        let provider = lock_provider_by_id(&mut tx, remote.provider_id).await?;
+        lock_provider_generation(&mut tx, &provider, true).await?;
+        let credential =
+            load_user_credential(&self.integrations, &mut tx, user_id, provider.id).await?;
+        tx.commit()
+            .await
+            .map_err(|_| GitOperationError::Unavailable)?;
+        let working_tree = self
+            .working_heads
+            .load(&mut connection, project_id, user_id)
+            .await
+            .map_err(map_executor_error)?;
+
+        // Execute: libgit2 push is intentionally not wrapped in a cancelling
+        // Tokio timeout because its blocking worker cannot be stopped safely.
+        let outcome = self
+            .executor
+            .commit_and_push(GitPushExecution {
+                update: GitUpdateExecution {
+                    remote: GitExecution {
+                        provider: &provider,
+                        repository_url: &remote.repository_url,
+                        branch: &remote.branch,
+                        credential: &credential,
+                    },
+                    expected_remote_head_sha: expected_head,
+                },
+                commit_message,
+                working_tree: &working_tree,
+            })
+            .await
+            .map_err(map_executor_error)?;
+        validate_update_outcome(&outcome, expected_head)
+            .map_err(|_| GitOperationError::CommitOutcomeUnknown)?;
+
+        // Finalize: re-authorize and fence every captured generation. From this
+        // point onward any failure is outcome-unknown because the remote has
+        // already accepted the commit.
+        let finalize = async {
+            let mut tx = connection
+                .begin()
+                .await
+                .map_err(|_| GitOperationError::Unavailable)?;
+            require_project_write(&mut tx, project_id, user_id).await?;
+            let current = lock_remote(&mut tx, project_id).await?;
+            if current.remote_version != remote.remote_version
+                || current.remote_head_sha != remote.remote_head_sha
+                || current.provider_id != remote.provider_id
+                || current.repository_url != remote.repository_url
+                || current.branch != remote.branch
+            {
+                return Err(GitOperationError::Conflict);
+            }
+            let current_provider = lock_provider_by_id(&mut tx, provider.id).await?;
+            if current_provider.config_version != provider.config_version {
+                return Err(GitOperationError::ProviderUnavailable);
+            }
+            lock_provider_generation(&mut tx, &current_provider, true).await?;
+            let row = sqlx::query(
+                "UPDATE project_git_remotes SET remote_head_sha=$2,\
+                 remote_version=remote_version+1,updated_at=CURRENT_TIMESTAMP \
+                 WHERE project_id=$1::uuid AND remote_version=$3 \
+                 RETURNING project_id::text,provider_id::text,repository_url,branch,\
+                 remote_head_sha,remote_version,created_at,updated_at",
+            )
+            .bind(project_id.to_string())
+            .bind(outcome.head_sha())
+            .bind(i64::try_from(remote.remote_version).map_err(|_| GitOperationError::Unavailable)?)
+            .fetch_one(&mut *tx)
+            .await
+            .map_err(map_database_error)?;
+            append_audit(
+                &mut tx,
+                user_id,
+                "git.project_pushed",
+                "project",
+                &project_id.to_string(),
+                correlation_id,
+            )
+            .await?;
+            let binding = remote_from_row(&row)?;
+            tx.commit()
+                .await
+                .map_err(|_| GitOperationError::Unavailable)?;
+            Ok(binding)
+        }
+        .await;
+        finalize
+            .map(|binding| (binding, outcome))
+            .map_err(|_| GitOperationError::CommitOutcomeUnknown)
+    }
+
+    async fn pull_remote(
+        &self,
+        user_id: UserId,
+        project_id: ProjectId,
+        expected_head: &str,
+        correlation_id: &str,
+    ) -> Result<(GitRemoteBinding, GitOperationOutcome), GitOperationError> {
+        validate_correlation(correlation_id)?;
+        let operation = async move {
             let mut connection = self.acquire().await?;
             let mut tx = connection
                 .begin()
                 .await
                 .map_err(|_| GitOperationError::Unavailable)?;
             require_project_write(&mut tx, project_id, user_id).await?;
+            let storage_scope_id = project_storage_scope(&mut tx, project_id).await?;
             let remote = lock_remote(&mut tx, project_id).await?;
             if remote.remote_head_sha != expected_head {
                 return Err(GitOperationError::NonFastForward);
             }
             let provider = lock_provider_by_id(&mut tx, remote.provider_id).await?;
-            lock_provider_generation(&mut tx, &provider, commit_message.is_some()).await?;
+            lock_provider_generation(&mut tx, &provider, false).await?;
             let credential =
                 load_user_credential(&self.integrations, &mut tx, user_id, provider.id).await?;
             let execution = GitUpdateExecution {
@@ -554,19 +889,54 @@ impl GitOperationService {
                 },
                 expected_remote_head_sha: expected_head,
             };
-            let outcome = match commit_message {
-                Some(message) => {
-                    self.executor
-                        .commit_and_push(GitPushExecution {
-                            update: execution,
-                            commit_message: message,
-                        })
-                        .await
-                }
-                None => self.executor.pull(execution).await,
-            }
-            .map_err(map_executor_error)?;
+            tx.commit()
+                .await
+                .map_err(|_| GitOperationError::Unavailable)?;
+            let outcome = self
+                .executor
+                .pull(execution)
+                .await
+                .map_err(map_executor_error)?;
             validate_update_outcome(&outcome, expected_head)?;
+            let tree = outcome
+                .materialized_tree()
+                .ok_or(GitOperationError::Unavailable)?;
+            // Bundle encoding and object persistence happen after the first
+            // transaction is committed and before the finalize transaction.
+            let prepared_head = self
+                .working_heads
+                .prepare(GitWorkingHeadPrepare {
+                    project_id,
+                    storage_scope_id,
+                    actor_user_id: user_id,
+                    remote_head_sha: outcome.head_sha(),
+                    tree,
+                })
+                .await
+                .map_err(map_executor_error)?;
+            let mut tx = connection
+                .begin()
+                .await
+                .map_err(|_| GitOperationError::Unavailable)?;
+            require_project_write(&mut tx, project_id, user_id).await?;
+            let current = lock_remote(&mut tx, project_id).await?;
+            if current.remote_version != remote.remote_version
+                || current.remote_head_sha != remote.remote_head_sha
+                || current.provider_id != remote.provider_id
+                || current.repository_url != remote.repository_url
+                || current.branch != remote.branch
+            {
+                return Err(GitOperationError::Conflict);
+            }
+            let current_provider = lock_provider_by_id(&mut tx, provider.id).await?;
+            if current_provider.config_version != provider.config_version {
+                return Err(GitOperationError::ProviderUnavailable);
+            }
+            lock_provider_generation(&mut tx, &current_provider, false).await?;
+            self.working_heads
+                .finalize(&mut tx, prepared_head)
+                .await
+                .map_err(map_executor_error)?;
             let row = sqlx::query(
                 "UPDATE project_git_remotes SET remote_head_sha=$2,
                  remote_version=remote_version+1,updated_at=CURRENT_TIMESTAMP
@@ -581,11 +951,7 @@ impl GitOperationService {
             append_audit(
                 &mut tx,
                 user_id,
-                if commit_message.is_some() {
-                    "git.project_pushed"
-                } else {
-                    "git.project_pulled"
-                },
+                "git.project_pulled",
                 "project",
                 &project_id.to_string(),
                 correlation_id,
@@ -596,8 +962,8 @@ impl GitOperationService {
                 .await
                 .map_err(|_| GitOperationError::Unavailable)?;
             Ok((binding, outcome))
-        })
-        .await
+        };
+        self.bounded(operation).await
     }
 
     async fn acquire(&self) -> Result<sqlx::pool::PoolConnection<Postgres>, GitOperationError> {
@@ -618,11 +984,24 @@ impl GitOperationService {
     }
 }
 
+#[cfg(test)]
+const fn map_finalize_error(
+    error: GitOperationError,
+    remote_push_completed: bool,
+) -> GitOperationError {
+    if remote_push_completed {
+        GitOperationError::CommitOutcomeUnknown
+    } else {
+        error
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum GitOperationError {
     InvalidInput,
     AuthenticationFailed,
+    ReauthenticationRequired,
     Forbidden,
     NotFound,
     AlreadyConnected,
@@ -632,6 +1011,10 @@ pub enum GitOperationError {
     CredentialUnavailable,
     TransferLimitExceeded,
     OperationTimeout,
+    /// The remote accepted a push, but Nuriteo could not durably finalize its
+    /// local head record. Callers must reconcile the remote before retrying;
+    /// blindly retrying can create a second commit.
+    CommitOutcomeUnknown,
     Unavailable,
 }
 
@@ -640,6 +1023,7 @@ impl fmt::Display for GitOperationError {
         formatter.write_str(match self {
             Self::InvalidInput => "Git operation input is invalid",
             Self::AuthenticationFailed => "Git credential was rejected",
+            Self::ReauthenticationRequired => "recent reauthentication is required",
             Self::Forbidden => "Git operation is not authorized",
             Self::NotFound => "Git resource was not found",
             Self::AlreadyConnected => "Git resource is already connected",
@@ -649,6 +1033,9 @@ impl fmt::Display for GitOperationError {
             Self::CredentialUnavailable => "Git credential is unavailable",
             Self::TransferLimitExceeded => "Git transfer limit was exceeded",
             Self::OperationTimeout => "Git operation timed out",
+            Self::CommitOutcomeUnknown => {
+                "remote Git push succeeded but local commit outcome is unknown"
+            }
             Self::Unavailable => "Git operation service is unavailable",
         })
     }
@@ -674,6 +1061,36 @@ async fn ensure_active_user(
     }
 }
 
+async fn require_recent_reauthentication(
+    tx: &mut Transaction<'_, Postgres>,
+    user_id: UserId,
+    session_id: SessionId,
+) -> Result<(), GitOperationError> {
+    let recent: Option<bool> = sqlx::query_scalar(
+        "SELECT session.last_reauthenticated_at IS NOT NULL \
+         AND session.last_reauthenticated_at>=transaction_timestamp()-\
+             make_interval(mins=>(policy.value #>> '{}')::integer) \
+         AND session.last_reauthenticated_at<=transaction_timestamp() \
+         FROM sessions session CROSS JOIN instance_settings policy \
+         WHERE session.id=$1::uuid AND session.user_id=$2::uuid \
+           AND session.revoked_at IS NULL AND session.rotated_at IS NULL \
+           AND session.idle_expires_at>transaction_timestamp() \
+           AND session.absolute_expires_at>transaction_timestamp() \
+           AND policy.key='security.reauthentication_window_minutes' \
+         FOR UPDATE OF session",
+    )
+    .bind(session_id.to_string())
+    .bind(user_id.to_string())
+    .fetch_optional(&mut **tx)
+    .await
+    .map_err(|_| GitOperationError::Unavailable)?;
+    match recent {
+        Some(true) => Ok(()),
+        Some(false) => Err(GitOperationError::ReauthenticationRequired),
+        None => Err(GitOperationError::AuthenticationFailed),
+    }
+}
+
 async fn require_project_write(
     tx: &mut Transaction<'_, Postgres>,
     project_id: ProjectId,
@@ -687,6 +1104,36 @@ async fn require_project_write(
     } else {
         Err(GitOperationError::NotFound)
     }
+}
+
+async fn require_project_read(
+    tx: &mut Transaction<'_, Postgres>,
+    project_id: ProjectId,
+    user_id: UserId,
+) -> Result<(), GitOperationError> {
+    let role = ProjectAccessRepository::resolve_effective_role(tx, project_id, user_id)
+        .await
+        .map_err(|_| GitOperationError::Unavailable)?;
+    if role >= EffectiveProjectRole::Read {
+        Ok(())
+    } else {
+        Err(GitOperationError::NotFound)
+    }
+}
+
+async fn project_storage_scope(
+    tx: &mut Transaction<'_, Postgres>,
+    project_id: ProjectId,
+) -> Result<StorageScopeId, GitOperationError> {
+    let value: String = sqlx::query_scalar(
+        "SELECT storage_scope_id::text FROM projects WHERE id=$1::uuid AND state='active'",
+    )
+    .bind(project_id.to_string())
+    .fetch_optional(&mut **tx)
+    .await
+    .map_err(|_| GitOperationError::Unavailable)?
+    .ok_or(GitOperationError::NotFound)?;
+    StorageScopeId::from_str(&value).map_err(|_| GitOperationError::Unavailable)
 }
 
 async fn lock_provider(
@@ -797,6 +1244,22 @@ async fn lock_remote(
          remote_version,created_at,updated_at FROM project_git_remotes WHERE project_id=$1::uuid FOR UPDATE",
     ).bind(project_id.to_string()).fetch_optional(&mut **tx).await
         .map_err(|_| GitOperationError::Unavailable)?.ok_or(GitOperationError::NotFound)?;
+    remote_from_row(&row)
+}
+
+async fn load_remote(
+    tx: &mut Transaction<'_, Postgres>,
+    project_id: ProjectId,
+) -> Result<GitRemoteBinding, GitOperationError> {
+    let row = sqlx::query(
+        "SELECT project_id::text,provider_id::text,repository_url,branch,remote_head_sha,\
+         remote_version,created_at,updated_at FROM project_git_remotes WHERE project_id=$1::uuid",
+    )
+    .bind(project_id.to_string())
+    .fetch_optional(&mut **tx)
+    .await
+    .map_err(|_| GitOperationError::Unavailable)?
+    .ok_or(GitOperationError::NotFound)?;
     remote_from_row(&row)
 }
 

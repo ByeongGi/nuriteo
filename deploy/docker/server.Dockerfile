@@ -1,5 +1,9 @@
 FROM docker.io/library/rust:1.97.1-slim-bookworm@sha256:2775a09d208ff0d7c1f50490c45b62db929e87ba1dcbc3f2132ac71a704bcdd3 AS builder
 
+RUN apt-get update \
+    && apt-get install --yes --no-install-recommends build-essential cmake perl pkg-config \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /build
 
 COPY Cargo.toml Cargo.lock ./

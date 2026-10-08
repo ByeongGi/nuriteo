@@ -432,6 +432,38 @@ async fn organization_http_journey_is_authorized_versioned_and_secret_free() {
         StatusCode::OK
     );
 
+    set_smtp_enabled(&pool, true).await;
+    let email_queued = json_request(
+        &router,
+        Some(&owner),
+        Method::POST,
+        &invitations_path,
+        json!({"email":"owner-two@example.test","role":"member"}),
+        None,
+    )
+    .await;
+    assert_eq!(email_queued.status(), StatusCode::CREATED);
+    let email_queued = response_json(email_queued).await;
+    assert_eq!(email_queued["delivery"], "email_queued");
+    assert!(email_queued["acceptUrl"].is_null());
+    let queued_reissue = json_request(
+        &router,
+        Some(&owner),
+        Method::POST,
+        &format!(
+            "{invitations_path}/{}/reissue",
+            email_queued["id"].as_str().unwrap()
+        ),
+        json!({"role":"member"}),
+        None,
+    )
+    .await;
+    assert_eq!(queued_reissue.status(), StatusCode::OK);
+    let queued_reissue = response_json(queued_reissue).await;
+    assert_eq!(queued_reissue["delivery"], "email_queued");
+    assert!(queued_reissue["acceptUrl"].is_null());
+    set_smtp_enabled(&pool, false).await;
+
     let archive_path = format!("{location}/archive");
     let archived = empty_request(
         &router,
@@ -670,6 +702,18 @@ async fn seed_users(pool: &DatabasePool) -> Users {
 
 async fn set_reauthenticated(pool: &DatabasePool, user_id: UserId) {
     sqlx::query("UPDATE sessions SET last_seen_at=transaction_timestamp(), last_reauthenticated_at=transaction_timestamp() WHERE user_id=$1::uuid AND revoked_at IS NULL").bind(user_id.to_string()).execute(&mut *acquire(pool).await).await.unwrap();
+}
+
+async fn set_smtp_enabled(pool: &DatabasePool, enabled: bool) {
+    sqlx::query(
+        "UPDATE instance_settings SET value=to_jsonb($1::boolean), \
+         updated_at=transaction_timestamp(), lock_version=lock_version+1 \
+         WHERE key='smtp.enabled'",
+    )
+    .bind(enabled)
+    .execute(&mut *acquire(pool).await)
+    .await
+    .unwrap();
 }
 
 async fn verify_no_secret_persistence(pool: &DatabasePool, secrets: &[&str]) {

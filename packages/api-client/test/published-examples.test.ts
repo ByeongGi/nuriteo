@@ -7,9 +7,11 @@ import {
   createApiClient,
   createPublishedExample,
   deletePublishedExample,
+  forkPublishedExample,
   getPublicPublishedExample,
   getPublicPublishedExampleVersion,
   listPublicPublishedExamples,
+  publicPublishedExampleContentPath,
   republishPublishedExample,
   selectPublishedExampleActiveVersion,
   setPublishedExampleVisibility,
@@ -30,6 +32,7 @@ const OWNER: ProjectOwner = { ownerType: "user", ownerId: USER_ID };
 
 await managementContract();
 await publicContractAndFailClosedProjection();
+await forkContractAndFailClosedProjection();
 await invalidRequestsFailBeforeFetch();
 
 async function managementContract(): Promise<void> {
@@ -120,6 +123,14 @@ async function managementContract(): Promise<void> {
 }
 
 async function publicContractAndFailClosedProjection(): Promise<void> {
+  assert.equal(
+    publicPublishedExampleContentPath({ publicId: PUBLIC_ID }),
+    `/published-examples/${PUBLIC_ID}/content`
+  );
+  assert.equal(
+    publicPublishedExampleContentPath({ publicId: PUBLIC_ID, versionNumber: 3 }),
+    `/published-examples/${PUBLIC_ID}/versions/3/content`
+  );
   const calls: string[] = [];
   const client = createApiClient({
     fetch: async (input) => {
@@ -161,6 +172,76 @@ async function publicContractAndFailClosedProjection(): Promise<void> {
   );
 }
 
+async function forkContractAndFailClosedProjection(): Promise<void> {
+  const calls: Array<{ url: string; init: RequestInit | undefined }> = [];
+  const forkedProjectId = "0199ee6c-c777-7000-8000-000000080006";
+  const active = forkPayload(forkedProjectId, 2, false);
+  const replay = forkPayload(forkedProjectId, 3, true);
+  const location = `/api/v1/workspaces/users/${USER_ID}/projects/${forkedProjectId}`;
+  const queue = [json(active, 201, { location }), json(replay, 200, { location })];
+  const client = createApiClient({
+    fetch: async (input, init) => {
+      calls.push({ url: String(input), init });
+      return queue.shift()!;
+    }
+  });
+
+  const created = await forkPublishedExample(client, {
+    publicId: PUBLIC_ID,
+    destinationOwner: OWNER,
+    slug: "forked-example",
+    name: "Forked Example",
+    idempotencyKey: "browser-fork-request-01"
+  }, { csrfToken: CSRF });
+  const retried = await forkPublishedExample(client, {
+    publicId: PUBLIC_ID,
+    versionNumber: 3,
+    destinationOwner: OWNER,
+    slug: "forked-example",
+    name: "Forked Example",
+    idempotencyKey: "browser-fork-request-02"
+  }, { csrfToken: CSRF });
+
+  assert.equal(created.location, location);
+  assert.equal(created.data.idempotentRetry, false);
+  assert.equal(retried.data.idempotentRetry, true);
+  assert.deepEqual(calls.map(({ url, init }) => ({
+    url,
+    body: JSON.parse(String(init?.body)),
+    csrf: new Headers(init?.headers).get("x-csrf-token"),
+    idempotency: new Headers(init?.headers).get("idempotency-key")
+  })), [
+    {
+      url: `/api/v1/published-examples/${PUBLIC_ID}/forks`,
+      body: { destinationOwner: OWNER, slug: "forked-example", name: "Forked Example" },
+      csrf: CSRF,
+      idempotency: "browser-fork-request-01"
+    },
+    {
+      url: `/api/v1/published-examples/${PUBLIC_ID}/versions/3/forks`,
+      body: { destinationOwner: OWNER, slug: "forked-example", name: "Forked Example" },
+      csrf: CSRF,
+      idempotency: "browser-fork-request-02"
+    }
+  ]);
+
+  for (const field of [
+    "sourceExampleId", "sourceExampleVersionId", "sourceBundleId", "projectVersionId",
+    "storageScopeId", "idempotencyKey"
+  ]) {
+    await assert.rejects(
+      () => forkPublishedExample(single({ ...active, [field]: "internal" }), {
+        publicId: PUBLIC_ID,
+        destinationOwner: OWNER,
+        slug: "forked-example",
+        name: "Forked Example",
+        idempotencyKey: "browser-fork-request-03"
+      }, { csrfToken: CSRF }),
+      ApiInvalidResponseError
+    );
+  }
+}
+
 async function invalidRequestsFailBeforeFetch(): Promise<void> {
   let fetched = false;
   const client = createApiClient({ fetch: async () => { fetched = true; return json({}); } });
@@ -184,6 +265,16 @@ async function invalidRequestsFailBeforeFetch(): Promise<void> {
   );
   await assert.rejects(
     () => listPublicPublishedExamples(client, { limit: 101 }),
+    ApiConfigurationError
+  );
+  await assert.rejects(
+    () => forkPublishedExample(client, {
+      publicId: PUBLIC_ID,
+      destinationOwner: OWNER,
+      slug: "Forked Example",
+      name: "Forked Example",
+      idempotencyKey: "short"
+    }, { csrfToken: CSRF }),
     ApiConfigurationError
   );
   assert.equal(fetched, false);
@@ -219,6 +310,24 @@ function publicExample() {
     visibility: "public",
     versionNumber: 1,
     publishedAt: "2026-10-08T00:00:00Z"
+  };
+}
+
+function forkPayload(projectId: string, sourceVersionNumber: number, idempotentRetry: boolean) {
+  return {
+    project: {
+      id: projectId,
+      ownerType: "user",
+      ownerId: USER_ID,
+      slug: "forked-example",
+      name: "Forked Example",
+      state: "active",
+      version: 2,
+      createdAt: "2026-10-08T00:00:00Z",
+      updatedAt: "2026-10-08T00:00:00Z"
+    },
+    sourceVersionNumber,
+    idempotentRetry
   };
 }
 

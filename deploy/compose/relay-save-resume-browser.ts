@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import path from "node:path";
 
 import { chromium, type BrowserContext, type Frame, type Page } from "@playwright/test";
 
@@ -86,9 +87,9 @@ async function saveJourney(
   await adminPage.goto(`${origin}/admin/invitations`, { waitUntil: "networkidle" });
   await adminPage.getByLabel("Invitee email").fill(inviteeEmail);
   await adminPage.getByRole("button", { name: "Issue invitation" }).click();
-  const activationUrl = await oneTimeUrl(adminPage, "/activate?token=nrt_inv_");
-  await adminPage.getByRole("button", { name: "Clear link" }).click();
-  await adminPage.locator("output").waitFor({ state: "detached" });
+  await adminPage.getByRole("status").filter({ hasText: "activation email is queued" }).waitFor();
+  assert.equal(await adminPage.locator("output").count(), 0);
+  const activationUrl = await consumeSmtpInvitationUrl("smtp-activation-url", "/activate?token=nrt_inv_");
 
   const invitee = await browser.newContext();
   const inviteePage = await observedPage(invitee, ledger);
@@ -112,12 +113,12 @@ async function saveJourney(
   journeyStage = "organization-invite";
   await adminPage.getByLabel("Invitee email").fill(inviteeEmail);
   await adminPage.getByRole("button", { name: "Issue Organization invitation" }).click();
-  const organizationInvitationUrl = await oneTimeUrl(
-    adminPage,
+  await adminPage.getByRole("status").filter({ hasText: "invitation email is queued" }).waitFor();
+  assert.equal(await adminPage.locator("output").count(), 0);
+  const organizationInvitationUrl = await consumeSmtpInvitationUrl(
+    "smtp-organization-url",
     "/organization-invitations/accept?token=nrt_org_inv_"
   );
-  await adminPage.getByRole("button", { name: "Clear link" }).click();
-  await adminPage.locator("output").waitFor({ state: "detached" });
 
   journeyStage = "organization-accept";
   await inviteePage.goto(organizationInvitationUrl, { waitUntil: "networkidle" });
@@ -165,6 +166,23 @@ async function saveJourney(
 
   await closeObservedContext(invitee, ledger);
   await closeObservedContext(admin, ledger);
+}
+
+async function consumeSmtpInvitationUrl(fileName: string, expectedPath: string): Promise<string> {
+  const captureDirectory = requiredEnvironment("NURITEO_COMPOSE_SMTP_CAPTURE_DIR");
+  const capturePath = path.join(captureDirectory, fileName);
+  for (let attempt = 0; attempt < 240; attempt += 1) {
+    if (fs.existsSync(capturePath)) {
+      const value = fs.readFileSync(capturePath, "utf8").trim();
+      fs.unlinkSync(capturePath);
+      const parsed = new URL(value);
+      assert.equal(parsed.origin, origin);
+      assert.ok(value.includes(expectedPath));
+      return value;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  throw new Error(`SMTP invitation capture was not produced: ${fileName}`);
 }
 
 async function runPreviewAndSave(page: Page, ledger: Ledger): Promise<void> {
@@ -359,17 +377,6 @@ function recordLedgerError(error: unknown, context: BrowserContext, ledger: Ledg
 
 function isTargetClosed(error: unknown): boolean {
   return error instanceof Error && /Target page, context or browser has been closed/u.test(error.message);
-}
-
-async function oneTimeUrl(page: Page, marker: string): Promise<string> {
-  const output = page.locator("output");
-  await output.waitFor();
-  const value = await output.textContent();
-  if (value === null || !value.includes(marker)) {
-    throw new Error("expected one-time URL was not displayed");
-  }
-  assert.equal(new URL(value).origin, origin);
-  return value;
 }
 
 async function waitForPreviewFrame(page: Page, expectedOrigin: string): Promise<Frame> {

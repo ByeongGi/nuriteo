@@ -474,6 +474,34 @@ impl RegistryGatewayService {
         Ok(metadata)
     }
 
+    /// Runs the normal authenticated Registry metadata preflight with a
+    /// staged CA candidate. This does not activate either the CA or Registry.
+    pub(crate) async fn preflight_ca_candidate(
+        &self,
+        id: Uuid,
+        candidate_ca: &ValidatedCaBundle,
+        endpoint: &CaEndpointBinding,
+    ) -> Result<(), RegistryError> {
+        let metadata = self
+            .list()
+            .await?
+            .into_iter()
+            .find(|connection| connection.id == id)
+            .ok_or(RegistryError::NotFound)?;
+        let mut connection = self.acquire().await?;
+        let mut tx = connection
+            .begin()
+            .await
+            .map_err(|_| RegistryError::Unavailable)?;
+        let runtime =
+            load_runtime_with_ca(&self.integrations, &mut tx, metadata, Some(candidate_ca)).await?;
+        tx.commit().await.map_err(|_| RegistryError::Unavailable)?;
+        if runtime.binding.fingerprint() != endpoint.fingerprint() {
+            return Err(RegistryError::ValidationFailed);
+        }
+        self.preflight(&runtime).await.map(|_| ())
+    }
+
     pub async fn set_default(
         &self,
         actor: IntegrationAdminActor,
@@ -823,6 +851,15 @@ async fn load_runtime(
     tx: &mut Transaction<'_, Postgres>,
     metadata: RegistryConnectionMetadata,
 ) -> Result<RegistryRuntime, RegistryError> {
+    load_runtime_with_ca(integrations, tx, metadata, None).await
+}
+
+async fn load_runtime_with_ca(
+    integrations: &IntegrationRepository,
+    tx: &mut Transaction<'_, Postgres>,
+    metadata: RegistryConnectionMetadata,
+    ca_override: Option<&ValidatedCaBundle>,
+) -> Result<RegistryRuntime, RegistryError> {
     let credential_id: String = sqlx::query_scalar(
         "SELECT credential_id::text FROM registry_connections WHERE id=$1::uuid",
     )
@@ -840,10 +877,13 @@ async fn load_runtime(
         return Err(RegistryError::CredentialUnavailable);
     }
     let binding = endpoint_binding(&metadata)?;
-    let ca = integrations
-        .active_ca_for_endpoint(&binding)
-        .await
-        .map_err(map_integration_error)?;
+    let ca = match ca_override {
+        Some(bundle) => Some(bundle.clone()),
+        None => integrations
+            .active_ca_for_endpoint(&binding)
+            .await
+            .map_err(map_integration_error)?,
+    };
     let ca_fingerprint = trust_fingerprint(ca.as_ref());
     Ok(RegistryRuntime {
         metadata,
@@ -1011,7 +1051,7 @@ fn is_public_ip(ip: IpAddr) -> bool {
     }
 }
 
-fn endpoint_binding(
+pub(crate) fn endpoint_binding(
     metadata: &RegistryConnectionMetadata,
 ) -> Result<CaEndpointBinding, RegistryError> {
     CaEndpointBinding::new(

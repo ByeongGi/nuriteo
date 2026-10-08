@@ -87,9 +87,10 @@ export interface OrganizationInvitationCollection {
   readonly items: readonly OrganizationInvitation[];
 }
 
-export interface IssuedOrganizationInvitation extends OrganizationInvitation {
-  readonly acceptUrl: OneTimeUrl;
-}
+export type IssuedOrganizationInvitation = OrganizationInvitation & (
+  | { readonly delivery: "copy_once"; readonly acceptUrl: OneTimeUrl }
+  | { readonly delivery: "email_queued"; readonly acceptUrl: null }
+);
 
 export interface CreateOrganizationInput {
   readonly slug: string;
@@ -389,7 +390,7 @@ function issuedInvitationResult(
   }
 ): ApiResult<IssuedOrganizationInvitation> {
   return validatedResultForStatus(response, status, (value) => {
-    const record = invitationRecord(value, ["acceptUrl"]);
+    const record = invitationRecord(value, ["acceptUrl", "delivery"]);
     const invitation = parseInvitationRecord(record);
     if (
       invitation.organizationId !== expected.organizationId ||
@@ -400,8 +401,14 @@ function issuedInvitationResult(
     ) {
       throw new TypeError("invalid issued invitation identity");
     }
+    const delivery = readEnum(record, "delivery", ["copy_once", "email_queued"] as const);
+    if (delivery === "email_queued") {
+      if (record.acceptUrl !== null) throw invalidResponse(response);
+      return { ...invitation, delivery, acceptUrl: null };
+    }
     return {
       ...invitation,
+      delivery,
       acceptUrl: OneTimeUrl.parse(
         record.acceptUrl,
         "/organization-invitations/accept",

@@ -41,7 +41,9 @@ function testServerFirstBoundaries(): void {
   const clientFiles = findFiles("src").filter((file) => /["']use client["']/u.test(read(file)));
   assert.deepEqual(clientFiles.sort(), [
     "src/app/(authenticated)/access-tokens/token-console.tsx",
+    "src/app/(authenticated)/admin/_components/integration-ca-console.tsx",
     "src/app/(authenticated)/admin/admin-navigation.tsx",
+    "src/app/(authenticated)/admin/git-providers/provider-console.tsx",
     "src/app/(authenticated)/admin/invitations/activation-invitations.tsx",
     "src/app/(authenticated)/admin/mfa/policy-editor.tsx",
     "src/app/(authenticated)/admin/notifications/email-delivery-console.tsx",
@@ -54,11 +56,14 @@ function testServerFirstBoundaries(): void {
     "src/app/(authenticated)/organizations/[organizationId]/teams/team-console.tsx",
     "src/app/(authenticated)/organizations/organization-console.tsx",
     "src/app/(authenticated)/projects/project-dashboard.tsx",
+    "src/app/(authenticated)/projects/project-git-panel.tsx",
     "src/app/(authenticated)/projects/project-history-panel.tsx",
     "src/app/(authenticated)/projects/project-ide-shell.tsx",
     "src/app/_components/error-view.tsx",
     "src/app/activate/activation-form.tsx",
     "src/app/error.tsx",
+    "src/app/examples/_components/fork-example-form.tsx",
+    "src/app/examples/_components/published-example-preview.tsx",
     "src/app/global-error.tsx",
     "src/app/mfa/security.tsx",
     "src/app/sign-in/sign-in-form.tsx",
@@ -139,6 +144,13 @@ function testProductionBoundary(): void {
   assert.match(loginRoute, /forwardCreateSession/u);
   assert.match(meRoute, /forwardCurrentUser/u);
   assert.doesNotMatch(`${loginRoute}\n${meRoute}`, /\[\.\.\.|params|pathname/u);
+
+  const projectGitPanel = read("src/app/(authenticated)/projects/project-git-panel.tsx");
+  assert.match(projectGitPanel, /type="password"/u);
+  assert.match(projectGitPanel, /REAUTHENTICATION_REQUIRED/u);
+  assert.match(projectGitPanel, /Sign in again to refresh recent authentication/u);
+  assert.match(projectGitPanel, /field\.value = ""/u);
+  assert.doesNotMatch(projectGitPanel, /localStorage|sessionStorage|indexedDB/u);
 }
 
 function findFiles(directory: string): string[] {

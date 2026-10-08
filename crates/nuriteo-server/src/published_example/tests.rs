@@ -52,3 +52,37 @@ fn migration_enforces_fixed_versions_and_permanent_public_id_reservation() {
     assert!(migration.contains("DEFERRABLE INITIALLY DEFERRED"));
     assert!(migration.contains("ON DELETE CASCADE"));
 }
+
+#[test]
+fn fork_idempotency_keys_are_bounded_and_redacted() {
+    let key = PublishedExampleForkKey::new("browser-request-01".into()).expect("valid key");
+    assert_eq!(key.as_str(), "browser-request-01");
+    assert_eq!(format!("{key:?}"), "PublishedExampleForkKey([redacted])");
+    assert!(PublishedExampleForkKey::new("short".into()).is_err());
+    assert!(PublishedExampleForkKey::new("contains whitespace".into()).is_err());
+    assert!(PublishedExampleForkKey::new("x".repeat(129)).is_err());
+}
+
+#[test]
+fn fork_migration_requires_exact_source_and_independent_destination_admission() {
+    let migration = include_str!("../../migrations/0043_published_example_forks.sql");
+    assert!(migration.contains("published_example_forks_actor_key_unique"));
+    assert!(migration.contains("idempotency_digest bytea"));
+    assert!(!migration.contains("idempotency_key text"));
+    assert!(migration.contains("example.state = 'published'"));
+    assert!(migration.contains("destination_bundle_id uuid NOT NULL UNIQUE"));
+    assert!(migration.contains("fork.destination_bundle_id = NEW.bundle_id"));
+    assert!(!migration.contains("fork.source_bundle_id = NEW.bundle_id"));
+    assert!(migration.contains("source_published_example_fork_id"));
+    assert!(migration.contains("project_bundle_admissions_provenance_check"));
+    assert!(migration.contains("source_save_session_id IS NULL"));
+    assert!(!migration.contains("REFERENCES published_example_versions"));
+    let materialization =
+        include_str!("../../migrations/0044_git_working_head_materializations.sql");
+    assert!(materialization.contains("published_example_forks_canonical_source_fk"));
+    assert!(materialization.contains("materialization.project_id = NEW.destination_project_id"));
+    assert!(
+        materialization
+            .contains("materialization.storage_scope_id = NEW.destination_storage_scope_id")
+    );
+}

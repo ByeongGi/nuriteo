@@ -10,7 +10,9 @@ const destinations = [
   { href: "/admin/mfa", label: "MFA policy" },
   { href: "/admin/oidc", label: "Identity providers" },
   { href: "/admin/registries", label: "Package registries" },
-  { href: "/admin/notifications", label: "Email delivery" }
+  { href: "/admin/git-providers", label: "Git providers" },
+  { href: "/admin/notifications", label: "Email delivery" },
+  { href: "/admin/smtp-trust", label: "SMTP trust" },
 ] as const;
 
 export function AdminNavigation() {

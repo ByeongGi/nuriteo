@@ -67,6 +67,19 @@ impl NotificationWorkerPolicy {
     }
 }
 
+impl Default for NotificationWorkerPolicy {
+    fn default() -> Self {
+        Self::new(
+            16,
+            4,
+            Duration::from_secs(1),
+            Duration::from_secs(5),
+            Duration::from_secs(45),
+        )
+        .expect("production notification worker policy is valid")
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NotificationWorkerPolicyError {
     InvalidBatchSize,
@@ -240,6 +253,7 @@ impl NotificationWorker {
             };
             let context = InvitationAttemptContext {
                 invitation_id: job.resource_id().to_owned(),
+                resource_type: job.resource_type().to_owned(),
                 recipient_email: job.recipient_email().to_owned(),
                 attempt_count: job.attempt_count(),
             };

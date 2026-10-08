@@ -184,6 +184,7 @@ impl fmt::Debug for InvitationAttemptToken {
 #[derive(Clone, PartialEq, Eq)]
 pub struct InvitationAttemptContext {
     pub invitation_id: String,
+    pub resource_type: String,
     pub recipient_email: String,
     pub attempt_count: u8,
 }
@@ -193,6 +194,7 @@ impl fmt::Debug for InvitationAttemptContext {
         formatter
             .debug_struct("InvitationAttemptContext")
             .field("invitation_id", &self.invitation_id)
+            .field("resource_type", &self.resource_type)
             .field("recipient_email", &"[REDACTED]")
             .field("attempt_count", &self.attempt_count)
             .finish()

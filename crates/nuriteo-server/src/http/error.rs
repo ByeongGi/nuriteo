@@ -14,6 +14,7 @@ enum ProblemKind {
     MethodNotAllowed,
     Authentication,
     Forbidden,
+    ReauthenticationRequired,
     PayloadTooLarge,
     UnsupportedMediaType,
     Validation,
@@ -23,6 +24,7 @@ enum ProblemKind {
     PreconditionRequired,
     PreconditionFailed,
     RangeNotSatisfiable,
+    RateLimited,
     ServiceUnavailable,
     OperationTimeout,
     CommitOutcomeUnknown,
@@ -35,7 +37,7 @@ impl ProblemKind {
             Self::NotFound => StatusCode::NOT_FOUND,
             Self::MethodNotAllowed => StatusCode::METHOD_NOT_ALLOWED,
             Self::Authentication => StatusCode::UNAUTHORIZED,
-            Self::Forbidden => StatusCode::FORBIDDEN,
+            Self::Forbidden | Self::ReauthenticationRequired => StatusCode::FORBIDDEN,
             Self::PayloadTooLarge => StatusCode::PAYLOAD_TOO_LARGE,
             Self::UnsupportedMediaType => StatusCode::UNSUPPORTED_MEDIA_TYPE,
             Self::Validation => StatusCode::UNPROCESSABLE_ENTITY,
@@ -43,6 +45,7 @@ impl ProblemKind {
             Self::PreconditionRequired => StatusCode::PRECONDITION_REQUIRED,
             Self::PreconditionFailed => StatusCode::PRECONDITION_FAILED,
             Self::RangeNotSatisfiable => StatusCode::RANGE_NOT_SATISFIABLE,
+            Self::RateLimited => StatusCode::TOO_MANY_REQUESTS,
             Self::ServiceUnavailable
             | Self::ReconciliationRequired
             | Self::CommitOutcomeUnknown => StatusCode::SERVICE_UNAVAILABLE,
@@ -57,6 +60,7 @@ impl ProblemKind {
             Self::MethodNotAllowed => "/docs/problems/method-not-allowed",
             Self::Authentication => "/docs/problems/authentication-failed",
             Self::Forbidden => "/docs/problems/request-forbidden",
+            Self::ReauthenticationRequired => "/docs/problems/reauthentication-required",
             Self::PayloadTooLarge => "/docs/problems/payload-too-large",
             Self::UnsupportedMediaType => "/docs/problems/unsupported-media-type",
             Self::Validation => "/docs/problems/validation-failed",
@@ -66,6 +70,7 @@ impl ProblemKind {
             Self::PreconditionRequired => "/docs/problems/precondition-required",
             Self::PreconditionFailed => "/docs/problems/precondition-failed",
             Self::RangeNotSatisfiable => "/docs/problems/range-not-satisfiable",
+            Self::RateLimited => "/docs/problems/rate-limited",
             Self::ServiceUnavailable => "/docs/problems/service-unavailable",
             Self::OperationTimeout => "/docs/problems/operation-timeout",
             Self::CommitOutcomeUnknown => "/docs/problems/commit-outcome-unknown",
@@ -79,6 +84,7 @@ impl ProblemKind {
             Self::MethodNotAllowed => "Method not allowed",
             Self::Authentication => "Authentication failed",
             Self::Forbidden => "Request forbidden",
+            Self::ReauthenticationRequired => "Recent reauthentication required",
             Self::PayloadTooLarge => "Payload too large",
             Self::UnsupportedMediaType => "Unsupported media type",
             Self::Validation => "Validation failed",
@@ -88,6 +94,7 @@ impl ProblemKind {
             Self::PreconditionRequired => "Precondition required",
             Self::PreconditionFailed => "Precondition failed",
             Self::RangeNotSatisfiable => "Range not satisfiable",
+            Self::RateLimited => "Rate limit exceeded",
             Self::ServiceUnavailable => "Service unavailable",
             Self::OperationTimeout => "Operation timed out",
             Self::CommitOutcomeUnknown => "Commit outcome unknown",
@@ -101,6 +108,7 @@ impl ProblemKind {
             Self::MethodNotAllowed => "METHOD_NOT_ALLOWED",
             Self::Authentication => "AUTHENTICATION_FAILED",
             Self::Forbidden => "REQUEST_FORBIDDEN",
+            Self::ReauthenticationRequired => "REAUTHENTICATION_REQUIRED",
             Self::PayloadTooLarge => "PAYLOAD_TOO_LARGE",
             Self::UnsupportedMediaType => "UNSUPPORTED_MEDIA_TYPE",
             Self::Validation => "VALIDATION_FAILED",
@@ -110,6 +118,7 @@ impl ProblemKind {
             Self::PreconditionRequired => "PRECONDITION_REQUIRED",
             Self::PreconditionFailed => "PRECONDITION_FAILED",
             Self::RangeNotSatisfiable => "RANGE_NOT_SATISFIABLE",
+            Self::RateLimited => "RATE_LIMITED",
             Self::ServiceUnavailable => "SERVICE_UNAVAILABLE",
             Self::OperationTimeout => "OPERATION_TIMEOUT",
             Self::CommitOutcomeUnknown => "COMMIT_OUTCOME_UNKNOWN",
@@ -123,6 +132,9 @@ impl ProblemKind {
             Self::MethodNotAllowed => "The requested method is not supported for this resource.",
             Self::Authentication => "The supplied authentication could not be accepted.",
             Self::Forbidden => "The request did not satisfy the required security policy.",
+            Self::ReauthenticationRequired => {
+                "Sign in again to refresh recent authentication before retrying."
+            }
             Self::PayloadTooLarge => "The request body exceeds the allowed size.",
             Self::UnsupportedMediaType => "The request body must use application/json.",
             Self::Validation => "One or more fields are invalid.",
@@ -134,6 +146,7 @@ impl ProblemKind {
             Self::PreconditionRequired => "A current resource validator is required.",
             Self::PreconditionFailed => "The supplied resource validator is not current.",
             Self::RangeNotSatisfiable => "Byte-range downloads are not supported.",
+            Self::RateLimited => "The API request rate limit was exceeded.",
             Self::ServiceUnavailable => "The service is temporarily unavailable.",
             Self::OperationTimeout => "The operation did not complete before its deadline.",
             Self::CommitOutcomeUnknown => {
@@ -208,6 +221,21 @@ impl HttpError {
     #[must_use]
     pub fn forbidden(request_id: RequestId, instance: impl Into<String>) -> Self {
         Self::new(ProblemKind::Forbidden, request_id, instance, Vec::new())
+    }
+
+    #[must_use]
+    pub fn rate_limited(request_id: RequestId, instance: impl Into<String>) -> Self {
+        Self::new(ProblemKind::RateLimited, request_id, instance, Vec::new())
+    }
+
+    #[must_use]
+    pub fn reauthentication_required(request_id: RequestId, instance: impl Into<String>) -> Self {
+        Self::new(
+            ProblemKind::ReauthenticationRequired,
+            request_id,
+            instance,
+            Vec::new(),
+        )
     }
 
     #[must_use]

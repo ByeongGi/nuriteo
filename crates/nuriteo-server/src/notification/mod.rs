@@ -1,6 +1,7 @@
 mod delivery;
 mod http_routes;
 mod http_service;
+mod production;
 mod repository;
 mod types;
 mod worker;
@@ -18,6 +19,7 @@ pub use http_service::{
     NotificationHttpServiceError, NotificationInboxItemView, NotificationInboxView,
     NotificationPreferencesView,
 };
+pub use production::{DatabaseInvitationAttemptTokenIssuer, ProductionEmailAttemptPreparer};
 pub use repository::{DatabaseDeliveryEligibility, EmailOutboxRepository, NotificationWorkerError};
 pub use types::{
     EmailChannelPreference, EmailOutboxId, EmailOutboxState, Notification, NotificationActionState,

@@ -629,6 +629,31 @@ impl GitProviderValidator {
             .await
     }
 
+    /// Runs the normal Git Provider HTTPS validation against a staged CA
+    /// candidate without changing Provider state. The endpoint binding is
+    /// derived from persisted Provider metadata and must match the candidate
+    /// binding supplied by the common integration CA lifecycle.
+    pub(crate) async fn preflight_ca_candidate(
+        &self,
+        service: &GitProviderService,
+        id: Uuid,
+        candidate_ca: &ValidatedCaBundle,
+        endpoint: &CaEndpointBinding,
+    ) -> Result<(), GitProviderError> {
+        let provider = service
+            .list()
+            .await?
+            .into_iter()
+            .find(|provider| provider.id == id)
+            .ok_or(GitProviderError::NotFound)?;
+        if endpoint_binding(&provider)?.fingerprint() != endpoint.fingerprint() {
+            return Err(GitProviderError::ValidationFailed);
+        }
+        self.preflight(&provider, Some(candidate_ca))
+            .await
+            .map(|_| ())
+    }
+
     async fn preflight(
         &self,
         candidate: &GitProviderMetadata,
@@ -970,7 +995,9 @@ fn trust_fingerprint(ca: Option<&ValidatedCaBundle>) -> [u8; 32] {
     }
 }
 
-fn endpoint_binding(provider: &GitProviderMetadata) -> Result<CaEndpointBinding, GitProviderError> {
+pub(crate) fn endpoint_binding(
+    provider: &GitProviderMetadata,
+) -> Result<CaEndpointBinding, GitProviderError> {
     CaEndpointBinding::new(
         INTEGRATION_TYPE,
         provider.id.to_string(),

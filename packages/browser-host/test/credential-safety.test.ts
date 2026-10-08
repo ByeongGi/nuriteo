@@ -43,6 +43,8 @@ const fetcher = new HostFetcher({
       url,
       authorization: new Headers(init.headers).get("authorization"),
       cookie: new Headers(init.headers).get("cookie"),
+      credentials: init.credentials,
+      referrerPolicy: init.referrerPolicy,
       safe: new Headers(init.headers).get("x-safe")
     });
     if (url === "https://registry.npmjs.org/pkg") {
@@ -63,12 +65,16 @@ assert.deepEqual(seen, [
     url: "https://registry.npmjs.org/pkg",
     authorization: "Bearer npm_secret_token",
     cookie: "sid=secret",
+    credentials: "omit",
+    referrerPolicy: "no-referrer",
     safe: "ok"
   },
   {
     url: "https://cdn.example/pkg.tgz",
     authorization: null,
     cookie: null,
+    credentials: "omit",
+    referrerPolicy: "no-referrer",
     safe: "ok"
   }
 ]);

@@ -4,6 +4,8 @@ use axum::Router;
 use axum::body::{Body, to_bytes};
 use axum::http::header::{CONTENT_TYPE, COOKIE, ETAG, IF_MATCH, LOCATION, ORIGIN, SET_COOKIE};
 use axum::http::{Method, Request, Response, StatusCode};
+use base64::Engine as _;
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use nuriteo_server::app::build_router_with_project_service;
 use nuriteo_server::auth::{AuthPolicy, AuthService};
 use nuriteo_server::database::{
@@ -13,10 +15,11 @@ use nuriteo_server::health::HealthService;
 use nuriteo_server::identity::{SessionPolicy, UserId};
 use nuriteo_server::invitations::InvitationHttpService;
 use nuriteo_server::organization::{OrganizationHttpService, OrganizationId};
-use nuriteo_server::project::{ProjectHttpPolicy, ProjectHttpService};
+use nuriteo_server::project::{ProjectHttpPolicy, ProjectHttpService, ProjectId};
 use nuriteo_server::setup::SetupStatusService;
 use nuriteo_server::workspace::StorageScopeId;
 use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
 use tower::ServiceExt;
 use url::Url;
 
@@ -29,6 +32,161 @@ const PASSWORD_HASH: &str = "$argon2id$v=19$m=19456,t=2,p=1$a25vd24tc2FsdC12YWx1
 
 #[tokio::test]
 #[ignore = "requires tests/fixtures/postgres-project-http/run.sh"]
+async fn project_access_tokens_authenticate_real_http_routes() {
+    let pool = fixture_pool().await;
+    reset_fixture(&pool).await;
+    let report = run_embedded_migrations(
+        &pool,
+        MigrationOptions::new(Duration::from_secs(5), Duration::from_secs(30)).unwrap(),
+    )
+    .await
+    .unwrap();
+    assert!(report.latest_version.is_some_and(|version| version >= 37));
+    let fixture = seed_fixture(&pool).await;
+    let project_id = seed_project(&pool, fixture.organization).await;
+    let location = format!(
+        "/api/v1/workspaces/organizations/{}/projects/{project_id}",
+        fixture.organization
+    );
+    let router = router(pool.clone());
+
+    let personal_token = seed_access_token(
+        &pool,
+        "personal",
+        fixture.owner.to_string(),
+        Some(fixture.owner.to_string()),
+        None,
+        &["project:read"],
+        &project_id.to_string(),
+    )
+    .await;
+    assert_eq!(
+        bearer_request(&router, Method::GET, &location, &personal_token, None)
+            .await
+            .status(),
+        StatusCode::OK
+    );
+    assert_problem(
+        bearer_request(
+            &router,
+            Method::POST,
+            &format!("{location}/archive"),
+            &personal_token,
+            None,
+        )
+        .await,
+        StatusCode::FORBIDDEN,
+        "REQUEST_FORBIDDEN",
+    )
+    .await;
+
+    let write_token = seed_access_token(
+        &pool,
+        "personal",
+        fixture.owner.to_string(),
+        Some(fixture.owner.to_string()),
+        None,
+        &["project:read", "project:write"],
+        "writer",
+    )
+    .await;
+    assert_eq!(
+        bearer_request(
+            &router,
+            Method::POST,
+            &format!("{location}/archive"),
+            &write_token,
+            Some("\"project-v1\""),
+        )
+        .await
+        .status(),
+        StatusCode::OK
+    );
+    assert_eq!(
+        bearer_request(
+            &router,
+            Method::POST,
+            &format!("{location}/restore"),
+            &write_token,
+            Some("\"project-v2\""),
+        )
+        .await
+        .status(),
+        StatusCode::OK
+    );
+
+    let outsider_token = seed_access_token(
+        &pool,
+        "personal",
+        fixture.outsider.to_string(),
+        Some(fixture.outsider.to_string()),
+        None,
+        &["project:read"],
+        "outsider",
+    )
+    .await;
+    assert_problem(
+        bearer_request(&router, Method::GET, &location, &outsider_token, None).await,
+        StatusCode::FORBIDDEN,
+        "REQUEST_FORBIDDEN",
+    )
+    .await;
+
+    let project_token = seed_access_token(
+        &pool,
+        "project",
+        project_id.to_string(),
+        None,
+        Some(project_id.to_string()),
+        &["project:read", "project:write"],
+        &project_id.to_string(),
+    )
+    .await;
+    assert_eq!(
+        bearer_request(&router, Method::GET, &location, &project_token, None)
+            .await
+            .status(),
+        StatusCode::OK
+    );
+    let wrong_project = ProjectId::new();
+    let wrong_location = format!(
+        "/api/v1/workspaces/organizations/{}/projects/{wrong_project}",
+        fixture.organization
+    );
+    assert_problem(
+        bearer_request(&router, Method::GET, &wrong_location, &project_token, None).await,
+        StatusCode::FORBIDDEN,
+        "REQUEST_FORBIDDEN",
+    )
+    .await;
+    assert_problem(
+        bearer_request(
+            &router,
+            Method::POST,
+            &format!("{location}/archive"),
+            &project_token,
+            None,
+        )
+        .await,
+        StatusCode::FORBIDDEN,
+        "REQUEST_FORBIDDEN",
+    )
+    .await;
+
+    revoke_access_token(&pool, &personal_token).await;
+    assert_problem(
+        bearer_request(&router, Method::GET, &location, &personal_token, None).await,
+        StatusCode::UNAUTHORIZED,
+        "AUTHENTICATION_FAILED",
+    )
+    .await;
+
+    reset_fixture(&pool).await;
+    pool.close(Duration::from_secs(2)).await.unwrap();
+}
+
+#[tokio::test]
+#[ignore = "requires tests/fixtures/postgres-project-http/run.sh"]
 async fn project_http_journey_is_authorized_versioned_and_audited() {
     let pool = fixture_pool().await;
     reset_fixture(&pool).await;
@@ -38,7 +196,7 @@ async fn project_http_journey_is_authorized_versioned_and_audited() {
     )
     .await
     .unwrap();
-    assert_eq!(report.latest_version, Some(13));
+    assert!(report.latest_version.is_some_and(|version| version >= 37));
     let fixture = seed_fixture(&pool).await;
     let router = router(pool.clone());
     let owner = login(&router, "owner@example.test").await;
@@ -424,7 +582,11 @@ async fn create(
         None,
     )
     .await;
-    assert_eq!(response.status(), StatusCode::CREATED);
+    if response.status() != StatusCode::CREATED {
+        let status = response.status();
+        let body = response_json(response).await;
+        panic!("project create returned {status}: {body}");
+    }
     response
 }
 
@@ -513,6 +675,24 @@ async fn empty_request(
         .header(ORIGIN, ORIGIN_VALUE)
         .header(COOKIE, &browser.cookie)
         .header("x-csrf-token", &browser.csrf);
+    if let Some(etag) = etag {
+        builder = builder.header(IF_MATCH, etag);
+    }
+    send(router, builder.body(Body::empty()).unwrap()).await
+}
+
+async fn bearer_request(
+    router: &Router,
+    method: Method,
+    uri: &str,
+    bearer: &str,
+    etag: Option<&str>,
+) -> Response<Body> {
+    let mut builder = Request::builder()
+        .method(method)
+        .uri(uri)
+        .header("x-request-id", REQUEST_ID)
+        .header("authorization", format!("Bearer {bearer}"));
     if let Some(etag) = etag {
         builder = builder.header(IF_MATCH, etag);
     }
@@ -619,6 +799,93 @@ async fn project_row_count(pool: &DatabasePool, id: &str) -> i64 {
         .fetch_one(&mut *acquire(pool).await)
         .await
         .unwrap()
+}
+
+async fn seed_project(pool: &DatabasePool, organization_id: OrganizationId) -> ProjectId {
+    let project_id = ProjectId::new();
+    sqlx::query(
+        "INSERT INTO projects \
+         (id,owner_organization_id,storage_scope_id,slug,name) \
+         SELECT $1::uuid,$2::uuid,id,'token-http','Token HTTP' FROM storage_scopes \
+         WHERE owner_organization_id=$2::uuid",
+    )
+    .bind(project_id.to_string())
+    .bind(organization_id.to_string())
+    .execute(&mut *acquire(pool).await)
+    .await
+    .unwrap();
+    project_id
+}
+
+async fn seed_access_token(
+    pool: &DatabasePool,
+    kind: &str,
+    principal_id: String,
+    owner_user_id: Option<String>,
+    project_id: Option<String>,
+    scopes: &[&str],
+    name_suffix: &str,
+) -> String {
+    let id = uuid::Uuid::now_v7();
+    let marker = if kind == "personal" {
+        "nur_pat_"
+    } else {
+        "nur_prj_"
+    };
+    let prefix = format!("{marker}{id}_");
+    let secret_byte = name_suffix.bytes().fold(
+        if kind == "personal" { 7_u8 } else { 8_u8 },
+        u8::wrapping_add,
+    );
+    let secret = URL_SAFE_NO_PAD.encode([secret_byte; 32]);
+    let token = format!("{prefix}{secret}");
+    let hash: [u8; 32] = Sha256::digest(secret.as_bytes()).into();
+    sqlx::query(
+        "INSERT INTO access_tokens \
+         (id,kind,name,principal_id,owner_user_id,project_id,created_by_user_id,scopes,\
+          token_prefix,secret_hash,expires_at,rotation_family_id) \
+         VALUES($1::uuid,$2,$3,$4::uuid,$5::uuid,$6::uuid,$7::uuid,$8,\
+                $9,$10,transaction_timestamp()+interval '1 day',$11::uuid)",
+    )
+    .bind(id.to_string())
+    .bind(kind)
+    .bind(format!("HTTP {name_suffix}"))
+    .bind(principal_id)
+    .bind(owner_user_id)
+    .bind(project_id)
+    .bind(fixture_owner_id(pool).await)
+    .bind(scopes.iter().map(ToString::to_string).collect::<Vec<_>>())
+    .bind(prefix)
+    .bind(hash.as_slice())
+    .bind(uuid::Uuid::now_v7().to_string())
+    .execute(&mut *acquire(pool).await)
+    .await
+    .unwrap();
+    token
+}
+
+async fn fixture_owner_id(pool: &DatabasePool) -> String {
+    sqlx::query_scalar("SELECT id::text FROM users WHERE normalized_email='owner@example.test'")
+        .fetch_one(&mut *acquire(pool).await)
+        .await
+        .unwrap()
+}
+
+async fn revoke_access_token(pool: &DatabasePool, token: &str) {
+    let id = token
+        .strip_prefix("nur_pat_")
+        .and_then(|value| value.split_once('_'))
+        .map(|(id, _)| id)
+        .unwrap();
+    sqlx::query(
+        "UPDATE access_tokens SET state='revoked',secret_hash=NULL,revoked_at=clock_timestamp(),\
+         revoke_reason='test_revocation',updated_at=clock_timestamp(),lock_version=lock_version+1 \
+         WHERE id=$1::uuid",
+    )
+    .bind(id)
+    .execute(&mut *acquire(pool).await)
+    .await
+    .unwrap();
 }
 
 async fn reset_fixture(pool: &DatabasePool) {

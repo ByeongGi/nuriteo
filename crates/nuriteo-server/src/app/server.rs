@@ -1,41 +1,52 @@
 use std::fmt;
 use std::num::NonZeroUsize;
+use std::sync::Arc;
 use std::time::Duration;
 
 use crate::access_token::AccessTokenManagementService;
 use crate::admin::{AdminHttpPolicy, AdminHttpService};
 use crate::auth::{AuthPolicy, AuthService};
-use crate::config::{Config, Environment, FileReader};
+use crate::config::{Config, Environment, FileReader, load_secret};
 use crate::database::{
     DatabasePool, DatabaseRuntimeConfig, SchemaReadiness, check_schema_readiness,
 };
+use crate::git_operations::{GitHttpService, GitOperationService};
+use crate::git_provider::{GitProviderService, GitProviderValidator};
 use crate::health::{HealthPolicy, HealthService};
 use crate::identity::SessionPolicy;
 use crate::instance_settings::InstanceSettingsRepository;
-use crate::integration::MasterKeyring;
+use crate::integration::{IntegrationRepository, MasterKeyring};
+use crate::integration_ca::IntegrationCaHttpService;
 use crate::invitations::{InvitationHttpPolicy, InvitationHttpService};
 use crate::mfa::MfaHttpService;
-use crate::notification::NotificationHttpService;
+use crate::notification::{
+    DatabaseDeliveryEligibility, DatabaseInvitationAttemptTokenIssuer, EmailOutboxRepository,
+    NotificationHttpService, NotificationWorker, NotificationWorkerPolicy,
+    ProductionEmailAttemptPreparer,
+};
 use crate::object_storage::{ObjectStorageConfig, OperationLimits, S3ObjectStore};
 use crate::oidc::OidcHttpService;
 use crate::organization::{OrganizationHttpPolicy, OrganizationHttpService};
 use crate::policy::PolicyMaintenanceWorker;
 use crate::project::{ProjectHttpPolicy, ProjectHttpService};
-use crate::published_example::{PublishedExampleHttpService, PublishedExampleServicePolicy};
+use crate::published_example::{
+    PublicPreviewAdmissionKey, PublishedExampleHttpService, PublishedExampleServicePolicy,
+};
 use crate::registry_gateway::RegistryHttpService;
 use crate::save::{
     CleanupOperationsPolicy, CleanupOperationsService, CleanupService, ContentServicePolicy,
     SaveHttpConfig, SaveHttpPolicy, SaveHttpService, SaveUploadTransport, WorkerShutdown,
 };
 use crate::setup::{SetupStatusPolicy, SetupStatusService};
+use crate::smtp::SmtpEmailSender;
 use crate::team::{TeamHttpPolicy, TeamHttpService};
 
-use super::{
-    Supervisor, SupervisorConfig, WorkerError, build_router_with_published_example_service,
-};
+use super::{Supervisor, SupervisorConfig, WorkerError, build_router_with_integration_ca_service};
 
-const PRODUCTION_WORKERS: NonZeroUsize = NonZeroUsize::new(4).unwrap();
+const PRODUCTION_WORKERS: NonZeroUsize = NonZeroUsize::new(5).unwrap();
 const INSTANCE_SETTINGS_STARTUP_TIMEOUT: Duration = Duration::from_secs(5);
+const PREVIEW_SIGNING_KEY: &str = "NURITEO_PREVIEW_SIGNING_KEY";
+const PREVIEW_SIGNING_KEY_FILE: &str = "NURITEO_PREVIEW_SIGNING_KEY_FILE";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ServeError {
@@ -54,6 +65,7 @@ pub(crate) enum ServeError {
     MfaConfiguration,
     OidcConfiguration,
     RegistryConfiguration,
+    GitConfiguration,
     PublishedExampleConfiguration,
     NotificationConfiguration,
     AccessTokenConfiguration,
@@ -83,6 +95,7 @@ impl ServeError {
             Self::MfaConfiguration => "mfa-configuration",
             Self::OidcConfiguration => "oidc-configuration",
             Self::RegistryConfiguration => "registry-configuration",
+            Self::GitConfiguration => "git-configuration",
             Self::PublishedExampleConfiguration => "published-example-configuration",
             Self::NotificationConfiguration => "notification-configuration",
             Self::AccessTokenConfiguration => "access-token-configuration",
@@ -209,7 +222,7 @@ pub(crate) async fn run_server(
         }
     };
     let operations = CleanupOperationsService::new(pool.clone(), operations_policy);
-    let admin = match effective_instance_settings {
+    let admin = match effective_instance_settings.clone() {
         Some(settings) => match AdminHttpService::production(
             pool.clone(),
             &global.public.external_url,
@@ -303,6 +316,45 @@ pub(crate) async fn run_server(
             return Err(ServeError::MfaConfiguration);
         }
     };
+    let (notification_worker, smtp_runtime_config) =
+        if let Some(settings) = effective_instance_settings.as_ref() {
+            let integrations = IntegrationRepository::new(pool.clone(), keyring.clone());
+            let smtp = match integrations
+                .smtp_config("default", settings, environment, files)
+                .await
+            {
+                Ok(smtp) => smtp,
+                Err(_) => {
+                    close_pool(pool, close_timeout).await?;
+                    return Err(ServeError::NotificationConfiguration);
+                }
+            };
+            match smtp {
+                Some(config) => {
+                    let config = crate::smtp::SmtpConfigHandle::new(Arc::new(config));
+                    let repository =
+                        EmailOutboxRepository::new(pool.clone(), INSTANCE_SETTINGS_STARTUP_TIMEOUT)
+                            .map_err(|_| ServeError::NotificationConfiguration)?;
+                    let worker = NotificationWorker::new(
+                        repository,
+                        Arc::new(DatabaseDeliveryEligibility::new(pool.clone())),
+                        Arc::new(ProductionEmailAttemptPreparer::new(
+                            global.public.external_url.clone(),
+                        )),
+                        Some(Arc::new(DatabaseInvitationAttemptTokenIssuer::new(
+                            pool.clone(),
+                        ))),
+                        Arc::new(SmtpEmailSender::new(config.clone())),
+                        NotificationWorkerPolicy::default(),
+                    )
+                    .map_err(|_| ServeError::NotificationConfiguration)?;
+                    (Some(worker), Some(config))
+                }
+                None => (None, None),
+            }
+        } else {
+            (None, None)
+        };
     let mfa = match MfaHttpService::production(
         pool.clone(),
         &global.public.external_url,
@@ -341,7 +393,7 @@ pub(crate) async fn run_server(
     let registry = match RegistryHttpService::production(
         pool.clone(),
         &global.public.external_url,
-        keyring,
+        keyring.clone(),
         SessionPolicy::default(),
     ) {
         Ok(registry) => registry,
@@ -361,16 +413,61 @@ pub(crate) async fn run_server(
             return Err(ServeError::AccessTokenConfiguration);
         }
     };
+    let preview_admission_key = load_secret(
+        environment,
+        files,
+        PREVIEW_SIGNING_KEY,
+        PREVIEW_SIGNING_KEY_FILE,
+    )
+    .map_err(|_| ServeError::PublishedExampleConfiguration)?
+    .map(|value| PublicPreviewAdmissionKey::from_base64url(value.expose_secret()))
+    .transpose()
+    .map_err(|_| ServeError::PublishedExampleConfiguration)?;
     let published_examples = match PublishedExampleHttpService::production(
         pool.clone(),
         &global.public.external_url,
+        store.clone(),
         PublishedExampleServicePolicy::default(),
         SessionPolicy::default(),
+        preview_admission_key,
     ) {
         Ok(service) => service,
         Err(_) => {
             close_pool(pool, close_timeout).await?;
             return Err(ServeError::PublishedExampleConfiguration);
+        }
+    };
+    let git = match GitHttpService::production(
+        pool.clone(),
+        &global.public.external_url,
+        SessionPolicy::default(),
+        GitOperationService::production(
+            pool.clone(),
+            keyring.clone(),
+            store.clone(),
+            save_config.effective_quota(),
+        ),
+        GitProviderService::new(IntegrationRepository::new(pool.clone(), keyring.clone())),
+        GitProviderValidator::new(Duration::from_secs(10))
+            .map_err(|_| ServeError::GitConfiguration)?,
+    ) {
+        Ok(service) => service,
+        Err(_) => {
+            close_pool(pool, close_timeout).await?;
+            return Err(ServeError::GitConfiguration);
+        }
+    };
+    let integration_ca = match IntegrationCaHttpService::production(
+        pool.clone(),
+        &global.public.external_url,
+        keyring,
+        SessionPolicy::default(),
+        smtp_runtime_config,
+    ) {
+        Ok(service) => service,
+        Err(_) => {
+            close_pool(pool, close_timeout).await?;
+            return Err(ServeError::Configuration);
         }
     };
     let maintenance = PolicyMaintenanceWorker::new(
@@ -380,7 +477,7 @@ pub(crate) async fn run_server(
     )
     .map_err(|_| ServeError::CleanupConfiguration)?;
     let cleanup = CleanupService::new(pool.clone(), store, global.cleanup.worker_policy);
-    let router = build_router_with_published_example_service(
+    let router = build_router_with_integration_ca_service(
         health,
         auth,
         invitations,
@@ -396,6 +493,8 @@ pub(crate) async fn run_server(
         oidc,
         registry,
         published_examples,
+        git,
+        integration_ca,
     );
     let management_router = operations.router();
     let cleanup_drain_timeout = global
@@ -458,6 +557,12 @@ pub(crate) async fn run_server(
                 .map_err(|_| WorkerError::new("policy-maintenance-failed"))
         })
         .is_err()
+    {
+        close_pool(pool, close_timeout).await?;
+        return Err(ServeError::Lifecycle);
+    }
+    if let Some(worker) = notification_worker
+        && worker.register(&mut supervisor).is_err()
     {
         close_pool(pool, close_timeout).await?;
         return Err(ServeError::Lifecycle);

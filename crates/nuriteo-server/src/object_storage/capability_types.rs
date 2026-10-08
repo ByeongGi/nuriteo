@@ -182,6 +182,12 @@ pub struct MultipartUpload {
     pub(crate) upload_id: String,
 }
 
+impl MultipartUpload {
+    pub(crate) fn upload_id(&self) -> &str {
+        &self.upload_id
+    }
+}
+
 impl fmt::Debug for MultipartUpload {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter

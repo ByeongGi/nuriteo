@@ -1,8 +1,8 @@
 use std::future::Future;
 use std::io;
 use std::pin::Pin;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, RwLock};
 
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
@@ -17,19 +17,65 @@ use crate::notification::{EmailSendFailure, EmailSender, PreparedEmail, SmtpAcce
 use super::preflight::{read_reply, send_command, supports_plain_auth, tls_connector};
 use super::{SmtpConfig, SmtpFailureClass, SmtpPreflightError, SmtpSecurity};
 
+#[derive(Clone)]
+pub struct SmtpConfigHandle {
+    config: Arc<RwLock<Arc<SmtpConfig>>>,
+}
+
+impl SmtpConfigHandle {
+    #[must_use]
+    pub fn new(config: Arc<SmtpConfig>) -> Self {
+        Self {
+            config: Arc::new(RwLock::new(config)),
+        }
+    }
+
+    #[must_use]
+    pub fn current(&self) -> Arc<SmtpConfig> {
+        self.config
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
+    }
+
+    pub(crate) fn replace(&self, config: Arc<SmtpConfig>) {
+        *self
+            .config
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = config;
+    }
+}
+
+impl From<Arc<SmtpConfig>> for SmtpConfigHandle {
+    fn from(config: Arc<SmtpConfig>) -> Self {
+        Self::new(config)
+    }
+}
+
+impl std::fmt::Debug for SmtpConfigHandle {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("SmtpConfigHandle")
+            .field("config", &self.current())
+            .finish()
+    }
+}
+
 trait SmtpIo: AsyncRead + AsyncWrite {}
 impl<T: AsyncRead + AsyncWrite> SmtpIo for T {}
 type SmtpStream = Pin<Box<dyn SmtpIo + Send>>;
 
 #[derive(Clone)]
 pub struct SmtpEmailSender {
-    config: Arc<SmtpConfig>,
+    config: SmtpConfigHandle,
 }
 
 impl SmtpEmailSender {
     #[must_use]
-    pub fn new(config: Arc<SmtpConfig>) -> Self {
-        Self { config }
+    pub fn new(config: impl Into<SmtpConfigHandle>) -> Self {
+        Self {
+            config: config.into(),
+        }
     }
 
     async fn deliver(
@@ -38,10 +84,11 @@ impl SmtpEmailSender {
         email: &PreparedEmail,
     ) -> Result<SmtpAcceptance, EmailSendFailure> {
         validate_recipient(recipient)?;
+        let config = self.config.current();
         let data_started = Arc::new(AtomicBool::new(false));
         let result = time::timeout(
-            self.config.preflight_timeout(),
-            deliver_inner(&self.config, recipient, email, Arc::clone(&data_started)),
+            config.preflight_timeout(),
+            deliver_inner(&config, recipient, email, Arc::clone(&data_started)),
         )
         .await;
         match result {
@@ -54,7 +101,7 @@ impl SmtpEmailSender {
 
 impl EmailSender for SmtpEmailSender {
     fn timeout(&self) -> std::time::Duration {
-        self.config.preflight_timeout()
+        self.config.current().preflight_timeout()
     }
 
     fn send<'a>(
@@ -310,7 +357,48 @@ fn classify_tls_error(error: io::Error) -> EmailSendFailure {
 
 #[cfg(test)]
 mod tests {
+    use std::ffi::OsString;
+    use std::time::Duration;
+
+    use crate::config::{Environment, FileReader};
+
     use super::*;
+
+    #[derive(Clone)]
+    struct TestEnvironment(Vec<(OsString, OsString)>);
+
+    impl Environment for TestEnvironment {
+        fn entries(&self) -> Vec<(OsString, OsString)> {
+            self.0.clone()
+        }
+    }
+
+    struct NoFiles;
+
+    impl FileReader for NoFiles {
+        fn read(&self, _: &std::path::Path, _: usize) -> Result<Vec<u8>, std::io::Error> {
+            Err(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                "not configured",
+            ))
+        }
+    }
+
+    fn smtp_config(port: u16, timeout_ms: u64) -> Arc<SmtpConfig> {
+        let values = [
+            ("NURITEO_SMTP_HOST", "smtp.example.test".to_owned()),
+            ("NURITEO_SMTP_PORT", port.to_string()),
+            ("NURITEO_SMTP_SECURITY", "starttls".to_owned()),
+            ("NURITEO_SMTP_PREFLIGHT_TIMEOUT_MS", timeout_ms.to_string()),
+        ];
+        let environment = TestEnvironment(
+            values
+                .into_iter()
+                .map(|(key, value)| (OsString::from(key), OsString::from(value)))
+                .collect(),
+        );
+        Arc::new(SmtpConfig::load(&environment, &NoFiles).unwrap().unwrap())
+    }
 
     #[test]
     fn reply_and_header_classification_is_safe() {
@@ -333,5 +421,18 @@ mod tests {
             classify_reply(550, &[250]),
             Err(EmailSendFailure::permanent(Some(550)))
         );
+    }
+
+    #[test]
+    fn sender_reads_reloaded_configuration_for_each_attempt() {
+        let handle = SmtpConfigHandle::new(smtp_config(2525, 900));
+        let sender = SmtpEmailSender::new(handle.clone());
+        assert_eq!(handle.current().port(), 2525);
+        assert_eq!(EmailSender::timeout(&sender), Duration::from_millis(900));
+
+        handle.replace(smtp_config(465, 1_700));
+
+        assert_eq!(handle.current().port(), 465);
+        assert_eq!(EmailSender::timeout(&sender), Duration::from_millis(1_700));
     }
 }

@@ -25,6 +25,11 @@ export interface SubdomainPreviewBridge {
   dispose(): Promise<void>;
 }
 
+interface PublishedExampleBinding {
+  readonly publicId: string;
+  readonly versionNumber: number;
+}
+
 export async function createSubdomainPreviewBridge(options: {
   configuration: EnabledPreviewOriginConfiguration;
   internalProjectIdentity: string;
@@ -35,13 +40,38 @@ export async function createSubdomainPreviewBridge(options: {
   onDiagnostic?(code: string): void;
   onRecoveryRequired?(): void;
 }): Promise<SubdomainPreviewBridge> {
+  return createPreviewBridge(options, (port) => issueProjectBinding(options, port));
+}
+
+export async function createPublishedExamplePreviewBridge(options: {
+  configuration: EnabledPreviewOriginConfiguration;
+  internalProjectIdentity: string;
+  internalPreviewUrl: string;
+  publicId: string;
+  versionNumber: number;
+  onDiagnostic?(code: string): void;
+  onRecoveryRequired?(): void;
+}): Promise<SubdomainPreviewBridge> {
+  return createPreviewBridge(options, (port) => issuePublishedExampleBinding(options, port));
+}
+
+async function createPreviewBridge(
+  options: {
+    configuration: EnabledPreviewOriginConfiguration;
+    internalProjectIdentity: string;
+    internalPreviewUrl: string;
+    onDiagnostic?(code: string): void;
+    onRecoveryRequired?(): void;
+  },
+  issuePreviewBinding: (port: number) => Promise<{ expiresAtMonotonic: number; runtimeId: string }>
+): Promise<SubdomainPreviewBridge> {
   const internal = parseInternalPreviewUrl(
     options.internalPreviewUrl,
     options.internalProjectIdentity,
     options.configuration.applicationOrigin
   );
   const port = internal.port;
-  const issuedBinding = await issueBinding(options, port);
+  const issuedBinding = await issuePreviewBinding(port);
   const runtimeId = issuedBinding.runtimeId;
   const { binding, url } = createPreviewOriginUrl(options.configuration, runtimeId, port);
   const previewOrigin = new URL(url).origin;
@@ -349,7 +379,7 @@ function randomNonce(): string {
   return btoa(String.fromCharCode(...value)).replaceAll("+", "-").replaceAll("/", "_").replaceAll("=", "");
 }
 
-async function issueBinding(
+async function issueProjectBinding(
   options: {
     configuration: EnabledPreviewOriginConfiguration;
     ownerId: string;
@@ -359,18 +389,43 @@ async function issueBinding(
   port: number
 ): Promise<{ expiresAtMonotonic: number; runtimeId: string }> {
   const csrf = readCsrfCredential();
-  const response = await fetch(new URL("/api/runtime-preview/bindings", options.configuration.applicationOrigin), {
-    body: JSON.stringify({ ownerId: options.ownerId, ownerType: options.ownerType, port, projectId: options.projectId }),
+  return requestBinding(
+    new URL("/api/runtime-preview/bindings", options.configuration.applicationOrigin),
+    { ownerId: options.ownerId, ownerType: options.ownerType, port, projectId: options.projectId },
+    { credentials: "same-origin", csrf }
+  );
+}
+
+async function issuePublishedExampleBinding(
+  options: { configuration: EnabledPreviewOriginConfiguration } & PublishedExampleBinding,
+  port: number
+): Promise<{ expiresAtMonotonic: number; runtimeId: string }> {
+  return requestBinding(
+    new URL("/api/runtime-preview/public-bindings", options.configuration.applicationOrigin),
+    { port, publicId: options.publicId, versionNumber: options.versionNumber },
+    { credentials: "omit" }
+  );
+}
+
+async function requestBinding(
+  url: URL,
+  body: Readonly<Record<string, string | number>>,
+  security: { readonly credentials: RequestCredentials; readonly csrf?: string }
+): Promise<{ expiresAtMonotonic: number; runtimeId: string }> {
+  const headers: Record<string, string> = { "content-type": "application/json" };
+  if (security.csrf !== undefined) headers["x-csrf-token"] = security.csrf;
+  const response = await fetch(url, {
+    body: JSON.stringify(body),
     cache: "no-store",
-    credentials: "same-origin",
-    headers: { "content-type": "application/json", "x-csrf-token": csrf },
+    credentials: security.credentials,
+    headers,
     method: "POST",
     redirect: "error"
   });
-  const body = await response.text();
-  if (!response.ok || body.length > 1_024) throw new Error("Preview binding unavailable");
+  const responseBody = await response.text();
+  if (!response.ok || responseBody.length > 1_024) throw new Error("Preview binding unavailable");
   let parsed: unknown;
-  try { parsed = JSON.parse(body); } catch { throw new Error("Preview binding unavailable"); }
+  try { parsed = JSON.parse(responseBody); } catch { throw new Error("Preview binding unavailable"); }
   if (!isExactRecord(parsed, ["runtimeId", "ttlMs"])
       || typeof parsed.runtimeId !== "string"
       || !/^[a-z2-7]{45}$/u.test(parsed.runtimeId)

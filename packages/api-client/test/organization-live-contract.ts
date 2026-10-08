@@ -38,12 +38,14 @@ const activation = createApiClient({ baseUrl, fetch: publicBrowser.fetch });
 await createSession(admin, { email: adminEmail, password: adminPassword });
 
 const firstActivation = await issueActivationInvitation(admin, { email: memberEmail }, { csrfToken: adminBrowser.csrfToken() });
+assert.equal(firstActivation.data.delivery, "copy_once");
 const firstActivationToken = tokenFrom(firstActivation.data.activationUrl.consume(), "/activate");
 const replacementActivation = await reissueActivationInvitation(
   admin,
   { invitationId: firstActivation.data.id },
   { csrfToken: adminBrowser.csrfToken() }
 );
+assert.equal(replacementActivation.data.delivery, "copy_once");
 const activationToken = tokenFrom(replacementActivation.data.activationUrl.consume(), "/activate");
 assert.notEqual(firstActivationToken, activationToken);
 const activationList = await listActivationInvitations(admin);
@@ -75,12 +77,14 @@ const firstInvitation = await issueOrganizationInvitation(
 assert.equal(firstInvitation.data.organizationId, organization.data.id);
 assert.equal(firstInvitation.data.inviteeUserId, memberIdentity.data.user.id);
 assert.equal(firstInvitation.data.proposedRole, "member");
+assert.equal(firstInvitation.data.delivery, "copy_once");
 const firstAcceptToken = tokenFrom(firstInvitation.data.acceptUrl.consume(), "/organization-invitations/accept");
 const replacementInvitation = await reissueOrganizationInvitation(
   admin,
   { organizationId: organization.data.id, invitationId: firstInvitation.data.id, role: "member" },
   { csrfToken: adminBrowser.csrfToken() }
 );
+assert.equal(replacementInvitation.data.delivery, "copy_once");
 const acceptToken = tokenFrom(replacementInvitation.data.acceptUrl.consume(), "/organization-invitations/accept");
 assert.notEqual(firstAcceptToken, acceptToken);
 await acceptOrganizationInvitation(member, acceptToken, { csrfToken: memberBrowser.csrfToken() });
@@ -129,6 +133,7 @@ const declineInvitation = await issueOrganizationInvitation(
   { organizationId: declineOrganization.data.id, email: memberEmail, role: "member" },
   { csrfToken: adminBrowser.csrfToken() }
 );
+assert.equal(declineInvitation.data.delivery, "copy_once");
 const declineToken = tokenFrom(declineInvitation.data.acceptUrl.consume(), "/organization-invitations/accept");
 const declined = await declineOrganizationInvitation(member, declineToken, { csrfToken: memberBrowser.csrfToken() });
 assert.equal(declined.data.status, "declined");

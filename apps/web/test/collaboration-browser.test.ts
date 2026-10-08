@@ -115,9 +115,19 @@ const core = http.createServer(async (request, response) => {
   }
   if (request.method === "POST" && requestPath === "/api/v1/admin/activation-invitations") {
     if (session !== "admin") return sendProblem(response, 403, "FORBIDDEN");
+    const body = await jsonBody(request);
+    if (body.email === "mail-queued@example.test") {
+      return sendJson(response, {
+        ...activationRecord(),
+        email: body.email,
+        id: "0199ee6c-c777-7000-8000-000000009302",
+        delivery: "email_queued",
+        activation_url: null
+      }, 201);
+    }
     activationIssueCount += 1;
     await new Promise((resolve) => setTimeout(resolve, 75));
-    return sendJson(response, { ...activationRecord(), activation_url: `${publicOrigin}/activate?token=${activationToken}` }, 201);
+    return sendJson(response, { ...activationRecord(), delivery: "copy_once", activation_url: `${publicOrigin}/activate?token=${activationToken}` }, 201);
   }
   if (request.method === "POST" && requestPath === "/api/v1/organizations") {
     if (session !== "admin") return sendProblem(response, 403, "FORBIDDEN");
@@ -149,8 +159,16 @@ const core = http.createServer(async (request, response) => {
       observedUnavailableEmails.push(body.email);
       return sendProblem(response, 404, "ORGANIZATION_NOT_FOUND");
     }
-    assert.equal(body.email, "invitee@example.test");
     assert.ok(body.role === "member" || body.role === "owner");
+    if (body.email === "mail-queued@example.test") {
+      const invitation = newOrganizationInvitation(body.role);
+      return sendJson(response, {
+        ...invitation,
+        delivery: "email_queued",
+        acceptUrl: null
+      }, 201);
+    }
+    assert.equal(body.email, "invitee@example.test");
     return issueOrganizationInvitation(response, body.role);
   }
   if (request.method === "PATCH" && requestPath === `/api/v1/organizations/${organizationId}`) {
@@ -258,6 +276,10 @@ try {
     ]);
     const adminPage = await admin.newPage();
     await adminPage.goto(`${publicOrigin}/admin/invitations`, { waitUntil: "networkidle" });
+    await adminPage.getByLabel("Invitee email").fill("mail-queued@example.test");
+    await adminPage.getByRole("button", { name: "Issue invitation" }).click();
+    await adminPage.getByRole("status").filter({ hasText: "activation email is queued" }).waitFor();
+    assert.equal(await adminPage.locator("output").count(), 0);
     await adminPage.getByLabel("Invitee email").fill("invitee@example.test");
     await adminPage.locator("form").evaluate((form: HTMLFormElement) => {
       form.requestSubmit();
@@ -382,6 +404,12 @@ try {
     const unavailableError = adminPage.getByRole("alert").filter({ hasText: "unavailable, already invited, or already a member" });
     await unavailableError.waitFor();
     assert.equal((await unavailableError.textContent())?.includes("unavailable@example.test"), false);
+    assert.equal(organizationIssueCount, 0);
+
+    await adminPage.getByLabel("Invitee email").fill("mail-queued@example.test");
+    await adminPage.getByRole("button", { name: "Issue Organization invitation" }).click();
+    await adminPage.getByRole("status").filter({ hasText: "invitation email is queued" }).waitFor();
+    assert.equal(await adminPage.locator("output").count(), 0);
     assert.equal(organizationIssueCount, 0);
 
     journeyStage = "issue-and-revoke-invitation";
@@ -594,7 +622,7 @@ function invitationToken(invitation: OrganizationInvitation): string {
 function issuedOrganizationInvitation(invitation: OrganizationInvitation) {
   const token = invitationToken(invitation);
   addForbiddenServerValue(token);
-  return { ...invitation, acceptUrl: `${publicOrigin}/organization-invitations/accept?token=${token}` };
+  return { ...invitation, delivery: "copy_once", acceptUrl: `${publicOrigin}/organization-invitations/accept?token=${token}` };
 }
 
 function issueOrganizationInvitation(response: http.ServerResponse, role: "owner" | "member") {

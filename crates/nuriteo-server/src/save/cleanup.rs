@@ -527,6 +527,7 @@ impl<B: CleanupBackend> CleanupService<B> {
             if *cancel.borrow() {
                 return Ok(());
             }
+            self.reconcile_canonical_materializations_once().await?;
             let jobs = self.claim(owner).await?;
             if jobs.is_empty() {
                 tokio::select! {
@@ -539,6 +540,156 @@ impl<B: CleanupBackend> CleanupService<B> {
             }
             self.process_batch(owner, jobs, &cancel).await?;
         }
+    }
+
+    /// Converts abandoned canonical materializations into the existing,
+    /// lifecycle-fenced GC queue. The grace period is longer than every
+    /// materializer request deadline, so an active upload is never collected.
+    /// Reconciles one bounded batch of abandoned canonical materializations.
+    /// Exposed for supervised maintenance entry points and actual-backend
+    /// qualification; normal production use is through `start_worker`.
+    pub async fn reconcile_canonical_materializations_once(&self) -> Result<(), CleanupError> {
+        type Row = (String, String, Vec<u8>, i64, Option<String>);
+        let deadline = Deadline::new(self.policy.operation_timeout);
+        let mut connection = deadline
+            .run(self.pool.acquire())
+            .await?
+            .map_err(map_database_error)?;
+        let mut transaction = deadline
+            .run(connection.begin())
+            .await?
+            .map_err(map_sql_error)?;
+        configure_transaction(&mut transaction, deadline).await?;
+        deadline
+            .run(
+                sqlx::query(
+                    "DELETE FROM canonical_bundle_materializations materialization \
+                     USING gc_candidates candidate WHERE materialization.object_key=candidate.object_key \
+                     AND materialization.state='cleanup_pending' AND candidate.status='completed' \
+                     AND NOT EXISTS(SELECT 1 FROM bundles bundle \
+                                    WHERE bundle.object_key=materialization.object_key)",
+                )
+                .execute(&mut *transaction),
+            )
+            .await?
+            .map_err(map_sql_error)?;
+        let rows: Vec<Row> = deadline
+            .run(
+                sqlx::query_as(
+                    "SELECT id::text,object_key,sha256,physical_bytes,multipart_upload_id \
+                     FROM canonical_bundle_materializations \
+                     WHERE state IN ('pending','uploaded','cleanup_pending') \
+                       AND updated_at <= transaction_timestamp() - INTERVAL '10 minutes' \
+                     ORDER BY updated_at,id LIMIT $1 FOR UPDATE SKIP LOCKED",
+                )
+                .bind(i64::from(self.policy.batch_size))
+                .fetch_all(&mut *transaction),
+            )
+            .await?
+            .map_err(map_sql_error)?;
+        let mut multipart_targets = Vec::new();
+        for (id, object_key, sha256, physical_bytes, multipart_upload_id) in rows {
+            deadline
+                .run(
+                    sqlx::query("SELECT lock_bundle_object_lifecycle($1)")
+                        .bind(&object_key)
+                        .execute(&mut *transaction),
+                )
+                .await?
+                .map_err(map_sql_error)?;
+            let referenced: bool = deadline
+                .run(
+                    sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM bundles WHERE object_key=$1)")
+                        .bind(&object_key)
+                        .fetch_one(&mut *transaction),
+                )
+                .await?
+                .map_err(map_sql_error)?;
+            let disposition =
+                canonical_materialization_disposition(referenced, multipart_upload_id.as_deref());
+            if disposition == CanonicalMaterializationDisposition::Finalize {
+                deadline
+                    .run(
+                        sqlx::query(
+                            "UPDATE canonical_bundle_materializations SET state='finalized',\
+                             updated_at=transaction_timestamp() WHERE id=$1::uuid",
+                        )
+                        .bind(&id)
+                        .execute(&mut *transaction),
+                    )
+                    .await?
+                    .map_err(map_sql_error)?;
+                continue;
+            }
+            if sha256.len() != 32 || physical_bytes <= 0 {
+                return Err(CleanupError::InvariantViolation);
+            }
+            if disposition == CanonicalMaterializationDisposition::AbortMultipartAndEnqueue {
+                let upload_id = multipart_upload_id.ok_or(CleanupError::InvariantViolation)?;
+                multipart_targets.push((id.clone(), object_key.clone(), upload_id));
+            }
+            deadline
+                .run(
+                    sqlx::query(
+                        "INSERT INTO gc_candidates \
+                         (object_key,expected_sha256,expected_bytes,reason,status,eligible_at) \
+                         VALUES($1,$2,$3,'verification_failed','queued',transaction_timestamp()) \
+                         ON CONFLICT (object_key) DO NOTHING",
+                    )
+                    .bind(&object_key)
+                    .bind(&sha256)
+                    .bind(physical_bytes)
+                    .execute(&mut *transaction),
+                )
+                .await?
+                .map_err(map_sql_error)?;
+            deadline
+                .run(
+                    sqlx::query(
+                        "UPDATE canonical_bundle_materializations SET state='cleanup_pending',\
+                         updated_at=transaction_timestamp() WHERE id=$1::uuid",
+                    )
+                    .bind(&id)
+                    .execute(&mut *transaction),
+                )
+                .await?
+                .map_err(map_sql_error)?;
+        }
+        commit(transaction, deadline).await?;
+        for (id, object_key, upload_id) in multipart_targets {
+            let target = CleanupTarget {
+                kind: CleanupKind::MultipartAbort,
+                object_key: ObjectKey::parse(object_key)
+                    .map_err(|_| CleanupError::InvariantViolation)?,
+                multipart_upload_id: Some(upload_id),
+                prior_absence: false,
+            };
+            let outcome = time::timeout(self.policy.item_timeout, self.backend.cleanup(target))
+                .await
+                .unwrap_or(CleanupBackendOutcome::Timeout);
+            if matches!(
+                outcome,
+                CleanupBackendOutcome::Completed | CleanupBackendOutcome::Missing
+            ) {
+                let mut connection = deadline
+                    .run(self.pool.acquire())
+                    .await?
+                    .map_err(map_database_error)?;
+                deadline
+                    .run(
+                        sqlx::query(
+                            "UPDATE canonical_bundle_materializations \
+                             SET multipart_upload_id=NULL,updated_at=transaction_timestamp() \
+                             WHERE id=$1::uuid AND state='cleanup_pending'",
+                        )
+                        .bind(id)
+                        .execute(&mut *connection),
+                    )
+                    .await?
+                    .map_err(map_sql_error)?;
+            }
+        }
+        Ok(())
     }
 
     async fn process_batch(
@@ -1270,6 +1421,26 @@ impl<B: CleanupBackend> CleanupService<B> {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CanonicalMaterializationDisposition {
+    Finalize,
+    EnqueueObject,
+    AbortMultipartAndEnqueue,
+}
+
+const fn canonical_materialization_disposition(
+    referenced: bool,
+    multipart_upload_id: Option<&str>,
+) -> CanonicalMaterializationDisposition {
+    if referenced {
+        CanonicalMaterializationDisposition::Finalize
+    } else if multipart_upload_id.is_some() {
+        CanonicalMaterializationDisposition::AbortMultipartAndEnqueue
+    } else {
+        CanonicalMaterializationDisposition::EnqueueObject
+    }
+}
+
 pub struct CleanupWorker {
     cancel: watch::Sender<bool>,
     join: JoinHandle<Result<(), CleanupError>>,
@@ -1736,6 +1907,22 @@ mod tests {
         let rendered = format!("{target:?}");
         assert!(!rendered.contains("staging/private/key"));
         assert!(!rendered.contains("private-upload-identity"));
+    }
+
+    #[test]
+    fn stale_canonical_materialization_routes_reference_and_multipart_cleanup() {
+        assert_eq!(
+            canonical_materialization_disposition(true, Some("unfinished-upload")),
+            CanonicalMaterializationDisposition::Finalize
+        );
+        assert_eq!(
+            canonical_materialization_disposition(false, None),
+            CanonicalMaterializationDisposition::EnqueueObject
+        );
+        assert_eq!(
+            canonical_materialization_disposition(false, Some("unfinished-upload")),
+            CanonicalMaterializationDisposition::AbortMultipartAndEnqueue
+        );
     }
 
     #[test]

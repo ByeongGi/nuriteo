@@ -1,3 +1,5 @@
+mod content;
+mod fork;
 mod http_routes;
 mod http_service;
 mod service;
@@ -5,6 +7,13 @@ mod types;
 
 use std::fmt;
 
+pub(crate) use content::{
+    PublishedContentDownload, PublishedContentError, PublishedContentService,
+};
+pub use fork::{
+    ForkPublishedExample, PublishedExampleForkError, PublishedExampleForkKey,
+    PublishedExampleForkPolicy, PublishedExampleForkResult, PublishedExampleForkService,
+};
 pub use service::{
     MAX_PUBLIC_EXAMPLE_PAGE_SIZE, PublishedExampleService, PublishedExampleServicePolicy,
 };
@@ -61,7 +70,8 @@ impl std::error::Error for PublishedExampleError {}
 mod tests;
 pub(crate) use http_routes::openapi_router;
 pub use http_service::{
-    PublicPublishedExampleListView, PublicPublishedExampleView, PublishedExampleCreateView,
+    ForkedProjectView, PublicPreviewAdmissionKey, PublicPublishedExampleListView,
+    PublicPublishedExampleView, PublishedExampleCreateView, PublishedExampleForkView,
     PublishedExampleHttpError, PublishedExampleHttpService, PublishedExampleVersionMutationView,
     PublishedExampleVersionView, PublishedExampleView,
 };

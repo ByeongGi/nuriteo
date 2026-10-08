@@ -189,6 +189,15 @@ function boundedStream(
   });
 }
 
+export function boundedContentStream(
+  source: ReadableStream<Uint8Array>,
+  expectedBytes: number,
+  requestSignal: AbortSignal,
+  deadline: { readonly idleTimeoutMs: number; readonly totalTimeout: AbortSignal }
+): ReadableStream<Uint8Array> {
+  return boundedStream(source, expectedBytes, requestSignal, deadline);
+}
+
 function sameOrigin(request: Request): string | undefined {
   const host = request.headers.get("host");
   const supplied = request.headers.get("origin");

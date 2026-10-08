@@ -58,6 +58,7 @@ const activation = await issueActivationInvitation(
   { email: memberEmail },
   { csrfToken: adminBrowser.csrfToken() }
 );
+assert.equal(activation.data.delivery, "copy_once");
 await activateAccount(publicClient, {
   token: tokenFrom(activation.data.activationUrl.consume(), "/activate"),
   email: memberEmail,
@@ -81,6 +82,7 @@ const invitation = await issueOrganizationInvitation(
   },
   { csrfToken: adminBrowser.csrfToken() }
 );
+assert.equal(invitation.data.delivery, "copy_once");
 await acceptOrganizationInvitation(
   member,
   tokenFrom(invitation.data.acceptUrl.consume(), "/organization-invitations/accept"),

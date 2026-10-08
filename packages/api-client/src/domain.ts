@@ -3,7 +3,7 @@ import type { ApiResponse, BodylessRequestOptions } from "./types.ts";
 
 export type DomainRequestOptions = Pick<
   BodylessRequestOptions,
-  "maxResponseBytes" | "signal" | "timeoutMs"
+  "headers" | "maxResponseBytes" | "signal" | "timeoutMs"
 >;
 
 export interface ApiResult<T> {

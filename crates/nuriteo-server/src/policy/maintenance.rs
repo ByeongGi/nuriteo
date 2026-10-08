@@ -277,6 +277,27 @@ where
             if expected_sha256.len() != 32 || expected_bytes < 0 {
                 return Err(PolicyMaintenanceError::Invariant);
             }
+            // Serialize the queued->running fence with every Bundle/reference
+            // admission. Once this transaction commits, the existing database
+            // triggers reject new references until deletion is reconciled.
+            sqlx::query("SELECT lock_bundle_object_lifecycle($1)")
+                .bind(&key)
+                .execute(&mut *tx)
+                .await
+                .map_err(|_| PolicyMaintenanceError::Database)?;
+            let referenced: bool = sqlx::query_scalar(
+                "SELECT EXISTS(SELECT 1 FROM projects project JOIN bundles bundle ON bundle.id=project.working_head_bundle_id WHERE bundle.object_key=$1) \
+                 OR EXISTS(SELECT 1 FROM project_bundle_refs reference JOIN bundles bundle ON bundle.id=reference.bundle_id WHERE bundle.object_key=$1) \
+                 OR EXISTS(SELECT 1 FROM save_sessions session WHERE session.staging_object_key=$1 AND session.state IN ('created','uploading','verifying')) \
+                 OR EXISTS(SELECT 1 FROM object_retention_holds hold WHERE hold.object_key=$1 AND (hold.retain_until IS NULL OR hold.retain_until>transaction_timestamp()))",
+            )
+            .bind(&key)
+            .fetch_one(&mut *tx)
+            .await
+            .map_err(|_| PolicyMaintenanceError::Database)?;
+            if referenced {
+                continue;
+            }
             sqlx::query("DELETE FROM gc_candidate_leases WHERE object_key=$1 AND lease_expires_at<=transaction_timestamp()")
                 .bind(&key).execute(&mut *tx).await.map_err(|_| PolicyMaintenanceError::Database)?;
             sqlx::query("UPDATE gc_candidates SET status='queued',retry_at=NULL,started_at=NULL,updated_at=transaction_timestamp() WHERE object_key=$1 AND status='running'")

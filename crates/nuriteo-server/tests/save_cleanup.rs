@@ -9,16 +9,18 @@ use aws_smithy_http_client::pool::{Client as PoolClient, ConnectionPool};
 use aws_smithy_http_client::tls::rustls_provider::CryptoMode;
 use aws_smithy_http_client::tls::{self, TlsContext, TrustStore};
 use bytes::Bytes;
-use nuriteo_server::config::{Environment, SystemFileReader};
+use nuriteo_server::config::{Environment, InstanceSettingBootstrap, SystemFileReader};
 use nuriteo_server::database::{
     DatabasePool, DatabasePoolConfig, DatabaseTlsConfig, MigrationOptions, run_embedded_migrations,
 };
 use nuriteo_server::identity::UserId;
+use nuriteo_server::instance_settings::InstanceSettingsRepository;
 use nuriteo_server::object_storage::{
     MIN_MULTIPART_PART_BYTES, MultipartLimits, MultipartPartRequest, ObjectKey,
     ObjectStorageConfig, OperationLimits, PresignExpiry, PresignedPutRequest, S3ObjectStore,
     Sha256Checksum,
 };
+use nuriteo_server::policy::PolicyMaintenanceWorker;
 use nuriteo_server::project::ProjectId;
 use nuriteo_server::quota::SaveSessionId;
 use nuriteo_server::save::{
@@ -26,6 +28,7 @@ use nuriteo_server::save::{
     CleanupOperatorState, CleanupService, CleanupWorkerPolicy, WorkerShutdown,
 };
 use nuriteo_server::workspace::StorageScopeId;
+use sha2::{Digest, Sha256};
 use sqlx::{Acquire, Executor};
 
 const DATABASE_URL_ENV: &str = "NURITEO_TEST_DATABASE_URL";
@@ -77,6 +80,11 @@ impl Environment for FixtureEnvironment {
 async fn cleanup_is_bounded_persisted_redacted_and_restart_safe() {
     let pool = fixture_pool().await;
     reset_and_seed(&pool).await;
+    InstanceSettingsRepository::new(pool.clone(), Duration::from_secs(5))
+        .unwrap()
+        .materialize(&InstanceSettingBootstrap::empty())
+        .await
+        .unwrap();
     prove_forward_backfill(&pool).await;
     let endpoint = env::var(S3_ENDPOINT_ENV).unwrap();
     let ca_file = env::var(S3_CA_ENV).unwrap();
@@ -878,6 +886,201 @@ async fn cleanup_is_bounded_persisted_redacted_and_restart_safe() {
         WorkerShutdown::Drained
     );
     pool.close(Duration::from_secs(2)).await.unwrap();
+}
+
+#[tokio::test]
+#[ignore = "requires tests/fixtures/save-cleanup/run.sh"]
+async fn stale_canonical_materialization_aborts_persisted_multipart() {
+    let pool = fixture_pool().await;
+    reset_and_seed(&pool).await;
+    InstanceSettingsRepository::new(pool.clone(), Duration::from_secs(5))
+        .unwrap()
+        .materialize(&InstanceSettingBootstrap::empty())
+        .await
+        .unwrap();
+    let endpoint = env::var(S3_ENDPOINT_ENV).unwrap();
+    let ca_file = env::var(S3_CA_ENV).unwrap();
+    create_bucket(&endpoint, &ca_file).await;
+    let store = object_store(endpoint.clone(), ca_file.clone()).await;
+    let policy = CleanupWorkerPolicy::new(
+        8,
+        1,
+        2,
+        Duration::from_secs(10),
+        Duration::from_millis(500),
+        Duration::from_secs(9 * 60),
+        Duration::from_millis(20),
+        Duration::from_millis(100),
+        Duration::from_millis(200),
+    )
+    .unwrap();
+    let service = CleanupService::new(pool.clone(), store.clone(), policy);
+    prove_stale_canonical_multipart_is_aborted(&pool, &service, &store, &endpoint, &ca_file).await;
+    pool.close(Duration::from_secs(2)).await.unwrap();
+}
+
+async fn prove_stale_canonical_multipart_is_aborted(
+    pool: &DatabasePool,
+    service: &CleanupService,
+    store: &S3ObjectStore,
+    endpoint: &str,
+    ca_file: &str,
+) {
+    let key = format!("canonical/{SCOPE}/stale-multipart.bundle");
+    let upload_id = create_backend_multipart(endpoint, ca_file, &key).await;
+    let ledger_id = uuid::Uuid::now_v7();
+    sqlx::query(
+        "INSERT INTO canonical_bundle_materializations \
+         (id,project_id,storage_scope_id,sha256,object_key,physical_bytes,logical_bytes,\
+          file_count,multipart_upload_id,state,updated_at) \
+         VALUES($1::uuid,$2::uuid,$3::uuid,$4,$5,1,0,0,$6,'pending',\
+                transaction_timestamp()-INTERVAL '11 minutes')",
+    )
+    .bind(ledger_id.to_string())
+    .bind(ABORT_PROJECT)
+    .bind(SCOPE)
+    .bind(vec![0x7au8; 32])
+    .bind(&key)
+    .bind(&upload_id)
+    .execute(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+
+    let referenced_key = format!("canonical/{SCOPE}/referenced.bundle");
+    let referenced_body = b"durable-referenced-canonical-object";
+    let referenced_sha = Sha256::digest(referenced_body).to_vec();
+    aws_client(endpoint, ca_file)
+        .put_object()
+        .bucket(BUCKET)
+        .key(&referenced_key)
+        .body(aws_sdk_s3::primitives::ByteStream::from_static(
+            referenced_body,
+        ))
+        .send()
+        .await
+        .unwrap();
+    let referenced_ledger_id = uuid::Uuid::now_v7();
+    sqlx::query(
+        "INSERT INTO canonical_bundle_materializations \
+         (id,project_id,storage_scope_id,sha256,object_key,physical_bytes,logical_bytes,\
+          file_count,state,updated_at) \
+         VALUES($1::uuid,$2::uuid,$3::uuid,$4,$5,$6,0,0,'uploaded',\
+                transaction_timestamp()-INTERVAL '11 minutes')",
+    )
+    .bind(referenced_ledger_id.to_string())
+    .bind(ABORT_PROJECT)
+    .bind(SCOPE)
+    .bind(&referenced_sha)
+    .bind(&referenced_key)
+    .bind(i64::try_from(referenced_body.len()).unwrap())
+    .execute(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO bundles \
+         (id,sha256,object_key,physical_bytes,logical_bytes,file_count,format,\
+          verification_state,verified_at) \
+         VALUES($1::uuid,$2,$3,$4,0,0,'project-bundle-v1','verified',transaction_timestamp())",
+    )
+    .bind(uuid::Uuid::now_v7().to_string())
+    .bind(&referenced_sha)
+    .bind(&referenced_key)
+    .bind(i64::try_from(referenced_body.len()).unwrap())
+    .execute(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+
+    service
+        .reconcile_canonical_materializations_once()
+        .await
+        .unwrap();
+    let stale_state: (String, Option<String>) = sqlx::query_as(
+        "SELECT state,multipart_upload_id FROM canonical_bundle_materializations \
+         WHERE id=$1::uuid",
+    )
+    .bind(ledger_id.to_string())
+    .fetch_one(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+    assert_eq!(stale_state, ("cleanup_pending".to_owned(), None));
+    let stale_gc: (String, String, Vec<u8>, i64) = sqlx::query_as(
+        "SELECT status,reason,expected_sha256,expected_bytes FROM gc_candidates \
+         WHERE object_key=$1",
+    )
+    .bind(&key)
+    .fetch_one(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+    assert_eq!(
+        stale_gc,
+        (
+            "queued".to_owned(),
+            "verification_failed".to_owned(),
+            vec![0x7au8; 32],
+            1
+        )
+    );
+    let referenced_state: String =
+        sqlx::query_scalar("SELECT state FROM canonical_bundle_materializations WHERE id=$1::uuid")
+            .bind(referenced_ledger_id.to_string())
+            .fetch_one(&mut *pool.acquire().await.unwrap())
+            .await
+            .unwrap();
+    assert_eq!(referenced_state, "finalized");
+    let referenced_gc: bool =
+        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM gc_candidates WHERE object_key=$1)")
+            .bind(&referenced_key)
+            .fetch_one(&mut *pool.acquire().await.unwrap())
+            .await
+            .unwrap();
+    assert!(!referenced_gc);
+    assert!(!backend_multipart_exists(endpoint, ca_file, &key, &upload_id).await);
+
+    // Recreate the queued candidate at an age beyond the production-default
+    // 24-hour grace. Identity remains guarded by the canonical ledger trigger.
+    sqlx::query("DELETE FROM gc_candidates WHERE object_key=$1 AND status='queued'")
+        .bind(&key)
+        .execute(&mut *pool.acquire().await.unwrap())
+        .await
+        .unwrap();
+    sqlx::query(
+        "INSERT INTO gc_candidates \
+         (object_key,expected_sha256,expected_bytes,reason,status,eligible_at,created_at,updated_at) \
+         VALUES($1,$2,1,'verification_failed','queued',\
+                transaction_timestamp()-INTERVAL '25 hours',\
+                transaction_timestamp()-INTERVAL '25 hours',transaction_timestamp())",
+    )
+    .bind(&key)
+    .bind(vec![0x7au8; 32])
+    .execute(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+    let gc = PolicyMaintenanceWorker::new(pool.clone(), store.clone(), Duration::from_secs(10))
+        .unwrap()
+        .run_once()
+        .await
+        .unwrap();
+    assert_eq!(gc.gc_claimed, 1);
+    assert_eq!(gc.gc_completed, 1);
+    let gc_state: String =
+        sqlx::query_scalar("SELECT status FROM gc_candidates WHERE object_key=$1")
+            .bind(&key)
+            .fetch_one(&mut *pool.acquire().await.unwrap())
+            .await
+            .unwrap();
+    assert_eq!(gc_state, "completed");
+    service
+        .reconcile_canonical_materializations_once()
+        .await
+        .unwrap();
+    let stale_ledger_exists: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM canonical_bundle_materializations WHERE id=$1::uuid)",
+    )
+    .bind(ledger_id.to_string())
+    .fetch_one(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+    assert!(!stale_ledger_exists);
 }
 
 fn scope() -> StorageScopeId {

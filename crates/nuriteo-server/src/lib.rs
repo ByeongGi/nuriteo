@@ -14,6 +14,7 @@ pub mod http;
 pub mod identity;
 pub mod instance_settings;
 pub mod integration;
+pub mod integration_ca;
 pub mod invitations;
 pub(crate) mod mfa;
 pub mod notification;

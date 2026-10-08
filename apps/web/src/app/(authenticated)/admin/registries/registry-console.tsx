@@ -23,6 +23,7 @@ import { Button } from "../../../../components/ui/button.tsx";
 import { createBrowserApiClient } from "../../../../lib/api/browser-client.ts";
 import { readCsrfCredential } from "../../../../lib/api/browser-security.ts";
 import { useExclusiveMutation } from "../../../../lib/use-exclusive-mutation.ts";
+import { IntegrationCaConsole } from "../_components/integration-ca-console.tsx";
 
 export function RegistryConsole({
   initialConfiguration
@@ -153,6 +154,7 @@ export function RegistryConsole({
           <form className="collaboration-form" onSubmit={(event) => void rename(event, registry)}><label className="field-group">Display name<input name="displayName" defaultValue={registry.displayName} maxLength={200} required disabled={mutation.isPending} /></label><Button disabled={mutation.isPending}>Rename</Button></form>
           <form className="collaboration-form" onSubmit={(event) => void rotate(event, registry)}><label className="field-group">Replacement token<input name="token" type="password" autoComplete="new-password" maxLength={4096} required disabled={mutation.isPending} /></label><Button disabled={mutation.isPending}>Rotate token</Button></form>
         </> : null}
+        <IntegrationCaConsole type="registry" integrationId={registry.id} />
         <div className="record-actions">
           {registry.state === "active" ? <Button disabled={mutation.isPending} onClick={() => void run(async () => (await disableRegistry(createBrowserApiClient(), registry.id, registry.configVersion, options())).data, "Registry disabled immediately; its routes will not fall back.")}>Disable</Button> : <Button variant="primary" disabled={mutation.isPending} onClick={() => void run(async () => (await activateRegistry(createBrowserApiClient(), registry.id, registry.configVersion, options())).data, "Registry validated and activated.")}>Validate and activate</Button>}
           <Button disabled={mutation.isPending || registry.state !== "active" || registry.isDefault} onClick={() => void run(async () => (await setDefaultRegistry(createBrowserApiClient(), registry.id, registry.configVersion, options())).data, "Default Registry updated.")}>Make default</Button>

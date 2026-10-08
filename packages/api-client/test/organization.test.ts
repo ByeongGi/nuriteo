@@ -70,10 +70,20 @@ async function testActivationInvitationContracts(): Promise<void> {
     { csrfToken: CSRF }
   );
   assert.equal(issued.status, 201);
+  assert.equal(issued.data.delivery, "copy_once");
   assert.doesNotMatch(JSON.stringify(issued), /nrt_inv_|activation_url/u);
-  const activationUrl = issued.data.activationUrl.consume();
+  const oneTimeActivationUrl = issued.data.activationUrl;
+  const activationUrl = oneTimeActivationUrl.consume();
   assert.equal(new URL(activationUrl).searchParams.get("token"), ACTIVATION_TOKEN);
-  assert.throws(() => issued.data.activationUrl.consume(), /already been consumed/u);
+  assert.throws(() => oneTimeActivationUrl.consume(), /already been consumed/u);
+
+  const queued = await issueActivationInvitation(
+    singleResponse({ ...issuedActivation(), delivery: "email_queued", activation_url: null }, 201),
+    { email: "queued@example.test" },
+    { csrfToken: CSRF }
+  );
+  assert.equal(queued.data.delivery, "email_queued");
+  assert.equal(queued.data.activationUrl, null);
 
   const listed = await listActivationInvitations(client);
   assert.equal(listed.data.items.length, 1);
@@ -84,6 +94,7 @@ async function testActivationInvitationContracts(): Promise<void> {
     { invitationId: INVITATION_ID },
     { csrfToken: CSRF }
   );
+  assert.equal(reissued.data.delivery, "copy_once");
   assert.equal(reissued.data.activationUrl.toString(), "[REDACTED]");
   await revokeActivationInvitation(client, INVITATION_ID, { csrfToken: CSRF });
   await activateAccount(client, {
@@ -168,10 +179,21 @@ async function testOrganizationContracts(): Promise<void> {
     { csrfToken: CSRF }
   );
   assert.doesNotMatch(JSON.stringify(issued), /nrt_org_inv_/u);
+  assert.equal(issued.data.delivery, "copy_once");
   assert.equal(
     new URL(issued.data.acceptUrl.consume()).searchParams.get("token"),
     ORGANIZATION_TOKEN
   );
+  const queued = await issueOrganizationInvitation(
+    singleResponse(
+      { ...issuedOrganizationInvitation(), delivery: "email_queued", acceptUrl: null },
+      201
+    ),
+    { organizationId: ORGANIZATION_ID, email: MEMBER_EMAIL, role: "member" },
+    { csrfToken: CSRF }
+  );
+  assert.equal(queued.data.delivery, "email_queued");
+  assert.equal(queued.data.acceptUrl, null);
   await reissueOrganizationInvitation(
     client,
     { organizationId: ORGANIZATION_ID, invitationId: INVITATION_ID, role: "owner" },
@@ -493,6 +515,7 @@ function activationInvitation(): Record<string, unknown> {
 function issuedActivation(): Record<string, unknown> {
   return {
     ...activationInvitation(),
+    delivery: "copy_once",
     activation_url: `https://example.test/activate?token=${ACTIVATION_TOKEN}`
   };
 }
@@ -521,6 +544,7 @@ function issuedOrganizationInvitation(
 ): Record<string, unknown> {
   return {
     ...organizationInvitation(overrides),
+    delivery: "copy_once",
     acceptUrl: `https://example.test/organization-invitations/accept?token=${ORGANIZATION_TOKEN}`
   };
 }

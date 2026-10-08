@@ -6,7 +6,8 @@ pub use config::{
     SmtpBootstrapConfig, SmtpConfig, SmtpConfigError, SmtpConfigSnapshot, SmtpCredentials,
     SmtpPublicSettings, SmtpSecurity, SmtpTlsTrust,
 };
-pub use delivery::SmtpEmailSender;
+pub use delivery::{SmtpConfigHandle, SmtpEmailSender};
+pub(crate) use preflight::preflight;
 pub use preflight::{
     SmtpFailureCategory, SmtpFailureClass, SmtpPreflightError, SmtpPreflightReport,
     preflight_bootstrap,

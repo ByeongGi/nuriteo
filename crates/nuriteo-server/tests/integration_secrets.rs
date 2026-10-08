@@ -264,6 +264,24 @@ async fn encrypted_credentials_rotation_and_ca_activation_fail_closed() {
     .unwrap();
     assert_eq!(active_id, active.id.to_string());
 
+    let slow_admin = IntegrationAdminService::new(
+        rotated
+            .clone()
+            .with_timeout(Duration::from_secs(1))
+            .unwrap(),
+    );
+    let slow_active = slow_admin
+        .activate_ca_candidate(
+            actor,
+            failed_candidate.id,
+            &endpoint,
+            "request:int-001-slow-preflight",
+            &SlowPreflight,
+        )
+        .await
+        .unwrap();
+    assert_eq!(slow_active.state, "active");
+
     let smtp = rotated
         .smtp_config(
             "instance-01",
@@ -472,6 +490,7 @@ async fn encrypted_credentials_rotation_and_ca_activation_fail_closed() {
 
 struct TlsEndpointPreflight;
 struct FailedPreflight;
+struct SlowPreflight;
 
 impl CaCandidatePreflight for TlsEndpointPreflight {
     fn preflight<'a>(
@@ -541,6 +560,21 @@ impl CaCandidatePreflight for FailedPreflight {
         _: &'a CaEndpointBinding,
     ) -> Pin<Box<dyn Future<Output = Result<CaPreflightProof, IntegrationError>> + Send + 'a>> {
         Box::pin(async { Err(IntegrationError::PreflightFailed) })
+    }
+}
+
+impl CaCandidatePreflight for SlowPreflight {
+    fn preflight<'a>(
+        &'a self,
+        _: &'a ValidatedCaBundle,
+        endpoint: &'a CaEndpointBinding,
+    ) -> Pin<Box<dyn Future<Output = Result<CaPreflightProof, IntegrationError>> + Send + 'a>> {
+        Box::pin(async move {
+            tokio::time::sleep(Duration::from_millis(1_100)).await;
+            Ok(CaPreflightProof {
+                endpoint_fingerprint: endpoint.fingerprint(),
+            })
+        })
     }
 }
 

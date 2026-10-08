@@ -80,7 +80,7 @@ struct InvitationListResponse {
     tag = "invitations",
     request_body(content = IssueRequest, content_type = "application/json"),
     responses(
-        (status = 201, description = "Invitation issued; activation URL is returned once", body = IssuedInvitationView),
+        (status = 201, description = "Invitation issued; delivery is either a copy-once activation URL or queued email", body = IssuedInvitationView),
         (status = 401, description = "Active Session required", body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
         (status = 403, description = "Instance Administrator, exact Origin and CSRF required", body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
         (status = 422, description = "Invalid or conflicting invitation request", body = crate::openapi::ProblemDetails, content_type = "application/problem+json")
@@ -144,7 +144,7 @@ async fn list_invitations(
     params(("invitation_id" = String, Path, description = "UUIDv7 invitation identifier")),
     request_body(content = ReissueRequest, content_type = "application/json"),
     responses(
-        (status = 200, description = "Replacement issued; activation URL is returned once", body = IssuedInvitationView),
+        (status = 200, description = "Replacement issued; delivery is either a copy-once activation URL or queued email", body = IssuedInvitationView),
         (status = 403, description = "Administrator browser security policy rejected the request", body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
         (status = 422, description = "Invitation is inactive or request is invalid", body = crate::openapi::ProblemDetails, content_type = "application/problem+json")
     )

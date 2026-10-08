@@ -3,10 +3,12 @@ mod archive;
 mod cleanup;
 mod commit;
 mod content;
+mod git_bundle;
 mod history;
 mod http_config;
 mod http_routes;
 mod http_service;
+mod materializer;
 mod multipart_service;
 mod multipart_types;
 mod operations;
@@ -27,6 +29,7 @@ pub use commit::{
 pub use content::{
     ContentDescriptor, ContentDownload, ContentError, ContentService, ContentServicePolicy,
 };
+pub use git_bundle::{EncodedGitBundle, decode_git_bundle, encode_git_snapshot};
 pub use history::{
     HistoricalPromotionOutcome, HistoricalReferenceKind, ProjectHistoryError,
     ProjectHistoryService, ProjectHistoryServicePolicy, PromoteHistoricalReference,
@@ -35,6 +38,10 @@ pub use history::{
 pub use http_config::{SaveHttpConfig, SaveHttpConfigError, SaveUploadTransport};
 pub(crate) use http_routes::openapi_router;
 pub use http_service::{SaveHttpError, SaveHttpPolicy, SaveHttpService};
+pub(crate) use materializer::{
+    CanonicalBundleMaterializer, CanonicalBundleRecord, MaterializationError,
+    PersistedCanonicalBundle,
+};
 pub use multipart_service::{
     MultipartService, MultipartServiceError, MultipartServicePolicy, MultipartStore,
 };

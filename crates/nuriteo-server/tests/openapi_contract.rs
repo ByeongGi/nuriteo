@@ -24,6 +24,29 @@ fn versioned_document_matches_the_reviewed_snapshot() {
 }
 
 #[test]
+fn published_content_is_binary_and_cookie_free() {
+    let document = serde_json::to_value(openapi::document()).unwrap();
+    for path in [
+        "/api/v1/published-examples/{public_id}/content",
+        "/api/v1/published-examples/{public_id}/versions/{version_number}/content",
+    ] {
+        let operation = &document["paths"][path]["get"];
+        assert!(operation.get("security").is_none());
+        assert_eq!(
+            operation["responses"]["200"]["content"]["application/vnd.nuriteo.published-project-bundle"]
+                ["schema"]["format"],
+            "binary"
+        );
+        for status in ["404", "416", "422", "500", "503", "504"] {
+            assert_eq!(
+                operation["responses"][status]["content"]["application/problem+json"]["schema"]["$ref"],
+                "#/components/schemas/ProblemDetails"
+            );
+        }
+    }
+}
+
+#[test]
 fn audit_api_declares_cursor_export_and_retention_security_boundaries() {
     let document = serde_json::to_value(openapi::document()).unwrap();
     let list = &document["paths"]["/api/v1/admin/audit-events"]["get"];
@@ -93,6 +116,45 @@ fn audit_api_declares_cursor_export_and_retention_security_boundaries() {
 }
 
 #[test]
+fn integration_ca_api_exposes_only_server_bound_safe_metadata() {
+    let document = serde_json::to_value(openapi::document()).unwrap();
+    let stage = &document["paths"]["/api/v1/admin/integrations/{integrationType}/{integrationId}/ca/candidates"]
+        ["post"];
+    let headers = stage["parameters"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|parameter| parameter["name"].as_str().unwrap())
+        .collect::<Vec<_>>();
+    for required in ["if-match", "idempotency-key", "x-csrf-token", "origin"] {
+        assert!(headers.contains(&required));
+    }
+    assert_eq!(stage["security"][0]["projectSessionCookie"], json!([]));
+
+    let request = &document["components"]["schemas"]["StageRequest"];
+    assert_eq!(sorted_keys(&request["properties"]), vec!["pem"]);
+    assert_eq!(request["additionalProperties"], false);
+    assert_eq!(request["properties"]["pem"]["maxLength"], 1_048_576);
+
+    let view = &document["components"]["schemas"]["IntegrationCaView"];
+    assert_eq!(
+        sorted_keys(&view["properties"]),
+        vec![
+            "earliestExpiry",
+            "fingerprints",
+            "id",
+            "integrationId",
+            "integrationType",
+            "state",
+            "version",
+        ]
+    );
+    for forbidden in ["pem", "secret", "host", "port", "endpoint"] {
+        assert!(view["properties"].get(forbidden).is_none());
+    }
+}
+
+#[test]
 fn operations_dashboard_is_admin_only_and_uses_safe_aggregate_schema() {
     let document = serde_json::to_value(openapi::document()).unwrap();
     let operation = &document["paths"]["/api/v1/admin/operations"]["get"];
@@ -147,6 +209,13 @@ async fn serves_the_versioned_document_from_the_application_router() {
             "/api/v1/admin/email-deliveries",
             "/api/v1/admin/email-deliveries/{deliveryId}/cancel",
             "/api/v1/admin/email-deliveries/{deliveryId}/retry",
+            "/api/v1/admin/git-providers",
+            "/api/v1/admin/git-providers/{provider_id}",
+            "/api/v1/admin/git-providers/{provider_id}/activate",
+            "/api/v1/admin/git-providers/{provider_id}/disable",
+            "/api/v1/admin/integrations/{integrationType}/{integrationId}/ca",
+            "/api/v1/admin/integrations/{integrationType}/{integrationId}/ca/candidates",
+            "/api/v1/admin/integrations/{integrationType}/{integrationId}/ca/candidates/{candidateId}/activate",
             "/api/v1/admin/mfa-policy",
             "/api/v1/admin/mfa-policy/preview",
             "/api/v1/admin/mfa-reset-targets",
@@ -176,6 +245,10 @@ async fn serves_the_versioned_document_from_the_application_router() {
             "/api/v1/auth/session",
             "/api/v1/auth/sessions",
             "/api/v1/me",
+            "/api/v1/me/git-connections",
+            "/api/v1/me/git-connections/{connection_id}",
+            "/api/v1/me/git-connections/{connection_id}/rotate",
+            "/api/v1/me/git-providers",
             "/api/v1/me/oidc-identities",
             "/api/v1/me/oidc-identities/{providerId}",
             "/api/v1/me/organization-invitations/accept",
@@ -206,9 +279,17 @@ async fn serves_the_versioned_document_from_the_application_router() {
             "/api/v1/projects/{projectId}/access-tokens",
             "/api/v1/projects/{projectId}/access-tokens/{tokenId}",
             "/api/v1/projects/{projectId}/access-tokens/{tokenId}/rotate",
+            "/api/v1/projects/{project_id}/git",
+            "/api/v1/projects/{project_id}/git/commit-push",
+            "/api/v1/projects/{project_id}/git/import",
+            "/api/v1/projects/{project_id}/git/pull",
             "/api/v1/published-examples",
             "/api/v1/published-examples/{public_id}",
+            "/api/v1/published-examples/{public_id}/content",
+            "/api/v1/published-examples/{public_id}/forks",
             "/api/v1/published-examples/{public_id}/versions/{version_number}",
+            "/api/v1/published-examples/{public_id}/versions/{version_number}/content",
+            "/api/v1/published-examples/{public_id}/versions/{version_number}/forks",
             "/api/v1/setup/status",
             "/api/v1/version",
             "/api/v1/workspaces/{owner_type}/{owner_id}/projects",
@@ -265,6 +346,123 @@ async fn serves_the_versioned_document_from_the_application_router() {
             .collect::<Vec<_>>(),
         vec!["bootstrapRequired"]
     );
+}
+
+#[test]
+fn git_api_exposes_only_metadata_and_requires_browser_mutation_guards() {
+    let document = serde_json::to_value(openapi::document()).unwrap();
+    let schemas = document["components"]["schemas"].as_object().unwrap();
+    for schema in ["GitConnectionView", "GitRemoteView", "GitOperationView"] {
+        let serialized = serde_json::to_string(&schemas[schema]).unwrap();
+        assert!(!serialized.contains("token"));
+        assert!(!serialized.contains("credentialPlaintext"));
+    }
+    for path in [
+        "/api/v1/me/git-connections",
+        "/api/v1/me/git-connections/{connection_id}/rotate",
+        "/api/v1/projects/{project_id}/git/import",
+        "/api/v1/projects/{project_id}/git/pull",
+        "/api/v1/projects/{project_id}/git/commit-push",
+    ] {
+        let operation = &document["paths"][path]["post"];
+        let parameters = operation["parameters"].as_array().unwrap();
+        assert!(
+            parameters
+                .iter()
+                .any(|parameter| parameter["name"] == "Origin")
+        );
+        assert!(
+            parameters
+                .iter()
+                .any(|parameter| parameter["name"] == "X-CSRF-Token")
+        );
+        assert_eq!(operation["security"][0]["projectSessionCookie"], json!([]));
+    }
+    for path in [
+        "/api/v1/projects/{project_id}/git/pull",
+        "/api/v1/projects/{project_id}/git/commit-push",
+    ] {
+        let parameters = document["paths"][path]["post"]["parameters"]
+            .as_array()
+            .unwrap();
+        assert!(
+            parameters
+                .iter()
+                .any(|parameter| parameter["name"] == "If-Match")
+        );
+    }
+}
+
+#[test]
+fn git_provider_administration_is_guarded_versioned_and_secret_free() {
+    let document = serde_json::to_value(openapi::document()).unwrap();
+    let schema =
+        serde_json::to_string(&document["components"]["schemas"]["GitProviderAdminView"]).unwrap();
+    for forbidden in ["token", "clientSecret", "credential", "caPem", "privateKey"] {
+        assert!(!schema.contains(forbidden));
+    }
+    for (path, method, needs_etag) in [
+        ("/api/v1/admin/git-providers", "post", false),
+        ("/api/v1/admin/git-providers/{provider_id}", "patch", true),
+        ("/api/v1/admin/git-providers/{provider_id}", "delete", true),
+        (
+            "/api/v1/admin/git-providers/{provider_id}/activate",
+            "post",
+            true,
+        ),
+        (
+            "/api/v1/admin/git-providers/{provider_id}/disable",
+            "post",
+            true,
+        ),
+    ] {
+        let operation = &document["paths"][path][method];
+        assert_eq!(operation["security"][0]["projectSessionCookie"], json!([]));
+        let parameters = operation["parameters"].as_array().unwrap();
+        for header in ["Origin", "X-CSRF-Token"] {
+            assert!(parameters.iter().any(|item| item["name"] == header));
+        }
+        assert_eq!(
+            parameters.iter().any(|item| item["name"] == "If-Match"),
+            needs_etag
+        );
+    }
+}
+
+#[test]
+fn published_example_forks_require_session_csrf_origin_and_idempotency() {
+    let document = serde_json::to_value(openapi::document()).unwrap();
+    for path in [
+        "/api/v1/published-examples/{public_id}/forks",
+        "/api/v1/published-examples/{public_id}/versions/{version_number}/forks",
+    ] {
+        let operation = &document["paths"][path]["post"];
+        assert_eq!(operation["security"], json!([{"projectSessionCookie": []}]));
+        let parameters = operation["parameters"].as_array().unwrap();
+        for header in ["Origin", "X-CSRF-Token", "Idempotency-Key"] {
+            assert!(parameters.iter().any(|item| item["name"] == header));
+        }
+        for status in [
+            "200", "201", "401", "403", "404", "409", "413", "415", "422", "503", "504",
+        ] {
+            assert!(operation["responses"].get(status).is_some());
+        }
+        let schema = operation["responses"]["201"]["content"]["application/json"]["schema"]["$ref"]
+            .as_str()
+            .unwrap();
+        assert_eq!(schema, "#/components/schemas/PublishedExampleForkView");
+    }
+    let fork_schema = document["components"]["schemas"]["PublishedExampleForkView"].to_string();
+    for forbidden in [
+        "sourceExampleId",
+        "sourceExampleVersionId",
+        "sourceBundleId",
+        "projectVersionId",
+        "storageScopeId",
+        "idempotencyKey",
+    ] {
+        assert!(!fork_schema.contains(forbidden));
+    }
 }
 
 #[test]
@@ -398,15 +596,30 @@ fn project_openapi_declares_every_error_as_problem_json() {
     assert_eq!(scheme["type"], "apiKey");
     assert_eq!(scheme["in"], "cookie");
     assert_eq!(scheme["name"], "__Host-nuriteo_session");
+    let bearer = &document["components"]["securitySchemes"]["accessTokenBearer"];
+    assert_eq!(bearer["type"], "http");
+    assert_eq!(bearer["scheme"], "bearer");
     for (path, item) in document["paths"].as_object().unwrap() {
         if !path.contains("/projects") {
             continue;
         }
         for (method, operation) in item.as_object().unwrap() {
+            let bearer_enabled = (path
+                == "/api/v1/workspaces/{owner_type}/{owner_id}/projects/{project_id}"
+                && method == "get")
+                || (matches!(
+                    path.as_str(),
+                    "/api/v1/workspaces/{owner_type}/{owner_id}/projects/{project_id}/archive"
+                        | "/api/v1/workspaces/{owner_type}/{owner_id}/projects/{project_id}/restore"
+                ) && method == "post");
             assert_eq!(
                 operation["security"],
-                json!([{"projectSessionCookie": []}]),
-                "{path} must require the production host-only Session cookie"
+                if bearer_enabled {
+                    json!([{"projectSessionCookie": []}, {"accessTokenBearer": []}])
+                } else {
+                    json!([{"projectSessionCookie": []}])
+                },
+                "{method} {path} must declare its exact authentication alternatives"
             );
             if operation.get("requestBody").is_some() {
                 for status in ["413", "415"] {
@@ -420,13 +633,10 @@ fn project_openapi_declares_every_error_as_problem_json() {
                 .as_array()
                 .into_iter()
                 .flatten()
-                .filter(|parameter| parameter["in"] == "header")
-                .map(|parameter| {
-                    assert_eq!(parameter["required"], true);
-                    parameter["name"].as_str().unwrap()
-                })
+                .filter(|parameter| parameter["in"] == "header" && parameter["required"] == true)
+                .map(|parameter| parameter["name"].as_str().unwrap())
                 .collect::<Vec<_>>();
-            if method == "get" {
+            if method == "get" || bearer_enabled {
                 assert!(!required_headers.contains(&"Origin"));
                 assert!(!required_headers.contains(&"X-CSRF-Token"));
             } else {

@@ -12,6 +12,18 @@ export {
 } from "./errors.ts";
 export { getVersion } from "./system.ts";
 export {
+  activateIntegrationCa,
+  listIntegrationCas,
+  stageIntegrationCa
+} from "./integration-ca.ts";
+export type {
+  IntegrationCaBundle,
+  IntegrationCaCollection,
+  IntegrationCaMutationOptions,
+  IntegrationCaState,
+  IntegrationCaType
+} from "./integration-ca.ts";
+export {
   activateOidcProvider,
   createOidcProvider,
   deleteOidcProvider,
@@ -102,6 +114,36 @@ export {
 } from "./organizations.ts";
 export { getCurrentWorkspaces } from "./workspaces.ts";
 export {
+  activateGitProvider,
+  createGitProvider,
+  commitAndPushGitRemote,
+  connectGitProvider,
+  deleteGitProvider,
+  disableGitProvider,
+  disconnectGitProvider,
+  getGitRemote,
+  importGitRepository,
+  listGitConnections,
+  listGitProvidersForAdmin,
+  listGitProviders,
+  pullGitRemote,
+  rotateGitCredential,
+  updateGitProvider
+} from "./git.ts";
+export type {
+  GitConnection,
+  GitConnectionResult,
+  GitOperation,
+  GitOperationResult,
+  GitProvider,
+  GitProviderAdmin,
+  GitProviderAdminInput,
+  GitProviderAdminUpdate,
+  GitProviderKind,
+  GitRemote,
+  GitRemoteResult
+} from "./git.ts";
+export {
   archiveProject,
   changeDirectProjectRole,
   createProject,
@@ -133,9 +175,11 @@ export {
   addPublishedExampleVersion,
   createPublishedExample,
   deletePublishedExample,
+  forkPublishedExample,
   getPublicPublishedExample,
   getPublicPublishedExampleVersion,
   listPublicPublishedExamples,
+  publicPublishedExampleContentPath,
   republishPublishedExample,
   selectPublishedExampleActiveVersion,
   setPublishedExampleVisibility,
@@ -145,6 +189,8 @@ export type {
   AddPublishedExampleVersionInput,
   CreatePublishedExampleInput,
   DeletePublishedExampleInput,
+  ForkedPublishedExampleProject,
+  ForkPublishedExampleInput,
   ListPublicPublishedExamplesInput,
   PublicPublishedExample,
   PublicPublishedExampleCollection,
@@ -153,6 +199,8 @@ export type {
   PublishedExample,
   PublishedExampleCreate,
   PublishedExampleCreateResult,
+  PublishedExampleFork,
+  PublishedExampleForkResult,
   PublishedExampleInput,
   PublishedExampleProjectInput,
   PublishedExampleResult,

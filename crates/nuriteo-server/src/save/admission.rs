@@ -155,6 +155,30 @@ impl AdmissionContract {
         Ok(())
     }
 
+    pub(super) fn admitted_paths(
+        &self,
+        paths: &[String],
+        ignore_source: Option<&[u8]>,
+    ) -> Result<Vec<bool>, VerificationError> {
+        let rules = self.parse_ignore(ignore_source)?;
+        let candidates = paths.iter().try_fold(0_usize, |total, path| {
+            total
+                .checked_add(path.split('/').count())
+                .ok_or(VerificationError::InvalidArchive)
+        })?;
+        if rules.len().saturating_mul(candidates) > self.ignore.max_match_evaluations {
+            return Err(VerificationError::InvalidArchive);
+        }
+        paths
+            .iter()
+            .map(|path| {
+                self.validate_path(path)?;
+                Ok(path == ROOT_IGNORE_PATH
+                    || (!self.is_system_excluded(path) && !is_ignored(path, &rules)))
+            })
+            .collect()
+    }
+
     fn parse_ignore(&self, source: Option<&[u8]>) -> Result<Vec<IgnoreRule>, VerificationError> {
         let Some(source) = source else {
             return Ok(Vec::new());

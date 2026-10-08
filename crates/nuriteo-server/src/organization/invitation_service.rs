@@ -7,6 +7,7 @@ use serde_json::json;
 use sqlx::{Acquire, Postgres, Row, Transaction};
 use time::OffsetDateTime;
 use tokio::time as tokio_time;
+use uuid::Uuid;
 
 use crate::audit::{
     ActorType, AuditActor, AuditEvent, AuditEventFields, AuditEventId, AuditMetadata, AuditResult,
@@ -154,6 +155,7 @@ impl fmt::Debug for OrganizationInvitationAuditContext {
 pub struct IssuedOrganizationInvitation {
     invitation: OrganizationInvitation,
     token: OrganizationInvitationToken,
+    email_delivery_queued: bool,
 }
 
 impl IssuedOrganizationInvitation {
@@ -165,6 +167,11 @@ impl IssuedOrganizationInvitation {
     #[must_use]
     pub const fn token(&self) -> &OrganizationInvitationToken {
         &self.token
+    }
+
+    #[must_use]
+    pub const fn email_delivery_queued(&self) -> bool {
+        self.email_delivery_queued
     }
 
     #[must_use]
@@ -427,8 +434,19 @@ impl OrganizationInvitationService {
             ),
         )
         .await?;
+        let email_delivery_queued = enqueue_organization_invitation_email(
+            &mut transaction,
+            invitation_id,
+            invitee_user_id,
+            &email,
+        )
+        .await?;
         transaction.commit().await.map_err(database_error)?;
-        Ok(IssuedOrganizationInvitation { invitation, token })
+        Ok(IssuedOrganizationInvitation {
+            invitation,
+            token,
+            email_delivery_queued,
+        })
     }
 
     async fn reissue_inner(
@@ -520,8 +538,19 @@ impl OrganizationInvitationService {
             ),
         )
         .await?;
+        let email_delivery_queued = enqueue_organization_invitation_email(
+            &mut transaction,
+            replacement_id,
+            invitee_user_id,
+            &email,
+        )
+        .await?;
         transaction.commit().await.map_err(database_error)?;
-        Ok(IssuedOrganizationInvitation { invitation, token })
+        Ok(IssuedOrganizationInvitation {
+            invitation,
+            token,
+            email_delivery_queued,
+        })
     }
 
     async fn effective_expiry(
@@ -1266,6 +1295,55 @@ async fn append_audit(
     AuditWriter::append(transaction, &event)
         .await
         .map_err(|_| OrganizationInvitationServiceError::AuditUnavailable)
+}
+
+async fn enqueue_organization_invitation_email(
+    transaction: &mut Transaction<'_, Postgres>,
+    invitation_id: OrganizationInvitationId,
+    invitee_user_id: UserId,
+    email: &NormalizedEmail,
+) -> Result<bool, OrganizationInvitationServiceError> {
+    let enabled: Option<bool> = sqlx::query_scalar(
+        "SELECT value='true'::jsonb FROM instance_settings WHERE key='smtp.enabled' FOR SHARE",
+    )
+    .fetch_optional(&mut **transaction)
+    .await
+    .map_err(database_error)?;
+    if enabled != Some(true) {
+        return Ok(false);
+    }
+    let notification_id = Uuid::now_v7().to_string();
+    let outbox_id = Uuid::now_v7().to_string();
+    sqlx::query(
+        "INSERT INTO notifications
+         (id,recipient_user_id,classification,event_code,template_id,locale,resource_type,
+          resource_id,rendering_data,action_state,first_occurred_at,last_occurred_at)
+         VALUES($1::uuid,$2::uuid,'collaboration','organization.invited',
+                'organization.invited','en-US','organization_invitation',$3,'{}'::jsonb,
+                'pending',transaction_timestamp(),transaction_timestamp())",
+    )
+    .bind(&notification_id)
+    .bind(invitee_user_id.to_string())
+    .bind(invitation_id.to_string())
+    .execute(&mut **transaction)
+    .await
+    .map_err(database_error)?;
+    sqlx::query(
+        "INSERT INTO email_outbox
+         (id,notification_id,recipient_user_id,recipient_email,classification,template_id,locale,
+          resource_type,resource_id)
+         VALUES($1::uuid,$2::uuid,$3::uuid,$4,'collaboration','organization.invited','en-US',
+                'organization_invitation',$5)",
+    )
+    .bind(outbox_id)
+    .bind(notification_id)
+    .bind(invitee_user_id.to_string())
+    .bind(email.as_str())
+    .bind(invitation_id.to_string())
+    .execute(&mut **transaction)
+    .await
+    .map_err(database_error)?;
+    Ok(true)
 }
 
 fn invitation_from_row(

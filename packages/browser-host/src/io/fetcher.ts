@@ -106,9 +106,11 @@ export class HostFetcher {
   async #fetch(url: URL, options: HostFetchOptions): Promise<Response> {
     try {
       const init: RequestInit = {
+        credentials: "omit",
         method: options.method || "GET",
         headers: options.headers || {},
-        redirect: "manual"
+        redirect: "manual",
+        referrerPolicy: "no-referrer"
       };
       if (options.signal !== undefined) init.signal = options.signal;
       if (options.body !== undefined) init.body = options.body;

@@ -602,15 +602,25 @@ impl Runtime {
         &self,
         issued: IssuedOrganizationInvitation,
     ) -> Result<IssuedOrganizationInvitationView, OrganizationHttpError> {
+        let email_delivery_queued = issued.email_delivery_queued();
         let (invitation, token) = issued.into_parts();
-        let mut url = self.external_url.clone();
-        url.set_path("/organization-invitations/accept");
-        url.set_query(None);
-        url.set_fragment(None);
-        url.query_pairs_mut().append_pair("token", token.expose());
+        let (delivery, accept_url) = if email_delivery_queued {
+            (OrganizationInvitationDeliveryView::EmailQueued, None)
+        } else {
+            let mut url = self.external_url.clone();
+            url.set_path("/organization-invitations/accept");
+            url.set_query(None);
+            url.set_fragment(None);
+            url.query_pairs_mut().append_pair("token", token.expose());
+            (
+                OrganizationInvitationDeliveryView::CopyOnce,
+                Some(url.into()),
+            )
+        };
         Ok(IssuedOrganizationInvitationView {
             invitation: OrganizationInvitationView::from(invitation),
-            accept_url: url.into(),
+            delivery,
+            accept_url,
         })
     }
 
@@ -709,7 +719,16 @@ impl From<OrganizationInvitation> for OrganizationInvitationView {
 pub(crate) struct IssuedOrganizationInvitationView {
     #[serde(flatten)]
     invitation: OrganizationInvitationView,
-    accept_url: String,
+    delivery: OrganizationInvitationDeliveryView,
+    #[schema(required)]
+    accept_url: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum OrganizationInvitationDeliveryView {
+    CopyOnce,
+    EmailQueued,
 }
 
 impl fmt::Debug for IssuedOrganizationInvitationView {

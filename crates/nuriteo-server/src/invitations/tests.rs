@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use super::service::{InvitationView, IssuedInvitationView};
+use super::service::{InvitationDeliveryView, InvitationView, IssuedInvitationView};
 use super::{InvitationHttpPolicy, InvitationHttpServiceError};
 
 #[test]
@@ -33,7 +33,8 @@ fn one_time_url_debug_and_errors_are_secret_free() {
             superseded_at: None,
             replacement_id: None,
         },
-        activation_url: format!("https://example.test/activate?token={secret}"),
+        delivery: InvitationDeliveryView::CopyOnce,
+        activation_url: Some(format!("https://example.test/activate?token={secret}")),
     };
     assert!(!format!("{view:?}").contains(secret));
     for error in [

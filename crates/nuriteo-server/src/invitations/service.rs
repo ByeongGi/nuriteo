@@ -308,7 +308,16 @@ impl From<ActivationInvitation> for InvitationView {
 pub(crate) struct IssuedInvitationView {
     #[serde(flatten)]
     pub(crate) invitation: InvitationView,
-    pub(crate) activation_url: String,
+    pub(crate) delivery: InvitationDeliveryView,
+    #[schema(required)]
+    pub(crate) activation_url: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum InvitationDeliveryView {
+    CopyOnce,
+    EmailQueued,
 }
 
 impl fmt::Debug for IssuedInvitationView {
@@ -394,15 +403,22 @@ impl InvitationRuntime {
         &self,
         issued: crate::identity::IssuedActivationInvitation,
     ) -> Result<IssuedInvitationView, InvitationHttpServiceError> {
+        let email_delivery_queued = issued.email_delivery_queued();
         let (invitation, token) = issued.into_parts();
-        let mut url = self.external_url.clone();
-        url.set_path("/activate");
-        url.set_query(None);
-        url.set_fragment(None);
-        url.query_pairs_mut().append_pair("token", token.expose());
+        let (delivery, activation_url) = if email_delivery_queued {
+            (InvitationDeliveryView::EmailQueued, None)
+        } else {
+            let mut url = self.external_url.clone();
+            url.set_path("/activate");
+            url.set_query(None);
+            url.set_fragment(None);
+            url.query_pairs_mut().append_pair("token", token.expose());
+            (InvitationDeliveryView::CopyOnce, Some(url.into()))
+        };
         Ok(IssuedInvitationView {
             invitation: invitation.into(),
-            activation_url: url.into(),
+            delivery,
+            activation_url,
         })
     }
 

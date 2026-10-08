@@ -13,6 +13,8 @@ lifecycle against real TLS backends:
   listing and abort;
 - an unavailable backend persists retry state, and a new worker process drains
   that state after recovery;
+- an abandoned canonical Bundle multipart upload is recovered from its durable
+  ledger, aborted by exact object key and upload ID, and marked for object GC;
 - shutdown is supervised and bounded.
 
 Run from the repository root:

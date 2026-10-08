@@ -7,6 +7,7 @@ container="nuriteo-prj-005-${RANDOM}"
 port="${NURITEO_TEST_DATABASE_PORT:-55459}"
 fixture_dir="$(mktemp -d "${TMPDIR:-/tmp}/nuriteo-prj-005.XXXXXX")"
 database_password="$(openssl rand -hex 24)"
+test_name="${NURITEO_PROJECT_HTTP_TEST_NAME:-project_http_journey_is_authorized_versioned_and_audited}"
 
 cleanup() {
   "$runtime" rm --force "$container" >/dev/null 2>&1 || true
@@ -57,5 +58,5 @@ NURITEO_TEST_DATABASE_URL="postgres://nuriteo:${database_password}@localhost:${p
 NURITEO_TEST_DATABASE_CA="$fixture_dir/ca.crt" \
 CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-/private/tmp/nuriteo-prj005-target}" \
 cargo test -p nuriteo-server --test project_http \
-  project_http_journey_is_authorized_versioned_and_audited \
+  "$test_name" \
   -- --ignored --exact --nocapture

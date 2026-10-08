@@ -1,9 +1,11 @@
 use crate::access_token::AccessTokenManagementService;
 use crate::admin::AdminHttpService;
 use crate::auth::AuthService;
+use crate::git_operations::GitHttpService;
 use crate::health::HealthService;
 use crate::http::{HttpError, RequestId, propagate_request_id};
 use crate::identity::{BrowserMethod, BrowserRequestHeaders};
+use crate::integration_ca::IntegrationCaHttpService;
 use crate::invitations::InvitationHttpService;
 use crate::mfa::{MfaHttpService, MfaHttpServiceError};
 use crate::notification::NotificationHttpService;
@@ -18,8 +20,8 @@ use crate::setup::SetupStatusService;
 use crate::team::TeamHttpService;
 use axum::Router;
 use axum::extract::{Extension, Request};
-use axum::http::Uri;
 use axum::http::header::{CACHE_CONTROL, HeaderValue};
+use axum::http::{Method, Uri};
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
 
@@ -348,8 +350,8 @@ pub(crate) fn build_router_with_published_example_service(
     registry: RegistryHttpService,
     published_examples: PublishedExampleHttpService,
 ) -> Router {
-    let enforcement = mfa.clone();
-    let api = openapi::router_with_published_examples(
+    build_router_with_git_service(
+        health,
         auth,
         invitations,
         organizations,
@@ -364,6 +366,88 @@ pub(crate) fn build_router_with_published_example_service(
         oidc,
         registry,
         published_examples,
+        GitHttpService::unconfigured(),
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn build_router_with_git_service(
+    health: HealthService,
+    auth: AuthService,
+    invitations: InvitationHttpService,
+    organizations: OrganizationHttpService,
+    projects: ProjectHttpService,
+    save: SaveHttpService,
+    setup: SetupStatusService,
+    admin: AdminHttpService,
+    teams: TeamHttpService,
+    mfa: MfaHttpService,
+    notifications: NotificationHttpService,
+    access_tokens: AccessTokenManagementService,
+    oidc: OidcHttpService,
+    registry: RegistryHttpService,
+    published_examples: PublishedExampleHttpService,
+    git: GitHttpService,
+) -> Router {
+    build_router_with_integration_ca_service(
+        health,
+        auth,
+        invitations,
+        organizations,
+        projects,
+        save,
+        setup,
+        admin,
+        teams,
+        mfa,
+        notifications,
+        access_tokens,
+        oidc,
+        registry,
+        published_examples,
+        git,
+        IntegrationCaHttpService::unconfigured(),
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn build_router_with_integration_ca_service(
+    health: HealthService,
+    auth: AuthService,
+    invitations: InvitationHttpService,
+    organizations: OrganizationHttpService,
+    projects: ProjectHttpService,
+    save: SaveHttpService,
+    setup: SetupStatusService,
+    admin: AdminHttpService,
+    teams: TeamHttpService,
+    mfa: MfaHttpService,
+    notifications: NotificationHttpService,
+    access_tokens: AccessTokenManagementService,
+    oidc: OidcHttpService,
+    registry: RegistryHttpService,
+    published_examples: PublishedExampleHttpService,
+    git: GitHttpService,
+    integration_ca: IntegrationCaHttpService,
+) -> Router {
+    let enforcement = mfa.clone();
+    let api = openapi::router_with_integration_ca(
+        auth,
+        invitations,
+        organizations,
+        projects,
+        save,
+        setup,
+        admin,
+        teams,
+        mfa,
+        notifications,
+        access_tokens,
+        oidc,
+        registry,
+        published_examples,
+        git,
+        integration_ca,
     )
     .layer(middleware::from_fn(move |request, next| {
         enforce_mfa_deadline(enforcement.clone(), request, next)
@@ -381,10 +465,7 @@ async fn enforce_mfa_deadline(service: MfaHttpService, request: Request, next: N
         .get::<RequestId>()
         .cloned()
         .unwrap_or_else(RequestId::generate);
-    let allowed = path == "/api/v1/me"
-        || path == "/api/v1/auth/session"
-        || path.starts_with("/api/v1/auth/oidc")
-        || path.starts_with("/api/v1/mfa");
+    let allowed = mfa_deadline_exempt(request.method(), &path);
     if allowed {
         return next.run(request).await;
     }
@@ -418,6 +499,17 @@ async fn enforce_mfa_deadline(service: MfaHttpService, request: Request, next: N
     }
 }
 
+fn mfa_deadline_exempt(method: &Method, path: &str) -> bool {
+    let public_published_example_read = matches!(*method, Method::GET | Method::HEAD)
+        && (path == "/api/v1/published-examples"
+            || path.starts_with("/api/v1/published-examples/"));
+    path == "/api/v1/me"
+        || path == "/api/v1/auth/session"
+        || path.starts_with("/api/v1/auth/oidc")
+        || public_published_example_read
+        || path.starts_with("/api/v1/mfa")
+}
+
 fn private_problem(error: HttpError) -> Response {
     let mut response = error.into_response();
     response
@@ -440,6 +532,14 @@ mod tests {
     use axum::body::{Body, to_bytes};
     use axum::http::{Request, StatusCode, header::CACHE_CONTROL};
     use tower::ServiceExt;
+
+    #[test]
+    fn public_example_reads_bypass_mfa_deadline_but_fork_mutations_do_not() {
+        let path = "/api/v1/published-examples/opaque/forks";
+        assert!(mfa_deadline_exempt(&Method::GET, path));
+        assert!(mfa_deadline_exempt(&Method::HEAD, path));
+        assert!(!mfa_deadline_exempt(&Method::POST, path));
+    }
 
     #[tokio::test]
     async fn authenticated_status_failure_blocks_protected_api_fail_closed() {

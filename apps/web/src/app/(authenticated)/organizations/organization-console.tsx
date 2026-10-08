@@ -43,6 +43,7 @@ export function OrganizationConsole(props: OrganizationConsoleProps) {
   const router = useRouter();
   const mutation = useExclusiveMutation();
   const [oneTimeUrl, setOneTimeUrl] = useState<string>();
+  const [deliveryNotice, setDeliveryNotice] = useState<string>();
   const [error, setError] = useState<string>();
 
   async function mutate(
@@ -53,6 +54,7 @@ export function OrganizationConsole(props: OrganizationConsoleProps) {
     await mutation.run(async () => {
       setError(undefined);
       setOneTimeUrl(undefined);
+      setDeliveryNotice(undefined);
       try {
         await action();
         if (refreshAfterSuccess) router.refresh();
@@ -110,7 +112,11 @@ export function OrganizationConsole(props: OrganizationConsoleProps) {
         },
         { csrfToken: readCsrfCredential() }
       );
-      setOneTimeUrl(result.data.acceptUrl.consume());
+      if (result.data.delivery === "email_queued") {
+        setDeliveryNotice("The organization invitation email is queued for delivery.");
+      } else {
+        setOneTimeUrl(result.data.acceptUrl.consume());
+      }
       form.reset();
     }, false);
   }
@@ -127,7 +133,11 @@ export function OrganizationConsole(props: OrganizationConsoleProps) {
         },
         { csrfToken: readCsrfCredential() }
       );
-      setOneTimeUrl(result.data.acceptUrl.consume());
+      if (result.data.delivery === "email_queued") {
+        setDeliveryNotice("The replacement invitation email is queued for delivery.");
+      } else {
+        setOneTimeUrl(result.data.acceptUrl.consume());
+      }
     }, false);
   }
 
@@ -185,6 +195,7 @@ export function OrganizationConsole(props: OrganizationConsoleProps) {
           <Button type="button" onClick={() => { setOneTimeUrl(undefined); router.refresh(); }}>Clear link</Button>
         </section>
       ) : null}
+      {deliveryNotice ? <p role="status">{deliveryNotice}</p> : null}
       {error ? <p className="form-error" role="alert">{error}</p> : null}
       {!props.organization ? (
         <form className="collaboration-form" onSubmit={create} aria-busy={mutation.isPending}>

@@ -1,7 +1,7 @@
 use axum::{Json, Router};
 use serde::Serialize;
 use utoipa::Modify;
-use utoipa::openapi::security::{ApiKey, ApiKeyValue, SecurityScheme};
+use utoipa::openapi::security::{ApiKey, ApiKeyValue, HttpAuthScheme, HttpBuilder, SecurityScheme};
 use utoipa::{OpenApi, ToSchema};
 use utoipa_axum::routes;
 use utoipa_swagger_ui::{Config, SwaggerUi};
@@ -10,6 +10,8 @@ use crate::VERSION;
 use crate::access_token::{self, AccessTokenManagementService};
 use crate::admin::{self, AdminHttpService};
 use crate::auth::{self, AuthService};
+use crate::git_operations::{self, GitHttpService};
+use crate::integration_ca::{self, IntegrationCaHttpService};
 use crate::invitations::{self, InvitationHttpService};
 use crate::mfa::{self, MfaHttpService};
 use crate::notification::{self, NotificationHttpService};
@@ -59,12 +61,16 @@ pub const DOCS_PATH: &str = "/api/docs";
         ,(name = "oidc-administration", description = "Instance-wide OIDC Provider administration")
         ,(name = "registry-administration", description = "Instance-wide package registry routing and credential administration")
         ,(name = "published-examples", description = "Immutable Project Version publication and public discovery")
+        ,(name = "git", description = "User Git credentials and bounded Project remote operations")
+        ,(name = "git-administration", description = "Instance-wide Git Provider administration")
+        ,(name = "integration-ca-administration", description = "Custom CA candidate validation and activation for outbound integrations")
     ),
     servers((url = "/", description = "Current self-hosted instance"))
 )]
 struct ApiDocument;
 
 const PROJECT_SESSION_SCHEME: &str = "projectSessionCookie";
+const ACCESS_TOKEN_BEARER_SCHEME: &str = "accessTokenBearer";
 
 struct ProjectSessionSecurity;
 
@@ -79,6 +85,18 @@ impl Modify for ProjectSessionSecurity {
                     "Host-only, Secure, HttpOnly browser Session cookie. Loopback development uses the equivalent nuriteo_dev_session cookie.",
                 ),
             )),
+        );
+        components.add_security_scheme(
+            ACCESS_TOKEN_BEARER_SCHEME,
+            SecurityScheme::Http(
+                HttpBuilder::new()
+                    .scheme(HttpAuthScheme::Bearer)
+                    .bearer_format("NURITEO Personal or Project Automation Token")
+                    .description(Some(
+                        "Copy-once token. Endpoint authorization is the intersection of token scope, live user/Project access, and Project lifecycle state.",
+                    ))
+                    .build(),
+            ),
         );
     }
 }
@@ -171,6 +189,8 @@ pub fn document() -> utoipa::openapi::OpenApi {
         OidcHttpService::unconfigured(),
         RegistryHttpService::unconfigured(),
         PublishedExampleHttpService::unconfigured(),
+        GitHttpService::unconfigured(),
+        IntegrationCaHttpService::unconfigured(),
     )
     .1
 }
@@ -325,6 +345,82 @@ pub(crate) fn router_with_published_examples(
     registry: RegistryHttpService,
     published_examples: PublishedExampleHttpService,
 ) -> Router {
+    router_with_git(
+        auth,
+        invitations,
+        organizations,
+        projects,
+        save,
+        setup,
+        admin,
+        teams,
+        mfa,
+        notifications,
+        access_tokens,
+        oidc,
+        registry,
+        published_examples,
+        GitHttpService::unconfigured(),
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn router_with_git(
+    auth: AuthService,
+    invitations: InvitationHttpService,
+    organizations: OrganizationHttpService,
+    projects: ProjectHttpService,
+    save: SaveHttpService,
+    setup: SetupStatusService,
+    admin: AdminHttpService,
+    teams: TeamHttpService,
+    mfa: MfaHttpService,
+    notifications: NotificationHttpService,
+    access_tokens: AccessTokenManagementService,
+    oidc: OidcHttpService,
+    registry: RegistryHttpService,
+    published_examples: PublishedExampleHttpService,
+    git: GitHttpService,
+) -> Router {
+    router_with_integration_ca(
+        auth,
+        invitations,
+        organizations,
+        projects,
+        save,
+        setup,
+        admin,
+        teams,
+        mfa,
+        notifications,
+        access_tokens,
+        oidc,
+        registry,
+        published_examples,
+        git,
+        IntegrationCaHttpService::unconfigured(),
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn router_with_integration_ca(
+    auth: AuthService,
+    invitations: InvitationHttpService,
+    organizations: OrganizationHttpService,
+    projects: ProjectHttpService,
+    save: SaveHttpService,
+    setup: SetupStatusService,
+    admin: AdminHttpService,
+    teams: TeamHttpService,
+    mfa: MfaHttpService,
+    notifications: NotificationHttpService,
+    access_tokens: AccessTokenManagementService,
+    oidc: OidcHttpService,
+    registry: RegistryHttpService,
+    published_examples: PublishedExampleHttpService,
+    git: GitHttpService,
+    integration_ca: IntegrationCaHttpService,
+) -> Router {
     let (api_routes, document) = openapi_parts(
         auth,
         invitations,
@@ -340,6 +436,8 @@ pub(crate) fn router_with_published_examples(
         oidc,
         registry,
         published_examples,
+        git,
+        integration_ca,
     );
     let config = Config::new([DOCUMENT_PATH]).validator_url("none");
     let docs = SwaggerUi::new(DOCS_PATH)
@@ -368,6 +466,8 @@ fn openapi_parts(
     oidc: OidcHttpService,
     registry: RegistryHttpService,
     published_examples: PublishedExampleHttpService,
+    git: GitHttpService,
+    integration_ca: IntegrationCaHttpService,
 ) -> (Router, utoipa::openapi::OpenApi) {
     let (auth_routes, document) =
         workspace::openapi_router(auth::openapi_router(ApiDocument::openapi()))
@@ -413,6 +513,12 @@ fn openapi_parts(
     let (published_example_routes, document) = published_example::openapi_router(document)
         .with_state(published_examples)
         .split_for_parts();
+    let (git_routes, document) = git_operations::openapi_router(document)
+        .with_state(git)
+        .split_for_parts();
+    let (integration_ca_routes, document) = integration_ca::openapi_router(document)
+        .with_state(integration_ca)
+        .split_for_parts();
     (
         auth_routes
             .merge(invitation_routes)
@@ -427,7 +533,9 @@ fn openapi_parts(
             .merge(access_token_routes)
             .merge(oidc_routes)
             .merge(registry_routes)
-            .merge(published_example_routes),
+            .merge(published_example_routes)
+            .merge(git_routes)
+            .merge(integration_ca_routes),
         document,
     )
 }

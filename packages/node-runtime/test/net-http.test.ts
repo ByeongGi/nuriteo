@@ -108,6 +108,29 @@ optionsServer.listen({ host: "127.0.0.1", port: 5301 });
 assert.equal((await optionsNetwork.fetch("http://127.0.0.1:5301/")).body, "options");
 optionsServer.close();
 
+const nativeFetch = globalThis.fetch;
+let browserCredentialBoundary: RequestInit | undefined;
+try {
+  globalThis.fetch = async (_input, init) => {
+    browserCredentialBoundary = init;
+    return new Response("credential-safe", { status: 200 });
+  };
+  const publicRuntimeHttp = createHttpBuiltin();
+  const body = await new Promise<string>((resolve, reject) => {
+    publicRuntimeHttp.get("https://app.example.test/api/v1/me", (runtimeResponse) => {
+      const chunks: string[] = [];
+      runtimeResponse.on("data", (chunk) => chunks.push(String(chunk)));
+      runtimeResponse.on("end", () => resolve(chunks.join("")));
+      runtimeResponse.on("error", reject);
+    }).on("error", reject);
+  });
+  assert.equal(body, "credential-safe");
+  assert.equal(browserCredentialBoundary?.credentials, "omit");
+  assert.equal(browserCredentialBoundary?.referrerPolicy, "no-referrer");
+} finally {
+  globalThis.fetch = nativeFetch;
+}
+
 const probeServer = netBuiltin.createServer();
 probeServer.listen({ host: "127.0.0.1", port: 5302 });
 await Promise.resolve();

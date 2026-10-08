@@ -266,6 +266,15 @@ impl SmtpPublicSettings {
 }
 
 impl SmtpConfig {
+    pub(crate) fn with_integration_ca(
+        &self,
+        bundle: &ValidatedCaBundle,
+    ) -> Result<Self, SmtpConfigError> {
+        let mut value = self.clone();
+        value.tls_trust.integration_ca = Some(parse_ca_bundle(bundle.pem(), SMTP_CA_FILE)?);
+        Ok(value)
+    }
+
     pub(crate) fn load(
         environment: &impl Environment,
         files: &impl FileReader,

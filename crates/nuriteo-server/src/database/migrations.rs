@@ -70,6 +70,14 @@ const GIT_PROVIDERS_SQL: &str = include_str!("../../migrations/0039_git_provider
 const REGISTRY_GATEWAY_SQL: &str = include_str!("../../migrations/0040_registry_gateway.sql");
 const GIT_USER_OPERATIONS_SQL: &str = include_str!("../../migrations/0041_git_user_operations.sql");
 const PUBLISHED_EXAMPLES_SQL: &str = include_str!("../../migrations/0042_published_examples.sql");
+const PUBLISHED_EXAMPLE_FORKS_SQL: &str =
+    include_str!("../../migrations/0043_published_example_forks.sql");
+const GIT_WORKING_HEAD_MATERIALIZATIONS_SQL: &str =
+    include_str!("../../migrations/0044_git_working_head_materializations.sql");
+const INVITATION_DELIVERY_TOKENS_SQL: &str =
+    include_str!("../../migrations/0045_invitation_delivery_tokens.sql");
+const PUBLIC_PREVIEW_RATE_LIMITS_SQL: &str =
+    include_str!("../../migrations/0046_public_preview_rate_limits.sql");
 
 // Two-key advisory locks use a namespace distinct from PostgreSQL's one-key
 // bigint locks. 0x4e555249 is the ASCII representation of "NURI".
@@ -421,6 +429,34 @@ pub(super) fn embedded_migrator() -> Migrator {
             Cow::Borrowed("immutable Published Examples"),
             MigrationType::Simple,
             PUBLISHED_EXAMPLES_SQL.into_sql_str(),
+            false,
+        ),
+        Migration::new(
+            43,
+            Cow::Borrowed("atomic Published Example forks"),
+            MigrationType::Simple,
+            PUBLISHED_EXAMPLE_FORKS_SQL.into_sql_str(),
+            false,
+        ),
+        Migration::new(
+            44,
+            Cow::Borrowed("Git Working Head materializations"),
+            MigrationType::Simple,
+            GIT_WORKING_HEAD_MATERIALIZATIONS_SQL.into_sql_str(),
+            false,
+        ),
+        Migration::new(
+            45,
+            Cow::Borrowed("one-attempt invitation delivery credentials"),
+            MigrationType::Simple,
+            INVITATION_DELIVERY_TOKENS_SQL.into_sql_str(),
+            false,
+        ),
+        Migration::new(
+            46,
+            Cow::Borrowed("shared Public Preview rate limits"),
+            MigrationType::Simple,
+            PUBLIC_PREVIEW_RATE_LIMITS_SQL.into_sql_str(),
             false,
         ),
     ])

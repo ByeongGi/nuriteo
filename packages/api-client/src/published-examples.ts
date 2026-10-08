@@ -29,6 +29,8 @@ const PUBLIC_ID = /^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$/u;
 const EXAMPLE_ETAG = /^"published-example-v([1-9]\d*)"$/u;
 const MAX_GENERATION = 9_223_372_036_854_775_806n;
 const MAX_PUBLIC_ITEMS = 100;
+const FORK_IDEMPOTENCY_KEY = /^[A-Za-z0-9._:-]{8,128}$/u;
+const PROJECT_SLUG = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/u;
 
 export type PublishedExampleVisibility = (typeof VISIBILITIES)[number];
 export type PublishedExampleState = (typeof STATES)[number];
@@ -134,6 +136,51 @@ export interface PublicPublishedExampleInput {
 
 export interface PublicPublishedExampleVersionInput extends PublicPublishedExampleInput {
   readonly versionNumber: number;
+}
+
+export interface ForkedPublishedExampleProject {
+  readonly id: string;
+  readonly ownerType: "user" | "organization";
+  readonly ownerId: string;
+  readonly slug: string;
+  readonly name: string;
+  readonly state: "active";
+  readonly version: number;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+}
+
+export interface PublishedExampleFork {
+  readonly project: ForkedPublishedExampleProject;
+  readonly sourceVersionNumber: number;
+  readonly idempotentRetry: boolean;
+}
+
+export interface ForkPublishedExampleInput extends PublicPublishedExampleInput {
+  readonly versionNumber?: number;
+  readonly destinationOwner: ProjectOwner;
+  readonly slug: string;
+  readonly name: string;
+  readonly idempotencyKey: string;
+}
+
+export interface PublishedExampleForkResult extends ApiResult<PublishedExampleFork> {
+  readonly location: string;
+}
+
+/**
+ * Returns the cookie-free Core API path for the immutable Project Bundle.
+ * The normal API client intentionally does not buffer or JSON-decode this
+ * potentially large binary response.
+ */
+export function publicPublishedExampleContentPath(
+  input: PublicPublishedExampleInput | PublicPublishedExampleVersionInput
+): `/${string}` {
+  const publicId = validatePublicId(input.publicId);
+  if ("versionNumber" in input) {
+    return `/published-examples/${publicId}/versions/${validatePositiveInteger(input.versionNumber, "version number")}/content`;
+  }
+  return `/published-examples/${publicId}/content`;
 }
 
 export async function createPublishedExample(
@@ -308,6 +355,49 @@ export async function getPublicPublishedExampleVersion(
   );
 }
 
+export async function forkPublishedExample(
+  client: ApiClient,
+  input: ForkPublishedExampleInput,
+  options: BrowserMutationOptions
+): Promise<PublishedExampleForkResult> {
+  const publicId = validatePublicId(input.publicId);
+  const destinationOwner = validateOwner(input.destinationOwner);
+  const slug = validateProjectSlug(input.slug);
+  const name = validateName(input.name);
+  const idempotencyKey = validateForkIdempotencyKey(input.idempotencyKey);
+  const version = input.versionNumber === undefined
+    ? ""
+    : `/versions/${validatePositiveInteger(input.versionNumber, "version number")}`;
+  const response = await client.post<unknown, unknown>(
+    `/published-examples/${publicId}${version}/forks`,
+    { destinationOwner, slug, name },
+    mutationOptions(options, { "idempotency-key": idempotencyKey })
+  );
+  if (response.status !== 200 && response.status !== 201) {
+    throw invalidResponse(response);
+  }
+  const parsed = validatedResultForStatus(response, response.status, parseFork);
+  const expectedStatus = parsed.data.idempotentRetry ? 200 : 201;
+  if (
+    response.status !== expectedStatus ||
+    parsed.data.project.ownerType !== destinationOwner.ownerType ||
+    parsed.data.project.ownerId !== destinationOwner.ownerId ||
+    parsed.data.project.slug !== slug ||
+    parsed.data.project.name !== name ||
+    (input.versionNumber !== undefined &&
+      parsed.data.sourceVersionNumber !== input.versionNumber)
+  ) {
+    throw invalidResponse(response);
+  }
+  const ownerSegment = destinationOwner.ownerType === "user" ? "users" : "organizations";
+  const expectedLocation = `/api/v1/workspaces/${ownerSegment}/${destinationOwner.ownerId}/projects/${parsed.data.project.id}`;
+  const location = response.headers.get("location");
+  if (location !== expectedLocation) {
+    throw invalidResponse(response);
+  }
+  return { ...parsed, location };
+}
+
 async function mutateExample(
   client: ApiClient,
   input: VersionedPublishedExampleInput,
@@ -415,6 +505,43 @@ function parsePublic(value: unknown, expectedPublicId?: string): PublicPublished
   return result;
 }
 
+function parseFork(value: unknown): PublishedExampleFork {
+  const record = readExactRecord(value, ["idempotentRetry", "project", "sourceVersionNumber"]);
+  if (typeof record.idempotentRetry !== "boolean") {
+    throw new TypeError("invalid Published Example fork retry state");
+  }
+  return {
+    project: parseForkedProject(record.project),
+    sourceVersionNumber: readPositiveInteger(record, "sourceVersionNumber"),
+    idempotentRetry: record.idempotentRetry
+  };
+}
+
+function parseForkedProject(value: unknown): ForkedPublishedExampleProject {
+  const record = readExactRecord(value, [
+    "createdAt", "id", "name", "ownerId", "ownerType", "slug", "state", "updatedAt",
+    "version"
+  ]);
+  const ownerType = readEnum(record, "ownerType", ["user", "organization"] as const);
+  const state = readEnum(record, "state", ["active"] as const);
+  const createdAt = readUtcTimestamp(record, "createdAt");
+  const updatedAt = readUtcTimestamp(record, "updatedAt");
+  if (Date.parse(createdAt) > Date.parse(updatedAt)) {
+    throw new TypeError("invalid forked Project timestamp order");
+  }
+  return {
+    id: readUuidV7(record, "id"),
+    ownerType,
+    ownerId: readUuidV7(record, "ownerId"),
+    slug: readProjectSlug(record, "slug"),
+    name: readName(record, "name"),
+    state,
+    version: readPositiveInteger(record, "version"),
+    createdAt,
+    updatedAt
+  };
+}
+
 interface ProjectContext {
   readonly owner: ProjectOwner;
   readonly projectId: string;
@@ -493,6 +620,29 @@ function readPublicId(record: Record<string, unknown>, key: string): string {
 function validatePositiveInteger(value: number, label: string): number {
   if (!Number.isSafeInteger(value) || value < 1) {
     throw new ApiConfigurationError(`The Published Example ${label} is invalid.`);
+  }
+  return value;
+}
+
+function validateProjectSlug(value: string): string {
+  try {
+    return readProjectSlug({ value }, "value");
+  } catch {
+    throw new ApiConfigurationError("The forked Project slug is invalid.");
+  }
+}
+
+function readProjectSlug(record: Record<string, unknown>, key: string): string {
+  const value = readBoundedString(record, key, 63);
+  if (!PROJECT_SLUG.test(value)) {
+    throw new TypeError("invalid Project slug");
+  }
+  return value;
+}
+
+function validateForkIdempotencyKey(value: string): string {
+  if (typeof value !== "string" || !FORK_IDEMPOTENCY_KEY.test(value)) {
+    throw new ApiConfigurationError("The Published Example fork idempotency key is invalid.");
   }
   return value;
 }

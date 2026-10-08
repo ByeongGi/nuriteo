@@ -9,7 +9,8 @@ interface RuntimeAssetManifest {
 
 export async function resolveRuntimeAssetRevision(
   configuredRevision?: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  credentials: RequestCredentials = "same-origin"
 ): Promise<string> {
   if (configuredRevision !== undefined) return validateRevision(configuredRevision);
 
@@ -20,7 +21,7 @@ export async function resolveRuntimeAssetRevision(
   try {
     const response = await fetch("/runtime/manifest.json", {
       cache: "no-store",
-      credentials: "same-origin",
+      credentials,
       signal: requestAbort.signal
     });
     if (!response.ok) {

@@ -4,6 +4,7 @@ import {
   type ApiEmptyResult,
   type ApiResult,
   type DomainRequestOptions,
+  invalidResponse,
   requireNoContent,
   validatedResult,
   validatedResultForStatus
@@ -49,9 +50,10 @@ export interface ActivationInvitationCollection {
   readonly items: readonly ActivationInvitation[];
 }
 
-export interface IssuedActivationInvitation extends ActivationInvitation {
-  readonly activationUrl: OneTimeUrl;
-}
+export type IssuedActivationInvitation = ActivationInvitation & (
+  | { readonly delivery: "copy_once"; readonly activationUrl: OneTimeUrl }
+  | { readonly delivery: "email_queued"; readonly activationUrl: null }
+);
 
 export interface IssueActivationInvitationInput {
   readonly email: string;
@@ -147,6 +149,7 @@ function issuedResult(
       "accepted_at",
       "activation_url",
       "created_at",
+      "delivery",
       "email",
       "expires_at",
       "id",
@@ -155,8 +158,15 @@ function issuedResult(
       "status",
       "superseded_at"
     ]);
+    const invitation = parseInvitationRecord(record);
+    const delivery = readEnum(record, "delivery", ["copy_once", "email_queued"] as const);
+    if (delivery === "email_queued") {
+      if (record.activation_url !== null) throw invalidResponse(response);
+      return { ...invitation, delivery, activationUrl: null };
+    }
     return {
-      ...parseInvitationRecord(record),
+      ...invitation,
+      delivery,
       activationUrl: OneTimeUrl.parse(
         record.activation_url,
         "/activate",

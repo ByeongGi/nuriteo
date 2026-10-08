@@ -5,7 +5,7 @@ import { randomUUID } from "node:crypto";
 import { selectForwardedHeaders, validateInternalApiUrl } from "./server-policy.ts";
 
 const MAX_BODY_BYTES = 16_384;
-const MAX_ALLOWED_BODY_BYTES = 65_536;
+const MAX_ALLOWED_BODY_BYTES = 1_100_000;
 const MAX_RESPONSE_BYTES = 1_048_576;
 const TIMEOUT_MS = 15_000;
 const UUID_V7 = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
@@ -24,6 +24,10 @@ const REGISTRY_ETAG = /^"registry-v([1-9]\d*)"$/u;
 const TEAM_ETAG = /^"team-v([1-9]\d*)"$/u;
 const TEAM_MEMBER_ETAG = /^"team-member-v([1-9]\d*)"$/u;
 const TEAM_PROJECT_ROLE_ETAG = /^"team-project-role-v([1-9]\d*)"$/u;
+const GIT_CONNECTION_ETAG = /^"git-connection-v([1-9]\d*)"$/u;
+const GIT_PROVIDER_ETAG = /^"git-provider-v([1-9]\d*)"$/u;
+const GIT_REMOTE_ETAG = /^"git-remote-(?:[0-9a-f]{40}|[0-9a-f]{64})"$/u;
+const INTEGRATION_CA_ETAG = /^"integration-ca-v(0|[1-9]\d*)"$/u;
 const MAX_PROJECT_VERSION = 9_223_372_036_854_775_806n;
 const SAFE_LOCATION = /^\/api\/v1\/organizations\/[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 const ORGANIZATION_INVITATION_EMAIL_MAX_CHARACTERS = 320;
@@ -46,7 +50,7 @@ export interface CollaborationForward {
   readonly withEtag?: boolean;
   readonly withIdempotencyKey?: boolean;
   readonly forwardSetCookie?: boolean;
-  readonly etagKind?: "email-delivery" | "mfa-policy" | "notification" | "notification-preferences" | "oidc-provider" | "organization" | "project" | "registry" | "setting" | "team" | "team-member" | "team-project-role";
+  readonly etagKind?: "email-delivery" | "git-connection" | "git-provider" | "git-remote" | "integration-ca" | "mfa-policy" | "notification" | "notification-preferences" | "oidc-provider" | "organization" | "project" | "registry" | "setting" | "team" | "team-member" | "team-project-role";
   readonly jsonBodyPolicy?: "organization-invitation-issue";
   readonly safeLocation?: (value: string) => boolean;
 }
@@ -346,6 +350,28 @@ function isEtagForKind(
 ): value is string {
   if (kind === "project") return isProjectEtag(value);
   if (kind === "setting") return isSettingEtag(value);
+  if (kind === "git-remote") return value !== null && GIT_REMOTE_ETAG.test(value);
+  if (kind === "integration-ca") {
+    if (value === null || value.length > 48) return false;
+    const match = value.match(INTEGRATION_CA_ETAG);
+    if (match === null) return false;
+    const version = BigInt(match[1] as string);
+    return version <= MAX_PROJECT_VERSION && value === `"integration-ca-v${version}"`;
+  }
+  if (kind === "git-connection") {
+    if (value === null || value.length > 48) return false;
+    const match = value.match(GIT_CONNECTION_ETAG);
+    if (match === null) return false;
+    const version = BigInt(match[1] as string);
+    return version <= MAX_PROJECT_VERSION && value === `"git-connection-v${version}"`;
+  }
+  if (kind === "git-provider") {
+    if (value === null || value.length > 48) return false;
+    const match = value.match(GIT_PROVIDER_ETAG);
+    if (match === null) return false;
+    const version = BigInt(match[1] as string);
+    return version <= MAX_PROJECT_VERSION && value === `"git-provider-v${version}"`;
+  }
   if (kind === "mfa-policy") {
     if (value === null || value.length > 40) return false;
     const match = value.match(MFA_POLICY_ETAG);

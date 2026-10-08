@@ -18,6 +18,7 @@ use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use sqlx::{Acquire, Postgres, Row, Transaction};
 use time::OffsetDateTime;
+use url::Url;
 use uuid::Uuid;
 use x509_parser::prelude::{FromDer, X509Certificate};
 use zeroize::{Zeroize, Zeroizing};
@@ -1172,7 +1173,26 @@ impl IntegrationAdminService {
         correlation_id: &str,
     ) -> Result<CaBundleMetadata, IntegrationError> {
         self.repository
-            .stage_ca_candidate(actor, endpoint, bundle, correlation_id)
+            .stage_ca_candidate(actor, endpoint, bundle, None, correlation_id)
+            .await
+    }
+
+    pub async fn stage_ca_candidate_versioned(
+        &self,
+        actor: IntegrationAdminActor,
+        endpoint: &CaEndpointBinding,
+        bundle: ValidatedCaBundle,
+        expected_version: u64,
+        correlation_id: &str,
+    ) -> Result<CaBundleMetadata, IntegrationError> {
+        self.repository
+            .stage_ca_candidate(
+                actor,
+                endpoint,
+                bundle,
+                Some(expected_version),
+                correlation_id,
+            )
             .await
     }
 
@@ -1212,6 +1232,10 @@ pub trait CaCandidatePreflight: Send + Sync {
         candidate: &'a ValidatedCaBundle,
         endpoint: &'a CaEndpointBinding,
     ) -> Pin<Box<dyn Future<Output = Result<CaPreflightProof, IntegrationError>> + Send + 'a>>;
+
+    fn activated(&self, _candidate: &ValidatedCaBundle) -> Result<(), IntegrationError> {
+        Ok(())
+    }
 }
 
 impl IntegrationRepository {
@@ -1220,11 +1244,18 @@ impl IntegrationRepository {
         actor: IntegrationAdminActor,
         endpoint: &CaEndpointBinding,
         bundle: ValidatedCaBundle,
+        expected_version: Option<u64>,
         correlation_id: &str,
     ) -> Result<CaBundleMetadata, IntegrationError> {
         tokio::time::timeout(
             self.operation_timeout,
-            self.stage_ca_candidate_inner(actor, endpoint, bundle, correlation_id),
+            self.stage_ca_candidate_inner(
+                actor,
+                endpoint,
+                bundle,
+                expected_version,
+                correlation_id,
+            ),
         )
         .await
         .map_err(|_| IntegrationError::Unavailable)?
@@ -1235,6 +1266,7 @@ impl IntegrationRepository {
         actor: IntegrationAdminActor,
         endpoint: &CaEndpointBinding,
         bundle: ValidatedCaBundle,
+        expected_version: Option<u64>,
         correlation_id: &str,
     ) -> Result<CaBundleMetadata, IntegrationError> {
         if !valid_correlation(correlation_id) {
@@ -1262,6 +1294,55 @@ impl IntegrationRepository {
             .await
             .map_err(|_| IntegrationError::Unavailable)?;
         authorize_recent_admin(&mut tx, actor).await?;
+        let current_version: i64 = sqlx::query_scalar(
+            "SELECT COALESCE(MAX(version),0) FROM integration_ca_bundles WHERE integration_type=$1 AND integration_id=$2",
+        )
+        .bind(integration_type)
+        .bind(integration_id)
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(|_| IntegrationError::Unavailable)?;
+        if let Some(expected) = expected_version
+            && i64::try_from(expected).map_err(|_| IntegrationError::InvalidInput)?
+                != current_version
+        {
+            let replay = sqlx::query(
+                "SELECT bundle.id::text,bundle.version,bundle.state,bundle.pem,bundle.certificate_count,
+                        bundle.fingerprints,bundle.earliest_expiry,bundle.endpoint_fingerprint
+                 FROM integration_ca_bundles bundle
+                 WHERE bundle.integration_type=$1 AND bundle.integration_id=$2 AND bundle.state='candidate'
+                   AND EXISTS(SELECT 1 FROM audit_events audit WHERE audit.action_code='integration.ca_staged'
+                     AND audit.target_type='integration' AND audit.target_id=$3 AND audit.correlation_id=$4)",
+            )
+            .bind(integration_type)
+            .bind(integration_id)
+            .bind(format!("{integration_type}:{integration_id}"))
+            .bind(correlation_id)
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(|_| IntegrationError::Unavailable)?;
+            if let Some(row) = replay {
+                let stored = validate_stored_ca(&row)?;
+                let stored_endpoint: Vec<u8> = row.get("endpoint_fingerprint");
+                if stored_endpoint == endpoint_fingerprint && stored.pem() == bundle.pem() {
+                    tx.commit()
+                        .await
+                        .map_err(|_| IntegrationError::Unavailable)?;
+                    return Ok(CaBundleMetadata {
+                        id: Uuid::from_str(&row.get::<String, _>("id"))
+                            .map_err(|_| IntegrationError::Unavailable)?,
+                        integration_type: integration_type.into(),
+                        integration_id: integration_id.into(),
+                        version: u64::try_from(row.get::<i64, _>("version"))
+                            .map_err(|_| IntegrationError::Unavailable)?,
+                        state: row.get("state"),
+                        fingerprints: row.get("fingerprints"),
+                        earliest_expiry: row.get("earliest_expiry"),
+                    });
+                }
+            }
+            return Err(IntegrationError::Conflict);
+        }
         sqlx::query("DELETE FROM integration_ca_bundles WHERE integration_type=$1 AND integration_id=$2 AND state='candidate'")
             .bind(integration_type).bind(integration_id).execute(&mut *tx).await.map_err(|_| IntegrationError::Unavailable)?;
         let version: i64 = sqlx::query_scalar(
@@ -1312,35 +1393,26 @@ impl IntegrationRepository {
         correlation_id: &str,
         preflight: &impl CaCandidatePreflight,
     ) -> Result<CaBundleMetadata, IntegrationError> {
-        tokio::time::timeout(
-            self.operation_timeout,
-            self.activate_ca_candidate_inner(
-                actor,
-                candidate_id,
-                endpoint,
-                correlation_id,
-                preflight,
-            ),
-        )
-        .await
-        .map_err(|_| IntegrationError::Unavailable)?
-    }
-
-    async fn activate_ca_candidate_inner(
-        &self,
-        actor: IntegrationAdminActor,
-        candidate_id: Uuid,
-        endpoint: &CaEndpointBinding,
-        correlation_id: &str,
-        preflight: &impl CaCandidatePreflight,
-    ) -> Result<CaBundleMetadata, IntegrationError> {
         if !valid_correlation(correlation_id) {
             return Err(IntegrationError::InvalidInput);
         }
-        let candidate = self
-            .load_ca(candidate_id, "candidate")
-            .await?
-            .ok_or(IntegrationError::PreflightFailed)?;
+        let candidate = match tokio::time::timeout(
+            self.operation_timeout,
+            self.load_ca(candidate_id, "candidate"),
+        )
+        .await
+        .map_err(|_| IntegrationError::Unavailable)??
+        {
+            Some(candidate) => candidate,
+            None => {
+                return tokio::time::timeout(
+                    self.operation_timeout,
+                    self.replay_ca_activation(candidate_id, endpoint, correlation_id, preflight),
+                )
+                .await
+                .map_err(|_| IntegrationError::Unavailable)?;
+            }
+        };
         let expected_endpoint = endpoint.fingerprint();
         if candidate.endpoint_fingerprint != expected_endpoint {
             return Err(IntegrationError::PreflightFailed);
@@ -1349,6 +1421,78 @@ impl IntegrationRepository {
             .preflight(&candidate.bundle, endpoint)
             .await
             .map_err(|_| IntegrationError::PreflightFailed)?;
+        let activated = tokio::time::timeout(
+            self.operation_timeout,
+            self.activate_ca_candidate_inner(
+                actor,
+                candidate_id,
+                endpoint,
+                correlation_id,
+                &candidate,
+                proof,
+            ),
+        )
+        .await
+        .map_err(|_| IntegrationError::Unavailable)??;
+        preflight.activated(&candidate.bundle)?;
+        Ok(activated)
+    }
+
+    async fn replay_ca_activation(
+        &self,
+        candidate_id: Uuid,
+        endpoint: &CaEndpointBinding,
+        correlation_id: &str,
+        preflight: &impl CaCandidatePreflight,
+    ) -> Result<CaBundleMetadata, IntegrationError> {
+        let active = self
+            .load_ca(candidate_id, "active")
+            .await?
+            .ok_or(IntegrationError::PreflightFailed)?;
+        let replay: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM audit_events WHERE action_code='integration.ca_activated'
+             AND target_type='integration' AND target_id=$1 AND correlation_id=$2)",
+        )
+        .bind(format!(
+            "{}:{}",
+            endpoint.integration_type(),
+            endpoint.integration_id()
+        ))
+        .bind(correlation_id)
+        .fetch_one(
+            &mut *self
+                .pool
+                .acquire()
+                .await
+                .map_err(|_| IntegrationError::Unavailable)?,
+        )
+        .await
+        .map_err(|_| IntegrationError::Unavailable)?;
+        if !replay || active.endpoint_fingerprint != endpoint.fingerprint() {
+            return Err(IntegrationError::PreflightFailed);
+        }
+        preflight.activated(&active.bundle)?;
+        Ok(CaBundleMetadata {
+            id: candidate_id,
+            integration_type: endpoint.integration_type().into(),
+            integration_id: endpoint.integration_id().into(),
+            version: active.version,
+            state: "active".into(),
+            fingerprints: active.bundle.fingerprints.clone(),
+            earliest_expiry: active.bundle.earliest_expiry,
+        })
+    }
+
+    async fn activate_ca_candidate_inner(
+        &self,
+        actor: IntegrationAdminActor,
+        candidate_id: Uuid,
+        endpoint: &CaEndpointBinding,
+        correlation_id: &str,
+        candidate: &StoredCa,
+        proof: CaPreflightProof,
+    ) -> Result<CaBundleMetadata, IntegrationError> {
+        let expected_endpoint = endpoint.fingerprint();
         let mut connection = self
             .pool
             .acquire()
@@ -1368,6 +1512,7 @@ impl IntegrationRepository {
             .await
             .map_err(|_| IntegrationError::Unavailable)?;
         authorize_recent_admin(&mut tx, actor).await?;
+        lock_and_validate_endpoint(&mut tx, endpoint).await?;
         let row = sqlx::query(
             "SELECT integration_type,integration_id,version,pem,certificate_count,fingerprints,earliest_expiry,endpoint_fingerprint
              FROM integration_ca_bundles WHERE id=$1::uuid AND state='candidate' FOR UPDATE",
@@ -1458,7 +1603,7 @@ impl IntegrationRepository {
             let rows = sqlx::query(
                 "SELECT id::text,version,state,pem,certificate_count,fingerprints,earliest_expiry
                  FROM integration_ca_bundles WHERE integration_type=$1 AND integration_id=$2
-                 ORDER BY version DESC",
+                 ORDER BY version DESC LIMIT 100",
             )
             .bind(integration_type)
             .bind(integration_id)
@@ -1658,6 +1803,83 @@ struct StoredCa {
     pem_hash: [u8; 32],
     endpoint_fingerprint: [u8; 32],
     bundle: ValidatedCaBundle,
+}
+
+async fn lock_and_validate_endpoint(
+    tx: &mut Transaction<'_, Postgres>,
+    expected: &CaEndpointBinding,
+) -> Result<(), IntegrationError> {
+    let current = match expected.integration_type() {
+        "oidc" => {
+            let id = Uuid::parse_str(expected.integration_id())
+                .map_err(|_| IntegrationError::PreflightFailed)?;
+            let issuer: String =
+                sqlx::query_scalar("SELECT issuer FROM oidc_providers WHERE id=$1::uuid FOR SHARE")
+                    .bind(id.to_string())
+                    .fetch_optional(&mut **tx)
+                    .await
+                    .map_err(|_| IntegrationError::Unavailable)?
+                    .ok_or(IntegrationError::PreflightFailed)?;
+            let issuer = Url::parse(&issuer).map_err(|_| IntegrationError::PreflightFailed)?;
+            CaEndpointBinding::new(
+                "oidc",
+                expected.integration_id(),
+                issuer.host_str().ok_or(IntegrationError::PreflightFailed)?,
+                issuer
+                    .port_or_known_default()
+                    .ok_or(IntegrationError::PreflightFailed)?,
+                "https",
+            )?
+        }
+        "git" => {
+            let id = Uuid::parse_str(expected.integration_id())
+                .map_err(|_| IntegrationError::PreflightFailed)?;
+            let row = sqlx::query(
+                "SELECT canonical_host,canonical_port FROM git_providers
+                 WHERE id=$1::uuid FOR SHARE",
+            )
+            .bind(id.to_string())
+            .fetch_optional(&mut **tx)
+            .await
+            .map_err(|_| IntegrationError::Unavailable)?
+            .ok_or(IntegrationError::PreflightFailed)?;
+            CaEndpointBinding::new(
+                "git",
+                expected.integration_id(),
+                row.get::<String, _>("canonical_host"),
+                u16::try_from(row.get::<i32, _>("canonical_port"))
+                    .map_err(|_| IntegrationError::PreflightFailed)?,
+                "https",
+            )?
+        }
+        "registry" => {
+            let id = Uuid::parse_str(expected.integration_id())
+                .map_err(|_| IntegrationError::PreflightFailed)?;
+            let row = sqlx::query(
+                "SELECT canonical_host,canonical_port FROM registry_connections
+                 WHERE id=$1::uuid FOR SHARE",
+            )
+            .bind(id.to_string())
+            .fetch_optional(&mut **tx)
+            .await
+            .map_err(|_| IntegrationError::Unavailable)?
+            .ok_or(IntegrationError::PreflightFailed)?;
+            CaEndpointBinding::new(
+                "registry",
+                expected.integration_id(),
+                row.get::<String, _>("canonical_host"),
+                u16::try_from(row.get::<i32, _>("canonical_port"))
+                    .map_err(|_| IntegrationError::PreflightFailed)?,
+                "https",
+            )?
+        }
+        "smtp" if expected.integration_id() == "default" => expected.clone(),
+        _ => return Err(IntegrationError::PreflightFailed),
+    };
+    if current.fingerprint() != expected.fingerprint() {
+        return Err(IntegrationError::PreflightFailed);
+    }
+    Ok(())
 }
 
 fn validate_stored_ca(row: &sqlx::postgres::PgRow) -> Result<ValidatedCaBundle, IntegrationError> {

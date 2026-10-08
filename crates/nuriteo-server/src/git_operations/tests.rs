@@ -1,5 +1,7 @@
 use super::*;
 
+mod actual_https_fixture;
+
 #[test]
 fn accepts_sha1_and_sha256_but_rejects_ambiguous_object_names() {
     assert!(valid_sha(&"a".repeat(40)));
@@ -73,6 +75,18 @@ fn executor_errors_preserve_non_fast_forward_and_auth_semantics() {
     assert_eq!(
         map_executor_error(GitExecutorError::TransferLimitExceeded),
         GitOperationError::TransferLimitExceeded
+    );
+}
+
+#[test]
+fn remote_push_success_fences_every_local_finalize_failure() {
+    assert_eq!(
+        map_finalize_error(GitOperationError::Unavailable, true),
+        GitOperationError::CommitOutcomeUnknown
+    );
+    assert_eq!(
+        map_finalize_error(GitOperationError::Conflict, false),
+        GitOperationError::Conflict
     );
 }
 

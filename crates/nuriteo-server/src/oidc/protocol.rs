@@ -371,6 +371,80 @@ impl OidcEndpointValidator {
             .await
     }
 
+    /// Validates OIDC discovery and JWKS with a staged CA candidate without
+    /// changing Provider state. The canonical endpoint is always derived from
+    /// persisted issuer metadata; callers cannot substitute a host or port.
+    pub(crate) async fn preflight_ca_candidate(
+        &self,
+        service: &OidcProviderService,
+        provider_id: Uuid,
+        candidate_ca: &ValidatedCaBundle,
+        endpoint: &CaEndpointBinding,
+    ) -> Result<(), OidcProviderError> {
+        let candidate = service
+            .list_providers()
+            .await?
+            .into_iter()
+            .find(|provider| provider.id == provider_id)
+            .ok_or(OidcProviderError::NotFound)?;
+        let issuer = validate_endpoint(&candidate.issuer, self.allow_test_addresses)?;
+        let host = issuer.host_str().ok_or(OidcProviderError::InvalidInput)?;
+        let port = issuer
+            .port_or_known_default()
+            .ok_or(OidcProviderError::InvalidInput)?;
+        let canonical =
+            CaEndpointBinding::new("oidc", provider_id.to_string(), host, port, "https")
+                .map_err(|_| OidcProviderError::InvalidInput)?;
+        if canonical.fingerprint() != endpoint.fingerprint() {
+            return Err(OidcProviderError::ValidationFailed);
+        }
+        let pinned = resolve_checked(
+            host,
+            port,
+            self.allow_test_addresses,
+            self.timeout.min(MAX_DNS_TIMEOUT),
+        )
+        .await?;
+        let discovery = discovery_url(&issuer)?;
+        let discovery_bytes = self
+            .fetch(&discovery, Some(candidate_ca), DISCOVERY_LIMIT, &pinned)
+            .await?
+            .0;
+        let document: DiscoveryDocument = serde_json::from_slice(&discovery_bytes)
+            .map_err(|_| OidcProviderError::ValidationFailed)?;
+        if document.issuer != candidate.issuer {
+            return Err(OidcProviderError::ValidationFailed);
+        }
+        for value in [
+            &document.authorization_endpoint,
+            &document.token_endpoint,
+            &document.jwks_uri,
+        ] {
+            let parsed = validate_endpoint(value, self.allow_test_addresses)?;
+            require_same_origin(&issuer, &parsed)?;
+        }
+        let jwks = validate_endpoint(&document.jwks_uri, self.allow_test_addresses)?;
+        self.jwks_fingerprint(
+            provider_id,
+            candidate.config_version,
+            &jwks,
+            Some(candidate_ca),
+            &pinned,
+        )
+        .await?;
+        let observed = resolve_checked(
+            host,
+            port,
+            self.allow_test_addresses,
+            self.timeout.min(MAX_DNS_TIMEOUT),
+        )
+        .await?;
+        if !same_address_set(&observed, &pinned) {
+            return Err(OidcProviderError::NetworkDenied);
+        }
+        Ok(())
+    }
+
     /// The sole OIDC-003 runtime handoff. It rechecks the stored endpoint and
     /// DNS pinning contract before releasing the generation-bound secret.
     #[allow(dead_code, reason = "consumed by OIDC-003")]

@@ -810,7 +810,7 @@ fn require_direct(runtime: &Runtime) -> Result<(), SaveHttpError> {
 fn map_project(e: ProjectHttpError) -> SaveHttpError {
     match e {
         ProjectHttpError::AuthenticationFailed => SaveHttpError::AuthenticationFailed,
-        ProjectHttpError::Forbidden => SaveHttpError::Forbidden,
+        ProjectHttpError::Forbidden | ProjectHttpError::RateLimited => SaveHttpError::Forbidden,
         ProjectHttpError::NotFound => SaveHttpError::NotFound,
         ProjectHttpError::InvalidInput => SaveHttpError::InvalidInput,
         ProjectHttpError::PreconditionFailed => SaveHttpError::StaleProjectVersion,

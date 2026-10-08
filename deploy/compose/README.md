@@ -20,7 +20,9 @@ Set these variables to absolute paths before rendering or starting the stack:
 - `NURITEO_BOOTSTRAP_ADMIN_PASSWORD_FILE`: password file for the first Instance Administrator
 - `NURITEO_EXTERNAL_URL`: canonical browser origin
 - `NURITEO_PREVIEW_BASE_DOMAIN`: dedicated wildcard Preview base domain (for example `preview.example.com`)
-- `NURITEO_PREVIEW_SIGNING_KEY_FILE`: file containing an independently generated 32-byte base64url key used only for short-lived Preview host capabilities
+- `NURITEO_PREVIEW_SIGNING_KEY_FILE`: file containing an independently generated 32-byte base64url key shared only by Core and Web for short-lived Preview host capabilities and privacy-preserving Preview admission proofs
+- `NURITEO_MASTER_KEY_FILE`: file containing the persistent base64-encoded 32-byte Integration credential envelope key
+- `NURITEO_MASTER_KEY_VERSION`: positive version of that envelope key (defaults to `1` for a new installation)
 
 The Compose file has no credential defaults. Protect every credential and private-key file with owner-only permissions. A minimal PostgreSQL derivative copies its mounted certificate and key into a private runtime path before delegating to the upstream entrypoint with TLS enabled. The Dockerfile build context allowlists only that wrapper. The database URL, database CA, PostgreSQL identity, and RustFS credentials are mounted as Compose secrets; RustFS TLS material is mounted read-only. Core always verifies the PostgreSQL hostname and CA; this topology does not claim that PostgreSQL rejects every non-TLS client.
 
@@ -57,7 +59,7 @@ CMP-003 changes only the bundled upload data path. Preserve the existing Postgre
 
 When drift is reported, inspect and reconcile the bucket CORS document deliberately, retaining any independently owned rules as appropriate; do not replace or delete the entire document merely to make startup pass. Then rerun `docker compose up`. This cleanup applies only to the bundled bucket. It does not migrate an external S3 deployment, whose direct browser upload still requires its exact CORS contract.
 
-Core also requires `NURITEO_SAVE_IDEMPOTENCY_SECRET_FILE`, containing exactly 32 non-zero random bytes encoded as standard base64. Preserve this file across restarts; changing it makes earlier save idempotency keys intentionally fail closed. `NURITEO_SAVE_DEFAULT_QUOTA_BYTES` is the bootstrap Instance default for each Workspace (`10737418240`, 10 GiB, in the bundled Compose file). Set a positive decimal byte count up to the PostgreSQL `bigint` maximum or the explicit value `unlimited`.
+Core also requires `NURITEO_SAVE_IDEMPOTENCY_SECRET_FILE`, containing exactly 32 non-zero random bytes encoded as standard base64. Preserve this file across restarts; changing it makes earlier save idempotency keys intentionally fail closed. Preserve `NURITEO_MASTER_KEY_FILE` and its version as part of the external Secret Recovery Kit: changing or losing this key makes stored OIDC, SMTP, Git, and Registry credentials intentionally unavailable. Key rotation must retain the old key in the documented previous-key ring until every envelope has been re-encrypted. `NURITEO_SAVE_DEFAULT_QUOTA_BYTES` is the bootstrap Instance default for each Workspace (`10737418240`, 10 GiB, in the bundled Compose file). Set a positive decimal byte count up to the PostgreSQL `bigint` maximum or the explicit value `unlimited`.
 
 The bootstrap password is accepted only through its mounted file. It is not placed in the command, environment, rendered Compose configuration, or image. After the initial install, rotate or remove the host-side bootstrap password file according to local secret-management policy; an already-initialized bootstrap run does not rewrite the credential.
 

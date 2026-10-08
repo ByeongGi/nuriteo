@@ -38,7 +38,7 @@ fn validates_migration_deadlines() {
 fn embedded_baseline_is_forward_only_and_framework_scoped() {
     let embedded = embedded_migrator();
     let migrations: Vec<_> = embedded.iter().collect();
-    assert_eq!(migrations.len(), 42);
+    assert_eq!(migrations.len(), 46);
     assert_eq!(
         migrations
             .iter()
@@ -46,7 +46,7 @@ fn embedded_baseline_is_forward_only_and_framework_scoped() {
             .collect::<Vec<_>>(),
         vec![
             1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
-            25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42
+            25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46
         ]
     );
     assert_eq!(migrations[0].version, 1);
@@ -55,6 +55,50 @@ fn embedded_baseline_is_forward_only_and_framework_scoped() {
     for forbidden in ["users", "organizations", "projects", "snapshots"] {
         assert!(!migrations[0].sql.as_str().contains(forbidden));
     }
+}
+
+#[test]
+fn git_materialization_migration_preserves_destination_provenance_and_cleanup_ledger() {
+    assert!(
+        GIT_WORKING_HEAD_MATERIALIZATIONS_SQL
+            .contains("fork.destination_bundle_id = NEW.bundle_id")
+    );
+    assert!(GIT_WORKING_HEAD_MATERIALIZATIONS_SQL.contains("canonical_bundle_materializations"));
+    assert!(
+        GIT_WORKING_HEAD_MATERIALIZATIONS_SQL
+            .contains("verification GC candidate requires exact durable provenance")
+    );
+    assert!(GIT_WORKING_HEAD_MATERIALIZATIONS_SQL.contains("source_git_materialization_id"));
+    assert!(
+        !GIT_WORKING_HEAD_MATERIALIZATIONS_SQL.contains("fork.source_bundle_id = NEW.bundle_id")
+    );
+}
+
+#[test]
+fn invitation_delivery_rotation_is_forward_only_and_guarded_in_database() {
+    for relation in ["activation_invitations", "organization_invitations"] {
+        assert!(INVITATION_DELIVERY_TOKENS_SQL.contains(&format!(
+            "ALTER TABLE {relation}\n    ADD COLUMN delivery_token_generation"
+        )));
+    }
+    assert!(
+        INVITATION_DELIVERY_TOKENS_SQL
+            .matches("NEW.delivery_token_generation <> OLD.delivery_token_generation + 1")
+            .count()
+            == 2
+    );
+    assert!(
+        INVITATION_DELIVERY_TOKENS_SQL
+            .matches("OLD.status <> 'pending'")
+            .count()
+            >= 4
+    );
+    assert!(
+        INVITATION_DELIVERY_TOKENS_SQL
+            .matches("NEW.expires_at <= transaction_timestamp()")
+            .count()
+            == 2
+    );
 }
 
 #[test]
@@ -139,14 +183,15 @@ async fn real_postgres_serializes_validates_rolls_back_and_retries() {
         .unwrap_or_else(|error| panic!("second runner task must join: {error}"))
         .unwrap_or_else(|error| panic!("second runner must succeed: {error}"));
     assert_eq!(first_report, second_report);
-    assert_eq!(first_report.latest_version, Some(42));
-    assert_eq!(first_report.known_migrations, 42);
-    for version in 1..=42 {
+    assert_eq!(first_report.latest_version, Some(46));
+    assert_eq!(first_report.known_migrations, 46);
+    for version in 1..=46 {
         assert_eq!(migration_row_count(&pool, version).await, 1);
     }
     verify_save_upload_lease_delete_fence(&pool).await;
     verify_published_example_lifecycle(&pool).await;
     verify_access_token_invariants(&pool).await;
+    verify_invitation_delivery_rotation_invariants(&pool).await;
 
     let mut blocker = pool
         .acquire()
@@ -275,6 +320,120 @@ async fn real_postgres_serializes_validates_rolls_back_and_retries() {
     pool.close(Duration::from_secs(2))
         .await
         .unwrap_or_else(|error| panic!("fixture pool must close: {error}"));
+}
+
+async fn verify_invitation_delivery_rotation_invariants(pool: &DatabasePool) {
+    let mut connection = pool.acquire().await.unwrap();
+    sqlx::query(
+        "INSERT INTO users(id,email,normalized_email,display_name,is_instance_admin) VALUES
+         ('0199ee6c-c777-7000-8000-000000009501','delivery-admin@example.test',
+          'delivery-admin@example.test','Delivery admin',true),
+         ('0199ee6c-c777-7000-8000-000000009502','delivery-user@example.test',
+          'delivery-user@example.test','Delivery user',false)",
+    )
+    .execute(&mut *connection)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO activation_invitations
+         (id,normalized_email,invited_by_user_id,token_hash,expires_at)
+         VALUES('0199ee6c-c777-7000-8000-000000009503','new-delivery@example.test',
+         '0199ee6c-c777-7000-8000-000000009501',decode(repeat('11',32),'hex'),
+         transaction_timestamp()+INTERVAL '7 days')",
+    )
+    .execute(&mut *connection)
+    .await
+    .unwrap();
+    sqlx::query(
+        "UPDATE activation_invitations SET token_hash=decode(repeat('12',32),'hex'),
+         delivery_token_generation=delivery_token_generation+1
+         WHERE id='0199ee6c-c777-7000-8000-000000009503'",
+    )
+    .execute(&mut *connection)
+    .await
+    .unwrap();
+    assert!(
+        sqlx::query(
+            "UPDATE activation_invitations SET token_hash=decode(repeat('13',32),'hex')
+             WHERE id='0199ee6c-c777-7000-8000-000000009503'",
+        )
+        .execute(&mut *connection)
+        .await
+        .is_err()
+    );
+    sqlx::query(
+        "UPDATE activation_invitations SET status='revoked',revoked_at=transaction_timestamp()
+         WHERE id='0199ee6c-c777-7000-8000-000000009503'",
+    )
+    .execute(&mut *connection)
+    .await
+    .unwrap();
+    assert!(
+        sqlx::query(
+            "UPDATE activation_invitations SET token_hash=decode(repeat('14',32),'hex'),
+             delivery_token_generation=delivery_token_generation+1
+             WHERE id='0199ee6c-c777-7000-8000-000000009503'",
+        )
+        .execute(&mut *connection)
+        .await
+        .is_err()
+    );
+
+    sqlx::query(
+        "INSERT INTO organizations(id,slug,display_name)
+         VALUES('0199ee6c-c777-7000-8000-000000009504','delivery-org','Delivery org')",
+    )
+    .execute(&mut *connection)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO organization_invitations
+         (id,organization_id,invitee_user_id,normalized_email,invited_by_user_id,proposed_role,
+          token_hash,expires_at)
+         VALUES('0199ee6c-c777-7000-8000-000000009505',
+         '0199ee6c-c777-7000-8000-000000009504','0199ee6c-c777-7000-8000-000000009502',
+         'delivery-user@example.test','0199ee6c-c777-7000-8000-000000009501','member',
+         decode(repeat('21',32),'hex'),transaction_timestamp()+INTERVAL '7 days')",
+    )
+    .execute(&mut *connection)
+    .await
+    .unwrap();
+    sqlx::query(
+        "UPDATE organization_invitations SET token_hash=decode(repeat('22',32),'hex'),
+         delivery_token_generation=delivery_token_generation+1
+         WHERE id='0199ee6c-c777-7000-8000-000000009505'",
+    )
+    .execute(&mut *connection)
+    .await
+    .unwrap();
+    assert!(
+        sqlx::query(
+            "UPDATE organization_invitations SET token_hash=decode(repeat('23',32),'hex'),
+             delivery_token_generation=delivery_token_generation+2
+             WHERE id='0199ee6c-c777-7000-8000-000000009505'",
+        )
+        .execute(&mut *connection)
+        .await
+        .is_err()
+    );
+    sqlx::query(
+        "UPDATE organization_invitations SET status='declined',
+         declined_at=transaction_timestamp()
+         WHERE id='0199ee6c-c777-7000-8000-000000009505'",
+    )
+    .execute(&mut *connection)
+    .await
+    .unwrap();
+    assert!(
+        sqlx::query(
+            "UPDATE organization_invitations SET token_hash=decode(repeat('24',32),'hex'),
+             delivery_token_generation=delivery_token_generation+1
+             WHERE id='0199ee6c-c777-7000-8000-000000009505'",
+        )
+        .execute(&mut *connection)
+        .await
+        .is_err()
+    );
 }
 
 async fn verify_published_example_lifecycle(pool: &DatabasePool) {

@@ -382,7 +382,10 @@ function testUxSourceContracts() {
   assert.match(activation, /useSearchParams\(\)/u);
   assert.match(activation, /router\.replace\("\/sign-in\?activated=1"\)/u);
   assert.match(admin, /activationUrl\.consume\(\)/u);
+  assert.match(admin, /delivery === "email_queued"/u);
+  assert.match(admin, /queued for delivery/u);
   assert.match(organizations, /acceptUrl\.consume\(\)/u);
+  assert.match(organizations, /delivery === "email_queued"/u);
   assert.match(organizations, /name="email" type="text" inputMode="email"/u);
   assert.match(organizations, /aria-describedby="organization-invitation-email-help"/u);
   assert.doesNotMatch(organizations, /name="email"[^>]*maxLength/u);

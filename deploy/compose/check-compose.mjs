@@ -46,12 +46,17 @@ function validate(
   assert.match(services.web, /secrets:\n      - preview_signing_key/u);
   assert.match(services.web, /NURITEO_PREVIEW_WILDCARD_READY: \$\{NURITEO_PREVIEW_WILDCARD_READY:-false\}/u);
   assert.match(services.core, /NURITEO_SAVE_IDEMPOTENCY_SECRET_FILE: \/run\/secrets\/save_idempotency_secret/u);
+  assert.match(services.core, /NURITEO_MASTER_KEY_FILE: \/run\/secrets\/master_key/u);
+  assert.match(services.core, /NURITEO_PREVIEW_SIGNING_KEY_FILE: \/run\/secrets\/preview_signing_key/u);
+  assert.match(services.core, /NURITEO_MASTER_KEY_VERSION: \$\{NURITEO_MASTER_KEY_VERSION:-1\}/u);
   assert.match(services.core, /NURITEO_SAVE_DEFAULT_QUOTA_BYTES: \$\{NURITEO_SAVE_DEFAULT_QUOTA_BYTES:-10737418240\}/u);
   assert.match(services.core, /^      NURITEO_SAVE_UPLOAD_TRANSPORT: relay$/mu);
   assert.match(services["storage-check"], /^      NURITEO_SAVE_UPLOAD_TRANSPORT: relay$/mu);
   assert.match(services["storage-init"], /NURITEO_LEGACY_BROWSER_CORS_ORIGIN: \$\{NURITEO_EXTERNAL_URL:\?set NURITEO_EXTERNAL_URL\}/u);
   assert.doesNotMatch(services["storage-init"], /^      NURITEO_EXTERNAL_URL:|NURITEO_SAVE_UPLOAD_TRANSPORT/mu);
   assert.match(services.core, /secrets:[\s\S]*- save_idempotency_secret/u);
+  assert.match(services.core, /secrets:[\s\S]*- master_key/u);
+  assert.match(services.core, /secrets:[\s\S]*- preview_signing_key/u);
   assert.match(acceptanceSource, /openssl rand -base64 32[\s\S]*preview-signing-key/u);
   assert.match(acceptanceSource, /chmod 644 "\$fixture_root\/preview-signing-key"/u);
   assert.match(acceptanceSource, /export NURITEO_PREVIEW_BASE_DOMAIN='preview\.localhost'/u);
@@ -59,6 +64,10 @@ function validate(
   assert.match(acceptanceSource, /openssl rand -base64 32 >"\$fixture_root\/save-idempotency-secret"/u);
   assert.match(acceptanceSource, /chmod 644 "\$fixture_root\/save-idempotency-secret"/u);
   assert.match(acceptanceSource, /export NURITEO_SAVE_IDEMPOTENCY_SECRET_FILE="\$fixture_root\/save-idempotency-secret"/u);
+  assert.match(acceptanceSource, /openssl rand -base64 32 >"\$fixture_root\/master-key"/u);
+  assert.match(acceptanceSource, /chmod 644 "\$fixture_root\/master-key"/u);
+  assert.match(acceptanceSource, /export NURITEO_MASTER_KEY_FILE="\$fixture_root\/master-key"/u);
+  assert.match(acceptanceSource, /export NURITEO_MASTER_KEY_VERSION=1/u);
   assert.match(acceptanceSource, /chmod 644 "\$fixture_root\/rustfs-tls\/rustfs_key\.pem"/u);
   assert.match(acceptanceSource, /install_exact_legacy_cors/u);
   assert.match(acceptanceSource, /install_drifted_legacy_cors/u);
@@ -134,7 +143,8 @@ function validate(
     "NURITEO_DATABASE_URL_FILE: /run/secrets/database_url",
     "NURITEO_S3_ACCESS_KEY_ID_FILE: /run/secrets/rustfs_access_key",
     "NURITEO_BOOTSTRAP_ADMIN_PASSWORD_FILE: /run/secrets/bootstrap_admin_password",
-    "NURITEO_SAVE_IDEMPOTENCY_SECRET_FILE: /run/secrets/save_idempotency_secret"
+    "NURITEO_SAVE_IDEMPOTENCY_SECRET_FILE: /run/secrets/save_idempotency_secret",
+    "NURITEO_MASTER_KEY_FILE: /run/secrets/master_key"
   ]) assert(source.includes(literal), `missing file-secret contract: ${literal}`);
   assert.doesNotMatch(source, /^\s+(?:POSTGRES_PASSWORD|NURITEO_DATABASE_URL|NURITEO_BOOTSTRAP_ADMIN_PASSWORD|NURITEO_S3_ACCESS_KEY_ID|NURITEO_S3_SECRET_ACCESS_KEY):/mu);
 
@@ -203,8 +213,9 @@ function verifyDriftDetection() {
     [compose.replace("NURITEO_BOOTSTRAP_ADMIN_PASSWORD_FILE", "NURITEO_BOOTSTRAP_ADMIN_PASSWORD"), external, init, acceptance],
     [compose.replace("  data:\n    internal: true", "  data:"), external, init, acceptance],
     [compose.replace("NURITEO_PREVIEW_WILDCARD_READY:-false", "NURITEO_PREVIEW_WILDCARD_READY:-true"), external, init, acceptance],
-    [compose.replace("NURITEO_PREVIEW_SIGNING_KEY_FILE: /run/secrets/preview_signing_key", "NURITEO_PREVIEW_SIGNING_KEY: public"), external, init, acceptance],
+    [compose.replaceAll("NURITEO_PREVIEW_SIGNING_KEY_FILE: /run/secrets/preview_signing_key", "NURITEO_PREVIEW_SIGNING_KEY: public"), external, init, acceptance],
     [compose.replace("NURITEO_SAVE_IDEMPOTENCY_SECRET_FILE: /run/secrets/save_idempotency_secret", "NURITEO_SAVE_IDEMPOTENCY_SECRET: public"), external, init, acceptance],
+    [compose.replace("NURITEO_MASTER_KEY_FILE: /run/secrets/master_key", "NURITEO_MASTER_KEY: public"), external, init, acceptance],
     [compose.replace("NURITEO_SAVE_UPLOAD_TRANSPORT: relay", "NURITEO_SAVE_UPLOAD_TRANSPORT: direct"), external, init, acceptance],
     [compose.replace("NURITEO_LEGACY_BROWSER_CORS_ORIGIN", "NURITEO_EXTERNAL_URL"), external, init, acceptance],
     [compose, external.replace("NURITEO_SAVE_UPLOAD_TRANSPORT: direct", "NURITEO_SAVE_UPLOAD_TRANSPORT: relay"), init, acceptance],
