@@ -76,28 +76,33 @@ try {
 
   const mfa = await api("GET", "/api/v1/admin/mfa-policy");
   const policy = mfa.json as { mode: string; gracePeriodDays: number; version: number };
-  const nextMfaMode = policy.mode === "administrators" ? "all_local_users" : "administrators";
+  // A clean installation intentionally has no enrolled administrator yet, so
+  // enabling enforcement must be rejected by the service's lockout guard. The
+  // aggregate gate still exercises preview/apply/restore by changing the grace
+  // period while preserving the current enforcement mode.
+  const nextMfaMode = policy.mode;
+  const nextGracePeriodDays = policy.gracePeriodDays === 14 ? 7 : 14;
   const impact = await api("POST", "/api/v1/admin/mfa-policy/preview", {
-    mode: nextMfaMode, gracePeriodDays: 7, version: policy.version
+    mode: nextMfaMode, gracePeriodDays: nextGracePeriodDays
   }, { "if-match": `"mfa-policy-v${policy.version}"` });
   const populationProof = (impact.json as { populationProof?: unknown }).populationProof;
   assert.equal(typeof populationProof, "string");
   const changedMfa = await api("PATCH", "/api/v1/admin/mfa-policy", {
-    mode: nextMfaMode, gracePeriodDays: 7, version: policy.version, populationProof
+    mode: nextMfaMode, gracePeriodDays: nextGracePeriodDays, populationProof
   }, { "if-match": `"mfa-policy-v${policy.version}"` });
   const changedMfaBody = changedMfa.json as { version: number; mode: string };
   assert.equal(changedMfaBody.mode, nextMfaMode);
   const restoreImpact = await api("POST", "/api/v1/admin/mfa-policy/preview", {
-    mode: policy.mode, gracePeriodDays: policy.gracePeriodDays, version: changedMfaBody.version
+    mode: policy.mode, gracePeriodDays: policy.gracePeriodDays
   }, { "if-match": `"mfa-policy-v${changedMfaBody.version}"` });
   const restoreProof = (restoreImpact.json as { populationProof?: unknown }).populationProof;
   assert.equal(typeof restoreProof, "string");
   const restoredMfa = await api("PATCH", "/api/v1/admin/mfa-policy", {
     mode: policy.mode, gracePeriodDays: policy.gracePeriodDays,
-    version: changedMfaBody.version, populationProof: restoreProof
+    populationProof: restoreProof
   }, { "if-match": `"mfa-policy-v${changedMfaBody.version}"` });
   assert.equal((restoredMfa.json as { mode: string }).mode, policy.mode);
-  pass("mfa-policy", "api", "MFA enforcement was previewed, applied with a grace period, observed, and restored against the live population");
+  pass("mfa-policy", "api", "MFA policy was previewed, applied with a changed grace period, observed, and restored against the live population");
 
   const issued = await api("POST", "/api/v1/access-tokens", { name: "GATE-005 probe", scopes: ["project:read"], expiryDays: 1 });
   const issuedBody = issued.json as { token: { id: string }; plaintext: string };

@@ -68,7 +68,6 @@ pub(crate) struct AccessTokenView {
 #[derive(Serialize, ToSchema, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct IssuedAccessTokenView {
-    #[serde(flatten)]
     pub token: AccessTokenView,
     pub plaintext: String,
 }
@@ -772,3 +771,41 @@ impl fmt::Display for AccessTokenManagementError {
 }
 
 impl std::error::Error for AccessTokenManagementError {}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::{AccessTokenView, IssuedAccessTokenView};
+
+    #[test]
+    fn issued_token_serializes_with_nested_token_metadata() {
+        let issued = IssuedAccessTokenView {
+            token: AccessTokenView {
+                id: "0199c963-d5ab-75de-a29e-e349e8f58c3d".to_owned(),
+                kind: "personal".to_owned(),
+                name: "CLI".to_owned(),
+                project_id: None,
+                scopes: vec!["project:read".to_owned()],
+                status: "active".to_owned(),
+                prefix: "nur_pat_0199c963".to_owned(),
+                created_at: "2026-10-09T00:00:00Z".to_owned(),
+                expires_at: "2026-10-10T00:00:00Z".to_owned(),
+                revoked_at: None,
+                last_used_at: None,
+                last_api_category: None,
+                recent_source_ips: Vec::new(),
+            },
+            plaintext: "nur_pat_copy_once".to_owned(),
+        };
+
+        let value = serde_json::to_value(issued).expect("issued token view must serialize");
+
+        assert_eq!(value["plaintext"], json!("nur_pat_copy_once"));
+        assert_eq!(
+            value["token"]["id"],
+            json!("0199c963-d5ab-75de-a29e-e349e8f58c3d")
+        );
+        assert!(value.get("id").is_none());
+    }
+}
