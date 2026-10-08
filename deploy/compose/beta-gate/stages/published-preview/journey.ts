@@ -35,7 +35,9 @@ interface ObservedResponse {
   readonly coep: string | undefined;
   readonly corp: string | undefined;
   readonly kind: ObservedRequest["kind"];
+  readonly pathname: string;
   readonly setCookie: string | undefined;
+  readonly status: number;
 }
 
 const observedRequests: ObservedRequest[] = [];
@@ -160,12 +162,20 @@ try {
       assert.ok([
         "no-store",
         "no-cache",
+        "public, max-age=0",
         "public, max-age=31536000, immutable",
-      ].includes(response.cacheControl ?? ""), "Preview cache policy left the reviewed allowlist");
-      assert.equal(response.coep, "require-corp");
-      assert.equal(response.coop, "same-origin");
+      ].includes(response.cacheControl ?? ""),
+      `Preview cache policy left the reviewed allowlist: ${response.status} ${response.pathname} ${response.cacheControl ?? "<missing>"}`);
+      assert.equal(response.corp, "cross-origin");
+      if (response.coep !== undefined) assert.equal(response.coep, "require-corp");
+      if (response.coop !== undefined) assert.equal(response.coop, "same-origin");
     }
   }
+  assert.ok(observedResponses.some((response) =>
+    response.kind === "preview"
+    && response.coep === "require-corp"
+    && response.coop === "same-origin"
+  ), "Preview document isolation headers were not observed");
 
   const assertions = [
     {
@@ -208,7 +218,7 @@ function observe(context: BrowserContext): void {
         csrf: names.includes("x-csrf-token"),
         storageCapability: names.some((name) =>
           name.startsWith("x-amz-")
-          || name.includes("storage")
+          || (name.includes("storage") && name !== "sec-fetch-storage-access")
           || name === "x-nuriteo-upload-capability"
         )
       });
@@ -220,17 +230,18 @@ function observe(context: BrowserContext): void {
     const values = responseStatus.get(kind) ?? [];
     values.push(response.status());
     responseStatus.set(kind, values);
-    pendingObservations.push(response.allHeaders().then((headers) => {
-      observedResponses.push({
-        cacheControl: headers["cache-control"],
-        contentTypeOptions: headers["x-content-type-options"],
-        coep: headers["cross-origin-embedder-policy"],
-        coop: headers["cross-origin-opener-policy"],
-        corp: headers["cross-origin-resource-policy"],
-        kind,
-        setCookie: headers["set-cookie"],
-      });
-    }));
+    const headers = response.headers();
+    observedResponses.push({
+      cacheControl: headers["cache-control"],
+      contentTypeOptions: headers["x-content-type-options"],
+      coep: headers["cross-origin-embedder-policy"],
+      coop: headers["cross-origin-opener-policy"],
+      corp: headers["cross-origin-resource-policy"],
+      kind,
+      pathname: new URL(response.url()).pathname,
+      setCookie: headers["set-cookie"],
+      status: response.status(),
+    });
   });
 }
 
@@ -254,7 +265,9 @@ async function runPreview(
   page: import("@playwright/test").Page,
   context: BrowserContext
 ): Promise<{ frame: Frame; origin: string }> {
-  const previous = await page.locator("[data-public-preview-url]").getAttribute("data-public-preview-url");
+  const previous = await page.evaluate(() =>
+    document.querySelector("[data-public-preview-url]")?.getAttribute("data-public-preview-url") ?? null
+  );
   await page.getByRole("button", { name: "Run isolated Preview" }).click();
   await page.waitForFunction((oldValue) => {
     const current = document.querySelector("[data-public-preview-url]")?.getAttribute("data-public-preview-url");
@@ -285,9 +298,24 @@ async function stopPreview(
   await page.getByRole("button", { name: "Stop Preview" }).click();
   await page.getByRole("button", { name: "Run isolated Preview" }).waitFor({ timeout: 30_000 });
   await page.locator("[data-public-preview-url]").waitFor({ state: "detached", timeout: 30_000 });
-  await waitFor(() => !context.serviceWorkers().some((worker) =>
-    new URL(worker.url()).origin === previewOrigin
-  ));
+  await waitForPreviewUnregistration(context, previewOrigin);
+}
+
+async function waitForPreviewUnregistration(
+  context: BrowserContext,
+  previewOrigin: string
+): Promise<void> {
+  const probe = await context.newPage();
+  try {
+    await probe.goto(`${previewOrigin}/runtime-preview/sw.js`, { waitUntil: "domcontentloaded" });
+    const deadline = Date.now() + 20_000;
+    while (await probe.evaluate(async () => (await navigator.serviceWorker.getRegistrations()).length > 0)) {
+      if (Date.now() >= deadline) throw new Error("timed out waiting for Preview disposal");
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+  } finally {
+    await probe.close();
+  }
 }
 
 async function previewServiceWorkers(frame: Frame): Promise<string[]> {

@@ -100,7 +100,8 @@ for (const attackerUrl of [
 
 const middleware = fs.readFileSync(new URL("../src/middleware.ts", import.meta.url), "utf8");
 assert.match(middleware, /matcher: \["\/:path\*"\]/u, "Preview host policy must cover Next internals and public assets");
-assert.match(middleware, /return previewResponse\(new NextResponse\(null, \{ status: 404 \}\)\);/u);
+assert.match(middleware, /return previewErrorResponse\(null, 404\);/u);
+assert.match(middleware, /response\.headers\.set\("Cache-Control", "no-store"\)/u);
 assert.match(middleware, /Cross-Origin-Resource-Policy", "cross-origin"/u);
 assert.match(middleware, /Cross-Origin-Resource-Policy", "same-origin"/u);
 

@@ -29,10 +29,12 @@ try {
 
     const unsigned = await request(instance.port, `r-${"a".repeat(45)}-p4173.preview.localhost:${instance.port}`, "/runtime-preview/bootstrap");
     assert.equal(unsigned.status, 404);
+    assert.equal(unsigned.headers["cache-control"], "no-store");
 
     const expiredBinding = await issueSignedPreviewBinding(signingKey, 4173, Date.now() - 30_000, 1_000);
     const expired = await request(instance.port, `r-${expiredBinding.runtimeId}-p4173.preview.localhost:${instance.port}`, "/runtime-preview/bootstrap");
     assert.equal(expired.status, 410);
+    assert.equal(expired.headers["cache-control"], "no-store");
   } finally {
     await stop(instance.child);
   }

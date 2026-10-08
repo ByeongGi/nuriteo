@@ -15,12 +15,12 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
 
   if (configuration.status === "disabled") {
     return mightBePreview
-      ? previewResponse(new NextResponse("Preview wildcard DNS and TLS are not ready.", { status: 503 }))
+      ? previewErrorResponse("Preview wildcard DNS and TLS are not ready.", 503)
       : applicationResponse(NextResponse.next());
   }
   const binding = parsePreviewHost(hostname, configuration.baseDomain);
   if (!binding) {
-    if (mightBePreview) return previewResponse(new NextResponse(null, { status: 404 }));
+    if (mightBePreview) return previewErrorResponse(null, 404);
     if (request.nextUrl.pathname.startsWith(PREVIEW_ASSET_PREFIX)) return applicationResponse(new NextResponse(null, { status: 404 }));
     return applicationResponse(NextResponse.next());
   }
@@ -29,7 +29,7 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
     binding.runtimeId,
     binding.port
   );
-  if (verification !== "valid") return previewResponse(new NextResponse(null, { status: verification === "expired" ? 410 : 404 }));
+  if (verification !== "valid") return previewErrorResponse(null, verification === "expired" ? 410 : 404);
   if (request.nextUrl.pathname === "/runtime-preview/bootstrap") {
     return previewResponse(NextResponse.next());
   }
@@ -41,7 +41,7 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
     response.headers.set("Service-Worker-Allowed", "/");
     return response;
   }
-  return previewResponse(new NextResponse(null, { status: 404 }));
+  return previewErrorResponse(null, 404);
 }
 
 export const config = {
@@ -61,5 +61,11 @@ function applicationResponse(response: NextResponse): NextResponse {
 
 function previewResponse(response: NextResponse): NextResponse {
   response.headers.set("Cross-Origin-Resource-Policy", "cross-origin");
+  return response;
+}
+
+function previewErrorResponse(body: string | null, status: number): NextResponse {
+  const response = previewResponse(new NextResponse(body, { status }));
+  response.headers.set("Cache-Control", "no-store");
   return response;
 }
