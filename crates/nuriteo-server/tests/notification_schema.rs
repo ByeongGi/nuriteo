@@ -37,8 +37,8 @@ async fn notification_outbox_is_transactional_bounded_and_secret_safe() {
     assert_eq!(
         report,
         MigrationReport {
-            latest_version: Some(36),
-            known_migrations: 36,
+            latest_version: Some(37),
+            known_migrations: 37,
         }
     );
     assert_eq!(migrate(&pool).await, report);

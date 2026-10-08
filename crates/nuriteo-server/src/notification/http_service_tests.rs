@@ -42,7 +42,7 @@ async fn actual_notification_http_is_tenant_safe_versioned_and_idempotent() {
     )
     .await
     .unwrap();
-    assert_eq!(report.latest_version, Some(36));
+    assert_eq!(report.latest_version, Some(37));
     InstanceSettingsRepository::new(pool.clone(), Duration::from_secs(5))
         .unwrap()
         .materialize(&InstanceSettingBootstrap::empty())

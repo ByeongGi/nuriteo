@@ -1,3 +1,4 @@
+pub(crate) mod access_token;
 pub mod admin;
 pub mod app;
 pub mod audit;

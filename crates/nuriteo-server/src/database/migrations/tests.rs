@@ -2,8 +2,8 @@ use std::borrow::Cow;
 use std::env;
 use std::fs;
 
-use sqlx::SqlSafeStr;
 use sqlx::migrate::{Migration, MigrationType};
+use sqlx::{Acquire, SqlSafeStr};
 
 use super::*;
 use crate::database::{DatabasePoolConfig, DatabaseTlsConfig};
@@ -29,7 +29,7 @@ fn validates_migration_deadlines() {
 fn embedded_baseline_is_forward_only_and_framework_scoped() {
     let embedded = embedded_migrator();
     let migrations: Vec<_> = embedded.iter().collect();
-    assert_eq!(migrations.len(), 36);
+    assert_eq!(migrations.len(), 37);
     assert_eq!(
         migrations
             .iter()
@@ -37,7 +37,7 @@ fn embedded_baseline_is_forward_only_and_framework_scoped() {
             .collect::<Vec<_>>(),
         vec![
             1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
-            25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36
+            25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37
         ]
     );
     assert_eq!(migrations[0].version, 1);
@@ -130,12 +130,13 @@ async fn real_postgres_serializes_validates_rolls_back_and_retries() {
         .unwrap_or_else(|error| panic!("second runner task must join: {error}"))
         .unwrap_or_else(|error| panic!("second runner must succeed: {error}"));
     assert_eq!(first_report, second_report);
-    assert_eq!(first_report.latest_version, Some(36));
-    assert_eq!(first_report.known_migrations, 36);
-    for version in 1..=36 {
+    assert_eq!(first_report.latest_version, Some(37));
+    assert_eq!(first_report.known_migrations, 37);
+    for version in 1..=37 {
         assert_eq!(migration_row_count(&pool, version).await, 1);
     }
     verify_save_upload_lease_delete_fence(&pool).await;
+    verify_access_token_invariants(&pool).await;
 
     let mut blocker = pool
         .acquire()
@@ -391,8 +392,206 @@ async fn verify_save_upload_lease_delete_fence(pool: &DatabasePool) {
     assert_eq!(lease_count, 0);
 }
 
+async fn verify_access_token_invariants(pool: &DatabasePool) {
+    const USER: &str = "0199ee6c-c777-7000-8000-000000009001";
+    const TOKEN: &str = "0199ee6c-c777-7000-8000-000000009101";
+    const DISABLE_TOKEN: &str = "0199ee6c-c777-7000-8000-000000009102";
+    const PROJECT_TOKEN: &str = "0199ee6c-c777-7000-8000-000000009105";
+    const PROJECT: &str = "0199ee6c-c777-7000-8000-000000009020";
+    const DELETED_USER: &str = "0199ee6c-c777-7000-8000-000000009107";
+    const DELETED_USER_TOKEN: &str = "0199ee6c-c777-7000-8000-000000009108";
+    const FAMILY: &str = "0199ee6c-c777-7000-8000-000000009110";
+
+    let insert = |id: &'static str, suffix: u8| {
+        sqlx::query(
+            "INSERT INTO access_tokens \
+             (id,kind,name,principal_id,owner_user_id,created_by_user_id,scopes,token_prefix,\
+              secret_hash,expires_at,rotation_family_id) \
+             VALUES ($1::uuid,'personal','CLI',$2::uuid,$2::uuid,$2::uuid,\
+                     ARRAY['project:read'],$3,decode(repeat($4,32),'hex'),\
+                     transaction_timestamp()+interval '90 days',$5::uuid)",
+        )
+        .bind(id)
+        .bind(USER)
+        .bind(format!("nur_pat_{id}_"))
+        .bind(format!("{suffix:02x}"))
+        .bind(FAMILY)
+    };
+
+    insert(TOKEN, 0x11)
+        .execute(&mut *pool.acquire().await.unwrap())
+        .await
+        .unwrap();
+
+    sqlx::query(
+        "INSERT INTO access_tokens \
+         (id,kind,name,principal_id,project_id,created_by_user_id,scopes,token_prefix,\
+          secret_hash,expires_at,rotation_family_id) \
+         VALUES ($1::uuid,'project','CI',$2::uuid,$2::uuid,$3::uuid,ARRAY['project:publish'],\
+                 $4,decode(repeat('55',32),'hex'),transaction_timestamp()+interval '90 days',$5::uuid)",
+    )
+    .bind(PROJECT_TOKEN)
+    .bind(PROJECT)
+    .bind(USER)
+    .bind(format!("nur_prj_{PROJECT_TOKEN}_"))
+    .bind(FAMILY)
+    .execute(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+
+    assert_constraint_rejected(
+        sqlx::query(
+            "INSERT INTO access_tokens \
+             (id,kind,name,principal_id,owner_user_id,scopes,token_prefix,secret_hash,expires_at,rotation_family_id) \
+             VALUES ('0199ee6c-c777-7000-8000-000000009103','personal','Too Long',$1::uuid,$1::uuid,\
+                     ARRAY['project:read'],'nur_pat_0199ee6c-c777-7000-8000-000000009103_',\
+                     decode(repeat('33',32),'hex'),transaction_timestamp()+interval '366 days',$2::uuid)",
+        )
+        .bind(USER)
+        .bind(FAMILY)
+        .execute(&mut *pool.acquire().await.unwrap())
+        .await,
+    );
+    assert_constraint_rejected(
+        sqlx::query(
+            "INSERT INTO access_tokens \
+             (id,kind,name,principal_id,project_id,scopes,token_prefix,secret_hash,expires_at,rotation_family_id) \
+             VALUES ('0199ee6c-c777-7000-8000-000000009106','project','Git Escape',$1::uuid,$1::uuid,\
+                     ARRAY['git:read'],'nur_prj_0199ee6c-c777-7000-8000-000000009106_',\
+                     decode(repeat('66',32),'hex'),transaction_timestamp()+interval '90 days',$2::uuid)",
+        )
+        .bind(PROJECT)
+        .bind(FAMILY)
+        .execute(&mut *pool.acquire().await.unwrap())
+        .await,
+    );
+    assert_constraint_rejected(
+        sqlx::query(
+            "INSERT INTO access_tokens \
+             (id,kind,name,principal_id,owner_user_id,scopes,token_prefix,secret_hash,expires_at,rotation_family_id) \
+             VALUES ('0199ee6c-c777-7000-8000-000000009104','personal','Bad Scope',$1::uuid,$1::uuid,\
+                     ARRAY['project:read','project:read'],'nur_pat_0199ee6c-c777-7000-8000-000000009104_',\
+                     decode(repeat('44',32),'hex'),transaction_timestamp()+interval '90 days',$2::uuid)",
+        )
+        .bind(USER)
+        .bind(FAMILY)
+        .execute(&mut *pool.acquire().await.unwrap())
+        .await,
+    );
+
+    sqlx::query(
+        "UPDATE access_tokens SET state='revoked',secret_hash=NULL,revoked_at=clock_timestamp(),\
+         revoke_reason='operator_revoked',updated_at=clock_timestamp(),lock_version=lock_version+1 \
+         WHERE id=$1::uuid",
+    )
+    .bind(TOKEN)
+    .execute(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+    assert_constraint_rejected(
+        sqlx::query(
+            "UPDATE access_tokens SET state='active',secret_hash=decode(repeat('11',32),'hex'),\
+             revoked_at=NULL,revoke_reason=NULL,updated_at=clock_timestamp(),lock_version=lock_version+1 \
+             WHERE id=$1::uuid",
+        )
+        .bind(TOKEN)
+        .execute(&mut *pool.acquire().await.unwrap())
+        .await,
+    );
+
+    insert(DISABLE_TOKEN, 0x22)
+        .execute(&mut *pool.acquire().await.unwrap())
+        .await
+        .unwrap();
+    sqlx::query(
+        "UPDATE users SET status='disabled',disabled_at=clock_timestamp(),updated_at=clock_timestamp() \
+         WHERE id=$1::uuid",
+    )
+    .bind(USER)
+    .execute(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+    let lifecycle: (String, bool, String) = sqlx::query_as(
+        "SELECT state,secret_hash IS NULL,revoke_reason FROM access_tokens WHERE id=$1::uuid",
+    )
+    .bind(DISABLE_TOKEN)
+    .fetch_one(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+    assert_eq!(lifecycle, ("revoked".into(), true, "user_disabled".into()));
+
+    let mut connection = pool.acquire().await.unwrap();
+    let mut transaction = connection.begin().await.unwrap();
+    sqlx::query(
+        "INSERT INTO project_tombstones(former_project_id,owner_user_id,slug) \
+         VALUES ($1::uuid,$2::uuid,'lease-fence')",
+    )
+    .bind(PROJECT)
+    .bind(USER)
+    .execute(&mut *transaction)
+    .await
+    .unwrap();
+    sqlx::query("DELETE FROM projects WHERE id=$1::uuid")
+        .bind(PROJECT)
+        .execute(&mut *transaction)
+        .await
+        .unwrap();
+    transaction.commit().await.unwrap();
+    let project_lifecycle: (String, bool, bool, String) = sqlx::query_as(
+        "SELECT state,secret_hash IS NULL,project_id IS NULL,revoke_reason \
+         FROM access_tokens WHERE id=$1::uuid",
+    )
+    .bind(PROJECT_TOKEN)
+    .fetch_one(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+    assert_eq!(
+        project_lifecycle,
+        ("revoked".into(), true, true, "project_deleted".into())
+    );
+
+    sqlx::query(
+        "INSERT INTO users(id,email,normalized_email,display_name) \
+         VALUES ($1::uuid,'deleted-token-user@example.test','deleted-token-user@example.test','Delete Me')",
+    )
+    .bind(DELETED_USER)
+    .execute(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO access_tokens \
+         (id,kind,name,principal_id,owner_user_id,scopes,token_prefix,secret_hash,expires_at,rotation_family_id) \
+         VALUES ($1::uuid,'personal','Delete Lifecycle',$2::uuid,$2::uuid,ARRAY['project:read'],$3,\
+                 decode(repeat('77',32),'hex'),transaction_timestamp()+interval '90 days',$4::uuid)",
+    )
+    .bind(DELETED_USER_TOKEN)
+    .bind(DELETED_USER)
+    .bind(format!("nur_pat_{DELETED_USER_TOKEN}_"))
+    .bind(FAMILY)
+    .execute(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+    sqlx::query("DELETE FROM users WHERE id=$1::uuid")
+        .bind(DELETED_USER)
+        .execute(&mut *pool.acquire().await.unwrap())
+        .await
+        .unwrap();
+    let deletion_lifecycle: (String, bool, bool, String) = sqlx::query_as(
+        "SELECT state,secret_hash IS NULL,owner_user_id IS NULL,revoke_reason \
+         FROM access_tokens WHERE id=$1::uuid",
+    )
+    .bind(DELETED_USER_TOKEN)
+    .fetch_one(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+    assert_eq!(
+        deletion_lifecycle,
+        ("revoked".into(), true, true, "user_deleted".into())
+    );
+}
+
 fn assert_constraint_rejected(result: Result<sqlx::postgres::PgQueryResult, sqlx::Error>) {
-    let error = result.expect_err("direct lease deletion must be rejected");
+    let error = result.expect_err("constraint violation must be rejected");
     assert_eq!(
         error.as_database_error().and_then(|error| error.code()),
         Some(Cow::Borrowed("23514"))

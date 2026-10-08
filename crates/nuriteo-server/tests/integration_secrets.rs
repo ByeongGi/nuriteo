@@ -43,7 +43,7 @@ async fn encrypted_credentials_rotation_and_ca_activation_fail_closed() {
     )
     .await
     .unwrap();
-    assert_eq!(report.latest_version, Some(36));
+    assert_eq!(report.latest_version, Some(37));
     let settings_repository =
         InstanceSettingsRepository::new(pool.clone(), Duration::from_secs(5)).unwrap();
     settings_repository

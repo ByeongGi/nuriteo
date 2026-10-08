@@ -72,8 +72,8 @@ async fn worker_retries_dead_letters_recovers_and_drains_with_actual_tls_smtp() 
     )
     .await
     .unwrap();
-    assert_eq!(report.latest_version, Some(36));
-    assert_eq!(report.known_migrations, 36);
+    assert_eq!(report.latest_version, Some(37));
+    assert_eq!(report.known_migrations, 37);
     let settings_repository =
         InstanceSettingsRepository::new(pool.clone(), Duration::from_secs(5)).unwrap();
     settings_repository
