@@ -455,7 +455,19 @@ pub(crate) fn build_router_with_integration_ca_service(
     api.merge(health.router())
         .fallback(not_found)
         .method_not_allowed_fallback(method_not_allowed)
+        .layer(middleware::from_fn(ensure_api_cache_policy))
         .layer(middleware::from_fn(propagate_request_id))
+}
+
+async fn ensure_api_cache_policy(request: Request, next: Next) -> Response {
+    let private_api = request.uri().path().starts_with("/api/v1/");
+    let mut response = next.run(request).await;
+    if private_api && !response.headers().contains_key(CACHE_CONTROL) {
+        response
+            .headers_mut()
+            .insert(CACHE_CONTROL, HeaderValue::from_static("private, no-store"));
+    }
+    response
 }
 
 async fn enforce_mfa_deadline(service: MfaHttpService, request: Request, next: Next) -> Response {
@@ -562,5 +574,46 @@ mod tests {
         let body: serde_json::Value =
             serde_json::from_slice(&to_bytes(response.into_body(), 1024).await.unwrap()).unwrap();
         assert_eq!(body["code"], "SERVICE_UNAVAILABLE");
+    }
+
+    #[tokio::test]
+    async fn api_errors_default_to_private_no_store() {
+        let response = build_router()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/does-not-exist")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        assert_eq!(response.headers()[CACHE_CONTROL], "private, no-store");
+    }
+
+    #[tokio::test]
+    async fn explicit_api_cache_policy_is_preserved() {
+        let response = Router::new()
+            .route(
+                "/api/v1/public",
+                axum::routing::get(|| async {
+                    let mut response = StatusCode::OK.into_response();
+                    response.headers_mut().insert(
+                        CACHE_CONTROL,
+                        HeaderValue::from_static("public, max-age=60"),
+                    );
+                    response
+                }),
+            )
+            .layer(middleware::from_fn(ensure_api_cache_policy))
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/public")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.headers()[CACHE_CONTROL], "public, max-age=60");
     }
 }
