@@ -164,7 +164,10 @@ for secret in 'gate-005-db-ephemeral' 'integration-secret-0123456789' "$admin_pa
   "$(cat "$run_root/provider-tls/control/registry-exact-token")" "$(cat "$run_root/provider-tls/control/registry-default-token")"; do
   ! grep -Fq "$secret" "$run_root/compose.rendered.yaml"
 done
-compose --profile gate-harness build postgres core web oidc-provider gate-harness >"$run_root/build.log" 2>&1
+for image_service in postgres core web oidc-provider; do
+  compose build "$image_service" >>"$run_root/build.log" 2>&1
+done
+compose --profile gate-harness build gate-harness >>"$run_root/build.log" 2>&1
 compose up --detach --no-build >"$run_root/up.log" 2>&1
 for job in storage-init storage-check migrate bootstrap-admin; do wait_job "$job"; done
 wait_web
