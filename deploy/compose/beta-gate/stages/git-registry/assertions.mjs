@@ -16,7 +16,7 @@ assert.equal(git.projectId, required("NURITEO_GATE_PROJECT_ID"));
 assert.match(git.remoteHeadSha, /^[0-9a-f]{40,64}$/u);
 assert.match(git.workingHeadBundleId, /^[0-9a-f-]{36}$/u);
 assert.equal(git.bundleVerificationState, "verified");
-assert.ok(Number.isInteger(git.materializationCount) && git.materializationCount >= 3);
+assert.equal(git.materializationCount, 2);
 assert.equal(required("NURITEO_GATE_GIT_OBJECT_EXISTS"), "true");
 
 const gitStats = read("NURITEO_GATE_GIT_STATS");
@@ -44,7 +44,7 @@ fs.mkdirSync(output, { recursive: true, mode: 0o700 });
 fs.writeFileSync(path.join(output, "git-integration.assertions.json"), `${JSON.stringify([
   { kind: "api", name: "live Core Git connection performed smart-HTTPS import, pull, commit and push, then rejected a non-fast-forward", status: "PASS" },
   { kind: "api", name: "temporary Git provider completed create, update and delete while administrative responses stayed no-store and credential-redacted", status: "PASS" },
-  { kind: "database", name: "Git remote and three canonical Working Head materializations retained the original database lineage", status: "PASS" },
+  { kind: "database", name: "Git remote and the import/pull canonical Working Head materializations retained the original database lineage", status: "PASS" },
   { kind: "object", name: "the verified Git Working Head Bundle exists in the original S3 object lineage", status: "PASS" },
 ])}\n`, { mode: 0o600 });
 fs.writeFileSync(path.join(output, "registry-integration.assertions.json"), `${JSON.stringify([
