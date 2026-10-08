@@ -344,12 +344,14 @@ async function observedPage(context: BrowserContext, ledger: Ledger): Promise<Pa
     ledger.pending.push(pending);
   });
   page.on("response", (response) => {
-    const pending = response.allHeaders()
-      .then((headers) => {
-        ledger.responses.push({ headers, status: response.status(), url: response.url() });
-      })
-      .catch((error: unknown) => recordLedgerError(error, context, ledger));
-    ledger.pending.push(pending);
+    // Response metadata is already available when this event fires. Using
+    // allHeaders() here can remain pending for long-lived Preview responses and
+    // prevent the gate from draining its ledger after a successful save.
+    ledger.responses.push({
+      headers: response.headers(),
+      status: response.status(),
+      url: response.url()
+    });
   });
   return page;
 }
