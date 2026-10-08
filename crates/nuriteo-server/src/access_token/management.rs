@@ -11,9 +11,14 @@ use url::Url;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
+use crate::audit::{
+    ActorType, AuditActor, AuditEvent, AuditEventFields, AuditEventId, AuditMetadata, AuditResult,
+    AuditScope, AuditTarget, AuditWriter, ScopeType,
+};
 use crate::database::DatabasePool;
 use crate::identity::{
-    BrowserCookieBoundary, BrowserRequestHeaders, SessionId, SessionPolicy, SessionService, UserId,
+    BrowserCookieBoundary, BrowserRequestHeaders, SessionId, SessionPolicy, SessionService,
+    Timestamp, UserId,
 };
 use crate::notification::{
     EmailChannelPreference, Notification, NotificationClassification, NotificationDelivery,
@@ -595,28 +600,59 @@ async fn append_audit(
     action: &str,
     correlation_id: &str,
 ) -> Result<(), AccessTokenManagementError> {
+    let occurred_at: OffsetDateTime = sqlx::query_scalar("SELECT transaction_timestamp()")
+        .fetch_one(&mut **tx)
+        .await
+        .map_err(unavailable)?;
+    let occurred_at =
+        Timestamp::from_datetime(occurred_at).map_err(|_| AccessTokenManagementError::Internal)?;
+    let event =
+        access_token_audit_event(actor, token_id, target, action, correlation_id, occurred_at)?;
+    AuditWriter::append(tx, &event)
+        .await
+        .map_err(|_| AccessTokenManagementError::Unavailable)
+}
+
+fn access_token_audit_event(
+    actor: UserId,
+    token_id: Uuid,
+    target: AccessTokenTarget,
+    action: &str,
+    correlation_id: &str,
+    occurred_at: Timestamp,
+) -> Result<AuditEvent, AccessTokenManagementError> {
     let (scope_type, scope_id) = match target {
-        AccessTokenTarget::Personal => ("user", actor.to_string()),
-        AccessTokenTarget::Project(project_id) => ("project", project_id.to_string()),
+        AccessTokenTarget::Personal => (ScopeType::User, actor.to_string()),
+        AccessTokenTarget::Project(project_id) => (ScopeType::Project, project_id.to_string()),
     };
-    sqlx::query(
-        "INSERT INTO audit_events \
-         (id,actor_type,actor_id,actor_user_id,action_code,target_type,target_id,scope_type,scope_id,\
-          result,correlation_id,changed_fields,metadata) \
-         VALUES($1::uuid,'user',$2,$2::uuid,$3,'access_token',$4,$5,$6,'succeeded',$7,\
-                ARRAY['state'],jsonb_build_object('credential','redacted'))",
-    )
-    .bind(Uuid::now_v7().to_string())
-    .bind(actor.to_string())
-    .bind(action)
-    .bind(token_id.to_string())
-    .bind(scope_type)
-    .bind(scope_id)
-    .bind(correlation_id)
-    .execute(&mut **tx)
-    .await
-    .map_err(unavailable)?;
-    Ok(())
+    AuditEvent::new(AuditEventFields {
+        id: AuditEventId::new(),
+        occurred_at,
+        actor: AuditActor {
+            kind: ActorType::User,
+            id: actor.to_string(),
+            user_id: Some(actor),
+            display_name: None,
+        },
+        action_code: action.into(),
+        target: AuditTarget {
+            kind: "access_token".into(),
+            id: token_id.to_string(),
+        },
+        scope: AuditScope {
+            kind: scope_type,
+            id: scope_id,
+        },
+        result: AuditResult::Succeeded,
+        reason_code: None,
+        correlation_id: correlation_id.into(),
+        source_ip: None,
+        schema_version: 1,
+        changed_fields: vec!["state".into()],
+        metadata: AuditMetadata::new(serde_json::json!({}))
+            .map_err(|_| AccessTokenManagementError::Internal)?,
+    })
+    .map_err(|_| AccessTokenManagementError::Internal)
 }
 
 async fn append_notification(
@@ -775,8 +811,36 @@ impl std::error::Error for AccessTokenManagementError {}
 #[cfg(test)]
 mod tests {
     use serde_json::json;
+    use uuid::Uuid;
 
-    use super::{AccessTokenView, IssuedAccessTokenView};
+    use crate::identity::{Timestamp, UserId};
+
+    use super::{
+        AccessTokenTarget, AccessTokenView, IssuedAccessTokenView, access_token_audit_event,
+    };
+
+    #[test]
+    fn access_token_lifecycle_audit_uses_validated_safe_metadata() {
+        let actor = "0199c963-d5ab-75de-a29e-e349e8f58c3d"
+            .parse::<UserId>()
+            .expect("fixture user ID must be valid");
+        let token_id = Uuid::parse_str("0199c963-d5ab-75de-a29e-e349e8f58c3e")
+            .expect("fixture token ID must be valid");
+        let occurred_at =
+            Timestamp::from_unix_timestamp(1_800_000_000).expect("fixture timestamp must be valid");
+
+        assert!(
+            access_token_audit_event(
+                actor,
+                token_id,
+                AccessTokenTarget::Personal,
+                "access_token.created",
+                "access-token-audit-test",
+                occurred_at,
+            )
+            .is_ok()
+        );
+    }
 
     #[test]
     fn issued_token_serializes_with_nested_token_metadata() {
