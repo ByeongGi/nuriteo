@@ -34,7 +34,7 @@ assert(
   "release build must use Cargo.lock and select only the server binary"
 );
 assert(
-  instructions.includes("ENV CARGO_BUILD_JOBS=2"),
+  instructions.includes("ENV CARGO_BUILD_JOBS=1"),
   "release build must remain viable on the documented small self-hosted builder"
 );
 assert(
