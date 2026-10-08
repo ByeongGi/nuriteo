@@ -186,9 +186,8 @@ try {
   const created = publication.json as { example: { publicId: string }; version: { versionNumber: number } };
   await api("GET", `/api/v1/published-examples/${created.example.publicId}/versions/${created.version.versionNumber}`);
   const fork = await api("POST", `/api/v1/published-examples/${created.example.publicId}/versions/${created.version.versionNumber}/forks`, {
-    destinationOwner: { ownerType: "user", ownerId: context.userId }, slug: "gate-005-fork", name: "GATE-005 Fork",
-    idempotencyKey: "gate-005-published-fork"
-  });
+    destinationOwner: { ownerType: "user", ownerId: context.userId }, slug: "gate-005-fork", name: "GATE-005 Fork"
+  }, { "idempotency-key": "gate-005-published-fork" });
   const forkBody = fork.json as { project: { id: string; ownerType: string; ownerId: string }; sourceVersionNumber: number };
   assert.notEqual(forkBody.project.id, context.projectId);
   assert.equal(forkBody.project.ownerType, "user");
