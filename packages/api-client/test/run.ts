@@ -7,6 +7,7 @@ import "./history.test.ts";
 import "./mfa.test.ts";
 import "./notifications.test.ts";
 import "./oidc.test.ts";
+import "./registries.test.ts";
 import "./organization.test.ts";
 import "./project.test.ts";
 import "./save.test.ts";

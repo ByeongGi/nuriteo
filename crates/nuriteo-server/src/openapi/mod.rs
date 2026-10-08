@@ -16,6 +16,7 @@ use crate::notification::{self, NotificationHttpService};
 use crate::oidc::{self, OidcHttpService};
 use crate::organization::{self, OrganizationHttpService};
 use crate::project::{self, ProjectHttpService};
+use crate::registry_gateway::{self, RegistryHttpService};
 use crate::save::{self, SaveHttpService};
 use crate::setup::{self, SetupStatusService};
 use crate::team::{self, TeamHttpService};
@@ -55,6 +56,7 @@ pub const DOCS_PATH: &str = "/api/docs";
         ,(name = "access-tokens", description = "Copy-once Personal and Project Automation Token lifecycle")
         ,(name = "oidc", description = "OIDC sign-in and linked identity lifecycle")
         ,(name = "oidc-administration", description = "Instance-wide OIDC Provider administration")
+        ,(name = "registry-administration", description = "Instance-wide package registry routing and credential administration")
     ),
     servers((url = "/", description = "Current self-hosted instance"))
 )]
@@ -165,6 +167,7 @@ pub fn document() -> utoipa::openapi::OpenApi {
         NotificationHttpService::unconfigured(),
         AccessTokenManagementService::unconfigured(),
         OidcHttpService::unconfigured(),
+        RegistryHttpService::unconfigured(),
     )
     .1
 }
@@ -251,6 +254,39 @@ pub(crate) fn router_with_oidc(
     access_tokens: AccessTokenManagementService,
     oidc: OidcHttpService,
 ) -> Router {
+    router_with_registry(
+        auth,
+        invitations,
+        organizations,
+        projects,
+        save,
+        setup,
+        admin,
+        teams,
+        mfa,
+        notifications,
+        access_tokens,
+        oidc,
+        RegistryHttpService::unconfigured(),
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn router_with_registry(
+    auth: AuthService,
+    invitations: InvitationHttpService,
+    organizations: OrganizationHttpService,
+    projects: ProjectHttpService,
+    save: SaveHttpService,
+    setup: SetupStatusService,
+    admin: AdminHttpService,
+    teams: TeamHttpService,
+    mfa: MfaHttpService,
+    notifications: NotificationHttpService,
+    access_tokens: AccessTokenManagementService,
+    oidc: OidcHttpService,
+    registry: RegistryHttpService,
+) -> Router {
     let (api_routes, document) = openapi_parts(
         auth,
         invitations,
@@ -264,6 +300,7 @@ pub(crate) fn router_with_oidc(
         notifications,
         access_tokens,
         oidc,
+        registry,
     );
     let config = Config::new([DOCUMENT_PATH]).validator_url("none");
     let docs = SwaggerUi::new(DOCS_PATH)
@@ -290,6 +327,7 @@ fn openapi_parts(
     notifications: NotificationHttpService,
     access_tokens: AccessTokenManagementService,
     oidc: OidcHttpService,
+    registry: RegistryHttpService,
 ) -> (Router, utoipa::openapi::OpenApi) {
     let (auth_routes, document) =
         workspace::openapi_router(auth::openapi_router(ApiDocument::openapi()))
@@ -329,6 +367,9 @@ fn openapi_parts(
     let (oidc_routes, document) = oidc::openapi_router(document)
         .with_state(oidc)
         .split_for_parts();
+    let (registry_routes, document) = registry_gateway::openapi_router(document)
+        .with_state(registry)
+        .split_for_parts();
     (
         auth_routes
             .merge(invitation_routes)
@@ -341,7 +382,8 @@ fn openapi_parts(
             .merge(mfa_routes)
             .merge(notification_routes)
             .merge(access_token_routes)
-            .merge(oidc_routes),
+            .merge(oidc_routes)
+            .merge(registry_routes),
         document,
     )
 }

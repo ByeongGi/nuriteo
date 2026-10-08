@@ -9,6 +9,7 @@ const destinations = [
   { href: "/admin/invitations", label: "Activation invitations" },
   { href: "/admin/mfa", label: "MFA policy" },
   { href: "/admin/oidc", label: "Identity providers" },
+  { href: "/admin/registries", label: "Package registries" },
   { href: "/admin/notifications", label: "Email delivery" }
 ] as const;
 

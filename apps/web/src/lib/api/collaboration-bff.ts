@@ -20,6 +20,7 @@ const NOTIFICATION_ETAG = /^"notification-v([1-9]\d*)"$/u;
 const NOTIFICATION_PREFERENCES_ETAG = /^"notification-preferences-v([1-9]\d*)"$/u;
 const EMAIL_DELIVERY_ETAG = /^"email-delivery-v([1-9]\d*)"$/u;
 const OIDC_PROVIDER_ETAG = /^"oidc-provider-v([1-9]\d*)"$/u;
+const REGISTRY_ETAG = /^"registry-v([1-9]\d*)"$/u;
 const TEAM_ETAG = /^"team-v([1-9]\d*)"$/u;
 const TEAM_MEMBER_ETAG = /^"team-member-v([1-9]\d*)"$/u;
 const TEAM_PROJECT_ROLE_ETAG = /^"team-project-role-v([1-9]\d*)"$/u;
@@ -45,7 +46,7 @@ export interface CollaborationForward {
   readonly withEtag?: boolean;
   readonly withIdempotencyKey?: boolean;
   readonly forwardSetCookie?: boolean;
-  readonly etagKind?: "email-delivery" | "mfa-policy" | "notification" | "notification-preferences" | "oidc-provider" | "organization" | "project" | "setting" | "team" | "team-member" | "team-project-role";
+  readonly etagKind?: "email-delivery" | "mfa-policy" | "notification" | "notification-preferences" | "oidc-provider" | "organization" | "project" | "registry" | "setting" | "team" | "team-member" | "team-project-role";
   readonly jsonBodyPolicy?: "organization-invitation-issue";
   readonly safeLocation?: (value: string) => boolean;
 }
@@ -358,6 +359,13 @@ function isEtagForKind(
     if (match === null) return false;
     const version = BigInt(match[1] as string);
     return version <= MAX_PROJECT_VERSION && value === `"oidc-provider-v${version}"`;
+  }
+  if (kind === "registry") {
+    if (value === null || value.length > 40) return false;
+    const match = value.match(REGISTRY_ETAG);
+    if (match === null) return false;
+    const version = BigInt(match[1] as string);
+    return version <= MAX_PROJECT_VERSION && value === `"registry-v${version}"`;
   }
   if (kind === "notification" || kind === "notification-preferences" || kind === "email-delivery") {
     if (value === null || value.length > 64) return false;

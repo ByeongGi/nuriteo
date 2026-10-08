@@ -11,6 +11,7 @@ use crate::oidc::OidcHttpService;
 use crate::openapi;
 use crate::organization::OrganizationHttpService;
 use crate::project::ProjectHttpService;
+use crate::registry_gateway::RegistryHttpService;
 use crate::save::SaveHttpService;
 use crate::setup::SetupStatusService;
 use crate::team::TeamHttpService;
@@ -274,8 +275,8 @@ pub(crate) fn build_router_with_oidc_service(
     access_tokens: AccessTokenManagementService,
     oidc: OidcHttpService,
 ) -> Router {
-    let enforcement = mfa.clone();
-    let api = openapi::router_with_oidc(
+    build_router_with_registry_service(
+        health,
         auth,
         invitations,
         organizations,
@@ -288,6 +289,42 @@ pub(crate) fn build_router_with_oidc_service(
         notifications,
         access_tokens,
         oidc,
+        RegistryHttpService::unconfigured(),
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn build_router_with_registry_service(
+    health: HealthService,
+    auth: AuthService,
+    invitations: InvitationHttpService,
+    organizations: OrganizationHttpService,
+    projects: ProjectHttpService,
+    save: SaveHttpService,
+    setup: SetupStatusService,
+    admin: AdminHttpService,
+    teams: TeamHttpService,
+    mfa: MfaHttpService,
+    notifications: NotificationHttpService,
+    access_tokens: AccessTokenManagementService,
+    oidc: OidcHttpService,
+    registry: RegistryHttpService,
+) -> Router {
+    let enforcement = mfa.clone();
+    let api = openapi::router_with_registry(
+        auth,
+        invitations,
+        organizations,
+        projects,
+        save,
+        setup,
+        admin,
+        teams,
+        mfa,
+        notifications,
+        access_tokens,
+        oidc,
+        registry,
     )
     .layer(middleware::from_fn(move |request, next| {
         enforce_mfa_deadline(enforcement.clone(), request, next)

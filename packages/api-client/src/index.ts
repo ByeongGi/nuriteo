@@ -329,6 +329,7 @@ export {
   recordSaveReceipts,
   uploadSaveCapability
 } from "./saves.ts";
+export * from "./registries.ts";
 export type {
   CompleteSaveSessionInput,
   CreateSaveSessionInput,

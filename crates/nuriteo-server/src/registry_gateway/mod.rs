@@ -20,6 +20,12 @@ use crate::integration::{
     IntegrationRepository, SecretValue, ValidatedCaBundle, authorize_recent_admin,
 };
 
+mod http_routes;
+mod http_service;
+pub(crate) use http_routes::openapi_router;
+pub use http_service::RegistryHttpService;
+pub(crate) use http_service::{RegistryAdminView, RegistryCollectionView};
+
 const INTEGRATION_TYPE: &str = "registry";
 const CREDENTIAL_KIND: &str = "auth_token";
 const INSTANCE_ID: &str = "instance";
@@ -146,6 +152,162 @@ impl RegistryGatewayService {
     fn allowing_test_addresses(mut self) -> Self {
         self.allow_test_addresses = true;
         self
+    }
+
+    pub async fn list(&self) -> Result<Vec<RegistryConnectionMetadata>, RegistryError> {
+        let mut connection = self.acquire().await?;
+        let rows = sqlx::query(
+            "SELECT id::text,display_name,base_url,canonical_host,canonical_port,base_path,status,
+             is_default,config_version,credential_version,validated_at
+             FROM registry_connections ORDER BY lower(display_name),id LIMIT 100",
+        )
+        .fetch_all(&mut *connection)
+        .await
+        .map_err(|_| RegistryError::Unavailable)?;
+        rows.iter().map(metadata_from_row).collect()
+    }
+
+    pub async fn list_scope_routes(&self) -> Result<Vec<(String, Uuid)>, RegistryError> {
+        let mut connection = self.acquire().await?;
+        sqlx::query("SELECT scope,connection_id::text FROM registry_scope_routes ORDER BY scope")
+            .fetch_all(&mut *connection)
+            .await
+            .map_err(|_| RegistryError::Unavailable)?
+            .into_iter()
+            .map(|row| {
+                Ok((
+                    row.get("scope"),
+                    Uuid::from_str(row.get::<String, _>("connection_id").as_str())
+                        .map_err(|_| RegistryError::Unavailable)?,
+                ))
+            })
+            .collect()
+    }
+
+    pub async fn rename(
+        &self,
+        actor: IntegrationAdminActor,
+        id: Uuid,
+        expected_version: u64,
+        display_name: &str,
+        correlation_id: &str,
+    ) -> Result<RegistryConnectionMetadata, RegistryError> {
+        if !valid_text(display_name, 200) {
+            return Err(RegistryError::InvalidInput);
+        }
+        validate_correlation(correlation_id)?;
+        let mut connection = self.acquire().await?;
+        let mut tx = connection
+            .begin()
+            .await
+            .map_err(|_| RegistryError::Unavailable)?;
+        authorize_recent_admin(&mut tx, actor)
+            .await
+            .map_err(map_integration_error)?;
+        let current = load_for_update(&mut tx, id, expected_version).await?;
+        if current.state != RegistryState::Disabled {
+            return Err(RegistryError::MustDisable);
+        }
+        sqlx::query("UPDATE registry_connections SET display_name=$2,config_version=config_version+1,updated_at=CURRENT_TIMESTAMP WHERE id=$1::uuid")
+            .bind(id.to_string()).bind(display_name).execute(&mut *tx).await.map_err(map_database_error)?;
+        append_audit(
+            &mut tx,
+            actor,
+            "registry.connection_updated",
+            id,
+            expected_version + 1,
+            correlation_id,
+        )
+        .await?;
+        let metadata = load_metadata(&mut tx, id).await?;
+        tx.commit().await.map_err(|_| RegistryError::Unavailable)?;
+        Ok(metadata)
+    }
+
+    pub async fn disable(
+        &self,
+        actor: IntegrationAdminActor,
+        id: Uuid,
+        expected_version: u64,
+        correlation_id: &str,
+    ) -> Result<RegistryConnectionMetadata, RegistryError> {
+        validate_correlation(correlation_id)?;
+        let mut connection = self.acquire().await?;
+        let mut tx = connection
+            .begin()
+            .await
+            .map_err(|_| RegistryError::Unavailable)?;
+        authorize_recent_admin(&mut tx, actor)
+            .await
+            .map_err(map_integration_error)?;
+        let current = load_for_update(&mut tx, id, expected_version).await?;
+        if current.state != RegistryState::Active {
+            return Err(RegistryError::Conflict);
+        }
+        sqlx::query("UPDATE registry_connections SET status='disabled',is_default=FALSE,disabled_at=CURRENT_TIMESTAMP,config_version=config_version+1,updated_at=CURRENT_TIMESTAMP WHERE id=$1::uuid")
+            .bind(id.to_string()).execute(&mut *tx).await.map_err(map_database_error)?;
+        append_audit(
+            &mut tx,
+            actor,
+            "registry.connection_disabled",
+            id,
+            expected_version + 1,
+            correlation_id,
+        )
+        .await?;
+        let metadata = load_metadata(&mut tx, id).await?;
+        tx.commit().await.map_err(|_| RegistryError::Unavailable)?;
+        Ok(metadata)
+    }
+
+    pub async fn delete(
+        &self,
+        actor: IntegrationAdminActor,
+        id: Uuid,
+        expected_version: u64,
+        correlation_id: &str,
+    ) -> Result<(), RegistryError> {
+        validate_correlation(correlation_id)?;
+        let mut connection = self.acquire().await?;
+        let mut tx = connection
+            .begin()
+            .await
+            .map_err(|_| RegistryError::Unavailable)?;
+        authorize_recent_admin(&mut tx, actor)
+            .await
+            .map_err(map_integration_error)?;
+        let current = load_for_update(&mut tx, id, expected_version).await?;
+        if current.state != RegistryState::Disabled {
+            return Err(RegistryError::MustDisable);
+        }
+        let credential_id: String = sqlx::query_scalar(
+            "SELECT credential_id::text FROM registry_connections WHERE id=$1::uuid",
+        )
+        .bind(id.to_string())
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(|_| RegistryError::Unavailable)?;
+        sqlx::query("DELETE FROM registry_connections WHERE id=$1::uuid")
+            .bind(id.to_string())
+            .execute(&mut *tx)
+            .await
+            .map_err(map_database_error)?;
+        sqlx::query("DELETE FROM integration_credentials WHERE id=$1::uuid")
+            .bind(credential_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(|_| RegistryError::Unavailable)?;
+        append_audit(
+            &mut tx,
+            actor,
+            "registry.connection_deleted",
+            id,
+            expected_version,
+            correlation_id,
+        )
+        .await?;
+        tx.commit().await.map_err(|_| RegistryError::Unavailable)?;
+        Ok(())
     }
 
     pub async fn create(
@@ -460,14 +622,21 @@ impl RegistryGatewayService {
             .await
             .map_err(|_| RegistryError::Unavailable)?;
         let id: Option<String> = if let Some(scope) = scope {
-            sqlx::query_scalar(
-                "SELECT c.id::text FROM registry_scope_routes r JOIN registry_connections c
-                 ON c.id=r.connection_id WHERE r.scope=$1 AND c.status='active'",
+            let route:Option<(String,String)>=sqlx::query_as(
+                "SELECT c.id::text,c.status FROM registry_scope_routes r JOIN registry_connections c
+                 ON c.id=r.connection_id WHERE r.scope=$1",
             )
             .bind(scope)
             .fetch_optional(&mut *tx)
             .await
-            .map_err(|_| RegistryError::Unavailable)?
+            .map_err(|_| RegistryError::Unavailable)?;
+            match route {
+                Some((_, status)) if status != "active" => {
+                    return Err(RegistryError::RouteUnavailable);
+                }
+                Some((id, _)) => Some(id),
+                None => None,
+            }
         } else {
             None
         };
@@ -984,6 +1153,8 @@ const fn map_integration_error(error: IntegrationError) -> RegistryError {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RegistryError {
+    AuthenticationFailed,
+    Forbidden,
     InvalidInput,
     InvalidPackage,
     ReauthenticationRequired,
@@ -1015,6 +1186,8 @@ impl RegistryError {
 impl fmt::Display for RegistryError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(match self {
+            Self::AuthenticationFailed => "authentication failed",
+            Self::Forbidden => "administrator access is required",
             Self::InvalidInput => "Registry input is invalid",
             Self::InvalidPackage => "package name is invalid",
             Self::ReauthenticationRequired => "recent administrator authentication is required",

@@ -2474,6 +2474,242 @@
         ]
       }
     },
+    "/api/v1/admin/registries": {
+      "get": {
+        "tags": [
+          "registry-administration"
+        ],
+        "operationId": "list",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegistryCollectionView"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "projectSessionCookie": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "registry-administration"
+        ],
+        "operationId": "create",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Create"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegistryAdminView"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "projectSessionCookie": []
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/registries/{registryId}": {
+      "delete": {
+        "tags": [
+          "registry-administration"
+        ],
+        "operationId": "delete",
+        "responses": {
+          "204": {}
+        },
+        "security": [
+          {
+            "projectSessionCookie": []
+          }
+        ]
+      },
+      "patch": {
+        "tags": [
+          "registry-administration"
+        ],
+        "operationId": "rename",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Rename"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegistryAdminView"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "projectSessionCookie": []
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/registries/{registryId}/activate": {
+      "post": {
+        "tags": [
+          "registry-administration"
+        ],
+        "operationId": "activate",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegistryAdminView"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "projectSessionCookie": []
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/registries/{registryId}/default": {
+      "post": {
+        "tags": [
+          "registry-administration"
+        ],
+        "operationId": "set_default",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegistryAdminView"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "projectSessionCookie": []
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/registries/{registryId}/disable": {
+      "post": {
+        "tags": [
+          "registry-administration"
+        ],
+        "operationId": "disable",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegistryAdminView"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "projectSessionCookie": []
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/registries/{registryId}/rotate-token": {
+      "post": {
+        "tags": [
+          "registry-administration"
+        ],
+        "operationId": "rotate",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Rotate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegistryAdminView"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "projectSessionCookie": []
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/registry-scopes": {
+      "post": {
+        "tags": [
+          "registry-administration"
+        ],
+        "operationId": "map_scope",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Scope"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {}
+        },
+        "security": [
+          {
+            "projectSessionCookie": []
+          }
+        ]
+      }
+    },
     "/api/v1/admin/settings": {
       "get": {
         "tags": [
@@ -12465,6 +12701,26 @@
           }
         }
       },
+      "Create": {
+        "type": "object",
+        "required": [
+          "displayName",
+          "baseUrl",
+          "token"
+        ],
+        "properties": {
+          "baseUrl": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "token": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
       "CreateOrganizationRequest": {
         "type": "object",
         "required": [
@@ -14362,6 +14618,87 @@
           }
         }
       },
+      "RegistryAdminView": {
+        "type": "object",
+        "required": [
+          "id",
+          "displayName",
+          "baseUrl",
+          "state",
+          "isDefault",
+          "configVersion",
+          "credentialVersion"
+        ],
+        "properties": {
+          "baseUrl": {
+            "type": "string"
+          },
+          "configVersion": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "credentialVersion": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "isDefault": {
+            "type": "boolean"
+          },
+          "state": {
+            "type": "string"
+          },
+          "validatedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "RegistryCollectionView": {
+        "type": "object",
+        "required": [
+          "items",
+          "scopes"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RegistryAdminView"
+            }
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RegistryScopeView"
+            }
+          }
+        }
+      },
+      "RegistryScopeView": {
+        "type": "object",
+        "required": [
+          "scope",
+          "connectionId"
+        ],
+        "properties": {
+          "connectionId": {
+            "type": "string"
+          },
+          "scope": {
+            "type": "string"
+          }
+        }
+      },
       "ReissueRequest": {
         "type": "object",
         "properties": {
@@ -14374,6 +14711,18 @@
             "example": 604800,
             "maximum": 2592000,
             "minimum": 3600
+          }
+        },
+        "additionalProperties": false
+      },
+      "Rename": {
+        "type": "object",
+        "required": [
+          "displayName"
+        ],
+        "properties": {
+          "displayName": {
+            "type": "string"
           }
         },
         "additionalProperties": false
@@ -14428,6 +14777,18 @@
         "properties": {
           "role": {
             "$ref": "#/components/schemas/OrganizationRole"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Rotate": {
+        "type": "object",
+        "required": [
+          "token"
+        ],
+        "properties": {
+          "token": {
+            "type": "string"
           }
         },
         "additionalProperties": false
@@ -14496,6 +14857,22 @@
             "type": "string"
           }
         }
+      },
+      "Scope": {
+        "type": "object",
+        "required": [
+          "scope",
+          "connectionId"
+        ],
+        "properties": {
+          "connectionId": {
+            "type": "string"
+          },
+          "scope": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
       },
       "SecretInput": {
         "type": "string"
@@ -15012,6 +15389,10 @@
     {
       "name": "oidc-administration",
       "description": "Instance-wide OIDC Provider administration"
+    },
+    {
+      "name": "registry-administration",
+      "description": "Instance-wide package registry routing and credential administration"
     }
   ]
 }
