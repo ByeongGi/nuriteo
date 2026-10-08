@@ -53,13 +53,15 @@ attempt=0
 until [ "$(query "SELECT state FROM email_outbox WHERE id='$retry_outbox';")" = retry_wait ]; do
   attempt=$((attempt+1)); [ "$attempt" -lt 120 ] || { echo 'retry delivery did not enter retry_wait' >&2; exit 1; }; sleep 0.25
 done
-query "UPDATE email_outbox SET available_at=clock_timestamp(),updated_at=clock_timestamp(),lock_version=lock_version+1 WHERE id='$retry_outbox' AND state='retry_wait';" >/dev/null
 
 attempt=0
 while :; do
   states="$(query "SELECT string_agg(state,',' ORDER BY recipient_email) FROM email_outbox WHERE id IN ('$sent_outbox','$retry_outbox','$dead_outbox');")"
   [ "$states" = 'dead_letter,sent,sent' ] && break
-  attempt=$((attempt+1)); [ "$attempt" -lt 160 ] || { echo "notification terminal states not reached: $states" >&2; exit 1; }; sleep 0.25
+  # The production worker's first retry uses a stable 48..72 second jittered
+  # delay. Preserve the outbox's monotonic schedule invariant and observe the
+  # real retry instead of mutating available_at to accelerate the gate.
+  attempt=$((attempt+1)); [ "$attempt" -lt 480 ] || { echo "notification terminal states not reached: $states" >&2; exit 1; }; sleep 0.25
 done
 
 notification_result="$(query "SELECT json_build_object(
