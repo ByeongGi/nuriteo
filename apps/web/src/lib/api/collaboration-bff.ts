@@ -14,6 +14,7 @@ const SAFE_HEADER = /^[\x20-\x7e]{1,512}$/u;
 const IDEMPOTENCY_KEY = /^[A-Za-z0-9._-]{16,128}$/u;
 const STRONG_ETAG = /^"org-v[1-9]\d*"$/u;
 const PROJECT_ETAG = /^"project-v([1-9]\d*)"$/u;
+const PUBLISHED_EXAMPLE_ETAG = /^"published-example-v([1-9]\d*)"$/u;
 const SETTING_ETAG = /^"setting-v([1-9]\d*)"$/u;
 const MFA_POLICY_ETAG = /^"mfa-policy-v([1-9]\d*)"$/u;
 const NOTIFICATION_ETAG = /^"notification-v([1-9]\d*)"$/u;
@@ -50,7 +51,7 @@ export interface CollaborationForward {
   readonly withEtag?: boolean;
   readonly withIdempotencyKey?: boolean;
   readonly forwardSetCookie?: boolean;
-  readonly etagKind?: "email-delivery" | "git-connection" | "git-provider" | "git-remote" | "integration-ca" | "mfa-policy" | "notification" | "notification-preferences" | "oidc-provider" | "organization" | "project" | "registry" | "setting" | "team" | "team-member" | "team-project-role";
+  readonly etagKind?: "email-delivery" | "git-connection" | "git-provider" | "git-remote" | "integration-ca" | "mfa-policy" | "notification" | "notification-preferences" | "oidc-provider" | "organization" | "project" | "published-example" | "registry" | "setting" | "team" | "team-member" | "team-project-role";
   readonly jsonBodyPolicy?: "organization-invitation-issue";
   readonly safeLocation?: (value: string) => boolean;
 }
@@ -349,6 +350,13 @@ function isEtagForKind(
   kind: NonNullable<CollaborationForward["etagKind"]>
 ): value is string {
   if (kind === "project") return isProjectEtag(value);
+  if (kind === "published-example") {
+    if (value === null || value.length > 48) return false;
+    const match = value.match(PUBLISHED_EXAMPLE_ETAG);
+    if (match === null) return false;
+    const version = BigInt(match[1] as string);
+    return version <= MAX_PROJECT_VERSION && value === `"published-example-v${version}"`;
+  }
   if (kind === "setting") return isSettingEtag(value);
   if (kind === "git-remote") return value !== null && GIT_REMOTE_ETAG.test(value);
   if (kind === "integration-ca") {

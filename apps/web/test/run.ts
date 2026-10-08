@@ -26,6 +26,7 @@ await import("./public-examples.test.ts");
 await import("./public-content-bff.test.ts");
 await import("./public-preview-content.test.ts");
 await import("./published-example-fork-bff.test.ts");
+await import("./published-example-management-bff.test.ts");
 await import("./save-upload-bff.test.ts");
 await import("./history-ux.test.ts");
 await import("./integration-ca-bff.test.ts");
