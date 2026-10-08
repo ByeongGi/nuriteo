@@ -29,7 +29,7 @@ fn validates_migration_deadlines() {
 fn embedded_baseline_is_forward_only_and_framework_scoped() {
     let embedded = embedded_migrator();
     let migrations: Vec<_> = embedded.iter().collect();
-    assert_eq!(migrations.len(), 37);
+    assert_eq!(migrations.len(), 38);
     assert_eq!(
         migrations
             .iter()
@@ -37,7 +37,7 @@ fn embedded_baseline_is_forward_only_and_framework_scoped() {
             .collect::<Vec<_>>(),
         vec![
             1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
-            25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37
+            25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38
         ]
     );
     assert_eq!(migrations[0].version, 1);
@@ -130,9 +130,9 @@ async fn real_postgres_serializes_validates_rolls_back_and_retries() {
         .unwrap_or_else(|error| panic!("second runner task must join: {error}"))
         .unwrap_or_else(|error| panic!("second runner must succeed: {error}"));
     assert_eq!(first_report, second_report);
-    assert_eq!(first_report.latest_version, Some(37));
-    assert_eq!(first_report.known_migrations, 37);
-    for version in 1..=37 {
+    assert_eq!(first_report.latest_version, Some(38));
+    assert_eq!(first_report.known_migrations, 38);
+    for version in 1..=38 {
         assert_eq!(migration_row_count(&pool, version).await, 1);
     }
     verify_save_upload_lease_delete_fence(&pool).await;
@@ -479,6 +479,8 @@ async fn verify_access_token_invariants(pool: &DatabasePool) {
         .await,
     );
 
+    verify_access_token_runtime(pool, USER, PROJECT).await;
+
     sqlx::query(
         "UPDATE access_tokens SET state='revoked',secret_hash=NULL,revoked_at=clock_timestamp(),\
          revoke_reason='operator_revoked',updated_at=clock_timestamp(),lock_version=lock_version+1 \
@@ -588,6 +590,250 @@ async fn verify_access_token_invariants(pool: &DatabasePool) {
         deletion_lifecycle,
         ("revoked".into(), true, true, "user_deleted".into())
     );
+}
+
+async fn verify_access_token_runtime(pool: &DatabasePool, user: &str, project: &str) {
+    use crate::access_token::{
+        AccessTokenAuthenticator, AccessTokenKind, AccessTokenPrincipal, AccessTokenRequest,
+        AccessTokenScope, AccessTokenServiceError, ApiCategory, ApiIdempotencyRepository,
+        IdempotencyReservation, generate_access_token,
+    };
+    use crate::project::ProjectId;
+    use uuid::Uuid;
+
+    let generated =
+        generate_access_token(AccessTokenKind::Personal, [AccessTokenScope::ProjectRead]).unwrap();
+    let family = Uuid::now_v7();
+    sqlx::query(
+        "INSERT INTO access_tokens \
+         (id,kind,name,principal_id,owner_user_id,created_by_user_id,scopes,token_prefix,\
+          secret_hash,expires_at,rotation_family_id) \
+         VALUES($1::uuid,'personal','Runtime',$2::uuid,$2::uuid,$2::uuid,ARRAY['project:read'],\
+                $3,$4,transaction_timestamp()+interval '90 days',$5::uuid)",
+    )
+    .bind(generated.id.to_string())
+    .bind(user)
+    .bind(&generated.token_prefix)
+    .bind(generated.secret_hash.as_bytes().as_slice())
+    .bind(family.to_string())
+    .execute(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+
+    let authenticator = AccessTokenAuthenticator::new(pool.clone());
+    let project_id = project.parse::<ProjectId>().unwrap();
+    let source_ip = "192.0.2.44".parse().unwrap();
+
+    let expired =
+        generate_access_token(AccessTokenKind::Personal, [AccessTokenScope::ProjectRead]).unwrap();
+    sqlx::query(
+        "INSERT INTO access_tokens \
+         (id,kind,name,principal_id,owner_user_id,scopes,token_prefix,secret_hash,expires_at,\
+          rotation_family_id,created_at,updated_at) \
+         VALUES($1::uuid,'personal','Expired',$2::uuid,$2::uuid,ARRAY['project:read'],$3,$4,\
+                transaction_timestamp()-interval '1 second',$5::uuid,\
+                transaction_timestamp()-interval '1 day',transaction_timestamp()-interval '1 day')",
+    )
+    .bind(expired.id.to_string())
+    .bind(user)
+    .bind(&expired.token_prefix)
+    .bind(expired.secret_hash.as_bytes().as_slice())
+    .bind(Uuid::now_v7().to_string())
+    .execute(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+    assert_eq!(
+        authenticator
+            .authenticate(AccessTokenRequest {
+                bearer: expired.plaintext.expose_once(),
+                required_scope: AccessTokenScope::ProjectRead,
+                project_id: Some(project_id),
+                source_ip: Some(source_ip),
+                category: ApiCategory::Read,
+            })
+            .await,
+        Err(AccessTokenServiceError::AuthenticationFailed)
+    );
+    let expired_state: (String, bool) =
+        sqlx::query_as("SELECT state,secret_hash IS NULL FROM access_tokens WHERE id=$1::uuid")
+            .bind(expired.id.to_string())
+            .fetch_one(&mut *pool.acquire().await.unwrap())
+            .await
+            .unwrap();
+    assert_eq!(expired_state, ("revoked".into(), true));
+
+    for index in 0..30 {
+        let observed_ip = std::net::IpAddr::V4(std::net::Ipv4Addr::new(
+            192,
+            0,
+            2,
+            40 + u8::try_from(index.min(5)).unwrap(),
+        ));
+        let principal = authenticator
+            .authenticate(AccessTokenRequest {
+                bearer: generated.plaintext.expose_once(),
+                required_scope: AccessTokenScope::ProjectRead,
+                project_id: Some(project_id),
+                source_ip: Some(observed_ip),
+                category: ApiCategory::Integration,
+            })
+            .await
+            .unwrap();
+        assert!(matches!(principal, AccessTokenPrincipal::User(_)));
+    }
+    assert_eq!(
+        authenticator
+            .authenticate(AccessTokenRequest {
+                bearer: generated.plaintext.expose_once(),
+                required_scope: AccessTokenScope::ProjectRead,
+                project_id: Some(project_id),
+                source_ip: Some(source_ip),
+                category: ApiCategory::Integration,
+            })
+            .await,
+        Err(AccessTokenServiceError::RateLimited)
+    );
+    let usage: (i64, i32, i64) = sqlx::query_as(
+        "SELECT (SELECT COUNT(*) FROM access_token_source_ips WHERE token_id=$1::uuid),\
+                (SELECT used_points FROM api_rate_limit_buckets WHERE subject_kind='token' AND subject_id=$1::uuid),\
+                (SELECT COUNT(*) FROM access_tokens WHERE id=$1::uuid AND last_api_category='integration')",
+    )
+    .bind(generated.id.to_string())
+    .fetch_one(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+    assert_eq!(usage, (5, 600, 1));
+
+    let project_token = generate_access_token(
+        AccessTokenKind::Project,
+        [
+            AccessTokenScope::ProjectRead,
+            AccessTokenScope::ProjectWrite,
+        ],
+    )
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO access_tokens \
+         (id,kind,name,principal_id,project_id,created_by_user_id,scopes,token_prefix,\
+          secret_hash,expires_at,rotation_family_id) \
+         VALUES($1::uuid,'project','Archive Runtime',$2::uuid,$2::uuid,$3::uuid,\
+                ARRAY['project:read','project:write'],$4,$5,\
+                transaction_timestamp()+interval '90 days',$6::uuid)",
+    )
+    .bind(project_token.id.to_string())
+    .bind(project)
+    .bind(user)
+    .bind(&project_token.token_prefix)
+    .bind(project_token.secret_hash.as_bytes().as_slice())
+    .bind(Uuid::now_v7().to_string())
+    .execute(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+    sqlx::query(
+        "UPDATE projects SET state='archived',archived_at=clock_timestamp(),\
+         updated_at=clock_timestamp(),lock_version=lock_version+1 WHERE id=$1::uuid",
+    )
+    .bind(project)
+    .execute(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+    assert_eq!(
+        authenticator
+            .authenticate(AccessTokenRequest {
+                bearer: project_token.plaintext.expose_once(),
+                required_scope: AccessTokenScope::ProjectRead,
+                project_id: Some(project_id),
+                source_ip: Some(source_ip),
+                category: ApiCategory::Read,
+            })
+            .await
+            .unwrap(),
+        AccessTokenPrincipal::Project(project_id)
+    );
+    assert_eq!(
+        authenticator
+            .authenticate(AccessTokenRequest {
+                bearer: project_token.plaintext.expose_once(),
+                required_scope: AccessTokenScope::ProjectWrite,
+                project_id: Some(project_id),
+                source_ip: Some(source_ip),
+                category: ApiCategory::Write,
+            })
+            .await,
+        Err(AccessTokenServiceError::Forbidden)
+    );
+    sqlx::query(
+        "UPDATE projects SET state='active',archived_at=NULL,updated_at=clock_timestamp(),\
+         lock_version=lock_version+1 WHERE id=$1::uuid",
+    )
+    .bind(project)
+    .execute(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+
+    let principal_id = Uuid::parse_str(user).unwrap();
+    let fingerprint = [0x42; 32];
+    let mut connection = pool.acquire().await.unwrap();
+    let mut transaction = connection.begin().await.unwrap();
+    assert_eq!(
+        ApiIdempotencyRepository::reserve(
+            &mut transaction,
+            principal_id,
+            generated.id,
+            "POST",
+            "/api/v1/projects",
+            "runtime-idempotency-key-0001",
+            &fingerprint,
+        )
+        .await
+        .unwrap(),
+        IdempotencyReservation::New
+    );
+    let body = serde_json::json!({"id":"project-result"});
+    ApiIdempotencyRepository::complete(
+        &mut transaction,
+        principal_id,
+        "POST",
+        "/api/v1/projects",
+        "runtime-idempotency-key-0001",
+        201,
+        &body,
+    )
+    .await
+    .unwrap();
+    transaction.commit().await.unwrap();
+
+    let mut connection = pool.acquire().await.unwrap();
+    let mut transaction = connection.begin().await.unwrap();
+    assert_eq!(
+        ApiIdempotencyRepository::reserve(
+            &mut transaction,
+            principal_id,
+            generated.id,
+            "POST",
+            "/api/v1/projects",
+            "runtime-idempotency-key-0001",
+            &fingerprint,
+        )
+        .await
+        .unwrap(),
+        IdempotencyReservation::Replay { status: 201, body }
+    );
+    assert_eq!(
+        ApiIdempotencyRepository::reserve(
+            &mut transaction,
+            principal_id,
+            generated.id,
+            "POST",
+            "/api/v1/projects",
+            "runtime-idempotency-key-0001",
+            &[0x43; 32],
+        )
+        .await
+        .unwrap(),
+        IdempotencyReservation::Conflict
+    );
+    transaction.commit().await.unwrap();
 }
 
 fn assert_constraint_rejected(result: Result<sqlx::postgres::PgQueryResult, sqlx::Error>) {

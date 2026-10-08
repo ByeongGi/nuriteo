@@ -64,6 +64,8 @@ const NOTIFICATION_INBOX_PREFERENCES_SQL: &str =
 const POLICY_MAINTENANCE_WORKERS_SQL: &str =
     include_str!("../../migrations/0036_policy_maintenance_workers.sql");
 const ACCESS_TOKENS_SQL: &str = include_str!("../../migrations/0037_access_tokens.sql");
+const ACCESS_TOKEN_RUNTIME_SQL: &str =
+    include_str!("../../migrations/0038_access_token_runtime.sql");
 
 // Two-key advisory locks use a namespace distinct from PostgreSQL's one-key
 // bigint locks. 0x4e555249 is the ASCII representation of "NURI".
@@ -380,6 +382,13 @@ pub(super) fn embedded_migrator() -> Migrator {
             Cow::Borrowed("hash-only access tokens"),
             MigrationType::Simple,
             ACCESS_TOKENS_SQL.into_sql_str(),
+            false,
+        ),
+        Migration::new(
+            38,
+            Cow::Borrowed("access token runtime controls"),
+            MigrationType::Simple,
+            ACCESS_TOKEN_RUNTIME_SQL.into_sql_str(),
             false,
         ),
     ])

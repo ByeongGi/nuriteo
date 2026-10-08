@@ -16,6 +16,14 @@ use subtle::ConstantTimeEq;
 use uuid::Uuid;
 use zeroize::Zeroizing;
 
+mod service;
+
+#[allow(unused_imports, reason = "TOK-002 HTTP adapter handoff")]
+pub(crate) use service::{
+    AccessTokenAuthenticator, AccessTokenPrincipal, AccessTokenRequest, AccessTokenServiceError,
+    ApiCategory, ApiIdempotencyRepository, IdempotencyReservation,
+};
+
 const SECRET_BYTES: usize = 32;
 const ENCODED_SECRET_BYTES: usize = 43;
 
@@ -30,6 +38,14 @@ impl AccessTokenKind {
         match self {
             Self::Personal => "nur_pat_",
             Self::Project => "nur_prj_",
+        }
+    }
+
+    fn parse(value: &str) -> Option<Self> {
+        match value {
+            "personal" => Some(Self::Personal),
+            "project" => Some(Self::Project),
+            _ => None,
         }
     }
 }
@@ -71,6 +87,10 @@ pub(crate) struct AccessTokenHash([u8; 32]);
 impl AccessTokenHash {
     pub(crate) const fn as_bytes(&self) -> &[u8; 32] {
         &self.0
+    }
+
+    fn from_slice(value: &[u8]) -> Option<Self> {
+        Some(Self(value.try_into().ok()?))
     }
 }
 
@@ -151,6 +171,45 @@ pub(crate) fn verify_access_token(
         return false;
     };
     hash_secret(secret.as_bytes())
+        .0
+        .ct_eq(&expected_hash.0)
+        .into()
+}
+
+struct ParsedAccessToken {
+    id: Uuid,
+    kind: AccessTokenKind,
+    secret: Zeroizing<String>,
+}
+
+fn parse_presented_token(presented: &str) -> Option<ParsedAccessToken> {
+    let (kind, remainder) = if let Some(value) = presented.strip_prefix("nur_pat_") {
+        (AccessTokenKind::Personal, value)
+    } else {
+        (
+            AccessTokenKind::Project,
+            presented.strip_prefix("nur_prj_")?,
+        )
+    };
+    let (id_text, secret) = remainder.split_once('_')?;
+    let id = Uuid::from_str(id_text).ok()?;
+    if id_text != id.to_string() {
+        return None;
+    }
+    if secret.len() != ENCODED_SECRET_BYTES
+        || URL_SAFE_NO_PAD.decode(secret).ok()?.len() != SECRET_BYTES
+    {
+        return None;
+    }
+    Some(ParsedAccessToken {
+        id,
+        kind,
+        secret: Zeroizing::new(secret.to_owned()),
+    })
+}
+
+fn verify_parsed_secret(parsed: &ParsedAccessToken, expected_hash: &AccessTokenHash) -> bool {
+    hash_secret(parsed.secret.as_bytes())
         .0
         .ct_eq(&expected_hash.0)
         .into()
