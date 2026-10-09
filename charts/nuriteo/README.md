@@ -20,6 +20,9 @@ by `K8S-003`.
   Never use a password, token, content hash or other derivation of secret material as that value.
 - `global.imageRegistry` can point to an internal mirror; it never falls back to GHCR.
 - The canonical URL is an HTTPS origin at `/`; subpath deployment is unsupported.
+- The optional Ingress always sends the canonical application host to Web. It adds exactly one wildcard
+  Preview host (`*.preview.baseDomain`) only after Preview readiness is acknowledged. It references an
+  existing TLS Secret and never installs an Ingress controller, cert-manager, DNS records, or a certificate.
 
 Before installing, replace every example endpoint and Secret reference in a private
 values file. Do not put credentials in that file.
@@ -59,6 +62,47 @@ cluster-internal Core Service. Both Deployment Pod templates consume the K8S-002
 The current checked-in digests record the GATE-005 baseline. Before actual RC deployment, the release
 pipeline must replace them with the paired RC image digests that include the current migration and
 `upgrade-preflight` command, then qualify that exact pair in a Kubernetes cluster.
+
+## Ingress and wildcard Preview
+
+Ingress is disabled by default. It can expose the application host while Preview remains disabled; the
+wildcard TLS host and routing rule are omitted until `preview.wildcardReady=true`. The controller must
+preserve the original `Host`, support upgraded WebSocket connections for the editor/terminal boundary,
+and route every path on both hosts to the Web Service. The Web middleware, not an Ingress rewrite,
+validates the opaque, signed single-label Preview hostname and permits only the Preview bootstrap,
+Service Worker and HMR assets.
+
+Create DNS records for the application host and `*.preview.baseDomain`, and provision one existing TLS
+Secret whose certificate is valid for both. Then test HTTPS, the cross-origin Preview boundary, original
+Host propagation, WebSocket upgrade, and an actual edit-to-HMR journey before setting the readiness
+values. The acknowledgements are fail-closed: `preview.wildcardReady=true` is rejected unless every one
+is true, and `ingress.enabled=true` additionally requires an Ingress class and existing TLS Secret name.
+
+```yaml
+externalUrl: https://nuriteo.example.com
+preview:
+  baseDomain: preview.nuriteo.example.com
+  wildcardReady: true
+ingress:
+  enabled: true
+  className: nginx
+  tls:
+    existingSecretName: nuriteo-edge-tls
+  readiness:
+    wildcardDns: true
+    wildcardTls: true
+    originalHost: true
+    webSocket: true
+    crossOrigin: true
+    hmr: true
+```
+
+The chart derives the application host from `externalUrl`; it is not configurable a second time.
+The render fails if that host equals or falls below `preview.baseDomain`, which prevents application
+traffic from being captured by the Preview wildcard. A custom external edge may leave
+`ingress.enabled=false`, but it must satisfy and acknowledge the same readiness contract before enabling
+remote Preview. Never use a same-origin fallback when any check fails: leave `preview.wildcardReady=false`
+so the product reports Preview as disabled.
 
 ## Validate
 

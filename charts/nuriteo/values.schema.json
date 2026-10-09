@@ -9,6 +9,7 @@
     "images",
     "externalUrl",
     "preview",
+    "ingress",
     "runtimeConfig",
     "rollout",
     "serviceAccount",
@@ -66,8 +67,54 @@
     "externalUrl": {
       "type": "string",
       "format": "uri",
-      "pattern": "^https://[^@/?#\\s]+(?::[0-9]{1,5})?/?$",
+      "maxLength": 264,
+      "pattern": "^https://(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?::[0-9]{1,5})?/?$",
       "description": "Canonical HTTPS origin. Subpath deployment is not supported."
+    },
+    "ingress": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "className", "tls", "readiness"],
+      "properties": {
+        "enabled": { "type": "boolean", "default": false },
+        "className": { "$ref": "#/definitions/optionalKubernetesName" },
+        "tls": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["existingSecretName"],
+          "properties": {
+            "existingSecretName": { "$ref": "#/definitions/optionalKubernetesName" }
+          }
+        },
+        "readiness": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["wildcardDns", "wildcardTls", "originalHost", "webSocket", "crossOrigin", "hmr"],
+          "properties": {
+            "wildcardDns": { "type": "boolean", "default": false },
+            "wildcardTls": { "type": "boolean", "default": false },
+            "originalHost": { "type": "boolean", "default": false },
+            "webSocket": { "type": "boolean", "default": false },
+            "crossOrigin": { "type": "boolean", "default": false },
+            "hmr": { "type": "boolean", "default": false }
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "enabled": { "const": true } } },
+          "then": {
+            "properties": {
+              "className": { "$ref": "#/definitions/kubernetesName" },
+              "tls": {
+                "properties": {
+                  "existingSecretName": { "$ref": "#/definitions/kubernetesName" }
+                }
+              }
+            }
+          }
+        }
+      ]
     },
     "preview": {
       "type": "object",
@@ -279,6 +326,35 @@
       ]
     }
   },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "preview": {
+            "properties": { "wildcardReady": { "const": true } }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "ingress": {
+            "properties": {
+              "readiness": {
+                "properties": {
+                  "wildcardDns": { "const": true },
+                  "wildcardTls": { "const": true },
+                  "originalHost": { "const": true },
+                  "webSocket": { "const": true },
+                  "crossOrigin": { "const": true },
+                  "hmr": { "const": true }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
   "definitions": {
     "hookJob": {
       "type": "object",
@@ -344,8 +420,8 @@
     "dnsName": {
       "type": "string",
       "minLength": 1,
-      "maxLength": 253,
-      "pattern": "^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$"
+      "maxLength": 198,
+      "pattern": "^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$"
     }
   }
 }

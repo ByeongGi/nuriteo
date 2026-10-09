@@ -5,8 +5,9 @@ chart_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 output_file=$(mktemp "${TMPDIR:-/tmp}/nuriteo-chart.XXXXXX")
 rotated_file=$(mktemp "${TMPDIR:-/tmp}/nuriteo-chart-rotated.XXXXXX")
 upgrade_file=$(mktemp "${TMPDIR:-/tmp}/nuriteo-chart-upgrade.XXXXXX")
+ingress_file=$(mktemp "${TMPDIR:-/tmp}/nuriteo-chart-ingress.XXXXXX")
 error_file=$(mktemp "${TMPDIR:-/tmp}/nuriteo-chart-error.XXXXXX")
-trap 'rm -f "$output_file" "$rotated_file" "$upgrade_file" "$error_file"' EXIT HUP INT TERM
+trap 'rm -f "$output_file" "$rotated_file" "$upgrade_file" "$ingress_file" "$error_file"' EXIT HUP INT TERM
 
 helm lint --strict "$chart_dir"
 helm template nuriteo "$chart_dir" --namespace nuriteo >"$output_file"
@@ -38,6 +39,32 @@ grep -F 'args: ["migrate"]' "$output_file" >/dev/null
 grep -F 'httpGet: { path: /health/live, port: http }' "$output_file" >/dev/null
 grep -F 'httpGet: { path: /health/ready, port: http }' "$output_file" >/dev/null
 grep -F 'httpGet: { path: /sign-in, port: http }' "$output_file" >/dev/null
+if grep -F 'kind: Ingress' "$output_file" >/dev/null; then
+  echo 'Ingress must remain opt-in until external edge readiness is acknowledged' >&2
+  exit 1
+fi
+
+helm template nuriteo "$chart_dir" --namespace nuriteo \
+  --set ingress.enabled=true \
+  --set-string ingress.className=nginx \
+  --set-string ingress.tls.existingSecretName=nuriteo-edge-tls \
+  --set preview.wildcardReady=true \
+  --set ingress.readiness.wildcardDns=true \
+  --set ingress.readiness.wildcardTls=true \
+  --set ingress.readiness.originalHost=true \
+  --set ingress.readiness.webSocket=true \
+  --set ingress.readiness.crossOrigin=true \
+  --set ingress.readiness.hmr=true >"$ingress_file"
+test "$(grep -c '^kind: Ingress$' "$ingress_file")" -eq 1
+grep -F 'ingressClassName: "nginx"' "$ingress_file" >/dev/null
+grep -F 'secretName: nuriteo-edge-tls' "$ingress_file" >/dev/null
+test "$(grep -c -- '- "nuriteo.example.com"' "$ingress_file")" -eq 1
+test "$(grep -c -F -- '- "*.preview.nuriteo.example.com"' "$ingress_file")" -eq 1
+grep -F 'host: "nuriteo.example.com"' "$ingress_file" >/dev/null
+grep -F 'host: "*.preview.nuriteo.example.com"' "$ingress_file" >/dev/null
+test "$(grep -c 'name: nuriteo-nuriteo-web' "$ingress_file")" -ge 3
+test "$(grep -c 'name: http' "$ingress_file")" -ge 3
+grep -F 'NURITEO_PREVIEW_WILDCARD_READY: "true"' "$ingress_file" >/dev/null
 
 if grep -F 'helm.sh/hook-delete-policy: hook-succeeded' "$output_file" >/dev/null; then
   echo 'completed or failed hook evidence must be retained until the next attempt' >&2
@@ -132,6 +159,79 @@ if helm template nuriteo "$chart_dir" \
 fi
 grep -F '/objectStorage/endpoint' "$error_file" >/dev/null
 
+if helm template nuriteo "$chart_dir" \
+  --set ingress.enabled=true >"$output_file" 2>"$error_file"; then
+  echo 'expected an enabled Ingress without class/TLS/readiness to fail closed' >&2
+  exit 1
+fi
+grep -F '/ingress/' "$error_file" >/dev/null
+
+helm template nuriteo "$chart_dir" \
+  --set ingress.enabled=true \
+  --set-string ingress.className=nginx \
+  --set-string ingress.tls.existingSecretName=nuriteo-edge-tls >"$rotated_file"
+grep -F 'host: "nuriteo.example.com"' "$rotated_file" >/dev/null
+if grep -F 'host: "*.preview.nuriteo.example.com"' "$rotated_file" >/dev/null; then
+  echo 'wildcard host must not render before Preview readiness is acknowledged' >&2
+  exit 1
+fi
+grep -F 'NURITEO_PREVIEW_WILDCARD_READY: "false"' "$rotated_file" >/dev/null
+
+if helm template nuriteo "$chart_dir" \
+  --set-string ingress.annotations.rewrite=unsafe >"$output_file" 2>"$error_file"; then
+  echo 'expected controller-specific Ingress annotations to be rejected' >&2
+  exit 1
+fi
+grep -F 'additional properties' "$error_file" >/dev/null
+
+for readiness in wildcardDns wildcardTls originalHost webSocket crossOrigin hmr; do
+  if helm template nuriteo "$chart_dir" \
+    --set preview.wildcardReady=true \
+    --set ingress.readiness.wildcardDns=true \
+    --set ingress.readiness.wildcardTls=true \
+    --set ingress.readiness.originalHost=true \
+    --set ingress.readiness.webSocket=true \
+    --set ingress.readiness.crossOrigin=true \
+    --set ingress.readiness.hmr=true \
+    --set "ingress.readiness.${readiness}=false" >"$output_file" 2>"$error_file"; then
+    echo "expected missing ${readiness} readiness to fail closed" >&2
+    exit 1
+  fi
+  grep -F '/ingress/readiness/' "$error_file" >/dev/null
+done
+
+if helm template nuriteo "$chart_dir" \
+  --set-string externalUrl=https://preview.nuriteo.example.com \
+  >"$output_file" 2>"$error_file"; then
+  echo 'expected application/Preview origin overlap to fail closed' >&2
+  exit 1
+fi
+grep -F 'must not equal or be covered by preview.baseDomain' "$error_file" >/dev/null
+
+if helm template nuriteo "$chart_dir" \
+  --set-string externalUrl=https://app.preview.nuriteo.example.com \
+  >"$output_file" 2>"$error_file"; then
+  echo 'expected an application host covered by the Preview wildcard to fail closed' >&2
+  exit 1
+fi
+grep -F 'must not equal or be covered by preview.baseDomain' "$error_file" >/dev/null
+
+if helm template nuriteo "$chart_dir" \
+  --set-string externalUrl=https://nuriteo.example.com:99999 \
+  >"$output_file" 2>"$error_file"; then
+  echo 'expected an invalid canonical origin port to fail closed' >&2
+  exit 1
+fi
+grep -F 'externalUrl port must be between 1 and 65535' "$error_file" >/dev/null
+
+if helm template nuriteo "$chart_dir" \
+  --set-string preview.baseDomain="$(printf 'a%.0s' $(seq 1 64)).example.com" \
+  >"$output_file" 2>"$error_file"; then
+  echo 'expected an overlong Preview DNS label to fail schema validation' >&2
+  exit 1
+fi
+grep -F '/preview/baseDomain' "$error_file" >/dev/null
+
 helm template nuriteo "$chart_dir" \
   --set bootstrapAdmin.enabled=true \
   --set-string bootstrapAdmin.email=admin@example.com \
@@ -141,4 +241,4 @@ grep -F 'app.kubernetes.io/component: bootstrap-admin' "$rotated_file" >/dev/nul
 grep -F 'helm.sh/hook-weight: "-5"' "$rotated_file" >/dev/null
 grep -F 'secretName: nuriteo-bootstrap' "$rotated_file" >/dev/null
 
-echo 'nuriteo Helm chart contract ok (schema, digests, refs, rollout, ordered job fence, workloads, probes)'
+echo 'nuriteo Helm chart contract ok (schema, digests, refs, rollout, jobs, workloads, ingress, wildcard Preview readiness)'

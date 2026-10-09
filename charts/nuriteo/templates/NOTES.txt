@@ -4,6 +4,28 @@ Helm blocks install/upgrade on the ordered preflight and migration hooks before
 applying either Deployment. No PostgreSQL resource, database or data PVC is owned
 by this chart. Inspect retained failed Jobs before retrying an operation.
 
+{{- if .Values.ingress.enabled }}
+
+Ingress routes these TLS hosts to Web:
+  Application: https://{{ include "nuriteo.applicationHost" . }}
+{{- if .Values.preview.wildcardReady }}
+  Preview:     https://*.{{ .Values.preview.baseDomain }}
+{{- else }}
+  Preview:     disabled; no wildcard TLS host or rule was rendered
+{{- end }}
+
+TLS Secret: {{ .Values.ingress.tls.existingSecretName }}
+
+The readiness values are operator acknowledgements, not active probes. Keep
+Preview disabled if DNS, certificate coverage, original Host propagation,
+WebSocket, cross-origin isolation, or edit-to-HMR verification later regresses.
+{{- else }}
+
+Ingress is disabled. If an external edge is used, route the canonical application
+host and exactly *.{{ .Values.preview.baseDomain }} to the Web Service, preserve
+Host, and complete every readiness check before enabling remote Preview.
+{{- end }}
+
 Pinned application images:
   Server: {{ include "nuriteo.image" (list . .Values.images.server) }}
   Web:    {{ include "nuriteo.image" (list . .Values.images.web) }}

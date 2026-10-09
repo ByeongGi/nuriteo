@@ -183,3 +183,34 @@ capabilities:
 - name: {{ . }}
 {{- end }}
 {{- end -}}
+
+{{/*
+Return the canonical application hostname and reject origin overlap with the
+Preview wildcard. A Preview label is intentionally only one DNS label deep.
+*/}}
+{{- define "nuriteo.applicationHost" -}}
+{{- $authority := trimSuffix "/" (trimPrefix "https://" .Values.externalUrl) -}}
+{{- $authorityParts := splitList ":" $authority -}}
+{{- $host := first $authorityParts -}}
+{{- if eq (len $authorityParts) 2 -}}
+{{- $port := atoi (last $authorityParts) -}}
+{{- if or (lt $port 1) (gt $port 65535) -}}
+{{- fail "externalUrl port must be between 1 and 65535" -}}
+{{- end -}}
+{{- end -}}
+{{- $previewSuffix := printf ".%s" .Values.preview.baseDomain -}}
+{{- if or (eq $host .Values.preview.baseDomain) (hasSuffix $previewSuffix $host) -}}
+{{- fail "externalUrl host must not equal or be covered by preview.baseDomain" -}}
+{{- end -}}
+{{- $host -}}
+{{- end -}}
+
+{{- define "nuriteo.validateIngress" -}}
+{{- $applicationHost := include "nuriteo.applicationHost" . -}}
+{{- if and .Values.preview.wildcardReady (not (and .Values.ingress.readiness.wildcardDns .Values.ingress.readiness.wildcardTls .Values.ingress.readiness.originalHost .Values.ingress.readiness.webSocket .Values.ingress.readiness.crossOrigin .Values.ingress.readiness.hmr)) -}}
+{{- fail "preview.wildcardReady=true requires DNS, TLS, original Host, WebSocket, cross-origin, and HMR readiness acknowledgements" -}}
+{{- end -}}
+{{- if eq $applicationHost (printf "*.%s" .Values.preview.baseDomain) -}}
+{{- fail "application and Preview ingress hosts must be distinct" -}}
+{{- end -}}
+{{- end -}}

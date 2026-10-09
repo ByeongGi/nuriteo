@@ -22,6 +22,19 @@ preview:
   baseDomain: preview.nuriteo.example.com
   wildcardReady: false
 
+ingress:
+  enabled: false
+  className: ""
+  tls:
+    existingSecretName: ""
+  readiness:
+    wildcardDns: false
+    wildcardTls: false
+    originalHost: false
+    webSocket: false
+    crossOrigin: false
+    hmr: false
+
 runtimeConfig:
   create: true
   existingConfigMap:
