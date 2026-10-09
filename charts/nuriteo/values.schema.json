@@ -9,6 +9,8 @@
     "images",
     "externalUrl",
     "preview",
+    "runtimeConfig",
+    "rollout",
     "postgresql",
     "objectStorage",
     "applicationSecrets",
@@ -60,7 +62,7 @@
     "externalUrl": {
       "type": "string",
       "format": "uri",
-      "pattern": "^https://[^/]+/?$",
+      "pattern": "^https://[^@/?#\\s]+(?::[0-9]{1,5})?/?$",
       "description": "Canonical HTTPS origin. Subpath deployment is not supported."
     },
     "preview": {
@@ -70,6 +72,52 @@
       "properties": {
         "baseDomain": { "$ref": "#/definitions/dnsName" },
         "wildcardReady": { "type": "boolean", "default": false }
+      }
+    },
+    "runtimeConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["create", "existingConfigMap"],
+      "properties": {
+        "create": {
+          "type": "boolean",
+          "description": "Create the chart-owned non-secret runtime ConfigMap. Set false to reference an operator-owned ConfigMap."
+        },
+        "existingConfigMap": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "revision"],
+          "properties": {
+            "name": { "$ref": "#/definitions/optionalKubernetesName" },
+            "revision": { "$ref": "#/definitions/optionalRevision" }
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "create": { "const": false } } },
+          "then": {
+            "properties": {
+              "existingConfigMap": {
+                "properties": {
+                  "name": { "$ref": "#/definitions/kubernetesName" },
+                  "revision": { "$ref": "#/definitions/revision" }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "rollout": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["externalSecretsRevision"],
+      "properties": {
+        "externalSecretsRevision": {
+          "$ref": "#/definitions/revision",
+          "description": "Opaque generation changed by the operator after rotating referenced Secrets. It must not be derived from secret contents."
+        }
       }
     },
     "postgresql": {
@@ -99,7 +147,11 @@
           "enum": ["external"],
           "description": "K8S-001 supports the production external S3 contract. A bundled quickstart is introduced only by its owning task."
         },
-        "endpoint": { "type": "string", "format": "uri", "pattern": "^https://" },
+        "endpoint": {
+          "type": "string",
+          "format": "uri",
+          "pattern": "^https://[^@/?#\\s]+(?::[0-9]{1,5})?(?:/[^@?#\\s]*)?/?$"
+        },
         "region": { "type": "string", "minLength": 1, "maxLength": 63, "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$" },
         "bucket": { "type": "string", "minLength": 3, "maxLength": 63, "pattern": "^[a-z0-9][a-z0-9.-]*[a-z0-9]$" },
         "addressingStyle": { "type": "string", "enum": ["path", "virtual-hosted"] },
@@ -216,6 +268,17 @@
       "maxLength": 253,
       "pattern": "^(?:|[A-Za-z0-9._-]+)$"
     },
+    "revision": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9._-]+$"
+    },
+    "optionalRevision": {
+      "type": "string",
+      "maxLength": 128,
+      "pattern": "^(?:|[A-Za-z0-9._-]+)$"
+    },
     "dnsName": {
       "type": "string",
       "minLength": 1,
@@ -224,4 +287,3 @@
     }
   }
 }
-

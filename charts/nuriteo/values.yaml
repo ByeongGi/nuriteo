@@ -22,6 +22,17 @@ preview:
   baseDomain: preview.nuriteo.example.com
   wildcardReady: false
 
+runtimeConfig:
+  create: true
+  existingConfigMap:
+    name: ""
+    revision: ""
+
+rollout:
+  # Change this opaque, non-secret token whenever any referenced Secret is rotated.
+  # Do not use a hash or other derivation of the secret contents.
+  externalSecretsRevision: initial
+
 postgresql:
   existingSecret:
     name: nuriteo-postgresql
@@ -56,4 +67,3 @@ bootstrapAdmin:
   existingSecret:
     name: ""
     passwordKey: password
-
