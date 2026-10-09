@@ -3,6 +3,7 @@ pub mod admin;
 pub mod app;
 pub mod audit;
 pub mod auth;
+pub mod backup;
 pub mod bootstrap;
 pub mod cli;
 pub mod config;
@@ -33,6 +34,7 @@ pub mod setup;
 pub mod smtp;
 mod storage_check;
 pub mod team;
+mod upgrade_preflight;
 pub mod workspace;
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

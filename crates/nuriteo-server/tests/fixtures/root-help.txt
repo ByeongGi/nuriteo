@@ -7,6 +7,8 @@ Commands:
           Run the API server
   migrate
           Apply forward-only database migrations
+  upgrade-preflight
+          Validate a supported upgrade without changing the database
   bootstrap-admin
           Create the first instance administrator when none exists
   healthcheck

@@ -162,3 +162,21 @@ fn migrate_fails_closed_without_configuration() {
         b"nuriteo-server: migrate failed (configuration)\n"
     );
 }
+
+#[test]
+fn upgrade_preflight_fails_closed_without_configuration() {
+    let output = Command::new(env!("CARGO_BIN_EXE_nuriteo-server"))
+        .arg("upgrade-preflight")
+        .env_remove("NURITEO_EXTERNAL_URL")
+        .env_remove("NURITEO_DATABASE_URL")
+        .env_remove("NURITEO_DATABASE_URL_FILE")
+        .output()
+        .expect("nuriteo-server binary should start");
+
+    assert_eq!(output.status.code(), Some(1));
+    assert!(output.stdout.is_empty());
+    assert_eq!(
+        output.stderr,
+        b"nuriteo-server: upgrade-preflight stopped (configuration)\n"
+    );
+}

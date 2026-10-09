@@ -15,6 +15,7 @@ use crate::database::{
 };
 use crate::health::run_http_healthcheck;
 use crate::storage_check;
+use crate::upgrade_preflight;
 use crate::{CommandStatus, VERSION};
 
 const BINARY_NAME: &str = "nuriteo-server";
@@ -23,6 +24,7 @@ const BINARY_NAME: &str = "nuriteo-server";
 pub enum OperationalCommand {
     Serve,
     Migrate,
+    UpgradePreflight,
     BootstrapAdmin,
     Healthcheck,
     StorageCheck,
@@ -41,6 +43,7 @@ impl OperationalCommand {
         match self {
             Self::Serve => "serve",
             Self::Migrate => "migrate",
+            Self::UpgradePreflight => "upgrade-preflight",
             Self::BootstrapAdmin => "bootstrap-admin",
             Self::Healthcheck => "healthcheck",
             Self::StorageCheck => "storage-check",
@@ -70,6 +73,11 @@ pub fn root_command() -> Command {
         .subcommand(
             Command::new("migrate")
                 .about("Apply forward-only database migrations")
+                .disable_version_flag(true),
+        )
+        .subcommand(
+            Command::new("upgrade-preflight")
+                .about("Validate a supported upgrade without changing the database")
                 .disable_version_flag(true),
         )
         .subcommand(
@@ -164,6 +172,9 @@ where
         }
         Ok(CliAction::Operational(OperationalCommand::Serve)) => serve(stderr).await,
         Ok(CliAction::Operational(OperationalCommand::Migrate)) => migrate(stdout, stderr).await,
+        Ok(CliAction::Operational(OperationalCommand::UpgradePreflight)) => {
+            upgrade_preflight(stdout, stderr).await
+        }
         Ok(CliAction::Operational(OperationalCommand::BootstrapAdmin)) => {
             bootstrap_admin(stdout, stderr).await
         }
@@ -347,6 +358,48 @@ async fn migrate<O: Write, E: Write>(stdout: &mut O, stderr: &mut E) -> io::Resu
     }
 }
 
+async fn upgrade_preflight<O: Write, E: Write>(
+    stdout: &mut O,
+    stderr: &mut E,
+) -> io::Result<CommandStatus> {
+    let environment = SystemEnvironment;
+    let files = SystemFileReader;
+    if Config::load(&environment, &files).is_err() {
+        return upgrade_preflight_failure(stderr, "configuration");
+    }
+    let config = match DatabaseRuntimeConfig::load(&environment, &files) {
+        Ok(config) => config,
+        Err(_) => return upgrade_preflight_failure(stderr, "database-configuration"),
+    };
+    let pool = match DatabasePool::connect(config.pool_config()).await {
+        Ok(pool) => pool,
+        Err(_) => return upgrade_preflight_failure(stderr, "database-connectivity"),
+    };
+
+    let result = upgrade_preflight::execute(&pool).await;
+    let close_result = pool.close(config.close_timeout()).await;
+    match (result, close_result) {
+        (Ok(report), Ok(())) => {
+            serde_json::to_writer(&mut *stdout, &report).map_err(io::Error::other)?;
+            writeln!(stdout)?;
+            Ok(CommandStatus::Success)
+        }
+        (Err(error), _) => upgrade_preflight_failure(stderr, error.category()),
+        (Ok(_), Err(_)) => upgrade_preflight_failure(stderr, "database-operation"),
+    }
+}
+
+fn upgrade_preflight_failure<E: Write>(
+    stderr: &mut E,
+    category: &str,
+) -> io::Result<CommandStatus> {
+    writeln!(
+        stderr,
+        "{BINARY_NAME}: upgrade-preflight stopped ({category})"
+    )?;
+    Ok(CommandStatus::Failure)
+}
+
 async fn execute_migration(
     pool: &DatabasePool,
     config: &DatabaseRuntimeConfig,
@@ -385,6 +438,9 @@ fn command_from_matches(matches: &ArgMatches) -> Result<CliAction, clap::Error> 
     match matches.subcommand_name() {
         Some("serve") => Ok(CliAction::Operational(OperationalCommand::Serve)),
         Some("migrate") => Ok(CliAction::Operational(OperationalCommand::Migrate)),
+        Some("upgrade-preflight") => {
+            Ok(CliAction::Operational(OperationalCommand::UpgradePreflight))
+        }
         Some("bootstrap-admin") => Ok(CliAction::Operational(OperationalCommand::BootstrapAdmin)),
         Some("healthcheck") => Ok(CliAction::Operational(OperationalCommand::Healthcheck)),
         Some("storage-check") => Ok(CliAction::Operational(OperationalCommand::StorageCheck)),
@@ -420,6 +476,7 @@ mod tests {
         let cases = [
             ("serve", OperationalCommand::Serve),
             ("migrate", OperationalCommand::Migrate),
+            ("upgrade-preflight", OperationalCommand::UpgradePreflight),
             ("bootstrap-admin", OperationalCommand::BootstrapAdmin),
             ("healthcheck", OperationalCommand::Healthcheck),
             ("storage-check", OperationalCommand::StorageCheck),
@@ -455,6 +512,7 @@ mod tests {
         for argument in [
             "serve",
             "migrate",
+            "upgrade-preflight",
             "bootstrap-admin",
             "healthcheck",
             "storage-check",

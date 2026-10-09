@@ -80,6 +80,8 @@ const PUBLIC_PREVIEW_RATE_LIMITS_SQL: &str =
     include_str!("../../migrations/0046_public_preview_rate_limits.sql");
 const BACKUP_MANIFEST_STATE_SQL: &str =
     include_str!("../../migrations/0047_backup_manifest_state.sql");
+const BACKUP_SYNCHRONIZED_SNAPSHOT_SQL: &str =
+    include_str!("../../migrations/0048_backup_synchronized_snapshot.sql");
 
 // Two-key advisory locks use a namespace distinct from PostgreSQL's one-key
 // bigint locks. 0x4e555249 is the ASCII representation of "NURI".
@@ -466,6 +468,13 @@ pub(super) fn embedded_migrator() -> Migrator {
             Cow::Borrowed("backup manifest state and retention"),
             MigrationType::Simple,
             BACKUP_MANIFEST_STATE_SQL.into_sql_str(),
+            false,
+        ),
+        Migration::new(
+            48,
+            Cow::Borrowed("backup synchronized PostgreSQL snapshot"),
+            MigrationType::Simple,
+            BACKUP_SYNCHRONIZED_SNAPSHOT_SQL.into_sql_str(),
             false,
         ),
     ])

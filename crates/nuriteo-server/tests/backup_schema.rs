@@ -21,7 +21,7 @@ async fn complete_only_deduplication_and_gc_fences_are_database_enforced() {
     )
     .await
     .unwrap();
-    assert_eq!(report.latest_version, Some(47));
+    assert_eq!(report.latest_version, Some(48));
 
     sqlx::raw_sql(
         "INSERT INTO backup_generations(
