@@ -1,0 +1,227 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "title": "NURITEO Helm values",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "global",
+    "release",
+    "images",
+    "externalUrl",
+    "preview",
+    "postgresql",
+    "objectStorage",
+    "applicationSecrets",
+    "bootstrapAdmin"
+  ],
+  "properties": {
+    "global": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["imageRegistry", "imagePullSecrets"],
+      "properties": {
+        "imageRegistry": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[^/@]+(?:/[^/@]+)*$",
+          "description": "Registry prefix. Air-gapped installs replace this with the internal registry and never fall back."
+        },
+        "imagePullSecrets": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 253,
+            "pattern": "^[a-z0-9](?:[-a-z0-9.]*[a-z0-9])?$"
+          }
+        }
+      }
+    },
+    "release": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["lineage", "apiVersion", "bundleFormat"],
+      "properties": {
+        "lineage": { "const": "nuriteo-self-hosted-v1" },
+        "apiVersion": { "const": "1.0.0" },
+        "bundleFormat": { "const": "project-bundle-v1" }
+      }
+    },
+    "images": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["server", "web"],
+      "properties": {
+        "server": { "$ref": "#/definitions/image" },
+        "web": { "$ref": "#/definitions/image" }
+      }
+    },
+    "externalUrl": {
+      "type": "string",
+      "format": "uri",
+      "pattern": "^https://[^/]+/?$",
+      "description": "Canonical HTTPS origin. Subpath deployment is not supported."
+    },
+    "preview": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["baseDomain", "wildcardReady"],
+      "properties": {
+        "baseDomain": { "$ref": "#/definitions/dnsName" },
+        "wildcardReady": { "type": "boolean", "default": false }
+      }
+    },
+    "postgresql": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["existingSecret"],
+      "properties": {
+        "existingSecret": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "databaseUrlKey", "caKey"],
+          "properties": {
+            "name": { "$ref": "#/definitions/kubernetesName" },
+            "databaseUrlKey": { "$ref": "#/definitions/secretKey" },
+            "caKey": { "$ref": "#/definitions/optionalSecretKey" }
+          }
+        }
+      }
+    },
+    "objectStorage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "endpoint", "region", "bucket", "addressingStyle", "credentialProvider", "existingSecret"],
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["external"],
+          "description": "K8S-001 supports the production external S3 contract. A bundled quickstart is introduced only by its owning task."
+        },
+        "endpoint": { "type": "string", "format": "uri", "pattern": "^https://" },
+        "region": { "type": "string", "minLength": 1, "maxLength": 63, "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$" },
+        "bucket": { "type": "string", "minLength": 3, "maxLength": 63, "pattern": "^[a-z0-9][a-z0-9.-]*[a-z0-9]$" },
+        "addressingStyle": { "type": "string", "enum": ["path", "virtual-hosted"] },
+        "credentialProvider": { "type": "string", "enum": ["static", "workload", "default"] },
+        "existingSecret": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "accessKeyIdKey", "secretAccessKeyKey", "sessionTokenKey", "caKey"],
+          "properties": {
+            "name": { "$ref": "#/definitions/kubernetesName" },
+            "accessKeyIdKey": { "$ref": "#/definitions/optionalSecretKey" },
+            "secretAccessKeyKey": { "$ref": "#/definitions/optionalSecretKey" },
+            "sessionTokenKey": { "$ref": "#/definitions/optionalSecretKey" },
+            "caKey": { "$ref": "#/definitions/optionalSecretKey" }
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "credentialProvider": { "const": "static" } } },
+          "then": {
+            "properties": {
+              "existingSecret": {
+                "properties": {
+                  "accessKeyIdKey": { "minLength": 1 },
+                  "secretAccessKeyKey": { "minLength": 1 }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "applicationSecrets": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["existingSecret"],
+      "properties": {
+        "existingSecret": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "masterKeyKey", "saveIdempotencyKey", "previewSigningKey"],
+          "properties": {
+            "name": { "$ref": "#/definitions/kubernetesName" },
+            "masterKeyKey": { "$ref": "#/definitions/secretKey" },
+            "saveIdempotencyKey": { "$ref": "#/definitions/secretKey" },
+            "previewSigningKey": { "$ref": "#/definitions/secretKey" }
+          }
+        }
+      }
+    },
+    "bootstrapAdmin": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "email", "name", "existingSecret"],
+      "properties": {
+        "enabled": { "type": "boolean", "default": false },
+        "email": { "type": "string" },
+        "name": { "type": "string" },
+        "existingSecret": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "passwordKey"],
+          "properties": {
+            "name": { "$ref": "#/definitions/optionalKubernetesName" },
+            "passwordKey": { "$ref": "#/definitions/secretKey" }
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "enabled": { "const": true } } },
+          "then": {
+            "properties": {
+              "email": { "type": "string", "format": "email" },
+              "name": { "type": "string", "minLength": 1, "maxLength": 100 },
+              "existingSecret": { "properties": { "name": { "$ref": "#/definitions/kubernetesName" } } }
+            }
+          }
+        }
+      ]
+    }
+  },
+  "definitions": {
+    "image": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository", "digest", "pullPolicy"],
+      "properties": {
+        "repository": { "type": "string", "minLength": 1, "pattern": "^[^@]+$" },
+        "digest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+        "pullPolicy": { "type": "string", "enum": ["IfNotPresent", "Always", "Never"] }
+      }
+    },
+    "kubernetesName": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 253,
+      "pattern": "^[a-z0-9](?:[-a-z0-9.]*[a-z0-9])?$"
+    },
+    "optionalKubernetesName": {
+      "type": "string",
+      "maxLength": 253,
+      "pattern": "^(?:|[a-z0-9](?:[-a-z0-9.]*[a-z0-9])?)$"
+    },
+    "secretKey": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 253,
+      "pattern": "^[A-Za-z0-9._-]+$"
+    },
+    "optionalSecretKey": {
+      "type": "string",
+      "maxLength": 253,
+      "pattern": "^(?:|[A-Za-z0-9._-]+)$"
+    },
+    "dnsName": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 253,
+      "pattern": "^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$"
+    }
+  }
+}
+

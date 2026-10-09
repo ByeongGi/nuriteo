@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "nuriteo.fullname" . }}-release-contract
+  labels:
+    {{- include "nuriteo.labels" . | nindent 4 }}
+  annotations:
+    nuriteo.dev/contract: digest-pinned-pair-v1
+data:
+  release-lineage: {{ .Values.release.lineage | quote }}
+  api-version: {{ .Values.release.apiVersion | quote }}
+  bundle-format: {{ .Values.release.bundleFormat | quote }}
+  server-image: {{ include "nuriteo.image" (list . .Values.images.server) | quote }}
+  web-image: {{ include "nuriteo.image" (list . .Values.images.web) | quote }}
+

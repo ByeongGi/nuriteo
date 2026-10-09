@@ -1,0 +1,59 @@
+global:
+  imageRegistry: ghcr.io/nuriteo
+  imagePullSecrets: []
+
+release:
+  lineage: nuriteo-self-hosted-v1
+  apiVersion: "1.0.0"
+  bundleFormat: project-bundle-v1
+
+images:
+  server:
+    repository: nuriteo-server
+    digest: sha256:1a144aded2998a652093435a658c51a247354a635e4b46be13bddfc91d477c92
+    pullPolicy: IfNotPresent
+  web:
+    repository: nuriteo-web
+    digest: sha256:69dbee9f5b3abff0aaff99fc59c296cf4eaa3ed149620644bb6922341592a13a
+    pullPolicy: IfNotPresent
+
+externalUrl: https://nuriteo.example.com
+preview:
+  baseDomain: preview.nuriteo.example.com
+  wildcardReady: false
+
+postgresql:
+  existingSecret:
+    name: nuriteo-postgresql
+    databaseUrlKey: database-url
+    caKey: ca.crt
+
+objectStorage:
+  mode: external
+  endpoint: https://s3.example.com
+  region: us-east-1
+  bucket: nuriteo
+  addressingStyle: path
+  credentialProvider: static
+  existingSecret:
+    name: nuriteo-object-storage
+    accessKeyIdKey: access-key-id
+    secretAccessKeyKey: secret-access-key
+    sessionTokenKey: ""
+    caKey: ca.crt
+
+applicationSecrets:
+  existingSecret:
+    name: nuriteo-application
+    masterKeyKey: master-key
+    saveIdempotencyKey: save-idempotency-key
+    previewSigningKey: preview-signing-key
+
+bootstrapAdmin:
+  enabled: false
+  email: ""
+  name: ""
+  existingSecret:
+    name: ""
+    passwordKey: password
+
