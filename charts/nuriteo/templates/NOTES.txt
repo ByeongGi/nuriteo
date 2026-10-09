@@ -1,10 +1,12 @@
-NURITEO chart skeleton rendered successfully.
+NURITEO workloads and lifecycle Jobs rendered successfully.
 
-This K8S-001 chart emits only the immutable release contract. Workloads, migration
-Jobs, Secret/ConfigMap wiring, routing and production hardening are added by the
-following K8S tasks. No PostgreSQL resource or data PVC is owned by this chart.
+Helm blocks install/upgrade on the ordered preflight and migration hooks before
+applying either Deployment. No PostgreSQL resource, database or data PVC is owned
+by this chart. Inspect retained failed Jobs before retrying an operation.
 
 Pinned application images:
   Server: {{ include "nuriteo.image" (list . .Values.images.server) }}
   Web:    {{ include "nuriteo.image" (list . .Values.images.web) }}
 
+The checked-in digests are the GATE-005 baseline. Use only a release-generated,
+paired RC digest set for actual deployment qualification.

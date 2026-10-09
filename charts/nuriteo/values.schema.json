@@ -11,6 +11,10 @@
     "preview",
     "runtimeConfig",
     "rollout",
+    "serviceAccount",
+    "jobs",
+    "core",
+    "web",
     "postgresql",
     "objectStorage",
     "applicationSecrets",
@@ -118,6 +122,46 @@
           "$ref": "#/definitions/revision",
           "description": "Opaque generation changed by the operator after rotating referenced Secrets. It must not be derived from secret contents."
         }
+      }
+    },
+    "serviceAccount": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "automountServiceAccountToken"],
+      "properties": {
+        "name": { "$ref": "#/definitions/optionalKubernetesName" },
+        "automountServiceAccountToken": { "type": "boolean" }
+      }
+    },
+    "jobs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["preflight", "migration", "ttlSecondsAfterFinished"],
+      "properties": {
+        "preflight": { "$ref": "#/definitions/hookJob" },
+        "migration": { "$ref": "#/definitions/hookJob" },
+        "ttlSecondsAfterFinished": { "type": "integer", "minimum": 60, "maximum": 604800 }
+      }
+    },
+    "core": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["replicas", "service", "managementPort", "terminationGracePeriodSeconds"],
+      "properties": {
+        "replicas": { "type": "integer", "minimum": 1, "maximum": 100 },
+        "service": { "$ref": "#/definitions/service" },
+        "managementPort": { "type": "integer", "minimum": 1024, "maximum": 65535 },
+        "terminationGracePeriodSeconds": { "type": "integer", "minimum": 30, "maximum": 300 }
+      }
+    },
+    "web": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["replicas", "service", "terminationGracePeriodSeconds"],
+      "properties": {
+        "replicas": { "type": "integer", "minimum": 1, "maximum": 100 },
+        "service": { "$ref": "#/definitions/service" },
+        "terminationGracePeriodSeconds": { "type": "integer", "minimum": 10, "maximum": 300 }
       }
     },
     "postgresql": {
@@ -236,6 +280,24 @@
     }
   },
   "definitions": {
+    "hookJob": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "backoffLimit", "activeDeadlineSeconds"],
+      "properties": {
+        "enabled": { "const": true },
+        "backoffLimit": { "type": "integer", "minimum": 0, "maximum": 6 },
+        "activeDeadlineSeconds": { "type": "integer", "minimum": 30, "maximum": 3600 }
+      }
+    },
+    "service": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["port"],
+      "properties": {
+        "port": { "type": "integer", "minimum": 1, "maximum": 65535 }
+      }
+    },
     "image": {
       "type": "object",
       "additionalProperties": false,

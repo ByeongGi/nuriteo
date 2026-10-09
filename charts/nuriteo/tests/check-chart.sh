@@ -4,11 +4,13 @@ set -eu
 chart_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 output_file=$(mktemp "${TMPDIR:-/tmp}/nuriteo-chart.XXXXXX")
 rotated_file=$(mktemp "${TMPDIR:-/tmp}/nuriteo-chart-rotated.XXXXXX")
+upgrade_file=$(mktemp "${TMPDIR:-/tmp}/nuriteo-chart-upgrade.XXXXXX")
 error_file=$(mktemp "${TMPDIR:-/tmp}/nuriteo-chart-error.XXXXXX")
-trap 'rm -f "$output_file" "$rotated_file" "$error_file"' EXIT HUP INT TERM
+trap 'rm -f "$output_file" "$rotated_file" "$upgrade_file" "$error_file"' EXIT HUP INT TERM
 
 helm lint --strict "$chart_dir"
 helm template nuriteo "$chart_dir" --namespace nuriteo >"$output_file"
+helm template nuriteo "$chart_dir" --namespace nuriteo --is-upgrade >"$upgrade_file"
 
 grep -F 'nuriteo.dev/contract: digest-pinned-pair-v1' "$output_file" >/dev/null
 grep -F 'ghcr.io/nuriteo/nuriteo-server@sha256:1a144aded2998a652093435a658c51a247354a635e4b46be13bddfc91d477c92' "$output_file" >/dev/null
@@ -23,6 +25,24 @@ grep -F 'secretName: nuriteo-postgresql' "$output_file" >/dev/null
 grep -F 'secretName: nuriteo-object-storage' "$output_file" >/dev/null
 grep -F 'secretName: nuriteo-application' "$output_file" >/dev/null
 grep -F 'defaultMode: 0400' "$output_file" >/dev/null
+test "$(grep -c '^kind: Deployment$' "$output_file")" -eq 2
+test "$(grep -c '^kind: Service$' "$output_file")" -eq 2
+test "$(grep -c '^kind: Job$' "$output_file")" -eq 2
+test "$(grep -c 'helm.sh/hook: pre-install,pre-upgrade' "$output_file")" -eq 2
+grep -F 'helm.sh/hook-weight: "-20"' "$output_file" >/dev/null
+grep -F 'helm.sh/hook-weight: "-10"' "$output_file" >/dev/null
+test "$(grep -c 'backoffLimit: 0' "$output_file")" -eq 2
+grep -F -- '- "storage-check"' "$output_file" >/dev/null
+grep -F -- '- "upgrade-preflight"' "$upgrade_file" >/dev/null
+grep -F 'args: ["migrate"]' "$output_file" >/dev/null
+grep -F 'httpGet: { path: /health/live, port: http }' "$output_file" >/dev/null
+grep -F 'httpGet: { path: /health/ready, port: http }' "$output_file" >/dev/null
+grep -F 'httpGet: { path: /sign-in, port: http }' "$output_file" >/dev/null
+
+if grep -F 'helm.sh/hook-delete-policy: hook-succeeded' "$output_file" >/dev/null; then
+  echo 'completed or failed hook evidence must be retained until the next attempt' >&2
+  exit 1
+fi
 
 if grep -Eq '^(kind: Secret|data:.*password|stringData:)' "$output_file"; then
   echo 'rendered chart must not create or inline Secret values' >&2
@@ -90,6 +110,13 @@ fi
 grep -F '/runtimeConfig/existingConfigMap' "$error_file" >/dev/null
 
 if helm template nuriteo "$chart_dir" \
+  --set jobs.migration.enabled=false >"$output_file" 2>"$error_file"; then
+  echo 'expected disabling the migration rollout fence to fail schema validation' >&2
+  exit 1
+fi
+grep -F '/jobs/migration/enabled' "$error_file" >/dev/null
+
+if helm template nuriteo "$chart_dir" \
   --set-string externalUrl=https://admin:password@nuriteo.example.com \
   >"$output_file" 2>"$error_file"; then
   echo 'expected credential-bearing external URL to fail schema validation' >&2
@@ -105,4 +132,13 @@ if helm template nuriteo "$chart_dir" \
 fi
 grep -F '/objectStorage/endpoint' "$error_file" >/dev/null
 
-echo 'nuriteo Helm chart contract ok (schema, render, paired digests, secret refs, rollout checksums)'
+helm template nuriteo "$chart_dir" \
+  --set bootstrapAdmin.enabled=true \
+  --set-string bootstrapAdmin.email=admin@example.com \
+  --set-string bootstrapAdmin.name=Administrator \
+  --set-string bootstrapAdmin.existingSecret.name=nuriteo-bootstrap >"$rotated_file"
+grep -F 'app.kubernetes.io/component: bootstrap-admin' "$rotated_file" >/dev/null
+grep -F 'helm.sh/hook-weight: "-5"' "$rotated_file" >/dev/null
+grep -F 'secretName: nuriteo-bootstrap' "$rotated_file" >/dev/null
+
+echo 'nuriteo Helm chart contract ok (schema, digests, refs, rollout, ordered job fence, workloads, probes)'

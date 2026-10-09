@@ -15,6 +15,16 @@ app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 helm.sh/chart: {{ printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" }}
 {{- end -}}
 
+{{- define "nuriteo.selectorLabels" -}}
+app.kubernetes.io/name: {{ include "nuriteo.name" .root }}
+app.kubernetes.io/instance: {{ .root.Release.Name }}
+app.kubernetes.io/component: {{ .component }}
+{{- end -}}
+
+{{- define "nuriteo.serviceAccountName" -}}
+{{- default "default" .Values.serviceAccount.name -}}
+{{- end -}}
+
 {{- define "nuriteo.image" -}}
 {{- $root := index . 0 -}}
 {{- $image := index . 1 -}}
@@ -130,4 +140,46 @@ checksum/nuriteo-secret-refs: {{ include "nuriteo.secretRefsChecksum" . | quote 
     items:
       - key: {{ .Values.applicationSecrets.existingSecret.previewSigningKey }}
         path: preview-signing-key
+{{- end -}}
+
+{{- define "nuriteo.coreSecretVolumeMounts" -}}
+- name: database-secrets
+  mountPath: /run/secrets/nuriteo/database
+  readOnly: true
+- name: object-storage-secrets
+  mountPath: /run/secrets/nuriteo/object-storage
+  readOnly: true
+- name: application-secrets
+  mountPath: /run/secrets/nuriteo/application
+  readOnly: true
+{{- end -}}
+
+{{- define "nuriteo.webSecretVolumeMounts" -}}
+- name: application-secrets
+  mountPath: /run/secrets/nuriteo/application
+  readOnly: true
+{{- end -}}
+
+{{- define "nuriteo.podSecurityContext" -}}
+runAsNonRoot: true
+runAsUser: 65532
+runAsGroup: 65532
+fsGroup: 65532
+fsGroupChangePolicy: OnRootMismatch
+seccompProfile:
+  type: RuntimeDefault
+{{- end -}}
+
+{{- define "nuriteo.containerSecurityContext" -}}
+allowPrivilegeEscalation: false
+readOnlyRootFilesystem: true
+capabilities:
+  drop:
+    - ALL
+{{- end -}}
+
+{{- define "nuriteo.imagePullSecrets" -}}
+{{- range .Values.global.imagePullSecrets }}
+- name: {{ . }}
+{{- end }}
 {{- end -}}

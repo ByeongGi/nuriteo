@@ -33,6 +33,34 @@ rollout:
   # Do not use a hash or other derivation of the secret contents.
   externalSecretsRevision: initial
 
+serviceAccount:
+  name: ""
+  automountServiceAccountToken: false
+
+jobs:
+  preflight:
+    enabled: true
+    backoffLimit: 0
+    activeDeadlineSeconds: 300
+  migration:
+    enabled: true
+    backoffLimit: 0
+    activeDeadlineSeconds: 600
+  ttlSecondsAfterFinished: 86400
+
+core:
+  replicas: 1
+  service:
+    port: 8080
+  managementPort: 9090
+  terminationGracePeriodSeconds: 45
+
+web:
+  replicas: 1
+  service:
+    port: 3000
+  terminationGracePeriodSeconds: 30
+
 postgresql:
   existingSecret:
     name: nuriteo-postgresql
