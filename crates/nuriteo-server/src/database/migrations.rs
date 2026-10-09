@@ -78,6 +78,8 @@ const INVITATION_DELIVERY_TOKENS_SQL: &str =
     include_str!("../../migrations/0045_invitation_delivery_tokens.sql");
 const PUBLIC_PREVIEW_RATE_LIMITS_SQL: &str =
     include_str!("../../migrations/0046_public_preview_rate_limits.sql");
+const BACKUP_MANIFEST_STATE_SQL: &str =
+    include_str!("../../migrations/0047_backup_manifest_state.sql");
 
 // Two-key advisory locks use a namespace distinct from PostgreSQL's one-key
 // bigint locks. 0x4e555249 is the ASCII representation of "NURI".
@@ -457,6 +459,13 @@ pub(super) fn embedded_migrator() -> Migrator {
             Cow::Borrowed("shared Public Preview rate limits"),
             MigrationType::Simple,
             PUBLIC_PREVIEW_RATE_LIMITS_SQL.into_sql_str(),
+            false,
+        ),
+        Migration::new(
+            47,
+            Cow::Borrowed("backup manifest state and retention"),
+            MigrationType::Simple,
+            BACKUP_MANIFEST_STATE_SQL.into_sql_str(),
             false,
         ),
     ])
