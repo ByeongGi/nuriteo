@@ -22,6 +22,8 @@
     "check:self-hosted-beta-baseline": "node tooling/checks/check-self-hosted-beta-baseline.ts",
     "check:self-hosted-rc-baseline": "node tooling/checks/check-self-hosted-rc-baseline.ts",
     "check:self-hosted-legacy-replacement": "node tooling/checks/check-self-hosted-legacy-replacement.ts",
+    "check:self-hosted-upgrade-compatibility": "node tooling/checks/check-self-hosted-upgrade-compatibility.ts",
+    "test:self-hosted-upgrade-compatibility": "node --test tooling/checks/test/self-hosted-upgrade-compatibility.test.ts",
     "check:self-hosted-g0": "node tooling/checks/check-self-hosted-g0.ts",
     "check:self-hosted-g2": "node tooling/checks/check-self-hosted-g2.ts",
     "check:node-upgrade": "node tooling/checks/check-node-upgrade.ts",
