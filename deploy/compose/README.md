@@ -101,3 +101,21 @@ deploy/compose/test-compose.sh
 The fixture creates temporary credentials and private test CAs, renders the configuration and scans it for secret values, builds the application images, and exercises a clean-volume installation. It verifies ready Core/Web, the administrator/credential/audit transaction, migration readiness, same-origin relay Save, no bundled browser storage exposure or CORS, database and object persistence, exact CMP-002 CORS removal on same-volume restart, fresh-browser-context Resume, and failed-one-shot gating. It removes its project-scoped containers, networks, volumes, and temporary files. Set `NURITEO_COMPOSE_KEEP=1` only for local failure diagnosis.
 
 Local runs may use Docker Compose, a configured Podman Compose provider, or the pinned isolated provider selected with `NURITEO_COMPOSE_PROVIDER=uvx`. Podman results are useful compatibility information, but they are not official release acceptance. The official acceptance boundary is the manual `Docker Compose v2 / Linux qualification` job in `.github/workflows/docker-compose-qualification.yml`, which requires Docker Compose v2 on a Linux Docker Engine and runs the bounded clean-install/restart/persistence/failure journey.
+
+## Release upgrade helper
+
+Create a release-specific plan from `fixtures/upgrade-plan-v1.json`, replace the explicitly non-runnable `example.invalid` fixture references, and pin both the compatibility manifest and the published target release-set manifest by SHA-256. The helper requires the target release-set to name exactly one digest-pinned Server and Web pair for the same release lineage; arbitrary or mixed target images are rejected. With the normal Compose variables and secrets still exported, run:
+
+```sh
+node deploy/compose/upgrade.mjs upgrade /absolute/path/to/upgrade-plan.json
+```
+
+The helper verifies that the running Core and Web are the plan's supported source release, then runs the target Server image in this strict order: read-only `upgrade-preflight`, object-storage capability check, forward migration, Core replacement/readiness, Web replacement, and a bounded `/sign-in` HTTP readiness probe from inside the Web container. A preflight, object check, or migration failure exits before either workload is changed. A Core or Web readiness failure switches both workloads back to the manifest-compatible source application while preserving the migrated schema and objects, and verifies both source readiness boundaries again.
+
+Application rollback is explicit and never means database downgrade:
+
+```sh
+node deploy/compose/upgrade.mjs rollback /absolute/path/to/upgrade-plan.json
+```
+
+Rollback first runs the current candidate's preflight, requires the plan to declare that the previous application accepts the current schema and object format, and then replaces only Core and Web. The helper contains no down-migration path. If schema or object data must be reverted, use a coordinated full restore instead. `NURITEO_COMPOSE_COMMAND` defaults to `docker compose`; set it to `podman compose` for a Podman compatibility rehearsal.
