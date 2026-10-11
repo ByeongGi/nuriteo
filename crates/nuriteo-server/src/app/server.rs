@@ -25,6 +25,7 @@ use crate::notification::{
     ProductionEmailAttemptPreparer,
 };
 use crate::object_storage::{ObjectStorageConfig, OperationLimits, S3ObjectStore};
+use crate::observability::MetricsService;
 use crate::oidc::OidcHttpService;
 use crate::organization::{OrganizationHttpPolicy, OrganizationHttpService};
 use crate::policy::PolicyMaintenanceWorker;
@@ -42,7 +43,7 @@ use crate::smtp::SmtpEmailSender;
 use crate::team::{TeamHttpPolicy, TeamHttpService};
 
 use super::{
-    Supervisor, SupervisorConfig, WorkerError, apply_maintenance_gate,
+    Supervisor, SupervisorConfig, WorkerError, apply_maintenance_gate, apply_metrics,
     build_router_with_integration_ca_service,
 };
 use crate::maintenance::{MaintenanceGate, public_router as maintenance_public_router};
@@ -503,7 +504,9 @@ pub(crate) async fn run_server(
     );
     let router = router.merge(maintenance_public_router(maintenance_gate.clone()));
     let router = apply_maintenance_gate(router, maintenance_gate);
-    let management_router = operations.router();
+    let metrics = MetricsService::new();
+    let router = apply_metrics(router, metrics.clone());
+    let management_router = operations.with_metrics(metrics).router();
     let cleanup_drain_timeout = global
         .server
         .shutdown_drain_timeout

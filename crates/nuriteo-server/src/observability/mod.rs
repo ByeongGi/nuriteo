@@ -26,6 +26,10 @@ use tracing_subscriber::registry::LookupSpan;
 
 use crate::VERSION;
 
+mod metrics;
+
+pub use metrics::{MetricsService, observe_http};
+
 const REDACTED: &str = "[REDACTED]";
 const SERVICE_NAME: &str = "nuriteo-server";
 const UNCLASSIFIED_EVENT: &str = "application.event";

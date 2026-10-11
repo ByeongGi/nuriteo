@@ -11,6 +11,7 @@ use tokio::sync::Semaphore;
 use tokio::time;
 
 use crate::database::DatabasePool;
+use crate::observability::MetricsService;
 
 const MAX_STATUS_CONCURRENCY: usize = 4;
 
@@ -84,6 +85,7 @@ pub struct CleanupOperationsService {
     pool: DatabasePool,
     policy: CleanupOperationsPolicy,
     gate: Arc<Semaphore>,
+    metrics: MetricsService,
 }
 
 impl CleanupOperationsService {
@@ -93,7 +95,14 @@ impl CleanupOperationsService {
             pool,
             policy,
             gate: Arc::new(Semaphore::new(MAX_STATUS_CONCURRENCY)),
+            metrics: MetricsService::new(),
         }
+    }
+
+    #[must_use]
+    pub fn with_metrics(mut self, metrics: MetricsService) -> Self {
+        self.metrics = metrics;
+        self
     }
 
     pub fn router(self) -> Router {
@@ -187,7 +196,7 @@ async fn cleanup_metrics(State(service): State<CleanupOperationsService>) -> imp
         Ok(snapshot) => {
             let degraded = u8::from(snapshot.state == CleanupOperatorState::Degraded);
             let oldest = snapshot.oldest_eligible_age_seconds.unwrap_or(0);
-            let body = format!(
+            let cleanup = format!(
                 "# TYPE nuriteo_cleanup_queue_depth gauge\n\
                  nuriteo_cleanup_queue_depth {}\n\
                  # TYPE nuriteo_cleanup_oldest_eligible_age_seconds gauge\n\
@@ -205,9 +214,18 @@ async fn cleanup_metrics(State(service): State<CleanupOperationsService>) -> imp
                 snapshot.retry_count,
                 snapshot.failed_count,
             );
+            let mut body = service.metrics.render();
+            if let Some(position) = body.rfind("# EOF\n") {
+                body.truncate(position);
+            }
+            body.push_str(&cleanup);
+            body.push_str("# EOF\n");
             (
                 StatusCode::OK,
-                [(header::CONTENT_TYPE, "text/plain; version=0.0.4")],
+                [(
+                    header::CONTENT_TYPE,
+                    "application/openmetrics-text; version=1.0.0; charset=utf-8",
+                )],
                 body,
             )
                 .into_response()

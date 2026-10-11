@@ -10,6 +10,7 @@ use crate::invitations::InvitationHttpService;
 use crate::maintenance::MaintenanceGate;
 use crate::mfa::{MfaHttpService, MfaHttpServiceError};
 use crate::notification::NotificationHttpService;
+use crate::observability::{MetricsService, observe_http};
 use crate::oidc::OidcHttpService;
 use crate::openapi;
 use crate::organization::OrganizationHttpService;
@@ -458,6 +459,12 @@ pub(crate) fn build_router_with_integration_ca_service(
         .method_not_allowed_fallback(method_not_allowed)
         .layer(middleware::from_fn(ensure_api_cache_policy))
         .layer(middleware::from_fn(propagate_request_id))
+}
+
+pub(crate) fn apply_metrics(router: Router, metrics: MetricsService) -> Router {
+    router.layer(middleware::from_fn(move |request, next| {
+        observe_http(metrics.clone(), request, next)
+    }))
 }
 
 pub(crate) fn apply_maintenance_gate(router: Router, gate: MaintenanceGate) -> Router {

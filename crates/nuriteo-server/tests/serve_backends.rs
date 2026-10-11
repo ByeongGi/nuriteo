@@ -25,6 +25,7 @@ const S3_CA_ENV: &str = "NURITEO_TEST_S3_CA_FILE";
 const ACCESS_KEY: &str = "integration-access";
 const SECRET_KEY: &str = "integration-secret-0123456789";
 const SAVE_IDEMPOTENCY_SECRET: &str = "WlpaWlpaWlpaWlpaWlpaWlpaWlpaWlpaWlpaWlpaWlo=";
+const MASTER_KEY: &str = "WVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVk=";
 const BUCKET: &str = "nuriteo-srv-004";
 
 #[tokio::test]
@@ -238,6 +239,8 @@ fn spawn_server(
         .env("NURITEO_S3_SECRET_ACCESS_KEY", SECRET_KEY)
         .env("NURITEO_S3_CA_FILE", s3_ca_path)
         .env("NURITEO_SAVE_IDEMPOTENCY_SECRET_FILE", save_secret_path)
+        .env("NURITEO_MASTER_KEY", MASTER_KEY)
+        .env("NURITEO_MASTER_KEY_VERSION", "1")
         .env("NURITEO_SAVE_DEFAULT_QUOTA_BYTES", "10737418240")
         .env("NURITEO_SAVE_UPLOAD_TRANSPORT", "direct")
         .stdout(Stdio::piped())
@@ -322,10 +325,15 @@ async fn wait_for_live(child: &mut ChildGuard, url: &str) {
     let client = reqwest::Client::builder().no_proxy().build().unwrap();
     let deadline = Instant::now() + Duration::from_secs(8);
     loop {
-        assert!(
-            child.child.try_wait().unwrap().is_none(),
-            "serve process exited before liveness"
-        );
+        if let Some(status) = child.child.try_wait().unwrap() {
+            child.reaped = true;
+            let output = read_output(&mut child.child, status);
+            panic!(
+                "serve process exited before liveness: status={:?}, stderr={}",
+                output.status.code(),
+                String::from_utf8_lossy(&output.stderr)
+            );
+        }
         if let Ok(response) = client.get(url).send().await
             && response.status() == reqwest::StatusCode::OK
         {
@@ -379,7 +387,7 @@ async fn assert_metrics(url: &str) {
             .headers()
             .get(reqwest::header::CONTENT_TYPE)
             .unwrap(),
-        "text/plain; version=0.0.4"
+        "application/openmetrics-text; version=1.0.0; charset=utf-8"
     );
     let body = response.text().await.unwrap();
     for metric in [
@@ -389,12 +397,16 @@ async fn assert_metrics(url: &str) {
         "nuriteo_cleanup_retry_count 0",
         "nuriteo_cleanup_failed_count 0",
         "nuriteo_cleanup_degraded 0",
+        "nuriteo_build_info{version=\"",
+        "nuriteo_http_requests_total{method=\"GET\",route=\"/health/live\",status_class=\"2xx\"} 1",
+        "nuriteo_http_request_duration_seconds_bucket",
     ] {
         assert!(body.contains(metric), "missing metric: {metric}");
     }
     for prohibited in [ACCESS_KEY, SECRET_KEY, BUCKET, "object_key", "session_id"] {
         assert!(!body.contains(prohibited));
     }
+    assert!(body.ends_with("# EOF\n"));
 }
 
 async fn run_healthcheck(url: String) -> Output {
