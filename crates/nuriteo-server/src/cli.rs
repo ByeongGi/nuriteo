@@ -1,10 +1,13 @@
 use std::ffi::{OsStr, OsString};
+use std::fs::{File, OpenOptions};
 use std::io::{self, Write};
+use std::path::Path;
 
 use clap::error::ErrorKind;
 use clap::{Arg, ArgAction, ArgMatches, Command};
 
 use crate::app::run_server;
+use crate::backup::{BackupEngine, DirectoryBackupRepository, PortableLimits, PrunePolicy};
 use crate::bootstrap::{
     BootstrapAdminInput, BootstrapErrorCategory, BootstrapOutcome, bootstrap_administrator,
 };
@@ -20,7 +23,18 @@ use crate::{CommandStatus, VERSION};
 
 const BINARY_NAME: &str = "nuriteo-server";
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum BackupCommand {
+    Create,
+    List,
+    Verify { backup_id: String },
+    Export { backup_id: String, output: String },
+    Import { input: String },
+    Restore { backup_id: String },
+    Prune,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum OperationalCommand {
     Serve,
     Migrate,
@@ -29,9 +43,10 @@ pub enum OperationalCommand {
     Healthcheck,
     StorageCheck,
     StorageConfigureBrowserUploadCors,
+    Backup(BackupCommand),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CliAction {
     Version,
     Operational(OperationalCommand),
@@ -39,7 +54,7 @@ pub enum CliAction {
 
 impl OperationalCommand {
     #[must_use]
-    pub const fn name(self) -> &'static str {
+    pub const fn name(&self) -> &'static str {
         match self {
             Self::Serve => "serve",
             Self::Migrate => "migrate",
@@ -48,6 +63,7 @@ impl OperationalCommand {
             Self::Healthcheck => "healthcheck",
             Self::StorageCheck => "storage-check",
             Self::StorageConfigureBrowserUploadCors => "storage-configure-browser-upload-cors",
+            Self::Backup(_) => "backup",
         }
     }
 }
@@ -100,6 +116,51 @@ pub fn root_command() -> Command {
                 .about("Explicitly replace bucket CORS with the NURITEO browser upload policy")
                 .disable_version_flag(true),
         )
+        .subcommand(backup_command())
+}
+
+fn backup_command() -> Command {
+    let backup_id = || Arg::new("backup-id").required(true).value_name("BACKUP_ID");
+    Command::new("backup")
+        .about("Create, verify, transfer, restore, and prune backups")
+        .disable_version_flag(true)
+        .subcommand_required(true)
+        .subcommand(Command::new("create").about("Create and verify an online backup"))
+        .subcommand(Command::new("list").about("List complete restore points"))
+        .subcommand(
+            Command::new("verify")
+                .about("Verify a complete restore point")
+                .arg(backup_id()),
+        )
+        .subcommand(
+            Command::new("export")
+                .about("Write a canonical portable backup stream")
+                .arg(backup_id())
+                .arg(
+                    Arg::new("format")
+                        .long("format")
+                        .required(true)
+                        .value_parser(["portable-v1"]),
+                )
+                .arg(Arg::new("output").long("output").required(true)),
+        )
+        .subcommand(
+            Command::new("import")
+                .about("Stage and verify a portable backup stream")
+                .arg(
+                    Arg::new("format")
+                        .long("format")
+                        .required(true)
+                        .value_parser(["portable-v1"]),
+                )
+                .arg(Arg::new("input").long("input").required(true)),
+        )
+        .subcommand(
+            Command::new("restore")
+                .about("Restore into an empty staged target")
+                .arg(backup_id()),
+        )
+        .subcommand(Command::new("prune").about("Prune unretained restore points"))
 }
 
 pub fn parse<I, S>(args: I) -> Result<CliAction, clap::Error>
@@ -139,7 +200,7 @@ where
             writeln!(stdout, "{BINARY_NAME} {VERSION}")?;
             Ok(CommandStatus::Success)
         }
-        Ok(CliAction::Operational(command)) => unavailable(command, stderr),
+        Ok(CliAction::Operational(command)) => unavailable(&command, stderr),
         Err(error) if is_successful_display(error.kind()) => {
             write!(stdout, "{error}")?;
             Ok(CommandStatus::Success)
@@ -186,6 +247,9 @@ where
         }
         Ok(CliAction::Operational(OperationalCommand::StorageConfigureBrowserUploadCors)) => {
             storage_configure_browser_upload_cors(stdout, stderr).await
+        }
+        Ok(CliAction::Operational(OperationalCommand::Backup(command))) => {
+            run_backup_command(command, stdout, stderr)
         }
         Err(error) if is_successful_display(error.kind()) => {
             write!(stdout, "{error}")?;
@@ -447,6 +511,7 @@ fn command_from_matches(matches: &ArgMatches) -> Result<CliAction, clap::Error> 
         Some("storage-configure-browser-upload-cors") => Ok(CliAction::Operational(
             OperationalCommand::StorageConfigureBrowserUploadCors,
         )),
+        Some("backup") => backup_from_matches(matches),
         _ => Err(root_command().error(
             ErrorKind::MissingSubcommand,
             "an operational command is required",
@@ -454,11 +519,160 @@ fn command_from_matches(matches: &ArgMatches) -> Result<CliAction, clap::Error> 
     }
 }
 
+fn backup_from_matches(matches: &ArgMatches) -> Result<CliAction, clap::Error> {
+    let (_, backup) = matches.subcommand().ok_or_else(|| {
+        root_command().error(ErrorKind::MissingSubcommand, "backup command required")
+    })?;
+    let command = match backup.subcommand() {
+        Some(("create", _)) => BackupCommand::Create,
+        Some(("list", _)) => BackupCommand::List,
+        Some(("verify", args)) => BackupCommand::Verify {
+            backup_id: required_string(args, "backup-id")?,
+        },
+        Some(("export", args)) => BackupCommand::Export {
+            backup_id: required_string(args, "backup-id")?,
+            output: required_string(args, "output")?,
+        },
+        Some(("import", args)) => BackupCommand::Import {
+            input: required_string(args, "input")?,
+        },
+        Some(("restore", args)) => BackupCommand::Restore {
+            backup_id: required_string(args, "backup-id")?,
+        },
+        Some(("prune", _)) => BackupCommand::Prune,
+        _ => {
+            return Err(root_command().error(
+                ErrorKind::MissingSubcommand,
+                "a backup subcommand is required",
+            ));
+        }
+    };
+    Ok(CliAction::Operational(OperationalCommand::Backup(command)))
+}
+
+fn required_string(matches: &ArgMatches, name: &str) -> Result<String, clap::Error> {
+    matches.get_one::<String>(name).cloned().ok_or_else(|| {
+        root_command().error(
+            ErrorKind::MissingRequiredArgument,
+            "required backup argument missing",
+        )
+    })
+}
+
+fn run_backup_command<O: Write, E: Write>(
+    command: BackupCommand,
+    stdout: &mut O,
+    stderr: &mut E,
+) -> io::Result<CommandStatus> {
+    let repository_root = match std::env::var_os("NURITEO_BACKUP_REPOSITORY_DIR") {
+        Some(root) => root,
+        None => return backup_failure(stderr, "configuration"),
+    };
+    let repository = match DirectoryBackupRepository::open(Path::new(&repository_root)) {
+        Ok(repository) => repository,
+        Err(_) => return backup_failure(stderr, "repository"),
+    };
+    let engine = BackupEngine::new(repository, PortableLimits::default());
+    let result = match command {
+        BackupCommand::List => engine.list().and_then(|backups| {
+            serde_json::to_writer(&mut *stdout, &backups)
+                .map_err(|_| crate::backup::BackupEngineError::Io)?;
+            writeln!(stdout).map_err(|_| crate::backup::BackupEngineError::Io)
+        }),
+        BackupCommand::Verify { backup_id } => engine.verify(&backup_id).and_then(|report| {
+            writeln!(
+                stdout,
+                "backup verified: {} entries={} bytes={}",
+                report.backup_id, report.entries, report.bytes
+            )
+            .map_err(|_| crate::backup::BackupEngineError::Io)
+        }),
+        BackupCommand::Export { backup_id, output } => {
+            if output == "-" {
+                engine.export(&backup_id, stdout)
+            } else {
+                match OpenOptions::new().write(true).create_new(true).open(output) {
+                    Ok(mut file) => engine.export(&backup_id, &mut file),
+                    Err(_) => Err(crate::backup::BackupEngineError::Io),
+                }
+            }
+        }
+        BackupCommand::Import { input } => {
+            let imported = if input == "-" {
+                let mut stdin = io::stdin().lock();
+                engine.import(&mut stdin)
+            } else {
+                File::open(input)
+                    .map_err(|_| crate::backup::BackupEngineError::Io)
+                    .and_then(|mut file| engine.import(&mut file))
+            };
+            imported.and_then(|report| {
+                writeln!(
+                    stdout,
+                    "backup imported: {} entries={} bytes={}",
+                    report.backup_id, report.entries, report.bytes
+                )
+                .map_err(|_| crate::backup::BackupEngineError::Io)
+            })
+        }
+        BackupCommand::Prune => {
+            let protected_backup_ids = std::env::var("NURITEO_BACKUP_PROTECTED_IDS")
+                .unwrap_or_default()
+                .split(',')
+                .filter(|value| !value.is_empty())
+                .map(str::to_owned)
+                .collect();
+            engine
+                .prune(&PrunePolicy {
+                    protected_backup_ids,
+                    max_deletions: 100,
+                })
+                .and_then(|deleted| {
+                    writeln!(stdout, "backup prune complete: deleted={}", deleted.len())
+                        .map_err(|_| crate::backup::BackupEngineError::Io)
+                })
+        }
+        // Production create/restore require the PostgreSQL + S3 coordinator,
+        // not the local repository adapter used for portable transfer tests.
+        BackupCommand::Create | BackupCommand::Restore { .. } => {
+            return backup_failure(stderr, "coordinator-unavailable");
+        }
+    };
+    match result {
+        Ok(()) => Ok(CommandStatus::Success),
+        Err(error) => backup_failure(stderr, backup_error_category(error)),
+    }
+}
+
+const fn backup_error_category(error: crate::backup::BackupEngineError) -> &'static str {
+    use crate::backup::BackupEngineError;
+    match error {
+        BackupEngineError::NotFound => "not-found",
+        BackupEngineError::NotComplete => "not-complete",
+        BackupEngineError::AlreadyExists => "already-exists",
+        BackupEngineError::Portable(_) => "invalid-portable-backup",
+        BackupEngineError::TargetNotEmpty => "target-not-empty",
+        BackupEngineError::RestoreInterrupted => "restore-interrupted",
+        BackupEngineError::RestoreValidation => "restore-validation",
+        BackupEngineError::RetentionProtected => "retention-protected",
+        BackupEngineError::InvalidPolicy => "invalid-policy",
+        BackupEngineError::InvalidRepository | BackupEngineError::Io => "repository",
+    }
+}
+
+fn backup_failure<E: Write>(stderr: &mut E, category: &str) -> io::Result<CommandStatus> {
+    writeln!(stderr, "{BINARY_NAME}: backup failed ({category})")?;
+    Ok(CommandStatus::Failure)
+}
+
 const fn is_successful_display(kind: ErrorKind) -> bool {
     matches!(kind, ErrorKind::DisplayHelp | ErrorKind::DisplayVersion)
 }
 
-fn unavailable<E: Write>(command: OperationalCommand, stderr: &mut E) -> io::Result<CommandStatus> {
+fn unavailable<E: Write>(
+    command: &OperationalCommand,
+    stderr: &mut E,
+) -> io::Result<CommandStatus> {
     writeln!(
         stderr,
         "{BINARY_NAME}: `{}` is not available in this build",
