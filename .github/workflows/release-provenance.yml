@@ -50,6 +50,7 @@ jobs:
       - run: node tooling/checks/check-release-ops-sg29.ts
       - run: node tooling/checks/check-public-beta-readiness.ts
       - run: node tooling/checks/check-release-provenance.ts
+      - run: node tooling/release/offline-manifest.test.mjs
       - run: node tooling/checks/check-workspace.ts
       - uses: actions/upload-artifact@v4
         with:
