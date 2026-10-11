@@ -165,6 +165,52 @@ async fn admin_settings_audit_and_operations_http_are_safe_and_transactional() {
     assert_problem(
         request(
             &router,
+            Some(&member),
+            Method::GET,
+            "/api/v1/admin/support-bundle",
+            None,
+            None,
+        )
+        .await,
+        StatusCode::FORBIDDEN,
+    )
+    .await;
+    let bundle = request(
+        &router,
+        Some(&admin),
+        Method::GET,
+        "/api/v1/admin/support-bundle",
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(bundle.status(), StatusCode::OK);
+    assert_eq!(bundle.headers()[CACHE_CONTROL], "private, no-store");
+    let bundle = json_body(bundle).await;
+    assert_eq!(bundle["schemaVersion"], 1);
+    assert_eq!(bundle["format"], "nuriteo-support-bundle-v1+json");
+    assert_eq!(bundle["configuration"]["databaseSchemaVersion"], 50);
+    assert_eq!(bundle["configuration"]["settingRegistryVersion"], 4);
+    assert_eq!(bundle["integrations"].as_array().unwrap().len(), 3);
+    assert_eq!(
+        bundle["diagnostics"].as_array().unwrap().last().unwrap()["operationId"],
+        REQUEST_ID
+    );
+    assert_eq!(bundle["retainedUntil"], Value::Null);
+    let serialized_bundle = bundle.to_string();
+    assert!(serialized_bundle.len() < 65_536);
+    for forbidden in [
+        PASSWORD,
+        PASSWORD_HASH,
+        "admin@example.test",
+        "member@example.test",
+    ] {
+        assert!(!serialized_bundle.contains(forbidden));
+    }
+
+    assert_problem(
+        request(
+            &router,
             Some(&admin),
             Method::PATCH,
             SETTING_PATH,

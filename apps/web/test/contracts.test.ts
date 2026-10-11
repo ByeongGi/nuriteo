@@ -50,6 +50,7 @@ function testServerFirstBoundaries(): void {
     "src/app/(authenticated)/admin/mfa/policy-editor.tsx",
     "src/app/(authenticated)/admin/notifications/email-delivery-console.tsx",
     "src/app/(authenticated)/admin/oidc/provider-console.tsx",
+    "src/app/(authenticated)/admin/operations/support-bundle-download.tsx",
     "src/app/(authenticated)/admin/registries/registry-console.tsx",
     "src/app/(authenticated)/admin/settings/admin-settings.tsx",
     "src/app/(authenticated)/admin/updates/update-readiness-console.tsx",

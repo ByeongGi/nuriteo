@@ -7,6 +7,7 @@ import { PATCH as patchSetting } from "../src/app/api/v1/admin/settings/[key]/ro
 import { POST as previewImpact } from "../src/app/api/v1/admin/settings/[key]/impact/route.ts";
 import { GET as previewCleanup } from "../src/app/api/v1/admin/policy-cleanup/preview/route.ts";
 import { GET as getOperations } from "../src/app/api/v1/admin/operations/route.ts";
+import { GET as getSupportBundle } from "../src/app/api/v1/admin/support-bundle/route.ts";
 
 const webRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const originalFetch = globalThis.fetch;
@@ -16,11 +17,33 @@ try {
   await settingBffContract();
   await policyPreviewBffContract();
   await operationsBffContract();
+  await supportBundleBffContract();
   sourceContracts();
 } finally {
   globalThis.fetch = originalFetch;
   if (originalUrl === undefined) delete process.env.NURITEO_INTERNAL_API_URL;
   else process.env.NURITEO_INTERNAL_API_URL = originalUrl;
+}
+
+async function supportBundleBffContract(): Promise<void> {
+  let dispatched: { headers: Headers; method: string | undefined; url: string } | undefined;
+  globalThis.fetch = async (input, init) => {
+    dispatched = {
+      headers: new Headers(init?.headers),
+      method: init?.method,
+      url: String(input)
+    };
+    return Response.json({ schemaVersion: 1, format: "nuriteo-support-bundle-v1+json" });
+  };
+  const response = await getSupportBundle(new Request(
+    "https://nuriteo.example.test/api/v1/admin/support-bundle",
+    { headers: { cookie: "nuriteo_dev_session=admin", host: "nuriteo.example.test" } }
+  ));
+  assert.equal(response.status, 200);
+  assert.equal(dispatched?.method, "GET");
+  assert.equal(dispatched?.url, "http://core.internal:8080/api/v1/admin/support-bundle");
+  assert.equal(dispatched?.headers.get("cookie"), "nuriteo_dev_session=admin");
+  assert.equal(dispatched?.headers.get("authorization"), null);
 }
 
 async function policyPreviewBffContract(): Promise<void> {
@@ -130,6 +153,7 @@ function sourceContracts(): void {
   const navigation = read("src/app/(authenticated)/admin/admin-navigation.tsx");
   const operationsPage = read("src/app/(authenticated)/admin/operations/page.tsx");
   const operationsDashboard = read("src/app/(authenticated)/admin/operations/operations-dashboard.tsx");
+  const supportBundle = read("src/app/(authenticated)/admin/operations/support-bundle-download.tsx");
   const layout = read("src/app/(authenticated)/layout.tsx");
 
   assert.match(page, /is_instance_admin/u);
@@ -151,6 +175,10 @@ function sourceContracts(): void {
   assert.match(operationsPage, /getAdminOperations\(client\)/u);
   assert.match(operationsDashboard, /Detailed endpoints, credentials, and backend errors are never shown here/u);
   assert.match(operationsDashboard, /aria-labelledby="dependency-health-title"/u);
+  assert.match(operationsDashboard, /SupportBundleDownload preview=\{operations\.supportBundle\}/u);
+  assert.match(supportBundle, /Nothing is uploaded automatically/u);
+  assert.match(supportBundle, /bytes\.byteLength > preview\.maximumBytes/u);
+  assert.doesNotMatch(supportBundle, /localStorage|sessionStorage|dangerouslySetInnerHTML/u);
   assert.match(layout, /href="\/admin\/settings">Administration/u);
   assert.doesNotMatch(
     `${page}\n${settings}\n${operationsPage}\n${operationsDashboard}`,

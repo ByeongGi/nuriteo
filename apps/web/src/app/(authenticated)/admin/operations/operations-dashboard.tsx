@@ -6,6 +6,8 @@ import type {
   AdminUsage
 } from "@nuriteo/api-client";
 
+import { SupportBundleDownload } from "./support-bundle-download.tsx";
+
 export function OperationsDashboard({ operations }: { readonly operations: AdminOperations }) {
   return (
     <main id="main-content" className="workspace-page admin-operations-page">
@@ -66,6 +68,16 @@ export function OperationsDashboard({ operations }: { readonly operations: Admin
             Storage totals cover verified Bundle metadata and active reservations; they are not a
             provider billing estimate.
           </p>
+        </section>
+
+        <section className="admin-operations-card admin-operations-card--wide" aria-labelledby="support-bundle-title">
+          <header className="admin-section-heading">
+            <div>
+              <p className="eyebrow">Safe diagnostics</p>
+              <h2 id="support-bundle-title">Support bundle</h2>
+            </div>
+          </header>
+          <SupportBundleDownload preview={operations.supportBundle} />
         </section>
       </div>
     </main>

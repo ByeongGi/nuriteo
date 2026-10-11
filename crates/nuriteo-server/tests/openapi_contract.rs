@@ -223,6 +223,42 @@ fn operations_dashboard_is_admin_only_and_uses_safe_aggregate_schema() {
     }
 }
 
+#[test]
+fn support_bundle_is_admin_only_and_has_no_secret_bearing_fields() {
+    let document = serde_json::to_value(openapi::document()).unwrap();
+    let operation = &document["paths"]["/api/v1/admin/support-bundle"]["get"];
+    assert_eq!(operation["security"][0]["projectSessionCookie"], json!([]));
+    assert_eq!(
+        operation["responses"]["200"]["content"]["application/json"]["schema"]["$ref"],
+        "#/components/schemas/AdminSupportBundleView"
+    );
+    let bundle = &document["components"]["schemas"]["AdminSupportBundleView"]["properties"];
+    for required in [
+        "schemaVersion",
+        "format",
+        "generatedAt",
+        "release",
+        "configuration",
+        "operations",
+        "integrations",
+        "diagnostics",
+        "exclusions",
+    ] {
+        assert!(bundle.get(required).is_some());
+    }
+    for forbidden in [
+        "environment",
+        "cookie",
+        "token",
+        "authorization",
+        "source",
+        "payload",
+        "rows",
+    ] {
+        assert!(bundle.get(forbidden).is_none());
+    }
+}
+
 #[tokio::test]
 async fn serves_the_versioned_document_from_the_application_router() {
     let response = get(build_router(), DOCUMENT_PATH).await;
@@ -285,6 +321,7 @@ async fn serves_the_versioned_document_from_the_application_router() {
             "/api/v1/admin/settings/{key}",
             "/api/v1/admin/settings/{key}/impact",
             "/api/v1/admin/status",
+            "/api/v1/admin/support-bundle",
             "/api/v1/admin/updates/approval",
             "/api/v1/admin/updates/history",
             "/api/v1/admin/updates/readiness",

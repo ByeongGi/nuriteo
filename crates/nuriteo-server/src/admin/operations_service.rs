@@ -55,6 +55,37 @@ pub struct AdminOperationsView {
     pub dependencies: AdminDependencyStatusView,
     pub cleanup: AdminCleanupQueueView,
     pub usage: AdminUsageView,
+    pub support_bundle: AdminSupportBundlePreviewView,
+}
+
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AdminSupportBundlePreviewView {
+    pub format: &'static str,
+    pub maximum_bytes: u32,
+    pub includes: Vec<&'static str>,
+    pub excludes: Vec<&'static str>,
+}
+
+pub(super) fn support_bundle_preview() -> AdminSupportBundlePreviewView {
+    AdminSupportBundlePreviewView {
+        format: "nuriteo-support-bundle-v1+json",
+        maximum_bytes: 65_536,
+        includes: vec![
+            "release and non-sensitive runtime identity",
+            "database schema and configuration fingerprint",
+            "dependency, cleanup, and aggregate usage state",
+            "integration kind and active/disabled counts",
+            "bounded diagnostic codes and operation ID",
+        ],
+        excludes: vec![
+            "Project source, Bundles, and object payloads",
+            "terminal output and runtime console text",
+            "environment values, cookies, tokens, and authorization headers",
+            "OIDC claims, private keys, CA PEM, and integration authentication material",
+            "request bodies, response bodies, and database application records",
+        ],
+    }
 }
 
 impl AdminHttpService {
@@ -91,6 +122,7 @@ impl AdminHttpService {
                     dependencies,
                     cleanup,
                     usage,
+                    support_bundle: support_bundle_preview(),
                 })
             })
             .await

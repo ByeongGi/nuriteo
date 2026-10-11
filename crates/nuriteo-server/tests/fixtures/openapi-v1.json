@@ -4031,6 +4031,73 @@
         ]
       }
     },
+    "/api/v1/admin/support-bundle": {
+      "get": {
+        "tags": [
+          "administration"
+        ],
+        "operationId": "support_bundle",
+        "responses": {
+          "200": {
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminSupportBundleView"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "504": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "projectSessionCookie": []
+          }
+        ]
+      }
+    },
     "/api/v1/admin/updates/approval": {
       "post": {
         "tags": [
@@ -16391,7 +16458,8 @@
           "overallState",
           "dependencies",
           "cleanup",
-          "usage"
+          "usage",
+          "supportBundle"
         ],
         "properties": {
           "cleanup": {
@@ -16405,6 +16473,9 @@
           },
           "overallState": {
             "$ref": "#/components/schemas/AdminOperationsState"
+          },
+          "supportBundle": {
+            "$ref": "#/components/schemas/AdminSupportBundlePreviewView"
           },
           "usage": {
             "$ref": "#/components/schemas/AdminUsageView"
@@ -16762,6 +16833,213 @@
             "minimum": 0
           },
           "settingRegistryVersion": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
+      "AdminSupportBundleConfigurationView": {
+        "type": "object",
+        "required": [
+          "databaseSchemaVersion",
+          "settingRegistryVersion",
+          "settingCount",
+          "fingerprint"
+        ],
+        "properties": {
+          "databaseSchemaVersion": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "fingerprint": {
+            "type": "string"
+          },
+          "settingCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "settingRegistryVersion": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
+      "AdminSupportBundleDiagnosticView": {
+        "type": "object",
+        "required": [
+          "sequence",
+          "occurredAtUnixMs",
+          "eventName",
+          "level"
+        ],
+        "properties": {
+          "code": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "eventName": {
+            "type": "string"
+          },
+          "level": {
+            "type": "string"
+          },
+          "occurredAtUnixMs": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "operationId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sequence": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "statusCode": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
+      "AdminSupportBundleIntegrationView": {
+        "type": "object",
+        "required": [
+          "kind",
+          "activeCount",
+          "disabledCount"
+        ],
+        "properties": {
+          "activeCount": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "disabledCount": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "kind": {
+            "type": "string"
+          }
+        }
+      },
+      "AdminSupportBundlePreviewView": {
+        "type": "object",
+        "required": [
+          "format",
+          "maximumBytes",
+          "includes",
+          "excludes"
+        ],
+        "properties": {
+          "excludes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "format": {
+            "type": "string"
+          },
+          "includes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "maximumBytes": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
+      "AdminSupportBundleReleaseView": {
+        "type": "object",
+        "required": [
+          "version",
+          "operatingSystem",
+          "architecture"
+        ],
+        "properties": {
+          "architecture": {
+            "type": "string"
+          },
+          "operatingSystem": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        }
+      },
+      "AdminSupportBundleView": {
+        "type": "object",
+        "required": [
+          "schemaVersion",
+          "format",
+          "generatedAt",
+          "release",
+          "configuration",
+          "operations",
+          "integrations",
+          "diagnostics",
+          "exclusions"
+        ],
+        "properties": {
+          "configuration": {
+            "$ref": "#/components/schemas/AdminSupportBundleConfigurationView"
+          },
+          "diagnostics": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminSupportBundleDiagnosticView"
+            }
+          },
+          "exclusions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "format": {
+            "type": "string"
+          },
+          "generatedAt": {
+            "type": "string"
+          },
+          "integrations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminSupportBundleIntegrationView"
+            }
+          },
+          "operations": {
+            "$ref": "#/components/schemas/AdminOperationsView"
+          },
+          "release": {
+            "$ref": "#/components/schemas/AdminSupportBundleReleaseView"
+          },
+          "retainedUntil": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "schemaVersion": {
             "type": "integer",
             "format": "int32",
             "minimum": 0

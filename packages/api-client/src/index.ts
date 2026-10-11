@@ -291,6 +291,7 @@ export type {
   AdminDependencyStatus,
   AdminOperations,
   AdminOperationsState,
+  AdminSupportBundlePreview,
   AdminUsage
 } from "./admin-operations.ts";
 export { OneTimeUrl } from "./one-time-url.ts";

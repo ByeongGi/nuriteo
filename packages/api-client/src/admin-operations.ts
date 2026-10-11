@@ -1,6 +1,7 @@
 import { type ApiResult, type DomainRequestOptions, validatedResult } from "./domain.ts";
 import type { ApiClient } from "./types.ts";
 import {
+  readBoundedArray,
   readBoundedString,
   readEnum,
   readExactRecord,
@@ -55,6 +56,14 @@ export interface AdminOperations {
   readonly dependencies: AdminDependencyStatus;
   readonly cleanup: AdminCleanupQueue;
   readonly usage: AdminUsage;
+  readonly supportBundle: AdminSupportBundlePreview;
+}
+
+export interface AdminSupportBundlePreview {
+  readonly format: "nuriteo-support-bundle-v1+json";
+  readonly maximumBytes: number;
+  readonly includes: readonly string[];
+  readonly excludes: readonly string[];
 }
 
 export async function getAdminOperations(
@@ -71,12 +80,14 @@ function parseOperations(value: unknown): AdminOperations {
     "dependencies",
     "generatedAt",
     "overallState",
+    "supportBundle",
     "usage"
   ]);
   const overallState = readEnum(record, "overallState", STATES);
   const dependencies = parseDependencies(record.dependencies);
   const cleanup = parseCleanup(record.cleanup);
   const usage = parseUsage(record.usage);
+  const supportBundle = parseSupportBundlePreview(record.supportBundle);
   const expectedOverall = dependencies.state === "nominal" &&
     cleanup.state === "nominal" && usage.state === "nominal"
     ? "nominal"
@@ -89,8 +100,28 @@ function parseOperations(value: unknown): AdminOperations {
     overallState,
     dependencies,
     cleanup,
-    usage
+    usage,
+    supportBundle
   };
+}
+
+function parseSupportBundlePreview(value: unknown): AdminSupportBundlePreview {
+  const record = readExactRecord(value, ["excludes", "format", "includes", "maximumBytes"]);
+  const format = readBoundedString(record, "format", 64);
+  if (format !== "nuriteo-support-bundle-v1+json") throw new TypeError("invalid support bundle format");
+  const maximumBytes = record.maximumBytes;
+  if (!Number.isSafeInteger(maximumBytes) || maximumBytes !== 65_536) {
+    throw new TypeError("invalid support bundle size");
+  }
+  const readItems = (key: "includes" | "excludes"): string[] =>
+    readBoundedArray(record, key, 10).map((item) => {
+      const projected = { item };
+      return readBoundedString(projected, "item", 256);
+    });
+  const includes = readItems("includes");
+  const excludes = readItems("excludes");
+  if (includes.length === 0 || excludes.length === 0) throw new TypeError("invalid support bundle contents");
+  return { format, maximumBytes, includes, excludes };
 }
 
 function parseDependencies(value: unknown): AdminDependencyStatus {

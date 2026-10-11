@@ -4,6 +4,7 @@ mod http_routes;
 mod http_service;
 mod maintenance;
 mod operations_service;
+mod support_bundle;
 mod update;
 
 use std::fmt;
@@ -44,7 +45,11 @@ pub use http_service::{
 pub use maintenance::AdminMaintenanceView;
 pub use operations_service::{
     AdminCleanupQueueView, AdminDependencyStatusView, AdminOperationsState, AdminOperationsView,
-    AdminUsageView,
+    AdminSupportBundlePreviewView, AdminUsageView,
+};
+pub use support_bundle::{
+    AdminSupportBundleConfigurationView, AdminSupportBundleDiagnosticView,
+    AdminSupportBundleIntegrationView, AdminSupportBundleReleaseView, AdminSupportBundleView,
 };
 pub use update::{
     AdminUpdateApprovalView, AdminUpdateCompatibilityView, AdminUpdateHistoryView,

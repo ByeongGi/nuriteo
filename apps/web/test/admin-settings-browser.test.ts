@@ -103,7 +103,22 @@ const core = http.createServer(async (request, response) => {
         verifiedBundles: 24,
         trackedPhysicalBytes: "1073741824",
         reservedBytes: "1048576"
+      },
+      supportBundle: {
+        format: "nuriteo-support-bundle-v1+json",
+        maximumBytes: 65536,
+        includes: ["release and non-sensitive runtime identity", "dependency health"],
+        excludes: ["Project source", "authentication material"]
       }
+    });
+  }
+  if (request.method === "GET" && requestPath === "/api/v1/admin/support-bundle") {
+    if (session !== "admin") return sendProblem(response, 403, "ADMIN_REQUIRED");
+    return sendJson(response, {
+      schemaVersion: 1,
+      format: "nuriteo-support-bundle-v1+json",
+      generatedAt: "2026-10-12T12:00:00Z",
+      diagnostics: [{ component: "dependencies", state: "degraded", code: "object_storage" }]
     });
   }
   if (
@@ -251,6 +266,12 @@ try {
     assert.equal(await page.getByText("The object storage readiness probe failed.", { exact: true }).count(), 1);
     assert.equal(await page.getByText("1 GiB", { exact: true }).count(), 1);
     assert.equal(await page.getByText("1 MiB", { exact: true }).count(), 1);
+    await page.getByRole("button", { name: "Download support bundle" }).waitFor();
+    const [download] = await Promise.all([
+      page.waitForEvent("download"),
+      page.getByRole("button", { name: "Download support bundle" }).click()
+    ]);
+    assert.match(download.suggestedFilename(), /^nuriteo-support-.+\.json$/u);
     assert.equal(
       await page.getByRole("navigation", { name: "Administration" })
         .getByRole("link", { name: "Operations" })

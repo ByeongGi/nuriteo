@@ -114,6 +114,13 @@ async function rejectsMalformedResponses(): Promise<void> {
     ApiInvalidResponseError
   );
   await assert.rejects(
+    () => getAdminOperations(single({
+      ...operations(),
+      supportBundle: { ...operations().supportBundle, maximumBytes: 1_000_000 }
+    })),
+    ApiInvalidResponseError
+  );
+  await assert.rejects(
     () => updateAdminSetting(
       single(setting(1, 168)),
       { key: "../unsafe", value: 3, version: 1 },
@@ -181,6 +188,12 @@ function operations() {
       verifiedBundles: 8,
       trackedPhysicalBytes: "1073741824",
       reservedBytes: "1024"
+    },
+    supportBundle: {
+      format: "nuriteo-support-bundle-v1+json",
+      maximumBytes: 65536,
+      includes: ["release and health"],
+      excludes: ["credentials and source"]
     }
   };
 }

@@ -23,7 +23,8 @@ use super::{
     AdminAuditRetentionPruneView, AdminBackupConsoleView, AdminBackupOperationRequest,
     AdminBackupPolicyUpdate, AdminHttpService, AdminHttpServiceError, AdminMaintenanceView,
     AdminOperationsView, AdminSettingListView, AdminSettingView, AdminStatusView,
-    AdminUpdateApprovalView, AdminUpdateHistoryView, AdminUpdateReadinessView,
+    AdminSupportBundleView, AdminUpdateApprovalView, AdminUpdateHistoryView,
+    AdminUpdateReadinessView,
 };
 
 const SETTINGS: &str = "/api/v1/admin/settings";
@@ -32,6 +33,7 @@ const SETTING_IMPACT: &str = "/api/v1/admin/settings/{key}/impact";
 const POLICY_CLEANUP_PREVIEW: &str = "/api/v1/admin/policy-cleanup/preview";
 const STATUS: &str = "/api/v1/admin/status";
 const OPERATIONS: &str = "/api/v1/admin/operations";
+const SUPPORT_BUNDLE: &str = "/api/v1/admin/support-bundle";
 const AUDIT_EVENTS: &str = "/api/v1/admin/audit-events";
 const AUDIT_EVENT: &str = "/api/v1/admin/audit-events/{eventId}";
 const AUDIT_EXPORT: &str = "/api/v1/admin/audit-events/export";
@@ -58,6 +60,7 @@ pub(crate) fn openapi_router(
         .routes(routes!(preview_policy_cleanup))
         .routes(routes!(admin_status))
         .routes(routes!(admin_operations))
+        .routes(routes!(support_bundle))
         .routes(routes!(list_audit_events))
         .routes(routes!(get_audit_event))
         .routes(routes!(export_audit_events))
@@ -590,6 +593,32 @@ async fn admin_operations(
         .operations(headers.request(BrowserMethod::Get))
         .await
         .map_err(|error| map_error(error, request_id, OPERATIONS))?;
+    Ok(private_no_store(Json(view).into_response()))
+}
+
+#[utoipa::path(
+    get,
+    path = SUPPORT_BUNDLE,
+    tag = "administration",
+    security(("projectSessionCookie" = [])),
+    responses(
+        (status = 200, body = AdminSupportBundleView, headers(("Cache-Control" = String))),
+        (status = 401, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+        (status = 403, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+        (status = 503, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+        (status = 504, body = crate::openapi::ProblemDetails, content_type = "application/problem+json")
+    )
+)]
+async fn support_bundle(
+    State(service): State<AdminHttpService>,
+    Extension(request_id): Extension<RequestId>,
+    request: Request,
+) -> Result<Response, HttpError> {
+    let headers = BrowserHeaders::read(request.headers(), &request_id, SUPPORT_BUNDLE)?;
+    let view = service
+        .support_bundle(headers.request(BrowserMethod::Get), request_id.as_str())
+        .await
+        .map_err(|error| map_error(error, request_id, SUPPORT_BUNDLE))?;
     Ok(private_no_store(Json(view).into_response()))
 }
 
