@@ -26,7 +26,7 @@ try {
     "2026-10-11T00:00:00.000Z",
   );
   fs.writeFileSync(path.join(root, "release-manifest.json"), `${JSON.stringify(manifest)}\n`);
-  assert.deepEqual(verifyManifest(manifest, inventory, root), { artifacts: 35, bundles: 2 });
+  assert.deepEqual(verifyManifest(manifest, inventory, root), { artifacts: 36, bundles: 2 });
   assert.equal(manifest.artifacts.filter(({ kind }) => kind === "oci-image").length, 6);
   assert.ok(manifest.artifacts.every(({ sha256 }) => /^[a-f0-9]{64}$/u.test(sha256)));
 

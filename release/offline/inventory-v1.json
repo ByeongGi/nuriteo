@@ -22,6 +22,7 @@
         { "id": "import-images", "kind": "script", "path": "scripts/import-images", "licenseRefs": ["nuriteo"] },
         { "id": "render-config", "kind": "script", "path": "scripts/render-config", "licenseRefs": ["nuriteo"] },
         { "id": "verify", "kind": "script", "path": "scripts/verify", "licenseRefs": ["nuriteo"] },
+        { "id": "verify-install", "kind": "script", "path": "scripts/verify-install", "licenseRefs": ["nuriteo"] },
         { "id": "helm-chart-sbom", "kind": "sbom", "path": "sbom/nuriteo-helm.spdx.json", "licenseRefs": ["nuriteo"] },
         { "id": "operations-image-sbom", "kind": "sbom", "path": "sbom/nuriteo-operations.spdx.json", "licenseRefs": ["nuriteo", "postgresql"] },
         { "id": "server-image-sbom", "kind": "sbom", "path": "sbom/nuriteo-server.spdx.json", "licenseRefs": ["nuriteo"] },

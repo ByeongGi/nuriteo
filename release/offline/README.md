@@ -68,3 +68,21 @@ helm upgrade --install nuriteo ./core/helm/nuriteo-0.1.0.tgz \
 The Helm chart archive is installed from the bundle. Operators must mirror any separately approved
 ingress, monitoring, or storage dependencies themselves; NURITEO does not contact an external chart or
 image registry during this procedure.
+
+Before applying the chart, generate and verify a restricted installation plan. Every PostgreSQL, S3,
+OIDC, SMTP, Git or other external dependency network must be listed explicitly; a default route such as
+`0.0.0.0/0` or `::/0` is rejected.
+
+```sh
+./scripts/verify-install \
+  /media/nuriteo-offline-1.0.0-rc.1 \
+  registry.internal:5443 nuriteo ./verified-install \
+  10.40.12.0/24 10.40.18.32/28
+
+helm upgrade --install nuriteo ./core/helm/nuriteo-0.1.0.tgz \
+  --values ./verified-install/configuration/helm-values-airgap.yaml
+```
+
+The verifier renders the bundled chart only, requires the four-policy default-deny profile, rejects
+public or tag-only workload images, and writes `install-plan.json` with the exact registry, images and
+allowed dependency CIDRs. Keep that plan with the installation evidence.

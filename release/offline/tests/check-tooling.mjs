@@ -22,7 +22,7 @@ try {
   for (const artifact of artifacts.values()) {
     const destination = path.join(bundle, artifact.path);
     fs.mkdirSync(path.dirname(destination), { recursive: true });
-    if (["verify", "import-images", "render-config"].includes(artifact.id)) {
+    if (["verify", "verify-install", "import-images", "render-config"].includes(artifact.id)) {
       fs.copyFileSync(path.join(repository, "release/offline/scripts", artifact.id), destination);
       fs.chmodSync(destination, 0o755);
     } else {
@@ -74,6 +74,12 @@ try {
   assert.notEqual(result.status, 0, "registry URL must fail closed");
   result = run(path.join(bundle, "scripts/render-config"), [bundle, "registry.internal\nimageRegistry: attacker", "nuriteo", path.join(temporary, "unsafe")]);
   assert.notEqual(result.status, 0, "registry YAML injection must fail closed");
+  result = run(path.join(bundle, "scripts/verify-install"), [bundle, "registry.internal:5443", "nuriteo", path.join(temporary, "missing-egress")]);
+  assert.notEqual(result.status, 0, "an empty egress allowlist must fail closed");
+  result = run(path.join(bundle, "scripts/verify-install"), [bundle, "registry.internal:5443", "nuriteo", path.join(temporary, "unbounded-egress"), "0.0.0.0/0"]);
+  assert.notEqual(result.status, 0, "an unbounded egress route must fail closed");
+  result = run(path.join(bundle, "scripts/verify-install"), [bundle, "registry.internal:5443", "nuriteo", path.join(temporary, "invalid-egress"), "999.1.1.1/33"]);
+  assert.notEqual(result.status, 0, "an invalid egress CIDR must fail closed");
 
   const compose = path.join(bundle, "core/compose/compose.yaml");
   fs.appendFileSync(compose, "tampered\n");
