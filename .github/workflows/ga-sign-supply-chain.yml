@@ -1,0 +1,54 @@
+name: GA / Sign supply chain
+
+on:
+  workflow_dispatch:
+    inputs:
+      server:
+        description: Immutable server image reference including sha256 digest
+        required: true
+      web:
+        description: Immutable web image reference including sha256 digest
+        required: true
+      operations:
+        description: Immutable operations image reference including sha256 digest
+        required: true
+
+permissions:
+  contents: read
+  id-token: write
+  packages: write
+
+jobs:
+  keyless-sign:
+    runs-on: ubuntu-24.04
+    environment: ga-release
+    steps:
+      - uses: actions/checkout@v4
+      - uses: sigstore/cosign-installer@v3
+      - name: Require immutable references
+        env:
+          SERVER: ${{ inputs.server }}
+          WEB: ${{ inputs.web }}
+          OPERATIONS: ${{ inputs.operations }}
+        run: |
+          for image in "$SERVER" "$WEB" "$OPERATIONS"; do
+            [[ "$image" =~ @sha256:[0-9a-f]{64}$ ]]
+          done
+      - name: Sign immutable images with the workflow identity
+        env:
+          SERVER: ${{ inputs.server }}
+          WEB: ${{ inputs.web }}
+          OPERATIONS: ${{ inputs.operations }}
+        run: cosign sign --yes "$SERVER" "$WEB" "$OPERATIONS"
+      - name: Verify the exact release workflow identity
+        env:
+          SERVER: ${{ inputs.server }}
+          WEB: ${{ inputs.web }}
+          OPERATIONS: ${{ inputs.operations }}
+        run: |
+          for image in "$SERVER" "$WEB" "$OPERATIONS"; do
+            cosign verify \
+              --certificate-identity-regexp '^https://github.com/.+/.github/workflows/ga-sign-supply-chain.yml@refs/tags/v1\.0\.0$' \
+              --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+              "$image"
+          done
