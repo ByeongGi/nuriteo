@@ -86,3 +86,19 @@ helm upgrade --install nuriteo ./core/helm/nuriteo-0.1.0.tgz \
 The verifier renders the bundled chart only, requires the four-policy default-deny profile, rejects
 public or tag-only workload images, and writes `install-plan.json` with the exact registry, images and
 allowed dependency CIDRs. Keep that plan with the installation evidence.
+
+## RC convergence qualification
+
+The RC qualification assembles the actual Compose definitions, Helm chart, compatibility manifest and
+offline scripts into one temporary Core Bundle. It verifies that bundle without network access, renders
+the restricted installation plan, and checks that the repository execution graph contains only the
+canonical Web, Rust Server and Workspace Runtime surfaces:
+
+```sh
+pnpm check:rc-offline-convergence
+```
+
+This qualification uses synthetic OCI payload bytes because image publication belongs to the final
+release gate. The manifest digests, file inventory, bundled deployment content, release lineage and
+fail-closed installation behavior are real. `GATE-006` replaces the synthetic image entries with the
+fixed RC image archives and reruns the aggregate.
