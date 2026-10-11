@@ -77,7 +77,7 @@ opaque revisions below are rollout generations, never hashes of secret material.
 {{- end -}}
 
 {{- define "nuriteo.secretRefsChecksum" -}}
-{{- dict "postgresql" .Values.postgresql.existingSecret "objectStorage" .Values.objectStorage.existingSecret "application" .Values.applicationSecrets.existingSecret "bootstrap" .Values.bootstrapAdmin.existingSecret "revision" .Values.rollout.externalSecretsRevision | toJson | sha256sum -}}
+{{- dict "postgresql" .Values.postgresql.existingSecret "objectStorage" .Values.objectStorage.existingSecret "application" .Values.applicationSecrets.existingSecret "observability" .Values.observability.otlp.existingSecret "bootstrap" .Values.bootstrapAdmin.existingSecret "revision" .Values.rollout.externalSecretsRevision | toJson | sha256sum -}}
 {{- end -}}
 
 {{- define "nuriteo.operationSecretRefsChecksum" -}}
@@ -141,6 +141,15 @@ checksum/nuriteo-secret-refs: {{ include "nuriteo.secretRefsChecksum" . | quote 
         path: save-idempotency-key
       - key: {{ .Values.applicationSecrets.existingSecret.previewSigningKey }}
         path: preview-signing-key
+{{- if and .Values.observability.otlp.existingSecret.name .Values.observability.otlp.existingSecret.caKey }}
+- name: observability-secrets
+  secret:
+    secretName: {{ .Values.observability.otlp.existingSecret.name }}
+    defaultMode: 0400
+    items:
+      - key: {{ .Values.observability.otlp.existingSecret.caKey }}
+        path: ca.crt
+{{- end }}
 {{- end -}}
 
 {{- define "nuriteo.webSecretVolumes" -}}
@@ -163,6 +172,11 @@ checksum/nuriteo-secret-refs: {{ include "nuriteo.secretRefsChecksum" . | quote 
 - name: application-secrets
   mountPath: /run/secrets/nuriteo/application
   readOnly: true
+{{- if and .Values.observability.otlp.existingSecret.name .Values.observability.otlp.existingSecret.caKey }}
+- name: observability-secrets
+  mountPath: /run/secrets/nuriteo/observability
+  readOnly: true
+{{- end }}
 {{- end -}}
 
 {{- define "nuriteo.webSecretVolumeMounts" -}}

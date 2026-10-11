@@ -158,6 +158,25 @@ core:
     enabled: true
     minAvailable: 1
 
+observability:
+  logFormat: json
+  logLevel: info
+  otlp:
+    endpoint: ""
+    protocol: grpc
+    tracesEnabled: false
+    metricsEnabled: false
+    logsEnabled: false
+    timeoutMillis: 5000
+    queueSize: 2048
+    batchSize: 512
+    traceSampleRatio: 0.1
+    logMinLevel: info
+    existingSecret:
+      name: ""
+      authorizationKey: authorization
+      caKey: ""
+
 web:
   replicas: 1
   service:

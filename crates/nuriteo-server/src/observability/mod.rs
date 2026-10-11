@@ -23,12 +23,15 @@ use tracing_subscriber::fmt::{
     FmtContext, FormatEvent, FormattedFields, Subscriber as FmtSubscriber,
 };
 use tracing_subscriber::registry::LookupSpan;
+use tracing_subscriber::{Layer as _, layer::SubscriberExt};
 
 use crate::VERSION;
 
 mod metrics;
+mod telemetry;
 
 pub use metrics::{MetricsService, observe_http};
+pub use telemetry::{TelemetryConfig, TelemetryConfigError, TelemetryProviders};
 
 const REDACTED: &str = "[REDACTED]";
 const SERVICE_NAME: &str = "nuriteo-server";
@@ -187,6 +190,58 @@ where
 /// Installs the process logger on standard error.
 pub fn install(config: LogConfig) -> Result<(), tracing::dispatcher::SetGlobalDefaultError> {
     tracing::dispatcher::set_global_default(build_dispatch(config, std::io::stderr))
+}
+
+#[derive(Debug)]
+pub enum TelemetryInstallError {
+    Configuration(TelemetryConfigError),
+    Subscriber,
+}
+
+/// Installs the local redacting logger and optional OTLP layers as one global subscriber.
+///
+/// The returned providers own the bounded exporters and flush them on drop. Collector
+/// availability is deliberately not checked here: batch export failures remain isolated
+/// from request processing and are surfaced by the SDK's internal diagnostics.
+pub fn install_with_telemetry(
+    log: LogConfig,
+    telemetry: &TelemetryConfig,
+) -> Result<TelemetryProviders, TelemetryInstallError> {
+    let providers =
+        TelemetryProviders::build(telemetry).map_err(TelemetryInstallError::Configuration)?;
+    let log_layer = providers.log_layer(telemetry.log_min_level);
+
+    match log.format {
+        LogFormat::Text => {
+            let fmt = tracing_subscriber::fmt::layer()
+                .with_writer(std::io::stderr)
+                .with_ansi(false)
+                .with_target(false)
+                .with_thread_ids(false)
+                .with_thread_names(false)
+                .with_file(false)
+                .with_line_number(false)
+                .fmt_fields(RedactedJsonFields)
+                .event_format(RedactedTextEvent)
+                .with_filter(log.level.as_filter());
+            tracing::subscriber::set_global_default(
+                tracing_subscriber::registry().with(log_layer).with(fmt),
+            )
+            .map_err(|_| TelemetryInstallError::Subscriber)?;
+        }
+        LogFormat::Json => {
+            let fmt = tracing_subscriber::fmt::layer()
+                .with_writer(std::io::stderr)
+                .fmt_fields(RedactedJsonFields)
+                .event_format(RedactedJsonEvent)
+                .with_filter(log.level.as_filter());
+            tracing::subscriber::set_global_default(
+                tracing_subscriber::registry().with(log_layer).with(fmt),
+            )
+            .map_err(|_| TelemetryInstallError::Subscriber)?;
+        }
+    }
+    Ok(providers)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

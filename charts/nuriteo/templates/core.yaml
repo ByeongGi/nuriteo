@@ -1,3 +1,6 @@
+{{- if gt (int .Values.observability.otlp.batchSize) (int .Values.observability.otlp.queueSize) }}
+{{- fail "observability.otlp.batchSize must not exceed queueSize" }}
+{{- end }}
 apiVersion: v1
 kind: Service
 metadata:
@@ -13,6 +16,10 @@ spec:
     - name: http
       port: {{ .Values.core.service.port }}
       targetPort: http
+      protocol: TCP
+    - name: management
+      port: {{ .Values.core.managementPort }}
+      targetPort: management
       protocol: TCP
 ---
 apiVersion: apps/v1
@@ -81,6 +88,47 @@ spec:
               value: 0.0.0.0:8080
             - name: NURITEO_MANAGEMENT_LISTEN_ADDR
               value: {{ printf "0.0.0.0:%v" .Values.core.managementPort | quote }}
+            - name: NURITEO_LOG_FORMAT
+              value: {{ .Values.observability.logFormat | quote }}
+            - name: NURITEO_LOG_LEVEL
+              value: {{ .Values.observability.logLevel | quote }}
+            - name: OTEL_TRACES_EXPORTER
+              value: {{ ternary "otlp" "none" .Values.observability.otlp.tracesEnabled | quote }}
+            - name: OTEL_METRICS_EXPORTER
+              value: {{ ternary "otlp" "none" .Values.observability.otlp.metricsEnabled | quote }}
+            - name: OTEL_LOGS_EXPORTER
+              value: {{ ternary "otlp" "none" .Values.observability.otlp.logsEnabled | quote }}
+            {{- if .Values.observability.otlp.endpoint }}
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: {{ .Values.observability.otlp.endpoint | quote }}
+            {{- end }}
+            - name: OTEL_EXPORTER_OTLP_PROTOCOL
+              value: {{ .Values.observability.otlp.protocol | quote }}
+            - name: OTEL_EXPORTER_OTLP_TIMEOUT
+              value: {{ .Values.observability.otlp.timeoutMillis | quote }}
+            - name: OTEL_BSP_MAX_QUEUE_SIZE
+              value: {{ .Values.observability.otlp.queueSize | quote }}
+            - name: OTEL_BSP_MAX_EXPORT_BATCH_SIZE
+              value: {{ .Values.observability.otlp.batchSize | quote }}
+            - name: OTEL_BLRP_MAX_QUEUE_SIZE
+              value: {{ .Values.observability.otlp.queueSize | quote }}
+            - name: OTEL_BLRP_MAX_EXPORT_BATCH_SIZE
+              value: {{ .Values.observability.otlp.batchSize | quote }}
+            - name: OTEL_TRACES_SAMPLER_ARG
+              value: {{ .Values.observability.otlp.traceSampleRatio | quote }}
+            - name: OTEL_LOG_LEVEL
+              value: {{ .Values.observability.otlp.logMinLevel | quote }}
+            {{- if .Values.observability.otlp.existingSecret.name }}
+            - name: NURITEO_OTLP_AUTHORIZATION
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.observability.otlp.existingSecret.name }}
+                  key: {{ .Values.observability.otlp.existingSecret.authorizationKey }}
+            {{- end }}
+            {{- if and .Values.observability.otlp.existingSecret.name .Values.observability.otlp.existingSecret.caKey }}
+            - name: NURITEO_OTLP_CA_FILE
+              value: /run/secrets/nuriteo/observability/ca.crt
+            {{- end }}
             - name: NURITEO_DATABASE_URL_FILE
               value: /run/secrets/nuriteo/database/database-url
             {{- if .Values.postgresql.existingSecret.caKey }}

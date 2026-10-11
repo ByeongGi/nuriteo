@@ -25,7 +25,9 @@ use crate::notification::{
     ProductionEmailAttemptPreparer,
 };
 use crate::object_storage::{ObjectStorageConfig, OperationLimits, S3ObjectStore};
-use crate::observability::MetricsService;
+use crate::observability::{
+    LogConfig, LogFormat, LogLevel, MetricsService, TelemetryConfig, install_with_telemetry,
+};
 use crate::oidc::OidcHttpService;
 use crate::organization::{OrganizationHttpPolicy, OrganizationHttpService};
 use crate::policy::PolicyMaintenanceWorker;
@@ -76,6 +78,7 @@ pub(crate) enum ServeError {
     AccessTokenConfiguration,
     SaveConfiguration,
     CleanupConfiguration,
+    ObservabilityConfiguration,
     Bind,
     ManagementBind,
     Lifecycle,
@@ -106,6 +109,7 @@ impl ServeError {
             Self::AccessTokenConfiguration => "access-token-configuration",
             Self::SaveConfiguration => "save-configuration",
             Self::CleanupConfiguration => "cleanup-configuration",
+            Self::ObservabilityConfiguration => "observability-configuration",
             Self::Bind => "bind",
             Self::ManagementBind => "management-bind",
             Self::Lifecycle => "lifecycle",
@@ -128,6 +132,24 @@ pub(crate) async fn run_server(
 ) -> Result<(), ServeError> {
     let load_report = Config::load(environment, files).map_err(|_| ServeError::Configuration)?;
     let global = load_report.config;
+    let telemetry_config = TelemetryConfig::load(environment, files)
+        .map_err(|_| ServeError::ObservabilityConfiguration)?;
+    let _telemetry = install_with_telemetry(
+        LogConfig {
+            format: match global.server.log_format {
+                crate::config::LogFormat::Text => LogFormat::Text,
+                crate::config::LogFormat::Json => LogFormat::Json,
+            },
+            level: match global.server.log_level {
+                crate::config::LogLevel::Error => LogLevel::Error,
+                crate::config::LogLevel::Warn => LogLevel::Warn,
+                crate::config::LogLevel::Info => LogLevel::Info,
+                crate::config::LogLevel::Debug => LogLevel::Debug,
+            },
+        },
+        &telemetry_config,
+    )
+    .map_err(|_| ServeError::ObservabilityConfiguration)?;
     let database = DatabaseRuntimeConfig::load(environment, files)
         .map_err(|_| ServeError::DatabaseConfiguration)?;
     let storage = ObjectStorageConfig::load(environment, files)
@@ -622,6 +644,10 @@ mod tests {
             (ServeError::TeamConfiguration, "team-configuration"),
             (ServeError::MfaConfiguration, "mfa-configuration"),
             (ServeError::CleanupConfiguration, "cleanup-configuration"),
+            (
+                ServeError::ObservabilityConfiguration,
+                "observability-configuration",
+            ),
             (ServeError::SaveConfiguration, "save-configuration"),
             (ServeError::Bind, "bind"),
             (ServeError::ManagementBind, "management-bind"),

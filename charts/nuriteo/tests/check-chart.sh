@@ -57,6 +57,13 @@ grep -F -- '- "upgrade-preflight"' "$upgrade_file" >/dev/null
 grep -F 'args: ["migrate"]' "$output_file" >/dev/null
 grep -F 'httpGet: { path: /health/live, port: http }' "$output_file" >/dev/null
 grep -F 'httpGet: { path: /health/ready, port: http }' "$output_file" >/dev/null
+grep -F 'name: management' "$output_file" >/dev/null
+grep -F 'name: OTEL_TRACES_EXPORTER' "$output_file" >/dev/null
+grep -F 'value: "none"' "$output_file" >/dev/null
+if grep -F 'name: NURITEO_OTLP_AUTHORIZATION' "$output_file" >/dev/null; then
+  echo 'default chart must not render an absent OTLP authorization Secret reference' >&2
+  exit 1
+fi
 grep -F 'httpGet: { path: /sign-in, port: http }' "$output_file" >/dev/null
 if grep -F 'kind: Ingress' "$output_file" >/dev/null; then
   echo 'Ingress must remain opt-in until external edge readiness is acknowledged' >&2

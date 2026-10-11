@@ -29,6 +29,9 @@ getrandom = "0.4.3"
 git2 = { version = "0.21.0", default-features = false, features = ["https", "vendored-libgit2", "vendored-openssl"] }
 hmac = { version = "0.13.0", default-features = false }
 http-body = "1.1.0"
+opentelemetry = { version = "0.33.0", default-features = false, features = ["logs", "metrics", "trace"] }
+opentelemetry-otlp = { version = "0.33.0", default-features = false, features = ["grpc-tonic", "http-proto", "logs", "metrics", "reqwest-blocking-client", "reqwest-rustls", "tls-ring", "tls-roots", "trace"] }
+opentelemetry_sdk = { version = "0.33.0", default-features = false, features = ["logs", "metrics", "trace"] }
 percent-encoding = "2.3.2"
 regex = { version = "1.13.1", default-features = false, features = ["perf", "std", "unicode-case", "unicode-perl"] }
 reqwest = { version = "0.13.2", default-features = false, features = ["rustls"] }

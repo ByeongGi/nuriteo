@@ -19,6 +19,10 @@ pub(super) const MANAGEMENT_LISTEN_ADDR: &str = "NURITEO_MANAGEMENT_LISTEN_ADDR"
 pub(super) const SHUTDOWN_DRAIN_TIMEOUT_MS: &str = "NURITEO_SHUTDOWN_DRAIN_TIMEOUT_MS";
 pub(super) const LOG_FORMAT: &str = "NURITEO_LOG_FORMAT";
 pub(super) const LOG_LEVEL: &str = "NURITEO_LOG_LEVEL";
+pub(super) const OTLP_AUTHORIZATION: &str = "NURITEO_OTLP_AUTHORIZATION";
+pub(super) const OTLP_AUTHORIZATION_FILE: &str = "NURITEO_OTLP_AUTHORIZATION_FILE";
+pub(super) const OTLP_CA: &str = "NURITEO_OTLP_CA";
+pub(super) const OTLP_CA_FILE: &str = "NURITEO_OTLP_CA_FILE";
 pub(super) const EXTERNAL_URL: &str = "NURITEO_EXTERNAL_URL";
 pub(super) const PREVIEW_BASE_DOMAIN: &str = "NURITEO_PREVIEW_BASE_DOMAIN";
 pub(super) const CLEANUP_BATCH_SIZE: &str = "NURITEO_CLEANUP_BATCH_SIZE";
@@ -130,6 +134,32 @@ pub const CONFIG_FIELDS: &[ConfigField] = &[
         Some("info"),
         "error, warn, info, or debug",
         "observability.logLevel",
+    ),
+    secret_field(
+        OTLP_AUTHORIZATION,
+        "optional non-empty OTLP authorization header value; prefer the file variant",
+        "observability.otlp.authorizationSecret",
+    ),
+    field(
+        OTLP_AUTHORIZATION_FILE,
+        None,
+        "path",
+        None,
+        "optional readable file containing the OTLP authorization header value",
+        "observability.otlp.authorizationSecretFile",
+    ),
+    secret_field(
+        OTLP_CA,
+        "optional PEM CA bundle; prefer the file variant",
+        "observability.otlp.caBundle",
+    ),
+    field(
+        OTLP_CA_FILE,
+        None,
+        "path",
+        None,
+        "optional readable PEM CA bundle file",
+        "observability.otlp.caFile",
     ),
     field(
         EXTERNAL_URL,

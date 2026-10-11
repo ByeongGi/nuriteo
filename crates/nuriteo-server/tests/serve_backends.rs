@@ -283,7 +283,17 @@ impl ChildGuard {
                 self.reaped = true;
                 break status;
             }
-            assert!(Instant::now() < deadline, "serve process exit timed out");
+            if Instant::now() >= deadline {
+                let _ = self.child.kill();
+                let status = self.child.wait().unwrap();
+                self.reaped = true;
+                let output = read_output(&mut self.child, status);
+                panic!(
+                    "serve process exit timed out: status={:?}, stderr={}",
+                    output.status.code(),
+                    String::from_utf8_lossy(&output.stderr)
+                );
+            }
             tokio::time::sleep(Duration::from_millis(20)).await;
         };
         read_output(&mut self.child, status)
