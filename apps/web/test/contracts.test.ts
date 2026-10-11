@@ -43,6 +43,7 @@ function testServerFirstBoundaries(): void {
     "src/app/(authenticated)/access-tokens/token-console.tsx",
     "src/app/(authenticated)/admin/_components/integration-ca-console.tsx",
     "src/app/(authenticated)/admin/admin-navigation.tsx",
+    "src/app/(authenticated)/admin/backups/backup-console.tsx",
     "src/app/(authenticated)/admin/git-providers/provider-console.tsx",
     "src/app/(authenticated)/admin/invitations/activation-invitations.tsx",
     "src/app/(authenticated)/admin/maintenance/maintenance-console.tsx",

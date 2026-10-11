@@ -986,6 +986,47 @@
     padding: var(--n-ref-space-3) var(--n-ref-space-5);
   }
 
+  .admin-backup-actions,
+  .admin-backup-submit {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--n-ref-space-3);
+    border-top: 1px solid var(--n-color-border-muted);
+    padding: var(--n-ref-space-4) var(--n-ref-space-5);
+  }
+
+  .admin-backup-fields {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--n-ref-space-4);
+    border-top: 1px solid var(--n-color-border-muted);
+    padding: var(--n-ref-space-5);
+  }
+
+  @media (max-width: 42rem) {
+    .admin-backup-fields {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+
+  .admin-backup-fields label {
+    display: grid;
+    gap: var(--n-ref-space-2);
+    color: var(--n-color-fg-muted);
+    font-size: var(--n-font-size-xs);
+  }
+
+  .admin-backup-fields input:not([type="checkbox"]),
+  .admin-backup-fields select {
+    width: 100%;
+    min-height: 2.5rem;
+    border: 1px solid var(--n-color-border-default);
+    border-radius: var(--n-radius-md);
+    background: var(--n-color-bg-canvas);
+    color: var(--n-color-fg-default);
+    padding: 0 var(--n-ref-space-3);
+  }
+
   .admin-operations-metrics dt {
     color: var(--n-color-fg-subtle);
     font-size: var(--n-font-size-xs);

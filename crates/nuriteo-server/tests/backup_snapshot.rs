@@ -30,7 +30,7 @@ async fn pg_dump_and_inventory_share_the_exported_online_snapshot() {
     )
     .await
     .unwrap();
-    assert_eq!(report.latest_version, Some(49));
+    assert_eq!(report.latest_version, Some(50));
     seed_identity(&pool).await;
     seed_live_bundle(&pool, 10, "before-snapshot", "a1").await;
     seed_unreferenced_gc_candidate(&pool).await;

@@ -1,4 +1,5 @@
 mod audit_service;
+mod backup_service;
 mod http_routes;
 mod http_service;
 mod maintenance;
@@ -29,6 +30,11 @@ pub use audit_service::{
     AdminAuditEventCollectionView, AdminAuditEventView, AdminAuditExportFormat,
     AdminAuditExportInput, AdminAuditExportView, AdminAuditListInput, AdminAuditRetentionPreview,
     AdminAuditRetentionPruneView,
+};
+pub use backup_service::{
+    AdminBackupAlertView, AdminBackupConsoleView, AdminBackupOperationRequest,
+    AdminBackupOperationView, AdminBackupPolicyUpdate, AdminBackupPolicyView,
+    AdminBackupRestorePointView,
 };
 pub(crate) use http_routes::openapi_router;
 pub use http_service::{

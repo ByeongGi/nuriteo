@@ -1180,6 +1180,295 @@
         ]
       }
     },
+    "/api/v1/admin/backups": {
+      "get": {
+        "tags": [
+          "administration"
+        ],
+        "operationId": "backup_console",
+        "responses": {
+          "200": {
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminBackupConsoleView"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "projectSessionCookie": []
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/backups/operations": {
+      "post": {
+        "tags": [
+          "administration"
+        ],
+        "operationId": "enqueue_backup_operation",
+        "parameters": [
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminBackupOperationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminBackupConsoleView"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "projectSessionCookie": []
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/backups/policy": {
+      "put": {
+        "tags": [
+          "administration"
+        ],
+        "operationId": "update_backup_policy",
+        "parameters": [
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminBackupPolicyUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminBackupConsoleView"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "412": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "428": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "projectSessionCookie": []
+          }
+        ]
+      }
+    },
     "/api/v1/admin/email-deliveries": {
       "get": {
         "tags": [
@@ -1838,6 +2127,175 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/IntegrationCaView"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "projectSessionCookie": []
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/maintenance": {
+      "get": {
+        "tags": [
+          "administration"
+        ],
+        "operationId": "maintenance_status",
+        "responses": {
+          "200": {
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminMaintenanceView"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "projectSessionCookie": []
+          }
+        ]
+      },
+      "put": {
+        "tags": [
+          "administration"
+        ],
+        "operationId": "set_maintenance",
+        "parameters": [
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MaintenanceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminMaintenanceView"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "415": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "504": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
                 }
               }
             }
@@ -3525,6 +3983,262 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/AdminStatusView"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "504": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "projectSessionCookie": []
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/updates/approval": {
+      "post": {
+        "tags": [
+          "administration"
+        ],
+        "operationId": "approve_update",
+        "parameters": [
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateApprovalRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminUpdateApprovalView"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "415": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "504": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "projectSessionCookie": []
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/updates/history": {
+      "get": {
+        "tags": [
+          "administration"
+        ],
+        "operationId": "update_history",
+        "responses": {
+          "200": {
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminUpdateHistoryView"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "504": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "projectSessionCookie": []
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/updates/readiness": {
+      "get": {
+        "tags": [
+          "administration"
+        ],
+        "operationId": "update_readiness",
+        "responses": {
+          "200": {
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminUpdateReadinessView"
                 }
               }
             }
@@ -15230,6 +15944,350 @@
           }
         }
       },
+      "AdminBackupAlertView": {
+        "type": "object",
+        "required": [
+          "level",
+          "code",
+          "message"
+        ],
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "level": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "AdminBackupConsoleView": {
+        "type": "object",
+        "required": [
+          "policy",
+          "restorePoints",
+          "operations",
+          "alerts",
+          "pruneCandidates"
+        ],
+        "properties": {
+          "alerts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminBackupAlertView"
+            }
+          },
+          "operations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminBackupOperationView"
+            }
+          },
+          "policy": {
+            "$ref": "#/components/schemas/AdminBackupPolicyView"
+          },
+          "pruneCandidates": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "restorePoints": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminBackupRestorePointView"
+            }
+          }
+        }
+      },
+      "AdminBackupOperationRequest": {
+        "type": "object",
+        "required": [
+          "kind"
+        ],
+        "properties": {
+          "backupId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "kind": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "AdminBackupOperationView": {
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "source",
+          "state",
+          "requestedAt"
+        ],
+        "properties": {
+          "backupId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "completedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "failureCode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "requestedAt": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "startedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "state": {
+            "type": "string"
+          }
+        }
+      },
+      "AdminBackupPolicyUpdate": {
+        "type": "object",
+        "required": [
+          "enabled",
+          "intervalHours",
+          "scheduleTime",
+          "scheduleTimezone",
+          "failedRetentionDays",
+          "multipartCleanupHours",
+          "warningAfterHours",
+          "criticalAfterFailures",
+          "drillFrequency",
+          "drillTime",
+          "drillTimezone"
+        ],
+        "properties": {
+          "criticalAfterFailures": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "dailyRetention": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "minimum": 0
+          },
+          "drillFrequency": {
+            "type": "string"
+          },
+          "drillTime": {
+            "type": "string"
+          },
+          "drillTimezone": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "failedRetentionDays": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "intervalHours": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "monthlyRetention": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "minimum": 0
+          },
+          "multipartCleanupHours": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "scheduleTime": {
+            "type": "string"
+          },
+          "scheduleTimezone": {
+            "type": "string"
+          },
+          "warningAfterHours": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "weeklyRetention": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "minimum": 0
+          }
+        },
+        "additionalProperties": false
+      },
+      "AdminBackupPolicyView": {
+        "type": "object",
+        "required": [
+          "enabled",
+          "intervalHours",
+          "scheduleTime",
+          "scheduleTimezone",
+          "failedRetentionDays",
+          "multipartCleanupHours",
+          "warningAfterHours",
+          "criticalAfterFailures",
+          "drillFrequency",
+          "drillTime",
+          "drillTimezone",
+          "version"
+        ],
+        "properties": {
+          "criticalAfterFailures": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "dailyRetention": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "minimum": 0
+          },
+          "drillFrequency": {
+            "type": "string"
+          },
+          "drillTime": {
+            "type": "string"
+          },
+          "drillTimezone": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "failedRetentionDays": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "intervalHours": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "monthlyRetention": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "minimum": 0
+          },
+          "multipartCleanupHours": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "scheduleTime": {
+            "type": "string"
+          },
+          "scheduleTimezone": {
+            "type": "string"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "warningAfterHours": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "weeklyRetention": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
+      "AdminBackupRestorePointView": {
+        "type": "object",
+        "required": [
+          "id",
+          "releaseVersion",
+          "schemaVersion",
+          "objectCount",
+          "payloadBytes",
+          "completedAt",
+          "retainedAs"
+        ],
+        "properties": {
+          "completedAt": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "objectCount": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "payloadBytes": {
+            "type": "string"
+          },
+          "releaseVersion": {
+            "type": "string"
+          },
+          "retainedAs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "schemaVersion": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
       "AdminCleanupQueueView": {
         "type": "object",
         "required": [
@@ -15295,6 +16353,26 @@
           },
           "state": {
             "$ref": "#/components/schemas/AdminOperationsState"
+          }
+        }
+      },
+      "AdminMaintenanceView": {
+        "type": "object",
+        "required": [
+          "phase",
+          "activeWrites",
+          "writeAdmissionOpen"
+        ],
+        "properties": {
+          "activeWrites": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "phase": {
+            "type": "string"
+          },
+          "writeAdmissionOpen": {
+            "type": "boolean"
           }
         }
       },
@@ -15687,6 +16765,210 @@
             "type": "integer",
             "format": "int32",
             "minimum": 0
+          }
+        }
+      },
+      "AdminUpdateApprovalView": {
+        "type": "object",
+        "required": [
+          "id",
+          "approvedAt",
+          "targetRelease",
+          "state",
+          "executionStarted"
+        ],
+        "properties": {
+          "approvedAt": {
+            "type": "string"
+          },
+          "executionStarted": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          },
+          "targetRelease": {
+            "type": "string"
+          }
+        }
+      },
+      "AdminUpdateBlockerView": {
+        "type": "object",
+        "required": [
+          "code",
+          "summary",
+          "operatorAction"
+        ],
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "operatorAction": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          }
+        }
+      },
+      "AdminUpdateCompatibilityView": {
+        "type": "object",
+        "required": [
+          "releaseLineage",
+          "sourceMigration",
+          "configurationRegistryVersion",
+          "schemaPolicy",
+          "objectPolicy",
+          "imagePolicy",
+          "failurePolicy"
+        ],
+        "properties": {
+          "configurationRegistryVersion": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "failurePolicy": {
+            "type": "string"
+          },
+          "imagePolicy": {
+            "type": "string"
+          },
+          "objectPolicy": {
+            "type": "string"
+          },
+          "releaseLineage": {
+            "type": "string"
+          },
+          "schemaPolicy": {
+            "type": "string"
+          },
+          "sourceMigration": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "AdminUpdateHistoryItemView": {
+        "type": "object",
+        "required": [
+          "id",
+          "occurredAt",
+          "action",
+          "targetRelease",
+          "result"
+        ],
+        "properties": {
+          "action": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "occurredAt": {
+            "type": "string"
+          },
+          "result": {
+            "type": "string"
+          },
+          "targetRelease": {
+            "type": "string"
+          }
+        }
+      },
+      "AdminUpdateHistoryView": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminUpdateHistoryItemView"
+            }
+          }
+        }
+      },
+      "AdminUpdatePreflightView": {
+        "type": "object",
+        "required": [
+          "state"
+        ],
+        "properties": {
+          "blockerCode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "currentMigration": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "schemaState": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "state": {
+            "type": "string"
+          },
+          "targetMigration": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          }
+        }
+      },
+      "AdminUpdateReadinessView": {
+        "type": "object",
+        "required": [
+          "generatedAt",
+          "currentRelease",
+          "targetRelease",
+          "state",
+          "approvalAllowed",
+          "compatibility",
+          "preflight",
+          "blockers"
+        ],
+        "properties": {
+          "approvalAllowed": {
+            "type": "boolean"
+          },
+          "blockers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminUpdateBlockerView"
+            }
+          },
+          "compatibility": {
+            "$ref": "#/components/schemas/AdminUpdateCompatibilityView"
+          },
+          "currentRelease": {
+            "type": "string"
+          },
+          "generatedAt": {
+            "type": "string"
+          },
+          "preflight": {
+            "$ref": "#/components/schemas/AdminUpdatePreflightView"
+          },
+          "state": {
+            "type": "string"
+          },
+          "targetRelease": {
+            "type": "string"
           }
         }
       },
@@ -16819,22 +18101,19 @@
         "additionalProperties": false
       },
       "IssuedAccessTokenView": {
-        "allOf": [
-          {
-            "$ref": "#/components/schemas/AccessTokenView"
+        "type": "object",
+        "required": [
+          "token",
+          "plaintext"
+        ],
+        "properties": {
+          "plaintext": {
+            "type": "string"
           },
-          {
-            "type": "object",
-            "required": [
-              "plaintext"
-            ],
-            "properties": {
-              "plaintext": {
-                "type": "string"
-              }
-            }
+          "token": {
+            "$ref": "#/components/schemas/AccessTokenView"
           }
-        ]
+        }
       },
       "IssuedInvitationView": {
         "allOf": [
@@ -16902,6 +18181,18 @@
             "type": "string",
             "format": "password",
             "maxLength": 1024
+          }
+        },
+        "additionalProperties": false
+      },
+      "MaintenanceRequest": {
+        "type": "object",
+        "required": [
+          "enabled"
+        ],
+        "properties": {
+          "enabled": {
+            "type": "boolean"
           }
         },
         "additionalProperties": false
@@ -18991,6 +20282,22 @@
             "type": "string",
             "format": "password",
             "maxLength": 55
+          }
+        },
+        "additionalProperties": false
+      },
+      "UpdateApprovalRequest": {
+        "type": "object",
+        "required": [
+          "targetRelease",
+          "acknowledged"
+        ],
+        "properties": {
+          "acknowledged": {
+            "type": "boolean"
+          },
+          "targetRelease": {
+            "type": "string"
           }
         },
         "additionalProperties": false

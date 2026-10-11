@@ -20,7 +20,8 @@ use crate::policy::{PolicyCleanupPreview, PolicyImpactPreview};
 use super::{
     AdminAuditEventCollectionView, AdminAuditEventView, AdminAuditExportFormat,
     AdminAuditExportInput, AdminAuditListInput, AdminAuditRetentionPreview,
-    AdminAuditRetentionPruneView, AdminHttpService, AdminHttpServiceError, AdminMaintenanceView,
+    AdminAuditRetentionPruneView, AdminBackupConsoleView, AdminBackupOperationRequest,
+    AdminBackupPolicyUpdate, AdminHttpService, AdminHttpServiceError, AdminMaintenanceView,
     AdminOperationsView, AdminSettingListView, AdminSettingView, AdminStatusView,
     AdminUpdateApprovalView, AdminUpdateHistoryView, AdminUpdateReadinessView,
 };
@@ -40,6 +41,9 @@ const UPDATE_READINESS: &str = "/api/v1/admin/updates/readiness";
 const UPDATE_HISTORY: &str = "/api/v1/admin/updates/history";
 const UPDATE_APPROVAL: &str = "/api/v1/admin/updates/approval";
 const MAINTENANCE: &str = "/api/v1/admin/maintenance";
+const BACKUPS: &str = "/api/v1/admin/backups";
+const BACKUP_POLICY: &str = "/api/v1/admin/backups/policy";
+const BACKUP_OPERATIONS: &str = "/api/v1/admin/backups/operations";
 const MAX_BODY_BYTES: usize = 2 * 1024;
 const ORIGIN: HeaderName = HeaderName::from_static("origin");
 const CSRF: HeaderName = HeaderName::from_static("x-csrf-token");
@@ -63,6 +67,115 @@ pub(crate) fn openapi_router(
         .routes(routes!(update_history))
         .routes(routes!(approve_update))
         .routes(routes!(maintenance_status, set_maintenance))
+        .routes(routes!(backup_console))
+        .routes(routes!(update_backup_policy))
+        .routes(routes!(enqueue_backup_operation))
+}
+
+#[utoipa::path(
+    get,
+    path = BACKUPS,
+    tag = "administration",
+    security(("projectSessionCookie" = [])),
+    responses(
+        (status = 200, body = AdminBackupConsoleView, headers(("ETag" = String), ("Cache-Control" = String))),
+        (status = 401, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+        (status = 403, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+        (status = 503, body = crate::openapi::ProblemDetails, content_type = "application/problem+json")
+    )
+)]
+async fn backup_console(
+    State(service): State<AdminHttpService>,
+    Extension(request_id): Extension<RequestId>,
+    request: Request,
+) -> Result<Response, HttpError> {
+    let headers = BrowserHeaders::read(request.headers(), &request_id, BACKUPS)?;
+    let view = service
+        .backup_console(headers.request(BrowserMethod::Get))
+        .await
+        .map_err(|error| map_error(error, request_id.clone(), BACKUPS))?;
+    backup_response(view, request_id, BACKUPS)
+}
+
+#[utoipa::path(
+    put,
+    path = BACKUP_POLICY,
+    tag = "administration",
+    security(("projectSessionCookie" = [])),
+    params(("If-Match" = String, Header), ("Origin" = String, Header), ("X-CSRF-Token" = String, Header)),
+    request_body(content = AdminBackupPolicyUpdate, content_type = "application/json"),
+    responses(
+        (status = 200, body = AdminBackupConsoleView, headers(("ETag" = String), ("Cache-Control" = String))),
+        (status = 401, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+        (status = 403, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+        (status = 412, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+        (status = 422, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+        (status = 428, body = crate::openapi::ProblemDetails, content_type = "application/problem+json")
+    )
+)]
+async fn update_backup_policy(
+    State(service): State<AdminHttpService>,
+    Extension(request_id): Extension<RequestId>,
+    request: Request,
+) -> Result<Response, HttpError> {
+    let (parts, body) = request.into_parts();
+    let headers = BrowserHeaders::read(&parts.headers, &request_id, BACKUP_POLICY)?;
+    let expected = parse_version_etag(
+        &parts.headers,
+        &request_id,
+        BACKUP_POLICY,
+        "backup-policy-v",
+    )?;
+    let input: AdminBackupPolicyUpdate =
+        json_body(&parts.headers, body, &request_id, BACKUP_POLICY).await?;
+    let view = service
+        .update_backup_policy(
+            headers.request(BrowserMethod::Put),
+            input,
+            expected,
+            request_id.as_str(),
+        )
+        .await
+        .map_err(|error| map_error(error, request_id.clone(), BACKUP_POLICY))?;
+    backup_response(view, request_id, BACKUP_POLICY)
+}
+
+#[utoipa::path(
+    post,
+    path = BACKUP_OPERATIONS,
+    tag = "administration",
+    security(("projectSessionCookie" = [])),
+    params(("Origin" = String, Header), ("X-CSRF-Token" = String, Header)),
+    request_body(content = AdminBackupOperationRequest, content_type = "application/json"),
+    responses(
+        (status = 202, body = AdminBackupConsoleView, headers(("ETag" = String), ("Cache-Control" = String))),
+        (status = 401, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+        (status = 403, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+        (status = 404, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+        (status = 409, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+        (status = 422, body = crate::openapi::ProblemDetails, content_type = "application/problem+json")
+    )
+)]
+async fn enqueue_backup_operation(
+    State(service): State<AdminHttpService>,
+    Extension(request_id): Extension<RequestId>,
+    request: Request,
+) -> Result<Response, HttpError> {
+    let (parts, body) = request.into_parts();
+    let headers = BrowserHeaders::read(&parts.headers, &request_id, BACKUP_OPERATIONS)?;
+    let input: AdminBackupOperationRequest =
+        json_body(&parts.headers, body, &request_id, BACKUP_OPERATIONS).await?;
+    let view = service
+        .enqueue_backup_operation(
+            headers.request(BrowserMethod::Post),
+            input,
+            request_id.as_str(),
+        )
+        .await
+        .map_err(|error| map_error(error, request_id.clone(), BACKUP_OPERATIONS))?;
+    let mut response = backup_response(view, request_id, BACKUP_OPERATIONS)?;
+    *response.status_mut() = axum::http::StatusCode::ACCEPTED;
+    Ok(response)
 }
 
 #[derive(Deserialize, ToSchema)]
@@ -831,6 +944,44 @@ fn parse_if_match(
         .ok_or_else(|| HttpError::precondition_failed(request_id.clone(), path))
 }
 
+fn parse_version_etag(
+    headers: &HeaderMap,
+    request_id: &RequestId,
+    path: &str,
+    prefix: &str,
+) -> Result<u64, HttpError> {
+    let values = headers.get_all(IF_MATCH).iter().collect::<Vec<_>>();
+    if values.is_empty() {
+        return Err(HttpError::precondition_required(request_id.clone(), path));
+    }
+    let [value] = values.as_slice() else {
+        return Err(HttpError::precondition_failed(request_id.clone(), path));
+    };
+    value
+        .to_str()
+        .ok()
+        .and_then(|value| value.strip_prefix(&format!("\"{prefix}")))
+        .and_then(|value| value.strip_suffix('"'))
+        .and_then(|value| value.parse::<u64>().ok())
+        .filter(|value| *value > 0)
+        .ok_or_else(|| HttpError::precondition_failed(request_id.clone(), path))
+}
+
+fn backup_response(
+    view: AdminBackupConsoleView,
+    request_id: RequestId,
+    path: &str,
+) -> Result<Response, HttpError> {
+    let version = view.policy.version;
+    let mut response = private_no_store(Json(view).into_response());
+    response.headers_mut().insert(
+        ETAG,
+        HeaderValue::from_str(&format!("\"backup-policy-v{version}\""))
+            .map_err(|_| HttpError::internal(request_id, path))?,
+    );
+    Ok(response)
+}
+
 fn setting_response(
     view: AdminSettingView,
     request_id: RequestId,
@@ -880,11 +1031,13 @@ fn map_error(error: AdminHttpServiceError, request_id: RequestId, path: &str) ->
             HttpError::forbidden(request_id, path)
         }
         AdminHttpServiceError::InvalidSetting => validation(&request_id, path, "value"),
+        AdminHttpServiceError::InvalidBackupPolicy => validation(&request_id, path, "policy"),
+        AdminHttpServiceError::InvalidBackupOperation => validation(&request_id, path, "operation"),
         AdminHttpServiceError::InvalidAuditQuery => validation(&request_id, path, "query"),
         AdminHttpServiceError::InvalidUpdateApproval => validation(&request_id, path, "approval"),
-        AdminHttpServiceError::SettingNotFound | AdminHttpServiceError::AuditEventNotFound => {
-            HttpError::not_found(request_id, path)
-        }
+        AdminHttpServiceError::SettingNotFound
+        | AdminHttpServiceError::AuditEventNotFound
+        | AdminHttpServiceError::BackupNotFound => HttpError::not_found(request_id, path),
         AdminHttpServiceError::PreconditionFailed => {
             HttpError::precondition_failed(request_id, path)
         }
@@ -895,7 +1048,9 @@ fn map_error(error: AdminHttpServiceError, request_id: RequestId, path: &str) ->
         AdminHttpServiceError::AuditUnavailable | AdminHttpServiceError::Unavailable => {
             HttpError::service_unavailable(request_id, path)
         }
-        AdminHttpServiceError::UpdateBlocked => HttpError::conflict(request_id, path),
+        AdminHttpServiceError::UpdateBlocked | AdminHttpServiceError::BackupOperationActive => {
+            HttpError::conflict(request_id, path)
+        }
         AdminHttpServiceError::Configuration | AdminHttpServiceError::Internal => {
             HttpError::internal(request_id, path)
         }

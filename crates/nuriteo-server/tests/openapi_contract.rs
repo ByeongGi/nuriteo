@@ -116,6 +116,50 @@ fn audit_api_declares_cursor_export_and_retention_security_boundaries() {
 }
 
 #[test]
+fn backup_api_declares_admin_mutation_and_concurrency_boundaries() {
+    let document = serde_json::to_value(openapi::document()).unwrap();
+    let console = &document["paths"]["/api/v1/admin/backups"]["get"];
+    assert_eq!(console["security"][0]["projectSessionCookie"], json!([]));
+    assert_eq!(
+        console["responses"]["200"]["content"]["application/json"]["schema"]["$ref"],
+        "#/components/schemas/AdminBackupConsoleView"
+    );
+    assert!(console["responses"]["200"]["headers"].get("ETag").is_some());
+
+    for (path, method, required_headers) in [
+        (
+            "/api/v1/admin/backups/policy",
+            "put",
+            &["If-Match", "Origin", "X-CSRF-Token"][..],
+        ),
+        (
+            "/api/v1/admin/backups/operations",
+            "post",
+            &["Origin", "X-CSRF-Token"][..],
+        ),
+    ] {
+        let operation = &document["paths"][path][method];
+        let headers = operation["parameters"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|parameter| parameter["name"].as_str().unwrap())
+            .collect::<Vec<_>>();
+        for required in required_headers {
+            assert!(headers.contains(required));
+        }
+        assert_eq!(operation["security"][0]["projectSessionCookie"], json!([]));
+    }
+
+    let operation_request = &document["components"]["schemas"]["AdminBackupOperationRequest"];
+    assert_eq!(operation_request["additionalProperties"], false);
+    assert_eq!(
+        sorted_keys(&operation_request["properties"]),
+        vec!["backupId", "kind"]
+    );
+}
+
+#[test]
 fn integration_ca_api_exposes_only_server_bound_safe_metadata() {
     let document = serde_json::to_value(openapi::document()).unwrap();
     let stage = &document["paths"]["/api/v1/admin/integrations/{integrationType}/{integrationId}/ca/candidates"]
@@ -206,6 +250,9 @@ async fn serves_the_versioned_document_from_the_application_router() {
             "/api/v1/admin/audit-events/{eventId}",
             "/api/v1/admin/audit-retention/preview",
             "/api/v1/admin/audit-retention/prune",
+            "/api/v1/admin/backups",
+            "/api/v1/admin/backups/operations",
+            "/api/v1/admin/backups/policy",
             "/api/v1/admin/email-deliveries",
             "/api/v1/admin/email-deliveries/{deliveryId}/cancel",
             "/api/v1/admin/email-deliveries/{deliveryId}/retry",
@@ -216,6 +263,7 @@ async fn serves_the_versioned_document_from_the_application_router() {
             "/api/v1/admin/integrations/{integrationType}/{integrationId}/ca",
             "/api/v1/admin/integrations/{integrationType}/{integrationId}/ca/candidates",
             "/api/v1/admin/integrations/{integrationType}/{integrationId}/ca/candidates/{candidateId}/activate",
+            "/api/v1/admin/maintenance",
             "/api/v1/admin/mfa-policy",
             "/api/v1/admin/mfa-policy/preview",
             "/api/v1/admin/mfa-reset-targets",
@@ -237,6 +285,9 @@ async fn serves_the_versioned_document_from_the_application_router() {
             "/api/v1/admin/settings/{key}",
             "/api/v1/admin/settings/{key}/impact",
             "/api/v1/admin/status",
+            "/api/v1/admin/updates/approval",
+            "/api/v1/admin/updates/history",
+            "/api/v1/admin/updates/readiness",
             "/api/v1/admin/users/{userId}/mfa/reset",
             "/api/v1/auth/activation",
             "/api/v1/auth/oidc/providers",

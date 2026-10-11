@@ -10,6 +10,18 @@ use sqlx::Executor;
 const DATABASE_URL_ENV: &str = "NURITEO_TEST_DATABASE_URL";
 const DATABASE_CA_ENV: &str = "NURITEO_TEST_DATABASE_CA";
 
+type BackupPolicyRow = (
+    bool,
+    i32,
+    String,
+    Option<i32>,
+    Option<i32>,
+    Option<i32>,
+    i32,
+    String,
+    i64,
+);
+
 #[tokio::test]
 #[ignore = "requires tests/fixtures/postgres-backup-schema/run.sh"]
 async fn complete_only_deduplication_and_gc_fences_are_database_enforced() {
@@ -21,7 +33,72 @@ async fn complete_only_deduplication_and_gc_fences_are_database_enforced() {
     )
     .await
     .unwrap();
-    assert_eq!(report.latest_version, Some(49));
+    assert_eq!(report.latest_version, Some(50));
+
+    let policy: BackupPolicyRow = sqlx::query_as(
+        "SELECT enabled,interval_hours,schedule_timezone,daily_retention,weekly_retention,monthly_retention,\
+         multipart_cleanup_hours,drill_frequency,lock_version FROM backup_policy WHERE singleton",
+    )
+    .fetch_one(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+    assert_eq!(
+        policy,
+        (
+            true,
+            24,
+            "UTC".into(),
+            Some(7),
+            Some(4),
+            Some(6),
+            24,
+            "monthly".into(),
+            1
+        )
+    );
+    assert_rejected(
+        &pool,
+        "UPDATE backup_policy SET daily_retention=366 WHERE singleton",
+    )
+    .await;
+    sqlx::query("UPDATE backup_policy SET daily_retention=0 WHERE singleton")
+        .execute(&mut *pool.acquire().await.unwrap())
+        .await
+        .unwrap();
+    sqlx::query("UPDATE backup_policy SET daily_retention=NULL WHERE singleton")
+        .execute(&mut *pool.acquire().await.unwrap())
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO backup_operations(id,kind,source) VALUES($1::uuid,'create','manual')")
+        .bind("0199ee6c-c777-7000-8000-000000010001")
+        .execute(&mut *pool.acquire().await.unwrap())
+        .await
+        .unwrap();
+    assert_rejected_with_code(
+        &pool,
+        "INSERT INTO backup_operations(id,kind,source) VALUES('0199ee6c-c777-7000-8000-000000010002','drill','schedule')",
+        "23505",
+    )
+    .await;
+    assert_rejected(
+        &pool,
+        "UPDATE backup_operations SET state='succeeded',started_at=transaction_timestamp(),completed_at=transaction_timestamp() WHERE id='0199ee6c-c777-7000-8000-000000010001'",
+    )
+    .await;
+    sqlx::query(
+        "UPDATE backup_operations SET state='running',started_at=transaction_timestamp() WHERE id=$1::uuid",
+    )
+    .bind("0199ee6c-c777-7000-8000-000000010001")
+    .execute(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+    sqlx::query(
+        "UPDATE backup_operations SET state='succeeded',completed_at=transaction_timestamp() WHERE id=$1::uuid",
+    )
+    .bind("0199ee6c-c777-7000-8000-000000010001")
+    .execute(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
 
     sqlx::raw_sql(
         "INSERT INTO backup_generations(
@@ -242,6 +319,10 @@ async fn assert_gc_rejected(pool: &DatabasePool) {
 }
 
 async fn assert_rejected(pool: &DatabasePool, sql: &'static str) {
+    assert_rejected_with_code(pool, sql, "23514").await;
+}
+
+async fn assert_rejected_with_code(pool: &DatabasePool, sql: &'static str, code: &str) {
     let error = sqlx::query(sql)
         .execute(&mut *pool.acquire().await.unwrap())
         .await
@@ -251,7 +332,7 @@ async fn assert_rejected(pool: &DatabasePool, sql: &'static str) {
             .as_database_error()
             .and_then(|error| error.code())
             .as_deref(),
-        Some("23514")
+        Some(code)
     );
 }
 

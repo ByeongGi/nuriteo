@@ -68,6 +68,17 @@ export {
 } from "./admin.ts";
 export { getAdminOperations } from "./admin-operations.ts";
 export {
+  enqueueAdminBackupOperation,
+  getAdminBackups,
+  updateAdminBackupPolicy
+} from "./admin-backups.ts";
+export type {
+  AdminBackupConsole,
+  AdminBackupOperationKind,
+  AdminBackupPolicy,
+  AdminBackupPolicyUpdate
+} from "./admin-backups.ts";
+export {
   beginMfaEnrollment,
   challengeMfa,
   confirmMfaEnrollment,

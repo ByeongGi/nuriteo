@@ -16,6 +16,7 @@ const STRONG_ETAG = /^"org-v[1-9]\d*"$/u;
 const PROJECT_ETAG = /^"project-v([1-9]\d*)"$/u;
 const PUBLISHED_EXAMPLE_ETAG = /^"published-example-v([1-9]\d*)"$/u;
 const SETTING_ETAG = /^"setting-v([1-9]\d*)"$/u;
+const BACKUP_POLICY_ETAG = /^"backup-policy-v([1-9]\d*)"$/u;
 const MFA_POLICY_ETAG = /^"mfa-policy-v([1-9]\d*)"$/u;
 const NOTIFICATION_ETAG = /^"notification-v([1-9]\d*)"$/u;
 const NOTIFICATION_PREFERENCES_ETAG = /^"notification-preferences-v([1-9]\d*)"$/u;
@@ -51,7 +52,7 @@ export interface CollaborationForward {
   readonly withEtag?: boolean;
   readonly withIdempotencyKey?: boolean;
   readonly forwardSetCookie?: boolean;
-  readonly etagKind?: "email-delivery" | "git-connection" | "git-provider" | "git-remote" | "integration-ca" | "mfa-policy" | "notification" | "notification-preferences" | "oidc-provider" | "organization" | "project" | "published-example" | "registry" | "setting" | "team" | "team-member" | "team-project-role";
+  readonly etagKind?: "backup-policy" | "email-delivery" | "git-connection" | "git-provider" | "git-remote" | "integration-ca" | "mfa-policy" | "notification" | "notification-preferences" | "oidc-provider" | "organization" | "project" | "published-example" | "registry" | "setting" | "team" | "team-member" | "team-project-role";
   readonly jsonBodyPolicy?: "organization-invitation-issue";
   readonly safeLocation?: (value: string) => boolean;
 }
@@ -358,6 +359,13 @@ function isEtagForKind(
     return version <= MAX_PROJECT_VERSION && value === `"published-example-v${version}"`;
   }
   if (kind === "setting") return isSettingEtag(value);
+  if (kind === "backup-policy") {
+    if (value === null || value.length > 40) return false;
+    const match = value.match(BACKUP_POLICY_ETAG);
+    if (match === null) return false;
+    const version = BigInt(match[1] as string);
+    return version <= MAX_PROJECT_VERSION && value === `"backup-policy-v${version}"`;
+  }
   if (kind === "git-remote") return value !== null && GIT_REMOTE_ETAG.test(value);
   if (kind === "integration-ca") {
     if (value === null || value.length > 48) return false;
