@@ -12,6 +12,9 @@ on:
       operations:
         description: Immutable operations image reference including sha256 digest
         required: true
+      chart_registry:
+        description: OCI registry path without an oci:// prefix
+        required: true
 
 permissions:
   contents: read
@@ -52,3 +55,13 @@ jobs:
               --certificate-oidc-issuer https://token.actions.githubusercontent.com \
               "$image"
           done
+      - name: Package and publish the Helm chart
+        env:
+          CHART_REGISTRY: ${{ inputs.chart_registry }}
+        run: |
+          release/ga/package-chart.sh
+          push_output="$(helm push release/ga/artifacts/nuriteo-1.0.0.tgz "oci://$CHART_REGISTRY" 2>&1)"
+          printf '%s\n' "$push_output"
+          chart_digest="$(printf '%s\n' "$push_output" | awk '/^Digest:/ {print $2}')"
+          [[ "$chart_digest" =~ ^sha256:[0-9a-f]{64}$ ]]
+          cosign sign --yes "$CHART_REGISTRY/nuriteo@$chart_digest"
