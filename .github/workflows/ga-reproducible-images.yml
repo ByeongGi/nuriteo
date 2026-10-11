@@ -50,3 +50,29 @@ jobs:
           path: release/ga/reproducible-images-${{ matrix.artifact }}.json
           if-no-files-found: error
           retention-days: 14
+
+  merge-evidence:
+    name: Merge native architecture evidence
+    needs: reproduce
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: rel-001-*-${{ github.sha }}
+          path: release/ga/native
+          merge-multiple: true
+      - name: Require the complete amd64 and arm64 matrix
+        run: >-
+          node release/ga/merge-reproducible-images.mjs
+          release/ga/reproducible-images.json
+          release/ga/native/reproducible-images-amd64.json
+          release/ga/native/reproducible-images-arm64.json
+      - name: Validate merged evidence
+        run: node tooling/checks/check-self-hosted-reproducible-images.ts
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rel-001-complete-${{ github.sha }}
+          path: release/ga/reproducible-images.json
+          if-no-files-found: error
+          retention-days: 30

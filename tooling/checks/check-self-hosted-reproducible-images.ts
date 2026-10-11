@@ -26,6 +26,12 @@ for (const role of policy.roles) {
     assert.ok(dockerfile.includes(label), `${role} image label missing ${label}`);
   assert.ok(dockerfile.includes("NURITEO_SOURCE_DATE_EPOCH"), `${role} epoch input missing`);
 }
+const merger = fs.readFileSync("release/ga/merge-reproducible-images.mjs", "utf8");
+for (const term of ["duplicate reproducibility result", "missing reproducibility result", "sourceCommit"])
+  assert.ok(merger.includes(term), `reproducibility merger missing ${term}`);
+const workflow = fs.readFileSync(".github/workflows/ga-reproducible-images.yml", "utf8");
+for (const term of ["ubuntu-24.04", "ubuntu-24.04-arm", "merge-reproducible-images.mjs"])
+  assert.ok(workflow.includes(term), `native reproducibility workflow missing ${term}`);
 const next = fs.readFileSync("apps/web/next.config.ts", "utf8");
 assert.ok(next.includes("generateBuildId"));
 assert.ok(next.includes("NURITEO_BUILD_REVISION"));

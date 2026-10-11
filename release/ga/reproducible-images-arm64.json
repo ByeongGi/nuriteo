@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "taskId": "REL-001",
+  "status": "PASS",
+  "version": "1.0.0",
+  "sourceCommit": "9fcbdd0f245ecbb38fbdc4cf826404d3a35e8a86",
+  "sourceDateEpoch": 1791737701,
+  "created": "2026-10-11T16:55:01Z",
+  "images": [
+    {
+      "role": "server",
+      "platform": "linux/arm64",
+      "digest": "sha256:0baba282c35f3e7fd2a76b7c1cb1f8bd8305dae5e1c24b85d9951920fd6bd682",
+      "passes": 2
+    },
+    {
+      "role": "web",
+      "platform": "linux/arm64",
+      "digest": "sha256:d4d150082d5122a9ec05845fee2b224e756f668908c410f4d8a536070ab5948c",
+      "passes": 2
+    },
+    {
+      "role": "operations",
+      "platform": "linux/arm64",
+      "digest": "sha256:dbd791c03075cfdb29d471b3dcbd2ec5c9e9e1ea7fcf4fde6a862ed53ab28189",
+      "passes": 2
+    }
+  ]
+}
