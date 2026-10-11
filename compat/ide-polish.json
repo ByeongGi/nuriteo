@@ -18,7 +18,7 @@
     "window and process menus"
   ],
   "tests": [
-    "apps/preview-service/test/ide-polish.test.ts",
-    "apps/preview-service/test/app-menu.test.ts"
+    "apps/web/test/authenticated-shell-browser.test.ts",
+    "apps/web/test/runtime-journey-browser.test.ts"
   ]
 }

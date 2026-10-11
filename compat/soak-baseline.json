@@ -37,9 +37,9 @@
       "status": "required"
     },
     {
-      "id": "service-install-dev-restart-soak",
-      "test": "apps/preview-service/test/workflow-soak.test.ts",
-      "command": "WORKFLOW_SOAK_ITERATIONS=25 node apps/preview-service/test/workflow-soak.test.ts",
+      "id": "workspace-runtime-offline-soak",
+      "test": "packages/workspace-runtime/test/ide-offline-soak.test.ts",
+      "command": "node packages/workspace-runtime/test/ide-offline-soak.test.ts",
       "status": "required"
     },
     {

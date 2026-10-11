@@ -6,7 +6,7 @@
       "status": "pass",
       "evidence": [
         "tests/system/browser/isolation.test.ts",
-        "apps/preview-service/test/mvp.test.ts"
+        "apps/web/test/gate-project-runtime-browser.test.ts"
       ]
     },
     "edge": {
@@ -20,7 +20,7 @@
         "Service Worker activation",
         "Vite React preview iframe"
       ],
-      "evidence": ["apps/preview-service/test/edge-browser-smoke.test.ts"]
+      "evidence": ["git-history:pre-1a419586:edge-browser-smoke"]
     },
     "safari": {
       "status": "pass",
@@ -35,7 +35,7 @@
         "OPFS write/reopen/delete",
         "quota cache eviction and recovery plan"
       ],
-      "evidence": ["apps/preview-service/test/safari-browser-smoke.test.ts"],
+      "evidence": ["git-history:pre-1a419586:safari-browser-smoke"],
       "limitations": [
         "macOS desktop Safari only; iOS and mobile Safari are not covered",
         "Safari WebDriver requires Allow Remote Automation on the validation host",

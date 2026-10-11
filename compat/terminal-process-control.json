@@ -64,8 +64,8 @@
     "crates/system-core/src/io/kernel.rs",
     "crates/system-wasm/src/dispatch.rs",
     "tests/compatibility/package-managers/terminal-commands.test.ts",
-    "apps/preview-service/test/terminal-session-control.test.ts",
-    "apps/preview-service/test/terminal-worker-browser.test.ts"
+    "packages/workspace-runtime/test/terminal-session-control.test.ts",
+    "apps/web/test/runtime-journey-browser.test.ts"
   ],
   "reproductionCommands": [
     "node tooling/checks/check-terminal-process-control.ts",
@@ -76,13 +76,12 @@
     "node packages/browser-host/test/process-lifecycle.test.ts",
     "node packages/browser-host/test/process-terminal-command.test.ts",
     "node packages/browser-host/test/process-worker-runtime.test.ts",
-    "node apps/preview-service/test/terminal-session-control.test.ts",
-    "node apps/preview-service/test/terminal-worker-browser.test.ts",
-    "PREVIEW_PRODUCTION=1 node apps/preview-service/test/terminal-worker-browser.test.ts",
+    "pnpm test:workspace-runtime",
+    "pnpm --filter @nuriteo/web test:runtime-browser",
     "pnpm test:browser-host",
-    "pnpm test:preview-service",
+    "pnpm test:web",
     "pnpm test:browser",
     "pnpm check:types",
-    "pnpm --filter @nuriteo/preview-service-app build"
+    "pnpm build:web"
   ]
 }

@@ -12,7 +12,8 @@ type Replacement = {
   target: string;
   secondaryTarget?: string;
   generatedTarget?: string;
-  state: "removed" | "renamed" | "relocated" | "cleanup-required";
+  testFixtureTarget?: string;
+  state: "removed" | "renamed" | "relocated" | "cleaned";
   behavior: string[];
   evidence: string[];
   nextAction: string;
@@ -26,6 +27,7 @@ type Inventory = {
   baselineManifest: string;
   recordedAt: string;
   migrationCompletedAt: string;
+  cleanupCompletedAt: string;
   policy: {
     productionSurfaces: string[];
     targetRuntimePackage: string;
@@ -55,6 +57,7 @@ assert.equal(inventory.taskId, "LEG-001");
 assert.equal(inventory.releaseLineage, "nuriteo-self-hosted-v1");
 assert.match(inventory.recordedAt, /^\d{4}-\d{2}-\d{2}$/u);
 assert.equal(inventory.migrationCompletedAt, "2026-10-11");
+assert.equal(inventory.cleanupCompletedAt, "2026-10-11");
 assert.equal(inventory.baselineManifest, "compat/self-hosted-rc-baseline.json");
 assertExisting(inventory.baselineManifest, "RC baseline manifest");
 
@@ -89,12 +92,12 @@ for (const replacement of inventory.replacements) {
     assert.equal(fs.existsSync(resolveRepositoryPath(replacement.source)), false, `${replacement.id} legacy source must be removed`);
     assertExisting(replacement.target, `${replacement.id} replacement target`);
   } else {
-    assert.equal(replacement.state, "cleanup-required");
-    assertExisting(replacement.source, `${replacement.id} cleanup source`);
+    assert.equal(replacement.state, "cleaned");
     assertExisting(replacement.target, `${replacement.id} replacement target`);
   }
   if (replacement.secondaryTarget) assertExisting(replacement.secondaryTarget, `${replacement.id} secondary target`);
   if (replacement.generatedTarget) assertExisting(replacement.generatedTarget, `${replacement.id} generated target`);
+  if (replacement.testFixtureTarget) assertExisting(replacement.testFixtureTarget, `${replacement.id} test fixture target`);
 }
 
 const gate004 = fs.readFileSync(resolveRepositoryPath("docs/implementation/self-hosted/evidence/GATE-004.md"), "utf8");
@@ -114,5 +117,6 @@ assert.doesNotMatch(assetBuilder, /apps\/preview-service/u);
 
 console.log(
   `self-hosted legacy replacement inventory ok (${inventory.replacements.length} paths, `
-  + `${inventory.replacements.filter(({ nextTask }) => nextTask === "LEG-002").length} migrations complete)`
+  + `${inventory.replacements.filter(({ state }) => state !== "cleaned").length} source migrations and `
+  + `${inventory.replacements.filter(({ state }) => state === "cleaned").length} cleanups complete)`
 );

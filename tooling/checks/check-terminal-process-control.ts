@@ -64,8 +64,8 @@ const hostRunner = fs.readFileSync("packages/browser-host/test/run.ts", "utf8");
 for (const name of ["process-lifecycle.test.ts", "process-terminal-command.test.ts", "process-worker-runtime.test.ts"]) {
   assert(hostRunner.includes(name), `browser host suite does not include ${name}`);
 }
-const previewRunner = fs.readFileSync("apps/preview-service/test/run.ts", "utf8");
-assert(previewRunner.includes("file.endsWith(\".test.ts\")"), "preview suite no longer discovers terminal session evidence");
+const runtimeRunner = fs.readFileSync("packages/workspace-runtime/test/run.ts", "utf8");
+assert(runtimeRunner.includes("terminal-session-control.test.ts"), "workspace runtime suite no longer includes terminal session evidence");
 
 const lifecycle = fs.readFileSync("packages/browser-host/test/process-lifecycle.test.ts", "utf8");
 assert(lifecycle.includes("outputDroppedBytes"), "bounded output evidence missing");

@@ -64,8 +64,8 @@
       "status": "pass",
       "evidence": [
         "compat/nextjs-compatibility.json",
-        "apps/preview-service/test/next-full-runtime.test.ts",
-        "apps/preview-service/test/next-browser-worker.test.ts",
+        "apps/web/test/gate-project-runtime-browser.test.ts",
+        "apps/web/test/preview-next-subdomain-browser.test.ts",
         "docs/productization/nextjs-product-support-target.md"
       ],
       "notes": "Pinned Next 15.5.26 real CLI dev/HMR/build/start/restart and full feature coverage pass in strict-CSP Chrome with version-matched WASM SWC."
@@ -78,7 +78,7 @@
       "evidence": [
         "compat/bundler-dev-workflow-results.json",
         "tests/compatibility/frameworks/bundlers/bundler-candidate-workflow.test.ts",
-        "apps/preview-service/test/bundler-browser-worker.test.ts"
+        "tests/compatibility/frameworks/bundlers/bundler-candidate-workflow.test.ts"
       ],
       "notes": "Pinned Webpack 5.111.0, webpack-cli 7.2.3, and webpack-dev-server 5.2.2 pass real build, dev-server, HMR, restart, integrity recovery, teardown, and heap-budget coverage in strict-CSP Chrome using the complete static factory graph."
     },
@@ -90,7 +90,7 @@
       "evidence": [
         "compat/bundler-dev-workflow-results.json",
         "tests/compatibility/frameworks/bundlers/bundler-candidate-workflow.test.ts",
-        "apps/preview-service/test/bundler-browser-worker.test.ts"
+        "tests/compatibility/frameworks/bundlers/bundler-candidate-workflow.test.ts"
       ],
       "notes": "Pinned Rspack 2.2.4 passes real WASI-backed build, dev-server, HMR, restart, integrity recovery, nested-worker teardown, and heap-budget coverage in strict-CSP Chrome; the native binding remains excluded."
     }

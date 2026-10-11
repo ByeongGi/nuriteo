@@ -9,8 +9,8 @@
       "name": "Single-user preview MVP",
       "status": "pass",
       "evidence": [
-        "apps/preview-service",
-        "apps/preview-service/test/mvp.test.ts",
+        "apps/web",
+        "apps/web/test/gate-project-runtime-browser.test.ts",
         "docs/productization/service-readiness-plan.md#sg22"
       ]
     },
@@ -18,7 +18,7 @@
       "name": "Private beta service",
       "status": "pass",
       "evidence": [
-        "packages/service-backend",
+        "crates/nuriteo-server",
         "tests/service-backend/project-service.test.ts",
         "tooling/checks/check-service-backend.ts",
         "docs/productization/service-backend.md",

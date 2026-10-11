@@ -5,6 +5,7 @@
   "baselineManifest": "compat/self-hosted-rc-baseline.json",
   "recordedAt": "2026-10-09",
   "migrationCompletedAt": "2026-10-11",
+  "cleanupCompletedAt": "2026-10-11",
   "policy": {
     "productionSurfaces": ["apps/web", "crates/nuriteo-server", "packages/api-client"],
     "targetRuntimePackage": "packages/workspace-runtime",
@@ -70,26 +71,27 @@
       "id": "legacy-root-commands",
       "source": "package.json",
       "target": "apps/web/package.json",
-      "state": "cleanup-required",
+      "state": "cleaned",
       "behavior": ["dev-preview", "build-preview", "legacy-browser-tests", "service-backend-tests"],
       "evidence": [
         "docs/implementation/self-hosted/evidence/GATE-005.md",
         "docs/implementation/self-hosted/evidence/BASE-003.md"
       ],
-      "nextAction": "replace-canonical-scripts-and-archive-fixtures",
+      "nextAction": "canonical-scripts-active",
       "nextTask": "LEG-003"
     },
     {
       "id": "runtime-lab",
       "source": "examples/runtime-lab",
       "target": "apps/web",
-      "state": "cleanup-required",
+      "testFixtureTarget": "tests/fixtures/runtime-lab",
+      "state": "cleaned",
       "behavior": ["manual-runtime-lab"],
       "evidence": [
         "docs/implementation/self-hosted/evidence/RT-004.md",
         "docs/implementation/self-hosted/evidence/GATE-004.md"
       ],
-      "nextAction": "remove-from-production-command-graph",
+      "nextAction": "test-fixture-only",
       "nextTask": "LEG-003"
     }
   ]

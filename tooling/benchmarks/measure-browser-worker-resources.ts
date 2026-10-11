@@ -4,7 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { chromium } from "@playwright/test";
-import { createServer } from "../../apps/preview-service/node_modules/vite/dist/node/index.js";
+import { createServer } from "vite";
 import { REQUIRED_RUNTIME_HEADERS } from "../../packages/browser-host/src/security/headers.ts";
 
 const root = path.resolve(new URL("../..", import.meta.url).pathname);

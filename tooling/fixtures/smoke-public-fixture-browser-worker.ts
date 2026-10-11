@@ -5,7 +5,7 @@ import path from "node:path";
 import { execFileSync } from "node:child_process";
 
 import { chromium } from "@playwright/test";
-import { createServer } from "../../apps/preview-service/node_modules/vite/dist/node/index.js";
+import { createServer } from "vite";
 import { REQUIRED_RUNTIME_HEADERS } from "../../packages/browser-host/src/security/headers.ts";
 import {
   createViteDependencyArtifactClosureFromWorkspace,

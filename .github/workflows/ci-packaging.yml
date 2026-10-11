@@ -4,7 +4,7 @@ on:
   pull_request:
     paths:
       - ".github/workflows/ci-packaging.yml"
-      - "apps/preview-service/**"
+      - "apps/web/**"
       - "crates/**"
       - "packages/**"
       - "tooling/release/**"
@@ -23,7 +23,7 @@ on:
       - main
     paths:
       - ".github/workflows/ci-packaging.yml"
-      - "apps/preview-service/**"
+      - "apps/web/**"
       - "crates/**"
       - "packages/**"
       - "tooling/release/**"
@@ -65,7 +65,7 @@ jobs:
           toolchain: 1.97.1
           targets: wasm32-unknown-unknown
       - run: pnpm install --frozen-lockfile
-      - run: pnpm build:preview
+      - run: pnpm build:web
       - run: pnpm package:sdk
       - run: pnpm test:sdk-consumer
       - run: pnpm check:sdk-public-release
@@ -74,7 +74,8 @@ jobs:
         with:
           name: nuriteo-packaging-${{ github.sha }}
           path: |
-            apps/preview-service/dist
+            apps/web/.next/standalone
+            apps/web/.next/static
             dist/sdk
           if-no-files-found: error
           retention-days: 7

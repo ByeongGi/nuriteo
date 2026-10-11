@@ -21,10 +21,10 @@
   },
   "csp": "default-src 'self'; script-src 'self'; worker-src 'self'; connect-src 'self'; img-src 'self' data:; style-src 'self'",
   "evidence": [
-    "apps/preview-service/test/next-browser-worker.test.ts",
+    "apps/web/test/preview-next-subdomain-browser.test.ts",
     "packages/workspace-runtime/assets/vendor/next-cli-15.5.26.mjs",
     "tooling/generators/build-next-csp-factory.ts",
     "packages/node-runtime/src/modules/cjs.ts"
   ],
-  "reproduce": "mise exec node@22.23.0 -- pnpm test:next-browser-worker"
+  "reproduce": "mise exec node@22.23.0 -- pnpm --filter @nuriteo/web test:preview-next-browser"
 }

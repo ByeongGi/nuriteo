@@ -63,9 +63,9 @@
     "secrets": "not exposed to language, extension, or debugger Workers"
   },
   "tests": [
-    "apps/preview-service/test/lsp-product-stage.test.ts",
-    "apps/preview-service/test/extension-debug-product-stage.test.ts",
-    "apps/preview-service/test/safe-javascript-runtime.test.ts",
-    "apps/preview-service/test/lsp-browser-smoke.test.ts"
+    "packages/workspace-runtime/test/controller-dispose.test.ts",
+    "packages/workspace-runtime/test/terminal-session-control.test.ts",
+    "apps/web/test/runtime-journey-browser.test.ts",
+    "apps/web/test/gate-project-runtime-browser.test.ts"
   ]
 }

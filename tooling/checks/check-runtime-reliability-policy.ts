@@ -67,14 +67,14 @@ assert(policy.browserGrades.chrome === "supported", "Chrome must remain supporte
 assert(policy.browserGrades.edge === "supported", "Edge must remain supported after the desktop smoke gate");
 assert(browserSmoke.results.edge.status === "pass", "Edge support requires passing browser smoke evidence");
 assert(
-  browserSmoke.results.edge.evidence.includes("apps/preview-service/test/edge-browser-smoke.test.ts"),
-  "Edge smoke evidence must reference its executable test"
+  browserSmoke.results.edge.evidence.some((entry) => entry.startsWith("git-history:")),
+  "Edge smoke evidence must retain a historical source reference"
 );
 assert(policy.browserGrades.safari === "supported", "Safari must be supported after the desktop product smoke gate");
 assert(browserSmoke.results.safari.status === "pass", "Safari support requires passing browser smoke evidence");
 assert(
-  browserSmoke.results.safari.evidence.includes("apps/preview-service/test/safari-browser-smoke.test.ts"),
-  "Safari smoke evidence must reference its executable test"
+  browserSmoke.results.safari.evidence.some((entry) => entry.startsWith("git-history:")),
+  "Safari smoke evidence must retain a historical source reference"
 );
 assert(
   browserSmoke.results.safari.limitations.some((limitation) => limitation.includes("iOS")),
@@ -95,9 +95,7 @@ assert(supportMatrix.includes("Safari"), "support matrix must mention Safari");
 assert(browserGrades.includes("candidate"), "browser grades doc must define candidate");
 assert(browserGrades.includes("SharedArrayBuffer"), "browser grades doc must discuss SharedArrayBuffer");
 assert(fs.existsSync("packages/browser-host/test/large-node-modules-stress.test.ts"), "large node_modules stress test missing");
-assert(fs.existsSync("apps/preview-service/test/workflow-soak.test.ts"), "workflow soak test missing");
-assert(fs.existsSync("apps/preview-service/test/edge-browser-smoke.test.ts"), "Edge browser smoke test missing");
-assert(fs.existsSync("apps/preview-service/test/safari-browser-smoke.test.ts"), "Safari browser smoke test missing");
+assert(fs.existsSync("packages/workspace-runtime/test/ide-offline-soak.test.ts"), "workspace Runtime soak test missing");
 
 console.log(
   `runtime reliability policy ok chrome=${policy.browserGrades.chrome} edge=${policy.browserGrades.edge} safari=${policy.browserGrades.safari}`

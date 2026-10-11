@@ -4,7 +4,6 @@
     "erasableSyntaxOnly": true
   },
   "include": [
-    "packages/protocol/test/**/*.ts",
-    "packages/service-backend/test/**/*.ts"
+    "packages/protocol/test/**/*.ts"
   ]
 }

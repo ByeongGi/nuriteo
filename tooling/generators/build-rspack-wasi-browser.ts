@@ -5,7 +5,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
 
-import { build } from "../../apps/preview-service/node_modules/vite/dist/node/index.js";
+import { build } from "vite";
 
 const repositoryRoot = path.resolve(new URL("../..", import.meta.url).pathname);
 const require = createRequire(import.meta.url);

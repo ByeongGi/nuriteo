@@ -5,7 +5,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 
-import { build } from "../../apps/preview-service/node_modules/vite/dist/node/index.js";
+import { build } from "vite";
 import { prepareCjsSourceForStaticFactory } from "../../packages/node-runtime/src/modules/cjs.ts";
 import { prepareEsmStaticFactoryBody } from "../../packages/node-runtime/src/modules/esm.ts";
 import { createWorkspaceModuleRuntime } from "../../packages/node-runtime/src/modules/index.ts";

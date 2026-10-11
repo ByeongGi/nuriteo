@@ -10,7 +10,7 @@ if (!fs.existsSync(chromePath)) {
 }
 
 async function withRuntimeLab(callback) {
-  const server = spawn(process.execPath, [new URL("../../../examples/runtime-lab/server.ts", import.meta.url).pathname], {
+  const server = spawn(process.execPath, [new URL("../../fixtures/runtime-lab/server.ts", import.meta.url).pathname], {
     env: {
       ...process.env,
       PORT: "0"

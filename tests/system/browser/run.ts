@@ -7,4 +7,3 @@ await import("./non-js-tooling.test.ts");
 await import("./recovery.test.ts");
 await import("./soak.test.ts");
 await import("./static-cjs-factory-csp.test.ts");
-await import("../../../apps/preview-service/test/next-browser-worker.test.ts");

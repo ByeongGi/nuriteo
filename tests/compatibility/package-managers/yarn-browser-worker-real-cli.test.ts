@@ -5,7 +5,7 @@ import path from "node:path";
 import { gzipSync } from "node:zlib";
 
 import { chromium } from "@playwright/test";
-import { createServer } from "../../../apps/preview-service/node_modules/vite/dist/node/index.js";
+import { createServer } from "vite";
 import { REQUIRED_RUNTIME_HEADERS } from "../../../packages/browser-host/src/security/headers.ts";
 import { MemoryPackageManagerWorkspace } from "../../../packages/node-runtime/src/package-managers/workspace.ts";
 

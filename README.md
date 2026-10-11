@@ -14,7 +14,7 @@ NURITEO는 GitHub 프로젝트나 템플릿을 브라우저에서 열고 설치,
 
 ```bash
 pnpm install
-pnpm dev:preview
+pnpm dev:web
 ```
 
 주요 검증 명령:
@@ -22,7 +22,8 @@ pnpm dev:preview
 ```bash
 pnpm check:workspace
 pnpm check:types
-pnpm test:preview-service
+pnpm test:web
+pnpm test:workspace-runtime
 cargo test --workspace
 ```
 

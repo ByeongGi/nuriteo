@@ -133,7 +133,7 @@
   "reproduction": [
     "pnpm view webpack@5.111.0 dist.integrity",
     "pnpm view @rspack/binding@2.2.4 --json",
-    "pnpm test:bundler-browser",
+    "pnpm test:bundler-candidates",
     "node tests/compatibility/frameworks/bundlers/bundler-candidate-workflow.test.ts",
     "node tooling/checks/check-framework-product-support.ts"
   ]

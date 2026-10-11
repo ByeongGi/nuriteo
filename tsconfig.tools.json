@@ -5,7 +5,7 @@
   },
   "include": [
     "apps/*/server.ts",
-    "examples/*/server.ts",
+    "tests/fixtures/*/server.ts",
     "experiments/*/server.ts"
   ]
 }

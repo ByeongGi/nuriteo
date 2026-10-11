@@ -7,7 +7,7 @@ import { chromium } from "@playwright/test";
 const root = new URL("../../..", import.meta.url).pathname;
 const fixture = path.join(root, "tests/fixtures/static-cjs-factory-csp");
 const port = await availablePort();
-const server = spawn(path.join(root, "apps/preview-service/node_modules/.bin/vite"), ["--host", "127.0.0.1", "--port", String(port), "--strictPort"], {
+const server = spawn(path.join(root, "node_modules/.bin/vite"), ["--host", "127.0.0.1", "--port", String(port), "--strictPort"], {
   cwd: fixture,
   stdio: ["ignore", "pipe", "pipe"]
 });
