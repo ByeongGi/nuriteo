@@ -5,7 +5,7 @@
   "license": "Apache-2.0",
   "type": "module",
   "scripts": {
-    "build": "pnpm runtime:assets && next build",
+    "build": "pnpm runtime:assets && next build && node tooling/canonicalize-next-output.mjs",
     "dev": "pnpm runtime:assets && next dev",
     "lint": "tsc -p tsconfig.json --noEmit",
     "start": "next start",
