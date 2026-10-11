@@ -39,7 +39,7 @@
   },
   "browserGradeNotes": {
     "chrome": "Primary gate browser with COOP/COEP and SharedArrayBuffer.",
-    "edge": "Microsoft Edge 153 desktop smoke passes COOP/COEP, SharedArrayBuffer, Service Worker activation, and Vite React preview.",
+    "edge": "Microsoft Edge 155 desktop smoke passes COOP/COEP, SharedArrayBuffer, Service Worker activation, OPFS, and the retained Vite React preview.",
     "safari": "Safari 26.6.2 desktop smoke passes COOP/COEP, SharedArrayBuffer, Service Worker preview routing, iframe rendering, OPFS reopen, and product quota recovery. iOS/mobile Safari is not covered."
   },
   "holdFixtures": []

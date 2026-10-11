@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "date": "2026-09-28",
+  "date": "2026-10-12",
   "status": "pass-with-product-resource-contract",
   "executionHost": "strict-csp-headless-chrome",
   "workerEntrypoint": "/workers/process-worker.ts",
@@ -19,7 +19,7 @@
     },
     "after": {
       "available": true,
-      "bytes": 486947,
+      "bytes": 478701,
       "breakdownCount": 4
     },
     "scope": "page/agent-cluster estimate; not a per-Worker hard limit"

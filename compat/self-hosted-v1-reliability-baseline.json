@@ -1,0 +1,75 @@
+{
+  "schemaVersion": 1,
+  "taskId": "QUAL-002",
+  "measuredAt": "2026-10-12",
+  "status": "pass",
+  "runtime": {
+    "node": "22.23.0",
+    "chrome": "154.0.8037.98",
+    "host": "macOS arm64 with Podman 6.0.2"
+  },
+  "results": [
+    {
+      "id": "browser-runtime-soak",
+      "status": "pass",
+      "iterations": 1000,
+      "threshold": "zero active workers, pending requests, open files, watches, ports, and system requests after every teardown",
+      "evidence": "tests/system/browser/soak.test.ts"
+    },
+    {
+      "id": "browser-worker-resource-churn",
+      "status": "pass",
+      "iterations": 30,
+      "threshold": "all boots pass, at least three injected failures recover, and worker target count returns to baseline",
+      "evidence": "compat/browser-worker-resource-results.json"
+    },
+    {
+      "id": "browser-watchdog-recovery",
+      "status": "pass",
+      "iterations": 1,
+      "threshold": "256 MiB admission rejection, watchdog teardown, zero pending resources, and clean reboot",
+      "evidence": "tests/system/browser/recovery.test.ts"
+    },
+    {
+      "id": "large-node-modules",
+      "status": "pass",
+      "iterations": 2500,
+      "threshold": "all files readable, cache eviction frees bytes, Project files remain, and ENOMEM writes are atomic",
+      "evidence": "packages/browser-host/test/large-node-modules-stress.test.ts"
+    },
+    {
+      "id": "offline-workflow",
+      "status": "pass",
+      "iterations": 1,
+      "threshold": "install, dev Preview, repeated response, export, and pinned Yarn command complete without network",
+      "evidence": "packages/workspace-runtime/test/ide-offline-soak.test.ts"
+    },
+    {
+      "id": "otlp-outage-and-shutdown",
+      "status": "pass",
+      "iterations": 5,
+      "threshold": "bounded queue/batch, redaction, flush, disabled default, and collector outage shutdown budget",
+      "evidence": "crates/nuriteo-server/src/observability/telemetry.rs"
+    },
+    {
+      "id": "production-server-lifecycle",
+      "status": "pass",
+      "iterations": 1,
+      "threshold": "TLS PostgreSQL and HTTPS S3 startup, serve, drain, shutdown, and backend immutability",
+      "evidence": "crates/nuriteo-server/tests/fixtures/production-serve/run.sh"
+    }
+  ],
+  "resourceContract": {
+    "workspaceAdmissionBytes": 268435456,
+    "workspaceStorageBytes": 268435456,
+    "wasmMaximumPages": 32768,
+    "browserWorkerHeapHardCap": "unavailable-not-claimed",
+    "pageMemory": "observational-only-no-regression-threshold"
+  },
+  "releaseBlockers": [
+    "required reliability result is not pass",
+    "worker or pending-resource count does not return to baseline",
+    "collector outage exceeds the configured shutdown timeout",
+    "resource limit is weakened without a new measured baseline"
+  ]
+}
