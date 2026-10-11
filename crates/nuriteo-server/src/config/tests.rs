@@ -583,3 +583,37 @@ fn strict_registry_accepts_bootstrap_command_inputs_without_loading_secrets() {
     assert_eq!(password_fields.len(), 2);
     assert!(password_fields.iter().all(|field| field.secret));
 }
+
+#[test]
+fn strict_registry_accepts_backup_and_isolated_restore_inputs() {
+    let report = load(
+        &[
+            (EXTERNAL_URL, "http://127.0.0.1:3000"),
+            ("NURITEO_PG_DUMP_PATH", "/usr/bin/pg_dump"),
+            ("NURITEO_BACKUP_SCRATCH_DIR", "/tmp/nuriteo-backup"),
+            ("NURITEO_BACKUP_S3_ENDPOINT", "https://backup.example.test"),
+            ("NURITEO_BACKUP_S3_BUCKET", "backups"),
+            (
+                "NURITEO_BACKUP_S3_SECRET_ACCESS_KEY_FILE",
+                "/run/secrets/backup-key",
+            ),
+            (
+                "NURITEO_RESTORE_DATABASE_URL_FILE",
+                "/run/secrets/restore-database-url",
+            ),
+            (
+                "NURITEO_RESTORE_S3_ENDPOINT",
+                "https://restore.example.test",
+            ),
+            ("NURITEO_RESTORE_S3_BUCKET", "restore-target"),
+            (
+                "NURITEO_RESTORE_S3_SECRET_ACCESS_KEY_FILE",
+                "/run/secrets/restore-key",
+            ),
+        ],
+        &TestFiles::default(),
+    )
+    .unwrap();
+
+    assert!(report.warnings.is_empty());
+}
