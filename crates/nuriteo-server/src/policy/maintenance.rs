@@ -2,12 +2,19 @@ use std::fmt;
 use std::future::Future;
 use std::time::Duration;
 
+use ::time::OffsetDateTime;
+use serde_json::json;
 use sqlx::{Acquire, Row};
 use tokio::task::JoinSet;
 use tokio::time;
 use uuid::Uuid;
 
+use crate::audit::{
+    ActorType, AuditActor, AuditEvent, AuditEventFields, AuditEventId, AuditMetadata, AuditResult,
+    AuditScope, AuditTarget, AuditWriter, ScopeType,
+};
 use crate::database::DatabasePool;
+use crate::identity::Timestamp;
 use crate::object_storage::{ObjectKey, ObjectStoreErrorKind, S3ObjectStore};
 
 use super::{EffectivePolicyEngine, EffectivePolicyError, EffectivePolicySnapshot};
@@ -17,6 +24,7 @@ pub(crate) const MAX_ATTEMPTS: i32 = 8;
 const LEASE_DURATION: Duration = Duration::from_secs(60 * 60);
 const ITEM_TIMEOUT: Duration = Duration::from_secs(30);
 const NOTIFICATION_BATCH: i64 = 100;
+const AUDIT_BATCH: i64 = 1_000;
 const MAX_RUN_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 
 pub(crate) const GC_ELIGIBLE_PREDICATE: &str = "candidate.attempts<$1 \
@@ -62,6 +70,7 @@ pub struct PolicyMaintenanceReport {
     pub gc_retried: u16,
     pub gc_failed: u16,
     pub notifications_deleted: u16,
+    pub audit_events_deleted: u16,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -145,6 +154,7 @@ where
 
     async fn run_once_inner(&self) -> Result<PolicyMaintenanceReport, PolicyMaintenanceError> {
         let notifications_deleted = self.sweep_notifications().await?;
+        let audit_events_deleted = self.sweep_audit_events().await?;
         let snapshot = EffectivePolicyEngine::new(self.pool.clone(), self.operation_timeout)
             .map_err(map_policy)?
             .load()
@@ -153,6 +163,7 @@ where
         if !snapshot.gc_enabled() {
             return Ok(PolicyMaintenanceReport {
                 notifications_deleted,
+                audit_events_deleted,
                 ..PolicyMaintenanceReport::default()
             });
         }
@@ -170,6 +181,7 @@ where
         let mut report = PolicyMaintenanceReport {
             gc_claimed: claimed,
             notifications_deleted,
+            audit_events_deleted,
             ..PolicyMaintenanceReport::default()
         };
         while let Some(result) = running.join_next().await {
@@ -226,6 +238,85 @@ where
             .await
             .map_err(|_| PolicyMaintenanceError::Database)?;
         u16::try_from(deleted).map_err(|_| PolicyMaintenanceError::Invariant)
+    }
+
+    async fn sweep_audit_events(&self) -> Result<u16, PolicyMaintenanceError> {
+        let mut connection = self
+            .pool
+            .acquire()
+            .await
+            .map_err(|_| PolicyMaintenanceError::Database)?;
+        let mut tx = connection
+            .begin()
+            .await
+            .map_err(|_| PolicyMaintenanceError::Database)?;
+        let snapshot = EffectivePolicyEngine::load_in_transaction(&mut tx)
+            .await
+            .map_err(map_policy)?;
+        let Some(days) = retention_days(&snapshot, "audit.retention_days")? else {
+            tx.commit()
+                .await
+                .map_err(|_| PolicyMaintenanceError::Database)?;
+            return Ok(0);
+        };
+        let deleted: i64 = sqlx::query_scalar(
+            "WITH candidates AS (SELECT event.id FROM audit_events event \
+             WHERE event.occurred_at < transaction_timestamp()-make_interval(days=>$1) \
+               AND NOT EXISTS (SELECT 1 FROM project_history_promotions promotion \
+                               WHERE promotion.audit_event_id=event.id) \
+             ORDER BY event.occurred_at,event.id LIMIT $2 FOR UPDATE SKIP LOCKED), \
+             removed AS (DELETE FROM audit_events event USING candidates \
+               WHERE event.id=candidates.id RETURNING event.id) \
+             SELECT COUNT(*)::bigint FROM removed",
+        )
+        .bind(days)
+        .bind(AUDIT_BATCH)
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(|_| PolicyMaintenanceError::Database)?;
+        let deleted = u16::try_from(deleted).map_err(|_| PolicyMaintenanceError::Invariant)?;
+        if deleted != 0 {
+            let event = AuditEvent::new(AuditEventFields {
+                id: AuditEventId::new(),
+                occurred_at: Timestamp::from_datetime(OffsetDateTime::now_utc())
+                    .map_err(|_| PolicyMaintenanceError::Invariant)?,
+                actor: AuditActor {
+                    kind: ActorType::BackgroundJob,
+                    id: "policy-maintenance".into(),
+                    user_id: None,
+                    display_name: None,
+                },
+                action_code: "audit.retention_pruned".into(),
+                target: AuditTarget {
+                    kind: "audit_retention".into(),
+                    id: "instance".into(),
+                },
+                scope: AuditScope {
+                    kind: ScopeType::Instance,
+                    id: "instance".into(),
+                },
+                result: AuditResult::Succeeded,
+                reason_code: None,
+                correlation_id: format!("maintenance:audit:{}", AuditEventId::new()),
+                source_ip: None,
+                schema_version: 1,
+                changed_fields: Vec::new(),
+                metadata: AuditMetadata::new(json!({
+                    "deletedCount": deleted,
+                    "retentionDays": days,
+                    "source": "policy-maintenance"
+                }))
+                .map_err(|_| PolicyMaintenanceError::Invariant)?,
+            })
+            .map_err(|_| PolicyMaintenanceError::Invariant)?;
+            AuditWriter::append(&mut tx, &event)
+                .await
+                .map_err(|_| PolicyMaintenanceError::Database)?;
+        }
+        tx.commit()
+            .await
+            .map_err(|_| PolicyMaintenanceError::Database)?;
+        Ok(deleted)
     }
 
     async fn claim_gc(

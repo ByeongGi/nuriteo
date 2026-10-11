@@ -49,7 +49,7 @@ async fn live_policy_is_serialized_restart_safe_and_dry_run_only() {
     )
     .await
     .unwrap();
-    assert_eq!(report.latest_version, Some(40));
+    assert_eq!(report.latest_version, Some(50));
     InstanceSettingsRepository::new(pool.clone(), Duration::from_secs(5))
         .unwrap()
         .materialize(&InstanceSettingBootstrap::empty())
@@ -130,6 +130,16 @@ async fn verify_maintenance_workers(pool: &DatabasePool) {
     )
     .await;
     sqlx::raw_sql(
+        "INSERT INTO audit_events(id,occurred_at,actor_type,actor_id,action_code,target_type,target_id,scope_type,scope_id,result,correlation_id,metadata) VALUES \
+         ('0199ee6c-c777-7000-8000-000000000901',transaction_timestamp()-interval '400 days','system','fixture','fixture.audit_expired','fixture','unreferenced','instance','instance','succeeded','fixture:audit-unreferenced','{}'::jsonb), \
+         ('0199ee6c-c777-7000-8000-000000000902',transaction_timestamp()-interval '400 days','system','fixture','fixture.audit_expired','fixture','history-reference','instance','instance','succeeded','fixture:audit-referenced','{}'::jsonb); \
+         INSERT INTO project_history_promotions(id,project_id,actor_user_id,idempotency_digest,reference_kind,reference_id,bundle_id,expected_project_version,resulting_project_version,changed,audit_event_id) VALUES \
+         ('0199ee6c-c777-7000-8000-000000000903','0199ee6c-c777-7000-8000-000000000815'::uuid,'0199ee6c-c777-7000-8000-000000000801'::uuid,decode(repeat('90',32),'hex'),'version','0199ee6c-c777-7000-8000-000000000904'::uuid,'0199ee6c-c777-7000-8000-000000000810'::uuid,1,1,FALSE,'0199ee6c-c777-7000-8000-000000000902'::uuid)",
+    )
+    .execute(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+    sqlx::raw_sql(
         "INSERT INTO gc_candidates(object_key,expected_sha256,expected_bytes,reason,eligible_at) \
          VALUES('bundles/policy-gc',decode(repeat('81',32),'hex'),128,'reference_removed',transaction_timestamp())",
     )
@@ -195,6 +205,44 @@ async fn verify_maintenance_workers(pool: &DatabasePool) {
     assert_eq!(first.gc_claimed, 1);
     assert_eq!(first.gc_retried, 1);
     assert_eq!(first.notifications_deleted, 1);
+    assert_eq!(first.audit_events_deleted, 1);
+    let audit_retention_state: (bool, bool, i64) = sqlx::query_as(
+        "SELECT \
+         EXISTS(SELECT 1 FROM audit_events WHERE id='0199ee6c-c777-7000-8000-000000000901'::uuid), \
+         EXISTS(SELECT 1 FROM audit_events WHERE id='0199ee6c-c777-7000-8000-000000000902'::uuid), \
+         (SELECT COUNT(*) FROM audit_events WHERE action_code='audit.retention_pruned' AND actor_type='background_job')",
+    )
+    .fetch_one(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+    assert_eq!(audit_retention_state, (false, true, 1));
+
+    sqlx::raw_sql(
+        "INSERT INTO audit_events(id,occurred_at,actor_type,actor_id,action_code,target_type,target_id,scope_type,scope_id,result,correlation_id,metadata) VALUES \
+         ('0199ee6c-c777-7000-8000-000000000905',transaction_timestamp()-interval '400 days','system','fixture','fixture.audit_expired','fixture','rollback','instance','instance','succeeded','fixture:audit-rollback','{}'::jsonb); \
+         CREATE FUNCTION reject_maintenance_audit() RETURNS trigger LANGUAGE plpgsql AS $$ \
+         BEGIN IF NEW.action_code='audit.retention_pruned' AND NEW.actor_type='background_job' THEN RAISE EXCEPTION 'fixture audit failure'; END IF; RETURN NEW; END $$; \
+         CREATE TRIGGER reject_maintenance_audit BEFORE INSERT ON audit_events FOR EACH ROW EXECUTE FUNCTION reject_maintenance_audit()",
+    )
+    .execute(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+    assert_eq!(
+        worker.run_once().await.unwrap_err(),
+        nuriteo_server::policy::PolicyMaintenanceError::Database
+    );
+    assert!(sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM audit_events WHERE id='0199ee6c-c777-7000-8000-000000000905'::uuid)",
+    )
+    .fetch_one(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap());
+    sqlx::raw_sql(
+        "DROP TRIGGER reject_maintenance_audit ON audit_events; DROP FUNCTION reject_maintenance_audit()",
+    )
+    .execute(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
     assert!(sqlx::query_scalar::<_, bool>(
         "SELECT EXISTS(SELECT 1 FROM notifications WHERE id='0199ee6c-c777-7000-8000-000000000812'::uuid)",
     )
@@ -216,6 +264,7 @@ async fn verify_maintenance_workers(pool: &DatabasePool) {
     tokio::time::sleep(Duration::from_millis(1_100)).await;
     let second = worker.run_once().await.unwrap();
     assert_eq!(second.gc_completed, 1);
+    assert_eq!(second.audit_events_deleted, 1);
     assert_eq!(backend.calls.load(Ordering::SeqCst), 2);
     let status: String =
         sqlx::query_scalar("SELECT status FROM gc_candidates WHERE object_key='bundles/policy-gc'")

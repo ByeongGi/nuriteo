@@ -30,6 +30,9 @@ const PROJECT_ID: &str = "0199ee6c-c777-7000-8000-000000022003";
 const SAVE_SESSION_ID: &str = "0199ee6c-c777-7000-8000-000000022004";
 const BUNDLE_ID: &str = "0199ee6c-c777-7000-8000-000000022005";
 const SESSION_ID: &str = "0199ee6c-c777-7000-8000-000000022006";
+const AUDIT_EVENT_ID: &str = "0199ee6c-c777-7000-8000-000000022007";
+const HISTORY_PROMOTION_ID: &str = "0199ee6c-c777-7000-8000-000000022008";
+const HISTORY_REFERENCE_ID: &str = "0199ee6c-c777-7000-8000-000000022009";
 const OBJECT_KEY: &str = "bundles/restore-drill";
 
 #[tokio::test]
@@ -401,6 +404,36 @@ async fn seed_source(pool: &DatabasePool, digest: [u8; 32], bytes: usize) {
     .execute(&mut *connection)
     .await
     .unwrap();
+    sqlx::query(
+        "INSERT INTO audit_events(id,actor_type,actor_id,actor_user_id,actor_display_name,
+         action_code,target_type,target_id,scope_type,scope_id,result,correlation_id,metadata)
+         VALUES($1::uuid,'user',$2,$2::uuid,'Restore fixture','project.history_promoted',
+                'project_history_reference',$3,'project',$4,'succeeded','fixture:backup-audit',
+                '{\"source\":\"backup-restore-fixture\"}'::jsonb)",
+    )
+    .bind(AUDIT_EVENT_ID)
+    .bind(USER_ID)
+    .bind(HISTORY_REFERENCE_ID)
+    .bind(PROJECT_ID)
+    .execute(&mut *connection)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO project_history_promotions(
+         id,project_id,actor_user_id,idempotency_digest,reference_kind,reference_id,bundle_id,
+         expected_project_version,resulting_project_version,changed,audit_event_id)
+         VALUES($1::uuid,$2::uuid,$3::uuid,decode(repeat('42',32),'hex'),'version',$4::uuid,
+                $5::uuid,1,2,TRUE,$6::uuid)",
+    )
+    .bind(HISTORY_PROMOTION_ID)
+    .bind(PROJECT_ID)
+    .bind(USER_ID)
+    .bind(HISTORY_REFERENCE_ID)
+    .bind(BUNDLE_ID)
+    .bind(AUDIT_EVENT_ID)
+    .execute(&mut *connection)
+    .await
+    .unwrap();
     connection.execute("COMMIT").await.unwrap();
 }
 
@@ -430,6 +463,24 @@ async fn assert_restored_database(pool: &DatabasePool) {
         (
             "needs_reconfiguration".to_owned(),
             Some("missing_recovery_kit".to_owned())
+        )
+    );
+    let restored_audit: (String, String) = sqlx::query_as(
+        "SELECT event.action_code,promotion.audit_event_id::text
+         FROM audit_events event JOIN project_history_promotions promotion
+           ON promotion.audit_event_id=event.id
+         WHERE event.id=$1::uuid AND promotion.id=$2::uuid",
+    )
+    .bind(AUDIT_EVENT_ID)
+    .bind(HISTORY_PROMOTION_ID)
+    .fetch_one(&mut *pool.acquire().await.unwrap())
+    .await
+    .unwrap();
+    assert_eq!(
+        restored_audit,
+        (
+            "project.history_promoted".to_owned(),
+            AUDIT_EVENT_ID.to_owned()
         )
     );
     let smtp_enable = sqlx::query(
