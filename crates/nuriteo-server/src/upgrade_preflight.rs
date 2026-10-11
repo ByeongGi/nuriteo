@@ -85,7 +85,6 @@ impl UpgradePreflightReport {
     pub const fn schema_state(&self) -> UpgradeSchemaState {
         self.schema_state
     }
-
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
