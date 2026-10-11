@@ -3,6 +3,7 @@ mod destination;
 mod engine;
 mod portable;
 mod reader;
+mod restore;
 mod snapshot;
 
 pub use coordinator::{BackupCreateCoordinator, BackupCreateError};
@@ -19,7 +20,8 @@ pub use portable::{
     CreatedBy, DatabaseDescriptor, ManifestEntry, ManifestEntryKind, PortableBackupManifest,
     PortableFormatError, PortableLimits, read_portable_v1, write_portable_v1,
 };
-pub use reader::{BackupReadCoordinator, BackupReadError};
+pub use reader::{BackupReadCoordinator, BackupReadError, StagedBackup};
+pub use restore::{BackupRestoreCoordinator, BackupRestoreError, RestoreRuntime};
 pub use snapshot::{
     BackupObjectInventory, CapturedBackupSnapshot, CommandPgDump, ExportedBackupSnapshot,
     PgDumpArtifact, PgDumpCommandConfig, PgDumpError, SnapshotCaptureError,

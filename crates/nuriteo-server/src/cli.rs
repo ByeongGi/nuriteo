@@ -9,8 +9,8 @@ use clap::{Arg, ArgAction, ArgMatches, Command};
 use crate::app::run_server;
 use crate::backup::{
     BackupCreateCoordinator, BackupDestination, BackupDestinationRuntime, BackupEngine,
-    BackupReadCoordinator, CommandPgDump, DirectoryBackupRepository, PgDumpCommandConfig,
-    PortableLimits, PrunePolicy,
+    BackupReadCoordinator, BackupRestoreCoordinator, CommandPgDump, DirectoryBackupRepository,
+    PgDumpCommandConfig, PortableLimits, PrunePolicy, RestoreRuntime,
 };
 use crate::bootstrap::{
     BootstrapAdminInput, BootstrapErrorCategory, BootstrapOutcome, bootstrap_administrator,
@@ -572,6 +572,9 @@ async fn run_backup_command<O: Write, E: Write>(
     if matches!(command, BackupCommand::Create) {
         return backup_create(stdout, stderr).await;
     }
+    if matches!(command, BackupCommand::Restore { .. }) {
+        return backup_restore(command, stdout, stderr).await;
+    }
     if matches!(
         command,
         BackupCommand::List | BackupCommand::Verify { .. } | BackupCommand::Export { .. }
@@ -659,6 +662,114 @@ async fn run_backup_command<O: Write, E: Write>(
         Ok(()) => Ok(CommandStatus::Success),
         Err(error) => backup_failure(stderr, backup_error_category(error)),
     }
+}
+
+async fn backup_restore<O: Write, E: Write>(
+    command: BackupCommand,
+    stdout: &mut O,
+    stderr: &mut E,
+) -> io::Result<CommandStatus> {
+    let BackupCommand::Restore { backup_id } = command else {
+        unreachable!("restore dispatcher only receives restore commands")
+    };
+    let environment = SystemEnvironment;
+    let files = SystemFileReader;
+    let source_database = match DatabaseRuntimeConfig::load(&environment, &files) {
+        Ok(config) => config,
+        Err(_) => return backup_failure(stderr, "database-configuration"),
+    };
+    let primary_storage = match ObjectStorageConfig::load(&environment, &files) {
+        Ok(config) => config,
+        Err(_) => return backup_failure(stderr, "source-storage-configuration"),
+    };
+    let backup_runtime = match BackupDestinationRuntime::load(&environment, &files) {
+        Ok(runtime) => runtime,
+        Err(_) => return backup_failure(stderr, "destination-configuration"),
+    };
+    let restore_runtime = match RestoreRuntime::load(&environment, &files) {
+        Ok(runtime) => runtime,
+        Err(error) => return backup_failure(stderr, error.category()),
+    };
+    if primary_storage.same_target(&restore_runtime.storage) {
+        return backup_failure(stderr, "production-target");
+    }
+    let scratch = match std::env::var_os("NURITEO_BACKUP_SCRATCH_DIR") {
+        Some(path) => PathBuf::from(path),
+        None => return backup_failure(stderr, "restore-scratch"),
+    };
+    let source_pool = match DatabasePool::connect(source_database.pool_config()).await {
+        Ok(pool) => pool,
+        Err(_) => return backup_failure(stderr, "database-connectivity"),
+    };
+    let target_pool = match DatabasePool::connect(restore_runtime.database.pool_config()).await {
+        Ok(pool) => pool,
+        Err(_) => {
+            let _ = source_pool.close(source_database.close_timeout()).await;
+            return backup_failure(stderr, "restore-database-connectivity");
+        }
+    };
+    let backup_destination =
+        match BackupDestination::new(backup_runtime.config, &backup_runtime.credential) {
+            Ok(destination) => destination,
+            Err(_) => {
+                close_restore_pools(source_pool, &source_database, target_pool, &restore_runtime)
+                    .await;
+                return backup_failure(stderr, "destination-initialization");
+            }
+        };
+    let target_storage =
+        match S3ObjectStore::new(&restore_runtime.storage, OperationLimits::default()).await {
+            Ok(storage) => storage,
+            Err(_) => {
+                close_restore_pools(source_pool, &source_database, target_pool, &restore_runtime)
+                    .await;
+                return backup_failure(stderr, "restore-storage-initialization");
+            }
+        };
+    let reader = BackupReadCoordinator::new(
+        source_pool.clone(),
+        backup_destination,
+        PortableLimits::default(),
+    );
+    let staged = match reader.stage(&backup_id, &scratch).await {
+        Ok(staged) => staged,
+        Err(error) => {
+            close_restore_pools(source_pool, &source_database, target_pool, &restore_runtime).await;
+            return backup_failure(stderr, error.category());
+        }
+    };
+    let target_close_timeout = restore_runtime.database.close_timeout();
+    let coordinator = BackupRestoreCoordinator::new(
+        source_pool.clone(),
+        target_pool.clone(),
+        target_storage,
+        restore_runtime,
+    );
+    let result = coordinator.restore(&staged).await;
+    let source_close = source_pool.close(source_database.close_timeout()).await;
+    let target_close = target_pool.close(target_close_timeout).await;
+    match (result, source_close, target_close) {
+        (Ok(report), Ok(()), Ok(())) => {
+            writeln!(
+                stdout,
+                "backup restored: {} entries={} bytes={}",
+                report.backup_id, report.entries, report.bytes
+            )?;
+            Ok(CommandStatus::Success)
+        }
+        (Err(error), _, _) => backup_failure(stderr, error.category()),
+        (Ok(_), Err(_), _) | (Ok(_), _, Err(_)) => backup_failure(stderr, "database-close"),
+    }
+}
+
+async fn close_restore_pools(
+    source: DatabasePool,
+    source_config: &DatabaseRuntimeConfig,
+    target: DatabasePool,
+    target_runtime: &RestoreRuntime,
+) {
+    let _ = source.close(source_config.close_timeout()).await;
+    let _ = target.close(target_runtime.database.close_timeout()).await;
 }
 
 async fn backup_read<O: Write, E: Write>(

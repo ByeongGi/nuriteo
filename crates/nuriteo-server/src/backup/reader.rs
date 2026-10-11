@@ -177,6 +177,68 @@ impl BackupReadCoordinator {
             bytes,
         })
     }
+
+    pub async fn stage(
+        &self,
+        backup_id: &str,
+        scratch_directory: &Path,
+    ) -> Result<StagedBackup, BackupReadError> {
+        require_scratch_directory(scratch_directory)?;
+        let manifest = self.load_manifest(backup_id).await?;
+        let directory = tempfile::Builder::new()
+            .prefix("nuriteo-restore-")
+            .tempdir_in(scratch_directory)
+            .map_err(|_| BackupReadError::Scratch)?;
+        let mut paths = Vec::with_capacity(manifest.entries.len());
+        for (index, entry) in manifest.entries.iter().enumerate() {
+            let digest = parse_digest(&entry.sha256)?;
+            let key = self.destination.payload_object_key(digest);
+            let target = directory.path().join(format!("entry-{index}"));
+            self.destination
+                .download_verified(&key, entry.bytes, digest, &target)
+                .await
+                .map_err(|_| BackupReadError::Destination)?;
+            paths.push(target);
+        }
+        Ok(StagedBackup {
+            _directory: directory,
+            manifest,
+            paths,
+        })
+    }
+}
+
+pub struct StagedBackup {
+    _directory: tempfile::TempDir,
+    manifest: PortableBackupManifest,
+    paths: Vec<std::path::PathBuf>,
+}
+
+impl StagedBackup {
+    #[must_use]
+    pub const fn manifest(&self) -> &PortableBackupManifest {
+        &self.manifest
+    }
+
+    pub fn database_archive(&self) -> Result<&Path, BackupReadError> {
+        self.paths
+            .first()
+            .map(std::path::PathBuf::as_path)
+            .ok_or(BackupReadError::Manifest)
+    }
+
+    pub fn payload_for_digest(&self, digest: &str) -> Result<&Path, BackupReadError> {
+        let index = self
+            .manifest
+            .entries
+            .iter()
+            .position(|entry| entry.sha256 == digest)
+            .ok_or(BackupReadError::Manifest)?;
+        self.paths
+            .get(index)
+            .map(std::path::PathBuf::as_path)
+            .ok_or(BackupReadError::Manifest)
+    }
 }
 
 async fn remove_staged(paths: &[std::path::PathBuf]) {

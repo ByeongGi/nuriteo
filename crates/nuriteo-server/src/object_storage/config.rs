@@ -129,6 +129,14 @@ impl ObjectStorageConfig {
                 .map_or(0, CaBundle::certificate_count),
         }
     }
+
+    /// Compares the physical S3 endpoint and bucket without exposing either in
+    /// diagnostics. Restore uses this to reject the production data plane as a
+    /// target even when different credentials were supplied.
+    #[must_use]
+    pub fn same_target(&self, other: &Self) -> bool {
+        self.endpoint == other.endpoint && self.bucket == other.bucket
+    }
 }
 
 impl fmt::Debug for ObjectStorageConfig {
