@@ -679,6 +679,37 @@ impl BackupDestination {
     ) -> Result<BackupStoredObject, BackupDestinationError> {
         verify_local_file(source, bytes, digest).await?;
         let key = self.payload_key(digest);
+        match self
+            .client
+            .head_object()
+            .bucket(&self.config.bucket)
+            .key(&key)
+            .send()
+            .await
+        {
+            Ok(head) => {
+                self.verify_object(&key, bytes, digest).await?;
+                return Ok(BackupStoredObject {
+                    key,
+                    version_id: head.version_id().map(str::to_owned),
+                    bytes,
+                    sha256: digest,
+                });
+            }
+            Err(error)
+                if missing_object(
+                    error
+                        .as_service_error()
+                        .and_then(ProvideErrorMetadata::code),
+                ) => {}
+            Err(error) => {
+                return Err(classify(
+                    error
+                        .as_service_error()
+                        .and_then(ProvideErrorMetadata::code),
+                ));
+            }
+        }
         let body = ByteStream::from_path(source)
             .await
             .map_err(|_| BackupDestinationError::LocalInput)?;
@@ -687,15 +718,48 @@ impl BackupDestination {
             .put_object()
             .bucket(&self.config.bucket)
             .key(&key)
-            .body(body);
+            .body(body)
+            .if_none_match("*");
         put = apply_sse(put, &self.config.sse);
-        let output = put.send().await.map_err(|error| {
-            classify(
-                error
-                    .as_service_error()
-                    .and_then(ProvideErrorMetadata::code),
-            )
-        })?;
+        let output = match put.send().await {
+            Ok(output) => output,
+            Err(error)
+                if precondition_failed(
+                    error
+                        .as_service_error()
+                        .and_then(ProvideErrorMetadata::code),
+                ) =>
+            {
+                self.verify_object(&key, bytes, digest).await?;
+                let head = self
+                    .client
+                    .head_object()
+                    .bucket(&self.config.bucket)
+                    .key(&key)
+                    .send()
+                    .await
+                    .map_err(|error| {
+                        classify(
+                            error
+                                .as_service_error()
+                                .and_then(ProvideErrorMetadata::code),
+                        )
+                    })?;
+                return Ok(BackupStoredObject {
+                    key,
+                    version_id: head.version_id().map(str::to_owned),
+                    bytes,
+                    sha256: digest,
+                });
+            }
+            Err(error) => {
+                return Err(classify(
+                    error
+                        .as_service_error()
+                        .and_then(ProvideErrorMetadata::code),
+                ));
+            }
+        };
         self.verify_object(&key, bytes, digest).await?;
         Ok(BackupStoredObject {
             key,
@@ -1088,6 +1152,17 @@ fn classify(code: Option<&str>) -> BackupDestinationError {
 
 fn permission_denied(code: Option<&str>) -> bool {
     matches!(code, Some("AccessDenied" | "Unauthorized" | "Forbidden"))
+}
+
+fn missing_object(code: Option<&str>) -> bool {
+    matches!(code, Some("NoSuchKey" | "NotFound" | "404"))
+}
+
+fn precondition_failed(code: Option<&str>) -> bool {
+    matches!(
+        code,
+        Some("PreconditionFailed" | "ConditionalRequestConflict" | "412" | "409")
+    )
 }
 
 fn build_http_client(ca_pem: Option<&[u8]>) -> Result<PoolClient, BackupDestinationError> {
