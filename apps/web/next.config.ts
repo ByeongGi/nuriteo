@@ -1,6 +1,12 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  experimental: {
+    cpus: 1,
+    parallelServerBuildTraces: false,
+    parallelServerCompiles: false,
+    webpackBuildWorker: false
+  },
   generateBuildId: async () => process.env.NURITEO_BUILD_REVISION ?? "development",
   async headers() {
     const isolationHeaders = [
