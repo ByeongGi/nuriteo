@@ -17,8 +17,13 @@ roles="${NURITEO_REPRO_ROLES:-server web operations}"
 output="${NURITEO_REPRO_REPORT:-$root/release/ga/reproducible-images.json}"
 work="$(mktemp -d "${TMPDIR:-/tmp}/nuriteo-rel001.XXXXXX")"
 tags=()
+keep_work="${NURITEO_REPRO_KEEP_WORK:-false}"
 
 cleanup() {
+  if [ "$keep_work" = true ]; then
+    printf 'REL-001 debug artifacts retained: %s\n' "$work" >&2
+    return
+  fi
   for tag in "${tags[@]}"; do "$runtime" rmi --force "$tag" >/dev/null 2>&1 || true; done
   rm -rf -- "$work"
 }
@@ -51,7 +56,8 @@ for platform in $platforms; do
       digest="$(skopeo inspect "oci-archive:$archive" | jq -r .Digest)"
       [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]
       digests+=("$digest")
-      "$runtime" rmi --force "$tag" >/dev/null
+      printf '%s\n' "$role $platform pass=$pass digest=$digest"
+      if [ "$keep_work" != true ]; then "$runtime" rmi --force "$tag" >/dev/null; fi
     done
     test "${digests[0]}" = "${digests[1]}"
     jq --arg role "$role" --arg platform "$platform" --arg digest "${digests[0]}" \
