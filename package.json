@@ -31,6 +31,7 @@
     "check:self-hosted-otlp": "node tooling/checks/check-self-hosted-otlp.ts",
     "check:self-hosted-audit-operations": "node tooling/checks/check-self-hosted-audit-operations.ts",
     "check:self-hosted-reproducible-images": "node tooling/checks/check-self-hosted-reproducible-images.ts",
+    "check:self-hosted-support-matrix": "node tooling/checks/check-self-hosted-support-matrix.ts",
     "check:self-hosted-legacy-replacement": "node tooling/checks/check-self-hosted-legacy-replacement.ts",
     "check:self-hosted-legacy-cleanup": "node tooling/checks/check-stale-legacy-references.ts",
     "check:rc-offline-convergence": "node release/offline/tests/check-convergence.mjs",
