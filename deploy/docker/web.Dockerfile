@@ -40,7 +40,8 @@ COPY packages/workspace-runtime/assets/runtime packages/workspace-runtime/assets
 COPY packages/workspace-runtime/assets/vendor/next-cli-15.5.26.mjs packages/workspace-runtime/assets/vendor/next-cli-15.5.26.mjs
 COPY packages/workspace-runtime/assets/vendor/vite-8.2.0 packages/workspace-runtime/assets/vendor/vite-8.2.0
 
-RUN pnpm --filter @nuriteo/web build
+RUN pnpm --filter @nuriteo/web build \
+    && find apps/web/.next -exec touch -h -d "@${SOURCE_DATE_EPOCH}" {} +
 
 FROM gcr.io/distroless/nodejs22-debian13:nonroot@sha256:ec2313763dd43931543bd03830466e0c409ce73a487e8d46f10db72d3b816c1c AS runtime
 
