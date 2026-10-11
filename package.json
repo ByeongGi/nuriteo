@@ -25,6 +25,7 @@
     "check:self-hosted-threat-model": "node tooling/checks/check-self-hosted-threat-model.ts",
     "check:self-hosted-dependencies": "security/check-dependencies.sh",
     "check:self-hosted-workload-hardening": "node tooling/checks/check-self-hosted-workload-hardening.ts",
+    "check:self-hosted-operations-image": "node deploy/docker/check-operations-image.mjs",
     "check:self-hosted-legacy-replacement": "node tooling/checks/check-self-hosted-legacy-replacement.ts",
     "check:self-hosted-legacy-cleanup": "node tooling/checks/check-stale-legacy-references.ts",
     "check:rc-offline-convergence": "node release/offline/tests/check-convergence.mjs",

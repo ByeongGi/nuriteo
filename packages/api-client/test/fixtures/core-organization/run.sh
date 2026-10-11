@@ -20,7 +20,7 @@ if [[ -n "${NURITEO_CLIENT_TEST_EXTERNAL_URL+x}" ]]; then
   fi
 fi
 unset NURITEO_CLIENT_TEST_EXTERNAL_URL
-postgres_image="docker.io/library/postgres@sha256:3645570cccdfa447589da9f57dd740faa29b30938e861289a5574b6ca6b03826"
+postgres_image="docker.io/library/postgres@sha256:2d2b8998d31037bf721cfdf764d76ba74171b4fab3431b7f72c27c56ddbdf9e3"
 rustfs_image="docker.io/rustfs/rustfs@sha256:42edb61d588775f9431ff436216d14392d2234d4eb2ed68321569fbf7245b36b"
 postgres_container="nuriteo-client-005-postgres-${RANDOM}"
 rustfs_container="nuriteo-client-005-rustfs-${RANDOM}"

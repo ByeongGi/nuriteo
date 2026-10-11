@@ -3,7 +3,7 @@ set -euo pipefail
 
 runtime="${CONTAINER_RUNTIME:-podman}"
 runtime_path="$(command -v "$runtime")"
-postgres_image="docker.io/library/postgres@sha256:3645570cccdfa447589da9f57dd740faa29b30938e861289a5574b6ca6b03826"
+postgres_image="docker.io/library/postgres@sha256:2d2b8998d31037bf721cfdf764d76ba74171b4fab3431b7f72c27c56ddbdf9e3"
 rustfs_image="docker.io/rustfs/rustfs@sha256:42edb61d588775f9431ff436216d14392d2234d4eb2ed68321569fbf7245b36b"
 postgres_container="nuriteo-bkp-004-postgres"
 rustfs_container="nuriteo-bkp-004-rustfs"
