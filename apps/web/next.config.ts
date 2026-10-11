@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  generateBuildId: async () => process.env.NURITEO_BUILD_REVISION ?? "development",
   async headers() {
     const isolationHeaders = [
       { key: "Cross-Origin-Embedder-Policy", value: "require-corp" },

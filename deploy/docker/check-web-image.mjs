@@ -48,6 +48,14 @@ function validateDockerfile(source) {
   const runtimeStart = instructions.indexOf(fromInstructions[2]);
   const runtimeInstructions = instructions.slice(runtimeStart + 1);
   const requiredRuntimeInstructions = [
+    "ARG BUILD_VERSION=dev",
+    "ARG BUILD_REVISION=unknown",
+    "ARG BUILD_CREATED=1970-01-01T00:00:00Z",
+    'LABEL org.opencontainers.image.title="NURITEO Web" \\',
+    'org.opencontainers.image.version="${BUILD_VERSION}" \\',
+    'org.opencontainers.image.revision="${BUILD_REVISION}" \\',
+    'org.opencontainers.image.created="${BUILD_CREATED}" \\',
+    'org.opencontainers.image.licenses="Apache-2.0"',
     "WORKDIR /app",
     "ENV NODE_ENV=production",
     "ENV HOSTNAME=0.0.0.0",

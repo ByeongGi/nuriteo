@@ -1,10 +1,15 @@
 FROM docker.io/library/node:22.23.0-bookworm-slim@sha256:d9f850096136edbc402debdd8729579a288aac64574ada0ff4db26b6ae58b0b2 AS dependencies
 
+ARG SOURCE_DATE_EPOCH=0
+ARG BUILD_REVISION=unknown
+
 WORKDIR /workspace
 
 ENV PNPM_HOME=/pnpm
 ENV PATH=/pnpm:$PATH
 ENV NEXT_TELEMETRY_DISABLED=1
+ENV SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH}
+ENV NURITEO_BUILD_REVISION=${BUILD_REVISION}
 
 RUN corepack enable && corepack prepare pnpm@11.15.1 --activate
 
@@ -38,6 +43,16 @@ COPY packages/workspace-runtime/assets/vendor/vite-8.2.0 packages/workspace-runt
 RUN pnpm --filter @nuriteo/web build
 
 FROM gcr.io/distroless/nodejs22-debian13:nonroot@sha256:ec2313763dd43931543bd03830466e0c409ce73a487e8d46f10db72d3b816c1c AS runtime
+
+ARG BUILD_VERSION=dev
+ARG BUILD_REVISION=unknown
+ARG BUILD_CREATED=1970-01-01T00:00:00Z
+
+LABEL org.opencontainers.image.title="NURITEO Web" \
+      org.opencontainers.image.version="${BUILD_VERSION}" \
+      org.opencontainers.image.revision="${BUILD_REVISION}" \
+      org.opencontainers.image.created="${BUILD_CREATED}" \
+      org.opencontainers.image.licenses="Apache-2.0"
 
 WORKDIR /app
 

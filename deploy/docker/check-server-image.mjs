@@ -58,6 +58,14 @@ assert(!instructions.some((line) => /^COPY\s+\.\s/.test(line)), "the repository 
 const runtimeStart = instructions.indexOf(fromInstructions[1]);
 const runtimeInstructions = instructions.slice(runtimeStart + 1);
 const allowedRuntimeInstructions = new Set([
+  "ARG BUILD_VERSION=dev",
+  "ARG BUILD_REVISION=unknown",
+  "ARG BUILD_CREATED=1970-01-01T00:00:00Z",
+  'LABEL org.opencontainers.image.title="NURITEO Server" \\',
+  'org.opencontainers.image.version="${BUILD_VERSION}" \\',
+  'org.opencontainers.image.revision="${BUILD_REVISION}" \\',
+  'org.opencontainers.image.created="${BUILD_CREATED}" \\',
+  'org.opencontainers.image.licenses="Apache-2.0"',
   "COPY --from=builder /build/target/release/nuriteo-server /usr/local/bin/nuriteo-server",
   "USER 65532:65532",
   'ENTRYPOINT ["/usr/local/bin/nuriteo-server"]'
