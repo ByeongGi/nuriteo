@@ -1,4 +1,6 @@
 use std::fmt;
+use std::fs::File;
+use std::io::{Read, Write};
 use std::path::Path;
 
 use sqlx::Row;
@@ -8,7 +10,7 @@ use crate::database::DatabasePool;
 
 use super::{
     BackupDestination, PortableBackupManifest, PortableFormatError, PortableLimits,
-    VerificationReport,
+    VerificationReport, write_portable_v1,
 };
 
 #[derive(Clone)]
@@ -121,6 +123,65 @@ impl BackupReadCoordinator {
             entries: manifest.entries.len(),
             bytes,
         })
+    }
+
+    pub async fn export<W: Write>(
+        &self,
+        backup_id: &str,
+        scratch_directory: &Path,
+        output: &mut W,
+    ) -> Result<VerificationReport, BackupReadError> {
+        require_scratch_directory(scratch_directory)?;
+        let manifest = self.load_manifest(backup_id).await?;
+        let run_id = Uuid::now_v7();
+        let mut staged = Vec::with_capacity(manifest.entries.len());
+        for (index, entry) in manifest.entries.iter().enumerate() {
+            let digest = parse_digest(&entry.sha256)?;
+            let key = self.destination.payload_object_key(digest);
+            let target = scratch_directory.join(format!("export-{run_id}-{index}"));
+            if self
+                .destination
+                .download_verified(&key, entry.bytes, digest, &target)
+                .await
+                .is_err()
+            {
+                remove_staged(&staged).await;
+                return Err(BackupReadError::Destination);
+            }
+            staged.push(target);
+        }
+
+        let mut index = 0_usize;
+        let export = write_portable_v1(output, &manifest, self.limits, |entry| {
+            let target = staged
+                .get(index)
+                .ok_or_else(|| std::io::Error::other("backup entry is not staged"))?;
+            if manifest.entries[index].path != entry.path {
+                return Err(std::io::Error::other("backup entry order drifted"));
+            }
+            index += 1;
+            File::open(target).map(|file| Box::new(file) as Box<dyn Read>)
+        })
+        .map_err(BackupReadError::Portable);
+        remove_staged(&staged).await;
+        export?;
+
+        let bytes = manifest.entries.iter().try_fold(0_u64, |total, entry| {
+            total
+                .checked_add(entry.bytes)
+                .ok_or(BackupReadError::Portable(PortableFormatError::SizeLimit))
+        })?;
+        Ok(VerificationReport {
+            backup_id: manifest.backup_id,
+            entries: manifest.entries.len(),
+            bytes,
+        })
+    }
+}
+
+async fn remove_staged(paths: &[std::path::PathBuf]) {
+    for path in paths {
+        let _ = tokio::fs::remove_file(path).await;
     }
 }
 

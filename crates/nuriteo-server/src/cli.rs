@@ -572,8 +572,10 @@ async fn run_backup_command<O: Write, E: Write>(
     if matches!(command, BackupCommand::Create) {
         return backup_create(stdout, stderr).await;
     }
-    if matches!(command, BackupCommand::List | BackupCommand::Verify { .. })
-        && std::env::var_os("NURITEO_BACKUP_REPOSITORY_DIR").is_none()
+    if matches!(
+        command,
+        BackupCommand::List | BackupCommand::Verify { .. } | BackupCommand::Export { .. }
+    ) && std::env::var_os("NURITEO_BACKUP_REPOSITORY_DIR").is_none()
     {
         return backup_read(command, stdout, stderr).await;
     }
@@ -710,7 +712,37 @@ async fn backup_read<O: Write, E: Write>(
                 Err(error) => Err(error),
             }
         }
-        _ => unreachable!("read coordinator only handles list and verify"),
+        BackupCommand::Export { backup_id, output } => {
+            let scratch = std::env::var_os("NURITEO_BACKUP_SCRATCH_DIR")
+                .map(PathBuf::from)
+                .ok_or(crate::backup::BackupReadError::Scratch);
+            match scratch {
+                Ok(scratch) if output == "-" => coordinator
+                    .export(&backup_id, &scratch, stdout)
+                    .await
+                    .map(|_| ()),
+                Ok(scratch) => match OpenOptions::new()
+                    .write(true)
+                    .create_new(true)
+                    .open(&output)
+                {
+                    Ok(mut file) => {
+                        let result = coordinator
+                            .export(&backup_id, &scratch, &mut file)
+                            .await
+                            .map(|_| ());
+                        if result.is_err() {
+                            drop(file);
+                            let _ = std::fs::remove_file(output);
+                        }
+                        result
+                    }
+                    Err(_) => Err(crate::backup::BackupReadError::Scratch),
+                },
+                Err(error) => Err(error),
+            }
+        }
+        _ => unreachable!("read coordinator only handles list, verify, and export"),
     };
     let close_result = pool.close(database_config.close_timeout()).await;
     match (result, close_result) {
