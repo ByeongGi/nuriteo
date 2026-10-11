@@ -35,6 +35,7 @@
     "check:self-hosted-support-bundle": "node tooling/checks/check-self-hosted-support-bundle.ts",
     "check:self-hosted-runbooks": "node tooling/checks/check-self-hosted-runbooks.ts",
     "check:self-hosted-support-process": "node tooling/checks/check-self-hosted-support-process.ts",
+    "check:self-hosted-qualification-matrix": "node tooling/checks/check-self-hosted-qualification-matrix.ts",
     "check:self-hosted-legacy-replacement": "node tooling/checks/check-self-hosted-legacy-replacement.ts",
     "check:self-hosted-legacy-cleanup": "node tooling/checks/check-stale-legacy-references.ts",
     "check:rc-offline-convergence": "node release/offline/tests/check-convergence.mjs",

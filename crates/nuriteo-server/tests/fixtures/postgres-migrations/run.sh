@@ -2,7 +2,7 @@
 set -euo pipefail
 
 runtime="${CONTAINER_RUNTIME:-podman}"
-image="docker.io/library/postgres@sha256:2d2b8998d31037bf721cfdf764d76ba74171b4fab3431b7f72c27c56ddbdf9e3"
+image="${NURITEO_TEST_POSTGRES_IMAGE:-docker.io/library/postgres@sha256:2d2b8998d31037bf721cfdf764d76ba74171b4fab3431b7f72c27c56ddbdf9e3}"
 container="nuriteo-db-002-${RANDOM}"
 port="${NURITEO_TEST_DATABASE_PORT:-55433}"
 fixture_dir="$(mktemp -d "${TMPDIR:-/tmp}/nuriteo-db-002.XXXXXX")"

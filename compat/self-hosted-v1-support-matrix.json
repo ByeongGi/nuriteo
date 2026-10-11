@@ -37,18 +37,18 @@
     {
       "id": "SHV1-KUBERNETES",
       "area": "Kubernetes and Helm",
-      "status": "candidate",
+      "status": "qualified",
       "contract": "Kubernetes 1.29 through 1.37 with Helm 3.14 through 4.2",
-      "qualification": "Kubernetes 1.37 and Helm 4.2.2 passed the RC restricted-PSA rehearsal; the required GA version matrix remains QUAL-001.",
-      "evidence": ["charts/nuriteo/Chart.yaml", "docs/implementation/self-hosted/evidence/K8S-006.md"]
+      "qualification": "Kubernetes 1.29.14 and 1.37.0 endpoints passed actual install, failure fence, upgrade, rollback, uninstall, and Secret-preservation lifecycles with Helm 4.2.2.",
+      "evidence": ["charts/nuriteo/Chart.yaml", "docs/implementation/self-hosted/evidence/K8S-006.md", "compat/self-hosted-v1-qualification-matrix.json"]
     },
     {
       "id": "SHV1-POSTGRESQL",
       "area": "PostgreSQL",
-      "status": "candidate",
+      "status": "qualified",
       "contract": "PostgreSQL 17 and 18 over verified TLS; no optional extension is required",
-      "qualification": "Pinned PostgreSQL 17.6/17.11 and 18.3 fixtures passed; the final required combination set remains QUAL-001.",
-      "evidence": ["docs/implementation/self-hosted/evidence/DB-001.md", "docs/implementation/self-hosted/evidence/SEC-004.md"]
+      "qualification": "Pinned PostgreSQL 17.11 and 18.1 both passed custom-CA TLS migration serialization, validation, rollback, and retry tests.",
+      "evidence": ["docs/implementation/self-hosted/evidence/DB-001.md", "docs/implementation/self-hosted/evidence/SEC-004.md", "compat/self-hosted-v1-qualification-matrix.json"]
     },
     {
       "id": "SHV1-S3",
@@ -63,16 +63,16 @@
       "area": "Browser",
       "status": "supported",
       "contract": "Current stable desktop Chrome/Chromium with cross-origin isolation, SharedArrayBuffer, Service Worker, and OPFS",
-      "qualification": "Production user journeys and browser runtime gates run in headless Chromium.",
-      "evidence": ["compat/browser-smoke-results.json"]
+      "qualification": "Chrome 154 passed current isolation, SharedArrayBuffer, Service Worker, and OPFS capability qualification; production browser runtime gates remain linked.",
+      "evidence": ["compat/browser-smoke-results.json", "compat/self-hosted-v1-qualification-matrix.json"]
     },
     {
       "id": "SHV1-BROWSER-EDGE",
       "area": "Browser",
       "status": "qualified",
-      "contract": "Microsoft Edge 153 desktop",
-      "qualification": "COOP/COEP, SharedArrayBuffer, Service Worker, and Vite preview smoke passed.",
-      "evidence": ["compat/browser-smoke-results.json"]
+      "contract": "Microsoft Edge 155 desktop",
+      "qualification": "COOP/COEP, SharedArrayBuffer, Service Worker, OPFS, and the retained Vite preview smoke passed.",
+      "evidence": ["compat/browser-smoke-results.json", "compat/self-hosted-v1-qualification-matrix.json"]
     },
     {
       "id": "SHV1-BROWSER-SAFARI",
@@ -80,7 +80,7 @@
       "status": "qualified",
       "contract": "Safari 26.6.2 on macOS desktop",
       "qualification": "Isolation, preview, OPFS reopen, and quota recovery smoke passed; iOS and mobile Safari are excluded.",
-      "evidence": ["compat/browser-smoke-results.json"]
+      "evidence": ["compat/browser-smoke-results.json", "compat/self-hosted-v1-qualification-matrix.json"]
     },
     {
       "id": "SHV1-AUTH",

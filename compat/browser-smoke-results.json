@@ -1,26 +1,37 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-09-28",
+  "updatedAt": "2026-10-12",
   "results": {
     "chrome": {
       "status": "pass",
-      "evidence": [
-        "tests/system/browser/isolation.test.ts",
-        "apps/web/test/gate-project-runtime-browser.test.ts"
-      ]
-    },
-    "edge": {
-      "status": "pass",
-      "version": "153.0.4234.48",
+      "version": "154.0.8037.98",
       "platform": "macOS desktop",
       "checks": [
         "COOP/COEP response headers",
         "crossOriginIsolated",
         "SharedArrayBuffer",
         "Service Worker activation",
-        "Vite React preview iframe"
+        "OPFS write/read/delete"
       ],
-      "evidence": ["git-history:pre-1a419586:edge-browser-smoke"]
+      "evidence": [
+        "tests/system/browser/isolation.test.ts",
+        "apps/web/test/gate-project-runtime-browser.test.ts",
+        "tooling/qualification/browser-capabilities.ts"
+      ]
+    },
+    "edge": {
+      "status": "pass",
+      "version": "155.0.4283.45",
+      "platform": "macOS desktop",
+      "checks": [
+        "COOP/COEP response headers",
+        "crossOriginIsolated",
+        "SharedArrayBuffer",
+        "Service Worker activation",
+        "Vite React preview iframe",
+        "OPFS write/read/delete"
+      ],
+      "evidence": ["git-history:pre-1a419586:edge-browser-smoke", "tooling/qualification/browser-capabilities.ts"]
     },
     "safari": {
       "status": "pass",

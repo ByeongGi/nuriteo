@@ -9,6 +9,7 @@ namespace="${NURITEO_KIND_NAMESPACE:-nuriteo-rc003}"
 context="kind-$cluster"
 provider="${KIND_EXPERIMENTAL_PROVIDER:-podman}"
 container_runtime="${NURITEO_CONTAINER_RUNTIME:-$provider}"
+node_image="${NURITEO_KIND_NODE_IMAGE:-}"
 work="$(mktemp -d "${TMPDIR:-/tmp}/nuriteo-rc003.XXXXXX")"
 created=false
 images=(
@@ -34,8 +35,11 @@ for command in "$container_runtime" helm kind kubectl awk; do
 done
 
 if ! KIND_EXPERIMENTAL_PROVIDER="$provider" kind get clusters | grep -Fx "$cluster" >/dev/null 2>&1; then
-  KIND_EXPERIMENTAL_PROVIDER="$provider" \
-    kind create cluster --name "$cluster" --wait 120s
+  create_args=(create cluster --name "$cluster" --wait 120s)
+  if [ -n "$node_image" ]; then
+    create_args+=(--image "$node_image")
+  fi
+  KIND_EXPERIMENTAL_PROVIDER="$provider" kind "${create_args[@]}"
   created=true
 fi
 
