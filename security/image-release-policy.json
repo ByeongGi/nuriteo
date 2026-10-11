@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "taskId": "SEC-004",
+  "scanner": {
+    "name": "trivy",
+    "version": "0.74.0",
+    "image": "docker.io/aquasec/trivy@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969"
+  },
+  "scanners": ["vuln", "secret"],
+  "severities": ["HIGH", "CRITICAL"],
+  "maximumFindings": { "high": 0, "critical": 0, "secrets": 0 },
+  "requiredImages": ["server", "web", "operations"],
+  "requiredInputs": [
+    "security/self-hosted-v1-threat-model.json",
+    "security/dependency-policy.json",
+    "security/workload-hardening-policy.json",
+    "docs/security/incident-intake.md"
+  ],
+  "report": "security/reports/SEC-004.json",
+  "revalidation": "Every release-candidate digest must be scanned again after the reproducible build and before signing or publication. A digest change invalidates its previous result."
+}
