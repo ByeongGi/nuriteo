@@ -14,7 +14,7 @@ assert(Number.isSafeInteger(iterations) && iterations >= 10 && iterations <= 100
 
 const server = await createServer({
   root,
-  publicDir: path.join(root, "apps/preview-service/public"),
+  publicDir: path.join(root, "packages/workspace-runtime/assets"),
   configFile: false,
   server: { host: "127.0.0.1", port: 0 },
   plugins: [{

@@ -14,7 +14,7 @@ COPY packages/api-client/package.json packages/api-client/package.json
 COPY packages/browser-host/package.json packages/browser-host/package.json
 COPY packages/node-runtime/package.json packages/node-runtime/package.json
 COPY packages/preview/package.json packages/preview/package.json
-COPY packages/preview-service/package.json packages/preview-service/package.json
+COPY packages/workspace-runtime/package.json packages/workspace-runtime/package.json
 COPY packages/protocol/package.json packages/protocol/package.json
 
 RUN pnpm install --frozen-lockfile --filter @nuriteo/web...
@@ -26,14 +26,14 @@ COPY packages/api-client packages/api-client
 COPY packages/browser-host packages/browser-host
 COPY packages/node-runtime packages/node-runtime
 COPY packages/preview packages/preview
-COPY packages/preview-service packages/preview-service
+COPY packages/workspace-runtime packages/workspace-runtime
 COPY packages/protocol packages/protocol
 COPY workers workers
 COPY vendor/cli/npm/10.9.2/package/node_modules/qrcode-terminal/vendor/QRCode vendor/cli/npm/10.9.2/package/node_modules/qrcode-terminal/vendor/QRCode
-COPY apps/preview-service/public/preview-sw.js apps/preview-service/public/preview-sw.js
-COPY apps/preview-service/public/runtime apps/preview-service/public/runtime
-COPY apps/preview-service/public/vendor/next-cli-15.5.26.mjs apps/preview-service/public/vendor/next-cli-15.5.26.mjs
-COPY apps/preview-service/public/vendor/vite-8.2.0 apps/preview-service/public/vendor/vite-8.2.0
+COPY packages/workspace-runtime/assets/preview-sw.js packages/workspace-runtime/assets/preview-sw.js
+COPY packages/workspace-runtime/assets/runtime packages/workspace-runtime/assets/runtime
+COPY packages/workspace-runtime/assets/vendor/next-cli-15.5.26.mjs packages/workspace-runtime/assets/vendor/next-cli-15.5.26.mjs
+COPY packages/workspace-runtime/assets/vendor/vite-8.2.0 packages/workspace-runtime/assets/vendor/vite-8.2.0
 
 RUN pnpm --filter @nuriteo/web build
 

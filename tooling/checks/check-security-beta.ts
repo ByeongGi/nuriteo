@@ -66,7 +66,7 @@ const spawnSource = fs.readFileSync("packages/browser-host/src/process/spawn.ts"
 assert(spawnSource.includes("assertAbuseAllowed"), "HostProcessTable must call assertAbuseAllowed");
 assert(spawnSource.includes('kind: "worker-spawn"') || spawnSource.includes("kind: \"worker-spawn\""), "HostProcessTable must check worker-spawn abuse");
 
-const reliabilitySource = fs.readFileSync("packages/preview-service/src/reliability.ts", "utf8");
+const reliabilitySource = fs.readFileSync("packages/workspace-runtime/src/reliability.ts", "utf8");
 assert(reliabilitySource.includes("assertAbuseAllowed"), "preview reliability must call assertAbuseAllowed");
 assert(reliabilitySource.includes("guardLoopIterations"), "preview reliability must guard loop iterations");
 assert(reliabilitySource.includes("guardMemoryGrowth") || reliabilitySource.includes("memory-growth"), "preview reliability must guard memory growth");

@@ -85,6 +85,6 @@ const wasi = fs.readFileSync("packages/node-runtime/src/builtins/wasi.ts", "utf8
 assert(wasi.includes("_fdRead") && wasi.includes("_fdWrite") && wasi.includes("WasiStdio"), "WASI terminal stdio bridge missing");
 const processWorker = fs.readFileSync("workers/process-worker.ts", "utf8");
 assert(processWorker.includes("/runtime/system_wasm.wasm"), "production process Worker does not load system WASM");
-assert(fs.existsSync("apps/preview-service/public/runtime/system_wasm.wasm"), "preview system WASM asset missing");
+assert(fs.existsSync("packages/workspace-runtime/assets/runtime/system_wasm.wasm"), "preview system WASM asset missing");
 
 console.log("terminal/process control contract ok (Rust/WASM virtual POSIX supported; host kernel PTY unsupported)");

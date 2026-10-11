@@ -338,7 +338,7 @@ function buildLane(lane: Lane): void {
     }
   }
 
-  const outputRoot = path.join(repositoryRoot, `apps/preview-service/public/vendor/${lane}-${config.version}`);
+  const outputRoot = path.join(repositoryRoot, `packages/workspace-runtime/assets/vendor/${lane}-${config.version}`);
   fs.mkdirSync(outputRoot, { recursive: true });
   const snapshot = {
     directories: ["/", "/workspace", projectRoot, `${projectRoot}/node_modules`],

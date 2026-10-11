@@ -27,7 +27,7 @@ const cspSafeSource = source.replaceAll(thenifyCall, () => "return createCspSafe
 }
 
 function createWrapper(name, options) {`);
-const target = path.join(root, "apps/preview-service/public/vendor/yarn-cli-1.22.22.mjs");
+const target = path.join(root, "packages/workspace-runtime/assets/vendor/yarn-cli-1.22.22.mjs");
 const output = `// Generated from the integrity-pinned Yarn 1.22.22 bundle. Do not edit by hand.\n` +
   `export const sourceSha256 = ${JSON.stringify(digest)};\n` +
   `export function evaluateYarnCjs(context, globals) {\n` +

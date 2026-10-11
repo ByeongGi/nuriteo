@@ -10,7 +10,7 @@ const webRoot = path.resolve(scriptDirectory, "..");
 const repositoryRoot = path.resolve(webRoot, "../..");
 const defaultOutputRoot = path.join(webRoot, "public/runtime");
 const outputRoot = resolveOutputRoot(process.argv.slice(2));
-const previewPublic = path.join(repositoryRoot, "apps/preview-service/public");
+const runtimeAssetSource = path.join(repositoryRoot, "packages/workspace-runtime/assets");
 
 const entries = Object.freeze({
   "system-worker.js": path.join(repositoryRoot, "workers/system-worker.ts"),
@@ -20,7 +20,7 @@ const entries = Object.freeze({
 
 const assets = new Map<string, Uint8Array>();
 const rewrittenRolldown = rewriteRolldownBinding(readText(path.join(
-  previewPublic,
+  runtimeAssetSource,
   "vendor/vite-8.2.0/rolldown-wasi-binding.mjs"
 )));
 const rewrittenRolldownHash = sha256(rewrittenRolldown);
@@ -60,10 +60,10 @@ function cliNestedWorkerAssetPlugin(): Plugin {
   };
 }
 
-assets.set("preview-sw.js", readBytes(path.join(previewPublic, "preview-sw.js")));
-assets.set("system.wasm", readBytes(path.join(previewPublic, "runtime/system_wasm.wasm")));
-assets.set("vendor/next-cli-15.5.26.mjs", readBytes(path.join(previewPublic, "vendor/next-cli-15.5.26.mjs")));
-copyTree(path.join(previewPublic, "vendor/vite-8.2.0"), "vendor/vite-8.2.0");
+assets.set("preview-sw.js", readBytes(path.join(runtimeAssetSource, "preview-sw.js")));
+assets.set("system.wasm", readBytes(path.join(runtimeAssetSource, "runtime/system_wasm.wasm")));
+assets.set("vendor/next-cli-15.5.26.mjs", readBytes(path.join(runtimeAssetSource, "vendor/next-cli-15.5.26.mjs")));
+copyTree(path.join(runtimeAssetSource, "vendor/vite-8.2.0"), "vendor/vite-8.2.0");
 assets.set("vendor/vite-8.2.0/rolldown-wasi-binding.mjs", rewrittenRolldown);
 
 const files = [...assets]

@@ -149,7 +149,7 @@ ${indent(body, 2)}
 
 assert.deepEqual(excluded, [`${projectRoot}/node_modules/rolldown/dist/experimental-runtime-base.mjs`]);
 
-const outputRoot = path.join(repositoryRoot, `apps/preview-service/public/vendor/vite-${viteVersion}`);
+const outputRoot = path.join(repositoryRoot, `packages/workspace-runtime/assets/vendor/vite-${viteVersion}`);
 fs.mkdirSync(outputRoot, { recursive: true });
 const bindingRoot = resolvePackageRoot(nodeModulesRoot, `@rolldown/binding-wasm32-wasi`, rolldownVersion);
 await build({

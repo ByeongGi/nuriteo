@@ -15,7 +15,7 @@ import type {
   PreviewWorkflowEvent,
   PreviewWorkflowListener,
   PreviewWorkflowSnapshot
-} from "@nuriteo/preview-service";
+} from "@nuriteo/workspace-runtime";
 
 const hash = "a".repeat(64);
 const scopeId = "0199ee6c-c777-7000-8000-00000000a001";

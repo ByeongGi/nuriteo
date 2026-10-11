@@ -15,7 +15,7 @@ import {
   type FileSystemTree,
   type PreviewWorkflowPhase,
   type PreviewWorkflowSnapshot
-} from "@nuriteo/preview-service";
+} from "@nuriteo/workspace-runtime";
 
 import {
   createLocalDraftWriterLease,

@@ -81,13 +81,13 @@
     "ERR_PROCESS_CRASH": "crash"
   },
   "requiredPaths": [
-    "packages/preview-service/src/observability.ts",
-    "packages/preview-service/src/index.ts",
+    "packages/workspace-runtime/src/observability.ts",
+    "packages/workspace-runtime/src/index.ts",
     "packages/browser-host/src/observability/support-bundle.ts",
     "packages/browser-host/src/observability/recovery-action-executor.ts",
     "packages/browser-host/src/observability/recovery-actions.ts",
     "compat/error-catalog.json",
     "tooling/checks/check-observability-support.ts",
-    "apps/preview-service/test/observability-support.test.ts"
+    "packages/workspace-runtime/test/observability-support.test.ts"
   ]
 }

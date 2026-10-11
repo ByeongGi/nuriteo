@@ -32,7 +32,7 @@ const workspace = new MemoryPackageManagerWorkspace([
 
 const server = await createServer({
   root: repositoryRoot,
-  publicDir: path.join(repositoryRoot, "apps/preview-service/public"),
+  publicDir: path.join(repositoryRoot, "packages/workspace-runtime/assets"),
   configFile: false,
   server: { host: "127.0.0.1", port: 0 },
   plugins: [{

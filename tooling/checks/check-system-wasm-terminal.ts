@@ -3,7 +3,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 
 const buildPath = "target/wasm32-unknown-unknown/debug/system_wasm.wasm";
-const productPath = "apps/preview-service/public/runtime/system_wasm.wasm";
+const productPath = "packages/workspace-runtime/assets/runtime/system_wasm.wasm";
 const adapterManifestPath = "vendor/manifests/wasm-adapters.json";
 const compatibilityPath = "compat/wasm-tool-adapters.json";
 

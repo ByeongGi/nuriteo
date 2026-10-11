@@ -12,7 +12,7 @@ type Replacement = {
   target: string;
   secondaryTarget?: string;
   generatedTarget?: string;
-  state: "replacement-proven" | "rename-required" | "relocation-required" | "cleanup-required";
+  state: "removed" | "renamed" | "relocated" | "cleanup-required";
   behavior: string[];
   evidence: string[];
   nextAction: string;
@@ -25,6 +25,7 @@ type Inventory = {
   releaseLineage: string;
   baselineManifest: string;
   recordedAt: string;
+  migrationCompletedAt: string;
   policy: {
     productionSurfaces: string[];
     targetRuntimePackage: string;
@@ -53,6 +54,7 @@ assert.equal(inventory.schemaVersion, 1);
 assert.equal(inventory.taskId, "LEG-001");
 assert.equal(inventory.releaseLineage, "nuriteo-self-hosted-v1");
 assert.match(inventory.recordedAt, /^\d{4}-\d{2}-\d{2}$/u);
+assert.equal(inventory.migrationCompletedAt, "2026-10-11");
 assert.equal(inventory.baselineManifest, "compat/self-hosted-rc-baseline.json");
 assertExisting(inventory.baselineManifest, "RC baseline manifest");
 
@@ -78,16 +80,18 @@ const sources = new Set<string>();
 for (const replacement of inventory.replacements) {
   assert(!sources.has(replacement.source), `duplicate legacy source: ${replacement.source}`);
   sources.add(replacement.source);
-  assertExisting(replacement.source, `${replacement.id} source`);
   assert(replacement.behavior.length > 0, `${replacement.id} must list replacement behavior`);
   assert(replacement.evidence.length >= 1, `${replacement.id} must have evidence`);
   for (const evidence of replacement.evidence) assertExisting(evidence, `${replacement.id} evidence`);
   assert.match(replacement.nextAction, /^[a-z][a-z-]+$/u, `${replacement.id} next action is invalid`);
 
-  if (replacement.state === "replacement-proven" || replacement.state === "cleanup-required") {
+  if (replacement.nextTask === "LEG-002") {
+    assert.equal(fs.existsSync(resolveRepositoryPath(replacement.source)), false, `${replacement.id} legacy source must be removed`);
     assertExisting(replacement.target, `${replacement.id} replacement target`);
   } else {
-    assert(!fs.existsSync(resolveRepositoryPath(replacement.target)), `${replacement.id} target already exists; advance LEG-002`);
+    assert.equal(replacement.state, "cleanup-required");
+    assertExisting(replacement.source, `${replacement.id} cleanup source`);
+    assertExisting(replacement.target, `${replacement.id} replacement target`);
   }
   if (replacement.secondaryTarget) assertExisting(replacement.secondaryTarget, `${replacement.id} secondary target`);
   if (replacement.generatedTarget) assertExisting(replacement.generatedTarget, `${replacement.id} generated target`);
@@ -102,12 +106,13 @@ const webManifest = JSON.parse(fs.readFileSync(resolveRepositoryPath("apps/web/p
   dependencies?: Record<string, string>;
 };
 assert.equal(webManifest.dependencies?.["@nuriteo/service-backend"], undefined);
-assert.equal(webManifest.dependencies?.["@nuriteo/preview-service"], "workspace:*");
+assert.equal(webManifest.dependencies?.["@nuriteo/workspace-runtime"], "workspace:*");
 
 const assetBuilder = fs.readFileSync(resolveRepositoryPath("apps/web/tooling/build-runtime-assets.ts"), "utf8");
-assert.match(assetBuilder, /apps\/preview-service\/public/u, "asset relocation source must remain explicit until LEG-002");
+assert.match(assetBuilder, /packages\/workspace-runtime\/assets/u, "asset builder must use relocated Runtime assets");
+assert.doesNotMatch(assetBuilder, /apps\/preview-service/u);
 
 console.log(
   `self-hosted legacy replacement inventory ok (${inventory.replacements.length} paths, `
-  + `${inventory.replacements.filter(({ state }) => state === "replacement-proven").length} replacements proven)`
+  + `${inventory.replacements.filter(({ nextTask }) => nextTask === "LEG-002").length} migrations complete)`
 );

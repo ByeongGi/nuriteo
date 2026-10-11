@@ -218,15 +218,15 @@ for (const dir of [
 }
 fs.mkdirSync(path.join(packageRoot, "vendor"), { recursive: true });
 fs.copyFileSync(
-  path.join(root, "apps/preview-service/public/vendor/yarn-cli-1.22.22.mjs"),
+  path.join(root, "packages/workspace-runtime/assets/vendor/yarn-cli-1.22.22.mjs"),
   path.join(packageRoot, "vendor/yarn-cli-1.22.22.mjs")
 );
 fs.copyFileSync(
-  path.join(root, "apps/preview-service/public/vendor/next-cli-15.5.26.mjs"),
+  path.join(root, "packages/workspace-runtime/assets/vendor/next-cli-15.5.26.mjs"),
   path.join(packageRoot, "vendor/next-cli-15.5.26.mjs")
 );
 fs.cpSync(
-  path.join(root, "apps/preview-service/public/vendor/vite-8.2.0"),
+  path.join(root, "packages/workspace-runtime/assets/vendor/vite-8.2.0"),
   path.join(packageRoot, "vendor/vite-8.2.0"),
   { recursive: true }
 );

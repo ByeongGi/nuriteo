@@ -43,7 +43,7 @@ for (const requiredPath of catalog.requiredPaths) {
   assert(fs.existsSync(path.resolve(requiredPath)), `missing required observability path: ${requiredPath}`);
 }
 
-const observability = await import(pathToFileURL(path.resolve("packages/preview-service/src/observability.ts")).href);
+const observability = await import(pathToFileURL(path.resolve("packages/workspace-runtime/src/observability.ts")).href);
 
 assert.deepEqual([...observability.SUPPORT_ERROR_CATEGORIES], catalog.categories, "SUPPORT_ERROR_CATEGORIES must match catalog");
 assert.deepEqual([...observability.WORKFLOW_STAGES], catalog.workflowStages, "WORKFLOW_STAGES must match catalog");

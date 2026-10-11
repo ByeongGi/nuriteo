@@ -20,7 +20,7 @@ const installedNextEntrySha256 = createHash("sha256")
   .update(fs.readFileSync(path.join(nextPackageRoot, "dist/bin/next")))
   .digest("hex");
 const installedNextFactorySha256 = createHash("sha256")
-  .update(fs.readFileSync("apps/preview-service/public/vendor/next-cli-15.5.26.mjs"))
+  .update(fs.readFileSync("packages/workspace-runtime/assets/vendor/next-cli-15.5.26.mjs"))
   .digest("hex");
 
 assert.equal(rootManifest.devDependencies.next, compatibility.nextVersion);

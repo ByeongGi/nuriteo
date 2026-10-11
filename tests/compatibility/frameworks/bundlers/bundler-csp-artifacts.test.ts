@@ -10,7 +10,7 @@ const lanes = {
 } as const;
 
 for (const [lane, expected] of Object.entries(lanes)) {
-  const artifactRoot = new URL(`apps/preview-service/public/vendor/${lane}-${expected.version}/`, root);
+  const artifactRoot = new URL(`packages/workspace-runtime/assets/vendor/${lane}-${expected.version}/`, root);
   const manifest = JSON.parse(fs.readFileSync(new URL("factory-manifest.json", artifactRoot), "utf8"));
   assert.equal(manifest.bundler, lane);
   assert.equal(manifest.version, expected.version);
@@ -32,9 +32,9 @@ assert.equal(packageManifest.devDependencies["@rspack/core"], "2.2.4");
 assert.equal(packageManifest.devDependencies["@rspack/cli"], "2.2.4");
 assert.equal(packageManifest.devDependencies["@rspack/dev-server"], "1.2.1");
 assert.equal(packageManifest.devDependencies["@rspack/binding-wasm32-wasi"], "2.2.4");
-assert.equal(sha256(new URL("apps/preview-service/public/vendor/rspack-2.2.4/assets/rspack.wasm", root)), "99425ddaffe461d35421208867c36c7b1edf2166c293a6425f3dc7f653b57055");
-assertNormalizedGeneratedText(new URL("apps/preview-service/public/vendor/rspack-2.2.4/rspack-wasi-binding.mjs", root), "Rspack WASI binding");
-assertNormalizedGeneratedText(new URL("apps/preview-service/public/vendor/rspack-2.2.4/assets/wasi-worker-browser.mjs", root), "Rspack WASI worker");
+assert.equal(sha256(new URL("packages/workspace-runtime/assets/vendor/rspack-2.2.4/assets/rspack.wasm", root)), "99425ddaffe461d35421208867c36c7b1edf2166c293a6425f3dc7f653b57055");
+assertNormalizedGeneratedText(new URL("packages/workspace-runtime/assets/vendor/rspack-2.2.4/rspack-wasi-binding.mjs", root), "Rspack WASI binding");
+assertNormalizedGeneratedText(new URL("packages/workspace-runtime/assets/vendor/rspack-2.2.4/assets/wasi-worker-browser.mjs", root), "Rspack WASI worker");
 
 console.log("bundler CSP artifacts test ok");
 

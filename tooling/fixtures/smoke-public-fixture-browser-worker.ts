@@ -61,7 +61,7 @@ const editedAppSource = workspace.readText(`${projectRoot}/src/App.jsx`).replace
 
 const server = await createServer({
   root,
-  publicDir: path.join(root, "apps/preview-service/public"),
+  publicDir: path.join(root, "packages/workspace-runtime/assets"),
   configFile: false,
   server: { host: "127.0.0.1", port: 0 },
   plugins: [{

@@ -4,6 +4,7 @@
   "releaseLineage": "nuriteo-self-hosted-v1",
   "baselineManifest": "compat/self-hosted-rc-baseline.json",
   "recordedAt": "2026-10-09",
+  "migrationCompletedAt": "2026-10-11",
   "policy": {
     "productionSurfaces": ["apps/web", "crates/nuriteo-server", "packages/api-client"],
     "targetRuntimePackage": "packages/workspace-runtime",
@@ -15,7 +16,7 @@
       "id": "legacy-web-app",
       "source": "apps/preview-service",
       "target": "apps/web",
-      "state": "replacement-proven",
+      "state": "removed",
       "behavior": ["project-shell", "browser-runtime", "preview", "save-resume", "published-example"],
       "evidence": [
         "docs/implementation/self-hosted/evidence/GATE-004.md",
@@ -29,7 +30,7 @@
       "source": "packages/service-backend",
       "target": "crates/nuriteo-server",
       "secondaryTarget": "packages/api-client",
-      "state": "replacement-proven",
+      "state": "removed",
       "behavior": ["identity", "authorization", "project", "save", "share-fork", "audit"],
       "evidence": [
         "docs/implementation/self-hosted/evidence/GATE-004.md",
@@ -42,7 +43,7 @@
       "id": "runtime-workflow-package",
       "source": "packages/preview-service",
       "target": "packages/workspace-runtime",
-      "state": "rename-required",
+      "state": "renamed",
       "behavior": ["workflow-controller", "terminal-lifecycle", "preview-lifecycle", "runtime-recovery"],
       "evidence": [
         "docs/implementation/self-hosted/evidence/RT-002.md",
@@ -56,7 +57,7 @@
       "source": "apps/preview-service/public",
       "target": "packages/workspace-runtime/assets",
       "generatedTarget": "apps/web/public/runtime",
-      "state": "relocation-required",
+      "state": "relocated",
       "behavior": ["preview-service-worker", "system-wasm", "pinned-next-cli", "pinned-vite-runtime"],
       "evidence": [
         "apps/web/tooling/build-runtime-assets.ts",

@@ -158,7 +158,7 @@ ${indent(body, 2)}
 }
 
 assert.deepEqual(excluded, [], `All reachable Next CLI modules must have static factories: ${excluded.join(", ")}`);
-const target = path.join(repositoryRoot, `apps/preview-service/public/vendor/next-cli-${nextVersion}.mjs`);
+const target = path.join(repositoryRoot, `packages/workspace-runtime/assets/vendor/next-cli-${nextVersion}.mjs`);
 const output = normalizeGeneratedWhitespace(`// Generated from the pinned Next.js ${nextVersion} CLI dependency graph. Do not edit by hand.
 export const nextVersion = ${JSON.stringify(nextVersion)};
 export const sourceSha256 = Object.freeze(${JSON.stringify(sourceSha256, null, 2)});

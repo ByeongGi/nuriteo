@@ -5,9 +5,9 @@ import { fileURLToPath } from "node:url";
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 
-const productionRoots = ["apps/web", "packages/api-client", "crates/nuriteo-server"];
+const productionRoots = ["apps/web", "packages/workspace-runtime", "packages/api-client", "crates/nuriteo-server"];
 const legacyRoots = ["apps/preview-service", "packages/service-backend"];
-const forbiddenPackages = ["@nuriteo/preview-service-app", "@nuriteo/service-backend"];
+const forbiddenPackages = ["@nuriteo/preview-service", "@nuriteo/preview-service-app", "@nuriteo/service-backend"];
 const dependencySections = ["dependencies", "devDependencies", "optionalDependencies", "peerDependencies"];
 const sourceExtensions = new Set([
   ".ts",
@@ -138,14 +138,10 @@ function inspectProductionRoot(relativeRoot: string): string[] {
   });
 }
 
-function verifyReferenceOnlyDocument(relativePath: string): void {
-  const source = fs.readFileSync(path.join(repositoryRoot, relativePath), "utf8");
-  assert.match(source, /Lifecycle: REFERENCE-ONLY/, `${relativePath} must declare REFERENCE-ONLY lifecycle`);
-  assert.match(source, /New production code/, `${relativePath} must document the new production boundary`);
-  assert.match(source, /Removal is allowed only after/, `${relativePath} must document its removal condition`);
+for (const legacyRoot of legacyRoots) {
+  assert.equal(fs.existsSync(path.join(repositoryRoot, legacyRoot)), false, `${legacyRoot} must stay removed`);
 }
 
-// Keep the check meaningful before all three production roots exist.
 const syntheticImporter = path.join(repositoryRoot, "apps/web/src/example.ts");
 assert.equal(forbiddenTarget("@nuriteo/service-backend", syntheticImporter), "@nuriteo/service-backend");
 assert.equal(
@@ -153,19 +149,17 @@ assert.equal(
   "packages/service-backend",
 );
 assert.equal(forbiddenTarget("../../preview-service/src/App.tsx", syntheticImporter), "apps/preview-service");
-assert.equal(forbiddenTarget("@nuriteo/preview-service", syntheticImporter), undefined);
+assert.equal(forbiddenTarget("@nuriteo/preview-service", syntheticImporter), "@nuriteo/preview-service");
+assert.equal(forbiddenTarget("@nuriteo/workspace-runtime", syntheticImporter), undefined);
 assert.equal(forbiddenTarget("@nuriteo/browser-host", syntheticImporter), undefined);
 assert.deepEqual(
   extractSourceSpecifiers(`
     import backend from "@nuriteo/service-backend";
     const app = import("../../preview-service/src/App.tsx", { with: { type: "module" } });
-    import { createPreviewWorkflowController } from "@nuriteo/preview-service";
+    import { createPreviewWorkflowController } from "@nuriteo/workspace-runtime";
   `),
-  ["@nuriteo/service-backend", "@nuriteo/preview-service", "../../preview-service/src/App.tsx"],
+  ["@nuriteo/service-backend", "@nuriteo/workspace-runtime", "../../preview-service/src/App.tsx"],
 );
-
-verifyReferenceOnlyDocument("apps/preview-service/README.md");
-verifyReferenceOnlyDocument("packages/service-backend/README.md");
 
 const violations = productionRoots.flatMap(inspectProductionRoot);
 assert.equal(

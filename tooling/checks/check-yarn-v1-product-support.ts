@@ -19,7 +19,7 @@ assert(gate.failureTaxonomy?.YARN_REGISTRY_DECOMPRESSION_STREAM_ORDERING?.status
 for (const capability of gate.capabilities) {
   for (const evidence of capability.evidence || []) assert(fs.existsSync(evidence), `missing Yarn evidence: ${evidence}`);
 }
-const shell = fs.readFileSync("packages/preview-service/src/shell.ts", "utf8");
+const shell = fs.readFileSync("packages/workspace-runtime/src/shell.ts", "utf8");
 assert(shell.includes('yarn: (context) => runPackageManager'), "preview shell must route Yarn commands");
 const factory = fs.readFileSync(gate.artifact.cspFactory);
 assert(crypto.createHash("sha256").update(factory).digest("hex") === gate.artifact.cspFactorySha256,

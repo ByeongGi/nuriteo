@@ -137,7 +137,7 @@ try {
   const nextEvidence = JSON.parse(fs.readFileSync(path.join(root, "compat/nextjs-browser-worker-results.json"), "utf8"));
   if (headers.nextFactorySha256 !== nextEvidence.nextCliFactorySha256) throw new Error("SDK Next factory integrity manifest mismatch");
   const packagedNextFactory = path.join(packageRoot, headers.nextFactoryPath);
-  if (fs.readFileSync(packagedNextFactory).equals(fs.readFileSync(path.join(root, "apps/preview-service/public/vendor/next-cli-15.5.26.mjs"))) === false) {
+  if (fs.readFileSync(packagedNextFactory).equals(fs.readFileSync(path.join(root, "packages/workspace-runtime/assets/vendor/next-cli-15.5.26.mjs"))) === false) {
     throw new Error("SDK Next factory differs from preview product asset");
   }
   const packedEntries = spawnSync("tar", ["-tzf", packageTarball], { encoding: "utf8" });

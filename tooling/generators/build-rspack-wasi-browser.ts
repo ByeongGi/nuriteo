@@ -13,7 +13,7 @@ const packageRoot = path.dirname(require.resolve("@rspack/binding-wasm32-wasi/pa
 const packageJson = JSON.parse(fs.readFileSync(path.join(packageRoot, "package.json"), "utf8")) as { version: string };
 assert.equal(packageJson.version, "2.2.4");
 
-const outputRoot = path.join(repositoryRoot, "apps/preview-service/public/vendor/rspack-2.2.4");
+const outputRoot = path.join(repositoryRoot, "packages/workspace-runtime/assets/vendor/rspack-2.2.4");
 const sharedBufferDecoderPlugin = {
   name: "nuriteo-rspack-copy-shared-textdecoder-input",
   enforce: "pre" as const,
