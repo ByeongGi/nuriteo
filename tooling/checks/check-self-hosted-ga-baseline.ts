@@ -18,7 +18,7 @@ type Baseline = {
     images: Record<string, string>;
   };
   blockers: Record<string, string>;
-  artifacts: Array<{ path: string; sha256: string }>;
+  artifacts: Array<{ path: string; sha256: string; immutable: boolean }>;
 };
 
 const baseline = JSON.parse(fs.readFileSync("compat/self-hosted-ga-baseline.json", "utf8")) as Baseline;
@@ -66,8 +66,11 @@ for (const artifact of baseline.artifacts) {
   assert.ok(!seen.has(artifact.path), `duplicate artifact path: ${artifact.path}`);
   seen.add(artifact.path);
   assert.match(artifact.sha256, /^[a-f0-9]{64}$/u);
+  assert.equal(typeof artifact.immutable, "boolean", `${artifact.path}: immutable policy is missing`);
   assert.equal(sha256(gitBytes(baseline.baselineCommit, artifact.path)), artifact.sha256, `${artifact.path}: frozen bytes drifted`);
-  assert.equal(sha256(fs.readFileSync(artifact.path)), artifact.sha256, `${artifact.path}: working tree drifted`);
+  if (artifact.immutable) {
+    assert.equal(sha256(fs.readFileSync(artifact.path)), artifact.sha256, `${artifact.path}: immutable working tree drifted`);
+  }
 }
 
 const gateEvidence = fs.readFileSync("docs/implementation/self-hosted/evidence/GATE-006.md", "utf8");

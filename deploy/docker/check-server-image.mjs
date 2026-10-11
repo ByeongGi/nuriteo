@@ -22,7 +22,7 @@ assert(
   "builder must pin the Rust 1.97.1 Bookworm multi-arch digest"
 );
 assert(
-  /^FROM gcr\.io\/distroless\/cc-debian12:nonroot@sha256:[0-9a-f]{64} AS runtime$/.test(
+  /^FROM gcr\.io\/distroless\/cc-debian13:nonroot@sha256:[0-9a-f]{64} AS runtime$/.test(
     fromInstructions[1]
   ),
   "runtime must pin the non-root distroless multi-arch digest"

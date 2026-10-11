@@ -2,7 +2,7 @@
 set -euo pipefail
 
 runtime="${CONTAINER_RUNTIME:-podman}"
-postgres_image="docker.io/library/postgres@sha256:f3bd19c606e442c3d7bdfa8002e03fe260a1023351e0ea4598032022b68dd6e3"
+postgres_image="docker.io/library/postgres@sha256:3645570cccdfa447589da9f57dd740faa29b30938e861289a5574b6ca6b03826"
 rustfs_image="docker.io/rustfs/rustfs@sha256:42edb61d588775f9431ff436216d14392d2234d4eb2ed68321569fbf7245b36b"
 suffix="${RANDOM}"
 postgres_container="nuriteo-save-009-pg-${suffix}"

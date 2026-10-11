@@ -16,7 +16,7 @@ RUN cargo build --locked --release --package nuriteo-server --bin nuriteo-server
 # The operations image is deliberately separate from the distroless online
 # server image. It supplies the pinned pg_dump/pg_restore toolchain required by
 # short-lived backup and restore Jobs without expanding the online image.
-FROM docker.io/library/postgres@sha256:f3bd19c606e442c3d7bdfa8002e03fe260a1023351e0ea4598032022b68dd6e3 AS runtime
+FROM docker.io/library/postgres@sha256:3645570cccdfa447589da9f57dd740faa29b30938e861289a5574b6ca6b03826 AS runtime
 
 COPY --from=builder /build/target/release/nuriteo-server /usr/local/bin/nuriteo-server
 

@@ -23,34 +23,34 @@ async fn migrate_subprocess_enforces_schema_readiness_and_redaction() {
     let pool = fixture_pool(database_url.clone(), ca).await;
     reset_schema(&pool).await;
 
-    assert_eq!(
-        check_schema_readiness(&pool).await.unwrap(),
+    let target = match check_schema_readiness(&pool).await.unwrap() {
         SchemaReadiness::Pending {
             current: None,
-            target: 14
-        }
-    );
-    assert_success(&run_migrate(&database_url, &ca_path, None));
+            target,
+        } => target,
+        state => panic!("empty schema must be pending, got {state:?}"),
+    };
+    assert!(target > 0, "embedded migration target must be positive");
+    assert_success(&run_migrate(&database_url, &ca_path, None), target);
     assert_eq!(
         check_schema_readiness(&pool).await.unwrap(),
-        SchemaReadiness::Ready { version: 14 }
+        SchemaReadiness::Ready { version: target }
     );
-    assert_success(&run_migrate(&database_url, &ca_path, None));
+    assert_success(&run_migrate(&database_url, &ca_path, None), target);
 
     reset_schema(&pool).await;
     assert_eq!(
         check_schema_readiness(&pool).await.unwrap(),
         SchemaReadiness::Pending {
             current: None,
-            target: 14
+            target
         }
     );
     let url_file = temporary_url_file(&database_url);
-    assert_success(&run_migrate(
-        &database_url,
-        &ca_path,
-        Some(url_file.as_path()),
-    ));
+    assert_success(
+        &run_migrate(&database_url, &ca_path, Some(url_file.as_path())),
+        target,
+    );
 
     sqlx::query("UPDATE _sqlx_migrations SET success = FALSE WHERE version = 1")
         .execute(&mut *pool.acquire().await.unwrap())
@@ -129,11 +129,11 @@ fn run_migrate(database_url: &str, ca_path: &str, url_file: Option<&std::path::P
         .unwrap_or_else(|error| panic!("migrate subprocess must start: {error}"))
 }
 
-fn assert_success(output: &Output) {
+fn assert_success(output: &Output, target: i64) {
     assert_eq!(output.status.code(), Some(0));
     assert_eq!(
         output.stdout,
-        b"database migration complete: schema=ready version=15\n"
+        format!("database migration complete: schema=ready version={target}\n").as_bytes()
     );
     assert!(output.stderr.is_empty());
 }

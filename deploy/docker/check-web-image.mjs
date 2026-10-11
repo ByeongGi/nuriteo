@@ -23,7 +23,7 @@ function validateDockerfile(source) {
   assert.deepEqual(fromInstructions, [
     "FROM docker.io/library/node:22.23.0-bookworm-slim@sha256:d9f850096136edbc402debdd8729579a288aac64574ada0ff4db26b6ae58b0b2 AS dependencies",
     "FROM dependencies AS builder",
-    "FROM gcr.io/distroless/nodejs22-debian12:nonroot@sha256:13593b7570658e8477de39e2f4a1dd25db2f836d68a0ba771251572d23bb4f8e AS runtime"
+    "FROM gcr.io/distroless/nodejs22-debian13:nonroot@sha256:ec2313763dd43931543bd03830466e0c409ce73a487e8d46f10db72d3b816c1c AS runtime"
   ]);
   assert(
     instructions.includes("RUN pnpm install --frozen-lockfile --filter @nuriteo/web..."),
