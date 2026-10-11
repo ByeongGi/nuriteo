@@ -8,24 +8,24 @@
     {
       "role": "server",
       "reference": "localhost/nuriteo-server:1.0.0-rc.1",
-      "digest": "sha256:3e93fa66d6f7fcc2245182c4affd91fd8b5e81dd649e0fd417254dd3ea6651b6",
-      "localDigest": "sha256:5fb9b5c5cde3fb4f3178bb6f7b2c6b7dab03a98e9157009a95990c1df7a2fd51",
+      "digest": "sha256:b5a5c9b60c6bc8998513dfe067350eab59da87b6b67ac1e5cc3368ff4bfa7239",
+      "localDigest": "sha256:b4751d7a9f0f0fa487ed7ce9ed6f3a77c23b71adc0459dc8f201d2450c6cdf67",
       "user": "65532:65532",
       "entrypoint": ["/usr/local/bin/nuriteo-server"]
     },
     {
       "role": "web",
       "reference": "localhost/nuriteo-web:1.0.0-rc.1",
-      "digest": "sha256:c7b50488636f9094a7a3ab29823c183eaf88da8c110e98f8f947a064558f8615",
-      "localDigest": "sha256:88281ce9cdf9e3d70cf4d6c5b540d7221da39a122fdb1f23cf54f7b7549b3864",
+      "digest": "sha256:c6f62fb88e0273f3f0d8ee4355171c872c1a666ec1e8e41fe43084970b8a45a5",
+      "localDigest": "sha256:e536a8a59117f1e97d8c658daba86cff5aad6a46de6192d3591789b9f2e4e2a5",
       "user": "65532:65532",
       "entrypoint": ["/nodejs/bin/node", "apps/web/server.js"]
     },
     {
       "role": "operations",
       "reference": "localhost/nuriteo-operations:1.0.0-rc.1",
-      "digest": "sha256:c3df32761c923f1a1a905d266d44a0ac33e13344aa16cf4744304dfe28b66ea8",
-      "localDigest": "sha256:7e86a0e7435cc8c39385d9a93635098cd9f67b6f58f827e1194b32bfdf553c9c",
+      "digest": "sha256:fe5fdbdade057b69a2f6fe57d5a6555dbf52c252b0f79ca0e2b6beaa36be5847",
+      "localDigest": "sha256:8ac2643fa8c1ac676563be952505d92b3d02b6e89a1d6e8e101b4161c0ded517",
       "user": "65532:65532",
       "entrypoint": ["/usr/local/bin/nuriteo-server"]
     }
