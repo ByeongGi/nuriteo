@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { createHash } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 const reportPath = process.argv[2] ?? "release/ga/reproducible-images.json";
@@ -69,12 +69,14 @@ const provenance = {
 };
 
 await mkdir(outputDirectory, { recursive: true });
+const copiedReportPath = path.join(outputDirectory, "reproducible-images.json");
+await copyFile(reportPath, copiedReportPath);
 const sbomPath = path.join(outputDirectory, `nuriteo-${report.version}.spdx.json`);
 const provenancePath = path.join(outputDirectory, `nuriteo-${report.version}.intoto.jsonl`);
 await writeFile(sbomPath, `${JSON.stringify(sbom, null, 2)}\n`);
 await writeFile(provenancePath, `${JSON.stringify(provenance)}\n`);
-const checksumInputs = [reportPath, sbomPath, provenancePath].sort();
+const checksumInputs = [copiedReportPath, sbomPath, provenancePath].sort();
 const checksums = [];
-for (const input of checksumInputs) checksums.push(`${sha256(await readFile(input))}  ${input}`);
+for (const input of checksumInputs) checksums.push(`${sha256(await readFile(input))}  ${path.basename(input)}`);
 await writeFile(path.join(outputDirectory, "SHA256SUMS"), `${checksums.join("\n")}\n`);
 console.log(JSON.stringify({ status: "pass", task: "REL-002", packages: packages.length, subjects: subjects.length }));

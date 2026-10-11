@@ -16,7 +16,7 @@ jq --arg version "$version" --arg chart "$(basename "$chart")" --arg chartSha "$
 printf '%s\n' "${chart_sha}  ${chart}" >"$output/CHART-SHA256SUMS"
 if [ -f "$output/SHA256SUMS" ]; then
   binding="$output/nuriteo-$version.chart-images.json"
-  { cat "$output/SHA256SUMS"; shasum -a 256 "$chart" "$binding"; } | sort -k2 >"$output/SHA256SUMS.next"
+  { cat "$output/SHA256SUMS"; (cd "$output" && shasum -a 256 "$(basename "$chart")" "$(basename "$binding")"); } | sort -k2 >"$output/SHA256SUMS.next"
   mv "$output/SHA256SUMS.next" "$output/SHA256SUMS"
 fi
 printf '%s\n' "{\"status\":\"pass\",\"task\":\"REL-003\",\"chartSha256\":\"$chart_sha\"}"

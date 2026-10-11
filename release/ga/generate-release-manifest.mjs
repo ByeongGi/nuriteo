@@ -48,4 +48,8 @@ const channels = {
   channels: { stable: { release: report.version, manifest: path.basename(manifestPath), manifestSha256 } }
 };
 await writeFile(path.join(directory, "channels.json"), `${JSON.stringify(channels, null, 2)}\n`);
+const releaseChecksums = [manifestPath, path.join(directory, "channels.json")];
+const releaseChecksumLines = [];
+for (const file of releaseChecksums.sort()) releaseChecksumLines.push(`${await hashFile(file)}  ${path.basename(file)}`);
+await writeFile(path.join(directory, "RELEASE-SHA256SUMS"), `${releaseChecksumLines.join("\n")}\n`);
 console.log(JSON.stringify({ status: "pass", task: "REL-004", release: report.version, manifestSha256 }));
