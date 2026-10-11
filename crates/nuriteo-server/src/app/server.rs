@@ -41,7 +41,11 @@ use crate::setup::{SetupStatusPolicy, SetupStatusService};
 use crate::smtp::SmtpEmailSender;
 use crate::team::{TeamHttpPolicy, TeamHttpService};
 
-use super::{Supervisor, SupervisorConfig, WorkerError, build_router_with_integration_ca_service};
+use super::{
+    Supervisor, SupervisorConfig, WorkerError, apply_maintenance_gate,
+    build_router_with_integration_ca_service,
+};
+use crate::maintenance::MaintenanceGate;
 
 const PRODUCTION_WORKERS: NonZeroUsize = NonZeroUsize::new(5).unwrap();
 const INSTANCE_SETTINGS_STARTUP_TIMEOUT: Duration = Duration::from_secs(5);
@@ -496,6 +500,7 @@ pub(crate) async fn run_server(
         git,
         integration_ca,
     );
+    let router = apply_maintenance_gate(router, MaintenanceGate::default());
     let management_router = operations.router();
     let cleanup_drain_timeout = global
         .server

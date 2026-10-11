@@ -7,6 +7,7 @@ use crate::http::{HttpError, RequestId, propagate_request_id};
 use crate::identity::{BrowserMethod, BrowserRequestHeaders};
 use crate::integration_ca::IntegrationCaHttpService;
 use crate::invitations::InvitationHttpService;
+use crate::maintenance::MaintenanceGate;
 use crate::mfa::{MfaHttpService, MfaHttpServiceError};
 use crate::notification::NotificationHttpService;
 use crate::oidc::OidcHttpService;
@@ -20,7 +21,7 @@ use crate::setup::SetupStatusService;
 use crate::team::TeamHttpService;
 use axum::Router;
 use axum::extract::{Extension, Request};
-use axum::http::header::{CACHE_CONTROL, HeaderValue};
+use axum::http::header::{CACHE_CONTROL, HeaderValue, RETRY_AFTER};
 use axum::http::{Method, Uri};
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
@@ -459,6 +460,35 @@ pub(crate) fn build_router_with_integration_ca_service(
         .layer(middleware::from_fn(propagate_request_id))
 }
 
+pub(crate) fn apply_maintenance_gate(router: Router, gate: MaintenanceGate) -> Router {
+    router.layer(middleware::from_fn(move |request, next| {
+        enforce_maintenance(gate.clone(), request, next)
+    }))
+}
+
+async fn enforce_maintenance(gate: MaintenanceGate, request: Request, next: Next) -> Response {
+    if matches!(
+        *request.method(),
+        Method::GET | Method::HEAD | Method::OPTIONS
+    ) {
+        return next.run(request).await;
+    }
+    let path = request.uri().path().to_owned();
+    let request_id = request
+        .extensions()
+        .get::<RequestId>()
+        .cloned()
+        .unwrap_or_else(RequestId::generate);
+    let Ok(_permit) = gate.try_enter_write() else {
+        let mut response = private_problem(HttpError::service_unavailable(request_id, path));
+        response
+            .headers_mut()
+            .insert(RETRY_AFTER, HeaderValue::from_static("30"));
+        return response;
+    };
+    next.run(request).await
+}
+
 async fn ensure_api_cache_policy(request: Request, next: Next) -> Response {
     let private_api = request.uri().path().starts_with("/api/v1/");
     let mut response = next.run(request).await;
@@ -544,6 +574,46 @@ mod tests {
     use axum::body::{Body, to_bytes};
     use axum::http::{Request, StatusCode, header::CACHE_CONTROL};
     use tower::ServiceExt;
+
+    #[tokio::test]
+    async fn maintenance_gate_allows_reads_and_rejects_new_mutations() {
+        let gate = MaintenanceGate::default();
+        gate.enter_maintenance(std::time::Duration::from_secs(1))
+            .await
+            .unwrap();
+        let router = apply_maintenance_gate(
+            Router::new().route(
+                "/api/v1/resource",
+                axum::routing::get(|| async { StatusCode::OK })
+                    .post(|| async { StatusCode::NO_CONTENT }),
+            ),
+            gate,
+        );
+        let read = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/resource")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(read.status(), StatusCode::OK);
+
+        let write = router
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/api/v1/resource")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(write.status(), StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(write.headers()[RETRY_AFTER], "30");
+    }
 
     #[test]
     fn public_example_reads_bypass_mfa_deadline_but_fork_mutations_do_not() {

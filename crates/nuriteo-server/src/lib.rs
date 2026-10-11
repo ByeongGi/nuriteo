@@ -17,6 +17,7 @@ pub mod instance_settings;
 pub mod integration;
 pub mod integration_ca;
 pub mod invitations;
+pub mod maintenance;
 pub(crate) mod mfa;
 pub mod notification;
 pub mod object_storage;
