@@ -1,7 +1,9 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-09-15",
-  "status": "p16-03-incident-playbook",
+  "updatedAt": "2026-10-12",
+  "status": "self-hosted-v1",
+  "responsePolicy": "security/vulnerability-response-policy.json",
+  "supportBundlePolicy": "compat/self-hosted-support-bundle-v1.json",
   "requiredIncidentTypes": [
     "rollback",
     "browser-regression",
@@ -54,7 +56,8 @@
   "supportBundleRequired": true,
   "responseTargets": {
     "critical": "acknowledge within 4 hours",
-    "high": "triage within 1 business day",
-    "medium": "triage within 2 business days"
+    "high": "acknowledge within 24 hours and triage within 48 hours",
+    "medium": "acknowledge within 48 hours and triage within 120 hours",
+    "low": "acknowledge within 120 hours and triage within 240 hours"
   }
 }
