@@ -16,6 +16,11 @@ images:
     repository: nuriteo-web
     digest: sha256:69dbee9f5b3abff0aaff99fc59c296cf4eaa3ed149620644bb6922341592a13a
     pullPolicy: IfNotPresent
+  operations:
+    repository: nuriteo-operations
+    # Release automation must replace this sentinel before enabling backup or restore Jobs.
+    digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+    pullPolicy: IfNotPresent
 
 externalUrl: https://nuriteo.example.com
 preview:
@@ -59,6 +64,70 @@ jobs:
     enabled: true
     backoffLimit: 0
     activeDeadlineSeconds: 600
+  ttlSecondsAfterFinished: 86400
+
+toolbox:
+  enabled: false
+  operation: list
+  backupId: ""
+  activeDeadlineSeconds: 3600
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 86400
+
+backupSchedule:
+  enabled: false
+  schedule: "0 2 * * *"
+  timeZone: Etc/UTC
+  startingDeadlineSeconds: 900
+  activeDeadlineSeconds: 14400
+  backoffLimit: 0
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+
+backupStorage:
+  endpoint: https://backup-s3.example.com
+  region: us-east-1
+  bucket: nuriteo-backups
+  prefix: instance-1/backups
+  addressingStyle: path
+  sse: s3
+  kmsKeyId: ""
+  scratchSizeLimit: 10Gi
+  existingSecret:
+    name: nuriteo-backup-storage
+    accessKeyIdKey: access-key-id
+    secretAccessKeyKey: secret-access-key
+    sessionTokenKey: ""
+    caKey: ca.crt
+
+restore:
+  enabled: false
+  restorePointId: ""
+  target:
+    identity: ""
+    postgresql:
+      existingSecret:
+        name: ""
+        databaseUrlKey: database-url
+        caKey: ca.crt
+    objectStorage:
+      endpoint: ""
+      region: us-east-1
+      bucket: ""
+      addressingStyle: path
+      credentialProvider: static
+      existingSecret:
+        name: ""
+        accessKeyIdKey: access-key-id
+        secretAccessKeyKey: secret-access-key
+        sessionTokenKey: ""
+        caKey: ca.crt
+  fence:
+    maintenanceModeAcknowledged: false
+    writesDrainedAcknowledged: false
+    targetValidatedAcknowledged: false
+  activeDeadlineSeconds: 14400
+  backoffLimit: 0
   ttlSecondsAfterFinished: 86400
 
 core:

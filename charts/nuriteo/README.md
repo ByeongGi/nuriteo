@@ -59,9 +59,84 @@ Core serves application traffic and Kubernetes health probes on port `8080`; the
 listener remains a separate port. Web probes its local `/sign-in` route and calls Core through the
 cluster-internal Core Service. Both Deployment Pod templates consume the K8S-002 rollout checksums.
 
-The current checked-in digests record the GATE-005 baseline. Before actual RC deployment, the release
-pipeline must replace them with the paired RC image digests that include the current migration and
-`upgrade-preflight` command, then qualify that exact pair in a Kubernetes cluster.
+The checked-in Server and Web digests record the GATE-005 baseline. The Operations image uses an
+all-zero sentinel and makes every backup/restore template fail closed until release automation supplies
+its published digest. Before actual RC deployment, the release pipeline must replace all three digests;
+the Operations image contains the same Server binary plus `pg_dump`/`pg_restore`, while the online
+Server remains distroless.
+
+## Backup schedule and operator jobs
+
+The chart does not create backup work by default. `backupSchedule.enabled=true` is an explicit opt-in
+that creates one `batch/v1` CronJob running the same pinned Server image and exact `backup create`
+engine used by the CLI and admin surface. It uses `concurrencyPolicy: Forbid`, a starting deadline,
+an active deadline, bounded retries and bounded successful/failed history. The Server-side Instance
+lock remains authoritative if a CLI or admin request races the CronJob. Choose and review the IANA
+timezone explicitly; this schedule is a Kubernetes CronJob schedule, not the product scheduler.
+
+```yaml
+backupSchedule:
+  enabled: true
+  schedule: "0 2 * * *"
+  timeZone: Asia/Seoul
+  startingDeadlineSeconds: 900
+  activeDeadlineSeconds: 14400
+  backoffLimit: 0
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+```
+
+The toolbox is also disabled by default. It deliberately exposes only remote `create`, `list` and
+`verify`; restore cannot be smuggled through the generic operation field, and the local-directory
+`import`/`prune` commands are not presented as cluster operations. Render it separately, inspect
+the exact digest, argv and target refs, create the Job, and only then unsuspend that Job. Do not set
+`toolbox.enabled` in a long-lived Helm release: a completed Job is immutable operational evidence, not
+declarative application state.
+
+```sh
+helm template nuriteo charts/nuriteo --namespace nuriteo \
+  --show-only templates/toolbox-job.yaml \
+  --set toolbox.enabled=true \
+  --set toolbox.operation=list > nuriteo-toolbox.yaml
+kubectl create -f nuriteo-toolbox.yaml
+kubectl patch job nuriteo-nuriteo-toolbox -n nuriteo \
+  --type=merge -p '{"spec":{"suspend":false}}'
+```
+
+Restore has a separate fail-closed template and is never scheduled or started by rendering. Enabling
+the template requires a complete restore-point UUID, an operator target identity, separate target
+PostgreSQL and Object Storage Secret references, plus acknowledgements that Maintenance Mode is active,
+writes are drained, and the target was validated. The rendered Job is still `suspend: true`. At runtime
+the Server independently rejects the production database identity, the production endpoint/bucket pair,
+a non-empty target, an incomplete restore point, or incompatible release data. The acknowledgements are
+operator cutover evidence; they are not presented as runtime enforcement. There is no chart-specific
+restore implementation.
+
+```sh
+helm template nuriteo charts/nuriteo --namespace nuriteo \
+  --show-only templates/restore-job.yaml \
+  --set restore.enabled=true \
+  --set-string restore.restorePointId=0199ee6c-c777-7000-8000-000000007099 \
+  --set-string restore.target.identity=isolated-drill \
+  --set-string restore.target.postgresql.existingSecret.name=nuriteo-restore-postgresql \
+  --set-string restore.target.objectStorage.endpoint=https://restore-s3.example.com \
+  --set-string restore.target.objectStorage.bucket=nuriteo-restore \
+  --set-string restore.target.objectStorage.existingSecret.name=nuriteo-restore-storage \
+  --set restore.fence.maintenanceModeAcknowledged=true \
+  --set restore.fence.writesDrainedAcknowledged=true \
+  --set restore.fence.targetValidatedAcknowledged=true > nuriteo-restore.yaml
+# Inspect the immutable digest, `backup restore` argv, restore-point and target
+# annotations. Create it only while the application is in Maintenance Mode.
+kubectl create -f nuriteo-restore.yaml
+kubectl patch job nuriteo-nuriteo-restore -n nuriteo \
+  --type=merge -p '{"spec":{"suspend":false}}'
+```
+
+All three operation types require the dedicated `backupStorage` destination and Secret reference,
+disable ServiceAccount token automount, run as UID/GID 65532 with
+RuntimeDefault seccomp, drop every capability, use a read-only root filesystem, and mount existing
+Secret files read-only with mode `0400`. Their `/tmp` scratch `emptyDir` is ephemeral and bounded;
+size it with `backupStorage.scratchSizeLimit` before using larger datasets.
 
 ## Ingress and wildcard Preview
 

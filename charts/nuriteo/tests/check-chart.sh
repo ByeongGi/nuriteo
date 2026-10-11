@@ -6,8 +6,12 @@ output_file=$(mktemp "${TMPDIR:-/tmp}/nuriteo-chart.XXXXXX")
 rotated_file=$(mktemp "${TMPDIR:-/tmp}/nuriteo-chart-rotated.XXXXXX")
 upgrade_file=$(mktemp "${TMPDIR:-/tmp}/nuriteo-chart-upgrade.XXXXXX")
 ingress_file=$(mktemp "${TMPDIR:-/tmp}/nuriteo-chart-ingress.XXXXXX")
+cron_file=$(mktemp "${TMPDIR:-/tmp}/nuriteo-chart-cron.XXXXXX")
+toolbox_file=$(mktemp "${TMPDIR:-/tmp}/nuriteo-chart-toolbox.XXXXXX")
+restore_file=$(mktemp "${TMPDIR:-/tmp}/nuriteo-chart-restore.XXXXXX")
 error_file=$(mktemp "${TMPDIR:-/tmp}/nuriteo-chart-error.XXXXXX")
-trap 'rm -f "$output_file" "$rotated_file" "$upgrade_file" "$ingress_file" "$error_file"' EXIT HUP INT TERM
+operations_digest=sha256:2222222222222222222222222222222222222222222222222222222222222222
+trap 'rm -f "$output_file" "$rotated_file" "$upgrade_file" "$ingress_file" "$cron_file" "$toolbox_file" "$restore_file" "$error_file"' EXIT HUP INT TERM
 
 helm lint --strict "$chart_dir"
 helm template nuriteo "$chart_dir" --namespace nuriteo >"$output_file"
@@ -43,6 +47,68 @@ if grep -F 'kind: Ingress' "$output_file" >/dev/null; then
   echo 'Ingress must remain opt-in until external edge readiness is acknowledged' >&2
   exit 1
 fi
+if grep -F 'kind: CronJob' "$output_file" >/dev/null || grep -F 'nuriteo.dev/operator-invoked:' "$output_file" >/dev/null; then
+  echo 'backup schedule, toolbox and restore must remain opt-in' >&2
+  exit 1
+fi
+
+helm template nuriteo "$chart_dir" --namespace nuriteo \
+  --show-only templates/backup-cronjob.yaml \
+  --set-string images.operations.digest="$operations_digest" \
+  --set backupSchedule.enabled=true >"$cron_file"
+test "$(grep -c '^kind: CronJob$' "$cron_file")" -eq 1
+grep -F 'concurrencyPolicy: Forbid' "$cron_file" >/dev/null
+grep -F 'startingDeadlineSeconds: 900' "$cron_file" >/dev/null
+grep -F 'activeDeadlineSeconds: 14400' "$cron_file" >/dev/null
+grep -F 'successfulJobsHistoryLimit: 3' "$cron_file" >/dev/null
+grep -F 'failedJobsHistoryLimit: 3' "$cron_file" >/dev/null
+grep -F 'args: ["backup", "create"]' "$cron_file" >/dev/null
+grep -F "ghcr.io/nuriteo/nuriteo-operations@${operations_digest}" "$cron_file" >/dev/null
+grep -F 'name: NURITEO_BACKUP_S3_ENDPOINT' "$cron_file" >/dev/null
+grep -F 'secretName: nuriteo-backup-storage' "$cron_file" >/dev/null
+if grep -F 'secretName: nuriteo-application' "$cron_file" >/dev/null; then
+  echo 'backup jobs must not mount application signing or encryption keys' >&2
+  exit 1
+fi
+
+helm template nuriteo "$chart_dir" --namespace nuriteo \
+  --show-only templates/toolbox-job.yaml \
+  --set-string images.operations.digest="$operations_digest" \
+  --set toolbox.enabled=true >"$toolbox_file"
+grep -F 'app.kubernetes.io/component: toolbox' "$toolbox_file" >/dev/null
+grep -F 'nuriteo.dev/operator-invoked: "true"' "$toolbox_file" >/dev/null
+grep -F 'suspend: true' "$toolbox_file" >/dev/null
+grep -F 'args: ["backup", "list"]' "$toolbox_file" >/dev/null
+
+restore_id=0199ee6c-c777-7000-8000-000000007099
+helm template nuriteo "$chart_dir" --namespace nuriteo \
+  --show-only templates/restore-job.yaml \
+  --set-string images.operations.digest="$operations_digest" \
+  --set restore.enabled=true \
+  --set-string restore.restorePointId="$restore_id" \
+  --set-string restore.target.identity=isolated-drill \
+  --set-string restore.target.postgresql.existingSecret.name=nuriteo-restore-postgresql \
+  --set-string restore.target.objectStorage.endpoint=https://restore-s3.example.com \
+  --set-string restore.target.objectStorage.bucket=nuriteo-restore \
+  --set-string restore.target.objectStorage.existingSecret.name=nuriteo-restore-storage \
+  --set restore.fence.maintenanceModeAcknowledged=true \
+  --set restore.fence.writesDrainedAcknowledged=true \
+  --set restore.fence.targetValidatedAcknowledged=true >"$restore_file"
+grep -F 'app.kubernetes.io/component: restore' "$restore_file" >/dev/null
+grep -F 'nuriteo.dev/restore-point-id: "0199ee6c-c777-7000-8000-000000007099"' "$restore_file" >/dev/null
+grep -F 'nuriteo.dev/target-postgresql-secret: "nuriteo-restore-postgresql"' "$restore_file" >/dev/null
+grep -F 'nuriteo.dev/target-object-storage-bucket: "nuriteo-restore"' "$restore_file" >/dev/null
+grep -F 'nuriteo.dev/operator-fence: "acknowledged"' "$restore_file" >/dev/null
+grep -F 'suspend: true' "$restore_file" >/dev/null
+grep -F 'args: ["backup", "restore", "0199ee6c-c777-7000-8000-000000007099"]' "$restore_file" >/dev/null
+grep -F 'automountServiceAccountToken: false' "$restore_file" >/dev/null
+grep -F 'runAsNonRoot: true' "$restore_file" >/dev/null
+grep -F 'readOnlyRootFilesystem: true' "$restore_file" >/dev/null
+grep -F 'secretName: nuriteo-restore-postgresql' "$restore_file" >/dev/null
+grep -F 'secretName: nuriteo-restore-storage' "$restore_file" >/dev/null
+grep -F 'name: NURITEO_BACKUP_S3_ENDPOINT' "$restore_file" >/dev/null
+grep -F 'name: NURITEO_RESTORE_DATABASE_URL_FILE' "$restore_file" >/dev/null
+grep -F 'name: NURITEO_RESTORE_S3_ENDPOINT' "$restore_file" >/dev/null
 
 helm template nuriteo "$chart_dir" --namespace nuriteo \
   --set ingress.enabled=true \
@@ -144,6 +210,54 @@ fi
 grep -F '/jobs/migration/enabled' "$error_file" >/dev/null
 
 if helm template nuriteo "$chart_dir" \
+  --set-string backupSchedule.schedule='@daily' >"$output_file" 2>"$error_file"; then
+  echo 'expected a non-five-field backup schedule to fail schema validation' >&2
+  exit 1
+fi
+grep -F '/backupSchedule/schedule' "$error_file" >/dev/null
+
+if helm template nuriteo "$chart_dir" \
+  --set toolbox.enabled=true --set-string toolbox.operation=restore \
+  >"$output_file" 2>"$error_file"; then
+  echo 'expected restore to be unavailable through the generic toolbox' >&2
+  exit 1
+fi
+grep -F '/toolbox/operation' "$error_file" >/dev/null
+
+if helm template nuriteo "$chart_dir" \
+  --set-string images.operations.digest="$operations_digest" \
+  --set restore.enabled=true >"$output_file" 2>"$error_file"; then
+  echo 'expected restore without point, target and fence acknowledgements to fail closed' >&2
+  exit 1
+fi
+grep -F '/restore/' "$error_file" >/dev/null
+
+if helm template nuriteo "$chart_dir" \
+  --set-string images.operations.digest="$operations_digest" \
+  --set restore.enabled=true \
+  --set-string restore.restorePointId="$restore_id" \
+  --set-string restore.target.identity=production-primary \
+  --set-string restore.target.postgresql.existingSecret.name=nuriteo-postgresql \
+  --set-string restore.target.objectStorage.endpoint=https://restore-s3.example.com \
+  --set-string restore.target.objectStorage.bucket=nuriteo-restore \
+  --set-string restore.target.objectStorage.existingSecret.name=nuriteo-restore-storage \
+  --set restore.fence.maintenanceModeAcknowledged=true \
+  --set restore.fence.writesDrainedAcknowledged=true \
+  --set restore.fence.targetValidatedAcknowledged=true \
+  >"$output_file" 2>"$error_file"; then
+  echo 'expected restore target confirmation drift to fail closed' >&2
+  exit 1
+fi
+grep -F 'must differ from the production PostgreSQL Secret' "$error_file" >/dev/null
+
+if helm template nuriteo "$chart_dir" \
+  --set backupSchedule.enabled=true >"$output_file" 2>"$error_file"; then
+  echo 'expected backup Jobs without a published operations image to fail closed' >&2
+  exit 1
+fi
+grep -F 'require a release-published images.operations.digest' "$error_file" >/dev/null
+
+if helm template nuriteo "$chart_dir" \
   --set-string externalUrl=https://admin:password@nuriteo.example.com \
   >"$output_file" 2>"$error_file"; then
   echo 'expected credential-bearing external URL to fail schema validation' >&2
@@ -241,4 +355,4 @@ grep -F 'app.kubernetes.io/component: bootstrap-admin' "$rotated_file" >/dev/nul
 grep -F 'helm.sh/hook-weight: "-5"' "$rotated_file" >/dev/null
 grep -F 'secretName: nuriteo-bootstrap' "$rotated_file" >/dev/null
 
-echo 'nuriteo Helm chart contract ok (schema, digests, refs, rollout, jobs, workloads, ingress, wildcard Preview readiness)'
+echo 'nuriteo Helm chart contract ok (schema, digests, refs, rollout, jobs, workloads, ingress, backup schedule, suspended toolbox/restore)'

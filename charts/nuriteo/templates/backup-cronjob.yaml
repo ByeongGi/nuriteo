@@ -1,0 +1,64 @@
+{{- if .Values.backupSchedule.enabled }}
+{{- include "nuriteo.validateOperationsImage" . }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "nuriteo.fullname" . }}-backup
+  labels:
+    {{- include "nuriteo.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backup
+spec:
+  schedule: {{ .Values.backupSchedule.schedule | quote }}
+  timeZone: {{ .Values.backupSchedule.timeZone | quote }}
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: {{ .Values.backupSchedule.startingDeadlineSeconds }}
+  successfulJobsHistoryLimit: {{ .Values.backupSchedule.successfulJobsHistoryLimit }}
+  failedJobsHistoryLimit: {{ .Values.backupSchedule.failedJobsHistoryLimit }}
+  jobTemplate:
+    metadata:
+      labels:
+        {{- include "nuriteo.labels" . | nindent 8 }}
+        app.kubernetes.io/component: backup
+    spec:
+      backoffLimit: {{ .Values.backupSchedule.backoffLimit }}
+      activeDeadlineSeconds: {{ .Values.backupSchedule.activeDeadlineSeconds }}
+      template:
+        metadata:
+          labels:
+            {{- include "nuriteo.selectorLabels" (dict "root" . "component" "backup") | nindent 12 }}
+          annotations:
+            {{- include "nuriteo.rolloutAnnotations" . | nindent 12 }}
+            checksum/nuriteo-operation-secret-refs: {{ include "nuriteo.operationSecretRefsChecksum" . | quote }}
+        spec:
+          restartPolicy: Never
+          serviceAccountName: {{ include "nuriteo.serviceAccountName" . }}
+          automountServiceAccountToken: false
+          securityContext:
+            {{- include "nuriteo.podSecurityContext" . | nindent 12 }}
+          {{- with .Values.global.imagePullSecrets }}
+          imagePullSecrets:
+            {{- include "nuriteo.imagePullSecrets" $ | nindent 12 }}
+          {{- end }}
+          containers:
+            - name: backup
+              image: {{ include "nuriteo.image" (list . .Values.images.operations) | quote }}
+              imagePullPolicy: {{ .Values.images.operations.pullPolicy }}
+              args: ["backup", "create"]
+              env:
+                {{- include "nuriteo.backupEnv" . | nindent 16 }}
+              securityContext:
+                {{- include "nuriteo.containerSecurityContext" . | nindent 16 }}
+              volumeMounts:
+                {{- include "nuriteo.backupSourceSecretVolumeMounts" . | nindent 16 }}
+                {{- include "nuriteo.backupSecretVolumeMount" . | nindent 16 }}
+                - name: scratch
+                  mountPath: /tmp/nuriteo-backup
+              resources:
+                requests: { cpu: 25m, memory: 64Mi }
+                limits: { memory: 1Gi }
+          volumes:
+            {{- include "nuriteo.backupSourceSecretVolumes" . | nindent 12 }}
+            {{- include "nuriteo.backupSecretVolume" . | nindent 12 }}
+            - name: scratch
+              emptyDir: { sizeLimit: {{ .Values.backupStorage.scratchSizeLimit }} }
+{{- end }}

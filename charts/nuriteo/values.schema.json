@@ -14,6 +14,10 @@
     "rollout",
     "serviceAccount",
     "jobs",
+    "toolbox",
+    "backupSchedule",
+    "backupStorage",
+    "restore",
     "core",
     "web",
     "postgresql",
@@ -58,10 +62,11 @@
     "images": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["server", "web"],
+      "required": ["server", "web", "operations"],
       "properties": {
         "server": { "$ref": "#/definitions/image" },
-        "web": { "$ref": "#/definitions/image" }
+        "web": { "$ref": "#/definitions/image" },
+        "operations": { "$ref": "#/definitions/image" }
       }
     },
     "externalUrl": {
@@ -189,6 +194,153 @@
         "migration": { "$ref": "#/definitions/hookJob" },
         "ttlSecondsAfterFinished": { "type": "integer", "minimum": 60, "maximum": 604800 }
       }
+    },
+    "toolbox": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "operation", "backupId", "activeDeadlineSeconds", "backoffLimit", "ttlSecondsAfterFinished"],
+      "properties": {
+        "enabled": { "type": "boolean", "default": false },
+        "operation": { "type": "string", "enum": ["create", "list", "verify"] },
+        "backupId": { "$ref": "#/definitions/optionalUuid" },
+        "activeDeadlineSeconds": { "$ref": "#/definitions/operationDeadline" },
+        "backoffLimit": { "$ref": "#/definitions/jobBackoffLimit" },
+        "ttlSecondsAfterFinished": { "$ref": "#/definitions/jobTtl" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "enabled": { "const": true }, "operation": { "const": "verify" } }, "required": ["enabled", "operation"] },
+          "then": { "properties": { "backupId": { "$ref": "#/definitions/uuid" } } }
+        },
+        {
+          "if": { "properties": { "operation": { "enum": ["create", "list"] } }, "required": ["operation"] },
+          "then": { "properties": { "backupId": { "const": "" } } }
+        }
+      ]
+    },
+    "backupSchedule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "schedule", "timeZone", "startingDeadlineSeconds", "activeDeadlineSeconds", "backoffLimit", "successfulJobsHistoryLimit", "failedJobsHistoryLimit"],
+      "properties": {
+        "enabled": { "type": "boolean", "default": false },
+        "schedule": { "type": "string", "minLength": 9, "maxLength": 128, "pattern": "^(?:\\S+\\s+){4}\\S+$" },
+        "timeZone": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[A-Za-z0-9_+.-]+(?:/[A-Za-z0-9_+.-]+)*$" },
+        "startingDeadlineSeconds": { "type": "integer", "minimum": 60, "maximum": 86400 },
+        "activeDeadlineSeconds": { "$ref": "#/definitions/operationDeadline" },
+        "backoffLimit": { "$ref": "#/definitions/jobBackoffLimit" },
+        "successfulJobsHistoryLimit": { "$ref": "#/definitions/historyLimit" },
+        "failedJobsHistoryLimit": { "$ref": "#/definitions/historyLimit" }
+      }
+    },
+    "backupStorage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["endpoint", "region", "bucket", "prefix", "addressingStyle", "sse", "kmsKeyId", "scratchSizeLimit", "existingSecret"],
+      "properties": {
+        "endpoint": { "type": "string", "format": "uri", "pattern": "^https://" },
+        "region": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "bucket": { "type": "string", "minLength": 3, "maxLength": 63 },
+        "prefix": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "^[^/].*[^/]$" },
+        "addressingStyle": { "type": "string", "enum": ["path", "virtual-hosted"] },
+        "sse": { "type": "string", "enum": ["s3", "kms", "provider-default"] },
+        "kmsKeyId": { "type": "string", "maxLength": 2048 },
+        "scratchSizeLimit": { "$ref": "#/definitions/quantity" },
+        "existingSecret": { "$ref": "#/definitions/objectStorageSecret" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "sse": { "const": "kms" } }, "required": ["sse"] },
+          "then": { "properties": { "kmsKeyId": { "type": "string", "minLength": 1 } } },
+          "else": { "properties": { "kmsKeyId": { "const": "" } } }
+        }
+      ]
+    },
+    "restore": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "restorePointId", "target", "fence", "activeDeadlineSeconds", "backoffLimit", "ttlSecondsAfterFinished"],
+      "properties": {
+        "enabled": { "type": "boolean", "default": false },
+        "restorePointId": { "$ref": "#/definitions/optionalUuid" },
+        "target": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["identity", "postgresql", "objectStorage"],
+          "properties": {
+            "identity": { "$ref": "#/definitions/optionalRevision" },
+            "postgresql": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["existingSecret"],
+              "properties": {
+                "existingSecret": { "$ref": "#/definitions/databaseSecret" }
+              }
+            },
+            "objectStorage": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["endpoint", "region", "bucket", "addressingStyle", "credentialProvider", "existingSecret"],
+              "properties": {
+                "endpoint": { "type": "string", "maxLength": 2048 },
+                "region": { "type": "string", "minLength": 1, "maxLength": 128 },
+                "bucket": { "type": "string", "maxLength": 63 },
+                "addressingStyle": { "type": "string", "enum": ["path", "virtual-hosted"] },
+                "credentialProvider": { "type": "string", "enum": ["static", "workload", "default"] },
+                "existingSecret": { "$ref": "#/definitions/objectStorageSecret" }
+              }
+            }
+          }
+        },
+        "fence": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["maintenanceModeAcknowledged", "writesDrainedAcknowledged", "targetValidatedAcknowledged"],
+          "properties": {
+            "maintenanceModeAcknowledged": { "type": "boolean", "default": false },
+            "writesDrainedAcknowledged": { "type": "boolean", "default": false },
+            "targetValidatedAcknowledged": { "type": "boolean", "default": false }
+          }
+        },
+        "activeDeadlineSeconds": { "$ref": "#/definitions/operationDeadline" },
+        "backoffLimit": { "$ref": "#/definitions/jobBackoffLimit" },
+        "ttlSecondsAfterFinished": { "$ref": "#/definitions/jobTtl" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "enabled": { "const": true } }, "required": ["enabled"] },
+          "then": {
+            "properties": {
+              "restorePointId": { "$ref": "#/definitions/uuid" },
+              "target": {
+                "properties": {
+                  "identity": { "$ref": "#/definitions/revision" },
+                  "postgresql": {
+                    "properties": {
+                      "existingSecret": {
+                        "properties": { "name": { "$ref": "#/definitions/kubernetesName" } }
+                      }
+                    }
+                  },
+                  "objectStorage": {
+                    "properties": {
+                      "endpoint": { "type": "string", "format": "uri", "pattern": "^https://" },
+                      "bucket": { "type": "string", "minLength": 3 }
+                    }
+                  }
+                }
+              },
+              "fence": {
+                "properties": {
+                  "maintenanceModeAcknowledged": { "const": true },
+                  "writesDrainedAcknowledged": { "const": true },
+                  "targetValidatedAcknowledged": { "const": true }
+                }
+              }
+            }
+          }
+        }
+      ]
     },
     "core": {
       "type": "object",
@@ -356,6 +508,60 @@
     }
   ],
   "definitions": {
+    "quantity": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]*(?:Ei|Pi|Ti|Gi|Mi|Ki|E|P|T|G|M|K)?$"
+    },
+    "databaseSecret": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "databaseUrlKey", "caKey"],
+      "properties": {
+        "name": { "$ref": "#/definitions/optionalKubernetesName" },
+        "databaseUrlKey": { "$ref": "#/definitions/kubernetesName" },
+        "caKey": { "$ref": "#/definitions/optionalKubernetesName" }
+      }
+    },
+    "objectStorageSecret": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "accessKeyIdKey", "secretAccessKeyKey", "sessionTokenKey", "caKey"],
+      "properties": {
+        "name": { "$ref": "#/definitions/optionalKubernetesName" },
+        "accessKeyIdKey": { "$ref": "#/definitions/optionalKubernetesName" },
+        "secretAccessKeyKey": { "$ref": "#/definitions/optionalKubernetesName" },
+        "sessionTokenKey": { "$ref": "#/definitions/optionalKubernetesName" },
+        "caKey": { "$ref": "#/definitions/optionalKubernetesName" }
+      }
+    },
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "optionalUuid": {
+      "type": "string",
+      "pattern": "^(?:|[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$"
+    },
+    "operationDeadline": {
+      "type": "integer",
+      "minimum": 60,
+      "maximum": 86400
+    },
+    "jobBackoffLimit": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 6
+    },
+    "jobTtl": {
+      "type": "integer",
+      "minimum": 60,
+      "maximum": 604800
+    },
+    "historyLimit": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 10
+    },
     "hookJob": {
       "type": "object",
       "additionalProperties": false,
