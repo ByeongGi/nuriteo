@@ -14,6 +14,7 @@
     "test:browser-entry": "node test/browser-entry.test.ts",
     "test:browser-shell": "node test/authenticated-shell-browser.test.ts",
     "test:browser-admin-settings": "node test/admin-settings-browser.test.ts",
+    "test:browser-admin-updates": "node test/admin-updates-browser.test.ts",
     "test:browser-mfa": "node test/mfa-browser.test.ts",
     "test:browser-oidc": "node test/oidc-browser.test.ts",
     "test:browser-registry": "node test/registry-browser.test.ts",

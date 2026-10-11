@@ -21,7 +21,8 @@ use super::{
     AdminAuditEventCollectionView, AdminAuditEventView, AdminAuditExportFormat,
     AdminAuditExportInput, AdminAuditListInput, AdminAuditRetentionPreview,
     AdminAuditRetentionPruneView, AdminHttpService, AdminHttpServiceError, AdminOperationsView,
-    AdminSettingListView, AdminSettingView, AdminStatusView,
+    AdminSettingListView, AdminSettingView, AdminStatusView, AdminUpdateApprovalView,
+    AdminUpdateHistoryView, AdminUpdateReadinessView,
 };
 
 const SETTINGS: &str = "/api/v1/admin/settings";
@@ -35,6 +36,9 @@ const AUDIT_EVENT: &str = "/api/v1/admin/audit-events/{eventId}";
 const AUDIT_EXPORT: &str = "/api/v1/admin/audit-events/export";
 const AUDIT_RETENTION_PREVIEW: &str = "/api/v1/admin/audit-retention/preview";
 const AUDIT_RETENTION_PRUNE: &str = "/api/v1/admin/audit-retention/prune";
+const UPDATE_READINESS: &str = "/api/v1/admin/updates/readiness";
+const UPDATE_HISTORY: &str = "/api/v1/admin/updates/history";
+const UPDATE_APPROVAL: &str = "/api/v1/admin/updates/approval";
 const MAX_BODY_BYTES: usize = 2 * 1024;
 const ORIGIN: HeaderName = HeaderName::from_static("origin");
 const CSRF: HeaderName = HeaderName::from_static("x-csrf-token");
@@ -54,6 +58,9 @@ pub(crate) fn openapi_router(
         .routes(routes!(export_audit_events))
         .routes(routes!(preview_audit_retention))
         .routes(routes!(prune_audit_retention))
+        .routes(routes!(update_readiness))
+        .routes(routes!(update_history))
+        .routes(routes!(approve_update))
 }
 
 #[derive(Deserialize, ToSchema)]
@@ -109,6 +116,106 @@ struct AuditRetentionPreviewQuery {
 #[serde(deny_unknown_fields)]
 struct AuditRetentionPruneRequest {
     limit: Option<u16>,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+struct UpdateApprovalRequest {
+    target_release: String,
+    acknowledged: bool,
+}
+
+#[utoipa::path(
+    get,
+    path = UPDATE_READINESS,
+    tag = "administration",
+    security(("projectSessionCookie" = [])),
+    responses(
+        (status = 200, body = AdminUpdateReadinessView, headers(("Cache-Control" = String))),
+        (status = 401, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+        (status = 403, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+        (status = 503, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+        (status = 504, body = crate::openapi::ProblemDetails, content_type = "application/problem+json")
+    )
+)]
+async fn update_readiness(
+    State(service): State<AdminHttpService>,
+    Extension(request_id): Extension<RequestId>,
+    request: Request,
+) -> Result<Response, HttpError> {
+    let headers = BrowserHeaders::read(request.headers(), &request_id, UPDATE_READINESS)?;
+    let view = service
+        .update_readiness(headers.request(BrowserMethod::Get))
+        .await
+        .map_err(|error| map_error(error, request_id, UPDATE_READINESS))?;
+    Ok(private_no_store(Json(view).into_response()))
+}
+
+#[utoipa::path(
+    get,
+    path = UPDATE_HISTORY,
+    tag = "administration",
+    security(("projectSessionCookie" = [])),
+    responses(
+        (status = 200, body = AdminUpdateHistoryView, headers(("Cache-Control" = String))),
+        (status = 401, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+        (status = 403, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+        (status = 503, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+        (status = 504, body = crate::openapi::ProblemDetails, content_type = "application/problem+json")
+    )
+)]
+async fn update_history(
+    State(service): State<AdminHttpService>,
+    Extension(request_id): Extension<RequestId>,
+    request: Request,
+) -> Result<Response, HttpError> {
+    let headers = BrowserHeaders::read(request.headers(), &request_id, UPDATE_HISTORY)?;
+    let view = service
+        .update_history(headers.request(BrowserMethod::Get))
+        .await
+        .map_err(|error| map_error(error, request_id, UPDATE_HISTORY))?;
+    Ok(private_no_store(Json(view).into_response()))
+}
+
+#[utoipa::path(
+    post,
+    path = UPDATE_APPROVAL,
+    tag = "administration",
+    security(("projectSessionCookie" = [])),
+    params(("Origin" = String, Header), ("X-CSRF-Token" = String, Header)),
+    request_body(content = UpdateApprovalRequest, content_type = "application/json"),
+    responses(
+        (status = 201, body = AdminUpdateApprovalView, headers(("Cache-Control" = String))),
+        (status = 401, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+        (status = 403, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+        (status = 409, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+        (status = 415, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+        (status = 422, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+        (status = 503, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+        (status = 504, body = crate::openapi::ProblemDetails, content_type = "application/problem+json")
+    )
+)]
+async fn approve_update(
+    State(service): State<AdminHttpService>,
+    Extension(request_id): Extension<RequestId>,
+    request: Request,
+) -> Result<Response, HttpError> {
+    let (parts, body) = request.into_parts();
+    let headers = BrowserHeaders::read(&parts.headers, &request_id, UPDATE_APPROVAL)?;
+    let input: UpdateApprovalRequest =
+        json_body(&parts.headers, body, &request_id, UPDATE_APPROVAL).await?;
+    let view = service
+        .approve_update(
+            headers.request(BrowserMethod::Post),
+            &input.target_release,
+            input.acknowledged,
+            request_id.as_str(),
+        )
+        .await
+        .map_err(|error| map_error(error, request_id, UPDATE_APPROVAL))?;
+    let mut response = private_no_store(Json(view).into_response());
+    *response.status_mut() = axum::http::StatusCode::CREATED;
+    Ok(response)
 }
 
 #[utoipa::path(
@@ -704,6 +811,7 @@ fn map_error(error: AdminHttpServiceError, request_id: RequestId, path: &str) ->
         }
         AdminHttpServiceError::InvalidSetting => validation(&request_id, path, "value"),
         AdminHttpServiceError::InvalidAuditQuery => validation(&request_id, path, "query"),
+        AdminHttpServiceError::InvalidUpdateApproval => validation(&request_id, path, "approval"),
         AdminHttpServiceError::SettingNotFound | AdminHttpServiceError::AuditEventNotFound => {
             HttpError::not_found(request_id, path)
         }
@@ -717,6 +825,7 @@ fn map_error(error: AdminHttpServiceError, request_id: RequestId, path: &str) ->
         AdminHttpServiceError::AuditUnavailable | AdminHttpServiceError::Unavailable => {
             HttpError::service_unavailable(request_id, path)
         }
+        AdminHttpServiceError::UpdateBlocked => HttpError::conflict(request_id, path),
         AdminHttpServiceError::Configuration | AdminHttpServiceError::Internal => {
             HttpError::internal(request_id, path)
         }

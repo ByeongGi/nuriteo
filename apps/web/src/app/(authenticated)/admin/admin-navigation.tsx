@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 
 const destinations = [
   { href: "/admin/operations", label: "Operations" },
+  { href: "/admin/updates", label: "Updates" },
   { href: "/admin/settings", label: "Settings" },
   { href: "/admin/invitations", label: "Activation invitations" },
   { href: "/admin/mfa", label: "MFA policy" },

@@ -2,6 +2,7 @@ mod audit_service;
 mod http_routes;
 mod http_service;
 mod operations_service;
+mod update;
 
 use std::fmt;
 use std::future::Future;
@@ -36,6 +37,10 @@ pub use http_service::{
 pub use operations_service::{
     AdminCleanupQueueView, AdminDependencyStatusView, AdminOperationsState, AdminOperationsView,
     AdminUsageView,
+};
+pub use update::{
+    AdminUpdateApprovalView, AdminUpdateCompatibilityView, AdminUpdateHistoryView,
+    AdminUpdatePreflightView, AdminUpdateReadinessView,
 };
 
 const DEFAULT_OPERATION_TIMEOUT: Duration = Duration::from_secs(5);

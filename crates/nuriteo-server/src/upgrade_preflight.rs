@@ -25,6 +25,7 @@ struct CompatibilityManifest {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct SupportContract {
+    upgrade_to: String,
     direction: String,
     downgrade: String,
     failure_policy: String,
@@ -67,6 +68,42 @@ pub struct UpgradePreflightReport {
     target_migration: i64,
     schema_state: UpgradeSchemaState,
     configuration_registry_version: u16,
+}
+
+impl UpgradePreflightReport {
+    #[must_use]
+    pub const fn current_migration(&self) -> i64 {
+        self.current_migration
+    }
+
+    #[must_use]
+    pub const fn target_migration(&self) -> i64 {
+        self.target_migration
+    }
+
+    #[must_use]
+    pub const fn schema_state(&self) -> UpgradeSchemaState {
+        self.schema_state
+    }
+
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UpgradeCompatibilityContract {
+    pub release_lineage: String,
+    pub target_release: String,
+    pub source_migration: i64,
+    pub configuration_registry_version: u16,
+}
+
+pub fn compatibility_contract() -> Result<UpgradeCompatibilityContract, UpgradePreflightError> {
+    let manifest = parse_manifest()?;
+    Ok(UpgradeCompatibilityContract {
+        release_lineage: manifest.release_lineage,
+        target_release: manifest.support.upgrade_to,
+        source_migration: manifest.schema.source_migration,
+        configuration_registry_version: manifest.configuration.registry_version,
+    })
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -141,6 +178,7 @@ fn parse_manifest() -> Result<CompatibilityManifest, UpgradePreflightError> {
     let valid = manifest.schema_version == 1
         && manifest.task_id == "UPG-001"
         && manifest.release_lineage == "nuriteo-self-hosted-v1"
+        && manifest.support.upgrade_to == "self-hosted-v1-rc-lineage"
         && manifest.support.direction == "forward-only"
         && manifest.support.downgrade == "not-supported"
         && manifest.support.failure_policy == "stop-before-mutation"
@@ -201,6 +239,9 @@ mod tests {
         let manifest = parse_manifest().unwrap();
         assert_eq!(manifest.schema.source_migration, 46);
         assert_eq!(manifest.configuration.registry_version, 4);
+        let contract = compatibility_contract().unwrap();
+        assert_eq!(contract.release_lineage, "nuriteo-self-hosted-v1");
+        assert_eq!(contract.target_release, "self-hosted-v1-rc-lineage");
     }
 
     #[test]
