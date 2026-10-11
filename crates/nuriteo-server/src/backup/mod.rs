@@ -1,8 +1,10 @@
+mod coordinator;
 mod destination;
 mod engine;
 mod portable;
 mod snapshot;
 
+pub use coordinator::{BackupCreateCoordinator, BackupCreateError};
 pub use destination::{
     BackupDestination, BackupDestinationConfig, BackupDestinationConfigError,
     BackupDestinationError, BackupDestinationPreflight, BackupDestinationRuntime,
