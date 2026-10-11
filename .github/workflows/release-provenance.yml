@@ -38,7 +38,10 @@ jobs:
         with:
           toolchain: 1.97.1
           targets: wasm32-unknown-unknown
+      - run: cargo install --locked cargo-audit --version 0.22.2
+      - run: cargo install --locked cargo-deny --version 0.20.2
       - run: pnpm install --frozen-lockfile
+      - run: security/check-dependencies.sh
       - run: pnpm exec tsc --noEmit --pretty false
       - run: node tooling/checks/check-release-policy.ts
       - run: node tooling/checks/check-performance-baseline.ts
