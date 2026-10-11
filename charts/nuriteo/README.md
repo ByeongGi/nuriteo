@@ -224,3 +224,14 @@ helm lint --strict charts/nuriteo
 helm template nuriteo charts/nuriteo --namespace nuriteo
 charts/nuriteo/tests/check-chart.sh
 ```
+
+The release lifecycle qualification uses a disposable kind cluster and five distinct fixture images. It
+proves clean install, preflight failure fencing, forward upgrade, Helm rollback, uninstall, and preservation
+of operator-owned Secrets. Podman is the local default:
+
+```sh
+charts/nuriteo/tests/kind-release.sh
+```
+
+Docker-based CI uses the same test with `KIND_EXPERIMENTAL_PROVIDER=docker` and
+`NURITEO_CONTAINER_RUNTIME=docker`. The test deletes its temporary cluster and fixture images on exit.

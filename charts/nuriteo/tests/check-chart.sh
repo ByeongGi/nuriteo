@@ -2,6 +2,7 @@
 set -eu
 
 chart_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+kind_release="$chart_dir/tests/kind-release.sh"
 output_file=$(mktemp "${TMPDIR:-/tmp}/nuriteo-chart.XXXXXX")
 rotated_file=$(mktemp "${TMPDIR:-/tmp}/nuriteo-chart-rotated.XXXXXX")
 upgrade_file=$(mktemp "${TMPDIR:-/tmp}/nuriteo-chart-upgrade.XXXXXX")
@@ -13,6 +14,11 @@ restricted_file=$(mktemp "${TMPDIR:-/tmp}/nuriteo-chart-restricted.XXXXXX")
 error_file=$(mktemp "${TMPDIR:-/tmp}/nuriteo-chart-error.XXXXXX")
 operations_digest=sha256:2222222222222222222222222222222222222222222222222222222222222222
 trap 'rm -f "$output_file" "$rotated_file" "$upgrade_file" "$ingress_file" "$cron_file" "$toolbox_file" "$restore_file" "$restricted_file" "$error_file"' EXIT HUP INT TERM
+
+bash -n "$kind_release"
+grep -F 'partialFailureFenced' "$kind_release" >/dev/null
+grep -F 'helm rollback nuriteo 1' "$kind_release" >/dev/null
+grep -F 'externalSecretsPreserved' "$kind_release" >/dev/null
 
 helm lint --strict "$chart_dir"
 helm template nuriteo "$chart_dir" --namespace nuriteo >"$output_file"
