@@ -183,7 +183,7 @@
       "required": ["name", "automountServiceAccountToken"],
       "properties": {
         "name": { "$ref": "#/definitions/optionalKubernetesName" },
-        "automountServiceAccountToken": { "type": "boolean" }
+        "automountServiceAccountToken": { "type": "boolean", "const": false }
       }
     },
     "networkPolicy": {

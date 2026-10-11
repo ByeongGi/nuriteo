@@ -42,7 +42,7 @@ spec:
         {{- include "nuriteo.rolloutAnnotations" . | nindent 8 }}
     spec:
       serviceAccountName: {{ include "nuriteo.serviceAccountName" . }}
-      automountServiceAccountToken: {{ .Values.serviceAccount.automountServiceAccountToken }}
+      automountServiceAccountToken: false
       terminationGracePeriodSeconds: {{ .Values.core.terminationGracePeriodSeconds }}
       securityContext:
         {{- include "nuriteo.podSecurityContext" . | nindent 8 }}
