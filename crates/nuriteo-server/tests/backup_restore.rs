@@ -3,6 +3,8 @@ use std::fs;
 use std::path::PathBuf;
 
 use aws_sdk_s3::config::{BehaviorVersion, Credentials, Region};
+use aws_sdk_s3::primitives::ByteStream;
+use aws_sdk_s3::types::ServerSideEncryption;
 use aws_smithy_http_client::pool::{Client as PoolClient, ConnectionPool};
 use aws_smithy_http_client::tls::rustls_provider::CryptoMode;
 use aws_smithy_http_client::tls::{self, TlsContext, TrustStore};
@@ -51,7 +53,7 @@ async fn encrypted_backup_restores_into_isolated_database_and_bucket() {
     let schema_version = migration.latest_version.expect("schema has migrations");
 
     let ca_pem = fs::read(required_path("NURITEO_TEST_S3_CA_FILE")).unwrap();
-    prepare_buckets(&ca_pem).await;
+    let fixture_client = prepare_buckets(&ca_pem).await;
     let primary_config = ObjectStorageConfig::load(&environment, &files).unwrap();
     let primary = S3ObjectStore::new(&primary_config, OperationLimits::default())
         .await
@@ -90,6 +92,8 @@ async fn encrypted_backup_restores_into_isolated_database_and_bucket() {
         .await
         .unwrap();
     assert_eq!(created.entries, 2);
+    let manifest_key = destination.manifest_object_key(generation_id);
+    let payload_key = destination.payload_object_key(digest);
 
     let reader =
         BackupReadCoordinator::new(source_pool.clone(), destination, PortableLimits::default());
@@ -141,6 +145,15 @@ async fn encrypted_backup_restores_into_isolated_database_and_bucket() {
     .await
     .expect_err("a populated restore target must fail closed");
     assert_eq!(error, BackupRestoreError::TargetNotEmpty);
+    verify_corrupt_and_missing_objects_fail_closed(
+        &fixture_client,
+        &reader,
+        generation_id,
+        &manifest_key,
+        &payload_key,
+        &scratch,
+    )
+    .await;
 
     source_pool
         .close(source_runtime.close_timeout())
@@ -149,7 +162,7 @@ async fn encrypted_backup_restores_into_isolated_database_and_bucket() {
     target_pool.close(target_close_timeout).await.unwrap();
 }
 
-async fn prepare_buckets(ca_pem: &[u8]) {
+async fn prepare_buckets(ca_pem: &[u8]) -> aws_sdk_s3::Client {
     let endpoint = env::var("NURITEO_S3_ENDPOINT").unwrap();
     let access_key = env::var("NURITEO_S3_ACCESS_KEY_ID").unwrap();
     let secret_key = env::var("NURITEO_S3_SECRET_ACCESS_KEY").unwrap();
@@ -181,11 +194,77 @@ async fn prepare_buckets(ca_pem: &[u8]) {
     for bucket in ["nuriteo-primary", "nuriteo-backup", "nuriteo-restore"] {
         client.create_bucket().bucket(bucket).send().await.unwrap();
     }
+    install_delete_deny(&client).await;
+    client
+}
+
+async fn install_delete_deny(client: &aws_sdk_s3::Client) {
     let policy = r#"{"Version":"2012-10-17","Statement":[{"Sid":"DenyBackupDelete","Effect":"Deny","Principal":"*","Action":["s3:DeleteObject","s3:DeleteObjectVersion"],"Resource":"arn:aws:s3:::nuriteo-backup/instance-1/backups/*"}]}"#;
     client
         .put_bucket_policy()
         .bucket("nuriteo-backup")
         .policy(policy)
+        .send()
+        .await
+        .unwrap();
+}
+
+async fn verify_corrupt_and_missing_objects_fail_closed(
+    client: &aws_sdk_s3::Client,
+    reader: &BackupReadCoordinator,
+    generation_id: Uuid,
+    manifest_key: &str,
+    payload_key: &str,
+    scratch: &std::path::Path,
+) {
+    let original_manifest = client
+        .get_object()
+        .bucket("nuriteo-backup")
+        .key(manifest_key)
+        .send()
+        .await
+        .unwrap()
+        .body
+        .collect()
+        .await
+        .unwrap()
+        .into_bytes();
+    client
+        .delete_bucket_policy()
+        .bucket("nuriteo-backup")
+        .send()
+        .await
+        .unwrap();
+    put_fixture_object(client, manifest_key, b"corrupt-manifest".to_vec()).await;
+    let error = reader
+        .verify(&generation_id.to_string(), scratch)
+        .await
+        .expect_err("a corrupted manifest must fail closed");
+    assert_eq!(error.category(), "destination");
+
+    put_fixture_object(client, manifest_key, original_manifest.to_vec()).await;
+    client
+        .delete_object()
+        .bucket("nuriteo-backup")
+        .key(payload_key)
+        .send()
+        .await
+        .unwrap();
+    let error = reader
+        .verify(&generation_id.to_string(), scratch)
+        .await
+        .expect_err("a missing payload must fail closed");
+    assert_eq!(error.category(), "destination");
+    install_delete_deny(client).await;
+}
+
+async fn put_fixture_object(client: &aws_sdk_s3::Client, key: &str, body: Vec<u8>) {
+    client
+        .put_object()
+        .bucket("nuriteo-backup")
+        .key(key)
+        .server_side_encryption(ServerSideEncryption::Aes256)
+        .body(ByteStream::from(body))
         .send()
         .await
         .unwrap();
