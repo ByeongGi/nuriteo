@@ -41,7 +41,7 @@ for platform in $platforms; do
       tag="localhost/nuriteo-${role}:rel001-${arch}-${pass}"
       tags+=("$tag")
       "$runtime" build --no-cache --layers=false --platform "$platform" --timestamp "$epoch" \
-        --build-arg "SOURCE_DATE_EPOCH=$epoch" \
+        --build-arg "NURITEO_SOURCE_DATE_EPOCH=$epoch" \
         --build-arg "BUILD_VERSION=$version" \
         --build-arg "BUILD_REVISION=$revision" \
         --build-arg "BUILD_CREATED=$created" \

@@ -24,7 +24,7 @@ for (const role of policy.roles) {
   const dockerfile = fs.readFileSync(`deploy/docker/${role}.Dockerfile`, "utf8");
   for (const label of policy.requiredLabels)
     assert.ok(dockerfile.includes(label), `${role} image label missing ${label}`);
-  assert.ok(dockerfile.includes("SOURCE_DATE_EPOCH"), `${role} epoch input missing`);
+  assert.ok(dockerfile.includes("NURITEO_SOURCE_DATE_EPOCH"), `${role} epoch input missing`);
 }
 const next = fs.readFileSync("apps/web/next.config.ts", "utf8");
 assert.ok(next.includes("generateBuildId"));
