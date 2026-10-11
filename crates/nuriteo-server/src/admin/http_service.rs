@@ -30,6 +30,7 @@ use crate::instance_settings::{
     EffectiveInstanceSettings, InstanceSettingsRepository, decode_complete_set,
     validate_complete_values,
 };
+use crate::maintenance::MaintenanceGate;
 use crate::policy::{
     EffectivePolicyEngine, EffectivePolicyError, PolicyCategory, PolicyCleanupPreview,
     PolicyImpactPreview, PolicyLookup, policy_lookup,
@@ -165,6 +166,7 @@ pub struct AdminStatusView {
 #[derive(Clone)]
 pub struct AdminHttpService {
     runtime: Option<Arc<AdminRuntime>>,
+    pub(super) maintenance: Option<MaintenanceGate>,
 }
 
 pub(super) struct AdminRuntime {
@@ -182,6 +184,7 @@ impl fmt::Debug for AdminHttpService {
         formatter
             .debug_struct("AdminHttpService")
             .field("configured", &self.runtime.is_some())
+            .field("maintenance_configured", &self.maintenance.is_some())
             .finish()
     }
 }
@@ -189,7 +192,10 @@ impl fmt::Debug for AdminHttpService {
 impl AdminHttpService {
     #[must_use]
     pub const fn unconfigured() -> Self {
-        Self { runtime: None }
+        Self {
+            runtime: None,
+            maintenance: None,
+        }
     }
 
     pub fn production(
@@ -213,7 +219,14 @@ impl AdminHttpService {
                 health,
                 cleanup,
             })),
+            maintenance: None,
         })
+    }
+
+    #[must_use]
+    pub fn with_maintenance_gate(mut self, gate: MaintenanceGate) -> Self {
+        self.maintenance = Some(gate);
+        self
     }
 
     pub(crate) async fn list_settings(

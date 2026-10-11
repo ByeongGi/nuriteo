@@ -226,6 +226,7 @@ pub(crate) async fn run_server(
         }
     };
     let operations = CleanupOperationsService::new(pool.clone(), operations_policy);
+    let maintenance_gate = MaintenanceGate::default();
     let admin = match effective_instance_settings.clone() {
         Some(settings) => match AdminHttpService::production(
             pool.clone(),
@@ -236,7 +237,7 @@ pub(crate) async fn run_server(
             health.clone(),
             operations.clone(),
         ) {
-            Ok(admin) => admin,
+            Ok(admin) => admin.with_maintenance_gate(maintenance_gate.clone()),
             Err(_) => {
                 close_pool(pool, close_timeout).await?;
                 return Err(ServeError::AdminConfiguration);
@@ -500,7 +501,7 @@ pub(crate) async fn run_server(
         git,
         integration_ca,
     );
-    let router = apply_maintenance_gate(router, MaintenanceGate::default());
+    let router = apply_maintenance_gate(router, maintenance_gate);
     let management_router = operations.router();
     let cleanup_drain_timeout = global
         .server

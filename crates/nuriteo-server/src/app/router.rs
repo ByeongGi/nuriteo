@@ -467,6 +467,9 @@ pub(crate) fn apply_maintenance_gate(router: Router, gate: MaintenanceGate) -> R
 }
 
 async fn enforce_maintenance(gate: MaintenanceGate, request: Request, next: Next) -> Response {
+    if request.uri().path() == "/api/v1/admin/maintenance" {
+        return next.run(request).await;
+    }
     if matches!(
         *request.method(),
         Method::GET | Method::HEAD | Method::OPTIONS

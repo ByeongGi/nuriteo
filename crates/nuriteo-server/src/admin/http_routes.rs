@@ -20,9 +20,9 @@ use crate::policy::{PolicyCleanupPreview, PolicyImpactPreview};
 use super::{
     AdminAuditEventCollectionView, AdminAuditEventView, AdminAuditExportFormat,
     AdminAuditExportInput, AdminAuditListInput, AdminAuditRetentionPreview,
-    AdminAuditRetentionPruneView, AdminHttpService, AdminHttpServiceError, AdminOperationsView,
-    AdminSettingListView, AdminSettingView, AdminStatusView, AdminUpdateApprovalView,
-    AdminUpdateHistoryView, AdminUpdateReadinessView,
+    AdminAuditRetentionPruneView, AdminHttpService, AdminHttpServiceError, AdminMaintenanceView,
+    AdminOperationsView, AdminSettingListView, AdminSettingView, AdminStatusView,
+    AdminUpdateApprovalView, AdminUpdateHistoryView, AdminUpdateReadinessView,
 };
 
 const SETTINGS: &str = "/api/v1/admin/settings";
@@ -39,6 +39,7 @@ const AUDIT_RETENTION_PRUNE: &str = "/api/v1/admin/audit-retention/prune";
 const UPDATE_READINESS: &str = "/api/v1/admin/updates/readiness";
 const UPDATE_HISTORY: &str = "/api/v1/admin/updates/history";
 const UPDATE_APPROVAL: &str = "/api/v1/admin/updates/approval";
+const MAINTENANCE: &str = "/api/v1/admin/maintenance";
 const MAX_BODY_BYTES: usize = 2 * 1024;
 const ORIGIN: HeaderName = HeaderName::from_static("origin");
 const CSRF: HeaderName = HeaderName::from_static("x-csrf-token");
@@ -61,6 +62,7 @@ pub(crate) fn openapi_router(
         .routes(routes!(update_readiness))
         .routes(routes!(update_history))
         .routes(routes!(approve_update))
+        .routes(routes!(maintenance_status, set_maintenance))
 }
 
 #[derive(Deserialize, ToSchema)]
@@ -123,6 +125,74 @@ struct AuditRetentionPruneRequest {
 struct UpdateApprovalRequest {
     target_release: String,
     acknowledged: bool,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
+struct MaintenanceRequest {
+    enabled: bool,
+}
+
+#[utoipa::path(
+    get,
+    path = MAINTENANCE,
+    tag = "administration",
+    security(("projectSessionCookie" = [])),
+    responses(
+        (status = 200, body = AdminMaintenanceView, headers(("Cache-Control" = String))),
+        (status = 401, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+        (status = 403, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+        (status = 503, body = crate::openapi::ProblemDetails, content_type = "application/problem+json")
+    )
+)]
+async fn maintenance_status(
+    State(service): State<AdminHttpService>,
+    Extension(request_id): Extension<RequestId>,
+    request: Request,
+) -> Result<Response, HttpError> {
+    let headers = BrowserHeaders::read(request.headers(), &request_id, MAINTENANCE)?;
+    let view = service
+        .maintenance_status(headers.request(BrowserMethod::Get))
+        .await
+        .map_err(|error| map_error(error, request_id, MAINTENANCE))?;
+    Ok(private_no_store(Json(view).into_response()))
+}
+
+#[utoipa::path(
+    put,
+    path = MAINTENANCE,
+    tag = "administration",
+    security(("projectSessionCookie" = [])),
+    params(("Origin" = String, Header), ("X-CSRF-Token" = String, Header)),
+    request_body(content = MaintenanceRequest, content_type = "application/json"),
+    responses(
+        (status = 200, body = AdminMaintenanceView, headers(("Cache-Control" = String))),
+        (status = 401, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+        (status = 403, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+        (status = 415, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+        (status = 422, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+        (status = 503, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+        (status = 504, body = crate::openapi::ProblemDetails, content_type = "application/problem+json")
+    )
+)]
+async fn set_maintenance(
+    State(service): State<AdminHttpService>,
+    Extension(request_id): Extension<RequestId>,
+    request: Request,
+) -> Result<Response, HttpError> {
+    let (parts, body) = request.into_parts();
+    let headers = BrowserHeaders::read(&parts.headers, &request_id, MAINTENANCE)?;
+    let input: MaintenanceRequest =
+        json_body(&parts.headers, body, &request_id, MAINTENANCE).await?;
+    let view = service
+        .set_maintenance(
+            headers.request(BrowserMethod::Put),
+            input.enabled,
+            request_id.as_str(),
+        )
+        .await
+        .map_err(|error| map_error(error, request_id, MAINTENANCE))?;
+    Ok(private_no_store(Json(view).into_response()))
 }
 
 #[utoipa::path(

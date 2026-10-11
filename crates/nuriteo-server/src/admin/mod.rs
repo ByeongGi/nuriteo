@@ -1,6 +1,7 @@
 mod audit_service;
 mod http_routes;
 mod http_service;
+mod maintenance;
 mod operations_service;
 mod update;
 
@@ -34,6 +35,7 @@ pub use http_service::{
     AdminHttpPolicy, AdminHttpService, AdminHttpServiceError, AdminSettingConstraintView,
     AdminSettingListView, AdminSettingView, AdminStatusView,
 };
+pub use maintenance::AdminMaintenanceView;
 pub use operations_service::{
     AdminCleanupQueueView, AdminDependencyStatusView, AdminOperationsState, AdminOperationsView,
     AdminUsageView,
