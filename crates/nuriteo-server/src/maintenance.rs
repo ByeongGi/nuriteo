@@ -3,8 +3,12 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
 use std::time::Duration;
 
+use axum::routing::get;
+use axum::{Json, Router};
+use serde::Serialize;
 use tokio::sync::Notify;
 use tokio::time;
+use utoipa::ToSchema;
 
 const ACTIVE: u8 = 0;
 const DRAINING: u8 = 1;
@@ -49,6 +53,13 @@ pub enum MaintenancePhase {
 pub enum MaintenanceError {
     WriteAdmissionClosed,
     DrainTimedOut,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct PublicMaintenanceView {
+    pub phase: &'static str,
+    pub read_only: bool,
 }
 
 impl fmt::Display for MaintenanceError {
@@ -142,6 +153,26 @@ impl MaintenanceGate {
     }
 }
 
+pub fn public_router(gate: MaintenanceGate) -> Router {
+    Router::new().route(
+        "/api/v1/maintenance",
+        get(move || {
+            let gate = gate.clone();
+            async move {
+                let phase = gate.phase();
+                Json(PublicMaintenanceView {
+                    phase: match phase {
+                        MaintenancePhase::Active => "active",
+                        MaintenancePhase::Draining => "draining",
+                        MaintenancePhase::Maintenance => "maintenance",
+                    },
+                    read_only: phase != MaintenancePhase::Active,
+                })
+            }
+        }),
+    )
+}
+
 impl Drop for WritePermit {
     fn drop(&mut self) {
         release_write(&self.inner);
@@ -159,6 +190,9 @@ fn release_write(inner: &GateInner) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use axum::body::{Body, to_bytes};
+    use axum::http::Request;
+    use tower::ServiceExt;
 
     #[tokio::test]
     async fn active_write_drains_before_maintenance_and_new_writes_are_rejected() {
@@ -210,5 +244,31 @@ mod tests {
         assert_eq!(left, Ok(()));
         assert_eq!(right, Ok(()));
         assert_eq!(gate.phase(), MaintenancePhase::Maintenance);
+    }
+
+    #[tokio::test]
+    async fn public_status_exposes_only_read_only_state() {
+        let gate = MaintenanceGate::default();
+        gate.enter_maintenance(Duration::from_secs(1))
+            .await
+            .unwrap();
+        let response = public_router(gate)
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/maintenance")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let body = to_bytes(response.into_body(), 1024).await.unwrap();
+        let value: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(
+            value,
+            serde_json::json!({
+                "phase": "maintenance",
+                "readOnly": true
+            })
+        );
     }
 }

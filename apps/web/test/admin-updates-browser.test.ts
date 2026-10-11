@@ -20,6 +20,8 @@ fs.cpSync(path.join(webRoot, ".next/static"), path.join(standaloneWeb, ".next/st
 
 let blocked = true;
 let approvals = 0;
+let maintenanceEnabled = false;
+let maintenanceChanges = 0;
 let observedApproval: unknown;
 const core = http.createServer(async (request, response) => {
   const requestPath = request.url ?? "/";
@@ -40,7 +42,34 @@ const core = http.createServer(async (request, response) => {
   if (request.method === "GET" && requestPath === "/api/v1/notifications?limit=1") {
     return sendJson(response, { items: [], nextCursor: null, unreadCount: 0 });
   }
+  if (request.method === "GET" && requestPath === "/api/v1/maintenance") {
+    return sendJson(response, {
+      phase: maintenanceEnabled ? "maintenance" : "active",
+      readOnly: maintenanceEnabled
+    });
+  }
   if (session !== "admin") return sendProblem(response, 403, "ADMIN_REQUIRED");
+  if (request.method === "GET" && requestPath === "/api/v1/admin/maintenance") {
+    return sendJson(response, {
+      phase: maintenanceEnabled ? "maintenance" : "active",
+      activeWrites: 0,
+      writeAdmissionOpen: !maintenanceEnabled
+    });
+  }
+  if (request.method === "PUT" && requestPath === "/api/v1/admin/maintenance") {
+    if (header(request, "x-csrf-token") !== csrfToken) {
+      return sendProblem(response, 403, "CSRF_REJECTED");
+    }
+    const body = await jsonBody(request) as { enabled?: unknown };
+    if (typeof body.enabled !== "boolean") return sendProblem(response, 422, "VALIDATION_FAILED");
+    maintenanceEnabled = body.enabled;
+    maintenanceChanges += 1;
+    return sendJson(response, {
+      phase: maintenanceEnabled ? "maintenance" : "active",
+      activeWrites: 0,
+      writeAdmissionOpen: !maintenanceEnabled
+    });
+  }
   if (request.method === "GET" && requestPath === "/api/v1/admin/updates/readiness") {
     return sendJson(response, readiness());
   }
@@ -132,6 +161,20 @@ try {
       targetRelease: "self-hosted-v1-rc-lineage",
       acknowledged: true
     });
+
+    await page.goto(`${origin}/admin/maintenance`, { waitUntil: "networkidle" });
+    await page.getByRole("heading", { name: "Enter maintenance mode" }).waitFor();
+    await page.getByRole("checkbox").check();
+    await page.getByRole("button", { name: "Enter maintenance mode" }).click();
+    await page.getByRole("status").filter({ hasText: "Maintenance mode is active" }).waitFor();
+    await page.getByText("Projects are read only while an administrator completes maintenance.").waitFor();
+    assert.equal(maintenanceChanges, 1);
+
+    await page.getByRole("checkbox").check();
+    await page.getByRole("button", { name: "Resume writes" }).click();
+    await page.getByRole("status").filter({ hasText: "Maintenance mode ended" }).waitFor();
+    assert.equal(maintenanceChanges, 2);
+    assert.equal(maintenanceEnabled, false);
     await admin.close();
   } finally {
     await browser.close();

@@ -14,7 +14,7 @@ use crate::maintenance::{MaintenanceError, MaintenancePhase};
 
 use super::http_service::{AdminHttpService, AdminHttpServiceError, authorize_recent_admin};
 
-const DRAIN_TIMEOUT: Duration = Duration::from_secs(30);
+const DRAIN_TIMEOUT: Duration = Duration::from_secs(10);
 
 #[derive(Debug, Clone, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]

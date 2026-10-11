@@ -16,12 +16,21 @@ export default async function AuthenticatedLayout({
   let current: Awaited<ReturnType<typeof getCurrentUser>>;
   let mfa: Awaited<ReturnType<typeof getMfaStatus>>;
   let notifications: Awaited<ReturnType<typeof listNotifications>> | undefined;
+  let maintenance: { readonly readOnly: boolean; readonly phase: string } | undefined;
   try {
     const client = await createServerApiClient();
     const mfaRequest = getMfaStatus(client);
     const notificationRequest = listNotifications(client, { limit: 1 }).catch(() => undefined);
+    const maintenanceRequest = client
+      .get<{ readonly readOnly: boolean; readonly phase: string }>("/maintenance")
+      .then((response) => response.data)
+      .catch(() => undefined);
     current = await getCurrentUser(client);
-    [mfa, notifications] = await Promise.all([mfaRequest, notificationRequest]);
+    [mfa, notifications, maintenance] = await Promise.all([
+      mfaRequest,
+      notificationRequest,
+      maintenanceRequest
+    ]);
   } catch (error) {
     if (isExplicitlySignedOut(error)) {
       redirect("/sign-in");
@@ -62,6 +71,12 @@ export default async function AuthenticatedLayout({
         </Link>
         {current.data.user.is_instance_admin ? <Link href="/admin/settings">Administration</Link> : null}
       </nav>
+      {maintenance?.readOnly ? (
+        <aside className="maintenance-banner" role="status">
+          <strong>Maintenance mode</strong>
+          <span>Projects are read only while an administrator completes maintenance.</span>
+        </aside>
+      ) : null}
       {children}
     </div>
   );

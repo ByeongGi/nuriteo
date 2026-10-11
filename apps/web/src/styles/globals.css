@@ -2225,6 +2225,22 @@
   }
 }
 
+.maintenance-banner {
+  display: flex;
+  align-items: center;
+  gap: var(--n-ref-space-3);
+  margin: var(--n-ref-space-3) clamp(var(--n-ref-space-4), 4vw, var(--n-ref-space-8)) 0;
+  padding: var(--n-ref-space-3) var(--n-ref-space-4);
+  border: 1px solid var(--n-color-border-strong);
+  border-radius: var(--n-radius-md);
+  background: var(--n-color-bg-raised);
+  color: var(--n-color-fg-default);
+}
+
+.maintenance-banner span {
+  color: var(--n-color-fg-muted);
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

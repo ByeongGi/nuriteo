@@ -45,7 +45,7 @@ use super::{
     Supervisor, SupervisorConfig, WorkerError, apply_maintenance_gate,
     build_router_with_integration_ca_service,
 };
-use crate::maintenance::MaintenanceGate;
+use crate::maintenance::{MaintenanceGate, public_router as maintenance_public_router};
 
 const PRODUCTION_WORKERS: NonZeroUsize = NonZeroUsize::new(5).unwrap();
 const INSTANCE_SETTINGS_STARTUP_TIMEOUT: Duration = Duration::from_secs(5);
@@ -501,6 +501,7 @@ pub(crate) async fn run_server(
         git,
         integration_ca,
     );
+    let router = router.merge(maintenance_public_router(maintenance_gate.clone()));
     let router = apply_maintenance_gate(router, maintenance_gate);
     let management_router = operations.router();
     let cleanup_drain_timeout = global

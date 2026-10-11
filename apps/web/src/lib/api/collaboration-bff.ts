@@ -43,7 +43,7 @@ interface RequestDeadline {
 
 export interface CollaborationForward {
   readonly commitOutcomeUnknown?: boolean;
-  readonly method: "DELETE" | "GET" | "PATCH" | "POST";
+  readonly method: "DELETE" | "GET" | "PATCH" | "POST" | "PUT";
   readonly maxBodyBytes?: number;
   readonly path: `/api/v1/${string}`;
   readonly requireCsrf: boolean;
