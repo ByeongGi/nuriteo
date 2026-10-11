@@ -5,7 +5,8 @@ mod snapshot;
 
 pub use destination::{
     BackupDestination, BackupDestinationConfig, BackupDestinationConfigError,
-    BackupDestinationError, BackupDestinationPreflight, BackupSse, BackupWriterCredential,
+    BackupDestinationError, BackupDestinationPreflight, BackupDestinationRuntime,
+    BackupDestinationRuntimeError, BackupSse, BackupStoredObject, BackupWriterCredential,
 };
 pub use engine::{
     BackupEngine, BackupEngineError, BackupRepository, DirectoryBackupRepository, PrunePolicy,

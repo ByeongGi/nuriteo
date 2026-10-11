@@ -1,6 +1,9 @@
+use std::collections::BTreeMap;
+use std::ffi::OsString;
 use std::fmt;
 use std::io::Cursor;
 use std::net::IpAddr;
+use std::path::Path;
 use std::str::FromStr;
 use std::time::Duration;
 
@@ -17,11 +20,12 @@ use aws_smithy_types::timeout::TimeoutConfig;
 use rustls_pemfile::Item;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use tokio::io::AsyncReadExt;
 use url::Url;
 use uuid::Uuid;
 use x509_parser::prelude::{FromDer, X509Certificate};
 
-use crate::config::SecretString;
+use crate::config::{Environment, FileReader, SecretString, load_secret};
 use crate::integration::{CredentialIdentity, IntegrationError, SecretValue};
 
 const PROBE_BODY: &[u8] = b"nuriteo-backup-destination-preflight-v1";
@@ -29,6 +33,182 @@ const MIN_TIMEOUT: Duration = Duration::from_millis(100);
 const MAX_TIMEOUT: Duration = Duration::from_secs(30);
 const MAX_CA_BYTES: usize = 1024 * 1024;
 const MAX_CA_CERTIFICATES: usize = 64;
+const BACKUP_ENDPOINT: &str = "NURITEO_BACKUP_S3_ENDPOINT";
+const BACKUP_REGION: &str = "NURITEO_BACKUP_S3_REGION";
+const BACKUP_BUCKET: &str = "NURITEO_BACKUP_S3_BUCKET";
+const BACKUP_PREFIX: &str = "NURITEO_BACKUP_S3_PREFIX";
+const BACKUP_ADDRESSING_STYLE: &str = "NURITEO_BACKUP_S3_ADDRESSING_STYLE";
+const BACKUP_SSE: &str = "NURITEO_BACKUP_S3_SSE";
+const BACKUP_KMS_KEY_ID: &str = "NURITEO_BACKUP_S3_KMS_KEY_ID";
+const BACKUP_ACCESS_KEY_ID: &str = "NURITEO_BACKUP_S3_ACCESS_KEY_ID";
+const BACKUP_ACCESS_KEY_ID_FILE: &str = "NURITEO_BACKUP_S3_ACCESS_KEY_ID_FILE";
+const BACKUP_SECRET_ACCESS_KEY: &str = "NURITEO_BACKUP_S3_SECRET_ACCESS_KEY";
+const BACKUP_SECRET_ACCESS_KEY_FILE: &str = "NURITEO_BACKUP_S3_SECRET_ACCESS_KEY_FILE";
+const BACKUP_SESSION_TOKEN: &str = "NURITEO_BACKUP_S3_SESSION_TOKEN";
+const BACKUP_SESSION_TOKEN_FILE: &str = "NURITEO_BACKUP_S3_SESSION_TOKEN_FILE";
+const BACKUP_CA_FILE: &str = "NURITEO_BACKUP_S3_CA_FILE";
+const BACKUP_TIMEOUT_MS: &str = "NURITEO_BACKUP_S3_TIMEOUT_MS";
+
+const BACKUP_VARIABLES: &[&str] = &[
+    BACKUP_ENDPOINT,
+    BACKUP_REGION,
+    BACKUP_BUCKET,
+    BACKUP_PREFIX,
+    BACKUP_ADDRESSING_STYLE,
+    BACKUP_SSE,
+    BACKUP_KMS_KEY_ID,
+    BACKUP_ACCESS_KEY_ID,
+    BACKUP_ACCESS_KEY_ID_FILE,
+    BACKUP_SECRET_ACCESS_KEY,
+    BACKUP_SECRET_ACCESS_KEY_FILE,
+    BACKUP_SESSION_TOKEN,
+    BACKUP_SESSION_TOKEN_FILE,
+    BACKUP_CA_FILE,
+    BACKUP_TIMEOUT_MS,
+];
+
+pub struct BackupDestinationRuntime {
+    pub config: BackupDestinationConfig,
+    pub credential: BackupWriterCredential,
+}
+
+impl BackupDestinationRuntime {
+    pub fn load(
+        environment: &impl Environment,
+        files: &impl FileReader,
+    ) -> Result<Self, BackupDestinationRuntimeError> {
+        let values = backup_values(environment)?;
+        let required = |name| {
+            values
+                .get(name)
+                .map(String::as_str)
+                .filter(|value| !value.is_empty())
+                .ok_or(BackupDestinationRuntimeError::Missing(name))
+        };
+        let force_path_style = match required(BACKUP_ADDRESSING_STYLE)? {
+            "path" => true,
+            "virtual-hosted" => false,
+            _ => return Err(BackupDestinationRuntimeError::Value),
+        };
+        let sse = match required(BACKUP_SSE)? {
+            "s3" => BackupSse::S3,
+            "provider-default" => BackupSse::ProviderDefault,
+            "kms" => BackupSse::Kms {
+                key_id: required(BACKUP_KMS_KEY_ID)?.to_owned(),
+            },
+            _ => return Err(BackupDestinationRuntimeError::Value),
+        };
+        if !matches!(sse, BackupSse::Kms { .. }) && values.contains_key(BACKUP_KMS_KEY_ID) {
+            return Err(BackupDestinationRuntimeError::Value);
+        }
+        let timeout_ms = values
+            .get(BACKUP_TIMEOUT_MS)
+            .map_or(Ok(5_000_u64), |value| value.parse().map_err(|_| ()))
+            .map_err(|_| BackupDestinationRuntimeError::Value)?;
+        let ca_pem = values
+            .get(BACKUP_CA_FILE)
+            .map(|path| files.read(Path::new(path), MAX_CA_BYTES))
+            .transpose()
+            .map_err(|_| BackupDestinationRuntimeError::File)?;
+        let access_key_id = load_secret(
+            environment,
+            files,
+            BACKUP_ACCESS_KEY_ID,
+            BACKUP_ACCESS_KEY_ID_FILE,
+        )
+        .map_err(|_| BackupDestinationRuntimeError::Secret)?
+        .ok_or(BackupDestinationRuntimeError::Missing(BACKUP_ACCESS_KEY_ID))?;
+        let secret_access_key = load_secret(
+            environment,
+            files,
+            BACKUP_SECRET_ACCESS_KEY,
+            BACKUP_SECRET_ACCESS_KEY_FILE,
+        )
+        .map_err(|_| BackupDestinationRuntimeError::Secret)?
+        .ok_or(BackupDestinationRuntimeError::Missing(
+            BACKUP_SECRET_ACCESS_KEY,
+        ))?;
+        let session_token = load_secret(
+            environment,
+            files,
+            BACKUP_SESSION_TOKEN,
+            BACKUP_SESSION_TOKEN_FILE,
+        )
+        .map_err(|_| BackupDestinationRuntimeError::Secret)?;
+        let config = BackupDestinationConfig::new(
+            required(BACKUP_ENDPOINT)?,
+            required(BACKUP_REGION)?.to_owned(),
+            required(BACKUP_BUCKET)?.to_owned(),
+            required(BACKUP_PREFIX)?.to_owned(),
+            force_path_style,
+            sse,
+            ca_pem,
+            Duration::from_millis(timeout_ms),
+        )?;
+        let credential = BackupWriterCredential::new(
+            access_key_id.expose_secret().to_owned(),
+            secret_access_key.expose_secret().to_owned(),
+            session_token.map(|value| value.expose_secret().to_owned()),
+        )?;
+        Ok(Self { config, credential })
+    }
+}
+
+#[derive(Debug)]
+pub enum BackupDestinationRuntimeError {
+    Duplicate,
+    NonUnicode,
+    Missing(&'static str),
+    Value,
+    File,
+    Secret,
+    Config(BackupDestinationConfigError),
+}
+
+impl From<BackupDestinationConfigError> for BackupDestinationRuntimeError {
+    fn from(value: BackupDestinationConfigError) -> Self {
+        Self::Config(value)
+    }
+}
+
+impl fmt::Display for BackupDestinationRuntimeError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("backup destination runtime configuration is invalid")
+    }
+}
+
+impl std::error::Error for BackupDestinationRuntimeError {}
+
+fn backup_values(
+    environment: &impl Environment,
+) -> Result<BTreeMap<&'static str, String>, BackupDestinationRuntimeError> {
+    let mut values = BTreeMap::new();
+    for (name, value) in environment.entries() {
+        let Some(name) = name.to_str() else {
+            if backup_name(&name).is_some() {
+                return Err(BackupDestinationRuntimeError::NonUnicode);
+            }
+            continue;
+        };
+        let Some(canonical) = BACKUP_VARIABLES.iter().copied().find(|item| *item == name) else {
+            continue;
+        };
+        let value = value
+            .into_string()
+            .map_err(|_| BackupDestinationRuntimeError::NonUnicode)?;
+        if values.insert(canonical, value).is_some() {
+            return Err(BackupDestinationRuntimeError::Duplicate);
+        }
+    }
+    Ok(values)
+}
+
+fn backup_name(value: &OsString) -> Option<&'static str> {
+    BACKUP_VARIABLES
+        .iter()
+        .copied()
+        .find(|name| value == &OsString::from(name))
+}
 
 #[derive(Clone, PartialEq, Eq)]
 pub enum BackupSse {
@@ -488,6 +668,199 @@ impl BackupDestination {
         })
     }
 
+    /// Stores one immutable backup payload under its content address. A
+    /// repeated upload is safe: the object is read back and must match the
+    /// caller's exact size and digest before it is accepted.
+    pub async fn put_verified_file(
+        &self,
+        digest: [u8; 32],
+        bytes: u64,
+        source: &Path,
+    ) -> Result<BackupStoredObject, BackupDestinationError> {
+        verify_local_file(source, bytes, digest).await?;
+        let key = self.payload_key(digest);
+        let body = ByteStream::from_path(source)
+            .await
+            .map_err(|_| BackupDestinationError::LocalInput)?;
+        let mut put = self
+            .client
+            .put_object()
+            .bucket(&self.config.bucket)
+            .key(&key)
+            .body(body);
+        put = apply_sse(put, &self.config.sse);
+        let output = put.send().await.map_err(|error| {
+            classify(
+                error
+                    .as_service_error()
+                    .and_then(ProvideErrorMetadata::code),
+            )
+        })?;
+        self.verify_object(&key, bytes, digest).await?;
+        Ok(BackupStoredObject {
+            key,
+            version_id: output.version_id().map(str::to_owned),
+            bytes,
+            sha256: digest,
+        })
+    }
+
+    pub async fn put_verified_bytes(
+        &self,
+        relative_key: &str,
+        body: Vec<u8>,
+    ) -> Result<BackupStoredObject, BackupDestinationError> {
+        if !safe_relative_key(relative_key) || body.is_empty() {
+            return Err(BackupDestinationError::InvalidObject);
+        }
+        let key = format!("{}/{}", self.config.prefix, relative_key);
+        let bytes = body.len() as u64;
+        let digest: [u8; 32] = Sha256::digest(&body).into();
+        let mut put = self
+            .client
+            .put_object()
+            .bucket(&self.config.bucket)
+            .key(&key)
+            .body(ByteStream::from(body));
+        put = apply_sse(put, &self.config.sse);
+        let output = put.send().await.map_err(|error| {
+            classify(
+                error
+                    .as_service_error()
+                    .and_then(ProvideErrorMetadata::code),
+            )
+        })?;
+        self.verify_object(&key, bytes, digest).await?;
+        Ok(BackupStoredObject {
+            key,
+            version_id: output.version_id().map(str::to_owned),
+            bytes,
+            sha256: digest,
+        })
+    }
+
+    pub async fn read_verified(
+        &self,
+        key: &str,
+        bytes: u64,
+        digest: [u8; 32],
+    ) -> Result<Vec<u8>, BackupDestinationError> {
+        if !key.starts_with(&format!("{}/", self.config.prefix)) || bytes > 128 * 1024 * 1024 {
+            return Err(BackupDestinationError::InvalidObject);
+        }
+        let output = self
+            .client
+            .get_object()
+            .bucket(&self.config.bucket)
+            .key(key)
+            .send()
+            .await
+            .map_err(|error| {
+                classify(
+                    error
+                        .as_service_error()
+                        .and_then(ProvideErrorMetadata::code),
+                )
+            })?;
+        if output
+            .content_length()
+            .and_then(|value| u64::try_from(value).ok())
+            != Some(bytes)
+        {
+            return Err(BackupDestinationError::ReadVerification);
+        }
+        let mut reader = output.body.into_async_read().take(bytes.saturating_add(1));
+        let capacity = usize::try_from(bytes).map_err(|_| BackupDestinationError::InvalidObject)?;
+        let mut body = Vec::with_capacity(capacity);
+        reader
+            .read_to_end(&mut body)
+            .await
+            .map_err(|_| BackupDestinationError::Transport)?;
+        if body.len() as u64 != bytes || <[u8; 32]>::from(Sha256::digest(&body)) != digest {
+            return Err(BackupDestinationError::ReadVerification);
+        }
+        Ok(body)
+    }
+
+    async fn verify_object(
+        &self,
+        key: &str,
+        bytes: u64,
+        digest: [u8; 32],
+    ) -> Result<(), BackupDestinationError> {
+        let head = self
+            .client
+            .head_object()
+            .bucket(&self.config.bucket)
+            .key(key)
+            .send()
+            .await
+            .map_err(|error| {
+                classify(
+                    error
+                        .as_service_error()
+                        .and_then(ProvideErrorMetadata::code),
+                )
+            })?;
+        verify_sse(
+            head.server_side_encryption(),
+            head.ssekms_key_id(),
+            &self.config.sse,
+        )?;
+        if head
+            .content_length()
+            .and_then(|value| u64::try_from(value).ok())
+            != Some(bytes)
+        {
+            return Err(BackupDestinationError::ReadVerification);
+        }
+        let output = self
+            .client
+            .get_object()
+            .bucket(&self.config.bucket)
+            .key(key)
+            .send()
+            .await
+            .map_err(|error| {
+                classify(
+                    error
+                        .as_service_error()
+                        .and_then(ProvideErrorMetadata::code),
+                )
+            })?;
+        let mut reader = output.body.into_async_read().take(bytes.saturating_add(1));
+        let mut hasher = Sha256::new();
+        let mut read_bytes = 0_u64;
+        let mut buffer = [0_u8; 64 * 1024];
+        loop {
+            let read = reader
+                .read(&mut buffer)
+                .await
+                .map_err(|_| BackupDestinationError::Transport)?;
+            if read == 0 {
+                break;
+            }
+            read_bytes = read_bytes
+                .checked_add(read as u64)
+                .ok_or(BackupDestinationError::InvalidObject)?;
+            hasher.update(&buffer[..read]);
+        }
+        if read_bytes != bytes || <[u8; 32]>::from(hasher.finalize()) != digest {
+            return Err(BackupDestinationError::ReadVerification);
+        }
+        Ok(())
+    }
+
+    fn payload_key(&self, digest: [u8; 32]) -> String {
+        let hex = hex_digest(digest);
+        format!(
+            "{}/payloads/sha256/{}/{}",
+            self.config.prefix,
+            &hex[..2],
+            hex
+        )
+    }
+
     async fn verify_bucket_default_encryption(&self) -> Result<(), BackupDestinationError> {
         let output = self
             .client
@@ -521,6 +894,26 @@ impl BackupDestination {
         encrypted
             .then_some(())
             .ok_or(BackupDestinationError::SseVerification)
+    }
+}
+
+#[derive(Clone, PartialEq, Eq)]
+pub struct BackupStoredObject {
+    pub key: String,
+    pub version_id: Option<String>,
+    pub bytes: u64,
+    pub sha256: [u8; 32],
+}
+
+impl fmt::Debug for BackupStoredObject {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("BackupStoredObject")
+            .field("key", &"[REDACTED]")
+            .field("version_id_configured", &self.version_id.is_some())
+            .field("bytes", &self.bytes)
+            .field("sha256", &"[SHA-256]")
+            .finish()
     }
 }
 
@@ -566,6 +959,8 @@ pub enum BackupDestinationError {
     ListVerification,
     SseVerification,
     DeletePermissionAllowed,
+    LocalInput,
+    InvalidObject,
 }
 
 impl fmt::Display for BackupDestinationError {
@@ -584,8 +979,64 @@ impl fmt::Display for BackupDestinationError {
             Self::DeletePermissionAllowed => {
                 "backup writer credential must not allow object deletion"
             }
+            Self::LocalInput => "backup source could not be read",
+            Self::InvalidObject => "backup object contract is invalid",
         })
     }
+}
+
+fn safe_relative_key(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 768
+        && !value.starts_with('/')
+        && !value.contains('\\')
+        && !value.chars().any(char::is_control)
+        && value
+            .split('/')
+            .all(|part| !part.is_empty() && !matches!(part, "." | ".."))
+}
+
+fn hex_digest(value: [u8; 32]) -> String {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let mut output = String::with_capacity(64);
+    for byte in value {
+        output.push(char::from(HEX[usize::from(byte >> 4)]));
+        output.push(char::from(HEX[usize::from(byte & 0x0f)]));
+    }
+    output
+}
+
+async fn verify_local_file(
+    source: &Path,
+    bytes: u64,
+    digest: [u8; 32],
+) -> Result<(), BackupDestinationError> {
+    let mut file = tokio::fs::File::open(source)
+        .await
+        .map_err(|_| BackupDestinationError::LocalInput)?;
+    let metadata = file
+        .metadata()
+        .await
+        .map_err(|_| BackupDestinationError::LocalInput)?;
+    if !metadata.is_file() || metadata.len() != bytes {
+        return Err(BackupDestinationError::LocalInput);
+    }
+    let mut hasher = Sha256::new();
+    let mut buffer = [0_u8; 64 * 1024];
+    loop {
+        let read = file
+            .read(&mut buffer)
+            .await
+            .map_err(|_| BackupDestinationError::LocalInput)?;
+        if read == 0 {
+            break;
+        }
+        hasher.update(&buffer[..read]);
+    }
+    if <[u8; 32]>::from(hasher.finalize()) != digest {
+        return Err(BackupDestinationError::LocalInput);
+    }
+    Ok(())
 }
 
 impl std::error::Error for BackupDestinationError {}
@@ -706,6 +1157,7 @@ fn valid_bucket(value: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io;
 
     #[test]
     fn object_sse_verification_requires_exact_mode_and_kms_key() {
@@ -778,5 +1230,81 @@ mod tests {
             BackupWriterCredential::from_repository_value(&unknown_field),
             Err(IntegrationError::CredentialUnavailable)
         ));
+    }
+
+    #[test]
+    fn backup_object_keys_are_relative_and_content_addressed() {
+        assert!(safe_relative_key("restore-points/id/manifest.json"));
+        for invalid in ["", "/absolute", "../escape", "a//b", "a/./b", "a\\b"] {
+            assert!(!safe_relative_key(invalid));
+        }
+        assert_eq!(
+            hex_digest([0xab; 32]),
+            "abababababababababababababababababababababababababababababababab"
+        );
+    }
+
+    #[tokio::test]
+    async fn local_source_is_verified_before_any_destination_write() {
+        let directory = tempfile::tempdir().unwrap();
+        let source = directory.path().join("payload");
+        std::fs::write(&source, b"payload").unwrap();
+        let digest: [u8; 32] = Sha256::digest(b"payload").into();
+        assert_eq!(verify_local_file(&source, 7, digest).await, Ok(()));
+        assert_eq!(
+            verify_local_file(&source, 8, digest).await,
+            Err(BackupDestinationError::LocalInput)
+        );
+        assert_eq!(
+            verify_local_file(&source, 7, [0; 32]).await,
+            Err(BackupDestinationError::LocalInput)
+        );
+    }
+
+    #[test]
+    fn runtime_configuration_is_explicit_and_has_no_primary_storage_fallback() {
+        let environment = TestEnvironment(vec![
+            (BACKUP_ENDPOINT.into(), "https://backup.example.test".into()),
+            (BACKUP_REGION.into(), "us-east-1".into()),
+            (BACKUP_BUCKET.into(), "nuriteo-backups".into()),
+            (BACKUP_PREFIX.into(), "instance-a".into()),
+            (BACKUP_ADDRESSING_STYLE.into(), "path".into()),
+            (BACKUP_SSE.into(), "s3".into()),
+            (BACKUP_ACCESS_KEY_ID.into(), "backup-writer".into()),
+            (BACKUP_SECRET_ACCESS_KEY.into(), "not-a-real-secret".into()),
+        ]);
+        let runtime = BackupDestinationRuntime::load(&environment, &NoFiles).unwrap();
+        assert_eq!(runtime.config.bucket, "nuriteo-backups");
+        assert_eq!(runtime.config.prefix, "instance-a");
+
+        let primary_only = TestEnvironment(vec![
+            (
+                "NURITEO_S3_ENDPOINT".into(),
+                "https://primary.example.test".into(),
+            ),
+            ("NURITEO_S3_REGION".into(), "us-east-1".into()),
+            ("NURITEO_S3_BUCKET".into(), "primary".into()),
+        ]);
+        assert!(matches!(
+            BackupDestinationRuntime::load(&primary_only, &NoFiles),
+            Err(BackupDestinationRuntimeError::Missing(_))
+        ));
+    }
+
+    #[derive(Clone)]
+    struct TestEnvironment(Vec<(OsString, OsString)>);
+
+    impl Environment for TestEnvironment {
+        fn entries(&self) -> Vec<(OsString, OsString)> {
+            self.0.clone()
+        }
+    }
+
+    struct NoFiles;
+
+    impl FileReader for NoFiles {
+        fn read(&self, _: &Path, _: usize) -> io::Result<Vec<u8>> {
+            Err(io::ErrorKind::NotFound.into())
+        }
     }
 }
