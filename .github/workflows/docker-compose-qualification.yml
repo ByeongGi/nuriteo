@@ -32,7 +32,7 @@ jobs:
       - uses: actions/checkout@v4
       - run: node deploy/compose/check-compose.mjs
       - run: node deploy/compose/check-docker-qualification.mjs
-      - run: bash -n deploy/compose/test-compose.sh deploy/compose/docker-qualification-ci.sh
+      - run: bash -n deploy/compose/test-compose.sh deploy/compose/docker-qualification-ci.sh deploy/compose/run-upgrade-rehearsal.sh
       - run: deploy/compose/docker-qualification-ci.sh self-test
       - run: sh -n deploy/compose/rustfs-init.sh deploy/compose/postgres-tls-entrypoint.sh
 
@@ -66,6 +66,8 @@ jobs:
         run: deploy/compose/docker-qualification-ci.sh build
       - name: Run clean-install, restart, persistence, and failure acceptance
         run: deploy/compose/docker-qualification-ci.sh acceptance
+      - name: Run digest-pinned upgrade and application rollback rehearsal
+        run: deploy/compose/run-upgrade-rehearsal.sh
       - name: Capture allowlisted failure state
         if: failure()
         continue-on-error: true

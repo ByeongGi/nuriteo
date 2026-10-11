@@ -19,7 +19,7 @@
   "rollback": {
     "compatibleApplications": ["self-hosted-beta-gate-005"],
     "schemaMinimum": 46,
-    "schemaMaximum": 48,
+    "schemaMaximum": 50,
     "objectFormats": ["project-bundle-v1"],
     "database": "preserve-current-schema",
     "downMigration": "forbidden"

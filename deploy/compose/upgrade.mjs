@@ -109,6 +109,7 @@ class ProcessRunner {
   constructor() {
     this.command = (process.env.NURITEO_COMPOSE_COMMAND || "docker compose").trim().split(/\s+/u);
     this.composeFile = process.env.NURITEO_COMPOSE_FILE || "deploy/compose/compose.yaml";
+    this.projectName = process.env.NURITEO_COMPOSE_PROJECT_NAME || "";
   }
   invoke(args, release) {
     const [command, ...prefix] = this.command;
@@ -122,6 +123,17 @@ class ProcessRunner {
   }
   compose(release, args) { this.invoke(args, release); }
   container(service) {
+    if (this.engine() === "podman" && this.projectName) {
+      const result = spawnSync("podman", [
+        "ps", "--all",
+        "--filter", `label=com.docker.compose.project=${this.projectName}`,
+        "--filter", `label=com.docker.compose.service=${service}`,
+        "--format", "{{.ID}}",
+      ], { cwd: root, encoding: "utf8" });
+      const containers = result.stdout.trim().split("\n").filter(Boolean);
+      if (result.status !== 0 || containers.length !== 1) throw new Error(`${service} workload is not present`);
+      return containers[0];
+    }
     const [command, ...prefix] = this.command;
     const result = spawnSync(command, [...prefix, "-f", this.composeFile, "ps", "--quiet", service], { cwd: root, encoding: "utf8", env: process.env });
     if (result.status !== 0 || !result.stdout.trim()) throw new Error(`${service} workload is not present`);
@@ -163,7 +175,7 @@ class ProcessRunner {
     }
     throw new Error("web /sign-in did not become ready");
   }
-  engine() { return this.command[0].includes("podman") ? "podman" : "docker"; }
+  engine() { return this.command.join(" ").includes("podman") ? "podman" : "docker"; }
 }
 
 function sha256(file) { return crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex"); }

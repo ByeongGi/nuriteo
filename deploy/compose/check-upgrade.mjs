@@ -8,10 +8,15 @@ const { plan } = loadPlan(planPath);
 const helperSource = fs.readFileSync("deploy/compose/upgrade.mjs", "utf8");
 const rehearsalContainerfile = fs.readFileSync("deploy/compose/fixtures/upgrade-rehearsal/Containerfile", "utf8");
 const rehearsalNode = fs.readFileSync("deploy/compose/fixtures/upgrade-rehearsal/fixture-node.sh", "utf8");
+const actualRehearsal = fs.readFileSync("deploy/compose/run-upgrade-rehearsal.sh", "utf8");
 
 assert.match(helperSource, /fetch\('http:\/\/127\.0\.0\.1:3000\/sign-in'/u, "helper must probe Web /sign-in");
 assert.match(rehearsalContainerfile, /COPY --chmod=0555 fixture-node\.sh \/usr\/local\/bin\/node/u, "rehearsal must install an executable Node probe adapter");
 assert.match(rehearsalNode, /http:\/\/127\.0\.0\.1:3000\/sign-in/u, "rehearsal adapter must implement the production readiness endpoint");
+assert.equal(plan.source.migration, 46, "qualification must start at the frozen Beta migration");
+assert.equal(plan.target.migration, 50, "qualification must target the current RC migration");
+assert.match(actualRehearsal, /FIXTURE_PREFLIGHT_FAIL=true/u, "actual rehearsal must inject a preflight stop");
+assert.match(actualRehearsal, /project-bundle-v1:preserve-me/u, "actual rehearsal must preserve an object sentinel");
 
 class FakeRunner {
   constructor(failAt = "") { this.calls = []; this.failAt = failAt; this.current = plan.source.release; }
@@ -78,7 +83,7 @@ assert.ok(!rollback.calls.some((call) => call.endsWith("migrate migrate")), "rol
 for (const mutate of [
   (copy) => { copy.upgrade.direction = "backward"; },
   (copy) => { copy.rollback.downMigration = "allowed"; },
-  (copy) => { copy.rollback.schemaMaximum = 47; },
+  (copy) => { copy.rollback.schemaMaximum = 49; },
   (copy) => { copy.target.serverImage = "registry.example.invalid/server:latest"; },
   (copy) => { copy.objects.rewritePolicy = "allowed"; }
 ]) {

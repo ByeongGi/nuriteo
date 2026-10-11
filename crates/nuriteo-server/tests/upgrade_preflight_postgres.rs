@@ -48,7 +48,7 @@ async fn preflight_is_read_only_and_stops_without_interrupting_previous_health()
     assert_eq!(report["sourceMigration"], 46);
     assert_eq!(report["currentMigration"], 46);
     assert_eq!(report["schemaState"], "upgrade-required");
-    assert_eq!(report["targetMigration"], 49);
+    assert_eq!(report["targetMigration"], 50);
     assert_eq!(database_snapshot(&pool).await, source_snapshot);
     assert_service_ready(health_address);
 
@@ -90,6 +90,42 @@ async fn preflight_is_read_only_and_stops_without_interrupting_previous_health()
     pool.close(Duration::from_secs(2)).await.unwrap();
 }
 
+#[tokio::test]
+#[ignore = "requires tests/fixtures/postgres-upgrade-preflight/run.sh"]
+async fn migration_46_to_50_preserves_existing_domain_data() {
+    let database_url = required_env(DATABASE_URL_ENV);
+    let ca_path = required_env(DATABASE_CA_ENV);
+    let ca = fs::read(&ca_path).expect("fixture CA should be readable");
+    let pool = fixture_pool(database_url.clone(), ca).await;
+    assert_eq!(
+        check_schema_readiness(&pool).await.unwrap(),
+        SchemaReadiness::Pending {
+            current: Some(46),
+            target: 50,
+        }
+    );
+    create_domain_sentinel(&pool).await;
+
+    let migration = run_migrate(&database_url, &ca_path);
+    assert_eq!(migration.status.code(), Some(0));
+    assert!(migration.stderr.is_empty());
+    assert_eq!(
+        migration.stdout,
+        b"database migration complete: schema=ready version=50\n"
+    );
+    assert_eq!(
+        check_schema_readiness(&pool).await.unwrap(),
+        SchemaReadiness::Ready { version: 50 }
+    );
+    assert_eq!(
+        sentinel_payload(&pool).await,
+        "004e55524954454f2d5550472d303032ff"
+    );
+
+    reset_schema(&pool).await;
+    pool.close(Duration::from_secs(2)).await.unwrap();
+}
+
 fn run_preflight(database_url: &str, ca_path: &str) -> Output {
     Command::new(env!("CARGO_BIN_EXE_nuriteo-server"))
         .arg("upgrade-preflight")
@@ -100,6 +136,18 @@ fn run_preflight(database_url: &str, ca_path: &str) -> Output {
         .env("NURITEO_DATABASE_MIN_CONNECTIONS", "0")
         .output()
         .expect("upgrade-preflight subprocess should start")
+}
+
+fn run_migrate(database_url: &str, ca_path: &str) -> Output {
+    Command::new(env!("CARGO_BIN_EXE_nuriteo-server"))
+        .arg("migrate")
+        .env_clear()
+        .env("NURITEO_EXTERNAL_URL", "http://127.0.0.1:3000")
+        .env("NURITEO_DATABASE_URL", database_url)
+        .env("NURITEO_DATABASE_CA_FILE", ca_path)
+        .env("NURITEO_DATABASE_MIN_CONNECTIONS", "0")
+        .output()
+        .expect("migrate subprocess should start")
 }
 
 fn assert_stopped(output: &Output, category: &str, database_url: &str) {

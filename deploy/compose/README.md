@@ -119,3 +119,15 @@ node deploy/compose/upgrade.mjs rollback /absolute/path/to/upgrade-plan.json
 ```
 
 Rollback first runs the current candidate's preflight, requires the plan to declare that the previous application accepts the current schema and object format, and then replaces only Core and Web. The helper contains no down-migration path. If schema or object data must be reverted, use a coordinated full restore instead. `NURITEO_COMPOSE_COMMAND` defaults to `docker compose`; set it to `podman compose` for a Podman compatibility rehearsal.
+
+The repository-owned qualification creates four distinct OCI images, pushes them to a disposable local registry,
+uses digest-only source/target release sets, injects a preflight failure, upgrades migration 46 to 50, and performs an
+application-only rollback while asserting that the schema and stored object sentinel remain intact:
+
+```sh
+deploy/compose/run-upgrade-rehearsal.sh
+```
+
+For the real database boundary, `crates/nuriteo-server/tests/fixtures/postgres-upgrade-preflight/run.sh` builds the
+server from the frozen Beta commit, migrates a TLS PostgreSQL instance to version 46, verifies read-only preflight,
+then runs the current migration 50 binary and checks that pre-existing domain bytes are unchanged.

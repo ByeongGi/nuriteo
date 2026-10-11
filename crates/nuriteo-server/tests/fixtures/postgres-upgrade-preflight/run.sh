@@ -83,3 +83,16 @@ NURITEO_TEST_DATABASE_CA="$fixture_dir/ca.crt" \
 cargo test -p nuriteo-server --test upgrade_preflight_postgres \
   preflight_is_read_only_and_stops_without_interrupting_previous_health \
   -- --ignored --exact --nocapture
+
+NURITEO_EXTERNAL_URL="http://127.0.0.1:3000" \
+NURITEO_DATABASE_URL="postgres://nuriteo:nuriteo-test-password@localhost:${port}/nuriteo" \
+NURITEO_DATABASE_CA_FILE="$fixture_dir/ca.crt" \
+NURITEO_DATABASE_MIN_CONNECTIONS=0 \
+  "$fixture_dir/previous-target/debug/nuriteo-server" migrate \
+  | grep -Fx 'database migration complete: schema=ready version=46'
+
+NURITEO_TEST_DATABASE_URL="postgres://nuriteo:nuriteo-test-password@localhost:${port}/nuriteo" \
+NURITEO_TEST_DATABASE_CA="$fixture_dir/ca.crt" \
+cargo test -p nuriteo-server --test upgrade_preflight_postgres \
+  migration_46_to_50_preserves_existing_domain_data \
+  -- --ignored --exact --nocapture

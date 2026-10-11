@@ -5,14 +5,14 @@ command=${1:-serve}
 case "$command" in
   upgrade-preflight)
     [ "${FIXTURE_PREFLIGHT_FAIL:-false}" != true ] || exit 42
-    echo '{"status":"upgrade-required","currentMigration":46,"targetMigration":48}'
+    echo '{"status":"upgrade-required","currentMigration":46,"targetMigration":50}'
     ;;
   storage-check)
     echo '{"status":"ready","format":"project-bundle-v1"}'
     ;;
   migrate)
     [ "${FIXTURE_MIGRATE_FAIL:-false}" != true ] || exit 43
-    echo 48 > /state/schema
+    echo 50 > /state/schema
     ;;
   healthcheck)
     wget -q -O /dev/null http://127.0.0.1:8080/health
