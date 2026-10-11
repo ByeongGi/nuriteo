@@ -51,6 +51,11 @@ pub enum BackupCommand {
         recovery_kit: Option<String>,
         recovery_kit_passphrase_file: Option<String>,
     },
+    Drill {
+        backup_id: String,
+        recovery_kit: Option<String>,
+        recovery_kit_passphrase_file: Option<String>,
+    },
     Prune,
 }
 
@@ -202,6 +207,21 @@ fn backup_command() -> Command {
         .subcommand(
             Command::new("restore")
                 .about("Restore into an empty staged target")
+                .arg(backup_id())
+                .arg(
+                    Arg::new("recovery-kit")
+                        .long("recovery-kit")
+                        .requires("recovery-kit-passphrase-file"),
+                )
+                .arg(
+                    Arg::new("recovery-kit-passphrase-file")
+                        .long("recovery-kit-passphrase-file")
+                        .requires("recovery-kit"),
+                ),
+        )
+        .subcommand(
+            Command::new("drill")
+                .about("Restore and validate a backup in an empty isolated target")
                 .arg(backup_id())
                 .arg(
                     Arg::new("recovery-kit")
@@ -681,6 +701,13 @@ fn backup_from_matches(matches: &ArgMatches) -> Result<CliAction, clap::Error> {
                 .get_one::<String>("recovery-kit-passphrase-file")
                 .cloned(),
         },
+        Some(("drill", args)) => BackupCommand::Drill {
+            backup_id: required_string(args, "backup-id")?,
+            recovery_kit: args.get_one::<String>("recovery-kit").cloned(),
+            recovery_kit_passphrase_file: args
+                .get_one::<String>("recovery-kit-passphrase-file")
+                .cloned(),
+        },
         Some(("prune", _)) => BackupCommand::Prune,
         _ => {
             return Err(root_command().error(
@@ -709,7 +736,10 @@ async fn run_backup_command<O: Write, E: Write>(
     if matches!(command, BackupCommand::Create) {
         return backup_create(stdout, stderr).await;
     }
-    if matches!(command, BackupCommand::Restore { .. }) {
+    if matches!(
+        command,
+        BackupCommand::Restore { .. } | BackupCommand::Drill { .. }
+    ) {
         return backup_restore(command, stdout, stderr).await;
     }
     if matches!(
@@ -791,7 +821,7 @@ async fn run_backup_command<O: Write, E: Write>(
         // Restore is connected after the Maintenance Mode target adapter is
         // available; it must not mutate production through the portable
         // repository boundary.
-        BackupCommand::Restore { .. } => {
+        BackupCommand::Restore { .. } | BackupCommand::Drill { .. } => {
             return backup_failure(stderr, "coordinator-unavailable");
         }
     };
@@ -806,13 +836,28 @@ async fn backup_restore<O: Write, E: Write>(
     stdout: &mut O,
     stderr: &mut E,
 ) -> io::Result<CommandStatus> {
-    let BackupCommand::Restore {
-        backup_id,
-        recovery_kit,
-        recovery_kit_passphrase_file,
-    } = command
-    else {
-        unreachable!("restore dispatcher only receives restore commands")
+    let (backup_id, recovery_kit, recovery_kit_passphrase_file, operation) = match command {
+        BackupCommand::Restore {
+            backup_id,
+            recovery_kit,
+            recovery_kit_passphrase_file,
+        } => (
+            backup_id,
+            recovery_kit,
+            recovery_kit_passphrase_file,
+            "restored",
+        ),
+        BackupCommand::Drill {
+            backup_id,
+            recovery_kit,
+            recovery_kit_passphrase_file,
+        } => (
+            backup_id,
+            recovery_kit,
+            recovery_kit_passphrase_file,
+            "drill complete",
+        ),
+        _ => unreachable!("restore dispatcher only receives restore or drill commands"),
     };
     let environment = SystemEnvironment;
     let files = SystemFileReader;
@@ -927,8 +972,8 @@ async fn backup_restore<O: Write, E: Write>(
         (Ok(report), Ok(()), Ok(())) => {
             writeln!(
                 stdout,
-                "backup restored: {} entries={} bytes={}",
-                report.backup_id, report.entries, report.bytes
+                "backup {operation}: {} entries={} bytes={}",
+                report.backup_id, report.entries, report.bytes,
             )?;
             Ok(CommandStatus::Success)
         }
@@ -1450,6 +1495,14 @@ mod tests {
             (
                 vec!["backup", "restore", "backup-1"],
                 BackupCommand::Restore {
+                    backup_id: "backup-1".into(),
+                    recovery_kit: None,
+                    recovery_kit_passphrase_file: None,
+                },
+            ),
+            (
+                vec!["backup", "drill", "backup-1"],
+                BackupCommand::Drill {
                     backup_id: "backup-1".into(),
                     recovery_kit: None,
                     recovery_kit_passphrase_file: None,

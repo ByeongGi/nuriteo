@@ -19,6 +19,7 @@ use nuriteo_server::database::{DatabasePool, DatabaseRuntimeConfig, run_embedded
 use nuriteo_server::object_storage::{
     ObjectKey, ObjectStorageConfig, OperationLimits, PutRequest, S3ObjectStore,
 };
+use nuriteo_server::{CommandStatus, run_async};
 use sha2::{Digest, Sha256};
 use sqlx::Executor;
 use uuid::Uuid;
@@ -110,17 +111,26 @@ async fn encrypted_backup_restores_into_isolated_database_and_bucket() {
     let target_storage = S3ObjectStore::new(&restore_runtime.storage, OperationLimits::default())
         .await
         .unwrap();
-    let restored = BackupRestoreCoordinator::new(
-        source_pool.clone(),
-        target_pool.clone(),
-        target_storage.clone(),
-        restore_runtime,
+    drop(restore_runtime);
+    let mut stdout = Vec::new();
+    let mut stderr = Vec::new();
+    let generation_id_text = generation_id.to_string();
+    let status = run_async(
+        ["backup", "drill", generation_id_text.as_str()],
+        &mut stdout,
+        &mut stderr,
     )
-    .restore(&staged)
     .await
     .unwrap();
-    assert_eq!(restored.backup_id, generation_id.to_string());
-    assert_eq!(restored.entries, 2);
+    assert_eq!(
+        status,
+        CommandStatus::Success,
+        "{}",
+        String::from_utf8_lossy(&stderr)
+    );
+    let output = String::from_utf8(stdout).unwrap();
+    assert!(output.contains(&format!("backup drill complete: {generation_id}")));
+    assert!(output.contains("entries=2"));
     assert_restored_database(&target_pool).await;
     assert_eq!(
         target_storage
