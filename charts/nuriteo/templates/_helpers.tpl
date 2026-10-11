@@ -195,6 +195,19 @@ capabilities:
 {{- end }}
 {{- end -}}
 
+{{- define "nuriteo.dnsEgress" -}}
+- to:
+    - namespaceSelector:
+        matchLabels:
+          {{- toYaml .Values.networkPolicy.dns.namespaceLabels | nindent 10 }}
+      podSelector:
+        matchLabels:
+          {{- toYaml .Values.networkPolicy.dns.podLabels | nindent 10 }}
+  ports:
+    - { protocol: UDP, port: 53 }
+    - { protocol: TCP, port: 53 }
+{{- end -}}
+
 {{/*
 Return the canonical application hostname and reject origin overlap with the
 Preview wildcard. A Preview label is intentionally only one DNS label deep.

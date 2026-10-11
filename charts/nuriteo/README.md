@@ -138,6 +138,44 @@ RuntimeDefault seccomp, drop every capability, use a read-only root filesystem, 
 Secret files read-only with mode `0400`. Their `/tmp` scratch `emptyDir` is ephemeral and bounded;
 size it with `backupStorage.scratchSizeLimit` before using larger datasets.
 
+## Pod security, disruption, and network isolation
+
+Every Pod runs as non-root UID/GID 65532 with RuntimeDefault seccomp, no privilege escalation, a
+read-only root filesystem and all Linux capabilities dropped. CPU/memory requests and memory limits are
+declared for every workload. Core and Web each render a `policy/v1` PodDisruptionBudget with
+`minAvailable: 1`; the chart rejects a minimum above the configured replica count. A one-replica install
+therefore deliberately blocks voluntary eviction. Scale the component before draining a node instead of
+disabling its budget during normal operation.
+
+Full NetworkPolicy isolation is opt-in because Kubernetes policies cannot safely infer IP ranges from
+PostgreSQL, S3, OIDC, SMTP, Git or registry DNS names. Enabling it without at least one explicit dependency
+CIDR fails schema validation. The restricted profile installs default deny, permits Ingress-controller →
+Web, Web → Core, selected DNS, and only the configured TCP ports to the configured CIDRs. It has no
+implicit public-network or private-network fallback.
+
+```yaml
+networkPolicy:
+  enabled: true
+  ingressController:
+    namespaceLabels:
+      kubernetes.io/metadata.name: ingress-nginx
+    podLabels:
+      app.kubernetes.io/name: ingress-nginx
+  dns:
+    namespaceLabels:
+      kubernetes.io/metadata.name: kube-system
+    podLabels:
+      k8s-app: kube-dns
+  externalEgress:
+    cidrBlocks:
+      - 10.42.0.0/16
+    tcpPorts: [443, 465, 587, 5432]
+```
+
+List every actual dependency CIDR and custom port before enabling the profile. For endpoints with rotating
+addresses, use a CNI/FQDN policy maintained by the cluster operator and keep this chart profile disabled;
+do not widen it to `0.0.0.0/0` merely to make an incomplete inventory pass.
+
 ## Ingress and wildcard Preview
 
 Ingress is disabled by default. It can expose the application host while Preview remains disabled; the

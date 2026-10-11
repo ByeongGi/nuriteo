@@ -9,9 +9,10 @@ ingress_file=$(mktemp "${TMPDIR:-/tmp}/nuriteo-chart-ingress.XXXXXX")
 cron_file=$(mktemp "${TMPDIR:-/tmp}/nuriteo-chart-cron.XXXXXX")
 toolbox_file=$(mktemp "${TMPDIR:-/tmp}/nuriteo-chart-toolbox.XXXXXX")
 restore_file=$(mktemp "${TMPDIR:-/tmp}/nuriteo-chart-restore.XXXXXX")
+restricted_file=$(mktemp "${TMPDIR:-/tmp}/nuriteo-chart-restricted.XXXXXX")
 error_file=$(mktemp "${TMPDIR:-/tmp}/nuriteo-chart-error.XXXXXX")
 operations_digest=sha256:2222222222222222222222222222222222222222222222222222222222222222
-trap 'rm -f "$output_file" "$rotated_file" "$upgrade_file" "$ingress_file" "$cron_file" "$toolbox_file" "$restore_file" "$error_file"' EXIT HUP INT TERM
+trap 'rm -f "$output_file" "$rotated_file" "$upgrade_file" "$ingress_file" "$cron_file" "$toolbox_file" "$restore_file" "$restricted_file" "$error_file"' EXIT HUP INT TERM
 
 helm lint --strict "$chart_dir"
 helm template nuriteo "$chart_dir" --namespace nuriteo >"$output_file"
@@ -32,6 +33,14 @@ grep -F 'secretName: nuriteo-application' "$output_file" >/dev/null
 grep -F 'defaultMode: 0400' "$output_file" >/dev/null
 test "$(grep -c '^kind: Deployment$' "$output_file")" -eq 2
 test "$(grep -c '^kind: Service$' "$output_file")" -eq 2
+test "$(grep -c '^kind: PodDisruptionBudget$' "$output_file")" -eq 2
+grep -F 'name: nuriteo-nuriteo-core' "$output_file" >/dev/null
+grep -F 'name: nuriteo-nuriteo-web' "$output_file" >/dev/null
+test "$(grep -c 'minAvailable: 1' "$output_file")" -eq 2
+if grep -F 'kind: NetworkPolicy' "$output_file" >/dev/null; then
+  echo 'full egress restriction must remain opt-in until dependency CIDRs are explicit' >&2
+  exit 1
+fi
 test "$(grep -c '^kind: Job$' "$output_file")" -eq 2
 test "$(grep -c 'helm.sh/hook: pre-install,pre-upgrade' "$output_file")" -eq 2
 grep -F 'helm.sh/hook-weight: "-20"' "$output_file" >/dev/null
@@ -51,6 +60,20 @@ if grep -F 'kind: CronJob' "$output_file" >/dev/null || grep -F 'nuriteo.dev/ope
   echo 'backup schedule, toolbox and restore must remain opt-in' >&2
   exit 1
 fi
+
+helm template nuriteo "$chart_dir" --namespace nuriteo \
+  --set networkPolicy.enabled=true \
+  --set-string 'networkPolicy.externalEgress.cidrBlocks[0]=10.42.0.0/16' >"$restricted_file"
+test "$(grep -c '^kind: NetworkPolicy$' "$restricted_file")" -eq 4
+grep -F 'name: nuriteo-nuriteo-default-deny' "$restricted_file" >/dev/null
+grep -F 'name: nuriteo-nuriteo-external-egress' "$restricted_file" >/dev/null
+grep -F 'kubernetes.io/metadata.name: ingress-nginx' "$restricted_file" >/dev/null
+grep -F 'kubernetes.io/metadata.name: kube-system' "$restricted_file" >/dev/null
+grep -F 'ipBlock: { cidr: "10.42.0.0/16" }' "$restricted_file" >/dev/null
+grep -F -- '- { protocol: TCP, port: 5432 }' "$restricted_file" >/dev/null
+grep -F -- '- { protocol: UDP, port: 53 }' "$restricted_file" >/dev/null
+grep -F 'operator: NotIn' "$restricted_file" >/dev/null
+grep -F 'values: [web]' "$restricted_file" >/dev/null
 
 helm template nuriteo "$chart_dir" --namespace nuriteo \
   --show-only templates/backup-cronjob.yaml \
@@ -258,6 +281,20 @@ fi
 grep -F 'require a release-published images.operations.digest' "$error_file" >/dev/null
 
 if helm template nuriteo "$chart_dir" \
+  --set networkPolicy.enabled=true >"$output_file" 2>"$error_file"; then
+  echo 'expected a restricted network profile without dependency CIDRs to fail closed' >&2
+  exit 1
+fi
+grep -F '/networkPolicy/externalEgress/cidrBlocks' "$error_file" >/dev/null
+
+if helm template nuriteo "$chart_dir" \
+  --set core.podDisruptionBudget.minAvailable=2 >"$output_file" 2>"$error_file"; then
+  echo 'expected a PDB minimum above the replica count to fail closed' >&2
+  exit 1
+fi
+grep -F 'core.podDisruptionBudget.minAvailable must not exceed core.replicas' "$error_file" >/dev/null
+
+if helm template nuriteo "$chart_dir" \
   --set-string externalUrl=https://admin:password@nuriteo.example.com \
   >"$output_file" 2>"$error_file"; then
   echo 'expected credential-bearing external URL to fail schema validation' >&2
@@ -355,4 +392,4 @@ grep -F 'app.kubernetes.io/component: bootstrap-admin' "$rotated_file" >/dev/nul
 grep -F 'helm.sh/hook-weight: "-5"' "$rotated_file" >/dev/null
 grep -F 'secretName: nuriteo-bootstrap' "$rotated_file" >/dev/null
 
-echo 'nuriteo Helm chart contract ok (schema, digests, refs, rollout, jobs, workloads, ingress, backup schedule, suspended toolbox/restore)'
+echo 'nuriteo Helm chart contract ok (schema, digests, refs, rollout, jobs, workloads, ingress, backup schedule, suspended toolbox/restore, PDB, restricted network profile)'

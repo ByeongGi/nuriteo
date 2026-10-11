@@ -55,6 +55,24 @@ serviceAccount:
   name: ""
   automountServiceAccountToken: false
 
+networkPolicy:
+  # Enable only after listing every external dependency CIDR used by PostgreSQL,
+  # S3, OIDC, SMTP, Git and registries. No implicit public-network fallback exists.
+  enabled: false
+  ingressController:
+    namespaceLabels:
+      kubernetes.io/metadata.name: ingress-nginx
+    podLabels:
+      app.kubernetes.io/name: ingress-nginx
+  dns:
+    namespaceLabels:
+      kubernetes.io/metadata.name: kube-system
+    podLabels:
+      k8s-app: kube-dns
+  externalEgress:
+    cidrBlocks: []
+    tcpPorts: [443, 465, 587, 5432]
+
 jobs:
   preflight:
     enabled: true
@@ -136,12 +154,18 @@ core:
     port: 8080
   managementPort: 9090
   terminationGracePeriodSeconds: 45
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
 
 web:
   replicas: 1
   service:
     port: 3000
   terminationGracePeriodSeconds: 30
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
 
 postgresql:
   existingSecret:
