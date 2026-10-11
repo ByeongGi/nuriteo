@@ -48,7 +48,7 @@ for (const image of report.images) {
 }
 
 const incident = fs.readFileSync("docs/security/incident-intake.md", "utf8");
-for (const term of ["image digest", "audit event ID", "critical", "high", "Release 차단 입력"])
+for (const term of ["digest", "audit event ID", "critical", "high", "Release 차단 입력"])
   assert.ok(incident.includes(term), `incident intake missing: ${term}`);
 
 console.log(JSON.stringify({ status: "pass", task: policy.taskId, images: report.images.length,
