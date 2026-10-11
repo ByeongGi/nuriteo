@@ -93,10 +93,10 @@
     {
       "id": "SHV1-UPGRADE",
       "area": "Upgrade",
-      "status": "candidate",
+      "status": "qualified",
       "contract": "Forward-only in-place upgrade from the published self-hosted v1 Beta/RC lineage; downgrade is not supported",
-      "qualification": "Every published source release must pass QUAL-003 before GATE-007.",
-      "evidence": ["compat/self-hosted-upgrade-compatibility-v1.json"]
+      "qualification": "Beta gate migration 46 and RC.1 migration 50 both passed the upgrade, isolated restore, and application-only rollback matrix; signed artifacts repeat it in QUAL-004.",
+      "evidence": ["compat/self-hosted-upgrade-compatibility-v1.json", "compat/self-hosted-v1-lifecycle-matrix.json"]
     },
     {
       "id": "SHV1-AIRGAP",
