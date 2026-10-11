@@ -1,4 +1,5 @@
 use std::fmt;
+use std::path::Path;
 
 use aws_config::default_provider::credentials::DefaultCredentialsChain;
 use aws_config::provider_config::ProviderConfig;
@@ -14,6 +15,7 @@ use aws_smithy_types::timeout::TimeoutConfig;
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use bytes::Bytes;
+use sha2::{Digest, Sha256};
 use tokio::io::AsyncReadExt;
 
 use super::capability_types::BackendIdentifier;
@@ -308,6 +310,59 @@ impl S3ObjectStore {
         Ok(())
     }
 
+    /// Writes one already-verified restore payload to an empty target exactly
+    /// once. This deliberately bypasses browser upload limits while retaining
+    /// immutable create, exact length and end-to-end SHA-256 verification.
+    pub async fn put_verified_restore_file(
+        &self,
+        key: &ObjectKey,
+        source: &Path,
+        bytes: u64,
+        digest: [u8; 32],
+    ) -> Result<(), ObjectStoreError> {
+        verify_restore_source(source, bytes, digest).await?;
+        let body = ByteStream::from_path(source)
+            .await
+            .map_err(|_| invalid_restore_request())?;
+        self.client
+            .put_object()
+            .bucket(&self.bucket)
+            .key(key.expose())
+            .if_none_match("*")
+            .content_length(i64::try_from(bytes).map_err(|_| invalid_restore_request())?)
+            .checksum_sha256(BASE64.encode(digest))
+            .body(body)
+            .send()
+            .await
+            .map_err(|error| classify_sdk_error(ObjectOperation::Put, &error))?;
+
+        let stream = self.get_stream(key, bytes).await?;
+        if stream.metadata.content_length != bytes {
+            return Err(integrity_restore_error());
+        }
+        let mut reader = stream.reader;
+        let mut hasher = Sha256::new();
+        let mut copied = 0_u64;
+        let mut buffer = [0_u8; 64 * 1024];
+        loop {
+            let read = reader
+                .read(&mut buffer)
+                .await
+                .map_err(|_| integrity_restore_error())?;
+            if read == 0 {
+                break;
+            }
+            copied = copied
+                .checked_add(read as u64)
+                .ok_or_else(integrity_restore_error)?;
+            hasher.update(&buffer[..read]);
+        }
+        if copied != bytes || <[u8; 32]>::from(hasher.finalize()) != digest {
+            return Err(integrity_restore_error());
+        }
+        Ok(())
+    }
+
     /// Performs the smallest read-only request that proves the configured
     /// bucket is reachable and authorized. It never lists keys or mutates data.
     pub async fn check_readiness(&self) -> Result<(), ObjectStoreError> {
@@ -372,6 +427,57 @@ impl S3ObjectStore {
         };
         Ok(ListPage { objects, next })
     }
+}
+
+async fn verify_restore_source(
+    source: &Path,
+    bytes: u64,
+    digest: [u8; 32],
+) -> Result<(), ObjectStoreError> {
+    if !source.is_absolute() || bytes == 0 || bytes > 5 * 1024 * 1024 * 1024 {
+        return Err(invalid_restore_request());
+    }
+    let metadata = tokio::fs::symlink_metadata(source)
+        .await
+        .map_err(|_| invalid_restore_request())?;
+    if !metadata.is_file() || metadata.file_type().is_symlink() || metadata.len() != bytes {
+        return Err(invalid_restore_request());
+    }
+    let mut file = tokio::fs::File::open(source)
+        .await
+        .map_err(|_| invalid_restore_request())?;
+    let mut hasher = Sha256::new();
+    let mut copied = 0_u64;
+    let mut buffer = [0_u8; 64 * 1024];
+    loop {
+        let read = file
+            .read(&mut buffer)
+            .await
+            .map_err(|_| invalid_restore_request())?;
+        if read == 0 {
+            break;
+        }
+        copied = copied
+            .checked_add(read as u64)
+            .ok_or_else(invalid_restore_request)?;
+        hasher.update(&buffer[..read]);
+    }
+    if copied != bytes || <[u8; 32]>::from(hasher.finalize()) != digest {
+        return Err(integrity_restore_error());
+    }
+    Ok(())
+}
+
+const fn invalid_restore_request() -> ObjectStoreError {
+    ObjectStoreError::new(
+        ObjectOperation::Put,
+        ObjectStoreErrorKind::InvalidRequest,
+        false,
+    )
+}
+
+const fn integrity_restore_error() -> ObjectStoreError {
+    ObjectStoreError::new(ObjectOperation::Put, ObjectStoreErrorKind::Integrity, false)
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
