@@ -124,6 +124,32 @@ async fn https_rustfs_sse_and_writer_permission_preflight() {
     assert!(report.external_lifecycle_cleanup_required);
     assert!(!format!("{report:?}").contains("instance-1/backups"));
 
+    let body = b"verified-backup-object".to_vec();
+    let object = destination
+        .put_verified_bytes("restore-points/read-boundary/manifest.json", body.clone())
+        .await
+        .expect("fixture stores a bounded object");
+    assert_eq!(
+        destination
+            .read_verified_bounded(&object.key, object.sha256, 1024)
+            .await
+            .expect("bounded read verifies the object"),
+        body
+    );
+    let temporary = tempfile::tempdir().expect("temporary directory exists");
+    let target = temporary.path().join("downloaded-object");
+    destination
+        .download_verified(&object.key, object.bytes, object.sha256, &target)
+        .await
+        .expect("streaming download verifies the object");
+    assert_eq!(fs::read(target).unwrap(), body);
+    let bad_target = temporary.path().join("bad-download");
+    destination
+        .download_verified(&object.key, object.bytes, [0_u8; 32], &bad_target)
+        .await
+        .expect_err("digest mismatch fails closed");
+    assert!(!bad_target.exists(), "partial files must be removed");
+
     let bad_secret = "credential-that-must-never-appear";
     let invalid = BackupWriterCredential::new(ACCESS_KEY.to_owned(), bad_secret.to_owned(), None)
         .expect("syntactically valid credential");

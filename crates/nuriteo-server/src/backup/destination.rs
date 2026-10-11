@@ -20,7 +20,7 @@ use aws_smithy_types::timeout::TimeoutConfig;
 use rustls_pemfile::Item;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use tokio::io::AsyncReadExt;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use url::Url;
 use uuid::Uuid;
 use x509_parser::prelude::{FromDer, X509Certificate};
@@ -33,6 +33,7 @@ const MIN_TIMEOUT: Duration = Duration::from_millis(100);
 const MAX_TIMEOUT: Duration = Duration::from_secs(30);
 const MAX_CA_BYTES: usize = 1024 * 1024;
 const MAX_CA_CERTIFICATES: usize = 64;
+const MAX_BUFFERED_BACKUP_OBJECT_BYTES: u64 = 128 * 1024 * 1024;
 const BACKUP_ENDPOINT: &str = "NURITEO_BACKUP_S3_ENDPOINT";
 const BACKUP_REGION: &str = "NURITEO_BACKUP_S3_REGION";
 const BACKUP_BUCKET: &str = "NURITEO_BACKUP_S3_BUCKET";
@@ -809,9 +810,93 @@ impl BackupDestination {
         bytes: u64,
         digest: [u8; 32],
     ) -> Result<Vec<u8>, BackupDestinationError> {
-        if !key.starts_with(&format!("{}/", self.config.prefix)) || bytes > 128 * 1024 * 1024 {
+        if bytes > MAX_BUFFERED_BACKUP_OBJECT_BYTES {
             return Err(BackupDestinationError::InvalidObject);
         }
+        let body = self.read_verified_bounded(key, digest, bytes).await?;
+        if body.len() as u64 != bytes {
+            return Err(BackupDestinationError::ReadVerification);
+        }
+        Ok(body)
+    }
+
+    /// Reads a small immutable object when its digest is known but its byte
+    /// count is not stored separately. This is the restore-point manifest
+    /// boundary: the response length is accepted only when it is non-zero and
+    /// within the caller's explicit bound, then the complete body is hashed.
+    pub async fn read_verified_bounded(
+        &self,
+        key: &str,
+        digest: [u8; 32],
+        max_bytes: u64,
+    ) -> Result<Vec<u8>, BackupDestinationError> {
+        if !self.owns_key(key) || max_bytes == 0 || max_bytes > MAX_BUFFERED_BACKUP_OBJECT_BYTES {
+            return Err(BackupDestinationError::InvalidObject);
+        }
+        let output = self
+            .client
+            .get_object()
+            .bucket(&self.config.bucket)
+            .key(key)
+            .send()
+            .await
+            .map_err(|error| {
+                classify(
+                    error
+                        .as_service_error()
+                        .and_then(ProvideErrorMetadata::code),
+                )
+            })?;
+        let bytes = output
+            .content_length()
+            .and_then(|value| u64::try_from(value).ok())
+            .filter(|bytes| *bytes > 0 && *bytes <= max_bytes)
+            .ok_or(BackupDestinationError::ReadVerification)?;
+        if bytes > max_bytes {
+            return Err(BackupDestinationError::ReadVerification);
+        }
+        let mut reader = output.body.into_async_read().take(bytes.saturating_add(1));
+        let capacity = usize::try_from(bytes).map_err(|_| BackupDestinationError::InvalidObject)?;
+        let mut body = Vec::with_capacity(capacity);
+        reader
+            .read_to_end(&mut body)
+            .await
+            .map_err(|_| BackupDestinationError::Transport)?;
+        if body.len() as u64 != bytes || <[u8; 32]>::from(Sha256::digest(&body)) != digest {
+            return Err(BackupDestinationError::ReadVerification);
+        }
+        Ok(body)
+    }
+
+    /// Streams a large immutable object to a new local file while checking the
+    /// exact declared byte count and SHA-256. A partial file is removed on all
+    /// failures so an interrupted restore cannot consume unverified bytes.
+    pub async fn download_verified(
+        &self,
+        key: &str,
+        bytes: u64,
+        digest: [u8; 32],
+        target: &Path,
+    ) -> Result<(), BackupDestinationError> {
+        if !self.owns_key(key) || bytes == 0 || !target.is_absolute() {
+            return Err(BackupDestinationError::InvalidObject);
+        }
+        let result = self
+            .download_verified_inner(key, bytes, digest, target)
+            .await;
+        if result.is_err() {
+            let _ = tokio::fs::remove_file(target).await;
+        }
+        result
+    }
+
+    async fn download_verified_inner(
+        &self,
+        key: &str,
+        bytes: u64,
+        digest: [u8; 32],
+        target: &Path,
+    ) -> Result<(), BackupDestinationError> {
         let output = self
             .client
             .get_object()
@@ -833,17 +918,56 @@ impl BackupDestination {
         {
             return Err(BackupDestinationError::ReadVerification);
         }
-        let mut reader = output.body.into_async_read().take(bytes.saturating_add(1));
-        let capacity = usize::try_from(bytes).map_err(|_| BackupDestinationError::InvalidObject)?;
-        let mut body = Vec::with_capacity(capacity);
-        reader
-            .read_to_end(&mut body)
+        let mut file = tokio::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(target)
             .await
-            .map_err(|_| BackupDestinationError::Transport)?;
-        if body.len() as u64 != bytes || <[u8; 32]>::from(Sha256::digest(&body)) != digest {
+            .map_err(|_| BackupDestinationError::LocalInput)?;
+        let mut reader = output.body.into_async_read().take(bytes.saturating_add(1));
+        let mut hasher = Sha256::new();
+        let mut copied = 0_u64;
+        let mut buffer = [0_u8; 64 * 1024];
+        loop {
+            let read = reader
+                .read(&mut buffer)
+                .await
+                .map_err(|_| BackupDestinationError::Transport)?;
+            if read == 0 {
+                break;
+            }
+            copied = copied
+                .checked_add(read as u64)
+                .ok_or(BackupDestinationError::ReadVerification)?;
+            if copied > bytes {
+                return Err(BackupDestinationError::ReadVerification);
+            }
+            file.write_all(&buffer[..read])
+                .await
+                .map_err(|_| BackupDestinationError::LocalInput)?;
+            hasher.update(&buffer[..read]);
+        }
+        file.sync_all()
+            .await
+            .map_err(|_| BackupDestinationError::LocalInput)?;
+        if copied != bytes || <[u8; 32]>::from(hasher.finalize()) != digest {
             return Err(BackupDestinationError::ReadVerification);
         }
-        Ok(body)
+        Ok(())
+    }
+
+    /// Returns the canonical immutable payload key for a manifest digest.
+    #[must_use]
+    pub fn payload_object_key(&self, digest: [u8; 32]) -> String {
+        self.payload_key(digest)
+    }
+
+    /// Returns the only manifest key accepted for one restore point.
+    pub fn manifest_object_key(&self, backup_id: Uuid) -> String {
+        format!(
+            "{}/restore-points/{backup_id}/manifest.json",
+            self.config.prefix
+        )
     }
 
     async fn verify_object(
@@ -923,6 +1047,11 @@ impl BackupDestination {
             &hex[..2],
             hex
         )
+    }
+
+    fn owns_key(&self, key: &str) -> bool {
+        key.strip_prefix(&self.config.prefix)
+            .is_some_and(|suffix| suffix.starts_with('/') && safe_relative_key(&suffix[1..]))
     }
 
     async fn verify_bucket_default_encryption(&self) -> Result<(), BackupDestinationError> {
