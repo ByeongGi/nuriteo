@@ -21,6 +21,7 @@
     "check:self-hosted-v1-task-graph": "node tooling/checks/check-self-hosted-v1-task-graph.ts",
     "check:self-hosted-beta-baseline": "node tooling/checks/check-self-hosted-beta-baseline.ts",
     "check:self-hosted-rc-baseline": "node tooling/checks/check-self-hosted-rc-baseline.ts",
+    "check:self-hosted-ga-baseline": "node tooling/checks/check-self-hosted-ga-baseline.ts",
     "check:self-hosted-legacy-replacement": "node tooling/checks/check-self-hosted-legacy-replacement.ts",
     "check:self-hosted-legacy-cleanup": "node tooling/checks/check-stale-legacy-references.ts",
     "check:rc-offline-convergence": "node release/offline/tests/check-convergence.mjs",
