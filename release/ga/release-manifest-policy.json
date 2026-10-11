@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "taskId": "REL-004",
+  "release": "1.0.0",
+  "channel": "stable",
+  "immutable": true,
+  "requiredArtifactKinds": ["sbom", "provenance", "checksums", "checksum-signature", "helm-chart", "chart-image-binding"],
+  "rollback": { "application": "1.0.0-rc.1", "database": "restore-pre-upgrade-backup-only" }
+}

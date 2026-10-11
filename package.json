@@ -33,6 +33,7 @@
     "check:self-hosted-reproducible-images": "node tooling/checks/check-self-hosted-reproducible-images.ts",
     "check:self-hosted-supply-chain": "node tooling/checks/check-self-hosted-supply-chain.ts",
     "check:self-hosted-chart-release": "node tooling/checks/check-self-hosted-chart-release.ts",
+    "check:self-hosted-release-manifest": "node tooling/checks/check-self-hosted-release-manifest.ts",
     "check:self-hosted-support-matrix": "node tooling/checks/check-self-hosted-support-matrix.ts",
     "check:self-hosted-support-bundle": "node tooling/checks/check-self-hosted-support-bundle.ts",
     "check:self-hosted-runbooks": "node tooling/checks/check-self-hosted-runbooks.ts",
