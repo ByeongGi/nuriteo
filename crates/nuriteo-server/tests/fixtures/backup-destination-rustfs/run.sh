@@ -6,8 +6,13 @@ container='nuriteo-bkp-003-rustfs'
 fixture_root=$(mktemp -d)
 cert_dir="$fixture_root/certs"
 mkdir -p "$cert_dir"
+sse_s3_master_key=$(openssl rand -base64 32 | tr -d '\n')
 
 cleanup() {
+  status=$?
+  if [ "$status" -ne 0 ]; then
+    podman logs "$container" >&2 || true
+  fi
   podman rm --force "$container" >/dev/null 2>&1 || true
   rm -rf -- "$fixture_root"
 }
@@ -40,6 +45,7 @@ podman run --detach --name "$container" \
   --env RUSTFS_TLS_PATH=/certs \
   --env RUSTFS_ACCESS_KEY=backup-writer-access \
   --env RUSTFS_SECRET_KEY=backup-writer-secret-0123456789 \
+  --env RUSTFS_SSE_S3_MASTER_KEY="$sse_s3_master_key" \
   "$image" >/dev/null
 
 attempt=0

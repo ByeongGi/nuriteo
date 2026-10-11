@@ -2,6 +2,8 @@ use std::fs;
 use std::time::Duration;
 
 use aws_sdk_s3::config::{BehaviorVersion, Credentials, Region};
+use aws_sdk_s3::primitives::ByteStream;
+use aws_sdk_s3::types::ServerSideEncryption;
 use aws_smithy_http_client::pool::{Client as PoolClient, ConnectionPool};
 use aws_smithy_http_client::tls::rustls_provider::CryptoMode;
 use aws_smithy_http_client::tls::{self, TlsContext, TrustStore};
@@ -96,7 +98,22 @@ async fn https_rustfs_sse_and_writer_permission_preflight() {
     let ca_file =
         std::env::var("NURITEO_TEST_BACKUP_CA_FILE").expect("fixture provides its CA file");
     let ca_pem = fs::read(&ca_file).expect("fixture CA is readable");
-    prepare_bucket(&endpoint, &ca_pem).await;
+    let fixture_client = prepare_bucket(&endpoint, &ca_pem).await;
+    fixture_client
+        .head_bucket()
+        .bucket(BUCKET)
+        .send()
+        .await
+        .expect("fixture head bucket succeeds");
+    fixture_client
+        .put_object()
+        .bucket(BUCKET)
+        .key("instance-1/backups/direct-client-probe")
+        .server_side_encryption(ServerSideEncryption::Aes256)
+        .body(ByteStream::from_static(b"direct-client-probe"))
+        .send()
+        .await
+        .expect("fixture direct SSE put succeeds");
 
     let config = BackupDestinationConfig::new(
         &endpoint,
@@ -167,7 +184,7 @@ async fn https_rustfs_sse_and_writer_permission_preflight() {
     assert!(!format!("{error:?} {error}").contains(bad_secret));
 }
 
-async fn prepare_bucket(endpoint: &str, ca_pem: &[u8]) {
+async fn prepare_bucket(endpoint: &str, ca_pem: &[u8]) -> aws_sdk_s3::Client {
     let context = TlsContext::builder()
         .with_trust_store(TrustStore::default().with_pem_certificate(ca_pem.to_vec()))
         .build()
@@ -211,4 +228,5 @@ async fn prepare_bucket(endpoint: &str, ca_pem: &[u8]) {
         .send()
         .await
         .expect("fixture installs explicit delete deny policy");
+    client
 }
