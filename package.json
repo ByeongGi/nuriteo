@@ -24,6 +24,8 @@
     "check:self-hosted-legacy-replacement": "node tooling/checks/check-self-hosted-legacy-replacement.ts",
     "check:self-hosted-legacy-cleanup": "node tooling/checks/check-stale-legacy-references.ts",
     "check:rc-offline-convergence": "node release/offline/tests/check-convergence.mjs",
+    "check:rc-gate": "node tooling/checks/check-rc-gate.ts",
+    "test:rc-gate": "release/rc/qualify.sh",
     "check:self-hosted-upgrade-compatibility": "node tooling/checks/check-self-hosted-upgrade-compatibility.ts",
     "test:self-hosted-upgrade-compatibility": "node --test tooling/checks/test/self-hosted-upgrade-compatibility.test.ts",
     "check:self-hosted-helm-chart": "charts/nuriteo/tests/check-chart.sh",

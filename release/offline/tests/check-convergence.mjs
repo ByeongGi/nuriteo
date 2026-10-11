@@ -13,6 +13,9 @@ const artifacts = validateInventory(inventory);
 const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "nuriteo-rc005-"));
 const bundle = path.join(temporary, "bundle");
 const install = path.join(temporary, "verified-install");
+const rcArchiveDirectory = process.env.NURITEO_RC_IMAGE_ARCHIVE_DIR;
+const rcManifestPath = process.env.NURITEO_RC_MANIFEST;
+const rcManifest = rcManifestPath ? JSON.parse(fs.readFileSync(rcManifestPath, "utf8")) : undefined;
 
 function run(command, arguments_, options = {}) {
   const result = spawnSync(command, arguments_, { cwd: repository, encoding: "utf8", ...options });
@@ -55,6 +58,18 @@ try {
       if (artifact.kind === "script") fs.chmodSync(destination, 0o755);
       continue;
     }
+    const rcRole = artifact.id.match(/^(server|web|operations)-image(?:-digest)?$/u)?.[1];
+    if (rcArchiveDirectory && rcManifest && rcRole && artifact.kind === "oci-image") {
+      copy(path.relative(repository, path.join(rcArchiveDirectory, `${rcRole}.oci.tar`)), destination);
+      continue;
+    }
+    if (rcArchiveDirectory && rcManifest && rcRole && artifact.kind === "oci-digest") {
+      fs.mkdirSync(path.dirname(destination), { recursive: true });
+      const image = rcManifest.images.find(({ role }) => role === rcRole);
+      assert(image, `RC image is missing: ${rcRole}`);
+      fs.writeFileSync(destination, `${image.digest}\n`);
+      continue;
+    }
     fs.mkdirSync(path.dirname(destination), { recursive: true });
     if (artifact.kind === "oci-digest") {
       fs.writeFileSync(destination, `sha256:${sha256(artifact.id)}\n`);
@@ -69,7 +84,7 @@ try {
   fs.mkdirSync(chartDestination, { recursive: true });
   run("helm", ["package", "charts/nuriteo", "--destination", chartDestination]);
 
-  const sourceCommit = run("git", ["rev-parse", "HEAD"]);
+  const sourceCommit = rcManifest?.sourceCommit ?? run("git", ["rev-parse", "HEAD"]);
   const manifest = buildManifest(inventory, bundle, sourceCommit, "2026-10-11T00:00:00.000Z");
   fs.writeFileSync(path.join(bundle, "release-manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
 
@@ -90,6 +105,13 @@ try {
   assert.equal(plan.workloadImages.length, 3);
   assert.equal(new Set(plan.workloadImages).size, 3);
   assert(plan.workloadImages.every((image) => image.startsWith("registry.internal:5443/nuriteo/")));
+
+  if (rcArchiveDirectory && rcManifest) {
+    for (const { role, digest } of rcManifest.images) {
+      const inspected = JSON.parse(run("skopeo", ["inspect", `oci-archive:${path.join(rcArchiveDirectory, `${role}.oci.tar`)}`]));
+      assert.equal(inspected.Digest, digest, `RC archive digest drift: ${role}`);
+    }
+  }
 
   const compatibility = JSON.parse(fs.readFileSync(path.join(bundle, "core/configuration/self-hosted-upgrade-compatibility-v1.json"), "utf8"));
   assert.equal(compatibility.releaseLineage, inventory.releaseLineage);
@@ -113,6 +135,8 @@ try {
     defaultDeny: plan.networkPolicy.defaultDeny,
     canonicalSurfaces: ["apps/web", "crates/nuriteo-server", "packages/workspace-runtime"],
     staleLegacyReferences: 0,
+    coreImagePayloads: rcArchiveDirectory ? "actual" : "synthetic",
+    optionalQuickstartPayloads: "synthetic",
   }));
 } finally {
   fs.rmSync(temporary, { recursive: true, force: true });

@@ -15,11 +15,13 @@ cleanup() {
 }
 trap cleanup EXIT HUP INT TERM
 
-podman build \
-  --file deploy/docker/web.Dockerfile \
-  --ignorefile deploy/docker/web.Dockerfile.dockerignore \
-  --tag "$image" \
-  .
+if [ "${NURITEO_WEB_SKIP_BUILD:-0}" != 1 ]; then
+  podman build \
+    --file deploy/docker/web.Dockerfile \
+    --ignorefile deploy/docker/web.Dockerfile.dockerignore \
+    --tag "$image" \
+    .
+fi
 
 user="$(podman image inspect "$image" --format '{{.Config.User}}')"
 entrypoint="$(podman image inspect "$image" --format '{{json .Config.Entrypoint}}')"

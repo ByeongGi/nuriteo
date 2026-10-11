@@ -219,7 +219,7 @@ run_browser_phase() {
     'compose-rustfs-secret-7e3bc2f41a' "$bootstrap_password" \
     "$invitee_password" "$preview_signing_key" "$save_idempotency_secret" \
     'nrt_inv_' 'nrt_org_inv_' 'X-Amz-'; do
-    if grep -Fq "$secret" "$output"; then
+    if grep -Fq -- "$secret" "$output"; then
       echo "compose browser output exposed a secret" >&2
       return 1
     fi
@@ -302,9 +302,9 @@ export NURITEO_EXTERNAL_URL="http://127.0.0.1:${web_port}"
 export NURITEO_PREVIEW_BASE_DOMAIN='preview.localhost'
 export NURITEO_PREVIEW_WILDCARD_READY='true'
 export NURITEO_WEB_PORT="$web_port"
-export NURITEO_POSTGRES_IMAGE='localhost/nuriteo-postgres:cmp-003'
-export NURITEO_SERVER_IMAGE='localhost/nuriteo-server:cmp-003'
-export NURITEO_WEB_IMAGE='localhost/nuriteo-web:cmp-003'
+export NURITEO_POSTGRES_IMAGE="${NURITEO_POSTGRES_IMAGE:-localhost/nuriteo-postgres:cmp-003}"
+export NURITEO_SERVER_IMAGE="${NURITEO_SERVER_IMAGE:-localhost/nuriteo-server:cmp-003}"
+export NURITEO_WEB_IMAGE="${NURITEO_WEB_IMAGE:-localhost/nuriteo-web:cmp-003}"
 
 compose config >"$rendered"
 preview_signing_key="$(cat "$fixture_root/preview-signing-key")"
@@ -312,10 +312,14 @@ save_idempotency_secret="$(cat "$fixture_root/save-idempotency-secret")"
 master_key="$(cat "$fixture_root/master-key")"
 invitee_password="$(cat "$fixture_root/invitee-password")"
 for secret in 'compose-db-password-7e3bc2' 'COMPOSEACCESS7E3BC2' 'compose-rustfs-secret-7e3bc2f41a' "$bootstrap_password" "$preview_signing_key" "$save_idempotency_secret" "$master_key"; do
-  if grep -Fq "$secret" "$rendered"; then echo "rendered Compose exposed a secret" >&2; exit 1; fi
+  if grep -Fq -- "$secret" "$rendered"; then echo "rendered Compose exposed a secret" >&2; exit 1; fi
 done
 
-compose build postgres core web
+if [ "${NURITEO_COMPOSE_SKIP_APP_BUILD:-0}" = 1 ]; then
+  compose build postgres
+else
+  compose build postgres core web
+fi
 start_stack
 for job in storage-init storage-check migrate bootstrap-admin; do wait_for_job "$job" 0; done
 wait_for_web
@@ -368,7 +372,7 @@ for secret in 'compose-db-password-7e3bc2' 'COMPOSEACCESS7E3BC2' \
   'compose-rustfs-secret-7e3bc2f41a' "$bootstrap_password" \
   "$invitee_password" "$preview_signing_key" "$save_idempotency_secret" \
   'nrt_inv_' 'nrt_org_inv_' 'X-Amz-'; do
-  if compose logs 2>&1 | grep -Fq "$secret"; then echo "logs exposed a secret" >&2; exit 1; fi
+  if compose logs 2>&1 | grep -Fq -- "$secret"; then echo "logs exposed a secret" >&2; exit 1; fi
 done
 
 # A non-exact operator policy is never treated as the legacy bundled rule. The

@@ -87,9 +87,12 @@ async function saveJourney(
   await adminPage.goto(`${origin}/admin/invitations`, { waitUntil: "networkidle" });
   await adminPage.getByLabel("Invitee email").fill(inviteeEmail);
   await adminPage.getByRole("button", { name: "Issue invitation" }).click();
-  await adminPage.getByRole("status").filter({ hasText: "activation email is queued" }).waitFor();
-  assert.equal(await adminPage.locator("output").count(), 0);
-  const activationUrl = await consumeSmtpInvitationUrl("smtp-activation-url", "/activate?token=nrt_inv_");
+  const activationUrl = await consumeInvitationUrl(
+    adminPage,
+    "activation email is queued",
+    "smtp-activation-url",
+    "/activate?token=nrt_inv_"
+  );
 
   const invitee = await browser.newContext();
   const inviteePage = await observedPage(invitee, ledger);
@@ -113,9 +116,9 @@ async function saveJourney(
   journeyStage = "organization-invite";
   await adminPage.getByLabel("Invitee email").fill(inviteeEmail);
   await adminPage.getByRole("button", { name: "Issue Organization invitation" }).click();
-  await adminPage.getByRole("status").filter({ hasText: "invitation email is queued" }).waitFor();
-  assert.equal(await adminPage.locator("output").count(), 0);
-  const organizationInvitationUrl = await consumeSmtpInvitationUrl(
+  const organizationInvitationUrl = await consumeInvitationUrl(
+    adminPage,
+    "invitation email is queued",
     "smtp-organization-url",
     "/organization-invitations/accept?token=nrt_org_inv_"
   );
@@ -183,6 +186,25 @@ async function consumeSmtpInvitationUrl(fileName: string, expectedPath: string):
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
   throw new Error(`SMTP invitation capture was not produced: ${fileName}`);
+}
+
+async function consumeInvitationUrl(
+  page: Page,
+  queuedText: string,
+  captureFile: string,
+  expectedPath: string
+): Promise<string> {
+  const result = page.locator('output, [role="status"]').first();
+  await result.waitFor();
+  if (await result.evaluate((element) => element.tagName === "OUTPUT")) {
+    const value = (await result.textContent())?.trim() ?? "";
+    const parsed = new URL(value);
+    assert.equal(parsed.origin, origin);
+    assert.ok(value.includes(expectedPath));
+    return value;
+  }
+  assert.match((await result.textContent()) ?? "", new RegExp(queuedText, "iu"));
+  return consumeSmtpInvitationUrl(captureFile, expectedPath);
 }
 
 async function runPreviewAndSave(page: Page, ledger: Ledger): Promise<void> {

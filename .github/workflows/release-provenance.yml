@@ -53,6 +53,8 @@ jobs:
       - run: node tooling/release/offline-manifest.test.mjs
       - run: node release/offline/tests/check-tooling.mjs
       - run: node release/offline/tests/check-convergence.mjs
+      - run: node tooling/checks/check-rc-gate.ts
+      - run: bash -n release/rc/qualify-images.sh
       - run: sh -n release/offline/scripts/* release/offline/tests/check-registry.sh release/offline/tests/kind-egress.sh
       - run: node tooling/checks/check-workspace.ts
       - uses: actions/upload-artifact@v4

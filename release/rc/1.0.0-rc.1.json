@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "releaseLineage": "nuriteo-self-hosted-v1",
+  "release": "1.0.0-rc.1",
+  "sourceCommit": "2989315174536de2bdbe9e3b9b98ed89d9ac4b93",
+  "createdAt": "2026-10-11T13:05:42.000Z",
+  "images": [
+    {
+      "role": "server",
+      "reference": "localhost/nuriteo-server:1.0.0-rc.1",
+      "digest": "sha256:3e93fa66d6f7fcc2245182c4affd91fd8b5e81dd649e0fd417254dd3ea6651b6",
+      "localDigest": "sha256:5fb9b5c5cde3fb4f3178bb6f7b2c6b7dab03a98e9157009a95990c1df7a2fd51",
+      "user": "65532:65532",
+      "entrypoint": ["/usr/local/bin/nuriteo-server"]
+    },
+    {
+      "role": "web",
+      "reference": "localhost/nuriteo-web:1.0.0-rc.1",
+      "digest": "sha256:c7b50488636f9094a7a3ab29823c183eaf88da8c110e98f8f947a064558f8615",
+      "localDigest": "sha256:88281ce9cdf9e3d70cf4d6c5b540d7221da39a122fdb1f23cf54f7b7549b3864",
+      "user": "65532:65532",
+      "entrypoint": ["/nodejs/bin/node", "apps/web/server.js"]
+    },
+    {
+      "role": "operations",
+      "reference": "localhost/nuriteo-operations:1.0.0-rc.1",
+      "digest": "sha256:c3df32761c923f1a1a905d266d44a0ac33e13344aa16cf4744304dfe28b66ea8",
+      "localDigest": "sha256:7e86a0e7435cc8c39385d9a93635098cd9f67b6f58f827e1194b32bfdf553c9c",
+      "user": "65532:65532",
+      "entrypoint": ["/usr/local/bin/nuriteo-server"]
+    }
+  ],
+  "artifactAggregateSha256": "eeee0bcd5b4577266e3b18f07c80523982fad5950f6b6ef58d5eb8a8c2f856ea",
+  "artifacts": [
+    { "path": "Cargo.lock", "sha256": "b0acb2ef22b876dd62a02b25a1956a5e18524a8e38a86dc158c1d444e6aee6d0" },
+    { "path": "pnpm-lock.yaml", "sha256": "b757ab5710665f230e420af604bcc7f9690ba53f9917e9ceefb4d7182e8ad801" },
+    { "path": "deploy/compose/compose.yaml", "sha256": "d4045603428d01a6eaf281db85db6bbeff4f35c12dbf09b57c1016d4d22fe863" },
+    { "path": "charts/nuriteo/Chart.yaml", "sha256": "0da862cf1d1e9f19be141cbf4b2e9756a4447527b08f33e86cdc0def9d7adfca" },
+    { "path": "charts/nuriteo/values.yaml", "sha256": "50b9f804da7dee9f9a9ebd5b2acfb212b3f41b2fc292c0cf22d3297615a51612" },
+    { "path": "charts/nuriteo/values.schema.json", "sha256": "2610b9593a122eb10bf1bccf5a7e3d7862cd39b323767be07eefc8ee94fe304f" },
+    { "path": "compat/self-hosted-upgrade-compatibility-v1.json", "sha256": "6e2864c0c82ddb24b2d8e7ca12ec65e0e6f5bcb6a309b7a3039aa0589bbc830f" },
+    { "path": "release/offline/inventory-v1.json", "sha256": "54747b8b25c64553e45161c35244dc3ad93927234b9e7f44a211b1baf975917a" }
+  ],
+  "qualifications": ["RC-002", "RC-003", "RC-004", "RC-005"]
+}
