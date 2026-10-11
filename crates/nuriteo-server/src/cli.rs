@@ -1,7 +1,7 @@
 use std::ffi::{OsStr, OsString};
 use std::fs::{File, OpenOptions};
 use std::io::{self, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use clap::error::ErrorKind;
 use clap::{Arg, ArgAction, ArgMatches, Command};
@@ -9,7 +9,8 @@ use clap::{Arg, ArgAction, ArgMatches, Command};
 use crate::app::run_server;
 use crate::backup::{
     BackupCreateCoordinator, BackupDestination, BackupDestinationRuntime, BackupEngine,
-    CommandPgDump, DirectoryBackupRepository, PgDumpCommandConfig, PortableLimits, PrunePolicy,
+    BackupReadCoordinator, CommandPgDump, DirectoryBackupRepository, PgDumpCommandConfig,
+    PortableLimits, PrunePolicy,
 };
 use crate::bootstrap::{
     BootstrapAdminInput, BootstrapErrorCategory, BootstrapOutcome, bootstrap_administrator,
@@ -571,6 +572,11 @@ async fn run_backup_command<O: Write, E: Write>(
     if matches!(command, BackupCommand::Create) {
         return backup_create(stdout, stderr).await;
     }
+    if matches!(command, BackupCommand::List | BackupCommand::Verify { .. })
+        && std::env::var_os("NURITEO_BACKUP_REPOSITORY_DIR").is_none()
+    {
+        return backup_read(command, stdout, stderr).await;
+    }
     let repository_root = match std::env::var_os("NURITEO_BACKUP_REPOSITORY_DIR") {
         Some(root) => root,
         None => return backup_failure(stderr, "configuration"),
@@ -650,6 +656,67 @@ async fn run_backup_command<O: Write, E: Write>(
     match result {
         Ok(()) => Ok(CommandStatus::Success),
         Err(error) => backup_failure(stderr, backup_error_category(error)),
+    }
+}
+
+async fn backup_read<O: Write, E: Write>(
+    command: BackupCommand,
+    stdout: &mut O,
+    stderr: &mut E,
+) -> io::Result<CommandStatus> {
+    let environment = SystemEnvironment;
+    let files = SystemFileReader;
+    let database_config = match DatabaseRuntimeConfig::load(&environment, &files) {
+        Ok(config) => config,
+        Err(_) => return backup_failure(stderr, "database-configuration"),
+    };
+    let destination_runtime = match BackupDestinationRuntime::load(&environment, &files) {
+        Ok(runtime) => runtime,
+        Err(_) => return backup_failure(stderr, "destination-configuration"),
+    };
+    let destination =
+        match BackupDestination::new(destination_runtime.config, &destination_runtime.credential) {
+            Ok(destination) => destination,
+            Err(_) => return backup_failure(stderr, "destination-initialization"),
+        };
+    let pool = match DatabasePool::connect(database_config.pool_config()).await {
+        Ok(pool) => pool,
+        Err(_) => return backup_failure(stderr, "database-connectivity"),
+    };
+    let coordinator =
+        BackupReadCoordinator::new(pool.clone(), destination, PortableLimits::default());
+    let result = match command {
+        BackupCommand::List => coordinator.list().await.and_then(|backups| {
+            serde_json::to_writer(&mut *stdout, &backups)
+                .map_err(|_| crate::backup::BackupReadError::Database)?;
+            writeln!(stdout).map_err(|_| crate::backup::BackupReadError::Database)
+        }),
+        BackupCommand::Verify { backup_id } => {
+            let scratch = std::env::var_os("NURITEO_BACKUP_SCRATCH_DIR")
+                .map(PathBuf::from)
+                .ok_or(crate::backup::BackupReadError::Scratch);
+            match scratch {
+                Ok(scratch) => coordinator
+                    .verify(&backup_id, &scratch)
+                    .await
+                    .and_then(|report| {
+                        writeln!(
+                            stdout,
+                            "backup verified: {} entries={} bytes={}",
+                            report.backup_id, report.entries, report.bytes
+                        )
+                        .map_err(|_| crate::backup::BackupReadError::Database)
+                    }),
+                Err(error) => Err(error),
+            }
+        }
+        _ => unreachable!("read coordinator only handles list and verify"),
+    };
+    let close_result = pool.close(database_config.close_timeout()).await;
+    match (result, close_result) {
+        (Ok(()), Ok(())) => Ok(CommandStatus::Success),
+        (Err(error), _) => backup_failure(stderr, error.category()),
+        (Ok(()), Err(_)) => backup_failure(stderr, "database-close"),
     }
 }
 
