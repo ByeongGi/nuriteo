@@ -7,7 +7,10 @@ use clap::error::ErrorKind;
 use clap::{Arg, ArgAction, ArgMatches, Command};
 
 use crate::app::run_server;
-use crate::backup::{BackupEngine, DirectoryBackupRepository, PortableLimits, PrunePolicy};
+use crate::backup::{
+    BackupCreateCoordinator, BackupDestination, BackupDestinationRuntime, BackupEngine,
+    CommandPgDump, DirectoryBackupRepository, PgDumpCommandConfig, PortableLimits, PrunePolicy,
+};
 use crate::bootstrap::{
     BootstrapAdminInput, BootstrapErrorCategory, BootstrapOutcome, bootstrap_administrator,
 };
@@ -17,6 +20,7 @@ use crate::database::{
     run_embedded_migrations,
 };
 use crate::health::run_http_healthcheck;
+use crate::object_storage::{ObjectStorageConfig, OperationLimits, S3ObjectStore};
 use crate::storage_check;
 use crate::upgrade_preflight;
 use crate::{CommandStatus, VERSION};
@@ -249,7 +253,7 @@ where
             storage_configure_browser_upload_cors(stdout, stderr).await
         }
         Ok(CliAction::Operational(OperationalCommand::Backup(command))) => {
-            run_backup_command(command, stdout, stderr)
+            run_backup_command(command, stdout, stderr).await
         }
         Err(error) if is_successful_display(error.kind()) => {
             write!(stdout, "{error}")?;
@@ -559,11 +563,14 @@ fn required_string(matches: &ArgMatches, name: &str) -> Result<String, clap::Err
     })
 }
 
-fn run_backup_command<O: Write, E: Write>(
+async fn run_backup_command<O: Write, E: Write>(
     command: BackupCommand,
     stdout: &mut O,
     stderr: &mut E,
 ) -> io::Result<CommandStatus> {
+    if matches!(command, BackupCommand::Create) {
+        return backup_create(stdout, stderr).await;
+    }
     let repository_root = match std::env::var_os("NURITEO_BACKUP_REPOSITORY_DIR") {
         Some(root) => root,
         None => return backup_failure(stderr, "configuration"),
@@ -632,9 +639,11 @@ fn run_backup_command<O: Write, E: Write>(
                         .map_err(|_| crate::backup::BackupEngineError::Io)
                 })
         }
-        // Production create/restore require the PostgreSQL + S3 coordinator,
-        // not the local repository adapter used for portable transfer tests.
-        BackupCommand::Create | BackupCommand::Restore { .. } => {
+        BackupCommand::Create => unreachable!("create is dispatched before portable commands"),
+        // Restore is connected after the Maintenance Mode target adapter is
+        // available; it must not mutate production through the portable
+        // repository boundary.
+        BackupCommand::Restore { .. } => {
             return backup_failure(stderr, "coordinator-unavailable");
         }
     };
@@ -642,6 +651,110 @@ fn run_backup_command<O: Write, E: Write>(
         Ok(()) => Ok(CommandStatus::Success),
         Err(error) => backup_failure(stderr, backup_error_category(error)),
     }
+}
+
+async fn backup_create<O: Write, E: Write>(
+    stdout: &mut O,
+    stderr: &mut E,
+) -> io::Result<CommandStatus> {
+    let environment = SystemEnvironment;
+    let files = SystemFileReader;
+    if Config::load(&environment, &files).is_err() {
+        return backup_failure(stderr, "configuration");
+    }
+    let database_config = match DatabaseRuntimeConfig::load(&environment, &files) {
+        Ok(config) => config,
+        Err(_) => return backup_failure(stderr, "database-configuration"),
+    };
+    let primary_config = match ObjectStorageConfig::load(&environment, &files) {
+        Ok(config) => config,
+        Err(_) => return backup_failure(stderr, "source-storage-configuration"),
+    };
+    let destination_runtime = match BackupDestinationRuntime::load(&environment, &files) {
+        Ok(runtime) => runtime,
+        Err(_) => return backup_failure(stderr, "destination-configuration"),
+    };
+    let scratch = match std::env::var_os("NURITEO_BACKUP_SCRATCH_DIR") {
+        Some(path) => Path::new(&path).to_path_buf(),
+        None => return backup_failure(stderr, "scratch-configuration"),
+    };
+    let generation_id = uuid::Uuid::now_v7();
+    let dump_config = match PgDumpCommandConfig::load(
+        &environment,
+        &files,
+        scratch.join(format!("database-{generation_id}.dump")),
+    ) {
+        Ok(config) => config,
+        Err(_) => return backup_failure(stderr, "pg-dump-configuration"),
+    };
+    let pool = match DatabasePool::connect(database_config.pool_config()).await {
+        Ok(pool) => pool,
+        Err(_) => return backup_failure(stderr, "database-connectivity"),
+    };
+    let readiness = check_schema_readiness(&pool).await;
+    let schema_version = match readiness {
+        Ok(SchemaReadiness::Ready { version }) => version,
+        _ => {
+            let _ = pool.close(database_config.close_timeout()).await;
+            return backup_failure(stderr, "schema-not-ready");
+        }
+    };
+    let postgres_major = match postgres_major(&pool).await {
+        Ok(version) => version,
+        Err(()) => {
+            let _ = pool.close(database_config.close_timeout()).await;
+            return backup_failure(stderr, "database-operation");
+        }
+    };
+    let primary = match S3ObjectStore::new(&primary_config, OperationLimits::default()).await {
+        Ok(store) => store,
+        Err(_) => {
+            let _ = pool.close(database_config.close_timeout()).await;
+            return backup_failure(stderr, "source-storage-initialization");
+        }
+    };
+    let destination =
+        match BackupDestination::new(destination_runtime.config, &destination_runtime.credential) {
+            Ok(destination) => destination,
+            Err(_) => {
+                let _ = pool.close(database_config.close_timeout()).await;
+                return backup_failure(stderr, "destination-initialization");
+            }
+        };
+    let coordinator = BackupCreateCoordinator::new(pool.clone(), primary, destination);
+    let result = coordinator
+        .create(
+            generation_id,
+            schema_version,
+            postgres_major,
+            CommandPgDump::new(dump_config),
+            &scratch,
+        )
+        .await;
+    let close_result = pool.close(database_config.close_timeout()).await;
+    match (result, close_result) {
+        (Ok(report), Ok(())) => {
+            writeln!(
+                stdout,
+                "backup created: {} entries={} bytes={}",
+                report.backup_id, report.entries, report.bytes
+            )?;
+            Ok(CommandStatus::Success)
+        }
+        (Err(error), _) => backup_failure(stderr, error.category()),
+        (Ok(_), Err(_)) => backup_failure(stderr, "database-close"),
+    }
+}
+
+async fn postgres_major(pool: &DatabasePool) -> Result<i32, ()> {
+    let mut connection = pool.acquire().await.map_err(|_| ())?;
+    let version: String = sqlx::query_scalar("SHOW server_version_num")
+        .fetch_one(&mut *connection)
+        .await
+        .map_err(|_| ())?;
+    let version: i32 = version.parse().map_err(|_| ())?;
+    let major = version / 10_000;
+    (14..=99).contains(&major).then_some(major).ok_or(())
 }
 
 const fn backup_error_category(error: crate::backup::BackupEngineError) -> &'static str {
@@ -719,6 +832,71 @@ mod tests {
         assert_eq!(status, CommandStatus::UsageError);
         assert!(stdout.is_empty());
         assert!(!stderr.is_empty());
+    }
+
+    #[test]
+    fn parses_the_complete_backup_command_surface() {
+        let cases = [
+            (vec!["backup", "create"], BackupCommand::Create),
+            (vec!["backup", "list"], BackupCommand::List),
+            (
+                vec!["backup", "verify", "backup-1"],
+                BackupCommand::Verify {
+                    backup_id: "backup-1".into(),
+                },
+            ),
+            (
+                vec![
+                    "backup",
+                    "export",
+                    "backup-1",
+                    "--format",
+                    "portable-v1",
+                    "--output",
+                    "-",
+                ],
+                BackupCommand::Export {
+                    backup_id: "backup-1".into(),
+                    output: "-".into(),
+                },
+            ),
+            (
+                vec![
+                    "backup",
+                    "import",
+                    "--format",
+                    "portable-v1",
+                    "--input",
+                    "-",
+                ],
+                BackupCommand::Import { input: "-".into() },
+            ),
+            (
+                vec!["backup", "restore", "backup-1"],
+                BackupCommand::Restore {
+                    backup_id: "backup-1".into(),
+                },
+            ),
+            (vec!["backup", "prune"], BackupCommand::Prune),
+        ];
+        for (arguments, expected) in cases {
+            assert_eq!(
+                parse(arguments).unwrap(),
+                CliAction::Operational(OperationalCommand::Backup(expected))
+            );
+        }
+        assert!(
+            parse([
+                "backup",
+                "export",
+                "id",
+                "--format",
+                "portable-v2",
+                "--output",
+                "-"
+            ])
+            .is_err()
+        );
     }
 
     #[test]

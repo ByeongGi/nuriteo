@@ -6,12 +6,14 @@ use std::process::{Command, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
 
+use percent_encoding::percent_decode_str;
 use sha2::{Digest, Sha256};
 use sqlx::pool::PoolConnection;
 use sqlx::{Executor, Postgres};
 use uuid::Uuid;
 use zeroize::Zeroize;
 
+use crate::config::{Environment, FileReader, load_secret};
 use crate::database::DatabasePool;
 
 const MIN_DUMP_TIMEOUT: Duration = Duration::from_secs(1);
@@ -88,6 +90,65 @@ impl Drop for PgDumpCommandConfig {
 }
 
 impl PgDumpCommandConfig {
+    pub fn load(
+        environment: &impl Environment,
+        files: &impl FileReader,
+        output_path: PathBuf,
+    ) -> Result<Self, PgDumpError> {
+        let database_url = load_secret(
+            environment,
+            files,
+            "NURITEO_DATABASE_URL",
+            "NURITEO_DATABASE_URL_FILE",
+        )
+        .map_err(|_| PgDumpError::InvalidConfiguration)?
+        .ok_or(PgDumpError::InvalidConfiguration)?;
+        let url = url::Url::parse(database_url.expose_secret())
+            .map_err(|_| PgDumpError::InvalidConfiguration)?;
+        if !matches!(url.scheme(), "postgres" | "postgresql")
+            || url.host_str().is_none()
+            || url.username().is_empty()
+            || url.password().is_none()
+            || url.query().is_some()
+            || url.fragment().is_some()
+        {
+            return Err(PgDumpError::InvalidConfiguration);
+        }
+        let decode = |value: &str| {
+            percent_decode_str(value)
+                .decode_utf8()
+                .map(|value| value.into_owned())
+                .map_err(|_| PgDumpError::InvalidConfiguration)
+        };
+        let database = url.path().strip_prefix('/').unwrap_or_default();
+        if database.is_empty() || database.contains('/') {
+            return Err(PgDumpError::InvalidConfiguration);
+        }
+        let executable = environment_value(environment, "NURITEO_PG_DUMP_PATH")?
+            .unwrap_or_else(|| "/usr/bin/pg_dump".into());
+        let timeout_ms = environment_value(environment, "NURITEO_BACKUP_PG_DUMP_TIMEOUT_MS")?
+            .map_or(Ok(14_400_000_u64), |value| {
+                value.parse().map_err(|_| PgDumpError::InvalidConfiguration)
+            })?;
+        let database_ca = environment_value(environment, "NURITEO_DATABASE_CA_FILE")?;
+        let instance_ca = environment_value(environment, "NURITEO_INSTANCE_CA_FILE")?;
+        let ssl_root_cert = database_ca.or(instance_ca).map(PathBuf::from);
+        Self::new(
+            PathBuf::from(executable),
+            url.host_str()
+                .ok_or(PgDumpError::InvalidConfiguration)?
+                .to_owned(),
+            url.port().unwrap_or(5432),
+            decode(url.username())?,
+            decode(database)?,
+            decode(url.password().ok_or(PgDumpError::InvalidConfiguration)?)?,
+            "verify-full".into(),
+            ssl_root_cert,
+            output_path,
+            Duration::from_millis(timeout_ms),
+        )
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         executable: PathBuf,
@@ -131,6 +192,29 @@ impl PgDumpCommandConfig {
             timeout,
         })
     }
+}
+
+fn environment_value(
+    environment: &impl Environment,
+    requested: &'static str,
+) -> Result<Option<String>, PgDumpError> {
+    let mut found = None;
+    for (name, value) in environment.entries() {
+        if name != requested {
+            continue;
+        }
+        if found.is_some() {
+            return Err(PgDumpError::InvalidConfiguration);
+        }
+        let value = value
+            .into_string()
+            .map_err(|_| PgDumpError::InvalidConfiguration)?;
+        if value.is_empty() {
+            return Err(PgDumpError::InvalidConfiguration);
+        }
+        found = Some(value);
+    }
+    Ok(found)
 }
 
 pub struct CommandPgDump {
@@ -588,3 +672,78 @@ impl std::fmt::Display for SnapshotCaptureError {
 }
 
 impl std::error::Error for SnapshotCaptureError {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::ffi::OsString;
+
+    #[derive(Clone)]
+    struct TestEnvironment(Vec<(OsString, OsString)>);
+
+    impl Environment for TestEnvironment {
+        fn entries(&self) -> Vec<(OsString, OsString)> {
+            self.0.clone()
+        }
+    }
+
+    struct NoFiles;
+
+    impl FileReader for NoFiles {
+        fn read(&self, _: &Path, _: usize) -> io::Result<Vec<u8>> {
+            Err(io::ErrorKind::NotFound.into())
+        }
+    }
+
+    #[test]
+    fn pg_dump_runtime_config_decodes_url_and_redacts_password() {
+        let directory = tempfile::tempdir().unwrap();
+        let config = PgDumpCommandConfig::load(
+            &TestEnvironment(vec![
+                (
+                    "NURITEO_DATABASE_URL".into(),
+                    "postgresql://backup%2Duser:super%2Fsecret@db.example.test:5443/nuriteo".into(),
+                ),
+                ("NURITEO_PG_DUMP_PATH".into(), "/usr/bin/pg_dump".into()),
+                ("NURITEO_BACKUP_PG_DUMP_TIMEOUT_MS".into(), "60000".into()),
+            ]),
+            &NoFiles,
+            directory.path().join("database.dump"),
+        )
+        .unwrap();
+        assert_eq!(config.host, "db.example.test");
+        assert_eq!(config.port, 5443);
+        assert_eq!(config.username, "backup-user");
+        assert_eq!(config.database, "nuriteo");
+        let debug = format!("{config:?}");
+        assert!(!debug.contains("super/secret"));
+        assert!(debug.contains("[REDACTED]"));
+    }
+
+    #[test]
+    fn pg_dump_runtime_config_rejects_passwordless_or_relative_executable() {
+        let directory = tempfile::tempdir().unwrap();
+        for entries in [
+            vec![(
+                "NURITEO_DATABASE_URL".into(),
+                "postgresql://user@db.example.test/nuriteo".into(),
+            )],
+            vec![
+                (
+                    "NURITEO_DATABASE_URL".into(),
+                    "postgresql://user:password@db.example.test/nuriteo".into(),
+                ),
+                ("NURITEO_PG_DUMP_PATH".into(), "pg_dump".into()),
+            ],
+        ] {
+            assert!(matches!(
+                PgDumpCommandConfig::load(
+                    &TestEnvironment(entries),
+                    &NoFiles,
+                    directory.path().join("database.dump")
+                ),
+                Err(PgDumpError::InvalidConfiguration)
+            ));
+        }
+    }
+}
