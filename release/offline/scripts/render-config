@@ -1,0 +1,49 @@
+#!/bin/sh
+set -eu
+
+root=${1:?usage: render-config BUNDLE_ROOT REGISTRY NAMESPACE OUTPUT_DIR}
+registry=${2:?registry host is required}
+namespace=${3:?registry namespace is required}
+output=${4:?output directory is required}
+[ "$(printf '%s\n' "$registry" | wc -l | tr -d ' ')" = 1 ] &&
+  printf '%s\n' "$registry" | grep -Eq '^[A-Za-z0-9][A-Za-z0-9.-]*(:[0-9]{1,5})?$' || {
+  echo 'registry must be a DNS host[:port] without scheme or path' >&2; exit 1;
+}
+[ "$(printf '%s\n' "$namespace" | wc -l | tr -d ' ')" = 1 ] &&
+  printf '%s\n' "$namespace" | grep -Eq '^[a-z0-9]+([._-][a-z0-9]+)*(/[a-z0-9]+([._-][a-z0-9]+)*)*$' || {
+  echo 'invalid registry namespace' >&2; exit 1;
+}
+[ ! -e "$output" ] || { echo 'output directory already exists' >&2; exit 1; }
+command -v jq >/dev/null 2>&1 || { echo 'jq is required' >&2; exit 1; }
+"$(dirname "$0")/verify" "$root" >/dev/null
+
+manifest="$root/release-manifest.json"
+server=$(jq -r '.artifacts[] | select(.id == "server-image") | .ociDigest' "$manifest")
+web=$(jq -r '.artifacts[] | select(.id == "web-image") | .ociDigest' "$manifest")
+operations=$(jq -r '.artifacts[] | select(.id == "operations-image") | .ociDigest' "$manifest")
+for value in "$server" "$web" "$operations"; do
+  printf '%s\n' "$value" | grep -Eq '^sha256:[a-f0-9]{64}$' || { echo 'application image digest missing' >&2; exit 1; }
+done
+
+umask 077
+mkdir -m 0700 "$output"
+cat >"$output/helm-values-airgap.yaml" <<YAML
+global:
+  imageRegistry: ${registry}/${namespace}
+images:
+  server:
+    repository: server
+    digest: ${server}
+  web:
+    repository: web
+    digest: ${web}
+  operations:
+    repository: operations
+    digest: ${operations}
+YAML
+cat >"$output/compose-images.env" <<ENV
+NURITEO_SERVER_IMAGE=${registry}/${namespace}/server@${server}
+NURITEO_WEB_IMAGE=${registry}/${namespace}/web@${web}
+NURITEO_OPERATIONS_IMAGE=${registry}/${namespace}/operations@${operations}
+ENV
+echo 'air-gapped image configuration rendered'

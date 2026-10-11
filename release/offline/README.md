@@ -33,3 +33,38 @@ drift. `release-manifest-v1.schema.json` is included in the Core Bundle for offl
 repository intentionally contains the inventory and schema, not a pretend finalized release manifest;
 the latter can exist only after all OCI archives, SBOMs, licenses, trusted root and attestations have been
 assembled from one source commit.
+
+## Internal registry import
+
+The import station needs POSIX `sh`, `jq`, and `skopeo`. Supply the internal registry as a bare
+`host[:port]`, a namespace, and an explicit registry certificate directory. For an authenticated
+registry, pass a containers-auth JSON file as the optional fifth argument. The tooling never disables
+TLS verification and never falls back to a public registry.
+
+```sh
+./scripts/verify /media/nuriteo-offline-1.0.0-rc.1
+./scripts/import-images \
+  /media/nuriteo-offline-1.0.0-rc.1 \
+  registry.internal:5443 nuriteo /etc/nuriteo/registry-certs \
+  /etc/nuriteo/registry-auth.json
+```
+
+The import first verifies the complete bundle, preserves each OCI manifest digest while copying, and
+then reads the object back from the internal registry. Any CA, authentication, copy, or digest mismatch
+stops the operation. Registry trust must also be installed on every container runtime node; the bundle
+does not mutate host trust stores.
+
+Generate digest-pinned Helm and Compose overrides into a new private directory:
+
+```sh
+./scripts/render-config \
+  /media/nuriteo-offline-1.0.0-rc.1 \
+  registry.internal:5443 nuriteo ./nuriteo-airgap-config
+
+helm upgrade --install nuriteo ./core/helm/nuriteo-0.1.0.tgz \
+  --values ./nuriteo-airgap-config/helm-values-airgap.yaml
+```
+
+The Helm chart archive is installed from the bundle. Operators must mirror any separately approved
+ingress, monitoring, or storage dependencies themselves; NURITEO does not contact an external chart or
+image registry during this procedure.
