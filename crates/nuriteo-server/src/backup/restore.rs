@@ -6,7 +6,7 @@ use std::process::{Command, Stdio};
 use std::time::Duration;
 
 use percent_encoding::percent_decode_str;
-use sqlx::Row;
+use sqlx::{Acquire, Row};
 use zeroize::Zeroize;
 
 use crate::VERSION;
@@ -132,8 +132,23 @@ impl BackupRestoreCoordinator {
     }
 
     pub async fn restore(
+        self,
+        staged: &StagedBackup,
+    ) -> Result<VerificationReport, BackupRestoreError> {
+        self.restore_inner(staged, false).await
+    }
+
+    pub async fn restore_with_recovery_kit(
+        self,
+        staged: &StagedBackup,
+    ) -> Result<VerificationReport, BackupRestoreError> {
+        self.restore_inner(staged, true).await
+    }
+
+    async fn restore_inner(
         mut self,
         staged: &StagedBackup,
+        recovery_kit_verified: bool,
     ) -> Result<VerificationReport, BackupRestoreError> {
         self.require_isolated_empty_target().await?;
         if staged.manifest().created_by.version != VERSION {
@@ -165,7 +180,8 @@ impl BackupRestoreCoordinator {
                 .await
                 .map_err(|_| BackupRestoreError::StorageWrite)?;
         }
-        self.revoke_sessions_and_validate(staged, &bundles).await?;
+        self.finalize_recovery_state_and_validate(staged, &bundles, recovery_kit_verified)
+            .await?;
 
         let bytes = staged
             .manifest()
@@ -257,10 +273,11 @@ impl BackupRestoreCoordinator {
             .collect()
     }
 
-    async fn revoke_sessions_and_validate(
+    async fn finalize_recovery_state_and_validate(
         &self,
         staged: &StagedBackup,
         bundles: &[RestoredBundle],
+        recovery_kit_verified: bool,
     ) -> Result<(), BackupRestoreError> {
         let manifest_payloads = staged
             .manifest()
@@ -281,14 +298,68 @@ impl BackupRestoreCoordinator {
             .acquire()
             .await
             .map_err(|_| BackupRestoreError::Database)?;
+        let mut transaction = connection
+            .begin()
+            .await
+            .map_err(|_| BackupRestoreError::Database)?;
         sqlx::query(
             "UPDATE sessions SET revoked_at=COALESCE(revoked_at,transaction_timestamp()),
              revocation_reason=COALESCE(revocation_reason,'backup_restore')
              WHERE revoked_at IS NULL",
         )
-        .execute(&mut *connection)
+        .execute(&mut *transaction)
         .await
         .map_err(|_| BackupRestoreError::Database)?;
+        if !recovery_kit_verified {
+            sqlx::query(
+                "UPDATE oidc_providers SET status='disabled',
+                disabled_at=COALESCE(disabled_at,transaction_timestamp()),
+                config_version=config_version+1,updated_at=transaction_timestamp()
+             WHERE status<>'disabled'",
+            )
+            .execute(&mut *transaction)
+            .await
+            .map_err(|_| BackupRestoreError::Database)?;
+            sqlx::query(
+                "UPDATE git_providers SET status='disabled',
+                disabled_at=COALESCE(disabled_at,transaction_timestamp()),
+                config_version=config_version+1,updated_at=transaction_timestamp()
+             WHERE status<>'disabled'",
+            )
+            .execute(&mut *transaction)
+            .await
+            .map_err(|_| BackupRestoreError::Database)?;
+            sqlx::query(
+                "UPDATE registry_connections SET status='disabled',is_default=FALSE,
+                disabled_at=COALESCE(disabled_at,transaction_timestamp()),
+                config_version=config_version+1,updated_at=transaction_timestamp()
+             WHERE status<>'disabled' OR is_default",
+            )
+            .execute(&mut *transaction)
+            .await
+            .map_err(|_| BackupRestoreError::Database)?;
+            sqlx::query(
+                "UPDATE instance_settings SET value='false'::jsonb,lock_version=lock_version+1,
+                updated_at=transaction_timestamp()
+             WHERE key='smtp.enabled' AND value='true'::jsonb",
+            )
+            .execute(&mut *transaction)
+            .await
+            .map_err(|_| BackupRestoreError::Database)?;
+            sqlx::query(
+                "UPDATE instance_recovery_state
+             SET state='needs_reconfiguration',reason='missing_recovery_kit',
+                 entered_at=transaction_timestamp(),updated_at=transaction_timestamp()
+             WHERE singleton",
+            )
+            .execute(&mut *transaction)
+            .await
+            .map_err(|_| BackupRestoreError::Database)?;
+        }
+        transaction
+            .commit()
+            .await
+            .map_err(|_| BackupRestoreError::Database)?;
         Ok(())
     }
 }

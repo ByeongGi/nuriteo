@@ -30,7 +30,7 @@ async fn pg_dump_and_inventory_share_the_exported_online_snapshot() {
     )
     .await
     .unwrap();
-    assert_eq!(report.latest_version, Some(48));
+    assert_eq!(report.latest_version, Some(49));
     seed_identity(&pool).await;
     seed_live_bundle(&pool, 10, "before-snapshot", "a1").await;
     seed_unreferenced_gc_candidate(&pool).await;
@@ -40,7 +40,7 @@ async fn pg_dump_and_inventory_share_the_exported_online_snapshot() {
         "INSERT INTO backup_generations(
              id,nuriteo_version,schema_version,postgres_major,synchronized_snapshot_id,
              expected_object_count,expected_payload_bytes
-         ) VALUES($1::uuid,'0.1.0',48,17,NULL,NULL,NULL)",
+         ) VALUES($1::uuid,'0.1.0',49,17,NULL,NULL,NULL)",
     )
     .bind(GENERATION_ID)
     .execute(&mut *pool.acquire().await.unwrap())
@@ -170,7 +170,7 @@ async fn verify_capture_failure_cleans_archive_and_holds(
         "INSERT INTO backup_generations(
              id,nuriteo_version,schema_version,postgres_major,synchronized_snapshot_id,
              expected_object_count,expected_payload_bytes
-         ) VALUES($1::uuid,'0.1.0',48,17,NULL,99,99)",
+         ) VALUES($1::uuid,'0.1.0',49,17,NULL,99,99)",
     )
     .bind(failure_id)
     .execute(&mut *pool.acquire().await.unwrap())
@@ -222,7 +222,7 @@ async fn verify_null_snapshot_failure_and_copying_fence(pool: &DatabasePool) {
         "INSERT INTO backup_generations(
              id,nuriteo_version,schema_version,postgres_major,synchronized_snapshot_id,
              expected_object_count,expected_payload_bytes
-         ) VALUES($1::uuid,'0.1.0',48,17,NULL,NULL,NULL)",
+         ) VALUES($1::uuid,'0.1.0',49,17,NULL,NULL,NULL)",
     )
     .bind(id)
     .execute(&mut *pool.acquire().await.unwrap())

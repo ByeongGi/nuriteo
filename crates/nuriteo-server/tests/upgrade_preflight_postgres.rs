@@ -48,7 +48,7 @@ async fn preflight_is_read_only_and_stops_without_interrupting_previous_health()
     assert_eq!(report["sourceMigration"], 46);
     assert_eq!(report["currentMigration"], 46);
     assert_eq!(report["schemaState"], "upgrade-required");
-    assert_eq!(report["targetMigration"], 48);
+    assert_eq!(report["targetMigration"], 49);
     assert_eq!(database_snapshot(&pool).await, source_snapshot);
     assert_service_ready(health_address);
 

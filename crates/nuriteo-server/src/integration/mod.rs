@@ -1,5 +1,7 @@
 //! Common, fail-closed persistence for integration credentials and private CAs.
 
+pub mod recovery_kit;
+
 use std::collections::{BTreeMap, HashSet};
 use std::fmt;
 use std::future::Future;

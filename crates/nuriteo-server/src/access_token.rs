@@ -154,7 +154,7 @@ pub(crate) fn generate_access_token(
     let token_prefix = format!("{}{id}_", kind.marker());
     let mut random = Zeroizing::new([0_u8; SECRET_BYTES]);
     getrandom::fill(random.as_mut()).map_err(|_| AccessTokenError::EntropyUnavailable)?;
-    let secret = Zeroizing::new(URL_SAFE_NO_PAD.encode(random.as_ref()));
+    let secret = Zeroizing::new(URL_SAFE_NO_PAD.encode(random.as_slice()));
     let secret_hash = hash_secret(secret.as_bytes());
     let plaintext =
         PlaintextAccessToken(Zeroizing::new(format!("{token_prefix}{}", secret.as_str())));

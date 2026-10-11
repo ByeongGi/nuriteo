@@ -410,6 +410,31 @@ async fn assert_restored_database(pool: &DatabasePool) {
     .await
     .unwrap();
     assert_eq!(session, (true, Some("backup_restore".to_owned())));
+    let recovery: (String, Option<String>) =
+        sqlx::query_as("SELECT state,reason FROM instance_recovery_state WHERE singleton")
+            .fetch_one(&mut *pool.acquire().await.unwrap())
+            .await
+            .unwrap();
+    assert_eq!(
+        recovery,
+        (
+            "needs_reconfiguration".to_owned(),
+            Some("missing_recovery_kit".to_owned())
+        )
+    );
+    let smtp_enable = sqlx::query(
+        "INSERT INTO instance_settings(key,registry_version,value,bootstrap_origin)
+         VALUES('smtp.enabled',4,'true'::jsonb,'default')
+         ON CONFLICT(key) DO UPDATE SET value=EXCLUDED.value,
+             lock_version=instance_settings.lock_version+1,
+             updated_at=transaction_timestamp()",
+    )
+    .execute(&mut *pool.acquire().await.unwrap())
+    .await;
+    assert!(
+        smtp_enable.is_err(),
+        "limited recovery must block SMTP activation"
+    );
 }
 
 async fn postgres_major(pool: &DatabasePool) -> i32 {

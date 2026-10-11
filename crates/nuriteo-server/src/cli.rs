@@ -1,6 +1,6 @@
 use std::ffi::{OsStr, OsString};
-use std::fs::{File, OpenOptions};
-use std::io::{self, Write};
+use std::fs::{self, File, OpenOptions};
+use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 
 use clap::error::ErrorKind;
@@ -21,6 +21,10 @@ use crate::database::{
     run_embedded_migrations,
 };
 use crate::health::run_http_healthcheck;
+use crate::integration::MasterKeyring;
+use crate::integration::recovery_kit::{
+    DEFAULT_FILENAME as RECOVERY_KIT_DEFAULT_FILENAME, RecoveryKitError, RecoveryKitPassphrase,
+};
 use crate::object_storage::{ObjectStorageConfig, OperationLimits, S3ObjectStore};
 use crate::storage_check;
 use crate::upgrade_preflight;
@@ -32,11 +36,43 @@ const BINARY_NAME: &str = "nuriteo-server";
 pub enum BackupCommand {
     Create,
     List,
-    Verify { backup_id: String },
-    Export { backup_id: String, output: String },
-    Import { input: String },
-    Restore { backup_id: String },
+    Verify {
+        backup_id: String,
+    },
+    Export {
+        backup_id: String,
+        output: String,
+    },
+    Import {
+        input: String,
+    },
+    Restore {
+        backup_id: String,
+        recovery_kit: Option<String>,
+        recovery_kit_passphrase_file: Option<String>,
+    },
     Prune,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RecoveryKitCommand {
+    Export {
+        output: String,
+        passphrase_file: String,
+    },
+    Inspect {
+        input: String,
+        passphrase_file: String,
+    },
+    Verify {
+        input: String,
+        passphrase_file: String,
+    },
+    Restore {
+        input: String,
+        passphrase_file: String,
+        output_dir: String,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -49,6 +85,7 @@ pub enum OperationalCommand {
     StorageCheck,
     StorageConfigureBrowserUploadCors,
     Backup(BackupCommand),
+    RecoveryKit(RecoveryKitCommand),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -69,6 +106,7 @@ impl OperationalCommand {
             Self::StorageCheck => "storage-check",
             Self::StorageConfigureBrowserUploadCors => "storage-configure-browser-upload-cors",
             Self::Backup(_) => "backup",
+            Self::RecoveryKit(_) => "recovery-kit",
         }
     }
 }
@@ -122,6 +160,7 @@ pub fn root_command() -> Command {
                 .disable_version_flag(true),
         )
         .subcommand(backup_command())
+        .subcommand(recovery_kit_command())
 }
 
 fn backup_command() -> Command {
@@ -163,9 +202,62 @@ fn backup_command() -> Command {
         .subcommand(
             Command::new("restore")
                 .about("Restore into an empty staged target")
-                .arg(backup_id()),
+                .arg(backup_id())
+                .arg(
+                    Arg::new("recovery-kit")
+                        .long("recovery-kit")
+                        .requires("recovery-kit-passphrase-file"),
+                )
+                .arg(
+                    Arg::new("recovery-kit-passphrase-file")
+                        .long("recovery-kit-passphrase-file")
+                        .requires("recovery-kit"),
+                ),
         )
         .subcommand(Command::new("prune").about("Prune unretained restore points"))
+}
+
+fn recovery_kit_command() -> Command {
+    let input = || Arg::new("input").long("input").required(true);
+    let passphrase_file = || {
+        Arg::new("passphrase-file")
+            .long("passphrase-file")
+            .required(true)
+            .help("Read the exact UTF-8 passphrase bytes from this file")
+    };
+    Command::new("recovery-kit")
+        .about("Export, inspect, verify, and restore an encrypted Secret Recovery Kit")
+        .disable_version_flag(true)
+        .subcommand_required(true)
+        .subcommand(
+            Command::new("export")
+                .about("Create a new passphrase-encrypted Recovery Kit")
+                .arg(
+                    Arg::new("output")
+                        .long("output")
+                        .default_value(RECOVERY_KIT_DEFAULT_FILENAME),
+                )
+                .arg(passphrase_file()),
+        )
+        .subcommand(
+            Command::new("inspect")
+                .about("Decrypt and print non-secret Recovery Kit metadata")
+                .arg(input())
+                .arg(passphrase_file()),
+        )
+        .subcommand(
+            Command::new("verify")
+                .about("Verify a Recovery Kit against this instance master-key ring")
+                .arg(input())
+                .arg(passphrase_file()),
+        )
+        .subcommand(
+            Command::new("restore")
+                .about("Write the verified master-key ring into a new private directory")
+                .arg(input())
+                .arg(passphrase_file())
+                .arg(Arg::new("output-dir").long("output-dir").required(true)),
+        )
 }
 
 pub fn parse<I, S>(args: I) -> Result<CliAction, clap::Error>
@@ -255,6 +347,9 @@ where
         }
         Ok(CliAction::Operational(OperationalCommand::Backup(command))) => {
             run_backup_command(command, stdout, stderr).await
+        }
+        Ok(CliAction::Operational(OperationalCommand::RecoveryKit(command))) => {
+            run_recovery_kit_command(command, stdout, stderr)
         }
         Err(error) if is_successful_display(error.kind()) => {
             write!(stdout, "{error}")?;
@@ -517,11 +612,49 @@ fn command_from_matches(matches: &ArgMatches) -> Result<CliAction, clap::Error> 
             OperationalCommand::StorageConfigureBrowserUploadCors,
         )),
         Some("backup") => backup_from_matches(matches),
+        Some("recovery-kit") => recovery_kit_from_matches(matches),
         _ => Err(root_command().error(
             ErrorKind::MissingSubcommand,
             "an operational command is required",
         )),
     }
+}
+
+fn recovery_kit_from_matches(matches: &ArgMatches) -> Result<CliAction, clap::Error> {
+    let (_, recovery_kit) = matches.subcommand().ok_or_else(|| {
+        root_command().error(
+            ErrorKind::MissingSubcommand,
+            "recovery-kit command required",
+        )
+    })?;
+    let command = match recovery_kit.subcommand() {
+        Some(("export", args)) => RecoveryKitCommand::Export {
+            output: required_string(args, "output")?,
+            passphrase_file: required_string(args, "passphrase-file")?,
+        },
+        Some(("inspect", args)) => RecoveryKitCommand::Inspect {
+            input: required_string(args, "input")?,
+            passphrase_file: required_string(args, "passphrase-file")?,
+        },
+        Some(("verify", args)) => RecoveryKitCommand::Verify {
+            input: required_string(args, "input")?,
+            passphrase_file: required_string(args, "passphrase-file")?,
+        },
+        Some(("restore", args)) => RecoveryKitCommand::Restore {
+            input: required_string(args, "input")?,
+            passphrase_file: required_string(args, "passphrase-file")?,
+            output_dir: required_string(args, "output-dir")?,
+        },
+        _ => {
+            return Err(root_command().error(
+                ErrorKind::MissingSubcommand,
+                "a recovery-kit subcommand is required",
+            ));
+        }
+    };
+    Ok(CliAction::Operational(OperationalCommand::RecoveryKit(
+        command,
+    )))
 }
 
 fn backup_from_matches(matches: &ArgMatches) -> Result<CliAction, clap::Error> {
@@ -543,6 +676,10 @@ fn backup_from_matches(matches: &ArgMatches) -> Result<CliAction, clap::Error> {
         },
         Some(("restore", args)) => BackupCommand::Restore {
             backup_id: required_string(args, "backup-id")?,
+            recovery_kit: args.get_one::<String>("recovery-kit").cloned(),
+            recovery_kit_passphrase_file: args
+                .get_one::<String>("recovery-kit-passphrase-file")
+                .cloned(),
         },
         Some(("prune", _)) => BackupCommand::Prune,
         _ => {
@@ -669,11 +806,45 @@ async fn backup_restore<O: Write, E: Write>(
     stdout: &mut O,
     stderr: &mut E,
 ) -> io::Result<CommandStatus> {
-    let BackupCommand::Restore { backup_id } = command else {
+    let BackupCommand::Restore {
+        backup_id,
+        recovery_kit,
+        recovery_kit_passphrase_file,
+    } = command
+    else {
         unreachable!("restore dispatcher only receives restore commands")
     };
     let environment = SystemEnvironment;
     let files = SystemFileReader;
+    let verified_recovery_kit = match (recovery_kit, recovery_kit_passphrase_file) {
+        (None, None) => false,
+        (Some(kit), Some(passphrase_file)) => {
+            let passphrase = match read_recovery_kit_passphrase(Path::new(&passphrase_file)) {
+                Ok(value) => value,
+                Err(_) => return backup_failure(stderr, "recovery-kit-passphrase"),
+            };
+            let artifact = match read_recovery_kit_artifact(Path::new(&kit)) {
+                Ok(value) => value,
+                Err(_) => return backup_failure(stderr, "recovery-kit-input"),
+            };
+            let keyring = match MasterKeyring::load(&environment, &files) {
+                Ok(value) => value,
+                Err(_) => return backup_failure(stderr, "recovery-kit-key-configuration"),
+            };
+            if crate::integration::recovery_kit::verify(
+                &artifact,
+                &passphrase,
+                "instance",
+                Some(&keyring),
+            )
+            .is_err()
+            {
+                return backup_failure(stderr, "recovery-kit-verification");
+            }
+            true
+        }
+        _ => return backup_failure(stderr, "recovery-kit-arguments"),
+    };
     let source_database = match DatabaseRuntimeConfig::load(&environment, &files) {
         Ok(config) => config,
         Err(_) => return backup_failure(stderr, "database-configuration"),
@@ -745,7 +916,11 @@ async fn backup_restore<O: Write, E: Write>(
         target_storage,
         restore_runtime,
     );
-    let result = coordinator.restore(&staged).await;
+    let result = if verified_recovery_kit {
+        coordinator.restore_with_recovery_kit(&staged).await
+    } else {
+        coordinator.restore(&staged).await
+    };
     let source_close = source_pool.close(source_database.close_timeout()).await;
     let target_close = target_pool.close(target_close_timeout).await;
     match (result, source_close, target_close) {
@@ -988,6 +1163,197 @@ fn backup_failure<E: Write>(stderr: &mut E, category: &str) -> io::Result<Comman
     Ok(CommandStatus::Failure)
 }
 
+fn run_recovery_kit_command<O: Write, E: Write>(
+    command: RecoveryKitCommand,
+    stdout: &mut O,
+    stderr: &mut E,
+) -> io::Result<CommandStatus> {
+    let passphrase_path = match &command {
+        RecoveryKitCommand::Export {
+            passphrase_file, ..
+        }
+        | RecoveryKitCommand::Inspect {
+            passphrase_file, ..
+        }
+        | RecoveryKitCommand::Verify {
+            passphrase_file, ..
+        }
+        | RecoveryKitCommand::Restore {
+            passphrase_file, ..
+        } => passphrase_file,
+    };
+    let passphrase = match read_recovery_kit_passphrase(Path::new(passphrase_path)) {
+        Ok(passphrase) => passphrase,
+        Err(error) => return recovery_kit_failure(stderr, recovery_kit_error_category(error)),
+    };
+    let result = (|| -> Result<(), RecoveryKitCliError> {
+        match command {
+            RecoveryKitCommand::Export { output, .. } => {
+                let keyring = MasterKeyring::load(&SystemEnvironment, &SystemFileReader)
+                    .map_err(|_| RecoveryKitCliError::KeyConfiguration)?;
+                let (artifact, metadata) = crate::integration::recovery_kit::export(
+                    &keyring,
+                    "instance",
+                    time::OffsetDateTime::now_utc(),
+                    &passphrase,
+                )
+                .map_err(RecoveryKitCliError::Kit)?;
+                write_private_new(Path::new(&output), &artifact)?;
+                write_metadata(stdout, &metadata)?;
+                Ok(())
+            }
+            RecoveryKitCommand::Inspect { input, .. } => {
+                let artifact = read_recovery_kit_artifact(Path::new(&input))?;
+                let metadata = crate::integration::recovery_kit::inspect(&artifact, &passphrase)
+                    .map_err(RecoveryKitCliError::Kit)?;
+                write_metadata(stdout, &metadata)
+            }
+            RecoveryKitCommand::Verify { input, .. } => {
+                let artifact = read_recovery_kit_artifact(Path::new(&input))?;
+                let keyring = MasterKeyring::load(&SystemEnvironment, &SystemFileReader)
+                    .map_err(|_| RecoveryKitCliError::KeyConfiguration)?;
+                let metadata = crate::integration::recovery_kit::verify(
+                    &artifact,
+                    &passphrase,
+                    "instance",
+                    Some(&keyring),
+                )
+                .map_err(RecoveryKitCliError::Kit)?;
+                write_metadata(stdout, &metadata)
+            }
+            RecoveryKitCommand::Restore {
+                input, output_dir, ..
+            } => {
+                let artifact = read_recovery_kit_artifact(Path::new(&input))?;
+                let verified =
+                    crate::integration::recovery_kit::restore(&artifact, &passphrase, "instance")
+                        .map_err(RecoveryKitCliError::Kit)?;
+                write_restored_keyring(Path::new(&output_dir), &verified)?;
+                write_metadata(stdout, &verified.metadata)
+            }
+        }
+    })();
+    match result {
+        Ok(()) => Ok(CommandStatus::Success),
+        Err(error) => recovery_kit_failure(stderr, recovery_kit_cli_error_category(error)),
+    }
+}
+
+#[derive(Debug)]
+enum RecoveryKitCliError {
+    Input,
+    Output,
+    KeyConfiguration,
+    Kit(RecoveryKitError),
+}
+
+fn read_recovery_kit_passphrase(path: &Path) -> Result<RecoveryKitPassphrase, RecoveryKitError> {
+    let bytes = fs::read(path).map_err(|_| RecoveryKitError::InvalidPassphrase)?;
+    if bytes.len() > 4096 {
+        return Err(RecoveryKitError::InvalidPassphrase);
+    }
+    let value = String::from_utf8(bytes).map_err(|_| RecoveryKitError::InvalidPassphrase)?;
+    RecoveryKitPassphrase::new(value)
+}
+
+fn read_recovery_kit_artifact(path: &Path) -> Result<Vec<u8>, RecoveryKitCliError> {
+    let file = File::open(path).map_err(|_| RecoveryKitCliError::Input)?;
+    let mut artifact = Vec::new();
+    file.take(1024 * 1024 + 1)
+        .read_to_end(&mut artifact)
+        .map_err(|_| RecoveryKitCliError::Input)?;
+    if artifact.is_empty() || artifact.len() > 1024 * 1024 {
+        return Err(RecoveryKitCliError::Input);
+    }
+    Ok(artifact)
+}
+
+fn write_metadata<O: Write>(
+    output: &mut O,
+    metadata: &crate::integration::recovery_kit::RecoveryKitMetadata,
+) -> Result<(), RecoveryKitCliError> {
+    serde_json::to_writer(&mut *output, metadata).map_err(|_| RecoveryKitCliError::Output)?;
+    writeln!(output).map_err(|_| RecoveryKitCliError::Output)
+}
+
+fn write_restored_keyring(
+    output_dir: &Path,
+    verified: &crate::integration::recovery_kit::VerifiedRecoveryKit,
+) -> Result<(), RecoveryKitCliError> {
+    create_private_dir(output_dir)?;
+    write_private_new(
+        &output_dir.join("master-key"),
+        verified
+            .current_key_base64()
+            .map_err(RecoveryKitCliError::Kit)?
+            .as_bytes(),
+    )?;
+    write_private_new(
+        &output_dir.join("master-key-version"),
+        verified.current_version().to_string().as_bytes(),
+    )?;
+    write_private_new(
+        &output_dir.join("previous-master-keys.json"),
+        &verified
+            .previous_keys_json()
+            .map_err(RecoveryKitCliError::Kit)?,
+    )
+}
+
+fn create_private_dir(path: &Path) -> Result<(), RecoveryKitCliError> {
+    let mut builder = fs::DirBuilder::new();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::DirBuilderExt;
+        builder.mode(0o700);
+    }
+    builder
+        .create(path)
+        .map_err(|_| RecoveryKitCliError::Output)
+}
+
+fn write_private_new(path: &Path, value: &[u8]) -> Result<(), RecoveryKitCliError> {
+    let mut options = OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    let mut file = options
+        .open(path)
+        .map_err(|_| RecoveryKitCliError::Output)?;
+    file.write_all(value)
+        .and_then(|()| file.sync_all())
+        .map_err(|_| RecoveryKitCliError::Output)
+}
+
+fn recovery_kit_error_category(error: RecoveryKitError) -> &'static str {
+    recovery_kit_cli_error_category(RecoveryKitCliError::Kit(error))
+}
+
+fn recovery_kit_cli_error_category(error: RecoveryKitCliError) -> &'static str {
+    match error {
+        RecoveryKitCliError::Input => "input",
+        RecoveryKitCliError::Output => "output",
+        RecoveryKitCliError::KeyConfiguration => "key-configuration",
+        RecoveryKitCliError::Kit(RecoveryKitError::InvalidPassphrase) => "passphrase",
+        RecoveryKitCliError::Kit(RecoveryKitError::Decryption) => "decryption",
+        RecoveryKitCliError::Kit(RecoveryKitError::UnsupportedFormat) => "unsupported-format",
+        RecoveryKitCliError::Kit(RecoveryKitError::IncompatibleInstance) => "incompatible-instance",
+        RecoveryKitCliError::Kit(RecoveryKitError::IncompatibleKeyring) => "incompatible-keyring",
+        RecoveryKitCliError::Kit(
+            RecoveryKitError::InvalidInstance | RecoveryKitError::InvalidPayload,
+        ) => "invalid-payload",
+        RecoveryKitCliError::Kit(RecoveryKitError::Encryption) => "encryption",
+    }
+}
+
+fn recovery_kit_failure<E: Write>(stderr: &mut E, category: &str) -> io::Result<CommandStatus> {
+    writeln!(stderr, "{BINARY_NAME}: recovery-kit failed ({category})")?;
+    Ok(CommandStatus::Failure)
+}
+
 const fn is_successful_display(kind: ErrorKind) -> bool {
     matches!(kind, ErrorKind::DisplayHelp | ErrorKind::DisplayVersion)
 }
@@ -1085,6 +1451,8 @@ mod tests {
                 vec!["backup", "restore", "backup-1"],
                 BackupCommand::Restore {
                     backup_id: "backup-1".into(),
+                    recovery_kit: None,
+                    recovery_kit_passphrase_file: None,
                 },
             ),
             (vec!["backup", "prune"], BackupCommand::Prune),
@@ -1107,6 +1475,88 @@ mod tests {
             ])
             .is_err()
         );
+        assert!(parse(["backup", "restore", "id", "--recovery-kit", "kit.age"]).is_err());
+        assert_eq!(
+            parse([
+                "backup",
+                "restore",
+                "id",
+                "--recovery-kit",
+                "kit.age",
+                "--recovery-kit-passphrase-file",
+                "passphrase"
+            ])
+            .unwrap(),
+            CliAction::Operational(OperationalCommand::Backup(BackupCommand::Restore {
+                backup_id: "id".into(),
+                recovery_kit: Some("kit.age".into()),
+                recovery_kit_passphrase_file: Some("passphrase".into()),
+            }))
+        );
+    }
+
+    #[test]
+    fn parses_the_complete_recovery_kit_command_surface() {
+        let cases = [
+            (
+                vec!["recovery-kit", "export", "--passphrase-file", "passphrase"],
+                RecoveryKitCommand::Export {
+                    output: RECOVERY_KIT_DEFAULT_FILENAME.into(),
+                    passphrase_file: "passphrase".into(),
+                },
+            ),
+            (
+                vec![
+                    "recovery-kit",
+                    "inspect",
+                    "--input",
+                    "kit.age",
+                    "--passphrase-file",
+                    "passphrase",
+                ],
+                RecoveryKitCommand::Inspect {
+                    input: "kit.age".into(),
+                    passphrase_file: "passphrase".into(),
+                },
+            ),
+            (
+                vec![
+                    "recovery-kit",
+                    "verify",
+                    "--input",
+                    "kit.age",
+                    "--passphrase-file",
+                    "passphrase",
+                ],
+                RecoveryKitCommand::Verify {
+                    input: "kit.age".into(),
+                    passphrase_file: "passphrase".into(),
+                },
+            ),
+            (
+                vec![
+                    "recovery-kit",
+                    "restore",
+                    "--input",
+                    "kit.age",
+                    "--passphrase-file",
+                    "passphrase",
+                    "--output-dir",
+                    "restored",
+                ],
+                RecoveryKitCommand::Restore {
+                    input: "kit.age".into(),
+                    passphrase_file: "passphrase".into(),
+                    output_dir: "restored".into(),
+                },
+            ),
+        ];
+        for (arguments, expected) in cases {
+            assert_eq!(
+                parse(arguments).unwrap(),
+                CliAction::Operational(OperationalCommand::RecoveryKit(expected))
+            );
+        }
     }
 
     #[test]

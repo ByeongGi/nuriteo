@@ -14,6 +14,7 @@ name = "nuriteo-server"
 path = "src/main.rs"
 
 [dependencies]
+age = { version = "=0.12.1", default-features = false }
 aes-gcm = "0.10.3"
 argon2 = { version = "0.6.0", default-features = false, features = ["alloc", "getrandom", "password-hash", "zeroize"] }
 aws-config = { version = "1.12.0", default-features = false, features = ["behavior-version-latest", "default-https-client", "rt-tokio"] }
@@ -55,7 +56,7 @@ utoipa = "6.0.0"
 utoipa-axum = "0.3.0"
 utoipa-swagger-ui = { version = "10.0.1", default-features = false, features = ["axum", "vendored"] }
 url = "2.5.7"
-uuid = { version = "1.22.0", features = ["v4", "v7"] }
+uuid = { version = "1.22.0", features = ["serde", "v4", "v7"] }
 x509-parser = { version = "0.18.1", default-features = false }
 zeroize = "1.8.2"
 
