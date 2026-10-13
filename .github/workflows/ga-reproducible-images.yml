@@ -37,6 +37,9 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - uses: docker/setup-buildx-action@v3
+        with:
+          driver: docker-container
       - name: Install OCI inspection tools
         run: sudo apt-get update && sudo apt-get install --yes skopeo jq
       - name: Build twice from clean caches
