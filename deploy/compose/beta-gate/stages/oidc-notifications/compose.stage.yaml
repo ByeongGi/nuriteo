@@ -1,0 +1,62 @@
+services:
+  core:
+    environment:
+      NURITEO_SMTP_ENABLED: "true"
+      NURITEO_SMTP_HOST: smtp-provider
+      NURITEO_SMTP_PORT: "8443"
+      NURITEO_SMTP_SECURITY: implicit-tls
+      NURITEO_SMTP_FROM_ADDRESS: noreply@example.invalid
+      NURITEO_SMTP_FROM_NAME: NURITEO GATE-005
+      NURITEO_SMTP_USERNAME_FILE: /run/secrets/gate_smtp_username
+      NURITEO_SMTP_PASSWORD_FILE: /run/secrets/gate_smtp_password
+      NURITEO_SMTP_CA_FILE: /run/secrets/gate_provider_ca
+      NURITEO_SMTP_PREFLIGHT_TIMEOUT_MS: "5000"
+      NURITEO_MASTER_KEY_FILE: /run/secrets/gate_master_key
+      NURITEO_MASTER_KEY_VERSION: ${NURITEO_MASTER_KEY_VERSION:-1}
+    secrets:
+      - gate_smtp_username
+      - gate_smtp_password
+      - gate_provider_ca
+      - gate_master_key
+
+  oidc-provider:
+    volumes:
+      - ./beta-gate/stages/oidc-notifications/oidc-provider.py:/fixture/oidc-provider.py:ro
+    entrypoint: ["python3", "/fixture/oidc-provider.py"]
+    environment:
+      OIDC_ISSUER: https://oidc-provider:8443
+      OIDC_CALLBACK_FORWARD_ORIGIN: ${NURITEO_EXTERNAL_URL:?set NURITEO_EXTERNAL_URL}
+
+  smtp-provider:
+    image: localhost/nuriteo-beta-provider:${NURITEO_BETA_GATE_RELEASE_COMMIT}
+    entrypoint: ["python3", "/fixture/smtp-provider.py"]
+    environment:
+      SMTP_CONTROL_DIR: /run/gate-provider/control
+      SMTP_PORT: "8443"
+      SMTP_CERT: /run/gate-provider/tls.crt
+      SMTP_KEY: /run/gate-provider/tls.key
+    ports:
+      - "127.0.0.1:${NURITEO_BETA_GATE_SMTP_PORT}:8443"
+    volumes:
+      - ./beta-gate/stages/oidc-notifications/smtp-provider.py:/fixture/smtp-provider.py:ro
+      - ${NURITEO_BETA_GATE_PROVIDER_TLS_DIR}:/run/gate-provider
+    read_only: true
+    user: "0:0"
+
+networks:
+  application:
+    ipam:
+      config:
+        # OIDC production SSRF checks intentionally reject RFC1918 endpoints. This is an
+        # isolated bridge only; a globally-routable-shaped subnet lets the real validator run.
+        - subnet: 11.254.205.0/24
+
+secrets:
+  gate_smtp_username:
+    file: ${NURITEO_BETA_GATE_PROVIDER_TLS_DIR}/control/smtp-username
+  gate_smtp_password:
+    file: ${NURITEO_BETA_GATE_PROVIDER_TLS_DIR}/control/smtp-password
+  gate_provider_ca:
+    file: ${NURITEO_BETA_GATE_PROVIDER_TLS_DIR}/ca.crt
+  gate_master_key:
+    file: ${NURITEO_MASTER_KEY_FILE:?set NURITEO_MASTER_KEY_FILE}

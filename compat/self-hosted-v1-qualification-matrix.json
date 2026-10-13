@@ -1,0 +1,86 @@
+{
+  "schemaVersion": 1,
+  "taskId": "QUAL-001",
+  "qualifiedAt": "2026-10-12",
+  "scope": "required-environment-endpoints",
+  "status": "pass",
+  "entries": [
+    {
+      "id": "postgresql-17",
+      "area": "postgresql",
+      "environment": "PostgreSQL 17.11 linux/arm64 with custom-CA TLS",
+      "mode": "actual",
+      "status": "pass",
+      "artifact": "docker.io/library/postgres@sha256:2d2b8998d31037bf721cfdf764d76ba74171b4fab3431b7f72c27c56ddbdf9e3",
+      "checks": ["TLS hostname verification", "embedded migrations", "serialization", "rollback", "retry"]
+    },
+    {
+      "id": "postgresql-18",
+      "area": "postgresql",
+      "environment": "PostgreSQL 18.1 linux/arm64 with custom-CA TLS",
+      "mode": "actual",
+      "status": "pass",
+      "artifact": "docker.io/library/postgres@sha256:1090bc3a8ccfb0b55f78a494d76f8d603434f7e4553543d6e807bc7bd6bbd17f",
+      "checks": ["TLS hostname verification", "embedded migrations", "serialization", "rollback", "retry"]
+    },
+    {
+      "id": "s3-compatible",
+      "area": "object-storage",
+      "environment": "Bundled RustFS over custom-CA HTTPS",
+      "mode": "actual",
+      "status": "pass",
+      "artifact": "docker.io/rustfs/rustfs@sha256:42edb61d588775f9431ff436216d14392d2234d4eb2ed68321569fbf7245b36b",
+      "checks": ["PUT", "GET", "HEAD", "DELETE", "LIST", "range", "checksum", "presign", "multipart", "cleanup"]
+    },
+    {
+      "id": "kubernetes-1.29",
+      "area": "kubernetes",
+      "environment": "Kubernetes 1.29.14 kind with Helm 4.2.2",
+      "mode": "actual",
+      "status": "pass",
+      "artifact": "docker.io/kindest/node@sha256:8703bd94ee24e51b778d5556ae310c6c0fa67d761fae6379c8e0bb480e6fea29",
+      "checks": ["install", "failed preflight fence", "upgrade", "rollback", "uninstall", "external Secret preservation"]
+    },
+    {
+      "id": "kubernetes-1.37",
+      "area": "kubernetes",
+      "environment": "Kubernetes 1.37.0 kind with Helm 4.2.2",
+      "mode": "actual",
+      "status": "pass",
+      "artifact": "docker.io/kindest/node@sha256:a1ed56cfb0e7b93589bdf97c8cd566405a265939e3620fc4f5de89adff580ae5",
+      "checks": ["install", "failed preflight fence", "upgrade", "rollback", "uninstall", "external Secret preservation"]
+    },
+    {
+      "id": "chrome-desktop",
+      "area": "browser",
+      "environment": "Google Chrome 154.0.8037.98 on macOS desktop",
+      "mode": "actual",
+      "status": "pass",
+      "artifact": "/Applications/Google Chrome.app",
+      "checks": ["COOP/COEP", "crossOriginIsolated", "SharedArrayBuffer", "Service Worker", "OPFS write/read/delete"]
+    },
+    {
+      "id": "edge-desktop",
+      "area": "browser",
+      "environment": "Microsoft Edge 155.0.4283.45 on macOS desktop",
+      "mode": "actual",
+      "status": "pass",
+      "artifact": "/Applications/Microsoft Edge.app",
+      "checks": ["COOP/COEP", "crossOriginIsolated", "SharedArrayBuffer", "Service Worker", "OPFS write/read/delete"]
+    },
+    {
+      "id": "safari-desktop",
+      "area": "browser",
+      "environment": "Safari 26.6.2 on macOS desktop",
+      "mode": "actual",
+      "status": "pass",
+      "artifact": "/Applications/Safari.app",
+      "checks": ["COOP/COEP", "crossOriginIsolated", "SharedArrayBuffer", "Service Worker", "Vite preview", "OPFS reopen", "quota recovery"]
+    }
+  ],
+  "excluded": [
+    "Cartesian products across PostgreSQL, S3, Kubernetes, and browser are not required because these boundaries do not execute in one process.",
+    "Mobile browsers and iOS Safari remain outside the v1 contract.",
+    "External S3 products qualify through the same capability preflight rather than a provider-name matrix."
+  ]
+}

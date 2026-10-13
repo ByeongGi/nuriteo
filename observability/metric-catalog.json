@@ -1,0 +1,91 @@
+{
+  "schemaVersion": 1,
+  "taskId": "OBS-002",
+  "endpoint": "/metrics",
+  "format": "OpenMetrics 1.0",
+  "visibility": "cluster-internal management surface",
+  "metrics": [
+    {
+      "name": "nuriteo_build_info",
+      "type": "gauge",
+      "unit": "1",
+      "labels": ["version"],
+      "cardinality": "one series per running release"
+    },
+    {
+      "name": "nuriteo_http_requests_in_flight",
+      "type": "gauge",
+      "unit": "requests",
+      "labels": [],
+      "cardinality": "one process-local series"
+    },
+    {
+      "name": "nuriteo_http_requests_total",
+      "type": "counter",
+      "unit": "requests",
+      "labels": ["method", "route", "status_class"],
+      "cardinality": "bounded method x declared route template x status class"
+    },
+    {
+      "name": "nuriteo_http_request_duration_seconds",
+      "type": "histogram",
+      "unit": "seconds",
+      "labels": ["method", "route", "status_class"],
+      "buckets": [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 1.0, 5.0],
+      "cardinality": "bounded method x declared route template x status class"
+    },
+    {
+      "name": "nuriteo_cleanup_queue_depth",
+      "type": "gauge",
+      "unit": "jobs",
+      "labels": [],
+      "cardinality": "one process-local series"
+    },
+    {
+      "name": "nuriteo_cleanup_oldest_eligible_age_seconds",
+      "type": "gauge",
+      "unit": "seconds",
+      "labels": [],
+      "cardinality": "one process-local series"
+    },
+    {
+      "name": "nuriteo_cleanup_running_count",
+      "type": "gauge",
+      "unit": "jobs",
+      "labels": [],
+      "cardinality": "one process-local series"
+    },
+    {
+      "name": "nuriteo_cleanup_retry_count",
+      "type": "gauge",
+      "unit": "jobs",
+      "labels": [],
+      "cardinality": "one process-local series"
+    },
+    {
+      "name": "nuriteo_cleanup_failed_count",
+      "type": "gauge",
+      "unit": "jobs",
+      "labels": [],
+      "cardinality": "one process-local series"
+    },
+    {
+      "name": "nuriteo_cleanup_degraded",
+      "type": "gauge",
+      "unit": "1",
+      "labels": [],
+      "cardinality": "one process-local series"
+    }
+  ],
+  "boundedLabels": {
+    "method": ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS", "OTHER"],
+    "route": "Axum MatchedPath route templates plus the constant unmatched value",
+    "status_class": ["1xx", "2xx", "3xx", "4xx", "5xx", "other"],
+    "version": "compile-time release version"
+  },
+  "prohibitedLabels": [
+    "user_id", "organization_id", "project_id", "request_id", "trace_id", "email",
+    "raw_path", "url", "query", "host", "error_message"
+  ],
+  "compatibility": "Metric names, types, units, label names and histogram buckets are stable within self-hosted v1. Additive metrics are allowed; removals or semantic changes require a documented major compatibility decision."
+}

@@ -1,0 +1,69 @@
+{{- if .Values.restore.enabled }}
+{{- include "nuriteo.validateOperationsImage" . }}
+{{- include "nuriteo.validateRestore" . }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "nuriteo.fullname" . }}-restore
+  labels:
+    {{- include "nuriteo.labels" . | nindent 4 }}
+    app.kubernetes.io/component: restore
+  annotations:
+    nuriteo.dev/operator-invoked: "true"
+    nuriteo.dev/restore-point-id: {{ .Values.restore.restorePointId | quote }}
+    nuriteo.dev/target-identity: {{ .Values.restore.target.identity | quote }}
+    nuriteo.dev/target-postgresql-secret: {{ .Values.restore.target.postgresql.existingSecret.name | quote }}
+    nuriteo.dev/target-object-storage-bucket: {{ .Values.restore.target.objectStorage.bucket | quote }}
+    nuriteo.dev/operator-fence: "acknowledged"
+spec:
+  # Restore is always rendered suspended. Only an operator may unsuspend this
+  # exact Job after maintenance mode, write drain and target checks are current.
+  suspend: true
+  backoffLimit: {{ .Values.restore.backoffLimit }}
+  activeDeadlineSeconds: {{ .Values.restore.activeDeadlineSeconds }}
+  ttlSecondsAfterFinished: {{ .Values.restore.ttlSecondsAfterFinished }}
+  template:
+    metadata:
+      labels:
+        {{- include "nuriteo.selectorLabels" (dict "root" . "component" "restore") | nindent 8 }}
+      annotations:
+        {{- include "nuriteo.rolloutAnnotations" . | nindent 8 }}
+        checksum/nuriteo-operation-secret-refs: {{ include "nuriteo.operationSecretRefsChecksum" . | quote }}
+        nuriteo.dev/restore-point-id: {{ .Values.restore.restorePointId | quote }}
+        nuriteo.dev/target-identity: {{ .Values.restore.target.identity | quote }}
+    spec:
+      restartPolicy: Never
+      serviceAccountName: {{ include "nuriteo.serviceAccountName" . }}
+      automountServiceAccountToken: false
+      securityContext:
+        {{- include "nuriteo.podSecurityContext" . | nindent 8 }}
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- include "nuriteo.imagePullSecrets" $ | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: restore
+          image: {{ include "nuriteo.image" (list . .Values.images.operations) | quote }}
+          imagePullPolicy: {{ .Values.images.operations.pullPolicy }}
+          args: ["backup", "restore", {{ .Values.restore.restorePointId | quote }}]
+          env:
+            {{- include "nuriteo.backupEnv" . | nindent 12 }}
+            {{- include "nuriteo.restoreEnv" . | nindent 12 }}
+          securityContext:
+            {{- include "nuriteo.containerSecurityContext" . | nindent 12 }}
+          volumeMounts:
+            {{- include "nuriteo.backupSourceSecretVolumeMounts" . | nindent 12 }}
+            {{- include "nuriteo.backupSecretVolumeMount" . | nindent 12 }}
+            {{- include "nuriteo.restoreSecretVolumeMounts" . | nindent 12 }}
+            - name: scratch
+              mountPath: /tmp/nuriteo-backup
+          resources:
+            requests: { cpu: 25m, memory: 64Mi }
+            limits: { memory: 1Gi }
+      volumes:
+        {{- include "nuriteo.backupSourceSecretVolumes" . | nindent 8 }}
+        {{- include "nuriteo.backupSecretVolume" . | nindent 8 }}
+        {{- include "nuriteo.restoreSecretVolumes" . | nindent 8 }}
+        - name: scratch
+          emptyDir: { sizeLimit: {{ .Values.backupStorage.scratchSizeLimit }} }
+{{- end }}

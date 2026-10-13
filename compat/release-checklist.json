@@ -1,0 +1,63 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-16",
+  "status": "pg20-release-candidate-ready",
+  "externalPublish": "approved-after-PG20-release-checklist-reconfirmation",
+  "releaseDecision": "release-candidate-ready-for-scoped-browser-js-ts-development",
+  "requiredDocs": [
+    "docs/release/release-policy.md",
+    "docs/release/provenance.md",
+    "docs/release/incident-playbook.md",
+    "docs/release/support-matrix.md",
+    "docs/release/known-limitations.md",
+    "docs/release/operations.md",
+    "docs/release/fingerprint.json"
+  ],
+  "requiredManifests": [
+    "compat/release-policy.json",
+    "compat/release-provenance.json",
+    "compat/incident-playbook.json",
+    "compat/performance-baseline.json",
+    "compat/soak-baseline.json"
+  ],
+  "requiredChecks": [
+    "node tooling/release/package-sdk.ts",
+    "node tooling/checks/check-sdk-public-release.ts",
+    "node tooling/checks/check-sdk-publish-rehearsal.ts",
+    "node tooling/checks/check-release-readiness.ts",
+    "node tooling/checks/check-release-ops-sg29.ts",
+    "node tooling/checks/check-release-policy.ts",
+    "node tooling/checks/check-release-provenance.ts",
+    "node tooling/checks/check-incident-playbook.ts",
+    "node tooling/checks/check-performance-baseline.ts",
+    "node tooling/checks/check-soak-baseline.ts",
+    "node tooling/checks/check-workspace.ts"
+  ],
+  "ciGate": {
+    "elevatedFrom": "docs/release/release-checklist.md",
+    "requiredCommands": [
+      "node tooling/release/package-sdk.ts",
+      "node tooling/checks/check-sdk-public-release.ts",
+      "node tooling/checks/check-sdk-publish-rehearsal.ts",
+      "node tooling/checks/check-release-readiness.ts",
+      "node tooling/checks/check-release-ops-sg29.ts"
+    ]
+  },
+  "gateReview": {
+    "PG15": "pass",
+    "PG16": "pass",
+    "PG20": "pass",
+    "stableLaunch": "release-candidate-ready"
+  },
+  "smokeDeploy": {
+    "status": "publish-approved-after-final-reconfirmation",
+    "reason": "PG20 passed; external deployment and registry publish require release checklist reconfirmation at publish time"
+  },
+  "acceptance": [
+    "release channels and support windows defined",
+    "artifact provenance and SBOM/license checks defined",
+    "incident playbook and support bundle requirement defined",
+    "known limitations public document exists",
+    "PG20 release-candidate decision explicitly recorded"
+  ]
+}

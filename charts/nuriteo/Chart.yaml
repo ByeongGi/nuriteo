@@ -1,0 +1,11 @@
+apiVersion: v2
+name: nuriteo
+description: Self-hosted NURITEO application chart
+type: application
+version: 0.1.0
+appVersion: "1.0.0-rc.1"
+kubeVersion: ">=1.29.0-0"
+annotations:
+  nuriteo.dev/release-lineage: nuriteo-self-hosted-v1
+  nuriteo.dev/release-contract: digest-pinned-pair-v1
+

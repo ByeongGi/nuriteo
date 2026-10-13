@@ -1,0 +1,147 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-09-15T01:10:00+09:00",
+  "status": "p0-02-baseline",
+  "runtimeBaseline": {
+    "node": {
+      "version": "22.23.0",
+      "channel": "initial-supported-node-lts-line",
+      "engineConstraint": ">=22.15.0 <23",
+      "referenceCandidate": "vivari",
+      "darwinArm64Tarball": {
+        "url": "https://nodejs.org/dist/v22.23.0/node-v22.23.0-darwin-arm64.tar.gz",
+        "sha256": "e0f383a215dd3093de6d2c74f87056dc2306a2e09ad494cbffdba28f89046f56"
+      },
+      "linuxArm64Tarball": {
+        "url": "https://nodejs.org/dist/v22.23.0/node-v22.23.0-linux-arm64.tar.xz",
+        "sha256": "4018815ac1bed4f18208901bbde524fee881253b591ee7bc952660e69bd057af"
+      },
+      "linuxX64Tarball": {
+        "url": "https://nodejs.org/dist/v22.23.0/node-v22.23.0-linux-x64.tar.xz",
+        "sha256": "14d7de44f235534799f8b171a4050d9a6a4bc99c87e053a25d3d54afa580aa20"
+      },
+      "rehearsalCandidate": {
+        "version": "22.23.2",
+        "source": "https://nodejs.org/download/release/latest-v22.x/",
+        "status": "rehearsed-not-promoted",
+        "reasonNotPromoted": "P8-01 records update procedure and compatibility evidence; baseline promotion is a separate release decision.",
+        "darwinArm64Tarball": {
+          "url": "https://nodejs.org/dist/v22.23.2/node-v22.23.2-darwin-arm64.tar.gz",
+          "sha256": "61130f394c1630d211dd50aecc4353d379480f36d3ac913cd85dbba1aed585c6"
+        },
+        "linuxArm64Tarball": {
+          "url": "https://nodejs.org/dist/v22.23.2/node-v22.23.2-linux-arm64.tar.xz",
+          "sha256": "fff4078c5def658577f92c88db7db3bc0072924bfb93fe52c1e744a54e94abb8"
+        },
+        "linuxX64Tarball": {
+          "url": "https://nodejs.org/dist/v22.23.2/node-v22.23.2-linux-x64.tar.xz",
+          "sha256": "d60acfe00a2932254bb0ad20e01b0d74397a0875595de719654b214f4b03f307"
+        }
+      }
+    },
+    "referenceNode": {
+      "version": "22.23.0",
+      "command": "mise exec node@22.23.0 bun@1.4.2 -- npm run verify",
+      "evidence": "docs/archive/implementation-2026-09-15/evidence/P0-01.md"
+    }
+  },
+  "compatibilityLane": {
+    "node": {
+      "version": "26.8.2",
+      "engineConstraint": ">=26",
+      "referenceCandidate": "opencontainers",
+      "darwinArm64Tarball": {
+        "url": "https://nodejs.org/dist/v26.8.2/node-v26.8.2-darwin-arm64.tar.gz",
+        "sha256": "974b6d5fb2fc7c33ff2354db0902b4e91c2de01ec8acc6de48e543c97e18c9e1"
+      },
+      "linuxArm64Tarball": {
+        "url": "https://nodejs.org/dist/v26.8.2/node-v26.8.2-linux-arm64.tar.xz",
+        "sha256": "81d8f0fdea9dcd3bfdcfeafc5f8359c151f097e9880b0007c0645ca670d07971"
+      },
+      "linuxX64Tarball": {
+        "url": "https://nodejs.org/dist/v26.8.2/node-v26.8.2-linux-x64.tar.xz",
+        "sha256": "40e1d3225c1c9ae9a2671c98ecb9857e4d5555026394f348645676798840d5c5"
+      }
+    },
+    "status": "test-reference-only-for-p0",
+    "evidence": "docs/evaluation/runtime-baseline.md"
+  },
+  "packageManagers": {
+    "npm": {
+      "version": "10.9.2",
+      "source": "https://registry.npmjs.org/npm/-/npm-10.9.2.tgz",
+      "integrity": "sha512-iriPEPIkoMYUy3F6f3wwSZAU93E0Eg6cHwIR6jzzOXWSy+SD/rOODEs74cVONHKSx2obXtuUoyidVEhISrisgQ==",
+      "license": "Artistic-2.0",
+      "required": true
+    },
+    "pnpm": {
+      "version": "9.15.9",
+      "source": "https://registry.npmjs.org/pnpm/-/pnpm-9.15.9.tgz",
+      "integrity": "sha512-aARhQYk8ZvrQHAeSMRKOmvuJ74fiaR1p5NQO7iKJiClf1GghgbrlW1hBjDolO95lpQXsfF+UA+zlzDzTfc8lMQ==",
+      "license": "MIT",
+      "required": true
+    },
+    "corepack": {
+      "version": "0.35.0",
+      "source": "https://registry.npmjs.org/corepack/-/corepack-0.35.0.tgz",
+      "integrity": "sha512-9BuIGHDFE7Zieor1CeRsvt7X7AJFEuJ6OnbSbsVprq83ChDFoBh1wP98NeUS9FT3ZwlzFllPElXcz/OiDf0YGw==",
+      "license": "MIT",
+      "required": true
+    },
+    "yarn": {
+      "version": "1.22.22",
+      "source": "https://registry.npmjs.org/yarn/-/yarn-1.22.22.tgz",
+      "integrity": "sha512-prL3kGtyG7o9Z9Sv8IPfBNrWTDmXB4Qbes8A9rEzt6wkJV8mUvoirjU0Mp3GGAU06Y0XQyA3/2/RQFVuK7MTfg==",
+      "license": "BSD-2-Clause",
+      "required": false
+    }
+  },
+  "applicationTooling": {
+    "vite": {
+      "version": "8.2.0",
+      "source": "https://registry.npmjs.org/vite/-/vite-8.2.0.tgz",
+      "integrity": "sha512-pn+CFpM0lwDeKwmOq1ZaBK/9sjorZcgqxki6MbY/jPEVd9vichIlmlD4HmQ5wdP5EgqQCFRaACBxMC7uEGc6lQ==",
+      "license": "MIT",
+      "requiredForGate": "G6"
+    },
+    "typescript": {
+      "version": "6.0.3",
+      "source": "https://registry.npmjs.org/typescript/-/typescript-6.0.3.tgz",
+      "integrity": "sha512-y2TvuxSZPDyQakkFRPZHKFm+KKVqIisdg9/CZwm9ftvKXLP8NRWj38/ODjNbr43SsoXqNuAisEf1GdCxqWcdBw==",
+      "license": "Apache-2.0",
+      "requiredForGate": "P0-03"
+    },
+    "tsgoWasm": {
+      "version": "7.0.2",
+      "source": "https://registry.npmjs.org/tsgo-wasm/-/tsgo-wasm-7.0.2.tgz",
+      "integrity": "sha512-wiu1mK6759F1r5T7w8mGduvjvS8sEIycMdWPxCOThQuOs73zK0Uwzxu0WZRvnR6iOMt+7/j8iGdXzNMZkl5ocA==",
+      "license": "Apache-2.0",
+      "required": false
+    }
+  },
+  "rustAndWasmToolchain": {
+    "rust": "1.97.1",
+    "cargo": "cargo 1.97.1 (c980f4866 2026-06-30)",
+    "wasmPack": "0.15.0",
+    "targets": [
+      "wasm32-unknown-unknown",
+      "wasm32-wasip1"
+    ]
+  },
+  "nativeAndWasmPolicy": {
+    "nativeNodeAddons": "unsupported-by-default; throw explicit errors unless a proven wasm adapter exists",
+    "requiredWasmFamilies": [
+      "Rust/WASM VFS",
+      "Rust/WASM compression codec",
+      "Rust/WASM crypto codec",
+      "WASI guest CLI support",
+      "WASM replacements for toolchain native packages where package-manager fixtures require them"
+    ],
+    "initialAdapterCandidates": [
+      "esbuild -> esbuild-wasm",
+      "rollup native bindings -> @rollup/wasm-node where required",
+      "lightningcss native bindings -> lightningcss-wasm where required",
+      "native sqlite packages -> sql.js or PGlite only when explicitly tested"
+    ]
+  }
+}

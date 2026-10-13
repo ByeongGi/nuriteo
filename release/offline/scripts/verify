@@ -1,0 +1,67 @@
+#!/bin/sh
+set -eu
+
+root=${1:?usage: verify BUNDLE_ROOT}
+manifest="$root/release-manifest.json"
+[ -d "$root" ] && [ ! -L "$root" ] || { echo 'bundle root must be a real directory' >&2; exit 1; }
+[ -f "$manifest" ] || { echo 'release-manifest.json is missing' >&2; exit 1; }
+command -v jq >/dev/null 2>&1 || { echo 'jq is required' >&2; exit 1; }
+
+jq -e '
+  .schemaVersion == 1 and
+  .releaseLineage == "nuriteo-self-hosted-v1" and
+  (.sourceCommit | test("^[a-f0-9]{40}$")) and
+  (.inventorySha256 | test("^[a-f0-9]{64}$")) and
+  ([.artifacts[].path] | length == (unique | length)) and
+  ([.artifacts[].id] | length == (unique | length)) and
+  (all(.artifacts[];
+    (.path | test("^(?!/)(?!.*(^|/)\\.\\.(/|$))[A-Za-z0-9._/-]+$")) and
+    (.sha256 | test("^[a-f0-9]{64}$")) and
+    (.bytes | type == "number" and . >= 0) and
+    (.licenseRefs | type == "array" and length > 0) and
+    (if .kind == "oci-image" then
+      (.ociDigest | test("^sha256:[a-f0-9]{64}$") and . != ("sha256:" + ("0" * 64))) and
+      (.sbomRefs | type == "array" and length > 0)
+    else has("ociDigest") | not end)
+  ))
+' "$manifest" >/dev/null
+
+temporary=$(mktemp -d "${TMPDIR:-/tmp}/nuriteo-offline-verify.XXXXXX")
+cleanup() { rm -rf -- "$temporary"; }
+trap cleanup EXIT HUP INT TERM
+
+find "$root" -type l -print -quit | grep . >"$temporary/symlink" || true
+[ ! -s "$temporary/symlink" ] || { echo 'bundle contains a symbolic link' >&2; exit 1; }
+
+jq -r '.artifacts[].path' "$manifest" | LC_ALL=C sort >"$temporary/expected"
+(cd "$root" && find . -type f ! -name release-manifest.json -print) \
+  | sed 's#^\./##' | LC_ALL=C sort >"$temporary/actual"
+cmp -s "$temporary/expected" "$temporary/actual" || { echo 'bundle file set drift' >&2; exit 1; }
+
+file_size() {
+  stat -c '%s' "$1" 2>/dev/null || stat -f '%z' "$1"
+}
+file_sha256() {
+  if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | awk '{print $1}'
+  else shasum -a 256 "$1" | awk '{print $1}'; fi
+}
+
+jq -r '.artifacts[] | [.path, (.bytes|tostring), .sha256] | @tsv' "$manifest" >"$temporary/checks"
+while IFS="$(printf '\t')" read -r relative expected_bytes expected_sha; do
+  file="$root/$relative"
+  [ "$(file_size "$file")" = "$expected_bytes" ] || { echo "artifact size drift: $relative" >&2; exit 1; }
+  [ "$(file_sha256 "$file")" = "$expected_sha" ] || { echo "artifact digest drift: $relative" >&2; exit 1; }
+done <"$temporary/checks"
+
+jq -r '.artifacts[] | select(.kind == "oci-image") | [.ociDigest, .path] | @tsv' "$manifest" >"$temporary/images"
+while IFS="$(printf '\t')" read -r expected_digest image_path; do
+  digest_path=$(jq -r --arg image "$image_path" '
+    .artifacts as $artifacts |
+    ($artifacts[] | select(.path == $image) | .id) as $image_id |
+    ($artifacts[] | select(.kind == "oci-digest" and .id == ($image_id | sub("-image$"; "-image-digest"))) | .path)
+  ' "$manifest")
+  [ -n "$digest_path" ] && [ "$digest_path" != null ] || { echo "OCI digest sidecar missing: $image_path" >&2; exit 1; }
+  [ "$(tr -d '\r\n' <"$root/$digest_path")" = "$expected_digest" ] || { echo "OCI digest sidecar drift: $image_path" >&2; exit 1; }
+done <"$temporary/images"
+
+echo 'offline bundle verified'

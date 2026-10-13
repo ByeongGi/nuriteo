@@ -1,0 +1,106 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-15",
+  "scope": {
+    "goal": "Track npm and pnpm conformance for browser guest runtime productization.",
+    "productRuntime": "browser-guest-node-runtime",
+    "testHelperRuntime": "host-node-test-helper"
+  },
+  "cases": [
+    {
+      "id": "npm-version",
+      "manager": "npm",
+      "command": "npm --version",
+      "runtime": "browser-guest-node-runtime",
+      "status": "pass",
+      "evidence": ["tests/compatibility/package-managers/npm-guest-runtime-boot.test.ts", "tests/compatibility/package-managers/npm-cli-module-evaluation.test.ts"],
+      "notes": "Guest runner classifies the command as version, and the async CLI module evaluator now runs the vendored npm entry through workspace CJS evaluation with dynamic import shims for the npm display path."
+    },
+    {
+      "id": "pnpm-version",
+      "manager": "pnpm",
+      "command": "pnpm --version",
+      "runtime": "browser-guest-node-runtime",
+      "status": "pass",
+      "evidence": ["tests/compatibility/package-managers/pnpm-guest-runtime-boot.test.ts", "tests/compatibility/package-managers/pnpm-cli-module-evaluation.test.ts"],
+      "notes": "Guest runner classifies the command as version, and the async CLI module evaluator now runs the vendored pnpm entry through workspace CJS evaluation with Node-shape process/fs/os/stream/events/timers/zlib support."
+    },
+    {
+      "id": "pnpm-store-plan",
+      "manager": "pnpm",
+      "command": "pnpm install --frozen-lockfile --ignore-scripts",
+      "runtime": "browser-guest-node-runtime",
+      "status": "pass",
+      "evidence": ["tests/compatibility/package-managers/pnpm-store-plan.test.ts"],
+      "notes": "Validates virtual store, workspace links, bin links, frozen lockfile invariants, and copy-fallback node_modules materialization from a native pnpm fixture."
+    },
+    {
+      "id": "registry-cache-tarball",
+      "manager": "npm,pnpm",
+      "command": "registry tarball fetch/cache/extract",
+      "runtime": "browser-guest-node-runtime",
+      "status": "pass",
+      "evidence": ["tests/compatibility/package-managers/tarball-cache.test.ts", "tests/compatibility/package-managers/fetcher.test.ts"]
+    },
+    {
+      "id": "cli-module-graph-preflight",
+      "manager": "npm,pnpm",
+      "command": "vendored CLI static require graph preflight and fixture CLI module evaluation",
+      "runtime": "browser-guest-node-runtime",
+      "status": "pass",
+      "evidence": ["tests/compatibility/package-managers/cli-module-graph.test.ts", "tests/compatibility/package-managers/cli-evaluator.test.ts", "tests/compatibility/package-managers/npm-cacache-put-stream-cli-module-evaluation.test.ts", "tests/compatibility/package-managers/npm-cli-module-evaluation.test.ts", "tests/compatibility/package-managers/npm-fetch-cli-module-evaluation.test.ts", "tests/compatibility/package-managers/npm-fetch-tar-extract-cli-module-evaluation.test.ts", "tests/compatibility/package-managers/npm-install-cli-module-evaluation.test.ts", "tests/compatibility/package-managers/npm-minizlib-cli-module-evaluation.test.ts", "tests/compatibility/package-managers/npm-pacote-remote-manifest-cli-module-evaluation.test.ts", "tests/compatibility/package-managers/npm-registry-install-cli-module-evaluation.test.ts", "tests/compatibility/package-managers/npm-remote-fetcher-tar-cli-module-evaluation.test.ts", "tests/compatibility/package-managers/npm-run-exec-cli-module-evaluation.test.ts", "tests/compatibility/package-managers/npm-tar-extract-cli-module-evaluation.test.ts", "tests/compatibility/package-managers/npm-tar-with-temp-dir-cli-module-evaluation.test.ts", "tests/compatibility/package-managers/pnpm-cli-module-evaluation.test.ts", "tests/compatibility/package-managers/pnpm-exec-cli-module-evaluation.test.ts", "tests/compatibility/package-managers/pnpm-install-cli-module-evaluation.test.ts", "tests/compatibility/package-managers/pnpm-registry-install-cli-module-evaluation.test.ts"],
+      "notes": "Walks vendored npm and pnpm entry module graphs, resolves simple computed path entries, expands npm install/ci/run/exec command dispatch, resolves npmPath package metadata probes, classifies Keyv adapter loading as optional for the default browser runtime store path, handles JSON modules, ignores string/comment false positives, rejects missing package modules, verifies there are no static unsupported builtin gaps, and counts only optional probes after product-scope graph expansion. Also evaluates npm-shaped CLI fixtures plus vendored npm/pnpm --version entries, vendored npm minipass-fetch HTTP response consumption, vendored npm minizlib gzip/gunzip native-handle compatibility, vendored npm cacache put-stream completion, vendored npm remote fetcher tar extraction, vendored npm pacote remote manifest extraction, vendored npm registry tarball dependency install with .bin link materialization, vendored npm local file dependency install/ci with .bin link materialization, vendored npm run/exec fixture commands through child_process shell shims, vendored pnpm exec fixture commands, vendored pnpm local file dependency install from workspace modules, and vendored pnpm registry tarball dependency install with virtual-store package files, top-level dependency symlink, lockfile/modules metadata, and .bin materialization through async cli-module-evaluation with BrowserProcess stdout/stderr/exit handling and fs cp/cpSync/promises.cp recursive copy and createReadStream/createWriteStream event flow."
+    },
+    {
+      "id": "npm-install",
+      "manager": "npm",
+      "command": "npm install --ignore-scripts",
+      "runtime": "browser-guest-node-runtime",
+      "status": "pass",
+      "evidence": ["tests/compatibility/package-managers/npm-install-cli-module-evaluation.test.ts", "tests/compatibility/package-managers/npm-registry-install-cli-module-evaluation.test.ts", "tests/compatibility/package-managers/npm-install-plan.test.ts", "tests/compatibility/package-managers/npm-integration.test.ts"],
+      "notes": "Browser runtime runs vendored npm CLI module evaluation for local file and registry tarball dependency installs, materializes package-lock plus symlinked node_modules and .bin links, and covers simple dependency install lifecycle scripts plus peer/optional dependency materialization."
+    },
+    {
+      "id": "npm-ci",
+      "manager": "npm",
+      "command": "npm ci",
+      "runtime": "browser-guest-node-runtime",
+      "status": "pass",
+      "evidence": ["tests/compatibility/package-managers/npm-install-cli-module-evaluation.test.ts", "tests/compatibility/package-managers/npm-guest-runtime-boot.test.ts", "tests/compatibility/package-managers/npm-install-plan.test.ts", "tests/compatibility/package-managers/npm-integration.test.ts"],
+      "notes": "Browser runtime runs vendored npm ci CLI module evaluation for local file dependencies and registry tarball ci from package-lock.json, then re-materializes node_modules plus .bin links, simple dependency install lifecycle scripts, and peer/optional dependencies."
+    },
+    {
+      "id": "npm-run-exec-lifecycle-peer-optional-interrupt",
+      "manager": "npm",
+      "command": "npm run/exec/lifecycle/peer/optional/interrupted recovery",
+      "runtime": "browser-guest-node-runtime",
+      "status": "pass",
+      "evidence": ["tests/compatibility/package-managers/npm-run-exec-cli-module-evaluation.test.ts", "tests/compatibility/package-managers/npm-guest-runtime-boot.test.ts", "tests/compatibility/package-managers/npm-install-plan.test.ts", "tests/compatibility/package-managers/npm-integration.test.ts"],
+      "notes": "Browser runtime runs vendored npm run and npm exec fixture commands through real CLI module evaluation using browser child_process shims for sh -c, node -e, local .bin resolution, and stdio inherit forwarding. Install/ci fixtures cover simple lifecycle, peer, and optional dependency materialization; install-plan application covers interrupted recovery."
+    },
+    {
+      "id": "pnpm-install",
+      "manager": "pnpm",
+      "command": "pnpm install --frozen-lockfile",
+      "runtime": "browser-guest-node-runtime",
+      "status": "pass",
+      "evidence": ["tests/compatibility/package-managers/pnpm-install-cli-module-evaluation.test.ts", "tests/compatibility/package-managers/pnpm-registry-install-cli-module-evaluation.test.ts", "tests/compatibility/package-managers/pnpm-store-plan.test.ts", "tests/compatibility/package-managers/pnpm-integration.test.ts"],
+      "notes": "Browser runtime runs vendored pnpm CLI module evaluation for local file dependency installs and registry tarball dependency installs. Local and registry installs materialize symlinked node_modules package files, pnpm-lock.yaml, node_modules/.modules.yaml, virtual-store lock.yaml, and .bin links; local installs cover simple dependency install lifecycle scripts plus peer/optional dependency materialization."
+    },
+    {
+      "id": "pnpm-run-exec-lifecycle-peer-optional-interrupt",
+      "manager": "pnpm",
+      "command": "pnpm run/exec/lifecycle/peer/optional/interrupted recovery",
+      "runtime": "browser-guest-node-runtime",
+      "status": "pass",
+      "evidence": ["tests/compatibility/package-managers/pnpm-exec-cli-module-evaluation.test.ts", "tests/compatibility/package-managers/pnpm-guest-runtime-boot.test.ts", "tests/compatibility/package-managers/pnpm-store-plan.test.ts", "tests/compatibility/package-managers/pnpm-integration.test.ts"],
+      "notes": "Browser runtime runs vendored pnpm run and pnpm exec fixture commands through real CLI module evaluation using browser child_process shims, legacy Transform stream compatibility, and stdio inherit forwarding. Install fixtures cover simple lifecycle, peer, and optional dependency materialization; install-plan application covers interrupted recovery."
+    }
+  ],
+  "gate": {
+    "id": "PG10",
+    "status": "pass",
+    "reason": "npm/pnpm version boot, vendored CLI module evaluation, registry fetch/cache/tar/integrity, npm install/ci/run/exec, pnpm install/run/exec, lockfile and package-manager metadata materialization, .bin links, simple dependency install lifecycle scripts, peer/optional dependency materialization, interrupted install-plan recovery, OPFS-backed workspace writer contracts, and product-scope static CLI graph classification now pass in browser guest runtime. Host-node-test-helper remains only as a reference comparator for native behavior snapshots.",
+    "requiredToPass": []
+  }
+}

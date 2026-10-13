@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "taskId": "SUP-003",
+  "releaseLineage": "nuriteo-self-hosted-v1",
+  "document": "docs/operations/self-hosted-v1-runbooks.md",
+  "rehearsal": "release/ga/runbook-rehearsal.sh",
+  "runbooks": [
+    {
+      "id": "install-compose",
+      "command": "NURITEO_COMPOSE_PROVIDER=uvx deploy/compose/test-compose.sh",
+      "contractCheck": "node deploy/compose/check-compose.mjs",
+      "actualEvidence": "docs/implementation/self-hosted/evidence/GATE-006.md"
+    },
+    {
+      "id": "install-helm",
+      "command": "charts/nuriteo/tests/kind-release.sh",
+      "contractCheck": "charts/nuriteo/tests/check-chart.sh",
+      "actualEvidence": "docs/implementation/self-hosted/evidence/GATE-006.md"
+    },
+    {
+      "id": "upgrade-rollback",
+      "command": "deploy/compose/run-upgrade-rehearsal.sh",
+      "contractCheck": "node deploy/compose/check-upgrade.mjs",
+      "actualEvidence": "docs/implementation/self-hosted/evidence/GATE-006.md"
+    },
+    {
+      "id": "backup-restore",
+      "command": "CONTAINER_RUNTIME=podman crates/nuriteo-server/tests/fixtures/backup-restore/run.sh",
+      "contractCheck": "cargo test -p nuriteo-server backup:: --lib",
+      "actualEvidence": "docs/implementation/self-hosted/evidence/GATE-006.md"
+    },
+    {
+      "id": "incident-triage",
+      "command": "pnpm check:incident-playbook && pnpm check:self-hosted-support-bundle",
+      "contractCheck": "pnpm check:incident-playbook",
+      "actualEvidence": "docs/implementation/self-hosted/evidence/SUP-002.md"
+    }
+  ]
+}

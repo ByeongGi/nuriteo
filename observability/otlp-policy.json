@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "taskId": "OBS-003",
+  "defaultEnabled": false,
+  "phoneHome": false,
+  "signals": ["traces", "metrics", "logs"],
+  "protocols": ["grpc", "http/protobuf"],
+  "endpoint": {
+    "requiredWhenEnabled": true,
+    "tlsRequired": true,
+    "loopbackHttpAllowedForDevelopment": true,
+    "fallback": false
+  },
+  "bounds": {
+    "timeoutMillis": { "default": 5000, "minimum": 100, "maximum": 10000 },
+    "queueSize": { "default": 2048, "minimum": 64, "maximum": 4096 },
+    "batchSize": { "default": 512, "minimum": 1, "maximum": 512 },
+    "traceSampleRatio": { "default": 0.1, "minimum": 0, "maximum": 1 }
+  },
+  "authorization": {
+    "environment": "NURITEO_OTLP_AUTHORIZATION",
+    "file": "NURITEO_OTLP_AUTHORIZATION_FILE",
+    "rendered": false,
+    "redacted": true
+  },
+  "customCaFile": "NURITEO_OTLP_CA_FILE",
+  "shutdown": "providers flush within the configured export timeout and failures never change product request outcomes",
+  "dataPolicy": "Only bounded route templates, methods, status classes, safe event fields and service identity are exported. Source, request bodies, URL values, query strings, credentials and arbitrary error text are excluded or redacted."
+}

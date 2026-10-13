@@ -1,0 +1,104 @@
+{
+  "schemaVersion": 1,
+  "taskId": "RC-001",
+  "releaseLineage": "nuriteo-self-hosted-v1",
+  "baselineCommit": "b3abb46aaecb00c8d84307cf1d8c213595c31d67",
+  "sourceGate": {
+    "id": "GATE-005",
+    "status": "PASS",
+    "releaseCommit": "700310fdd1208deb6c66e306b263dfc133b50f6b",
+    "verdict": "self-hosted-beta-ready"
+  },
+  "recordedAt": "2026-10-09",
+  "freeze": {
+    "state": "feature-frozen",
+    "allowedTaskPrefixes": ["BKP", "MNT", "UPG", "K8S", "AIR", "LEG", "RC", "GATE"],
+    "changePolicy": "Only RC lifecycle, deployment convergence, qualification, security fixes, and release-blocking corrections may extend this baseline. New product features require a separately reviewed post-v1 task."
+  },
+  "contracts": {
+    "migrationPrefix": {
+      "first": 1,
+      "last": 46,
+      "count": 46,
+      "aggregateSha256": "ca5c6c70777ff0cfa4f64cbb82ba947a50ef36443af9ac7a3b3e9fe2e9b6dbf6"
+    },
+    "openapi": {
+      "specification": "3.1.0",
+      "version": "1.0.0",
+      "compatibility": "additive-within-v1"
+    },
+    "bundleFormat": "project-bundle-v1",
+    "betaAcceptance": {
+      "requiredStages": 18,
+      "sameComposeProject": true,
+      "sameDatabaseLineage": true,
+      "secretScan": "PASS"
+    }
+  },
+  "images": [
+    {
+      "name": "postgres",
+      "digest": "sha256:de55a01489539d3a974b3102b6e3418c89d8c65adb986b0879722bd0eb3ea09b"
+    },
+    {
+      "name": "server",
+      "digest": "sha256:1a144aded2998a652093435a658c51a247354a635e4b46be13bddfc91d477c92"
+    },
+    {
+      "name": "web",
+      "digest": "sha256:69dbee9f5b3abff0aaff99fc59c296cf4eaa3ed149620644bb6922341592a13a"
+    }
+  ],
+  "artifactAggregateSha256": "2b5c40f019214f325bd57771645fa56c8c19793170a6efda2561aedbea4e984f",
+  "artifacts": [
+    {
+      "path": "Cargo.lock",
+      "sha256": "5a614fa30f109a581c1b604b074bce70c8749d3d4a81e87c2672fe872cc9e703"
+    },
+    {
+      "path": "pnpm-lock.yaml",
+      "sha256": "f0e139a6921822d75795164e485fa97fe0532135aeb89f1b8a95dfe5cddb0cbb"
+    },
+    {
+      "path": "deploy/docker/server.Dockerfile",
+      "sha256": "fb5a02b91aa849d689599da9a4b5a426579b6a2209516cd6ed165be94d736547"
+    },
+    {
+      "path": "deploy/docker/web.Dockerfile",
+      "sha256": "c5dde7378c5c338022affc5739eb9caa76ee9ffcfeb3d612b08c25a6f33ad25b"
+    },
+    {
+      "path": "deploy/compose/compose.yaml",
+      "sha256": "d4045603428d01a6eaf281db85db6bbeff4f35c12dbf09b57c1016d4d22fe863"
+    },
+    {
+      "path": "deploy/compose/compose.external-s3.yaml",
+      "sha256": "80fd43444fe129fac7ae541c0584891955caa764fcc95ac56139e91c110a6be1"
+    },
+    {
+      "path": "compat/project-bundle-admission-v1.json",
+      "sha256": "88f0215ee638061b7a25623e077e11d118a94755aa8011202b0d1f0aa748bcf5",
+      "immutable": true
+    },
+    {
+      "path": "crates/nuriteo-server/tests/fixtures/openapi-v1.json",
+      "sha256": "92409c41076666f67d6d73a0cdab3c18aa6d96f31950c652be0f4eb6b3012947"
+    },
+    {
+      "path": "deploy/compose/beta-gate/contract.json",
+      "sha256": "e2c1e2a779be45bc60dce425db44cb0869f6e2d0e2af47a749d75c11da5e6580"
+    },
+    {
+      "path": "deploy/compose/beta-gate/run.sh",
+      "sha256": "9f5fd9f2f75788493b62a2ee8e44ce70d2c7b4352af85d05840172a8b887b360"
+    },
+    {
+      "path": "deploy/compose/beta-gate/acceptance-driver.sh",
+      "sha256": "9739508cdcea9ff7d4baf7f477a382671fcc4abd22f030c878951e7f865616d7"
+    },
+    {
+      "path": "docs/implementation/self-hosted/evidence/GATE-005.md",
+      "sha256": "24f624ca40cf9aa84b9ffc827737cc4124e8fcfab69a05c805986b8aae067181"
+    }
+  ]
+}

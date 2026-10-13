@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "gate": "GATE-005",
+  "alphaBaselineCommit": "e09c657bb3454891054e5293f1b3cb3a4f99f102",
+  "taskGraph": "docs/implementation/self-hosted/tasks/v1-release-task-graph.json",
+  "requiredImages": ["postgres", "server", "web"],
+  "requiredStages": [
+    "clean-install",
+    "alpha-lineage",
+    "local-administrator",
+    "local-user",
+    "oidc-provider-administration",
+    "oidc-user",
+    "mfa-policy",
+    "team-collaboration",
+    "instance-policy",
+    "notifications",
+    "audit-and-operations",
+    "access-tokens",
+    "git-integration",
+    "registry-integration",
+    "published-example",
+    "published-preview",
+    "same-volume-restart",
+    "secret-scan"
+  ]
+}

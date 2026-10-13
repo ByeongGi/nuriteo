@@ -1,0 +1,40 @@
+#!/bin/sh
+set -eu
+
+root=${1:?usage: import-images BUNDLE_ROOT REGISTRY NAMESPACE CERT_DIR [AUTHFILE]}
+registry=${2:?registry host is required}
+namespace=${3:?registry namespace is required}
+cert_dir=${4:?registry cert directory is required}
+authfile=${5:-}
+
+[ "$(printf '%s\n' "$registry" | wc -l | tr -d ' ')" = 1 ] &&
+  printf '%s\n' "$registry" | grep -Eq '^[A-Za-z0-9][A-Za-z0-9.-]*(:[0-9]{1,5})?$' || {
+  echo 'registry must be a DNS host[:port] without scheme or path' >&2; exit 1;
+}
+[ "$(printf '%s\n' "$namespace" | wc -l | tr -d ' ')" = 1 ] &&
+  printf '%s\n' "$namespace" | grep -Eq '^[a-z0-9]+([._-][a-z0-9]+)*(/[a-z0-9]+([._-][a-z0-9]+)*)*$' || {
+  echo 'invalid registry namespace' >&2; exit 1;
+}
+[ -d "$cert_dir" ] || { echo 'registry certificate directory is missing' >&2; exit 1; }
+[ -z "$authfile" ] || [ -f "$authfile" ] || { echo 'registry auth file is missing' >&2; exit 1; }
+command -v skopeo >/dev/null 2>&1 || { echo 'skopeo is required' >&2; exit 1; }
+command -v jq >/dev/null 2>&1 || { echo 'jq is required' >&2; exit 1; }
+
+"$(dirname "$0")/verify" "$root" >/dev/null
+manifest="$root/release-manifest.json"
+temporary=$(mktemp "${TMPDIR:-/tmp}/nuriteo-image-import.XXXXXX")
+trap 'rm -f "$temporary"' EXIT HUP INT TERM
+jq -r '.release as $release | .artifacts[] | select(.kind == "oci-image") | [.id, .path, .ociDigest, $release] | @tsv' "$manifest" >"$temporary"
+
+while IFS="$(printf '\t')" read -r id relative expected_digest release; do
+  repository=$(printf '%s' "$id" | sed 's/-image$//')
+  destination="${registry}/${namespace}/${repository}:${release}"
+  set -- copy --preserve-digests --dest-cert-dir "$cert_dir"
+  [ -z "$authfile" ] || set -- "$@" --dest-authfile "$authfile"
+  skopeo "$@" "oci-archive:$root/$relative" "docker://$destination" >&2
+  set -- inspect --cert-dir "$cert_dir"
+  [ -z "$authfile" ] || set -- "$@" --authfile "$authfile"
+  actual_digest=$(skopeo "$@" "docker://$destination" | jq -r '.Digest')
+  [ "$actual_digest" = "$expected_digest" ] || { echo "registry digest drift: $id" >&2; exit 1; }
+  printf '%s@%s\n' "${registry}/${namespace}/${repository}" "$actual_digest"
+done <"$temporary"

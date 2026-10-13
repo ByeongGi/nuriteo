@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-28",
+  "status": "p24-reliability-policy",
+  "memory": {
+    "heapCeilingMiB": 256,
+    "source": "compat/performance-baseline.json#runtime-memory-heap-limit",
+    "enforcement": "node-worker-v8-limit-and-product-owned-browser-resource-contract",
+    "nodeWorkerV8OldGenerationLimitMiB": 256,
+    "guestWorkspaceLimitBytes": 268435456,
+    "browserWorkerHeapEnforcement": "unavailable-not-claimed",
+    "browserWorkerResourceObservation": "chrome-page-memory-and-worker-target-churn",
+    "browserWorkerResourceContract": "preflight-admission-wasm-constructor-workspace-watchdog",
+    "browserWorkerAdmissionLimitBytes": 268435456,
+    "browserWorkerWasmMaximumPages": 32768,
+    "browserWorkerWasmMaximumBytes": 2147483648
+  },
+  "timeouts": {
+    "installMs": 120000,
+    "cliWorkerMs": 90000,
+    "devServerIdleMs": 600000,
+    "previewRelayMs": 1500
+  },
+  "storage": {
+    "quotaBytesDefault": 268435456,
+    "evictionPrefixes": ["cache/", "packages/"],
+    "protectedPrefixes": ["projects/"],
+    "writerLeaseTtlMs": 30000
+  },
+  "soak": {
+    "bootRunTeardownIterations": 1000,
+    "installDevRestartIterationsDefault": 25,
+    "largeNodeModulesFileCount": 2500
+  },
+  "browserGrades": {
+    "chrome": "supported",
+    "edge": "supported",
+    "safari": "supported"
+  },
+  "browserGradeNotes": {
+    "chrome": "Primary gate browser with COOP/COEP and SharedArrayBuffer.",
+    "edge": "Microsoft Edge 155 desktop smoke passes COOP/COEP, SharedArrayBuffer, Service Worker activation, OPFS, and the retained Vite React preview.",
+    "safari": "Safari 26.6.2 desktop smoke passes COOP/COEP, SharedArrayBuffer, Service Worker preview routing, iframe rendering, OPFS reopen, and product quota recovery. iOS/mobile Safari is not covered."
+  },
+  "holdFixtures": []
+}

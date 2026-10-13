@@ -1,0 +1,158 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-27",
+  "scope": {
+    "goal": "SG25 service workflow fixture set (20) with pass or documented hold counts",
+    "total": 20,
+    "minimumPassOrHold": 14
+  },
+  "summary": {
+    "total": 20,
+    "pass": 19,
+    "hold": 1,
+    "passOrHold": 20,
+    "sg25": "pass"
+  },
+  "results": [
+    {
+      "id": "vite-official-template-react",
+      "status": "pass",
+      "score": 100,
+      "source": "compat/ecosystem-fixture-actual-product-results.json",
+      "notes": "Actual product workflow pass."
+    },
+    {
+      "id": "awe-templates-react-starter",
+      "status": "pass",
+      "score": 100,
+      "source": "compat/ecosystem-fixture-actual-product-results.json",
+      "notes": "Exact-revision Node worker actual-product workflow pass."
+    },
+    {
+      "id": "hvalette-react-vite-template",
+      "status": "pass",
+      "score": 100,
+      "source": "compat/ecosystem-fixture-actual-product-results.json",
+      "notes": "Actual product workflow pass."
+    },
+    {
+      "id": "gabbloquet-vite-react18",
+      "status": "pass",
+      "score": 100,
+      "source": "compat/ecosystem-fixture-actual-product-results.json",
+      "notes": "Actual product workflow pass."
+    },
+    {
+      "id": "sivamani18-vite-react-ts-boilerplate",
+      "status": "pass",
+      "score": 100,
+      "source": "compat/ecosystem-fixture-actual-product-results.json",
+      "notes": "Actual product workflow pass."
+    },
+    {
+      "id": "fuhouyu-homepage",
+      "status": "pass",
+      "score": 100,
+      "source": "compat/ecosystem-fixture-actual-product-results.json",
+      "notes": "Actual product workflow pass."
+    },
+    {
+      "id": "seongpil0948-react-dev-guide",
+      "status": "pass",
+      "score": 100,
+      "source": "compat/ecosystem-fixture-actual-product-results.json",
+      "notes": "Actual product workflow pass."
+    },
+    {
+      "id": "ravaniproshan-velorah-landing",
+      "status": "pass",
+      "score": 100,
+      "source": "compat/ecosystem-fixture-actual-product-results.json",
+      "notes": "Exact-revision Node worker actual-product workflow pass."
+    },
+    {
+      "id": "commencis-starter-react-vite",
+      "status": "pass",
+      "score": 100,
+      "source": "compat/ecosystem-fixture-actual-product-results.json",
+      "notes": "Actual product workflow pass."
+    },
+    {
+      "id": "r35007-vite-react-typescript",
+      "status": "pass",
+      "score": 100,
+      "source": "compat/ecosystem-fixture-actual-product-results.json",
+      "notes": "Exact-revision Node worker actual-product workflow pass."
+    },
+    {
+      "id": "local-vite-vue-fixture",
+      "status": "pass",
+      "score": 100,
+      "source": "tests/compatibility/frameworks/vite/vite-vue-svelte-actual.test.ts|tests/compatibility/frameworks/vite/vite-react-product-workflow.test.ts",
+      "notes": "Local service-workflow / adapter validation pass."
+    },
+    {
+      "id": "local-vite-svelte-fixture",
+      "status": "pass",
+      "score": 100,
+      "source": "tests/compatibility/frameworks/vite/vite-vue-svelte-actual.test.ts|tests/compatibility/frameworks/vite/vite-react-product-workflow.test.ts",
+      "notes": "Local service-workflow / adapter validation pass."
+    },
+    {
+      "id": "local-vite-vanilla-fixture",
+      "status": "pass",
+      "score": 100,
+      "source": "tests/compatibility/frameworks/vite/vite-vue-svelte-actual.test.ts|tests/compatibility/frameworks/vite/vite-react-product-workflow.test.ts",
+      "notes": "Local service-workflow / adapter validation pass."
+    },
+    {
+      "id": "local-vite-react-fixture",
+      "status": "pass",
+      "score": 100,
+      "source": "tests/compatibility/frameworks/vite/vite-vue-svelte-actual.test.ts|tests/compatibility/frameworks/vite/vite-react-product-workflow.test.ts",
+      "notes": "Local service-workflow / adapter validation pass."
+    },
+    {
+      "id": "preview-service-vite-react-template",
+      "status": "pass",
+      "score": 100,
+      "source": "packages/browser-host/test/project-onboarding.test.ts|apps/web/test/gate-project-runtime-browser.test.ts",
+      "notes": "Local service-workflow / adapter validation pass."
+    },
+    {
+      "id": "preview-service-vite-ts-template",
+      "status": "pass",
+      "score": 100,
+      "source": "packages/browser-host/test/project-onboarding.test.ts|apps/web/test/gate-project-runtime-browser.test.ts",
+      "notes": "Local service-workflow / adapter validation pass."
+    },
+    {
+      "id": "preview-service-minimal-npm-template",
+      "status": "pass",
+      "score": 100,
+      "source": "packages/browser-host/test/project-onboarding.test.ts|apps/web/test/gate-project-runtime-browser.test.ts",
+      "notes": "Local service-workflow / adapter validation pass."
+    },
+    {
+      "id": "preview-service-minimal-pnpm-template",
+      "status": "pass",
+      "score": 100,
+      "source": "packages/browser-host/test/project-onboarding.test.ts|apps/web/test/gate-project-runtime-browser.test.ts",
+      "notes": "Local service-workflow / adapter validation pass."
+    },
+    {
+      "id": "webpack-rspack-dev-workflow",
+      "status": "pass",
+      "score": 100,
+      "source": "compat/bundler-dev-workflow-results.json",
+      "notes": "Pinned Webpack and Rspack pass strict-CSP Chrome build, dev-server, HMR, restart, integrity recovery, teardown, and heap-budget gates; Rspack uses the validated WASI browser binding."
+    },
+    {
+      "id": "next-static-export-candidate",
+      "status": "hold",
+      "score": 25,
+      "source": "compat/nextjs-compatibility.json",
+      "notes": "Documented hold/candidate evaluation only; not product-supported."
+    }
+  ]
+}

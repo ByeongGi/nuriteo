@@ -1,0 +1,14 @@
+packages:
+  - "packages/*"
+  - "examples/*"
+  - "apps/*"
+
+overrides:
+  "postcss@<8.5.18": "8.5.29"
+  "sharp@<0.35.5": "0.35.5"
+  "source-map-js@<1.2.2": "1.2.2"
+
+allowBuilds:
+  bufferutil: false
+  esbuild: true
+  sharp: false

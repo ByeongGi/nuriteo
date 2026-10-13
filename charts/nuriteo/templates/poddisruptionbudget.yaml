@@ -1,0 +1,21 @@
+{{- range $component := list "core" "web" }}
+{{- $workload := index $.Values $component }}
+{{- if $workload.podDisruptionBudget.enabled }}
+{{- if gt (int $workload.podDisruptionBudget.minAvailable) (int $workload.replicas) }}
+{{- fail (printf "%s.podDisruptionBudget.minAvailable must not exceed %s.replicas" $component $component) }}
+{{- end }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "nuriteo.fullname" $ }}-{{ $component }}
+  labels:
+    {{- include "nuriteo.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: {{ $component }}
+spec:
+  minAvailable: {{ $workload.podDisruptionBudget.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "nuriteo.selectorLabels" (dict "root" $ "component" $component) | nindent 6 }}
+---
+{{- end }}
+{{- end }}

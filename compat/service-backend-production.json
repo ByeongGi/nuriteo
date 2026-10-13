@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "status": "candidate",
+  "capabilities": {
+    "signedSessions": true,
+    "externalIdentityAdapter": true,
+    "tenantIsolation": true,
+    "databaseAdapter": true,
+    "objectStorageAdapter": true,
+    "crossInstanceResume": true,
+    "projectListSaveResume": true,
+    "previewUiListSaveResumeShareFork": true,
+    "shareFork": true,
+    "shareTokenHashing": true,
+    "shareRotationRevocation": true,
+    "acl": true,
+    "audit": true,
+    "idempotentUsageIngestion": true,
+    "billing": false
+  },
+  "externalRequirements": [
+    "Deploy an OIDC/session IdentityProviderAdapter or configure the built-in HMAC provider with a secret manager.",
+    "Deploy a transactional ProductionDatabaseAdapter for multi-node writes.",
+    "Deploy a replicated ProductionObjectStorageAdapter for managed cloud durability.",
+    "Select billing policy and provider; usage events are collected but never billed."
+  ],
+  "gate": {
+    "test": "node tests/service-backend/production-backend.test.ts",
+    "check": "node tooling/checks/check-service-backend-production.ts"
+  }
+}

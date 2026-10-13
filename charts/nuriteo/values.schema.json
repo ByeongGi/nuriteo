@@ -1,0 +1,758 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "title": "NURITEO Helm values",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "global",
+    "release",
+    "images",
+    "externalUrl",
+    "preview",
+    "ingress",
+    "runtimeConfig",
+    "rollout",
+    "serviceAccount",
+    "networkPolicy",
+    "jobs",
+    "toolbox",
+    "backupSchedule",
+    "backupStorage",
+    "restore",
+    "core",
+    "observability",
+    "web",
+    "postgresql",
+    "objectStorage",
+    "applicationSecrets",
+    "bootstrapAdmin"
+  ],
+  "properties": {
+    "global": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["imageRegistry", "imagePullSecrets"],
+      "properties": {
+        "imageRegistry": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[^/@]+(?:/[^/@]+)*$",
+          "description": "Registry prefix. Air-gapped installs replace this with the internal registry and never fall back."
+        },
+        "imagePullSecrets": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 253,
+            "pattern": "^[a-z0-9](?:[-a-z0-9.]*[a-z0-9])?$"
+          }
+        }
+      }
+    },
+    "release": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["lineage", "apiVersion", "bundleFormat"],
+      "properties": {
+        "lineage": { "const": "nuriteo-self-hosted-v1" },
+        "apiVersion": { "const": "1.0.0" },
+        "bundleFormat": { "const": "project-bundle-v1" }
+      }
+    },
+    "images": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["server", "web", "operations"],
+      "properties": {
+        "server": { "$ref": "#/definitions/image" },
+        "web": { "$ref": "#/definitions/image" },
+        "operations": { "$ref": "#/definitions/image" }
+      }
+    },
+    "externalUrl": {
+      "type": "string",
+      "format": "uri",
+      "maxLength": 264,
+      "pattern": "^https://(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?::[0-9]{1,5})?/?$",
+      "description": "Canonical HTTPS origin. Subpath deployment is not supported."
+    },
+    "ingress": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "className", "tls", "readiness"],
+      "properties": {
+        "enabled": { "type": "boolean", "default": false },
+        "className": { "$ref": "#/definitions/optionalKubernetesName" },
+        "tls": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["existingSecretName"],
+          "properties": {
+            "existingSecretName": { "$ref": "#/definitions/optionalKubernetesName" }
+          }
+        },
+        "readiness": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["wildcardDns", "wildcardTls", "originalHost", "webSocket", "crossOrigin", "hmr"],
+          "properties": {
+            "wildcardDns": { "type": "boolean", "default": false },
+            "wildcardTls": { "type": "boolean", "default": false },
+            "originalHost": { "type": "boolean", "default": false },
+            "webSocket": { "type": "boolean", "default": false },
+            "crossOrigin": { "type": "boolean", "default": false },
+            "hmr": { "type": "boolean", "default": false }
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "enabled": { "const": true } } },
+          "then": {
+            "properties": {
+              "className": { "$ref": "#/definitions/kubernetesName" },
+              "tls": {
+                "properties": {
+                  "existingSecretName": { "$ref": "#/definitions/kubernetesName" }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "preview": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["baseDomain", "wildcardReady"],
+      "properties": {
+        "baseDomain": { "$ref": "#/definitions/dnsName" },
+        "wildcardReady": { "type": "boolean", "default": false }
+      }
+    },
+    "runtimeConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["create", "existingConfigMap"],
+      "properties": {
+        "create": {
+          "type": "boolean",
+          "description": "Create the chart-owned non-secret runtime ConfigMap. Set false to reference an operator-owned ConfigMap."
+        },
+        "existingConfigMap": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "revision"],
+          "properties": {
+            "name": { "$ref": "#/definitions/optionalKubernetesName" },
+            "revision": { "$ref": "#/definitions/optionalRevision" }
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "create": { "const": false } } },
+          "then": {
+            "properties": {
+              "existingConfigMap": {
+                "properties": {
+                  "name": { "$ref": "#/definitions/kubernetesName" },
+                  "revision": { "$ref": "#/definitions/revision" }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "rollout": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["externalSecretsRevision"],
+      "properties": {
+        "externalSecretsRevision": {
+          "$ref": "#/definitions/revision",
+          "description": "Opaque generation changed by the operator after rotating referenced Secrets. It must not be derived from secret contents."
+        }
+      }
+    },
+    "serviceAccount": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "automountServiceAccountToken"],
+      "properties": {
+        "name": { "$ref": "#/definitions/optionalKubernetesName" },
+        "automountServiceAccountToken": { "type": "boolean", "const": false }
+      }
+    },
+    "networkPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "ingressController", "dns", "externalEgress"],
+      "properties": {
+        "enabled": { "type": "boolean", "default": false },
+        "ingressController": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["namespaceLabels", "podLabels"],
+          "properties": {
+            "namespaceLabels": { "$ref": "#/definitions/labelSelector" },
+            "podLabels": { "$ref": "#/definitions/labelSelector" }
+          }
+        },
+        "dns": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["namespaceLabels", "podLabels"],
+          "properties": {
+            "namespaceLabels": { "$ref": "#/definitions/labelSelector" },
+            "podLabels": { "$ref": "#/definitions/labelSelector" }
+          }
+        },
+        "externalEgress": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["cidrBlocks", "tcpPorts"],
+          "properties": {
+            "cidrBlocks": {
+              "type": "array",
+              "minItems": 0,
+              "maxItems": 64,
+              "uniqueItems": true,
+              "items": { "type": "string", "minLength": 3, "maxLength": 64, "pattern": "^[0-9a-fA-F:.]+/[0-9]{1,3}$" }
+            },
+            "tcpPorts": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 32,
+              "uniqueItems": true,
+              "items": { "type": "integer", "minimum": 1, "maximum": 65535 }
+            }
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "enabled": { "const": true } }, "required": ["enabled"] },
+          "then": {
+            "properties": {
+              "externalEgress": { "properties": { "cidrBlocks": { "minItems": 1 } } }
+            }
+          }
+        }
+      ]
+    },
+    "jobs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["preflight", "migration", "ttlSecondsAfterFinished"],
+      "properties": {
+        "preflight": { "$ref": "#/definitions/hookJob" },
+        "migration": { "$ref": "#/definitions/hookJob" },
+        "ttlSecondsAfterFinished": { "type": "integer", "minimum": 60, "maximum": 604800 }
+      }
+    },
+    "toolbox": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "operation", "backupId", "activeDeadlineSeconds", "backoffLimit", "ttlSecondsAfterFinished"],
+      "properties": {
+        "enabled": { "type": "boolean", "default": false },
+        "operation": { "type": "string", "enum": ["create", "list", "verify"] },
+        "backupId": { "$ref": "#/definitions/optionalUuid" },
+        "activeDeadlineSeconds": { "$ref": "#/definitions/operationDeadline" },
+        "backoffLimit": { "$ref": "#/definitions/jobBackoffLimit" },
+        "ttlSecondsAfterFinished": { "$ref": "#/definitions/jobTtl" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "enabled": { "const": true }, "operation": { "const": "verify" } }, "required": ["enabled", "operation"] },
+          "then": { "properties": { "backupId": { "$ref": "#/definitions/uuid" } } }
+        },
+        {
+          "if": { "properties": { "operation": { "enum": ["create", "list"] } }, "required": ["operation"] },
+          "then": { "properties": { "backupId": { "const": "" } } }
+        }
+      ]
+    },
+    "backupSchedule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "schedule", "timeZone", "startingDeadlineSeconds", "activeDeadlineSeconds", "backoffLimit", "successfulJobsHistoryLimit", "failedJobsHistoryLimit"],
+      "properties": {
+        "enabled": { "type": "boolean", "default": false },
+        "schedule": { "type": "string", "minLength": 9, "maxLength": 128, "pattern": "^(?:\\S+\\s+){4}\\S+$" },
+        "timeZone": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[A-Za-z0-9_+.-]+(?:/[A-Za-z0-9_+.-]+)*$" },
+        "startingDeadlineSeconds": { "type": "integer", "minimum": 60, "maximum": 86400 },
+        "activeDeadlineSeconds": { "$ref": "#/definitions/operationDeadline" },
+        "backoffLimit": { "$ref": "#/definitions/jobBackoffLimit" },
+        "successfulJobsHistoryLimit": { "$ref": "#/definitions/historyLimit" },
+        "failedJobsHistoryLimit": { "$ref": "#/definitions/historyLimit" }
+      }
+    },
+    "backupStorage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["endpoint", "region", "bucket", "prefix", "addressingStyle", "sse", "kmsKeyId", "scratchSizeLimit", "existingSecret"],
+      "properties": {
+        "endpoint": { "type": "string", "format": "uri", "pattern": "^https://" },
+        "region": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "bucket": { "type": "string", "minLength": 3, "maxLength": 63 },
+        "prefix": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "^[^/].*[^/]$" },
+        "addressingStyle": { "type": "string", "enum": ["path", "virtual-hosted"] },
+        "sse": { "type": "string", "enum": ["s3", "kms", "provider-default"] },
+        "kmsKeyId": { "type": "string", "maxLength": 2048 },
+        "scratchSizeLimit": { "$ref": "#/definitions/quantity" },
+        "existingSecret": { "$ref": "#/definitions/objectStorageSecret" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "sse": { "const": "kms" } }, "required": ["sse"] },
+          "then": { "properties": { "kmsKeyId": { "type": "string", "minLength": 1 } } },
+          "else": { "properties": { "kmsKeyId": { "const": "" } } }
+        }
+      ]
+    },
+    "restore": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "restorePointId", "target", "fence", "activeDeadlineSeconds", "backoffLimit", "ttlSecondsAfterFinished"],
+      "properties": {
+        "enabled": { "type": "boolean", "default": false },
+        "restorePointId": { "$ref": "#/definitions/optionalUuid" },
+        "target": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["identity", "postgresql", "objectStorage"],
+          "properties": {
+            "identity": { "$ref": "#/definitions/optionalRevision" },
+            "postgresql": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["existingSecret"],
+              "properties": {
+                "existingSecret": { "$ref": "#/definitions/databaseSecret" }
+              }
+            },
+            "objectStorage": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["endpoint", "region", "bucket", "addressingStyle", "credentialProvider", "existingSecret"],
+              "properties": {
+                "endpoint": { "type": "string", "maxLength": 2048 },
+                "region": { "type": "string", "minLength": 1, "maxLength": 128 },
+                "bucket": { "type": "string", "maxLength": 63 },
+                "addressingStyle": { "type": "string", "enum": ["path", "virtual-hosted"] },
+                "credentialProvider": { "type": "string", "enum": ["static", "workload", "default"] },
+                "existingSecret": { "$ref": "#/definitions/objectStorageSecret" }
+              }
+            }
+          }
+        },
+        "fence": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["maintenanceModeAcknowledged", "writesDrainedAcknowledged", "targetValidatedAcknowledged"],
+          "properties": {
+            "maintenanceModeAcknowledged": { "type": "boolean", "default": false },
+            "writesDrainedAcknowledged": { "type": "boolean", "default": false },
+            "targetValidatedAcknowledged": { "type": "boolean", "default": false }
+          }
+        },
+        "activeDeadlineSeconds": { "$ref": "#/definitions/operationDeadline" },
+        "backoffLimit": { "$ref": "#/definitions/jobBackoffLimit" },
+        "ttlSecondsAfterFinished": { "$ref": "#/definitions/jobTtl" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "enabled": { "const": true } }, "required": ["enabled"] },
+          "then": {
+            "properties": {
+              "restorePointId": { "$ref": "#/definitions/uuid" },
+              "target": {
+                "properties": {
+                  "identity": { "$ref": "#/definitions/revision" },
+                  "postgresql": {
+                    "properties": {
+                      "existingSecret": {
+                        "properties": { "name": { "$ref": "#/definitions/kubernetesName" } }
+                      }
+                    }
+                  },
+                  "objectStorage": {
+                    "properties": {
+                      "endpoint": { "type": "string", "format": "uri", "pattern": "^https://" },
+                      "bucket": { "type": "string", "minLength": 3 }
+                    }
+                  }
+                }
+              },
+              "fence": {
+                "properties": {
+                  "maintenanceModeAcknowledged": { "const": true },
+                  "writesDrainedAcknowledged": { "const": true },
+                  "targetValidatedAcknowledged": { "const": true }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "observability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["logFormat", "logLevel", "otlp"],
+      "properties": {
+        "logFormat": { "type": "string", "enum": ["text", "json"] },
+        "logLevel": { "type": "string", "enum": ["error", "warn", "info", "debug"] },
+        "otlp": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["endpoint", "protocol", "tracesEnabled", "metricsEnabled", "logsEnabled", "timeoutMillis", "queueSize", "batchSize", "traceSampleRatio", "logMinLevel", "existingSecret"],
+          "properties": {
+            "endpoint": { "type": "string", "maxLength": 2048, "pattern": "^(?:|https://[^?#]+)$" },
+            "protocol": { "type": "string", "enum": ["grpc", "http/protobuf"] },
+            "tracesEnabled": { "type": "boolean", "default": false },
+            "metricsEnabled": { "type": "boolean", "default": false },
+            "logsEnabled": { "type": "boolean", "default": false },
+            "timeoutMillis": { "type": "integer", "minimum": 100, "maximum": 10000 },
+            "queueSize": { "type": "integer", "minimum": 64, "maximum": 4096 },
+            "batchSize": { "type": "integer", "minimum": 1, "maximum": 512 },
+            "traceSampleRatio": { "type": "number", "minimum": 0, "maximum": 1 },
+            "logMinLevel": { "type": "string", "enum": ["error", "warn", "info", "debug"] },
+            "existingSecret": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["name", "authorizationKey", "caKey"],
+              "properties": {
+                "name": { "$ref": "#/definitions/optionalKubernetesName" },
+                "authorizationKey": { "$ref": "#/definitions/secretKey" },
+                "caKey": { "$ref": "#/definitions/optionalSecretKey" }
+              }
+            }
+          },
+          "allOf": [
+            {
+              "if": {
+                "anyOf": [
+                  { "properties": { "tracesEnabled": { "const": true } } },
+                  { "properties": { "metricsEnabled": { "const": true } } },
+                  { "properties": { "logsEnabled": { "const": true } } }
+                ]
+              },
+              "then": { "properties": { "endpoint": { "type": "string", "minLength": 9, "pattern": "^https://[^?#]+$" } } }
+            }
+          ]
+        }
+      }
+    },
+    "core": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["replicas", "service", "managementPort", "terminationGracePeriodSeconds", "podDisruptionBudget"],
+      "properties": {
+        "replicas": { "type": "integer", "minimum": 1, "maximum": 100 },
+        "service": { "$ref": "#/definitions/service" },
+        "managementPort": { "type": "integer", "minimum": 1024, "maximum": 65535 },
+        "terminationGracePeriodSeconds": { "type": "integer", "minimum": 30, "maximum": 300 },
+        "podDisruptionBudget": { "$ref": "#/definitions/podDisruptionBudget" }
+      }
+    },
+    "web": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["replicas", "service", "terminationGracePeriodSeconds", "podDisruptionBudget"],
+      "properties": {
+        "replicas": { "type": "integer", "minimum": 1, "maximum": 100 },
+        "service": { "$ref": "#/definitions/service" },
+        "terminationGracePeriodSeconds": { "type": "integer", "minimum": 10, "maximum": 300 },
+        "podDisruptionBudget": { "$ref": "#/definitions/podDisruptionBudget" }
+      }
+    },
+    "postgresql": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["existingSecret"],
+      "properties": {
+        "existingSecret": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "databaseUrlKey", "caKey"],
+          "properties": {
+            "name": { "$ref": "#/definitions/kubernetesName" },
+            "databaseUrlKey": { "$ref": "#/definitions/secretKey" },
+            "caKey": { "$ref": "#/definitions/optionalSecretKey" }
+          }
+        }
+      }
+    },
+    "objectStorage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "endpoint", "region", "bucket", "addressingStyle", "credentialProvider", "existingSecret"],
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["external"],
+          "description": "K8S-001 supports the production external S3 contract. A bundled quickstart is introduced only by its owning task."
+        },
+        "endpoint": {
+          "type": "string",
+          "format": "uri",
+          "pattern": "^https://[^@/?#\\s]+(?::[0-9]{1,5})?(?:/[^@?#\\s]*)?/?$"
+        },
+        "region": { "type": "string", "minLength": 1, "maxLength": 63, "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$" },
+        "bucket": { "type": "string", "minLength": 3, "maxLength": 63, "pattern": "^[a-z0-9][a-z0-9.-]*[a-z0-9]$" },
+        "addressingStyle": { "type": "string", "enum": ["path", "virtual-hosted"] },
+        "credentialProvider": { "type": "string", "enum": ["static", "workload", "default"] },
+        "existingSecret": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "accessKeyIdKey", "secretAccessKeyKey", "sessionTokenKey", "caKey"],
+          "properties": {
+            "name": { "$ref": "#/definitions/kubernetesName" },
+            "accessKeyIdKey": { "$ref": "#/definitions/optionalSecretKey" },
+            "secretAccessKeyKey": { "$ref": "#/definitions/optionalSecretKey" },
+            "sessionTokenKey": { "$ref": "#/definitions/optionalSecretKey" },
+            "caKey": { "$ref": "#/definitions/optionalSecretKey" }
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "credentialProvider": { "const": "static" } } },
+          "then": {
+            "properties": {
+              "existingSecret": {
+                "properties": {
+                  "accessKeyIdKey": { "minLength": 1 },
+                  "secretAccessKeyKey": { "minLength": 1 }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "applicationSecrets": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["existingSecret"],
+      "properties": {
+        "existingSecret": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "masterKeyKey", "saveIdempotencyKey", "previewSigningKey"],
+          "properties": {
+            "name": { "$ref": "#/definitions/kubernetesName" },
+            "masterKeyKey": { "$ref": "#/definitions/secretKey" },
+            "saveIdempotencyKey": { "$ref": "#/definitions/secretKey" },
+            "previewSigningKey": { "$ref": "#/definitions/secretKey" }
+          }
+        }
+      }
+    },
+    "bootstrapAdmin": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "email", "name", "existingSecret"],
+      "properties": {
+        "enabled": { "type": "boolean", "default": false },
+        "email": { "type": "string" },
+        "name": { "type": "string" },
+        "existingSecret": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "passwordKey"],
+          "properties": {
+            "name": { "$ref": "#/definitions/optionalKubernetesName" },
+            "passwordKey": { "$ref": "#/definitions/secretKey" }
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "enabled": { "const": true } } },
+          "then": {
+            "properties": {
+              "email": { "type": "string", "format": "email" },
+              "name": { "type": "string", "minLength": 1, "maxLength": 100 },
+              "existingSecret": { "properties": { "name": { "$ref": "#/definitions/kubernetesName" } } }
+            }
+          }
+        }
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "preview": {
+            "properties": { "wildcardReady": { "const": true } }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "ingress": {
+            "properties": {
+              "readiness": {
+                "properties": {
+                  "wildcardDns": { "const": true },
+                  "wildcardTls": { "const": true },
+                  "originalHost": { "const": true },
+                  "webSocket": { "const": true },
+                  "crossOrigin": { "const": true },
+                  "hmr": { "const": true }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "definitions": {
+    "labelSelector": {
+      "type": "object",
+      "minProperties": 1,
+      "maxProperties": 16,
+      "propertyNames": { "pattern": "^(?:[A-Za-z0-9][-A-Za-z0-9_.]*/)?[A-Za-z0-9][-A-Za-z0-9_.]*$", "maxLength": 253 },
+      "additionalProperties": { "type": "string", "minLength": 1, "maxLength": 63, "pattern": "^[A-Za-z0-9][-A-Za-z0-9_.]*$" }
+    },
+    "podDisruptionBudget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "minAvailable"],
+      "properties": {
+        "enabled": { "type": "boolean", "default": true },
+        "minAvailable": { "type": "integer", "minimum": 1, "maximum": 100 }
+      }
+    },
+    "quantity": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]*(?:Ei|Pi|Ti|Gi|Mi|Ki|E|P|T|G|M|K)?$"
+    },
+    "databaseSecret": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "databaseUrlKey", "caKey"],
+      "properties": {
+        "name": { "$ref": "#/definitions/optionalKubernetesName" },
+        "databaseUrlKey": { "$ref": "#/definitions/kubernetesName" },
+        "caKey": { "$ref": "#/definitions/optionalKubernetesName" }
+      }
+    },
+    "objectStorageSecret": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "accessKeyIdKey", "secretAccessKeyKey", "sessionTokenKey", "caKey"],
+      "properties": {
+        "name": { "$ref": "#/definitions/optionalKubernetesName" },
+        "accessKeyIdKey": { "$ref": "#/definitions/optionalKubernetesName" },
+        "secretAccessKeyKey": { "$ref": "#/definitions/optionalKubernetesName" },
+        "sessionTokenKey": { "$ref": "#/definitions/optionalKubernetesName" },
+        "caKey": { "$ref": "#/definitions/optionalKubernetesName" }
+      }
+    },
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "optionalUuid": {
+      "type": "string",
+      "pattern": "^(?:|[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$"
+    },
+    "operationDeadline": {
+      "type": "integer",
+      "minimum": 60,
+      "maximum": 86400
+    },
+    "jobBackoffLimit": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 6
+    },
+    "jobTtl": {
+      "type": "integer",
+      "minimum": 60,
+      "maximum": 604800
+    },
+    "historyLimit": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 10
+    },
+    "hookJob": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "backoffLimit", "activeDeadlineSeconds"],
+      "properties": {
+        "enabled": { "const": true },
+        "backoffLimit": { "type": "integer", "minimum": 0, "maximum": 6 },
+        "activeDeadlineSeconds": { "type": "integer", "minimum": 30, "maximum": 3600 }
+      }
+    },
+    "service": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["port"],
+      "properties": {
+        "port": { "type": "integer", "minimum": 1, "maximum": 65535 }
+      }
+    },
+    "image": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository", "digest", "pullPolicy"],
+      "properties": {
+        "repository": { "type": "string", "minLength": 1, "pattern": "^[^@]+$" },
+        "digest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+        "pullPolicy": { "type": "string", "enum": ["IfNotPresent", "Always", "Never"] }
+      }
+    },
+    "kubernetesName": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 253,
+      "pattern": "^[a-z0-9](?:[-a-z0-9.]*[a-z0-9])?$"
+    },
+    "optionalKubernetesName": {
+      "type": "string",
+      "maxLength": 253,
+      "pattern": "^(?:|[a-z0-9](?:[-a-z0-9.]*[a-z0-9])?)$"
+    },
+    "secretKey": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 253,
+      "pattern": "^[A-Za-z0-9._-]+$"
+    },
+    "optionalSecretKey": {
+      "type": "string",
+      "maxLength": 253,
+      "pattern": "^(?:|[A-Za-z0-9._-]+)$"
+    },
+    "revision": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9._-]+$"
+    },
+    "optionalRevision": {
+      "type": "string",
+      "maxLength": 128,
+      "pattern": "^(?:|[A-Za-z0-9._-]+)$"
+    },
+    "dnsName": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 198,
+      "pattern": "^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$"
+    }
+  }
+}

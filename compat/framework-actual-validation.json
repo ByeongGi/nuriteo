@@ -1,0 +1,109 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-27",
+  "scope": {
+    "goal": "Record actual worker-backed framework validation results for SG25.",
+    "productRuntime": "browser-guest-node-runtime"
+  },
+  "results": [
+    {
+      "framework": "vite-react",
+      "grade": "supported",
+      "validation": "actual-worker-backed",
+      "status": "pass",
+      "evidence": [
+        "tests/compatibility/frameworks/vite/vite-react-product-workflow.test.ts",
+        "compat/framework-conformance.json#vite-react-product-workflow"
+      ],
+      "notes": "Product-supported. Install/dev/preview/edit-HMR/build/reload recovery covered by worker-backed product workflow."
+    },
+    {
+      "framework": "vite-vue",
+      "publicName": "Vite Vue runtime",
+      "grade": "supported",
+      "validation": "actual-worker-backed",
+      "status": "pass",
+      "evidence": [
+        "tests/compatibility/frameworks/vite/vite-react-product-workflow.test.ts",
+        "tests/compatibility/frameworks/vite/vite-vue-svelte-actual.test.ts",
+        "tests/fixtures/vite-vue/package.json",
+        "compat/framework-product-support.json"
+      ],
+      "notes": "Product-supported. The local runtime fixture is tied to an exact Vite template-vue upstream revision and passes npm/pnpm install, dev/preview, edit-HMR, build, reload recovery, and framework performance budgets."
+    },
+    {
+      "framework": "vite-svelte",
+      "publicName": "Vite Svelte",
+      "grade": "supported",
+      "validation": "actual-worker-backed",
+      "status": "pass",
+      "evidence": [
+        "tests/compatibility/frameworks/vite/vite-react-product-workflow.test.ts",
+        "tests/compatibility/frameworks/vite/vite-vue-svelte-actual.test.ts",
+        "tests/fixtures/vite-svelte/package.json",
+        "compat/framework-product-support.json"
+      ],
+      "notes": "Product-supported. The local runtime fixture is tied to an exact Vite template-svelte upstream revision and passes npm/pnpm install, dev/preview, edit-HMR, build, reload recovery, plugin loading, and framework performance budgets."
+    },
+    {
+      "framework": "nextjs",
+      "grade": "product-preview",
+      "validation": "product-preview-adapter",
+      "status": "pass",
+      "evidence": [
+        "compat/nextjs-compatibility.json",
+        "tests/compatibility/frameworks/vite/nextjs-compatibility.test.ts",
+        "docs/productization/public-compatibility-matrix.md"
+      ],
+      "notes": "App Router preview adapter remains product-supported alongside the pinned full-runtime lane."
+    },
+    {
+      "framework": "nextjs-full-runtime",
+      "grade": "product-supported",
+      "validation": "actual-guest-runtime",
+      "status": "pass",
+      "evidence": [
+        "compat/nextjs-compatibility.json",
+        "apps/web/test/gate-project-runtime-browser.test.ts",
+        "apps/web/test/preview-next-subdomain-browser.test.ts",
+        "docs/productization/nextjs-product-support-target.md"
+      ],
+      "notes": "Pinned Next 15.5.26 real CLI dev/HMR/build/start/restart and full feature coverage pass in strict-CSP Chrome with version-matched WASM SWC."
+    },
+    {
+      "framework": "webpack-dev-workflow",
+      "grade": "supported",
+      "validation": "actual-browser-worker",
+      "status": "pass",
+      "evidence": [
+        "compat/bundler-dev-workflow-results.json",
+        "tests/compatibility/frameworks/bundlers/bundler-candidate-workflow.test.ts",
+        "tests/compatibility/frameworks/bundlers/bundler-candidate-workflow.test.ts"
+      ],
+      "notes": "Pinned Webpack 5.111.0, webpack-cli 7.2.3, and webpack-dev-server 5.2.2 pass real build, dev-server, HMR, restart, integrity recovery, teardown, and heap-budget coverage in strict-CSP Chrome using the complete static factory graph."
+    },
+    {
+      "framework": "rspack-dev-workflow",
+      "grade": "supported",
+      "validation": "actual-browser-worker",
+      "status": "pass",
+      "evidence": [
+        "compat/bundler-dev-workflow-results.json",
+        "tests/compatibility/frameworks/bundlers/bundler-candidate-workflow.test.ts",
+        "tests/compatibility/frameworks/bundlers/bundler-candidate-workflow.test.ts"
+      ],
+      "notes": "Pinned Rspack 2.2.4 passes real WASI-backed build, dev-server, HMR, restart, integrity recovery, nested-worker teardown, and heap-budget coverage in strict-CSP Chrome; the native binding remains excluded."
+    }
+  ],
+  "gate": {
+    "id": "SG25-frameworks",
+    "status": "pass",
+    "requirements": [
+      "vite-react remains supported",
+      "vue and svelte both have actual worker-backed validation records",
+      "vue and svelte are product-supported through fixtures tied to exact-revision public template upstreams",
+      "webpack and rspack have exact-revision strict-CSP browser-worker product evidence",
+      "nextjs preview-adapter and pinned full-runtime product grades are explicit"
+    ]
+  }
+}

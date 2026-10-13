@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "taskId": "REL-003",
+  "version": "1.0.0",
+  "chart": "charts/nuriteo",
+  "distribution": "OCI",
+  "binding": "release/ga/artifacts/nuriteo-1.0.0.chart-images.json",
+  "requiredPlatforms": ["linux/amd64", "linux/arm64"],
+  "requiredRoles": ["server", "web", "operations"],
+  "signing": "Sigstore keyless OCI chart digest"
+}

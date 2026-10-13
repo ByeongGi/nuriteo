@@ -1,0 +1,140 @@
+{
+  "schemaVersion": 1,
+  "measuredAt": "2026-09-27",
+  "runtime": "browser-guest-node-runtime",
+  "securityBoundary": "strict-csp-no-unsafe-eval",
+  "supportDecision": "supported",
+  "factoryInvestigation": {
+    "existingPath": "The Yarn factory is a single integrity-pinned self-contained bundle transformed into one static ESM function.",
+    "implementedRuntimeApis": [
+      "StaticCjsFactoryRegistry keyed by canonical module path with factory and source SHA-256 metadata",
+      "CLI evaluator registry propagation across direct, isolated, and worker-backed execution with missing-factory diagnostics",
+      "WasmAdapterRegistry async import provider and same-origin worker asset resolver",
+      "Chrome strict-CSP execution proof without unsafe-eval"
+    ],
+    "webpackGap": null,
+    "rspackGap": null,
+    "remainingArtifacts": [],
+    "implementedArtifacts": [
+      "Integrity-checked static factory and workspace snapshots for the complete pinned Webpack and Rspack CLI/dev-server graphs",
+      "Static Tapable hook execution and pinned schema-validation policy without unsafe-eval",
+      "Rspack emnapi/WASI browser binding, module, nested worker and filesystem write-through bridge",
+      "Loopback HTTP/WebSocket serving with changed-path invalidation for real HMR output"
+    ]
+  },
+  "results": [
+    {
+      "bundler": "webpack",
+      "grade": "supported",
+      "productSupport": true,
+      "fixture": {
+        "repository": "https://github.com/webpack/webpack",
+        "revision": "92561183fc7cf44dce57f9d05b4819ba7693c961",
+        "tag": "v5.111.0",
+        "subdirectory": "examples/hot-module-replacement"
+      },
+      "dependencies": [
+        {
+          "name": "webpack",
+          "version": "5.111.0",
+          "role": "bundler",
+          "integrity": "sha512-A2R74kfE6b3eLKS91iZiol03Ebx7avmJJBOyiP+4LePW9NNeNJGQkKeSQos4dk6R4H0YAMYlv+aOrs1CyWT3eA=="
+        },
+        {
+          "name": "webpack-cli",
+          "version": "7.2.3",
+          "role": "cli",
+          "integrity": "sha512-vDFU7jrfCctnN7jJQWPl+V26B51GLp11prVZXg50oeonsgeBzSTJEWmXkjHsOjTgMjlPOQM8GWLh33X9RN/0ow=="
+        },
+        {
+          "name": "webpack-dev-server",
+          "version": "5.2.2",
+          "role": "dev-server",
+          "integrity": "sha512-QcQ72gh8a+7JO63TAx/6XZf/CWhgMzu5m0QirvPfGvptOusAxG12w2+aua1Jkjr7hzaWDnJ2n6JFeexMHI+Zjg=="
+        }
+      ],
+      "measurements": {
+        "install": "pass-exact-version-and-sri",
+        "cliBootstrap": "pass-strict-csp-static-factory",
+        "devServer": "pass-loopback-port-bind",
+        "serverReady": "pass",
+        "preview": "pass-served-and-production-bundle-executed",
+        "sourceEdit": "pass-write-through",
+        "update": "pass-invalid-hash-ok-and-updated-asset",
+        "productionBuild": "pass-real-dist-output",
+        "teardown": "pass-no-worker-target-or-listener-leak",
+        "restartRecovery": "pass-fresh-worker",
+        "tamperRecovery": "pass-exact-factory-integrity-diagnostic",
+        "cancellation": "pass-worker-termination",
+        "resourceBound": "pass-browser-heap-under-800-mib-delta"
+      },
+      "blockers": []
+    },
+    {
+      "bundler": "rspack",
+      "grade": "supported",
+      "productSupport": true,
+      "fixture": {
+        "repository": "https://github.com/web-infra-dev/rspack",
+        "revision": "ccc3c0e56a82343c1da7e151a9b3c40d67e1c872",
+        "tag": "v2.2.4",
+        "subdirectory": "examples/basic"
+      },
+      "dependencies": [
+        {
+          "name": "@rspack/core",
+          "version": "2.2.4",
+          "role": "bundler",
+          "integrity": "sha512-p8/w2i3viGQDVaqbHZtKpBwQNG7rY+Bf8iwu3i+d4KHwC1+VMLc4fBD30qU+cAHuUtsdx15sicvTVz3CniYOlg=="
+        },
+        {
+          "name": "@rspack/cli",
+          "version": "2.2.4",
+          "role": "cli",
+          "integrity": "sha512-14ItRehZ983xA9g7MD+enl8/KYWZuuz9LJchTHxHvQ8MOVouKk7h0J06LrzH2b99dAAKH/wO3ojkCpOB9XSdFQ=="
+        },
+        {
+          "name": "@rspack/dev-server",
+          "version": "1.2.1",
+          "role": "dev-server",
+          "integrity": "sha512-e/ARvskYn2Qdd02qLvc0i6H9BnOmzP0xGHS2XCr7GZ3t2k5uC5ZlLkeN1iEebU0FkAW+6ot89NahFo3nupKuww=="
+        },
+        {
+          "name": "@rspack/binding",
+          "version": "2.2.4",
+          "role": "binding",
+          "integrity": "sha512-KoH5Wofyt1+egnqWF3pr8ItiYQiLgrHYLHOAn4YpzIMsGc8zDur3dCIhrhJ1uhbD3O7zkKqav4he3bo1kAmX9Q=="
+        },
+        {
+          "name": "@rspack/binding-wasm32-wasi",
+          "version": "2.2.4",
+          "role": "wasm-binding",
+          "integrity": "sha512-Ak0PYNbyQd/0d7xsuCCBvc/V9+S8+NoHHv5dzlHepa6udSF7zKDxv9MxRMdhIIBrgn+8GMHQb3ohwW1XjzmONg=="
+        }
+      ],
+      "measurements": {
+        "install": "pass-exact-version-and-sri",
+        "cliBootstrap": "pass-strict-csp-static-factory",
+        "devServer": "pass-loopback-port-bind",
+        "serverReady": "pass",
+        "preview": "pass-served-and-production-bundle-executed",
+        "sourceEdit": "pass-js-and-wasi-write-through",
+        "update": "pass-invalid-hash-ok-and-updated-asset",
+        "productionBuild": "pass-real-wasi-dist-output",
+        "teardown": "pass-no-worker-target-or-listener-leak",
+        "restartRecovery": "pass-fresh-worker",
+        "tamperRecovery": "pass-exact-factory-integrity-diagnostic",
+        "cancellation": "pass-process-and-nested-worker-termination",
+        "resourceBound": "pass-browser-heap-under-800-mib-delta"
+      },
+      "blockers": []
+    }
+  ],
+  "reproduction": [
+    "pnpm view webpack@5.111.0 dist.integrity",
+    "pnpm view @rspack/binding@2.2.4 --json",
+    "pnpm test:bundler-candidates",
+    "node tests/compatibility/frameworks/bundlers/bundler-candidate-workflow.test.ts",
+    "node tooling/checks/check-framework-product-support.ts"
+  ]
+}

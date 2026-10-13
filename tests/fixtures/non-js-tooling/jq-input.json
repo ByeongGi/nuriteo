@@ -1,0 +1,7 @@
+{
+  "packages": [
+    { "name": "@nuriteo/runtime", "kind": "runtime", "supported": true },
+    { "name": "@nuriteo/docs", "kind": "documentation", "supported": false },
+    { "name": "@nuriteo/preview", "kind": "runtime", "supported": true }
+  ]
+}

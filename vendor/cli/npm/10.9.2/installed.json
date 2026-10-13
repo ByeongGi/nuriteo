@@ -1,0 +1,15 @@
+{
+  "name": "npm",
+  "version": "10.9.2",
+  "source": "https://registry.npmjs.org/npm/-/npm-10.9.2.tgz",
+  "integrity": "sha512-iriPEPIkoMYUy3F6f3wwSZAU93E0Eg6cHwIR6jzzOXWSy+SD/rOODEs74cVONHKSx2obXtuUoyidVEhISrisgQ==",
+  "license": "Artistic-2.0",
+  "tarball": "/private/tmp/npm-10.9.2.tgz",
+  "tarballRelative": "../../../../private/tmp/npm-10.9.2.tgz",
+  "tarballSha256": "5cd1e5ab971ea6333f910bc2d50700167c5ef4e66da279b2a3efc874c6b116e4",
+  "entry": "vendor/cli/npm/10.9.2/package/bin/npm-cli.js",
+  "entryRelative": "vendor/cli/npm/10.9.2/package/bin/npm-cli.js",
+  "entrySha256": "8e5f6f3429f8cdbe693cdc29904e9d5a7b127a494bd15c804bd54c7403bfcbe7",
+  "resolutionPolicy": "real-cli-artifact-only; do-not-replace-dependency-resolution-with-custom-installer",
+  "mode": "real-tarball"
+}

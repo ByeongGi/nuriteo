@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "taskId": "REL-005",
+  "sourceToReleaseVerification": true,
+  "immutableReleasePaths": true,
+  "channelConflictPolicy": "reject",
+  "requiredChecks": ["artifact-signature", "artifact-checksum", "release-signature", "release-manifest", "source-commit"]
+}

@@ -1,0 +1,103 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-18",
+  "gate": "SG27",
+  "status": "pass",
+  "unresolvedHighRisk": [],
+  "items": [
+    {
+      "id": "lifecycle-script-permission-policy",
+      "title": "Package lifecycle script permission policy connected to diagnostics/UI catalog",
+      "status": "pass",
+      "risk": "high",
+      "evidence": [
+        "packages/node-runtime/src/package-managers/execution-policy.ts",
+        "packages/browser-host/src/security/permission-catalog.ts",
+        "packages/browser-host/src/observability/permission-diagnostics.ts"
+      ]
+    },
+    {
+      "id": "registry-credential-storage-redaction",
+      "title": "Registry credential storage, redirect stripping, and redaction",
+      "status": "pass",
+      "risk": "high",
+      "evidence": [
+        "packages/browser-host/src/security/credentials.ts",
+        "packages/browser-host/test/credential-safety.test.ts"
+      ]
+    },
+    {
+      "id": "network-permission-audit-log",
+      "title": "Network permission prompt allow/deny audit log model",
+      "status": "pass",
+      "risk": "high",
+      "evidence": [
+        "packages/browser-host/src/security/permissions.ts",
+        "packages/browser-host/test/permission-model.test.ts"
+      ]
+    },
+    {
+      "id": "preview-origin-session-forgery",
+      "title": "Preview origin/session forgery defense",
+      "status": "pass",
+      "risk": "high",
+      "evidence": [
+        "packages/preview/src/session.ts",
+        "packages/preview/src/relay.ts",
+        "packages/preview/test/session-relay.test.ts",
+        "tests/system/browser/isolation.test.ts"
+      ]
+    },
+    {
+      "id": "csp-coop-coep-header-validator",
+      "title": "CSP/COOP/COEP header validator for deployment pipeline",
+      "status": "pass",
+      "risk": "high",
+      "evidence": [
+        "packages/browser-host/src/security/headers.ts",
+        "tooling/checks/check-security-beta.ts",
+        "packages/browser-host/test/security-headers.test.ts"
+      ]
+    },
+    {
+      "id": "resource-abuse-limits",
+      "title": "Resource abuse limits for loop, memory growth, worker spawn, large archive",
+      "status": "pass",
+      "risk": "high",
+      "evidence": [
+        "packages/browser-host/src/security/abuse-limits.ts",
+        "packages/browser-host/test/security-beta.test.ts"
+      ]
+    },
+    {
+      "id": "support-bundle-secret-redaction",
+      "title": "Support bundle redaction of tokens, env, registry auth, and cookies",
+      "status": "pass",
+      "risk": "high",
+      "evidence": [
+        "packages/browser-host/src/observability/support-bundle.ts",
+        "packages/browser-host/src/security/credentials.ts",
+        "packages/browser-host/test/security-beta.test.ts",
+        "packages/browser-host/test/support-bundle.test.ts"
+      ]
+    }
+  ],
+  "requiredPaths": [
+    "compat/security-beta-checklist.json",
+    "packages/browser-host/src/security/abuse-limits.ts",
+    "packages/browser-host/src/security/permission-catalog.ts",
+    "packages/browser-host/src/security/credentials.ts",
+    "packages/browser-host/src/security/headers.ts",
+    "packages/browser-host/src/security/permissions.ts",
+    "packages/browser-host/src/observability/support-bundle.ts",
+    "packages/node-runtime/src/package-managers/execution-policy.ts",
+    "packages/preview/src/session.ts",
+    "packages/preview/src/relay.ts",
+    "tooling/checks/check-security-beta.ts",
+    "packages/browser-host/test/security-beta.test.ts"
+  ],
+  "requiredChecks": [
+    "node tooling/checks/check-security-beta.ts",
+    "node packages/browser-host/test/security-beta.test.ts"
+  ]
+}

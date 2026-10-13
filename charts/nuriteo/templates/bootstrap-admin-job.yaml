@@ -1,0 +1,87 @@
+{{- if .Values.bootstrapAdmin.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "nuriteo.fullname" . }}-bootstrap-admin
+  labels:
+    {{- include "nuriteo.labels" . | nindent 4 }}
+    app.kubernetes.io/component: bootstrap-admin
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-weight: "-5"
+    helm.sh/hook-delete-policy: before-hook-creation
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 300
+  ttlSecondsAfterFinished: {{ .Values.jobs.ttlSecondsAfterFinished }}
+  template:
+    metadata:
+      labels:
+        {{- include "nuriteo.selectorLabels" (dict "root" . "component" "bootstrap-admin") | nindent 8 }}
+      annotations:
+        {{- include "nuriteo.rolloutAnnotations" . | nindent 8 }}
+    spec:
+      restartPolicy: Never
+      serviceAccountName: {{ include "nuriteo.serviceAccountName" . }}
+      automountServiceAccountToken: false
+      securityContext:
+        {{- include "nuriteo.podSecurityContext" . | nindent 8 }}
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- include "nuriteo.imagePullSecrets" $ | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: bootstrap-admin
+          image: {{ include "nuriteo.image" (list . .Values.images.server) | quote }}
+          imagePullPolicy: {{ .Values.images.server.pullPolicy }}
+          args: ["bootstrap-admin"]
+          env:
+            - name: NURITEO_EXTERNAL_URL
+              value: {{ .Values.externalUrl | quote }}
+            - name: NURITEO_DATABASE_URL_FILE
+              value: /run/secrets/nuriteo/database/database-url
+            {{- if .Values.postgresql.existingSecret.caKey }}
+            - name: NURITEO_DATABASE_CA_FILE
+              value: /run/secrets/nuriteo/database/ca.crt
+            {{- end }}
+            - name: NURITEO_BOOTSTRAP_ADMIN_EMAIL
+              value: {{ .Values.bootstrapAdmin.email | quote }}
+            - name: NURITEO_BOOTSTRAP_ADMIN_NAME
+              value: {{ .Values.bootstrapAdmin.name | quote }}
+            - name: NURITEO_BOOTSTRAP_ADMIN_PASSWORD_FILE
+              value: /run/secrets/nuriteo/bootstrap/password
+          securityContext:
+            {{- include "nuriteo.containerSecurityContext" . | nindent 12 }}
+          volumeMounts:
+            - name: database-secrets
+              mountPath: /run/secrets/nuriteo/database
+              readOnly: true
+            - name: bootstrap-secret
+              mountPath: /run/secrets/nuriteo/bootstrap
+              readOnly: true
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              memory: 256Mi
+      volumes:
+        - name: database-secrets
+          secret:
+            secretName: {{ .Values.postgresql.existingSecret.name }}
+            defaultMode: 0400
+            items:
+              - key: {{ .Values.postgresql.existingSecret.databaseUrlKey }}
+                path: database-url
+              {{- if .Values.postgresql.existingSecret.caKey }}
+              - key: {{ .Values.postgresql.existingSecret.caKey }}
+                path: ca.crt
+              {{- end }}
+        - name: bootstrap-secret
+          secret:
+            secretName: {{ .Values.bootstrapAdmin.existingSecret.name }}
+            defaultMode: 0400
+            items:
+              - key: {{ .Values.bootstrapAdmin.existingSecret.passwordKey }}
+                path: password
+{{- end }}

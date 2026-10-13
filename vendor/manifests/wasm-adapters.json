@@ -1,0 +1,90 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-09-27T00:00:00+09:00",
+  "policy": {
+    "nativeNodeAddons": "unsupported-by-default",
+    "wasmAdapters": "allowed-only-with-manifest-integrity-and-export-contract",
+    "wasiExecutables": "separate-contract-from-js-addons"
+  },
+  "adapters": [
+    {
+      "name": "system-wasm",
+      "status": "supported",
+      "kind": "rust-wasm",
+      "path": "target/wasm32-unknown-unknown/debug/system_wasm.wasm",
+      "sha256": "005ac1c5684f190df6be50f722059a59cd04a8c07b666ae5b3dfe58277fa278e",
+      "exports": {
+        "nuriteo_abi_version": "function",
+        "memory": "memory"
+      },
+      "usedFor": [
+        "Rust/WASM VFS and syscall kernel fixture",
+        "browser-compatible WASM loader verification",
+        "preview terminal virtual POSIX PTY"
+      ],
+      "fallbackPolicy": "deny-native"
+    }
+  ],
+  "candidateReplacements": [
+    {
+      "package": "vite",
+      "version": "8.2.0",
+      "status": "js-entry-with-native-capable-dependencies",
+      "dependencies": {
+        "rolldown": "~1.2.0",
+        "lightningcss": "^1.33.0",
+        "postcss": "^8.5.23",
+        "picomatch": "^4.0.5",
+        "tinyglobby": "^0.2.17"
+      }
+    },
+    {
+      "package": "rolldown",
+      "version": "1.2.0",
+      "nativePackages": [
+        "@rolldown/binding-darwin-arm64",
+        "@rolldown/binding-darwin-x64",
+        "@rolldown/binding-linux-x64-gnu",
+        "@rolldown/binding-linux-x64-musl",
+        "@rolldown/binding-linux-arm64-gnu",
+        "@rolldown/binding-linux-arm64-musl",
+        "@rolldown/binding-win32-x64-msvc",
+        "@rolldown/binding-win32-arm64-msvc"
+      ],
+      "wasmPackage": "@rolldown/binding-wasm32-wasi",
+      "fallbackPolicy": "prefer-wasm",
+      "status": "candidate-prefer-wasi-binding-for-browser-runtime-when-vite-fixture-requires-bundling"
+    },
+    {
+      "package": "esbuild",
+      "version": "0.27.2",
+      "nativePackages": [
+        "@esbuild/darwin-arm64",
+        "@esbuild/darwin-x64",
+        "@esbuild/linux-arm64",
+        "@esbuild/linux-x64",
+        "@esbuild/win32-x64"
+      ],
+      "wasmPackage": "esbuild-wasm",
+      "fallbackPolicy": "prefer-wasm",
+      "status": "candidate-until-esbuild-wasm-artifact-is-integrity-pinned"
+    },
+    {
+      "package": "lightningcss",
+      "version": "1.33.0",
+      "nativePackages": [
+        "lightningcss-darwin-arm64",
+        "lightningcss-darwin-x64",
+        "lightningcss-linux-x64-gnu",
+        "lightningcss-linux-x64-musl",
+        "lightningcss-linux-arm64-gnu",
+        "lightningcss-linux-arm64-musl",
+        "lightningcss-win32-x64-msvc",
+        "lightningcss-win32-arm64-msvc"
+      ],
+      "wasmPackage": null,
+      "fallbackPolicy": "deny-native",
+      "status": "native-only-unless-browser-compatible-wasm-package-is-pinned"
+    }
+  ]
+}

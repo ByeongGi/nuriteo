@@ -1,0 +1,67 @@
+[package]
+name = "nuriteo-server"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "nuriteo-server"
+path = "src/main.rs"
+
+[dependencies]
+age = { version = "=0.12.1", default-features = false }
+aes-gcm = "0.10.3"
+argon2 = { version = "0.6.0", default-features = false, features = ["alloc", "getrandom", "password-hash", "zeroize"] }
+aws-config = { version = "1.12.0", default-features = false, features = ["behavior-version-latest", "default-https-client", "rt-tokio"] }
+aws-sdk-s3 = { version = "1.152.0", default-features = false, features = ["behavior-version-latest", "http-1x", "rt-tokio"] }
+aws-smithy-http-client = { version = "1.5.0", default-features = false, features = ["default-client", "rt-tokio", "rustls-ring"] }
+aws-smithy-types = "1.4.7"
+axum = { version = "0.8.9", default-features = false, features = ["http1", "json", "matched-path", "query", "tokio"] }
+base64 = "0.22.1"
+bytes = "1.11.1"
+clap = { version = "4.6.6", default-features = false, features = ["error-context", "help", "std", "suggestions", "usage"] }
+getrandom = "0.4.3"
+git2 = { version = "0.21.0", default-features = false, features = ["https", "vendored-libgit2", "vendored-openssl"] }
+hmac = { version = "0.13.0", default-features = false }
+http-body = "1.1.0"
+opentelemetry = { version = "0.33.0", default-features = false, features = ["logs", "metrics", "trace"] }
+opentelemetry-otlp = { version = "0.33.0", default-features = false, features = ["grpc-tonic", "http-proto", "logs", "metrics", "reqwest-blocking-client", "reqwest-rustls", "tls-ring", "tls-roots", "trace"] }
+opentelemetry_sdk = { version = "0.33.0", default-features = false, features = ["logs", "metrics", "trace"] }
+percent-encoding = "2.3.2"
+regex = { version = "1.13.1", default-features = false, features = ["perf", "std", "unicode-case", "unicode-perl"] }
+reqwest = { version = "0.13.2", default-features = false, features = ["rustls"] }
+ring = "0.17.14"
+rustls-pemfile = { version = "2.2.0", default-features = false, features = ["std"] }
+rustls = { version = "0.23.45", default-features = false, features = ["ring", "std", "tls12"] }
+rustls-native-certs = "0.8.4"
+sea-orm = { version = "2.0.4", default-features = false, features = ["runtime-tokio-rustls", "sqlx-postgres"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+sha1 = { version = "0.11.0", default-features = false }
+sha2 = { version = "0.11.0", default-features = false }
+sqlx = { version = "0.9.0", default-features = false, features = ["migrate", "postgres", "runtime-tokio", "time", "tls-rustls-ring-native-roots"] }
+subtle = { version = "2.6.1", default-features = false }
+time = { version = "0.3.55", features = ["formatting", "parsing"] }
+tempfile = "3.24.0"
+tokio = { version = "1.48.0", features = ["io-util", "macros", "net", "rt", "signal", "sync", "time"] }
+tokio-rustls = { version = "0.26.6", default-features = false, features = ["ring", "tls12"] }
+tokio-util = { version = "0.7.19", features = ["io"] }
+toml = { version = "1.1.6", default-features = false, features = ["parse", "serde"] }
+tracing = { version = "0.1.44", default-features = false, features = ["std"] }
+tracing-subscriber = { version = "0.3.23", default-features = false, features = ["fmt", "registry", "std"] }
+unicode-normalization = "0.1.25"
+utoipa = "6.0.0"
+utoipa-axum = "0.3.0"
+utoipa-swagger-ui = { version = "10.0.1", default-features = false, features = ["axum", "vendored"] }
+url = "2.5.7"
+uuid = { version = "1.22.0", features = ["serde", "v4", "v7"] }
+x509-parser = { version = "0.18.1", default-features = false }
+zeroize = "1.8.2"
+
+[dev-dependencies]
+tower = { version = "0.5.3", features = ["util"] }

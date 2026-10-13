@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "taskId": "SUP-002",
+  "format": "nuriteo-support-bundle-v1+json",
+  "authorization": "instance-admin-only",
+  "delivery": {
+    "trigger": "manual-download",
+    "automaticUpload": false,
+    "serverRetention": "none-streamed-response-only",
+    "maximumBytes": 65536
+  },
+  "diagnostics": {
+    "processLocal": true,
+    "ringCapacity": 128,
+    "bundleMaximumEvents": 64,
+    "persistenceGuaranteed": false,
+    "fields": ["sequence", "occurredAtUnixMs", "eventName", "level", "operationId", "code", "statusCode"]
+  },
+  "included": [
+    "release-version-os-architecture",
+    "database-schema-and-setting-fingerprint",
+    "dependency-cleanup-aggregate-usage",
+    "integration-kind-active-disabled-counts",
+    "bounded-allowlisted-diagnostic-events"
+  ],
+  "excluded": [
+    "project-source-bundles-object-payloads",
+    "terminal-runtime-console-output",
+    "environment-values-cookies-tokens-authorization",
+    "oidc-claims-private-keys-ca-pem-integration-auth-material",
+    "request-response-bodies-database-application-records"
+  ],
+  "evidence": [
+    "crates/nuriteo-server/tests/admin_http.rs",
+    "crates/nuriteo-server/tests/openapi_contract.rs",
+    "apps/web/test/admin-settings-ux.test.ts",
+    "apps/web/test/admin-settings-browser.test.ts"
+  ]
+}

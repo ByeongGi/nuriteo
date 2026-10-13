@@ -1,0 +1,93 @@
+{{- if .Values.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "nuriteo.fullname" . }}-default-deny
+  labels:
+    {{- include "nuriteo.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "nuriteo.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  policyTypes: [Ingress, Egress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "nuriteo.fullname" . }}-web
+  labels:
+    {{- include "nuriteo.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "nuriteo.selectorLabels" (dict "root" . "component" "web") | nindent 6 }}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              {{- toYaml .Values.networkPolicy.ingressController.namespaceLabels | nindent 14 }}
+          podSelector:
+            matchLabels:
+              {{- toYaml .Values.networkPolicy.ingressController.podLabels | nindent 14 }}
+      ports:
+        - { protocol: TCP, port: 3000 }
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "nuriteo.selectorLabels" (dict "root" . "component" "core") | nindent 14 }}
+      ports:
+        - { protocol: TCP, port: {{ .Values.core.service.port }} }
+    {{- include "nuriteo.dnsEgress" . | nindent 4 }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "nuriteo.fullname" . }}-core
+  labels:
+    {{- include "nuriteo.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "nuriteo.selectorLabels" (dict "root" . "component" "core") | nindent 6 }}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "nuriteo.selectorLabels" (dict "root" . "component" "web") | nindent 14 }}
+      ports:
+        - { protocol: TCP, port: {{ .Values.core.service.port }} }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "nuriteo.fullname" . }}-external-egress
+  labels:
+    {{- include "nuriteo.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app.kubernetes.io/name
+        operator: In
+        values: [{{ include "nuriteo.name" . }}]
+      - key: app.kubernetes.io/instance
+        operator: In
+        values: [{{ .Release.Name }}]
+      - key: app.kubernetes.io/component
+        operator: NotIn
+        values: [web]
+  policyTypes: [Egress]
+  egress:
+    {{- include "nuriteo.dnsEgress" . | nindent 4 }}
+    - to:
+        {{- range .Values.networkPolicy.externalEgress.cidrBlocks }}
+        - ipBlock: { cidr: {{ . | quote }} }
+        {{- end }}
+      ports:
+        {{- range .Values.networkPolicy.externalEgress.tcpPorts }}
+        - { protocol: TCP, port: {{ . }} }
+        {{- end }}
+{{- end }}

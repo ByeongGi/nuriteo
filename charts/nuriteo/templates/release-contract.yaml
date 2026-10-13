@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "nuriteo.fullname" . }}-release-contract
+  labels:
+    {{- include "nuriteo.labels" . | nindent 4 }}
+  annotations:
+    nuriteo.dev/contract: digest-pinned-pair-v1
+    {{- include "nuriteo.rolloutAnnotations" . | nindent 4 }}
+data:
+  release-lineage: {{ .Values.release.lineage | quote }}
+  api-version: {{ .Values.release.apiVersion | quote }}
+  bundle-format: {{ .Values.release.bundleFormat | quote }}
+  server-image: {{ include "nuriteo.image" (list . .Values.images.server) | quote }}
+  web-image: {{ include "nuriteo.image" (list . .Values.images.web) | quote }}
+  runtime-config-name: {{ include "nuriteo.runtimeConfigName" . | quote }}
+  runtime-config-ref.yaml: |
+    {{- include "nuriteo.runtimeConfigRef" . | nindent 4 }}
+  core-secret-volumes.yaml: |
+    {{- include "nuriteo.coreSecretVolumes" . | nindent 4 }}
+  web-secret-volumes.yaml: |
+    {{- include "nuriteo.webSecretVolumes" . | nindent 4 }}

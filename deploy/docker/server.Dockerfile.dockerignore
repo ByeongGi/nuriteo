@@ -1,0 +1,12 @@
+**
+!Cargo.toml
+!Cargo.lock
+!compat/
+!compat/project-bundle-admission-v1.json
+!crates/
+!crates/**/
+!crates/**/Cargo.toml
+!crates/**/src/
+!crates/**/src/**
+!crates/nuriteo-server/migrations/
+!crates/nuriteo-server/migrations/*.sql

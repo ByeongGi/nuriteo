@@ -1,0 +1,33 @@
+{
+  "name": "pnpm",
+  "version": "9.15.9",
+  "source": "https://registry.npmjs.org/pnpm/-/pnpm-9.15.9.tgz",
+  "integrity": "sha512-aARhQYk8ZvrQHAeSMRKOmvuJ74fiaR1p5NQO7iKJiClf1GghgbrlW1hBjDolO95lpQXsfF+UA+zlzDzTfc8lMQ==",
+  "entry": "/package/bin/pnpm.cjs",
+  "license": "MIT",
+  "resolutionPolicy": "real-cli-artifact-only; do-not-replace-dependency-resolution-with-custom-installer",
+  "platformPolicy": {
+    "runtime": "browser-native-node-compat",
+    "nativeModules": "unsupported-unless-explicit-platform-exception-is-recorded",
+    "wasmModules": "allowed-when-browser-compatible-and-integrity-pinned",
+    "currentFixtureCoverage": "pure-js-local-workspace"
+  },
+  "tarballSha256": "cf86a7ad764406395d4286a6d09d730711720acc6d93e9dce9ac7ac4dc4a28a7",
+  "rollbackArtifact": {
+    "version": "9.15.9",
+    "source": "https://registry.npmjs.org/pnpm/-/pnpm-9.15.9.tgz",
+    "tarballSha256": "cf86a7ad764406395d4286a6d09d730711720acc6d93e9dce9ac7ac4dc4a28a7",
+    "entry": "/package/bin/pnpm.cjs"
+  },
+  "rehearsalCandidate": {
+    "version": "12.4.1",
+    "source": "https://registry.npmjs.org/pnpm/-/pnpm-12.4.1.tgz",
+    "integrity": "sha512-LoHjmdc/6DkNqyXgaqeIq3pZCCSNL1o3D4K0gRR6ano2e/gEj5pv22Rg8hpm8FQt7bi5TKLIcjWWdBkgsWVtTA==",
+    "license": "MIT",
+    "entry": "/package/pnpm",
+    "tarballSha256": "6276298e9af576b7a7f5e9044bfafbe2678209250cd10b1705ea5d3aa64d4882",
+    "status": "rehearsed-not-promoted",
+    "runtimeDecision": "hold-browser-promotion",
+    "reasonNotPromoted": "pnpm 12 changes the entry contract to a shell/native-binary handoff and first-use native binary acquisition. Keep pnpm 9.15.9 until browser runtime covers that path explicitly."
+  }
+}

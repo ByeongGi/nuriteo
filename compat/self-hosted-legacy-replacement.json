@@ -1,0 +1,98 @@
+{
+  "schemaVersion": 1,
+  "taskId": "LEG-001",
+  "releaseLineage": "nuriteo-self-hosted-v1",
+  "baselineManifest": "compat/self-hosted-rc-baseline.json",
+  "recordedAt": "2026-10-09",
+  "migrationCompletedAt": "2026-10-11",
+  "cleanupCompletedAt": "2026-10-11",
+  "policy": {
+    "productionSurfaces": ["apps/web", "crates/nuriteo-server", "packages/api-client"],
+    "targetRuntimePackage": "packages/workspace-runtime",
+    "removalTask": "LEG-002",
+    "cleanupTask": "LEG-003"
+  },
+  "replacements": [
+    {
+      "id": "legacy-web-app",
+      "source": "apps/preview-service",
+      "target": "apps/web",
+      "state": "removed",
+      "behavior": ["project-shell", "browser-runtime", "preview", "save-resume", "published-example"],
+      "evidence": [
+        "docs/implementation/self-hosted/evidence/GATE-004.md",
+        "docs/implementation/self-hosted/evidence/GATE-005.md"
+      ],
+      "nextAction": "remove-source",
+      "nextTask": "LEG-002"
+    },
+    {
+      "id": "legacy-node-backend",
+      "source": "packages/service-backend",
+      "target": "crates/nuriteo-server",
+      "secondaryTarget": "packages/api-client",
+      "state": "removed",
+      "behavior": ["identity", "authorization", "project", "save", "share-fork", "audit"],
+      "evidence": [
+        "docs/implementation/self-hosted/evidence/GATE-004.md",
+        "docs/implementation/self-hosted/evidence/GATE-005.md"
+      ],
+      "nextAction": "remove-source",
+      "nextTask": "LEG-002"
+    },
+    {
+      "id": "runtime-workflow-package",
+      "source": "packages/preview-service",
+      "target": "packages/workspace-runtime",
+      "state": "renamed",
+      "behavior": ["workflow-controller", "terminal-lifecycle", "preview-lifecycle", "runtime-recovery"],
+      "evidence": [
+        "docs/implementation/self-hosted/evidence/RT-002.md",
+        "docs/implementation/self-hosted/evidence/RT-005.md"
+      ],
+      "nextAction": "rename-and-rewire",
+      "nextTask": "LEG-002"
+    },
+    {
+      "id": "runtime-static-assets",
+      "source": "apps/preview-service/public",
+      "target": "packages/workspace-runtime/assets",
+      "generatedTarget": "apps/web/public/runtime",
+      "state": "relocated",
+      "behavior": ["preview-service-worker", "system-wasm", "pinned-next-cli", "pinned-vite-runtime"],
+      "evidence": [
+        "apps/web/tooling/build-runtime-assets.ts",
+        "docs/implementation/self-hosted/evidence/CMP-003.md"
+      ],
+      "nextAction": "relocate-source-and-preserve-digests",
+      "nextTask": "LEG-002"
+    },
+    {
+      "id": "legacy-root-commands",
+      "source": "package.json",
+      "target": "apps/web/package.json",
+      "state": "cleaned",
+      "behavior": ["dev-preview", "build-preview", "legacy-browser-tests", "service-backend-tests"],
+      "evidence": [
+        "docs/implementation/self-hosted/evidence/GATE-005.md",
+        "docs/implementation/self-hosted/evidence/BASE-003.md"
+      ],
+      "nextAction": "canonical-scripts-active",
+      "nextTask": "LEG-003"
+    },
+    {
+      "id": "runtime-lab",
+      "source": "examples/runtime-lab",
+      "target": "apps/web",
+      "testFixtureTarget": "tests/fixtures/runtime-lab",
+      "state": "cleaned",
+      "behavior": ["manual-runtime-lab"],
+      "evidence": [
+        "docs/implementation/self-hosted/evidence/RT-004.md",
+        "docs/implementation/self-hosted/evidence/GATE-004.md"
+      ],
+      "nextAction": "test-fixture-only",
+      "nextTask": "LEG-003"
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "name": "npm",
+  "version": "10.9.2",
+  "source": "https://registry.npmjs.org/npm/-/npm-10.9.2.tgz",
+  "integrity": "sha512-iriPEPIkoMYUy3F6f3wwSZAU93E0Eg6cHwIR6jzzOXWSy+SD/rOODEs74cVONHKSx2obXtuUoyidVEhISrisgQ==",
+  "entry": "/package/bin/npm-cli.js",
+  "license": "Artistic-2.0",
+  "resolutionPolicy": "real-cli-artifact-only; do-not-replace-dependency-resolution-with-custom-installer",
+  "platformPolicy": {
+    "runtime": "browser-native-node-compat",
+    "nativeModules": "unsupported-unless-explicit-platform-exception-is-recorded",
+    "wasmModules": "allowed-when-browser-compatible-and-integrity-pinned",
+    "currentFixtureCoverage": "pure-js-local-workspace"
+  },
+  "tarballSha256": "5cd1e5ab971ea6333f910bc2d50700167c5ef4e66da279b2a3efc874c6b116e4",
+  "rollbackArtifact": {
+    "version": "10.9.2",
+    "source": "https://registry.npmjs.org/npm/-/npm-10.9.2.tgz",
+    "tarballSha256": "5cd1e5ab971ea6333f910bc2d50700167c5ef4e66da279b2a3efc874c6b116e4",
+    "entry": "/package/bin/npm-cli.js"
+  },
+  "rehearsalCandidate": {
+    "version": "10.9.8",
+    "source": "https://registry.npmjs.org/npm/-/npm-10.9.8.tgz",
+    "integrity": "sha512-fYwb6ODSmHkqrJQQaCxY3M2lPf/mpgC7ik0HSzzIwG5CGtabRp4bNqikatvCoT42b5INQSqudVH0R7yVmC9hVg==",
+    "license": "Artistic-2.0",
+    "entry": "/package/bin/npm-cli.js",
+    "tarballSha256": "3e68f9b5fcaf1a94ba0e37e6a565c920b2be6bd98998c50970385d6a692af780",
+    "status": "rehearsed-not-promoted",
+    "reasonNotPromoted": "P8-02 records the one-manager update path; production promotion is a release decision after broader app coverage."
+  }
+}

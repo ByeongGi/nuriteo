@@ -1,0 +1,20 @@
+{
+  "name": "@nuriteo/workspace-runtime",
+  "version": "0.0.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "test": "node test/run.ts"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./controller": "./src/controller.ts",
+    "./observability": "./src/observability.ts"
+  },
+  "dependencies": {
+    "@nuriteo/browser-host": "workspace:*",
+    "@nuriteo/node-runtime": "workspace:*",
+    "@nuriteo/preview": "workspace:*"
+  }
+}

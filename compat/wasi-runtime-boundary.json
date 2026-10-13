@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-15",
+  "status": "p19-01-wasi-boundary",
+  "filesystem": {
+    "defaultProjectRoot": "/workspace",
+    "requiresAbsolutePaths": true,
+    "readOutsideProject": "deny",
+    "writeOutsideProject": "deny",
+    "errorCode": "EWASIPATH"
+  },
+  "environment": {
+    "defaultAllowedKeys": ["NODE_ENV", "CI"],
+    "defaultAllowedPrefixes": ["npm_", "VITE_"],
+    "deniedKeysErrorCode": "EWASIENV"
+  },
+  "stdio": {
+    "defaultCapacityBytes": 1048576,
+    "invalidCapacityErrorCode": "EWASISTDIO"
+  },
+  "capabilities": {
+    "clock": "allow-by-default",
+    "random": "allow-by-default",
+    "directTcp": "deny",
+    "directUdp": "deny",
+    "fetch": "deny-unless-explicit-host-adapter"
+  },
+  "networkErrorCode": "EWASINETWORK"
+}

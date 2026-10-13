@@ -1,0 +1,17 @@
+{
+  "format": "nuriteo-portable",
+  "formatVersion": 1,
+  "backupId": "0199ee6c-c777-7000-8000-000000024002",
+  "createdBy": { "version": "0.1.0" },
+  "database": { "schemaVersion": 48, "archiveFormat": "postgres-custom" },
+  "requiredFeatures": [],
+  "entries": [
+    {
+      "path": "database.dump",
+      "kind": "database_archive",
+      "bytes": 20,
+      "sha256": "30019ffcb795d6b19c86411e51112ffa17a5baba23397043acbbbc539452e529"
+    }
+  ],
+  "extensions": { "example.fixtureNote": "unknown optional metadata is ignored" }
+}

@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "taskId": "AUD-003",
+  "sourceOfTruth": "postgresql",
+  "retention": {
+    "defaultDays": 365,
+    "minimumDays": 30,
+    "maximumDays": 3650,
+    "unlimitedAllowed": true,
+    "batchSize": 1000,
+    "scheduler": "embedded-policy-maintenance",
+    "replicaCoordination": "for-update-skip-locked",
+    "auditAtomic": true,
+    "protectedReferences": ["project_history_promotions.audit_event_id"]
+  },
+  "export": {
+    "formats": ["jsonl", "csv"],
+    "maximumEventsPerPage": 1000,
+    "maximumBytesPerPage": 20971520,
+    "formulaSafeCsv": true,
+    "exportIsAudited": true
+  },
+  "backup": {
+    "databaseArchiveIncludesAuditEvents": true,
+    "restoreValidatesProjectHistoryReference": true,
+    "backupRetentionIndependent": true
+  },
+  "actualTests": [
+    "crates/nuriteo-server/tests/fixtures/postgres-policy-engine/run.sh",
+    "crates/nuriteo-server/tests/fixtures/postgres-admin-http/run.sh",
+    "crates/nuriteo-server/tests/fixtures/backup-restore/run.sh"
+  ]
+}

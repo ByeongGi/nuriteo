@@ -1,0 +1,62 @@
+{
+  "contract": "project-bundle-admission-v1",
+  "bundleFormat": "project-bundle-v1",
+  "pathNormalization": "Unicode NFC",
+  "ignoreSemantics": "nuriteo-ignore-v1",
+  "pathRules": {
+    "syntax": "relative-posix",
+    "rejectAbsolute": true,
+    "rejectBackslash": true,
+    "rejectEmptyDotDotDotSegments": true,
+    "rejectControlsAndUnpairedSurrogates": true,
+    "rejectPostNormalizationDuplicates": true,
+    "measure": "UTF-8 bytes"
+  },
+  "ignoreRules": {
+    "rootFile": ".nuriteoignore",
+    "encoding": "UTF-8-strict",
+    "orderedLastMatchWins": true,
+    "excludedParentMustBeReincluded": true,
+    "syntax": [
+      "blank-and-hash-comments",
+      "backslash-escape",
+      "root-anchor-slash",
+      "directory-trailing-slash",
+      "negation-bang",
+      "wildcard-star-question-double-star",
+      "character-class-and-range"
+    ]
+  },
+  "defaults": {
+    "maxFileBytes": 16777216,
+    "maxLogicalBytes": 134217728,
+    "maxFiles": 2500,
+    "maxDepth": 32,
+    "maxPathBytes": 512,
+    "maxSegmentBytes": 255
+  },
+  "configurableBounds": {
+    "maxFileBytes": { "min": 1, "max": 16777216 },
+    "maxLogicalBytes": { "min": 16777216, "max": 268435456 },
+    "maxFiles": { "min": 1, "max": 2500 },
+    "maxDepth": { "min": 8, "max": 64 },
+    "maxPathBytes": { "min": 256, "max": 1024 }
+  },
+  "ignoreBounds": {
+    "maxPatterns": 4096,
+    "maxPatternBytes": 1024,
+    "maxWildcardsPerPattern": 32,
+    "maxMatchEvaluations": 10000000
+  },
+  "clientWorkspaceScan": {
+    "maxFiles": 100000
+  },
+  "systemExclusions": {
+    "directoryNames": [".git", "node_modules", ".pnpm-store"],
+    "directoryPaths": [".yarn/cache", ".nuriteo/cache", ".nuriteo/runtime", ".nuriteo/temp", ".nuriteo/tmp"],
+    "ephemeralSuffixes": [".pid", ".sock", ".socket", ".lock"],
+    "ephemeralNames": [".lock", "runtime.lock"],
+    "sourceLockfileNames": ["bun.lock", "Cargo.lock", "composer.lock", "deno.lock", "Gemfile.lock", "Pipfile.lock", "poetry.lock", "yarn.lock"],
+    "credentialRule": ".env and .env.* except .env.example/.sample/.template"
+  }
+}

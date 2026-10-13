@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-23",
+  "fixtureCatalog": "compat/ecosystem-fixtures.json",
+  "resultSchemaVersion": 1,
+  "runtime": {
+    "node": "22.23.0",
+    "npm": "10.9.8",
+    "pnpm": "11.15.1"
+  },
+  "toolchain": {
+    "vite": "8.2.0",
+    "rolldown": "1.2.8",
+    "rolldownWasiBinding": "1.2.8",
+    "wasmPolicy": "vendor/manifests/wasm-adapters.json"
+  },
+  "workerTimeoutMs": 90000,
+  "generatedFixtureLockSha256": {
+    "vite-official-template-react": "86980e35dab86de2089c3e46fca339419f5564f39808d52734d21fc408cf1c30",
+    "fuhouyu-homepage": "1023bcfa233a11e25d7cf687bfa3deade3694d465d75357f4e2c50e64003b506",
+    "ravaniproshan-velorah-landing": "aa4635bde4dee482c8727670e89f59f965e795b18f6cf5330db466213139b7c7"
+  },
+  "fixtureDependencyPreparation": {
+    "pnpmVersions": {
+      "vite-official-template-react": "12.4.2",
+      "seongpil0948-react-dev-guide": "8.15.9",
+      "commencis-starter-react-vite": "11.17.0"
+    },
+    "isolatedWorkspaceIds": ["vite-official-template-react"],
+    "npmLegacyPeerDepsIds": ["gabbloquet-vite-react18"]
+  },
+  "publicFixtureIds": [
+    "vite-official-template-react",
+    "awe-templates-react-starter",
+    "hvalette-react-vite-template",
+    "gabbloquet-vite-react18",
+    "sivamani18-vite-react-ts-boilerplate",
+    "fuhouyu-homepage",
+    "seongpil0948-react-dev-guide",
+    "ravaniproshan-velorah-landing",
+    "commencis-starter-react-vite",
+    "r35007-vite-react-typescript"
+  ]
+}

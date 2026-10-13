@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "valid": [
+    "valid-minimal.manifest.json",
+    "valid-optional-extension.manifest.json"
+  ],
+  "generatedArchiveCases": [
+    { "id": "path-traversal", "expectedError": "unsafe-path" },
+    { "id": "absolute-path", "expectedError": "unsafe-path" },
+    { "id": "hardlink", "expectedError": "invalid-entry-type" },
+    { "id": "symlink", "expectedError": "invalid-entry-type" },
+    { "id": "device", "expectedError": "invalid-entry-type" },
+    { "id": "duplicate-entry", "expectedError": "duplicate-entry" },
+    { "id": "undeclared-entry", "expectedError": "undeclared-entry" },
+    { "id": "unknown-required-feature", "expectedError": "unsupported-feature" },
+    { "id": "size-mismatch", "expectedError": "size-mismatch" },
+    { "id": "checksum-mismatch", "expectedError": "checksum-mismatch" },
+    { "id": "truncated", "expectedError": "io" },
+    { "id": "trailing-data", "expectedError": "trailing-data" }
+  ]
+}

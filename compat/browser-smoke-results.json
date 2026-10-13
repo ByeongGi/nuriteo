@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-10-12",
+  "results": {
+    "chrome": {
+      "status": "pass",
+      "version": "154.0.8037.98",
+      "platform": "macOS desktop",
+      "checks": [
+        "COOP/COEP response headers",
+        "crossOriginIsolated",
+        "SharedArrayBuffer",
+        "Service Worker activation",
+        "OPFS write/read/delete"
+      ],
+      "evidence": [
+        "tests/system/browser/isolation.test.ts",
+        "apps/web/test/gate-project-runtime-browser.test.ts",
+        "tooling/qualification/browser-capabilities.ts"
+      ]
+    },
+    "edge": {
+      "status": "pass",
+      "version": "155.0.4283.45",
+      "platform": "macOS desktop",
+      "checks": [
+        "COOP/COEP response headers",
+        "crossOriginIsolated",
+        "SharedArrayBuffer",
+        "Service Worker activation",
+        "Vite React preview iframe",
+        "OPFS write/read/delete"
+      ],
+      "evidence": ["git-history:pre-1a419586:edge-browser-smoke", "tooling/qualification/browser-capabilities.ts"]
+    },
+    "safari": {
+      "status": "pass",
+      "version": "26.6.2",
+      "platform": "macOS desktop",
+      "checks": [
+        "COOP/COEP response headers",
+        "crossOriginIsolated",
+        "SharedArrayBuffer",
+        "Service Worker activation and control",
+        "Vite React preview iframe",
+        "OPFS write/reopen/delete",
+        "quota cache eviction and recovery plan"
+      ],
+      "evidence": ["git-history:pre-1a419586:safari-browser-smoke"],
+      "limitations": [
+        "macOS desktop Safari only; iOS and mobile Safari are not covered",
+        "Safari WebDriver requires Allow Remote Automation on the validation host",
+        "browser-managed OPFS quota remains implementation-defined",
+        "no browser API enforces the product's 256 MiB per-Worker JavaScript heap ceiling"
+      ]
+    }
+  }
+}

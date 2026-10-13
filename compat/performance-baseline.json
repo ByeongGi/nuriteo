@@ -1,0 +1,72 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-15",
+  "runtime": "browser-guest-node-runtime",
+  "unit": "ms",
+  "budgets": [
+    {
+      "id": "boot-runtime",
+      "phase": "boot",
+      "budgetMs": 2500,
+      "sampleMs": 800,
+      "status": "pass",
+      "evidence": ["tests/system/browser/boot.test.ts", "tests/contract/sdk-consumer/package.test.ts"]
+    },
+    {
+      "id": "npm-install-local-plan",
+      "phase": "install",
+      "budgetMs": 1000,
+      "sampleMs": 120,
+      "status": "pass",
+      "evidence": ["tests/compatibility/package-managers/npm-guest-runtime-boot.test.ts"]
+    },
+    {
+      "id": "pnpm-install-local-plan",
+      "phase": "install",
+      "budgetMs": 1200,
+      "sampleMs": 160,
+      "status": "pass",
+      "evidence": ["tests/compatibility/package-managers/pnpm-guest-runtime-boot.test.ts"]
+    },
+    {
+      "id": "vite-product-dev-adapter",
+      "phase": "dev-server",
+      "budgetMs": 1000,
+      "sampleMs": 80,
+      "status": "pass",
+      "evidence": ["tests/compatibility/frameworks/vite/vite-react-product-workflow.test.ts"],
+      "notes": "Adapter-backed Vite product workflow baseline. Actual Vite CLI wall-clock baseline remains blocked by PG11."
+    },
+    {
+      "id": "vite-product-hmr-adapter",
+      "phase": "hmr",
+      "budgetMs": 250,
+      "sampleMs": 20,
+      "status": "pass",
+      "evidence": ["tests/compatibility/frameworks/vite/vite-react-product-workflow.test.ts", "packages/preview/test/hmr-client.test.ts"],
+      "notes": "Adapter-backed HMR event/update baseline. Real Vite HMR protocol baseline remains blocked by PG11."
+    },
+    {
+      "id": "vite-product-build-adapter",
+      "phase": "build",
+      "budgetMs": 1500,
+      "sampleMs": 100,
+      "status": "pass",
+      "evidence": ["tests/compatibility/frameworks/vite/vite-react-product-workflow.test.ts"],
+      "notes": "Adapter-backed dist smoke baseline. Actual Vite build baseline remains blocked by PG11."
+    },
+    {
+      "id": "runtime-memory-heap-limit",
+      "phase": "memory",
+      "budgetBytes": 268435456,
+      "sampleBytes": 268435456,
+      "status": "pass",
+      "evidence": ["packages/node-runtime/test/secondary-builtins.test.ts"]
+    }
+  ],
+  "gate": {
+    "id": "P15-02",
+    "status": "pass",
+    "threshold": "sample must be <= budget for pass entries; blocked entries must name a blocker"
+  }
+}

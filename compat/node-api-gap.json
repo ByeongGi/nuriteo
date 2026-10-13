@@ -1,0 +1,479 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-15",
+  "runtimeProfile": "node-22-browser-native-p3",
+  "nodeVersion": "22.23.0",
+  "scope": {
+    "goal": "Reach WebContainers parity for browser-based JavaScript and TypeScript development workflows.",
+    "included": [
+      "npm and pnpm CLI boot paths",
+      "Vite React install/dev/HMR/build workflow",
+      "Node builtin subsets needed by package-manager and dev-server dependencies"
+    ],
+    "excluded": [
+      "native .node addon loading",
+      "arbitrary native binary execution",
+      "Docker, VM, OS daemon, and direct TCP database compatibility"
+    ]
+  },
+  "sourceEvidence": [
+    {
+      "id": "node-profile",
+      "path": "packages/node-runtime/src/node-profile.ts",
+      "summary": "Current browser-native Node profile marks core package-manager builtins as partial."
+    },
+    {
+      "id": "cli-smoke",
+      "path": "packages/node-runtime/test/cli-smoke.test.ts",
+      "summary": "npm --version and pnpm --version are ready for guest runtime smoke because no priority P9 builtin remains missing."
+    },
+    {
+      "id": "package-manager-baseline",
+      "path": "tests/compatibility/package-managers/cli-baseline.test.ts",
+      "summary": "Vendored npm and pnpm entrypoints are verified against host Node before browser guest runtime boot."
+    }
+  ],
+  "callTraces": [
+    {
+      "command": "npm --version",
+      "runtime": "browser-guest-node-runtime",
+      "status": "ready-for-guest-runtime-smoke",
+      "missingBuiltins": [],
+      "resolvedBuiltins": ["buffer", "events", "stream", "util"]
+    },
+    {
+      "command": "pnpm --version",
+      "runtime": "browser-guest-node-runtime",
+      "status": "ready-for-guest-runtime-smoke",
+      "missingBuiltins": [],
+      "resolvedBuiltins": ["buffer", "events", "stream", "util"]
+    },
+    {
+      "command": "vite --host 127.0.0.1",
+      "runtime": "browser-guest-node-runtime",
+      "status": "not-run",
+      "blockedBy": ["npm --version", "pnpm --version"],
+      "missingBuiltins": [],
+      "resolvedBuiltins": ["buffer", "events", "stream", "util"]
+    }
+  ],
+  "gaps": [
+    {
+      "builtin": "buffer",
+      "status": "partial",
+      "priority": 0,
+      "implementedBy": "packages/node-runtime/src/builtins/buffer.ts",
+      "tests": ["packages/node-runtime/test/builtin-subset.test.ts"],
+      "requiredBy": ["npm bootstrap", "pnpm bootstrap", "package metadata and tar/integrity dependencies"],
+      "minimumApi": [
+        "Buffer.from",
+        "Buffer.alloc",
+        "Buffer.allocUnsafe",
+        "Buffer.byteLength",
+        "Buffer.concat",
+        "Buffer.isBuffer",
+        "buffer.toString",
+        "buffer.subarray",
+        "buffer.slice",
+        "buffer.copy",
+        "buffer.equals",
+        "buffer.length",
+        "kMaxLength"
+      ],
+      "acceptance": [
+        "Reference Node fixture covers string, utf8, base64, hex, array buffer, typed array, concat, and slice/copy behavior.",
+        "Browser runtime fixture passes the same fixture without host shortcuts.",
+        "npm --version and pnpm --version are no longer blocked on Buffer construction failures."
+      ],
+      "nextPhase": "P9-02"
+    },
+    {
+      "builtin": "events",
+      "status": "partial",
+      "priority": 0,
+      "implementedBy": "packages/node-runtime/src/builtins/events.ts",
+      "tests": ["packages/node-runtime/test/builtin-subset.test.ts"],
+      "requiredBy": ["npm bootstrap", "pnpm bootstrap", "streams", "dev server event lifecycle"],
+      "minimumApi": [
+        "EventEmitter",
+        "on",
+        "once",
+        "emit",
+        "off",
+        "removeListener",
+        "removeAllListeners",
+        "listenerCount",
+        "listeners",
+        "setMaxListeners",
+        "error event semantics"
+      ],
+      "acceptance": [
+        "Reference Node fixture covers listener ordering, once removal, this binding, error throw behavior, and listener cleanup.",
+        "Browser runtime fixture passes the same fixture.",
+        "stream implementation can depend on the shared EventEmitter subset."
+      ],
+      "nextPhase": "P9-02"
+    },
+    {
+      "builtin": "child_process",
+      "status": "partial",
+      "priority": 1,
+      "implementedBy": "packages/node-runtime/src/builtins/child-process.ts",
+      "tests": ["packages/node-runtime/test/secondary-builtins.test.ts"],
+      "requiredBy": ["npm lifecycle scripts", "node-gyp/native package probes", "editor/help command fallbacks"],
+      "minimumApi": ["spawn", "execFile", "exec", "spawnSync", "execFileSync", "execSync", "ChildProcess"],
+      "acceptance": ["Module loads for dependency graph compatibility and external process attempts fail with ERR_BROWSER_CHILD_PROCESS_UNSUPPORTED."],
+      "nextPhase": "P10"
+    },
+    {
+      "builtin": "constants",
+      "status": "partial",
+      "priority": 1,
+      "implementedBy": "packages/node-runtime/src/builtins/constants.ts",
+      "tests": ["packages/node-runtime/test/secondary-builtins.test.ts"],
+      "requiredBy": ["graceful-fs", "package-manager filesystem compatibility"],
+      "minimumApi": ["O_RDONLY", "O_WRONLY", "O_RDWR", "S_IFMT", "S_IFREG", "S_IFDIR", "S_IFLNK", "F_OK", "R_OK", "W_OK", "X_OK"],
+      "acceptance": ["Common dependency constants resolve through require('constants') and require('node:constants')."],
+      "nextPhase": "P10"
+    },
+    {
+      "builtin": "crypto",
+      "status": "partial",
+      "priority": 1,
+      "implementedBy": "packages/node-runtime/src/builtins/crypto.ts",
+      "tests": ["packages/node-runtime/test/secondary-builtins.test.ts", "tests/compatibility/package-managers/fetcher.test.ts"],
+      "requiredBy": ["ssri integrity hashing", "npm exec cache keys", "tar unpack temp names", "sigstore/TUF digest helpers"],
+      "minimumApi": ["createHash", "getHashes", "randomBytes", "randomFillSync", "randomUUID", "timingSafeEqual"],
+      "acceptance": [
+        "sha256 and sha512 createHash update/digest pass reference vectors in hex and base64.",
+        "Package-manager tarball integrity paths use the browser-native crypto subset instead of host node:crypto.",
+        "Unsupported public-key, signing, and HMAC operations fail with ERR_BROWSER_CRYPTO_UNSUPPORTED."
+      ],
+      "nextPhase": "P10"
+    },
+    {
+      "builtin": "dns",
+      "status": "partial",
+      "priority": 1,
+      "implementedBy": "packages/node-runtime/src/builtins/dns.ts",
+      "tests": ["packages/node-runtime/test/secondary-builtins.test.ts"],
+      "requiredBy": ["make-fetch-happen", "@npmcli/agent", "socks proxy option normalization"],
+      "minimumApi": ["lookup callback API", "promises.lookup", "ADDRCONFIG", "V4MAPPED"],
+      "acceptance": ["lookup provides deterministic browser-safe addresses and preserves Node callback/promise result shapes."],
+      "nextPhase": "P10"
+    },
+    {
+      "builtin": "fs/promises",
+      "status": "partial",
+      "priority": 1,
+      "implementedBy": "packages/node-runtime/src/builtins/fs-promises.ts",
+      "tests": ["packages/node-runtime/test/secondary-builtins.test.ts"],
+      "requiredBy": ["npm config/package-json/pacote file operations", "pnpm filesystem operations"],
+      "minimumApi": ["readFile", "writeFile", "mkdir", "stat"],
+      "acceptance": ["Promise FS methods delegate to the runtime fs binding and resolve/reject through async API shape."],
+      "nextPhase": "P10"
+    },
+    {
+      "builtin": "http",
+      "status": "partial",
+      "priority": 1,
+      "implementedBy": "packages/node-runtime/src/builtins/http.ts",
+      "tests": ["packages/node-runtime/test/secondary-builtins.test.ts"],
+      "requiredBy": ["minipass-fetch", "make-fetch-happen", "package registry requests"],
+      "minimumApi": ["request", "get", "Agent", "ClientRequest", "IncomingMessage"],
+      "acceptance": ["Fetch-backed request/get invokes callback with status, headers, and readable body."],
+      "nextPhase": "P10"
+    },
+    {
+      "builtin": "http2",
+      "status": "partial",
+      "priority": 1,
+      "implementedBy": "packages/node-runtime/src/builtins/http2.ts",
+      "tests": ["packages/node-runtime/test/secondary-builtins.test.ts"],
+      "requiredBy": ["npm sigstore fetch constants", "pnpm http2-wrapper feature loading"],
+      "minimumApi": ["constants", "connect", "ClientHttp2Session", "createServer", "createSecureServer"],
+      "acceptance": [
+        "HTTP/2 constants required by npm sigstore and pnpm http2-wrapper load under browser runtime.",
+        "Direct HTTP/2 session and server attempts fail with ERR_BROWSER_HTTP2_UNSUPPORTED."
+      ],
+      "nextPhase": "P10"
+    },
+    {
+      "builtin": "https",
+      "status": "partial",
+      "priority": 1,
+      "implementedBy": "packages/node-runtime/src/builtins/http.ts",
+      "tests": ["packages/node-runtime/test/secondary-builtins.test.ts"],
+      "requiredBy": ["minipass-fetch", "make-fetch-happen", "package registry requests"],
+      "minimumApi": ["request", "get", "Agent", "ClientRequest", "IncomingMessage"],
+      "acceptance": ["HTTPS facade shares fetch-backed request/get behavior with https default protocol."],
+      "nextPhase": "P10"
+    },
+    {
+      "builtin": "net",
+      "status": "partial",
+      "priority": 1,
+      "implementedBy": "packages/node-runtime/src/builtins/net.ts",
+      "tests": ["packages/node-runtime/test/secondary-builtins.test.ts"],
+      "requiredBy": ["proxy agents", "package-manager network dependency loading"],
+      "minimumApi": ["Socket", "connect", "createConnection", "isIP", "isIPv4", "isIPv6"],
+      "acceptance": ["Module loads for dependency graph compatibility and direct TCP attempts fail with ERR_BROWSER_TCP_UNSUPPORTED."],
+      "nextPhase": "P10"
+    },
+    {
+      "builtin": "tls",
+      "status": "partial",
+      "priority": 1,
+      "implementedBy": "packages/node-runtime/src/builtins/tls.ts",
+      "tests": ["packages/node-runtime/test/secondary-builtins.test.ts"],
+      "requiredBy": ["https/proxy agents", "package-manager network dependency loading"],
+      "minimumApi": ["TLSSocket", "connect", "createSecureContext", "rootCertificates"],
+      "acceptance": ["Module loads for dependency graph compatibility and direct TLS attempts fail with ERR_BROWSER_TCP_UNSUPPORTED."],
+      "nextPhase": "P10"
+    },
+    {
+      "builtin": "util",
+      "status": "partial",
+      "priority": 0,
+      "implementedBy": "packages/node-runtime/src/builtins/util.ts",
+      "tests": ["packages/node-runtime/test/builtin-subset.test.ts"],
+      "requiredBy": ["npm diagnostics", "pnpm diagnostics", "dependency compatibility helpers"],
+      "minimumApi": [
+        "util.format",
+        "util.inspect",
+        "util.inherits",
+        "util.promisify",
+        "util.callbackify",
+        "util.types.isDate",
+        "util.types.isRegExp",
+        "util.types.isArrayBuffer",
+        "util.types.isTypedArray",
+        "util.deprecate"
+      ],
+      "acceptance": [
+        "Reference Node fixture covers formatting, shallow inspection, custom inspect hooks, inheritance, promisify callback order, and util.types probes.",
+        "Browser runtime fixture passes the same fixture.",
+        "Unsupported deep inspect features are explicitly documented instead of silently diverging."
+      ],
+      "nextPhase": "P9-02"
+    },
+    {
+      "builtin": "v8",
+      "status": "partial",
+      "priority": 2,
+      "implementedBy": "packages/node-runtime/src/builtins/v8.ts",
+      "tests": ["packages/node-runtime/test/secondary-builtins.test.ts"],
+      "requiredBy": ["npm arborist packument cache sizing"],
+      "minimumApi": ["getHeapStatistics", "getHeapSpaceStatistics"],
+      "acceptance": [
+        "getHeapStatistics returns a stable heap_size_limit for npm arborist cache sizing.",
+        "getHeapSpaceStatistics loads with the expected array shape."
+      ],
+      "nextPhase": "P10"
+    },
+    {
+      "builtin": "wasi",
+      "status": "partial",
+      "priority": 1,
+      "implementedBy": "packages/node-runtime/src/builtins/wasi.ts",
+      "tests": ["packages/node-runtime/test/secondary-builtins.test.ts"],
+      "requiredBy": ["Rolldown WASI binding candidate", "Vite 8 browser runtime WASM fallback"],
+      "minimumApi": ["WASI", "WASI#wasiImport", "WASI#getImportObject", "WASI#initialize", "WASI#start"],
+      "acceptance": [
+        "node:wasi resolves in package-manager CLI evaluation.",
+        "WASI exposes a Node-compatible constructor and import object surface.",
+        "Full WASI syscall execution remains governed by the P19 WASI runtime boundary."
+      ],
+      "nextPhase": "P11"
+    },
+    {
+      "builtin": "stream",
+      "status": "partial",
+      "priority": 1,
+      "implementedBy": "packages/node-runtime/src/builtins/stream.ts",
+      "tests": ["packages/node-runtime/test/stream-subset.test.ts"],
+      "requiredBy": ["npm install pipeline", "pnpm install pipeline", "tarball extraction", "Vite dev server IO"],
+      "minimumApi": [
+        "Readable",
+        "Writable",
+        "Duplex",
+        "Transform",
+        "PassThrough",
+        "pipeline",
+        "finished",
+        "Readable.from",
+        "readable pipe/unpipe",
+        "async iterator",
+        "backpressure and error propagation subset"
+      ],
+      "acceptance": [
+        "Reference Node fixture covers objectMode false byte streams, pipe lifecycle, transform flush, async iteration, and error forwarding.",
+        "Browser runtime fixture passes the same fixture.",
+        "Tarball download/extract path can stream data without buffering the entire archive in package-manager code."
+      ],
+      "nextPhase": "P9-03"
+    },
+    {
+      "builtin": "path",
+      "status": "partial",
+      "priority": 2,
+      "implementedBy": "packages/node-runtime/src/builtins/path.ts",
+      "tests": ["packages/node-runtime/test/secondary-builtins.test.ts"],
+      "requiredBy": ["package resolution", "Vite project file paths"],
+      "minimumApi": ["posix.join", "posix.resolve", "posix.normalize", "posix.relative", "dirname", "basename", "extname", "isAbsolute"],
+      "acceptance": ["Trace-driven fixture passes for package-manager and Vite paths."],
+      "nextPhase": "P9-04"
+    },
+    {
+      "builtin": "perf_hooks",
+      "status": "partial",
+      "priority": 2,
+      "implementedBy": "packages/node-runtime/src/builtins/perf-hooks.ts",
+      "tests": ["packages/node-runtime/test/secondary-builtins.test.ts"],
+      "requiredBy": ["Vite dev/build timing", "Rollup/plugin performance marks", "framework diagnostics"],
+      "minimumApi": ["performance.now", "performance.mark", "performance.measure", "performance.getEntries", "performance.getEntriesByName", "performance.getEntriesByType", "performance.clearMarks", "performance.clearMeasures", "PerformanceObserver", "constants"],
+      "acceptance": [
+        "Vite/Rollup timing imports from node:perf_hooks load under the browser runtime.",
+        "Marks and measures preserve Node-compatible entry shapes for timing probes.",
+        "PerformanceObserver provides a non-crashing browser-safe observer shape for feature probes."
+      ],
+      "nextPhase": "P11"
+    },
+    {
+      "builtin": "url",
+      "status": "partial",
+      "priority": 2,
+      "implementedBy": "packages/node-runtime/src/builtins/url.ts",
+      "tests": ["packages/node-runtime/test/secondary-builtins.test.ts"],
+      "requiredBy": ["package metadata fetch", "Vite dev server URLs"],
+      "minimumApi": ["URL", "URLSearchParams", "fileURLToPath", "pathToFileURL", "urlToHttpOptions"],
+      "acceptance": ["Trace-driven fixture passes for package-manager and Vite URLs."],
+      "nextPhase": "P9-04"
+    },
+    {
+      "builtin": "process",
+      "status": "partial",
+      "priority": 2,
+      "implementedBy": "packages/node-runtime/src/builtins/process.ts",
+      "tests": ["packages/node-runtime/test/secondary-builtins.test.ts"],
+      "requiredBy": ["CLI args/env/cwd", "framework feature detection"],
+      "minimumApi": ["argv", "env", "cwd", "chdir", "exitCode", "nextTick", "platform", "versions", "release"],
+      "acceptance": ["CLI and Vite fixtures do not fail on process shape checks."],
+      "nextPhase": "P9-04"
+    },
+    {
+      "builtin": "os",
+      "status": "partial",
+      "priority": 3,
+      "implementedBy": "packages/node-runtime/src/builtins/os.ts",
+      "tests": ["packages/node-runtime/test/secondary-builtins.test.ts"],
+      "requiredBy": ["temporary paths", "platform feature detection"],
+      "minimumApi": ["tmpdir", "homedir", "platform", "arch", "cpus", "EOL"],
+      "acceptance": ["Package-manager fixtures use stable browser-safe values."],
+      "nextPhase": "P9-04"
+    },
+    {
+      "builtin": "querystring",
+      "status": "partial",
+      "priority": 2,
+      "implementedBy": "packages/node-runtime/src/builtins/querystring.ts",
+      "tests": ["packages/node-runtime/test/secondary-builtins.test.ts"],
+      "requiredBy": ["npm registry fetch", "package-manager URL compatibility"],
+      "minimumApi": ["parse", "stringify", "escape", "unescape", "encode", "decode"],
+      "acceptance": ["Duplicate keys, plus-space decoding, and array stringification pass under browser runtime."],
+      "nextPhase": "P10"
+    },
+    {
+      "builtin": "readline",
+      "status": "partial",
+      "priority": 2,
+      "implementedBy": "packages/node-runtime/src/builtins/readline.ts",
+      "tests": ["packages/node-runtime/test/secondary-builtins.test.ts"],
+      "requiredBy": ["pnpm FileHandle.readLines", "enquirer keypress setup"],
+      "minimumApi": ["createInterface", "Interface async iterator", "close", "pause", "resume", "question", "emitKeypressEvents"],
+      "acceptance": ["Async iterable input is exposed as lines and non-interactive prompt setup does not throw."],
+      "nextPhase": "P10"
+    },
+    {
+      "builtin": "string_decoder",
+      "status": "partial",
+      "priority": 2,
+      "implementedBy": "packages/node-runtime/src/builtins/string-decoder.ts",
+      "tests": ["packages/node-runtime/test/secondary-builtins.test.ts"],
+      "requiredBy": ["minipass", "readable-stream", "package-manager stream compatibility"],
+      "minimumApi": ["StringDecoder", "write", "end", "utf8 multibyte boundary handling"],
+      "acceptance": ["Split UTF-8 byte sequences decode without replacement characters across write/end."],
+      "nextPhase": "P10"
+    },
+    {
+      "builtin": "timers",
+      "status": "partial",
+      "priority": 2,
+      "implementedBy": "packages/node-runtime/src/builtins/timers-classic.ts",
+      "tests": ["packages/node-runtime/test/secondary-builtins.test.ts"],
+      "requiredBy": ["package-manager timeout/immediate compatibility", "pnpm CLI graph"],
+      "minimumApi": ["setTimeout", "clearTimeout", "setImmediate", "clearImmediate"],
+      "acceptance": ["Classic timer functions are available from node:timers and match browser scheduler behavior."],
+      "nextPhase": "P10"
+    },
+    {
+      "builtin": "timers/promises",
+      "status": "partial",
+      "priority": 2,
+      "implementedBy": "packages/node-runtime/src/builtins/timers.ts",
+      "tests": ["packages/node-runtime/test/secondary-builtins.test.ts"],
+      "requiredBy": ["package-manager async retry/backoff compatibility"],
+      "minimumApi": ["setTimeout promise", "AbortSignal cancellation"],
+      "acceptance": ["Promise timeout resolves with the supplied value and rejects on an aborted signal."],
+      "nextPhase": "P10"
+    },
+    {
+      "builtin": "tty",
+      "status": "partial",
+      "priority": 3,
+      "implementedBy": "packages/node-runtime/src/builtins/tty.ts",
+      "tests": ["packages/node-runtime/test/secondary-builtins.test.ts"],
+      "requiredBy": ["CLI color/progress behavior"],
+      "minimumApi": ["isatty", "WriteStream", "ReadStream"],
+      "acceptance": ["npm/pnpm output mode is deterministic and non-interactive by default."],
+      "nextPhase": "P9-04"
+    },
+    {
+      "builtin": "worker_threads",
+      "status": "partial",
+      "priority": 2,
+      "implementedBy": "packages/node-runtime/src/builtins/worker-threads-builtin.ts",
+      "tests": ["packages/node-runtime/test/secondary-builtins.test.ts"],
+      "requiredBy": ["pnpm thread id suffixes", "pnpm tarball worker pool feature detection"],
+      "minimumApi": ["isMainThread", "threadId", "parentPort", "workerData", "MessageChannel", "MessagePort", "Worker"],
+      "acceptance": [
+        "Thread identity feature detection returns stable browser-main-thread values.",
+        "MessageChannel supports same-runtime message delivery for dependency feature probes.",
+        "Actual Worker construction fails with ERR_BROWSER_WORKER_THREAD_UNSUPPORTED until a browser-backed worker bridge is productized."
+      ],
+      "nextPhase": "P10"
+    },
+    {
+      "builtin": "async_hooks",
+      "status": "partial",
+      "priority": 2,
+      "implementedBy": "packages/node-runtime/src/builtins/async-hooks.ts",
+      "tests": ["packages/node-runtime/test/secondary-builtins.test.ts"],
+      "requiredBy": ["pnpm async context feature detection", "package-manager CLI graph"],
+      "minimumApi": ["AsyncLocalStorage", "createHook", "executionAsyncId", "triggerAsyncId"],
+      "acceptance": ["AsyncLocalStorage stores synchronous context and createHook exposes chainable enable/disable no-op hooks."],
+      "nextPhase": "P10"
+    },
+    {
+      "builtin": "assert",
+      "status": "partial",
+      "priority": 3,
+      "implementedBy": "packages/node-runtime/src/builtins/assert.ts",
+      "tests": ["packages/node-runtime/test/secondary-builtins.test.ts"],
+      "requiredBy": ["dependency self-checks"],
+      "minimumApi": ["ok", "equal", "deepEqual", "strictEqual", "throws", "rejects", "strict"],
+      "acceptance": ["Common dependency assertion usage passes under browser runtime."],
+      "nextPhase": "P9-04"
+    }
+  ]
+}

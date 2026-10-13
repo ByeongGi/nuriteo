@@ -1,0 +1,123 @@
+{
+  "schemaVersion": 5,
+  "updatedAt": "2026-09-27",
+  "nextVersion": "15.5.26",
+  "publicGrade": "product-preview",
+  "fullRuntimeGrade": "product-supported",
+  "productSupportClaim": true,
+  "productSupportClaimScope": "Pinned Next.js 15.5.26 browser-worker CLI/runtime with version-matched WASM SWC under the release CSP. Native .node addons and arbitrary Next versions remain outside scope.",
+  "scope": {
+    "runtime": "browser-guest-node-runtime",
+    "phase": "productization",
+    "goal": "Maintain the pinned Next.js full runtime as a strict-CSP browser-worker product surface."
+  },
+  "packageFacts": {
+    "bin": "dist/bin/next",
+    "nodeEngine": "^18.18.0 || ^19.8.0 || >=20.0.0",
+    "wasmSwcPackage": "@next/swc-wasm-nodejs",
+    "wasmSwcVersion": "15.5.26",
+    "wasmSwcIntegrity": "sha512-1ytohzo+DpKjkrAvgJsbfU0Hma2uQYKOGbE1Wndb4uakU3fmBotDrHw4byH5sXmR74/dS5X4H4OP3cyslV0CtA==",
+    "nativeAddonPolicy": "unsupported",
+    "nativeOptionalDependencies": [
+      "@next/swc-darwin-arm64",
+      "@next/swc-darwin-x64",
+      "@next/swc-linux-arm64-gnu",
+      "@next/swc-linux-arm64-musl",
+      "@next/swc-linux-x64-gnu",
+      "@next/swc-linux-x64-musl",
+      "@next/swc-win32-arm64-msvc",
+      "@next/swc-win32-x64-msvc",
+      "sharp"
+    ]
+  },
+  "browserWorker": {
+    "status": "pass",
+    "executionHost": "strict-csp-headless-chrome",
+    "reason": "The complete integrity-pinned Next 15.5.26 graph passes dev/HMR, build, start/restart, feature, recovery, teardown, and heap-budget checks in strict-CSP Chrome.",
+    "evidence": "compat/nextjs-browser-worker-results.json"
+  },
+  "security": {
+    "status": "pass",
+    "reason": "Pinned Next 15.5.26 and version-matched WASM SWC satisfy the maintained September 2026 security baseline.",
+    "evidence": "compat/nextjs-security-baseline.json"
+  },
+  "capabilities": [
+    {
+      "id": "next-app-router-preview-adapter",
+      "command": "next dev (adapter)",
+      "status": "supported",
+      "reason": "NextProductWorkflow serves app/**/page.tsx with layout wrapping, next/link navigation, and save-triggered preview refresh in the product IDE."
+    },
+    {
+      "id": "next-app-router-multi-route",
+      "command": "app/**/page.tsx routing",
+      "status": "supported",
+      "reason": "Preview path maps to app route segments (e.g. /about -> app/about/page.tsx)."
+    },
+    {
+      "id": "next-app-router-build-adapter",
+      "command": "next build (adapter smoke)",
+      "status": "supported",
+      "reason": "Adapter writes out/index.html smoke artifacts for product build button."
+    },
+    {
+      "id": "next-cli-artifact-execution",
+      "command": "next dev | next build | next start",
+      "status": "supported",
+      "reason": "The pinned Next 15.5.26 distribution and real CLI dev, build, and start paths pass in strict-CSP Chrome."
+    },
+    {
+      "id": "next-app-router-dev",
+      "command": "next dev",
+      "status": "supported",
+      "reason": "The real Next 15.5.26 development server compiles the App Router with version-matched WASM SWC, serves it, and applies a real HMR edit."
+    },
+    {
+      "id": "next-app-router-build",
+      "command": "next build",
+      "status": "supported",
+      "reason": "The real Next 15.5.26 build emits BUILD_ID, RSC/client manifests, middleware and Edge bundles, prerender metadata, server chunks, and production assets."
+    },
+    {
+      "id": "next-static-export",
+      "command": "next build with output export",
+      "status": "candidate",
+      "reason": "May become supportable after WASM SWC and build-time filesystem contracts are verified; runtime server features remain out of scope."
+    },
+    {
+      "id": "next-native-swc",
+      "command": "load @next/swc-* native optional packages",
+      "status": "unsupported",
+      "reason": "Native platform packages and native .node addons are outside the browser runtime support scope."
+    },
+    {
+      "id": "next-wasm-swc",
+      "command": "load @next/swc-wasm-nodejs",
+      "status": "supported",
+      "reason": "The integrity-pinned, version-matched @next/swc-wasm-nodejs 15.5.26 transform path passes real next dev and next build in strict-CSP Chrome."
+    },
+    {
+      "id": "next-rsc-server-actions",
+      "command": "RSC and Server Actions",
+      "status": "supported",
+      "reason": "Production RSC manifests are emitted and a real Server Action POST returns the expected 303 action redirect."
+    },
+    {
+      "id": "next-middleware-edge",
+      "command": "Middleware and Edge route",
+      "status": "supported",
+      "reason": "Middleware response mutation and an Edge-runtime route execute through the production server fixture."
+    },
+    {
+      "id": "next-isr-image",
+      "command": "ISR and Image Optimization",
+      "status": "supported",
+      "reason": "ISR transitions from stale to regenerated cache content and Image Optimization returns byte-exact PNG data."
+    }
+  ],
+  "gate": {
+    "id": "SG25-nextjs",
+    "status": "product-supported",
+    "supportDecision": "Pinned Next.js 15.5.26 full CLI/runtime is product-supported under the exact release CSP with integrity-pinned, version-matched WASM SWC. Native .node SWC and arbitrary Next versions remain unsupported."
+  }
+}

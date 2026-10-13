@@ -1,0 +1,18 @@
+{
+  "name": "@nuriteo/sdk",
+  "version": "0.1.0-beta.1",
+  "license": "Apache-2.0",
+  "publishConfig": {
+    "access": "public",
+    "provenance": true,
+    "tag": "beta"
+  },
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@nuriteo/browser-host": "workspace:*",
+    "@nuriteo/protocol": "workspace:*"
+  }
+}

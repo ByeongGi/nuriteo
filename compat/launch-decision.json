@@ -1,0 +1,78 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-28",
+  "gate": "SG30",
+  "decision": "private-beta-ready",
+  "allowedDecisions": ["private-beta-ready", "public-beta-ready", "hold"],
+  "milestones": {
+    "S-A": {
+      "name": "Single-user preview MVP",
+      "status": "pass",
+      "evidence": [
+        "apps/web",
+        "apps/web/test/gate-project-runtime-browser.test.ts",
+        "docs/productization/service-readiness-plan.md#sg22"
+      ]
+    },
+    "S-B": {
+      "name": "Private beta service",
+      "status": "pass",
+      "evidence": [
+        "crates/nuriteo-server",
+        "tests/service-backend/project-service.test.ts",
+        "tooling/checks/check-service-backend.ts",
+        "docs/productization/service-backend.md",
+        "compat/security-beta-checklist.json",
+        "compat/error-catalog.json",
+        "tooling/checks/check-observability-support.ts"
+      ]
+    },
+    "S-C": {
+      "name": "Public beta readiness",
+      "status": "hold",
+      "evidence": [
+        "compat/ecosystem-fixture-actual-product-results.json",
+        "compat/service-workflow-fixture-results.json",
+        "compat/browser-smoke-results.json",
+        "docs/productization/browser-support-grades.md",
+        "compat/runtime-reliability-policy.json"
+      ],
+      "blockers": [
+        "The ten public Vite React fixtures pass in a Node worker; browser-worker validation of this repository cohort remains pending"
+      ]
+    }
+  },
+  "gates": {
+    "SG21": "pass",
+    "SG22": "pass",
+    "SG23": "pass",
+    "SG24": "pass",
+    "SG25": "pass",
+    "SG26": "pass",
+    "SG27": "pass",
+    "SG28": "pass",
+    "SG29": "pass",
+    "SG30": "private-beta-ready"
+  },
+  "supportMatrix": {
+    "chrome": "supported",
+    "edge": "supported",
+    "safari": "supported",
+    "viteReact": "supported",
+    "publicFixtureBrowserWorker": "hold",
+    "viteVue": "supported",
+    "viteSvelte": "supported",
+    "nextjsPreviewAdapter": "supported",
+    "nextjsFullCli": "hold"
+  },
+  "acceptedRisks": [
+    "Next.js App Router preview is adapter-backed; the full next CLI, native SWC, and server-only features are not product-supported",
+    "Large public repositories have Node-worker evidence; equivalent browser-worker soak remains unverified",
+    "Production cloud provider wiring and deployment remain pending"
+  ],
+  "launchBlockersForPublicBeta": [
+    "The ten-repository Node-worker result must be verified in the browser-worker public cohort",
+    "S-C remains hold while browser-worker cohort validation is unresolved"
+  ],
+  "rationale": "S-A and S-B criteria are met with preview MVP, onboarding, reliability policy, private-beta backend path, security checklist, observability/support, release-ops rollback rehearsal, and Safari desktop product smoke. The public repository browser-worker cohort remains unverified, so S-C is not fully met and the launch decision remains private-beta-ready."
+}

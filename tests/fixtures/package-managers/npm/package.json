@@ -1,0 +1,19 @@
+{
+  "name": "npm-workspace-fixture",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "preinstall": "node scripts/preinstall.js",
+    "build": "node scripts/build-check.js",
+    "lifecycle-test": "node scripts/lifecycle-check.js"
+  },
+  "dependencies": {
+    "fixture-bin": "file:packages/fixture-bin",
+    "fixture-optional": "file:packages/fixture-optional",
+    "fixture-peer-consumer": "file:packages/fixture-peer-consumer",
+    "fixture-peer-provider": "file:packages/fixture-peer-provider"
+  }
+}

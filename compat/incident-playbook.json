@@ -1,0 +1,63 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-10-12",
+  "status": "self-hosted-v1",
+  "responsePolicy": "security/vulnerability-response-policy.json",
+  "supportBundlePolicy": "compat/self-hosted-support-bundle-v1.json",
+  "requiredIncidentTypes": [
+    "rollback",
+    "browser-regression",
+    "registry-outage",
+    "quota-corruption",
+    "security-report"
+  ],
+  "incidents": [
+    {
+      "id": "rollback",
+      "severity": "high",
+      "owner": "release-owner",
+      "signals": ["PG regression", "support bundle error spike", "artifact fingerprint mismatch"],
+      "mitigation": ["stop promotion", "restore rollback artifact", "rerun release provenance and smoke suites"],
+      "userCommsTemplate": "We paused this release and rolled back to the previous verified runtime artifact. Existing projects remain available; retry after the status page reports recovery."
+    },
+    {
+      "id": "browser-regression",
+      "severity": "high",
+      "owner": "runtime-owner",
+      "signals": ["SharedArrayBuffer unavailable", "COOP/COEP drift", "worker boot failures after browser update"],
+      "mitigation": ["pin known-good browser matrix", "publish affected browser versions", "ship runtime workaround or hold release"],
+      "userCommsTemplate": "A browser update is affecting runtime startup. Use a supported Chromium version from the support matrix while we validate a runtime fix."
+    },
+    {
+      "id": "registry-outage",
+      "severity": "medium",
+      "owner": "package-runtime-owner",
+      "signals": ["registry fetch timeout", "integrity fetch failure", "package install retry spike"],
+      "mitigation": ["switch to cached tarballs when integrity is already verified", "surface offline diagnostic", "retry with backoff"],
+      "userCommsTemplate": "Package registry access is degraded. Cached packages continue to work; new installs may fail until registry connectivity recovers."
+    },
+    {
+      "id": "quota-corruption",
+      "severity": "medium",
+      "owner": "storage-owner",
+      "signals": ["EOPFSQUOTA", "snapshot recovery failure", "lease conflict spike"],
+      "mitigation": ["preserve latest valid snapshot", "evict cache prefixes only", "offer project archive export before reset"],
+      "userCommsTemplate": "Project storage needs recovery. We preserved the latest valid snapshot and will avoid deleting project files unless you explicitly reset the workspace."
+    },
+    {
+      "id": "security-report",
+      "severity": "critical",
+      "owner": "security-owner",
+      "signals": ["credential leak report", "permission bypass report", "CSP/COOP/COEP regression"],
+      "mitigation": ["acknowledge privately", "reproduce with support bundle", "patch and rotate affected credentials", "publish advisory when needed"],
+      "userCommsTemplate": "We received a security report and are investigating. Do not share tokens or private project archives in public channels; we will provide a patched build or mitigation."
+    }
+  ],
+  "supportBundleRequired": true,
+  "responseTargets": {
+    "critical": "acknowledge within 4 hours",
+    "high": "acknowledge within 24 hours and triage within 48 hours",
+    "medium": "acknowledge within 48 hours and triage within 120 hours",
+    "low": "acknowledge within 120 hours and triage within 240 hours"
+  }
+}

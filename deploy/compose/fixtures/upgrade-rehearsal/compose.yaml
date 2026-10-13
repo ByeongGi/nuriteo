@@ -1,0 +1,29 @@
+services:
+  migrate:
+    image: ${NURITEO_SERVER_IMAGE:?set NURITEO_SERVER_IMAGE}
+    environment:
+      FIXTURE_PREFLIGHT_FAIL: ${FIXTURE_PREFLIGHT_FAIL:-false}
+      FIXTURE_MIGRATE_FAIL: ${FIXTURE_MIGRATE_FAIL:-false}
+    volumes:
+      - state:/state
+  storage-check:
+    image: ${NURITEO_SERVER_IMAGE:?set NURITEO_SERVER_IMAGE}
+    command: ["storage-check"]
+  core:
+    image: ${NURITEO_SERVER_IMAGE:?set NURITEO_SERVER_IMAGE}
+    command: ["serve"]
+    environment:
+      FIXTURE_RELEASE: ${NURITEO_SERVER_IMAGE:?set NURITEO_SERVER_IMAGE}
+    healthcheck:
+      test: ["CMD", "/bin/sh", "/driver.sh", "healthcheck"]
+      interval: 1s
+      timeout: 1s
+      retries: 20
+  web:
+    image: ${NURITEO_WEB_IMAGE:?set NURITEO_WEB_IMAGE}
+    command: ["web"]
+    environment:
+      FIXTURE_RELEASE: ${NURITEO_WEB_IMAGE:?set NURITEO_WEB_IMAGE}
+      FIXTURE_PORT: 3000
+volumes:
+  state:

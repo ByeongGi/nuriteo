@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "taskId": "SUP-004",
+  "scenario": "suspected-registry-credential-exposure",
+  "severity": "critical",
+  "startedAt": "2026-10-12T00:00:00Z",
+  "events": [
+    { "state": "reported", "at": "2026-10-12T00:00:00Z", "owner": "security-owner", "evidence": "redacted-operation-id" },
+    { "state": "acknowledged", "at": "2026-10-12T01:00:00Z", "owner": "incident-commander", "evidence": "private-acknowledgement" },
+    { "state": "triaged", "at": "2026-10-12T03:00:00Z", "owner": "security-owner", "evidence": "affected-release-and-digest-bounded" },
+    { "state": "contained", "at": "2026-10-12T04:00:00Z", "owner": "release-owner", "evidence": "credential-revoked-promotion-held" },
+    { "state": "remediated", "at": "2026-10-12T18:00:00Z", "owner": "release-owner", "evidence": "new-image-digest-security-gate-pass" },
+    { "state": "disclosed", "at": "2026-10-12T20:00:00Z", "owner": "communications-owner", "evidence": "affected-range-mitigation-advisory" },
+    { "state": "closed", "at": "2026-10-13T00:00:00Z", "owner": "scribe", "evidence": "post-incident-actions-assigned" }
+  ],
+  "secretMaterialPresent": false,
+  "artifacts": ["support-bundle-redacted", "audit-export-redacted", "security-gate-report", "advisory-draft"]
+}

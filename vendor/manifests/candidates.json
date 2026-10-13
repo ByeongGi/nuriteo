@@ -1,0 +1,114 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-09-15T00:50:55+09:00",
+  "purpose": "P0-01 browser-native Node runtime candidate baseline. These entries pin reference implementations for evaluation only; they are not approved vendored product code.",
+  "localEvaluationEnvironment": {
+    "os": "macOS",
+    "node": "v24.17.0, plus mise node@22.23.0 and node@26.8.2 for candidate reruns",
+    "npm": "11.13.0, plus npm 11.19.1 with node@26.8.2",
+    "pnpm": "11.15.1",
+    "bun": "1.4.2 via mise",
+    "cargo": "cargo 1.97.1 (c980f4866 2026-06-30)",
+    "wasmPack": "0.15.0"
+  },
+  "candidates": [
+    {
+      "id": "vivari",
+      "name": "Vivari",
+      "repository": "https://github.com/maitrungduc1410/vivari.git",
+      "branch": "master",
+      "commit": "9a89ff328b87ad0fb6a180d4401ea418c180cbe7",
+      "license": {
+        "declared": "MIT",
+        "evidence": "LICENSE"
+      },
+      "package": {
+        "name": "vivari",
+        "version": "0.0.1",
+        "type": "module",
+        "engines": {
+          "node": ">=22.15.0"
+        },
+        "workspaces": [
+          "packages/core",
+          "packages/react",
+          "examples/basic"
+        ],
+        "packageManager": null
+      },
+      "notableScripts": {
+        "verify": "node scripts/verify-node.mjs",
+        "build": "npm run build:vfs && npm run build:vfs:node && npm run build:codec && npm run build:codec:node && npm run build:crypto && npm run build:crypto:node && npm run build:wasi-demo",
+        "dev": "cd packages/studio && bun run dev",
+        "spikesPackageManagers": "node scripts/run-spikes.mjs --net npm yarn pnpm corepack",
+        "vendorNpm": "node scripts/vendor-npm.mjs",
+        "vendorPnpm": "node scripts/vendor-pnpm.mjs",
+        "vendorCorepack": "node scripts/vendor-corepack.mjs"
+      },
+      "observedStructure": [
+        "Rust/WASM crates: packages/vfs, packages/codec, packages/crypto, packages/wasi-demo",
+        "Kernel and VFS host code: packages/kernel-host",
+        "Node runtime layer: packages/runtime",
+        "Protocol: packages/protocol",
+        "Studio app: packages/studio",
+        "Cloudflare preview worker: worker"
+      ],
+      "p0Status": "verified-reference-run",
+      "localRun": {
+        "command": "mise exec node@22.23.0 bun@1.4.2 -- npm run build && mise exec node@22.23.0 bun@1.4.2 -- npm run verify && mise exec node@22.23.0 bun@1.4.2 -- npm run spikes:pm",
+        "exitCode": 0,
+        "summary": "Rust/WASM build completed, verify reported RESULT: PASS, and package-manager network spikes passed 8/8 for npm, npm-studio, yarn, yarn-studio, pnpm, pnpm-studio, corepack, and corepack-studio."
+      },
+      "adoptionNotes": [
+        "Strong reference for actual npm/pnpm/corepack strategy and WebContainer-like worker topology.",
+        "Rust VFS/codec/crypto reuse is directly relevant, but importing the whole stack would carry substantial patch responsibility.",
+        "Requires a build toolchain bootstrap before deeper execution comparison."
+      ]
+    },
+    {
+      "id": "opencontainers",
+      "name": "OpenContainers",
+      "repository": "https://github.com/Welfordian/OpenContainers.git",
+      "branch": "main",
+      "commit": "b60f317dd2ceb73fefe36707f958f558e00ec470",
+      "license": {
+        "declared": "not-found-in-repository-root",
+        "evidence": "No LICENSE file found at repository root during P0-01 clone."
+      },
+      "package": {
+        "name": "opencontainers",
+        "version": "0.1.4",
+        "type": "module",
+        "engines": {
+          "node": ">=26"
+        },
+        "workspaces": null,
+        "packageManager": null
+      },
+      "notableScripts": {
+        "test": "node --test tests/*.test.mjs",
+        "testMilestones": "node --test tests/milestones.test.mjs",
+        "compatDocs": "node scripts/generate-compat-doc.mjs"
+      },
+      "observedStructure": [
+        "Virtual filesystem: packages/fs",
+        "Kernel/process/network managers: packages/kernel",
+        "Node runtime layer: packages/runtime-node",
+        "npm installer implementation: packages/npm",
+        "Preview service worker/client: packages/service-worker, packages/preview-client",
+        "WebContainer-compatible facade: packages/embed"
+      ],
+      "p0Status": "mostly-verified-reference-run",
+      "localRun": {
+        "command": "mise exec node@26.8.2 -- npm test && mise exec node@26.8.2 -- npm run test:milestones",
+        "exitCode": 1,
+        "summary": "Node 26.8.2 executed the full suite: 423 tests, 421 pass, 2 reported failures from one failing package-probes subtest involving dotenv reading missing /workspace/.env. Milestones passed 6/6."
+      },
+      "adoptionNotes": [
+        "Very useful as a compact compatibility-test corpus and architecture checklist.",
+        "Not Rust-based and does not satisfy the target implementation language on its own.",
+        "Actual pnpm support was not established in the root scripts during this pass."
+      ]
+    }
+  ]
+}

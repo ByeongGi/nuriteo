@@ -1,0 +1,327 @@
+{
+  "schemaVersion": 5,
+  "updatedAt": "2026-09-27",
+  "status": "supported-adapters-with-held-runtime-validated-candidates",
+  "decisionCriteria": {
+    "productValue": ["common frontend workflow need", "project-local execution", "clear user-visible output"],
+    "maintenanceCost": ["artifact size", "WASI/syscall surface", "release cadence", "security patch pressure"],
+    "runtimeFit": ["no direct TCP", "project sandbox filesystem only", "bounded stdio", "deterministic adapter contract"]
+  },
+  "validationRequirements": [
+    "artifact integrity",
+    "filesystem boundary",
+    "transaction durability where applicable",
+    "credential and network boundary",
+    "performance budget"
+  ],
+  "candidates": [
+    {
+      "id": "jq-wasm",
+      "tool": "jq",
+      "category": "json-transform",
+      "status": "supported",
+      "supportDecision": "product-supported-project-adapter",
+      "productValue": "medium",
+      "maintenanceCost": "medium",
+      "runtimeFit": "good",
+      "reason": "Pinned jq WebAssembly executes deterministic JSON transforms from host-approved project files without native dependencies or runtime network access.",
+      "package": {
+        "name": "jq-wasm",
+        "version": "3.0.0-jq-1.8.2",
+        "registryIntegrity": "sha512-jgWSEBJSd0lYR4Q5Fw8333MxQS5jCRI+g9KwAGL7yK1spwzTJy8C5uOS08wbpKE0Gz8oQYLlRpNLE/W70Ksp2g=="
+      },
+      "artifact": {
+        "path": "dist/build/jq.wasm",
+        "sha256": "27d493c06601e9cbc7112ef4198ee71a0dc3e9c9a4a1754e73888841da6c450a",
+        "bytes": 928824
+      },
+      "filesystem": {
+        "mode": "host-mediated-project-read",
+        "result": "pass",
+        "outsideProject": "deny"
+      },
+      "durability": {
+        "result": "not-applicable"
+      },
+      "credentialsAndNetwork": {
+        "credentialInjection": "deny",
+        "runtimeFetch": "deny",
+        "directTcp": "deny",
+        "result": "pass"
+      },
+      "performance": {
+        "artifactBudgetBytes": 2097152,
+        "coldStartBudgetMs": 2000,
+        "result": "pass"
+      },
+      "productSurface": {
+        "api": "createJqProjectAdapter",
+        "command": "jq <filter> <project-json-path> [output-path]",
+        "inputBoundary": "project-root-only",
+        "outputBoundary": "project-root-only",
+        "limits": { "inputBytes": 2097152, "outputBytes": 2097152 },
+        "status": "pass"
+      },
+      "fixtures": [
+        "tests/fixtures/non-js-tooling/jq-input.json",
+        "packages/node-runtime/test/non-js-tooling.test.ts",
+        "packages/node-runtime/test/project-tooling.test.ts"
+      ],
+      "requiredBeforeSupport": []
+    },
+    {
+      "id": "python-wasi",
+      "tool": "python",
+      "category": "general-purpose-language",
+      "status": "hold",
+      "productValue": "medium",
+      "maintenanceCost": "high",
+      "runtimeFit": "partial",
+      "reason": "Integrity-pinned Wasmer SDK and Python 3.13.18 WEBC pass Node 22 and cross-origin-isolated Chrome Worker import, project I/O, stdio, cancellation, timeout, static-memory admission, and network-disabled execution. The 150 MiB external artifact, modified-MIT attribution condition, provenance, and guest peak-memory enforcement remain blockers.",
+      "candidateArtifacts": [
+        {
+          "name": "@wasmer/sdk",
+          "versionObserved": "0.18.0",
+          "registryIntegrity": "sha512-umeaf9asTL5xS6Sp6D3tDiO4v/B3Z7gLsLWra0BDKkThX0+XTZWhb5nl77sqlfTUjTSxOLpBN7xQivNSsBLQBQ==",
+          "licenseMetadata": "Modified MIT; UI attribution required above documented commercial thresholds",
+          "runtimeFormat": "WASIX host plus separately resolved registry package",
+          "decision": "hold",
+          "blocker": "Python WEBC is 157272498 bytes and not vendored; attribution review, production delivery provenance, and guest peak-memory enforcement remain unresolved. Host/WISP networking remains disabled."
+        },
+        {
+          "name": "pyodide",
+          "versionObserved": "314.0.7",
+          "registryIntegrity": "sha512-0YvXxEhfEdpLfb/XkM2BFAeMROq0iMUX2bzzH9pOttyMcWkwq+HbE5uyuGD82LN7y2q+SNvi/6V5JEsOlD2R1A==",
+          "licenseMetadata": "MPL-2.0",
+          "runtimeFormat": "Emscripten CPython, not WASI",
+          "decision": "not-selected-for-python-wasi",
+          "blocker": "Does not exercise the product WASI boundary and has a separate Emscripten filesystem/package-loading model."
+        }
+      ],
+      "artifact": {
+        "result": "external-integrity-pass",
+        "package": "python/python@=3.13.18",
+        "format": "WEBC",
+        "sha256": "0464f16f1ad0ce4d1ab4266b057b62accd5b4123995a08103897699aefc92a54",
+        "bytes": 157272498,
+        "sdkWasmSha256": "eb00b569d1f5dc4cdb23f8986a6b812158eb7a01845000af14ae564fea050397",
+        "sdkWasmBytes": 4804809,
+        "distribution": "external-cache-not-vendored"
+      },
+      "filesystem": {
+        "mode": "project-read-write-plus-read-only-stdlib-mount",
+        "adapterResult": "pass",
+        "runtimeResult": "node-and-chrome-worker-pass",
+        "outsideProject": "deny",
+        "stdlibWrite": "deny"
+      },
+      "syscalls": {
+        "expected": ["args/env", "fd read/write/seek/stat", "path open/stat/readlink/create/unlink/rename", "clock", "random", "proc_exit"],
+        "denied": ["socket tcp/udp", "process spawn", "host filesystem outside mounts"],
+        "result": "behavioral-pass-without-syscall-trace"
+      },
+      "credentialsAndNetwork": {
+        "credentialInjection": "deny",
+        "runtimeFetch": "deny",
+        "directTcp": "deny",
+        "diagnostic": "EWASINETWORK",
+        "adapterResult": "pass",
+        "runtimeResult": "pass-network-disabled"
+      },
+      "performance": {
+        "stdioBudgetBytes": 1048576,
+        "memoryBudgetBytes": 268435456,
+        "executionBudgetMs": 10000,
+        "adapterResult": "pass",
+        "observedNode22ElapsedMs": 6181.7,
+        "staticAdmissionResult": "pass-256MiB-pre-execution-envelope",
+        "runtimeResult": "node-and-chrome-pass-guest-peak-memory-unenforced"
+      },
+      "productSurface": {
+        "api": "createPythonWasiProjectAdapter",
+        "lifecycle": "fresh-disposable-runtime-per-execution",
+        "status": "candidate-contract-only"
+      },
+      "fixtures": [
+        "packages/node-runtime/test/project-tooling-candidates.test.ts",
+        "tooling/runtime-evidence/python-wasi-runtime.ts",
+        "tests/system/browser/python-wasi-runtime.test.ts",
+        "tests/system/browser/fixtures/python-wasi-worker.mjs"
+      ],
+      "requiredBeforeSupport": [
+        "approve modified-MIT attribution obligations and 150 MiB delivery budget",
+        "enforce and measure a per-sandbox peak-memory ceiling",
+        "replace registry bootstrap with signed or vendored artifact provenance"
+      ]
+    },
+    {
+      "id": "sqlite-wasm",
+      "tool": "sqlite",
+      "category": "embedded-db",
+      "status": "supported",
+      "supportDecision": "product-supported-project-worker-adapter-with-constraints",
+      "productValue": "medium",
+      "maintenanceCost": "medium",
+      "runtimeFit": "good-with-worker-opfs-constraints",
+      "reason": "Pinned official SQLite WebAssembly passes transactions and OPFS reopen durability, but remains an embedded browser database rather than a TCP database replacement.",
+      "package": {
+        "name": "@sqlite.org/sqlite-wasm",
+        "version": "3.53.4-build1",
+        "registryIntegrity": "sha512-U8pvL0patYHMgieD8JxxYJTlh9m1LUX8+BDYb7MiKQzBI89f2qbdmdcG/PvnPaLm9wsBbv4VlVG453ixnxBOnA=="
+      },
+      "artifact": {
+        "path": "dist/sqlite3.wasm",
+        "sha256": "2ee8f3dab694532afc8840e07703127287662d08b74e6ff50491ce63f00d5752",
+        "bytes": 868907
+      },
+      "filesystem": {
+        "mode": "project-namespaced-opfs-worker",
+        "result": "conditional-pass",
+        "constraints": ["dedicated Worker", "COOP/COEP", "project-scoped database path"]
+      },
+      "durability": {
+        "mode": "commit-rollback-close-worker-reopen-worker",
+        "result": "pass"
+      },
+      "credentialsAndNetwork": {
+        "credentialInjection": "deny",
+        "runtimeFetch": "same-origin-pinned-artifact-only",
+        "directTcp": "deny",
+        "tcpDatabaseDiagnostic": "required",
+        "result": "pass"
+      },
+      "performance": {
+        "artifactBudgetBytes": 2097152,
+        "coldStartBudgetMs": 2000,
+        "opfsDurabilityBudgetMs": 10000,
+        "result": "pass"
+      },
+      "productSurface": {
+        "api": "createSqliteProjectClient",
+        "worker": "dedicated-worker-per-client",
+        "namespace": "projectId + database",
+        "lifecycle": ["replace-values", "read-values", "close", "reopen"],
+        "status": "pass"
+      },
+      "fixtures": [
+        "packages/node-runtime/test/non-js-tooling.test.ts",
+        "tests/system/browser/non-js-tooling.test.ts",
+        "tests/system/browser/fixtures/sqlite-opfs-worker.mjs",
+        "packages/browser-host/test/sqlite-project-client.test.ts"
+      ],
+      "requiredBeforeSupport": []
+    },
+    {
+      "id": "git-wasm",
+      "tool": "git",
+      "category": "vcs",
+      "status": "hold",
+      "productValue": "high",
+      "maintenanceCost": "high",
+      "runtimeFit": "partial",
+      "reason": "Pinned wasm-git/libgit2 passes local workflows, project-namespaced Chrome OPFS reopen, corruption and import-boundary rejection, and bounded host transport contracts. Remote execution stays fail-closed; license review, actual pack application budgets, and transport-to-libgit2 integration still block promotion.",
+      "candidateArtifacts": [
+        {
+          "name": "wasm-git",
+          "versionObserved": "0.0.17",
+          "registryIntegrity": "sha512-eAWLe2BQrx23t9jjffV5BkwbVW1c9nfUh4KDzPgMMKynNPGGTqztGYuJZY0x60hyO6clIn4eFUNkFnY535XtHw==",
+          "licenseMetadata": null,
+          "upstreamLicense": "Bundled COPYING: GPL-2.0 with linking exception; npm package metadata field is empty",
+          "runtimeFormat": "Emscripten libgit2 WebAssembly",
+          "decision": "hold",
+          "blocker": "License obligations need product review; actual pack application time/peak-memory budgets and host transport integration are not yet verified."
+        },
+        {
+          "name": "isomorphic-git",
+          "versionObserved": "1.42.2",
+          "registryIntegrity": "sha512-Rb7czWhLO4JYqmg4an01nNomuAgFbWWK2CVfkHGBOvK5t7hrGTKOXPx/csscJ1j9o3uXFzNcC6njgvCafSmIPw==",
+          "licenseMetadata": "MIT",
+          "runtimeFormat": "JavaScript, not WebAssembly",
+          "decision": "fallback-study-only",
+          "blocker": "Does not validate the Git WASM lane; browser remote operations still require an explicit host HTTP/CORS and credential boundary."
+        }
+      ],
+      "artifact": {
+        "result": "pass",
+        "path": "lg2.wasm",
+        "sha256": "5cd5df122c066f63c1a940e66fb126a0a35f44b7c0f1c9801b1c1007078eb0f9",
+        "bytes": 862879,
+        "loaderPath": "lg2.js",
+        "loaderSha256": "6f3181a5ea4d5a926c243bdd6239c0730ac758c87dfbb88a28a1264dd96f61c6",
+        "opfsPath": "lg2_opfs.wasm",
+        "opfsSha256": "ec1807f0ad7924bd179f1a864b645d2cd44149ca40cb4492ef9cff7425ab4c83",
+        "opfsBytes": 976417,
+        "opfsLoaderPath": "lg2_opfs.js",
+        "opfsLoaderSha256": "7e54dd2f7bb6f3b1615ce2f992f88b0b3a14c617dda96b031e41b580ec49e545"
+      },
+      "filesystem": {
+        "mode": "project-only-local-repository",
+        "adapterResult": "pass",
+        "runtimeResult": "node-and-chrome-host-snapshot-plus-chrome-opfs-reopen-pass",
+        "outsideProject": "deny",
+        "directGitMetadataMutation": "deny"
+      },
+      "syscalls": {
+        "expected": ["directory enumerate", "fd read/write/seek/stat/sync", "path open/stat/readlink/symlink/create/unlink/rename", "clock", "random"],
+        "denied": ["socket tcp/udp", "process spawn", "host filesystem outside project mount"],
+        "result": "behavioral-pass-without-syscall-trace"
+      },
+      "credentialsAndNetwork": {
+        "credentialInjection": "deny",
+        "runtimeFetch": "deny",
+        "directTcp": "deny",
+        "fetchAndClone": "fail-closed-until-host-transport-is-connected",
+        "hostTransportContract": "credential-free-https-plus-one-shot-opaque-handle-and-redacted-errors-pass",
+        "packfileValidation": "PACK-v2-v3-header-and-64MiB-limit-pass",
+        "adapterResult": "pass",
+        "runtimeResult": "pass-local-only-host-transport-contract-not-connected"
+      },
+      "performance": {
+        "outputBudgetBytes": 1048576,
+        "memoryBudgetBytes": 268435456,
+        "packfileBudgetBytes": 67108864,
+        "adapterResult": "pass",
+        "localWorkflowBudgetMs": 5000,
+        "observedNode22ElapsedMs": 57.8,
+        "packfileAdmissionBudgetMs": 250,
+        "packfileAdmissionResult": "pass",
+        "runtimeResult": "local-and-admission-pass-actual-pack-application-not-run"
+      },
+      "productSurface": {
+        "api": "createGitWasmProjectAdapter + createGitOpfsProjectClient + createGitHostTransportBoundary",
+        "localOperations": ["init", "status", "add", "commit", "log"],
+        "remoteOperations": "disabled",
+        "status": "candidate-contract-only"
+      },
+      "fixtures": [
+        "packages/node-runtime/test/project-tooling-candidates.test.ts",
+        "packages/node-runtime/test/git-wasm-runtime.test.ts",
+        "packages/node-runtime/test/git-host-transport.test.ts",
+        "packages/browser-host/test/git-opfs-project-client.test.ts",
+        "tests/system/browser/fixtures/git-wasm-worker.mjs",
+        "tests/system/browser/fixtures/git-opfs-worker.mjs",
+        "tests/system/browser/non-js-tooling.test.ts"
+      ],
+      "requiredBeforeSupport": [
+        "approve bundled GPL-2.0 with linking exception obligations and source offer process",
+        "run actual large packfile indexing/application time and peak-memory baseline",
+        "connect the bounded host transport to libgit2 without exposing credentials or direct TCP",
+        "restore reliable pthread-build status/log text capture or expose equivalent structured results"
+      ]
+    },
+    {
+      "id": "docker-linux-binary",
+      "tool": "docker",
+      "category": "container-runtime",
+      "status": "unsupported",
+      "productValue": "low-for-browser-parity-scope",
+      "maintenanceCost": "very-high",
+      "runtimeFit": "bad",
+      "reason": "Requires privileged OS/container features and direct networking outside the browser runtime model.",
+      "requiredBeforeSupport": []
+    }
+  ],
+  "supportedAdapters": ["jq-wasm", "sqlite-wasm"],
+  "firstSupportLane": ["jq-wasm", "sqlite-wasm"],
+  "excludedByDefault": ["docker-linux-binary", "arbitrary-linux-binary"]
+}

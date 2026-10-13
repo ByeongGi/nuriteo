@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "taskId": "GATE-007",
+  "release": "1.0.0",
+  "passVerdict": "v1-ga-ready",
+  "requiredTasks": [
+    "GA-001", "OBS-002", "OBS-003", "AUD-003", "SEC-001", "SEC-002", "SEC-003", "SEC-004",
+    "REL-001", "REL-002", "REL-003", "REL-004", "REL-005", "SUP-001", "SUP-002", "SUP-003", "SUP-004",
+    "QUAL-001", "QUAL-002", "QUAL-003", "QUAL-004"
+  ],
+  "requiredReports": [
+    "release/ga/reproducible-images.json",
+    "release/ga/artifacts/nuriteo-1.0.0.release.json",
+    "release/ga/artifacts/channels.json",
+    "release/ga/qualification-report.json",
+    "security/reports/SEC-004.json"
+  ]
+}

@@ -1,0 +1,12 @@
+{{- if .Values.runtimeConfig.create }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "nuriteo.runtimeConfigName" . }}
+  labels:
+    {{- include "nuriteo.labels" . | nindent 4 }}
+  annotations:
+    checksum/nuriteo-runtime-config: {{ include "nuriteo.runtimeConfigChecksum" . | quote }}
+data:
+  {{- include "nuriteo.runtimeConfigData" . | nindent 2 }}
+{{- end }}

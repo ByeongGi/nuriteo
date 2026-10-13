@@ -1,0 +1,222 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-27",
+  "scope": {
+    "goal": "Publish the current WebContainers-parity compatibility surface for developers.",
+    "productRuntime": "browser-guest-node-runtime",
+    "parityBoundary": "Node/npm/pnpm/Yarn Classic 1.22.22/Vite/pinned Webpack and Rspack/browser preview/storage/SDK are in scope; Yarn Berry, private registry auth UX, Docker, direct TCP databases, arbitrary native binaries, and native addons without a WASM/browser fallback are out of scope."
+  },
+  "frameworks": [
+    {
+      "name": "Vite React",
+      "status": "supported",
+      "supportLevel": "product-target",
+      "evidence": [
+        "compat/framework-conformance.json",
+        "docs/archive/productization-2026-09-16/evidence/P11-01.md"
+      ],
+      "notes": "Actual Vite 8.2.0 worker-backed path covers install/dev/preview/edit-HMR/build/reload recovery for the product target."
+    },
+    {
+      "name": "Vite Vue runtime",
+      "status": "supported",
+      "supportLevel": "product-target",
+      "evidence": [
+        "compat/framework-conformance.json",
+        "compat/framework-actual-validation.json",
+        "compat/framework-product-support.json",
+        "tests/compatibility/frameworks/vite/vite-vue-svelte-actual.test.ts"
+      ],
+      "notes": "The runtime fixture is tied to a pinned Vite template-vue upstream revision and passes npm/pnpm install, dev/preview, edit-HMR, build, and reload recovery within the framework budget."
+    },
+    {
+      "name": "Vite Svelte",
+      "status": "supported",
+      "supportLevel": "product-target",
+      "evidence": [
+        "compat/framework-conformance.json",
+        "compat/framework-actual-validation.json",
+        "compat/framework-product-support.json",
+        "tests/compatibility/frameworks/vite/vite-vue-svelte-actual.test.ts"
+      ],
+      "notes": "The runtime fixture is tied to a pinned Vite template-svelte upstream revision and passes npm/pnpm install, plugin-backed dev/preview, edit-HMR, build, and reload recovery within the framework budget."
+    },
+    {
+      "name": "Webpack 5.111.0 dev workflow",
+      "status": "supported",
+      "supportLevel": "pinned-strict-csp-browser-runtime",
+      "evidence": [
+        "compat/bundler-dev-workflow-results.json",
+        "compat/framework-product-support.json",
+        "tests/compatibility/frameworks/bundlers/bundler-candidate-workflow.test.ts"
+      ],
+      "notes": "The pinned Webpack CLI, compiler, and dev server pass real production build, dev/HMR, restart, integrity recovery, teardown, and heap-budget coverage in strict-CSP Chrome."
+    },
+    {
+      "name": "Rspack 2.2.4 dev workflow",
+      "status": "supported",
+      "supportLevel": "pinned-strict-csp-browser-wasi-runtime",
+      "evidence": [
+        "compat/bundler-dev-workflow-results.json",
+        "compat/framework-product-support.json",
+        "tests/compatibility/frameworks/bundlers/bundler-candidate-workflow.test.ts"
+      ],
+      "notes": "The pinned Rspack CLI and validated WASI browser binding pass real production build, dev/HMR, restart, integrity recovery, nested-worker teardown, and heap-budget coverage in strict-CSP Chrome. Native bindings remain unsupported."
+    },
+    {
+      "name": "Next.js App Router preview adapter",
+      "status": "product-preview",
+      "supportLevel": "preview-adapter",
+      "evidence": [
+        "compat/nextjs-compatibility.json",
+        "compat/framework-actual-validation.json",
+        "tests/compatibility/frameworks/vite/nextjs-compatibility.test.ts",
+        "docs/productization/nextjs-product-support-target.md"
+      ],
+      "notes": "App Router preview adapter is product-supported for multi-route preview, layout, link navigation, and HMR."
+    },
+    {
+      "name": "Next.js 15.5.26 full runtime",
+      "status": "supported",
+      "supportLevel": "pinned-strict-csp-browser-runtime",
+      "evidence": [
+        "compat/nextjs-compatibility.json",
+        "apps/web/test/gate-project-runtime-browser.test.ts",
+        "apps/web/test/preview-next-subdomain-browser.test.ts",
+        "docs/productization/nextjs-product-support-target.md"
+      ],
+      "notes": "Real next dev/HMR/build/start/restart, App/Pages Router, config/plugin, WASM SWC, RSC/Server Actions, Middleware/Edge, ISR, and Image Optimization pass in strict-CSP Chrome. Native .node SWC remains unsupported."
+    }
+  ],
+  "packages": [
+    {
+      "cohort": "pure-js-cjs-esm",
+      "status": "supported",
+      "evidence": [
+        "compat/package-compatibility-cohorts.json",
+        "tests/productization/package-cohort-execution.test.ts"
+      ]
+    },
+    {
+      "cohort": "registry-cache-tarball",
+      "status": "supported",
+      "evidence": [
+        "compat/package-compatibility-cohorts.json",
+        "tests/productization/package-cohort-execution.test.ts"
+      ]
+    },
+    {
+      "cohort": "lifecycle-js",
+      "status": "supported",
+      "evidence": [
+        "compat/package-compatibility-cohorts.json",
+        "tests/productization/package-cohort-execution.test.ts"
+      ]
+    },
+    {
+      "cohort": "optional-native-polyfill",
+      "status": "supported-with-polyfill",
+      "evidence": [
+        "compat/package-compatibility-cohorts.json",
+        "tests/productization/package-cohort-execution.test.ts"
+      ]
+    },
+    {
+      "cohort": "wasm-tool-fallback",
+      "status": "candidate",
+      "evidence": [
+        "compat/package-compatibility-cohorts.json",
+        "compat/wasm-tool-adapters.json",
+        "tests/productization/package-cohort-execution.test.ts"
+      ]
+    },
+    {
+      "cohort": "unsupported-native-addon",
+      "status": "unsupported",
+      "requiredErrorCode": "ERR_PM_NATIVE_ADDON_UNSUPPORTED",
+      "evidence": [
+        "compat/package-compatibility-cohorts.json",
+        "compat/unsupported-diagnostics.json",
+        "tests/productization/package-cohort-execution.test.ts"
+      ]
+    },
+    {
+      "cohort": "binary-tool-wrapper",
+      "status": "unsupported",
+      "requiredErrorCode": "ERR_RUNTIME_UNSUPPORTED_BINARY",
+      "evidence": [
+        "compat/package-compatibility-cohorts.json",
+        "compat/unsupported-diagnostics.json",
+        "tests/productization/package-cohort-execution.test.ts"
+      ]
+    }
+  ],
+  "projectFixtures": {
+    "status": "sg25-service-workflow-pass",
+    "source": "compat/ecosystem-fixtures.json",
+    "results": "compat/ecosystem-fixture-results.json",
+    "productAdapterResults": "compat/ecosystem-fixture-product-results.json",
+    "actualProductResults": "compat/ecosystem-fixture-actual-product-results.json",
+    "serviceWorkflowResults": "compat/service-workflow-fixture-results.json",
+    "total": 20,
+    "minimumPassForMilestoneB": 7,
+    "minimumPassOrHoldForSG25": 14,
+    "referenceInstallPass": 7,
+    "referenceBuildPass": 6,
+    "referenceDevPreviewPass": 6,
+    "referenceHmrPass": 4,
+    "referencePass": 4,
+    "referenceScoreAtLeast75": 6,
+    "productAdapterPass": 10,
+    "productAdapterScoreAtLeast75": 10,
+    "actualProductMeasured": 10,
+    "actualProductPass": 10,
+    "actualProductPartialPass": 0,
+    "actualProductScoreAtLeast50": 10,
+    "actualProductScoreAtLeast75": 10,
+    "actualProductScoreAtLeast100": 10,
+    "actualProductExecutionHost": "node-worker-thread",
+    "actualProductBlockers": [],
+    "serviceWorkflowTotal": 20,
+    "serviceWorkflowPass": 18,
+    "serviceWorkflowHold": 2,
+    "serviceWorkflowPassOrHold": 20
+  },
+  "unsupported": [
+    {
+      "feature": "Docker/container runtime",
+      "status": "unsupported",
+      "requiredErrorCode": "ERR_RUNTIME_DOCKER_UNSUPPORTED"
+    },
+    {
+      "feature": "Direct TCP database",
+      "status": "unsupported",
+      "requiredErrorCode": "ERR_RUNTIME_TCP_DB_UNSUPPORTED"
+    },
+    {
+      "feature": "Native Node addon without fallback",
+      "status": "unsupported",
+      "requiredErrorCode": "ERR_PM_NATIVE_ADDON_UNSUPPORTED"
+    },
+    {
+      "feature": "Arbitrary Linux binary",
+      "status": "unsupported",
+      "requiredErrorCode": "ERR_RUNTIME_UNSUPPORTED_BINARY"
+    }
+  ],
+  "reproduce": [
+    "pnpm exec tsc --noEmit --pretty false",
+    "node tests/productization/run.ts",
+    "node tests/compatibility/package-managers/run.ts",
+    "node tests/compatibility/frameworks/vite/vite-react-product-workflow.test.ts",
+    "pnpm --filter @nuriteo/web test:preview-next-browser",
+    "node packages/preview/test/run.ts",
+    "node packages/browser-host/test/run.ts",
+    "node tests/system/browser/boot.test.ts"
+  ],
+  "gate": {
+    "id": "P18-04",
+    "status": "pass",
+    "requiredBeforeDone": []
+  }
+}

@@ -1,0 +1,17 @@
+/node_modules/
+/.pnpm-store/
+/target/
+/dist/
+/artifacts/
+
+/packages/*/node_modules/
+/examples/*/node_modules/
+/apps/*/node_modules/
+/apps/*/dist/
+/apps/web/public/runtime/
+/tests/**/node_modules/
+
+.DS_Store
+*.log
+
+/tmp/

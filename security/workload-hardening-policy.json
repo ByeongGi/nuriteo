@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "taskId": "SEC-003",
+  "profile": "restricted-v1",
+  "container": {
+    "runAsUser": 65532,
+    "runAsGroup": 65532,
+    "runAsNonRoot": true,
+    "readOnlyRootFilesystem": true,
+    "allowPrivilegeEscalation": false,
+    "dropCapabilities": ["ALL"],
+    "seccompProfile": "RuntimeDefault"
+  },
+  "pod": {
+    "automountServiceAccountToken": false,
+    "hostNetwork": false,
+    "hostPID": false,
+    "hostIPC": false,
+    "hostPath": false
+  },
+  "network": {
+    "productionProfile": "default-deny",
+    "dnsExplicit": true,
+    "externalEgressRequiresCidrs": true,
+    "implicitPublicFallback": false
+  },
+  "requiredWorkloadTemplates": [
+    "core.yaml", "web.yaml", "preflight-job.yaml", "migration-job.yaml", "bootstrap-admin-job.yaml",
+    "backup-cronjob.yaml", "toolbox-job.yaml", "restore-job.yaml"
+  ],
+  "images": ["server", "web", "operations"]
+}

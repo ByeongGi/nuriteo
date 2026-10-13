@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "taskId": "REL-001",
+  "version": "1.0.0",
+  "platforms": ["linux/amd64", "linux/arm64"],
+  "roles": ["server", "web", "operations"],
+  "cleanPasses": 2,
+  "cacheAllowed": false,
+  "timestampSource": "source-commit",
+  "requiredLabels": [
+    "org.opencontainers.image.version",
+    "org.opencontainers.image.revision",
+    "org.opencontainers.image.created",
+    "org.opencontainers.image.licenses"
+  ],
+  "report": "release/ga/reproducible-images.json"
+}

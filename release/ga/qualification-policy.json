@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "taskId": "QUAL-004",
+  "release": "1.0.0",
+  "cleanEnvironment": true,
+  "signedArtifactsOnly": true,
+  "requiredPhases": ["verify", "install", "beta-journey", "backup", "upgrade", "restore", "helm"],
+  "report": "release/ga/qualification-report.json"
+}

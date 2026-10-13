@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 1,
+  "releaseLineage": "nuriteo-self-hosted-v1",
+  "release": "self-hosted-v1-rc-lineage",
+  "bundles": [
+    {
+      "id": "core",
+      "required": true,
+      "artifacts": [
+        { "id": "core-attestation", "kind": "attestation", "path": "attestations/core-bundle.jsonl", "licenseRefs": ["nuriteo"] },
+        { "id": "compose-external-s3", "kind": "configuration", "path": "core/compose/compose.external-s3.yaml", "licenseRefs": ["nuriteo"] },
+        { "id": "compose", "kind": "configuration", "path": "core/compose/compose.yaml", "licenseRefs": ["nuriteo"] },
+        { "id": "release-manifest-schema", "kind": "metadata", "path": "core/configuration/release-manifest-v1.schema.json", "licenseRefs": ["nuriteo"] },
+        { "id": "upgrade-compatibility", "kind": "metadata", "path": "core/configuration/self-hosted-upgrade-compatibility-v1.json", "licenseRefs": ["nuriteo"] },
+        { "id": "helm-chart", "kind": "helm-chart", "path": "core/helm/nuriteo-0.1.0.tgz", "sbomRefs": ["helm-chart-sbom"], "licenseRefs": ["nuriteo"] },
+        { "id": "operations-image-digest", "kind": "oci-digest", "path": "core/images/nuriteo-operations.digest", "licenseRefs": ["nuriteo", "postgresql"] },
+        { "id": "operations-image", "kind": "oci-image", "path": "core/images/nuriteo-operations.oci.tar", "ociDigestRef": "operations-image-digest", "sbomRefs": ["operations-image-sbom"], "licenseRefs": ["nuriteo", "postgresql"] },
+        { "id": "server-image-digest", "kind": "oci-digest", "path": "core/images/nuriteo-server.digest", "licenseRefs": ["nuriteo"] },
+        { "id": "server-image", "kind": "oci-image", "path": "core/images/nuriteo-server.oci.tar", "ociDigestRef": "server-image-digest", "sbomRefs": ["server-image-sbom"], "licenseRefs": ["nuriteo"] },
+        { "id": "web-image-digest", "kind": "oci-digest", "path": "core/images/nuriteo-web.digest", "licenseRefs": ["nuriteo"] },
+        { "id": "web-image", "kind": "oci-image", "path": "core/images/nuriteo-web.oci.tar", "ociDigestRef": "web-image-digest", "sbomRefs": ["web-image-sbom"], "licenseRefs": ["nuriteo"] },
+        { "id": "import-images", "kind": "script", "path": "scripts/import-images", "licenseRefs": ["nuriteo"] },
+        { "id": "render-config", "kind": "script", "path": "scripts/render-config", "licenseRefs": ["nuriteo"] },
+        { "id": "verify", "kind": "script", "path": "scripts/verify", "licenseRefs": ["nuriteo"] },
+        { "id": "verify-install", "kind": "script", "path": "scripts/verify-install", "licenseRefs": ["nuriteo"] },
+        { "id": "helm-chart-sbom", "kind": "sbom", "path": "sbom/nuriteo-helm.spdx.json", "licenseRefs": ["nuriteo"] },
+        { "id": "operations-image-sbom", "kind": "sbom", "path": "sbom/nuriteo-operations.spdx.json", "licenseRefs": ["nuriteo", "postgresql"] },
+        { "id": "server-image-sbom", "kind": "sbom", "path": "sbom/nuriteo-server.spdx.json", "licenseRefs": ["nuriteo"] },
+        { "id": "web-image-sbom", "kind": "sbom", "path": "sbom/nuriteo-web.spdx.json", "licenseRefs": ["nuriteo"] },
+        { "id": "nuriteo-license", "kind": "license", "path": "licenses/NURITEO-APACHE-2.0.txt", "licenseRefs": ["nuriteo"] },
+        { "id": "nuriteo-notice", "kind": "license", "path": "licenses/NURITEO-NOTICE.txt", "licenseRefs": ["nuriteo"] },
+        { "id": "postgresql-license", "kind": "license", "path": "licenses/POSTGRESQL.txt", "licenseRefs": ["postgresql"] },
+        { "id": "trusted-root", "kind": "trust-material", "path": "trusted-root/github-sigstore-root.json", "licenseRefs": ["nuriteo"] }
+      ]
+    },
+    {
+      "id": "quickstart",
+      "required": false,
+      "artifacts": [
+        { "id": "caddy-image-digest", "kind": "oci-digest", "path": "addons/quickstart/images/caddy.digest", "licenseRefs": ["caddy"] },
+        { "id": "caddy-image", "kind": "oci-image", "path": "addons/quickstart/images/caddy.oci.tar", "ociDigestRef": "caddy-image-digest", "sbomRefs": ["caddy-image-sbom"], "licenseRefs": ["caddy"] },
+        { "id": "postgres-image-digest", "kind": "oci-digest", "path": "addons/quickstart/images/postgres.digest", "licenseRefs": ["postgresql"] },
+        { "id": "postgres-image", "kind": "oci-image", "path": "addons/quickstart/images/postgres.oci.tar", "ociDigestRef": "postgres-image-digest", "sbomRefs": ["postgres-image-sbom"], "licenseRefs": ["postgresql"] },
+        { "id": "rustfs-image-digest", "kind": "oci-digest", "path": "addons/quickstart/images/rustfs.digest", "licenseRefs": ["rustfs"] },
+        { "id": "rustfs-image", "kind": "oci-image", "path": "addons/quickstart/images/rustfs.oci.tar", "ociDigestRef": "rustfs-image-digest", "sbomRefs": ["rustfs-image-sbom"], "licenseRefs": ["rustfs"] },
+        { "id": "quickstart-config", "kind": "configuration", "path": "addons/quickstart/configuration/compose.quickstart.yaml", "licenseRefs": ["nuriteo"] },
+        { "id": "caddy-image-sbom", "kind": "sbom", "path": "sbom/caddy.spdx.json", "licenseRefs": ["caddy"] },
+        { "id": "postgres-image-sbom", "kind": "sbom", "path": "sbom/postgres.spdx.json", "licenseRefs": ["postgresql"] },
+        { "id": "rustfs-image-sbom", "kind": "sbom", "path": "sbom/rustfs.spdx.json", "licenseRefs": ["rustfs"] },
+        { "id": "caddy-license", "kind": "license", "path": "licenses/CADDY-APACHE-2.0.txt", "licenseRefs": ["caddy"] },
+        { "id": "rustfs-license", "kind": "license", "path": "licenses/RUSTFS-APACHE-2.0.txt", "licenseRefs": ["rustfs"] }
+      ]
+    }
+  ],
+  "licenses": [
+    { "id": "caddy", "name": "Caddy", "spdx": "Apache-2.0", "source": "https://github.com/caddyserver/caddy" },
+    { "id": "nuriteo", "name": "NURITEO", "spdx": "Apache-2.0", "source": "LICENSE" },
+    { "id": "postgresql", "name": "PostgreSQL", "spdx": "PostgreSQL", "source": "https://www.postgresql.org" },
+    { "id": "rustfs", "name": "RustFS", "spdx": "Apache-2.0", "source": "https://github.com/rustfs/rustfs" }
+  ]
+}

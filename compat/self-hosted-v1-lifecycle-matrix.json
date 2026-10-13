@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "taskId": "QUAL-003",
+  "qualifiedAt": "2026-10-12",
+  "target": "self-hosted-v1-ga-candidate",
+  "status": "pass",
+  "sources": [
+    {
+      "id": "self-hosted-beta-gate-005",
+      "sourceCommit": "700310fdd1208deb6c66e306b263dfc133b50f6b",
+      "sourceMigration": 46,
+      "targetMigration": 50,
+      "actual": true,
+      "upgrade": "pass",
+      "restore": "pass",
+      "rollback": "application-only-pass",
+      "objectPolicy": "read-in-place-byte-preserved",
+      "databasePolicy": "forward-only-no-down-migration",
+      "evidence": [
+        "docs/implementation/self-hosted/evidence/RC-002.md",
+        "docs/implementation/self-hosted/evidence/RC-004.md",
+        "deploy/compose/run-upgrade-rehearsal.sh",
+        "crates/nuriteo-server/tests/fixtures/backup-restore/run.sh"
+      ]
+    },
+    {
+      "id": "1.0.0-rc.1",
+      "sourceCommit": "2989315174536de2bdbe9e3b9b98ed89d9ac4b93",
+      "sourceMigration": 50,
+      "targetMigration": 50,
+      "actual": true,
+      "upgrade": "pass",
+      "restore": "pass",
+      "rollback": "application-only-pass",
+      "objectPolicy": "read-in-place-byte-preserved",
+      "databasePolicy": "schema-no-op-no-down-migration",
+      "evidence": [
+        "docs/implementation/self-hosted/evidence/GATE-006.md",
+        "docs/implementation/self-hosted/evidence/GA-001.md",
+        "docs/implementation/self-hosted/evidence/RC-004.md",
+        "crates/nuriteo-server/tests/fixtures/backup-restore/run.sh"
+      ]
+    }
+  ],
+  "commonNegativeCases": [
+    "preflight failure stops before workload or schema mutation",
+    "object capability failure stops before migration",
+    "populated restore target is rejected",
+    "corrupt manifest or missing payload is rejected before target mutation",
+    "database down migration is forbidden"
+  ],
+  "finalArtifactBoundary": "QUAL-004 repeats the lifecycle with the signed immutable GA artifact set."
+}

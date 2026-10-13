@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "releaseLineage": "nuriteo-self-hosted-v1",
+  "release": "self-hosted-v1-rc-lineage",
+  "images": {
+    "identity": "sha256-digest",
+    "setPolicy": "complete-release-set",
+    "roles": [
+      {
+        "name": "server",
+        "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      {
+        "name": "web",
+        "digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      }
+    ]
+  },
+  "rollback": {
+    "compatibleApplications": ["self-hosted-beta-gate-005"],
+    "schemaMinimum": 46,
+    "schemaMaximum": 50,
+    "objectFormats": ["project-bundle-v1"],
+    "database": "preserve-current-schema",
+    "downMigration": "forbidden"
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-23",
+  "version": "1.22.22",
+  "status": "supported",
+  "publicGrade": "supported",
+  "artifact": {
+    "manifest": "vendor/manifests/yarn.json",
+    "installed": "vendor/cli/yarn/1.22.22/installed.json",
+    "entry": "vendor/cli/yarn/1.22.22/package/bin/yarn.js",
+    "entrySha256": "148e19db309ec9eaf7720b28df811337906eea8a1758deaa54afee60a6305e04",
+    "bundle": "vendor/cli/yarn/1.22.22/package/lib/cli.js",
+    "bundleSha256": "443ed69e76443b89afddccfc9faec1ff16eb5e500979cc079c696dec4c3d94ee",
+    "cspFactory": "packages/workspace-runtime/assets/vendor/yarn-cli-1.22.22.mjs",
+    "cspFactorySha256": "e6f01b28a30aae3d6bd6cf78302d0b1ba1f5e6e8d2f6f918989b6cd7f2a428a0",
+    "bundleBytes": 5320747,
+    "tarballSha256": "c17d3797fb9a9115bf375e31bfd30058cac6bc9c3b8807a3d8cb2094794b51ca"
+  },
+  "capabilities": [
+    { "id": "vendored-real-cli", "status": "pass", "evidence": ["vendor/cli/yarn/1.22.22/installed.json", "tests/compatibility/package-managers/yarn-vendored-cli.test.ts"] },
+    { "id": "real-cli-bundle-graph", "status": "pass", "evidence": ["tests/compatibility/package-managers/yarn-vendored-cli.test.ts"] },
+    { "id": "real-cli-version", "status": "pass", "evidence": ["tests/compatibility/package-managers/yarn-real-cli.test.ts", "tests/compatibility/package-managers/cli-evaluator.test.ts"] },
+    { "id": "local-file-install", "status": "pass", "evidence": ["tests/compatibility/package-managers/yarn-guest-runtime-boot.test.ts"] },
+    { "id": "scripts-and-exec", "status": "pass", "evidence": ["tests/compatibility/package-managers/yarn-guest-runtime-boot.test.ts", "tests/compatibility/package-managers/terminal-commands.test.ts"] },
+    { "id": "cancellation-recovery-soak", "status": "pass", "evidence": ["tests/compatibility/package-managers/yarn-guest-runtime-boot.test.ts"] },
+    { "id": "registry-resolution-install", "status": "pass", "evidence": ["tests/compatibility/package-managers/yarn-registry-install-real-cli.test.ts"] },
+    { "id": "real-cli-browser-execution", "status": "pass", "evidence": ["tests/compatibility/package-managers/yarn-browser-worker-real-cli.test.ts", "packages/workspace-runtime/assets/vendor/yarn-cli-1.22.22.mjs"] },
+    { "id": "detection-override-ui", "status": "pass", "evidence": ["packages/browser-host/test/project-onboarding.test.ts", "apps/web/test/gate-project-runtime-browser.test.ts"] }
+  ],
+  "promotionGate": {
+    "status": "passed",
+    "requires": ["registry-resolution-install", "real-cli-browser-execution", "detection-override-ui"],
+    "reason": "Pinned Yarn Classic passes real registry materialization, strict-CSP Chrome Worker install/cancel/recovery, and product detection/override/shell gates."
+  },
+  "failureTaxonomy": {
+    "YARN_REGISTRY_DECOMPRESSION_STREAM_ORDERING": {
+      "status": "resolved",
+      "stage": "post-tarball-download/pre-materialization",
+      "symptom": "The bundled decompression peek pipeline formerly raised write after end; stream lifecycle and gunzip transform fixes now pass package materialization.",
+      "evidence": "tests/compatibility/package-managers/yarn-registry-install-real-cli.test.ts"
+    }
+  }
+}

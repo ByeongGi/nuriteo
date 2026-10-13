@@ -1,0 +1,59 @@
+{{- if .Values.toolbox.enabled }}
+{{- include "nuriteo.validateOperationsImage" . }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "nuriteo.fullname" . }}-toolbox
+  labels:
+    {{- include "nuriteo.labels" . | nindent 4 }}
+    app.kubernetes.io/component: toolbox
+  annotations:
+    nuriteo.dev/operator-invoked: "true"
+    nuriteo.dev/operation: {{ .Values.toolbox.operation | quote }}
+spec:
+  # Rendering this template never starts an operation. Inspect it, create it,
+  # then explicitly remove suspension after checking the target and argv.
+  suspend: true
+  backoffLimit: {{ .Values.toolbox.backoffLimit }}
+  activeDeadlineSeconds: {{ .Values.toolbox.activeDeadlineSeconds }}
+  ttlSecondsAfterFinished: {{ .Values.toolbox.ttlSecondsAfterFinished }}
+  template:
+    metadata:
+      labels:
+        {{- include "nuriteo.selectorLabels" (dict "root" . "component" "toolbox") | nindent 8 }}
+      annotations:
+        {{- include "nuriteo.rolloutAnnotations" . | nindent 8 }}
+        checksum/nuriteo-operation-secret-refs: {{ include "nuriteo.operationSecretRefsChecksum" . | quote }}
+    spec:
+      restartPolicy: Never
+      serviceAccountName: {{ include "nuriteo.serviceAccountName" . }}
+      automountServiceAccountToken: false
+      securityContext:
+        {{- include "nuriteo.podSecurityContext" . | nindent 8 }}
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- include "nuriteo.imagePullSecrets" $ | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: toolbox
+          image: {{ include "nuriteo.image" (list . .Values.images.operations) | quote }}
+          imagePullPolicy: {{ .Values.images.operations.pullPolicy }}
+          args: {{ include "nuriteo.toolboxArgs" . }}
+          env:
+            {{- include "nuriteo.backupEnv" . | nindent 12 }}
+          securityContext:
+            {{- include "nuriteo.containerSecurityContext" . | nindent 12 }}
+          volumeMounts:
+            {{- include "nuriteo.backupSourceSecretVolumeMounts" . | nindent 12 }}
+            {{- include "nuriteo.backupSecretVolumeMount" . | nindent 12 }}
+            - name: scratch
+              mountPath: /tmp/nuriteo-backup
+          resources:
+            requests: { cpu: 25m, memory: 64Mi }
+            limits: { memory: 1Gi }
+      volumes:
+        {{- include "nuriteo.backupSourceSecretVolumes" . | nindent 8 }}
+        {{- include "nuriteo.backupSecretVolume" . | nindent 8 }}
+        - name: scratch
+          emptyDir: { sizeLimit: {{ .Values.backupStorage.scratchSizeLimit }} }
+{{- end }}

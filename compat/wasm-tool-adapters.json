@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-27",
+  "status": "p19-02-tool-adapters",
+  "systemWasmBaseline": {
+    "rustc": "1.97.1",
+    "target": "wasm32-unknown-unknown",
+    "profile": "debug",
+    "sha256": "005ac1c5684f190df6be50f722059a59cd04a8c07b666ae5b3dfe58277fa278e",
+    "exports": ["nuriteo_abi_version", "memory"],
+    "rebuildHashStable": true,
+    "result": "pass"
+  },
+  "supportedAdapters": [
+    {
+      "name": "system-wasm",
+      "source": "vendor/manifests/wasm-adapters.json",
+      "integrity": "sha256-required",
+      "exportContract": "required",
+      "fallbackPolicy": "deny-native",
+      "fixture": "packages/node-runtime/test/wasm-adapters.test.ts"
+    }
+  ],
+  "viteEcosystemCandidates": [
+    {
+      "package": "rolldown",
+      "wasmPackage": "@rolldown/binding-wasm32-wasi",
+      "fallbackPolicy": "prefer-wasm",
+      "status": "candidate"
+    },
+    {
+      "package": "esbuild",
+      "wasmPackage": "esbuild-wasm",
+      "fallbackPolicy": "prefer-wasm",
+      "status": "candidate-until-integrity-pinned"
+    },
+    {
+      "package": "lightningcss",
+      "wasmPackage": null,
+      "fallbackPolicy": "deny-native",
+      "status": "hold"
+    }
+  ],
+  "requirements": {
+    "supportedAdaptersMustHaveHash": true,
+    "supportedAdaptersMustHaveExportContract": true,
+    "wasmPackageFallbackPolicyRequired": true,
+    "nativeOnlyFallbackMustDeny": true
+  }
+}
