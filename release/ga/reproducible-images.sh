@@ -3,6 +3,7 @@ set -Eeuo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 runtime="${CONTAINER_RUNTIME:-podman}"
+builder="${NURITEO_REPRO_BUILDER:-podman}"
 version="${NURITEO_BUILD_VERSION:-1.0.0}"
 revision="${NURITEO_BUILD_REVISION:-$(git -C "$root" rev-parse HEAD)}"
 epoch="${SOURCE_DATE_EPOCH:-$(git -C "$root" show -s --format=%ct "$revision")}" 
@@ -30,6 +31,11 @@ cleanup() {
 trap cleanup EXIT HUP INT TERM
 
 for command in "$runtime" git jq skopeo; do command -v "$command" >/dev/null; done
+case "$builder" in podman|buildx) ;; *) echo "unsupported reproducible builder: $builder" >&2; exit 2 ;; esac
+if [ "$builder" = buildx ] && [ "$runtime" != docker ]; then
+  echo "buildx mode requires CONTAINER_RUNTIME=docker" >&2
+  exit 2
+fi
 test "$revision" = "$(git -C "$root" rev-parse HEAD)"
 test -z "$(git -C "$root" status --porcelain --untracked-files=no)"
 [[ "$revision" =~ ^[0-9a-f]{40}$ ]]
@@ -43,21 +49,33 @@ for platform in $platforms; do
     case "$role" in server|web|operations) ;; *) echo "unsupported role: $role" >&2; exit 2 ;; esac
     digests=()
     for pass in 1 2; do
-      tag="localhost/nuriteo-${role}:rel001-${arch}-${pass}"
-      tags+=("$tag")
-      "$runtime" build --no-cache --layers=false --platform "$platform" --timestamp "$epoch" \
-        --build-arg "NURITEO_SOURCE_DATE_EPOCH=$epoch" \
-        --build-arg "BUILD_VERSION=$version" \
-        --build-arg "BUILD_REVISION=$revision" \
-        --build-arg "BUILD_CREATED=$created" \
-        --file "$root/deploy/docker/${role}.Dockerfile" --tag "$tag" "$root"
       archive="$work/${role}-${arch}-${pass}.oci.tar"
-      "$runtime" save --format oci-archive --output "$archive" "$tag"
+      if [ "$builder" = buildx ]; then
+        SOURCE_DATE_EPOCH="$epoch" BUILDX_NO_DEFAULT_ATTESTATIONS=1 \
+          "$runtime" buildx build --no-cache --platform "$platform" \
+          --provenance=false --sbom=false \
+          --build-arg "NURITEO_SOURCE_DATE_EPOCH=$epoch" \
+          --build-arg "BUILD_VERSION=$version" \
+          --build-arg "BUILD_REVISION=$revision" \
+          --build-arg "BUILD_CREATED=$created" \
+          --file "$root/deploy/docker/${role}.Dockerfile" \
+          --output "type=oci,dest=$archive,rewrite-timestamp=true" "$root"
+      else
+        tag="localhost/nuriteo-${role}:rel001-${arch}-${pass}"
+        tags+=("$tag")
+        "$runtime" build --no-cache --layers=false --platform "$platform" --timestamp "$epoch" \
+          --build-arg "NURITEO_SOURCE_DATE_EPOCH=$epoch" \
+          --build-arg "BUILD_VERSION=$version" \
+          --build-arg "BUILD_REVISION=$revision" \
+          --build-arg "BUILD_CREATED=$created" \
+          --file "$root/deploy/docker/${role}.Dockerfile" --tag "$tag" "$root"
+        "$runtime" save --format oci-archive --output "$archive" "$tag"
+      fi
       digest="$(skopeo inspect "oci-archive:$archive" | jq -r .Digest)"
       [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]
       digests+=("$digest")
       printf '%s\n' "$role $platform pass=$pass digest=$digest"
-      if [ "$keep_work" != true ]; then "$runtime" rmi --force "$tag" >/dev/null; fi
+      if [ "$builder" = podman ] && [ "$keep_work" != true ]; then "$runtime" rmi --force "$tag" >/dev/null; fi
     done
     test "${digests[0]}" = "${digests[1]}"
     jq --arg role "$role" --arg platform "$platform" --arg digest "${digests[0]}" \
