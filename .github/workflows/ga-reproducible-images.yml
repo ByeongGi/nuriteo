@@ -20,17 +20,17 @@ permissions:
 
 jobs:
   reproduce:
-    name: ${{ matrix.platform }} clean digest comparison
+    name: ${{ matrix.platform }} ${{ matrix.role }} clean digest comparison
     strategy:
       fail-fast: false
       matrix:
         include:
-          - runner: ubuntu-24.04
-            platform: linux/amd64
-            artifact: amd64
-          - runner: ubuntu-24.04-arm
-            platform: linux/arm64
-            artifact: arm64
+          - { runner: ubuntu-24.04, platform: linux/amd64, arch: amd64, role: server }
+          - { runner: ubuntu-24.04, platform: linux/amd64, arch: amd64, role: web }
+          - { runner: ubuntu-24.04, platform: linux/amd64, arch: amd64, role: operations }
+          - { runner: ubuntu-24.04-arm, platform: linux/arm64, arch: arm64, role: server }
+          - { runner: ubuntu-24.04-arm, platform: linux/arm64, arch: arm64, role: web }
+          - { runner: ubuntu-24.04-arm, platform: linux/arm64, arch: arm64, role: operations }
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 120
     steps:
@@ -44,12 +44,13 @@ jobs:
           CONTAINER_RUNTIME: docker
           NURITEO_REPRO_BUILDER: buildx
           NURITEO_REPRO_PLATFORMS: ${{ matrix.platform }}
-          NURITEO_REPRO_REPORT: release/ga/reproducible-images-${{ matrix.artifact }}.json
+          NURITEO_REPRO_ROLES: ${{ matrix.role }}
+          NURITEO_REPRO_REPORT: release/ga/reproducible-images-${{ matrix.role }}-${{ matrix.arch }}.json
         run: release/ga/reproducible-images.sh
       - uses: actions/upload-artifact@v4
         with:
-          name: rel-001-${{ matrix.artifact }}-${{ github.sha }}
-          path: release/ga/reproducible-images-${{ matrix.artifact }}.json
+          name: rel-001-${{ matrix.role }}-${{ matrix.arch }}-${{ github.sha }}
+          path: release/ga/reproducible-images-${{ matrix.role }}-${{ matrix.arch }}.json
           if-no-files-found: error
           retention-days: 14
 
@@ -68,8 +69,12 @@ jobs:
         run: >-
           node release/ga/merge-reproducible-images.mjs
           release/ga/reproducible-images.json
-          release/ga/native/reproducible-images-amd64.json
-          release/ga/native/reproducible-images-arm64.json
+          release/ga/native/reproducible-images-server-amd64.json
+          release/ga/native/reproducible-images-web-amd64.json
+          release/ga/native/reproducible-images-operations-amd64.json
+          release/ga/native/reproducible-images-server-arm64.json
+          release/ga/native/reproducible-images-web-arm64.json
+          release/ga/native/reproducible-images-operations-arm64.json
       - name: Validate merged evidence
         run: node tooling/checks/check-self-hosted-reproducible-images.ts
       - uses: actions/upload-artifact@v4
