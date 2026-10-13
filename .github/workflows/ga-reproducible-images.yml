@@ -1,0 +1,78 @@
+name: GA / Reproducible images
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/ga-reproducible-images.yml"
+      - "deploy/docker/**"
+      - "release/ga/**"
+      - "apps/web/**"
+      - "crates/**"
+      - "packages/**"
+      - "Cargo.lock"
+      - "Cargo.toml"
+      - "package.json"
+      - "pnpm-lock.yaml"
+
+permissions:
+  contents: read
+
+jobs:
+  reproduce:
+    name: ${{ matrix.platform }} clean digest comparison
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            platform: linux/amd64
+            artifact: amd64
+          - runner: ubuntu-24.04-arm
+            platform: linux/arm64
+            artifact: arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Install OCI inspection tools
+        run: sudo apt-get update && sudo apt-get install --yes podman skopeo jq
+      - name: Build twice from clean caches
+        env:
+          NURITEO_REPRO_PLATFORMS: ${{ matrix.platform }}
+          NURITEO_REPRO_REPORT: release/ga/reproducible-images-${{ matrix.artifact }}.json
+        run: release/ga/reproducible-images.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rel-001-${{ matrix.artifact }}-${{ github.sha }}
+          path: release/ga/reproducible-images-${{ matrix.artifact }}.json
+          if-no-files-found: error
+          retention-days: 14
+
+  merge-evidence:
+    name: Merge native architecture evidence
+    needs: reproduce
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: rel-001-*-${{ github.sha }}
+          path: release/ga/native
+          merge-multiple: true
+      - name: Require the complete amd64 and arm64 matrix
+        run: >-
+          node release/ga/merge-reproducible-images.mjs
+          release/ga/reproducible-images.json
+          release/ga/native/reproducible-images-amd64.json
+          release/ga/native/reproducible-images-arm64.json
+      - name: Validate merged evidence
+        run: node tooling/checks/check-self-hosted-reproducible-images.ts
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rel-001-complete-${{ github.sha }}
+          path: release/ga/reproducible-images.json
+          if-no-files-found: error
+          retention-days: 30

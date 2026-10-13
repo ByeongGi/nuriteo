@@ -1,0 +1,88 @@
+{{- if .Values.jobs.preflight.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "nuriteo.fullname" . }}-preflight
+  labels:
+    {{- include "nuriteo.labels" . | nindent 4 }}
+    app.kubernetes.io/component: preflight
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-weight: "-20"
+    helm.sh/hook-delete-policy: before-hook-creation
+spec:
+  backoffLimit: {{ .Values.jobs.preflight.backoffLimit }}
+  activeDeadlineSeconds: {{ .Values.jobs.preflight.activeDeadlineSeconds }}
+  ttlSecondsAfterFinished: {{ .Values.jobs.ttlSecondsAfterFinished }}
+  template:
+    metadata:
+      labels:
+        {{- include "nuriteo.selectorLabels" (dict "root" . "component" "preflight") | nindent 8 }}
+      annotations:
+        {{- include "nuriteo.rolloutAnnotations" . | nindent 8 }}
+    spec:
+      restartPolicy: Never
+      serviceAccountName: {{ include "nuriteo.serviceAccountName" . }}
+      automountServiceAccountToken: false
+      securityContext:
+        {{- include "nuriteo.podSecurityContext" . | nindent 8 }}
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- include "nuriteo.imagePullSecrets" $ | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: preflight
+          image: {{ include "nuriteo.image" (list . .Values.images.server) | quote }}
+          imagePullPolicy: {{ .Values.images.server.pullPolicy }}
+          args:
+            - {{ ternary "upgrade-preflight" "storage-check" .Release.IsUpgrade | quote }}
+          env:
+            - name: NURITEO_EXTERNAL_URL
+              value: {{ .Values.externalUrl | quote }}
+            - name: NURITEO_DATABASE_URL_FILE
+              value: /run/secrets/nuriteo/database/database-url
+            {{- if .Values.postgresql.existingSecret.caKey }}
+            - name: NURITEO_DATABASE_CA_FILE
+              value: /run/secrets/nuriteo/database/ca.crt
+            {{- end }}
+            - name: NURITEO_S3_ENDPOINT
+              value: {{ .Values.objectStorage.endpoint | quote }}
+            - name: NURITEO_S3_REGION
+              value: {{ .Values.objectStorage.region | quote }}
+            - name: NURITEO_S3_BUCKET
+              value: {{ .Values.objectStorage.bucket | quote }}
+            - name: NURITEO_S3_ADDRESSING_STYLE
+              value: {{ .Values.objectStorage.addressingStyle | quote }}
+            - name: NURITEO_S3_CREDENTIAL_PROVIDER
+              value: {{ .Values.objectStorage.credentialProvider | quote }}
+            {{- if .Values.objectStorage.existingSecret.accessKeyIdKey }}
+            - name: NURITEO_S3_ACCESS_KEY_ID_FILE
+              value: /run/secrets/nuriteo/object-storage/access-key-id
+            {{- end }}
+            {{- if .Values.objectStorage.existingSecret.secretAccessKeyKey }}
+            - name: NURITEO_S3_SECRET_ACCESS_KEY_FILE
+              value: /run/secrets/nuriteo/object-storage/secret-access-key
+            {{- end }}
+            {{- if .Values.objectStorage.existingSecret.sessionTokenKey }}
+            - name: NURITEO_S3_SESSION_TOKEN_FILE
+              value: /run/secrets/nuriteo/object-storage/session-token
+            {{- end }}
+            {{- if .Values.objectStorage.existingSecret.caKey }}
+            - name: NURITEO_S3_CA_FILE
+              value: /run/secrets/nuriteo/object-storage/ca.crt
+            {{- end }}
+            - name: NURITEO_SAVE_UPLOAD_TRANSPORT
+              value: direct
+          securityContext:
+            {{- include "nuriteo.containerSecurityContext" . | nindent 12 }}
+          volumeMounts:
+            {{- include "nuriteo.coreSecretVolumeMounts" . | nindent 12 }}
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              memory: 256Mi
+      volumes:
+        {{- include "nuriteo.coreSecretVolumes" . | nindent 8 }}
+{{- end }}

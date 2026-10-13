@@ -1,0 +1,22 @@
+{
+  "name": "yarn",
+  "version": "1.22.22",
+  "source": "https://registry.npmjs.org/yarn/-/yarn-1.22.22.tgz",
+  "integrity": "sha512-prL3kGtyG7o9Z9Sv8IPfBNrWTDmXB4Qbes8A9rEzt6wkJV8mUvoirjU0Mp3GGAU06Y0XQyA3/2/RQFVuK7MTfg==",
+  "entry": "/package/bin/yarn.js",
+  "license": "BSD-2-Clause",
+  "resolutionPolicy": "real-cli-artifact-only; registry install support requires browser fetch/tar/integrity fixtures",
+  "platformPolicy": {
+    "runtime": "browser-native-node-compat",
+    "nativeModules": "unsupported-unless-explicit-platform-exception-is-recorded",
+    "wasmModules": "allowed-when-browser-compatible-and-integrity-pinned",
+    "currentFixtureCoverage": "local-file-workspace-and-cli-graph-preflight"
+  },
+  "tarballSha256": "c17d3797fb9a9115bf375e31bfd30058cac6bc9c3b8807a3d8cb2094794b51ca",
+  "rollbackArtifact": {
+    "version": "1.22.22",
+    "source": "https://registry.npmjs.org/yarn/-/yarn-1.22.22.tgz",
+    "tarballSha256": "c17d3797fb9a9115bf375e31bfd30058cac6bc9c3b8807a3d8cb2094794b51ca",
+    "entry": "/package/bin/yarn.js"
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 2,
+  "date": "2026-09-27",
+  "status": "pass",
+  "executionHost": "strict-csp-headless-chrome",
+  "nextVersion": "15.5.26",
+  "nextCliEntrySha256": "a18774eab8037f10a2ab76c233a225c4a76dbcdc0e59c216508fd0888fa42b03",
+  "nextCliFactorySha256": "0c103d7af3c610283437fd6f326f5b6b9aa8aa53880926a7e509d2433c515224",
+  "commands": ["next dev", "next build", "next start"],
+  "preflight": {
+    "status": "pass",
+    "coveredModule": "/workspace/app/node_modules/next/dist/bin/next",
+    "reason": "The complete integrity-pinned Next 15.5.26 CLI graph executes without unsafe-eval under the release CSP. Chrome validates dev/HMR, build, start/restart, App and Pages routers, config/plugin loading, RSC/Server Actions, Middleware/Edge, ISR, and Image Optimization."
+  },
+  "lifecycle": {
+    "factoryIntegrityRejection": "pass",
+    "workerTeardown": "pass",
+    "recoveryAttempt": "pass",
+    "crossOriginIsolationAfterRecovery": true,
+    "heapBudget": "pass"
+  },
+  "csp": "default-src 'self'; script-src 'self'; worker-src 'self'; connect-src 'self'; img-src 'self' data:; style-src 'self'",
+  "evidence": [
+    "apps/web/test/preview-next-subdomain-browser.test.ts",
+    "packages/workspace-runtime/assets/vendor/next-cli-15.5.26.mjs",
+    "tooling/generators/build-next-csp-factory.ts",
+    "packages/node-runtime/src/modules/cjs.ts"
+  ],
+  "reproduce": "mise exec node@22.23.0 -- pnpm --filter @nuriteo/web test:preview-next-browser"
+}

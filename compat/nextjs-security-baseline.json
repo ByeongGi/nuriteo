@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-27",
+  "status": "pass",
+  "next": {
+    "version": "15.5.26",
+    "lockfileIntegrity": "sha512-EVCqhvq8Hs+nX9udH2VzE/iXAg9QodZBZnwVJTuAMl386GIYvlJtYhFytV9nSlDYxKw3kEyv8I2dCQs0+on0sQ==",
+    "releaseSecurityEligible": true,
+    "minimumMaintenanceLine": "15.5.26",
+    "reason": "15.5.26 is the maintained patched release selected by the September 2026 security baseline."
+  },
+  "wasmSwc": {
+    "package": "@next/swc-wasm-nodejs",
+    "version": "15.5.26",
+    "lockfileIntegrity": "sha512-1ytohzo+DpKjkrAvgJsbfU0Hma2uQYKOGbE1Wndb4uakU3fmBotDrHw4byH5sXmR74/dS5X4H4OP3cyslV0CtA==",
+    "versionMatched": true,
+    "nativeNodeAddonsSupported": false
+  },
+  "advisories": [
+    {
+      "id": "CVE-2025-66478",
+      "severity": "critical",
+      "affected": "Next.js 15.1.0 through 15.1.8",
+      "patched15_1": "15.1.9",
+      "source": "https://nextjs.org/blog/CVE-2025-66478"
+    },
+    {
+      "id": "2025-12-11-nextjs-security-update",
+      "severity": "high",
+      "packageStatus": "next@15.1.9 is deprecated on npm",
+      "source": "https://nextjs.org/blog/security-update-2025-12-11"
+    },
+    {
+      "id": "2026-09-22-nextjs-security-update",
+      "severity": "critical",
+      "patchedMaintenanceRelease": "15.5.26",
+      "source": "https://nextjs.org/blog/nextjs-security-update-september-22-2026"
+    }
+  ],
+  "requirements": {
+    "keepFullRuntimeCandidate": false,
+    "denyNativeNodeSwcClaim": true,
+    "requireVersionMatchedWasmSwc": true,
+    "requireMaintainedNextBeforeReleasePromotion": false,
+    "requireBrowserWorkerFeatureLaneBeforePromotion": false
+  }
+}

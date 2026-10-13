@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-12",
+  "status": "pass-with-product-resource-contract",
+  "executionHost": "strict-csp-headless-chrome",
+  "workerEntrypoint": "/workers/process-worker.ts",
+  "csp": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; connect-src 'self'; img-src 'self' data:; style-src 'self'",
+  "crossOriginIsolated": true,
+  "iterations": 30,
+  "successfulBoots": 30,
+  "forcedBootFailuresAndRecoveries": 3,
+  "workerTargetsBefore": 0,
+  "workerTargetsAfter": 0,
+  "pageMemory": {
+    "before": {
+      "available": true,
+      "bytes": 430407,
+      "breakdownCount": 4
+    },
+    "after": {
+      "available": true,
+      "bytes": 478701,
+      "breakdownCount": 4
+    },
+    "scope": "page/agent-cluster estimate; not a per-Worker hard limit"
+  },
+  "productResourceContract": {
+    "status": "pass",
+    "admissionLimitBytes": 268435456,
+    "wasmMaximumPages": 32768,
+    "workspaceLimitBytes": 268435456,
+    "watchdog": "terminates the system/process worker pair on timeout or worker error"
+  },
+  "jsHeapHardCap": {
+    "status": "unavailable-not-claimed",
+    "reason": "No Web Worker API enforces a per-Worker V8 heap ceiling; page memory measurement is observational only."
+  }
+}

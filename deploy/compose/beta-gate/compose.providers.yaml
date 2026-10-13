@@ -1,0 +1,150 @@
+services:
+  postgres:
+    ports: ["127.0.0.1:${NURITEO_BETA_GATE_POSTGRES_PORT}:5432"]
+    build:
+      labels:
+        org.opencontainers.image.revision: ${NURITEO_BETA_GATE_RELEASE_COMMIT}
+  rustfs:
+    ports: ["127.0.0.1:${NURITEO_BETA_GATE_RUSTFS_PORT}:9000"]
+  core:
+    build:
+      labels:
+        org.opencontainers.image.revision: ${NURITEO_BETA_GATE_RELEASE_COMMIT}
+    ports: ["127.0.0.1:${NURITEO_BETA_GATE_CORE_PORT}:8080"]
+    environment:
+      NURITEO_SMTP_ENABLED: "true"
+      NURITEO_SMTP_HOST: smtp-provider
+      NURITEO_SMTP_PORT: "8443"
+      NURITEO_SMTP_SECURITY: implicit-tls
+      NURITEO_SMTP_FROM_ADDRESS: noreply@example.invalid
+      NURITEO_SMTP_FROM_NAME: NURITEO GATE-005
+      NURITEO_SMTP_USERNAME_FILE: /run/secrets/gate_smtp_username
+      NURITEO_SMTP_PASSWORD_FILE: /run/secrets/gate_smtp_password
+      NURITEO_SMTP_CA_FILE: /run/secrets/gate_provider_ca
+      NURITEO_SMTP_PREFLIGHT_TIMEOUT_MS: "5000"
+    secrets: [gate_smtp_username, gate_smtp_password, gate_provider_ca]
+    depends_on:
+      smtp-provider:
+        condition: service_started
+  web:
+    build:
+      labels:
+        org.opencontainers.image.revision: ${NURITEO_BETA_GATE_RELEASE_COMMIT}
+
+  oidc-provider:
+    build:
+      context: ./beta-gate
+      dockerfile: provider.Dockerfile
+      labels:
+        org.opencontainers.image.revision: ${NURITEO_BETA_GATE_RELEASE_COMMIT}
+    image: localhost/nuriteo-beta-provider:${NURITEO_BETA_GATE_RELEASE_COMMIT}
+    entrypoint: ["python3", "/fixture/oidc-provider.py"]
+    environment:
+      OIDC_CONTROL_DIR: /run/gate-provider/control
+      OIDC_ISSUER: https://oidc-provider:8443
+      OIDC_CALLBACK_FORWARD_ORIGIN: ${NURITEO_EXTERNAL_URL:?set NURITEO_EXTERNAL_URL}
+      OIDC_PORT: "8443"
+      OIDC_CERT: /run/gate-provider/tls.crt
+      OIDC_KEY: /run/gate-provider/tls.key
+    ports: ["127.0.0.1:${NURITEO_BETA_GATE_OIDC_PORT}:8443"]
+    volumes:
+      - ./beta-gate/stages/oidc-notifications/oidc-provider.py:/fixture/oidc-provider.py:ro
+      - ${NURITEO_BETA_GATE_PROVIDER_TLS_DIR}:/run/gate-provider
+    networks: [application]
+    read_only: true
+    security_opt: ["no-new-privileges:true"]
+  smtp-provider:
+    image: localhost/nuriteo-beta-provider:${NURITEO_BETA_GATE_RELEASE_COMMIT}
+    entrypoint: ["python3", "/fixture/smtp-provider.py"]
+    environment:
+      SMTP_CONTROL_DIR: /run/gate-provider/control
+      SMTP_PORT: "8443"
+      SMTP_CERT: /run/gate-provider/tls.crt
+      SMTP_KEY: /run/gate-provider/tls.key
+    ports: ["127.0.0.1:${NURITEO_BETA_GATE_SMTP_PORT}:8443"]
+    volumes:
+      - ./beta-gate/stages/oidc-notifications/smtp-provider.py:/fixture/smtp-provider.py:ro
+      - ${NURITEO_BETA_GATE_PROVIDER_TLS_DIR}:/run/gate-provider
+    networks: [application]
+    read_only: true
+    security_opt: ["no-new-privileges:true"]
+
+  git-provider:
+    image: localhost/nuriteo-beta-provider:${NURITEO_BETA_GATE_RELEASE_COMMIT}
+    entrypoint: ["python3", "/fixture/git-registry-provider.py", "--mode", "git", "--port", "8443", "--cert", "/run/gate-provider/tls.crt", "--key", "/run/gate-provider/tls.key", "--token-file", "/run/secrets/gate_git_token", "--stats", "/run/gate-provider/git-stats.json", "--git-root", "/run/gate-provider/git-root"]
+    ports: ["127.0.0.1:${NURITEO_BETA_GATE_GIT_PORT}:8443"]
+    secrets: [gate_git_token]
+    volumes:
+      - ./beta-gate/stages/git-registry/provider.py:/fixture/git-registry-provider.py:ro
+      - ${NURITEO_BETA_GATE_PROVIDER_TLS_DIR}:/run/gate-provider
+    networks: [application]
+    read_only: true
+    security_opt: ["no-new-privileges:true"]
+  registry-exact-provider:
+    image: localhost/nuriteo-beta-provider:${NURITEO_BETA_GATE_RELEASE_COMMIT}
+    entrypoint: ["python3", "/fixture/git-registry-provider.py", "--mode", "registry", "--port", "8443", "--cert", "/run/gate-provider/tls.crt", "--key", "/run/gate-provider/tls.key", "--token-file", "/run/secrets/gate_registry_exact_token", "--stats", "/run/gate-provider/registry-exact-stats.json", "--registry-name", "@gate/exact", "--registry-label", "exact"]
+    ports: ["127.0.0.1:${NURITEO_BETA_GATE_REGISTRY_EXACT_PORT}:8443"]
+    secrets: [gate_registry_exact_token]
+    volumes:
+      - ./beta-gate/stages/git-registry/provider.py:/fixture/git-registry-provider.py:ro
+      - ${NURITEO_BETA_GATE_PROVIDER_TLS_DIR}:/run/gate-provider
+    networks: [application]
+    read_only: true
+    security_opt: ["no-new-privileges:true"]
+  registry-default-provider:
+    image: localhost/nuriteo-beta-provider:${NURITEO_BETA_GATE_RELEASE_COMMIT}
+    entrypoint: ["python3", "/fixture/git-registry-provider.py", "--mode", "registry", "--port", "8443", "--cert", "/run/gate-provider/tls.crt", "--key", "/run/gate-provider/tls.key", "--token-file", "/run/secrets/gate_registry_default_token", "--stats", "/run/gate-provider/registry-default-stats.json", "--registry-name", "unscoped-gate", "--registry-label", "default"]
+    ports: ["127.0.0.1:${NURITEO_BETA_GATE_REGISTRY_DEFAULT_PORT}:8443"]
+    secrets: [gate_registry_default_token]
+    volumes:
+      - ./beta-gate/stages/git-registry/provider.py:/fixture/git-registry-provider.py:ro
+      - ${NURITEO_BETA_GATE_PROVIDER_TLS_DIR}:/run/gate-provider
+    networks: [application]
+    read_only: true
+    security_opt: ["no-new-privileges:true"]
+
+  gate-harness:
+    profiles: [gate-harness]
+    build:
+      context: ../..
+      dockerfile: deploy/compose/beta-gate/stages/git-registry/harness.Dockerfile
+      labels:
+        org.opencontainers.image.revision: ${NURITEO_BETA_GATE_RELEASE_COMMIT}
+    image: localhost/nuriteo-beta-git-registry-harness:${NURITEO_BETA_GATE_RELEASE_COMMIT}
+    environment:
+      NURITEO_GATE_DATABASE_URL_FILE: /run/secrets/database_url
+      NURITEO_GATE_DATABASE_CA_FILE: /run/secrets/database_ca
+      NURITEO_MASTER_KEY_FILE: /run/secrets/master_key
+      NURITEO_MASTER_KEY_VERSION: "1"
+    secrets: [database_url, database_ca, master_key]
+    volumes:
+      - ${NURITEO_BETA_GATE_PROVIDER_TLS_DIR}/ca.crt:/run/gate-provider/ca.crt:ro
+      - ${NURITEO_BETA_GATE_HARNESS_DIR}:/run/gate-state
+    networks: [application, data]
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16777216,mode=1777
+    user: "65532:65532"
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    restart: "no"
+
+networks:
+  application:
+    ipam:
+      config:
+        - subnet: 11.254.205.0/24
+
+secrets:
+  gate_smtp_username:
+    file: ${NURITEO_BETA_GATE_PROVIDER_TLS_DIR}/control/smtp-username
+  gate_smtp_password:
+    file: ${NURITEO_BETA_GATE_PROVIDER_TLS_DIR}/control/smtp-password
+  gate_provider_ca:
+    file: ${NURITEO_BETA_GATE_PROVIDER_TLS_DIR}/ca.crt
+  gate_git_token:
+    file: ${NURITEO_BETA_GATE_PROVIDER_TLS_DIR}/control/git-token
+  gate_registry_exact_token:
+    file: ${NURITEO_BETA_GATE_PROVIDER_TLS_DIR}/control/registry-exact-token
+  gate_registry_default_token:
+    file: ${NURITEO_BETA_GATE_PROVIDER_TLS_DIR}/control/registry-default-token

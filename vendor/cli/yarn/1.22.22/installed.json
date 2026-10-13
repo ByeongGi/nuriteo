@@ -1,0 +1,15 @@
+{
+  "name": "yarn",
+  "version": "1.22.22",
+  "source": "https://registry.npmjs.org/yarn/-/yarn-1.22.22.tgz",
+  "integrity": "sha512-prL3kGtyG7o9Z9Sv8IPfBNrWTDmXB4Qbes8A9rEzt6wkJV8mUvoirjU0Mp3GGAU06Y0XQyA3/2/RQFVuK7MTfg==",
+  "license": "BSD-2-Clause",
+  "tarball": "/private/tmp/yarn-1.22.22.tgz",
+  "tarballRelative": "../../../../private/tmp/yarn-1.22.22.tgz",
+  "tarballSha256": "c17d3797fb9a9115bf375e31bfd30058cac6bc9c3b8807a3d8cb2094794b51ca",
+  "entry": "vendor/cli/yarn/1.22.22/package/bin/yarn.js",
+  "entryRelative": "vendor/cli/yarn/1.22.22/package/bin/yarn.js",
+  "entrySha256": "148e19db309ec9eaf7720b28df811337906eea8a1758deaa54afee60a6305e04",
+  "resolutionPolicy": "real-cli-artifact-only; registry install support requires browser fetch/tar/integrity fixtures",
+  "mode": "real-tarball"
+}

@@ -1,0 +1,44 @@
+name: CI / Helm Qualification
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/helm-qualification.yml"
+      - "charts/nuriteo/**"
+      - "deploy/compose/fixtures/upgrade-rehearsal/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: helm-qualification-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  static-contract:
+    name: Helm release contract
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash -n charts/nuriteo/tests/kind-release.sh
+      - run: charts/nuriteo/tests/check-chart.sh
+
+  kind-release:
+    name: kind install / failure / upgrade / rollback
+    if: github.event_name == 'workflow_dispatch'
+    needs: static-contract
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      KIND_EXPERIMENTAL_PROVIDER: docker
+      NURITEO_CONTAINER_RUNTIME: docker
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pinned kind
+        run: go install sigs.k8s.io/kind@v0.33.0
+      - name: Verify runner dependencies
+        run: command -v docker helm kubectl kind
+      - name: Run complete Helm lifecycle qualification
+        run: charts/nuriteo/tests/kind-release.sh

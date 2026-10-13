@@ -1,0 +1,4 @@
+**
+!deploy/
+!deploy/compose/
+!deploy/compose/postgres-tls-entrypoint.sh

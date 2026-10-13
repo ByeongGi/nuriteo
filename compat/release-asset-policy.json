@@ -1,0 +1,67 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-18",
+  "gate": "SG29",
+  "status": "machine-readable-cdn-cache-contract",
+  "versionedAssetLayout": {
+    "assetSetRoot": "/sdk/releases/{channel}/{assetSetId}/",
+    "channelPointer": "/sdk/channels/{channel}/current.json",
+    "previousPointer": "/sdk/channels/{channel}/previous.json",
+    "assetSetIdSource": "fingerprint.sdkPackage hashes (assetManifestSha256 + systemWasmSha256 + tarballSha256)",
+    "requiredAssets": [
+      "asset-manifest.json",
+      "assets/system_wasm.wasm",
+      "workers/system-worker.ts",
+      "workers/process-worker.ts",
+      "nuriteo-sdk.tgz"
+    ]
+  },
+  "cacheHeaders": {
+    "immutableVersionedAssets": {
+      "Cache-Control": "public, max-age=31536000, immutable",
+      "appliesTo": [
+        "/sdk/releases/{channel}/{assetSetId}/**"
+      ]
+    },
+    "channelPointers": {
+      "Cache-Control": "no-cache, must-revalidate",
+      "appliesTo": [
+        "/sdk/channels/{channel}/current.json",
+        "/sdk/channels/{channel}/previous.json"
+      ]
+    },
+    "compatibilityDocs": {
+      "Cache-Control": "public, max-age=300",
+      "appliesTo": [
+        "/sdk/releases/{channel}/{assetSetId}/compatibility-matrix.json",
+        "/sdk/releases/{channel}/{assetSetId}/known-limitations.md"
+      ]
+    }
+  },
+  "boundReleaseDocs": [
+    "compat/public-compatibility-matrix.json",
+    "docs/release/known-limitations.md"
+  ],
+  "rollback": {
+    "strategy": "switch-channel-pointer-to-previous-asset-set",
+    "retainPreviousSets": 1,
+    "rehearsalMode": "local-hash-set-switch-without-cdn",
+    "automated": true,
+    "notes": "Rollback does not re-upload bytes; it rewrites the channel pointer to the previous immutable asset set id."
+  },
+  "migrationContract": {
+    "record": "ProjectSnapshot",
+    "currentSchemaVersion": 1,
+    "supportedSchemaVersions": [1],
+    "onUnsupportedVersion": "reject-load-preserve-bytes",
+    "dataLossPolicy": "migration failure must leave original snapshot bytes untouched"
+  },
+  "ciGate": {
+    "checklist": "compat/release-checklist.json",
+    "requiredCommands": [
+      "node tooling/release/package-sdk.ts",
+      "node tooling/checks/check-release-readiness.ts",
+      "node tooling/checks/check-release-ops-sg29.ts"
+    ]
+  }
+}

@@ -1,0 +1,108 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-27",
+  "scope": {
+    "runtime": "browser-guest-node-runtime",
+    "viteVersion": "8.2.0",
+    "supportContract": "install, dev, preview, edit-HMR, build, and reload recovery must pass for npm and pnpm in a reproducible runtime fixture tied to an exact public template revision"
+  },
+  "frameworks": [
+    {
+      "id": "vite-vue",
+      "grade": "supported",
+      "fixtureId": "local-vite-vue-fixture",
+      "template": "vue-runtime",
+      "publicFixture": {
+        "repository": "https://github.com/vitejs/vite",
+        "revision": "1544bb1b7ac92f775e9d0dea97954c99cc6cbd43",
+        "subdirectory": "packages/create-vite/template-vue"
+      },
+      "packageManagers": ["npm", "pnpm"],
+      "requiredCapabilities": ["install", "dev-preview", "edit-hmr", "build-dist", "reload-recovery"],
+      "evidence": [
+        "tests/fixtures/vite-vue/package.json",
+        "tests/compatibility/frameworks/vite/vite-vue-svelte-actual.test.ts",
+        "compat/framework-actual-validation.json"
+      ]
+    },
+    {
+      "id": "vite-svelte",
+      "grade": "supported",
+      "fixtureId": "local-vite-svelte-fixture",
+      "template": "svelte",
+      "publicFixture": {
+        "repository": "https://github.com/vitejs/vite",
+        "revision": "1544bb1b7ac92f775e9d0dea97954c99cc6cbd43",
+        "subdirectory": "packages/create-vite/template-svelte"
+      },
+      "packageManagers": ["npm", "pnpm"],
+      "requiredCapabilities": ["install", "dev-preview", "edit-hmr", "build-dist", "reload-recovery"],
+      "evidence": [
+        "tests/fixtures/vite-svelte/package.json",
+        "tests/compatibility/frameworks/vite/vite-vue-svelte-actual.test.ts",
+        "compat/framework-actual-validation.json"
+      ]
+    }
+  ],
+  "performanceBudgets": {
+    "adapterWorkflowMs": 2000,
+    "cliBackedWorkflowMs": 30000,
+    "hmrStatePreserved": true,
+    "distArtifactRequired": "dist/index.html"
+  },
+  "failureTaxonomy": [
+    {
+      "id": "fixture-install",
+      "stage": "install",
+      "codes": ["ERR_MODULE_NOT_FOUND", "ERR_PM_NATIVE_ADDON_UNSUPPORTED"],
+      "supportPolicy": "fail with a package or native-fallback diagnostic; never report preview success"
+    },
+    {
+      "id": "plugin-load",
+      "stage": "dev-preview",
+      "codes": ["ERR_MODULE_NOT_FOUND", "EVITEARTIFACTMANIFEST", "EVITEARTIFACTNAME"],
+      "supportPolicy": "report the missing plugin or invalid artifact and keep the project recoverable"
+    },
+    {
+      "id": "worker-timeout",
+      "stage": "dev-preview",
+      "codes": ["ECLIEWORKERTIMEOUT", "EACTUALDEVHMRTIMEOUT", "EACTUALCLITIMEOUT"],
+      "supportPolicy": "terminate the worker, reject pending I/O, and allow a clean restart"
+    },
+    {
+      "id": "hmr-update",
+      "stage": "edit-hmr",
+      "codes": ["EACTUALHMRTIMEOUT", "EACTUALHMRWRITETIMEOUT"],
+      "supportPolicy": "preserve source files and offer dev-server restart recovery"
+    },
+    {
+      "id": "build-output",
+      "stage": "build-dist",
+      "codes": ["ERR_VITE_CLI_BUILD_REGISTRATION_MISSING"],
+      "supportPolicy": "fail unless the build exits successfully and dist/index.html exists"
+    }
+  ],
+  "bundlerCandidates": [
+    {
+      "id": "webpack-dev-workflow",
+      "grade": "supported",
+      "productSupport": true,
+      "blocker": "",
+      "diagnosticCodes": ["ERR_WEBPACK_CSP_FACTORY_INTEGRITY", "ERR_WEBPACK_CSP_WORKSPACE_INTEGRITY"],
+      "evidence": ["compat/bundler-dev-workflow-results.json", "tests/compatibility/frameworks/bundlers/bundler-candidate-workflow.test.ts"]
+    },
+    {
+      "id": "rspack-dev-workflow",
+      "grade": "supported",
+      "productSupport": true,
+      "blocker": "",
+      "diagnosticCodes": ["ERR_RSPACK_CSP_FACTORY_INTEGRITY", "ERR_RSPACK_WASI_MODULE_INTEGRITY", "ERR_RSPACK_WASI_WORKER_INTEGRITY"],
+      "evidence": ["compat/bundler-dev-workflow-results.json", "tests/compatibility/frameworks/bundlers/bundler-candidate-workflow.test.ts"]
+    }
+  ],
+  "gate": {
+    "id": "W6-framework-promotion",
+    "status": "pass",
+    "requiredSupported": ["vite-vue", "vite-svelte"]
+  }
+}

@@ -1,0 +1,427 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-18",
+  "scope": {
+    "goal": "Select public Vite React projects and freeze the scoring rubric for ecosystem compatibility.",
+    "productRuntime": "browser-guest-node-runtime",
+    "referenceRuntime": "host-node-reference-harness",
+    "minimumPassForMilestoneB": 7,
+    "minimumPassOrHoldForSG25": 14,
+    "fixtureCount": 20
+  },
+  "scoringRubric": {
+    "totalPoints": 100,
+    "criteria": [
+      {
+        "id": "install",
+        "points": 25,
+        "description": "Package manager install completes without unsupported native or postinstall blockers."
+      },
+      {
+        "id": "dev-preview",
+        "points": 25,
+        "description": "Dev server starts, preview loads, and core application content renders."
+      },
+      {
+        "id": "edit-hmr",
+        "points": 25,
+        "description": "A source edit updates served modules through HMR without losing client state."
+      },
+      {
+        "id": "build-dist",
+        "points": 25,
+        "description": "Production build completes and generated dist output passes a static smoke check."
+      }
+    ],
+    "classification": {
+      "pass": "score >= 80 and no unsupported blocker",
+      "partial-pass": "score >= 50 or one recoverable product-runtime gap",
+      "hold": "requires unsupported-but-replaceable dependency, missing lockfile migration, or non-critical Node API gap",
+      "unsupported": "requires Docker, direct TCP database, native addon without browser/WASM fallback, or arbitrary Linux binary"
+    }
+  },
+  "referenceNodeBaseline": {
+    "status": "install-build-dev-preview-hmr-measured",
+    "node": ">=22.23.0 <23",
+    "packageManagers": ["npm", "pnpm"],
+    "commands": [
+      "install",
+      "dev",
+      "preview",
+      "source-edit-hmr",
+      "build",
+      "dist-smoke"
+    ],
+    "evidenceRequired": [
+      "install log",
+      "build log",
+      "dist file list",
+      "dev server URL",
+      "browser screenshot or DOM assertion",
+      "HMR event log"
+    ]
+  },
+  "fixtures": [
+    {
+      "id": "vite-official-template-react",
+      "name": "Vite official template-react",
+      "repository": "https://github.com/vitejs/vite",
+      "revision": "1544bb1b7ac92f775e9d0dea97954c99cc6cbd43",
+      "subdirectory": "packages/create-vite/template-react",
+      "license": "MIT",
+      "packageManager": "pnpm",
+      "lockfile": "monorepo-pnpm-lock",
+      "expectedCommands": {
+        "install": "pnpm install",
+        "dev": "pnpm dev",
+        "build": "pnpm build"
+      },
+      "nativeDependencyRisk": "low",
+      "status": "selected",
+      "source": "https://github.com/vitejs/vite/blob/main/packages/create-vite/template-react/package.json"
+    },
+    {
+      "id": "awe-templates-react-starter",
+      "name": "awe-templates/react-starter",
+      "repository": "https://github.com/awe-templates/react-starter",
+      "revision": "a2a1e370eb7dec2f3a87ba88e7e08efb9eaf1654",
+      "license": "MIT",
+      "packageManager": "pnpm",
+      "lockfile": "pnpm-lock.yaml",
+      "expectedCommands": {
+        "install": "pnpm install",
+        "dev": "pnpm dev",
+        "build": "pnpm build"
+      },
+      "nativeDependencyRisk": "medium",
+      "riskNotes": "SWC/Tailwind toolchain may need WASM/native fallback classification.",
+      "status": "selected",
+      "source": "https://github.com/awe-templates/react-starter"
+    },
+    {
+      "id": "hvalette-react-vite-template",
+      "name": "hvalette/react-vite-template",
+      "repository": "https://github.com/hvalette/react-vite-template",
+      "revision": "22959650fcfe432f98d023eb57efa367073ec39e",
+      "license": "MIT",
+      "packageManager": "npm",
+      "lockfile": "package-lock.json",
+      "expectedCommands": {
+        "install": "npm install",
+        "dev": "npm run dev",
+        "build": "npm run build"
+      },
+      "nativeDependencyRisk": "medium",
+      "riskNotes": "PWA and Tailwind dependencies should be classified before product-runtime scoring.",
+      "status": "selected",
+      "source": "https://github.com/hvalette/react-vite-template"
+    },
+    {
+      "id": "gabbloquet-vite-react18",
+      "name": "gabbloquet/vite-react18",
+      "repository": "https://github.com/gabbloquet/vite-react18",
+      "revision": "73b69837690a8ccf64015126ea82a8d297a1b584",
+      "license": "unknown",
+      "packageManager": "npm",
+      "lockfile": "package-lock.json",
+      "expectedCommands": {
+        "install": "npm install",
+        "dev": "npm run dev",
+        "build": "npm run build"
+      },
+      "nativeDependencyRisk": "low",
+      "status": "selected",
+      "source": "https://github.com/gabbloquet/vite-react18"
+    },
+    {
+      "id": "sivamani18-vite-react-ts-boilerplate",
+      "name": "Sivamani-18/vite-react-ts-boilerplate",
+      "repository": "https://github.com/Sivamani-18/vite-react-ts-boilerplate",
+      "revision": "7bd73d35ca4036ba4a68ee7f9a4ec11df1d2f2e3",
+      "license": "unknown",
+      "packageManager": "npm",
+      "lockfile": "package-lock-or-none",
+      "expectedCommands": {
+        "install": "npm install",
+        "dev": "npm run dev",
+        "build": "npm run build"
+      },
+      "nativeDependencyRisk": "medium",
+      "riskNotes": "Tailwind/PostCSS dependency set should be checked for native tooling.",
+      "status": "selected",
+      "source": "https://github.com/Sivamani-18/vite-react-ts-boilerplate"
+    },
+    {
+      "id": "fuhouyu-homepage",
+      "name": "fuhouyu/homepage",
+      "repository": "https://github.com/fuhouyu/homepage",
+      "revision": "13b25559fdeebbee991ec8763803487cfb6b456d",
+      "license": "listed-public-repo",
+      "packageManager": "npm",
+      "lockfile": "package-lock-or-none",
+      "expectedCommands": {
+        "install": "npm install",
+        "dev": "npm run dev",
+        "build": "npm run build"
+      },
+      "nativeDependencyRisk": "medium",
+      "riskNotes": "Ant Design app; verify browser-compatible dependency graph.",
+      "status": "selected",
+      "source": "https://github.com/fuhouyu/homepage"
+    },
+    {
+      "id": "seongpil0948-react-dev-guide",
+      "name": "seongpil0948/react-dev-guide",
+      "repository": "https://github.com/seongpil0948/react-dev-guide",
+      "revision": "0d3e853ed95b3f25d8f9c24dc1a19b3f9cbecbba",
+      "license": "unknown",
+      "packageManager": "pnpm",
+      "lockfile": "pnpm-lock.yaml",
+      "expectedCommands": {
+        "install": "pnpm install",
+        "dev": "pnpm dev",
+        "build": "pnpm build"
+      },
+      "nativeDependencyRisk": "medium",
+      "riskNotes": "Playwright/e2e files are out of product-runtime scope unless app dev/build ignores them.",
+      "status": "selected",
+      "source": "https://github.com/seongpil0948/react-dev-guide"
+    },
+    {
+      "id": "ravaniproshan-velorah-landing",
+      "name": "RavaniRoshan/velorah-landing",
+      "repository": "https://github.com/RavaniRoshan/velorah-landing",
+      "revision": "ebd83651f56115e04988c1dceb7e46a337defaa3",
+      "license": "unknown",
+      "packageManager": "pnpm",
+      "lockfile": "pnpm-lock-or-workspace",
+      "expectedCommands": {
+        "install": "pnpm install",
+        "dev": "pnpm dev",
+        "build": "pnpm build"
+      },
+      "nativeDependencyRisk": "medium",
+      "riskNotes": "Tailwind v4 and motion/Radix dependencies should be classified.",
+      "status": "selected",
+      "source": "https://github.com/RavaniRoshan/velorah-landing"
+    },
+    {
+      "id": "commencis-starter-react-vite",
+      "name": "Commencis/starter-react-vite",
+      "repository": "https://github.com/Commencis/starter-react-vite",
+      "revision": "a0647b6d566ff61868ac91ac8132b8480b05e652",
+      "license": "Apache-2.0",
+      "packageManager": "pnpm",
+      "lockfile": "pnpm-lock.yaml",
+      "expectedCommands": {
+        "install": "pnpm install",
+        "dev": "pnpm dev",
+        "build": "pnpm build"
+      },
+      "nativeDependencyRisk": "medium",
+      "riskNotes": "Storybook/MSW/tooling may need optional-scope filtering.",
+      "status": "selected",
+      "source": "https://github.com/Commencis/starter-react-vite"
+    },
+    {
+      "id": "r35007-vite-react-typescript",
+      "name": "R35007/vite-react-typescript",
+      "repository": "https://github.com/R35007/vite-react-typescript",
+      "revision": "c1ae13ccab557fffcdeed0eed356b5ae95ef7318",
+      "license": "MIT",
+      "packageManager": "npm",
+      "lockfile": "package-lock.json",
+      "expectedCommands": {
+        "install": "npm install",
+        "dev": "npm run dev",
+        "build": "npm run build"
+      },
+      "nativeDependencyRisk": "medium",
+      "riskNotes": "Cypress and heavier tooling are out of first compatibility scoring unless dev/build requires them.",
+      "status": "selected",
+      "source": "https://github.com/R35007/vite-react-typescript"
+    },
+    {
+      "id": "local-vite-vue-fixture",
+      "name": "Local Vite Vue fixture",
+      "repository": "local://tests/fixtures/vite-vue",
+      "license": "project",
+      "packageManager": "npm",
+      "lockfile": "none",
+      "expectedCommands": {
+        "install": "npm install",
+        "dev": "npm run dev",
+        "build": "npm run build"
+      },
+      "nativeDependencyRisk": "low",
+      "status": "selected",
+      "cohort": "framework-vue",
+      "upstream": {
+        "repository": "https://github.com/vitejs/vite",
+        "revision": "1544bb1b7ac92f775e9d0dea97954c99cc6cbd43",
+        "subdirectory": "packages/create-vite/template-vue"
+      },
+      "source": "tests/fixtures/vite-vue"
+    },
+    {
+      "id": "local-vite-svelte-fixture",
+      "name": "Local Vite Svelte fixture",
+      "repository": "local://tests/fixtures/vite-svelte",
+      "license": "project",
+      "packageManager": "npm",
+      "lockfile": "none",
+      "expectedCommands": {
+        "install": "npm install",
+        "dev": "npm run dev",
+        "build": "npm run build"
+      },
+      "nativeDependencyRisk": "low",
+      "status": "selected",
+      "cohort": "framework-svelte",
+      "upstream": {
+        "repository": "https://github.com/vitejs/vite",
+        "revision": "1544bb1b7ac92f775e9d0dea97954c99cc6cbd43",
+        "subdirectory": "packages/create-vite/template-svelte"
+      },
+      "source": "tests/fixtures/vite-svelte"
+    },
+    {
+      "id": "local-vite-vanilla-fixture",
+      "name": "Local Vite TypeScript vanilla fixture",
+      "repository": "local://tests/fixtures/vite-vanilla",
+      "license": "project",
+      "packageManager": "npm",
+      "lockfile": "none",
+      "expectedCommands": {
+        "install": "npm install",
+        "dev": "npm run dev",
+        "build": "npm run build"
+      },
+      "nativeDependencyRisk": "low",
+      "status": "selected",
+      "cohort": "framework-vanilla",
+      "source": "tests/fixtures/vite-vanilla"
+    },
+    {
+      "id": "local-vite-react-fixture",
+      "name": "Local Vite React fixture",
+      "repository": "local://tests/fixtures/vite-react",
+      "license": "project",
+      "packageManager": "npm",
+      "lockfile": "none",
+      "expectedCommands": {
+        "install": "npm install",
+        "dev": "npm run dev",
+        "build": "npm run build"
+      },
+      "nativeDependencyRisk": "low",
+      "status": "selected",
+      "cohort": "framework-react",
+      "source": "tests/fixtures/vite-react"
+    },
+    {
+      "id": "preview-service-vite-react-template",
+      "name": "Preview-service Vite React template",
+      "repository": "local://packages/browser-host/src/onboarding/templates.ts#vite-react",
+      "license": "project",
+      "packageManager": "pnpm",
+      "lockfile": "pnpm-lock.yaml",
+      "expectedCommands": {
+        "install": "pnpm install",
+        "dev": "pnpm dev",
+        "build": "pnpm build"
+      },
+      "nativeDependencyRisk": "low",
+      "status": "selected",
+      "cohort": "service-template",
+      "source": "packages/browser-host/src/onboarding/templates.ts"
+    },
+    {
+      "id": "preview-service-vite-ts-template",
+      "name": "Preview-service Vite TS template",
+      "repository": "local://packages/browser-host/src/onboarding/templates.ts#vite-ts",
+      "license": "project",
+      "packageManager": "npm",
+      "lockfile": "package-lock.json",
+      "expectedCommands": {
+        "install": "npm install",
+        "dev": "npm run dev",
+        "build": "npm run build"
+      },
+      "nativeDependencyRisk": "low",
+      "status": "selected",
+      "cohort": "service-template",
+      "source": "packages/browser-host/src/onboarding/templates.ts"
+    },
+    {
+      "id": "preview-service-minimal-npm-template",
+      "name": "Preview-service minimal npm template",
+      "repository": "local://packages/browser-host/src/onboarding/templates.ts#minimal-npm",
+      "license": "project",
+      "packageManager": "npm",
+      "lockfile": "package-lock.json",
+      "expectedCommands": {
+        "install": "npm install",
+        "dev": "npm run dev",
+        "build": "npm run build"
+      },
+      "nativeDependencyRisk": "low",
+      "status": "selected",
+      "cohort": "service-template",
+      "source": "packages/browser-host/src/onboarding/templates.ts"
+    },
+    {
+      "id": "preview-service-minimal-pnpm-template",
+      "name": "Preview-service minimal pnpm template",
+      "repository": "local://packages/browser-host/src/onboarding/templates.ts#minimal-pnpm",
+      "license": "project",
+      "packageManager": "pnpm",
+      "lockfile": "pnpm-lock.yaml",
+      "expectedCommands": {
+        "install": "pnpm install",
+        "dev": "pnpm dev",
+        "build": "pnpm build"
+      },
+      "nativeDependencyRisk": "low",
+      "status": "selected",
+      "cohort": "service-template",
+      "source": "packages/browser-host/src/onboarding/templates.ts"
+    },
+    {
+      "id": "webpack-rspack-dev-workflow",
+      "name": "Webpack/Rspack dev workflow",
+      "repository": "local://compat/bundler-dev-workflow-results.json",
+      "license": "MIT",
+      "packageManager": "npm",
+      "lockfile": "exact-version-and-sri-manifest",
+      "expectedCommands": {
+        "install": "npm install",
+        "dev": "webpack serve",
+        "build": "webpack"
+      },
+      "nativeDependencyRisk": "high",
+      "riskNotes": "Pinned Webpack and Rspack workflows pass real strict-CSP Chrome build/dev/HMR/recovery gates. Rspack uses the integrity-pinned WASI binding; native bindings and arbitrary versions remain outside support.",
+      "status": "selected",
+      "cohort": "bundler-supported",
+      "source": "compat/bundler-dev-workflow-results.json"
+    },
+    {
+      "id": "next-static-export-candidate",
+      "name": "Next.js static export candidate",
+      "repository": "local://compat/nextjs-compatibility.json#next-static-export",
+      "license": "n/a",
+      "packageManager": "npm",
+      "lockfile": "none",
+      "expectedCommands": {
+        "install": "npm install",
+        "dev": "next dev",
+        "build": "next build"
+      },
+      "nativeDependencyRisk": "high",
+      "riskNotes": "Static export remains a separately scoped candidate; maintained App Router and Pages Router dev/build/start workflows are product-supported under the documented strict CSP.",
+      "status": "selected",
+      "cohort": "nextjs",
+      "source": "compat/nextjs-compatibility.json"
+    }
+  ]
+}

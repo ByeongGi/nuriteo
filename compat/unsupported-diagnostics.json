@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-16",
+  "scope": {
+    "goal": "Ensure unsupported browser-runtime requests fail with product diagnostics instead of hangs or generic module errors.",
+    "productRuntime": "browser-guest-node-runtime"
+  },
+  "cases": [
+    {
+      "id": "docker-compose",
+      "request": "docker compose up",
+      "kind": "docker",
+      "status": "unsupported",
+      "requiredErrorCode": "ERR_RUNTIME_DOCKER_UNSUPPORTED",
+      "recovery": ["open-docs", "export-support-bundle"]
+    },
+    {
+      "id": "direct-tcp-database",
+      "request": "postgres://localhost:5432/app",
+      "kind": "direct-tcp-database",
+      "status": "unsupported",
+      "requiredErrorCode": "ERR_RUNTIME_TCP_DB_UNSUPPORTED",
+      "recovery": ["open-docs", "export-support-bundle"]
+    },
+    {
+      "id": "native-node-addon",
+      "request": "require('./addon.node')",
+      "kind": "native-addon",
+      "status": "unsupported",
+      "requiredErrorCode": "ERR_PM_NATIVE_ADDON_UNSUPPORTED",
+      "recovery": ["open-docs", "export-support-bundle"]
+    },
+    {
+      "id": "arbitrary-linux-binary",
+      "request": "./node_modules/.bin/linux-tool",
+      "kind": "arbitrary-linux-binary",
+      "status": "unsupported",
+      "requiredErrorCode": "ERR_RUNTIME_UNSUPPORTED_BINARY",
+      "recovery": ["open-docs", "export-support-bundle"]
+    }
+  ],
+  "evidence": [
+    "tests/productization/unsupported-diagnostics.test.ts",
+    "packages/browser-host/src/observability/unsupported-runtime.ts",
+    "packages/browser-host/src/observability/recovery-actions.ts",
+    "packages/browser-host/src/observability/package-manager-diagnostics.ts",
+    "packages/browser-host/src/observability/network-diagnostics.ts"
+  ],
+  "gate": {
+    "id": "P18-03",
+    "status": "pass",
+    "requiredBeforeDone": []
+  }
+}

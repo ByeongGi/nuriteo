@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>NURITEO Runtime Lab</title>
+    <link rel="stylesheet" href="/style.css">
+    <script type="module" src="/app.js"></script>
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>NURITEO Runtime Lab</h1>
+        <p id="status">idle</p>
+      </header>
+      <section class="toolbar">
+        <button id="boot" type="button">Boot</button>
+        <button id="teardown" type="button">Teardown</button>
+      </section>
+      <section class="terminal-panel" aria-labelledby="terminal-title">
+        <div class="terminal-header">
+          <h2 id="terminal-title">Terminal</h2>
+          <p id="terminal-status">idle</p>
+        </div>
+        <form id="terminal-form" class="terminal-form">
+          <label for="terminal-command">Command</label>
+          <input id="terminal-command" name="command" type="text" value="npm install" autocomplete="off">
+          <button id="terminal-run" type="submit">Run</button>
+          <button id="terminal-cancel" type="button" disabled>Cancel</button>
+          <button id="terminal-restart" type="button">Restart</button>
+        </form>
+        <pre id="terminal-log"></pre>
+        <ol id="terminal-history" aria-label="Terminal history"></ol>
+      </section>
+      <section class="workspace-panel" aria-labelledby="workspace-title">
+        <div class="workspace-header">
+          <h2 id="workspace-title">Workspace</h2>
+          <p id="editor-status">saved</p>
+        </div>
+        <div class="workspace-layout">
+          <nav aria-label="Project files">
+            <ol id="file-tree"></ol>
+          </nav>
+          <div class="editor-pane">
+            <div class="editor-toolbar">
+              <input id="editor-path" type="text" aria-label="File path">
+              <button id="editor-save" type="button">Save</button>
+              <button id="editor-create" type="button">Create</button>
+              <button id="editor-rename" type="button">Rename</button>
+              <button id="editor-delete" type="button">Delete</button>
+            </div>
+            <textarea id="editor-text" spellcheck="false" aria-label="File editor"></textarea>
+            <div class="search-row">
+              <input id="editor-search" type="search" aria-label="Search files" placeholder="Search">
+            </div>
+            <ol id="editor-search-results" aria-label="Search results"></ol>
+          </div>
+        </div>
+      </section>
+      <section class="diagnostics-panel" aria-labelledby="diagnostics-title">
+        <div class="diagnostics-header">
+          <h2 id="diagnostics-title">Diagnostics</h2>
+          <p id="diagnostics-status">idle</p>
+        </div>
+        <ol id="diagnostics-list" aria-label="Diagnostics"></ol>
+        <div id="recovery-actions" class="recovery-actions" aria-label="Recovery actions"></div>
+      </section>
+      <pre id="log"></pre>
+    </main>
+  </body>
+</html>

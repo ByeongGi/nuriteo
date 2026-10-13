@@ -1,0 +1,122 @@
+{
+  "schemaVersion": 1,
+  "taskId": "BASE-001",
+  "baselineCommit": "38562b246dc18e725da9ed81e47fc0437f385529",
+  "recordedAt": "2026-10-03",
+  "cleanCheckout": {
+    "preparation": [
+      "pnpm install --frozen-lockfile"
+    ],
+    "commands": [
+      "pnpm test:rust",
+      "pnpm check:types",
+      "pnpm test:browser"
+    ]
+  },
+  "measurement": {
+    "method": "/usr/bin/time -p <command>",
+    "samplePolicy": "Three successful serial runs after dependency installation; averages are arithmetic means of wall-clock real seconds.",
+    "environment": {
+      "os": "macOS 26.6.2 arm64",
+      "node": "24.17.0",
+      "pnpm": "11.15.1",
+      "rustc": "1.97.1",
+      "cargo": "1.97.1",
+      "playwright": "1.63.0"
+    },
+    "caveats": [
+      "The measurement host used Node.js 24.17.0 while package.json requires Node.js >=22.23.0 <23; all commands passed, but release CI must use the declared Node.js 22 range.",
+      "Dependency caches were available. The Rust suite's separate first compile observation was 2.33 seconds and is not part of the warm three-run average.",
+      "Browser timings include local server startup, Chromium launch, Next.js development and production lifecycle checks, and the soak scenario."
+    ]
+  },
+  "suites": [
+    {
+      "id": "rust-workspace",
+      "category": "rust",
+      "packageScript": "test:rust",
+      "command": "pnpm test:rust",
+      "workingDirectory": ".",
+      "purpose": "Run unit and documentation tests for every Rust workspace crate.",
+      "timingSeconds": {
+        "samples": [0.7, 0.42, 0.43],
+        "average": 0.52,
+        "cacheState": "Cargo dependencies and target artifacts warm"
+      },
+      "externalDependencies": [
+        {
+          "name": "Rust 1.97.1 toolchain",
+          "type": "toolchain",
+          "phase": "run",
+          "network": "none"
+        },
+        {
+          "name": "crates.io-compatible registry",
+          "type": "package-registry",
+          "phase": "prepare-if-cache-miss",
+          "network": "outbound-https"
+        }
+      ]
+    },
+    {
+      "id": "typescript-projects",
+      "category": "typescript",
+      "packageScript": "check:types",
+      "command": "pnpm check:types",
+      "workingDirectory": ".",
+      "purpose": "Type-check production, test, tooling, and migrated TypeScript project references.",
+      "timingSeconds": {
+        "samples": [5.93, 5.54, 5.37],
+        "average": 5.61,
+        "cacheState": "pnpm dependencies installed; TypeScript incremental cache not required"
+      },
+      "externalDependencies": [
+        {
+          "name": "Node.js 22 and pnpm 11",
+          "type": "toolchain",
+          "phase": "run",
+          "network": "none"
+        },
+        {
+          "name": "npm-compatible registry",
+          "type": "package-registry",
+          "phase": "prepare-if-cache-miss",
+          "network": "outbound-https"
+        }
+      ]
+    },
+    {
+      "id": "browser-system",
+      "category": "browser",
+      "packageScript": "test:browser",
+      "command": "pnpm test:browser",
+      "workingDirectory": ".",
+      "purpose": "Run browser boot, isolation, non-JS tooling, recovery, soak, strict-CSP, and Next.js lifecycle scenarios.",
+      "timingSeconds": {
+        "samples": [104.72, 97.29, 97.43],
+        "average": 99.81,
+        "cacheState": "pnpm dependencies and Playwright Chromium installed; framework build caches warm after the first sample"
+      },
+      "externalDependencies": [
+        {
+          "name": "Playwright Chromium 1.63-compatible binary",
+          "type": "browser",
+          "phase": "run",
+          "network": "none"
+        },
+        {
+          "name": "ephemeral IPv4 loopback ports",
+          "type": "local-network",
+          "phase": "run",
+          "network": "loopback-only"
+        },
+        {
+          "name": "npm-compatible registry and Playwright browser distribution",
+          "type": "package-registry",
+          "phase": "prepare-if-cache-miss",
+          "network": "outbound-https"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,43 @@
+const tests = [
+  "./cli-baseline.test.ts",
+  "./cli-evaluator.test.ts",
+  "./cli-module-graph.test.ts",
+  "./conformance-matrix.test.ts",
+  "./execution-boundary.test.ts",
+  "./native-fallback-policy.test.ts",
+  "./nested-worker-isolate.test.ts",
+  "./npm-cacache-put-stream-cli-module-evaluation.test.ts",
+  "./npm-fetch-cli-module-evaluation.test.ts",
+  "./npm-fetch-tar-extract-cli-module-evaluation.test.ts",
+  "./npm-install-cli-module-evaluation.test.ts",
+  "./npm-minizlib-cli-module-evaluation.test.ts",
+  "./npm-pacote-remote-manifest-cli-module-evaluation.test.ts",
+  "./npm-registry-install-cli-module-evaluation.test.ts",
+  "./npm-remote-fetcher-tar-cli-module-evaluation.test.ts",
+  "./npm-run-exec-cli-module-evaluation.test.ts",
+  "./npm-tar-extract-cli-module-evaluation.test.ts",
+  "./npm-tar-with-temp-dir-cli-module-evaluation.test.ts",
+  "./npm-cli-module-evaluation.test.ts",
+  "./npm-guest-runtime-boot.test.ts",
+  "./npm-install-plan.test.ts",
+  "./pnpm-cli-module-evaluation.test.ts",
+  "./pnpm-exec-cli-module-evaluation.test.ts",
+  "./pnpm-install-cli-module-evaluation.test.ts",
+  "./pnpm-registry-install-cli-module-evaluation.test.ts",
+  "./pnpm-guest-runtime-boot.test.ts",
+  "./pnpm-store-plan.test.ts",
+  "./terminal-commands.test.ts",
+  "./yarn-guest-runtime-boot.test.ts",
+  "./yarn-real-cli.test.ts",
+  "./yarn-registry-install-real-cli.test.ts",
+  "./yarn-vendored-cli.test.ts",
+  "./workspace-snapshot.test.ts",
+  "./tarball-cache.test.ts",
+  "./fetcher.test.ts",
+  "./npm-integration.test.ts",
+  "./pnpm-integration.test.ts"
+];
+
+for (const test of tests) {
+  await import(test);
+}

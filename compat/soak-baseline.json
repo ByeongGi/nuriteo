@@ -1,0 +1,57 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-18",
+  "runtime": "browser-guest-node-runtime",
+  "requiredIterations": 1000,
+  "budgets": {
+    "activeWorkersAfterTeardown": 0,
+    "pendingRequestsAfterTeardown": 0,
+    "systemOpenFiles": 0,
+    "systemWatchCount": 0,
+    "systemPortCount": 0,
+    "systemPendingRequests": 0
+  },
+  "fixtures": [
+    {
+      "id": "browser-runtime-boot-run-teardown",
+      "test": "tests/system/browser/soak.test.ts",
+      "command": "SOAK_ITERATIONS=1000 node tests/system/browser/soak.test.ts",
+      "status": "required"
+    },
+    {
+      "id": "package-cache-return-to-budget",
+      "test": "tests/compatibility/package-managers/tarball-cache.test.ts",
+      "command": "node tests/compatibility/package-managers/tarball-cache.test.ts",
+      "status": "required"
+    },
+    {
+      "id": "worker-churn-return-to-budget",
+      "test": "packages/browser-host/test/process-lifecycle.test.ts",
+      "command": "node packages/browser-host/test/process-lifecycle.test.ts",
+      "status": "required"
+    },
+    {
+      "id": "preview-reconnect-return-to-budget",
+      "test": "packages/preview/test/hmr-client.test.ts",
+      "command": "node packages/preview/test/hmr-client.test.ts",
+      "status": "required"
+    },
+    {
+      "id": "workspace-runtime-offline-soak",
+      "test": "packages/workspace-runtime/test/ide-offline-soak.test.ts",
+      "command": "node packages/workspace-runtime/test/ide-offline-soak.test.ts",
+      "status": "required"
+    },
+    {
+      "id": "large-node-modules-stress",
+      "test": "packages/browser-host/test/large-node-modules-stress.test.ts",
+      "command": "node packages/browser-host/test/large-node-modules-stress.test.ts",
+      "status": "required"
+    }
+  ],
+  "gate": {
+    "id": "SG24",
+    "status": "pass",
+    "threshold": "required soak fixtures must exist, browser soak must support at least requiredIterations, and install/dev/restart plus large node_modules stress must be present"
+  }
+}

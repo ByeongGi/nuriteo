@@ -1,0 +1,20 @@
+{
+  "version": "2.2.4",
+  "files": [
+    {
+      "path": "packages/workspace-runtime/assets/vendor/rspack-2.2.4/assets/rspack.wasm",
+      "bytes": 30041306,
+      "sha256": "99425ddaffe461d35421208867c36c7b1edf2166c293a6425f3dc7f653b57055"
+    },
+    {
+      "path": "packages/workspace-runtime/assets/vendor/rspack-2.2.4/assets/wasi-worker-browser.mjs",
+      "bytes": 657773,
+      "sha256": "32c8dd24f1bb60f9f258c450810a5382d7919e3de315b63f924b7cc38518290b"
+    },
+    {
+      "path": "packages/workspace-runtime/assets/vendor/rspack-2.2.4/rspack-wasi-binding.mjs",
+      "bytes": 688420,
+      "sha256": "a0dbff6f0abde0062a9e44ce366f71b93a307b32f5e4543e9582d5bfd4e5d4e5"
+    }
+  ]
+}

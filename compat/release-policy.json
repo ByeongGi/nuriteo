@@ -1,0 +1,74 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-15",
+  "status": "p16-01-release-policy",
+  "channels": [
+    {
+      "id": "internal",
+      "audience": "maintainers and controlled product QA",
+      "promotionCriteria": ["PG15 pass", "support bundle available", "known limitations reviewed"],
+      "externalPublish": false
+    },
+    {
+      "id": "beta-candidate",
+      "audience": "trusted browser IDE integrations",
+      "promotionCriteria": ["PG16 pass", "PG17 pass", "PG18 scored", "rollback artifact verified"],
+      "externalPublish": false
+    },
+    {
+      "id": "stable",
+      "audience": "production browser development sessions",
+      "promotionCriteria": ["PG20 pass", "release checklist pass", "support window announced"],
+      "externalPublish": true
+    }
+  ],
+  "versioning": {
+    "sdk": {
+      "scheme": "semver",
+      "major": "public SDK API break, runtime ABI incompatibility, or unsupported migration requirement",
+      "minor": "new supported SDK/runtime capability within the current ABI",
+      "patch": "bug fix, security fix, documentation correction, or compatibility fixture expansion"
+    },
+    "runtimeAbi": {
+      "current": 1,
+      "compatibility": "minor and patch releases must remain compatible with ABI v1; ABI breaks require SDK major"
+    },
+    "protocolAbi": {
+      "source": "packages/protocol/src/generated.ts ABI_VERSION",
+      "compatibility": "runtime protocol ABI must be recorded in release notes when changed"
+    }
+  },
+  "supportWindows": {
+    "node": {
+      "baseline": "22.23.0",
+      "line": "22.x",
+      "candidate": "22.23.2",
+      "policy": "patch candidates are rehearsed before promotion; major line changes require a compatibility lane"
+    },
+    "npm": {
+      "baseline": "10.9.2",
+      "candidate": "10.9.8",
+      "policy": "single package-manager promotion per release candidate"
+    },
+    "pnpm": {
+      "baseline": "9.15.9",
+      "candidate": "12.4.1",
+      "policy": "pnpm 12 remains held until browser runtime supports its entry contract"
+    },
+    "browser": {
+      "baseline": "Chromium family with COOP/COEP and SharedArrayBuffer",
+      "policy": "qualify current stable and previous two stable Chromium releases before beta or stable"
+    }
+  },
+  "endOfSupport": {
+    "noticeDays": 90,
+    "overlap": "keep the previous supported Node/npm/pnpm baseline for one minor release after promotion",
+    "exceptions": "critical security fixes may shorten overlap with a documented mitigation"
+  },
+  "candidateRehearsal": [
+    "record source URL, integrity, and SHA256 before running fixtures",
+    "run protocol, node-runtime, browser-host, package-manager, preview, browser, Vite, SDK consumer suites",
+    "keep candidate status as rehearsed-not-promoted until product gates and rollback artifacts are updated",
+    "record promotion or hold reason in release notes and manifests"
+  ]
+}

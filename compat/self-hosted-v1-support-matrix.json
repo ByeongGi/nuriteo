@@ -1,0 +1,144 @@
+{
+  "schemaVersion": 1,
+  "taskId": "SUP-001",
+  "releaseLineage": "nuriteo-self-hosted-v1",
+  "reviewedAt": "2026-10-12",
+  "statusDefinitions": {
+    "supported": "A GA product contract backed by automated evidence.",
+    "candidate": "The intended GA contract; GATE-007 cannot promote it until QUAL-001 passes.",
+    "qualified": "An exact environment that has already passed an actual release rehearsal.",
+    "unsupported": "Outside the v1 product contract."
+  },
+  "support": [
+    {
+      "id": "SHV1-OCI",
+      "area": "Application images",
+      "status": "candidate",
+      "contract": "Server, Web, and Operations OCI images on linux/amd64 and linux/arm64",
+      "qualification": "REL-001 must prove two clean builds with identical manifest digests on both architectures.",
+      "evidence": ["release/ga/reproducible-images-policy.json"]
+    },
+    {
+      "id": "SHV1-COMPOSE-DOCKER",
+      "area": "Single-host Docker Compose",
+      "status": "qualified",
+      "contract": "Docker Engine 28.5.1 with Docker Compose 2.40.3 on Linux arm64",
+      "qualification": "Clean install, restart, upgrade, backup, restore, and application rollback were rehearsed.",
+      "evidence": ["docs/implementation/self-hosted/evidence/GATE-004.md"]
+    },
+    {
+      "id": "SHV1-COMPOSE-PODMAN",
+      "area": "Single-host Podman Compose",
+      "status": "qualified",
+      "contract": "Podman 6.0.2 with podman-compose 1.5.0 on macOS arm64 Linux VM",
+      "qualification": "The complete RC aggregate rehearsal passed in this environment.",
+      "evidence": ["docs/implementation/self-hosted/evidence/GATE-006.md"]
+    },
+    {
+      "id": "SHV1-KUBERNETES",
+      "area": "Kubernetes and Helm",
+      "status": "qualified",
+      "contract": "Kubernetes 1.29 through 1.37 with Helm 3.14 through 4.2",
+      "qualification": "Kubernetes 1.29.14 and 1.37.0 endpoints passed actual install, failure fence, upgrade, rollback, uninstall, and Secret-preservation lifecycles with Helm 4.2.2.",
+      "evidence": ["charts/nuriteo/Chart.yaml", "docs/implementation/self-hosted/evidence/K8S-006.md", "compat/self-hosted-v1-qualification-matrix.json"]
+    },
+    {
+      "id": "SHV1-POSTGRESQL",
+      "area": "PostgreSQL",
+      "status": "qualified",
+      "contract": "PostgreSQL 17 and 18 over verified TLS; no optional extension is required",
+      "qualification": "Pinned PostgreSQL 17.11 and 18.1 both passed custom-CA TLS migration serialization, validation, rollback, and retry tests.",
+      "evidence": ["docs/implementation/self-hosted/evidence/DB-001.md", "docs/implementation/self-hosted/evidence/SEC-004.md", "compat/self-hosted-v1-qualification-matrix.json"]
+    },
+    {
+      "id": "SHV1-S3",
+      "area": "Object storage",
+      "status": "supported",
+      "contract": "HTTPS S3-compatible storage that passes the NURITEO capability preflight; bundled RustFS 1.0.0 is the single-host default",
+      "qualification": "Compatibility is granted by PUT, GET, HEAD, DELETE, LIST, range, checksum, presign, multipart, and cleanup behavior—not by provider name.",
+      "evidence": ["docs/policies/object-storage.md", "docs/implementation/self-hosted/evidence/S3-003.md"]
+    },
+    {
+      "id": "SHV1-BROWSER-CHROME",
+      "area": "Browser",
+      "status": "supported",
+      "contract": "Current stable desktop Chrome/Chromium with cross-origin isolation, SharedArrayBuffer, Service Worker, and OPFS",
+      "qualification": "Chrome 154 passed current isolation, SharedArrayBuffer, Service Worker, and OPFS capability qualification; production browser runtime gates remain linked.",
+      "evidence": ["compat/browser-smoke-results.json", "compat/self-hosted-v1-qualification-matrix.json"]
+    },
+    {
+      "id": "SHV1-BROWSER-EDGE",
+      "area": "Browser",
+      "status": "qualified",
+      "contract": "Microsoft Edge 155 desktop",
+      "qualification": "COOP/COEP, SharedArrayBuffer, Service Worker, OPFS, and the retained Vite preview smoke passed.",
+      "evidence": ["compat/browser-smoke-results.json", "compat/self-hosted-v1-qualification-matrix.json"]
+    },
+    {
+      "id": "SHV1-BROWSER-SAFARI",
+      "area": "Browser",
+      "status": "qualified",
+      "contract": "Safari 26.6.2 on macOS desktop",
+      "qualification": "Isolation, preview, OPFS reopen, and quota recovery smoke passed; iOS and mobile Safari are excluded.",
+      "evidence": ["compat/browser-smoke-results.json", "compat/self-hosted-v1-qualification-matrix.json"]
+    },
+    {
+      "id": "SHV1-AUTH",
+      "area": "Identity",
+      "status": "supported",
+      "contract": "Local administrator-managed accounts, expiring invitations, optional TOTP MFA, and multiple instance-wide OIDC providers",
+      "qualification": "WebAuthn/passkeys and public self-registration are not part of v1.",
+      "evidence": ["docs/policies/identity-and-access.md"]
+    },
+    {
+      "id": "SHV1-UPGRADE",
+      "area": "Upgrade",
+      "status": "qualified",
+      "contract": "Forward-only in-place upgrade from the published self-hosted v1 Beta/RC lineage; downgrade is not supported",
+      "qualification": "Beta gate migration 46 and RC.1 migration 50 both passed the upgrade, isolated restore, and application-only rollback matrix; signed artifacts repeat it in QUAL-004.",
+      "evidence": ["compat/self-hosted-upgrade-compatibility-v1.json", "compat/self-hosted-v1-lifecycle-matrix.json"]
+    },
+    {
+      "id": "SHV1-AIRGAP",
+      "area": "Air-gapped installation",
+      "status": "candidate",
+      "contract": "Digest-pinned Core Bundle plus optional Quickstart Add-on Bundle imported through an operator-owned OCI registry",
+      "qualification": "The RC Core Bundle plan passed; signed GA artifacts remain REL-002 through REL-005 and QUAL-004 work.",
+      "evidence": ["release/offline/inventory-v1.json", "docs/implementation/self-hosted/evidence/AIR-002.md"]
+    }
+  ],
+  "knownLimits": [
+    {
+      "id": "SHV1-LIMIT-MANAGED",
+      "summary": "Managed cloud hosting, billing, and a vendor-operated control plane are not provided."
+    },
+    {
+      "id": "SHV1-LIMIT-SECRET",
+      "summary": "Project secret or environment-variable injection into browser-executed code is not provided."
+    },
+    {
+      "id": "SHV1-LIMIT-MOBILE",
+      "summary": "Mobile browsers, including iOS Safari, are outside the v1 support claim."
+    },
+    {
+      "id": "SHV1-LIMIT-RUNTIME",
+      "summary": "Browser workspaces do not provide Docker, arbitrary Linux binaries, direct TCP databases, or general native Node addons."
+    },
+    {
+      "id": "SHV1-LIMIT-REGISTRY",
+      "summary": "NURITEO is not a package proxy or artifact repository; operators integrate an existing npm registry or repository manager."
+    },
+    {
+      "id": "SHV1-LIMIT-S3",
+      "summary": "S3-compatible means the tested minimum capability contract, not every AWS S3 API or provider-specific feature."
+    },
+    {
+      "id": "SHV1-LIMIT-DOWNGRADE",
+      "summary": "Database downgrade is unsupported; rollback restores a verified pre-upgrade backup when schema compatibility is lost."
+    },
+    {
+      "id": "SHV1-LIMIT-HA",
+      "summary": "The v1 Compose profile is single-host; multi-node high availability requires the Helm production profile and operator-managed PostgreSQL and S3."
+    }
+  ]
+}

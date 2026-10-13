@@ -1,0 +1,71 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-27",
+  "status": "project-complete",
+  "productClaim": "project-scoped browser IDE runtime; not upstream VS Code, Marketplace, Node inspector, or arbitrary language-server compatible",
+  "milestones": {
+    "lspTransport": {
+      "status": "project-complete",
+      "implemented": [
+        "TypeScript compiler LanguageService in a dedicated same-origin module Worker",
+        "JSON-RPC initialize/shutdown lifecycle, request timeout, cancellation, and stale document version rejection",
+        "incremental didOpen/didChange/didClose workspace synchronization",
+        "compiler diagnostics, completion, definition, references, hover, signature help, prepareRename, rename, symbols, formatting, quick fixes, and semantic tokens",
+        "Monaco providers, versioned markers, and validated multi-file workspace-edit commits",
+        "HostProcessTable process isolation with deny-by-default startup permission and deterministic cleanup"
+      ],
+      "limitations": [
+        "TypeScript and JavaScript only; no rust-analyzer or arbitrary stdio language-server executable",
+        "workspace declaration files and a browser baseline library are used instead of unrestricted node_modules filesystem access",
+        "external package-not-found diagnostics are suppressed when declarations are unavailable inside the browser workspace"
+      ]
+    },
+    "extensionHost": {
+      "status": "project-complete",
+      "implemented": [
+        "P-256 signed and SHA-256 integrity-pinned built-in manifest verification",
+        "one isolated HostProcessTable Worker per extension",
+        "multi-extension command and language contribution registry with collision rejection",
+        "onStartup, onCommand, and onLanguage activation",
+        "persisted deny-by-default command, diagnostics, workspace read, and workspace write grants",
+        "capability-brokered document snapshots and workspace edits",
+        "extension-local one-shot crash recovery without editor or runtime failure propagation"
+      ],
+      "limitations": [
+        "signed built-in registry only",
+        "no VSIX, Marketplace, arbitrary JavaScript bundle, or upstream VS Code API compatibility",
+        "no ambient network, host filesystem, process, clipboard, DOM, or secret capability"
+      ]
+    },
+    "debugAdapter": {
+      "status": "project-complete",
+      "implemented": [
+        "DAP request, response, and event transport in a dedicated HostProcessTable Worker",
+        "workspace program/source launch, verified and conditional breakpoints, continue, next, stepIn, stepOut, terminate, and disconnect",
+        "threads, workspace source stack location, module scope variables, watch, REPL evaluation, setVariable, stdout, and exception stops",
+        "persisted per-program breakpoint configuration",
+        "CSP-safe TypeScript AST interpreter with no eval or new Function",
+        "1 MB source and 100000 execution-step safety bounds"
+      ],
+      "limitations": [
+        "bounded JavaScript and TypeScript statement/expression subset; TSX rendering, imports, classes, async execution, and browser DOM are not executed",
+        "function bodies and loops execute atomically rather than exposing nested call frames",
+        "not a V8 or Node inspector and does not attach to the live Vite or Next.js preview process",
+        "single browser-runtime thread"
+      ]
+    }
+  },
+  "securityBoundaries": {
+    "csp": "same-origin module Workers with no unsafe-eval, eval, new Function, blob script, or remote worker source",
+    "filesystem": "validated file:///workspace URI documents and explicit controller edits only; no host filesystem handles",
+    "network": "no language, extension, or debugger network capability",
+    "process": "scoped browser guest Worker processes only; no host OS process spawn",
+    "secrets": "not exposed to language, extension, or debugger Workers"
+  },
+  "tests": [
+    "packages/workspace-runtime/test/controller-dispose.test.ts",
+    "packages/workspace-runtime/test/terminal-session-control.test.ts",
+    "apps/web/test/runtime-journey-browser.test.ts",
+    "apps/web/test/gate-project-runtime-browser.test.ts"
+  ]
+}

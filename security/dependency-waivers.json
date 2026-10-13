@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "waivers": [
+    {
+      "ecosystem": "cargo",
+      "id": "RUSTSEC-2025-0134",
+      "package": "rustls-pemfile",
+      "version": "2.2.0",
+      "kind": "unmaintained",
+      "reason": "The advisory reports maintenance status rather than a vulnerability. The crate is a thin wrapper used only for bounded PEM parsing; migration to rustls-pki-types PemObject remains required.",
+      "owner": "self-hosted security owner",
+      "expiresAt": "2026-12-31",
+      "replacement": "Use rustls-pki-types::pem::PemObject directly and remove rustls-pemfile."
+    }
+  ]
+}

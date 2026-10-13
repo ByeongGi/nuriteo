@@ -1,0 +1,64 @@
+services:
+  storage-configure-browser-upload-cors:
+    image: ${NURITEO_SERVER_IMAGE:-localhost/nuriteo-server:cmp-003}
+    build:
+      context: ../..
+      dockerfile: deploy/docker/server.Dockerfile
+    command: ["storage-configure-browser-upload-cors"]
+    profiles: ["configure-browser-upload-cors"]
+    environment: &external-s3-environment
+      NURITEO_EXTERNAL_URL: ${NURITEO_EXTERNAL_URL:?set NURITEO_EXTERNAL_URL}
+      NURITEO_S3_ENDPOINT: ${NURITEO_S3_ENDPOINT:?set NURITEO_S3_ENDPOINT}
+      NURITEO_S3_REGION: ${NURITEO_S3_REGION:?set NURITEO_S3_REGION}
+      NURITEO_S3_BUCKET: ${NURITEO_S3_BUCKET:?set NURITEO_S3_BUCKET}
+      NURITEO_S3_ADDRESSING_STYLE: ${NURITEO_S3_ADDRESSING_STYLE:-path}
+      NURITEO_S3_CREDENTIAL_PROVIDER: static
+      NURITEO_S3_ACCESS_KEY_ID_FILE: /run/secrets/s3_access_key
+      NURITEO_S3_SECRET_ACCESS_KEY_FILE: /run/secrets/s3_secret_key
+      NURITEO_S3_CA_FILE: /run/secrets/s3_ca
+    secrets: [s3_access_key, s3_secret_key, s3_ca]
+    read_only: true
+    tmpfs: [/tmp:rw,noexec,nosuid,size=16777216,mode=1777]
+    user: "65532:65532"
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    restart: "no"
+
+  storage-check:
+    image: ${NURITEO_SERVER_IMAGE:-localhost/nuriteo-server:cmp-003}
+    build:
+      context: ../..
+      dockerfile: deploy/docker/server.Dockerfile
+    command: ["storage-check"]
+    environment:
+      NURITEO_EXTERNAL_URL: ${NURITEO_EXTERNAL_URL:?set NURITEO_EXTERNAL_URL}
+      NURITEO_SAVE_UPLOAD_TRANSPORT: direct
+      NURITEO_S3_ENDPOINT: ${NURITEO_S3_ENDPOINT:?set NURITEO_S3_ENDPOINT}
+      NURITEO_S3_REGION: ${NURITEO_S3_REGION:?set NURITEO_S3_REGION}
+      NURITEO_S3_BUCKET: ${NURITEO_S3_BUCKET:?set NURITEO_S3_BUCKET}
+      NURITEO_S3_ADDRESSING_STYLE: ${NURITEO_S3_ADDRESSING_STYLE:-path}
+      NURITEO_S3_CREDENTIAL_PROVIDER: static
+      NURITEO_S3_ACCESS_KEY_ID_FILE: /run/secrets/s3_access_key
+      NURITEO_S3_SECRET_ACCESS_KEY_FILE: /run/secrets/s3_secret_key
+      NURITEO_S3_CA_FILE: /run/secrets/s3_ca
+    secrets:
+      - s3_access_key
+      - s3_secret_key
+      - s3_ca
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16777216,mode=1777
+    user: "65532:65532"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    restart: "no"
+
+secrets:
+  s3_access_key:
+    file: ${NURITEO_S3_ACCESS_KEY_FILE:?set NURITEO_S3_ACCESS_KEY_FILE}
+  s3_secret_key:
+    file: ${NURITEO_S3_SECRET_KEY_FILE:?set NURITEO_S3_SECRET_KEY_FILE}
+  s3_ca:
+    file: ${NURITEO_S3_CA_FILE:?set NURITEO_S3_CA_FILE}

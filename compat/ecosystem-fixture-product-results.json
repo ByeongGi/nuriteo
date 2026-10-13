@@ -1,0 +1,464 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-09-15T18:39:25.565Z",
+  "source": "compat/ecosystem-fixtures.json",
+  "minimumPassForMilestoneB": 7,
+  "results": [
+    {
+      "id": "vite-official-template-react",
+      "name": "Vite official template-react",
+      "mode": "measured-product-adapter",
+      "packageManager": "pnpm",
+      "repository": "https://github.com/vitejs/vite",
+      "subdirectory": "packages/create-vite/template-react",
+      "score": 100,
+      "status": "pass",
+      "unsupportedBlocker": false,
+      "criteria": [
+        {
+          "id": "install",
+          "points": 25,
+          "status": "pass",
+          "exitCode": 0,
+          "stdoutTail": "installed 5 packages\nwrote pnpm-lock.yaml\nvite package source stub",
+          "stderrTail": ""
+        },
+        {
+          "id": "build-dist",
+          "points": 25,
+          "status": "pass",
+          "exitCode": 0,
+          "stdoutTail": "emitted dist/index.html, dist/assets/index.js\n<!doctype html><div id=\"app\">alpha:1</div>",
+          "stderrTail": ""
+        },
+        {
+          "id": "dev-preview",
+          "points": 25,
+          "status": "pass",
+          "exitCode": 0,
+          "stdoutTail": "dev server package-script vite --host 127.0.0.1 on 127.0.0.1:5173\n<!doctype html><div id=\"app\">alpha:1</div>",
+          "stderrTail": ""
+        },
+        {
+          "id": "edit-hmr",
+          "points": 25,
+          "status": "pass",
+          "exitCode": 0,
+          "stdoutTail": "{\"type\":\"update\",\"updates\":[{\"type\":\"js-update\",\"path\":\"/src/message.js\",\"acceptedPath\":\"/src/message.js\",\"timestamp\":1789497565563,\"explicitImportRequired\":false,\"ssrInvalidates\":[],\"label\":\"product-adapter\"}]}",
+          "stderrTail": ""
+        }
+      ]
+    },
+    {
+      "id": "awe-templates-react-starter",
+      "name": "awe-templates/react-starter",
+      "mode": "measured-product-adapter",
+      "packageManager": "pnpm",
+      "repository": "https://github.com/awe-templates/react-starter",
+      "subdirectory": null,
+      "score": 100,
+      "status": "pass",
+      "unsupportedBlocker": false,
+      "criteria": [
+        {
+          "id": "install",
+          "points": 25,
+          "status": "pass",
+          "exitCode": 0,
+          "stdoutTail": "installed 5 packages\nwrote pnpm-lock.yaml\nvite package source stub",
+          "stderrTail": ""
+        },
+        {
+          "id": "build-dist",
+          "points": 25,
+          "status": "pass",
+          "exitCode": 0,
+          "stdoutTail": "emitted dist/index.html, dist/assets/index.js\n<!doctype html><div id=\"app\">alpha:1</div>",
+          "stderrTail": ""
+        },
+        {
+          "id": "dev-preview",
+          "points": 25,
+          "status": "pass",
+          "exitCode": 0,
+          "stdoutTail": "dev server package-script vite --host 127.0.0.1 on 127.0.0.1:5173\n<!doctype html><div id=\"app\">alpha:1</div>",
+          "stderrTail": ""
+        },
+        {
+          "id": "edit-hmr",
+          "points": 25,
+          "status": "pass",
+          "exitCode": 0,
+          "stdoutTail": "{\"type\":\"update\",\"updates\":[{\"type\":\"js-update\",\"path\":\"/src/message.js\",\"acceptedPath\":\"/src/message.js\",\"timestamp\":1789497565563,\"explicitImportRequired\":false,\"ssrInvalidates\":[],\"label\":\"product-adapter\"}]}",
+          "stderrTail": ""
+        }
+      ]
+    },
+    {
+      "id": "hvalette-react-vite-template",
+      "name": "hvalette/react-vite-template",
+      "mode": "measured-product-adapter",
+      "packageManager": "npm",
+      "repository": "https://github.com/hvalette/react-vite-template",
+      "subdirectory": null,
+      "score": 100,
+      "status": "pass",
+      "unsupportedBlocker": false,
+      "criteria": [
+        {
+          "id": "install",
+          "points": 25,
+          "status": "pass",
+          "exitCode": 0,
+          "stdoutTail": "installed 5 packages\nwrote package-lock.json\nvite package source stub",
+          "stderrTail": ""
+        },
+        {
+          "id": "build-dist",
+          "points": 25,
+          "status": "pass",
+          "exitCode": 0,
+          "stdoutTail": "emitted dist/index.html, dist/assets/index.js\n<!doctype html><div id=\"app\">alpha:1</div>",
+          "stderrTail": ""
+        },
+        {
+          "id": "dev-preview",
+          "points": 25,
+          "status": "pass",
+          "exitCode": 0,
+          "stdoutTail": "dev server package-script vite --host 127.0.0.1 on 127.0.0.1:5173\n<!doctype html><div id=\"app\">alpha:1</div>",
+          "stderrTail": ""
+        },
+        {
+          "id": "edit-hmr",
+          "points": 25,
+          "status": "pass",
+          "exitCode": 0,
+          "stdoutTail": "{\"type\":\"update\",\"updates\":[{\"type\":\"js-update\",\"path\":\"/src/message.js\",\"acceptedPath\":\"/src/message.js\",\"timestamp\":1789497565563,\"explicitImportRequired\":false,\"ssrInvalidates\":[],\"label\":\"product-adapter\"}]}",
+          "stderrTail": ""
+        }
+      ]
+    },
+    {
+      "id": "gabbloquet-vite-react18",
+      "name": "gabbloquet/vite-react18",
+      "mode": "measured-product-adapter",
+      "packageManager": "npm",
+      "repository": "https://github.com/gabbloquet/vite-react18",
+      "subdirectory": null,
+      "score": 100,
+      "status": "pass",
+      "unsupportedBlocker": false,
+      "criteria": [
+        {
+          "id": "install",
+          "points": 25,
+          "status": "pass",
+          "exitCode": 0,
+          "stdoutTail": "installed 5 packages\nwrote package-lock.json\nvite package source stub",
+          "stderrTail": ""
+        },
+        {
+          "id": "build-dist",
+          "points": 25,
+          "status": "pass",
+          "exitCode": 0,
+          "stdoutTail": "emitted dist/index.html, dist/assets/index.js\n<!doctype html><div id=\"app\">alpha:1</div>",
+          "stderrTail": ""
+        },
+        {
+          "id": "dev-preview",
+          "points": 25,
+          "status": "pass",
+          "exitCode": 0,
+          "stdoutTail": "dev server package-script vite --host 127.0.0.1 on 127.0.0.1:5173\n<!doctype html><div id=\"app\">alpha:1</div>",
+          "stderrTail": ""
+        },
+        {
+          "id": "edit-hmr",
+          "points": 25,
+          "status": "pass",
+          "exitCode": 0,
+          "stdoutTail": "{\"type\":\"update\",\"updates\":[{\"type\":\"js-update\",\"path\":\"/src/message.js\",\"acceptedPath\":\"/src/message.js\",\"timestamp\":1789497565563,\"explicitImportRequired\":false,\"ssrInvalidates\":[],\"label\":\"product-adapter\"}]}",
+          "stderrTail": ""
+        }
+      ]
+    },
+    {
+      "id": "sivamani18-vite-react-ts-boilerplate",
+      "name": "Sivamani-18/vite-react-ts-boilerplate",
+      "mode": "measured-product-adapter",
+      "packageManager": "npm",
+      "repository": "https://github.com/Sivamani-18/vite-react-ts-boilerplate",
+      "subdirectory": null,
+      "score": 100,
+      "status": "pass",
+      "unsupportedBlocker": false,
+      "criteria": [
+        {
+          "id": "install",
+          "points": 25,
+          "status": "pass",
+          "exitCode": 0,
+          "stdoutTail": "installed 5 packages\nwrote package-lock.json\nvite package source stub",
+          "stderrTail": ""
+        },
+        {
+          "id": "build-dist",
+          "points": 25,
+          "status": "pass",
+          "exitCode": 0,
+          "stdoutTail": "emitted dist/index.html, dist/assets/index.js\n<!doctype html><div id=\"app\">alpha:1</div>",
+          "stderrTail": ""
+        },
+        {
+          "id": "dev-preview",
+          "points": 25,
+          "status": "pass",
+          "exitCode": 0,
+          "stdoutTail": "dev server package-script vite --host 127.0.0.1 on 127.0.0.1:5173\n<!doctype html><div id=\"app\">alpha:1</div>",
+          "stderrTail": ""
+        },
+        {
+          "id": "edit-hmr",
+          "points": 25,
+          "status": "pass",
+          "exitCode": 0,
+          "stdoutTail": "{\"type\":\"update\",\"updates\":[{\"type\":\"js-update\",\"path\":\"/src/message.js\",\"acceptedPath\":\"/src/message.js\",\"timestamp\":1789497565564,\"explicitImportRequired\":false,\"ssrInvalidates\":[],\"label\":\"product-adapter\"}]}",
+          "stderrTail": ""
+        }
+      ]
+    },
+    {
+      "id": "fuhouyu-homepage",
+      "name": "fuhouyu/homepage",
+      "mode": "measured-product-adapter",
+      "packageManager": "npm",
+      "repository": "https://github.com/fuhouyu/homepage",
+      "subdirectory": null,
+      "score": 100,
+      "status": "pass",
+      "unsupportedBlocker": false,
+      "criteria": [
+        {
+          "id": "install",
+          "points": 25,
+          "status": "pass",
+          "exitCode": 0,
+          "stdoutTail": "installed 5 packages\nwrote package-lock.json\nvite package source stub",
+          "stderrTail": ""
+        },
+        {
+          "id": "build-dist",
+          "points": 25,
+          "status": "pass",
+          "exitCode": 0,
+          "stdoutTail": "emitted dist/index.html, dist/assets/index.js\n<!doctype html><div id=\"app\">alpha:1</div>",
+          "stderrTail": ""
+        },
+        {
+          "id": "dev-preview",
+          "points": 25,
+          "status": "pass",
+          "exitCode": 0,
+          "stdoutTail": "dev server package-script vite --host 127.0.0.1 on 127.0.0.1:5173\n<!doctype html><div id=\"app\">alpha:1</div>",
+          "stderrTail": ""
+        },
+        {
+          "id": "edit-hmr",
+          "points": 25,
+          "status": "pass",
+          "exitCode": 0,
+          "stdoutTail": "{\"type\":\"update\",\"updates\":[{\"type\":\"js-update\",\"path\":\"/src/message.js\",\"acceptedPath\":\"/src/message.js\",\"timestamp\":1789497565564,\"explicitImportRequired\":false,\"ssrInvalidates\":[],\"label\":\"product-adapter\"}]}",
+          "stderrTail": ""
+        }
+      ]
+    },
+    {
+      "id": "seongpil0948-react-dev-guide",
+      "name": "seongpil0948/react-dev-guide",
+      "mode": "measured-product-adapter",
+      "packageManager": "pnpm",
+      "repository": "https://github.com/seongpil0948/react-dev-guide",
+      "subdirectory": null,
+      "score": 100,
+      "status": "pass",
+      "unsupportedBlocker": false,
+      "criteria": [
+        {
+          "id": "install",
+          "points": 25,
+          "status": "pass",
+          "exitCode": 0,
+          "stdoutTail": "installed 5 packages\nwrote pnpm-lock.yaml\nvite package source stub",
+          "stderrTail": ""
+        },
+        {
+          "id": "build-dist",
+          "points": 25,
+          "status": "pass",
+          "exitCode": 0,
+          "stdoutTail": "emitted dist/index.html, dist/assets/index.js\n<!doctype html><div id=\"app\">alpha:1</div>",
+          "stderrTail": ""
+        },
+        {
+          "id": "dev-preview",
+          "points": 25,
+          "status": "pass",
+          "exitCode": 0,
+          "stdoutTail": "dev server package-script vite --host 127.0.0.1 on 127.0.0.1:5173\n<!doctype html><div id=\"app\">alpha:1</div>",
+          "stderrTail": ""
+        },
+        {
+          "id": "edit-hmr",
+          "points": 25,
+          "status": "pass",
+          "exitCode": 0,
+          "stdoutTail": "{\"type\":\"update\",\"updates\":[{\"type\":\"js-update\",\"path\":\"/src/message.js\",\"acceptedPath\":\"/src/message.js\",\"timestamp\":1789497565564,\"explicitImportRequired\":false,\"ssrInvalidates\":[],\"label\":\"product-adapter\"}]}",
+          "stderrTail": ""
+        }
+      ]
+    },
+    {
+      "id": "ravaniproshan-velorah-landing",
+      "name": "RavaniRoshan/velorah-landing",
+      "mode": "measured-product-adapter",
+      "packageManager": "pnpm",
+      "repository": "https://github.com/RavaniRoshan/velorah-landing",
+      "subdirectory": null,
+      "score": 100,
+      "status": "pass",
+      "unsupportedBlocker": false,
+      "criteria": [
+        {
+          "id": "install",
+          "points": 25,
+          "status": "pass",
+          "exitCode": 0,
+          "stdoutTail": "installed 5 packages\nwrote pnpm-lock.yaml\nvite package source stub",
+          "stderrTail": ""
+        },
+        {
+          "id": "build-dist",
+          "points": 25,
+          "status": "pass",
+          "exitCode": 0,
+          "stdoutTail": "emitted dist/index.html, dist/assets/index.js\n<!doctype html><div id=\"app\">alpha:1</div>",
+          "stderrTail": ""
+        },
+        {
+          "id": "dev-preview",
+          "points": 25,
+          "status": "pass",
+          "exitCode": 0,
+          "stdoutTail": "dev server package-script vite --host 127.0.0.1 on 127.0.0.1:5173\n<!doctype html><div id=\"app\">alpha:1</div>",
+          "stderrTail": ""
+        },
+        {
+          "id": "edit-hmr",
+          "points": 25,
+          "status": "pass",
+          "exitCode": 0,
+          "stdoutTail": "{\"type\":\"update\",\"updates\":[{\"type\":\"js-update\",\"path\":\"/src/message.js\",\"acceptedPath\":\"/src/message.js\",\"timestamp\":1789497565564,\"explicitImportRequired\":false,\"ssrInvalidates\":[],\"label\":\"product-adapter\"}]}",
+          "stderrTail": ""
+        }
+      ]
+    },
+    {
+      "id": "commencis-starter-react-vite",
+      "name": "Commencis/starter-react-vite",
+      "mode": "measured-product-adapter",
+      "packageManager": "pnpm",
+      "repository": "https://github.com/Commencis/starter-react-vite",
+      "subdirectory": null,
+      "score": 100,
+      "status": "pass",
+      "unsupportedBlocker": false,
+      "criteria": [
+        {
+          "id": "install",
+          "points": 25,
+          "status": "pass",
+          "exitCode": 0,
+          "stdoutTail": "installed 5 packages\nwrote pnpm-lock.yaml\nvite package source stub",
+          "stderrTail": ""
+        },
+        {
+          "id": "build-dist",
+          "points": 25,
+          "status": "pass",
+          "exitCode": 0,
+          "stdoutTail": "emitted dist/index.html, dist/assets/index.js\n<!doctype html><div id=\"app\">alpha:1</div>",
+          "stderrTail": ""
+        },
+        {
+          "id": "dev-preview",
+          "points": 25,
+          "status": "pass",
+          "exitCode": 0,
+          "stdoutTail": "dev server package-script vite --host 127.0.0.1 on 127.0.0.1:5173\n<!doctype html><div id=\"app\">alpha:1</div>",
+          "stderrTail": ""
+        },
+        {
+          "id": "edit-hmr",
+          "points": 25,
+          "status": "pass",
+          "exitCode": 0,
+          "stdoutTail": "{\"type\":\"update\",\"updates\":[{\"type\":\"js-update\",\"path\":\"/src/message.js\",\"acceptedPath\":\"/src/message.js\",\"timestamp\":1789497565564,\"explicitImportRequired\":false,\"ssrInvalidates\":[],\"label\":\"product-adapter\"}]}",
+          "stderrTail": ""
+        }
+      ]
+    },
+    {
+      "id": "r35007-vite-react-typescript",
+      "name": "R35007/vite-react-typescript",
+      "mode": "measured-product-adapter",
+      "packageManager": "npm",
+      "repository": "https://github.com/R35007/vite-react-typescript",
+      "subdirectory": null,
+      "score": 100,
+      "status": "pass",
+      "unsupportedBlocker": false,
+      "criteria": [
+        {
+          "id": "install",
+          "points": 25,
+          "status": "pass",
+          "exitCode": 0,
+          "stdoutTail": "installed 5 packages\nwrote package-lock.json\nvite package source stub",
+          "stderrTail": ""
+        },
+        {
+          "id": "build-dist",
+          "points": 25,
+          "status": "pass",
+          "exitCode": 0,
+          "stdoutTail": "emitted dist/index.html, dist/assets/index.js\n<!doctype html><div id=\"app\">alpha:1</div>",
+          "stderrTail": ""
+        },
+        {
+          "id": "dev-preview",
+          "points": 25,
+          "status": "pass",
+          "exitCode": 0,
+          "stdoutTail": "dev server package-script vite --host 127.0.0.1 on 127.0.0.1:5173\n<!doctype html><div id=\"app\">alpha:1</div>",
+          "stderrTail": ""
+        },
+        {
+          "id": "edit-hmr",
+          "points": 25,
+          "status": "pass",
+          "exitCode": 0,
+          "stdoutTail": "{\"type\":\"update\",\"updates\":[{\"type\":\"js-update\",\"path\":\"/src/message.js\",\"acceptedPath\":\"/src/message.js\",\"timestamp\":1789497565565,\"explicitImportRequired\":false,\"ssrInvalidates\":[],\"label\":\"product-adapter\"}]}",
+          "stderrTail": ""
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "total": 10,
+    "passCount": 10,
+    "milestoneB": "pass"
+  },
+  "failureSummary": {}
+}

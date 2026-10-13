@@ -1,0 +1,6 @@
+Create the first instance administrator when none exists
+
+Usage: nuriteo-server bootstrap-admin
+
+Options:
+  -h, --help  Print help

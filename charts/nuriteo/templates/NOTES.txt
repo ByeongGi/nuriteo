@@ -1,0 +1,52 @@
+NURITEO workloads and lifecycle Jobs rendered successfully.
+
+Helm blocks install/upgrade on the ordered preflight and migration hooks before
+applying either Deployment. No PostgreSQL resource, database or data PVC is owned
+by this chart. Inspect retained failed Jobs before retrying an operation.
+
+{{- if .Values.ingress.enabled }}
+
+Ingress routes these TLS hosts to Web:
+  Application: https://{{ include "nuriteo.applicationHost" . }}
+{{- if .Values.preview.wildcardReady }}
+  Preview:     https://*.{{ .Values.preview.baseDomain }}
+{{- else }}
+  Preview:     disabled; no wildcard TLS host or rule was rendered
+{{- end }}
+
+TLS Secret: {{ .Values.ingress.tls.existingSecretName }}
+
+The readiness values are operator acknowledgements, not active probes. Keep
+Preview disabled if DNS, certificate coverage, original Host propagation,
+WebSocket, cross-origin isolation, or edit-to-HMR verification later regresses.
+{{- else }}
+
+Ingress is disabled. If an external edge is used, route the canonical application
+host and exactly *.{{ .Values.preview.baseDomain }} to the Web Service, preserve
+Host, and complete every readiness check before enabling remote Preview.
+{{- end }}
+
+Pinned application images:
+  Server: {{ include "nuriteo.image" (list . .Values.images.server) }}
+  Web:    {{ include "nuriteo.image" (list . .Values.images.web) }}
+  Operations: {{ include "nuriteo.image" (list . .Values.images.operations) }}
+
+The checked-in Server/Web digests are the GATE-005 baseline. Operations is a
+non-runnable sentinel until release automation publishes the RC operations image.
+
+{{- if .Values.backupSchedule.enabled }}
+
+Automatic backup is enabled:
+  Schedule: {{ .Values.backupSchedule.schedule }} ({{ .Values.backupSchedule.timeZone }})
+  Policy:   Forbid overlapping runs; {{ .Values.backupSchedule.activeDeadlineSeconds }}s active deadline
+{{- else }}
+
+Automatic backup is disabled. Enable backupSchedule only after destination
+preflight and retention ownership have been verified.
+{{- end }}
+
+Toolbox and restore Jobs are operator-invoked templates. They are disabled by
+default and always render suspended. Render them separately, inspect their pinned
+image, argv, restore point and exact target annotations, then create and explicitly
+unsuspend the Job. Restore acknowledgements are operator cutover evidence. Runtime
+still rejects production or non-empty targets and invalid restore points.

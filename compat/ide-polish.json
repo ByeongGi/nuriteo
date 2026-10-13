@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-22",
+  "status": "supported",
+  "features": {
+    "editableSplit": "supported",
+    "splitSave": "supported",
+    "notificationCenter": "supported",
+    "menuScope": "documented-subset",
+    "iconThemes": ["color", "monochrome"],
+    "colorThemes": ["dark", "light", "high-contrast"],
+    "editorSettings": ["fontSize", "saveTrigger", "editorMinimap", "wordWrap"]
+  },
+  "excludedMenuScope": [
+    "native filesystem dialogs",
+    "multi-root workspace management",
+    "extension-contributed commands",
+    "window and process menus"
+  ],
+  "tests": [
+    "apps/web/test/authenticated-shell-browser.test.ts",
+    "apps/web/test/runtime-journey-browser.test.ts"
+  ]
+}

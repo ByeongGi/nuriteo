@@ -1,0 +1,74 @@
+{
+  "name": "nuriteo-wire",
+  "abiVersion": 1,
+  "magic": "CCON",
+  "endianness": "little",
+  "headerLength": 32,
+  "maxPayloadLength": 1048576,
+  "fields": [
+    { "name": "magic", "offset": 0, "type": "u32" },
+    { "name": "abiVersion", "offset": 4, "type": "u16" },
+    { "name": "headerLength", "offset": 6, "type": "u16" },
+    { "name": "requestId", "offset": 8, "type": "u32" },
+    { "name": "generation", "offset": 12, "type": "u32" },
+    { "name": "pid", "offset": 16, "type": "u32" },
+    { "name": "opcode", "offset": 20, "type": "u16" },
+    { "name": "status", "offset": 22, "type": "u16" },
+    { "name": "payloadLength", "offset": 24, "type": "u32" },
+    { "name": "reserved", "offset": 28, "type": "u32" }
+  ],
+  "status": {
+    "request": 0,
+    "ok": 1,
+    "error": 2
+  },
+  "opcodes": {
+    "ping": 1,
+    "fs.open": 16,
+    "fs.read": 17,
+    "fs.write": 18,
+    "fs.close": 19,
+    "fs.stat": 20,
+    "fs.mkdir": 21,
+    "process.register": 32,
+    "process.signal.take": 33,
+    "process.exit": 34,
+    "pty.open": 48,
+    "pty.read": 49,
+    "pty.write": 50,
+    "pty.close": 51,
+    "pty.ioctl": 52,
+    "pty.poll": 53,
+    "pty.attach": 54,
+    "pty.setForeground": 55,
+    "pty.dispatchEvent": 56
+  },
+  "errors": {
+    "EIO": 5,
+    "E2BIG": 7,
+    "EBADF": 9,
+    "EAGAIN": 11,
+    "EINVAL": 22,
+    "ENOSYS": 38,
+    "EBADMSG": 74
+  },
+  "rules": [
+    "All scalar fields are little-endian.",
+    "payloadLength counts bytes after the fixed header and must not exceed maxPayloadLength.",
+    "A sync channel has exactly one in-flight request for a given generation.",
+    "PID is assigned by the process registration channel and is echoed in the request header only; payload PID values are never authoritative.",
+    "Large I/O is split into chunks no larger than maxPayloadLength.",
+    "reserved must be zero until a later ABI version defines it."
+  ],
+  "golden": {
+    "request": {
+      "requestId": 16909060,
+      "generation": 5,
+      "pid": 42,
+      "opcode": "ping",
+      "status": "request",
+      "payloadHex": "6869",
+      "wireHex": "43434f4e0100200004030201050000002a0000000100000002000000000000006869"
+    }
+  }
+}

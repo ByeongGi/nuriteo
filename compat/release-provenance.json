@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-15",
+  "status": "p16-02-provenance-policy",
+  "artifactRoot": "dist/sdk/package",
+  "requiredArtifacts": [
+    "package.json",
+    "pnpm-lock.yaml",
+    "Cargo.lock",
+    "dist/sdk/package/package.json",
+    "dist/sdk/package/index.js",
+    "dist/sdk/package/index.cjs",
+    "dist/sdk/package/index.d.ts",
+    "dist/sdk/package/asset-manifest.json",
+    "dist/sdk/package/assets/system_wasm.wasm",
+    "docs/release/fingerprint.json",
+    "compat/release-policy.json",
+    "compat/performance-baseline.json",
+    "compat/soak-baseline.json"
+  ],
+  "sbom": {
+    "format": "CycloneDX-like JSON summary",
+    "requiredComponents": [
+      { "name": "npm", "version": "10.9.2", "license": "Artistic-2.0", "source": "vendor/manifests/npm.json" },
+      { "name": "pnpm", "version": "9.15.9", "license": "MIT", "source": "vendor/manifests/pnpm.json" },
+      { "name": "fflate", "version": "0.8.3", "license": "MIT", "source": "package.json" },
+      { "name": "typescript", "version": "6.0.3", "license": "Apache-2.0", "source": "package.json" }
+    ]
+  },
+  "signing": {
+    "internal": "unsigned hash-verified artifact is allowed",
+    "betaCandidate": "hash-verified artifact plus maintainer attestation required",
+    "stable": "sigstore or equivalent detached signature required before external publish"
+  },
+  "ci": {
+    "workflow": ".github/workflows/release-provenance.yml",
+    "requiredCommands": [
+      "pnpm exec tsc --noEmit --pretty false",
+      "node tooling/checks/check-release-policy.ts",
+      "node tooling/checks/check-performance-baseline.ts",
+      "node tooling/checks/check-soak-baseline.ts",
+      "node tooling/release/package-sdk.ts",
+      "node tooling/checks/check-sdk-public-release.ts",
+      "node tooling/checks/check-sdk-publish-rehearsal.ts",
+      "node tooling/checks/check-release-readiness.ts",
+      "node tooling/checks/check-release-ops-sg29.ts",
+      "node tooling/checks/check-release-provenance.ts",
+      "node tooling/checks/check-workspace.ts"
+    ]
+  }
+}

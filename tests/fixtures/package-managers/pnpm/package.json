@@ -1,0 +1,17 @@
+{
+  "name": "pnpm-workspace-fixture",
+  "version": "1.0.0",
+  "private": true,
+  "packageManager": "pnpm@9.15.9",
+  "scripts": {
+    "preinstall": "node scripts/preinstall.js",
+    "build": "node scripts/build-check.js",
+    "lifecycle-test": "node scripts/lifecycle-check.js"
+  },
+  "dependencies": {
+    "fixture-bin": "workspace:*",
+    "fixture-optional": "workspace:*",
+    "fixture-peer-consumer": "workspace:*",
+    "fixture-peer-provider": "workspace:*"
+  }
+}

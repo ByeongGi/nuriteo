@@ -1,0 +1,90 @@
+name: CI / Docker Compose Qualification
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/docker-compose-qualification.yml"
+      - "apps/web/**"
+      - "crates/nuriteo-server/**"
+      - "deploy/compose/**"
+      - "deploy/docker/**"
+      - "packages/api-client/**"
+      - "Cargo.lock"
+      - "Cargo.toml"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docker-compose-qualification-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  static-contract:
+    name: Compose qualification contract
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - run: node deploy/compose/check-compose.mjs
+      - run: node deploy/compose/check-docker-qualification.mjs
+      - run: bash -n deploy/compose/test-compose.sh deploy/compose/docker-qualification-ci.sh deploy/compose/run-upgrade-rehearsal.sh
+      - run: deploy/compose/docker-qualification-ci.sh self-test
+      - run: sh -n deploy/compose/rustfs-init.sh deploy/compose/postgres-tls-entrypoint.sh
+
+  docker-compose-v2:
+    name: Docker Compose v2 / Linux qualification
+    if: github.event_name == 'workflow_dispatch'
+    needs: static-contract
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    env:
+      NURITEO_QUALIFICATION_ARTIFACTS: ${{ github.workspace }}/artifacts/docker-compose
+      NURITEO_QUALIFICATION_TMP_ROOT: ${{ runner.temp }}/nuriteo-compose
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.15.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.23.0
+          cache: pnpm
+      - name: Install browser fixture dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Install pinned Chromium runtime
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Verify official Docker Compose v2 on Linux
+        run: deploy/compose/docker-qualification-ci.sh preflight
+      - name: Pull pinned images
+        run: deploy/compose/docker-qualification-ci.sh pull
+      - name: Build Compose application images
+        run: deploy/compose/docker-qualification-ci.sh build
+      - name: Run clean-install, restart, persistence, and failure acceptance
+        run: deploy/compose/docker-qualification-ci.sh acceptance
+      - name: Run digest-pinned upgrade and application rollback rehearsal
+        run: deploy/compose/run-upgrade-rehearsal.sh
+      - name: Capture allowlisted failure state
+        if: failure()
+        continue-on-error: true
+        run: deploy/compose/docker-qualification-ci.sh diagnostics
+      - name: Clean project volumes, images, and build cache
+        id: cleanup
+        if: always()
+        run: deploy/compose/docker-qualification-ci.sh cleanup
+      - name: Capture state after cleanup failure
+        if: steps.cleanup.outcome == 'failure'
+        continue-on-error: true
+        run: deploy/compose/docker-qualification-ci.sh diagnostics
+      - name: Upload allowlisted failure state
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-compose-qualification-${{ github.run_id }}
+          path: artifacts/docker-compose
+          if-no-files-found: error
+          retention-days: 7

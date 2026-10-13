@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "taskId": "SEC-001",
+  "releaseLineage": "nuriteo-self-hosted-v1",
+  "reviewedAt": "2026-10-11",
+  "scope": "Self-hosted v1 application, browser runtime, preview origin, PostgreSQL, S3-compatible storage, integrations, backup/restore and operator surfaces",
+  "trustBoundaries": [
+    { "id": "browser-application", "untrusted": "browser and user-controlled input", "trusted": "Web BFF and Rust API", "controls": ["session authentication", "CSRF/origin validation", "bounded request bodies", "request correlation"] },
+    { "id": "preview-application", "untrusted": "project code and preview document", "trusted": "authenticated application origin", "controls": ["separate wildcard origin", "opaque preview session", "CSP and sandbox", "no application credentials"] },
+    { "id": "runtime-host", "untrusted": "project files, dependencies and commands", "trusted": "browser host capabilities", "controls": ["capability allowlist", "resource budgets", "network mode", "explicit unsupported diagnostics"] },
+    { "id": "server-integrations", "untrusted": "remote OIDC, Git, Registry, SMTP and update endpoints", "trusted": "server adapters", "controls": ["registered endpoint only", "TLS validation", "SSRF and redirect checks", "credential host binding", "no fallback"] },
+    { "id": "server-data", "untrusted": "network and storage failure", "trusted": "PostgreSQL and S3-compatible stores", "controls": ["TLS", "scoped credentials", "transactional metadata", "content digests", "isolated restore"] },
+    { "id": "operator-plane", "untrusted": "administrator browser and deployment inputs", "trusted": "privileged operations", "controls": ["recent reauthentication", "optional MFA", "audit events", "maintenance and destructive acknowledgements"] },
+    { "id": "release-installation", "untrusted": "registry, mirror and downloaded bundle", "trusted": "running release", "controls": ["immutable digest", "checksum", "SBOM", "provenance", "signature", "offline verification"] }
+  ],
+  "threats": [
+    { "id": "TM-01", "category": "spoofing", "scenario": "forged preview client reads an application session", "severity": "critical", "status": "mitigated", "controls": ["separate preview origin", "session-bound preview relay"], "evidence": ["packages/preview/src/session.ts", "tests/system/browser/isolation.test.ts"] },
+    { "id": "TM-02", "category": "information-disclosure", "scenario": "integration or storage credentials reach project code, logs or bundles", "severity": "critical", "status": "mitigated", "controls": ["server-only credential envelope", "redaction", "capability-scoped upload"], "evidence": ["crates/nuriteo-server/src/object_storage/capability.rs", "crates/nuriteo-server/src/object_storage/redaction.rs"] },
+    { "id": "TM-03", "category": "elevation-of-privilege", "scenario": "workspace or project role bypass reaches instance administration", "severity": "critical", "status": "mitigated", "controls": ["typed authorization policies", "recent reauthentication", "audit"], "evidence": ["crates/nuriteo-server/src/admin/http_service.rs", "crates/nuriteo-server/tests/admin_http.rs"] },
+    { "id": "TM-04", "category": "tampering", "scenario": "backup or object content is substituted before restore", "severity": "high", "status": "mitigated", "controls": ["encrypted portable backup", "manifest digest", "empty-target restore"], "evidence": ["crates/nuriteo-server/src/backup/portable.rs", "crates/nuriteo-server/src/backup/restore.rs"] },
+    { "id": "TM-05", "category": "server-side-request-forgery", "scenario": "registered integration is redirected to metadata or a private unauthorized endpoint", "severity": "critical", "status": "mitigated", "controls": ["scheme and destination validation", "redirect revalidation", "credential stripping"], "evidence": ["crates/nuriteo-server/src/git_operations/transport_security.rs", "docs/policies/runtime-network-security.md"] },
+    { "id": "TM-06", "category": "denial-of-service", "scenario": "project dependencies or runtime workers exhaust memory, storage or process capacity", "severity": "high", "status": "mitigated", "controls": ["resource admission", "workspace quota", "worker watchdog", "bounded concurrency"], "evidence": ["packages/browser-host/src/security/abuse-limits.ts", "crates/nuriteo-server/src/save/operations.rs"] },
+    { "id": "TM-07", "category": "repudiation", "scenario": "privileged change or destructive operation has no attributable record", "severity": "high", "status": "mitigated", "controls": ["append-only audit event", "operation identifier", "bounded export and retention"], "evidence": ["crates/nuriteo-server/src/audit/writer.rs", "crates/nuriteo-server/src/admin/audit_service.rs"] },
+    { "id": "TM-08", "category": "supply-chain", "scenario": "mutable or unsigned image, chart or dependency enters a release", "severity": "critical", "status": "release-gated", "controls": ["digest pinning", "dependency policy", "SBOM", "provenance", "signature verification"], "evidence": ["release/rc/1.0.0-rc.1.json", "release/offline/inventory-v1.json"] },
+    { "id": "TM-09", "category": "tampering", "scenario": "concurrent save or stale upload overwrites the active project version", "severity": "high", "status": "mitigated", "controls": ["save session fencing", "part receipts", "content digest", "transactional completion"], "evidence": ["crates/nuriteo-server/src/save/service.rs", "crates/nuriteo-server/tests/save_cleanup.rs"] },
+    { "id": "TM-10", "category": "information-disclosure", "scenario": "metrics, traces or support bundles contain PII, source code or credentials", "severity": "high", "status": "release-gated", "controls": ["allowlisted fields", "bounded labels", "subscriber redaction", "support bundle redaction"], "evidence": ["crates/nuriteo-server/src/observability/mod.rs", "packages/browser-host/src/observability/support-bundle.ts"] },
+    { "id": "TM-11", "category": "elevation-of-privilege", "scenario": "container escape through root user, writable root filesystem or ambient capabilities", "severity": "critical", "status": "release-gated", "controls": ["non-root UID", "read-only filesystem", "drop ALL capabilities", "default-deny network policy"], "evidence": ["deploy/compose/compose.yaml", "charts/nuriteo/templates/networkpolicy.yaml"] },
+    { "id": "TM-12", "category": "availability", "scenario": "failed migration or upgrade leaves the previous release unavailable without bounded rollback", "severity": "high", "status": "mitigated", "controls": ["preflight", "forward-only migration guard", "maintenance mode", "application rollback"], "evidence": ["compat/self-hosted-upgrade-compatibility-v1.json", "charts/nuriteo/templates/preflight-job.yaml"] }
+  ],
+  "review": {
+    "ownerRole": "self-hosted release owner",
+    "decision": "approved-for-ga-hardening",
+    "openCritical": 0,
+    "openHigh": 0,
+    "releaseGatedThreats": ["TM-08", "TM-10", "TM-11"]
+  }
+}

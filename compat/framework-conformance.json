@@ -1,0 +1,125 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-18",
+  "scope": {
+    "goal": "Track framework workflow readiness for productization.",
+    "productRuntime": "browser-guest-node-runtime",
+    "referenceRuntime": "host-node-reference-harness"
+  },
+  "cases": [
+    {
+      "id": "vite-vanilla-reference-workflow",
+      "framework": "vite",
+      "template": "vanilla",
+      "runtime": "host-node-reference-harness",
+      "status": "pass",
+      "evidence": [
+        "tests/compatibility/frameworks/vite/vite-integration.test.ts",
+        "tests/fixtures/vite-vanilla/package.json"
+      ],
+      "notes": "npm and pnpm install, dev server, browser preview, source edit, HMR state preservation, build, dist smoke, and restart pass in the reference harness."
+    },
+    {
+      "id": "vite-react-reference-workflow",
+      "framework": "vite",
+      "template": "react",
+      "runtime": "host-node-reference-harness",
+      "status": "pass",
+      "evidence": [
+        "tests/compatibility/frameworks/vite/vite-integration.test.ts",
+        "tests/fixtures/vite-react/package.json"
+      ],
+      "notes": "npm and pnpm install, dev server, browser preview, React render, source edit, HMR state preservation, build, dist smoke, and restart pass in the reference harness."
+    },
+    {
+      "id": "vite-vue-reference-workflow",
+      "framework": "vite",
+      "template": "vue-runtime",
+      "runtime": "host-node-reference-harness",
+      "status": "pass",
+      "evidence": [
+        "tests/compatibility/frameworks/vite/vite-integration.test.ts",
+        "tests/fixtures/vite-vue/package.json"
+      ],
+      "notes": "npm and pnpm install, dev server, browser preview, Vue runtime render, source edit, HMR state preservation, build, dist smoke, and restart pass in the reference harness."
+    },
+    {
+      "id": "vite-svelte-reference-workflow",
+      "framework": "vite",
+      "template": "svelte",
+      "runtime": "host-node-reference-harness",
+      "status": "pass",
+      "evidence": [
+        "tests/compatibility/frameworks/vite/vite-integration.test.ts",
+        "tests/fixtures/vite-svelte/package.json"
+      ],
+      "notes": "npm and pnpm install, dev server, browser preview, Svelte render, source edit, HMR state preservation, build, dist smoke, and restart pass in the reference harness."
+    },
+    {
+      "id": "vite-react-product-workflow",
+      "framework": "vite",
+      "template": "react",
+      "runtime": "browser-guest-node-runtime",
+      "status": "pass",
+      "evidence": [
+        "tests/compatibility/frameworks/vite/vite-react-product-workflow.test.ts",
+        "docs/archive/productization-2026-09-16/evidence/P11-01.md"
+      ],
+      "productGap": "Actual Vite 8.2.0 worker-backed product runtime covers install artifacts, hydrated dependency materialization, actual Vite CLI dev server start, browser preview relay, real Vite import-analysis transform, React bare package import rewrite, TypeScript/TSX transform fallback, real Vite HMR connected/update payloads, actual Vite build dist artifact generation, and worker bridge reload recovery."
+    },
+    {
+      "id": "vite-vue-product-workflow",
+      "framework": "vite",
+      "template": "vue-runtime",
+      "runtime": "browser-guest-node-runtime",
+      "status": "supported",
+      "evidence": [
+        "tests/compatibility/frameworks/vite/vite-react-product-workflow.test.ts",
+        "tests/compatibility/frameworks/vite/vite-vue-svelte-actual.test.ts",
+        "compat/framework-actual-validation.json",
+        "compat/framework-product-support.json",
+        "docs/archive/productization-2026-09-16/evidence/P11-02.md"
+      ],
+      "supportContract": "The fixture tied to the pinned Vite template-vue upstream passes npm/pnpm install, worker-backed dev/preview, edit-HMR with state preservation, build/dist smoke, and reload recovery within the W6 performance budget."
+    },
+    {
+      "id": "vite-svelte-product-workflow",
+      "framework": "vite",
+      "template": "svelte",
+      "runtime": "browser-guest-node-runtime",
+      "status": "supported",
+      "evidence": [
+        "tests/compatibility/frameworks/vite/vite-react-product-workflow.test.ts",
+        "tests/compatibility/frameworks/vite/vite-vue-svelte-actual.test.ts",
+        "compat/framework-actual-validation.json",
+        "compat/framework-product-support.json",
+        "docs/archive/productization-2026-09-16/evidence/P11-02.md"
+      ],
+      "supportContract": "The fixture tied to the pinned Vite template-svelte upstream passes npm/pnpm install, plugin-backed worker dev/preview, edit-HMR with state preservation, build/dist smoke, and reload recovery within the W6 performance budget."
+    },
+    {
+      "id": "nextjs-full-runtime",
+      "framework": "nextjs",
+      "template": "app-router",
+      "runtime": "browser-guest-node-runtime",
+      "status": "pass",
+      "evidence": [
+        "apps/web/test/gate-project-runtime-browser.test.ts",
+        "compat/nextjs-compatibility.json",
+        "docs/productization/nextjs-product-support-target.md"
+      ],
+      "supportContract": "Pinned Next 15.5.26 real CLI dev/HMR/build/start/restart, App/Pages Router, config/plugin, WASM SWC, RSC/Server Actions, Middleware/Edge, ISR, Image Optimization, binary HTTP responses, lifecycle teardown, and heap budget pass under strict CSP."
+    }
+  ],
+  "gate": {
+    "id": "SG25",
+    "status": "pass",
+    "reason": "Vite React, Vue, and Svelte have worker-backed product support evidence. Pinned Webpack and Rspack workflows have separate strict-CSP Chrome product evidence.",
+    "requiredToPass": [
+      "Keep Vite React product-supported evidence green",
+      "Keep Vue and Svelte exact-revision worker-backed support gates green",
+      "Keep Webpack and Rspack strict-CSP browser-worker support gates green",
+      "Keep Next.js grade explicit without overstating support"
+    ]
+  }
+}

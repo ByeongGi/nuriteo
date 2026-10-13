@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "compatibilityManifest": "compat/self-hosted-upgrade-compatibility-v1.json",
+  "compatibilityManifestSha256": "6e2864c0c82ddb24b2d8e7ca12ec65e0e6f5bcb6a309b7a3039aa0589bbc830f",
+  "targetReleaseManifest": "deploy/compose/fixtures/target-release-set-v1.json",
+  "targetReleaseManifestSha256": "2faba90cec0ddb0115692c469b58818eac2adb8e3bf09569a7e91ed62e310023",
+  "source": {
+    "release": "self-hosted-beta-gate-005",
+    "migration": 46,
+    "serverImage": "registry.example.invalid/nuriteo-server@sha256:1a144aded2998a652093435a658c51a247354a635e4b46be13bddfc91d477c92",
+    "webImage": "registry.example.invalid/nuriteo-web@sha256:69dbee9f5b3abff0aaff99fc59c296cf4eaa3ed149620644bb6922341592a13a"
+  },
+  "target": {
+    "release": "self-hosted-v1-rc-lineage",
+    "migration": 50,
+    "serverImage": "registry.example.invalid/nuriteo-server@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "webImage": "registry.example.invalid/nuriteo-web@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  },
+  "objects": {
+    "readFormats": ["project-bundle-v1"],
+    "writeFormat": "project-bundle-v1",
+    "existingObjectPolicy": "read-in-place",
+    "rewritePolicy": "forbidden-during-upgrade"
+  },
+  "upgrade": {
+    "direction": "forward-only",
+    "failurePolicy": "stop-before-mutation"
+  },
+  "rollback": {
+    "applicationRelease": "self-hosted-beta-gate-005",
+    "schemaMinimum": 46,
+    "schemaMaximum": 50,
+    "objectFormats": ["project-bundle-v1"],
+    "database": "preserve-current-schema",
+    "downMigration": "forbidden"
+  }
+}

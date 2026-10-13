@@ -1,0 +1,20 @@
+import "./client.test.ts";
+import "./access-tokens.test.ts";
+import "./admin.test.ts";
+import "./domain.test.ts";
+import "./fixture-environment.test.ts";
+import "./git.test.ts";
+import "./history.test.ts";
+import "./integration-ca.test.ts";
+import "./mfa.test.ts";
+import "./notifications.test.ts";
+import "./oidc.test.ts";
+import "./registries.test.ts";
+import "./organization.test.ts";
+import "./project.test.ts";
+import "./published-examples.test.ts";
+import "./save.test.ts";
+import "./setup.test.ts";
+import "./team.test.ts";
+
+console.log("api client tests ok");

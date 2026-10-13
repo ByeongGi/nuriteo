@@ -1,0 +1,68 @@
+{
+  "schemaVersion": 1,
+  "taskId": "UPG-001",
+  "releaseLineage": "nuriteo-self-hosted-v1",
+  "recordedAt": "2026-10-09",
+  "sourceBaseline": {
+    "path": "compat/self-hosted-rc-baseline.json",
+    "sha256": "6e13603ba87bc75290721f81c6a5d0e30edd7b1b275668eaafd229f0aa32fccc",
+    "taskId": "RC-001",
+    "baselineCommit": "b3abb46aaecb00c8d84307cf1d8c213595c31d67",
+    "releaseCommit": "700310fdd1208deb6c66e306b263dfc133b50f6b"
+  },
+  "support": {
+    "upgradeFrom": "self-hosted-beta-gate-005",
+    "upgradeTo": "self-hosted-v1-rc-lineage",
+    "direction": "forward-only",
+    "downgrade": "not-supported",
+    "failurePolicy": "stop-before-mutation"
+  },
+  "schema": {
+    "engine": "postgresql",
+    "sourceMigration": 46,
+    "immutablePrefix": { "first": 1, "last": 46, "count": 46 },
+    "aggregateSha256": "ca5c6c70777ff0cfa4f64cbb82ba947a50ef36443af9ac7a3b3e9fe2e9b6dbf6",
+    "historyPolicy": "exact-prefix-checksum",
+    "candidatePolicy": "append-only"
+  },
+  "objects": {
+    "storageProtocol": "s3-compatible",
+    "readFormats": ["project-bundle-v1"],
+    "writeFormat": "project-bundle-v1",
+    "admissionContract": {
+      "path": "compat/project-bundle-admission-v1.json",
+      "sha256": "88f0215ee638061b7a25623e077e11d118a94755aa8011202b0d1f0aa748bcf5"
+    },
+    "existingObjectPolicy": "read-in-place",
+    "rewritePolicy": "forbidden-during-upgrade"
+  },
+  "configuration": {
+    "registryVersion": 4,
+    "definitionSource": {
+      "path": "crates/nuriteo-server/src/config/instance_settings.rs",
+      "baselineSha256": "e4c578329e0c4ea9e2b7cee3df1e77264b5d34afe6623bad4ab42d530523b0eb"
+    },
+    "persistedAuthority": "postgresql-after-bootstrap",
+    "unknownKeyPolicy": "fail-closed",
+    "futureRegistryPolicy": "fail-closed",
+    "compatibility": "exact-registry-version"
+  },
+  "images": {
+    "identity": "sha256-digest",
+    "setPolicy": "complete-release-set",
+    "roles": [
+      {
+        "name": "postgres",
+        "digest": "sha256:de55a01489539d3a974b3102b6e3418c89d8c65adb986b0879722bd0eb3ea09b"
+      },
+      {
+        "name": "server",
+        "digest": "sha256:1a144aded2998a652093435a658c51a247354a635e4b46be13bddfc91d477c92"
+      },
+      {
+        "name": "web",
+        "digest": "sha256:69dbee9f5b3abff0aaff99fc59c296cf4eaa3ed149620644bb6922341592a13a"
+      }
+    ]
+  }
+}

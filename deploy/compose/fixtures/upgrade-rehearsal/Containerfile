@@ -1,0 +1,11 @@
+FROM docker.io/library/busybox@sha256:d82c2ab94640ded77cf76514ce6a84870761105058a4a9e51b05a8a79be97a6c
+ARG FIXTURE_RELEASE
+ARG FIXTURE_ROLE
+ARG FIXTURE_PREFLIGHT_FAIL=false
+LABEL io.nuriteo.fixture.release=$FIXTURE_RELEASE
+LABEL io.nuriteo.fixture.role=$FIXTURE_ROLE
+ENV FIXTURE_PREFLIGHT_FAIL=$FIXTURE_PREFLIGHT_FAIL
+ENV FIXTURE_ROLE=$FIXTURE_ROLE
+COPY driver.sh /driver.sh
+COPY --chmod=0555 fixture-node.sh /usr/local/bin/node
+ENTRYPOINT ["/bin/sh", "/driver.sh"]

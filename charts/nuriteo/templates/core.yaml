@@ -1,0 +1,197 @@
+{{- if gt (int .Values.observability.otlp.batchSize) (int .Values.observability.otlp.queueSize) }}
+{{- fail "observability.otlp.batchSize must not exceed queueSize" }}
+{{- end }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "nuriteo.fullname" . }}-core
+  labels:
+    {{- include "nuriteo.labels" . | nindent 4 }}
+    app.kubernetes.io/component: core
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "nuriteo.selectorLabels" (dict "root" . "component" "core") | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ .Values.core.service.port }}
+      targetPort: http
+      protocol: TCP
+    - name: management
+      port: {{ .Values.core.managementPort }}
+      targetPort: management
+      protocol: TCP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "nuriteo.fullname" . }}-core
+  labels:
+    {{- include "nuriteo.labels" . | nindent 4 }}
+    app.kubernetes.io/component: core
+spec:
+  replicas: {{ .Values.core.replicas }}
+  revisionHistoryLimit: 3
+  progressDeadlineSeconds: 600
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      {{- include "nuriteo.selectorLabels" (dict "root" . "component" "core") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "nuriteo.selectorLabels" (dict "root" . "component" "core") | nindent 8 }}
+      annotations:
+        {{- include "nuriteo.rolloutAnnotations" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "nuriteo.serviceAccountName" . }}
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: {{ .Values.core.terminationGracePeriodSeconds }}
+      securityContext:
+        {{- include "nuriteo.podSecurityContext" . | nindent 8 }}
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- include "nuriteo.imagePullSecrets" $ | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: core
+          image: {{ include "nuriteo.image" (list . .Values.images.server) | quote }}
+          imagePullPolicy: {{ .Values.images.server.pullPolicy }}
+          args: ["serve"]
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+            - name: management
+              containerPort: {{ .Values.core.managementPort }}
+              protocol: TCP
+          env:
+            - name: NURITEO_EXTERNAL_URL
+              valueFrom: { configMapKeyRef: { name: {{ include "nuriteo.runtimeConfigName" . }}, key: NURITEO_EXTERNAL_URL } }
+            - name: NURITEO_PREVIEW_BASE_DOMAIN
+              valueFrom: { configMapKeyRef: { name: {{ include "nuriteo.runtimeConfigName" . }}, key: NURITEO_PREVIEW_BASE_DOMAIN } }
+            - name: NURITEO_S3_ENDPOINT
+              valueFrom: { configMapKeyRef: { name: {{ include "nuriteo.runtimeConfigName" . }}, key: NURITEO_S3_ENDPOINT } }
+            - name: NURITEO_S3_REGION
+              valueFrom: { configMapKeyRef: { name: {{ include "nuriteo.runtimeConfigName" . }}, key: NURITEO_S3_REGION } }
+            - name: NURITEO_S3_BUCKET
+              valueFrom: { configMapKeyRef: { name: {{ include "nuriteo.runtimeConfigName" . }}, key: NURITEO_S3_BUCKET } }
+            - name: NURITEO_S3_ADDRESSING_STYLE
+              valueFrom: { configMapKeyRef: { name: {{ include "nuriteo.runtimeConfigName" . }}, key: NURITEO_S3_ADDRESSING_STYLE } }
+            - name: NURITEO_S3_CREDENTIAL_PROVIDER
+              valueFrom: { configMapKeyRef: { name: {{ include "nuriteo.runtimeConfigName" . }}, key: NURITEO_S3_CREDENTIAL_PROVIDER } }
+            - name: NURITEO_HTTP_LISTEN_ADDR
+              value: 0.0.0.0:8080
+            - name: NURITEO_MANAGEMENT_LISTEN_ADDR
+              value: {{ printf "0.0.0.0:%v" .Values.core.managementPort | quote }}
+            - name: NURITEO_LOG_FORMAT
+              value: {{ .Values.observability.logFormat | quote }}
+            - name: NURITEO_LOG_LEVEL
+              value: {{ .Values.observability.logLevel | quote }}
+            - name: OTEL_TRACES_EXPORTER
+              value: {{ ternary "otlp" "none" .Values.observability.otlp.tracesEnabled | quote }}
+            - name: OTEL_METRICS_EXPORTER
+              value: {{ ternary "otlp" "none" .Values.observability.otlp.metricsEnabled | quote }}
+            - name: OTEL_LOGS_EXPORTER
+              value: {{ ternary "otlp" "none" .Values.observability.otlp.logsEnabled | quote }}
+            {{- if .Values.observability.otlp.endpoint }}
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: {{ .Values.observability.otlp.endpoint | quote }}
+            {{- end }}
+            - name: OTEL_EXPORTER_OTLP_PROTOCOL
+              value: {{ .Values.observability.otlp.protocol | quote }}
+            - name: OTEL_EXPORTER_OTLP_TIMEOUT
+              value: {{ .Values.observability.otlp.timeoutMillis | quote }}
+            - name: OTEL_BSP_MAX_QUEUE_SIZE
+              value: {{ .Values.observability.otlp.queueSize | quote }}
+            - name: OTEL_BSP_MAX_EXPORT_BATCH_SIZE
+              value: {{ .Values.observability.otlp.batchSize | quote }}
+            - name: OTEL_BLRP_MAX_QUEUE_SIZE
+              value: {{ .Values.observability.otlp.queueSize | quote }}
+            - name: OTEL_BLRP_MAX_EXPORT_BATCH_SIZE
+              value: {{ .Values.observability.otlp.batchSize | quote }}
+            - name: OTEL_TRACES_SAMPLER_ARG
+              value: {{ .Values.observability.otlp.traceSampleRatio | quote }}
+            - name: OTEL_LOG_LEVEL
+              value: {{ .Values.observability.otlp.logMinLevel | quote }}
+            {{- if .Values.observability.otlp.existingSecret.name }}
+            - name: NURITEO_OTLP_AUTHORIZATION
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.observability.otlp.existingSecret.name }}
+                  key: {{ .Values.observability.otlp.existingSecret.authorizationKey }}
+            {{- end }}
+            {{- if and .Values.observability.otlp.existingSecret.name .Values.observability.otlp.existingSecret.caKey }}
+            - name: NURITEO_OTLP_CA_FILE
+              value: /run/secrets/nuriteo/observability/ca.crt
+            {{- end }}
+            - name: NURITEO_DATABASE_URL_FILE
+              value: /run/secrets/nuriteo/database/database-url
+            {{- if .Values.postgresql.existingSecret.caKey }}
+            - name: NURITEO_DATABASE_CA_FILE
+              value: /run/secrets/nuriteo/database/ca.crt
+            {{- end }}
+            {{- if .Values.objectStorage.existingSecret.accessKeyIdKey }}
+            - name: NURITEO_S3_ACCESS_KEY_ID_FILE
+              value: /run/secrets/nuriteo/object-storage/access-key-id
+            {{- end }}
+            {{- if .Values.objectStorage.existingSecret.secretAccessKeyKey }}
+            - name: NURITEO_S3_SECRET_ACCESS_KEY_FILE
+              value: /run/secrets/nuriteo/object-storage/secret-access-key
+            {{- end }}
+            {{- if .Values.objectStorage.existingSecret.sessionTokenKey }}
+            - name: NURITEO_S3_SESSION_TOKEN_FILE
+              value: /run/secrets/nuriteo/object-storage/session-token
+            {{- end }}
+            {{- if .Values.objectStorage.existingSecret.caKey }}
+            - name: NURITEO_S3_CA_FILE
+              value: /run/secrets/nuriteo/object-storage/ca.crt
+            {{- end }}
+            - name: NURITEO_SAVE_IDEMPOTENCY_SECRET_FILE
+              value: /run/secrets/nuriteo/application/save-idempotency-key
+            - name: NURITEO_MASTER_KEY_FILE
+              value: /run/secrets/nuriteo/application/master-key
+            - name: NURITEO_MASTER_KEY_VERSION
+              value: "1"
+            - name: NURITEO_PREVIEW_SIGNING_KEY_FILE
+              value: /run/secrets/nuriteo/application/preview-signing-key
+            - name: NURITEO_SAVE_UPLOAD_TRANSPORT
+              value: direct
+            - name: NURITEO_SAVE_DEFAULT_QUOTA_BYTES
+              value: "10737418240"
+          startupProbe:
+            httpGet: { path: /health/live, port: http }
+            periodSeconds: 2
+            failureThreshold: 30
+          livenessProbe:
+            httpGet: { path: /health/live, port: http }
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+          readinessProbe:
+            httpGet: { path: /health/ready, port: http }
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          securityContext:
+            {{- include "nuriteo.containerSecurityContext" . | nindent 12 }}
+          volumeMounts:
+            {{- include "nuriteo.coreSecretVolumeMounts" . | nindent 12 }}
+            - name: tmp
+              mountPath: /tmp
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              memory: 512Mi
+      volumes:
+        {{- include "nuriteo.coreSecretVolumes" . | nindent 8 }}
+        - name: tmp
+          emptyDir:
+            medium: Memory
+            sizeLimit: 16Mi

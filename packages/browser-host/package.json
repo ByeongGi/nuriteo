@@ -1,0 +1,16 @@
+{
+  "name": "@nuriteo/browser-host",
+  "version": "0.0.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./process": "./src/process/index.ts",
+    "./redaction": "./src/observability/support-bundle.ts",
+    "./supervisor": "./src/supervisor.ts"
+  },
+  "dependencies": {
+    "@nuriteo/protocol": "workspace:*"
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "taskId": "REL-002",
+  "version": "1.0.0",
+  "input": "release/ga/reproducible-images.json",
+  "formats": { "sbom": "SPDX-2.3", "provenance": "in-toto/SLSA-v1" },
+  "checksums": "SHA-256",
+  "signing": {
+    "connected": "Sigstore keyless identity bound to the release workflow",
+    "offline": "detached signature over SHA256SUMS with an operator-trusted public key",
+    "privateKeysInRepository": false
+  },
+  "requiredOutputs": [
+    "release/ga/artifacts/nuriteo-1.0.0.spdx.json",
+    "release/ga/artifacts/nuriteo-1.0.0.intoto.jsonl",
+    "release/ga/artifacts/SHA256SUMS",
+    "release/ga/artifacts/SHA256SUMS.sig"
+  ]
+}

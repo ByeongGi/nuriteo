@@ -1,0 +1,73 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-22",
+  "scope": {
+    "goal": "Track SDK consumer bundler compatibility for productization.",
+    "packageArtifact": "dist/sdk/nuriteo-sdk-0.1.0-beta.1.tgz",
+    "stableApi": "docs/productization/sdk-api-freeze-rfc.md"
+  },
+  "cases": [
+    {
+      "id": "sdk-service-webcontainer-contract",
+      "bundler": "source-contract",
+      "command": "node tests/contract/sdk-consumer/services.test.ts",
+      "status": "pass",
+      "evidence": ["tests/contract/sdk-consumer/services.test.ts", "compat/sdk-public-release.json"],
+      "notes": "Validates typed errors, filesystem/package/process/project/preview adapters, trace events, mount-root containment, lifecycle retry and teardown, and the NURITEO WebContainer-style facade."
+    },
+    {
+      "id": "typescript-bundler-resolution",
+      "bundler": "typescript",
+      "command": "tsc --noEmit with moduleResolution Bundler",
+      "status": "pass",
+      "evidence": ["tests/contract/sdk-consumer/package.test.ts"],
+      "notes": "Tarball-installed consumer imports @nuriteo/sdk root types and validates stable API surface."
+    },
+    {
+      "id": "node-commonjs-require",
+      "bundler": "node-cjs",
+      "command": "require('@nuriteo/sdk')",
+      "status": "pass",
+      "evidence": ["tests/contract/sdk-consumer/package.test.ts"],
+      "notes": "Tarball-installed consumer verifies CommonJS conditional export exposes createContainer, createPreviewRelay, and protocolVersion."
+    },
+    {
+      "id": "vite-consumer-build",
+      "bundler": "vite",
+      "command": "vite build",
+      "status": "pass",
+      "evidence": ["tests/contract/sdk-consumer/vite-build.test.ts", "docs/archive/productization-2026-09-16/evidence/P14-03.md"],
+      "notes": "Tarball-installed Vite consumer imports the root SDK package, builds successfully, and verifies worker asset URL strings survive bundling."
+    },
+    {
+      "id": "webpack-consumer-build",
+      "bundler": "webpack",
+      "command": "webpack build",
+      "status": "pass",
+      "evidence": ["tests/contract/sdk-consumer/webpack-build.test.ts", "docs/archive/productization-2026-09-16/evidence/P14-03.md"],
+      "notes": "Tarball-installed Webpack consumer imports the root SDK package, builds successfully, and verifies runtime worker URL strings survive bundling when expressed from location.href."
+    },
+    {
+      "id": "rspack-consumer-build",
+      "bundler": "rspack",
+      "command": "rspack build",
+      "status": "pass",
+      "evidence": ["tests/contract/sdk-consumer/rspack-build.test.ts", "docs/archive/productization-2026-09-16/evidence/P14-03.md"],
+      "notes": "Tarball-installed Rspack consumer imports the root SDK package, builds successfully, and verifies runtime worker URL strings survive bundling when expressed from location.href."
+    },
+    {
+      "id": "next-consumer-build",
+      "bundler": "next",
+      "command": "next build",
+      "status": "pass",
+      "evidence": ["tests/contract/sdk-consumer/next-build.test.ts", "docs/archive/productization-2026-09-16/evidence/P14-03.md"],
+      "notes": "Tarball-installed Next app router client fixture imports the root SDK package with transpilePackages and verifies worker URL strings survive in client assets."
+    }
+  ],
+  "gate": {
+    "id": "P14-03",
+    "status": "pass",
+    "reason": "TypeScript bundler resolution, CJS require, Vite, Webpack, Rspack, and Next consumer build smoke pass. Vite works with direct runtime asset URLs; Webpack/Rspack use location.href runtime URLs; Next uses a client component with transpilePackages.",
+    "requiredToPass": []
+  }
+}

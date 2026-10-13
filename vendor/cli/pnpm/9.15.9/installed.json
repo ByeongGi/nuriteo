@@ -1,0 +1,15 @@
+{
+  "name": "pnpm",
+  "version": "9.15.9",
+  "source": "https://registry.npmjs.org/pnpm/-/pnpm-9.15.9.tgz",
+  "integrity": "sha512-aARhQYk8ZvrQHAeSMRKOmvuJ74fiaR1p5NQO7iKJiClf1GghgbrlW1hBjDolO95lpQXsfF+UA+zlzDzTfc8lMQ==",
+  "license": "MIT",
+  "tarball": "/private/tmp/pnpm-9.15.9.tgz",
+  "tarballRelative": "../../../../private/tmp/pnpm-9.15.9.tgz",
+  "tarballSha256": "cf86a7ad764406395d4286a6d09d730711720acc6d93e9dce9ac7ac4dc4a28a7",
+  "entry": "vendor/cli/pnpm/9.15.9/package/bin/pnpm.cjs",
+  "entryRelative": "vendor/cli/pnpm/9.15.9/package/bin/pnpm.cjs",
+  "entrySha256": "98e6b99a881d64a1cc982c3e60aa260bf02160386b12e74475e06486dc74b090",
+  "resolutionPolicy": "real-cli-artifact-only; do-not-replace-dependency-resolution-with-custom-installer",
+  "mode": "real-tarball"
+}

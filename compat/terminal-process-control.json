@@ -1,0 +1,87 @@
+{
+  "schemaVersion": 4,
+  "updatedAt": "2026-09-27",
+  "status": "partial",
+  "runtimeModel": "browser-worker-rust-wasm-virtual-posix",
+  "capabilities": {
+    "isolatedSessions": { "status": "supported", "semantics": "Each preview terminal id owns an independent shell runtime, cwd, environment, transcript, foreground command, input listeners, and terminal size." },
+    "cwdAndEnvironment": { "status": "supported", "semantics": "Session-local cd/export/unset state; host process start messages carry an absolute normalized cwd and validated environment names." },
+    "streamingStdio": { "status": "supported", "semantics": "Allowlisted production Worker commands route stdin and stdout through Rust system-wasm PTY file descriptors, then stream bounded stdout/stderr chunks through HostProcessTable into preview xterm. WASI preview1 fd_read/fd_write accept an explicit bounded stdio adapter; package workflow commands remain direct workflow adapters." },
+    "ptyLineDiscipline": { "status": "supported", "semantics": "Rust system-core VirtualPty provides bounded canonical/raw input, termios flags, local echo, backspace and line-kill editing, Ctrl-D EOF, Ctrl-C interrupt events, fd read/write and poll semantics." },
+    "terminalResize": { "status": "supported", "semantics": "Resize is retained per session, applied through the Rust virtual ioctl path, dispatched as virtual SIGWINCH to the foreground process group, and reflected in BrowserProcess TTY metadata." },
+    "foregroundProcess": { "status": "partial", "semantics": "Rust system-core models session leaders, process groups, controlling terminals and foreground pgid routing; the product shell still permits one foreground command and does not expose background-job grammar or fg/bg/jobs." },
+    "exitStatus": { "status": "supported", "semantics": "Completion records exit code; virtual SIGINT/SIGTERM/SIGKILL fallbacks use 130/143/137." },
+    "lifecycleRecovery": { "status": "supported", "semantics": "Production Worker close, teardown, listener cleanup, generation rejection, resource release, and fresh-session restart are covered in Chrome and unit tests." },
+    "signals": { "status": "partial", "values": ["SIGINT", "SIGTERM", "SIGKILL", "SIGWINCH"], "semantics": "Rust virtual SIGINT and SIGWINCH route to the foreground process group; host SIGTERM is cooperative with a bounded grace period and SIGKILL terminates the Worker immediately. These are virtual signals, not Unix kernel delivery." },
+    "processListAndKill": { "status": "partial", "semantics": "The preview UI reads active PID/generation/cwd/argv/TTY state from HostProcessTable and offers interrupt/terminate/kill; retained history and POSIX process groups are unsupported." },
+    "portListAndStop": { "status": "supported", "semantics": "The Ports panel lists and stops preview workflow ports." },
+    "packageScriptArguments": { "status": "supported", "semantics": "npm/pnpm/yarn supported script arguments remain argv entries." },
+    "projectLocalBin": { "status": "partial", "semantics": "The shell resolves registered PATH entries and recognizes pinned Node shebang fixtures; it is not arbitrary executable or native-binary execution." },
+    "boundedBackpressure": { "status": "supported", "semantics": "The production Worker gates output on HostProcessTable acknowledgements, delays stdin credit acknowledgement until output admission, and caps retained host/shell/transcript bytes and scheduler callbacks." },
+    "commandSecurity": { "status": "supported", "semantics": "Commands resolve through an explicit registry/project PATH mapping; start messages carry immutable argv arrays, validated cwd/env, and never join input into a native shell command." }
+  },
+  "limits": {
+    "hostOutputBytesPerProcess": 1048576,
+    "hostOutputChunksPerProcess": 1024,
+    "hostStdinWindowBytes": 65536,
+    "shellOutputBytesPerRun": 1048576,
+    "terminalInputChunkBytes": 65536,
+    "schedulerCallbacksPerRun": 100000,
+    "gracefulSignalTimeoutMs": 500
+  },
+  "shellGrammar": {
+    "supported": ["quoted argv", "pipeline", "AND operator", "stdout overwrite"],
+    "diagnosticCode": "ERR_NURITEO_UNSUPPORTED_SHELL_SYNTAX",
+    "unsupported": ["background jobs", "command substitution", "OR operator", "command lists", "heredoc", "append redirect", "stdin redirect", "shell blocks"]
+  },
+  "posixPty": {
+    "status": "partial",
+    "virtual": {
+      "status": "supported",
+      "features": ["master/slave file descriptors", "bounded input/output queues", "termios canonical/raw flags", "ioctl terminal size", "poll readiness", "session leader", "process group", "foreground pgid", "virtual SIGINT", "virtual SIGWINCH"]
+    },
+    "hostKernel": {
+      "status": "unsupported",
+      "unsupported": ["kernel PTY", "/dev/pts", "host fork and exec", "host job control", "native Unix signals", "arbitrary native binaries"]
+    }
+  },
+  "security": {
+    "executionModel": "parsed-argv-allowlist",
+    "nativeShell": false,
+    "workerUrlPolicy": "permission-manager",
+    "workspaceCwd": "absolute-normalized",
+    "unsupportedSyntaxDiagnostic": "ERR_NURITEO_UNSUPPORTED_SHELL_SYNTAX"
+  },
+  "tests": [
+    "packages/node-runtime/test/shell.test.ts",
+    "packages/node-runtime/test/scheduler.test.ts",
+    "packages/node-runtime/test/secondary-builtins.test.ts",
+    "packages/browser-host/test/process-lifecycle.test.ts",
+    "packages/browser-host/test/process-terminal-command.test.ts",
+    "packages/browser-host/test/process-worker-runtime.test.ts",
+    "packages/browser-host/test/system-wasm-virtual-pty.test.ts",
+    "crates/system-core/src/io/pty.rs",
+    "crates/system-core/src/io/kernel.rs",
+    "crates/system-wasm/src/dispatch.rs",
+    "tests/compatibility/package-managers/terminal-commands.test.ts",
+    "packages/workspace-runtime/test/terminal-session-control.test.ts",
+    "apps/web/test/runtime-journey-browser.test.ts"
+  ],
+  "reproductionCommands": [
+    "node tooling/checks/check-terminal-process-control.ts",
+    "pnpm build:wasm",
+    "pnpm check:system-wasm-terminal",
+    "node packages/node-runtime/test/shell.test.ts",
+    "node packages/node-runtime/test/scheduler.test.ts",
+    "node packages/browser-host/test/process-lifecycle.test.ts",
+    "node packages/browser-host/test/process-terminal-command.test.ts",
+    "node packages/browser-host/test/process-worker-runtime.test.ts",
+    "pnpm test:workspace-runtime",
+    "pnpm --filter @nuriteo/web test:runtime-browser",
+    "pnpm test:browser-host",
+    "pnpm test:web",
+    "pnpm test:browser",
+    "pnpm check:types",
+    "pnpm build:web"
+  ]
+}

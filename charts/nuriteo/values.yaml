@@ -1,0 +1,222 @@
+global:
+  imageRegistry: ghcr.io/nuriteo
+  imagePullSecrets: []
+
+release:
+  lineage: nuriteo-self-hosted-v1
+  apiVersion: "1.0.0"
+  bundleFormat: project-bundle-v1
+
+images:
+  server:
+    repository: nuriteo-server
+    digest: sha256:1a144aded2998a652093435a658c51a247354a635e4b46be13bddfc91d477c92
+    pullPolicy: IfNotPresent
+  web:
+    repository: nuriteo-web
+    digest: sha256:69dbee9f5b3abff0aaff99fc59c296cf4eaa3ed149620644bb6922341592a13a
+    pullPolicy: IfNotPresent
+  operations:
+    repository: nuriteo-operations
+    # Release automation must replace this sentinel before enabling backup or restore Jobs.
+    digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+    pullPolicy: IfNotPresent
+
+externalUrl: https://nuriteo.example.com
+preview:
+  baseDomain: preview.nuriteo.example.com
+  wildcardReady: false
+
+ingress:
+  enabled: false
+  className: ""
+  tls:
+    existingSecretName: ""
+  readiness:
+    wildcardDns: false
+    wildcardTls: false
+    originalHost: false
+    webSocket: false
+    crossOrigin: false
+    hmr: false
+
+runtimeConfig:
+  create: true
+  existingConfigMap:
+    name: ""
+    revision: ""
+
+rollout:
+  # Change this opaque, non-secret token whenever any referenced Secret is rotated.
+  # Do not use a hash or other derivation of the secret contents.
+  externalSecretsRevision: initial
+
+serviceAccount:
+  name: ""
+  automountServiceAccountToken: false
+
+networkPolicy:
+  # Enable only after listing every external dependency CIDR used by PostgreSQL,
+  # S3, OIDC, SMTP, Git and registries. No implicit public-network fallback exists.
+  enabled: false
+  ingressController:
+    namespaceLabels:
+      kubernetes.io/metadata.name: ingress-nginx
+    podLabels:
+      app.kubernetes.io/name: ingress-nginx
+  dns:
+    namespaceLabels:
+      kubernetes.io/metadata.name: kube-system
+    podLabels:
+      k8s-app: kube-dns
+  externalEgress:
+    cidrBlocks: []
+    tcpPorts: [443, 465, 587, 5432]
+
+jobs:
+  preflight:
+    enabled: true
+    backoffLimit: 0
+    activeDeadlineSeconds: 300
+  migration:
+    enabled: true
+    backoffLimit: 0
+    activeDeadlineSeconds: 600
+  ttlSecondsAfterFinished: 86400
+
+toolbox:
+  enabled: false
+  operation: list
+  backupId: ""
+  activeDeadlineSeconds: 3600
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 86400
+
+backupSchedule:
+  enabled: false
+  schedule: "0 2 * * *"
+  timeZone: Etc/UTC
+  startingDeadlineSeconds: 900
+  activeDeadlineSeconds: 14400
+  backoffLimit: 0
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+
+backupStorage:
+  endpoint: https://backup-s3.example.com
+  region: us-east-1
+  bucket: nuriteo-backups
+  prefix: instance-1/backups
+  addressingStyle: path
+  sse: s3
+  kmsKeyId: ""
+  scratchSizeLimit: 10Gi
+  existingSecret:
+    name: nuriteo-backup-storage
+    accessKeyIdKey: access-key-id
+    secretAccessKeyKey: secret-access-key
+    sessionTokenKey: ""
+    caKey: ca.crt
+
+restore:
+  enabled: false
+  restorePointId: ""
+  target:
+    identity: ""
+    postgresql:
+      existingSecret:
+        name: ""
+        databaseUrlKey: database-url
+        caKey: ca.crt
+    objectStorage:
+      endpoint: ""
+      region: us-east-1
+      bucket: ""
+      addressingStyle: path
+      credentialProvider: static
+      existingSecret:
+        name: ""
+        accessKeyIdKey: access-key-id
+        secretAccessKeyKey: secret-access-key
+        sessionTokenKey: ""
+        caKey: ca.crt
+  fence:
+    maintenanceModeAcknowledged: false
+    writesDrainedAcknowledged: false
+    targetValidatedAcknowledged: false
+  activeDeadlineSeconds: 14400
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 86400
+
+core:
+  replicas: 1
+  service:
+    port: 8080
+  managementPort: 9090
+  terminationGracePeriodSeconds: 45
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+
+observability:
+  logFormat: json
+  logLevel: info
+  otlp:
+    endpoint: ""
+    protocol: grpc
+    tracesEnabled: false
+    metricsEnabled: false
+    logsEnabled: false
+    timeoutMillis: 5000
+    queueSize: 2048
+    batchSize: 512
+    traceSampleRatio: 0.1
+    logMinLevel: info
+    existingSecret:
+      name: ""
+      authorizationKey: authorization
+      caKey: ""
+
+web:
+  replicas: 1
+  service:
+    port: 3000
+  terminationGracePeriodSeconds: 30
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+
+postgresql:
+  existingSecret:
+    name: nuriteo-postgresql
+    databaseUrlKey: database-url
+    caKey: ca.crt
+
+objectStorage:
+  mode: external
+  endpoint: https://s3.example.com
+  region: us-east-1
+  bucket: nuriteo
+  addressingStyle: path
+  credentialProvider: static
+  existingSecret:
+    name: nuriteo-object-storage
+    accessKeyIdKey: access-key-id
+    secretAccessKeyKey: secret-access-key
+    sessionTokenKey: ""
+    caKey: ca.crt
+
+applicationSecrets:
+  existingSecret:
+    name: nuriteo-application
+    masterKeyKey: master-key
+    saveIdempotencyKey: save-idempotency-key
+    previewSigningKey: preview-signing-key
+
+bootstrapAdmin:
+  enabled: false
+  email: ""
+  name: ""
+  existingSecret:
+    name: ""
+    passwordKey: password

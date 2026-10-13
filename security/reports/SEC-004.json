@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "taskId": "SEC-004",
+  "status": "PASS",
+  "scannedAt": "2026-10-11T14:48:59Z",
+  "sourceCommit": "626f4574d70fbdbcd127128ad7c98c3abb67f555",
+  "scanner": {
+    "name": "trivy",
+    "version": "0.74.0",
+    "image": "docker.io/aquasec/trivy@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969"
+  },
+  "images": [
+    {
+      "role": "server",
+      "reference": "localhost/nuriteo-server:1.0.0-ga.sec4",
+      "digest": "sha256:e1748e3f6ed9148a11a535cc0f3277c801dcaf729750323f1972d73e710ba2d6",
+      "archiveSha256": "07f777550c702131e3ffd6a2d03ca83813977caa3c896dfdda2f5b62979ff9f4",
+      "rawReportSha256": "23203088bb2caf25fc89baf19038251717da46af61fc98834bf5a7dd23405f04",
+      "os": "debian 13.7",
+      "user": "65532:65532",
+      "high": 0,
+      "critical": 0,
+      "secrets": 0,
+      "runtimeSmoke": "PASS"
+    },
+    {
+      "role": "web",
+      "reference": "localhost/nuriteo-web:1.0.0-ga.sec4",
+      "digest": "sha256:f557e4e00c7a1699fdd73d26ac089e653336886b2674a3847194c3f38686163a",
+      "archiveSha256": "39f0688ac4d020bb5774f5132bf0f6ccf4e8b4ec3c5cd8aab2e36158b6cab1bf",
+      "rawReportSha256": "f3d9d9a494654ff76521dd361633db894b1d6b3f96ad695454877a6c41413d9a",
+      "os": "debian 13.7",
+      "user": "65532:65532",
+      "high": 0,
+      "critical": 0,
+      "secrets": 0,
+      "runtimeSmoke": "PASS"
+    },
+    {
+      "role": "operations",
+      "reference": "localhost/nuriteo-operations:1.0.0-ga.sec4",
+      "digest": "sha256:88d7de1570aaef01a948d9f9d02b1e051ba1e429cf44009e48aed70bb87abd56",
+      "archiveSha256": "958a9d97e9aefb5989a8f8d0a5923b92a7fd0038d71d3fe7880416105fb2a20c",
+      "rawReportSha256": "d2b90fa2f6c9d5c5f3116c4f97740230d84710979c93cdde5eb518f6315347a7",
+      "os": "debian 13.7",
+      "user": "65532:65532",
+      "high": 0,
+      "critical": 0,
+      "secrets": 0,
+      "runtimeSmoke": "PASS"
+    }
+  ]
+}
