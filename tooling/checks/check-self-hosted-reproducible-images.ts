@@ -35,6 +35,10 @@ for (const term of ["ubuntu-24.04", "ubuntu-24.04-arm", "merge-reproducible-imag
 const next = fs.readFileSync("apps/web/next.config.ts", "utf8");
 assert.ok(next.includes("generateBuildId"));
 assert.ok(next.includes("NURITEO_BUILD_REVISION"));
+const nextCanonicalizer = fs.readFileSync("apps/web/tooling/canonicalize-next-output.mjs", "utf8");
+for (const term of ["previewModeId", "previewModeSigningKey", "previewModeEncryptionKey",
+  "server-reference-manifest.json", "NURITEO_BUILD_REVISION"])
+  assert.ok(nextCanonicalizer.includes(term), `Next.js reproducibility normalization missing ${term}`);
 
 if (fs.existsSync(policy.report)) {
   const report = JSON.parse(fs.readFileSync(policy.report, "utf8")) as {
