@@ -38,9 +38,11 @@ jobs:
         with:
           fetch-depth: 0
       - name: Install OCI inspection tools
-        run: sudo apt-get update && sudo apt-get install --yes podman skopeo jq
+        run: sudo apt-get update && sudo apt-get install --yes skopeo jq
       - name: Build twice from clean caches
         env:
+          CONTAINER_RUNTIME: docker
+          NURITEO_REPRO_BUILDER: buildx
           NURITEO_REPRO_PLATFORMS: ${{ matrix.platform }}
           NURITEO_REPRO_REPORT: release/ga/reproducible-images-${{ matrix.artifact }}.json
         run: release/ga/reproducible-images.sh
