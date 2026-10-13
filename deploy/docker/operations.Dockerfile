@@ -32,7 +32,10 @@ RUN set -eu; \
       ldd /usr/lib/postgresql/17/bin/pg_restore; \
     } | awk '$2 == "=>" && $3 ~ /^\// { print $3 } $1 ~ /^\// { print $1 }' \
       | sort -u \
-      | while IFS= read -r library; do cp --parents "$library" "$root"; done
+      | while IFS= read -r library; do \
+          resolved="$(readlink -f "$library")"; \
+          cp --parents "$resolved" "$root"; \
+        done
 
 # The operations image is deliberately separate from the online server image.
 # It supplies the pinned pg_dump/pg_restore toolchain required by short-lived
