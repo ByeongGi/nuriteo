@@ -1,0 +1,20 @@
+name: GA / Publicize candidate packages
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publicize:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Make candidate packages public
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for role in server web operations; do
+            gh api --method PATCH "/user/packages/container/nuriteo-${role}/visibility" -f visibility=public
+          done
