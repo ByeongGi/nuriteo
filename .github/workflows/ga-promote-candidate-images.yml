@@ -1,0 +1,63 @@
+name: GA / Promote candidate images
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_commit:
+        description: Verified REL-001 source commit
+        required: true
+        type: string
+      evidence_run_id:
+        description: Successful REL-001 workflow run ID
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+  packages: write
+
+jobs:
+  promote:
+    name: ${{ matrix.platform }} ${{ matrix.role }} candidate promotion
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { runner: ubuntu-24.04, platform: linux/amd64, arch: amd64, role: server }
+          - { runner: ubuntu-24.04, platform: linux/amd64, arch: amd64, role: web }
+          - { runner: ubuntu-24.04, platform: linux/amd64, arch: amd64, role: operations }
+          - { runner: ubuntu-24.04-arm, platform: linux/arm64, arch: arm64, role: server }
+          - { runner: ubuntu-24.04-arm, platform: linux/arm64, arch: arm64, role: web }
+          - { runner: ubuntu-24.04-arm, platform: linux/arm64, arch: arm64, role: operations }
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_commit }}
+          path: source
+      - uses: docker/setup-buildx-action@v3
+        with:
+          driver: docker-container
+      - name: Install OCI inspection tools
+        run: sudo apt-get update && sudo apt-get install --yes skopeo jq
+      - name: Download verified REL-001 evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh run download "${{ inputs.evidence_run_id }}"
+          --name "rel-001-complete-${{ inputs.source_commit }}"
+          --dir evidence
+      - name: Authenticate candidate registry
+        env:
+          REGISTRY_TOKEN: ${{ github.token }}
+        run: printf '%s' "$REGISTRY_TOKEN" | skopeo login ghcr.io --username "${{ github.actor }}" --password-stdin
+      - name: Rebuild, verify, and promote candidate
+        run: >-
+          release/ga/promote-candidate-image.sh
+          source
+          evidence/reproducible-images.json
+          "${{ matrix.role }}"
+          "${{ matrix.platform }}"
