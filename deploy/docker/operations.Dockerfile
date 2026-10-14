@@ -34,7 +34,9 @@ RUN set -eu; \
       | sort -u \
       | while IFS= read -r library; do \
           resolved="$(readlink -f "$library")"; \
-          cp --parents "$resolved" "$root"; \
+          destination="$root$(dirname "$resolved")"; \
+          mkdir -p "$destination"; \
+          cp -L "$library" "$destination/$(basename "$library")"; \
         done
 
 # The operations image is deliberately separate from the online server image.
