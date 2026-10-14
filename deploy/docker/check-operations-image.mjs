@@ -14,6 +14,8 @@ for (const required of [
   "/usr/lib/postgresql/17/bin/pg_restore",
   "ldd /usr/lib/postgresql/17/bin/pg_dump",
   "ldd /usr/lib/postgresql/17/bin/pg_restore",
+  'destination="$root$(dirname "$resolved")"',
+  'cp -L "$library" "$destination/$(basename "$library")"',
   "COPY --from=postgres-client /runtime-root /",
   "COPY --from=builder /build/target/release/nuriteo-server /usr/local/bin/nuriteo-server",
   "USER 65532:65532",
