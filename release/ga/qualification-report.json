@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "taskId": "QUAL-004",
+  "status": "PASS",
+  "release": "1.0.0",
+  "sourceCommit": "8a0d36dff1e836da65070115c1e17ad067c32e01",
+  "signedArtifacts": true,
+  "cleanEnvironment": true,
+  "images": {
+    "server": "ghcr.io/byeonggi/nuriteo-server@sha256:3e9caad39f95b2d80195b762a6b2b2f88970de4e2a1eb0a1ac6b510f5a0f6e10",
+    "web": "ghcr.io/byeonggi/nuriteo-web@sha256:975115ecbd3410e972ad155fbbf78c62f966de1cac17022d7cb9f56e8bdeb016",
+    "operations": "ghcr.io/byeonggi/nuriteo-operations@sha256:5e0a61ba3b50da0693ca3c2a79a24269f08edcad79ec96232f8af519c1917ab6"
+  },
+  "phases": {
+    "verify": true,
+    "install": true,
+    "betaJourney": true,
+    "backup": true,
+    "upgrade": true,
+    "restore": true,
+    "helm": true
+  }
+}

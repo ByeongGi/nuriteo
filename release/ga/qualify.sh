@@ -30,7 +30,11 @@ CONTAINER_RUNTIME="$runtime" "$root/charts/nuriteo/tests/kind-release.sh"
 
 source_commit="$(jq -r .sourceCommit "$artifacts/nuriteo-1.0.0.release.json")"
 jq -n --arg sourceCommit "$source_commit" \
+  --arg serverImage "$NURITEO_SERVER_IMAGE" \
+  --arg webImage "$NURITEO_WEB_IMAGE" \
+  --arg operationsImage "$NURITEO_OPERATIONS_IMAGE" \
   '{schemaVersion:1,taskId:"QUAL-004",status:"PASS",release:"1.0.0",sourceCommit:$sourceCommit,
     signedArtifacts:true,cleanEnvironment:true,
+    images:{server:$serverImage,web:$webImage,operations:$operationsImage},
     phases:{verify:true,install:true,betaJourney:true,backup:true,upgrade:true,restore:true,helm:true}}' >"$report"
 jq -c '{status:(.status|ascii_downcase),task:.taskId,release,phases}' "$report"

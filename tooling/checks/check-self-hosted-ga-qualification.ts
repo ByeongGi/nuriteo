@@ -15,6 +15,8 @@ if (fs.existsSync(policy.report)) {
   assert.equal(report.status, "PASS");
   assert.equal(report.signedArtifacts, true);
   assert.equal(report.cleanEnvironment, true);
+  assert.deepEqual(Object.keys(report.images).sort(), ["operations", "server", "web"]);
+  for (const image of Object.values(report.images)) assert.match(image as string, /@sha256:[0-9a-f]{64}$/u);
   for (const phase of Object.values(report.phases)) assert.equal(phase, true);
   execFileSync("git", ["merge-base", "--is-ancestor", report.sourceCommit, "HEAD"]);
 }

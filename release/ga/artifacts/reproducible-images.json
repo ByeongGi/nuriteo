@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "taskId": "REL-001",
+  "status": "PASS",
+  "version": "1.0.0",
+  "sourceCommit": "8a0d36dff1e836da65070115c1e17ad067c32e01",
+  "sourceDateEpoch": 1791958294,
+  "created": "2026-10-14T06:11:34Z",
+  "images": [
+    { "role": "operations", "platform": "linux/amd64", "digest": "sha256:88c848c35d3ca50cf491824f4550cbd8a8f6deecc9de4118fa8971991a23ab5f", "passes": 2 },
+    { "role": "server", "platform": "linux/amd64", "digest": "sha256:ede2172210c8d183bdb315c7fd19826e5fc09898296631d82927fb8d65466971", "passes": 2 },
+    { "role": "web", "platform": "linux/amd64", "digest": "sha256:f5909d3799502fd30759bc0b0f26578b5b1771189694b1bde49776c15009f8e4", "passes": 2 },
+    { "role": "operations", "platform": "linux/arm64", "digest": "sha256:5e0a61ba3b50da0693ca3c2a79a24269f08edcad79ec96232f8af519c1917ab6", "passes": 2 },
+    { "role": "server", "platform": "linux/arm64", "digest": "sha256:3e9caad39f95b2d80195b762a6b2b2f88970de4e2a1eb0a1ac6b510f5a0f6e10", "passes": 2 },
+    { "role": "web", "platform": "linux/arm64", "digest": "sha256:975115ecbd3410e972ad155fbbf78c62f966de1cac17022d7cb9f56e8bdeb016", "passes": 2 }
+  ]
+}

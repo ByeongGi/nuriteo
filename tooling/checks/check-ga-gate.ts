@@ -21,9 +21,23 @@ assert.equal(qualification.status, "PASS");
 assert.equal(qualification.signedArtifacts, true);
 const security = JSON.parse(fs.readFileSync("security/reports/SEC-004.json", "utf8"));
 assert.equal(security.status, "PASS");
+assert.equal(security.sourceCommit, reproducibility.sourceCommit);
 assert.equal(security.images.reduce((sum, image) => sum + image.critical, 0), 0);
 assert.equal(security.images.reduce((sum, image) => sum + image.high, 0), 0);
 const manifest = JSON.parse(fs.readFileSync("release/ga/artifacts/nuriteo-1.0.0.release.json", "utf8"));
 assert.equal(manifest.release, "1.0.0");
+assert.equal(manifest.sourceCommit, reproducibility.sourceCommit);
+assert.equal(qualification.sourceCommit, reproducibility.sourceCommit);
+for (const image of security.images) {
+  assert.ok(reproducibility.images.some((candidate) =>
+    candidate.role === image.role && candidate.digest === image.digest),
+  `security report digest is outside REL-001: ${image.role}`);
+}
+for (const [role, reference] of Object.entries(qualification.images)) {
+  const digest = (reference as string).split("@")[1];
+  assert.ok(reproducibility.images.some((candidate) =>
+    candidate.role === role && candidate.digest === digest),
+  `qualification digest is outside REL-001: ${role}`);
+}
 execFileSync("git", ["merge-base", "--is-ancestor", manifest.sourceCommit, "HEAD"]);
 console.log(JSON.stringify({ status: "pass", gate: "GATE-007", verdict: policy.passVerdict, release: policy.release }));
