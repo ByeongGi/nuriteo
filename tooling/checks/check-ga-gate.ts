@@ -26,6 +26,12 @@ assert.equal(security.images.reduce((sum, image) => sum + image.critical, 0), 0)
 assert.equal(security.images.reduce((sum, image) => sum + image.high, 0), 0);
 const manifest = JSON.parse(fs.readFileSync("release/ga/artifacts/nuriteo-1.0.0.release.json", "utf8"));
 assert.equal(manifest.release, "1.0.0");
+const support = JSON.parse(fs.readFileSync("compat/self-hosted-v1-support-matrix.json", "utf8"));
+assert.equal(
+  support.support.filter((entry) => entry.status === "candidate").length,
+  0,
+  "GA support matrix retains an unqualified candidate",
+);
 assert.equal(manifest.sourceCommit, reproducibility.sourceCommit);
 assert.equal(qualification.sourceCommit, reproducibility.sourceCommit);
 for (const image of security.images) {

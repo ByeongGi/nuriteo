@@ -60,6 +60,11 @@ const requiredLimitIds = [
 assert.deepEqual(matrix.support.map(({ id }) => id), requiredSupportIds);
 assert.deepEqual(matrix.knownLimits.map(({ id }) => id), requiredLimitIds);
 assert.equal(new Set([...requiredSupportIds, ...requiredLimitIds]).size, matrix.support.length + matrix.knownLimits.length);
+assert.equal(
+  matrix.support.filter(({ status }) => status === "candidate").length,
+  0,
+  "GA support matrix must not retain pre-GA candidates",
+);
 
 for (const entry of matrix.support) {
   assert.ok(entry.area.length >= 3, `${entry.id}: area is incomplete`);
