@@ -1,0 +1,113 @@
+name: GA / Security candidate images
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_commit:
+        description: Verified REL-001 source commit
+        required: true
+        type: string
+      evidence_run_id:
+        description: Successful REL-001 workflow run ID
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+  packages: read
+
+jobs:
+  scan:
+    name: linux/arm64 ${{ matrix.role }} security scan
+    strategy:
+      fail-fast: false
+      matrix:
+        role: [server, web, operations]
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install OCI inspection tools
+        run: sudo apt-get update && sudo apt-get install --yes skopeo jq
+      - name: Download verified REL-001 evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh run download "${{ inputs.evidence_run_id }}"
+          --name "rel-001-complete-${{ inputs.source_commit }}"
+          --dir evidence
+      - name: Scan and smoke the exact candidate digest
+        env:
+          ROLE: ${{ matrix.role }}
+          SOURCE_COMMIT: ${{ inputs.source_commit }}
+          SCANNER: docker.io/aquasec/trivy@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969
+        run: |
+          set -Eeuo pipefail
+          mkdir -p reports
+          digest="$(jq -r --arg role "$ROLE" '.images[] | select(.role == $role and .platform == "linux/arm64") | .digest' evidence/reproducible-images.json)"
+          reference="ghcr.io/byeonggi/nuriteo-${ROLE}@${digest}"
+          docker pull "$reference"
+          user="$(docker image inspect --format '{{.Config.User}}' "$reference")"
+          test "$user" = "65532:65532"
+          case "$ROLE" in
+            server) docker run --rm "$reference" --version ;;
+            web) docker run --rm --entrypoint /nodejs/bin/node "$reference" --version ;;
+            operations) docker run --rm --entrypoint /usr/bin/pg_dump "$reference" --version ;;
+          esac
+          set +e
+          docker run --rm --volume "$PWD/reports:/report" "$SCANNER" image \
+            --scanners vuln,secret --severity HIGH,CRITICAL --exit-code 1 \
+            --skip-version-check --format json --output "/report/${ROLE}.json" "$reference"
+          scan_status=$?
+          set -e
+          high="$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity == "HIGH")] | length' "reports/${ROLE}.json")"
+          critical="$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity == "CRITICAL")] | length' "reports/${ROLE}.json")"
+          secrets="$(jq '[.Results[]?.Secrets[]?] | length' "reports/${ROLE}.json")"
+          os="$(jq -r '.Metadata.OS | "\(.Family) \(.Name)"' "reports/${ROLE}.json")"
+          raw_sha="$(sha256sum "reports/${ROLE}.json" | cut -d' ' -f1)"
+          jq -n --arg role "$ROLE" --arg reference "$reference" --arg digest "$digest" \
+            --arg os "$os" --arg user "$user" --arg rawReportSha256 "$raw_sha" \
+            --arg sourceCommit "$SOURCE_COMMIT" --arg scannedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --argjson high "$high" --argjson critical "$critical" --argjson secrets "$secrets" \
+            '{status:"PASS",scannedAt:$scannedAt,sourceCommit:$sourceCommit,role:$role,reference:$reference,
+              digest:$digest,rawReportSha256:$rawReportSha256,os:$os,user:$user,
+              high:$high,critical:$critical,secrets:$secrets,runtimeSmoke:"PASS"}' >"reports/${ROLE}-summary.json"
+          test "$scan_status" -eq 0
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sec-004-${{ matrix.role }}-${{ inputs.source_commit }}
+          path: reports
+          if-no-files-found: error
+          retention-days: 30
+
+  merge-evidence:
+    needs: scan
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: sec-004-*-${{ inputs.source_commit }}
+          path: reports
+          merge-multiple: true
+      - name: Download verified REL-001 evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh run download "${{ inputs.evidence_run_id }}"
+          --name "rel-001-complete-${{ inputs.source_commit }}"
+          --dir evidence
+      - name: Bind scan evidence to REL-001
+        run: >-
+          node release/ga/merge-security-candidate-reports.mjs
+          evidence/reproducible-images.json
+          reports/SEC-004.json
+          reports/server-summary.json
+          reports/web-summary.json
+          reports/operations-summary.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sec-004-complete-${{ inputs.source_commit }}
+          path: reports
+          if-no-files-found: error
+          retention-days: 30
