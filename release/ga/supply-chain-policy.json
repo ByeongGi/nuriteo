@@ -9,7 +9,7 @@
     "connected": "Sigstore keyless identity bound to the release workflow",
     "offline": "detached signature over SHA256SUMS with an operator-trusted public key",
     "trustedPublicKey": "release/ga/trusted-release-key.pem",
-    "trustedPublicKeySha256": "599aaa9b07fbe6583bf512302196c26d0cf8b92d5019d558ba01c0feca5dccce",
+    "trustedPublicKeySha256": "357a0e576a4bbb22f20d6367b6ea6f27c7e87ddee76f4a59a4ca9b38ceecea9e",
     "privateKeysInRepository": false
   },
   "requiredOutputs": [

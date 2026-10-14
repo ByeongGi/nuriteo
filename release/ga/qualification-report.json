@@ -3,13 +3,13 @@
   "taskId": "QUAL-004",
   "status": "PASS",
   "release": "1.0.0",
-  "sourceCommit": "8a0d36dff1e836da65070115c1e17ad067c32e01",
+  "sourceCommit": "92f7fcab26db2fc0f131e90dedd6c0692a518388",
   "signedArtifacts": true,
   "cleanEnvironment": true,
   "images": {
-    "server": "ghcr.io/byeonggi/nuriteo-server@sha256:3e9caad39f95b2d80195b762a6b2b2f88970de4e2a1eb0a1ac6b510f5a0f6e10",
-    "web": "ghcr.io/byeonggi/nuriteo-web@sha256:975115ecbd3410e972ad155fbbf78c62f966de1cac17022d7cb9f56e8bdeb016",
-    "operations": "ghcr.io/byeonggi/nuriteo-operations@sha256:5e0a61ba3b50da0693ca3c2a79a24269f08edcad79ec96232f8af519c1917ab6"
+    "server": "ghcr.io/byeonggi/nuriteo-server@sha256:d35f76707180ac02faed2ed8da86068a8e1f3b7f8193ed0d757d80911919e5d5",
+    "web": "ghcr.io/byeonggi/nuriteo-web@sha256:084d886d3d82d0e087111b46053a6f80565ead35eccaee3dab25a4bff6a481cb",
+    "operations": "ghcr.io/byeonggi/nuriteo-operations@sha256:b8c1a6e386aa3c1f59543e073d2c007969450ad750509be36db79c039ca04d56"
   },
   "phases": {
     "verify": true,

@@ -3,9 +3,9 @@
   "dataLicense": "CC0-1.0",
   "SPDXID": "SPDXRef-DOCUMENT",
   "name": "nuriteo-1.0.0",
-  "documentNamespace": "https://nuriteo.dev/spdx/1.0.0/8a0d36dff1e836da65070115c1e17ad067c32e01",
+  "documentNamespace": "https://nuriteo.dev/spdx/1.0.0/92f7fcab26db2fc0f131e90dedd6c0692a518388",
   "creationInfo": {
-    "created": "2026-10-14T06:11:34Z",
+    "created": "2026-10-14T14:42:52Z",
     "creators": [
       "Tool: nuriteo-release"
     ]
@@ -4846,7 +4846,7 @@
     {
       "SPDXID": "SPDXRef-Package-303",
       "name": "rustls",
-      "versionInfo": "0.23.45",
+      "versionInfo": "0.23.46",
       "downloadLocation": "NOASSERTION",
       "filesAnalyzed": false,
       "licenseConcluded": "NOASSERTION",
@@ -4855,7 +4855,7 @@
         {
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
-          "referenceLocator": "pkg:cargo/rustls@0.23.45"
+          "referenceLocator": "pkg:cargo/rustls@0.23.46"
         }
       ]
     },

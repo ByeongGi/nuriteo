@@ -4,7 +4,7 @@
     "stable": {
       "release": "1.0.0",
       "manifest": "nuriteo-1.0.0.release.json",
-      "manifestSha256": "d4260ee7dbe44f22bc136e093e2a8de4670a895f09a7143c5048634b099fec9b"
+      "manifestSha256": "72ebbbb0d93708dc90f9516061018c0d2e54cdcedc040be11f10ce680a5e975a"
     }
   }
 }

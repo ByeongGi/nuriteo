@@ -4,43 +4,43 @@
   "releaseLineage": "nuriteo-self-hosted-v1",
   "release": "1.0.0",
   "channel": "stable",
-  "sourceCommit": "8a0d36dff1e836da65070115c1e17ad067c32e01",
-  "created": "2026-10-14T06:11:34Z",
+  "sourceCommit": "92f7fcab26db2fc0f131e90dedd6c0692a518388",
+  "created": "2026-10-14T14:42:52Z",
   "images": [
     {
       "role": "operations",
       "platform": "linux/amd64",
-      "digest": "sha256:88c848c35d3ca50cf491824f4550cbd8a8f6deecc9de4118fa8971991a23ab5f",
+      "digest": "sha256:344efd006418335f8e28633ec5fb1ac66adb3131651b3125635e2675b1637a25",
       "passes": 2
     },
     {
       "role": "server",
       "platform": "linux/amd64",
-      "digest": "sha256:ede2172210c8d183bdb315c7fd19826e5fc09898296631d82927fb8d65466971",
+      "digest": "sha256:a8b51dc60b2e3f691a00ac7bf870b7354d42e10f2d66813250bdb3f3664aa7b9",
       "passes": 2
     },
     {
       "role": "web",
       "platform": "linux/amd64",
-      "digest": "sha256:f5909d3799502fd30759bc0b0f26578b5b1771189694b1bde49776c15009f8e4",
+      "digest": "sha256:797854019136c0b364ee35548f746938db4838928eecc2616d565d5fc5cb59f2",
       "passes": 2
     },
     {
       "role": "operations",
       "platform": "linux/arm64",
-      "digest": "sha256:5e0a61ba3b50da0693ca3c2a79a24269f08edcad79ec96232f8af519c1917ab6",
+      "digest": "sha256:b8c1a6e386aa3c1f59543e073d2c007969450ad750509be36db79c039ca04d56",
       "passes": 2
     },
     {
       "role": "server",
       "platform": "linux/arm64",
-      "digest": "sha256:3e9caad39f95b2d80195b762a6b2b2f88970de4e2a1eb0a1ac6b510f5a0f6e10",
+      "digest": "sha256:d35f76707180ac02faed2ed8da86068a8e1f3b7f8193ed0d757d80911919e5d5",
       "passes": 2
     },
     {
       "role": "web",
       "platform": "linux/arm64",
-      "digest": "sha256:975115ecbd3410e972ad155fbbf78c62f966de1cac17022d7cb9f56e8bdeb016",
+      "digest": "sha256:084d886d3d82d0e087111b46053a6f80565ead35eccaee3dab25a4bff6a481cb",
       "passes": 2
     }
   ],
@@ -48,22 +48,22 @@
     {
       "kind": "sbom",
       "path": "nuriteo-1.0.0.spdx.json",
-      "sha256": "0d8b2152b5feda7b8f650a90c4a60f5bca0d59b8caf320a5bc1d6f3f29fda322"
+      "sha256": "964b59b98bc7bf1ee4a6eb3d10cb0b1e0d80f8615854913733d30f77b0b45abc"
     },
     {
       "kind": "provenance",
       "path": "nuriteo-1.0.0.intoto.jsonl",
-      "sha256": "6e8798b2f0b2359959505a49b1cd4763b434dd9ef95febe269b8f6f3fb2cb15a"
+      "sha256": "c38633c4369260e58eb1a03b56fc7594eaadf4a2967080eb282755d68d48ebb1"
     },
     {
       "kind": "checksums",
       "path": "SHA256SUMS",
-      "sha256": "229f34595fd615adaf3621b137ba2c33127a61813134b0f0c45e50c6a206ba89"
+      "sha256": "953bd9b5d8909ae5f011e04cb1d3ead96ee2f09d577c3a107a8633367b5cc659"
     },
     {
       "kind": "checksum-signature",
       "path": "SHA256SUMS.sig",
-      "sha256": "f2f598236a7e0f1d1da1e525475989844bf62024b81a8108f30c81bf1a882e31"
+      "sha256": "bd31e97a04a866365e6b40ea1d98a0ce8b02a7c37a1814e6318ce6516bc54433"
     },
     {
       "kind": "helm-chart",
@@ -73,7 +73,7 @@
     {
       "kind": "chart-image-binding",
       "path": "nuriteo-1.0.0.chart-images.json",
-      "sha256": "dc057baca346539f9c8786f16ef4274415655452a0ffe0ac232bba8c04242c3b"
+      "sha256": "0acd871a725a2dae1e8653e3061e3166bf9f66e38f9d3cea7a32a4df2461dd19"
     }
   ],
   "compatibility": {
