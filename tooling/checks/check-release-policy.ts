@@ -10,7 +10,7 @@ const document = fs.readFileSync("docs/release/release-policy.md", "utf8");
 assert(policy.schemaVersion === 1, "unexpected release policy schema");
 assert(policy.versioning.sdk.scheme === "semver", "SDK versioning must be semver");
 assert(policy.versioning.runtimeAbi.current === 1, "runtime ABI baseline must be 1");
-assert(policy.supportWindows.node.baseline === "22.23.0", "unexpected Node support baseline");
+assert(policy.supportWindows.node.baseline === "24.17.0", "unexpected Node support baseline");
 assert(policy.supportWindows.npm.baseline === "10.9.2", "unexpected npm support baseline");
 assert(policy.supportWindows.pnpm.baseline === "9.15.9", "unexpected pnpm support baseline");
 assert(policy.supportWindows.browser.baseline.includes("SharedArrayBuffer"), "browser support must require SharedArrayBuffer");

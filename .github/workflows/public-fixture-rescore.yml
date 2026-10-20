@@ -25,7 +25,7 @@ jobs:
           version: 11.15.1
       - uses: actions/setup-node@v4
         with:
-          node-version: 22.23.0
+          node-version: 24.17.0
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm check:fixtures-rescore

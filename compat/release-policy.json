@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-09-15",
+  "updatedAt": "2026-10-21",
   "status": "p16-01-release-policy",
   "channels": [
     {
@@ -40,9 +40,9 @@
   },
   "supportWindows": {
     "node": {
-      "baseline": "22.23.0",
-      "line": "22.x",
-      "candidate": "22.23.2",
+      "baseline": "24.17.0",
+      "line": "24.x",
+      "candidate": "26.8.2",
       "policy": "patch candidates are rehearsed before promotion; major line changes require a compatibility lane"
     },
     "npm": {

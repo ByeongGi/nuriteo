@@ -21,16 +21,17 @@ function validateDockerfile(source) {
   const fromInstructions = instructions.filter((line) => line.startsWith("FROM "));
 
   assert.deepEqual(fromInstructions, [
-    "FROM docker.io/library/node:22.23.0-bookworm-slim@sha256:d9f850096136edbc402debdd8729579a288aac64574ada0ff4db26b6ae58b0b2 AS dependencies",
+    "FROM docker.io/library/node:24.17.0-bookworm-slim@sha256:862263c612aa437e3037674b85419622a9d93bff80aa1eee5398dfe686375532 AS dependencies",
     "FROM dependencies AS builder",
-    "FROM gcr.io/distroless/nodejs22-debian13:nonroot@sha256:ec2313763dd43931543bd03830466e0c409ce73a487e8d46f10db72d3b816c1c AS runtime"
+    "FROM gcr.io/distroless/nodejs24-debian13:nonroot@sha256:55de7e48a8414e7aff825207c0b3c0f7db3b10133efc50d748560c27c9053be1 AS runtime"
   ]);
   assert(
     instructions.includes("RUN pnpm install --frozen-lockfile --filter @nuriteo/web..."),
     "web dependencies must use the frozen root lockfile"
   );
-  assert(
-    instructions.includes("RUN pnpm --filter @nuriteo/web build"),
+  assert.match(
+    source,
+    /RUN pnpm --filter @nuriteo\/web build\s*\\/u,
     "builder must run the Web production build"
   );
   assert(
@@ -168,7 +169,7 @@ function validateBuildContext() {
 
 function verifyDriftDetection() {
   const mutations = [
-    dockerfile.replace("@sha256:d9f850096136edbc402debdd8729579a288aac64574ada0ff4db26b6ae58b0b2", ""),
+    dockerfile.replace("@sha256:862263c612aa437e3037674b85419622a9d93bff80aa1eee5398dfe686375532", ""),
     dockerfile.replace("/workspace/apps/web/.next/static", "/workspace/apps/web/.next/cache"),
     dockerfile.replace("USER 65532:65532", "USER root"),
     dockerfile.replace(

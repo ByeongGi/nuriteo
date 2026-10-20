@@ -1,48 +1,48 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-15T01:10:00+09:00",
-  "status": "p0-02-baseline",
+  "generatedAt": "2026-10-21T00:00:00+09:00",
+  "status": "node-24-lts-baseline",
   "runtimeBaseline": {
     "node": {
-      "version": "22.23.0",
-      "channel": "initial-supported-node-lts-line",
-      "engineConstraint": ">=22.15.0 <23",
+      "version": "24.17.0",
+      "channel": "supported-node-24-lts-line",
+      "engineConstraint": ">=24.17.0 <25",
       "referenceCandidate": "vivari",
       "darwinArm64Tarball": {
-        "url": "https://nodejs.org/dist/v22.23.0/node-v22.23.0-darwin-arm64.tar.gz",
-        "sha256": "e0f383a215dd3093de6d2c74f87056dc2306a2e09ad494cbffdba28f89046f56"
+        "url": "https://nodejs.org/dist/v24.17.0/node-v24.17.0-darwin-arm64.tar.gz",
+        "sha256": "4fc3266a3702eebc39cc37661cf4eeceeade307e242ab64e4d7ce7949197e11f"
       },
       "linuxArm64Tarball": {
-        "url": "https://nodejs.org/dist/v22.23.0/node-v22.23.0-linux-arm64.tar.xz",
-        "sha256": "4018815ac1bed4f18208901bbde524fee881253b591ee7bc952660e69bd057af"
+        "url": "https://nodejs.org/dist/v24.17.0/node-v24.17.0-linux-arm64.tar.xz",
+        "sha256": "67324b9e515e7d13da72571a5dd522bb23145a820f7dde15497897e466759ab3"
       },
       "linuxX64Tarball": {
-        "url": "https://nodejs.org/dist/v22.23.0/node-v22.23.0-linux-x64.tar.xz",
-        "sha256": "14d7de44f235534799f8b171a4050d9a6a4bc99c87e053a25d3d54afa580aa20"
+        "url": "https://nodejs.org/dist/v24.17.0/node-v24.17.0-linux-x64.tar.xz",
+        "sha256": "ab343a1b747c7cbf3630dfd7dbf818c5423fab2eb4f5ad1afc896f6bd121a917"
       },
       "rehearsalCandidate": {
-        "version": "22.23.2",
-        "source": "https://nodejs.org/download/release/latest-v22.x/",
-        "status": "rehearsed-not-promoted",
-        "reasonNotPromoted": "P8-01 records update procedure and compatibility evidence; baseline promotion is a separate release decision.",
+        "version": "26.8.2",
+        "source": "https://nodejs.org/download/release/latest-v26.x/",
+        "status": "compatibility-lane-not-promoted",
+        "reasonNotPromoted": "Node 26 remains an explicit compatibility lane until the full product and release gates are rehearsed.",
         "darwinArm64Tarball": {
-          "url": "https://nodejs.org/dist/v22.23.2/node-v22.23.2-darwin-arm64.tar.gz",
-          "sha256": "61130f394c1630d211dd50aecc4353d379480f36d3ac913cd85dbba1aed585c6"
+          "url": "https://nodejs.org/dist/v26.8.2/node-v26.8.2-darwin-arm64.tar.gz",
+          "sha256": "974b6d5fb2fc7c33ff2354db0902b4e91c2de01ec8acc6de48e543c97e18c9e1"
         },
         "linuxArm64Tarball": {
-          "url": "https://nodejs.org/dist/v22.23.2/node-v22.23.2-linux-arm64.tar.xz",
-          "sha256": "fff4078c5def658577f92c88db7db3bc0072924bfb93fe52c1e744a54e94abb8"
+          "url": "https://nodejs.org/dist/v26.8.2/node-v26.8.2-linux-arm64.tar.xz",
+          "sha256": "81d8f0fdea9dcd3bfdcfeafc5f8359c151f097e9880b0007c0645ca670d07971"
         },
         "linuxX64Tarball": {
-          "url": "https://nodejs.org/dist/v22.23.2/node-v22.23.2-linux-x64.tar.xz",
-          "sha256": "d60acfe00a2932254bb0ad20e01b0d74397a0875595de719654b214f4b03f307"
+          "url": "https://nodejs.org/dist/v26.8.2/node-v26.8.2-linux-x64.tar.xz",
+          "sha256": "40e1d3225c1c9ae9a2671c98ecb9857e4d5555026394f348645676798840d5c5"
         }
       }
     },
     "referenceNode": {
-      "version": "22.23.0",
-      "command": "mise exec node@22.23.0 bun@1.4.2 -- npm run verify",
-      "evidence": "docs/archive/implementation-2026-09-15/evidence/P0-01.md"
+      "version": "24.17.0",
+      "command": "mise exec node@24.17.0 bun@1.4.2 -- npm run verify",
+      "evidence": "docs/evaluation/node-upgrade.md"
     }
   },
   "compatibilityLane": {

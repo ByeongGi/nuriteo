@@ -24,7 +24,7 @@ assert.match(workflow, /if: github\.event_name == 'workflow_dispatch'/u);
 assert.match(workflow, /runs-on: ubuntu-24\.04/u);
 assert.match(workflow, /timeout-minutes: 75/u);
 assert.match(workflow, /pnpm\/action-setup@v4[\s\S]*version: 11\.15\.1/u);
-assert.match(workflow, /actions\/setup-node@v4[\s\S]*node-version: 22\.23\.0/u);
+assert.match(workflow, /actions\/setup-node@v4[\s\S]*node-version: 24\.17\.0/u);
 assert.match(workflow, /pnpm install --frozen-lockfile/u);
 assert.match(workflow, /pnpm exec playwright install --with-deps chromium/u);
 assert.match(workflow, /if: failure\(\)[\s\S]*docker-qualification-ci\.sh diagnostics/u);

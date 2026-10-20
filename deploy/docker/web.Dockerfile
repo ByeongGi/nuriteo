@@ -1,4 +1,4 @@
-FROM docker.io/library/node:22.23.0-bookworm-slim@sha256:d9f850096136edbc402debdd8729579a288aac64574ada0ff4db26b6ae58b0b2 AS dependencies
+FROM docker.io/library/node:24.17.0-bookworm-slim@sha256:862263c612aa437e3037674b85419622a9d93bff80aa1eee5398dfe686375532 AS dependencies
 
 ARG NURITEO_SOURCE_DATE_EPOCH=0
 ARG BUILD_REVISION=unknown
@@ -43,7 +43,7 @@ COPY packages/workspace-runtime/assets/vendor/vite-8.2.0 packages/workspace-runt
 RUN pnpm --filter @nuriteo/web build \
     && find apps/web/.next -exec touch -h -d "@${SOURCE_DATE_EPOCH}" {} +
 
-FROM gcr.io/distroless/nodejs22-debian13:nonroot@sha256:ec2313763dd43931543bd03830466e0c409ce73a487e8d46f10db72d3b816c1c AS runtime
+FROM gcr.io/distroless/nodejs24-debian13:nonroot@sha256:55de7e48a8414e7aff825207c0b3c0f7db3b10133efc50d748560c27c9053be1 AS runtime
 
 ARG BUILD_VERSION=dev
 ARG BUILD_REVISION=unknown

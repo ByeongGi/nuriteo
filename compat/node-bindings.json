@@ -1,6 +1,6 @@
 {
-  "nodeVersion": "22.23.0",
-  "runtimeProfile": "node-22-browser-native-p3",
+  "nodeVersion": "24.17.0",
+  "runtimeProfile": "node-24-browser-native-p3",
   "bindings": {
     "fs": {
       "status": "partial",

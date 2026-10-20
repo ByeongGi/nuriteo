@@ -1,6 +1,6 @@
 export const NODE_PROFILE = Object.freeze({
-  name: "node-22-browser-native-p3",
-  nodeVersion: "22.23.0",
+  name: "node-24-browser-native-p3",
+  nodeVersion: "24.17.0",
   abiVersion: 1,
   csp: Object.freeze({
     unsafeEval: false,

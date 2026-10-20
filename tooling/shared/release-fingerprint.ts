@@ -9,9 +9,9 @@ export const FINGERPRINT_PATH = "docs/release/fingerprint.json";
 export const ASSET_MANIFEST_PATH = "dist/sdk/package/asset-manifest.json";
 
 export const RECOVERY_COMMANDS = [
-  "mise exec node@22.23.0 -- node tooling/release/package-sdk.ts --write-fingerprint",
-  "mise exec node@22.23.0 -- node tooling/checks/check-release-readiness.ts",
-  "mise exec node@22.23.0 -- node tooling/checks/check-release-provenance.ts"
+  "mise exec node@24.17.0 -- node tooling/release/package-sdk.ts --write-fingerprint",
+  "mise exec node@24.17.0 -- node tooling/checks/check-release-readiness.ts",
+  "mise exec node@24.17.0 -- node tooling/checks/check-release-provenance.ts"
 ];
 
 export function sha256File(file) {

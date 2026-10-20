@@ -4,7 +4,7 @@ import {
   createStorageLease,
   StorageLeaseError
 } from "../../browser-host/src/index.ts";
-import { createPreviewReliabilitySession } from "../../preview-service/src/reliability.ts";
+import { createPreviewReliabilitySession } from "../../workspace-runtime/src/reliability.ts";
 
 const lease = createStorageLease({ ttlMs: 30_000 });
 lease.acquire("tab-a");

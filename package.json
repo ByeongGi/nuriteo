@@ -5,7 +5,7 @@
   "type": "module",
   "packageManager": "pnpm@11.15.1",
   "engines": {
-    "node": ">=22.23.0 <23",
+    "node": ">=24.17.0 <25",
     "pnpm": ">=11.15.1 <12"
   },
   "scripts": {
@@ -122,7 +122,7 @@
     "@rspack/core": "2.2.4",
     "@rspack/dev-server": "1.2.1",
     "@sqlite.org/sqlite-wasm": "3.53.4-build1",
-    "@types/node": "^22.20.2",
+    "@types/node": "^24.19.2",
     "@types/react": "19.0.3",
     "@wasmer/sdk": "0.18.0",
     "client-only": "0.0.1",

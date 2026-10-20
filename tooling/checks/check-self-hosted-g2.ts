@@ -12,12 +12,12 @@ const [nodeMajor, nodeMinor, nodePatch] = nodeVersion;
 const diffBase = process.env.NURITEO_G2_DIFF_BASE ?? "main";
 
 if (
-  nodeMajor !== 22 ||
+  nodeMajor !== 24 ||
   nodeMinor === undefined ||
   nodePatch === undefined ||
-  nodeMinor < 23
+  nodeMinor < 17
 ) {
-  console.error(`[g2] FAIL runtime: Node >=22.23.0 <23 is required, received ${process.versions.node}`);
+  console.error(`[g2] FAIL runtime: Node >=24.17.0 <25 is required, received ${process.versions.node}`);
   process.exit(1);
 }
 

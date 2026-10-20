@@ -61,7 +61,7 @@ interface ActiveProcess {
 const MAX_PROTOCOL_BYTES = 64 * 1024;
 const MAX_ARGV_ENTRIES = 256;
 const OUTPUT_CHUNK_BYTES = 16 * 1024;
-const NODE_VERSION = "v22.23.0";
+const NODE_VERSION = "v24.17.0";
 
 export function createProcessWorkerRuntime(options: ProcessWorkerRuntimeOptions): {
   handleMessage(message: unknown): boolean;

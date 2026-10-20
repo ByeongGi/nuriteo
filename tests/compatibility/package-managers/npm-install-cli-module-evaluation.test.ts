@@ -123,7 +123,7 @@ const result = await evaluate({
   env: {
     HOME: "/home/webcontainer",
     PATH: "/usr/local/bin:/usr/bin:/bin",
-    npm_config_user_agent: `npm/${installed.version} node/v22.23.0 browser`
+    npm_config_user_agent: `npm/${installed.version} node/v24.17.0 browser`
   }
 });
 
@@ -157,7 +157,7 @@ const ciResult = await evaluate({
   env: {
     HOME: "/home/webcontainer",
     PATH: "/usr/local/bin:/usr/bin:/bin",
-    npm_config_user_agent: `npm/${installed.version} node/v22.23.0 browser`
+    npm_config_user_agent: `npm/${installed.version} node/v24.17.0 browser`
   }
 });
 

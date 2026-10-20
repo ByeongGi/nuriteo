@@ -13,7 +13,7 @@ if (rehearsal.version === baseline) {
 if (!rehearsal.darwinArm64Tarball?.sha256 || !rehearsal.linuxX64Tarball?.sha256) {
   throw new Error("rehearsal candidate must pin release artifact hashes");
 }
-if (rehearsal.status !== "rehearsed-not-promoted") {
+if (rehearsal.status !== "compatibility-lane-not-promoted") {
   throw new Error(`unexpected rehearsal status: ${rehearsal.status}`);
 }
 

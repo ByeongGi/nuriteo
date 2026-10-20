@@ -8,7 +8,7 @@ NURITEO는 GitHub 프로젝트나 템플릿을 브라우저에서 열고 설치,
 
 요구 사항:
 
-- Node.js 22.23 이상, 23 미만
+- Node.js 24.17 이상, 25 미만
 - pnpm 11.15 이상, 12 미만
 - Rust toolchain 1.97
 

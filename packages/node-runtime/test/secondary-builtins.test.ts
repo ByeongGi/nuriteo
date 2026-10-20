@@ -156,7 +156,7 @@ assert.deepEqual(moduleBuiltin._nodeModulePaths("/workspace/app"), moduleBuiltin
 assert.equal(moduleBuiltin.Module._resolveFilename("node:path"), "node:path");
 
 const processModule = requireBuiltin("process");
-assert.equal(processModule.version, "v22.23.0");
+assert.equal(processModule.version, "v24.17.0");
 assert.equal(processModule.features.typescript, false);
 assert.equal(processModule.features.require_module, true);
 assert.equal(processModule.execPath, "/usr/local/bin/node");

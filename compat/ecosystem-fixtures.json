@@ -42,7 +42,7 @@
   },
   "referenceNodeBaseline": {
     "status": "install-build-dev-preview-hmr-measured",
-    "node": ">=22.23.0 <23",
+    "node": ">=24.17.0 <25",
     "packageManagers": ["npm", "pnpm"],
     "commands": [
       "install",

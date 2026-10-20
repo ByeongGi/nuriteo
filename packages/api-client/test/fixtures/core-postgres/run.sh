@@ -159,7 +159,7 @@ curl --fail --silent --show-error \
 
 NURITEO_CLIENT_TEST_BASE_URL="http://127.0.0.1:${core_port}" \
 NURITEO_CLIENT_TEST_BOOTSTRAP_REQUIRED=true \
-  mise exec node@22.23.0 -- node packages/api-client/test/setup-live-contract.ts
+  mise exec node@24.17.0 -- node packages/api-client/test/setup-live-contract.ts
 
 NURITEO_BOOTSTRAP_ADMIN_EMAIL=admin@example.test \
 NURITEO_BOOTSTRAP_ADMIN_NAME='Fixture Administrator' \
@@ -168,9 +168,9 @@ NURITEO_BOOTSTRAP_ADMIN_PASSWORD_FILE="$fixture_dir/admin-password" \
 
 NURITEO_CLIENT_TEST_BASE_URL="http://127.0.0.1:${core_port}" \
 NURITEO_CLIENT_TEST_BOOTSTRAP_REQUIRED=false \
-  mise exec node@22.23.0 -- node packages/api-client/test/setup-live-contract.ts
+  mise exec node@24.17.0 -- node packages/api-client/test/setup-live-contract.ts
 
 NURITEO_CLIENT_TEST_BASE_URL="http://127.0.0.1:${core_port}" \
 NURITEO_CLIENT_TEST_EMAIL=admin@example.test \
 NURITEO_CLIENT_TEST_PASSWORD_FILE="$fixture_dir/admin-password" \
-  mise exec node@22.23.0 -- node packages/api-client/test/live-contract.ts
+  mise exec node@24.17.0 -- node packages/api-client/test/live-contract.ts

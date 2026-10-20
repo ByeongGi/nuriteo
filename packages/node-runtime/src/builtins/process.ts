@@ -114,7 +114,7 @@ export class BrowserProcess extends EventEmitter {
   execPath = "/usr/local/bin/node";
   platform = "linux";
   arch = "x64";
-  version = "v22.23.0";
+  version = "v24.17.0";
   features = Object.freeze({
     cached_builtins: false,
     debug: false,
@@ -129,7 +129,7 @@ export class BrowserProcess extends EventEmitter {
     uv: true
   });
   versions = Object.freeze({
-    node: "22.23.0",
+    node: "24.17.0",
     v8: "browser",
     uv: "browser",
     webcontainer: "1.0.0"

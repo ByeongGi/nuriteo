@@ -19,7 +19,7 @@ import {
   redactSecrets,
   validateRuntimeHeaders
 } from "../../browser-host/src/index.ts";
-import { createPreviewReliabilitySession } from "../../preview-service/src/reliability.ts";
+import { createPreviewReliabilitySession } from "../../workspace-runtime/src/reliability.ts";
 import {
   createPreviewRelay,
   createPreviewSessionRegistry

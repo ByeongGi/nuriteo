@@ -26,5 +26,5 @@
     "tooling/generators/build-next-csp-factory.ts",
     "packages/node-runtime/src/modules/cjs.ts"
   ],
-  "reproduce": "mise exec node@22.23.0 -- pnpm --filter @nuriteo/web test:preview-next-browser"
+  "reproduce": "mise exec node@24.17.0 -- pnpm --filter @nuriteo/web test:preview-next-browser"
 }

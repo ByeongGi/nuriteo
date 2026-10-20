@@ -12,7 +12,7 @@ Run from the repository root:
 packages/api-client/test/fixtures/core-organization/run.sh
 ```
 
-Set `CONTAINER_RUNTIME=docker` when Podman is not available. The fixture requires OpenSSL, curl with AWS SigV4 support, Cargo, and Node 22.23.0 through mise.
+Set `CONTAINER_RUNTIME=docker` when Podman is not available. The fixture requires OpenSSL, curl with AWS SigV4 support, Cargo, and Node 24.17.0 through mise.
 
 `NURITEO_CLIENT_TEST_EXTERNAL_URL` optionally sets a distinct public origin for
 Web/BFF fixtures. It must be an exact canonical absolute HTTP(S) origin such as

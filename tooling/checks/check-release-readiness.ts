@@ -29,8 +29,8 @@ const pnpmManifest = readJson("vendor/manifests/pnpm.json");
 const progress = fs.readFileSync("docs/archive/implementation-2026-09-15/PROGRESS.md", "utf8");
 const operations = fs.readFileSync("docs/release/operations.md", "utf8");
 
-assert(versions.runtimeBaseline.node.version === "22.23.0", "unexpected Node baseline");
-assert(versions.runtimeBaseline.node.rehearsalCandidate.status === "rehearsed-not-promoted", "Node candidate must not be promoted");
+assert(versions.runtimeBaseline.node.version === "24.17.0", "unexpected Node baseline");
+assert(versions.runtimeBaseline.node.rehearsalCandidate.status === "compatibility-lane-not-promoted", "Node candidate must remain in the compatibility lane");
 assert(npmManifest.version === "10.9.2", "unexpected npm baseline");
 assert(npmManifest.rehearsalCandidate.version === "10.9.8", "unexpected npm candidate");
 assert(npmManifest.rollbackArtifact.version === npmManifest.version, "npm rollback artifact mismatch");

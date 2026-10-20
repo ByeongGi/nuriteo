@@ -13,7 +13,7 @@ external_url_override=""
 if [[ -n "${NURITEO_CLIENT_TEST_EXTERNAL_URL+x}" ]]; then
   external_url_override_set=true
   if ! external_url_override="$(
-    mise exec node@22.23.0 -- node \
+    mise exec node@24.17.0 -- node \
       packages/api-client/test/fixtures/core-organization/validate-external-origin.mjs
   )"; then
     exit 2
@@ -226,5 +226,5 @@ if [[ "$external_url_override_set" == true ]]; then
   client_environment+=("NURITEO_CLIENT_TEST_EXTERNAL_URL=$external_url_override")
 fi
 env "${client_environment[@]}" \
-  mise exec node@22.23.0 -- node \
+  mise exec node@24.17.0 -- node \
     "${CLIENT_LIVE_CONTRACT:-packages/api-client/test/organization-live-contract.ts}"
