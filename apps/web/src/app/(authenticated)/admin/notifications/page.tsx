@@ -4,6 +4,7 @@ import type { Metadata } from "next";
 import { EntryUnavailable } from "../../../_components/entry-unavailable.tsx";
 import { safeRequestReference } from "../../../../lib/api/presentation-error.ts";
 import { createServerApiClient } from "../../../../lib/api/server-client.ts";
+import { AdminAccessRequired } from "../_components/admin-access-required.tsx";
 import { EmailDeliveryConsole } from "./email-delivery-console.tsx";
 
 export const metadata: Metadata = { title: "Email delivery" };
@@ -16,7 +17,7 @@ export default async function AdminNotificationsPage() {
       listEmailDeliveries(client, { state: "dead_letter", limit: 25 })
     ]);
     if (!current.data.user.is_instance_admin) {
-      return <main id="main-content" className="workspace-page"><h1>Administrator access required</h1></main>;
+      return <AdminAccessRequired description="Server authorization is required to inspect and retry email delivery." />;
     }
     return <EmailDeliveryConsole initial={deliveries.data} />;
   } catch (error) {

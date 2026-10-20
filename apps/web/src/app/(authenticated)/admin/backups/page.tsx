@@ -4,6 +4,7 @@ import type { Metadata } from "next";
 import { EntryUnavailable } from "../../../_components/entry-unavailable.tsx";
 import { safeRequestReference } from "../../../../lib/api/presentation-error.ts";
 import { createServerApiClient } from "../../../../lib/api/server-client.ts";
+import { AdminAccessRequired } from "../_components/admin-access-required.tsx";
 import { BackupConsole } from "./backup-console.tsx";
 
 export const metadata: Metadata = { title: "Backups" };
@@ -16,12 +17,7 @@ export default async function AdminBackupsPage() {
       getAdminBackups(client)
     ]);
     if (!current.data.user.is_instance_admin) {
-      return (
-        <main id="main-content" className="workspace-page">
-          <h1>Administrator access required</h1>
-          <p>Server authorization is required to manage instance backups.</p>
-        </main>
-      );
+      return <AdminAccessRequired description="Server authorization is required to manage instance backups." />;
     }
     return <BackupConsole initial={backups.data} />;
   } catch (error) {

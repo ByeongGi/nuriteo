@@ -4,6 +4,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { EntryUnavailable } from "../_components/entry-unavailable.tsx";
+import { ProductEntryShell } from "../_components/product-entry-shell.tsx";
 import { createServerApiClient } from "../../lib/api/server-client.ts";
 import { safeRequestReference } from "../../lib/api/presentation-error.ts";
 
@@ -36,15 +37,12 @@ export default async function SetupPage() {
   }
 
   return (
-    <main id="main-content" className="entry-page" tabIndex={-1}>
-      <section className="entry-card" aria-labelledby="setup-title">
-        <p className="eyebrow">Administrator setup</p>
-        <h1 id="setup-title">Finish setup from your server</h1>
-        <p className="entry-description">
-          For security, the first administrator can only be created with the NURITEO command-line
-          tool. This page never accepts or displays the bootstrap password.
-        </p>
-
+    <ProductEntryShell
+      description="보안을 위해 첫 관리자는 서버의 NURITEO 명령줄 도구에서만 생성할 수 있습니다. 이 화면은 부트스트랩 비밀번호를 받거나 표시하지 않습니다."
+      eyebrow="관리자 설정"
+      title="서버에서 설정을 완료하세요"
+      titleId="setup-title"
+    >
         <div className="command-panel" aria-labelledby="compose-command-title">
           <h2 id="compose-command-title">Docker Compose</h2>
           <p>Configure the bootstrap secret files on the host, then run:</p>
@@ -57,7 +55,6 @@ export default async function SetupPage() {
           </Link>
           <p>The check is made directly against Core and is never cached.</p>
         </div>
-      </section>
-    </main>
+    </ProductEntryShell>
   );
 }

@@ -4,6 +4,7 @@ import type { Metadata } from "next";
 import { EntryUnavailable } from "../../../_components/entry-unavailable.tsx";
 import { createServerApiClient } from "../../../../lib/api/server-client.ts";
 import { safeRequestReference } from "../../../../lib/api/presentation-error.ts";
+import { AdminAccessRequired } from "../_components/admin-access-required.tsx";
 import { ActivationInvitations } from "./activation-invitations.tsx";
 
 export const metadata: Metadata = { title: "Activation invitations" };
@@ -13,7 +14,7 @@ export default async function ActivationInvitationsPage() {
     const client = await createServerApiClient();
     const current = await getCurrentUser(client);
     if (!current.data.user.is_instance_admin) {
-      return <main id="main-content" className="workspace-page"><h1>Administrator access required</h1><p>Server authorization is required for invitation management.</p></main>;
+      return <AdminAccessRequired description="Server authorization is required for invitation management." />;
     }
     const invitations = await listActivationInvitations(client);
     return <ActivationInvitations invitations={invitations.data.items} />;

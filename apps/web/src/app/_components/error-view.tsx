@@ -3,6 +3,7 @@
 import Link from "next/link";
 
 import { Button } from "../../components/ui/button.tsx";
+import { ProductEntryShell } from "./product-entry-shell.tsx";
 
 interface ErrorViewProps {
   onRetry: () => void;
@@ -11,11 +12,13 @@ interface ErrorViewProps {
 
 export function ErrorView({ onRetry, reference }: ErrorViewProps) {
   return (
-    <main id="main-content" className="boundary-page" tabIndex={-1}>
-      <div className="boundary-card" role="alert" aria-labelledby="error-title">
-        <p className="eyebrow">Something went wrong</p>
-        <h1 id="error-title">This page could not be loaded safely.</h1>
-        <p>Your work has not been changed. Try the page again or return home.</p>
+    <ProductEntryShell
+      description="작업 내용은 변경되지 않았습니다. 페이지를 다시 시도하거나 홈으로 돌아가세요."
+      eyebrow="문제가 발생했습니다"
+      title="이 페이지를 안전하게 불러오지 못했습니다"
+      titleId="error-title"
+    >
+      <div role="alert">
         {reference ? <p className="boundary-reference">Reference: {reference}</p> : null}
         <div className="boundary-actions">
           <Button variant="primary" onClick={onRetry}>
@@ -26,6 +29,6 @@ export function ErrorView({ onRetry, reference }: ErrorViewProps) {
           </Link>
         </div>
       </div>
-    </main>
+    </ProductEntryShell>
   );
 }

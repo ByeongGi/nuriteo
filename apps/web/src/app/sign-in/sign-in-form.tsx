@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 
 import { Button } from "../../components/ui/button.tsx";
+import { ProductEntryShell } from "../_components/product-entry-shell.tsx";
 import { createBrowserApiClient } from "../../lib/api/browser-client.ts";
 import {
   classifySignInFailure,
@@ -70,12 +71,13 @@ export function SignInForm({ providers = [], oidcFailed = false }: { readonly pr
   }
 
   return (
-    <main id="main-content" className="entry-page" tabIndex={-1}>
-      <section className="entry-card entry-card--compact" aria-labelledby="sign-in-title">
-        <p className="eyebrow">Welcome back</p>
-        <h1 id="sign-in-title">Sign in to NURITEO</h1>
-        <p className="entry-description">Use the local account provided by your administrator.</p>
-
+    <ProductEntryShell
+      compact
+      description="회사 계정으로 계속하거나 관리자가 제공한 로컬 계정을 사용하세요."
+      eyebrow="다시 오신 것을 환영합니다"
+      title="NURITEO 로그인"
+      titleId="sign-in-title"
+    >
         {oidcFailed ? <div className="form-error" role="alert"><p>Identity-provider sign-in could not be completed. Try that Provider again or use your local account.</p></div> : null}
 
         {providers.length > 0 ? (
@@ -129,7 +131,6 @@ export function SignInForm({ providers = [], oidcFailed = false }: { readonly pr
             {isPending ? "Signing in…" : "Sign in"}
           </Button>
         </form>
-      </section>
-    </main>
+    </ProductEntryShell>
   );
 }

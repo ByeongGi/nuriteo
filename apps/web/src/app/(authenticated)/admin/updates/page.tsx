@@ -4,6 +4,7 @@ import type { Metadata } from "next";
 import { EntryUnavailable } from "../../../_components/entry-unavailable.tsx";
 import { safeRequestReference } from "../../../../lib/api/presentation-error.ts";
 import { createServerApiClient } from "../../../../lib/api/server-client.ts";
+import { AdminAccessRequired } from "../_components/admin-access-required.tsx";
 import { UpdateReadinessConsole } from "./update-readiness-console.tsx";
 import { getAdminUpdateHistory, getAdminUpdateReadiness } from "./update-model.ts";
 
@@ -14,12 +15,7 @@ export default async function AdminUpdatesPage() {
     const client = await createServerApiClient();
     const current = await getCurrentUser(client);
     if (!current.data.user.is_instance_admin) {
-      return (
-        <main id="main-content" className="workspace-page">
-          <h1>Administrator access required</h1>
-          <p>Server authorization is required to review or approve instance updates.</p>
-        </main>
-      );
+      return <AdminAccessRequired description="Server authorization is required to review or approve instance updates." />;
     }
     const [readiness, history] = await Promise.all([
       getAdminUpdateReadiness(client),

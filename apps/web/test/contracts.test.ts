@@ -124,8 +124,13 @@ function testSafeAccessibleBoundaries(): void {
   assert.match(loading, /aria-live="polite"/u);
 
   const notFound = read("src/app/not-found.tsx");
-  assert.match(notFound, /<h1/u);
+  assert.match(notFound, /<ProductEntryShell/u);
+  assert.match(notFound, /titleId="not-found-title"/u);
   assert.match(notFound, /href="\/"/u);
+
+  const productEntryShell = read("src/app/_components/product-entry-shell.tsx");
+  assert.match(productEntryShell, /<h1 id=\{titleId\}>/u);
+  assert.match(productEntryShell, /aria-labelledby=\{titleId\}/u);
 
   for (const errorFile of ["src/app/error.tsx", "src/app/global-error.tsx"] as const) {
     const source = read(errorFile);

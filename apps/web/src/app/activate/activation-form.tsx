@@ -6,6 +6,7 @@ import { useState } from "react";
 import type { FormEvent } from "react";
 
 import { Button } from "../../components/ui/button.tsx";
+import { ProductEntryShell } from "../_components/product-entry-shell.tsx";
 import { createBrowserApiClient } from "../../lib/api/browser-client.ts";
 import { collaborationError } from "../../lib/api/browser-security.ts";
 import { useExclusiveMutation } from "../../lib/use-exclusive-mutation.ts";
@@ -43,11 +44,12 @@ export function ActivationForm() {
   }
 
   return (
-    <main id="main-content" className="entry-page" tabIndex={-1}>
-      <section className="entry-card" aria-labelledby="activation-title">
-        <p className="eyebrow">Invitation</p>
-        <h1 id="activation-title">Activate your account</h1>
-        <p className="entry-description">Choose your profile and password. You will sign in separately after activation.</p>
+    <ProductEntryShell
+      description="프로필과 비밀번호를 설정한 뒤 새 계정으로 로그인할 수 있습니다."
+      eyebrow="초대받은 워크스페이스"
+      title="계정을 활성화하세요"
+      titleId="activation-title"
+    >
         <form className="sign-in-form" onSubmit={handleSubmit} aria-busy={mutation.isPending}>
           <label className="field-group">Email<input name="email" type="email" autoComplete="username" required maxLength={320} disabled={mutation.isPending} /></label>
           <label className="field-group">Display name<input name="displayName" required maxLength={200} disabled={mutation.isPending} /></label>
@@ -55,7 +57,6 @@ export function ActivationForm() {
           {error ? <p className="form-error" role="alert">{error}</p> : null}
           <Button type="submit" variant="primary" disabled={mutation.isPending}>{mutation.isPending ? "Activating…" : "Activate account"}</Button>
         </form>
-      </section>
-    </main>
+    </ProductEntryShell>
   );
 }

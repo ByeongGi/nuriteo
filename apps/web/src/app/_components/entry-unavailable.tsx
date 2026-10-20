@@ -1,5 +1,7 @@
 import Link from "next/link";
 
+import { ProductEntryShell } from "./product-entry-shell.tsx";
+
 interface EntryUnavailableProps {
   readonly description: string;
   readonly reference?: string | undefined;
@@ -14,16 +16,16 @@ export function EntryUnavailable({
   title
 }: EntryUnavailableProps) {
   return (
-    <main id="main-content" className="entry-page" tabIndex={-1}>
-      <section className="entry-card" aria-labelledby="entry-error-title">
-        <p className="eyebrow">Connection required</p>
-        <h1 id="entry-error-title">{title}</h1>
-        <p className="entry-description">{description}</p>
+    <ProductEntryShell
+      description={description}
+      eyebrow="연결 확인 필요"
+      title={title}
+      titleId="entry-error-title"
+    >
         {reference ? <p className="entry-reference">Request reference: {reference}</p> : null}
         <Link className="link-button" href={retryHref}>
           Try again
         </Link>
-      </section>
-    </main>
+    </ProductEntryShell>
   );
 }
