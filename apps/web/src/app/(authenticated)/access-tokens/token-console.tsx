@@ -25,6 +25,20 @@ const SCOPES: readonly AccessTokenScope[] = [
   "project:read", "project:write", "project:publish", "project:manage", "git:read", "git:write"
 ];
 
+const SCOPE_DESCRIPTIONS: Readonly<Record<AccessTokenScope, string>> = {
+  "project:read": "프로젝트와 파일 조회",
+  "project:write": "프로젝트 콘텐츠 변경",
+  "project:publish": "공개 예제 배포",
+  "project:manage": "프로젝트 설정과 권한 관리",
+  "git:read": "Git 상태와 기록 조회",
+  "git:write": "Git 변경사항 반영"
+};
+
+type PendingTokenAction = Readonly<{
+  action: "revoke" | "rotate";
+  token: AccessToken;
+}>;
+
 export function AccessTokenConsole({ initialTokens, target }: {
   readonly initialTokens: readonly AccessToken[];
   readonly target: AccessTokenTarget;
@@ -32,6 +46,7 @@ export function AccessTokenConsole({ initialTokens, target }: {
   const mutation = useExclusiveMutation();
   const [tokens, setTokens] = useState(initialTokens);
   const [issued, setIssued] = useState<IssuedAccessToken>();
+  const [pendingAction, setPendingAction] = useState<PendingTokenAction>();
   const [feedback, setFeedback] = useState<{ readonly error: boolean; readonly text: string }>();
 
   async function issue(event: FormEvent<HTMLFormElement>) {
@@ -40,6 +55,10 @@ export function AccessTokenConsole({ initialTokens, target }: {
     const data = new FormData(form);
     const scopes = SCOPES.filter((scope) => data.getAll("scope").includes(scope));
     const expiry = String(data.get("expiryDays") ?? "").trim();
+    if (scopes.length === 0) {
+      setFeedback({ error: true, text: "토큰에 필요한 권한 범위를 하나 이상 선택하세요." });
+      return;
+    }
     await mutation.run(async () => {
       setFeedback(undefined);
       setIssued(undefined);
@@ -51,6 +70,7 @@ export function AccessTokenConsole({ initialTokens, target }: {
         }, { csrfToken: readCsrfCredential() });
         setTokens((current) => [result.data.token, ...current]);
         setIssued(result.data);
+        setPendingAction(undefined);
         form.reset();
       } catch (error) {
         setFeedback(tokenFailure(error));
@@ -67,6 +87,7 @@ export function AccessTokenConsole({ initialTokens, target }: {
           createBrowserApiClient(), target, token.id, { csrfToken: readCsrfCredential() }
         );
         replace(result.data);
+        setPendingAction(undefined);
         setFeedback({ error: false, text: `${token.name} was revoked immediately.` });
       } catch (error) {
         setFeedback(tokenFailure(error));
@@ -89,6 +110,7 @@ export function AccessTokenConsole({ initialTokens, target }: {
             : candidate)
         ]);
         setIssued(result.data);
+        setPendingAction(undefined);
       } catch (error) {
         setFeedback(tokenFailure(error));
       }
@@ -109,58 +131,79 @@ export function AccessTokenConsole({ initialTokens, target }: {
     }
   }
 
+  function confirmPendingAction() {
+    if (pendingAction === undefined) return;
+    if (pendingAction.action === "rotate") {
+      void rotate(pendingAction.token);
+      return;
+    }
+    void revoke(pendingAction.token);
+  }
+
   return (
     <main id="main-content" className="workspace-page access-token-page">
       <header className="workspace-page__intro">
         <p className="eyebrow">{target.kind === "personal" ? "Personal automation" : "Project automation"}</p>
-        <h1>Access tokens</h1>
-        <p>Issue narrowly scoped credentials. NURITEO shows a token value once and stores only its hash.</p>
+        <h1>액세스 토큰</h1>
+        <p>필요한 권한만 가진 자격 증명을 발급하세요. NURITEO shows a token value once and stores only its hash.</p>
       </header>
 
       <nav className="access-token-context" aria-label="Token context">
-        <Link href="/access-tokens" aria-current={target.kind === "personal" ? "page" : undefined}>Personal tokens</Link>
-        {target.kind === "project" ? <span>Project {target.projectId}</span> : <span>Open a Project to manage its Project tokens.</span>}
+        <Link href="/access-tokens" aria-current={target.kind === "personal" ? "page" : undefined}>개인 토큰</Link>
+        {target.kind === "project" ? <span>프로젝트 {target.projectId}</span> : <span>프로젝트 토큰은 프로젝트 상세 화면에서 관리할 수 있습니다.</span>}
       </nav>
 
       {issued === undefined ? null : (
         <section className="access-token-secret" aria-labelledby="issued-token-title">
-          <div><p className="eyebrow">Shown once</p><h2 id="issued-token-title">Copy this token now</h2></div>
+          <div><p className="eyebrow">Shown once</p><h2 id="issued-token-title">지금 토큰을 복사하세요</h2><p>이 화면을 벗어나면 토큰 값을 다시 확인할 수 없습니다.</p></div>
           <code>{issued.plaintext}</code>
           <div className="access-token-actions">
-            <Button type="button" variant="primary" onClick={() => void copyIssued()}>Copy token</Button>
-            <Button type="button" onClick={() => setIssued(undefined)}>I stored it securely</Button>
+            <Button type="button" variant="primary" onClick={() => void copyIssued()}>토큰 복사</Button>
+            <Button type="button" onClick={() => setIssued(undefined)}>안전하게 저장했습니다</Button>
           </div>
         </section>
       )}
 
       <section className="access-token-issue" aria-labelledby="issue-token-title">
-        <div><p className="eyebrow">Least privilege</p><h2 id="issue-token-title">Issue a token</h2><p>Issuing, rotating, and revoking require a recently authenticated session.</p></div>
+        <div><p className="eyebrow">LEAST PRIVILEGE</p><h2 id="issue-token-title">새 토큰 발급</h2><p>Issuing, rotating, and revoking require a recently authenticated session.</p></div>
         <form className="collaboration-form" onSubmit={issue} aria-busy={mutation.isPending}>
-          <label className="field-group">Token name<input name="name" required maxLength={120} disabled={mutation.isPending} /></label>
-          <label className="field-group">Expiry in days <span>(optional)</span><input name="expiryDays" type="number" min="1" max="365" inputMode="numeric" disabled={mutation.isPending} /></label>
-          <fieldset className="access-token-scopes"><legend>Scopes</legend>{SCOPES.map((scope) => <label key={scope}><input type="checkbox" name="scope" value={scope} disabled={mutation.isPending} /><span>{scope}</span></label>)}</fieldset>
-          <Button type="submit" variant="primary" disabled={mutation.isPending}>{mutation.isPending ? "Working…" : "Issue token"}</Button>
+          <label className="field-group">토큰 이름<input name="name" placeholder="preview-deploy" required maxLength={120} disabled={mutation.isPending} /><small>사용 목적이 드러나는 이름을 권장합니다.</small></label>
+          <label className="field-group">만료 기간 <span>(일)</span><input name="expiryDays" type="number" min="1" max="365" inputMode="numeric" defaultValue="30" disabled={mutation.isPending} /><small>30일을 권장하며 최대 365일까지 설정할 수 있습니다.</small></label>
+          <fieldset className="access-token-scopes"><legend>권한 범위 <small>하나 이상 선택</small></legend>{SCOPES.map((scope) => <label key={scope}><input type="checkbox" name="scope" value={scope} disabled={mutation.isPending} /><span><code>{scope}</code><small>{SCOPE_DESCRIPTIONS[scope]}</small></span></label>)}</fieldset>
+          <Button type="submit" variant="primary" disabled={mutation.isPending}>{mutation.isPending ? "처리 중…" : "토큰 발급"}</Button>
         </form>
       </section>
 
       <section className="access-token-list" aria-labelledby="token-list-title">
-        <div><p className="eyebrow">Credential inventory</p><h2 id="token-list-title">Tokens</h2></div>
-        {tokens.length === 0 ? <p>No tokens have been issued in this context.</p> : (
+        <div><p className="eyebrow">CREDENTIAL INVENTORY</p><h2 id="token-list-title">발급된 토큰</h2><p>사용하지 않는 토큰은 즉시 폐기하세요.</p></div>
+        {tokens.length === 0 ? <div className="access-token-empty"><strong>발급된 토큰이 없습니다.</strong><p>위 양식에서 필요한 권한만 선택해 첫 토큰을 발급하세요.</p></div> : (
           <ul className="record-list">
             {tokens.map((token) => <li key={token.id}>
-              <div><strong>{token.name}</strong><span><code>{token.prefix}…</code> · {token.status} · expires {formatDate(token.expiresAt)}</span><small>{token.scopes.length === 0 ? "No scopes" : token.scopes.join(", ")}{token.lastUsedAt === null ? " · never used" : ` · last used ${formatDate(token.lastUsedAt)}`}</small></div>
-              {token.status === "active" ? <div className="record-actions"><Button type="button" disabled={mutation.isPending} onClick={() => void rotate(token)}>Rotate</Button><Button type="button" variant="danger" disabled={mutation.isPending} onClick={() => void revoke(token)}>Revoke</Button></div> : null}
+              <div><strong>{token.name}</strong><span><code>{token.prefix}…</code> · {tokenStatusLabel(token.status)} · {formatDate(token.expiresAt)} 만료</span><small>{token.scopes.length === 0 ? "권한 없음" : token.scopes.join(", ")}{token.lastUsedAt === null ? " · 사용 기록 없음" : ` · 마지막 사용 ${formatDate(token.lastUsedAt)}`}</small></div>
+              {token.status === "active" ? <div className="record-actions"><Button type="button" disabled={mutation.isPending} onClick={() => setPendingAction({ action: "rotate", token })}>교체</Button><Button type="button" variant="danger" disabled={mutation.isPending} onClick={() => setPendingAction({ action: "revoke", token })}>폐기</Button></div> : null}
             </li>)}
           </ul>
         )}
       </section>
+      {pendingAction === undefined ? null : (
+        <section className="access-token-confirmation" role="alertdialog" aria-labelledby="token-confirmation-title" aria-describedby="token-confirmation-description">
+          <div><p className="eyebrow">확인 필요</p><h2 id="token-confirmation-title">{pendingAction.action === "rotate" ? "토큰을 교체할까요?" : "토큰을 폐기할까요?"}</h2><p id="token-confirmation-description"><strong>{pendingAction.token.name}</strong>을 사용하는 자동화는 기존 자격 증명으로 더 이상 접근할 수 없습니다.</p></div>
+          <div className="access-token-actions"><Button type="button" onClick={() => setPendingAction(undefined)}>취소</Button><Button type="button" variant={pendingAction.action === "revoke" ? "danger" : "primary"} disabled={mutation.isPending} onClick={confirmPendingAction}>{mutation.isPending ? "처리 중…" : pendingAction.action === "rotate" ? "교체하고 새 토큰 보기" : "토큰 폐기"}</Button></div>
+        </section>
+      )}
       {feedback ? <p className={`notification-feedback notification-feedback--${feedback.error ? "error" : "success"}`} role={feedback.error ? "alert" : "status"}>{feedback.text}</p> : null}
     </main>
   );
 }
 
 function formatDate(value: string) {
-  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
+  return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
+}
+
+function tokenStatusLabel(status: AccessToken["status"]): string {
+  if (status === "revoked") return "폐기됨";
+  if (status === "expired") return "만료됨";
+  return "활성";
 }
 
 function tokenFailure(error: unknown): { readonly error: true; readonly text: string } {

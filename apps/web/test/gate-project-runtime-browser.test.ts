@@ -151,6 +151,7 @@ try {
     await staleAfterFailure.close();
 
     await page.getByRole("button", { name: "Stop workspace" }).click();
+    if (await page.getByRole("button", { name: "초안을 버리고 종료" }).count()) await page.getByRole("button", { name: "초안을 버리고 종료" }).click();
     await page.getByRole("button", { name: "Start workspace" }).waitFor({ timeout: 10_000 });
     await page.waitForFunction(() => window.__nuriteoGateWorkerProbe.active === 0);
     await page.getByRole("button", { name: "Start workspace" }).click();
@@ -169,6 +170,7 @@ try {
     await recoveredFrame.getByRole("button", { name: "GATE003 recovered:1" }).waitFor({ timeout: 20_000 });
 
     await page.getByRole("button", { name: "Stop workspace" }).click();
+    if (await page.getByRole("button", { name: "초안을 버리고 종료" }).count()) await page.getByRole("button", { name: "초안을 버리고 종료" }).click();
     await page.getByRole("button", { name: "Start workspace" }).waitFor({ timeout: 10_000 });
     await page.waitForFunction(() => window.__nuriteoGateWorkerProbe.active === 0);
     assert.equal(await previewRegion.locator("iframe").count(), 0);

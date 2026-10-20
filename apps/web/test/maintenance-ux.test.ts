@@ -55,7 +55,7 @@ try {
   assert.match(consoleSource, /Recent administrator reauthentication is required/u);
   assert.match(consoleSource, /drain timeout stays fail-closed/iu);
   assert.match(consoleSource, /aria-busy=\{mutation\.isPending\}/u);
-  assert.match(shell, /Projects are read only while an administrator completes maintenance/u);
+  assert.match(shell, /관리 작업이 끝날 때까지 프로젝트는 읽기 전용입니다/u);
   assert.doesNotMatch(`${page}\n${consoleSource}\n${shell}`, /dangerouslySetInnerHTML|localStorage|sessionStorage/u);
 } finally {
   globalThis.fetch = originalFetch;

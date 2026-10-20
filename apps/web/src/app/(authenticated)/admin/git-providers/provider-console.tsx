@@ -6,6 +6,7 @@ import { useState } from "react";
 import type { FormEvent } from "react";
 
 import { Button } from "../../../../components/ui/button.tsx";
+import { ConfirmationDialog } from "../../../../components/ui/confirmation-dialog.tsx";
 import { createBrowserApiClient } from "../../../../lib/api/browser-client.ts";
 import { readCsrfCredential } from "../../../../lib/api/browser-security.ts";
 import { useExclusiveMutation } from "../../../../lib/use-exclusive-mutation.ts";
@@ -14,6 +15,7 @@ import { IntegrationCaConsole } from "../_components/integration-ca-console.tsx"
 export function GitProviderConsole({ initialProviders }: { readonly initialProviders: readonly GitProviderAdmin[] }) {
   const [providers, setProviders] = useState(initialProviders);
   const [feedback, setFeedback] = useState<{ error: boolean; text: string }>();
+  const [pendingDeletion, setPendingDeletion] = useState<GitProviderAdmin>();
   const mutation = useExclusiveMutation();
   const options = () => ({ csrfToken: readCsrfCredential() });
   const replace = (provider: GitProviderAdmin) => setProviders((items) => items.map((item) => item.id === provider.id ? provider : item));
@@ -51,9 +53,8 @@ export function GitProviderConsole({ initialProviders }: { readonly initialProvi
   }
 
   async function remove(provider: GitProviderAdmin) {
-    if (!window.confirm(`Permanently delete ${provider.displayName}?`)) return;
     await mutation.run(async () => {
-      try { await deleteGitProvider(createBrowserApiClient(), provider.id, provider.configVersion, options()); setProviders((items) => items.filter((item) => item.id !== provider.id)); }
+      try { await deleteGitProvider(createBrowserApiClient(), provider.id, provider.configVersion, options()); setProviders((items) => items.filter((item) => item.id !== provider.id)); setPendingDeletion(undefined); }
       catch (error) { setFeedback(failure(error)); }
     });
   }
@@ -62,8 +63,9 @@ export function GitProviderConsole({ initialProviders }: { readonly initialProvi
     <header className="workspace-page__intro"><p className="eyebrow">Instance Git transport</p><h1>Git providers</h1><p>Register exact HTTPS origins. User credentials remain separate and are never displayed here.</p></header>
     <section aria-labelledby="add-git-provider"><h2 id="add-git-provider">Add Git provider</h2><ProviderForm onSubmit={create} disabled={mutation.isPending} /></section>
     <section id="git-provider-ca" aria-labelledby="git-provider-ca-title"><h2 id="git-provider-ca-title">Private certificate authorities</h2><p>Private CA trust is managed per provider before activation. Certificate contents are accepted once and never displayed again.</p></section>
-    <section aria-labelledby="git-provider-list"><h2 id="git-provider-list">Configured providers</h2>{providers.length === 0 ? <p>No Git provider is configured.</p> : <ul className="record-list">{providers.map((provider) => <li key={provider.id}><div><strong>{provider.displayName}</strong><span>{provider.state}</span><small>{provider.kind} · {provider.host}:{provider.port} · configuration v{provider.configVersion}</small></div>{provider.state === "disabled" ? <ProviderForm provider={provider} onSubmit={(event) => void update(event, provider)} disabled={mutation.isPending} /> : null}<IntegrationCaConsole type="git_provider" integrationId={provider.id} /><div className="record-actions">{provider.state === "active" ? <Button onClick={() => void execute(async () => (await disableGitProvider(createBrowserApiClient(), provider.id, provider.configVersion, options())).data, "Provider disabled immediately.")} disabled={mutation.isPending}>Disable</Button> : <Button variant="primary" onClick={() => void execute(async () => (await activateGitProvider(createBrowserApiClient(), provider.id, provider.configVersion, options())).data, "Provider validated and activated.")} disabled={mutation.isPending}>Validate and activate</Button>}<Button variant="danger" onClick={() => void remove(provider)} disabled={mutation.isPending || provider.state !== "disabled"}>Delete</Button></div></li>)}</ul>}</section>
+    <section aria-labelledby="git-provider-list"><h2 id="git-provider-list">Configured providers</h2>{providers.length === 0 ? <p>No Git provider is configured.</p> : <ul className="record-list">{providers.map((provider) => <li key={provider.id}><div><strong>{provider.displayName}</strong><span>{provider.state}</span><small>{provider.kind} · {provider.host}:{provider.port} · configuration v{provider.configVersion}</small></div>{provider.state === "disabled" ? <ProviderForm provider={provider} onSubmit={(event) => void update(event, provider)} disabled={mutation.isPending} /> : null}<IntegrationCaConsole type="git_provider" integrationId={provider.id} /><div className="record-actions">{provider.state === "active" ? <Button onClick={() => void execute(async () => (await disableGitProvider(createBrowserApiClient(), provider.id, provider.configVersion, options())).data, "Provider disabled immediately.")} disabled={mutation.isPending}>Disable</Button> : <Button variant="primary" onClick={() => void execute(async () => (await activateGitProvider(createBrowserApiClient(), provider.id, provider.configVersion, options())).data, "Provider validated and activated.")} disabled={mutation.isPending}>Validate and activate</Button>}<Button variant="danger" onClick={() => setPendingDeletion(provider)} disabled={mutation.isPending || provider.state !== "disabled"}>Delete</Button></div></li>)}</ul>}</section>
     {feedback ? <p role={feedback.error ? "alert" : "status"}>{feedback.text}</p> : null}
+    <ConfirmationDialog busy={mutation.isPending} confirmLabel={mutation.isPending ? "삭제 중…" : "Provider 삭제"} description={`${pendingDeletion?.displayName ?? "선택한 Provider"} 설정과 인증서 신뢰 구성이 영구적으로 삭제됩니다.`} open={pendingDeletion !== undefined} title="Git Provider를 삭제할까요?" onCancel={() => setPendingDeletion(undefined)} onConfirm={() => { if (pendingDeletion) void remove(pendingDeletion); }} />
   </main>;
 }
 

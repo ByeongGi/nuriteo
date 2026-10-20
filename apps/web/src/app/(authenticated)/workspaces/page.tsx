@@ -15,7 +15,7 @@ import {
 } from "../../../lib/workspace-selection.ts";
 
 export const metadata: Metadata = {
-  title: "Workspaces"
+  title: "워크스페이스"
 };
 
 interface WorkspacesPageProps {
@@ -47,28 +47,29 @@ export default async function WorkspacesPage({ searchParams }: WorkspacesPagePro
       return (
         <main id="main-content" className="workspace-page" tabIndex={-1}>
           <section className="workspace-empty" aria-labelledby="workspace-empty-title">
-            <p className="eyebrow">No Workspace available</p>
-            <h1 id="workspace-empty-title">Ask an administrator for access</h1>
-            <p>
-              Your account is active, but it does not currently have a Personal or Organization
-              Workspace.
-            </p>
+            <p className="eyebrow">사용 가능한 워크스페이스 없음</p>
+            <h1 id="workspace-empty-title">관리자에게 접근 권한을 요청하세요</h1>
+            <p>계정은 활성화되었지만 현재 사용할 수 있는 개인 또는 조직 워크스페이스가 없습니다.</p>
             <Link className="link-button" href="/workspaces">
-              Retry Workspace access
+              접근 권한 다시 확인
             </Link>
           </section>
         </main>
       );
     }
+    const activeScope = selectedScope ?? workspaces[0]!.storageScopeId;
 
     return (
-      <main id="main-content" className="workspace-page" tabIndex={-1}>
-        <header className="workspace-page__intro">
-          <p className="eyebrow">Choose your context</p>
-          <h1>Workspaces</h1>
-          <p>
-            Personal work stays with your account. Organization work is shared with its members.
-          </p>
+      <main id="main-content" className="workspace-page workspace-dashboard" tabIndex={-1}>
+        <header className="workspace-dashboard__header">
+          <div>
+            <p className="eyebrow">NURITEO WORKSPACE</p>
+            <h1>어떤 작업을 이어갈까요?</h1>
+            <p>개인 작업과 조직 프로젝트를 한곳에서 선택하고 이어서 작업하세요.</p>
+          </div>
+          <Link className="link-button workspace-dashboard__primary" href={`/projects?workspace=${encodeURIComponent(activeScope)}`}>
+            프로젝트 열기
+          </Link>
         </header>
 
         {invitationStatus ? (
@@ -77,11 +78,14 @@ export default async function WorkspacesPage({ searchParams }: WorkspacesPagePro
           </p>
         ) : null}
 
-        <nav className="workspace-selector" aria-labelledby="workspace-selector-title">
-          <h2 id="workspace-selector-title">Available Workspaces</h2>
+        <nav className="workspace-selector workspace-selector--dashboard" aria-labelledby="workspace-selector-title">
+          <header>
+            <div><h2 id="workspace-selector-title">워크스페이스</h2><p>작업할 공간을 선택하세요.</p></div>
+            <span>{workspaces.length}개</span>
+          </header>
           <ul>
             {workspaces.map((workspace) => {
-              const isSelected = workspace.storageScopeId === selectedScope;
+              const isSelected = workspace.storageScopeId === activeScope;
               const ownerLabel = workspaceOwnerLabel(workspace);
               return (
                 <li key={workspace.storageScopeId}>
@@ -92,10 +96,10 @@ export default async function WorkspacesPage({ searchParams }: WorkspacesPagePro
                   >
                     <span className="workspace-option__copy">
                       <strong>{workspace.displayLabel}</strong>
-                      <span>{ownerLabel} Workspace</span>
+                      <span>{ownerLabel} 워크스페이스</span>
                     </span>
                     <span className="workspace-option__state" aria-hidden={!isSelected}>
-                      {isSelected ? "Current" : "Select"}
+                      {isSelected ? "현재 선택됨" : "선택"}
                     </span>
                   </Link>
                 </li>
@@ -103,6 +107,15 @@ export default async function WorkspacesPage({ searchParams }: WorkspacesPagePro
             })}
           </ul>
         </nav>
+
+        <section className="workspace-dashboard__shortcuts" aria-labelledby="workspace-shortcuts-title">
+          <header><h2 id="workspace-shortcuts-title">빠른 이동</h2><p>자주 사용하는 관리 화면으로 이동합니다.</p></header>
+          <div>
+            <Link href={`/projects?workspace=${encodeURIComponent(activeScope)}`}><span>P</span><strong>프로젝트</strong><small>코드와 실행 환경 관리</small></Link>
+            <Link href="/organizations"><span>O</span><strong>조직</strong><small>멤버와 팀 권한 관리</small></Link>
+            <Link href="/notifications"><span>●</span><strong>알림</strong><small>최근 변경 사항 확인</small></Link>
+          </div>
+        </section>
       </main>
     );
   } catch (error) {

@@ -64,8 +64,8 @@ function testAccessibleStateContract(): void {
 
   assert.match(page, /<nav[^>]+aria-labelledby="workspace-selector-title"/u);
   assert.match(page, /aria-current=\{isSelected \? "page" : undefined\}/u);
-  assert.match(page, /Personal or Organization/u);
-  assert.match(page, /Ask an administrator for access/u);
+  assert.match(page, /개인 또는 조직 워크스페이스/u);
+  assert.match(page, /관리자에게 접근 권한을 요청하세요/u);
   assert.match(loading, /aria-busy="true"/u);
   assert.match(loading, /aria-live="polite"/u);
   assert.match(loading, /Loading Workspaces/u);

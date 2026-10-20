@@ -48,6 +48,20 @@ const core = http.createServer(async (request, response) => {
     assert.ok(request.headers.origin?.startsWith("http://127.0.0.1:"));
   }
   if (request.method === "GET" && requestPath === "/api/v1/me") return json(response, me(session));
+  if (request.method === "GET" && requestPath === "/api/v1/mfa") return json(response, {
+    localAccount: true,
+    enrolled: true,
+    pendingEnrollment: false,
+    recoveryCodesRemaining: 8,
+    policyMode: "off",
+    gracePeriodDays: 7,
+    required: false,
+    deadlineAt: null,
+    restricted: false,
+    notificationState: "none"
+  });
+  if (request.method === "GET" && requestPath.startsWith("/api/v1/notifications")) return json(response, { items: [], nextCursor: null, unreadCount: 0 });
+  if (request.method === "GET" && requestPath === "/api/v1/maintenance") return json(response, { readOnly: false, phase: "idle" });
   if (request.method === "GET" && requestPath === "/api/v1/me/workspaces") return json(response, { workspaces: workspaces(session) });
   if (request.method === "GET" && requestPath === `/api/v1/organizations/${organizationId}/members`) {
     assert.equal(session, "admin");
@@ -173,6 +187,11 @@ try {
     assert.equal((await createResponse).status(), 201);
     await admin.getByRole("heading", { name: "Alpha Project", exact: true }).waitFor();
     assert.equal(new URL(admin.url()).searchParams.get("project"), projectId);
+    await admin.setViewportSize({ width: 390, height: 844 });
+    assert.equal(await admin.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true);
+    const mobileIdeBounds = await admin.locator(".project-ide-shell").boundingBox();
+    assert.ok(mobileIdeBounds && mobileIdeBounds.y < 844, "the selected Project IDE must appear in the first mobile viewport");
+    await admin.setViewportSize({ width: 1600, height: 1100 });
 
     await admin.getByRole("link", { name: "Admin Personal" }).click();
     await admin.getByText("Select a Project").waitFor();
@@ -305,10 +324,10 @@ try {
     await member.goto(`${projectsUrl}&project=${projectId}`, { waitUntil: "networkidle" });
     assert.equal(await member.getByText("Renamed Project", { exact: true }).count(), 0);
 
-    await admin.getByRole("link", { name: "all", exact: true }).click();
+    await admin.getByRole("link", { name: "전체", exact: true }).click();
     await admin.locator(".project-sidebar .record-list").getByText("Renamed Project", { exact: true }).click();
     await admin.getByRole("button", { name: "Archive" }).click();
-    await admin.locator(".project-sidebar .record-list li", { hasText: "Renamed Project" }).getByText(/archived/u).waitFor();
+    await admin.locator(".project-sidebar .record-list li", { hasText: "Renamed Project" }).getByText(/보관/u).waitFor();
     await admin.getByLabel(/Type Renamed Project to delete/u).fill("Renamed Project");
     await admin.getByRole("button", { name: "Delete Project" }).click();
     await admin.waitForURL((url) => !url.searchParams.has("project"));

@@ -5,13 +5,16 @@ import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 
 import { Button } from "../../../components/ui/button.tsx";
+import { ConfirmationDialog } from "../../../components/ui/confirmation-dialog.tsx";
 import { createBrowserApiClient } from "../../../lib/api/browser-client.ts";
 import { readCsrfCredential } from "../../../lib/api/browser-security.ts";
 import { createRetryableLazyFeature } from "../../../lib/retryable-lazy-feature.ts";
+import { useUnsavedChangesGuard } from "../../../lib/use-unsaved-changes-guard.ts";
 import type {
   RuntimeAdapter,
   RuntimeRecoveryActionKind,
   RuntimeViewState,
+  RuntimeWorkspaceFile,
   RuntimeWorkspaceState
 } from "../../../runtime/runtime-adapter.ts";
 import { resolveRuntimeAssetRevision } from "../../../runtime/runtime-assets.ts";
@@ -21,6 +24,7 @@ import type { PreviewOriginConfiguration } from "../../../runtime/preview-origin
 import type { SubdomainPreviewBridge } from "../../../runtime/subdomain-preview-bridge.ts";
 import { ProjectHistoryPanel } from "./project-history-panel.tsx";
 import type { RestoredProjectHead } from "./project-history-panel.tsx";
+import { useProjectFileSearch } from "./use-project-file-search.ts";
 
 const EMPTY_RUNTIME_STATE: RuntimeViewState = {
   generation: 0,
@@ -38,6 +42,8 @@ const MAX_TERMINAL_COMMAND_CHARS = 2_048;
 const RUNTIME_BOOT_TIMEOUT_MS = 10_000;
 const RUNTIME_RELAY_TIMEOUT_MS = 10_000;
 const RUNTIME_MEMORY_LIMIT_BYTES = 512 * 1024 * 1024;
+const FILE_LIST_BATCH_SIZE = 200;
+const EMPTY_WORKSPACE_FILES: readonly RuntimeWorkspaceFile[] = [];
 
 type RuntimeFeature = typeof import("../../../runtime/runtime-adapter.ts");
 const runtimeFeature = createRetryableLazyFeature<RuntimeFeature>(
@@ -50,6 +56,7 @@ const resumeFeature = createRetryableLazyFeature<ResumeFeature>(
 type SaveFeature = typeof import("../../../save/project-save.ts");
 const saveFeature = createRetryableLazyFeature<SaveFeature>(() => import("../../../save/project-save.ts"));
 type WorkspaceSource = "saved" | "template";
+type UtilityPanel = "preview" | "terminal";
 
 interface Props {
   readonly assetRevision?: string;
@@ -73,12 +80,15 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, onProjectReloa
   const manifestAbortRef = useRef<AbortController | null>(null);
   const saveAbortRef = useRef<AbortController | null>(null);
   const replacementAbortRef = useRef<AbortController | null>(null);
+  const fileSearchRef = useRef<HTMLInputElement | null>(null);
   const projectEtagRef = useRef(projectEtag);
+  const terminalTruncatedRef = useRef(false);
   const unmountedRef = useRef(false);
   const [workspace, setWorkspace] = useState<RuntimeWorkspaceState>();
   const [selectedPath, setSelectedPath] = useState<string>();
   const [editorContent, setEditorContent] = useState("");
   const [terminalOutput, setTerminalOutput] = useState("");
+  const [terminalWasTruncated, setTerminalWasTruncated] = useState(false);
   const [error, setError] = useState<string>();
   const [isStarting, setIsStarting] = useState(false);
   const [startingSource, setStartingSource] = useState<WorkspaceSource>();
@@ -94,6 +104,12 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, onProjectReloa
   const [isolatedPreviewUrl, setIsolatedPreviewUrl] = useState<string>();
   const [editorStatus, setEditorStatus] = useState("Local Draft");
   const [runtime, setRuntime] = useState<RuntimeViewState>(EMPTY_RUNTIME_STATE);
+  const [fileQuery, setFileQuery] = useState("");
+  const [fileListLimit, setFileListLimit] = useState(FILE_LIST_BATCH_SIZE);
+  const [utilityPanel, setUtilityPanel] = useState<UtilityPanel>("preview");
+  const [isFocusMode, setIsFocusMode] = useState(false);
+  const [hasUnpublishedChanges, setHasUnpublishedChanges] = useState(false);
+  const [confirmingWorkspaceStop, setConfirmingWorkspaceStop] = useState(false);
   projectEtagRef.current = projectEtag;
 
   useEffect(() => {
@@ -117,6 +133,10 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, onProjectReloa
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
         event.preventDefault();
         void saveToServer();
+      }
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "p") {
+        event.preventDefault();
+        fileSearchRef.current?.focus();
       }
     };
     globalThis.addEventListener("keydown", saveShortcut);
@@ -187,6 +207,7 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, onProjectReloa
         : await adapter.workspace.materializeBundle(savedContent.files);
       const firstTextFile = materialized.files.find((file) => file.kind === "text");
       setWorkspace(materialized);
+      setHasUnpublishedChanges(savedContent === undefined);
       setEditorStatus(savedContent === undefined
         ? "Local Draft"
         : `Server Save v${savedContent.descriptor.projectVersion} restored`);
@@ -259,6 +280,7 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, onProjectReloa
       return;
     }
     setError(undefined);
+    setUtilityPanel("preview");
     setIsRunningPreview(true);
     try {
       const next = await adapter.workflow.start();
@@ -437,6 +459,7 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, onProjectReloa
       setServerSaveStatus(result.snapshotCurrent
         ? `Server Save v${result.projectVersion} complete · Local Draft is current`
         : `Server Save v${result.projectVersion} complete · newer Local Draft changes remain`);
+      setHasUnpublishedChanges(!result.snapshotCurrent);
     } catch (cause) {
       if (!controller.signal.aborted) {
         const stale = cause instanceof Error && "status" in cause && (cause as { status?: unknown }).status === 412;
@@ -464,8 +487,15 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, onProjectReloa
     setSelectedPath(undefined);
     setEditorContent("");
     setTerminalOutput("");
+    terminalTruncatedRef.current = false;
+    setTerminalWasTruncated(false);
     setEditorStatus("Local Draft");
     setResumeStatus(undefined);
+    setFileQuery("");
+    setFileListLimit(FILE_LIST_BATCH_SIZE);
+    setIsFocusMode(false);
+    setHasUnpublishedChanges(false);
+    setConfirmingWorkspaceStop(false);
   }
 
   async function replaceLocalDraftWithRestoredSave(head: RestoredProjectHead): Promise<void> {
@@ -556,6 +586,7 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, onProjectReloa
         setEditorContent("");
       }
       setEditorStatus(`Restored Server Save v${head.projectVersion} · Local Draft replaced by explicit choice`);
+      setHasUnpublishedChanges(false);
       setResumeStatus(`Verified restored Server Save v${head.projectVersion} is now the Local Draft.`);
 
       const cleanup = await Promise.allSettled([
@@ -604,30 +635,59 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, onProjectReloa
   }
 
   function appendTerminal(value: string) {
-    setTerminalOutput((current) => `${current}${value}`.slice(-MAX_TERMINAL_OUTPUT_CHARS));
+    setTerminalOutput((current) => {
+      const next = `${current}${value}`;
+      if (next.length > MAX_TERMINAL_OUTPUT_CHARS && !terminalTruncatedRef.current) {
+        terminalTruncatedRef.current = true;
+        setTerminalWasTruncated(true);
+      }
+      return next.slice(-MAX_TERMINAL_OUTPUT_CHARS);
+    });
   }
 
   const hasWorkspace = workspace?.status === "ready";
   const hasIsolatedPreview = isolatedPreviewUrl !== undefined;
   const canWriteLocalDraft = runtime.localDraftAccess === "writer";
   const recoveryDiagnostics = runtime.diagnostics.filter((diagnostic) => diagnostic.actions.length > 0);
+  const {
+    hasMoreFiles,
+    isSearchPending: isFileSearchPending,
+    matchingFiles,
+    visibleFiles
+  } = useProjectFileSearch({
+    files: workspace?.files ?? EMPTY_WORKSPACE_FILES,
+    limit: fileListLimit,
+    query: fileQuery,
+    selectedPath
+  });
+  const hasUnsavedEditorChange = editorStatus === "Unsaved Local Draft";
+  const selectedFileName = selectedPath?.split("/").at(-1);
+  const editorLineCount = editorContent.length === 0 ? 1 : editorContent.split("\n").length;
+  useUnsavedChangesGuard(hasUnpublishedChanges || hasUnsavedEditorChange);
 
   return (
-    <section className="mt-6 overflow-hidden rounded-lg border border-border bg-surface" aria-labelledby="project-ide-title">
-      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-muted-border bg-subtle px-4 py-3">
-        <div><p className="m-0 text-xs text-muted-foreground">Browser workspace · {runtime.lifecycle}</p><h3 id="project-ide-title" className="m-0 text-sm font-semibold">{project.name} IDE</h3></div>
-        {hasWorkspace ? <div className="flex flex-wrap items-center gap-2"><span className="text-xs text-muted-foreground" role="status" aria-live="polite">{isReplacingDraft ? "Preparing restored Save · current Local Draft preserved" : serverSaveStatus}</span><Button type="button" size="sm" variant="primary" disabled={isServerSaving || isReplacingDraft || !projectEtag || !canWriteLocalDraft} onClick={() => void saveToServer()}>{isServerSaving ? "Saving…" : "Save to server"}</Button><Button type="button" size="sm" disabled={isReplacingDraft} onClick={() => void stopWorkspace()}>Stop workspace</Button></div> : (
-          <div className="flex flex-wrap gap-2">
-            <Button type="button" size="sm" variant="primary" disabled={isStarting || project.state !== "active"} onClick={() => void startWorkspace("saved")}>{startingSource === "saved" ? "Resuming…" : "Resume saved Project"}</Button>
-            <Button type="button" size="sm" disabled={isStarting || project.state !== "active"} onClick={() => void startWorkspace("template")}>{startingSource === "template" ? "Starting…" : "Start workspace from template"}</Button>
-          </div>
-        )}
+    <section className={`project-ide-shell${isFocusMode ? " project-ide-shell--focus" : ""}`} aria-labelledby="project-ide-title">
+      <header className="project-ide-header">
+        <div className="project-ide-header__identity">
+          <span className={`project-ide-runtime-dot project-ide-runtime-dot--${runtime.lifecycle}`} aria-hidden="true" />
+          <div><p>브라우저 워크스페이스 · {runtime.lifecycle}</p><h3 id="project-ide-title" aria-label={`${project.name} IDE`}>{project.name}</h3></div>
+          {hasWorkspace ? <span className={`project-ide-access project-ide-access--${canWriteLocalDraft ? "writer" : "reader"}`}>{canWriteLocalDraft ? "편집 가능" : "읽기 전용"}</span> : null}
+        </div>
+        {hasWorkspace ? <div className="project-ide-header__actions">
+          <span className="project-ide-save-state" role="status" aria-live="polite"><i className={hasUnsavedEditorChange ? "is-dirty" : ""} aria-hidden="true" />{isReplacingDraft ? "복원본 준비 중 · 현재 초안 보존됨" : serverSaveStatus}</span>
+          <Button type="button" size="sm" aria-pressed={isFocusMode} onClick={() => setIsFocusMode((current) => !current)}>{isFocusMode ? "패널 표시" : "집중 모드"}</Button>
+          <Button aria-label="Save to server" type="button" size="sm" variant="primary" disabled={isServerSaving || isReplacingDraft || !projectEtag || !canWriteLocalDraft} onClick={() => void saveToServer()}>{isServerSaving ? "저장 중…" : "서버에 저장"}<kbd>⌘S</kbd></Button>
+          <Button aria-label="Stop workspace" type="button" size="sm" disabled={isReplacingDraft} onClick={() => {
+            if (hasUnpublishedChanges || hasUnsavedEditorChange) setConfirmingWorkspaceStop(true);
+            else void stopWorkspace();
+          }}>종료</Button>
+        </div> : null}
       </header>
-      {error ? <p className="m-3 rounded-md border border-danger p-3 text-sm text-danger" role="alert">{error}</p> : null}
-      {serverSaveFailure ? <div className="mx-3 mt-3 flex flex-wrap gap-2" aria-label="Server Save recovery">{serverSaveFailure === "retry" ? <Button type="button" size="sm" disabled={isServerSaving || !canWriteLocalDraft} onClick={() => void saveToServer()}>Retry Server Save</Button> : <Button type="button" size="sm" onClick={() => onProjectReload?.()}>Reload latest Project</Button>}</div> : null}
-      {resumeStatus ? <p className="m-3 text-sm text-muted-foreground" role="status" aria-live="polite">{resumeStatus}</p> : null}
+      {error ? <div className="project-ide-message project-ide-message--error" role="alert"><strong>작업을 완료하지 못했습니다.</strong><span>{error}</span></div> : null}
+      {serverSaveFailure ? <div className="project-ide-recovery-actions" aria-label="Server Save recovery">{serverSaveFailure === "retry" ? <Button type="button" size="sm" disabled={isServerSaving || !canWriteLocalDraft} onClick={() => void saveToServer()}>Retry Server Save</Button> : <Button type="button" size="sm" onClick={() => onProjectReload?.()}>Reload latest Project</Button>}</div> : null}
+      {resumeStatus ? <p className="project-ide-message project-ide-message--status" role="status" aria-live="polite">{resumeStatus}</p> : null}
       {recoveryDiagnostics.length > 0 ? (
-        <section className="m-3 rounded-md border border-warning bg-subtle p-3" aria-label="Workspace recovery">
+        <section className="project-ide-recovery" aria-label="Workspace recovery">
           <h4 className="m-0 text-sm font-semibold">Workspace needs attention</h4>
           {recoveryDiagnostics.map((diagnostic) => (
             <div className="mt-2" key={diagnostic.code}>
@@ -659,7 +719,31 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, onProjectReloa
           ) : null}
         </section>
       ) : null}
-      <div className="px-3">
+      {project.state !== "active" ? <p className="m-3 text-sm text-muted-foreground">This archived Project is read-only. Its Versions and Recovery checkpoints remain available for inspection; restore the Project before mutating history or starting its workspace.</p> : null}
+      {hasWorkspace ? (
+        <div className="project-ide-workbench">
+          <nav className="project-ide-files" aria-label="Project files">
+            <div className="project-ide-panel-heading"><div><span>EXPLORER</span><strong>파일</strong></div><kbd>⌘P</kbd></div>
+            <label className="project-ide-file-search"><span className="sr-only">파일 검색</span><input ref={fileSearchRef} value={fileQuery} onChange={(event) => { setFileQuery(event.currentTarget.value); setFileListLimit(FILE_LIST_BATCH_SIZE); }} placeholder="파일 검색" autoComplete="off" /><span aria-hidden="true">{isFileSearchPending ? "…" : "⌕"}</span></label>
+            <p className="project-ide-file-count" aria-live="polite">{visibleFiles.length}개 표시 · {matchingFiles.length}개 일치 · 전체 {workspace.files.length}개</p>
+            {visibleFiles.length > 0 ? <ul>{visibleFiles.map((file) => <li key={file.path}><button type="button" aria-current={selectedPath === file.path ? "page" : undefined} onClick={() => selectFile(file.path)}><span className="project-ide-file-icon" aria-hidden="true">{file.kind === "text" ? "#" : "◆"}</span><span>{file.path}</span>{selectedPath === file.path && hasUnsavedEditorChange ? <i aria-label="저장하지 않은 변경 사항" /> : null}</button></li>)}</ul> : <p className="project-ide-files__empty">일치하는 파일이 없습니다.</p>}
+            {hasMoreFiles ? <button className="project-ide-files__more" type="button" onClick={() => setFileListLimit((current) => current + FILE_LIST_BATCH_SIZE)}>다음 {Math.min(FILE_LIST_BATCH_SIZE, matchingFiles.length - visibleFiles.length)}개 보기</button> : null}
+          </nav>
+          <section className="project-ide-editor" aria-label="Text editor">
+            <div className="project-ide-editor__tabs">{selectedPath ? <div className="is-active"><span className="project-ide-file-icon" aria-hidden="true">#</span><strong>{selectedFileName}</strong>{hasUnsavedEditorChange ? <i aria-label="저장하지 않은 변경 사항" /> : <button type="button" aria-label={`${selectedFileName} 닫기`} onClick={() => { setSelectedPath(undefined); setEditorContent(""); }}>×</button>}</div> : <span>파일을 선택하세요</span>}</div>
+            <div className="project-ide-editor__breadcrumb"><span>{project.name}</span>{selectedPath?.split("/").map((segment) => <span key={segment}>{segment}</span>)}</div>
+            {selectedPath ? <textarea className="project-ide-editor__input" aria-label={`Editor for ${selectedPath}`} spellCheck={false} readOnly={!canWriteLocalDraft} value={editorContent} onChange={(event) => { setEditorContent(event.currentTarget.value); setEditorStatus("Unsaved Local Draft"); setHasUnpublishedChanges(true); }} /> : <div className="project-ide-editor__empty"><span aria-hidden="true">⌘</span><strong>편집할 파일을 선택하세요</strong><p>왼쪽 파일 목록에서 선택하거나 <kbd>⌘P</kbd>로 빠르게 찾을 수 있습니다.</p></div>}
+            <div className="project-ide-editor__status"><span><i className={hasUnsavedEditorChange ? "is-dirty" : ""} aria-hidden="true" />{editorStatus}</span><span>Ln {editorLineCount} · {editorContent.length}자 · UTF-8</span><Button aria-label="Apply to Local Draft" type="button" size="sm" disabled={!selectedPath || isSaving || !canWriteLocalDraft} onClick={saveSelectedFile}>{isSaving ? "적용 중…" : "로컬 초안에 적용"}</Button></div>
+          </section>
+          <aside className="project-ide-utility">
+            <div className="project-ide-utility__tabs" role="tablist" aria-label="실행 도구"><button type="button" role="tab" aria-selected={utilityPanel === "preview"} onClick={() => setUtilityPanel("preview")}>미리보기{runtime.hmrState === "connected" ? <i aria-hidden="true" /> : null}</button><button type="button" role="tab" aria-selected={utilityPanel === "terminal"} onClick={() => setUtilityPanel("terminal")}>터미널{runtime.terminalProcessCount > 0 ? <span>{runtime.terminalProcessCount}</span> : null}</button></div>
+            <section className="project-ide-preview" aria-label="Preview" data-preview-url={isolatedPreviewUrl} hidden={utilityPanel !== "preview"}><div className="project-ide-preview__toolbar"><div><strong>LIVE PREVIEW</strong><span>{runtime.workflowPhase} · HMR {runtime.hmrState}</span></div>{hasIsolatedPreview ? <span className="project-ide-live"><i aria-hidden="true" /> LIVE</span> : <Button aria-label="Run Preview" type="button" size="sm" variant="primary" disabled={isRunningPreview} onClick={() => void runPreview()}>{isRunningPreview ? "설치 중…" : "미리보기 실행"}</Button>}</div>{hasIsolatedPreview ? <iframe ref={(frame) => previewBridgeRef.current?.attach(frame?.contentWindow ?? null)} title={`${project.name} Preview`} src={isolatedPreviewUrl} sandbox="allow-scripts allow-same-origin" allow="cross-origin-isolated" referrerPolicy="no-referrer" /> : previewConfiguration.status === "disabled" ? <div className="project-ide-utility__empty" role="status"><strong>미리보기를 사용할 수 없습니다.</strong><p>{previewConfiguration.message} Same-origin Preview is disabled.</p></div> : runtime.previewUrl ? <div className="project-ide-utility__empty" role="status"><strong>격리된 연결을 준비하고 있습니다.</strong><p>The isolated Preview connection is not ready. Same-origin Preview is disabled.</p></div> : <div className="project-ide-utility__empty"><span aria-hidden="true">▷</span><strong>실행 결과를 바로 확인하세요</strong><p>의존성을 설치하고 개발 서버를 시작합니다.</p></div>}</section>
+            <section className="project-ide-terminal" aria-label="Terminal" hidden={utilityPanel !== "terminal"}><div className="project-ide-terminal__toolbar"><strong>TERMINAL</strong><span>{terminalWasTruncated ? "최근 64KB만 표시" : runtime.terminalProcessCount > 0 ? `${runtime.terminalProcessCount}개 프로세스 실행 중` : "대기 중"}</span></div><pre aria-live="polite">{terminalOutput || "브라우저 안에서 제한된 명령을 실행할 수 있습니다."}</pre><form onSubmit={runCommand}><label className="sr-only" htmlFor={`terminal-command-${project.id}`}>Terminal command</label><span aria-hidden="true">›</span><input id={`terminal-command-${project.id}`} name="command" placeholder="명령어 입력" autoComplete="off" maxLength={MAX_TERMINAL_COMMAND_CHARS} /><Button type="submit" size="sm">실행</Button></form></section>
+          </aside>
+        </div>
+      ) : <div className="project-ide-start"><div className="project-ide-start__copy"><span className="project-ide-start__mark" aria-hidden="true">N</span><p className="eyebrow">BROWSER IDE</p><h4>코드를 열고,<br />바로 실행하세요.</h4><p>서버에 저장된 작업을 안전하게 이어가거나, 새로운 React 템플릿으로 바로 시작하세요.</p></div><div className="project-ide-start__actions"><button aria-label="Resume saved Project" type="button" disabled={isStarting || project.state !== "active"} onClick={() => void startWorkspace("saved")}><span aria-hidden="true">↗</span><strong>{startingSource === "saved" ? "불러오는 중…" : "저장된 프로젝트 이어서 열기"}</strong><small>무결성을 확인한 최신 서버 저장본을 엽니다.</small></button><button aria-label="Start workspace from template" type="button" disabled={isStarting || project.state !== "active"} onClick={() => void startWorkspace("template")}><span aria-hidden="true">＋</span><strong>{startingSource === "template" ? "시작하는 중…" : "새 템플릿으로 시작"}</strong><small>Vite + React 기본 구성으로 로컬 초안을 만듭니다.</small></button></div><p className="project-ide-start__safety">브라우저의 로컬 초안은 명시적으로 서버에 저장하기 전까지 기존 서버 버전을 덮어쓰지 않습니다.</p></div>}
+      <details className="project-ide-history" open>
+        <summary><span>버전과 복구</span><small>서버 저장 이력과 체크포인트</small></summary>
         <ProjectHistoryPanel
           hasLocalDraft={hasWorkspace}
           project={project}
@@ -668,29 +752,15 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, onProjectReloa
           onReloadProject={() => onProjectReload?.()}
           onResumeRestoredSave={(head) => void replaceLocalDraftWithRestoredSave(head)}
         />
-      </div>
-      {project.state !== "active" ? <p className="m-3 text-sm text-muted-foreground">This archived Project is read-only. Its Versions and Recovery checkpoints remain available for inspection; restore the Project before mutating history or starting its workspace.</p> : null}
-      {hasWorkspace ? (
-        <div className="grid min-h-[34rem] grid-cols-1 lg:grid-cols-[14rem_minmax(0,1fr)_minmax(18rem,0.8fr)]">
-          <nav className="border-b border-muted-border bg-sidebar p-3 lg:border-r lg:border-b-0" aria-label="Project files">
-            <p className="mb-2 mt-0 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Files</p>
-            <ul className="m-0 grid list-none gap-1 p-0">{workspace.files.map((file) => <li key={file.path}><button type="button" className="w-full rounded-sm px-2 py-1.5 text-left font-mono text-xs hover:bg-hover aria-[current=page]:bg-selected" aria-current={selectedPath === file.path ? "page" : undefined} onClick={() => selectFile(file.path)}>{file.path}</button></li>)}</ul>
-          </nav>
-          <section className="grid min-w-0 grid-rows-[auto_minmax(16rem,1fr)_auto] border-b border-muted-border lg:border-r lg:border-b-0" aria-label="Text editor">
-            <div className="border-b border-muted-border bg-subtle px-3 py-2 font-mono text-xs text-muted-foreground">{selectedPath ?? "Select a file"}</div>
-            {selectedPath ? <textarea className="h-full min-h-64 w-full resize-none border-0 bg-surface p-4 font-mono text-sm leading-6 text-foreground outline-none read-only:cursor-not-allowed read-only:bg-subtle" aria-label={`Editor for ${selectedPath}`} spellCheck={false} readOnly={!canWriteLocalDraft} value={editorContent} onChange={(event) => { setEditorContent(event.currentTarget.value); setEditorStatus("Unsaved Local Draft"); }} /> : <p className="p-4 text-sm text-muted-foreground">Choose a text file from the tree.</p>}
-            <div className="relative z-10 flex items-center justify-between gap-3 border-t border-muted-border bg-surface px-3 py-2 text-xs text-muted-foreground"><span>{editorStatus} · {canWriteLocalDraft ? "writer" : "read-only"} · {workspace.files.length} files · {workspace.totalBytes} bytes</span><Button type="button" size="sm" disabled={!selectedPath || isSaving || !canWriteLocalDraft} onClick={saveSelectedFile}>{isSaving ? "Applying…" : "Apply to Local Draft"}</Button></div>
-          </section>
-          <div className="grid min-w-0 grid-rows-[minmax(12rem,1fr)_minmax(12rem,1fr)] overflow-hidden">
-            <section className="grid min-h-0 grid-rows-[auto_1fr] border-b border-muted-border" aria-label="Preview" data-preview-url={isolatedPreviewUrl}><div className="flex items-center justify-between gap-3 border-b border-muted-border p-3"><div><h4 className="m-0 text-sm font-semibold">Preview</h4><p className="m-0 text-xs text-muted-foreground">{runtime.workflowPhase} · HMR {runtime.hmrState}</p></div>{hasIsolatedPreview ? null : <Button type="button" size="sm" variant="primary" disabled={isRunningPreview || previewConfiguration.status === "disabled"} onClick={() => void runPreview()}>{isRunningPreview ? "Installing…" : "Run Preview"}</Button>}</div>{hasIsolatedPreview ? <iframe ref={(frame) => previewBridgeRef.current?.attach(frame?.contentWindow ?? null)} title={`${project.name} Preview`} className="h-full min-h-0 w-full border-0 bg-white" src={isolatedPreviewUrl} sandbox="allow-scripts allow-same-origin" allow="cross-origin-isolated" referrerPolicy="no-referrer" /> : previewConfiguration.status === "disabled" ? <p className="p-3 text-sm text-muted-foreground" role="status">{previewConfiguration.message} Same-origin Preview is disabled.</p> : runtime.previewUrl ? <p className="p-3 text-sm text-muted-foreground" role="status">The isolated Preview connection is not ready. Same-origin Preview is disabled.</p> : <p className="p-3 text-sm text-muted-foreground">Run bounded install and dev to open the isolated Preview.</p>}</section>
-            <section className="grid min-h-0 grid-rows-[auto_minmax(8rem,1fr)_auto] bg-background" aria-label="Terminal">
-              <h4 className="m-0 border-b border-muted-border px-3 py-2 text-sm font-semibold">Terminal</h4>
-              <pre className="m-0 overflow-auto whitespace-pre-wrap p-3 font-mono text-xs" aria-live="polite">{terminalOutput || "Run a bounded browser command."}</pre>
-              <form className="flex gap-2 border-t border-muted-border p-2" onSubmit={runCommand}><label className="sr-only" htmlFor={`terminal-command-${project.id}`}>Terminal command</label><input id={`terminal-command-${project.id}`} name="command" className="min-w-0 flex-1 rounded-md border border-border bg-surface px-3 font-mono text-sm" autoComplete="off" maxLength={MAX_TERMINAL_COMMAND_CHARS} /><Button type="submit" size="sm">Run</Button></form>
-            </section>
-          </div>
-        </div>
-      ) : <div className="p-6"><p className="m-0 text-sm text-muted-foreground">Resume the verified current Server Save, or start from the template only when this Project has not been saved yet. A failed integrity check never replaces the Local Draft.</p></div>}
+      </details>
+      <ConfirmationDialog
+        confirmLabel="초안을 버리고 종료"
+        description="서버에 저장하지 않은 로컬 초안과 편집 중인 내용이 사라집니다. 필요한 변경은 먼저 서버에 저장하세요."
+        open={confirmingWorkspaceStop}
+        title="브라우저 워크스페이스를 종료할까요?"
+        onCancel={() => setConfirmingWorkspaceStop(false)}
+        onConfirm={() => void stopWorkspace()}
+      />
     </section>
   );
 }

@@ -185,6 +185,7 @@ try {
   assert.equal(await page.evaluate(() => window.__nuriteoRuntimeProbe.activeWorkers), 2);
 
   await page.getByRole("button", { name: "Stop workspace" }).click();
+  if (await page.getByRole("button", { name: "초안을 버리고 종료" }).count()) await page.getByRole("button", { name: "초안을 버리고 종료" }).click();
   await page.getByRole("button", { name: "Start workspace from template", exact: true }).waitFor({ timeout: 10_000 });
   await page.waitForFunction(() => window.__nuriteoRuntimeProbe.activeWorkers === 0);
   assert.deepEqual(errors, []);

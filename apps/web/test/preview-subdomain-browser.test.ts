@@ -321,6 +321,7 @@ try {
   assert.equal(capacityStatus, 429, "relay concurrency must fail excess work deterministically");
 
   await page.getByRole("button", { name: "Stop workspace" }).click();
+  if (await page.getByRole("button", { name: "초안을 버리고 종료" }).count()) await page.getByRole("button", { name: "초안을 버리고 종료" }).click();
   try {
     await page.getByRole("button", { name: "Start workspace" }).waitFor({ timeout: 10_000 });
   } catch (error) {

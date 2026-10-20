@@ -54,6 +54,7 @@ function testServerFirstBoundaries(): void {
     "src/app/(authenticated)/admin/registries/registry-console.tsx",
     "src/app/(authenticated)/admin/settings/admin-settings.tsx",
     "src/app/(authenticated)/admin/updates/update-readiness-console.tsx",
+    "src/app/(authenticated)/authenticated-navigation.tsx",
     "src/app/(authenticated)/identities/identity-connections.tsx",
     "src/app/(authenticated)/notifications/notification-center.tsx",
     "src/app/(authenticated)/organization-invitations/accept/accept-invitation.tsx",
@@ -63,6 +64,7 @@ function testServerFirstBoundaries(): void {
     "src/app/(authenticated)/projects/project-git-panel.tsx",
     "src/app/(authenticated)/projects/project-history-panel.tsx",
     "src/app/(authenticated)/projects/project-ide-shell.tsx",
+    "src/app/(authenticated)/projects/use-project-file-search.ts",
     "src/app/_components/error-view.tsx",
     "src/app/activate/activation-form.tsx",
     "src/app/error.tsx",
@@ -73,9 +75,11 @@ function testServerFirstBoundaries(): void {
     "src/app/sign-in/sign-in-form.tsx",
     "src/components/theme-selector.tsx",
     "src/components/ui/button.tsx",
+    "src/components/ui/confirmation-dialog.tsx",
     "src/lib/api/browser-client.ts",
     "src/lib/api/browser-security.ts",
-    "src/lib/use-exclusive-mutation.ts"
+    "src/lib/use-exclusive-mutation.ts",
+    "src/lib/use-unsaved-changes-guard.ts"
   ]);
 }
 
@@ -136,7 +140,7 @@ function testProductionBoundary(): void {
     assert.doesNotMatch(source, /apps\/preview-service|service-backend|@nuriteo\/preview-service(?:\/|["'])/u, `${file} imports legacy code or a package-internal path`);
     assert.doesNotMatch(source, /from ["'](?:postgres|sea-orm|sqlx|@aws-sdk\/client-s3)["']/iu, `${file} crosses service storage boundary`);
     if (file.endsWith(".tsx") && file !== "src/app/layout.tsx") {
-      assert.doesNotMatch(source, /#[\da-f]{3,8}\b/iu, `${file} bypasses semantic tokens`);
+      assert.doesNotMatch(source, /(?<!&)#[\da-f]{3,8}\b/iu, `${file} bypasses semantic tokens`);
     }
   }
 

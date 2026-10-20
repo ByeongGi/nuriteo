@@ -14,6 +14,7 @@ import { useState } from "react";
 import type { FormEvent } from "react";
 
 import { Button } from "../../../../components/ui/button.tsx";
+import { ConfirmationDialog } from "../../../../components/ui/confirmation-dialog.tsx";
 import { createBrowserApiClient } from "../../../../lib/api/browser-client.ts";
 import { readCsrfCredential } from "../../../../lib/api/browser-security.ts";
 import { useExclusiveMutation } from "../../../../lib/use-exclusive-mutation.ts";
@@ -23,6 +24,7 @@ export function OidcProviderConsole({ initialProviders }: { readonly initialProv
   const mutation = useExclusiveMutation();
   const [providers, setProviders] = useState(initialProviders);
   const [feedback, setFeedback] = useState<{ readonly error: boolean; readonly text: string }>();
+  const [pendingDeletion, setPendingDeletion] = useState<OidcProvider>();
   const options = () => ({ csrfToken: readCsrfCredential() });
   const replace = (provider: OidcProvider) => setProviders((items) => items.map((item) => item.id === provider.id ? provider : item));
 
@@ -63,10 +65,9 @@ export function OidcProviderConsole({ initialProviders }: { readonly initialProv
   }
 
   async function remove(provider: OidcProvider) {
-    if (!window.confirm(`Permanently delete ${provider.displayName}?`)) return;
     await mutation.run(async () => {
       setFeedback(undefined);
-      try { await deleteOidcProvider(createBrowserApiClient(), provider.id, provider.configVersion, options()); setProviders((items) => items.filter((item) => item.id !== provider.id)); setFeedback({ error: false, text: "Provider deleted." }); }
+      try { await deleteOidcProvider(createBrowserApiClient(), provider.id, provider.configVersion, options()); setProviders((items) => items.filter((item) => item.id !== provider.id)); setPendingDeletion(undefined); setFeedback({ error: false, text: "Provider deleted." }); }
       catch (error) { setFeedback(providerFailure(error)); }
     });
   }
@@ -85,8 +86,9 @@ export function OidcProviderConsole({ initialProviders }: { readonly initialProv
       {provider.state === "disabled" ? <form className="collaboration-form" onSubmit={(event) => void rotate(event, provider)}><label className="field-group">Replacement client secret<input name="clientSecret" type="password" autoComplete="new-password" maxLength={4096} required disabled={mutation.isPending} /></label><Button disabled={mutation.isPending}>Rotate secret</Button></form> : null}
       <IntegrationCaConsole type="oidc" integrationId={provider.id} />
       <div className="record-actions">{provider.state === "active" ? <Button disabled={mutation.isPending} onClick={() => void run(async () => (await disableOidcProvider(createBrowserApiClient(), provider.id, provider.configVersion, options())).data, "Provider disabled immediately.")}>Disable</Button> : <Button variant="primary" disabled={mutation.isPending} onClick={() => void run(async () => (await activateOidcProvider(createBrowserApiClient(), provider.id, provider.configVersion, `${window.location.origin}/api/v1/auth/oidc/${provider.id}/callback`, options())).data, "Provider validated and activated.")}>Validate and activate</Button>}
-      <Button variant="danger" disabled={mutation.isPending || provider.state !== "disabled" || provider.linkedIdentityCount !== 0} onClick={() => void remove(provider)}>Delete</Button></div></li>)}</ul>}</section>
+      <Button variant="danger" disabled={mutation.isPending || provider.state !== "disabled" || provider.linkedIdentityCount !== 0} onClick={() => setPendingDeletion(provider)}>Delete</Button></div></li>)}</ul>}</section>
     {feedback ? <p className={`notification-feedback notification-feedback--${feedback.error ? "error" : "success"}`} role={feedback.error ? "alert" : "status"}>{feedback.text}</p> : null}
+    <ConfirmationDialog busy={mutation.isPending} confirmLabel={mutation.isPending ? "삭제 중…" : "Provider 삭제"} description={`${pendingDeletion?.displayName ?? "선택한 Provider"} 설정과 저장된 secret이 영구적으로 삭제됩니다.`} open={pendingDeletion !== undefined} title="Identity Provider를 삭제할까요?" onCancel={() => setPendingDeletion(undefined)} onConfirm={() => { if (pendingDeletion) void remove(pendingDeletion); }} />
   </main>;
 }
 

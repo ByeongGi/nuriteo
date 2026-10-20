@@ -245,35 +245,33 @@ export function ProjectDashboard(props: Props) {
 
   return (
     <main id="main-content" className="workspace-page project-page" tabIndex={-1}>
-      <header className="workspace-page__intro"><p className="eyebrow">Workspace development</p><h1>Projects</h1><p>Create, archive, and share browser development Projects.</p></header>
-      <nav className="organization-tabs" aria-label="Project Workspaces">
+      <header className="workspace-page__intro project-page__header"><div><p className="eyebrow">WORKSPACE DEVELOPMENT</p><h1>프로젝트</h1><p>브라우저 개발 프로젝트를 만들고 실행 환경과 접근 권한을 관리합니다.</p></div><span>{projects.length}개 프로젝트</span></header>
+      <nav className="organization-tabs" aria-label="프로젝트 워크스페이스">
         {props.workspaces.map((item) => <Link key={item.storageScopeId} href={projectHref(item.storageScopeId, "active")} aria-current={item.storageScopeId === props.selectedScope ? "page" : undefined}>{item.displayLabel}</Link>)}
       </nav>
-      {workspace === undefined ? <p>No Workspace is available. Ask an administrator for access.</p> : (
+      {workspace === undefined ? <p>사용 가능한 워크스페이스가 없습니다. 관리자에게 접근 권한을 요청하세요.</p> : (
         <div className="project-layout">
           <aside className="project-sidebar">
             <form className="collaboration-form" onSubmit={create} aria-busy={mutation.isPending}>
-              <h2>Create Project</h2>
-              <label className="field-group">Slug<input name="slug" required pattern="[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?" maxLength={63} disabled={mutation.isPending} /></label>
-              <label className="field-group">Name<input name="name" required maxLength={200} disabled={mutation.isPending} /></label>
-              <Button type="submit" variant="primary" disabled={mutation.isPending}>Create Project</Button>
+              <div className="project-sidebar__heading"><div><p className="eyebrow">CREATE</p><h2>새 프로젝트</h2></div></div>
+              <label className="field-group">슬러그<input aria-label="Slug" name="slug" placeholder="runtime-editor" required pattern="[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?" maxLength={63} disabled={mutation.isPending} /></label>
+              <label className="field-group">프로젝트 이름<input aria-label="Name" name="name" placeholder="런타임 편집기" required maxLength={200} disabled={mutation.isPending} /></label>
+              <Button aria-label="Create Project" type="submit" variant="primary" disabled={mutation.isPending}>프로젝트 만들기</Button>
             </form>
-            <nav className="project-filters" aria-label="Project state">
-              {(["active", "archived", "all"] as const).map((filter) => <Link key={filter} href={projectHref(workspace.storageScopeId, filter)} aria-current={state === filter ? "page" : undefined}>{filter}</Link>)}
+            <nav className="project-filters" aria-label="프로젝트 상태">
+              {(["active", "archived", "all"] as const).map((filter) => <Link key={filter} href={projectHref(workspace.storageScopeId, filter)} aria-current={state === filter ? "page" : undefined}>{projectStateLabel(filter)}</Link>)}
             </nav>
-            <ul className="record-list" aria-label="Projects">
-              {projects.map((item) => <li key={item.id}><Link href={projectHref(workspace.storageScopeId, state, item.id)} aria-current={project?.id === item.id ? "page" : undefined}><strong>{item.name}</strong><span>{item.slug} · {item.state}</span></Link></li>)}
+            <ul className="record-list project-records" aria-label="프로젝트">
+              {projects.map((item) => <li key={item.id}><Link className="project-record-link" href={projectHref(workspace.storageScopeId, state, item.id)} aria-current={project?.id === item.id ? "page" : undefined}><b aria-hidden="true">{projectInitial(item.name)}</b><span><strong>{item.name}</strong><small>{item.slug} · v{item.version}</small></span><em>{item.state === "active" ? "활성" : "보관"}</em></Link></li>)}
             </ul>
-            {cursor !== null ? <Button type="button" onClick={() => void loadMore()} disabled={isLoadingMore}>{isLoadingMore ? "Loading…" : "Load more"}</Button> : null}
+            {cursor !== null ? <Button type="button" onClick={() => void loadMore()} disabled={isLoadingMore}>{isLoadingMore ? "불러오는 중…" : "더 보기"}</Button> : null}
           </aside>
           <section className="project-detail">
             {error ? <p className="form-error" role="alert">{error}</p> : null}
             {needsReconciliation ? <Button type="button" onClick={() => router.refresh()}>Reload latest Project</Button> : null}
-            {project === undefined ? <div className="workspace-empty"><h2>Select a Project</h2><p>Choose a Project to inspect its lifecycle and access.</p></div> : (
+            {project === undefined ? <div className="workspace-empty"><p className="eyebrow">Select a Project</p><h2>프로젝트를 선택하세요</h2><p>왼쪽 목록에서 프로젝트를 선택하면 실행 환경과 접근 권한을 확인할 수 있습니다.</p></div> : (
               <>
-                <header><p className="eyebrow">{project.state} · version {project.version}</p><h2>{project.name}</h2><p>{project.slug}</p><Link href={`/access-tokens?projectId=${encodeURIComponent(project.id)}`}>Manage Project tokens</Link></header>
-                <form className="collaboration-form" onSubmit={rename} aria-busy={mutation.isPending}><label className="field-group">Project name<input name="name" defaultValue={project.name} required maxLength={200} disabled={mutation.isPending} /></label><Button type="submit" disabled={mutation.isPending}>Save name</Button></form>
-                <section className="project-actions"><h3>Lifecycle</h3><Button type="button" disabled={mutation.isPending} onClick={() => void changeLifecycle(project.state === "active" ? "archive" : "restore")}>{project.state === "active" ? "Archive" : "Restore"}</Button><p>Archive hides a Project from the active list. Delete is immediate and irreversible.</p><form onSubmit={remove}><label className="field-group">Type <strong>{project.name}</strong> to delete<input name="confirmName" required disabled={mutation.isPending} /></label><Button type="submit" variant="danger" disabled={mutation.isPending}>Delete Project</Button></form></section>
+                <header className="project-detail__header"><div><p className="eyebrow">{project.state === "active" ? "ACTIVE" : "ARCHIVED"} · VERSION {project.version}</p><h2>{project.name}</h2><p>{project.slug}</p></div><Link className="link-button" href={`/access-tokens?projectId=${encodeURIComponent(project.id)}`}>액세스 토큰</Link></header>
                 <ProjectIdeShell
                   key={`${workspace.storageScopeId}:${project.id}:${project.state}`}
                   {...(props.runtimeAssetRevision === undefined ? {} : { assetRevision: props.runtimeAssetRevision })}
@@ -289,6 +287,7 @@ export function ProjectDashboard(props: Props) {
                   workspaceScope={workspace.storageScopeId}
                 />
                 {project.state === "active" ? <ProjectGitPanel project={project} /> : null}
+                <details className="project-management" open><summary><span>프로젝트 관리</span><small>이름, 보관 및 삭제</small></summary><div className="project-management__content"><form className="collaboration-form project-profile-form" onSubmit={rename} aria-busy={mutation.isPending}><div><h3>프로젝트 정보</h3><p>목록과 협업 화면에 표시되는 이름입니다.</p></div><label className="field-group">프로젝트 이름<input aria-label="Project name" name="name" defaultValue={project.name} required maxLength={200} disabled={mutation.isPending} /></label><Button type="submit" disabled={mutation.isPending}>Save name</Button></form><section className="project-actions"><h3>Lifecycle</h3><Button type="button" disabled={mutation.isPending} onClick={() => void changeLifecycle(project.state === "active" ? "archive" : "restore")}>{project.state === "active" ? "Archive" : "Restore"}</Button><p>Archive hides a Project from the active list. Delete is immediate and irreversible.</p><form onSubmit={remove}><label className="field-group">Type <strong>{project.name}</strong> to delete<input name="confirmName" required disabled={mutation.isPending} /></label><Button type="submit" variant="danger" disabled={mutation.isPending}>Delete Project</Button></form></section></div></details>
                 {owner?.ownerType === "organization" ? <section><h3>Direct roles</h3>{props.canManageRoles ? <><form className="collaboration-form" onSubmit={addRole}><label className="field-group">Organization member<select aria-label="Organization member" name="userId" required value={selectedMemberId} disabled={mutation.isPending || !hasAvailableMembers} onChange={(event) => setSelectedMemberId(event.currentTarget.value)}><option value="">Select a member</option>{props.organizationMembers?.map((member) => <option key={member.userId} value={member.userId} disabled={member.role === "owner" || !hasUniqueMemberLabel(member) || grantedUserIds.has(member.userId)}>{organizationMemberLabel(member)}</option>)}</select></label>{hasAmbiguousMembers ? <p>Members with the same display name and Organization role cannot receive a direct role until their display names are distinct.</p> : null}{hasAvailableMembers ? null : <p>No Organization members are available for a direct role.</p>}<label className="field-group">Role<select name="role" disabled={mutation.isPending || !hasAvailableMembers}><option value="read">Read</option><option value="write">Write</option><option value="admin">Admin</option></select></label><Button type="submit" disabled={mutation.isPending || selectedMemberId === ""}>Grant role</Button></form>{roleStatus === undefined ? null : <p role="status" aria-live="polite">{roleStatus}</p>}<ul className="record-list">{grants.map((grant, grantIndex) => { const member = memberByUserId.get(grant.userId); const memberIsActionable = member !== undefined && hasUniqueMemberLabel(member); const memberLabel = directGrantMemberLabel(grant, grantIndex, grants, memberByUserId, hasUniqueMemberLabel); return <li key={grant.userId}><div><strong>{memberLabel}</strong><span>{grant.role}{member === undefined ? "" : ` · Organization ${member.role}`}</span></div><div className="record-actions"><select aria-label={`Role for ${memberLabel}`} value={grant.role} disabled={mutation.isPending || !memberIsActionable} onChange={(event) => void updateRole(grant, roleValue(event.currentTarget.value))}><option value="read">Read</option><option value="write">Write</option><option value="admin">Admin</option></select><Button type="button" aria-label={`Revoke ${memberLabel}`} disabled={mutation.isPending} onClick={() => void updateRole(grant)}>Revoke</Button></div></li>; })}</ul></> : <p>Only Organization Owners can inspect and manage direct Project roles.</p>}</section> : null}
               </>
             )}
@@ -297,6 +296,16 @@ export function ProjectDashboard(props: Props) {
       )}
     </main>
   );
+}
+
+function projectStateLabel(state: ProjectListState): string {
+  if (state === "archived") return "보관됨";
+  if (state === "all") return "전체";
+  return "활성";
+}
+
+function projectInitial(name: string): string {
+  return Array.from(name.trim())[0]?.toUpperCase() ?? "P";
 }
 
 function roleValue(value: FormDataEntryValue | null): ProjectRole {

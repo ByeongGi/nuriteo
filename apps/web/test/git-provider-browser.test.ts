@@ -151,8 +151,8 @@ try {
     await page.getByRole("status").filter({ hasText: "validated and activated" }).waitFor();
     await page.getByRole("button", { name: "Disable", exact: true }).click();
     await page.getByRole("status").filter({ hasText: "disabled immediately" }).waitFor();
-    page.once("dialog", (dialog) => dialog.accept());
     await page.getByRole("button", { name: "Delete" }).click();
+    await page.getByRole("button", { name: "Provider 삭제" }).click();
     await page.getByText("No Git provider is configured.").waitFor();
 
     assert.deepEqual(mutations.map(({ path }) => path), [

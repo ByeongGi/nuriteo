@@ -59,6 +59,22 @@ try {
   await page.getByRole("button", { name: "Start workspace" }).click();
 
   await page.getByRole("region", { name: "Workspace recovery" }).waitFor();
+  await page.keyboard.press("Control+p");
+  const fileSearch = page.getByPlaceholder("파일 검색");
+  assert.equal(await fileSearch.evaluate((element) => element === document.activeElement), true);
+  await fileSearch.fill("message.ts");
+  assert.equal(await page.getByRole("button", { name: "src/message.ts" }).count(), 1);
+  await fileSearch.fill("missing-file");
+  await page.getByText("일치하는 파일이 없습니다.").waitFor();
+  await fileSearch.fill("");
+  await page.getByRole("tab", { name: "터미널" }).click();
+  await page.getByLabel("Terminal command").waitFor();
+  await page.getByRole("tab", { name: "미리보기" }).click();
+  const focusMode = page.getByRole("button", { name: "집중 모드" });
+  await focusMode.click();
+  const exitFocusMode = page.getByRole("button", { name: "패널 표시" });
+  assert.equal(await exitFocusMode.getAttribute("aria-pressed"), "true");
+  await exitFocusMode.click();
   assert.equal(await page.getByLabel("Editor for src/message.ts").isEditable(), false);
   await page.getByRole("button", { name: "Take over writer lease" }).click();
   await page.getByRole("alertdialog").waitFor();
@@ -94,6 +110,34 @@ try {
   assert.equal(await page.getByRole("region", { name: "Preview" }).getAttribute("data-preview-url"), "about:blank");
   assert.deepEqual(pageErrors, []);
 
+  const scalePage = await browser.newPage();
+  const scalePageErrors: string[] = [];
+  scalePage.on("pageerror", (error) => scalePageErrors.push(error.message));
+  await scalePage.goto(`http://127.0.0.1:${address.port}/?mode=scale`, { waitUntil: "domcontentloaded" });
+  await scalePage.getByRole("button", { name: "Start workspace" }).click();
+  const scaleFiles = scalePage.getByRole("navigation", { name: "Project files" });
+  await scalePage.getByText("200개 표시 · 2501개 일치 · 전체 2501개").waitFor();
+  assert.equal(await scaleFiles.locator("li").count(), 200, "large workspaces must render only the first file batch");
+  const scaleSearch = scalePage.getByPlaceholder("파일 검색");
+  await scaleSearch.fill("module-2499");
+  const lastGeneratedFile = scaleFiles.getByRole("button", { name: "src/generated/module-2499.ts" });
+  await lastGeneratedFile.waitFor();
+  assert.equal(await scaleFiles.locator("li").count(), 1, "search must scan the full workspace, not only the rendered batch");
+  await lastGeneratedFile.click();
+  await scaleSearch.fill("");
+  await scalePage.getByText("200개 표시 · 2501개 일치 · 전체 2501개").waitFor();
+  await scaleFiles.getByRole("button", { name: "src/generated/module-2499.ts" }).waitFor();
+  assert.equal(await scaleFiles.locator("li").count(), 200, "the selected file must stay pinned without expanding the rendered batch");
+  await scalePage.getByRole("button", { name: "다음 200개 보기" }).click();
+  assert.equal(await scaleFiles.locator("li").count(), 400, "load more must append one bounded batch");
+  await scalePage.getByRole("tab", { name: "터미널" }).click();
+  await scalePage.getByLabel("Terminal command").fill("stress-log");
+  await scalePage.getByRole("region", { name: "Terminal" }).getByRole("button", { name: "실행" }).click();
+  await scalePage.getByText("최근 64KB만 표시").waitFor();
+  assert.equal((await scalePage.getByRole("region", { name: "Terminal" }).locator("pre").textContent())?.length, 64 * 1_024);
+  assert.deepEqual(scalePageErrors, []);
+  await scalePage.close();
+
   const unmountPage = await browser.newPage();
   const unmountPageErrors: string[] = [];
   unmountPage.on("pageerror", (error) => unmountPageErrors.push(error.message));
@@ -112,7 +156,7 @@ try {
   assert.deepEqual(unmountPageErrors, []);
   await unmountPage.close();
 
-  console.log("RT-005 browser recovery journey ok (lazy retry, writer takeover, quota preservation, failed bridge replacement, unmount disposal)");
+  console.log("RT-005 browser recovery journey ok (2,501-file scale, lazy retry, writer takeover, quota preservation, failed bridge replacement, unmount disposal)");
 } finally {
   await browser.close();
   await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));

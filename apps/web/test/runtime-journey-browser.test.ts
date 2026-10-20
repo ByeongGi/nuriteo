@@ -59,7 +59,7 @@ try {
   assert.equal(await page.evaluate(() => window.__nuriteoRuntimeProbe.createdWorkers), 2);
 
   await page.getByRole("button", { name: "Run Preview" }).click();
-  await page.getByText("Same-origin Preview is disabled.", { exact: false }).waitFor({ timeout: 20_000 });
+  await page.waitForFunction(() => Boolean(document.querySelector<HTMLElement>('[aria-label="Preview"]')?.dataset.previewUrl), undefined, { timeout: 20_000 });
   const previewUrl = await page.getByRole("region", { name: "Preview" }).getAttribute("data-preview-url");
   assert(previewUrl && previewUrl.includes("/__preview/"));
   const initialPreview = await page.evaluate(async (url) => (await fetch(url)).text(), previewUrl);
@@ -74,6 +74,7 @@ try {
   assert.match(updatedPreview, /RT004 edited:1/u);
 
   await page.getByRole("button", { name: "Stop workspace" }).click();
+  await page.getByRole("button", { name: "초안을 버리고 종료" }).click();
   await page.getByRole("button", { name: "Start workspace" }).waitFor({ timeout: 10_000 });
   await page.waitForFunction(() => window.__nuriteoRuntimeProbe.activeWorkers === 0);
   assert.deepEqual(errors, []);

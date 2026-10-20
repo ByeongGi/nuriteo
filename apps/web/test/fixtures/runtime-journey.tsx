@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { createRoot } from "react-dom/client";
 
 import { ProjectIdeShell } from "../../src/app/(authenticated)/projects/project-ide-shell.tsx";
+import type { SubdomainPreviewBridge } from "../../src/runtime/subdomain-preview-bridge.ts";
 
 declare global {
   interface Window { __nuriteoRuntimeProbe: { activeWorkers: number; createdWorkers: number; committedVersion?: number; committedEtag?: string; reloads: number; restoreMode: "download-failure" | "intervening" | "materialization-failure" | "success" } }
@@ -43,23 +44,18 @@ const project = {
   version: 1
 };
 
-const previewConfiguration = location.hostname === "app.localhost"
-  ? {
-      status: "enabled" as const,
-      applicationOrigin: location.origin,
-      baseDomain: "preview.localhost",
-      protocol: location.protocol as "http:" | "https:",
-      publicPort: location.port
-    }
-  : {
-      status: "disabled" as const,
-      code: "PREVIEW_CONFIGURATION_INVALID" as const,
-      message: "Preview origin configuration is invalid."
-    };
+const previewConfiguration = {
+  status: "enabled" as const,
+  applicationOrigin: location.origin,
+  baseDomain: "preview.localhost",
+  protocol: location.protocol as "http:" | "https:",
+  publicPort: location.port
+};
 
 function Fixture() {
   const [etag, setEtag] = useState('"project-v1"');
   return <ProjectIdeShell
+      previewBridgeFactory={createFixturePreviewBridge}
       previewConfiguration={previewConfiguration}
       project={project}
       projectEtag={etag}
@@ -72,6 +68,15 @@ function Fixture() {
       resumeProjectContentLoader={loadResumeFeature}
       workspaceScope={project.ownerId}
     />;
+}
+
+async function createFixturePreviewBridge({ internalPreviewUrl }: { readonly internalPreviewUrl: string }): Promise<SubdomainPreviewBridge> {
+  return {
+    attach() {},
+    async dispose() {},
+    hotUpdate() {},
+    url: internalPreviewUrl
+  };
 }
 
 createRoot(document.getElementById("root")!).render(<Fixture />);

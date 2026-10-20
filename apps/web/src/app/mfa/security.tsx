@@ -16,6 +16,7 @@ import { useMemo, useRef, useState } from "react";
 import type { FormEvent } from "react";
 
 import { Button } from "../../components/ui/button.tsx";
+import { ConfirmationDialog } from "../../components/ui/confirmation-dialog.tsx";
 import { createBrowserApiClient } from "../../lib/api/browser-client.ts";
 import { readCsrfCredential } from "../../lib/api/browser-security.ts";
 import { createQrMatrix } from "../../lib/qr-matrix.ts";
@@ -28,6 +29,7 @@ export function MfaSecurity({ status, displayName }: { readonly status: MfaStatu
   const [recoveryCodes, setRecoveryCodes] = useState<readonly string[]>();
   const [copiedRecoveryCodes, setCopiedRecoveryCodes] = useState(false);
   const [message, setMessage] = useState<{ readonly tone: "error" | "success"; readonly text: string }>();
+  const [confirmingDisable, setConfirmingDisable] = useState(false);
   const idempotencyKeys = useRef(new Map<string, string>());
 
   function mutationOptions(operation: string) {
@@ -133,6 +135,7 @@ export function MfaSecurity({ status, displayName }: { readonly status: MfaStatu
     await mutation.run(async () => {
       try {
         await disableMfa(createBrowserApiClient(), { csrfToken: readCsrfCredential() });
+        setConfirmingDisable(false);
         setMessage({ tone: "success", text: "MFA was disabled and other sessions were signed out." });
         router.refresh();
       } catch (error) {
@@ -203,7 +206,7 @@ export function MfaSecurity({ status, displayName }: { readonly status: MfaStatu
           <section className="mfa-card">
             <h2>Disable MFA</h2>
             <p>Only available when instance policy does not require your account to remain enrolled.</p>
-            <Button disabled={mutation.isPending || status.required} onClick={disable}>Disable MFA</Button>
+            <Button disabled={mutation.isPending || status.required} onClick={() => setConfirmingDisable(true)}>MFA 해제</Button>
           </section>
         </div>
       ) : null}
@@ -213,6 +216,15 @@ export function MfaSecurity({ status, displayName }: { readonly status: MfaStatu
         {!status.restricted ? <Link href="/workspaces">Return to workspaces</Link> : null}
         <Button disabled={mutation.isPending} onClick={signOut}>Sign out or switch account</Button>
       </nav>
+      <ConfirmationDialog
+        busy={mutation.isPending}
+        confirmLabel={mutation.isPending ? "해제 중…" : "MFA 해제"}
+        description="계정의 추가 인증 보호가 제거되고 다른 세션은 로그아웃됩니다. 다시 로그인할 수 있는지 확인하세요."
+        open={confirmingDisable}
+        title="다단계 인증을 해제할까요?"
+        onCancel={() => setConfirmingDisable(false)}
+        onConfirm={() => void disable()}
+      />
     </main>
   );
 }

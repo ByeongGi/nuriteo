@@ -20,6 +20,7 @@ import { useState } from "react";
 import type { FormEvent } from "react";
 
 import { Button } from "../../../../components/ui/button.tsx";
+import { ConfirmationDialog } from "../../../../components/ui/confirmation-dialog.tsx";
 import { createBrowserApiClient } from "../../../../lib/api/browser-client.ts";
 import { readCsrfCredential } from "../../../../lib/api/browser-security.ts";
 import { useExclusiveMutation } from "../../../../lib/use-exclusive-mutation.ts";
@@ -34,6 +35,7 @@ export function RegistryConsole({
   const [registries, setRegistries] = useState(initialConfiguration.items);
   const [scopes, setScopes] = useState(initialConfiguration.scopes);
   const [feedback, setFeedback] = useState<{ readonly error: boolean; readonly text: string }>();
+  const [pendingDeletion, setPendingDeletion] = useState<RegistryConnection>();
   const options = () => ({ csrfToken: readCsrfCredential() });
   const replace = (registry: RegistryConnection) => {
     setRegistries((items) => items.map((item) => {
@@ -116,13 +118,13 @@ export function RegistryConsole({
   }
 
   async function remove(registry: RegistryConnection) {
-    if (!window.confirm(`Permanently delete ${registry.displayName}?`)) return;
     await mutation.run(async () => {
       setFeedback(undefined);
       try {
         await deleteRegistry(createBrowserApiClient(), registry.id, registry.configVersion, options());
         setRegistries((items) => items.filter((item) => item.id !== registry.id));
         setScopes((items) => items.filter((item) => item.connectionId !== registry.id));
+        setPendingDeletion(undefined);
         setFeedback({ error: false, text: "Registry and its stored credential were deleted." });
       } catch (error) {
         setFeedback(registryFailure(error));
@@ -158,7 +160,7 @@ export function RegistryConsole({
         <div className="record-actions">
           {registry.state === "active" ? <Button disabled={mutation.isPending} onClick={() => void run(async () => (await disableRegistry(createBrowserApiClient(), registry.id, registry.configVersion, options())).data, "Registry disabled immediately; its routes will not fall back.")}>Disable</Button> : <Button variant="primary" disabled={mutation.isPending} onClick={() => void run(async () => (await activateRegistry(createBrowserApiClient(), registry.id, registry.configVersion, options())).data, "Registry validated and activated.")}>Validate and activate</Button>}
           <Button disabled={mutation.isPending || registry.state !== "active" || registry.isDefault} onClick={() => void run(async () => (await setDefaultRegistry(createBrowserApiClient(), registry.id, registry.configVersion, options())).data, "Default Registry updated.")}>Make default</Button>
-          <Button variant="danger" disabled={mutation.isPending || registry.state !== "disabled"} onClick={() => void remove(registry)}>Delete</Button>
+          <Button variant="danger" disabled={mutation.isPending || registry.state !== "disabled"} onClick={() => setPendingDeletion(registry)}>Delete</Button>
         </div>
       </li>)}</ul>}
     </section>
@@ -173,6 +175,7 @@ export function RegistryConsole({
       {scopes.length === 0 ? <p>No scope route is configured.</p> : <ul className="record-list">{scopes.map((route) => <li key={route.scope}><div><strong>{route.scope}</strong><span>{registries.find((registry) => registry.id === route.connectionId)?.displayName ?? "Unavailable Registry"}</span></div></li>)}</ul>}
     </section>
     {feedback ? <p className={`notification-feedback notification-feedback--${feedback.error ? "error" : "success"}`} role={feedback.error ? "alert" : "status"}>{feedback.text}</p> : null}
+    <ConfirmationDialog busy={mutation.isPending} confirmLabel={mutation.isPending ? "삭제 중…" : "Registry 삭제"} description={`${pendingDeletion?.displayName ?? "선택한 Registry"}의 credential과 연결된 scope route가 영구적으로 삭제됩니다.`} open={pendingDeletion !== undefined} title="Package Registry를 삭제할까요?" onCancel={() => setPendingDeletion(undefined)} onConfirm={() => { if (pendingDeletion) void remove(pendingDeletion); }} />
   </main>;
 }
 

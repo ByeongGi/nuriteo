@@ -155,6 +155,7 @@ function sourceContracts(): void {
   const operationsDashboard = read("src/app/(authenticated)/admin/operations/operations-dashboard.tsx");
   const supportBundle = read("src/app/(authenticated)/admin/operations/support-bundle-download.tsx");
   const layout = read("src/app/(authenticated)/layout.tsx");
+  const authenticatedNavigation = read("src/app/(authenticated)/authenticated-navigation.tsx");
 
   assert.match(page, /is_instance_admin/u);
   assert.match(page, /Promise\.all\(\[/u);
@@ -179,7 +180,8 @@ function sourceContracts(): void {
   assert.match(supportBundle, /Nothing is uploaded automatically/u);
   assert.match(supportBundle, /bytes\.byteLength > preview\.maximumBytes/u);
   assert.doesNotMatch(supportBundle, /localStorage|sessionStorage|dangerouslySetInnerHTML/u);
-  assert.match(layout, /href="\/admin\/settings">Administration/u);
+  assert.match(layout, /<AuthenticatedNavigation/u);
+  assert.match(authenticatedNavigation, /href: "\/admin\/settings"/u);
   assert.doesNotMatch(
     `${page}\n${settings}\n${operationsPage}\n${operationsDashboard}`,
     /dangerouslySetInnerHTML|localStorage|sessionStorage/u

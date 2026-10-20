@@ -121,77 +121,83 @@ export function NotificationCenter({
   return (
     <main id="main-content" className="workspace-page notification-page">
       <header className="workspace-page__intro">
-        <p className="eyebrow">Account inbox</p>
-        <h1>Notifications</h1>
-        <p>Review security, account access, collaboration, and operations updates without exposing private payload data.</p>
+        <p className="eyebrow">ACCOUNT INBOX</p>
+        <h1 aria-label="Notifications">알림</h1>
+        <p>보안, 계정 접근, 협업 및 운영 변경 사항을 한곳에서 확인하세요.</p>
       </header>
 
-      <section className="notification-inbox" aria-labelledby="notification-inbox-title">
-        <div className="notification-heading">
+      {feedback ? <p className={`notification-feedback notification-feedback--${feedback.error ? "error" : "success"}`} role={feedback.error ? "alert" : "status"} aria-live="polite">{feedback.text}</p> : null}
+
+      <div className="notification-layout">
+        <aside className="notification-preferences" aria-labelledby="notification-preferences-title">
           <div>
-            <p className="eyebrow">{active.unreadCount} unread</p>
-            <h2 id="notification-inbox-title">Inbox</h2>
+            <p className="eyebrow">EMAIL CHANNELS</p>
+            <h2 id="notification-preferences-title">이메일 알림</h2>
+            <p>{preferences.smtpConfigured ? "Email delivery is available." : "SMTP is not configured. Your choices are saved, and in-app notifications remain available."}</p>
           </div>
-          <div className="notification-tabs" role="tablist" aria-label="Notification lists">
-            <Button role="tab" aria-selected={view === "active"} variant={view === "active" ? "primary" : "secondary"} onClick={() => setView("active")}>Active</Button>
-            <Button role="tab" aria-selected={view === "archived"} variant={view === "archived" ? "primary" : "secondary"} onClick={() => setView("archived")}>Archived</Button>
+          <form onSubmit={savePreferences} aria-busy={mutation.isPending}>
+            <Preference name="criticalSecurity" label="중요 보안" ariaLabel="Critical security" description="SMTP 사용 시 항상 발송됩니다." checked disabled />
+            <Preference name="accountAccess" label="계정과 접근" ariaLabel="Account and access" description="비밀번호, MFA, 멤버십 및 권한 변경" checked={preferences.accountAccess} />
+            <Preference name="collaboration" label="협업" ariaLabel="Collaboration" description="초대와 공유 프로젝트 활동" checked={preferences.collaboration} />
+            <Preference name="operations" label="운영" ariaLabel="Operations" description="관리자를 위한 인스턴스 상태와 전달 장애" checked={preferences.operations} />
+            <Button aria-label="Save preferences" type="submit" variant="primary" disabled={mutation.isPending}>{mutation.isPending ? "저장 중…" : "설정 저장"}</Button>
+          </form>
+        </aside>
+
+        <section className="notification-inbox" aria-labelledby="notification-inbox-title">
+          <div className="notification-heading">
+            <div>
+              <p className="eyebrow">{active.unreadCount} UNREAD</p>
+              <h2 id="notification-inbox-title">최근 알림</h2>
+            </div>
+            <div className="notification-tabs" role="tablist" aria-label="Notification lists">
+              <Button id="active-notifications-tab" aria-controls="notification-list-panel" aria-label="Active" role="tab" aria-selected={view === "active"} variant={view === "active" ? "primary" : "secondary"} onClick={() => setView("active")}>활성</Button>
+              <Button id="archived-notifications-tab" aria-controls="notification-list-panel" aria-label="Archived" role="tab" aria-selected={view === "archived"} variant={view === "archived" ? "primary" : "secondary"} onClick={() => setView("archived")}>보관됨</Button>
+            </div>
           </div>
-        </div>
-        {collection.items.length === 0 ? (
-          <p className="notification-empty">No {view} notifications.</p>
-        ) : (
-          <ol className="notification-list" aria-live="polite">
-            {collection.items.map((item) => (
-              <li key={item.id} className={`notification-item notification-item--${item.status}`}>
-                <div className="notification-item__copy">
-                  <p className="notification-item__meta"><span>{labelClassification(item.classification)}</span><time dateTime={item.occurredAt}>{formatDate(item.occurredAt)}</time></p>
-                  <h3>{item.title}</h3>
-                  <p>{item.summary}</p>
-                  {item.occurrenceCount > 1 ? <small>Occurred {item.occurrenceCount} times</small> : null}
-                  {item.actionState !== "none" ? <small>Action state: {item.actionState}</small> : null}
-                </div>
-                <div className="notification-item__actions">
-                  {item.status === "unread" ? <Button disabled={mutation.isPending} onClick={() => changeStatus(item, "read")}>Mark read</Button> : null}
-                  {item.status === "read" ? <Button disabled={mutation.isPending} onClick={() => changeStatus(item, "unread")}>Mark unread</Button> : null}
-                  {item.status === "archived" ? <Button disabled={mutation.isPending} onClick={() => changeStatus(item, "read")}>Restore</Button> : <Button disabled={mutation.isPending} onClick={() => changeStatus(item, "archived")}>Archive</Button>}
-                </div>
-              </li>
-            ))}
-          </ol>
-        )}
-        {collection.nextCursor !== null ? <Button disabled={mutation.isPending} onClick={loadMore}>{mutation.isPending ? "Loading…" : "Load more"}</Button> : null}
-      </section>
-
-      <section className="notification-preferences" aria-labelledby="notification-preferences-title">
-        <div>
-          <p className="eyebrow">Email channels</p>
-          <h2 id="notification-preferences-title">Preferences</h2>
-          <p>{preferences.smtpConfigured ? "Email delivery is available." : "SMTP is not configured. Your choices are saved, and in-app notifications remain available."}</p>
-        </div>
-        <form onSubmit={savePreferences} aria-busy={mutation.isPending}>
-          <Preference name="criticalSecurity" label="Critical security" description="Always attempted when SMTP is available." checked disabled />
-          <Preference name="accountAccess" label="Account and access" description="Password, MFA, membership, and permission changes." checked={preferences.accountAccess} />
-          <Preference name="collaboration" label="Collaboration" description="Invitations and shared project activity." checked={preferences.collaboration} />
-          <Preference name="operations" label="Operations" description="Instance health and delivery incidents for administrators." checked={preferences.operations} />
-          <Button type="submit" variant="primary" disabled={mutation.isPending}>{mutation.isPending ? "Saving…" : "Save preferences"}</Button>
-        </form>
-      </section>
-
-      {feedback ? <p className={`notification-feedback notification-feedback--${feedback.error ? "error" : "success"}`} role={feedback.error ? "alert" : "status"}>{feedback.text}</p> : null}
+          <div id="notification-list-panel" role="tabpanel" aria-labelledby={view === "active" ? "active-notifications-tab" : "archived-notifications-tab"}>
+            {collection.items.length === 0 ? (
+              <div className="notification-empty"><strong>{view === "active" ? "새 알림이 없습니다." : "보관된 알림이 없습니다."}</strong><p>{view === "active" ? "새로운 변경 사항이 생기면 이곳에 표시됩니다." : "보관한 알림을 다시 확인할 수 있습니다."}</p></div>
+            ) : (
+              <ol className="notification-list" aria-live="polite">
+                {collection.items.map((item) => (
+                  <li key={item.id} className={`notification-item notification-item--${item.status}`}>
+                    <span className="notification-item__indicator" aria-label={item.status === "unread" ? "읽지 않음" : "읽음"} />
+                    <div className="notification-item__copy">
+                      <p className="notification-item__meta"><span>{labelClassification(item.classification)}</span><time dateTime={item.occurredAt}>{formatDate(item.occurredAt)}</time></p>
+                      <h3>{item.title}</h3>
+                      <p>{item.summary}</p>
+                      {item.occurrenceCount > 1 ? <small>{item.occurrenceCount}회 발생</small> : null}
+                      {item.actionState !== "none" ? <small>처리 상태: {item.actionState}</small> : null}
+                    </div>
+                    <div className="notification-item__actions">
+                      {item.status === "unread" ? <Button aria-label="Mark read" disabled={mutation.isPending} onClick={() => changeStatus(item, "read")}>읽음</Button> : null}
+                      {item.status === "read" ? <Button aria-label="Mark unread" disabled={mutation.isPending} onClick={() => changeStatus(item, "unread")}>읽지 않음</Button> : null}
+                      {item.status === "archived" ? <Button aria-label="Restore" disabled={mutation.isPending} onClick={() => changeStatus(item, "read")}>복원</Button> : <Button aria-label="Archive" variant="ghost" disabled={mutation.isPending} onClick={() => changeStatus(item, "archived")}>보관</Button>}
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            )}
+            {collection.nextCursor !== null ? <Button aria-label="Load more" disabled={mutation.isPending} onClick={loadMore}>{mutation.isPending ? "불러오는 중…" : "더 보기"}</Button> : null}
+          </div>
+        </section>
+      </div>
     </main>
   );
 }
 
-function Preference({ name, label, description, checked, disabled = false }: {
+function Preference({ name, label, ariaLabel, description, checked, disabled = false }: {
   readonly name: string;
   readonly label: string;
+  readonly ariaLabel: string;
   readonly description: string;
   readonly checked: boolean;
   readonly disabled?: boolean;
 }) {
   return (
     <label className="notification-preference">
-      <input type="checkbox" name={name} defaultChecked={checked} disabled={disabled} />
+      <input aria-label={ariaLabel} type="checkbox" name={name} defaultChecked={checked} disabled={disabled} />
       <span><strong>{label}</strong><small>{description}</small></span>
     </label>
   );
@@ -218,11 +224,17 @@ function unreadAfter(current: NotificationInbox, item: NotificationInboxItem) {
 }
 
 function labelClassification(value: NotificationInboxItem["classification"]) {
-  return value.split("_").map((word) => word[0]?.toUpperCase() + word.slice(1)).join(" ");
+  const labels = {
+    account_access: "계정과 접근",
+    collaboration: "협업",
+    critical_security: "중요 보안",
+    operations: "운영"
+  } satisfies Record<NotificationInboxItem["classification"], string>;
+  return labels[value];
 }
 
 function formatDate(value: string) {
-  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
+  return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
 }
 
 function notificationFailure(error: unknown): { readonly error: true; readonly text: string } {

@@ -167,7 +167,7 @@ try {
     await page.getByRole("checkbox").check();
     await page.getByRole("button", { name: "Enter maintenance mode" }).click();
     await page.getByRole("status").filter({ hasText: "Maintenance mode is active" }).waitFor();
-    await page.getByText("Projects are read only while an administrator completes maintenance.").waitFor();
+    await page.getByText("관리 작업이 끝날 때까지 프로젝트는 읽기 전용입니다.").waitFor();
     assert.equal(maintenanceChanges, 1);
 
     await page.getByRole("checkbox").check();

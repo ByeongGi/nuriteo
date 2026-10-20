@@ -58,7 +58,7 @@ try {
     await adminPage.getByRole("status").filter({ hasText: "disabled state" }).waitFor(); assert.equal(await adminPage.getByText("top-secret").count(), 0);
 
     const user = await browser.newContext(); await user.addCookies([{ name: "nuriteo_dev_session", value: "user", url: origin }, { name: "nuriteo_dev_csrf", value: csrf, url: origin }]); const identities = await user.newPage();
-    await identities.goto(`${origin}/identities`, { waitUntil: "networkidle" }); await identities.getByRole("heading", { name: "Connected identities" }).waitFor(); await identities.getByRole("button", { name: "Disconnect" }).click(); await identities.getByRole("status").filter({ hasText: "session was rotated" }).waitFor();
+    await identities.goto(`${origin}/identities`, { waitUntil: "networkidle" }); await identities.getByRole("heading", { name: "Connected identities" }).waitFor(); await identities.getByRole("button", { name: /Disconnect/u }).click(); await identities.getByRole("button", { name: "연결 해제", exact: true }).click(); await identities.getByRole("status").filter({ hasText: "session was rotated" }).waitFor();
     assert.ok(mutations.every((entry) => entry.csrf === csrf && entry.origin === origin));
     await Promise.all([anonymous.close(), admin.close(), user.close()]);
   } finally { await browser.close(); }

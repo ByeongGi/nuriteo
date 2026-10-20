@@ -6,9 +6,11 @@
   "type": "module",
   "scripts": {
     "build": "pnpm runtime:assets && next build && node tooling/canonicalize-next-output.mjs",
+    "build:storybook": "storybook build",
     "dev": "pnpm runtime:assets && next dev",
     "lint": "tsc -p tsconfig.json --noEmit",
     "start": "next start",
+    "storybook": "storybook dev -p 6006",
     "runtime:assets": "node --experimental-strip-types tooling/build-runtime-assets.ts",
     "test": "node --conditions=react-server test/run.ts",
     "test:browser-entry": "node test/browser-entry.test.ts",
@@ -54,11 +56,15 @@
     "tailwind-merge": "3.7.0"
   },
   "devDependencies": {
+    "@storybook/addon-a11y": "10.6.2",
+    "@storybook/addon-docs": "10.6.2",
+    "@storybook/nextjs-vite": "10.6.2",
     "@tailwindcss/postcss": "4.3.3",
     "@types/node": "^22.20.2",
     "@types/react": "19.0.3",
     "@types/react-dom": "19.0.3",
     "esbuild": "0.28.2",
+    "storybook": "10.6.2",
     "tailwindcss": "4.3.3",
     "typescript": "6.0.3"
   }

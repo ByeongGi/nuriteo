@@ -37,6 +37,7 @@ await import("./mfa-ux.test.ts");
 await import("./oidc-bff.test.ts");
 await import("./registry-bff.test.ts");
 await import("./team-bff.test.ts");
+await import("./ui-safety-ux.test.ts");
 await import("./project-bundle-v1-validation.test.ts");
 await import("./project-bundle-v1.test.ts");
 await import("./project-bundle-v1-stream.test.ts");

@@ -25,7 +25,7 @@ const project = {
   version: 1
 };
 
-type FixtureMode = "failure" | "unmount";
+type FixtureMode = "failure" | "scale" | "unmount";
 interface FixtureControl {
   failPreview(): void;
   resolvePendingBridge(): void;
@@ -33,13 +33,14 @@ interface FixtureControl {
   unmount(): void;
 }
 
-const mode: FixtureMode = new URLSearchParams(location.search).get("mode") === "unmount" ? "unmount" : "failure";
+const requestedMode = new URLSearchParams(location.search).get("mode");
+const mode: FixtureMode = requestedMode === "unmount" || requestedMode === "scale" ? requestedMode : "failure";
 let lazyAttempts = 0;
 let bridgeAttempts = 0;
 let bridgeCreationPending = false;
 let disposedBridges = 0;
 let pendingBridgeResolve: (() => void) | undefined;
-const fixture = createRecoveryFixtureAdapter(mode === "unmount" ? "writer" : "conflict");
+const fixture = createRecoveryFixtureAdapter(mode === "failure" ? "conflict" : "writer", mode === "scale");
 const root = createRoot(document.getElementById("root")!);
 
 root.render(
@@ -98,9 +99,15 @@ function makeFixtureBridge(): SubdomainPreviewBridge {
   };
 }
 
-function createRecoveryFixtureAdapter(initialDraftAccess: "conflict" | "writer"): { adapter: RuntimeAdapter; failPreview(): void } {
+function createRecoveryFixtureAdapter(initialDraftAccess: "conflict" | "writer", withLargeWorkspace: boolean): { adapter: RuntimeAdapter; failPreview(): void } {
   const listeners = new Set<(state: RuntimeViewState) => void>();
   const workspaceText = new Map([["src/message.ts", 'export const label = "initial";\n']]);
+  if (withLargeWorkspace) {
+    for (let index = 0; index < 2_500; index += 1) {
+      const suffix = String(index).padStart(4, "0");
+      workspaceText.set(`src/generated/module-${suffix}.ts`, `export const module${suffix} = ${index};\n`);
+    }
+  }
   let quotaArmed = true;
   let state = baseState();
 
@@ -122,14 +129,22 @@ function createRecoveryFixtureAdapter(initialDraftAccess: "conflict" | "writer")
     };
   }
 
-  const workspaceState = (): RuntimeWorkspaceState => ({
-    status: "ready",
-    projectId: project.id,
-    root: `/workspace/projects/${project.id}`,
-    files: [{ kind: "text", name: "message.ts", path: "src/message.ts", sizeBytes: new TextEncoder().encode(workspaceText.get("src/message.ts")).byteLength }],
-    totalBytes: new TextEncoder().encode(workspaceText.get("src/message.ts")).byteLength,
-    errorCode: null
-  });
+  const workspaceState = (): RuntimeWorkspaceState => {
+    let totalBytes = 0;
+    const files = Array.from(workspaceText, ([path, content]) => {
+      const sizeBytes = new TextEncoder().encode(content).byteLength;
+      totalBytes += sizeBytes;
+      return { kind: "text" as const, name: path.split("/").at(-1) ?? path, path, sizeBytes };
+    });
+    return {
+      status: "ready",
+      projectId: project.id,
+      root: `/workspace/projects/${project.id}`,
+      files,
+      totalBytes,
+      errorCode: null
+    };
+  };
 
   const adapter: RuntimeAdapter = {
     async mount() {
@@ -144,7 +159,10 @@ function createRecoveryFixtureAdapter(initialDraftAccess: "conflict" | "writer")
     subscribe(listener) { listeners.add(listener); return () => { listeners.delete(listener); }; },
     getState: copyState,
     terminal: {
-      run: async () => ({ exitCode: 0 }),
+      run: async (command, _terminalId, onOutput) => {
+        if (command === "stress-log") onOutput?.({ stream: "stdout", data: "x".repeat(70 * 1_024) });
+        return { exitCode: 0 };
+      },
       input: () => true,
       resize() {},
       signal: () => true,

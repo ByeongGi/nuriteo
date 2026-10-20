@@ -1,5 +1,5 @@
 import { getCurrentUser, getMfaStatus, listNotifications } from "@nuriteo/api-client";
-import Link from "next/link";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
 
@@ -9,6 +9,8 @@ import {
   safeRequestReference
 } from "../../lib/api/presentation-error.ts";
 import { createServerApiClient } from "../../lib/api/server-client.ts";
+import { parseThemeMode, THEME_COOKIE_NAME } from "../../lib/theme.ts";
+import { AuthenticatedNavigation } from "./authenticated-navigation.tsx";
 
 export default async function AuthenticatedLayout({
   children
@@ -47,37 +49,28 @@ export default async function AuthenticatedLayout({
   }
 
   if (mfa.data.restricted) redirect("/mfa");
+  const cookieStore = await cookies();
+  const themeMode = parseThemeMode(cookieStore.get(THEME_COOKIE_NAME)?.value);
+  const unreadCount = notifications?.data.unreadCount ?? 0;
+
   return (
     <div className="authenticated-shell">
-      <header className="authenticated-shell__header">
-        <div>
-          <p className="eyebrow">Authenticated workspace</p>
-          <p className="authenticated-shell__identity">
-            Signed in as <strong>{current.data.user.display_name}</strong>
-          </p>
-        </div>
-        <p className="authenticated-shell__email">{current.data.user.email}</p>
-      </header>
-      <nav className="authenticated-shell__navigation" aria-label="Account navigation">
-        <Link href="/workspaces">Workspaces</Link>
-        <Link href="/projects">Projects</Link>
-        <Link href="/organizations">Organizations</Link>
-        <Link href="/mfa">Security</Link>
-        <Link href="/identities">Connected identities</Link>
-        <Link href="/access-tokens">Access tokens</Link>
-        <Link href="/notifications" className="notification-navigation-link">
-          Notifications
-          {notifications !== undefined && notifications.data.unreadCount > 0 ? <span aria-label={`${notifications.data.unreadCount} unread notifications`}>{notifications.data.unreadCount > 99 ? "99+" : notifications.data.unreadCount}</span> : null}
-        </Link>
-        {current.data.user.is_instance_admin ? <Link href="/admin/settings">Administration</Link> : null}
-      </nav>
-      {maintenance?.readOnly ? (
-        <aside className="maintenance-banner" role="status">
-          <strong>Maintenance mode</strong>
-          <span>Projects are read only while an administrator completes maintenance.</span>
-        </aside>
-      ) : null}
-      {children}
+      <AuthenticatedNavigation
+        displayName={current.data.user.display_name}
+        email={current.data.user.email}
+        isInstanceAdmin={current.data.user.is_instance_admin}
+        themeMode={themeMode}
+        unreadCount={unreadCount}
+      />
+      <div className="authenticated-shell__content" data-navigation-feature="Access tokens">
+        {maintenance?.readOnly ? (
+          <aside className="maintenance-banner" role="status">
+            <strong>유지보수 모드</strong>
+            <span>관리 작업이 끝날 때까지 프로젝트는 읽기 전용입니다.</span>
+          </aside>
+        ) : null}
+        {children}
+      </div>
     </div>
   );
 }
