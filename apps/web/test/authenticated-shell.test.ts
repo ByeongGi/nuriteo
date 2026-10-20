@@ -61,6 +61,8 @@ function testRequestScopedAuthenticatedBoundary(): void {
 function testAccessibleStateContract(): void {
   const page = read("src/app/(authenticated)/workspaces/page.tsx");
   const loading = read("src/app/(authenticated)/workspaces/loading.tsx");
+  const navigation = read("src/app/(authenticated)/authenticated-navigation.tsx");
+  const logout = read("src/app/(authenticated)/logout-button.tsx");
 
   assert.match(page, /<nav[^>]+aria-labelledby="workspace-selector-title"/u);
   assert.match(page, /aria-current=\{isSelected \? "page" : undefined\}/u);
@@ -69,6 +71,11 @@ function testAccessibleStateContract(): void {
   assert.match(loading, /aria-busy="true"/u);
   assert.match(loading, /aria-live="polite"/u);
   assert.match(loading, /Loading Workspaces/u);
+  assert.match(navigation, /<LogoutButton\s*\/>/u);
+  assert.match(logout, /await deleteSession/u);
+  assert.match(logout, /csrfToken: readCsrfCredential\(\)/u);
+  assert.match(logout, /router\.replace\("\/sign-in"\)/u);
+  assert.match(logout, /role="alert"/u);
 }
 
 function workspace(

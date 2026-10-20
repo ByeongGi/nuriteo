@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 
 import {
   forwardCreateSession,
-  forwardCurrentUser
+  forwardCurrentUser,
+  forwardDeleteSession
 } from "../src/lib/api/auth-bff.ts";
 
 const originalFetch = globalThis.fetch;
@@ -11,6 +12,8 @@ const originalInternalUrl = process.env.NURITEO_INTERNAL_API_URL;
 try {
   process.env.NURITEO_INTERNAL_API_URL = "http://core.internal:8080";
   await testExactLoginForwarding();
+  await testExactLogoutForwarding();
+  await testLogoutSecurityRejection();
   await testOriginAndBodyRejection();
   await testCurrentUserCookieAllowlist();
   await testBoundedSafeUpstreamFailure();
@@ -25,6 +28,68 @@ try {
   } else {
     process.env.NURITEO_INTERNAL_API_URL = originalInternalUrl;
   }
+}
+
+async function testExactLogoutForwarding(): Promise<void> {
+  let receivedUrl: string | undefined;
+  let receivedInit: RequestInit | undefined;
+  globalThis.fetch = async (input, init) => {
+    receivedUrl = String(input);
+    receivedInit = init;
+    return new Response(null, {
+      headers: [
+        ["set-cookie", "nrt_session=; Max-Age=0; Path=/; HttpOnly; SameSite=Lax"],
+        ["set-cookie", "nrt_csrf=; Max-Age=0; Path=/; SameSite=Lax"]
+      ],
+      status: 204
+    });
+  };
+  const csrf = `nrt_csrf_${"a".repeat(43)}`;
+  const response = await forwardDeleteSession(new Request(
+    "https://nuriteo.example.test/api/v1/auth/session",
+    {
+      headers: {
+        cookie: `nrt_session=opaque; nrt_csrf=${csrf}`,
+        host: "nuriteo.example.test",
+        origin: "https://nuriteo.example.test",
+        "x-csrf-token": csrf,
+        "x-request-id": "edge-logout-request"
+      },
+      method: "DELETE"
+    }
+  ));
+
+  assert.equal(receivedUrl, "http://core.internal:8080/api/v1/auth/session");
+  assert.equal(receivedInit?.method, "DELETE");
+  assert.deepEqual([...new Headers(receivedInit?.headers).entries()], [
+    ["cookie", `nrt_session=opaque; nrt_csrf=${csrf}`],
+    ["origin", "https://nuriteo.example.test"],
+    ["x-csrf-token", csrf],
+    ["x-request-id", "edge-logout-request"]
+  ]);
+  assert.equal(response.status, 204);
+  assert.equal(response.headers.getSetCookie().length, 2);
+}
+
+async function testLogoutSecurityRejection(): Promise<void> {
+  let called = false;
+  globalThis.fetch = async () => {
+    called = true;
+    return new Response();
+  };
+  const response = await forwardDeleteSession(new Request(
+    "https://nuriteo.example.test/api/v1/auth/session",
+    {
+      headers: {
+        host: "nuriteo.example.test",
+        origin: "https://attacker.example.test",
+        "x-csrf-token": "invalid"
+      },
+      method: "DELETE"
+    }
+  ));
+  assert.equal(response.status, 403);
+  assert.equal(called, false);
 }
 
 async function testExactLoginForwarding(): Promise<void> {

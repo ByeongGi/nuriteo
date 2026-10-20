@@ -6,15 +6,17 @@ import {
   selectForwardedHeaders,
   validateInternalApiUrl
 } from "./server-policy.ts";
+import { isCanonicalCsrfCredential } from "./csrf-credential.ts";
 
 const LOGIN_PATH = "/api/v1/auth/sessions";
+const SESSION_PATH = "/api/v1/auth/session";
 const ME_PATH = "/api/v1/me";
 const MAX_LOGIN_BODY_BYTES = 4_096;
 const MAX_RESPONSE_BYTES = 1_048_576;
 const UPSTREAM_TIMEOUT_MS = 15_000;
 const REQUEST_ID_PATTERN = /^[A-Za-z0-9._:-]{1,128}$/u;
 
-type AuthBffPath = typeof LOGIN_PATH | typeof ME_PATH;
+type AuthBffPath = typeof LOGIN_PATH | typeof SESSION_PATH | typeof ME_PATH;
 type StreamFailure = "aborted" | "read_error" | "too_large";
 type StreamResult =
   | { bytes: Uint8Array; ok: true }
@@ -73,6 +75,33 @@ export async function forwardCurrentUser(
     },
     requestIdFor(request),
     false,
+    deadline
+  );
+}
+
+export async function forwardDeleteSession(
+  request: Request,
+  timeoutSignal = AbortSignal.timeout(UPSTREAM_TIMEOUT_MS)
+): Promise<Response> {
+  const requestId = requestIdFor(request);
+  const deadline = requestDeadline(request.signal, timeoutSignal);
+  if (deadline.signal.aborted) {
+    return abortProblem(deadline, requestId, SESSION_PATH);
+  }
+  const origin = sameOriginHeader(request);
+  const csrf = request.headers.get("x-csrf-token");
+  if (origin === undefined || !isCanonicalCsrfCredential(csrf)) {
+    return problem(403, "BFF_BROWSER_SECURITY_REJECTED", requestId, SESSION_PATH);
+  }
+
+  const headers = selectForwardedHeaders(request.headers);
+  headers.set("origin", origin);
+  headers.set("x-csrf-token", csrf);
+  return forward(
+    SESSION_PATH,
+    { headers, method: "DELETE" },
+    requestId,
+    true,
     deadline
   );
 }

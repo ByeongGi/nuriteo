@@ -2453,9 +2453,33 @@
     grid-template-columns: 2rem minmax(0, 1fr);
     align-items: center;
     gap: var(--n-ref-space-2);
-    margin-top: auto;
+    margin-top: var(--n-ref-space-2);
     border-top: 1px solid var(--n-color-border-muted);
     padding-top: var(--n-ref-space-3);
+  }
+
+  .authenticated-navigation__logout {
+    display: grid;
+    gap: var(--n-ref-space-1);
+    margin-top: auto;
+  }
+
+  .authenticated-navigation__logout button {
+    width: 100%;
+    justify-content: flex-start;
+    gap: var(--n-ref-space-2);
+    color: var(--n-color-fg-muted);
+  }
+
+  .authenticated-navigation__logout button:hover {
+    color: var(--n-color-fg-default);
+  }
+
+  .authenticated-navigation__logout p {
+    margin: 0;
+    color: var(--n-color-status-danger);
+    font-size: var(--n-font-size-xs);
+    line-height: 1.4;
   }
 
   .authenticated-navigation__avatar {
@@ -2780,7 +2804,9 @@
   .authenticated-navigation > nav a > span:not(.authenticated-navigation__icon):not(.authenticated-navigation__badge),
   .authenticated-navigation__account > p,
   .authenticated-navigation__user,
-  .authenticated-navigation__footer .theme-selector {
+  .authenticated-navigation__footer .theme-selector,
+  .authenticated-navigation__logout button > span:last-child,
+  .authenticated-navigation__logout p {
     display: none;
   }
 
@@ -2805,6 +2831,10 @@
     justify-items: center;
   }
 
+  .authenticated-navigation__logout button {
+    padding-inline: 0;
+  }
+
   .workspace-dashboard__shortcuts > div {
     grid-template-columns: 1fr;
   }
@@ -2823,7 +2853,9 @@
     right: 0;
     bottom: 0;
     left: 0;
-    display: block;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 3rem;
+    gap: var(--n-ref-space-1);
     width: auto;
     height: 4rem;
     border-top: 1px solid var(--n-color-border-muted);
@@ -2844,6 +2876,19 @@
     grid-template-columns: repeat(4, 1fr);
     gap: var(--n-ref-space-1);
     margin: 0;
+  }
+
+  .authenticated-navigation__logout {
+    display: block;
+    margin: 0;
+  }
+
+  .authenticated-navigation__logout button {
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    justify-content: center;
+    border-radius: var(--n-radius-md);
   }
 
   .authenticated-navigation > nav:first-of-type a {

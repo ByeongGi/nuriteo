@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 
 import { ThemeSelector } from "../../components/theme-selector.tsx";
 import type { ThemeMode } from "../../lib/theme.ts";
+import { LogoutButton } from "./logout-button.tsx";
 
 interface AuthenticatedNavigationProps {
   readonly displayName: string;
@@ -108,6 +109,8 @@ export function AuthenticatedNavigation({
           />
         ) : null}
       </nav>
+
+      <LogoutButton />
 
       <div className="authenticated-navigation__footer">
         <span className="authenticated-navigation__avatar">{userInitials(displayName)}</span>

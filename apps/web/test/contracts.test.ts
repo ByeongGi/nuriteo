@@ -56,6 +56,7 @@ function testServerFirstBoundaries(): void {
     "src/app/(authenticated)/admin/updates/update-readiness-console.tsx",
     "src/app/(authenticated)/authenticated-navigation.tsx",
     "src/app/(authenticated)/identities/identity-connections.tsx",
+    "src/app/(authenticated)/logout-button.tsx",
     "src/app/(authenticated)/notifications/notification-center.tsx",
     "src/app/(authenticated)/organization-invitations/accept/accept-invitation.tsx",
     "src/app/(authenticated)/organizations/[organizationId]/teams/team-console.tsx",
@@ -153,10 +154,12 @@ function testProductionBoundary(): void {
   assert.match(runtimeAdapter, /from "@nuriteo\/workspace-runtime"/u);
 
   const loginRoute = read("src/app/api/v1/auth/sessions/route.ts");
+  const logoutRoute = read("src/app/api/v1/auth/session/route.ts");
   const meRoute = read("src/app/api/v1/me/route.ts");
   assert.match(loginRoute, /forwardCreateSession/u);
+  assert.match(logoutRoute, /forwardDeleteSession/u);
   assert.match(meRoute, /forwardCurrentUser/u);
-  assert.doesNotMatch(`${loginRoute}\n${meRoute}`, /\[\.\.\.|params|pathname/u);
+  assert.doesNotMatch(`${loginRoute}\n${logoutRoute}\n${meRoute}`, /\[\.\.\.|params|pathname/u);
 
   const projectGitPanel = read("src/app/(authenticated)/projects/project-git-panel.tsx");
   assert.match(projectGitPanel, /type="password"/u);
