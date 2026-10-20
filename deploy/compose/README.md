@@ -28,6 +28,32 @@ The Compose file has no credential defaults. Protect every credential and privat
 
 Optional settings are `NURITEO_WEB_BIND_IP` (default `127.0.0.1`), `NURITEO_WEB_PORT` (default `3000`), `NURITEO_POSTGRES_IMAGE`, `NURITEO_SERVER_IMAGE`, and `NURITEO_WEB_IMAGE`.
 
+## Persistent local development
+
+For edit-and-refresh development, run `pnpm dev` from the repository root. PostgreSQL and RustFS run in containers and publish development-only loopback ports through `compose.dev.yaml`; Core runs natively and restarts after Rust, migration, or Cargo input changes; Web runs with Next.js HMR. The local TLS certificates include both Compose DNS identities and the loopback identity. Ctrl-C stops Core and Web while preserving the infrastructure and data for the next run. Run `pnpm dev:stack:down` when the infrastructure should also stop.
+
+The repository provides a local wrapper that keeps production Compose service boundaries while generating development-only credentials and TLS material under the ignored `.local/nuriteo-compose` directory:
+
+```sh
+pnpm dev:stack
+pnpm dev:stack:status
+pnpm dev:stack:credentials
+pnpm dev:stack:logs
+pnpm dev:stack:down
+```
+
+`dev:stack` selects Docker Compose v2 first, then Podman Compose, and finally the pinned `uvx` Podman Compose provider. It manually gates PostgreSQL, RustFS, storage initialization, migrations, administrator bootstrap, Core health, and Web readiness so failed one-shots cannot be hidden by a later service start. The default URL is `http://127.0.0.1:3000`; use `NURITEO_DEV_WEB_PORT` to select another port before initialization or startup.
+
+Credentials and CA material are stable across `down`/`up`, as are the named PostgreSQL and RustFS volumes. View the generated administrator login with `pnpm dev:stack:credentials`. Never reuse these development secrets outside the local stack.
+
+Reset is intentionally destructive and explicit:
+
+```sh
+pnpm dev:stack:reset
+```
+
+The underlying command refuses to remove data without `reset --yes` and removes the state directory only when its NURITEO marker is present. Use `NURITEO_DEV_STATE_DIR`, `NURITEO_DEV_PROJECT`, `NURITEO_DEV_ADMIN_EMAIL`, and `NURITEO_DEV_ADMIN_NAME` only when an isolated second local stack is required.
+
 ## Isolated Preview origin
 
 Production Preview requires wildcard DNS and TLS for `*.${NURITEO_PREVIEW_BASE_DOMAIN}` at the reverse proxy. The proxy must preserve the original `Host` header and route both the application origin and the wildcard Preview hosts to Web. Set `NURITEO_PREVIEW_WILDCARD_READY=true` only after independently verifying that DNS, the wildcard certificate, and proxy routing work end to end. This flag is an explicit operator acknowledgement; Nuriteo does not infer or provision those external resources.

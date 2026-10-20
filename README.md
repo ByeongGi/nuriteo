@@ -14,8 +14,20 @@ NURITEO는 GitHub 프로젝트나 템플릿을 브라우저에서 열고 설치,
 
 ```bash
 pnpm install
-pnpm dev:web
+pnpm dev
 ```
+
+`pnpm dev`는 PostgreSQL과 RustFS는 컨테이너로 유지하고, Core는 Rust 소스 변경 시 자동 재빌드·재시작하며, Web은 Next.js HMR로 저장 즉시 갱신한다. 기본 접속 주소는 `http://127.0.0.1:3000`이다. 종료 후에도 데이터 컨테이너는 남아 다음 실행이 빠르며 `pnpm dev:stack:down`으로 정지할 수 있다.
+
+프로덕션 이미지와 동일한 경계로 PostgreSQL, RustFS, Core, Web을 함께 검증하려면:
+
+```bash
+pnpm dev:stack
+```
+
+최초 실행 시 `.local/nuriteo-compose`에 개발 전용 인증정보와 TLS가 생성된다.
+접속 정보는 `pnpm dev:stack:credentials`, 상태는 `pnpm dev:stack:status`로 확인한다.
+`pnpm dev:stack:down`은 데이터를 보존하며, `pnpm dev:stack:reset`만 데이터와 인증정보를 삭제한다.
 
 주요 검증 명령:
 

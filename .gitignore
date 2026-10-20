@@ -3,6 +3,7 @@
 /target/
 /dist/
 /artifacts/
+/.local/
 
 /packages/*/node_modules/
 /examples/*/node_modules/

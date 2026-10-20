@@ -29,6 +29,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm check:workspace
+      - run: pnpm test:dev-stack
       - run: pnpm check:self-hosted-task-graph
       - run: pnpm check:self-hosted-baseline
       - run: pnpm check:types
