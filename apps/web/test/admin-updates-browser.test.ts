@@ -134,7 +134,7 @@ try {
     await member.addCookies([{ name: "nuriteo_dev_session", value: "member", url: origin }]);
     const memberPage = await member.newPage();
     await memberPage.goto(`${origin}/admin/updates`, { waitUntil: "networkidle" });
-    await memberPage.getByRole("heading", { name: "Administrator access required" }).waitFor();
+    await memberPage.getByRole("heading", { name: "관리자 권한이 필요합니다" }).waitFor();
     await member.close();
 
     const admin = await browser.newContext({ viewport: { width: 1280, height: 900 } });
@@ -144,18 +144,18 @@ try {
     ]);
     const page = await admin.newPage();
     await page.goto(`${origin}/admin/updates`, { waitUntil: "networkidle" });
-    await page.getByRole("heading", { name: "Resolve blockers before approval" }).waitFor();
-    assert.equal(await page.getByRole("button", { name: "Record update approval" }).count(), 0);
+    await page.getByRole("heading", { name: "승인 전 차단 요인을 해결하세요" }).waitFor();
+    assert.equal(await page.getByRole("button", { name: "업데이트 승인 기록" }).count(), 0);
     assert.equal(await page.getByText(/postgres:\/\//).count(), 0);
 
     blocked = false;
     await page.reload({ waitUntil: "networkidle" });
-    const approve = page.getByRole("button", { name: "Record update approval" });
+    const approve = page.getByRole("button", { name: "업데이트 승인 기록" });
     assert.equal(await approve.isDisabled(), true);
     await page.getByRole("checkbox").check();
     await approve.click();
-    await page.getByRole("status").filter({ hasText: "No update was started" }).waitFor();
-    await page.getByRole("heading", { name: "Recent update approvals" }).waitFor();
+    await page.getByRole("status").filter({ hasText: "업데이트는 시작하지 않았습니다" }).waitFor();
+    await page.getByRole("heading", { name: "최근 업데이트 승인" }).waitFor();
     assert.equal(approvals, 1);
     assert.deepEqual(observedApproval, {
       targetRelease: "self-hosted-v1-rc-lineage",
@@ -163,16 +163,17 @@ try {
     });
 
     await page.goto(`${origin}/admin/maintenance`, { waitUntil: "networkidle" });
-    await page.getByRole("heading", { name: "Enter maintenance mode" }).waitFor();
+    await page.getByRole("heading", { name: "유지보수 모드 시작" }).waitFor();
     await page.getByRole("checkbox").check();
-    await page.getByRole("button", { name: "Enter maintenance mode" }).click();
-    await page.getByRole("status").filter({ hasText: "Maintenance mode is active" }).waitFor();
+    await page.getByRole("button", { name: "유지보수 시작" }).click();
+    await page.getByRole("status").filter({ hasText: "유지보수 모드가 활성화" }).waitFor();
+    await page.reload({ waitUntil: "networkidle" });
     await page.getByText("관리 작업이 끝날 때까지 프로젝트는 읽기 전용입니다.").waitFor();
     assert.equal(maintenanceChanges, 1);
 
     await page.getByRole("checkbox").check();
-    await page.getByRole("button", { name: "Resume writes" }).click();
-    await page.getByRole("status").filter({ hasText: "Maintenance mode ended" }).waitFor();
+    await page.getByRole("button", { name: "쓰기 재개" }).click();
+    await page.getByRole("status").filter({ hasText: "유지보수 모드를 종료" }).waitFor();
     assert.equal(maintenanceChanges, 2);
     assert.equal(maintenanceEnabled, false);
     await admin.close();

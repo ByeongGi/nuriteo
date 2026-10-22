@@ -9,12 +9,12 @@ const guard = read("src/lib/use-unsaved-changes-guard.ts");
 const ide = read("src/app/(authenticated)/projects/project-ide-shell.tsx");
 const fileSearch = read("src/app/(authenticated)/projects/use-project-file-search.ts");
 
-assert.match(dialog, /aria-modal="true"/u);
-assert.match(dialog, /aria-labelledby=\{titleId\}/u);
-assert.match(dialog, /aria-describedby=\{descriptionId\}/u);
-assert.match(dialog, /event\.key === "Escape"/u);
-assert.match(dialog, /event\.key !== "Tab"/u);
-assert.match(dialog, /previouslyFocused\?\.focus/u);
+assert.match(dialog, /@base-ui\/react\/alert-dialog/u);
+assert.match(dialog, /<AlertDialog\.Root/u);
+assert.match(dialog, /<AlertDialog\.Title/u);
+assert.match(dialog, /<AlertDialog\.Description/u);
+assert.match(dialog, /initialFocus=\{cancelRef\}/u);
+assert.doesNotMatch(dialog, /addEventListener|FOCUSABLE_ELEMENTS|previouslyFocused/u);
 assert.match(guard, /beforeunload/u);
 assert.match(guard, /document\.addEventListener\("click"/u);
 assert.match(guard, /window\.confirm\(message\)/u);

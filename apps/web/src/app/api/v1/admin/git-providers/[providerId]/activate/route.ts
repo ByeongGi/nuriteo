@@ -1,4 +1,4 @@
-import { action } from "../provider-action.ts";
+import { action } from "#src/app/api/v1/admin/git-providers/[providerId]/provider-action.ts";
 
 export const dynamic = "force-dynamic";
 

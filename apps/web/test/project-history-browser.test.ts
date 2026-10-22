@@ -92,55 +92,55 @@ try {
   const pageErrors: string[] = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
   await page.goto(origin, { waitUntil: "networkidle" });
-  await page.getByText("1 Versions and 2 Recovery checkpoints loaded.").waitFor();
-  assert.equal(await page.getByRole("region", { name: "Recovery checkpoints" }).locator("li strong").first().textContent(), "Recovery 2");
+  await page.getByText("버전 1개와 복구 지점 2개를 불러왔습니다.").waitFor();
+  assert.equal(await page.getByRole("region", { name: "복구 지점" }).locator("li strong").first().textContent(), "복구 지점 2");
 
-  await page.getByRole("button", { name: "Load more Versions" }).click();
-  await page.getByText("1 more Versions loaded.").waitFor();
+  await page.getByRole("button", { name: "버전 더 보기" }).click();
+  await page.getByText("버전 1개를 더 불러왔습니다.").waitFor();
   assert.match(requests.at(-1) ?? "", /cursor=next-page/u);
 
-  await page.getByLabel("Version name").fill("Stale Version");
-  await page.getByRole("button", { name: "Create Version" }).click();
-  await page.getByText(/Server Project changed/u).waitFor();
-  await page.getByRole("button", { name: "Reload latest Project" }).click();
+  await page.getByLabel("버전 이름").fill("Stale Version");
+  await page.getByRole("button", { name: "버전 만들기" }).click();
+  await page.getByText(/서버 프로젝트가 변경/u).waitFor();
+  await page.getByRole("button", { name: "최신 프로젝트 다시 불러오기" }).click();
   assert.equal(await page.evaluate(() => window.__nuriteoHistoryProbe.reloads), 1);
 
-  await page.getByLabel("Version name").fill("Manual checkpoint");
-  await page.getByRole("button", { name: "Create Version" }).click();
-  await page.getByText("Version “Manual checkpoint” created.").waitFor();
+  await page.getByLabel("버전 이름").fill("Manual checkpoint");
+  await page.getByRole("button", { name: "버전 만들기" }).click();
+  await page.getByText("“Manual checkpoint” 버전을 만들었습니다.").waitFor();
   assert.notEqual(versionKeys[0], versionKeys[1], "a changed Version payload must use a fresh idempotency key");
 
   const beforeRefactor = page.locator("li", { hasText: "Before refactor" });
-  await beforeRefactor.getByRole("button", { name: "Restore" }).click();
-  const confirm = page.getByRole("button", { name: "Restore Server Working Head" });
+  await beforeRefactor.getByRole("button", { name: "복구" }).click();
+  const confirm = page.getByRole("button", { name: "서버 작업 버전 복구" });
   await confirm.waitFor();
   assert.equal(await confirm.evaluate((element) => element === document.activeElement), true);
   await page.keyboard.press("Shift+Tab");
-  assert.equal(await page.getByRole("button", { name: "Cancel" }).evaluate((element) => element === document.activeElement), true);
+  assert.equal(await page.getByRole("button", { name: "취소" }).evaluate((element) => element === document.activeElement), true);
   await page.keyboard.press("Tab");
   assert.equal(await confirm.evaluate((element) => element === document.activeElement), true);
   await page.keyboard.press("Escape");
   await confirm.waitFor({ state: "detached" });
   await page.waitForTimeout(50);
-  assert.equal(await beforeRefactor.getByRole("button", { name: "Restore" }).evaluate((element) => element === document.activeElement), true);
+  assert.equal(await beforeRefactor.getByRole("button", { name: "복구" }).evaluate((element) => element === document.activeElement), true);
 
-  await beforeRefactor.getByRole("button", { name: "Restore" }).click();
-  await page.getByRole("button", { name: "Restore Server Working Head" }).click();
-  await page.getByText("Server Working Head is now v2. The browser Local Draft was not replaced.").waitFor();
-  await page.getByText("Your current Local Draft is still open and unchanged.").waitFor();
+  await beforeRefactor.getByRole("button", { name: "복구" }).click();
+  await page.getByRole("button", { name: "서버 작업 버전 복구" }).click();
+  await page.getByText("서버 작업 버전은 이제 v2입니다. 브라우저의 로컬 초안은 바꾸지 않았습니다.").waitFor();
+  await page.getByText("현재 로컬 초안은 열린 상태로 그대로 유지됩니다.").waitFor();
   assert.deepEqual(await page.evaluate(() => ({
     etag: window.__nuriteoHistoryProbe.committedEtag,
     version: window.__nuriteoHistoryProbe.committedVersion
   })), { etag: '"project-v2"', version: 2 });
   assert.ok(requests.some((entry) => entry === `GET ${base}/history/restore`), "unknown restore must reconcile");
 
-  await page.getByRole("button", { name: "Replace Local Draft with restored Server Save" }).click();
+  await page.getByRole("button", { name: "로컬 초안을 복구한 서버 저장본으로 교체" }).click();
   assert.equal(await page.evaluate(() => window.__nuriteoHistoryProbe.resumes), 1);
 
   await page.getByRole("button", { name: "Archive fixture Project" }).click();
-  await page.getByText("Archived · read-only").waitFor();
-  assert.equal(await page.getByRole("button", { name: "Create Version" }).count(), 0);
-  assert.equal(await page.getByRole("button", { name: "Restore", exact: true }).count(), 0);
+  await page.getByText("보관됨 · 읽기 전용").waitFor();
+  assert.equal(await page.getByRole("button", { name: "버전 만들기" }).count(), 0);
+  assert.equal(await page.getByRole("button", { name: "복구", exact: true }).count(), 0);
   assert.equal(await page.getByText("Before refactor", { exact: true }).count(), 1);
   assert.deepEqual(pageErrors, []);
   console.log("WEB-007 browser history matrix ok (pagination, 412, create, focus/Escape, reconcile, Local Draft, archive)");

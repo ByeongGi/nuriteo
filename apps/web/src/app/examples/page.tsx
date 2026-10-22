@@ -1,52 +1,27 @@
 import { listPublicPublishedExamples } from "@nuriteo/api-client";
 import type { Metadata } from "next";
 
-import { EntryUnavailable } from "../_components/entry-unavailable.tsx";
-import { safeRequestReference } from "../../lib/api/presentation-error.ts";
-import { createPublicServerApiClient } from "../../lib/api/public-server-client.ts";
-import { ExampleCard } from "./_components/example-card.tsx";
+import { EntryUnavailable } from "#src/app/_components/entry-unavailable.tsx";
+import { safeRequestReference } from "#src/lib/api/presentation-error.ts";
+import { createPublicServerApiClient } from "#src/lib/api/public-server-client.ts";
+import { PublicExamplesScreen } from "#src/app/examples/_components/public-examples-screen.tsx";
 
 export const metadata: Metadata = {
-  description: "Browse fixed, read-only examples published from this NURITEO instance.",
-  title: "Examples"
+  description: "누리터에서 게시된 읽기 전용 고정 버전을 살펴보고 내 워크스페이스로 복제하세요.",
+  title: "공개 예제"
 };
 
 export default async function ExamplesPage() {
   try {
-    const result = await listPublicPublishedExamples(createPublicServerApiClient(), { limit: 48 });
-    const examples = result.data.items;
-
-    return (
-      <main id="main-content" className="mx-auto w-full max-w-[var(--n-layout-content-max)] px-[var(--n-layout-content-gutter)] py-12 md:py-20" tabIndex={-1}>
-        <header className="max-w-3xl">
-          <p className="eyebrow">Published examples</p>
-          <h1 className="m-0 text-4xl font-medium tracking-[-0.045em] text-foreground text-balance md:text-6xl">
-            Explore what people are building.
-          </h1>
-          <p className="mt-5 max-w-2xl text-base text-muted-foreground md:text-lg">
-            Every example is an immutable, read-only project version. Opening one never grants access to its source project or workspace.
-          </p>
-        </header>
-
-        {examples.length === 0 ? (
-          <section className="mt-12 rounded-xl border border-dashed border-border bg-subtle px-6 py-16 text-center" aria-labelledby="empty-examples-title">
-            <h2 id="empty-examples-title" className="m-0 text-xl font-medium text-foreground">No public examples yet</h2>
-            <p className="mt-2 text-muted-foreground">Published examples will appear here when they are made public.</p>
-          </section>
-        ) : (
-          <section className="mt-12 grid gap-3 sm:grid-cols-2 lg:grid-cols-3" aria-label="Public examples">
-            {examples.map((example) => <ExampleCard key={example.publicId} example={example} />)}
-          </section>
-        )}
-      </main>
-    );
+    const result = await listPublicPublishedExamples(createPublicServerApiClient(), { limit: 100 });
+    return <PublicExamplesScreen examples={result.data.items} />;
   } catch (error) {
     return (
       <EntryUnavailable
-        description="Public examples could not be loaded safely. No sign-in or private project data was requested."
+        description="공개 예제를 안전하게 불러오지 못했습니다. 로그인 정보나 비공개 프로젝트 데이터는 요청하지 않았습니다."
         reference={safeRequestReference(error)}
         retryHref="/examples"
-        title="Examples are temporarily unavailable"
+        title="공개 예제를 일시적으로 사용할 수 없습니다"
       />
     );
   }

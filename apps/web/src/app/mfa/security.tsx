@@ -10,17 +10,25 @@ import {
   recoverMfa
 } from "@nuriteo/api-client";
 import type { MfaEnrollmentStart, MfaStatus } from "@nuriteo/api-client";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import type { FormEvent } from "react";
 
-import { Button } from "../../components/ui/button.tsx";
-import { ConfirmationDialog } from "../../components/ui/confirmation-dialog.tsx";
-import { createBrowserApiClient } from "../../lib/api/browser-client.ts";
-import { readCsrfCredential } from "../../lib/api/browser-security.ts";
-import { createQrMatrix } from "../../lib/qr-matrix.ts";
-import { useExclusiveMutation } from "../../lib/use-exclusive-mutation.ts";
+import { Button } from "#src/components/ui/button.tsx";
+import { ConfirmationDialog } from "#src/components/ui/confirmation-dialog.tsx";
+import { createBrowserApiClient } from "#src/lib/api/browser-client.ts";
+import { readCsrfCredential } from "#src/lib/api/browser-security.ts";
+import { useExclusiveMutation } from "#src/lib/use-exclusive-mutation.ts";
+
+const MfaEnrollmentPanel = dynamic(
+  () => import("#src/app/mfa/mfa-enrollment-panel.tsx").then((module) => module.MfaEnrollmentPanel),
+  {
+    loading: () => <section className="mfa-card" aria-busy="true"><h2>인증 앱 설정을 준비하는 중입니다…</h2></section>,
+    ssr: false
+  }
+);
 
 export function MfaSecurity({ status, displayName }: { readonly status: MfaStatus; readonly displayName: string }) {
   const router = useRouter();
@@ -79,7 +87,7 @@ export function MfaSecurity({ status, displayName }: { readonly status: MfaStatu
         setEnrollment(undefined);
         setRecoveryCodes(result.data.recoveryCodes);
         setCopiedRecoveryCodes(false);
-        setMessage({ tone: "success", text: "Authenticator verified. Save every recovery code before continuing." });
+        setMessage({ tone: "success", text: "인증 앱을 확인했습니다. 계속하기 전에 모든 복구 코드를 저장하세요." });
       } catch (error) {
         settle(operation, error);
         setMessage(mfaFailure(error));
@@ -92,9 +100,9 @@ export function MfaSecurity({ status, displayName }: { readonly status: MfaStatu
     try {
       await navigator.clipboard.writeText(recoveryCodes.join("\n"));
       setCopiedRecoveryCodes(true);
-      setMessage({ tone: "success", text: "Recovery codes copied. Store them safely before continuing." });
+      setMessage({ tone: "success", text: "복구 코드를 복사했습니다. 계속하기 전에 안전한 곳에 보관하세요." });
     } catch {
-      setMessage({ tone: "error", text: "The browser could not copy the codes. Keep this screen open and allow clipboard access before retrying." });
+      setMessage({ tone: "error", text: "브라우저에서 코드를 복사하지 못했습니다. 이 화면을 유지하고 클립보드 접근을 허용한 뒤 다시 시도하세요." });
     }
   }
 
@@ -120,8 +128,8 @@ export function MfaSecurity({ status, displayName }: { readonly status: MfaStatu
         setMessage({
           tone: "success",
           text: recovery
-            ? "Recovery succeeded. Other sessions were signed out; this does not count as recent reauthentication."
-            : "Authenticator challenge succeeded and your session was rotated."
+            ? "계정을 복구했습니다. 다른 세션은 로그아웃되었으며 최근 재인증으로 처리되지는 않습니다."
+            : "인증 앱 확인을 완료하고 세션을 새로 발급했습니다."
         });
         router.refresh();
       } catch (error) {
@@ -136,7 +144,7 @@ export function MfaSecurity({ status, displayName }: { readonly status: MfaStatu
       try {
         await disableMfa(createBrowserApiClient(), { csrfToken: readCsrfCredential() });
         setConfirmingDisable(false);
-        setMessage({ tone: "success", text: "MFA was disabled and other sessions were signed out." });
+        setMessage({ tone: "success", text: "다단계 인증을 해제하고 다른 세션을 로그아웃했습니다." });
         router.refresh();
       } catch (error) {
         setMessage(mfaFailure(error));
@@ -158,42 +166,52 @@ export function MfaSecurity({ status, displayName }: { readonly status: MfaStatu
   const deadline = status.deadlineAt === null ? undefined : new Date(status.deadlineAt);
   return (
     <main id="main-content" className="workspace-page mfa-page">
+      <nav className="mfa-product-bar" aria-label="계정 보안 탐색">
+        <Link className="mfa-product-bar__brand" href={status.restricted ? "/mfa" : "/workspaces"}><span aria-hidden="true">N</span><strong>NURITEO</strong></Link>
+        {status.restricted ? <span>계정 보호 설정이 필요합니다</span> : <div><Link href="/workspaces">워크스페이스</Link><Link href="/identities">연결된 계정</Link><Link aria-current="page" href="/mfa">계정 보안</Link></div>}
+      </nav>
       <header className="workspace-page__intro">
-        <p className="eyebrow">Account security</p>
-        <h1>Multi-factor authentication</h1>
-        <p>{displayName}, protect your local account with a time-based authenticator and one-time recovery codes.</p>
+        <p className="eyebrow">계정 / 보안</p>
+        <h1 aria-label="다단계 인증">계정 보안</h1>
+        <p>{displayName}님의 로컬 계정을 인증 앱과 일회용 복구 코드로 보호합니다.</p>
       </header>
 
-      {status.required ? (
+      <section className="product-metrics" aria-label="계정 보안 요약">
+        <article><span>다중 인증</span><strong>{status.enrolled ? "켜짐" : "꺼짐"}</strong><small>{status.localAccount ? "인증 앱 기반" : "회사 인증 제공자에서 관리"}</small></article>
+        <article><span>복구 코드</span><strong>{status.enrolled ? `${status.recoveryCodesRemaining}개` : "—"}</strong><small>안전한 장소에 별도 보관</small></article>
+        <article><span>보안 정책</span><strong>{status.required ? "필수" : "선택"}</strong><small>{status.restricted ? "설정 전까지 접근 제한" : "현재 계정 접근 가능"}</small></article>
+      </section>
+
+      {status.required && !status.enrolled ? (
         <section className={`mfa-notice ${status.restricted ? "mfa-notice--danger" : ""}`} role={status.restricted ? "alert" : "status"}>
-          <strong>{status.restricted ? "Enrollment is required before continuing" : "Enrollment deadline"}</strong>
-          <p>{deadline?.toLocaleString() ?? "Enroll now"}. Your account remains active and no project data is changed.</p>
+          <strong>{status.restricted ? "계속하려면 인증 앱 설정이 필요합니다" : "인증 앱 설정 기한"}</strong>
+          <p>{deadline?.toLocaleString("ko-KR") ?? "지금 설정하세요"}. 설정 중에도 프로젝트 데이터는 변경되지 않습니다.</p>
         </section>
       ) : null}
 
       {!status.localAccount ? (
-        <section className="mfa-card"><h2>Managed by your identity provider</h2><p>NURITEO TOTP is only used for local-password accounts.</p></section>
+        <section className="mfa-card"><h2>회사 인증 제공자에서 관리됨</h2><p>누리터 인증 앱은 로컬 비밀번호 계정에만 사용됩니다.</p></section>
       ) : null}
 
       {status.localAccount && !status.enrolled && enrollment === undefined && recoveryCodes === undefined ? (
         <section className="mfa-card">
-          <h2>Set up an authenticator</h2>
-          <p>Recent reauthentication is required. Starting again replaces any unfinished enrollment.</p>
-          <Button variant="primary" disabled={mutation.isPending} onClick={begin}>Start enrollment</Button>
+          <h2>인증 앱 설정</h2>
+          <p>최근에 다시 인증한 세션이 필요합니다. 시작하면 완료되지 않은 기존 설정을 교체합니다.</p>
+          <Button aria-label="인증 앱 설정 시작" variant="primary" disabled={mutation.isPending} onClick={begin}>설정 시작</Button>
         </section>
       ) : null}
 
-      {enrollment !== undefined ? <EnrollmentPanel enrollment={enrollment} pending={mutation.isPending} onSubmit={confirm} /> : null}
+      {enrollment !== undefined ? <MfaEnrollmentPanel enrollment={enrollment} pending={mutation.isPending} onSubmit={confirm} /> : null}
 
       {recoveryCodes !== undefined ? (
         <section className="mfa-card mfa-recovery" aria-labelledby="recovery-title">
-          <h2 id="recovery-title">Recovery codes — shown once</h2>
-          <p>Store these outside this browser. Closing this screen will not allow the codes to be shown again.</p>
+          <h2 id="recovery-title">복구 코드 — 한 번만 표시됩니다</h2>
+          <p>브라우저 밖의 안전한 장소에 보관하세요. 이 화면을 닫으면 다시 확인할 수 없습니다.</p>
           <ul>{recoveryCodes.map((code) => <li key={code}><code>{code}</code></li>)}</ul>
           <div className="mfa-actions">
-            <Button onClick={copyRecoveryCodes}>Copy all codes</Button>
+            <Button onClick={copyRecoveryCodes}>모든 코드 복사</Button>
             <Button variant="primary" disabled={!copiedRecoveryCodes} onClick={finishRecoveryConfirmation}>
-              {copiedRecoveryCodes ? "I saved the codes" : "Copy codes to continue"}
+              {copiedRecoveryCodes ? "코드를 안전하게 저장했습니다" : "계속하려면 코드를 복사하세요"}
             </Button>
           </div>
         </section>
@@ -201,20 +219,20 @@ export function MfaSecurity({ status, displayName }: { readonly status: MfaStatu
 
       {status.enrolled && recoveryCodes === undefined ? (
         <div className="mfa-grid">
-          <CodePanel title="Authenticator challenge" description="Verify a fresh six-digit code and rotate this session." pending={mutation.isPending} onSubmit={(event) => submitCode(event, false)} />
-          <CodePanel title="Use a recovery code" description={`${status.recoveryCodesRemaining} one-time codes remain. Recovery does not grant recent reauthentication.`} pending={mutation.isPending} onSubmit={(event) => submitCode(event, true)} recovery />
+          <CodePanel title="인증 앱 확인" description="새로운 6자리 코드를 입력해 현재 세션을 확인합니다." pending={mutation.isPending} onSubmit={(event) => submitCode(event, false)} />
+          <CodePanel title="복구 코드 사용" description={`일회용 코드가 ${status.recoveryCodesRemaining}개 남았습니다. 복구 후 중요한 변경에는 다시 인증해야 합니다.`} pending={mutation.isPending} onSubmit={(event) => submitCode(event, true)} recovery />
           <section className="mfa-card">
-            <h2>Disable MFA</h2>
-            <p>Only available when instance policy does not require your account to remain enrolled.</p>
+            <h2>다중 인증 해제</h2>
+            <p>인스턴스 정책에서 다중 인증을 필수로 요구하지 않을 때만 해제할 수 있습니다.</p>
             <Button disabled={mutation.isPending || status.required} onClick={() => setConfirmingDisable(true)}>MFA 해제</Button>
           </section>
         </div>
       ) : null}
 
       {message ? <p className={`mfa-feedback mfa-feedback--${message.tone}`} role={message.tone === "error" ? "alert" : "status"}>{message.text}</p> : null}
-      <nav className="mfa-safe-navigation" aria-label="Restricted account actions">
-        {!status.restricted ? <Link href="/workspaces">Return to workspaces</Link> : null}
-        <Button disabled={mutation.isPending} onClick={signOut}>Sign out or switch account</Button>
+      <nav className="mfa-safe-navigation" aria-label="제한된 계정 작업">
+        {!status.restricted ? <Link href="/workspaces">워크스페이스로 돌아가기</Link> : null}
+        <Button aria-label="로그아웃 또는 계정 전환" disabled={mutation.isPending} onClick={signOut}>로그아웃 또는 계정 전환</Button>
       </nav>
       <ConfirmationDialog
         busy={mutation.isPending}
@@ -229,53 +247,24 @@ export function MfaSecurity({ status, displayName }: { readonly status: MfaStatu
   );
 }
 
-function EnrollmentPanel({ enrollment, pending, onSubmit }: { readonly enrollment: MfaEnrollmentStart; readonly pending: boolean; readonly onSubmit: (event: FormEvent<HTMLFormElement>) => void }) {
-  const matrix = useMemo(() => createQrMatrix(enrollment.provisioningUri), [enrollment.provisioningUri]);
-  return (
-    <section className="mfa-card" aria-labelledby="enrollment-title">
-      <h2 id="enrollment-title">Scan the enrollment QR code</h2>
-      <p>The secret exists only in this response. Scan it now or enter the manual key.</p>
-      <div className="mfa-enrollment-grid">
-        <QrCode matrix={matrix} />
-        <div><span className="mfa-label">Manual key</span><code className="mfa-secret">{enrollment.manualSecret}</code></div>
-      </div>
-      <form className="mfa-code-form" onSubmit={onSubmit} aria-busy={pending}>
-        <label htmlFor="mfa-confirm-code">Six-digit code</label>
-        <input id="mfa-confirm-code" name="code" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" minLength={6} maxLength={6} required />
-        <Button type="submit" variant="primary" disabled={pending}>{pending ? "Verifying…" : "Verify and enable"}</Button>
-      </form>
-    </section>
-  );
-}
-
-function QrCode({ matrix }: { readonly matrix: readonly (readonly boolean[])[] }) {
-  const size = matrix.length;
-  return (
-    <svg className="mfa-qr" viewBox={`0 0 ${size + 8} ${size + 8}`} role="img" aria-label="Authenticator provisioning QR code" shapeRendering="crispEdges">
-      <rect width={size + 8} height={size + 8} fill="white" />
-      {matrix.flatMap((row, rowIndex) => row.map((dark, columnIndex) => dark ? <rect key={`${rowIndex}-${columnIndex}`} x={columnIndex + 4} y={rowIndex + 4} width="1" height="1" fill="black" /> : null))}
-    </svg>
-  );
-}
-
 function CodePanel({ title, description, pending, onSubmit, recovery = false }: { readonly title: string; readonly description: string; readonly pending: boolean; readonly onSubmit: (event: FormEvent<HTMLFormElement>) => void; readonly recovery?: boolean }) {
   const id = recovery ? "mfa-recovery-code" : "mfa-challenge-code";
   return (
     <section className="mfa-card">
       <h2>{title}</h2><p>{description}</p>
       <form className="mfa-code-form" onSubmit={onSubmit} aria-busy={pending}>
-        <label htmlFor={id}>{recovery ? "Recovery code" : "Six-digit code"}</label>
+        <label htmlFor={id}>{recovery ? "복구 코드" : "6자리 인증 코드"}</label>
         <input id={id} name="code" autoComplete="one-time-code" inputMode={recovery ? "text" : "numeric"} minLength={6} maxLength={128} required />
-        <Button type="submit" disabled={pending}>{pending ? "Checking…" : recovery ? "Recover account" : "Verify code"}</Button>
+        <Button type="submit" disabled={pending}>{pending ? "확인 중…" : recovery ? "계정 복구" : "코드 확인"}</Button>
       </form>
     </section>
   );
 }
 
 function mfaFailure(error: unknown): { readonly tone: "error"; readonly text: string } {
-  if (error instanceof ApiError && error.code === "COMMIT_OUTCOME_UNKNOWN") return { tone: "error", text: "The server may have committed this security change. Retry the same action to recover its protected one-time response." };
-  if (error instanceof ApiError && error.status === 403) return { tone: "error", text: "Recent reauthentication or administrator policy approval is required." };
-  if (error instanceof ApiError && error.status === 401) return { tone: "error", text: "The code was not accepted. Wait for a new code or use an unused recovery code." };
-  if (error instanceof ApiError && (error.status === 409 || error.status === 412)) return { tone: "error", text: "MFA state changed elsewhere. Reload before trying again." };
-  return { tone: "error", text: "The security change could not be completed safely. Nothing was exposed; retry shortly." };
+  if (error instanceof ApiError && error.code === "COMMIT_OUTCOME_UNKNOWN") return { tone: "error", text: "서버에 보안 변경이 반영되었을 수 있습니다. 같은 작업을 다시 시도해 보호된 일회성 응답을 복구하세요." };
+  if (error instanceof ApiError && error.status === 403) return { tone: "error", text: "최근 재인증 또는 관리자 정책 승인이 필요합니다." };
+  if (error instanceof ApiError && error.status === 401) return { tone: "error", text: "코드가 일치하지 않습니다. 새 코드를 기다리거나 사용하지 않은 복구 코드를 입력하세요." };
+  if (error instanceof ApiError && (error.status === 409 || error.status === 412)) return { tone: "error", text: "다른 곳에서 MFA 상태가 변경되었습니다. 새로 고친 뒤 다시 시도하세요." };
+  return { tone: "error", text: "보안 변경을 안전하게 완료하지 못했습니다. 노출된 정보는 없으며 잠시 후 다시 시도해 주세요." };
 }

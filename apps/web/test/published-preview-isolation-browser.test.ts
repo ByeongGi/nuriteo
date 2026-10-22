@@ -123,7 +123,7 @@ try {
     sessionStorage.setItem("nuriteo-session-secret", "must-not-cross-origin");
   });
 
-  await page.getByRole("button", { name: "Run isolated Preview" }).click();
+  await page.getByRole("button", { name: "격리 미리보기 실행" }).click();
   const firstUrl = await waitForPreviewUrl(page);
   const firstOrigin = new URL(firstUrl).origin;
   const firstFrame = await waitForFrame(page, firstOrigin);
@@ -137,12 +137,12 @@ try {
   assert.equal(await firstFrame.evaluate(() => navigator.serviceWorker.controller?.scriptURL), `${firstOrigin}/runtime-preview/sw.js`);
   await firstFrame.evaluate(() => localStorage.setItem("public-preview-marker", "first-origin-only"));
 
-  await page.getByRole("button", { name: "Stop Preview" }).click();
-  await page.getByRole("button", { name: "Run isolated Preview" }).waitFor({ timeout: 10_000 });
+  await page.getByRole("button", { name: "미리보기 종료" }).click();
+  await page.getByRole("button", { name: "격리 미리보기 실행" }).waitFor({ timeout: 10_000 });
   await page.waitForFunction(() => (window as unknown as {
     __nuriteoPublicPreviewProbe: { activeWorkers: number };
   }).__nuriteoPublicPreviewProbe.activeWorkers === 0);
-  await page.getByRole("button", { name: "Run isolated Preview" }).click();
+  await page.getByRole("button", { name: "격리 미리보기 실행" }).click();
   const secondUrl = await waitForPreviewUrl(page, firstUrl);
   const secondOrigin = new URL(secondUrl).origin;
   const secondFrame = await waitForFrame(page, secondOrigin);
@@ -160,8 +160,8 @@ try {
   assert.ok(requests.some((request) => request.kind === "binding"));
   assert.ok(requests.some((request) => request.kind === "preview"));
 
-  await page.getByRole("button", { name: "Stop Preview" }).click();
-  await page.getByRole("button", { name: "Run isolated Preview" }).waitFor({ timeout: 10_000 });
+  await page.getByRole("button", { name: "미리보기 종료" }).click();
+  await page.getByRole("button", { name: "격리 미리보기 실행" }).waitFor({ timeout: 10_000 });
   await page.waitForFunction(() => (window as unknown as {
     __nuriteoPublicPreviewProbe: { activeWorkers: number };
   }).__nuriteoPublicPreviewProbe.activeWorkers === 0);

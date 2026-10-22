@@ -21,9 +21,9 @@ import type {
 import { useEffect, useRef, useState } from "react";
 import type { FormEvent, KeyboardEvent as ReactKeyboardEvent } from "react";
 
-import { Button } from "../../../components/ui/button.tsx";
-import { createBrowserApiClient } from "../../../lib/api/browser-client.ts";
-import { readCsrfCredential } from "../../../lib/api/browser-security.ts";
+import { Button } from "#src/components/ui/button.tsx";
+import { createBrowserApiClient } from "#src/lib/api/browser-client.ts";
+import { readCsrfCredential } from "#src/lib/api/browser-security.ts";
 
 const VERSION_PAGE_SIZE = 20;
 
@@ -39,11 +39,18 @@ export interface RestoredProjectHead {
   readonly projectVersion: number;
 }
 
+export interface ProjectHistoryState {
+  readonly nextCursor: string | null;
+  readonly recovery: readonly RecoveryCheckpoint[];
+  readonly versions: readonly ProjectVersion[];
+}
+
 interface Props {
   readonly hasLocalDraft: boolean;
   readonly onProjectCommit: (result: { readonly projectEtag: string; readonly projectVersion: number }) => void;
   readonly onReloadProject: () => void;
   readonly onResumeRestoredSave: (head: RestoredProjectHead) => void;
+  readonly initialState?: ProjectHistoryState | undefined;
   readonly project: Project;
   readonly projectEtag?: string;
 }
@@ -53,18 +60,21 @@ export function ProjectHistoryPanel({
   onProjectCommit,
   onReloadProject,
   onResumeRestoredSave,
+  initialState,
   project,
   projectEtag
 }: Props) {
-  const [versions, setVersions] = useState<readonly ProjectVersion[]>([]);
-  const [recovery, setRecovery] = useState<readonly RecoveryCheckpoint[]>([]);
-  const [cursor, setCursor] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [versions, setVersions] = useState<readonly ProjectVersion[]>(initialState?.versions ?? []);
+  const [recovery, setRecovery] = useState<readonly RecoveryCheckpoint[]>(initialState?.recovery ?? []);
+  const [cursor, setCursor] = useState<string | null>(initialState?.nextCursor ?? null);
+  const [isLoading, setIsLoading] = useState(initialState === undefined);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [isMutating, setIsMutating] = useState(false);
   const [pendingRestore, setPendingRestore] = useState<HistoryReference>();
   const [restoredHead, setRestoredHead] = useState<RestoredProjectHead>();
-  const [status, setStatus] = useState("Loading Version and Recovery history…");
+  const [status, setStatus] = useState(initialState === undefined
+    ? "버전과 복구 기록을 불러오는 중…"
+    : historyLoadedStatus(initialState.versions.length, initialState.recovery.length));
   const [error, setError] = useState<string>();
   const [stale, setStale] = useState(false);
   const createAttempt = useRef<{ readonly key: string; readonly signature: string } | null>(null);
@@ -75,6 +85,16 @@ export function ProjectHistoryPanel({
   const owner = { ownerType: project.ownerType, ownerId: project.ownerId } as const;
 
   useEffect(() => {
+    if (initialState !== undefined) {
+      setVersions(initialState.versions);
+      setRecovery(sortRecoveryCheckpoints(initialState.recovery));
+      setCursor(initialState.nextCursor);
+      setStatus(historyLoadedStatus(initialState.versions.length, initialState.recovery.length));
+      setError(undefined);
+      setIsLoading(false);
+      return;
+    }
+
     const controller = new AbortController();
     setIsLoading(true);
     setError(undefined);
@@ -94,13 +114,13 @@ export function ProjectHistoryPanel({
     }).catch((cause: unknown) => {
       if (!controller.signal.aborted) {
         setError(historyFailureMessage(cause, "read"));
-        setStatus("History could not be loaded.");
+        setStatus("기록을 불러오지 못했습니다.");
       }
     }).finally(() => {
       if (!controller.signal.aborted) setIsLoading(false);
     });
     return () => controller.abort();
-  }, [project.id, project.ownerId, project.ownerType]);
+  }, [initialState, project.id, project.ownerId, project.ownerType]);
 
   useEffect(() => {
     if (pendingRestore === undefined) return;
@@ -127,7 +147,7 @@ export function ProjectHistoryPanel({
       });
       setVersions((current) => appendUniqueVersions(current, result.data.items));
       setCursor(result.data.nextCursor);
-      setStatus(`${result.data.items.length} more Versions loaded.`);
+      setStatus(`버전 ${result.data.items.length}개를 더 불러왔습니다.`);
     } catch (cause) {
       setError(historyFailureMessage(cause, "read"));
     } finally {
@@ -143,7 +163,7 @@ export function ProjectHistoryPanel({
     setIsMutating(true);
     setError(undefined);
     setStale(false);
-    setStatus("Creating an explicit Version from the current Server Save…");
+    setStatus("현재 서버 저장본으로 명시적인 버전을 만드는 중…");
     const signature = `${projectEtag}\n${name}`;
     if (createAttempt.current?.signature !== signature) {
       createAttempt.current = { key: idempotencyKey("version"), signature };
@@ -160,12 +180,12 @@ export function ProjectHistoryPanel({
       setVersions((current) => appendUniqueVersions([result.data.version], current));
       createAttempt.current = null;
       form.reset();
-      setStatus(result.replayed ? "Version creation was safely reconciled." : `Version “${result.data.version.name}” created.`);
+      setStatus(result.replayed ? "버전 생성 결과를 안전하게 확인했습니다." : `“${result.data.version.name}” 버전을 만들었습니다.`);
     } catch (cause) {
       const isStale = staleProject(cause);
       setStale(isStale);
       setError(historyFailureMessage(cause, "create"));
-      setStatus(isStale ? "Version creation blocked by a newer Server Project." : "Version creation can be retried safely.");
+      setStatus(isStale ? "서버에 더 최신 프로젝트가 있어 버전을 만들지 않았습니다." : "버전 만들기를 안전하게 다시 시도할 수 있습니다.");
     } finally {
       setIsMutating(false);
     }
@@ -177,7 +197,7 @@ export function ProjectHistoryPanel({
     setIsMutating(true);
     setError(undefined);
     setStale(false);
-    setStatus(`Restoring ${reference.label} to the Server Working Head…`);
+    setStatus(`${reference.label}을 서버 작업 버전으로 복구하는 중…`);
     const key = restoreAttemptKey.current ??= idempotencyKey("restore");
     try {
       const input = {
@@ -195,7 +215,7 @@ export function ProjectHistoryPanel({
         });
       } catch (cause) {
         if (!outcomeMayBeUnknown(cause)) throw cause;
-        setStatus("Restore outcome is unknown. Reconciling with the server…");
+        setStatus("복구 결과를 확인할 수 없어 서버 상태를 조회하는 중…");
         result = await reconcileProjectHistory(createBrowserApiClient(), {
           owner, projectId: project.id, idempotencyKey: key
         });
@@ -205,15 +225,15 @@ export function ProjectHistoryPanel({
       restoreAttemptKey.current = null;
       restoreTriggerRef.current = null;
       setPendingRestore(undefined);
-      setStatus(`Server Working Head is now v${result.data.projectVersion}. The browser Local Draft was not replaced.`);
+      setStatus(`서버 작업 버전은 이제 v${result.data.projectVersion}입니다. 브라우저의 로컬 초안은 바꾸지 않았습니다.`);
       void refreshRecovery().catch(() => {
-        setError("The Server Working Head was restored, but Recovery checkpoints could not be refreshed. Your Local Draft remains unchanged.");
+        setError("서버 작업 버전은 복구했지만 복구 지점을 새로고침하지 못했습니다. 로컬 초안은 그대로 유지됩니다.");
       });
     } catch (cause) {
       const isStale = staleProject(cause);
       setStale(isStale);
       setError(historyFailureMessage(cause, "restore"));
-      setStatus(isStale ? "Restore blocked by a newer Server Project." : "Restore can be retried or reconciled safely.");
+      setStatus(isStale ? "서버에 더 최신 프로젝트가 있어 복구하지 않았습니다." : "복구를 안전하게 다시 시도하거나 결과를 확인할 수 있습니다.");
     } finally {
       setIsMutating(false);
     }
@@ -254,69 +274,69 @@ export function ProjectHistoryPanel({
     <section className="mt-4 rounded-lg border border-border bg-surface p-4" aria-labelledby={`history-title-${project.id}`}>
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="m-0 text-xs uppercase tracking-wide text-muted-foreground">Server history</p>
-          <h3 id={`history-title-${project.id}`} className="m-0 text-sm font-semibold">Versions &amp; Recovery</h3>
-          <p className="mb-0 mt-1 text-xs text-muted-foreground">History changes the Server Working Head. It never silently replaces this browser&apos;s Local Draft.</p>
+          <p className="m-0 text-xs uppercase tracking-wide text-muted-foreground">서버 기록</p>
+          <h3 id={`history-title-${project.id}`} className="m-0 text-sm font-semibold">버전과 복구</h3>
+          <p className="mb-0 mt-1 text-xs text-muted-foreground">복구는 서버 작업 버전만 변경합니다. 이 브라우저의 로컬 초안을 자동으로 덮어쓰지 않습니다.</p>
         </div>
-        {archived ? <span className="rounded-md border border-border bg-subtle px-2 py-1 text-xs">Archived · read-only</span> : null}
+        {archived ? <span className="rounded-md border border-border bg-subtle px-2 py-1 text-xs">보관됨 · 읽기 전용</span> : null}
       </header>
 
       <p className="mt-3 text-sm text-muted-foreground" role="status" aria-live="polite">{status}</p>
-      {error ? <div className="mt-3 rounded-md border border-danger p-3" role="alert"><p className="m-0 text-sm text-danger">{error}</p>{stale ? <Button className="mt-2" type="button" size="sm" onClick={onReloadProject}>Reload latest Project</Button> : null}</div> : null}
+      {error ? <div className="mt-3 rounded-md border border-danger p-3" role="alert"><p className="m-0 text-sm text-danger">{error}</p>{stale ? <Button className="mt-2" type="button" size="sm" onClick={onReloadProject}>최신 프로젝트 다시 불러오기</Button> : null}</div> : null}
       {restoredHead !== undefined ? (
         <div className="mt-3 rounded-md border border-warning bg-subtle p-3">
-          <p className="m-0 text-sm"><strong>Server v{restoredHead.projectVersion} is restored.</strong> {hasLocalDraft ? "Your current Local Draft is still open and unchanged." : "No Local Draft is open."}</p>
-          {archived ? null : <Button className="mt-2" type="button" size="sm" variant="primary" onClick={() => onResumeRestoredSave(restoredHead)}>Replace Local Draft with restored Server Save</Button>}
+          <p className="m-0 text-sm"><strong>서버 v{restoredHead.projectVersion}을 복구했습니다.</strong> {hasLocalDraft ? "현재 로컬 초안은 열린 상태로 그대로 유지됩니다." : "열린 로컬 초안이 없습니다."}</p>
+          {archived ? null : <Button className="mt-2" type="button" size="sm" variant="primary" onClick={() => onResumeRestoredSave(restoredHead)}>로컬 초안을 복구한 서버 저장본으로 교체</Button>}
         </div>
       ) : null}
 
       {!archived ? (
         <form className="mt-4 flex flex-wrap items-end gap-2" onSubmit={createVersion} aria-busy={isMutating}>
-          <label className="field-group min-w-64 flex-1">Version name<input name="versionName" required maxLength={200} disabled={isMutating || projectEtag === undefined} /></label>
-          <Button type="submit" size="sm" disabled={isMutating || projectEtag === undefined}>{isMutating ? "Working…" : "Create Version"}</Button>
+          <label className="field-group min-w-64 flex-1">버전 이름<input name="versionName" required maxLength={200} disabled={isMutating || projectEtag === undefined} /></label>
+          <Button type="submit" size="sm" disabled={isMutating || projectEtag === undefined}>{isMutating ? "처리 중…" : "버전 만들기"}</Button>
         </form>
       ) : null}
 
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
         <HistoryList
           archived={archived}
-          heading="Versions"
+          heading="버전"
           isLoading={isLoading}
           items={versions.map((version) => ({
             id: version.id,
             kind: "version" as const,
             label: version.name,
             createdAt: version.createdAt,
-            detail: `Server v${version.sourceProjectVersion} · ${formatBytes(version.physicalBytes)} · ${version.fileCount} files`
+            detail: `서버 v${version.sourceProjectVersion} · ${formatBytes(version.physicalBytes)} · 파일 ${version.fileCount}개`
           }))}
           isMutating={isMutating}
           onRestore={openRestore}
         />
         <HistoryList
           archived={archived}
-          heading="Recovery checkpoints"
+          heading="복구 지점"
           isLoading={isLoading}
           items={recovery.map((checkpoint) => ({
             id: checkpoint.id,
             kind: "recovery" as const,
-            label: `Recovery ${checkpoint.position}`,
+            label: `복구 지점 ${checkpoint.position}`,
             createdAt: checkpoint.createdAt,
-            detail: `${formatBytes(checkpoint.physicalBytes)} · ${checkpoint.fileCount} files`
+            detail: `${formatBytes(checkpoint.physicalBytes)} · 파일 ${checkpoint.fileCount}개`
           }))}
           isMutating={isMutating}
           onRestore={openRestore}
         />
       </div>
-      {cursor !== null ? <Button className="mt-3" type="button" size="sm" disabled={isLoadingMore} onClick={() => void loadMore()}>{isLoadingMore ? "Loading…" : "Load more Versions"}</Button> : null}
+      {cursor !== null ? <Button className="mt-3" type="button" size="sm" disabled={isLoadingMore} onClick={() => void loadMore()}>{isLoadingMore ? "불러오는 중…" : "버전 더 보기"}</Button> : null}
 
       {pendingRestore ? (
         <div className="fixed inset-0 z-50 grid place-items-center bg-background/80 p-4" role="presentation">
           <section ref={dialogRef} className="max-w-lg rounded-lg border border-danger bg-surface p-5 shadow-lg" role="alertdialog" aria-modal="true" aria-labelledby={`restore-title-${pendingRestore.id}`} aria-describedby={`restore-description-${pendingRestore.id}`} onKeyDown={trapDialogFocus}>
-            <h4 id={`restore-title-${pendingRestore.id}`} className="m-0 text-base font-semibold">Restore {pendingRestore.label}?</h4>
-            <p id={`restore-description-${pendingRestore.id}`} className="mt-2 text-sm text-muted-foreground">This promotes the selected snapshot to a new Server Working Head. {hasLocalDraft ? "Your open Local Draft remains unchanged until you explicitly replace it." : "The browser will not start or replace a Local Draft automatically."}</p>
+            <h4 id={`restore-title-${pendingRestore.id}`} className="m-0 text-base font-semibold">{pendingRestore.label}을 복구할까요?</h4>
+            <p id={`restore-description-${pendingRestore.id}`} className="mt-2 text-sm text-muted-foreground">선택한 스냅샷을 새로운 서버 작업 버전으로 지정합니다. {hasLocalDraft ? "직접 교체하기 전까지 열린 로컬 초안은 그대로 유지됩니다." : "브라우저가 로컬 초안을 자동으로 시작하거나 교체하지 않습니다."}</p>
             <div className="mt-4 flex flex-wrap gap-2">
-              <Button ref={confirmButtonRef} type="button" size="sm" variant="danger" disabled={isMutating} onClick={() => void confirmRestore()}>{isMutating ? "Restoring…" : "Restore Server Working Head"}</Button>
-              <Button type="button" size="sm" disabled={isMutating} onClick={closeRestore}>Cancel</Button>
+              <Button ref={confirmButtonRef} type="button" size="sm" variant="danger" disabled={isMutating} onClick={() => void confirmRestore()}>{isMutating ? "복구 중…" : "서버 작업 버전 복구"}</Button>
+              <Button type="button" size="sm" disabled={isMutating} onClick={closeRestore}>취소</Button>
             </div>
           </section>
         </div>
@@ -338,9 +358,9 @@ function HistoryList({ archived, heading, isLoading, isMutating, items, onRestor
   return (
     <section aria-label={heading}>
       <h4 className="m-0 text-sm font-semibold">{heading}</h4>
-      {isLoading ? <p className="text-sm text-muted-foreground">Loading…</p> : items.length === 0 ? <p className="text-sm text-muted-foreground">No {heading.toLowerCase()} yet.</p> : (
+      {isLoading ? <p className="text-sm text-muted-foreground">불러오는 중…</p> : items.length === 0 ? <p className="text-sm text-muted-foreground">아직 {heading}이 없습니다.</p> : (
         <ol className="mt-2 grid list-none gap-2 p-0">
-          {items.map((item) => <li className="rounded-md border border-muted-border p-3" key={item.id}><div className="flex items-start justify-between gap-2"><div><strong className="text-sm">{item.label}</strong><p className="m-0 text-xs text-muted-foreground">{formatTimestamp(item.createdAt)} · {item.detail}</p></div>{archived ? null : <Button type="button" size="sm" disabled={isMutating} onClick={(event) => onRestore(item, event.currentTarget)}>Restore</Button>}</div></li>)}
+          {items.map((item) => <li className="rounded-md border border-muted-border p-3" key={item.id}><div className="flex items-start justify-between gap-2"><div><strong className="text-sm">{item.label}</strong><p className="m-0 text-xs text-muted-foreground">{formatTimestamp(item.createdAt)} · {item.detail}</p></div>{archived ? null : <Button type="button" size="sm" disabled={isMutating} onClick={(event) => onRestore(item, event.currentTarget)}>복구</Button>}</div></li>)}
         </ol>
       )}
     </section>
@@ -352,7 +372,7 @@ function idempotencyKey(action: string): string {
 }
 
 function historyLoadedStatus(versionCount: number, recoveryCount: number): string {
-  return `${versionCount} Versions and ${recoveryCount} Recovery checkpoints loaded.`;
+  return `버전 ${versionCount}개와 복구 지점 ${recoveryCount}개를 불러왔습니다.`;
 }
 
 function appendUniqueVersions(first: readonly ProjectVersion[], second: readonly ProjectVersion[]): readonly ProjectVersion[] {
@@ -381,16 +401,16 @@ function outcomeMayBeUnknown(cause: unknown): boolean {
 
 function historyFailureMessage(cause: unknown, action: "create" | "read" | "restore"): string {
   if (cause instanceof ApiError) {
-    if (cause.status === 412 || cause.status === 428) return "The Server Project changed. Your Local Draft is preserved; reload the latest Project before retrying.";
-    if (cause.status === 403) return "You do not have permission for this history action.";
-    if (cause.code === "COMMIT_OUTCOME_UNKNOWN" || cause.code === "RECONCILIATION_REQUIRED") return "The server outcome is still unknown. Your Local Draft is preserved; retry reconciliation when the service is available.";
+    if (cause.status === 412 || cause.status === 428) return "서버 프로젝트가 변경되었습니다. 로컬 초안은 보존되므로 최신 프로젝트를 불러온 뒤 다시 시도하세요.";
+    if (cause.status === 403) return "이 기록 작업을 수행할 권한이 없습니다.";
+    if (cause.code === "COMMIT_OUTCOME_UNKNOWN" || cause.code === "RECONCILIATION_REQUIRED") return "서버 처리 결과를 아직 확인할 수 없습니다. 로컬 초안은 보존되므로 서비스가 준비되면 결과 확인을 다시 시도하세요.";
   }
-  if (action === "read") return "History is temporarily unavailable. Retry without changing the Local Draft.";
-  return `${action === "create" ? "Version creation" : "History restore"} did not complete. Your Local Draft is preserved; the same action can be retried safely.`;
+  if (action === "read") return "기록을 일시적으로 사용할 수 없습니다. 로컬 초안을 변경하지 않고 다시 시도할 수 있습니다.";
+  return `${action === "create" ? "버전 만들기" : "기록 복구"}를 완료하지 못했습니다. 로컬 초안은 보존되므로 같은 작업을 안전하게 다시 시도할 수 있습니다.`;
 }
 
 function formatTimestamp(value: string): string {
-  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
+  return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
 }
 
 function formatBytes(value: number): string {

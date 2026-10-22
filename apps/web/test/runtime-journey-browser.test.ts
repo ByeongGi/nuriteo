@@ -54,28 +54,28 @@ try {
   await page.goto(`http://127.0.0.1:${address.port}/`, { waitUntil: "domcontentloaded" });
   assert.equal(await page.evaluate(() => globalThis.crossOriginIsolated), true);
 
-  await page.getByRole("button", { name: "Start workspace" }).click();
-  await page.getByRole("button", { name: "Run Preview" }).waitFor({ timeout: 20_000 });
+  await page.getByRole("button", { name: "템플릿으로 워크스페이스 시작" }).click();
+  await page.getByRole("button", { name: "미리보기 실행" }).waitFor({ timeout: 20_000 });
   assert.equal(await page.evaluate(() => window.__nuriteoRuntimeProbe.createdWorkers), 2);
 
-  await page.getByRole("button", { name: "Run Preview" }).click();
-  await page.waitForFunction(() => Boolean(document.querySelector<HTMLElement>('[aria-label="Preview"]')?.dataset.previewUrl), undefined, { timeout: 20_000 });
-  const previewUrl = await page.getByRole("region", { name: "Preview" }).getAttribute("data-preview-url");
+  await page.getByRole("button", { name: "미리보기 실행" }).click();
+  await page.waitForFunction(() => Boolean(document.querySelector<HTMLElement>('[aria-label="미리보기"]')?.dataset.previewUrl), undefined, { timeout: 20_000 });
+  const previewUrl = await page.getByRole("region", { name: "미리보기" }).getAttribute("data-preview-url");
   assert(previewUrl && previewUrl.includes("/__preview/"));
   const initialPreview = await page.evaluate(async (url) => (await fetch(url)).text(), previewUrl);
   assert.match(initialPreview, /nuriteo:1/u);
 
   await page.getByRole("button", { name: "src/message.ts" }).click();
-  const editor = page.getByLabel("Editor for src/message.ts");
+  const editor = page.getByLabel("src/message.ts 편집기");
   await editor.fill('export const label = "RT004 edited";\n');
-  await page.getByRole("button", { name: "Apply to Local Draft" }).click();
-  await page.getByText("Local Draft saved · HMR applied", { exact: false }).waitFor({ timeout: 10_000 });
+  await page.getByRole("button", { name: "로컬 초안에 적용" }).click();
+  await page.getByText("로컬 초안 저장됨 · HMR 적용됨", { exact: false }).waitFor({ timeout: 10_000 });
   const updatedPreview = await page.evaluate(async (url) => (await fetch(url)).text(), previewUrl);
   assert.match(updatedPreview, /RT004 edited:1/u);
 
-  await page.getByRole("button", { name: "Stop workspace" }).click();
+  await page.getByRole("button", { name: "워크스페이스 종료" }).click();
   await page.getByRole("button", { name: "초안을 버리고 종료" }).click();
-  await page.getByRole("button", { name: "Start workspace" }).waitFor({ timeout: 10_000 });
+  await page.getByRole("button", { name: "템플릿으로 워크스페이스 시작" }).waitFor({ timeout: 10_000 });
   await page.waitForFunction(() => window.__nuriteoRuntimeProbe.activeWorkers === 0);
   assert.deepEqual(errors, []);
   console.log("RT-004 actual browser journey ok (install, dev, Preview, edit, HMR, dispose)");

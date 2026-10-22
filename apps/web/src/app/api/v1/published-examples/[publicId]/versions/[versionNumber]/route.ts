@@ -1,4 +1,4 @@
-import { publicExampleVersionResponse } from "../../../../../../../lib/api/published-example-bff.ts";
+import { publicExampleVersionResponse } from "#src/lib/api/published-example-bff.ts";
 
 interface Context {
   readonly params: Promise<{

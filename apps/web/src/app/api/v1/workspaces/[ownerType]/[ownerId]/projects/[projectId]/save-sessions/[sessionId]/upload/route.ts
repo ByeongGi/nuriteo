@@ -1,4 +1,4 @@
-import { forwardSaveUploadRequest } from "../../../../../../../../../../../lib/api/save-bff.ts";
+import { forwardSaveUploadRequest } from "#src/lib/api/save-bff.ts";
 
 interface Context {
   readonly params: Promise<{

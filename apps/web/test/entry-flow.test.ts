@@ -22,15 +22,26 @@ testSetupRouting();
 testAuthenticationErrorClassification();
 testCliOnlySetupContract();
 testAccessibleCredentialBoundary();
+testActivationAndSystemStateContracts();
 
 function testSetupRouting(): void {
   assert.equal(setupDestination(true), "/setup");
   assert.equal(setupDestination(false), "/sign-in");
 
   const rootPage = read("src/app/page.tsx");
+  assert.match(rootPage, /Promise\.allSettled\(\[/u);
   assert.match(rootPage, /getSetupStatus\(client\)/u);
+  assert.match(rootPage, /getCurrentUser\(client\)/u);
+  assert.match(rootPage, /isExplicitlySignedOut\(currentUserResult\.reason\)/u);
   assert.match(rootPage, /safeRequestReference\(error\)/u);
-  assert.match(rootPage, /setupDestination\(bootstrapRequired\)/u);
+  assert.match(rootPage, /redirect\("\/setup"\)/u);
+  assert.match(rootPage, /redirect\("\/workspaces"\)/u);
+  assert.match(rootPage, /<HomeEntry \/>/u);
+
+  const homeEntry = read("src/app/_components/home-entry.tsx");
+  assert.match(homeEntry, /href="\/sign-in"/u);
+  assert.match(homeEntry, /href="\/examples"/u);
+  assert.match(homeEntry, /id="main-content"/u);
 }
 
 function testAuthenticationErrorClassification(): void {
@@ -67,8 +78,8 @@ function testAccessibleCredentialBoundary(): void {
 
   assert.match(signInPage, /isExplicitlySignedOut\(error\)/u);
   assert.match(signInPage, /redirect\("\/workspaces"\)/u);
-  assert.match(form, /<label htmlFor="email">Email<\/label>/u);
-  assert.match(form, /<label htmlFor="password">Password<\/label>/u);
+  assert.match(form, /<label[^>]*htmlFor="email"[^>]*>이메일<\/label>/u);
+  assert.match(form, /<label[^>]*htmlFor="password"[^>]*>비밀번호<\/label>/u);
   assert.match(form, /autoComplete="username"/u);
   assert.match(form, /autoComplete="current-password"/u);
   assert.match(form, /await createSession\(client, \{ email, password \}\);\s+await getCurrentUser\(client\);/u);
@@ -76,6 +87,24 @@ function testAccessibleCredentialBoundary(): void {
   assert.match(form, /passwordInput\.current\.value = ""/u);
   assert.match(form, /role="alert"/u);
   assert.doesNotMatch(form, /localStorage|sessionStorage|URLSearchParams|console\./u);
+}
+
+function testActivationAndSystemStateContracts(): void {
+  const activation = read("src/app/activate/activation-form.tsx");
+  const systemStates = read("src/design-system/production-shells.stories.tsx");
+  const projectsLoading = read("src/app/(authenticated)/projects/loading.tsx");
+  const workspacesLoading = read("src/app/(authenticated)/workspaces/loading.tsx");
+
+  assert.match(activation, /activationToken === undefined \? searchParams\.get\("token"\) : activationToken/u);
+  assert.match(activation, /if \(token === null \|\| token\.trim\(\)\.length === 0\)/u);
+  assert.match(activation, /계정을 활성화할 수 없습니다/u);
+  assert.match(systemStates, /<ActivationForm activationToken="storybook-activation-token"/u);
+  assert.match(systemStates, /<EntryUnavailable/u);
+  assert.match(systemStates, /<ErrorView/u);
+  assert.match(systemStates, /<NotFound/u);
+  assert.doesNotMatch(systemStates, /<form/u);
+  assert.match(projectsLoading, /<WorkspacePageLoading/u);
+  assert.match(workspacesLoading, /<WorkspacePageLoading/u);
 }
 
 function read(relativePath: string): string {

@@ -54,11 +54,11 @@ try {
   page.on("pageerror", (error) => pageErrors.push(error.message));
   await page.goto(`http://127.0.0.1:${address.port}/`, { waitUntil: "domcontentloaded" });
 
-  await page.getByRole("button", { name: "Start workspace" }).click();
-  await page.getByText("The browser workspace could not be started safely.").waitFor();
-  await page.getByRole("button", { name: "Start workspace" }).click();
+  await page.getByRole("button", { name: "템플릿으로 워크스페이스 시작" }).click();
+  await page.getByText("브라우저 워크스페이스를 안전하게 시작하지 못했습니다.", { exact: false }).waitFor();
+  await page.getByRole("button", { name: "템플릿으로 워크스페이스 시작" }).click();
 
-  await page.getByRole("region", { name: "Workspace recovery" }).waitFor();
+  await page.getByRole("region", { name: "워크스페이스 복구" }).waitFor();
   await page.keyboard.press("Control+p");
   const fileSearch = page.getByPlaceholder("파일 검색");
   assert.equal(await fileSearch.evaluate((element) => element === document.activeElement), true);
@@ -68,54 +68,54 @@ try {
   await page.getByText("일치하는 파일이 없습니다.").waitFor();
   await fileSearch.fill("");
   await page.getByRole("tab", { name: "터미널" }).click();
-  await page.getByLabel("Terminal command").waitFor();
+  await page.getByLabel("터미널 명령어").waitFor();
   await page.getByRole("tab", { name: "미리보기" }).click();
   const focusMode = page.getByRole("button", { name: "집중 모드" });
   await focusMode.click();
   const exitFocusMode = page.getByRole("button", { name: "패널 표시" });
   assert.equal(await exitFocusMode.getAttribute("aria-pressed"), "true");
   await exitFocusMode.click();
-  assert.equal(await page.getByLabel("Editor for src/message.ts").isEditable(), false);
-  await page.getByRole("button", { name: "Take over writer lease" }).click();
+  assert.equal(await page.getByLabel("src/message.ts 편집기").isEditable(), false);
+  await page.getByRole("button", { name: "편집 권한 가져오기" }).click();
   await page.getByRole("alertdialog").waitFor();
-  await page.getByRole("button", { name: "Confirm writer takeover" }).click();
-  await page.getByText("Writer lease acquired · Local Draft preserved", { exact: false }).waitFor();
-  assert.equal(await page.getByLabel("Editor for src/message.ts").isEditable(), true);
+  await page.getByRole("button", { name: "이 탭에서 편집 시작" }).click();
+  await page.getByText("편집 권한 획득 · 로컬 초안 보존됨", { exact: false }).waitFor();
+  assert.equal(await page.getByLabel("src/message.ts 편집기").isEditable(), true);
 
-  const editor = page.getByLabel("Editor for src/message.ts");
+  const editor = page.getByLabel("src/message.ts 편집기");
   await editor.fill('export const label = "quota-trigger";\n');
-  await page.getByRole("button", { name: "Apply to Local Draft" }).click();
+  await page.getByRole("button", { name: "로컬 초안에 적용" }).click();
   await page.getByText("EOPFSQUOTA", { exact: false }).waitFor();
   assert.match(await editor.inputValue(), /quota-trigger/u, "quota failure must preserve unsaved editor text");
-  await page.getByRole("button", { name: "Clear package cache" }).click();
-  await page.getByText("Package cache cleared · Local Draft preserved", { exact: false }).waitFor();
-  await page.getByRole("button", { name: "Apply to Local Draft" }).click();
-  await page.getByText("Local Draft saved", { exact: false }).waitFor();
+  await page.getByRole("button", { name: "패키지 캐시 비우기" }).click();
+  await page.getByText("패키지 캐시 삭제됨 · 로컬 초안 보존됨", { exact: false }).waitFor();
+  await page.getByRole("button", { name: "로컬 초안에 적용" }).click();
+  await page.getByText("로컬 초안 저장됨", { exact: false }).waitFor();
 
-  await page.getByRole("button", { name: "Run Preview" }).click();
-  await page.locator('iframe[title="Runtime Recovery Preview"]').waitFor();
-  assert.equal(await page.getByRole("region", { name: "Preview" }).getAttribute("data-preview-url"), "about:blank");
+  await page.getByRole("button", { name: "미리보기 실행" }).click();
+  await page.locator('iframe[title="Runtime Recovery 미리보기"]').waitFor();
+  assert.equal(await page.getByRole("region", { name: "미리보기" }).getAttribute("data-preview-url"), "about:blank");
   await page.evaluate(() => {
     window.__runtimeRecoveryFixture.failPreview();
   });
   await page.getByText("RUNTIME_PREVIEW_FAILED", { exact: false }).waitFor();
-  await page.getByRole("button", { name: "Retry Preview" }).click();
-  await page.getByText("Recovery did not complete.", { exact: false }).waitFor();
-  assert.equal(await page.locator('iframe[title="Runtime Recovery Preview"]').count(), 0, "a failed replacement must not retain the disposed iframe");
-  assert.equal(await page.getByRole("region", { name: "Preview" }).getAttribute("data-preview-url"), null);
+  await page.getByRole("button", { name: "미리보기 다시 시도" }).click();
+  await page.getByText("복구를 완료하지 못했습니다.", { exact: false }).waitFor();
+  assert.equal(await page.locator('iframe[title="Runtime Recovery 미리보기"]').count(), 0, "a failed replacement must not retain the disposed iframe");
+  assert.equal(await page.getByRole("region", { name: "미리보기" }).getAttribute("data-preview-url"), null);
   assert.equal(await page.evaluate(() => window.__runtimeRecoveryFixture.snapshot().disposedBridges), 1);
 
-  await page.getByRole("button", { name: "Run Preview" }).click();
-  await page.locator('iframe[title="Runtime Recovery Preview"]').waitFor();
-  assert.equal(await page.getByRole("region", { name: "Preview" }).getAttribute("data-preview-url"), "about:blank");
+  await page.getByRole("button", { name: "미리보기 실행" }).click();
+  await page.locator('iframe[title="Runtime Recovery 미리보기"]').waitFor();
+  assert.equal(await page.getByRole("region", { name: "미리보기" }).getAttribute("data-preview-url"), "about:blank");
   assert.deepEqual(pageErrors, []);
 
   const scalePage = await browser.newPage();
   const scalePageErrors: string[] = [];
   scalePage.on("pageerror", (error) => scalePageErrors.push(error.message));
   await scalePage.goto(`http://127.0.0.1:${address.port}/?mode=scale`, { waitUntil: "domcontentloaded" });
-  await scalePage.getByRole("button", { name: "Start workspace" }).click();
-  const scaleFiles = scalePage.getByRole("navigation", { name: "Project files" });
+  await scalePage.getByRole("button", { name: "템플릿으로 워크스페이스 시작" }).click();
+  const scaleFiles = scalePage.getByRole("navigation", { name: "프로젝트 파일" });
   await scalePage.getByText("200개 표시 · 2501개 일치 · 전체 2501개").waitFor();
   assert.equal(await scaleFiles.locator("li").count(), 200, "large workspaces must render only the first file batch");
   const scaleSearch = scalePage.getByPlaceholder("파일 검색");
@@ -131,10 +131,10 @@ try {
   await scalePage.getByRole("button", { name: "다음 200개 보기" }).click();
   assert.equal(await scaleFiles.locator("li").count(), 400, "load more must append one bounded batch");
   await scalePage.getByRole("tab", { name: "터미널" }).click();
-  await scalePage.getByLabel("Terminal command").fill("stress-log");
-  await scalePage.getByRole("region", { name: "Terminal" }).getByRole("button", { name: "실행" }).click();
+  await scalePage.getByLabel("터미널 명령어").fill("stress-log");
+  await scalePage.getByRole("region", { name: "터미널" }).getByRole("button", { name: "실행" }).click();
   await scalePage.getByText("최근 64KB만 표시").waitFor();
-  assert.equal((await scalePage.getByRole("region", { name: "Terminal" }).locator("pre").textContent())?.length, 64 * 1_024);
+  assert.equal((await scalePage.getByRole("region", { name: "터미널" }).locator("pre").textContent())?.length, 64 * 1_024);
   assert.deepEqual(scalePageErrors, []);
   await scalePage.close();
 
@@ -142,8 +142,8 @@ try {
   const unmountPageErrors: string[] = [];
   unmountPage.on("pageerror", (error) => unmountPageErrors.push(error.message));
   await unmountPage.goto(`http://127.0.0.1:${address.port}/?mode=unmount`, { waitUntil: "domcontentloaded" });
-  await unmountPage.getByRole("button", { name: "Start workspace" }).click();
-  await unmountPage.getByRole("button", { name: "Run Preview" }).click();
+  await unmountPage.getByRole("button", { name: "템플릿으로 워크스페이스 시작" }).click();
+  await unmountPage.getByRole("button", { name: "미리보기 실행" }).click();
   await unmountPage.waitForFunction(() => window.__runtimeRecoveryFixture.snapshot().bridgeCreationPending);
   await unmountPage.evaluate(() => {
     const control = window.__runtimeRecoveryFixture;

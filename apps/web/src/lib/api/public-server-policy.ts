@@ -1,7 +1,7 @@
 import { API_PREFIX, createApiClient } from "@nuriteo/api-client";
 import type { ApiClient } from "@nuriteo/api-client";
 
-import { DEFAULT_SERVER_API_TIMEOUT_MS, validateInternalApiUrl } from "./server-policy.ts";
+import { DEFAULT_SERVER_API_TIMEOUT_MS, validateInternalApiUrl } from "#src/lib/api/server-policy.ts";
 
 const PUBLIC_RESPONSE_MAX_BYTES = 131_072;
 const PREVIEW_ABUSE_KEY_HEADER = "x-nuriteo-preview-abuse-key";

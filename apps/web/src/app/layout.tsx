@@ -2,12 +2,12 @@ import { cookies } from "next/headers";
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 
-import { SiteHeader } from "../components/site-header.tsx";
-import { parseThemeMode, THEME_COOKIE_NAME } from "../lib/theme.ts";
-import "../styles/globals.css";
+import { SiteHeader } from "#src/components/site-header.tsx";
+import { parseThemeMode, THEME_COOKIE_NAME } from "#src/lib/theme.ts";
+import "#src/styles/globals.css";
 
 export const metadata: Metadata = {
-  description: "A self-hosted browser development workspace.",
+  description: "설치 없이 브라우저에서 Node.js 프로젝트를 개발하고 실행하는 자체 호스팅 워크스페이스.",
   title: {
     default: "NURITEO",
     template: "%s · NURITEO"
@@ -27,10 +27,10 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
   const themeMode = parseThemeMode(cookieStore.get(THEME_COOKIE_NAME)?.value);
 
   return (
-    <html lang="en" data-theme-mode={themeMode}>
+    <html lang="ko" data-theme-mode={themeMode}>
       <body>
         <a className="skip-link" href="#main-content">
-          Skip to main content
+          본문으로 건너뛰기
         </a>
         <div className="application-root">
           <SiteHeader themeMode={themeMode} />

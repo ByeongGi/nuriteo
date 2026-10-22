@@ -11,12 +11,14 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 
-import { Button } from "../../../components/ui/button.tsx";
-import { readCsrfCredential } from "../../../lib/api/browser-security.ts";
-import { createBrowserApiClient } from "../../../lib/api/browser-client.ts";
+import { Button } from "#src/components/ui/button.tsx";
+import { SelectField } from "#src/components/ui/field.tsx";
+import { readCsrfCredential } from "#src/lib/api/browser-security.ts";
+import { createBrowserApiClient } from "#src/lib/api/browser-client.ts";
 
-interface Props {
+export interface ForkExampleFormProps {
   readonly example: PublicPublishedExample;
+  readonly initialWorkspaces?: readonly Workspace[] | undefined;
 }
 
 interface Attempt {
@@ -24,17 +26,20 @@ interface Attempt {
   readonly signature: string;
 }
 
-export function ForkExampleForm({ example }: Props) {
+export function ForkExampleForm({ example, initialWorkspaces }: ForkExampleFormProps) {
   const router = useRouter();
-  const [workspaces, setWorkspaces] = useState<readonly Workspace[]>();
-  const [selectedScope, setSelectedScope] = useState("");
-  const [status, setStatus] = useState<"loading" | "ready" | "signed-out" | "unavailable">("loading");
+  const [workspaces, setWorkspaces] = useState<readonly Workspace[] | undefined>(initialWorkspaces);
+  const [selectedScope, setSelectedScope] = useState(initialWorkspaces?.[0]?.storageScopeId ?? "");
+  const [status, setStatus] = useState<"loading" | "ready" | "signed-out" | "unavailable">(
+    initialWorkspaces === undefined ? "loading" : "ready"
+  );
   const [error, setError] = useState<string>();
   const [forkSessionEnded, setForkSessionEnded] = useState(false);
   const [pending, setPending] = useState(false);
   const attempt = useRef<Attempt | undefined>(undefined);
 
   useEffect(() => {
+    if (initialWorkspaces !== undefined) return;
     const controller = new AbortController();
     void getCurrentWorkspaces(createBrowserApiClient(), { signal: controller.signal })
       .then((result) => {
@@ -47,7 +52,7 @@ export function ForkExampleForm({ example }: Props) {
         setStatus(cause instanceof ApiError && cause.status === 401 ? "signed-out" : "unavailable");
       });
     return () => controller.abort();
-  }, []);
+  }, [initialWorkspaces]);
 
   async function fork(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -75,9 +80,7 @@ export function ForkExampleForm({ example }: Props) {
         name,
         idempotencyKey: attempt.current.key
       }, { csrfToken: readCsrfCredential() });
-      router.push(
-        `/projects?workspace=${encodeURIComponent(workspace.storageScopeId)}&project=${encodeURIComponent(result.data.project.id)}`
-      );
+      router.push(`/projects/${encodeURIComponent(result.data.project.id)}?workspace=${encodeURIComponent(workspace.storageScopeId)}`);
     } catch (cause) {
       setForkSessionEnded(cause instanceof ApiError && cause.status === 401);
       setError(forkError(cause));
@@ -87,49 +90,42 @@ export function ForkExampleForm({ example }: Props) {
   }
 
   if (status === "loading") {
-    return <p aria-live="polite" className="text-sm text-muted-foreground">Checking available Workspaces…</p>;
+    return <p aria-live="polite" className="text-sm text-muted-foreground">사용 가능한 워크스페이스를 확인하는 중…</p>;
   }
   if (status === "signed-out") {
     return (
       <div className="rounded-lg border border-muted-border bg-subtle p-4 text-left">
-        <p className="m-0 text-sm text-muted-foreground">Sign in to fork this fixed version into your own Workspace.</p>
+        <p className="m-0 text-sm text-muted-foreground">이 고정 버전을 내 워크스페이스로 복제하려면 로그인하세요.</p>
         <Link className="mt-3 inline-flex text-sm font-semibold text-link underline-offset-4 hover:underline" href="/sign-in">
-          Sign in to fork
+          로그인하고 복제
         </Link>
       </div>
     );
   }
   if (status === "unavailable") {
-    return <p role="alert" className="text-sm text-danger">Workspace information is temporarily unavailable.</p>;
+    return <p role="alert" className="text-sm text-danger">워크스페이스 정보를 일시적으로 사용할 수 없습니다.</p>;
   }
   if (workspaces?.length === 0) {
-    return <p className="text-sm text-muted-foreground">No writable Workspace is available for this account.</p>;
+    return <p className="text-sm text-muted-foreground">이 계정에서 쓸 수 있는 워크스페이스가 없습니다.</p>;
   }
 
   return (
     <form className="grid gap-4 rounded-lg border border-muted-border bg-subtle p-4 text-left" onSubmit={fork} aria-busy={pending}>
       <div>
-        <h3 className="m-0 text-base font-semibold text-foreground">Fork this version</h3>
-        <p className="mt-1 text-sm text-muted-foreground">Creates an independent Project without source access, Git connections, or environment values.</p>
+        <h3 className="m-0 text-base font-semibold text-foreground">내 워크스페이스로 복제</h3>
+        <p className="mt-1 text-sm text-muted-foreground">원본 접근 권한, Git 연결이나 환경값 없이 독립적인 프로젝트를 만듭니다.</p>
       </div>
+      <SelectField
+        className="text-sm text-foreground"
+        label="워크스페이스"
+        disabled={pending}
+        options={(workspaces ?? []).map((workspace) => ({ value: workspace.storageScopeId, label: workspace.displayLabel }))}
+        required
+        value={selectedScope}
+        onValueChange={setSelectedScope}
+      />
       <label className="grid gap-1.5 text-sm font-medium text-foreground">
-        Workspace
-        <select
-          className="min-h-10 rounded-md border border-border bg-surface px-3 text-foreground"
-          disabled={pending}
-          onChange={(event) => setSelectedScope(event.currentTarget.value)}
-          required
-          value={selectedScope}
-        >
-          {workspaces?.map((workspace) => (
-            <option key={workspace.storageScopeId} value={workspace.storageScopeId}>
-              {workspace.displayLabel}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label className="grid gap-1.5 text-sm font-medium text-foreground">
-        Project slug
+        프로젝트 슬러그
         <input
           className="min-h-10 rounded-md border border-border bg-surface px-3 text-foreground"
           defaultValue={suggestedSlug(example.name)}
@@ -141,10 +137,10 @@ export function ForkExampleForm({ example }: Props) {
         />
       </label>
       <label className="grid gap-1.5 text-sm font-medium text-foreground">
-        Project name
+        프로젝트 이름
         <input
           className="min-h-10 rounded-md border border-border bg-surface px-3 text-foreground"
-          defaultValue={`${example.name} fork`}
+          defaultValue={`${example.name} 복제본`}
           disabled={pending}
           maxLength={200}
           name="name"
@@ -156,13 +152,13 @@ export function ForkExampleForm({ example }: Props) {
           <p className="m-0">{error}</p>
           {forkSessionEnded ? (
             <Link className="w-fit font-semibold text-link underline-offset-4 hover:underline" href="/sign-in">
-              Sign in to continue
+              로그인하고 계속
             </Link>
           ) : null}
         </div>
       )}
       <Button disabled={pending || selectedScope === ""} type="submit" variant="primary">
-        {pending ? "Forking…" : "Fork into Workspace"}
+        {pending ? "복제하는 중…" : "워크스페이스로 복제"}
       </Button>
     </form>
   );
@@ -182,13 +178,13 @@ function suggestedSlug(name: string): string {
 function forkError(error: unknown): string {
   if (error instanceof ApiError) {
     if (error.code === "COMMIT_OUTCOME_UNKNOWN") {
-      return "The fork may have completed. Retry with the same values to reconcile it safely.";
+      return "복제가 완료되었을 수 있습니다. 같은 값으로 다시 시도해 안전하게 결과를 확인하세요.";
     }
-    if (error.status === 401) return "Your session ended. Sign in again before forking.";
-    if (error.status === 403) return "You cannot create a Project in that Workspace.";
-    if (error.status === 404) return "This published version is no longer available.";
-    if (error.status === 409) return "That Project slug is already in use, or the Workspace quota was reached.";
-    if (error.status === 400 || error.status === 422) return "Review the Project slug and name, then try again.";
+    if (error.status === 401) return "세션이 종료되었습니다. 다시 로그인한 뒤 복제하세요.";
+    if (error.status === 403) return "해당 워크스페이스에 프로젝트를 만들 수 없습니다.";
+    if (error.status === 404) return "이 게시 버전을 더 이상 사용할 수 없습니다.";
+    if (error.status === 409) return "프로젝트 슬러그가 이미 사용 중이거나 워크스페이스 할당량에 도달했습니다.";
+    if (error.status === 400 || error.status === 422) return "프로젝트 슬러그와 이름을 확인하고 다시 시도하세요.";
   }
-  return "The fork could not be completed. Your source example was not changed.";
+  return "복제를 완료하지 못했습니다. 원본 예제는 변경되지 않았습니다.";
 }

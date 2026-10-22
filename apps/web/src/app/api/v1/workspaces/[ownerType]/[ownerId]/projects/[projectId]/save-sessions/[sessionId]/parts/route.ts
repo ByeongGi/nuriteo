@@ -1,4 +1,4 @@
-import { forwardSaveSessionRequest } from "../../../../../../../../../../../lib/api/save-bff.ts";
+import { forwardSaveSessionRequest } from "#src/lib/api/save-bff.ts";
 
 interface Context { readonly params: Promise<{ ownerId: string; ownerType: string; projectId: string; sessionId: string }> }
 

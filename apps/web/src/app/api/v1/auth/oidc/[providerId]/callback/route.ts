@@ -1,4 +1,4 @@
-import { forwardOidcNavigation, invalidCollaborationRoute, uuidPathSegment } from "../../../../../../../lib/api/collaboration-bff.ts";
+import { forwardOidcNavigation, invalidCollaborationRoute, uuidPathSegment } from "#src/lib/api/collaboration-bff.ts";
 
 export const dynamic = "force-dynamic";
 

@@ -52,6 +52,18 @@ const core = http.createServer((request, response) => {
   if (request.method === "GET" && requestPath === "/api/v1/me/workspaces") return json(response, {
     workspaces: [{ ownerType: "user", ownerId: userId, displayLabel: "Saved Personal", storageScopeId: scopeId }]
   });
+  if (request.method === "GET" && requestPath === "/api/v1/mfa") return json(response, {
+    localAccount: true,
+    enrolled: false,
+    pendingEnrollment: false,
+    recoveryCodesRemaining: 0,
+    policyMode: "off",
+    gracePeriodDays: 7,
+    required: false,
+    deadlineAt: null,
+    restricted: false,
+    notificationState: "none"
+  });
   const collection = `/api/v1/workspaces/users/${userId}/projects`;
   if (request.method === "GET" && requestPath.startsWith(`${collection}?`)) {
     return json(response, { items: [project()], nextCursor: null });
@@ -91,30 +103,35 @@ const standalone = await startWeb(coreAddress.port);
 try {
   const browser = await chromium.launch({ headless: true });
   try {
-    const projectUrl = `${standalone.origin}/projects?workspace=${scopeId}&state=active&project=${projectId}`;
+    const projectUrl = `${standalone.origin}/projects/${projectId}/studio?workspace=${scopeId}`;
     const firstContext = await signedContext(browser, standalone.origin);
     const firstPage = await firstContext.newPage();
     await firstPage.goto(projectUrl, { waitUntil: "networkidle" });
-    await firstPage.getByRole("button", { name: "Resume saved Project" }).waitFor();
+    try {
+      await firstPage.getByRole("button", { name: "저장된 프로젝트 이어서 열기" }).waitFor();
+    } catch (error) {
+      const visibleText = (await firstPage.locator("body").innerText()).slice(0, 4_096);
+      throw new Error(`Studio did not become ready.\nRequests:\n${requests.join("\n")}\nPage:\n${visibleText}`, { cause: error });
+    }
     await firstContext.close();
 
     const newContext = await signedContext(browser, standalone.origin);
     const page = await newContext.newPage();
     await page.goto(projectUrl, { waitUntil: "networkidle" });
     assert.equal(await page.locator("textarea").count(), 0, "a fresh context must not inherit a Local Draft");
-    await page.getByRole("button", { name: "Resume saved Project" }).click();
+    await page.getByRole("button", { name: "저장된 프로젝트 이어서 열기" }).click();
     try {
-      await page.getByText("Server Save v7 is ready in this browser.").waitFor({ timeout: 30_000 });
+      await page.getByText("이 브라우저에 서버 저장본 v7을 준비했습니다.").waitFor({ timeout: 30_000 });
     } catch (error) {
       const visibleText = (await page.locator("body").innerText()).slice(0, 4_096);
       throw new Error(`Resume did not complete.\nRequests:\n${requests.join("\n")}\nPage:\n${visibleText}`, { cause: error });
     }
     await page.getByRole("button", { name: "src/main.tsx" }).click();
-    await page.getByLabel("Editor for src/main.tsx").waitFor();
-    assert.match(await page.getByLabel("Editor for src/main.tsx").inputValue(), /resumed in a new context/u);
+    await page.getByLabel("src/main.tsx 편집기").waitFor();
+    assert.match(await page.getByLabel("src/main.tsx 편집기").inputValue(), /resumed in a new context/u);
     await page.getByRole("button", { name: "public/logo.bin" }).click();
-    await page.getByText("Binary and unsupported files cannot be opened in the text editor.").waitFor();
-    assert.equal(await page.getByText(/failed integrity verification/u).count(), 0);
+    await page.getByText("바이너리 파일과 지원하지 않는 파일은 텍스트 편집기에서 열 수 없습니다.").waitFor();
+    assert.equal(await page.getByText(/무결성 검증에 실패/u).count(), 0);
     await newContext.close();
   } finally {
     await browser.close();

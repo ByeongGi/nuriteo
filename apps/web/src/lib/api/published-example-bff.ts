@@ -12,10 +12,10 @@ import type { PublicPublishedExample } from "@nuriteo/api-client";
 import {
   publicIdPathSegment,
   publicVersionPathSegment
-} from "../published-example-path.ts";
-import { boundedContentStream } from "./content-bff.ts";
-import { createPublicServerApiClient } from "./public-server-client.ts";
-import { fetchPublicBinary } from "./public-server-policy.ts";
+} from "#src/lib/published-example-path.ts";
+import { boundedContentStream } from "#src/lib/api/content-bff.ts";
+import { createPublicServerApiClient } from "#src/lib/api/public-server-client.ts";
+import { fetchPublicBinary } from "#src/lib/api/public-server-policy.ts";
 
 const REQUEST_ID = /^[A-Za-z0-9._:-]{1,128}$/u;
 const CONTENT_ETAG = /^"published-content-v[1-9]\d*-[A-Za-z0-9_-]{43}"$/u;

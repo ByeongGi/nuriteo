@@ -1,8 +1,10 @@
 import { createHash } from "node:crypto";
-import { readdir, readFile, writeFile } from "node:fs/promises";
+import { cp, mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-const outputDirectory = path.resolve(process.argv[2] ?? ".next");
+const outputDirectory = path.resolve(
+  process.argv[2] ?? process.env.NURITEO_NEXT_DIST_DIR ?? ".next"
+);
 const clientManifestSuffix = "_client-reference-manifest.js";
 const buildRevision = process.env.NURITEO_BUILD_REVISION ?? "development";
 
@@ -86,4 +88,32 @@ for (const filePath of await collectFiles(outputDirectory)) {
   }
 }
 
-console.log(`canonicalized Next.js output (${changed} files changed)`);
+const standaloneServerDirectory = path.join(
+  outputDirectory,
+  "standalone",
+  "apps",
+  "web",
+  ".next",
+  "server"
+);
+const vendorChunksDirectory = path.join(outputDirectory, "server", "vendor-chunks");
+let copiedVendorChunks = false;
+
+try {
+  const [standaloneServer, vendorChunks] = await Promise.all([
+    stat(standaloneServerDirectory),
+    stat(vendorChunksDirectory)
+  ]);
+  if (standaloneServer.isDirectory() && vendorChunks.isDirectory()) {
+    await mkdir(path.join(standaloneServerDirectory, "vendor-chunks"), { recursive: true });
+    await cp(vendorChunksDirectory, path.join(standaloneServerDirectory, "vendor-chunks"), {
+      force: true,
+      recursive: true
+    });
+    copiedVendorChunks = true;
+  }
+} catch (error) {
+  if (error?.code !== "ENOENT") throw error;
+}
+
+console.log(`canonicalized Next.js output (${changed} files changed; vendor chunks ${copiedVendorChunks ? "synced" : "not required"})`);

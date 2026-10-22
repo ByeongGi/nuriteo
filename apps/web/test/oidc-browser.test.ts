@@ -46,19 +46,19 @@ try {
   try {
     const anonymous = await browser.newContext(); const signIn = await anonymous.newPage();
     await signIn.goto(`${origin}/sign-in`, { waitUntil: "networkidle" });
-    const corporate = signIn.getByRole("link", { name: "Continue with Corporate SSO" });
+    const corporate = signIn.getByRole("link", { name: "Corporate SSO 계정으로 계속" });
     assert.equal(await corporate.count(), 1);
-    assert.equal(await signIn.getByRole("link", { name: "Continue with Partner SSO" }).count(), 1);
-    assert.equal(await signIn.getByRole("button", { name: "Sign in" }).count(), 1);
+    assert.equal(await signIn.getByRole("link", { name: "Partner SSO 계정으로 계속" }).count(), 1);
+    assert.equal(await signIn.getByRole("button", { name: "로그인" }).count(), 1);
     assert.equal(await corporate.getAttribute("href"), `/api/v1/auth/oidc/${firstId}/begin`);
 
     const admin = await browser.newContext(); await admin.addCookies([{ name: "nuriteo_dev_session", value: "admin", url: origin }, { name: "nuriteo_dev_csrf", value: csrf, url: origin }]); const adminPage = await admin.newPage();
-    await adminPage.goto(`${origin}/admin/oidc`, { waitUntil: "networkidle" }); await adminPage.getByRole("heading", { name: "Identity providers" }).waitFor();
-    await adminPage.getByLabel("Display name").first().fill("Engineering SSO"); await adminPage.getByLabel("Issuer URL").fill("https://id.example.test"); await adminPage.getByLabel("Client ID").first().fill("nuriteo"); await adminPage.getByLabel("Client secret").fill("top-secret"); await adminPage.getByRole("button", { name: "Save disabled Provider" }).click();
-    await adminPage.getByRole("status").filter({ hasText: "disabled state" }).waitFor(); assert.equal(await adminPage.getByText("top-secret").count(), 0);
+    await adminPage.goto(`${origin}/admin/oidc`, { waitUntil: "networkidle" }); await adminPage.getByRole("heading", { name: "로그인 제공자" }).waitFor();
+    await adminPage.getByLabel("표시 이름").first().fill("Engineering SSO"); await adminPage.getByLabel("발급자 URL").fill("https://id.example.test"); await adminPage.getByLabel("클라이언트 ID").first().fill("nuriteo"); await adminPage.getByLabel("클라이언트 비밀키").fill("top-secret"); await adminPage.getByRole("button", { name: "비활성 제공자 저장" }).click();
+    await adminPage.getByRole("status").filter({ hasText: "비활성 상태로 저장" }).waitFor(); assert.equal(await adminPage.getByText("top-secret").count(), 0);
 
     const user = await browser.newContext(); await user.addCookies([{ name: "nuriteo_dev_session", value: "user", url: origin }, { name: "nuriteo_dev_csrf", value: csrf, url: origin }]); const identities = await user.newPage();
-    await identities.goto(`${origin}/identities`, { waitUntil: "networkidle" }); await identities.getByRole("heading", { name: "Connected identities" }).waitFor(); await identities.getByRole("button", { name: /Disconnect/u }).click(); await identities.getByRole("button", { name: "연결 해제", exact: true }).click(); await identities.getByRole("status").filter({ hasText: "session was rotated" }).waitFor();
+    await identities.goto(`${origin}/identities`, { waitUntil: "networkidle" }); await identities.getByRole("heading", { name: "연결된 계정" }).waitFor(); await identities.getByRole("button", { name: /연결 해제/u }).click(); await identities.getByRole("button", { name: "연결 해제", exact: true }).click(); await identities.getByRole("status").filter({ hasText: "세션을 안전하게 갱신" }).waitFor();
     assert.ok(mutations.every((entry) => entry.csrf === csrf && entry.origin === origin));
     await Promise.all([anonymous.close(), admin.close(), user.close()]);
   } finally { await browser.close(); }

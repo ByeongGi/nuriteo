@@ -2,135 +2,146 @@
 
 import { createSession, getCurrentUser } from "@nuriteo/api-client";
 import type { OidcLoginProvider } from "@nuriteo/api-client";
+import { useMutation } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import type { FormEvent } from "react";
 
-import { Button } from "../../components/ui/button.tsx";
-import { ProductEntryShell } from "../_components/product-entry-shell.tsx";
-import { createBrowserApiClient } from "../../lib/api/browser-client.ts";
+import { Button } from "#src/components/ui/button.tsx";
+import { signInStyles } from "#src/app/sign-in/sign-in.styles.ts";
+import { SignInShell } from "#src/app/sign-in/sign-in-shell.tsx";
+import { createBrowserApiClient } from "#src/lib/api/browser-client.ts";
 import {
   classifySignInFailure,
   safeRequestReference
-} from "../../lib/api/presentation-error.ts";
+} from "#src/lib/api/presentation-error.ts";
 
 interface SignInErrorState {
   readonly message: string;
   readonly reference?: string | undefined;
 }
 
+class SignInValidationError extends Error {}
+
+function presentSignInError(cause: unknown): SignInErrorState {
+  if (cause instanceof SignInValidationError) {
+    return { message: cause.message };
+  }
+
+  const kind = classifySignInFailure(cause);
+  return {
+    message:
+      kind === "invalid-credentials"
+        ? "이메일 또는 비밀번호를 다시 확인하세요."
+        : "현재 로그인할 수 없습니다. 잠시 후 다시 시도하세요.",
+    reference: safeRequestReference(cause)
+  };
+}
+
 export function SignInForm({ providers = [], oidcFailed = false }: { readonly providers?: readonly OidcLoginProvider[]; readonly oidcFailed?: boolean }) {
+  const styles = signInStyles();
   const router = useRouter();
   const passwordInput = useRef<HTMLInputElement>(null);
-  const [error, setError] = useState<SignInErrorState>();
-  const [isPending, setIsPending] = useState(false);
+  const signIn = useMutation({
+    mutationFn: async (formData: FormData) => {
+      const email = formData.get("email");
+      const password = formData.get("password");
+      if (typeof email !== "string" || typeof password !== "string") {
+        throw new SignInValidationError("이메일과 비밀번호를 입력한 뒤 다시 시도하세요.");
+      }
 
-  useEffect(() => {
-    if (error !== undefined) {
-      passwordInput.current?.focus();
-    }
-  }, [error]);
-
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (isPending) {
-      return;
-    }
-
-    const formData = new FormData(event.currentTarget);
-    const email = formData.get("email");
-    const password = formData.get("password");
-    if (typeof email !== "string" || typeof password !== "string") {
-      setError({ message: "Enter your email and password, then try again." });
-      passwordInput.current?.focus();
-      return;
-    }
-
-    setError(undefined);
-    setIsPending(true);
-    try {
       const client = createBrowserApiClient();
       await createSession(client, { email, password });
       await getCurrentUser(client);
-      router.replace("/workspaces");
-      router.refresh();
-    } catch (cause) {
-      const kind = classifySignInFailure(cause);
-      setError({
-        message:
-          kind === "invalid-credentials"
-            ? "The email or password is incorrect."
-            : "Sign-in is temporarily unavailable. Try again.",
-        reference: safeRequestReference(cause)
-      });
+    },
+    onError: () => {
       if (passwordInput.current) {
         passwordInput.current.value = "";
       }
-      setIsPending(false);
+      passwordInput.current?.focus();
+    },
+    onSuccess: () => {
+      router.replace("/workspaces");
+      router.refresh();
     }
+  });
+  const error = signIn.error ? presentSignInError(signIn.error) : undefined;
+
+  useEffect(() => {
+    if (signIn.isError) {
+      passwordInput.current?.focus();
+    }
+  }, [signIn.isError]);
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (signIn.isPending) {
+      return;
+    }
+
+    signIn.mutate(new FormData(event.currentTarget));
   }
 
   return (
-    <ProductEntryShell
-      compact
-      description="회사 계정으로 계속하거나 관리자가 제공한 로컬 계정을 사용하세요."
-      eyebrow="다시 오신 것을 환영합니다"
-      title="NURITEO 로그인"
-      titleId="sign-in-title"
-    >
-        {oidcFailed ? <div className="form-error" role="alert"><p>Identity-provider sign-in could not be completed. Try that Provider again or use your local account.</p></div> : null}
+    <SignInShell>
+        {oidcFailed ? <div className={styles.error({ className: styles.oidcError() })} role="alert"><p>회사 계정 로그인을 완료하지 못했습니다. 다시 시도하거나 로컬 계정을 사용하세요.</p></div> : null}
 
         {providers.length > 0 ? (
-          <div className="sign-in-form" aria-label="Identity provider sign-in">
+          <div className={styles.oidc()} aria-label="OIDC 계정 로그인">
             {providers.map((provider) => (
-              <Button key={provider.id} render={<a href={`/api/v1/auth/oidc/${provider.id}/begin`} />}>
-                Continue with {provider.displayName}
+              <Button className={styles.oidcButton()} key={provider.id} render={<a href={`/api/v1/auth/oidc/${provider.id}/begin`} />}>
+                <span className={styles.providerMark()} aria-hidden="true">{provider.displayName.trim().charAt(0).toUpperCase()}</span>
+                {provider.displayName} 계정으로 계속
               </Button>
             ))}
-            <p className="entry-description">Or use your local account.</p>
+            <div className={styles.divider()}><span>또는 로컬 계정</span></div>
           </div>
         ) : null}
 
-        <form className="sign-in-form" onSubmit={handleSubmit} aria-busy={isPending}>
-          <div className="field-group">
-            <label htmlFor="email">Email</label>
+        <form className={styles.form()} onSubmit={handleSubmit} aria-busy={signIn.isPending}>
+          <div className={styles.field()}>
+            <label className={styles.label()} htmlFor="email">이메일</label>
             <input
+              className={styles.input()}
               id="email"
               name="email"
               type="email"
               autoComplete="username"
               inputMode="email"
               maxLength={320}
+              placeholder="name@company.com"
               required
-              disabled={isPending}
+              disabled={signIn.isPending}
             />
           </div>
 
-          <div className="field-group">
-            <label htmlFor="password">Password</label>
+          <div className={styles.field()}>
+            <label className={styles.label()} htmlFor="password">비밀번호</label>
             <input
+              className={styles.input()}
               ref={passwordInput}
               id="password"
               name="password"
               type="password"
               autoComplete="current-password"
               required
-              disabled={isPending}
-              aria-describedby={error ? "sign-in-error" : undefined}
+              disabled={signIn.isPending}
+              aria-describedby={error ? "sign-in-error" : "sign-in-password-help"}
+              placeholder="비밀번호 입력"
             />
           </div>
 
           {error ? (
-            <div id="sign-in-error" className="form-error" role="alert" aria-live="polite">
+            <div id="sign-in-error" className={styles.error()} role="alert" aria-live="polite">
               <p>{error.message}</p>
-              {error.reference ? <p>Request reference: {error.reference}</p> : null}
+              {error.reference ? <p>요청 참조: {error.reference}</p> : null}
             </div>
           ) : null}
 
-          <Button type="submit" variant="primary" disabled={isPending}>
-            {isPending ? "Signing in…" : "Sign in"}
+          <Button className={styles.submitButton()} type="submit" variant="primary" disabled={signIn.isPending}>
+            {signIn.isPending ? "로그인 중…" : "로그인"}
           </Button>
         </form>
-    </ProductEntryShell>
+    </SignInShell>
   );
 }

@@ -3,7 +3,7 @@ import "server-only";
 import {
   forwardCollaborationMutation,
   invalidCollaborationRoute
-} from "./collaboration-bff.ts";
+} from "#src/lib/api/collaboration-bff.ts";
 
 const AUDIT_PATH = "/api/v1/admin/audit-events" as const;
 const MAX_QUERY_BYTES = 4_096;

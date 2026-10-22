@@ -3,11 +3,11 @@ import { init as initializeModuleLexer, parse as parseModuleImports } from "es-m
 import {
   createPreviewOriginUrl,
   parseInternalPreviewUrl
-} from "./preview-origin-contract.ts";
+} from "#src/runtime/preview-origin-contract.ts";
 import type {
   EnabledPreviewOriginConfiguration,
   PreviewHostBinding
-} from "./preview-origin-contract.ts";
+} from "#src/runtime/preview-origin-contract.ts";
 
 const PROTOCOL_VERSION = 1;
 const MAX_RESPONSE_BYTES = 8 * 1024 * 1024;

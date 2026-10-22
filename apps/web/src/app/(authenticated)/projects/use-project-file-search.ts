@@ -2,7 +2,7 @@
 
 import { useDeferredValue, useMemo } from "react";
 
-import type { RuntimeWorkspaceFile } from "../../../runtime/runtime-adapter.ts";
+import type { RuntimeWorkspaceFile } from "#src/runtime/runtime-adapter.ts";
 
 interface ProjectFileSearchInput {
   readonly files: readonly RuntimeWorkspaceFile[];

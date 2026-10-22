@@ -4,11 +4,11 @@ import { acceptOrganizationInvitation, declineOrganizationInvitation } from "@nu
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 
-import { Button } from "../../../../components/ui/button.tsx";
-import { ProductEntryShell } from "../../../_components/product-entry-shell.tsx";
-import { collaborationError, readCsrfCredential } from "../../../../lib/api/browser-security.ts";
-import { createBrowserApiClient } from "../../../../lib/api/browser-client.ts";
-import { useExclusiveMutation } from "../../../../lib/use-exclusive-mutation.ts";
+import { Button } from "#src/components/ui/button.tsx";
+import { ProductEntryShell } from "#src/app/_components/product-entry-shell.tsx";
+import { collaborationError, readCsrfCredential } from "#src/lib/api/browser-security.ts";
+import { createBrowserApiClient } from "#src/lib/api/browser-client.ts";
+import { useExclusiveMutation } from "#src/lib/use-exclusive-mutation.ts";
 
 export function AcceptInvitation() {
   const router = useRouter();
@@ -17,7 +17,7 @@ export function AcceptInvitation() {
   const [error, setError] = useState<string>();
 
   async function respond(action: "accept" | "decline") {
-    if (token === null) { setError("This invitation link is missing or invalid."); return; }
+    if (token === null) { setError("초대 링크가 없거나 올바르지 않습니다."); return; }
     await mutation.run(async () => {
       setError(undefined);
       try {

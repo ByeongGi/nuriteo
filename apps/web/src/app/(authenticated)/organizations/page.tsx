@@ -8,12 +8,12 @@ import {
 } from "@nuriteo/api-client";
 import type { Metadata } from "next";
 
-import { EntryUnavailable } from "../../_components/entry-unavailable.tsx";
-import { safeRequestReference } from "../../../lib/api/presentation-error.ts";
-import { createServerApiClient } from "../../../lib/api/server-client.ts";
-import { OrganizationConsole } from "./organization-console.tsx";
+import { EntryUnavailable } from "#src/app/_components/entry-unavailable.tsx";
+import { safeRequestReference } from "#src/lib/api/presentation-error.ts";
+import { createServerApiClient } from "#src/lib/api/server-client.ts";
+import { OrganizationConsole } from "#src/app/(authenticated)/organizations/organization-console.tsx";
 
-export const metadata: Metadata = { title: "Organizations" };
+export const metadata: Metadata = { title: "조직" };
 
 export default async function OrganizationsPage({
   searchParams
@@ -48,6 +48,6 @@ export default async function OrganizationsPage({
     }
     return <OrganizationConsole canManage={canManage} currentUserId={current.data.user.id} workspaces={collection.data.workspaces} organization={organization.data} etag={organization.etag} members={members.data.items} {...(invitations === undefined ? {} : { invitations })} />;
   } catch (error) {
-    return <EntryUnavailable title="Organizations are temporarily unavailable" description="Organization collaboration data could not be loaded safely." reference={safeRequestReference(error)} retryHref="/organizations" />;
+    return <EntryUnavailable title="조직을 일시적으로 사용할 수 없습니다" description="조직 협업 정보를 안전하게 불러오지 못했습니다." reference={safeRequestReference(error)} retryHref="/organizations" />;
   }
 }

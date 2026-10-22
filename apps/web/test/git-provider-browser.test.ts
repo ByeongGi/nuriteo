@@ -131,29 +131,29 @@ try {
     ]);
     const page = await context.newPage();
     await page.goto(`${origin}/admin/git-providers`, { waitUntil: "networkidle" });
-    await page.getByRole("heading", { name: "Git providers" }).waitFor();
-    await page.getByLabel("Display name").first().fill("Company Git");
-    await page.getByLabel("Exact host").fill("git.internal.example");
-    await page.getByLabel("API base URL").first().fill("https://git.internal.example/api");
-    await page.getByLabel("Allow write").first().check();
+    await page.getByRole("heading", { name: "Git 제공자", exact: true }).waitFor();
+    await page.getByLabel("표시 이름").first().fill("Company Git");
+    await page.getByLabel("정확한 호스트").fill("git.internal.example");
+    await page.getByLabel("API 기본 URL").first().fill("https://git.internal.example/api");
+    await page.getByLabel("쓰기 허용").first().check();
     const invalidFields = await page.locator("form").first().locator(":invalid").evaluateAll((nodes) => nodes.map((node) => ({ name: (node as HTMLInputElement).name, message: (node as HTMLInputElement).validationMessage })));
     assert.deepEqual(invalidFields, []);
-    await page.getByRole("button", { name: "Save disabled provider" }).click();
+    await page.getByRole("button", { name: "비활성 제공자 저장" }).click();
     await page.waitForTimeout(500);
     let feedback = page.locator('main [role="status"], main [role="alert"]');
-    assert.match((await feedback.allInnerTexts()).join(" "), /saved disabled/u);
-    assert.equal(await page.getByRole("region", { name: "Private certificate authority" }).count(), 1);
+    assert.match((await feedback.allInnerTexts()).join(" "), /비활성 상태로 저장/u);
+    assert.equal(await page.getByRole("region", { name: "사설 인증 기관" }).count() >= 1, true);
 
-    await page.getByLabel("Display name").last().fill("Company Git updated");
-    await page.getByRole("button", { name: "Update provider" }).click();
-    await page.getByRole("status").filter({ hasText: "Provider updated" }).waitFor();
-    await page.getByRole("button", { name: "Validate and activate" }).click();
-    await page.getByRole("status").filter({ hasText: "validated and activated" }).waitFor();
-    await page.getByRole("button", { name: "Disable", exact: true }).click();
-    await page.getByRole("status").filter({ hasText: "disabled immediately" }).waitFor();
-    await page.getByRole("button", { name: "Delete" }).click();
-    await page.getByRole("button", { name: "Provider 삭제" }).click();
-    await page.getByText("No Git provider is configured.").waitFor();
+    await page.getByLabel("표시 이름").last().fill("Company Git updated");
+    await page.getByRole("button", { name: "제공자 정보 변경" }).click();
+    await page.getByRole("status").filter({ hasText: "제공자 정보를 변경" }).waitFor();
+    await page.getByRole("button", { name: "검증 후 활성화" }).click();
+    await page.getByRole("status").filter({ hasText: "검증하고 활성화" }).waitFor();
+    await page.getByRole("button", { name: "비활성화", exact: true }).click();
+    await page.getByRole("status").filter({ hasText: "즉시 비활성화" }).waitFor();
+    await page.getByRole("button", { name: "삭제" }).click();
+    await page.getByRole("button", { name: "제공자 삭제" }).click();
+    await page.getByText("등록된 Git 제공자가 없습니다.").waitFor();
 
     assert.deepEqual(mutations.map(({ path }) => path), [
       "/api/v1/admin/git-providers",

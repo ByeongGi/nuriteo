@@ -5,8 +5,8 @@ import { randomUUID } from "node:crypto";
 import {
   selectForwardedHeaders,
   validateInternalApiUrl
-} from "./server-policy.ts";
-import { isCanonicalCsrfCredential } from "./csrf-credential.ts";
+} from "#src/lib/api/server-policy.ts";
+import { isCanonicalCsrfCredential } from "#src/lib/api/csrf-credential.ts";
 
 const LOGIN_PATH = "/api/v1/auth/sessions";
 const SESSION_PATH = "/api/v1/auth/session";

@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 
-import { Button } from "../../components/ui/button.tsx";
-import { ProductEntryShell } from "./product-entry-shell.tsx";
+import { Button } from "#src/components/ui/button.tsx";
+import { ProductEntryShell } from "#src/app/_components/product-entry-shell.tsx";
 
 interface ErrorViewProps {
   onRetry: () => void;
@@ -19,13 +19,13 @@ export function ErrorView({ onRetry, reference }: ErrorViewProps) {
       titleId="error-title"
     >
       <div role="alert">
-        {reference ? <p className="boundary-reference">Reference: {reference}</p> : null}
+        {reference ? <p className="boundary-reference">참조: {reference}</p> : null}
         <div className="boundary-actions">
           <Button variant="primary" onClick={onRetry}>
-            Try again
+            다시 시도
           </Button>
           <Link className="text-link" href="/">
-            Return home
+            홈으로 돌아가기
           </Link>
         </div>
       </div>

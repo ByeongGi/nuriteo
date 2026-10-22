@@ -2,9 +2,9 @@ import "server-only";
 
 import { randomUUID } from "node:crypto";
 
-import { isCanonicalCsrfCredential } from "./csrf-credential.ts";
-import { selectForwardedHeaders, validateInternalApiUrl } from "./server-policy.ts";
-import { forwardProjectRequest, hasNoProjectQuery, invalidProjectRoute, projectSaveSessionPath } from "./project-bff.ts";
+import { isCanonicalCsrfCredential } from "#src/lib/api/csrf-credential.ts";
+import { selectForwardedHeaders, validateInternalApiUrl } from "#src/lib/api/server-policy.ts";
+import { forwardProjectRequest, hasNoProjectQuery, invalidProjectRoute, projectSaveSessionPath } from "#src/lib/api/project-bff.ts";
 
 const BUNDLE_CONTENT_TYPE = "application/vnd.nuriteo.project-bundle";
 const MAX_RELAY_BODY_BYTES = 64 * 1024 * 1024;

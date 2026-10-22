@@ -1,6 +1,6 @@
-const PUBLISHED_DATE_FORMAT = new Intl.DateTimeFormat("en", {
+const PUBLISHED_DATE_FORMAT = new Intl.DateTimeFormat("ko-KR", {
   day: "numeric",
-  month: "short",
+  month: "long",
   timeZone: "UTC",
   year: "numeric"
 });

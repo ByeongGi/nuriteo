@@ -4,9 +4,9 @@ import { deleteSession } from "@nuriteo/api-client";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-import { Button } from "../../components/ui/button.tsx";
-import { createBrowserApiClient } from "../../lib/api/browser-client.ts";
-import { readCsrfCredential } from "../../lib/api/browser-security.ts";
+import { Button } from "#src/components/ui/button.tsx";
+import { createBrowserApiClient } from "#src/lib/api/browser-client.ts";
+import { readCsrfCredential } from "#src/lib/api/browser-security.ts";
 
 export function LogoutButton() {
   const router = useRouter();

@@ -1,4 +1,4 @@
-import { IncrementalSha256 } from "./incremental-sha256.ts";
+import { IncrementalSha256 } from "#src/bundles/incremental-sha256.ts";
 
 const TAR_BLOCK_BYTES = 512;
 const TAR_END_BLOCKS = 2;

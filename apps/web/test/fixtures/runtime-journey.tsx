@@ -2,7 +2,10 @@ import React, { useState } from "react";
 import { createRoot } from "react-dom/client";
 
 import { ProjectIdeShell } from "../../src/app/(authenticated)/projects/project-ide-shell.tsx";
-import type { SubdomainPreviewBridge } from "../../src/runtime/subdomain-preview-bridge.ts";
+import {
+  createSubdomainPreviewBridge,
+  type SubdomainPreviewBridge
+} from "../../src/runtime/subdomain-preview-bridge.ts";
 
 declare global {
   interface Window { __nuriteoRuntimeProbe: { activeWorkers: number; createdWorkers: number; committedVersion?: number; committedEtag?: string; reloads: number; restoreMode: "download-failure" | "intervening" | "materialization-failure" | "success" } }
@@ -70,12 +73,17 @@ function Fixture() {
     />;
 }
 
-async function createFixturePreviewBridge({ internalPreviewUrl }: { readonly internalPreviewUrl: string }): Promise<SubdomainPreviewBridge> {
+async function createFixturePreviewBridge(
+  options: Parameters<typeof createSubdomainPreviewBridge>[0]
+): Promise<SubdomainPreviewBridge> {
+  if (location.hostname === "app.localhost") {
+    return createSubdomainPreviewBridge(options);
+  }
   return {
     attach() {},
     async dispose() {},
     hotUpdate() {},
-    url: internalPreviewUrl
+    url: options.internalPreviewUrl
   };
 }
 

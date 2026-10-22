@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import type { CSSProperties, ReactNode } from "react";
 
-import { Button } from "../components/ui/button.tsx";
+import { Button } from "#src/components/ui/button.tsx";
 
 type Token = {
   label: string;

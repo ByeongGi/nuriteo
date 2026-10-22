@@ -1,4 +1,4 @@
-import { forwardProjectHistoryRequest } from "../../../../../../../../../lib/api/history-bff.ts";
+import { forwardProjectHistoryRequest } from "#src/lib/api/history-bff.ts";
 
 interface Context { readonly params: Promise<{ ownerId: string; ownerType: string; projectId: string }> }
 

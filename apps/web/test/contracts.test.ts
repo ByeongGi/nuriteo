@@ -20,12 +20,48 @@ function testStandaloneAndDependencyContract(): void {
   };
   assert.equal(packageJson.dependencies.next, "15.5.26");
   assert.equal(packageJson.dependencies.react, "19.0.0");
+  assert.equal(packageJson.dependencies["@tanstack/react-query"], "5.104.5");
+  assert.equal(packageJson.dependencies["tailwind-variants"], "3.3.1");
+  assert.equal("class-variance-authority" in packageJson.dependencies, false);
   assert.equal(packageJson.devDependencies.tailwindcss, "4.3.3");
-  for (const dependency of ["zustand", "@tanstack/react-query"] as const) {
+  for (const dependency of ["zustand"] as const) {
     assert.equal(dependency in packageJson.dependencies, false, `${dependency} must not be installed`);
   }
+  const providers = read("src/app/providers.tsx");
+  assert.match(providers, /QueryClientProvider/u);
+  assert.match(providers, /staleTime:\s*60_000/u);
+  assert.match(read("src/app/sign-in/sign-in-form.tsx"), /useMutation/u);
+  assert.match(read("src/components/ui/button.tsx"), /const buttonVariants = tv\(/u);
+  const fieldSource = read("src/components/ui/field.tsx");
+  assert.match(fieldSource, /@base-ui\/react\/field/u);
+  assert.match(fieldSource, /@base-ui\/react\/select/u);
+  assert.match(fieldSource, /const fieldVariants = tv\(/u);
+  assert.match(read("src/components/ui/checkbox.tsx"), /@base-ui\/react\/checkbox/u);
+  assert.match(read("src/components/ui/radio-group.tsx"), /@base-ui\/react\/radio-group/u);
+  assert.match(read("src/components/ui/switch.tsx"), /@base-ui\/react\/switch/u);
+  assert.match(read("src/components/ui/checkbox.tsx"), /const checkboxStyles = tv\(/u);
+  assert.match(read("src/components/ui/number-field.tsx"), /@base-ui\/react\/number-field/u);
+  for (const uiFile of findFiles("src/components/ui").filter((file) => file.endsWith(".tsx"))) {
+    assert.doesNotMatch(read(uiFile), /admin(?:-|_|\s)|project(?:-|_|\s)|workspace(?:-|_|\s)/iu, `${uiFile} must stay domain-neutral`);
+  }
+  const confirmationDialogSource = read("src/components/ui/confirmation-dialog.tsx");
+  assert.match(confirmationDialogSource, /@base-ui\/react\/alert-dialog/u);
+  assert.doesNotMatch(confirmationDialogSource, /addEventListener|role=["']alertdialog/u);
+  const segmentedControlSource = read("src/components/ui/segmented-control.tsx");
+  assert.match(segmentedControlSource, /@base-ui\/react\/toggle-group/u);
+  assert.match(segmentedControlSource, /const segmentedControlStyles = tv\(/u);
+  for (const appFile of findFiles("src/app").filter((file) => file.endsWith(".tsx"))) {
+    assert.doesNotMatch(read(appFile), /<select(?:\s|>)/u, `${appFile} must use the Base UI select field`);
+    assert.doesNotMatch(read(appFile), /<input[^>]+type=["'](?:checkbox|radio)["']/u, `${appFile} must use the Base UI choice fields`);
+  }
+  assert.match(read("src/app/sign-in/sign-in.styles.ts"), /slots:\s*\{/u);
   assert.match(read("next.config.ts"), /output:\s*"standalone"/u);
   assert.match(read("postcss.config.mjs"), /"@tailwindcss\/postcss"/u);
+  const relativeSourceImport = /(?:\bfrom\s+|\bimport\s*\(\s*|\bimport\s+)["']\.\.?\//u;
+  for (const sourceFile of findFiles("src").filter((file) => /\.tsx?$/u.test(file))) {
+    if (sourceFile === "src/lib/qr-matrix.ts") continue;
+    assert.doesNotMatch(read(sourceFile), relativeSourceImport, `${sourceFile} must use the #src/* alias`);
+  }
 }
 
 function testServerFirstBoundaries(): void {
@@ -39,21 +75,26 @@ function testServerFirstBoundaries(): void {
     assert.doesNotMatch(read(serverFile), /["']use client["']/u, `${serverFile} must stay server-first`);
   }
   const clientFiles = findFiles("src").filter((file) => /["']use client["']/u.test(read(file)));
-  assert.deepEqual(clientFiles.sort(), [
+  const uiFiles = findFiles("src/components/ui").filter((file) => file.endsWith(".tsx"));
+  for (const uiFile of uiFiles) {
+    assert.match(read(uiFile), /["']use client["']/u, `${uiFile} must keep the Base UI client boundary`);
+  }
+  const nonUiClientFiles = clientFiles.filter((file) => !file.startsWith("src/components/ui/"));
+  assert.deepEqual(nonUiClientFiles.sort(), [
+    "src/app/(admin)/admin/_components/integration-ca-console.tsx",
+    "src/app/(admin)/admin/admin-navigation.tsx",
+    "src/app/(admin)/admin/backups/backup-console.tsx",
+    "src/app/(admin)/admin/git-providers/provider-console.tsx",
+    "src/app/(admin)/admin/invitations/activation-invitations.tsx",
+    "src/app/(admin)/admin/maintenance/maintenance-console.tsx",
+    "src/app/(admin)/admin/mfa/policy-editor.tsx",
+    "src/app/(admin)/admin/notifications/email-delivery-console.tsx",
+    "src/app/(admin)/admin/oidc/provider-console.tsx",
+    "src/app/(admin)/admin/operations/support-bundle-download.tsx",
+    "src/app/(admin)/admin/registries/registry-console.tsx",
+    "src/app/(admin)/admin/settings/admin-settings.tsx",
+    "src/app/(admin)/admin/updates/update-readiness-console.tsx",
     "src/app/(authenticated)/access-tokens/token-console.tsx",
-    "src/app/(authenticated)/admin/_components/integration-ca-console.tsx",
-    "src/app/(authenticated)/admin/admin-navigation.tsx",
-    "src/app/(authenticated)/admin/backups/backup-console.tsx",
-    "src/app/(authenticated)/admin/git-providers/provider-console.tsx",
-    "src/app/(authenticated)/admin/invitations/activation-invitations.tsx",
-    "src/app/(authenticated)/admin/maintenance/maintenance-console.tsx",
-    "src/app/(authenticated)/admin/mfa/policy-editor.tsx",
-    "src/app/(authenticated)/admin/notifications/email-delivery-console.tsx",
-    "src/app/(authenticated)/admin/oidc/provider-console.tsx",
-    "src/app/(authenticated)/admin/operations/support-bundle-download.tsx",
-    "src/app/(authenticated)/admin/registries/registry-console.tsx",
-    "src/app/(authenticated)/admin/settings/admin-settings.tsx",
-    "src/app/(authenticated)/admin/updates/update-readiness-console.tsx",
     "src/app/(authenticated)/authenticated-navigation.tsx",
     "src/app/(authenticated)/identities/identity-connections.tsx",
     "src/app/(authenticated)/logout-button.tsx",
@@ -66,17 +107,20 @@ function testServerFirstBoundaries(): void {
     "src/app/(authenticated)/projects/project-history-panel.tsx",
     "src/app/(authenticated)/projects/project-ide-shell.tsx",
     "src/app/(authenticated)/projects/use-project-file-search.ts",
+    "src/app/(authenticated)/workspaces/workspace-catalog.tsx",
+    "src/app/(studio)/projects/[projectId]/studio/project-studio-screen.tsx",
     "src/app/_components/error-view.tsx",
     "src/app/activate/activation-form.tsx",
     "src/app/error.tsx",
+    "src/app/examples/_components/examples-gallery.tsx",
     "src/app/examples/_components/fork-example-form.tsx",
     "src/app/examples/_components/published-example-preview.tsx",
     "src/app/global-error.tsx",
+    "src/app/mfa/mfa-enrollment-panel.tsx",
     "src/app/mfa/security.tsx",
+    "src/app/providers.tsx",
     "src/app/sign-in/sign-in-form.tsx",
     "src/components/theme-selector.tsx",
-    "src/components/ui/button.tsx",
-    "src/components/ui/confirmation-dialog.tsx",
     "src/lib/api/browser-client.ts",
     "src/lib/api/browser-security.ts",
     "src/lib/use-exclusive-mutation.ts",
@@ -112,13 +156,15 @@ function testThemeAndTokenContract(): void {
   assert.match(globals, /@import "tailwindcss"/u);
   assert.match(globals, /@theme inline/u);
   assert.match(globals, /:focus-visible/u);
+  assert.doesNotMatch(globals, /\.confirmation-dialog(?:__|\s*\{)/u);
+  assert.doesNotMatch(globals, /\.product-segments button/u);
   assert.match(globals, /prefers-reduced-motion: reduce/u);
 }
 
 function testSafeAccessibleBoundaries(): void {
   const layout = read("src/app/layout.tsx");
   assert.match(layout, /href="#main-content"/u);
-  assert.match(layout, /Skip to main content/u);
+  assert.match(layout, /본문으로 건너뛰기/u);
 
   const loading = read("src/app/loading.tsx");
   assert.match(loading, /aria-busy="true"/u);
@@ -164,7 +210,7 @@ function testProductionBoundary(): void {
   const projectGitPanel = read("src/app/(authenticated)/projects/project-git-panel.tsx");
   assert.match(projectGitPanel, /type="password"/u);
   assert.match(projectGitPanel, /REAUTHENTICATION_REQUIRED/u);
-  assert.match(projectGitPanel, /Sign in again to refresh recent authentication/u);
+  assert.match(projectGitPanel, /최근 인증을 갱신하려면 다시 로그인/u);
   assert.match(projectGitPanel, /field\.value = ""/u);
   assert.doesNotMatch(projectGitPanel, /localStorage|sessionStorage|indexedDB/u);
 }

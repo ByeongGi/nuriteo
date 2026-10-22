@@ -96,7 +96,9 @@ function testPublicRouteValidation(): void {
 
 function testReadOnlyPublicExperienceBoundary(): void {
   const gallery = read("src/app/examples/page.tsx");
+  const galleryScreen = read("src/app/examples/_components/public-examples-screen.tsx");
   const detail = read("src/app/examples/[publicId]/page.tsx");
+  const detailScreen = read("src/app/examples/_components/public-example-detail.tsx");
   const version = read("src/app/examples/[publicId]/versions/[versionNumber]/page.tsx");
   const shell = read("src/app/examples/_components/read-only-example-shell.tsx");
   const forkForm = read("src/app/examples/_components/fork-example-form.tsx");
@@ -104,19 +106,21 @@ function testReadOnlyPublicExperienceBoundary(): void {
   const workspaceRoute = read("src/app/api/v1/me/workspaces/route.ts");
 
   assert.match(gallery, /listPublicPublishedExamples\(createPublicServerApiClient\(\)/u);
+  assert.match(gallery, /PublicExamplesScreen/u);
   assert.match(detail, /getPublicPublishedExample\(createPublicServerApiClient\(\)/u);
+  assert.match(detail, /PublicExampleDetail/u);
   assert.match(version, /getPublicPublishedExampleVersion/u);
-  assert.match(shell, /Read-only/u);
-  assert.match(shell, /Fixed snapshot/u);
-  assert.match(shell, /Download sanitized archive/u);
+  assert.match(shell, /읽기 전용/u);
+  assert.match(shell, /고정 스냅샷/u);
+  assert.match(shell, /정제된 아카이브 다운로드/u);
   assert.match(shell, /ForkExampleForm/u);
   assert.match(forkForm, /getCurrentWorkspaces/u);
   assert.match(forkForm, /forkPublishedExample/u);
   assert.match(forkForm, /readCsrfCredential/u);
   assert.match(forkForm, /published-example-fork-\$\{crypto\.randomUUID\(\)\}/u);
-  assert.match(forkForm, /source access, Git connections, or environment values/u);
+  assert.match(forkForm, /원본 접근 권한, Git 연결이나 환경값/u);
   assert.match(shell, /\/api\/v1\/published-examples\/\$\{example\.publicId\}\/versions\/\$\{example\.versionNumber\}\/content/u);
-  assert.doesNotMatch(`${gallery}\n${detail}\n${version}\n${shell}`, /ProjectIdeShell|createServerApiClient|cookies\(|headers\(/u);
+  assert.doesNotMatch(`${gallery}\n${galleryScreen}\n${detail}\n${detailScreen}\n${version}\n${shell}`, /ProjectIdeShell|createServerApiClient|cookies\(|headers\(/u);
   assert.doesNotMatch(publicClient, /next\/headers|next\/cookies|createServerApiClient/u);
   assert.match(workspaceRoute, /path: "\/api\/v1\/me\/workspaces"/u);
   assert.match(workspaceRoute, /requireCsrf: false/u);

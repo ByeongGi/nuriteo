@@ -1,4 +1,4 @@
-import { forwardCollaborationMutation } from "../../../../lib/api/collaboration-bff.ts";
+import { forwardCollaborationMutation } from "#src/lib/api/collaboration-bff.ts";
 
 export const dynamic = "force-dynamic";
 

@@ -39,8 +39,8 @@ function testSelectionContract(): void {
   assert.equal(resolveWorkspaceSelection([personal], "unknown"), personal.storageScopeId);
   assert.equal(resolveWorkspaceSelection([personal], [personal.storageScopeId]), personal.storageScopeId);
   assert.equal(resolveWorkspaceSelection([], undefined), undefined);
-  assert.equal(workspaceOwnerLabel(personal), "Personal");
-  assert.equal(workspaceOwnerLabel(organization), "Organization");
+  assert.equal(workspaceOwnerLabel(personal), "개인");
+  assert.equal(workspaceOwnerLabel(organization), "조직");
 }
 
 function testRequestScopedAuthenticatedBoundary(): void {
@@ -49,29 +49,42 @@ function testRequestScopedAuthenticatedBoundary(): void {
 
   assert.match(layout, /await createServerApiClient\(\)/u);
   assert.match(layout, /await getCurrentUser\(client\)/u);
+  assert.match(layout, /<Suspense fallback=\{<AuthenticatedShellLoading/u);
+  assert.match(layout, /<AuthenticatedShellFrame/u);
   assert.match(layout, /isExplicitlySignedOut\(error\)/u);
   assert.match(layout, /redirect\("\/sign-in"\)/u);
   assert.match(page, /await createServerApiClient\(\)/u);
   assert.match(page, /await getCurrentWorkspaces\(client\)/u);
-  assert.match(page, /Workspaces are temporarily unavailable/u);
+  assert.match(page, /워크스페이스를 일시적으로 사용할 수 없습니다/u);
   assert.doesNotMatch(`${layout}\n${page}`, /cache\(|globalThis\.|mock|localStorage|sessionStorage/u);
   assert.doesNotMatch(`${layout}\n${page}`, /["']use client["']/u);
 }
 
 function testAccessibleStateContract(): void {
   const page = read("src/app/(authenticated)/workspaces/page.tsx");
+  const catalog = read("src/app/(authenticated)/workspaces/workspace-catalog.tsx");
   const loading = read("src/app/(authenticated)/workspaces/loading.tsx");
+  const sharedLoading = read("src/app/_components/workspace-page-loading.tsx");
   const navigation = read("src/app/(authenticated)/authenticated-navigation.tsx");
   const logout = read("src/app/(authenticated)/logout-button.tsx");
 
-  assert.match(page, /<nav[^>]+aria-labelledby="workspace-selector-title"/u);
-  assert.match(page, /aria-current=\{isSelected \? "page" : undefined\}/u);
-  assert.match(page, /개인 또는 조직 워크스페이스/u);
-  assert.match(page, /관리자에게 접근 권한을 요청하세요/u);
-  assert.match(loading, /aria-busy="true"/u);
-  assert.match(loading, /aria-live="polite"/u);
-  assert.match(loading, /Loading Workspaces/u);
+  assert.match(page, /<WorkspaceScreen/u);
+  assert.match(catalog, /aria-label="워크스페이스 검색 및 필터"/u);
+  assert.match(catalog, /<SegmentedControl/u);
+  assert.match(catalog, /value=\{filter\}/u);
+  assert.match(catalog, /onValueChange=\{setFilter\}/u);
+  assert.match(catalog, /aria-current=\{isSelected \? "page" : undefined\}/u);
+  assert.match(catalog, /export function EmptyWorkspaceScreen/u);
+  assert.match(catalog, /조직 만들기/u);
+  assert.match(catalog, /접근 권한 다시 확인/u);
+  assert.match(loading, /<WorkspacePageLoading/u);
+  assert.match(sharedLoading, /aria-busy="true"/u);
+  assert.match(sharedLoading, /aria-live="polite"/u);
+  assert.match(loading, /워크스페이스를 불러오는 중/u);
   assert.match(navigation, /<LogoutButton\s*\/>/u);
+  assert.match(navigation, /authenticated-navigation__mobile-more/u);
+  assert.match(navigation, /계정 및 시스템 메뉴 열기/u);
+  assert.match(navigation, /label: "워크스페이스"/u);
   assert.match(logout, /await deleteSession/u);
   assert.match(logout, /csrfToken: readCsrfCredential\(\)/u);
   assert.match(logout, /router\.replace\("\/sign-in"\)/u);

@@ -1,14 +1,14 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 
-import { ActivationForm } from "./activation-form.tsx";
-import { ProductEntryLoading } from "../_components/product-entry-shell.tsx";
+import { ActivationForm } from "#src/app/activate/activation-form.tsx";
+import { ProductEntryLoading } from "#src/app/_components/product-entry-shell.tsx";
 
-export const metadata: Metadata = { title: "Activate account" };
+export const metadata: Metadata = { title: "계정 활성화" };
 
 export default function ActivatePage() {
   return (
-    <Suspense fallback={<ProductEntryLoading label="Loading activation" />}>
+    <Suspense fallback={<ProductEntryLoading label="계정 활성화를 준비하는 중" />}>
       <ActivationForm />
     </Suspense>
   );

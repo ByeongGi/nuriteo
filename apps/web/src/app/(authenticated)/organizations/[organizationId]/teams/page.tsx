@@ -14,15 +14,15 @@ import type { Project, TeamMember, TeamProjectRole } from "@nuriteo/api-client";
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 
-import { EntryUnavailable } from "../../../../_components/entry-unavailable.tsx";
+import { EntryUnavailable } from "#src/app/_components/entry-unavailable.tsx";
 import {
   isExplicitlySignedOut,
   safeRequestReference
-} from "../../../../../lib/api/presentation-error.ts";
-import { createServerApiClient } from "../../../../../lib/api/server-client.ts";
-import { TeamConsole } from "./team-console.tsx";
+} from "#src/lib/api/presentation-error.ts";
+import { createServerApiClient } from "#src/lib/api/server-client.ts";
+import { TeamConsole } from "#src/app/(authenticated)/organizations/[organizationId]/teams/team-console.tsx";
 
-export const metadata: Metadata = { title: "Teams" };
+export const metadata: Metadata = { title: "팀과 프로젝트 권한" };
 
 const UUID_V7 = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 
@@ -57,7 +57,9 @@ export default async function TeamsPage({ params, searchParams }: TeamsPageProps
     let selectedTeam;
     let selectedTeamEtag;
     let members: readonly TeamMember[] = [];
+    let memberNextCursor: string | null = null;
     let projectRoles: readonly TeamProjectRole[] = [];
+    let projectRoleNextCursor: string | null = null;
     let projects: readonly Project[] = [];
     let canManageMembers = false;
 
@@ -78,7 +80,9 @@ export default async function TeamsPage({ params, searchParams }: TeamsPageProps
       selectedTeam = teamResult.data;
       selectedTeamEtag = teamResult.etag;
       members = teamMembersResult.data.items;
+      memberNextCursor = teamMembersResult.data.nextCursor;
       projectRoles = projectRolesResult.data.items;
+      projectRoleNextCursor = projectRolesResult.data.nextCursor;
       const currentTeamRole = members.find(
         (member) => member.userId === current.data.user.id
       )?.role;
@@ -99,7 +103,10 @@ export default async function TeamsPage({ params, searchParams }: TeamsPageProps
         canRenameTeam={canManageMembers}
         currentUserId={current.data.user.id}
         initialMembers={members}
+        initialMemberNextCursor={memberNextCursor}
+        initialNextTeamCursor={teamsResult.data.nextCursor}
         initialProjectRoles={projectRoles}
+        initialProjectRoleNextCursor={projectRoleNextCursor}
         organization={organizationResult.data}
         organizationMembers={organizationMembers.map((member) => ({
           displayName: member.displayName,
@@ -116,8 +123,8 @@ export default async function TeamsPage({ params, searchParams }: TeamsPageProps
     if (isExplicitlySignedOut(error)) redirect("/sign-in");
     return (
       <EntryUnavailable
-        title="Teams are temporarily unavailable"
-        description="Team access data could not be loaded safely. No change was attempted."
+        title="팀과 프로젝트 권한을 일시적으로 불러올 수 없습니다"
+        description="팀 접근 데이터를 안전하게 불러오지 못했습니다. 시도된 변경은 없습니다."
         reference={safeRequestReference(error)}
         retryHref={`/organizations/${organizationId}/teams`}
       />

@@ -4,6 +4,9 @@
   "private": true,
   "license": "Apache-2.0",
   "type": "module",
+  "imports": {
+    "#src/*": "./src/*"
+  },
   "scripts": {
     "build": "pnpm runtime:assets && next build && node tooling/canonicalize-next-output.mjs",
     "build:storybook": "storybook build",
@@ -46,14 +49,14 @@
     "@nuriteo/api-client": "workspace:*",
     "@nuriteo/browser-host": "workspace:*",
     "@nuriteo/workspace-runtime": "workspace:*",
-    "class-variance-authority": "0.7.1",
-    "clsx": "2.1.1",
+    "@tanstack/react-query": "5.104.5",
     "es-module-lexer": "2.3.2",
     "next": "15.5.26",
     "react": "19.0.0",
     "react-dom": "19.0.0",
     "server-only": "0.0.1",
-    "tailwind-merge": "3.7.0"
+    "tailwind-merge": "3.7.0",
+    "tailwind-variants": "3.3.1"
   },
   "devDependencies": {
     "@storybook/addon-a11y": "10.6.2",

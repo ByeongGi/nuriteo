@@ -1,29 +1,34 @@
 "use client";
 
 import { activateAccount } from "@nuriteo/api-client";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import type { FormEvent } from "react";
 
-import { Button } from "../../components/ui/button.tsx";
-import { ProductEntryShell } from "../_components/product-entry-shell.tsx";
-import { createBrowserApiClient } from "../../lib/api/browser-client.ts";
-import { collaborationError } from "../../lib/api/browser-security.ts";
-import { useExclusiveMutation } from "../../lib/use-exclusive-mutation.ts";
+import { Button } from "#src/components/ui/button.tsx";
+import { ProductEntryShell } from "#src/app/_components/product-entry-shell.tsx";
+import { createBrowserApiClient } from "#src/lib/api/browser-client.ts";
+import { collaborationError } from "#src/lib/api/browser-security.ts";
+import { useExclusiveMutation } from "#src/lib/use-exclusive-mutation.ts";
 
-export function ActivationForm() {
+interface ActivationFormProps {
+  readonly activationToken?: string | null | undefined;
+}
+
+export function ActivationForm({ activationToken }: ActivationFormProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const mutation = useExclusiveMutation();
   const [error, setError] = useState<string>();
+  const token = activationToken === undefined ? searchParams.get("token") : activationToken;
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = event.currentTarget;
-    const token = searchParams.get("token");
     const data = new FormData(form);
     if (token === null) {
-      setError("This activation link is missing or invalid.");
+      setError("활성화 링크가 없거나 올바르지 않습니다.");
       return;
     }
     await mutation.run(async () => {
@@ -43,6 +48,22 @@ export function ActivationForm() {
     });
   }
 
+  if (token === null || token.trim().length === 0) {
+    return (
+      <ProductEntryShell
+        compact
+        description="초대 링크가 없거나 올바르지 않습니다. 관리자가 보낸 최신 초대 메일을 다시 확인하세요."
+        eyebrow="초대 링크 확인 필요"
+        title="계정을 활성화할 수 없습니다"
+        titleId="activation-invalid-title"
+      >
+        <div className="boundary-actions" role="alert">
+          <Link className="link-button" href="/sign-in">로그인으로 돌아가기</Link>
+        </div>
+      </ProductEntryShell>
+    );
+  }
+
   return (
     <ProductEntryShell
       description="프로필과 비밀번호를 설정한 뒤 새 계정으로 로그인할 수 있습니다."
@@ -50,13 +71,13 @@ export function ActivationForm() {
       title="계정을 활성화하세요"
       titleId="activation-title"
     >
-        <form className="sign-in-form" onSubmit={handleSubmit} aria-busy={mutation.isPending}>
-          <label className="field-group">Email<input name="email" type="email" autoComplete="username" required maxLength={320} disabled={mutation.isPending} /></label>
-          <label className="field-group">Display name<input name="displayName" required maxLength={200} disabled={mutation.isPending} /></label>
-          <label className="field-group">Password<input name="password" type="password" autoComplete="new-password" required disabled={mutation.isPending} /></label>
-          {error ? <p className="form-error" role="alert">{error}</p> : null}
-          <Button type="submit" variant="primary" disabled={mutation.isPending}>{mutation.isPending ? "Activating…" : "Activate account"}</Button>
-        </form>
+      <form className="sign-in-form" onSubmit={handleSubmit} aria-busy={mutation.isPending}>
+        <label className="field-group">이메일<input name="email" type="email" autoComplete="username" required maxLength={320} disabled={mutation.isPending} /></label>
+        <label className="field-group">표시 이름<input name="displayName" required maxLength={200} disabled={mutation.isPending} /></label>
+        <label className="field-group">비밀번호<input name="password" type="password" autoComplete="new-password" required disabled={mutation.isPending} /></label>
+        {error ? <p className="form-error" role="alert">{error}</p> : null}
+        <Button type="submit" variant="primary" disabled={mutation.isPending}>{mutation.isPending ? "활성화 중…" : "계정 활성화"}</Button>
+      </form>
     </ProductEntryShell>
   );
 }

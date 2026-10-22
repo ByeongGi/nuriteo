@@ -2,7 +2,7 @@ import "server-only";
 
 import { randomUUID } from "node:crypto";
 
-import { selectForwardedHeaders, validateInternalApiUrl } from "./server-policy.ts";
+import { selectForwardedHeaders, validateInternalApiUrl } from "#src/lib/api/server-policy.ts";
 
 const MAX_RESUME_PHYSICAL_BYTES = 16 * 1024 * 1024;
 const RESPONSE_HEADER_TIMEOUT_MS = 15_000;

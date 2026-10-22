@@ -1,4 +1,4 @@
-import { forwardProjectRequest, hasNoProjectQuery, invalidProjectRoute, projectContentPath, projectItemPath } from "../../../../../../../../../lib/api/project-bff.ts";
+import { forwardProjectRequest, hasNoProjectQuery, invalidProjectRoute, projectContentPath, projectItemPath } from "#src/lib/api/project-bff.ts";
 
 interface Context { readonly params: Promise<{ action: string; ownerId: string; ownerType: string; projectId: string }> }
 

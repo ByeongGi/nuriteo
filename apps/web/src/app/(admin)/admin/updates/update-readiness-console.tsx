@@ -1,0 +1,205 @@
+"use client";
+
+import { ApiError } from "@nuriteo/api-client";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+
+import { Button } from "#src/components/ui/button.tsx";
+import { CheckboxField } from "#src/components/ui/checkbox.tsx";
+import { createBrowserApiClient } from "#src/lib/api/browser-client.ts";
+import { readCsrfCredential } from "#src/lib/api/browser-security.ts";
+import { useExclusiveMutation } from "#src/lib/use-exclusive-mutation.ts";
+import { AdminPageHeader } from "#src/app/(admin)/admin/_components/admin-page-header.tsx";
+import type { AdminUpdateHistory, AdminUpdateReadiness } from "#src/app/(admin)/admin/updates/update-model.ts";
+
+export function UpdateReadinessConsole({
+  readiness,
+  history
+}: {
+  readonly readiness: AdminUpdateReadiness;
+  readonly history: AdminUpdateHistory;
+}) {
+  const router = useRouter();
+  const mutation = useExclusiveMutation();
+  const [acknowledged, setAcknowledged] = useState(false);
+  const [error, setError] = useState<string>();
+  const [notice, setNotice] = useState<string>();
+
+  async function approve() {
+    await mutation.run(async () => {
+      setError(undefined);
+      setNotice(undefined);
+      try {
+        await createBrowserApiClient().post(
+          "/admin/updates/approval",
+          { targetRelease: readiness.targetRelease, acknowledged: true },
+          { headers: { "x-csrf-token": readCsrfCredential() } }
+        );
+        setAcknowledged(false);
+        setNotice("업데이트 승인을 기록했습니다. 업데이트는 시작하지 않았습니다.");
+        router.refresh();
+      } catch (cause) {
+        setError(approvalError(cause));
+      }
+    });
+  }
+
+  return (
+    <main id="main-content" className="workspace-page admin-detail-page">
+      <AdminPageHeader
+        category="업데이트"
+        title="버전 관리"
+        description="민감 정보를 제거한 호환성 및 사전 점검 보고서를 검토하세요. 승인은 배포 작업에 운영자의 의도만 기록하며 업데이트를 시작하지 않습니다."
+        aside={<div className="admin-operations-summary">
+          <span className="status-badge" data-state={readiness.state === "ready" ? "nominal" : "degraded"}>
+            {readiness.state === "ready" ? "승인 가능" : readiness.state === "current" ? "최신 상태" : "차단됨"}
+          </span>
+          <time dateTime={readiness.generatedAt}>{formatTimestamp(readiness.generatedAt)}</time>
+        </div>}
+      />
+
+      <div className="admin-update-grid">
+        <section className="admin-operations-card" aria-labelledby="update-target-title">
+          <header className="admin-section-heading">
+            <div>
+              <p className="eyebrow">릴리스 경로</p>
+              <h2 id="update-target-title">호환성</h2>
+            </div>
+          </header>
+          <dl className="admin-update-details">
+            <Detail label="설치된 릴리스" value={readiness.currentRelease} />
+            <Detail label="대상 릴리스" value={readiness.targetRelease} />
+            <Detail label="스키마" value={readiness.compatibility.schemaPolicy} />
+            <Detail label="저장 오브젝트" value={readiness.compatibility.objectPolicy} />
+            <Detail label="이미지" value={readiness.compatibility.imagePolicy} />
+            <Detail label="실패 정책" value={readiness.compatibility.failurePolicy} />
+          </dl>
+          <p className="admin-operations-card__note">
+            이미지 다이제스트, 스토리지 엔드포인트, 자격 증명과 백엔드 오류는 의도적으로 표시하지 않습니다.
+          </p>
+        </section>
+
+        <section className="admin-operations-card" aria-labelledby="update-preflight-title">
+          <header className="admin-section-heading">
+            <div>
+              <p className="eyebrow">읽기 전용 점검</p>
+              <h2 id="update-preflight-title">사전 점검</h2>
+            </div>
+            <span className="status-badge" data-state={readiness.preflight.state === "passed" ? "nominal" : "degraded"}>
+              {readiness.preflight.state === "passed" ? "통과" : "중지됨"}
+            </span>
+          </header>
+          <dl className="admin-update-details">
+            <Detail label="스키마 상태" value={readiness.preflight.schemaState ?? "확인 불가"} />
+            <Detail label="현재 마이그레이션" value={formatMigration(readiness.preflight.currentMigration)} />
+            <Detail label="대상 마이그레이션" value={formatMigration(readiness.preflight.targetMigration)} />
+            <Detail label="설정 레지스트리" value={`v${readiness.compatibility.configurationRegistryVersion}`} />
+          </dl>
+          <p className="admin-operations-card__note">
+            배포 도구는 변경 전에 활성 이미지 세트와 오브젝트 스토리지를 다시 확인해야 합니다.
+          </p>
+        </section>
+      </div>
+
+      {readiness.blockers.length > 0 ? (
+        <section className="admin-update-blockers" aria-labelledby="update-blockers-title">
+          <header className="admin-section-heading">
+            <div>
+              <p className="eyebrow">업그레이드 중단 조건</p>
+              <h2 id="update-blockers-title">승인 전 차단 요인을 해결하세요</h2>
+            </div>
+          </header>
+          <ul>
+            {readiness.blockers.map((blocker) => (
+              <li key={blocker.code}>
+                <strong>{blocker.summary}</strong>
+                <span>{blocker.operatorAction}</span>
+                <code>{blocker.code}</code>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
+      <section className="admin-update-approval" aria-labelledby="update-approval-title">
+        <header className="admin-section-heading">
+          <div>
+            <p className="eyebrow">관리자 명시적 실행</p>
+            <h2 id="update-approval-title">업데이트 승인</h2>
+          </div>
+        </header>
+        {readiness.approvalAllowed ? (
+          <div className="admin-update-approval__body" aria-busy={mutation.isPending}>
+            <CheckboxField checked={acknowledged} disabled={mutation.isPending} onCheckedChange={setAcknowledged} label="차단 요인을 검토했으며 이 작업이 승인만 기록하고 업데이트를 실행하지 않음을 이해했습니다." />
+            <Button type="button" disabled={!acknowledged || mutation.isPending} onClick={approve}>
+              {mutation.isPending ? "승인 기록 중…" : "업데이트 승인 기록"}
+            </Button>
+          </div>
+        ) : (
+          <p className="admin-operations-card__note">
+            {readiness.state === "current"
+              ? "이 인스턴스는 이미 최신 스키마를 사용 중이므로 승인이 필요하지 않습니다."
+              : "사전 점검 차단 요인이 남아 있는 동안에는 승인할 수 없습니다."}
+          </p>
+        )}
+        {notice ? <p role="status" className="admin-update-feedback">{notice}</p> : null}
+        {error ? <p role="alert" className="form-error admin-update-feedback">{error}</p> : null}
+      </section>
+
+      <section className="admin-update-history" aria-labelledby="update-history-title">
+        <header className="admin-section-heading">
+          <div>
+            <p className="eyebrow">감사 기록</p>
+            <h2 id="update-history-title">최근 업데이트 승인</h2>
+          </div>
+        </header>
+        {history.items.length === 0 ? (
+          <p className="admin-operations-card__note">기록된 업데이트 승인이 없습니다.</p>
+        ) : (
+          <ol>
+            {history.items.map((item) => (
+              <li key={item.id}>
+                <div>
+                  <strong>{item.targetRelease}</strong>
+                  <span>승인만 기록했으며 이 작업으로 업데이트를 시작하지 않았습니다.</span>
+                </div>
+                <time dateTime={item.occurredAt}>{formatTimestamp(item.occurredAt)}</time>
+              </li>
+            ))}
+          </ol>
+        )}
+      </section>
+    </main>
+  );
+}
+
+function Detail({ label, value }: { readonly label: string; readonly value: string }) {
+  return <div><dt>{label}</dt><dd>{value}</dd></div>;
+}
+
+function formatMigration(value: number | null): string {
+  return value === null ? "—" : String(value);
+}
+
+function formatTimestamp(value: string): string {
+  return new Intl.DateTimeFormat("ko-KR", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: "UTC"
+  }).format(new Date(value)) + " UTC";
+}
+
+function approvalError(error: unknown): string {
+  if (error instanceof ApiError) {
+    if (error.code === "REAUTHENTICATION_REQUIRED" || error.status === 403) {
+      return "승인하려면 최근 관리자 재인증이 필요합니다.";
+    }
+    if (error.status === 409) {
+      return "준비 상태가 변경되어 승인을 기록하지 않았습니다. 최신 차단 요인을 검토하세요.";
+    }
+    if (error.code === "COMMIT_OUTCOME_UNKNOWN") {
+      return "승인 결과를 확인할 수 없습니다. 기록을 새로 불러온 뒤 다시 시도하세요.";
+    }
+  }
+  return "승인을 기록하지 못했습니다. 업데이트는 시작되지 않았습니다.";
+}

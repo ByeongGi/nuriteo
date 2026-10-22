@@ -3,7 +3,7 @@ import "server-only";
 import { headers } from "next/headers";
 import type { ApiClient } from "@nuriteo/api-client";
 
-import { createRequestScopedApiClient } from "./server-policy.ts";
+import { createRequestScopedApiClient } from "#src/lib/api/server-policy.ts";
 
 const INTERNAL_API_URL_ENV = "NURITEO_INTERNAL_API_URL";
 

@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-import { previewOriginConfiguration, previewSigningKey } from "./lib/preview/config.ts";
-import { verifySignedPreviewBinding } from "./lib/preview/signed-binding.ts";
-import { parsePreviewHost } from "./runtime/preview-origin-contract.ts";
+import { previewOriginConfiguration, previewSigningKey } from "#src/lib/preview/config.ts";
+import { verifySignedPreviewBinding } from "#src/lib/preview/signed-binding.ts";
+import { parsePreviewHost } from "#src/runtime/preview-origin-contract.ts";
 
 const PREVIEW_ASSET_PREFIX = "/runtime-preview/";
 

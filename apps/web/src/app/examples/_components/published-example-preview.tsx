@@ -3,28 +3,28 @@
 import type { PublicPublishedExample } from "@nuriteo/api-client";
 import { useEffect, useRef, useState } from "react";
 
-import { Button } from "../../../components/ui/button.tsx";
-import { createRetryableLazyFeature } from "../../../lib/retryable-lazy-feature.ts";
-import type { PublicPreviewContentError } from "../../../published-example/public-preview-content.ts";
-import type { RuntimeAdapter } from "../../../runtime/runtime-adapter.ts";
-import type { PreviewOriginConfiguration } from "../../../runtime/preview-origin-contract.ts";
-import type { SubdomainPreviewBridge } from "../../../runtime/subdomain-preview-bridge.ts";
+import { Button } from "#src/components/ui/button.tsx";
+import { createRetryableLazyFeature } from "#src/lib/retryable-lazy-feature.ts";
+import type { PublicPreviewContentError } from "#src/published-example/public-preview-content.ts";
+import type { RuntimeAdapter } from "#src/runtime/runtime-adapter.ts";
+import type { PreviewOriginConfiguration } from "#src/runtime/preview-origin-contract.ts";
+import type { SubdomainPreviewBridge } from "#src/runtime/subdomain-preview-bridge.ts";
 
 const RUNTIME_BOOT_TIMEOUT_MS = 10_000;
 const RUNTIME_RELAY_TIMEOUT_MS = 10_000;
 const RUNTIME_MEMORY_LIMIT_BYTES = 512 * 1024 * 1024;
 
 const runtimeFeature = createRetryableLazyFeature(
-  () => import("../../../runtime/runtime-adapter.ts")
+  () => import("#src/runtime/runtime-adapter.ts")
 );
 const contentFeature = createRetryableLazyFeature(
-  () => import("../../../published-example/public-preview-content.ts")
+  () => import("#src/published-example/public-preview-content.ts")
 );
 const bridgeFeature = createRetryableLazyFeature(
-  () => import("../../../runtime/subdomain-preview-bridge.ts")
+  () => import("#src/runtime/subdomain-preview-bridge.ts")
 );
 const assetFeature = createRetryableLazyFeature(
-  () => import("../../../runtime/runtime-assets.ts")
+  () => import("#src/runtime/runtime-assets.ts")
 );
 type BridgeFeature = Awaited<ReturnType<typeof bridgeFeature.load>>;
 
@@ -128,7 +128,7 @@ export function PublishedExamplePreview({
         },
         reportDiagnostic(diagnostic) {
           if (!unmountedRef.current && diagnostic.severity === "error") {
-            setError("The isolated public Preview stopped safely.");
+            setError("격리된 공개 미리보기를 안전하게 중지했습니다.");
           }
         }
       });
@@ -191,7 +191,7 @@ export function PublishedExamplePreview({
       publicId: example.publicId,
       versionNumber: example.versionNumber,
       onDiagnostic() {
-        if (!unmountedRef.current) setError("The isolated public Preview stopped safely.");
+        if (!unmountedRef.current) setError("격리된 공개 미리보기를 안전하게 중지했습니다.");
       },
       onRecoveryRequired() {
         if (created !== undefined) recoverPreview(created, bridgeModule, binding);
@@ -236,7 +236,7 @@ export function PublishedExamplePreview({
       setPreviewUrl(nextBridge.url);
     })().catch(() => {
       if (!unmountedRef.current && operationRef.current === operation) {
-        setError("The isolated public Preview could not reconnect. Stop it and run a fresh session.");
+        setError("격리된 공개 미리보기에 다시 연결하지 못했습니다. 중지한 뒤 새 세션으로 실행하세요.");
       }
     }).finally(() => {
       recoveryRef.current = null;
@@ -256,31 +256,31 @@ export function PublishedExamplePreview({
       <div className="flex flex-wrap items-start justify-between gap-4 text-left">
         <div>
           <h3 id="published-preview-title" className="m-0 text-base font-semibold text-foreground">
-            Isolated Preview
+            격리된 미리보기
           </h3>
           <p className="mt-1 max-w-xl text-sm text-muted-foreground">
-            Runs this immutable public version in a temporary browser Runtime on a separate origin. Account cookies, authorization, CSRF, environment values, and storage credentials are not sent.
+            이 고정 공개 버전을 별도 출처의 임시 브라우저 런타임에서 실행합니다. 계정 쿠키, 인증, CSRF, 환경값과 스토리지 자격 증명은 전송하지 않습니다.
           </p>
         </div>
         {status === "running" || status === "loading" ? (
           <Button type="button" variant="secondary" onClick={() => void stopPreview()}>
-            {status === "loading" ? "Cancel Preview" : "Stop Preview"}
+            {status === "loading" ? "미리보기 취소" : "미리보기 종료"}
           </Button>
         ) : (
           <Button type="button" disabled={disabled || status === "stopping"} onClick={() => void startPreview()}>
-            {status === "stopping" ? "Stopping…" : "Run isolated Preview"}
+            {status === "stopping" ? "종료하는 중…" : "격리 미리보기 실행"}
           </Button>
         )}
       </div>
 
       {disabled ? (
         <p className="mt-4 rounded-md border border-muted-border bg-subtle p-3 text-sm text-muted-foreground" role="status">
-          {previewConfiguration.message} Same-origin Preview is disabled.
+          {previewConfiguration.message} 동일 출처 미리보기는 비활성화되어 있습니다.
         </p>
       ) : null}
       {status === "loading" ? (
         <p className="mt-4 text-sm text-muted-foreground" role="status">
-          Verifying the immutable bundle and starting an isolated Runtime…
+          고정 번들을 검증하고 격리된 런타임을 시작하는 중…
         </p>
       ) : null}
       {error !== undefined ? (
@@ -311,15 +311,15 @@ export function PublishedExamplePreview({
 function previewErrorMessage(error: unknown): string {
   const contentError = error as Partial<PublicPreviewContentError> | undefined;
   if (contentError?.code === "PUBLIC_PREVIEW_LIMIT_EXCEEDED") {
-    return "This example exceeds the browser Preview limit. You can still download the verified archive.";
+    return "이 예제는 브라우저 미리보기 제한을 초과합니다. 검증된 아카이브는 계속 다운로드할 수 있습니다.";
   }
   if (contentError?.code === "PUBLIC_PREVIEW_CONTENT_UNAVAILABLE") {
-    return "This published version is no longer available.";
+    return "이 게시 버전을 더 이상 사용할 수 없습니다.";
   }
   if (contentError?.code === "PUBLIC_PREVIEW_INTEGRITY_FAILED") {
-    return "The public bundle failed integrity verification and was not executed.";
+    return "공개 번들의 무결성 검증에 실패하여 실행하지 않았습니다.";
   }
-  return "The isolated public Preview could not start. No account credential was shared; retry with a fresh session.";
+  return "격리된 공개 미리보기를 시작하지 못했습니다. 계정 자격 증명은 공유되지 않았습니다. 새 세션으로 다시 시도하세요.";
 }
 
 function temporaryUuidV7(): string {

@@ -11,6 +11,7 @@
 /apps/*/dist/
 /apps/web/public/runtime/
 /apps/web/storybook-static/
+/apps/web/.next-e2e/
 /tests/**/node_modules/
 
 .DS_Store

@@ -115,9 +115,9 @@ try {
   await page.goto(`${applicationOrigin}/`, { waitUntil: "domcontentloaded" });
   assert.equal(await page.evaluate(() => globalThis.crossOriginIsolated), true);
 
-  await page.getByRole("button", { name: "Start workspace" }).click();
+  await page.getByRole("button", { name: "템플릿으로 워크스페이스 시작" }).click();
   try {
-    await page.getByRole("button", { name: "Run Preview" }).waitFor({ timeout: 20_000 });
+    await page.getByRole("button", { name: "미리보기 실행" }).waitFor({ timeout: 20_000 });
   } catch (error) {
     throw new Error(`workspace did not start: ${await page.locator("body").innerText()} | ${errors.join(" | ")}`, { cause: error });
   }
@@ -126,8 +126,8 @@ try {
     Object.defineProperty(window, "__nuriteoNativeDateNow", { configurable: true, value: nativeNow });
     Date.now = () => nativeNow() + 10 * 60_000;
   });
-  await page.getByRole("button", { name: "Run Preview" }).click();
-  const previewRegion = page.getByRole("region", { name: "Preview" });
+  await page.getByRole("button", { name: "미리보기 실행" }).click();
+  const previewRegion = page.getByRole("region", { name: "미리보기" });
   try {
     await previewRegion.locator("iframe").waitFor({ timeout: 20_000 });
   } catch (error) {
@@ -150,7 +150,7 @@ try {
   assert.equal(await previewFrame.evaluate(() => globalThis.crossOriginIsolated), true);
   assert.equal(await previewFrame.evaluate(() => navigator.serviceWorker.controller?.scriptURL.endsWith("/runtime-preview/sw.js")), true);
   await page.getByRole("button", { name: "src/debug.ts" }).click();
-  await page.getByLabel("Editor for src/debug.ts").fill([
+  await page.getByLabel("src/debug.ts 편집기").fill([
     'import React from "react";',
     'export const lazy = () => import("react");',
     'export const label = "react";',
@@ -159,7 +159,7 @@ try {
     'export default React;',
     ''
   ].join("\n"));
-  await page.getByRole("button", { name: "Apply to Local Draft" }).click();
+  await page.getByRole("button", { name: "로컬 초안에 적용" }).click();
   const rewrittenModule = await previewFrame.evaluate(async () => await (await fetch("/src/debug.ts")).text());
   assert.match(rewrittenModule, /import React from "\/node_modules\/react\/index\.js"/u);
   assert.match(rewrittenModule, /import\("\/node_modules\/react\/index\.js"\)/u);
@@ -222,9 +222,9 @@ try {
   await previewFrame.getByRole("button", { name: "nuriteo:1" }).click();
   await previewFrame.getByRole("button", { name: "nuriteo:2" }).waitFor();
   await page.getByRole("button", { name: "src/message.ts" }).click();
-  await page.getByLabel("Editor for src/message.ts").fill('export const label = "PRV001 cross origin";\n');
-  await page.getByRole("button", { name: "Apply to Local Draft" }).click();
-  await page.getByText("Local Draft saved · HMR applied", { exact: false }).waitFor({ timeout: 10_000 });
+  await page.getByLabel("src/message.ts 편집기").fill('export const label = "PRV001 cross origin";\n');
+  await page.getByRole("button", { name: "로컬 초안에 적용" }).click();
+  await page.getByText("로컬 초안 저장됨 · HMR 적용됨", { exact: false }).waitFor({ timeout: 10_000 });
   await previewFrame.waitForFunction(() => (window as unknown as { __nuriteoHmrApplied: number }).__nuriteoHmrApplied === 1);
   assert.equal(await previewFrame.evaluate(() => performance.timeOrigin), documentTimeOrigin, "HMR must not replace the document");
   await previewFrame.getByRole("button", { name: "PRV001 cross origin:2" }).click();
@@ -253,15 +253,15 @@ try {
     Object.defineProperty(window, "__nuriteoHmrApplied", { configurable: true, value: 0, writable: true });
     addEventListener("nuriteo-preview:hmr-applied", () => { (window as unknown as { __nuriteoHmrApplied: number }).__nuriteoHmrApplied += 1; });
   });
-  await page.getByLabel("Editor for src/message.ts").fill('export const label = "PRV001 expired route";\n');
-  await page.getByRole("button", { name: "Apply to Local Draft" }).click();
+  await page.getByLabel("src/message.ts 편집기").fill('export const label = "PRV001 expired route";\n');
+  await page.getByRole("button", { name: "로컬 초안에 적용" }).click();
   await previewFrame.waitForFunction(() => (window as unknown as { __nuriteoHmrApplied: number }).__nuriteoHmrApplied === 1);
   await previewFrame.getByRole("button", { name: "PRV001 expired route:1" }).waitFor();
   const workerVersionId = await waitForWorkerVersion(workerVersions, previewOrigin);
   await cdp.send("ServiceWorker.unregister", { scopeURL: `${previewOrigin}/` });
   await cdp.send("ServiceWorker.stopWorker", { versionId: workerVersionId });
   await page.waitForFunction((oldUrl) => {
-    const nextUrl = document.querySelector<HTMLElement>('[aria-label="Preview"]')?.dataset.previewUrl;
+    const nextUrl = document.querySelector<HTMLElement>('[aria-label="미리보기"]')?.dataset.previewUrl;
     return Boolean(nextUrl && nextUrl !== oldUrl);
   }, externalUrl, { timeout: 15_000 });
   const recoveredUrl = await previewRegion.getAttribute("data-preview-url");
@@ -274,8 +274,8 @@ try {
     addEventListener("nuriteo-preview:hmr-applied", () => { (window as unknown as { __nuriteoHmrApplied: number }).__nuriteoHmrApplied += 1; });
     return performance.timeOrigin;
   });
-  await page.getByLabel("Editor for src/message.ts").fill('export const label = "PRV001 recovered";\n');
-  await page.getByRole("button", { name: "Apply to Local Draft" }).click();
+  await page.getByLabel("src/message.ts 편집기").fill('export const label = "PRV001 recovered";\n');
+  await page.getByRole("button", { name: "로컬 초안에 적용" }).click();
   await recoveredFrame.waitForFunction(() => (window as unknown as { __nuriteoHmrApplied: number }).__nuriteoHmrApplied === 1);
   assert.equal(await recoveredFrame.evaluate(() => performance.timeOrigin), recoveredTimeOrigin);
   await recoveredFrame.getByRole("button", { name: "PRV001 recovered:1" }).click();
@@ -320,10 +320,10 @@ try {
   });
   assert.equal(capacityStatus, 429, "relay concurrency must fail excess work deterministically");
 
-  await page.getByRole("button", { name: "Stop workspace" }).click();
+  await page.getByRole("button", { name: "워크스페이스 종료" }).click();
   if (await page.getByRole("button", { name: "초안을 버리고 종료" }).count()) await page.getByRole("button", { name: "초안을 버리고 종료" }).click();
   try {
-    await page.getByRole("button", { name: "Start workspace" }).waitFor({ timeout: 10_000 });
+    await page.getByRole("button", { name: "템플릿으로 워크스페이스 시작" }).waitFor({ timeout: 10_000 });
   } catch (error) {
     throw new Error(`workspace did not stop: ${await page.locator("body").innerText()} | ${errors.join(" | ")}`, { cause: error });
   }

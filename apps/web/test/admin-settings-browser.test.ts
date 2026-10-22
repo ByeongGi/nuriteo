@@ -8,12 +8,13 @@ import { fileURLToPath } from "node:url";
 import { chromium } from "@playwright/test";
 
 const webRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const standaloneWeb = path.join(webRoot, ".next/standalone/apps/web");
+const nextDirectory = process.env.NURITEO_NEXT_DIST_DIR ?? ".next";
+const standaloneWeb = path.join(webRoot, nextDirectory, "standalone/apps/web");
 const serverEntry = path.join(standaloneWeb, "server.js");
 const csrfToken = `nrt_csrf_${"a".repeat(43)}`;
 
 assert.ok(fs.existsSync(serverEntry), "Run the production build before this browser check.");
-fs.cpSync(path.join(webRoot, ".next/static"), path.join(standaloneWeb, ".next/static"), {
+fs.cpSync(path.join(webRoot, nextDirectory, "static"), path.join(standaloneWeb, ".next/static"), {
   force: true,
   recursive: true
 });
@@ -205,33 +206,33 @@ try {
     ]);
     const page = await admin.newPage();
     await page.goto(`${origin}/admin/settings`, { waitUntil: "networkidle" });
-    await page.getByRole("heading", { level: 1, name: "Settings" }).waitFor();
+    await page.getByRole("heading", { level: 1, name: "인스턴스 설정" }).waitFor();
     assert.equal(await page.getByText("0.1.0-beta.1", { exact: true }).count(), 1);
-    assert.equal(await page.getByText("Up to date", { exact: true }).count(), 1);
+    assert.equal(await page.getByText("최신 상태", { exact: true }).count(), 1);
 
-    const settingsLink = page.getByRole("navigation", { name: "Administration" })
-      .getByRole("link", { name: "Settings" });
-    const invitationsLink = page.getByRole("navigation", { name: "Administration" })
-      .getByRole("link", { name: "Activation invitations" });
+    const settingsLink = page.getByRole("navigation", { name: "시스템 관리" })
+      .getByRole("link", { name: "정책 설정" });
+    const invitationsLink = page.getByRole("navigation", { name: "시스템 관리" })
+      .getByRole("link", { name: "가입 초대" });
     assert.equal(await settingsLink.getAttribute("aria-current"), "page");
     await settingsLink.focus();
     await page.keyboard.press("Tab");
     assert.equal(await invitationsLink.evaluate((element) => element === document.activeElement), true);
 
-    const invitationForm = page.locator("form").filter({ hasText: "Invitation expiry" });
-    const expiry = invitationForm.getByLabel("Invitation expiry");
+    const invitationForm = page.locator("form").filter({ hasText: "초대 만료" });
+    const expiry = invitationForm.getByLabel("초대 만료");
     assert.equal(await expiry.inputValue(), "168");
     assert.equal(await page.getByText("3", { exact: true }).count() > 0, true);
     await expiry.fill("0");
-    await invitationForm.getByRole("button", { name: "Review impact" }).click();
-    await invitationForm.getByRole("alert").filter({ hasText: "outside its allowed range" }).waitFor();
+    await invitationForm.getByRole("button", { name: "영향 검토" }).click();
+    await invitationForm.getByRole("alert").filter({ hasText: "허용 범위를 벗어났습니다" }).waitFor();
     assert.equal(observedPreviews.length, 0);
     await expiry.fill("336");
-    assert.equal(await invitationForm.getByRole("button", { name: "Apply change" }).isDisabled(), true);
-    await invitationForm.getByRole("button", { name: "Review impact" }).click();
-    await invitationForm.getByText("Existing data will not be deleted automatically.").waitFor();
-    await invitationForm.getByRole("button", { name: "Apply change" }).click();
-    await invitationForm.getByRole("status").filter({ hasText: "Invitation expiry saved." }).waitFor();
+    assert.equal(await invitationForm.getByRole("button", { name: "변경 적용" }).isDisabled(), true);
+    await invitationForm.getByRole("button", { name: "영향 검토" }).click();
+    await invitationForm.getByText("기존 데이터는 자동으로 삭제되지 않습니다.").waitFor();
+    await invitationForm.getByRole("button", { name: "변경 적용" }).click();
+    await invitationForm.getByRole("status").filter({ hasText: "초대 만료 설정을 저장했습니다." }).waitFor();
     assert.equal(settingValue, 336);
     assert.equal(settingVersion, 2);
     assert.deepEqual(observedMutations[0]?.body, { value: 336 });
@@ -244,37 +245,37 @@ try {
     settingValue = 400;
     settingVersion = 3;
     await expiry.fill("360");
-    await invitationForm.getByRole("button", { name: "Review impact" }).click();
-    await invitationForm.getByRole("button", { name: "Apply change" }).click();
+    await invitationForm.getByRole("button", { name: "영향 검토" }).click();
+    await invitationForm.getByRole("button", { name: "변경 적용" }).click();
     const conflict = invitationForm.getByRole("alert");
-    await conflict.filter({ hasText: "changed elsewhere" }).waitFor();
+    await conflict.filter({ hasText: "다른 곳에서 설정이 변경" }).waitFor();
     assert.equal(observedMutations[1]?.etag, '"setting-v2"');
-    await conflict.getByRole("button", { name: "Reload latest" }).click();
-    await assertEventually(async () => (await page.getByLabel("Invitation expiry").inputValue()) === "400");
-    const refreshedInvitationForm = page.locator("form").filter({ hasText: "Invitation expiry" });
-    await refreshedInvitationForm.getByRole("button", { name: "Reset to default" }).click();
-    await refreshedInvitationForm.getByText("Impact reviewed").waitFor();
-    assert.equal(await refreshedInvitationForm.getByLabel("Invitation expiry").inputValue(), "168");
-    await refreshedInvitationForm.getByRole("button", { name: "Apply change" }).click();
-    await refreshedInvitationForm.getByRole("status").filter({ hasText: "Invitation expiry saved." }).waitFor();
+    await conflict.getByRole("button", { name: "최신 상태 불러오기" }).click();
+    await assertEventually(async () => (await page.getByLabel("초대 만료").inputValue()) === "400");
+    const refreshedInvitationForm = page.locator("form").filter({ hasText: "초대 만료" });
+    await refreshedInvitationForm.getByRole("button", { name: "기본값으로 초기화" }).click();
+    await refreshedInvitationForm.getByText("영향 검토 완료").waitFor();
+    assert.equal(await refreshedInvitationForm.getByLabel("초대 만료").inputValue(), "168");
+    await refreshedInvitationForm.getByRole("button", { name: "변경 적용" }).click();
+    await refreshedInvitationForm.getByRole("status").filter({ hasText: "초대 만료 설정을 저장했습니다." }).waitFor();
     assert.equal(settingValue, 168);
 
-    await page.getByRole("navigation", { name: "Administration" })
-      .getByRole("link", { name: "Operations" })
+    await page.getByRole("navigation", { name: "시스템 관리" })
+      .getByRole("link", { name: "운영 현황" })
       .click();
-    await page.getByRole("heading", { level: 1, name: "Operations" }).waitFor();
-    assert.equal(await page.getByText("The object storage readiness probe failed.", { exact: true }).count(), 1);
+    await page.getByRole("heading", { level: 1, name: "운영 현황" }).waitFor();
+    assert.equal(await page.getByText("오브젝트 스토리지 준비 상태 점검에 실패했습니다.", { exact: true }).count(), 1);
     assert.equal(await page.getByText("1 GiB", { exact: true }).count(), 1);
     assert.equal(await page.getByText("1 MiB", { exact: true }).count(), 1);
-    await page.getByRole("button", { name: "Download support bundle" }).waitFor();
+    await page.getByRole("button", { name: "지원 번들 다운로드" }).waitFor();
     const [download] = await Promise.all([
       page.waitForEvent("download"),
-      page.getByRole("button", { name: "Download support bundle" }).click()
+      page.getByRole("button", { name: "지원 번들 다운로드" }).click()
     ]);
     assert.match(download.suggestedFilename(), /^nuriteo-support-.+\.json$/u);
     assert.equal(
-      await page.getByRole("navigation", { name: "Administration" })
-        .getByRole("link", { name: "Operations" })
+      await page.getByRole("navigation", { name: "시스템 관리" })
+        .getByRole("link", { name: "운영 현황" })
         .getAttribute("aria-current"),
       "page"
     );
@@ -289,8 +290,8 @@ try {
     await member.addCookies([{ name: "nuriteo_dev_session", value: "member", url: origin }]);
     const memberPage = await member.newPage();
     await memberPage.goto(`${origin}/admin/operations`, { waitUntil: "networkidle" });
-    await memberPage.getByRole("heading", { name: "Administrator access required" }).waitFor();
-    assert.equal(await memberPage.getByText("Core dependencies", { exact: true }).count(), 0);
+    await memberPage.getByRole("heading", { name: "관리자 권한이 필요합니다" }).waitFor();
+    assert.equal(await memberPage.getByText("핵심 의존성", { exact: true }).count(), 0);
     await Promise.all([admin.close(), member.close()]);
   } finally {
     await browser.close();

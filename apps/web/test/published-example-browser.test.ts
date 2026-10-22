@@ -150,17 +150,17 @@ async function fixedVersionForkJourney(browser: Awaited<ReturnType<typeof chromi
   ]);
   const page = await context.newPage();
   await page.goto(`${publicOrigin}/examples/${publicId}/versions/3`, { waitUntil: "networkidle" });
-  await page.getByText("Fixed snapshot", { exact: true }).waitFor();
-  await page.getByText("This public view is pinned to version 3.", { exact: false }).waitFor();
-  await page.getByLabel("Workspace").selectOption(organizationScopeId);
-  await page.getByLabel("Project slug").fill("browser-fixed-fork");
-  await page.getByLabel("Project name").fill("Browser fixed fork");
+  await page.getByText("고정 스냅샷", { exact: true }).waitFor();
+  await page.getByText("이 공개 화면은 버전 3에 고정", { exact: false }).waitFor();
+  await page.getByLabel("워크스페이스").selectOption(organizationScopeId);
+  await page.getByLabel("프로젝트 슬러그").fill("browser-fixed-fork");
+  await page.getByLabel("프로젝트 이름").fill("Browser fixed fork");
 
-  await page.getByRole("button", { name: "Fork into Workspace" }).click();
-  await page.getByRole("alert").filter({ hasText: "Retry with the same values" }).waitFor();
+  await page.getByRole("button", { name: "워크스페이스로 복제" }).click();
+  await page.getByRole("alert").filter({ hasText: "같은 값으로 다시 시도" }).waitFor();
   await Promise.all([
-    page.waitForURL(`**/projects?workspace=${organizationScopeId}&project=${projectId}`),
-    page.getByRole("button", { name: "Fork into Workspace" }).click()
+    page.waitForURL(`**/projects/${projectId}?workspace=${organizationScopeId}`),
+    page.getByRole("button", { name: "워크스페이스로 복제" }).click()
   ]);
 
   const activeForks = forkRequests.filter((entry) => entry.cookie?.includes("active"));
@@ -185,7 +185,7 @@ async function signedOutWorkspaceJourney(browser: Awaited<ReturnType<typeof chro
   const context = await browser.newContext();
   const page = await context.newPage();
   await page.goto(`${publicOrigin}/examples/${publicId}/versions/3`, { waitUntil: "networkidle" });
-  await page.getByRole("link", { name: "Sign in to fork" }).waitFor();
+  await page.getByRole("link", { name: "로그인하고 복제" }).waitFor();
   await context.close();
 }
 
@@ -197,9 +197,9 @@ async function expiredForkSessionJourney(browser: Awaited<ReturnType<typeof chro
   ]);
   const page = await context.newPage();
   await page.goto(`${publicOrigin}/examples/${publicId}/versions/3`, { waitUntil: "networkidle" });
-  await page.getByRole("button", { name: "Fork into Workspace" }).click();
-  await page.getByRole("alert").filter({ hasText: "Your session ended" }).waitFor();
-  await page.getByRole("link", { name: "Sign in to continue" }).waitFor();
+  await page.getByRole("button", { name: "워크스페이스로 복제" }).click();
+  await page.getByRole("alert").filter({ hasText: "세션이 종료" }).waitFor();
+  await page.getByRole("link", { name: "로그인하고 계속" }).waitFor();
   await context.close();
 }
 

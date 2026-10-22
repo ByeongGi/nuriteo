@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { ProductEntryShell } from "./_components/product-entry-shell.tsx";
+import { ProductEntryShell } from "#src/app/_components/product-entry-shell.tsx";
 
 export default function NotFound() {
   return (

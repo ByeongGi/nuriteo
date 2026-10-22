@@ -16,21 +16,42 @@ import type { GitConnection, GitProvider, GitRemote, Project } from "@nuriteo/ap
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 
-import { Button } from "../../../components/ui/button.tsx";
-import { createBrowserApiClient } from "../../../lib/api/browser-client.ts";
-import { readCsrfCredential } from "../../../lib/api/browser-security.ts";
-import { useExclusiveMutation } from "../../../lib/use-exclusive-mutation.ts";
+import { Button } from "#src/components/ui/button.tsx";
+import { SelectField } from "#src/components/ui/field.tsx";
+import { createBrowserApiClient } from "#src/lib/api/browser-client.ts";
+import { readCsrfCredential } from "#src/lib/api/browser-security.ts";
+import { useExclusiveMutation } from "#src/lib/use-exclusive-mutation.ts";
 
-export function ProjectGitPanel({ project }: { readonly project: Project }) {
+export interface ProjectGitState {
+  readonly connections: readonly GitConnection[];
+  readonly providers: readonly GitProvider[];
+  readonly remote?: GitRemote | undefined;
+  readonly remoteEtag?: string | undefined;
+}
+
+export function ProjectGitPanel({ initialState, project }: Readonly<{
+  initialState?: ProjectGitState | undefined;
+  project: Project;
+}>) {
   const mutation = useExclusiveMutation();
-  const [providers, setProviders] = useState<readonly GitProvider[]>([]);
-  const [connections, setConnections] = useState<readonly GitConnection[]>([]);
-  const [remote, setRemote] = useState<GitRemote>();
-  const [remoteEtag, setRemoteEtag] = useState<string>();
-  const [loading, setLoading] = useState(true);
+  const [providers, setProviders] = useState<readonly GitProvider[]>(initialState?.providers ?? []);
+  const [connections, setConnections] = useState<readonly GitConnection[]>(initialState?.connections ?? []);
+  const [remote, setRemote] = useState<GitRemote | undefined>(initialState?.remote);
+  const [remoteEtag, setRemoteEtag] = useState<string | undefined>(initialState?.remoteEtag);
+  const [loading, setLoading] = useState(initialState === undefined);
   const [feedback, setFeedback] = useState<{ readonly error: boolean; readonly text: string }>();
 
   useEffect(() => {
+    if (initialState !== undefined) {
+      setProviders(initialState.providers);
+      setConnections(initialState.connections);
+      setRemote(initialState.remote);
+      setRemoteEtag(initialState.remoteEtag);
+      setLoading(false);
+      setFeedback(undefined);
+      return;
+    }
+
     const controller = new AbortController();
     async function load() {
       setLoading(true);
@@ -59,7 +80,7 @@ export function ProjectGitPanel({ project }: { readonly project: Project }) {
     }
     void load();
     return () => controller.abort();
-  }, [project.id]);
+  }, [initialState, project.id]);
 
   async function connect(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -75,7 +96,7 @@ export function ProjectGitPanel({ project }: { readonly project: Project }) {
       );
       setConnections((items) => [...items, result.data]);
       form.reset();
-      return "Git credential connected. Its plaintext will not be shown again.";
+      return "Git 자격 증명을 연결했습니다. 토큰 원문은 다시 표시되지 않습니다.";
     });
   }
 
@@ -92,7 +113,7 @@ export function ProjectGitPanel({ project }: { readonly project: Project }) {
       );
       setConnections((items) => items.map((item) => item.id === connection.id ? result.data : item));
       form.reset();
-      return "Git credential rotated.";
+      return "Git 자격 증명을 교체했습니다.";
     });
   }
 
@@ -104,7 +125,7 @@ export function ProjectGitPanel({ project }: { readonly project: Project }) {
         { csrfToken: readCsrfCredential() }
       );
       setConnections((items) => items.filter((item) => item.id !== connection.id));
-      return "Git credential disconnected.";
+      return "Git 자격 증명 연결을 해제했습니다.";
     });
   }
 
@@ -119,7 +140,7 @@ export function ProjectGitPanel({ project }: { readonly project: Project }) {
       }, { csrfToken: readCsrfCredential() });
       setRemote(result.data.remote);
       setRemoteEtag(result.etag);
-      return `Imported ${result.data.changedObjects} Git objects into the Project Working Head.`;
+      return `Git 객체 ${result.data.changedObjects}개를 프로젝트 작업 버전으로 가져왔습니다.`;
     });
   }
 
@@ -134,7 +155,7 @@ export function ProjectGitPanel({ project }: { readonly project: Project }) {
       );
       setRemote(result.data.remote);
       setRemoteEtag(result.etag);
-      return `Pulled ${result.data.changedObjects} changed Git objects.`;
+      return `변경된 Git 객체 ${result.data.changedObjects}개를 가져왔습니다.`;
     });
   }
 
@@ -152,7 +173,7 @@ export function ProjectGitPanel({ project }: { readonly project: Project }) {
       setRemote(result.data.remote);
       setRemoteEtag(result.etag);
       form.reset();
-      return `Pushed commit ${result.data.headSha.slice(0, 12)}.`;
+      return `${result.data.headSha.slice(0, 12)} 커밋을 원격 저장소에 반영했습니다.`;
     });
   }
 
@@ -175,36 +196,43 @@ export function ProjectGitPanel({ project }: { readonly project: Project }) {
 
   return (
     <section aria-labelledby="project-git-title">
-      <p className="eyebrow">Server-side integration</p>
-      <h3 id="project-git-title">Git remote</h3>
-      <p>Credentials are sent once to the Core service, never returned by the API, and never saved in browser storage.</p>
-      {loading ? <p aria-live="polite">Loading Git connections…</p> : null}
+      <p className="eyebrow">서버 연동</p>
+      <h3 id="project-git-title">Git 원격 저장소</h3>
+      <p>자격 증명은 개발 서버에 한 번만 전송되며 API 응답이나 브라우저 저장소에 남지 않습니다.</p>
+      {loading ? <p aria-live="polite">Git 연결을 불러오는 중…</p> : null}
       {feedback ? <p className={feedback.error ? "form-error" : undefined} role={feedback.error ? "alert" : "status"}>{feedback.text}</p> : null}
 
       {!loading && availableProviders.length > 0 ? (
         <form className="collaboration-form" onSubmit={connect} aria-busy={mutation.isPending}>
-          <h4>Connect a credential</h4>
-          <label className="field-group">Provider<select name="providerId" required disabled={mutation.isPending}><option value="">Select a provider</option>{availableProviders.map((provider) => <option key={provider.id} value={provider.id}>{provider.displayName} · {provider.host}</option>)}</select></label>
-          <label className="field-group">Personal access token<input name="token" type="password" autoComplete="off" required maxLength={61_440} disabled={mutation.isPending} /></label>
-          <Button type="submit" disabled={mutation.isPending}>Connect Git</Button>
+          <h4>자격 증명 연결</h4>
+          <SelectField
+            label="제공자"
+            name="providerId"
+            options={availableProviders.map((provider) => ({ value: provider.id, label: `${provider.displayName} · ${provider.host}` }))}
+            placeholder="제공자 선택"
+            required
+            disabled={mutation.isPending}
+          />
+          <label className="field-group">개인 액세스 토큰<input name="token" type="password" autoComplete="off" required maxLength={61_440} disabled={mutation.isPending} /></label>
+          <Button type="submit" disabled={mutation.isPending}>Git 연결</Button>
         </form>
       ) : null}
 
-      {connections.length > 0 ? <ul className="record-list" aria-label="Git credentials">{connections.map((connection) => {
+      {connections.length > 0 ? <ul className="record-list" aria-label="Git 자격 증명">{connections.map((connection) => {
         const provider = providers.find((item) => item.id === connection.providerId);
-        return <li key={connection.id}><div><strong>{provider?.displayName ?? "Unavailable provider"}</strong><span>Credential version {connection.credentialVersion}</span></div><div className="record-actions"><form onSubmit={(event) => void rotate(event, connection)}><label className="field-group">Replacement token<input aria-label={`Replacement token for ${provider?.displayName ?? "provider"}`} name="token" type="password" autoComplete="off" required maxLength={61_440} disabled={mutation.isPending} /></label><Button type="submit" disabled={mutation.isPending}>Rotate</Button></form><Button type="button" variant="danger" disabled={mutation.isPending || remote?.providerId === connection.providerId} onClick={() => void disconnect(connection)}>Disconnect</Button></div></li>;
+        return <li key={connection.id}><div><strong>{provider?.displayName ?? "사용할 수 없는 제공자"}</strong><span>자격 증명 버전 {connection.credentialVersion}</span></div><div className="record-actions"><form onSubmit={(event) => void rotate(event, connection)}><label className="field-group">교체 토큰<input aria-label={`${provider?.displayName ?? "제공자"} 교체 토큰`} name="token" type="password" autoComplete="off" required maxLength={61_440} disabled={mutation.isPending} /></label><Button type="submit" disabled={mutation.isPending}>교체</Button></form><Button type="button" variant="danger" disabled={mutation.isPending || remote?.providerId === connection.providerId} onClick={() => void disconnect(connection)}>연결 해제</Button></div></li>;
       })}</ul> : null}
 
       {!loading && remote === undefined ? (
         <form className="collaboration-form" onSubmit={importRepository} aria-busy={mutation.isPending}>
-          <h4>Import repository</h4>
-          <label className="field-group">HTTPS repository URL<input name="repositoryUrl" type="url" inputMode="url" required placeholder="https://git.example.com/team/project.git" disabled={mutation.isPending || connections.length === 0} /></label>
-          <label className="field-group">Branch<input name="branch" required defaultValue="main" maxLength={255} disabled={mutation.isPending || connections.length === 0} /></label>
-          <Button type="submit" disabled={mutation.isPending || connections.length === 0}>Import into Working Head</Button>
+          <h4>저장소 가져오기</h4>
+          <label className="field-group">HTTPS 저장소 URL<input name="repositoryUrl" type="url" inputMode="url" required placeholder="https://git.example.com/team/project.git" disabled={mutation.isPending || connections.length === 0} /></label>
+          <label className="field-group">브랜치<input name="branch" required defaultValue="main" maxLength={255} disabled={mutation.isPending || connections.length === 0} /></label>
+          <Button type="submit" disabled={mutation.isPending || connections.length === 0}>작업 버전으로 가져오기</Button>
         </form>
       ) : null}
 
-      {remote !== undefined ? <div className="collaboration-form"><h4>{remote.repositoryUrl}</h4><p>{remote.branch} · {remote.remoteHeadSha.slice(0, 12)} · {activeProvider?.displayName ?? "Configured provider"}</p><div className="record-actions"><Button type="button" disabled={mutation.isPending} onClick={() => void pull()}>Pull</Button></div><form onSubmit={push}><label className="field-group">Commit message<input name="commitMessage" required maxLength={10_240} disabled={mutation.isPending || activeProvider?.allowsWrite === false} /></label><Button type="submit" disabled={mutation.isPending || activeProvider?.allowsWrite === false}>Commit &amp; Push</Button></form></div> : null}
+      {remote !== undefined ? <div className="collaboration-form"><h4>{remote.repositoryUrl}</h4><p>{remote.branch} · {remote.remoteHeadSha.slice(0, 12)} · {activeProvider?.displayName ?? "설정된 제공자"}</p><div className="record-actions"><Button type="button" disabled={mutation.isPending} onClick={() => void pull()}>변경사항 가져오기</Button></div><form onSubmit={push}><label className="field-group">커밋 메시지<input name="commitMessage" required maxLength={10_240} disabled={mutation.isPending || activeProvider?.allowsWrite === false} /></label><Button type="submit" disabled={mutation.isPending || activeProvider?.allowsWrite === false}>커밋하고 반영</Button></form></div> : null}
     </section>
   );
 }
@@ -223,11 +251,11 @@ function takeSecret(form: HTMLFormElement, name: string): string {
 
 function gitFailureMessage(error: unknown): string {
   if (error instanceof ApiError) {
-    if (error.status === 412) return "The remote changed. Reload Git state before retrying; no force push was attempted.";
-    if (error.code === "COMMIT_OUTCOME_UNKNOWN") return "The push result is uncertain. Re-read the remote before retrying.";
-    if (error.code === "REAUTHENTICATION_REQUIRED") return "Sign in again to refresh recent authentication, then retry this credential change.";
-    if (error.status === 401 || error.status === 403) return "Your session or Project permission does not allow this Git operation.";
-    if (error.status === 413) return "The Git transfer exceeded the configured limit.";
+    if (error.status === 412) return "원격 저장소가 변경되었습니다. 강제 반영은 시도하지 않았으므로 Git 상태를 새로고침한 뒤 다시 시도하세요.";
+    if (error.code === "COMMIT_OUTCOME_UNKNOWN") return "원격 반영 결과를 확인할 수 없습니다. 다시 시도하기 전에 원격 상태를 확인하세요.";
+    if (error.code === "REAUTHENTICATION_REQUIRED") return "최근 인증을 갱신하려면 다시 로그인한 뒤 자격 증명 변경을 시도하세요.";
+    if (error.status === 401 || error.status === 403) return "현재 세션 또는 프로젝트 권한으로 이 Git 작업을 수행할 수 없습니다.";
+    if (error.status === 413) return "Git 전송 크기가 설정된 제한을 초과했습니다.";
   }
-  return "The Git operation could not be completed safely. No credential details were exposed.";
+  return "Git 작업을 안전하게 완료하지 못했습니다. 자격 증명 정보는 노출되지 않았습니다.";
 }

@@ -1,4 +1,4 @@
-import { publicExampleListResponse } from "../../../../lib/api/published-example-bff.ts";
+import { publicExampleListResponse } from "#src/lib/api/published-example-bff.ts";
 
 export const dynamic = "force-dynamic";
 

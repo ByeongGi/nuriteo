@@ -3,7 +3,7 @@ import {
   forwardPublishedExampleRequest,
   invalidPublishedExampleRoute,
   publishedExampleCollectionPath
-} from "../../../../../../../../../lib/api/published-example-management-bff.ts";
+} from "#src/lib/api/published-example-management-bff.ts";
 
 interface Context {
   readonly params: Promise<{ ownerId: string; ownerType: string; projectId: string }>;

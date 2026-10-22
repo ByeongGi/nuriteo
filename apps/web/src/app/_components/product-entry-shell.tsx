@@ -16,13 +16,13 @@ interface ProductEntryLoadingProps {
 
 function EntryShowcase() {
   return (
-    <aside className="entry-showcase" aria-label="NURITEO self-hosted workspace">
+    <aside className="entry-showcase" aria-label="누리터 자체 호스팅 워크스페이스">
       <div className="entry-showcase__brand">
         <span aria-hidden="true">N</span>
         <strong>NURITEO</strong>
       </div>
       <div className="entry-showcase__message">
-        <p>SELF-HOSTED WORKSPACE</p>
+        <p>자체 호스팅 워크스페이스</p>
         <h2>코드를 열고, 바로 실행하세요.</h2>
         <span>프로젝트와 실행 환경은 조직의 인프라 안에 안전하게 유지됩니다.</span>
       </div>

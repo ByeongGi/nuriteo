@@ -2,17 +2,17 @@ import { ApiError, getPublicPublishedExampleVersion } from "@nuriteo/api-client"
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
-import { EntryUnavailable } from "../../../../_components/entry-unavailable.tsx";
-import { safeRequestReference } from "../../../../../lib/api/presentation-error.ts";
-import { createPublicServerApiClient } from "../../../../../lib/api/public-server-client.ts";
+import { EntryUnavailable } from "#src/app/_components/entry-unavailable.tsx";
+import { safeRequestReference } from "#src/lib/api/presentation-error.ts";
+import { createPublicServerApiClient } from "#src/lib/api/public-server-client.ts";
 import {
   publicIdPathSegment,
   publicVersionPathSegment
-} from "../../../../../lib/published-example-path.ts";
-import { previewOriginConfiguration } from "../../../../../lib/preview/config.ts";
-import { ReadOnlyExampleShell } from "../../../_components/read-only-example-shell.tsx";
+} from "#src/lib/published-example-path.ts";
+import { previewOriginConfiguration } from "#src/lib/preview/config.ts";
+import { ReadOnlyExampleShell } from "#src/app/examples/_components/read-only-example-shell.tsx";
 
-export const metadata: Metadata = { title: "Read-only example" };
+export const metadata: Metadata = { title: "읽기 전용 예제" };
 
 interface Props {
   readonly params: Promise<{
@@ -43,10 +43,10 @@ export default async function FixedExampleVersionPage({ params }: Props) {
     if (error instanceof ApiError && error.status === 404) notFound();
     return (
       <EntryUnavailable
-        description="This fixed example version could not be loaded safely. No private project data was requested."
+        description="이 고정 예제 버전을 안전하게 불러오지 못했습니다. 비공개 프로젝트 데이터에는 접근하지 않았습니다."
         reference={safeRequestReference(error)}
         retryHref={`/examples/${encodeURIComponent(publicId)}/versions/${encodeURIComponent(rawVersionNumber)}`}
-        title="Example version is temporarily unavailable"
+        title="예제 버전을 일시적으로 사용할 수 없습니다"
       />
     );
   }

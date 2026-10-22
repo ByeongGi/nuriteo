@@ -1,4 +1,4 @@
-import { publicExampleContentResponse } from "../../../../../../../../lib/api/published-example-bff.ts";
+import { publicExampleContentResponse } from "#src/lib/api/published-example-bff.ts";
 
 interface Context {
   readonly params: Promise<{

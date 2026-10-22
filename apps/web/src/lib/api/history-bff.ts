@@ -6,7 +6,7 @@ import {
   hasNoProjectQuery,
   invalidProjectRoute,
   projectItemPath
-} from "./project-bff.ts";
+} from "#src/lib/api/project-bff.ts";
 
 export interface HistoryRouteContext {
   readonly ownerType: string;

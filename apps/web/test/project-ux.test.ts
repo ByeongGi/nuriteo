@@ -217,13 +217,13 @@ async function testContentStreamForwarding() {
 function testReconciliationClassification() {
   const stale = projectError(new ApiError(412, "safe", undefined), "project-profile");
   assert.equal(stale.reconcile, true);
-  assert.match(stale.message, /Reload/u);
+  assert.match(stale.message, /최신 버전을 불러온 뒤/u);
   const unknown = projectError(new ApiError(503, "safe", {
     type: "about:blank", title: "Unknown", status: 503, detail: "Unknown.",
     instance: "/api/v1/projects", code: "COMMIT_OUTCOME_UNKNOWN", request_id: "safe", errors: []
   }), "project-role");
   assert.equal(unknown.reconcile, true);
-  assert.match(unknown.message, /may have completed/u);
+  assert.match(unknown.message, /변경을 완료했을 수 있습니다/u);
   assert.doesNotMatch(projectError(new Error("token=secret"), "project-role").message, /token|secret/u);
 }
 
@@ -386,36 +386,49 @@ function testProjectSourceContracts() {
   const dashboard = read("src/app/(authenticated)/projects/project-dashboard.tsx");
   const ideShell = read("src/app/(authenticated)/projects/project-ide-shell.tsx");
   const page = read("src/app/(authenticated)/projects/page.tsx");
+  const detailPage = read("src/app/(authenticated)/projects/[projectId]/page.tsx");
+  const studioScreen = read("src/app/(studio)/projects/[projectId]/studio/project-studio-screen.tsx");
+  const studioStory = read("src/design-system/redesign/studio-redesign.stories.tsx");
   assert.match(dashboard, /createBrowserApiClient\(\)/u);
   assert.match(dashboard, /readCsrfCredential\(\)/u);
   assert.match(dashboard, /useExclusiveMutation\(\)/u);
+  assert.match(dashboard, /useDeferredValue\(projectQuery\)/u);
+  assert.match(dashboard, /aria-busy=\{isSearchPending\}/u);
+  assert.match(dashboard, /검색은 현재 불러온 프로젝트에 적용됩니다/u);
+  assert.match(dashboard, /createProjectRoleDirectory/u);
   assert.match(dashboard, /COMMIT_OUTCOME_UNKNOWN|needsReconciliation/u);
   assert.doesNotMatch(dashboard, /router\.replace\([^;]+;\s*router\.refresh\(\)/u);
   assert.match(page, /createServerApiClient\(\)/u);
   assert.match(page, /listProjects/u);
-  assert.match(page, /listOrganizationMembers/u);
-  assert.match(page, /roleManagementPromise/u);
-  assert.match(dashboard, /Organization member<select/u);
+  assert.match(detailPage, /listOrganizationMembers/u);
+  assert.match(detailPage, /roleManagementPromise/u);
+  assert.match(dashboard, /<SelectField label="조직 멤버"/u);
   assert.doesNotMatch(dashboard, /Organization member user ID/u);
-  assert.match(page, /key=\{`\$\{workspace\.storageScopeId\}:\$\{state\}:/u);
-  assert.match(page, /error\.status !== 403 && error\.status !== 404/u);
-  assert.match(dashboard, /<ProjectIdeShell/u);
-  assert.match(dashboard, /key=\{`\$\{workspace\.storageScopeId\}:\$\{project\.id\}:\$\{project\.state\}`\}/u);
+  assert.match(detailPage, /key=\{`\$\{workspace\.storageScopeId\}:\$\{state\}:/u);
+  assert.match(detailPage, /error\.status !== 403 && error\.status !== 404/u);
+  assert.doesNotMatch(dashboard, /<ProjectIdeShell/u);
+  assert.match(studioScreen, /<ProjectIdeShell/u);
+  assert.match(studioScreen, /export function ProjectStudioFrame/u);
+  assert.match(studioScreen, /key=\{`\$\{props\.workspaceScope\}:\$\{project\.id\}:\$\{project\.state\}`\}/u);
   assert.match(ideShell, /maxLength=\{MAX_TERMINAL_COMMAND_CHARS\}/u);
-  assert.match(ideShell, /aria-label="Project files"/u);
-  assert.match(ideShell, /aria-label="Text editor"/u);
-  assert.match(ideShell, /aria-label="Preview"/u);
-  assert.match(ideShell, /Apply to Local Draft/u);
-  assert.match(ideShell, /Local Draft saved · HMR applied/u);
-  assert.match(ideShell, /Same-origin Preview is disabled/u);
+  assert.match(ideShell, /aria-label="프로젝트 파일"/u);
+  assert.match(ideShell, /aria-label="텍스트 편집기"/u);
+  assert.match(ideShell, /aria-label="미리보기"/u);
+  assert.match(ideShell, /로컬 초안에 적용/u);
+  assert.match(ideShell, /로컬 초안 저장됨 · HMR 적용됨/u);
+  assert.match(ideShell, /동일 출처 미리보기는 보안을 위해 비활성화/u);
   assert.doesNotMatch(ideShell, />Save<|"Saved · HMR/u);
-  assert.match(ideShell, /aria-label="Terminal"/u);
+  assert.match(ideShell, /aria-label="터미널"/u);
+  assert.match(studioStory, /<ProjectIdeShell/u);
+  assert.match(studioStory, /<ProjectStudioFrame/u);
+  assert.match(studioStory, /initialHistoryState=\{emptyHistory\}/u);
+  assert.doesNotMatch(studioStory, /function CodeEditor|function Explorer/u);
   assert.match(ideShell, /createRuntimeAdapter/u);
   assert.match(ideShell, /storageScopeId: project\.storageScopeId/u);
   assert.match(ideShell, /workspaceScopeId: workspaceScope/u);
   assert.doesNotMatch(ideShell, /localDraftKey/u);
   assert.doesNotMatch(ideShell, /BrowserRuntimeSupervisor|HostProcessTable|createPreviewWorkflowController|service-backend/u);
-  assert.doesNotMatch(`${dashboard}\n${page}\n${ideShell}`, /localStorage|sessionStorage|console\./u);
+  assert.doesNotMatch(`${dashboard}\n${page}\n${detailPage}\n${studioScreen}\n${ideShell}`, /localStorage|sessionStorage|console\./u);
 }
 
 function request(search: string): Request {

@@ -2,7 +2,7 @@ import {
   forwardTeamRequest,
   invalidTeamRoute,
   teamItemPath
-} from "../../../../../../../lib/api/team-bff.ts";
+} from "#src/lib/api/team-bff.ts";
 
 export const dynamic = "force-dynamic";
 

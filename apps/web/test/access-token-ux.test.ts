@@ -56,13 +56,13 @@ async function mutationAmbiguityRequiresReconciliation() {
 function sourceContracts() {
   const console = read("src/app/(authenticated)/access-tokens/token-console.tsx");
   const page = read("src/app/(authenticated)/access-tokens/page.tsx");
-  const layout = read("src/app/(authenticated)/layout.tsx");
-  assert.match(console, /Shown once/u);
-  assert.match(console, /stores only its hash/u);
-  assert.match(console, /recently authenticated session/u);
+  const shell = read("src/app/(authenticated)/authenticated-shell-frame.tsx");
+  assert.match(console, /한 번만 표시/u);
+  assert.match(console, /해시만 저장/u);
+  assert.match(console, /최근에 인증한 세션/u);
   assert.match(console, /navigator\.clipboard\.writeText/u);
-  assert.match(page, /No credential was issued, changed, or exposed/u);
-  assert.match(layout, /Access tokens/u);
+  assert.match(page, /자격 증명은 발급·변경·노출되지 않았습니다/u);
+  assert.match(shell, /Access tokens/u);
   assert.doesNotMatch(`${console}\n${page}`, /localStorage|sessionStorage|dangerouslySetInnerHTML/u);
 }
 

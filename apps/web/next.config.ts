@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  distDir: process.env.NURITEO_NEXT_DIST_DIR ?? ".next",
   experimental: {
     cpus: 1,
     parallelServerBuildTraces: false,
@@ -34,7 +35,10 @@ const nextConfig: NextConfig = {
   },
   output: "standalone",
   poweredByHeader: false,
-  reactStrictMode: true
+  reactStrictMode: true,
+  // Bundle styling recipes into the server output. Leaving these ESM-only
+  // packages external produces missing vendor chunks in Next standalone mode.
+  transpilePackages: ["tailwind-merge", "tailwind-variants"]
 };
 
 export default nextConfig;

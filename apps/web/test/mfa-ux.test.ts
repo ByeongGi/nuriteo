@@ -56,19 +56,19 @@ async function rotatedSessionContract(): Promise<void> {
 
 function sourceContracts(): void {
   const security = read("src/app/mfa/security.tsx");
-  const policy = read("src/app/(authenticated)/admin/mfa/policy-editor.tsx");
+  const policy = read("src/app/(admin)/admin/mfa/policy-editor.tsx");
   const layout = read("src/app/(authenticated)/layout.tsx");
   const qr = read("src/lib/qr-matrix.ts");
-  assert.match(security, /shown once/u);
-  assert.match(security, /Copy codes to continue/u);
-  assert.match(security, /does not grant recent reauthentication/u);
-  assert.match(security, /Sign out or switch account/u);
-  assert.match(policy, /active local administrator/u);
-  assert.match(policy, /Reload latest/u);
+  assert.match(security, /한 번만 표시됩니다/u);
+  assert.match(security, /계속하려면 코드를 복사하세요/u);
+  assert.match(security, /중요한 변경에는 다시 인증/u);
+  assert.match(security, /로그아웃 또는 계정 전환/u);
+  assert.match(policy, /활성 로컬 관리자/u);
+  assert.match(policy, /최신 상태 불러오기/u);
   assert.match(layout, /mfa\.data\.restricted/u);
   assert.doesNotMatch(layout, /getMfaStatus\(client\)\.catch/u);
-  assert.match(policy, /Review impact/u);
-  assert.match(policy, /Find by email or display name/u);
+  assert.match(policy, /영향 검토/u);
+  assert.match(policy, /이메일 또는 표시 이름으로 찾기/u);
   assert.match(qr, /qrcode-terminal/u);
   assert.doesNotMatch(`${security}\n${policy}\n${qr}`, /localStorage|sessionStorage|dangerouslySetInnerHTML/u);
 }

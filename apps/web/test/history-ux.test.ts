@@ -74,12 +74,12 @@ function testHistoryUiContract(): void {
   assert.match(panel, /event\.key === "Escape"/u);
   assert.match(panel, /event\.key !== "Tab"/u);
   assert.match(panel, /Date\.parse\(right\.createdAt\) - Date\.parse\(left\.createdAt\)/u);
-  assert.match(panel, /Local Draft was not replaced/u);
-  assert.match(panel, /Archived · read-only/u);
+  assert.match(panel, /로컬 초안은 바꾸지 않았습니다/u);
+  assert.match(panel, /보관됨 · 읽기 전용/u);
   assert.match(panel, /reconcileProjectHistory/u);
-  assert.match(panel, /Load more Versions/u);
-  assert.match(shell, /Retry Server Save/u);
-  assert.match(shell, /Reload latest Project/u);
+  assert.match(panel, /버전 더 보기/u);
+  assert.match(shell, /서버 저장 다시 시도/u);
+  assert.match(shell, /최신 프로젝트 다시 불러오기/u);
 }
 
 function request(urlPath: string, method = "GET", headers: Record<string, string> = {}, body?: string): Request {

@@ -1,4 +1,4 @@
-import { forwardCurrentUser } from "../../../../lib/api/auth-bff.ts";
+import { forwardCurrentUser } from "#src/lib/api/auth-bff.ts";
 
 export const dynamic = "force-dynamic";
 

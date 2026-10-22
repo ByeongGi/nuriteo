@@ -1,8 +1,8 @@
 import {
   forwardCollaborationMutation,
   invalidCollaborationRoute
-} from "../../../../../../lib/api/collaboration-bff.ts";
-import { publicIdPathSegment } from "../../../../../../lib/published-example-path.ts";
+} from "#src/lib/api/collaboration-bff.ts";
+import { publicIdPathSegment } from "#src/lib/published-example-path.ts";
 
 interface Context {
   readonly params: Promise<{ readonly publicId: string }>;

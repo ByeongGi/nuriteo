@@ -1,7 +1,7 @@
 import type {
   ProjectBundleV1SourceFile,
   ValidatedProjectBundleV1Projection
-} from "./project-bundle-v1.ts";
+} from "#src/bundles/project-bundle-v1.ts";
 
 const MEBIBYTE = 1024 * 1024;
 const UUID_V7 = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;

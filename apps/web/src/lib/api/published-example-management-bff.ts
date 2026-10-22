@@ -4,8 +4,8 @@ import {
   forwardCollaborationMutation,
   invalidCollaborationRoute,
   uuidPathSegment
-} from "./collaboration-bff.ts";
-import { hasNoProjectQuery, projectItemPath } from "./project-bff.ts";
+} from "#src/lib/api/collaboration-bff.ts";
+import { hasNoProjectQuery, projectItemPath } from "#src/lib/api/project-bff.ts";
 
 export interface PublishedExampleForward {
   readonly method: "DELETE" | "PATCH" | "POST";

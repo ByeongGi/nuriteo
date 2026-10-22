@@ -2,7 +2,7 @@ import {
   forwardCollaborationMutation,
   invalidCollaborationRoute,
   uuidPathSegment
-} from "../../../../../../lib/api/collaboration-bff.ts";
+} from "#src/lib/api/collaboration-bff.ts";
 
 export async function registryAction(
   request: Request,

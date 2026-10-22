@@ -23,19 +23,19 @@ import type {
   SaveUploadReceipt
 } from "@nuriteo/api-client";
 
-import { IncrementalSha256 } from "../bundles/incremental-sha256.ts";
+import { IncrementalSha256 } from "#src/bundles/incremental-sha256.ts";
 import {
   BoundedProjectBundleBlobSink,
   ProjectBundleMultipartSink,
   streamValidatedProjectBundleV1
-} from "../bundles/project-bundle-v1.ts";
+} from "#src/bundles/project-bundle-v1.ts";
 import type {
   ProjectBundleV1Sink,
   ProjectBundleV1StreamMetadata,
   ValidatedProjectBundleV1Projection
-} from "../bundles/project-bundle-v1.ts";
-import { validateProjectBundleV1Projection } from "../bundles/project-bundle-v1-validation.ts";
-import type { RuntimeBundleFile } from "../runtime/runtime-adapter.ts";
+} from "#src/bundles/project-bundle-v1.ts";
+import { validateProjectBundleV1Projection } from "#src/bundles/project-bundle-v1-validation.ts";
+import type { RuntimeBundleFile } from "#src/runtime/runtime-adapter.ts";
 
 export type ProjectSavePhase = "planning" | "creating" | "uploading" | "committing" | "reconciling";
 

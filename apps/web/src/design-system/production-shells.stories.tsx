@@ -1,39 +1,72 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 
-import { AdminAccessRequired } from "../app/(authenticated)/admin/_components/admin-access-required.tsx";
-import { ProductEntryShell } from "../app/_components/product-entry-shell.tsx";
-import { Button } from "../components/ui/button.tsx";
+import { AdminAccessRequired } from "#src/app/(admin)/admin/_components/admin-access-required.tsx";
+import { AuthenticatedShellLoading } from "#src/app/(authenticated)/authenticated-shell-frame.tsx";
+import AdminUpdatesLoading from "#src/app/(admin)/admin/updates/loading.tsx";
+import ProjectsLoading from "#src/app/(authenticated)/projects/loading.tsx";
+import WorkspacesLoading from "#src/app/(authenticated)/workspaces/loading.tsx";
+import { EntryUnavailable } from "#src/app/_components/entry-unavailable.tsx";
+import { ErrorView } from "#src/app/_components/error-view.tsx";
+import { ProductEntryLoading } from "#src/app/_components/product-entry-shell.tsx";
+import { ActivationForm } from "#src/app/activate/activation-form.tsx";
+import NotFound from "#src/app/not-found.tsx";
 
 const meta = {
-  parameters: { layout: "fullscreen" },
-  title: "Patterns/Production shells"
+  parameters: {
+    layout: "fullscreen",
+    nextjs: { appDirectory: true }
+  },
+  title: "UX Redesign/08 System States"
 } satisfies Meta;
 
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const Entry: Story = {
+export const AccountActivation: Story = {
+  render: () => <ActivationForm activationToken="storybook-activation-token" />
+};
+
+export const InvalidInvitation: Story = {
+  render: () => <ActivationForm activationToken={null} />
+};
+
+export const EntryLoading: Story = {
+  render: () => <ProductEntryLoading label="계정 활성화를 준비하는 중" />
+};
+
+export const ApplicationLoading: Story = {
+  render: () => <AuthenticatedShellLoading />
+};
+
+export const ProjectsLoadingState: Story = {
+  render: () => <ProjectsLoading />
+};
+
+export const WorkspacesLoadingState: Story = {
+  render: () => <WorkspacesLoading />
+};
+
+export const AdminUpdateLoadingState: Story = {
+  render: () => <AdminUpdatesLoading />
+};
+
+export const ServiceUnavailable: Story = {
   render: () => (
-    <ProductEntryShell
-      compact
-      description="회사 계정으로 계속하거나 관리자가 제공한 로컬 계정을 사용하세요."
-      eyebrow="다시 오신 것을 환영합니다"
-      title="NURITEO 로그인"
-      titleId="production-entry-title"
-    >
-      <form className="sign-in-form">
-        <label className="field-group" htmlFor="production-entry-email">
-          이메일
-          <input id="production-entry-email" type="email" placeholder="name@company.com" />
-        </label>
-        <label className="field-group" htmlFor="production-entry-password">
-          비밀번호
-          <input id="production-entry-password" type="password" placeholder="비밀번호 입력" />
-        </label>
-        <Button type="button" variant="primary">로그인</Button>
-      </form>
-    </ProductEntryShell>
+    <EntryUnavailable
+      description="작업 내용은 변경되지 않았습니다. 연결 상태를 확인한 뒤 다시 시도하세요."
+      reference="request-storybook-503"
+      retryHref="/workspaces"
+      title="워크스페이스를 일시적으로 사용할 수 없습니다"
+    />
   )
+};
+
+export const UnexpectedError: Story = {
+  render: () => <ErrorView onRetry={() => undefined} reference="error-storybook" />
+};
+
+export const MissingPage: Story = {
+  render: () => <NotFound />
 };
 
 export const RestrictedAdministration: Story = {

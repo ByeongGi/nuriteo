@@ -148,40 +148,46 @@ async function settingBffContract(): Promise<void> {
 }
 
 function sourceContracts(): void {
-  const page = read("src/app/(authenticated)/admin/settings/page.tsx");
-  const settings = read("src/app/(authenticated)/admin/settings/admin-settings.tsx");
-  const navigation = read("src/app/(authenticated)/admin/admin-navigation.tsx");
-  const operationsPage = read("src/app/(authenticated)/admin/operations/page.tsx");
-  const operationsDashboard = read("src/app/(authenticated)/admin/operations/operations-dashboard.tsx");
-  const supportBundle = read("src/app/(authenticated)/admin/operations/support-bundle-download.tsx");
+  const page = read("src/app/(admin)/admin/settings/page.tsx");
+  const settings = read("src/app/(admin)/admin/settings/admin-settings.tsx");
+  const navigation = read("src/app/(admin)/admin/admin-navigation.tsx");
+  const adminLayout = read("src/app/(admin)/admin/layout.tsx");
+  const adminShell = read("src/app/(admin)/admin/admin-shell-frame.tsx");
+  const operationsPage = read("src/app/(admin)/admin/operations/page.tsx");
+  const operationsDashboard = read("src/app/(admin)/admin/operations/operations-dashboard.tsx");
+  const supportBundle = read("src/app/(admin)/admin/operations/support-bundle-download.tsx");
   const layout = read("src/app/(authenticated)/layout.tsx");
   const authenticatedNavigation = read("src/app/(authenticated)/authenticated-navigation.tsx");
 
-  assert.match(page, /is_instance_admin/u);
   assert.match(page, /Promise\.all\(\[/u);
   assert.match(page, /listAdminSettings\(client\)/u);
   assert.match(page, /getAdminStatus\(client\)/u);
   assert.match(page, /previewAdminPolicyCleanup\(client\)/u);
-  assert.match(settings, /Review impact/u);
-  assert.match(settings, /Reset to default/u);
-  assert.match(settings, /Existing data will not be deleted automatically/u);
-  assert.match(settings, /This is a dry run/u);
-  assert.match(settings, /Reload latest/u);
-  assert.match(settings, /Web update required/u);
-  assert.match(settings, /Recent administrator reauthentication is required/u);
+  assert.match(settings, /영향 검토/u);
+  assert.match(settings, /기본값으로 초기화/u);
+  assert.match(settings, /기존 데이터는 자동으로 삭제되지 않습니다/u);
+  assert.match(settings, /읽기 전용 점검/u);
+  assert.match(settings, /최신 상태 불러오기/u);
+  assert.match(settings, /웹 업데이트 필요/u);
+  assert.match(settings, /최근 관리자 재인증이 필요/u);
   assert.match(settings, /aria-busy=\{mutation\.isPending\}/u);
   assert.match(navigation, /aria-current=\{pathname === destination\.href \? "page"/u);
+  assert.match(navigation, /href="\/admin"/u);
   assert.match(navigation, /href: "\/admin\/operations"/u);
-  assert.match(operationsPage, /is_instance_admin/u);
   assert.match(operationsPage, /getAdminOperations\(client\)/u);
-  assert.match(operationsDashboard, /Detailed endpoints, credentials, and backend errors are never shown here/u);
+  assert.match(operationsDashboard, /상세 엔드포인트, 자격 증명과 내부 오류 내용은 표시하지 않습니다/u);
   assert.match(operationsDashboard, /aria-labelledby="dependency-health-title"/u);
   assert.match(operationsDashboard, /SupportBundleDownload preview=\{operations\.supportBundle\}/u);
-  assert.match(supportBundle, /Nothing is uploaded automatically/u);
+  assert.match(supportBundle, /어떤 정보도 자동으로 업로드되지 않습니다/u);
   assert.match(supportBundle, /bytes\.byteLength > preview\.maximumBytes/u);
   assert.doesNotMatch(supportBundle, /localStorage|sessionStorage|dangerouslySetInnerHTML/u);
-  assert.match(layout, /<AuthenticatedNavigation/u);
-  assert.match(authenticatedNavigation, /href: "\/admin\/settings"/u);
+  assert.match(layout, /<AuthenticatedShellFrame/u);
+  assert.match(authenticatedNavigation, /href: "\/admin"/u);
+  assert.match(adminLayout, /is_instance_admin/u);
+  assert.match(adminLayout, /<AdminShellFrame/u);
+  assert.doesNotMatch(adminLayout, /AuthenticatedShellFrame/u);
+  assert.match(adminShell, /사용자 화면으로 돌아가기/u);
+  assert.match(adminShell, /<AdminNavigation/u);
   assert.doesNotMatch(
     `${page}\n${settings}\n${operationsPage}\n${operationsDashboard}`,
     /dangerouslySetInnerHTML|localStorage|sessionStorage/u

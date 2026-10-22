@@ -1,6 +1,6 @@
 "use client";
 
-import { ErrorView } from "./_components/error-view.tsx";
+import { ErrorView } from "#src/app/_components/error-view.tsx";
 
 interface GlobalErrorProps {
   error: Error & { digest?: string };

@@ -1,25 +1,46 @@
 "use client";
 
-import { useEffect, useId, useRef } from "react";
+import { AlertDialog } from "@base-ui/react/alert-dialog";
+import { useRef } from "react";
+import { tv } from "tailwind-variants";
+import type { VariantProps } from "tailwind-variants";
 
-import { Button } from "./button.tsx";
+import { Button } from "#src/components/ui/button.tsx";
 
-interface ConfirmationDialogProps {
+const confirmationDialogStyles = tv({
+  slots: {
+    backdrop:
+      "fixed inset-0 z-[100] bg-[color-mix(in_srgb,var(--n-color-bg-canvas)_64%,transparent)] backdrop-blur-sm transition-opacity duration-fast data-[ending-style]:opacity-0 data-[starting-style]:opacity-0 motion-reduce:transition-none",
+    viewport: "fixed inset-0 z-[100] grid place-items-center overflow-y-auto p-5",
+    popup:
+      "grid w-full max-w-[30rem] grid-cols-[auto_minmax(0,1fr)] gap-4 rounded-xl border border-border bg-raised p-6 text-foreground shadow-overlay outline-none transition-[opacity,transform] duration-fast data-[ending-style]:scale-[0.98] data-[ending-style]:opacity-0 data-[starting-style]:scale-[0.98] data-[starting-style]:opacity-0 motion-reduce:transition-none",
+    indicator: "grid size-9 shrink-0 place-items-center rounded-full text-sm font-bold",
+    copy: "min-w-0",
+    title: "m-0 text-lg font-semibold tracking-tight",
+    description: "mt-2 text-sm leading-relaxed text-muted-foreground",
+    actions: "col-span-full mt-2 flex flex-wrap justify-end gap-2"
+  },
+  variants: {
+    tone: {
+      danger: { indicator: "bg-danger-subtle text-danger" },
+      primary: { indicator: "bg-info-subtle text-primary" }
+    }
+  },
+  defaultVariants: { tone: "danger" }
+});
+
+interface ConfirmationDialogProps extends VariantProps<typeof confirmationDialogStyles> {
   readonly busy?: boolean;
   readonly cancelLabel?: string;
   readonly confirmLabel: string;
   readonly description: string;
   readonly open: boolean;
   readonly title: string;
-  readonly tone?: "danger" | "primary";
   readonly onCancel: () => void;
   readonly onConfirm: () => void;
 }
 
-const FOCUSABLE_ELEMENTS =
-  'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
-
-export function ConfirmationDialog({
+function ConfirmationDialog({
   busy = false,
   cancelLabel = "취소",
   confirmLabel,
@@ -30,86 +51,44 @@ export function ConfirmationDialog({
   onCancel,
   onConfirm
 }: ConfirmationDialogProps) {
-  const titleId = useId();
-  const descriptionId = useId();
-  const dialogRef = useRef<HTMLElement>(null);
-  const confirmRef = useRef<HTMLButtonElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-
-    const previouslyFocused = document.activeElement instanceof HTMLElement
-      ? document.activeElement
-      : undefined;
-    confirmRef.current?.focus();
-
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape" && !busy) {
-        event.preventDefault();
-        onCancel();
-        return;
-      }
-      if (event.key !== "Tab" || !dialogRef.current) return;
-
-      const focusable = Array.from(
-        dialogRef.current.querySelectorAll<HTMLElement>(FOCUSABLE_ELEMENTS)
-      );
-      const first = focusable[0];
-      const last = focusable.at(-1);
-      if (!first || !last) return;
-
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    }
-
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("keydown", handleKeyDown);
-      previouslyFocused?.focus();
-    };
-  }, [busy, onCancel, open]);
-
-  if (!open) return null;
+  const cancelRef = useRef<HTMLButtonElement>(null);
+  const styles = confirmationDialogStyles({ tone });
 
   return (
-    <div
-      className="confirmation-dialog__backdrop"
-      onMouseDown={(event) => {
-        if (!busy && event.currentTarget === event.target) onCancel();
+    <AlertDialog.Root
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen && !busy) onCancel();
       }}
     >
-      <section
-        ref={dialogRef}
-        className="confirmation-dialog"
-        role={tone === "danger" ? "alertdialog" : "dialog"}
-        aria-modal="true"
-        aria-labelledby={titleId}
-        aria-describedby={descriptionId}
-        aria-busy={busy}
-      >
-        <div className={`confirmation-dialog__indicator confirmation-dialog__indicator--${tone}`} aria-hidden="true">!</div>
-        <div>
-          <h2 id={titleId}>{title}</h2>
-          <p id={descriptionId}>{description}</p>
-        </div>
-        <div className="confirmation-dialog__actions">
-          <Button type="button" disabled={busy} onClick={onCancel}>{cancelLabel}</Button>
-          <Button
-            ref={confirmRef}
-            type="button"
-            variant={tone === "danger" ? "danger" : "primary"}
-            disabled={busy}
-            onClick={onConfirm}
-          >
-            {confirmLabel}
-          </Button>
-        </div>
-      </section>
-    </div>
+      <AlertDialog.Portal>
+        <AlertDialog.Backdrop className={styles.backdrop()} />
+        <AlertDialog.Viewport className={styles.viewport()}>
+          <AlertDialog.Popup aria-busy={busy} className={styles.popup()} initialFocus={cancelRef}>
+            <div aria-hidden="true" className={styles.indicator()}>!</div>
+            <div className={styles.copy()}>
+              <AlertDialog.Title className={styles.title()}>{title}</AlertDialog.Title>
+              <AlertDialog.Description className={styles.description()}>{description}</AlertDialog.Description>
+            </div>
+            <div className={styles.actions()}>
+              <Button ref={cancelRef} type="button" disabled={busy} onClick={onCancel}>
+                {cancelLabel}
+              </Button>
+              <Button
+                type="button"
+                variant={tone === "danger" ? "danger" : "primary"}
+                disabled={busy}
+                onClick={onConfirm}
+              >
+                {confirmLabel}
+              </Button>
+            </div>
+          </AlertDialog.Popup>
+        </AlertDialog.Viewport>
+      </AlertDialog.Portal>
+    </AlertDialog.Root>
   );
 }
+
+export { ConfirmationDialog, confirmationDialogStyles };
+export type { ConfirmationDialogProps };

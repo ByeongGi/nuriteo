@@ -1,5 +1,5 @@
-import { forwardProjectContentDownload } from "../../../../../../../../../../lib/api/content-bff.ts";
-import { hasNoProjectQuery, invalidProjectRoute, projectContentPath } from "../../../../../../../../../../lib/api/project-bff.ts";
+import { forwardProjectContentDownload } from "#src/lib/api/content-bff.ts";
+import { hasNoProjectQuery, invalidProjectRoute, projectContentPath } from "#src/lib/api/project-bff.ts";
 
 interface Context {
   readonly params: Promise<{

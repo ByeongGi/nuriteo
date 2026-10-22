@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 
-import { ConfirmationDialog } from "../components/ui/confirmation-dialog.tsx";
+import { ConfirmationDialog } from "#src/components/ui/confirmation-dialog.tsx";
 
 const meta = {
   title: "Components/Confirmation dialog",

@@ -1,5 +1,5 @@
-import { IncrementalSha256 } from "../bundles/incremental-sha256.ts";
-import type { RuntimeBundleFile } from "../runtime/runtime-adapter.ts";
+import { IncrementalSha256 } from "#src/bundles/incremental-sha256.ts";
+import type { RuntimeBundleFile } from "#src/runtime/runtime-adapter.ts";
 
 const CONTENT_ETAG = /^"published-content-v([1-9]\d*)-([A-Za-z0-9_-]{43})"$/u;
 const PUBLIC_ID = /^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$/u;

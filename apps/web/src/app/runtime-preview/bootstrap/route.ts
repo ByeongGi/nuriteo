@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 
-import { previewOriginConfiguration, previewSigningKey } from "../../../lib/preview/config.ts";
-import { verifySignedPreviewBinding } from "../../../lib/preview/signed-binding.ts";
-import { previewBootstrapDocument } from "../../../runtime/preview-bootstrap-document.ts";
-import { parsePreviewHost } from "../../../runtime/preview-origin-contract.ts";
+import { previewOriginConfiguration, previewSigningKey } from "#src/lib/preview/config.ts";
+import { verifySignedPreviewBinding } from "#src/lib/preview/signed-binding.ts";
+import { previewBootstrapDocument } from "#src/runtime/preview-bootstrap-document.ts";
+import { parsePreviewHost } from "#src/runtime/preview-origin-contract.ts";
 
 export async function GET(request: Request): Promise<NextResponse> {
   const configuration = previewOriginConfiguration();

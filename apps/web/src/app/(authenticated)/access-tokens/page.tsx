@@ -2,12 +2,12 @@ import { listAccessTokens } from "@nuriteo/api-client";
 import type { AccessTokenTarget } from "@nuriteo/api-client";
 import type { Metadata } from "next";
 
-import { EntryUnavailable } from "../../_components/entry-unavailable.tsx";
-import { createServerApiClient } from "../../../lib/api/server-client.ts";
-import { safeRequestReference } from "../../../lib/api/presentation-error.ts";
-import { AccessTokenConsole } from "./token-console.tsx";
+import { EntryUnavailable } from "#src/app/_components/entry-unavailable.tsx";
+import { createServerApiClient } from "#src/lib/api/server-client.ts";
+import { safeRequestReference } from "#src/lib/api/presentation-error.ts";
+import { AccessTokenConsole } from "#src/app/(authenticated)/access-tokens/token-console.tsx";
 
-export const metadata: Metadata = { title: "Access tokens" };
+export const metadata: Metadata = { title: "액세스 토큰" };
 
 export default async function AccessTokensPage({
   searchParams
@@ -24,8 +24,8 @@ export default async function AccessTokensPage({
   } catch (error) {
     return (
       <EntryUnavailable
-        title="Access tokens are temporarily unavailable"
-        description="No credential was issued, changed, or exposed. Check the Project identifier and your administrative access, then retry."
+        title="액세스 토큰을 일시적으로 사용할 수 없습니다"
+        description="자격 증명은 발급·변경·노출되지 않았습니다. 프로젝트 식별자와 관리 권한을 확인한 뒤 다시 시도하세요."
         reference={safeRequestReference(error)}
         retryHref="/access-tokens"
       />

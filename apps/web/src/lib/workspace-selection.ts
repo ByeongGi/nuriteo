@@ -19,5 +19,5 @@ export function resolveWorkspaceSelection(
 }
 
 export function workspaceOwnerLabel(workspace: Workspace): string {
-  return workspace.ownerType === "user" ? "Personal" : "Organization";
+  return workspace.ownerType === "user" ? "개인" : "조직";
 }

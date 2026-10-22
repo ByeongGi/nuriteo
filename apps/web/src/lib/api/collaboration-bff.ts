@@ -2,7 +2,7 @@ import "server-only";
 
 import { randomUUID } from "node:crypto";
 
-import { selectForwardedHeaders, validateInternalApiUrl } from "./server-policy.ts";
+import { selectForwardedHeaders, validateInternalApiUrl } from "#src/lib/api/server-policy.ts";
 
 const MAX_BODY_BYTES = 16_384;
 const MAX_ALLOWED_BODY_BYTES = 1_100_000;

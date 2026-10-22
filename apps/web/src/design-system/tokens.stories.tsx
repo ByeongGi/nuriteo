@@ -2,8 +2,8 @@ import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import type { CSSProperties } from "react";
 import { useDeferredValue, useState } from "react";
 
-import type { FoundationToken, TokenGroup } from "./token-registry.ts";
-import { tokenGroups } from "./token-registry.ts";
+import type { FoundationToken, TokenGroup } from "#src/design-system/token-registry.ts";
+import { tokenGroups } from "#src/design-system/token-registry.ts";
 
 type TokenCatalogProps = {
   groups: TokenGroup[];

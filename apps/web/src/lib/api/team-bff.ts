@@ -4,7 +4,7 @@ import {
   forwardCollaborationMutation,
   invalidCollaborationRoute,
   uuidPathSegment
-} from "./collaboration-bff.ts";
+} from "#src/lib/api/collaboration-bff.ts";
 
 const MAX_CURSOR_BYTES = 2_048;
 const MAX_PAGE_SIZE = 100;

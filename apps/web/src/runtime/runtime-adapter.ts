@@ -21,7 +21,7 @@ import {
   createLocalDraftWriterLease,
   type LocalDraftWriterLease,
   type LocalDraftWriterLeaseOptions
-} from "./local-draft-writer.ts";
+} from "#src/runtime/local-draft-writer.ts";
 
 const MAX_DIAGNOSTICS = 20;
 const MAX_DIAGNOSTIC_LENGTH = 512;

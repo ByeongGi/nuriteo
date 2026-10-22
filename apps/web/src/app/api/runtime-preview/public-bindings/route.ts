@@ -1,17 +1,17 @@
 import { ApiError, getPublicPublishedExampleVersion } from "@nuriteo/api-client";
 import { NextResponse } from "next/server.js";
 
-import { createPublicServerApiClient } from "../../../../lib/api/public-server-client.ts";
+import { createPublicServerApiClient } from "#src/lib/api/public-server-client.ts";
 import {
   publicIdPathSegment,
   publicVersionPathSegment
-} from "../../../../lib/published-example-path.ts";
-import { previewOriginConfiguration, previewSigningKey } from "../../../../lib/preview/config.ts";
-import { publicPreviewClientIdentity } from "../../../../lib/preview/public-client-identity.ts";
+} from "#src/lib/published-example-path.ts";
+import { previewOriginConfiguration, previewSigningKey } from "#src/lib/preview/config.ts";
+import { publicPreviewClientIdentity } from "#src/lib/preview/public-client-identity.ts";
 import {
   issueSignedPreviewBinding,
   validPreviewSigningKey
-} from "../../../../lib/preview/signed-binding.ts";
+} from "#src/lib/preview/signed-binding.ts";
 
 const MAX_BODY_BYTES = 256;
 const DEADLINE_MS = 5_000;

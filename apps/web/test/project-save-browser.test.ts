@@ -129,19 +129,19 @@ try {
   await page.goto(`${applicationOrigin}/`, { waitUntil: "domcontentloaded" });
   assert.equal(await page.evaluate(() => globalThis.crossOriginIsolated), true);
 
-  await page.getByRole("button", { name: "Start workspace from template", exact: true }).click();
-  await page.getByRole("button", { name: "Run Preview" }).waitFor({ timeout: 20_000 });
+  await page.getByRole("button", { name: "템플릿으로 워크스페이스 시작", exact: true }).click();
+  await page.getByRole("button", { name: "미리보기 실행" }).waitFor({ timeout: 20_000 });
   assert.equal(await page.evaluate(() => window.__nuriteoRuntimeProbe.createdWorkers), 2);
 
   await page.getByRole("button", { name: "src/message.ts" }).click();
-  const editor = page.getByLabel("Editor for src/message.ts");
+  const editor = page.getByLabel("src/message.ts 편집기");
   await editor.fill('export const label = "RT004 edited";\n');
-  await page.getByRole("button", { name: "Apply to Local Draft" }).click();
-  await page.getByText("Local Draft saved", { exact: false }).waitFor({ timeout: 10_000 });
-  await page.getByRole("button", { name: "Save to server" }).click();
-  await page.getByText("Server Save failed · Local Draft preserved", { exact: true }).waitFor({ timeout: 20_000 });
-  await page.getByRole("button", { name: "Retry Server Save" }).click();
-  await page.getByText("Server Save v2 complete · Local Draft is current", { exact: true }).waitFor({ timeout: 20_000 });
+  await page.getByRole("button", { name: "로컬 초안에 적용" }).click();
+  await page.getByText("로컬 초안 저장됨", { exact: false }).waitFor({ timeout: 10_000 });
+  await page.getByRole("button", { name: "서버에 저장" }).click();
+  await page.getByText("서버 저장 실패 · 로컬 초안 보존됨", { exact: true }).waitFor({ timeout: 20_000 });
+  await page.getByRole("button", { name: "서버 저장 다시 시도" }).click();
+  await page.getByText("서버 저장 v2 완료 · 로컬 초안과 일치", { exact: true }).waitFor({ timeout: 20_000 });
   assert.deepEqual(await page.evaluate(() => ({
     etag: window.__nuriteoRuntimeProbe.committedEtag,
     version: window.__nuriteoRuntimeProbe.committedVersion
@@ -149,44 +149,44 @@ try {
   assert.ok(saveRequests.some((entry) => entry.endsWith("/reconcile")), "unknown Save completion must reconcile");
 
   await editor.fill('export const label = "newer local draft";\n');
-  await page.getByRole("button", { name: "Apply to Local Draft" }).click();
-  await page.getByRole("button", { name: "Save to server" }).click();
-  await page.getByText(/Server Project changed before this Save/u).waitFor({ timeout: 20_000 });
-  await page.getByRole("button", { name: "Reload latest Project" }).click();
+  await page.getByRole("button", { name: "로컬 초안에 적용" }).click();
+  await page.getByRole("button", { name: "서버에 저장" }).click();
+  await page.getByText(/저장 전에 서버 프로젝트가 변경되었습니다/u).waitFor({ timeout: 20_000 });
+  await page.getByRole("button", { name: "최신 프로젝트 다시 불러오기" }).click();
   assert.equal(await page.evaluate(() => window.__nuriteoRuntimeProbe.reloads), 1);
 
   const historyVersion = page.locator("li", { hasText: "Before refactor" });
-  await historyVersion.getByRole("button", { name: "Restore" }).click();
-  await page.getByRole("button", { name: "Restore Server Working Head" }).click();
-  await page.getByText("Server Working Head is now v3. The browser Local Draft was not replaced.").waitFor();
-  const replaceDraft = page.getByRole("button", { name: "Replace Local Draft with restored Server Save" });
+  await historyVersion.getByRole("button", { name: "복구" }).click();
+  await page.getByRole("button", { name: "서버 작업 버전 복구" }).click();
+  await page.getByText("서버 작업 버전은 이제 v3입니다. 브라우저의 로컬 초안은 바꾸지 않았습니다.").waitFor();
+  const replaceDraft = page.getByRole("button", { name: "로컬 초안을 복구한 서버 저장본으로 교체" });
 
   await page.evaluate(() => { window.__nuriteoRuntimeProbe.restoreMode = "intervening"; });
   await replaceDraft.click();
-  await page.getByText(/Server Project changed before the restored Save could be promoted/u).waitFor();
+  await page.getByText(/복구 저장본을 적용하기 전에 서버 프로젝트가 변경되었습니다/u).waitFor();
   assert.equal(await editor.inputValue(), 'export const label = "newer local draft";\n');
 
   await page.evaluate(() => { window.__nuriteoRuntimeProbe.restoreMode = "download-failure"; });
   await replaceDraft.click();
-  await page.getByText(/could not be fetched, verified, and materialized safely/u).waitFor();
+  await page.getByText(/복구된 서버 저장본을 안전하게 가져오고 검증해 열지 못했습니다/u).waitFor();
   assert.equal(await editor.inputValue(), 'export const label = "newer local draft";\n');
 
   await page.evaluate(() => { window.__nuriteoRuntimeProbe.restoreMode = "materialization-failure"; });
   await replaceDraft.click();
-  await page.getByText(/could not be fetched, verified, and materialized safely/u).waitFor();
+  await page.getByText(/복구된 서버 저장본을 안전하게 가져오고 검증해 열지 못했습니다/u).waitFor();
   assert.equal(await editor.inputValue(), 'export const label = "newer local draft";\n');
   assert.equal(await page.evaluate(() => window.__nuriteoRuntimeProbe.activeWorkers), 2);
 
   await page.evaluate(() => { window.__nuriteoRuntimeProbe.restoreMode = "success"; });
   await replaceDraft.click();
-  await page.getByText("Verified restored Server Save v3 is now the Local Draft.").waitFor();
+  await page.getByText("검증된 서버 저장본 v3을 로컬 초안으로 열었습니다.").waitFor();
   assert.equal(await editor.inputValue(), 'export const label = "restored exact head";\n');
   assert.equal(await editor.isEditable(), true);
   assert.equal(await page.evaluate(() => window.__nuriteoRuntimeProbe.activeWorkers), 2);
 
-  await page.getByRole("button", { name: "Stop workspace" }).click();
+  await page.getByRole("button", { name: "워크스페이스 종료" }).click();
   if (await page.getByRole("button", { name: "초안을 버리고 종료" }).count()) await page.getByRole("button", { name: "초안을 버리고 종료" }).click();
-  await page.getByRole("button", { name: "Start workspace from template", exact: true }).waitFor({ timeout: 10_000 });
+  await page.getByRole("button", { name: "템플릿으로 워크스페이스 시작", exact: true }).waitFor({ timeout: 10_000 });
   await page.waitForFunction(() => window.__nuriteoRuntimeProbe.activeWorkers === 0);
   assert.deepEqual(errors, []);
   console.log("WEB-007 browser Save matrix ok (retry, reconcile, 412, exact atomic restore, failure preservation, dispose)");

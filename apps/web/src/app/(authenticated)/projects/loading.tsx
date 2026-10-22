@@ -1,3 +1,5 @@
+import { WorkspacePageLoading } from "#src/app/_components/workspace-page-loading.tsx";
+
 export default function ProjectsLoading() {
-  return <main id="main-content" className="workspace-page" aria-busy="true"><p aria-live="polite">Loading Projects…</p></main>;
+  return <WorkspacePageLoading label="프로젝트를 불러오는 중" />;
 }

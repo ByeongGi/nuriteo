@@ -1,15 +1,5 @@
+import { WorkspacePageLoading } from "#src/app/_components/workspace-page-loading.tsx";
+
 export default function WorkspacesLoading() {
-  return (
-    <main id="main-content" className="workspace-page" aria-busy="true" aria-live="polite">
-      <div className="loading-shell">
-        <span className="loading-shell__line loading-shell__line--short" />
-        <span className="loading-shell__line loading-shell__line--title" />
-        <div className="loading-shell__grid" aria-hidden="true">
-          <div />
-          <div />
-        </div>
-        <span className="sr-only">Loading Workspaces</span>
-      </div>
-    </main>
-  );
+  return <WorkspacePageLoading cardCount={2} label="워크스페이스를 불러오는 중" />;
 }

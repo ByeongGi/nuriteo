@@ -1,4 +1,4 @@
-import { IncrementalSha256 } from "../bundles/incremental-sha256.ts";
+import { IncrementalSha256 } from "#src/bundles/incremental-sha256.ts";
 
 const UUID_V7 = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 const CONTENT_ETAG = /^"content-v([1-9]\d*)-([A-Za-z0-9_-]{43})"$/u;

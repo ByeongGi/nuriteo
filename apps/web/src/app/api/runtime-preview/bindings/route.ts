@@ -1,9 +1,9 @@
 import { ApiError, getCurrentUser, getProject } from "@nuriteo/api-client";
 import { NextResponse } from "next/server.js";
 
-import { createRequestScopedApiClient } from "../../../../lib/api/server-policy.ts";
-import { previewOriginConfiguration, previewSigningKey } from "../../../../lib/preview/config.ts";
-import { issueSignedPreviewBinding, validPreviewSigningKey } from "../../../../lib/preview/signed-binding.ts";
+import { createRequestScopedApiClient } from "#src/lib/api/server-policy.ts";
+import { previewOriginConfiguration, previewSigningKey } from "#src/lib/preview/config.ts";
+import { issueSignedPreviewBinding, validPreviewSigningKey } from "#src/lib/preview/signed-binding.ts";
 
 const MAX_BODY_BYTES = 512;
 const DEADLINE_MS = 5_000;

@@ -31,20 +31,23 @@ try {
   firstPage.on("request", (request) => browserRequests.push(`${request.method()} ${request.url()}`));
   await signIn(firstPage, standalone.origin, password);
   await firstPage.goto(`${standalone.origin}/projects`, { waitUntil: "networkidle" });
-  await firstPage.getByLabel("Slug").fill("web-011-relay");
-  await firstPage.getByLabel("Name", { exact: true }).fill("WEB 011 Relay");
-  await firstPage.getByRole("button", { name: "Create Project" }).click();
+  await firstPage.getByLabel("슬러그").fill("web-011-relay");
+  await firstPage.getByLabel("프로젝트 이름", { exact: true }).fill("WEB 011 Relay");
+  await firstPage.getByRole("button", { name: "프로젝트 만들기" }).click();
   await firstPage.getByRole("heading", { name: "WEB 011 Relay", exact: true }).waitFor();
-  const projectUrl = firstPage.url();
-  const projectId = new URL(projectUrl).searchParams.get("project");
+  const projectDetailUrl = firstPage.url();
+  const projectId = new URL(projectDetailUrl).pathname.split("/").at(-1);
   assert.ok(projectId, "created Project URL must contain its identity");
+  const studioUrl = await firstPage.getByRole("link", { name: "Studio 열기" }).getAttribute("href");
+  assert.ok(studioUrl, "created Project must expose its Studio route");
+  await firstPage.goto(new URL(studioUrl, standalone.origin).href, { waitUntil: "networkidle" });
 
-  await firstPage.getByRole("button", { name: "Start workspace from template", exact: true }).click();
-  await firstPage.getByText("Starter template is ready in this browser.").waitFor({ timeout: 30_000 });
+  await firstPage.getByRole("button", { name: "템플릿으로 워크스페이스 시작", exact: true }).click();
+  await firstPage.getByText("이 브라우저에 시작 템플릿을 준비했습니다.").waitFor({ timeout: 30_000 });
   await firstPage.getByRole("button", { name: "src/message.ts" }).click();
-  const editor = firstPage.getByLabel("Editor for src/message.ts");
+  const editor = firstPage.getByLabel("src/message.ts 편집기");
   await editor.fill(editedSource);
-  await firstPage.getByRole("button", { name: "Apply to Local Draft" }).click();
+  await firstPage.getByRole("button", { name: "로컬 초안에 적용" }).click();
 
   const createResponsePromise = firstPage.waitForResponse((response) =>
     response.request().method() === "POST" && response.url().endsWith("/save-sessions")
@@ -52,9 +55,9 @@ try {
   const uploadRequestPromise = firstPage.waitForRequest((request) =>
     request.method() === "PUT" && request.url().includes("/save-sessions/") && request.url().endsWith("/upload")
   );
-  await firstPage.getByRole("button", { name: "Save to server" }).click();
+  await firstPage.getByRole("button", { name: "서버에 저장" }).click();
   const [createResponse, uploadRequest] = await Promise.all([createResponsePromise, uploadRequestPromise]);
-  await firstPage.getByText("Server Save v2 complete · Local Draft is current", { exact: true }).waitFor({ timeout: 30_000 });
+  await firstPage.getByText("서버 저장 v2 완료 · 로컬 초안과 일치", { exact: true }).waitFor({ timeout: 30_000 });
 
   const capabilityText = await createResponse.text();
   const created = JSON.parse(capabilityText) as {
@@ -76,12 +79,12 @@ try {
   const freshPage = await freshContext.newPage();
   freshPage.on("request", (request) => browserRequests.push(`${request.method()} ${request.url()}`));
   await signIn(freshPage, standalone.origin, password);
-  await freshPage.goto(projectUrl, { waitUntil: "networkidle" });
+  await freshPage.goto(new URL(studioUrl, standalone.origin).href, { waitUntil: "networkidle" });
   assert.equal(await freshPage.locator("textarea").count(), 0, "fresh BrowserContext must not inherit the Local Draft");
-  await freshPage.getByRole("button", { name: "Resume saved Project" }).click();
-  await freshPage.getByText("Server Save v2 is ready in this browser.").waitFor({ timeout: 30_000 });
+  await freshPage.getByRole("button", { name: "저장된 프로젝트 이어서 열기" }).click();
+  await freshPage.getByText("이 브라우저에 서버 저장본 v2을 준비했습니다.").waitFor({ timeout: 30_000 });
   await freshPage.getByRole("button", { name: "src/message.ts" }).click();
-  assert.equal(await freshPage.getByLabel("Editor for src/message.ts").inputValue(), editedSource);
+  assert.equal(await freshPage.getByLabel("src/message.ts 편집기").inputValue(), editedSource);
   assert.equal(browserRequests.some((entry) => entry.includes(new URL(rustfsUrl).host)), false);
   await freshContext.close();
 } finally {
@@ -97,9 +100,9 @@ async function signIn(
   adminPassword: string
 ): Promise<void> {
   await page.goto(`${origin}/sign-in`, { waitUntil: "domcontentloaded" });
-  await page.getByLabel("Email").fill("admin@example.test");
-  await page.getByLabel("Password").fill(adminPassword);
-  await page.getByRole("button", { name: "Sign in" }).click();
+  await page.getByLabel("이메일").fill("admin@example.test");
+  await page.getByLabel("비밀번호").fill(adminPassword);
+  await page.getByRole("button", { name: "로그인" }).click();
   await page.waitForURL((url) => url.pathname === "/workspaces", { timeout: 15_000 });
 }
 

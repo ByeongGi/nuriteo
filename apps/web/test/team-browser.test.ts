@@ -57,6 +57,20 @@ const core = http.createServer(async (request, response) => {
   }
 
   if (request.method === "GET" && requestPath === "/api/v1/me") return json(response, currentUser(session));
+  if (request.method === "GET" && requestPath === "/api/v1/mfa") {
+    return json(response, {
+      localAccount: true,
+      enrolled: false,
+      pendingEnrollment: false,
+      recoveryCodesRemaining: 0,
+      policyMode: "off",
+      gracePeriodDays: 7,
+      required: false,
+      deadlineAt: null,
+      restricted: false,
+      notificationState: "none"
+    });
+  }
   if (request.method === "GET" && requestPath === `/api/v1/organizations/${organizationId}`) {
     response.setHeader("etag", '"org-v1"');
     return json(response, organization());
@@ -158,57 +172,61 @@ try {
     const teamsUrl = `${web.origin}/organizations/${organizationId}/teams`;
 
     await owner.goto(teamsUrl, { waitUntil: "networkidle" });
-    await owner.getByRole("heading", { level: 1, name: "Teams" }).waitFor();
+    try {
+      await owner.getByRole("heading", { level: 1, name: "팀과 프로젝트 권한" }).waitFor();
+    } catch (error) {
+      throw new Error(`Team page did not render. URL: ${owner.url()}\n${await owner.locator("body").innerText()}`, { cause: error });
+    }
     assert.equal(await owner.locator("html").getAttribute("data-theme-mode"), "light");
-    await owner.getByLabel("Slug").fill("platform");
-    await owner.getByLabel("Display name", { exact: true }).fill("Platform");
+    await owner.getByLabel("슬러그").fill("platform");
+    await owner.getByLabel("표시 이름", { exact: true }).fill("Platform");
     const [createResponse] = await Promise.all([
       owner.waitForResponse((candidate) => candidate.request().method() === "POST" && candidate.url().endsWith("/teams")),
-      owner.getByRole("button", { name: "Create Team" }).click()
+      owner.getByRole("button", { name: "팀 만들기" }).click()
     ]);
     assert.equal(createResponse.status(), 201);
     await owner.getByRole("heading", { level: 2, name: "Platform" }).waitFor();
     assert.equal(new URL(owner.url()).searchParams.get("team"), teamId);
 
-    await owner.getByLabel("Organization member").selectOption(memberId);
+    await owner.getByLabel("조직 멤버").selectOption(memberId);
     const [memberResponse] = await Promise.all([
       owner.waitForResponse((candidate) => candidate.request().method() === "POST" && candidate.url().endsWith("/members")),
-      owner.getByRole("button", { name: "Add member" }).click()
+      owner.getByRole("button", { name: "멤버 추가" }).click()
     ]);
     assert.equal(memberResponse.status(), 201);
-    await owner.getByRole("status").getByText("Team member added.").waitFor();
+    await owner.getByRole("status").getByText("팀 멤버를 추가했습니다.").waitFor();
 
     await owner.locator('select[name="projectId"]').selectOption(projectId);
     await owner.locator('select[name="role"]').last().selectOption("write");
     const [grantResponse] = await Promise.all([
       owner.waitForResponse((candidate) => candidate.request().method() === "POST" && candidate.url().endsWith("/project-roles")),
-      owner.getByRole("button", { name: "Grant access" }).click()
+      owner.getByRole("button", { name: "접근 권한 부여" }).click()
     ]);
     assert.equal(grantResponse.status(), 201);
-    await owner.getByRole("status").getByText("Project access granted to the Team.").waitFor();
+    await owner.getByRole("status").getByText("팀에 프로젝트 접근 권한을 부여했습니다.").waitFor();
 
-    await owner.getByRole("region", { name: "Profile" })
-      .getByLabel("Display name")
+    await owner.getByRole("region", { name: "팀 정보" })
+      .getByLabel("표시 이름")
       .fill("Platform Engineering");
     const [staleResponse] = await Promise.all([
       owner.waitForResponse((candidate) => candidate.request().method() === "PATCH" && candidate.url().endsWith(`/teams/${teamId}`)),
-      owner.getByRole("button", { name: "Save name" }).click()
+      owner.getByRole("button", { name: "이름 저장" }).click()
     ]);
     assert.equal(staleResponse.status(), 412);
-    await owner.getByRole("alert").getByText(/changed or the server outcome is unknown/u).waitFor();
-    await owner.getByRole("button", { name: "Reload latest Team" }).click();
+    await owner.getByRole("alert").getByText(/팀 정보가 변경되었거나 서버 처리 결과/u).waitFor();
+    await owner.getByRole("button", { name: "최신 팀 정보 불러오기" }).click();
     await owner.locator(".team-feedback").waitFor({ state: "detached" });
     await owner.getByRole("heading", { level: 2, name: "Platform" }).waitFor();
 
     await member.goto(`${teamsUrl}?team=${teamId}`, { waitUntil: "networkidle" });
     await member.getByRole("heading", { level: 2, name: "Platform" }).waitFor();
     assert.equal(await member.locator("html").getAttribute("data-theme-mode"), "dark");
-    await member.getByText("Your Team membership is read-only.", { exact: true }).waitFor();
-    await member.getByText("Only Organization Owners can change Team Project grants.", { exact: true }).waitFor();
-    assert.equal(await member.getByRole("button", { name: "Create Team" }).count(), 0);
-    assert.equal(await member.getByRole("button", { name: "Grant access" }).count(), 0);
+    await member.getByText("현재 팀 멤버십은 읽기 전용입니다.", { exact: true }).waitFor();
+    await member.getByText("조직 소유자만 팀의 프로젝트 역할을 변경할 수 있습니다.", { exact: true }).waitFor();
+    assert.equal(await member.getByRole("button", { name: "팀 만들기" }).count(), 0);
+    assert.equal(await member.getByRole("button", { name: "접근 권한 부여" }).count(), 0);
     assert.equal(await member.getByText("Atlas", { exact: true }).count(), 1);
-    assert.equal(await member.getByText("write", { exact: true }).count(), 1);
+    assert.equal(await member.getByText("쓰기", { exact: true }).count(), 1);
     assert.equal(memberEffectiveProjectReads, 1, "member Project projection must be authorized by the Team grant");
     assert.equal(
       await member.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),

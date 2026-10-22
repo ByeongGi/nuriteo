@@ -98,8 +98,8 @@ try {
     });
 
     await page.goto(`${applicationOrigin}/sign-in`, { waitUntil: "networkidle" });
-    await page.getByLabel("Email").fill(adminEmail);
-    await page.getByLabel("Password").fill(adminPassword);
+    await page.getByLabel("이메일").fill(adminEmail);
+    await page.getByLabel("비밀번호").fill(adminPassword);
     await page.getByRole("button", { name: "Sign in" }).click();
     await page.waitForURL(`${applicationOrigin}/workspaces`);
     await page.getByRole("heading", { name: "Workspaces", exact: true }).waitFor();
@@ -114,16 +114,16 @@ try {
     await page.getByRole("heading", { name: "GATE Runtime Project", exact: true }).waitFor();
     assert.match(page.url(), /[?&]project=[0-9a-f-]+/u);
 
-    await page.getByRole("button", { name: "Start workspace" }).click();
-    await page.getByRole("button", { name: "Run Preview" }).waitFor({ timeout: 30_000 });
+    await page.getByRole("button", { name: "템플릿으로 워크스페이스 시작" }).click();
+    await page.getByRole("button", { name: "미리보기 실행" }).waitFor({ timeout: 30_000 });
     await page.getByRole("button", { name: "src/message.ts" }).click();
-    assert.equal(await page.getByLabel("Editor for src/message.ts").isEditable(), true);
+    assert.equal(await page.getByLabel("src/message.ts 편집기").isEditable(), true);
     const workerAfterMount = await page.evaluate(() => ({ ...window.__nuriteoGateWorkerProbe }));
     assert.equal(workerAfterMount.created, 2, "production Runtime must start its system and process Workers");
     assert.equal(workerAfterMount.active, 2);
 
-    await page.getByRole("button", { name: "Run Preview" }).click();
-    const previewRegion = page.getByRole("region", { name: "Preview" });
+    await page.getByRole("button", { name: "미리보기 실행" }).click();
+    const previewRegion = page.getByRole("region", { name: "미리보기" });
     await previewRegion.locator("iframe").waitFor({ timeout: 30_000 });
     const firstPreviewUrl = await previewRegion.getAttribute("data-preview-url");
     assert(firstPreviewUrl);
@@ -135,10 +135,10 @@ try {
     assert.equal(await firstFrame.evaluate(() => globalThis.crossOriginIsolated), true);
     assert.equal(await firstFrame.evaluate(() => navigator.serviceWorker.controller?.scriptURL.endsWith("/runtime-preview/sw.js")), true);
 
-    const editor = page.getByLabel("Editor for src/message.ts");
+    const editor = page.getByLabel("src/message.ts 편집기");
     await editor.fill('export const label = "GATE003 edited";\n');
-    await page.getByRole("button", { name: "Apply to Local Draft" }).click();
-    await page.getByText("Local Draft saved · HMR applied", { exact: false }).waitFor({ timeout: 10_000 });
+    await page.getByRole("button", { name: "로컬 초안에 적용" }).click();
+    await page.getByText("로컬 초안 저장됨 · HMR 적용됨", { exact: false }).waitFor({ timeout: 10_000 });
     await firstFrame.getByRole("button", { name: "GATE003 edited:1" }).waitFor({ timeout: 20_000 });
 
     const firstWorkerVersion = await waitForWorkerVersion(workerVersions, firstPreviewOrigin);
@@ -150,28 +150,28 @@ try {
     assert.equal(staleAfterFailureResponse?.status(), 410, "failed Preview relay must not expose its stale signed host");
     await staleAfterFailure.close();
 
-    await page.getByRole("button", { name: "Stop workspace" }).click();
+    await page.getByRole("button", { name: "워크스페이스 종료" }).click();
     if (await page.getByRole("button", { name: "초안을 버리고 종료" }).count()) await page.getByRole("button", { name: "초안을 버리고 종료" }).click();
-    await page.getByRole("button", { name: "Start workspace" }).waitFor({ timeout: 10_000 });
+    await page.getByRole("button", { name: "템플릿으로 워크스페이스 시작" }).waitFor({ timeout: 10_000 });
     await page.waitForFunction(() => window.__nuriteoGateWorkerProbe.active === 0);
-    await page.getByRole("button", { name: "Start workspace" }).click();
-    await page.getByRole("button", { name: "Run Preview" }).waitFor({ timeout: 30_000 });
+    await page.getByRole("button", { name: "템플릿으로 워크스페이스 시작" }).click();
+    await page.getByRole("button", { name: "미리보기 실행" }).waitFor({ timeout: 30_000 });
     await page.getByRole("button", { name: "src/message.ts" }).click();
-    await page.getByRole("button", { name: "Run Preview" }).click();
+    await page.getByRole("button", { name: "미리보기 실행" }).click();
     await previewRegion.locator("iframe").waitFor({ timeout: 30_000 });
     const recoveredPreviewUrl = await previewRegion.getAttribute("data-preview-url");
     assert(recoveredPreviewUrl && recoveredPreviewUrl !== firstPreviewUrl, "user recovery must issue a fresh signed host");
     const recoveredPreviewOrigin = new URL(recoveredPreviewUrl).origin;
     const recoveredFrame = await waitForFrame(page, recoveredPreviewOrigin, { previewResponses, requestFailures });
     await recoveredFrame.getByRole("button", { name: /:1$/u }).waitFor({ timeout: 20_000 });
-    const recoveredEditor = page.getByLabel("Editor for src/message.ts");
+    const recoveredEditor = page.getByLabel("src/message.ts 편집기");
     await recoveredEditor.fill('export const label = "GATE003 recovered";\n');
-    await page.getByRole("button", { name: "Apply to Local Draft" }).click();
+    await page.getByRole("button", { name: "로컬 초안에 적용" }).click();
     await recoveredFrame.getByRole("button", { name: "GATE003 recovered:1" }).waitFor({ timeout: 20_000 });
 
-    await page.getByRole("button", { name: "Stop workspace" }).click();
+    await page.getByRole("button", { name: "워크스페이스 종료" }).click();
     if (await page.getByRole("button", { name: "초안을 버리고 종료" }).count()) await page.getByRole("button", { name: "초안을 버리고 종료" }).click();
-    await page.getByRole("button", { name: "Start workspace" }).waitFor({ timeout: 10_000 });
+    await page.getByRole("button", { name: "템플릿으로 워크스페이스 시작" }).waitFor({ timeout: 10_000 });
     await page.waitForFunction(() => window.__nuriteoGateWorkerProbe.active === 0);
     assert.equal(await previewRegion.locator("iframe").count(), 0);
     await waitForStatus(context, recoveredPreviewUrl, 410);

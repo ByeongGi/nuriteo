@@ -106,6 +106,20 @@ const core = http.createServer(async (request, response) => {
   if (request.method === "GET" && requestPath === "/api/v1/me") {
     return sendJson(response, currentUser(session));
   }
+  if (request.method === "GET" && requestPath === "/api/v1/mfa") {
+    return sendJson(response, {
+      localAccount: true,
+      enrolled: false,
+      pendingEnrollment: false,
+      recoveryCodesRemaining: 0,
+      policyMode: "off",
+      gracePeriodDays: 7,
+      required: false,
+      deadlineAt: null,
+      restricted: false,
+      notificationState: "none"
+    });
+  }
   if (request.method === "GET" && requestPath === "/api/v1/me/workspaces") {
     return sendJson(response, { workspaces: workspaces(session) });
   }
@@ -276,11 +290,11 @@ try {
     ]);
     const adminPage = await admin.newPage();
     await adminPage.goto(`${publicOrigin}/admin/invitations`, { waitUntil: "networkidle" });
-    await adminPage.getByLabel("Invitee email").fill("mail-queued@example.test");
-    await adminPage.getByRole("button", { name: "Issue invitation" }).click();
-    await adminPage.getByRole("status").filter({ hasText: "activation email is queued" }).waitFor();
+    await adminPage.getByLabel("초대받을 이메일").fill("mail-queued@example.test");
+    await adminPage.getByRole("button", { name: "초대 발급" }).click();
+    await adminPage.getByRole("status").filter({ hasText: "활성화 이메일을 전송 대기열" }).waitFor();
     assert.equal(await adminPage.locator("output").count(), 0);
-    await adminPage.getByLabel("Invitee email").fill("invitee@example.test");
+    await adminPage.getByLabel("초대받을 이메일").fill("invitee@example.test");
     await adminPage.locator("form").evaluate((form: HTMLFormElement) => {
       form.requestSubmit();
       form.requestSubmit();
@@ -290,7 +304,7 @@ try {
     assert.equal(activationIssueCount, 1);
     const activationUrl = await activationOutput.textContent();
     assert.ok(activationUrl?.includes("/activate?token=nrt_inv_"));
-    await adminPage.getByRole("button", { name: "Clear link" }).click();
+    await adminPage.getByRole("button", { name: "링크 지우기" }).click();
     assert.equal(await adminPage.locator("output").count(), 0);
 
     const invitee = await browser.newContext();
@@ -303,10 +317,10 @@ try {
     });
     journeyStage = "activate-invitee";
     await inviteePage.goto(activationUrl!, { waitUntil: "networkidle" });
-    await inviteePage.getByLabel("Email").fill("invitee@example.test");
-    await inviteePage.getByLabel("Display name").fill("Invited Teammate");
-    await inviteePage.getByLabel("Password").fill("correct horse battery staple");
-    await inviteePage.getByRole("button", { name: "Activate account" }).click();
+    await inviteePage.getByLabel("이메일").fill("invitee@example.test");
+    await inviteePage.getByLabel("표시 이름").fill("Invited Teammate");
+    await inviteePage.getByLabel("비밀번호").fill("correct horse battery staple");
+    await inviteePage.getByRole("button", { name: "계정 활성화" }).click();
     await Promise.race([
       inviteePage.waitForURL("**/sign-in?activated=1"),
       inviteePage.locator(".form-error").waitFor().then(async () => {
@@ -315,38 +329,62 @@ try {
     ]);
     assert.equal(inviteePage.url().includes("token="), false);
     journeyStage = "authenticate-invitee";
-    await inviteePage.getByLabel("Email").fill("invitee@example.test");
-    await inviteePage.getByLabel("Password").fill("correct horse battery staple");
-    await inviteePage.getByRole("button", { name: "Sign in" }).click();
+    await inviteePage.getByLabel("이메일").fill("invitee@example.test");
+    await inviteePage.getByLabel("비밀번호").fill("correct horse battery staple");
+    await inviteePage.getByRole("button", { name: "로그인" }).click();
     await inviteePage.waitForURL("**/workspaces");
     await inviteePage.getByText("Invitee Personal", { exact: true }).waitFor();
     assert.equal(await inviteePage.getByText("Alpha Organization", { exact: true }).count(), 0);
     await inviteePage.goto(`${publicOrigin}/admin/invitations`, { waitUntil: "networkidle" });
-    await inviteePage.getByRole("heading", { name: "Administrator access required" }).waitFor();
+    await inviteePage.getByRole("heading", { name: "관리자 권한이 필요합니다" }).waitFor();
 
-    journeyStage = "create-organization";
+    journeyStage = "create-organization-open";
     await adminPage.goto(`${publicOrigin}/organizations`, { waitUntil: "networkidle" });
-    await adminPage.getByLabel("Slug").fill("alpha");
-    await adminPage.getByLabel("Display name").fill("Alpha Organization");
-    await adminPage.getByRole("button", { name: "Create Organization" }).click();
-    await waitForCondition(() => organizationCreated);
-    try {
-      await adminPage.waitForURL(`**/organizations?organization=${organizationId}`);
-    } catch {
-      throw new Error(`Organization was created but navigation was not rendered: ${adminPage.url()} ${await adminPage.locator("body").innerText()}`);
+    journeyStage = "create-organization-form";
+    await adminPage.getByLabel("조직 주소").fill("alpha");
+    await adminPage.getByLabel("조직 이름").fill("Alpha Organization");
+    journeyStage = "create-organization-submit";
+    const [organizationResponse] = await Promise.all([
+      adminPage.waitForResponse((response) => response.request().method() === "POST" && response.url().endsWith("/api/v1/organizations")),
+      adminPage.getByRole("button", { name: "조직 만들기" }).click()
+    ]);
+    if (organizationResponse.status() !== 201) journeyStage = "create-organization-response-status";
+    assert.equal(organizationResponse.status(), 201);
+    if (organizationResponse.headers().location !== `/api/v1/organizations/${organizationId}`) {
+      journeyStage = "create-organization-response-location";
     }
-    assert.equal(await adminPage.getByRole("heading", { name: "Invite member" }).count(), 1);
-    await adminPage.getByLabel("Display name").fill("Alpha Organization Renamed");
-    await adminPage.getByRole("button", { name: "Save name" }).click();
-    await adminPage.getByRole("alert").filter({ hasText: "Reload the latest version" }).waitFor();
+    assert.equal(organizationResponse.headers().location, `/api/v1/organizations/${organizationId}`);
+    await waitForCondition(() => organizationCreated);
+    journeyStage = "create-organization-navigation";
+    try {
+      await adminPage.waitForURL(
+        new RegExp(`/organizations\\?organization=${organizationId}$`, "u"),
+        { waitUntil: "domcontentloaded", timeout: 15_000 }
+      );
+    } catch (error) {
+      throw new Error(`Organization was created but navigation was not rendered: ${adminPage.url()}`, { cause: error });
+    }
+    assert.equal(adminPage.url(), `${publicOrigin}/organizations?organization=${organizationId}`);
+    try {
+      await adminPage.getByRole("heading", { name: "멤버 초대" }).waitFor();
+    } catch (error) {
+      journeyStage = "create-organization-view-missing";
+      journeyStage = (await adminPage.getByText("Organizations are temporarily unavailable", { exact: true }).count()) > 0
+        ? "create-organization-unavailable"
+        : "create-organization-view-missing";
+      throw new Error(`Organization navigation did not render the management view: ${adminPage.url()} ${await adminPage.locator("body").innerText()}`, { cause: error });
+    }
+    await adminPage.getByLabel("조직 이름").fill("Alpha Organization Renamed");
+    await adminPage.getByRole("button", { name: "이름 저장" }).click();
+    await adminPage.getByRole("alert").filter({ hasText: "최신 버전을 불러온 뒤" }).waitFor();
     assert.equal(observedIfMatch, '"org-v1"');
     journeyStage = "validate-invitation-form";
-    const inviteeEmail = adminPage.getByLabel("Invitee email");
+    const inviteeEmail = adminPage.getByLabel("초대할 이메일");
     assert.equal(await inviteeEmail.getAttribute("type"), "text");
     assert.equal(await inviteeEmail.getAttribute("inputmode"), "email");
     assert.equal(await inviteeEmail.evaluate((input: HTMLInputElement) => input.maxLength), -1);
     assert.equal(await inviteeEmail.getAttribute("aria-describedby"), "organization-invitation-email-help");
-    await adminPage.getByText("Enter the existing account email using 3 to 320 Unicode characters.", { exact: true }).waitFor();
+    await adminPage.getByText("기존 누리터 계정에 사용하는 이메일을 입력하세요.", { exact: true }).waitFor();
     assert.equal(await adminPage.getByLabel("Invitee user ID").count(), 0);
 
     const legacyStatus = await adminPage.evaluate(async ({ csrfToken: csrf, inviteeId: userId, organizationId: id }) => {
@@ -380,7 +418,7 @@ try {
           : `x${String.fromCharCode(1)}@example.test`;
         input.form?.requestSubmit();
       }, invalidKind);
-      await adminPage.getByRole("alert").filter({ hasText: "The request could not be completed" }).waitFor();
+      await adminPage.getByRole("alert").filter({ hasText: "요청을 완료하지 못했습니다" }).waitFor();
       await adminPage.waitForTimeout(25);
       assert.equal(invitationBffRequestCount, requestsBefore);
       assert.equal(organizationIssueCount, 0);
@@ -390,62 +428,62 @@ try {
     journeyStage = "validate-unavailable-invitations";
     for (const unicodeEmail of [bmpUnicodeEmail, astralUnicodeEmail]) {
       const requestsBefore = invitationBffRequestCount;
-      await adminPage.getByLabel("Invitee email").fill(unicodeEmail);
-      await adminPage.getByRole("button", { name: "Issue Organization invitation" }).click();
+      await adminPage.getByLabel("초대할 이메일").fill(unicodeEmail);
+      await adminPage.getByRole("button", { name: "초대 발급" }).click();
       await waitForCondition(() => observedUnavailableEmails.includes(unicodeEmail));
-      await adminPage.getByRole("alert").filter({ hasText: "unavailable, already invited, or already a member" }).waitFor();
+      await adminPage.getByRole("alert").filter({ hasText: "사용할 수 없는 계정이거나 이미 초대 또는 참여한 계정" }).waitFor();
       assert.equal(invitationBffRequestCount, requestsBefore + 1);
       assert.equal(organizationIssueCount, 0);
       await adminPage.reload({ waitUntil: "networkidle" });
     }
 
-    await adminPage.getByLabel("Invitee email").fill("unavailable@example.test");
-    await adminPage.getByRole("button", { name: "Issue Organization invitation" }).click();
-    const unavailableError = adminPage.getByRole("alert").filter({ hasText: "unavailable, already invited, or already a member" });
+    await adminPage.getByLabel("초대할 이메일").fill("unavailable@example.test");
+    await adminPage.getByRole("button", { name: "초대 발급" }).click();
+    const unavailableError = adminPage.getByRole("alert").filter({ hasText: "사용할 수 없는 계정이거나 이미 초대 또는 참여한 계정" });
     await unavailableError.waitFor();
     assert.equal((await unavailableError.textContent())?.includes("unavailable@example.test"), false);
     assert.equal(organizationIssueCount, 0);
 
-    await adminPage.getByLabel("Invitee email").fill("mail-queued@example.test");
-    await adminPage.getByRole("button", { name: "Issue Organization invitation" }).click();
-    await adminPage.getByRole("status").filter({ hasText: "invitation email is queued" }).waitFor();
+    await adminPage.getByLabel("초대할 이메일").fill("mail-queued@example.test");
+    await adminPage.getByRole("button", { name: "초대 발급" }).click();
+    await adminPage.getByRole("status").filter({ hasText: "조직 초대 이메일을 전송 대기열" }).waitFor();
     assert.equal(await adminPage.locator("output").count(), 0);
     assert.equal(organizationIssueCount, 0);
 
     journeyStage = "issue-and-revoke-invitation";
-    await adminPage.getByLabel("Invitee email").fill("Invitee@Example.Test");
-    await adminPage.getByRole("button", { name: "Issue Organization invitation" }).click();
+    await adminPage.getByLabel("초대할 이메일").fill("Invitee@Example.Test");
+    await adminPage.getByRole("button", { name: "초대 발급" }).click();
     let invitationUrl = await visibleOneTimeUrl(adminPage);
     await waitForCondition(() => organizationIssueCount === 1);
-    assert.equal(await adminPage.getByLabel("Invitee email").inputValue(), "");
+    assert.equal(await adminPage.getByLabel("초대할 이메일").inputValue(), "");
     await adminPage.reload({ waitUntil: "networkidle" });
-    await adminPage.getByRole("button", { name: "Reissue" }).click();
+    await adminPage.getByRole("button", { name: "다시 발급" }).click();
     const reissuedUrl = await visibleOneTimeUrl(adminPage);
     assert.notEqual(reissuedUrl, invitationUrl);
     const revokedUrl = reissuedUrl;
     await waitForCondition(() => organizationReissueCount === 1);
     await adminPage.reload({ waitUntil: "networkidle" });
-    await adminPage.getByText(/superseded · expires/u).waitFor();
-    const pendingInvitation = adminPage.getByRole("list", { name: "Organization invitations" }).locator("li").filter({ hasText: "pending" });
-    await pendingInvitation.getByRole("button", { name: "Revoke" }).click();
+    await adminPage.getByText(/교체됨 · .* 만료/u).waitFor();
+    const pendingInvitation = adminPage.getByRole("list", { name: "조직 초대" }).locator("li").filter({ hasText: "전달 대기" });
+    await pendingInvitation.getByRole("button", { name: "취소" }).click();
     await waitForCondition(() => organizationRevokeCount === 1);
     await adminPage.reload({ waitUntil: "networkidle" });
-    await adminPage.getByText(/revoked · expires/u).waitFor();
+    await adminPage.getByText(/취소됨 · .* 만료/u).waitFor();
 
     journeyStage = "validate-revoked-invitation";
     await inviteePage.goto(revokedUrl, { waitUntil: "networkidle" });
-    const revokedAccept = inviteePage.getByRole("button", { name: "Accept invitation" });
+    const revokedAccept = inviteePage.getByRole("button", { name: "초대 수락" });
     if (await revokedAccept.count() !== 1) {
       throw new Error(`revoked invitation page did not render: ${inviteePage.url()} ${await inviteePage.locator("body").innerText()}`);
     }
     await revokedAccept.click();
-    const terminalError = inviteePage.getByRole("alert").filter({ hasText: "expired, used, revoked, or replaced" });
+    const terminalError = inviteePage.getByRole("alert").filter({ hasText: "더 이상 사용할 수 없습니다" });
     await terminalError.waitFor();
     assert.equal((await terminalError.textContent())?.includes("nrt_org_inv_"), false);
 
     journeyStage = "validate-malformed-terminal-responses";
-    await adminPage.getByLabel("Invitee email").fill("invitee@example.test");
-    await adminPage.getByRole("button", { name: "Issue Organization invitation" }).click();
+    await adminPage.getByLabel("초대할 이메일").fill("invitee@example.test");
+    await adminPage.getByRole("button", { name: "초대 발급" }).click();
     const malformedUrl = await visibleOneTimeUrl(adminPage);
     await waitForCondition(() => organizationIssueCount === 2);
 
@@ -453,76 +491,74 @@ try {
     await inviteePage.goto(malformedUrl, { waitUntil: "networkidle" });
     await Promise.all([
       inviteePage.waitForResponse((response) => response.url().endsWith("/api/v1/me/organization-invitations/accept")),
-      inviteePage.getByRole("button", { name: "Accept invitation" }).click()
+      inviteePage.getByRole("button", { name: "초대 수락" }).click()
     ]);
-    await inviteePage.getByRole("alert").filter({ hasText: "The request could not be completed" }).waitFor();
+    await inviteePage.getByRole("alert").filter({ hasText: "요청을 완료하지 못했습니다" }).waitFor();
     assert.equal(inviteePage.url(), malformedUrl);
     await inviteePage.goto(`${publicOrigin}/workspaces`, { waitUntil: "networkidle" });
     assert.equal(await inviteePage.getByText("Alpha Organization", { exact: true }).count(), 0);
-    assert.equal(await inviteePage.getByText("Organization invitation accepted", { exact: false }).count(), 0);
+    assert.equal(await inviteePage.getByText("조직 초대를 수락했습니다", { exact: false }).count(), 0);
 
     malformedDeclineOnce = true;
     await inviteePage.goto(malformedUrl, { waitUntil: "networkidle" });
     await Promise.all([
       inviteePage.waitForResponse((response) => response.url().endsWith("/api/v1/me/organization-invitations/decline")),
-      inviteePage.getByRole("button", { name: "Decline" }).click()
+      inviteePage.getByRole("button", { name: "거절" }).click()
     ]);
-    await inviteePage.getByRole("alert").filter({ hasText: "The request could not be completed" }).waitFor();
+    await inviteePage.getByRole("alert").filter({ hasText: "요청을 완료하지 못했습니다" }).waitFor();
     assert.equal(inviteePage.url(), malformedUrl);
     await inviteePage.goto(`${publicOrigin}/workspaces`, { waitUntil: "networkidle" });
     assert.equal(await inviteePage.getByText("Alpha Organization", { exact: true }).count(), 0);
-    assert.equal(await inviteePage.getByText("Organization invitation declined", { exact: false }).count(), 0);
+    assert.equal(await inviteePage.getByText("조직 초대를 거절했습니다", { exact: false }).count(), 0);
 
     await adminPage.reload({ waitUntil: "networkidle" });
-    const malformedPending = adminPage.getByRole("list", { name: "Organization invitations" }).locator("li").filter({ hasText: "pending" });
-    await malformedPending.getByRole("button", { name: "Revoke" }).click();
+    const malformedPending = adminPage.getByRole("list", { name: "조직 초대" }).locator("li").filter({ hasText: "전달 대기" });
+    await malformedPending.getByRole("button", { name: "취소" }).click();
     await waitForCondition(() => organizationRevokeCount === 2);
     await adminPage.reload({ waitUntil: "networkidle" });
 
     journeyStage = "decline-issue";
-    await adminPage.getByLabel("Invitee email").fill("invitee@example.test");
-    await adminPage.getByRole("button", { name: "Issue Organization invitation" }).click();
+    await adminPage.getByLabel("초대할 이메일").fill("invitee@example.test");
+    await adminPage.getByRole("button", { name: "초대 발급" }).click();
     const declineUrl = await visibleOneTimeUrl(adminPage);
     await waitForCondition(() => organizationIssueCount === 3);
     journeyStage = "decline-open";
     await inviteePage.goto(declineUrl, { waitUntil: "networkidle" });
     journeyStage = "decline-submit";
-    await inviteePage.getByRole("button", { name: "Decline" }).click();
+    await inviteePage.getByRole("button", { name: "거절" }).click();
     await inviteePage.waitForURL("**/workspaces?invitation=declined");
     assert.equal(inviteePage.url().includes("token="), false);
     journeyStage = "decline-workspace";
-    await inviteePage.getByRole("status").filter({ hasText: "Organization invitation declined" }).waitFor();
+    await inviteePage.getByRole("status").filter({ hasText: "조직 초대를 거절했습니다" }).waitFor();
     assert.equal(await inviteePage.getByText("Alpha Organization", { exact: true }).count(), 0);
 
     journeyStage = "accept-invitation";
-    await adminPage.getByLabel("Invitee email").fill("invitee@example.test");
-    await adminPage.getByRole("button", { name: "Issue Organization invitation" }).click();
+    await adminPage.getByLabel("초대할 이메일").fill("invitee@example.test");
+    await adminPage.getByRole("button", { name: "초대 발급" }).click();
     invitationUrl = await visibleOneTimeUrl(adminPage);
     await waitForCondition(() => organizationIssueCount === 4);
     await inviteePage.goto(invitationUrl, { waitUntil: "networkidle" });
-    await inviteePage.getByRole("button", { name: "Accept invitation" }).click();
-    await inviteePage.waitForURL("**/workspaces?joined=1");
+    await inviteePage.getByRole("button", { name: "초대 수락" }).click();
+    journeyStage = "accept-navigation";
+    await inviteePage.waitForURL(/\/workspaces\?joined=1$/u);
     assert.equal(inviteePage.url().includes("token="), false);
-    await inviteePage.getByRole("status").filter({ hasText: "Organization invitation accepted" }).waitFor();
+    journeyStage = "accept-status";
+    await inviteePage.getByRole("status").filter({ hasText: "조직 초대를 수락했습니다" }).waitFor();
+    journeyStage = "accept-workspaces";
     await inviteePage.getByText("Invitee Personal", { exact: true }).waitFor();
-    const selector = inviteePage.getByRole("navigation", { name: "Available Workspaces" });
-    const shared = selector.getByRole("link", { name: /Alpha Organization Organization Workspace/u });
-    await shared.waitFor();
-    await Promise.all([
-      inviteePage.waitForURL("**/workspaces?workspace=0199ee6c-c777-7000-8000-000000009202"),
-      shared.click()
-    ]);
-    assert.equal(await shared.getAttribute("aria-current"), "page");
+    const shared = inviteePage.getByRole("article").filter({ hasText: "Alpha Organization" });
+    await shared.getByText("조직 워크스페이스", { exact: true }).waitFor();
+    assert.match(await shared.getByRole("link", { name: "프로젝트 열기" }).getAttribute("href") ?? "", /workspace=0199ee6c-c777-7000-8000-000000009202/u);
     await inviteePage.goto(`${publicOrigin}/organizations?organization=${organizationId}`, {
       waitUntil: "networkidle"
     });
-    await inviteePage.getByText("Member access is read-only. The server enforces every mutation.").waitFor();
-    assert.equal(await inviteePage.getByRole("heading", { name: "Invite member" }).count(), 0);
+    await inviteePage.getByText("멤버 권한에서는 조직 정보를 조회할 수만 있습니다.").waitFor();
+    assert.equal(await inviteePage.getByRole("heading", { name: "멤버 초대" }).count(), 0);
 
     journeyStage = "mutate-member";
     await adminPage.goto(`${publicOrigin}/organizations?organization=${organizationId}`, { waitUntil: "networkidle" });
     const inviteeMember = adminPage.locator(".record-list li").filter({ hasText: "Invited Teammate" });
-    await inviteeMember.getByRole("button", { name: "Make owner" }).click();
+    await inviteeMember.getByRole("button", { name: "소유자로 변경" }).click();
     try {
       await waitForCondition(() => memberRoleChangeCount === 1);
     } catch {
@@ -530,11 +566,11 @@ try {
     }
     await adminPage.reload({ waitUntil: "networkidle" });
     const updatedInviteeMember = adminPage.locator(".record-list li").filter({ hasText: "Invited Teammate" });
-    const makeMember = updatedInviteeMember.getByRole("button", { name: "Make member" });
+    const makeMember = updatedInviteeMember.getByRole("button", { name: "멤버로 변경" });
     if (await makeMember.count() !== 1) {
       throw new Error(`member role mutation was not rendered: ${adminPage.url()} ${await adminPage.locator("body").innerText()}`);
     }
-    await updatedInviteeMember.getByRole("button", { name: "Remove" }).click();
+    await updatedInviteeMember.getByRole("button", { name: "제외" }).click();
     await waitForCondition(() => memberDeleteCount === 1);
     await adminPage.reload({ waitUntil: "networkidle" });
     await adminPage.getByText("Invited Teammate", { exact: true }).waitFor({ state: "detached" });
@@ -562,11 +598,21 @@ console.log("web collaboration browser journey ok");
 type Session = "admin" | "invitee";
 type CollaborationJourneyStage =
   | "accept-invitation"
+  | "accept-navigation"
+  | "accept-status"
+  | "accept-workspaces"
   | "activate-invitee"
   | "authenticate-invitee"
   | "bootstrap-admin"
   | "close-contexts"
-  | "create-organization"
+  | "create-organization-form"
+  | "create-organization-navigation"
+  | "create-organization-open"
+  | "create-organization-response-location"
+  | "create-organization-response-status"
+  | "create-organization-submit"
+  | "create-organization-unavailable"
+  | "create-organization-view-missing"
   | "decline-issue"
   | "decline-open"
   | "decline-submit"

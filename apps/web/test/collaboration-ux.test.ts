@@ -92,20 +92,20 @@ function testSecretSafeFailureCategories() {
 }
 
 function testSafeErrorClassification() {
-  assert.match(collaborationError(new ApiError(412, "safe", undefined), "organization-profile"), /Reload/u);
-  assert.match(collaborationError(new ApiError(410, "safe", undefined), "organization-invitation-terminal"), /expired, used, revoked/u);
-  assert.match(collaborationError(apiValidationError("invitation"), "activation-invitation-terminal"), /expired, used, revoked/u);
-  assert.match(collaborationError(apiValidationError("token"), "activation-invitation-terminal"), /expired, used, revoked/u);
-  assert.match(collaborationError(apiValidationError("email"), "activation-invitation-terminal"), /submitted values are invalid/u);
-  assert.match(collaborationError(apiValidationError("password"), "activation-invitation-terminal"), /submitted values are invalid/u);
-  assert.match(collaborationError(new ApiError(409, "safe", undefined), "organization-create"), /slug is already in use/u);
-  assert.match(collaborationError(new ApiError(409, "safe", undefined), "organization-member"), /last Organization Owner/u);
-  assert.match(collaborationError(new ApiError(422, "safe", undefined), "organization-create"), /submitted values are invalid/u);
-  assert.match(collaborationError(new ApiError(422, "safe", undefined), "organization-invitation-issue"), /submitted values are invalid/u);
+  assert.match(collaborationError(new ApiError(412, "safe", undefined), "organization-profile"), /최신 버전을 불러온 뒤/u);
+  assert.match(collaborationError(new ApiError(410, "safe", undefined), "organization-invitation-terminal"), /만료되었거나 이미 사용·취소·교체/u);
+  assert.match(collaborationError(apiValidationError("invitation"), "activation-invitation-terminal"), /만료되었거나 이미 사용·취소·교체/u);
+  assert.match(collaborationError(apiValidationError("token"), "activation-invitation-terminal"), /만료되었거나 이미 사용·취소·교체/u);
+  assert.match(collaborationError(apiValidationError("email"), "activation-invitation-terminal"), /입력값이 올바르지 않습니다/u);
+  assert.match(collaborationError(apiValidationError("password"), "activation-invitation-terminal"), /입력값이 올바르지 않습니다/u);
+  assert.match(collaborationError(new ApiError(409, "safe", undefined), "organization-create"), /이미 사용 중인 조직 주소/u);
+  assert.match(collaborationError(new ApiError(409, "safe", undefined), "organization-member"), /마지막 조직 소유자/u);
+  assert.match(collaborationError(new ApiError(422, "safe", undefined), "organization-create"), /입력값이 올바르지 않습니다/u);
+  assert.match(collaborationError(new ApiError(422, "safe", undefined), "organization-invitation-issue"), /입력값이 올바르지 않습니다/u);
   const unavailable = collaborationError(new ApiError(404, "safe", undefined), "organization-invitation-issue");
   const duplicate = collaborationError(new ApiError(409, "safe", undefined), "organization-invitation-issue");
   assert.equal(unavailable, duplicate);
-  assert.match(unavailable, /unavailable, already invited, or already a member/u);
+  assert.match(unavailable, /사용할 수 없는 계정이거나 이미 초대 또는 참여한 계정/u);
   assert.doesNotMatch(unavailable, /member@example\.test|user ID|UUID/u);
   assert.doesNotMatch(collaborationError(new Error("token=nrt_org_inv_secret"), "organization-invitation-terminal"), /secret|token/u);
   assert.equal(uuidPathSegment("0199ee6c-c777-7000-8000-000000005001"), "0199ee6c-c777-7000-8000-000000005001");
@@ -374,7 +374,7 @@ function jsonRequest(signal?: AbortSignal): Request {
 
 function testUxSourceContracts() {
   const activation = read("src/app/activate/activation-form.tsx");
-  const admin = read("src/app/(authenticated)/admin/invitations/activation-invitations.tsx");
+  const admin = read("src/app/(admin)/admin/invitations/activation-invitations.tsx");
   const organizations = read("src/app/(authenticated)/organizations/organization-console.tsx");
   const accept = read("src/app/(authenticated)/organization-invitations/accept/accept-invitation.tsx");
   const organizationPage = read("src/app/(authenticated)/organizations/page.tsx");
@@ -383,7 +383,7 @@ function testUxSourceContracts() {
   assert.match(activation, /router\.replace\("\/sign-in\?activated=1"\)/u);
   assert.match(admin, /activationUrl\.consume\(\)/u);
   assert.match(admin, /delivery === "email_queued"/u);
-  assert.match(admin, /queued for delivery/u);
+  assert.match(admin, /전송 대기열에 추가했습니다/u);
   assert.match(organizations, /acceptUrl\.consume\(\)/u);
   assert.match(organizations, /delivery === "email_queued"/u);
   assert.match(organizations, /name="email" type="text" inputMode="email"/u);

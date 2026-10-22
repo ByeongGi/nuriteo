@@ -9,14 +9,23 @@ const SAFE_REQUEST_ID = /^[A-Za-z0-9._:-]{1,128}$/u;
 export type SignInFailureKind = "invalid-credentials" | "service-unavailable";
 
 export function isExplicitlySignedOut(error: unknown): boolean {
-  return error instanceof ApiError && (error.status === 401 || error.status === 403);
+  const status = httpStatusFrom(error);
+  return status === 401 || status === 403;
 }
 
 export function classifySignInFailure(error: unknown): SignInFailureKind {
-  if (error instanceof ApiError && [400, 401, 403, 422].includes(error.status)) {
+  const status = httpStatusFrom(error);
+  if (status !== undefined && [400, 401, 403, 422].includes(status)) {
     return "invalid-credentials";
   }
   return "service-unavailable";
+}
+
+function httpStatusFrom(error: unknown): number | undefined {
+  if (error instanceof ApiError) return error.status;
+  if (typeof error !== "object" || error === null || !("status" in error)) return undefined;
+  const status = error.status;
+  return typeof status === "number" && Number.isInteger(status) ? status : undefined;
 }
 
 export function safeRequestReference(error: unknown): string | undefined {

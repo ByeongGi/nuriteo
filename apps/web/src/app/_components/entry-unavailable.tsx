@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { ProductEntryShell } from "./product-entry-shell.tsx";
+import { ProductEntryShell } from "#src/app/_components/product-entry-shell.tsx";
 
 interface EntryUnavailableProps {
   readonly description: string;
@@ -22,10 +22,10 @@ export function EntryUnavailable({
       title={title}
       titleId="entry-error-title"
     >
-        {reference ? <p className="entry-reference">Request reference: {reference}</p> : null}
-        <Link className="link-button" href={retryHref}>
-          Try again
-        </Link>
+      {reference ? <p className="entry-reference">요청 참조: {reference}</p> : null}
+      <Link className="link-button" href={retryHref}>
+        다시 시도
+      </Link>
     </ProductEntryShell>
   );
 }

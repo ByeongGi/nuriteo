@@ -2,9 +2,9 @@ import "server-only";
 
 import fs from "node:fs";
 
-import { resolvePreviewOriginConfiguration } from "../../runtime/preview-origin-contract.ts";
-import type { PreviewOriginConfiguration } from "../../runtime/preview-origin-contract.ts";
-import { validPreviewSigningKey } from "./signed-binding.ts";
+import { resolvePreviewOriginConfiguration } from "#src/runtime/preview-origin-contract.ts";
+import type { PreviewOriginConfiguration } from "#src/runtime/preview-origin-contract.ts";
+import { validPreviewSigningKey } from "#src/lib/preview/signed-binding.ts";
 
 export function previewOriginConfiguration(): PreviewOriginConfiguration {
   const configuration = resolvePreviewOriginConfiguration(process.env);

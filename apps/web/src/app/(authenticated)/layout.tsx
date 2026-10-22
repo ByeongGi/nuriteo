@@ -1,33 +1,45 @@
 import { getCurrentUser, getMfaStatus, listNotifications } from "@nuriteo/api-client";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { Suspense } from "react";
 import type { ReactNode } from "react";
 
-import { EntryUnavailable } from "../_components/entry-unavailable.tsx";
+import { EntryUnavailable } from "#src/app/_components/entry-unavailable.tsx";
 import {
   isExplicitlySignedOut,
   safeRequestReference
-} from "../../lib/api/presentation-error.ts";
-import { createServerApiClient } from "../../lib/api/server-client.ts";
-import { parseThemeMode, THEME_COOKIE_NAME } from "../../lib/theme.ts";
-import { AuthenticatedNavigation } from "./authenticated-navigation.tsx";
+} from "#src/lib/api/presentation-error.ts";
+import { createServerApiClient } from "#src/lib/api/server-client.ts";
+import { parseThemeMode, THEME_COOKIE_NAME } from "#src/lib/theme.ts";
+import {
+  AuthenticatedShellFrame,
+  AuthenticatedShellLoading
+} from "#src/app/(authenticated)/authenticated-shell-frame.tsx";
 
-export default async function AuthenticatedLayout({
+export default function AuthenticatedLayout({
   children
 }: Readonly<{ children: ReactNode }>) {
+  return (
+    <Suspense fallback={<AuthenticatedShellLoading />}>
+      <AuthenticatedSessionBoundary>{children}</AuthenticatedSessionBoundary>
+    </Suspense>
+  );
+}
+
+async function AuthenticatedSessionBoundary({ children }: Readonly<{ children: ReactNode }>) {
   let current: Awaited<ReturnType<typeof getCurrentUser>>;
   let mfa: Awaited<ReturnType<typeof getMfaStatus>>;
   let notifications: Awaited<ReturnType<typeof listNotifications>> | undefined;
   let maintenance: { readonly readOnly: boolean; readonly phase: string } | undefined;
   try {
     const client = await createServerApiClient();
+    current = await getCurrentUser(client);
     const mfaRequest = getMfaStatus(client);
     const notificationRequest = listNotifications(client, { limit: 1 }).catch(() => undefined);
     const maintenanceRequest = client
       .get<{ readonly readOnly: boolean; readonly phase: string }>("/maintenance")
       .then((response) => response.data)
       .catch(() => undefined);
-    current = await getCurrentUser(client);
     [mfa, notifications, maintenance] = await Promise.all([
       mfaRequest,
       notificationRequest,
@@ -40,10 +52,10 @@ export default async function AuthenticatedLayout({
 
     return (
       <EntryUnavailable
-        description="NURITEO could not verify your session. Retry when the Core service is available."
+        description="세션을 확인하지 못했습니다. Core 서비스 상태를 확인한 뒤 다시 시도하세요."
         reference={safeRequestReference(error)}
         retryHref="/workspaces"
-        title="Your workspace is temporarily unavailable"
+        title="워크스페이스를 일시적으로 사용할 수 없습니다"
       />
     );
   }
@@ -54,23 +66,15 @@ export default async function AuthenticatedLayout({
   const unreadCount = notifications?.data.unreadCount ?? 0;
 
   return (
-    <div className="authenticated-shell">
-      <AuthenticatedNavigation
-        displayName={current.data.user.display_name}
-        email={current.data.user.email}
-        isInstanceAdmin={current.data.user.is_instance_admin}
-        themeMode={themeMode}
-        unreadCount={unreadCount}
-      />
-      <div className="authenticated-shell__content" data-navigation-feature="Access tokens">
-        {maintenance?.readOnly ? (
-          <aside className="maintenance-banner" role="status">
-            <strong>유지보수 모드</strong>
-            <span>관리 작업이 끝날 때까지 프로젝트는 읽기 전용입니다.</span>
-          </aside>
-        ) : null}
-        {children}
-      </div>
-    </div>
+    <AuthenticatedShellFrame
+      displayName={current.data.user.display_name}
+      email={current.data.user.email}
+      isInstanceAdmin={current.data.user.is_instance_admin}
+      maintenanceReadOnly={maintenance?.readOnly}
+      themeMode={themeMode}
+      unreadCount={unreadCount}
+    >
+      {children}
+    </AuthenticatedShellFrame>
   );
 }

@@ -63,6 +63,23 @@ const core = http.createServer(async (request, response) => {
     return;
   }
 
+  if (request.method === "GET" && request.url === "/api/v1/mfa") {
+    response.setHeader("content-type", "application/json");
+    response.end(JSON.stringify({
+      localAccount: true,
+      enrolled: false,
+      pendingEnrollment: false,
+      recoveryCodesRemaining: 0,
+      policyMode: "off",
+      gracePeriodDays: 7,
+      required: false,
+      deadlineAt: null,
+      restricted: false,
+      notificationState: "none"
+    }));
+    return;
+  }
+
   if (request.method === "POST" && request.url === "/api/v1/auth/sessions") {
     bffCalls.push("create-session");
     forwardedOrigins.push(request.headers.origin ?? "missing");
@@ -134,31 +151,34 @@ try {
     });
 
     await page.goto(origin, { waitUntil: "networkidle" });
-    await page.getByRole("heading", { name: "Finish setup from your server" }).waitFor();
+    await page.getByRole("heading", { name: "서버에서 설정을 완료하세요" }).waitFor();
     assert.equal(new URL(page.url()).pathname, "/setup");
     assert.equal(await page.getByText("docker compose run --rm bootstrap-admin").count(), 1);
 
     bootstrapRequired = false;
-    await page.getByRole("link", { name: "Check setup status" }).click();
-    await page.getByRole("heading", { name: "Sign in to NURITEO" }).waitFor();
+    await page.getByRole("link", { name: "설정 상태 다시 확인" }).click();
+    await page.getByRole("heading", { name: "코드를 열고, 바로 실행하세요." }).waitFor();
+    assert.equal(new URL(page.url()).pathname, "/");
+    await page.getByRole("link", { name: "워크스페이스 로그인" }).click();
+    await page.getByRole("heading", { name: "로그인" }).waitFor();
     assert.equal(new URL(page.url()).pathname, "/sign-in");
 
-    await page.getByLabel("Email").fill("unknown@example.test");
-    await page.getByLabel("Password").fill("not-a-real-password");
-    await page.getByRole("button", { name: "Sign in" }).click();
+    await page.getByLabel("이메일").fill("unknown@example.test");
+    await page.getByLabel("비밀번호").fill("not-a-real-password");
+    await page.getByRole("button", { name: "로그인" }).click();
     const signInError = page.locator("#sign-in-error");
     await signInError.waitFor();
     assert.equal(
       await signInError.textContent(),
-      "The email or password is incorrect.Request reference: browser-invalid-login",
+      "이메일 또는 비밀번호를 다시 확인하세요.요청 참조: browser-invalid-login",
       JSON.stringify({ apiResponses, bffCalls, browserRequestOrigins, pageErrors })
     );
-    assert.equal(await page.getByLabel("Password").inputValue(), "");
-    assert.equal(await page.getByLabel("Password").evaluate((element) => element === document.activeElement), true);
+    assert.equal(await page.getByLabel("비밀번호").inputValue(), "");
+    assert.equal(await page.getByLabel("비밀번호").evaluate((element) => element === document.activeElement), true);
 
-    await page.getByLabel("Email").fill("admin@example.test");
-    await page.getByLabel("Password").fill("correct-password");
-    await page.getByRole("button", { name: "Sign in" }).click();
+    await page.getByLabel("이메일").fill("admin@example.test");
+    await page.getByLabel("비밀번호").fill("correct-password");
+    await page.getByRole("button", { name: "로그인" }).click();
     await page.waitForURL("**/workspaces");
 
     const cookieNames = (await page.context().cookies(origin))
