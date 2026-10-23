@@ -1,25 +1,3 @@
-import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 
-import { EntryUnavailable } from "#src/app/_components/entry-unavailable.tsx";
-import { safeRequestReference } from "#src/lib/api/presentation-error.ts";
-import { createServerApiClient } from "#src/lib/api/server-client.ts";
-import { MaintenanceConsole } from "#src/app/(admin)/admin/maintenance/maintenance-console.tsx";
-import { getAdminMaintenanceStatus } from "#src/app/(admin)/admin/maintenance/maintenance-model.ts";
-
-export const metadata: Metadata = { title: "점검 모드" };
-
-export default async function AdminMaintenancePage() {
-  try {
-    const client = await createServerApiClient();
-    return <MaintenanceConsole initial={await getAdminMaintenanceStatus(client)} />;
-  } catch (error) {
-    return (
-      <EntryUnavailable
-        title="점검 모드 제어를 일시적으로 사용할 수 없습니다"
-        description="현재 쓰기 허용 상태를 안전하게 확인하지 못했습니다. 변경된 점검 설정은 없습니다."
-        reference={safeRequestReference(error)}
-        retryHref="/admin/maintenance"
-      />
-    );
-  }
-}
+export default function LegacyMaintenancePage() { redirect("/admin/operations/maintenance"); }

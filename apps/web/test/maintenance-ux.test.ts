@@ -48,7 +48,8 @@ try {
   ));
   assert.equal(missingCsrf.status, 403);
 
-  const page = readSource("src/app/(admin)/admin/maintenance/page.tsx");
+  const page = readSource("src/app/(admin)/admin/operations/maintenance/page.tsx");
+  const legacyPage = readSource("src/app/(admin)/admin/maintenance/page.tsx");
   const adminLayout = readSource("src/app/(admin)/admin/layout.tsx");
   const consoleSource = readSource("src/app/(admin)/admin/maintenance/maintenance-console.tsx");
   const shell = readSource("src/app/(authenticated)/authenticated-shell-frame.tsx");
@@ -57,6 +58,7 @@ try {
   assert.match(consoleSource, /종료 제한 시간을 넘기면 안전을 위해 차단 상태를 유지/u);
   assert.match(consoleSource, /aria-busy=\{mutation\.isPending\}/u);
   assert.match(shell, /관리 작업이 끝날 때까지 프로젝트는 읽기 전용입니다/u);
+  assert.match(legacyPage, /redirect\("\/admin\/operations\/maintenance"\)/u);
   assert.doesNotMatch(`${page}\n${consoleSource}\n${shell}`, /dangerouslySetInnerHTML|localStorage|sessionStorage/u);
 } finally {
   globalThis.fetch = originalFetch;

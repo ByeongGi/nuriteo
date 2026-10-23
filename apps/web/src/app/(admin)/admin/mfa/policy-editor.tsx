@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { FormEvent } from "react";
 
+import { Badge } from "#src/components/ui/badge.tsx";
 import { Button } from "#src/components/ui/button.tsx";
 import { CheckboxField } from "#src/components/ui/checkbox.tsx";
 import { RadioCardGroup } from "#src/components/ui/radio-group.tsx";
@@ -23,7 +24,7 @@ const POLICY_OPTIONS: readonly { readonly value: MfaPolicyMode; readonly label: 
   { value: "all_local_users", label: "모든 로컬 사용자", description: "로컬 비밀번호를 가진 모든 활성 계정에 요구합니다." }
 ];
 
-export function MfaPolicyEditor({ initial }: { readonly initial: MfaPolicy }) {
+export function MfaPolicyEditor({ initial, view = "policy" }: { readonly initial: MfaPolicy; readonly view?: "policy" | "reset" }) {
   const router = useRouter();
   const mutation = useExclusiveMutation();
   const [policy, setPolicy] = useState(initial);
@@ -116,13 +117,13 @@ export function MfaPolicyEditor({ initial }: { readonly initial: MfaPolicy }) {
   return (
     <main id="main-content" className="workspace-page admin-detail-page admin-mfa-page">
       <AdminPageHeader
-        category="MFA 정책"
-        title="MFA 정책"
-        description="인증 제공자의 MFA 경계와 기존 등록을 유지하면서 로컬 계정의 인증 앱 사용 정책을 관리합니다."
-        aside={<span className="admin-page-header__count">정책 v{policy.version}</span>}
+        category={view === "policy" ? "인증" : "사용자·접근"}
+        title={view === "policy" ? "MFA 정책" : "사용자 MFA 초기화"}
+        description={view === "policy" ? "인증 제공자의 MFA 경계와 기존 등록을 유지하면서 로컬 계정의 인증 앱 사용 정책을 관리합니다." : "접근 복구가 필요한 사용자의 MFA 자격 증명과 활성 세션을 안전하게 초기화합니다."}
+        aside={view === "policy" ? <Badge>정책 v{policy.version}</Badge> : undefined}
       />
 
-      <section className="admin-settings" aria-labelledby="mfa-policy-title">
+      {view === "policy" ? <section className="admin-settings" aria-labelledby="mfa-policy-title">
         <div className="admin-section-heading"><div><p className="eyebrow">VERSION {policy.version}</p><h2 id="mfa-policy-title">적용 대상</h2></div><p>정책 변경에는 최근 관리자 재인증이 필요합니다.</p></div>
         <AdminForm layout="panel" onSubmit={save} aria-busy={mutation.isPending}>
           <AdminFormSection title="정책 대상" description="로그인 시 MFA 등록을 요구할 로컬 사용자 범위를 선택합니다.">
@@ -145,9 +146,9 @@ export function MfaPolicyEditor({ initial }: { readonly initial: MfaPolicy }) {
             <Button type="submit" variant="primary" disabled={mutation.isPending || !previewIsCurrent}>{mutation.isPending ? "적용 중…" : "정책 적용"}</Button>
           </AdminFormActions>
         </AdminForm>
-      </section>
+      </section> : null}
 
-      <section className="mfa-card admin-mfa-reset">
+      {view === "reset" ? <section className="mfa-card admin-mfa-reset">
         <h2>다른 사용자의 MFA 초기화</h2>
         <p>대상의 MFA 자격 증명, 복구 코드, 진행 중인 등록과 모든 세션을 폐기합니다. 본인 계정 초기화는 허용되지 않습니다.</p>
         <form className="mfa-code-form" onSubmit={search} role="search" aria-busy={mutation.isPending}>
@@ -159,7 +160,7 @@ export function MfaPolicyEditor({ initial }: { readonly initial: MfaPolicy }) {
           {selectedTarget ? <div className="mfa-reset-confirmation"><p><strong>{selectedTarget.displayName}</strong> ({selectedTarget.email}) 계정을 초기화합니다.</p><CheckboxField checked={resetConfirmed} onCheckedChange={setResetConfirmed} label="이 계정의 MFA, 복구 코드와 모든 활성 세션이 폐기됨을 이해했습니다." /></div> : null}
           <Button type="submit" variant="danger" disabled={mutation.isPending || !selectedTarget || !resetConfirmed}>MFA와 세션 초기화</Button>
         </form>
-      </section>
+      </section> : null}
 
       {feedback ? <div className={`mfa-feedback mfa-feedback--${feedback.tone}`} role={feedback.tone === "error" ? "alert" : "status"}><span>{feedback.text}</span>{feedback.reconcile ? <Button onClick={() => router.refresh()}>최신 상태 불러오기</Button> : null}</div> : null}
     </main>

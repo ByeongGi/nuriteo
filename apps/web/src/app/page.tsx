@@ -27,7 +27,7 @@ export default async function HomePage() {
     return <HomeServiceUnavailable error={setupResult.reason} />;
   }
   if (setupResult.value.data.bootstrapRequired) redirect("/setup");
-  if (currentUserResult.status === "fulfilled") redirect("/workspaces");
+  if (currentUserResult.status === "fulfilled") redirect("/dashboard");
   if (!isExplicitlySignedOut(currentUserResult.reason)) {
     return <HomeServiceUnavailable error={currentUserResult.reason} />;
   }

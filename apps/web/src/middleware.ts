@@ -16,13 +16,13 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
   if (configuration.status === "disabled") {
     return mightBePreview
       ? previewErrorResponse("Preview wildcard DNS and TLS are not ready.", 503)
-      : applicationResponse(NextResponse.next());
+      : applicationRequestResponse(request);
   }
   const binding = parsePreviewHost(hostname, configuration.baseDomain);
   if (!binding) {
     if (mightBePreview) return previewErrorResponse(null, 404);
     if (request.nextUrl.pathname.startsWith(PREVIEW_ASSET_PREFIX)) return applicationResponse(new NextResponse(null, { status: 404 }));
-    return applicationResponse(NextResponse.next());
+    return applicationRequestResponse(request);
   }
   const verification = await verifySignedPreviewBinding(
     previewSigningKey() ?? "",
@@ -57,6 +57,15 @@ function requestHostname(host: string | null): string {
 function applicationResponse(response: NextResponse): NextResponse {
   response.headers.set("Cross-Origin-Resource-Policy", "same-origin");
   return response;
+}
+
+function applicationRequestResponse(request: NextRequest): NextResponse {
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set(
+    "x-nuriteo-request-path",
+    `${request.nextUrl.pathname}${request.nextUrl.search}`
+  );
+  return applicationResponse(NextResponse.next({ request: { headers: requestHeaders } }));
 }
 
 function previewResponse(response: NextResponse): NextResponse {

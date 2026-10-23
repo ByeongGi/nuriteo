@@ -13,7 +13,7 @@ export default function GlobalError({ error, reset }: GlobalErrorProps) {
     : undefined;
 
   return (
-    <html lang="en" data-theme-mode="system">
+    <html lang="ko" data-theme-mode="system">
       <body>
         <ErrorView onRetry={reset} reference={reference} />
       </body>

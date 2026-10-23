@@ -289,7 +289,7 @@ try {
       { name: "nuriteo_dev_csrf", value: csrfToken, url: publicOrigin }
     ]);
     const adminPage = await admin.newPage();
-    await adminPage.goto(`${publicOrigin}/admin/invitations`, { waitUntil: "networkidle" });
+    await adminPage.goto(`${publicOrigin}/admin/access/invitations`, { waitUntil: "networkidle" });
     await adminPage.getByLabel("초대받을 이메일").fill("mail-queued@example.test");
     await adminPage.getByRole("button", { name: "초대 발급" }).click();
     await adminPage.getByRole("status").filter({ hasText: "활성화 이메일을 전송 대기열" }).waitFor();
@@ -335,7 +335,7 @@ try {
     await inviteePage.waitForURL("**/workspaces");
     await inviteePage.getByText("Invitee Personal", { exact: true }).waitFor();
     assert.equal(await inviteePage.getByText("Alpha Organization", { exact: true }).count(), 0);
-    await inviteePage.goto(`${publicOrigin}/admin/invitations`, { waitUntil: "networkidle" });
+    await inviteePage.goto(`${publicOrigin}/admin/access/invitations`, { waitUntil: "networkidle" });
     await inviteePage.getByRole("heading", { name: "관리자 권한이 필요합니다" }).waitFor();
 
     journeyStage = "create-organization-open";

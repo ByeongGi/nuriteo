@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
 
+import { productEntryStyles } from "#src/app/_components/product-entry-shell.styles.ts";
+
 interface ProductEntryShellProps {
   readonly children?: ReactNode;
   readonly compact?: boolean;
@@ -15,18 +17,19 @@ interface ProductEntryLoadingProps {
 }
 
 function EntryShowcase() {
+  const styles = productEntryStyles();
   return (
-    <aside className="entry-showcase" aria-label="누리터 자체 호스팅 워크스페이스">
-      <div className="entry-showcase__brand">
-        <span aria-hidden="true">N</span>
+    <aside className={styles.showcase()} aria-label="누리터 자체 호스팅 워크스페이스">
+      <div className={styles.brand()}>
+        <span className={styles.brandMark()} aria-hidden="true">N</span>
         <strong>NURITEO</strong>
       </div>
-      <div className="entry-showcase__message">
-        <p>자체 호스팅 워크스페이스</p>
-        <h2>코드를 열고, 바로 실행하세요.</h2>
-        <span>프로젝트와 실행 환경은 조직의 인프라 안에 안전하게 유지됩니다.</span>
+      <div className={styles.message()}>
+        <p className={styles.eyebrow()}>자체 호스팅 워크스페이스</p>
+        <h2 className={styles.heading()}>코드를 열고, 바로 실행하세요.</h2>
+        <span className={styles.detail()}>프로젝트와 실행 환경은 조직의 인프라 안에 안전하게 유지됩니다.</span>
       </div>
-      <p className="entry-showcase__status"><i aria-hidden="true" /> 브라우저 네이티브 개발 환경</p>
+      <p className={styles.status()}><i className={styles.statusMark()} aria-hidden="true" /> 브라우저 네이티브 개발 환경</p>
     </aside>
   );
 }
@@ -39,18 +42,19 @@ export function ProductEntryShell({
   title,
   titleId
 }: ProductEntryShellProps) {
+  const styles = productEntryStyles();
   return (
-    <main id="main-content" className="entry-page" tabIndex={-1}>
-      <div className="entry-window">
+    <main id="main-content" className={styles.page()} tabIndex={-1}>
+      <div className={styles.window()}>
         <EntryShowcase />
         <section
-          className={`entry-card${compact ? " entry-card--compact" : ""}`}
+          className={styles.card({ className: compact ? styles.cardCompact() : undefined })}
           aria-labelledby={titleId}
         >
-          <header className="entry-card__header">
-            <p className="eyebrow">{eyebrow}</p>
-            <h1 id={titleId}>{title}</h1>
-            <p className="entry-description">{description}</p>
+          <header className={styles.header()}>
+            <p className={styles.cardEyebrow()}>{eyebrow}</p>
+            <h1 className={styles.title()} id={titleId}>{title}</h1>
+            <p className={styles.description()}>{description}</p>
           </header>
           {children}
         </section>
@@ -60,15 +64,16 @@ export function ProductEntryShell({
 }
 
 export function ProductEntryLoading({ compact = false, label }: ProductEntryLoadingProps) {
+  const styles = productEntryStyles();
   return (
-    <main id="main-content" className="entry-page" aria-busy="true" aria-live="polite">
+    <main id="main-content" className={styles.page()} aria-busy="true" aria-live="polite">
       <p className="sr-only">{label}</p>
-      <div className="entry-window">
+      <div className={styles.window()}>
         <EntryShowcase />
-        <section className={`entry-card entry-card--loading${compact ? " entry-card--compact" : ""}`} aria-hidden="true">
-          <div className="loading-shell__line loading-shell__line--short" />
-          <div className="loading-shell__line loading-shell__line--title" />
-          <div className="loading-shell__line" />
+        <section className={styles.card({ className: compact ? styles.cardCompact() : undefined })} aria-hidden="true">
+          <div className={styles.loadingLine({ className: styles.loadingShort() })} />
+          <div className={styles.loadingLine({ className: styles.loadingTitle() })} />
+          <div className={styles.loadingLine({ className: styles.loadingBody() })} />
         </section>
       </div>
     </main>

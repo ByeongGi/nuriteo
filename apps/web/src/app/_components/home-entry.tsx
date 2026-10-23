@@ -92,7 +92,7 @@ function ProductPreview() {
           <div className={styles.editorTab()}><span className={styles.syntaxLanguage()}>TSX</span><span>App.tsx</span></div>
           <div className={styles.code()}>
             <span className={styles.lineNumbers()}>1<br />2<br />3<br />4<br />5<br />6<br />7<br />8</span>
-            <code className={styles.codeText()}><span className="keyword">import</span> {`{ useState }`} <span className="keyword">from</span> <span className="string">&quot;react&quot;</span>;<br /><br /><span className="keyword">export default function</span> App() {`{`}<br />&nbsp;&nbsp;<span className="keyword">const</span> [count, setCount] = useState(0);<br /><br />&nbsp;&nbsp;<span className="keyword">return</span> (<br />&nbsp;&nbsp;&nbsp;&nbsp;&lt;button&gt;<span className="accent">실행 {`{count}`}</span>&lt;/button&gt;<br />&nbsp;&nbsp;);</code>
+            <code className={styles.codeText()}><span className={styles.codeKeyword()}>import</span> {`{ useState }`} <span className={styles.codeKeyword()}>from</span> <span className={styles.codeString()}>&quot;react&quot;</span>;<br /><br /><span className={styles.codeKeyword()}>export default function</span> App() {`{`}<br />&nbsp;&nbsp;<span className={styles.codeKeyword()}>const</span> [count, setCount] = useState(0);<br /><br />&nbsp;&nbsp;<span className={styles.codeKeyword()}>return</span> (<br />&nbsp;&nbsp;&nbsp;&nbsp;&lt;button&gt;<span className={styles.codeAccent()}>실행 {`{count}`}</span>&lt;/button&gt;<br />&nbsp;&nbsp;);</code>
           </div>
         </section>
       </div>

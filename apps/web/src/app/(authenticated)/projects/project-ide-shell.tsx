@@ -3,9 +3,15 @@
 import type { Project } from "@nuriteo/api-client";
 import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
+import { tv } from "tailwind-variants";
 
 import { Button } from "#src/components/ui/button.tsx";
 import { ConfirmationDialog } from "#src/components/ui/confirmation-dialog.tsx";
+import { CollapsibleContent, CollapsiblePanel, CollapsibleRoot, CollapsibleTrigger } from "#src/components/ui/collapsible.tsx";
+import { Input } from "#src/components/ui/input.tsx";
+import { SearchField } from "#src/components/ui/search-field.tsx";
+import { TabsIndicator, TabsList, TabsRoot, TabsTab } from "#src/components/ui/tabs.tsx";
+import { Textarea } from "#src/components/ui/textarea.tsx";
 import { createBrowserApiClient } from "#src/lib/api/browser-client.ts";
 import { readCsrfCredential } from "#src/lib/api/browser-security.ts";
 import { createRetryableLazyFeature } from "#src/lib/retryable-lazy-feature.ts";
@@ -44,6 +50,54 @@ const RUNTIME_RELAY_TIMEOUT_MS = 10_000;
 const RUNTIME_MEMORY_LIMIT_BYTES = 512 * 1024 * 1024;
 const FILE_LIST_BATCH_SIZE = 200;
 const EMPTY_WORKSPACE_FILES: readonly RuntimeWorkspaceFile[] = [];
+
+const ideStyles = tv({
+  slots: {
+    shell: "grid min-h-[42rem] min-w-0 overflow-hidden rounded-xl border border-muted-border bg-surface shadow-sm",
+    header: "flex min-w-0 items-center justify-between gap-4 border-b border-muted-border bg-raised px-5 py-3 max-[48rem]:items-start max-[48rem]:flex-col",
+    identity: "flex min-w-0 items-center gap-3 [&_p]:m-0 [&_p]:text-xs [&_p]:text-muted-foreground [&_h3]:m-0 [&_h3]:truncate [&_h3]:text-base",
+    headerActions: "flex flex-wrap items-center justify-end gap-2 max-[48rem]:w-full max-[48rem]:justify-start",
+    access: "rounded-full border border-muted-border bg-subtle px-2 py-1 text-[var(--n-font-size-2xs)] font-semibold text-muted-foreground",
+    saveState: "flex items-center gap-2 text-xs text-muted-foreground",
+    message: "mx-4 mt-3 flex items-start gap-3 rounded-lg border px-4 py-3 text-sm",
+    panelHeading: "mb-3 flex items-center justify-between gap-3 px-2 [&>div]:grid [&>div]:gap-0.5 [&_span]:text-[var(--n-font-size-2xs)] [&_span]:text-muted-foreground [&_strong]:text-sm",
+    workbench: "grid min-h-[38rem] min-w-0 grid-cols-[16rem_minmax(0,1fr)_minmax(20rem,34%)] max-[72rem]:grid-cols-[14rem_minmax(0,1fr)] max-[48rem]:grid-cols-1",
+    files: "min-w-0 overflow-hidden border-r border-muted-border bg-raised max-[48rem]:max-h-72 max-[48rem]:border-r-0 max-[48rem]:border-b [&_ul]:m-0 [&_ul]:grid [&_ul]:list-none [&_ul]:gap-1 [&_ul]:p-0 [&_li]:[content-visibility:auto] [&_li]:[contain-intrinsic-size:0_2.5rem] [&_li_button]:grid [&_li_button]:min-h-9 [&_li_button]:w-full [&_li_button]:grid-cols-[1rem_minmax(0,1fr)_auto] [&_li_button]:items-center [&_li_button]:gap-2 [&_li_button]:rounded-sm [&_li_button]:px-2 [&_li_button]:font-mono [&_li_button]:text-xs [&_li_button]:text-muted-foreground [&_li_button]:hover:bg-hover [&_li_button]:hover:text-foreground [&_li_button[aria-current=page]]:bg-selected [&_li_button[aria-current=page]]:font-semibold [&_li_button[aria-current=page]]:text-primary [&_li_button>span:nth-child(2)]:truncate",
+    editor: "grid min-h-0 min-w-0 grid-rows-[2.75rem_2rem_minmax(20rem,1fr)_2.75rem] border-r border-muted-border bg-surface max-[72rem]:border-r-0",
+    utility: "min-h-0 min-w-0 overflow-hidden border-l border-muted-border bg-raised max-[72rem]:col-span-2 max-[72rem]:border-l-0 max-[72rem]:border-t max-[48rem]:col-span-1",
+    fileSearch: "relative block [&_input]:h-9 [&_input]:w-full [&_input]:rounded-md [&_input]:border [&_input]:border-muted-border [&_input]:bg-surface [&_input]:pl-3 [&_input]:pr-8 [&_input]:text-xs",
+    fileCount: "mx-2 mb-2 mt-3 text-xs text-muted-foreground",
+    fileIcon: "font-mono text-xs text-primary",
+    fileEmpty: "px-2 py-4 text-xs text-muted-foreground",
+    fileMore: "mt-2 min-h-10 w-full rounded-md border border-dashed border-border bg-transparent text-xs font-semibold text-primary hover:border-solid hover:bg-hover",
+    editorTabs: "flex items-stretch overflow-hidden border-b border-muted-border bg-subtle text-xs text-muted-foreground [&>span]:self-center [&>span]:px-4 [&>div]:flex [&>div]:max-w-64 [&>div]:items-center [&>div]:gap-2 [&>div]:border-r [&>div]:border-muted-border [&>div]:px-3 [&>div.is-active]:border-t-2 [&>div.is-active]:border-t-primary [&>div.is-active]:bg-surface [&>div.is-active]:text-foreground [&_strong]:truncate",
+    breadcrumb: "flex min-w-0 items-center gap-2 overflow-hidden border-b border-muted-border px-4 font-mono text-[var(--n-font-size-2xs)] whitespace-nowrap text-muted-foreground [&_span+span]:before:mr-2 [&_span+span]:before:text-strong-border [&_span+span]:before:content-['/']",
+    editorInput: "min-h-80 w-full resize-none rounded-none border-0 bg-surface px-6 py-5 font-mono text-sm leading-7 text-foreground outline-none focus-visible:shadow-[inset_0_0_0_2px_color-mix(in_srgb,var(--n-color-action-primary)_38%,transparent)] read-only:cursor-not-allowed read-only:bg-subtle",
+    editorEmpty: "grid place-content-center justify-items-center p-8 text-center text-muted-foreground [&>span]:mb-3 [&>span]:grid [&>span]:size-12 [&>span]:place-items-center [&>span]:rounded-lg [&>span]:border [&>span]:border-muted-border [&>span]:bg-subtle [&>span]:text-xl [&>span]:text-primary [&_p]:mt-2 [&_p]:max-w-md [&_p]:text-xs",
+    status: "flex min-w-0 items-center justify-between gap-3 border-t border-muted-border bg-subtle px-3 text-[var(--n-font-size-2xs)] text-muted-foreground max-[48rem]:flex-wrap max-[48rem]:py-2 [&>span]:flex [&>span]:min-w-0 [&>span]:items-center [&>span]:gap-2 [&>span]:truncate",
+    utilityTabs: "flex border-b border-muted-border bg-subtle [&_button]:flex [&_button]:min-w-26 [&_button]:items-center [&_button]:justify-center [&_button]:gap-2 [&_button]:border-0 [&_button]:border-b-2 [&_button]:border-b-transparent [&_button]:bg-transparent [&_button]:text-xs [&_button]:font-semibold [&_button]:text-muted-foreground [&_button[aria-selected=true]]:border-b-primary [&_button[aria-selected=true]]:bg-surface [&_button[aria-selected=true]]:text-foreground",
+    utilityEmpty: "grid place-content-center justify-items-center p-8 text-center text-muted-foreground [&>span]:mb-3 [&>span]:grid [&>span]:size-12 [&>span]:place-items-center [&>span]:rounded-lg [&>span]:border [&>span]:border-muted-border [&>span]:bg-subtle [&>span]:text-xl [&>span]:text-primary [&_p]:mt-2 [&_p]:max-w-md [&_p]:text-xs",
+    preview: "grid min-h-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden [&_iframe]:h-full [&_iframe]:min-h-96 [&_iframe]:w-full [&_iframe]:border-0 [&_iframe]:bg-white",
+    previewToolbar: "flex min-h-11 items-center justify-between gap-3 border-b border-muted-border bg-surface px-4 text-xs text-muted-foreground",
+    live: "flex items-center gap-2 text-[var(--n-font-size-2xs)] font-bold text-success",
+    start: "grid min-h-[30rem] grid-cols-[minmax(16rem,.8fr)_minmax(20rem,1.2fr)] place-content-center gap-[clamp(2rem,6vw,4rem)] bg-page p-[clamp(2rem,7vw,4rem)] max-[48rem]:grid-cols-1",
+    startMark: "mb-6 grid size-12 place-items-center rounded-lg bg-primary text-lg font-bold text-on-primary",
+    startActions: "grid content-center gap-3 [&_button]:grid [&_button]:min-h-28 [&_button]:grid-cols-[2.5rem_minmax(0,1fr)] [&_button]:gap-x-3 [&_button]:rounded-xl [&_button]:border [&_button]:border-border [&_button]:bg-surface [&_button]:p-5 [&_button]:text-left",
+    startSafety: "col-span-full m-0 text-sm leading-6 text-muted-foreground",
+    history: "border-b border-muted-border bg-surface",
+    recoveryActions: "flex flex-wrap gap-2 px-4",
+    recovery: "mx-4 grid gap-3 rounded-lg border border-warning/30 bg-warning/10 p-4 text-sm",
+    terminal: "grid min-h-0 grid-rows-[auto_minmax(0,1fr)_auto] bg-[var(--n-ref-color-hanji-950)] text-[var(--n-ref-color-hanji-100)] [&_pre]:m-0 [&_pre]:min-h-0 [&_pre]:overflow-auto [&_pre]:whitespace-pre-wrap [&_pre]:p-4 [&_pre]:font-mono [&_pre]:text-xs [&_form]:grid [&_form]:grid-cols-[auto_minmax(0,1fr)_auto] [&_form]:items-center [&_form]:gap-2 [&_form]:border-t [&_form]:border-white/10 [&_form]:p-3 [&_input]:min-w-0 [&_input]:border-0 [&_input]:bg-transparent [&_input]:font-mono [&_input]:text-xs [&_input]:text-white [&_input]:outline-none",
+    terminalToolbar: "flex min-h-10 items-center justify-between gap-3 border-b border-white/10 px-4 text-xs text-white/70 [&_strong]:text-white"
+  },
+  variants: { focus: { true: { workbench: "grid-cols-[minmax(0,1fr)]", files: "hidden", utility: "hidden" } } }
+});
+
+const runtimeDot = tv({
+  base: "size-2 shrink-0 rounded-full bg-muted-foreground",
+  variants: { state: { ready: "bg-success", running: "bg-success", failed: "bg-danger", idle: "bg-muted-foreground", starting: "bg-warning", stopping: "bg-warning" } },
+  defaultVariants: { state: "idle" }
+});
 
 type RuntimeFeature = typeof import("#src/runtime/runtime-adapter.ts");
 const runtimeFeature = createRetryableLazyFeature<RuntimeFeature>(
@@ -666,16 +720,17 @@ export function ProjectIdeShell({ assetRevision, initialHistoryState, onProjectC
   const editorLineCount = editorContent.length === 0 ? 1 : editorContent.split("\n").length;
   useUnsavedChangesGuard(hasUnpublishedChanges || hasUnsavedEditorChange);
 
+  const css = ideStyles({ focus: isFocusMode });
   return (
-    <section className={`project-ide-shell${isFocusMode ? " project-ide-shell--focus" : ""}`} aria-labelledby="project-ide-title">
-      <header className="project-ide-header">
-        <div className="project-ide-header__identity">
-          <span className={`project-ide-runtime-dot project-ide-runtime-dot--${runtime.lifecycle}`} aria-hidden="true" />
+    <section className={css.shell()} aria-labelledby="project-ide-title">
+      <header className={css.header()}>
+        <div className={css.identity()}>
+          <span className={runtimeDot({ state: runtime.lifecycle === "ready" || runtime.lifecycle === "running" || runtime.lifecycle === "failed" ? runtime.lifecycle : "idle" })} aria-hidden="true" />
           <div><p>브라우저 워크스페이스 · {runtimeLifecycleLabel(runtime.lifecycle)}</p><h3 id="project-ide-title" aria-label={`${project.name} 개발 편집기`}>{project.name}</h3></div>
-          {hasWorkspace ? <span className={`project-ide-access project-ide-access--${canWriteLocalDraft ? "writer" : "reader"}`}>{canWriteLocalDraft ? "편집 가능" : "읽기 전용"}</span> : null}
+          {hasWorkspace ? <span className={css.access({ className: canWriteLocalDraft ? "border-primary/20 bg-selected text-primary" : undefined })}>{canWriteLocalDraft ? "편집 가능" : "읽기 전용"}</span> : null}
         </div>
-        {hasWorkspace ? <div className="project-ide-header__actions">
-          <span className="project-ide-save-state" role="status" aria-live="polite"><i className={hasUnsavedEditorChange ? "is-dirty" : ""} aria-hidden="true" />{isReplacingDraft ? "복원본 준비 중 · 현재 초안 보존됨" : serverSaveStatus}</span>
+        {hasWorkspace ? <div className={css.headerActions()}>
+          <span className={css.saveState()} role="status" aria-live="polite"><i className={hasUnsavedEditorChange ? "is-dirty" : ""} aria-hidden="true" />{isReplacingDraft ? "복원본 준비 중 · 현재 초안 보존됨" : serverSaveStatus}</span>
           <Button type="button" size="sm" aria-pressed={isFocusMode} onClick={() => setIsFocusMode((current) => !current)}>{isFocusMode ? "패널 표시" : "집중 모드"}</Button>
           <Button aria-label="서버에 저장" type="button" size="sm" variant="primary" disabled={isServerSaving || isReplacingDraft || !projectEtag || !canWriteLocalDraft} onClick={() => void saveToServer()}>{isServerSaving ? "저장 중…" : "서버에 저장"}<kbd>⌘S</kbd></Button>
           <Button aria-label="워크스페이스 종료" type="button" size="sm" disabled={isReplacingDraft} onClick={() => {
@@ -684,11 +739,11 @@ export function ProjectIdeShell({ assetRevision, initialHistoryState, onProjectC
           }}>종료</Button>
         </div> : null}
       </header>
-      {error ? <div className="project-ide-message project-ide-message--error" role="alert"><strong>작업을 완료하지 못했습니다.</strong><span>{error}</span></div> : null}
-      {serverSaveFailure ? <div className="project-ide-recovery-actions" aria-label="서버 저장 복구">{serverSaveFailure === "retry" ? <Button type="button" size="sm" disabled={isServerSaving || !canWriteLocalDraft} onClick={() => void saveToServer()}>서버 저장 다시 시도</Button> : <Button type="button" size="sm" onClick={() => onProjectReload?.()}>최신 프로젝트 다시 불러오기</Button>}</div> : null}
-      {resumeStatus ? <p className="project-ide-message project-ide-message--status" role="status" aria-live="polite">{resumeStatus}</p> : null}
+      {error ? <div className={css.message({ className: "border-danger/30 bg-danger/10 text-danger" })} role="alert"><strong>작업을 완료하지 못했습니다.</strong><span>{error}</span></div> : null}
+      {serverSaveFailure ? <div className={css.recoveryActions()} aria-label="서버 저장 복구">{serverSaveFailure === "retry" ? <Button type="button" size="sm" disabled={isServerSaving || !canWriteLocalDraft} onClick={() => void saveToServer()}>서버 저장 다시 시도</Button> : <Button type="button" size="sm" onClick={() => onProjectReload?.()}>최신 프로젝트 다시 불러오기</Button>}</div> : null}
+      {resumeStatus ? <p className={css.message({ className: "border-primary/20 bg-selected text-foreground" })} role="status" aria-live="polite">{resumeStatus}</p> : null}
       {recoveryDiagnostics.length > 0 ? (
-        <section className="project-ide-recovery" aria-label="워크스페이스 복구">
+        <section className={css.recovery()} aria-label="워크스페이스 복구">
           <h4 className="m-0 text-sm font-semibold">워크스페이스 확인이 필요합니다</h4>
           {recoveryDiagnostics.map((diagnostic) => (
             <div className="mt-2" key={diagnostic.code}>
@@ -722,30 +777,30 @@ export function ProjectIdeShell({ assetRevision, initialHistoryState, onProjectC
       ) : null}
       {project.state !== "active" ? <p className="m-3 text-sm text-muted-foreground">보관된 프로젝트는 읽기 전용입니다. 버전과 복구 지점은 계속 확인할 수 있으며, 기록을 변경하거나 워크스페이스를 시작하려면 먼저 프로젝트를 복원하세요.</p> : null}
       {hasWorkspace ? (
-        <div className="project-ide-workbench">
-          <nav className="project-ide-files" aria-label="프로젝트 파일">
-            <div className="project-ide-panel-heading"><div><span>탐색기</span><strong>파일</strong></div><kbd>⌘P</kbd></div>
-            <label className="project-ide-file-search"><span className="sr-only">파일 검색</span><input ref={fileSearchRef} value={fileQuery} onChange={(event) => { setFileQuery(event.currentTarget.value); setFileListLimit(FILE_LIST_BATCH_SIZE); }} placeholder="파일 검색" autoComplete="off" /><span aria-hidden="true">{isFileSearchPending ? "…" : "⌕"}</span></label>
-            <p className="project-ide-file-count" aria-live="polite">{visibleFiles.length}개 표시 · {matchingFiles.length}개 일치 · 전체 {workspace.files.length}개</p>
-            {visibleFiles.length > 0 ? <ul>{visibleFiles.map((file) => <li key={file.path}><button type="button" title={file.path} aria-current={selectedPath === file.path ? "page" : undefined} onClick={() => selectFile(file.path)}><span className="project-ide-file-icon" aria-hidden="true">{file.kind === "text" ? "#" : "◆"}</span><span>{file.path}</span>{selectedPath === file.path && hasUnsavedEditorChange ? <i aria-label="저장하지 않은 변경 사항" /> : null}</button></li>)}</ul> : <p className="project-ide-files__empty">일치하는 파일이 없습니다.</p>}
-            {hasMoreFiles ? <button className="project-ide-files__more" type="button" onClick={() => setFileListLimit((current) => current + FILE_LIST_BATCH_SIZE)}>다음 {Math.min(FILE_LIST_BATCH_SIZE, matchingFiles.length - visibleFiles.length)}개 보기</button> : null}
+        <div className={css.workbench()}>
+          <nav className={css.files()} aria-label="프로젝트 파일">
+            <div className={css.panelHeading()}><div><span>탐색기</span><strong>파일</strong></div><kbd>⌘P</kbd></div>
+            <SearchField className={css.fileSearch()} label="파일 검색" aria-busy={isFileSearchPending} ref={fileSearchRef} value={fileQuery} onChange={(event) => { setFileQuery(event.currentTarget.value); setFileListLimit(FILE_LIST_BATCH_SIZE); }} placeholder="파일 검색" autoComplete="off" />
+            <p className={css.fileCount()} aria-live="polite">{visibleFiles.length}개 표시 · {matchingFiles.length}개 일치 · 전체 {workspace.files.length}개</p>
+            {visibleFiles.length > 0 ? <ul>{visibleFiles.map((file) => <li key={file.path}><Button variant="ghost" type="button" title={file.path} aria-current={selectedPath === file.path ? "page" : undefined} onClick={() => selectFile(file.path)}><span className={css.fileIcon()} aria-hidden="true">{file.kind === "text" ? "#" : "◆"}</span><span>{file.path}</span>{selectedPath === file.path && hasUnsavedEditorChange ? <i aria-label="저장하지 않은 변경 사항" /> : null}</Button></li>)}</ul> : <p className={css.fileEmpty()}>일치하는 파일이 없습니다.</p>}
+            {hasMoreFiles ? <Button className={css.fileMore()} variant="ghost" type="button" onClick={() => setFileListLimit((current) => current + FILE_LIST_BATCH_SIZE)}>다음 {Math.min(FILE_LIST_BATCH_SIZE, matchingFiles.length - visibleFiles.length)}개 보기</Button> : null}
           </nav>
-          <section className="project-ide-editor" aria-label="텍스트 편집기">
-            <div className="project-ide-editor__tabs">{selectedPath ? <div className="is-active"><span className="project-ide-file-icon" aria-hidden="true">#</span><strong>{selectedFileName}</strong>{hasUnsavedEditorChange ? <i aria-label="저장하지 않은 변경 사항" /> : <button type="button" aria-label={`${selectedFileName} 닫기`} onClick={() => { setSelectedPath(undefined); setEditorContent(""); }}>×</button>}</div> : <span>파일을 선택하세요</span>}</div>
-            <div className="project-ide-editor__breadcrumb"><span>{project.name}</span>{selectedPath?.split("/").map((segment) => <span key={segment}>{segment}</span>)}</div>
-            {selectedPath ? <textarea className="project-ide-editor__input" aria-label={`${selectedPath} 편집기`} spellCheck={false} readOnly={!canWriteLocalDraft} value={editorContent} onChange={(event) => { setEditorContent(event.currentTarget.value); setEditorStatus("저장하지 않은 로컬 변경"); setHasUnpublishedChanges(true); }} /> : <div className="project-ide-editor__empty"><span aria-hidden="true">⌘</span><strong>편집할 파일을 선택하세요</strong><p>왼쪽 파일 목록에서 선택하거나 <kbd>⌘P</kbd>로 빠르게 찾을 수 있습니다.</p></div>}
-            <div className="project-ide-editor__status"><span><i className={hasUnsavedEditorChange ? "is-dirty" : ""} aria-hidden="true" />{editorStatus}</span><span>{editorLineCount}줄 · {editorContent.length}자 · UTF-8</span><Button aria-label="로컬 초안에 적용" type="button" size="sm" disabled={!selectedPath || isSaving || !canWriteLocalDraft} onClick={saveSelectedFile}>{isSaving ? "적용 중…" : "로컬 초안에 적용"}</Button></div>
+          <section className={css.editor()} aria-label="텍스트 편집기">
+            <div className={css.editorTabs()}>{selectedPath ? <div className="is-active"><span className={css.fileIcon()} aria-hidden="true">#</span><strong>{selectedFileName}</strong>{hasUnsavedEditorChange ? <i aria-label="저장하지 않은 변경 사항" /> : <Button variant="ghost" size="sm" type="button" aria-label={`${selectedFileName} 닫기`} onClick={() => { setSelectedPath(undefined); setEditorContent(""); }}>×</Button>}</div> : <span>파일을 선택하세요</span>}</div>
+            <div className={css.breadcrumb()}><span>{project.name}</span>{selectedPath?.split("/").map((segment) => <span key={segment}>{segment}</span>)}</div>
+            {selectedPath ? <Textarea className={css.editorInput()} resize="none" aria-label={`${selectedPath} 편집기`} spellCheck={false} readOnly={!canWriteLocalDraft} value={editorContent} onChange={(event) => { setEditorContent(event.currentTarget.value); setEditorStatus("저장하지 않은 로컬 변경"); setHasUnpublishedChanges(true); }} /> : <div className={css.editorEmpty()}><span aria-hidden="true">⌘</span><strong>편집할 파일을 선택하세요</strong><p>왼쪽 파일 목록에서 선택하거나 <kbd>⌘P</kbd>로 빠르게 찾을 수 있습니다.</p></div>}
+            <div className={css.status()}><span><i className={hasUnsavedEditorChange ? "is-dirty" : ""} aria-hidden="true" />{editorStatus}</span><span>{editorLineCount}줄 · {editorContent.length}자 · UTF-8</span><Button aria-label="로컬 초안에 적용" type="button" size="sm" disabled={!selectedPath || isSaving || !canWriteLocalDraft} onClick={saveSelectedFile}>{isSaving ? "적용 중…" : "로컬 초안에 적용"}</Button></div>
           </section>
-          <aside className="project-ide-utility">
-            <div className="project-ide-utility__tabs" role="tablist" aria-label="실행 도구"><button type="button" role="tab" aria-selected={utilityPanel === "preview"} onClick={() => setUtilityPanel("preview")}>미리보기{runtime.hmrState === "connected" ? <i aria-hidden="true" /> : null}</button><button type="button" role="tab" aria-selected={utilityPanel === "terminal"} onClick={() => setUtilityPanel("terminal")}>터미널{runtime.terminalProcessCount > 0 ? <span>{runtime.terminalProcessCount}</span> : null}</button></div>
-            <section className="project-ide-preview" aria-label="미리보기" data-preview-url={isolatedPreviewUrl} hidden={utilityPanel !== "preview"}><div className="project-ide-preview__toolbar"><div><strong>실시간 미리보기</strong><span>{workflowPhaseLabel(runtime.workflowPhase)} · HMR {hmrStateLabel(runtime.hmrState)}</span></div>{hasIsolatedPreview ? <span className="project-ide-live"><i aria-hidden="true" /> 실행 중</span> : <Button aria-label="미리보기 실행" type="button" size="sm" variant="primary" disabled={isRunningPreview} onClick={() => void runPreview()}>{isRunningPreview ? "설치 중…" : "미리보기 실행"}</Button>}</div>{hasIsolatedPreview ? <iframe ref={(frame) => previewBridgeRef.current?.attach(frame?.contentWindow ?? null)} title={`${project.name} 미리보기`} src={isolatedPreviewUrl} sandbox="allow-scripts allow-same-origin" allow="cross-origin-isolated" referrerPolicy="no-referrer" /> : previewConfiguration.status === "disabled" ? <div className="project-ide-utility__empty" role="status"><strong>미리보기를 사용할 수 없습니다.</strong><p>{previewConfiguration.message} 동일 출처 미리보기는 보안을 위해 비활성화되어 있습니다.</p></div> : runtime.previewUrl ? <div className="project-ide-utility__empty" role="status"><strong>격리된 연결을 준비하고 있습니다.</strong><p>격리된 미리보기 연결이 아직 준비되지 않았습니다. 동일 출처 미리보기는 비활성화되어 있습니다.</p></div> : <div className="project-ide-utility__empty"><span aria-hidden="true">▷</span><strong>실행 결과를 바로 확인하세요</strong><p>의존성을 설치하고 개발 서버를 시작합니다.</p></div>}</section>
-            <section className="project-ide-terminal" aria-label="터미널" hidden={utilityPanel !== "terminal"}><div className="project-ide-terminal__toolbar"><strong>터미널</strong><span>{terminalWasTruncated ? "최근 64KB만 표시" : runtime.terminalProcessCount > 0 ? `${runtime.terminalProcessCount}개 프로세스 실행 중` : "대기 중"}</span></div><pre aria-live="polite">{terminalOutput || "브라우저 안에서 제한된 명령을 실행할 수 있습니다."}</pre><form onSubmit={runCommand}><label className="sr-only" htmlFor={`terminal-command-${project.id}`}>터미널 명령어</label><span aria-hidden="true">›</span><input id={`terminal-command-${project.id}`} name="command" placeholder="명령어 입력" autoComplete="off" maxLength={MAX_TERMINAL_COMMAND_CHARS} /><Button type="submit" size="sm">실행</Button></form></section>
-          </aside>
+          <TabsRoot className={css.utility()} value={utilityPanel} onValueChange={(value) => setUtilityPanel(value as UtilityPanel)}>
+            <TabsList className={css.utilityTabs()} aria-label="실행 도구"><TabsTab value="preview">미리보기{runtime.hmrState === "connected" ? <i aria-hidden="true" /> : null}</TabsTab><TabsTab value="terminal">터미널{runtime.terminalProcessCount > 0 ? <span>{runtime.terminalProcessCount}</span> : null}</TabsTab><TabsIndicator /></TabsList>
+            <section className={css.preview()} aria-label="미리보기" data-preview-url={isolatedPreviewUrl} hidden={utilityPanel !== "preview"}><div className={css.previewToolbar()}><div><strong>실시간 미리보기</strong><span>{workflowPhaseLabel(runtime.workflowPhase)} · HMR {hmrStateLabel(runtime.hmrState)}</span></div>{hasIsolatedPreview ? <span className={css.live()}><i aria-hidden="true" /> 실행 중</span> : <Button aria-label="미리보기 실행" type="button" size="sm" variant="primary" disabled={isRunningPreview} onClick={() => void runPreview()}>{isRunningPreview ? "설치 중…" : "미리보기 실행"}</Button>}</div>{hasIsolatedPreview ? <iframe ref={(frame) => previewBridgeRef.current?.attach(frame?.contentWindow ?? null)} title={`${project.name} 미리보기`} src={isolatedPreviewUrl} sandbox="allow-scripts allow-same-origin" allow="cross-origin-isolated" referrerPolicy="no-referrer" /> : previewConfiguration.status === "disabled" ? <div className={css.utilityEmpty()} role="status"><strong>미리보기를 사용할 수 없습니다.</strong><p>{previewConfiguration.message} 동일 출처 미리보기는 보안을 위해 비활성화되어 있습니다.</p></div> : runtime.previewUrl ? <div className={css.utilityEmpty()} role="status"><strong>격리된 연결을 준비하고 있습니다.</strong><p>격리된 미리보기 연결이 아직 준비되지 않았습니다. 동일 출처 미리보기는 비활성화되어 있습니다.</p></div> : <div className={css.utilityEmpty()}><span aria-hidden="true">▷</span><strong>실행 결과를 바로 확인하세요</strong><p>의존성을 설치하고 개발 서버를 시작합니다.</p></div>}</section>
+            <section className={css.terminal()} aria-label="터미널" hidden={utilityPanel !== "terminal"}><div className={css.terminalToolbar()}><strong>터미널</strong><span>{terminalWasTruncated ? "최근 64KB만 표시" : runtime.terminalProcessCount > 0 ? `${runtime.terminalProcessCount}개 프로세스 실행 중` : "대기 중"}</span></div><pre aria-live="polite">{terminalOutput || "브라우저 안에서 제한된 명령을 실행할 수 있습니다."}</pre><form onSubmit={runCommand}><label className="sr-only" htmlFor={`terminal-command-${project.id}`}>터미널 명령어</label><span aria-hidden="true">›</span><Input id={`terminal-command-${project.id}`} name="command" placeholder="명령어 입력" autoComplete="off" maxLength={MAX_TERMINAL_COMMAND_CHARS} /><Button type="submit" size="sm">실행</Button></form></section>
+          </TabsRoot>
         </div>
-      ) : <div className="project-ide-start"><div className="project-ide-start__copy"><span className="project-ide-start__mark" aria-hidden="true">N</span><p className="eyebrow">브라우저 개발 환경</p><h4>코드를 열고,<br />바로 실행하세요.</h4><p>서버에 저장된 작업을 안전하게 이어가거나, 새로운 React 템플릿으로 바로 시작하세요.</p></div><div className="project-ide-start__actions"><button aria-label="저장된 프로젝트 이어서 열기" type="button" disabled={isStarting || project.state !== "active"} onClick={() => void startWorkspace("saved")}><span aria-hidden="true">↗</span><strong>{startingSource === "saved" ? "불러오는 중…" : "저장된 프로젝트 이어서 열기"}</strong><small>무결성을 확인한 최신 서버 저장본을 엽니다.</small></button><button aria-label="템플릿으로 워크스페이스 시작" type="button" disabled={isStarting || project.state !== "active"} onClick={() => void startWorkspace("template")}><span aria-hidden="true">＋</span><strong>{startingSource === "template" ? "시작하는 중…" : "새 템플릿으로 시작"}</strong><small>Vite + React 기본 구성으로 로컬 초안을 만듭니다.</small></button></div><p className="project-ide-start__safety">브라우저의 로컬 초안은 명시적으로 서버에 저장하기 전까지 기존 서버 버전을 덮어쓰지 않습니다.</p></div>}
-      <details className="project-ide-history" open>
-        <summary><span>버전과 복구</span><small>서버 저장 이력과 체크포인트</small></summary>
-        <ProjectHistoryPanel
+      ) : <div className={css.start()}><div><span className={css.startMark()} aria-hidden="true">N</span><p className="eyebrow">브라우저 개발 환경</p><h4>코드를 열고,<br />바로 실행하세요.</h4><p>서버에 저장된 작업을 안전하게 이어가거나, 새로운 React 템플릿으로 바로 시작하세요.</p></div><div className={css.startActions()}><Button variant="ghost" aria-label="저장된 프로젝트 이어서 열기" type="button" disabled={isStarting || project.state !== "active"} onClick={() => void startWorkspace("saved")}><span aria-hidden="true">↗</span><strong>{startingSource === "saved" ? "불러오는 중…" : "저장된 프로젝트 이어서 열기"}</strong><small>무결성을 확인한 최신 서버 저장본을 엽니다.</small></Button><Button variant="ghost" aria-label="템플릿으로 워크스페이스 시작" type="button" disabled={isStarting || project.state !== "active"} onClick={() => void startWorkspace("template")}><span aria-hidden="true">＋</span><strong>{startingSource === "template" ? "시작하는 중…" : "새 템플릿으로 시작"}</strong><small>Vite + React 기본 구성으로 로컬 초안을 만듭니다.</small></Button></div><p className={css.startSafety()}>브라우저의 로컬 초안은 명시적으로 서버에 저장하기 전까지 기존 서버 버전을 덮어쓰지 않습니다.</p></div>}
+      <CollapsibleRoot className={css.history()} defaultOpen>
+        <CollapsibleTrigger><span>버전과 복구</span><small>서버 저장 이력과 체크포인트</small></CollapsibleTrigger>
+        <CollapsiblePanel><CollapsibleContent><ProjectHistoryPanel
           hasLocalDraft={hasWorkspace}
           initialState={initialHistoryState}
           project={project}
@@ -753,8 +808,8 @@ export function ProjectIdeShell({ assetRevision, initialHistoryState, onProjectC
           onProjectCommit={(result) => onProjectCommit?.(result)}
           onReloadProject={() => onProjectReload?.()}
           onResumeRestoredSave={(head) => void replaceLocalDraftWithRestoredSave(head)}
-        />
-      </details>
+        /></CollapsibleContent></CollapsiblePanel>
+      </CollapsibleRoot>
       <ConfirmationDialog
         confirmLabel="초안을 버리고 종료"
         description="서버에 저장하지 않은 로컬 초안과 편집 중인 내용이 사라집니다. 필요한 변경은 먼저 서버에 저장하세요."

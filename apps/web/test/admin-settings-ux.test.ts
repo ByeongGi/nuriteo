@@ -148,7 +148,9 @@ async function settingBffContract(): Promise<void> {
 }
 
 function sourceContracts(): void {
-  const page = read("src/app/(admin)/admin/settings/page.tsx");
+  const page = read("src/app/(admin)/admin/system/settings/page.tsx");
+  const legacySettingsPage = read("src/app/(admin)/admin/settings/page.tsx");
+  const adminHome = read("src/app/(admin)/admin/page.tsx");
   const settings = read("src/app/(admin)/admin/settings/admin-settings.tsx");
   const navigation = read("src/app/(admin)/admin/admin-navigation.tsx");
   const adminLayout = read("src/app/(admin)/admin/layout.tsx");
@@ -171,9 +173,41 @@ function sourceContracts(): void {
   assert.match(settings, /웹 업데이트 필요/u);
   assert.match(settings, /최근 관리자 재인증이 필요/u);
   assert.match(settings, /aria-busy=\{mutation\.isPending\}/u);
-  assert.match(navigation, /aria-current=\{pathname === destination\.href \? "page"/u);
+  assert.match(navigation, /activeDestination === destination\.href/u);
   assert.match(navigation, /href="\/admin"/u);
   assert.match(navigation, /href: "\/admin\/operations"/u);
+  assert.match(navigation, /label: "사용자·접근"/u);
+  assert.match(navigation, /label: "인증"/u);
+  assert.match(navigation, /label: "연동"/u);
+  assert.match(navigation, /label: "운영"/u);
+  assert.match(navigation, /label: "시스템"/u);
+  assert.match(navigation, /href: "\/admin\/access\/invitations"/u);
+  assert.match(navigation, /href: "\/admin\/authentication\/mfa"/u);
+  assert.match(navigation, /href: "\/admin\/integrations\/git"/u);
+  assert.match(navigation, /href: "\/admin\/operations\/email-deliveries"/u);
+  assert.match(navigation, /href: "\/admin\/system\/settings"/u);
+  assert.doesNotMatch(navigation, /href: "\/admin\/(?:invitations|mfa|oidc|git-providers|registries|notifications|smtp-trust|maintenance|backups|updates|settings)"/u);
+  assert.match(adminHome, /href: "\/admin\/access\/invitations"/u);
+  assert.match(adminHome, /href: "\/admin\/authentication\/mfa"/u);
+  assert.match(adminHome, /href: "\/admin\/integrations\/git"/u);
+  assert.match(adminHome, /href: "\/admin\/operations"/u);
+  assert.match(adminHome, /href: "\/admin\/system\/updates"/u);
+  assert.match(legacySettingsPage, /redirect\("\/admin\/system\/settings"\)/u);
+  for (const [legacy, canonical] of [
+    ["invitations", "/admin/access/invitations"],
+    ["mfa", "/admin/authentication/mfa"],
+    ["oidc", "/admin/authentication/oidc"],
+    ["git-providers", "/admin/integrations/git"],
+    ["registries", "/admin/integrations/registries"],
+    ["smtp-trust", "/admin/integrations/smtp/trust"],
+    ["notifications", "/admin/operations/email-deliveries"],
+    ["maintenance", "/admin/operations/maintenance"],
+    ["backups", "/admin/operations/backups"],
+    ["updates", "/admin/system/updates"],
+    ["settings", "/admin/system/settings"]
+  ] as const) {
+    assert.ok(read(`src/app/(admin)/admin/${legacy}/page.tsx`).includes(`redirect("${canonical}")`));
+  }
   assert.match(operationsPage, /getAdminOperations\(client\)/u);
   assert.match(operationsDashboard, /상세 엔드포인트, 자격 증명과 내부 오류 내용은 표시하지 않습니다/u);
   assert.match(operationsDashboard, /aria-labelledby="dependency-health-title"/u);

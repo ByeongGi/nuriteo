@@ -146,7 +146,7 @@ try {
     const admin = await browser.newContext({ viewport: { width: 390, height: 844 } });
     await admin.addCookies([{ name: "nuriteo_dev_session", value: "admin", url: origin }, { name: "nuriteo_dev_csrf", value: csrf, url: origin }]);
     const adminPage = await admin.newPage();
-    await adminPage.goto(`${origin}/admin/notifications`, { waitUntil: "networkidle" });
+    await adminPage.goto(`${origin}/admin/operations/email-deliveries`, { waitUntil: "networkidle" });
     await adminPage.getByRole("heading", { level: 1, name: "이메일 전송" }).waitFor();
     assert.equal(await adminPage.getByRole("status").filter({ hasText: "SMTP를 사용할 수 없습니다" }).count(), 1);
     const retry = adminPage.getByRole("button", { name: "지금 재시도" });

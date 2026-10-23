@@ -1,4 +1,4 @@
-import { getNotificationPreferences, listNotifications } from "@nuriteo/api-client";
+import { listNotifications } from "@nuriteo/api-client";
 import type { Metadata } from "next";
 
 import { EntryUnavailable } from "#src/app/_components/entry-unavailable.tsx";
@@ -11,16 +11,14 @@ export const metadata: Metadata = { title: "알림" };
 export default async function NotificationsPage() {
   try {
     const client = await createServerApiClient();
-    const [active, archived, preferences] = await Promise.all([
+    const [active, archived] = await Promise.all([
       listNotifications(client, { limit: 25 }),
-      listNotifications(client, { archived: true, limit: 25 }),
-      getNotificationPreferences(client)
+      listNotifications(client, { archived: true, limit: 25 })
     ]);
     return (
       <NotificationCenter
         initialActive={active.data}
         initialArchived={archived.data}
-        initialPreferences={preferences.data}
       />
     );
   } catch (error) {

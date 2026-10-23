@@ -16,11 +16,14 @@ import type {
   RegistryConnection,
   RegistryScopeRoute
 } from "@nuriteo/api-client";
+import Link from "next/link";
 import { useState } from "react";
 import type { FormEvent } from "react";
 
+import { Badge } from "#src/components/ui/badge.tsx";
 import { Button } from "#src/components/ui/button.tsx";
 import { ConfirmationDialog } from "#src/components/ui/confirmation-dialog.tsx";
+import { CollapsibleContent, CollapsiblePanel, CollapsibleRoot, CollapsibleTrigger } from "#src/components/ui/collapsible.tsx";
 import { SelectField, TextField } from "#src/components/ui/field.tsx";
 import { createBrowserApiClient } from "#src/lib/api/browser-client.ts";
 import { readCsrfCredential } from "#src/lib/api/browser-security.ts";
@@ -28,6 +31,7 @@ import { useExclusiveMutation } from "#src/lib/use-exclusive-mutation.ts";
 import { AdminEmptyState, AdminForm, AdminFormActionNote, AdminFormActions, AdminFormFieldSpan, AdminFormSection } from "#src/app/(admin)/admin/_components/admin-form-layout.tsx";
 import { AdminPageHeader } from "#src/app/(admin)/admin/_components/admin-page-header.tsx";
 import { IntegrationCaConsole } from "#src/app/(admin)/admin/_components/integration-ca-console.tsx";
+import { AdminCollectionHeading, AdminIntegrationRecord, AdminPage, AdminPanel, AdminRecordActions } from "#src/app/(admin)/admin/_components/admin-surface.tsx";
 
 export function RegistryConsole({
   initialConfiguration
@@ -136,14 +140,14 @@ export function RegistryConsole({
   }
 
   const active = registries.filter((registry) => registry.state === "active");
-  return <main id="main-content" className="workspace-page admin-detail-page">
+  return <AdminPage id="main-content">
     <AdminPageHeader
       category="패키지 저장소"
       title="패키지 저장소"
       description="전역 npm 호환 저장소와 정확한 스코프 경로를 관리합니다. 선택한 경로가 실패해도 다른 저장소로 우회하지 않습니다."
-      aside={<span className="admin-page-header__count">활성 {active.length}개 · 전체 {registries.length}개</span>}
+      aside={<Badge>활성 {active.length}개 · 전체 {registries.length}개</Badge>}
     />
-    <section className="admin-detail-panel admin-create-panel" aria-labelledby="add-registry"><details open={registries.length === 0}><summary><span id="add-registry">저장소 추가</span><small>연결 검증 전에는 패키지 요청에 사용되지 않습니다</small></summary>
+    <AdminPanel className="admin-create-panel" aria-labelledby="add-registry"><CollapsibleRoot defaultOpen={registries.length === 0}><CollapsibleTrigger><span id="add-registry">저장소 추가</span><small>연결 검증 전에는 패키지 요청에 사용되지 않습니다</small></CollapsibleTrigger><CollapsiblePanel><CollapsibleContent>
       <AdminForm onSubmit={create} aria-busy={mutation.isPending}>
         <AdminFormSection title="저장소 정보" description="관리 화면에 표시할 이름과 정확한 npm 호환 HTTPS 주소를 입력합니다.">
           <TextField label="표시 이름" name="displayName" maxLength={200} required disabled={mutation.isPending} />
@@ -156,25 +160,25 @@ export function RegistryConsole({
           <AdminFormActionNote>비활성 상태로 저장한 뒤 연결 검증을 통과해야 패키지 요청에 사용할 수 있습니다.</AdminFormActionNote>
           <Button type="submit" variant="primary" disabled={mutation.isPending}>비활성 저장소 저장</Button>
         </AdminFormActions>
-      </AdminForm></details>
-    </section>
-    <section className="admin-detail-panel" aria-labelledby="registry-list">
-      <div className="admin-collection-heading"><h2 id="registry-list">등록된 저장소</h2><span className="admin-page-header__count">{registries.length}개</span></div>
-      {registries.length === 0 ? <AdminEmptyState title="등록된 패키지 저장소가 없습니다">위의 추가 영역에서 첫 npm 호환 저장소를 등록하세요.</AdminEmptyState> : <ul className="record-list">{registries.map((registry) => <li className="admin-integration-record" key={registry.id}>
-        <div><strong>{registry.displayName}{registry.isDefault ? " · 기본값" : ""}</strong><span>{registry.state === "active" ? "활성" : "비활성"}</span><small>{registry.baseUrl} · 설정 v{registry.configVersion} · 자격 증명 v{registry.credentialVersion}</small></div>
-        {registry.state === "disabled" ? <details className="admin-record-disclosure"><summary>저장소 설정 및 토큰</summary>
+      </AdminForm></CollapsibleContent></CollapsiblePanel></CollapsibleRoot>
+    </AdminPanel>
+    <AdminPanel aria-labelledby="registry-list">
+      <AdminCollectionHeading><h2 id="registry-list">등록된 저장소</h2><Badge>{registries.length}개</Badge></AdminCollectionHeading>
+      {registries.length === 0 ? <AdminEmptyState title="등록된 패키지 저장소가 없습니다">위의 추가 영역에서 첫 npm 호환 저장소를 등록하세요.</AdminEmptyState> : <ul className="record-list">{registries.map((registry) => <AdminIntegrationRecord key={registry.id}>
+        <div><strong><Link href={`/admin/integrations/registries/${registry.id}`}>{registry.displayName}</Link>{registry.isDefault ? " · 기본값" : ""}</strong><span>{registry.state === "active" ? "활성" : "비활성"}</span><small>{registry.baseUrl} · 설정 v{registry.configVersion} · 자격 증명 v{registry.credentialVersion}</small></div>
+        {registry.state === "disabled" ? <CollapsibleRoot className="admin-record-disclosure"><CollapsibleTrigger>저장소 설정 및 토큰</CollapsibleTrigger><CollapsiblePanel><CollapsibleContent>
           <form className="collaboration-form" onSubmit={(event) => void rename(event, registry)}><TextField label="표시 이름" name="displayName" defaultValue={registry.displayName} maxLength={200} required disabled={mutation.isPending} /><Button disabled={mutation.isPending}>이름 변경</Button></form>
           <form className="collaboration-form" onSubmit={(event) => void rotate(event, registry)}><TextField label="교체 토큰" name="token" type="password" autoComplete="new-password" maxLength={4096} required disabled={mutation.isPending} /><Button disabled={mutation.isPending}>토큰 교체</Button></form>
-        </details> : null}
+        </CollapsibleContent></CollapsiblePanel></CollapsibleRoot> : null}
         <IntegrationCaConsole type="registry" integrationId={registry.id} />
-        <div className="record-actions">
+        <AdminRecordActions>
           {registry.state === "active" ? <Button disabled={mutation.isPending} onClick={() => void run(async () => (await disableRegistry(createBrowserApiClient(), registry.id, registry.configVersion, options())).data, "저장소를 즉시 비활성화했습니다. 연결된 경로는 다른 저장소로 우회하지 않습니다.")}>비활성화</Button> : <Button variant="primary" disabled={mutation.isPending} onClick={() => void run(async () => (await activateRegistry(createBrowserApiClient(), registry.id, registry.configVersion, options())).data, "저장소를 검증하고 활성화했습니다.")}>검증 후 활성화</Button>}
           <Button disabled={mutation.isPending || registry.state !== "active" || registry.isDefault} onClick={() => void run(async () => (await setDefaultRegistry(createBrowserApiClient(), registry.id, registry.configVersion, options())).data, "기본 저장소를 변경했습니다.")}>기본값으로 설정</Button>
           <Button variant="danger" disabled={mutation.isPending || registry.state !== "disabled"} onClick={() => setPendingDeletion(registry)}>삭제</Button>
-        </div>
-      </li>)}</ul>}
-    </section>
-    <section className="admin-detail-panel" aria-labelledby="scope-routing">
+        </AdminRecordActions>
+      </AdminIntegrationRecord>)}</ul>}
+    </AdminPanel>
+    <AdminPanel aria-labelledby="scope-routing">
       <h2 id="scope-routing">스코프 경로</h2>
       <p><code>@company</code> 같은 정확한 npm 스코프를 하나의 활성 저장소에 연결합니다. 저장소를 사용할 수 없으면 안전하게 실패합니다.</p>
       <AdminForm onSubmit={mapScope}>
@@ -188,10 +192,10 @@ export function RegistryConsole({
         </AdminFormActions>
       </AdminForm>
       {scopes.length === 0 ? <AdminEmptyState title="등록된 스코프 경로가 없습니다">활성 저장소를 선택해 첫 패키지 경로를 추가하세요.</AdminEmptyState> : <ul className="record-list">{scopes.map((route) => <li key={route.scope}><div><strong>{route.scope}</strong><span>{registries.find((registry) => registry.id === route.connectionId)?.displayName ?? "사용할 수 없는 저장소"}</span></div></li>)}</ul>}
-    </section>
+    </AdminPanel>
     {feedback ? <p className={`notification-feedback notification-feedback--${feedback.error ? "error" : "success"}`} role={feedback.error ? "alert" : "status"}>{feedback.text}</p> : null}
     <ConfirmationDialog busy={mutation.isPending} confirmLabel={mutation.isPending ? "삭제 중…" : "저장소 삭제"} description={`${pendingDeletion?.displayName ?? "선택한 저장소"}의 자격 증명과 연결된 스코프 경로가 영구적으로 삭제됩니다.`} open={pendingDeletion !== undefined} title="패키지 저장소를 삭제할까요?" onCancel={() => setPendingDeletion(undefined)} onConfirm={() => { if (pendingDeletion) void remove(pendingDeletion); }} />
-  </main>;
+  </AdminPage>;
 }
 
 function replaceScope(

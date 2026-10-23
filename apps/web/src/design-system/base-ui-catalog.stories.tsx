@@ -6,11 +6,15 @@ import { Button } from "#src/components/ui/button.tsx";
 import { CollapsibleContent, CollapsibleIndicator, CollapsiblePanel, CollapsibleRoot, CollapsibleTrigger } from "#src/components/ui/collapsible.tsx";
 import { Input } from "#src/components/ui/input.tsx";
 import { MeterHeader, MeterIndicator, MeterLabel, MeterRoot, MeterTrack, MeterValue } from "#src/components/ui/meter.tsx";
+import { MetricGrid, MetricItem } from "#src/components/ui/metric-grid.tsx";
 import { OTPFieldInput, OTPFieldRoot, OTPFieldSeparator } from "#src/components/ui/otp-field.tsx";
+import { PageHeader } from "#src/components/ui/page-header.tsx";
 import { ProgressHeader, ProgressIndicator, ProgressLabel, ProgressRoot, ProgressTrack, ProgressValue } from "#src/components/ui/progress.tsx";
+import { SearchField } from "#src/components/ui/search-field.tsx";
 import { Separator } from "#src/components/ui/separator.tsx";
 import { SliderControl, SliderHeader, SliderIndicator, SliderLabel, SliderRoot, SliderThumb, SliderTrack, SliderValue } from "#src/components/ui/slider.tsx";
 import { TabsIndicator, TabsList, TabsPanel, TabsRoot, TabsTab } from "#src/components/ui/tabs.tsx";
+import { Textarea } from "#src/components/ui/textarea.tsx";
 import { Toggle } from "#src/components/ui/toggle.tsx";
 import { ToolbarButton, ToolbarGroup, ToolbarRoot, ToolbarSeparator } from "#src/components/ui/toolbar.tsx";
 import { TooltipContent, TooltipProvider, TooltipRoot, TooltipTrigger } from "#src/components/ui/tooltip.tsx";
@@ -36,9 +40,26 @@ function CatalogPreview() {
           <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">Base UI의 상호작용 계약 위에 누리터 토큰과 Tailwind Variants 스타일을 적용한 공통 계층입니다.</p>
         </header>
 
+        <section className="grid gap-5 rounded-xl border border-border bg-raised p-5">
+          <h2 className="text-lg font-semibold">제품 페이지 구조</h2>
+          <PageHeader
+            eyebrow="개발"
+            title="프로젝트"
+            description="주요 작업과 현재 상태를 모든 사용자 화면에서 같은 순서로 전달합니다."
+            actions={<Button variant="primary">새 프로젝트</Button>}
+          />
+          <MetricGrid aria-label="프로젝트 요약">
+            <MetricItem label="활성" value="12" description="현재 편집 가능한 프로젝트" />
+            <MetricItem label="협업 중" value="4" description="멤버와 공유된 프로젝트" />
+            <MetricItem label="보관됨" value="2" description="설정에서 복원 가능" />
+          </MetricGrid>
+        </section>
+
         <section className="grid gap-4 rounded-xl border border-border bg-raised p-5">
           <h2 className="text-lg font-semibold">입력과 선택</h2>
-          <Input aria-label="프로젝트 검색" placeholder="프로젝트 검색" />
+          <Input aria-label="프로젝트 이름" placeholder="프로젝트 이름" />
+          <SearchField label="프로젝트 검색" placeholder="프로젝트 검색" />
+          <Textarea aria-label="프로젝트 설명" placeholder="프로젝트 설명" rows={3} />
           <div className="flex flex-wrap items-center gap-3">
             <Button variant="primary">저장</Button>
             <Toggle aria-label="미리 보기 고정">미리 보기 고정</Toggle>

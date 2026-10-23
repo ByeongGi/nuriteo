@@ -57,6 +57,9 @@ async function rotatedSessionContract(): Promise<void> {
 function sourceContracts(): void {
   const security = read("src/app/mfa/security.tsx");
   const policy = read("src/app/(admin)/admin/mfa/policy-editor.tsx");
+  const policyPage = read("src/app/(admin)/admin/authentication/mfa/page.tsx");
+  const resetPage = read("src/app/(admin)/admin/access/mfa-reset/page.tsx");
+  const legacyPage = read("src/app/(admin)/admin/mfa/page.tsx");
   const layout = read("src/app/(authenticated)/layout.tsx");
   const qr = read("src/lib/qr-matrix.ts");
   assert.match(security, /한 번만 표시됩니다/u);
@@ -69,6 +72,11 @@ function sourceContracts(): void {
   assert.doesNotMatch(layout, /getMfaStatus\(client\)\.catch/u);
   assert.match(policy, /영향 검토/u);
   assert.match(policy, /이메일 또는 표시 이름으로 찾기/u);
+  assert.match(policy, /view === "policy"/u);
+  assert.match(policy, /view === "reset"/u);
+  assert.match(policyPage, /view="policy"/u);
+  assert.match(resetPage, /view="reset"/u);
+  assert.match(legacyPage, /redirect\("\/admin\/authentication\/mfa"\)/u);
   assert.match(qr, /qrcode-terminal/u);
   assert.doesNotMatch(`${security}\n${policy}\n${qr}`, /localStorage|sessionStorage|dangerouslySetInnerHTML/u);
 }

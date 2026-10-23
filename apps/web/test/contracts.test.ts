@@ -10,6 +10,7 @@ const webRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 testStandaloneAndDependencyContract();
 testServerFirstBoundaries();
 testThemeAndTokenContract();
+testComponentOwnedStyleBoundaries();
 testSafeAccessibleBoundaries();
 testProductionBoundary();
 
@@ -32,6 +33,7 @@ function testStandaloneAndDependencyContract(): void {
   assert.match(providers, /staleTime:\s*60_000/u);
   assert.match(read("src/app/sign-in/sign-in-form.tsx"), /useMutation/u);
   assert.match(read("src/components/ui/button.tsx"), /const buttonVariants = tv\(/u);
+  assert.match(read("src/components/ui/badge.tsx"), /const badgeVariants = tv\(/u);
   const fieldSource = read("src/components/ui/field.tsx");
   assert.match(fieldSource, /@base-ui\/react\/field/u);
   assert.match(fieldSource, /@base-ui\/react\/select/u);
@@ -41,6 +43,8 @@ function testStandaloneAndDependencyContract(): void {
   assert.match(read("src/components/ui/switch.tsx"), /@base-ui\/react\/switch/u);
   assert.match(read("src/components/ui/checkbox.tsx"), /const checkboxStyles = tv\(/u);
   assert.match(read("src/components/ui/number-field.tsx"), /@base-ui\/react\/number-field/u);
+  assert.match(read("src/components/ui/search-field.tsx"), /#src\/components\/ui\/input\.tsx/u);
+  assert.match(read("src/components/ui/textarea.tsx"), /<textarea/u);
   for (const uiFile of findFiles("src/components/ui").filter((file) => file.endsWith(".tsx"))) {
     assert.doesNotMatch(read(uiFile), /admin(?:-|_|\s)|project(?:-|_|\s)|workspace(?:-|_|\s)/iu, `${uiFile} must stay domain-neutral`);
   }
@@ -50,9 +54,16 @@ function testStandaloneAndDependencyContract(): void {
   const segmentedControlSource = read("src/components/ui/segmented-control.tsx");
   assert.match(segmentedControlSource, /@base-ui\/react\/toggle-group/u);
   assert.match(segmentedControlSource, /const segmentedControlStyles = tv\(/u);
-  for (const appFile of findFiles("src/app").filter((file) => file.endsWith(".tsx"))) {
-    assert.doesNotMatch(read(appFile), /<select(?:\s|>)/u, `${appFile} must use the Base UI select field`);
-    assert.doesNotMatch(read(appFile), /<input[^>]+type=["'](?:checkbox|radio)["']/u, `${appFile} must use the Base UI choice fields`);
+  const uiConsumerFiles = findFiles("src").filter((file) => file.endsWith(".tsx") && !file.startsWith("src/components/ui/"));
+  for (const sourceFile of uiConsumerFiles) {
+    const source = read(sourceFile);
+    assert.doesNotMatch(source, /<select(?:\s|>)/u, `${sourceFile} must use the Base UI select field`);
+    assert.doesNotMatch(source, /<(?:button|textarea|details|summary)(?:\s|>)/u, `${sourceFile} must use a shared UI wrapper`);
+    assert.doesNotMatch(source, /role=["'](?:tab|tablist|tabpanel)["']/u, `${sourceFile} must use the Base UI tabs wrapper`);
+    for (const [input] of source.matchAll(/<input\b[^>]*>/gu)) {
+      assert.match(input, /type=["']hidden["']/u, `${sourceFile} must wrap every visible input`);
+    }
+    assert.doesNotMatch(read(sourceFile), /["']@base-ui\/react(?:\/|["'])/u, `${sourceFile} must import Base UI through a shared wrapper`);
   }
   assert.match(read("src/app/sign-in/sign-in.styles.ts"), /slots:\s*\{/u);
   assert.match(read("next.config.ts"), /output:\s*"standalone"/u);
@@ -84,6 +95,7 @@ function testServerFirstBoundaries(): void {
     "src/app/(admin)/admin/_components/integration-ca-console.tsx",
     "src/app/(admin)/admin/admin-navigation.tsx",
     "src/app/(admin)/admin/backups/backup-console.tsx",
+    "src/app/(admin)/admin/error.tsx",
     "src/app/(admin)/admin/git-providers/provider-console.tsx",
     "src/app/(admin)/admin/invitations/activation-invitations.tsx",
     "src/app/(admin)/admin/maintenance/maintenance-console.tsx",
@@ -95,7 +107,10 @@ function testServerFirstBoundaries(): void {
     "src/app/(admin)/admin/settings/admin-settings.tsx",
     "src/app/(admin)/admin/updates/update-readiness-console.tsx",
     "src/app/(authenticated)/access-tokens/token-console.tsx",
+    "src/app/(authenticated)/account/_components/account-navigation.tsx",
+    "src/app/(authenticated)/account/notifications/notification-preferences-form.tsx",
     "src/app/(authenticated)/authenticated-navigation.tsx",
+    "src/app/(authenticated)/error.tsx",
     "src/app/(authenticated)/identities/identity-connections.tsx",
     "src/app/(authenticated)/logout-button.tsx",
     "src/app/(authenticated)/notifications/notification-center.tsx",
@@ -107,18 +122,24 @@ function testServerFirstBoundaries(): void {
     "src/app/(authenticated)/projects/project-history-panel.tsx",
     "src/app/(authenticated)/projects/project-ide-shell.tsx",
     "src/app/(authenticated)/projects/use-project-file-search.ts",
+    "src/app/(authenticated)/workspaces/[workspaceId]/error.tsx",
     "src/app/(authenticated)/workspaces/workspace-catalog.tsx",
+    "src/app/(studio)/error.tsx",
     "src/app/(studio)/projects/[projectId]/studio/project-studio-screen.tsx",
     "src/app/_components/error-view.tsx",
     "src/app/activate/activation-form.tsx",
+    "src/app/activate/error.tsx",
     "src/app/error.tsx",
     "src/app/examples/_components/examples-gallery.tsx",
     "src/app/examples/_components/fork-example-form.tsx",
     "src/app/examples/_components/published-example-preview.tsx",
+    "src/app/examples/error.tsx",
     "src/app/global-error.tsx",
+    "src/app/mfa/error.tsx",
     "src/app/mfa/mfa-enrollment-panel.tsx",
     "src/app/mfa/security.tsx",
     "src/app/providers.tsx",
+    "src/app/sign-in/error.tsx",
     "src/app/sign-in/sign-in-form.tsx",
     "src/components/theme-selector.tsx",
     "src/lib/api/browser-client.ts",
@@ -161,6 +182,59 @@ function testThemeAndTokenContract(): void {
   assert.match(globals, /prefers-reduced-motion: reduce/u);
 }
 
+function testComponentOwnedStyleBoundaries(): void {
+  const authenticatedShell = read("src/app/(authenticated)/authenticated-shell-frame.tsx");
+  const authenticatedNavigation = read("src/app/(authenticated)/authenticated-navigation.tsx");
+  const projectDashboard = read("src/app/(authenticated)/projects/project-dashboard.tsx");
+  const adminShell = read("src/app/(admin)/admin/admin-shell-frame.tsx");
+  const adminNavigation = read("src/app/(admin)/admin/admin-navigation.tsx");
+  const globals = read("src/styles/globals.css");
+
+  for (const [name, source] of [
+    ["authenticated shell", authenticatedShell],
+    ["authenticated navigation", authenticatedNavigation],
+    ["project dashboard", projectDashboard],
+    ["admin shell", adminShell],
+    ["admin navigation", adminNavigation]
+  ] as const) {
+    assert.match(source, /from "tailwind-variants"/u, `${name} must own its Tailwind Variants styles`);
+    assert.match(source, /const \w+Styles = tv\(\{[\s\S]+slots:\s*\{/u, `${name} must expose named TV slots`);
+  }
+
+  assert.doesNotMatch(
+    authenticatedShell,
+    /className="authenticated-(?:shell|navigation)[^"]*"/u,
+    "the authenticated shell must not depend on legacy global classes"
+  );
+  assert.doesNotMatch(
+    authenticatedNavigation,
+    /className="authenticated-navigation[^"]*"/u,
+    "authenticated navigation must not depend on legacy global classes"
+  );
+  assert.doesNotMatch(
+    projectDashboard,
+    /className="project-(?:page|layout|sidebar|catalog|record)[^"]*"/u,
+    "the project catalog must render through its TV slots"
+  );
+  assert.doesNotMatch(
+    adminShell,
+    /className="admin-(?:application-shell|sidebar|mobile-header|shell)[^"]*"/u,
+    "the admin shell must not depend on legacy global classes"
+  );
+  assert.doesNotMatch(
+    adminNavigation,
+    /className="admin-navigation[^"]*"/u,
+    "admin navigation must not depend on legacy global classes"
+  );
+
+  assert.doesNotMatch(globals, /unlayered\s+project\s+override/iu);
+  assert.doesNotMatch(
+    globals,
+    /\.project-catalog__pagination\b/u,
+    "globals.css must not own the Project catalog pagination override"
+  );
+}
+
 function testSafeAccessibleBoundaries(): void {
   const layout = read("src/app/layout.tsx");
   assert.match(layout, /href="#main-content"/u);
@@ -171,12 +245,10 @@ function testSafeAccessibleBoundaries(): void {
   assert.match(loading, /aria-live="polite"/u);
 
   const notFound = read("src/app/not-found.tsx");
-  assert.match(notFound, /<ProductEntryShell/u);
-  assert.match(notFound, /titleId="not-found-title"/u);
-  assert.match(notFound, /href="\/"/u);
+  assert.match(notFound, /<NotFoundState/u);
 
   const productEntryShell = read("src/app/_components/product-entry-shell.tsx");
-  assert.match(productEntryShell, /<h1 id=\{titleId\}>/u);
+  assert.match(productEntryShell, /<h1 className=\{styles\.title\(\)\} id=\{titleId\}>/u);
   assert.match(productEntryShell, /aria-labelledby=\{titleId\}/u);
 
   for (const errorFile of ["src/app/error.tsx", "src/app/global-error.tsx"] as const) {

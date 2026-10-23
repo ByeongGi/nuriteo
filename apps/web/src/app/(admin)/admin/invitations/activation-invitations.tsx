@@ -10,7 +10,9 @@ import { useRouter } from "next/navigation";
 import { useDeferredValue, useState } from "react";
 import type { FormEvent } from "react";
 
+import { Badge } from "#src/components/ui/badge.tsx";
 import { Button } from "#src/components/ui/button.tsx";
+import { CollapsibleContent, CollapsibleIndicator, CollapsiblePanel, CollapsibleRoot, CollapsibleTrigger } from "#src/components/ui/collapsible.tsx";
 import { SelectField, TextField } from "#src/components/ui/field.tsx";
 import { createBrowserApiClient } from "#src/lib/api/browser-client.ts";
 import { collaborationError, readCsrfCredential } from "#src/lib/api/browser-security.ts";
@@ -122,7 +124,7 @@ export function ActivationInvitations({
         category="가입 초대"
         title="계정 활성화"
         description="일회용 계정 활성화 링크를 발급합니다. 이메일 전송이 구성되어 있으면 링크를 이 화면에 표시하지 않고 이메일로 보냅니다."
-        aside={<span className="admin-page-header__count">대기 중 {pendingCount}개</span>}
+        aside={<Badge>대기 중 {pendingCount}개</Badge>}
       />
       {oneTimeUrl ? (
         <section className="one-time-panel" aria-live="polite">
@@ -136,19 +138,19 @@ export function ActivationInvitations({
       {deliveryNotice ? <p role="status">{deliveryNotice}</p> : null}
       {error ? <p className="form-error" role="alert">{error}</p> : null}
       <section className="admin-detail-panel admin-create-panel" aria-labelledby="issue-invitation-title">
-        <details open={invitations.length === 0}>
-          <summary><span id="issue-invitation-title">새 계정 초대</span><small>링크는 한 번만 사용할 수 있습니다</small></summary>
-          <form className="collaboration-form admin-invitation-form" onSubmit={issue} aria-busy={mutation.isPending}>
+        <CollapsibleRoot defaultOpen={invitations.length === 0}>
+          <CollapsibleTrigger><span id="issue-invitation-title">새 계정 초대</span><small>링크는 한 번만 사용할 수 있습니다</small><CollapsibleIndicator>⌄</CollapsibleIndicator></CollapsibleTrigger>
+          <CollapsiblePanel><CollapsibleContent><form className="collaboration-form admin-invitation-form" onSubmit={issue} aria-busy={mutation.isPending}>
             <TextField label="초대받을 이메일" name="email" type="email" required maxLength={320} autoComplete="email" disabled={mutation.isPending} />
             <SelectField label="유효 기간" name="expiresInSeconds" defaultValue="604800" options={EXPIRATION_OPTIONS} required disabled={mutation.isPending} />
             <Button type="submit" variant="primary" disabled={mutation.isPending}>
               {mutation.isPending ? "처리 중…" : "초대 발급"}
             </Button>
-          </form>
-        </details>
+          </form></CollapsibleContent></CollapsiblePanel>
+        </CollapsibleRoot>
       </section>
       <section className="admin-detail-panel" aria-labelledby="invitation-list-title">
-        <div className="admin-collection-heading"><h2 id="invitation-list-title">발급 내역</h2><span className="admin-page-header__count">전체 {invitations.length}개</span></div>
+        <div className="admin-collection-heading"><h2 id="invitation-list-title">발급 내역</h2><Badge>전체 {invitations.length}개</Badge></div>
         <div className="admin-collection-toolbar" role="search" aria-label="계정 초대 검색 및 필터">
           <TextField label="이메일 검색" labelHidden density="compact" type="search" value={query} onChange={(event) => setQuery(event.currentTarget.value)} placeholder="이메일 검색" />
           <SelectField label="초대 상태" labelHidden density="compact" options={STATUS_OPTIONS} value={statusFilter} onValueChange={(nextValue) => setStatusFilter(nextValue as "all" | ActivationInvitation["status"])} />

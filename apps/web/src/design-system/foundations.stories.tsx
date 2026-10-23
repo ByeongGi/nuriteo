@@ -382,10 +382,10 @@ function FoundationsOverview() {
         title="Motion"
       >
         <div className="foundation-motion">
-          <button type="button">
+          <Button type="button">
             <span />
             Hover or focus
-          </button>
+          </Button>
           <div>
             <TokenName>--n-duration-fast · 120ms</TokenName>
             <TokenName>--n-duration-normal · 180ms</TokenName>

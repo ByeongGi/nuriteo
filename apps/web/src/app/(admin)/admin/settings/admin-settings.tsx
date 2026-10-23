@@ -22,12 +22,14 @@ import type { FormEvent } from "react";
 
 import { Button } from "#src/components/ui/button.tsx";
 import { CheckboxField } from "#src/components/ui/checkbox.tsx";
+import { Input } from "#src/components/ui/input.tsx";
 import { SwitchField } from "#src/components/ui/switch.tsx";
 import { SelectField } from "#src/components/ui/field.tsx";
 import { createBrowserApiClient } from "#src/lib/api/browser-client.ts";
 import { readCsrfCredential } from "#src/lib/api/browser-security.ts";
 import { useExclusiveMutation } from "#src/lib/use-exclusive-mutation.ts";
 import { AdminPageHeader } from "#src/app/(admin)/admin/_components/admin-page-header.tsx";
+import { AdminPage, AdminSectionHeading } from "#src/app/(admin)/admin/_components/admin-surface.tsx";
 
 interface SettingDescriptor {
   readonly label: string;
@@ -58,7 +60,7 @@ export function AdminSettings({
   const [restartRequired, setRestartRequired] = useState(status.restartRequired);
 
   return (
-    <main id="main-content" className="workspace-page admin-detail-page admin-settings-page">
+    <AdminPage id="main-content">
       <AdminPageHeader
         category="인스턴스 설정"
         title="인스턴스 설정"
@@ -67,7 +69,7 @@ export function AdminSettings({
       />
 
       <section className="admin-status" aria-labelledby="instance-status-title">
-        <div className="admin-section-heading">
+        <AdminSectionHeading>
           <div>
             <p className="eyebrow">런타임 상태</p>
             <h2 id="instance-status-title">인스턴스 상태</h2>
@@ -75,7 +77,7 @@ export function AdminSettings({
           <span className={restartRequired ? "status-badge status-badge--warning" : "status-badge"}>
             {restartRequired ? "재시작 필요" : "최신 상태"}
           </span>
-        </div>
+        </AdminSectionHeading>
         <dl className="admin-status-grid">
           <StatusItem label="릴리스" value={status.releaseVersion} />
           <StatusItem label="데이터베이스 스키마" value={String(status.schemaVersion)} />
@@ -87,13 +89,13 @@ export function AdminSettings({
       <CleanupPreview initial={cleanup} />
 
       <section className="admin-settings" aria-labelledby="instance-settings-title">
-        <div className="admin-section-heading">
+        <AdminSectionHeading>
           <div>
             <p className="eyebrow">REGISTRY {settings.registryVersion}</p>
             <h2 id="instance-settings-title">인스턴스 정책</h2>
           </div>
           <p>모든 변경은 유효성 및 버전을 확인한 뒤 감사 기록에 남습니다.</p>
-        </div>
+        </AdminSectionHeading>
         <div className="admin-setting-list">
           {settings.items.map((setting) => {
             if (setting.key === "security.mfa_enforcement" || setting.key === "security.mfa_grace_period_days") {
@@ -113,7 +115,7 @@ export function AdminSettings({
           })}
         </div>
       </section>
-    </main>
+    </AdminPage>
   );
 }
 
@@ -126,7 +128,7 @@ function ManagedMfaSetting({ setting }: { readonly setting: AdminSetting }) {
         <code>{setting.key}</code>
         <span>{applyModeLabel(setting.applyMode)} · version {setting.version}</span>
       </div>
-      <Link className="button button--sm" href="/admin/mfa">MFA 정책 관리</Link>
+      <Link className="button button--sm" href="/admin/authentication/mfa">MFA 정책 관리</Link>
     </article>
   );
 }
@@ -150,7 +152,7 @@ function CleanupPreview({ initial }: { readonly initial: AdminPolicyCleanupPrevi
 
   return (
     <section className="admin-policy-preview" aria-labelledby="cleanup-preview-title">
-      <div className="admin-section-heading">
+      <AdminSectionHeading>
         <div>
           <p className="eyebrow">읽기 전용 사전 점검</p>
           <h2 id="cleanup-preview-title">오브젝트 정리 미리보기</h2>
@@ -158,7 +160,7 @@ function CleanupPreview({ initial }: { readonly initial: AdminPolicyCleanupPrevi
         <Button type="button" size="sm" onClick={refresh} disabled={mutation.isPending}>
           {mutation.isPending ? "새로 고치는 중…" : "미리보기 새로 고침"}
         </Button>
-      </div>
+      </AdminSectionHeading>
       <dl className="admin-status-grid">
         <StatusItem label="가비지 컬렉션" value={preview.gcEnabled ? "켜짐" : "꺼짐"} />
         <StatusItem label="유예 기간" value={formatDuration(preview.gracePeriodSeconds)} />
@@ -353,7 +355,7 @@ function SettingControl({
     return (
       <>
         <div className="admin-number-control">
-          <input
+          <Input
             id={controlId}
             type="number"
             min={constraint.minimum}
@@ -373,7 +375,7 @@ function SettingControl({
     );
   }
   return (
-    <input
+    <Input
       id={controlId}
       type={constraint.kind === "email_address" ? "email" : "text"}
       minLength={constraint.kind === "text" ? constraint.minimumBytes : undefined}

@@ -1,6 +1,4 @@
-import Link from "next/link";
-
-import { ProductEntryShell } from "#src/app/_components/product-entry-shell.tsx";
+import { ServiceUnavailableState } from "#src/app/_components/system-state.tsx";
 
 interface EntryUnavailableProps {
   readonly description: string;
@@ -16,16 +14,11 @@ export function EntryUnavailable({
   title
 }: EntryUnavailableProps) {
   return (
-    <ProductEntryShell
+    <ServiceUnavailableState
       description={description}
-      eyebrow="연결 확인 필요"
+      reference={reference}
+      retryHref={retryHref}
       title={title}
-      titleId="entry-error-title"
-    >
-      {reference ? <p className="entry-reference">요청 참조: {reference}</p> : null}
-      <Link className="link-button" href={retryHref}>
-        다시 시도
-      </Link>
-    </ProductEntryShell>
+    />
   );
 }

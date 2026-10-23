@@ -205,7 +205,7 @@ try {
       { name: "nuriteo_dev_csrf", value: csrfToken, url: origin }
     ]);
     const page = await admin.newPage();
-    await page.goto(`${origin}/admin/settings`, { waitUntil: "networkidle" });
+    await page.goto(`${origin}/admin/system/settings`, { waitUntil: "networkidle" });
     await page.getByRole("heading", { level: 1, name: "인스턴스 설정" }).waitFor();
     assert.equal(await page.getByText("0.1.0-beta.1", { exact: true }).count(), 1);
     assert.equal(await page.getByText("최신 상태", { exact: true }).count(), 1);

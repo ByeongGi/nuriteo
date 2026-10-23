@@ -1,6 +1,11 @@
 import type { ReactNode } from "react";
 import { tv } from "tailwind-variants";
 
+import { Button } from "#src/components/ui/button.tsx";
+import { Input } from "#src/components/ui/input.tsx";
+import { SearchField as UiSearchField } from "#src/components/ui/search-field.tsx";
+import { SegmentedControl as UiSegmentedControl } from "#src/components/ui/segmented-control.tsx";
+
 type NavigationKey =
   | "workspaces"
   | "projects"
@@ -101,10 +106,10 @@ export function ProductStoryShell({ active, children, description, eyebrow, titl
       <div className={styles.window()}>
         <aside className={styles.sidebar()}>
           <div className={styles.brand()}><span className={styles.brandMark()}>N</span><strong>NURITEO</strong></div>
-          <button className={styles.workspace()} type="button">
+          <Button className={styles.workspace()} variant="ghost" type="button">
             <span className="grid"><strong>누리터 팀</strong><small className="text-xs text-subtle-foreground">Organization</small></span>
             <span aria-hidden="true">⌄</span>
-          </button>
+          </Button>
           <nav className={styles.navigation()} aria-label="리디자인 제품 메뉴">
             {navigationGroups.map((group) => (
               <div className="contents" key={group.label}>
@@ -122,7 +127,7 @@ export function ProductStoryShell({ active, children, description, eyebrow, titl
           <div className={styles.profile()}>
             <span className={styles.profileMark()}>BK</span>
             <span className="grid min-w-0 flex-1"><strong>김병기</strong><small className="truncate text-xs text-subtle-foreground">byeonggi@nuriteo.dev</small></span>
-            <button className="border-0 bg-transparent text-muted-foreground" aria-label="계정 메뉴" type="button">•••</button>
+            <Button className="border-0 bg-transparent text-muted-foreground" variant="ghost" size="sm" aria-label="계정 메뉴" type="button">•••</Button>
           </div>
         </aside>
         <section className={styles.content()} id={`redesign-${active}`}>
@@ -142,15 +147,15 @@ export function ProductStoryShell({ active, children, description, eyebrow, titl
 }
 
 export function PrimaryAction({ children }: Readonly<{ children: ReactNode }>) {
-  return <button className={action({ tone: "primary" })} type="button">{children}</button>;
+  return <Button className={action({ tone: "primary" })} variant="primary" type="button">{children}</Button>;
 }
 
 export function SecondaryAction({ children }: Readonly<{ children: ReactNode }>) {
-  return <button className={action({ tone: "secondary" })} type="button">{children}</button>;
+  return <Button className={action({ tone: "secondary" })} variant="secondary" type="button">{children}</Button>;
 }
 
 export function DangerAction({ children }: Readonly<{ children: ReactNode }>) {
-  return <button className={action({ tone: "danger" })} type="button">{children}</button>;
+  return <Button className={action({ tone: "danger" })} variant="danger" type="button">{children}</Button>;
 }
 
 export function Status({ children, tone = "neutral" }: Readonly<{ children: ReactNode; tone?: StatusTone }>) {
@@ -182,11 +187,11 @@ export function Toolbar({ children }: Readonly<{ children: ReactNode }>) {
 }
 
 export function SearchField({ label, placeholder }: Readonly<{ label: string; placeholder: string }>) {
-  return <label className="flex min-h-10 min-w-56 flex-1 items-center gap-2 rounded-lg border border-border bg-background px-3 text-muted-foreground"><span aria-hidden="true">⌕</span><span className="sr-only">{label}</span><input className="min-w-0 flex-1 border-0 bg-transparent text-sm text-foreground outline-none" aria-label={label} placeholder={placeholder} /></label>;
+  return <UiSearchField className="min-w-56 flex-1" label={label} placeholder={placeholder} />;
 }
 
 export function SegmentedControl({ items }: Readonly<{ items: readonly string[] }>) {
-  return <div className="flex items-center gap-1 rounded-lg bg-subtle p-1">{items.map((item, index) => <button className={index === 0 ? "min-h-8 rounded-md bg-surface px-3 text-xs font-semibold shadow-xs" : "min-h-8 rounded-md border-0 bg-transparent px-3 text-xs text-muted-foreground"} key={item} type="button">{item}</button>)}</div>;
+  return <UiSegmentedControl aria-label="보기 전환" value={items[0] ?? ""} onValueChange={() => undefined} options={items.map((item) => ({ value: item, label: item }))} />;
 }
 
 export function DataRows({ children }: Readonly<{ children: ReactNode }>) {
@@ -203,7 +208,7 @@ export function Callout({ children, tone = "info", title }: Readonly<{ children:
 }
 
 export function EmptyState({ actionLabel, description, title }: Readonly<{ actionLabel: string; description: string; title: string }>) {
-  return <section className="grid min-h-72 place-items-center rounded-xl border border-dashed border-border bg-subtle/45 p-8 text-center"><div className="max-w-md"><span className="mx-auto grid size-12 place-items-center rounded-xl bg-selected text-xl text-link">＋</span><h2 className="mt-4 mb-0 text-xl font-semibold">{title}</h2><p className="mt-2 text-sm text-muted-foreground">{description}</p><button className={action({ tone: "primary", className: "mt-5" })} type="button">{actionLabel}</button></div></section>;
+  return <section className="grid min-h-72 place-items-center rounded-xl border border-dashed border-border bg-subtle/45 p-8 text-center"><div className="max-w-md"><span className="mx-auto grid size-12 place-items-center rounded-xl bg-selected text-xl text-link">＋</span><h2 className="mt-4 mb-0 text-xl font-semibold">{title}</h2><p className="mt-2 text-sm text-muted-foreground">{description}</p><Button className={action({ tone: "primary", className: "mt-5" })} variant="primary" type="button">{actionLabel}</Button></div></section>;
 }
 
 export function SettingRow({ children, description, label }: Readonly<{ children: ReactNode; description: string; label: string }>) {
@@ -211,5 +216,5 @@ export function SettingRow({ children, description, label }: Readonly<{ children
 }
 
 export function TextInput({ ariaLabel, value }: Readonly<{ ariaLabel: string; value: string }>) {
-  return <input className="min-h-10 w-full rounded-lg border border-border bg-background px-3 text-sm" aria-label={ariaLabel} defaultValue={value} />;
+  return <Input aria-label={ariaLabel} defaultValue={value} />;
 }

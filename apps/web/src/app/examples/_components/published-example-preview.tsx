@@ -4,6 +4,7 @@ import type { PublicPublishedExample } from "@nuriteo/api-client";
 import { useEffect, useRef, useState } from "react";
 
 import { Button } from "#src/components/ui/button.tsx";
+import { examplesStyles } from "#src/app/examples/_components/examples.styles.ts";
 import { createRetryableLazyFeature } from "#src/lib/retryable-lazy-feature.ts";
 import type { PublicPreviewContentError } from "#src/published-example/public-preview-content.ts";
 import type { RuntimeAdapter } from "#src/runtime/runtime-adapter.ts";
@@ -46,6 +47,7 @@ export function PublishedExamplePreview({
   example,
   previewConfiguration
 }: PublishedExamplePreviewProps) {
+  const styles = examplesStyles();
   const adapterRef = useRef<RuntimeAdapter | undefined>(undefined);
   const bridgeRef = useRef<SubdomainPreviewBridge | undefined>(undefined);
   const abortRef = useRef<AbortController | undefined>(undefined);
@@ -252,13 +254,13 @@ export function PublishedExamplePreview({
 
   const disabled = previewConfiguration.status === "disabled";
   return (
-    <section className="mt-8 border-t border-muted-border pt-7" aria-labelledby="published-preview-title">
-      <div className="flex flex-wrap items-start justify-between gap-4 text-left">
+    <section className={styles.preview()} aria-labelledby="published-preview-title">
+      <div className={styles.previewHeader()}>
         <div>
-          <h3 id="published-preview-title" className="m-0 text-base font-semibold text-foreground">
+          <h3 id="published-preview-title" className={styles.previewTitle()}>
             격리된 미리보기
           </h3>
-          <p className="mt-1 max-w-xl text-sm text-muted-foreground">
+          <p className={styles.previewDescription()}>
             이 고정 공개 버전을 별도 출처의 임시 브라우저 런타임에서 실행합니다. 계정 쿠키, 인증, CSRF, 환경값과 스토리지 자격 증명은 전송하지 않습니다.
           </p>
         </div>
@@ -274,29 +276,29 @@ export function PublishedExamplePreview({
       </div>
 
       {disabled ? (
-        <p className="mt-4 rounded-md border border-muted-border bg-subtle p-3 text-sm text-muted-foreground" role="status">
+        <p className={styles.previewNotice()} role="status">
           {previewConfiguration.message} 동일 출처 미리보기는 비활성화되어 있습니다.
         </p>
       ) : null}
       {status === "loading" ? (
-        <p className="mt-4 text-sm text-muted-foreground" role="status">
+        <p className={styles.previewNotice()} role="status">
           고정 번들을 검증하고 격리된 런타임을 시작하는 중…
         </p>
       ) : null}
       {error !== undefined ? (
-        <p className="mt-4 rounded-md border border-danger/30 bg-danger/5 p-3 text-sm text-danger" role="alert">
+        <p className={styles.previewError()} role="alert">
           {error}
         </p>
       ) : null}
       {previewUrl !== undefined ? (
         <div
-          className="mt-5 overflow-hidden rounded-lg border border-muted-border bg-white"
+          className={styles.previewFrame()}
           data-public-preview-url={previewUrl}
         >
           <iframe
             ref={(frame) => bridgeRef.current?.attach(frame?.contentWindow ?? null)}
             title={`${example.name} public Preview`}
-            className="h-[34rem] w-full border-0 bg-white"
+            className={styles.previewIframe()}
             src={previewUrl}
             sandbox="allow-scripts allow-same-origin"
             allow="cross-origin-isolated"

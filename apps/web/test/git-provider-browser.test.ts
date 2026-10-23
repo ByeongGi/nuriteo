@@ -130,7 +130,7 @@ try {
       { name: "nuriteo_dev_csrf", value: csrf, url: origin }
     ]);
     const page = await context.newPage();
-    await page.goto(`${origin}/admin/git-providers`, { waitUntil: "networkidle" });
+    await page.goto(`${origin}/admin/integrations/git`, { waitUntil: "networkidle" });
     await page.getByRole("heading", { name: "Git 제공자", exact: true }).waitFor();
     await page.getByLabel("표시 이름").first().fill("Company Git");
     await page.getByLabel("정확한 호스트").fill("git.internal.example");

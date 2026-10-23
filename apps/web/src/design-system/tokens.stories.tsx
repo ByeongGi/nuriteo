@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import type { CSSProperties } from "react";
 import { useDeferredValue, useState } from "react";
 
+import { Input } from "#src/components/ui/input.tsx";
 import type { FoundationToken, TokenGroup } from "#src/design-system/token-registry.ts";
 import { tokenGroups } from "#src/design-system/token-registry.ts";
 
@@ -151,7 +152,7 @@ function TokenCatalog({ groups, title }: Readonly<TokenCatalogProps>) {
 
       <div className="token-catalog__search">
         <label htmlFor="token-search">Search tokens</label>
-        <input
+        <Input
           autoComplete="off"
           id="token-search"
           onChange={(event) => setQuery(event.currentTarget.value)}

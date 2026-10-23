@@ -3,6 +3,7 @@
 import { acceptOrganizationInvitation, declineOrganizationInvitation } from "@nuriteo/api-client";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
+import { tv } from "tailwind-variants";
 
 import { Button } from "#src/components/ui/button.tsx";
 import { ProductEntryShell } from "#src/app/_components/product-entry-shell.tsx";
@@ -10,7 +11,15 @@ import { collaborationError, readCsrfCredential } from "#src/lib/api/browser-sec
 import { createBrowserApiClient } from "#src/lib/api/browser-client.ts";
 import { useExclusiveMutation } from "#src/lib/use-exclusive-mutation.ts";
 
+const invitationStyles = tv({
+  slots: {
+    error: "mt-5 rounded-lg border border-danger/25 bg-danger-subtle px-4 py-3 text-sm text-danger",
+    actions: "mt-6 flex flex-wrap gap-2 border-t border-muted-border pt-5 max-[32rem]:grid max-[32rem]:[&>button]:w-full"
+  }
+});
+
 export function AcceptInvitation() {
+  const styles = invitationStyles();
   const router = useRouter();
   const token = useSearchParams().get("token");
   const mutation = useExclusiveMutation();
@@ -45,8 +54,8 @@ export function AcceptInvitation() {
       title="공유 워크스페이스에 참여하세요"
       titleId="organization-invitation-title"
     >
-      {error ? <p className="form-error" role="alert">{error}</p> : null}
-      <div className="record-actions entry-invitation-actions">
+      {error ? <p className={styles.error()} role="alert">{error}</p> : null}
+      <div className={styles.actions()}>
         <Button type="button" variant="primary" disabled={mutation.isPending} onClick={() => void respond("accept")}>초대 수락</Button>
         <Button type="button" disabled={mutation.isPending} onClick={() => void respond("decline")}>거절</Button>
       </div>

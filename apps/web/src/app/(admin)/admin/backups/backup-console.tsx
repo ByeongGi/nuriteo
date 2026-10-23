@@ -23,6 +23,7 @@ import { readCsrfCredential } from "#src/lib/api/browser-security.ts";
 import { useExclusiveMutation } from "#src/lib/use-exclusive-mutation.ts";
 import { AdminForm, AdminFormActionNote, AdminFormActions, AdminFormSection } from "#src/app/(admin)/admin/_components/admin-form-layout.tsx";
 import { AdminPageHeader } from "#src/app/(admin)/admin/_components/admin-page-header.tsx";
+import { AdminNote, AdminPage, AdminSectionHeading, AdminSummary } from "#src/app/(admin)/admin/_components/admin-surface.tsx";
 import { backupConsoleStyles } from "#src/app/(admin)/admin/backups/backup-console.styles.ts";
 
 const styles = backupConsoleStyles();
@@ -74,30 +75,30 @@ export function BackupConsole({ initial }: { readonly initial: BackupState }) {
   }
 
   return (
-    <main id="main-content" className="workspace-page admin-detail-page">
+    <AdminPage id="main-content">
       <AdminPageHeader
         category="백업"
         title="백업과 복구"
         description="복구 지점 일정과 보존 정책을 관리하고 격리된 복구 검증을 실행하세요."
-        aside={<div className="admin-operations-summary">
+        aside={<AdminSummary>
           <span className="status-badge" data-state={state.alerts.length === 0 ? "nominal" : "degraded"}>
             {state.alerts.length === 0 ? "정상" : "확인 필요"}
           </span>
           <span>복구 지점 {state.restorePoints.length}개</span>
-        </div>}
+        </AdminSummary>}
       />
 
       {state.alerts.length > 0 ? (
         <section className="admin-update-blockers" aria-labelledby="backup-alerts-title">
-          <header className="admin-section-heading"><h2 id="backup-alerts-title">백업 알림</h2></header>
+          <AdminSectionHeading><h2 id="backup-alerts-title">백업 알림</h2></AdminSectionHeading>
           <ul>{state.alerts.map((alert) => <li key={alert.code}><strong>{alert.message}</strong><span>{alert.level}</span></li>)}</ul>
         </section>
       ) : null}
 
       <section className="admin-update-approval" aria-labelledby="backup-actions-title">
-        <header className="admin-section-heading">
+        <AdminSectionHeading>
           <div><p className="eyebrow">즉시 실행</p><h2 id="backup-actions-title">관리자 작업</h2></div>
-        </header>
+        </AdminSectionHeading>
         <div className="admin-backup-actions" aria-busy={mutation.isPending}>
           <Button type="button" disabled={mutation.isPending} onClick={() => void run("create")}>지금 백업</Button>
           <Button type="button" variant="secondary" disabled={mutation.isPending} onClick={() => void run("drill")}>복구 훈련 실행</Button>
@@ -105,13 +106,13 @@ export function BackupConsole({ initial }: { readonly initial: BackupState }) {
             정리 대상 {state.pruneCandidates}개 처리
           </Button>
         </div>
-        <p className="admin-operations-card__note">최근 관리자 재인증이 필요합니다. 정리는 현재 미리보기에서 확인한 미보존 후보만 대기열에 추가합니다.</p>
+        <AdminNote>최근 관리자 재인증이 필요합니다. 정리는 현재 미리보기에서 확인한 미보존 후보만 대기열에 추가합니다.</AdminNote>
       </section>
 
       <AdminForm className="admin-update-approval admin-backup-policy" onSubmit={savePolicy}>
-        <header className="admin-section-heading">
+        <AdminSectionHeading>
           <div><p className="eyebrow">POLICY VERSION {state.policy.version}</p><h2>일정과 보존 정책</h2></div>
-        </header>
+        </AdminSectionHeading>
         <div className={styles.formBody()}>
           <AdminFormSection title="백업 일정" description="자동 백업 실행 간격과 기준 시각을 설정합니다.">
             <div className={styles.toggle()}><SwitchField appearance="card" label="자동 백업" description="설정한 간격에 따라 백업을 생성합니다." checked={draft.enabled} onCheckedChange={(enabled) => setDraft({ ...draft, enabled })} /></div>
@@ -143,17 +144,17 @@ export function BackupConsole({ initial }: { readonly initial: BackupState }) {
       {feedback ? <p role={feedback.error ? "alert" : "status"} className={feedback.error ? "form-error admin-update-feedback" : "admin-update-feedback"}>{feedback.text}</p> : null}
 
       <section className="admin-update-history" aria-labelledby="restore-points-title">
-        <header className="admin-section-heading"><div><p className="eyebrow">검증된 상태</p><h2 id="restore-points-title">복구 지점</h2></div></header>
-        {state.restorePoints.length === 0 ? <p className="admin-operations-card__note">사용 가능한 완료 복구 지점이 없습니다.</p> : (
+        <AdminSectionHeading><div><p className="eyebrow">검증된 상태</p><h2 id="restore-points-title">복구 지점</h2></div></AdminSectionHeading>
+        {state.restorePoints.length === 0 ? <AdminNote>사용 가능한 완료 복구 지점이 없습니다.</AdminNote> : (
           <ol>{state.restorePoints.map((point) => <li key={point.id}><div><strong>{new Date(point.completedAt).toLocaleString("ko-KR")}</strong><span>{formatBytes(point.payloadBytes)} · 오브젝트 {point.objectCount}개 · {point.retainedAs.join(", ") || "미보존"}</span></div><Button size="sm" variant="secondary" disabled={mutation.isPending} onClick={() => void run("verify", point.id)}>검증</Button></li>)}</ol>
         )}
       </section>
 
       <section className="admin-update-history" aria-labelledby="backup-history-title">
-        <header className="admin-section-heading"><div><p className="eyebrow">지속 작업 대기열</p><h2 id="backup-history-title">작업 기록</h2></div></header>
-        {state.operations.length === 0 ? <p className="admin-operations-card__note">요청된 백업 작업이 없습니다.</p> : <ol>{state.operations.map((operation) => <li key={operation.id}><div><strong>{actionLabel(operation.kind)}</strong><span>{operation.source} · {operation.state}{operation.failureCode ? ` · ${operation.failureCode}` : ""}</span></div><time dateTime={operation.requestedAt}>{new Date(operation.requestedAt).toLocaleString("ko-KR")}</time></li>)}</ol>}
+        <AdminSectionHeading><div><p className="eyebrow">지속 작업 대기열</p><h2 id="backup-history-title">작업 기록</h2></div></AdminSectionHeading>
+        {state.operations.length === 0 ? <AdminNote>요청된 백업 작업이 없습니다.</AdminNote> : <ol>{state.operations.map((operation) => <li key={operation.id}><div><strong>{actionLabel(operation.kind)}</strong><span>{operation.source} · {operation.state}{operation.failureCode ? ` · ${operation.failureCode}` : ""}</span></div><time dateTime={operation.requestedAt}>{new Date(operation.requestedAt).toLocaleString("ko-KR")}</time></li>)}</ol>}
       </section>
-    </main>
+    </AdminPage>
   );
 }
 

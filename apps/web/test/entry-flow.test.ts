@@ -15,6 +15,11 @@ import {
   safeRequestReference
 } from "../src/lib/api/presentation-error.ts";
 import { setupDestination } from "../src/lib/setup-destination.ts";
+import {
+  DEFAULT_SIGN_IN_DESTINATION,
+  safeReturnTo,
+  signInHref
+} from "../src/app/sign-in/return-to.ts";
 
 const webRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -23,6 +28,7 @@ testAuthenticationErrorClassification();
 testCliOnlySetupContract();
 testAccessibleCredentialBoundary();
 testActivationAndSystemStateContracts();
+testSafeReturnTo();
 
 function testSetupRouting(): void {
   assert.equal(setupDestination(true), "/setup");
@@ -35,7 +41,7 @@ function testSetupRouting(): void {
   assert.match(rootPage, /isExplicitlySignedOut\(currentUserResult\.reason\)/u);
   assert.match(rootPage, /safeRequestReference\(error\)/u);
   assert.match(rootPage, /redirect\("\/setup"\)/u);
-  assert.match(rootPage, /redirect\("\/workspaces"\)/u);
+  assert.match(rootPage, /redirect\("\/dashboard"\)/u);
   assert.match(rootPage, /<HomeEntry \/>/u);
 
   const homeEntry = read("src/app/_components/home-entry.tsx");
@@ -77,13 +83,13 @@ function testAccessibleCredentialBoundary(): void {
   const form = read("src/app/sign-in/sign-in-form.tsx");
 
   assert.match(signInPage, /isExplicitlySignedOut\(error\)/u);
-  assert.match(signInPage, /redirect\("\/workspaces"\)/u);
+  assert.match(signInPage, /redirect\(returnTo\)/u);
   assert.match(form, /<label[^>]*htmlFor="email"[^>]*>이메일<\/label>/u);
   assert.match(form, /<label[^>]*htmlFor="password"[^>]*>비밀번호<\/label>/u);
   assert.match(form, /autoComplete="username"/u);
   assert.match(form, /autoComplete="current-password"/u);
   assert.match(form, /await createSession\(client, \{ email, password \}\);\s+await getCurrentUser\(client\);/u);
-  assert.match(form, /router\.replace\("\/workspaces"\)/u);
+  assert.match(form, /router\.replace\(destination\)/u);
   assert.match(form, /passwordInput\.current\.value = ""/u);
   assert.match(form, /role="alert"/u);
   assert.doesNotMatch(form, /localStorage|sessionStorage|URLSearchParams|console\./u);
@@ -105,6 +111,17 @@ function testActivationAndSystemStateContracts(): void {
   assert.doesNotMatch(systemStates, /<form/u);
   assert.match(projectsLoading, /<WorkspacePageLoading/u);
   assert.match(workspacesLoading, /<WorkspacePageLoading/u);
+}
+
+function testSafeReturnTo(): void {
+  assert.equal(safeReturnTo("/workspaces/alpha/projects?view=active#recent"), "/workspaces/alpha/projects?view=active#recent");
+  assert.equal(safeReturnTo("/mfa"), "/mfa");
+  assert.equal(safeReturnTo("https://example.test/steal"), DEFAULT_SIGN_IN_DESTINATION);
+  assert.equal(safeReturnTo("//example.test/steal"), DEFAULT_SIGN_IN_DESTINATION);
+  assert.equal(safeReturnTo("/\\example.test/steal"), DEFAULT_SIGN_IN_DESTINATION);
+  assert.equal(safeReturnTo("/sign-in?returnTo=%2Fsign-in"), DEFAULT_SIGN_IN_DESTINATION);
+  assert.equal(safeReturnTo(undefined), DEFAULT_SIGN_IN_DESTINATION);
+  assert.equal(signInHref("/projects/alpha/studio"), "/sign-in?returnTo=%2Fprojects%2Falpha%2Fstudio");
 }
 
 function read(relativePath: string): string {

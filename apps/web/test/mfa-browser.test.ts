@@ -116,7 +116,7 @@ try {
     await user.addCookies([{ name: "nuriteo_dev_session", value: "user", url: origin }, { name: "nuriteo_dev_csrf", value: csrf, url: origin }]);
     const page = await user.newPage();
     await page.goto(`${origin}/workspaces`, { waitUntil: "networkidle" });
-    assert.equal(new URL(page.url()).pathname, "/mfa");
+    assert.equal(new URL(page.url()).pathname, "/mfa/setup");
     await page.getByRole("heading", { name: "다단계 인증" }).waitFor();
     assert.equal(await page.getByRole("alert").filter({ hasText: "인증 앱 설정이 필요" }).count(), 1);
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true);
@@ -160,7 +160,7 @@ try {
     const admin = await browser.newContext({ viewport: { width: 1280, height: 900 } });
     await admin.addCookies([{ name: "nuriteo_dev_session", value: "admin", url: origin }, { name: "nuriteo_dev_csrf", value: csrf, url: origin }]);
     const adminPage = await admin.newPage();
-    await adminPage.goto(`${origin}/admin/mfa`, { waitUntil: "networkidle" });
+    await adminPage.goto(`${origin}/admin/authentication/mfa`, { waitUntil: "networkidle" });
     await adminPage.getByRole("heading", { level: 1, name: "MFA 정책" }).waitFor();
     await adminPage.getByRole("radio", { name: /관리자/u }).check();
     await adminPage.getByLabel("유예 기간").fill("0");
@@ -183,6 +183,8 @@ try {
     await adminPage.getByRole("alert").filter({ hasText: "새로 고친 뒤" }).waitFor();
     assert.equal(await adminPage.getByRole("button", { name: "최신 상태 불러오기" }).count(), 1);
     assert.equal(await applyPolicy.isDisabled(), true);
+    await adminPage.goto(`${origin}/admin/access/mfa-reset`, { waitUntil: "networkidle" });
+    await adminPage.getByRole("heading", { level: 1, name: "사용자 MFA 초기화" }).waitFor();
     await adminPage.setViewportSize({ width: 390, height: 844 });
     assert.equal(await adminPage.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true);
     await adminPage.getByLabel("이메일 또는 표시 이름으로 찾기").fill("user@example.test");

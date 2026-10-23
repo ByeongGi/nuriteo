@@ -12,9 +12,11 @@ import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 
 import { Button } from "#src/components/ui/button.tsx";
-import { SelectField } from "#src/components/ui/field.tsx";
+import { SelectField, TextField } from "#src/components/ui/field.tsx";
+import { examplesStyles } from "#src/app/examples/_components/examples.styles.ts";
 import { readCsrfCredential } from "#src/lib/api/browser-security.ts";
 import { createBrowserApiClient } from "#src/lib/api/browser-client.ts";
+import { signInHref } from "#src/app/sign-in/return-to.ts";
 
 export interface ForkExampleFormProps {
   readonly example: PublicPublishedExample;
@@ -27,6 +29,7 @@ interface Attempt {
 }
 
 export function ForkExampleForm({ example, initialWorkspaces }: ForkExampleFormProps) {
+  const styles = examplesStyles();
   const router = useRouter();
   const [workspaces, setWorkspaces] = useState<readonly Workspace[] | undefined>(initialWorkspaces);
   const [selectedScope, setSelectedScope] = useState(initialWorkspaces?.[0]?.storageScopeId ?? "");
@@ -37,6 +40,7 @@ export function ForkExampleForm({ example, initialWorkspaces }: ForkExampleFormP
   const [forkSessionEnded, setForkSessionEnded] = useState(false);
   const [pending, setPending] = useState(false);
   const attempt = useRef<Attempt | undefined>(undefined);
+  const returnTo = `/examples/${example.publicId}/versions/${example.versionNumber}`;
 
   useEffect(() => {
     if (initialWorkspaces !== undefined) return;
@@ -80,7 +84,9 @@ export function ForkExampleForm({ example, initialWorkspaces }: ForkExampleFormP
         name,
         idempotencyKey: attempt.current.key
       }, { csrfToken: readCsrfCredential() });
-      router.push(`/projects/${encodeURIComponent(result.data.project.id)}?workspace=${encodeURIComponent(workspace.storageScopeId)}`);
+      router.push(
+        `/workspaces/${encodeURIComponent(workspace.storageScopeId)}/projects/${encodeURIComponent(result.data.project.id)}/studio`
+      );
     } catch (cause) {
       setForkSessionEnded(cause instanceof ApiError && cause.status === 401);
       setError(forkError(cause));
@@ -94,26 +100,26 @@ export function ForkExampleForm({ example, initialWorkspaces }: ForkExampleFormP
   }
   if (status === "signed-out") {
     return (
-      <div className="rounded-lg border border-muted-border bg-subtle p-4 text-left">
+      <div className={styles.forkState()}>
         <p className="m-0 text-sm text-muted-foreground">이 고정 버전을 내 워크스페이스로 복제하려면 로그인하세요.</p>
-        <Link className="mt-3 inline-flex text-sm font-semibold text-link underline-offset-4 hover:underline" href="/sign-in">
+        <Link className="mt-3 inline-flex text-sm font-semibold text-link underline-offset-4 hover:underline" href={signInHref(returnTo)}>
           로그인하고 복제
         </Link>
       </div>
     );
   }
   if (status === "unavailable") {
-    return <p role="alert" className="text-sm text-danger">워크스페이스 정보를 일시적으로 사용할 수 없습니다.</p>;
+    return <p role="alert" className={styles.forkState({ className: "border-danger/30 text-danger" })}>워크스페이스 정보를 일시적으로 사용할 수 없습니다.</p>;
   }
   if (workspaces?.length === 0) {
-    return <p className="text-sm text-muted-foreground">이 계정에서 쓸 수 있는 워크스페이스가 없습니다.</p>;
+    return <p className={styles.forkState()}>이 계정에서 쓸 수 있는 워크스페이스가 없습니다.</p>;
   }
 
   return (
-    <form className="grid gap-4 rounded-lg border border-muted-border bg-subtle p-4 text-left" onSubmit={fork} aria-busy={pending}>
+    <form className={styles.forkForm()} onSubmit={fork} aria-busy={pending}>
       <div>
-        <h3 className="m-0 text-base font-semibold text-foreground">내 워크스페이스로 복제</h3>
-        <p className="mt-1 text-sm text-muted-foreground">원본 접근 권한, Git 연결이나 환경값 없이 독립적인 프로젝트를 만듭니다.</p>
+        <h3 className={styles.forkTitle()}>내 워크스페이스로 복제</h3>
+        <p className={styles.forkDescription()}>원본 접근 권한, Git 연결이나 환경값 없이 독립적인 프로젝트를 만듭니다.</p>
       </div>
       <SelectField
         className="text-sm text-foreground"
@@ -124,10 +130,8 @@ export function ForkExampleForm({ example, initialWorkspaces }: ForkExampleFormP
         value={selectedScope}
         onValueChange={setSelectedScope}
       />
-      <label className="grid gap-1.5 text-sm font-medium text-foreground">
-        프로젝트 슬러그
-        <input
-          className="min-h-10 rounded-md border border-border bg-surface px-3 text-foreground"
+      <TextField
+          label="프로젝트 슬러그"
           defaultValue={suggestedSlug(example.name)}
           disabled={pending}
           maxLength={63}
@@ -135,23 +139,19 @@ export function ForkExampleForm({ example, initialWorkspaces }: ForkExampleFormP
           pattern="[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?"
           required
         />
-      </label>
-      <label className="grid gap-1.5 text-sm font-medium text-foreground">
-        프로젝트 이름
-        <input
-          className="min-h-10 rounded-md border border-border bg-surface px-3 text-foreground"
+      <TextField
+          label="프로젝트 이름"
           defaultValue={`${example.name} 복제본`}
           disabled={pending}
           maxLength={200}
           name="name"
           required
         />
-      </label>
       {error === undefined ? null : (
         <div className="grid gap-2 text-sm text-danger" role="alert">
           <p className="m-0">{error}</p>
           {forkSessionEnded ? (
-            <Link className="w-fit font-semibold text-link underline-offset-4 hover:underline" href="/sign-in">
+            <Link className="w-fit font-semibold text-link underline-offset-4 hover:underline" href={signInHref(returnTo)}>
               로그인하고 계속
             </Link>
           ) : null}

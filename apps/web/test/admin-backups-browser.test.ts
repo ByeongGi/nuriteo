@@ -76,7 +76,7 @@ try {
       { name: "nuriteo_dev_csrf", value: csrfToken, url: origin }
     ]);
     const page = await context.newPage();
-    await page.goto(`${origin}/admin/backups`, { waitUntil: "networkidle" });
+    await page.goto(`${origin}/admin/operations/backups`, { waitUntil: "networkidle" });
     await page.getByRole("heading", { level: 1, name: "백업과 복구" }).waitFor();
     assert.equal(await page.getByText("No successful restore point is available yet.").count(), 1);
     assert.equal(await page.getByRole("button", { name: "정리 대상 2개 처리" }).isEnabled(), true);

@@ -1,5 +1,5 @@
 import { getCurrentUser, getMfaStatus } from "@nuriteo/api-client";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { redirect, unstable_rethrow } from "next/navigation";
 import { Suspense } from "react";
 import type { ReactNode } from "react";
@@ -13,6 +13,7 @@ import { createServerApiClient } from "#src/lib/api/server-client.ts";
 import { parseThemeMode, THEME_COOKIE_NAME } from "#src/lib/theme.ts";
 import { AdminAccessRequired } from "#src/app/(admin)/admin/_components/admin-access-required.tsx";
 import { AdminShellFrame, AdminShellLoading } from "#src/app/(admin)/admin/admin-shell-frame.tsx";
+import { signInHref } from "#src/app/sign-in/return-to.ts";
 
 export default function AdminLayout({ children }: Readonly<{ children: ReactNode }>) {
   return (
@@ -51,7 +52,10 @@ async function AdminSessionBoundary({ children }: Readonly<{ children: ReactNode
     );
   } catch (error) {
     unstable_rethrow(error);
-    if (isExplicitlySignedOut(error)) redirect("/sign-in");
+    if (isExplicitlySignedOut(error)) {
+      const requestPath = (await headers()).get("x-nuriteo-request-path") ?? "/admin";
+      redirect(signInHref(requestPath));
+    }
 
     return (
       <EntryUnavailable

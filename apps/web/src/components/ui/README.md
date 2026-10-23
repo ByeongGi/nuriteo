@@ -27,7 +27,11 @@ thin compound wrapper or by a deliberate higher-level field recipe:
 - Navigation: `accordion`, `collapsible`, `menu`, `context-menu`, `menubar`, `navigation-menu`, `tabs`, `toolbar`.
 - Overlays and feedback: `alert-dialog` through `confirmation-dialog`, `dialog`, `drawer`, `popover`, `preview-card`, `toast`, `tooltip`.
 - Inputs: `autocomplete`, `button`, `checkbox`, `checkbox-group`, `combobox`, `field`, `fieldset`, `form`, `input`, `number-field`, `otp-field`, `radio-group`, `select` through `SelectField`, `slider`, `switch`, `toggle`, `toggle-group`.
-- Display and layout: `avatar`, `meter`, `progress`, `scroll-area`, `separator`.
+- Display and layout: `avatar`, `meter`, `progress`, `scroll-area`, `separator`, plus the domain-neutral `badge`, `page-header`, `metric-grid`, and `loading-shell` recipes.
+
+Native controls that Base UI intentionally does not provide, such as a multiline `textarea`, must
+still be isolated behind a tokenized component in this directory. Hidden inputs used only for form
+serialization may remain native because they have no visual or interaction contract.
 
 Base UI infrastructure exports (`csp-provider`, `direction-provider`, `merge-props`, `use-render`,
 and media-query utilities) are not styled components. Import them directly from Base UI when a

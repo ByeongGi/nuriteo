@@ -3,21 +3,22 @@
 import {
   ApiError,
   listNotifications,
-  updateNotificationPreferences,
   updateNotificationStatus
 } from "@nuriteo/api-client";
 import type {
   NotificationInbox,
   NotificationInboxItem,
-  NotificationPreferences,
   NotificationStatus
 } from "@nuriteo/api-client";
 import { useDeferredValue, useMemo, useState } from "react";
-import type { FormEvent } from "react";
+import { tv } from "tailwind-variants";
 
 import { Button } from "#src/components/ui/button.tsx";
-import { SwitchField } from "#src/components/ui/switch.tsx";
+import { MetricGrid, MetricItem } from "#src/components/ui/metric-grid.tsx";
+import { PageHeader } from "#src/components/ui/page-header.tsx";
 import { SegmentedControl } from "#src/components/ui/segmented-control.tsx";
+import { SearchField } from "#src/components/ui/search-field.tsx";
+import { TabsIndicator, TabsList, TabsPanel, TabsRoot, TabsTab } from "#src/components/ui/tabs.tsx";
 import { createBrowserApiClient } from "#src/lib/api/browser-client.ts";
 import { readCsrfCredential } from "#src/lib/api/browser-security.ts";
 import { useExclusiveMutation } from "#src/lib/use-exclusive-mutation.ts";
@@ -25,26 +26,57 @@ import { useExclusiveMutation } from "#src/lib/use-exclusive-mutation.ts";
 type View = "active" | "archived";
 type ClassificationFilter = "all" | NotificationInboxItem["classification"];
 
+const notificationCenterStyles = tv({
+  slots: {
+    root: "mx-auto grid w-full max-w-[82rem] gap-6 px-[clamp(1.25rem,4vw,3.5rem)] py-[clamp(2rem,4vw,3.75rem)] outline-none max-[48rem]:px-4 max-[48rem]:py-5",
+    feedback: "sticky top-3 z-[var(--n-z-sticky)] m-0 rounded-md border border-muted-border bg-raised px-4 py-3 text-sm shadow-md",
+    feedbackError: "border-danger/40 text-danger",
+    feedbackSuccess: "border-success/40 text-success",
+    toolbar: "flex flex-wrap items-end justify-between gap-3 rounded-xl border border-muted-border bg-surface p-4",
+    search: "min-w-[min(100%,18rem)] flex-1",
+    inbox: "rounded-xl border border-muted-border bg-surface p-[clamp(1rem,3vw,2rem)]",
+    heading: "flex flex-wrap items-center justify-between gap-3",
+    headingCopy: "grid gap-1",
+    eyebrow: "m-0 text-xs font-semibold text-accent-foreground",
+    headingTitle: "m-0 text-lg font-semibold",
+    headingCount: "text-xs font-medium text-muted-foreground",
+    tabs: "flex flex-wrap gap-2",
+    searchScope: "mt-4 mb-0 text-xs text-muted-foreground",
+    list: "my-5 grid max-h-[42rem] list-none gap-3 overflow-auto p-0 [scrollbar-gutter:stable]",
+    item: "grid grid-cols-[0.5rem_minmax(0,1fr)_auto] items-start gap-3 rounded-lg border border-muted-border bg-surface p-4 max-[48rem]:grid-cols-[0.5rem_minmax(0,1fr)]",
+    itemUnread: "border-l-primary bg-selected",
+    indicator: "mt-1.5 size-2 rounded-full bg-strong-border",
+    indicatorUnread: "bg-primary",
+    itemCopy: "grid min-w-0 gap-1",
+    itemMeta: "m-0 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground",
+    itemTitle: "m-0 text-sm font-semibold",
+    itemSummary: "m-0 text-sm leading-relaxed text-muted-foreground",
+    itemDetail: "text-xs text-muted-foreground",
+    itemActions: "flex flex-wrap gap-2 max-[48rem]:col-start-2",
+    empty: "grid min-h-48 place-content-center justify-items-center gap-2 rounded-lg border border-dashed border-muted-border p-6 text-center",
+    emptyTitle: "font-semibold",
+    emptyDescription: "m-0 text-sm text-muted-foreground"
+  }
+});
+
 export interface NotificationCenterProps {
   readonly initialActive: NotificationInbox;
   readonly initialArchived: NotificationInbox;
-  readonly initialPreferences: NotificationPreferences;
 }
 
 export function NotificationCenter({
   initialActive,
-  initialArchived,
-  initialPreferences
+  initialArchived
 }: NotificationCenterProps) {
   const mutation = useExclusiveMutation();
   const [view, setView] = useState<View>("active");
   const [active, setActive] = useState(initialActive);
   const [archived, setArchived] = useState(initialArchived);
-  const [preferences, setPreferences] = useState(initialPreferences);
   const [query, setQuery] = useState("");
   const deferredQuery = useDeferredValue(query);
   const [classification, setClassification] = useState<ClassificationFilter>("all");
   const [feedback, setFeedback] = useState<{ readonly error: boolean; readonly text: string }>();
+  const styles = notificationCenterStyles();
   const collection = view === "active" ? active : archived;
   const normalizedQuery = deferredQuery.trim().toLocaleLowerCase("ko-KR");
   const visibleItems = useMemo(() => collection.items.filter((item) => (
@@ -107,48 +139,20 @@ export function NotificationCenter({
     });
   }
 
-  async function savePreferences(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const data = new FormData(event.currentTarget);
-    await mutation.run(async () => {
-      setFeedback(undefined);
-      try {
-        const result = await updateNotificationPreferences(
-          createBrowserApiClient(),
-          {
-            accountAccess: data.get("accountAccess") === "on",
-            collaboration: data.get("collaboration") === "on",
-            operations: data.get("operations") === "on",
-            version: preferences.version
-          },
-          { csrfToken: readCsrfCredential() }
-        );
-        setPreferences(result.data);
-        setFeedback({ error: false, text: "이메일 알림 설정을 저장했습니다." });
-      } catch (error) {
-        setFeedback(notificationFailure(error));
-      }
-    });
-  }
-
   return (
-    <main id="main-content" className="workspace-page notification-page">
-      <header className="workspace-page__intro">
-        <p className="eyebrow">계정 알림함</p>
-        <h1>알림</h1>
-        <p>보안, 계정 접근, 협업 및 운영 변경 사항을 한곳에서 확인하세요.</p>
-      </header>
+    <main id="main-content" className={styles.root()} tabIndex={-1}>
+      <PageHeader eyebrow="활동" title="알림" description="보안, 계정 접근, 협업 및 운영 변경 사항을 한곳에서 확인하세요." />
 
-      {feedback ? <p className={`notification-feedback notification-feedback--${feedback.error ? "error" : "success"}`} role={feedback.error ? "alert" : "status"} aria-live="polite">{feedback.text}</p> : null}
+      {feedback ? <p className={styles.feedback({ className: feedback.error ? styles.feedbackError() : styles.feedbackSuccess() })} role={feedback.error ? "alert" : "status"} aria-live="polite">{feedback.text}</p> : null}
 
-      <section className="product-metrics" aria-label="알림 요약">
-        <article><span>읽지 않은 알림</span><strong>{active.unreadCount}</strong><small>우선 확인이 필요한 새 소식</small></article>
-        <article><span>활성 알림</span><strong>{active.items.length}</strong><small>현재 목록에 불러온 항목</small></article>
-        <article><span>보관한 알림</span><strong>{archived.items.length}</strong><small>필요할 때 다시 복원 가능</small></article>
-      </section>
+      <MetricGrid className="mt-5" aria-label="알림 요약">
+        <MetricItem label="읽지 않음" value={active.unreadCount} description="우선 확인이 필요한 새 소식" />
+        <MetricItem label="활성" value={active.items.length} description="현재 목록에 불러온 항목" />
+        <MetricItem label="보관됨" value={archived.items.length} description="필요할 때 다시 복원 가능" />
+      </MetricGrid>
 
-      <section className="product-toolbar notification-toolbar" aria-label="알림 검색 및 분류">
-        <label className="product-search"><span aria-hidden="true">⌕</span><span className="sr-only">알림 검색</span><input value={query} onChange={(event) => setQuery(event.currentTarget.value)} placeholder="제목 또는 내용 검색" /></label>
+      <section className={styles.toolbar()} aria-label="알림 검색 및 분류">
+        <SearchField className={styles.search()} label="알림 검색" value={query} onChange={(event) => setQuery(event.currentTarget.value)} placeholder="제목 또는 내용 검색" />
         <SegmentedControl
           aria-label="알림 분류"
           value={classification}
@@ -163,50 +167,36 @@ export function NotificationCenter({
         />
       </section>
 
-      <div className="notification-layout">
-        <aside className="notification-preferences" aria-labelledby="notification-preferences-title">
-          <div>
-            <p className="eyebrow">이메일 채널</p>
-            <h2 id="notification-preferences-title">이메일 알림</h2>
-            <p>{preferences.smtpConfigured ? "이메일 알림을 받을 수 있습니다." : "SMTP가 설정되지 않았습니다. 선택한 설정은 저장되며 앱 내 알림은 계속 사용할 수 있습니다."}</p>
-          </div>
-          <form onSubmit={savePreferences} aria-busy={mutation.isPending}>
-            <Preference name="criticalSecurity" label="중요 보안" description="SMTP 사용 시 항상 발송됩니다." checked disabled />
-            <Preference name="accountAccess" label="계정과 접근" description="비밀번호, MFA, 멤버십 및 권한 변경" checked={preferences.accountAccess} />
-            <Preference name="collaboration" label="협업" description="초대와 공유 프로젝트 활동" checked={preferences.collaboration} />
-            <Preference name="operations" label="운영" description="관리자를 위한 인스턴스 상태와 전달 장애" checked={preferences.operations} />
-            <Button aria-label="알림 설정 저장" type="submit" variant="primary" disabled={mutation.isPending}>{mutation.isPending ? "저장 중…" : "설정 저장"}</Button>
-          </form>
-        </aside>
-
-        <section className="notification-inbox" aria-labelledby="notification-inbox-title">
-          <div className="notification-heading">
-            <div>
-              <p className="eyebrow">읽지 않음 {active.unreadCount}개</p>
-              <h2 id="notification-inbox-title">최근 알림 <small>{visibleItems.length} / {collection.items.length}</small></h2>
+      <div>
+        <section className={styles.inbox()} aria-labelledby="notification-inbox-title"><TabsRoot value={view} onValueChange={(value) => setView(value as View)}>
+          <div className={styles.heading()}>
+            <div className={styles.headingCopy()}>
+              <p className={styles.eyebrow()}>읽지 않음 {active.unreadCount}개</p>
+              <h2 className={styles.headingTitle()} id="notification-inbox-title">최근 알림 <small className={styles.headingCount()}>{visibleItems.length} / {collection.items.length}</small></h2>
             </div>
-            <div className="notification-tabs" role="tablist" aria-label="알림 목록">
-              <Button id="active-notifications-tab" aria-controls="notification-list-panel" aria-label="활성 알림" role="tab" aria-selected={view === "active"} variant={view === "active" ? "primary" : "secondary"} onClick={() => setView("active")}>활성</Button>
-              <Button id="archived-notifications-tab" aria-controls="notification-list-panel" aria-label="보관된 알림" role="tab" aria-selected={view === "archived"} variant={view === "archived" ? "primary" : "secondary"} onClick={() => setView("archived")}>보관됨</Button>
-            </div>
+            <TabsList className={styles.tabs()} aria-label="알림 목록">
+              <TabsTab value="active" aria-label="활성 알림">활성</TabsTab>
+              <TabsTab value="archived" aria-label="보관된 알림">보관됨</TabsTab>
+              <TabsIndicator />
+            </TabsList>
           </div>
-          <div id="notification-list-panel" role="tabpanel" aria-busy={query !== deferredQuery} aria-labelledby={view === "active" ? "active-notifications-tab" : "archived-notifications-tab"}>
-            {collection.nextCursor !== null ? <p className="notification-search-scope">현재 불러온 알림에서 검색합니다. 더 보기를 누르면 검색 범위가 넓어집니다.</p> : null}
+          <TabsPanel value={view} aria-busy={query !== deferredQuery}>
+            {collection.nextCursor !== null ? <p className={styles.searchScope()}>현재 불러온 알림에서 검색합니다. 더 보기를 누르면 검색 범위가 넓어집니다.</p> : null}
             {visibleItems.length === 0 ? (
-              <div className="notification-empty"><strong>{view === "active" ? "새 알림이 없습니다." : "보관된 알림이 없습니다."}</strong><p>{view === "active" ? "새로운 변경 사항이 생기면 이곳에 표시됩니다." : "보관한 알림을 다시 확인할 수 있습니다."}</p></div>
+              <div className={styles.empty()}><strong className={styles.emptyTitle()}>{view === "active" ? "새 알림이 없습니다." : "보관된 알림이 없습니다."}</strong><p className={styles.emptyDescription()}>{view === "active" ? "새로운 변경 사항이 생기면 이곳에 표시됩니다." : "보관한 알림을 다시 확인할 수 있습니다."}</p></div>
             ) : (
-              <ol className="notification-list" aria-live="polite">
+              <ol className={styles.list()} aria-live="polite">
                 {visibleItems.map((item) => (
-                  <li key={item.id} className={`notification-item notification-item--${item.status}`}>
-                    <span className="notification-item__indicator" aria-label={item.status === "unread" ? "읽지 않음" : "읽음"} />
-                    <div className="notification-item__copy">
-                      <p className="notification-item__meta"><span>{labelClassification(item.classification)}</span><time dateTime={item.occurredAt}>{formatDate(item.occurredAt)}</time></p>
-                      <h3>{item.title}</h3>
-                      <p>{item.summary}</p>
-                      {item.occurrenceCount > 1 ? <small>{item.occurrenceCount}회 발생</small> : null}
-                      {item.actionState !== "none" ? <small>처리 상태: {item.actionState}</small> : null}
+                  <li key={item.id} className={styles.item({ className: item.status === "unread" ? styles.itemUnread() : undefined })}>
+                    <span className={styles.indicator({ className: item.status === "unread" ? styles.indicatorUnread() : undefined })} aria-label={item.status === "unread" ? "읽지 않음" : "읽음"} />
+                    <div className={styles.itemCopy()}>
+                      <p className={styles.itemMeta()}><span>{labelClassification(item.classification)}</span><time dateTime={item.occurredAt}>{formatDate(item.occurredAt)}</time></p>
+                      <h3 className={styles.itemTitle()}>{item.title}</h3>
+                      <p className={styles.itemSummary()}>{item.summary}</p>
+                      {item.occurrenceCount > 1 ? <small className={styles.itemDetail()}>{item.occurrenceCount}회 발생</small> : null}
+                      {item.actionState !== "none" ? <small className={styles.itemDetail()}>처리 상태: {item.actionState}</small> : null}
                     </div>
-                    <div className="notification-item__actions">
+                    <div className={styles.itemActions()}>
                       {item.status === "unread" ? <Button aria-label="읽음으로 표시" disabled={mutation.isPending} onClick={() => changeStatus(item, "read")}>읽음</Button> : null}
                       {item.status === "read" ? <Button aria-label="읽지 않음으로 표시" disabled={mutation.isPending} onClick={() => changeStatus(item, "unread")}>읽지 않음</Button> : null}
                       {item.status === "archived" ? <Button aria-label="알림 복원" disabled={mutation.isPending} onClick={() => changeStatus(item, "read")}>복원</Button> : <Button aria-label="알림 보관" variant="ghost" disabled={mutation.isPending} onClick={() => changeStatus(item, "archived")}>보관</Button>}
@@ -216,22 +206,10 @@ export function NotificationCenter({
               </ol>
             )}
             {collection.nextCursor !== null ? <Button aria-label="알림 더 보기" disabled={mutation.isPending} onClick={loadMore}>{mutation.isPending ? "불러오는 중…" : "더 보기"}</Button> : null}
-          </div>
-        </section>
+          </TabsPanel>
+        </TabsRoot></section>
       </div>
     </main>
-  );
-}
-
-function Preference({ name, label, description, checked, disabled = false }: {
-  readonly name: string;
-  readonly label: string;
-  readonly description: string;
-  readonly checked: boolean;
-  readonly disabled?: boolean;
-}) {
-  return (
-    <SwitchField appearance="card" name={name} label={label} description={description} defaultChecked={checked} disabled={disabled} />
   );
 }
 

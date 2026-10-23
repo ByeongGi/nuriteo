@@ -78,7 +78,7 @@ export const Operations: Story = {
 
 export const InstanceSettings: Story = {
   render: () => (
-    <AdminStoryFrame pathname="/admin/settings">
+    <AdminStoryFrame pathname="/admin/system/settings">
       <AdminSettings cleanup={adminCleanup} settings={adminSettings} status={adminStatus} />
     </AdminStoryFrame>
   )
@@ -86,7 +86,7 @@ export const InstanceSettings: Story = {
 
 export const Maintenance: Story = {
   render: () => (
-    <AdminStoryFrame pathname="/admin/maintenance">
+    <AdminStoryFrame pathname="/admin/operations/maintenance">
       <MaintenanceConsole initial={adminMaintenance} />
     </AdminStoryFrame>
   )
@@ -94,7 +94,7 @@ export const Maintenance: Story = {
 
 export const Backups: Story = {
   render: () => (
-    <AdminStoryFrame pathname="/admin/backups">
+    <AdminStoryFrame pathname="/admin/operations/backups">
       <BackupConsole initial={adminBackup} />
     </AdminStoryFrame>
   )
@@ -102,7 +102,7 @@ export const Backups: Story = {
 
 export const Updates: Story = {
   render: () => (
-    <AdminStoryFrame pathname="/admin/updates">
+    <AdminStoryFrame pathname="/admin/system/updates">
       <UpdateReadinessConsole history={adminUpdateHistory} readiness={adminUpdateReadiness} />
     </AdminStoryFrame>
   )
@@ -110,7 +110,7 @@ export const Updates: Story = {
 
 export const ActivationAccounts: Story = {
   render: () => (
-    <AdminStoryFrame pathname="/admin/invitations">
+    <AdminStoryFrame pathname="/admin/access/invitations">
       <ActivationInvitations invitations={activationInvitations} />
     </AdminStoryFrame>
   )
@@ -118,7 +118,7 @@ export const ActivationAccounts: Story = {
 
 export const MfaPolicy: Story = {
   render: () => (
-    <AdminStoryFrame pathname="/admin/mfa">
+    <AdminStoryFrame pathname="/admin/authentication/mfa">
       <MfaPolicyEditor initial={adminMfaPolicy} />
     </AdminStoryFrame>
   )
@@ -126,7 +126,7 @@ export const MfaPolicy: Story = {
 
 export const AuthenticationProviders: Story = {
   render: () => (
-    <AdminStoryFrame pathname="/admin/oidc">
+    <AdminStoryFrame pathname="/admin/authentication/oidc">
       <OidcProviderConsole initialProviders={oidcProviders} />
     </AdminStoryFrame>
   )
@@ -134,7 +134,7 @@ export const AuthenticationProviders: Story = {
 
 export const PackageRegistries: Story = {
   render: () => (
-    <AdminStoryFrame pathname="/admin/registries">
+    <AdminStoryFrame pathname="/admin/integrations/registries">
       <RegistryConsole initialConfiguration={registryConfiguration} />
     </AdminStoryFrame>
   )
@@ -142,7 +142,7 @@ export const PackageRegistries: Story = {
 
 export const GitProviders: Story = {
   render: () => (
-    <AdminStoryFrame pathname="/admin/git-providers">
+    <AdminStoryFrame pathname="/admin/integrations/git">
       <GitProviderConsole initialProviders={gitProviders} />
     </AdminStoryFrame>
   )
@@ -150,7 +150,7 @@ export const GitProviders: Story = {
 
 export const EmailDelivery: Story = {
   render: () => (
-    <AdminStoryFrame pathname="/admin/notifications">
+    <AdminStoryFrame pathname="/admin/operations/email-deliveries">
       <EmailDeliveryConsole initial={emailDeliveries} />
     </AdminStoryFrame>
   )
@@ -158,7 +158,7 @@ export const EmailDelivery: Story = {
 
 export const SmtpCertificates: Story = {
   render: () => (
-    <AdminStoryFrame pathname="/admin/smtp-trust">
+    <AdminStoryFrame pathname="/admin/integrations/smtp/trust">
       <SmtpTrustScreen initialCollection={smtpCaCollection} />
     </AdminStoryFrame>
   )

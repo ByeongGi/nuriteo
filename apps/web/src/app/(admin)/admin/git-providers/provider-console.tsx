@@ -2,11 +2,14 @@
 
 import { ApiError, activateGitProvider, createGitProvider, deleteGitProvider, disableGitProvider, updateGitProvider } from "@nuriteo/api-client";
 import type { GitProviderAdmin, GitProviderKind } from "@nuriteo/api-client";
+import Link from "next/link";
 import { useState } from "react";
 import type { FormEvent } from "react";
 
+import { Badge } from "#src/components/ui/badge.tsx";
 import { Button } from "#src/components/ui/button.tsx";
 import { CheckboxField } from "#src/components/ui/checkbox.tsx";
+import { CollapsibleContent, CollapsiblePanel, CollapsibleRoot, CollapsibleTrigger } from "#src/components/ui/collapsible.tsx";
 import { ConfirmationDialog } from "#src/components/ui/confirmation-dialog.tsx";
 import { SelectField, TextField } from "#src/components/ui/field.tsx";
 import { createBrowserApiClient } from "#src/lib/api/browser-client.ts";
@@ -14,6 +17,7 @@ import { readCsrfCredential } from "#src/lib/api/browser-security.ts";
 import { useExclusiveMutation } from "#src/lib/use-exclusive-mutation.ts";
 import { AdminForm, AdminFormActionNote, AdminFormActions } from "#src/app/(admin)/admin/_components/admin-form-layout.tsx";
 import { AdminPageHeader } from "#src/app/(admin)/admin/_components/admin-page-header.tsx";
+import { AdminCollectionHeading, AdminIntegrationRecord, AdminPage, AdminPanel, AdminRecordActions } from "#src/app/(admin)/admin/_components/admin-surface.tsx";
 
 const PROVIDER_KIND_OPTIONS = [
   { value: "generic", label: "일반 HTTPS" },
@@ -71,13 +75,13 @@ export function GitProviderConsole({ initialProviders }: { readonly initialProvi
     });
   }
 
-  return <main id="main-content" className="workspace-page admin-detail-page">
-    <AdminPageHeader category="Git 제공자" title="Git 제공자" description="정확한 HTTPS 원본을 등록하세요. 사용자 자격 증명은 분리되어 이 화면에 표시되지 않습니다." aside={<span className="admin-page-header__count">등록 {providers.length}개</span>} />
-    <section className="admin-detail-panel admin-create-panel" aria-labelledby="add-git-provider"><details open={providers.length === 0}><summary><span id="add-git-provider">Git 제공자 추가</span><small>비활성 상태로 저장한 뒤 연결을 검증합니다</small></summary><ProviderForm onSubmit={create} disabled={mutation.isPending} /></details></section>
-    <section className="admin-detail-panel" aria-labelledby="git-provider-list"><div className="admin-collection-heading"><h2 id="git-provider-list">등록된 제공자</h2><span className="admin-page-header__count">{providers.length}개</span></div>{providers.length === 0 ? <p>등록된 Git 제공자가 없습니다. 위에서 첫 연결을 추가하세요.</p> : <ul className="record-list">{providers.map((provider) => <li className="admin-integration-record" key={provider.id}><div><strong>{provider.displayName}</strong><span>{provider.state === "active" ? "활성" : "비활성"}</span><small>{provider.kind} · {provider.host}:{provider.port} · 설정 v{provider.configVersion}</small></div>{provider.state === "disabled" ? <details className="admin-record-disclosure"><summary>연결 설정 편집</summary><ProviderForm provider={provider} onSubmit={(event) => void update(event, provider)} disabled={mutation.isPending} /></details> : null}<IntegrationCaConsole type="git_provider" integrationId={provider.id} /><div className="record-actions">{provider.state === "active" ? <Button onClick={() => void execute(async () => (await disableGitProvider(createBrowserApiClient(), provider.id, provider.configVersion, options())).data, "제공자를 즉시 비활성화했습니다.")} disabled={mutation.isPending}>비활성화</Button> : <Button variant="primary" onClick={() => void execute(async () => (await activateGitProvider(createBrowserApiClient(), provider.id, provider.configVersion, options())).data, "제공자를 검증하고 활성화했습니다.")} disabled={mutation.isPending}>검증 후 활성화</Button>}<Button variant="danger" onClick={() => setPendingDeletion(provider)} disabled={mutation.isPending || provider.state !== "disabled"}>삭제</Button></div></li>)}</ul>}</section>
+  return <AdminPage id="main-content">
+    <AdminPageHeader category="Git 제공자" title="Git 제공자" description="정확한 HTTPS 원본을 등록하세요. 사용자 자격 증명은 분리되어 이 화면에 표시되지 않습니다." aside={<Badge>등록 {providers.length}개</Badge>} />
+    <AdminPanel className="admin-create-panel" aria-labelledby="add-git-provider"><CollapsibleRoot defaultOpen={providers.length === 0}><CollapsibleTrigger><span id="add-git-provider">Git 제공자 추가</span><small>비활성 상태로 저장한 뒤 연결을 검증합니다</small></CollapsibleTrigger><CollapsiblePanel><CollapsibleContent><ProviderForm onSubmit={create} disabled={mutation.isPending} /></CollapsibleContent></CollapsiblePanel></CollapsibleRoot></AdminPanel>
+    <AdminPanel aria-labelledby="git-provider-list"><AdminCollectionHeading><h2 id="git-provider-list">등록된 제공자</h2><Badge>{providers.length}개</Badge></AdminCollectionHeading>{providers.length === 0 ? <p>등록된 Git 제공자가 없습니다. 위에서 첫 연결을 추가하세요.</p> : <ul className="record-list">{providers.map((provider) => <AdminIntegrationRecord key={provider.id}><div><strong><Link href={`/admin/integrations/git/${provider.id}`}>{provider.displayName}</Link></strong><span>{provider.state === "active" ? "활성" : "비활성"}</span><small>{provider.kind} · {provider.host}:{provider.port} · 설정 v{provider.configVersion}</small></div>{provider.state === "disabled" ? <CollapsibleRoot className="admin-record-disclosure"><CollapsibleTrigger>연결 설정 편집</CollapsibleTrigger><CollapsiblePanel><CollapsibleContent><ProviderForm provider={provider} onSubmit={(event) => void update(event, provider)} disabled={mutation.isPending} /></CollapsibleContent></CollapsiblePanel></CollapsibleRoot> : null}<IntegrationCaConsole type="git_provider" integrationId={provider.id} /><AdminRecordActions>{provider.state === "active" ? <Button onClick={() => void execute(async () => (await disableGitProvider(createBrowserApiClient(), provider.id, provider.configVersion, options())).data, "제공자를 즉시 비활성화했습니다.")} disabled={mutation.isPending}>비활성화</Button> : <Button variant="primary" onClick={() => void execute(async () => (await activateGitProvider(createBrowserApiClient(), provider.id, provider.configVersion, options())).data, "제공자를 검증하고 활성화했습니다.")} disabled={mutation.isPending}>검증 후 활성화</Button>}<Button variant="danger" onClick={() => setPendingDeletion(provider)} disabled={mutation.isPending || provider.state !== "disabled"}>삭제</Button></AdminRecordActions></AdminIntegrationRecord>)}</ul>}</AdminPanel>
     {feedback ? <p role={feedback.error ? "alert" : "status"}>{feedback.text}</p> : null}
     <ConfirmationDialog busy={mutation.isPending} confirmLabel={mutation.isPending ? "삭제 중…" : "제공자 삭제"} description={`${pendingDeletion?.displayName ?? "선택한 제공자"} 설정과 인증서 신뢰 구성이 영구적으로 삭제됩니다.`} open={pendingDeletion !== undefined} title="Git 제공자를 삭제할까요?" onCancel={() => setPendingDeletion(undefined)} onConfirm={() => { if (pendingDeletion) void remove(pendingDeletion); }} />
-  </main>;
+  </AdminPage>;
 }
 
 function ProviderForm({ provider, onSubmit, disabled }: { readonly provider?: GitProviderAdmin; readonly onSubmit: (event: FormEvent<HTMLFormElement>) => void; readonly disabled: boolean }) {

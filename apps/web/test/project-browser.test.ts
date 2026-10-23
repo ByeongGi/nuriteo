@@ -176,28 +176,56 @@ try {
     const memberContext = await contextFor(browser, standalone.origin, "member");
     const admin = await adminContext.newPage();
     const member = await memberContext.newPage();
-    const projectsUrl = `${standalone.origin}/projects?workspace=${scopeId}&state=active`;
+    const projectsPath = `/workspaces/${scopeId}/projects`;
+    const projectSettingsPath = `${projectsPath}/${projectId}/settings`;
+    const projectStudioPath = `${projectsPath}/${projectId}/studio`;
+    const projectsUrl = `${standalone.origin}${projectsPath}?state=active`;
     await Promise.all([admin.goto(projectsUrl, { waitUntil: "networkidle" }), member.goto(projectsUrl, { waitUntil: "networkidle" })]);
     assert.equal(await member.getByText("프로젝트를 선택하세요").count(), 1);
+
+    await admin.goto(`${standalone.origin}/projects?workspace=${scopeId}&state=active`, { waitUntil: "networkidle" });
+    assertCanonicalLocation(admin, projectsPath, "active");
+    await admin.goto(`${standalone.origin}/workspaces/${scopeId}/projects?state=active`, { waitUntil: "networkidle" });
+    assertCanonicalLocation(admin, projectsPath, "active");
 
     await admin.getByLabel("슬러그").fill("alpha-project");
     await admin.getByLabel("프로젝트 이름", { exact: true }).fill("Alpha Project");
     const createResponse = admin.waitForResponse((response) => response.request().method() === "POST" && response.url().endsWith("/projects"));
     await admin.getByRole("button", { name: "프로젝트 만들기" }).click();
     assert.equal((await createResponse).status(), 201);
-    await admin.getByRole("heading", { name: "Alpha Project", exact: true }).waitFor();
-    assert.equal(new URL(admin.url()).pathname, `/projects/${projectId}`);
+    await admin.waitForURL((url) => url.pathname === projectStudioPath);
+    assertCanonicalLocation(admin, projectStudioPath);
+    await admin.getByText("Alpha Project", { exact: true }).first().waitFor();
+    assert.equal(await admin.getByLabel("프로젝트 이름", { exact: true }).count(), 0, "Studio must not expose project settings fields");
+
+    await admin.goto(`${standalone.origin}/projects/${projectId}/studio?workspace=${scopeId}`, { waitUntil: "networkidle" });
+    assertCanonicalLocation(admin, projectStudioPath);
+    await admin.goto(`${standalone.origin}/workspaces/${scopeId}/projects/${projectId}/studio`, { waitUntil: "networkidle" });
+    assertCanonicalLocation(admin, projectStudioPath);
+    await admin.getByRole("link", { name: "프로젝트 설정", exact: true }).click();
+    await admin.waitForURL((url) => url.pathname === projectSettingsPath);
+    assertCanonicalLocation(admin, projectSettingsPath);
+
+    await admin.goto(`${standalone.origin}/projects/${projectId}/settings?workspace=${scopeId}&state=active`, { waitUntil: "networkidle" });
+    assertCanonicalLocation(admin, projectSettingsPath, "active");
+    await admin.goto(`${standalone.origin}/workspaces/${scopeId}/projects/${projectId}/settings?state=active`, { waitUntil: "networkidle" });
+    assertCanonicalLocation(admin, projectSettingsPath, "active");
     await admin.setViewportSize({ width: 390, height: 844 });
     assert.equal(await admin.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true);
-    const mobileStudioBounds = await admin.getByRole("link", { name: "Studio 열기" }).boundingBox();
+    const mobileStudioBounds = await admin.getByRole("link", { name: "편집기 열기" }).boundingBox();
     assert.ok(mobileStudioBounds && mobileStudioBounds.y < 844, "the selected Project Studio action must appear in the first mobile viewport");
     await admin.setViewportSize({ width: 1600, height: 1100 });
 
-    await admin.goto(`${standalone.origin}/projects?workspace=${personalScopeId}&state=active`, { waitUntil: "networkidle" });
+    await admin.goto(`${standalone.origin}/workspaces/${personalScopeId}/projects?state=active`, { waitUntil: "networkidle" });
     await admin.getByRole("heading", { name: "새 프로젝트" }).waitFor();
     assert.equal(await admin.getByRole("heading", { name: "Alpha Project", exact: true }).count(), 0);
     await admin.goto(projectsUrl, { waitUntil: "networkidle" });
     await admin.getByText("Alpha Project", { exact: true }).click();
+    await admin.waitForURL((url) => url.pathname === projectStudioPath);
+    assertCanonicalLocation(admin, projectStudioPath);
+    await admin.getByRole("link", { name: "프로젝트 설정", exact: true }).click();
+    await admin.waitForURL((url) => url.pathname === projectSettingsPath);
+    assertCanonicalLocation(admin, projectSettingsPath);
     await admin.getByRole("heading", { name: "Alpha Project", exact: true }).waitFor();
 
     const projectNameInput = admin.locator(".project-profile-form").getByLabel("프로젝트 이름");
@@ -272,6 +300,11 @@ try {
 
     await member.reload({ waitUntil: "networkidle" });
     await member.getByText("Renamed Project", { exact: true }).click();
+    await member.waitForURL((url) => url.pathname === projectStudioPath);
+    assertCanonicalLocation(member, projectStudioPath);
+    await member.getByRole("link", { name: "프로젝트 설정", exact: true }).click();
+    await member.waitForURL((url) => url.pathname === projectSettingsPath);
+    assertCanonicalLocation(member, projectSettingsPath);
     await member.getByRole("heading", { name: "Renamed Project", exact: true }).waitFor();
     assert.equal(await member.getByText(/조직 소유자만 프로젝트의 직접 역할/u).count(), 1);
 
@@ -324,10 +357,10 @@ try {
 
     await member.goto(projectsUrl, { waitUntil: "networkidle" });
     assert.equal(await member.getByText("Renamed Project", { exact: true }).count(), 0);
-    await member.goto(`${projectsUrl}&project=${projectId}`, { waitUntil: "networkidle" });
+    await member.goto(`${standalone.origin}${projectSettingsPath}?state=active`, { waitUntil: "networkidle" });
     assert.equal(await member.getByText("Renamed Project", { exact: true }).count(), 0);
 
-    await admin.goto(`${standalone.origin}/projects?workspace=${scopeId}&state=all`, { waitUntil: "networkidle" });
+    await admin.goto(`${standalone.origin}${projectsPath}?state=all`, { waitUntil: "networkidle" });
     await admin.locator(".project-sidebar .record-list").getByText("Renamed Project", { exact: true }).click();
     await admin.getByRole("button", { name: "보관" }).click();
     await admin.getByRole("button", { name: "복원" }).waitFor();
@@ -337,7 +370,8 @@ try {
     );
     await admin.getByLabel(/삭제하려면 Renamed Project 입력/u).fill("Renamed Project");
     await admin.getByRole("button", { name: "프로젝트 삭제" }).click();
-    await admin.waitForURL((url) => url.pathname === "/projects");
+    await admin.waitForURL((url) => url.pathname === projectsPath);
+    assertCanonicalLocation(admin, projectsPath, "all");
     assert.equal(project, undefined);
     assert.equal(memberCanRead, false);
   } finally {
@@ -389,3 +423,11 @@ async function startWeb(corePort: number) { for (let attempt = 0; attempt < 5; a
 async function ready(origin: string, child: ReturnType<typeof spawn>) { const deadline = Date.now() + 15_000; while (Date.now() < deadline) { if (child.exitCode !== null) throw new Error("standalone exited"); try { const response = await fetch(`${origin}/sign-in`, { redirect: "manual" }); if (response.status < 500) return; } catch { /* starting */ } await new Promise((resolve) => setTimeout(resolve, 100)); } throw new Error("standalone readiness timed out"); }
 async function stopChild(child: ReturnType<typeof spawn>) { if (child.exitCode !== null) return; child.kill("SIGTERM"); const exited = new Promise<boolean>((resolve) => child.once("exit", () => resolve(true))); if (await Promise.race([exited, new Promise<false>((resolve) => setTimeout(() => resolve(false), 2_000))])) return; child.kill("SIGKILL"); await Promise.race([exited, new Promise((resolve) => setTimeout(resolve, 1_000))]); }
 async function contextFor(browser: import("@playwright/test").Browser, origin: string, session: string) { const context = await browser.newContext(); await context.addCookies([{ name: "nuriteo_dev_session", value: session, url: origin }, { name: "nuriteo_dev_csrf", value: csrf, url: origin }]); return context; }
+
+function assertCanonicalLocation(page: import("@playwright/test").Page, pathname: string, state?: string): void {
+  const current = new URL(page.url());
+  assert.equal(current.pathname, pathname);
+  assert.equal(current.searchParams.has("workspace"), false, "canonical IA must not leak workspace as a query parameter");
+  assert.equal(current.searchParams.has("canonical"), false, "internal canonical markers must not leak into the browser URL");
+  assert.equal(current.searchParams.get("state"), state ?? null);
+}

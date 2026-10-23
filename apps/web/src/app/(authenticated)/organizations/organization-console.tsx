@@ -19,9 +19,13 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useDeferredValue, useMemo, useState } from "react";
 import type { FormEvent } from "react";
+import { tv } from "tailwind-variants";
 
 import { Button } from "#src/components/ui/button.tsx";
-import { SelectField } from "#src/components/ui/field.tsx";
+import { SelectField, TextField } from "#src/components/ui/field.tsx";
+import { MetricGrid, MetricItem } from "#src/components/ui/metric-grid.tsx";
+import { PageHeader } from "#src/components/ui/page-header.tsx";
+import { SearchField } from "#src/components/ui/search-field.tsx";
 import {
   collaborationError,
   readCsrfCredential
@@ -29,6 +33,33 @@ import {
 import type { CollaborationOperation } from "#src/lib/api/browser-security.ts";
 import { createBrowserApiClient } from "#src/lib/api/browser-client.ts";
 import { useExclusiveMutation } from "#src/lib/use-exclusive-mutation.ts";
+
+const organizationStyles = tv({
+  slots: {
+    root: "mx-auto grid w-full max-w-[64rem] gap-6 px-[clamp(1.25rem,4vw,3.5rem)] py-[clamp(2rem,7vw,5rem)] max-[48rem]:px-4 max-[48rem]:py-5",
+    switcher: "flex items-end justify-between gap-3 max-[48rem]:items-stretch max-[48rem]:flex-col [&_[data-slot=field]]:w-full sm:[&_[data-slot=field]]:max-w-md",
+    switcherLink: "inline-flex min-h-10 shrink-0 items-center justify-center rounded-lg border border-muted-border px-3 text-sm font-semibold text-foreground no-underline hover:bg-hover",
+    actions: "flex justify-end",
+    actionLink: "inline-flex min-h-10 items-center rounded-lg border border-muted-border px-3 text-sm font-semibold text-foreground no-underline hover:bg-hover",
+    notice: "grid gap-3 rounded-lg border border-warning bg-surface p-4 [&_h2]:m-0 [&_h2]:text-base [&_p]:m-0 [&_p]:text-sm [&_p]:text-muted-foreground [&_output]:select-all [&_output]:[overflow-wrap:anywhere] [&_output]:rounded-md [&_output]:bg-subtle [&_output]:p-3 [&_output]:font-mono",
+    status: "m-0 rounded-lg border border-muted-border bg-surface px-4 py-3 text-sm",
+    error: "m-0 rounded-lg border border-danger bg-danger-subtle px-4 py-3 text-sm text-danger",
+    form: "grid gap-4 rounded-lg border border-muted-border bg-surface p-4",
+    createForm: "grid items-end gap-4 rounded-xl p-5 md:grid-cols-[minmax(15rem,.8fr)_minmax(14rem,1fr)_minmax(16rem,1.2fr)_auto] [&_h2]:m-0 [&_p]:m-0 [&_p:last-child]:mt-2 [&_p:last-child]:text-sm [&_p:last-child]:leading-relaxed [&_p:last-child]:text-muted-foreground [&_[data-slot=button]]:whitespace-nowrap",
+    metrics: "mb-1",
+    management: "grid items-start gap-6 md:grid-cols-[minmax(16rem,.65fr)_minmax(0,1.35fr)] [&>div]:min-w-0 [&>div]:rounded-xl [&>div]:border [&>div]:border-muted-border [&>div]:bg-surface [&>div]:p-4 md:[&>div:last-child]:col-span-full",
+    managementCard: "grid content-start gap-4 [&>h2]:m-0 [&>p]:m-0 [&>p]:text-sm [&>p]:text-muted-foreground",
+    directory: "min-w-0",
+    directoryHeading: "flex items-start justify-between gap-3 [&_h2]:m-0 [&_h3]:m-0 [&_h2]:text-base [&_h3]:text-sm [&_p]:mt-1 [&_p]:mb-0 [&_p]:text-sm [&_p]:text-muted-foreground",
+    count: "shrink-0 rounded-full bg-subtle px-2 py-1 text-xs text-muted-foreground",
+    search: "mt-3 w-full rounded-lg border border-muted-border bg-background px-3",
+    empty: "mt-2 mb-0 text-sm text-muted-foreground",
+    list: "mt-4 grid max-h-[36rem] list-none gap-2 overflow-auto overscroll-contain p-0 [scrollbar-gutter:stable]",
+    record: "flex items-center justify-between gap-3 border-b border-muted-border py-3 max-[37.5rem]:items-stretch max-[37.5rem]:flex-col [&>div:first-child]:grid [&>div:first-child]:gap-1 [&_span]:text-xs [&_span]:text-muted-foreground",
+    recordActions: "flex flex-wrap gap-3 max-[37.5rem]:[&>*]:w-full",
+    invitations: "mt-5 border-t border-muted-border pt-4"
+  }
+});
 
 export interface OrganizationConsoleProps {
   readonly canManage: boolean;
@@ -41,6 +72,7 @@ export interface OrganizationConsoleProps {
 }
 
 export function OrganizationConsole(props: OrganizationConsoleProps) {
+  const styles = organizationStyles();
   const router = useRouter();
   const mutation = useExclusiveMutation();
   const [oneTimeUrl, setOneTimeUrl] = useState<string>();
@@ -53,6 +85,9 @@ export function OrganizationConsole(props: OrganizationConsoleProps) {
     () => props.workspaces.filter((workspace) => workspace.ownerType === "organization"),
     [props.workspaces]
   );
+  const activeWorkspace = props.organization === undefined
+    ? undefined
+    : organizationWorkspaces.find((workspace) => workspace.ownerId === props.organization?.id);
   const visibleMembers = useMemo(() => {
     const query = deferredMemberQuery.trim().toLocaleLowerCase("ko-KR");
     if (query === "") return props.members ?? [];
@@ -97,7 +132,7 @@ export function OrganizationConsole(props: OrganizationConsoleProps) {
         },
         { csrfToken: readCsrfCredential() }
       );
-      router.replace(`/organizations?organization=${result.data.id}`);
+      router.replace("/workspaces");
     }, false);
   }
 
@@ -189,13 +224,13 @@ export function OrganizationConsole(props: OrganizationConsoleProps) {
   }
 
   return (
-    <main id="main-content" className="workspace-page organization-page">
-      <header className="workspace-page__intro">
-        <p className="eyebrow">{props.organization ? `${props.organization.displayName} / OVERVIEW` : "ORGANIZATION / COLLABORATION"}</p>
-        <h1>{props.organization ? "조직 관리" : "조직"}</h1>
-        <p>{props.organization ? "멤버, 팀, 초대와 조직 정보를 한곳에서 관리합니다." : "함께 개발할 조직 워크스페이스를 만들고 멤버와 권한을 관리합니다."}</p>
-      </header>
-      <div className="organization-switcher">
+    <main id="main-content" className={styles.root()}>
+      <PageHeader
+        eyebrow={props.organization ? props.organization.displayName : "협업"}
+        title={props.organization ? "조직 관리" : "조직"}
+        description={props.organization ? "멤버, 팀, 초대와 조직 정보를 한곳에서 관리하세요." : "팀과 함께 개발할 조직 워크스페이스를 만들고 접근 권한을 관리하세요."}
+      />
+      <div className={styles.switcher()}>
         <SelectField
           id="organization-switcher-select"
           label="조직 전환"
@@ -205,48 +240,49 @@ export function OrganizationConsole(props: OrganizationConsoleProps) {
           ]}
           value={props.organization?.id ?? "create"}
           onValueChange={(organizationId) => {
-            router.push(organizationId === "create" ? "/organizations" : `/organizations?organization=${organizationId}`);
+            const selected = organizationWorkspaces.find((workspace) => workspace.ownerId === organizationId);
+            router.push(selected === undefined ? "/workspaces/new/organization" : `/workspaces/${encodeURIComponent(selected.storageScopeId)}/members`);
           }}
         />
-        <Link href="/organizations" aria-current={!props.organization ? "page" : undefined}>새 조직</Link>
+        <Link className={styles.switcherLink()} href="/workspaces/new/organization" aria-current={!props.organization ? "page" : undefined}>새 조직</Link>
       </div>
       {props.organization ? (
-        <nav className="organization-actions" aria-label={`${props.organization.displayName} 설정`}>
-          <Link href={`/organizations/${props.organization.id}/teams`}>팀과 권한 관리</Link>
+        <nav className={styles.actions()} aria-label={`${props.organization.displayName} 설정`}>
+          <Link className={styles.actionLink()} href={activeWorkspace === undefined ? "/workspaces" : `/workspaces/${encodeURIComponent(activeWorkspace.storageScopeId)}/teams`}>팀과 권한 관리</Link>
         </nav>
       ) : null}
       {oneTimeUrl ? (
-        <section className="one-time-panel" aria-labelledby="organization-invitation-link-title" aria-live="polite">
+        <section className={styles.notice()} aria-labelledby="organization-invitation-link-title" aria-live="polite">
           <h2 id="organization-invitation-link-title">지금 초대 링크를 복사하세요</h2>
           <p>이 일회용 링크는 페이지를 떠나거나 새로 고치면 다시 표시되지 않습니다.</p>
           <output aria-labelledby="organization-invitation-link-title">{oneTimeUrl}</output>
           <Button type="button" onClick={() => { setOneTimeUrl(undefined); router.refresh(); }}>링크 확인 완료</Button>
         </section>
       ) : null}
-      {deliveryNotice ? <p role="status">{deliveryNotice}</p> : null}
-      {error ? <p className="form-error" role="alert">{error}</p> : null}
+      {deliveryNotice ? <p className={styles.status()} role="status">{deliveryNotice}</p> : null}
+      {error ? <p className={styles.error()} role="alert">{error}</p> : null}
       {!props.organization ? (
-        <form className="collaboration-form organization-create-form" onSubmit={create} aria-busy={mutation.isPending}>
+        <form className={`${styles.form()} ${styles.createForm()}`} onSubmit={create} aria-busy={mutation.isPending}>
           <div><p className="eyebrow">새 워크스페이스</p><h2>새 조직 만들기</h2><p>조직을 만들면 멤버를 초대하고 프로젝트 접근을 함께 관리할 수 있습니다.</p></div>
-          <label className="field-group">조직 주소<input name="slug" placeholder="nuriteo-team" required pattern="[a-z0-9][a-z0-9-]*" maxLength={63} disabled={mutation.isPending} /><small>영문 소문자, 숫자와 하이픈만 사용할 수 있습니다.</small></label>
-          <label className="field-group">조직 이름<input name="displayName" placeholder="누리터 팀" required maxLength={200} disabled={mutation.isPending} /></label>
+          <TextField label="조직 주소" description="영문 소문자, 숫자와 하이픈만 사용할 수 있습니다." name="slug" placeholder="nuriteo-team" required pattern="[a-z0-9][a-z0-9-]*" maxLength={63} disabled={mutation.isPending} />
+          <TextField label="조직 이름" name="displayName" placeholder="누리터 팀" required maxLength={200} disabled={mutation.isPending} />
           <Button type="submit" variant="primary" disabled={mutation.isPending}>조직 만들기</Button>
         </form>
       ) : null}
       {props.organization ? (
         <>
-        <section className="product-metrics organization-metrics" aria-label="조직 지표">
-          <article><span>멤버</span><strong>{props.members?.length ?? 0}</strong><small>소유자 {props.members?.filter((member) => member.role === "owner").length ?? 0}명</small></article>
-          <article><span>대기 중 초대</span><strong>{props.invitations?.filter((invitation) => invitation.status === "pending").length ?? 0}</strong><small>아직 참여하지 않은 계정</small></article>
-          <article><span>조직 버전</span><strong>v{props.organization.version}</strong><small>{props.organization.status === "active" ? "정상 운영 중" : props.organization.status}</small></article>
-        </section>
-        <section className="collaboration-grid organization-management">
-          <div>
+        <MetricGrid className={styles.metrics()} aria-label="조직 지표">
+          <MetricItem label="멤버" value={props.members?.length ?? 0} description={`소유자 ${props.members?.filter((member) => member.role === "owner").length ?? 0}명`} />
+          <MetricItem label="대기 중 초대" value={props.invitations?.filter((invitation) => invitation.status === "pending").length ?? 0} description="아직 참여하지 않은 계정" />
+          <MetricItem label="조직 버전" value={`v${props.organization.version}`} description={props.organization.status === "active" ? "정상 운영 중" : props.organization.status} />
+        </MetricGrid>
+        <section className={styles.management()}>
+          <div className={styles.managementCard()}>
             <h2>{props.organization.displayName}</h2>
             <p>{props.organization.status === "active" ? "활성 조직" : props.organization.status} · 버전 {props.organization.version}</p>
             {props.canManage ? (
-              <form className="collaboration-form" onSubmit={rename} aria-busy={mutation.isPending}>
-                <label className="field-group">조직 이름<input name="displayName" defaultValue={props.organization.displayName} required disabled={mutation.isPending} /></label>
+              <form className={styles.form()} onSubmit={rename} aria-busy={mutation.isPending}>
+                <TextField label="조직 이름" name="displayName" defaultValue={props.organization.displayName} required disabled={mutation.isPending} />
                 <Button type="submit" disabled={mutation.isPending}>이름 저장</Button>
               </form>
             ) : <p>멤버 권한에서는 조직 정보를 조회할 수만 있습니다.</p>}
@@ -264,10 +300,10 @@ export function OrganizationConsole(props: OrganizationConsoleProps) {
             totalCount={props.members?.length ?? 0}
           />
           {props.canManage ? (
-            <div>
+            <div className={styles.managementCard()}>
               <h2>멤버 초대</h2>
-              <form className="collaboration-form" onSubmit={invite} aria-busy={mutation.isPending}>
-                <label className="field-group">초대할 이메일<input name="email" type="text" inputMode="email" autoComplete="email" autoCapitalize="none" spellCheck={false} aria-describedby="organization-invitation-email-help" required disabled={mutation.isPending} /></label>
+              <form className={styles.form()} onSubmit={invite} aria-busy={mutation.isPending}>
+                <TextField label="초대할 이메일" name="email" type="text" inputMode="email" autoComplete="email" autoCapitalize="none" spellCheck={false} aria-describedby="organization-invitation-email-help" required disabled={mutation.isPending} />
                 <p id="organization-invitation-email-help">기존 누리터 계정에 사용하는 이메일을 입력하세요.</p>
                 <SelectField label="역할" name="role" options={[{ value: "member", label: "멤버" }, { value: "owner", label: "소유자" }]} defaultValue="member" required disabled={mutation.isPending} />
                 <Button type="submit" variant="primary" disabled={mutation.isPending}>초대 발급</Button>
@@ -310,28 +346,21 @@ interface OrganizationMemberDirectoryProps {
 }
 
 function OrganizationMemberDirectory(props: OrganizationMemberDirectoryProps) {
+  const styles = organizationStyles();
   return (
-    <div className="organization-directory">
-      <div className="organization-directory__heading">
+    <div className={styles.directory()}>
+      <div className={styles.directoryHeading()}>
         <div><h2>멤버</h2><p>불러온 멤버의 이름, 역할 또는 식별자로 검색합니다.</p></div>
-        <span>{props.members.length} / {props.totalCount}</span>
+        <span className={styles.count()}>{props.members.length} / {props.totalCount}</span>
       </div>
-      <label className="product-search organization-search">
-        <span aria-hidden="true">⌕</span>
-        <span className="sr-only">조직 멤버 검색</span>
-        <input
-          value={props.query}
-          onChange={(event) => props.onQueryChange(event.currentTarget.value)}
-          placeholder="이름 또는 역할 검색"
-        />
-      </label>
-      {props.members.length === 0 ? <p className="team-empty-copy">검색 결과가 없습니다.</p> : (
-        <ul className="record-list organization-records" aria-busy={props.isFiltering} aria-label="조직 멤버">
+      <SearchField className={styles.search()} label="조직 멤버 검색" value={props.query} onChange={(event) => props.onQueryChange(event.currentTarget.value)} placeholder="이름 또는 역할 검색" />
+      {props.members.length === 0 ? <p className={styles.empty()}>검색 결과가 없습니다.</p> : (
+        <ul className={styles.list()} aria-busy={props.isFiltering} aria-label="조직 멤버">
           {props.members.map((member) => (
-            <li key={member.userId}>
+            <li className={styles.record()} key={member.userId}>
               <div><strong>{member.displayName}{member.userId === props.currentUserId ? " (나)" : ""}</strong><span>{member.role === "owner" ? "소유자" : "멤버"} · {shortId(member.userId)}</span></div>
               {props.canManage && member.userId !== props.currentUserId ? (
-                <div className="record-actions">
+                <div className={styles.recordActions()}>
                   <Button type="button" disabled={props.disabled} onClick={() => void props.onRoleChange(member)}>{member.role === "owner" ? "멤버로 변경" : "소유자로 변경"}</Button>
                   <Button type="button" disabled={props.disabled} onClick={() => void props.onRemove(member)}>제외</Button>
                 </div>
@@ -355,9 +384,10 @@ interface OrganizationInvitationDirectoryProps {
 }
 
 function OrganizationInvitationDirectory(props: OrganizationInvitationDirectoryProps) {
+  const styles = organizationStyles();
   return (
-    <div className="organization-invitations">
-      <div className="organization-directory__heading">
+    <div className={styles.invitations()}>
+      <div className={styles.directoryHeading()}>
         <h3>초대 내역</h3>
         <SelectField
           label="표시 범위"
@@ -367,13 +397,13 @@ function OrganizationInvitationDirectory(props: OrganizationInvitationDirectoryP
           onValueChange={(nextValue) => props.onFilterChange(nextValue === "all" ? "all" : "pending")}
         />
       </div>
-      {props.invitations.length === 0 ? <p className="team-empty-copy">표시할 초대가 없습니다.</p> : (
-        <ul className="record-list organization-records" aria-label="조직 초대">
+      {props.invitations.length === 0 ? <p className={styles.empty()}>표시할 초대가 없습니다.</p> : (
+        <ul className={styles.list()} aria-label="조직 초대">
           {props.invitations.map((invitation) => (
-            <li key={invitation.id}>
+            <li className={styles.record()} key={invitation.id}>
               <div><strong>{invitation.proposedRole === "owner" ? "소유자 초대" : "멤버 초대"} · {shortId(invitation.inviteeUserId)}</strong><span>{invitationStatusLabel(invitation.status)} · {expirationLabel(invitation.expiresAt)}</span></div>
               {invitation.status === "pending" ? (
-                <div className="record-actions">
+                <div className={styles.recordActions()}>
                   <Button type="button" disabled={props.disabled} onClick={() => void props.onReissue(invitation)}>다시 발급</Button>
                   <Button type="button" disabled={props.disabled} onClick={() => void props.onRevoke(invitation)}>취소</Button>
                 </div>

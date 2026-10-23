@@ -16,11 +16,16 @@ import Link from "next/link";
 import { useDeferredValue, useMemo, useState } from "react";
 import type { FormEvent } from "react";
 
+import { tokenConsoleStyles } from "#src/app/(authenticated)/access-tokens/token-console.styles.ts";
 import { Button } from "#src/components/ui/button.tsx";
 import { CheckboxField } from "#src/components/ui/checkbox.tsx";
+import { ConfirmationDialog } from "#src/components/ui/confirmation-dialog.tsx";
 import { TextField } from "#src/components/ui/field.tsx";
+import { MetricGrid, MetricItem } from "#src/components/ui/metric-grid.tsx";
 import { NumberField } from "#src/components/ui/number-field.tsx";
+import { PageHeader } from "#src/components/ui/page-header.tsx";
 import { SegmentedControl } from "#src/components/ui/segmented-control.tsx";
+import { SearchField } from "#src/components/ui/search-field.tsx";
 import { createBrowserApiClient } from "#src/lib/api/browser-client.ts";
 import { readCsrfCredential } from "#src/lib/api/browser-security.ts";
 import { useExclusiveMutation } from "#src/lib/use-exclusive-mutation.ts";
@@ -44,12 +49,15 @@ type PendingTokenAction = Readonly<{
 }>;
 
 export interface AccessTokenConsoleProps {
+  readonly embedded?: boolean;
   readonly initialTokens: readonly AccessToken[];
   readonly referenceTime?: number;
   readonly target: AccessTokenTarget;
 }
 
-export function AccessTokenConsole({ initialTokens, referenceTime, target }: AccessTokenConsoleProps) {
+export function AccessTokenConsole({ embedded = false, initialTokens, referenceTime, target }: AccessTokenConsoleProps) {
+  const styles = tokenConsoleStyles();
+  const Root = embedded ? "div" : "main";
   const mutation = useExclusiveMutation();
   const [tokens, setTokens] = useState(initialTokens);
   const [issued, setIssued] = useState<IssuedAccessToken>();
@@ -165,49 +173,49 @@ export function AccessTokenConsole({ initialTokens, referenceTime, target }: Acc
   }
 
   return (
-    <main id="main-content" className="workspace-page access-token-page">
-      <header className="workspace-page__intro">
-        <p className="eyebrow">{target.kind === "personal" ? "개인 자동화" : "프로젝트 자동화"}</p>
-        <h1>액세스 토큰</h1>
-        <p>필요한 권한만 가진 자격 증명을 발급하세요. 누리터는 토큰 값을 한 번만 표시하고 해시만 저장합니다.</p>
-      </header>
+    <Root {...(embedded ? {} : { id: "main-content" })} className={styles.root()}>
+      {embedded ? null : <PageHeader
+        eyebrow={target.kind === "personal" ? "개인 자동화" : "프로젝트 자동화"}
+        title="액세스 토큰"
+        description="필요한 권한만 가진 자격 증명을 발급하세요. 토큰 원문은 한 번만 표시하고 해시만 저장합니다."
+      />}
 
-      <nav className="access-token-context" aria-label="토큰 적용 범위">
-        <Link href="/access-tokens" aria-current={target.kind === "personal" ? "page" : undefined}>개인 토큰</Link>
+      {embedded ? null : <nav className={styles.context()} aria-label="토큰 적용 범위">
+        <Link className={styles.contextLink()} href="/account/tokens" aria-current={target.kind === "personal" ? "page" : undefined}>개인 토큰</Link>
         {target.kind === "project" ? <span>프로젝트 {target.projectId}</span> : <span>프로젝트 토큰은 프로젝트 상세 화면에서 관리할 수 있습니다.</span>}
-      </nav>
+      </nav>}
 
-      <section className="product-metrics" aria-label="액세스 토큰 요약">
-        <article><span>활성 토큰</span><strong>{activeTokens.length}</strong><small>{target.kind === "personal" ? "개인 자동화 자격 증명" : "프로젝트 자동화 자격 증명"}</small></article>
-        <article><span>최근 사용 기록</span><strong>{usedTokenCount}</strong><small>한 번 이상 사용된 활성 토큰</small></article>
-        <article><span>가장 가까운 만료</span><strong>{nearestExpiryDays === null ? "—" : `${nearestExpiryDays}일`}</strong><small>만료 전에 교체를 준비하세요</small></article>
-      </section>
+      <MetricGrid aria-label="액세스 토큰 요약">
+        <MetricItem label="활성 토큰" value={activeTokens.length} description={target.kind === "personal" ? "개인 자동화 자격 증명" : "프로젝트 자동화 자격 증명"} />
+        <MetricItem label="사용 기록 있음" value={usedTokenCount} description="한 번 이상 사용된 활성 토큰" />
+        <MetricItem label="가장 가까운 만료" value={nearestExpiryDays === null ? "—" : `${nearestExpiryDays}일`} description="만료 전에 교체를 준비하세요" />
+      </MetricGrid>
 
       {issued === undefined ? null : (
-        <section className="access-token-secret" aria-labelledby="issued-token-title">
-          <div><p className="eyebrow">한 번만 표시</p><h2 id="issued-token-title">지금 토큰을 복사하세요</h2><p>이 화면을 벗어나면 토큰 값을 다시 확인할 수 없습니다.</p></div>
-          <code>{issued.plaintext}</code>
-          <div className="access-token-actions">
+        <section className={styles.panel({ className: styles.secret() })} aria-labelledby="issued-token-title">
+          <div className={styles.heading()}><p className={styles.eyebrow()}>한 번만 표시</p><h2 className={styles.title()} id="issued-token-title">지금 토큰을 복사하세요</h2><p className={styles.description()}>이 화면을 벗어나면 토큰 값을 다시 확인할 수 없습니다.</p></div>
+          <code className={styles.secretCode()}>{issued.plaintext}</code>
+          <div className={styles.actions()}>
             <Button type="button" variant="primary" onClick={() => void copyIssued()}>토큰 복사</Button>
             <Button type="button" onClick={() => setIssued(undefined)}>안전하게 저장했습니다</Button>
           </div>
         </section>
       )}
 
-      <section className="access-token-issue" aria-labelledby="issue-token-title">
-        <div><p className="eyebrow">최소 권한 원칙</p><h2 id="issue-token-title">새 토큰 발급</h2><p>발급·교체·폐기 작업에는 최근에 인증한 세션이 필요합니다.</p></div>
-        <form className="collaboration-form" onSubmit={issue} aria-busy={mutation.isPending}>
+      <section className={styles.panel()} aria-labelledby="issue-token-title">
+        <div className={styles.heading()}><p className={styles.eyebrow()}>최소 권한 원칙</p><h2 className={styles.title()} id="issue-token-title">새 토큰 발급</h2><p className={styles.description()}>발급·교체·폐기 작업에는 최근에 인증한 세션이 필요합니다.</p></div>
+        <form className={styles.form()} onSubmit={issue} aria-busy={mutation.isPending}>
           <TextField label="토큰 이름" name="name" placeholder="preview-deploy" required maxLength={120} disabled={mutation.isPending} description="사용 목적이 드러나는 이름을 권장합니다." />
           <NumberField label="만료 기간(일)" name="expiryDays" min={1} max={365} defaultValue={30} disabled={mutation.isPending} description="30일을 권장하며 최대 365일까지 설정할 수 있습니다." />
-          <fieldset className="access-token-scopes"><legend>권한 범위 <small>하나 이상 선택</small></legend>{SCOPES.map((scope) => <CheckboxField key={scope} name="scope" value={scope} label={<code>{scope}</code>} description={SCOPE_DESCRIPTIONS[scope]} disabled={mutation.isPending} />)}</fieldset>
+          <fieldset className={styles.scopes()}><legend className={styles.legend()}>권한 범위 <small className={styles.legendHint()}>하나 이상 선택</small></legend>{SCOPES.map((scope) => <CheckboxField appearance="card" key={scope} name="scope" value={scope} label={<code>{scope}</code>} description={SCOPE_DESCRIPTIONS[scope]} disabled={mutation.isPending} />)}</fieldset>
           <Button type="submit" variant="primary" disabled={mutation.isPending}>{mutation.isPending ? "처리 중…" : "토큰 발급"}</Button>
         </form>
       </section>
 
-      <section className="access-token-list" aria-labelledby="token-list-title">
-        <div><p className="eyebrow">자격 증명 목록</p><h2 id="token-list-title">발급된 토큰 <small>{visibleTokens.length} / {tokens.length}</small></h2><p>사용하지 않는 토큰은 즉시 폐기하세요.</p></div>
-        <section className="product-toolbar" aria-label="토큰 검색 및 상태 필터">
-          <label className="product-search"><span aria-hidden="true">⌕</span><span className="sr-only">토큰 검색</span><input value={query} onChange={(event) => setQuery(event.currentTarget.value)} placeholder="이름, 접두사 또는 권한 검색" /></label>
+      <section className={styles.panel()} aria-labelledby="token-list-title">
+        <div className={styles.heading()}><p className={styles.eyebrow()}>자격 증명 목록</p><h2 className={styles.title()} id="token-list-title">발급된 토큰 <small className={styles.titleCount()}>{visibleTokens.length} / {tokens.length}</small></h2><p className={styles.description()}>사용하지 않는 토큰은 즉시 폐기하세요.</p></div>
+        <section className={styles.toolbar()} aria-label="토큰 검색 및 상태 필터">
+          <SearchField className={styles.search()} label="토큰 검색" value={query} onChange={(event) => setQuery(event.currentTarget.value)} placeholder="이름, 접두사 또는 권한 검색" />
           <SegmentedControl
             aria-label="토큰 상태"
             value={statusFilter}
@@ -220,23 +228,27 @@ export function AccessTokenConsole({ initialTokens, referenceTime, target }: Acc
             ]}
           />
         </section>
-        {visibleTokens.length === 0 ? <div className="access-token-empty"><strong>{tokens.length === 0 ? "발급된 토큰이 없습니다." : "검색 결과가 없습니다."}</strong><p>{tokens.length === 0 ? "위 양식에서 필요한 권한만 선택해 첫 토큰을 발급하세요." : "다른 검색어나 상태를 선택해보세요."}</p></div> : (
-          <ul className="record-list" aria-busy={query !== deferredQuery}>
-            {visibleTokens.map((token) => <li key={token.id}>
-              <div><strong>{token.name}</strong><span><code>{token.prefix}…</code> · {tokenStatusLabel(token.status)} · {formatDate(token.expiresAt)} 만료</span><small>{token.scopes.length === 0 ? "권한 없음" : token.scopes.join(", ")}{token.lastUsedAt === null ? " · 사용 기록 없음" : ` · 마지막 사용 ${formatDate(token.lastUsedAt)}`}</small></div>
-              {token.status === "active" ? <div className="record-actions"><Button type="button" disabled={mutation.isPending} onClick={() => setPendingAction({ action: "rotate", token })}>교체</Button><Button type="button" variant="danger" disabled={mutation.isPending} onClick={() => setPendingAction({ action: "revoke", token })}>폐기</Button></div> : null}
+        {visibleTokens.length === 0 ? <div className={styles.empty()}><strong className={styles.emptyTitle()}>{tokens.length === 0 ? "발급된 토큰이 없습니다." : "검색 결과가 없습니다."}</strong><p className={styles.emptyDescription()}>{tokens.length === 0 ? "위 양식에서 필요한 권한만 선택해 첫 토큰을 발급하세요." : "다른 검색어나 상태를 선택해보세요."}</p></div> : (
+          <ul className={styles.list()} aria-busy={query !== deferredQuery}>
+            {visibleTokens.map((token) => <li className={styles.item()} key={token.id}>
+              <div className={styles.itemCopy()}><strong className={styles.itemTitle()}>{token.name}</strong><span className={styles.itemMeta()}><code>{token.prefix}…</code> · {tokenStatusLabel(token.status)} · {formatDate(token.expiresAt)} 만료</span><small className={styles.itemDetail()}>{token.scopes.length === 0 ? "권한 없음" : token.scopes.join(", ")}{token.lastUsedAt === null ? " · 사용 기록 없음" : ` · 마지막 사용 ${formatDate(token.lastUsedAt)}`}</small></div>
+              {token.status === "active" ? <div className={styles.recordActions()}><Button type="button" disabled={mutation.isPending} onClick={() => setPendingAction({ action: "rotate", token })}>교체</Button><Button type="button" variant="danger" disabled={mutation.isPending} onClick={() => setPendingAction({ action: "revoke", token })}>폐기</Button></div> : null}
             </li>)}
           </ul>
         )}
       </section>
-      {pendingAction === undefined ? null : (
-        <section className="access-token-confirmation" role="alertdialog" aria-labelledby="token-confirmation-title" aria-describedby="token-confirmation-description">
-          <div><p className="eyebrow">확인 필요</p><h2 id="token-confirmation-title">{pendingAction.action === "rotate" ? "토큰을 교체할까요?" : "토큰을 폐기할까요?"}</h2><p id="token-confirmation-description"><strong>{pendingAction.token.name}</strong>을 사용하는 자동화는 기존 자격 증명으로 더 이상 접근할 수 없습니다.</p></div>
-          <div className="access-token-actions"><Button type="button" onClick={() => setPendingAction(undefined)}>취소</Button><Button type="button" variant={pendingAction.action === "revoke" ? "danger" : "primary"} disabled={mutation.isPending} onClick={confirmPendingAction}>{mutation.isPending ? "처리 중…" : pendingAction.action === "rotate" ? "교체하고 새 토큰 보기" : "토큰 폐기"}</Button></div>
-        </section>
-      )}
-      {feedback ? <p className={`notification-feedback notification-feedback--${feedback.error ? "error" : "success"}`} role={feedback.error ? "alert" : "status"}>{feedback.text}</p> : null}
-    </main>
+      <ConfirmationDialog
+        busy={mutation.isPending}
+        confirmLabel={mutation.isPending ? "처리 중…" : pendingAction?.action === "rotate" ? "교체하고 새 토큰 보기" : "토큰 폐기"}
+        description={`${pendingAction?.token.name ?? "선택한 토큰"}을 사용하는 자동화는 기존 자격 증명으로 더 이상 접근할 수 없습니다.`}
+        open={pendingAction !== undefined}
+        title={pendingAction?.action === "rotate" ? "토큰을 교체할까요?" : "토큰을 폐기할까요?"}
+        tone={pendingAction?.action === "revoke" ? "danger" : "primary"}
+        onCancel={() => setPendingAction(undefined)}
+        onConfirm={confirmPendingAction}
+      />
+      {feedback ? <p className={styles.feedback({ className: feedback.error ? styles.feedbackError() : styles.feedbackSuccess() })} role={feedback.error ? "alert" : "status"}>{feedback.text}</p> : null}
+    </Root>
   );
 }
 

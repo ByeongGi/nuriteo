@@ -2,32 +2,34 @@ import type { PublicPublishedExample } from "@nuriteo/api-client";
 import Link from "next/link";
 
 import { formatPublishedDate } from "#src/app/examples/_utils/format-published-date.ts";
+import { examplesStyles } from "#src/app/examples/_components/examples.styles.ts";
 
 interface ExampleCardProps {
   readonly example: PublicPublishedExample;
 }
 
 export function ExampleCard({ example }: ExampleCardProps) {
+  const styles = examplesStyles();
   return (
-    <article className="public-example-card group">
+    <article className={styles.card()}>
       <div>
-        <div className="flex items-center justify-between gap-3">
-          <span className="rounded-full bg-selected px-2.5 py-1 text-xs font-medium text-foreground">
+        <div className={styles.cardMeta()}>
+          <span className={styles.badge()}>
             버전 {example.versionNumber}
           </span>
-          <span className="text-xs text-subtle-foreground">
+          <span className={styles.date()}>
             {formatPublishedDate(example.publishedAt)}
           </span>
         </div>
-        <h2 className="mt-5 text-xl font-medium tracking-[-0.025em] text-foreground text-balance">
+        <h2 className={styles.cardTitle()}>
           {example.name}
         </h2>
-        <p className="mt-2 text-sm text-muted-foreground">
+        <p className={styles.cardDescription()}>
           게시 시점의 상태를 안전하게 살펴볼 수 있는 읽기 전용 고정 버전입니다.
         </p>
       </div>
       <Link
-        className="inline-flex w-fit items-center gap-2 text-sm font-medium text-link underline-offset-4 group-hover:underline"
+        className={styles.cardLink()}
         href={`/examples/${example.publicId}`}
       >
         예제 보기

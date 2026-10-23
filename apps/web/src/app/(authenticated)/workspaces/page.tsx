@@ -1,6 +1,6 @@
 import { getCurrentWorkspaces } from "@nuriteo/api-client";
 import type { Metadata } from "next";
-import { redirect } from "next/navigation";
+import { redirect, unstable_rethrow } from "next/navigation";
 
 import { EntryUnavailable } from "#src/app/_components/entry-unavailable.tsx";
 import {
@@ -48,6 +48,7 @@ export default async function WorkspacesPage({ searchParams }: WorkspacesPagePro
 
     return <WorkspaceScreen activeScope={activeWorkspace.storageScopeId} invitationStatus={invitationStatus} workspaces={workspaces} />;
   } catch (error) {
+    unstable_rethrow(error);
     if (isExplicitlySignedOut(error)) {
       redirect("/sign-in");
     }

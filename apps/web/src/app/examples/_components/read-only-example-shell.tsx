@@ -1,10 +1,13 @@
 import type { PublicPublishedExample, Workspace } from "@nuriteo/api-client";
 import Link from "next/link";
 
+import { examplesStyles } from "#src/app/examples/_components/examples.styles.ts";
 import { formatPublishedDate } from "#src/app/examples/_utils/format-published-date.ts";
 import type { PreviewOriginConfiguration } from "#src/runtime/preview-origin-contract.ts";
 import { ForkExampleForm } from "#src/app/examples/_components/fork-example-form.tsx";
 import { PublishedExamplePreview } from "#src/app/examples/_components/published-example-preview.tsx";
+import { Button } from "#src/components/ui/button.tsx";
+import { PageHeader } from "#src/components/ui/page-header.tsx";
 
 export interface ReadOnlyExampleShellProps {
   readonly example: PublicPublishedExample;
@@ -14,16 +17,17 @@ export interface ReadOnlyExampleShellProps {
 
 export function ReadOnlyExampleShell({ example, initialForkWorkspaces, previewConfiguration }: ReadOnlyExampleShellProps) {
   const bundleHref = `/api/v1/published-examples/${example.publicId}/versions/${example.versionNumber}/content`;
+  const styles = examplesStyles();
   return (
-    <main id="main-content" className="min-h-[calc(100vh-var(--n-layout-header-height))] bg-background" tabIndex={-1}>
-      <div className="mx-auto w-full max-w-[var(--n-layout-content-max)] px-[var(--n-layout-content-gutter)] py-6">
-        <nav aria-label="예제 탐색" className="mb-4 text-sm text-muted-foreground">
-          <Link className="text-link underline-offset-4 hover:underline" href="/examples">
+    <main id="main-content" className={styles.readOnlyPage()} tabIndex={-1}>
+      <div className={styles.readOnlyInner()}>
+        <nav aria-label="예제 탐색" className={styles.breadcrumb()}>
+          <Link className={styles.breadcrumbLink()} href="/examples">
             공개 예제
           </Link>
           <span aria-hidden="true"> / </span>
           <Link
-            className="text-link underline-offset-4 hover:underline"
+            className={styles.breadcrumbLink()}
             href={`/examples/${example.publicId}`}
           >
             {example.name}
@@ -31,29 +35,23 @@ export function ReadOnlyExampleShell({ example, initialForkWorkspaces, previewCo
           <span aria-hidden="true"> / 버전 {example.versionNumber}</span>
         </nav>
 
-        <section className="overflow-hidden rounded-xl border border-muted-border bg-surface shadow-[var(--n-shadow-overlay)]" aria-labelledby="example-shell-title">
-          <header className="flex flex-wrap items-center justify-between gap-4 border-b border-muted-border bg-raised px-5 py-4">
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="rounded-full bg-selected px-2.5 py-1 text-xs font-semibold text-foreground">
-                  읽기 전용
-                </span>
-                <span className="text-xs text-subtle-foreground">고정 스냅샷</span>
-              </div>
-              <h1 id="example-shell-title" className="mt-2 truncate text-lg font-medium tracking-[-0.02em] text-foreground">
-                {example.name}
-              </h1>
-            </div>
-            <dl className="grid grid-cols-2 gap-x-5 gap-y-1 text-xs">
+        <PageHeader
+          eyebrow="읽기 전용 / 고정 스냅샷"
+          title={example.name}
+          description="게시된 버전을 안전한 공개 경계에서 확인하고, 필요한 경우 독립 프로젝트로 복제하세요."
+          actions={(
+            <dl className={styles.shellMeta()}>
               <dt className="text-subtle-foreground">버전</dt>
               <dd className="m-0 text-right font-mono text-foreground">{example.versionNumber}</dd>
               <dt className="text-subtle-foreground">게시일</dt>
               <dd className="m-0 text-right text-foreground">{formatPublishedDate(example.publishedAt)}</dd>
             </dl>
-          </header>
+          )}
+        />
 
-          <div className="grid min-h-[28rem] md:grid-cols-[15rem_minmax(0,1fr)]">
-            <aside className="border-b border-muted-border bg-sidebar p-4 md:border-r md:border-b-0" aria-label="스냅샷 정보">
+        <section className={styles.shell()} aria-label={`${example.name} 읽기 전용 버전`}>
+          <div className={styles.shellLayout()}>
+            <aside className={styles.shellAside()} aria-label="스냅샷 정보">
               <p className="m-0 text-xs font-semibold uppercase tracking-[0.08em] text-subtle-foreground">
                 스냅샷
               </p>
@@ -65,8 +63,8 @@ export function ReadOnlyExampleShell({ example, initialForkWorkspaces, previewCo
               </p>
             </aside>
 
-            <div className="grid place-items-center p-6 md:p-10">
-              <div className="w-full max-w-5xl text-center">
+            <div className={styles.shellContent()}>
+              <div className={styles.shellContentInner()}>
                 <span className="mx-auto grid size-12 place-items-center rounded-xl border border-border bg-subtle text-xl text-primary" aria-hidden="true">
                   ◇
                 </span>
@@ -76,20 +74,13 @@ export function ReadOnlyExampleShell({ example, initialForkWorkspaces, previewCo
                 <p className="mt-3 text-muted-foreground text-balance">
                   검증·정제된 아카이브는 쿠키가 없는 공개 경계를 통해 제공됩니다. 이 고정 스냅샷만 포함하며 프로젝트 권한, Git, 계정 또는 환경 정보는 포함하지 않습니다.
                 </p>
-                <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
-                  <a
-                    className="inline-flex min-h-10 items-center rounded-md bg-primary px-4 text-sm font-semibold text-on-primary no-underline transition-colors hover:bg-primary-strong"
-                    download="nuriteo-published-example.tar"
-                    href={bundleHref}
-                  >
+                <div className={styles.actionRow()}>
+                  <Button className={styles.action()} variant="primary" render={<a download="nuriteo-published-example.tar" href={bundleHref} />}>
                     정제된 아카이브 다운로드
-                  </a>
-                  <Link
-                    className="inline-flex min-h-10 items-center rounded-md border border-border bg-subtle px-4 text-sm font-medium text-foreground no-underline transition-colors hover:bg-hover"
-                    href={`/examples/${example.publicId}`}
-                  >
+                  </Button>
+                  <Button className={styles.action()} render={<Link href={`/examples/${example.publicId}`} />}>
                     예제 상세로 돌아가기
-                  </Link>
+                  </Button>
                 </div>
                 <div className="mx-auto mt-8 max-w-md">
                   <ForkExampleForm example={example} initialWorkspaces={initialForkWorkspaces} />

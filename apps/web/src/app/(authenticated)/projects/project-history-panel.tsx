@@ -19,13 +19,48 @@ import type {
   RecoveryCheckpoint
 } from "@nuriteo/api-client";
 import { useEffect, useRef, useState } from "react";
-import type { FormEvent, KeyboardEvent as ReactKeyboardEvent } from "react";
+import type { FormEvent } from "react";
+import { tv } from "tailwind-variants";
 
+import { Badge } from "#src/components/ui/badge.tsx";
 import { Button } from "#src/components/ui/button.tsx";
+import { ConfirmationDialog } from "#src/components/ui/confirmation-dialog.tsx";
+import { TextField } from "#src/components/ui/field.tsx";
+import { ScrollAreaContent, ScrollAreaRoot, ScrollAreaScrollbar, ScrollAreaThumb, ScrollAreaViewport } from "#src/components/ui/scroll-area.tsx";
 import { createBrowserApiClient } from "#src/lib/api/browser-client.ts";
 import { readCsrfCredential } from "#src/lib/api/browser-security.ts";
 
 const VERSION_PAGE_SIZE = 20;
+const timestampFormatter = new Intl.DateTimeFormat("ko-KR", {
+  dateStyle: "medium",
+  timeStyle: "short"
+});
+
+const historyPanelStyles = tv({
+  slots: {
+    root: "grid gap-5 rounded-xl border border-muted-border bg-surface p-5 shadow-xs",
+    header: "flex flex-wrap items-start justify-between gap-3 border-b border-muted-border pb-4",
+    headerCopy: "grid min-w-0 gap-1 [&_p]:m-0",
+    eyebrow: "text-xs font-semibold tracking-[.08em] text-accent-foreground",
+    title: "m-0 text-base font-semibold",
+    description: "max-w-2xl text-xs leading-relaxed text-muted-foreground",
+    status: "m-0 rounded-md bg-subtle px-3 py-2 text-sm text-muted-foreground",
+    feedback: "grid gap-2 rounded-md border p-3 [&_p]:m-0 [&_p]:text-sm",
+    error: "border-danger/40 bg-danger-subtle text-danger",
+    restored: "border-warning/40 bg-warning/10",
+    createForm: "grid items-end gap-3 sm:grid-cols-[minmax(16rem,1fr)_auto]",
+    columns: "grid min-w-0 gap-4 lg:grid-cols-2",
+    listSection: "grid min-w-0 content-start gap-3 rounded-lg border border-muted-border bg-background p-3",
+    listHeading: "flex items-center justify-between gap-3 [&_h4]:m-0 [&_h4]:text-sm [&_h4]:font-semibold",
+    listEmpty: "m-0 grid min-h-28 place-items-center rounded-md bg-subtle px-4 text-center text-sm text-muted-foreground",
+    scrollRoot: "max-h-[32rem] min-h-0",
+    list: "m-0 grid list-none gap-2 p-0 pr-2",
+    item: "rounded-md border border-muted-border bg-surface p-3 [content-visibility:auto] [contain-intrinsic-size:auto_5rem]",
+    itemLayout: "flex items-start justify-between gap-3",
+    itemCopy: "grid min-w-0 gap-1 [&_strong]:truncate [&_strong]:text-sm [&_p]:m-0 [&_p]:text-xs [&_p]:leading-relaxed [&_p]:text-muted-foreground",
+    more: "w-full"
+  }
+});
 
 interface HistoryReference {
   readonly id: string;
@@ -79,8 +114,6 @@ export function ProjectHistoryPanel({
   const [stale, setStale] = useState(false);
   const createAttempt = useRef<{ readonly key: string; readonly signature: string } | null>(null);
   const restoreAttemptKey = useRef<string | null>(null);
-  const confirmButtonRef = useRef<HTMLButtonElement>(null);
-  const dialogRef = useRef<HTMLElement>(null);
   const restoreTriggerRef = useRef<HTMLButtonElement | null>(null);
   const owner = { ownerType: project.ownerType, ownerId: project.ownerId } as const;
 
@@ -121,16 +154,6 @@ export function ProjectHistoryPanel({
     });
     return () => controller.abort();
   }, [initialState, project.id, project.ownerId, project.ownerType]);
-
-  useEffect(() => {
-    if (pendingRestore === undefined) return;
-    confirmButtonRef.current?.focus();
-    const dismiss = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !isMutating) closeRestore();
-    };
-    globalThis.addEventListener("keydown", dismiss);
-    return () => globalThis.removeEventListener("keydown", dismiss);
-  }, [isMutating, pendingRestore]);
 
   async function refreshRecovery(): Promise<void> {
     const result = await listRecoveryCheckpoints(createBrowserApiClient(), { owner, projectId: project.id });
@@ -252,52 +275,36 @@ export function ProjectHistoryPanel({
     globalThis.requestAnimationFrame(() => trigger?.focus());
   }
 
-  function trapDialogFocus(event: ReactKeyboardEvent<HTMLElement>): void {
-    if (event.key !== "Tab") return;
-    const controls = [...(dialogRef.current?.querySelectorAll<HTMLElement>(
-      'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
-    ) ?? [])].filter((element) => element.tabIndex >= 0);
-    const first = controls[0];
-    const last = controls.at(-1);
-    if (first === undefined || last === undefined) return;
-    if (event.shiftKey && document.activeElement === first) {
-      event.preventDefault();
-      last.focus();
-    } else if (!event.shiftKey && document.activeElement === last) {
-      event.preventDefault();
-      first.focus();
-    }
-  }
-
   const archived = project.state === "archived";
+  const styles = historyPanelStyles();
   return (
-    <section className="mt-4 rounded-lg border border-border bg-surface p-4" aria-labelledby={`history-title-${project.id}`}>
-      <header className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <p className="m-0 text-xs uppercase tracking-wide text-muted-foreground">서버 기록</p>
-          <h3 id={`history-title-${project.id}`} className="m-0 text-sm font-semibold">버전과 복구</h3>
-          <p className="mb-0 mt-1 text-xs text-muted-foreground">복구는 서버 작업 버전만 변경합니다. 이 브라우저의 로컬 초안을 자동으로 덮어쓰지 않습니다.</p>
+    <section className={styles.root()} aria-labelledby={`history-title-${project.id}`}>
+      <header className={styles.header()}>
+        <div className={styles.headerCopy()}>
+          <p className={styles.eyebrow()}>서버 기록</p>
+          <h3 id={`history-title-${project.id}`} className={styles.title()}>버전과 복구</h3>
+          <p className={styles.description()}>복구는 서버 작업 버전만 변경합니다. 이 브라우저의 로컬 초안을 자동으로 덮어쓰지 않습니다.</p>
         </div>
-        {archived ? <span className="rounded-md border border-border bg-subtle px-2 py-1 text-xs">보관됨 · 읽기 전용</span> : null}
+        {archived ? <Badge size="sm" tone="neutral" variant="status">보관됨 · 읽기 전용</Badge> : null}
       </header>
 
-      <p className="mt-3 text-sm text-muted-foreground" role="status" aria-live="polite">{status}</p>
-      {error ? <div className="mt-3 rounded-md border border-danger p-3" role="alert"><p className="m-0 text-sm text-danger">{error}</p>{stale ? <Button className="mt-2" type="button" size="sm" onClick={onReloadProject}>최신 프로젝트 다시 불러오기</Button> : null}</div> : null}
+      <p className={styles.status()} role="status" aria-live="polite">{status}</p>
+      {error ? <div className={`${styles.feedback()} ${styles.error()}`} role="alert"><p>{error}</p>{stale ? <Button className="justify-self-start" type="button" size="sm" onClick={onReloadProject}>최신 프로젝트 다시 불러오기</Button> : null}</div> : null}
       {restoredHead !== undefined ? (
-        <div className="mt-3 rounded-md border border-warning bg-subtle p-3">
-          <p className="m-0 text-sm"><strong>서버 v{restoredHead.projectVersion}을 복구했습니다.</strong> {hasLocalDraft ? "현재 로컬 초안은 열린 상태로 그대로 유지됩니다." : "열린 로컬 초안이 없습니다."}</p>
-          {archived ? null : <Button className="mt-2" type="button" size="sm" variant="primary" onClick={() => onResumeRestoredSave(restoredHead)}>로컬 초안을 복구한 서버 저장본으로 교체</Button>}
+        <div className={`${styles.feedback()} ${styles.restored()}`}>
+          <p><strong>서버 v{restoredHead.projectVersion}을 복구했습니다.</strong> {hasLocalDraft ? "현재 로컬 초안은 열린 상태로 그대로 유지됩니다." : "열린 로컬 초안이 없습니다."}</p>
+          {!archived && hasLocalDraft ? <Button className="justify-self-start" type="button" size="sm" variant="primary" onClick={() => onResumeRestoredSave(restoredHead)}>로컬 초안을 복구한 서버 저장본으로 교체</Button> : null}
         </div>
       ) : null}
 
       {!archived ? (
-        <form className="mt-4 flex flex-wrap items-end gap-2" onSubmit={createVersion} aria-busy={isMutating}>
-          <label className="field-group min-w-64 flex-1">버전 이름<input name="versionName" required maxLength={200} disabled={isMutating || projectEtag === undefined} /></label>
+        <form className={styles.createForm()} onSubmit={createVersion} aria-busy={isMutating}>
+          <TextField label="버전 이름" name="versionName" required maxLength={200} disabled={isMutating || projectEtag === undefined} />
           <Button type="submit" size="sm" disabled={isMutating || projectEtag === undefined}>{isMutating ? "처리 중…" : "버전 만들기"}</Button>
         </form>
       ) : null}
 
-      <div className="mt-4 grid gap-4 lg:grid-cols-2">
+      <div className={styles.columns()}>
         <HistoryList
           archived={archived}
           heading="버전"
@@ -327,20 +334,18 @@ export function ProjectHistoryPanel({
           onRestore={openRestore}
         />
       </div>
-      {cursor !== null ? <Button className="mt-3" type="button" size="sm" disabled={isLoadingMore} onClick={() => void loadMore()}>{isLoadingMore ? "불러오는 중…" : "버전 더 보기"}</Button> : null}
+      {cursor !== null ? <Button className={styles.more()} type="button" size="sm" disabled={isLoadingMore} onClick={() => void loadMore()}>{isLoadingMore ? "불러오는 중…" : `버전 ${VERSION_PAGE_SIZE}개 더 보기`}</Button> : null}
 
-      {pendingRestore ? (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-background/80 p-4" role="presentation">
-          <section ref={dialogRef} className="max-w-lg rounded-lg border border-danger bg-surface p-5 shadow-lg" role="alertdialog" aria-modal="true" aria-labelledby={`restore-title-${pendingRestore.id}`} aria-describedby={`restore-description-${pendingRestore.id}`} onKeyDown={trapDialogFocus}>
-            <h4 id={`restore-title-${pendingRestore.id}`} className="m-0 text-base font-semibold">{pendingRestore.label}을 복구할까요?</h4>
-            <p id={`restore-description-${pendingRestore.id}`} className="mt-2 text-sm text-muted-foreground">선택한 스냅샷을 새로운 서버 작업 버전으로 지정합니다. {hasLocalDraft ? "직접 교체하기 전까지 열린 로컬 초안은 그대로 유지됩니다." : "브라우저가 로컬 초안을 자동으로 시작하거나 교체하지 않습니다."}</p>
-            <div className="mt-4 flex flex-wrap gap-2">
-              <Button ref={confirmButtonRef} type="button" size="sm" variant="danger" disabled={isMutating} onClick={() => void confirmRestore()}>{isMutating ? "복구 중…" : "서버 작업 버전 복구"}</Button>
-              <Button type="button" size="sm" disabled={isMutating} onClick={closeRestore}>취소</Button>
-            </div>
-          </section>
-        </div>
-      ) : null}
+      <ConfirmationDialog
+        busy={isMutating}
+        confirmLabel={isMutating ? "복구 중…" : "서버 작업 버전 복구"}
+        description={pendingRestore === undefined ? "" : `선택한 ${formatTimestamp(pendingRestore.createdAt)} 스냅샷을 새로운 서버 작업 버전으로 지정합니다. ${hasLocalDraft ? "직접 교체하기 전까지 열린 로컬 초안은 그대로 유지됩니다." : "브라우저가 로컬 초안을 자동으로 시작하거나 교체하지 않습니다."}`}
+        open={pendingRestore !== undefined}
+        title={pendingRestore === undefined ? "버전을 복구할까요?" : `${pendingRestore.label}을 복구할까요?`}
+        tone="danger"
+        onCancel={closeRestore}
+        onConfirm={() => void confirmRestore()}
+      />
     </section>
   );
 }
@@ -355,13 +360,21 @@ function HistoryList({ archived, heading, isLoading, isMutating, items, onRestor
   readonly items: readonly HistoryListItem[];
   readonly onRestore: (item: HistoryReference, trigger: HTMLButtonElement) => void;
 }) {
+  const styles = historyPanelStyles();
   return (
-    <section aria-label={heading}>
-      <h4 className="m-0 text-sm font-semibold">{heading}</h4>
-      {isLoading ? <p className="text-sm text-muted-foreground">불러오는 중…</p> : items.length === 0 ? <p className="text-sm text-muted-foreground">아직 {heading}이 없습니다.</p> : (
-        <ol className="mt-2 grid list-none gap-2 p-0">
-          {items.map((item) => <li className="rounded-md border border-muted-border p-3" key={item.id}><div className="flex items-start justify-between gap-2"><div><strong className="text-sm">{item.label}</strong><p className="m-0 text-xs text-muted-foreground">{formatTimestamp(item.createdAt)} · {item.detail}</p></div>{archived ? null : <Button type="button" size="sm" disabled={isMutating} onClick={(event) => onRestore(item, event.currentTarget)}>복구</Button>}</div></li>)}
-        </ol>
+    <section className={styles.listSection()} aria-label={heading}>
+      <div className={styles.listHeading()}><h4>{heading}</h4><Badge size="sm" tone="neutral" variant="count">{items.length}개</Badge></div>
+      {isLoading ? <p className={styles.listEmpty()}>불러오는 중…</p> : items.length === 0 ? <p className={styles.listEmpty()}>아직 {heading}이 없습니다.</p> : (
+        <ScrollAreaRoot className={styles.scrollRoot()}>
+          <ScrollAreaViewport>
+            <ScrollAreaContent>
+              <ol className={styles.list()}>
+                {items.map((item) => <li className={styles.item()} key={item.id}><div className={styles.itemLayout()}><div className={styles.itemCopy()}><strong title={item.label}>{item.label}</strong><p>{formatTimestamp(item.createdAt)} · {item.detail}</p></div>{archived ? null : <Button type="button" size="sm" disabled={isMutating} onClick={(event) => onRestore(item, event.currentTarget)}>복구</Button>}</div></li>)}
+              </ol>
+            </ScrollAreaContent>
+          </ScrollAreaViewport>
+          <ScrollAreaScrollbar><ScrollAreaThumb /></ScrollAreaScrollbar>
+        </ScrollAreaRoot>
       )}
     </section>
   );
@@ -410,7 +423,7 @@ function historyFailureMessage(cause: unknown, action: "create" | "read" | "rest
 }
 
 function formatTimestamp(value: string): string {
-  return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
+  return timestampFormatter.format(new Date(value));
 }
 
 function formatBytes(value: number): string {

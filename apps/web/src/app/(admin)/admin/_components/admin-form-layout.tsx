@@ -7,7 +7,7 @@ type AdminFormProps = ComponentProps<"form"> & Pick<VariantProps<typeof adminFor
 
 function AdminForm({ className, layout, ...props }: AdminFormProps) {
   const styles = adminFormStyles({ layout });
-  return <form className={styles.form({ className })} {...props} />;
+  return <form data-slot="admin-form" className={styles.form({ className })} {...props} />;
 }
 
 interface AdminFormSectionProps {
@@ -19,19 +19,19 @@ interface AdminFormSectionProps {
 function AdminFormSection({ children, description, title }: AdminFormSectionProps) {
   const styles = adminFormStyles();
   return (
-    <section className={styles.section()}>
-      <header className={styles.sectionHeader()}>
-        <h3 className={styles.sectionTitle()}>{title}</h3>
-        <p className={styles.sectionDescription()}>{description}</p>
+    <section data-slot="admin-form-section" className={styles.section()}>
+      <header data-slot="admin-form-section-header" className={styles.sectionHeader()}>
+        <h3 data-slot="admin-form-section-title" className={styles.sectionTitle()}>{title}</h3>
+        <p data-slot="admin-form-section-description" className={styles.sectionDescription()}>{description}</p>
       </header>
-      <div className={styles.fields()}>{children}</div>
+      <div data-slot="admin-form-fields" className={styles.fields()}>{children}</div>
     </section>
   );
 }
 
 function AdminFormActions({ children }: { readonly children: ReactNode }) {
   const styles = adminFormStyles();
-  return <footer className={styles.actions()}>{children}</footer>;
+  return <footer data-slot="admin-form-actions" className={styles.actions()}>{children}</footer>;
 }
 
 function AdminFormActionNote({ children }: { readonly children: ReactNode }) {
@@ -41,15 +41,15 @@ function AdminFormActionNote({ children }: { readonly children: ReactNode }) {
 
 function AdminFormFieldSpan({ children }: { readonly children: ReactNode }) {
   const styles = adminFormStyles();
-  return <div className={styles.fieldSpan()}>{children}</div>;
+  return <div data-slot="admin-form-field-span" className={styles.fieldSpan()}>{children}</div>;
 }
 
 function AdminEmptyState({ children, title }: { readonly children: ReactNode; readonly title: ReactNode }) {
   const styles = adminFormStyles();
   return (
-    <div className={styles.emptyState()}>
-      <strong className={styles.emptyTitle()}>{title}</strong>
-      <p className={styles.emptyDescription()}>{children}</p>
+    <div data-slot="admin-empty-state" className={styles.emptyState()}>
+      <strong data-slot="admin-empty-state-title" className={styles.emptyTitle()}>{title}</strong>
+      <p data-slot="admin-empty-state-description" className={styles.emptyDescription()}>{children}</p>
     </div>
   );
 }

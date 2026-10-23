@@ -3,12 +3,35 @@
 import { deleteSession } from "@nuriteo/api-client";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { tv } from "tailwind-variants";
 
 import { Button } from "#src/components/ui/button.tsx";
 import { createBrowserApiClient } from "#src/lib/api/browser-client.ts";
 import { readCsrfCredential } from "#src/lib/api/browser-security.ts";
 
-export function LogoutButton() {
+const logoutButtonStyles = tv({
+  slots: {
+    root: "mt-auto grid gap-1 pt-4",
+    button: "w-full justify-start gap-2 text-muted-foreground hover:text-foreground",
+    error: "m-0 text-xs leading-snug text-danger"
+  },
+  variants: {
+    placement: {
+      sidebar: {
+        root: "max-[48rem]:hidden"
+      },
+      mobile: {
+        root: "m-0 block p-0",
+        button: "min-h-11 justify-start px-3"
+      }
+    }
+  },
+  defaultVariants: {
+    placement: "sidebar"
+  }
+});
+
+export function LogoutButton({ placement = "sidebar" }: Readonly<{ placement?: "sidebar" | "mobile" }>) {
   const router = useRouter();
   const [isPending, setIsPending] = useState(false);
   const [error, setError] = useState<string>();
@@ -29,8 +52,10 @@ export function LogoutButton() {
     }
   }
 
+  const styles = logoutButtonStyles({ placement });
+
   return (
-    <div className="authenticated-navigation__logout">
+    <div className={styles.root()} data-slot="logout-action">
       <Button
         aria-describedby={error ? "logout-error" : undefined}
         disabled={isPending}
@@ -38,11 +63,12 @@ export function LogoutButton() {
         size="sm"
         type="button"
         variant="ghost"
+        className={styles.button()}
       >
         <span aria-hidden="true">↪</span>
         <span>{isPending ? "로그아웃 중…" : "로그아웃"}</span>
       </Button>
-      {error ? <p id="logout-error" role="alert">{error}</p> : null}
+      {error ? <p className={styles.error()} id="logout-error" role="alert">{error}</p> : null}
     </div>
   );
 }

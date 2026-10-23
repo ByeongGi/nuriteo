@@ -383,12 +383,32 @@ async function assertProblemCode(response: Response, status: number, code: strin
 }
 
 function testProjectSourceContracts() {
+  assert.equal(
+    fs.existsSync(path.join(webRoot, "src/app/(authenticated)/projects/[projectId]/settings/page.tsx")),
+    true,
+    "legacy Project settings bookmarks require a redirect shim"
+  );
+  assert.equal(
+    fs.existsSync(path.join(webRoot, "src/app/(studio)/workspaces/[workspaceId]/projects/[projectId]/studio/page.tsx")),
+    true,
+    "workspace-first IA requires a canonical Studio route"
+  );
   const dashboard = read("src/app/(authenticated)/projects/project-dashboard.tsx");
   const ideShell = read("src/app/(authenticated)/projects/project-ide-shell.tsx");
-  const page = read("src/app/(authenticated)/projects/page.tsx");
-  const detailPage = read("src/app/(authenticated)/projects/[projectId]/page.tsx");
+  const legacyPage = read("src/app/(authenticated)/projects/page.tsx");
+  const legacyProjectPage = read("src/app/(authenticated)/projects/[projectId]/page.tsx");
+  const legacySettingsPage = read("src/app/(authenticated)/projects/[projectId]/settings/page.tsx");
+  const workspacePage = read("src/app/(authenticated)/workspaces/[workspaceId]/page.tsx");
+  const workspaceProjectsPage = read("src/app/(authenticated)/workspaces/[workspaceId]/projects/page.tsx");
+  const projectSettingsPage = read("src/app/(authenticated)/workspaces/[workspaceId]/projects/[projectId]/settings/page.tsx");
   const studioScreen = read("src/app/(studio)/projects/[projectId]/studio/project-studio-screen.tsx");
+  const legacyStudioPage = read("src/app/(studio)/projects/[projectId]/studio/page.tsx");
+  const workspaceProjectStudioPage = read("src/app/(studio)/workspaces/[workspaceId]/projects/[projectId]/studio/page.tsx");
   const studioStory = read("src/design-system/redesign/studio-redesign.stories.tsx");
+  const projectLinkHelpers = dashboard.slice(
+    dashboard.indexOf("function projectHref"),
+    dashboard.indexOf("function visibleInState")
+  );
   assert.match(dashboard, /createBrowserApiClient\(\)/u);
   assert.match(dashboard, /readCsrfCredential\(\)/u);
   assert.match(dashboard, /useExclusiveMutation\(\)/u);
@@ -398,17 +418,52 @@ function testProjectSourceContracts() {
   assert.match(dashboard, /createProjectRoleDirectory/u);
   assert.match(dashboard, /COMMIT_OUTCOME_UNKNOWN|needsReconciliation/u);
   assert.doesNotMatch(dashboard, /router\.replace\([^;]+;\s*router\.refresh\(\)/u);
-  assert.match(page, /createServerApiClient\(\)/u);
-  assert.match(page, /listProjects/u);
-  assert.match(detailPage, /listOrganizationMembers/u);
-  assert.match(detailPage, /roleManagementPromise/u);
+  assert.match(dashboard, /router\.replace\(projectStudioHref\(workspace\.storageScopeId, result\.data\.id\)\)/u);
+  assert.match(
+    dashboard,
+    /href=\{item\.state === "active"\s*\? projectStudioHref\(workspace\.storageScopeId, item\.id\)\s*:\s*projectDetailHref\(workspace\.storageScopeId, state, item\.id\)\}/u,
+    "활성 프로젝트의 목록 주 동작은 설정 화면이 아니라 Studio를 열어야 합니다."
+  );
+  assert.match(
+    dashboard,
+    /href=\{projectDetailHref\(workspace\.storageScopeId, state, item\.id\)\}[\s\S]+aria-label=\{`\$\{item\.name\} 프로젝트 설정`\}/u,
+    "프로젝트 설정은 목록의 별도 보조 동작이어야 합니다."
+  );
+  assert.match(dashboard, /function projectHref\([\s\S]+return `\/workspaces\/\$\{encodeURIComponent\(scope\)\}\/projects\?\$\{query\.toString\(\)\}`/u);
+  assert.match(dashboard, /function projectDetailHref\([\s\S]+return `\/workspaces\/\$\{encodeURIComponent\(scope\)\}\/projects\/\$\{encodeURIComponent\(projectId\)\}\/settings\?/u);
+  assert.match(dashboard, /function projectStudioHref\([\s\S]+return `\/workspaces\/\$\{encodeURIComponent\(scope\)\}\/projects\/\$\{encodeURIComponent\(projectId\)\}\/studio`/u);
+  assert.doesNotMatch(
+    projectLinkHelpers,
+    /new URLSearchParams\(\{[^}]*workspace:/u,
+    "canonical project links must carry workspace identity in the path, not a query parameter"
+  );
+  assert.match(dashboard, /"편집기 열기"/u);
+  assert.match(legacyPage, /redirect\(projectsHref\(workspaceId, state\)\)/u);
+  assert.doesNotMatch(legacyPage, /createServerApiClient|<ProjectDashboard/u);
+  assert.match(legacyProjectPage, /\/studio/u);
+  assert.match(legacySettingsPage, /\/settings\?/u);
+  assert.match(workspacePage, /\/projects\?/u);
+  assert.doesNotMatch(workspacePage, /<ProjectDashboard|createServerApiClient/u);
+  assert.match(workspaceProjectsPage, /createServerApiClient\(\)/u);
+  assert.match(workspaceProjectsPage, /listProjects/u);
+  assert.match(workspaceProjectsPage, /<ProjectDashboard/u);
+  assert.match(projectSettingsPage, /listOrganizationMembers/u);
+  assert.match(projectSettingsPage, /roleManagementRequest/u);
+  assert.doesNotMatch(projectSettingsPage, /listProjects/u);
   assert.match(dashboard, /<SelectField label="조직 멤버"/u);
   assert.doesNotMatch(dashboard, /Organization member user ID/u);
-  assert.match(detailPage, /key=\{`\$\{workspace\.storageScopeId\}:\$\{state\}:/u);
-  assert.match(detailPage, /error\.status !== 403 && error\.status !== 404/u);
+  assert.match(projectSettingsPage, /key=\{`\$\{workspace\.storageScopeId\}:\$\{projectResult\.data\.id\}:/u);
+  assert.match(projectSettingsPage, /error\.status !== 403 && error\.status !== 404/u);
   assert.doesNotMatch(dashboard, /<ProjectIdeShell/u);
   assert.match(studioScreen, /<ProjectIdeShell/u);
   assert.match(studioScreen, /export function ProjectStudioFrame/u);
+  assert.match(studioScreen, /const projectBaseHref = `\/workspaces\/\$\{encodeURIComponent\(workspaceScope\)\}\/projects`/u);
+  assert.match(studioScreen, /const settingsHref = `\$\{projectBaseHref\}\/\$\{encodeURIComponent\(project\.id\)\}\/settings`/u);
+  assert.match(studioScreen, /<Link href=\{settingsHref\}>프로젝트 설정<\/Link>/u);
+  assert.match(legacyStudioPage, /redirect\(/u);
+  assert.doesNotMatch(legacyStudioPage, /<ProjectStudioScreen|createServerApiClient/u);
+  assert.match(workspaceProjectStudioPage, /<ProjectStudioScreen/u);
+  assert.match(workspaceProjectStudioPage, /getProject/u);
   assert.match(studioScreen, /key=\{`\$\{props\.workspaceScope\}:\$\{project\.id\}:\$\{project\.state\}`\}/u);
   assert.match(ideShell, /maxLength=\{MAX_TERMINAL_COMMAND_CHARS\}/u);
   assert.match(ideShell, /aria-label="프로젝트 파일"/u);
@@ -428,7 +483,10 @@ function testProjectSourceContracts() {
   assert.match(ideShell, /workspaceScopeId: workspaceScope/u);
   assert.doesNotMatch(ideShell, /localDraftKey/u);
   assert.doesNotMatch(ideShell, /BrowserRuntimeSupervisor|HostProcessTable|createPreviewWorkflowController|service-backend/u);
-  assert.doesNotMatch(`${dashboard}\n${page}\n${detailPage}\n${studioScreen}\n${ideShell}`, /localStorage|sessionStorage|console\./u);
+  assert.doesNotMatch(
+    `${dashboard}\n${workspaceProjectsPage}\n${projectSettingsPage}\n${studioScreen}\n${ideShell}`,
+    /localStorage|sessionStorage|console\./u
+  );
 }
 
 function request(search: string): Request {

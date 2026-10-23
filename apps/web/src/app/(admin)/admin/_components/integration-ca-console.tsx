@@ -10,7 +10,9 @@ import type { IntegrationCaBundle, IntegrationCaCollection, IntegrationCaType } 
 import { useState } from "react";
 import type { FormEvent } from "react";
 
+import { Badge } from "#src/components/ui/badge.tsx";
 import { Button } from "#src/components/ui/button.tsx";
+import { CollapsibleContent, CollapsiblePanel, CollapsibleRoot, CollapsibleTrigger } from "#src/components/ui/collapsible.tsx";
 import { TextareaField } from "#src/components/ui/field.tsx";
 import { createBrowserApiClient } from "#src/lib/api/browser-client.ts";
 import { readCsrfCredential } from "#src/lib/api/browser-security.ts";
@@ -90,11 +92,11 @@ export function IntegrationCaConsole({ initialCollection, type, integrationId }:
         <>
           <div className="admin-collection-heading">
             <h3>사설 인증 기관</h3>
-            <span className="admin-page-header__count">등록 {items.length}개</span>
+            <Badge>등록 {items.length}개</Badge>
           </div>
-          <details className="admin-record-disclosure integration-ca-console__stage">
-            <summary>새 CA 후보 등록</summary>
-            <AdminForm onSubmit={(event) => void stage(event)} aria-busy={pending}>
+          <CollapsibleRoot className="admin-record-disclosure integration-ca-console__stage">
+            <CollapsibleTrigger>새 CA 후보 등록</CollapsibleTrigger>
+            <CollapsiblePanel><CollapsibleContent><AdminForm onSubmit={(event) => void stage(event)} aria-busy={pending}>
               <AdminFormSection title="인증서 번들" description="연동 서버를 신뢰하는 데 필요한 PEM 형식의 사설 루트 또는 중간 인증서를 등록합니다.">
                 <AdminFormFieldSpan>
                   <TextareaField label="PEM CA 번들" name="pem" required maxLength={1_048_576} rows={5} spellCheck={false} disabled={pending} />
@@ -104,8 +106,8 @@ export function IntegrationCaConsole({ initialCollection, type, integrationId }:
                 <AdminFormActionNote>최대 1MiB, 유효한 CA 인증서 64개까지 등록할 수 있습니다. 엔드포인트는 연동 설정의 값을 그대로 사용합니다.</AdminFormActionNote>
                 <Button disabled={pending}>CA 후보 저장</Button>
               </AdminFormActions>
-            </AdminForm>
-          </details>
+            </AdminForm></CollapsibleContent></CollapsiblePanel>
+          </CollapsibleRoot>
           {items.length === 0 ? (
             <AdminEmptyState title="사용자 CA가 없습니다">현재 시스템 신뢰 저장소만 사용하고 있습니다.</AdminEmptyState>
           ) : (

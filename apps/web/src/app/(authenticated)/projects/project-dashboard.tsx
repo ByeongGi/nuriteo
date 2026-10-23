@@ -25,15 +25,84 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent } from "react";
+import { tv } from "tailwind-variants";
 
-import { Button } from "#src/components/ui/button.tsx";
-import { SelectField } from "#src/components/ui/field.tsx";
+import { Button, buttonVariants } from "#src/components/ui/button.tsx";
+import { CollapsibleContent, CollapsiblePanel, CollapsibleRoot, CollapsibleTrigger } from "#src/components/ui/collapsible.tsx";
+import { SelectField, TextField } from "#src/components/ui/field.tsx";
+import { PageHeader } from "#src/components/ui/page-header.tsx";
+import { SearchField } from "#src/components/ui/search-field.tsx";
 import { projectError, readCsrfCredential } from "#src/lib/api/browser-security.ts";
 import type { CollaborationOperation } from "#src/lib/api/browser-security.ts";
 import { createBrowserApiClient } from "#src/lib/api/browser-client.ts";
 import { useExclusiveMutation } from "#src/lib/use-exclusive-mutation.ts";
 import { ProjectGitPanel } from "#src/app/(authenticated)/projects/project-git-panel.tsx";
 import type { ProjectGitState } from "#src/app/(authenticated)/projects/project-git-panel.tsx";
+
+const projectDashboardStyles = tv({
+  slots: {
+    root: "mx-auto w-full max-w-[82rem] px-[clamp(1.25rem,4vw,3.5rem)] pt-[clamp(2rem,4vw,3.75rem)] pb-20 outline-none max-[48rem]:px-4 max-[48rem]:py-5",
+    header: "",
+    count: "inline-flex shrink-0 items-center rounded-full bg-subtle px-2 py-1 text-xs font-semibold whitespace-nowrap text-muted-foreground",
+    layout: "mt-6 grid min-w-0 grid-cols-1 gap-6",
+    sidebar: "grid min-w-0 content-start gap-5",
+    createForm: "grid grid-cols-[minmax(12rem,0.8fr)_minmax(14rem,1fr)_minmax(9rem,auto)] items-end gap-4 rounded-xl border border-muted-border bg-surface p-5 shadow-xs max-[48rem]:grid-cols-1",
+    createHeading: "col-span-full grid content-start gap-1 [&_h2]:m-0 [&_h2]:text-base max-[48rem]:col-span-1",
+    createButton: "min-w-36 whitespace-nowrap max-[48rem]:w-full",
+    toolbar: "flex items-center gap-3 rounded-xl border border-muted-border bg-surface p-3 max-[48rem]:items-stretch max-[48rem]:flex-col",
+    search: "flex-1",
+    filters: "flex shrink-0 gap-1 overflow-x-auto rounded-lg bg-subtle p-1",
+    filter: "inline-flex min-h-9 items-center rounded-md px-3 text-xs font-semibold whitespace-nowrap text-muted-foreground no-underline hover:bg-hover hover:text-foreground aria-[current=page]:bg-surface aria-[current=page]:text-foreground aria-[current=page]:shadow-xs",
+    panel: "overflow-hidden rounded-xl border border-muted-border bg-surface shadow-xs",
+    panelHeader: "flex items-start justify-between gap-4 border-b border-muted-border px-5 py-4 max-[48rem]:flex-col max-[48rem]:gap-2 [&_h2]:m-0 [&_h2]:text-base [&_p]:mt-1 [&_p]:mb-0 [&_p]:text-sm [&_p]:text-muted-foreground",
+    panelCount: "shrink-0 rounded-full bg-subtle px-2 py-1 text-xs whitespace-nowrap text-muted-foreground",
+    empty: "grid min-h-48 place-content-center justify-items-center gap-2 text-muted-foreground [&_span]:text-sm",
+    list: "m-0 grid list-none p-0",
+    item: "grid grid-cols-[minmax(0,1fr)_auto] items-center border-b border-muted-border p-0 last:border-b-0 max-[48rem]:grid-cols-1",
+    main: "grid min-h-[4.5rem] min-w-0 grid-cols-[2rem_minmax(0,1fr)_auto_auto] items-center gap-3 px-5 py-3 text-foreground no-underline hover:bg-hover max-[48rem]:grid-cols-[2rem_minmax(0,1fr)_auto] max-[48rem]:px-3",
+    initial: "grid size-8 place-items-center rounded-lg bg-selected text-xs font-semibold text-link",
+    recordCopy: "grid min-w-0 gap-1 [&_strong]:truncate [&_small]:truncate [&_small]:text-xs [&_small]:text-muted-foreground",
+    status: "inline-flex items-center gap-1 rounded-full bg-subtle px-2 py-1 text-xs font-semibold whitespace-nowrap text-muted-foreground [&_i]:size-1.5 [&_i]:rounded-full [&_i]:bg-current max-[48rem]:hidden",
+    activeStatus: "bg-success-subtle text-success",
+    rowAction: "inline-flex min-h-10 items-center rounded-lg border border-strong-border px-3 text-sm font-semibold whitespace-nowrap max-[48rem]:border-0 max-[48rem]:px-1",
+    settings: "mr-3 inline-flex min-h-9 shrink-0 items-center rounded-md px-3 text-xs font-semibold whitespace-nowrap text-muted-foreground no-underline hover:bg-hover hover:text-foreground max-[48rem]:mx-3 max-[48rem]:mb-3 max-[48rem]:w-[calc(100%-1.5rem)] max-[48rem]:justify-center max-[48rem]:border max-[48rem]:border-muted-border",
+    pagination: "flex items-center justify-between gap-4 rounded-xl border border-muted-border bg-surface px-4 py-3 max-[48rem]:items-stretch max-[48rem]:flex-col [&_p]:m-0 [&_p]:text-sm [&_p]:text-muted-foreground max-[48rem]:[&_button]:w-full",
+    detail: "grid min-w-0 content-start gap-4 rounded-xl border border-muted-border bg-surface p-[clamp(1rem,3vw,2rem)] shadow-xs",
+    detailHeader: "flex min-h-14 items-start justify-between gap-4 border-b border-muted-border pb-4 max-[48rem]:flex-col",
+    detailIdentity: "flex min-w-0 items-start gap-3",
+    detailBack: "grid size-10 shrink-0 place-items-center rounded-lg border border-strong-border text-xl leading-none text-foreground no-underline hover:bg-hover",
+    detailCopy: "min-w-0 [&_h2]:m-0 [&_p]:m-0 [&_p:last-child]:mt-1 [&_p:last-child]:text-sm [&_p:last-child]:text-muted-foreground",
+    detailActions: "flex flex-wrap items-center gap-2 max-[48rem]:w-full max-[48rem]:[&>*]:flex-1",
+    profileForm: "grid gap-4",
+    projectActions: "grid gap-4 border-t border-muted-border pt-5",
+    dangerActions: "grid gap-4",
+    feedback: "grid gap-3 rounded-lg border border-danger/25 bg-danger-subtle px-4 py-3 text-sm text-danger [&_p]:m-0",
+    eyebrow: "m-0 text-xs font-semibold uppercase tracking-[0.08em] text-accent-foreground",
+    emptyDetail: "grid min-h-56 place-content-center justify-items-center gap-2 rounded-lg border border-dashed border-muted-border bg-subtle p-6 text-center [&_h2]:m-0 [&_p]:m-0 [&_p:last-child]:max-w-md [&_p:last-child]:text-sm [&_p:last-child]:text-muted-foreground",
+    accessSection: "grid gap-4 border-t border-muted-border pt-5 [&_h3]:m-0",
+    accessForm: "grid gap-4 rounded-lg border border-muted-border bg-subtle p-4 md:grid-cols-[minmax(12rem,1fr)_minmax(9rem,0.6fr)_auto] md:items-end [&_p]:md:col-span-full",
+    grantList: "m-0 grid list-none gap-2 p-0 [&>li]:grid [&>li]:grid-cols-[minmax(0,1fr)_auto] [&>li]:items-center [&>li]:gap-3 [&>li]:rounded-lg [&>li]:border [&>li]:border-muted-border [&>li]:p-3 max-[48rem]:[&>li]:grid-cols-1 [&>li>div:first-child]:grid [&>li>div:first-child]:min-w-0 [&>li>div:first-child>span]:text-sm [&>li>div:first-child>span]:text-muted-foreground",
+    grantActions: "flex flex-wrap items-end justify-end gap-2 max-[48rem]:justify-stretch max-[48rem]:[&>*]:flex-1",
+    roleStatus: "m-0 rounded-md border border-success/25 bg-success-subtle px-3 py-2 text-sm text-success",
+    accessHint: "m-0 rounded-md bg-subtle px-3 py-2 text-sm text-muted-foreground"
+  },
+  variants: {
+    detailMode: {
+      true: {
+        root: "max-w-[82rem] py-6",
+        layout: "mt-6",
+        sidebar: "hidden"
+      },
+      false: {
+        detail: "hidden"
+      }
+    },
+    sectionPage: {
+      true: { detailHeader: "hidden" },
+      false: {}
+    }
+  }
+});
 
 export interface ProjectDashboardProps {
   readonly canManageRoles?: boolean;
@@ -46,6 +115,8 @@ export interface ProjectDashboardProps {
   readonly selectedScope?: string;
   readonly selectedState?: ProjectListState;
   readonly workspaces: readonly Workspace[];
+  readonly detailSection?: "access" | "all" | "danger" | "general";
+  readonly view?: "collection" | "create";
 }
 
 interface OrganizationMemberOption {
@@ -97,6 +168,13 @@ export function ProjectDashboard(props: ProjectDashboardProps) {
   const projectCountLabel = cursor === null
     ? `${projects.length}개 프로젝트`
     : `${projects.length}개 이상 프로젝트`;
+  const detailSection = props.detailSection ?? "all";
+  const styles = projectDashboardStyles({
+    detailMode: project !== undefined,
+    sectionPage: project !== undefined && detailSection !== "all"
+  });
+  const sectionCopy = projectSettingsCopy(detailSection);
+  const view = props.view ?? "collection";
 
   useEffect(() => () => paginationAbort.current?.abort(), []);
   useEffect(() => {
@@ -134,7 +212,7 @@ export function ProjectDashboard(props: ProjectDashboardProps) {
         slug: String(data.get("slug") ?? ""),
         name: String(data.get("name") ?? "")
       }, { csrfToken: readCsrfCredential() });
-      router.replace(projectDetailHref(workspace.storageScopeId, state, result.data.id));
+      router.replace(projectStudioHref(workspace.storageScopeId, result.data.id));
     });
   }
 
@@ -248,46 +326,82 @@ export function ProjectDashboard(props: ProjectDashboardProps) {
   }
 
   return (
-    <main id="main-content" className={`workspace-page project-page${project === undefined ? "" : " project-page--detail"}`} tabIndex={-1}>
-      <header className="workspace-page__intro project-page__header"><div><p className="eyebrow">워크스페이스 개발</p><h1>프로젝트</h1><p>브라우저 개발 프로젝트를 만들고 실행 환경과 접근 권한을 관리합니다.</p></div><span>{projectCountLabel}</span></header>
-      <nav className="organization-tabs" aria-label="프로젝트 워크스페이스">
-        {props.workspaces.map((item) => <Link key={item.storageScopeId} href={projectHref(item.storageScopeId, "active")} aria-current={item.storageScopeId === props.selectedScope ? "page" : undefined}>{item.displayLabel}</Link>)}
-      </nav>
+    <main id="main-content" className={styles.root()} tabIndex={-1}>
+      <PageHeader
+        className={styles.header()}
+        eyebrow={project === undefined ? workspace?.displayLabel ?? "워크스페이스" : workspace?.displayLabel ?? "워크스페이스"}
+        title={project === undefined ? view === "create" ? "새 프로젝트" : "프로젝트" : sectionCopy.title}
+        description={project === undefined
+          ? view === "create"
+            ? "프로젝트 이름과 주소를 정하면 즉시 Studio를 열어 개발을 시작합니다."
+            : "프로젝트를 선택하면 편집기로 바로 이동합니다. 설정은 별도 화면에서 관리할 수 있습니다."
+          : `${project.name}의 ${sectionCopy.description}`}
+        actions={project === undefined && workspace !== undefined
+          ? view === "create"
+            ? <Link className={buttonVariants({ variant: "secondary" })} href={projectHref(workspace.storageScopeId, state)}>목록으로</Link>
+            : <div className="flex items-center gap-2"><span className={styles.count()}>{projectCountLabel}</span><Link className={buttonVariants({ variant: "primary" })} href={`/workspaces/${encodeURIComponent(workspace.storageScopeId)}/projects/new`}>새 프로젝트</Link></div>
+          : undefined}
+      />
+      {error || needsReconciliation ? (
+        <div className={styles.feedback()}>
+          {error ? <p role="alert">{error}</p> : null}
+          {needsReconciliation ? <Button type="button" variant="secondary" onClick={() => router.refresh()}>최신 프로젝트 불러오기</Button> : null}
+        </div>
+      ) : null}
       {workspace === undefined ? <p>사용 가능한 워크스페이스가 없습니다. 관리자에게 접근 권한을 요청하세요.</p> : (
-        <div className={`project-layout ${project === undefined ? "project-layout--catalog" : "project-layout--detail"}`}>
-          <aside className="project-sidebar">
-            <form className="collaboration-form" onSubmit={create} aria-busy={mutation.isPending}>
-              <div className="project-sidebar__heading"><div><p className="eyebrow">새로 만들기</p><h2>새 프로젝트</h2></div></div>
-              <label className="field-group">슬러그<input name="slug" placeholder="runtime-editor" required pattern="[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?" maxLength={63} disabled={mutation.isPending} /></label>
-              <label className="field-group">프로젝트 이름<input name="name" placeholder="런타임 편집기" required maxLength={200} disabled={mutation.isPending} /></label>
-              <Button type="submit" variant="primary" disabled={mutation.isPending}>프로젝트 만들기</Button>
-            </form>
-            <section className="product-toolbar project-catalog__toolbar" aria-label="프로젝트 검색 및 상태 필터">
-              <label className="product-search"><span aria-hidden="true">⌕</span><span className="sr-only">불러온 프로젝트 검색</span><input type="search" autoComplete="off" value={projectQuery} onChange={(event) => setProjectQuery(event.currentTarget.value)} placeholder="불러온 프로젝트에서 검색" /></label>
-              <nav className="project-filters product-segments" aria-label="프로젝트 상태">
-                {(["active", "archived", "all"] as const).map((filter) => <Link key={filter} href={projectHref(workspace.storageScopeId, filter)} aria-current={state === filter ? "page" : undefined}>{projectStateLabel(filter)}</Link>)}
+        <div className={styles.layout()}>
+          <aside className={styles.sidebar()}>
+            {view === "create" ? <form className={styles.createForm()} onSubmit={create} aria-busy={mutation.isPending}>
+              <div className={styles.createHeading()}><div><p className={styles.eyebrow()}>새로 만들기</p><h2>새 프로젝트</h2></div></div>
+              <TextField label="슬러그" name="slug" placeholder="runtime-editor" required pattern="[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?" maxLength={63} disabled={mutation.isPending} />
+              <TextField label="프로젝트 이름" name="name" placeholder="런타임 편집기" required maxLength={200} disabled={mutation.isPending} />
+              <Button className={styles.createButton()} type="submit" variant="primary" disabled={mutation.isPending}>프로젝트 만들기</Button>
+            </form> : null}
+            {view === "collection" ? <><section className={styles.toolbar()} aria-label="프로젝트 검색 및 상태 필터">
+              <SearchField className={styles.search()} label="불러온 프로젝트 검색" autoComplete="off" value={projectQuery} onChange={(event) => setProjectQuery(event.currentTarget.value)} placeholder="불러온 프로젝트에서 검색" />
+              <nav className={styles.filters()} aria-label="프로젝트 상태">
+                {(["active", "archived", "all"] as const).map((filter) => <Link className={styles.filter()} key={filter} href={projectHref(workspace.storageScopeId, filter)} aria-current={state === filter ? "page" : undefined}>{projectStateLabel(filter)}</Link>)}
               </nav>
             </section>
-            <section className="product-panel project-catalog__list" aria-busy={isSearchPending} aria-labelledby="project-list-title">
-              <header><div><h2 id="project-list-title">프로젝트 목록</h2><p>프로젝트를 선택해 개요, Git, 권한을 확인하세요.</p></div><span>{visibleProjects.length}개 표시</span></header>
+            <section className={styles.panel()} aria-busy={isSearchPending} aria-labelledby="project-list-title">
+              <header className={styles.panelHeader()}><div><h2 id="project-list-title">프로젝트 목록</h2><p>프로젝트를 선택해 편집기를 열고 개발을 이어가세요.</p></div><span className={styles.panelCount()}>{visibleProjects.length}개 표시</span></header>
               <p className="sr-only" role="status" aria-live="polite">{isSearchPending ? "검색 결과를 갱신하는 중" : `${visibleProjects.length}개 프로젝트 표시 중`}</p>
-              {visibleProjects.length === 0 ? <div className="product-list-empty"><strong>검색 결과가 없습니다.</strong><span>다른 이름이나 상태를 선택해보세요.</span></div> : (
-                <ul className="record-list project-records" aria-label="프로젝트">
-                  {visibleProjects.map((item) => <li key={item.id}><Link className="project-record-link" href={projectDetailHref(workspace.storageScopeId, state, item.id)} aria-current={project?.id === item.id ? "page" : undefined}><b aria-hidden="true">{projectInitial(item.name)}</b><span><strong>{item.name}</strong><small>{item.slug} · v{item.version}</small></span><em className={`product-status${item.state === "active" ? " product-status--success" : ""}`}><i />{item.state === "active" ? "정상" : "보관됨"}</em><span className="product-row-action">프로젝트 보기</span></Link></li>)}
+              {visibleProjects.length === 0 ? <div className={styles.empty()}><strong>검색 결과가 없습니다.</strong><span>다른 이름이나 상태를 선택해보세요.</span></div> : (
+                <ul className={styles.list()} aria-label="프로젝트">
+                  {visibleProjects.map((item) => (
+                    <li className={styles.item()} key={item.id}>
+                      <Link
+                        className={styles.main()}
+                        href={item.state === "active"
+                          ? projectStudioHref(workspace.storageScopeId, item.id)
+                          : projectDetailHref(workspace.storageScopeId, state, item.id)}
+                      >
+                        <b className={styles.initial()} aria-hidden="true">{projectInitial(item.name)}</b>
+                        <span className={styles.recordCopy()}><strong>{item.name}</strong><small>{item.slug} · v{item.version}</small></span>
+                        <em className={`${styles.status()} ${item.state === "active" ? styles.activeStatus() : ""}`}><i />{item.state === "active" ? "정상" : "보관됨"}</em>
+                        <span className={styles.rowAction()}>{item.state === "active" ? "편집기 열기" : "보관 설정"}</span>
+                      </Link>
+                      <Link
+                        className={styles.settings()}
+                        href={projectDetailHref(workspace.storageScopeId, state, item.id)}
+                        aria-label={`${item.name} 프로젝트 설정`}
+                      >
+                        설정
+                      </Link>
+                    </li>
+                  ))}
                 </ul>
               )}
             </section>
-            {cursor !== null ? <div className="project-catalog__pagination"><p>{normalizedProjectQuery === "" ? "다음 프로젝트를 이어서 불러올 수 있습니다." : "검색은 현재 불러온 프로젝트에 적용됩니다. 더 불러오면 검색 범위가 넓어집니다."}</p><Button type="button" onClick={() => void loadMore()} disabled={isLoadingMore}>{isLoadingMore ? "불러오는 중…" : "프로젝트 더 불러오기"}</Button></div> : null}
+            {cursor !== null ? <div className={styles.pagination()}><p>{normalizedProjectQuery === "" ? "다음 프로젝트를 이어서 불러올 수 있습니다." : "검색은 현재 불러온 프로젝트에 적용됩니다. 더 불러오면 검색 범위가 넓어집니다."}</p><Button type="button" onClick={() => void loadMore()} disabled={isLoadingMore}>{isLoadingMore ? "불러오는 중…" : "프로젝트 더 불러오기"}</Button></div> : null}</> : null}
           </aside>
-          <section className="project-detail">
-            {error ? <p className="form-error" role="alert">{error}</p> : null}
-            {needsReconciliation ? <Button type="button" onClick={() => router.refresh()}>최신 프로젝트 불러오기</Button> : null}
-            {project === undefined ? <div className="workspace-empty"><p className="eyebrow">프로젝트 선택</p><h2>프로젝트를 선택하세요</h2><p>왼쪽 목록에서 프로젝트를 선택하면 실행 환경과 접근 권한을 확인할 수 있습니다.</p></div> : (
+          <section className={styles.detail()}>
+            {project === undefined ? <div className={styles.emptyDetail()}><p className={styles.eyebrow()}>프로젝트 선택</p><h2>프로젝트를 선택하세요</h2><p>왼쪽 목록에서 프로젝트를 선택하면 실행 환경과 접근 권한을 확인할 수 있습니다.</p></div> : (
               <>
-                <header className="project-detail__header"><div className="project-detail__identity"><Link className="project-detail__back" href={projectHref(workspace.storageScopeId, state)} aria-label="프로젝트 목록으로 돌아가기">‹</Link><div><p className="eyebrow">{project.state === "active" ? "활성" : "보관됨"} · 버전 {project.version}</p><h2>{project.name}</h2><p>{workspace.displayLabel} / {project.slug}</p></div></div><div className="project-detail__actions">{project.state === "active" ? <Link className="link-button link-button--primary" href={projectStudioHref(workspace.storageScopeId, project.id)}>Studio 열기</Link> : null}<Link className="link-button" href={`/access-tokens?projectId=${encodeURIComponent(project.id)}`}>액세스 토큰</Link></div></header>
-                {project.state === "active" ? <ProjectGitPanel initialState={props.initialGitState} project={project} /> : null}
-                <details className="project-management" open><summary><span>프로젝트 관리</span><small>이름, 보관 및 삭제</small></summary><div className="project-management__content"><form className="collaboration-form project-profile-form" onSubmit={rename} aria-busy={mutation.isPending}><div><h3>프로젝트 정보</h3><p>목록과 협업 화면에 표시되는 이름입니다.</p></div><label className="field-group">프로젝트 이름<input name="name" defaultValue={project.name} required maxLength={200} disabled={mutation.isPending} /></label><Button type="submit" disabled={mutation.isPending}>이름 저장</Button></form><section className="project-actions"><h3>상태 관리</h3><Button type="button" disabled={mutation.isPending} onClick={() => void changeLifecycle(project.state === "active" ? "archive" : "restore")}>{project.state === "active" ? "보관" : "복원"}</Button><p>보관하면 활성 목록에서 숨겨집니다. 삭제한 프로젝트는 복구할 수 없습니다.</p><form onSubmit={remove}><label className="field-group">삭제하려면 <strong>{project.name}</strong> 입력<input name="confirmName" required disabled={mutation.isPending} /></label><Button type="submit" variant="danger" disabled={mutation.isPending}>프로젝트 삭제</Button></form></section></div></details>
-                {owner?.ownerType === "organization" ? <section><h3>직접 역할</h3>{props.canManageRoles ? <><form className="collaboration-form" onSubmit={addRole}><SelectField label="조직 멤버" name="userId" required value={selectedMemberId} disabled={mutation.isPending || !hasAvailableMembers} placeholder="멤버 선택" options={organizationMembers.map((member) => ({ value: member.userId, label: organizationMemberLabel(member), disabled: member.role === "owner" || !hasUniqueMemberLabel(member) || grantedUserIds.has(member.userId) }))} onValueChange={setSelectedMemberId} />{hasAmbiguousMembers ? <p>표시 이름과 조직 역할이 같은 멤버는 이름을 구분한 뒤 직접 역할을 부여할 수 있습니다.</p> : null}{hasAvailableMembers ? null : <p>직접 역할을 부여할 수 있는 조직 멤버가 없습니다.</p>}<SelectField label="역할" name="role" defaultValue="read" disabled={mutation.isPending || !hasAvailableMembers} options={[{ value: "read", label: "읽기" }, { value: "write", label: "쓰기" }, { value: "admin", label: "관리" }]} /><Button type="submit" disabled={mutation.isPending || selectedMemberId === ""}>역할 부여</Button></form>{roleStatus === undefined ? null : <p role="status" aria-live="polite">{roleStatus}</p>}<ul className="record-list">{grants.map((grant, grantIndex) => { const member = memberByUserId.get(grant.userId); const memberIsActionable = member !== undefined && hasUniqueMemberLabel(member); const memberLabel = directGrantMemberLabel(grant, grantIndex, grants, memberByUserId, hasUniqueMemberLabel); return <li key={grant.userId}><div><strong>{memberLabel}</strong><span>{projectRoleLabel(grant.role)}{member === undefined ? "" : ` · 조직 ${organizationRoleLabel(member.role)}`}</span></div><div className="record-actions"><SelectField label={`${memberLabel} 역할`} labelHidden density="compact" value={grant.role} disabled={mutation.isPending || !memberIsActionable} options={[{ value: "read", label: "읽기" }, { value: "write", label: "쓰기" }, { value: "admin", label: "관리" }]} onValueChange={(nextRole) => void updateRole(grant, roleValue(nextRole))} /><Button type="button" aria-label={`${memberLabel} 역할 제거`} disabled={mutation.isPending} onClick={() => void updateRole(grant)}>제거</Button></div></li>; })}</ul></> : <p>조직 소유자만 프로젝트의 직접 역할을 확인하고 관리할 수 있습니다.</p>}</section> : null}
+                <header className={styles.detailHeader()}><div className={styles.detailIdentity()}><Link className={styles.detailBack()} href={projectHref(workspace.storageScopeId, state)} aria-label="프로젝트 목록으로 돌아가기">‹</Link><div className={styles.detailCopy()}><p className={styles.eyebrow()}>{project.state === "active" ? "활성" : "보관됨"} · 버전 {project.version}</p><h2>{project.name}</h2><p>{workspace.displayLabel} / {project.slug}</p></div></div><div className={styles.detailActions()}>{project.state === "active" ? <Link className={buttonVariants({ variant: "primary" })} href={projectStudioHref(workspace.storageScopeId, project.id)}>편집기 열기</Link> : null}<Link className={buttonVariants({ variant: "secondary" })} href={`/workspaces/${encodeURIComponent(workspace.storageScopeId)}/projects/${encodeURIComponent(project.id)}/settings/tokens`}>액세스 토큰</Link></div></header>
+                {detailSection === "all" && project.state === "active" ? <ProjectGitPanel initialState={props.initialGitState} project={project} /> : null}
+                {detailSection === "all" || detailSection === "general" || detailSection === "danger" ? <CollapsibleRoot className="mt-1" defaultOpen><CollapsibleTrigger><span>{detailSection === "danger" ? "프로젝트 상태" : "프로젝트 관리"}</span><small>{detailSection === "danger" ? "보관, 복원 및 영구 삭제" : "이름과 표시 정보"}</small></CollapsibleTrigger><CollapsiblePanel><CollapsibleContent className="grid gap-5">{detailSection !== "danger" ? <form className={styles.profileForm()} onSubmit={rename} aria-busy={mutation.isPending}><div><h3>프로젝트 정보</h3><p>목록과 협업 화면에 표시되는 이름입니다.</p></div><TextField label="프로젝트 이름" name="name" defaultValue={project.name} required maxLength={200} disabled={mutation.isPending} /><Button type="submit" disabled={mutation.isPending}>이름 저장</Button></form> : null}{detailSection === "all" || detailSection === "danger" ? <section className={detailSection === "danger" ? styles.dangerActions() : styles.projectActions()}><h3>상태 관리</h3><Button type="button" disabled={mutation.isPending} onClick={() => void changeLifecycle(project.state === "active" ? "archive" : "restore")}>{project.state === "active" ? "보관" : "복원"}</Button><p>보관하면 활성 목록에서 숨겨집니다. 삭제한 프로젝트는 복구할 수 없습니다.</p><form onSubmit={remove}><TextField label={<>삭제하려면 <strong>{project.name}</strong> 입력</>} name="confirmName" required disabled={mutation.isPending} /><Button type="submit" variant="danger" disabled={mutation.isPending}>프로젝트 삭제</Button></form></section> : null}</CollapsibleContent></CollapsiblePanel></CollapsibleRoot> : null}
+                {(detailSection === "all" || detailSection === "access") && owner?.ownerType === "organization" ? <section className={styles.accessSection()}><h3>직접 역할</h3>{props.canManageRoles ? <><form className={styles.accessForm()} onSubmit={addRole}><SelectField label="조직 멤버" name="userId" required value={selectedMemberId} disabled={mutation.isPending || !hasAvailableMembers} placeholder="멤버 선택" options={organizationMembers.map((member) => ({ value: member.userId, label: organizationMemberLabel(member), disabled: member.role === "owner" || !hasUniqueMemberLabel(member) || grantedUserIds.has(member.userId) }))} onValueChange={setSelectedMemberId} />{hasAmbiguousMembers ? <p>표시 이름과 조직 역할이 같은 멤버는 이름을 구분한 뒤 직접 역할을 부여할 수 있습니다.</p> : null}{hasAvailableMembers ? null : <p>직접 역할을 부여할 수 있는 조직 멤버가 없습니다.</p>}<SelectField label="역할" name="role" defaultValue="read" disabled={mutation.isPending || !hasAvailableMembers} options={[{ value: "read", label: "읽기" }, { value: "write", label: "쓰기" }, { value: "admin", label: "관리" }]} /><Button type="submit" disabled={mutation.isPending || selectedMemberId === ""}>역할 부여</Button></form>{roleStatus === undefined ? null : <p className={styles.roleStatus()} role="status" aria-live="polite">{roleStatus}</p>}{grants.length === 0 ? <p className={styles.accessHint()}>직접 부여된 역할이 없습니다. 팀 역할 또는 조직 기본 권한이 적용될 수 있습니다.</p> : <ul className={styles.grantList()}>{grants.map((grant, grantIndex) => { const member = memberByUserId.get(grant.userId); const memberIsActionable = member !== undefined && hasUniqueMemberLabel(member); const memberLabel = directGrantMemberLabel(grant, grantIndex, grants, memberByUserId, hasUniqueMemberLabel); return <li key={grant.userId}><div><strong>{memberLabel}</strong><span>{projectRoleLabel(grant.role)}{member === undefined ? "" : ` · 조직 ${organizationRoleLabel(member.role)}`}</span></div><div className={styles.grantActions()}><SelectField label={`${memberLabel} 역할`} labelHidden density="compact" value={grant.role} disabled={mutation.isPending || !memberIsActionable} options={[{ value: "read", label: "읽기" }, { value: "write", label: "쓰기" }, { value: "admin", label: "관리" }]} onValueChange={(nextRole) => void updateRole(grant, roleValue(nextRole))} /><Button type="button" aria-label={`${memberLabel} 역할 제거`} disabled={mutation.isPending} onClick={() => void updateRole(grant)}>제거</Button></div></li>; })}</ul>}</> : <p className={styles.accessHint()}>조직 소유자만 프로젝트의 직접 역할을 확인하고 관리할 수 있습니다.</p>}</section> : null}
               </>
             )}
           </section>
@@ -301,6 +415,16 @@ function projectStateLabel(state: ProjectListState): string {
   if (state === "archived") return "보관됨";
   if (state === "all") return "전체";
   return "활성";
+}
+
+function projectSettingsCopy(section: NonNullable<ProjectDashboardProps["detailSection"]>): {
+  readonly description: string;
+  readonly title: string;
+} {
+  if (section === "general") return { title: "일반 설정", description: "이름과 기본 표시 정보를 관리합니다." };
+  if (section === "access") return { title: "접근 권한", description: "조직 멤버에게 직접 부여한 역할을 관리합니다." };
+  if (section === "danger") return { title: "위험 영역", description: "보관, 복원과 영구 삭제 작업을 관리합니다." };
+  return { title: "프로젝트 설정", description: "이름, Git, 접근 권한과 보관 상태를 관리합니다." };
 }
 
 function projectInitial(name: string): string {
@@ -383,18 +507,17 @@ function projectRoleLabel(role: ProjectRole): string {
   return "읽기";
 }
 
-function projectHref(scope: string, state: ProjectListState, projectId?: string): string {
-  const query = new URLSearchParams({ workspace: scope, state });
-  if (projectId !== undefined) query.set("project", projectId);
-  return `/projects?${query.toString()}`;
+function projectHref(scope: string, state: ProjectListState): string {
+  const query = new URLSearchParams({ state });
+  return `/workspaces/${encodeURIComponent(scope)}/projects?${query.toString()}`;
 }
 
 function projectDetailHref(scope: string, state: ProjectListState, projectId: string): string {
-  return `/projects/${encodeURIComponent(projectId)}?${new URLSearchParams({ workspace: scope, state }).toString()}`;
+  return `/workspaces/${encodeURIComponent(scope)}/projects/${encodeURIComponent(projectId)}/settings/general?${new URLSearchParams({ state }).toString()}`;
 }
 
 function projectStudioHref(scope: string, projectId: string): string {
-  return `/projects/${encodeURIComponent(projectId)}/studio?${new URLSearchParams({ workspace: scope }).toString()}`;
+  return `/workspaces/${encodeURIComponent(scope)}/projects/${encodeURIComponent(projectId)}/studio`;
 }
 
 function visibleInState(project: Project, state: ProjectListState): boolean {

@@ -53,7 +53,7 @@ try {
     assert.equal(await corporate.getAttribute("href"), `/api/v1/auth/oidc/${firstId}/begin`);
 
     const admin = await browser.newContext(); await admin.addCookies([{ name: "nuriteo_dev_session", value: "admin", url: origin }, { name: "nuriteo_dev_csrf", value: csrf, url: origin }]); const adminPage = await admin.newPage();
-    await adminPage.goto(`${origin}/admin/oidc`, { waitUntil: "networkidle" }); await adminPage.getByRole("heading", { name: "로그인 제공자" }).waitFor();
+    await adminPage.goto(`${origin}/admin/authentication/oidc`, { waitUntil: "networkidle" }); await adminPage.getByRole("heading", { name: "로그인 제공자" }).waitFor();
     await adminPage.getByLabel("표시 이름").first().fill("Engineering SSO"); await adminPage.getByLabel("발급자 URL").fill("https://id.example.test"); await adminPage.getByLabel("클라이언트 ID").first().fill("nuriteo"); await adminPage.getByLabel("클라이언트 비밀키").fill("top-secret"); await adminPage.getByRole("button", { name: "비활성 제공자 저장" }).click();
     await adminPage.getByRole("status").filter({ hasText: "비활성 상태로 저장" }).waitFor(); assert.equal(await adminPage.getByText("top-secret").count(), 0);
 

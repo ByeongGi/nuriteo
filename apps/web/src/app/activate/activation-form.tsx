@@ -5,8 +5,10 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import type { FormEvent } from "react";
+import { tv } from "tailwind-variants";
 
-import { Button } from "#src/components/ui/button.tsx";
+import { Button, buttonVariants } from "#src/components/ui/button.tsx";
+import { TextField } from "#src/components/ui/field.tsx";
 import { ProductEntryShell } from "#src/app/_components/product-entry-shell.tsx";
 import { createBrowserApiClient } from "#src/lib/api/browser-client.ts";
 import { collaborationError } from "#src/lib/api/browser-security.ts";
@@ -16,7 +18,16 @@ interface ActivationFormProps {
   readonly activationToken?: string | null | undefined;
 }
 
+const activationStyles = tv({
+  slots: {
+    actions: "mt-6 flex flex-wrap items-center gap-3",
+    form: "mt-6 grid gap-4",
+    error: "m-0 rounded-lg border border-danger/25 bg-danger-subtle px-4 py-3 text-sm text-danger"
+  }
+});
+
 export function ActivationForm({ activationToken }: ActivationFormProps) {
+  const styles = activationStyles();
   const router = useRouter();
   const searchParams = useSearchParams();
   const mutation = useExclusiveMutation();
@@ -57,8 +68,8 @@ export function ActivationForm({ activationToken }: ActivationFormProps) {
         title="계정을 활성화할 수 없습니다"
         titleId="activation-invalid-title"
       >
-        <div className="boundary-actions" role="alert">
-          <Link className="link-button" href="/sign-in">로그인으로 돌아가기</Link>
+        <div className={styles.actions()} role="alert">
+          <Link className={buttonVariants({ variant: "primary" })} href="/sign-in">로그인으로 돌아가기</Link>
         </div>
       </ProductEntryShell>
     );
@@ -71,11 +82,11 @@ export function ActivationForm({ activationToken }: ActivationFormProps) {
       title="계정을 활성화하세요"
       titleId="activation-title"
     >
-      <form className="sign-in-form" onSubmit={handleSubmit} aria-busy={mutation.isPending}>
-        <label className="field-group">이메일<input name="email" type="email" autoComplete="username" required maxLength={320} disabled={mutation.isPending} /></label>
-        <label className="field-group">표시 이름<input name="displayName" required maxLength={200} disabled={mutation.isPending} /></label>
-        <label className="field-group">비밀번호<input name="password" type="password" autoComplete="new-password" required disabled={mutation.isPending} /></label>
-        {error ? <p className="form-error" role="alert">{error}</p> : null}
+      <form className={styles.form()} onSubmit={handleSubmit} aria-busy={mutation.isPending}>
+        <TextField label="이메일" name="email" type="email" autoComplete="username" required maxLength={320} disabled={mutation.isPending} />
+        <TextField label="표시 이름" name="displayName" required maxLength={200} disabled={mutation.isPending} />
+        <TextField label="비밀번호" name="password" type="password" autoComplete="new-password" required disabled={mutation.isPending} />
+        {error ? <p className={styles.error()} role="alert">{error}</p> : null}
         <Button type="submit" variant="primary" disabled={mutation.isPending}>{mutation.isPending ? "활성화 중…" : "계정 활성화"}</Button>
       </form>
     </ProductEntryShell>

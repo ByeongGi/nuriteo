@@ -3,8 +3,8 @@ import type {
   MfaStatus,
   NotificationInbox,
   NotificationInboxItem,
-  NotificationPreferences,
-  OidcIdentity
+  OidcIdentity,
+  Workspace
 } from "@nuriteo/api-client";
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 
@@ -15,14 +15,6 @@ import { NotificationCenter } from "#src/app/(authenticated)/notifications/notif
 import { MfaSecurity as MfaSecurityScreen } from "#src/app/mfa/security.tsx";
 
 const referenceTime = Date.parse("2026-10-22T01:00:00.000Z");
-const preferences: NotificationPreferences = {
-  accountAccess: true,
-  collaboration: true,
-  criticalSecurity: true,
-  operations: false,
-  smtpConfigured: true,
-  version: 7
-};
 const activeNotifications = createNotificationInbox(100, false);
 const archivedNotifications = createNotificationInbox(36, true);
 const accessTokens = createAccessTokens(100);
@@ -43,10 +35,13 @@ const enrolledMfa: MfaStatus = {
   required: true,
   restricted: false
 };
+const accountWorkspaces: readonly Workspace[] = [
+  { displayLabel: "김병기의 워크스페이스", ownerId: fixtureId(8_001), ownerType: "user", storageScopeId: fixtureId(8_002) }
+];
 
 function AccountShell({ children, pathname }: Readonly<{ children: React.ReactNode; pathname: string }>) {
   return (
-    <AuthenticatedShellFrame displayName="김병기" email="byeonggi@nuriteo.dev" isInstanceAdmin pathnameOverride={pathname} themeMode="light" unreadCount={activeNotifications.unreadCount}>
+    <AuthenticatedShellFrame displayName="김병기" email="byeonggi@nuriteo.dev" isInstanceAdmin pathnameOverride={pathname} themeMode="light" unreadCount={activeNotifications.unreadCount} workspaces={accountWorkspaces}>
       {children}
     </AuthenticatedShellFrame>
   );
@@ -55,15 +50,15 @@ function AccountShell({ children, pathname }: Readonly<{ children: React.ReactNo
 function NotificationsFixture({ large = false }: Readonly<{ large?: boolean }>) {
   const active = large ? activeNotifications : sliceInbox(activeNotifications, 12, null);
   const archived = large ? archivedNotifications : sliceInbox(archivedNotifications, 4, null);
-  return <AccountShell pathname="/notifications"><NotificationCenter initialActive={active} initialArchived={archived} initialPreferences={preferences} /></AccountShell>;
+  return <AccountShell pathname="/notifications"><NotificationCenter initialActive={active} initialArchived={archived} /></AccountShell>;
 }
 
 function IdentitiesFixture() {
-  return <AccountShell pathname="/identities"><IdentityConnections initialIdentities={identities} /></AccountShell>;
+  return <AccountShell pathname="/account/identities"><IdentityConnections initialIdentities={identities} /></AccountShell>;
 }
 
 function TokensFixture({ large = false }: Readonly<{ large?: boolean }>) {
-  return <AccountShell pathname="/access-tokens"><AccessTokenConsole initialTokens={large ? accessTokens : accessTokens.slice(0, 8)} referenceTime={referenceTime} target={{ kind: "personal" }} /></AccountShell>;
+  return <AccountShell pathname="/account/tokens"><AccessTokenConsole initialTokens={large ? accessTokens : accessTokens.slice(0, 8)} referenceTime={referenceTime} target={{ kind: "personal" }} /></AccountShell>;
 }
 
 function createNotificationInbox(count: number, archived: boolean): NotificationInbox {

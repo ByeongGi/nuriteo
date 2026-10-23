@@ -133,7 +133,7 @@ try {
     const member = await browser.newContext();
     await member.addCookies([{ name: "nuriteo_dev_session", value: "member", url: origin }]);
     const memberPage = await member.newPage();
-    await memberPage.goto(`${origin}/admin/updates`, { waitUntil: "networkidle" });
+    await memberPage.goto(`${origin}/admin/system/updates`, { waitUntil: "networkidle" });
     await memberPage.getByRole("heading", { name: "관리자 권한이 필요합니다" }).waitFor();
     await member.close();
 
@@ -143,7 +143,7 @@ try {
       { name: "nuriteo_dev_csrf", value: csrfToken, url: origin }
     ]);
     const page = await admin.newPage();
-    await page.goto(`${origin}/admin/updates`, { waitUntil: "networkidle" });
+    await page.goto(`${origin}/admin/system/updates`, { waitUntil: "networkidle" });
     await page.getByRole("heading", { name: "승인 전 차단 요인을 해결하세요" }).waitFor();
     assert.equal(await page.getByRole("button", { name: "업데이트 승인 기록" }).count(), 0);
     assert.equal(await page.getByText(/postgres:\/\//).count(), 0);
@@ -162,7 +162,7 @@ try {
       acknowledged: true
     });
 
-    await page.goto(`${origin}/admin/maintenance`, { waitUntil: "networkidle" });
+    await page.goto(`${origin}/admin/operations/maintenance`, { waitUntil: "networkidle" });
     await page.getByRole("heading", { name: "유지보수 모드 시작" }).waitFor();
     await page.getByRole("checkbox").check();
     await page.getByRole("button", { name: "유지보수 시작" }).click();

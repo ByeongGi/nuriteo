@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { EntryUnavailable } from "#src/app/_components/entry-unavailable.tsx";
 import { Providers } from "#src/app/providers.tsx";
 import { SignInForm } from "#src/app/sign-in/sign-in-form.tsx";
+import { safeReturnTo } from "#src/app/sign-in/return-to.ts";
 import { createServerApiClient } from "#src/lib/api/server-client.ts";
 import {
   isExplicitlySignedOut,
@@ -15,8 +16,17 @@ export const metadata: Metadata = {
   title: "로그인"
 };
 
-export default async function SignInPage({ searchParams }: { readonly searchParams: Promise<{ readonly oidc?: string }> }) {
-  const oidcFailed = (await searchParams).oidc === "failed";
+interface SignInSearchParams {
+  readonly activated?: string;
+  readonly oidc?: string;
+  readonly returnTo?: string;
+}
+
+export default async function SignInPage({ searchParams }: { readonly searchParams: Promise<SignInSearchParams> }) {
+  const query = await searchParams;
+  const activated = query.activated === "1";
+  const oidcFailed = query.oidc === "failed";
+  const returnTo = safeReturnTo(query.returnTo);
   try {
     const client = await createServerApiClient();
     await getCurrentUser(client);
@@ -24,9 +34,9 @@ export default async function SignInPage({ searchParams }: { readonly searchPara
     if (isExplicitlySignedOut(error)) {
       try {
         const providers = await listOidcLoginProviders(await createServerApiClient());
-        return <Providers><SignInForm providers={providers.data} oidcFailed={oidcFailed} /></Providers>;
+        return <Providers><SignInForm activated={activated} providers={providers.data} oidcFailed={oidcFailed} returnTo={returnTo} /></Providers>;
       } catch {
-        return <Providers><SignInForm providers={[]} oidcFailed={oidcFailed} /></Providers>;
+        return <Providers><SignInForm activated={activated} providers={[]} providersLoadFailed oidcFailed={oidcFailed} returnTo={returnTo} /></Providers>;
       }
     }
 
@@ -40,5 +50,5 @@ export default async function SignInPage({ searchParams }: { readonly searchPara
     );
   }
 
-  redirect("/workspaces");
+  redirect(returnTo);
 }

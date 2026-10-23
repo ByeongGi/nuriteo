@@ -62,7 +62,7 @@ function OrganizationFixture({
   manageable?: boolean;
 }>) {
   return (
-    <AuthenticatedShellFrame displayName="김병기" email="byeonggi@nuriteo.dev" isInstanceAdmin pathnameOverride="/organizations" themeMode="light" unreadCount={3}>
+    <AuthenticatedShellFrame displayName="김병기" email="byeonggi@nuriteo.dev" isInstanceAdmin pathnameOverride="/workspaces/0199ee6c-c777-7000-8000-000000004502/members" themeMode="light" unreadCount={3} workspaces={workspaces}>
       <OrganizationConsole
         canManage={manageable}
         currentUserId={currentUserId}
@@ -81,7 +81,7 @@ function TeamFixture({ large = false, manageable = true }: Readonly<{ large?: bo
   const visibleMembers = large ? teamMembers : teamMembers.slice(0, 8);
   const visibleRoles = large ? projectRoles : projectRoles.slice(0, 6);
   return (
-    <AuthenticatedShellFrame displayName="김병기" email="byeonggi@nuriteo.dev" isInstanceAdmin pathnameOverride={`/organizations/${organizationId}/teams`} themeMode="light" unreadCount={3}>
+    <AuthenticatedShellFrame displayName="김병기" email="byeonggi@nuriteo.dev" isInstanceAdmin pathnameOverride="/workspaces/0199ee6c-c777-7000-8000-000000004502/teams" themeMode="light" unreadCount={3} workspaces={workspaces}>
       <TeamConsole
         canCreateTeam={manageable}
         canDeleteTeam={manageable}
@@ -107,7 +107,7 @@ function TeamFixture({ large = false, manageable = true }: Readonly<{ large?: bo
 
 function NewOrganizationScreen() {
   return (
-    <AuthenticatedShellFrame displayName="김병기" email="byeonggi@nuriteo.dev" isInstanceAdmin pathnameOverride="/organizations" themeMode="light" unreadCount={3}>
+    <AuthenticatedShellFrame displayName="김병기" email="byeonggi@nuriteo.dev" isInstanceAdmin pathnameOverride="/workspaces/new/organization" themeMode="light" unreadCount={3} workspaces={workspaces}>
       <OrganizationConsole canManage currentUserId={currentUserId} workspaces={workspaces} />
     </AuthenticatedShellFrame>
   );

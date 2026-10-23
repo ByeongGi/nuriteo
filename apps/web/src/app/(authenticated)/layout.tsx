@@ -1,5 +1,6 @@
-import { getCurrentUser, getMfaStatus, listNotifications } from "@nuriteo/api-client";
-import { cookies } from "next/headers";
+import { getCurrentUser, getCurrentWorkspaces, getMfaStatus, listNotifications } from "@nuriteo/api-client";
+import type { Workspace } from "@nuriteo/api-client";
+import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import type { ReactNode } from "react";
@@ -15,6 +16,7 @@ import {
   AuthenticatedShellFrame,
   AuthenticatedShellLoading
 } from "#src/app/(authenticated)/authenticated-shell-frame.tsx";
+import { signInHref } from "#src/app/sign-in/return-to.ts";
 
 export default function AuthenticatedLayout({
   children
@@ -29,25 +31,33 @@ export default function AuthenticatedLayout({
 async function AuthenticatedSessionBoundary({ children }: Readonly<{ children: ReactNode }>) {
   let current: Awaited<ReturnType<typeof getCurrentUser>>;
   let mfa: Awaited<ReturnType<typeof getMfaStatus>>;
+  let workspaces: readonly Workspace[];
   let notifications: Awaited<ReturnType<typeof listNotifications>> | undefined;
   let maintenance: { readonly readOnly: boolean; readonly phase: string } | undefined;
   try {
     const client = await createServerApiClient();
     current = await getCurrentUser(client);
     const mfaRequest = getMfaStatus(client);
+    const workspaceRequest = getCurrentWorkspaces(client);
     const notificationRequest = listNotifications(client, { limit: 1 }).catch(() => undefined);
     const maintenanceRequest = client
       .get<{ readonly readOnly: boolean; readonly phase: string }>("/maintenance")
       .then((response) => response.data)
       .catch(() => undefined);
-    [mfa, notifications, maintenance] = await Promise.all([
+    const [mfaResult, workspaceResult, notificationResult, maintenanceResult] = await Promise.all([
       mfaRequest,
+      workspaceRequest,
       notificationRequest,
       maintenanceRequest
     ]);
+    mfa = mfaResult;
+    workspaces = workspaceResult.data.workspaces;
+    notifications = notificationResult;
+    maintenance = maintenanceResult;
   } catch (error) {
     if (isExplicitlySignedOut(error)) {
-      redirect("/sign-in");
+      const requestPath = (await headers()).get("x-nuriteo-request-path") ?? "/dashboard";
+      redirect(signInHref(requestPath));
     }
 
     return (
@@ -73,6 +83,7 @@ async function AuthenticatedSessionBoundary({ children }: Readonly<{ children: R
       maintenanceReadOnly={maintenance?.readOnly}
       themeMode={themeMode}
       unreadCount={unreadCount}
+      workspaces={workspaces}
     >
       {children}
     </AuthenticatedShellFrame>

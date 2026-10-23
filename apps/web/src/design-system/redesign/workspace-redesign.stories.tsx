@@ -19,7 +19,7 @@ const selectedProject = projectRows[0]!;
 
 function WorkspaceOverviewScreen() {
   return (
-    <AuthenticatedShellFrame displayName="김병기" email="byeonggi@example.com" isInstanceAdmin pathnameOverride="/workspaces" themeMode="light" unreadCount={3}>
+    <AuthenticatedShellFrame displayName="김병기" email="byeonggi@example.com" isInstanceAdmin pathnameOverride="/workspaces" themeMode="light" unreadCount={3} workspaces={workspaceRows}>
       <WorkspaceScreen activeScope="user:user-kim" workspaces={workspaceRows} />
     </AuthenticatedShellFrame>
   );
@@ -27,7 +27,7 @@ function WorkspaceOverviewScreen() {
 
 function EmptyWorkspaceScreen() {
   return (
-    <AuthenticatedShellFrame displayName="김병기" email="byeonggi@example.com" isInstanceAdmin pathnameOverride="/workspaces" themeMode="light" unreadCount={0}>
+    <AuthenticatedShellFrame displayName="김병기" email="byeonggi@example.com" isInstanceAdmin pathnameOverride="/workspaces" themeMode="light" unreadCount={0} workspaces={workspaceRows}>
       <EmptyWorkspaceContent />
     </AuthenticatedShellFrame>
   );
@@ -35,7 +35,7 @@ function EmptyWorkspaceScreen() {
 
 function ProjectCatalogScreen() {
   return (
-    <AuthenticatedShellFrame displayName="김병기" email="byeonggi@example.com" isInstanceAdmin pathnameOverride="/projects" themeMode="light" unreadCount={3}>
+    <AuthenticatedShellFrame displayName="김병기" email="byeonggi@example.com" isInstanceAdmin pathnameOverride="/workspaces/user%3Auser-kim/projects" themeMode="light" unreadCount={3} workspaces={workspaceRows}>
       <ProjectDashboard initialCollection={{ items: projectRows, nextCursor: null }} selectedScope="user:user-kim" selectedState="active" workspaces={workspaceRows} />
     </AuthenticatedShellFrame>
   );
@@ -44,15 +44,23 @@ function ProjectCatalogScreen() {
 function LargeProjectCatalogScreen() {
   const projects = createProjectFixtures(100);
   return (
-    <AuthenticatedShellFrame displayName="김병기" email="byeonggi@example.com" isInstanceAdmin pathnameOverride="/projects" themeMode="light" unreadCount={3}>
+    <AuthenticatedShellFrame displayName="김병기" email="byeonggi@example.com" isInstanceAdmin pathnameOverride="/workspaces/user%3Auser-kim/projects" themeMode="light" unreadCount={3} workspaces={workspaceRows}>
       <ProjectDashboard initialCollection={{ items: projects, nextCursor: "next-page-fixture" }} selectedScope="user:user-kim" selectedState="active" workspaces={workspaceRows} />
+    </AuthenticatedShellFrame>
+  );
+}
+
+function NewProjectScreen() {
+  return (
+    <AuthenticatedShellFrame displayName="김병기" email="byeonggi@example.com" isInstanceAdmin pathnameOverride="/workspaces/user%3Auser-kim/projects/new" themeMode="light" unreadCount={3} workspaces={workspaceRows}>
+      <ProjectDashboard selectedScope="user:user-kim" selectedState="active" view="create" workspaces={workspaceRows} />
     </AuthenticatedShellFrame>
   );
 }
 
 function ProjectDetailScreen() {
   return (
-    <AuthenticatedShellFrame displayName="김병기" email="byeonggi@example.com" isInstanceAdmin pathnameOverride={`/projects/${selectedProject.id}`} themeMode="light" unreadCount={3}>
+    <AuthenticatedShellFrame displayName="김병기" email="byeonggi@example.com" isInstanceAdmin pathnameOverride={`/workspaces/user%3Auser-kim/projects/${selectedProject.id}/settings`} themeMode="light" unreadCount={3} workspaces={workspaceRows}>
       <ProjectDashboard
         initialCollection={{ items: projectRows, nextCursor: null }}
         initialGitState={{ connections: [], providers: [] }}
@@ -101,5 +109,6 @@ type Story = StoryObj<typeof meta>;
 export const WorkspaceOverview: Story = { render: () => <WorkspaceOverviewScreen /> };
 export const EmptyWorkspace: Story = { render: () => <EmptyWorkspaceScreen /> };
 export const ProjectCatalog: Story = { render: () => <ProjectCatalogScreen /> };
+export const NewProject: Story = { render: () => <NewProjectScreen /> };
 export const LargeProjectCatalog: Story = { render: () => <LargeProjectCatalogScreen /> };
 export const ProjectDetail: Story = { render: () => <ProjectDetailScreen /> };

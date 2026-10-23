@@ -85,7 +85,7 @@ try {
       { name: "nuriteo_dev_csrf", value: csrf, url: origin }
     ]);
     const page = await context.newPage();
-    await page.goto(`${origin}/admin/registries`, { waitUntil: "networkidle" });
+    await page.goto(`${origin}/admin/integrations/registries`, { waitUntil: "networkidle" });
     await page.getByRole("heading", { name: "패키지 저장소" }).waitFor();
     await page.getByLabel("표시 이름").first().fill("Company npm");
     await page.getByLabel("HTTPS 기본 URL").fill("https://registry.example.test/npm");

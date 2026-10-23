@@ -1,34 +1,28 @@
-import { listAccessTokens } from "@nuriteo/api-client";
-import type { AccessTokenTarget } from "@nuriteo/api-client";
 import type { Metadata } from "next";
-
-import { EntryUnavailable } from "#src/app/_components/entry-unavailable.tsx";
-import { createServerApiClient } from "#src/lib/api/server-client.ts";
-import { safeRequestReference } from "#src/lib/api/presentation-error.ts";
-import { AccessTokenConsole } from "#src/app/(authenticated)/access-tokens/token-console.tsx";
+import { redirect } from "next/navigation";
 
 export const metadata: Metadata = { title: "액세스 토큰" };
 
-export default async function AccessTokensPage({
+export default async function LegacyAccessTokensPage({
   searchParams
-}: {
-  readonly searchParams: Promise<{ readonly projectId?: string }>;
-}) {
-  const projectId = (await searchParams).projectId;
-  const target: AccessTokenTarget = projectId === undefined
-    ? { kind: "personal" }
-    : { kind: "project", projectId };
-  try {
-    const result = await listAccessTokens(await createServerApiClient(), target);
-    return <AccessTokenConsole initialTokens={result.data} target={target} />;
-  } catch (error) {
-    return (
-      <EntryUnavailable
-        title="액세스 토큰을 일시적으로 사용할 수 없습니다"
-        description="자격 증명은 발급·변경·노출되지 않았습니다. 프로젝트 식별자와 관리 권한을 확인한 뒤 다시 시도하세요."
-        reference={safeRequestReference(error)}
-        retryHref="/access-tokens"
-      />
-    );
-  }
+}: Readonly<{
+  searchParams: Promise<{
+    projectId?: string | string[];
+    workspace?: string | string[];
+  }>;
+}>) {
+  const query = await searchParams;
+  const projectId = singleValue(query.projectId);
+  if (projectId === undefined) redirect("/account/tokens");
+
+  const workspaceId = singleValue(query.workspace);
+  if (workspaceId === undefined) redirect("/workspaces");
+
+  redirect(
+    `/workspaces/${encodeURIComponent(workspaceId)}/projects/${encodeURIComponent(projectId)}/settings/tokens`
+  );
+}
+
+function singleValue(value: string | readonly string[] | undefined): string | undefined {
+  return typeof value === "string" && value.length > 0 ? value : undefined;
 }

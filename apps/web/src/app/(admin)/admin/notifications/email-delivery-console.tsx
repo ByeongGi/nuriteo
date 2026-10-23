@@ -9,6 +9,7 @@ import {
 import type { EmailDelivery, EmailDeliveryCollection, EmailDeliveryState } from "@nuriteo/api-client";
 import { useState } from "react";
 
+import { Badge } from "#src/components/ui/badge.tsx";
 import { Button } from "#src/components/ui/button.tsx";
 import { SelectField } from "#src/components/ui/field.tsx";
 import { createBrowserApiClient } from "#src/lib/api/browser-client.ts";
@@ -102,7 +103,7 @@ export function EmailDeliveryConsole({ initial }: { readonly initial: EmailDeliv
         category="이메일 전송"
         title="이메일 전송"
         description="정제된 전송 메타데이터를 확인하세요. 본문, 토큰, 자격 증명과 공급자 응답 원문은 표시하지 않습니다."
-        aside={<span className="admin-page-header__count">현재 목록 {collection.items.length}건</span>}
+        aside={<Badge>현재 목록 {collection.items.length}건</Badge>}
       />
       {!collection.smtpConfigured ? <div className="notification-smtp-warning" role="status"><strong>SMTP를 사용할 수 없습니다</strong><span>SMTP를 구성하기 전에는 대기 중인 이메일을 전송할 수 없습니다. 앱 내 알림은 계속 정상적으로 제공됩니다.</span></div> : null}
       <section className="email-delivery-console" aria-labelledby="delivery-list-title">

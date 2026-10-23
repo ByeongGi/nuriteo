@@ -27,12 +27,57 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
+import { tv } from "tailwind-variants";
 
 import { Button } from "#src/components/ui/button.tsx";
-import { SelectField } from "#src/components/ui/field.tsx";
+import { SelectField, TextField } from "#src/components/ui/field.tsx";
+import { MetricGrid, MetricItem } from "#src/components/ui/metric-grid.tsx";
+import { PageHeader } from "#src/components/ui/page-header.tsx";
+import { SearchField } from "#src/components/ui/search-field.tsx";
 import { readCsrfCredential } from "#src/lib/api/browser-security.ts";
 import { createBrowserApiClient } from "#src/lib/api/browser-client.ts";
 import { useExclusiveMutation } from "#src/lib/use-exclusive-mutation.ts";
+
+const teamStyles = tv({
+  slots: {
+    root: "mx-auto grid w-full max-w-[64rem] gap-6 px-[clamp(1.25rem,4vw,3.5rem)] py-[clamp(2rem,7vw,5rem)] max-[48rem]:px-4 max-[48rem]:py-5",
+    metrics: "mt-1",
+    tabs: "flex flex-wrap gap-1 border-b border-muted-border pb-3",
+    tab: "rounded-md px-3 py-2 text-sm font-medium text-link underline-offset-4 hover:bg-hover aria-[current=page]:bg-selected aria-[current=page]:text-foreground",
+    layout: "grid min-w-0 content-start gap-6 md:grid-cols-[minmax(15rem,19rem)_minmax(0,1fr)]",
+    sidebar: "grid min-w-0 content-start gap-6",
+    form: "grid gap-4 rounded-lg border border-muted-border bg-surface p-4 [&_h2]:m-0 [&_h2]:text-base",
+    accessNote: "rounded-xl border border-muted-border bg-surface p-4 [&_p]:mt-2 [&_p]:mb-0 [&_p]:text-sm [&_p]:text-muted-foreground",
+    directoryHeading: "flex items-start justify-between gap-3 [&_h2]:m-0 [&_h2]:text-sm [&_h2]:font-semibold",
+    count: "shrink-0 rounded-full bg-subtle px-2 py-1 text-xs text-muted-foreground",
+    search: "my-3 w-full rounded-lg border border-muted-border bg-background px-3",
+    searchScope: "-mt-2 mb-2 text-xs text-muted-foreground",
+    emptyCopy: "mt-2 mb-0 text-sm text-muted-foreground",
+    list: "m-0 grid max-h-[34rem] list-none gap-2 overflow-auto overscroll-contain p-0 [scrollbar-gutter:stable]",
+    listItem: "m-0 p-0 [content-visibility:auto] [contain-intrinsic-size:auto_5rem]",
+    listLink: "grid w-full gap-1 rounded-md p-3 text-foreground no-underline hover:bg-hover aria-[current=page]:bg-selected [&_span]:text-xs [&_span]:text-muted-foreground",
+    detail: "grid min-w-0 content-start gap-6 rounded-xl border border-muted-border bg-surface p-[clamp(1rem,3vw,2rem)] [&_h2]:m-0 [&_h2]:text-xl [&_h2]:tracking-[-.025em] [&_h3]:mt-0 [&_h3]:mb-1 [&_h3]:text-base [&_p]:mt-0",
+    emptyState: "grid min-w-0 content-start gap-2",
+    detailHeader: "flex min-w-0 items-start justify-between gap-4 max-[37.5rem]:items-stretch max-[37.5rem]:flex-col",
+    badge: "shrink-0 rounded-full bg-subtle px-2 py-1 text-xs font-medium text-muted-foreground",
+    feedback: "flex items-center justify-between gap-3 rounded-md border border-muted-border bg-subtle p-3 max-[37.5rem]:items-stretch max-[37.5rem]:flex-col [&_p]:m-0",
+    section: "grid min-w-0 content-start gap-4 border-t border-muted-border pt-6",
+    sectionHeading: "flex min-w-0 items-start justify-between gap-4 max-[37.5rem]:items-stretch max-[37.5rem]:flex-col [&_p]:mb-0 [&_p]:text-sm [&_p]:text-muted-foreground",
+    inlineForm: "grid items-end gap-3 sm:grid-cols-[minmax(0,1fr)_auto]",
+    addForm: "grid items-end gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(8rem,.45fr)_auto]",
+    readOnly: "mt-2 mb-0 text-sm text-muted-foreground",
+    records: "m-0 grid max-h-[36rem] list-none gap-2 overflow-auto overscroll-contain p-0 [scrollbar-gutter:stable]",
+    record: "flex items-center justify-between gap-3 border-b border-muted-border py-3 [content-visibility:auto] [contain-intrinsic-size:auto_5rem] max-[37.5rem]:items-stretch max-[37.5rem]:flex-col [&>div:first-child]:grid [&>div:first-child]:gap-1 [&_span]:text-xs [&_span]:text-muted-foreground",
+    recordActions: "flex flex-wrap gap-3 max-[37.5rem]:[&>*]:w-full",
+    danger: "border-t-danger [&_[data-slot=field]]:max-w-md [&_[data-slot=button]]:justify-self-start"
+  },
+  variants: {
+    feedbackTone: {
+      error: { feedback: "border-danger text-danger" },
+      success: { feedback: "border-success" }
+    }
+  }
+});
 
 export interface OrganizationMemberOption {
   readonly displayName: string;
@@ -47,6 +92,7 @@ export interface ProjectOption {
 }
 
 export interface TeamConsoleProps {
+  readonly baseHref?: string;
   readonly canCreateTeam: boolean;
   readonly canDeleteTeam: boolean;
   readonly canManageMembers: boolean;
@@ -73,6 +119,7 @@ interface Feedback {
 }
 
 export function TeamConsole(props: TeamConsoleProps) {
+  const styles = teamStyles();
   const router = useRouter();
   const mutation = useExclusiveMutation();
   const [teams, setTeams] = useState(props.teams);
@@ -210,7 +257,7 @@ export function TeamConsole(props: TeamConsoleProps) {
         slug: String(data.get("slug") ?? ""),
         displayName: String(data.get("displayName") ?? "")
       }, { csrfToken: readCsrfCredential() });
-      router.replace(teamHref(props.organization.id, result.data.id));
+      router.replace(teamHref(result.data.id, props.baseHref));
     });
   }
 
@@ -240,7 +287,7 @@ export function TeamConsole(props: TeamConsoleProps) {
         teamId: team.id,
         etag: teamEtag
       }, { csrfToken: readCsrfCredential() });
-      router.replace(teamHref(props.organization.id));
+      router.replace(teamHref(undefined, props.baseHref));
       router.refresh();
     });
   }
@@ -345,57 +392,51 @@ export function TeamConsole(props: TeamConsoleProps) {
   }
 
   return (
-    <main id="main-content" className="workspace-page team-page" tabIndex={-1}>
-      <header className="workspace-page__intro">
-        <p className="eyebrow">{props.organization.displayName}</p>
-        <h1>팀과 프로젝트 권한</h1>
-        <p>조직 멤버를 팀으로 구성하고 필요한 프로젝트와 역할만 연결하세요.</p>
-      </header>
+    <main id="main-content" className={styles.root()} tabIndex={-1}>
+      <PageHeader
+        eyebrow={props.organization.displayName}
+        title="팀과 프로젝트 권한"
+        description="조직 멤버를 팀으로 구성하고 필요한 프로젝트와 역할만 연결하세요."
+      />
 
-      <section className="product-metrics team-metrics" aria-label="팀 요약">
-        <article><span>접근 가능한 팀</span><strong>{teams.length}</strong><small>현재 계정에서 확인할 수 있음</small></article>
-        <article><span>선택한 팀 멤버</span><strong>{team === undefined ? "—" : members.length}</strong><small>유지관리자와 일반 멤버</small></article>
-        <article><span>프로젝트 연결</span><strong>{team === undefined ? "—" : projectRoles.length}</strong><small>팀에 직접 부여된 역할</small></article>
-      </section>
+      <MetricGrid className={styles.metrics()} aria-label="팀 요약">
+        <MetricItem label="접근 가능한 팀" value={teams.length} description="현재 계정에서 확인 가능" />
+        <MetricItem label="선택한 팀 멤버" value={team === undefined ? "—" : members.length} description="유지관리자와 일반 멤버" />
+        <MetricItem label="프로젝트 연결" value={team === undefined ? "—" : projectRoles.length} description="팀에 직접 부여된 역할" />
+      </MetricGrid>
 
-      <nav className="organization-tabs" aria-label="조직 설정">
-        <Link href={`/organizations?organization=${props.organization.id}`}>조직 개요</Link>
-        <Link href={teamHref(props.organization.id)} aria-current="page">팀과 권한</Link>
+      <nav className={styles.tabs()} aria-label="조직 설정">
+        <Link className={styles.tab()} href={props.baseHref === undefined ? "/workspaces" : `${props.baseHref.replace(/\/teams$/u, "")}/members`}>조직 개요</Link>
+        <Link className={styles.tab()} href={teamHref(undefined, props.baseHref)} aria-current="page">팀과 권한</Link>
       </nav>
 
-      <div className="team-layout">
-        <aside className="team-sidebar" aria-label="팀 선택">
+      <div className={styles.layout()}>
+        <aside className={styles.sidebar()} aria-label="팀 선택">
           {props.canCreateTeam ? (
-            <form className="collaboration-form" onSubmit={handleCreate} aria-busy={mutation.isPending}>
+            <form className={styles.form()} onSubmit={handleCreate} aria-busy={mutation.isPending}>
               <h2>새 팀</h2>
-              <label className="field-group">
-                슬러그
-                <input name="slug" required pattern="[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?" maxLength={63} disabled={mutation.isPending} />
-              </label>
-              <label className="field-group">
-                표시 이름
-                <input name="displayName" required maxLength={200} disabled={mutation.isPending} />
-              </label>
+              <TextField label="슬러그" name="slug" required pattern="[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?" maxLength={63} disabled={mutation.isPending} />
+              <TextField label="표시 이름" name="displayName" required maxLength={200} disabled={mutation.isPending} />
               <Button type="submit" variant="primary" disabled={mutation.isPending}>팀 만들기</Button>
             </form>
           ) : (
-            <div className="team-access-note">
+            <div className={styles.accessNote()}>
               <strong>조직 멤버 권한</strong>
               <p>소속된 팀을 확인할 수 있습니다. 팀 생성과 삭제는 조직 소유자만 할 수 있습니다.</p>
             </div>
           )}
 
           <nav aria-label="팀">
-            <div className="team-directory-heading"><h2 className="team-sidebar__heading">팀 목록</h2><span>{visibleTeams.length} / {teams.length}</span></div>
-            <label className="product-search team-search"><span aria-hidden="true">⌕</span><span className="sr-only">팀 검색</span><input value={teamQuery} onChange={(event) => setTeamQuery(event.currentTarget.value)} placeholder="팀 이름 또는 슬러그 검색" /></label>
-            {nextTeamCursor !== null ? <p className="team-search-scope">현재 불러온 팀에서 검색합니다.</p> : null}
+            <div className={styles.directoryHeading()}><h2>팀 목록</h2><span className={styles.count()}>{visibleTeams.length} / {teams.length}</span></div>
+            <SearchField className={styles.search()} label="팀 검색" value={teamQuery} onChange={(event) => setTeamQuery(event.currentTarget.value)} placeholder="팀 이름 또는 슬러그 검색" />
+            {nextTeamCursor !== null ? <p className={styles.searchScope()}>현재 불러온 팀에서 검색합니다.</p> : null}
             {visibleTeams.length === 0 ? (
-              <p className="team-empty-copy">{teams.length === 0 ? "사용 가능한 팀이 없습니다." : "검색 결과가 없습니다."}</p>
+              <p className={styles.emptyCopy()}>{teams.length === 0 ? "사용 가능한 팀이 없습니다." : "검색 결과가 없습니다."}</p>
             ) : (
-              <ul className="record-list team-list">
+              <ul className={styles.list()}>
                 {visibleTeams.map((item) => (
-                  <li key={item.id}>
-                    <Link href={teamHref(props.organization.id, item.id)} aria-current={team?.id === item.id ? "page" : undefined}>
+                  <li className={styles.listItem()} key={item.id}>
+                    <Link className={styles.listLink()} href={teamHref(item.id, props.baseHref)} aria-current={team?.id === item.id ? "page" : undefined}>
                       <strong>{item.displayName}</strong>
                       <span>{item.slug}</span>
                     </Link>
@@ -411,40 +452,40 @@ export function TeamConsole(props: TeamConsoleProps) {
           </nav>
         </aside>
 
-        <section className="team-detail" aria-labelledby="team-detail-title">
+        <section className={styles.detail()} aria-labelledby="team-detail-title">
           {team === undefined ? (
-            <div className="team-empty-state">
+            <div className={styles.emptyState()}>
               <p className="eyebrow">팀 접근 권한</p>
               <h2 id="team-detail-title">팀을 선택하세요</h2>
               <p>팀을 선택하면 멤버와 프로젝트 역할을 함께 확인할 수 있습니다.</p>
             </div>
           ) : (
             <>
-              <header className="team-detail__header">
+              <header className={styles.detailHeader()}>
                 <div>
                   <p className="eyebrow">{team.slug}</p>
                   <h2 id="team-detail-title">{team.displayName}</h2>
                 </div>
-                <span className="team-version" aria-label={`Team version ${team.version}`}>v{team.version}</span>
+                <span className={styles.badge()} aria-label={`Team version ${team.version}`}>v{team.version}</span>
               </header>
 
               {feedback === undefined ? null : (
-                <div className={`team-feedback team-feedback--${feedback.tone}`} role={feedback.tone === "error" ? "alert" : "status"} aria-live="polite">
+                <div className={teamStyles({ feedbackTone: feedback.tone }).feedback()} role={feedback.tone === "error" ? "alert" : "status"} aria-live="polite">
                   <p>{feedback.message}</p>
                   {feedback.reconcile ? <Button type="button" size="sm" onClick={() => router.refresh()}>최신 팀 정보 불러오기</Button> : null}
                 </div>
               )}
 
-              <section className="team-section" aria-labelledby="team-profile-title">
-                <div className="team-section__heading">
+              <section className={styles.section()} aria-labelledby="team-profile-title">
+                <div className={styles.sectionHeading()}>
                   <div><h3 id="team-profile-title">팀 정보</h3><p>슬러그는 유지되며 표시 이름은 변경할 수 있습니다.</p></div>
                 </div>
                 {props.canRenameTeam ? (
-                  <form className="team-inline-form" onSubmit={handleRename} aria-busy={mutation.isPending}>
-                    <label className="field-group">표시 이름<input name="displayName" defaultValue={team.displayName} required maxLength={200} disabled={mutation.isPending} /></label>
+                  <form className={styles.inlineForm()} onSubmit={handleRename} aria-busy={mutation.isPending}>
+                    <TextField label="표시 이름" name="displayName" defaultValue={team.displayName} required maxLength={200} disabled={mutation.isPending} />
                     <Button type="submit" disabled={mutation.isPending}>이름 저장</Button>
                   </form>
-                ) : <p className="team-read-only">현재 팀 멤버십은 읽기 전용입니다.</p>}
+                ) : <p className={styles.readOnly()}>현재 팀 멤버십은 읽기 전용입니다.</p>}
               </section>
 
               <TeamMembers
@@ -475,9 +516,9 @@ export function TeamConsole(props: TeamConsoleProps) {
               />
 
               {props.canDeleteTeam ? (
-                <section className="team-section team-danger-zone" aria-labelledby="team-delete-title">
-                  <div className="team-section__heading"><div><h3 id="team-delete-title">팀 삭제</h3><p>팀, 멤버십과 프로젝트 역할을 제거합니다. 프로젝트 자체는 삭제되지 않습니다.</p></div></div>
-                  <label className="field-group">확인하려면 <strong>{team.slug}</strong> 입력<input value={deleteConfirmation} onChange={(event) => setDeleteConfirmation(event.currentTarget.value)} autoComplete="off" spellCheck={false} disabled={mutation.isPending} /></label>
+                <section className={`${styles.section()} ${styles.danger()}`} aria-labelledby="team-delete-title">
+                  <div className={styles.sectionHeading()}><div><h3 id="team-delete-title">팀 삭제</h3><p>팀, 멤버십과 프로젝트 역할을 제거합니다. 프로젝트 자체는 삭제되지 않습니다.</p></div></div>
+                  <TextField label={<>확인하려면 <strong>{team.slug}</strong> 입력</>} value={deleteConfirmation} onChange={(event) => setDeleteConfirmation(event.currentTarget.value)} autoComplete="off" spellCheck={false} disabled={mutation.isPending} />
                   <Button type="button" variant="danger" disabled={mutation.isPending || deleteConfirmation !== team.slug} onClick={() => void handleDelete()}>팀 삭제</Button>
                 </section>
               ) : null}
@@ -504,6 +545,7 @@ interface TeamMembersProps {
 }
 
 function TeamMembers(props: TeamMembersProps) {
+  const styles = teamStyles();
   const [query, setQuery] = useState("");
   const deferredQuery = useDeferredValue(query);
   const visibleMembers = useMemo(() => {
@@ -518,23 +560,23 @@ function TeamMembers(props: TeamMembersProps) {
   }, [deferredQuery, props.memberById, props.members]);
 
   return (
-    <section className="team-section" aria-labelledby="team-members-title">
-      <div className="team-section__heading"><div><h3 id="team-members-title">멤버</h3><p>유지관리자는 팀 멤버를 관리하고 일반 멤버는 팀 리소스를 조회합니다.</p></div><span>{visibleMembers.length} / {props.members.length}</span></div>
+    <section className={styles.section()} aria-labelledby="team-members-title">
+      <div className={styles.sectionHeading()}><div><h3 id="team-members-title">멤버</h3><p>유지관리자는 팀 멤버를 관리하고 일반 멤버는 팀 리소스를 조회합니다.</p></div><span className={styles.badge()}>{visibleMembers.length} / {props.members.length}</span></div>
       {props.canManage ? (
-        <form className="team-add-form" onSubmit={props.onAdd} aria-busy={props.disabled}>
+        <form className={styles.addForm()} onSubmit={props.onAdd} aria-busy={props.disabled}>
           <SelectField id="team-member-user" label="조직 멤버" name="userId" required disabled={props.disabled || props.memberOptions.length === 0} placeholder="멤버 선택" options={props.memberOptions.map((member) => ({ value: member.userId, label: `${member.displayName} · 조직 ${organizationRoleLabel(member.organizationRole)} · ${shortId(member.userId)}` }))} />
           <SelectField id="team-member-new-role" label="팀 역할" name="role" defaultValue="member" disabled={props.disabled} options={[{ value: "member", label: "멤버" }, { value: "maintainer", label: "유지관리자" }]} />
           <Button type="submit" disabled={props.disabled || props.memberOptions.length === 0}>멤버 추가</Button>
         </form>
       ) : null}
-      {props.members.length > 0 ? <label className="product-search team-search"><span aria-hidden="true">⌕</span><span className="sr-only">팀 멤버 검색</span><input value={query} onChange={(event) => setQuery(event.currentTarget.value)} placeholder="멤버 이름, 역할 또는 식별자 검색" /></label> : null}
-      {props.hasMore ? <p className="team-search-scope">현재 불러온 멤버에서 검색합니다.</p> : null}
-      {props.members.length === 0 ? <p className="team-empty-copy">이 팀에는 아직 멤버가 없습니다.</p> : visibleMembers.length === 0 ? <p className="team-empty-copy">검색 결과가 없습니다.</p> : (
-        <ul className="record-list team-records" aria-busy={query !== deferredQuery} aria-label="팀 멤버">
+      {props.members.length > 0 ? <SearchField className={styles.search()} label="팀 멤버 검색" value={query} onChange={(event) => setQuery(event.currentTarget.value)} placeholder="멤버 이름, 역할 또는 식별자 검색" /> : null}
+      {props.hasMore ? <p className={styles.searchScope()}>현재 불러온 멤버에서 검색합니다.</p> : null}
+      {props.members.length === 0 ? <p className={styles.emptyCopy()}>이 팀에는 아직 멤버가 없습니다.</p> : visibleMembers.length === 0 ? <p className={styles.emptyCopy()}>검색 결과가 없습니다.</p> : (
+        <ul className={styles.records()} aria-busy={query !== deferredQuery} aria-label="팀 멤버">
           {visibleMembers.map((member, index) => {
             const organizationMember = props.memberById.get(member.userId);
             const label = organizationMember?.displayName ?? `확인할 수 없는 멤버 ${index + 1}`;
-            return <li key={member.userId}><div><strong>{label}{member.userId === props.currentUserId ? " (나)" : ""}</strong><span>조직 {organizationMember === undefined ? "멤버십 정보 없음" : organizationRoleLabel(organizationMember.organizationRole)}</span></div>{props.canManage ? <div className="record-actions"><SelectField id={`team-member-role-${member.userId}`} label={`${label} 역할`} labelHidden density="compact" value={member.role} disabled={props.disabled} options={[{ value: "member", label: "멤버" }, { value: "maintainer", label: "유지관리자" }]} onValueChange={(nextRole) => void props.onRoleChange(member, teamRole(nextRole))} /><Button type="button" size="sm" disabled={props.disabled || member.userId === props.currentUserId} aria-label={`${label} 팀에서 제외`} onClick={() => void props.onRemove(member)}>제외</Button></div> : <span className="team-role-badge">{teamRoleLabel(member.role)}</span>}</li>;
+            return <li className={styles.record()} key={member.userId}><div><strong>{label}{member.userId === props.currentUserId ? " (나)" : ""}</strong><span>조직 {organizationMember === undefined ? "멤버십 정보 없음" : organizationRoleLabel(organizationMember.organizationRole)}</span></div>{props.canManage ? <div className={styles.recordActions()}><SelectField id={`team-member-role-${member.userId}`} label={`${label} 역할`} labelHidden density="compact" value={member.role} disabled={props.disabled} options={[{ value: "member", label: "멤버" }, { value: "maintainer", label: "유지관리자" }]} onValueChange={(nextRole) => void props.onRoleChange(member, teamRole(nextRole))} /><Button type="button" size="sm" disabled={props.disabled || member.userId === props.currentUserId} aria-label={`${label} 팀에서 제외`} onClick={() => void props.onRemove(member)}>제외</Button></div> : <span className={styles.badge()}>{teamRoleLabel(member.role)}</span>}</li>;
           })}
         </ul>
       )}
@@ -557,6 +599,7 @@ interface TeamProjectRolesProps {
 }
 
 function TeamProjectRoles(props: TeamProjectRolesProps) {
+  const styles = teamStyles();
   const [query, setQuery] = useState("");
   const deferredQuery = useDeferredValue(query);
   const visibleGrants = useMemo(() => {
@@ -571,23 +614,23 @@ function TeamProjectRoles(props: TeamProjectRolesProps) {
   }, [deferredQuery, props.grants, props.projectById]);
 
   return (
-    <section className="team-section" aria-labelledby="team-projects-title">
-      <div className="team-section__heading"><div><h3 id="team-projects-title">프로젝트 접근</h3><p>읽기는 조회, 쓰기는 콘텐츠 변경, 관리는 프로젝트 설정 변경 권한을 제공합니다.</p></div><span>{visibleGrants.length} / {props.grants.length}</span></div>
+    <section className={styles.section()} aria-labelledby="team-projects-title">
+      <div className={styles.sectionHeading()}><div><h3 id="team-projects-title">프로젝트 접근</h3><p>읽기는 조회, 쓰기는 콘텐츠 변경, 관리는 프로젝트 설정 변경 권한을 제공합니다.</p></div><span className={styles.badge()}>{visibleGrants.length} / {props.grants.length}</span></div>
       {props.canManage ? (
-        <form className="team-add-form" onSubmit={props.onAdd} aria-busy={props.disabled}>
+        <form className={styles.addForm()} onSubmit={props.onAdd} aria-busy={props.disabled}>
           <SelectField id="team-project-new" label="프로젝트" name="projectId" required disabled={props.disabled || props.projectOptions.length === 0} placeholder="프로젝트 선택" options={props.projectOptions.map((project) => ({ value: project.id, label: `${project.name} · ${project.slug}` }))} />
           <SelectField id="team-project-new-role" label="프로젝트 역할" name="role" defaultValue="read" disabled={props.disabled} options={[{ value: "read", label: "읽기" }, { value: "write", label: "쓰기" }, { value: "admin", label: "관리" }]} />
           <Button type="submit" disabled={props.disabled || props.projectOptions.length === 0}>접근 권한 부여</Button>
         </form>
-      ) : <p className="team-read-only">조직 소유자만 팀의 프로젝트 역할을 변경할 수 있습니다.</p>}
-      {props.grants.length > 0 ? <label className="product-search team-search"><span aria-hidden="true">⌕</span><span className="sr-only">프로젝트 권한 검색</span><input value={query} onChange={(event) => setQuery(event.currentTarget.value)} placeholder="프로젝트 이름, 슬러그 또는 역할 검색" /></label> : null}
-      {props.hasMore ? <p className="team-search-scope">현재 불러온 프로젝트 권한에서 검색합니다.</p> : null}
-      {props.grants.length === 0 ? <p className="team-empty-copy">이 팀에 연결된 프로젝트가 없습니다.</p> : visibleGrants.length === 0 ? <p className="team-empty-copy">검색 결과가 없습니다.</p> : (
-        <ul className="record-list team-records" aria-busy={query !== deferredQuery} aria-label="팀 프로젝트 역할">
+      ) : <p className={styles.readOnly()}>조직 소유자만 팀의 프로젝트 역할을 변경할 수 있습니다.</p>}
+      {props.grants.length > 0 ? <SearchField className={styles.search()} label="프로젝트 권한 검색" value={query} onChange={(event) => setQuery(event.currentTarget.value)} placeholder="프로젝트 이름, 슬러그 또는 역할 검색" /> : null}
+      {props.hasMore ? <p className={styles.searchScope()}>현재 불러온 프로젝트 권한에서 검색합니다.</p> : null}
+      {props.grants.length === 0 ? <p className={styles.emptyCopy()}>이 팀에 연결된 프로젝트가 없습니다.</p> : visibleGrants.length === 0 ? <p className={styles.emptyCopy()}>검색 결과가 없습니다.</p> : (
+        <ul className={styles.records()} aria-busy={query !== deferredQuery} aria-label="팀 프로젝트 역할">
           {visibleGrants.map((grant, index) => {
             const project = props.projectById.get(grant.projectId);
             const label = project?.name ?? `확인할 수 없는 프로젝트 ${index + 1}`;
-            return <li key={grant.projectId}><div><strong>{label}</strong><span>{project?.slug ?? "프로젝트 정보 없음"}</span></div>{props.canManage ? <div className="record-actions"><SelectField id={`team-project-role-${grant.projectId}`} label={`${label} 역할`} labelHidden density="compact" value={grant.role} disabled={props.disabled} options={[{ value: "read", label: "읽기" }, { value: "write", label: "쓰기" }, { value: "admin", label: "관리" }]} onValueChange={(nextRole) => void props.onRoleChange(grant, projectRole(nextRole))} /><Button type="button" size="sm" disabled={props.disabled} aria-label={`${label} 접근 제거`} onClick={() => void props.onRemove(grant)}>제거</Button></div> : <span className="team-role-badge">{projectRoleLabel(grant.role)}</span>}</li>;
+            return <li className={styles.record()} key={grant.projectId}><div><strong>{label}</strong><span>{project?.slug ?? "프로젝트 정보 없음"}</span></div>{props.canManage ? <div className={styles.recordActions()}><SelectField id={`team-project-role-${grant.projectId}`} label={`${label} 역할`} labelHidden density="compact" value={grant.role} disabled={props.disabled} options={[{ value: "read", label: "읽기" }, { value: "write", label: "쓰기" }, { value: "admin", label: "관리" }]} onValueChange={(nextRole) => void props.onRoleChange(grant, projectRole(nextRole))} /><Button type="button" size="sm" disabled={props.disabled} aria-label={`${label} 접근 제거`} onClick={() => void props.onRemove(grant)}>제거</Button></div> : <span className={styles.badge()}>{projectRoleLabel(grant.role)}</span>}</li>;
           })}
         </ul>
       )}
@@ -617,9 +660,9 @@ function shortId(value: string): string {
   return value.slice(-8);
 }
 
-function teamHref(organizationId: string, teamId?: string): string {
-  const base = `/organizations/${organizationId}/teams`;
-  return teamId === undefined ? base : `${base}?team=${teamId}`;
+function teamHref(teamId?: string, baseHref?: string): string {
+  if (baseHref === undefined) return "/workspaces";
+  return teamId === undefined ? baseHref : `${baseHref}/${encodeURIComponent(teamId)}`;
 }
 
 function memberEtag(member: TeamMember): string {

@@ -3,13 +3,16 @@
 import { createSession, getCurrentUser } from "@nuriteo/api-client";
 import type { OidcLoginProvider } from "@nuriteo/api-client";
 import { useMutation } from "@tanstack/react-query";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef } from "react";
 import type { FormEvent } from "react";
 
 import { Button } from "#src/components/ui/button.tsx";
+import { Input } from "#src/components/ui/input.tsx";
 import { signInStyles } from "#src/app/sign-in/sign-in.styles.ts";
 import { SignInShell } from "#src/app/sign-in/sign-in-shell.tsx";
+import { safeReturnTo, signInHref } from "#src/app/sign-in/return-to.ts";
 import { createBrowserApiClient } from "#src/lib/api/browser-client.ts";
 import {
   classifySignInFailure,
@@ -38,10 +41,25 @@ function presentSignInError(cause: unknown): SignInErrorState {
   };
 }
 
-export function SignInForm({ providers = [], oidcFailed = false }: { readonly providers?: readonly OidcLoginProvider[]; readonly oidcFailed?: boolean }) {
+interface SignInFormProps {
+  readonly activated?: boolean;
+  readonly oidcFailed?: boolean;
+  readonly providers?: readonly OidcLoginProvider[];
+  readonly providersLoadFailed?: boolean;
+  readonly returnTo?: string;
+}
+
+export function SignInForm({
+  activated = false,
+  oidcFailed = false,
+  providers = [],
+  providersLoadFailed = false,
+  returnTo = "/dashboard"
+}: SignInFormProps) {
   const styles = signInStyles();
   const router = useRouter();
   const passwordInput = useRef<HTMLInputElement>(null);
+  const destination = safeReturnTo(returnTo);
   const signIn = useMutation({
     mutationFn: async (formData: FormData) => {
       const email = formData.get("email");
@@ -61,7 +79,7 @@ export function SignInForm({ providers = [], oidcFailed = false }: { readonly pr
       passwordInput.current?.focus();
     },
     onSuccess: () => {
-      router.replace("/workspaces");
+      router.replace(destination);
       router.refresh();
     }
   });
@@ -84,14 +102,27 @@ export function SignInForm({ providers = [], oidcFailed = false }: { readonly pr
 
   return (
     <SignInShell>
+        {activated ? (
+          <div className={styles.status()} role="status">
+            계정 활성화를 완료했습니다. 새 계정으로 로그인하세요.
+          </div>
+        ) : null}
+
         {oidcFailed ? <div className={styles.error({ className: styles.oidcError() })} role="alert"><p>회사 계정 로그인을 완료하지 못했습니다. 다시 시도하거나 로컬 계정을 사용하세요.</p></div> : null}
+
+        {providersLoadFailed ? (
+          <div className={styles.providerError()} role="alert">
+            <p>회사 계정 로그인 옵션을 불러오지 못했습니다. 로컬 계정으로 로그인하거나 다시 확인하세요.</p>
+            <Button size="sm" render={<Link href={signInHref(destination)} />}>회사 로그인 다시 불러오기</Button>
+          </div>
+        ) : null}
 
         {providers.length > 0 ? (
           <div className={styles.oidc()} aria-label="OIDC 계정 로그인">
             {providers.map((provider) => (
               <Button className={styles.oidcButton()} key={provider.id} render={<a href={`/api/v1/auth/oidc/${provider.id}/begin`} />}>
                 <span className={styles.providerMark()} aria-hidden="true">{provider.displayName.trim().charAt(0).toUpperCase()}</span>
-                {provider.displayName} 계정으로 계속
+                <span className={styles.providerLabel()}>{provider.displayName} 계정으로 계속</span>
               </Button>
             ))}
             <div className={styles.divider()}><span>또는 로컬 계정</span></div>
@@ -101,7 +132,7 @@ export function SignInForm({ providers = [], oidcFailed = false }: { readonly pr
         <form className={styles.form()} onSubmit={handleSubmit} aria-busy={signIn.isPending}>
           <div className={styles.field()}>
             <label className={styles.label()} htmlFor="email">이메일</label>
-            <input
+            <Input
               className={styles.input()}
               id="email"
               name="email"
@@ -117,7 +148,7 @@ export function SignInForm({ providers = [], oidcFailed = false }: { readonly pr
 
           <div className={styles.field()}>
             <label className={styles.label()} htmlFor="password">비밀번호</label>
-            <input
+            <Input
               className={styles.input()}
               ref={passwordInput}
               id="password"

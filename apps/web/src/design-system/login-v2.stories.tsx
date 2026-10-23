@@ -1,6 +1,9 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import type { ReactNode } from "react";
 
+import { Button } from "#src/components/ui/button.tsx";
+import { Input } from "#src/components/ui/input.tsx";
+
 type LoginPreviewProps = Readonly<{
   children: ReactNode;
 }>;
@@ -40,10 +43,10 @@ function OidcProviderList({ error, providers }: OidcProviderListProps) {
     <div className="login-v2__sso-list" aria-label="OIDC 계정 로그인">
       {error ? <p className="login-v2__error" role="alert"><i aria-hidden="true">!</i>{error}</p> : null}
       {providers.map((provider) => (
-        <button className="login-v2__sso" key={provider.id} type="button">
+        <Button className="login-v2__sso" key={provider.id} type="button">
           <span aria-hidden="true">{provider.mark}</span>
           {provider.label}
-        </button>
+        </Button>
       ))}
     </div>
   );
@@ -58,7 +61,7 @@ function LocalLoginForm({ error }: LocalLoginFormProps) {
     <form className="login-v2__form">
       <label htmlFor="login-v2-email">
         <span>이메일</span>
-        <input
+        <Input
           aria-describedby={error ? "login-v2-error" : undefined}
           autoComplete="username"
           defaultValue={error ? "admin@example.test" : undefined}
@@ -70,7 +73,7 @@ function LocalLoginForm({ error }: LocalLoginFormProps) {
       </label>
       <label htmlFor="login-v2-password">
         <span>비밀번호</span>
-        <input
+        <Input
           aria-describedby={error ? "login-v2-error" : "login-v2-password-help"}
           autoComplete="current-password"
           id="login-v2-password"
@@ -79,7 +82,7 @@ function LocalLoginForm({ error }: LocalLoginFormProps) {
         />
       </label>
       {error ? <p className="login-v2__error" id="login-v2-error" role="alert"><i aria-hidden="true">!</i>{error}</p> : null}
-      <button className="login-v2__submit" type="submit">로그인</button>
+      <Button className="login-v2__submit" type="submit">로그인</Button>
     </form>
   );
 }
