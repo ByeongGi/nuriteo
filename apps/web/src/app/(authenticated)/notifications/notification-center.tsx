@@ -28,13 +28,13 @@ type ClassificationFilter = "all" | NotificationInboxItem["classification"];
 
 const notificationCenterStyles = tv({
   slots: {
-    root: "mx-auto grid w-full max-w-[82rem] gap-6 px-[clamp(1.25rem,4vw,3.5rem)] py-[clamp(2rem,4vw,3.75rem)] outline-none max-[48rem]:px-4 max-[48rem]:py-5",
+    root: "grid w-full gap-4 px-6 py-5 outline-none max-[48rem]:px-4 max-[48rem]:py-4",
     feedback: "sticky top-3 z-[var(--n-z-sticky)] m-0 rounded-md border border-muted-border bg-raised px-4 py-3 text-sm shadow-md",
     feedbackError: "border-danger/40 text-danger",
     feedbackSuccess: "border-success/40 text-success",
-    toolbar: "flex flex-wrap items-end justify-between gap-3 rounded-xl border border-muted-border bg-surface p-4",
+    toolbar: "flex flex-wrap items-end justify-between gap-2 border-b border-muted-border pb-3",
     search: "min-w-[min(100%,18rem)] flex-1",
-    inbox: "rounded-xl border border-muted-border bg-surface p-[clamp(1rem,3vw,2rem)]",
+    inbox: "rounded-lg border border-muted-border bg-surface p-4",
     heading: "flex flex-wrap items-center justify-between gap-3",
     headingCopy: "grid gap-1",
     eyebrow: "m-0 text-xs font-semibold text-accent-foreground",
@@ -42,8 +42,8 @@ const notificationCenterStyles = tv({
     headingCount: "text-xs font-medium text-muted-foreground",
     tabs: "flex flex-wrap gap-2",
     searchScope: "mt-4 mb-0 text-xs text-muted-foreground",
-    list: "my-5 grid max-h-[42rem] list-none gap-3 overflow-auto p-0 [scrollbar-gutter:stable]",
-    item: "grid grid-cols-[0.5rem_minmax(0,1fr)_auto] items-start gap-3 rounded-lg border border-muted-border bg-surface p-4 max-[48rem]:grid-cols-[0.5rem_minmax(0,1fr)]",
+    list: "my-4 grid max-h-[42rem] list-none gap-1 overflow-auto p-0 [scrollbar-gutter:stable]",
+    item: "grid grid-cols-[0.5rem_minmax(0,1fr)_auto] items-start gap-3 rounded-md border border-transparent px-3 py-2.5 hover:bg-hover max-[48rem]:grid-cols-[0.5rem_minmax(0,1fr)]",
     itemUnread: "border-l-primary bg-selected",
     indicator: "mt-1.5 size-2 rounded-full bg-strong-border",
     indicatorUnread: "bg-primary",
@@ -141,18 +141,18 @@ export function NotificationCenter({
 
   return (
     <main id="main-content" className={styles.root()} tabIndex={-1}>
-      <PageHeader eyebrow="활동" title="알림" description="보안, 계정 접근, 협업 및 운영 변경 사항을 한곳에서 확인하세요." />
+      <PageHeader density="compact" eyebrow="활동" title="알림" description="보안, 계정 접근, 협업 및 운영 변경 사항을 한곳에서 확인하세요." />
 
       {feedback ? <p className={styles.feedback({ className: feedback.error ? styles.feedbackError() : styles.feedbackSuccess() })} role={feedback.error ? "alert" : "status"} aria-live="polite">{feedback.text}</p> : null}
 
-      <MetricGrid className="mt-5" aria-label="알림 요약">
+      <MetricGrid density="compact" aria-label="알림 요약">
         <MetricItem label="읽지 않음" value={active.unreadCount} description="우선 확인이 필요한 새 소식" />
         <MetricItem label="활성" value={active.items.length} description="현재 목록에 불러온 항목" />
         <MetricItem label="보관됨" value={archived.items.length} description="필요할 때 다시 복원 가능" />
       </MetricGrid>
 
       <section className={styles.toolbar()} aria-label="알림 검색 및 분류">
-        <SearchField className={styles.search()} label="알림 검색" value={query} onChange={(event) => setQuery(event.currentTarget.value)} placeholder="제목 또는 내용 검색" />
+        <SearchField density="compact" className={styles.search()} label="알림 검색" value={query} onChange={(event) => setQuery(event.currentTarget.value)} placeholder="제목 또는 내용 검색" />
         <SegmentedControl
           aria-label="알림 분류"
           value={classification}

@@ -122,7 +122,7 @@ function testServerFirstBoundaries(): void {
     "src/app/(authenticated)/projects/project-history-panel.tsx",
     "src/app/(authenticated)/projects/project-ide-shell.tsx",
     "src/app/(authenticated)/projects/use-project-file-search.ts",
-    "src/app/(authenticated)/workspaces/[workspaceId]/error.tsx",
+    "src/app/(workspace)/workspaces/[workspaceId]/error.tsx",
     "src/app/(authenticated)/workspaces/workspace-catalog.tsx",
     "src/app/(studio)/error.tsx",
     "src/app/(studio)/projects/[projectId]/studio/project-studio-screen.tsx",

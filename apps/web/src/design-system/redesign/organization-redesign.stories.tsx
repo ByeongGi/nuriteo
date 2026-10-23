@@ -10,6 +10,7 @@ import type {
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 
 import { AuthenticatedShellFrame } from "#src/app/(authenticated)/authenticated-shell-frame.tsx";
+import { WorkspaceShellFrame } from "#src/app/(workspace)/workspace-shell-frame.tsx";
 import {
   TeamConsole,
   type OrganizationMemberOption,
@@ -62,9 +63,10 @@ function OrganizationFixture({
   manageable?: boolean;
 }>) {
   return (
-    <AuthenticatedShellFrame displayName="김병기" email="byeonggi@nuriteo.dev" isInstanceAdmin pathnameOverride="/workspaces/0199ee6c-c777-7000-8000-000000004502/members" themeMode="light" unreadCount={3} workspaces={workspaces}>
+    <WorkspaceShellFrame displayName="김병기" email="byeonggi@nuriteo.dev" themeMode="light" unreadCount={3} workspace={workspaces[1]!}>
       <OrganizationConsole
         canManage={manageable}
+        context="workspace"
         currentUserId={currentUserId}
         etag={'"org-v18"'}
         invitations={fixtureInvitations}
@@ -72,7 +74,7 @@ function OrganizationFixture({
         organization={organization}
         workspaces={workspaces}
       />
-    </AuthenticatedShellFrame>
+    </WorkspaceShellFrame>
   );
 }
 
@@ -81,8 +83,9 @@ function TeamFixture({ large = false, manageable = true }: Readonly<{ large?: bo
   const visibleMembers = large ? teamMembers : teamMembers.slice(0, 8);
   const visibleRoles = large ? projectRoles : projectRoles.slice(0, 6);
   return (
-    <AuthenticatedShellFrame displayName="김병기" email="byeonggi@nuriteo.dev" isInstanceAdmin pathnameOverride="/workspaces/0199ee6c-c777-7000-8000-000000004502/teams" themeMode="light" unreadCount={3} workspaces={workspaces}>
+    <WorkspaceShellFrame displayName="김병기" email="byeonggi@nuriteo.dev" themeMode="light" unreadCount={3} workspace={workspaces[1]!}>
       <TeamConsole
+        baseHref={`/workspaces/${encodeURIComponent(workspaces[1]!.storageScopeId)}/teams`}
         canCreateTeam={manageable}
         canDeleteTeam={manageable}
         canManageMembers={manageable}
@@ -101,7 +104,7 @@ function TeamFixture({ large = false, manageable = true }: Readonly<{ large?: bo
         selectedTeamEtag={'"team-v7"'}
         teams={visibleTeams}
       />
-    </AuthenticatedShellFrame>
+    </WorkspaceShellFrame>
   );
 }
 

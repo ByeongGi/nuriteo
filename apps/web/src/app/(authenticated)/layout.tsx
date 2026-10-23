@@ -29,6 +29,7 @@ export default function AuthenticatedLayout({
 }
 
 async function AuthenticatedSessionBoundary({ children }: Readonly<{ children: ReactNode }>) {
+  const requestPath = (await headers()).get("x-nuriteo-request-path") ?? "/workspaces";
   let current: Awaited<ReturnType<typeof getCurrentUser>>;
   let mfa: Awaited<ReturnType<typeof getMfaStatus>>;
   let workspaces: readonly Workspace[];
@@ -56,7 +57,6 @@ async function AuthenticatedSessionBoundary({ children }: Readonly<{ children: R
     maintenance = maintenanceResult;
   } catch (error) {
     if (isExplicitlySignedOut(error)) {
-      const requestPath = (await headers()).get("x-nuriteo-request-path") ?? "/dashboard";
       redirect(signInHref(requestPath));
     }
 
@@ -74,7 +74,6 @@ async function AuthenticatedSessionBoundary({ children }: Readonly<{ children: R
   const cookieStore = await cookies();
   const themeMode = parseThemeMode(cookieStore.get(THEME_COOKIE_NAME)?.value);
   const unreadCount = notifications?.data.unreadCount ?? 0;
-
   return (
     <AuthenticatedShellFrame
       displayName={current.data.user.display_name}

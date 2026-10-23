@@ -53,15 +53,15 @@ const EMPTY_WORKSPACE_FILES: readonly RuntimeWorkspaceFile[] = [];
 
 const ideStyles = tv({
   slots: {
-    shell: "grid min-h-[42rem] min-w-0 overflow-hidden rounded-xl border border-muted-border bg-surface shadow-sm",
-    header: "flex min-w-0 items-center justify-between gap-4 border-b border-muted-border bg-raised px-5 py-3 max-[48rem]:items-start max-[48rem]:flex-col",
+    shell: "flex min-h-[calc(100vh-3.25rem)] min-w-0 flex-col overflow-hidden bg-surface",
+    header: "flex min-w-0 items-center justify-between gap-4 border-b border-muted-border bg-raised px-4 py-2 max-[48rem]:items-start max-[48rem]:flex-col",
     identity: "flex min-w-0 items-center gap-3 [&_p]:m-0 [&_p]:text-xs [&_p]:text-muted-foreground [&_h3]:m-0 [&_h3]:truncate [&_h3]:text-base",
     headerActions: "flex flex-wrap items-center justify-end gap-2 max-[48rem]:w-full max-[48rem]:justify-start",
     access: "rounded-full border border-muted-border bg-subtle px-2 py-1 text-[var(--n-font-size-2xs)] font-semibold text-muted-foreground",
     saveState: "flex items-center gap-2 text-xs text-muted-foreground",
     message: "mx-4 mt-3 flex items-start gap-3 rounded-lg border px-4 py-3 text-sm",
     panelHeading: "mb-3 flex items-center justify-between gap-3 px-2 [&>div]:grid [&>div]:gap-0.5 [&_span]:text-[var(--n-font-size-2xs)] [&_span]:text-muted-foreground [&_strong]:text-sm",
-    workbench: "grid min-h-[38rem] min-w-0 grid-cols-[16rem_minmax(0,1fr)_minmax(20rem,34%)] max-[72rem]:grid-cols-[14rem_minmax(0,1fr)] max-[48rem]:grid-cols-1",
+    workbench: "grid min-h-[38rem] min-w-0 flex-1 grid-cols-[15rem_minmax(0,1fr)_minmax(20rem,34%)] max-[72rem]:grid-cols-[14rem_minmax(0,1fr)] max-[48rem]:grid-cols-1",
     files: "min-w-0 overflow-hidden border-r border-muted-border bg-raised max-[48rem]:max-h-72 max-[48rem]:border-r-0 max-[48rem]:border-b [&_ul]:m-0 [&_ul]:grid [&_ul]:list-none [&_ul]:gap-1 [&_ul]:p-0 [&_li]:[content-visibility:auto] [&_li]:[contain-intrinsic-size:0_2.5rem] [&_li_button]:grid [&_li_button]:min-h-9 [&_li_button]:w-full [&_li_button]:grid-cols-[1rem_minmax(0,1fr)_auto] [&_li_button]:items-center [&_li_button]:gap-2 [&_li_button]:rounded-sm [&_li_button]:px-2 [&_li_button]:font-mono [&_li_button]:text-xs [&_li_button]:text-muted-foreground [&_li_button]:hover:bg-hover [&_li_button]:hover:text-foreground [&_li_button[aria-current=page]]:bg-selected [&_li_button[aria-current=page]]:font-semibold [&_li_button[aria-current=page]]:text-primary [&_li_button>span:nth-child(2)]:truncate",
     editor: "grid min-h-0 min-w-0 grid-rows-[2.75rem_2rem_minmax(20rem,1fr)_2.75rem] border-r border-muted-border bg-surface max-[72rem]:border-r-0",
     utility: "min-h-0 min-w-0 overflow-hidden border-l border-muted-border bg-raised max-[72rem]:col-span-2 max-[72rem]:border-l-0 max-[72rem]:border-t max-[48rem]:col-span-1",
@@ -80,11 +80,11 @@ const ideStyles = tv({
     preview: "grid min-h-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden [&_iframe]:h-full [&_iframe]:min-h-96 [&_iframe]:w-full [&_iframe]:border-0 [&_iframe]:bg-white",
     previewToolbar: "flex min-h-11 items-center justify-between gap-3 border-b border-muted-border bg-surface px-4 text-xs text-muted-foreground",
     live: "flex items-center gap-2 text-[var(--n-font-size-2xs)] font-bold text-success",
-    start: "grid min-h-[30rem] grid-cols-[minmax(16rem,.8fr)_minmax(20rem,1.2fr)] place-content-center gap-[clamp(2rem,6vw,4rem)] bg-page p-[clamp(2rem,7vw,4rem)] max-[48rem]:grid-cols-1",
+    start: "grid min-h-[30rem] flex-1 grid-cols-[minmax(16rem,.8fr)_minmax(20rem,1.2fr)] place-content-center gap-[clamp(2rem,6vw,4rem)] bg-page p-[clamp(2rem,7vw,4rem)] max-[48rem]:grid-cols-1",
     startMark: "mb-6 grid size-12 place-items-center rounded-lg bg-primary text-lg font-bold text-on-primary",
-    startActions: "grid content-center gap-3 [&_button]:grid [&_button]:min-h-28 [&_button]:grid-cols-[2.5rem_minmax(0,1fr)] [&_button]:gap-x-3 [&_button]:rounded-xl [&_button]:border [&_button]:border-border [&_button]:bg-surface [&_button]:p-5 [&_button]:text-left",
+    startActions: "grid content-center gap-3 [&_button]:grid [&_button]:min-h-24 [&_button]:grid-cols-[2rem_minmax(0,1fr)] [&_button]:gap-x-3 [&_button]:rounded-lg [&_button]:border [&_button]:border-border [&_button]:bg-surface [&_button]:p-4 [&_button]:text-left [&_button>span]:row-span-2 [&_button>span]:self-start [&_button>strong]:col-start-2 [&_button>strong]:whitespace-normal [&_button>small]:col-start-2 [&_button>small]:mt-1 [&_button>small]:whitespace-normal [&_button>small]:text-xs [&_button>small]:leading-5 [&_button>small]:text-muted-foreground",
     startSafety: "col-span-full m-0 text-sm leading-6 text-muted-foreground",
-    history: "border-b border-muted-border bg-surface",
+    history: "shrink-0 rounded-none border-x-0 border-b-0 bg-surface",
     recoveryActions: "flex flex-wrap gap-2 px-4",
     recovery: "mx-4 grid gap-3 rounded-lg border border-warning/30 bg-warning/10 p-4 text-sm",
     terminal: "grid min-h-0 grid-rows-[auto_minmax(0,1fr)_auto] bg-[var(--n-ref-color-hanji-950)] text-[var(--n-ref-color-hanji-100)] [&_pre]:m-0 [&_pre]:min-h-0 [&_pre]:overflow-auto [&_pre]:whitespace-pre-wrap [&_pre]:p-4 [&_pre]:font-mono [&_pre]:text-xs [&_form]:grid [&_form]:grid-cols-[auto_minmax(0,1fr)_auto] [&_form]:items-center [&_form]:gap-2 [&_form]:border-t [&_form]:border-white/10 [&_form]:p-3 [&_input]:min-w-0 [&_input]:border-0 [&_input]:bg-transparent [&_input]:font-mono [&_input]:text-xs [&_input]:text-white [&_input]:outline-none",
@@ -798,7 +798,7 @@ export function ProjectIdeShell({ assetRevision, initialHistoryState, onProjectC
           </TabsRoot>
         </div>
       ) : <div className={css.start()}><div><span className={css.startMark()} aria-hidden="true">N</span><p className="m-0 mb-3 text-xs font-semibold uppercase tracking-[0.08em] text-accent-foreground">브라우저 개발 환경</p><h4>코드를 열고,<br />바로 실행하세요.</h4><p>서버에 저장된 작업을 안전하게 이어가거나, 새로운 React 템플릿으로 바로 시작하세요.</p></div><div className={css.startActions()}><Button variant="ghost" aria-label="저장된 프로젝트 이어서 열기" type="button" disabled={isStarting || project.state !== "active"} onClick={() => void startWorkspace("saved")}><span aria-hidden="true">↗</span><strong>{startingSource === "saved" ? "불러오는 중…" : "저장된 프로젝트 이어서 열기"}</strong><small>무결성을 확인한 최신 서버 저장본을 엽니다.</small></Button><Button variant="ghost" aria-label="템플릿으로 워크스페이스 시작" type="button" disabled={isStarting || project.state !== "active"} onClick={() => void startWorkspace("template")}><span aria-hidden="true">＋</span><strong>{startingSource === "template" ? "시작하는 중…" : "새 템플릿으로 시작"}</strong><small>Vite + React 기본 구성으로 로컬 초안을 만듭니다.</small></Button></div><p className={css.startSafety()}>브라우저의 로컬 초안은 명시적으로 서버에 저장하기 전까지 기존 서버 버전을 덮어쓰지 않습니다.</p></div>}
-      <CollapsibleRoot className={css.history()} defaultOpen>
+      <CollapsibleRoot className={css.history()}>
         <CollapsibleTrigger><span>버전과 복구</span><small>서버 저장 이력과 체크포인트</small></CollapsibleTrigger>
         <CollapsiblePanel><CollapsibleContent><ProjectHistoryPanel
           hasLocalDraft={hasWorkspace}

@@ -1,7 +1,9 @@
 import type { Project, Workspace } from "@nuriteo/api-client";
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
+import type { ReactNode } from "react";
 
 import { AuthenticatedShellFrame } from "#src/app/(authenticated)/authenticated-shell-frame.tsx";
+import { WorkspaceShellFrame } from "#src/app/(workspace)/workspace-shell-frame.tsx";
 import { ProjectDashboard } from "#src/app/(authenticated)/projects/project-dashboard.tsx";
 import {
   EmptyWorkspaceScreen as EmptyWorkspaceContent,
@@ -17,10 +19,18 @@ const workspaceRows: readonly Workspace[] = [
 const projectRows = createProjectFixtures(4);
 const selectedProject = projectRows[0]!;
 
+function WorkspaceProjectShell({ children }: Readonly<{ children: ReactNode }>) {
+  return (
+    <WorkspaceShellFrame displayName="김병기" email="byeonggi@example.com" themeMode="light" unreadCount={3} workspace={workspaceRows[0]!}>
+      {children}
+    </WorkspaceShellFrame>
+  );
+}
+
 function WorkspaceOverviewScreen() {
   return (
     <AuthenticatedShellFrame displayName="김병기" email="byeonggi@example.com" isInstanceAdmin pathnameOverride="/workspaces" themeMode="light" unreadCount={3} workspaces={workspaceRows}>
-      <WorkspaceScreen activeScope="user:user-kim" workspaces={workspaceRows} />
+      <WorkspaceScreen workspaces={workspaceRows} />
     </AuthenticatedShellFrame>
   );
 }
@@ -33,34 +43,42 @@ function EmptyWorkspaceScreen() {
   );
 }
 
+function WorkspaceHomeScreen() {
+  return (
+    <WorkspaceProjectShell>
+      <ProjectDashboard initialCollection={{ items: projectRows, nextCursor: null }} selectedScope="user:user-kim" selectedState="active" workspaces={workspaceRows} />
+    </WorkspaceProjectShell>
+  );
+}
+
 function ProjectCatalogScreen() {
   return (
-    <AuthenticatedShellFrame displayName="김병기" email="byeonggi@example.com" isInstanceAdmin pathnameOverride="/workspaces/user%3Auser-kim/projects" themeMode="light" unreadCount={3} workspaces={workspaceRows}>
+    <WorkspaceProjectShell>
       <ProjectDashboard initialCollection={{ items: projectRows, nextCursor: null }} selectedScope="user:user-kim" selectedState="active" workspaces={workspaceRows} />
-    </AuthenticatedShellFrame>
+    </WorkspaceProjectShell>
   );
 }
 
 function LargeProjectCatalogScreen() {
   const projects = createProjectFixtures(100);
   return (
-    <AuthenticatedShellFrame displayName="김병기" email="byeonggi@example.com" isInstanceAdmin pathnameOverride="/workspaces/user%3Auser-kim/projects" themeMode="light" unreadCount={3} workspaces={workspaceRows}>
+    <WorkspaceProjectShell>
       <ProjectDashboard initialCollection={{ items: projects, nextCursor: "next-page-fixture" }} selectedScope="user:user-kim" selectedState="active" workspaces={workspaceRows} />
-    </AuthenticatedShellFrame>
+    </WorkspaceProjectShell>
   );
 }
 
 function NewProjectScreen() {
   return (
-    <AuthenticatedShellFrame displayName="김병기" email="byeonggi@example.com" isInstanceAdmin pathnameOverride="/workspaces/user%3Auser-kim/projects/new" themeMode="light" unreadCount={3} workspaces={workspaceRows}>
+    <WorkspaceProjectShell>
       <ProjectDashboard selectedScope="user:user-kim" selectedState="active" view="create" workspaces={workspaceRows} />
-    </AuthenticatedShellFrame>
+    </WorkspaceProjectShell>
   );
 }
 
 function ProjectDetailScreen() {
   return (
-    <AuthenticatedShellFrame displayName="김병기" email="byeonggi@example.com" isInstanceAdmin pathnameOverride={`/workspaces/user%3Auser-kim/projects/${selectedProject.id}/settings`} themeMode="light" unreadCount={3} workspaces={workspaceRows}>
+    <WorkspaceProjectShell>
       <ProjectDashboard
         initialCollection={{ items: projectRows, nextCursor: null }}
         initialGitState={{ connections: [], providers: [] }}
@@ -70,7 +88,7 @@ function ProjectDetailScreen() {
         selectedState="active"
         workspaces={workspaceRows}
       />
-    </AuthenticatedShellFrame>
+    </WorkspaceProjectShell>
   );
 }
 
@@ -107,6 +125,7 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const WorkspaceOverview: Story = { render: () => <WorkspaceOverviewScreen /> };
+export const WorkspaceHomePage: Story = { render: () => <WorkspaceHomeScreen /> };
 export const EmptyWorkspace: Story = { render: () => <EmptyWorkspaceScreen /> };
 export const ProjectCatalog: Story = { render: () => <ProjectCatalogScreen /> };
 export const NewProject: Story = { render: () => <NewProjectScreen /> };

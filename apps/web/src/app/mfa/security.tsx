@@ -195,9 +195,9 @@ export function MfaSecurity({
         <Link className={styles.productBrand()} href={status.restricted ? "/mfa/setup" : "/workspaces"}><span className={styles.brandMark()} aria-hidden="true">N</span><strong>NURITEO</strong></Link>
         {status.restricted ? <span className={styles.productStatus()}>계정 보호 설정이 필요합니다</span> : <div className={styles.productNav()}><Link className={styles.productLink()} href="/workspaces">워크스페이스</Link><Link className={styles.productLink()} href="/account/identities">연결된 로그인</Link><Link className={styles.productLink()} aria-current="page" href={securityHref}>계정 보안</Link></div>}
       </nav>}
-      <PageHeader eyebrow="계정 / 보안" title={pageTitle} description={pageDescription} />
+      <PageHeader density="compact" eyebrow="계정 / 보안" title={pageTitle} description={pageDescription} />
 
-      {!isChallengeView ? <MetricGrid aria-label="계정 보안 요약">
+      {!isChallengeView ? <MetricGrid density="compact" aria-label="계정 보안 요약">
         <MetricItem label="다중 인증" value={status.enrolled ? "켜짐" : "꺼짐"} description={status.localAccount ? "인증 앱 기반" : "회사 인증 제공자에서 관리"} />
         <MetricItem label="복구 코드" value={status.enrolled ? `${status.recoveryCodesRemaining}개` : "—"} description="안전한 장소에 별도 보관" />
         <MetricItem label="보안 정책" value={status.required ? "필수" : "선택"} description={status.restricted ? "설정 전까지 접근 제한" : "현재 계정 접근 가능"} />

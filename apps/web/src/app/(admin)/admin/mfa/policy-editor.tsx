@@ -124,7 +124,7 @@ export function MfaPolicyEditor({ initial, view = "policy" }: { readonly initial
         aside={view === "policy" ? <Badge>정책 v{policy.version}</Badge> : undefined}
       />
 
-      {view === "policy" ? <section className="mt-8 overflow-hidden rounded-xl border border-muted-border bg-surface shadow-xs" aria-labelledby="mfa-policy-title">
+      {view === "policy" ? <section className="mt-4 overflow-hidden rounded-lg border border-muted-border bg-surface" aria-labelledby="mfa-policy-title">
         <AdminSectionHeading><div><p className="m-0 mb-3 text-xs font-semibold uppercase tracking-[0.08em] text-accent-foreground">VERSION {policy.version}</p><h2 id="mfa-policy-title">적용 대상</h2></div><p>정책 변경에는 최근 관리자 재인증이 필요합니다.</p></AdminSectionHeading>
         <AdminForm layout="panel" onSubmit={save} aria-busy={mutation.isPending}>
           <AdminFormSection title="정책 대상" description="로그인 시 MFA 등록을 요구할 로컬 사용자 범위를 선택합니다.">
@@ -149,7 +149,7 @@ export function MfaPolicyEditor({ initial, view = "policy" }: { readonly initial
         </AdminForm>
       </section> : null}
 
-      {view === "reset" ? <section className="mt-8 rounded-xl border border-border bg-surface p-5 [&_h2]:mt-0 [&_p]:mt-0 [&_p]:text-muted-foreground">
+      {view === "reset" ? <section className="mt-4 rounded-lg border border-border bg-surface p-4 [&_h2]:mt-0 [&_p]:mt-0 [&_p]:text-muted-foreground">
         <h2>다른 사용자의 MFA 초기화</h2>
         <p>대상의 MFA 자격 증명, 복구 코드, 진행 중인 등록과 모든 세션을 폐기합니다. 본인 계정 초기화는 허용되지 않습니다.</p>
         <form className="mt-4 grid gap-3 max-[48rem]:grid-cols-1 max-[48rem]:[&>label]:col-auto max-[48rem]:[&>[data-slot=button]]:w-full max-[48rem]:[&>[data-slot=button]]:justify-self-stretch [&>[data-slot=button]]:justify-self-start" onSubmit={search} role="search" aria-busy={mutation.isPending}>

@@ -3,17 +3,17 @@ import { tv } from "tailwind-variants";
 
 const styles = tv({
   slots: {
-    page: "mx-auto grid w-full max-w-[82rem] content-start gap-6 px-[clamp(1rem,4vw,3rem)] py-[clamp(1.5rem,4vw,3rem)]",
-    panel: "rounded-xl border border-muted-border bg-surface p-6 shadow-xs max-[48rem]:p-4",
-    heading: "mb-4 flex items-center justify-between gap-4 [&_h2]:m-0 [&_p]:m-0",
-    record: "grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-4 rounded-xl border border-muted-border bg-surface p-5 shadow-xs max-[48rem]:grid-cols-1 max-[48rem]:p-4 [&>div:first-child]:min-w-0 [&_small]:text-muted-foreground [&_small]:[overflow-wrap:anywhere]",
+    page: "grid w-full content-start gap-4 px-6 py-5 max-[48rem]:px-4 max-[48rem]:py-4",
+    panel: "rounded-lg border border-muted-border bg-surface p-4",
+    heading: "mb-3 flex items-center justify-between gap-3 [&_h2]:m-0 [&_h2]:text-sm [&_p]:m-0",
+    record: "grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-4 rounded-lg border border-muted-border bg-surface px-4 py-3 max-[48rem]:grid-cols-1 max-[48rem]:items-start [&>div:first-child]:min-w-0 [&_small]:text-muted-foreground [&_small]:[overflow-wrap:anywhere]",
     actions: "col-start-2 row-start-1 flex flex-wrap justify-end gap-2 max-[48rem]:col-start-1 max-[48rem]:row-auto max-[48rem]:justify-stretch max-[48rem]:[&>*]:flex-1",
     full: "col-span-full",
-    sectionHeading: "flex items-start justify-between gap-4 p-5 max-[37.5rem]:flex-col max-[37.5rem]:items-stretch [&_h2]:m-0 [&_h2]:mt-1 [&_h2]:text-lg [&_p]:m-0 [&_p]:text-sm [&_p]:text-muted-foreground [&>p]:max-w-[28rem] [&>p]:text-right max-[37.5rem]:[&>p]:text-left",
-    summary: "flex flex-wrap items-center gap-3 text-sm text-muted-foreground",
-    card: "grid gap-4 rounded-xl border border-muted-border bg-surface p-5 shadow-xs max-[48rem]:p-4",
+    sectionHeading: "flex items-start justify-between gap-4 px-4 py-3 max-[37.5rem]:flex-col max-[37.5rem]:items-stretch [&_h2]:m-0 [&_h2]:text-sm [&_p]:m-0 [&_p]:max-w-[32rem] [&_p]:text-right [&_p]:text-xs [&_p]:leading-5 [&_p]:text-muted-foreground max-[37.5rem]:[&>p]:text-left",
+    summary: "flex flex-wrap items-center gap-2 text-xs text-muted-foreground",
+    card: "grid gap-3 rounded-lg border border-muted-border bg-surface p-4",
     note: "m-0 text-sm leading-6 text-muted-foreground",
-    metricGrid: "grid grid-cols-[repeat(auto-fit,minmax(min(100%,12rem),1fr))] gap-3"
+    metricGrid: "grid grid-cols-[repeat(auto-fit,minmax(min(100%,11rem),1fr))] gap-2"
   }
 });
 

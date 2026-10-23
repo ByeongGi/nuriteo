@@ -13,13 +13,13 @@ import type { PreviewOriginConfiguration } from "#src/runtime/preview-origin-con
 const studioFrameStyles = tv({
   slots: {
     root: "grid min-h-screen min-w-0 grid-rows-[auto_minmax(0,1fr)] bg-page",
-    bar: "flex min-h-15 items-center justify-between gap-4 border-b border-muted-border bg-sidebar px-4 py-2 max-[40rem]:items-start max-[40rem]:gap-2 max-[40rem]:px-3",
+    bar: "flex min-h-13 items-center justify-between gap-4 border-b border-muted-border bg-sidebar px-3 py-1.5 max-[40rem]:items-start max-[40rem]:gap-2",
     identity: "flex min-w-0 items-center gap-3",
     identityCopy: "flex min-w-0 flex-col items-start [&_strong]:max-w-[min(55vw,42rem)] [&_strong]:truncate [&_span]:max-w-[min(55vw,42rem)] [&_span]:truncate [&_span]:text-xs [&_span]:text-muted-foreground",
     back: "grid size-8 shrink-0 place-items-center rounded-md border border-muted-border text-xl leading-none text-foreground no-underline hover:bg-hover",
     navigation: "flex items-center gap-1 max-[40rem]:grid max-[40rem]:justify-items-end",
-    navigationLink: "rounded-md px-3 py-2 text-sm font-semibold text-muted-foreground no-underline hover:bg-hover hover:text-foreground max-[40rem]:px-2 max-[40rem]:py-1.5 max-[40rem]:text-xs",
-    workspace: "min-w-0 p-3 max-[40rem]:p-2",
+    navigationLink: "rounded-md px-2.5 py-1.5 text-xs font-semibold text-muted-foreground no-underline hover:bg-hover hover:text-foreground",
+    workspace: "min-w-0",
     loading: "grid min-h-[calc(100vh-6rem)] place-items-center text-muted-foreground"
   }
 });
@@ -70,14 +70,15 @@ export function ProjectStudioFrame({ children, project, workspaceLabel, workspac
   workspaceLabel: string;
   workspaceScope: string;
 }>) {
-  const projectBaseHref = `/workspaces/${encodeURIComponent(workspaceScope)}/projects`;
+  const workspaceHref = `/workspaces/${encodeURIComponent(workspaceScope)}`;
+  const projectBaseHref = `${workspaceHref}/projects`;
   const settingsHref = `${projectBaseHref}/${encodeURIComponent(project.id)}/settings`;
 
   return (
     <main id="main-content" className={studioStyles.root()} tabIndex={-1}>
       <header className={studioStyles.bar()}>
         <div className={studioStyles.identity()}>
-          <Link href={projectBaseHref} className={studioStyles.back()} aria-label={`${workspaceLabel} 프로젝트 목록으로 돌아가기`}>‹</Link>
+          <Link href={workspaceHref} className={studioStyles.back()} aria-label={`${workspaceLabel} 프로젝트 목록으로 돌아가기`}>‹</Link>
           <div className={studioStyles.identityCopy()}>
             <strong>{project.name}</strong>
             <span>{workspaceLabel} / {project.slug} · v{project.version}</span>

@@ -38,7 +38,7 @@ function projectState(value: string | readonly string[] | undefined): "active" |
 }
 
 function projectsHref(workspaceId: string, state: string): string {
-  return `/workspaces/${encodeURIComponent(workspaceId)}/projects?${new URLSearchParams({ state }).toString()}`;
+  return `/workspaces/${encodeURIComponent(workspaceId)}?${new URLSearchParams({ state }).toString()}`;
 }
 
 function projectSettingsHref(workspaceId: string, projectId: string, state: string): string {

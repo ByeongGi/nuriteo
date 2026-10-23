@@ -27,7 +27,7 @@ export function AdminAccessRequired({ description }: AdminAccessRequiredProps) {
           <p className={styles.eyebrow()}>접근 제한</p>
           <h1 id="admin-access-required-title">관리자 권한이 필요합니다</h1>
           <p>{description}</p>
-          <Link className={buttonVariants({ variant: "secondary" })} href="/dashboard">사용자 화면으로 돌아가기</Link>
+          <Link className={buttonVariants({ variant: "secondary" })} href="/workspaces">사용자 화면으로 돌아가기</Link>
         </div>
       </section>
     </AdminPage>

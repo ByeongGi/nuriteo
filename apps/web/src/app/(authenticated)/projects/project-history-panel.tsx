@@ -59,7 +59,21 @@ const historyPanelStyles = tv({
     itemLayout: "flex items-start justify-between gap-3",
     itemCopy: "grid min-w-0 gap-1 [&_strong]:truncate [&_strong]:text-sm [&_p]:m-0 [&_p]:text-xs [&_p]:leading-relaxed [&_p]:text-muted-foreground",
     more: "w-full"
-  }
+  },
+  variants: {
+    density: {
+      comfortable: {},
+      compact: {
+        root: "gap-4 rounded-lg p-4 shadow-none",
+        header: "pb-3",
+        createForm: "gap-2",
+        columns: "gap-3",
+        listSection: "gap-2 p-3",
+        item: "p-2.5"
+      }
+    }
+  },
+  defaultVariants: { density: "comfortable" }
 });
 
 interface HistoryReference {
@@ -81,6 +95,7 @@ export interface ProjectHistoryState {
 }
 
 interface Props {
+  readonly density?: "comfortable" | "compact";
   readonly hasLocalDraft: boolean;
   readonly onProjectCommit: (result: { readonly projectEtag: string; readonly projectVersion: number }) => void;
   readonly onReloadProject: () => void;
@@ -91,6 +106,7 @@ interface Props {
 }
 
 export function ProjectHistoryPanel({
+  density = "comfortable",
   hasLocalDraft,
   onProjectCommit,
   onReloadProject,
@@ -276,7 +292,7 @@ export function ProjectHistoryPanel({
   }
 
   const archived = project.state === "archived";
-  const styles = historyPanelStyles();
+  const styles = historyPanelStyles({ density });
   return (
     <section className={styles.root()} aria-labelledby={`history-title-${project.id}`}>
       <header className={styles.header()}>

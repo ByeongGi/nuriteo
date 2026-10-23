@@ -2,10 +2,10 @@ import { tv } from "tailwind-variants";
 
 const tokenConsoleStyles = tv({
   slots: {
-    root: "grid w-full min-w-0 gap-6",
+    root: "grid w-full min-w-0 gap-4",
     context: "flex min-w-0 flex-wrap items-center justify-between gap-3 border-b border-muted-border pb-4 text-sm text-muted-foreground max-[36rem]:items-start max-[36rem]:flex-col",
     contextLink: "font-semibold text-primary underline-offset-4 hover:underline",
-    panel: "grid min-w-0 gap-5 rounded-xl border border-muted-border bg-surface p-[clamp(1rem,3vw,1.5rem)] shadow-xs",
+    panel: "grid min-w-0 gap-4 rounded-lg border border-muted-border bg-surface p-4",
     secret: "border-warning/40 bg-warning-subtle",
     heading: "grid min-w-0 gap-1",
     eyebrow: "m-0 text-xs font-semibold text-accent-foreground",
@@ -18,13 +18,13 @@ const tokenConsoleStyles = tv({
     scopes: "m-0 grid min-w-0 grid-cols-2 gap-2 border-0 p-0 max-[42rem]:grid-cols-1",
     legend: "mb-2 flex w-full flex-wrap items-center justify-between gap-2 text-sm font-semibold text-foreground",
     legendHint: "text-xs font-normal text-muted-foreground",
-    toolbar: "grid items-end gap-3 rounded-lg border border-muted-border bg-background p-3 md:grid-cols-[minmax(14rem,1fr)_auto]",
+    toolbar: "grid items-end gap-2 border-b border-muted-border pb-3 md:grid-cols-[minmax(14rem,1fr)_auto]",
     search: "min-w-0",
     empty: "grid min-h-44 place-content-center justify-items-center gap-2 rounded-lg border border-dashed border-muted-border p-6 text-center",
     emptyTitle: "font-semibold text-foreground",
     emptyDescription: "m-0 max-w-[34rem] text-sm leading-relaxed text-muted-foreground",
     list: "m-0 grid max-h-[38rem] list-none overflow-auto p-0 [scrollbar-gutter:stable]",
-    item: "flex min-w-0 items-start justify-between gap-4 border-t border-muted-border py-4 first:border-t-0 max-[42rem]:items-stretch max-[42rem]:flex-col",
+    item: "flex min-w-0 items-start justify-between gap-4 border-t border-muted-border px-2 py-3 first:border-t-0 hover:bg-hover max-[42rem]:items-stretch max-[42rem]:flex-col",
     itemCopy: "grid min-w-0 gap-1",
     itemTitle: "font-semibold text-foreground",
     itemMeta: "text-sm leading-relaxed text-muted-foreground",
@@ -33,7 +33,18 @@ const tokenConsoleStyles = tv({
     feedback: "sticky top-3 z-[var(--n-z-sticky)] m-0 rounded-lg border px-4 py-3 text-sm shadow-md",
     feedbackError: "border-danger/40 bg-danger-subtle text-danger",
     feedbackSuccess: "border-success/40 bg-success-subtle text-success"
-  }
+  },
+  variants: {
+    embedded: {
+      true: {
+        root: "gap-3",
+        panel: "border-x-0 border-b-0 px-0 pb-0",
+        heading: "px-1"
+      },
+      false: {}
+    }
+  },
+  defaultVariants: { embedded: false }
 });
 
 export { tokenConsoleStyles };

@@ -8,14 +8,14 @@ import type { ThemeMode } from "#src/lib/theme.ts";
 
 const authenticatedShellStyles = tv({
   slots: {
-    root: "grid min-h-screen grid-cols-[15rem_minmax(0,1fr)] bg-[radial-gradient(circle_at_88%_0%,color-mix(in_srgb,var(--n-color-action-primary)_5%,transparent),transparent_28rem),var(--n-color-bg-page)] max-[64rem]:grid-cols-[4.75rem_minmax(0,1fr)] max-[48rem]:block max-[48rem]:pb-16",
-    content: "min-h-screen min-w-0",
-    maintenance: "mx-6 mt-4 flex w-auto items-center gap-3 rounded-lg border border-warning/30 bg-warning/10 px-4 py-3 text-sm max-[48rem]:mx-4",
-    loadingNavigation: "sticky top-0 flex h-screen flex-col gap-5 border-r border-muted-border bg-sidebar p-4 max-[48rem]:hidden",
+    root: "grid min-h-screen grid-cols-[15.5rem_minmax(0,1fr)] bg-sidebar max-[48rem]:block max-[48rem]:pb-16",
+    content: "my-2 mr-2 min-h-[calc(100vh-1rem)] min-w-0 overflow-hidden rounded-xl border border-muted-border bg-background shadow-xs max-[48rem]:m-0 max-[48rem]:min-h-screen max-[48rem]:rounded-none max-[48rem]:border-0 max-[48rem]:shadow-none",
+    maintenance: "mx-5 mt-4 flex w-auto items-center gap-3 rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-xs max-[48rem]:mx-4",
+    loadingNavigation: "sticky top-0 flex h-screen flex-col gap-3 bg-sidebar p-2 max-[48rem]:hidden",
     loadingBrand: "h-9 animate-pulse rounded-md bg-raised",
-    loadingWorkspace: "h-[3.25rem] animate-pulse rounded-md bg-raised",
-    loadingNav: "min-h-96 animate-pulse rounded-md bg-raised",
-    loadingMain: "w-full max-w-[82rem] px-[clamp(1.25rem,4vw,3.5rem)] pt-[clamp(2rem,4vw,3.75rem)] pb-20 max-[48rem]:px-4 max-[48rem]:py-5"
+    loadingWorkspace: "h-12 animate-pulse rounded-md bg-raised",
+    loadingNav: "min-h-72 animate-pulse rounded-md bg-raised",
+    loadingMain: "w-full max-w-none px-6 py-6 max-[48rem]:px-4 max-[48rem]:py-4"
   }
 });
 

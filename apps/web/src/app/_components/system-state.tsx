@@ -50,7 +50,7 @@ export function SystemState({ actions, description, kind, reference, title }: Sy
   );
 }
 
-export function AccessDeniedState({ backHref = "/dashboard" }: { readonly backHref?: string }) {
+export function AccessDeniedState({ backHref = "/workspaces" }: { readonly backHref?: string }) {
   return (
     <SystemState
       actions={<Button className={stateStyles().action()} render={<Link href={backHref} />}>돌아가기</Button>}

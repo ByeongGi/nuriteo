@@ -59,8 +59,8 @@ export function UpdateReadinessConsole({
         </AdminSummary>}
       />
 
-      <div className="mt-8 grid grid-cols-2 gap-4 max-[37.5rem]:grid-cols-1">
-        <section className="min-w-0 overflow-hidden rounded-xl border border-muted-border bg-surface shadow-xs" aria-labelledby="update-target-title">
+      <div className="mt-4 grid grid-cols-2 gap-3 max-[37.5rem]:grid-cols-1">
+        <section className="min-w-0 overflow-hidden rounded-lg border border-muted-border bg-surface" aria-labelledby="update-target-title">
           <AdminSectionHeading>
             <div>
               <p className="m-0 mb-3 text-xs font-semibold uppercase tracking-[0.08em] text-accent-foreground">릴리스 경로</p>
@@ -80,7 +80,7 @@ export function UpdateReadinessConsole({
           </AdminNote>
         </section>
 
-        <section className="min-w-0 overflow-hidden rounded-xl border border-muted-border bg-surface shadow-xs" aria-labelledby="update-preflight-title">
+        <section className="min-w-0 overflow-hidden rounded-lg border border-muted-border bg-surface" aria-labelledby="update-preflight-title">
           <AdminSectionHeading>
             <div>
               <p className="m-0 mb-3 text-xs font-semibold uppercase tracking-[0.08em] text-accent-foreground">읽기 전용 점검</p>
@@ -103,7 +103,7 @@ export function UpdateReadinessConsole({
       </div>
 
       {readiness.blockers.length > 0 ? (
-        <section className="mt-6 overflow-hidden rounded-xl border border-warning bg-surface shadow-xs [&_ul]:m-0 [&_ul]:list-none [&_ul]:border-t [&_ul]:border-muted-border [&_ul]:p-0 [&_li]:flex [&_li]:items-start [&_li]:justify-between [&_li]:gap-4 [&_li]:border-b [&_li]:border-muted-border [&_li]:px-5 [&_li]:py-4 [&_li:last-child]:border-b-0 max-[37.5rem]:[&_li]:flex-col max-[37.5rem]:[&_li]:items-stretch [&_li>span]:text-xs [&_li>span]:text-muted-foreground" aria-labelledby="update-blockers-title">
+        <section className="mt-4 overflow-hidden rounded-lg border border-warning bg-surface [&_ul]:m-0 [&_ul]:list-none [&_ul]:border-t [&_ul]:border-muted-border [&_ul]:p-0 [&_li]:flex [&_li]:items-start [&_li]:justify-between [&_li]:gap-4 [&_li]:border-b [&_li]:border-muted-border [&_li]:px-4 [&_li]:py-3 [&_li:last-child]:border-b-0 max-[37.5rem]:[&_li]:flex-col max-[37.5rem]:[&_li]:items-stretch [&_li>span]:text-xs [&_li>span]:text-muted-foreground" aria-labelledby="update-blockers-title">
           <AdminSectionHeading>
             <div>
               <p className="m-0 mb-3 text-xs font-semibold uppercase tracking-[0.08em] text-accent-foreground">업그레이드 중단 조건</p>
@@ -122,7 +122,7 @@ export function UpdateReadinessConsole({
         </section>
       ) : null}
 
-      <section className="mt-6 overflow-hidden rounded-xl border border-muted-border bg-surface shadow-xs" aria-labelledby="update-approval-title">
+      <section className="mt-4 overflow-hidden rounded-lg border border-muted-border bg-surface" aria-labelledby="update-approval-title">
         <AdminSectionHeading>
           <div>
             <p className="m-0 mb-3 text-xs font-semibold uppercase tracking-[0.08em] text-accent-foreground">관리자 명시적 실행</p>
@@ -130,7 +130,7 @@ export function UpdateReadinessConsole({
           </div>
         </AdminSectionHeading>
         {readiness.approvalAllowed ? (
-          <div className="flex items-center justify-between gap-4 border-t border-muted-border px-5 py-4 max-[37.5rem]:flex-col max-[37.5rem]:items-stretch [&_label]:flex [&_label]:max-w-[42rem] [&_label]:items-start [&_label]:gap-2 [&_label]:text-sm" aria-busy={mutation.isPending}>
+          <div className="flex items-center justify-between gap-4 border-t border-muted-border px-4 py-3 max-[37.5rem]:flex-col max-[37.5rem]:items-stretch [&_label]:flex [&_label]:max-w-[42rem] [&_label]:items-start [&_label]:gap-2 [&_label]:text-sm" aria-busy={mutation.isPending}>
             <CheckboxField checked={acknowledged} disabled={mutation.isPending} onCheckedChange={setAcknowledged} label="차단 요인을 검토했으며 이 작업이 승인만 기록하고 업데이트를 실행하지 않음을 이해했습니다." />
             <Button type="button" disabled={!acknowledged || mutation.isPending} onClick={approve}>
               {mutation.isPending ? "승인 기록 중…" : "업데이트 승인 기록"}
@@ -147,7 +147,7 @@ export function UpdateReadinessConsole({
         {error ? <p role="alert" className="m-0 border-t border-danger px-5 py-3 text-danger">{error}</p> : null}
       </section>
 
-      <section className="mt-6 overflow-hidden rounded-xl border border-muted-border bg-surface shadow-xs [&_ol]:m-0 [&_ol]:list-none [&_ol]:border-t [&_ol]:border-muted-border [&_ol]:p-0 [&_li]:flex [&_li]:items-start [&_li]:justify-between [&_li]:gap-4 [&_li]:border-b [&_li]:border-muted-border [&_li]:px-5 [&_li]:py-4 [&_li:last-child]:border-b-0 max-[37.5rem]:[&_li]:flex-col max-[37.5rem]:[&_li]:items-stretch [&_li>div]:grid [&_li>div]:gap-1 [&_li_span]:text-xs [&_li_span]:text-muted-foreground [&_time]:shrink-0 [&_time]:text-xs [&_time]:text-muted-foreground" aria-labelledby="update-history-title">
+      <section className="mt-4 overflow-hidden rounded-lg border border-muted-border bg-surface [&_ol]:m-0 [&_ol]:list-none [&_ol]:border-t [&_ol]:border-muted-border [&_ol]:p-0 [&_li]:flex [&_li]:items-start [&_li]:justify-between [&_li]:gap-4 [&_li]:border-b [&_li]:border-muted-border [&_li]:px-4 [&_li]:py-3 [&_li:last-child]:border-b-0 max-[37.5rem]:[&_li]:flex-col max-[37.5rem]:[&_li]:items-stretch [&_li>div]:grid [&_li>div]:gap-1 [&_li_span]:text-xs [&_li_span]:text-muted-foreground [&_time]:shrink-0 [&_time]:text-xs [&_time]:text-muted-foreground" aria-labelledby="update-history-title">
         <AdminSectionHeading>
           <div>
             <p className="m-0 mb-3 text-xs font-semibold uppercase tracking-[0.08em] text-accent-foreground">감사 기록</p>

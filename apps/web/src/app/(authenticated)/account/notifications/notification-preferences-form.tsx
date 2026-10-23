@@ -8,6 +8,7 @@ import { tv } from "tailwind-variants";
 
 import { Button } from "#src/components/ui/button.tsx";
 import { PageHeader } from "#src/components/ui/page-header.tsx";
+import { SettingsGroup, SettingsRow } from "#src/components/ui/settings-group.tsx";
 import { SwitchField } from "#src/components/ui/switch.tsx";
 import { createBrowserApiClient } from "#src/lib/api/browser-client.ts";
 import { readCsrfCredential } from "#src/lib/api/browser-security.ts";
@@ -15,13 +16,12 @@ import { useExclusiveMutation } from "#src/lib/use-exclusive-mutation.ts";
 
 const notificationPreferencesStyles = tv({
   slots: {
-    root: "grid gap-6 outline-none",
-    panel: "grid gap-5 rounded-xl border border-muted-border bg-surface p-5 shadow-xs",
+    root: "grid gap-4 outline-none",
     channel: "grid gap-1",
     channelTitle: "m-0 text-base font-semibold",
     channelDescription: "m-0 text-sm leading-relaxed text-muted-foreground",
     form: "grid gap-3",
-    actions: "flex justify-end",
+    actions: "flex justify-end border-t border-muted-border pt-3",
     feedback: "m-0 rounded-md border border-muted-border bg-raised px-4 py-3 text-sm",
     error: "border-danger/40 text-danger"
   }
@@ -62,6 +62,7 @@ export function NotificationPreferencesForm({ initialPreferences }: Readonly<{
   return (
     <main id="main-content" className={styles.root()} tabIndex={-1}>
       <PageHeader
+        density="compact"
         eyebrow="계정"
         title="알림 설정"
         description="알림함과 분리해 이벤트별 이메일 수신 방식을 관리합니다."
@@ -71,23 +72,20 @@ export function NotificationPreferencesForm({ initialPreferences }: Readonly<{
           {feedback.text}
         </p>
       ) : null}
-      <section className={styles.panel()} aria-labelledby="email-channel-title">
-        <div className={styles.channel()}>
-          <h2 className={styles.channelTitle()} id="email-channel-title">이메일 채널</h2>
-          <p className={styles.channelDescription()}>
-            {preferences.smtpConfigured
-              ? "이메일 알림을 받을 수 있습니다."
-              : "SMTP가 설정되지 않았습니다. 선택은 저장되며 앱 내 알림은 계속 사용할 수 있습니다."}
-          </p>
-        </div>
-        <form className={styles.form()} onSubmit={save} aria-busy={mutation.isPending}>
-          <SwitchField appearance="card" name="criticalSecurity" label="중요 보안" description="보안을 위해 항상 발송됩니다." defaultChecked disabled />
-          <SwitchField appearance="card" name="accountAccess" label="계정과 접근" description="비밀번호, MFA, 멤버십 및 권한 변경" defaultChecked={preferences.accountAccess} />
-          <SwitchField appearance="card" name="collaboration" label="협업" description="초대와 공유 프로젝트 활동" defaultChecked={preferences.collaboration} />
-          <SwitchField appearance="card" name="operations" label="운영" description="관리자를 위한 인스턴스 상태와 전달 장애" defaultChecked={preferences.operations} />
-          <div className={styles.actions()}><Button type="submit" variant="primary" disabled={mutation.isPending}>{mutation.isPending ? "저장 중…" : "설정 저장"}</Button></div>
-        </form>
-      </section>
+      <form className={styles.form()} onSubmit={save} aria-busy={mutation.isPending}>
+        <SettingsGroup
+          title="이메일 채널"
+          description={preferences.smtpConfigured
+            ? "이벤트별 이메일 수신 여부를 선택합니다."
+            : "SMTP가 설정되지 않았습니다. 선택은 저장되며 앱 내 알림은 계속 사용할 수 있습니다."}
+        >
+          <SettingsRow title="중요 보안" description="로그인과 계정 보호에 필요한 필수 알림입니다."><SwitchField name="criticalSecurity" label="항상 받기" defaultChecked disabled /></SettingsRow>
+          <SettingsRow title="계정과 접근" description="비밀번호, MFA, 멤버십 및 권한 변경"><SwitchField name="accountAccess" label="이메일 받기" defaultChecked={preferences.accountAccess} /></SettingsRow>
+          <SettingsRow title="협업" description="초대와 공유 프로젝트 활동"><SwitchField name="collaboration" label="이메일 받기" defaultChecked={preferences.collaboration} /></SettingsRow>
+          <SettingsRow title="운영" description="관리자를 위한 인스턴스 상태와 전달 장애"><SwitchField name="operations" label="이메일 받기" defaultChecked={preferences.operations} /></SettingsRow>
+        </SettingsGroup>
+        <div className={styles.actions()}><Button type="submit" variant="primary" disabled={mutation.isPending}>{mutation.isPending ? "저장 중…" : "변경 사항 저장"}</Button></div>
+      </form>
     </main>
   );
 }

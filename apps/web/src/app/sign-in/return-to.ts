@@ -1,4 +1,4 @@
-const DEFAULT_SIGN_IN_DESTINATION = "/dashboard";
+const DEFAULT_SIGN_IN_DESTINATION = "/workspaces";
 const RETURN_TO_BASE_URL = "https://nuriteo.invalid";
 
 /**

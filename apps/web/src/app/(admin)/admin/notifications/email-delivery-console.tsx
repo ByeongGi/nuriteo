@@ -107,7 +107,7 @@ export function EmailDeliveryConsole({ initial }: { readonly initial: EmailDeliv
         aside={<Badge>현재 목록 {collection.items.length}건</Badge>}
       />
       {!collection.smtpConfigured ? <div className="mt-4 flex flex-col gap-3 rounded-lg border border-warning bg-subtle p-4" role="status"><strong>SMTP를 사용할 수 없습니다</strong><span>SMTP를 구성하기 전에는 대기 중인 이메일을 전송할 수 없습니다. 앱 내 알림은 계속 정상적으로 제공됩니다.</span></div> : null}
-      <section className="rounded-xl border border-muted-border bg-surface p-[clamp(1rem,3vw,2rem)]" aria-labelledby="delivery-list-title">
+      <section className="rounded-lg border border-muted-border bg-surface p-4" aria-labelledby="delivery-list-title">
         <div className="flex items-center justify-between gap-3 max-[37.5rem]:flex-col max-[37.5rem]:items-stretch [&_h2]:m-0">
           <h2 id="delivery-list-title">전송 대기열</h2>
           <SelectField
@@ -120,11 +120,11 @@ export function EmailDeliveryConsole({ initial }: { readonly initial: EmailDeliv
           />
         </div>
         {collection.items.length === 0 ? <p className="m-0 grid min-h-48 place-content-center justify-items-center rounded-lg border border-dashed border-border text-center text-foreground">이 상태의 전송 작업이 없습니다.</p> : (
-          <div className="my-5 grid gap-3">
+          <div className="my-4 grid">
             {collection.items.map((delivery) => {
               const pending = confirmation?.id === delivery.id ? confirmation.operation : undefined;
               return (
-                <article key={delivery.id} className="grid gap-4 rounded-lg border border-muted-border bg-raised p-4 [content-visibility:auto] [contain-intrinsic-size:auto_5rem] max-[37.5rem]:[&_dl]:grid-cols-1">
+                <article key={delivery.id} className="grid gap-3 border-t border-muted-border px-1 py-3 first:border-t-0 [content-visibility:auto] [contain-intrinsic-size:auto_5rem] max-[37.5rem]:[&_dl]:grid-cols-1">
                   <div className="flex items-center justify-between gap-3 max-[37.5rem]:flex-col max-[37.5rem]:items-stretch [&_h3]:m-0 [&>span]:rounded-full [&>span]:bg-subtle [&>span]:px-2 [&>span]:py-1 [&>span]:text-xs"><h3>{delivery.recipientEmail}</h3><span>{FILTERS.find((item) => item.value === delivery.state)?.label ?? delivery.state}</span></div>
                   <dl className="m-0 grid grid-cols-3 gap-3 max-[37.5rem]:grid-cols-1 [&>div]:min-w-0 [&_dt]:text-xs [&_dt]:text-muted-foreground [&_dd]:mt-1 [&_dd]:[overflow-wrap:anywhere]">
                     <div><dt>템플릿</dt><dd>{delivery.templateId}</dd></div>

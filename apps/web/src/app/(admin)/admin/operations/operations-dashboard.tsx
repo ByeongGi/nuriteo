@@ -14,11 +14,11 @@ import { SupportBundleDownload } from "#src/app/(admin)/admin/operations/support
 const operationStyles = tv({
   slots: {
     summary: "grid shrink-0 justify-items-end gap-2 text-xs text-subtle-foreground max-[37.5rem]:justify-items-start",
-    grid: "mt-8 grid grid-cols-2 gap-4 max-[37.5rem]:grid-cols-1",
-    card: "min-w-0 overflow-hidden rounded-xl border border-muted-border bg-surface shadow-xs",
-    cardText: "m-0 border-t border-muted-border px-5 py-4 text-sm",
-    cardNote: "m-0 border-t border-muted-border px-5 py-4 text-xs text-muted-foreground",
-    metrics: "m-0 grid grid-cols-2 border-t border-muted-border max-[37.5rem]:grid-cols-1 [&>div]:min-w-0 [&>div]:border-r [&>div]:border-b [&>div]:border-muted-border [&>div]:px-5 [&>div]:py-4 [&>div:nth-child(2n)]:border-r-0 max-[37.5rem]:[&>div]:border-r-0 [&_dt]:m-0 [&_dt]:text-xs [&_dt]:text-subtle-foreground [&_dd]:mt-1 [&_dd]:font-mono [&_dd]:text-base [&_dd]:[overflow-wrap:anywhere]",
+    grid: "mt-4 grid grid-cols-2 gap-3 max-[37.5rem]:grid-cols-1",
+    card: "min-w-0 overflow-hidden rounded-lg border border-muted-border bg-surface",
+    cardText: "m-0 border-t border-muted-border px-4 py-3 text-sm",
+    cardNote: "m-0 border-t border-muted-border px-4 py-3 text-xs text-muted-foreground",
+    metrics: "m-0 grid grid-cols-2 border-t border-muted-border max-[37.5rem]:grid-cols-1 [&>div]:min-w-0 [&>div]:border-r [&>div]:border-b [&>div]:border-muted-border [&>div]:px-4 [&>div]:py-3 [&>div:nth-child(2n)]:border-r-0 max-[37.5rem]:[&>div]:border-r-0 [&_dt]:m-0 [&_dt]:text-xs [&_dt]:text-subtle-foreground [&_dd]:mt-1 [&_dd]:font-mono [&_dd]:text-sm [&_dd]:[overflow-wrap:anywhere]",
     status: "shrink-0 rounded-full border border-success px-3 py-1 text-xs font-medium text-foreground data-[state=degraded]:border-warning data-[state=unavailable]:border-warning"
   },
   variants: {

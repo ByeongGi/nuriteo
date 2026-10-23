@@ -34,12 +34,12 @@ import { AdminPage, AdminSectionHeading } from "#src/app/(admin)/admin/_componen
 
 const adminSettingsStyles = tv({
   slots: {
-    section: "mt-8 overflow-hidden rounded-xl border border-muted-border bg-surface shadow-xs",
+    section: "mt-4 overflow-hidden rounded-lg border border-muted-border bg-surface",
     status: "shrink-0 rounded-full border border-success px-3 py-1 text-xs font-medium text-foreground",
-    statusGrid: "m-0 grid grid-cols-2 border-t border-muted-border max-[37.5rem]:grid-cols-1 [&>div]:min-w-0 [&>div]:border-b [&>div]:border-muted-border [&>div]:px-5 [&>div]:py-4 [&>div:nth-child(odd)]:border-r [&>div:nth-last-child(-n+2)]:border-b-0 max-[37.5rem]:[&>div]:border-r-0 max-[37.5rem]:[&>div]:border-b max-[37.5rem]:[&>div:last-child]:border-b-0 [&_dt]:m-0 [&_dt]:text-xs [&_dt]:text-subtle-foreground [&_dd]:mt-1 [&_dd]:font-mono [&_dd]:text-sm [&_dd]:[overflow-wrap:anywhere]",
+    statusGrid: "m-0 grid grid-cols-2 border-t border-muted-border max-[37.5rem]:grid-cols-1 [&>div]:min-w-0 [&>div]:border-b [&>div]:border-muted-border [&>div]:px-4 [&>div]:py-3 [&>div:nth-child(odd)]:border-r [&>div:nth-last-child(-n+2)]:border-b-0 max-[37.5rem]:[&>div]:border-r-0 max-[37.5rem]:[&>div]:border-b max-[37.5rem]:[&>div:last-child]:border-b-0 [&_dt]:m-0 [&_dt]:text-xs [&_dt]:text-subtle-foreground [&_dd]:mt-1 [&_dd]:font-mono [&_dd]:text-sm [&_dd]:[overflow-wrap:anywhere]",
     settingList: "border-t border-muted-border",
-    setting: "m-0 grid grid-cols-[minmax(0,1fr)_minmax(15rem,20rem)] gap-5 border-b border-muted-border p-5 last:border-b-0 max-[37.5rem]:grid-cols-1 max-[37.5rem]:items-stretch",
-    copy: "grid min-w-0 content-start gap-2 [&>label]:text-base [&>label]:font-medium [&>strong]:text-base [&>strong]:font-medium [&_p]:m-0 [&_p]:text-sm [&_p]:text-muted-foreground [&>span]:text-sm [&>span]:text-muted-foreground [&_code]:w-fit [&_code]:max-w-full [&_code]:text-xs [&_code]:text-subtle-foreground [&_code]:[overflow-wrap:anywhere]",
+    setting: "m-0 grid grid-cols-[minmax(0,1fr)_minmax(15rem,20rem)] gap-5 border-b border-muted-border px-4 py-3 last:border-b-0 max-[37.5rem]:grid-cols-1 max-[37.5rem]:items-stretch",
+    copy: "grid min-w-0 content-start gap-1 [&>label]:text-sm [&>label]:font-medium [&>strong]:text-sm [&>strong]:font-medium [&_p]:m-0 [&_p]:text-xs [&_p]:text-muted-foreground [&>span]:text-xs [&>span]:text-muted-foreground [&_code]:w-fit [&_code]:max-w-full [&_code]:text-xs [&_code]:text-subtle-foreground [&_code]:[overflow-wrap:anywhere]",
     control: "grid min-w-0 content-start gap-3",
     actions: "flex flex-wrap gap-2 max-[37.5rem]:[&_[data-slot=button]]:w-full",
     feedback: "col-span-full flex items-center justify-between gap-3 rounded-md border bg-subtle p-3 text-sm max-[37.5rem]:flex-col max-[37.5rem]:items-stretch",

@@ -398,9 +398,9 @@ function testProjectSourceContracts() {
   const legacyPage = read("src/app/(authenticated)/projects/page.tsx");
   const legacyProjectPage = read("src/app/(authenticated)/projects/[projectId]/page.tsx");
   const legacySettingsPage = read("src/app/(authenticated)/projects/[projectId]/settings/page.tsx");
-  const workspacePage = read("src/app/(authenticated)/workspaces/[workspaceId]/page.tsx");
-  const workspaceProjectsPage = read("src/app/(authenticated)/workspaces/[workspaceId]/projects/page.tsx");
-  const projectSettingsPage = read("src/app/(authenticated)/workspaces/[workspaceId]/projects/[projectId]/settings/page.tsx");
+  const workspacePage = read("src/app/(workspace)/workspaces/[workspaceId]/page.tsx");
+  const workspaceProjectsPage = read("src/app/(workspace)/workspaces/[workspaceId]/projects/page.tsx");
+  const projectSettingsPage = read("src/app/(workspace)/workspaces/[workspaceId]/projects/[projectId]/settings/page.tsx");
   const studioScreen = read("src/app/(studio)/projects/[projectId]/studio/project-studio-screen.tsx");
   const legacyStudioPage = read("src/app/(studio)/projects/[projectId]/studio/page.tsx");
   const workspaceProjectStudioPage = read("src/app/(studio)/workspaces/[workspaceId]/projects/[projectId]/studio/page.tsx");
@@ -429,7 +429,7 @@ function testProjectSourceContracts() {
     /href=\{projectDetailHref\(workspace\.storageScopeId, state, item\.id\)\}[\s\S]+aria-label=\{`\$\{item\.name\} 프로젝트 설정`\}/u,
     "프로젝트 설정은 목록의 별도 보조 동작이어야 합니다."
   );
-  assert.match(dashboard, /function projectHref\([\s\S]+return `\/workspaces\/\$\{encodeURIComponent\(scope\)\}\/projects\?\$\{query\.toString\(\)\}`/u);
+  assert.match(dashboard, /function projectHref\([\s\S]+return `\/workspaces\/\$\{encodeURIComponent\(scope\)\}\?\$\{query\.toString\(\)\}`/u);
   assert.match(dashboard, /function projectDetailHref\([\s\S]+return `\/workspaces\/\$\{encodeURIComponent\(scope\)\}\/projects\/\$\{encodeURIComponent\(projectId\)\}\/settings\?/u);
   assert.match(dashboard, /function projectStudioHref\([\s\S]+return `\/workspaces\/\$\{encodeURIComponent\(scope\)\}\/projects\/\$\{encodeURIComponent\(projectId\)\}\/studio`/u);
   assert.doesNotMatch(
@@ -442,11 +442,11 @@ function testProjectSourceContracts() {
   assert.doesNotMatch(legacyPage, /createServerApiClient|<ProjectDashboard/u);
   assert.match(legacyProjectPage, /\/studio/u);
   assert.match(legacySettingsPage, /\/settings\?/u);
-  assert.match(workspacePage, /\/projects\?/u);
-  assert.doesNotMatch(workspacePage, /<ProjectDashboard|createServerApiClient/u);
-  assert.match(workspaceProjectsPage, /createServerApiClient\(\)/u);
-  assert.match(workspaceProjectsPage, /listProjects/u);
-  assert.match(workspaceProjectsPage, /<ProjectDashboard/u);
+  assert.match(workspacePage, /<ProjectDashboard/u);
+  assert.match(workspacePage, /createServerApiClient\(\)/u);
+  assert.match(workspacePage, /listProjects/u);
+  assert.match(workspaceProjectsPage, /redirect\(`\/workspaces\/\$\{encodeURIComponent\(workspaceId\)\}\?/u);
+  assert.doesNotMatch(workspaceProjectsPage, /createServerApiClient|listProjects|<ProjectDashboard/u);
   assert.match(projectSettingsPage, /listOrganizationMembers/u);
   assert.match(projectSettingsPage, /roleManagementRequest/u);
   assert.doesNotMatch(projectSettingsPage, /listProjects/u);
@@ -457,7 +457,9 @@ function testProjectSourceContracts() {
   assert.doesNotMatch(dashboard, /<ProjectIdeShell/u);
   assert.match(studioScreen, /<ProjectIdeShell/u);
   assert.match(studioScreen, /export function ProjectStudioFrame/u);
-  assert.match(studioScreen, /const projectBaseHref = `\/workspaces\/\$\{encodeURIComponent\(workspaceScope\)\}\/projects`/u);
+  assert.match(studioScreen, /const workspaceHref = `\/workspaces\/\$\{encodeURIComponent\(workspaceScope\)\}`/u);
+  assert.match(studioScreen, /const projectBaseHref = `\$\{workspaceHref\}\/projects`/u);
+  assert.match(studioScreen, /<Link href=\{workspaceHref\}[^>]+프로젝트 목록으로 돌아가기/u);
   assert.match(studioScreen, /const settingsHref = `\$\{projectBaseHref\}\/\$\{encodeURIComponent\(project\.id\)\}\/settings`/u);
   assert.match(studioScreen, /<Link href=\{settingsHref\}>프로젝트 설정<\/Link>/u);
   assert.match(legacyStudioPage, /redirect\(/u);

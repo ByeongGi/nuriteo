@@ -11,15 +11,15 @@ import { AdminNavigation } from "#src/app/(admin)/admin/admin-navigation.tsx";
 
 const adminShellStyles = tv({
   slots: {
-    root: "grid min-h-screen grid-cols-[17rem_minmax(0,1fr)] bg-[color-mix(in_srgb,var(--n-color-bg-page)_94%,var(--n-color-bg-subtle))] max-[48rem]:block",
-    sidebar: "sticky top-0 z-[var(--n-z-sticky)] flex h-screen min-w-0 flex-col border-r border-muted-border bg-surface px-3 pb-4 pt-5 max-[48rem]:hidden",
-    brand: "flex items-center gap-3 text-foreground no-underline",
-    brandMark: "grid size-8 place-items-center rounded-[0.625rem] bg-primary font-bold text-on-primary",
+    root: "grid min-h-screen grid-cols-[15.5rem_minmax(0,1fr)] bg-sidebar max-[48rem]:block",
+    sidebar: "sticky top-0 z-[var(--n-z-sticky)] flex h-screen min-w-0 flex-col px-2 pb-3 pt-3 max-[48rem]:hidden",
+    brand: "flex min-h-9 items-center gap-2.5 rounded-md px-2 text-foreground no-underline hover:bg-hover",
+    brandMark: "grid size-7 place-items-center rounded-md bg-primary text-xs font-bold text-on-primary",
     brandCopy: "grid gap-0.5",
-    brandTitle: "text-sm tracking-[0.08em]",
+    brandTitle: "text-xs tracking-[0.08em]",
     brandSubtitle: "text-xs text-subtle-foreground",
-    returnLink: "mt-5 flex min-h-10 items-center gap-2 rounded-md border border-muted-border bg-raised px-3 text-xs font-medium text-muted-foreground no-underline hover:border-strong-border hover:bg-hover hover:text-foreground",
-    footer: "mt-4 grid gap-3 border-t border-muted-border pt-4",
+    returnLink: "mt-2 flex min-h-8 items-center gap-2 rounded-md px-2 text-xs font-medium text-muted-foreground no-underline hover:bg-hover hover:text-foreground",
+    footer: "mt-2 grid gap-2 border-t border-muted-border px-1 pt-3",
     identity: "grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2",
     avatar: "grid size-8 place-items-center rounded-full bg-selected text-xs font-bold text-link",
     identityCopy: "grid min-w-0",
@@ -29,13 +29,13 @@ const adminShellStyles = tv({
     utilities: "grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2",
     theme: "w-full min-w-0 max-w-none",
     themeTrigger: "w-full min-w-0 max-w-none",
-    mobileHeader: "hidden max-[48rem]:sticky max-[48rem]:top-0 max-[48rem]:z-[var(--n-z-sticky)] max-[48rem]:flex max-[48rem]:min-h-16 max-[48rem]:items-center max-[48rem]:justify-between max-[48rem]:border-b max-[48rem]:border-muted-border max-[48rem]:bg-[color-mix(in_srgb,var(--n-color-bg-surface)_94%,transparent)] max-[48rem]:px-4 max-[48rem]:backdrop-blur-2xl",
+    mobileHeader: "hidden max-[48rem]:sticky max-[48rem]:top-0 max-[48rem]:z-[var(--n-z-sticky)] max-[48rem]:flex max-[48rem]:min-h-[3.25rem] max-[48rem]:items-center max-[48rem]:justify-between max-[48rem]:border-b max-[48rem]:border-muted-border max-[48rem]:bg-[color-mix(in_srgb,var(--n-color-bg-surface)_94%,transparent)] max-[48rem]:px-3 max-[48rem]:backdrop-blur-2xl",
     mobileMenu: "relative border-0 bg-transparent",
-    mobileTrigger: "min-h-10 w-auto rounded-md border border-muted-border px-3 py-2 text-sm font-semibold",
-    mobilePanel: "fixed inset-x-0 top-16 z-[var(--n-z-sticky)] flex h-[calc(100vh-4rem)] flex-col overflow-auto border-0 bg-surface px-4 py-5",
+    mobileTrigger: "min-h-8 w-auto rounded-md border border-muted-border px-2.5 py-1.5 text-xs font-semibold",
+    mobilePanel: "fixed inset-x-0 top-[3.25rem] z-[var(--n-z-sticky)] flex h-[calc(100vh-3.25rem)] flex-col overflow-auto border-0 bg-surface px-3 py-4",
     mobileReturnLink: "mt-6",
     mobileUtilities: "mt-4 border-t border-muted-border pt-4",
-    content: "min-w-0",
+    content: "my-2 mr-2 min-w-0 overflow-hidden rounded-xl border border-muted-border bg-background shadow-xs max-[48rem]:m-0 max-[48rem]:min-h-[calc(100vh-3.25rem)] max-[48rem]:rounded-none max-[48rem]:border-0 max-[48rem]:shadow-none",
     loadingBlock: "block rounded-md bg-subtle",
     loadingBrand: "h-10",
     loadingReturn: "mt-5 h-10",
@@ -94,7 +94,7 @@ export function AdminShellFrame({
           </span>
         </Link>
 
-        <Link className={styles.returnLink()} href="/dashboard">
+        <Link className={styles.returnLink()} href="/workspaces">
           <span aria-hidden="true">←</span>
           사용자 화면으로 돌아가기
         </Link>
@@ -120,7 +120,7 @@ export function AdminShellFrame({
           <CollapsiblePanel><CollapsibleContent className={styles.mobilePanel()}>
             <AdminIdentity displayName={displayName} email={email} />
             <AdminNavigation placement="mobile" pathnameOverride={pathnameOverride} />
-            <Link className={styles.returnLink({ className: styles.mobileReturnLink() })} href="/dashboard">사용자 화면으로 돌아가기</Link>
+            <Link className={styles.returnLink({ className: styles.mobileReturnLink() })} href="/workspaces">사용자 화면으로 돌아가기</Link>
             <div className={styles.utilities({ className: styles.mobileUtilities() })}>
               <ThemeSelector className={styles.theme()} triggerClassName={styles.themeTrigger()} initialMode={themeMode} />
               <LogoutButton placement="mobile" />

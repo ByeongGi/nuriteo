@@ -6,12 +6,12 @@ import { tv } from "tailwind-variants";
 
 const adminNavigationStyles = tv({
   slots: {
-    root: "mt-5 block min-w-0 flex-1 overflow-auto border-0 p-0",
-    home: "mb-5",
-    section: "block border-0 p-0 [&+&]:mt-5",
-    sectionLabel: "mb-2 px-3 text-[var(--n-font-size-2xs)] font-semibold tracking-[0.04em] text-subtle-foreground",
+    root: "mt-3 block min-w-0 flex-1 overflow-auto border-0 p-0",
+    home: "mb-3",
+    section: "block border-0 p-0 [&+&]:mt-3",
+    sectionLabel: "mb-1 px-2 text-[var(--n-font-size-2xs)] font-semibold tracking-[0.04em] text-subtle-foreground",
     destinations: "grid gap-0.5",
-    link: "flex min-h-10 items-center rounded-md px-3 text-sm font-medium text-muted-foreground no-underline hover:bg-hover hover:text-foreground aria-[current=page]:bg-[color-mix(in_srgb,var(--n-color-action-primary)_9%,var(--n-color-bg-surface))] aria-[current=page]:text-primary aria-[current=page]:shadow-[inset_3px_0_var(--n-color-action-primary)]"
+    link: "flex min-h-8 items-center rounded-md px-2 text-[0.8125rem] font-medium text-muted-foreground no-underline hover:bg-hover hover:text-foreground aria-[current=page]:bg-selected aria-[current=page]:text-foreground"
   },
   variants: {
     placement: {

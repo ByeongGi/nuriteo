@@ -59,7 +59,7 @@ export function MaintenanceConsole({ initial }: { readonly initial: AdminMainten
         </div>}
       />
 
-      <section className="mt-6 overflow-hidden rounded-xl border border-muted-border bg-surface shadow-xs" aria-labelledby="maintenance-action-title">
+      <section className="mt-4 overflow-hidden rounded-lg border border-muted-border bg-surface" aria-labelledby="maintenance-action-title">
         <AdminSectionHeading>
           <div>
             <p className="m-0 mb-3 text-xs font-semibold uppercase tracking-[0.08em] text-accent-foreground">쓰기 제한 범위</p>
@@ -68,7 +68,7 @@ export function MaintenanceConsole({ initial }: { readonly initial: AdminMainten
             </h2>
           </div>
         </AdminSectionHeading>
-        <div className="flex items-center justify-between gap-4 border-t border-muted-border px-5 py-4 max-[37.5rem]:flex-col max-[37.5rem]:items-stretch [&_label]:flex [&_label]:max-w-[42rem] [&_label]:items-start [&_label]:gap-2 [&_label]:text-sm" aria-busy={mutation.isPending}>
+        <div className="flex items-center justify-between gap-4 border-t border-muted-border px-4 py-3 max-[37.5rem]:flex-col max-[37.5rem]:items-stretch [&_label]:flex [&_label]:max-w-[42rem] [&_label]:items-start [&_label]:gap-2 [&_label]:text-sm" aria-busy={mutation.isPending}>
           <CheckboxField
             checked={confirmed}
             disabled={mutation.isPending}
@@ -87,7 +87,7 @@ export function MaintenanceConsole({ initial }: { readonly initial: AdminMainten
               : enabled ? "쓰기 재개" : "유지보수 시작"}
           </Button>
         </div>
-        <p className="m-0 border-t border-muted-border px-5 py-4 text-xs text-muted-foreground">
+        <p className="m-0 border-t border-muted-border px-4 py-3 text-xs text-muted-foreground">
           최근 관리자 재인증이 필요합니다. 종료 제한 시간을 넘기면 안전을 위해 차단 상태를 유지하므로 다시 시도하기 전에 현재 상태를 새로 확인하세요.
         </p>
         {feedback ? (

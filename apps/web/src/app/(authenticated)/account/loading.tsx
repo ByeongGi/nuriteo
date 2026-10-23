@@ -7,7 +7,7 @@ const accountLoadingStyles = tv({
     title: "h-9 w-48 animate-pulse rounded-md bg-raised",
     description: "h-4 w-full max-w-xl animate-pulse rounded bg-raised",
     grid: "grid gap-3 pt-3 sm:grid-cols-2",
-    item: "h-36 animate-pulse rounded-xl bg-raised"
+    item: "h-28 animate-pulse rounded-lg bg-raised"
   }
 });
 

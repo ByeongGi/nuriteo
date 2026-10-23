@@ -41,7 +41,7 @@ function testSetupRouting(): void {
   assert.match(rootPage, /isExplicitlySignedOut\(currentUserResult\.reason\)/u);
   assert.match(rootPage, /safeRequestReference\(error\)/u);
   assert.match(rootPage, /redirect\("\/setup"\)/u);
-  assert.match(rootPage, /redirect\("\/dashboard"\)/u);
+  assert.match(rootPage, /redirect\("\/workspaces"\)/u);
   assert.match(rootPage, /<HomeEntry \/>/u);
 
   const homeEntry = read("src/app/_components/home-entry.tsx");

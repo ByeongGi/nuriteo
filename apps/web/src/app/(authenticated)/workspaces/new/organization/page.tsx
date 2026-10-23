@@ -12,5 +12,5 @@ export default async function NewOrganizationWorkspacePage() {
     getCurrentUser(client),
     getCurrentWorkspaces(client)
   ]);
-  return <OrganizationConsole canManage currentUserId={current.data.user.id} workspaces={workspaces.data.workspaces} />;
+  return <OrganizationConsole canManage context="creation" currentUserId={current.data.user.id} workspaces={workspaces.data.workspaces} />;
 }

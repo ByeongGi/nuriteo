@@ -8,7 +8,6 @@ import {
   safeRequestReference
 } from "#src/lib/api/presentation-error.ts";
 import { createServerApiClient } from "#src/lib/api/server-client.ts";
-import { resolveWorkspaceSelection } from "#src/lib/workspace-selection.ts";
 import { EmptyWorkspaceScreen, WorkspaceScreen } from "#src/app/(authenticated)/workspaces/workspace-catalog.tsx";
 
 export const metadata: Metadata = {
@@ -19,15 +18,13 @@ interface WorkspacesPageProps {
   readonly searchParams: Promise<{
     invitation?: string | string[] | undefined;
     joined?: string | string[] | undefined;
-    workspace?: string | string[] | undefined;
   }>;
 }
 
 export default async function WorkspacesPage({ searchParams }: WorkspacesPageProps) {
   const {
     invitation,
-    joined,
-    workspace: requestedScope
+    joined
   } = await searchParams;
   const invitationStatus = joined === "1"
     ? "조직 초대를 수락했습니다. 공유 워크스페이스를 사용할 수 있습니다."
@@ -38,15 +35,11 @@ export default async function WorkspacesPage({ searchParams }: WorkspacesPagePro
     const client = await createServerApiClient();
     const result = await getCurrentWorkspaces(client);
     const workspaces = result.data.workspaces;
-    const selectedScope = resolveWorkspaceSelection(workspaces, requestedScope);
-
     if (workspaces.length === 0) {
       return <EmptyWorkspaceScreen />;
     }
-    const activeScope = selectedScope ?? workspaces[0]!.storageScopeId;
-    const activeWorkspace = workspaces.find((workspace) => workspace.storageScopeId === activeScope) ?? workspaces[0]!;
 
-    return <WorkspaceScreen activeScope={activeWorkspace.storageScopeId} invitationStatus={invitationStatus} workspaces={workspaces} />;
+    return <WorkspaceScreen invitationStatus={invitationStatus} workspaces={workspaces} />;
   } catch (error) {
     unstable_rethrow(error);
     if (isExplicitlySignedOut(error)) {

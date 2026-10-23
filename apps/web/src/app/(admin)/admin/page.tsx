@@ -41,16 +41,16 @@ const adminAreas = [
 
 const adminHomeStyles = tv({
   slots: {
-    root: "mx-auto grid w-full max-w-[82rem] content-start gap-6 px-[clamp(1.25rem,4vw,3.5rem)] pt-[clamp(2rem,4vw,3.5rem)] pb-20 outline-none max-[48rem]:px-4 max-[48rem]:py-5",
-    notice: "flex items-center gap-3 rounded-lg border border-primary/20 bg-primary/5 px-5 py-4 max-[48rem]:items-start max-[48rem]:flex-col",
+    root: "grid w-full content-start gap-4 px-6 py-5 outline-none max-[48rem]:px-4 max-[48rem]:py-4",
+    notice: "flex items-center gap-3 rounded-lg border border-primary/20 bg-primary/5 px-4 py-3 max-[48rem]:items-start max-[48rem]:flex-col",
     noticeCopy: "m-0 text-sm text-muted-foreground",
-    grid: "grid grid-cols-2 gap-4 min-[72rem]:grid-cols-3 max-[48rem]:grid-cols-1",
-    card: "grid min-h-64 grid-rows-[auto_1fr_auto] gap-4 rounded-xl border border-muted-border bg-surface p-6 shadow-xs",
-    cardCopy: "[&_h2]:mt-1 [&_h2]:mb-2 [&_h2]:text-xl [&_p]:m-0 [&_p]:text-muted-foreground",
+    grid: "grid grid-cols-2 gap-3 min-[72rem]:grid-cols-3 max-[48rem]:grid-cols-1",
+    card: "grid min-h-52 grid-rows-[auto_1fr_auto] gap-3 rounded-lg border border-muted-border bg-surface p-4 transition-colors hover:border-strong-border",
+    cardCopy: "[&_h2]:mt-1 [&_h2]:mb-1.5 [&_h2]:text-base [&_p]:m-0 [&_p]:text-sm [&_p]:leading-5 [&_p]:text-muted-foreground",
     eyebrow: "m-0 text-xs font-semibold tracking-[0.08em] text-accent-foreground",
     tags: "m-0 flex list-none flex-wrap content-start gap-2 p-0",
     tag: "rounded-full bg-subtle px-2.5 py-1 text-xs text-muted-foreground",
-    link: "flex items-center justify-between border-t border-muted-border pt-4 font-semibold text-link no-underline hover:text-foreground"
+    link: "flex items-center justify-between border-t border-muted-border pt-3 text-sm font-semibold text-link no-underline hover:text-foreground"
   }
 });
 

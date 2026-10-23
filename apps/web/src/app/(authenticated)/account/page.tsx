@@ -8,9 +8,9 @@ export const metadata: Metadata = { title: "계정 설정" };
 
 const accountOverviewStyles = tv({
   slots: {
-    root: "grid gap-6 outline-none",
-    grid: "grid gap-3 sm:grid-cols-2",
-    item: "grid min-h-36 content-between gap-5 rounded-xl border border-muted-border bg-surface p-5 text-foreground no-underline shadow-xs transition-colors hover:border-strong-border hover:bg-hover",
+    root: "grid gap-4 outline-none",
+    grid: "grid overflow-hidden rounded-lg border border-muted-border bg-surface sm:grid-cols-2",
+    item: "grid min-h-28 content-between gap-3 p-4 text-foreground no-underline transition-colors hover:bg-hover [&:nth-child(even)]:border-l [&:nth-child(n+3)]:border-t [&:nth-child(even)]:border-muted-border [&:nth-child(n+3)]:border-muted-border max-[40rem]:border-l-0 max-[40rem]:[&+&]:border-t",
     copy: "grid gap-2",
     title: "m-0 text-base font-semibold",
     description: "m-0 text-sm leading-relaxed text-muted-foreground",
@@ -30,6 +30,7 @@ export default function AccountPage() {
   return (
     <main id="main-content" className={styles.root()} tabIndex={-1}>
       <PageHeader
+        density="compact"
         eyebrow="개인 범위"
         title="계정 설정"
         description="내 로그인, 보안, 개인 자격 증명과 알림 수신 방식을 관리하세요."

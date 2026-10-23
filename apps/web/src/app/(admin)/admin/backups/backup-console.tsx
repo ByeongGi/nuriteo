@@ -89,13 +89,13 @@ export function BackupConsole({ initial }: { readonly initial: BackupState }) {
       />
 
       {state.alerts.length > 0 ? (
-        <section className="mt-6 overflow-hidden rounded-xl border border-warning bg-surface shadow-xs [&_ul]:m-0 [&_ul]:list-none [&_ul]:border-t [&_ul]:border-muted-border [&_ul]:p-0 [&_li]:flex [&_li]:items-start [&_li]:justify-between [&_li]:gap-4 [&_li]:border-b [&_li]:border-muted-border [&_li]:px-5 [&_li]:py-4 [&_li:last-child]:border-b-0 max-[37.5rem]:[&_li]:flex-col max-[37.5rem]:[&_li]:items-stretch" aria-labelledby="backup-alerts-title">
+        <section className="mt-4 overflow-hidden rounded-lg border border-warning bg-surface [&_ul]:m-0 [&_ul]:list-none [&_ul]:border-t [&_ul]:border-muted-border [&_ul]:p-0 [&_li]:flex [&_li]:items-start [&_li]:justify-between [&_li]:gap-4 [&_li]:border-b [&_li]:border-muted-border [&_li]:px-4 [&_li]:py-3 [&_li:last-child]:border-b-0 max-[37.5rem]:[&_li]:flex-col max-[37.5rem]:[&_li]:items-stretch" aria-labelledby="backup-alerts-title">
           <AdminSectionHeading><h2 id="backup-alerts-title">백업 알림</h2></AdminSectionHeading>
           <ul>{state.alerts.map((alert) => <li key={alert.code}><strong>{alert.message}</strong><span>{alert.level}</span></li>)}</ul>
         </section>
       ) : null}
 
-      <section className="mt-6 overflow-hidden rounded-xl border border-muted-border bg-surface shadow-xs" aria-labelledby="backup-actions-title">
+      <section className="mt-4 overflow-hidden rounded-lg border border-muted-border bg-surface" aria-labelledby="backup-actions-title">
         <AdminSectionHeading>
           <div><p className="m-0 mb-3 text-xs font-semibold uppercase tracking-[0.08em] text-accent-foreground">즉시 실행</p><h2 id="backup-actions-title">관리자 작업</h2></div>
         </AdminSectionHeading>
@@ -109,7 +109,7 @@ export function BackupConsole({ initial }: { readonly initial: BackupState }) {
         <AdminNote>최근 관리자 재인증이 필요합니다. 정리는 현재 미리보기에서 확인한 미보존 후보만 대기열에 추가합니다.</AdminNote>
       </section>
 
-      <AdminForm className="mt-6 overflow-hidden rounded-xl border border-muted-border bg-surface shadow-xs" onSubmit={savePolicy}>
+      <AdminForm className="mt-4 overflow-hidden rounded-lg border border-muted-border bg-surface" onSubmit={savePolicy}>
         <AdminSectionHeading>
           <div><p className="m-0 mb-3 text-xs font-semibold uppercase tracking-[0.08em] text-accent-foreground">POLICY VERSION {state.policy.version}</p><h2>일정과 보존 정책</h2></div>
         </AdminSectionHeading>
@@ -143,14 +143,14 @@ export function BackupConsole({ initial }: { readonly initial: BackupState }) {
 
       {feedback ? <p role={feedback.error ? "alert" : "status"} className={feedback.error ? "m-0 rounded-md border border-danger bg-subtle px-5 py-3 text-danger" : "m-0 border-t border-muted-border px-5 py-3"}>{feedback.text}</p> : null}
 
-      <section className="mt-6 overflow-hidden rounded-xl border border-muted-border bg-surface shadow-xs [&_ol]:m-0 [&_ol]:list-none [&_ol]:border-t [&_ol]:border-muted-border [&_ol]:p-0 [&_li]:flex [&_li]:items-start [&_li]:justify-between [&_li]:gap-4 [&_li]:border-b [&_li]:border-muted-border [&_li]:px-5 [&_li]:py-4 [&_li:last-child]:border-b-0 max-[37.5rem]:[&_li]:flex-col max-[37.5rem]:[&_li]:items-stretch" aria-labelledby="restore-points-title">
+      <section className="mt-4 overflow-hidden rounded-lg border border-muted-border bg-surface [&_ol]:m-0 [&_ol]:list-none [&_ol]:border-t [&_ol]:border-muted-border [&_ol]:p-0 [&_li]:flex [&_li]:items-start [&_li]:justify-between [&_li]:gap-4 [&_li]:border-b [&_li]:border-muted-border [&_li]:px-4 [&_li]:py-3 [&_li:last-child]:border-b-0 max-[37.5rem]:[&_li]:flex-col max-[37.5rem]:[&_li]:items-stretch" aria-labelledby="restore-points-title">
         <AdminSectionHeading><div><p className="m-0 mb-3 text-xs font-semibold uppercase tracking-[0.08em] text-accent-foreground">검증된 상태</p><h2 id="restore-points-title">복구 지점</h2></div></AdminSectionHeading>
         {state.restorePoints.length === 0 ? <AdminNote>사용 가능한 완료 복구 지점이 없습니다.</AdminNote> : (
           <ol>{state.restorePoints.map((point) => <li key={point.id}><div><strong>{new Date(point.completedAt).toLocaleString("ko-KR")}</strong><span>{formatBytes(point.payloadBytes)} · 오브젝트 {point.objectCount}개 · {point.retainedAs.join(", ") || "미보존"}</span></div><Button size="sm" variant="secondary" disabled={mutation.isPending} onClick={() => void run("verify", point.id)}>검증</Button></li>)}</ol>
         )}
       </section>
 
-      <section className="mt-6 overflow-hidden rounded-xl border border-muted-border bg-surface shadow-xs [&_ol]:m-0 [&_ol]:list-none [&_ol]:border-t [&_ol]:border-muted-border [&_ol]:p-0 [&_li]:flex [&_li]:items-start [&_li]:justify-between [&_li]:gap-4 [&_li]:border-b [&_li]:border-muted-border [&_li]:px-5 [&_li]:py-4 [&_li:last-child]:border-b-0 max-[37.5rem]:[&_li]:flex-col max-[37.5rem]:[&_li]:items-stretch" aria-labelledby="backup-history-title">
+      <section className="mt-4 overflow-hidden rounded-lg border border-muted-border bg-surface [&_ol]:m-0 [&_ol]:list-none [&_ol]:border-t [&_ol]:border-muted-border [&_ol]:p-0 [&_li]:flex [&_li]:items-start [&_li]:justify-between [&_li]:gap-4 [&_li]:border-b [&_li]:border-muted-border [&_li]:px-4 [&_li]:py-3 [&_li:last-child]:border-b-0 max-[37.5rem]:[&_li]:flex-col max-[37.5rem]:[&_li]:items-stretch" aria-labelledby="backup-history-title">
         <AdminSectionHeading><div><p className="m-0 mb-3 text-xs font-semibold uppercase tracking-[0.08em] text-accent-foreground">지속 작업 대기열</p><h2 id="backup-history-title">작업 기록</h2></div></AdminSectionHeading>
         {state.operations.length === 0 ? <AdminNote>요청된 백업 작업이 없습니다.</AdminNote> : <ol>{state.operations.map((operation) => <li key={operation.id}><div><strong>{actionLabel(operation.kind)}</strong><span>{operation.source} · {operation.state}{operation.failureCode ? ` · ${operation.failureCode}` : ""}</span></div><time dateTime={operation.requestedAt}>{new Date(operation.requestedAt).toLocaleString("ko-KR")}</time></li>)}</ol>}
       </section>

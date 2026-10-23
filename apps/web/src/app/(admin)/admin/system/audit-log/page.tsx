@@ -22,11 +22,11 @@ interface AuditEvent {
 
 const styles = tv({
   slots: {
-    root: "mx-auto grid w-full max-w-[82rem] content-start gap-6 px-[clamp(1rem,4vw,3rem)] py-[clamp(1.5rem,4vw,3rem)]",
-    panel: "overflow-hidden rounded-xl border border-muted-border bg-surface shadow-xs",
-    heading: "flex items-center justify-between gap-3 border-b border-muted-border px-5 py-4",
+    root: "grid w-full content-start gap-4 px-6 py-5 max-[48rem]:px-4 max-[48rem]:py-4",
+    panel: "overflow-hidden rounded-lg border border-muted-border bg-surface",
+    heading: "flex items-center justify-between gap-3 border-b border-muted-border px-4 py-3 [&_h2]:text-sm",
     list: "m-0 grid list-none divide-y divide-muted-border p-0",
-    item: "grid grid-cols-[minmax(12rem,1fr)_minmax(12rem,1fr)_auto] items-center gap-4 px-5 py-4 max-[48rem]:grid-cols-1",
+    item: "grid grid-cols-[minmax(12rem,1fr)_minmax(12rem,1fr)_auto] items-center gap-4 px-4 py-3 hover:bg-hover max-[48rem]:grid-cols-1",
     primary: "grid min-w-0 gap-1",
     title: "truncate font-semibold text-foreground",
     detail: "truncate text-sm text-muted-foreground",

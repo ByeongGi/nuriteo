@@ -40,34 +40,34 @@ import { useExclusiveMutation } from "#src/lib/use-exclusive-mutation.ts";
 
 const teamStyles = tv({
   slots: {
-    root: "mx-auto grid w-full max-w-[64rem] gap-6 px-[clamp(1.25rem,4vw,3.5rem)] py-[clamp(2rem,7vw,5rem)] max-[48rem]:px-4 max-[48rem]:py-5",
-    metrics: "mt-1",
-    tabs: "flex flex-wrap gap-1 border-b border-muted-border pb-3",
-    tab: "rounded-md px-3 py-2 text-sm font-medium text-link underline-offset-4 hover:bg-hover aria-[current=page]:bg-selected aria-[current=page]:text-foreground",
-    layout: "grid min-w-0 content-start gap-6 md:grid-cols-[minmax(15rem,19rem)_minmax(0,1fr)]",
-    sidebar: "grid min-w-0 content-start gap-6",
+    root: "mx-auto grid w-full max-w-none gap-4 px-6 py-6 max-[48rem]:px-4 max-[48rem]:py-4",
+    metrics: "[&_[data-slot=metric-item]]:min-h-20 [&_[data-slot=metric-item]]:rounded-lg [&_[data-slot=metric-item]]:p-3 [&_[data-slot=metric-item]>strong]:mt-1 [&_[data-slot=metric-item]>strong]:text-xl",
+    tabs: "flex flex-wrap gap-4 border-b border-muted-border",
+    tab: "relative inline-flex min-h-9 items-center px-0.5 text-xs font-medium text-muted-foreground no-underline hover:text-foreground aria-[current=page]:text-foreground aria-[current=page]:after:absolute aria-[current=page]:after:inset-x-0 aria-[current=page]:after:bottom-0 aria-[current=page]:after:h-0.5 aria-[current=page]:after:rounded-full aria-[current=page]:after:bg-primary",
+    layout: "grid min-w-0 content-start gap-4 md:grid-cols-[minmax(14rem,17rem)_minmax(0,1fr)]",
+    sidebar: "grid min-w-0 content-start gap-4",
     form: "grid gap-4 rounded-lg border border-muted-border bg-surface p-4 [&_h2]:m-0 [&_h2]:text-base",
-    accessNote: "rounded-xl border border-muted-border bg-surface p-4 [&_p]:mt-2 [&_p]:mb-0 [&_p]:text-sm [&_p]:text-muted-foreground",
+    accessNote: "rounded-lg border border-muted-border bg-surface p-4 [&_p]:mt-2 [&_p]:mb-0 [&_p]:text-sm [&_p]:text-muted-foreground",
     directoryHeading: "flex items-start justify-between gap-3 [&_h2]:m-0 [&_h2]:text-sm [&_h2]:font-semibold",
     count: "shrink-0 rounded-full bg-subtle px-2 py-1 text-xs text-muted-foreground",
     search: "my-3 w-full rounded-lg border border-muted-border bg-background px-3",
     searchScope: "-mt-2 mb-2 text-xs text-muted-foreground",
     emptyCopy: "mt-2 mb-0 text-sm text-muted-foreground",
-    list: "m-0 grid max-h-[34rem] list-none gap-2 overflow-auto overscroll-contain p-0 [scrollbar-gutter:stable]",
-    listItem: "m-0 p-0 [content-visibility:auto] [contain-intrinsic-size:auto_5rem]",
-    listLink: "grid w-full gap-1 rounded-md p-3 text-foreground no-underline hover:bg-hover aria-[current=page]:bg-selected [&_span]:text-xs [&_span]:text-muted-foreground",
-    detail: "grid min-w-0 content-start gap-6 rounded-xl border border-muted-border bg-surface p-[clamp(1rem,3vw,2rem)] [&_h2]:m-0 [&_h2]:text-xl [&_h2]:tracking-[-.025em] [&_h3]:mt-0 [&_h3]:mb-1 [&_h3]:text-base [&_p]:mt-0",
+    list: "m-0 grid max-h-[34rem] list-none gap-0.5 overflow-auto overscroll-contain p-0 [scrollbar-gutter:stable]",
+    listItem: "m-0 p-0 [content-visibility:auto] [contain-intrinsic-size:auto_4rem]",
+    listLink: "grid w-full gap-0.5 rounded-md px-2.5 py-2 text-foreground no-underline hover:bg-hover aria-[current=page]:bg-active [&_strong]:text-xs [&_span]:text-[var(--n-font-size-2xs)] [&_span]:text-muted-foreground",
+    detail: "grid min-w-0 content-start gap-5 rounded-lg border border-muted-border bg-surface p-5 [&_h2]:m-0 [&_h2]:text-lg [&_h2]:tracking-[-.02em] [&_h3]:mt-0 [&_h3]:mb-1 [&_h3]:text-sm [&_p]:mt-0",
     emptyState: "grid min-w-0 content-start gap-2",
     detailHeader: "flex min-w-0 items-start justify-between gap-4 max-[37.5rem]:items-stretch max-[37.5rem]:flex-col",
     badge: "shrink-0 rounded-full bg-subtle px-2 py-1 text-xs font-medium text-muted-foreground",
     feedback: "flex items-center justify-between gap-3 rounded-md border border-muted-border bg-subtle p-3 max-[37.5rem]:items-stretch max-[37.5rem]:flex-col [&_p]:m-0",
-    section: "grid min-w-0 content-start gap-4 border-t border-muted-border pt-6",
+    section: "grid min-w-0 content-start gap-4 border-t border-muted-border pt-5",
     sectionHeading: "flex min-w-0 items-start justify-between gap-4 max-[37.5rem]:items-stretch max-[37.5rem]:flex-col [&_p]:mb-0 [&_p]:text-sm [&_p]:text-muted-foreground",
     inlineForm: "grid items-end gap-3 sm:grid-cols-[minmax(0,1fr)_auto]",
     addForm: "grid items-end gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(8rem,.45fr)_auto]",
     readOnly: "mt-2 mb-0 text-sm text-muted-foreground",
-    records: "m-0 grid max-h-[36rem] list-none gap-2 overflow-auto overscroll-contain p-0 [scrollbar-gutter:stable]",
-    record: "flex items-center justify-between gap-3 border-b border-muted-border py-3 [content-visibility:auto] [contain-intrinsic-size:auto_5rem] max-[37.5rem]:items-stretch max-[37.5rem]:flex-col [&>div:first-child]:grid [&>div:first-child]:gap-1 [&_span]:text-xs [&_span]:text-muted-foreground",
+    records: "m-0 grid max-h-[36rem] list-none gap-0 overflow-auto overscroll-contain p-0 [scrollbar-gutter:stable]",
+    record: "flex min-h-12 items-center justify-between gap-3 border-b border-muted-border py-2 [content-visibility:auto] [contain-intrinsic-size:auto_4rem] max-[37.5rem]:items-stretch max-[37.5rem]:flex-col [&>div:first-child]:grid [&>div:first-child]:gap-0.5 [&_span]:text-xs [&_span]:text-muted-foreground",
     recordActions: "flex flex-wrap gap-3 max-[37.5rem]:[&>*]:w-full",
     danger: "border-t-danger [&_[data-slot=field]]:max-w-md [&_[data-slot=button]]:justify-self-start"
   },
@@ -120,6 +120,7 @@ interface Feedback {
 
 export function TeamConsole(props: TeamConsoleProps) {
   const styles = teamStyles();
+  const inWorkspace = props.baseHref !== undefined;
   const router = useRouter();
   const mutation = useExclusiveMutation();
   const [teams, setTeams] = useState(props.teams);
@@ -394,21 +395,22 @@ export function TeamConsole(props: TeamConsoleProps) {
   return (
     <main id="main-content" className={styles.root()} tabIndex={-1}>
       <PageHeader
+        density="compact"
         eyebrow={props.organization.displayName}
-        title="팀과 프로젝트 권한"
-        description="조직 멤버를 팀으로 구성하고 필요한 프로젝트와 역할만 연결하세요."
+        title={inWorkspace ? "팀" : "팀과 프로젝트 권한"}
+        description={inWorkspace ? "팀별 멤버와 프로젝트 접근 권한을 관리합니다." : "조직 멤버를 팀으로 구성하고 필요한 프로젝트와 역할만 연결하세요."}
       />
 
-      <MetricGrid className={styles.metrics()} aria-label="팀 요약">
+      {inWorkspace ? null : <MetricGrid className={styles.metrics()} aria-label="팀 요약">
         <MetricItem label="접근 가능한 팀" value={teams.length} description="현재 계정에서 확인 가능" />
         <MetricItem label="선택한 팀 멤버" value={team === undefined ? "—" : members.length} description="유지관리자와 일반 멤버" />
         <MetricItem label="프로젝트 연결" value={team === undefined ? "—" : projectRoles.length} description="팀에 직접 부여된 역할" />
-      </MetricGrid>
+      </MetricGrid>}
 
-      <nav className={styles.tabs()} aria-label="조직 설정">
+      {inWorkspace ? null : <nav className={styles.tabs()} aria-label="조직 설정">
         <Link className={styles.tab()} href={props.baseHref === undefined ? "/workspaces" : `${props.baseHref.replace(/\/teams$/u, "")}/members`}>조직 개요</Link>
         <Link className={styles.tab()} href={teamHref(undefined, props.baseHref)} aria-current="page">팀과 권한</Link>
-      </nav>
+      </nav>}
 
       <div className={styles.layout()}>
         <aside className={styles.sidebar()} aria-label="팀 선택">
@@ -428,7 +430,7 @@ export function TeamConsole(props: TeamConsoleProps) {
 
           <nav aria-label="팀">
             <div className={styles.directoryHeading()}><h2>팀 목록</h2><span className={styles.count()}>{visibleTeams.length} / {teams.length}</span></div>
-            <SearchField className={styles.search()} label="팀 검색" value={teamQuery} onChange={(event) => setTeamQuery(event.currentTarget.value)} placeholder="팀 이름 또는 슬러그 검색" />
+            <SearchField className={styles.search()} density="compact" label="팀 검색" value={teamQuery} onChange={(event) => setTeamQuery(event.currentTarget.value)} placeholder="팀 이름 또는 슬러그 검색" />
             {nextTeamCursor !== null ? <p className={styles.searchScope()}>현재 불러온 팀에서 검색합니다.</p> : null}
             {visibleTeams.length === 0 ? (
               <p className={styles.emptyCopy()}>{teams.length === 0 ? "사용 가능한 팀이 없습니다." : "검색 결과가 없습니다."}</p>
@@ -569,7 +571,7 @@ function TeamMembers(props: TeamMembersProps) {
           <Button type="submit" disabled={props.disabled || props.memberOptions.length === 0}>멤버 추가</Button>
         </form>
       ) : null}
-      {props.members.length > 0 ? <SearchField className={styles.search()} label="팀 멤버 검색" value={query} onChange={(event) => setQuery(event.currentTarget.value)} placeholder="멤버 이름, 역할 또는 식별자 검색" /> : null}
+      {props.members.length > 0 ? <SearchField className={styles.search()} density="compact" label="팀 멤버 검색" value={query} onChange={(event) => setQuery(event.currentTarget.value)} placeholder="멤버 이름, 역할 또는 식별자 검색" /> : null}
       {props.hasMore ? <p className={styles.searchScope()}>현재 불러온 멤버에서 검색합니다.</p> : null}
       {props.members.length === 0 ? <p className={styles.emptyCopy()}>이 팀에는 아직 멤버가 없습니다.</p> : visibleMembers.length === 0 ? <p className={styles.emptyCopy()}>검색 결과가 없습니다.</p> : (
         <ul className={styles.records()} aria-busy={query !== deferredQuery} aria-label="팀 멤버">
@@ -623,7 +625,7 @@ function TeamProjectRoles(props: TeamProjectRolesProps) {
           <Button type="submit" disabled={props.disabled || props.projectOptions.length === 0}>접근 권한 부여</Button>
         </form>
       ) : <p className={styles.readOnly()}>조직 소유자만 팀의 프로젝트 역할을 변경할 수 있습니다.</p>}
-      {props.grants.length > 0 ? <SearchField className={styles.search()} label="프로젝트 권한 검색" value={query} onChange={(event) => setQuery(event.currentTarget.value)} placeholder="프로젝트 이름, 슬러그 또는 역할 검색" /> : null}
+      {props.grants.length > 0 ? <SearchField className={styles.search()} density="compact" label="프로젝트 권한 검색" value={query} onChange={(event) => setQuery(event.currentTarget.value)} placeholder="프로젝트 이름, 슬러그 또는 역할 검색" /> : null}
       {props.hasMore ? <p className={styles.searchScope()}>현재 불러온 프로젝트 권한에서 검색합니다.</p> : null}
       {props.grants.length === 0 ? <p className={styles.emptyCopy()}>이 팀에 연결된 프로젝트가 없습니다.</p> : visibleGrants.length === 0 ? <p className={styles.emptyCopy()}>검색 결과가 없습니다.</p> : (
         <ul className={styles.records()} aria-busy={query !== deferredQuery} aria-label="팀 프로젝트 역할">

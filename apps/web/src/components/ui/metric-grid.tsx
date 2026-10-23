@@ -10,11 +10,24 @@ const metricGridStyles = tv({
     label: "text-xs font-medium text-muted-foreground",
     value: "mt-3 text-3xl font-semibold tracking-[-0.04em] text-foreground",
     description: "mt-1 text-xs leading-relaxed text-subtle-foreground"
-  }
+  },
+  variants: {
+    density: {
+      comfortable: {},
+      compact: {
+        root: "grid-cols-3 gap-px overflow-hidden rounded-lg border border-muted-border bg-muted-border sm:grid-cols-3 [&>[data-slot=metric-item]]:min-h-20 [&>[data-slot=metric-item]]:rounded-none [&>[data-slot=metric-item]]:border-0 [&>[data-slot=metric-item]]:p-3 [&>[data-slot=metric-item]]:shadow-none [&>[data-slot=metric-item]>strong]:mt-1 [&>[data-slot=metric-item]>strong]:text-xl max-[36rem]:[&>[data-slot=metric-item]>small]:hidden"
+      }
+    }
+  },
+  defaultVariants: { density: "comfortable" }
 });
 
-function MetricGrid({ className, ...props }: ComponentProps<"section">) {
-  const styles = metricGridStyles();
+interface MetricGridProps extends ComponentProps<"section"> {
+  readonly density?: "comfortable" | "compact";
+}
+
+function MetricGrid({ className, density = "comfortable", ...props }: MetricGridProps) {
+  const styles = metricGridStyles({ density });
   return <section data-slot="metric-grid" className={styles.root({ className })} {...props} />;
 }
 

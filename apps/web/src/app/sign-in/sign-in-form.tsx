@@ -54,7 +54,7 @@ export function SignInForm({
   oidcFailed = false,
   providers = [],
   providersLoadFailed = false,
-  returnTo = "/dashboard"
+  returnTo = "/workspaces"
 }: SignInFormProps) {
   const styles = signInStyles();
   const router = useRouter();

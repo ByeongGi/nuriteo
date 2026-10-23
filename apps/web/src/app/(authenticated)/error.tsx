@@ -11,5 +11,5 @@ export default function AuthenticatedError({ error, reset }: AuthenticatedErrorP
   const reference = error.digest && /^[A-Za-z0-9_-]{1,128}$/u.test(error.digest)
     ? error.digest
     : undefined;
-  return <ErrorView homeHref="/dashboard" homeLabel="대시보드로 돌아가기" onRetry={reset} reference={reference} />;
+  return <ErrorView homeHref="/workspaces" homeLabel="워크스페이스로 돌아가기" onRetry={reset} reference={reference} />;
 }

@@ -56,7 +56,7 @@ export interface AccessTokenConsoleProps {
 }
 
 export function AccessTokenConsole({ embedded = false, initialTokens, referenceTime, target }: AccessTokenConsoleProps) {
-  const styles = tokenConsoleStyles();
+  const styles = tokenConsoleStyles({ embedded });
   const Root = embedded ? "div" : "main";
   const mutation = useExclusiveMutation();
   const [tokens, setTokens] = useState(initialTokens);
@@ -175,6 +175,7 @@ export function AccessTokenConsole({ embedded = false, initialTokens, referenceT
   return (
     <Root {...(embedded ? {} : { id: "main-content" })} className={styles.root()}>
       {embedded ? null : <PageHeader
+        density="compact"
         eyebrow={target.kind === "personal" ? "개인 자동화" : "프로젝트 자동화"}
         title="액세스 토큰"
         description="필요한 권한만 가진 자격 증명을 발급하세요. 토큰 원문은 한 번만 표시하고 해시만 저장합니다."
@@ -185,7 +186,7 @@ export function AccessTokenConsole({ embedded = false, initialTokens, referenceT
         {target.kind === "project" ? <span>프로젝트 {target.projectId}</span> : <span>프로젝트 토큰은 프로젝트 상세 화면에서 관리할 수 있습니다.</span>}
       </nav>}
 
-      <MetricGrid aria-label="액세스 토큰 요약">
+      <MetricGrid density="compact" aria-label="액세스 토큰 요약">
         <MetricItem label="활성 토큰" value={activeTokens.length} description={target.kind === "personal" ? "개인 자동화 자격 증명" : "프로젝트 자동화 자격 증명"} />
         <MetricItem label="사용 기록 있음" value={usedTokenCount} description="한 번 이상 사용된 활성 토큰" />
         <MetricItem label="가장 가까운 만료" value={nearestExpiryDays === null ? "—" : `${nearestExpiryDays}일`} description="만료 전에 교체를 준비하세요" />
@@ -215,7 +216,7 @@ export function AccessTokenConsole({ embedded = false, initialTokens, referenceT
       <section className={styles.panel()} aria-labelledby="token-list-title">
         <div className={styles.heading()}><p className={styles.eyebrow()}>자격 증명 목록</p><h2 className={styles.title()} id="token-list-title">발급된 토큰 <small className={styles.titleCount()}>{visibleTokens.length} / {tokens.length}</small></h2><p className={styles.description()}>사용하지 않는 토큰은 즉시 폐기하세요.</p></div>
         <section className={styles.toolbar()} aria-label="토큰 검색 및 상태 필터">
-          <SearchField className={styles.search()} label="토큰 검색" value={query} onChange={(event) => setQuery(event.currentTarget.value)} placeholder="이름, 접두사 또는 권한 검색" />
+          <SearchField density="compact" className={styles.search()} label="토큰 검색" value={query} onChange={(event) => setQuery(event.currentTarget.value)} placeholder="이름, 접두사 또는 권한 검색" />
           <SegmentedControl
             aria-label="토큰 상태"
             value={statusFilter}

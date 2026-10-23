@@ -32,6 +32,7 @@ import { CollapsibleContent, CollapsiblePanel, CollapsibleRoot, CollapsibleTrigg
 import { SelectField, TextField } from "#src/components/ui/field.tsx";
 import { PageHeader } from "#src/components/ui/page-header.tsx";
 import { SearchField } from "#src/components/ui/search-field.tsx";
+import { SettingsGroup, SettingsRow } from "#src/components/ui/settings-group.tsx";
 import { projectError, readCsrfCredential } from "#src/lib/api/browser-security.ts";
 import type { CollaborationOperation } from "#src/lib/api/browser-security.ts";
 import { createBrowserApiClient } from "#src/lib/api/browser-client.ts";
@@ -41,26 +42,24 @@ import type { ProjectGitState } from "#src/app/(authenticated)/projects/project-
 
 const projectDashboardStyles = tv({
   slots: {
-    root: "mx-auto w-full max-w-[82rem] px-[clamp(1.25rem,4vw,3.5rem)] pt-[clamp(2rem,4vw,3.75rem)] pb-20 outline-none max-[48rem]:px-4 max-[48rem]:py-5",
+    root: "mx-auto w-full max-w-none px-6 py-6 pb-16 outline-none max-[48rem]:px-4 max-[48rem]:py-4",
     header: "",
     count: "inline-flex shrink-0 items-center rounded-full bg-subtle px-2 py-1 text-xs font-semibold whitespace-nowrap text-muted-foreground",
-    layout: "mt-6 grid min-w-0 grid-cols-1 gap-6",
-    sidebar: "grid min-w-0 content-start gap-5",
+    layout: "mt-4 grid min-w-0 grid-cols-1 gap-4",
+    sidebar: "grid min-w-0 content-start gap-4",
     createForm: "grid grid-cols-[minmax(12rem,0.8fr)_minmax(14rem,1fr)_minmax(9rem,auto)] items-end gap-4 rounded-xl border border-muted-border bg-surface p-5 shadow-xs max-[48rem]:grid-cols-1",
     createHeading: "col-span-full grid content-start gap-1 [&_h2]:m-0 [&_h2]:text-base max-[48rem]:col-span-1",
     createButton: "min-w-36 whitespace-nowrap max-[48rem]:w-full",
-    toolbar: "flex items-center gap-3 rounded-xl border border-muted-border bg-surface p-3 max-[48rem]:items-stretch max-[48rem]:flex-col",
+    toolbar: "flex items-center gap-2 rounded-lg border border-muted-border bg-surface p-2 max-[48rem]:items-stretch max-[48rem]:flex-col",
     search: "flex-1",
     filters: "flex shrink-0 gap-1 overflow-x-auto rounded-lg bg-subtle p-1",
     filter: "inline-flex min-h-9 items-center rounded-md px-3 text-xs font-semibold whitespace-nowrap text-muted-foreground no-underline hover:bg-hover hover:text-foreground aria-[current=page]:bg-surface aria-[current=page]:text-foreground aria-[current=page]:shadow-xs",
-    panel: "overflow-hidden rounded-xl border border-muted-border bg-surface shadow-xs",
-    panelHeader: "flex items-start justify-between gap-4 border-b border-muted-border px-5 py-4 max-[48rem]:flex-col max-[48rem]:gap-2 [&_h2]:m-0 [&_h2]:text-base [&_p]:mt-1 [&_p]:mb-0 [&_p]:text-sm [&_p]:text-muted-foreground",
-    panelCount: "shrink-0 rounded-full bg-subtle px-2 py-1 text-xs whitespace-nowrap text-muted-foreground",
+    panel: "overflow-hidden rounded-lg border border-muted-border bg-surface",
     empty: "grid min-h-48 place-content-center justify-items-center gap-2 text-muted-foreground [&_span]:text-sm",
     list: "m-0 grid list-none p-0",
     item: "grid grid-cols-[minmax(0,1fr)_auto] items-center border-b border-muted-border p-0 last:border-b-0 max-[48rem]:grid-cols-1",
-    main: "grid min-h-[4.5rem] min-w-0 grid-cols-[2rem_minmax(0,1fr)_auto_auto] items-center gap-3 px-5 py-3 text-foreground no-underline hover:bg-hover max-[48rem]:grid-cols-[2rem_minmax(0,1fr)_auto] max-[48rem]:px-3",
-    initial: "grid size-8 place-items-center rounded-lg bg-selected text-xs font-semibold text-link",
+    main: "grid min-h-14 min-w-0 grid-cols-[1.75rem_minmax(0,1fr)_auto_auto] items-center gap-3 px-4 py-2 text-foreground no-underline hover:bg-hover max-[48rem]:grid-cols-[1.75rem_minmax(0,1fr)_auto] max-[48rem]:px-3",
+    initial: "grid size-7 place-items-center rounded-md bg-selected text-[var(--n-font-size-2xs)] font-semibold text-link",
     recordCopy: "grid min-w-0 gap-1 [&_strong]:truncate [&_small]:truncate [&_small]:text-xs [&_small]:text-muted-foreground",
     status: "inline-flex items-center gap-1 rounded-full bg-subtle px-2 py-1 text-xs font-semibold whitespace-nowrap text-muted-foreground [&_i]:size-1.5 [&_i]:rounded-full [&_i]:bg-current max-[48rem]:hidden",
     activeStatus: "bg-success-subtle text-success",
@@ -89,7 +88,7 @@ const projectDashboardStyles = tv({
   variants: {
     detailMode: {
       true: {
-        root: "max-w-[82rem] py-6",
+        root: "max-w-none py-5",
         layout: "mt-6",
         sidebar: "hidden"
       },
@@ -98,7 +97,15 @@ const projectDashboardStyles = tv({
       }
     },
     sectionPage: {
-      true: { detailHeader: "hidden" },
+      true: {
+        accessForm: "rounded-none border-0 border-b border-muted-border bg-transparent px-4 py-3",
+        accessHint: "mx-4 my-3",
+        accessSection: "gap-0 overflow-hidden rounded-lg border border-muted-border bg-surface pt-0 [&>h3]:border-b [&>h3]:border-muted-border [&>h3]:px-4 [&>h3]:py-3 [&>h3]:text-sm",
+        detail: "gap-4 rounded-none border-0 bg-transparent p-0 shadow-none",
+        detailHeader: "hidden",
+        grantList: "gap-0 [&>li]:rounded-none [&>li]:border-x-0 [&>li]:border-b-0 [&>li]:px-4 [&>li]:py-3",
+        roleStatus: "mx-4 mt-3"
+      },
       false: {}
     }
   }
@@ -329,12 +336,13 @@ export function ProjectDashboard(props: ProjectDashboardProps) {
     <main id="main-content" className={styles.root()} tabIndex={-1}>
       <PageHeader
         className={styles.header()}
+        density="compact"
         eyebrow={project === undefined ? workspace?.displayLabel ?? "워크스페이스" : workspace?.displayLabel ?? "워크스페이스"}
         title={project === undefined ? view === "create" ? "새 프로젝트" : "프로젝트" : sectionCopy.title}
         description={project === undefined
           ? view === "create"
             ? "프로젝트 이름과 주소를 정하면 즉시 Studio를 열어 개발을 시작합니다."
-            : "프로젝트를 선택하면 편집기로 바로 이동합니다. 설정은 별도 화면에서 관리할 수 있습니다."
+            : "프로젝트를 선택해 Studio를 열거나 별도 설정을 관리합니다."
           : `${project.name}의 ${sectionCopy.description}`}
         actions={project === undefined && workspace !== undefined
           ? view === "create"
@@ -358,13 +366,12 @@ export function ProjectDashboard(props: ProjectDashboardProps) {
               <Button className={styles.createButton()} type="submit" variant="primary" disabled={mutation.isPending}>프로젝트 만들기</Button>
             </form> : null}
             {view === "collection" ? <><section className={styles.toolbar()} aria-label="프로젝트 검색 및 상태 필터">
-              <SearchField className={styles.search()} label="불러온 프로젝트 검색" autoComplete="off" value={projectQuery} onChange={(event) => setProjectQuery(event.currentTarget.value)} placeholder="불러온 프로젝트에서 검색" />
+              <SearchField className={styles.search()} density="compact" label="불러온 프로젝트 검색" autoComplete="off" value={projectQuery} onChange={(event) => setProjectQuery(event.currentTarget.value)} placeholder="불러온 프로젝트에서 검색" />
               <nav className={styles.filters()} aria-label="프로젝트 상태">
                 {(["active", "archived", "all"] as const).map((filter) => <Link className={styles.filter()} key={filter} href={projectHref(workspace.storageScopeId, filter)} aria-current={state === filter ? "page" : undefined}>{projectStateLabel(filter)}</Link>)}
               </nav>
             </section>
-            <section className={styles.panel()} aria-busy={isSearchPending} aria-labelledby="project-list-title">
-              <header className={styles.panelHeader()}><div><h2 id="project-list-title">프로젝트 목록</h2><p>프로젝트를 선택해 편집기를 열고 개발을 이어가세요.</p></div><span className={styles.panelCount()}>{visibleProjects.length}개 표시</span></header>
+            <section className={styles.panel()} aria-busy={isSearchPending} aria-label="프로젝트 목록">
               <p className="sr-only" role="status" aria-live="polite">{isSearchPending ? "검색 결과를 갱신하는 중" : `${visibleProjects.length}개 프로젝트 표시 중`}</p>
               {visibleProjects.length === 0 ? <div className={styles.empty()}><strong>검색 결과가 없습니다.</strong><span>다른 이름이나 상태를 선택해보세요.</span></div> : (
                 <ul className={styles.list()} aria-label="프로젝트">
@@ -400,7 +407,20 @@ export function ProjectDashboard(props: ProjectDashboardProps) {
               <>
                 <header className={styles.detailHeader()}><div className={styles.detailIdentity()}><Link className={styles.detailBack()} href={projectHref(workspace.storageScopeId, state)} aria-label="프로젝트 목록으로 돌아가기">‹</Link><div className={styles.detailCopy()}><p className={styles.eyebrow()}>{project.state === "active" ? "활성" : "보관됨"} · 버전 {project.version}</p><h2>{project.name}</h2><p>{workspace.displayLabel} / {project.slug}</p></div></div><div className={styles.detailActions()}>{project.state === "active" ? <Link className={buttonVariants({ variant: "primary" })} href={projectStudioHref(workspace.storageScopeId, project.id)}>편집기 열기</Link> : null}<Link className={buttonVariants({ variant: "secondary" })} href={`/workspaces/${encodeURIComponent(workspace.storageScopeId)}/projects/${encodeURIComponent(project.id)}/settings/tokens`}>액세스 토큰</Link></div></header>
                 {detailSection === "all" && project.state === "active" ? <ProjectGitPanel initialState={props.initialGitState} project={project} /> : null}
-                {detailSection === "all" || detailSection === "general" || detailSection === "danger" ? <CollapsibleRoot className="mt-1" defaultOpen><CollapsibleTrigger><span>{detailSection === "danger" ? "프로젝트 상태" : "프로젝트 관리"}</span><small>{detailSection === "danger" ? "보관, 복원 및 영구 삭제" : "이름과 표시 정보"}</small></CollapsibleTrigger><CollapsiblePanel><CollapsibleContent className="grid gap-5">{detailSection !== "danger" ? <form className={styles.profileForm()} onSubmit={rename} aria-busy={mutation.isPending}><div><h3>프로젝트 정보</h3><p>목록과 협업 화면에 표시되는 이름입니다.</p></div><TextField label="프로젝트 이름" name="name" defaultValue={project.name} required maxLength={200} disabled={mutation.isPending} /><Button type="submit" disabled={mutation.isPending}>이름 저장</Button></form> : null}{detailSection === "all" || detailSection === "danger" ? <section className={detailSection === "danger" ? styles.dangerActions() : styles.projectActions()}><h3>상태 관리</h3><Button type="button" disabled={mutation.isPending} onClick={() => void changeLifecycle(project.state === "active" ? "archive" : "restore")}>{project.state === "active" ? "보관" : "복원"}</Button><p>보관하면 활성 목록에서 숨겨집니다. 삭제한 프로젝트는 복구할 수 없습니다.</p><form onSubmit={remove}><TextField label={<>삭제하려면 <strong>{project.name}</strong> 입력</>} name="confirmName" required disabled={mutation.isPending} /><Button type="submit" variant="danger" disabled={mutation.isPending}>프로젝트 삭제</Button></form></section> : null}</CollapsibleContent></CollapsiblePanel></CollapsibleRoot> : null}
+                {detailSection === "all" || detailSection === "general" ? <CollapsibleRoot className="mt-1" defaultOpen><CollapsibleTrigger><span>프로젝트 관리</span><small>이름과 표시 정보</small></CollapsibleTrigger><CollapsiblePanel><CollapsibleContent className="grid gap-5"><form className={styles.profileForm()} onSubmit={rename} aria-busy={mutation.isPending}><div><h3>프로젝트 정보</h3><p>목록과 협업 화면에 표시되는 이름입니다.</p></div><TextField label="프로젝트 이름" name="name" defaultValue={project.name} required maxLength={200} disabled={mutation.isPending} /><Button type="submit" disabled={mutation.isPending}>이름 저장</Button></form>{detailSection === "all" ? <section className={styles.projectActions()}><h3>상태 관리</h3><Button type="button" disabled={mutation.isPending} onClick={() => void changeLifecycle(project.state === "active" ? "archive" : "restore")}>{project.state === "active" ? "보관" : "복원"}</Button><p>보관하면 활성 목록에서 숨겨집니다. 삭제한 프로젝트는 복구할 수 없습니다.</p><form onSubmit={remove}><TextField label={<>삭제하려면 <strong>{project.name}</strong> 입력</>} name="confirmName" required disabled={mutation.isPending} /><Button type="submit" variant="danger" disabled={mutation.isPending}>프로젝트 삭제</Button></form></section> : null}</CollapsibleContent></CollapsiblePanel></CollapsibleRoot> : null}
+                {detailSection === "danger" ? (
+                  <SettingsGroup tone="danger" title="위험 영역" description="프로젝트 가용성과 데이터를 변경하는 작업입니다.">
+                    <SettingsRow title={project.state === "active" ? "프로젝트 보관" : "프로젝트 복원"} description={project.state === "active" ? "활성 목록과 Studio에서 숨기며 필요할 때 복원할 수 있습니다." : "프로젝트를 다시 활성 목록과 Studio에서 사용할 수 있게 합니다."}>
+                      <Button type="button" disabled={mutation.isPending} onClick={() => void changeLifecycle(project.state === "active" ? "archive" : "restore")}>{project.state === "active" ? "프로젝트 보관" : "프로젝트 복원"}</Button>
+                    </SettingsRow>
+                    <SettingsRow layout="stacked" title="프로젝트 영구 삭제" description="삭제한 프로젝트와 기록은 복구할 수 없습니다. 프로젝트 이름을 입력해 확인하세요.">
+                      <form className="grid w-full items-end gap-3 sm:grid-cols-[minmax(14rem,1fr)_auto]" onSubmit={remove}>
+                        <TextField label={<>확인을 위해 <strong>{project.name}</strong> 입력</>} name="confirmName" required disabled={mutation.isPending} />
+                        <Button type="submit" variant="danger" disabled={mutation.isPending}>프로젝트 삭제</Button>
+                      </form>
+                    </SettingsRow>
+                  </SettingsGroup>
+                ) : null}
                 {(detailSection === "all" || detailSection === "access") && owner?.ownerType === "organization" ? <section className={styles.accessSection()}><h3>직접 역할</h3>{props.canManageRoles ? <><form className={styles.accessForm()} onSubmit={addRole}><SelectField label="조직 멤버" name="userId" required value={selectedMemberId} disabled={mutation.isPending || !hasAvailableMembers} placeholder="멤버 선택" options={organizationMembers.map((member) => ({ value: member.userId, label: organizationMemberLabel(member), disabled: member.role === "owner" || !hasUniqueMemberLabel(member) || grantedUserIds.has(member.userId) }))} onValueChange={setSelectedMemberId} />{hasAmbiguousMembers ? <p>표시 이름과 조직 역할이 같은 멤버는 이름을 구분한 뒤 직접 역할을 부여할 수 있습니다.</p> : null}{hasAvailableMembers ? null : <p>직접 역할을 부여할 수 있는 조직 멤버가 없습니다.</p>}<SelectField label="역할" name="role" defaultValue="read" disabled={mutation.isPending || !hasAvailableMembers} options={[{ value: "read", label: "읽기" }, { value: "write", label: "쓰기" }, { value: "admin", label: "관리" }]} /><Button type="submit" disabled={mutation.isPending || selectedMemberId === ""}>역할 부여</Button></form>{roleStatus === undefined ? null : <p className={styles.roleStatus()} role="status" aria-live="polite">{roleStatus}</p>}{grants.length === 0 ? <p className={styles.accessHint()}>직접 부여된 역할이 없습니다. 팀 역할 또는 조직 기본 권한이 적용될 수 있습니다.</p> : <ul className={styles.grantList()}>{grants.map((grant, grantIndex) => { const member = memberByUserId.get(grant.userId); const memberIsActionable = member !== undefined && hasUniqueMemberLabel(member); const memberLabel = directGrantMemberLabel(grant, grantIndex, grants, memberByUserId, hasUniqueMemberLabel); return <li key={grant.userId}><div><strong>{memberLabel}</strong><span>{projectRoleLabel(grant.role)}{member === undefined ? "" : ` · 조직 ${organizationRoleLabel(member.role)}`}</span></div><div className={styles.grantActions()}><SelectField label={`${memberLabel} 역할`} labelHidden density="compact" value={grant.role} disabled={mutation.isPending || !memberIsActionable} options={[{ value: "read", label: "읽기" }, { value: "write", label: "쓰기" }, { value: "admin", label: "관리" }]} onValueChange={(nextRole) => void updateRole(grant, roleValue(nextRole))} /><Button type="button" aria-label={`${memberLabel} 역할 제거`} disabled={mutation.isPending} onClick={() => void updateRole(grant)}>제거</Button></div></li>; })}</ul>}</> : <p className={styles.accessHint()}>조직 소유자만 프로젝트의 직접 역할을 확인하고 관리할 수 있습니다.</p>}</section> : null}
               </>
             )}
@@ -509,7 +529,7 @@ function projectRoleLabel(role: ProjectRole): string {
 
 function projectHref(scope: string, state: ProjectListState): string {
   const query = new URLSearchParams({ state });
-  return `/workspaces/${encodeURIComponent(scope)}/projects?${query.toString()}`;
+  return `/workspaces/${encodeURIComponent(scope)}?${query.toString()}`;
 }
 
 function projectDetailHref(scope: string, state: ProjectListState, projectId: string): string {

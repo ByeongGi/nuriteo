@@ -76,7 +76,8 @@ function testAccessibleStateContract(): void {
   assert.match(catalog, /<SegmentedControl/u);
   assert.match(catalog, /value=\{filter\}/u);
   assert.match(catalog, /onValueChange=\{setFilter\}/u);
-  assert.match(catalog, /href=\{`\/workspaces\/\$\{encodeURIComponent\(workspace\.storageScopeId\)\}\/projects`\}/u);
+  assert.match(catalog, /href=\{`\/workspaces\/\$\{encodeURIComponent\(workspace\.storageScopeId\)\}`\}/u);
+  assert.match(catalog, /워크스페이스 열기/u);
   assert.match(catalog, /export function EmptyWorkspaceScreen/u);
   assert.match(catalog, /워크스페이스 추가/u);
   assert.match(catalog, /href="\/workspaces\/new"/u);
@@ -94,12 +95,12 @@ function testAccessibleStateContract(): void {
   assert.match(navigation, /aria-label="모바일 계정 메뉴"/u);
   assert.match(navigation, /<LogoutButton placement="mobile"\s*\/>/u);
   assert.match(navigation, /resolveWorkspaceSelection\(workspaces, requestedScope\)/u);
-  assert.match(navigation, /label: "대시보드"/u);
+  assert.doesNotMatch(navigation, /label: "대시보드"/u);
   assert.match(navigation, /label: "워크스페이스"/u);
-  assert.match(navigation, /label: "프로젝트"/u);
+  assert.doesNotMatch(navigation, /label: "프로젝트"/u);
   assert.match(navigation, /aria-label="현재 워크스페이스 메뉴"/u);
   assert.match(navigation, /aria-label="협업 메뉴"/u);
-  assert.match(navigation, /: `\$\{workspaceBaseHref\}\/projects`/u);
+  assert.doesNotMatch(navigation, /workspaceBaseHref[^\n]+\/projects/u);
   assert.doesNotMatch(navigation, /workspaceBaseHref[^\n]+[?&]workspace=/u);
   assert.match(logout, /await deleteSession/u);
   assert.match(logout, /csrfToken: readCsrfCredential\(\)/u);

@@ -23,6 +23,10 @@ const logoutButtonStyles = tv({
       mobile: {
         root: "m-0 block p-0",
         button: "min-h-11 justify-start px-3"
+      },
+      header: {
+        root: "m-0 block p-0 max-[40rem]:hidden",
+        button: "min-h-9 w-auto justify-center px-3"
       }
     }
   },
@@ -31,7 +35,7 @@ const logoutButtonStyles = tv({
   }
 });
 
-export function LogoutButton({ placement = "sidebar" }: Readonly<{ placement?: "sidebar" | "mobile" }>) {
+export function LogoutButton({ placement = "sidebar" }: Readonly<{ placement?: "sidebar" | "mobile" | "header" }>) {
   const router = useRouter();
   const [isPending, setIsPending] = useState(false);
   const [error, setError] = useState<string>();

@@ -17,7 +17,7 @@ export default async function StudioLayout({ children }: Readonly<{ children: Re
   } catch (error) {
     unstable_rethrow(error);
     if (isExplicitlySignedOut(error)) {
-      const requestPath = (await headers()).get("x-nuriteo-request-path") ?? "/dashboard";
+      const requestPath = (await headers()).get("x-nuriteo-request-path") ?? "/workspaces";
       redirect(signInHref(requestPath));
     }
     return (
