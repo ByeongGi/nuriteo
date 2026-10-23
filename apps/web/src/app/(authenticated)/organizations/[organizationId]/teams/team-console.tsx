@@ -455,7 +455,7 @@ export function TeamConsole(props: TeamConsoleProps) {
         <section className={styles.detail()} aria-labelledby="team-detail-title">
           {team === undefined ? (
             <div className={styles.emptyState()}>
-              <p className="eyebrow">팀 접근 권한</p>
+              <p className="m-0 mb-3 text-xs font-semibold uppercase tracking-[0.08em] text-accent-foreground">팀 접근 권한</p>
               <h2 id="team-detail-title">팀을 선택하세요</h2>
               <p>팀을 선택하면 멤버와 프로젝트 역할을 함께 확인할 수 있습니다.</p>
             </div>
@@ -463,7 +463,7 @@ export function TeamConsole(props: TeamConsoleProps) {
             <>
               <header className={styles.detailHeader()}>
                 <div>
-                  <p className="eyebrow">{team.slug}</p>
+                  <p className="m-0 mb-3 text-xs font-semibold uppercase tracking-[0.08em] text-accent-foreground">{team.slug}</p>
                   <h2 id="team-detail-title">{team.displayName}</h2>
                 </div>
                 <span className={styles.badge()} aria-label={`Team version ${team.version}`}>v{team.version}</span>

@@ -10,7 +10,7 @@ export function WorkspacePageLoading({
   label
 }: WorkspacePageLoadingProps) {
   return (
-    <main id="main-content" className="workspace-page" aria-busy="true" aria-live="polite">
+    <main id="main-content" className="mx-auto w-full max-w-[64rem] px-[var(--n-layout-content-gutter)] py-[clamp(2rem,7vw,5rem)]" aria-busy="true" aria-live="polite">
       <LoadingShell cardCount={cardCount} label={label} showBodyLine />
     </main>
   );

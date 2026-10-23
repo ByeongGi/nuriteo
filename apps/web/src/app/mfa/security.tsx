@@ -190,7 +190,7 @@ export function MfaSecurity({
       ? "인증 앱의 새 코드 또는 사용하지 않은 복구 코드로 현재 세션을 확인합니다."
       : `${displayName}님의 로컬 계정을 인증 앱과 일회용 복구 코드로 보호합니다.`;
   return (
-    <main id="main-content" className={styles.root({ className: "mfa-page" })}>
+    <main id="main-content" className={styles.root()}>
       {view === "security" ? null : <nav className={styles.productBar()} aria-label="계정 보안 탐색">
         <Link className={styles.productBrand()} href={status.restricted ? "/mfa/setup" : "/workspaces"}><span className={styles.brandMark()} aria-hidden="true">N</span><strong>NURITEO</strong></Link>
         {status.restricted ? <span className={styles.productStatus()}>계정 보호 설정이 필요합니다</span> : <div className={styles.productNav()}><Link className={styles.productLink()} href="/workspaces">워크스페이스</Link><Link className={styles.productLink()} href="/account/identities">연결된 로그인</Link><Link className={styles.productLink()} aria-current="page" href={securityHref}>계정 보안</Link></div>}

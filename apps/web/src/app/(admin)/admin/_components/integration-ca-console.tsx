@@ -17,6 +17,7 @@ import { TextareaField } from "#src/components/ui/field.tsx";
 import { createBrowserApiClient } from "#src/lib/api/browser-client.ts";
 import { readCsrfCredential } from "#src/lib/api/browser-security.ts";
 import { AdminEmptyState, AdminForm, AdminFormActionNote, AdminFormActions, AdminFormFieldSpan, AdminFormSection } from "#src/app/(admin)/admin/_components/admin-form-layout.tsx";
+import { AdminCollectionHeading } from "#src/app/(admin)/admin/_components/admin-surface.tsx";
 
 interface IntegrationCaConsoleProps {
   readonly initialCollection?: IntegrationCaCollection | undefined;
@@ -83,18 +84,18 @@ export function IntegrationCaConsole({ initialCollection, type, integrationId }:
   }
 
   return (
-    <section className="integration-ca-console" aria-label="사설 인증 기관">
+    <section className="col-span-full mt-4 border-t border-muted-border pt-4" aria-label="사설 인증 기관">
       {items === undefined ? (
         <Button onClick={() => void load()} disabled={pending}>
           CA 신뢰 기록 불러오기
         </Button>
       ) : (
         <>
-          <div className="admin-collection-heading">
+          <AdminCollectionHeading>
             <h3>사설 인증 기관</h3>
             <Badge>등록 {items.length}개</Badge>
-          </div>
-          <CollapsibleRoot className="admin-record-disclosure integration-ca-console__stage">
+          </AdminCollectionHeading>
+          <CollapsibleRoot className="mt-4">
             <CollapsibleTrigger>새 CA 후보 등록</CollapsibleTrigger>
             <CollapsiblePanel><CollapsibleContent><AdminForm onSubmit={(event) => void stage(event)} aria-busy={pending}>
               <AdminFormSection title="인증서 번들" description="연동 서버를 신뢰하는 데 필요한 PEM 형식의 사설 루트 또는 중간 인증서를 등록합니다.">
@@ -111,7 +112,7 @@ export function IntegrationCaConsole({ initialCollection, type, integrationId }:
           {items.length === 0 ? (
             <AdminEmptyState title="사용자 CA가 없습니다">현재 시스템 신뢰 저장소만 사용하고 있습니다.</AdminEmptyState>
           ) : (
-            <ul className="record-list">
+            <ul className="mt-6 grid list-none gap-2 p-0 [&>li]:[content-visibility:auto] [&>li]:[contain-intrinsic-size:auto_5rem]">
               {items.map((item) => (
                 <li key={item.id}>
                   <div>

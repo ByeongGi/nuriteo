@@ -19,6 +19,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { FormEvent } from "react";
+import { tv } from "tailwind-variants";
 
 import { Button } from "#src/components/ui/button.tsx";
 import { CheckboxField } from "#src/components/ui/checkbox.tsx";
@@ -30,6 +31,32 @@ import { readCsrfCredential } from "#src/lib/api/browser-security.ts";
 import { useExclusiveMutation } from "#src/lib/use-exclusive-mutation.ts";
 import { AdminPageHeader } from "#src/app/(admin)/admin/_components/admin-page-header.tsx";
 import { AdminPage, AdminSectionHeading } from "#src/app/(admin)/admin/_components/admin-surface.tsx";
+
+const adminSettingsStyles = tv({
+  slots: {
+    section: "mt-8 overflow-hidden rounded-xl border border-muted-border bg-surface shadow-xs",
+    status: "shrink-0 rounded-full border border-success px-3 py-1 text-xs font-medium text-foreground",
+    statusGrid: "m-0 grid grid-cols-2 border-t border-muted-border max-[37.5rem]:grid-cols-1 [&>div]:min-w-0 [&>div]:border-b [&>div]:border-muted-border [&>div]:px-5 [&>div]:py-4 [&>div:nth-child(odd)]:border-r [&>div:nth-last-child(-n+2)]:border-b-0 max-[37.5rem]:[&>div]:border-r-0 max-[37.5rem]:[&>div]:border-b max-[37.5rem]:[&>div:last-child]:border-b-0 [&_dt]:m-0 [&_dt]:text-xs [&_dt]:text-subtle-foreground [&_dd]:mt-1 [&_dd]:font-mono [&_dd]:text-sm [&_dd]:[overflow-wrap:anywhere]",
+    settingList: "border-t border-muted-border",
+    setting: "m-0 grid grid-cols-[minmax(0,1fr)_minmax(15rem,20rem)] gap-5 border-b border-muted-border p-5 last:border-b-0 max-[37.5rem]:grid-cols-1 max-[37.5rem]:items-stretch",
+    copy: "grid min-w-0 content-start gap-2 [&>label]:text-base [&>label]:font-medium [&>strong]:text-base [&>strong]:font-medium [&_p]:m-0 [&_p]:text-sm [&_p]:text-muted-foreground [&>span]:text-sm [&>span]:text-muted-foreground [&_code]:w-fit [&_code]:max-w-full [&_code]:text-xs [&_code]:text-subtle-foreground [&_code]:[overflow-wrap:anywhere]",
+    control: "grid min-w-0 content-start gap-3",
+    actions: "flex flex-wrap gap-2 max-[37.5rem]:[&_[data-slot=button]]:w-full",
+    feedback: "col-span-full flex items-center justify-between gap-3 rounded-md border bg-subtle p-3 text-sm max-[37.5rem]:flex-col max-[37.5rem]:items-stretch",
+    numberControl: "grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 [&_span]:text-sm [&_span]:text-muted-foreground",
+    impact: "col-span-full grid gap-3 rounded-md border border-border bg-subtle p-4 [&_dl]:m-0 [&_dl]:grid [&_dl]:grid-cols-3 [&_dl]:gap-3 max-[37.5rem]:[&_dl]:grid-cols-1 [&_dt]:m-0 [&_dt]:text-xs [&_dt]:text-subtle-foreground [&_dd]:mt-1 [&_dd]:font-mono",
+    impactHeading: "flex justify-between gap-3 max-[37.5rem]:flex-col [&_span]:text-sm [&_span]:text-muted-foreground",
+    policyNote: "m-0 border-t border-muted-border px-5 py-3 text-sm text-muted-foreground",
+    policyError: "m-0 border-t border-muted-border px-5 py-3 text-sm text-danger"
+  },
+  variants: {
+    warning: { true: { status: "border-warning" } },
+    feedbackTone: {
+      error: { feedback: "border-danger text-danger" },
+      success: { feedback: "border-success" }
+    }
+  }
+});
 
 interface SettingDescriptor {
   readonly label: string;
@@ -58,6 +85,7 @@ export function AdminSettings({
   readonly status: AdminStatus;
 }) {
   const [restartRequired, setRestartRequired] = useState(status.restartRequired);
+  const styles = adminSettingsStyles({ warning: restartRequired });
 
   return (
     <AdminPage id="main-content">
@@ -65,20 +93,20 @@ export function AdminSettings({
         category="인스턴스 설정"
         title="인스턴스 설정"
         description="현재 설정과 변경 영향을 같은 맥락에서 검토하세요. 민감한 자격 증명은 각 연동 화면에서 별도로 관리합니다."
-        aside={<span className={restartRequired ? "status-badge status-badge--warning" : "status-badge"}>{restartRequired ? "재시작 필요" : "최신 상태"}</span>}
+        aside={<span className={styles.status()}>{restartRequired ? "재시작 필요" : "최신 상태"}</span>}
       />
 
-      <section className="admin-status" aria-labelledby="instance-status-title">
+      <section className={styles.section()} aria-labelledby="instance-status-title">
         <AdminSectionHeading>
           <div>
-            <p className="eyebrow">런타임 상태</p>
+            <p className="m-0 mb-3 text-xs font-semibold uppercase tracking-[0.08em] text-accent-foreground">런타임 상태</p>
             <h2 id="instance-status-title">인스턴스 상태</h2>
           </div>
-          <span className={restartRequired ? "status-badge status-badge--warning" : "status-badge"}>
+          <span className={styles.status()}>
             {restartRequired ? "재시작 필요" : "최신 상태"}
           </span>
         </AdminSectionHeading>
-        <dl className="admin-status-grid max-[37.5rem]:grid-cols-1 max-[37.5rem]:[&>div]:border-r-0 max-[37.5rem]:[&>div]:border-b max-[37.5rem]:[&>div:last-child]:border-b-0">
+        <dl className={styles.statusGrid()}>
           <StatusItem label="릴리스" value={status.releaseVersion} />
           <StatusItem label="데이터베이스 스키마" value={String(status.schemaVersion)} />
           <StatusItem label="설정 레지스트리" value={String(status.settingRegistryVersion)} />
@@ -88,15 +116,15 @@ export function AdminSettings({
 
       <CleanupPreview initial={cleanup} />
 
-      <section className="admin-settings" aria-labelledby="instance-settings-title">
+      <section className={styles.section()} aria-labelledby="instance-settings-title">
         <AdminSectionHeading>
           <div>
-            <p className="eyebrow">REGISTRY {settings.registryVersion}</p>
+            <p className="m-0 mb-3 text-xs font-semibold uppercase tracking-[0.08em] text-accent-foreground">REGISTRY {settings.registryVersion}</p>
             <h2 id="instance-settings-title">인스턴스 정책</h2>
           </div>
           <p>모든 변경은 유효성 및 버전을 확인한 뒤 감사 기록에 남습니다.</p>
         </AdminSectionHeading>
-        <div className="admin-setting-list">
+        <div className={styles.settingList()}>
           {settings.items.map((setting) => {
             if (setting.key === "security.mfa_enforcement" || setting.key === "security.mfa_grace_period_days") {
               return <ManagedMfaSetting key={setting.key} setting={setting} />;
@@ -120,9 +148,10 @@ export function AdminSettings({
 }
 
 function ManagedMfaSetting({ setting }: { readonly setting: AdminSetting }) {
+  const styles = adminSettingsStyles();
   return (
-    <article className="admin-setting max-[37.5rem]:grid-cols-1 max-[37.5rem]:items-stretch">
-      <div className="admin-setting__copy">
+    <article className={styles.setting()}>
+      <div className={styles.copy()}>
         <strong>{setting.key === "security.mfa_enforcement" ? "MFA 적용 정책" : "MFA 유예 기간"}</strong>
         <p>등록 영향과 활성 관리자 안전 검증을 포함하는 전용 화면에서 관리합니다.</p>
         <code>{setting.key}</code>
@@ -137,6 +166,7 @@ function CleanupPreview({ initial }: { readonly initial: AdminPolicyCleanupPrevi
   const mutation = useExclusiveMutation();
   const [preview, setPreview] = useState(initial);
   const [failure, setFailure] = useState(false);
+  const styles = adminSettingsStyles();
 
   async function refresh() {
     await mutation.run(async () => {
@@ -151,26 +181,26 @@ function CleanupPreview({ initial }: { readonly initial: AdminPolicyCleanupPrevi
   }
 
   return (
-    <section className="admin-policy-preview" aria-labelledby="cleanup-preview-title">
+    <section className={styles.section()} aria-labelledby="cleanup-preview-title">
       <AdminSectionHeading>
         <div>
-          <p className="eyebrow">읽기 전용 사전 점검</p>
+          <p className="m-0 mb-3 text-xs font-semibold uppercase tracking-[0.08em] text-accent-foreground">읽기 전용 사전 점검</p>
           <h2 id="cleanup-preview-title">오브젝트 정리 미리보기</h2>
         </div>
         <Button type="button" size="sm" onClick={refresh} disabled={mutation.isPending}>
           {mutation.isPending ? "새로 고치는 중…" : "미리보기 새로 고침"}
         </Button>
       </AdminSectionHeading>
-      <dl className="admin-status-grid max-[37.5rem]:grid-cols-1 max-[37.5rem]:[&>div]:border-r-0 max-[37.5rem]:[&>div]:border-b max-[37.5rem]:[&>div:last-child]:border-b-0">
+      <dl className={styles.statusGrid()}>
         <StatusItem label="가비지 컬렉션" value={preview.gcEnabled ? "켜짐" : "꺼짐"} />
         <StatusItem label="유예 기간" value={formatDuration(preview.gracePeriodSeconds)} />
         <StatusItem label="정리 대상" value={String(preview.eligibleCandidates)} />
         <StatusItem label="예상 회수량" value={formatBytes(preview.expectedReclaimBytes)} />
       </dl>
-      <p className="admin-policy-preview__note">
+      <p className={styles.policyNote()}>
         최대 {preview.batchLimit}개 후보를 확인하는 읽기 전용 점검입니다. 실제 삭제는 시작하지 않습니다.
       </p>
-      {failure ? <p className="admin-policy-preview__error" role="alert">정리 미리보기를 새로 고치지 못했습니다.</p> : null}
+      {failure ? <p className={styles.policyError()} role="alert">정리 미리보기를 새로 고치지 못했습니다.</p> : null}
     </section>
   );
 }
@@ -258,15 +288,16 @@ function SettingEditor({
   }
 
   const controlId = `setting-${setting.key.replaceAll(".", "-")}`;
+  const styles = adminSettingsStyles({ feedbackTone: feedback?.tone });
   return (
-    <form className="admin-setting max-[37.5rem]:grid-cols-1 max-[37.5rem]:items-stretch" onSubmit={submit} aria-busy={mutation.isPending}>
-      <div className="admin-setting__copy">
+    <form className={styles.setting()} onSubmit={submit} aria-busy={mutation.isPending}>
+      <div className={styles.copy()}>
         <label htmlFor={controlId}>{descriptor.label}</label>
         <p>{descriptor.description}</p>
         <code>{setting.key}</code>
         <span>{applyModeLabel(setting.applyMode)} · 버전 {setting.version}</span>
       </div>
-      <div className="admin-setting__control">
+      <div className={styles.control()}>
         <SettingControl
           controlId={controlId}
           constraint={setting.constraint}
@@ -277,7 +308,7 @@ function SettingEditor({
           onDraft={(value) => { setDraft(value); setImpact(undefined); setFeedback(undefined); }}
           onUnlimited={(value) => { setUnlimited(value); setImpact(undefined); setFeedback(undefined); }}
         />
-        <div className="admin-setting__actions max-[37.5rem]:[&_[data-slot=button]]:w-full">
+        <div className={styles.actions()}>
           <Button type="button" size="sm" onClick={review} disabled={mutation.isPending}>영향 검토</Button>
           <Button type="button" size="sm" onClick={resetDefault} disabled={mutation.isPending || (draft === settingValueToDraft(setting.defaultValue) && unlimited === (setting.defaultValue === null))}>
             기본값으로 초기화
@@ -289,7 +320,7 @@ function SettingEditor({
       </div>
       {impact ? <ImpactPreview impact={impact.value} /> : null}
       {feedback ? (
-        <div className={`admin-setting__feedback admin-setting__feedback--${feedback.tone} max-[37.5rem]:flex-col max-[37.5rem]:items-stretch`} role={feedback.tone === "error" ? "alert" : "status"}>
+        <div className={styles.feedback()} role={feedback.tone === "error" ? "alert" : "status"}>
           <span>{feedback.message}</span>
           {feedback.reconcile ? (
             <Button type="button" size="sm" onClick={() => router.refresh()}>
@@ -354,7 +385,7 @@ function SettingControl({
       (constraint.kind === "retention_days" && constraint.allowUnlimited);
     return (
       <>
-        <div className="admin-number-control">
+        <div className={adminSettingsStyles().numberControl()}>
           <Input
             id={controlId}
             type="number"
@@ -390,32 +421,34 @@ function SettingControl({
 }
 
 function ImpactPreview({ impact }: { readonly impact: AdminPolicyImpact }) {
+  const styles = adminSettingsStyles();
   return (
-    <div className="admin-policy-impact" role="status" aria-live="polite">
-      <div className="admin-policy-impact__heading max-[37.5rem]:flex-col">
+    <div className={styles.impact()} role="status" aria-live="polite">
+      <div className={styles.impactHeading()}>
         <strong>영향 검토 완료</strong>
         <span>{humanize(impact.direction)} · {humanize(impact.applyScope)}</span>
       </div>
-      <dl className="max-[37.5rem]:grid-cols-1">
+      <dl>
         <StatusItem label="영향받는 리소스" value={String(impact.affectedResources)} />
         <StatusItem label="정책 미준수 리소스" value={String(impact.nonCompliantResources)} />
         <StatusItem label="유예 기간" value={impact.gracePeriodSeconds === null ? "해당 없음" : formatDuration(impact.gracePeriodSeconds)} />
       </dl>
       <p>기존 데이터는 자동으로 삭제되지 않습니다.</p>
-      {impact.requiresRecentReauthentication ? <p className="admin-policy-impact__warning">이 변경을 적용하려면 최근 관리자 재인증이 필요합니다.</p> : null}
+      {impact.requiresRecentReauthentication ? <p className="m-0 text-sm text-danger">이 변경을 적용하려면 최근 관리자 재인증이 필요합니다.</p> : null}
     </div>
   );
 }
 
 function UnsupportedSetting({ setting }: { readonly setting: AdminSetting }) {
+  const styles = adminSettingsStyles();
   return (
-    <article className="admin-setting admin-setting--unsupported max-[37.5rem]:grid-cols-1 max-[37.5rem]:items-stretch">
-      <div className="admin-setting__copy">
+    <article className={styles.setting({ className: "items-start" })}>
+      <div className={styles.copy()}>
         <strong>{setting.key}</strong>
         <p>이 레지스트리 항목은 현재 웹 릴리스보다 새 버전이어서 읽기 전용으로 표시됩니다.</p>
         <span>{applyModeLabel(setting.applyMode)} · 버전 {setting.version}</span>
       </div>
-      <span className="status-badge status-badge--warning">웹 업데이트 필요</span>
+      <span className={adminSettingsStyles({ warning: true }).status()}>웹 업데이트 필요</span>
     </article>
   );
 }

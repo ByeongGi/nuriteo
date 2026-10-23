@@ -29,10 +29,10 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
   return (
     <html lang="ko" data-theme-mode={themeMode}>
       <body>
-        <a className="skip-link" href="#main-content">
+        <a className="fixed top-2 left-2 z-[var(--n-z-toast)] -translate-y-[150%] rounded-md bg-raised px-3 py-2 text-foreground shadow-[var(--n-shadow-overlay)] focus:translate-y-0" href="#main-content">
           본문으로 건너뛰기
         </a>
-        <div className="application-root">
+        <div className="isolate min-h-screen">
           <SiteHeader themeMode={themeMode} />
           {children}
         </div>

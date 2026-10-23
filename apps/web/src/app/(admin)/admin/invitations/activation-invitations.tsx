@@ -128,7 +128,7 @@ export function ActivationInvitations({
         aside={<Badge>대기 중 {pendingCount}개</Badge>}
       />
       {oneTimeUrl ? (
-        <section className="one-time-panel" aria-live="polite">
+        <section className="mt-6 grid gap-3 rounded-lg border border-warning bg-surface p-4 [&_h2]:m-0 [&_h2]:text-base [&_output]:select-all [&_output]:rounded-md [&_output]:bg-subtle [&_output]:p-3 [&_output]:font-mono [&_output]:[overflow-wrap:anywhere]" aria-live="polite">
           <h2>지금 링크를 복사하세요</h2>
           <output>{oneTimeUrl}</output>
           <Button type="button" disabled={mutation.isPending} onClick={() => setOneTimeUrl(undefined)}>
@@ -137,11 +137,11 @@ export function ActivationInvitations({
         </section>
       ) : null}
       {deliveryNotice ? <p role="status">{deliveryNotice}</p> : null}
-      {error ? <p className="form-error" role="alert">{error}</p> : null}
-      <AdminPanel className="admin-create-panel" aria-labelledby="issue-invitation-title">
+      {error ? <p className="rounded-md border border-danger bg-subtle p-3 text-danger" role="alert">{error}</p> : null}
+      <AdminPanel aria-labelledby="issue-invitation-title">
         <CollapsibleRoot defaultOpen={invitations.length === 0}>
           <CollapsibleTrigger className="max-[48rem]:[&_small]:hidden"><span id="issue-invitation-title">새 계정 초대</span><small>링크는 한 번만 사용할 수 있습니다</small><CollapsibleIndicator>⌄</CollapsibleIndicator></CollapsibleTrigger>
-          <CollapsiblePanel><CollapsibleContent><form className="collaboration-form admin-invitation-form max-[48rem]:grid-cols-1 max-[48rem]:[&>[data-slot=button]]:col-start-1 max-[48rem]:[&>[data-slot=button]]:w-full max-[48rem]:[&>[data-slot=button]]:justify-self-stretch" onSubmit={issue} aria-busy={mutation.isPending}>
+          <CollapsiblePanel><CollapsibleContent><form className="grid grid-cols-[minmax(0,1fr)_12rem_auto] items-end gap-4 max-[48rem]:grid-cols-1 max-[48rem]:[&>[data-slot=button]]:col-start-1 max-[48rem]:[&>[data-slot=button]]:w-full max-[48rem]:[&>[data-slot=button]]:justify-self-stretch" onSubmit={issue} aria-busy={mutation.isPending}>
             <TextField label="초대받을 이메일" name="email" type="email" required maxLength={320} autoComplete="email" disabled={mutation.isPending} />
             <SelectField label="유효 기간" name="expiresInSeconds" defaultValue="604800" options={EXPIRATION_OPTIONS} required disabled={mutation.isPending} />
             <Button type="submit" variant="primary" disabled={mutation.isPending}>
@@ -152,20 +152,20 @@ export function ActivationInvitations({
       </AdminPanel>
       <AdminPanel aria-labelledby="invitation-list-title">
         <AdminCollectionHeading><h2 id="invitation-list-title">발급 내역</h2><Badge>전체 {invitations.length}개</Badge></AdminCollectionHeading>
-        <div className="admin-collection-toolbar max-[48rem]:grid-cols-1" role="search" aria-label="계정 초대 검색 및 필터">
+        <div className="mb-4 grid grid-cols-[minmax(12rem,1fr)_12rem_auto] items-end gap-3 rounded-lg border border-muted-border bg-subtle p-3 max-[48rem]:grid-cols-1 [&>span]:self-center [&>span]:text-xs [&>span]:text-muted-foreground" role="search" aria-label="계정 초대 검색 및 필터">
           <TextField label="이메일 검색" labelHidden density="compact" type="search" value={query} onChange={(event) => setQuery(event.currentTarget.value)} placeholder="이메일 검색" />
           <SelectField label="초대 상태" labelHidden density="compact" options={STATUS_OPTIONS} value={statusFilter} onValueChange={(nextValue) => setStatusFilter(nextValue as "all" | ActivationInvitation["status"])} />
           <span aria-live="polite">{visibleInvitations.length}개 표시</span>
         </div>
-        {invitations.length === 0 ? <p>발급한 계정 초대가 없습니다.</p> : visibleInvitations.length === 0 ? <p>검색 조건에 맞는 초대가 없습니다.</p> : <ul className="record-list" aria-label="계정 활성화 초대">
+        {invitations.length === 0 ? <p>발급한 계정 초대가 없습니다.</p> : visibleInvitations.length === 0 ? <p>검색 조건에 맞는 초대가 없습니다.</p> : <ul className="mt-6 grid list-none gap-2 p-0 [&>li]:[content-visibility:auto] [&>li]:[contain-intrinsic-size:auto_5rem]" aria-label="계정 활성화 초대">
           {visibleInvitations.map((invitation) => (
           <li key={invitation.id}>
             <div>
               <strong>{invitation.email}</strong>
-              <span><b className="admin-record-status" data-status={invitation.status}>{invitationStatusLabel(invitation.status)}</b> · {new Date(invitation.expires_at).toLocaleString("ko-KR")} 만료</span>
+              <span><b className="font-semibold text-muted-foreground data-[status=accepted]:text-success data-[status=pending]:text-warning" data-status={invitation.status}>{invitationStatusLabel(invitation.status)}</b> · {new Date(invitation.expires_at).toLocaleString("ko-KR")} 만료</span>
             </div>
             {invitation.status === "pending" ? (
-              <div className="record-actions">
+              <div className="flex flex-wrap gap-3">
                 <Button type="button" disabled={mutation.isPending} onClick={() => void reissue(invitation.id)}>다시 발급</Button>
                 <Button type="button" disabled={mutation.isPending} onClick={() => void revoke(invitation.id)}>초대 취소</Button>
               </div>

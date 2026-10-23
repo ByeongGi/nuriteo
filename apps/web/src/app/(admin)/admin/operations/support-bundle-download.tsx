@@ -49,7 +49,7 @@ export function SupportBundleDownload({ preview }: { readonly preview: AdminSupp
 
   return (
     <div>
-      <p className="admin-operations-card__summary">
+      <p className="m-0 border-t border-muted-border px-5 py-4 text-sm text-foreground">
         아래 포함 항목을 확인한 뒤 로컬 JSON 파일을 만드세요. 어떤 정보도 자동으로 업로드되지 않습니다.
       </p>
       <CollapsibleRoot>
@@ -66,7 +66,7 @@ export function SupportBundleDownload({ preview }: { readonly preview: AdminSupp
           </CollapsibleContent>
         </CollapsiblePanel>
       </CollapsibleRoot>
-      <p className="admin-operations-card__note">
+      <p className="m-0 border-t border-muted-border px-5 py-4 text-xs text-muted-foreground">
         최대 다운로드 크기는 {formatBytes(preview.maximumBytes)}입니다. 프로젝트 파일, 자격 증명,
         요청 본문과 데이터베이스 행은 포함되지 않습니다.
       </p>

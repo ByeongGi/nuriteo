@@ -30,5 +30,5 @@ export default async function StudioLayout({ children }: Readonly<{ children: Re
     );
   }
 
-  return <div className="studio-route min-h-screen bg-page">{children}</div>;
+  return <div className="min-h-screen bg-page">{children}</div>;
 }

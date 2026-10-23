@@ -10,7 +10,7 @@ import { createBrowserApiClient } from "#src/lib/api/browser-client.ts";
 import { readCsrfCredential } from "#src/lib/api/browser-security.ts";
 import { useExclusiveMutation } from "#src/lib/use-exclusive-mutation.ts";
 import { AdminPageHeader } from "#src/app/(admin)/admin/_components/admin-page-header.tsx";
-import { AdminSectionHeading } from "#src/app/(admin)/admin/_components/admin-surface.tsx";
+import { AdminPage, AdminSectionHeading } from "#src/app/(admin)/admin/_components/admin-surface.tsx";
 import type { AdminMaintenanceStatus } from "#src/app/(admin)/admin/maintenance/maintenance-model.ts";
 
 export function MaintenanceConsole({ initial }: { readonly initial: AdminMaintenanceStatus }) {
@@ -46,29 +46,29 @@ export function MaintenanceConsole({ initial }: { readonly initial: AdminMainten
   }
 
   return (
-    <main id="main-content" className="workspace-page admin-detail-page">
+    <AdminPage id="main-content">
       <AdminPageHeader
         category="유지보수"
         title="유지보수"
         description="백업 복구나 업데이트 전에 새 쓰기를 안전하게 차단합니다. 기존 쓰기가 종료되는 동안 조회는 계속 사용할 수 있습니다."
-        aside={<div className="admin-operations-summary max-[37.5rem]:justify-items-start">
-          <span className="status-badge" data-state={enabled ? "degraded" : "nominal"}>
+        aside={<div className="grid shrink-0 justify-items-end gap-2 text-xs text-subtle-foreground max-[37.5rem]:justify-items-start">
+          <span className="shrink-0 rounded-full border border-success px-3 py-1 text-xs font-medium text-foreground data-[state=degraded]:border-warning" data-state={enabled ? "degraded" : "nominal"}>
             {phaseLabel(status.phase)}
           </span>
           <span>활성 쓰기 {status.activeWrites}개</span>
         </div>}
       />
 
-      <section className="admin-update-approval" aria-labelledby="maintenance-action-title">
+      <section className="mt-6 overflow-hidden rounded-xl border border-muted-border bg-surface shadow-xs" aria-labelledby="maintenance-action-title">
         <AdminSectionHeading>
           <div>
-            <p className="eyebrow">쓰기 제한 범위</p>
+            <p className="m-0 mb-3 text-xs font-semibold uppercase tracking-[0.08em] text-accent-foreground">쓰기 제한 범위</p>
             <h2 id="maintenance-action-title">
               {enabled ? "정상 운영 재개" : "유지보수 모드 시작"}
             </h2>
           </div>
         </AdminSectionHeading>
-        <div className="admin-update-approval__body max-[37.5rem]:flex-col max-[37.5rem]:items-stretch" aria-busy={mutation.isPending}>
+        <div className="flex items-center justify-between gap-4 border-t border-muted-border px-5 py-4 max-[37.5rem]:flex-col max-[37.5rem]:items-stretch [&_label]:flex [&_label]:max-w-[42rem] [&_label]:items-start [&_label]:gap-2 [&_label]:text-sm" aria-busy={mutation.isPending}>
           <CheckboxField
             checked={confirmed}
             disabled={mutation.isPending}
@@ -87,16 +87,16 @@ export function MaintenanceConsole({ initial }: { readonly initial: AdminMainten
               : enabled ? "쓰기 재개" : "유지보수 시작"}
           </Button>
         </div>
-        <p className="admin-operations-card__note">
+        <p className="m-0 border-t border-muted-border px-5 py-4 text-xs text-muted-foreground">
           최근 관리자 재인증이 필요합니다. 종료 제한 시간을 넘기면 안전을 위해 차단 상태를 유지하므로 다시 시도하기 전에 현재 상태를 새로 확인하세요.
         </p>
         {feedback ? (
-          <p role={feedback.error ? "alert" : "status"} className={feedback.error ? "form-error admin-update-feedback" : "admin-update-feedback"}>
+          <p role={feedback.error ? "alert" : "status"} className={feedback.error ? "m-0 border-t border-danger px-5 py-3 text-danger" : "m-0 border-t border-muted-border px-5 py-3"}>
             {feedback.text}
           </p>
         ) : null}
       </section>
-    </main>
+    </AdminPage>
   );
 }
 

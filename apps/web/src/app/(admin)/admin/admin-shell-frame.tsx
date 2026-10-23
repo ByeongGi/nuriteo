@@ -35,7 +35,7 @@ const adminShellStyles = tv({
     mobilePanel: "fixed inset-x-0 top-16 z-[var(--n-z-sticky)] flex h-[calc(100vh-4rem)] flex-col overflow-auto border-0 bg-surface px-4 py-5",
     mobileReturnLink: "mt-6",
     mobileUtilities: "mt-4 border-t border-muted-border pt-4",
-    content: "admin-shell min-w-0 [&>.workspace-page]:w-[min(100%,82rem)] [&>.workspace-page]:px-[clamp(1.25rem,4vw,3.5rem)] [&>.workspace-page]:pb-20 [&>.workspace-page]:pt-6",
+    content: "min-w-0",
     loadingBlock: "block rounded-md bg-subtle",
     loadingBrand: "h-10",
     loadingReturn: "mt-5 h-10",

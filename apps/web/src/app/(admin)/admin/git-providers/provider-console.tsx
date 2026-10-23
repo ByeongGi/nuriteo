@@ -77,8 +77,8 @@ export function GitProviderConsole({ initialProviders }: { readonly initialProvi
 
   return <AdminPage id="main-content">
     <AdminPageHeader category="Git 제공자" title="Git 제공자" description="정확한 HTTPS 원본을 등록하세요. 사용자 자격 증명은 분리되어 이 화면에 표시되지 않습니다." aside={<Badge>등록 {providers.length}개</Badge>} />
-    <AdminPanel className="admin-create-panel" aria-labelledby="add-git-provider"><CollapsibleRoot defaultOpen={providers.length === 0}><CollapsibleTrigger className="max-[48rem]:[&_small]:hidden"><span id="add-git-provider">Git 제공자 추가</span><small>비활성 상태로 저장한 뒤 연결을 검증합니다</small></CollapsibleTrigger><CollapsiblePanel><CollapsibleContent><ProviderForm onSubmit={create} disabled={mutation.isPending} /></CollapsibleContent></CollapsiblePanel></CollapsibleRoot></AdminPanel>
-    <AdminPanel aria-labelledby="git-provider-list"><AdminCollectionHeading><h2 id="git-provider-list">등록된 제공자</h2><Badge>{providers.length}개</Badge></AdminCollectionHeading>{providers.length === 0 ? <p>등록된 Git 제공자가 없습니다. 위에서 첫 연결을 추가하세요.</p> : <ul className="record-list">{providers.map((provider) => <AdminIntegrationRecord key={provider.id}><div><strong><Link href={`/admin/integrations/git/${provider.id}`}>{provider.displayName}</Link></strong><span>{provider.state === "active" ? "활성" : "비활성"}</span><small>{provider.kind} · {provider.host}:{provider.port} · 설정 v{provider.configVersion}</small></div>{provider.state === "disabled" ? <CollapsibleRoot className="admin-record-disclosure"><CollapsibleTrigger>연결 설정 편집</CollapsibleTrigger><CollapsiblePanel><CollapsibleContent><ProviderForm provider={provider} onSubmit={(event) => void update(event, provider)} disabled={mutation.isPending} /></CollapsibleContent></CollapsiblePanel></CollapsibleRoot> : null}<IntegrationCaConsole type="git_provider" integrationId={provider.id} /><AdminRecordActions>{provider.state === "active" ? <Button onClick={() => void execute(async () => (await disableGitProvider(createBrowserApiClient(), provider.id, provider.configVersion, options())).data, "제공자를 즉시 비활성화했습니다.")} disabled={mutation.isPending}>비활성화</Button> : <Button variant="primary" onClick={() => void execute(async () => (await activateGitProvider(createBrowserApiClient(), provider.id, provider.configVersion, options())).data, "제공자를 검증하고 활성화했습니다.")} disabled={mutation.isPending}>검증 후 활성화</Button>}<Button variant="danger" onClick={() => setPendingDeletion(provider)} disabled={mutation.isPending || provider.state !== "disabled"}>삭제</Button></AdminRecordActions></AdminIntegrationRecord>)}</ul>}</AdminPanel>
+    <AdminPanel aria-labelledby="add-git-provider"><CollapsibleRoot defaultOpen={providers.length === 0}><CollapsibleTrigger className="max-[48rem]:[&_small]:hidden"><span id="add-git-provider">Git 제공자 추가</span><small>비활성 상태로 저장한 뒤 연결을 검증합니다</small></CollapsibleTrigger><CollapsiblePanel><CollapsibleContent><ProviderForm onSubmit={create} disabled={mutation.isPending} /></CollapsibleContent></CollapsiblePanel></CollapsibleRoot></AdminPanel>
+    <AdminPanel aria-labelledby="git-provider-list"><AdminCollectionHeading><h2 id="git-provider-list">등록된 제공자</h2><Badge>{providers.length}개</Badge></AdminCollectionHeading>{providers.length === 0 ? <p>등록된 Git 제공자가 없습니다. 위에서 첫 연결을 추가하세요.</p> : <ul className="mt-6 grid list-none gap-2 p-0">{providers.map((provider) => <AdminIntegrationRecord key={provider.id}><div><strong><Link href={`/admin/integrations/git/${provider.id}`}>{provider.displayName}</Link></strong><span>{provider.state === "active" ? "활성" : "비활성"}</span><small>{provider.kind} · {provider.host}:{provider.port} · 설정 v{provider.configVersion}</small></div>{provider.state === "disabled" ? <CollapsibleRoot className="mt-4"><CollapsibleTrigger>연결 설정 편집</CollapsibleTrigger><CollapsiblePanel><CollapsibleContent><ProviderForm provider={provider} onSubmit={(event) => void update(event, provider)} disabled={mutation.isPending} /></CollapsibleContent></CollapsiblePanel></CollapsibleRoot> : null}<IntegrationCaConsole type="git_provider" integrationId={provider.id} /><AdminRecordActions>{provider.state === "active" ? <Button onClick={() => void execute(async () => (await disableGitProvider(createBrowserApiClient(), provider.id, provider.configVersion, options())).data, "제공자를 즉시 비활성화했습니다.")} disabled={mutation.isPending}>비활성화</Button> : <Button variant="primary" onClick={() => void execute(async () => (await activateGitProvider(createBrowserApiClient(), provider.id, provider.configVersion, options())).data, "제공자를 검증하고 활성화했습니다.")} disabled={mutation.isPending}>검증 후 활성화</Button>}<Button variant="danger" onClick={() => setPendingDeletion(provider)} disabled={mutation.isPending || provider.state !== "disabled"}>삭제</Button></AdminRecordActions></AdminIntegrationRecord>)}</ul>}</AdminPanel>
     {feedback ? <p role={feedback.error ? "alert" : "status"}>{feedback.text}</p> : null}
     <ConfirmationDialog busy={mutation.isPending} confirmLabel={mutation.isPending ? "삭제 중…" : "제공자 삭제"} description={`${pendingDeletion?.displayName ?? "선택한 제공자"} 설정과 인증서 신뢰 구성이 영구적으로 삭제됩니다.`} open={pendingDeletion !== undefined} title="Git 제공자를 삭제할까요?" onCancel={() => setPendingDeletion(undefined)} onConfirm={() => { if (pendingDeletion) void remove(pendingDeletion); }} />
   </AdminPage>;
@@ -91,15 +91,15 @@ function ProviderForm({ provider, onSubmit, disabled }: { readonly provider?: Gi
   const usesOAuth = kind !== "generic";
 
   return (
-    <AdminForm className="admin-provider-form" onSubmit={onSubmit} aria-busy={disabled}>
-      <section className="admin-provider-form__section max-[48rem]:grid-cols-1" aria-labelledby={provider ? `provider-basic-${provider.id}` : "provider-basic-new"}>
-        <header>
+    <AdminForm onSubmit={onSubmit} aria-busy={disabled}>
+      <section className="col-span-full grid grid-cols-2 gap-4 border-t border-muted-border pt-5 first:border-t-0 first:pt-0 max-[48rem]:grid-cols-1" aria-labelledby={provider ? `provider-basic-${provider.id}` : "provider-basic-new"}>
+        <header className="col-span-full grid gap-1 [&_strong]:text-sm [&_strong]:text-foreground [&_span]:text-xs [&_span]:text-subtle-foreground">
           <strong id={provider ? `provider-basic-${provider.id}` : "provider-basic-new"}>기본 정보</strong>
           <span>관리 화면과 연결 선택기에 표시되는 정보를 설정합니다.</span>
         </header>
         <TextField label="표시 이름" name="displayName" defaultValue={provider?.displayName} required maxLength={200} disabled={disabled} />
         {provider ? (
-          <div className="admin-provider-form__readonly">
+          <div className="grid min-w-0 gap-1 rounded-md border border-muted-border bg-subtle px-4 py-3 [&_span]:text-xs [&_span]:text-subtle-foreground [&_strong]:[overflow-wrap:anywhere]">
             <span>제공자 종류</span>
             <strong>{providerKindLabel(kind)}</strong>
           </div>
@@ -108,14 +108,14 @@ function ProviderForm({ provider, onSubmit, disabled }: { readonly provider?: Gi
         )}
       </section>
 
-      <section className="admin-provider-form__section max-[48rem]:grid-cols-1" aria-labelledby={provider ? `provider-connection-${provider.id}` : "provider-connection-new"}>
-        <header>
+      <section className="col-span-full grid grid-cols-2 gap-4 border-t border-muted-border pt-5 first:border-t-0 first:pt-0 max-[48rem]:grid-cols-1" aria-labelledby={provider ? `provider-connection-${provider.id}` : "provider-connection-new"}>
+        <header className="col-span-full grid gap-1 [&_strong]:text-sm [&_strong]:text-foreground [&_span]:text-xs [&_span]:text-subtle-foreground">
           <strong id={provider ? `provider-connection-${provider.id}` : "provider-connection-new"}>연결 정보</strong>
           <span>{preset ? "공식 서비스 주소를 안전한 기본값으로 사용합니다." : "서버가 검증할 정확한 HTTPS 원본을 입력합니다."}</span>
         </header>
         {preset ? (
           <>
-            <div className="admin-provider-form__fixed max-[48rem]:col-auto max-[48rem]:grid-cols-1">
+            <div className="col-span-full grid grid-cols-[minmax(0,1fr)_7rem_minmax(0,1.4fr)] gap-3 rounded-md border border-muted-border bg-subtle px-4 py-3 max-[48rem]:col-auto max-[48rem]:grid-cols-1 [&>span]:grid [&>span]:min-w-0 [&>span]:gap-1 [&_small]:text-xs [&_small]:text-subtle-foreground [&_strong]:[overflow-wrap:anywhere]">
               <span><small>호스트</small><strong>{preset.host}</strong></span>
               <span><small>포트</small><strong>{preset.port}</strong></span>
               <span><small>API</small><strong>{preset.apiBaseUrl}</strong></span>
@@ -125,7 +125,7 @@ function ProviderForm({ provider, onSubmit, disabled }: { readonly provider?: Gi
             <input type="hidden" name="apiBaseUrl" value={preset.apiBaseUrl} />
           </>
         ) : provider ? (
-          <div className="admin-provider-form__fixed max-[48rem]:col-auto max-[48rem]:grid-cols-1">
+          <div className="col-span-full grid grid-cols-[minmax(0,1fr)_7rem_minmax(0,1.4fr)] gap-3 rounded-md border border-muted-border bg-subtle px-4 py-3 max-[48rem]:col-auto max-[48rem]:grid-cols-1 [&>span]:grid [&>span]:min-w-0 [&>span]:gap-1 [&_small]:text-xs [&_small]:text-subtle-foreground [&_strong]:[overflow-wrap:anywhere]">
             <span><small>호스트</small><strong>{provider.host}</strong></span>
             <span><small>포트</small><strong>{provider.port}</strong></span>
             <span><small>API</small><strong>{provider.apiBaseUrl}</strong></span>
@@ -134,20 +134,20 @@ function ProviderForm({ provider, onSubmit, disabled }: { readonly provider?: Gi
           <>
             <TextField label="정확한 호스트" name="host" required maxLength={253} disabled={disabled} placeholder="git.example.com" />
             <TextField label="포트" name="port" type="number" min="1" max="65535" defaultValue="443" required disabled={disabled} />
-            <TextField className="admin-provider-form__wide max-[48rem]:col-auto" label="API 기본 URL" name="apiBaseUrl" type="url" required maxLength={2048} disabled={disabled} placeholder="https://git.example.com/api" />
+            <TextField className="col-span-full min-w-0 max-[48rem]:col-auto" label="API 기본 URL" name="apiBaseUrl" type="url" required maxLength={2048} disabled={disabled} placeholder="https://git.example.com/api" />
           </>
         )}
       </section>
 
       {usesOAuth ? (
-        <section className="admin-provider-form__section max-[48rem]:grid-cols-1" aria-labelledby={provider ? `provider-oauth-${provider.id}` : "provider-oauth-new"}>
-          <header>
+        <section className="col-span-full grid grid-cols-2 gap-4 border-t border-muted-border pt-5 first:border-t-0 first:pt-0 max-[48rem]:grid-cols-1" aria-labelledby={provider ? `provider-oauth-${provider.id}` : "provider-oauth-new"}>
+          <header className="col-span-full grid gap-1 [&_strong]:text-sm [&_strong]:text-foreground [&_span]:text-xs [&_span]:text-subtle-foreground">
             <strong id={provider ? `provider-oauth-${provider.id}` : "provider-oauth-new"}>OAuth 애플리케이션</strong>
             <span>{isSelfHosted ? "자체 호스팅 서비스에 등록한 OAuth 애플리케이션 정보를 입력합니다." : "공식 서비스에 등록한 OAuth 애플리케이션의 클라이언트 ID를 입력합니다."}</span>
           </header>
           {preset ? (
             <>
-              <TextField className="admin-provider-form__wide max-[48rem]:col-auto" label="OAuth 클라이언트 ID" name="oauthClientId" defaultValue={provider?.oauthClientId ?? ""} required maxLength={1024} disabled={disabled} />
+              <TextField className="col-span-full min-w-0 max-[48rem]:col-auto" label="OAuth 클라이언트 ID" name="oauthClientId" defaultValue={provider?.oauthClientId ?? ""} required maxLength={1024} disabled={disabled} />
               <input type="hidden" name="oauthAuthorizationUrl" value={preset.oauthAuthorizationUrl} />
               <input type="hidden" name="oauthTokenUrl" value={preset.oauthTokenUrl} />
             </>
@@ -155,16 +155,16 @@ function ProviderForm({ provider, onSubmit, disabled }: { readonly provider?: Gi
             <>
               <TextField label="OAuth 인증 URL" name="oauthAuthorizationUrl" type="url" defaultValue={provider?.oauthAuthorizationUrl ?? ""} required maxLength={2048} disabled={disabled} placeholder="https://git.example.com/oauth/authorize" />
               <TextField label="OAuth 토큰 URL" name="oauthTokenUrl" type="url" defaultValue={provider?.oauthTokenUrl ?? ""} required maxLength={2048} disabled={disabled} placeholder="https://git.example.com/oauth/token" />
-              <TextField className="admin-provider-form__wide max-[48rem]:col-auto" label="OAuth 클라이언트 ID" name="oauthClientId" defaultValue={provider?.oauthClientId ?? ""} required maxLength={1024} disabled={disabled} />
+              <TextField className="col-span-full min-w-0 max-[48rem]:col-auto" label="OAuth 클라이언트 ID" name="oauthClientId" defaultValue={provider?.oauthClientId ?? ""} required maxLength={1024} disabled={disabled} />
             </>
           )}
         </section>
       ) : (
-        <p className="admin-provider-form__notice max-[48rem]:col-auto">일반 HTTPS 제공자는 OAuth를 사용하지 않습니다. 사용자는 프로젝트에서 개인 액세스 토큰을 별도로 연결합니다.</p>
+        <p className="col-span-full text-xs text-subtle-foreground max-[48rem]:col-auto">일반 HTTPS 제공자는 OAuth를 사용하지 않습니다. 사용자는 프로젝트에서 개인 액세스 토큰을 별도로 연결합니다.</p>
       )}
 
-      <fieldset className="admin-permissions">
-        <legend>저장소 접근 권한</legend>
+      <fieldset className="col-span-full m-0 flex flex-wrap gap-2 border-0 p-0">
+        <legend className="mb-2 w-full text-xs font-semibold text-muted-foreground">저장소 접근 권한</legend>
         <CheckboxField name="allowsRead" label="읽기 허용" description="저장소 내용과 브랜치 정보를 조회합니다." defaultChecked={provider?.allowsRead ?? true} disabled={disabled} />
         <CheckboxField name="allowsWrite" label="쓰기 허용" description="커밋과 브랜치 변경을 원격 저장소에 반영합니다." defaultChecked={provider?.allowsWrite ?? false} disabled={disabled} />
       </fieldset>

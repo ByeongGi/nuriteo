@@ -52,22 +52,22 @@ export function UpdateReadinessConsole({
         title="버전 관리"
         description="민감 정보를 제거한 호환성 및 사전 점검 보고서를 검토하세요. 승인은 배포 작업에 운영자의 의도만 기록하며 업데이트를 시작하지 않습니다."
         aside={<AdminSummary>
-          <span className="status-badge" data-state={readiness.state === "ready" ? "nominal" : "degraded"}>
+          <span className="shrink-0 rounded-full border border-success px-3 py-1 text-xs font-medium text-foreground data-[state=degraded]:border-warning" data-state={readiness.state === "ready" ? "nominal" : "degraded"}>
             {readiness.state === "ready" ? "승인 가능" : readiness.state === "current" ? "최신 상태" : "차단됨"}
           </span>
           <time dateTime={readiness.generatedAt}>{formatTimestamp(readiness.generatedAt)}</time>
         </AdminSummary>}
       />
 
-      <div className="admin-update-grid max-[37.5rem]:grid-cols-1">
-        <section className="admin-operations-card" aria-labelledby="update-target-title">
+      <div className="mt-8 grid grid-cols-2 gap-4 max-[37.5rem]:grid-cols-1">
+        <section className="min-w-0 overflow-hidden rounded-xl border border-muted-border bg-surface shadow-xs" aria-labelledby="update-target-title">
           <AdminSectionHeading>
             <div>
-              <p className="eyebrow">릴리스 경로</p>
+              <p className="m-0 mb-3 text-xs font-semibold uppercase tracking-[0.08em] text-accent-foreground">릴리스 경로</p>
               <h2 id="update-target-title">호환성</h2>
             </div>
           </AdminSectionHeading>
-          <dl className="admin-update-details max-[37.5rem]:[&>div]:grid-cols-1 max-[37.5rem]:[&>div]:gap-1">
+          <dl className="m-0 grid border-t border-muted-border [&>div]:grid [&>div]:grid-cols-[minmax(8rem,0.45fr)_minmax(0,1fr)] [&>div]:gap-4 [&>div]:border-b [&>div]:border-muted-border [&>div]:px-5 [&>div]:py-3 max-[37.5rem]:[&>div]:grid-cols-1 max-[37.5rem]:[&>div]:gap-1 [&_dd]:m-0 [&_dd]:text-sm [&_dd]:[overflow-wrap:anywhere] [&_dt]:m-0 [&_dt]:text-xs [&_dt]:text-subtle-foreground [&_dt]:[overflow-wrap:anywhere]">
             <Detail label="설치된 릴리스" value={readiness.currentRelease} />
             <Detail label="대상 릴리스" value={readiness.targetRelease} />
             <Detail label="스키마" value={readiness.compatibility.schemaPolicy} />
@@ -80,17 +80,17 @@ export function UpdateReadinessConsole({
           </AdminNote>
         </section>
 
-        <section className="admin-operations-card" aria-labelledby="update-preflight-title">
+        <section className="min-w-0 overflow-hidden rounded-xl border border-muted-border bg-surface shadow-xs" aria-labelledby="update-preflight-title">
           <AdminSectionHeading>
             <div>
-              <p className="eyebrow">읽기 전용 점검</p>
+              <p className="m-0 mb-3 text-xs font-semibold uppercase tracking-[0.08em] text-accent-foreground">읽기 전용 점검</p>
               <h2 id="update-preflight-title">사전 점검</h2>
             </div>
-            <span className="status-badge" data-state={readiness.preflight.state === "passed" ? "nominal" : "degraded"}>
+            <span className="shrink-0 rounded-full border border-success px-3 py-1 text-xs font-medium text-foreground data-[state=degraded]:border-warning" data-state={readiness.preflight.state === "passed" ? "nominal" : "degraded"}>
               {readiness.preflight.state === "passed" ? "통과" : "중지됨"}
             </span>
           </AdminSectionHeading>
-          <dl className="admin-update-details max-[37.5rem]:[&>div]:grid-cols-1 max-[37.5rem]:[&>div]:gap-1">
+          <dl className="m-0 grid border-t border-muted-border [&>div]:grid [&>div]:grid-cols-[minmax(8rem,0.45fr)_minmax(0,1fr)] [&>div]:gap-4 [&>div]:border-b [&>div]:border-muted-border [&>div]:px-5 [&>div]:py-3 max-[37.5rem]:[&>div]:grid-cols-1 max-[37.5rem]:[&>div]:gap-1 [&_dd]:m-0 [&_dd]:text-sm [&_dd]:[overflow-wrap:anywhere] [&_dt]:m-0 [&_dt]:text-xs [&_dt]:text-subtle-foreground [&_dt]:[overflow-wrap:anywhere]">
             <Detail label="스키마 상태" value={readiness.preflight.schemaState ?? "확인 불가"} />
             <Detail label="현재 마이그레이션" value={formatMigration(readiness.preflight.currentMigration)} />
             <Detail label="대상 마이그레이션" value={formatMigration(readiness.preflight.targetMigration)} />
@@ -103,10 +103,10 @@ export function UpdateReadinessConsole({
       </div>
 
       {readiness.blockers.length > 0 ? (
-        <section className="admin-update-blockers max-[37.5rem]:[&_li]:flex-col max-[37.5rem]:[&_li]:items-stretch" aria-labelledby="update-blockers-title">
+        <section className="mt-6 overflow-hidden rounded-xl border border-warning bg-surface shadow-xs [&_ul]:m-0 [&_ul]:list-none [&_ul]:border-t [&_ul]:border-muted-border [&_ul]:p-0 [&_li]:flex [&_li]:items-start [&_li]:justify-between [&_li]:gap-4 [&_li]:border-b [&_li]:border-muted-border [&_li]:px-5 [&_li]:py-4 [&_li:last-child]:border-b-0 max-[37.5rem]:[&_li]:flex-col max-[37.5rem]:[&_li]:items-stretch [&_li>span]:text-xs [&_li>span]:text-muted-foreground" aria-labelledby="update-blockers-title">
           <AdminSectionHeading>
             <div>
-              <p className="eyebrow">업그레이드 중단 조건</p>
+              <p className="m-0 mb-3 text-xs font-semibold uppercase tracking-[0.08em] text-accent-foreground">업그레이드 중단 조건</p>
               <h2 id="update-blockers-title">승인 전 차단 요인을 해결하세요</h2>
             </div>
           </AdminSectionHeading>
@@ -122,15 +122,15 @@ export function UpdateReadinessConsole({
         </section>
       ) : null}
 
-      <section className="admin-update-approval" aria-labelledby="update-approval-title">
+      <section className="mt-6 overflow-hidden rounded-xl border border-muted-border bg-surface shadow-xs" aria-labelledby="update-approval-title">
         <AdminSectionHeading>
           <div>
-            <p className="eyebrow">관리자 명시적 실행</p>
+            <p className="m-0 mb-3 text-xs font-semibold uppercase tracking-[0.08em] text-accent-foreground">관리자 명시적 실행</p>
             <h2 id="update-approval-title">업데이트 승인</h2>
           </div>
         </AdminSectionHeading>
         {readiness.approvalAllowed ? (
-          <div className="admin-update-approval__body max-[37.5rem]:flex-col max-[37.5rem]:items-stretch" aria-busy={mutation.isPending}>
+          <div className="flex items-center justify-between gap-4 border-t border-muted-border px-5 py-4 max-[37.5rem]:flex-col max-[37.5rem]:items-stretch [&_label]:flex [&_label]:max-w-[42rem] [&_label]:items-start [&_label]:gap-2 [&_label]:text-sm" aria-busy={mutation.isPending}>
             <CheckboxField checked={acknowledged} disabled={mutation.isPending} onCheckedChange={setAcknowledged} label="차단 요인을 검토했으며 이 작업이 승인만 기록하고 업데이트를 실행하지 않음을 이해했습니다." />
             <Button type="button" disabled={!acknowledged || mutation.isPending} onClick={approve}>
               {mutation.isPending ? "승인 기록 중…" : "업데이트 승인 기록"}
@@ -143,14 +143,14 @@ export function UpdateReadinessConsole({
               : "사전 점검 차단 요인이 남아 있는 동안에는 승인할 수 없습니다."}
           </AdminNote>
         )}
-        {notice ? <p role="status" className="admin-update-feedback">{notice}</p> : null}
-        {error ? <p role="alert" className="form-error admin-update-feedback">{error}</p> : null}
+        {notice ? <p role="status" className="m-0 border-t border-muted-border px-5 py-3">{notice}</p> : null}
+        {error ? <p role="alert" className="m-0 border-t border-danger px-5 py-3 text-danger">{error}</p> : null}
       </section>
 
-      <section className="admin-update-history max-[37.5rem]:[&_li]:flex-col max-[37.5rem]:[&_li]:items-stretch" aria-labelledby="update-history-title">
+      <section className="mt-6 overflow-hidden rounded-xl border border-muted-border bg-surface shadow-xs [&_ol]:m-0 [&_ol]:list-none [&_ol]:border-t [&_ol]:border-muted-border [&_ol]:p-0 [&_li]:flex [&_li]:items-start [&_li]:justify-between [&_li]:gap-4 [&_li]:border-b [&_li]:border-muted-border [&_li]:px-5 [&_li]:py-4 [&_li:last-child]:border-b-0 max-[37.5rem]:[&_li]:flex-col max-[37.5rem]:[&_li]:items-stretch [&_li>div]:grid [&_li>div]:gap-1 [&_li_span]:text-xs [&_li_span]:text-muted-foreground [&_time]:shrink-0 [&_time]:text-xs [&_time]:text-muted-foreground" aria-labelledby="update-history-title">
         <AdminSectionHeading>
           <div>
-            <p className="eyebrow">감사 기록</p>
+            <p className="m-0 mb-3 text-xs font-semibold uppercase tracking-[0.08em] text-accent-foreground">감사 기록</p>
             <h2 id="update-history-title">최근 업데이트 승인</h2>
           </div>
         </AdminSectionHeading>
