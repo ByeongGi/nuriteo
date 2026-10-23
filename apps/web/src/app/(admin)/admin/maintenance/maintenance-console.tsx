@@ -10,6 +10,7 @@ import { createBrowserApiClient } from "#src/lib/api/browser-client.ts";
 import { readCsrfCredential } from "#src/lib/api/browser-security.ts";
 import { useExclusiveMutation } from "#src/lib/use-exclusive-mutation.ts";
 import { AdminPageHeader } from "#src/app/(admin)/admin/_components/admin-page-header.tsx";
+import { AdminSectionHeading } from "#src/app/(admin)/admin/_components/admin-surface.tsx";
 import type { AdminMaintenanceStatus } from "#src/app/(admin)/admin/maintenance/maintenance-model.ts";
 
 export function MaintenanceConsole({ initial }: { readonly initial: AdminMaintenanceStatus }) {
@@ -50,7 +51,7 @@ export function MaintenanceConsole({ initial }: { readonly initial: AdminMainten
         category="유지보수"
         title="유지보수"
         description="백업 복구나 업데이트 전에 새 쓰기를 안전하게 차단합니다. 기존 쓰기가 종료되는 동안 조회는 계속 사용할 수 있습니다."
-        aside={<div className="admin-operations-summary">
+        aside={<div className="admin-operations-summary max-[37.5rem]:justify-items-start">
           <span className="status-badge" data-state={enabled ? "degraded" : "nominal"}>
             {phaseLabel(status.phase)}
           </span>
@@ -59,15 +60,15 @@ export function MaintenanceConsole({ initial }: { readonly initial: AdminMainten
       />
 
       <section className="admin-update-approval" aria-labelledby="maintenance-action-title">
-        <header className="admin-section-heading">
+        <AdminSectionHeading>
           <div>
             <p className="eyebrow">쓰기 제한 범위</p>
             <h2 id="maintenance-action-title">
               {enabled ? "정상 운영 재개" : "유지보수 모드 시작"}
             </h2>
           </div>
-        </header>
-        <div className="admin-update-approval__body" aria-busy={mutation.isPending}>
+        </AdminSectionHeading>
+        <div className="admin-update-approval__body max-[37.5rem]:flex-col max-[37.5rem]:items-stretch" aria-busy={mutation.isPending}>
           <CheckboxField
             checked={confirmed}
             disabled={mutation.isPending}

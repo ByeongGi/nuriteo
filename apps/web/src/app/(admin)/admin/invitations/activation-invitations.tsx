@@ -18,6 +18,7 @@ import { createBrowserApiClient } from "#src/lib/api/browser-client.ts";
 import { collaborationError, readCsrfCredential } from "#src/lib/api/browser-security.ts";
 import { useExclusiveMutation } from "#src/lib/use-exclusive-mutation.ts";
 import { AdminPageHeader } from "#src/app/(admin)/admin/_components/admin-page-header.tsx";
+import { AdminCollectionHeading, AdminPage, AdminPanel } from "#src/app/(admin)/admin/_components/admin-surface.tsx";
 
 const EXPIRATION_OPTIONS = [
   { value: "86400", label: "1일" },
@@ -119,7 +120,7 @@ export function ActivationInvitations({
   ));
 
   return (
-    <main id="main-content" className="workspace-page admin-detail-page">
+    <AdminPage id="main-content">
       <AdminPageHeader
         category="가입 초대"
         title="계정 활성화"
@@ -137,10 +138,10 @@ export function ActivationInvitations({
       ) : null}
       {deliveryNotice ? <p role="status">{deliveryNotice}</p> : null}
       {error ? <p className="form-error" role="alert">{error}</p> : null}
-      <section className="admin-detail-panel admin-create-panel" aria-labelledby="issue-invitation-title">
+      <AdminPanel className="admin-create-panel" aria-labelledby="issue-invitation-title">
         <CollapsibleRoot defaultOpen={invitations.length === 0}>
-          <CollapsibleTrigger><span id="issue-invitation-title">새 계정 초대</span><small>링크는 한 번만 사용할 수 있습니다</small><CollapsibleIndicator>⌄</CollapsibleIndicator></CollapsibleTrigger>
-          <CollapsiblePanel><CollapsibleContent><form className="collaboration-form admin-invitation-form" onSubmit={issue} aria-busy={mutation.isPending}>
+          <CollapsibleTrigger className="max-[48rem]:[&_small]:hidden"><span id="issue-invitation-title">새 계정 초대</span><small>링크는 한 번만 사용할 수 있습니다</small><CollapsibleIndicator>⌄</CollapsibleIndicator></CollapsibleTrigger>
+          <CollapsiblePanel><CollapsibleContent><form className="collaboration-form admin-invitation-form max-[48rem]:grid-cols-1 max-[48rem]:[&>[data-slot=button]]:col-start-1 max-[48rem]:[&>[data-slot=button]]:w-full max-[48rem]:[&>[data-slot=button]]:justify-self-stretch" onSubmit={issue} aria-busy={mutation.isPending}>
             <TextField label="초대받을 이메일" name="email" type="email" required maxLength={320} autoComplete="email" disabled={mutation.isPending} />
             <SelectField label="유효 기간" name="expiresInSeconds" defaultValue="604800" options={EXPIRATION_OPTIONS} required disabled={mutation.isPending} />
             <Button type="submit" variant="primary" disabled={mutation.isPending}>
@@ -148,10 +149,10 @@ export function ActivationInvitations({
             </Button>
           </form></CollapsibleContent></CollapsiblePanel>
         </CollapsibleRoot>
-      </section>
-      <section className="admin-detail-panel" aria-labelledby="invitation-list-title">
-        <div className="admin-collection-heading"><h2 id="invitation-list-title">발급 내역</h2><Badge>전체 {invitations.length}개</Badge></div>
-        <div className="admin-collection-toolbar" role="search" aria-label="계정 초대 검색 및 필터">
+      </AdminPanel>
+      <AdminPanel aria-labelledby="invitation-list-title">
+        <AdminCollectionHeading><h2 id="invitation-list-title">발급 내역</h2><Badge>전체 {invitations.length}개</Badge></AdminCollectionHeading>
+        <div className="admin-collection-toolbar max-[48rem]:grid-cols-1" role="search" aria-label="계정 초대 검색 및 필터">
           <TextField label="이메일 검색" labelHidden density="compact" type="search" value={query} onChange={(event) => setQuery(event.currentTarget.value)} placeholder="이메일 검색" />
           <SelectField label="초대 상태" labelHidden density="compact" options={STATUS_OPTIONS} value={statusFilter} onValueChange={(nextValue) => setStatusFilter(nextValue as "all" | ActivationInvitation["status"])} />
           <span aria-live="polite">{visibleInvitations.length}개 표시</span>
@@ -172,8 +173,8 @@ export function ActivationInvitations({
           </li>
           ))}
         </ul>}
-      </section>
-    </main>
+      </AdminPanel>
+    </AdminPage>
   );
 }
 

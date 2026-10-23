@@ -120,7 +120,7 @@
   --n-layout-header-height: 3.5rem;
   --n-layout-sidebar-width: 16rem;
   --n-layout-content-max: 80rem;
-  --n-layout-content-gutter: 1.5rem;
+  --n-layout-content-gutter: clamp(1rem, 4vw, 1.5rem);
 
   /* Browser Studio component semantics: deliberately dark in both product modes. */
   --n-color-studio-stage: #07101f;

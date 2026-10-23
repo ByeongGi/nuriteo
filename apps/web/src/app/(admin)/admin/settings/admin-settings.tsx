@@ -78,7 +78,7 @@ export function AdminSettings({
             {restartRequired ? "재시작 필요" : "최신 상태"}
           </span>
         </AdminSectionHeading>
-        <dl className="admin-status-grid">
+        <dl className="admin-status-grid max-[37.5rem]:grid-cols-1 max-[37.5rem]:[&>div]:border-r-0 max-[37.5rem]:[&>div]:border-b max-[37.5rem]:[&>div:last-child]:border-b-0">
           <StatusItem label="릴리스" value={status.releaseVersion} />
           <StatusItem label="데이터베이스 스키마" value={String(status.schemaVersion)} />
           <StatusItem label="설정 레지스트리" value={String(status.settingRegistryVersion)} />
@@ -121,7 +121,7 @@ export function AdminSettings({
 
 function ManagedMfaSetting({ setting }: { readonly setting: AdminSetting }) {
   return (
-    <article className="admin-setting">
+    <article className="admin-setting max-[37.5rem]:grid-cols-1 max-[37.5rem]:items-stretch">
       <div className="admin-setting__copy">
         <strong>{setting.key === "security.mfa_enforcement" ? "MFA 적용 정책" : "MFA 유예 기간"}</strong>
         <p>등록 영향과 활성 관리자 안전 검증을 포함하는 전용 화면에서 관리합니다.</p>
@@ -161,7 +161,7 @@ function CleanupPreview({ initial }: { readonly initial: AdminPolicyCleanupPrevi
           {mutation.isPending ? "새로 고치는 중…" : "미리보기 새로 고침"}
         </Button>
       </AdminSectionHeading>
-      <dl className="admin-status-grid">
+      <dl className="admin-status-grid max-[37.5rem]:grid-cols-1 max-[37.5rem]:[&>div]:border-r-0 max-[37.5rem]:[&>div]:border-b max-[37.5rem]:[&>div:last-child]:border-b-0">
         <StatusItem label="가비지 컬렉션" value={preview.gcEnabled ? "켜짐" : "꺼짐"} />
         <StatusItem label="유예 기간" value={formatDuration(preview.gracePeriodSeconds)} />
         <StatusItem label="정리 대상" value={String(preview.eligibleCandidates)} />
@@ -259,7 +259,7 @@ function SettingEditor({
 
   const controlId = `setting-${setting.key.replaceAll(".", "-")}`;
   return (
-    <form className="admin-setting" onSubmit={submit} aria-busy={mutation.isPending}>
+    <form className="admin-setting max-[37.5rem]:grid-cols-1 max-[37.5rem]:items-stretch" onSubmit={submit} aria-busy={mutation.isPending}>
       <div className="admin-setting__copy">
         <label htmlFor={controlId}>{descriptor.label}</label>
         <p>{descriptor.description}</p>
@@ -277,7 +277,7 @@ function SettingEditor({
           onDraft={(value) => { setDraft(value); setImpact(undefined); setFeedback(undefined); }}
           onUnlimited={(value) => { setUnlimited(value); setImpact(undefined); setFeedback(undefined); }}
         />
-        <div className="admin-setting__actions">
+        <div className="admin-setting__actions max-[37.5rem]:[&_[data-slot=button]]:w-full">
           <Button type="button" size="sm" onClick={review} disabled={mutation.isPending}>영향 검토</Button>
           <Button type="button" size="sm" onClick={resetDefault} disabled={mutation.isPending || (draft === settingValueToDraft(setting.defaultValue) && unlimited === (setting.defaultValue === null))}>
             기본값으로 초기화
@@ -289,7 +289,7 @@ function SettingEditor({
       </div>
       {impact ? <ImpactPreview impact={impact.value} /> : null}
       {feedback ? (
-        <div className={`admin-setting__feedback admin-setting__feedback--${feedback.tone}`} role={feedback.tone === "error" ? "alert" : "status"}>
+        <div className={`admin-setting__feedback admin-setting__feedback--${feedback.tone} max-[37.5rem]:flex-col max-[37.5rem]:items-stretch`} role={feedback.tone === "error" ? "alert" : "status"}>
           <span>{feedback.message}</span>
           {feedback.reconcile ? (
             <Button type="button" size="sm" onClick={() => router.refresh()}>
@@ -392,11 +392,11 @@ function SettingControl({
 function ImpactPreview({ impact }: { readonly impact: AdminPolicyImpact }) {
   return (
     <div className="admin-policy-impact" role="status" aria-live="polite">
-      <div className="admin-policy-impact__heading">
+      <div className="admin-policy-impact__heading max-[37.5rem]:flex-col">
         <strong>영향 검토 완료</strong>
         <span>{humanize(impact.direction)} · {humanize(impact.applyScope)}</span>
       </div>
-      <dl>
+      <dl className="max-[37.5rem]:grid-cols-1">
         <StatusItem label="영향받는 리소스" value={String(impact.affectedResources)} />
         <StatusItem label="정책 미준수 리소스" value={String(impact.nonCompliantResources)} />
         <StatusItem label="유예 기간" value={impact.gracePeriodSeconds === null ? "해당 없음" : formatDuration(impact.gracePeriodSeconds)} />
@@ -409,7 +409,7 @@ function ImpactPreview({ impact }: { readonly impact: AdminPolicyImpact }) {
 
 function UnsupportedSetting({ setting }: { readonly setting: AdminSetting }) {
   return (
-    <article className="admin-setting admin-setting--unsupported">
+    <article className="admin-setting admin-setting--unsupported max-[37.5rem]:grid-cols-1 max-[37.5rem]:items-stretch">
       <div className="admin-setting__copy">
         <strong>{setting.key}</strong>
         <p>이 레지스트리 항목은 현재 웹 릴리스보다 새 버전이어서 읽기 전용으로 표시됩니다.</p>

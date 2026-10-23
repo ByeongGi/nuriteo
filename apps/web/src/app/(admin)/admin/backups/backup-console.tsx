@@ -89,7 +89,7 @@ export function BackupConsole({ initial }: { readonly initial: BackupState }) {
       />
 
       {state.alerts.length > 0 ? (
-        <section className="admin-update-blockers" aria-labelledby="backup-alerts-title">
+        <section className="admin-update-blockers max-[37.5rem]:[&_li]:flex-col max-[37.5rem]:[&_li]:items-stretch" aria-labelledby="backup-alerts-title">
           <AdminSectionHeading><h2 id="backup-alerts-title">백업 알림</h2></AdminSectionHeading>
           <ul>{state.alerts.map((alert) => <li key={alert.code}><strong>{alert.message}</strong><span>{alert.level}</span></li>)}</ul>
         </section>
@@ -143,14 +143,14 @@ export function BackupConsole({ initial }: { readonly initial: BackupState }) {
 
       {feedback ? <p role={feedback.error ? "alert" : "status"} className={feedback.error ? "form-error admin-update-feedback" : "admin-update-feedback"}>{feedback.text}</p> : null}
 
-      <section className="admin-update-history" aria-labelledby="restore-points-title">
+      <section className="admin-update-history max-[37.5rem]:[&_li]:flex-col max-[37.5rem]:[&_li]:items-stretch" aria-labelledby="restore-points-title">
         <AdminSectionHeading><div><p className="eyebrow">검증된 상태</p><h2 id="restore-points-title">복구 지점</h2></div></AdminSectionHeading>
         {state.restorePoints.length === 0 ? <AdminNote>사용 가능한 완료 복구 지점이 없습니다.</AdminNote> : (
           <ol>{state.restorePoints.map((point) => <li key={point.id}><div><strong>{new Date(point.completedAt).toLocaleString("ko-KR")}</strong><span>{formatBytes(point.payloadBytes)} · 오브젝트 {point.objectCount}개 · {point.retainedAs.join(", ") || "미보존"}</span></div><Button size="sm" variant="secondary" disabled={mutation.isPending} onClick={() => void run("verify", point.id)}>검증</Button></li>)}</ol>
         )}
       </section>
 
-      <section className="admin-update-history" aria-labelledby="backup-history-title">
+      <section className="admin-update-history max-[37.5rem]:[&_li]:flex-col max-[37.5rem]:[&_li]:items-stretch" aria-labelledby="backup-history-title">
         <AdminSectionHeading><div><p className="eyebrow">지속 작업 대기열</p><h2 id="backup-history-title">작업 기록</h2></div></AdminSectionHeading>
         {state.operations.length === 0 ? <AdminNote>요청된 백업 작업이 없습니다.</AdminNote> : <ol>{state.operations.map((operation) => <li key={operation.id}><div><strong>{actionLabel(operation.kind)}</strong><span>{operation.source} · {operation.state}{operation.failureCode ? ` · ${operation.failureCode}` : ""}</span></div><time dateTime={operation.requestedAt}>{new Date(operation.requestedAt).toLocaleString("ko-KR")}</time></li>)}</ol>}
       </section>

@@ -147,7 +147,7 @@ export function RegistryConsole({
       description="전역 npm 호환 저장소와 정확한 스코프 경로를 관리합니다. 선택한 경로가 실패해도 다른 저장소로 우회하지 않습니다."
       aside={<Badge>활성 {active.length}개 · 전체 {registries.length}개</Badge>}
     />
-    <AdminPanel className="admin-create-panel" aria-labelledby="add-registry"><CollapsibleRoot defaultOpen={registries.length === 0}><CollapsibleTrigger><span id="add-registry">저장소 추가</span><small>연결 검증 전에는 패키지 요청에 사용되지 않습니다</small></CollapsibleTrigger><CollapsiblePanel><CollapsibleContent>
+    <AdminPanel className="admin-create-panel" aria-labelledby="add-registry"><CollapsibleRoot defaultOpen={registries.length === 0}><CollapsibleTrigger className="max-[48rem]:[&_small]:hidden"><span id="add-registry">저장소 추가</span><small>연결 검증 전에는 패키지 요청에 사용되지 않습니다</small></CollapsibleTrigger><CollapsiblePanel><CollapsibleContent>
       <AdminForm onSubmit={create} aria-busy={mutation.isPending}>
         <AdminFormSection title="저장소 정보" description="관리 화면에 표시할 이름과 정확한 npm 호환 HTTPS 주소를 입력합니다.">
           <TextField label="표시 이름" name="displayName" maxLength={200} required disabled={mutation.isPending} />
@@ -167,8 +167,8 @@ export function RegistryConsole({
       {registries.length === 0 ? <AdminEmptyState title="등록된 패키지 저장소가 없습니다">위의 추가 영역에서 첫 npm 호환 저장소를 등록하세요.</AdminEmptyState> : <ul className="record-list">{registries.map((registry) => <AdminIntegrationRecord key={registry.id}>
         <div><strong><Link href={`/admin/integrations/registries/${registry.id}`}>{registry.displayName}</Link>{registry.isDefault ? " · 기본값" : ""}</strong><span>{registry.state === "active" ? "활성" : "비활성"}</span><small>{registry.baseUrl} · 설정 v{registry.configVersion} · 자격 증명 v{registry.credentialVersion}</small></div>
         {registry.state === "disabled" ? <CollapsibleRoot className="admin-record-disclosure"><CollapsibleTrigger>저장소 설정 및 토큰</CollapsibleTrigger><CollapsiblePanel><CollapsibleContent>
-          <form className="collaboration-form" onSubmit={(event) => void rename(event, registry)}><TextField label="표시 이름" name="displayName" defaultValue={registry.displayName} maxLength={200} required disabled={mutation.isPending} /><Button disabled={mutation.isPending}>이름 변경</Button></form>
-          <form className="collaboration-form" onSubmit={(event) => void rotate(event, registry)}><TextField label="교체 토큰" name="token" type="password" autoComplete="new-password" maxLength={4096} required disabled={mutation.isPending} /><Button disabled={mutation.isPending}>토큰 교체</Button></form>
+          <form className="collaboration-form max-[48rem]:grid-cols-1 max-[48rem]:[&>[data-slot=button]]:w-full max-[48rem]:[&>[data-slot=button]]:justify-self-stretch" onSubmit={(event) => void rename(event, registry)}><TextField label="표시 이름" name="displayName" defaultValue={registry.displayName} maxLength={200} required disabled={mutation.isPending} /><Button disabled={mutation.isPending}>이름 변경</Button></form>
+          <form className="collaboration-form max-[48rem]:grid-cols-1 max-[48rem]:[&>[data-slot=button]]:w-full max-[48rem]:[&>[data-slot=button]]:justify-self-stretch" onSubmit={(event) => void rotate(event, registry)}><TextField label="교체 토큰" name="token" type="password" autoComplete="new-password" maxLength={4096} required disabled={mutation.isPending} /><Button disabled={mutation.isPending}>토큰 교체</Button></form>
         </CollapsibleContent></CollapsiblePanel></CollapsibleRoot> : null}
         <IntegrationCaConsole type="registry" integrationId={registry.id} />
         <AdminRecordActions>

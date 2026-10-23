@@ -107,7 +107,7 @@ export function EmailDeliveryConsole({ initial }: { readonly initial: EmailDeliv
       />
       {!collection.smtpConfigured ? <div className="notification-smtp-warning" role="status"><strong>SMTP를 사용할 수 없습니다</strong><span>SMTP를 구성하기 전에는 대기 중인 이메일을 전송할 수 없습니다. 앱 내 알림은 계속 정상적으로 제공됩니다.</span></div> : null}
       <section className="email-delivery-console" aria-labelledby="delivery-list-title">
-        <div className="notification-heading">
+        <div className="notification-heading max-[37.5rem]:flex-col max-[37.5rem]:items-stretch">
           <h2 id="delivery-list-title">전송 대기열</h2>
           <SelectField
             label="상태"
@@ -123,8 +123,8 @@ export function EmailDeliveryConsole({ initial }: { readonly initial: EmailDeliv
             {collection.items.map((delivery) => {
               const pending = confirmation?.id === delivery.id ? confirmation.operation : undefined;
               return (
-                <article key={delivery.id} className="email-delivery-card">
-                  <div className="email-delivery-card__heading"><h3>{delivery.recipientEmail}</h3><span>{FILTERS.find((item) => item.value === delivery.state)?.label ?? delivery.state}</span></div>
+                <article key={delivery.id} className="email-delivery-card max-[37.5rem]:[&_dl]:grid-cols-1">
+                  <div className="email-delivery-card__heading max-[37.5rem]:flex-col max-[37.5rem]:items-stretch"><h3>{delivery.recipientEmail}</h3><span>{FILTERS.find((item) => item.value === delivery.state)?.label ?? delivery.state}</span></div>
                   <dl>
                     <div><dt>템플릿</dt><dd>{delivery.templateId}</dd></div>
                     <div><dt>리소스</dt><dd>{delivery.resourceType}: {delivery.resourceId}</dd></div>
@@ -133,7 +133,7 @@ export function EmailDeliveryConsole({ initial }: { readonly initial: EmailDeliv
                     <div><dt>최근 변경</dt><dd><time dateTime={delivery.updatedAt}>{formatDate(delivery.updatedAt)}</time></dd></div>
                     <div><dt>처리 가능 시각</dt><dd><time dateTime={delivery.availableAt}>{formatDate(delivery.availableAt)}</time></dd></div>
                   </dl>
-                  <div className="email-delivery-card__actions">
+                  <div className="email-delivery-card__actions max-[37.5rem]:flex-col max-[37.5rem]:items-stretch max-[37.5rem]:[&_[data-slot=button]]:w-full">
                     {delivery.state === "dead_letter" ? <Button variant={pending === "retry" ? "danger" : "secondary"} disabled={mutation.isPending} onClick={() => apply(delivery, "retry")}>{pending === "retry" ? "재시도 확인" : "지금 재시도"}</Button> : null}
                     {(["pending", "retry_wait"] as const).includes(delivery.state as "pending" | "retry_wait") ? <Button variant={pending === "cancel" ? "danger" : "secondary"} disabled={mutation.isPending} onClick={() => apply(delivery, "cancel")}>{pending === "cancel" ? "폐기 확인" : "폐기"}</Button> : null}
                     {pending ? <Button disabled={mutation.isPending} onClick={() => setConfirmation(undefined)}>작업 유지</Button> : null}

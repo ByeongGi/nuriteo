@@ -17,6 +17,7 @@ import { readCsrfCredential } from "#src/lib/api/browser-security.ts";
 import { useExclusiveMutation } from "#src/lib/use-exclusive-mutation.ts";
 import { AdminForm, AdminFormActionNote, AdminFormActions, AdminFormFieldSpan, AdminFormSection } from "#src/app/(admin)/admin/_components/admin-form-layout.tsx";
 import { AdminPageHeader } from "#src/app/(admin)/admin/_components/admin-page-header.tsx";
+import { AdminSectionHeading } from "#src/app/(admin)/admin/_components/admin-surface.tsx";
 
 const POLICY_OPTIONS: readonly { readonly value: MfaPolicyMode; readonly label: string; readonly description: string }[] = [
   { value: "off", label: "선택", description: "사용자가 MFA 사용 여부를 선택합니다." },
@@ -124,7 +125,7 @@ export function MfaPolicyEditor({ initial, view = "policy" }: { readonly initial
       />
 
       {view === "policy" ? <section className="admin-settings" aria-labelledby="mfa-policy-title">
-        <div className="admin-section-heading"><div><p className="eyebrow">VERSION {policy.version}</p><h2 id="mfa-policy-title">적용 대상</h2></div><p>정책 변경에는 최근 관리자 재인증이 필요합니다.</p></div>
+        <AdminSectionHeading><div><p className="eyebrow">VERSION {policy.version}</p><h2 id="mfa-policy-title">적용 대상</h2></div><p>정책 변경에는 최근 관리자 재인증이 필요합니다.</p></AdminSectionHeading>
         <AdminForm layout="panel" onSubmit={save} aria-busy={mutation.isPending}>
           <AdminFormSection title="정책 대상" description="로그인 시 MFA 등록을 요구할 로컬 사용자 범위를 선택합니다.">
             <AdminFormFieldSpan>
@@ -134,7 +135,7 @@ export function MfaPolicyEditor({ initial, view = "policy" }: { readonly initial
           <AdminFormSection title="등록 유예 기간" description="정책 대상자가 인증 앱과 복구 코드를 준비할 기간을 설정합니다.">
             <NumberField label="유예 기간(일)" min={0} max={30} step={1} value={graceDays} disabled={mutation.isPending} description="0일이면 다음 로그인 직후 접근이 제한됩니다." onValueChange={(nextValue) => { if (nextValue !== null) setGraceDays(nextValue); setImpact(undefined); }} />
           </AdminFormSection>
-          <dl className="mfa-impact-preview">
+          <dl className="mfa-impact-preview max-[37.5rem]:grid-cols-1">
             <div><dt>적용 대상 계정</dt><dd>{previewIsCurrent ? impact.affectedUsers : "—"}</dd></div>
             <div><dt>등록 필요</dt><dd>{previewIsCurrent ? impact.unenrolledUsers : "—"}</dd></div>
             <div><dt>즉시 제한</dt><dd>{previewIsCurrent ? impact.immediatelyRestrictedUsers : "—"}</dd></div>
@@ -151,7 +152,7 @@ export function MfaPolicyEditor({ initial, view = "policy" }: { readonly initial
       {view === "reset" ? <section className="mfa-card admin-mfa-reset">
         <h2>다른 사용자의 MFA 초기화</h2>
         <p>대상의 MFA 자격 증명, 복구 코드, 진행 중인 등록과 모든 세션을 폐기합니다. 본인 계정 초기화는 허용되지 않습니다.</p>
-        <form className="mfa-code-form" onSubmit={search} role="search" aria-busy={mutation.isPending}>
+        <form className="mfa-code-form max-[48rem]:grid-cols-1 max-[48rem]:[&>label]:col-auto max-[48rem]:[&>[data-slot=button]]:w-full max-[48rem]:[&>[data-slot=button]]:justify-self-stretch" onSubmit={search} role="search" aria-busy={mutation.isPending}>
           <TextField label="이메일 또는 표시 이름으로 찾기" name="query" required minLength={2} maxLength={200} autoComplete="off" />
           <Button type="submit" disabled={mutation.isPending}>사용자 검색</Button>
         </form>

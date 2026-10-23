@@ -59,7 +59,7 @@ export function UpdateReadinessConsole({
         </AdminSummary>}
       />
 
-      <div className="admin-update-grid">
+      <div className="admin-update-grid max-[37.5rem]:grid-cols-1">
         <section className="admin-operations-card" aria-labelledby="update-target-title">
           <AdminSectionHeading>
             <div>
@@ -67,7 +67,7 @@ export function UpdateReadinessConsole({
               <h2 id="update-target-title">호환성</h2>
             </div>
           </AdminSectionHeading>
-          <dl className="admin-update-details">
+          <dl className="admin-update-details max-[37.5rem]:[&>div]:grid-cols-1 max-[37.5rem]:[&>div]:gap-1">
             <Detail label="설치된 릴리스" value={readiness.currentRelease} />
             <Detail label="대상 릴리스" value={readiness.targetRelease} />
             <Detail label="스키마" value={readiness.compatibility.schemaPolicy} />
@@ -90,7 +90,7 @@ export function UpdateReadinessConsole({
               {readiness.preflight.state === "passed" ? "통과" : "중지됨"}
             </span>
           </AdminSectionHeading>
-          <dl className="admin-update-details">
+          <dl className="admin-update-details max-[37.5rem]:[&>div]:grid-cols-1 max-[37.5rem]:[&>div]:gap-1">
             <Detail label="스키마 상태" value={readiness.preflight.schemaState ?? "확인 불가"} />
             <Detail label="현재 마이그레이션" value={formatMigration(readiness.preflight.currentMigration)} />
             <Detail label="대상 마이그레이션" value={formatMigration(readiness.preflight.targetMigration)} />
@@ -103,7 +103,7 @@ export function UpdateReadinessConsole({
       </div>
 
       {readiness.blockers.length > 0 ? (
-        <section className="admin-update-blockers" aria-labelledby="update-blockers-title">
+        <section className="admin-update-blockers max-[37.5rem]:[&_li]:flex-col max-[37.5rem]:[&_li]:items-stretch" aria-labelledby="update-blockers-title">
           <AdminSectionHeading>
             <div>
               <p className="eyebrow">업그레이드 중단 조건</p>
@@ -130,7 +130,7 @@ export function UpdateReadinessConsole({
           </div>
         </AdminSectionHeading>
         {readiness.approvalAllowed ? (
-          <div className="admin-update-approval__body" aria-busy={mutation.isPending}>
+          <div className="admin-update-approval__body max-[37.5rem]:flex-col max-[37.5rem]:items-stretch" aria-busy={mutation.isPending}>
             <CheckboxField checked={acknowledged} disabled={mutation.isPending} onCheckedChange={setAcknowledged} label="차단 요인을 검토했으며 이 작업이 승인만 기록하고 업데이트를 실행하지 않음을 이해했습니다." />
             <Button type="button" disabled={!acknowledged || mutation.isPending} onClick={approve}>
               {mutation.isPending ? "승인 기록 중…" : "업데이트 승인 기록"}
@@ -147,7 +147,7 @@ export function UpdateReadinessConsole({
         {error ? <p role="alert" className="form-error admin-update-feedback">{error}</p> : null}
       </section>
 
-      <section className="admin-update-history" aria-labelledby="update-history-title">
+      <section className="admin-update-history max-[37.5rem]:[&_li]:flex-col max-[37.5rem]:[&_li]:items-stretch" aria-labelledby="update-history-title">
         <AdminSectionHeading>
           <div>
             <p className="eyebrow">감사 기록</p>

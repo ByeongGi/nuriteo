@@ -7,6 +7,7 @@ import type {
 } from "@nuriteo/api-client";
 
 import { AdminPageHeader } from "#src/app/(admin)/admin/_components/admin-page-header.tsx";
+import { AdminSectionHeading } from "#src/app/(admin)/admin/_components/admin-surface.tsx";
 import { SupportBundleDownload } from "#src/app/(admin)/admin/operations/support-bundle-download.tsx";
 
 export function OperationsDashboard({ operations }: { readonly operations: AdminOperations }) {
@@ -16,7 +17,7 @@ export function OperationsDashboard({ operations }: { readonly operations: Admin
         category="운영 현황"
         title="운영 현황"
         description={<>서비스 상태, 정리 작업과 전체 인스턴스 사용량을 한눈에 확인하세요. 진단 정보는 안전한 운영 범위만 표시합니다.</>}
-        aside={<div className="admin-operations-summary">
+        aside={<div className="admin-operations-summary max-[37.5rem]:justify-items-start">
           <StateBadge state={operations.overallState} />
           <time dateTime={operations.generatedAt}>
             {formatTimestamp(operations.generatedAt)} 업데이트
@@ -24,7 +25,7 @@ export function OperationsDashboard({ operations }: { readonly operations: Admin
         </div>}
       />
 
-      <div className="admin-operations-grid">
+      <div className="admin-operations-grid max-[37.5rem]:grid-cols-1">
         <section className="admin-operations-card" aria-labelledby="dependency-health-title">
           <CardHeading
             eyebrow="READINESS"
@@ -66,12 +67,12 @@ export function OperationsDashboard({ operations }: { readonly operations: Admin
         </section>
 
         <section className="admin-operations-card admin-operations-card--wide" aria-labelledby="support-bundle-title">
-          <header className="admin-section-heading">
+          <AdminSectionHeading>
             <div>
               <p className="eyebrow">안전 진단</p>
               <h2 id="support-bundle-title">지원 번들</h2>
             </div>
-          </header>
+          </AdminSectionHeading>
           <SupportBundleDownload preview={operations.supportBundle} />
         </section>
       </div>
@@ -91,13 +92,13 @@ function CardHeading({
   readonly state: AdminOperationsState;
 }) {
   return (
-    <header className="admin-section-heading">
+    <AdminSectionHeading>
       <div>
         <p className="eyebrow">{eyebrow}</p>
         <h2 id={id}>{title}</h2>
       </div>
       <StateBadge state={state} />
-    </header>
+    </AdminSectionHeading>
   );
 }
 
@@ -114,7 +115,7 @@ function CleanupMetrics({ cleanup }: { readonly cleanup: AdminCleanupQueue }) {
     return <UnavailableMetric message="정리 작업 대기열 집계를 일시적으로 사용할 수 없습니다." />;
   }
   return (
-    <dl className="admin-operations-metrics">
+    <dl className="admin-operations-metrics max-[37.5rem]:grid-cols-1 max-[37.5rem]:[&>div]:border-r-0">
       <Metric label="대기" value={formatCount(cleanup.queueDepth)} />
       <Metric label="실행 중" value={formatCount(cleanup.runningCount)} />
       <Metric label="재시도 대기" value={formatCount(cleanup.retryCount)} />
@@ -132,7 +133,7 @@ function UsageMetrics({ usage }: { readonly usage: AdminUsage }) {
     return <UnavailableMetric message="전체 사용량 집계를 일시적으로 사용할 수 없습니다." />;
   }
   return (
-    <dl className="admin-operations-metrics admin-operations-metrics--usage">
+    <dl className="admin-operations-metrics admin-operations-metrics--usage max-[37.5rem]:grid-cols-1 max-[37.5rem]:[&>div]:border-r-0">
       <Metric label="활성 사용자" value={formatCount(usage.activeUsers)} />
       <Metric label="활성 조직" value={formatCount(usage.activeOrganizations)} />
       <Metric label="활성 프로젝트" value={formatCount(usage.activeProjects)} />
