@@ -42,6 +42,24 @@ export type RuntimeLifecycle =
   | "disposed"
   | "failed";
 
+export interface RuntimePortInfo {
+  readonly label: string;
+  readonly port: number;
+  readonly status: "running" | "stopped";
+  readonly url: string;
+}
+
+export interface RuntimeProcessInfo {
+  readonly argv: readonly string[];
+  readonly command: string;
+  readonly cwd: string;
+  readonly generation?: number;
+  readonly pid: number;
+  readonly status: string;
+  readonly terminalId: string;
+  readonly terminalSize?: { readonly cols: number; readonly rows: number };
+}
+
 export interface RuntimeDiagnostic {
   code: string;
   severity: "info" | "warning" | "error";
@@ -89,18 +107,35 @@ export interface RuntimeViewState {
   workflowPhase: PreviewWorkflowPhase | "idle";
   hmrState: PreviewWorkflowSnapshot["hmrState"];
   previewUrl: string | null;
+  ports: readonly RuntimePortInfo[];
+  processes: readonly RuntimeProcessInfo[];
   diagnostics: readonly RuntimeDiagnostic[];
   localDraftAccess: "none" | "writer" | "conflict" | "lost";
   terminalProcessCount: number;
 }
 
 export interface RuntimeTerminalPort {
-  run(command: string, terminalId?: string, onOutput?: (chunk: { stream: "stdout" | "stderr"; data: string }) => void): Promise<unknown>;
+  run(command: string, terminalId?: string, onOutput?: (chunk: { stream: "stdout" | "stderr"; data: string }) => void): Promise<RuntimeTerminalRunResult>;
   input(data: string, terminalId?: string): boolean;
   resize(cols: number, rows: number, terminalId?: string): void;
   signal(signal?: "SIGINT" | "SIGTERM" | "SIGKILL", terminalId?: string): boolean;
   close(terminalId: string): boolean;
   activeCount(): number;
+  processes(): readonly RuntimeProcessInfo[];
+}
+
+export interface RuntimeTerminalFileChange {
+  readonly kind: "content" | "create" | "delete" | "rename";
+  readonly path: string;
+  readonly previousPath?: string;
+}
+
+export interface RuntimeTerminalRunResult {
+  readonly changedFiles?: readonly RuntimeTerminalFileChange[];
+  readonly exitCode?: number;
+  readonly stderr?: string;
+  readonly stdout?: string;
+  readonly [key: string]: unknown;
 }
 
 export interface RuntimeWorkflowPort {
@@ -151,6 +186,9 @@ export interface RuntimeWorkspacePort {
   currentRevision(): number;
   getState(): RuntimeWorkspaceState;
   readText(path: string): string;
+  createText(path: string, content?: string): RuntimeViewState;
+  renameText(from: string, to: string): RuntimeViewState;
+  deleteText(path: string): RuntimeViewState;
   writeText(path: string, content: string): RuntimeViewState;
 }
 
@@ -182,9 +220,12 @@ interface ControllerLike {
   resizeShell: PreviewWorkflowController["resizeShell"];
   signalShell: PreviewWorkflowController["signalShell"];
   closeShell: PreviewWorkflowController["closeShell"];
-  listShellProcesses(): readonly unknown[];
+  listShellProcesses: PreviewWorkflowController["listShellProcesses"];
   restartDev: PreviewWorkflowController["restartDev"];
   runPreview: PreviewWorkflowController["runPreview"];
+  createTextFile: PreviewWorkflowController["createTextFile"];
+  renameFile: PreviewWorkflowController["renameFile"];
+  deleteFile: PreviewWorkflowController["deleteFile"];
   saveTextFile: PreviewWorkflowController["saveTextFile"];
   runRecoveryAction: PreviewWorkflowController["runRecoveryAction"];
   stopPreviewPort: PreviewWorkflowController["stopPreviewPort"];
@@ -231,14 +272,25 @@ export function createRuntimeAdapter(dependencies: RuntimeAdapterDependencies = 
 
   const terminal: RuntimeTerminalPort = {
     async run(command, terminalId, onOutput) {
-      const controller = requireReady().controller;
-      markWorkspaceMutation();
-      return controller.runShellCommand(command, terminalId, onOutput);
+      const current = requireReady();
+      const before = snapshotRuntimeFiles(current.controller.exportProjectFiles());
+      let result: unknown;
+      let changedFiles: RuntimeTerminalFileChange[] = [];
+      try {
+        result = await current.controller.runShellCommand(command, terminalId, onOutput);
+      } finally {
+        changedFiles = diffRuntimeFiles(before, snapshotRuntimeFiles(current.controller.exportProjectFiles()));
+        synchronizeWorkspaceFromController(current);
+        if (changedFiles.length > 0) markWorkspaceMutation();
+        applySnapshot(current, current.controller.getSnapshot());
+      }
+      if (typeof result === "object" && result !== null && !Array.isArray(result)) {
+        return { ...result, changedFiles };
+      }
+      return { changedFiles, value: result };
     },
     input(data, terminalId) {
-      const accepted = requireReady().controller.writeShellInput(data, terminalId);
-      if (accepted) markWorkspaceMutation();
-      return accepted;
+      return requireReady().controller.writeShellInput(data, terminalId);
     },
     resize(cols, rows, terminalId) {
       requireReady().controller.resizeShell(cols, rows, terminalId);
@@ -251,6 +303,9 @@ export function createRuntimeAdapter(dependencies: RuntimeAdapterDependencies = 
     },
     activeCount() {
       return owned?.controller.listShellProcesses().length ?? 0;
+    },
+    processes() {
+      return owned ? runtimeProcesses(owned.controller.listShellProcesses()) : [];
     }
   };
 
@@ -409,6 +464,84 @@ export function createRuntimeAdapter(dependencies: RuntimeAdapterDependencies = 
       const content = workspaceText.get(path);
       if (content === undefined) throw new RuntimeAdapterError("RUNTIME_FILE_UNAVAILABLE", "The selected text file is unavailable.");
       return content;
+    },
+    createText(path, content = "") {
+      const current = requireReady();
+      if (state.localDraftAccess !== "writer") throw new RuntimeAdapterError("ELEASEHELD", "Another tab owns this Local Draft writer lease.");
+      const sizeBytes = new TextEncoder().encode(content).byteLength;
+      if (
+        workspaceState.status !== "ready"
+        || !isSafeRuntimeBundlePath(path)
+        || workspaceState.files.some((file) => file.path === path)
+        || workspaceState.files.length >= MAX_TEMPLATE_FILES
+        || sizeBytes > MAX_TEMPLATE_FILE_BYTES
+        || workspaceState.totalBytes + sizeBytes > MAX_TEMPLATE_TOTAL_BYTES
+      ) throw new RuntimeAdapterError("RUNTIME_FILE_CREATE_FAILED", "The Project file could not be created safely.");
+      try {
+        const snapshot = current.controller.createTextFile(path, content);
+        workspaceText.set(path, content);
+        workspaceState = {
+          ...workspaceState,
+          totalBytes: workspaceState.totalBytes + sizeBytes,
+          files: [...workspaceState.files, { path, name: path.split("/").at(-1) ?? path, kind: "text" as const, sizeBytes }]
+            .sort((left, right) => left.path.localeCompare(right.path))
+        };
+        markWorkspaceMutation();
+        applySnapshot(current, snapshot);
+        return publicState();
+      } catch {
+        throw new RuntimeAdapterError("RUNTIME_FILE_CREATE_FAILED", "The Project file could not be created safely.");
+      }
+    },
+    renameText(from, to) {
+      const current = requireReady();
+      if (state.localDraftAccess !== "writer") throw new RuntimeAdapterError("ELEASEHELD", "Another tab owns this Local Draft writer lease.");
+      const content = workspaceText.get(from);
+      if (
+        workspaceState.status !== "ready"
+        || content === undefined
+        || !isSafeRuntimeBundlePath(to)
+        || workspaceState.files.some((file) => file.path === to)
+      ) throw new RuntimeAdapterError("RUNTIME_FILE_RENAME_FAILED", "The Project file could not be renamed safely.");
+      try {
+        const snapshot = current.controller.renameFile(from, to);
+        workspaceText.delete(from);
+        workspaceText.set(to, content);
+        workspaceState = {
+          ...workspaceState,
+          files: workspaceState.files
+            .map((file) => file.path === from ? { ...file, path: to, name: to.split("/").at(-1) ?? to } : file)
+            .sort((left, right) => left.path.localeCompare(right.path))
+        };
+        markWorkspaceMutation();
+        applySnapshot(current, snapshot);
+        return publicState();
+      } catch {
+        throw new RuntimeAdapterError("RUNTIME_FILE_RENAME_FAILED", "The Project file could not be renamed safely.");
+      }
+    },
+    deleteText(path) {
+      const current = requireReady();
+      if (state.localDraftAccess !== "writer") throw new RuntimeAdapterError("ELEASEHELD", "Another tab owns this Local Draft writer lease.");
+      const content = workspaceText.get(path);
+      const file = workspaceState.files.find((candidate) => candidate.path === path);
+      if (workspaceState.status !== "ready" || content === undefined || file?.kind !== "text") {
+        throw new RuntimeAdapterError("RUNTIME_FILE_DELETE_FAILED", "The Project file could not be deleted safely.");
+      }
+      try {
+        const snapshot = current.controller.deleteFile(path);
+        workspaceText.delete(path);
+        workspaceState = {
+          ...workspaceState,
+          totalBytes: workspaceState.totalBytes - file.sizeBytes,
+          files: workspaceState.files.filter((candidate) => candidate.path !== path)
+        };
+        markWorkspaceMutation();
+        applySnapshot(current, snapshot);
+        return publicState();
+      } catch {
+        throw new RuntimeAdapterError("RUNTIME_FILE_DELETE_FAILED", "The Project file could not be deleted safely.");
+      }
     },
     writeText(path, content) {
       const current = requireReady();
@@ -584,6 +717,8 @@ export function createRuntimeAdapter(dependencies: RuntimeAdapterDependencies = 
         lifecycle: "disposed",
         projectId: null,
         previewUrl: null,
+        ports: [],
+        processes: [],
         localDraftAccess: "none",
         terminalProcessCount: 0
       };
@@ -611,6 +746,24 @@ export function createRuntimeAdapter(dependencies: RuntimeAdapterDependencies = 
       throw new RuntimeAdapterError("RUNTIME_REVISION_EXHAUSTED", "The Local Draft revision limit was reached.");
     }
     workspaceRevision += 1;
+  }
+
+  function synchronizeWorkspaceFromController(current: OwnedRuntime): void {
+    if (!isCurrent(current) || workspaceState.status !== "ready") return;
+    const exported = [...current.controller.exportProjectFiles()]
+      .sort((left, right) => compareUtf8Paths(left.path, right.path));
+    const decoded = decodeRuntimeBundleFiles(exported);
+    workspaceText = decoded.text;
+    workspaceState = {
+      ...workspaceState,
+      files: decoded.files.map((file) => ({
+        path: file.path,
+        name: file.path.split("/").at(-1) ?? file.path,
+        kind: file.kind,
+        sizeBytes: file.bytes.byteLength
+      })),
+      totalBytes: decoded.totalBytes
+    };
   }
 
   async function cleanupOwned(current: OwnedRuntime, publishDisposed: boolean): Promise<boolean> {
@@ -644,6 +797,8 @@ export function createRuntimeAdapter(dependencies: RuntimeAdapterDependencies = 
         projectId: null,
         workflowPhase: "idle",
         previewUrl: null,
+        ports: [],
+        processes: [],
         localDraftAccess: "none",
         terminalProcessCount: 0
       };
@@ -685,13 +840,21 @@ export function createRuntimeAdapter(dependencies: RuntimeAdapterDependencies = 
     if (!isCurrent(current) || current.abortController.signal.aborted) return;
     workflowDiagnostics = snapshot.diagnostics.map(normalizeDiagnostic).slice(-MAX_DIAGNOSTICS);
     const diagnostics = combinedDiagnostics();
+    const processes = runtimeProcesses(current.controller.listShellProcesses());
     state = {
       ...state,
       workflowPhase: snapshot.phase,
       hmrState: snapshot.hmrState,
       previewUrl: snapshot.previewUrl,
+      ports: snapshot.session && snapshot.previewUrl ? [{
+        label: "Preview",
+        port: snapshot.session.port,
+        status: snapshot.session.serverState,
+        url: snapshot.previewUrl
+      }] : [],
+      processes,
       diagnostics,
-      terminalProcessCount: current.controller.listShellProcesses().length
+      terminalProcessCount: processes.length
     };
     emit();
   }
@@ -734,7 +897,13 @@ export function createRuntimeAdapter(dependencies: RuntimeAdapterDependencies = 
   function publicState(): RuntimeViewState {
     return {
       ...state,
-      diagnostics: state.diagnostics.map((diagnostic) => ({ ...diagnostic, actions: [...diagnostic.actions] }))
+      diagnostics: state.diagnostics.map((diagnostic) => ({ ...diagnostic, actions: [...diagnostic.actions] })),
+      ports: state.ports.map((port) => ({ ...port })),
+      processes: state.processes.map((process) => ({
+        ...process,
+        argv: [...process.argv],
+        ...(process.terminalSize ? { terminalSize: { ...process.terminalSize } } : {})
+      }))
     };
   }
 
@@ -759,10 +928,27 @@ function createInitialState(): RuntimeViewState {
     workflowPhase: "idle",
     hmrState: "idle",
     previewUrl: null,
+    ports: [],
+    processes: [],
     diagnostics: [],
     localDraftAccess: "none",
     terminalProcessCount: 0
   };
+}
+
+function runtimeProcesses(
+  processes: ReturnType<PreviewWorkflowController["listShellProcesses"]>
+): RuntimeProcessInfo[] {
+  return processes.map((process) => ({
+    argv: [...(process.argv ?? [])],
+    command: process.command,
+    cwd: process.cwd,
+    ...(process.generation === undefined ? {} : { generation: process.generation }),
+    pid: process.pid,
+    status: process.status,
+    terminalId: process.terminalId,
+    ...(process.terminalSize ? { terminalSize: { ...process.terminalSize } } : {})
+  }));
 }
 
 function createEmptyWorkspaceState(): RuntimeWorkspaceState {
@@ -862,6 +1048,59 @@ function compareUtf8Paths(left: string, right: string): number {
     if (difference !== 0) return difference;
   }
   return leftBytes.byteLength - rightBytes.byteLength;
+}
+
+function snapshotRuntimeFiles(
+  files: readonly { readonly bytes: Uint8Array; readonly path: string }[]
+): ReadonlyMap<string, Uint8Array> {
+  return new Map(files.map((file) => [file.path, Uint8Array.from(file.bytes)]));
+}
+
+function diffRuntimeFiles(
+  before: ReadonlyMap<string, Uint8Array>,
+  after: ReadonlyMap<string, Uint8Array>
+): RuntimeTerminalFileChange[] {
+  const paths = new Set([...before.keys(), ...after.keys()]);
+  const created = [...paths]
+    .filter((path) => !before.has(path) && after.has(path))
+    .sort(compareUtf8Paths);
+  const deleted = [...paths]
+    .filter((path) => before.has(path) && !after.has(path))
+    .sort(compareUtf8Paths);
+  const changes: RuntimeTerminalFileChange[] = [];
+  const renamedCreations = new Set<string>();
+  const renamedDeletions = new Set<string>();
+  for (const previousPath of deleted) {
+    const previous = before.get(previousPath);
+    if (!previous) continue;
+    const path = created.find((candidate) => {
+      const next = after.get(candidate);
+      return !renamedCreations.has(candidate) && Boolean(next && equalBytes(previous, next));
+    });
+    if (!path) continue;
+    renamedCreations.add(path);
+    renamedDeletions.add(previousPath);
+    changes.push({ kind: "rename", path, previousPath });
+  }
+  for (const path of [...paths].sort(compareUtf8Paths)) {
+    const previous = before.get(path);
+    const next = after.get(path);
+    if (!previous && next) {
+      if (!renamedCreations.has(path)) changes.push({ kind: "create", path });
+      continue;
+    }
+    if (previous && !next) {
+      if (!renamedDeletions.has(path)) changes.push({ kind: "delete", path });
+      continue;
+    }
+    if (previous && next && !equalBytes(previous, next)) changes.push({ kind: "content", path });
+  }
+  return changes;
+}
+
+function equalBytes(left: Uint8Array, right: Uint8Array): boolean {
+  if (left.byteLength !== right.byteLength) return false;
+  return left.every((value, index) => value === right[index]);
 }
 
 function projectRoot(projectId: string): string {

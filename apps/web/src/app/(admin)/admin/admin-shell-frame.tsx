@@ -18,14 +18,13 @@ const adminShellStyles = tv({
     brandCopy: "grid gap-0.5",
     brandTitle: "text-xs tracking-[0.08em]",
     brandSubtitle: "text-xs text-subtle-foreground",
-    returnLink: "mt-2 flex min-h-8 items-center gap-2 rounded-md px-2 text-xs font-medium text-muted-foreground no-underline hover:bg-hover hover:text-foreground",
+    returnLink: "mt-2 flex min-h-9 items-center gap-2 rounded-md border border-muted-border/70 bg-[color-mix(in_srgb,var(--n-color-bg-surface)_38%,transparent)] px-2.5 text-xs font-medium text-muted-foreground no-underline transition-colors hover:bg-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus",
     footer: "mt-2 grid gap-2 border-t border-muted-border px-1 pt-3",
-    identity: "grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2",
+    identity: "grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-2",
     avatar: "grid size-8 place-items-center rounded-full bg-selected text-xs font-bold text-link",
     identityCopy: "grid min-w-0",
     identityName: "truncate text-xs",
     identityEmail: "truncate text-[var(--n-font-size-2xs)] text-subtle-foreground",
-    identityBadge: "rounded-full bg-selected px-[0.45rem] py-[0.2rem] text-[var(--n-font-size-2xs)] text-link",
     utilities: "grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2",
     theme: "w-full min-w-0 max-w-none",
     themeTrigger: "w-full min-w-0 max-w-none",
@@ -69,7 +68,6 @@ function AdminIdentity({ displayName, email }: Readonly<{
         <strong className={styles.identityName()}>{displayName}</strong>
         <small className={styles.identityEmail()}>{email}</small>
       </span>
-      <b className={styles.identityBadge()}>관리자</b>
     </div>
   );
 }
@@ -86,17 +84,17 @@ export function AdminShellFrame({
   return (
     <div className={styles.root()}>
       <aside className={styles.sidebar()}>
-        <Link className={styles.brand()} href="/admin" aria-label="NURITEO 관리자 홈">
+        <Link className={styles.brand()} href="/admin/operations" aria-label="NURITEO 관리자">
           <span className={styles.brandMark()} aria-hidden="true">N</span>
           <span className={styles.brandCopy()}>
             <strong className={styles.brandTitle()}>NURITEO</strong>
-            <small className={styles.brandSubtitle()}>관리자 홈</small>
+            <small className={styles.brandSubtitle()}>관리자</small>
           </span>
         </Link>
 
         <Link className={styles.returnLink()} href="/workspaces">
           <span aria-hidden="true">←</span>
-          사용자 화면으로 돌아가기
+          사용자 화면
         </Link>
 
         <AdminNavigation pathnameOverride={pathnameOverride} />
@@ -111,16 +109,16 @@ export function AdminShellFrame({
       </aside>
 
       <header className={styles.mobileHeader()}>
-        <Link className={styles.brand()} href="/admin">
+        <Link className={styles.brand()} href="/admin/operations">
           <span className={styles.brandMark()} aria-hidden="true">N</span>
-          <strong>관리자 홈</strong>
+          <strong>관리자</strong>
         </Link>
         <CollapsibleRoot className={styles.mobileMenu()}>
           <CollapsibleTrigger className={styles.mobileTrigger()}>관리 메뉴</CollapsibleTrigger>
           <CollapsiblePanel><CollapsibleContent className={styles.mobilePanel()}>
             <AdminIdentity displayName={displayName} email={email} />
             <AdminNavigation placement="mobile" pathnameOverride={pathnameOverride} />
-            <Link className={styles.returnLink({ className: styles.mobileReturnLink() })} href="/workspaces">사용자 화면으로 돌아가기</Link>
+            <Link className={styles.returnLink({ className: styles.mobileReturnLink() })} href="/workspaces"><span aria-hidden="true">←</span> 사용자 화면</Link>
             <div className={styles.utilities({ className: styles.mobileUtilities() })}>
               <ThemeSelector className={styles.theme()} triggerClassName={styles.themeTrigger()} initialMode={themeMode} />
               <LogoutButton placement="mobile" />
@@ -145,7 +143,7 @@ export function AdminShellLoading() {
         <span className={styles.loadingBlock({ className: styles.loadingNavigation() })} />
       </aside>
       <main id="main-content" className={styles.content()}>
-        <LoadingShell label="관리자 홈을 불러오는 중" />
+        <LoadingShell label="관리자 영역을 불러오는 중" />
       </main>
     </div>
   );

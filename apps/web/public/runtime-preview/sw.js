@@ -71,17 +71,18 @@ self.addEventListener("fetch", (event) => {
 
 function receiveRelayMessage(event) {
   const message = event.data;
-  if (isExactRecord(message, ["binding", "generation", "nonce", "path", "sequence", "type", "version"])
+  if (isExactRecord(message, ["binding", "changeKind", "generation", "nonce", "path", "sequence", "type", "version"])
       && message.type === "nuriteo-preview:hmr"
       && message.version === PROTOCOL_VERSION
       && message.binding === relayBinding
+      && ["content", "create", "delete", "rename"].includes(message.changeKind)
       && message.generation === relayGeneration
       && message.nonce === relayNonce
       && typeof message.path === "string"
-      && /^src\/(?!.*\.\.)[^\\]{1,508}$/.test(message.path)
+      && /^(?!\/)(?!.*(?:^|\/)\.\.(?:\/|$))[^\\\0]{1,512}$/.test(message.path)
       && Number.isSafeInteger(message.sequence)
       && message.sequence > 0) {
-    void notifyControlledWindows({ type: "nuriteo-preview:hmr", version: PROTOCOL_VERSION, binding: relayBinding, generation: relayGeneration, path: message.path, sequence: message.sequence });
+    void notifyControlledWindows({ type: "nuriteo-preview:hmr", version: PROTOCOL_VERSION, binding: relayBinding, changeKind: message.changeKind, generation: relayGeneration, path: message.path, sequence: message.sequence });
     return;
   }
   if (isExactRecord(message, ["binding", "generation", "nonce", "type", "version"])

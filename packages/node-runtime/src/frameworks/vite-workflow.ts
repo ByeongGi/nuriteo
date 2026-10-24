@@ -385,7 +385,12 @@ export class ViteProductWorkflow {
   }
 
   install(): ViteProductInstallResult {
-    const packages = packagesForTemplate(this.template);
+    const manifest = JSON.parse(this.workspace.readText(join(this.projectRoot, "package.json"))) as VitePackageManifest;
+    const packages = uniquePackageNames([
+      ...packagesForTemplate(this.template),
+      ...Object.keys(manifest.dependencies || {}),
+      ...Object.keys(manifest.devDependencies || {})
+    ]);
     for (const pkg of packages) {
       if ((pkg === "vite" && this.vitePackageArtifact) || this.#hasDependencyArtifact(pkg)) continue;
       this.#installFixturePackage(pkg);
@@ -1119,7 +1124,7 @@ export class ViteProductWorkflow {
       this.workspace.writeText(join(packageRoot, "index.js"), "export default function react() { return { name: 'browser-native-react-plugin' }; }\n");
       return;
     }
-    this.workspace.writeText(join(packageRoot, "package.json"), JSON.stringify({ name: pkg }));
+    this.workspace.writeText(join(packageRoot, "package.json"), JSON.stringify({ name: pkg, version: "product-fixture" }));
   }
 
   #installEsbuildShim(): void {

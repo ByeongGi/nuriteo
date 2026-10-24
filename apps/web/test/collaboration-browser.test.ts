@@ -123,9 +123,9 @@ const core = http.createServer(async (request, response) => {
   if (request.method === "GET" && requestPath === "/api/v1/me/workspaces") {
     return sendJson(response, { workspaces: workspaces(session) });
   }
-  if (request.method === "GET" && requestPath === "/api/v1/admin/activation-invitations") {
+  if (request.method === "GET" && requestPath.startsWith("/api/v1/admin/activation-invitations")) {
     if (session !== "admin") return sendProblem(response, 403, "FORBIDDEN");
-    return sendJson(response, { items: activated ? [{ ...activationRecord(), status: "accepted", accepted_at: now }] : [activationRecord()] });
+    return sendJson(response, { items: activated ? [{ ...activationRecord(), status: "accepted", accepted_at: now }] : [activationRecord()], nextCursor: null });
   }
   if (request.method === "POST" && requestPath === "/api/v1/admin/activation-invitations") {
     if (session !== "admin") return sendProblem(response, 403, "FORBIDDEN");
@@ -289,12 +289,12 @@ try {
       { name: "nuriteo_dev_csrf", value: csrfToken, url: publicOrigin }
     ]);
     const adminPage = await admin.newPage();
-    await adminPage.goto(`${publicOrigin}/admin/access/invitations`, { waitUntil: "networkidle" });
-    await adminPage.getByLabel("초대받을 이메일").fill("mail-queued@example.test");
+    await adminPage.goto(`${publicOrigin}/admin/access/invitations/new`, { waitUntil: "networkidle" });
+    await adminPage.getByLabel("이메일").fill("mail-queued@example.test");
     await adminPage.getByRole("button", { name: "초대 발급" }).click();
     await adminPage.getByRole("status").filter({ hasText: "활성화 이메일을 전송 대기열" }).waitFor();
     assert.equal(await adminPage.locator("output").count(), 0);
-    await adminPage.getByLabel("초대받을 이메일").fill("invitee@example.test");
+    await adminPage.getByLabel("이메일").fill("invitee@example.test");
     await adminPage.locator("form").evaluate((form: HTMLFormElement) => {
       form.requestSubmit();
       form.requestSubmit();
@@ -304,8 +304,6 @@ try {
     assert.equal(activationIssueCount, 1);
     const activationUrl = await activationOutput.textContent();
     assert.ok(activationUrl?.includes("/activate?token=nrt_inv_"));
-    await adminPage.getByRole("button", { name: "링크 지우기" }).click();
-    assert.equal(await adminPage.locator("output").count(), 0);
 
     const invitee = await browser.newContext();
     const inviteePage = await invitee.newPage();

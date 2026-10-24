@@ -3,13 +3,14 @@
 import { ApiError, activateGitProvider, createGitProvider, deleteGitProvider, disableGitProvider, updateGitProvider } from "@nuriteo/api-client";
 import type { GitProviderAdmin, GitProviderKind } from "@nuriteo/api-client";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { FormEvent } from "react";
 
 import { Badge } from "#src/components/ui/badge.tsx";
+import { buttonVariants } from "#src/components/ui/button.styles.ts";
 import { Button } from "#src/components/ui/button.tsx";
 import { CheckboxField } from "#src/components/ui/checkbox.tsx";
-import { CollapsibleContent, CollapsiblePanel, CollapsibleRoot, CollapsibleTrigger } from "#src/components/ui/collapsible.tsx";
 import { ConfirmationDialog } from "#src/components/ui/confirmation-dialog.tsx";
 import { SelectField, TextField } from "#src/components/ui/field.tsx";
 import { createBrowserApiClient } from "#src/lib/api/browser-client.ts";
@@ -17,7 +18,9 @@ import { readCsrfCredential } from "#src/lib/api/browser-security.ts";
 import { useExclusiveMutation } from "#src/lib/use-exclusive-mutation.ts";
 import { AdminForm, AdminFormActionNote, AdminFormActions } from "#src/app/(admin)/admin/_components/admin-form-layout.tsx";
 import { AdminPageHeader } from "#src/app/(admin)/admin/_components/admin-page-header.tsx";
-import { AdminCollectionHeading, AdminIntegrationRecord, AdminPage, AdminPanel, AdminRecordActions } from "#src/app/(admin)/admin/_components/admin-surface.tsx";
+import { AdminConnectionGuide } from "#src/app/(admin)/admin/_components/admin-connection-guide.tsx";
+import { AdminIntegrationActionBar, AdminIntegrationBackLink, AdminIntegrationDangerSection, AdminIntegrationReadOnlyGrid, AdminIntegrationSection, AdminIntegrationSummary } from "#src/app/(admin)/admin/_components/admin-integration-detail.tsx";
+import { AdminCollectionHeading, AdminFeedback, AdminIntegrationRecord, AdminPage, AdminPanel, AdminRecordActions, AdminSection } from "#src/app/(admin)/admin/_components/admin-surface.tsx";
 
 const PROVIDER_KIND_OPTIONS = [
   { value: "generic", label: "일반 HTTPS" },
@@ -28,7 +31,8 @@ const PROVIDER_KIND_OPTIONS = [
 ] as const;
 import { IntegrationCaConsole } from "#src/app/(admin)/admin/_components/integration-ca-console.tsx";
 
-export function GitProviderConsole({ initialProviders }: { readonly initialProviders: readonly GitProviderAdmin[] }) {
+export function GitProviderConsole({ createMode = false, detailMode = false, initialProviders }: { readonly createMode?: boolean; readonly detailMode?: boolean; readonly initialProviders: readonly GitProviderAdmin[] }) {
+  const router = useRouter();
   const [providers, setProviders] = useState(initialProviders);
   const [feedback, setFeedback] = useState<{ error: boolean; text: string }>();
   const [pendingDeletion, setPendingDeletion] = useState<GitProviderAdmin>();
@@ -55,9 +59,12 @@ export function GitProviderConsole({ initialProviders }: { readonly initialProvi
         setProviders((items) => [...items, result.data]);
         form.reset();
         setFeedback({ error: false, text: "제공자를 비활성 상태로 저장했습니다. 필요하면 사설 CA 신뢰를 구성한 뒤 검증하고 활성화하세요." });
+        if (createMode) router.replace(`/admin/integrations/git/${result.data.id}`);
       } catch (error) { setFeedback(failure(error)); }
     });
   }
+
+  if (createMode) return <GitProviderCreate busy={mutation.isPending} feedback={feedback} onSubmit={create} />;
 
   async function update(event: FormEvent<HTMLFormElement>, provider: GitProviderAdmin) {
     event.preventDefault();
@@ -70,18 +77,113 @@ export function GitProviderConsole({ initialProviders }: { readonly initialProvi
 
   async function remove(provider: GitProviderAdmin) {
     await mutation.run(async () => {
-      try { await deleteGitProvider(createBrowserApiClient(), provider.id, provider.configVersion, options()); setProviders((items) => items.filter((item) => item.id !== provider.id)); setPendingDeletion(undefined); }
+      try { await deleteGitProvider(createBrowserApiClient(), provider.id, provider.configVersion, options()); setProviders((items) => items.filter((item) => item.id !== provider.id)); setPendingDeletion(undefined); if (detailMode) router.replace("/admin/integrations/git"); }
       catch (error) { setFeedback(failure(error)); }
     });
   }
 
-  return <AdminPage id="main-content">
-    <AdminPageHeader category="Git 제공자" title="Git 제공자" description="정확한 HTTPS 원본을 등록하세요. 사용자 자격 증명은 분리되어 이 화면에 표시되지 않습니다." aside={<Badge>등록 {providers.length}개</Badge>} />
-    <AdminPanel aria-labelledby="add-git-provider"><CollapsibleRoot defaultOpen={providers.length === 0}><CollapsibleTrigger className="max-[48rem]:[&_small]:hidden"><span id="add-git-provider">Git 제공자 추가</span><small>비활성 상태로 저장한 뒤 연결을 검증합니다</small></CollapsibleTrigger><CollapsiblePanel><CollapsibleContent><ProviderForm onSubmit={create} disabled={mutation.isPending} /></CollapsibleContent></CollapsiblePanel></CollapsibleRoot></AdminPanel>
-    <AdminPanel aria-labelledby="git-provider-list"><AdminCollectionHeading><h2 id="git-provider-list">등록된 제공자</h2><Badge>{providers.length}개</Badge></AdminCollectionHeading>{providers.length === 0 ? <p>등록된 Git 제공자가 없습니다. 위에서 첫 연결을 추가하세요.</p> : <ul className="mt-6 grid list-none gap-2 p-0">{providers.map((provider) => <AdminIntegrationRecord key={provider.id}><div><strong><Link href={`/admin/integrations/git/${provider.id}`}>{provider.displayName}</Link></strong><span>{provider.state === "active" ? "활성" : "비활성"}</span><small>{provider.kind} · {provider.host}:{provider.port} · 설정 v{provider.configVersion}</small></div>{provider.state === "disabled" ? <CollapsibleRoot className="mt-4"><CollapsibleTrigger>연결 설정 편집</CollapsibleTrigger><CollapsiblePanel><CollapsibleContent><ProviderForm provider={provider} onSubmit={(event) => void update(event, provider)} disabled={mutation.isPending} /></CollapsibleContent></CollapsiblePanel></CollapsibleRoot> : null}<IntegrationCaConsole type="git_provider" integrationId={provider.id} /><AdminRecordActions>{provider.state === "active" ? <Button onClick={() => void execute(async () => (await disableGitProvider(createBrowserApiClient(), provider.id, provider.configVersion, options())).data, "제공자를 즉시 비활성화했습니다.")} disabled={mutation.isPending}>비활성화</Button> : <Button variant="primary" onClick={() => void execute(async () => (await activateGitProvider(createBrowserApiClient(), provider.id, provider.configVersion, options())).data, "제공자를 검증하고 활성화했습니다.")} disabled={mutation.isPending}>검증 후 활성화</Button>}<Button variant="danger" onClick={() => setPendingDeletion(provider)} disabled={mutation.isPending || provider.state !== "disabled"}>삭제</Button></AdminRecordActions></AdminIntegrationRecord>)}</ul>}</AdminPanel>
-    {feedback ? <p role={feedback.error ? "alert" : "status"}>{feedback.text}</p> : null}
+  const detailProvider = detailMode ? providers[0] : undefined;
+  if (detailProvider) {
+    return <GitProviderDetail
+      provider={detailProvider}
+      busy={mutation.isPending}
+      feedback={feedback}
+      pendingDeletion={pendingDeletion}
+      onActivate={() => void execute(async () => (await activateGitProvider(createBrowserApiClient(), detailProvider.id, detailProvider.configVersion, options())).data, "제공자를 검증하고 활성화했습니다.")}
+      onDelete={() => setPendingDeletion(detailProvider)}
+      onDeleteCancel={() => setPendingDeletion(undefined)}
+      onDeleteConfirm={() => void remove(detailProvider)}
+      onDisable={() => void execute(async () => (await disableGitProvider(createBrowserApiClient(), detailProvider.id, detailProvider.configVersion, options())).data, "제공자를 즉시 비활성화했습니다.")}
+      onUpdate={(event) => void update(event, detailProvider)}
+    />;
+  }
+
+  return <AdminPage id="main-content" contentWidth="standard">
+    <AdminPageHeader category="연동" title="Git 제공자" description="등록된 Git 연결의 상태, 권한과 검증 결과를 확인합니다." aside={<div className="flex items-center gap-2"><Badge>등록 {providers.length}개</Badge><Link className={buttonVariants({ size: "sm", variant: "primary" })} href="/admin/integrations/git/new">새 제공자</Link></div>} />
+    <AdminPanel aria-labelledby="git-provider-list"><AdminCollectionHeading><h2 id="git-provider-list">등록된 제공자</h2><Badge>{providers.length}개</Badge></AdminCollectionHeading>{providers.length === 0 ? <p>등록된 Git 제공자가 없습니다. 새 제공자를 등록해 첫 연결을 구성하세요.</p> : <ul className="mt-6 grid list-none gap-2 p-0">{providers.map((provider) => <AdminIntegrationRecord key={provider.id}><div><strong>{provider.displayName}</strong><span>{provider.state === "active" ? "활성" : "비활성"} · {providerKindLabel(provider.kind)}</span><small>{provider.host}:{provider.port} · {provider.allowsWrite ? "읽기·쓰기" : "읽기 전용"}</small></div><AdminRecordActions><Link className={buttonVariants({ size: "sm", variant: "secondary" })} href={`/admin/integrations/git/${provider.id}`}>상세 보기</Link></AdminRecordActions></AdminIntegrationRecord>)}</ul>}</AdminPanel>
+    {feedback ? <AdminFeedback feedbackTone={feedback.error ? "danger" : "success"} role={feedback.error ? "alert" : "status"}>{feedback.text}</AdminFeedback> : null}
     <ConfirmationDialog busy={mutation.isPending} confirmLabel={mutation.isPending ? "삭제 중…" : "제공자 삭제"} description={`${pendingDeletion?.displayName ?? "선택한 제공자"} 설정과 인증서 신뢰 구성이 영구적으로 삭제됩니다.`} open={pendingDeletion !== undefined} title="Git 제공자를 삭제할까요?" onCancel={() => setPendingDeletion(undefined)} onConfirm={() => { if (pendingDeletion) void remove(pendingDeletion); }} />
   </AdminPage>;
+}
+
+interface GitProviderDetailProps {
+  readonly busy: boolean;
+  readonly feedback: { readonly error: boolean; readonly text: string } | undefined;
+  readonly onActivate: () => void;
+  readonly onDelete: () => void;
+  readonly onDeleteCancel: () => void;
+  readonly onDeleteConfirm: () => void;
+  readonly onDisable: () => void;
+  readonly onUpdate: (event: FormEvent<HTMLFormElement>) => void;
+  readonly pendingDeletion: GitProviderAdmin | undefined;
+  readonly provider: GitProviderAdmin;
+}
+
+function GitProviderCreate({ busy, feedback, onSubmit }: { readonly busy: boolean; readonly feedback: { readonly error: boolean; readonly text: string } | undefined; readonly onSubmit: (event: FormEvent<HTMLFormElement>) => void }) {
+  return (
+    <AdminPage id="main-content" contentWidth="narrow" aria-busy={busy}>
+      <AdminIntegrationBackLink href="/admin/integrations/git">Git 제공자</AdminIntegrationBackLink>
+      <AdminPageHeader category="Git 제공자" title="새 Git 제공자" description="연결 원본과 권한을 등록한 뒤 상세 화면에서 검증하고 활성화합니다." />
+      <AdminConnectionGuide subject="Git 제공자" />
+      <AdminPanel><ProviderForm onSubmit={onSubmit} disabled={busy} /></AdminPanel>
+      {feedback ? <AdminFeedback feedbackTone={feedback.error ? "danger" : "success"} role={feedback.error ? "alert" : "status"}>{feedback.text}</AdminFeedback> : null}
+    </AdminPage>
+  );
+}
+
+function GitProviderDetail({ busy, feedback, onActivate, onDelete, onDeleteCancel, onDeleteConfirm, onDisable, onUpdate, pendingDeletion, provider }: GitProviderDetailProps) {
+  const active = provider.state === "active";
+  const permissions = provider.allowsWrite ? "읽기·쓰기" : provider.allowsRead ? "읽기 전용" : "권한 없음";
+  return (
+    <AdminPage id="main-content" contentWidth="standard" aria-busy={busy}>
+      <AdminIntegrationBackLink href="/admin/integrations/git">Git 제공자</AdminIntegrationBackLink>
+      <AdminPageHeader
+        category="Git 제공자"
+        title={provider.displayName}
+        description="저장소 연결 주소, 접근 범위와 검증 상태를 한곳에서 관리합니다."
+        aside={<Badge tone={active ? "success" : "neutral"} variant="status">{active ? "활성" : "비활성"}</Badge>}
+      />
+      <AdminIntegrationSummary
+        state={active ? "active" : "disabled"}
+        title={active ? "프로젝트에서 이 Git 연결을 사용할 수 있습니다" : "프로젝트 연결에 아직 사용할 수 없습니다"}
+        description={active ? "현재 설정은 잠겨 있습니다. 주소나 권한을 변경하려면 먼저 비활성화하세요." : "연결 정보와 접근 범위를 확인한 뒤 실제 네트워크 검증을 통과하면 활성화할 수 있습니다."}
+        metrics={[
+          { label: "제공자", value: providerKindLabel(provider.kind) },
+          { label: "저장소 권한", value: permissions },
+          { label: "최근 검증", value: formatValidationDate(provider.validatedAt) },
+          { label: "설정 버전", value: `v${provider.configVersion}` }
+        ]}
+      />
+      <AdminIntegrationSection title="연결 및 접근 범위" description="API 원본과 OAuth 애플리케이션, 저장소 권한을 관리합니다.">
+        {active ? (
+          <AdminIntegrationReadOnlyGrid items={[
+            { label: "호스트", value: `${provider.host}:${provider.port}` },
+            { label: "API 기본 URL", value: provider.apiBaseUrl },
+            { label: "OAuth 클라이언트 ID", value: provider.oauthClientId ?? "사용하지 않음" },
+            { label: "접근 권한", value: permissions }
+          ]} />
+        ) : <ProviderForm provider={provider} onSubmit={onUpdate} disabled={busy} />}
+      </AdminIntegrationSection>
+      <AdminIntegrationSection title="TLS 인증서 신뢰" description="자체 호스팅 Git 서버가 사설 인증 기관을 사용할 때만 등록하세요.">
+        <IntegrationCaConsole appearance="detail" type="git_provider" integrationId={provider.id} />
+      </AdminIntegrationSection>
+      <AdminSection>
+        <AdminIntegrationActionBar note={active ? "비활성화하면 새 프로젝트 연결과 원격 Git 작업이 중단될 수 있습니다." : "활성화 전에 HTTPS, API 응답, OAuth 설정과 인증서 신뢰를 실제로 검증합니다."}>
+          {active ? <Button disabled={busy} onClick={onDisable}>Git 연결 비활성화</Button> : <Button variant="primary" disabled={busy} onClick={onActivate}>검증 후 활성화</Button>}
+        </AdminIntegrationActionBar>
+      </AdminSection>
+      <AdminIntegrationDangerSection title="제공자 삭제" description="연결 설정과 인증서 신뢰 구성을 영구적으로 제거합니다. 먼저 제공자를 비활성화해야 합니다.">
+        <Button variant="danger" disabled={busy || active} onClick={onDelete}>제공자 삭제</Button>
+      </AdminIntegrationDangerSection>
+      {feedback ? <AdminFeedback feedbackTone={feedback.error ? "danger" : "success"} role={feedback.error ? "alert" : "status"}>{feedback.text}</AdminFeedback> : null}
+      <ConfirmationDialog busy={busy} confirmLabel={busy ? "삭제 중…" : "제공자 삭제"} description={`${provider.displayName} 설정과 인증서 신뢰 구성이 영구적으로 삭제됩니다.`} open={pendingDeletion !== undefined} title="Git 제공자를 삭제할까요?" onCancel={onDeleteCancel} onConfirm={onDeleteConfirm} />
+    </AdminPage>
+  );
+}
+
+function formatValidationDate(value: string | null): string {
+  if (value === null) return "검증 기록 없음";
+  return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
 }
 
 function ProviderForm({ provider, onSubmit, disabled }: { readonly provider?: GitProviderAdmin; readonly onSubmit: (event: FormEvent<HTMLFormElement>) => void; readonly disabled: boolean }) {
@@ -163,14 +265,14 @@ function ProviderForm({ provider, onSubmit, disabled }: { readonly provider?: Gi
         <p className="col-span-full text-xs text-subtle-foreground max-[48rem]:col-auto">일반 HTTPS 제공자는 OAuth를 사용하지 않습니다. 사용자는 프로젝트에서 개인 액세스 토큰을 별도로 연결합니다.</p>
       )}
 
-      <fieldset className="col-span-full m-0 flex flex-wrap gap-2 border-0 p-0">
-        <legend className="mb-2 w-full text-xs font-semibold text-muted-foreground">저장소 접근 권한</legend>
-        <CheckboxField name="allowsRead" label="읽기 허용" description="저장소 내용과 브랜치 정보를 조회합니다." defaultChecked={provider?.allowsRead ?? true} disabled={disabled} />
-        <CheckboxField name="allowsWrite" label="쓰기 허용" description="커밋과 브랜치 변경을 원격 저장소에 반영합니다." defaultChecked={provider?.allowsWrite ?? false} disabled={disabled} />
+      <fieldset className="col-span-full m-0 grid grid-cols-2 gap-3 border-0 p-0 max-[40rem]:grid-cols-1">
+        <legend className="mb-2 w-full text-sm font-semibold text-foreground">저장소 접근 권한</legend>
+        <CheckboxField appearance="card" name="allowsRead" label="읽기 허용" description="저장소 내용과 브랜치 정보를 조회합니다." defaultChecked={provider?.allowsRead ?? true} disabled={disabled} />
+        <CheckboxField appearance="card" name="allowsWrite" label="쓰기 허용" description="커밋과 브랜치 변경을 원격 저장소에 반영합니다." defaultChecked={provider?.allowsWrite ?? false} disabled={disabled} />
       </fieldset>
       <AdminFormActions>
         <AdminFormActionNote>{provider ? "정보를 변경하면 연결을 다시 검증해야 합니다." : "비활성 상태로 저장한 뒤 연결과 권한을 검증해 활성화하세요."}</AdminFormActionNote>
-        <Button type="submit" variant={provider ? "secondary" : "primary"} disabled={disabled}>{provider ? "제공자 정보 변경" : "비활성 제공자 저장"}</Button>
+        <Button type="submit" variant={provider ? "secondary" : "primary"} disabled={disabled}>{provider ? "제공자 정보 변경" : "제공자 등록"}</Button>
       </AdminFormActions>
     </AdminForm>
   );

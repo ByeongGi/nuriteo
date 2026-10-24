@@ -4,6 +4,8 @@ import {
   createPreviewShellSession,
   createPreviewWorkflowController
 } from "../../../packages/workspace-runtime/src/index.ts";
+import { createMemoryOpfs, createProjectWorkspaceStore } from "../../../packages/browser-host/src/index.ts";
+import { readWorkspacePackageScript } from "../../../packages/workspace-runtime/src/package-script.ts";
 
 const controller = createPreviewWorkflowController();
 await controller.runShellCommand("cd projects/one", "terminal-one");
@@ -33,13 +35,9 @@ const shell = createPreviewShellSession({
   getCwd: () => "/workspace/app",
   getProject: () => null,
   install: async () => ({ stdout: "", stderr: "", exitCode: 0 }),
-  runDev: async (args = []) => {
-    calls.push(["dev", args]);
-    return { stdout: "dev\n", stderr: "", exitCode: 0 };
-  },
-  runBuild: async (args = []) => {
-    calls.push(["build", args]);
-    return { stdout: "build\n", stderr: "", exitCode: 0 };
+  runScript: async (name, args = []) => {
+    calls.push([name, args]);
+    return { stdout: `${name}\n`, stderr: "", exitCode: 0 };
   },
   restartDev: async (args = []) => {
     calls.push(["restart", args]);
@@ -53,21 +51,113 @@ assert.deepEqual(calls, [
   ["build", ["--", "--watch"]]
 ]);
 
+const project = createProjectWorkspaceStore({
+  projectId: "terminal-project",
+  root: "/workspace/app",
+  opfs: createMemoryOpfs()
+});
+project.writeText("src/App.tsx", "export default function App() {\n  return <main>Hello</main>;\n}\n");
+project.writeText(".env", "MODE=development\n");
+const projectShell = createPreviewShellSession({
+  getCwd: () => project.root,
+  getProject: () => project,
+  install: async () => ({ stdout: "", stderr: "", exitCode: 0 }),
+  runScript: async () => ({ stdout: "", stderr: "", exitCode: 0 }),
+  restartDev: async () => ({ stdout: "", stderr: "", exitCode: 0 })
+});
+await projectShell.run("cd src");
+assert.equal((await projectShell.run("pwd")).stdout, "/workspace/app/src\n");
+assert.equal((await projectShell.run("ls -la")).stdout, "App.tsx\n");
+assert.equal((await projectShell.run("grep -n return App.tsx")).stdout, "2:  return <main>Hello</main>;\n");
+assert.equal((await projectShell.run("cat App.tsx | grep Hello")).stdout, "  return <main>Hello</main>;\n");
+assert.equal((await projectShell.run("find . -name '*.tsx'")).stdout, "./App.tsx\n");
+assert.equal((await projectShell.run("cp App.tsx App.copy.tsx")).exitCode, 0);
+assert.equal(project.readText("src/App.copy.tsx"), project.readText("src/App.tsx"));
+assert.equal((await projectShell.run("printf 'created\\n' > generated.txt")).exitCode, 0);
+assert.equal(project.readText("src/generated.txt"), "created\n");
+assert.equal((await projectShell.run("ls ../../")).exitCode, 1);
+assert.equal((await projectShell.run("cd ../../")).exitCode, 1);
+assert.equal((await projectShell.run("pwd")).stdout, "/workspace/app/src\n");
+
+const scriptController = createPreviewWorkflowController();
+scriptController.loadViteReactTemplate();
+const scriptSnapshot = scriptController.getSnapshot();
+const packageJson = JSON.parse(scriptSnapshot.project!.readText("package.json"));
+packageJson.scripts.check = "node scripts/check.cjs";
+packageJson.scripts.chain = "node scripts/pre.cjs && node scripts/post.cjs";
+packageJson.scripts.pipe = "node scripts/emit.cjs | node scripts/upper.cjs > piped.txt";
+packageJson.scripts.serve = "vite --host 0.0.0.0";
+packageJson.scripts.bundle = "vite build";
+scriptController.saveTextFile("package.json", `${JSON.stringify(packageJson, null, 2)}\n`);
+scriptController.createTextFile(
+  "scripts/check.cjs",
+  "const fs = require('node:fs');\nfs.writeFileSync('generated.txt', process.argv[2]);\nconsole.log('script:' + process.argv[2]);\n"
+);
+scriptController.createTextFile(
+  "scripts/pre.cjs",
+  "const fs = require('node:fs');\nfs.writeFileSync('chain.txt', 'pre');\nconsole.log('pre');\n"
+);
+scriptController.createTextFile(
+  "scripts/post.cjs",
+  "const fs = require('node:fs');\nfs.appendFileSync('chain.txt', ':' + process.argv[2]);\nconsole.log('post:' + process.argv[2]);\n"
+);
+scriptController.createTextFile("scripts/emit.cjs", "process.stdout.write('pipeline');\n");
+scriptController.createTextFile(
+  "scripts/upper.cjs",
+  "let value = '';\nprocess.stdin.on('data', (chunk) => { value += chunk; });\nprocess.stdin.on('end', () => process.stdout.write(value.toUpperCase()));\n"
+);
+assert.equal((await scriptController.runShellCommand("pnpm install", "script-terminal")).exitCode, 0);
+const scriptResult = await scriptController.runShellCommand("pnpm run check -- alpha", "script-terminal");
+assert.equal(scriptResult.exitCode, 0, scriptResult.stderr);
+assert.equal(scriptResult.stdout, "script:alpha\n");
+assert.equal(scriptController.getSnapshot().project!.readText("generated.txt"), "alpha");
+const redirectedFile = await scriptController.runShellCommand(
+  "printf 'body { color: red; }\\n' > src/terminal-preview.css",
+  "script-terminal"
+);
+assert.equal(redirectedFile.exitCode, 0, redirectedFile.stderr);
+assert.equal(
+  scriptController.getSnapshot().workflow!.workspace.readText("/workspace/app/src/terminal-preview.css"),
+  "body { color: red; }\n"
+);
+assert.equal((await scriptController.runShellCommand("mv src/terminal-preview.css src/terminal-renamed.css", "script-terminal")).exitCode, 0);
+assert.throws(
+  () => scriptController.getSnapshot().workflow!.workspace.readText("/workspace/app/src/terminal-preview.css"),
+  /No such file/u
+);
+assert.equal((await scriptController.runShellCommand("rm src/terminal-renamed.css", "script-terminal")).exitCode, 0);
+assert.throws(
+  () => scriptController.getSnapshot().workflow!.workspace.readText("/workspace/app/src/terminal-renamed.css"),
+  /No such file/u
+);
+const chainResult = await scriptController.runShellCommand("pnpm run chain -- browser", "script-terminal");
+assert.equal(chainResult.exitCode, 0, chainResult.stderr);
+assert.equal(chainResult.stdout, "pre\npost:browser\n");
+assert.equal(scriptController.getSnapshot().project!.readText("chain.txt"), "pre:browser");
+const pipeResult = await scriptController.runShellCommand("npm run pipe", "script-terminal");
+assert.equal(pipeResult.exitCode, 0, pipeResult.stderr);
+assert.equal(pipeResult.stdout, "");
+assert.equal(scriptController.getSnapshot().project!.readText("piped.txt"), "PIPELINE");
+const buildAliasResult = await scriptController.runShellCommand("npm run bundle", "script-terminal");
+assert.equal(buildAliasResult.exitCode, 0, buildAliasResult.stderr);
+assert.match(buildAliasResult.stdout, /^build ok files=/);
+assert.match(scriptController.getSnapshot().project!.readText("dist/index.html"), /<!doctype html>/i);
+assert.equal(readWorkspacePackageScript(scriptController.getSnapshot().workflow!, "serve").kind, "dev");
+scriptController.dispose();
+
 const never = () => new Promise<{ stdout: string; stderr: string; exitCode: number }>(() => undefined);
 const firstLong = createPreviewShellSession({
   getCwd: () => "/workspace/first",
   getProject: () => null,
   install: never,
-  runDev: never,
-  runBuild: never,
+  runScript: never,
   restartDev: never
 });
 const secondLong = createPreviewShellSession({
   getCwd: () => "/workspace/second",
   getProject: () => null,
   install: never,
-  runDev: never,
-  runBuild: never,
+  runScript: never,
   restartDev: never
 });
 await firstLong.run("export SESSION=first");

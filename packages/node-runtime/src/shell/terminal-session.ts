@@ -202,9 +202,11 @@ export function createTerminalSession(options: TerminalSessionOptions = {}): Ter
 function cloneRuntimeOptions(options: ShellRuntimeOptions): ShellRuntimeOptions {
   const clone: ShellRuntimeOptions = {};
   if (options.cwd !== undefined) clone.cwd = options.cwd;
+  if (options.filesystemRoot !== undefined) clone.filesystemRoot = options.filesystemRoot;
   if (options.commands) clone.commands = { ...options.commands };
   if (options.env) clone.env = { ...options.env };
   if (options.files) clone.files = { ...options.files };
+  if (options.onFileWrite) clone.onFileWrite = options.onFileWrite;
   if (options.maxOutputBytes !== undefined) clone.maxOutputBytes = options.maxOutputBytes;
   if (options.maxInputChunkBytes !== undefined) clone.maxInputChunkBytes = options.maxInputChunkBytes;
   return clone;

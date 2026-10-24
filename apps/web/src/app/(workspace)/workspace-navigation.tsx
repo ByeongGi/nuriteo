@@ -29,11 +29,10 @@ const navigationStyles = tv({
 
 interface Props {
   readonly organization: boolean;
-  readonly unreadCount?: number;
   readonly workspaceId: string;
 }
 
-type WorkspaceNavigationIcon = "members" | "notification" | "projects" | "settings" | "teams";
+type WorkspaceNavigationIcon = "members" | "projects" | "settings" | "teams";
 
 interface WorkspaceNavigationItem {
   readonly href: string;
@@ -50,31 +49,27 @@ interface WorkspaceNavigationSection {
 export function WorkspaceNavigation({
   organization,
   placement = "sidebar",
-  unreadCount = 0,
   workspaceId
 }: Props & { readonly placement?: "mobile" | "sidebar" }) {
   const pathname = usePathname();
   const styles = navigationStyles({ placement });
   const base = `/workspaces/${encodeURIComponent(workspaceId)}`;
 
+  const managementItems: readonly WorkspaceNavigationItem[] = [
+    ...(organization ? [
+      { href: `${base}/members`, icon: "members" as const, label: "멤버" },
+      { href: `${base}/teams`, icon: "teams" as const, label: "팀" }
+    ] : []),
+    { href: `${base}/settings`, icon: "settings", label: "설정" }
+  ];
   const sections: readonly WorkspaceNavigationSection[] = [
-    {
-      label: "개인",
-      items: [{ href: "/notifications", icon: "notification", label: "알림" }]
-    },
     {
       label: "작업",
       items: [{ href: base, icon: "projects", label: "프로젝트", projectRoot: true }]
     },
     {
-      label: "워크스페이스 관리",
-      items: [
-        ...(organization ? [
-          { href: `${base}/members`, icon: "members", label: "멤버" },
-          { href: `${base}/teams`, icon: "teams", label: "팀" }
-        ] : []),
-        { href: `${base}/settings`, icon: "settings", label: "설정" }
-      ]
+      label: "관리",
+      items: managementItems
     }
   ];
 
@@ -100,9 +95,6 @@ export function WorkspaceNavigation({
             >
               <WorkspaceNavIcon className={styles.icon()} name={item.icon} />
               <span>{item.label}</span>
-              {item.icon === "notification" && unreadCount > 0 ? (
-                <span className={styles.badge()}>{unreadCount > 99 ? "99+" : unreadCount}</span>
-              ) : null}
             </Link>
           ))}
         </section>
@@ -120,9 +112,6 @@ function WorkspaceNavIcon({ className, name }: Readonly<{ className: string; nam
   }
   if (name === "teams") {
     return <svg aria-hidden="true" className={className} fill="none" viewBox="0 0 16 16"><circle cx="5.25" cy="5.5" r="1.75" stroke="currentColor" /><circle cx="11.25" cy="6.25" r="1.5" stroke="currentColor" /><path d="M1.75 12.5c.3-2 1.55-3 3.5-3 2 0 3.2 1 3.5 3M9.25 9.75c1.8-.45 3.9.3 4.5 2.25" stroke="currentColor" strokeLinecap="round" /></svg>;
-  }
-  if (name === "notification") {
-    return <svg aria-hidden="true" className={className} fill="none" viewBox="0 0 16 16"><path d="M4.5 6.5a3.5 3.5 0 0 1 7 0c0 3.5 1.5 4 1.5 5h-10c0-1 1.5-1.5 1.5-5Z" stroke="currentColor" strokeLinejoin="round" /><path d="M6.5 13.25h3" stroke="currentColor" strokeLinecap="round" /></svg>;
   }
   return <svg aria-hidden="true" className={className} fill="none" viewBox="0 0 16 16"><circle cx="8" cy="8" r="2" stroke="currentColor" /><path d="M8 2.25v1.5M8 12.25v1.5M13.75 8h-1.5M3.75 8h-1.5M12.07 3.93 11 5M5 11l-1.07 1.07M12.07 12.07 11 11M5 5 3.93 3.93" stroke="currentColor" strokeLinecap="round" /></svg>;
 }

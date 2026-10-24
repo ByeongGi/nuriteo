@@ -64,6 +64,7 @@ export class ViteProductPackageArtifactError extends Error {
 export interface VitePackageManifest {
   bin?: string | Record<string, string>;
   dependencies?: Record<string, string>;
+  devDependencies?: Record<string, string>;
   name?: string;
   optionalDependencies?: Record<string, string>;
   version?: string;

@@ -1,5 +1,6 @@
 const DNS_NAME = /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])$/u;
 const PREVIEW_LABEL = /^r-([a-z2-7]{45})-p([1-9][0-9]{0,4})$/u;
+const PREVIEW_WINDOW_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 const INTERNAL_PREVIEW_PATH = /^\/__preview\/([^/]+)\/([1-9][0-9]{0,4})\/$/u;
 
 export interface EnabledPreviewOriginConfiguration {
@@ -77,6 +78,17 @@ export function createPreviewOriginUrl(
     binding: { hostname, label, port, runtimeId },
     url: `${configuration.protocol}//${hostname}${publicPort}/runtime-preview/bootstrap`
   };
+}
+
+export function createPreviewWindowUrl(applicationOrigin: string, previewWindowId: string): string {
+  if (!isPreviewWindowId(previewWindowId)) throw new Error("invalid Preview window ID");
+  const url = new URL("/preview-window", applicationOrigin);
+  url.searchParams.set("window", previewWindowId);
+  return url.href;
+}
+
+export function isPreviewWindowId(value: unknown): value is string {
+  return typeof value === "string" && PREVIEW_WINDOW_ID.test(value);
 }
 
 export interface InternalPreviewBinding {

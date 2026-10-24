@@ -38,6 +38,23 @@ export interface AdminBackupPolicy {
 export type AdminBackupPolicyUpdate = Omit<AdminBackupPolicy, "version">;
 export type AdminBackupOperationKind = (typeof OPERATION_KINDS)[number];
 
+export interface AdminBackupOperation {
+  readonly id: string;
+  readonly kind: AdminBackupOperationKind;
+  readonly source: "manual" | "schedule";
+  readonly backupId: string | null;
+  readonly state: (typeof OPERATION_STATES)[number];
+  readonly failureCode: string | null;
+  readonly requestedAt: string;
+  readonly startedAt: string | null;
+  readonly completedAt: string | null;
+}
+
+export interface AdminBackupOperationCollection {
+  readonly items: readonly AdminBackupOperation[];
+  readonly nextCursor: string | null;
+}
+
 export interface AdminBackupConsole {
   readonly policy: AdminBackupPolicy;
   readonly restorePoints: readonly {
@@ -49,17 +66,7 @@ export interface AdminBackupConsole {
     readonly completedAt: string;
     readonly retainedAs: readonly string[];
   }[];
-  readonly operations: readonly {
-    readonly id: string;
-    readonly kind: AdminBackupOperationKind;
-    readonly source: "manual" | "schedule";
-    readonly backupId: string | null;
-    readonly state: (typeof OPERATION_STATES)[number];
-    readonly failureCode: string | null;
-    readonly requestedAt: string;
-    readonly startedAt: string | null;
-    readonly completedAt: string | null;
-  }[];
+  readonly operations: readonly AdminBackupOperation[];
   readonly alerts: readonly {
     readonly level: (typeof ALERT_LEVELS)[number];
     readonly code: string;
@@ -73,6 +80,23 @@ export async function getAdminBackups(
   options: DomainRequestOptions = {}
 ): Promise<ApiResult<AdminBackupConsole>> {
   return validatedResult(await client.get<unknown>("/admin/backups", options), parseConsole);
+}
+
+export async function listAdminBackupOperations(
+  client: ApiClient,
+  options: DomainRequestOptions & { readonly cursor?: string; readonly limit?: number } = {}
+): Promise<ApiResult<AdminBackupOperationCollection>> {
+  const { cursor, limit, ...requestOptions } = options;
+  const parameters = new URLSearchParams();
+  if (cursor !== undefined) parameters.set("cursor", readUuidCursor(cursor));
+  if (limit !== undefined) {
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) throw new TypeError("invalid backup operation page limit");
+    parameters.set("limit", String(limit));
+  }
+  return validatedResult(
+    await client.get<unknown>(`/admin/backups/operations${parameters.size === 0 ? "" : `?${parameters.toString()}`}`, requestOptions),
+    parseOperationCollection
+  );
 }
 
 export async function updateAdminBackupPolicy(
@@ -106,6 +130,14 @@ function parseConsole(value: unknown): AdminBackupConsole {
     operations: readBoundedArray(record, "operations", 20).map(parseOperation),
     alerts: readBoundedArray(record, "alerts", 10).map(parseAlert),
     pruneCandidates: readNonNegative(record, "pruneCandidates")
+  };
+}
+
+function parseOperationCollection(value: unknown): AdminBackupOperationCollection {
+  const record = readExact(value, ["items", "nextCursor"]);
+  return {
+    items: readBoundedArray(record, "items", 100).map(parseOperation),
+    nextCursor: record.nextCursor === null ? null : readUuidCursor(record.nextCursor)
   };
 }
 
@@ -202,4 +234,8 @@ function readDecimal(record: Record<string, unknown>, key: string) {
   const value = readBoundedString(record, key, 20);
   if (!/^(?:0|[1-9]\d{0,19})$/u.test(value)) throw new TypeError("invalid decimal");
   return value;
+}
+
+function readUuidCursor(value: unknown): string {
+  return readUuidV7({ value }, "value");
 }

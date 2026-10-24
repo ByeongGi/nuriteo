@@ -15,7 +15,7 @@ const metricGridStyles = tv({
     density: {
       comfortable: {},
       compact: {
-        root: "grid-cols-3 gap-px overflow-hidden rounded-lg border border-muted-border bg-muted-border sm:grid-cols-3 [&>[data-slot=metric-item]]:min-h-20 [&>[data-slot=metric-item]]:rounded-none [&>[data-slot=metric-item]]:border-0 [&>[data-slot=metric-item]]:p-3 [&>[data-slot=metric-item]]:shadow-none [&>[data-slot=metric-item]>strong]:mt-1 [&>[data-slot=metric-item]>strong]:text-xl max-[36rem]:[&>[data-slot=metric-item]>small]:hidden"
+        root: "grid-cols-3 gap-px overflow-hidden rounded-lg border border-muted-border bg-muted-border sm:grid-cols-3 [&>[data-slot=metric-item]]:min-h-18 [&>[data-slot=metric-item]]:rounded-none [&>[data-slot=metric-item]]:border-0 [&>[data-slot=metric-item]]:p-3 [&>[data-slot=metric-item]]:shadow-none [&>[data-slot=metric-item]>strong]:mt-1 [&>[data-slot=metric-item]>strong]:text-lg max-[36rem]:[&>[data-slot=metric-item]>small]:hidden"
       }
     }
   },

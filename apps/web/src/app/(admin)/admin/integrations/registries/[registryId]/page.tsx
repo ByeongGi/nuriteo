@@ -9,5 +9,5 @@ export default async function RegistryDetailPage({ params }: { readonly params: 
   const configuration = (await listRegistries(await createServerApiClient())).data;
   const registry = configuration.items.find((item) => item.id === registryId);
   if (!registry) notFound();
-  return <RegistryConsole initialConfiguration={{ items: [registry], scopes: configuration.scopes.filter((scope) => scope.connectionId === registryId) }} />;
+  return <RegistryConsole detailMode initialConfiguration={{ items: [registry], scopes: configuration.scopes.filter((scope) => scope.connectionId === registryId) }} />;
 }

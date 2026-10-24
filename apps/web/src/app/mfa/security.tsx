@@ -21,8 +21,8 @@ import { Button } from "#src/components/ui/button.tsx";
 import { CheckboxField } from "#src/components/ui/checkbox.tsx";
 import { ConfirmationDialog } from "#src/components/ui/confirmation-dialog.tsx";
 import { Input } from "#src/components/ui/input.tsx";
-import { MetricGrid, MetricItem } from "#src/components/ui/metric-grid.tsx";
 import { PageHeader } from "#src/components/ui/page-header.tsx";
+import { SettingsGroup, SettingsRow, SettingsValue } from "#src/components/ui/settings-group.tsx";
 import { createBrowserApiClient } from "#src/lib/api/browser-client.ts";
 import { readCsrfCredential } from "#src/lib/api/browser-security.ts";
 import { useExclusiveMutation } from "#src/lib/use-exclusive-mutation.ts";
@@ -197,11 +197,13 @@ export function MfaSecurity({
       </nav>}
       <PageHeader density="compact" eyebrow="계정 / 보안" title={pageTitle} description={pageDescription} />
 
-      {!isChallengeView ? <MetricGrid density="compact" aria-label="계정 보안 요약">
-        <MetricItem label="다중 인증" value={status.enrolled ? "켜짐" : "꺼짐"} description={status.localAccount ? "인증 앱 기반" : "회사 인증 제공자에서 관리"} />
-        <MetricItem label="복구 코드" value={status.enrolled ? `${status.recoveryCodesRemaining}개` : "—"} description="안전한 장소에 별도 보관" />
-        <MetricItem label="보안 정책" value={status.required ? "필수" : "선택"} description={status.restricted ? "설정 전까지 접근 제한" : "현재 계정 접근 가능"} />
-      </MetricGrid> : null}
+      {!isChallengeView ? (
+        <SettingsGroup density="compact" title="보안 상태" description="현재 계정에 적용된 로그인 보호 상태입니다.">
+          <SettingsRow density="compact" title="다중 인증" description={status.localAccount ? "인증 앱 기반" : "회사 인증 제공자에서 관리"}><SettingsValue>{status.enrolled ? "켜짐" : "꺼짐"}</SettingsValue></SettingsRow>
+          <SettingsRow density="compact" title="복구 코드" description="안전한 장소에 별도 보관하세요."><SettingsValue>{status.enrolled ? `${status.recoveryCodesRemaining}개` : "—"}</SettingsValue></SettingsRow>
+          <SettingsRow density="compact" title="보안 정책" description={status.restricted ? "설정 전까지 계정 접근이 제한됩니다." : "현재 계정에 정상적으로 접근할 수 있습니다."}><SettingsValue>{status.required ? "필수" : "선택"}</SettingsValue></SettingsRow>
+        </SettingsGroup>
+      ) : null}
 
       {status.required && !status.enrolled ? (
         <section className={styles.notice({ className: status.restricted ? styles.noticeDanger() : undefined })} role={status.restricted ? "alert" : "status"}>
@@ -218,7 +220,7 @@ export function MfaSecurity({
         <section className={styles.card()}>
           <h2>인증 앱 설정</h2>
           <p>최근에 다시 인증한 세션이 필요합니다. 시작하면 완료되지 않은 기존 설정을 교체합니다.</p>
-          <Button className={styles.cardAction()} aria-label="인증 앱 설정 시작" variant="primary" disabled={mutation.isPending} onClick={begin}>설정 시작</Button>
+          <Button className={styles.cardAction()} size="sm" aria-label="인증 앱 설정 시작" variant="primary" disabled={mutation.isPending} onClick={begin}>설정 시작</Button>
         </section>
       ) : null}
 
@@ -236,8 +238,8 @@ export function MfaSecurity({
             onCheckedChange={setCopiedRecoveryCodes}
           />
           <div className={styles.actions()}>
-            <Button onClick={copyRecoveryCodes}>모든 코드 복사</Button>
-            <Button variant="primary" disabled={!copiedRecoveryCodes} onClick={finishRecoveryConfirmation}>
+            <Button size="sm" onClick={copyRecoveryCodes}>모든 코드 복사</Button>
+            <Button size="sm" variant="primary" disabled={!copiedRecoveryCodes} onClick={finishRecoveryConfirmation}>
               {copiedRecoveryCodes ? "코드를 안전하게 저장했습니다" : "계속하려면 코드를 복사하세요"}
             </Button>
           </div>
@@ -251,16 +253,15 @@ export function MfaSecurity({
           {!isChallengeView ? <section className={styles.card()}>
             <h2>다중 인증 해제</h2>
             <p>인스턴스 정책에서 다중 인증을 필수로 요구하지 않을 때만 해제할 수 있습니다.</p>
-            <Button className={styles.cardAction()} disabled={mutation.isPending || status.required} onClick={() => setConfirmingDisable(true)}>MFA 해제</Button>
+            <Button className={styles.cardAction()} size="sm" disabled={mutation.isPending || status.required} onClick={() => setConfirmingDisable(true)}>MFA 해제</Button>
           </section> : null}
         </div>
       ) : null}
 
       {message ? <p className={styles.feedback({ className: message.tone === "error" ? styles.feedbackError() : styles.feedbackSuccess() })} role={message.tone === "error" ? "alert" : "status"}>{message.text}</p> : null}
-      <nav className={styles.safeNavigation()} aria-label="제한된 계정 작업">
-        {!status.restricted ? <Link className={styles.safeLink()} href="/workspaces">워크스페이스로 돌아가기</Link> : null}
-        <Button aria-label="로그아웃 또는 계정 전환" disabled={mutation.isPending} onClick={signOut}>로그아웃 또는 계정 전환</Button>
-      </nav>
+      <div className={styles.safeNavigation()}>
+        <Button size="sm" aria-label="로그아웃 또는 계정 전환" disabled={mutation.isPending} onClick={signOut}>로그아웃 또는 계정 전환</Button>
+      </div>
       <ConfirmationDialog
         busy={mutation.isPending}
         confirmLabel={mutation.isPending ? "해제 중…" : "MFA 해제"}
@@ -282,8 +283,8 @@ function CodePanel({ title, description, pending, onSubmit, recovery = false }: 
       <h2>{title}</h2><p>{description}</p>
       <form className={styles.codeForm()} onSubmit={onSubmit} aria-busy={pending}>
         <label htmlFor={id}>{recovery ? "복구 코드" : "6자리 인증 코드"}</label>
-        <Input id={id} name="code" autoComplete="one-time-code" inputMode={recovery ? "text" : "numeric"} minLength={6} maxLength={128} required />
-        <Button type="submit" disabled={pending}>{pending ? "확인 중…" : recovery ? "계정 복구" : "코드 확인"}</Button>
+        <Input id={id} name="code" size="sm" autoComplete="one-time-code" inputMode={recovery ? "text" : "numeric"} minLength={6} maxLength={128} required />
+        <Button type="submit" size="sm" variant="primary" disabled={pending}>{pending ? "확인 중…" : recovery ? "계정 복구" : "코드 확인"}</Button>
       </form>
     </section>
   );

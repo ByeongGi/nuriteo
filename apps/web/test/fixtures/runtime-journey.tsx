@@ -3,34 +3,45 @@ import { createRoot } from "react-dom/client";
 
 import { ProjectIdeShell } from "../../src/app/(authenticated)/projects/project-ide-shell.tsx";
 import {
+  createRuntimeAdapter as createBrowserRuntimeAdapter,
+  type RuntimeAdapter
+} from "../../src/runtime/runtime-adapter.ts";
+import {
   createSubdomainPreviewBridge,
   type SubdomainPreviewBridge
 } from "../../src/runtime/subdomain-preview-bridge.ts";
 
 declare global {
-  interface Window { __nuriteoRuntimeProbe: { activeWorkers: number; createdWorkers: number; committedVersion?: number; committedEtag?: string; reloads: number; restoreMode: "download-failure" | "intervening" | "materialization-failure" | "success" } }
+  interface Window { __nuriteoRuntimeProbe: { activeWorkers: number; adapter?: RuntimeAdapter; createdWorkers: number; committedVersion?: number; committedEtag?: string; reloads: number; restoreMode: "download-failure" | "intervening" | "materialization-failure" | "success"; runtimeActiveWorkers: number; runtimeCreatedWorkers: number } }
 }
 
 const NativeWorker = globalThis.Worker;
 class TrackingWorker extends NativeWorker {
   #active = true;
+  #runtimeWorker: boolean;
 
   constructor(scriptURL: string | URL, options?: WorkerOptions) {
     super(scriptURL, options);
+    this.#runtimeWorker = /\/runtime\/[^/]+\/(?:system|process)-worker\.js$/u.test(String(scriptURL));
     window.__nuriteoRuntimeProbe.activeWorkers += 1;
     window.__nuriteoRuntimeProbe.createdWorkers += 1;
+    if (this.#runtimeWorker) {
+      window.__nuriteoRuntimeProbe.runtimeActiveWorkers += 1;
+      window.__nuriteoRuntimeProbe.runtimeCreatedWorkers += 1;
+    }
   }
 
   override terminate(): void {
     if (this.#active) {
       this.#active = false;
       window.__nuriteoRuntimeProbe.activeWorkers -= 1;
+      if (this.#runtimeWorker) window.__nuriteoRuntimeProbe.runtimeActiveWorkers -= 1;
     }
     super.terminate();
   }
 }
 
-window.__nuriteoRuntimeProbe = { activeWorkers: 0, createdWorkers: 0, reloads: 0, restoreMode: "success" };
+window.__nuriteoRuntimeProbe = { activeWorkers: 0, createdWorkers: 0, reloads: 0, restoreMode: "success", runtimeActiveWorkers: 0, runtimeCreatedWorkers: 0 };
 Object.defineProperty(globalThis, "Worker", { configurable: true, value: TrackingWorker });
 
 const project = {
@@ -69,8 +80,19 @@ function Fixture() {
       }}
       onProjectReload={() => { window.__nuriteoRuntimeProbe.reloads += 1; }}
       resumeProjectContentLoader={loadResumeFeature}
+      runtimeFeatureLoader={loadRuntimeFeature}
       workspaceScope={project.ownerId}
     />;
+}
+
+async function loadRuntimeFeature() {
+  return {
+    createRuntimeAdapter() {
+      const adapter = createBrowserRuntimeAdapter();
+      window.__nuriteoRuntimeProbe.adapter = adapter;
+      return adapter;
+    }
+  };
 }
 
 async function createFixturePreviewBridge(

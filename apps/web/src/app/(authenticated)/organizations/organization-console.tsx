@@ -143,7 +143,7 @@ export function OrganizationConsole(props: OrganizationConsoleProps) {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
     await mutate("organization-create", async () => {
-      const result = await createOrganization(
+      await createOrganization(
         createBrowserApiClient(),
         {
           slug: String(data.get("slug") ?? ""),

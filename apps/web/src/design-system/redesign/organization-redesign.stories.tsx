@@ -63,7 +63,7 @@ function OrganizationFixture({
   manageable?: boolean;
 }>) {
   return (
-    <WorkspaceShellFrame displayName="김병기" email="byeonggi@nuriteo.dev" themeMode="light" unreadCount={3} workspace={workspaces[1]!}>
+    <WorkspaceShellFrame displayName="김병기" email="byeonggi@nuriteo.dev" themeMode="light" workspace={workspaces[1]!}>
       <OrganizationConsole
         canManage={manageable}
         context="workspace"
@@ -83,7 +83,7 @@ function TeamFixture({ large = false, manageable = true }: Readonly<{ large?: bo
   const visibleMembers = large ? teamMembers : teamMembers.slice(0, 8);
   const visibleRoles = large ? projectRoles : projectRoles.slice(0, 6);
   return (
-    <WorkspaceShellFrame displayName="김병기" email="byeonggi@nuriteo.dev" themeMode="light" unreadCount={3} workspace={workspaces[1]!}>
+    <WorkspaceShellFrame displayName="김병기" email="byeonggi@nuriteo.dev" themeMode="light" workspace={workspaces[1]!}>
       <TeamConsole
         baseHref={`/workspaces/${encodeURIComponent(workspaces[1]!.storageScopeId)}/teams`}
         canCreateTeam={manageable}

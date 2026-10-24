@@ -9,5 +9,5 @@ export default async function OidcProviderDetailPage({ params }: { readonly para
   const providers = (await listAdminOidcProviders(await createServerApiClient())).data;
   const provider = providers.find((item) => item.id === providerId);
   if (!provider) notFound();
-  return <OidcProviderConsole initialProviders={[provider]} />;
+  return <OidcProviderConsole detailMode initialProviders={[provider]} />;
 }

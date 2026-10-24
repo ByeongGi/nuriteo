@@ -75,7 +75,8 @@ function createStudioRuntimeAdapter({ fileCount = 4, mode = "ready", projectId }
       resize() {},
       signal: () => true,
       close: () => true,
-      activeCount: () => 0
+      activeCount: () => 0,
+      processes: () => []
     },
     recovery: {
       async run(kind: RuntimeRecoveryActionKind) {
@@ -107,6 +108,22 @@ function createStudioRuntimeAdapter({ fileCount = 4, mode = "ready", projectId }
         const content = workspaceText.get(path);
         if (content === undefined) throw new Error("Fixture file does not exist.");
         return content;
+      },
+      createText(path, content = "") {
+        if (workspaceText.has(path)) throw new Error("Fixture file already exists.");
+        workspaceText.set(path, content);
+        return copyRuntimeState(state);
+      },
+      renameText(from, to) {
+        const content = workspaceText.get(from);
+        if (content === undefined || workspaceText.has(to)) throw new Error("Fixture file cannot be renamed.");
+        workspaceText.delete(from);
+        workspaceText.set(to, content);
+        return copyRuntimeState(state);
+      },
+      deleteText(path) {
+        if (!workspaceText.delete(path)) throw new Error("Fixture file does not exist.");
+        return copyRuntimeState(state);
       },
       writeText(path, content) {
         workspaceText.set(path, content);
@@ -147,7 +164,9 @@ function runtimeState(
     hmrState: "idle",
     lifecycle,
     localDraftAccess,
+    ports: [],
     previewUrl: null,
+    processes: [],
     projectId,
     terminalProcessCount: 0,
     workflowPhase: "idle"
@@ -160,7 +179,9 @@ function copyRuntimeState(state: RuntimeViewState): RuntimeViewState {
     diagnostics: state.diagnostics.map((diagnostic) => ({
       ...diagnostic,
       actions: [...diagnostic.actions]
-    }))
+    })),
+    ports: state.ports.map((port) => ({ ...port })),
+    processes: state.processes.map((process) => ({ ...process, argv: [...process.argv] }))
   };
 }
 

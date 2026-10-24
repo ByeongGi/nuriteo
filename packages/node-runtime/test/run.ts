@@ -19,3 +19,4 @@ import "./git-host-transport.test.ts";
 import "./wasm-adapters.test.ts";
 import "./wasi-boundary.test.ts";
 import "./static-cjs-factory.test.ts";
+import "./registry-installer.test.ts";

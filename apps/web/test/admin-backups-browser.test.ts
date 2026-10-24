@@ -32,6 +32,9 @@ const core = http.createServer(async (request, response) => {
     response.setHeader("etag", `"backup-policy-v${version}"`);
     return sendJson(response, state());
   }
+  if (request.method === "GET" && requestPath.startsWith("/api/v1/admin/backups/operations")) {
+    return sendJson(response, { items: state().operations, nextCursor: null });
+  }
   if (request.method === "PUT" && requestPath === "/api/v1/admin/backups/policy") {
     const body = await jsonBody(request);
     mutations.push({ body, csrf: header(request, "x-csrf-token"), etag: header(request, "if-match") });
@@ -78,19 +81,23 @@ try {
     const page = await context.newPage();
     await page.goto(`${origin}/admin/operations/backups`, { waitUntil: "networkidle" });
     await page.getByRole("heading", { level: 1, name: "백업과 복구" }).waitFor();
-    assert.equal(await page.getByText("No successful restore point is available yet.").count(), 1);
+    assert.equal(await page.getByText("아직 성공적으로 완료된 복구 지점이 없습니다.").count(), 1);
+    await page.getByRole("link", { name: "작업 실행" }).click();
     assert.equal(await page.getByRole("button", { name: "정리 대상 2개 처리" }).isEnabled(), true);
-    await page.getByLabel("백업 시간대").fill("Asia/Seoul");
+    await page.goto(`${origin}/admin/operations/backups/policy`, { waitUntil: "networkidle" });
+    await page.getByRole("combobox", { name: "백업 기준 시간대" }).click();
+    await page.getByRole("option", { name: "대한민국 표준시 (Asia/Seoul)" }).click();
     await page.getByRole("button", { name: "정책 저장" }).click();
     await page.getByRole("status").filter({ hasText: "감사 로그" }).waitFor();
     assert.equal(mutations[0]?.etag, '"backup-policy-v1"');
     assert.equal(mutations[0]?.csrf, csrfToken);
     assert.equal((mutations[0]?.body as { scheduleTimezone?: string }).scheduleTimezone, "Asia/Seoul");
+    await page.goto(`${origin}/admin/operations/backups/actions`, { waitUntil: "networkidle" });
     await page.getByRole("button", { name: "복구 훈련 실행" }).click();
     await page.getByRole("status").filter({ hasText: "대기열" }).waitFor();
     assert.deepEqual(operations[0]?.body, { kind: "drill", backupId: null });
     assert.equal(operations[0]?.csrf, csrfToken);
-    await page.reload({ waitUntil: "networkidle" });
+    await page.goto(`${origin}/admin/operations/backups`, { waitUntil: "networkidle" });
     await page.getByRole("heading", { name: "작업 기록" }).waitFor();
     await page.setViewportSize({ width: 390, height: 844 });
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true);

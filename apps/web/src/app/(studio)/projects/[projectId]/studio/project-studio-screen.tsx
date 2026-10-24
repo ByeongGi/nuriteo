@@ -12,15 +12,17 @@ import type { PreviewOriginConfiguration } from "#src/runtime/preview-origin-con
 
 const studioFrameStyles = tv({
   slots: {
-    root: "grid min-h-screen min-w-0 grid-rows-[auto_minmax(0,1fr)] bg-page",
-    bar: "flex min-h-13 items-center justify-between gap-4 border-b border-muted-border bg-sidebar px-3 py-1.5 max-[40rem]:items-start max-[40rem]:gap-2",
+    root: "grid h-dvh min-h-0 min-w-0 grid-rows-[2.75rem_minmax(0,1fr)] overflow-hidden bg-page text-foreground",
+    bar: "grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-4 border-b border-muted-border bg-sidebar px-2.5 max-[40rem]:gap-2",
     identity: "flex min-w-0 items-center gap-3",
-    identityCopy: "flex min-w-0 flex-col items-start [&_strong]:max-w-[min(55vw,42rem)] [&_strong]:truncate [&_span]:max-w-[min(55vw,42rem)] [&_span]:truncate [&_span]:text-xs [&_span]:text-muted-foreground",
-    back: "grid size-8 shrink-0 place-items-center rounded-md border border-muted-border text-xl leading-none text-foreground no-underline hover:bg-hover",
-    navigation: "flex items-center gap-1 max-[40rem]:grid max-[40rem]:justify-items-end",
-    navigationLink: "rounded-md px-2.5 py-1.5 text-xs font-semibold text-muted-foreground no-underline hover:bg-hover hover:text-foreground",
-    workspace: "min-w-0",
-    loading: "grid min-h-[calc(100vh-6rem)] place-items-center text-muted-foreground"
+    identityCopy: "flex min-w-0 items-center gap-2 [&_strong]:max-w-[min(34vw,32rem)] [&_strong]:truncate [&_strong]:text-xs [&_strong]:font-semibold [&_strong]:text-foreground [&_span]:max-w-[min(28vw,28rem)] [&_span]:truncate [&_span]:text-[0.6875rem] [&_span]:text-muted-foreground",
+    back: "grid size-7 shrink-0 place-items-center rounded text-sm leading-none text-muted-foreground no-underline hover:bg-hover hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-primary",
+    studioMark: "grid size-6 shrink-0 place-items-center rounded bg-primary text-[0.6875rem] font-bold text-on-primary shadow-sm",
+    divider: "text-muted-foreground/40",
+    navigation: "flex items-center gap-1",
+    navigationLink: "rounded border border-transparent px-2.5 py-1.5 text-[0.6875rem] font-semibold text-muted-foreground no-underline hover:border-muted-border hover:bg-hover hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-primary max-[32rem]:px-2",
+    workspace: "min-h-0 min-w-0 overflow-hidden",
+    loading: "grid min-h-[calc(100vh-3rem)] place-items-center bg-surface text-muted-foreground"
   }
 });
 
@@ -73,20 +75,23 @@ export function ProjectStudioFrame({ children, project, workspaceLabel, workspac
   const workspaceHref = `/workspaces/${encodeURIComponent(workspaceScope)}`;
   const projectBaseHref = `${workspaceHref}/projects`;
   const settingsHref = `${projectBaseHref}/${encodeURIComponent(project.id)}/settings`;
+  const historyHref = `${projectBaseHref}/${encodeURIComponent(project.id)}/history`;
 
   return (
     <main id="main-content" className={studioStyles.root()} tabIndex={-1}>
       <header className={studioStyles.bar()}>
         <div className={studioStyles.identity()}>
-          <Link href={workspaceHref} className={studioStyles.back()} aria-label={`${workspaceLabel} 프로젝트 목록으로 돌아가기`}>‹</Link>
+          <Link href={workspaceHref} className={studioStyles.back()} aria-label={`${workspaceLabel} 프로젝트 목록으로 돌아가기`}>←</Link>
+          <span className={studioStyles.studioMark()} aria-hidden="true">S</span>
           <div className={studioStyles.identityCopy()}>
             <strong>{project.name}</strong>
-            <span>{workspaceLabel} / {project.slug} · v{project.version}</span>
+            <span className={studioStyles.divider()} aria-hidden="true">/</span>
+            <span>{workspaceLabel} · {project.slug} · v{project.version}</span>
           </div>
         </div>
         <nav className={studioStyles.navigation()} aria-label="Studio 프로젝트 메뉴">
-          <Link className={studioStyles.navigationLink()} href={settingsHref}>프로젝트 설정</Link>
-          <Link className={studioStyles.navigationLink()} href={`${projectBaseHref}/${encodeURIComponent(project.id)}/settings/tokens`}>액세스 토큰</Link>
+          <Link className={studioStyles.navigationLink()} href={historyHref}>버전과 복구</Link>
+          <Link className={studioStyles.navigationLink()} href={settingsHref}>프로젝트 관리</Link>
         </nav>
       </header>
       <section className={studioStyles.workspace()} aria-label={`${project.name} Studio`}>

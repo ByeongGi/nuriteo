@@ -71,11 +71,12 @@ function ConfirmationDialog({
               <AlertDialog.Description className={styles.description()}>{description}</AlertDialog.Description>
             </div>
             <div className={styles.actions()}>
-              <Button ref={cancelRef} type="button" disabled={busy} onClick={onCancel}>
+              <Button ref={cancelRef} type="button" size="sm" disabled={busy} onClick={onCancel}>
                 {cancelLabel}
               </Button>
               <Button
                 type="button"
+                size="sm"
                 variant={tone === "danger" ? "danger" : "primary"}
                 disabled={busy}
                 onClick={onConfirm}

@@ -133,7 +133,7 @@ export const adminStatus: AdminStatus = {
   releaseVersion: "0.2.0",
   restartRequired: false,
   schemaVersion: 47,
-  settingCount: 8,
+  settingCount: 9,
   settingRegistryVersion: 4
 };
 
@@ -145,6 +145,15 @@ export const adminSettings: AdminSettingCollection = {
     numberSetting("notifications.security_retention_days", 365, 90, 2_555, "notification"),
     numberSetting("tokens.default_expiry_days", 30, 1, 365, "token"),
     numberSetting("tokens.maximum_expiry_days", 90, 1, 730, "token"),
+    {
+      applyMode: "live",
+      constraint: { kind: "boolean" },
+      defaultValue: true,
+      key: "object_storage.gc_enabled",
+      policyCategory: "object_storage",
+      value: true,
+      version: 2
+    },
     {
       applyMode: "new_runtime",
       constraint: { allowed: ["isolated", "restricted"], kind: "enumeration" },
@@ -196,7 +205,8 @@ export const adminUpdateHistory: AdminUpdateHistory = {
   items: [
     { action: "approved", id: fixtureId(6_301), occurredAt: "2026-09-28T02:14:00.000Z", result: "recorded", targetRelease: "0.1.0" },
     { action: "approved", id: fixtureId(6_302), occurredAt: "2026-08-17T01:05:00.000Z", result: "recorded", targetRelease: "0.0.9" }
-  ]
+  ],
+  nextCursor: null
 };
 
 export const activationInvitations: readonly ActivationInvitation[] = [

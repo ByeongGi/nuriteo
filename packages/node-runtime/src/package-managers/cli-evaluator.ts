@@ -223,11 +223,14 @@ export interface CliModuleEvaluationRequest {
   args: string[];
   cwd: string;
   env?: RuntimeEnv;
+  stdin?: string;
 }
 
 export function createCliModuleEvaluator(options: CliModuleEvaluatorOptions): (request: CliModuleEvaluationRequest) => CliRunResult {
   return function evaluateCliModule(request: CliModuleEvaluationRequest): CliRunResult {
-    return startCliModuleEvaluation(options, request, { supportedModes: ["cjs"] }).finalize();
+    const evaluation = startCliModuleEvaluation(options, request, { supportedModes: ["cjs"] });
+    evaluation.writeStdin();
+    return evaluation.finalize();
   };
 }
 
@@ -243,6 +246,7 @@ export function createAsyncCliModuleEvaluator(options: AsyncCliModuleEvaluatorOp
         stderr: `${result.stderr}ECLIETIMEOUT: CLI module evaluation did not become ready within ${readyTimeout.timeoutMs}ms\n`
       };
     }
+    evaluation.writeStdin();
     if (options.waitForExit) {
       const exitTimeout = await waitForCliEvaluationExit(evaluation.exited, options);
       if (exitTimeout) {
@@ -619,7 +623,7 @@ function startCliModuleEvaluation(
   options: CliModuleEvaluatorOptions,
   request: CliModuleEvaluationRequest,
   capabilities: { supportedModes: readonly ("cjs" | "esm")[] }
-): { ready: Promise<void>; exited: Promise<void>; finalize: () => CliRunResult } {
+): { ready: Promise<void>; exited: Promise<void>; finalize: () => CliRunResult; writeStdin: () => void } {
   const readiness = inspectCliEntryReadiness({
     entry: request.entry,
     reader: options.reader,
@@ -637,7 +641,8 @@ function startCliModuleEvaluation(
           entry: request.entry.entry,
           ...(request.entry.entrySha256 ? { entrySha256: request.entry.entrySha256 } : {})
         };
-      }
+      },
+      writeStdin() {}
     };
   }
 
@@ -848,6 +853,11 @@ function startCliModuleEvaluation(
   return {
     ready,
     exited,
+    writeStdin() {
+      if (request.stdin === undefined) return;
+      process.writeStdin(request.stdin);
+      process.endStdin();
+    },
     finalize() {
       restoreHostErrorCapture();
       if (asyncExitCode !== undefined) exitCode = asyncExitCode;

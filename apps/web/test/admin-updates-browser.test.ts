@@ -73,7 +73,7 @@ const core = http.createServer(async (request, response) => {
   if (request.method === "GET" && requestPath === "/api/v1/admin/updates/readiness") {
     return sendJson(response, readiness());
   }
-  if (request.method === "GET" && requestPath === "/api/v1/admin/updates/history") {
+  if (request.method === "GET" && requestPath.startsWith("/api/v1/admin/updates/history")) {
     return sendJson(response, {
       items: approvals === 0 ? [] : [{
         id: "0199ee6c-c777-7000-8000-000000024701",
@@ -81,7 +81,8 @@ const core = http.createServer(async (request, response) => {
         action: "approved",
         targetRelease: "self-hosted-v1-rc-lineage",
         result: "recorded"
-      }]
+      }],
+      nextCursor: null
     });
   }
   if (request.method === "POST" && requestPath === "/api/v1/admin/updates/approval") {
@@ -155,7 +156,8 @@ try {
     await page.getByRole("checkbox").check();
     await approve.click();
     await page.getByRole("status").filter({ hasText: "업데이트는 시작하지 않았습니다" }).waitFor();
-    await page.getByRole("heading", { name: "최근 업데이트 승인" }).waitFor();
+    await page.getByRole("link", { name: "승인 이력" }).click();
+    await page.getByRole("heading", { name: "승인 기록" }).waitFor();
     assert.equal(approvals, 1);
     assert.deepEqual(observedApproval, {
       targetRelease: "self-hosted-v1-rc-lineage",

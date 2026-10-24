@@ -14,24 +14,23 @@ const mfaSecurityStyles = tv({
     noticeTitle: "font-semibold text-foreground",
     noticeDescription: "m-0 text-sm leading-relaxed text-muted-foreground",
     card: "grid min-w-0 gap-3 rounded-lg border border-muted-border bg-surface p-4 [&>h2]:m-0 [&>h2]:text-base [&>h2]:font-semibold [&>p]:m-0 [&>p]:text-sm [&>p]:leading-relaxed [&>p]:text-muted-foreground",
-    cardAction: "mt-1 justify-self-start max-[30rem]:w-full",
+    cardAction: "mt-1 justify-self-end max-[30rem]:w-full",
     grid: "grid min-w-0 gap-3",
     enrollmentGrid: "grid min-w-0 grid-cols-2 items-start gap-4 max-[42rem]:grid-cols-1",
     enrollmentSecret: "grid min-w-0 gap-2",
     label: "text-xs font-medium text-subtle-foreground",
     secret: "block min-w-0 select-all rounded-md bg-subtle p-3 font-mono text-sm [overflow-wrap:anywhere]",
     qr: "aspect-square w-full max-w-72 rounded-lg border border-muted-border bg-white p-2",
-    codeForm: "mt-1 grid gap-3 [&>label]:text-sm [&>label]:font-medium [&_[data-slot=button]]:justify-self-start max-[30rem]:[&_[data-slot=button]]:w-full",
+    codeForm: "mt-1 grid gap-3 [&>label]:text-sm [&>label]:font-medium [&_[data-slot=button]]:justify-self-end max-[30rem]:[&_[data-slot=button]]:w-full",
     recovery: "border-warning/40",
     recoveryList: "m-0 grid list-none grid-cols-2 gap-2 p-0 max-[32rem]:grid-cols-1",
     recoveryItem: "min-w-0 rounded-md bg-subtle px-3 py-2",
     recoveryCode: "select-all font-mono text-sm [overflow-wrap:anywhere]",
-    actions: "mt-1 flex flex-wrap items-center justify-between gap-2 max-[32rem]:items-stretch max-[32rem]:flex-col max-[32rem]:[&>*]:w-full",
+    actions: "mt-1 flex flex-wrap items-center justify-end gap-2 max-[32rem]:items-stretch max-[32rem]:flex-col max-[32rem]:[&>*]:w-full",
     feedback: "sticky top-3 z-[var(--n-z-sticky)] m-0 rounded-lg border px-4 py-3 text-sm shadow-md",
     feedbackError: "border-danger/40 bg-danger-subtle text-danger",
     feedbackSuccess: "border-success/40 bg-success-subtle text-success",
-    safeNavigation: "flex flex-wrap items-center gap-3 border-t border-muted-border pt-5 max-[30rem]:items-stretch max-[30rem]:flex-col",
-    safeLink: "text-sm font-semibold text-primary underline-offset-4 hover:underline"
+    safeNavigation: "flex flex-wrap items-center justify-end gap-3 border-t border-muted-border pt-5 max-[30rem]:items-stretch max-[30rem]:flex-col"
   },
   variants: {
     standalone: {

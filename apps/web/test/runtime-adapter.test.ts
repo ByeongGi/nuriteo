@@ -88,16 +88,30 @@ class FakeController {
     this.listener?.({ type: "phase", detail: {}, snapshot: next } as PreviewWorkflowEvent);
   }
   getSnapshot(): PreviewWorkflowSnapshot { return this.current; }
-  async runShellCommand(_command: string, terminalId = "default"): Promise<unknown> {
+  async runShellCommand(command: string, terminalId = "default"): Promise<unknown> {
     this.terminals.add(terminalId);
+    if (command === "node generate.cjs" && this.importedFiles) {
+      this.importedFiles.push({
+        path: "generated.txt",
+        kind: "text",
+        bytes: new TextEncoder().encode("created by terminal\n")
+      });
+    }
     return { exitCode: 0 };
   }
   writeShellInput(): boolean { return true; }
   resizeShell(): void {}
   signalShell(): boolean { return true; }
   closeShell(terminalId: string): boolean { return this.terminals.delete(terminalId); }
-  listShellProcesses(): Array<{ terminalId: string }> {
-    return [...this.terminals].map((terminalId) => ({ terminalId }));
+  listShellProcesses() {
+    return [...this.terminals].map((terminalId, index) => ({
+      pid: index + 1,
+      terminalId,
+      command: "fixture-process",
+      argv: ["fixture-process"],
+      cwd: "/workspace/app",
+      status: "running" as const
+    }));
   }
   async restartDev(): Promise<PreviewWorkflowSnapshot> { return this.current; }
   async runPreview(): Promise<PreviewWorkflowSnapshot> {
@@ -108,6 +122,9 @@ class FakeController {
     this.savedText = { path, data };
     return this.current;
   }
+  createTextFile(): PreviewWorkflowSnapshot { return this.current; }
+  renameFile(): PreviewWorkflowSnapshot { return this.current; }
+  deleteFile(): PreviewWorkflowSnapshot { return this.current; }
   async runRecoveryAction(kind: string): Promise<unknown> {
     this.recoveryKinds.push(kind);
     if (kind === "retry") return this.runPreview();
@@ -273,8 +290,13 @@ function readyWriterLease(): LocalDraftWriterLease {
     () => adapter.workspace.writeText("src/main.tsx", "x".repeat(1024 * 1024 + 1)),
     (error: unknown) => error instanceof RuntimeAdapterError && error.code === "RUNTIME_EDIT_LIMIT_EXCEEDED"
   );
-  await adapter.terminal.run("pnpm dev", "terminal-1");
-  assert.equal(adapter.workspace.currentRevision(), 4, "shell command dispatch conservatively advances the Local Draft revision");
+  const generated = await adapter.terminal.run("node generate.cjs", "terminal-1");
+  assert.deepEqual(generated.changedFiles, [{ kind: "create", path: "generated.txt" }]);
+  assert.equal(adapter.workspace.readText("generated.txt"), "created by terminal\n");
+  assert.equal(adapter.workspace.getState().files.some((file) => file.path === "generated.txt"), true);
+  const dev = await adapter.terminal.run("pnpm dev", "terminal-1");
+  assert.deepEqual(dev.changedFiles, []);
+  assert.equal(adapter.workspace.currentRevision(), 4, "read-only shell commands must not advance the Local Draft revision");
   assert.equal(adapter.terminal.activeCount(), 1);
   const firstDispose = adapter.dispose();
   const secondDispose = adapter.dispose();

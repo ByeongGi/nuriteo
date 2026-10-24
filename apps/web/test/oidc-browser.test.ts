@@ -53,9 +53,9 @@ try {
     assert.equal(await corporate.getAttribute("href"), `/api/v1/auth/oidc/${firstId}/begin`);
 
     const admin = await browser.newContext(); await admin.addCookies([{ name: "nuriteo_dev_session", value: "admin", url: origin }, { name: "nuriteo_dev_csrf", value: csrf, url: origin }]); const adminPage = await admin.newPage();
-    await adminPage.goto(`${origin}/admin/authentication/oidc`, { waitUntil: "networkidle" }); await adminPage.getByRole("heading", { name: "로그인 제공자" }).waitFor();
-    await adminPage.getByLabel("표시 이름").first().fill("Engineering SSO"); await adminPage.getByLabel("발급자 URL").fill("https://id.example.test"); await adminPage.getByLabel("클라이언트 ID").first().fill("nuriteo"); await adminPage.getByLabel("클라이언트 비밀키").fill("top-secret"); await adminPage.getByRole("button", { name: "비활성 제공자 저장" }).click();
-    await adminPage.getByRole("status").filter({ hasText: "비활성 상태로 저장" }).waitFor(); assert.equal(await adminPage.getByText("top-secret").count(), 0);
+    await adminPage.goto(`${origin}/admin/authentication/oidc/new`, { waitUntil: "networkidle" }); await adminPage.getByRole("heading", { name: "새 OIDC 제공자" }).waitFor();
+    await adminPage.getByLabel("표시 이름").first().fill("Engineering SSO"); await adminPage.getByLabel("발급자 URL").fill("https://id.example.test"); await adminPage.getByLabel("클라이언트 ID").first().fill("nuriteo"); await adminPage.getByLabel("클라이언트 비밀키").fill("top-secret"); await adminPage.getByRole("button", { name: "제공자 등록" }).click();
+    await adminPage.waitForURL(`**/admin/authentication/oidc/${createdId}`); assert.equal(await adminPage.getByText("top-secret").count(), 0);
 
     const user = await browser.newContext(); await user.addCookies([{ name: "nuriteo_dev_session", value: "user", url: origin }, { name: "nuriteo_dev_csrf", value: csrf, url: origin }]); const identities = await user.newPage();
     await identities.goto(`${origin}/identities`, { waitUntil: "networkidle" }); await identities.getByRole("heading", { name: "연결된 계정" }).waitFor(); await identities.getByRole("button", { name: /연결 해제/u }).click(); await identities.getByRole("button", { name: "연결 해제", exact: true }).click(); await identities.getByRole("status").filter({ hasText: "세션을 안전하게 갱신" }).waitFor();

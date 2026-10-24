@@ -130,18 +130,16 @@ try {
       { name: "nuriteo_dev_csrf", value: csrf, url: origin }
     ]);
     const page = await context.newPage();
-    await page.goto(`${origin}/admin/integrations/git`, { waitUntil: "networkidle" });
-    await page.getByRole("heading", { name: "Git 제공자", exact: true }).waitFor();
+    await page.goto(`${origin}/admin/integrations/git/new`, { waitUntil: "networkidle" });
+    await page.getByRole("heading", { name: "새 Git 제공자", exact: true }).waitFor();
     await page.getByLabel("표시 이름").first().fill("Company Git");
     await page.getByLabel("정확한 호스트").fill("git.internal.example");
     await page.getByLabel("API 기본 URL").first().fill("https://git.internal.example/api");
     await page.getByLabel("쓰기 허용").first().check();
     const invalidFields = await page.locator("form").first().locator(":invalid").evaluateAll((nodes) => nodes.map((node) => ({ name: (node as HTMLInputElement).name, message: (node as HTMLInputElement).validationMessage })));
     assert.deepEqual(invalidFields, []);
-    await page.getByRole("button", { name: "비활성 제공자 저장" }).click();
-    await page.waitForTimeout(500);
-    let feedback = page.locator('main [role="status"], main [role="alert"]');
-    assert.match((await feedback.allInnerTexts()).join(" "), /비활성 상태로 저장/u);
+    await page.getByRole("button", { name: "제공자 등록" }).click();
+    await page.waitForURL(/\/admin\/integrations\/git\//u);
     assert.equal(await page.getByRole("region", { name: "사설 인증 기관" }).count() >= 1, true);
 
     await page.getByLabel("표시 이름").last().fill("Company Git updated");

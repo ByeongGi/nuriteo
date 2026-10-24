@@ -15,6 +15,7 @@ export { applyYarnInstallPlan, createYarnInstallPlan } from "./yarn-install.ts";
 export { createYarnRunner, YarnRunner } from "./yarn-runner.ts";
 export { createPackageScriptRunner, PackageScriptRunner } from "./script-runner.ts";
 export { createPackageTarballCache, extractTarEntries, PackageTarballCache } from "./tarball-cache.ts";
+export { createRegistryPackageInstaller, parsePackageRequest, RegistryPackageInstaller } from "./registry-installer.ts";
 export { createPackageManagerTerminalCommands } from "./terminal-commands.ts";
 export { DEFAULT_WORKSPACE_MEMORY_LIMIT_BYTES, MemoryPackageManagerWorkspace, WorkspaceMemoryLimitError } from "./workspace.ts";
 export type { InstallTransactionOptions, InstallTransactionResult } from "./install-transaction.ts";
@@ -22,6 +23,7 @@ export type { CliEntryModuleMode, CliEntryReadiness, CliEntryReadinessReason, Cl
 export type { PnpmStoreApplyOptions, PnpmStoreApplyResult, PnpmStorePlan, PnpmStorePlanOptions, PnpmWorkspaceLink, PnpmWorkspacePackage, PnpmWorkspaceReader, PnpmWorkspaceWriter } from "./pnpm-store.ts";
 export type { YarnInstallApplyOptions, YarnInstallApplyResult, YarnInstallLink, YarnInstallPlan, YarnInstallPlanOptions } from "./yarn-install.ts";
 export type { PackageTarballCacheMetrics, PackageTarballCacheOptions, PackageTarballRequest, PackageTarballResult, TarEntry } from "./tarball-cache.ts";
+export type { RegistryInstalledPackage, RegistryInstallRequest, RegistryInstallResult, RegistryPackageInstallerOptions } from "./registry-installer.ts";
 export type { PackageScriptReader, PackageScriptResult, PackageScriptRunnerOptions, PackageScriptWriter } from "./script-runner.ts";
 export type { NpmInstallApplyOptions, NpmInstallApplyResult, NpmInstallLink, NpmInstallPlan, NpmInstallPlanOptions, NpmWorkspaceReader } from "./npm-install.ts";
 export type { NativeFallbackAction, NativeFallbackDecision, NativeFallbackPolicyOptions, NativeFallbackRequest } from "./native-fallback.ts";

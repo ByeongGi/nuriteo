@@ -57,7 +57,6 @@ interface WorkspaceShellFrameProps {
   readonly email: string;
   readonly maintenanceReadOnly?: boolean | undefined;
   readonly themeMode: ThemeMode;
-  readonly unreadCount: number;
   readonly workspace: Workspace;
 }
 
@@ -67,7 +66,6 @@ export function WorkspaceShellFrame({
   email,
   maintenanceReadOnly = false,
   themeMode,
-  unreadCount,
   workspace
 }: WorkspaceShellFrameProps) {
   const styles = workspaceShellStyles();
@@ -93,7 +91,7 @@ export function WorkspaceShellFrame({
           <strong className={styles.workspaceName()} title={workspace.displayLabel}>{workspace.displayLabel}</strong>
           <span className={styles.workspaceType()}>{organization ? "조직 워크스페이스" : "개인 워크스페이스"}</span>
         </div>
-        <WorkspaceNavigation organization={organization} unreadCount={unreadCount} workspaceId={workspaceId} />
+        <WorkspaceNavigation organization={organization} workspaceId={workspaceId} />
         <WorkspaceSidebarFooter
           displayName={displayName}
           email={email}
@@ -115,7 +113,7 @@ export function WorkspaceShellFrame({
                 <strong className={styles.workspaceName()}>{workspace.displayLabel}</strong>
                 <span className={styles.workspaceType()}>{organization ? "조직 워크스페이스" : "개인 워크스페이스"}</span>
               </div>
-              <WorkspaceNavigation organization={organization} placement="mobile" unreadCount={unreadCount} workspaceId={workspaceId} />
+              <WorkspaceNavigation organization={organization} placement="mobile" workspaceId={workspaceId} />
               <div className={styles.mobileFooter()}>
                 <Link className={styles.returnLink({ className: styles.mobileReturnLink() })} href="/workspaces">← 워크스페이스 목록</Link>
                 <WorkspaceSidebarFooter

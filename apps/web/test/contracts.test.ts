@@ -32,7 +32,9 @@ function testStandaloneAndDependencyContract(): void {
   assert.match(providers, /QueryClientProvider/u);
   assert.match(providers, /staleTime:\s*60_000/u);
   assert.match(read("src/app/sign-in/sign-in-form.tsx"), /useMutation/u);
-  assert.match(read("src/components/ui/button.tsx"), /const buttonVariants = tv\(/u);
+  const buttonStyles = read("src/components/ui/button.styles.ts");
+  assert.match(buttonStyles, /const buttonVariants = tv\(/u);
+  assert.doesNotMatch(buttonStyles, /["']use client["']/u);
   assert.match(read("src/components/ui/badge.tsx"), /const badgeVariants = tv\(/u);
   const fieldSource = read("src/components/ui/field.tsx");
   assert.match(fieldSource, /@base-ui\/react\/field/u);

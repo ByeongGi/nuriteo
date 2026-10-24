@@ -24,7 +24,7 @@ export function ProjectSettingsNavigation({ projectId, projectName, workspaceId 
   const items = [
     [`${base}/settings/general`, "일반"],
     [`${base}/settings/git`, "Git"],
-    [`${base}/history`, "버전 기록"],
+    [`${base}/history`, "버전과 복구"],
     [`${base}/settings/access`, "접근 권한"],
     [`${base}/settings/runtime`, "런타임"],
     [`${base}/settings/tokens`, "토큰"],

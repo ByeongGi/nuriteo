@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 
+import { Providers } from "#src/app/providers.tsx";
 import { SiteHeader } from "#src/components/site-header.tsx";
 import { parseThemeMode, THEME_COOKIE_NAME } from "#src/lib/theme.ts";
 import "#src/styles/globals.css";
@@ -29,13 +30,15 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
   return (
     <html lang="ko" data-theme-mode={themeMode}>
       <body>
-        <a className="fixed top-2 left-2 z-[var(--n-z-toast)] -translate-y-[150%] rounded-md bg-raised px-3 py-2 text-foreground shadow-[var(--n-shadow-overlay)] focus:translate-y-0" href="#main-content">
-          본문으로 건너뛰기
-        </a>
-        <div className="isolate min-h-screen">
-          <SiteHeader themeMode={themeMode} />
-          {children}
-        </div>
+        <Providers>
+          <a className="fixed top-2 left-2 z-[var(--n-z-toast)] -translate-y-[150%] rounded-md bg-raised px-3 py-2 text-foreground shadow-[var(--n-shadow-overlay)] focus:translate-y-0" href="#main-content">
+            본문으로 건너뛰기
+          </a>
+          <div className="isolate min-h-screen">
+            <SiteHeader themeMode={themeMode} />
+            {children}
+          </div>
+        </Providers>
       </body>
     </html>
   );

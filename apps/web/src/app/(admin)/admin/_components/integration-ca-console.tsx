@@ -9,6 +9,7 @@ import {
 import type { IntegrationCaBundle, IntegrationCaCollection, IntegrationCaType } from "@nuriteo/api-client";
 import { useState } from "react";
 import type { FormEvent } from "react";
+import { tv } from "tailwind-variants";
 
 import { Badge } from "#src/components/ui/badge.tsx";
 import { Button } from "#src/components/ui/button.tsx";
@@ -20,12 +21,35 @@ import { AdminEmptyState, AdminForm, AdminFormActionNote, AdminFormActions, Admi
 import { AdminCollectionHeading } from "#src/app/(admin)/admin/_components/admin-surface.tsx";
 
 interface IntegrationCaConsoleProps {
+  readonly appearance?: "detail" | "embedded" | "standalone";
   readonly initialCollection?: IntegrationCaCollection | undefined;
   readonly type: IntegrationCaType;
   readonly integrationId: string;
 }
 
-export function IntegrationCaConsole({ initialCollection, type, integrationId }: IntegrationCaConsoleProps) {
+const integrationCaStyles = tv({
+  slots: {
+    root: "col-span-full min-w-0",
+    list: "mt-4 grid list-none gap-2 p-0",
+    item: "grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4 rounded-md border border-muted-border bg-subtle px-4 py-3 [content-visibility:auto] [contain-intrinsic-size:auto_5rem] max-[42rem]:grid-cols-1 max-[42rem]:items-stretch max-[42rem]:[&_[data-slot=button]]:w-full",
+    itemCopy: "grid min-w-0 gap-1",
+    itemHeading: "flex flex-wrap items-center gap-2",
+    itemMeta: "text-xs text-muted-foreground",
+    fingerprint: "m-0 font-mono text-[var(--n-font-size-2xs)] leading-5 text-subtle-foreground [overflow-wrap:anywhere]",
+    message: "mt-3 mb-0 rounded-md border border-muted-border bg-subtle px-3 py-2 text-sm"
+  },
+  variants: {
+    appearance: {
+      detail: { root: "" },
+      embedded: { root: "mt-4 border-t border-muted-border pt-4" },
+      standalone: { root: "rounded-lg border border-muted-border bg-surface p-5 max-[37.5rem]:p-4" }
+    }
+  },
+  defaultVariants: { appearance: "embedded" }
+});
+
+export function IntegrationCaConsole({ appearance = "embedded", initialCollection, type, integrationId }: IntegrationCaConsoleProps) {
+  const styles = integrationCaStyles({ appearance });
   const [items, setItems] = useState<readonly IntegrationCaBundle[] | undefined>(initialCollection?.items);
   const [version, setVersion] = useState(initialCollection?.version ?? 0);
   const [pending, setPending] = useState(false);
@@ -84,7 +108,7 @@ export function IntegrationCaConsole({ initialCollection, type, integrationId }:
   }
 
   return (
-    <section className="col-span-full mt-4 border-t border-muted-border pt-4" aria-label="사설 인증 기관">
+    <section className={styles.root()} aria-label="사설 인증 기관">
       {items === undefined ? (
         <Button onClick={() => void load()} disabled={pending}>
           CA 신뢰 기록 불러오기
@@ -98,7 +122,7 @@ export function IntegrationCaConsole({ initialCollection, type, integrationId }:
           <CollapsibleRoot className="mt-4">
             <CollapsibleTrigger>새 CA 후보 등록</CollapsibleTrigger>
             <CollapsiblePanel><CollapsibleContent><AdminForm onSubmit={(event) => void stage(event)} aria-busy={pending}>
-              <AdminFormSection title="인증서 번들" description="연동 서버를 신뢰하는 데 필요한 PEM 형식의 사설 루트 또는 중간 인증서를 등록합니다.">
+              <AdminFormSection orientation="stacked" title="인증서 번들" description="연동 서버를 신뢰하는 데 필요한 PEM 형식의 사설 루트 또는 중간 인증서를 등록합니다.">
                 <AdminFormFieldSpan>
                   <TextareaField label="PEM CA 번들" name="pem" required maxLength={1_048_576} rows={5} spellCheck={false} disabled={pending} />
                 </AdminFormFieldSpan>
@@ -112,15 +136,20 @@ export function IntegrationCaConsole({ initialCollection, type, integrationId }:
           {items.length === 0 ? (
             <AdminEmptyState title="사용자 CA가 없습니다">현재 시스템 신뢰 저장소만 사용하고 있습니다.</AdminEmptyState>
           ) : (
-            <ul className="mt-6 grid list-none gap-2 p-0 [&>li]:[content-visibility:auto] [&>li]:[contain-intrinsic-size:auto_5rem]">
+            <ul className={styles.list()}>
               {items.map((item) => (
-                <li key={item.id}>
-                  <div>
-                    <strong>{item.state === "active" ? "활성 인증서" : "검증 대기 후보"}</strong>
-                    <span>
+                <li className={styles.item()} key={item.id}>
+                  <div className={styles.itemCopy()}>
+                    <div className={styles.itemHeading()}>
+                      <strong>{item.state === "active" ? "활성 인증서" : "검증 대기 후보"}</strong>
+                      <Badge size="sm" tone={item.state === "active" ? "success" : "warning"} variant="status">
+                        {item.state === "active" ? "사용 중" : "검증 필요"}
+                      </Badge>
+                    </div>
+                    <span className={styles.itemMeta()}>
                       CA 버전 {item.version} · {new Date(item.earliestExpiry).toLocaleDateString("ko-KR")} 만료
                     </span>
-                    <small>{item.fingerprints.join(", ")}</small>
+                    <p className={styles.fingerprint()}>SHA-256 · {item.fingerprints.join(" · ")}</p>
                   </div>
                   {item.state === "candidate" ? (
                     <Button variant="primary" disabled={pending} onClick={() => void activate(item)}>
@@ -133,7 +162,7 @@ export function IntegrationCaConsole({ initialCollection, type, integrationId }:
           )}
         </>
       )}
-      {message ? <p role={message.error ? "alert" : "status"}>{message.text}</p> : null}
+      {message ? <p className={styles.message()} role={message.error ? "alert" : "status"}>{message.text}</p> : null}
     </section>
   );
 }

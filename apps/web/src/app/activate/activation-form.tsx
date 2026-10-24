@@ -7,7 +7,8 @@ import { useState } from "react";
 import type { FormEvent } from "react";
 import { tv } from "tailwind-variants";
 
-import { Button, buttonVariants } from "#src/components/ui/button.tsx";
+import { buttonVariants } from "#src/components/ui/button.styles.ts";
+import { Button } from "#src/components/ui/button.tsx";
 import { TextField } from "#src/components/ui/field.tsx";
 import { ProductEntryShell } from "#src/app/_components/product-entry-shell.tsx";
 import { createBrowserApiClient } from "#src/lib/api/browser-client.ts";

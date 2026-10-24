@@ -167,14 +167,32 @@ impl InvitationHttpService {
     pub(crate) async fn list(
         &self,
         request: BrowserRequestHeaders<'_>,
-    ) -> Result<Vec<InvitationView>, InvitationHttpServiceError> {
+        cursor: Option<String>,
+        limit: u16,
+    ) -> Result<(Vec<InvitationView>, Option<String>), InvitationHttpServiceError> {
         let runtime = self.runtime()?;
-        let admin = runtime.authenticate_admin(request).await?;
-        InvitationService::new(runtime.pool.clone(), InvitationServicePolicy::default())
-            .list(admin.user_id)
+        runtime.authenticate_admin(request).await?;
+        runtime.within_timeout(async {
+            let mut connection = runtime.pool.acquire().await.map_err(|_| InvitationHttpServiceError::Unavailable)?;
+            let rows = sqlx::query(
+                "SELECT id::text, normalized_email, \
+                        CASE WHEN status = 'pending' AND expires_at <= transaction_timestamp() THEN 'expired' ELSE status END AS status, \
+                        created_at, expires_at, accepted_at, revoked_at, superseded_at, replaced_by_invitation_id::text \
+                 FROM activation_invitations WHERE ($1::uuid IS NULL OR (created_at, id) < (\
+                   SELECT created_at, id FROM activation_invitations WHERE id = $1::uuid\
+                 )) ORDER BY created_at DESC, id DESC LIMIT $2",
+            )
+            .bind(cursor)
+            .bind(i64::from(limit) + 1)
+            .fetch_all(&mut *connection)
             .await
-            .map_err(map_lifecycle_error)
-            .map(|items| items.into_iter().map(InvitationView::from).collect())
+            .map_err(|_| InvitationHttpServiceError::Unavailable)?;
+            let mut items = rows.into_iter().map(invitation_view_from_row).collect::<Result<Vec<_>, _>>()?;
+            let has_more = items.len() > usize::from(limit);
+            if has_more { items.truncate(usize::from(limit)); }
+            let next_cursor = has_more.then(|| items.last().map(|item| item.id.clone())).flatten();
+            Ok((items, next_cursor))
+        }).await
     }
 
     pub(crate) async fn reissue(
@@ -256,6 +274,54 @@ impl InvitationHttpService {
             .as_deref()
             .ok_or(InvitationHttpServiceError::Unavailable)
     }
+}
+
+fn invitation_view_from_row(
+    row: sqlx::postgres::PgRow,
+) -> Result<InvitationView, InvitationHttpServiceError> {
+    fn timestamp(
+        row: &sqlx::postgres::PgRow,
+        field: &str,
+    ) -> Result<String, InvitationHttpServiceError> {
+        let value: OffsetDateTime = row
+            .try_get(field)
+            .map_err(|_| InvitationHttpServiceError::Internal)?;
+        Timestamp::from_datetime(value)
+            .map_err(|_| InvitationHttpServiceError::Internal)
+            .map(|value| value.to_string())
+    }
+    fn nullable_timestamp(
+        row: &sqlx::postgres::PgRow,
+        field: &str,
+    ) -> Result<Option<String>, InvitationHttpServiceError> {
+        let value: Option<OffsetDateTime> = row
+            .try_get(field)
+            .map_err(|_| InvitationHttpServiceError::Internal)?;
+        value
+            .map(Timestamp::from_datetime)
+            .transpose()
+            .map_err(|_| InvitationHttpServiceError::Internal)
+            .map(|value| value.map(|item| item.to_string()))
+    }
+    Ok(InvitationView {
+        id: row
+            .try_get("id")
+            .map_err(|_| InvitationHttpServiceError::Internal)?,
+        email: row
+            .try_get("normalized_email")
+            .map_err(|_| InvitationHttpServiceError::Internal)?,
+        status: row
+            .try_get("status")
+            .map_err(|_| InvitationHttpServiceError::Internal)?,
+        created_at: timestamp(&row, "created_at")?,
+        expires_at: timestamp(&row, "expires_at")?,
+        accepted_at: nullable_timestamp(&row, "accepted_at")?,
+        revoked_at: nullable_timestamp(&row, "revoked_at")?,
+        superseded_at: nullable_timestamp(&row, "superseded_at")?,
+        replacement_id: row
+            .try_get("replaced_by_invitation_id")
+            .map_err(|_| InvitationHttpServiceError::Internal)?,
+    })
 }
 
 pub(crate) struct ActivationInput {

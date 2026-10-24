@@ -33,9 +33,9 @@ pub use audit_service::{
     AdminAuditRetentionPruneView,
 };
 pub use backup_service::{
-    AdminBackupAlertView, AdminBackupConsoleView, AdminBackupOperationRequest,
-    AdminBackupOperationView, AdminBackupPolicyUpdate, AdminBackupPolicyView,
-    AdminBackupRestorePointView,
+    AdminBackupAlertView, AdminBackupConsoleView, AdminBackupOperationCollectionView,
+    AdminBackupOperationRequest, AdminBackupOperationView, AdminBackupPolicyUpdate,
+    AdminBackupPolicyView, AdminBackupRestorePointView,
 };
 pub(crate) use http_routes::openapi_router;
 pub use http_service::{

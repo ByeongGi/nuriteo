@@ -4,6 +4,7 @@ import { Radio } from "@base-ui/react/radio";
 import { RadioGroup as RadioGroupPrimitive } from "@base-ui/react/radio-group";
 import type { ReactNode } from "react";
 import { tv } from "tailwind-variants";
+import type { VariantProps } from "tailwind-variants";
 
 const radioGroupStyles = tv({
   slots: {
@@ -19,7 +20,14 @@ const radioGroupStyles = tv({
     copy: "grid min-w-0 gap-1",
     optionLabel: "font-medium leading-5 text-foreground",
     optionDescription: "text-xs leading-relaxed text-subtle-foreground"
-  }
+  },
+  variants: {
+    layout: {
+      columns: { group: "grid-cols-2 max-[40rem]:grid-cols-1" },
+      stacked: {}
+    }
+  },
+  defaultVariants: { layout: "stacked" }
 });
 
 interface RadioCardOption<Value extends string> {
@@ -29,7 +37,7 @@ interface RadioCardOption<Value extends string> {
   readonly value: Value;
 }
 
-interface RadioCardGroupProps<Value extends string> {
+interface RadioCardGroupProps<Value extends string> extends VariantProps<typeof radioGroupStyles> {
   readonly description?: ReactNode;
   readonly disabled?: boolean;
   readonly label: ReactNode;
@@ -39,8 +47,8 @@ interface RadioCardGroupProps<Value extends string> {
   readonly value: Value;
 }
 
-function RadioCardGroup<Value extends string>({ description, disabled, label, name, onValueChange, options, value }: RadioCardGroupProps<Value>) {
-  const styles = radioGroupStyles();
+function RadioCardGroup<Value extends string>({ description, disabled, label, layout, name, onValueChange, options, value }: RadioCardGroupProps<Value>) {
+  const styles = radioGroupStyles({ layout });
   return (
     <fieldset className={styles.fieldset()}>
       <legend className={styles.legend()}>{label}</legend>

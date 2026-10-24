@@ -27,7 +27,8 @@ import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { tv } from "tailwind-variants";
 
-import { Button, buttonVariants } from "#src/components/ui/button.tsx";
+import { buttonVariants } from "#src/components/ui/button.styles.ts";
+import { Button } from "#src/components/ui/button.tsx";
 import { CollapsibleContent, CollapsiblePanel, CollapsibleRoot, CollapsibleTrigger } from "#src/components/ui/collapsible.tsx";
 import { SelectField, TextField } from "#src/components/ui/field.tsx";
 import { PageHeader } from "#src/components/ui/page-header.tsx";

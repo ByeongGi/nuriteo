@@ -5,16 +5,20 @@ import type { ShellCommand, ShellCommandRegistry, ShellRunOptions, ShellRunResul
 
 export class ShellRuntime {
   cwd: string;
+  filesystemRoot: string | null;
   env: RuntimeEnv;
   files: Map<string, string>;
   registry: ShellCommandRegistry;
   maxOutputBytes: number;
+  onFileWrite: ((path: string, data: string) => void) | null;
 
   constructor(options: ShellRuntimeOptions = {}) {
     this.cwd = options.cwd || "/workspace";
+    this.filesystemRoot = options.filesystemRoot || null;
     this.env = { PATH: "/workspace/node_modules/.bin:/bin", ...(options.env || {}) };
     this.files = new Map(Object.entries(options.files || {}));
     this.registry = createCommandRegistry(options.commands || {});
+    this.onFileWrite = options.onFileWrite || null;
     this.maxOutputBytes = positiveLimit(options.maxOutputBytes, 1024 * 1024, "maxOutputBytes");
   }
 
@@ -52,7 +56,9 @@ export class ShellRuntime {
       if (result.stderr && !streamed.stderr) options.onOutput?.({ stream: "stderr", data: result.stderr });
       if (redirect) {
         const redirected = appendWithinLimit("", result.stdout || "", this.maxOutputBytes);
-        this.files.set(resolvePath(redirect, this.cwd), redirected.value);
+        const path = resolvePath(redirect, this.cwd);
+        this.files.set(path, redirected.value);
+        this.onFileWrite?.(path, redirected.value);
         outputTruncatedBytes += redirected.droppedBytes;
       }
       else if (nextStep?.op !== "|") {
@@ -108,6 +114,12 @@ export class ShellRuntime {
   runStatefulBuiltin(argv: string[]): Awaited<ReturnType<ShellCommand>> | null {
     if (argv[0] === "cd") {
       const target = normalizePath(argv[1] || this.env.HOME || "/workspace", this.cwd);
+      if (this.filesystemRoot && target !== this.filesystemRoot && !target.startsWith(`${this.filesystemRoot}/`)) {
+        return { stdout: "", stderr: `cd: ${argv[1] || target}: Permission denied\n`, exitCode: 1, argv };
+      }
+      if (this.files.size > 0 && !this.files.has(target) && ![...this.files.keys()].some((path) => path.startsWith(`${target}/`))) {
+        return { stdout: "", stderr: `cd: ${argv[1] || target}: No such file or directory\n`, exitCode: 1, argv };
+      }
       this.cwd = target;
       this.env.PWD = target;
       return { stdout: "", stderr: "", exitCode: 0, argv };

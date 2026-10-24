@@ -17,6 +17,7 @@ const bridge = await createSubdomainPreviewBridge({
   ownerType: "user",
   projectId
 });
+(window as typeof window & { __nuriteoNextPreviewHotUpdate?: (path: string) => void }).__nuriteoNextPreviewHotUpdate = (path) => bridge.hotUpdate(path);
 const frame = document.createElement("iframe");
 frame.title = "Isolated Next Preview";
 frame.src = bridge.url;

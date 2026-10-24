@@ -35,9 +35,11 @@ export interface ShellStep {
 
 export interface ShellRuntimeOptions {
   cwd?: string;
+  filesystemRoot?: string;
   env?: RuntimeEnv;
   files?: Record<string, string>;
   commands?: ShellCommandMap;
+  onFileWrite?: (path: string, data: string) => void;
   maxOutputBytes?: number;
   maxInputChunkBytes?: number;
 }

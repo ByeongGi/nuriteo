@@ -153,12 +153,12 @@ export function AuthenticatedNavigation({
     { href: "/notifications", icon: "notification", label: "알림", matchPrefixes: ["/notifications"] }
   ];
   const accountNavigation: readonly NavigationItem[] = [
-    { href: "/account", icon: "account", label: "계정 설정", matchPrefixes: ["/account"] }
+    { href: "/account/security", icon: "account", label: "계정 설정", matchPrefixes: ["/account"] }
   ];
   const adminNavigation: NavigationItem = {
-    href: "/admin",
+    href: "/admin/operations",
     icon: "admin",
-    label: "관리자 홈",
+    label: "관리자",
     matchPrefixes: ["/admin"]
   };
   const styles = navigationStyles();
@@ -170,10 +170,12 @@ export function AuthenticatedNavigation({
         <strong className={styles.brandLabel()}>NURITEO</strong>
       </Link>
 
-      <Link className={styles.workspaceCard()} href={activeScope === undefined ? "/workspaces" : workspaceBaseHref}>
-        <span className={styles.workspaceCopy()}><strong>{activeWorkspace?.displayLabel ?? "워크스페이스"}</strong><small>{activeWorkspace === undefined ? "작업 공간 선택" : `${workspaceOwnerLabel(activeWorkspace)} 워크스페이스`}</small></span>
-        <b className={styles.workspaceArrow()} aria-hidden="true">→</b>
-      </Link>
+      {activeWorkspace ? (
+        <Link className={styles.workspaceCard()} href={workspaceBaseHref}>
+          <span className={styles.workspaceCopy()}><strong>{activeWorkspace.displayLabel}</strong><small>{workspaceOwnerLabel(activeWorkspace)} 워크스페이스</small></span>
+          <b className={styles.workspaceArrow()} aria-hidden="true">→</b>
+        </Link>
+      ) : null}
 
       <nav className={`${styles.nav()} ${styles.workspaceNav()}`} aria-label="현재 워크스페이스 메뉴">
         <p className={styles.label()}>탐색</p>

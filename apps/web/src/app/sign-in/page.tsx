@@ -3,7 +3,6 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
 import { EntryUnavailable } from "#src/app/_components/entry-unavailable.tsx";
-import { Providers } from "#src/app/providers.tsx";
 import { SignInForm } from "#src/app/sign-in/sign-in-form.tsx";
 import { safeReturnTo } from "#src/app/sign-in/return-to.ts";
 import { createServerApiClient } from "#src/lib/api/server-client.ts";
@@ -34,9 +33,9 @@ export default async function SignInPage({ searchParams }: { readonly searchPara
     if (isExplicitlySignedOut(error)) {
       try {
         const providers = await listOidcLoginProviders(await createServerApiClient());
-        return <Providers><SignInForm activated={activated} providers={providers.data} oidcFailed={oidcFailed} returnTo={returnTo} /></Providers>;
+        return <SignInForm activated={activated} providers={providers.data} oidcFailed={oidcFailed} returnTo={returnTo} />;
       } catch {
-        return <Providers><SignInForm activated={activated} providers={[]} providersLoadFailed oidcFailed={oidcFailed} returnTo={returnTo} /></Providers>;
+        return <SignInForm activated={activated} providers={[]} providersLoadFailed oidcFailed={oidcFailed} returnTo={returnTo} />;
       }
     }
 

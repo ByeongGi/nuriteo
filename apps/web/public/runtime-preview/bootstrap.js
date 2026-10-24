@@ -10,6 +10,7 @@ async function boot() {
   const binding = readMeta("nuriteo-preview-binding");
   const generation = readMeta("nuriteo-runtime-id");
   if (!RUNTIME_ID.test(generation)) throw new Error("invalid runtime binding");
+  installParentControls(applicationOrigin, binding, generation);
 
   const registration = await navigator.serviceWorker.register("/runtime-preview/sw.js", {
     scope: "/",
@@ -49,6 +50,38 @@ async function boot() {
   mountProjectFrame();
   setInterval(() => { void ensureRelay().catch(() => undefined); }, HEARTBEAT_INTERVAL_MS);
   navigator.serviceWorker.addEventListener("controllerchange", () => { void ensureRelay().catch(() => undefined); });
+}
+
+function installParentControls(applicationOrigin, binding, generation) {
+  window.addEventListener("message", async (event) => {
+    if (event.origin !== applicationOrigin || event.source !== window.parent) return;
+    const message = event.data;
+    if (!isExactRecord(message, ["type", "version"])) return;
+    if (message.type !== "nuriteo-preview:reload" || message.version !== PROTOCOL_VERSION) return;
+    const frame = document.querySelector("#nuriteo-preview-frame");
+    if (!(frame instanceof HTMLIFrameElement)) return;
+    try {
+      const currentUrl = frame.contentWindow?.location.href || frame.src;
+      const response = await fetch(currentUrl, { cache: "no-store", credentials: "omit", method: "HEAD" });
+      if (!response.ok) throw new Error(`Preview server returned HTTP ${response.status}`);
+      window.parent.postMessage({
+        type: "nuriteo-preview:reload-result",
+        version: PROTOCOL_VERSION,
+        binding,
+        generation,
+        ok: true
+      }, applicationOrigin);
+      frame.contentWindow?.location.reload();
+    } catch {
+      window.parent.postMessage({
+        type: "nuriteo-preview:reload-result",
+        version: PROTOCOL_VERSION,
+        binding,
+        generation,
+        ok: false
+      }, applicationOrigin);
+    }
+  });
 }
 
 async function connectRelay(worker, applicationOrigin, binding, generation) {

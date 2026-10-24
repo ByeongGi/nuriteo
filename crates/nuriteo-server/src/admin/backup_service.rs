@@ -85,6 +85,13 @@ pub struct AdminBackupOperationView {
 
 #[derive(Debug, Clone, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
+pub struct AdminBackupOperationCollectionView {
+    pub items: Vec<AdminBackupOperationView>,
+    pub next_cursor: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
 pub struct AdminBackupAlertView {
     pub level: String,
     pub code: String,
@@ -116,6 +123,48 @@ impl AdminHttpService {
         let runtime = self.runtime()?;
         runtime.authenticate(request).await?;
         runtime.within_timeout(load_console(&runtime.pool)).await
+    }
+
+    pub(crate) async fn backup_operations(
+        &self,
+        request: BrowserRequestHeaders<'_>,
+        cursor: Option<Uuid>,
+        limit: u16,
+    ) -> Result<AdminBackupOperationCollectionView, AdminHttpServiceError> {
+        let runtime = self.runtime()?;
+        runtime.authenticate(request).await?;
+        runtime
+            .within_timeout(async {
+                let mut connection = runtime
+                    .pool
+                    .acquire()
+                    .await
+                    .map_err(|_| AdminHttpServiceError::Unavailable)?;
+                let rows = sqlx::query(
+                    "SELECT id::text AS id,kind,source,backup_id::text AS backup_id,state,failure_code,requested_at,started_at,completed_at \
+                     FROM backup_operations WHERE ($1::uuid IS NULL OR (requested_at,id) < (\
+                       SELECT requested_at,id FROM backup_operations WHERE id=$1::uuid\
+                     )) ORDER BY requested_at DESC,id DESC LIMIT $2",
+                )
+                .bind(cursor.map(|value| value.to_string()))
+                .bind(i64::from(limit) + 1)
+                .fetch_all(&mut *connection)
+                .await
+                .map_err(unavailable)?;
+                let mut items = rows
+                    .iter()
+                    .map(operation_from_row)
+                    .collect::<Result<Vec<_>, _>>()?;
+                let has_more = items.len() > usize::from(limit);
+                if has_more {
+                    items.truncate(usize::from(limit));
+                }
+                let next_cursor = has_more
+                    .then(|| items.last().map(|item| item.id.clone()))
+                    .flatten();
+                Ok(AdminBackupOperationCollectionView { items, next_cursor })
+            })
+            .await
     }
 
     pub(crate) async fn update_backup_policy(

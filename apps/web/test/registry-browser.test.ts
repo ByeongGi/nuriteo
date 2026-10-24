@@ -85,21 +85,17 @@ try {
       { name: "nuriteo_dev_csrf", value: csrf, url: origin }
     ]);
     const page = await context.newPage();
-    await page.goto(`${origin}/admin/integrations/registries`, { waitUntil: "networkidle" });
-    await page.getByRole("heading", { name: "패키지 저장소" }).waitFor();
+    await page.goto(`${origin}/admin/integrations/registries/new`, { waitUntil: "networkidle" });
+    await page.getByRole("heading", { name: "새 패키지 저장소" }).waitFor();
     await page.getByLabel("표시 이름").first().fill("Company npm");
     await page.getByLabel("HTTPS 기본 URL").fill("https://registry.example.test/npm");
     await page.getByLabel("접근 토큰").fill("top-secret-registry-token");
     const [createResponse] = await Promise.all([
       page.waitForResponse((response) => response.request().method() === "POST" && response.url().endsWith("/api/v1/admin/registries")),
-      page.getByRole("button", { name: "비활성 저장소 저장" }).click()
+      page.getByRole("button", { name: "저장소 등록" }).click()
     ]);
     assert.equal(createResponse.status(), 201);
-    try {
-      await page.getByRole("status").filter({ hasText: "토큰은 다시 표시되지 않으므로" }).waitFor();
-    } catch (error) {
-      throw new Error(`Registry creation feedback missing:\n${await page.locator("body").innerText()}`, { cause: error });
-    }
+    await page.waitForURL(/\/admin\/integrations\/registries\//u);
     assert.equal(await page.getByText("top-secret-registry-token").count(), 0);
     await page.getByRole("button", { name: "검증 후 활성화" }).click();
     await page.getByRole("status").filter({ hasText: "검증하고 활성화" }).waitFor();

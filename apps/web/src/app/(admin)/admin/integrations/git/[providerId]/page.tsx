@@ -9,5 +9,5 @@ export default async function GitProviderDetailPage({ params }: { readonly param
   const providers = (await listGitProvidersForAdmin(await createServerApiClient())).data;
   const provider = providers.find((item) => item.id === providerId);
   if (!provider) notFound();
-  return <GitProviderConsole initialProviders={[provider]} />;
+  return <GitProviderConsole detailMode initialProviders={[provider]} />;
 }

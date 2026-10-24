@@ -20,10 +20,12 @@ const NONCE = /^[0-9a-f]{32}$/u;
 export interface SubdomainPreviewBridge {
   readonly binding: PreviewHostBinding;
   readonly url: string;
-  attach(target: Window | null): void;
-  hotUpdate(path: string): void;
+  attach(target: Window | null, sourceOrigin?: string): void;
+  hotUpdate(path: string, changeKind?: PreviewChangeKind): void;
   dispose(): Promise<void>;
 }
+
+export type PreviewChangeKind = "content" | "create" | "delete" | "rename";
 
 interface PublishedExampleBinding {
   readonly publicId: string;
@@ -37,7 +39,9 @@ export async function createSubdomainPreviewBridge(options: {
   ownerId: string;
   ownerType: "organization" | "user";
   projectId: string;
+  onConnected?(): void;
   onDiagnostic?(code: string): void;
+  onReloadResult?(ok: boolean): void;
   onRecoveryRequired?(): void;
 }): Promise<SubdomainPreviewBridge> {
   return createPreviewBridge(options, (port) => issueProjectBinding(options, port));
@@ -49,6 +53,7 @@ export async function createPublishedExamplePreviewBridge(options: {
   internalPreviewUrl: string;
   publicId: string;
   versionNumber: number;
+  onConnected?(): void;
   onDiagnostic?(code: string): void;
   onRecoveryRequired?(): void;
 }): Promise<SubdomainPreviewBridge> {
@@ -60,7 +65,9 @@ async function createPreviewBridge(
     configuration: EnabledPreviewOriginConfiguration;
     internalProjectIdentity: string;
     internalPreviewUrl: string;
+    onConnected?(): void;
     onDiagnostic?(code: string): void;
+    onReloadResult?(ok: boolean): void;
     onRecoveryRequired?(): void;
   },
   issuePreviewBinding: (port: number) => Promise<{ expiresAtMonotonic: number; runtimeId: string }>
@@ -78,6 +85,7 @@ async function createPreviewBridge(
   const seenNonces = new Set<string>();
   const abort = new AbortController();
   let target: Window | null = null;
+  let targetOrigin = previewOrigin;
   let relayPort: MessagePort | null = null;
   let activeNonce: string | null = null;
   let inFlightRequests = 0;
@@ -86,16 +94,23 @@ async function createPreviewBridge(
   let acknowledgeDispose: (() => void) | null = null;
   let hotUpdateSequence = 0;
   let relayRequestHighWater = 0;
+  const bindingExpiryTimeout = setTimeout(() => {
+    if (!disposed && relayPort === null) options.onRecoveryRequired?.();
+  }, Math.max(0, issuedBinding.expiresAtMonotonic - performance.now()));
 
-  function attach(value: Window | null): void { target = value; }
+  function attach(value: Window | null, sourceOrigin = previewOrigin): void {
+    target = value;
+    targetOrigin = sourceOrigin;
+  }
 
-  function hotUpdate(path: string): void {
+  function hotUpdate(path: string, changeKind: PreviewChangeKind = "content"): void {
     if (disposed || !relayPort || !activeNonce) return;
-    if (!path.startsWith("src/") || path.length > 512 || path.includes("..") || path.includes("\\")) return;
+    if (!isSafePreviewPath(path)) return;
     relayPort.postMessage({
       type: "nuriteo-preview:hmr",
       version: PROTOCOL_VERSION,
       binding: binding.label,
+      changeKind,
       generation: binding.runtimeId,
       nonce: activeNonce,
       path,
@@ -104,9 +119,13 @@ async function createPreviewBridge(
   }
 
   function receiveHandshake(event: MessageEvent): void {
-    if (disposed || event.origin !== previewOrigin || event.source !== target) return;
+    if (disposed || event.origin !== targetOrigin || event.source !== target) return;
     if (isRecoveryMessage(event.data, binding.label, binding.runtimeId)) {
       options.onRecoveryRequired?.();
+      return;
+    }
+    if (isReloadResultMessage(event.data, binding.label, binding.runtimeId)) {
+      options.onReloadResult?.(event.data.ok);
       return;
     }
     if (event.ports.length !== 1) return;
@@ -121,6 +140,7 @@ async function createPreviewBridge(
     activeNonce = event.data.nonce;
     relayPort = event.ports[0] ?? null;
     if (!relayPort) return;
+    clearTimeout(bindingExpiryTimeout);
     relayRequestHighWater = 0;
     const acceptedPort = relayPort;
     relayPort.onmessage = (relayEvent) => {
@@ -138,6 +158,7 @@ async function createPreviewBridge(
       generation: binding.runtimeId,
       nonce: activeNonce
     });
+    options.onConnected?.();
   }
 
   async function receiveRelayRequest(value: unknown, responsePort: MessagePort): Promise<void> {
@@ -201,10 +222,12 @@ async function createPreviewBridge(
   async function dispose(): Promise<void> {
     if (disposePromise) return disposePromise;
     disposed = true;
+    clearTimeout(bindingExpiryTimeout);
     globalThis.removeEventListener("message", receiveHandshake);
     disposePromise = (async () => {
       const port = relayPort;
       const nonce = activeNonce;
+      const wasConnected = port !== null && nonce !== null;
       if (port && nonce) {
         const acknowledged = new Promise<void>((resolve) => { acknowledgeDispose = resolve; });
         port.postMessage({
@@ -225,7 +248,7 @@ async function createPreviewBridge(
       target = null;
       acknowledgeDispose = null;
       const remainingLifetime = issuedBinding.expiresAtMonotonic - performance.now();
-      if (remainingLifetime > 0) await new Promise((resolve) => setTimeout(resolve, remainingLifetime));
+      if (!wasConnected && remainingLifetime > 0) await new Promise((resolve) => setTimeout(resolve, remainingLifetime));
     })();
     return disposePromise;
   }
@@ -234,12 +257,29 @@ async function createPreviewBridge(
   return { binding, url, attach, hotUpdate, dispose };
 }
 
+function isSafePreviewPath(path: string): boolean {
+  return /^(?!\/)(?!.*(?:^|\/)\.\.(?:\/|$))[^\\\0]{1,512}$/u.test(path);
+}
+
 function isRecoveryMessage(value: unknown, binding: string, generation: string): boolean {
   return isExactRecord(value, ["binding", "generation", "type", "version"])
     && value.type === "nuriteo-preview:recovery-required"
     && value.version === PROTOCOL_VERSION
     && value.binding === binding
     && value.generation === generation;
+}
+
+function isReloadResultMessage(
+  value: unknown,
+  binding: string,
+  generation: string
+): value is { binding: string; generation: string; ok: boolean; type: string; version: number } {
+  return isExactRecord(value, ["binding", "generation", "ok", "type", "version"])
+    && value.type === "nuriteo-preview:reload-result"
+    && value.version === PROTOCOL_VERSION
+    && value.binding === binding
+    && value.generation === generation
+    && typeof value.ok === "boolean";
 }
 
 function postFailure(port: MessagePort, id: string, status: number, message: string): void {

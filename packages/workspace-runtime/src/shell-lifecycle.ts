@@ -6,6 +6,7 @@ import {
 } from "../../browser-host/src/process/index.ts";
 import type { TerminalRunResult } from "../../node-runtime/src/shell/index.ts";
 import { createPreviewShellSession, type PreviewShellSession } from "./shell.ts";
+import type { PreviewPackageInstallRequest } from "./shell.ts";
 
 type ShellOutputChunk = { stream: "stdout" | "stderr"; data: string };
 
@@ -18,13 +19,13 @@ interface ShellCommandResult {
 interface PreviewShellLifecycleOptions {
   getCwd(): string;
   getProject(): ProjectWorkspaceStore | null;
-  install(): Promise<ShellCommandResult>;
+  install(request?: PreviewPackageInstallRequest): Promise<ShellCommandResult>;
   log(line: unknown): void;
   onProcessFinish(command: string, exitCode: number): void;
   onProcessStart(terminalId: string, command: string): void;
   restartDev(): Promise<ShellCommandResult>;
-  runBuild(): Promise<ShellCommandResult>;
-  runDev(): Promise<ShellCommandResult>;
+  runNode(cwd: string, args: string[], stdin?: string): Promise<ShellCommandResult>;
+  runScript(name: string, args?: string[]): Promise<ShellCommandResult>;
   terminalProcessTable?: HostProcessTable | null;
 }
 
@@ -73,8 +74,8 @@ export function createPreviewShellLifecycle(
       processCommands: createTerminalProcessCommands(terminalProcessTable, terminalId)
     } : {}),
     install: options.install,
-    runDev: options.runDev,
-    runBuild: options.runBuild,
+    runNode: options.runNode,
+    runScript: options.runScript,
     restartDev: options.restartDev
   });
 

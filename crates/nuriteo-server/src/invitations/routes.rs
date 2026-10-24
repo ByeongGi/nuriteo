@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use axum::Json;
 use axum::body::{Body, to_bytes};
-use axum::extract::{Extension, Path, Request, State};
+use axum::extract::{Extension, Path, Query, Request, State};
 use axum::http::header::{CONTENT_TYPE, COOKIE};
 use axum::http::{HeaderMap, HeaderName, StatusCode};
 use axum::response::{IntoResponse, Response};
@@ -69,9 +69,18 @@ struct ActivationRequest {
     password: String,
 }
 
+#[derive(Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
+struct InvitationListQuery {
+    cursor: Option<String>,
+    limit: Option<u16>,
+}
+
 #[derive(Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
 struct InvitationListResponse {
     items: Vec<InvitationView>,
+    next_cursor: Option<String>,
 }
 
 #[utoipa::path(
@@ -118,6 +127,7 @@ async fn issue_invitation(
     get,
     path = "/api/v1/admin/activation-invitations",
     tag = "invitations",
+    params(("cursor" = Option<String>, Query), ("limit" = Option<u16>, Query, minimum = 1, maximum = 100)),
     responses(
         (status = 200, description = "Bounded safe invitation metadata without activation credentials", body = InvitationListResponse),
         (status = 401, description = "Active Session required", body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
@@ -127,14 +137,27 @@ async fn issue_invitation(
 async fn list_invitations(
     State(service): State<InvitationHttpService>,
     Extension(request_id): Extension<RequestId>,
+    Query(query): Query<InvitationListQuery>,
     request: Request,
 ) -> Result<Json<InvitationListResponse>, HttpError> {
+    let limit = query.limit.unwrap_or(25);
+    if !(1..=100).contains(&limit) {
+        return Err(validation(&request_id, COLLECTION_PATH, "limit"));
+    }
+    let cursor = query
+        .cursor
+        .map(|value| {
+            ActivationInvitationId::from_str(&value)
+                .map(|id| id.to_string())
+                .map_err(|_| validation(&request_id, COLLECTION_PATH, "cursor"))
+        })
+        .transpose()?;
     let headers = RequestHeaders::read(request.headers(), &request_id, COLLECTION_PATH)?;
-    let items = service
-        .list(headers.browser(BrowserMethod::Get))
+    let (items, next_cursor) = service
+        .list(headers.browser(BrowserMethod::Get), cursor, limit)
         .await
         .map_err(|error| map_service_error(error, request_id.clone(), COLLECTION_PATH))?;
-    Ok(Json(InvitationListResponse { items }))
+    Ok(Json(InvitationListResponse { items, next_cursor }))
 }
 
 #[utoipa::path(
@@ -369,6 +392,18 @@ fn parse_id(
             )],
         )
     })
+}
+
+fn validation(request_id: &RequestId, path: &str, field: &str) -> HttpError {
+    HttpError::validation(
+        request_id.clone(),
+        path,
+        [FieldViolation::new(
+            field,
+            "INVALID",
+            "The value is invalid.",
+        )],
+    )
 }
 
 fn validate_activation(input: &ActivationRequest, request_id: &RequestId) -> Result<(), HttpError> {

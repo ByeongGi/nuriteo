@@ -20,6 +20,7 @@ await build({
   entryPoints: [path.join(webRoot, "test/fixtures/runtime-journey.tsx")],
   format: "esm",
   jsx: "automatic",
+  loader: { ".ttf": "dataurl" },
   outfile: path.join(fixtureRoot, "fixture.js"),
   platform: "browser",
   target: "es2022"
@@ -115,19 +116,13 @@ try {
   await page.goto(`${applicationOrigin}/`, { waitUntil: "domcontentloaded" });
   assert.equal(await page.evaluate(() => globalThis.crossOriginIsolated), true);
 
-  await page.getByRole("button", { name: "템플릿으로 워크스페이스 시작" }).click();
-  try {
-    await page.getByRole("button", { name: "미리보기 실행" }).waitFor({ timeout: 20_000 });
-  } catch (error) {
-    throw new Error(`workspace did not start: ${await page.locator("body").innerText()} | ${errors.join(" | ")}`, { cause: error });
-  }
   await page.evaluate(() => {
     const nativeNow = Date.now;
     Object.defineProperty(window, "__nuriteoNativeDateNow", { configurable: true, value: nativeNow });
     Date.now = () => nativeNow() + 10 * 60_000;
   });
-  await page.getByRole("button", { name: "미리보기 실행" }).click();
-  const previewRegion = page.getByRole("region", { name: "미리보기" });
+  await page.getByRole("button", { name: "템플릿으로 워크스페이스 시작" }).click();
+  const previewRegion = page.getByRole("region", { name: "미리보기", exact: true });
   try {
     await previewRegion.locator("iframe").waitFor({ timeout: 20_000 });
   } catch (error) {
@@ -149,7 +144,15 @@ try {
   assert.equal(await previewFrame.evaluate(() => document.cookie), "");
   assert.equal(await previewFrame.evaluate(() => globalThis.crossOriginIsolated), true);
   assert.equal(await previewFrame.evaluate(() => navigator.serviceWorker.controller?.scriptURL.endsWith("/runtime-preview/sw.js")), true);
-  await page.getByRole("button", { name: "src/debug.ts" }).click();
+  const refreshTimeOrigin = await previewFrame.evaluate(() => performance.timeOrigin);
+  const runtimeWorkersBeforeRefresh = await page.evaluate(() => window.__nuriteoRuntimeProbe.runtimeCreatedWorkers);
+  const previewUrlBeforeRefresh = await previewRegion.getAttribute("data-preview-url");
+  await page.getByRole("button", { name: "미리보기 새로고침" }).click();
+  await previewFrame.waitForFunction((previous) => performance.timeOrigin !== previous, refreshTimeOrigin);
+  await previewFrame.locator("#root").getByText("nuriteo:1").waitFor({ timeout: 20_000 });
+  assert.equal(await page.evaluate(() => window.__nuriteoRuntimeProbe.runtimeCreatedWorkers), runtimeWorkersBeforeRefresh, "refresh must not restart the browser runtime");
+  assert.equal(await previewRegion.getAttribute("data-preview-url"), previewUrlBeforeRefresh, "refresh must preserve the Preview binding");
+  await page.getByRole("button", { name: "debug.ts", exact: true }).click();
   await page.getByLabel("src/debug.ts 편집기").fill([
     'import React from "react";',
     'export const lazy = () => import("react");',
@@ -221,7 +224,7 @@ try {
   });
   await previewFrame.getByRole("button", { name: "nuriteo:1" }).click();
   await previewFrame.getByRole("button", { name: "nuriteo:2" }).waitFor();
-  await page.getByRole("button", { name: "src/message.ts" }).click();
+  await page.getByRole("button", { name: "message.ts", exact: true }).click();
   await page.getByLabel("src/message.ts 편집기").fill('export const label = "PRV001 cross origin";\n');
   await page.getByRole("button", { name: "로컬 초안에 적용" }).click();
   await page.getByText("로컬 초안 저장됨 · HMR 적용됨", { exact: false }).waitFor({ timeout: 10_000 });
@@ -229,12 +232,23 @@ try {
   assert.equal(await previewFrame.evaluate(() => performance.timeOrigin), documentTimeOrigin, "HMR must not replace the document");
   await previewFrame.getByRole("button", { name: "PRV001 cross origin:2" }).click();
   await previewFrame.getByRole("button", { name: "PRV001 cross origin:3" }).waitFor();
+  await page.getByRole("button", { name: "App.css", exact: true }).click();
+  await page.getByLabel("src/App.css 편집기").fill("button { color: rgb(1, 2, 3); }\n");
+  await page.getByRole("button", { name: "로컬 초안에 적용" }).click();
+  await previewFrame.waitForFunction(() => (window as unknown as { __nuriteoHmrApplied: number }).__nuriteoHmrApplied === 2);
+  assert.equal(
+    await previewFrame.getByRole("button", { name: "PRV001 cross origin:3" }).evaluate((element) => getComputedStyle(element).color),
+    "rgb(1, 2, 3)",
+    "CSS HMR must apply the latest stylesheet"
+  );
+  assert.equal(await previewFrame.evaluate(() => performance.timeOrigin), documentTimeOrigin, "CSS HMR must preserve document state");
   const hmrCount = await previewFrame.evaluate(() => (window as unknown as { __nuriteoHmrApplied: number }).__nuriteoHmrApplied);
   await previewFrame.evaluate(({ appOrigin, generation }) => {
     parent.postMessage({
       type: "nuriteo-preview:hmr",
       version: 1,
       binding: location.hostname.split(".")[0],
+      changeKind: "content",
       generation,
       path: "src/message.ts",
       sequence: 999
@@ -320,6 +334,20 @@ try {
   });
   assert.equal(capacityStatus, 429, "relay concurrency must fail excess work deterministically");
 
+  const workersBeforeStoppedRefresh = await page.evaluate(() => window.__nuriteoRuntimeProbe.runtimeCreatedWorkers);
+  await page.evaluate(() => {
+    const adapter = window.__nuriteoRuntimeProbe.adapter;
+    if (!adapter) throw new Error("runtime adapter unavailable");
+    const port = adapter.getState().ports[0]?.port;
+    if (!port || !adapter.workflow.stopPreview(port)) throw new Error("preview server did not stop");
+  });
+  await page.getByRole("button", { name: "미리보기 새로고침" }).click();
+  await page.getByRole("alert").getByText("개발 서버가 중지되었습니다.", { exact: true }).waitFor({ timeout: 10_000 });
+  assert.equal(await page.evaluate(() => window.__nuriteoRuntimeProbe.runtimeCreatedWorkers), workersBeforeStoppedRefresh, "failed refresh must not restart the browser runtime automatically");
+  await page.getByRole("button", { name: "개발 서버 다시 실행" }).click();
+  await page.getByText("실행 중", { exact: true }).waitFor({ timeout: 20_000 });
+  assert.equal(await page.getByRole("alert").count(), 0, "successful restart must dismiss the stopped-server guidance");
+
   await page.getByRole("button", { name: "워크스페이스 종료" }).click();
   if (await page.getByRole("button", { name: "초안을 버리고 종료" }).count()) await page.getByRole("button", { name: "초안을 버리고 종료" }).click();
   try {
@@ -360,7 +388,7 @@ async function issueBinding(request: http.IncomingMessage, response: http.Server
     response.writeHead(400).end("rejected");
     return;
   }
-  const binding = await issueSignedPreviewBinding(signingKey, parsed.port as number);
+  const binding = await issueSignedPreviewBinding(signingKey, parsed.port as number, Date.now(), 5_000);
   response.writeHead(201, { "Cache-Control": "no-store", "Content-Type": "application/json" }).end(JSON.stringify({
     runtimeId: binding.runtimeId,
     ttlMs: Math.max(1, binding.expiresAt - Date.now())

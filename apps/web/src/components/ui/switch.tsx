@@ -19,9 +19,16 @@ const switchStyles = tv({
     appearance: {
       card: { root: "w-full rounded-md border border-muted-border bg-surface px-3 py-2.5" },
       plain: {}
+    },
+    density: {
+      compact: {
+        control: "h-5 w-9",
+        thumb: "size-4 data-[checked]:translate-x-4"
+      },
+      default: {}
     }
   },
-  defaultVariants: { appearance: "plain" }
+  defaultVariants: { appearance: "plain", density: "default" }
 });
 
 type SwitchFieldProps = Pick<SwitchPrimitive.Root.Props, "checked" | "defaultChecked" | "disabled" | "id" | "name" | "onCheckedChange" | "readOnly" | "required" | "value"> &
@@ -30,8 +37,8 @@ type SwitchFieldProps = Pick<SwitchPrimitive.Root.Props, "checked" | "defaultChe
     readonly label: ReactNode;
   };
 
-function SwitchField({ appearance, description, label, ...props }: SwitchFieldProps) {
-  const styles = switchStyles({ appearance });
+function SwitchField({ appearance, density, description, label, ...props }: SwitchFieldProps) {
+  const styles = switchStyles({ appearance, density });
   return (
     <label className={styles.root()}>
       <span className={styles.copy()}>

@@ -13,11 +13,12 @@ function AdminForm({ className, layout, ...props }: AdminFormProps) {
 interface AdminFormSectionProps {
   readonly children: ReactNode;
   readonly description: ReactNode;
+  readonly orientation?: "split" | "stacked";
   readonly title: ReactNode;
 }
 
-function AdminFormSection({ children, description, title }: AdminFormSectionProps) {
-  const styles = adminFormStyles();
+function AdminFormSection({ children, description, orientation = "split", title }: AdminFormSectionProps) {
+  const styles = adminFormStyles({ orientation });
   return (
     <section data-slot="admin-form-section" className={styles.section()}>
       <header data-slot="admin-form-section-header" className={styles.sectionHeader()}>

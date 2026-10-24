@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "@xterm/xterm/css/xterm.css";
 @import "./tokens.css";
 @source "../design-system";
 

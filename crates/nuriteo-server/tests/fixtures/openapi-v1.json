@@ -398,6 +398,27 @@
           "invitations"
         ],
         "operationId": "list_invitations",
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "maximum": 100,
+              "minimum": 1
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Bounded safe invitation metadata without activation credentials",
@@ -1244,6 +1265,92 @@
       }
     },
     "/api/v1/admin/backups/operations": {
+      "get": {
+        "tags": [
+          "administration"
+        ],
+        "operationId": "list_backup_operations",
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "maximum": 100,
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminBackupOperationCollectionView"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "projectSessionCookie": []
+          }
+        ]
+      },
       "post": {
         "tags": [
           "administration"
@@ -4226,6 +4333,27 @@
           "administration"
         ],
         "operationId": "update_history",
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "maximum": 100,
+              "minimum": 1
+            }
+          }
+        ],
         "responses": {
           "200": {
             "headers": {
@@ -16068,6 +16196,26 @@
           }
         }
       },
+      "AdminBackupOperationCollectionView": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminBackupOperationView"
+            }
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
       "AdminBackupOperationRequest": {
         "type": "object",
         "required": [
@@ -17168,6 +17316,12 @@
             "items": {
               "$ref": "#/components/schemas/AdminUpdateHistoryItemView"
             }
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },

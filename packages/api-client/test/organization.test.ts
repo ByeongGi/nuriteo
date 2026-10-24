@@ -57,7 +57,7 @@ async function testActivationInvitationContracts(): Promise<void> {
   const calls: RequestCall[] = [];
   const queue = [
     jsonResponse(issuedActivation(), 201),
-    jsonResponse({ items: [activationInvitation()] }),
+    jsonResponse({ items: [activationInvitation()], nextCursor: null }),
     jsonResponse(issuedActivation(), 200),
     new Response(null, { status: 204 }),
     new Response(null, { status: 204 })
@@ -241,8 +241,8 @@ async function testUnicodeInvitationEmailContracts(): Promise<void> {
 
 async function testFailClosedBoundaries(): Promise<void> {
   const invalidPayloads: Array<() => Promise<unknown>> = [
-    () => listActivationInvitations(singleResponse({ items: [{ ...activationInvitation(), activation_url: "https://example.test/activate?token=secret" }] })),
-    () => listActivationInvitations(singleResponse({ items: Array.from({ length: 101 }, activationInvitation) })),
+    () => listActivationInvitations(singleResponse({ items: [{ ...activationInvitation(), activation_url: "https://example.test/activate?token=secret" }], nextCursor: null })),
+    () => listActivationInvitations(singleResponse({ items: Array.from({ length: 101 }, activationInvitation), nextCursor: null })),
     () => listOrganizationMembers(singleResponse({ items: [{ userId: USER_ID, displayName: "x".repeat(201), role: "owner" }] }), ORGANIZATION_ID),
     () => listOrganizationInvitations(singleResponse({ items: [{ ...organizationInvitation(), token_digest: "secret" }] }), ORGANIZATION_ID),
     () => issueOrganizationInvitation(singleResponse({ ...issuedOrganizationInvitation(), acceptUrl: "https://example.test/wrong?token=secret" }, 201), { organizationId: ORGANIZATION_ID, email: MEMBER_EMAIL, role: "member" }, { csrfToken: CSRF }),

@@ -11,6 +11,7 @@ use serde::de::DeserializeOwned;
 use serde_json::Value;
 use utoipa::ToSchema;
 use utoipa_axum::{router::OpenApiRouter, routes};
+use uuid::Uuid;
 
 use crate::audit::AuditEventId;
 use crate::http::{FieldViolation, HttpError, RequestId};
@@ -20,10 +21,10 @@ use crate::policy::{PolicyCleanupPreview, PolicyImpactPreview};
 use super::{
     AdminAuditEventCollectionView, AdminAuditEventView, AdminAuditExportFormat,
     AdminAuditExportInput, AdminAuditListInput, AdminAuditRetentionPreview,
-    AdminAuditRetentionPruneView, AdminBackupConsoleView, AdminBackupOperationRequest,
-    AdminBackupPolicyUpdate, AdminHttpService, AdminHttpServiceError, AdminMaintenanceView,
-    AdminOperationsView, AdminSettingListView, AdminSettingView, AdminStatusView,
-    AdminSupportBundleView, AdminUpdateApprovalView, AdminUpdateHistoryView,
+    AdminAuditRetentionPruneView, AdminBackupConsoleView, AdminBackupOperationCollectionView,
+    AdminBackupOperationRequest, AdminBackupPolicyUpdate, AdminHttpService, AdminHttpServiceError,
+    AdminMaintenanceView, AdminOperationsView, AdminSettingListView, AdminSettingView,
+    AdminStatusView, AdminSupportBundleView, AdminUpdateApprovalView, AdminUpdateHistoryView,
     AdminUpdateReadinessView,
 };
 
@@ -72,7 +73,7 @@ pub(crate) fn openapi_router(
         .routes(routes!(maintenance_status, set_maintenance))
         .routes(routes!(backup_console))
         .routes(routes!(update_backup_policy))
-        .routes(routes!(enqueue_backup_operation))
+        .routes(routes!(list_backup_operations, enqueue_backup_operation))
 }
 
 #[utoipa::path(
@@ -181,6 +182,52 @@ async fn enqueue_backup_operation(
     Ok(response)
 }
 
+#[derive(Debug, Default, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+struct BackupOperationsQuery {
+    cursor: Option<String>,
+    limit: Option<u16>,
+}
+
+#[utoipa::path(
+    get,
+    path = BACKUP_OPERATIONS,
+    tag = "administration",
+    security(("projectSessionCookie" = [])),
+    params(("cursor" = Option<String>, Query), ("limit" = Option<u16>, Query, minimum = 1, maximum = 100)),
+    responses(
+        (status = 200, body = AdminBackupOperationCollectionView, headers(("Cache-Control" = String))),
+        (status = 401, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+        (status = 403, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+        (status = 422, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
+        (status = 503, body = crate::openapi::ProblemDetails, content_type = "application/problem+json")
+    )
+)]
+async fn list_backup_operations(
+    State(service): State<AdminHttpService>,
+    Extension(request_id): Extension<RequestId>,
+    Query(query): Query<BackupOperationsQuery>,
+    request: Request,
+) -> Result<Response, HttpError> {
+    let limit = query.limit.unwrap_or(25);
+    if !(1..=100).contains(&limit) {
+        return Err(validation(&request_id, BACKUP_OPERATIONS, "limit"));
+    }
+    let cursor = query
+        .cursor
+        .map(|value| {
+            Uuid::parse_str(&value)
+                .map_err(|_| validation(&request_id, BACKUP_OPERATIONS, "cursor"))
+        })
+        .transpose()?;
+    let headers = BrowserHeaders::read(request.headers(), &request_id, BACKUP_OPERATIONS)?;
+    let view = service
+        .backup_operations(headers.request(BrowserMethod::Get), cursor, limit)
+        .await
+        .map_err(|error| map_error(error, request_id.clone(), BACKUP_OPERATIONS))?;
+    Ok(private_no_store(Json(view).into_response()))
+}
+
 #[derive(Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
 struct UpdateSettingRequest {
@@ -197,6 +244,13 @@ struct PolicyImpactRequest {
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 struct PolicyCleanupPreviewQuery {
     batch_limit: Option<u16>,
+}
+
+#[derive(Debug, Default, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+struct UpdateHistoryQuery {
+    cursor: Option<String>,
+    limit: Option<u16>,
 }
 
 #[derive(Debug, Default, Deserialize, ToSchema)]
@@ -342,6 +396,7 @@ async fn update_readiness(
     path = UPDATE_HISTORY,
     tag = "administration",
     security(("projectSessionCookie" = [])),
+    params(("cursor" = Option<String>, Query), ("limit" = Option<u16>, Query, minimum = 1, maximum = 100)),
     responses(
         (status = 200, body = AdminUpdateHistoryView, headers(("Cache-Control" = String))),
         (status = 401, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
@@ -355,9 +410,19 @@ async fn update_history(
     Extension(request_id): Extension<RequestId>,
     request: Request,
 ) -> Result<Response, HttpError> {
+    let query = parse_query::<UpdateHistoryQuery>(request.uri(), &request_id, UPDATE_HISTORY)?;
+    let limit = query.limit.unwrap_or(25);
+    if !(1..=100).contains(&limit) {
+        return Err(validation(&request_id, UPDATE_HISTORY, "limit"));
+    }
+    let cursor = query
+        .cursor
+        .map(|value| value.parse::<AuditEventId>().map(|id| id.to_string()))
+        .transpose()
+        .map_err(|_| validation(&request_id, UPDATE_HISTORY, "cursor"))?;
     let headers = BrowserHeaders::read(request.headers(), &request_id, UPDATE_HISTORY)?;
     let view = service
-        .update_history(headers.request(BrowserMethod::Get))
+        .update_history(headers.request(BrowserMethod::Get), cursor, limit)
         .await
         .map_err(|error| map_error(error, request_id, UPDATE_HISTORY))?;
     Ok(private_no_store(Json(view).into_response()))

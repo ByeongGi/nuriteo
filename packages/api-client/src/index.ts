@@ -70,10 +70,13 @@ export { getAdminOperations } from "./admin-operations.ts";
 export {
   enqueueAdminBackupOperation,
   getAdminBackups,
+  listAdminBackupOperations,
   updateAdminBackupPolicy
 } from "./admin-backups.ts";
 export type {
   AdminBackupConsole,
+  AdminBackupOperation,
+  AdminBackupOperationCollection,
   AdminBackupOperationKind,
   AdminBackupPolicy,
   AdminBackupPolicyUpdate

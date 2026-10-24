@@ -48,6 +48,7 @@ export interface ActivationInvitation {
 
 export interface ActivationInvitationCollection {
   readonly items: readonly ActivationInvitation[];
+  readonly nextCursor: string | null;
 }
 
 export type IssuedActivationInvitation = ActivationInvitation & (
@@ -87,9 +88,16 @@ export async function issueActivationInvitation(
 
 export async function listActivationInvitations(
   client: ApiClient,
-  options: DomainRequestOptions = {}
+  options: DomainRequestOptions & { readonly cursor?: string; readonly limit?: number } = {}
 ): Promise<ApiResult<ActivationInvitationCollection>> {
-  const response = await client.get<unknown>("/admin/activation-invitations", options);
+  const { cursor, limit, ...requestOptions } = options;
+  const parameters = new URLSearchParams();
+  if (cursor !== undefined) parameters.set("cursor", validatedId(cursor));
+  if (limit !== undefined) {
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) throw new TypeError("invalid invitation page limit");
+    parameters.set("limit", String(limit));
+  }
+  const response = await client.get<unknown>(`/admin/activation-invitations${parameters.size === 0 ? "" : `?${parameters.toString()}`}`, requestOptions);
   return validatedResult(response, parseCollection);
 }
 
@@ -178,9 +186,11 @@ function issuedResult(
 }
 
 function parseCollection(value: unknown): ActivationInvitationCollection {
-  const root = readExactRecord(value, ["items"]);
+  const root = readExactRecord(value, ["items", "nextCursor"]);
+  if (root.nextCursor !== null && typeof root.nextCursor !== "string") throw new TypeError("invalid invitation cursor");
   return {
-    items: readBoundedArray(root, "items", MAX_INVITATIONS).map(parseInvitation)
+    items: readBoundedArray(root, "items", MAX_INVITATIONS).map(parseInvitation),
+    nextCursor: root.nextCursor === null ? null : validatedId(root.nextCursor)
   };
 }
 

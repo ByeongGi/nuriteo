@@ -1,9 +1,9 @@
-import zlib from "node:zlib";
+import { gunzipSync, gzipSync } from "../builtins/zlib.ts";
 
-export function gunzip(bytes: Uint8Array): Buffer {
-  return zlib.gunzipSync(bytes);
+export function gunzip(bytes: Uint8Array): Uint8Array {
+  return gunzipSync(bytes);
 }
 
-export function gzip(bytes: Uint8Array): Buffer {
-  return zlib.gzipSync(bytes);
+export function gzip(bytes: Uint8Array): Uint8Array {
+  return gzipSync(bytes);
 }

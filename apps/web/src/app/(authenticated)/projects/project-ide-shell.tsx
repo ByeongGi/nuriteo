@@ -1,17 +1,18 @@
 "use client";
 
 import type { Project } from "@nuriteo/api-client";
-import { useEffect, useRef, useState } from "react";
-import type { FormEvent } from "react";
+import dynamic from "next/dynamic";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { CSSProperties, FormEvent, PointerEvent as ReactPointerEvent } from "react";
 import { tv } from "tailwind-variants";
 
 import { Button } from "#src/components/ui/button.tsx";
 import { ConfirmationDialog } from "#src/components/ui/confirmation-dialog.tsx";
-import { CollapsibleContent, CollapsiblePanel, CollapsibleRoot, CollapsibleTrigger } from "#src/components/ui/collapsible.tsx";
 import { Input } from "#src/components/ui/input.tsx";
+import { MenuGroupLabel, MenuItem, MenuPopup, MenuPortal, MenuPositioner, MenuRadioGroup, MenuRadioItem, MenuRadioItemIndicator, MenuRoot, MenuSeparator, MenuTrigger } from "#src/components/ui/menu.tsx";
 import { SearchField } from "#src/components/ui/search-field.tsx";
-import { TabsIndicator, TabsList, TabsRoot, TabsTab } from "#src/components/ui/tabs.tsx";
-import { Textarea } from "#src/components/ui/textarea.tsx";
+import { EDITOR_THEME_OPTIONS, parseEditorThemePreference, readEditorThemePreference, writeEditorThemePreference } from "#src/app/(authenticated)/projects/project-editor-theme.ts";
+import type { EditorThemePreference } from "#src/app/(authenticated)/projects/project-editor-theme.ts";
 import { createBrowserApiClient } from "#src/lib/api/browser-client.ts";
 import { readCsrfCredential } from "#src/lib/api/browser-security.ts";
 import { createRetryableLazyFeature } from "#src/lib/retryable-lazy-feature.ts";
@@ -24,13 +25,16 @@ import type {
   RuntimeWorkspaceState
 } from "#src/runtime/runtime-adapter.ts";
 import { resolveRuntimeAssetRevision } from "#src/runtime/runtime-assets.ts";
+import { hotUpdatePreviewBridges } from "#src/runtime/preview-hot-update.ts";
 import { awaitWorkspaceStart } from "#src/runtime/workspace-start.ts";
 import { createSubdomainPreviewBridge } from "#src/runtime/subdomain-preview-bridge.ts";
+import { createPreviewWindowUrl } from "#src/runtime/preview-origin-contract.ts";
 import type { PreviewOriginConfiguration } from "#src/runtime/preview-origin-contract.ts";
-import type { SubdomainPreviewBridge } from "#src/runtime/subdomain-preview-bridge.ts";
-import { ProjectHistoryPanel } from "#src/app/(authenticated)/projects/project-history-panel.tsx";
-import type { ProjectHistoryState, RestoredProjectHead } from "#src/app/(authenticated)/projects/project-history-panel.tsx";
-import { useProjectFileSearch } from "#src/app/(authenticated)/projects/use-project-file-search.ts";
+import type { PreviewChangeKind, SubdomainPreviewBridge } from "#src/runtime/subdomain-preview-bridge.ts";
+import { useProjectContentSearch, useProjectFileSearch } from "#src/app/(authenticated)/projects/use-project-file-search.ts";
+import { ProjectFileTree } from "#src/app/(authenticated)/projects/project-file-tree.tsx";
+import { ProjectTerminalView } from "#src/app/(authenticated)/projects/project-terminal-view.tsx";
+import { useProjectTerminalSessions } from "#src/app/(authenticated)/projects/use-project-terminal-sessions.ts";
 
 const EMPTY_RUNTIME_STATE: RuntimeViewState = {
   generation: 0,
@@ -39,58 +43,98 @@ const EMPTY_RUNTIME_STATE: RuntimeViewState = {
   workflowPhase: "idle",
   hmrState: "idle",
   previewUrl: null,
+  ports: [],
+  processes: [],
   diagnostics: [],
   localDraftAccess: "none",
   terminalProcessCount: 0
 };
-const MAX_TERMINAL_OUTPUT_CHARS = 64 * 1024;
 const MAX_TERMINAL_COMMAND_CHARS = 2_048;
 const RUNTIME_BOOT_TIMEOUT_MS = 10_000;
 const RUNTIME_RELAY_TIMEOUT_MS = 10_000;
 const RUNTIME_MEMORY_LIMIT_BYTES = 512 * 1024 * 1024;
+const PREVIEW_WINDOW_CONNECT_TIMEOUT_MS = 3_000;
+const PREVIEW_WINDOW_CLOSED_POLL_MS = 1_000;
 const FILE_LIST_BATCH_SIZE = 200;
 const EMPTY_WORKSPACE_FILES: readonly RuntimeWorkspaceFile[] = [];
 
+const ProjectMonacoEditor = dynamic(
+  () => import("#src/app/(authenticated)/projects/project-monaco-editor.tsx").then((module) => module.ProjectMonacoEditor),
+  {
+    loading: () => <div className="grid h-full min-h-0 place-items-center bg-surface text-xs text-muted-foreground" role="status">코드 편집기를 준비하는 중…</div>,
+    ssr: false
+  }
+);
+
 const ideStyles = tv({
   slots: {
-    shell: "flex min-h-[calc(100vh-3.25rem)] min-w-0 flex-col overflow-hidden bg-surface",
-    header: "flex min-w-0 items-center justify-between gap-4 border-b border-muted-border bg-raised px-4 py-2 max-[48rem]:items-start max-[48rem]:flex-col",
-    identity: "flex min-w-0 items-center gap-3 [&_p]:m-0 [&_p]:text-xs [&_p]:text-muted-foreground [&_h3]:m-0 [&_h3]:truncate [&_h3]:text-base",
-    headerActions: "flex flex-wrap items-center justify-end gap-2 max-[48rem]:w-full max-[48rem]:justify-start",
-    access: "rounded-full border border-muted-border bg-subtle px-2 py-1 text-[var(--n-font-size-2xs)] font-semibold text-muted-foreground",
-    saveState: "flex items-center gap-2 text-xs text-muted-foreground",
-    message: "mx-4 mt-3 flex items-start gap-3 rounded-lg border px-4 py-3 text-sm",
-    panelHeading: "mb-3 flex items-center justify-between gap-3 px-2 [&>div]:grid [&>div]:gap-0.5 [&_span]:text-[var(--n-font-size-2xs)] [&_span]:text-muted-foreground [&_strong]:text-sm",
-    workbench: "grid min-h-[38rem] min-w-0 flex-1 grid-cols-[15rem_minmax(0,1fr)_minmax(20rem,34%)] max-[72rem]:grid-cols-[14rem_minmax(0,1fr)] max-[48rem]:grid-cols-1",
-    files: "min-w-0 overflow-hidden border-r border-muted-border bg-raised max-[48rem]:max-h-72 max-[48rem]:border-r-0 max-[48rem]:border-b [&_ul]:m-0 [&_ul]:grid [&_ul]:list-none [&_ul]:gap-1 [&_ul]:p-0 [&_li]:[content-visibility:auto] [&_li]:[contain-intrinsic-size:0_2.5rem] [&_li_button]:grid [&_li_button]:min-h-9 [&_li_button]:w-full [&_li_button]:grid-cols-[1rem_minmax(0,1fr)_auto] [&_li_button]:items-center [&_li_button]:gap-2 [&_li_button]:rounded-sm [&_li_button]:px-2 [&_li_button]:font-mono [&_li_button]:text-xs [&_li_button]:text-muted-foreground [&_li_button]:hover:bg-hover [&_li_button]:hover:text-foreground [&_li_button[aria-current=page]]:bg-selected [&_li_button[aria-current=page]]:font-semibold [&_li_button[aria-current=page]]:text-primary [&_li_button>span:nth-child(2)]:truncate",
-    editor: "grid min-h-0 min-w-0 grid-rows-[2.75rem_2rem_minmax(20rem,1fr)_2.75rem] border-r border-muted-border bg-surface max-[72rem]:border-r-0",
-    utility: "min-h-0 min-w-0 overflow-hidden border-l border-muted-border bg-raised max-[72rem]:col-span-2 max-[72rem]:border-l-0 max-[72rem]:border-t max-[48rem]:col-span-1",
-    fileSearch: "relative block [&_input]:h-9 [&_input]:w-full [&_input]:rounded-md [&_input]:border [&_input]:border-muted-border [&_input]:bg-surface [&_input]:pl-3 [&_input]:pr-8 [&_input]:text-xs",
-    fileCount: "mx-2 mb-2 mt-3 text-xs text-muted-foreground",
-    fileIcon: "font-mono text-xs text-primary",
-    fileEmpty: "px-2 py-4 text-xs text-muted-foreground",
-    fileMore: "mt-2 min-h-10 w-full rounded-md border border-dashed border-border bg-transparent text-xs font-semibold text-primary hover:border-solid hover:bg-hover",
-    editorTabs: "flex items-stretch overflow-hidden border-b border-muted-border bg-subtle text-xs text-muted-foreground [&>span]:self-center [&>span]:px-4 [&>div]:flex [&>div]:max-w-64 [&>div]:items-center [&>div]:gap-2 [&>div]:border-r [&>div]:border-muted-border [&>div]:px-3 [&>div.is-active]:border-t-2 [&>div.is-active]:border-t-primary [&>div.is-active]:bg-surface [&>div.is-active]:text-foreground [&_strong]:truncate",
-    breadcrumb: "flex min-w-0 items-center gap-2 overflow-hidden border-b border-muted-border px-4 font-mono text-[var(--n-font-size-2xs)] whitespace-nowrap text-muted-foreground [&_span+span]:before:mr-2 [&_span+span]:before:text-strong-border [&_span+span]:before:content-['/']",
-    editorInput: "min-h-80 w-full resize-none rounded-none border-0 bg-surface px-6 py-5 font-mono text-sm leading-7 text-foreground outline-none focus-visible:shadow-[inset_0_0_0_2px_color-mix(in_srgb,var(--n-color-action-primary)_38%,transparent)] read-only:cursor-not-allowed read-only:bg-subtle",
+    shell: "relative flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-surface text-foreground",
+    header: "flex min-h-12 shrink-0 min-w-0 items-center justify-between gap-4 border-b border-muted-border bg-raised px-3 py-1.5 max-[48rem]:items-start max-[48rem]:flex-col",
+    identity: "flex min-w-0 items-center gap-2.5 [&_p]:m-0 [&_p]:text-[0.6875rem] [&_p]:font-semibold [&_p]:uppercase [&_p]:tracking-[0.06em] [&_p]:text-foreground [&_h3]:m-0 [&_h3]:truncate",
+    identityCopy: "grid min-w-0 gap-0.5",
+    runtimeMeta: "flex items-center gap-2 text-[0.6875rem] text-muted-foreground",
+    headerActions: "flex flex-wrap items-center justify-end gap-1.5 max-[48rem]:w-full max-[48rem]:justify-start [&_[data-slot=button]]:min-h-8 [&_[data-slot=button]]:px-2.5 [&_[data-slot=button]]:text-[0.6875rem] [&_[data-slot=button]]:shadow-none",
+    access: "rounded-sm border border-primary/25 bg-selected px-1.5 py-0.5 text-[0.625rem] font-semibold text-primary",
+    saveState: "flex max-w-80 items-center gap-2 truncate text-[0.6875rem] text-muted-foreground",
+    quickOpen: "absolute left-1/2 top-14 z-50 grid w-[min(38rem,calc(100%-2rem))] -translate-x-1/2 grid-rows-[auto_minmax(0,20rem)] overflow-hidden rounded-md border border-muted-border bg-raised shadow-xl [&_input]:h-10 [&_input]:w-full [&_input]:border-0 [&_input]:border-b [&_input]:border-muted-border [&_input]:bg-surface [&_input]:px-3 [&_input]:font-mono [&_input]:text-sm [&_input]:outline-none [&_ul]:m-0 [&_ul]:grid [&_ul]:max-h-80 [&_ul]:list-none [&_ul]:overflow-auto [&_ul]:p-1 [&_button]:grid [&_button]:min-h-9 [&_button]:w-full [&_button]:grid-cols-[minmax(0,1fr)_auto] [&_button]:items-center [&_button]:gap-3 [&_button]:rounded-sm [&_button]:border-0 [&_button]:bg-transparent [&_button]:px-3 [&_button]:text-left [&_button]:hover:bg-hover [&_button]:aria-selected:bg-selected [&_button]:aria-selected:text-primary [&_button_strong]:truncate [&_button_strong]:font-mono [&_button_strong]:text-xs [&_button_small]:truncate [&_button_small]:font-mono [&_button_small]:text-[0.625rem] [&_button_small]:text-muted-foreground",
+    message: "mx-2 mt-1.5 flex shrink-0 items-center gap-3 rounded border px-2.5 py-1.5 text-[0.6875rem]",
+    panelHeading: "flex min-h-9 items-center justify-between gap-3 border-y border-muted-border bg-subtle px-3 [&>div]:flex [&>div]:items-center [&>div]:gap-2 [&_span]:text-[0.625rem] [&_span]:font-semibold [&_span]:uppercase [&_span]:tracking-[0.08em] [&_span]:text-muted-foreground [&_strong]:text-[0.6875rem] [&_strong]:font-semibold [&_strong]:text-foreground",
+    fileActions: "flex items-center gap-px [&_button]:grid [&_button]:size-7 [&_button]:place-items-center [&_button]:rounded-sm [&_button]:border-0 [&_button]:bg-transparent [&_button]:text-sm [&_button]:text-muted-foreground [&_button]:hover:bg-hover [&_button]:hover:text-foreground [&_button:disabled]:cursor-not-allowed [&_button:disabled]:opacity-35",
+    fileOperation: "mx-2 mt-2 grid grid-cols-[minmax(0,1fr)_auto] gap-1 [&_input]:h-8 [&_input]:min-w-0 [&_input]:rounded-sm [&_input]:border [&_input]:border-primary [&_input]:bg-surface [&_input]:px-2.5 [&_input]:font-mono [&_input]:text-[0.6875rem] [&_button]:min-h-8 [&_button]:px-2 [&_button]:text-[0.625rem]",
+    workbench: "grid min-h-0 min-w-0 flex-1 grid-cols-[3rem_var(--studio-sidebar-width)_minmax(24rem,1fr)_var(--studio-preview-width)] max-[72rem]:grid-cols-[3rem_14rem_minmax(0,1fr)] max-[72rem]:overflow-auto max-[48rem]:grid-cols-[3rem_minmax(0,1fr)]",
+    activity: "flex min-h-0 flex-col items-center gap-1 border-r border-muted-border bg-sidebar py-2 max-[48rem]:max-h-72",
+    activityButton: "grid size-10 place-items-center rounded-sm border-0 border-l-2 border-l-transparent bg-transparent p-0 text-muted-foreground hover:bg-hover hover:text-foreground aria-[pressed=true]:border-l-primary aria-[pressed=true]:bg-selected aria-[pressed=true]:text-primary focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-primary [&_svg]:size-[1.15rem]",
+    activityDivider: "my-1 h-px w-6 bg-muted-border",
+    files: "relative grid min-h-0 min-w-0 grid-rows-[auto_auto_auto_auto_minmax(0,1fr)] overflow-visible border-r border-muted-border bg-raised max-[48rem]:col-start-2 max-[48rem]:max-h-72 max-[48rem]:border-r-0 max-[48rem]:border-b [&>*:not([role=separator])]:min-w-0",
+    projectSummary: "grid gap-1 px-3 py-3 [&_strong]:truncate [&_strong]:text-xs [&_strong]:font-semibold [&_strong]:text-foreground [&_span]:truncate [&_span]:text-[0.6875rem] [&_span]:text-muted-foreground",
+    fileList: "min-h-0 overflow-auto px-1.5 pb-3",
+    contentResults: "min-h-0 overflow-auto px-1.5 pb-3 [&_ul]:m-0 [&_ul]:grid [&_ul]:list-none [&_ul]:gap-1 [&_ul]:p-0 [&_button]:grid [&_button]:w-full [&_button]:grid-cols-[minmax(0,1fr)_auto] [&_button]:gap-x-2 [&_button]:rounded-sm [&_button]:border-0 [&_button]:bg-transparent [&_button]:px-2 [&_button]:py-2 [&_button]:text-left [&_button]:hover:bg-hover [&_button_strong]:truncate [&_button_strong]:font-mono [&_button_strong]:text-[0.6875rem] [&_button_strong]:text-primary [&_button_small]:font-mono [&_button_small]:text-[0.625rem] [&_button_small]:text-muted-foreground [&_button_span]:col-span-2 [&_button_span]:mt-1 [&_button_span]:truncate [&_button_span]:font-mono [&_button_span]:text-[0.625rem] [&_button_span]:text-muted-foreground",
+    editorStack: "grid min-h-0 min-w-0 grid-rows-[minmax(0,1fr)_auto] border-r border-muted-border max-[72rem]:min-h-[30rem] max-[72rem]:border-r-0 max-[48rem]:col-span-2",
+    editor: "grid min-h-0 min-w-0 grid-rows-[2.5rem_minmax(0,1fr)_auto] bg-surface",
+    utility: "relative grid min-h-0 min-w-0 grid-rows-[minmax(0,1fr)] overflow-visible border-l border-muted-border bg-raised max-[72rem]:col-span-3 max-[72rem]:min-h-96 max-[72rem]:border-l-0 max-[72rem]:border-t max-[48rem]:col-span-2 [&>*:not([role=separator])]:min-w-0",
+    fileSearch: "relative mx-2 mt-2 block [&_input]:h-8 [&_input]:w-full [&_input]:rounded-sm [&_input]:border [&_input]:border-muted-border [&_input]:bg-surface [&_input]:pl-2.5 [&_input]:pr-7 [&_input]:text-[0.6875rem]",
+    searchArea: "grid gap-1",
+    searchControls: "mx-2 flex items-center justify-end gap-1 [&_button]:grid [&_button]:size-7 [&_button]:place-items-center [&_button]:rounded-sm [&_button]:border-0 [&_button]:bg-transparent [&_button]:font-mono [&_button]:text-[0.625rem] [&_button]:font-semibold [&_button]:text-muted-foreground [&_button]:hover:bg-hover [&_button]:hover:text-foreground [&_button[aria-pressed=true]]:bg-selected [&_button[aria-pressed=true]]:text-primary",
+    fileCount: "mx-3 mb-1.5 mt-2 text-[0.625rem] uppercase tracking-[0.05em] text-muted-foreground",
+    fileIcon: "font-mono text-[0.6875rem] text-primary",
+    fileEmpty: "px-2 py-4 text-[0.6875rem] text-muted-foreground",
+    fileMore: "mt-2 min-h-8 w-full rounded-sm border border-dashed border-muted-border bg-transparent text-[0.6875rem] font-semibold text-primary hover:border-solid hover:bg-hover",
+    editorTabs: "flex min-w-0 items-stretch overflow-x-auto overflow-y-hidden border-b border-muted-border bg-subtle text-[0.6875rem] text-muted-foreground [&>span]:self-center [&>span]:px-3 [&>div]:flex [&>div]:max-w-64 [&>div]:shrink-0 [&>div]:items-center [&>div]:border-r [&>div]:border-muted-border [&>div.is-active]:border-t-2 [&>div.is-active]:border-t-primary [&>div.is-active]:bg-surface [&>div.is-active]:text-foreground [&_.tab-select]:flex [&_.tab-select]:min-w-0 [&_.tab-select]:items-center [&_.tab-select]:gap-2 [&_.tab-select]:border-0 [&_.tab-select]:bg-transparent [&_.tab-select]:px-3 [&_.tab-select]:py-1 [&_.tab-select]:text-inherit [&_.tab-close]:mr-1 [&_.tab-close]:grid [&_.tab-close]:size-6 [&_.tab-close]:place-items-center [&_.tab-close]:border-0 [&_.tab-close]:bg-transparent [&_.tab-close]:text-muted-foreground [&_.tab-close]:hover:bg-hover [&_strong]:max-w-40 [&_strong]:truncate",
+    editorHost: "relative min-h-0 min-w-0 overflow-hidden bg-surface focus-within:shadow-[inset_0_0_0_1px_var(--n-color-border-focus)]",
+    editorPanes: "grid h-full min-h-0 min-w-0 grid-cols-1 divide-x divide-muted-border data-[split=true]:grid-cols-2 max-[56rem]:data-[split=true]:grid-cols-1 max-[56rem]:data-[split=true]:grid-rows-2 max-[56rem]:data-[split=true]:divide-x-0 max-[56rem]:data-[split=true]:divide-y [&>div]:min-h-0 [&>div]:min-w-0",
     editorEmpty: "grid place-content-center justify-items-center p-8 text-center text-muted-foreground [&>span]:mb-3 [&>span]:grid [&>span]:size-12 [&>span]:place-items-center [&>span]:rounded-lg [&>span]:border [&>span]:border-muted-border [&>span]:bg-subtle [&>span]:text-xl [&>span]:text-primary [&_p]:mt-2 [&_p]:max-w-md [&_p]:text-xs",
-    status: "flex min-w-0 items-center justify-between gap-3 border-t border-muted-border bg-subtle px-3 text-[var(--n-font-size-2xs)] text-muted-foreground max-[48rem]:flex-wrap max-[48rem]:py-2 [&>span]:flex [&>span]:min-w-0 [&>span]:items-center [&>span]:gap-2 [&>span]:truncate",
-    utilityTabs: "flex border-b border-muted-border bg-subtle [&_button]:flex [&_button]:min-w-26 [&_button]:items-center [&_button]:justify-center [&_button]:gap-2 [&_button]:border-0 [&_button]:border-b-2 [&_button]:border-b-transparent [&_button]:bg-transparent [&_button]:text-xs [&_button]:font-semibold [&_button]:text-muted-foreground [&_button[aria-selected=true]]:border-b-primary [&_button[aria-selected=true]]:bg-surface [&_button[aria-selected=true]]:text-foreground",
+    status: "flex min-h-7 min-w-0 items-center justify-between gap-3 border-t border-muted-border bg-subtle px-2.5 text-[0.625rem] text-muted-foreground max-[48rem]:flex-wrap max-[48rem]:py-2 [&>span]:flex [&>span]:min-w-0 [&>span]:items-center [&>span]:gap-2 [&>span]:truncate [&_button]:min-h-6 [&_button]:bg-transparent [&_button]:px-2 [&_button]:text-[0.625rem]",
     utilityEmpty: "grid place-content-center justify-items-center p-8 text-center text-muted-foreground [&>span]:mb-3 [&>span]:grid [&>span]:size-12 [&>span]:place-items-center [&>span]:rounded-lg [&>span]:border [&>span]:border-muted-border [&>span]:bg-subtle [&>span]:text-xl [&>span]:text-primary [&_p]:mt-2 [&_p]:max-w-md [&_p]:text-xs",
-    preview: "grid min-h-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden [&_iframe]:h-full [&_iframe]:min-h-96 [&_iframe]:w-full [&_iframe]:border-0 [&_iframe]:bg-white",
-    previewToolbar: "flex min-h-11 items-center justify-between gap-3 border-b border-muted-border bg-surface px-4 text-xs text-muted-foreground",
-    live: "flex items-center gap-2 text-[var(--n-font-size-2xs)] font-bold text-success",
+    preview: "grid min-h-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden [&_iframe]:h-full [&_iframe]:min-h-0 [&_iframe]:w-full [&_iframe]:border-0 [&_iframe]:bg-white",
+    previewToolbar: "grid min-h-10 grid-cols-[auto_minmax(8rem,1fr)_auto] items-center gap-1.5 border-b border-muted-border bg-raised px-1.5 text-[0.6875rem] text-muted-foreground",
+    previewControls: "flex items-center gap-px [&_button]:grid [&_button]:size-7 [&_button]:place-items-center [&_button]:rounded-sm [&_button]:border-0 [&_button]:bg-transparent [&_button]:text-sm [&_button]:text-muted-foreground [&_button]:hover:bg-hover [&_button]:hover:text-foreground [&_button:disabled]:opacity-35",
+    previewAddress: "flex min-w-0 items-center gap-2 rounded-full border border-muted-border bg-surface px-3 py-1.5 font-mono text-[0.625rem] text-muted-foreground [&_span:last-child]:truncate",
+    previewActions: "flex items-center gap-1 [&_[data-slot=button]]:min-h-7 [&_[data-slot=button]]:px-2 [&_[data-slot=button]]:text-[0.625rem]",
+    live: "flex items-center gap-1.5 text-[0.625rem] font-bold text-success",
     start: "grid min-h-[30rem] flex-1 grid-cols-[minmax(16rem,.8fr)_minmax(20rem,1.2fr)] place-content-center gap-[clamp(2rem,6vw,4rem)] bg-page p-[clamp(2rem,7vw,4rem)] max-[48rem]:grid-cols-1",
     startMark: "mb-6 grid size-12 place-items-center rounded-lg bg-primary text-lg font-bold text-on-primary",
     startActions: "grid content-center gap-3 [&_button]:grid [&_button]:min-h-24 [&_button]:grid-cols-[2rem_minmax(0,1fr)] [&_button]:gap-x-3 [&_button]:rounded-lg [&_button]:border [&_button]:border-border [&_button]:bg-surface [&_button]:p-4 [&_button]:text-left [&_button>span]:row-span-2 [&_button>span]:self-start [&_button>strong]:col-start-2 [&_button>strong]:whitespace-normal [&_button>small]:col-start-2 [&_button>small]:mt-1 [&_button>small]:whitespace-normal [&_button>small]:text-xs [&_button>small]:leading-5 [&_button>small]:text-muted-foreground",
     startSafety: "col-span-full m-0 text-sm leading-6 text-muted-foreground",
-    history: "shrink-0 rounded-none border-x-0 border-b-0 bg-surface",
     recoveryActions: "flex flex-wrap gap-2 px-4",
     recovery: "mx-4 grid gap-3 rounded-lg border border-warning/30 bg-warning/10 p-4 text-sm",
-    terminal: "grid min-h-0 grid-rows-[auto_minmax(0,1fr)_auto] bg-[var(--n-ref-color-hanji-950)] text-[var(--n-ref-color-hanji-100)] [&_pre]:m-0 [&_pre]:min-h-0 [&_pre]:overflow-auto [&_pre]:whitespace-pre-wrap [&_pre]:p-4 [&_pre]:font-mono [&_pre]:text-xs [&_form]:grid [&_form]:grid-cols-[auto_minmax(0,1fr)_auto] [&_form]:items-center [&_form]:gap-2 [&_form]:border-t [&_form]:border-white/10 [&_form]:p-3 [&_input]:min-w-0 [&_input]:border-0 [&_input]:bg-transparent [&_input]:font-mono [&_input]:text-xs [&_input]:text-white [&_input]:outline-none",
-    terminalToolbar: "flex min-h-10 items-center justify-between gap-3 border-b border-white/10 px-4 text-xs text-white/70 [&_strong]:text-white"
+    terminal: "relative grid h-48 min-h-0 grid-rows-[2rem_minmax(0,1fr)] border-t border-white/10 bg-[#14151a] text-[#e6e7eb]",
+    terminalToolbar: "flex min-h-8 items-center justify-between gap-3 border-b border-white/10 bg-[#1b1c22] pl-2 text-[0.6875rem] text-white/70 [&_[role=tablist]]:flex [&_[role=tablist]]:h-full [&_[role=tablist]]:min-w-0 [&_[role=tablist]]:items-stretch [&_[role=tab]]:min-w-0 [&_[role=tab]]:border-0 [&_[role=tab]]:border-b-2 [&_[role=tab]]:border-b-transparent [&_[role=tab]]:bg-transparent [&_[role=tab]]:px-2.5 [&_[role=tab]]:text-white/50 [&_[role=tab]]:hover:text-white/85 [&_[role=tab][aria-selected=true]]:border-b-[#48d597] [&_[role=tab][aria-selected=true]]:text-white",
+    terminalActions: "flex h-full shrink-0 items-center [&_button]:grid [&_button]:h-full [&_button]:min-w-8 [&_button]:place-items-center [&_button]:border-0 [&_button]:border-l [&_button]:border-white/10 [&_button]:bg-transparent [&_button]:px-2 [&_button]:text-sm [&_button]:text-white/55 [&_button]:hover:bg-white/5 [&_button]:hover:text-white",
+    runtimeList: "m-0 grid min-h-0 list-none content-start gap-px overflow-auto p-2 font-mono text-[0.6875rem] text-white/70 [&_li]:grid [&_li]:grid-cols-[minmax(0,1fr)_auto] [&_li]:items-center [&_li]:gap-x-4 [&_li]:rounded-sm [&_li]:px-2.5 [&_li]:py-2 [&_li]:hover:bg-white/5 [&_strong]:truncate [&_strong]:font-medium [&_strong]:text-white/90 [&_span]:truncate [&_span]:text-white/45 [&_button]:rounded-sm [&_button]:border [&_button]:border-white/15 [&_button]:bg-transparent [&_button]:px-2 [&_button]:py-1 [&_button]:font-sans [&_button]:text-[0.625rem] [&_button]:text-white/65 [&_button]:hover:bg-white/10 [&_button]:hover:text-white [&_a]:text-[#72e5ac] [&_a]:no-underline [&_a]:hover:underline"
   },
-  variants: { focus: { true: { workbench: "grid-cols-[minmax(0,1fr)]", files: "hidden", utility: "hidden" } } }
+  variants: {
+    sidebarOpen: {
+      false: {
+        files: "hidden"
+      }
+    },
+    previewOpen: {
+      false: { utility: "hidden" }
+    },
+    focus: {
+      true: { workbench: "grid-cols-[minmax(0,1fr)]", activity: "hidden", files: "hidden", utility: "hidden" }
+    }
+  }
 });
 
 const runtimeDot = tv({
@@ -110,7 +154,20 @@ const resumeFeature = createRetryableLazyFeature<ResumeFeature>(
 type SaveFeature = typeof import("#src/save/project-save.ts");
 const saveFeature = createRetryableLazyFeature<SaveFeature>(() => import("#src/save/project-save.ts"));
 type WorkspaceSource = "saved" | "template";
-type UtilityPanel = "preview" | "terminal";
+type SidebarPanel = "files" | "search";
+type BottomPanel = "ports" | "problems" | "processes" | "output" | "terminal";
+type FileOperation = "create" | "rename";
+interface EditorDiagnostic {
+  readonly column: number;
+  readonly line: number;
+  readonly message: string;
+  readonly severity: number;
+}
+interface EditorPositionRequest {
+  readonly column: number;
+  readonly line: number;
+  readonly requestId: number;
+}
 
 interface Props {
   readonly assetRevision?: string;
@@ -120,30 +177,34 @@ interface Props {
   readonly projectEtag?: string;
   readonly onProjectCommit?: (result: { readonly projectEtag: string; readonly projectVersion: number }) => void;
   readonly onProjectReload?: () => void;
-  readonly initialHistoryState?: ProjectHistoryState;
   readonly resumeProjectContentLoader?: () => Promise<Pick<ResumeFeature, "resumeProjectContent">>;
   readonly runtimeFeatureLoader?: () => Promise<RuntimeFeature>;
   readonly workspaceScope: string;
 }
-
-export function ProjectIdeShell({ assetRevision, initialHistoryState, onProjectCommit, onProjectReload, previewBridgeFactory, previewConfiguration, project, projectEtag, resumeProjectContentLoader, runtimeFeatureLoader, workspaceScope }: Props) {
+export function ProjectIdeShell({ assetRevision, onProjectCommit, onProjectReload, previewBridgeFactory, previewConfiguration, project, projectEtag, resumeProjectContentLoader, runtimeFeatureLoader, workspaceScope }: Props) {
   const adapterRef = useRef<RuntimeAdapter | undefined>(undefined);
   const previewBridgeRef = useRef<SubdomainPreviewBridge | undefined>(undefined);
+  const previewFrameRef = useRef<HTMLIFrameElement | null>(null);
   const previewBridgeOperationRef = useRef(0);
   const previewRecoveryRef = useRef<Promise<void> | null>(null);
+  const previewWindowDisposersRef = useRef(new Set<() => void>());
+  const previewWindowBridgesRef = useRef(new Set<SubdomainPreviewBridge>());
   const unsubscribeRef = useRef<() => void>(() => undefined);
   const manifestAbortRef = useRef<AbortController | null>(null);
   const saveAbortRef = useRef<AbortController | null>(null);
-  const replacementAbortRef = useRef<AbortController | null>(null);
   const fileSearchRef = useRef<HTMLInputElement | null>(null);
-  const projectEtagRef = useRef(projectEtag);
-  const terminalTruncatedRef = useRef(false);
+  const workbenchRef = useRef<HTMLDivElement | null>(null);
   const unmountedRef = useRef(false);
   const [workspace, setWorkspace] = useState<RuntimeWorkspaceState>();
   const [selectedPath, setSelectedPath] = useState<string>();
+  const [openPaths, setOpenPaths] = useState<readonly string[]>([]);
   const [editorContent, setEditorContent] = useState("");
-  const [terminalOutput, setTerminalOutput] = useState("");
-  const [terminalWasTruncated, setTerminalWasTruncated] = useState(false);
+  const [editorDiagnostics, setEditorDiagnostics] = useState<readonly EditorDiagnostic[]>([]);
+  const [editorPositionRequest, setEditorPositionRequest] = useState<EditorPositionRequest>();
+  const [editorFormatRequestId, setEditorFormatRequestId] = useState<number>();
+  const [isEditorSplit, setIsEditorSplit] = useState(false);
+  const [editorThemePreference, setEditorThemePreference] = useState<EditorThemePreference>("system");
+  const terminal = useProjectTerminalSessions();
   const [error, setError] = useState<string>();
   const [isStarting, setIsStarting] = useState(false);
   const [startingSource, setStartingSource] = useState<WorkspaceSource>();
@@ -151,33 +212,58 @@ export function ProjectIdeShell({ assetRevision, initialHistoryState, onProjectC
   const [isRunningPreview, setIsRunningPreview] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isServerSaving, setIsServerSaving] = useState(false);
-  const [isReplacingDraft, setIsReplacingDraft] = useState(false);
   const [serverSaveStatus, setServerSaveStatus] = useState("이 세션에서 아직 서버에 저장하지 않음");
   const [serverSaveFailure, setServerSaveFailure] = useState<"retry" | "stale">();
   const [recoveringAction, setRecoveringAction] = useState<RuntimeRecoveryActionKind>();
   const [confirmingWriterTakeover, setConfirmingWriterTakeover] = useState(false);
   const [isolatedPreviewUrl, setIsolatedPreviewUrl] = useState<string>();
+  const [previewRefreshFailed, setPreviewRefreshFailed] = useState(false);
   const [editorStatus, setEditorStatus] = useState("로컬 초안");
   const [runtime, setRuntime] = useState<RuntimeViewState>(EMPTY_RUNTIME_STATE);
   const [fileQuery, setFileQuery] = useState("");
   const [fileListLimit, setFileListLimit] = useState(FILE_LIST_BATCH_SIZE);
-  const [utilityPanel, setUtilityPanel] = useState<UtilityPanel>("preview");
+  const [sidebarPanel, setSidebarPanel] = useState<SidebarPanel>("files");
+  const [isQuickOpenOpen, setIsQuickOpenOpen] = useState(false);
+  const [quickOpenQuery, setQuickOpenQuery] = useState("");
+  const [quickOpenIndex, setQuickOpenIndex] = useState(0);
+  const [fileOperation, setFileOperation] = useState<FileOperation>();
+  const [fileOperationValue, setFileOperationValue] = useState("");
+  const [confirmingFileDelete, setConfirmingFileDelete] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [matchFileCase, setMatchFileCase] = useState(false);
+  const [useFileRegularExpression, setUseFileRegularExpression] = useState(false);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(true);
+  const [isTerminalOpen, setIsTerminalOpen] = useState(false);
+  const [bottomPanel, setBottomPanel] = useState<BottomPanel>("terminal");
+  const [sidebarWidth, setSidebarWidth] = useState(240);
+  const [previewWidth, setPreviewWidth] = useState(420);
+  const [bottomPanelHeight, setBottomPanelHeight] = useState(192);
   const [isFocusMode, setIsFocusMode] = useState(false);
   const [hasUnpublishedChanges, setHasUnpublishedChanges] = useState(false);
   const [confirmingWorkspaceStop, setConfirmingWorkspaceStop] = useState(false);
-  projectEtagRef.current = projectEtag;
+
+  useEffect(() => {
+    setEditorThemePreference(readEditorThemePreference());
+  }, []);
 
   useEffect(() => {
     unmountedRef.current = false;
+    const initialUrl = new URL(globalThis.location.href);
+    if (initialUrl.searchParams.get("terminal") === "dev") {
+      setBottomPanel("terminal");
+      setIsTerminalOpen(true);
+    }
     return () => {
       unmountedRef.current = true;
       previewBridgeOperationRef.current += 1;
       manifestAbortRef.current?.abort();
       saveAbortRef.current?.abort();
-      replacementAbortRef.current?.abort();
       unsubscribeRef.current();
       const bridge = previewBridgeRef.current;
       previewBridgeRef.current = undefined;
+      for (const dispose of previewWindowDisposersRef.current) dispose();
+      previewWindowDisposersRef.current.clear();
+      previewWindowBridgesRef.current.clear();
       void bridge?.dispose();
       void adapterRef.current?.dispose();
     };
@@ -191,7 +277,22 @@ export function ProjectIdeShell({ assetRevision, initialHistoryState, onProjectC
       }
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "p") {
         event.preventDefault();
-        fileSearchRef.current?.focus();
+        setQuickOpenQuery("");
+        setQuickOpenIndex(0);
+        setIsQuickOpenOpen(true);
+      }
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "b") {
+        event.preventDefault();
+        setIsSidebarOpen((current) => !current);
+      }
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "j") {
+        event.preventDefault();
+        setIsPreviewOpen((current) => !current);
+      }
+      if (event.ctrlKey && event.key === "`") {
+        event.preventDefault();
+        setBottomPanel("terminal");
+        setIsTerminalOpen((current) => !current);
       }
     };
     globalThis.addEventListener("keydown", saveShortcut);
@@ -260,8 +361,11 @@ export function ProjectIdeShell({ assetRevision, initialHistoryState, onProjectC
       const materialized = savedContent === undefined
         ? await adapter.workspace.materializeTemplate("vite-react")
         : await adapter.workspace.materializeBundle(savedContent.files);
-      const firstTextFile = materialized.files.find((file) => file.kind === "text");
+      const requestedPath = new URL(globalThis.location.href).searchParams.get("file");
+      const firstTextFile = materialized.files.find((file) => file.kind === "text" && file.path === requestedPath)
+        ?? materialized.files.find((file) => file.kind === "text");
       setWorkspace(materialized);
+      setOpenPaths([]);
       setHasUnpublishedChanges(savedContent === undefined);
       setEditorStatus(savedContent === undefined
         ? "로컬 초안"
@@ -270,6 +374,7 @@ export function ProjectIdeShell({ assetRevision, initialHistoryState, onProjectC
         ? "이 브라우저에 시작 템플릿을 준비했습니다."
         : `이 브라우저에 서버 저장본 v${savedContent.descriptor.projectVersion}을 준비했습니다.`);
       if (firstTextFile) selectFile(firstTextFile.path, materialized);
+      if (previewConfiguration.status === "enabled") void startPreview(adapter);
     } catch (caught) {
       const contentCode = projectContentErrorCode(caught);
       const runtimeCode = runtimeErrorCode(caught);
@@ -296,8 +401,12 @@ export function ProjectIdeShell({ assetRevision, initialHistoryState, onProjectC
     try {
       const adapter = adapterRef.current;
       if (!adapter) throw new Error("runtime unavailable");
+      persistSelectedEditorToDraft(adapter);
       setEditorContent(adapter.workspace.readText(path));
       setSelectedPath(path);
+      setOpenPaths((current) => current.includes(path) ? current : [...current, path]);
+      setEditorDiagnostics([]);
+      setEditorPositionRequest(undefined);
       setError(undefined);
     } catch {
       setEditorContent("");
@@ -306,22 +415,211 @@ export function ProjectIdeShell({ assetRevision, initialHistoryState, onProjectC
     }
   }
 
-  async function runCommand(event: FormEvent<HTMLFormElement>) {
+  function persistSelectedEditorToDraft(adapter = adapterRef.current): void {
+    if (!adapter || !selectedPath || editorStatus !== "저장하지 않은 로컬 변경") return;
+    const next = adapter.workspace.writeText(selectedPath, editorContent);
+    setRuntime(next);
+    setWorkspace(adapter.workspace.getState());
+    hotUpdatePreviews(selectedPath);
+    setEditorStatus(next.hmrState === "connected" ? "로컬 초안 저장됨 · HMR 적용됨" : "로컬 초안 저장됨");
+  }
+
+  function hotUpdatePreviews(path: string, changeKind: PreviewChangeKind = "content"): void {
+    hotUpdatePreviewBridges(previewBridgeRef.current, previewWindowBridgesRef.current, path, changeKind);
+  }
+
+  function closeFile(path: string): void {
+    const currentIndex = openPaths.indexOf(path);
+    const remainingPaths = openPaths.filter((candidate) => candidate !== path);
+    if (path !== selectedPath) {
+      setOpenPaths(remainingPaths);
+      return;
+    }
+    persistSelectedEditorToDraft();
+    const nextPath = remainingPaths[Math.min(currentIndex, remainingPaths.length - 1)];
+    setOpenPaths(remainingPaths);
+    setEditorDiagnostics([]);
+    setEditorPositionRequest(undefined);
+    if (nextPath) {
+      const adapter = adapterRef.current;
+      setSelectedPath(nextPath);
+      setEditorContent(adapter?.workspace.readText(nextPath) ?? "");
+      return;
+    }
+    setSelectedPath(undefined);
+    setEditorContent("");
+  }
+
+  function closeAllFiles(): void {
+    persistSelectedEditorToDraft();
+    setOpenPaths([]);
+    setSelectedPath(undefined);
+    setEditorContent("");
+    setEditorDiagnostics([]);
+    setEditorPositionRequest(undefined);
+  }
+
+  function closeSavedFiles(): void {
+    if (hasUnsavedEditorChange && selectedPath) {
+      setOpenPaths([selectedPath]);
+      return;
+    }
+    closeAllFiles();
+  }
+
+  function changeEditorThemePreference(value: unknown): void {
+    const preference = parseEditorThemePreference(typeof value === "string" ? value : undefined);
+    setEditorThemePreference(preference);
+    writeEditorThemePreference(preference);
+  }
+
+  function beginFileOperation(operation: FileOperation): void {
+    setSidebarPanel("files");
+    setIsSidebarOpen(true);
+    setFileOperation(operation);
+    setFileOperationValue(operation === "rename" ? selectedPath ?? "" : "src/");
+  }
+
+  function commitFileOperation(event: FormEvent<HTMLFormElement>): void {
     event.preventDefault();
-    const form = event.currentTarget;
-    const command = String(new FormData(form).get("command") ?? "").trim();
+    const adapter = adapterRef.current;
+    const nextPath = fileOperationValue.trim();
+    if (!adapter || !fileOperation || !nextPath) return;
+    try {
+      persistSelectedEditorToDraft(adapter);
+      if (fileOperation === "create") {
+        const next = adapter.workspace.createText(nextPath);
+        setRuntime(next);
+        setWorkspace(adapter.workspace.getState());
+        setFileOperation(undefined);
+        setFileOperationValue("");
+        setHasUnpublishedChanges(true);
+        hotUpdatePreviews(nextPath, "create");
+        selectFile(nextPath, adapter.workspace.getState());
+        return;
+      }
+      if (!selectedPath || nextPath === selectedPath) {
+        setFileOperation(undefined);
+        return;
+      }
+      const previousPath = selectedPath;
+      const next = adapter.workspace.renameText(previousPath, nextPath);
+      setRuntime(next);
+      setWorkspace(adapter.workspace.getState());
+      setOpenPaths((current) => current.map((path) => path === previousPath ? nextPath : path));
+      setSelectedPath(nextPath);
+      setEditorStatus("파일 이름 변경됨 · 로컬 초안");
+      setFileOperation(undefined);
+      setFileOperationValue("");
+      setHasUnpublishedChanges(true);
+      hotUpdatePreviews(nextPath, "rename");
+    } catch {
+      setError(fileOperation === "create" ? "새 파일을 만들지 못했습니다. 경로와 중복 여부를 확인하세요." : "파일 이름을 변경하지 못했습니다. 경로와 중복 여부를 확인하세요.");
+    }
+  }
+
+  function deleteSelectedFile(): void {
+    const adapter = adapterRef.current;
+    if (!adapter || !selectedPath) return;
+    const deletedPath = selectedPath;
+    try {
+      const next = adapter.workspace.deleteText(deletedPath);
+      const remainingPaths = openPaths.filter((path) => path !== deletedPath);
+      const nextPath = remainingPaths.at(-1);
+      setRuntime(next);
+      setWorkspace(adapter.workspace.getState());
+      setOpenPaths(remainingPaths);
+      setSelectedPath(nextPath);
+      setEditorContent(nextPath ? adapter.workspace.readText(nextPath) : "");
+      setEditorDiagnostics([]);
+      setEditorPositionRequest(undefined);
+      setEditorStatus("파일 삭제됨 · 로컬 초안");
+      setHasUnpublishedChanges(true);
+      setConfirmingFileDelete(false);
+      hotUpdatePreviews(deletedPath, "delete");
+    } catch {
+      setConfirmingFileDelete(false);
+      setError("파일을 삭제하지 못했습니다.");
+    }
+  }
+
+  function beginHorizontalResize(panel: "files" | "preview", event: ReactPointerEvent<HTMLDivElement>): void {
+    event.preventDefault();
+    const startX = event.clientX;
+    const startWidth = panel === "files" ? sidebarWidth : previewWidth;
+    const workbenchWidth = workbenchRef.current?.clientWidth ?? globalThis.innerWidth;
+    const move = (moveEvent: PointerEvent) => {
+      const delta = moveEvent.clientX - startX;
+      if (panel === "files") {
+        setSidebarWidth(Math.max(192, Math.min(360, startWidth + delta)));
+        return;
+      }
+      const maximumPreviewWidth = Math.max(320, workbenchWidth - sidebarWidth - 48 - 480);
+      setPreviewWidth(Math.max(320, Math.min(maximumPreviewWidth, startWidth - delta)));
+    };
+    const stop = () => {
+      globalThis.removeEventListener("pointermove", move);
+      globalThis.removeEventListener("pointerup", stop);
+    };
+    globalThis.addEventListener("pointermove", move);
+    globalThis.addEventListener("pointerup", stop, { once: true });
+  }
+
+  function beginBottomPanelResize(event: ReactPointerEvent<HTMLDivElement>): void {
+    event.preventDefault();
+    const startY = event.clientY;
+    const startHeight = bottomPanelHeight;
+    const move = (moveEvent: PointerEvent) => setBottomPanelHeight(Math.max(120, Math.min(480, startHeight + startY - moveEvent.clientY)));
+    const stop = () => {
+      globalThis.removeEventListener("pointermove", move);
+      globalThis.removeEventListener("pointerup", stop);
+    };
+    globalThis.addEventListener("pointermove", move);
+    globalThis.addEventListener("pointerup", stop, { once: true });
+  }
+
+  async function runCommand(command: string): Promise<void> {
     if (!command) return;
     if (command.length > MAX_TERMINAL_COMMAND_CHARS) {
       setError("터미널 명령어가 너무 깁니다.");
       return;
     }
     setError(undefined);
-    appendTerminal(`$ ${command}\n`);
+    const sessionId = terminal.activeSessionId;
+    terminal.append(sessionId, `❯ ${command}\n`);
     try {
       const adapter = adapterRef.current;
       if (!adapter) throw new Error("runtime unavailable");
-      await adapter.terminal.run(command, "ide-terminal", (chunk) => appendTerminal(chunk.data));
-      form.reset();
+      persistSelectedEditorToDraft(adapter);
+      const result = await adapter.terminal.run(command, `ide-terminal-${sessionId}`, (chunk) => terminal.append(sessionId, chunk.data));
+      const changedFiles = result.changedFiles ?? [];
+      for (const change of changedFiles) {
+        hotUpdatePreviews(change.path, change.kind);
+      }
+      if (changedFiles.length > 0) {
+        const nextWorkspace = adapter.workspace.getState();
+        setWorkspace(nextWorkspace);
+        setHasUnpublishedChanges(true);
+        const selectedRename = changedFiles.find((change) => change.kind === "rename" && change.previousPath === selectedPath);
+        if (selectedRename) {
+          setOpenPaths((current) => current.map((path) => path === selectedRename.previousPath ? selectedRename.path : path));
+          setSelectedPath(selectedRename.path);
+          setEditorContent(adapter.workspace.readText(selectedRename.path));
+          setEditorStatus("터미널에서 파일 이름 변경됨 · 로컬 초안");
+        } else if (selectedPath && changedFiles.some((change) => change.path === selectedPath && change.kind === "content")) {
+          setEditorContent(adapter.workspace.readText(selectedPath));
+          setEditorStatus("터미널 변경 반영됨 · 로컬 초안");
+        } else if (selectedPath && changedFiles.some((change) => change.path === selectedPath && change.kind === "delete")) {
+          const availablePaths = new Set(nextWorkspace.files.filter((file) => file.kind === "text").map((file) => file.path));
+          const remainingPaths = openPaths.filter((path) => path !== selectedPath && availablePaths.has(path));
+          const nextPath = remainingPaths.at(-1) ?? nextWorkspace.files.find((file) => file.kind === "text")?.path;
+          setOpenPaths(nextPath && !remainingPaths.includes(nextPath) ? [...remainingPaths, nextPath] : remainingPaths);
+          setSelectedPath(nextPath);
+          setEditorContent(nextPath ? adapter.workspace.readText(nextPath) : "");
+          setEditorDiagnostics([]);
+          setEditorStatus("터미널에서 파일 삭제됨 · 로컬 초안");
+        }
+      }
     } catch {
       setError("터미널 명령을 완료하지 못했습니다.");
     }
@@ -335,14 +633,69 @@ export function ProjectIdeShell({ assetRevision, initialHistoryState, onProjectC
       return;
     }
     setError(undefined);
-    setUtilityPanel("preview");
+    setPreviewRefreshFailed(false);
+    setIsPreviewOpen(true);
+    await startPreview(adapter);
+  }
+
+  const attachPreviewFrame = useCallback((frame: HTMLIFrameElement | null) => {
+    previewFrameRef.current = frame;
+    previewBridgeRef.current?.attach(frame?.contentWindow ?? null);
+  }, []);
+
+  function refreshPreview(): void {
+    const frameWindow = previewFrameRef.current?.contentWindow;
+    if (!frameWindow || !isolatedPreviewUrl) return;
+    setError(undefined);
+    setPreviewRefreshFailed(false);
+    frameWindow.postMessage(
+      { type: "nuriteo-preview:reload", version: 1 },
+      new URL(isolatedPreviewUrl).origin
+    );
+  }
+
+  async function stopPreviewPort(port: number): Promise<void> {
+    const adapter = adapterRef.current;
+    if (!adapter) return;
+    setError(undefined);
+    if (!adapter.workflow.stopPreview(port)) {
+      setError(`포트 ${port}의 개발 서버를 찾지 못했습니다.`);
+      return;
+    }
+    previewBridgeOperationRef.current += 1;
+    const bridge = previewBridgeRef.current;
+    previewBridgeRef.current = undefined;
+    setIsolatedPreviewUrl(undefined);
+    await bridge?.dispose();
+    if (!unmountedRef.current && adapterRef.current === adapter) {
+      setRuntime(adapter.getState());
+      terminal.append(terminal.activeSessionId, `포트 ${port} 개발 서버를 중지했습니다.\n`);
+    }
+  }
+
+  function stopTerminalProcess(terminalId: string): void {
+    const adapter = adapterRef.current;
+    if (!adapter) return;
+    setError(undefined);
+    if (!adapter.terminal.signal("SIGTERM", terminalId)) {
+      setError("이미 종료됐거나 찾을 수 없는 프로세스입니다.");
+    }
+  }
+
+  async function startPreview(adapter: RuntimeAdapter): Promise<void> {
+    const sessionId = terminal.activeSessionId;
     setIsRunningPreview(true);
+    setBottomPanel("terminal");
+    setIsTerminalOpen(true);
+    terminal.append(sessionId, "❯ npm run dev\n의존성을 확인하고 개발 서버를 시작합니다…\n");
     try {
       const next = await adapter.workflow.start();
       if (!next.previewUrl) throw new Error("Preview URL unavailable");
+      terminal.append(sessionId, `개발 서버 준비 완료 · ${next.previewUrl}\n`);
       await swapPreviewBridge(adapter, next.previewUrl);
     } catch {
       if (!unmountedRef.current && adapterRef.current === adapter) {
+        terminal.append(sessionId, "개발 서버를 시작하지 못했습니다.\n");
         setError("의존성 설치와 미리보기 실행을 완료하지 못했습니다.");
       }
     } finally {
@@ -397,11 +750,113 @@ export function ProjectIdeShell({ assetRevision, initialHistoryState, onProjectC
       onDiagnostic() {
         if (!unmountedRef.current) setError("격리된 미리보기 연결을 안전하게 중지했습니다.");
       },
+      onReloadResult(ok) {
+        if (!unmountedRef.current) setPreviewRefreshFailed(!ok);
+      },
       onRecoveryRequired() {
         if (created) recoverPreview(created, internalPreviewUrl);
       }
     });
     return created;
+  }
+
+  function openPreviewWindow(): void {
+    const internalPreviewUrl = adapterRef.current?.getState().previewUrl;
+    if (!internalPreviewUrl || previewConfiguration.status === "disabled") return;
+    setError(undefined);
+    const previewWindowId = globalThis.crypto.randomUUID();
+    const popup = globalThis.open(
+      createPreviewWindowUrl(previewConfiguration.applicationOrigin, previewWindowId),
+      "_blank"
+    );
+    if (!popup) {
+      setError("새 탭을 열지 못했습니다. 브라우저의 팝업 차단 설정을 확인하세요.");
+      return;
+    }
+
+    let activeBridge: SubdomainPreviewBridge | undefined;
+    let bridgeOperation = 0;
+    let connectionTimeout: ReturnType<typeof setTimeout> | undefined;
+    let disposed = false;
+    let closedPoll: ReturnType<typeof setInterval> | undefined;
+    const dispose = () => {
+      if (disposed) return;
+      disposed = true;
+      bridgeOperation += 1;
+      if (connectionTimeout) clearTimeout(connectionTimeout);
+      if (closedPoll) clearInterval(closedPoll);
+      globalThis.removeEventListener("message", receive);
+      previewWindowDisposersRef.current.delete(dispose);
+      if (activeBridge) previewWindowBridgesRef.current.delete(activeBridge);
+      void activeBridge?.dispose();
+    };
+    const reconnect = async () => {
+      const operation = bridgeOperation + 1;
+      bridgeOperation = operation;
+      if (connectionTimeout) clearTimeout(connectionTimeout);
+      let createdBridge: SubdomainPreviewBridge | undefined;
+      try {
+        createdBridge = await (previewBridgeFactory ?? createSubdomainPreviewBridge)({
+          configuration: previewConfiguration,
+          internalProjectIdentity: `${workspaceScope}:${project.id}`,
+          internalPreviewUrl,
+          ownerId: project.ownerId,
+          ownerType: project.ownerType,
+          projectId: project.id,
+          onConnected() {
+            if (createdBridge === activeBridge && connectionTimeout) {
+              clearTimeout(connectionTimeout);
+              connectionTimeout = undefined;
+            }
+          },
+          onDiagnostic: dispose,
+          onRecoveryRequired() {
+            if (createdBridge === activeBridge) void reconnect();
+          }
+        });
+        if (disposed || popup.closed || operation !== bridgeOperation) {
+          await createdBridge.dispose();
+          return;
+        }
+        const previousBridge = activeBridge;
+        activeBridge = createdBridge;
+        previewWindowBridgesRef.current.add(createdBridge);
+        createdBridge.attach(popup, previewConfiguration.applicationOrigin);
+        popup.postMessage({
+          type: "nuriteo-preview-window:initialize",
+          previewWindowId,
+          projectName: project.name,
+          url: createdBridge.url,
+          version: 1
+        }, previewConfiguration.applicationOrigin);
+        connectionTimeout = setTimeout(() => {
+          if (createdBridge === activeBridge) void reconnect();
+        }, PREVIEW_WINDOW_CONNECT_TIMEOUT_MS);
+        if (previousBridge) {
+          previewWindowBridgesRef.current.delete(previousBridge);
+          void previousBridge.dispose();
+        }
+      } catch {
+        dispose();
+        popup.close();
+        if (!unmountedRef.current) setError("새 탭 미리보기를 연결하지 못했습니다.");
+      }
+    };
+    const receive = (event: MessageEvent) => {
+      if (event.source !== popup || event.origin !== previewConfiguration.applicationOrigin || typeof event.data !== "object" || event.data === null) return;
+      const type = (event.data as Record<string, unknown>).type;
+      const receivedPreviewWindowId = (event.data as Record<string, unknown>).previewWindowId;
+      const version = (event.data as Record<string, unknown>).version;
+      if (receivedPreviewWindowId !== previewWindowId || version !== 1) return;
+      if (type === "nuriteo-preview-window:ready") {
+        void reconnect();
+      }
+    };
+    previewWindowDisposersRef.current.add(dispose);
+    globalThis.addEventListener("message", receive);
+    closedPoll = setInterval(() => {
+      if (popup.closed) dispose();
+    }, PREVIEW_WINDOW_CLOSED_POLL_MS);
   }
 
   async function swapPreviewBridge(
@@ -435,7 +890,9 @@ export function ProjectIdeShell({ assetRevision, initialHistoryState, onProjectC
     }
 
     previewBridgeRef.current = createdBridge;
+    createdBridge.attach(previewFrameRef.current?.contentWindow ?? null);
     setIsolatedPreviewUrl(createdBridge.url);
+    setPreviewRefreshFailed(false);
     return true;
   }
 
@@ -464,7 +921,7 @@ export function ProjectIdeShell({ assetRevision, initialHistoryState, onProjectC
       const next = adapter.workspace.writeText(selectedPath, editorContent);
       setRuntime(next);
       setWorkspace(adapter.workspace.getState());
-      previewBridgeRef.current?.hotUpdate(selectedPath);
+      hotUpdatePreviews(selectedPath);
       setEditorStatus(next.hmrState === "connected" ? "로컬 초안 저장됨 · HMR 적용됨" : "로컬 초안 저장됨 · 재시작 필요할 수 있음");
     } catch {
       setError("텍스트 변경사항을 안전하게 저장하지 못했습니다.");
@@ -475,7 +932,7 @@ export function ProjectIdeShell({ assetRevision, initialHistoryState, onProjectC
 
   async function saveToServer() {
     const adapter = adapterRef.current;
-    if (!adapter || !projectEtag || isServerSaving || replacementAbortRef.current !== null || runtime.localDraftAccess !== "writer") return;
+    if (!adapter || !projectEtag || isServerSaving || runtime.localDraftAccess !== "writer") return;
     const controller = new AbortController();
     saveAbortRef.current?.abort();
     saveAbortRef.current = controller;
@@ -488,7 +945,7 @@ export function ProjectIdeShell({ assetRevision, initialHistoryState, onProjectC
         const next = adapter.workspace.writeText(selectedPath, editorContent);
         setRuntime(next);
         setWorkspace(adapter.workspace.getState());
-        previewBridgeRef.current?.hotUpdate(selectedPath);
+        hotUpdatePreviews(selectedPath);
         setEditorStatus("서버 저장을 위해 로컬 초안에 적용됨");
       }
       const { saveCurrentProject } = await saveFeature.load();
@@ -540,136 +997,27 @@ export function ProjectIdeShell({ assetRevision, initialHistoryState, onProjectC
     }
     setWorkspace(undefined);
     setSelectedPath(undefined);
+    setOpenPaths([]);
     setEditorContent("");
-    setTerminalOutput("");
-    terminalTruncatedRef.current = false;
-    setTerminalWasTruncated(false);
+    setEditorDiagnostics([]);
+    setEditorPositionRequest(undefined);
+    terminal.reset();
     setEditorStatus("로컬 초안");
     setResumeStatus(undefined);
     setFileQuery("");
     setFileListLimit(FILE_LIST_BATCH_SIZE);
+    setSidebarPanel("files");
+    setFileOperation(undefined);
+    setFileOperationValue("");
+    setIsSidebarOpen(true);
+    setMatchFileCase(false);
+    setUseFileRegularExpression(false);
+    setIsPreviewOpen(true);
+    setIsTerminalOpen(false);
+    setBottomPanel("terminal");
     setIsFocusMode(false);
     setHasUnpublishedChanges(false);
     setConfirmingWorkspaceStop(false);
-  }
-
-  async function replaceLocalDraftWithRestoredSave(head: RestoredProjectHead): Promise<void> {
-    if (
-      project.state !== "active" || isStarting || isServerSaving || replacementAbortRef.current !== null
-    ) return;
-    if (projectEtagRef.current !== head.projectEtag) {
-      setError("복구 후 서버 프로젝트가 변경되었습니다. 로컬 초안은 보존되므로 기록을 새로고침한 뒤 교체하세요.");
-      return;
-    }
-
-    const controller = new AbortController();
-    replacementAbortRef.current = controller;
-    setIsReplacingDraft(true);
-    setError(undefined);
-    setResumeStatus(`현재 로컬 초안을 변경하지 않고 복구된 서버 저장본 v${head.projectVersion}을 준비하는 중…`);
-    let stagedAdapter: RuntimeAdapter | undefined;
-    try {
-      const [feature, revision, savedContent] = await Promise.all([
-        runtimeFeatureLoader?.() ?? runtimeFeature.load(),
-        resolveRuntimeAssetRevision(assetRevision, controller.signal),
-        (resumeProjectContentLoader?.() ?? resumeFeature.load()).then(({ resumeProjectContent }) => resumeProjectContent({
-          ownerType: project.ownerType,
-          ownerId: project.ownerId,
-          projectId: project.id,
-          storageScopeId: project.storageScopeId
-        }, { signal: controller.signal }))
-      ]);
-      if (
-        controller.signal.aborted ||
-        savedContent.descriptor.projectVersion !== head.projectVersion ||
-        projectEtagRef.current !== head.projectEtag
-      ) {
-        throw new RestoredHeadChangedError();
-      }
-
-      stagedAdapter = feature.createRuntimeAdapter();
-      const origin = globalThis.location.origin;
-      const base = `/runtime/${revision}`;
-      await stagedAdapter.mount({
-        project: {
-          id: project.id,
-          storageScopeId: project.storageScopeId,
-          workspaceScopeId: workspaceScope,
-          displayName: project.name
-        },
-        assets: {
-          systemWorkerUrl: new URL(`${base}/system-worker.js`, origin),
-          processWorkerUrl: new URL(`${base}/process-worker.js`, origin),
-          systemWasmUrl: new URL(`${base}/system.wasm`, origin),
-          previewServiceWorkerUrl: new URL(`${base}/preview-sw.js`, origin)
-        },
-        policy: {
-          bootTimeoutMs: RUNTIME_BOOT_TIMEOUT_MS,
-          relayTimeoutMs: RUNTIME_RELAY_TIMEOUT_MS,
-          memoryLimitBytes: RUNTIME_MEMORY_LIMIT_BYTES
-        },
-        reportDiagnostic() { /* staged diagnostics are surfaced only if promotion fails */ }
-      });
-      const stagedWorkspace = await stagedAdapter.workspace.materializeBundle(savedContent.files);
-      if (
-        controller.signal.aborted ||
-        stagedWorkspace.status !== "ready" ||
-        savedContent.descriptor.projectVersion !== head.projectVersion ||
-        projectEtagRef.current !== head.projectEtag
-      ) {
-        throw new RestoredHeadChangedError();
-      }
-
-      const previousAdapter = adapterRef.current;
-      const previousUnsubscribe = unsubscribeRef.current;
-      const previousBridge = previewBridgeRef.current;
-      previewBridgeOperationRef.current += 1;
-      previewBridgeRef.current = undefined;
-      setIsolatedPreviewUrl(undefined);
-      previousUnsubscribe();
-
-      adapterRef.current = stagedAdapter;
-      stagedAdapter = undefined;
-      unsubscribeRef.current = adapterRef.current.subscribe(setRuntime);
-      setRuntime(adapterRef.current.getState());
-      setWorkspace(stagedWorkspace);
-      setTerminalOutput("");
-      const firstTextFile = stagedWorkspace.files.find((file) => file.kind === "text");
-      if (firstTextFile) selectFile(firstTextFile.path, stagedWorkspace);
-      else {
-        setSelectedPath(undefined);
-        setEditorContent("");
-      }
-      setEditorStatus(`서버 저장본 v${head.projectVersion} 복구됨 · 사용자 선택으로 로컬 초안 교체됨`);
-      setHasUnpublishedChanges(false);
-      setResumeStatus(`검증된 서버 저장본 v${head.projectVersion}을 로컬 초안으로 열었습니다.`);
-
-      const cleanup = await Promise.allSettled([
-        previousBridge?.dispose() ?? Promise.resolve(),
-        previousAdapter?.dispose() ?? Promise.resolve()
-      ]);
-      if (cleanup.some((result) => result.status === "rejected")) {
-        setError("복구된 로컬 초안은 준비되었지만 이전 런타임이 완전히 종료되지 않았습니다. 미리보기 실행 전에 새로고침하세요.");
-      }
-      if (adapterRef.current.getState().localDraftAccess !== "writer") {
-        try {
-          setRuntime(await adapterRef.current.recovery.run("resolve-writer-conflict"));
-        } catch {
-          setError("편집 권한을 확보하지 못해 복구된 로컬 초안을 읽기 전용으로 열었습니다. 편집 전에 새로고침하세요.");
-        }
-      }
-    } catch (cause) {
-      await stagedAdapter?.dispose();
-      if (!controller.signal.aborted) {
-        setError(cause instanceof RestoredHeadChangedError
-          ? "복구 저장본을 적용하기 전에 서버 프로젝트가 변경되었습니다. 이전 로컬 초안은 보존됩니다."
-          : "복구된 서버 저장본을 안전하게 가져오고 검증해 열지 못했습니다. 이전 로컬 초안은 보존됩니다.");
-        setResumeStatus("복구 저장본 교체 중지됨 · 이전 로컬 초안 보존됨");
-      }
-    } finally {
-      if (replacementAbortRef.current === controller) replacementAbortRef.current = null;
-      if (!unmountedRef.current) setIsReplacingDraft(false);
-    }
   }
 
   async function releaseAdapter() {
@@ -689,56 +1037,97 @@ export function ProjectIdeShell({ assetRevision, initialHistoryState, onProjectC
     }
   }
 
-  function appendTerminal(value: string) {
-    setTerminalOutput((current) => {
-      const next = `${current}${value}`;
-      if (next.length > MAX_TERMINAL_OUTPUT_CHARS && !terminalTruncatedRef.current) {
-        terminalTruncatedRef.current = true;
-        setTerminalWasTruncated(true);
-      }
-      return next.slice(-MAX_TERMINAL_OUTPUT_CHARS);
-    });
-  }
-
   const hasWorkspace = workspace?.status === "ready";
   const hasIsolatedPreview = isolatedPreviewUrl !== undefined;
   const canWriteLocalDraft = runtime.localDraftAccess === "writer";
   const recoveryDiagnostics = runtime.diagnostics.filter((diagnostic) => diagnostic.actions.length > 0);
+  const readWorkspaceText = useCallback((path: string) => adapterRef.current?.workspace.readText(path) ?? "", []);
   const {
     hasMoreFiles,
-    isSearchPending: isFileSearchPending,
     matchingFiles,
     visibleFiles
   } = useProjectFileSearch({
     files: workspace?.files ?? EMPTY_WORKSPACE_FILES,
     limit: fileListLimit,
-    query: fileQuery,
+    matchCase: matchFileCase,
+    query: isQuickOpenOpen ? quickOpenQuery : "",
+    useRegularExpression: useFileRegularExpression,
     selectedPath
+  });
+  const {
+    isSearchPending: isContentSearchPending,
+    matches: contentSearchMatches,
+    searchError: contentSearchError,
+    totalMatches: totalContentSearchMatches
+  } = useProjectContentSearch({
+    files: workspace?.files ?? EMPTY_WORKSPACE_FILES,
+    limit: fileListLimit,
+    matchCase: matchFileCase,
+    query: sidebarPanel === "search" ? fileQuery : "",
+    readText: readWorkspaceText,
+    selectedContent: editorContent,
+    selectedPath,
+    useRegularExpression: useFileRegularExpression
   });
   const hasUnsavedEditorChange = editorStatus === "저장하지 않은 로컬 변경";
   const selectedFileName = selectedPath?.split("/").at(-1);
   const editorLineCount = editorContent.length === 0 ? 1 : editorContent.split("\n").length;
   useUnsavedChangesGuard(hasUnpublishedChanges || hasUnsavedEditorChange);
 
-  const css = ideStyles({ focus: isFocusMode });
+  useEffect(() => {
+    if (!hasWorkspace) return;
+    const nextUrl = new URL(globalThis.location.href);
+    if (selectedPath) nextUrl.searchParams.set("file", selectedPath);
+    else nextUrl.searchParams.delete("file");
+    if (isTerminalOpen && bottomPanel === "terminal") nextUrl.searchParams.set("terminal", "dev");
+    else nextUrl.searchParams.delete("terminal");
+    globalThis.history.replaceState(globalThis.history.state, "", nextUrl);
+  }, [bottomPanel, hasWorkspace, isTerminalOpen, selectedPath]);
+
+  const css = ideStyles({ focus: isFocusMode, previewOpen: isPreviewOpen, sidebarOpen: isSidebarOpen });
+  const workbenchLayout = workbenchLayoutClass({
+    focusMode: isFocusMode,
+    previewOpen: isPreviewOpen,
+    sidebarOpen: isSidebarOpen
+  });
+  const utilityLayout = isSidebarOpen ? undefined : "max-[72rem]:col-span-2";
+  const workbenchStyle = {
+    "--studio-preview-width": `${previewWidth}px`,
+    "--studio-sidebar-width": `${sidebarWidth}px`
+  } as CSSProperties;
   return (
     <section className={css.shell()} aria-labelledby="project-ide-title">
       <header className={css.header()}>
         <div className={css.identity()}>
-          <span className={runtimeDot({ state: runtime.lifecycle === "ready" || runtime.lifecycle === "running" || runtime.lifecycle === "failed" ? runtime.lifecycle : "idle" })} aria-hidden="true" />
-          <div><p>브라우저 워크스페이스 · {runtimeLifecycleLabel(runtime.lifecycle)}</p><h3 id="project-ide-title" aria-label={`${project.name} 개발 편집기`}>{project.name}</h3></div>
-          {hasWorkspace ? <span className={css.access({ className: canWriteLocalDraft ? "border-primary/20 bg-selected text-primary" : undefined })}>{canWriteLocalDraft ? "편집 가능" : "읽기 전용"}</span> : null}
+          <span className={runtimeDot({ state: runtime.lifecycle === "ready" || runtime.lifecycle === "failed" ? runtime.lifecycle : "idle" })} aria-hidden="true" />
+          <div className={css.identityCopy()}>
+            <p>개발 워크스페이스</p>
+            <div className={css.runtimeMeta()}>
+              <span>{runtimeLifecycleLabel(runtime.lifecycle)}</span>
+              {hasWorkspace ? <span className={css.access()}>{canWriteLocalDraft ? "편집 가능" : "읽기 전용"}</span> : null}
+            </div>
+          </div>
+          <h3 className="sr-only" id="project-ide-title">{project.name} 개발 편집기</h3>
         </div>
         {hasWorkspace ? <div className={css.headerActions()}>
-          <span className={css.saveState()} role="status" aria-live="polite"><i className={hasUnsavedEditorChange ? "is-dirty" : ""} aria-hidden="true" />{isReplacingDraft ? "복원본 준비 중 · 현재 초안 보존됨" : serverSaveStatus}</span>
+          <span className={css.saveState()} role="status" aria-live="polite"><i className={hasUnsavedEditorChange ? "is-dirty" : ""} aria-hidden="true" />{serverSaveStatus}</span>
+          <Button type="button" size="sm" aria-pressed={isPreviewOpen} onClick={() => setIsPreviewOpen((current) => !current)}>미리보기</Button>
+          <Button type="button" size="sm" aria-pressed={isTerminalOpen} onClick={() => setIsTerminalOpen((current) => !current)}>하단 패널</Button>
           <Button type="button" size="sm" aria-pressed={isFocusMode} onClick={() => setIsFocusMode((current) => !current)}>{isFocusMode ? "패널 표시" : "집중 모드"}</Button>
-          <Button aria-label="서버에 저장" type="button" size="sm" variant="primary" disabled={isServerSaving || isReplacingDraft || !projectEtag || !canWriteLocalDraft} onClick={() => void saveToServer()}>{isServerSaving ? "저장 중…" : "서버에 저장"}<kbd>⌘S</kbd></Button>
-          <Button aria-label="워크스페이스 종료" type="button" size="sm" disabled={isReplacingDraft} onClick={() => {
+          <Button aria-label="서버에 저장" type="button" size="sm" variant="primary" disabled={isServerSaving || !projectEtag || !canWriteLocalDraft} onClick={() => void saveToServer()}>{isServerSaving ? "저장 중…" : "서버에 저장"}<kbd>⌘S</kbd></Button>
+          <Button aria-label="워크스페이스 종료" type="button" size="sm" onClick={() => {
             if (hasUnpublishedChanges || hasUnsavedEditorChange) setConfirmingWorkspaceStop(true);
             else void stopWorkspace();
           }}>종료</Button>
         </div> : null}
       </header>
+      {isQuickOpenOpen ? <section className={css.quickOpen()} aria-label="빠른 파일 열기"><label className="sr-only" htmlFor={`quick-open-${project.id}`}>빠른 파일 열기</label><Input id={`quick-open-${project.id}`} autoFocus value={quickOpenQuery} placeholder="파일 이름을 입력하세요" onChange={(event) => { setQuickOpenQuery(event.currentTarget.value); setQuickOpenIndex(0); }} onKeyDown={(event) => {
+        const resultCount = Math.min(matchingFiles.length, 40);
+        if (event.key === "Escape") setIsQuickOpenOpen(false);
+        if (event.key === "ArrowDown" && resultCount > 0) { event.preventDefault(); setQuickOpenIndex((current) => (current + 1) % resultCount); }
+        if (event.key === "ArrowUp" && resultCount > 0) { event.preventDefault(); setQuickOpenIndex((current) => (current - 1 + resultCount) % resultCount); }
+        if (event.key === "Enter" && matchingFiles[quickOpenIndex]) { selectFile(matchingFiles[quickOpenIndex].path); setIsQuickOpenOpen(false); }
+      }} /><ul>{matchingFiles.slice(0, 40).map((file, index) => <li key={file.path}><button type="button" aria-selected={index === quickOpenIndex} onMouseEnter={() => setQuickOpenIndex(index)} onClick={() => { selectFile(file.path); setIsQuickOpenOpen(false); }}><strong>{file.name}</strong><small>{file.path}</small></button></li>)}</ul></section> : null}
       {error ? <div className={css.message({ className: "border-danger/30 bg-danger/10 text-danger" })} role="alert"><strong>작업을 완료하지 못했습니다.</strong><span>{error}</span></div> : null}
       {serverSaveFailure ? <div className={css.recoveryActions()} aria-label="서버 저장 복구">{serverSaveFailure === "retry" ? <Button type="button" size="sm" disabled={isServerSaving || !canWriteLocalDraft} onClick={() => void saveToServer()}>서버 저장 다시 시도</Button> : <Button type="button" size="sm" onClick={() => onProjectReload?.()}>최신 프로젝트 다시 불러오기</Button>}</div> : null}
       {resumeStatus ? <p className={css.message({ className: "border-primary/20 bg-selected text-foreground" })} role="status" aria-live="polite">{resumeStatus}</p> : null}
@@ -777,39 +1166,186 @@ export function ProjectIdeShell({ assetRevision, initialHistoryState, onProjectC
       ) : null}
       {project.state !== "active" ? <p className="m-3 text-sm text-muted-foreground">보관된 프로젝트는 읽기 전용입니다. 버전과 복구 지점은 계속 확인할 수 있으며, 기록을 변경하거나 워크스페이스를 시작하려면 먼저 프로젝트를 복원하세요.</p> : null}
       {hasWorkspace ? (
-        <div className={css.workbench()}>
+        <div className={css.workbench({ className: workbenchLayout })} ref={workbenchRef} style={workbenchStyle}>
+          <aside className={css.activity()} aria-label="Studio 도구">
+            <button
+              className={css.activityButton()}
+              type="button"
+              aria-label="프로젝트 파일"
+              aria-pressed={isSidebarOpen && sidebarPanel === "files"}
+              onClick={() => {
+                setIsSidebarOpen((current) => sidebarPanel === "files" ? !current : true);
+                setSidebarPanel("files");
+                setFileListLimit(FILE_LIST_BATCH_SIZE);
+              }}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M3.5 5.5h6l2 2h9v12h-17z"/><path d="M3.5 9.5h17"/></svg>
+            </button>
+            <button
+              className={css.activityButton()}
+              type="button"
+              aria-label="프로젝트 파일 검색"
+              aria-pressed={isSidebarOpen && sidebarPanel === "search"}
+              onClick={() => {
+                setIsSidebarOpen((current) => sidebarPanel === "search" ? !current : true);
+                setSidebarPanel("search");
+                setFileListLimit(FILE_LIST_BATCH_SIZE);
+                globalThis.requestAnimationFrame(() => fileSearchRef.current?.focus());
+              }}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><circle cx="10.5" cy="10.5" r="5.5"/><path d="m15 15 5 5"/></svg>
+            </button>
+            <span className={css.activityDivider()} aria-hidden="true" />
+            <button
+              className={css.activityButton()}
+              type="button"
+              aria-label={isFocusMode ? "전체 패널 표시" : "편집기에 집중"}
+              aria-pressed={isFocusMode}
+              onClick={() => setIsFocusMode((current) => !current)}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M4 8V4h4M16 4h4v4M20 16v4h-4M8 20H4v-4"/></svg>
+            </button>
+          </aside>
           <nav className={css.files()} aria-label="프로젝트 파일">
-            <div className={css.panelHeading()}><div><span>탐색기</span><strong>파일</strong></div><kbd>⌘P</kbd></div>
-            <SearchField className={css.fileSearch()} label="파일 검색" aria-busy={isFileSearchPending} ref={fileSearchRef} value={fileQuery} onChange={(event) => { setFileQuery(event.currentTarget.value); setFileListLimit(FILE_LIST_BATCH_SIZE); }} placeholder="파일 검색" autoComplete="off" />
-            <p className={css.fileCount()} aria-live="polite">{visibleFiles.length}개 표시 · {matchingFiles.length}개 일치 · 전체 {workspace.files.length}개</p>
-            {visibleFiles.length > 0 ? <ul>{visibleFiles.map((file) => <li key={file.path}><Button variant="ghost" type="button" title={file.path} aria-current={selectedPath === file.path ? "page" : undefined} onClick={() => selectFile(file.path)}><span className={css.fileIcon()} aria-hidden="true">{file.kind === "text" ? "#" : "◆"}</span><span>{file.path}</span>{selectedPath === file.path && hasUnsavedEditorChange ? <i aria-label="저장하지 않은 변경 사항" /> : null}</Button></li>)}</ul> : <p className={css.fileEmpty()}>일치하는 파일이 없습니다.</p>}
-            {hasMoreFiles ? <Button className={css.fileMore()} variant="ghost" type="button" onClick={() => setFileListLimit((current) => current + FILE_LIST_BATCH_SIZE)}>다음 {Math.min(FILE_LIST_BATCH_SIZE, matchingFiles.length - visibleFiles.length)}개 보기</Button> : null}
+            <div className="absolute inset-y-0 right-[-0.25rem] z-20 w-2 cursor-col-resize touch-none max-[72rem]:hidden" role="separator" aria-label="파일 패널 너비 조절" aria-orientation="vertical" aria-valuemin={192} aria-valuemax={360} aria-valuenow={sidebarWidth} onPointerDown={(event) => beginHorizontalResize("files", event)} />
+            <div className={css.projectSummary()}>
+              <strong>{project.name}</strong>
+              <span>{project.slug} · v{project.version}</span>
+            </div>
+            <div className={css.panelHeading()}>
+              <div>
+                <span>{sidebarPanel === "search" ? "검색" : "프로젝트"}</span>
+                <strong>{sidebarPanel === "search" ? "코드 검색" : "파일"}</strong>
+              </div>
+              <div className={css.fileActions()}>
+                <button type="button" aria-label="새 파일" title="새 파일" disabled={!canWriteLocalDraft} onClick={() => beginFileOperation("create")}>＋</button>
+                <button type="button" aria-label="선택한 파일 이름 변경" title="이름 변경" disabled={!selectedPath || !canWriteLocalDraft} onClick={() => beginFileOperation("rename")}>✎</button>
+                <button type="button" aria-label="선택한 파일 삭제" title="삭제" disabled={!selectedPath || !canWriteLocalDraft} onClick={() => setConfirmingFileDelete(true)}>⌫</button>
+                <kbd>⌘P</kbd>
+              </div>
+            </div>
+            {fileOperation ? <form className={css.fileOperation()} onSubmit={commitFileOperation}><label className="sr-only" htmlFor={`file-operation-${project.id}`}>{fileOperation === "create" ? "새 파일 경로" : "변경할 파일 경로"}</label><Input id={`file-operation-${project.id}`} autoFocus value={fileOperationValue} onChange={(event) => setFileOperationValue(event.currentTarget.value)} onKeyDown={(event) => { if (event.key === "Escape") setFileOperation(undefined); }} /><Button type="submit" size="sm">{fileOperation === "create" ? "생성" : "변경"}</Button></form> : sidebarPanel === "search" ? (
+              <div className={css.searchArea()}>
+                <SearchField className={css.fileSearch()} label="코드 검색" aria-busy={isContentSearchPending} aria-invalid={contentSearchError !== undefined} ref={fileSearchRef} value={fileQuery} onChange={(event) => { setFileQuery(event.currentTarget.value); setFileListLimit(FILE_LIST_BATCH_SIZE); }} placeholder="프로젝트 코드 검색" autoComplete="off" />
+                <div className={css.searchControls()} aria-label="파일 검색 옵션">
+                  <button type="button" aria-label="대소문자 구분" aria-pressed={matchFileCase} onClick={() => setMatchFileCase((current) => !current)}>Aa</button>
+                  <button type="button" aria-label="정규식 사용" aria-pressed={useFileRegularExpression} onClick={() => setUseFileRegularExpression((current) => !current)}>.*</button>
+                </div>
+              </div>
+            ) : <span aria-hidden="true" />}
+            <p className={css.fileCount()} aria-live="polite">
+              {sidebarPanel === "search" ? contentSearchError ?? `${totalContentSearchMatches}개 코드 검색 결과` : `파일 ${workspace.files.length}개`}
+            </p>
+            {sidebarPanel === "search" ? <div className={css.contentResults()}>
+              {contentSearchMatches.length > 0 ? <ul>{contentSearchMatches.map((match, index) => <li key={`${match.path}:${match.line}:${match.column}:${index}`}><button type="button" onClick={() => { selectFile(match.path); setEditorPositionRequest({ column: match.column, line: match.line, requestId: Date.now() }); }}><strong>{match.path}</strong><small>{match.line}:{match.column}</small><span>{match.snippet || "빈 줄"}</span></button></li>)}</ul> : <p className={css.fileEmpty()}>{fileQuery.trim() ? "일치하는 코드를 찾지 못했습니다." : "검색어를 입력하면 프로젝트 전체 코드를 찾습니다."}</p>}
+              {contentSearchMatches.length < totalContentSearchMatches ? <Button className={css.fileMore()} variant="ghost" type="button" onClick={() => setFileListLimit((current) => current + FILE_LIST_BATCH_SIZE)}>검색 결과 더 보기</Button> : null}
+            </div> : <div className={css.fileList()}>
+              {visibleFiles.length > 0 ? <ProjectFileTree files={visibleFiles} hasUnsavedEditorChange={hasUnsavedEditorChange} onSelect={selectFile} selectedPath={selectedPath} /> : <p className={css.fileEmpty()}>프로젝트 파일이 없습니다.</p>}
+              {hasMoreFiles ? <Button className={css.fileMore()} variant="ghost" type="button" onClick={() => setFileListLimit((current) => current + FILE_LIST_BATCH_SIZE)}>다음 {Math.min(FILE_LIST_BATCH_SIZE, matchingFiles.length - visibleFiles.length)}개 보기</Button> : null}
+            </div>}
           </nav>
-          <section className={css.editor()} aria-label="텍스트 편집기">
-            <div className={css.editorTabs()}>{selectedPath ? <div className="is-active"><span className={css.fileIcon()} aria-hidden="true">#</span><strong>{selectedFileName}</strong>{hasUnsavedEditorChange ? <i aria-label="저장하지 않은 변경 사항" /> : <Button variant="ghost" size="sm" type="button" aria-label={`${selectedFileName} 닫기`} onClick={() => { setSelectedPath(undefined); setEditorContent(""); }}>×</Button>}</div> : <span>파일을 선택하세요</span>}</div>
-            <div className={css.breadcrumb()}><span>{project.name}</span>{selectedPath?.split("/").map((segment) => <span key={segment}>{segment}</span>)}</div>
-            {selectedPath ? <Textarea className={css.editorInput()} resize="none" aria-label={`${selectedPath} 편집기`} spellCheck={false} readOnly={!canWriteLocalDraft} value={editorContent} onChange={(event) => { setEditorContent(event.currentTarget.value); setEditorStatus("저장하지 않은 로컬 변경"); setHasUnpublishedChanges(true); }} /> : <div className={css.editorEmpty()}><span aria-hidden="true">⌘</span><strong>편집할 파일을 선택하세요</strong><p>왼쪽 파일 목록에서 선택하거나 <kbd>⌘P</kbd>로 빠르게 찾을 수 있습니다.</p></div>}
-            <div className={css.status()}><span><i className={hasUnsavedEditorChange ? "is-dirty" : ""} aria-hidden="true" />{editorStatus}</span><span>{editorLineCount}줄 · {editorContent.length}자 · UTF-8</span><Button aria-label="로컬 초안에 적용" type="button" size="sm" disabled={!selectedPath || isSaving || !canWriteLocalDraft} onClick={saveSelectedFile}>{isSaving ? "적용 중…" : "로컬 초안에 적용"}</Button></div>
+          <div className={css.editorStack()}>
+            <section className={css.editor()} aria-label="텍스트 편집기">
+              <div className={css.editorTabs()} role="tablist" aria-label="열린 파일">
+                {openPaths.length > 0 ? openPaths.map((path) => {
+                  const fileName = path.split("/").at(-1) ?? path;
+                  const isActive = path === selectedPath;
+                  return <div className={isActive ? "is-active" : undefined} key={path}>
+                    <button className="tab-select" type="button" role="tab" aria-selected={isActive} title={path} onClick={() => selectFile(path)}><span className={css.fileIcon()} aria-hidden="true">#</span><strong>{fileName}</strong>{isActive && hasUnsavedEditorChange ? <i aria-label="저장하지 않은 변경 사항" /> : null}</button>
+                    <button className="tab-close" type="button" aria-label={`${fileName} 닫기`} onClick={() => closeFile(path)}>×</button>
+                  </div>;
+                }) : <span>파일을 선택하세요</span>}
+                <div className="sticky right-0 ml-auto !max-w-none !gap-0 !border-l !border-r-0 !border-muted-border bg-subtle !px-1" role="group" aria-label="편집기 작업">
+                  <button className="grid size-7 place-items-center rounded-sm border-0 bg-transparent text-muted-foreground hover:bg-hover hover:text-foreground" type="button" aria-label="문서 서식 정리" disabled={!selectedPath || !canWriteLocalDraft} onClick={() => setEditorFormatRequestId(Date.now())}>↹</button>
+                  <button className="grid size-7 place-items-center rounded-sm border-0 bg-transparent text-muted-foreground hover:bg-hover hover:text-foreground" type="button" aria-label={isEditorSplit ? "편집기 분할 닫기" : "편집기 분할"} disabled={!selectedPath} onClick={() => setIsEditorSplit((current) => !current)}>◫</button>
+                  <MenuRoot>
+                    <MenuTrigger className="grid size-7 place-items-center rounded-sm border-0 bg-transparent text-muted-foreground hover:bg-hover hover:text-foreground" type="button" aria-label="편집기 작업 더 보기">•••</MenuTrigger>
+                    <MenuPortal>
+                      <MenuPositioner align="end" side="bottom" sideOffset={4}>
+                        <MenuPopup className="w-56 text-xs">
+                          <MenuRadioGroup value={editorThemePreference} onValueChange={changeEditorThemePreference}>
+                            <MenuGroupLabel>에디터 테마</MenuGroupLabel>
+                            {EDITOR_THEME_OPTIONS.map((option) => (
+                              <MenuRadioItem closeOnClick key={option.value} value={option.value}>
+                                <MenuRadioItemIndicator className="data-[unchecked]:invisible" keepMounted aria-hidden="true">✓</MenuRadioItemIndicator>
+                                <span>{option.label}</span>
+                              </MenuRadioItem>
+                            ))}
+                          </MenuRadioGroup>
+                          <MenuSeparator />
+                          <MenuItem disabled={openPaths.length === 0} onClick={closeSavedFiles}><span aria-hidden="true" /><span>저장된 편집기 닫기</span></MenuItem>
+                          <MenuItem disabled={openPaths.length === 0} onClick={closeAllFiles}><span aria-hidden="true" /><span>모든 편집기 닫기</span></MenuItem>
+                        </MenuPopup>
+                      </MenuPositioner>
+                    </MenuPortal>
+                  </MenuRoot>
+                </div>
+              </div>
+              {selectedPath ? <div className={css.editorHost()}><div className={css.editorPanes()} data-split={isEditorSplit}><ProjectMonacoEditor formatRequestId={editorFormatRequestId} path={selectedPath} priorityPaths={openPaths} projectKey={`${workspaceScope}:${project.id}`} readOnly={!canWriteLocalDraft} readWorkspaceText={readWorkspaceText} revealPosition={editorPositionRequest} themePreference={editorThemePreference} value={editorContent} workspaceFiles={workspace?.files} onDiagnosticsChange={setEditorDiagnostics} onChange={(nextValue) => { setEditorContent(nextValue); setEditorStatus("저장하지 않은 로컬 변경"); setHasUnpublishedChanges(true); }} />{isEditorSplit ? <ProjectMonacoEditor formatRequestId={editorFormatRequestId} path={selectedPath} projectKey={`${workspaceScope}:${project.id}`} readOnly={!canWriteLocalDraft} revealPosition={editorPositionRequest} themePreference={editorThemePreference} value={editorContent} onChange={(nextValue) => { setEditorContent(nextValue); setEditorStatus("저장하지 않은 로컬 변경"); setHasUnpublishedChanges(true); }} /> : null}</div></div> : <div className={css.editorEmpty()}><span aria-hidden="true">⌘</span><strong>편집할 파일을 선택하세요</strong><p>왼쪽 파일 목록에서 선택하거나 <kbd>⌘P</kbd>로 빠르게 찾을 수 있습니다.</p></div>}
+              <div className={css.status()}><span><i className={hasUnsavedEditorChange ? "is-dirty" : ""} aria-hidden="true" />{editorStatus}</span><span>{editorLineCount}줄 · {editorContent.length}자 · UTF-8</span><Button aria-label="로컬 초안에 적용" type="button" size="sm" disabled={!selectedPath || isSaving || !canWriteLocalDraft} onClick={saveSelectedFile}>{isSaving ? "적용 중…" : "로컬 초안에 적용"}</Button></div>
+            </section>
+            {isTerminalOpen ? <section className={css.terminal()} aria-label="하단 도구 패널" style={{ height: bottomPanelHeight }}>
+              <div className="absolute inset-x-0 top-[-0.25rem] z-20 h-2 cursor-row-resize touch-none" role="separator" aria-label="하단 패널 높이 조절" aria-orientation="horizontal" aria-valuemin={120} aria-valuemax={480} aria-valuenow={bottomPanelHeight} onPointerDown={beginBottomPanelResize} />
+              <div className={css.terminalToolbar()}>
+                <div role="tablist" aria-label="하단 패널">
+                  <button role="tab" type="button" aria-selected={bottomPanel === "problems"} onClick={() => setBottomPanel("problems")}>문제{editorDiagnostics.length > 0 ? ` ${editorDiagnostics.length}` : ""}</button>
+                  <button role="tab" type="button" aria-selected={bottomPanel === "output"} onClick={() => setBottomPanel("output")}>출력</button>
+                  <button role="tab" type="button" aria-selected={bottomPanel === "ports"} onClick={() => setBottomPanel("ports")}>포트{runtime.ports.length > 0 ? ` ${runtime.ports.length}` : ""}</button>
+                  <button role="tab" type="button" aria-selected={bottomPanel === "processes"} onClick={() => setBottomPanel("processes")}>프로세스{runtime.processes.length > 0 ? ` ${runtime.processes.length}` : ""}</button>
+                  {terminal.sessions.map((session) => <button key={session.id} role="tab" type="button" aria-selected={bottomPanel === "terminal" && terminal.activeSessionId === session.id} title={session.name} onClick={() => { terminal.setActiveSessionId(session.id); setBottomPanel("terminal"); }}>{session.name}</button>)}
+                </div>
+                <div className={css.terminalActions()}>
+                  {bottomPanel === "terminal" ? <>
+                    <button type="button" aria-label="새 터미널" title="새 터미널" onClick={() => { terminal.create(); setBottomPanel("terminal"); }}>＋</button>
+                    <button type="button" aria-label="터미널 내용 지우기" title="터미널 내용 지우기 (Ctrl+L)" onClick={() => terminal.clear()}>⌫</button>
+                  </> : null}
+                  <button type="button" aria-label="하단 패널 닫기" title="하단 패널 닫기" onClick={() => setIsTerminalOpen(false)}>×</button>
+                </div>
+              </div>
+              {bottomPanel === "problems" ? <div className="min-h-0 overflow-auto p-3 text-xs text-white/75">{editorDiagnostics.length > 0 ? <ul className="m-0 grid list-none gap-2 p-0">{editorDiagnostics.map((diagnostic, index) => <li className="grid grid-cols-[auto_minmax(0,1fr)_auto] gap-2" key={`${diagnostic.line}:${diagnostic.column}:${index}`}><span aria-hidden="true">{diagnostic.severity >= 8 ? "●" : "▲"}</span><span>{diagnostic.message}</span><button className="border-0 bg-transparent font-mono text-white/55 hover:text-white" type="button" onClick={() => setEditorPositionRequest({ column: diagnostic.column, line: diagnostic.line, requestId: Date.now() })}>{selectedFileName}:{diagnostic.line}:{diagnostic.column}</button></li>)}</ul> : <p className="m-0 text-white/55">현재 파일에서 발견된 문제가 없습니다.</p>}</div> : null}
+              {bottomPanel === "output" ? <pre className="m-0 min-h-0 overflow-auto whitespace-pre-wrap p-3 font-mono text-xs text-white/70" aria-live="polite">{terminal.activeSession.output || "실행 출력을 기다리고 있습니다."}</pre> : null}
+              {bottomPanel === "ports" ? runtime.ports.length > 0 ? <ul className={css.runtimeList()} aria-label="열린 포트">{runtime.ports.map((port) => <li key={port.port}><div className="grid min-w-0 gap-0.5"><strong>{port.label} · localhost:{port.port}</strong><span>{port.status === "running" ? "실행 중" : "중지됨"} · <button className="border-0 bg-transparent p-0 font-inherit text-[#72e5ac] hover:underline" type="button" onClick={openPreviewWindow}>브라우저에서 열기</button></span></div><button type="button" aria-label={`포트 ${port.port} 중지`} onClick={() => void stopPreviewPort(port.port)}>중지</button></li>)}</ul> : <p className="m-0 p-3 text-xs text-white/55">열린 개발 서버 포트가 없습니다.</p> : null}
+              {bottomPanel === "processes" ? runtime.processes.length > 0 ? <ul className={css.runtimeList()} aria-label="실행 중 프로세스">{runtime.processes.map((process) => <li key={`${process.terminalId}:${process.pid}:${process.generation ?? 0}`}><div className="grid min-w-0 gap-0.5"><strong>{process.command}</strong><span>PID {process.pid} · {process.terminalId} · {process.cwd}{process.terminalSize ? ` · ${process.terminalSize.cols}×${process.terminalSize.rows}` : ""}</span></div><button type="button" aria-label={`${process.command} 프로세스 종료`} onClick={() => stopTerminalProcess(process.terminalId)}>종료</button></li>)}</ul> : <p className="m-0 p-3 text-xs text-white/55">실행 중인 터미널 프로세스가 없습니다.</p> : null}
+              {bottomPanel === "terminal" ? <ProjectTerminalView
+                key={terminal.activeSession.id}
+                output={terminal.activeSession.output}
+                sessionName={terminal.activeSession.name}
+                onClear={() => terminal.clear()}
+                onInput={(data) => { adapterRef.current?.terminal.input(data, `ide-terminal-${terminal.activeSessionId}`); }}
+                onInterrupt={() => { adapterRef.current?.terminal.signal("SIGINT", `ide-terminal-${terminal.activeSessionId}`); }}
+                onResize={(cols, rows) => { adapterRef.current?.terminal.resize(cols, rows, `ide-terminal-${terminal.activeSessionId}`); }}
+                onRun={runCommand}
+              /> : null}
+            </section> : null}
+          </div>
+          <section className={css.utility({ className: utilityLayout })} aria-label="미리보기 패널">
+            <div className="absolute inset-y-0 left-[-0.25rem] z-20 w-2 cursor-col-resize touch-none max-[72rem]:hidden" role="separator" aria-label="미리보기 너비 조절" aria-orientation="vertical" aria-valuemin={320} aria-valuemax={720} aria-valuenow={previewWidth} onPointerDown={(event) => beginHorizontalResize("preview", event)} />
+            <section className={css.preview()} aria-label="미리보기" data-preview-url={isolatedPreviewUrl}>
+              <div className={css.previewToolbar()}>
+                <div className={css.previewControls()}>
+                  <button type="button" aria-label="미리보기 뒤로" disabled>←</button>
+                  <button type="button" aria-label="미리보기 앞으로" disabled>→</button>
+                  <button type="button" aria-label="미리보기 새로고침" disabled={isRunningPreview || !hasIsolatedPreview} onClick={refreshPreview}>↻</button>
+                </div>
+                <div className={css.previewAddress()} title={isolatedPreviewUrl ?? runtime.previewUrl ?? undefined}>
+                  <span aria-hidden="true">▣</span>
+                  <span>{isolatedPreviewUrl ?? runtime.previewUrl ?? "미리보기를 실행하세요"}</span>
+                </div>
+                <div className={css.previewActions()}>{hasIsolatedPreview ? <><span className={css.live()}><i aria-hidden="true" /> 실행 중</span><button className="grid size-7 place-items-center rounded-sm border-0 bg-transparent text-xs text-muted-foreground hover:bg-hover hover:text-foreground" type="button" onClick={openPreviewWindow} aria-label="미리보기를 새 탭에서 열기" title="새 탭에서 열기">↗</button></> : <Button aria-label="미리보기 실행" type="button" size="sm" variant="primary" disabled={isRunningPreview} onClick={() => void runPreview()}>{isRunningPreview ? "설치 중…" : "실행"}</Button>}<Button aria-label="미리보기 닫기" type="button" size="sm" variant="ghost" onClick={() => setIsPreviewOpen(false)}>×</Button></div>
+              </div>
+              {hasIsolatedPreview ? <div className="relative min-h-0 overflow-hidden"><iframe className="block size-full" ref={attachPreviewFrame} title={`${project.name} 미리보기`} src={isolatedPreviewUrl} sandbox="allow-scripts allow-same-origin" allow="cross-origin-isolated" referrerPolicy="no-referrer" />{previewRefreshFailed ? <div className="absolute inset-0 grid place-content-center justify-items-center bg-raised/95 p-8 text-center" role="alert"><strong className="text-sm text-foreground">개발 서버가 중지되었습니다.</strong><p className="mb-4 mt-2 max-w-sm text-xs text-muted-foreground">새로고침할 수 없습니다. 개발 서버를 다시 실행하면 현재 로컬 초안으로 미리보기를 복구합니다.</p><Button type="button" size="sm" variant="primary" disabled={isRunningPreview} onClick={() => void runPreview()}>{isRunningPreview ? "다시 실행 중…" : "개발 서버 다시 실행"}</Button></div> : null}</div> : previewConfiguration.status === "disabled" ? <div className={css.utilityEmpty()} role="status"><strong>미리보기를 사용할 수 없습니다.</strong><p>{previewConfiguration.message} 동일 출처 미리보기는 보안을 위해 비활성화되어 있습니다.</p></div> : runtime.previewUrl ? <div className={css.utilityEmpty()} role="status"><strong>격리된 연결을 준비하고 있습니다.</strong><p>격리된 미리보기 연결이 아직 준비되지 않았습니다. 동일 출처 미리보기는 비활성화되어 있습니다.</p></div> : <div className={css.utilityEmpty()}><span aria-hidden="true">▷</span><strong>실행 결과를 바로 확인하세요</strong><p>의존성을 설치하고 개발 서버를 시작합니다.</p></div>}
+            </section>
           </section>
-          <TabsRoot className={css.utility()} value={utilityPanel} onValueChange={(value) => setUtilityPanel(value as UtilityPanel)}>
-            <TabsList className={css.utilityTabs()} aria-label="실행 도구"><TabsTab value="preview">미리보기{runtime.hmrState === "connected" ? <i aria-hidden="true" /> : null}</TabsTab><TabsTab value="terminal">터미널{runtime.terminalProcessCount > 0 ? <span>{runtime.terminalProcessCount}</span> : null}</TabsTab><TabsIndicator /></TabsList>
-            <section className={css.preview()} aria-label="미리보기" data-preview-url={isolatedPreviewUrl} hidden={utilityPanel !== "preview"}><div className={css.previewToolbar()}><div><strong>실시간 미리보기</strong><span>{workflowPhaseLabel(runtime.workflowPhase)} · HMR {hmrStateLabel(runtime.hmrState)}</span></div>{hasIsolatedPreview ? <span className={css.live()}><i aria-hidden="true" /> 실행 중</span> : <Button aria-label="미리보기 실행" type="button" size="sm" variant="primary" disabled={isRunningPreview} onClick={() => void runPreview()}>{isRunningPreview ? "설치 중…" : "미리보기 실행"}</Button>}</div>{hasIsolatedPreview ? <iframe ref={(frame) => previewBridgeRef.current?.attach(frame?.contentWindow ?? null)} title={`${project.name} 미리보기`} src={isolatedPreviewUrl} sandbox="allow-scripts allow-same-origin" allow="cross-origin-isolated" referrerPolicy="no-referrer" /> : previewConfiguration.status === "disabled" ? <div className={css.utilityEmpty()} role="status"><strong>미리보기를 사용할 수 없습니다.</strong><p>{previewConfiguration.message} 동일 출처 미리보기는 보안을 위해 비활성화되어 있습니다.</p></div> : runtime.previewUrl ? <div className={css.utilityEmpty()} role="status"><strong>격리된 연결을 준비하고 있습니다.</strong><p>격리된 미리보기 연결이 아직 준비되지 않았습니다. 동일 출처 미리보기는 비활성화되어 있습니다.</p></div> : <div className={css.utilityEmpty()}><span aria-hidden="true">▷</span><strong>실행 결과를 바로 확인하세요</strong><p>의존성을 설치하고 개발 서버를 시작합니다.</p></div>}</section>
-            <section className={css.terminal()} aria-label="터미널" hidden={utilityPanel !== "terminal"}><div className={css.terminalToolbar()}><strong>터미널</strong><span>{terminalWasTruncated ? "최근 64KB만 표시" : runtime.terminalProcessCount > 0 ? `${runtime.terminalProcessCount}개 프로세스 실행 중` : "대기 중"}</span></div><pre aria-live="polite">{terminalOutput || "브라우저 안에서 제한된 명령을 실행할 수 있습니다."}</pre><form onSubmit={runCommand}><label className="sr-only" htmlFor={`terminal-command-${project.id}`}>터미널 명령어</label><span aria-hidden="true">›</span><Input id={`terminal-command-${project.id}`} name="command" placeholder="명령어 입력" autoComplete="off" maxLength={MAX_TERMINAL_COMMAND_CHARS} /><Button type="submit" size="sm">실행</Button></form></section>
-          </TabsRoot>
         </div>
       ) : <div className={css.start()}><div><span className={css.startMark()} aria-hidden="true">N</span><p className="m-0 mb-3 text-xs font-semibold uppercase tracking-[0.08em] text-accent-foreground">브라우저 개발 환경</p><h4>코드를 열고,<br />바로 실행하세요.</h4><p>서버에 저장된 작업을 안전하게 이어가거나, 새로운 React 템플릿으로 바로 시작하세요.</p></div><div className={css.startActions()}><Button variant="ghost" aria-label="저장된 프로젝트 이어서 열기" type="button" disabled={isStarting || project.state !== "active"} onClick={() => void startWorkspace("saved")}><span aria-hidden="true">↗</span><strong>{startingSource === "saved" ? "불러오는 중…" : "저장된 프로젝트 이어서 열기"}</strong><small>무결성을 확인한 최신 서버 저장본을 엽니다.</small></Button><Button variant="ghost" aria-label="템플릿으로 워크스페이스 시작" type="button" disabled={isStarting || project.state !== "active"} onClick={() => void startWorkspace("template")}><span aria-hidden="true">＋</span><strong>{startingSource === "template" ? "시작하는 중…" : "새 템플릿으로 시작"}</strong><small>Vite + React 기본 구성으로 로컬 초안을 만듭니다.</small></Button></div><p className={css.startSafety()}>브라우저의 로컬 초안은 명시적으로 서버에 저장하기 전까지 기존 서버 버전을 덮어쓰지 않습니다.</p></div>}
-      <CollapsibleRoot className={css.history()}>
-        <CollapsibleTrigger><span>버전과 복구</span><small>서버 저장 이력과 체크포인트</small></CollapsibleTrigger>
-        <CollapsiblePanel><CollapsibleContent><ProjectHistoryPanel
-          hasLocalDraft={hasWorkspace}
-          initialState={initialHistoryState}
-          project={project}
-          {...(projectEtag === undefined ? {} : { projectEtag })}
-          onProjectCommit={(result) => onProjectCommit?.(result)}
-          onReloadProject={() => onProjectReload?.()}
-          onResumeRestoredSave={(head) => void replaceLocalDraftWithRestoredSave(head)}
-        /></CollapsibleContent></CollapsiblePanel>
-      </CollapsibleRoot>
+      <ConfirmationDialog
+        confirmLabel="파일 삭제"
+        description={`${selectedPath ?? "선택한 파일"}을 로컬 초안에서 삭제합니다. 서버에 저장하기 전에는 기존 서버 버전에 영향을 주지 않습니다.`}
+        open={confirmingFileDelete}
+        title="이 파일을 삭제할까요?"
+        onCancel={() => setConfirmingFileDelete(false)}
+        onConfirm={deleteSelectedFile}
+      />
       <ConfirmationDialog
         confirmLabel="초안을 버리고 종료"
         description="서버에 저장하지 않은 로컬 초안과 편집 중인 내용이 사라집니다. 필요한 변경은 먼저 서버에 저장하세요."
@@ -822,6 +1358,26 @@ export function ProjectIdeShell({ assetRevision, initialHistoryState, onProjectC
   );
 }
 
+function workbenchLayoutClass({ focusMode, previewOpen, sidebarOpen }: Readonly<{
+  focusMode: boolean;
+  previewOpen: boolean;
+  sidebarOpen: boolean;
+}>): string | undefined {
+  if (focusMode) {
+    return "grid-cols-[minmax(0,1fr)]";
+  }
+  if (!sidebarOpen && !previewOpen) {
+    return "grid-cols-[3rem_minmax(24rem,1fr)] max-[48rem]:grid-cols-[3rem_minmax(0,1fr)]";
+  }
+  if (!sidebarOpen) {
+    return "grid-cols-[3rem_minmax(24rem,1fr)_var(--studio-preview-width)] max-[72rem]:grid-cols-[3rem_minmax(0,1fr)] max-[48rem]:grid-cols-[3rem_minmax(0,1fr)]";
+  }
+  if (!previewOpen) {
+    return "grid-cols-[3rem_var(--studio-sidebar-width)_minmax(24rem,1fr)] max-[72rem]:grid-cols-[3rem_14rem_minmax(0,1fr)] max-[48rem]:grid-cols-[3rem_minmax(0,1fr)]";
+  }
+  return undefined;
+}
+
 function runtimeLifecycleLabel(value: string): string {
   const labels: Readonly<Record<string, string>> = {
     idle: "대기",
@@ -829,28 +1385,6 @@ function runtimeLifecycleLabel(value: string): string {
     ready: "준비됨",
     stopping: "종료 중",
     stopped: "종료됨",
-    failed: "오류"
-  };
-  return labels[value] ?? value;
-}
-
-function workflowPhaseLabel(value: string): string {
-  const labels: Readonly<Record<string, string>> = {
-    idle: "대기",
-    installing: "설치 중",
-    starting: "서버 시작 중",
-    running: "실행 중",
-    failed: "오류"
-  };
-  return labels[value] ?? value;
-}
-
-function hmrStateLabel(value: string): string {
-  const labels: Readonly<Record<string, string>> = {
-    idle: "대기",
-    connecting: "연결 중",
-    connected: "연결됨",
-    disconnected: "연결 끊김",
     failed: "오류"
   };
   return labels[value] ?? value;
@@ -906,5 +1440,3 @@ function resumeErrorMessage(code: string): string {
   if (code === "RESUME_ABORTED") return "프로젝트 열기를 취소했습니다. 로컬 초안은 교체하지 않았습니다.";
   return "현재 서버 저장본을 열지 못했습니다. 로컬 초안은 교체하지 않았으므로 서비스가 준비되면 다시 시도하세요.";
 }
-
-class RestoredHeadChangedError extends Error {}

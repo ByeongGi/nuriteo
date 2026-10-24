@@ -4,7 +4,7 @@ import type { Metadata } from "next";
 import { loadProjectContext } from "#src/app/(workspace)/workspaces/[workspaceId]/projects/[projectId]/project-context.ts";
 import { ProjectHistoryScreen } from "#src/app/(workspace)/workspaces/[workspaceId]/projects/[projectId]/history/history-screen.tsx";
 
-export const metadata: Metadata = { title: "프로젝트 버전 기록" };
+export const metadata: Metadata = { title: "프로젝트 버전과 복구" };
 
 export default async function ProjectHistoryPage({ params }: { readonly params: Promise<{ projectId: string; workspaceId: string }> }) {
   const { projectId, workspaceId } = await params;

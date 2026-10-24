@@ -152,6 +152,9 @@ export interface PreviewWorkflowController {
   setPackageManagerOverride(value: SupportedPackageManager | null | ""): void;
   setPreviewErrorBridge(enabled: boolean): void;
   getChangeStatus(): PreviewChangeStatus;
+  createTextFile(path: string, data?: string): PreviewWorkflowSnapshot;
+  renameFile(from: string, to: string): PreviewWorkflowSnapshot;
+  deleteFile(path: string): PreviewWorkflowSnapshot;
   saveTextFile(path: string, data: string): PreviewWorkflowSnapshot;
   runPreview(): Promise<PreviewWorkflowSnapshot>;
   restartDev(): Promise<PreviewWorkflowSnapshot>;
@@ -184,6 +187,8 @@ export interface PreviewWorkflowController {
 }
 
 export interface PreviewWorkflowControllerOptions {
+  packageFetch?: typeof globalThis.fetch;
+  packageRegistryUrl?: string;
   previewServiceWorkerUrl?: string | URL;
   workspaceProjectId?: string;
   workspaceRoot?: string;

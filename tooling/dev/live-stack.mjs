@@ -13,8 +13,20 @@ const rustfsPort = validatedPort("NURITEO_DEV_RUSTFS_PORT", 19000);
 const adminEmail = process.env.NURITEO_DEV_ADMIN_EMAIL ?? "admin@example.test";
 const adminName = process.env.NURITEO_DEV_ADMIN_NAME ?? "Local Administrator";
 const serverCommand = ["run", "--locked", "--package", "nuriteo-server", "--bin", "nuriteo-server", "--"];
+const requestedModes = new Set(process.argv.slice(2));
+const backendOnly = requestedModes.has("--backend-only");
+const webOnly = requestedModes.has("--web-only");
 const processes = new Set();
 let stopping = false;
+
+if (backendOnly && webOnly) {
+  throw new Error("--backend-only and --web-only cannot be used together");
+}
+for (const mode of requestedModes) {
+  if (mode !== "--backend-only" && mode !== "--web-only") {
+    throw new Error(`unknown live stack option: ${mode}`);
+  }
+}
 
 function validatedPort(name, fallback) {
   const value = Number.parseInt(process.env[name] ?? String(fallback), 10);
@@ -151,15 +163,13 @@ async function shutdown(exitCode = 0) {
   if (stopping) return;
   stopping = true;
   process.exitCode = exitCode;
-  console.log("\n[live] Core and Web stopping; PostgreSQL and RustFS remain available for the next run.");
+  const stoppedServices = backendOnly ? "Core" : webOnly ? "Web" : "Core and Web";
+  console.log(`\n[live] ${stoppedServices} stopping; PostgreSQL and RustFS remain available for the next run.`);
   for (const child of processes) terminate(child);
   setTimeout(() => process.exit(exitCode), 750);
 }
 
-async function main() {
-  process.once("SIGINT", () => void shutdown(0));
-  process.once("SIGTERM", () => void shutdown(0));
-
+async function prepareBackend() {
   await run(path.join(repositoryRoot, "deploy/compose/dev-stack.sh"), ["infra"], "Starting PostgreSQL and RustFS");
   const environment = localEnvironment();
   await run("cargo", [...serverCommand, "storage-check"], "Checking object storage", environment);
@@ -175,9 +185,11 @@ async function main() {
       NURITEO_BOOTSTRAP_ADMIN_PASSWORD_FILE: path.join(stateRoot, "bootstrap-admin-password"),
     },
   );
-  await run("pnpm", ["--filter", "@nuriteo/web", "runtime:assets"], "Preparing browser runtime assets");
-
   startCoreWatcher(environment);
+}
+
+async function startWeb() {
+  await run("pnpm", ["--filter", "@nuriteo/web", "runtime:assets"], "Preparing browser runtime assets");
   console.log(`[live] Web listening on http://127.0.0.1:${webPort} (Next.js HMR enabled)`);
   const web = spawnProcess(
     "pnpm",
@@ -196,6 +208,14 @@ async function main() {
   web.once("exit", (code) => {
     if (!stopping) void shutdown(code ?? 1);
   });
+}
+
+async function main() {
+  process.once("SIGINT", () => void shutdown(0));
+  process.once("SIGTERM", () => void shutdown(0));
+
+  if (!webOnly) await prepareBackend();
+  if (!backendOnly) await startWeb();
 }
 
 main().catch((error) => {

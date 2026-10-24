@@ -18,7 +18,7 @@ const inputVariants = tv({
   defaultVariants: { size: "md" }
 });
 
-type InputProps = InputPrimitive.Props & VariantProps<typeof inputVariants>;
+type InputProps = Omit<InputPrimitive.Props, "size"> & VariantProps<typeof inputVariants>;
 
 function Input({ className, size, ...props }: InputProps) {
   return <InputPrimitive data-slot="input" className={resolveComponentClassName(className, (override) => inputVariants({ className: override, size }))} {...props} />;

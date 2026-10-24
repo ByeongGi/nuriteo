@@ -408,7 +408,7 @@ export function TeamConsole(props: TeamConsoleProps) {
       </MetricGrid>}
 
       {inWorkspace ? null : <nav className={styles.tabs()} aria-label="조직 설정">
-        <Link className={styles.tab()} href={props.baseHref === undefined ? "/workspaces" : `${props.baseHref.replace(/\/teams$/u, "")}/members`}>조직 개요</Link>
+        <Link className={styles.tab()} href="/workspaces">조직 개요</Link>
         <Link className={styles.tab()} href={teamHref(undefined, props.baseHref)} aria-current="page">팀과 권한</Link>
       </nav>}
 

@@ -85,6 +85,18 @@ try {
   const origin = new URL(externalUrl).origin;
   const projectFrame = await waitForFrame(page, origin, "/");
   await projectFrame.getByRole("heading", { name: "Next.js" }).waitFor({ timeout: 20_000 });
+  const documentTimeOrigin = await projectFrame.evaluate(() => performance.timeOrigin);
+  const pagePath = `${workflow.projectRoot}/app/page.tsx`;
+  const editedPage = workflow.workspace.readText(pagePath).replace("<h1>Next.js</h1>", "<h1>Next HMR</h1>");
+  assert.notEqual(editedPage, workflow.workspace.readText(pagePath));
+  workflow.applySourceEdit("app/page.tsx", editedPage);
+  await page.evaluate(() => {
+    const hotUpdate = (window as typeof window & { __nuriteoNextPreviewHotUpdate?: (path: string) => void }).__nuriteoNextPreviewHotUpdate;
+    if (!hotUpdate) throw new Error("Next Preview HMR probe unavailable");
+    hotUpdate("app/page.tsx");
+  });
+  await projectFrame.getByRole("heading", { name: "Next HMR" }).waitFor({ timeout: 20_000 });
+  assert.equal(await projectFrame.evaluate(() => performance.timeOrigin), documentTimeOrigin, "Next HMR must preserve the Preview document");
   const aboutResponse = await projectFrame.goto(`${origin}/about`, { waitUntil: "domcontentloaded" });
   assert.equal(aboutResponse?.status(), 200);
   await projectFrame.getByRole("heading", { name: "About" }).waitFor();

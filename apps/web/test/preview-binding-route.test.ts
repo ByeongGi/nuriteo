@@ -44,7 +44,7 @@ try {
   assert.equal(response.headers.get("cache-control"), "no-store");
   const result = await response.json() as { runtimeId: string; ttlMs: number };
   assert.match(result.runtimeId, /^[a-z2-7]{45}$/u);
-  assert.ok(result.ttlMs > 0 && result.ttlMs <= 6_000, "the client receives a bounded relative lifetime, not a wall-clock expiry");
+  assert.ok(result.ttlMs > 0 && result.ttlMs <= 30_000, "the client receives a bounded relative lifetime, not a wall-clock expiry");
 
   let stalledBodyCancelled = false;
   const stalledBody = new ReadableStream<Uint8Array>({

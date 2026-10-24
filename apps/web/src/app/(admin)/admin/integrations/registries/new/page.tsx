@@ -1,0 +1,9 @@
+import type { Metadata } from "next";
+
+import { RegistryConsole } from "#src/app/(admin)/admin/registries/registry-console.tsx";
+
+export const metadata: Metadata = { title: "새 패키지 저장소" };
+
+export default function NewRegistryPage() {
+  return <RegistryConsole createMode initialConfiguration={{ items: [], scopes: [] }} />;
+}

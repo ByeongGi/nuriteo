@@ -15,6 +15,13 @@ const settingsGroupStyles = tv({
     value: "min-w-0 break-words text-right text-sm font-medium text-foreground max-[42rem]:text-left"
   },
   variants: {
+    density: {
+      comfortable: {},
+      compact: {
+        header: "py-2.5",
+        row: "min-h-14 py-2.5"
+      }
+    },
     layout: {
       default: {},
       stacked: {
@@ -30,16 +37,17 @@ const settingsGroupStyles = tv({
       }
     }
   },
-  defaultVariants: { layout: "default", tone: "default" }
+  defaultVariants: { density: "comfortable", layout: "default", tone: "default" }
 });
 
-export function SettingsGroup({ children, description, title, tone = "default" }: Readonly<{
+export function SettingsGroup({ children, density = "comfortable", description, title, tone = "default" }: Readonly<{
   children: ReactNode;
+  density?: "comfortable" | "compact";
   description?: string;
   title: string;
   tone?: "danger" | "default";
 }>) {
-  const styles = settingsGroupStyles({ tone });
+  const styles = settingsGroupStyles({ density, tone });
   return (
     <section className={styles.root()}>
       <header className={styles.header()}>
@@ -51,13 +59,14 @@ export function SettingsGroup({ children, description, title, tone = "default" }
   );
 }
 
-export function SettingsRow({ children, description, layout = "default", title }: Readonly<{
+export function SettingsRow({ children, density = "comfortable", description, layout = "default", title }: Readonly<{
   children: ReactNode;
+  density?: "comfortable" | "compact";
   description?: string;
   layout?: "default" | "stacked";
   title: string;
 }>) {
-  const styles = settingsGroupStyles({ layout });
+  const styles = settingsGroupStyles({ density, layout });
   return (
     <div className={styles.row()}>
       <div className={styles.copy()}>

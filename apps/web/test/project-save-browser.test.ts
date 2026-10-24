@@ -8,8 +8,10 @@ import { fileURLToPath } from "node:url";
 import { chromium } from "@playwright/test";
 import { build } from "esbuild";
 
+import type { RuntimeAdapter } from "../src/runtime/runtime-adapter.ts";
+
 declare global {
-  interface Window { __nuriteoRuntimeProbe: { activeWorkers: number; createdWorkers: number; committedVersion?: number; committedEtag?: string; reloads: number; restoreMode: "download-failure" | "intervening" | "materialization-failure" | "success" } }
+  interface Window { __nuriteoRuntimeProbe: { activeWorkers: number; adapter?: RuntimeAdapter; createdWorkers: number; committedVersion?: number; committedEtag?: string; reloads: number; restoreMode: "download-failure" | "intervening" | "materialization-failure" | "success"; runtimeActiveWorkers: number; runtimeCreatedWorkers: number } }
 }
 
 const webRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");

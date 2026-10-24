@@ -117,7 +117,12 @@ function createRecoveryFixtureAdapter(initialDraftAccess: "conflict" | "writer",
   }
 
   function copyState(): RuntimeViewState {
-    return { ...state, diagnostics: state.diagnostics.map((diagnostic) => ({ ...diagnostic, actions: [...diagnostic.actions] })) };
+    return {
+      ...state,
+      diagnostics: state.diagnostics.map((diagnostic) => ({ ...diagnostic, actions: [...diagnostic.actions] })),
+      ports: state.ports.map((port) => ({ ...port })),
+      processes: state.processes.map((process) => ({ ...process, argv: [...process.argv] }))
+    };
   }
 
   function previewFailureDiagnostic(): RuntimeDiagnostic {
@@ -167,7 +172,8 @@ function createRecoveryFixtureAdapter(initialDraftAccess: "conflict" | "writer",
       resize() {},
       signal: () => true,
       close: () => true,
-      activeCount: () => 0
+      activeCount: () => 0,
+      processes: () => []
     },
     recovery: {
       async run(kind: RuntimeRecoveryActionKind) {
@@ -238,6 +244,8 @@ function baseState(): RuntimeViewState {
     workflowPhase: "idle",
     hmrState: "idle",
     previewUrl: null,
+    ports: [],
+    processes: [],
     diagnostics: [],
     localDraftAccess: "none",
     terminalProcessCount: 0

@@ -1,6 +1,6 @@
 const RUNTIME_ID = /^[a-z2-7]{45}$/u;
 const SIGNING_KEY = /^[A-Za-z0-9_-]{43}$/u;
-const DEFAULT_TTL_MS = 5_000;
+const DEFAULT_TTL_MS = 29_000;
 
 export interface SignedPreviewBinding {
   readonly expiresAt: number;

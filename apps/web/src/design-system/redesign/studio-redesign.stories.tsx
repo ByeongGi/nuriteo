@@ -1,5 +1,6 @@
 import type { Project } from "@nuriteo/api-client";
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
+import { waitFor } from "storybook/test";
 
 import { ProjectIdeShell } from "#src/app/(authenticated)/projects/project-ide-shell.tsx";
 import { ProjectStudioFrame } from "#src/app/(studio)/projects/[projectId]/studio/project-studio-screen.tsx";
@@ -19,7 +20,6 @@ const project: Project = {
   version: 18
 };
 
-const emptyHistory = { nextCursor: null, recovery: [], versions: [] } as const;
 const readyRuntime = createStudioRuntimeFeatureLoader({ projectId: project.id });
 const largeRuntime = createStudioRuntimeFeatureLoader({ fileCount: 2_500, projectId: project.id });
 const conflictRuntime = createStudioRuntimeFeatureLoader({ mode: "conflict", projectId: project.id });
@@ -36,7 +36,6 @@ function StudioFixture({
     <ProjectStudioFrame project={fixtureProject} workspaceLabel="김병기의 워크스페이스" workspaceScope="user:user-kim">
       <ProjectIdeShell
         assetRevision={"a".repeat(64)}
-        initialHistoryState={emptyHistory}
         previewConfiguration={{
           code: "PREVIEW_CONFIGURATION_INVALID",
           message: "Storybook에서는 격리 미리보기 연결을 만들지 않습니다.",
@@ -55,6 +54,18 @@ async function startTemplate({ canvas }: { canvas: { getByRole: (role: string, o
   canvas.getByRole("button", { name: "템플릿으로 워크스페이스 시작" }).click();
 }
 
+async function startTemplateWithTerminal(context: Parameters<typeof startTemplate>[0]) {
+  await startTemplate(context);
+  await waitFor(() => context.canvas.getByRole("button", { name: "터미널" }));
+  context.canvas.getByRole("button", { name: "터미널" }).click();
+}
+
+async function startTemplateWithSearch(context: Parameters<typeof startTemplate>[0]) {
+  await startTemplate(context);
+  await waitFor(() => context.canvas.getByRole("button", { name: "프로젝트 파일 검색" }));
+  context.canvas.getByRole("button", { name: "프로젝트 파일 검색" }).click();
+}
+
 const meta = {
   parameters: {
     layout: "fullscreen",
@@ -68,6 +79,16 @@ type Story = StoryObj<typeof meta>;
 
 export const Ready: Story = {
   play: startTemplate,
+  render: () => <StudioFixture />
+};
+
+export const TerminalOpen: Story = {
+  play: startTemplateWithTerminal,
+  render: () => <StudioFixture />
+};
+
+export const FileSearch: Story = {
+  play: startTemplateWithSearch,
   render: () => <StudioFixture />
 };
 

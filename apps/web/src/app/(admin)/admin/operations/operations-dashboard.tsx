@@ -5,16 +5,18 @@ import type {
   AdminOperationsState,
   AdminUsage
 } from "@nuriteo/api-client";
+import Link from "next/link";
 import { tv } from "tailwind-variants";
 
 import { AdminPageHeader } from "#src/app/(admin)/admin/_components/admin-page-header.tsx";
 import { AdminPage, AdminSectionHeading } from "#src/app/(admin)/admin/_components/admin-surface.tsx";
 import { SupportBundleDownload } from "#src/app/(admin)/admin/operations/support-bundle-download.tsx";
+import { buttonVariants } from "#src/components/ui/button.styles.ts";
 
 const operationStyles = tv({
   slots: {
     summary: "grid shrink-0 justify-items-end gap-2 text-xs text-subtle-foreground max-[37.5rem]:justify-items-start",
-    grid: "mt-4 grid grid-cols-2 gap-3 max-[37.5rem]:grid-cols-1",
+    grid: "grid grid-cols-2 gap-4 max-[48rem]:grid-cols-1",
     card: "min-w-0 overflow-hidden rounded-lg border border-muted-border bg-surface",
     cardText: "m-0 border-t border-muted-border px-4 py-3 text-sm",
     cardNote: "m-0 border-t border-muted-border px-4 py-3 text-xs text-muted-foreground",
@@ -30,9 +32,9 @@ const operationStyles = tv({
 export function OperationsDashboard({ operations }: { readonly operations: AdminOperations }) {
   const styles = operationStyles();
   return (
-    <AdminPage id="main-content">
+    <AdminPage id="main-content" contentWidth="wide">
       <AdminPageHeader
-        category="운영 현황"
+        category="운영"
         title="운영 현황"
         description={<>서비스 상태, 정리 작업과 전체 인스턴스 사용량을 한눈에 확인하세요. 진단 정보는 안전한 운영 범위만 표시합니다.</>}
         aside={<div className={styles.summary()}>
@@ -46,7 +48,7 @@ export function OperationsDashboard({ operations }: { readonly operations: Admin
       <div className={styles.grid()}>
         <section className={styles.card()} aria-labelledby="dependency-health-title">
           <CardHeading
-            eyebrow="READINESS"
+            eyebrow="서비스 준비 상태"
             title="핵심 의존성"
             id="dependency-health-title"
             state={operations.dependencies.state}
@@ -63,17 +65,18 @@ export function OperationsDashboard({ operations }: { readonly operations: Admin
 
         <section className={styles.card()} aria-labelledby="cleanup-queue-title">
           <CardHeading
-            eyebrow="BACKGROUND WORK"
+            eyebrow="백그라운드 작업"
             title="정리 작업 대기열"
             id="cleanup-queue-title"
             state={operations.cleanup.state}
           />
           <CleanupMetrics cleanup={operations.cleanup} />
+          <div className="flex justify-end border-t border-muted-border px-4 py-3"><Link className={buttonVariants({ size: "sm", variant: "secondary" })} href="/admin/operations/storage-cleanup">정리 대상 점검</Link></div>
         </section>
 
         <section className={operationStyles({ wide: true }).card()} aria-labelledby="usage-title">
           <CardHeading
-            eyebrow="AGGREGATE USAGE"
+            eyebrow="전체 사용량"
             title="인스턴스 사용량"
             id="usage-title"
             state={operations.usage.state}
@@ -229,6 +232,6 @@ function formatTimestamp(value: string): string {
   return new Intl.DateTimeFormat("ko-KR", {
     dateStyle: "medium",
     timeStyle: "short",
-    timeZone: "UTC"
-  }).format(new Date(value)) + " UTC";
+    timeZone: "Asia/Seoul"
+  }).format(new Date(value)) + " KST";
 }

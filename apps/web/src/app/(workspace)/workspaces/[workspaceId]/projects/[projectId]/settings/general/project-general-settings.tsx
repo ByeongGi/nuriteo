@@ -86,7 +86,7 @@ export function ProjectGeneralSettings({ initialEtag, initialProject, workspace 
         <SettingsRow title="개발 및 기록" description="Studio에서 개발하거나 이전 저장본을 확인합니다.">
           <div className={css.actions()}>
             {project.state === "active" ? <Link className={css.link({ className: css.primary() })} href={`${projectBase}/studio`}>Studio에서 열기</Link> : null}
-            <Link className={css.link({ className: css.secondary() })} href={`${projectBase}/history`}>버전 기록 보기</Link>
+            <Link className={css.link({ className: css.secondary() })} href={`${projectBase}/history`}>버전과 복구 보기</Link>
           </div>
         </SettingsRow>
       </SettingsGroup>

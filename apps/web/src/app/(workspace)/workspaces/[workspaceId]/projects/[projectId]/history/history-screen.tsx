@@ -21,7 +21,7 @@ export function ProjectHistoryScreen({ initialState, project, projectEtag }: Rea
   return (
     <ProjectSettingsSection
       projectName={project.name}
-      title="버전 기록"
+      title="버전과 복구"
       description="서버 저장본의 명시적 버전과 자동 복구 지점을 확인하고 복구합니다."
     >
       <ProjectHistoryPanel

@@ -28,8 +28,8 @@ export function MfaEnrollmentPanel({ enrollment, pending, onSubmit }: MfaEnrollm
       </div>
       <form className={styles.codeForm()} onSubmit={onSubmit} aria-busy={pending}>
         <label htmlFor="mfa-confirm-code">6자리 인증 코드</label>
-        <Input id="mfa-confirm-code" name="code" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" minLength={6} maxLength={6} required />
-        <Button type="submit" variant="primary" disabled={pending}>{pending ? "확인 중…" : "확인하고 사용"}</Button>
+        <Input id="mfa-confirm-code" name="code" size="sm" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" minLength={6} maxLength={6} required />
+        <Button type="submit" size="sm" variant="primary" disabled={pending}>{pending ? "확인 중…" : "확인하고 사용"}</Button>
       </form>
     </section>
   );

@@ -14,7 +14,6 @@ use crate::upgrade_preflight::{self, UpgradePreflightError, UpgradeSchemaState};
 
 use super::http_service::{AdminHttpService, AdminHttpServiceError, authorize_recent_admin};
 
-const HISTORY_LIMIT: i64 = 20;
 const APPROVAL_ACTION: &str = "instance.update_approved";
 
 #[derive(Debug, Clone, Serialize, ToSchema)]
@@ -74,6 +73,7 @@ pub struct AdminUpdateHistoryItemView {
 #[serde(rename_all = "camelCase")]
 pub struct AdminUpdateHistoryView {
     pub items: Vec<AdminUpdateHistoryItemView>,
+    pub next_cursor: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, ToSchema)]
@@ -99,6 +99,8 @@ impl AdminHttpService {
     pub(crate) async fn update_history(
         &self,
         request: BrowserRequestHeaders<'_>,
+        cursor: Option<String>,
+        limit: u16,
     ) -> Result<AdminUpdateHistoryView, AdminHttpServiceError> {
         let runtime = self.runtime()?;
         runtime.authenticate(request).await?;
@@ -112,14 +114,17 @@ impl AdminHttpService {
                 let rows = sqlx::query(
                     "SELECT id::text, occurred_at, target_id FROM audit_events \
                      WHERE action_code = $1 AND target_type = 'update_release' \
-                     ORDER BY occurred_at DESC, id DESC LIMIT $2",
+                     AND ($2::uuid IS NULL OR (occurred_at, id) < (\
+                       SELECT occurred_at, id FROM audit_events WHERE id = $2::uuid\
+                     )) ORDER BY occurred_at DESC, id DESC LIMIT $3",
                 )
                 .bind(APPROVAL_ACTION)
-                .bind(HISTORY_LIMIT)
+                .bind(cursor)
+                .bind(i64::from(limit) + 1)
                 .fetch_all(&mut *connection)
                 .await
                 .map_err(|_| AdminHttpServiceError::Unavailable)?;
-                let items = rows
+                let mut items = rows
                     .into_iter()
                     .map(|row| {
                         let occurred_at: OffsetDateTime = row
@@ -140,7 +145,14 @@ impl AdminHttpService {
                         })
                     })
                     .collect::<Result<Vec<_>, _>>()?;
-                Ok(AdminUpdateHistoryView { items })
+                let has_more = items.len() > usize::from(limit);
+                if has_more {
+                    items.truncate(usize::from(limit));
+                }
+                let next_cursor = has_more
+                    .then(|| items.last().map(|item| item.id.clone()))
+                    .flatten();
+                Ok(AdminUpdateHistoryView { items, next_cursor })
             })
             .await
     }

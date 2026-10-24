@@ -68,9 +68,11 @@ const terminal = createTerminalSession({
 });
 
 const run = terminal.run("vite dev");
+assert.equal(terminal.write("early input\n"), true, "terminal input is accepted while the Worker starts");
 await new Promise((resolve) => setTimeout(resolve, 0));
 assert.equal(terminal.activeEntry.command, "vite dev");
 assert.equal(chunks[0].data, "vite dev server ready\n");
+assert.equal(workers[0].messages.some((message) => message.type === "stdin" && message.data === "early input\n"), true);
 const [processOutput] = table.output(1);
 assert.equal(processOutput.data, "vite dev server ready\n");
 assert.equal(table.writeStdin(1, "q\n"), true);

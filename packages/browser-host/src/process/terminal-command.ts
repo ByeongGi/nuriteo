@@ -18,7 +18,15 @@ export function createHostProcessShellCommand(options: HostProcessShellCommandOp
       if (chunk.pid !== prepared.pid || chunk.generation !== prepared.generation) return;
       output?.({ stream: chunk.stream, data: chunk.data });
     });
-    const stopInput = terminal?.onInput((data) => options.table.writeStdin(prepared.pid, data)) || (() => undefined);
+    const pendingInput: string[] = [];
+    let processReady = false;
+    const stopInput = terminal?.onInput((data) => {
+      if (!processReady) {
+        pendingInput.push(data);
+        return;
+      }
+      options.table.writeStdin(prepared.pid, data);
+    }) || (() => undefined);
     const stopResize = terminal?.onResize((size) => options.table.resize(prepared.pid, size)) || (() => undefined);
     const abort = () => {
       const reason = signal?.reason;
@@ -31,7 +39,12 @@ export function createHostProcessShellCommand(options: HostProcessShellCommandOp
 
     try {
       const started = await options.table.start(prepared.pid);
-      if (terminal && started.status === "ready") options.table.resize(prepared.pid, terminal.size);
+      processReady = started.status === "ready";
+      if (terminal && processReady) options.table.resize(prepared.pid, terminal.size);
+      if (processReady) {
+        for (const data of pendingInput) options.table.writeStdin(prepared.pid, data);
+      }
+      pendingInput.length = 0;
       if (stdin) options.table.writeStdin(prepared.pid, stdin);
       const final = options.waitForExit === false || started.status !== "ready"
         ? started

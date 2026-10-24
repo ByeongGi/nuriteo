@@ -27,6 +27,7 @@ import {
   ViteProductWorkflow,
   type ViteProductPackageManager
 } from "../../node-runtime/src/frameworks/vite-workflow.ts";
+import { createRegistryPackageInstaller } from "../../node-runtime/src/package-managers/registry-installer.ts";
 
 import {
   createHmrClient,
@@ -57,6 +58,12 @@ import {
   injectPreviewErrorBridge,
   shouldInjectPreviewErrorBridge
 } from "./preview-inject.ts";
+import {
+  executeWorkspacePackageLifecycles,
+  executeWorkspaceNode,
+  executeWorkspacePackageScript,
+  readWorkspacePackageScript
+} from "./package-script.ts";
 import type { RuntimeRecoveryActionKind } from "../../browser-host/src/observability/recovery-actions.ts";
 import { PHASES } from "./controller-contracts.ts";
 import type {
@@ -311,24 +318,7 @@ export function createPreviewWorkflowController(
   }
 
   function attachEditor(project: ProjectWorkspaceStore, workflow: ProductWorkflow): void {
-    const editor = createProjectWorkspaceEditorBridge(project, {
-      onChange(event: ProjectWorkspaceEditorChangeEvent) {
-        emit("editor-change", { event });
-      },
-      onSave(event: ProjectWorkspaceEditorSaveEvent) {
-        if (!state.workflow) return;
-        try {
-          const relative = event.relativePath || event.path.slice(workflow.projectRoot.length + 1);
-          const result = state.workflow.applySourceEdit(relative, event.data);
-          log(`hmr update ${relative}`);
-          emit("hmr-update", { result });
-        } catch (error) {
-          setError(error, "hmr");
-        }
-      }
-    });
-
-    createProjectWorkspaceDevServerChangeBridge(workflow, {
+    const applyDevServerChange = createProjectWorkspaceDevServerChangeBridge(workflow, {
       root: workflow.projectRoot,
       onDiagnostic(diagnostic) {
         const action: PreviewRecoveryAction = {
@@ -343,6 +333,33 @@ export function createPreviewWorkflowController(
           recoveryActions: [action]
         }];
         emit("diagnostic", { diagnostic });
+      }
+    });
+    const editor = createProjectWorkspaceEditorBridge(project, {
+      onChange(event: ProjectWorkspaceEditorChangeEvent) {
+        emit("editor-change", { event });
+        if (event.kind === "create" && event.data !== undefined) {
+          workflow.workspace.writeText(event.path, event.data);
+        }
+        if (event.kind === "rename" && event.previousPath && event.data !== undefined) {
+          if (workflow.workspace.rename) {
+            workflow.workspace.rename(event.previousPath, event.path);
+          } else {
+            workflow.workspace.writeText(event.path, event.data);
+            workflow.workspace.remove(event.previousPath);
+          }
+        }
+        if (event.kind === "delete") {
+          workflow.workspace.remove(event.path);
+        }
+        const result = applyDevServerChange(event);
+        if (result.hmrResult !== undefined) {
+          log(`hmr update ${result.relativePath}`);
+          emit("hmr-update", { result: result.hmrResult });
+        }
+      },
+      onSave(event: ProjectWorkspaceEditorSaveEvent) {
+        workflow.workspace.writeText(event.path, event.data);
       }
     });
 
@@ -911,7 +928,7 @@ export function createPreviewWorkflowController(
     return hmr.snapshot();
   }
 
-  async function runPreview(): Promise<PreviewWorkflowSnapshot> {
+  async function runPreview(scriptName = "dev"): Promise<PreviewWorkflowSnapshot> {
     if (!state.workflow) loadTemplate("vite-react");
     if (!state.workflow) throw new Error("Failed to load preview workflow");
     if (state.health && !state.health.ok) {
@@ -929,7 +946,7 @@ export function createPreviewWorkflowController(
       setPhase(PHASES.installed);
 
       setPhase(PHASES.startingDev);
-      const dev = state.workflow.startDevServerFromPackageScript("dev");
+      const dev = state.workflow.startDevServerFromPackageScript(scriptName);
       log(`dev server ready :${dev.port}`);
 
       await ensureServiceWorker();
@@ -961,6 +978,84 @@ export function createPreviewWorkflowController(
     if (index === -1) state.projectFiles.push(next);
     else state.projectFiles[index] = next;
     return getSnapshot();
+  }
+
+  function createTextFile(path: string, data = ""): PreviewWorkflowSnapshot {
+    if (disposed || !state.editor) throw new Error("Preview editor is unavailable");
+    state.editor.createFile(path, data);
+    const relative = relativeProjectPath(path, state.project?.root || "");
+    state.projectFiles.push({ path: relative, kind: "text", bytes: new TextEncoder().encode(data) });
+    state.projectFiles.sort((left, right) => left.path.localeCompare(right.path));
+    return getSnapshot();
+  }
+
+  function renameFile(from: string, to: string): PreviewWorkflowSnapshot {
+    if (disposed || !state.editor) throw new Error("Preview editor is unavailable");
+    const fromRelative = relativeProjectPath(from, state.project?.root || "");
+    const index = state.projectFiles.findIndex((file) => file.path === fromRelative);
+    if (index < 0) throw new Error(`No such project file: ${fromRelative}`);
+    const renamed = state.editor.renameFile(from, to);
+    const toRelative = relativeProjectPath(renamed.path, state.project?.root || "");
+    state.projectFiles[index] = { path: toRelative, kind: "text", bytes: new TextEncoder().encode(renamed.data) };
+    state.projectFiles.sort((left, right) => left.path.localeCompare(right.path));
+    return getSnapshot();
+  }
+
+  function deleteFile(path: string): PreviewWorkflowSnapshot {
+    if (disposed || !state.editor) throw new Error("Preview editor is unavailable");
+    state.editor.deleteFile(path);
+    const relative = relativeProjectPath(path, state.project?.root || "");
+    state.projectFiles = state.projectFiles.filter((file) => file.path !== relative);
+    return getSnapshot();
+  }
+
+  function syncWorkflowFilesToProject(): void {
+    const workflow = state.workflow;
+    const project = state.project;
+    if (!workflow || !project) return;
+    const rootPrefix = `${workflow.projectRoot}/`;
+    const runtimeFiles = new Map(
+      [...workflow.workspace.files.entries()]
+        .filter(([path]) => path.startsWith(rootPrefix) && !path.startsWith(`${rootPrefix}node_modules/`))
+    );
+
+    for (const file of project.listFiles()) {
+      if (!runtimeFiles.has(file.path)) project.files.delete(file.path);
+    }
+    for (const [path, bytes] of runtimeFiles) {
+      try {
+        project.writeText(path, new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+      } catch {
+        // ProjectWorkspaceStore currently represents editor-visible text files only.
+      }
+    }
+    state.projectFiles = project.listFiles().map((file) => ({
+      path: relativeProjectPath(file.path, project.root),
+      kind: "text",
+      bytes: new TextEncoder().encode(file.data)
+    }));
+  }
+
+  function syncProjectFilesToWorkflow(): void {
+    const workflow = state.workflow;
+    const project = state.project;
+    if (!workflow || !project) return;
+    const currentTextFiles = new Map(project.listFiles().map((file) => [file.path, file.data]));
+    for (const file of state.projectFiles) {
+      if (file.kind !== "text") continue;
+      const absolutePath = `${workflow.projectRoot}/${file.path}`;
+      if (!currentTextFiles.has(absolutePath)) workflow.workspace.remove(absolutePath);
+    }
+    for (const [path, data] of currentTextFiles) workflow.workspace.writeText(path, data);
+    const binaryFiles = state.projectFiles.filter((file) => file.kind === "binary");
+    state.projectFiles = [
+      ...binaryFiles,
+      ...project.listFiles().map((file) => ({
+        path: relativeProjectPath(file.path, project.root),
+        kind: "text" as const,
+        bytes: new TextEncoder().encode(file.data)
+      }))
+    ].sort((left, right) => left.path.localeCompare(right.path));
   }
 
   function beginOperation(): AbortController {
@@ -1023,11 +1118,11 @@ export function createPreviewWorkflowController(
     } finally { operationControllers.delete(operation); }
   }
 
-  async function runBuild(): Promise<PreviewWorkflowSnapshot> {
+  async function runBuild(scriptName = "build"): Promise<PreviewWorkflowSnapshot> {
     if (!state.workflow) throw new Error("Load a template before building");
     try {
       setPhase(PHASES.building);
-      state.build = state.workflow.buildFromPackageScript("build");
+      state.build = state.workflow.buildFromPackageScript(scriptName);
       log(`build ok files=${state.build.files.join(",")}`);
       setPhase(PHASES.built);
       emit("build", { build: state.build });
@@ -1121,14 +1216,50 @@ export function createPreviewWorkflowController(
     onProcessStart(terminalId, command) {
       emit("log", { line: "shell-process-start", terminalId, command });
     },
-    install: async () => {
+    install: async (request) => {
       if (!state.workflow) loadTemplate("vite-react");
       if (!state.workflow) return { stdout: "", stderr: "no workflow\n", exitCode: 1 };
       try {
         setPhase(PHASES.installing);
         state.install = state.workflow.install();
+        const registryInstall = await createRegistryPackageInstaller({
+          workspace: state.workflow.workspace,
+          ...(options.packageFetch ? { fetch: options.packageFetch } : {}),
+          ...(options.packageRegistryUrl ? { registryUrl: options.packageRegistryUrl } : {})
+        }).install({
+          cwd: state.workflow.projectRoot,
+          ...(request?.packages.length ? { packages: request.packages, save: request.save } : {}),
+          ...(!request?.packages.length ? { exclude: state.install.packages } : {}),
+          ...(request?.signal ? { signal: request.signal } : {})
+        });
+        const lifecycleOutput: string[] = [];
+        if (!request?.ignoreScripts && registryInstall.installed.length > 0) {
+          const installedByPath = new Map(registryInstall.installed.map((entry) => [entry.path, entry]));
+          const lifecycleResults = await executeWorkspacePackageLifecycles(
+            state.workflow,
+            registryInstall.installed.map((entry) => entry.path).reverse()
+          );
+          for (const result of lifecycleResults) {
+            if (result.stdout) lifecycleOutput.push(result.stdout.trimEnd());
+            if (result.exitCode === 0) continue;
+            const installedPackage = installedByPath.get(result.packagePath);
+            if (installedPackage?.optional) {
+              log(`optional lifecycle skipped ${installedPackage.name}: ${result.stderr.trim()}`);
+              continue;
+            }
+            throw new Error(`${installedPackage?.name ?? result.packagePath} ${result.event}: ${result.stderr.trim()}`);
+          }
+        }
+        syncWorkflowFilesToProject();
         setPhase(PHASES.installed);
-        const stdout = `install ok packages=${state.install.packages.join(",")}\n`;
+        const installed = registryInstall.installed.map((entry) => `${entry.name}@${entry.version}`);
+        const reused = registryInstall.reused.map((entry) => `${entry.name}@${entry.version}`);
+        const stdout = [
+          `install ok packages=${state.install.packages.join(",")}`,
+          ...(installed.length ? [`added ${installed.join(", ")}`] : []),
+          ...(reused.length ? [`reused ${reused.join(", ")}`] : []),
+          ...lifecycleOutput
+        ].join("\n") + "\n";
         log(stdout.trim());
         return { stdout, stderr: "", exitCode: 0 };
       } catch (error) {
@@ -1140,22 +1271,36 @@ export function createPreviewWorkflowController(
         };
       }
     },
-    runDev: async () => {
+    runScript: async (name, args = []) => {
       try {
-        await runPreview();
-        return { stdout: `dev server ready ${state.previewUrl || ""}\n`, stderr: "", exitCode: 0 };
+        if (!state.workflow) return { stdout: "", stderr: "no workflow\n", exitCode: 1 };
+        const script = readWorkspacePackageScript(state.workflow, name);
+        if (script.kind === "dev") {
+          await runPreview(name);
+          return { stdout: `dev server ready ${state.previewUrl || ""}\n`, stderr: "", exitCode: 0 };
+        }
+        if (script.kind === "build") {
+          await runBuild(name);
+          syncWorkflowFilesToProject();
+          return {
+            stdout: `build ok files=${(state.build?.files || []).join(",")}\n`,
+            stderr: "",
+            exitCode: 0
+          };
+        }
+        const result = await executeWorkspacePackageScript(state.workflow, script, args);
+        syncWorkflowFilesToProject();
+        return result;
       } catch (error) {
         return { stdout: "", stderr: `${error instanceof Error ? error.message : String(error)}\n`, exitCode: 1 };
       }
     },
-    runBuild: async () => {
+    runNode: async (cwd, args, stdin = "") => {
       try {
-        await runBuild();
-        return {
-          stdout: `build ok files=${(state.build?.files || []).join(",")}\n`,
-          stderr: "",
-          exitCode: 0
-        };
+        if (!state.workflow) return { stdout: "", stderr: "no workflow\n", exitCode: 1 };
+        const result = await executeWorkspaceNode(state.workflow, cwd, args, stdin);
+        syncWorkflowFilesToProject();
+        return result;
       } catch (error) {
         return { stdout: "", stderr: `${error instanceof Error ? error.message : String(error)}\n`, exitCode: 1 };
       }
@@ -1175,10 +1320,22 @@ export function createPreviewWorkflowController(
     dispose: disposeShellLifecycle,
     listShellProcesses,
     resizeShell,
-    runShellCommand,
+    runShellCommand: runShellCommandInSession,
     signalShell,
     writeShellInput
   } = shellLifecycle;
+
+  async function runShellCommand(
+    command: string,
+    terminalId?: string,
+    onOutput?: (chunk: { stream: "stdout" | "stderr"; data: string }) => void
+  ) {
+    try {
+      return await runShellCommandInSession(command, terminalId, onOutput);
+    } finally {
+      syncProjectFilesToWorkflow();
+    }
+  }
 
   function dispose(): void {
     if (disposeComplete) return;
@@ -1248,6 +1405,9 @@ export function createPreviewWorkflowController(
     setPackageManagerOverride,
     setPreviewErrorBridge,
     getChangeStatus,
+    createTextFile,
+    renameFile,
+    deleteFile,
     saveTextFile,
     runPreview,
     restartDev,

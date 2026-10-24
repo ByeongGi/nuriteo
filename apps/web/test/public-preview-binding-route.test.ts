@@ -44,7 +44,7 @@ try {
   assert.equal(response.headers.get("cache-control"), "no-store");
   const body = await response.json() as { runtimeId: string; ttlMs: number };
   assert.match(body.runtimeId, /^[a-z2-7]{45}$/u);
-  assert.ok(body.ttlMs > 0 && body.ttlMs <= 6_000);
+  assert.ok(body.ttlMs > 0 && body.ttlMs <= 30_000);
   const firstCookie = cookiePair(response);
   assert.equal(coreRequests.length, 1);
   assert.equal(coreRequests[0]?.credentials, "omit");

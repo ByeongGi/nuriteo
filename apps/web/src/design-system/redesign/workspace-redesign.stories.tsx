@@ -21,7 +21,7 @@ const selectedProject = projectRows[0]!;
 
 function WorkspaceProjectShell({ children }: Readonly<{ children: ReactNode }>) {
   return (
-    <WorkspaceShellFrame displayName="김병기" email="byeonggi@example.com" themeMode="light" unreadCount={3} workspace={workspaceRows[0]!}>
+    <WorkspaceShellFrame displayName="김병기" email="byeonggi@example.com" themeMode="light" workspace={workspaceRows[0]!}>
       {children}
     </WorkspaceShellFrame>
   );

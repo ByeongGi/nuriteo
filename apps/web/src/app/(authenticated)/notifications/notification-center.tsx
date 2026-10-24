@@ -10,11 +10,11 @@ import type {
   NotificationInboxItem,
   NotificationStatus
 } from "@nuriteo/api-client";
+import Link from "next/link";
 import { useDeferredValue, useMemo, useState } from "react";
 import { tv } from "tailwind-variants";
 
 import { Button } from "#src/components/ui/button.tsx";
-import { MetricGrid, MetricItem } from "#src/components/ui/metric-grid.tsx";
 import { PageHeader } from "#src/components/ui/page-header.tsx";
 import { SegmentedControl } from "#src/components/ui/segmented-control.tsx";
 import { SearchField } from "#src/components/ui/search-field.tsx";
@@ -28,34 +28,37 @@ type ClassificationFilter = "all" | NotificationInboxItem["classification"];
 
 const notificationCenterStyles = tv({
   slots: {
-    root: "grid w-full gap-4 px-6 py-5 outline-none max-[48rem]:px-4 max-[48rem]:py-4",
+    root: "mx-auto grid w-full max-w-[68rem] gap-4 px-6 py-8 outline-none max-[48rem]:px-4 max-[48rem]:py-5",
+    settingsLink: "inline-flex min-h-9 items-center justify-center rounded-md border border-strong-border bg-surface px-3 text-sm font-semibold text-foreground no-underline hover:bg-hover",
     feedback: "sticky top-3 z-[var(--n-z-sticky)] m-0 rounded-md border border-muted-border bg-raised px-4 py-3 text-sm shadow-md",
     feedbackError: "border-danger/40 text-danger",
     feedbackSuccess: "border-success/40 text-success",
-    toolbar: "flex flex-wrap items-end justify-between gap-2 border-b border-muted-border pb-3",
+    toolbar: "flex flex-wrap items-end justify-between gap-2 border-b border-muted-border px-4 py-3",
     search: "min-w-[min(100%,18rem)] flex-1",
-    inbox: "rounded-lg border border-muted-border bg-surface p-4",
-    heading: "flex flex-wrap items-center justify-between gap-3",
+    inbox: "overflow-hidden rounded-lg border border-muted-border bg-surface",
+    heading: "flex flex-wrap items-center justify-between gap-3 border-b border-muted-border px-4 py-3",
     headingCopy: "grid gap-1",
     eyebrow: "m-0 text-xs font-semibold text-accent-foreground",
-    headingTitle: "m-0 text-lg font-semibold",
+    headingTitle: "m-0 text-sm font-semibold",
     headingCount: "text-xs font-medium text-muted-foreground",
     tabs: "flex flex-wrap gap-2",
-    searchScope: "mt-4 mb-0 text-xs text-muted-foreground",
-    list: "my-4 grid max-h-[42rem] list-none gap-1 overflow-auto p-0 [scrollbar-gutter:stable]",
-    item: "grid grid-cols-[0.5rem_minmax(0,1fr)_auto] items-start gap-3 rounded-md border border-transparent px-3 py-2.5 hover:bg-hover max-[48rem]:grid-cols-[0.5rem_minmax(0,1fr)]",
-    itemUnread: "border-l-primary bg-selected",
+    searchScope: "m-0 border-b border-muted-border px-4 py-2 text-xs text-muted-foreground",
+    list: "m-0 grid list-none p-0",
+    item: "grid min-h-[5.75rem] grid-cols-[0.5rem_minmax(0,1fr)_auto] items-start gap-3 px-4 py-3 transition-colors [content-visibility:auto] [contain-intrinsic-size:0_5.75rem] hover:bg-hover [&+&]:border-t [&+&]:border-muted-border max-[48rem]:grid-cols-[0.5rem_minmax(0,1fr)]",
+    itemUnread: "bg-selected/60",
     indicator: "mt-1.5 size-2 rounded-full bg-strong-border",
     indicatorUnread: "bg-primary",
     itemCopy: "grid min-w-0 gap-1",
-    itemMeta: "m-0 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground",
+    itemMeta: "m-0 flex flex-wrap items-center gap-2 text-xs text-muted-foreground [&_time]:ml-auto",
+    classification: "rounded-full bg-subtle px-2 py-0.5 text-[var(--n-font-size-2xs)] font-medium text-muted-foreground",
     itemTitle: "m-0 text-sm font-semibold",
     itemSummary: "m-0 text-sm leading-relaxed text-muted-foreground",
     itemDetail: "text-xs text-muted-foreground",
     itemActions: "flex flex-wrap gap-2 max-[48rem]:col-start-2",
-    empty: "grid min-h-48 place-content-center justify-items-center gap-2 rounded-lg border border-dashed border-muted-border p-6 text-center",
+    empty: "grid min-h-64 place-content-center justify-items-center gap-2 p-8 text-center",
     emptyTitle: "font-semibold",
-    emptyDescription: "m-0 text-sm text-muted-foreground"
+    emptyDescription: "m-0 max-w-md text-sm text-muted-foreground",
+    more: "m-4"
   }
 });
 
@@ -141,45 +144,43 @@ export function NotificationCenter({
 
   return (
     <main id="main-content" className={styles.root()} tabIndex={-1}>
-      <PageHeader density="compact" eyebrow="활동" title="알림" description="보안, 계정 접근, 협업 및 운영 변경 사항을 한곳에서 확인하세요." />
+      <PageHeader
+        density="compact"
+        eyebrow="활동"
+        title="알림"
+        description="보안, 계정 접근, 협업 및 운영 변경 사항을 한곳에서 확인하세요."
+        actions={<Link className={styles.settingsLink()} href="/account/notifications">알림 수신 설정</Link>}
+      />
 
       {feedback ? <p className={styles.feedback({ className: feedback.error ? styles.feedbackError() : styles.feedbackSuccess() })} role={feedback.error ? "alert" : "status"} aria-live="polite">{feedback.text}</p> : null}
 
-      <MetricGrid density="compact" aria-label="알림 요약">
-        <MetricItem label="읽지 않음" value={active.unreadCount} description="우선 확인이 필요한 새 소식" />
-        <MetricItem label="활성" value={active.items.length} description="현재 목록에 불러온 항목" />
-        <MetricItem label="보관됨" value={archived.items.length} description="필요할 때 다시 복원 가능" />
-      </MetricGrid>
-
-      <section className={styles.toolbar()} aria-label="알림 검색 및 분류">
-        <SearchField density="compact" className={styles.search()} label="알림 검색" value={query} onChange={(event) => setQuery(event.currentTarget.value)} placeholder="제목 또는 내용 검색" />
-        <SegmentedControl
-          aria-label="알림 분류"
-          value={classification}
-          onValueChange={setClassification}
-          options={[
-            { value: "all", label: "전체" },
-            { value: "critical_security", label: "보안" },
-            { value: "collaboration", label: "협업" },
-            { value: "operations", label: "운영" },
-            { value: "account_access", label: "계정" }
-          ]}
-        />
-      </section>
-
-      <div>
-        <section className={styles.inbox()} aria-labelledby="notification-inbox-title"><TabsRoot value={view} onValueChange={(value) => setView(value as View)}>
+      <section className={styles.inbox()} aria-labelledby="notification-inbox-title"><TabsRoot value={view} onValueChange={(value) => setView(value as View)}>
           <div className={styles.heading()}>
             <div className={styles.headingCopy()}>
-              <p className={styles.eyebrow()}>읽지 않음 {active.unreadCount}개</p>
-              <h2 className={styles.headingTitle()} id="notification-inbox-title">최근 알림 <small className={styles.headingCount()}>{visibleItems.length} / {collection.items.length}</small></h2>
+              <p className={styles.eyebrow()}>{active.unreadCount > 0 ? `읽지 않은 알림 ${active.unreadCount}개` : "모두 확인했습니다"}</p>
+              <h2 className={styles.headingTitle()} id="notification-inbox-title">알림 인박스 <small className={styles.headingCount()}>{visibleItems.length} / {collection.items.length}</small></h2>
             </div>
             <TabsList className={styles.tabs()} aria-label="알림 목록">
-              <TabsTab value="active" aria-label="활성 알림">활성</TabsTab>
-              <TabsTab value="archived" aria-label="보관된 알림">보관됨</TabsTab>
+              <TabsTab value="active" aria-label="활성 알림">받은 알림 {active.items.length}</TabsTab>
+              <TabsTab value="archived" aria-label="보관된 알림">보관함 {archived.items.length}</TabsTab>
               <TabsIndicator />
             </TabsList>
           </div>
+          <section className={styles.toolbar()} aria-label="알림 검색 및 분류">
+            <SearchField density="compact" className={styles.search()} label="알림 검색" value={query} onChange={(event) => setQuery(event.currentTarget.value)} placeholder="제목 또는 내용 검색" />
+            <SegmentedControl
+              aria-label="알림 분류"
+              value={classification}
+              onValueChange={setClassification}
+              options={[
+                { value: "all", label: "전체" },
+                { value: "critical_security", label: "보안" },
+                { value: "collaboration", label: "협업" },
+                { value: "operations", label: "운영" },
+                { value: "account_access", label: "계정" }
+              ]}
+            />
+          </section>
           <TabsPanel value={view} aria-busy={query !== deferredQuery}>
             {collection.nextCursor !== null ? <p className={styles.searchScope()}>현재 불러온 알림에서 검색합니다. 더 보기를 누르면 검색 범위가 넓어집니다.</p> : null}
             {visibleItems.length === 0 ? (
@@ -190,7 +191,7 @@ export function NotificationCenter({
                   <li key={item.id} className={styles.item({ className: item.status === "unread" ? styles.itemUnread() : undefined })}>
                     <span className={styles.indicator({ className: item.status === "unread" ? styles.indicatorUnread() : undefined })} aria-label={item.status === "unread" ? "읽지 않음" : "읽음"} />
                     <div className={styles.itemCopy()}>
-                      <p className={styles.itemMeta()}><span>{labelClassification(item.classification)}</span><time dateTime={item.occurredAt}>{formatDate(item.occurredAt)}</time></p>
+                      <p className={styles.itemMeta()}><span className={styles.classification()}>{labelClassification(item.classification)}</span><time dateTime={item.occurredAt}>{formatDate(item.occurredAt)}</time></p>
                       <h3 className={styles.itemTitle()}>{item.title}</h3>
                       <p className={styles.itemSummary()}>{item.summary}</p>
                       {item.occurrenceCount > 1 ? <small className={styles.itemDetail()}>{item.occurrenceCount}회 발생</small> : null}
@@ -205,10 +206,9 @@ export function NotificationCenter({
                 ))}
               </ol>
             )}
-            {collection.nextCursor !== null ? <Button aria-label="알림 더 보기" disabled={mutation.isPending} onClick={loadMore}>{mutation.isPending ? "불러오는 중…" : "더 보기"}</Button> : null}
+            {collection.nextCursor !== null ? <Button className={styles.more()} aria-label="알림 더 보기" disabled={mutation.isPending} onClick={loadMore}>{mutation.isPending ? "불러오는 중…" : "알림 더 보기"}</Button> : null}
           </TabsPanel>
         </TabsRoot></section>
-      </div>
     </main>
   );
 }

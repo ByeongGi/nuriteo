@@ -2,7 +2,7 @@ import Link from "next/link";
 import { tv } from "tailwind-variants";
 
 import { AdminPage } from "#src/app/(admin)/admin/_components/admin-surface.tsx";
-import { buttonVariants } from "#src/components/ui/button.tsx";
+import { buttonVariants } from "#src/components/ui/button.styles.ts";
 
 interface AdminAccessRequiredProps {
   readonly description: string;
@@ -20,7 +20,7 @@ const accessRequiredStyles = tv({
 export function AdminAccessRequired({ description }: AdminAccessRequiredProps) {
   const styles = accessRequiredStyles();
   return (
-    <AdminPage id="main-content" tabIndex={-1}>
+    <AdminPage id="main-content" contentWidth="narrow" tabIndex={-1}>
       <section className={styles.panel()} aria-labelledby="admin-access-required-title">
         <span className={styles.mark()} aria-hidden="true">◇</span>
         <div className={styles.copy()}>

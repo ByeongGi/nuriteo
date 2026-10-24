@@ -3,11 +3,9 @@
 import {
   ApiError,
   previewAdminPolicyChange,
-  previewAdminPolicyCleanup,
   updateAdminSetting
 } from "@nuriteo/api-client";
 import type {
-  AdminPolicyCleanupPreview,
   AdminPolicyImpact,
   AdminSetting,
   AdminSettingCollection,
@@ -21,24 +19,28 @@ import { useState } from "react";
 import type { FormEvent } from "react";
 import { tv } from "tailwind-variants";
 
+import { buttonVariants } from "#src/components/ui/button.styles.ts";
 import { Button } from "#src/components/ui/button.tsx";
-import { CheckboxField } from "#src/components/ui/checkbox.tsx";
 import { Input } from "#src/components/ui/input.tsx";
-import { SwitchField } from "#src/components/ui/switch.tsx";
+import { SearchField } from "#src/components/ui/search-field.tsx";
 import { SelectField } from "#src/components/ui/field.tsx";
+import { SegmentedControl } from "#src/components/ui/segmented-control.tsx";
 import { createBrowserApiClient } from "#src/lib/api/browser-client.ts";
 import { readCsrfCredential } from "#src/lib/api/browser-security.ts";
 import { useExclusiveMutation } from "#src/lib/use-exclusive-mutation.ts";
 import { AdminPageHeader } from "#src/app/(admin)/admin/_components/admin-page-header.tsx";
-import { AdminPage, AdminSectionHeading } from "#src/app/(admin)/admin/_components/admin-surface.tsx";
+import { AdminPage, AdminSection, AdminSectionHeading } from "#src/app/(admin)/admin/_components/admin-surface.tsx";
 
 const adminSettingsStyles = tv({
   slots: {
-    section: "mt-4 overflow-hidden rounded-lg border border-muted-border bg-surface",
     status: "shrink-0 rounded-full border border-success px-3 py-1 text-xs font-medium text-foreground",
-    statusGrid: "m-0 grid grid-cols-2 border-t border-muted-border max-[37.5rem]:grid-cols-1 [&>div]:min-w-0 [&>div]:border-b [&>div]:border-muted-border [&>div]:px-4 [&>div]:py-3 [&>div:nth-child(odd)]:border-r [&>div:nth-last-child(-n+2)]:border-b-0 max-[37.5rem]:[&>div]:border-r-0 max-[37.5rem]:[&>div]:border-b max-[37.5rem]:[&>div:last-child]:border-b-0 [&_dt]:m-0 [&_dt]:text-xs [&_dt]:text-subtle-foreground [&_dd]:mt-1 [&_dd]:font-mono [&_dd]:text-sm [&_dd]:[overflow-wrap:anywhere]",
+    statusGrid: "m-0 grid grid-cols-2 border-t border-muted-border max-[37.5rem]:grid-cols-1 [&>div]:min-w-0 [&>div]:border-b [&>div]:border-muted-border [&>div]:px-5 [&>div]:py-3.5 [&>div:nth-child(odd)]:border-r [&>div:nth-last-child(-n+2)]:border-b-0 max-[37.5rem]:[&>div]:border-r-0 max-[37.5rem]:[&>div]:border-b max-[37.5rem]:[&>div:last-child]:border-b-0 [&_dt]:m-0 [&_dt]:text-xs [&_dt]:text-subtle-foreground [&_dd]:mt-1 [&_dd]:font-mono [&_dd]:text-sm [&_dd]:[overflow-wrap:anywhere]",
     settingList: "border-t border-muted-border",
-    setting: "m-0 grid grid-cols-[minmax(0,1fr)_minmax(15rem,20rem)] gap-5 border-b border-muted-border px-4 py-3 last:border-b-0 max-[37.5rem]:grid-cols-1 max-[37.5rem]:items-stretch",
+    filterBar: "grid grid-cols-[minmax(0,1fr)_14rem] gap-3 border-t border-muted-border px-4 py-3 max-[40rem]:grid-cols-1",
+    settingGroups: "grid min-w-0",
+    category: "min-w-0 border-t border-muted-border first:border-t-0",
+    categoryHeader: "flex items-center justify-between gap-3 bg-subtle/55 px-4 py-2.5 [&_h3]:m-0 [&_h3]:text-xs [&_h3]:font-semibold [&_h3]:text-foreground [&_span]:text-xs [&_span]:text-muted-foreground",
+    setting: "m-0 grid grid-cols-[minmax(0,1fr)_minmax(15rem,20rem)] gap-6 border-t border-muted-border px-4 py-3.5 first:border-t-0 max-[48rem]:grid-cols-1 max-[48rem]:items-stretch",
     copy: "grid min-w-0 content-start gap-1 [&>label]:text-sm [&>label]:font-medium [&>strong]:text-sm [&>strong]:font-medium [&_p]:m-0 [&_p]:text-xs [&_p]:text-muted-foreground [&>span]:text-xs [&>span]:text-muted-foreground [&_code]:w-fit [&_code]:max-w-full [&_code]:text-xs [&_code]:text-subtle-foreground [&_code]:[overflow-wrap:anywhere]",
     control: "grid min-w-0 content-start gap-3",
     actions: "flex flex-wrap gap-2 max-[37.5rem]:[&_[data-slot=button]]:w-full",
@@ -46,8 +48,7 @@ const adminSettingsStyles = tv({
     numberControl: "grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 [&_span]:text-sm [&_span]:text-muted-foreground",
     impact: "col-span-full grid gap-3 rounded-md border border-border bg-subtle p-4 [&_dl]:m-0 [&_dl]:grid [&_dl]:grid-cols-3 [&_dl]:gap-3 max-[37.5rem]:[&_dl]:grid-cols-1 [&_dt]:m-0 [&_dt]:text-xs [&_dt]:text-subtle-foreground [&_dd]:mt-1 [&_dd]:font-mono",
     impactHeading: "flex justify-between gap-3 max-[37.5rem]:flex-col [&_span]:text-sm [&_span]:text-muted-foreground",
-    policyNote: "m-0 border-t border-muted-border px-5 py-3 text-sm text-muted-foreground",
-    policyError: "m-0 border-t border-muted-border px-5 py-3 text-sm text-danger"
+    empty: "m-0 border-t border-muted-border px-4 py-10 text-center text-sm text-muted-foreground"
   },
   variants: {
     warning: { true: { status: "border-warning" } },
@@ -69,34 +70,61 @@ const DESCRIPTORS: Readonly<Record<string, SettingDescriptor>> = {
   "invitations.default_expiry_hours": descriptor("초대 만료", "새 계정 활성화 초대의 기본 유효 기간입니다.", "시간"),
   "notifications.general_retention_days": descriptor("일반 알림 보존", "일반 앱 알림을 보존하는 기간입니다.", "일"),
   "notifications.security_retention_days": descriptor("보안 알림 보존", "계정 및 보안 알림을 보존하는 기간입니다.", "일"),
+  "object_storage.gc_enabled": descriptor("자동 오브젝트 정리", "참조되지 않는 오브젝트를 유예 기간 이후 자동 정리합니다."),
   "runtime.network.default": descriptor("기본 런타임 네트워크", "새 런타임에 적용할 네트워크 정책입니다."),
   "security.reauthentication_window_minutes": descriptor("재인증 유효 시간", "민감한 변경에 사용할 최근 관리자 인증의 유효 시간입니다.", "분"),
   "tokens.default_expiry_days": descriptor("기본 토큰 만료", "새 액세스 토큰에 제안할 기본 유효 기간입니다.", "일"),
   "tokens.maximum_expiry_days": descriptor("최대 토큰 만료", "관리자가 선택할 수 있는 액세스 토큰의 최대 유효 기간입니다.", "일")
 };
 
+const SETTING_CATEGORIES = [
+  { value: "all", label: "전체 설정" },
+  { value: "security", label: "보안" },
+  { value: "identity", label: "인증과 세션" },
+  { value: "workspace", label: "워크스페이스" },
+  { value: "project", label: "프로젝트" },
+  { value: "runtime", label: "런타임" },
+  { value: "object_storage", label: "오브젝트 스토리지" },
+  { value: "notification", label: "알림" },
+  { value: "token", label: "액세스 토큰" },
+  { value: "audit", label: "감사 로그" },
+  { value: "unsupported", label: "업데이트 필요" }
+] as const;
+
 export function AdminSettings({
-  cleanup,
   settings,
   status
 }: {
-  readonly cleanup: AdminPolicyCleanupPreview;
   readonly settings: AdminSettingCollection;
   readonly status: AdminStatus;
 }) {
   const [restartRequired, setRestartRequired] = useState(status.restartRequired);
+  const [category, setCategory] = useState("all");
+  const [query, setQuery] = useState("");
   const styles = adminSettingsStyles({ warning: restartRequired });
+  const normalizedQuery = query.trim().toLocaleLowerCase("ko-KR");
+  const visibleSettings = settings.items.filter((setting) => {
+    const settingCategory = setting.policyCategory ?? "unsupported";
+    if (category !== "all" && settingCategory !== category) return false;
+    if (normalizedQuery.length === 0) return true;
+    const descriptor = DESCRIPTORS[setting.key] ?? inferredDescriptor(setting);
+    return `${descriptor.label} ${descriptor.description} ${setting.key}`.toLocaleLowerCase("ko-KR").includes(normalizedQuery);
+  });
+  const visibleCategories = SETTING_CATEGORIES
+    .filter((item) => item.value !== "all")
+    .map((item) => ({ ...item, settings: visibleSettings.filter((setting) => (setting.policyCategory ?? "unsupported") === item.value) }))
+    .filter((item) => item.settings.length > 0);
 
   return (
-    <AdminPage id="main-content">
+    <AdminPage id="main-content" contentWidth="standard">
       <AdminPageHeader
-        category="인스턴스 설정"
+        category="시스템"
         title="인스턴스 설정"
         description="현재 설정과 변경 영향을 같은 맥락에서 검토하세요. 민감한 자격 증명은 각 연동 화면에서 별도로 관리합니다."
         aside={<span className={styles.status()}>{restartRequired ? "재시작 필요" : "최신 상태"}</span>}
       />
 
-      <section className={styles.section()} aria-labelledby="instance-status-title">
+      <AdminSection aria-labelledby="instance-status-title">
         <AdminSectionHeading>
           <div>
             <p className="m-0 mb-3 text-xs font-semibold uppercase tracking-[0.08em] text-accent-foreground">런타임 상태</p>
@@ -112,38 +140,51 @@ export function AdminSettings({
           <StatusItem label="설정 레지스트리" value={String(status.settingRegistryVersion)} />
           <StatusItem label="등록된 설정" value={String(status.settingCount)} />
         </dl>
-      </section>
+      </AdminSection>
 
-      <CleanupPreview initial={cleanup} />
-
-      <section className={styles.section()} aria-labelledby="instance-settings-title">
+      <AdminSection aria-labelledby="instance-settings-title">
         <AdminSectionHeading>
           <div>
-            <p className="m-0 mb-3 text-xs font-semibold uppercase tracking-[0.08em] text-accent-foreground">REGISTRY {settings.registryVersion}</p>
+            <p className="m-0 mb-3 text-xs font-semibold tracking-[0.08em] text-accent-foreground">설정 레지스트리 {settings.registryVersion}</p>
             <h2 id="instance-settings-title">인스턴스 정책</h2>
           </div>
           <p>모든 변경은 유효성 및 버전을 확인한 뒤 감사 기록에 남습니다.</p>
         </AdminSectionHeading>
-        <div className={styles.settingList()}>
-          {settings.items.map((setting) => {
-            if (setting.key === "security.mfa_enforcement" || setting.key === "security.mfa_grace_period_days") {
-              return <ManagedMfaSetting key={setting.key} setting={setting} />;
-            }
-            if (setting.policyCategory === null) return (
-              <UnsupportedSetting key={setting.key} setting={setting} />
-            );
-            return (
-              <SettingEditor
-                key={setting.key}
-                initial={setting}
-                descriptor={DESCRIPTORS[setting.key] ?? inferredDescriptor(setting)}
-                onRestartRequired={() => setRestartRequired(true)}
-              />
-            );
-          })}
+        <div className={styles.filterBar()} role="search" aria-label="인스턴스 설정 찾기">
+          <SearchField density="compact" label="설정 검색" placeholder="이름이나 설정 키로 검색" value={query} onChange={(event) => setQuery(event.currentTarget.value)} />
+          <SelectField density="compact" label="설정 영역" labelHidden options={SETTING_CATEGORIES} value={category} onValueChange={setCategory} />
         </div>
-      </section>
+        {visibleCategories.length === 0 ? <p className={styles.empty()}>조건에 맞는 설정이 없습니다.</p> : (
+          <div className={styles.settingGroups()}>
+            {visibleCategories.map((group) => (
+              <section className={styles.category()} key={group.value} aria-labelledby={`settings-category-${group.value}`}>
+                <header className={styles.categoryHeader()}>
+                  <h3 id={`settings-category-${group.value}`}>{group.label}</h3>
+                  <span>{group.settings.length}개</span>
+                </header>
+                <div>
+                  {group.settings.map((setting) => <SettingEntry key={setting.key} setting={setting} onRestartRequired={() => setRestartRequired(true)} />)}
+                </div>
+              </section>
+            ))}
+          </div>
+        )}
+      </AdminSection>
     </AdminPage>
+  );
+}
+
+function SettingEntry({ onRestartRequired, setting }: { readonly onRestartRequired: () => void; readonly setting: AdminSetting }) {
+  if (setting.key === "security.mfa_enforcement" || setting.key === "security.mfa_grace_period_days") {
+    return <ManagedMfaSetting setting={setting} />;
+  }
+  if (setting.policyCategory === null) return <UnsupportedSetting setting={setting} />;
+  return (
+    <SettingEditor
+      initial={setting}
+      descriptor={DESCRIPTORS[setting.key] ?? inferredDescriptor(setting)}
+      onRestartRequired={onRestartRequired}
+    />
   );
 }
 
@@ -157,51 +198,8 @@ function ManagedMfaSetting({ setting }: { readonly setting: AdminSetting }) {
         <code>{setting.key}</code>
         <span>{applyModeLabel(setting.applyMode)} · version {setting.version}</span>
       </div>
-      <Link className="button button--sm" href="/admin/authentication/mfa">MFA 정책 관리</Link>
+      <Link className={buttonVariants({ size: "sm", variant: "secondary" })} href="/admin/authentication/mfa">MFA 정책 관리</Link>
     </article>
-  );
-}
-
-function CleanupPreview({ initial }: { readonly initial: AdminPolicyCleanupPreview }) {
-  const mutation = useExclusiveMutation();
-  const [preview, setPreview] = useState(initial);
-  const [failure, setFailure] = useState(false);
-  const styles = adminSettingsStyles();
-
-  async function refresh() {
-    await mutation.run(async () => {
-      setFailure(false);
-      try {
-        const result = await previewAdminPolicyCleanup(createBrowserApiClient(), preview.batchLimit);
-        setPreview(result.data);
-      } catch {
-        setFailure(true);
-      }
-    });
-  }
-
-  return (
-    <section className={styles.section()} aria-labelledby="cleanup-preview-title">
-      <AdminSectionHeading>
-        <div>
-          <p className="m-0 mb-3 text-xs font-semibold uppercase tracking-[0.08em] text-accent-foreground">읽기 전용 사전 점검</p>
-          <h2 id="cleanup-preview-title">오브젝트 정리 미리보기</h2>
-        </div>
-        <Button type="button" size="sm" onClick={refresh} disabled={mutation.isPending}>
-          {mutation.isPending ? "새로 고치는 중…" : "미리보기 새로 고침"}
-        </Button>
-      </AdminSectionHeading>
-      <dl className={styles.statusGrid()}>
-        <StatusItem label="가비지 컬렉션" value={preview.gcEnabled ? "켜짐" : "꺼짐"} />
-        <StatusItem label="유예 기간" value={formatDuration(preview.gracePeriodSeconds)} />
-        <StatusItem label="정리 대상" value={String(preview.eligibleCandidates)} />
-        <StatusItem label="예상 회수량" value={formatBytes(preview.expectedReclaimBytes)} />
-      </dl>
-      <p className={styles.policyNote()}>
-        최대 {preview.batchLimit}개 후보를 확인하는 읽기 전용 점검입니다. 실제 삭제는 시작하지 않습니다.
-      </p>
-      {failure ? <p className={styles.policyError()} role="alert">정리 미리보기를 새로 고치지 못했습니다.</p> : null}
-    </section>
   );
 }
 
@@ -354,12 +352,13 @@ function SettingControl({
 }) {
   if (constraint.kind === "boolean") {
     return (
-      <SwitchField
-        id={controlId}
-        label={descriptor.label}
-        checked={draft === "true"}
+      <SegmentedControl
+        aria-label={descriptor.label}
         disabled={disabled}
-        onCheckedChange={(checked) => onDraft(String(checked))}
+        options={[{ value: "false", label: "사용 안 함" }, { value: "true", label: "사용" }]}
+        value={draft === "true" ? "true" : "false"}
+        width="full"
+        onValueChange={onDraft}
       />
     );
   }
@@ -400,7 +399,7 @@ function SettingControl({
           {descriptor.unit ? <span>{descriptor.unit}</span> : null}
         </div>
         {nullable ? (
-          <CheckboxField checked={unlimited} disabled={disabled} onCheckedChange={onUnlimited} label="제한 없음" />
+          <SegmentedControl aria-label={`${descriptor.label} 제한 방식`} disabled={disabled} options={[{ value: "limited", label: "기간 지정" }, { value: "unlimited", label: "제한 없음" }]} value={unlimited ? "unlimited" : "limited"} width="full" onValueChange={(value) => onUnlimited(value === "unlimited")} />
         ) : null}
       </>
     );
@@ -527,15 +526,6 @@ function formatDuration(seconds: number): string {
   if (seconds % 3_600 === 0) return `${seconds / 3_600}시간`;
   if (seconds % 60 === 0) return `${seconds / 60}분`;
   return `${seconds}초`;
-}
-
-function formatBytes(raw: string): string {
-  const bytes = BigInt(raw);
-  const units = [[1_073_741_824n, "GiB"], [1_048_576n, "MiB"], [1_024n, "KiB"]] as const;
-  for (const [size, label] of units) {
-    if (bytes >= size && bytes % size === 0n) return `${bytes / size} ${label}`;
-  }
-  return `${bytes} 바이트`;
 }
 
 function settingFailure(error: unknown): { message: string; reconcile: boolean; tone: "error" } {

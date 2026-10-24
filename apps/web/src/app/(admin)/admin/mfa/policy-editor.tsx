@@ -17,12 +17,12 @@ import { readCsrfCredential } from "#src/lib/api/browser-security.ts";
 import { useExclusiveMutation } from "#src/lib/use-exclusive-mutation.ts";
 import { AdminForm, AdminFormActionNote, AdminFormActions, AdminFormFieldSpan, AdminFormSection } from "#src/app/(admin)/admin/_components/admin-form-layout.tsx";
 import { AdminPageHeader } from "#src/app/(admin)/admin/_components/admin-page-header.tsx";
-import { AdminPage, AdminSectionHeading } from "#src/app/(admin)/admin/_components/admin-surface.tsx";
+import { AdminPage, AdminSection, AdminSectionHeading } from "#src/app/(admin)/admin/_components/admin-surface.tsx";
 
 const POLICY_OPTIONS: readonly { readonly value: MfaPolicyMode; readonly label: string; readonly description: string }[] = [
-  { value: "off", label: "선택", description: "사용자가 MFA 사용 여부를 선택합니다." },
-  { value: "administrators", label: "관리자", description: "활성 로컬 인스턴스 관리자에게 요구합니다." },
-  { value: "all_local_users", label: "모든 로컬 사용자", description: "로컬 비밀번호를 가진 모든 활성 계정에 요구합니다." }
+  { value: "off", label: "사용자 선택", description: "MFA 등록을 강제하지 않고 각 사용자가 직접 선택합니다." },
+  { value: "administrators", label: "관리자만 필수", description: "활성 로컬 인스턴스 관리자에게만 등록을 요구합니다." },
+  { value: "all_local_users", label: "모든 로컬 사용자 필수", description: "로컬 비밀번호를 사용하는 모든 활성 계정에 등록을 요구합니다." }
 ];
 
 export function MfaPolicyEditor({ initial, view = "policy" }: { readonly initial: MfaPolicy; readonly view?: "policy" | "reset" }) {
@@ -116,15 +116,15 @@ export function MfaPolicyEditor({ initial, view = "policy" }: { readonly initial
     && impact.gracePeriodDays === graceDays
     && impact.policyVersion === policy.version;
   return (
-    <AdminPage id="main-content" className="max-w-[64rem]">
+    <AdminPage id="main-content" contentWidth="narrow">
       <AdminPageHeader
-        category={view === "policy" ? "인증" : "사용자·접근"}
-        title={view === "policy" ? "MFA 정책" : "사용자 MFA 초기화"}
+        category="접근 관리"
+        title={view === "policy" ? "MFA 정책" : "접근 복구"}
         description={view === "policy" ? "인증 제공자의 MFA 경계와 기존 등록을 유지하면서 로컬 계정의 인증 앱 사용 정책을 관리합니다." : "접근 복구가 필요한 사용자의 MFA 자격 증명과 활성 세션을 안전하게 초기화합니다."}
         aside={view === "policy" ? <Badge>정책 v{policy.version}</Badge> : undefined}
       />
 
-      {view === "policy" ? <section className="mt-4 overflow-hidden rounded-lg border border-muted-border bg-surface" aria-labelledby="mfa-policy-title">
+      {view === "policy" ? <AdminSection aria-labelledby="mfa-policy-title">
         <AdminSectionHeading><div><p className="m-0 mb-3 text-xs font-semibold uppercase tracking-[0.08em] text-accent-foreground">VERSION {policy.version}</p><h2 id="mfa-policy-title">적용 대상</h2></div><p>정책 변경에는 최근 관리자 재인증이 필요합니다.</p></AdminSectionHeading>
         <AdminForm layout="panel" onSubmit={save} aria-busy={mutation.isPending}>
           <AdminFormSection title="정책 대상" description="로그인 시 MFA 등록을 요구할 로컬 사용자 범위를 선택합니다.">
@@ -147,21 +147,20 @@ export function MfaPolicyEditor({ initial, view = "policy" }: { readonly initial
             <Button type="submit" variant="primary" disabled={mutation.isPending || !previewIsCurrent}>{mutation.isPending ? "적용 중…" : "정책 적용"}</Button>
           </AdminFormActions>
         </AdminForm>
-      </section> : null}
+      </AdminSection> : null}
 
-      {view === "reset" ? <section className="mt-4 rounded-lg border border-border bg-surface p-4 [&_h2]:mt-0 [&_p]:mt-0 [&_p]:text-muted-foreground">
-        <h2>다른 사용자의 MFA 초기화</h2>
-        <p>대상의 MFA 자격 증명, 복구 코드, 진행 중인 등록과 모든 세션을 폐기합니다. 본인 계정 초기화는 허용되지 않습니다.</p>
-        <form className="mt-4 grid gap-3 max-[48rem]:grid-cols-1 max-[48rem]:[&>label]:col-auto max-[48rem]:[&>[data-slot=button]]:w-full max-[48rem]:[&>[data-slot=button]]:justify-self-stretch [&>[data-slot=button]]:justify-self-start" onSubmit={search} role="search" aria-busy={mutation.isPending}>
+      {view === "reset" ? <AdminSection className="p-5 max-[37.5rem]:p-4 [&_h2]:m-0 [&_p]:mt-1 [&_p]:mb-0 [&_p]:text-muted-foreground">
+        <h2 className="text-base">복구할 사용자 찾기</h2>
+        <p className="text-sm leading-6">이메일 또는 표시 이름으로 사용자를 확인한 뒤, MFA 자격 증명과 활성 세션을 초기화합니다.</p>
+        <form className="mt-4 grid grid-cols-[minmax(0,1fr)_auto] items-end gap-3 max-[40rem]:grid-cols-1 max-[40rem]:[&>[data-slot=button]]:w-full max-[40rem]:[&>[data-slot=button]]:justify-center" onSubmit={search} role="search" aria-busy={mutation.isPending}>
           <TextField label="이메일 또는 표시 이름으로 찾기" name="query" required minLength={2} maxLength={200} autoComplete="off" />
           <Button type="submit" disabled={mutation.isPending}>사용자 검색</Button>
         </form>
-        <form className="mt-4 grid gap-3 [&>[data-slot=button]]:justify-self-start" onSubmit={reset} aria-busy={mutation.isPending}>
-          {targets.length > 0 ? <RadioCardGroup label="초기화할 계정 선택" name="resetTarget" options={targets.map((target) => ({ value: target.credentialGeneration, label: target.displayName, description: target.email }))} value={selectedTarget?.credentialGeneration ?? ""} onValueChange={(credentialGeneration) => { setSelectedTarget(targets.find((target) => target.credentialGeneration === credentialGeneration)); setResetConfirmed(false); }} /> : null}
-          {selectedTarget ? <div className="grid gap-3 rounded-lg border border-warning bg-subtle p-4"><p><strong>{selectedTarget.displayName}</strong> ({selectedTarget.email}) 계정을 초기화합니다.</p><CheckboxField checked={resetConfirmed} onCheckedChange={setResetConfirmed} label="이 계정의 MFA, 복구 코드와 모든 활성 세션이 폐기됨을 이해했습니다." /></div> : null}
-          <Button type="submit" variant="danger" disabled={mutation.isPending || !selectedTarget || !resetConfirmed}>MFA와 세션 초기화</Button>
-        </form>
-      </section> : null}
+        {targets.length > 0 ? <form className="mt-5 grid gap-4 border-t border-muted-border pt-5" onSubmit={reset} aria-busy={mutation.isPending}>
+          <RadioCardGroup label="복구할 계정 선택" name="resetTarget" options={targets.map((target) => ({ value: target.credentialGeneration, label: target.displayName, description: target.email }))} value={selectedTarget?.credentialGeneration ?? ""} onValueChange={(credentialGeneration) => { setSelectedTarget(targets.find((target) => target.credentialGeneration === credentialGeneration)); setResetConfirmed(false); }} />
+          {selectedTarget ? <div className="grid gap-3 rounded-lg border border-warning bg-subtle p-4"><p><strong>{selectedTarget.displayName}</strong> ({selectedTarget.email}) 계정의 인증 정보를 초기화합니다.</p><CheckboxField checked={resetConfirmed} onCheckedChange={setResetConfirmed} label="MFA, 복구 코드, 진행 중인 등록과 모든 활성 세션이 폐기됨을 확인했습니다." /><Button className="justify-self-start max-[40rem]:w-full" type="submit" variant="danger" disabled={mutation.isPending || !resetConfirmed}>인증 정보 초기화</Button></div> : null}
+        </form> : null}
+      </AdminSection> : null}
 
       {feedback ? <div className={`flex items-center justify-between gap-3 rounded-lg border p-4 ${feedback.tone === "error" ? "border-danger text-danger" : "border-success"}`} role={feedback.tone === "error" ? "alert" : "status"}><span>{feedback.text}</span>{feedback.reconcile ? <Button onClick={() => router.refresh()}>최신 상태 불러오기</Button> : null}</div> : null}
     </AdminPage>

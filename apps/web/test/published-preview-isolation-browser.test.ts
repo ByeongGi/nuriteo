@@ -187,7 +187,7 @@ async function issuePublicBinding(request: http.IncomingMessage, response: http.
     response.writeHead(403).end("rejected");
     return;
   }
-  const binding = await issueSignedPreviewBinding(signingKey, parsed.port as number);
+  const binding = await issueSignedPreviewBinding(signingKey, parsed.port as number, Date.now(), 5_000);
   response.writeHead(201, { "Cache-Control": "no-store", "Content-Type": "application/json" });
   response.end(JSON.stringify({
     runtimeId: binding.runtimeId,

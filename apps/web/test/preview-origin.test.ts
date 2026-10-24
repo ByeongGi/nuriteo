@@ -3,11 +3,13 @@ import fs from "node:fs";
 
 import {
   createPreviewOriginUrl,
+  createPreviewWindowUrl,
   parseInternalPreviewUrl,
   parsePreviewHost,
   resolvePreviewOriginConfiguration
 } from "../src/runtime/preview-origin-contract.ts";
 import { issueSignedPreviewBinding, verifySignedPreviewBinding } from "../src/lib/preview/signed-binding.ts";
+import { hotUpdatePreviewBridges } from "../src/runtime/preview-hot-update.ts";
 
 const runtimeId = "a".repeat(45);
 const projectId = "019a4a82-1640-7000-8000-000000000001";
@@ -65,6 +67,29 @@ assert.equal(createPreviewOriginUrl(nonDefaultPort, runtimeId, 4173).url, `https
 assert(local.status === "enabled");
 const preview = createPreviewOriginUrl(local, runtimeId, 4173);
 assert.equal(preview.url, `http://r-${runtimeId}-p4173.preview.localhost:3042/runtime-preview/bootstrap`);
+const previewWindowId = "123e4567-e89b-42d3-a456-426614174000";
+assert.equal(
+  createPreviewWindowUrl(local.applicationOrigin, previewWindowId),
+  `http://app.localhost:3042/preview-window?window=${previewWindowId}`
+);
+assert.throws(() => createPreviewWindowUrl(local.applicationOrigin, "shared"), /invalid Preview window ID/u);
+const deliveredHotUpdates: string[] = [];
+const hotUpdateTarget = (name: string) => ({
+  hotUpdate(path: string, changeKind = "content") {
+    deliveredHotUpdates.push(`${name}:${path}:${changeKind}`);
+  }
+});
+hotUpdatePreviewBridges(
+  hotUpdateTarget("embedded"),
+  [hotUpdateTarget("window-a"), hotUpdateTarget("window-b")],
+  "src/message.ts",
+  "content"
+);
+assert.deepEqual(deliveredHotUpdates, [
+  "embedded:src/message.ts:content",
+  "window-a:src/message.ts:content",
+  "window-b:src/message.ts:content"
+]);
 assert.deepEqual(parsePreviewHost(`r-${runtimeId}-p4173.preview.localhost`, "preview.localhost"), preview.binding);
 for (const hostname of [
   `project-name.r-${runtimeId}-p4173.preview.localhost`,
@@ -109,9 +134,20 @@ const bridge = fs.readFileSync(new URL("../src/runtime/subdomain-preview-bridge.
 assert.match(bridge, /MAX_IN_FLIGHT_REQUESTS = 4/u);
 assert.match(bridge, /credentials: "omit"/u);
 assert.doesNotMatch(bridge, /fetch\(internalUrl,[\s\S]{0,300}headers:/u, "relay fetch must not forward browser credential headers");
+const ideShell = fs.readFileSync(new URL("../src/app/(authenticated)/projects/project-ide-shell.tsx", import.meta.url), "utf8");
+assert.match(ideShell, /hotUpdatePreviewBridges\(previewBridgeRef\.current, previewWindowBridgesRef\.current, path, changeKind\)/u);
+assert.match(ideShell, /type === "nuriteo-preview-window:ready"[\s\S]{0,100}void reconnect\(\)/u);
+assert.doesNotMatch(ideShell, /type === "nuriteo-preview-window:closed"/u, "reload and close must be distinguished by the opener's live window check");
+const previewWindowScript = fs.readFileSync(new URL("../public/preview-window.js", import.meta.url), "utf8");
+assert.match(previewWindowScript, /opener\.postMessage\(\{ type: "nuriteo-preview-window:ready", previewWindowId, version: 1 \}/u);
+assert.match(previewWindowScript, /previewRoot\.replaceChildren\(frame\)/u, "every reconnect must replace the stale iframe browsing context");
 
 const serviceWorker = fs.readFileSync(new URL("../public/runtime-preview/sw.js", import.meta.url), "utf8");
 assert.match(serviceWorker, /MAX_PENDING_REQUESTS = 8/u);
+const internalPreviewServiceWorker = fs.readFileSync(new URL("../../../packages/workspace-runtime/assets/preview-sw.js", import.meta.url), "utf8");
+assert.match(internalPreviewServiceWorker, /routePreview\(event\.request, event\.clientId\)/u);
+assert.match(internalPreviewServiceWorker, /self\.clients\.get\(clientId\)/u);
+assert.match(internalPreviewServiceWorker, /client\.frameType !== "top-level"/u);
 const bootstrap = fs.readFileSync(new URL("../public/runtime-preview/bootstrap.js", import.meta.url), "utf8");
 assert.match(bootstrap, /await waitForController\(\)/u);
 

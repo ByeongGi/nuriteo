@@ -1,4 +1,4 @@
-import { getCurrentUser, getCurrentWorkspaces, getMfaStatus, listNotifications } from "@nuriteo/api-client";
+import { getCurrentUser, getCurrentWorkspaces, getMfaStatus } from "@nuriteo/api-client";
 import { cookies, headers } from "next/headers";
 import { redirect, unstable_rethrow } from "next/navigation";
 import { Suspense } from "react";
@@ -36,11 +36,10 @@ async function WorkspaceSessionBoundary({
 
   try {
     const client = await createServerApiClient();
-    const [current, mfa, workspaceResult, notifications, maintenance] = await Promise.all([
+    const [current, mfa, workspaceResult, maintenance] = await Promise.all([
       getCurrentUser(client),
       getMfaStatus(client),
       getCurrentWorkspaces(client),
-      listNotifications(client, { limit: 1 }).catch(() => undefined),
       client
         .get<{ readonly readOnly: boolean; readonly phase: string }>("/maintenance")
         .then((response) => response.data)
@@ -63,7 +62,6 @@ async function WorkspaceSessionBoundary({
         email={current.data.user.email}
         maintenanceReadOnly={maintenance?.readOnly}
         themeMode={themeMode}
-        unreadCount={notifications?.data.unreadCount ?? 0}
         workspace={workspace}
       >
         {children}

@@ -6,8 +6,8 @@ const accountLoadingStyles = tv({
     eyebrow: "h-3 w-20 animate-pulse rounded bg-raised",
     title: "h-9 w-48 animate-pulse rounded-md bg-raised",
     description: "h-4 w-full max-w-xl animate-pulse rounded bg-raised",
-    grid: "grid gap-3 pt-3 sm:grid-cols-2",
-    item: "h-28 animate-pulse rounded-lg bg-raised"
+    grid: "grid overflow-hidden rounded-lg border border-muted-border pt-3",
+    item: "h-[4.75rem] animate-pulse border-t border-muted-border bg-raised first:border-t-0"
   }
 });
 

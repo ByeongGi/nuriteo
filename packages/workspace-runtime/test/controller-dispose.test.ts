@@ -38,6 +38,15 @@ controller.on(() => { eventCount += 1; });
 controller.loadViteReactTemplate({ label: "Disposable Project" });
 const workflow = controller.getSnapshot().workflow;
 assert.ok(workflow);
+const structuralFile = `${workflow.projectRoot}/src/structural-preview.css`;
+const renamedStructuralFile = `${workflow.projectRoot}/src/renamed-preview.css`;
+controller.createTextFile("src/structural-preview.css", "body { color: red; }\n");
+assert.equal(workflow.workspace.readText(structuralFile), "body { color: red; }\n");
+controller.renameFile("src/structural-preview.css", "src/renamed-preview.css");
+assert.throws(() => workflow.workspace.readText(structuralFile), /No such file/u);
+assert.equal(workflow.workspace.readText(renamedStructuralFile), "body { color: red; }\n");
+controller.deleteFile("src/renamed-preview.css");
+assert.throws(() => workflow.workspace.readText(renamedStructuralFile), /No such file/u);
 let stopCount = 0;
 const originalStop = workflow.stopDevServer.bind(workflow);
 workflow.stopDevServer = () => {

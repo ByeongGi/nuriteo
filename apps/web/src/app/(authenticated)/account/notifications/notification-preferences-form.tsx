@@ -21,7 +21,7 @@ const notificationPreferencesStyles = tv({
     channelTitle: "m-0 text-base font-semibold",
     channelDescription: "m-0 text-sm leading-relaxed text-muted-foreground",
     form: "grid gap-3",
-    actions: "flex justify-end border-t border-muted-border pt-3",
+    actions: "flex justify-end border-t border-muted-border pt-4 max-[30rem]:[&>[data-slot=button]]:w-full",
     feedback: "m-0 rounded-md border border-muted-border bg-raised px-4 py-3 text-sm",
     error: "border-danger/40 text-danger"
   }
@@ -74,17 +74,18 @@ export function NotificationPreferencesForm({ initialPreferences }: Readonly<{
       ) : null}
       <form className={styles.form()} onSubmit={save} aria-busy={mutation.isPending}>
         <SettingsGroup
+          density="compact"
           title="이메일 채널"
           description={preferences.smtpConfigured
             ? "이벤트별 이메일 수신 여부를 선택합니다."
             : "SMTP가 설정되지 않았습니다. 선택은 저장되며 앱 내 알림은 계속 사용할 수 있습니다."}
         >
-          <SettingsRow title="중요 보안" description="로그인과 계정 보호에 필요한 필수 알림입니다."><SwitchField name="criticalSecurity" label="항상 받기" defaultChecked disabled /></SettingsRow>
-          <SettingsRow title="계정과 접근" description="비밀번호, MFA, 멤버십 및 권한 변경"><SwitchField name="accountAccess" label="이메일 받기" defaultChecked={preferences.accountAccess} /></SettingsRow>
-          <SettingsRow title="협업" description="초대와 공유 프로젝트 활동"><SwitchField name="collaboration" label="이메일 받기" defaultChecked={preferences.collaboration} /></SettingsRow>
-          <SettingsRow title="운영" description="관리자를 위한 인스턴스 상태와 전달 장애"><SwitchField name="operations" label="이메일 받기" defaultChecked={preferences.operations} /></SettingsRow>
+          <SettingsRow density="compact" title="중요 보안" description="로그인과 계정 보호에 필요한 필수 알림입니다."><SwitchField density="compact" name="criticalSecurity" label="항상 받기" defaultChecked disabled /></SettingsRow>
+          <SettingsRow density="compact" title="계정과 접근" description="비밀번호, MFA, 멤버십 및 권한 변경"><SwitchField density="compact" name="accountAccess" label="이메일 받기" defaultChecked={preferences.accountAccess} /></SettingsRow>
+          <SettingsRow density="compact" title="협업" description="초대와 공유 프로젝트 활동"><SwitchField density="compact" name="collaboration" label="이메일 받기" defaultChecked={preferences.collaboration} /></SettingsRow>
+          <SettingsRow density="compact" title="운영" description="관리자를 위한 인스턴스 상태와 전달 장애"><SwitchField density="compact" name="operations" label="이메일 받기" defaultChecked={preferences.operations} /></SettingsRow>
         </SettingsGroup>
-        <div className={styles.actions()}><Button type="submit" variant="primary" disabled={mutation.isPending}>{mutation.isPending ? "저장 중…" : "변경 사항 저장"}</Button></div>
+        <div className={styles.actions()}><Button type="submit" size="sm" variant="primary" disabled={mutation.isPending}>{mutation.isPending ? "저장 중…" : "변경 사항 저장"}</Button></div>
       </form>
     </main>
   );

@@ -15,7 +15,7 @@ self.addEventListener("fetch", (event) => {
     return;
   }
   if (!url.pathname.startsWith("/__preview/")) return;
-  event.respondWith(routePreview(event.request));
+  event.respondWith(routePreview(event.request, event.clientId));
 });
 
 async function routeRuntimeModule(request) {
@@ -31,9 +31,12 @@ async function routeRuntimeModule(request) {
   });
 }
 
-async function routePreview(request) {
-  const clients = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
-  const client = clients.find((entry) => entry.frameType === "top-level") || clients[0];
+async function routePreview(request, clientId) {
+  let client = clientId ? await self.clients.get(clientId) : null;
+  if (!client || client.frameType !== "top-level") {
+    const clients = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+    client = clients.find((entry) => entry.frameType === "top-level") || clients[0];
+  }
   const corpHeaders = {
     "content-type": "text/plain; charset=utf-8",
     "Cross-Origin-Resource-Policy": "same-origin",
