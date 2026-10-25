@@ -10,7 +10,7 @@ use nuriteo_server::identity::{Timestamp, UserId};
 use nuriteo_server::organization::OrganizationId;
 use nuriteo_server::project::{
     NewProject, ProjectConflict, ProjectId, ProjectName, ProjectOwner, ProjectPageLimit,
-    ProjectRepository, ProjectRepositoryError, ProjectSlug,
+    ProjectRepository, ProjectRepositoryError, ProjectSlug, ProjectTemplate,
 };
 use nuriteo_server::workspace::StorageScopeId;
 use sqlx::{Acquire, Executor, Postgres, Transaction};
@@ -677,6 +677,7 @@ fn candidate(id: &str, owner: ProjectOwner, scope_id: &str, slug: &str) -> NewPr
         StorageScopeId::from_str(scope_id).expect("scope fixture must parse"),
         ProjectSlug::new(slug.to_owned()).expect("slug fixture must validate"),
         ProjectName::new(format!("Project {slug}")).expect("name fixture must validate"),
+        ProjectTemplate::ViteReact,
         Timestamp::from_unix_timestamp(1_780_000_000).expect("timestamp fixture must validate"),
     )
 }

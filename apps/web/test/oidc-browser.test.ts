@@ -9,9 +9,9 @@ import { chromium } from "@playwright/test";
 const webRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const standaloneWeb = path.join(webRoot, ".next/standalone/apps/web");
 const serverEntry = path.join(standaloneWeb, "server.js");
-const firstId = "0199ee6c-c777-7000-8000-000000060001";
-const secondId = "0199ee6c-c777-7000-8000-000000060002";
-const createdId = "0199ee6c-c777-7000-8000-000000060003";
+const firstId = "0199ee6c-7777-7000-8000-000000060001";
+const secondId = "0199ee6c-7777-7000-8000-000000060002";
+const createdId = "0199ee6c-7777-7000-8000-000000060003";
 const csrf = `nrt_csrf_${"o".repeat(43)}`;
 let created = false;
 const mutations: Array<{ path: string; csrf: string | undefined; origin: string | undefined; etag: string | undefined }> = [];
@@ -27,6 +27,9 @@ const core = http.createServer(async (request, response) => {
   if (request.method === "GET" && requestPath === `/api/v1/auth/oidc/${firstId}/begin`) { response.statusCode = 303; response.setHeader("location", "https://id-one.example.test/authorize"); response.setHeader("set-cookie", "nuriteo_dev_oidc_binding=opaque; HttpOnly; SameSite=Lax; Path=/"); return response.end(); }
   if (request.method === "GET" && requestPath === "/api/v1/me") return session ? json(response, me(session)) : problem(response, 401, "AUTHENTICATION_REQUIRED");
   if (session === undefined) return problem(response, 401, "AUTHENTICATION_REQUIRED");
+  if (request.method === "GET" && requestPath === "/api/v1/me/workspaces") return json(response, {
+    workspaces: [{ ownerType: "user", ownerId: session === "admin" ? "0199ee6c-c777-7000-8000-000000060011" : "0199ee6c-c777-7000-8000-000000060012", displayLabel: `${session} workspace`, storageScopeId: session === "admin" ? "0199ee6c-c777-7000-8000-000000060021" : "0199ee6c-c777-7000-8000-000000060022" }]
+  });
   if (request.method === "GET" && requestPath === "/api/v1/mfa") return json(response, { localAccount: true, enrolled: false, pendingEnrollment: false, recoveryCodesRemaining: 0, policyMode: "off", gracePeriodDays: 7, required: false, deadlineAt: null, restricted: false, notificationState: "none" });
   if (request.method === "GET" && requestPath.startsWith("/api/v1/notifications")) return problem(response, 503, "UNAVAILABLE");
   if (request.method === "GET" && requestPath === "/api/v1/admin/oidc/providers") return json(response, { items: created ? [provider(createdId, "Engineering SSO")] : [] });
@@ -46,11 +49,11 @@ try {
   try {
     const anonymous = await browser.newContext(); const signIn = await anonymous.newPage();
     await signIn.goto(`${origin}/sign-in`, { waitUntil: "networkidle" });
-    const corporate = signIn.getByRole("link", { name: "Corporate SSO 계정으로 계속" });
+    const corporate = signIn.getByRole("button", { name: "Corporate SSO 계정으로 계속" });
     assert.equal(await corporate.count(), 1);
-    assert.equal(await signIn.getByRole("link", { name: "Partner SSO 계정으로 계속" }).count(), 1);
-    assert.equal(await signIn.getByRole("button", { name: "로그인" }).count(), 1);
-    assert.equal(await corporate.getAttribute("href"), `/api/v1/auth/oidc/${firstId}/begin`);
+    assert.equal(await signIn.getByRole("button", { name: "Partner SSO 계정으로 계속" }).count(), 1);
+    assert.equal(await signIn.getByRole("button", { name: "로그인", exact: true }).count(), 1);
+    assert.equal(await corporate.getAttribute("href"), `/api/v1/auth/oidc/${firstId}/begin?returnTo=%2Fworkspaces`);
 
     const admin = await browser.newContext(); await admin.addCookies([{ name: "nuriteo_dev_session", value: "admin", url: origin }, { name: "nuriteo_dev_csrf", value: csrf, url: origin }]); const adminPage = await admin.newPage();
     await adminPage.goto(`${origin}/admin/authentication/oidc/new`, { waitUntil: "networkidle" }); await adminPage.getByRole("heading", { name: "새 OIDC 제공자" }).waitFor();
@@ -58,7 +61,7 @@ try {
     await adminPage.waitForURL(`**/admin/authentication/oidc/${createdId}`); assert.equal(await adminPage.getByText("top-secret").count(), 0);
 
     const user = await browser.newContext(); await user.addCookies([{ name: "nuriteo_dev_session", value: "user", url: origin }, { name: "nuriteo_dev_csrf", value: csrf, url: origin }]); const identities = await user.newPage();
-    await identities.goto(`${origin}/identities`, { waitUntil: "networkidle" }); await identities.getByRole("heading", { name: "연결된 계정" }).waitFor(); await identities.getByRole("button", { name: /연결 해제/u }).click(); await identities.getByRole("button", { name: "연결 해제", exact: true }).click(); await identities.getByRole("status").filter({ hasText: "세션을 안전하게 갱신" }).waitFor();
+    await identities.goto(`${origin}/account/identities`, { waitUntil: "networkidle" }); assert.equal(await identities.getByRole("heading", { name: "연결된 계정" }).count(), 1, await identities.locator("body").innerText()); await identities.getByRole("button", { name: /연결 해제/u }).click(); await identities.getByRole("button", { name: "연결 해제", exact: true }).click(); await identities.getByRole("status").filter({ hasText: "세션을 안전하게 갱신" }).waitFor();
     assert.ok(mutations.every((entry) => entry.csrf === csrf && entry.origin === origin));
     await Promise.all([anonymous.close(), admin.close(), user.close()]);
   } finally { await browser.close(); }

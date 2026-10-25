@@ -12,7 +12,7 @@ import {
 } from "../../src/runtime/subdomain-preview-bridge.ts";
 
 declare global {
-  interface Window { __nuriteoRuntimeProbe: { activeWorkers: number; adapter?: RuntimeAdapter; createdWorkers: number; committedVersion?: number; committedEtag?: string; reloads: number; restoreMode: "download-failure" | "intervening" | "materialization-failure" | "success"; runtimeActiveWorkers: number; runtimeCreatedWorkers: number } }
+  interface Window { __nuriteoRuntimeProbe: { activeWorkers: number; adapter?: RuntimeAdapter; createdWorkers: number; committedVersion?: number; committedEtag?: string; reloads: number; restoreMode: "download-failure" | "intervening" | "materialization-failure" | "not-saved" | "success"; runtimeActiveWorkers: number; runtimeCreatedWorkers: number } }
 }
 
 const NativeWorker = globalThis.Worker;
@@ -41,7 +41,7 @@ class TrackingWorker extends NativeWorker {
   }
 }
 
-window.__nuriteoRuntimeProbe = { activeWorkers: 0, createdWorkers: 0, reloads: 0, restoreMode: "success", runtimeActiveWorkers: 0, runtimeCreatedWorkers: 0 };
+window.__nuriteoRuntimeProbe = { activeWorkers: 0, createdWorkers: 0, reloads: 0, restoreMode: "not-saved", runtimeActiveWorkers: 0, runtimeCreatedWorkers: 0 };
 Object.defineProperty(globalThis, "Worker", { configurable: true, value: TrackingWorker });
 
 const project = {
@@ -51,6 +51,7 @@ const project = {
   storageScopeId: "0199ee6c-c777-7000-8000-00000000b001",
   slug: "runtime-journey",
   name: "Runtime Journey",
+  templateId: "vite-react" as const,
   state: "active" as const,
   createdAt: "2026-10-04T00:00:00Z",
   updatedAt: "2026-10-04T00:00:00Z",
@@ -115,6 +116,7 @@ async function loadResumeFeature() {
   return {
     async resumeProjectContent() {
       const mode = window.__nuriteoRuntimeProbe.restoreMode;
+      if (mode === "not-saved") throw Object.assign(new Error("fixture project is not saved"), { code: "RESUME_NOT_SAVED" });
       if (mode === "download-failure") throw new Error("fixture download failed");
       const bytes = new TextEncoder().encode('export const label = "restored exact head";\n');
       const file = { path: "src/message.ts", kind: "text" as const, executable: false, bytes };

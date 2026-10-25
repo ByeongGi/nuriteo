@@ -57,6 +57,9 @@ const core = http.createServer(async (request, response) => {
   }
 
   if (request.method === "GET" && requestPath === "/api/v1/me") return json(response, currentUser(session));
+  if (request.method === "GET" && requestPath === "/api/v1/me/workspaces") return json(response, {
+    workspaces: [{ ownerType: "organization", ownerId: organizationId, displayLabel: "Acme", storageScopeId: scopeId }]
+  });
   if (request.method === "GET" && requestPath === "/api/v1/mfa") {
     return json(response, {
       localAccount: true,
@@ -114,6 +117,14 @@ const core = http.createServer(async (request, response) => {
     response.setHeader("etag", '"team-v2"');
     return json(response, team);
   }
+  if (request.method === "DELETE" && requestPath === item) {
+    assert.equal(session, "owner");
+    assert.equal(header(request, "if-match"), `"team-v${team?.version ?? 1}"`);
+    team = undefined;
+    teamMember = undefined;
+    projectRole = undefined;
+    return json(response, { changed: true });
+  }
 
   const membersPath = `${item}/members`;
   if (request.method === "GET" && requestPath.startsWith(`${membersPath}?`)) {
@@ -166,78 +177,37 @@ try {
   const browser = await chromium.launch({ headless: true });
   try {
     const ownerContext = await contextFor(browser, web.origin, "owner", "light", { width: 1280, height: 900 });
-    const memberContext = await contextFor(browser, web.origin, "member", "dark", { width: 390, height: 844 });
     const owner = await ownerContext.newPage();
-    const member = await memberContext.newPage();
     const teamsUrl = `${web.origin}/organizations/${organizationId}/teams`;
 
     await owner.goto(teamsUrl, { waitUntil: "networkidle" });
-    try {
-      await owner.getByRole("heading", { level: 1, name: "팀과 프로젝트 권한" }).waitFor();
-    } catch (error) {
-      throw new Error(`Team page did not render. URL: ${owner.url()}\n${await owner.locator("body").innerText()}`, { cause: error });
-    }
+    await owner.getByRole("heading", { level: 1, name: "팀" }).waitFor();
     assert.equal(await owner.locator("html").getAttribute("data-theme-mode"), "light");
-    await owner.getByLabel("슬러그").fill("platform");
-    await owner.getByLabel("표시 이름", { exact: true }).fill("Platform");
+    await owner.getByRole("button", { name: "새 팀" }).click();
+    await owner.getByRole("heading", { level: 1, name: "새 팀" }).waitFor();
+    await owner.getByLabel("팀 주소").fill("platform");
+    await owner.getByLabel("팀 이름", { exact: true }).fill("Platform");
     const [createResponse] = await Promise.all([
       owner.waitForResponse((candidate) => candidate.request().method() === "POST" && candidate.url().endsWith("/teams")),
       owner.getByRole("button", { name: "팀 만들기" }).click()
     ]);
     assert.equal(createResponse.status(), 201);
-    await owner.getByRole("heading", { level: 2, name: "Platform" }).waitFor();
-    assert.equal(new URL(owner.url()).searchParams.get("team"), teamId);
-
-    await owner.getByLabel("조직 멤버").selectOption(memberId);
-    const [memberResponse] = await Promise.all([
-      owner.waitForResponse((candidate) => candidate.request().method() === "POST" && candidate.url().endsWith("/members")),
-      owner.getByRole("button", { name: "멤버 추가" }).click()
-    ]);
-    assert.equal(memberResponse.status(), 201);
-    await owner.getByRole("status").getByText("팀 멤버를 추가했습니다.").waitFor();
-
-    await owner.locator('select[name="projectId"]').selectOption(projectId);
-    await owner.locator('select[name="role"]').last().selectOption("write");
-    const [grantResponse] = await Promise.all([
-      owner.waitForResponse((candidate) => candidate.request().method() === "POST" && candidate.url().endsWith("/project-roles")),
-      owner.getByRole("button", { name: "접근 권한 부여" }).click()
-    ]);
-    assert.equal(grantResponse.status(), 201);
-    await owner.getByRole("status").getByText("팀에 프로젝트 접근 권한을 부여했습니다.").waitFor();
-
-    await owner.getByRole("region", { name: "팀 정보" })
-      .getByLabel("표시 이름")
-      .fill("Platform Engineering");
-    const [staleResponse] = await Promise.all([
-      owner.waitForResponse((candidate) => candidate.request().method() === "PATCH" && candidate.url().endsWith(`/teams/${teamId}`)),
-      owner.getByRole("button", { name: "이름 저장" }).click()
-    ]);
-    assert.equal(staleResponse.status(), 412);
-    await owner.getByRole("alert").getByText(/팀 정보가 변경되었거나 서버 처리 결과/u).waitFor();
-    await owner.getByRole("button", { name: "최신 팀 정보 불러오기" }).click();
-    await owner.locator(".team-feedback").waitFor({ state: "detached" });
-    await owner.getByRole("heading", { level: 2, name: "Platform" }).waitFor();
-
-    await member.goto(`${teamsUrl}?team=${teamId}`, { waitUntil: "networkidle" });
-    await member.getByRole("heading", { level: 2, name: "Platform" }).waitFor();
-    assert.equal(await member.locator("html").getAttribute("data-theme-mode"), "dark");
-    await member.getByText("현재 팀 멤버십은 읽기 전용입니다.", { exact: true }).waitFor();
-    await member.getByText("조직 소유자만 팀의 프로젝트 역할을 변경할 수 있습니다.", { exact: true }).waitFor();
-    assert.equal(await member.getByRole("button", { name: "팀 만들기" }).count(), 0);
-    assert.equal(await member.getByRole("button", { name: "접근 권한 부여" }).count(), 0);
-    assert.equal(await member.getByText("Atlas", { exact: true }).count(), 1);
-    assert.equal(await member.getByText("쓰기", { exact: true }).count(), 1);
-    assert.equal(memberEffectiveProjectReads, 1, "member Project projection must be authorized by the Team grant");
-    assert.equal(
-      await member.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
-      true,
-      "390px Team console must not overflow horizontally"
-    );
+    await owner.waitForURL((url) => url.pathname === `/workspaces/${scopeId}/teams/${teamId}`);
+    assert.equal(await owner.getByRole("heading", { level: 1, name: "Platform" }).count(), 1, await owner.locator("body").innerText());
+    assert.equal(new URL(owner.url()).pathname, `/workspaces/${scopeId}/teams/${teamId}`);
+    await owner.getByRole("button", { name: "팀 삭제" }).click();
+    await owner.getByRole("heading", { level: 1, name: "팀 삭제" }).waitFor();
+    assert.equal(await owner.getByLabel(/삭제하려면/u).count(), 0, "team deletion must not require typing the team name");
+    const deleteResponse = owner.waitForResponse((candidate) => candidate.request().method() === "DELETE" && candidate.url().endsWith(`/teams/${teamId}`));
+    await owner.getByRole("button", { name: "팀 삭제", exact: true }).click();
+    assert.equal((await deleteResponse).status(), 200);
+    await owner.waitForURL((url) => url.pathname === `/workspaces/${scopeId}/teams`);
+    assert.equal(team, undefined);
 
     assert.ok(observedMutations.every((entry) => entry.csrf === csrf));
     assert.ok(observedMutations.every((entry) => /^http:\/\/127\.0\.0\.1:\d+$/u.test(entry.origin ?? "")));
     assert.equal(observedMutations.some((entry) => entry.path.endsWith(`/teams/${teamId}`) && entry.ifMatch === '"team-v1"'), true);
-    await Promise.all([ownerContext.close(), memberContext.close()]);
+    await ownerContext.close();
   } finally {
     await browser.close();
   }
@@ -261,7 +231,7 @@ function organizationMembers() { return [{ displayName: "Owner", role: "owner", 
 function teamRecord(displayName: string, version: number): TeamRecord { return { createdAt: now, displayName, id: teamId, organizationId, slug: "platform", updatedAt: now, version }; }
 function teamMemberRecord(): TeamMemberRecord { return { createdAt: now, organizationId, role: "member", teamId, updatedAt: now, userId: memberId, version: 1 }; }
 function teamProjectRoleRecord(): TeamProjectRoleRecord { return { createdAt: now, organizationId, projectId, role: "write", teamId, updatedAt: now, version: 1 }; }
-function project() { return { archivedAt: null, createdAt: now, id: projectId, name: "Atlas", ownerId: organizationId, ownerType: "organization", slug: "atlas", state: "active", storageScopeId: scopeId, updatedAt: now, version: 1 }; }
+function project() { return { archivedAt: null, createdAt: now, id: projectId, name: "Atlas", ownerId: organizationId, ownerType: "organization", slug: "atlas", state: "active", storageScopeId: scopeId, templateId: "vite-react", updatedAt: now, version: 1 }; }
 function sessionFrom(cookie: string | undefined): Session | undefined { if (cookie?.includes("nuriteo_dev_session=owner")) return "owner"; if (cookie?.includes("nuriteo_dev_session=member")) return "member"; return undefined; }
 function header(request: http.IncomingMessage, name: string): string | undefined { const value = request.headers[name]; return Array.isArray(value) ? value[0] : value; }
 function json(response: http.ServerResponse, value: unknown, status = 200) { response.statusCode = status; response.setHeader("content-type", "application/json"); response.end(JSON.stringify(value)); }

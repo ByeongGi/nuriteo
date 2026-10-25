@@ -49,7 +49,7 @@ async fn live_policy_is_serialized_restart_safe_and_dry_run_only() {
     )
     .await
     .unwrap();
-    assert_eq!(report.latest_version, Some(50));
+    assert_eq!(report.latest_version, Some(51));
     InstanceSettingsRepository::new(pool.clone(), Duration::from_secs(5))
         .unwrap()
         .materialize(&InstanceSettingBootstrap::empty())

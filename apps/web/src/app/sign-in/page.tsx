@@ -18,6 +18,7 @@ export const metadata: Metadata = {
 interface SignInSearchParams {
   readonly activated?: string;
   readonly oidc?: string;
+  readonly reauthenticate?: string;
   readonly returnTo?: string;
 }
 
@@ -25,6 +26,7 @@ export default async function SignInPage({ searchParams }: { readonly searchPara
   const query = await searchParams;
   const activated = query.activated === "1";
   const oidcFailed = query.oidc === "failed";
+  const reauthentication = query.reauthenticate === "1";
   const returnTo = safeReturnTo(query.returnTo);
   try {
     const client = await createServerApiClient();
@@ -33,9 +35,9 @@ export default async function SignInPage({ searchParams }: { readonly searchPara
     if (isExplicitlySignedOut(error)) {
       try {
         const providers = await listOidcLoginProviders(await createServerApiClient());
-        return <SignInForm activated={activated} providers={providers.data} oidcFailed={oidcFailed} returnTo={returnTo} />;
+        return <SignInForm activated={activated} providers={providers.data} oidcFailed={oidcFailed} reauthentication={reauthentication} returnTo={returnTo} />;
       } catch {
-        return <SignInForm activated={activated} providers={[]} providersLoadFailed oidcFailed={oidcFailed} returnTo={returnTo} />;
+        return <SignInForm activated={activated} providers={[]} providersLoadFailed oidcFailed={oidcFailed} reauthentication={reauthentication} returnTo={returnTo} />;
       }
     }
 
@@ -47,6 +49,15 @@ export default async function SignInPage({ searchParams }: { readonly searchPara
         title="로그인을 일시적으로 사용할 수 없습니다"
       />
     );
+  }
+
+  if (reauthentication) {
+    try {
+      const providers = await listOidcLoginProviders(await createServerApiClient());
+      return <SignInForm providers={providers.data} oidcFailed={oidcFailed} reauthentication returnTo={returnTo} />;
+    } catch {
+      return <SignInForm providers={[]} providersLoadFailed oidcFailed={oidcFailed} reauthentication returnTo={returnTo} />;
+    }
   }
 
   redirect(returnTo);

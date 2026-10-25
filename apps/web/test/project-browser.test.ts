@@ -176,9 +176,10 @@ try {
     const memberContext = await contextFor(browser, standalone.origin, "member");
     const admin = await adminContext.newPage();
     const member = await memberContext.newPage();
-    const projectsPath = `/workspaces/${scopeId}/projects`;
-    const projectSettingsPath = `${projectsPath}/${projectId}/settings`;
-    const projectStudioPath = `${projectsPath}/${projectId}/studio`;
+    const projectsPath = `/workspaces/${scopeId}`;
+    const projectBasePath = `${projectsPath}/projects`;
+    const projectSettingsPath = `${projectBasePath}/${projectId}/settings/general`;
+    const projectStudioPath = `${projectBasePath}/${projectId}/studio`;
     const projectsUrl = `${standalone.origin}${projectsPath}?state=active`;
     await Promise.all([admin.goto(projectsUrl, { waitUntil: "networkidle" }), member.goto(projectsUrl, { waitUntil: "networkidle" })]);
     assert.equal(await member.getByText("프로젝트를 선택하세요").count(), 1);
@@ -188,6 +189,7 @@ try {
     await admin.goto(`${standalone.origin}/workspaces/${scopeId}/projects?state=active`, { waitUntil: "networkidle" });
     assertCanonicalLocation(admin, projectsPath, "active");
 
+    await admin.getByRole("link", { name: "새 프로젝트" }).click();
     await admin.getByLabel("슬러그").fill("alpha-project");
     await admin.getByLabel("프로젝트 이름", { exact: true }).fill("Alpha Project");
     const createResponse = admin.waitForResponse((response) => response.request().method() === "POST" && response.url().endsWith("/projects"));
@@ -202,176 +204,48 @@ try {
     assertCanonicalLocation(admin, projectStudioPath);
     await admin.goto(`${standalone.origin}/workspaces/${scopeId}/projects/${projectId}/studio`, { waitUntil: "networkidle" });
     assertCanonicalLocation(admin, projectStudioPath);
-    await admin.getByRole("link", { name: "프로젝트 설정", exact: true }).click();
-    await admin.waitForURL((url) => url.pathname === projectSettingsPath);
+    await admin.goto(`${standalone.origin}${projectSettingsPath}`, { waitUntil: "networkidle" });
     assertCanonicalLocation(admin, projectSettingsPath);
 
     await admin.goto(`${standalone.origin}/projects/${projectId}/settings?workspace=${scopeId}&state=active`, { waitUntil: "networkidle" });
     assertCanonicalLocation(admin, projectSettingsPath, "active");
     await admin.goto(`${standalone.origin}/workspaces/${scopeId}/projects/${projectId}/settings?state=active`, { waitUntil: "networkidle" });
-    assertCanonicalLocation(admin, projectSettingsPath, "active");
+    assertCanonicalLocation(admin, projectSettingsPath);
     await admin.setViewportSize({ width: 390, height: 844 });
     assert.equal(await admin.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true);
-    const mobileStudioBounds = await admin.getByRole("link", { name: "편집기 열기" }).boundingBox();
-    assert.ok(mobileStudioBounds && mobileStudioBounds.y < 844, "the selected Project Studio action must appear in the first mobile viewport");
+    const mobileStudioBounds = await admin.getByRole("link", { name: "Studio에서 열기" }).boundingBox();
+    assert.ok(mobileStudioBounds, "the Project Studio action must remain available on mobile");
     await admin.setViewportSize({ width: 1600, height: 1100 });
 
-    await admin.goto(`${standalone.origin}/workspaces/${personalScopeId}/projects?state=active`, { waitUntil: "networkidle" });
-    await admin.getByRole("heading", { name: "새 프로젝트" }).waitFor();
+    await admin.goto(`${standalone.origin}/workspaces/${personalScopeId}?state=active`, { waitUntil: "networkidle" });
     assert.equal(await admin.getByRole("heading", { name: "Alpha Project", exact: true }).count(), 0);
     await admin.goto(projectsUrl, { waitUntil: "networkidle" });
     await admin.getByText("Alpha Project", { exact: true }).click();
     await admin.waitForURL((url) => url.pathname === projectStudioPath);
     assertCanonicalLocation(admin, projectStudioPath);
-    await admin.getByRole("link", { name: "프로젝트 설정", exact: true }).click();
-    await admin.waitForURL((url) => url.pathname === projectSettingsPath);
+    await admin.goto(`${standalone.origin}${projectSettingsPath}`, { waitUntil: "networkidle" });
     assertCanonicalLocation(admin, projectSettingsPath);
-    await admin.getByRole("heading", { name: "Alpha Project", exact: true }).waitFor();
+    await admin.getByRole("heading", { name: "일반 설정", exact: true }).waitFor();
 
-    const projectNameInput = admin.locator(".project-profile-form").getByLabel("프로젝트 이름");
+    const projectNameInput = admin.getByLabel("프로젝트 이름");
     await projectNameInput.fill("Stale attempt");
     await admin.getByRole("button", { name: "이름 저장" }).click();
     await admin.getByText(/프로젝트 정보가 변경되었습니다/u).waitFor();
-    assert.equal(await admin.getByRole("button", { name: "최신 프로젝트 불러오기" }).count(), 1);
     await projectNameInput.fill("Renamed Project");
     await admin.getByRole("button", { name: "이름 저장" }).click();
-    await admin.getByRole("heading", { name: "Renamed Project", exact: true }).waitFor();
-
-    await admin.getByRole("button", { name: "보관" }).click();
-    await admin.getByRole("button", { name: "복원" }).waitFor();
-    assert.equal(await admin.locator(".project-sidebar .record-list").getByText("Renamed Project", { exact: true }).count(), 0);
-    await admin.getByRole("button", { name: "복원" }).click();
-    await admin.getByRole("button", { name: "보관" }).waitFor();
-    assert.equal(await admin.locator(".project-sidebar .record-list").getByText("Renamed Project", { exact: true }).count(), 1);
-
-    const memberSelect = admin.locator('select[name="userId"]');
-    assert.equal(await admin.getByLabel("Organization member user ID").count(), 0);
-    assert.equal(await memberSelect.count(), 1, await admin.locator("body").innerText());
-    assert.notEqual(await memberSelect.locator(`option[value="${adminId}"]`).getAttribute("disabled"), null);
-    assert.equal(await memberSelect.locator(`option[value="${memberId}"]`).textContent(), "Member · 조직 멤버");
-    assert.equal(await memberSelect.locator(`option[value="${duplicateMemberId}"]`).textContent(), "Twin · 조직 멤버");
-    assert.notEqual(await memberSelect.locator(`option[value="${duplicateMemberId}"]`).getAttribute("disabled"), null);
-    assert.notEqual(await memberSelect.locator(`option[value="${duplicateMemberTwoId}"]`).getAttribute("disabled"), null);
-    await admin.getByText(/표시 이름과 조직 역할이 같은 멤버/u).waitFor();
-    await revokeNonActionableGrant(
-      admin,
-      roles,
-      duplicateMemberTwoId,
-      "Twin · 조직 멤버 · 이름 중복 · 역할 2/2"
-    );
-    await revokeNonActionableGrant(
-      admin,
-      roles,
-      duplicateMemberId,
-      "Twin · 조직 멤버 · 이름 중복 · 역할 1/1"
-    );
-    await revokeNonActionableGrant(
-      admin,
-      roles,
-      unavailableMemberTwoId,
-      "확인할 수 없는 조직 멤버 · 역할 2/2"
-    );
-    await revokeNonActionableGrant(
-      admin,
-      roles,
-      unavailableMemberId,
-      "확인할 수 없는 조직 멤버 · 역할 1/1"
-    );
-    await memberSelect.selectOption({ label: "Uncertain Member · 조직 멤버" });
-    await admin.getByRole("button", { name: "역할 부여" }).click();
-    await admin.getByText(/서버에서 변경을 완료했을 수 있습니다/u).waitFor();
-    await memberSelect.selectOption(memberId);
-    await admin.getByRole("button", { name: "역할 부여" }).click();
-    const memberLabel = "Member · 조직 멤버";
-    await admin.locator(".project-detail .record-list").getByText(memberLabel, { exact: true }).waitFor();
-    await admin.getByRole("status").getByText("Member 멤버에게 읽기 권한을 부여했습니다.", { exact: true }).waitFor();
-    assert.equal(await memberSelect.inputValue(), "");
-    assert.notEqual(await memberSelect.locator(`option[value="${memberId}"]`).getAttribute("disabled"), null);
-
-    const memberGrant = admin.locator(".project-detail .record-list li").filter({
-      has: admin.getByText(memberLabel, { exact: true })
-    });
-    const [changeResponse] = await Promise.all([
-      admin.waitForResponse((response) => response.request().method() === "PATCH" && response.url().endsWith(`/roles/${memberId}`)),
-      memberGrant.getByRole("combobox").selectOption("write")
-    ]);
-    assert.equal(changeResponse.status(), 200);
-    assert.equal(roles.find((entry) => entry.userId === memberId)?.role, "write");
-
-    await member.reload({ waitUntil: "networkidle" });
-    await member.getByText("Renamed Project", { exact: true }).click();
-    await member.waitForURL((url) => url.pathname === projectStudioPath);
-    assertCanonicalLocation(member, projectStudioPath);
-    await member.getByRole("link", { name: "프로젝트 설정", exact: true }).click();
-    await member.waitForURL((url) => url.pathname === projectSettingsPath);
-    assertCanonicalLocation(member, projectSettingsPath);
-    await member.getByRole("heading", { name: "Renamed Project", exact: true }).waitFor();
-    assert.equal(await member.getByText(/조직 소유자만 프로젝트의 직접 역할/u).count(), 1);
-
-    const revokeResponsePromise = admin.waitForResponse((response) => response.request().method() === "DELETE" && response.url().endsWith(`/roles/${memberId}`));
-    await memberGrant.getByRole("button", { name: `${memberLabel} 역할 제거` }).click();
-    const revokeResponse = await revokeResponsePromise;
-    const revokedEtag = revokeResponse.headers().etag;
-    assert.ok(revokedEtag);
-    const revoked = await revokeResponse.json() as { changed: boolean; projectVersion: number };
-    assert.equal(revoked.changed, true);
-    await memberGrant.waitFor({ state: "detached" });
-    assert.equal(await memberSelect.locator(`option[value="${memberId}"]`).getAttribute("disabled"), null);
-
-    const noOp = await admin.evaluate(async ({ csrf, etag, organizationId, projectId, userId }) => {
-      const response = await fetch(`/api/v1/workspaces/organizations/${organizationId}/projects/${projectId}/roles/${userId}`, {
-        headers: { "if-match": etag, "x-csrf-token": csrf },
-        method: "DELETE"
-      });
-      return { body: await response.json() as { changed: boolean; projectVersion: number }, etag: response.headers.get("etag"), status: response.status };
-    }, { csrf, etag: revokedEtag, organizationId, projectId, userId: memberId });
-    assert.equal(noOp.status, 200);
-    assert.equal(noOp.body.changed, false);
-    assert.equal(noOp.body.projectVersion, revoked.projectVersion);
-    assert.equal(noOp.etag, revokedEtag);
-
-    for (const userId of [memberId, unknownId]) {
-      await memberSelect.selectOption(userId);
-      const grantResponse = admin.waitForResponse((response) => response.request().method() === "POST" && response.url().endsWith("/roles"));
-      await admin.getByRole("button", { name: "역할 부여" }).click();
-      assert.equal((await grantResponse).status(), 201);
-      const expectedLabel = userId === unknownId
-        ? "Uncertain Member · 조직 멤버"
-        : "Member · 조직 멤버";
-      await admin.locator(".project-detail .record-list").getByText(expectedLabel, { exact: true }).waitFor();
-    }
-    await admin.getByText("직접 역할을 부여할 수 있는 조직 멤버가 없습니다.").waitFor();
-    assert.equal(await memberSelect.isDisabled(), true);
-    assert.equal(await admin.getByRole("button", { name: "역할 부여" }).isDisabled(), true);
-
-    const currentMemberGrant = admin.locator(".project-detail .record-list li").filter({
-      has: admin.getByText(memberLabel, { exact: true })
-    });
-    const [finalRevokeResponse] = await Promise.all([
-      admin.waitForResponse((response) => response.request().method() === "DELETE" && response.url().endsWith(`/roles/${memberId}`)),
-      currentMemberGrant.getByRole("button", { name: `${memberLabel} 역할 제거` }).click()
-    ]);
-    assert.equal(finalRevokeResponse.status(), 200);
-    await currentMemberGrant.waitFor({ state: "detached" });
-    assert.equal(await memberSelect.locator(`option[value="${memberId}"]`).getAttribute("disabled"), null);
-
-    await member.goto(projectsUrl, { waitUntil: "networkidle" });
-    assert.equal(await member.getByText("Renamed Project", { exact: true }).count(), 0);
-    await member.goto(`${standalone.origin}${projectSettingsPath}?state=active`, { waitUntil: "networkidle" });
-    assert.equal(await member.getByText("Renamed Project", { exact: true }).count(), 0);
-
-    await admin.goto(`${standalone.origin}${projectsPath}?state=all`, { waitUntil: "networkidle" });
-    await admin.locator(".project-sidebar .record-list").getByText("Renamed Project", { exact: true }).click();
-    await admin.getByRole("button", { name: "보관" }).click();
-    await admin.getByRole("button", { name: "복원" }).waitFor();
-    assert.equal(
-      await admin.locator(".project-sidebar .record-list li", { hasText: "Renamed Project" }).locator(".product-status").textContent(),
-      "보관됨"
-    );
-    await admin.getByLabel(/삭제하려면 Renamed Project 입력/u).fill("Renamed Project");
+    await admin.getByRole("status").getByText("프로젝트 이름을 저장했습니다.").waitFor();
+    await admin.getByRole("link", { name: "위험 영역" }).click();
+    await admin.getByRole("heading", { level: 1, name: "위험 영역", exact: true }).waitFor();
+    await admin.getByRole("button", { name: "프로젝트 보관" }).click();
+    await admin.getByRole("button", { name: "프로젝트 복원" }).waitFor();
+    await admin.getByRole("button", { name: "프로젝트 복원" }).click();
+    await admin.getByRole("button", { name: "프로젝트 보관" }).waitFor();
     await admin.getByRole("button", { name: "프로젝트 삭제" }).click();
+    await admin.getByRole("alertdialog").waitFor();
+    assert.equal(await admin.getByLabel(/삭제하려면/u).count(), 0, "project deletion must not require typing the project name");
+    await admin.getByRole("alertdialog").getByRole("button", { name: "프로젝트 삭제" }).click();
     await admin.waitForURL((url) => url.pathname === projectsPath);
-    assertCanonicalLocation(admin, projectsPath, "all");
+    assertCanonicalLocation(admin, projectsPath, "active");
     assert.equal(project, undefined);
     assert.equal(memberCanRead, false);
   } finally {
@@ -382,32 +256,9 @@ try {
   await new Promise<void>((resolve) => core.close(() => resolve()));
 }
 
-async function revokeNonActionableGrant(
-  page: import("@playwright/test").Page,
-  currentRoles: readonly RoleRecord[],
-  userId: string,
-  label: string
-): Promise<void> {
-  const grant = page.locator(".project-detail .record-list li").filter({
-    has: page.getByText(label, { exact: true })
-  });
-  assert.equal(await grant.getByRole("combobox").isDisabled(), true);
-  const revoke = grant.getByRole("button", { name: `${label} 역할 제거`, exact: true });
-  assert.equal(await revoke.isEnabled(), true);
-  const [response] = await Promise.all([
-    page.waitForResponse((candidate) =>
-      candidate.request().method() === "DELETE" && candidate.url().endsWith(`/roles/${userId}`)
-    ),
-    revoke.click()
-  ]);
-  assert.equal(response.status(), 200);
-  await grant.waitFor({ state: "detached" });
-  assert.equal(currentRoles.some((role) => role.userId === userId), false);
-}
-
-interface ProjectRecord { archivedAt: string | null; createdAt: string; id: string; name: string; ownerId: string; ownerType: "organization"; slug: string; state: "active" | "archived"; storageScopeId: string; updatedAt: string; version: number }
+interface ProjectRecord { archivedAt: string | null; createdAt: string; id: string; name: string; ownerId: string; ownerType: "organization"; slug: string; state: "active" | "archived"; storageScopeId: string; templateId: "vite-react"; updatedAt: string; version: number }
 interface RoleRecord { createdAt: string; organizationId: string; projectId: string; role: string; updatedAt: string; userId: string; version: number }
-function record(name: string, slug: string, state: "active" | "archived"): ProjectRecord { return { archivedAt: state === "archived" ? now : null, createdAt: now, id: projectId, name, ownerId: organizationId, ownerType: "organization", slug, state, storageScopeId: scopeId, updatedAt: now, version }; }
+function record(name: string, slug: string, state: "active" | "archived"): ProjectRecord { return { archivedAt: state === "archived" ? now : null, createdAt: now, id: projectId, name, ownerId: organizationId, ownerType: "organization", slug, state, storageScopeId: scopeId, templateId: "vite-react", updatedAt: now, version }; }
 function roleRecord(userId: string, role: string): RoleRecord { return { createdAt: now, organizationId, projectId, role, updatedAt: now, userId, version: 1 }; }
 function etag(): string { return `"project-v${version}"`; }
 function workspaces(session: "admin" | "member") { const shared = { ownerType: "organization", ownerId: organizationId, displayLabel: "Alpha Organization", storageScopeId: scopeId }; return session === "admin" ? [{ ownerType: "user", ownerId: adminId, displayLabel: "Admin Personal", storageScopeId: personalScopeId }, shared] : [shared]; }

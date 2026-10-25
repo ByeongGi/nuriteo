@@ -48,7 +48,7 @@ const personalOwner = {
 
 const personal = await createProject(
   admin,
-  { owner: personalOwner, slug: "client-003-personal", name: "Client 003 Personal" },
+  { owner: personalOwner, slug: "client-003-personal", name: "Client 003 Personal", templateId: "vite-react" },
   { csrfToken: adminBrowser.csrfToken() }
 );
 assert.equal(personal.etag, '"project-v1"');
@@ -83,7 +83,7 @@ assert.equal(restored.data.state, "active");
 
 await createProject(
   admin,
-  { owner: personalOwner, slug: "client-003-second", name: "Client 003 Second" },
+  { owner: personalOwner, slug: "client-003-second", name: "Client 003 Second", templateId: "vite-react" },
   { csrfToken: adminBrowser.csrfToken() }
 );
 const firstPage = await listProjects(admin, {
@@ -156,7 +156,7 @@ const organizationOwner = {
 };
 const shared = await createProject(
   admin,
-  { owner: organizationOwner, slug: "shared-project", name: "Shared Project" },
+  { owner: organizationOwner, slug: "shared-project", name: "Shared Project", templateId: "next-app" },
   { csrfToken: adminBrowser.csrfToken() }
 );
 const granted = await grantDirectProjectRole(

@@ -29,7 +29,7 @@ export function TeamSettingsForm({ organizationId, organizationName, team, teamE
       setError(undefined);
       try {
         await renameTeam(createBrowserApiClient(), { organizationId, teamId: team.id, etag: teamEtag, displayName }, { csrfToken: readCsrfCredential() });
-        router.push(detail); router.refresh();
+        router.push(detail);
       } catch (cause) { setError(teamErrorMessage(cause)); }
     });
   }

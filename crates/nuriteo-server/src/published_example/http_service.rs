@@ -30,7 +30,6 @@ use super::{
     PublishedExampleVersionId, PublishedExampleVisibility,
 };
 
-const REAUTHENTICATION_WINDOW_SECONDS: i64 = 15 * 60;
 const PUBLIC_PREVIEW_BINDINGS_PER_MINUTE: i32 = 120;
 
 #[derive(Clone)]
@@ -354,10 +353,7 @@ impl PublishedExampleHttpService {
                 identity.user_id,
                 example_id,
                 expected_generation,
-                &PublishedExampleDeleteConfirmation {
-                    name,
-                    recently_reauthenticated: identity.recently_reauthenticated,
-                },
+                &PublishedExampleDeleteConfirmation { name },
             )
             .await
             .map_err(map_domain_error)
@@ -530,7 +526,6 @@ impl PublishedExampleHttpService {
 struct BrowserIdentity {
     user_id: UserId,
     display_name: String,
-    recently_reauthenticated: bool,
 }
 
 impl BrowserIdentity {
@@ -576,15 +571,9 @@ impl Runtime {
         let Some((true, display_name)) = actor else {
             return Err(PublishedExampleHttpError::AuthenticationFailed);
         };
-        let now = fields.last_seen_at.into_datetime();
-        let recently_reauthenticated = fields.last_reauthenticated_at.is_some_and(|at| {
-            let age = now - at.into_datetime();
-            !age.is_negative() && age.whole_seconds() <= REAUTHENTICATION_WINDOW_SECONDS
-        });
         Ok(BrowserIdentity {
             user_id: fields.user_id,
             display_name,
-            recently_reauthenticated,
         })
     }
 

@@ -25,7 +25,7 @@ export function RemoveMember({ member, organizationId, organizationName, workspa
       setError(undefined);
       try {
         await removeOrganizationMember(createBrowserApiClient(), { organizationId, userId: member.userId }, { csrfToken: readCsrfCredential() });
-        router.push(base); router.refresh();
+        router.push(base);
       } catch (cause) { setError(collaborationError(cause, "organization-member")); }
     });
   }

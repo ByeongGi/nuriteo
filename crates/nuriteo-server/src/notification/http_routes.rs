@@ -506,9 +506,9 @@ fn map_error(error: NotificationHttpServiceError, request_id: RequestId, path: &
         NotificationHttpServiceError::AuthenticationFailed => {
             HttpError::authentication(request_id, path)
         }
-        NotificationHttpServiceError::Forbidden
-        | NotificationHttpServiceError::ReauthenticationRequired => {
-            HttpError::forbidden(request_id, path)
+        NotificationHttpServiceError::Forbidden => HttpError::forbidden(request_id, path),
+        NotificationHttpServiceError::ReauthenticationRequired => {
+            HttpError::reauthentication_required(request_id, path)
         }
         NotificationHttpServiceError::InvalidInput => validation(&request_id, path, "body"),
         NotificationHttpServiceError::NotFound => HttpError::not_found(request_id, path),

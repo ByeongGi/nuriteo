@@ -28,7 +28,7 @@ use super::http_service::{
 };
 use super::{
     ProjectId, ProjectName, ProjectOwner, ProjectPageLimit, ProjectRole, ProjectRolePageLimit,
-    ProjectSlug, ProjectState, ProjectVersion,
+    ProjectSlug, ProjectState, ProjectTemplate, ProjectVersion,
 };
 use crate::access_token::{AccessTokenScope, ApiCategory};
 
@@ -448,6 +448,8 @@ impl ToSchema for ProjectBundleBinary {}
 struct CreateProjectRequest {
     slug: String,
     name: String,
+    #[serde(rename = "templateId")]
+    template: ProjectTemplate,
 }
 
 #[derive(Deserialize, ToSchema)]
@@ -508,6 +510,7 @@ async fn create_project(
                 .map_err(|_| validation(&request_id, COLLECTION, "slug"))?,
             ProjectName::new(input.name)
                 .map_err(|_| validation(&request_id, COLLECTION, "name"))?,
+            input.template,
             request_id.as_str(),
         )
         .await
@@ -656,20 +659,22 @@ async fn delete_project(
     request: Request,
 ) -> Result<StatusCode, HttpError> {
     let (parts, body) = request.into_parts();
-    let headers = BrowserHeaders::read(&parts.headers, &request_id, ITEM)?;
-    let version = parse_if_match(&parts.headers, &request_id, ITEM)?;
-    let input: DeleteProjectRequest = json_body(&parts.headers, body, &request_id, ITEM).await?;
+    let instance = parts.uri.path().to_owned();
+    let headers = BrowserHeaders::read(&parts.headers, &request_id, &instance)?;
+    let version = parse_if_match(&parts.headers, &request_id, &instance)?;
+    let input: DeleteProjectRequest =
+        json_body(&parts.headers, body, &request_id, &instance).await?;
     service
         .delete(
             headers.request(BrowserMethod::Delete),
-            parse_owner(&owner_type, &owner_id, &request_id, ITEM)?,
-            parse_project_id(&project_id, &request_id, ITEM)?,
+            parse_owner(&owner_type, &owner_id, &request_id, &instance)?,
+            parse_project_id(&project_id, &request_id, &instance)?,
             version,
-            ProjectName::new(input.name).map_err(|_| validation(&request_id, ITEM, "name"))?,
+            ProjectName::new(input.name).map_err(|_| validation(&request_id, &instance, "name"))?,
             request_id.as_str(),
         )
         .await
-        .map_err(|error| map_error(error, request_id, ITEM))?;
+        .map_err(|error| map_error(error, request_id, &instance))?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -1315,9 +1320,8 @@ fn validation(request_id: &RequestId, path: &str, field: &str) -> HttpError {
 fn map_error(error: ProjectHttpError, request_id: RequestId, path: &str) -> HttpError {
     match error {
         ProjectHttpError::AuthenticationFailed => HttpError::authentication(request_id, path),
-        ProjectHttpError::Forbidden | ProjectHttpError::ConfirmationRequired => {
-            HttpError::forbidden(request_id, path)
-        }
+        ProjectHttpError::Forbidden => HttpError::forbidden(request_id, path),
+        ProjectHttpError::ConfirmationRequired => validation(&request_id, path, "name"),
         ProjectHttpError::NotFound => HttpError::not_found(request_id, path),
         ProjectHttpError::InvalidInput => validation(&request_id, path, "request"),
         ProjectHttpError::Conflict => HttpError::conflict(request_id, path),

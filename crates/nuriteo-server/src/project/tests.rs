@@ -274,6 +274,7 @@ fn validated_project_round_trips_and_rejects_tampered_json() {
         assert_eq!(project.storage_scope_id(), storage_scope_id());
         assert_eq!(project.slug().as_str(), "example-project");
         assert_eq!(project.name().as_str(), "Example Project");
+        assert_eq!(project.template(), ProjectTemplate::ViteReact);
         assert_eq!(project.created_at(), timestamp(100));
         assert_eq!(project.lock_version().get(), 1);
 
@@ -352,6 +353,7 @@ fn active_fields(owner: ProjectOwner) -> ProjectFields {
             .unwrap_or_else(|error| panic!("{error}")),
         name: ProjectName::new("Example Project".to_owned())
             .unwrap_or_else(|error| panic!("{error}")),
+        template: ProjectTemplate::ViteReact,
         state: ProjectState::Active,
         created_at: timestamp(100),
         updated_at: timestamp(100),
@@ -367,6 +369,7 @@ fn reconstruct(fields: ProjectFields) -> Result<Project, ProjectError> {
         fields.storage_scope_id,
         fields.slug,
         fields.name,
+        fields.template,
         fields.state,
         fields.created_at,
         fields.updated_at,

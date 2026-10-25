@@ -42,6 +42,9 @@ export function collaborationError(
   operation: CollaborationOperation
 ): string {
   if (error instanceof ApiError) {
+    if (error.code === "REAUTHENTICATION_REQUIRED") {
+      return "보안을 위해 다시 로그인한 뒤 이 작업을 다시 시도하세요.";
+    }
     if (error.status === 403) return "이 작업을 수행할 권한이 없습니다.";
     if (error.status === 412 || error.status === 428) {
       return "조직 정보가 변경되었습니다. 최신 버전을 불러온 뒤 다시 시도하세요.";
@@ -77,6 +80,12 @@ export function collaborationError(
 
 export function projectError(error: unknown, operation: CollaborationOperation): ProjectFailure {
   if (error instanceof ApiError) {
+    if (error.code === "REAUTHENTICATION_REQUIRED") {
+      return {
+        message: "보안을 위해 다시 로그인한 뒤 이 작업을 다시 시도하세요.",
+        reconcile: false
+      };
+    }
     if (error.code === "COMMIT_OUTCOME_UNKNOWN") {
       return {
         message: "서버에서 변경을 완료했을 수 있습니다. 다음 작업 전에 프로젝트를 새로 불러오세요.",

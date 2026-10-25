@@ -46,6 +46,7 @@ interface SignInFormProps {
   readonly oidcFailed?: boolean;
   readonly providers?: readonly OidcLoginProvider[];
   readonly providersLoadFailed?: boolean;
+  readonly reauthentication?: boolean;
   readonly returnTo?: string;
 }
 
@@ -54,6 +55,7 @@ export function SignInForm({
   oidcFailed = false,
   providers = [],
   providersLoadFailed = false,
+  reauthentication = false,
   returnTo = "/workspaces"
 }: SignInFormProps) {
   const styles = signInStyles();
@@ -102,6 +104,11 @@ export function SignInForm({
 
   return (
     <SignInShell>
+        {reauthentication ? (
+          <div className={styles.status()} role="status">
+            보안이 필요한 작업입니다. 계정을 다시 인증하면 원래 화면으로 돌아갑니다.
+          </div>
+        ) : null}
         {activated ? (
           <div className={styles.status()} role="status">
             계정 활성화를 완료했습니다. 새 계정으로 로그인하세요.
@@ -120,7 +127,7 @@ export function SignInForm({
         {providers.length > 0 ? (
           <div className={styles.oidc()} aria-label="OIDC 계정 로그인">
             {providers.map((provider) => (
-              <Button className={styles.oidcButton()} key={provider.id} render={<a href={`/api/v1/auth/oidc/${provider.id}/begin`} />}>
+              <Button className={styles.oidcButton()} key={provider.id} render={<a href={`/api/v1/auth/oidc/${provider.id}/begin?returnTo=${encodeURIComponent(destination)}`} />}>
                 <span className={styles.providerMark()} aria-hidden="true">{provider.displayName.trim().charAt(0).toUpperCase()}</span>
                 <span className={styles.providerLabel()}>{provider.displayName} 계정으로 계속</span>
               </Button>

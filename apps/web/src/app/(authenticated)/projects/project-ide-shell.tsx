@@ -111,16 +111,14 @@ const ideStyles = tv({
     previewAddress: "flex min-w-0 items-center gap-2 rounded-full border border-muted-border bg-surface px-3 py-1.5 font-mono text-[0.625rem] text-muted-foreground [&_span:last-child]:truncate",
     previewActions: "flex items-center gap-1 [&_[data-slot=button]]:min-h-7 [&_[data-slot=button]]:px-2 [&_[data-slot=button]]:text-[0.625rem]",
     live: "flex items-center gap-1.5 text-[0.625rem] font-bold text-success",
-    start: "grid min-h-[30rem] flex-1 grid-cols-[minmax(16rem,.8fr)_minmax(20rem,1.2fr)] place-content-center gap-[clamp(2rem,6vw,4rem)] bg-page p-[clamp(2rem,7vw,4rem)] max-[48rem]:grid-cols-1",
+    start: "grid min-h-[30rem] flex-1 place-content-center justify-items-center gap-4 bg-page p-[clamp(2rem,7vw,4rem)] text-center [&_h4]:m-0 [&_p]:m-0 [&_p]:max-w-lg [&_p]:text-sm [&_p]:leading-6 [&_p]:text-muted-foreground",
     startMark: "mb-6 grid size-12 place-items-center rounded-lg bg-primary text-lg font-bold text-on-primary",
-    startActions: "grid content-center gap-3 [&_button]:grid [&_button]:min-h-24 [&_button]:grid-cols-[2rem_minmax(0,1fr)] [&_button]:gap-x-3 [&_button]:rounded-lg [&_button]:border [&_button]:border-border [&_button]:bg-surface [&_button]:p-4 [&_button]:text-left [&_button>span]:row-span-2 [&_button>span]:self-start [&_button>strong]:col-start-2 [&_button>strong]:whitespace-normal [&_button>small]:col-start-2 [&_button>small]:mt-1 [&_button>small]:whitespace-normal [&_button>small]:text-xs [&_button>small]:leading-5 [&_button>small]:text-muted-foreground",
-    startSafety: "col-span-full m-0 text-sm leading-6 text-muted-foreground",
     recoveryActions: "flex flex-wrap gap-2 px-4",
     recovery: "mx-4 grid gap-3 rounded-lg border border-warning/30 bg-warning/10 p-4 text-sm",
-    terminal: "relative grid h-48 min-h-0 grid-rows-[2rem_minmax(0,1fr)] border-t border-white/10 bg-[#14151a] text-[#e6e7eb]",
-    terminalToolbar: "flex min-h-8 items-center justify-between gap-3 border-b border-white/10 bg-[#1b1c22] pl-2 text-[0.6875rem] text-white/70 [&_[role=tablist]]:flex [&_[role=tablist]]:h-full [&_[role=tablist]]:min-w-0 [&_[role=tablist]]:items-stretch [&_[role=tab]]:min-w-0 [&_[role=tab]]:border-0 [&_[role=tab]]:border-b-2 [&_[role=tab]]:border-b-transparent [&_[role=tab]]:bg-transparent [&_[role=tab]]:px-2.5 [&_[role=tab]]:text-white/50 [&_[role=tab]]:hover:text-white/85 [&_[role=tab][aria-selected=true]]:border-b-[#48d597] [&_[role=tab][aria-selected=true]]:text-white",
+    terminal: "relative grid h-48 min-h-0 grid-rows-[2rem_minmax(0,1fr)] border-t border-white/10 bg-[var(--n-color-studio-editor)] text-[var(--n-color-studio-fg)]",
+    terminalToolbar: "flex min-h-8 items-center justify-between gap-3 border-b border-white/10 bg-[var(--n-color-studio-raised)] pl-2 text-[0.6875rem] text-white/70 [&_[role=toolbar]]:flex [&_[role=toolbar]]:h-full [&_[role=toolbar]]:min-w-0 [&_[role=toolbar]]:items-stretch [&_[role=toolbar]_button]:min-w-0 [&_[role=toolbar]_button]:border-0 [&_[role=toolbar]_button]:border-b-2 [&_[role=toolbar]_button]:border-b-transparent [&_[role=toolbar]_button]:bg-transparent [&_[role=toolbar]_button]:px-2.5 [&_[role=toolbar]_button]:text-white/50 [&_[role=toolbar]_button]:hover:text-white/85 [&_[role=toolbar]_button[aria-pressed=true]]:border-b-[var(--n-color-studio-success)] [&_[role=toolbar]_button[aria-pressed=true]]:text-white",
     terminalActions: "flex h-full shrink-0 items-center [&_button]:grid [&_button]:h-full [&_button]:min-w-8 [&_button]:place-items-center [&_button]:border-0 [&_button]:border-l [&_button]:border-white/10 [&_button]:bg-transparent [&_button]:px-2 [&_button]:text-sm [&_button]:text-white/55 [&_button]:hover:bg-white/5 [&_button]:hover:text-white",
-    runtimeList: "m-0 grid min-h-0 list-none content-start gap-px overflow-auto p-2 font-mono text-[0.6875rem] text-white/70 [&_li]:grid [&_li]:grid-cols-[minmax(0,1fr)_auto] [&_li]:items-center [&_li]:gap-x-4 [&_li]:rounded-sm [&_li]:px-2.5 [&_li]:py-2 [&_li]:hover:bg-white/5 [&_strong]:truncate [&_strong]:font-medium [&_strong]:text-white/90 [&_span]:truncate [&_span]:text-white/45 [&_button]:rounded-sm [&_button]:border [&_button]:border-white/15 [&_button]:bg-transparent [&_button]:px-2 [&_button]:py-1 [&_button]:font-sans [&_button]:text-[0.625rem] [&_button]:text-white/65 [&_button]:hover:bg-white/10 [&_button]:hover:text-white [&_a]:text-[#72e5ac] [&_a]:no-underline [&_a]:hover:underline"
+    runtimeList: "m-0 grid min-h-0 list-none content-start gap-px overflow-auto p-2 font-mono text-[0.6875rem] text-white/70 [&_li]:grid [&_li]:grid-cols-[minmax(0,1fr)_auto] [&_li]:items-center [&_li]:gap-x-4 [&_li]:rounded-sm [&_li]:px-2.5 [&_li]:py-2 [&_li]:hover:bg-white/5 [&_strong]:truncate [&_strong]:font-medium [&_strong]:text-white/90 [&_span]:truncate [&_span]:text-white/45 [&_button]:rounded-sm [&_button]:border [&_button]:border-white/15 [&_button]:bg-transparent [&_button]:px-2 [&_button]:py-1 [&_button]:font-sans [&_button]:text-[0.625rem] [&_button]:text-white/65 [&_button]:hover:bg-white/10 [&_button]:hover:text-white [&_a]:text-[var(--n-color-studio-success)] [&_a]:no-underline [&_a]:hover:underline"
   },
   variants: {
     sidebarOpen: {
@@ -153,7 +151,6 @@ const resumeFeature = createRetryableLazyFeature<ResumeFeature>(
 );
 type SaveFeature = typeof import("#src/save/project-save.ts");
 const saveFeature = createRetryableLazyFeature<SaveFeature>(() => import("#src/save/project-save.ts"));
-type WorkspaceSource = "saved" | "template";
 type SidebarPanel = "files" | "search";
 type BottomPanel = "ports" | "problems" | "processes" | "output" | "terminal";
 type FileOperation = "create" | "rename";
@@ -195,6 +192,7 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, onProjectReloa
   const fileSearchRef = useRef<HTMLInputElement | null>(null);
   const workbenchRef = useRef<HTMLDivElement | null>(null);
   const unmountedRef = useRef(false);
+  const workspaceStartOperationRef = useRef(0);
   const [workspace, setWorkspace] = useState<RuntimeWorkspaceState>();
   const [selectedPath, setSelectedPath] = useState<string>();
   const [openPaths, setOpenPaths] = useState<readonly string[]>([]);
@@ -207,7 +205,6 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, onProjectReloa
   const terminal = useProjectTerminalSessions();
   const [error, setError] = useState<string>();
   const [isStarting, setIsStarting] = useState(false);
-  const [startingSource, setStartingSource] = useState<WorkspaceSource>();
   const [resumeStatus, setResumeStatus] = useState<string>();
   const [isRunningPreview, setIsRunningPreview] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -253,8 +250,10 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, onProjectReloa
       setBottomPanel("terminal");
       setIsTerminalOpen(true);
     }
+    if (project.state === "active") void startWorkspace();
     return () => {
       unmountedRef.current = true;
+      workspaceStartOperationRef.current += 1;
       previewBridgeOperationRef.current += 1;
       manifestAbortRef.current?.abort();
       saveAbortRef.current?.abort();
@@ -299,37 +298,42 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, onProjectReloa
     return () => globalThis.removeEventListener("keydown", saveShortcut);
   });
 
-  async function startWorkspace(source: WorkspaceSource) {
+  async function startWorkspace() {
     if (adapterRef.current !== undefined) {
       setError("완전히 종료되지 않은 워크스페이스입니다. 프로젝트를 새로고침한 뒤 다시 시도하세요.");
       return;
     }
+    const operation = workspaceStartOperationRef.current + 1;
+    workspaceStartOperationRef.current = operation;
     setError(undefined);
     setServerSaveFailure(undefined);
     setIsStarting(true);
-    setStartingSource(source);
-    setResumeStatus(source === "saved" ? "현재 서버 저장본을 확인하는 중…" : "새 로컬 초안을 준비하는 중…");
+    setResumeStatus("현재 서버 저장본을 확인하는 중…");
     try {
       manifestAbortRef.current?.abort();
       const manifestAbort = new AbortController();
       manifestAbortRef.current = manifestAbort;
       const runtimePromise = runtimeFeatureLoader?.() ?? runtimeFeature.load();
       const revisionPromise = resolveRuntimeAssetRevision(assetRevision, manifestAbort.signal);
-      const savedContentPromise = source === "saved"
-        ? (resumeProjectContentLoader?.() ?? resumeFeature.load()).then(({ resumeProjectContent }) => resumeProjectContent({
+      const savedContentPromise = (resumeProjectContentLoader?.() ?? resumeFeature.load())
+        .then(({ resumeProjectContent }) => resumeProjectContent({
             ownerType: project.ownerType,
             ownerId: project.ownerId,
             projectId: project.id,
             storageScopeId: project.storageScopeId
           }, { signal: manifestAbort.signal }))
-        : Promise.resolve(undefined);
+        .catch((caught: unknown) => {
+          if (projectContentErrorCode(caught) === "RESUME_NOT_SAVED") return undefined;
+          throw caught;
+        });
       const [{ createRuntimeAdapter }, revision, savedContent] = await awaitWorkspaceStart(manifestAbort, {
         runtime: runtimePromise,
         revision: revisionPromise,
         content: savedContentPromise
       });
-      if (unmountedRef.current) return;
-      setResumeStatus(source === "saved" ? "검증 완료. 저장된 프로젝트를 여는 중…" : "시작 템플릿을 만드는 중…");
+      if (unmountedRef.current || workspaceStartOperationRef.current !== operation) return;
+      const source = savedContent === undefined ? "template" : "saved";
+      setResumeStatus(source === "saved" ? "검증 완료. 저장된 프로젝트를 여는 중…" : "저장본이 없어 시작 템플릿을 만드는 중…");
       const adapter = createRuntimeAdapter();
       adapterRef.current = adapter;
       unsubscribeRef.current();
@@ -358,24 +362,32 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, onProjectReloa
           if (diagnostic.severity === "error") setError(diagnostic.message);
         }
       });
-      const materialized = savedContent === undefined
-        ? await adapter.workspace.materializeTemplate("vite-react")
-        : await adapter.workspace.materializeBundle(savedContent.files);
+      let materialized: RuntimeWorkspaceState;
+      if (source === "template") {
+        materialized = await adapter.workspace.materializeTemplate(project.templateId);
+      } else {
+        if (savedContent === undefined) throw new Error("Saved project content is unavailable.");
+        materialized = await adapter.workspace.materializeBundle(savedContent.files);
+      }
       const requestedPath = new URL(globalThis.location.href).searchParams.get("file");
       const firstTextFile = materialized.files.find((file) => file.kind === "text" && file.path === requestedPath)
         ?? materialized.files.find((file) => file.kind === "text");
       setWorkspace(materialized);
       setOpenPaths([]);
-      setHasUnpublishedChanges(savedContent === undefined);
-      setEditorStatus(savedContent === undefined
-        ? "로컬 초안"
-        : `서버 저장본 v${savedContent.descriptor.projectVersion} 복원됨`);
-      setResumeStatus(savedContent === undefined
-        ? "이 브라우저에 시작 템플릿을 준비했습니다."
-        : `이 브라우저에 서버 저장본 v${savedContent.descriptor.projectVersion}을 준비했습니다.`);
+      if (source === "template") {
+        setHasUnpublishedChanges(true);
+        setEditorStatus("로컬 초안");
+        setResumeStatus("이 브라우저에 시작 템플릿을 준비했습니다.");
+      } else {
+        if (savedContent === undefined) throw new Error("Saved project content is unavailable.");
+        setHasUnpublishedChanges(false);
+        setEditorStatus(`서버 저장본 v${savedContent.descriptor.projectVersion} 복원됨`);
+        setResumeStatus(`이 브라우저에 서버 저장본 v${savedContent.descriptor.projectVersion}을 준비했습니다.`);
+      }
       if (firstTextFile) selectFile(firstTextFile.path, materialized);
       if (previewConfiguration.status === "enabled") void startPreview(adapter);
     } catch (caught) {
+      if (workspaceStartOperationRef.current !== operation) return;
       const contentCode = projectContentErrorCode(caught);
       const runtimeCode = runtimeErrorCode(caught);
       setError(contentCode === null
@@ -384,9 +396,10 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, onProjectReloa
       setResumeStatus(undefined);
       await releaseAdapter();
     } finally {
-      manifestAbortRef.current = null;
-      setIsStarting(false);
-      setStartingSource(undefined);
+      if (workspaceStartOperationRef.current === operation) {
+        manifestAbortRef.current = null;
+        setIsStarting(false);
+      }
     }
   }
 
@@ -1127,7 +1140,7 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, onProjectReloa
         if (event.key === "ArrowDown" && resultCount > 0) { event.preventDefault(); setQuickOpenIndex((current) => (current + 1) % resultCount); }
         if (event.key === "ArrowUp" && resultCount > 0) { event.preventDefault(); setQuickOpenIndex((current) => (current - 1 + resultCount) % resultCount); }
         if (event.key === "Enter" && matchingFiles[quickOpenIndex]) { selectFile(matchingFiles[quickOpenIndex].path); setIsQuickOpenOpen(false); }
-      }} /><ul>{matchingFiles.slice(0, 40).map((file, index) => <li key={file.path}><button type="button" aria-selected={index === quickOpenIndex} onMouseEnter={() => setQuickOpenIndex(index)} onClick={() => { selectFile(file.path); setIsQuickOpenOpen(false); }}><strong>{file.name}</strong><small>{file.path}</small></button></li>)}</ul></section> : null}
+      }} /><ul>{matchingFiles.slice(0, 40).map((file, index) => <li key={file.path}><Button type="button" size="sm" variant="ghost" aria-selected={index === quickOpenIndex} onMouseEnter={() => setQuickOpenIndex(index)} onClick={() => { selectFile(file.path); setIsQuickOpenOpen(false); }}><strong>{file.name}</strong><small>{file.path}</small></Button></li>)}</ul></section> : null}
       {error ? <div className={css.message({ className: "border-danger/30 bg-danger/10 text-danger" })} role="alert"><strong>작업을 완료하지 못했습니다.</strong><span>{error}</span></div> : null}
       {serverSaveFailure ? <div className={css.recoveryActions()} aria-label="서버 저장 복구">{serverSaveFailure === "retry" ? <Button type="button" size="sm" disabled={isServerSaving || !canWriteLocalDraft} onClick={() => void saveToServer()}>서버 저장 다시 시도</Button> : <Button type="button" size="sm" onClick={() => onProjectReload?.()}>최신 프로젝트 다시 불러오기</Button>}</div> : null}
       {resumeStatus ? <p className={css.message({ className: "border-primary/20 bg-selected text-foreground" })} role="status" aria-live="polite">{resumeStatus}</p> : null}
@@ -1168,9 +1181,11 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, onProjectReloa
       {hasWorkspace ? (
         <div className={css.workbench({ className: workbenchLayout })} ref={workbenchRef} style={workbenchStyle}>
           <aside className={css.activity()} aria-label="Studio 도구">
-            <button
+            <Button
               className={css.activityButton()}
               type="button"
+              size="icon"
+              variant="ghost"
               aria-label="프로젝트 파일"
               aria-pressed={isSidebarOpen && sidebarPanel === "files"}
               onClick={() => {
@@ -1180,10 +1195,12 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, onProjectReloa
               }}
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M3.5 5.5h6l2 2h9v12h-17z"/><path d="M3.5 9.5h17"/></svg>
-            </button>
-            <button
+            </Button>
+            <Button
               className={css.activityButton()}
               type="button"
+              size="icon"
+              variant="ghost"
               aria-label="프로젝트 파일 검색"
               aria-pressed={isSidebarOpen && sidebarPanel === "search"}
               onClick={() => {
@@ -1194,17 +1211,19 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, onProjectReloa
               }}
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><circle cx="10.5" cy="10.5" r="5.5"/><path d="m15 15 5 5"/></svg>
-            </button>
+            </Button>
             <span className={css.activityDivider()} aria-hidden="true" />
-            <button
+            <Button
               className={css.activityButton()}
               type="button"
+              size="icon"
+              variant="ghost"
               aria-label={isFocusMode ? "전체 패널 표시" : "편집기에 집중"}
               aria-pressed={isFocusMode}
               onClick={() => setIsFocusMode((current) => !current)}
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M4 8V4h4M16 4h4v4M20 16v4h-4M8 20H4v-4"/></svg>
-            </button>
+            </Button>
           </aside>
           <nav className={css.files()} aria-label="프로젝트 파일">
             <div className="absolute inset-y-0 right-[-0.25rem] z-20 w-2 cursor-col-resize touch-none max-[72rem]:hidden" role="separator" aria-label="파일 패널 너비 조절" aria-orientation="vertical" aria-valuemin={192} aria-valuemax={360} aria-valuenow={sidebarWidth} onPointerDown={(event) => beginHorizontalResize("files", event)} />
@@ -1218,9 +1237,9 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, onProjectReloa
                 <strong>{sidebarPanel === "search" ? "코드 검색" : "파일"}</strong>
               </div>
               <div className={css.fileActions()}>
-                <button type="button" aria-label="새 파일" title="새 파일" disabled={!canWriteLocalDraft} onClick={() => beginFileOperation("create")}>＋</button>
-                <button type="button" aria-label="선택한 파일 이름 변경" title="이름 변경" disabled={!selectedPath || !canWriteLocalDraft} onClick={() => beginFileOperation("rename")}>✎</button>
-                <button type="button" aria-label="선택한 파일 삭제" title="삭제" disabled={!selectedPath || !canWriteLocalDraft} onClick={() => setConfirmingFileDelete(true)}>⌫</button>
+                <Button type="button" size="icon" variant="ghost" aria-label="새 파일" title="새 파일" disabled={!canWriteLocalDraft} onClick={() => beginFileOperation("create")}>＋</Button>
+                <Button type="button" size="icon" variant="ghost" aria-label="선택한 파일 이름 변경" title="이름 변경" disabled={!selectedPath || !canWriteLocalDraft} onClick={() => beginFileOperation("rename")}>✎</Button>
+                <Button type="button" size="icon" variant="ghost" aria-label="선택한 파일 삭제" title="삭제" disabled={!selectedPath || !canWriteLocalDraft} onClick={() => setConfirmingFileDelete(true)}>⌫</Button>
                 <kbd>⌘P</kbd>
               </div>
             </div>
@@ -1228,8 +1247,8 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, onProjectReloa
               <div className={css.searchArea()}>
                 <SearchField className={css.fileSearch()} label="코드 검색" aria-busy={isContentSearchPending} aria-invalid={contentSearchError !== undefined} ref={fileSearchRef} value={fileQuery} onChange={(event) => { setFileQuery(event.currentTarget.value); setFileListLimit(FILE_LIST_BATCH_SIZE); }} placeholder="프로젝트 코드 검색" autoComplete="off" />
                 <div className={css.searchControls()} aria-label="파일 검색 옵션">
-                  <button type="button" aria-label="대소문자 구분" aria-pressed={matchFileCase} onClick={() => setMatchFileCase((current) => !current)}>Aa</button>
-                  <button type="button" aria-label="정규식 사용" aria-pressed={useFileRegularExpression} onClick={() => setUseFileRegularExpression((current) => !current)}>.*</button>
+                  <Button type="button" size="icon" variant="ghost" aria-label="대소문자 구분" aria-pressed={matchFileCase} onClick={() => setMatchFileCase((current) => !current)}>Aa</Button>
+                  <Button type="button" size="icon" variant="ghost" aria-label="정규식 사용" aria-pressed={useFileRegularExpression} onClick={() => setUseFileRegularExpression((current) => !current)}>.*</Button>
                 </div>
               </div>
             ) : <span aria-hidden="true" />}
@@ -1237,7 +1256,7 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, onProjectReloa
               {sidebarPanel === "search" ? contentSearchError ?? `${totalContentSearchMatches}개 코드 검색 결과` : `파일 ${workspace.files.length}개`}
             </p>
             {sidebarPanel === "search" ? <div className={css.contentResults()}>
-              {contentSearchMatches.length > 0 ? <ul>{contentSearchMatches.map((match, index) => <li key={`${match.path}:${match.line}:${match.column}:${index}`}><button type="button" onClick={() => { selectFile(match.path); setEditorPositionRequest({ column: match.column, line: match.line, requestId: Date.now() }); }}><strong>{match.path}</strong><small>{match.line}:{match.column}</small><span>{match.snippet || "빈 줄"}</span></button></li>)}</ul> : <p className={css.fileEmpty()}>{fileQuery.trim() ? "일치하는 코드를 찾지 못했습니다." : "검색어를 입력하면 프로젝트 전체 코드를 찾습니다."}</p>}
+              {contentSearchMatches.length > 0 ? <ul>{contentSearchMatches.map((match, index) => <li key={`${match.path}:${match.line}:${match.column}:${index}`}><Button type="button" size="sm" variant="ghost" onClick={() => { selectFile(match.path); setEditorPositionRequest({ column: match.column, line: match.line, requestId: Date.now() }); }}><strong>{match.path}</strong><small>{match.line}:{match.column}</small><span>{match.snippet || "빈 줄"}</span></Button></li>)}</ul> : <p className={css.fileEmpty()}>{fileQuery.trim() ? "일치하는 코드를 찾지 못했습니다." : "검색어를 입력하면 프로젝트 전체 코드를 찾습니다."}</p>}
               {contentSearchMatches.length < totalContentSearchMatches ? <Button className={css.fileMore()} variant="ghost" type="button" onClick={() => setFileListLimit((current) => current + FILE_LIST_BATCH_SIZE)}>검색 결과 더 보기</Button> : null}
             </div> : <div className={css.fileList()}>
               {visibleFiles.length > 0 ? <ProjectFileTree files={visibleFiles} hasUnsavedEditorChange={hasUnsavedEditorChange} onSelect={selectFile} selectedPath={selectedPath} /> : <p className={css.fileEmpty()}>프로젝트 파일이 없습니다.</p>}
@@ -1246,18 +1265,18 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, onProjectReloa
           </nav>
           <div className={css.editorStack()}>
             <section className={css.editor()} aria-label="텍스트 편집기">
-              <div className={css.editorTabs()} role="tablist" aria-label="열린 파일">
+              <div className={css.editorTabs()} role="toolbar" aria-label="열린 파일">
                 {openPaths.length > 0 ? openPaths.map((path) => {
                   const fileName = path.split("/").at(-1) ?? path;
                   const isActive = path === selectedPath;
                   return <div className={isActive ? "is-active" : undefined} key={path}>
-                    <button className="tab-select" type="button" role="tab" aria-selected={isActive} title={path} onClick={() => selectFile(path)}><span className={css.fileIcon()} aria-hidden="true">#</span><strong>{fileName}</strong>{isActive && hasUnsavedEditorChange ? <i aria-label="저장하지 않은 변경 사항" /> : null}</button>
-                    <button className="tab-close" type="button" aria-label={`${fileName} 닫기`} onClick={() => closeFile(path)}>×</button>
+                    <Button className="tab-select" type="button" size="sm" variant="ghost" aria-pressed={isActive} title={path} onClick={() => selectFile(path)}><span className={css.fileIcon()} aria-hidden="true">#</span><strong>{fileName}</strong>{isActive && hasUnsavedEditorChange ? <i aria-label="저장하지 않은 변경 사항" /> : null}</Button>
+                    <Button className="tab-close" type="button" size="icon" variant="ghost" aria-label={`${fileName} 닫기`} onClick={() => closeFile(path)}>×</Button>
                   </div>;
                 }) : <span>파일을 선택하세요</span>}
                 <div className="sticky right-0 ml-auto !max-w-none !gap-0 !border-l !border-r-0 !border-muted-border bg-subtle !px-1" role="group" aria-label="편집기 작업">
-                  <button className="grid size-7 place-items-center rounded-sm border-0 bg-transparent text-muted-foreground hover:bg-hover hover:text-foreground" type="button" aria-label="문서 서식 정리" disabled={!selectedPath || !canWriteLocalDraft} onClick={() => setEditorFormatRequestId(Date.now())}>↹</button>
-                  <button className="grid size-7 place-items-center rounded-sm border-0 bg-transparent text-muted-foreground hover:bg-hover hover:text-foreground" type="button" aria-label={isEditorSplit ? "편집기 분할 닫기" : "편집기 분할"} disabled={!selectedPath} onClick={() => setIsEditorSplit((current) => !current)}>◫</button>
+                  <Button className="grid size-7 place-items-center rounded-sm border-0 bg-transparent text-muted-foreground hover:bg-hover hover:text-foreground" type="button" size="icon" variant="ghost" aria-label="문서 서식 정리" disabled={!selectedPath || !canWriteLocalDraft} onClick={() => setEditorFormatRequestId(Date.now())}>↹</Button>
+                  <Button className="grid size-7 place-items-center rounded-sm border-0 bg-transparent text-muted-foreground hover:bg-hover hover:text-foreground" type="button" size="icon" variant="ghost" aria-label={isEditorSplit ? "편집기 분할 닫기" : "편집기 분할"} disabled={!selectedPath} onClick={() => setIsEditorSplit((current) => !current)}>◫</Button>
                   <MenuRoot>
                     <MenuTrigger className="grid size-7 place-items-center rounded-sm border-0 bg-transparent text-muted-foreground hover:bg-hover hover:text-foreground" type="button" aria-label="편집기 작업 더 보기">•••</MenuTrigger>
                     <MenuPortal>
@@ -1287,25 +1306,25 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, onProjectReloa
             {isTerminalOpen ? <section className={css.terminal()} aria-label="하단 도구 패널" style={{ height: bottomPanelHeight }}>
               <div className="absolute inset-x-0 top-[-0.25rem] z-20 h-2 cursor-row-resize touch-none" role="separator" aria-label="하단 패널 높이 조절" aria-orientation="horizontal" aria-valuemin={120} aria-valuemax={480} aria-valuenow={bottomPanelHeight} onPointerDown={beginBottomPanelResize} />
               <div className={css.terminalToolbar()}>
-                <div role="tablist" aria-label="하단 패널">
-                  <button role="tab" type="button" aria-selected={bottomPanel === "problems"} onClick={() => setBottomPanel("problems")}>문제{editorDiagnostics.length > 0 ? ` ${editorDiagnostics.length}` : ""}</button>
-                  <button role="tab" type="button" aria-selected={bottomPanel === "output"} onClick={() => setBottomPanel("output")}>출력</button>
-                  <button role="tab" type="button" aria-selected={bottomPanel === "ports"} onClick={() => setBottomPanel("ports")}>포트{runtime.ports.length > 0 ? ` ${runtime.ports.length}` : ""}</button>
-                  <button role="tab" type="button" aria-selected={bottomPanel === "processes"} onClick={() => setBottomPanel("processes")}>프로세스{runtime.processes.length > 0 ? ` ${runtime.processes.length}` : ""}</button>
-                  {terminal.sessions.map((session) => <button key={session.id} role="tab" type="button" aria-selected={bottomPanel === "terminal" && terminal.activeSessionId === session.id} title={session.name} onClick={() => { terminal.setActiveSessionId(session.id); setBottomPanel("terminal"); }}>{session.name}</button>)}
+                <div role="toolbar" aria-label="하단 패널">
+                  <Button type="button" size="sm" variant="ghost" aria-pressed={bottomPanel === "problems"} onClick={() => setBottomPanel("problems")}>문제{editorDiagnostics.length > 0 ? ` ${editorDiagnostics.length}` : ""}</Button>
+                  <Button type="button" size="sm" variant="ghost" aria-pressed={bottomPanel === "output"} onClick={() => setBottomPanel("output")}>출력</Button>
+                  <Button type="button" size="sm" variant="ghost" aria-pressed={bottomPanel === "ports"} onClick={() => setBottomPanel("ports")}>포트{runtime.ports.length > 0 ? ` ${runtime.ports.length}` : ""}</Button>
+                  <Button type="button" size="sm" variant="ghost" aria-pressed={bottomPanel === "processes"} onClick={() => setBottomPanel("processes")}>프로세스{runtime.processes.length > 0 ? ` ${runtime.processes.length}` : ""}</Button>
+                  {terminal.sessions.map((session) => <Button key={session.id} type="button" size="sm" variant="ghost" aria-pressed={bottomPanel === "terminal" && terminal.activeSessionId === session.id} title={session.name} onClick={() => { terminal.setActiveSessionId(session.id); setBottomPanel("terminal"); }}>{session.name}</Button>)}
                 </div>
                 <div className={css.terminalActions()}>
                   {bottomPanel === "terminal" ? <>
-                    <button type="button" aria-label="새 터미널" title="새 터미널" onClick={() => { terminal.create(); setBottomPanel("terminal"); }}>＋</button>
-                    <button type="button" aria-label="터미널 내용 지우기" title="터미널 내용 지우기 (Ctrl+L)" onClick={() => terminal.clear()}>⌫</button>
+                    <Button type="button" size="icon" variant="ghost" aria-label="새 터미널" title="새 터미널" onClick={() => { terminal.create(); setBottomPanel("terminal"); }}>＋</Button>
+                    <Button type="button" size="icon" variant="ghost" aria-label="터미널 내용 지우기" title="터미널 내용 지우기 (Ctrl+L)" onClick={() => terminal.clear()}>⌫</Button>
                   </> : null}
-                  <button type="button" aria-label="하단 패널 닫기" title="하단 패널 닫기" onClick={() => setIsTerminalOpen(false)}>×</button>
+                  <Button type="button" size="icon" variant="ghost" aria-label="하단 패널 닫기" title="하단 패널 닫기" onClick={() => setIsTerminalOpen(false)}>×</Button>
                 </div>
               </div>
-              {bottomPanel === "problems" ? <div className="min-h-0 overflow-auto p-3 text-xs text-white/75">{editorDiagnostics.length > 0 ? <ul className="m-0 grid list-none gap-2 p-0">{editorDiagnostics.map((diagnostic, index) => <li className="grid grid-cols-[auto_minmax(0,1fr)_auto] gap-2" key={`${diagnostic.line}:${diagnostic.column}:${index}`}><span aria-hidden="true">{diagnostic.severity >= 8 ? "●" : "▲"}</span><span>{diagnostic.message}</span><button className="border-0 bg-transparent font-mono text-white/55 hover:text-white" type="button" onClick={() => setEditorPositionRequest({ column: diagnostic.column, line: diagnostic.line, requestId: Date.now() })}>{selectedFileName}:{diagnostic.line}:{diagnostic.column}</button></li>)}</ul> : <p className="m-0 text-white/55">현재 파일에서 발견된 문제가 없습니다.</p>}</div> : null}
+              {bottomPanel === "problems" ? <div className="min-h-0 overflow-auto p-3 text-xs text-white/75">{editorDiagnostics.length > 0 ? <ul className="m-0 grid list-none gap-2 p-0">{editorDiagnostics.map((diagnostic, index) => <li className="grid grid-cols-[auto_minmax(0,1fr)_auto] gap-2" key={`${diagnostic.line}:${diagnostic.column}:${index}`}><span aria-hidden="true">{diagnostic.severity >= 8 ? "●" : "▲"}</span><span>{diagnostic.message}</span><Button className="border-0 bg-transparent font-mono text-white/55 hover:text-white" type="button" size="sm" variant="ghost" onClick={() => setEditorPositionRequest({ column: diagnostic.column, line: diagnostic.line, requestId: Date.now() })}>{selectedFileName}:{diagnostic.line}:{diagnostic.column}</Button></li>)}</ul> : <p className="m-0 text-white/55">현재 파일에서 발견된 문제가 없습니다.</p>}</div> : null}
               {bottomPanel === "output" ? <pre className="m-0 min-h-0 overflow-auto whitespace-pre-wrap p-3 font-mono text-xs text-white/70" aria-live="polite">{terminal.activeSession.output || "실행 출력을 기다리고 있습니다."}</pre> : null}
-              {bottomPanel === "ports" ? runtime.ports.length > 0 ? <ul className={css.runtimeList()} aria-label="열린 포트">{runtime.ports.map((port) => <li key={port.port}><div className="grid min-w-0 gap-0.5"><strong>{port.label} · localhost:{port.port}</strong><span>{port.status === "running" ? "실행 중" : "중지됨"} · <button className="border-0 bg-transparent p-0 font-inherit text-[#72e5ac] hover:underline" type="button" onClick={openPreviewWindow}>브라우저에서 열기</button></span></div><button type="button" aria-label={`포트 ${port.port} 중지`} onClick={() => void stopPreviewPort(port.port)}>중지</button></li>)}</ul> : <p className="m-0 p-3 text-xs text-white/55">열린 개발 서버 포트가 없습니다.</p> : null}
-              {bottomPanel === "processes" ? runtime.processes.length > 0 ? <ul className={css.runtimeList()} aria-label="실행 중 프로세스">{runtime.processes.map((process) => <li key={`${process.terminalId}:${process.pid}:${process.generation ?? 0}`}><div className="grid min-w-0 gap-0.5"><strong>{process.command}</strong><span>PID {process.pid} · {process.terminalId} · {process.cwd}{process.terminalSize ? ` · ${process.terminalSize.cols}×${process.terminalSize.rows}` : ""}</span></div><button type="button" aria-label={`${process.command} 프로세스 종료`} onClick={() => stopTerminalProcess(process.terminalId)}>종료</button></li>)}</ul> : <p className="m-0 p-3 text-xs text-white/55">실행 중인 터미널 프로세스가 없습니다.</p> : null}
+              {bottomPanel === "ports" ? runtime.ports.length > 0 ? <ul className={css.runtimeList()} aria-label="열린 포트">{runtime.ports.map((port) => <li key={port.port}><div className="grid min-w-0 gap-0.5"><strong>{port.label} · localhost:{port.port}</strong><span>{port.status === "running" ? "실행 중" : "중지됨"} · <Button className="border-0 bg-transparent p-0 font-inherit text-[var(--n-color-studio-success)] hover:underline" type="button" size="sm" variant="ghost" onClick={openPreviewWindow}>브라우저에서 열기</Button></span></div><Button type="button" size="sm" variant="ghost" aria-label={`포트 ${port.port} 중지`} onClick={() => void stopPreviewPort(port.port)}>중지</Button></li>)}</ul> : <p className="m-0 p-3 text-xs text-white/55">열린 개발 서버 포트가 없습니다.</p> : null}
+              {bottomPanel === "processes" ? runtime.processes.length > 0 ? <ul className={css.runtimeList()} aria-label="실행 중 프로세스">{runtime.processes.map((process) => <li key={`${process.terminalId}:${process.pid}:${process.generation ?? 0}`}><div className="grid min-w-0 gap-0.5"><strong>{process.command}</strong><span>PID {process.pid} · {process.terminalId} · {process.cwd}{process.terminalSize ? ` · ${process.terminalSize.cols}×${process.terminalSize.rows}` : ""}</span></div><Button type="button" size="sm" variant="ghost" aria-label={`${process.command} 프로세스 종료`} onClick={() => stopTerminalProcess(process.terminalId)}>종료</Button></li>)}</ul> : <p className="m-0 p-3 text-xs text-white/55">실행 중인 터미널 프로세스가 없습니다.</p> : null}
               {bottomPanel === "terminal" ? <ProjectTerminalView
                 key={terminal.activeSession.id}
                 output={terminal.activeSession.output}
@@ -1323,21 +1342,21 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, onProjectReloa
             <section className={css.preview()} aria-label="미리보기" data-preview-url={isolatedPreviewUrl}>
               <div className={css.previewToolbar()}>
                 <div className={css.previewControls()}>
-                  <button type="button" aria-label="미리보기 뒤로" disabled>←</button>
-                  <button type="button" aria-label="미리보기 앞으로" disabled>→</button>
-                  <button type="button" aria-label="미리보기 새로고침" disabled={isRunningPreview || !hasIsolatedPreview} onClick={refreshPreview}>↻</button>
+                  <Button type="button" size="icon" variant="ghost" aria-label="미리보기 뒤로" disabled>←</Button>
+                  <Button type="button" size="icon" variant="ghost" aria-label="미리보기 앞으로" disabled>→</Button>
+                  <Button type="button" size="icon" variant="ghost" aria-label="미리보기 새로고침" disabled={isRunningPreview || !hasIsolatedPreview} onClick={refreshPreview}>↻</Button>
                 </div>
                 <div className={css.previewAddress()} title={isolatedPreviewUrl ?? runtime.previewUrl ?? undefined}>
                   <span aria-hidden="true">▣</span>
                   <span>{isolatedPreviewUrl ?? runtime.previewUrl ?? "미리보기를 실행하세요"}</span>
                 </div>
-                <div className={css.previewActions()}>{hasIsolatedPreview ? <><span className={css.live()}><i aria-hidden="true" /> 실행 중</span><button className="grid size-7 place-items-center rounded-sm border-0 bg-transparent text-xs text-muted-foreground hover:bg-hover hover:text-foreground" type="button" onClick={openPreviewWindow} aria-label="미리보기를 새 탭에서 열기" title="새 탭에서 열기">↗</button></> : <Button aria-label="미리보기 실행" type="button" size="sm" variant="primary" disabled={isRunningPreview} onClick={() => void runPreview()}>{isRunningPreview ? "설치 중…" : "실행"}</Button>}<Button aria-label="미리보기 닫기" type="button" size="sm" variant="ghost" onClick={() => setIsPreviewOpen(false)}>×</Button></div>
+                <div className={css.previewActions()}>{hasIsolatedPreview ? <><span className={css.live()}><i aria-hidden="true" /> 실행 중</span><Button className="grid size-7 place-items-center rounded-sm border-0 bg-transparent text-xs text-muted-foreground hover:bg-hover hover:text-foreground" type="button" size="icon" variant="ghost" onClick={openPreviewWindow} aria-label="미리보기를 새 탭에서 열기" title="새 탭에서 열기">↗</Button></> : <Button aria-label="미리보기 실행" type="button" size="sm" variant="primary" disabled={isRunningPreview} onClick={() => void runPreview()}>{isRunningPreview ? "설치 중…" : "실행"}</Button>}<Button aria-label="미리보기 닫기" type="button" size="sm" variant="ghost" onClick={() => setIsPreviewOpen(false)}>×</Button></div>
               </div>
               {hasIsolatedPreview ? <div className="relative min-h-0 overflow-hidden"><iframe className="block size-full" ref={attachPreviewFrame} title={`${project.name} 미리보기`} src={isolatedPreviewUrl} sandbox="allow-scripts allow-same-origin" allow="cross-origin-isolated" referrerPolicy="no-referrer" />{previewRefreshFailed ? <div className="absolute inset-0 grid place-content-center justify-items-center bg-raised/95 p-8 text-center" role="alert"><strong className="text-sm text-foreground">개발 서버가 중지되었습니다.</strong><p className="mb-4 mt-2 max-w-sm text-xs text-muted-foreground">새로고침할 수 없습니다. 개발 서버를 다시 실행하면 현재 로컬 초안으로 미리보기를 복구합니다.</p><Button type="button" size="sm" variant="primary" disabled={isRunningPreview} onClick={() => void runPreview()}>{isRunningPreview ? "다시 실행 중…" : "개발 서버 다시 실행"}</Button></div> : null}</div> : previewConfiguration.status === "disabled" ? <div className={css.utilityEmpty()} role="status"><strong>미리보기를 사용할 수 없습니다.</strong><p>{previewConfiguration.message} 동일 출처 미리보기는 보안을 위해 비활성화되어 있습니다.</p></div> : runtime.previewUrl ? <div className={css.utilityEmpty()} role="status"><strong>격리된 연결을 준비하고 있습니다.</strong><p>격리된 미리보기 연결이 아직 준비되지 않았습니다. 동일 출처 미리보기는 비활성화되어 있습니다.</p></div> : <div className={css.utilityEmpty()}><span aria-hidden="true">▷</span><strong>실행 결과를 바로 확인하세요</strong><p>의존성을 설치하고 개발 서버를 시작합니다.</p></div>}
             </section>
           </section>
         </div>
-      ) : <div className={css.start()}><div><span className={css.startMark()} aria-hidden="true">N</span><p className="m-0 mb-3 text-xs font-semibold uppercase tracking-[0.08em] text-accent-foreground">브라우저 개발 환경</p><h4>코드를 열고,<br />바로 실행하세요.</h4><p>서버에 저장된 작업을 안전하게 이어가거나, 새로운 React 템플릿으로 바로 시작하세요.</p></div><div className={css.startActions()}><Button variant="ghost" aria-label="저장된 프로젝트 이어서 열기" type="button" disabled={isStarting || project.state !== "active"} onClick={() => void startWorkspace("saved")}><span aria-hidden="true">↗</span><strong>{startingSource === "saved" ? "불러오는 중…" : "저장된 프로젝트 이어서 열기"}</strong><small>무결성을 확인한 최신 서버 저장본을 엽니다.</small></Button><Button variant="ghost" aria-label="템플릿으로 워크스페이스 시작" type="button" disabled={isStarting || project.state !== "active"} onClick={() => void startWorkspace("template")}><span aria-hidden="true">＋</span><strong>{startingSource === "template" ? "시작하는 중…" : "새 템플릿으로 시작"}</strong><small>Vite + React 기본 구성으로 로컬 초안을 만듭니다.</small></Button></div><p className={css.startSafety()}>브라우저의 로컬 초안은 명시적으로 서버에 저장하기 전까지 기존 서버 버전을 덮어쓰지 않습니다.</p></div>}
+      ) : <div className={css.start()} role="status"><span className={css.startMark()} aria-hidden="true">N</span><h4>{isStarting ? "Studio를 준비하고 있습니다" : project.state === "active" ? error ? "Studio를 준비하지 못했습니다" : "Studio가 종료되었습니다" : "보관된 프로젝트입니다"}</h4><p>{isStarting ? `저장본을 확인한 뒤, 저장본이 없으면 프로젝트에 고정된 ${projectTemplateLabel(project.templateId)} 템플릿을 자동으로 엽니다.` : error ?? (project.state === "active" ? "프로젝트에 고정된 시작 템플릿으로 Studio를 다시 열 수 있습니다." : "활성 프로젝트만 Studio에서 열 수 있습니다.")}</p>{!isStarting && project.state === "active" ? <Button type="button" variant="primary" onClick={() => void startWorkspace()}>{error ? "다시 시도" : "Studio 열기"}</Button> : null}</div>}
       <ConfirmationDialog
         confirmLabel="파일 삭제"
         description={`${selectedPath ?? "선택한 파일"}을 로컬 초안에서 삭제합니다. 서버에 저장하기 전에는 기존 서버 버전에 영향을 주지 않습니다.`}
@@ -1376,6 +1395,10 @@ function workbenchLayoutClass({ focusMode, previewOpen, sidebarOpen }: Readonly<
     return "grid-cols-[3rem_var(--studio-sidebar-width)_minmax(24rem,1fr)] max-[72rem]:grid-cols-[3rem_14rem_minmax(0,1fr)] max-[48rem]:grid-cols-[3rem_minmax(0,1fr)]";
   }
   return undefined;
+}
+
+function projectTemplateLabel(templateId: Project["templateId"]): string {
+  return templateId === "next-app" ? "Next.js" : "Vite + React";
 }
 
 function runtimeLifecycleLabel(value: string): string {

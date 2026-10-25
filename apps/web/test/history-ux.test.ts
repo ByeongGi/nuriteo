@@ -68,16 +68,16 @@ async function testHistoryForwarding(): Promise<void> {
 function testHistoryUiContract(): void {
   const panel = read("src/app/(authenticated)/projects/project-history-panel.tsx");
   const shell = read("src/app/(authenticated)/projects/project-ide-shell.tsx");
-  assert.match(panel, /role="alertdialog"/u);
-  assert.match(panel, /aria-modal="true"/u);
-  assert.match(panel, /confirmButtonRef\.current\?\.focus/u);
-  assert.match(panel, /event\.key === "Escape"/u);
-  assert.match(panel, /event\.key !== "Tab"/u);
+  const confirmationDialog = read("src/components/ui/confirmation-dialog.tsx");
+  assert.match(panel, /<ConfirmationDialog/u);
+  assert.match(confirmationDialog, /<AlertDialog\.Root/u);
+  assert.match(confirmationDialog, /<AlertDialog\.Popup/u);
+  assert.match(confirmationDialog, /<AlertDialog\.Viewport/u);
   assert.match(panel, /Date\.parse\(right\.createdAt\) - Date\.parse\(left\.createdAt\)/u);
   assert.match(panel, /로컬 초안은 바꾸지 않았습니다/u);
   assert.match(panel, /보관됨 · 읽기 전용/u);
   assert.match(panel, /reconcileProjectHistory/u);
-  assert.match(panel, /버전 더 보기/u);
+  assert.match(panel, /`버전 \$\{VERSION_PAGE_SIZE\}개 더 보기`/u);
   assert.match(shell, /서버 저장 다시 시도/u);
   assert.match(shell, /최신 프로젝트 다시 불러오기/u);
 }

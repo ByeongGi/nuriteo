@@ -28,6 +28,17 @@ await build({
 const workflow = new NextProductWorkflow({ manager: "pnpm", initialTitle: "Next.js" });
 workflow.install();
 workflow.startDevServerFromPackageScript("dev");
+const pagesWorkflow = new NextProductWorkflow({ manager: "pnpm", initialTitle: "Pages Router" });
+pagesWorkflow.install();
+pagesWorkflow.workspace.remove(`${pagesWorkflow.projectRoot}/app`);
+pagesWorkflow.workspace.writeText(`${pagesWorkflow.projectRoot}/pages/index.tsx`, "export default function Page() { return <h1>Pages Router</h1>; }\n");
+pagesWorkflow.startDevServerFromPackageScript("dev");
+assert.match(pagesWorkflow.preview("/").body, /__NEXT_PREVIEW_PAGE_MODULE__="\/pages\/index\.js"/u);
+assert.match(pagesWorkflow.preview("/pages/index.js").body, /Pages Router/u);
+const pagesEdit = pagesWorkflow.applySourceEdit("pages/index.tsx", "export default function Page() { return <h1>Pages HMR</h1>; }\n");
+assert.equal(pagesEdit.statePreserved, true);
+assert.match(pagesWorkflow.preview("/pages/index.js?nuriteo_hmr=1").body, /Pages HMR/u);
+pagesWorkflow.stopDevServer();
 const signingKey = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 const internalPrefix = "/__preview/019a4a82-1640-7000-8000-000000000032%3A019a4a82-1640-7000-8000-000000000031/3045";
 let applicationOrigin = "";

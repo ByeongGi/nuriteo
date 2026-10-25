@@ -273,7 +273,8 @@ function backupAlertMessage(code: string, fallback: string): string {
 
 function backupError(error: unknown) {
   if (error instanceof ApiError) {
-    if (error.status === 403) return "이 변경에는 최근 관리자 재인증이 필요합니다.";
+    if (error.code === "REAUTHENTICATION_REQUIRED") return "보안을 위해 다시 로그인한 뒤 백업 변경을 다시 시도하세요.";
+    if (error.status === 403) return "이 백업 변경을 수행할 관리자 권한이 없습니다.";
     if (error.status === 409) return "다른 백업 작업이 이미 대기 중이거나 실행 중입니다.";
     if (error.status === 412) return "다른 곳에서 백업 정책이 변경되었습니다. 페이지를 새로 고친 뒤 다시 시도하세요.";
     if (error.status === 422) return "일정, 시간대와 보존 한도를 확인해 주세요.";

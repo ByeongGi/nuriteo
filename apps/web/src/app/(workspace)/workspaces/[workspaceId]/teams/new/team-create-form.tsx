@@ -29,7 +29,6 @@ export function TeamCreateForm({ organizationId, organizationName, workspaceId }
       try {
         const result = await createTeam(createBrowserApiClient(), { organizationId, slug: String(data.get("slug") ?? ""), displayName: String(data.get("displayName") ?? "") }, { csrfToken: readCsrfCredential() });
         router.push(`${base}/${encodeURIComponent(result.data.id)}`);
-        router.refresh();
       } catch (cause) { setError(teamErrorMessage(cause)); }
     });
   }

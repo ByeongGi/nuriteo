@@ -477,8 +477,9 @@ fn no_store(mut response: Response) -> Response {
 fn map_error(error: OidcProviderError, id: RequestId, path: &str) -> HttpError {
     match error {
         OidcProviderError::AuthenticationFailed => HttpError::authentication(id, path),
-        OidcProviderError::Forbidden | OidcProviderError::ReauthenticationRequired => {
-            HttpError::forbidden(id, path)
+        OidcProviderError::Forbidden => HttpError::forbidden(id, path),
+        OidcProviderError::ReauthenticationRequired => {
+            HttpError::reauthentication_required(id, path)
         }
         OidcProviderError::NotFound | OidcProviderError::Disabled => HttpError::not_found(id, path),
         OidcProviderError::InvalidInput

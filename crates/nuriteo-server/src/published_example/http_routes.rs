@@ -1048,9 +1048,8 @@ fn map_error(error: PublishedExampleHttpError, request_id: RequestId, path: &str
         PublishedExampleHttpError::AuthenticationFailed => {
             HttpError::authentication(request_id, path)
         }
-        PublishedExampleHttpError::Forbidden | PublishedExampleHttpError::ConfirmationRequired => {
-            HttpError::forbidden(request_id, path)
-        }
+        PublishedExampleHttpError::Forbidden => HttpError::forbidden(request_id, path),
+        PublishedExampleHttpError::ConfirmationRequired => validation(&request_id, path, "name"),
         PublishedExampleHttpError::NotFound => HttpError::not_found(request_id, path),
         PublishedExampleHttpError::InvalidInput => validation(&request_id, path, "request"),
         PublishedExampleHttpError::Conflict => HttpError::conflict(request_id, path),

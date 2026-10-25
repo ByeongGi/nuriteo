@@ -17,9 +17,15 @@ import {
 import { setupDestination } from "../src/lib/setup-destination.ts";
 import {
   DEFAULT_SIGN_IN_DESTINATION,
+  reauthenticationHref,
   safeReturnTo,
   signInHref
 } from "../src/app/sign-in/return-to.ts";
+import {
+  clearOidcReturnToCookie,
+  issueOidcReturnToCookie,
+  readOidcReturnTo
+} from "../src/app/sign-in/oidc-return-to.ts";
 
 const webRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -29,6 +35,7 @@ testCliOnlySetupContract();
 testAccessibleCredentialBoundary();
 testActivationAndSystemStateContracts();
 testSafeReturnTo();
+testOidcReturnToCookie();
 
 function testSetupRouting(): void {
   assert.equal(setupDestination(true), "/setup");
@@ -81,8 +88,10 @@ function testCliOnlySetupContract(): void {
 function testAccessibleCredentialBoundary(): void {
   const signInPage = read("src/app/sign-in/page.tsx");
   const form = read("src/app/sign-in/sign-in-form.tsx");
+  const browserClient = read("src/lib/api/browser-client.ts");
 
   assert.match(signInPage, /isExplicitlySignedOut\(error\)/u);
+  assert.match(signInPage, /if \(reauthentication\)/u);
   assert.match(signInPage, /redirect\(returnTo\)/u);
   assert.match(form, /<label[^>]*htmlFor="email"[^>]*>이메일<\/label>/u);
   assert.match(form, /<label[^>]*htmlFor="password"[^>]*>비밀번호<\/label>/u);
@@ -90,9 +99,12 @@ function testAccessibleCredentialBoundary(): void {
   assert.match(form, /autoComplete="current-password"/u);
   assert.match(form, /await createSession\(client, \{ email, password \}\);\s+await getCurrentUser\(client\);/u);
   assert.match(form, /router\.replace\(destination\)/u);
+  assert.match(form, /begin\?returnTo=\$\{encodeURIComponent\(destination\)\}/u);
   assert.match(form, /passwordInput\.current\.value = ""/u);
   assert.match(form, /role="alert"/u);
   assert.doesNotMatch(form, /localStorage|sessionStorage|URLSearchParams|console\./u);
+  assert.match(browserClient, /REAUTHENTICATION_REQUIRED/u);
+  assert.match(browserClient, /window\.location\.assign\(reauthenticationHref\(returnTo\)\)/u);
 }
 
 function testActivationAndSystemStateContracts(): void {
@@ -122,6 +134,26 @@ function testSafeReturnTo(): void {
   assert.equal(safeReturnTo("/sign-in?returnTo=%2Fsign-in"), DEFAULT_SIGN_IN_DESTINATION);
   assert.equal(safeReturnTo(undefined), DEFAULT_SIGN_IN_DESTINATION);
   assert.equal(signInHref("/projects/alpha/studio"), "/sign-in?returnTo=%2Fprojects%2Falpha%2Fstudio");
+  assert.equal(reauthenticationHref("/admin/settings?section=security"), "/sign-in?reauthenticate=1&returnTo=%2Fadmin%2Fsettings%3Fsection%3Dsecurity");
+}
+
+function testOidcReturnToCookie(): void {
+  const destination = "/admin/settings?section=security";
+  const request = new Request("https://nuriteo.example/api/v1/auth/oidc/provider/begin");
+  const issued = issueOidcReturnToCookie(request, destination);
+  assert.match(issued, /^__Host-nuriteo_oidc_return_to=/u);
+  assert.match(issued, /; HttpOnly; SameSite=Lax;/u);
+  assert.match(issued, /; Secure$/u);
+  const cookiePair = issued.split(";", 1)[0]!;
+  const callback = new Request("https://nuriteo.example/api/v1/auth/oidc/provider/callback", {
+    headers: { cookie: cookiePair }
+  });
+  assert.equal(readOidcReturnTo(callback), destination);
+  assert.match(clearOidcReturnToCookie(callback), /Max-Age=0; Secure$/u);
+  const unsafe = new Request(callback.url, {
+    headers: { cookie: "__Host-nuriteo_oidc_return_to=https%3A%2F%2Fevil.example" }
+  });
+  assert.equal(readOidcReturnTo(unsafe), DEFAULT_SIGN_IN_DESTINATION);
 }
 
 function read(relativePath: string): string {

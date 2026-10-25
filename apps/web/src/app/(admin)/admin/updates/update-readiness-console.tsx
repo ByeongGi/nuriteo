@@ -208,8 +208,11 @@ function formatTimestamp(value: string): string {
 
 function approvalError(error: unknown): string {
   if (error instanceof ApiError) {
-    if (error.code === "REAUTHENTICATION_REQUIRED" || error.status === 403) {
-      return "승인하려면 최근 관리자 재인증이 필요합니다.";
+    if (error.code === "REAUTHENTICATION_REQUIRED") {
+      return "보안을 위해 다시 로그인한 뒤 업데이트 승인을 다시 시도하세요.";
+    }
+    if (error.status === 403) {
+      return "업데이트를 승인할 관리자 권한이 없습니다.";
     }
     if (error.status === 409) {
       return "준비 상태가 변경되어 승인을 기록하지 않았습니다. 최신 차단 요인을 검토하세요.";

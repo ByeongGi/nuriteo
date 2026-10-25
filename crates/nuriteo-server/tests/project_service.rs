@@ -13,7 +13,7 @@ use nuriteo_server::project::{
     ProjectDeleteConfirmation, ProjectId, ProjectName, ProjectOwner, ProjectPageLimit,
     ProjectRepository, ProjectRepositoryError, ProjectRole, ProjectRoleMutationResult,
     ProjectRolePageLimit, ProjectService, ProjectServiceError, ProjectServicePolicy, ProjectSlug,
-    ProjectState, ProjectVersion,
+    ProjectState, ProjectTemplate, ProjectVersion,
 };
 use sqlx::{Acquire, Executor, Postgres, Transaction};
 use tokio::time as tokio_time;
@@ -59,6 +59,7 @@ async fn project_service_is_authorized_versioned_audited_and_atomic() {
             personal_owner,
             slug("personal-alpha"),
             name("Personal Alpha"),
+            ProjectTemplate::ViteReact,
             &audit(owner),
         )
         .await
@@ -71,6 +72,7 @@ async fn project_service_is_authorized_versioned_audited_and_atomic() {
                 personal_owner,
                 slug("personal-denied"),
                 name("Personal Denied"),
+                ProjectTemplate::ViteReact,
                 &audit(outsider),
             )
             .await,
@@ -83,6 +85,7 @@ async fn project_service_is_authorized_versioned_audited_and_atomic() {
             organization_owner,
             slug("shared-alpha"),
             name("Shared Alpha"),
+            ProjectTemplate::NextApp,
             &audit(owner),
         )
         .await
@@ -96,6 +99,7 @@ async fn project_service_is_authorized_versioned_audited_and_atomic() {
                 organization_owner,
                 slug("member-create"),
                 name("Member Create"),
+                ProjectTemplate::ViteReact,
                 &audit(member),
             )
             .await,
@@ -382,7 +386,7 @@ async fn project_service_is_authorized_versioned_audited_and_atomic() {
                 organization_owner,
                 project_id,
                 version(10),
-                &ProjectDeleteConfirmation::new(name("Wrong Name"), true),
+                &ProjectDeleteConfirmation::new(name("Wrong Name")),
                 &audit(owner),
             )
             .await,
@@ -395,7 +399,7 @@ async fn project_service_is_authorized_versioned_audited_and_atomic() {
             organization_owner,
             project_id,
             version(10),
-            &ProjectDeleteConfirmation::new(name("Direct Admin Rename"), true),
+            &ProjectDeleteConfirmation::new(name("Direct Admin Rename")),
             &audit(owner),
         )
         .await
@@ -409,6 +413,7 @@ async fn project_service_is_authorized_versioned_audited_and_atomic() {
                 organization_owner,
                 slug("shared-alpha"),
                 name("Hijack Attempt"),
+                ProjectTemplate::ViteReact,
                 &audit(owner),
             )
             .await,
@@ -472,6 +477,7 @@ async fn verify_direct_role_pagination(
             organization_owner,
             slug("role-list"),
             name("Role List"),
+            ProjectTemplate::ViteReact,
             &audit(owner),
         )
         .await
@@ -543,6 +549,7 @@ async fn verify_audit_failure_rolls_back_and_denial_fails_closed(
             ProjectOwner::User(owner),
             slug("audit-anchor"),
             name("Audit Anchor"),
+            ProjectTemplate::ViteReact,
             &reused,
         )
         .await
@@ -554,6 +561,7 @@ async fn verify_audit_failure_rolls_back_and_denial_fails_closed(
                 ProjectOwner::User(owner),
                 slug("audit-rollback"),
                 name("Audit Rollback"),
+                ProjectTemplate::ViteReact,
                 &reused,
             )
             .await,
@@ -567,6 +575,7 @@ async fn verify_audit_failure_rolls_back_and_denial_fails_closed(
             ProjectOwner::User(owner),
             slug("denial-anchor"),
             name("Denial Anchor"),
+            ProjectTemplate::ViteReact,
             &audit(owner),
         )
         .await
@@ -604,6 +613,7 @@ async fn verify_failure_audit_uses_single_deadline(
             ProjectOwner::User(owner),
             slug("audit-deadline"),
             name("Audit Deadline"),
+            ProjectTemplate::ViteReact,
             &audit(owner),
         )
         .await
@@ -688,6 +698,7 @@ async fn verify_commit_resolution_is_bounded_and_explicit(pool: &DatabasePool, o
             ProjectOwner::User(owner),
             slug("commit-deadline"),
             name("Commit Deadline"),
+            ProjectTemplate::ViteReact,
             &audit(owner),
         )
         .await;
@@ -723,6 +734,7 @@ async fn verify_persistence_timeouts_remain_typed(
             organization_owner,
             slug("typed-timeout"),
             name("Typed Timeout"),
+            ProjectTemplate::ViteReact,
             &audit(owner),
         )
         .await
@@ -804,6 +816,7 @@ async fn verify_direct_service_query_timeout_remains_typed(
             ProjectOwner::User(owner),
             slug("direct-query-timeout"),
             name("Direct Query Timeout"),
+            ProjectTemplate::ViteReact,
             &audit(owner),
         )
         .await
@@ -874,6 +887,7 @@ async fn verify_same_version_role_mutations_serialize(
             organization_owner,
             slug("role-race"),
             name("Role Race"),
+            ProjectTemplate::ViteReact,
             &audit(owner),
         )
         .await
@@ -935,6 +949,7 @@ async fn verify_update_authorization_blocks_without_lock_upgrade(
             organization_owner,
             slug("update-lock-race"),
             name("Update Lock Race"),
+            ProjectTemplate::ViteReact,
             &audit(owner),
         )
         .await
@@ -994,6 +1009,7 @@ async fn verify_get_reloads_after_archive_race(
             organization_owner,
             slug("get-archive-race"),
             name("Get Archive Race"),
+            ProjectTemplate::ViteReact,
             &audit(owner),
         )
         .await
@@ -1051,6 +1067,7 @@ async fn verify_disabled_removed_and_archived_boundaries(
             organization_owner,
             slug("boundary-project"),
             name("Boundary Project"),
+            ProjectTemplate::ViteReact,
             &audit(owner),
         )
         .await

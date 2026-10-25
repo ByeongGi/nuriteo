@@ -92,7 +92,7 @@ await acceptOrganizationInvitation(
 const owner = { ownerType: "organization" as const, ownerId: organization.data.id };
 const project = await createProject(
   admin,
-  { owner, slug: "saved-project", name: "Saved Project" },
+  { owner, slug: "saved-project", name: "Saved Project", templateId: "vite-react" },
   { csrfToken: adminBrowser.csrfToken() }
 );
 const granted = await grantDirectProjectRole(
@@ -327,7 +327,8 @@ async function runMultipartJourney(): Promise<void> {
     {
       owner,
       slug: `${expectedTransport}-multipart`,
-      name: `${expectedTransport === "direct" ? "Direct" : "Relay"} Multipart`
+      name: `${expectedTransport === "direct" ? "Direct" : "Relay"} Multipart`,
+      templateId: "vite-react"
     },
     { csrfToken: adminBrowser.csrfToken() }
   );

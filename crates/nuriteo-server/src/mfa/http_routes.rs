@@ -544,7 +544,9 @@ fn map_error(error: MfaHttpServiceError, request_id: RequestId, path: &str) -> H
             HttpError::authentication(request_id, path)
         }
         MfaHttpServiceError::Forbidden => HttpError::forbidden(request_id, path),
-        MfaHttpServiceError::ReauthenticationRequired => HttpError::forbidden(request_id, path),
+        MfaHttpServiceError::ReauthenticationRequired => {
+            HttpError::reauthentication_required(request_id, path)
+        }
         MfaHttpServiceError::InvalidInput => validation(&request_id, path, "body"),
         MfaHttpServiceError::NotActive => HttpError::conflict(request_id, path),
         MfaHttpServiceError::Conflict => HttpError::precondition_failed(request_id, path),

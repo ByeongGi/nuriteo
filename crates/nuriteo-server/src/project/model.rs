@@ -4,7 +4,8 @@ use crate::identity::Timestamp;
 use crate::workspace::StorageScopeId;
 
 use super::{
-    ProjectError, ProjectId, ProjectName, ProjectOwner, ProjectSlug, ProjectState, ProjectVersion,
+    ProjectError, ProjectId, ProjectName, ProjectOwner, ProjectSlug, ProjectState, ProjectTemplate,
+    ProjectVersion,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -14,6 +15,7 @@ pub(crate) struct ProjectFields {
     pub(crate) storage_scope_id: StorageScopeId,
     pub(crate) slug: ProjectSlug,
     pub(crate) name: ProjectName,
+    pub(crate) template: ProjectTemplate,
     pub(crate) state: ProjectState,
     pub(crate) created_at: Timestamp,
     pub(crate) updated_at: Timestamp,
@@ -29,6 +31,7 @@ pub struct Project {
     storage_scope_id: StorageScopeId,
     slug: ProjectSlug,
     name: ProjectName,
+    template: ProjectTemplate,
     state: ProjectState,
     created_at: Timestamp,
     updated_at: Timestamp,
@@ -47,6 +50,7 @@ impl Project {
         storage_scope_id: StorageScopeId,
         slug: ProjectSlug,
         name: ProjectName,
+        template: ProjectTemplate,
         state: ProjectState,
         created_at: Timestamp,
         updated_at: Timestamp,
@@ -59,6 +63,7 @@ impl Project {
             storage_scope_id,
             slug,
             name,
+            template,
             state,
             created_at,
             updated_at,
@@ -86,6 +91,7 @@ impl Project {
             storage_scope_id: fields.storage_scope_id,
             slug: fields.slug,
             name: fields.name,
+            template: fields.template,
             state: fields.state,
             created_at: fields.created_at,
             updated_at: fields.updated_at,
@@ -117,6 +123,11 @@ impl Project {
     #[must_use]
     pub fn name(&self) -> &ProjectName {
         &self.name
+    }
+
+    #[must_use]
+    pub const fn template(&self) -> ProjectTemplate {
+        self.template
     }
 
     #[must_use]
@@ -153,6 +164,7 @@ impl Project {
             storage_scope_id: self.storage_scope_id,
             slug: self.slug,
             name: self.name,
+            template: self.template,
             state: self.state,
             created_at: self.created_at,
             updated_at: self.updated_at,

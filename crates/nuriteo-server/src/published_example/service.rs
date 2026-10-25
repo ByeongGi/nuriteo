@@ -403,7 +403,7 @@ impl PublishedExampleService {
             EffectiveProjectRole::Admin,
         )
         .await?;
-        if !confirmation.recently_reauthenticated || confirmation.name.as_str() != name {
+        if confirmation.name.as_str() != name {
             return Err(PublishedExampleError::ConfirmationRequired);
         }
         let result =

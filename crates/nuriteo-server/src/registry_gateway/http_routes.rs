@@ -282,9 +282,8 @@ fn no_store(mut r: Response) -> Response {
 fn map_error(e: RegistryError, id: RequestId, p: &str) -> HttpError {
     match e {
         RegistryError::AuthenticationFailed => HttpError::authentication(id, p),
-        RegistryError::Forbidden | RegistryError::ReauthenticationRequired => {
-            HttpError::forbidden(id, p)
-        }
+        RegistryError::Forbidden => HttpError::forbidden(id, p),
+        RegistryError::ReauthenticationRequired => HttpError::reauthentication_required(id, p),
         RegistryError::NotFound => HttpError::not_found(id, p),
         RegistryError::InvalidInput
         | RegistryError::InvalidPackage

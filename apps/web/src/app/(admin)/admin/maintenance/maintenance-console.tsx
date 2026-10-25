@@ -302,7 +302,8 @@ function phaseLabel(phase: AdminMaintenanceStatus["phase"]): string {
 
 function maintenanceError(error: unknown): string {
   if (error instanceof ApiError) {
-    if (error.status === 403) return "이 변경에는 최근 관리자 재인증이 필요합니다.";
+    if (error.code === "REAUTHENTICATION_REQUIRED") return "보안을 위해 다시 로그인한 뒤 유지보수 변경을 다시 시도하세요.";
+    if (error.status === 403) return "이 유지보수 변경을 수행할 관리자 권한이 없습니다.";
     if (error.status === 504) return "제한 시간 안에 활성 쓰기가 종료되지 않았습니다. 인스턴스는 안전을 위해 차단 상태를 유지합니다. 계속하기 전에 상태를 새로 불러오세요.";
     if (error.code === "COMMIT_OUTCOME_UNKNOWN") return "제어 결과를 확인할 수 없습니다. 현재 상태를 새로 불러온 뒤 다시 시도하세요.";
   }

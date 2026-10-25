@@ -388,7 +388,8 @@ function tokenStatusLabel(status: AccessToken["status"]): string {
 
 function tokenFailure(error: unknown): { readonly error: true; readonly text: string } {
   if (error instanceof ApiError && error.code === "COMMIT_OUTCOME_UNKNOWN") return { error: true, text: "서버에서 작업을 완료했을 수 있습니다. 다시 시도하기 전에 토큰 목록을 새로고침하세요." };
-  if (error instanceof ApiError && error.status === 403) return { error: true, text: "최근 재인증과 충분한 권한이 필요합니다. 다시 로그인한 뒤 시도하세요." };
+  if (error instanceof ApiError && error.code === "REAUTHENTICATION_REQUIRED") return { error: true, text: "보안을 위해 다시 로그인한 뒤 토큰 작업을 다시 시도하세요." };
+  if (error instanceof ApiError && error.status === 403) return { error: true, text: "이 토큰 작업을 수행할 권한이 없습니다." };
   if (error instanceof ApiError && error.status === 409) return { error: true, text: "이 토큰 또는 프로젝트가 더 이상 활성 상태가 아닙니다. 페이지를 새로고침하세요." };
   if (error instanceof ApiError && (error.status === 400 || error.status === 422)) return { error: true, text: "이름, 권한 범위와 만료 기간을 확인하세요. 관리자가 더 짧은 최대 만료 기간을 설정했을 수 있습니다." };
   return { error: true, text: "토큰 서비스를 일시적으로 사용할 수 없습니다. 이 페이지에는 토큰 원문을 남기지 않았습니다." };

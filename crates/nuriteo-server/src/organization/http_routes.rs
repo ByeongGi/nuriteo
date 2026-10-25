@@ -581,8 +581,9 @@ fn validation(request_id: &RequestId, path: &str, field: &str) -> HttpError {
 fn map_error(error: OrganizationHttpError, request_id: RequestId, path: &str) -> HttpError {
     match error {
         OrganizationHttpError::AuthenticationFailed => HttpError::authentication(request_id, path),
-        OrganizationHttpError::Forbidden | OrganizationHttpError::ReauthenticationRequired => {
-            HttpError::forbidden(request_id, path)
+        OrganizationHttpError::Forbidden => HttpError::forbidden(request_id, path),
+        OrganizationHttpError::ReauthenticationRequired => {
+            HttpError::reauthentication_required(request_id, path)
         }
         OrganizationHttpError::NotFound => HttpError::not_found(request_id, path),
         OrganizationHttpError::InvalidInput => validation(&request_id, path, "request"),

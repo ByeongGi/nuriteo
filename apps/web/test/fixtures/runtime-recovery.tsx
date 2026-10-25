@@ -18,6 +18,7 @@ const project = {
   storageScopeId: "0199ee6c-c777-7000-8000-00000000c001",
   slug: "runtime-recovery",
   name: "Runtime Recovery",
+  templateId: "vite-react" as const,
   state: "active" as const,
   createdAt: "2026-10-04T00:00:00Z",
   updatedAt: "2026-10-04T00:00:00Z",
@@ -55,6 +56,11 @@ root.render(
       publicPort: location.port
     }}
     project={project}
+    resumeProjectContentLoader={async () => ({
+      async resumeProjectContent() {
+        throw Object.assign(new Error("fixture project is not saved"), { code: "RESUME_NOT_SAVED" });
+      }
+    })}
     runtimeFeatureLoader={async () => {
       lazyAttempts += 1;
       if (mode === "failure" && lazyAttempts === 1) throw new Error("simulated lazy chunk failure");
@@ -190,7 +196,7 @@ function createRecoveryFixtureAdapter(initialDraftAccess: "conflict" | "writer",
     },
     workflow: {
       async start() {
-        emit({ ...state, diagnostics: [], workflowPhase: "hmr_connected", hmrState: "connected", previewUrl: "/__internal-preview/" });
+        emit({ ...state, workflowPhase: "hmr_connected", hmrState: "connected", previewUrl: "/__internal-preview/" });
         return copyState();
       },
       stopPreview: () => true,

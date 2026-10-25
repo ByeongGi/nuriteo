@@ -150,6 +150,8 @@ assert.match(internalPreviewServiceWorker, /self\.clients\.get\(clientId\)/u);
 assert.match(internalPreviewServiceWorker, /client\.frameType !== "top-level"/u);
 const bootstrap = fs.readFileSync(new URL("../public/runtime-preview/bootstrap.js", import.meta.url), "utf8");
 assert.match(bootstrap, /await waitForController\(\)/u);
+const hmrClient = fs.readFileSync(new URL("../public/runtime-preview/hmr.js", import.meta.url), "utf8");
+assert.match(hmrClient, /pathname === "\/_next\/static\/chunks\/app\.js"/u, "isolated HMR must support Next.js app entries");
 
 const signingKey = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 const signed = await issueSignedPreviewBinding(signingKey, 4173, 1_700_000_000_000, 5_000);

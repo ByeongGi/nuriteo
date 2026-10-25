@@ -292,7 +292,8 @@ function CodePanel({ title, description, pending, onSubmit, recovery = false }: 
 
 function mfaFailure(error: unknown): { readonly tone: "error"; readonly text: string } {
   if (error instanceof ApiError && error.code === "COMMIT_OUTCOME_UNKNOWN") return { tone: "error", text: "서버에 보안 변경이 반영되었을 수 있습니다. 같은 작업을 다시 시도해 보호된 일회성 응답을 복구하세요." };
-  if (error instanceof ApiError && error.status === 403) return { tone: "error", text: "최근 재인증 또는 관리자 정책 승인이 필요합니다." };
+  if (error instanceof ApiError && error.code === "REAUTHENTICATION_REQUIRED") return { tone: "error", text: "보안을 위해 다시 로그인한 뒤 MFA 변경을 다시 시도하세요." };
+  if (error instanceof ApiError && error.status === 403) return { tone: "error", text: "관리자 정책상 이 MFA 변경을 수행할 수 없습니다." };
   if (error instanceof ApiError && error.status === 401) return { tone: "error", text: "코드가 일치하지 않습니다. 새 코드를 기다리거나 사용하지 않은 복구 코드를 입력하세요." };
   if (error instanceof ApiError && (error.status === 409 || error.status === 412)) return { tone: "error", text: "다른 곳에서 MFA 상태가 변경되었습니다. 새로 고친 뒤 다시 시도하세요." };
   return { tone: "error", text: "보안 변경을 안전하게 완료하지 못했습니다. 노출된 정보는 없으며 잠시 후 다시 시도해 주세요." };

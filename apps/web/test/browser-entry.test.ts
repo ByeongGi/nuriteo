@@ -165,7 +165,7 @@ try {
 
     await page.getByLabel("이메일").fill("unknown@example.test");
     await page.getByLabel("비밀번호").fill("not-a-real-password");
-    await page.getByRole("button", { name: "로그인" }).click();
+    await page.getByRole("button", { name: "로그인", exact: true }).click();
     const signInError = page.locator("#sign-in-error");
     await signInError.waitFor();
     assert.equal(
@@ -178,7 +178,7 @@ try {
 
     await page.getByLabel("이메일").fill("admin@example.test");
     await page.getByLabel("비밀번호").fill("correct-password");
-    await page.getByRole("button", { name: "로그인" }).click();
+    await page.getByRole("button", { name: "로그인", exact: true }).click();
     await page.waitForURL("**/workspaces");
 
     const cookieNames = (await page.context().cookies(origin))

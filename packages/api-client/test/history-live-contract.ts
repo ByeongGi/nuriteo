@@ -84,7 +84,7 @@ await acceptOrganizationInvitation(
 const owner: ProjectOwner = { ownerType: "organization", ownerId: organization.data.id };
 const project = await createProject(
   admin,
-  { owner, slug: "history-project", name: "History Project" },
+  { owner, slug: "history-project", name: "History Project", templateId: "vite-react" },
   { csrfToken: adminBrowser.csrfToken() }
 );
 const granted = await grantDirectProjectRole(

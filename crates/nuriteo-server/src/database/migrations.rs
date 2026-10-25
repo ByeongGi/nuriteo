@@ -85,6 +85,7 @@ const BACKUP_SYNCHRONIZED_SNAPSHOT_SQL: &str =
 const INSTANCE_RECOVERY_STATE_SQL: &str =
     include_str!("../../migrations/0049_instance_recovery_state.sql");
 const BACKUP_OPERATIONS_SQL: &str = include_str!("../../migrations/0050_backup_operations.sql");
+const PROJECT_TEMPLATES_SQL: &str = include_str!("../../migrations/0051_project_templates.sql");
 
 // Two-key advisory locks use a namespace distinct from PostgreSQL's one-key
 // bigint locks. 0x4e555249 is the ASCII representation of "NURI".
@@ -492,6 +493,13 @@ pub(super) fn embedded_migrator() -> Migrator {
             Cow::Borrowed("backup schedule and operation queue"),
             MigrationType::Simple,
             BACKUP_OPERATIONS_SQL.into_sql_str(),
+            false,
+        ),
+        Migration::new(
+            51,
+            Cow::Borrowed("immutable project starter templates"),
+            MigrationType::Simple,
+            PROJECT_TEMPLATES_SQL.into_sql_str(),
             false,
         ),
     ])

@@ -114,7 +114,6 @@ try {
     await page.getByRole("heading", { name: "GATE Runtime Project", exact: true }).waitFor();
     assert.match(page.url(), /[?&]project=[0-9a-f-]+/u);
 
-    await page.getByRole("button", { name: "템플릿으로 워크스페이스 시작" }).click();
     await page.getByRole("button", { name: "미리보기 실행" }).waitFor({ timeout: 30_000 });
     await page.getByRole("button", { name: "src/message.ts" }).click();
     assert.equal(await page.getByLabel("src/message.ts 편집기").isEditable(), true);
@@ -152,9 +151,9 @@ try {
 
     await page.getByRole("button", { name: "워크스페이스 종료" }).click();
     if (await page.getByRole("button", { name: "초안을 버리고 종료" }).count()) await page.getByRole("button", { name: "초안을 버리고 종료" }).click();
-    await page.getByRole("button", { name: "템플릿으로 워크스페이스 시작" }).waitFor({ timeout: 10_000 });
+    await page.getByRole("button", { name: "Studio 열기" }).waitFor({ timeout: 10_000 });
     await page.waitForFunction(() => window.__nuriteoGateWorkerProbe.active === 0);
-    await page.getByRole("button", { name: "템플릿으로 워크스페이스 시작" }).click();
+    await page.getByRole("button", { name: "Studio 열기" }).click();
     await page.getByRole("button", { name: "미리보기 실행" }).waitFor({ timeout: 30_000 });
     await page.getByRole("button", { name: "src/message.ts" }).click();
     await page.getByRole("button", { name: "미리보기 실행" }).click();
@@ -171,7 +170,7 @@ try {
 
     await page.getByRole("button", { name: "워크스페이스 종료" }).click();
     if (await page.getByRole("button", { name: "초안을 버리고 종료" }).count()) await page.getByRole("button", { name: "초안을 버리고 종료" }).click();
-    await page.getByRole("button", { name: "템플릿으로 워크스페이스 시작" }).waitFor({ timeout: 10_000 });
+    await page.getByRole("button", { name: "Studio 열기" }).waitFor({ timeout: 10_000 });
     await page.waitForFunction(() => window.__nuriteoGateWorkerProbe.active === 0);
     assert.equal(await previewRegion.locator("iframe").count(), 0);
     await waitForStatus(context, recoveredPreviewUrl, 410);

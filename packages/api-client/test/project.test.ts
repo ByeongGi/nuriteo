@@ -68,7 +68,7 @@ async function testLifecycleContracts(): Promise<void> {
 
   const createdResult = await createProject(
     client,
-    { owner: PERSONAL_OWNER, slug: "example-project", name: "Example" },
+    { owner: PERSONAL_OWNER, slug: "example-project", name: "Example", templateId: "next-app" },
     { csrfToken: CSRF }
   );
   assert.equal(createdResult.etag, '"project-v1"');
@@ -101,7 +101,7 @@ async function testLifecycleContracts(): Promise<void> {
   );
 
   assertCalls(calls, [
-    ["POST", projectCollection(PERSONAL_OWNER), { slug: "example-project", name: "Example" }, undefined],
+    ["POST", projectCollection(PERSONAL_OWNER), { slug: "example-project", name: "Example", templateId: "next-app" }, undefined],
     ["GET", projectLocation(PERSONAL_OWNER), undefined, undefined],
     ["PATCH", projectLocation(PERSONAL_OWNER), { name: "Renamed" }, '"project-v1"'],
     ["POST", `${projectLocation(PERSONAL_OWNER)}/archive`, undefined, '"project-v2"'],
@@ -333,7 +333,8 @@ async function testRequestValidationFailsBeforeFetch(): Promise<void> {
     () => archiveProject(client, { owner: PERSONAL_OWNER, projectId: PROJECT_ID, etag: '"project-v0"' }, { csrfToken: CSRF }),
     () => archiveProject(client, { owner: PERSONAL_OWNER, projectId: PROJECT_ID, etag: '"project-v9223372036854775807"' }, { csrfToken: CSRF }),
     () => archiveProject(client, { owner: PERSONAL_OWNER, projectId: PROJECT_ID, etag: `"project-v${"9".repeat(500)}"` }, { csrfToken: CSRF }),
-    () => createProject(client, { owner: PERSONAL_OWNER, slug: "Bad-Slug", name: "Name" }, { csrfToken: CSRF }),
+    () => createProject(client, { owner: PERSONAL_OWNER, slug: "Bad-Slug", name: "Name", templateId: "vite-react" }, { csrfToken: CSRF }),
+    () => createProject(client, { owner: PERSONAL_OWNER, slug: "valid-slug", name: "Name", templateId: "unknown" as never }, { csrfToken: CSRF }),
     () => deleteProject(client, { owner: PERSONAL_OWNER, projectId: PROJECT_ID, name: " Name", etag: '"project-v1"' }, { csrfToken: CSRF }),
     () => listDirectProjectRoles(client, { owner: PERSONAL_OWNER, projectId: PROJECT_ID }),
     () => grantDirectProjectRole(client, { owner: ORGANIZATION_OWNER, projectId: PROJECT_ID, userId: MEMBER_ID, role: "admin", etag: '"project-v1"' }, { csrfToken: "line\nbreak" })
@@ -438,6 +439,7 @@ function project(version: number): Record<string, unknown> {
     storageScopeId: STORAGE_SCOPE_ID,
     slug: "example-project",
     name: "Example",
+    templateId: "next-app",
     state: "active",
     createdAt: "2026-10-04T00:00:00Z",
     updatedAt: "2026-10-04T00:00:00Z",

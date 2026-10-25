@@ -168,8 +168,14 @@ export function IntegrationCaConsole({ appearance = "embedded", initialCollectio
 }
 
 function failure(error: unknown) {
-  if (error instanceof ApiError && (error.status === 403 || error.status === 428)) {
-    return { error: true, text: "관리자 권한과 최근 재인증이 필요합니다." };
+  if (error instanceof ApiError && error.code === "REAUTHENTICATION_REQUIRED") {
+    return { error: true, text: "보안을 위해 다시 로그인한 뒤 CA 변경을 다시 시도하세요." };
+  }
+  if (error instanceof ApiError && error.status === 403) {
+    return { error: true, text: "이 CA 변경을 수행할 관리자 권한이 없습니다." };
+  }
+  if (error instanceof ApiError && error.status === 428) {
+    return { error: true, text: "최신 CA 상태를 다시 불러온 뒤 변경을 다시 시도하세요." };
   }
   if (error instanceof ApiError && error.status === 412) {
     return { error: true, text: "다른 곳에서 CA 상태가 변경되었습니다. 신뢰 기록을 새로 불러온 뒤 다시 시도하세요." };

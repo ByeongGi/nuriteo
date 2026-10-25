@@ -468,9 +468,9 @@ fn map_error(error: AccessTokenManagementError, request_id: RequestId, path: &st
         AccessTokenManagementError::AuthenticationFailed => {
             HttpError::authentication(request_id, path)
         }
-        AccessTokenManagementError::Forbidden
-        | AccessTokenManagementError::ReauthenticationRequired => {
-            HttpError::forbidden(request_id, path)
+        AccessTokenManagementError::Forbidden => HttpError::forbidden(request_id, path),
+        AccessTokenManagementError::ReauthenticationRequired => {
+            HttpError::reauthentication_required(request_id, path)
         }
         AccessTokenManagementError::InvalidInput => validation(&request_id, path, "body"),
         AccessTokenManagementError::NotFound => HttpError::not_found(request_id, path),

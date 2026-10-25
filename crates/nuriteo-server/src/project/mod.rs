@@ -28,7 +28,10 @@ pub use service::{
     ProjectRolePageKey, ProjectRolePageLimit, ProjectService, ProjectServiceError,
     ProjectServicePolicy,
 };
-pub use types::{ProjectId, ProjectName, ProjectOwner, ProjectSlug, ProjectState, ProjectVersion};
+pub use types::{
+    ProjectId, ProjectName, ProjectOwner, ProjectSlug, ProjectState, ProjectTemplate,
+    ProjectVersion,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
@@ -39,6 +42,7 @@ pub enum ProjectError {
     InvalidOwner,
     InvalidSlug,
     InvalidName,
+    InvalidTemplate,
     InvalidLifecycle,
     InvalidTimestampOrder,
     InvalidLockVersion,
@@ -54,6 +58,7 @@ impl fmt::Display for ProjectError {
             Self::InvalidOwner => "project must have exactly one owner",
             Self::InvalidSlug => "project slug is not canonical",
             Self::InvalidName => "project name is invalid",
+            Self::InvalidTemplate => "project template is invalid",
             Self::InvalidLifecycle => "project lifecycle state is invalid",
             Self::InvalidTimestampOrder => "project timestamps are out of order",
             Self::InvalidLockVersion => "project lock version is invalid",

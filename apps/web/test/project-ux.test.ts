@@ -215,6 +215,13 @@ async function testContentStreamForwarding() {
 }
 
 function testReconciliationClassification() {
+  const reauthentication = projectError(new ApiError(403, "safe", {
+    type: "/docs/problems/reauthentication-required", title: "Recent reauthentication required",
+    status: 403, detail: "Sign in again.", instance: "/api/v1/projects",
+    code: "REAUTHENTICATION_REQUIRED", request_id: "safe", errors: []
+  }), "project-delete");
+  assert.equal(reauthentication.reconcile, false);
+  assert.match(reauthentication.message, /다시 로그인/u);
   const stale = projectError(new ApiError(412, "safe", undefined), "project-profile");
   assert.equal(stale.reconcile, true);
   assert.match(stale.message, /최신 버전을 불러온 뒤/u);
@@ -395,12 +402,15 @@ function testProjectSourceContracts() {
   );
   const dashboard = read("src/app/(authenticated)/projects/project-dashboard.tsx");
   const ideShell = read("src/app/(authenticated)/projects/project-ide-shell.tsx");
+  const terminalView = read("src/app/(authenticated)/projects/project-terminal-view.tsx");
+  const templatePicker = read("src/app/(authenticated)/projects/project-template-picker.tsx");
   const legacyPage = read("src/app/(authenticated)/projects/page.tsx");
   const legacyProjectPage = read("src/app/(authenticated)/projects/[projectId]/page.tsx");
   const legacySettingsPage = read("src/app/(authenticated)/projects/[projectId]/settings/page.tsx");
   const workspacePage = read("src/app/(workspace)/workspaces/[workspaceId]/page.tsx");
   const workspaceProjectsPage = read("src/app/(workspace)/workspaces/[workspaceId]/projects/page.tsx");
   const projectSettingsPage = read("src/app/(workspace)/workspaces/[workspaceId]/projects/[projectId]/settings/page.tsx");
+  const projectAccessSettingsPage = read("src/app/(workspace)/workspaces/[workspaceId]/projects/[projectId]/settings/access/page.tsx");
   const studioScreen = read("src/app/(studio)/projects/[projectId]/studio/project-studio-screen.tsx");
   const legacyStudioPage = read("src/app/(studio)/projects/[projectId]/studio/page.tsx");
   const workspaceProjectStudioPage = read("src/app/(studio)/workspaces/[workspaceId]/projects/[projectId]/studio/page.tsx");
@@ -419,6 +429,15 @@ function testProjectSourceContracts() {
   assert.match(dashboard, /COMMIT_OUTCOME_UNKNOWN|needsReconciliation/u);
   assert.doesNotMatch(dashboard, /router\.replace\([^;]+;\s*router\.refresh\(\)/u);
   assert.match(dashboard, /router\.replace\(projectStudioHref\(workspace\.storageScopeId, result\.data\.id\)\)/u);
+  assert.match(dashboard, /<ProjectTemplatePicker disabled=\{mutation\.isPending\} \/>/u);
+  assert.match(dashboard, /templateId: projectTemplateId\(data\.get\("templateId"\)\)/u);
+  assert.match(templatePicker, /name="templateId"/u);
+  assert.match(templatePicker, /id: "vite-react"[\s\S]+recommended: true/u);
+  assert.match(templatePicker, /id: "next-app"/u);
+  assert.match(templatePicker, /프로젝트 생성 후 변경할 수 없습니다/u);
+  assert.match(dashboard, /title="이 프로젝트를 삭제할까요\?"/u);
+  assert.match(dashboard, /name: project\.name/u);
+  assert.doesNotMatch(dashboard, /confirmName|정확한 프로젝트 이름/u);
   assert.match(
     dashboard,
     /href=\{item\.state === "active"\s*\? projectStudioHref\(workspace\.storageScopeId, item\.id\)\s*:\s*projectDetailHref\(workspace\.storageScopeId, state, item\.id\)\}/u,
@@ -430,7 +449,7 @@ function testProjectSourceContracts() {
     "프로젝트 설정은 목록의 별도 보조 동작이어야 합니다."
   );
   assert.match(dashboard, /function projectHref\([\s\S]+return `\/workspaces\/\$\{encodeURIComponent\(scope\)\}\?\$\{query\.toString\(\)\}`/u);
-  assert.match(dashboard, /function projectDetailHref\([\s\S]+return `\/workspaces\/\$\{encodeURIComponent\(scope\)\}\/projects\/\$\{encodeURIComponent\(projectId\)\}\/settings\?/u);
+  assert.match(dashboard, /function projectDetailHref\([\s\S]+return `\/workspaces\/\$\{encodeURIComponent\(scope\)\}\/projects\/\$\{encodeURIComponent\(projectId\)\}\/settings\/general\?/u);
   assert.match(dashboard, /function projectStudioHref\([\s\S]+return `\/workspaces\/\$\{encodeURIComponent\(scope\)\}\/projects\/\$\{encodeURIComponent\(projectId\)\}\/studio`/u);
   assert.doesNotMatch(
     projectLinkHelpers,
@@ -441,19 +460,20 @@ function testProjectSourceContracts() {
   assert.match(legacyPage, /redirect\(projectsHref\(workspaceId, state\)\)/u);
   assert.doesNotMatch(legacyPage, /createServerApiClient|<ProjectDashboard/u);
   assert.match(legacyProjectPage, /\/studio/u);
-  assert.match(legacySettingsPage, /\/settings\?/u);
+  assert.match(legacySettingsPage, /\/settings\/general\?/u);
   assert.match(workspacePage, /<ProjectDashboard/u);
   assert.match(workspacePage, /createServerApiClient\(\)/u);
   assert.match(workspacePage, /listProjects/u);
   assert.match(workspaceProjectsPage, /redirect\(`\/workspaces\/\$\{encodeURIComponent\(workspaceId\)\}\?/u);
   assert.doesNotMatch(workspaceProjectsPage, /createServerApiClient|listProjects|<ProjectDashboard/u);
-  assert.match(projectSettingsPage, /listOrganizationMembers/u);
-  assert.match(projectSettingsPage, /roleManagementRequest/u);
-  assert.doesNotMatch(projectSettingsPage, /listProjects/u);
+  assert.match(projectSettingsPage, /settings\/general/u);
+  assert.match(projectAccessSettingsPage, /listOrganizationMembers/u);
+  assert.match(projectAccessSettingsPage, /roleManagement/u);
+  assert.doesNotMatch(projectAccessSettingsPage, /listProjects/u);
   assert.match(dashboard, /<SelectField label="조직 멤버"/u);
   assert.doesNotMatch(dashboard, /Organization member user ID/u);
-  assert.match(projectSettingsPage, /key=\{`\$\{workspace\.storageScopeId\}:\$\{projectResult\.data\.id\}:/u);
-  assert.match(projectSettingsPage, /error\.status !== 403 && error\.status !== 404/u);
+  assert.match(projectAccessSettingsPage, /key=\{`\$\{project\.data\.id\}:\$\{project\.data\.version\}:access`\}/u);
+  assert.match(projectAccessSettingsPage, /error\.status !== 403 && error\.status !== 404/u);
   assert.doesNotMatch(dashboard, /<ProjectIdeShell/u);
   assert.match(studioScreen, /<ProjectIdeShell/u);
   assert.match(studioScreen, /export function ProjectStudioFrame/u);
@@ -461,13 +481,13 @@ function testProjectSourceContracts() {
   assert.match(studioScreen, /const projectBaseHref = `\$\{workspaceHref\}\/projects`/u);
   assert.match(studioScreen, /<Link href=\{workspaceHref\}[^>]+프로젝트 목록으로 돌아가기/u);
   assert.match(studioScreen, /const settingsHref = `\$\{projectBaseHref\}\/\$\{encodeURIComponent\(project\.id\)\}\/settings`/u);
-  assert.match(studioScreen, /<Link href=\{settingsHref\}>프로젝트 설정<\/Link>/u);
+  assert.match(studioScreen, /<Link[^>]+href=\{settingsHref\}>프로젝트 관리<\/Link>/u);
   assert.match(legacyStudioPage, /redirect\(/u);
   assert.doesNotMatch(legacyStudioPage, /<ProjectStudioScreen|createServerApiClient/u);
   assert.match(workspaceProjectStudioPage, /<ProjectStudioScreen/u);
   assert.match(workspaceProjectStudioPage, /getProject/u);
   assert.match(studioScreen, /key=\{`\$\{props\.workspaceScope\}:\$\{project\.id\}:\$\{project\.state\}`\}/u);
-  assert.match(ideShell, /maxLength=\{MAX_TERMINAL_COMMAND_CHARS\}/u);
+  assert.match(ideShell, /command\.length > MAX_TERMINAL_COMMAND_CHARS/u);
   assert.match(ideShell, /aria-label="프로젝트 파일"/u);
   assert.match(ideShell, /aria-label="텍스트 편집기"/u);
   assert.match(ideShell, /aria-label="미리보기"/u);
@@ -475,12 +495,16 @@ function testProjectSourceContracts() {
   assert.match(ideShell, /로컬 초안 저장됨 · HMR 적용됨/u);
   assert.match(ideShell, /동일 출처 미리보기는 보안을 위해 비활성화/u);
   assert.doesNotMatch(ideShell, />Save<|"Saved · HMR/u);
-  assert.match(ideShell, /aria-label="터미널"/u);
+  assert.match(terminalView, /aria-label=\{`\$\{props\.sessionName\} 콘솔`\}/u);
   assert.match(studioStory, /<ProjectIdeShell/u);
   assert.match(studioStory, /<ProjectStudioFrame/u);
-  assert.match(studioStory, /initialHistoryState=\{emptyHistory\}/u);
+  assert.match(studioStory, /resumeProjectContentLoader=\{async \(\) =>/u);
   assert.doesNotMatch(studioStory, /function CodeEditor|function Explorer/u);
   assert.match(ideShell, /createRuntimeAdapter/u);
+  assert.match(ideShell, /materializeTemplate\(project\.templateId\)/u);
+  assert.doesNotMatch(ideShell, /name="templateId"|ProjectTemplatePicker/u);
+  assert.match(ideShell, /if \(project\.state === "active"\) void startWorkspace\(\)/u);
+  assert.doesNotMatch(ideShell, /템플릿으로 워크스페이스 시작|저장된 프로젝트 이어서 열기/u);
   assert.match(ideShell, /storageScopeId: project\.storageScopeId/u);
   assert.match(ideShell, /workspaceScopeId: workspaceScope/u);
   assert.doesNotMatch(ideShell, /localDraftKey/u);

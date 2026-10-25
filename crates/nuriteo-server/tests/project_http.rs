@@ -76,7 +76,7 @@ async fn project_access_tokens_authenticate_real_http_routes() {
         )
         .await,
         StatusCode::FORBIDDEN,
-        "REQUEST_FORBIDDEN",
+        "REAUTHENTICATION_REQUIRED",
     )
     .await;
 
@@ -211,7 +211,7 @@ async fn project_http_journey_is_authorized_versioned_and_audited() {
             None,
             Method::POST,
             &personal_collection,
-            json!({"slug":"denied","name":"Denied"}),
+            json!({"slug":"denied","name":"Denied","templateId":"vite-react"}),
             None,
         )
         .await,
@@ -493,22 +493,24 @@ async fn project_http_journey_is_authorized_versioned_and_audited() {
     )
     .await;
 
-    set_stale_reauthentication(&pool, fixture.owner).await;
-    assert_problem(
-        json_request(
-            &router,
-            Some(&owner),
-            Method::DELETE,
-            &personal_location,
-            json!({"name":"Personal Renamed"}),
-            Some("\"project-v4\""),
-        )
-        .await,
-        StatusCode::FORBIDDEN,
-        "REQUEST_FORBIDDEN",
+    let wrong_confirmation = json_request(
+        &router,
+        Some(&owner),
+        Method::DELETE,
+        &personal_location,
+        json!({"name":"Wrong project name"}),
+        Some("\"project-v4\""),
     )
     .await;
-    set_reauthenticated(&pool, fixture.owner).await;
+    assert_eq!(
+        wrong_confirmation.status(),
+        StatusCode::UNPROCESSABLE_ENTITY
+    );
+    let wrong_confirmation = response_json(wrong_confirmation).await;
+    assert_eq!(wrong_confirmation["code"], "VALIDATION_FAILED");
+    assert_eq!(wrong_confirmation["instance"], personal_location);
+
+    set_stale_reauthentication(&pool, fixture.owner).await;
     let deleted = json_request(
         &router,
         Some(&owner),
@@ -578,7 +580,7 @@ async fn create(
         Some(browser),
         Method::POST,
         collection,
-        json!({"slug":slug,"name":name}),
+        json!({"slug":slug,"name":name,"templateId":"vite-react"}),
         None,
     )
     .await;
@@ -774,11 +776,6 @@ async fn seed_fixture(pool: &DatabasePool) -> Fixture {
         .await
         .unwrap();
     fixture
-}
-
-async fn set_reauthenticated(pool: &DatabasePool, user_id: UserId) {
-    sqlx::query("UPDATE sessions SET last_seen_at=transaction_timestamp(), last_reauthenticated_at=transaction_timestamp() WHERE user_id=$1::uuid AND revoked_at IS NULL")
-        .bind(user_id.to_string()).execute(&mut *acquire(pool).await).await.unwrap();
 }
 
 async fn set_stale_reauthentication(pool: &DatabasePool, user_id: UserId) {

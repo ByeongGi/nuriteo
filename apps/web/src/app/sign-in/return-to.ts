@@ -33,4 +33,9 @@ export function signInHref(returnTo: string): string {
   return `/sign-in?returnTo=${encodeURIComponent(safeDestination)}`;
 }
 
+export function reauthenticationHref(returnTo: string): string {
+  const safeDestination = safeReturnTo(returnTo);
+  return `/sign-in?reauthenticate=1&returnTo=${encodeURIComponent(safeDestination)}`;
+}
+
 export { DEFAULT_SIGN_IN_DESTINATION };

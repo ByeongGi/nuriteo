@@ -26,7 +26,7 @@ export function MemberRoleEditor({ member, organizationId, organizationName, wor
       setError(undefined);
       try {
         await changeOrganizationMemberRole(createBrowserApiClient(), { organizationId, userId: member.userId, role }, { csrfToken: readCsrfCredential() });
-        router.push(detailHref); router.refresh();
+        router.push(detailHref);
       } catch (cause) { setError(collaborationError(cause, "organization-member")); }
     });
   }

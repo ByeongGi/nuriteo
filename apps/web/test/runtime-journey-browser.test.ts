@@ -13,7 +13,7 @@ import type { RuntimeAdapter } from "../src/runtime/runtime-adapter.ts";
 import { integritySha512 } from "../../../packages/node-runtime/src/network/crypto.ts";
 
 declare global {
-  interface Window { __nuriteoRuntimeProbe: { activeWorkers: number; adapter?: RuntimeAdapter; createdWorkers: number; committedVersion?: number; committedEtag?: string; reloads: number; restoreMode: "download-failure" | "intervening" | "materialization-failure" | "success"; runtimeActiveWorkers: number; runtimeCreatedWorkers: number } }
+  interface Window { __nuriteoRuntimeProbe: { activeWorkers: number; adapter?: RuntimeAdapter; createdWorkers: number; committedVersion?: number; committedEtag?: string; reloads: number; restoreMode: "download-failure" | "intervening" | "materialization-failure" | "not-saved" | "success"; runtimeActiveWorkers: number; runtimeCreatedWorkers: number } }
 }
 
 const webRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -99,7 +99,7 @@ try {
   assert.equal(await page.evaluate(() => globalThis.crossOriginIsolated), true);
 
   try {
-    await page.getByRole("button", { name: "템플릿으로 워크스페이스 시작" }).click({ timeout: 10_000 });
+    await page.getByRole("button", { name: "미리보기 실행" }).waitFor({ timeout: 10_000 });
   } catch (error) {
     throw new Error(`Studio fixture did not render:\n${await page.locator("body").innerText()}\n${errors.join("\n")}`, { cause: error });
   }
@@ -177,9 +177,9 @@ try {
   assert.equal(terminalJourney.serve.exitCode, 0);
   assert.match(terminalJourney.serve.stdout, /dev server ready/u);
 
-  const portsTab = page.getByRole("tab", { name: "포트 1", exact: true });
+  const portsTab = page.getByRole("button", { name: "포트 1", exact: true });
   await portsTab.evaluate((button: HTMLButtonElement) => button.click());
-  await portsTab.getAttribute("aria-selected").then((selected) => assert.equal(selected, "true"));
+  await portsTab.getAttribute("aria-pressed").then((pressed) => assert.equal(pressed, "true"));
   const portList = page.getByRole("list", { name: "열린 포트" });
   const previewPort = await page.evaluate(() => window.__nuriteoRuntimeProbe.adapter?.getState().ports[0]?.port ?? null);
   assert(previewPort, "preview port was not exposed by the runtime adapter");
@@ -215,7 +215,7 @@ try {
   assert.equal(runningProcesses.activeDuringRun, 2);
   assert.deepEqual(runningProcesses.processes.map((process) => process.terminalId).sort(), ["browser-pty-1", "browser-pty-2"]);
 
-  const processesTab = page.getByRole("tab", { name: "프로세스 2", exact: true });
+  const processesTab = page.getByRole("button", { name: "프로세스 2", exact: true });
   await processesTab.evaluate((button: HTMLButtonElement) => button.click());
   const processList = page.getByRole("list", { name: "실행 중 프로세스" });
   const firstProcess = processList.getByRole("listitem").filter({ hasText: "browser-pty-1" });
@@ -270,7 +270,7 @@ try {
   // portal action because its production stacking styles are not present.
   await page.getByRole("button", { name: "초안을 버리고 종료" }).evaluate((button: HTMLButtonElement) => button.click());
   try {
-    await page.getByRole("button", { name: "템플릿으로 워크스페이스 시작" }).waitFor({ timeout: 10_000 });
+    await page.getByRole("button", { name: "Studio 열기" }).waitFor({ timeout: 10_000 });
   } catch (error) {
     const cleanupState = await page.evaluate(() => ({
       activeWorkers: window.__nuriteoRuntimeProbe.activeWorkers,

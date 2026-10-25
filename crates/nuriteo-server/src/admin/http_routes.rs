@@ -1121,8 +1121,9 @@ fn validation(request_id: &RequestId, path: &str, field: &str) -> HttpError {
 fn map_error(error: AdminHttpServiceError, request_id: RequestId, path: &str) -> HttpError {
     match error {
         AdminHttpServiceError::AuthenticationFailed => HttpError::authentication(request_id, path),
-        AdminHttpServiceError::Forbidden | AdminHttpServiceError::ReauthenticationRequired => {
-            HttpError::forbidden(request_id, path)
+        AdminHttpServiceError::Forbidden => HttpError::forbidden(request_id, path),
+        AdminHttpServiceError::ReauthenticationRequired => {
+            HttpError::reauthentication_required(request_id, path)
         }
         AdminHttpServiceError::InvalidSetting => validation(&request_id, path, "value"),
         AdminHttpServiceError::InvalidBackupPolicy => validation(&request_id, path, "policy"),

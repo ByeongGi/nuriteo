@@ -357,6 +357,7 @@ export type {
   ProjectRoleMutation,
   ProjectRoleMutationResult,
   ProjectState,
+  ProjectTemplateId,
   RenameProjectInput,
   RevokeDirectProjectRoleInput,
   VersionedProjectInput

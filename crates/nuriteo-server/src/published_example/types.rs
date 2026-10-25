@@ -387,5 +387,4 @@ pub struct CreatePublishedExample {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PublishedExampleDeleteConfirmation {
     pub name: PublishedExampleName,
-    pub recently_reauthenticated: bool,
 }

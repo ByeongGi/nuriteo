@@ -40,12 +40,12 @@ use super::{
     DirectProjectRoleGrant, Project, ProjectAuditContext, ProjectDeleteConfirmation, ProjectId,
     ProjectName, ProjectOwner, ProjectPageKey, ProjectPageLimit, ProjectRepository, ProjectRole,
     ProjectRoleMutationResult, ProjectRolePageKey, ProjectRolePageLimit, ProjectService,
-    ProjectServiceError, ProjectServicePolicy, ProjectSlug, ProjectState, ProjectVersion,
+    ProjectServiceError, ProjectServicePolicy, ProjectSlug, ProjectState, ProjectTemplate,
+    ProjectVersion,
 };
 
 const CURSOR_PREFIX: &str = "nrt_project_cursor_";
 const CURSOR_TTL_SECONDS: i64 = 15 * 60;
-const REAUTHENTICATION_WINDOW_SECONDS: i64 = 15 * 60;
 const CURSOR_KEY_BYTES: usize = 32;
 const MAX_CURSOR_BYTES: usize = 2048;
 
@@ -206,6 +206,7 @@ impl ProjectHttpService {
         owner: ProjectOwner,
         slug: ProjectSlug,
         name: ProjectName,
+        template: ProjectTemplate,
         correlation_id: &str,
     ) -> Result<ProjectView, ProjectHttpError> {
         let runtime = self.runtime()?;
@@ -217,6 +218,7 @@ impl ProjectHttpService {
                 owner,
                 slug,
                 name,
+                template,
                 &identity.audit(correlation_id),
             )
             .await
@@ -706,7 +708,7 @@ impl ProjectHttpService {
     ) -> Result<(), ProjectHttpError> {
         let runtime = self.runtime()?;
         let identity = runtime.authenticate(request).await?;
-        let confirmation = ProjectDeleteConfirmation::new(name, identity.recently_reauthenticated);
+        let confirmation = ProjectDeleteConfirmation::new(name);
         runtime
             .projects
             .delete(
@@ -861,7 +863,6 @@ pub(crate) struct SaveProjectContext {
 struct BrowserIdentity {
     user_id: UserId,
     display_name: String,
-    recently_reauthenticated: bool,
 }
 
 pub(crate) enum ProjectAccessTokenIdentity {
@@ -923,18 +924,9 @@ impl Runtime {
         if status != "active" {
             return Err(ProjectHttpError::AuthenticationFailed);
         }
-        // Session authentication refreshes `last_seen_at` with the database clock.
-        // Compare reauthentication freshness in that same clock domain so small
-        // host/database skew cannot reject a just-completed reauthentication.
-        let now = fields.last_seen_at.into_datetime();
-        let recently_reauthenticated = fields.last_reauthenticated_at.is_some_and(|at| {
-            let age = now - at.into_datetime();
-            !age.is_negative() && age.whole_seconds() <= REAUTHENTICATION_WINDOW_SECONDS
-        });
         Ok(BrowserIdentity {
             user_id: fields.user_id,
             display_name,
-            recently_reauthenticated,
         })
     }
 }
@@ -948,6 +940,7 @@ pub(crate) struct ProjectView {
     pub(crate) storage_scope_id: String,
     pub(crate) slug: String,
     pub(crate) name: String,
+    pub(crate) template_id: &'static str,
     pub(crate) state: &'static str,
     pub(crate) created_at: String,
     pub(crate) updated_at: String,
@@ -968,6 +961,7 @@ impl From<Project> for ProjectView {
             storage_scope_id: project.storage_scope_id().to_string(),
             slug: project.slug().to_string(),
             name: project.name().as_str().to_owned(),
+            template_id: project.template().as_str(),
             state: match project.state() {
                 ProjectState::Active => "active",
                 ProjectState::Archived => "archived",

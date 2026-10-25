@@ -158,26 +158,25 @@ function sourceContracts(): void {
   const operationsPage = read("src/app/(admin)/admin/operations/page.tsx");
   const operationsDashboard = read("src/app/(admin)/admin/operations/operations-dashboard.tsx");
   const supportBundle = read("src/app/(admin)/admin/operations/support-bundle-download.tsx");
+  const storageCleanupPage = read("src/app/(admin)/admin/operations/storage-cleanup/page.tsx");
   const layout = read("src/app/(authenticated)/layout.tsx");
   const authenticatedNavigation = read("src/app/(authenticated)/authenticated-navigation.tsx");
 
   assert.match(page, /Promise\.all\(\[/u);
   assert.match(page, /listAdminSettings\(client\)/u);
   assert.match(page, /getAdminStatus\(client\)/u);
-  assert.match(page, /previewAdminPolicyCleanup\(client\)/u);
+  assert.match(storageCleanupPage, /previewAdminPolicyCleanup\(await createServerApiClient\(\)\)/u);
   assert.match(settings, /영향 검토/u);
   assert.match(settings, /기본값으로 초기화/u);
   assert.match(settings, /기존 데이터는 자동으로 삭제되지 않습니다/u);
-  assert.match(settings, /읽기 전용 점검/u);
+  assert.match(settings, /읽기 전용으로 표시/u);
   assert.match(settings, /최신 상태 불러오기/u);
   assert.match(settings, /웹 업데이트 필요/u);
   assert.match(settings, /최근 관리자 재인증이 필요/u);
   assert.match(settings, /aria-busy=\{mutation\.isPending\}/u);
   assert.match(navigation, /activeDestination === destination\.href/u);
-  assert.match(navigation, /href="\/admin"/u);
   assert.match(navigation, /href: "\/admin\/operations"/u);
-  assert.match(navigation, /label: "사용자·접근"/u);
-  assert.match(navigation, /label: "인증"/u);
+  assert.match(navigation, /label: "접근 관리"/u);
   assert.match(navigation, /label: "연동"/u);
   assert.match(navigation, /label: "운영"/u);
   assert.match(navigation, /label: "시스템"/u);
@@ -187,11 +186,7 @@ function sourceContracts(): void {
   assert.match(navigation, /href: "\/admin\/operations\/email-deliveries"/u);
   assert.match(navigation, /href: "\/admin\/system\/settings"/u);
   assert.doesNotMatch(navigation, /href: "\/admin\/(?:invitations|mfa|oidc|git-providers|registries|notifications|smtp-trust|maintenance|backups|updates|settings)"/u);
-  assert.match(adminHome, /href: "\/admin\/access\/invitations"/u);
-  assert.match(adminHome, /href: "\/admin\/authentication\/mfa"/u);
-  assert.match(adminHome, /href: "\/admin\/integrations\/git"/u);
-  assert.match(adminHome, /href: "\/admin\/operations"/u);
-  assert.match(adminHome, /href: "\/admin\/system\/updates"/u);
+  assert.match(adminHome, /redirect\("\/admin\/operations"\)/u);
   assert.match(legacySettingsPage, /redirect\("\/admin\/system\/settings"\)/u);
   for (const [legacy, canonical] of [
     ["invitations", "/admin/access/invitations"],
@@ -216,11 +211,12 @@ function sourceContracts(): void {
   assert.match(supportBundle, /bytes\.byteLength > preview\.maximumBytes/u);
   assert.doesNotMatch(supportBundle, /localStorage|sessionStorage|dangerouslySetInnerHTML/u);
   assert.match(layout, /<AuthenticatedShellFrame/u);
-  assert.match(authenticatedNavigation, /href: "\/admin"/u);
+  assert.match(authenticatedNavigation, /href: "\/admin\/operations"/u);
   assert.match(adminLayout, /is_instance_admin/u);
   assert.match(adminLayout, /<AdminShellFrame/u);
   assert.doesNotMatch(adminLayout, /AuthenticatedShellFrame/u);
-  assert.match(adminShell, /사용자 화면으로 돌아가기/u);
+  assert.match(adminShell, /href="\/workspaces"/u);
+  assert.match(adminShell, /사용자 화면/u);
   assert.match(adminShell, /<AdminNavigation/u);
   assert.doesNotMatch(
     `${page}\n${settings}\n${operationsPage}\n${operationsDashboard}`,

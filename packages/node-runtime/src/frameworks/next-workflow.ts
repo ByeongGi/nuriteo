@@ -550,6 +550,10 @@ export class NextProductWorkflow {
 
   #renderDocument(routePath = "/"): string {
     const title = this.#readTitle(routePath);
+    const pagePath = this.#resolvePagePathForRoute(routePath);
+    const pageModule = pagePath
+      ? pagePath.slice(this.projectRoot.length).replace(/\.(?:tsx?|jsx)$/u, ".js")
+      : null;
     const globalsHref = this.workspace.exists(join(this.projectRoot, "app/globals.css"))
       ? '<link rel="stylesheet" href="./app/globals.css" />'
       : "";
@@ -577,8 +581,9 @@ export class NextProductWorkflow {
       "<style>body{margin:0;font-family:system-ui,sans-serif}#app,#root{min-height:100vh}a{color:#2563eb}</style>",
       "</head>",
       "<body>",
-      `<div id="app"><main><h1>${escapeHtml(title)}</h1><p>Next.js App Router</p></main></div>`,
+      `<div id="app"><main><h1>${escapeHtml(title)}</h1><p>Next.js Preview</p></main></div>`,
       `<script>window.__NEXT_PREVIEW_ROUTE__=${JSON.stringify(routePath)};</script>`,
+      `<script>window.__NEXT_PREVIEW_PAGE_MODULE__=${JSON.stringify(pageModule)};</script>`,
       "<script type=\"module\" src=\"./_next/static/chunks/app.js\"></script>",
       "</body></html>"
     ].join("");
@@ -1019,6 +1024,9 @@ function buildAppRouterBootstrap(): string {
     "}",
     "",
     "function pageModuleUrl(route) {",
+    "  if (typeof window !== \"undefined\" && window.__NEXT_PREVIEW_PAGE_MODULE__) {",
+    "    return versionedModuleUrl(window.__NEXT_PREVIEW_PAGE_MODULE__);",
+    "  }",
     "  // app.js lives at /_next/static/chunks/app.js → go up to preview root.",
     "  if (!route || route === \"/\") return versionedModuleUrl(\"../../../app/page.js\");",
     "  return versionedModuleUrl(`../../../app${route}/page.js`);",

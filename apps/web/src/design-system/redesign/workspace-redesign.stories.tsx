@@ -107,6 +107,7 @@ function createProjectFixtures(count: number): readonly Project[] {
       slug: `browser-project-${index + 1}`,
       state: "active",
       storageScopeId: "user:user-kim",
+      templateId: index % 2 === 0 ? "vite-react" : "next-app",
       updatedAt: "2026-10-22T01:00:00.000Z",
       version: 18 - (index % 8)
     } satisfies Project;

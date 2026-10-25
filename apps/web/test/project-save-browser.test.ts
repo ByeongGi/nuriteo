@@ -11,7 +11,7 @@ import { build } from "esbuild";
 import type { RuntimeAdapter } from "../src/runtime/runtime-adapter.ts";
 
 declare global {
-  interface Window { __nuriteoRuntimeProbe: { activeWorkers: number; adapter?: RuntimeAdapter; createdWorkers: number; committedVersion?: number; committedEtag?: string; reloads: number; restoreMode: "download-failure" | "intervening" | "materialization-failure" | "success"; runtimeActiveWorkers: number; runtimeCreatedWorkers: number } }
+  interface Window { __nuriteoRuntimeProbe: { activeWorkers: number; adapter?: RuntimeAdapter; createdWorkers: number; committedVersion?: number; committedEtag?: string; reloads: number; restoreMode: "download-failure" | "intervening" | "materialization-failure" | "not-saved" | "success"; runtimeActiveWorkers: number; runtimeCreatedWorkers: number } }
 }
 
 const webRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -131,7 +131,6 @@ try {
   await page.goto(`${applicationOrigin}/`, { waitUntil: "domcontentloaded" });
   assert.equal(await page.evaluate(() => globalThis.crossOriginIsolated), true);
 
-  await page.getByRole("button", { name: "템플릿으로 워크스페이스 시작", exact: true }).click();
   await page.getByRole("button", { name: "미리보기 실행" }).waitFor({ timeout: 20_000 });
   assert.equal(await page.evaluate(() => window.__nuriteoRuntimeProbe.createdWorkers), 2);
 
@@ -188,7 +187,7 @@ try {
 
   await page.getByRole("button", { name: "워크스페이스 종료" }).click();
   if (await page.getByRole("button", { name: "초안을 버리고 종료" }).count()) await page.getByRole("button", { name: "초안을 버리고 종료" }).click();
-  await page.getByRole("button", { name: "템플릿으로 워크스페이스 시작", exact: true }).waitFor({ timeout: 10_000 });
+  await page.getByRole("button", { name: "Studio 열기", exact: true }).waitFor({ timeout: 10_000 });
   await page.waitForFunction(() => window.__nuriteoRuntimeProbe.activeWorkers === 0);
   assert.deepEqual(errors, []);
   console.log("WEB-007 browser Save matrix ok (retry, reconcile, 412, exact atomic restore, failure preservation, dispose)");

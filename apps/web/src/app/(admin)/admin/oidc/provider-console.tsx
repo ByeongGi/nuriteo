@@ -221,7 +221,8 @@ function formatProviderDate(value: string): string {
 function providerFailure(error: unknown): { readonly error: true; readonly text: string } {
   if (error instanceof ApiError && error.code === "COMMIT_OUTCOME_UNKNOWN") return { error: true, text: "변경이 완료되었을 수 있습니다. 새로 불러온 뒤 다시 시도하세요." };
   if (error instanceof ApiError && error.status === 412) return { error: true, text: "다른 곳에서 제공자가 변경되었습니다. 새로 불러온 뒤 다시 시도하세요." };
-  if (error instanceof ApiError && error.status === 403) return { error: true, text: "관리자 권한과 최근 재인증이 필요합니다." };
+  if (error instanceof ApiError && error.code === "REAUTHENTICATION_REQUIRED") return { error: true, text: "보안을 위해 다시 로그인한 뒤 제공자 변경을 다시 시도하세요." };
+  if (error instanceof ApiError && error.status === 403) return { error: true, text: "이 제공자를 변경할 관리자 권한이 없습니다." };
   if (error instanceof ApiError && (error.status === 400 || error.status === 422)) return { error: true, text: "검증에 실패했습니다. HTTPS 발급자, 클라이언트 설정, 리디렉션 URI와 제공자 네트워크 연결을 확인하세요." };
   if (error instanceof ApiError && error.status === 409) return { error: true, text: "먼저 제공자를 비활성화하고 연결된 계정을 제거한 뒤 삭제하세요." };
   return { error: true, text: "제공자 변경을 안전하게 완료하지 못했습니다." };

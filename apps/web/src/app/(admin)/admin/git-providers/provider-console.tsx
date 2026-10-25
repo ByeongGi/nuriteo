@@ -310,7 +310,8 @@ function input(data: FormData) {
 
 function failure(error: unknown) {
   if (error instanceof ApiError && error.status === 412) return { error: true, text: "다른 곳에서 제공자가 변경되었습니다. 새로 불러온 뒤 다시 시도하세요." };
-  if (error instanceof ApiError && error.status === 403) return { error: true, text: "관리자 권한과 최근 재인증이 필요합니다." };
+  if (error instanceof ApiError && error.code === "REAUTHENTICATION_REQUIRED") return { error: true, text: "보안을 위해 다시 로그인한 뒤 Git 제공자 변경을 다시 시도하세요." };
+  if (error instanceof ApiError && error.status === 403) return { error: true, text: "이 Git 제공자를 변경할 관리자 권한이 없습니다." };
   if (error instanceof ApiError && error.status === 409) return { error: true, text: "편집하거나 삭제하기 전에 제공자를 비활성화하세요." };
   return { error: true, text: "Git 제공자 변경을 안전하게 완료하지 못했습니다." };
 }

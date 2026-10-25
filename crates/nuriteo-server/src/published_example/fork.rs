@@ -18,7 +18,7 @@ use crate::{
     policy::EffectivePolicyEngine,
     project::{
         NewProject, Project, ProjectAuditContext, ProjectConflict, ProjectId, ProjectName,
-        ProjectOwner, ProjectRepository, ProjectRepositoryError, ProjectSlug,
+        ProjectOwner, ProjectRepository, ProjectRepositoryError, ProjectSlug, ProjectTemplate,
     },
     save::{CanonicalBundleMaterializer, CanonicalBundleRecord, MaterializationError},
     workspace::StorageScopeId,
@@ -51,6 +51,7 @@ struct SourceBundle {
     bundle_id: String,
     project_id: ProjectId,
     storage_scope_id: StorageScopeId,
+    template: ProjectTemplate,
     sha256: [u8; 32],
     object_key: String,
     physical_bytes: u64,
@@ -380,6 +381,7 @@ async fn complete_new_fork(
         storage_scope_id,
         request.destination_slug.clone(),
         request.destination_name.clone(),
+        source.template,
         now,
     );
     ProjectRepository::create(transaction, &candidate)
@@ -596,6 +598,7 @@ async fn resolve_source(
         String,
         String,
         String,
+        String,
         Vec<u8>,
         String,
         i64,
@@ -603,10 +606,11 @@ async fn resolve_source(
     let row = sqlx::query_as::<_, Row>(
         "SELECT example.id::text,version.id::text,version.version_number,\
                 reference.bundle_id::text,version.project_id::text,\
-                reference.storage_scope_id::text,bundle.sha256,bundle.object_key,\
+                reference.storage_scope_id::text,source_project.template_id,bundle.sha256,bundle.object_key,\
                 bundle.physical_bytes \
          FROM published_examples example \
          JOIN published_example_versions version ON version.example_id=example.id \
+         JOIN projects source_project ON source_project.id=version.project_id \
          JOIN project_bundle_refs reference ON reference.id=version.project_version_id \
               AND reference.project_id=version.project_id AND reference.kind='version' \
          JOIN bundles bundle ON bundle.id=reference.bundle_id \
@@ -614,7 +618,7 @@ async fn resolve_source(
          WHERE example.public_id=$1 AND example.state='published' \
            AND (($2::bigint IS NULL AND version.id=example.active_version_id) \
                 OR version.version_number=$2) \
-         FOR SHARE OF example,version,reference,bundle",
+         FOR SHARE OF example,version,source_project,reference,bundle",
     )
     .bind(request.source_public_id.as_str())
     .bind(request.source_version_number)
@@ -623,7 +627,7 @@ async fn resolve_source(
     .map_err(map_sql_error)?
     .ok_or(PublishedExampleForkError::SourceUnavailable)?;
     let sha256: [u8; 32] = row
-        .6
+        .7
         .try_into()
         .map_err(|_| PublishedExampleForkError::InvariantViolation)?;
     Ok(SourceBundle {
@@ -639,9 +643,11 @@ async fn resolve_source(
             .5
             .parse()
             .map_err(|_| PublishedExampleForkError::InvariantViolation)?,
+        template: ProjectTemplate::parse(&row.6)
+            .map_err(|_| PublishedExampleForkError::InvariantViolation)?,
         sha256,
-        object_key: row.7,
-        physical_bytes: u64::try_from(row.8)
+        object_key: row.8,
+        physical_bytes: u64::try_from(row.9)
             .map_err(|_| PublishedExampleForkError::InvariantViolation)?,
     })
 }

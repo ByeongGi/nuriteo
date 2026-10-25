@@ -70,5 +70,17 @@ function RadioCardGroup<Value extends string>({ description, disabled, label, la
   );
 }
 
-export { RadioCardGroup, radioGroupStyles };
+function RadioGroupRoot(props: RadioGroupPrimitive.Props) {
+  return <RadioGroupPrimitive {...props} />;
+}
+
+function RadioControl(props: Radio.Root.Props) {
+  return <Radio.Root {...props} />;
+}
+
+function RadioIndicator(props: Radio.Indicator.Props) {
+  return <Radio.Indicator {...props} />;
+}
+
+export { RadioCardGroup, RadioControl, RadioGroupRoot, RadioIndicator, radioGroupStyles };
 export type { RadioCardGroupProps, RadioCardOption };

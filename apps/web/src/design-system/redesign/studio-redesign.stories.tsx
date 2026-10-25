@@ -16,6 +16,7 @@ const project: Project = {
   slug: "runtime-editor",
   state: "active",
   storageScopeId: "user:user-kim",
+  templateId: "vite-react",
   updatedAt: "2026-10-22T01:00:00.000Z",
   version: 18
 };
@@ -43,6 +44,11 @@ function StudioFixture({
         }}
         project={fixtureProject}
         projectEtag={`"project-v${fixtureProject.version}"`}
+        resumeProjectContentLoader={async () => ({
+          async resumeProjectContent() {
+            throw Object.assign(new Error("Storybook project is not saved"), { code: "RESUME_NOT_SAVED" });
+          }
+        })}
         runtimeFeatureLoader={runtimeFeatureLoader}
         workspaceScope="user:user-kim"
       />
@@ -51,7 +57,7 @@ function StudioFixture({
 }
 
 async function startTemplate({ canvas }: { canvas: { getByRole: (role: string, options: { name: string }) => HTMLElement } }) {
-  canvas.getByRole("button", { name: "템플릿으로 워크스페이스 시작" }).click();
+  await waitFor(() => canvas.getByRole("button", { name: "미리보기 실행" }));
 }
 
 async function startTemplateWithTerminal(context: Parameters<typeof startTemplate>[0]) {

@@ -30,6 +30,7 @@ import type { FormEvent } from "react";
 import { tv } from "tailwind-variants";
 
 import { Button } from "#src/components/ui/button.tsx";
+import { ConfirmationDialog } from "#src/components/ui/confirmation-dialog.tsx";
 import { SelectField, TextField } from "#src/components/ui/field.tsx";
 import { MetricGrid, MetricItem } from "#src/components/ui/metric-grid.tsx";
 import { PageHeader } from "#src/components/ui/page-header.tsx";
@@ -132,7 +133,7 @@ export function TeamConsole(props: TeamConsoleProps) {
   const [projectRoles, setProjectRoles] = useState(props.initialProjectRoles);
   const [projectRoleNextCursor, setProjectRoleNextCursor] = useState(props.initialProjectRoleNextCursor);
   const [feedback, setFeedback] = useState<Feedback>();
-  const [deleteConfirmation, setDeleteConfirmation] = useState("");
+  const [confirmingTeamDelete, setConfirmingTeamDelete] = useState(false);
   const [teamQuery, setTeamQuery] = useState("");
   const deferredTeamQuery = useDeferredValue(teamQuery);
 
@@ -146,7 +147,7 @@ export function TeamConsole(props: TeamConsoleProps) {
     setProjectRoles(props.initialProjectRoles);
     setProjectRoleNextCursor(props.initialProjectRoleNextCursor);
     setFeedback(undefined);
-    setDeleteConfirmation("");
+    setConfirmingTeamDelete(false);
   }, [
     props.initialMemberNextCursor,
     props.initialMembers,
@@ -281,7 +282,8 @@ export function TeamConsole(props: TeamConsoleProps) {
   }
 
   async function handleDelete() {
-    if (team === undefined || teamEtag === undefined || deleteConfirmation !== team.slug) return;
+    if (team === undefined || teamEtag === undefined) return;
+    setConfirmingTeamDelete(false);
     await runMutation(async () => {
       await deleteTeam(createBrowserApiClient(), {
         organizationId: props.organization.id,
@@ -520,14 +522,24 @@ export function TeamConsole(props: TeamConsoleProps) {
               {props.canDeleteTeam ? (
                 <section className={`${styles.section()} ${styles.danger()}`} aria-labelledby="team-delete-title">
                   <div className={styles.sectionHeading()}><div><h3 id="team-delete-title">팀 삭제</h3><p>팀, 멤버십과 프로젝트 역할을 제거합니다. 프로젝트 자체는 삭제되지 않습니다.</p></div></div>
-                  <TextField label={<>확인하려면 <strong>{team.slug}</strong> 입력</>} value={deleteConfirmation} onChange={(event) => setDeleteConfirmation(event.currentTarget.value)} autoComplete="off" spellCheck={false} disabled={mutation.isPending} />
-                  <Button type="button" variant="danger" disabled={mutation.isPending || deleteConfirmation !== team.slug} onClick={() => void handleDelete()}>팀 삭제</Button>
+                  <Button type="button" variant="danger" disabled={mutation.isPending} onClick={() => setConfirmingTeamDelete(true)}>팀 삭제</Button>
                 </section>
               ) : null}
             </>
           )}
         </section>
       </div>
+      {team === undefined ? null : (
+        <ConfirmationDialog
+          busy={mutation.isPending}
+          confirmLabel="팀 삭제"
+          description={`${team.displayName} 팀과 멤버십, 프로젝트 역할을 삭제합니다. 프로젝트 자체는 삭제되지 않습니다.`}
+          open={confirmingTeamDelete}
+          title="이 팀을 삭제할까요?"
+          onCancel={() => setConfirmingTeamDelete(false)}
+          onConfirm={() => void handleDelete()}
+        />
+      )}
     </main>
   );
 }

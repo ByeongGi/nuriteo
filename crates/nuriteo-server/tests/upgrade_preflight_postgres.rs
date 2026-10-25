@@ -92,7 +92,7 @@ async fn preflight_is_read_only_and_stops_without_interrupting_previous_health()
 
 #[tokio::test]
 #[ignore = "requires tests/fixtures/postgres-upgrade-preflight/run.sh"]
-async fn migration_46_to_50_preserves_existing_domain_data() {
+async fn migration_46_to_51_preserves_existing_domain_data() {
     let database_url = required_env(DATABASE_URL_ENV);
     let ca_path = required_env(DATABASE_CA_ENV);
     let ca = fs::read(&ca_path).expect("fixture CA should be readable");
@@ -111,7 +111,7 @@ async fn migration_46_to_50_preserves_existing_domain_data() {
     assert!(migration.stderr.is_empty());
     assert_eq!(
         migration.stdout,
-        b"database migration complete: schema=ready version=50\n"
+        b"database migration complete: schema=ready version=51\n"
     );
     assert_eq!(
         check_schema_readiness(&pool).await.unwrap(),

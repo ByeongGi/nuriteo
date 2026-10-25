@@ -51,7 +51,7 @@ async fn admin_settings_audit_and_operations_http_are_safe_and_transactional() {
     )
     .await
     .unwrap();
-    assert_eq!(report.latest_version, Some(50));
+    assert_eq!(report.latest_version, Some(51));
     let admin_id = seed_user(&pool, "admin@example.test", true).await;
     seed_user(&pool, "member@example.test", false).await;
     let settings = InstanceSettingsRepository::new(pool.clone(), Duration::from_secs(5))
@@ -189,7 +189,7 @@ async fn admin_settings_audit_and_operations_http_are_safe_and_transactional() {
     let bundle = json_body(bundle).await;
     assert_eq!(bundle["schemaVersion"], 1);
     assert_eq!(bundle["format"], "nuriteo-support-bundle-v1+json");
-    assert_eq!(bundle["configuration"]["databaseSchemaVersion"], 50);
+    assert_eq!(bundle["configuration"]["databaseSchemaVersion"], 51);
     assert_eq!(bundle["configuration"]["settingRegistryVersion"], 4);
     assert_eq!(bundle["integrations"].as_array().unwrap().len(), 3);
     assert_eq!(
@@ -398,7 +398,7 @@ async fn admin_settings_audit_and_operations_http_are_safe_and_transactional() {
     .await;
     assert_eq!(status.status(), StatusCode::OK);
     let status = json_body(status).await;
-    assert_eq!(status["schemaVersion"], 50);
+    assert_eq!(status["schemaVersion"], 51);
     assert_eq!(status["settingRegistryVersion"], 4);
     assert_eq!(status["settingCount"], 40);
     assert_eq!(status["restartRequired"], false);

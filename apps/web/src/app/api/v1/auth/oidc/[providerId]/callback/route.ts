@@ -1,4 +1,5 @@
 import { forwardOidcNavigation, invalidCollaborationRoute, uuidPathSegment } from "#src/lib/api/collaboration-bff.ts";
+import { clearOidcReturnToCookie, copyResponse, readOidcReturnTo } from "#src/app/sign-in/oidc-return-to.ts";
 
 export const dynamic = "force-dynamic";
 
@@ -11,5 +12,12 @@ export async function GET(request: Request, { params }: { params: Promise<{ prov
     return invalidCollaborationRoute(request);
   }
   const query = new URLSearchParams({ iss: values.iss![0]!, state: values.state![0]!, code: values.code![0]! });
-  return forwardOidcNavigation(request, `/api/v1/auth/oidc/${providerId}/callback?${query}`, "application");
+  const response = await forwardOidcNavigation(request, `/api/v1/auth/oidc/${providerId}/callback?${query}`, "application");
+  if (response.status !== 303) return response;
+  const headers = new Headers(response.headers);
+  if (headers.get("location") === "/workspaces") {
+    headers.set("location", readOidcReturnTo(request));
+  }
+  headers.append("set-cookie", clearOidcReturnToCookie(request));
+  return copyResponse(response, headers);
 }

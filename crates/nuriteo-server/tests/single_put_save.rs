@@ -443,7 +443,6 @@ async fn published_example_fork_rematerializes_destination_identity() {
             unpublished.generation(),
             &PublishedExampleDeleteConfirmation {
                 name: PublishedExampleName::new("Fork Source".into()).unwrap(),
-                recently_reauthenticated: true,
             },
         )
         .await
@@ -3472,7 +3471,7 @@ async fn project_history_promotes_atomically_and_replays_durable_outcomes() {
             owner,
             project_b,
             ProjectVersion::new(8).unwrap(),
-            &ProjectDeleteConfirmation::new(ProjectName::new("Save B".to_owned()).unwrap(), true),
+            &ProjectDeleteConfirmation::new(ProjectName::new("Save B".to_owned()).unwrap()),
             &history_audit(actor, "history-project-delete-cascade"),
         )
         .await

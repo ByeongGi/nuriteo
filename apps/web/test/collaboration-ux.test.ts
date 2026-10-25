@@ -392,8 +392,9 @@ function testUxSourceContracts() {
   assert.doesNotMatch(organizations, /name="inviteeUserId"|Invitee user ID/u);
   assert.match(accept, /\/workspaces\?joined=1/u);
   assert.match(accept, /\/workspaces\?invitation=declined/u);
-  assert.match(organizationPage, /error instanceof ApiError && error\.status === 403/u);
-  assert.match(organizationPage, /canManage=\{canManage\}/u);
+  assert.match(organizationPage, /getCurrentWorkspaces\(await createServerApiClient\(\)\)/u);
+  assert.match(organizationPage, /redirect\(`\/workspaces\/\$\{encodeURIComponent\(workspace\.storageScopeId\)\}\/members`\)/u);
+  assert.match(organizations, /canManage/u);
   assert.match(guard, /if \(locked\.current\) return false/u);
   assert.match(guard, /finally/u);
   assert.doesNotMatch(`${activation}\n${admin}\n${organizations}\n${accept}`, /localStorage|sessionStorage|console\./u);

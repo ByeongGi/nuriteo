@@ -33,7 +33,7 @@ async fn complete_only_deduplication_and_gc_fences_are_database_enforced() {
     )
     .await
     .unwrap();
-    assert_eq!(report.latest_version, Some(50));
+    assert_eq!(report.latest_version, Some(51));
 
     let policy: BackupPolicyRow = sqlx::query_as(
         "SELECT enabled,interval_hours,schedule_timezone,daily_retention,weekly_retention,monthly_retention,\

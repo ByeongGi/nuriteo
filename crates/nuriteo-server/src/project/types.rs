@@ -2,6 +2,7 @@ use std::fmt;
 use std::str::FromStr;
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use utoipa::ToSchema;
 use uuid::{Uuid, Variant, Version};
 
 use crate::identity::UserId;
@@ -10,6 +11,32 @@ use crate::organization::OrganizationId;
 use super::ProjectError;
 
 const MAX_LOCK_VERSION: i64 = i64::MAX - 1;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, ToSchema)]
+pub enum ProjectTemplate {
+    #[serde(rename = "vite-react")]
+    ViteReact,
+    #[serde(rename = "next-app")]
+    NextApp,
+}
+
+impl ProjectTemplate {
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::ViteReact => "vite-react",
+            Self::NextApp => "next-app",
+        }
+    }
+
+    pub(crate) fn parse(value: &str) -> Result<Self, ProjectError> {
+        match value {
+            "vite-react" => Ok(Self::ViteReact),
+            "next-app" => Ok(Self::NextApp),
+            _ => Err(ProjectError::InvalidTemplate),
+        }
+    }
+}
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ProjectId(Uuid);

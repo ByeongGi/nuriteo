@@ -54,7 +54,7 @@ function testRequestScopedAuthenticatedBoundary(): void {
   assert.match(layout, /<Suspense fallback=\{<AuthenticatedShellLoading/u);
   assert.match(layout, /<AuthenticatedShellFrame/u);
   assert.match(layout, /isExplicitlySignedOut\(error\)/u);
-  assert.match(layout, /redirect\("\/sign-in"\)/u);
+  assert.match(layout, /redirect\(signInHref\(requestPath\)\)/u);
   assert.match(page, /await createServerApiClient\(\)/u);
   assert.match(page, /await getCurrentWorkspaces\(client\)/u);
   assert.match(page, /워크스페이스를 일시적으로 사용할 수 없습니다/u);
@@ -79,9 +79,9 @@ function testAccessibleStateContract(): void {
   assert.match(catalog, /href=\{`\/workspaces\/\$\{encodeURIComponent\(workspace\.storageScopeId\)\}`\}/u);
   assert.match(catalog, /워크스페이스 열기/u);
   assert.match(catalog, /export function EmptyWorkspaceScreen/u);
-  assert.match(catalog, /워크스페이스 추가/u);
-  assert.match(catalog, /href="\/workspaces\/new"/u);
-  assert.match(newWorkspace, /href="\/organizations\?intent=create"/u);
+  assert.match(catalog, /공유 워크스페이스 만들기/u);
+  assert.match(catalog, /href="\/workspaces\/new\/organization"/u);
+  assert.match(newWorkspace, /redirect\("\/workspaces\/new\/organization"\)/u);
   assert.doesNotMatch(catalog, /새 조직 만들기/u);
   assert.match(catalog, /접근 권한 다시 확인/u);
   assert.match(loading, /<WorkspacePageLoading/u);
@@ -94,7 +94,7 @@ function testAccessibleStateContract(): void {
   assert.match(navigation, /<span>더보기<\/span>/u);
   assert.match(navigation, /aria-label="모바일 계정 메뉴"/u);
   assert.match(navigation, /<LogoutButton placement="mobile"\s*\/>/u);
-  assert.match(navigation, /resolveWorkspaceSelection\(workspaces, requestedScope\)/u);
+  assert.match(navigation, /workspaces\.find\(\(workspace\) => workspace\.storageScopeId === requestedScope\)/u);
   assert.doesNotMatch(navigation, /label: "대시보드"/u);
   assert.match(navigation, /label: "워크스페이스"/u);
   assert.doesNotMatch(navigation, /label: "프로젝트"/u);

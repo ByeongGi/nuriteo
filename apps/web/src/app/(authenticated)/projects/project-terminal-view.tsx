@@ -33,6 +33,9 @@ export function ProjectTerminalView(props: Props) {
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
+    const studioColor = (name: string) => getComputedStyle(document.documentElement)
+      .getPropertyValue(`--n-color-studio-${name}`)
+      .trim();
     const terminal = new Terminal({
       allowTransparency: false,
       convertEol: true,
@@ -43,15 +46,15 @@ export function ProjectTerminalView(props: Props) {
       lineHeight: 1.35,
       scrollback: 5_000,
       theme: {
-        background: "#14151a",
-        black: "#14151a",
-        brightBlack: "#767985",
-        brightGreen: "#72e5ac",
-        cursor: "#e6e7eb",
-        cursorAccent: "#14151a",
-        foreground: "#e6e7eb",
-        green: "#48d597",
-        selectionBackground: "#45506a99"
+        background: studioColor("editor"),
+        black: studioColor("editor"),
+        brightBlack: studioColor("fg-subtle"),
+        brightGreen: studioColor("success"),
+        cursor: studioColor("fg"),
+        cursorAccent: studioColor("editor"),
+        foreground: studioColor("fg"),
+        green: studioColor("success"),
+        selectionBackground: studioColor("selected")
       }
     });
     const fitAddon = new FitAddon();
@@ -131,7 +134,7 @@ export function ProjectTerminalView(props: Props) {
     renderedOutputLengthRef.current = output.length;
   }, [output]);
 
-  return <div ref={hostRef} className="min-h-0 overflow-hidden bg-[#14151a] px-2 py-2" role="application" aria-label={`${props.sessionName} 콘솔`} />;
+  return <div ref={hostRef} className="min-h-0 overflow-hidden bg-[var(--n-color-studio-editor)] px-2 py-2" role="application" aria-label={`${props.sessionName} 콘솔`} />;
 }
 
 interface ShellInputState {

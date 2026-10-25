@@ -28,6 +28,7 @@ const MAX_CURSOR_BYTES = 2_048;
 const PROJECT_STATES = ["active", "archived"] as const;
 const PROJECT_LIST_STATES = ["active", "archived", "all"] as const;
 const PROJECT_ROLES = ["read", "write", "admin"] as const;
+const PROJECT_TEMPLATES = ["vite-react", "next-app"] as const;
 const PROJECT_ETAG = /^"project-v([1-9]\d*)"$/u;
 const MAX_PROJECT_VERSION = 9_223_372_036_854_775_806n;
 const PROJECT_SLUG = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/u;
@@ -37,6 +38,7 @@ export type ProjectOwner = PersonalProjectOwner | OrganizationProjectOwner;
 export type ProjectState = (typeof PROJECT_STATES)[number];
 export type ProjectListState = (typeof PROJECT_LIST_STATES)[number];
 export type ProjectRole = (typeof PROJECT_ROLES)[number];
+export type ProjectTemplateId = (typeof PROJECT_TEMPLATES)[number];
 
 export interface PersonalProjectOwner {
   readonly ownerType: "user";
@@ -55,6 +57,7 @@ export interface Project {
   readonly storageScopeId: string;
   readonly slug: string;
   readonly name: string;
+  readonly templateId: ProjectTemplateId;
   readonly state: ProjectState;
   readonly createdAt: string;
   readonly updatedAt: string;
@@ -101,6 +104,7 @@ export interface CreateProjectInput {
   readonly owner: ProjectOwner;
   readonly slug: string;
   readonly name: string;
+  readonly templateId: ProjectTemplateId;
 }
 
 export interface ListProjectsInput {
@@ -152,7 +156,11 @@ export async function createProject(
   const owner = validateOwner(input.owner);
   const response = await client.post<unknown, unknown>(
     projectCollectionPath(owner),
-    { slug: validateSlug(input.slug), name: validateName(input.name) },
+    {
+      slug: validateSlug(input.slug),
+      name: validateName(input.name),
+      templateId: validateTemplateId(input.templateId)
+    },
     mutationOptions(options)
   );
   return projectResult(response, 201, owner, true);
@@ -349,7 +357,7 @@ function projectRoleMutationResult(
 
 function parseProject(value: unknown, expectedOwner?: ProjectOwner): Project {
   const record = readExactRecord(value, [
-    "archivedAt", "createdAt", "id", "name", "ownerId", "ownerType", "slug",
+    "archivedAt", "createdAt", "id", "name", "ownerId", "ownerType", "slug", "templateId",
     "state", "storageScopeId", "updatedAt", "version"
   ]);
   const ownerType = readEnum(record, "ownerType", ["user", "organization"] as const);
@@ -360,6 +368,7 @@ function parseProject(value: unknown, expectedOwner?: ProjectOwner): Project {
     storageScopeId: readUuidV7(record, "storageScopeId"),
     slug: readBoundedString(record, "slug", 63),
     name: readBoundedString(record, "name", 800, { maxCharacters: 200 }),
+    templateId: readEnum(record, "templateId", PROJECT_TEMPLATES),
     state: readEnum(record, "state", PROJECT_STATES),
     createdAt: readUtcTimestamp(record, "createdAt"),
     updatedAt: readUtcTimestamp(record, "updatedAt"),
@@ -554,6 +563,13 @@ function validateName(value: string): string {
     /[\u0000-\u001f\u007f]/u.test(value)
   ) {
     throw new ApiConfigurationError("The Project name is invalid.");
+  }
+  return value;
+}
+
+function validateTemplateId(value: ProjectTemplateId): ProjectTemplateId {
+  if (!PROJECT_TEMPLATES.includes(value)) {
+    throw new ApiConfigurationError("The Project template is invalid.");
   }
   return value;
 }

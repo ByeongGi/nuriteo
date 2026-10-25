@@ -108,7 +108,7 @@ try {
     const firstPage = await firstContext.newPage();
     await firstPage.goto(projectUrl, { waitUntil: "networkidle" });
     try {
-      await firstPage.getByRole("button", { name: "저장된 프로젝트 이어서 열기" }).waitFor();
+      await firstPage.getByText("이 브라우저에 서버 저장본 v7을 준비했습니다.").waitFor({ timeout: 30_000 });
     } catch (error) {
       const visibleText = (await firstPage.locator("body").innerText()).slice(0, 4_096);
       throw new Error(`Studio did not become ready.\nRequests:\n${requests.join("\n")}\nPage:\n${visibleText}`, { cause: error });
@@ -118,18 +118,17 @@ try {
     const newContext = await signedContext(browser, standalone.origin);
     const page = await newContext.newPage();
     await page.goto(projectUrl, { waitUntil: "networkidle" });
-    assert.equal(await page.locator("textarea").count(), 0, "a fresh context must not inherit a Local Draft");
-    await page.getByRole("button", { name: "저장된 프로젝트 이어서 열기" }).click();
     try {
       await page.getByText("이 브라우저에 서버 저장본 v7을 준비했습니다.").waitFor({ timeout: 30_000 });
     } catch (error) {
       const visibleText = (await page.locator("body").innerText()).slice(0, 4_096);
       throw new Error(`Resume did not complete.\nRequests:\n${requests.join("\n")}\nPage:\n${visibleText}`, { cause: error });
     }
-    await page.getByRole("button", { name: "src/main.tsx" }).click();
-    await page.getByLabel("src/main.tsx 편집기").waitFor();
-    assert.match(await page.getByLabel("src/main.tsx 편집기").inputValue(), /resumed in a new context/u);
-    await page.getByRole("button", { name: "public/logo.bin" }).click();
+    const projectFiles = page.getByRole("navigation", { name: "프로젝트 파일" });
+    await projectFiles.getByRole("button", { name: "main.tsx", exact: true }).click();
+    await page.locator(".monaco-editor .view-lines").waitFor();
+    assert.match((await page.locator(".monaco-editor .view-lines").innerText()).replaceAll("\u00a0", " "), /resumed in a new context/u);
+    await projectFiles.getByRole("button", { name: "logo.bin", exact: true }).click();
     await page.getByText("바이너리 파일과 지원하지 않는 파일은 텍스트 편집기에서 열 수 없습니다.").waitFor();
     assert.equal(await page.getByText(/무결성 검증에 실패/u).count(), 0);
     await newContext.close();
@@ -146,7 +145,7 @@ try {
 console.log("WEB-008 new browser context resume passed");
 
 function project() {
-  return { id: projectId, ownerType: "user", ownerId: userId, storageScopeId: scopeId, slug: "saved-project", name: "Saved Project", state: "active", createdAt: now, updatedAt: now, archivedAt: null, version: 1 };
+  return { id: projectId, ownerType: "user", ownerId: userId, storageScopeId: scopeId, templateId: "vite-react", slug: "saved-project", name: "Saved Project", state: "active", createdAt: now, updatedAt: now, archivedAt: null, version: 1 };
 }
 function encode(value: string): Uint8Array { return new TextEncoder().encode(value); }
 function json(response: http.ServerResponse, value: unknown) { response.statusCode = 200; response.setHeader("content-type", "application/json"); response.end(JSON.stringify(value)); }

@@ -118,6 +118,7 @@ function coreFetch(scenario: "anonymous" | "authorized" | "no-project-access" | 
         slug: "preview-project",
         state: "active",
         storageScopeId,
+        templateId: "vite-react",
         updatedAt: "2026-10-04T00:00:00.000Z",
         version: 1
       }, { etag: '"project-v1"' });

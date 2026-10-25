@@ -169,6 +169,7 @@ export function MfaPolicyEditor({ initial, view = "policy" }: { readonly initial
 
 function policyFailure(error: unknown): { readonly tone: "error"; readonly text: string; readonly reconcile?: boolean } {
   if (error instanceof ApiError && (error.status === 412 || error.status === 428)) return { tone: "error", text: "정책 상태가 변경되었거나 활성 로컬 관리자 안전 조건을 충족하지 못했습니다. 새로 고친 뒤 영향을 다시 검토하세요.", reconcile: true };
-  if (error instanceof ApiError && error.status === 403) return { tone: "error", text: "최근 관리자 재인증이 필요합니다." };
+  if (error instanceof ApiError && error.code === "REAUTHENTICATION_REQUIRED") return { tone: "error", text: "보안을 위해 다시 로그인한 뒤 MFA 정책 변경을 다시 시도하세요." };
+  if (error instanceof ApiError && error.status === 403) return { tone: "error", text: "이 MFA 정책을 변경할 관리자 권한이 없습니다." };
   return { tone: "error", text: "변경을 안전하게 반영하지 못했습니다. 기존 정책은 그대로 유지됩니다." };
 }

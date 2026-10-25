@@ -325,7 +325,8 @@ function replaceScope(
 function registryFailure(error: unknown): { readonly error: true; readonly text: string } {
   if (error instanceof ApiError && error.code === "COMMIT_OUTCOME_UNKNOWN") return { error: true, text: "변경이 완료되었을 수 있습니다. 새로 불러온 뒤 다시 시도하세요." };
   if (error instanceof ApiError && error.status === 412) return { error: true, text: "다른 곳에서 저장소가 변경되었습니다. 새로 불러온 뒤 다시 시도하세요." };
-  if (error instanceof ApiError && error.status === 403) return { error: true, text: "관리자 권한과 최근 재인증이 필요합니다." };
+  if (error instanceof ApiError && error.code === "REAUTHENTICATION_REQUIRED") return { error: true, text: "보안을 위해 다시 로그인한 뒤 저장소 변경을 다시 시도하세요." };
+  if (error instanceof ApiError && error.status === 403) return { error: true, text: "이 저장소를 변경할 관리자 권한이 없습니다." };
   if (error instanceof ApiError && (error.status === 400 || error.status === 422)) return { error: true, text: "검증에 실패했습니다. HTTPS URL, 토큰, TLS 신뢰와 저장소 네트워크 연결을 확인하세요." };
   if (error instanceof ApiError && error.status === 409) return { error: true, text: "편집하거나 삭제하기 전에 저장소를 비활성화하세요. 활성 스코프 경로는 다른 저장소로 우회하지 않습니다." };
   return { error: true, text: "저장소 변경을 안전하게 완료하지 못했습니다." };

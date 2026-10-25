@@ -7,13 +7,15 @@ use crate::identity::Timestamp;
 use crate::workspace::StorageScopeId;
 
 use super::{
-    Project, ProjectId, ProjectName, ProjectOwner, ProjectSlug, ProjectState, ProjectVersion,
+    Project, ProjectId, ProjectName, ProjectOwner, ProjectSlug, ProjectState, ProjectTemplate,
+    ProjectVersion,
 };
 
 type ProjectRow = (
     String,
     Option<String>,
     Option<String>,
+    String,
     String,
     String,
     String,
@@ -151,6 +153,7 @@ pub struct NewProject {
     storage_scope_id: StorageScopeId,
     slug: ProjectSlug,
     name: ProjectName,
+    template: ProjectTemplate,
     created_at: Timestamp,
 }
 
@@ -162,6 +165,7 @@ impl NewProject {
         storage_scope_id: StorageScopeId,
         slug: ProjectSlug,
         name: ProjectName,
+        template: ProjectTemplate,
         created_at: Timestamp,
     ) -> Self {
         Self {
@@ -170,6 +174,7 @@ impl NewProject {
             storage_scope_id,
             slug,
             name,
+            template,
             created_at,
         }
     }
@@ -187,12 +192,12 @@ impl ProjectRepository {
         let (owner_user_id, owner_organization_id) = owner_columns(candidate.owner);
         let row = sqlx::query_as::<_, ProjectRow>(
             "INSERT INTO projects \
-             (id, owner_user_id, owner_organization_id, storage_scope_id, slug, name, \
+             (id, owner_user_id, owner_organization_id, storage_scope_id, slug, name, template_id, \
               state, created_at, updated_at, archived_at, lock_version) \
-             VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5, $6, \
-                     'active', $7::timestamptz, $7::timestamptz, NULL, 1) \
+             VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5, $6, $7, \
+                     'active', $8::timestamptz, $8::timestamptz, NULL, 1) \
              RETURNING id::text, owner_user_id::text, owner_organization_id::text, \
-                       storage_scope_id::text, slug, name, state, created_at, updated_at, \
+                       storage_scope_id::text, slug, name, template_id, state, created_at, updated_at, \
                        archived_at, lock_version",
         )
         .bind(candidate.id.to_string())
@@ -201,6 +206,7 @@ impl ProjectRepository {
         .bind(candidate.storage_scope_id.to_string())
         .bind(candidate.slug.as_str())
         .bind(candidate.name.as_str())
+        .bind(candidate.template.as_str())
         .bind(candidate.created_at.to_string())
         .fetch_one(&mut **transaction)
         .await
@@ -218,7 +224,7 @@ impl ProjectRepository {
             ProjectOwner::User(owner_id) => {
                 sqlx::query_as::<_, ProjectRow>(
                     "SELECT id::text, owner_user_id::text, owner_organization_id::text, \
-                            storage_scope_id::text, slug, name, state, created_at, updated_at, \
+                            storage_scope_id::text, slug, name, template_id, state, created_at, updated_at, \
                             archived_at, lock_version FROM projects \
                      WHERE id = $1::uuid AND owner_user_id = $2::uuid \
                        AND owner_organization_id IS NULL",
@@ -231,7 +237,7 @@ impl ProjectRepository {
             ProjectOwner::Organization(owner_id) => {
                 sqlx::query_as::<_, ProjectRow>(
                     "SELECT id::text, owner_user_id::text, owner_organization_id::text, \
-                            storage_scope_id::text, slug, name, state, created_at, updated_at, \
+                            storage_scope_id::text, slug, name, template_id, state, created_at, updated_at, \
                             archived_at, lock_version FROM projects \
                      WHERE id = $1::uuid AND owner_organization_id = $2::uuid \
                        AND owner_user_id IS NULL",
@@ -272,7 +278,7 @@ impl ProjectRepository {
             ProjectOwner::User(owner_id) => {
                 sqlx::query_as::<_, ProjectRow>(
                     "SELECT id::text, owner_user_id::text, owner_organization_id::text, \
-                            storage_scope_id::text, slug, name, state, created_at, updated_at, \
+                            storage_scope_id::text, slug, name, template_id, state, created_at, updated_at, \
                             archived_at, lock_version FROM projects \
                      WHERE owner_user_id = $1::uuid AND owner_organization_id IS NULL \
                        AND ($2::text IS NULL OR (slug, id) > ($2::text, $3::uuid)) \
@@ -290,7 +296,7 @@ impl ProjectRepository {
             ProjectOwner::Organization(owner_id) => {
                 sqlx::query_as::<_, ProjectRow>(
                     "SELECT id::text, owner_user_id::text, owner_organization_id::text, \
-                            storage_scope_id::text, slug, name, state, created_at, updated_at, \
+                            storage_scope_id::text, slug, name, template_id, state, created_at, updated_at, \
                             archived_at, lock_version FROM projects \
                      WHERE owner_organization_id = $1::uuid AND owner_user_id IS NULL \
                        AND ($2::text IS NULL OR (slug, id) > ($2::text, $3::uuid)) \
@@ -318,7 +324,7 @@ impl ProjectRepository {
     ) -> Result<Option<Project>, ProjectRepositoryError> {
         let row = sqlx::query_as::<_, ProjectRow>(
             "SELECT id::text, owner_user_id::text, owner_organization_id::text, \
-                    storage_scope_id::text, slug, name, state, created_at, updated_at, \
+                    storage_scope_id::text, slug, name, template_id, state, created_at, updated_at, \
                     archived_at, lock_version FROM projects \
              WHERE id = $1::uuid FOR UPDATE",
         )
@@ -383,28 +389,31 @@ fn decode_project(row: ProjectRow) -> Result<Project, ProjectRepositoryError> {
         ProjectSlug::new(row.4).map_err(|_| ProjectRepositoryError::InvalidPersistedState)?;
     let name =
         ProjectName::new(row.5).map_err(|_| ProjectRepositoryError::InvalidPersistedState)?;
-    let state = match row.6.as_str() {
+    let template = ProjectTemplate::parse(&row.6)
+        .map_err(|_| ProjectRepositoryError::InvalidPersistedState)?;
+    let state = match row.7.as_str() {
         "active" => ProjectState::Active,
         "archived" => ProjectState::Archived,
         _ => return Err(ProjectRepositoryError::InvalidPersistedState),
     };
-    let created_at = Timestamp::from_datetime(row.7)
+    let created_at = Timestamp::from_datetime(row.8)
         .map_err(|_| ProjectRepositoryError::InvalidPersistedState)?;
-    let updated_at = Timestamp::from_datetime(row.8)
+    let updated_at = Timestamp::from_datetime(row.9)
         .map_err(|_| ProjectRepositoryError::InvalidPersistedState)?;
     let archived_at = row
-        .9
+        .10
         .map(Timestamp::from_datetime)
         .transpose()
         .map_err(|_| ProjectRepositoryError::InvalidPersistedState)?;
     let lock_version =
-        ProjectVersion::new(row.10).map_err(|_| ProjectRepositoryError::InvalidPersistedState)?;
+        ProjectVersion::new(row.11).map_err(|_| ProjectRepositoryError::InvalidPersistedState)?;
     Project::reconstruct(
         id,
         owner,
         storage_scope_id,
         slug,
         name,
+        template,
         state,
         created_at,
         updated_at,

@@ -537,9 +537,16 @@ function settingFailure(error: unknown): { message: string; reconcile: boolean; 
         tone: "error"
       };
     }
+    if (error.code === "REAUTHENTICATION_REQUIRED") {
+      return {
+        message: "보안을 위해 다시 로그인한 뒤 설정 변경을 다시 시도하세요.",
+        reconcile: false,
+        tone: "error"
+      };
+    }
     if (error.status === 403) {
       return {
-        message: "이 변경에는 최근 관리자 재인증이 필요합니다.",
+        message: "이 설정을 변경할 관리자 권한이 없습니다.",
         reconcile: false,
         tone: "error"
       };

@@ -25,7 +25,7 @@ use super::{
     DirectProjectRoleGrant, EffectiveProjectRole, NewProject, Project, ProjectAccessError,
     ProjectAccessRepository, ProjectConflict, ProjectId, ProjectName, ProjectOwner, ProjectPageKey,
     ProjectPageLimit, ProjectRepository, ProjectRepositoryError, ProjectRole, ProjectRoleVersion,
-    ProjectSlug, ProjectState, ProjectVersion,
+    ProjectSlug, ProjectState, ProjectTemplate, ProjectVersion,
 };
 
 const DEFAULT_OPERATION_TIMEOUT: Duration = Duration::from_secs(5);
@@ -46,6 +46,7 @@ type ProjectRow = (
     String,
     Option<String>,
     Option<String>,
+    String,
     String,
     String,
     String,
@@ -239,16 +240,12 @@ impl DirectProjectRolePage {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProjectDeleteConfirmation {
     name: ProjectName,
-    recently_reauthenticated: bool,
 }
 
 impl ProjectDeleteConfirmation {
     #[must_use]
-    pub const fn new(name: ProjectName, recently_reauthenticated: bool) -> Self {
-        Self {
-            name,
-            recently_reauthenticated,
-        }
+    pub const fn new(name: ProjectName) -> Self {
+        Self { name }
     }
 }
 
@@ -348,6 +345,7 @@ impl ProjectService {
         owner: ProjectOwner,
         slug: ProjectSlug,
         name: ProjectName,
+        template: ProjectTemplate,
         audit: &ProjectAuditContext,
     ) -> Result<Project, ProjectServiceError> {
         self.ensure_audit_actor(actor_user_id, audit)?;
@@ -362,6 +360,7 @@ impl ProjectService {
                     project_id,
                     slug,
                     name,
+                    template,
                     audit,
                     &deadline,
                 ),
@@ -654,6 +653,7 @@ impl ProjectService {
         project_id: ProjectId,
         slug: ProjectSlug,
         name: ProjectName,
+        template: ProjectTemplate,
         audit: &ProjectAuditContext,
         deadline: &MutationDeadline,
     ) -> Result<Project, ProjectServiceError> {
@@ -665,7 +665,15 @@ impl ProjectService {
         configure_transaction_deadline(&mut transaction, deadline).await?;
         let now = transaction_now(&mut transaction).await?;
         let storage_scope_id = authorize_create(&mut transaction, actor_user_id, owner).await?;
-        let candidate = NewProject::new(project_id, owner, storage_scope_id, slug, name, now);
+        let candidate = NewProject::new(
+            project_id,
+            owner,
+            storage_scope_id,
+            slug,
+            name,
+            template,
+            now,
+        );
         let project = ProjectRepository::create(&mut transaction, &candidate)
             .await
             .map_err(map_repository_error)?;
@@ -983,7 +991,7 @@ impl ProjectService {
             expected_version,
         )
         .await?;
-        if !confirmation.recently_reauthenticated || confirmation.name != *project.name() {
+        if confirmation.name != *project.name() {
             return Err(ProjectServiceError::ConfirmationRequired);
         }
         sqlx::query("SELECT set_config('nuriteo.project_delete_id',$1,true)")
@@ -1551,7 +1559,7 @@ async fn query_authorized_page(
         (ProjectOwner::User(owner_id), ListAuthorization::PersonalOwner) => {
             sqlx::query_as::<_, ProjectRow>(
                 "SELECT id::text, owner_user_id::text, owner_organization_id::text, \
-                        storage_scope_id::text, slug, name, state, created_at, updated_at, \
+                        storage_scope_id::text, slug, name, template_id, state, created_at, updated_at, \
                         archived_at, lock_version FROM projects \
                  WHERE owner_user_id=$1::uuid AND owner_organization_id IS NULL \
                    AND ($2::text IS NULL OR (slug,id)>($2::text,$3::uuid)) \
@@ -1569,7 +1577,7 @@ async fn query_authorized_page(
         (ProjectOwner::Organization(owner_id), ListAuthorization::OrganizationOwner) => {
             sqlx::query_as::<_, ProjectRow>(
                 "SELECT id::text, owner_user_id::text, owner_organization_id::text, \
-                        storage_scope_id::text, slug, name, state, created_at, updated_at, \
+                        storage_scope_id::text, slug, name, template_id, state, created_at, updated_at, \
                         archived_at, lock_version FROM projects \
                  WHERE owner_organization_id=$1::uuid AND owner_user_id IS NULL \
                    AND ($2::text IS NULL OR (slug,id)>($2::text,$3::uuid)) \
@@ -1587,7 +1595,7 @@ async fn query_authorized_page(
         (ProjectOwner::Organization(owner_id), ListAuthorization::OrganizationMember) => {
             sqlx::query_as::<_, ProjectRow>(
                 "SELECT p.id::text, p.owner_user_id::text, p.owner_organization_id::text, \
-                        p.storage_scope_id::text, p.slug, p.name, p.state, p.created_at, \
+                        p.storage_scope_id::text, p.slug, p.name, p.template_id, p.state, p.created_at, \
                         p.updated_at, p.archived_at, p.lock_version FROM projects p \
                  JOIN project_user_roles role ON role.project_id=p.id \
                     AND role.organization_id=p.owner_organization_id \
@@ -1656,28 +1664,31 @@ fn decode_project(row: ProjectRow) -> Result<Project, ProjectServiceError> {
         .map_err(|_| ProjectServiceError::InvariantViolation)?;
     let slug = ProjectSlug::new(row.4).map_err(|_| ProjectServiceError::InvariantViolation)?;
     let name = ProjectName::new(row.5).map_err(|_| ProjectServiceError::InvariantViolation)?;
-    let state = match row.6.as_str() {
+    let template =
+        ProjectTemplate::parse(&row.6).map_err(|_| ProjectServiceError::InvariantViolation)?;
+    let state = match row.7.as_str() {
         "active" => ProjectState::Active,
         "archived" => ProjectState::Archived,
         _ => return Err(ProjectServiceError::InvariantViolation),
     };
     let created_at =
-        Timestamp::from_datetime(row.7).map_err(|_| ProjectServiceError::InvariantViolation)?;
-    let updated_at =
         Timestamp::from_datetime(row.8).map_err(|_| ProjectServiceError::InvariantViolation)?;
+    let updated_at =
+        Timestamp::from_datetime(row.9).map_err(|_| ProjectServiceError::InvariantViolation)?;
     let archived_at = row
-        .9
+        .10
         .map(Timestamp::from_datetime)
         .transpose()
         .map_err(|_| ProjectServiceError::InvariantViolation)?;
     let version =
-        ProjectVersion::new(row.10).map_err(|_| ProjectServiceError::InvariantViolation)?;
+        ProjectVersion::new(row.11).map_err(|_| ProjectServiceError::InvariantViolation)?;
     Project::reconstruct(
         id,
         owner,
         storage_scope_id,
         slug,
         name,
+        template,
         state,
         created_at,
         updated_at,
@@ -1719,6 +1730,7 @@ fn reconstruct_changed_project(
         project.storage_scope_id(),
         project.slug().clone(),
         name,
+        project.template(),
         state,
         project.created_at(),
         updated_at,
