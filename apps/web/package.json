@@ -33,6 +33,7 @@
     "test:browser-published-preview": "node --experimental-strip-types test/published-preview-isolation-browser.test.ts",
     "test:runtime-browser": "node --experimental-strip-types test/runtime-journey-browser.test.ts",
     "test:runtime-recovery-browser": "node --experimental-strip-types test/runtime-recovery-browser.test.ts",
+    "test:save-browser": "node --experimental-strip-types test/project-save-browser.test.ts",
     "test:resume-browser": "node --experimental-strip-types test/resume-browser.test.ts",
     "test:history-browser": "node --experimental-strip-types test/project-history-browser.test.ts",
     "test:relay-browser-actual": "test/fixtures/private-relay/run.sh",

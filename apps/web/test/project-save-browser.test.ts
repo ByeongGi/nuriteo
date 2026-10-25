@@ -22,6 +22,7 @@ await build({
   entryPoints: [path.join(webRoot, "test/fixtures/runtime-journey.tsx")],
   format: "esm",
   jsx: "automatic",
+  loader: { ".ttf": "dataurl" },
   outfile: path.join(fixtureRoot, "fixture.js"),
   platform: "browser",
   target: "es2022"
@@ -31,7 +32,6 @@ fs.writeFileSync(path.join(fixtureRoot, "index.html"), '<!doctype html><meta cha
 const csrf = `nrt_csrf_${"s".repeat(43)}`;
 const saveSessionId = "0199ee6c-c777-7000-8000-00000000b003";
 const bundleId = "0199ee6c-c777-7000-8000-00000000b004";
-const historyVersionId = "0199ee6c-c777-7000-8000-00000000b006";
 const saveRequests: string[] = [];
 let createAttempts = 0;
 const server = http.createServer(async (request, response) => {
@@ -39,16 +39,6 @@ const server = http.createServer(async (request, response) => {
   response.setHeader("Cross-Origin-Opener-Policy", "same-origin");
   response.setHeader("Cross-Origin-Resource-Policy", "same-origin");
   const pathname = new URL(request.url ?? "/", "http://localhost").pathname;
-  if (pathname.endsWith("/versions") && request.method === "GET") {
-    response.setHeader("content-type", "application/json");
-    response.end(JSON.stringify({ items: [{ id: historyVersionId, projectId: "0199ee6c-c777-7000-8000-00000000b002", bundleId, name: "Before refactor", createdByUserId: "0199ee6c-c777-7000-8000-00000000b001", sourceProjectVersion: 1, createdAt: "2026-10-04T00:00:00Z", sha256: "a".repeat(64), physicalBytes: 100, logicalBytes: 50, fileCount: 1, format: "project-bundle-v1" }], nextCursor: null }));
-    return;
-  }
-  if (pathname.endsWith("/recovery-checkpoints") && request.method === "GET") {
-    response.setHeader("content-type", "application/json");
-    response.end(JSON.stringify({ items: [] }));
-    return;
-  }
   if (pathname.includes("/save-sessions")) {
     saveRequests.push(`${request.method} ${pathname}`);
     assert.equal(request.headers["x-csrf-token"], csrf);
@@ -81,15 +71,11 @@ const server = http.createServer(async (request, response) => {
       return;
     }
   }
-  if (pathname.endsWith("/history/restore") && request.method === "POST") {
-    assert.equal(request.headers["x-csrf-token"], csrf);
-    assert.equal(request.headers["if-match"], '"project-v2"');
-    response.setHeader("content-type", "application/json");
-    response.setHeader("etag", '"project-v3"');
-    response.end(JSON.stringify({ operationId: "0199ee6c-c777-7000-8000-00000000b007", referenceKind: "version", referenceId: historyVersionId, bundleId, projectVersion: 3, changed: true, idempotentRetry: false }));
-    return;
-  }
-  const root = pathname.startsWith("/runtime/") ? publicRoot : fixtureRoot;
+  const root = pathname.startsWith("/runtime/")
+    ? publicRoot
+    : pathname.startsWith("/node_modules/monaco-editor/")
+      ? webRoot
+      : fixtureRoot;
   const relative = pathname === "/" ? "index.html" : pathname.slice(1);
   const resolved = path.resolve(root, relative);
   if (!resolved.startsWith(`${root}${path.sep}`) || !fs.existsSync(resolved) || !fs.statSync(resolved).isFile()) {
@@ -132,16 +118,16 @@ try {
   assert.equal(await page.evaluate(() => globalThis.crossOriginIsolated), true);
 
   await page.getByRole("button", { name: "미리보기 실행" }).waitFor({ timeout: 20_000 });
-  assert.equal(await page.evaluate(() => window.__nuriteoRuntimeProbe.createdWorkers), 2);
+  assert.equal(await page.evaluate(() => window.__nuriteoRuntimeProbe.runtimeCreatedWorkers), 2);
 
-  await page.getByRole("button", { name: "src/message.ts" }).click();
+  await page.getByTitle("src/message.ts").click();
   const editor = page.getByLabel("src/message.ts 편집기");
-  await editor.fill('export const label = "RT004 edited";\n');
-  await page.getByRole("button", { name: "로컬 초안에 적용" }).click();
+  await replaceEditorValue(page, "src/message.ts 편집기", 'export const label = "RT004 edited";\n');
+  await clickButton(page, "로컬 초안에 적용");
   await page.getByText("로컬 초안 저장됨", { exact: false }).waitFor({ timeout: 10_000 });
-  await page.getByRole("button", { name: "서버에 저장" }).click();
+  await clickButton(page, "서버에 저장");
   await page.getByText("서버 저장 실패 · 로컬 초안 보존됨", { exact: true }).waitFor({ timeout: 20_000 });
-  await page.getByRole("button", { name: "서버 저장 다시 시도" }).click();
+  await clickButton(page, "서버 저장 다시 시도");
   await page.getByText("서버 저장 v2 완료 · 로컬 초안과 일치", { exact: true }).waitFor({ timeout: 20_000 });
   assert.deepEqual(await page.evaluate(() => ({
     etag: window.__nuriteoRuntimeProbe.committedEtag,
@@ -149,48 +135,33 @@ try {
   })), { etag: '"project-v2"', version: 2 });
   assert.ok(saveRequests.some((entry) => entry.endsWith("/reconcile")), "unknown Save completion must reconcile");
 
-  await editor.fill('export const label = "newer local draft";\n');
-  await page.getByRole("button", { name: "로컬 초안에 적용" }).click();
-  await page.getByRole("button", { name: "서버에 저장" }).click();
+  await replaceEditorValue(page, "src/message.ts 편집기", 'export const label = "newer local draft";\n');
+  await clickButton(page, "로컬 초안에 적용");
+  await clickButton(page, "서버에 저장");
   await page.getByText(/저장 전에 서버 프로젝트가 변경되었습니다/u).waitFor({ timeout: 20_000 });
-  await page.getByRole("button", { name: "최신 프로젝트 다시 불러오기" }).click();
+  await clickButton(page, "최신 프로젝트 다시 불러오기");
   assert.equal(await page.evaluate(() => window.__nuriteoRuntimeProbe.reloads), 1);
+  assert.equal(await workspaceText(page, "src/message.ts"), 'export const label = "newer local draft";\n');
+  assert.equal(await page.evaluate(() => window.__nuriteoRuntimeProbe.runtimeActiveWorkers), 2);
+  assert.notEqual(await editor.getAttribute("aria-readonly"), "true");
 
-  const historyVersion = page.locator("li", { hasText: "Before refactor" });
-  await historyVersion.getByRole("button", { name: "복구" }).click();
-  await page.getByRole("button", { name: "서버 작업 버전 복구" }).click();
-  await page.getByText("서버 작업 버전은 이제 v3입니다. 브라우저의 로컬 초안은 바꾸지 않았습니다.").waitFor();
-  const replaceDraft = page.getByRole("button", { name: "로컬 초안을 복구한 서버 저장본으로 교체" });
-
-  await page.evaluate(() => { window.__nuriteoRuntimeProbe.restoreMode = "intervening"; });
-  await replaceDraft.click();
-  await page.getByText(/복구 저장본을 적용하기 전에 서버 프로젝트가 변경되었습니다/u).waitFor();
-  assert.equal(await editor.inputValue(), 'export const label = "newer local draft";\n');
-
-  await page.evaluate(() => { window.__nuriteoRuntimeProbe.restoreMode = "download-failure"; });
-  await replaceDraft.click();
-  await page.getByText(/복구된 서버 저장본을 안전하게 가져오고 검증해 열지 못했습니다/u).waitFor();
-  assert.equal(await editor.inputValue(), 'export const label = "newer local draft";\n');
-
-  await page.evaluate(() => { window.__nuriteoRuntimeProbe.restoreMode = "materialization-failure"; });
-  await replaceDraft.click();
-  await page.getByText(/복구된 서버 저장본을 안전하게 가져오고 검증해 열지 못했습니다/u).waitFor();
-  assert.equal(await editor.inputValue(), 'export const label = "newer local draft";\n');
-  assert.equal(await page.evaluate(() => window.__nuriteoRuntimeProbe.activeWorkers), 2);
-
-  await page.evaluate(() => { window.__nuriteoRuntimeProbe.restoreMode = "success"; });
-  await replaceDraft.click();
-  await page.getByText("검증된 서버 저장본 v3을 로컬 초안으로 열었습니다.").waitFor();
-  assert.equal(await editor.inputValue(), 'export const label = "restored exact head";\n');
-  assert.equal(await editor.isEditable(), true);
-  assert.equal(await page.evaluate(() => window.__nuriteoRuntimeProbe.activeWorkers), 2);
-
-  await page.getByRole("button", { name: "워크스페이스 종료" }).click();
-  if (await page.getByRole("button", { name: "초안을 버리고 종료" }).count()) await page.getByRole("button", { name: "초안을 버리고 종료" }).click();
-  await page.getByRole("button", { name: "Studio 열기", exact: true }).waitFor({ timeout: 10_000 });
-  await page.waitForFunction(() => window.__nuriteoRuntimeProbe.activeWorkers === 0);
+  await clickButton(page, "워크스페이스 종료");
+  const discardDraft = page.getByRole("button", { name: "초안을 버리고 종료" });
+  await discardDraft.waitFor();
+  await discardDraft.evaluate((button: HTMLButtonElement) => button.click());
+  try {
+    await page.getByRole("button", { name: "Studio 열기", exact: true }).waitFor({ timeout: 10_000 });
+  } catch (error) {
+    const cleanupState = await page.evaluate(() => ({
+      activeWorkers: window.__nuriteoRuntimeProbe.activeWorkers,
+      lifecycle: window.__nuriteoRuntimeProbe.adapter?.getState().lifecycle,
+      text: document.body.innerText
+    }));
+    throw new Error(`Studio did not dispose cleanly: ${JSON.stringify(cleanupState)}`, { cause: error });
+  }
+  await page.waitForFunction(() => window.__nuriteoRuntimeProbe.runtimeActiveWorkers === 0);
   assert.deepEqual(errors, []);
-  console.log("WEB-007 browser Save matrix ok (retry, reconcile, 412, exact atomic restore, failure preservation, dispose)");
+  console.log("WEB-007 browser Save matrix ok (retry, reconcile, 412, local draft preservation, dispose)");
 } finally {
   await browser.close();
   await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
@@ -209,6 +180,26 @@ async function requestJson(request: http.IncomingMessage): Promise<Record<string
   const chunks: Buffer[] = [];
   for await (const chunk of request) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
   return JSON.parse(Buffer.concat(chunks).toString("utf8")) as Record<string, unknown>;
+}
+
+async function replaceEditorValue(
+  page: import("@playwright/test").Page,
+  label: string,
+  value: string
+): Promise<void> {
+  const editor = page.getByLabel(label);
+  await editor.press("ControlOrMeta+A");
+  await editor.pressSequentially(value, { delay: 1 });
+  await page.getByText(new RegExp(`${value.length}자`, "u")).waitFor();
+}
+
+async function workspaceText(page: import("@playwright/test").Page, path: string): Promise<string | undefined> {
+  return page.evaluate((filePath) => window.__nuriteoRuntimeProbe.adapter?.workspace.readText(filePath), path);
+}
+
+async function clickButton(page: import("@playwright/test").Page, name: string): Promise<void> {
+  // This isolated fixture omits the production Tailwind positioning stylesheet.
+  await page.getByRole("button", { name, exact: true }).evaluate((button: HTMLButtonElement) => button.click());
 }
 
 function problem(response: http.ServerResponse, status: number, code: string): void {

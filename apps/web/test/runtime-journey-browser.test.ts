@@ -138,8 +138,9 @@ try {
     );
     const install = await adapter.terminal.run("pnpm install", "browser-script") as { exitCode: number };
     const directNode = await adapter.terminal.run("node scripts/direct-node.cjs browser", "browser-script") as { exitCode: number; stdout: string };
-    const add = await adapter.terminal.run("pnpm add browser-answer@1.0.0", "browser-script") as { exitCode: number; stdout: string };
+    const add = await adapter.terminal.run("npm install browser-answer@1.0.0", "browser-script") as { exitCode: number; stdout: string };
     const installedManifest = JSON.parse(adapter.workspace.readText("package.json"));
+    const installedDependency = installedManifest.dependencies?.["browser-answer"];
     installedManifest.scripts.answer = "answer";
     adapter.workspace.writeText("package.json", `${JSON.stringify(installedManifest, null, 2)}\n`);
     const answer = await adapter.terminal.run("pnpm run answer", "browser-script") as { exitCode: number; stdout: string };
@@ -154,6 +155,7 @@ try {
       generated: adapter.workspace.readText("generated.txt"),
       hasGeneratedFile: adapter.workspace.getState().files.some((file) => file.path === "generated.txt"),
       install,
+      installedDependency,
       piped: adapter.workspace.readText("piped.txt"),
       pipeline,
       serve
@@ -165,6 +167,7 @@ try {
   assert.equal(terminalJourney.add.exitCode, 0);
   assert.match(terminalJourney.add.stdout, /added browser-answer@1\.0\.0/u);
   assert.match(terminalJourney.add.stdout, /browser-postinstall:ready/u);
+  assert.equal(terminalJourney.installedDependency, "1.0.0");
   assert.equal(terminalJourney.answer.exitCode, 0);
   assert.equal(terminalJourney.answer.stdout, "browser-answer:42\n");
   assert.equal(terminalJourney.check.exitCode, 0);
@@ -281,7 +284,7 @@ try {
   }
   await page.waitForFunction(() => window.__nuriteoRuntimeProbe.runtimeActiveWorkers === 0);
   assert.deepEqual({ errors, networkErrors }, { errors: [], networkErrors: [] });
-  console.log("RT-004 actual browser journey ok (direct node, registry add/lifecycle/bin, arbitrary scripts, pipe/redirect, dev alias, Ports UI, multi-PTY Processes UI, Preview, edit, HMR, dispose)");
+  console.log("RT-004 actual browser journey ok (direct node, npm registry install/save/lifecycle/bin, arbitrary scripts, pipe/redirect, dev alias, Ports UI, multi-PTY Processes UI, Preview, edit, HMR, dispose)");
 } finally {
   await browser.close();
   server.closeAllConnections();

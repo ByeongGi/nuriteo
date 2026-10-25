@@ -139,14 +139,13 @@ try {
     assert.ok(await pageB.getByText("Beta Personal", { exact: true }).count() >= 1);
     assert.equal(await pageB.getByText("Alpha Platform", { exact: true }).count(), 0);
 
-    const personal = pageA.getByRole("article").filter({ hasText: "Alpha Personal" }).getByRole("link", { name: "프로젝트 열기" });
-    const organization = pageA.getByRole("article").filter({ hasText: "Alpha Platform" }).getByRole("link", { name: "프로젝트 열기" });
-    assert.equal(await personal.getAttribute("aria-current"), "page");
+    const personal = pageA.getByRole("link", { name: "Alpha Personal 워크스페이스 열기" });
+    const organization = pageA.getByRole("link", { name: "Alpha Platform 워크스페이스 열기" });
     await personal.focus();
     assert.equal(await personal.evaluate((element) => element === document.activeElement), true);
     await pageA.keyboard.press("Tab");
     assert.equal(await organization.evaluate((element) => element === document.activeElement), true);
-    assert.match(await organization.getAttribute("href") ?? "", new RegExp(`workspace=${workspaces("a")[1]?.storageScopeId}$`, "u"));
+    assert.equal(await organization.getAttribute("href"), `/workspaces/${workspaces("a")[1]?.storageScopeId}`);
 
     for (const observed of observedRequests.filter(({ path: requestPath }) =>
       requestPath === "/api/v1/me" || requestPath === "/api/v1/me/workspaces"
@@ -175,7 +174,7 @@ try {
     ]);
     assert.equal(new URL(anonymousPage.url()).pathname, "/sign-in");
     await anonymousPage.getByRole("heading", { name: "로그인" }).waitFor();
-    await emptyPage.getByRole("heading", { name: "관리자에게 접근 권한을 요청하세요" }).waitFor();
+    await emptyPage.getByRole("heading", { name: "첫 워크스페이스를 준비하세요" }).waitFor();
     await unavailablePage.getByRole("heading", {
       name: "워크스페이스를 일시적으로 사용할 수 없습니다"
     }).waitFor();

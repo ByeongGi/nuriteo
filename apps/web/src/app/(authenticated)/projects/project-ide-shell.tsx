@@ -57,6 +57,7 @@ const PREVIEW_WINDOW_CONNECT_TIMEOUT_MS = 3_000;
 const PREVIEW_WINDOW_CLOSED_POLL_MS = 1_000;
 const FILE_LIST_BATCH_SIZE = 200;
 const EMPTY_WORKSPACE_FILES: readonly RuntimeWorkspaceFile[] = [];
+const INITIAL_SERVER_SAVE_STATUS = "이 세션에서 아직 서버에 저장하지 않음";
 
 const ProjectMonacoEditor = dynamic(
   () => import("#src/app/(authenticated)/projects/project-monaco-editor.tsx").then((module) => module.ProjectMonacoEditor),
@@ -209,7 +210,7 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, onProjectReloa
   const [isRunningPreview, setIsRunningPreview] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isServerSaving, setIsServerSaving] = useState(false);
-  const [serverSaveStatus, setServerSaveStatus] = useState("이 세션에서 아직 서버에 저장하지 않음");
+  const [serverSaveStatus, setServerSaveStatus] = useState(INITIAL_SERVER_SAVE_STATUS);
   const [serverSaveFailure, setServerSaveFailure] = useState<"retry" | "stale">();
   const [recoveringAction, setRecoveringAction] = useState<RuntimeRecoveryActionKind>();
   const [confirmingWriterTakeover, setConfirmingWriterTakeover] = useState(false);
@@ -307,6 +308,7 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, onProjectReloa
     workspaceStartOperationRef.current = operation;
     setError(undefined);
     setServerSaveFailure(undefined);
+    setServerSaveStatus(INITIAL_SERVER_SAVE_STATUS);
     setIsStarting(true);
     setResumeStatus("현재 서버 저장본을 확인하는 중…");
     try {
@@ -1030,6 +1032,9 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, onProjectReloa
     setBottomPanel("terminal");
     setIsFocusMode(false);
     setHasUnpublishedChanges(false);
+    setError(undefined);
+    setServerSaveFailure(undefined);
+    setServerSaveStatus(INITIAL_SERVER_SAVE_STATUS);
     setConfirmingWorkspaceStop(false);
   }
 

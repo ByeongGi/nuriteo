@@ -95,7 +95,7 @@ try {
   await page.getByText("버전 1개와 복구 지점 2개를 불러왔습니다.").waitFor();
   assert.equal(await page.getByRole("region", { name: "복구 지점" }).locator("li strong").first().textContent(), "복구 지점 2");
 
-  await page.getByRole("button", { name: "버전 더 보기" }).click();
+  await page.getByRole("button", { name: "버전 20개 더 보기" }).click();
   await page.getByText("버전 1개를 더 불러왔습니다.").waitFor();
   assert.match(requests.at(-1) ?? "", /cursor=next-page/u);
 
@@ -113,19 +113,22 @@ try {
   const beforeRefactor = page.locator("li", { hasText: "Before refactor" });
   await beforeRefactor.getByRole("button", { name: "복구" }).click();
   const confirm = page.getByRole("button", { name: "서버 작업 버전 복구" });
+  const cancel = page.getByRole("button", { name: "취소" });
   await confirm.waitFor();
-  assert.equal(await confirm.evaluate((element) => element === document.activeElement), true);
-  await page.keyboard.press("Shift+Tab");
-  assert.equal(await page.getByRole("button", { name: "취소" }).evaluate((element) => element === document.activeElement), true);
+  assert.equal(await cancel.evaluate((element) => element === document.activeElement), true);
   await page.keyboard.press("Tab");
   assert.equal(await confirm.evaluate((element) => element === document.activeElement), true);
+  await page.keyboard.press("Shift+Tab");
+  assert.equal(await cancel.evaluate((element) => element === document.activeElement), true);
   await page.keyboard.press("Escape");
   await confirm.waitFor({ state: "detached" });
-  await page.waitForTimeout(50);
+  await page.locator("[data-base-ui-inert]").waitFor({ state: "detached" });
   assert.equal(await beforeRefactor.getByRole("button", { name: "복구" }).evaluate((element) => element === document.activeElement), true);
 
   await beforeRefactor.getByRole("button", { name: "복구" }).click();
-  await page.getByRole("button", { name: "서버 작업 버전 복구" }).click();
+  // This isolated fixture does not load the production Tailwind positioning
+  // styles, so the Base UI inert guard can geometrically cover the portal.
+  await page.getByRole("button", { name: "서버 작업 버전 복구" }).evaluate((button: HTMLButtonElement) => button.click());
   await page.getByText("서버 작업 버전은 이제 v2입니다. 브라우저의 로컬 초안은 바꾸지 않았습니다.").waitFor();
   await page.getByText("현재 로컬 초안은 열린 상태로 그대로 유지됩니다.").waitFor();
   assert.deepEqual(await page.evaluate(() => ({

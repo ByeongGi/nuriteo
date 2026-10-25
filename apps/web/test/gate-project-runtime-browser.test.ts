@@ -10,7 +10,7 @@ import { chromium } from "@playwright/test";
 
 declare global {
   interface Window {
-    __nuriteoGateWorkerProbe: { active: number; created: number };
+    __nuriteoGateWorkerProbe: { active: number; created: number; runtimeActive: number; runtimeCreated: number };
   }
 }
 
@@ -61,20 +61,27 @@ try {
       const NativeWorker = globalThis.Worker;
       class TrackingWorker extends NativeWorker {
         #active = true;
+        #runtime: boolean;
         constructor(scriptURL: string | URL, options?: WorkerOptions) {
           super(scriptURL, options);
+          this.#runtime = /\/runtime\/[^/]+\/(?:system|process)-worker\.js$/u.test(String(scriptURL));
           window.__nuriteoGateWorkerProbe.active += 1;
           window.__nuriteoGateWorkerProbe.created += 1;
+          if (this.#runtime) {
+            window.__nuriteoGateWorkerProbe.runtimeActive += 1;
+            window.__nuriteoGateWorkerProbe.runtimeCreated += 1;
+          }
         }
         override terminate(): void {
           if (this.#active) {
             this.#active = false;
             window.__nuriteoGateWorkerProbe.active -= 1;
+            if (this.#runtime) window.__nuriteoGateWorkerProbe.runtimeActive -= 1;
           }
           super.terminate();
         }
       }
-      window.__nuriteoGateWorkerProbe = { active: 0, created: 0 };
+      window.__nuriteoGateWorkerProbe = { active: 0, created: 0, runtimeActive: 0, runtimeCreated: 0 };
       Object.defineProperty(globalThis, "Worker", { configurable: true, value: TrackingWorker });
     });
     const page = await context.newPage();
@@ -100,26 +107,28 @@ try {
     await page.goto(`${applicationOrigin}/sign-in`, { waitUntil: "networkidle" });
     await page.getByLabel("이메일").fill(adminEmail);
     await page.getByLabel("비밀번호").fill(adminPassword);
-    await page.getByRole("button", { name: "Sign in" }).click();
+    await page.getByRole("button", { name: "로그인" }).click();
     await page.waitForURL(`${applicationOrigin}/workspaces`);
-    await page.getByRole("heading", { name: "Workspaces", exact: true }).waitFor();
+    await page.getByRole("heading", { name: "워크스페이스", exact: true }).waitFor();
 
-    await page.goto(`${applicationOrigin}/projects`, { waitUntil: "networkidle" });
-    await page.getByRole("heading", { name: "Projects" }).waitFor();
-    await page.getByLabel("Slug").fill("gate-runtime");
-    await page.getByLabel("Name", { exact: true }).fill("GATE Runtime Project");
+    const workspaceHref = await page.getByRole("link", { name: /워크스페이스 열기$/u }).first().getAttribute("href");
+    assert(workspaceHref?.startsWith("/workspaces/"));
+    await page.goto(`${applicationOrigin}${workspaceHref}/projects/new`, { waitUntil: "networkidle" });
+    await page.getByRole("heading", { name: "새 프로젝트" }).waitFor();
+    await page.getByLabel("슬러그").fill("gate-runtime");
+    await page.getByLabel("프로젝트 이름", { exact: true }).fill("GATE Runtime Project");
     const creation = page.waitForResponse((response) => response.request().method() === "POST" && /\/projects$/u.test(response.url()));
-    await page.getByRole("button", { name: "Create Project" }).click();
+    await page.getByRole("button", { name: "프로젝트 만들기" }).click();
     assert.equal((await creation).status(), 201);
     await page.getByRole("heading", { name: "GATE Runtime Project", exact: true }).waitFor();
-    assert.match(page.url(), /[?&]project=[0-9a-f-]+/u);
+    assert.match(page.url(), /\/workspaces\/[0-9a-f-]+\/projects\/[0-9a-f-]+\/studio$/u);
 
     await page.getByRole("button", { name: "미리보기 실행" }).waitFor({ timeout: 30_000 });
-    await page.getByRole("button", { name: "src/message.ts" }).click();
-    assert.equal(await page.getByLabel("src/message.ts 편집기").isEditable(), true);
+    await page.getByTitle("src/message.ts").click();
+    assert.notEqual(await page.getByLabel("src/message.ts 편집기").getAttribute("aria-readonly"), "true");
     const workerAfterMount = await page.evaluate(() => ({ ...window.__nuriteoGateWorkerProbe }));
-    assert.equal(workerAfterMount.created, 2, "production Runtime must start its system and process Workers");
-    assert.equal(workerAfterMount.active, 2);
+    assert.equal(workerAfterMount.runtimeCreated, 2, "production Runtime must start its system and process Workers");
+    assert.equal(workerAfterMount.runtimeActive, 2);
 
     await page.getByRole("button", { name: "미리보기 실행" }).click();
     const previewRegion = page.getByRole("region", { name: "미리보기" });
@@ -134,8 +143,7 @@ try {
     assert.equal(await firstFrame.evaluate(() => globalThis.crossOriginIsolated), true);
     assert.equal(await firstFrame.evaluate(() => navigator.serviceWorker.controller?.scriptURL.endsWith("/runtime-preview/sw.js")), true);
 
-    const editor = page.getByLabel("src/message.ts 편집기");
-    await editor.fill('export const label = "GATE003 edited";\n');
+    await replaceEditorValue(page, "src/message.ts 편집기", 'export const label = "GATE003 edited";\n');
     await page.getByRole("button", { name: "로컬 초안에 적용" }).click();
     await page.getByText("로컬 초안 저장됨 · HMR 적용됨", { exact: false }).waitFor({ timeout: 10_000 });
     await firstFrame.getByRole("button", { name: "GATE003 edited:1" }).waitFor({ timeout: 20_000 });
@@ -150,12 +158,14 @@ try {
     await staleAfterFailure.close();
 
     await page.getByRole("button", { name: "워크스페이스 종료" }).click();
-    if (await page.getByRole("button", { name: "초안을 버리고 종료" }).count()) await page.getByRole("button", { name: "초안을 버리고 종료" }).click();
+    const firstDiscard = page.getByRole("button", { name: "초안을 버리고 종료" });
+    await firstDiscard.waitFor();
+    await firstDiscard.click();
     await page.getByRole("button", { name: "Studio 열기" }).waitFor({ timeout: 10_000 });
-    await page.waitForFunction(() => window.__nuriteoGateWorkerProbe.active === 0);
+    await page.waitForFunction(() => window.__nuriteoGateWorkerProbe.runtimeActive === 0);
     await page.getByRole("button", { name: "Studio 열기" }).click();
     await page.getByRole("button", { name: "미리보기 실행" }).waitFor({ timeout: 30_000 });
-    await page.getByRole("button", { name: "src/message.ts" }).click();
+    await page.getByTitle("src/message.ts").click();
     await page.getByRole("button", { name: "미리보기 실행" }).click();
     await previewRegion.locator("iframe").waitFor({ timeout: 30_000 });
     const recoveredPreviewUrl = await previewRegion.getAttribute("data-preview-url");
@@ -163,15 +173,16 @@ try {
     const recoveredPreviewOrigin = new URL(recoveredPreviewUrl).origin;
     const recoveredFrame = await waitForFrame(page, recoveredPreviewOrigin, { previewResponses, requestFailures });
     await recoveredFrame.getByRole("button", { name: /:1$/u }).waitFor({ timeout: 20_000 });
-    const recoveredEditor = page.getByLabel("src/message.ts 편집기");
-    await recoveredEditor.fill('export const label = "GATE003 recovered";\n');
+    await replaceEditorValue(page, "src/message.ts 편집기", 'export const label = "GATE003 recovered";\n');
     await page.getByRole("button", { name: "로컬 초안에 적용" }).click();
     await recoveredFrame.getByRole("button", { name: "GATE003 recovered:1" }).waitFor({ timeout: 20_000 });
 
     await page.getByRole("button", { name: "워크스페이스 종료" }).click();
-    if (await page.getByRole("button", { name: "초안을 버리고 종료" }).count()) await page.getByRole("button", { name: "초안을 버리고 종료" }).click();
+    const secondDiscard = page.getByRole("button", { name: "초안을 버리고 종료" });
+    await secondDiscard.waitFor();
+    await secondDiscard.click();
     await page.getByRole("button", { name: "Studio 열기" }).waitFor({ timeout: 10_000 });
-    await page.waitForFunction(() => window.__nuriteoGateWorkerProbe.active === 0);
+    await page.waitForFunction(() => window.__nuriteoGateWorkerProbe.runtimeActive === 0);
     assert.equal(await previewRegion.locator("iframe").count(), 0);
     await waitForStatus(context, recoveredPreviewUrl, 410);
     const stalePage = await context.newPage();
@@ -260,6 +271,17 @@ async function waitForStatus(context: import("@playwright/test").BrowserContext,
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
   throw new Error(`Preview host did not reach HTTP ${expected}`);
+}
+
+async function replaceEditorValue(
+  page: import("@playwright/test").Page,
+  label: string,
+  value: string
+): Promise<void> {
+  const editor = page.getByLabel(label);
+  await editor.press("ControlOrMeta+A");
+  await editor.pressSequentially(value, { delay: 1 });
+  await page.getByText(new RegExp(`${value.length}자`, "u")).waitFor();
 }
 
 function captureOutput(child: ReturnType<typeof spawn>): Promise<string> {
