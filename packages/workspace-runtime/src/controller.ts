@@ -84,6 +84,7 @@ import type {
   ProductWorkflow
 } from "./controller-contracts.ts";
 import { createPreviewShellLifecycle } from "./shell-lifecycle.ts";
+import type { PreviewPackageInstallRequest } from "./shell.ts";
 export { PHASES } from "./controller-contracts.ts";
 export type {
   FileSystemTree,
@@ -943,6 +944,7 @@ export function createPreviewWorkflowController(
       log("install start");
       state.install = state.workflow.install();
       log(`install ok packages=${state.install.packages.join(",")}`);
+      await installDeclaredPackages({ ignoreScripts: false, manager: "npm", packages: [], save: false, signal: operation.signal });
       setPhase(PHASES.installed);
 
       setPhase(PHASES.startingDev);
@@ -1009,6 +1011,10 @@ export function createPreviewWorkflowController(
     return getSnapshot();
   }
 
+  function isInstalledDependencyPath(relativePath: string): boolean {
+    return relativePath.split("/").some((segment) => segment === "node_modules" || segment === ".pnpm-store");
+  }
+
   function syncWorkflowFilesToProject(): void {
     const workflow = state.workflow;
     const project = state.project;
@@ -1016,7 +1022,7 @@ export function createPreviewWorkflowController(
     const rootPrefix = `${workflow.projectRoot}/`;
     const runtimeFiles = new Map(
       [...workflow.workspace.files.entries()]
-        .filter(([path]) => path.startsWith(rootPrefix) && !path.startsWith(`${rootPrefix}node_modules/`))
+        .filter(([path]) => path.startsWith(rootPrefix) && !isInstalledDependencyPath(path.slice(rootPrefix.length)))
     );
 
     for (const file of project.listFiles()) {
@@ -1205,6 +1211,88 @@ export function createPreviewWorkflowController(
     throw new Error(`Unsupported recovery action: ${kind}`);
   }
 
+  async function installDeclaredPackages(request?: PreviewPackageInstallRequest) {
+    if (!state.workflow || !state.install) throw new Error("no workflow");
+    const fixtureRuntime = new Set<string>();
+    let manifest: {
+      dependencies?: Record<string, string>;
+      devDependencies?: Record<string, string>;
+      optionalDependencies?: Record<string, string>;
+    } = {};
+    try {
+      manifest = JSON.parse(state.workflow.workspace.readText(`${state.workflow.projectRoot}/package.json`)) as typeof manifest;
+    } catch {
+      manifest = {};
+    }
+    const dependencyNames = new Set(Object.keys(manifest.dependencies ?? {}));
+    const declaredNames = new Set([
+      ...dependencyNames,
+      ...Object.keys(manifest.devDependencies ?? {}),
+      ...Object.keys(manifest.optionalDependencies ?? {})
+    ]);
+    for (const name of declaredNames) {
+      // Vite, TypeScript, and @types stay as browser shims. App libraries such
+      // as date-fns are often declared in devDependencies and still have to be
+      // fetched, or the preview keeps a product-fixture stub and a bare import.
+      if (!dependencyNames.has(name) && isBrowserToolchainPackage(name)) continue;
+      try {
+        const installed = JSON.parse(state.workflow.workspace.readText(`${state.workflow.projectRoot}/node_modules/${name}/package.json`)) as { version?: string };
+        if (installed.version === "product-fixture") fixtureRuntime.add(name);
+      } catch {
+        fixtureRuntime.add(name);
+      }
+    }
+    return createRegistryPackageInstaller({
+      workspace: state.workflow.workspace,
+      ...(options.packageFetch ? { fetch: options.packageFetch } : {}),
+      ...(options.packageRegistryUrl ? { registryUrl: options.packageRegistryUrl } : {})
+    }).install({
+      cwd: state.workflow.projectRoot,
+      ...(request?.packages.length ? { packages: request.packages, save: request.save } : {}),
+      ...(!request?.packages.length ? { exclude: state.install.packages.filter((name) => !fixtureRuntime.has(name)) } : {}),
+      ...(request?.signal ? { signal: request.signal } : {})
+    });
+  }
+
+  async function runInstalledPackageLifecycles(
+    ignoreScripts: boolean,
+    registryInstall: Awaited<ReturnType<typeof installDeclaredPackages>>
+  ): Promise<string[]> {
+    const lifecycleOutput: string[] = [];
+    if (!state.workflow || ignoreScripts || registryInstall.installed.length === 0) return lifecycleOutput;
+    const installedByPath = new Map(registryInstall.installed.map((entry) => [entry.path, entry]));
+    const lifecycleResults = await executeWorkspacePackageLifecycles(
+      state.workflow,
+      registryInstall.installed.map((entry) => entry.path).reverse()
+    );
+    for (const result of lifecycleResults) {
+      if (result.stdout) lifecycleOutput.push(result.stdout.trimEnd());
+      if (result.exitCode === 0) continue;
+      const installedPackage = installedByPath.get(result.packagePath);
+      if (installedPackage?.optional) {
+        log(`optional lifecycle skipped ${installedPackage.name}: ${result.stderr.trim()}`);
+        continue;
+      }
+      throw new Error(`${installedPackage?.name ?? result.packagePath} ${result.event}: ${result.stderr.trim()}`);
+    }
+    return lifecycleOutput;
+  }
+
+  async function syncDeclaredPackages(): Promise<{ added: string[] }> {
+    if (disposed || !state.workflow || !state.install) return { added: [] };
+    const registryInstall = await installDeclaredPackages({
+      ignoreScripts: false,
+      manager: "npm",
+      packages: [],
+      save: false
+    });
+    await runInstalledPackageLifecycles(false, registryInstall);
+    const names = new Set(state.install.packages);
+    for (const entry of [...registryInstall.installed, ...registryInstall.reused]) names.add(entry.name);
+    state.install = { ...state.install, packages: [...names] };
+    return { added: registryInstall.installed.map((entry) => `${entry.name}@${entry.version}`) };
+  }
+
   const shellLifecycle = createPreviewShellLifecycle({
     getCwd: () => state.workflow?.projectRoot || state.project?.root || "/workspace/app",
     getProject: () => state.project,
@@ -1221,35 +1309,11 @@ export function createPreviewWorkflowController(
       if (!state.workflow) return { stdout: "", stderr: "no workflow\n", exitCode: 1 };
       try {
         setPhase(PHASES.installing);
+        // Terminal install refreshes fixture stubs first. Editing package.json
+        // must not take this path, or it would replace real packages with stubs.
         state.install = state.workflow.install();
-        const registryInstall = await createRegistryPackageInstaller({
-          workspace: state.workflow.workspace,
-          ...(options.packageFetch ? { fetch: options.packageFetch } : {}),
-          ...(options.packageRegistryUrl ? { registryUrl: options.packageRegistryUrl } : {})
-        }).install({
-          cwd: state.workflow.projectRoot,
-          ...(request?.packages.length ? { packages: request.packages, save: request.save } : {}),
-          ...(!request?.packages.length ? { exclude: state.install.packages } : {}),
-          ...(request?.signal ? { signal: request.signal } : {})
-        });
-        const lifecycleOutput: string[] = [];
-        if (!request?.ignoreScripts && registryInstall.installed.length > 0) {
-          const installedByPath = new Map(registryInstall.installed.map((entry) => [entry.path, entry]));
-          const lifecycleResults = await executeWorkspacePackageLifecycles(
-            state.workflow,
-            registryInstall.installed.map((entry) => entry.path).reverse()
-          );
-          for (const result of lifecycleResults) {
-            if (result.stdout) lifecycleOutput.push(result.stdout.trimEnd());
-            if (result.exitCode === 0) continue;
-            const installedPackage = installedByPath.get(result.packagePath);
-            if (installedPackage?.optional) {
-              log(`optional lifecycle skipped ${installedPackage.name}: ${result.stderr.trim()}`);
-              continue;
-            }
-            throw new Error(`${installedPackage?.name ?? result.packagePath} ${result.event}: ${result.stderr.trim()}`);
-          }
-        }
+        const registryInstall = await installDeclaredPackages(request);
+        const lifecycleOutput = await runInstalledPackageLifecycles(request?.ignoreScripts ?? false, registryInstall);
         syncWorkflowFilesToProject();
         setPhase(PHASES.installed);
         const installed = registryInstall.installed.map((entry) => `${entry.name}@${entry.version}`);
@@ -1409,6 +1473,7 @@ export function createPreviewWorkflowController(
     renameFile,
     deleteFile,
     saveTextFile,
+    syncDeclaredPackages,
     runPreview,
     restartDev,
     reconnectHmr,
@@ -1429,6 +1494,16 @@ export function createPreviewWorkflowController(
     dispose,
     log
   };
+}
+
+function isBrowserToolchainPackage(name: string): boolean {
+  return name === "vite"
+    || name === "typescript"
+    || name === "esbuild"
+    || name === "tsx"
+    || name.startsWith("@types/")
+    || name.startsWith("@vitejs/")
+    || name.startsWith("@sveltejs/vite-plugin");
 }
 
 function normalizeExportPrefix(path?: string): string {

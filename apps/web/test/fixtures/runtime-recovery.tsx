@@ -201,6 +201,7 @@ function createRecoveryFixtureAdapter(initialDraftAccess: "conflict" | "writer",
       },
       stopPreview: () => true,
       restart: async () => copyState(),
+      syncDeclaredPackages: async () => ({ added: [] }),
       dispose: async () => undefined
     },
     workspace: {

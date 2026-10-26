@@ -95,6 +95,7 @@ function createStudioRuntimeAdapter({ fileCount = 4, mode = "ready", projectId }
       },
       stopPreview: () => true,
       restart: async () => copyRuntimeState(state),
+      syncDeclaredPackages: async () => ({ added: [] }),
       dispose: async () => undefined
     },
     workspace: {

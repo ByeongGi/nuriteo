@@ -338,7 +338,7 @@ function pushUnique(values: RegistryInstalledPackage[], value: RegistryInstalled
 }
 
 function isReusable(installed: RegistryInstalledPackage, range: string): boolean {
-  return installed.version === "product-fixture" || satisfies(installed.version, range);
+  return installed.version !== "product-fixture" && satisfies(installed.version, range);
 }
 
 function installError(code: string, message: string): Error & { code: string } {

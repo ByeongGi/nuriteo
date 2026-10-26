@@ -11,6 +11,8 @@ async function boot() {
   const generation = readMeta("nuriteo-runtime-id");
   if (!RUNTIME_ID.test(generation)) throw new Error("invalid runtime binding");
   installParentControls(applicationOrigin, binding, generation);
+  installConsoleForwarder(applicationOrigin, binding, generation);
+  watchProjectFrameLocation(applicationOrigin, binding, generation);
 
   const registration = await navigator.serviceWorker.register("/runtime-preview/sw.js", {
     scope: "/",
@@ -52,12 +54,37 @@ async function boot() {
   navigator.serviceWorker.addEventListener("controllerchange", () => { void ensureRelay().catch(() => undefined); });
 }
 
+function installConsoleForwarder(applicationOrigin, binding, generation) {
+  window.addEventListener("message", (event) => {
+    if (event.origin !== location.origin) return;
+    const frame = document.querySelector("#nuriteo-preview-frame");
+    if (!(frame instanceof HTMLIFrameElement) || event.source !== frame.contentWindow) return;
+    const message = event.data;
+    if (!isExactRecord(message, ["level", "message", "stack", "type", "version"])) return;
+    if (message.type !== "nuriteo-preview:console" || message.version !== PROTOCOL_VERSION || message.level !== "error") return;
+    if (typeof message.message !== "string" || message.message.length === 0 || message.message.length > 2000) return;
+    if (typeof message.stack !== "string" || message.stack.length > 4000) return;
+    window.parent.postMessage({
+      type: "nuriteo-preview:console",
+      version: PROTOCOL_VERSION,
+      binding,
+      generation,
+      level: "error",
+      message: message.message,
+      stack: message.stack
+    }, applicationOrigin);
+  });
+}
+
 function installParentControls(applicationOrigin, binding, generation) {
   window.addEventListener("message", async (event) => {
     if (event.origin !== applicationOrigin || event.source !== window.parent) return;
     const message = event.data;
-    if (!isExactRecord(message, ["type", "version"])) return;
-    if (message.type !== "nuriteo-preview:reload" || message.version !== PROTOCOL_VERSION) return;
+    if (isNavigateMessage(message)) {
+      navigateProjectFrame(message.path);
+      return;
+    }
+    if (!isExactRecord(message, ["type", "version"]) || message.type !== "nuriteo-preview:reload" || message.version !== PROTOCOL_VERSION) return;
     const frame = document.querySelector("#nuriteo-preview-frame");
     if (!(frame instanceof HTMLIFrameElement)) return;
     try {
@@ -82,6 +109,73 @@ function installParentControls(applicationOrigin, binding, generation) {
       }, applicationOrigin);
     }
   });
+}
+
+function watchProjectFrameLocation(applicationOrigin, binding, generation) {
+  let reported = "";
+  const report = () => {
+    const path = readProjectFrameAddress();
+    if (!path || path === reported) return;
+    reported = path;
+    window.parent.postMessage({
+      type: "nuriteo-preview:location",
+      version: PROTOCOL_VERSION,
+      binding,
+      generation,
+      path
+    }, applicationOrigin);
+  };
+  report();
+  setInterval(report, 400);
+}
+
+function navigateProjectFrame(path) {
+  const frame = document.querySelector("#nuriteo-preview-frame");
+  if (!(frame instanceof HTMLIFrameElement) || !isPreviewAddress(path)) return;
+  try {
+    const current = frame.contentWindow?.location;
+    if (current && current.origin === location.origin && `${current.pathname}${current.search}${current.hash}` === path) {
+      current.reload();
+      return;
+    }
+  } catch {
+    // The project frame can be on another origin while the first document loads.
+  }
+  frame.src = path;
+}
+
+function readProjectFrameAddress() {
+  const frame = document.querySelector("#nuriteo-preview-frame");
+  if (!(frame instanceof HTMLIFrameElement)) return "";
+  try {
+    const current = frame.contentWindow?.location;
+    if (!current || current.origin !== location.origin) return "";
+    const path = `${current.pathname}${current.search}${current.hash}`;
+    return isPreviewAddress(path) ? path : "";
+  } catch {
+    return "";
+  }
+}
+
+function isNavigateMessage(message) {
+  return isExactRecord(message, ["path", "type", "version"])
+    && message.type === "nuriteo-preview:navigate"
+    && message.version === PROTOCOL_VERSION
+    && typeof message.path === "string"
+    && isPreviewAddress(message.path);
+}
+
+function isPreviewAddress(path) {
+  if (typeof path !== "string" || path.length === 0 || path.length > 2048 || !path.startsWith("/") || path.startsWith("//")) return false;
+  if (path.includes("\\") || path.includes("\0")) return false;
+  const pathOnly = path.split(/[?#]/)[0];
+  if (/(^|\/)\.\.?(?:\/|$)/.test(pathOnly)) return false;
+  try {
+    const url = new URL(path, location.origin);
+    return url.origin === location.origin && !url.pathname.split("/").some((segment) => segment === "." || segment === "..");
+  } catch {
+    return false;
+  }
 }
 
 async function connectRelay(worker, applicationOrigin, binding, generation) {

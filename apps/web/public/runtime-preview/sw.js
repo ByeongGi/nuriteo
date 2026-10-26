@@ -1,6 +1,7 @@
 const PROTOCOL_VERSION = 1;
 const MAX_RELAY_WAIT_MS = 10_000;
 const MAX_PENDING_REQUESTS = 8;
+const MAX_QUEUED_REQUESTS = 1024;
 const ACTIVE_SESSION_CACHE = "nuriteo-preview-active-v1";
 let relay = null;
 let relayBinding = null;
@@ -10,11 +11,13 @@ let relayOwnerClientId = null;
 let relayApplicationOrigin = null;
 let sequence = 0;
 const pending = new Map();
+const queued = [];
 
 self.addEventListener("install", (event) => {
   event.waitUntil((async () => {
     const cache = await caches.open(ACTIVE_SESSION_CACHE);
     await cache.add(new Request("/runtime-preview/hmr.js", { cache: "reload" }));
+    await cache.add(new Request("/runtime-preview/console-bridge.js", { cache: "reload" }));
     if (!self.registration.active) await self.skipWaiting();
   })());
 });
@@ -61,7 +64,7 @@ self.addEventListener("message", (event) => {
 });
 self.addEventListener("fetch", (event) => {
   const requestUrl = new URL(event.request.url);
-  if (requestUrl.pathname === "/runtime-preview/hmr.js") {
+  if (requestUrl.pathname === "/runtime-preview/hmr.js" || requestUrl.pathname === "/runtime-preview/console-bridge.js") {
     event.respondWith(caches.match(event.request).then((response) => response ?? new Response("Preview session asset unavailable", { status: 503 })));
     return;
   }
@@ -110,29 +113,65 @@ function receiveRelayMessage(event) {
   pending.delete(message.id);
   clearTimeout(request.timeout);
   request.resolve(response);
+  pumpRelayQueue();
 }
 
 function relayFetch(request) {
   if (request.method !== "GET" && request.method !== "HEAD") return Promise.resolve(new Response("Method not allowed", { status: 405 }));
-  if (pending.size >= MAX_PENDING_REQUESTS) return Promise.resolve(new Response("Preview relay capacity exceeded", { status: 429 }));
-  const id = `${relayBinding}:${++sequence}`;
   return new Promise((resolve) => {
-    const timeout = setTimeout(() => {
-      pending.delete(id);
-      resolve(new Response("Preview relay timed out", { status: 504 }));
-    }, MAX_RELAY_WAIT_MS);
-    pending.set(id, { resolve, timeout, head: request.method === "HEAD", navigation: request.mode === "navigate" });
-    const url = new URL(request.url);
-    relay.postMessage({
-      type: "nuriteo-preview:request",
-      version: PROTOCOL_VERSION,
-      binding: relayBinding,
-      id,
-      method: request.method,
-      destination: request.destination,
-      path: `${url.pathname}${url.search}`
-    });
+    if (!acceptRelay({ request, resolve })) {
+      resolve(new Response("Preview relay capacity exceeded", { status: 429 }));
+    }
   });
+}
+
+function acceptRelay(job) {
+  if (pending.size < MAX_PENDING_REQUESTS) {
+    startRelay(job);
+    return true;
+  }
+  if (queued.length >= MAX_QUEUED_REQUESTS) return false;
+  job.timeout = setTimeout(() => {
+    const index = queued.indexOf(job);
+    if (index < 0) return;
+    queued.splice(index, 1);
+    job.resolve(new Response("Preview relay timed out", { status: 504 }));
+  }, MAX_RELAY_WAIT_MS);
+  queued.push(job);
+  return true;
+}
+
+function startRelay(job) {
+  const id = `${relayBinding}:${++sequence}`;
+  const timeout = setTimeout(() => {
+    if (!pending.has(id)) return;
+    pending.delete(id);
+    job.resolve(new Response("Preview relay timed out", { status: 504 }));
+    pumpRelayQueue();
+  }, MAX_RELAY_WAIT_MS);
+  pending.set(id, { resolve: job.resolve, timeout, head: job.request.method === "HEAD", navigation: job.request.mode === "navigate" });
+  const url = new URL(job.request.url);
+  relay.postMessage({
+    type: "nuriteo-preview:request",
+    version: PROTOCOL_VERSION,
+    binding: relayBinding,
+    id,
+    method: requestMethod(job.request),
+    destination: job.request.destination,
+    path: `${url.pathname}${url.search}`
+  });
+}
+
+function requestMethod(request) {
+  return request.method === "HEAD" ? "HEAD" : "GET";
+}
+
+function pumpRelayQueue() {
+  while (pending.size < MAX_PENDING_REQUESTS && queued.length > 0) {
+    const job = queued.shift();
+    clearTimeout(job.timeout);
+    startRelay(job);
+  }
 }
 
 function relayResponse(message, request) {
@@ -189,6 +228,11 @@ function rejectPending() {
     request.resolve(new Response("Preview relay replaced", { status: 410 }));
   }
   pending.clear();
+  for (const job of queued) {
+    clearTimeout(job.timeout);
+    job.resolve(new Response("Preview relay replaced", { status: 410 }));
+  }
+  queued.length = 0;
 }
 
 async function disposeRelay() {

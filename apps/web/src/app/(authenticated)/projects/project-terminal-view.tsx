@@ -59,6 +59,7 @@ export function ProjectTerminalView(props: Props) {
     });
     const fitAddon = new FitAddon();
     terminal.loadAddon(fitAddon);
+    guardRenderServiceDimensions(terminal);
     terminal.open(host);
     terminalRef.current = terminal;
 
@@ -87,10 +88,16 @@ export function ProjectTerminalView(props: Props) {
         run: executeCommand
       });
     });
+    let disposed = false;
+    const fit = () => {
+      if (disposed) return;
+      fitTerminal(terminal, fitAddon);
+    };
     const resizeSubscription = terminal.onResize(({ cols, rows }) => propsRef.current.onResize(cols, rows));
-    const resizeObserver = new ResizeObserver(() => fitAddon.fit());
+    const resizeObserver = new ResizeObserver(() => fit());
     resizeObserver.observe(host);
-    fitAddon.fit();
+    fit();
+    const fitFrame = requestAnimationFrame(fit);
 
     async function executeCommand(command: string) {
       const nextHistory = [...historyRef.current.filter((item) => item !== command), command];
@@ -110,6 +117,8 @@ export function ProjectTerminalView(props: Props) {
     }
 
     return () => {
+      disposed = true;
+      cancelAnimationFrame(fitFrame);
       resizeObserver.disconnect();
       resizeSubscription.dispose();
       dataSubscription.dispose();
@@ -143,6 +152,61 @@ interface ShellInputState {
   readonly history: { current: readonly string[] };
   readonly historyIndex: { current: number };
   readonly run: (command: string) => void;
+}
+
+const EMPTY_RENDER_DIMENSIONS = {
+  css: { canvas: { width: 0, height: 0 }, cell: { width: 0, height: 0 } },
+  device: {
+    canvas: { width: 0, height: 0 },
+    cell: { width: 0, height: 0 },
+    char: { width: 0, height: 0, left: 0, top: 0 }
+  }
+};
+
+function guardRenderServiceDimensions(terminal: Terminal): void {
+  const instantiation = (terminal as unknown as {
+    _core?: { _instantiationService?: { createInstance: (...args: unknown[]) => unknown } };
+  })._core?._instantiationService;
+  if (!instantiation || Object.hasOwn(instantiation, "createInstance") && (instantiation as { __nuriteoPatched?: boolean }).__nuriteoPatched) return;
+  const original = instantiation.createInstance.bind(instantiation);
+  instantiation.createInstance = (...args: unknown[]) => {
+    const instance = original(...args);
+    guardCreatedRenderService(instance);
+    return instance;
+  };
+  (instantiation as { __nuriteoPatched?: boolean }).__nuriteoPatched = true;
+}
+
+function guardCreatedRenderService(instance: unknown): void {
+  if (!instance || typeof instance !== "object") return;
+  const service = instance as { _renderer?: { value?: unknown } };
+  if (!service._renderer || Object.hasOwn(service, "dimensions")) return;
+  const descriptor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(service), "dimensions");
+  if (!descriptor?.get) return;
+  // The render service is created during open(), and xterm 5.5 emits
+  // onDimensionsChange before `_renderer.value` exists. Viewport.syncScrollArea
+  // then throws on the stock getter.
+  Object.defineProperty(service, "dimensions", {
+    configurable: true,
+    get() {
+      if (!service._renderer?.value) return EMPTY_RENDER_DIMENSIONS;
+      return descriptor.get!.call(service);
+    }
+  });
+}
+
+function fitTerminal(terminal: Terminal, fitAddon: FitAddon): void {
+  const element = terminal.element;
+  if (!element?.isConnected || element.clientWidth < 2 || element.clientHeight < 2) return;
+  const renderService = (terminal as unknown as {
+    _core?: { _renderService?: { _renderer?: { value?: unknown } } };
+  })._core?._renderService;
+  if (!renderService?._renderer?.value) return;
+  try {
+    fitAddon.fit();
+  } catch {
+    // A resize that races renderer disposal should not surface as a page error.
+  }
 }
 
 function handleShellInput(terminal: Terminal, data: string, state: ShellInputState): void {

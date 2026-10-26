@@ -8,7 +8,7 @@ import { MemoryPackageManagerWorkspace, type PackageManagerWorkspaceMount } from
 import { transpileTypeScript } from "../transforms/typescript.ts";
 import type { CliRunResult, RuntimeEnv } from "../types.ts";
 import type { WorkspaceModuleReader } from "../modules/index.ts";
-import { createViteHmrUpdate, type ViteProductHmrSocket, type ViteProductHmrUpdate } from "./vite-workflow.ts";
+import { createViteHmrUpdate, finishPreviewModule, previewJsonModuleSource, resolveInstalledPreviewSpecifier, type ViteProductHmrSocket, type ViteProductHmrUpdate } from "./vite-workflow.ts";
 
 export type NextProductPackageManager = "npm" | "pnpm" | "yarn";
 
@@ -384,7 +384,22 @@ export class NextProductWorkflow {
 
   preview(path = "/"): NextProductPreviewResult {
     if (!this.#running) return { statusCode: 503, body: "dev server unavailable" };
-    const requestPath = normalizeRoutePath(path.split("?")[0] || "/");
+    const queryIndex = path.indexOf("?");
+    const requestPath = normalizeRoutePath((queryIndex >= 0 ? path.slice(0, queryIndex) : path) || "/");
+    const query = queryIndex >= 0 ? path.slice(queryIndex + 1) : "";
+    if (new URLSearchParams(query).get("nuriteo-module") === "json") {
+      const workspacePath = this.#resolveServedWorkspacePath(requestPath);
+      if (!workspacePath?.endsWith(".json")) return { statusCode: 404, body: "Not found" };
+      try {
+        return {
+          statusCode: 200,
+          headers: { "content-type": "text/javascript; charset=utf-8" },
+          body: previewJsonModuleSource(this.workspace.readText(workspacePath))
+        };
+      } catch {
+        return { statusCode: 500, body: "Invalid JSON module" };
+      }
+    }
     if (requestPath === "/_next/static/chunks/app.js") {
       return this.#serveAppBootstrap();
     }
@@ -609,7 +624,11 @@ export class NextProductWorkflow {
     return {
       statusCode: 200,
       headers: { "content-type": "text/javascript; charset=utf-8" },
-      body: transformModule(layoutPath, this.workspace.readText(layoutPath))
+      body: transformModule(layoutPath, this.workspace.readText(layoutPath), (specifier) => this.#resolvePreviewSpecifier(specifier), {
+        importerPath: layoutPath,
+        projectRoot: this.projectRoot,
+        workspace: this.workspace
+      })
     };
   }
 
@@ -638,6 +657,10 @@ export class NextProductWorkflow {
     return page;
   }
 
+  #resolvePreviewSpecifier(specifier: string): string | undefined {
+    return resolveInstalledPreviewSpecifier(this.projectRoot, specifier, this.workspace);
+  }
+
   #readTitle(routePath = "/"): string {
     try {
       const pagePath = this.#resolvePagePathForRoute(routePath) || this.#resolvePagePath();
@@ -658,7 +681,11 @@ export class NextProductWorkflow {
     return {
       statusCode: 200,
       headers: { "content-type": contentTypeForPath(requestPath) },
-      body: /\.(?:[cm]?tsx?|jsx)$/.test(transformPath) ? transformModule(transformPath, body) : body
+      body: transformServedModule(transformPath, body, (specifier) => this.#resolvePreviewSpecifier(specifier), {
+        importerPath: workspacePath,
+        projectRoot: this.projectRoot,
+        workspace: this.workspace
+      })
     };
   }
 
@@ -1062,22 +1089,28 @@ function buildAppRouterBootstrap(): string {
   ].join("\n");
 }
 
-function transformModule(path: string, source: string): string {
+function transformModule(
+  path: string,
+  source: string,
+  resolveSpecifier?: (specifier: string) => string | undefined,
+  context?: Parameters<typeof finishPreviewModule>[3]
+): string {
   const result = transpileTypeScript(source, {
     fileName: path,
     jsx: /\.(?:jsx|tsx)$/.test(path) ? "react-jsx" : "react"
   });
-  return rewriteBrowserModuleImports(result.code);
+  return finishPreviewModule(path, result.code, resolveSpecifier, context);
 }
 
-function rewriteBrowserModuleImports(source: string): string {
-  return source.replace(
-    /from\s+["'](\.[^"']+)["']/g,
-    (full, specifier: string) => {
-      if (/\.[a-z0-9]+$/i.test(specifier)) return full;
-      return full.replace(specifier, `${specifier}.js`);
-    }
-  );
+function transformServedModule(
+  path: string,
+  source: string,
+  resolveSpecifier?: (specifier: string) => string | undefined,
+  context?: Parameters<typeof finishPreviewModule>[3]
+): string {
+  if (!/\.(?:[cm]?jsx?|tsx?)$/.test(path)) return source;
+  if (/\.(?:[cm]?tsx?|jsx)$/.test(path)) return transformModule(path, source, resolveSpecifier, context);
+  return finishPreviewModule(path, source, resolveSpecifier, context);
 }
 
 function assertNextDevCommand(command: string): void {
@@ -1196,11 +1229,10 @@ function normalizeRoutePath(path: string): string {
 }
 
 function contentTypeForPath(path: string): string {
-  if (path.endsWith(".css")) return "text/css; charset=utf-8";
-  if (path.endsWith(".html")) return "text/html; charset=utf-8";
-  if (path.endsWith(".js") || path.endsWith(".jsx") || path.endsWith(".ts") || path.endsWith(".tsx") || path.endsWith(".mjs")) {
-    return "text/javascript; charset=utf-8";
-  }
+  const pathname = path.split(/[?#]/u, 1)[0] ?? path;
+  if (pathname.endsWith(".css")) return "text/css; charset=utf-8";
+  if (pathname.endsWith(".html")) return "text/html; charset=utf-8";
+  if (/\.(?:[cm]?[jt]sx?)$/iu.test(pathname)) return "text/javascript; charset=utf-8";
   return "application/octet-stream";
 }
 

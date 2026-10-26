@@ -66,7 +66,7 @@ const server = http.createServer((request, response) => {
       response.writeHead(200, bootstrapHeaders()).end(previewBootstrapDocument({ applicationOrigin, binding: binding.label, runtimeId: binding.runtimeId }));
       return;
     }
-    if (["/runtime-preview/bootstrap.js", "/runtime-preview/hmr.js", "/runtime-preview/sw.js"].includes(pathname)) {
+    if (["/runtime-preview/bootstrap.js", "/runtime-preview/console-bridge.js", "/runtime-preview/hmr.js", "/runtime-preview/sw.js"].includes(pathname)) {
       file(response, path.join(publicRoot, pathname), "text/javascript; charset=utf-8", pathname.endsWith("sw.js") ? { "Service-Worker-Allowed": "/" } : {});
       return;
     }

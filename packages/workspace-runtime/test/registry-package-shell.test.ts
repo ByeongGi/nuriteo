@@ -114,6 +114,66 @@ const ignoredNativeInstall = await nativeController.runShellCommand(
 assert.equal(ignoredNativeInstall.exitCode, 0, ignoredNativeInstall.stderr);
 nativeController.dispose();
 
+const dateFnsArchive = tar({
+  "package/package.json": JSON.stringify({
+    name: "date-fns",
+    version: "4.4.0",
+    type: "module",
+    module: "index.js",
+    exports: { ".": { import: { default: "./index.js" } } }
+  }),
+  "package/index.js": "export function format() { return \"formatted\"; }\n"
+});
+const dateFetch: typeof fetch = async (input) => {
+  const url = String(input);
+  if (url.endsWith("/date-fns")) {
+    return Response.json({
+      "dist-tags": { latest: "4.4.0" },
+      versions: {
+        "4.4.0": {
+          name: "date-fns",
+          version: "4.4.0",
+          dist: {
+            integrity: integritySha512(dateFnsArchive),
+            tarball: "https://registry.test/date-fns.tgz"
+          }
+        }
+      }
+    });
+  }
+  if (url.endsWith("/date-fns.tgz")) return new Response(dateFnsArchive);
+  return new Response("missing", { status: 404 });
+};
+const dateController = createPreviewWorkflowController({ packageFetch: dateFetch });
+dateController.loadViteReactTemplate();
+const dateManifest = JSON.parse(dateController.getSnapshot().project!.readText("package.json"));
+dateManifest.dependencies["date-fns"] = "4.4.0";
+dateController.saveTextFile("package.json", `${JSON.stringify(dateManifest, null, 2)}\n`);
+const dateInstall = await dateController.runShellCommand("npm install", "date-fns-terminal");
+assert.equal(dateInstall.exitCode, 0, dateInstall.stderr);
+assert.equal(
+  JSON.parse(dateController.getSnapshot().workflow!.workspace.readText("/workspace/app/node_modules/date-fns/package.json")).version,
+  "4.4.0"
+);
+dateController.saveTextFile("src/App.tsx", "import { format } from \"date-fns\";\nexport default function App() { return format(new Date(), \"yyyy\"); }\n");
+const dateWorkflow = dateController.getSnapshot().workflow!;
+dateWorkflow.startDevServerFromPackageScript("dev");
+const served = dateWorkflow.preview("/src/App.tsx");
+assert.equal(served.statusCode, 200);
+assert.match(String(served.body), /from "\/node_modules\/date-fns\/index\.js"/u);
+delete dateManifest.dependencies["date-fns"];
+dateManifest.devDependencies = { ...(dateManifest.devDependencies ?? {}), "date-fns": "4.4.0" };
+dateController.saveTextFile("package.json", `${JSON.stringify(dateManifest, null, 2)}\n`);
+const devDependencyInstall = await dateController.runShellCommand("npm install", "date-fns-dev-terminal");
+assert.equal(devDependencyInstall.exitCode, 0, devDependencyInstall.stderr);
+assert.equal(
+  JSON.parse(dateController.getSnapshot().workflow!.workspace.readText("/workspace/app/node_modules/date-fns/package.json")).version,
+  "4.4.0"
+);
+const devServed = dateWorkflow.preview("/src/App.tsx");
+assert.match(String(devServed.body), /from "\/node_modules\/date-fns\/index\.js"/u);
+dateController.dispose();
+
 console.log("workspace registry package shell journey ok");
 
 function tar(files: Record<string, string>): Uint8Array {

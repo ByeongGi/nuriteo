@@ -91,7 +91,7 @@ const server = http.createServer((request, response) => {
       }));
       return;
     }
-    if (["/runtime-preview/bootstrap.js", "/runtime-preview/hmr.js", "/runtime-preview/sw.js"].includes(pathname)) {
+    if (["/runtime-preview/bootstrap.js", "/runtime-preview/console-bridge.js", "/runtime-preview/hmr.js", "/runtime-preview/sw.js"].includes(pathname)) {
       response.writeHead(200, {
         ...previewHeaders("text/javascript; charset=utf-8"),
         "Service-Worker-Allowed": "/"

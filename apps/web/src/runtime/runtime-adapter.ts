@@ -142,6 +142,7 @@ export interface RuntimeWorkflowPort {
   start(): Promise<RuntimeViewState>;
   stopPreview(port?: number): boolean;
   restart(): Promise<RuntimeViewState>;
+  syncDeclaredPackages(): Promise<{ added: string[] }>;
   dispose(): Promise<void>;
 }
 
@@ -227,6 +228,7 @@ interface ControllerLike {
   renameFile: PreviewWorkflowController["renameFile"];
   deleteFile: PreviewWorkflowController["deleteFile"];
   saveTextFile: PreviewWorkflowController["saveTextFile"];
+  syncDeclaredPackages: PreviewWorkflowController["syncDeclaredPackages"];
   runRecoveryAction: PreviewWorkflowController["runRecoveryAction"];
   stopPreviewPort: PreviewWorkflowController["stopPreviewPort"];
   loadTemplate: PreviewWorkflowController["loadTemplate"];
@@ -335,6 +337,12 @@ export function createRuntimeAdapter(dependencies: RuntimeAdapterDependencies = 
       const snapshot = await current.controller.restartDev();
       applySnapshot(current, snapshot);
       return publicState();
+    },
+    async syncDeclaredPackages() {
+      const current = requireReady();
+      const result = await current.controller.syncDeclaredPackages();
+      applySnapshot(current, current.controller.getSnapshot());
+      return result;
     },
     dispose
   };

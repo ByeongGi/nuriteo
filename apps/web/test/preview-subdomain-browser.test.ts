@@ -82,7 +82,7 @@ function servePreview(
     }));
     return;
   }
-  if (pathname === "/runtime-preview/bootstrap.js" || pathname === "/runtime-preview/hmr.js" || pathname === "/runtime-preview/sw.js") {
+  if (pathname === "/runtime-preview/bootstrap.js" || pathname === "/runtime-preview/hmr.js" || pathname === "/runtime-preview/console-bridge.js" || pathname === "/runtime-preview/sw.js") {
     response.writeHead(200, {
       ...previewHeaders("text/javascript; charset=utf-8"),
       "Service-Worker-Allowed": "/"
@@ -153,6 +153,11 @@ try {
   await page.getByRole("button", { name: "미리보기 새로고침" }).click();
   await previewFrame.waitForFunction((previous) => performance.timeOrigin !== previous, refreshTimeOrigin);
   await previewFrame.locator("#root").getByText("nuriteo:1").waitFor({ timeout: 20_000 });
+  await previewFrame.evaluate(() => { console.error("studio-console-check"); });
+  await page.getByRole("toolbar", { name: "하단 패널" }).getByRole("button", { name: /^콘솔/ }).evaluate((button) => {
+    if (button instanceof HTMLButtonElement) button.click();
+  });
+  await page.getByRole("log", { name: "미리보기 콘솔" }).getByText("studio-console-check", { exact: true }).waitFor();
   assert.equal(await page.evaluate(() => window.__nuriteoRuntimeProbe.runtimeCreatedWorkers), runtimeWorkersBeforeRefresh, "refresh must not restart the browser runtime");
   assert.equal(await previewRegion.getAttribute("data-preview-url"), previewUrlBeforeRefresh, "refresh must preserve the Preview binding");
   await page.getByRole("button", { name: "debug.ts", exact: true }).click();
@@ -275,6 +280,7 @@ try {
   const expiredRouteResponse = await previewFrame.goto(`${previewOrigin}/`, { waitUntil: "domcontentloaded" });
   assert.equal(expiredRouteResponse?.status(), 200, "an active session must keep Vite navigation alive after host expiry");
   assert.equal(await previewFrame.evaluate(async () => (await fetch("/runtime-preview/hmr.js")).status), 200, "active-session HMR must be served after signed-host expiry");
+  assert.equal(await previewFrame.evaluate(async () => (await fetch("/runtime-preview/console-bridge.js")).status), 200, "active-session console bridge must be served after signed-host expiry");
   assert.equal(await previewFrame.evaluate(async () => (await fetch("/src/App.tsx")).status), 200, "post-expiry non-root Vite assets must remain relayed");
   await previewFrame.getByRole("button", { name: "PRV001 cross origin:1" }).waitFor({ timeout: 20_000 });
   await previewFrame.evaluate(() => {
@@ -337,7 +343,7 @@ try {
     }) as typeof fetch;
   });
   const capacityStatus = await recoveredFrame.evaluate(async () => {
-    const requests = Array.from({ length: 9 }, (_, index) => fetch(`/hold-relay-${index}`));
+    const requests = Array.from({ length: 8 + 1024 + 1 }, (_, index) => fetch(`/hold-relay-${index}`));
     return (await Promise.race([
       Promise.any(requests.map(async (request) => {
         const status = (await request).status;

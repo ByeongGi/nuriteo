@@ -132,6 +132,7 @@ assert.match(middleware, /Cross-Origin-Resource-Policy", "same-origin"/u);
 
 const bridge = fs.readFileSync(new URL("../src/runtime/subdomain-preview-bridge.ts", import.meta.url), "utf8");
 assert.match(bridge, /MAX_IN_FLIGHT_REQUESTS = 4/u);
+assert.match(bridge, /MAX_QUEUED_REQUESTS = 1024/u);
 assert.match(bridge, /credentials: "omit"/u);
 assert.doesNotMatch(bridge, /fetch\(internalUrl,[\s\S]{0,300}headers:/u, "relay fetch must not forward browser credential headers");
 const ideShell = fs.readFileSync(new URL("../src/app/(authenticated)/projects/project-ide-shell.tsx", import.meta.url), "utf8");
@@ -144,12 +145,25 @@ assert.match(previewWindowScript, /previewRoot\.replaceChildren\(frame\)/u, "eve
 
 const serviceWorker = fs.readFileSync(new URL("../public/runtime-preview/sw.js", import.meta.url), "utf8");
 assert.match(serviceWorker, /MAX_PENDING_REQUESTS = 8/u);
+assert.match(serviceWorker, /MAX_QUEUED_REQUESTS = 1024/u);
+assert.match(serviceWorker, /\/runtime-preview\/console-bridge\.js/u);
+assert.match(middleware, /\/runtime-preview\/console-bridge\.js/u);
 const internalPreviewServiceWorker = fs.readFileSync(new URL("../../../packages/workspace-runtime/assets/preview-sw.js", import.meta.url), "utf8");
 assert.match(internalPreviewServiceWorker, /routePreview\(event\.request, event\.clientId\)/u);
 assert.match(internalPreviewServiceWorker, /self\.clients\.get\(clientId\)/u);
 assert.match(internalPreviewServiceWorker, /client\.frameType !== "top-level"/u);
 const bootstrap = fs.readFileSync(new URL("../public/runtime-preview/bootstrap.js", import.meta.url), "utf8");
 assert.match(bootstrap, /await waitForController\(\)/u);
+assert.match(bootstrap, /installConsoleForwarder\(applicationOrigin, binding, generation\)/u);
+assert.match(bootstrap, /type: "nuriteo-preview:console"/u);
+assert.match(bootstrap, /nuriteo-preview:navigate/u);
+assert.match(bootstrap, /type: "nuriteo-preview:location"/u);
+assert.match(ideShell, /aria-label="미리보기 주소"/u);
+assert.match(ideShell, /nuriteo-preview:navigate/u);
+assert.match(bootstrap, /event\.source !== frame\.contentWindow/u);
+assert.match(bridge, /console-bridge\.js/u);
+assert.match(bridge, /onConsole\?\.\(\{ message: event\.data\.message, stack: event\.data\.stack \}\)/u);
+assert.match(ideShell, /aria-label="미리보기 콘솔"/u);
 const hmrClient = fs.readFileSync(new URL("../public/runtime-preview/hmr.js", import.meta.url), "utf8");
 assert.match(hmrClient, /pathname === "\/_next\/static\/chunks\/app\.js"/u, "isolated HMR must support Next.js app entries");
 

@@ -156,6 +156,7 @@ export interface PreviewWorkflowController {
   renameFile(from: string, to: string): PreviewWorkflowSnapshot;
   deleteFile(path: string): PreviewWorkflowSnapshot;
   saveTextFile(path: string, data: string): PreviewWorkflowSnapshot;
+  syncDeclaredPackages(): Promise<{ added: string[] }>;
   runPreview(): Promise<PreviewWorkflowSnapshot>;
   restartDev(): Promise<PreviewWorkflowSnapshot>;
   reconnectHmr(): Promise<HmrClientSnapshot>;

@@ -21,6 +21,7 @@ assert.match(guard, /window\.confirm\(message\)/u);
 assert.match(ide, /useUnsavedChangesGuard\(hasUnpublishedChanges \|\| hasUnsavedEditorChange\)/u);
 assert.match(ide, /<ConfirmationDialog/u);
 assert.match(ide, /useProjectFileSearch/u);
+assert.match(ide, /visibleStudioExplorerFiles/u);
 assert.match(fileSearch, /useDeferredValue\(query\)/u);
 assert.match(fileSearch, /selectedFileIsVisible/u);
 

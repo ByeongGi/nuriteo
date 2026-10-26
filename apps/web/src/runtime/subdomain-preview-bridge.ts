@@ -1,5 +1,7 @@
 import { init as initializeModuleLexer, parse as parseModuleImports } from "es-module-lexer";
 
+import { versionPreviewImportSpecifier } from "#src/runtime/preview-import-version.ts";
+
 import {
   createPreviewOriginUrl,
   parseInternalPreviewUrl
@@ -12,6 +14,7 @@ import type {
 const PROTOCOL_VERSION = 1;
 const MAX_RESPONSE_BYTES = 8 * 1024 * 1024;
 const MAX_IN_FLIGHT_REQUESTS = 4;
+const MAX_QUEUED_REQUESTS = 1024;
 const RELAY_TIMEOUT_MS = 10_000;
 const DISPOSE_ACK_TIMEOUT_MS = 2_000;
 const REQUEST_ID = /^r-[a-z2-7]{45}-p[1-9][0-9]{0,4}:[1-9][0-9]{0,9}$/u;
@@ -27,6 +30,11 @@ export interface SubdomainPreviewBridge {
 
 export type PreviewChangeKind = "content" | "create" | "delete" | "rename";
 
+export interface PreviewConsoleEntry {
+  readonly message: string;
+  readonly stack: string;
+}
+
 interface PublishedExampleBinding {
   readonly publicId: string;
   readonly versionNumber: number;
@@ -40,6 +48,7 @@ export async function createSubdomainPreviewBridge(options: {
   ownerType: "organization" | "user";
   projectId: string;
   onConnected?(): void;
+  onConsole?(entry: PreviewConsoleEntry): void;
   onDiagnostic?(code: string): void;
   onReloadResult?(ok: boolean): void;
   onRecoveryRequired?(): void;
@@ -54,6 +63,7 @@ export async function createPublishedExamplePreviewBridge(options: {
   publicId: string;
   versionNumber: number;
   onConnected?(): void;
+  onConsole?(entry: PreviewConsoleEntry): void;
   onDiagnostic?(code: string): void;
   onRecoveryRequired?(): void;
 }): Promise<SubdomainPreviewBridge> {
@@ -66,6 +76,7 @@ async function createPreviewBridge(
     internalProjectIdentity: string;
     internalPreviewUrl: string;
     onConnected?(): void;
+    onConsole?(entry: PreviewConsoleEntry): void;
     onDiagnostic?(code: string): void;
     onReloadResult?(ok: boolean): void;
     onRecoveryRequired?(): void;
@@ -89,6 +100,7 @@ async function createPreviewBridge(
   let relayPort: MessagePort | null = null;
   let activeNonce: string | null = null;
   let inFlightRequests = 0;
+  const relayQueue: Array<{ responsePort: MessagePort; value: { destination: string; id: string; method: "GET" | "HEAD"; path: string } }> = [];
   let disposed = false;
   let disposePromise: Promise<void> | null = null;
   let acknowledgeDispose: (() => void) | null = null;
@@ -126,6 +138,10 @@ async function createPreviewBridge(
     }
     if (isReloadResultMessage(event.data, binding.label, binding.runtimeId)) {
       options.onReloadResult?.(event.data.ok);
+      return;
+    }
+    if (isConsoleMessage(event.data, binding.label, binding.runtimeId)) {
+      options.onConsole?.({ message: event.data.message, stack: event.data.stack });
       return;
     }
     if (event.ports.length !== 1) return;
@@ -167,9 +183,20 @@ async function createPreviewBridge(
     if (!Number.isSafeInteger(requestSequence) || requestSequence <= relayRequestHighWater) return;
     relayRequestHighWater = requestSequence;
     if (inFlightRequests >= MAX_IN_FLIGHT_REQUESTS) {
-      postFailure(responsePort, value.id, 429, "Preview relay capacity exceeded");
+      if (relayQueue.length >= MAX_QUEUED_REQUESTS) {
+        postFailure(responsePort, value.id, 429, "Preview relay capacity exceeded");
+        return;
+      }
+      relayQueue.push({ responsePort, value });
       return;
     }
+    await executeRelayRequest(value, responsePort);
+  }
+
+  async function executeRelayRequest(
+    value: { destination: string; id: string; method: "GET" | "HEAD"; path: string },
+    responsePort: MessagePort
+  ): Promise<void> {
     inFlightRequests += 1;
     const requestAbort = new AbortController();
     const timeout = setTimeout(() => requestAbort.abort(), RELAY_TIMEOUT_MS);
@@ -216,12 +243,24 @@ async function createPreviewBridge(
       inFlightRequests -= 1;
       clearTimeout(timeout);
       abort.signal.removeEventListener("abort", onDispose);
+      pumpRelayQueue();
+    }
+  }
+
+  function pumpRelayQueue(): void {
+    while (inFlightRequests < MAX_IN_FLIGHT_REQUESTS && relayQueue.length > 0) {
+      const next = relayQueue.shift();
+      if (!next || disposed || relayPort !== next.responsePort) continue;
+      void executeRelayRequest(next.value, next.responsePort);
     }
   }
 
   async function dispose(): Promise<void> {
     if (disposePromise) return disposePromise;
     disposed = true;
+    relayQueue.splice(0).forEach((item) => {
+      postFailure(item.responsePort, item.value.id, 502, "Preview relay unavailable");
+    });
     clearTimeout(bindingExpiryTimeout);
     globalThis.removeEventListener("message", receiveHandshake);
     disposePromise = (async () => {
@@ -267,6 +306,24 @@ function isRecoveryMessage(value: unknown, binding: string, generation: string):
     && value.version === PROTOCOL_VERSION
     && value.binding === binding
     && value.generation === generation;
+}
+
+function isConsoleMessage(
+  value: unknown,
+  binding: string,
+  generation: string
+): value is { binding: string; generation: string; level: "error"; message: string; stack: string; type: string; version: number } {
+  return isExactRecord(value, ["binding", "generation", "level", "message", "stack", "type", "version"])
+    && value.type === "nuriteo-preview:console"
+    && value.version === PROTOCOL_VERSION
+    && value.binding === binding
+    && value.generation === generation
+    && value.level === "error"
+    && typeof value.message === "string"
+    && value.message.length > 0
+    && value.message.length <= 2_000
+    && typeof value.stack === "string"
+    && value.stack.length <= 4_000;
 }
 
 function isReloadResultMessage(
@@ -340,8 +397,12 @@ function injectHmrClient(body: Uint8Array): { body: Uint8Array; scriptNonce: str
     const withoutNonce = attributes.replace(/\snonce\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/giu, "");
     return `<script${withoutNonce} nonce="${scriptNonce}">`;
   });
+  const consoleScript = `<script src="/runtime-preview/console-bridge.js" nonce="${scriptNonce}"></script>`;
   const script = `<script src="/runtime-preview/hmr.js" nonce="${scriptNonce}" defer></script>`;
-  const injected = /<\/body>/iu.test(nonceScripts) ? nonceScripts.replace(/<\/body>/iu, `${script}</body>`) : `${nonceScripts}${script}`;
+  const withConsole = /<head[^>]*>/iu.test(nonceScripts)
+    ? nonceScripts.replace(/<head[^>]*>/iu, (head) => `${head}${consoleScript}`)
+    : `${consoleScript}${nonceScripts}`;
+  const injected = /<\/body>/iu.test(withConsole) ? withConsole.replace(/<\/body>/iu, `${script}</body>`) : `${withConsole}${script}`;
   const result = new TextEncoder().encode(injected);
   if (result.byteLength > MAX_RESPONSE_BYTES) throw new Error("Preview response exceeds limit");
   return { body: result, scriptNonce };
@@ -365,10 +426,11 @@ async function rewriteModuleImports(body: Uint8Array, requestPath: string): Prom
   for (const parsed of parsedImports) {
     const specifier = parsed.n;
     if (specifier === undefined) continue;
-    const replacement = imports[specifier]
-      ?? (validVersion && /^\.\.?\//u.test(specifier) && !specifier.includes("?")
-        ? `${specifier}?nuriteo_hmr=${validVersion}`
-        : specifier);
+    const mapped = imports[specifier];
+    const resolved = mapped ?? specifier;
+    const replacement = validVersion && (mapped !== undefined || specifier.startsWith("/node_modules/") || /^\.\.?\//u.test(specifier))
+      ? versionPreviewImportSpecifier(resolved, validVersion)
+      : resolved;
     const encodedReplacement = parsed.d >= 0 ? JSON.stringify(replacement) : replacement;
     rewritten += source.slice(offset, parsed.s) + encodedReplacement;
     offset = parsed.e;

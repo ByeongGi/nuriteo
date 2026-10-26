@@ -1008,7 +1008,9 @@ function createGeneratedCjsModuleBridge(options: GeneratedCjsModuleBridgeOptions
         "Cross-Origin-Embedder-Policy": "require-corp"
       }
     }));
-    await import(/* @vite-ignore */ url);
+    // The URL is a Cache Storage module created at runtime. Leave it as a native
+    // import so Next/webpack does not build a context for every possible request.
+    await import(/* webpackIgnore: true */ /* @vite-ignore */ url);
     await storage.delete(url);
   };
 

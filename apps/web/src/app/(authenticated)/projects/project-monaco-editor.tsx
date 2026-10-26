@@ -194,6 +194,7 @@ export function ProjectMonacoEditor({ formatRequestId, onChange, onDiagnosticsCh
           useShadowDOM: false,
           wordWrap: "off"
         }}
+        keepCurrentModel
         path={monacoModelPath(projectKey, path)}
         saveViewState
         theme={theme}

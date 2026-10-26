@@ -33,7 +33,7 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
   if (request.nextUrl.pathname === "/runtime-preview/bootstrap") {
     return previewResponse(NextResponse.next());
   }
-  if (request.nextUrl.pathname === "/runtime-preview/bootstrap.js" || request.nextUrl.pathname === "/runtime-preview/hmr.js") {
+  if (request.nextUrl.pathname === "/runtime-preview/bootstrap.js" || request.nextUrl.pathname === "/runtime-preview/hmr.js" || request.nextUrl.pathname === "/runtime-preview/console-bridge.js") {
     return previewResponse(NextResponse.next());
   }
   if (request.nextUrl.pathname === "/runtime-preview/sw.js") {

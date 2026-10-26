@@ -496,6 +496,8 @@ function testProjectSourceContracts() {
   assert.match(ideShell, /동일 출처 미리보기는 보안을 위해 비활성화/u);
   assert.doesNotMatch(ideShell, />Save<|"Saved · HMR/u);
   assert.match(terminalView, /aria-label=\{`\$\{props\.sessionName\} 콘솔`\}/u);
+  assert.match(ideShell, /aria-label="미리보기 콘솔"/u);
+  assert.match(ideShell, /미리보기 콘솔 에러가 없습니다/u);
   assert.match(studioStory, /<ProjectIdeShell/u);
   assert.match(studioStory, /<ProjectStudioFrame/u);
   assert.match(studioStory, /resumeProjectContentLoader=\{async \(\) =>/u);
