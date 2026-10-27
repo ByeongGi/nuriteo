@@ -77,7 +77,7 @@ function sourceContracts(): void {
   assert.match(policyPage, /view="policy"/u);
   assert.match(resetPage, /view="reset"/u);
   assert.match(legacyPage, /redirect\("\/admin\/authentication\/mfa"\)/u);
-  assert.match(qr, /vendor\/runtime\/qrcode/u);
+  assert.match(qr, /from "qrcode-generator"/u);
   assert.doesNotMatch(`${security}\n${policy}\n${qr}`, /localStorage|sessionStorage|dangerouslySetInnerHTML/u);
 }
 

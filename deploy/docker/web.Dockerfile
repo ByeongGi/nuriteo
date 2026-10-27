@@ -35,7 +35,6 @@ COPY packages/preview packages/preview
 COPY packages/workspace-runtime packages/workspace-runtime
 COPY packages/protocol packages/protocol
 COPY packages/workers packages/workers
-COPY vendor/runtime/qrcode vendor/runtime/qrcode
 COPY packages/workspace-runtime/assets/preview-sw.js packages/workspace-runtime/assets/preview-sw.js
 COPY packages/workspace-runtime/assets/runtime packages/workspace-runtime/assets/runtime
 COPY packages/workspace-runtime/assets/vendor/next-cli-15.5.26.mjs packages/workspace-runtime/assets/vendor/next-cli-15.5.26.mjs

@@ -39,12 +39,8 @@ function validateDockerfile(source) {
       instructions.includes("COPY packages/api-client packages/api-client"),
     "the Web image must include its workspace API client dependency"
   );
-  assert(
-    instructions.includes(
-      "COPY vendor/runtime/qrcode vendor/runtime/qrcode"
-    ),
-    "the Web image must include the local-only MFA QR encoder"
-  );
+  const webPackage = JSON.parse(fs.readFileSync("apps/web/package.json", "utf8"));
+  assert.equal(webPackage.dependencies["qrcode-generator"], "2.0.4", "MFA QR encoding must use qrcode-generator");
 
   const runtimeStart = instructions.indexOf(fromInstructions[2]);
   const runtimeInstructions = instructions.slice(runtimeStart + 1);
@@ -133,11 +129,7 @@ function validateBuildContext() {
     "!packages/protocol/",
     "!packages/protocol/**",
     "!packages/workers/",
-    "!packages/workers/**",
-    "!vendor/",
-    "!vendor/runtime/",
-    "!vendor/runtime/qrcode/",
-    "!vendor/runtime/qrcode/**"
+    "!packages/workers/**"
   ];
   assert.deepEqual(ignoreRules, expectedIgnoreRules);
 
@@ -149,7 +141,6 @@ function validateBuildContext() {
     "apps/web/package.json",
     "apps/web/next.config.ts",
     "apps/web/src",
-    "vendor/runtime/qrcode/index.js",
     "packages/api-client/package.json",
     "packages/api-client/src"
   ]) {

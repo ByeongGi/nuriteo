@@ -72,7 +72,6 @@ function testStandaloneAndDependencyContract(): void {
   assert.match(read("postcss.config.mjs"), /"@tailwindcss\/postcss"/u);
   const relativeSourceImport = /(?:\bfrom\s+|\bimport\s*\(\s*|\bimport\s+)["']\.\.?\//u;
   for (const sourceFile of findFiles("src").filter((file) => /\.tsx?$/u.test(file))) {
-    if (sourceFile === "src/lib/qr-matrix.ts") continue;
     // Monaco language contributions and worker entry points must remain static
     // relative URLs so Next/Webpack can include the package-owned browser assets.
     if (sourceFile === "src/projects/project-monaco-editor.tsx") continue;

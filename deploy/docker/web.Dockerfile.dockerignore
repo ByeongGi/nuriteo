@@ -42,7 +42,3 @@
 !packages/protocol/**
 !packages/workers/
 !packages/workers/**
-!vendor/
-!vendor/runtime/
-!vendor/runtime/qrcode/
-!vendor/runtime/qrcode/**
