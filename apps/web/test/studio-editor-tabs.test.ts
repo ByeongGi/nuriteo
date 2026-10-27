@@ -14,8 +14,8 @@ import {
   renameEditorDraft,
   renameEditorPath,
   settleEditorDraft
-} from "../src/projects/studio-editor-tabs.ts";
-import { appendStudioConsole, freshServerLogLines, studioConsoleSourceLabel } from "../src/projects/studio-preview-console.ts";
+} from "../src/projects/studio/editor-tabs.ts";
+import { appendStudioConsole, freshServerLogLines, studioConsoleSourceLabel } from "../src/projects/studio/preview-console.ts";
 
 const previewA = openEditorFile(createEditorTabs(), "src/App.tsx", "preview");
 const replaced = openEditorFile(previewA, "src/main.tsx", "preview");
