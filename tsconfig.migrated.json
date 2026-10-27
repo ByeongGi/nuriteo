@@ -7,7 +7,6 @@
   },
   "include": [
     "apps/*/test/**/*.ts",
-    "experiments/*/check.ts",
     "packages/*/test/**/*.ts",
     "tests/**/*.ts",
     "tooling/**/*.ts"

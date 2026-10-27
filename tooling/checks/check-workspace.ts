@@ -221,7 +221,6 @@ const required = [
   "packages/browser-host/src/supervisor.ts",
   "workers/system-worker.ts",
   "workers/process-worker.ts",
-  "experiments/worker-boot/check.ts",
   "tests/harness/reference-node.ts",
   "tests/harness/browser.ts",
   "tests/harness/compare.ts",

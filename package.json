@@ -104,7 +104,6 @@
     "test:vite": "node tests/compatibility/frameworks/vite/run.ts",
     "test:bundler-candidates": "node tests/compatibility/frameworks/bundlers/run.ts",
     "test:sdk-consumer": "node tests/contract/sdk-consumer/run.ts",
-    "test:worker-boot": "node experiments/worker-boot/check.ts",
     "test:harness": "node tests/harness/self-test.ts",
     "dev": "node tooling/dev/live-stack.mjs",
     "dev:backend": "node tooling/dev/live-stack.mjs --backend-only",
