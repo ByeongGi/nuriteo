@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 
 let manifestDir = path.resolve("vendor/manifests");
-let outDir = path.resolve("vendor/cli");
+let outDir = path.resolve("tests/fixtures/package-managers/cli");
 
 function readManifest(name) {
   return JSON.parse(fs.readFileSync(path.join(manifestDir, `${name}.json`), "utf8"));

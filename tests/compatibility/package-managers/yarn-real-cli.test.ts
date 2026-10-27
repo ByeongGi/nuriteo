@@ -6,7 +6,7 @@ import { createAsyncCliModuleEvaluator } from "../../../packages/node-runtime/sr
 import { MemoryPackageManagerWorkspace } from "../../../packages/node-runtime/src/package-managers/workspace.ts";
 
 const repositoryRoot = path.resolve(new URL("../../..", import.meta.url).pathname);
-const artifactRoot = path.join(repositoryRoot, "vendor/cli/yarn/1.22.22/package");
+const artifactRoot = path.join(repositoryRoot, "tests/fixtures/package-managers/cli/yarn/1.22.22/package");
 const guestRoot = "/workspace/vendor/yarn/package";
 const workspace = new MemoryPackageManagerWorkspace([
   file("bin/yarn.js"),

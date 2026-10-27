@@ -27,13 +27,13 @@ await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
 try {
   const { port } = server.address();
   const workspace = new MemoryPackageManagerWorkspace([
-    ...readMounts(repoRoot, mountRoot, "vendor/cli/npm/10.9.2/package"),
+    ...readMounts(repoRoot, mountRoot, "tests/fixtures/package-managers/cli/npm/10.9.2/package"),
     {
       path: "/workspace/fetch-cli/bin.js",
       data: `
         (async function run(process) {
           try {
-            const fetch = require("/workspace/vendor/cli/npm/10.9.2/package/node_modules/minipass-fetch/lib/index.js");
+            const fetch = require("/workspace/tests/fixtures/package-managers/cli/npm/10.9.2/package/node_modules/minipass-fetch/lib/index.js");
             const response = await fetch("http://127.0.0.1:${port}/fixture.tgz");
             const buffer = await response.buffer();
             process.stdout.write(response.status + " " + response.statusText + " " + buffer.length + "\\n");

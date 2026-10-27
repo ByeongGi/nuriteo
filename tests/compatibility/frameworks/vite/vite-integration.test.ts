@@ -100,8 +100,8 @@ async function runViteFixture(fixture, manager) {
 
 function runPackageManager(manager, cwd, args) {
   const entry = manager === "npm"
-    ? path.join(root, "vendor/cli/npm/10.9.2/package/bin/npm-cli.js")
-    : path.join(root, "vendor/cli/pnpm/9.15.9/package/bin/pnpm.cjs");
+    ? path.join(root, "tests/fixtures/package-managers/cli/npm/10.9.2/package/bin/npm-cli.js")
+    : path.join(root, "tests/fixtures/package-managers/cli/pnpm/9.15.9/package/bin/pnpm.cjs");
   return spawnSync(process.execPath, [entry, ...args], {
     cwd,
     env: {
@@ -120,8 +120,8 @@ function runPackageManager(manager, cwd, args) {
 
 function spawnPackageManager(manager, cwd, args) {
   const entry = manager === "npm"
-    ? path.join(root, "vendor/cli/npm/10.9.2/package/bin/npm-cli.js")
-    : path.join(root, "vendor/cli/pnpm/9.15.9/package/bin/pnpm.cjs");
+    ? path.join(root, "tests/fixtures/package-managers/cli/npm/10.9.2/package/bin/npm-cli.js")
+    : path.join(root, "tests/fixtures/package-managers/cli/pnpm/9.15.9/package/bin/pnpm.cjs");
   return spawn(process.execPath, [entry, ...args], {
     cwd,
     env: {

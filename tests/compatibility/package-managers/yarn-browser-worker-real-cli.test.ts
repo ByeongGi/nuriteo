@@ -10,7 +10,7 @@ import { REQUIRED_RUNTIME_HEADERS } from "../../../packages/browser-host/src/sec
 import { MemoryPackageManagerWorkspace } from "../../../packages/node-runtime/src/package-managers/workspace.ts";
 
 const repositoryRoot = path.resolve(new URL("../../..", import.meta.url).pathname);
-const artifactRoot = path.join(repositoryRoot, "vendor/cli/yarn/1.22.22/package");
+const artifactRoot = path.join(repositoryRoot, "tests/fixtures/package-managers/cli/yarn/1.22.22/package");
 const guestRoot = "/workspace/vendor/yarn/package";
 const chromePath = process.env.CHROME_PATH || "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const tarball = gzipSync(createTar([

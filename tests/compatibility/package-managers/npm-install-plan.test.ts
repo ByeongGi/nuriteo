@@ -8,7 +8,7 @@ import { applyNpmInstallPlan, CliRegistry, createNpmInstallPlan, createNpmRunner
 
 const root = new URL("../../..", import.meta.url).pathname;
 const fixture = path.join(root, "tests/fixtures/package-managers/npm");
-const installed = JSON.parse(fs.readFileSync(new URL("../../../vendor/cli/npm/10.9.2/installed.json", import.meta.url), "utf8"));
+const installed = JSON.parse(fs.readFileSync(new URL("../../fixtures/package-managers/cli/npm/10.9.2/installed.json", import.meta.url), "utf8"));
 const registry = new CliRegistry([installed]);
 const workdir = fs.mkdtempSync(path.join(os.tmpdir(), "npm-install-plan-"));
 

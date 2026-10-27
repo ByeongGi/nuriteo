@@ -9,7 +9,7 @@ import { CliRegistry, createPnpmRunner } from "../../../packages/node-runtime/sr
 
 const root = new URL("../../..", import.meta.url).pathname;
 const fixture = path.join(root, "tests/fixtures/package-managers/pnpm");
-const installed = ["pnpm"].map((name) => JSON.parse(fs.readFileSync(path.join(root, `vendor/cli/${name}/9.15.9/installed.json`), "utf8")));
+const installed = ["pnpm"].map((name) => JSON.parse(fs.readFileSync(path.join(root, `tests/fixtures/package-managers/cli/${name}/9.15.9/installed.json`), "utf8")));
 const registry = new CliRegistry(installed);
 const pnpm = createPnpmRunner({
   registry,

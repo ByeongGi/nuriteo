@@ -1,0 +1,7 @@
+{
+  "name": "@nuriteo/qrcode-encoder",
+  "private": true,
+  "type": "commonjs",
+  "license": "MIT",
+  "description": "Product copy of the MIT QR encoder used by MFA setup. Compatibility tests keep a separate copy inside the npm CLI fixture."
+}

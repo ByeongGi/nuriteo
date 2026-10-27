@@ -6,8 +6,8 @@ import { createMemoryOpfs, createOpfsPackageWorkspace } from "../../browser-host
 import { CliRegistry, createGuestRuntimeProcessRunner, createNpmRunner, createPnpmRunner } from "../../node-runtime/src/index.ts";
 
 const root = new URL("../../..", import.meta.url).pathname;
-const npmInstalled = JSON.parse(fs.readFileSync(new URL("../../../vendor/cli/npm/10.9.2/installed.json", import.meta.url), "utf8"));
-const pnpmInstalled = JSON.parse(fs.readFileSync(new URL("../../../vendor/cli/pnpm/9.15.9/installed.json", import.meta.url), "utf8"));
+const npmInstalled = JSON.parse(fs.readFileSync(new URL("../../../tests/fixtures/package-managers/cli/npm/10.9.2/installed.json", import.meta.url), "utf8"));
+const pnpmInstalled = JSON.parse(fs.readFileSync(new URL("../../../tests/fixtures/package-managers/cli/pnpm/9.15.9/installed.json", import.meta.url), "utf8"));
 const registry = new CliRegistry([npmInstalled, pnpmInstalled]);
 
 const npmWorkspace = createOpfsPackageWorkspace({ opfs: createMemoryOpfs(), root: "npm-project" });

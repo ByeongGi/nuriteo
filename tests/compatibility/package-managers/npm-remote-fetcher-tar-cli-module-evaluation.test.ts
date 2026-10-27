@@ -36,18 +36,18 @@ await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
 try {
   const { port } = server.address();
   const workspace = new MemoryPackageManagerWorkspace([
-    ...readMounts(repoRoot, mountRoot, "vendor/cli/npm/10.9.2/package"),
+    ...readMounts(repoRoot, mountRoot, "tests/fixtures/package-managers/cli/npm/10.9.2/package"),
     {
       path: "/workspace/remote-fetcher-cli/bin.js",
       data: `
         (async function run(process) {
           try {
-            const RemoteFetcher = require("/workspace/vendor/cli/npm/10.9.2/package/node_modules/pacote/lib/remote.js");
-            const protectedSymbols = require("/workspace/vendor/cli/npm/10.9.2/package/node_modules/pacote/lib/util/protected.js");
-            const tar = require("/workspace/vendor/cli/npm/10.9.2/package/node_modules/cacache/node_modules/tar/dist/commonjs/index.js");
+            const RemoteFetcher = require("/workspace/tests/fixtures/package-managers/cli/npm/10.9.2/package/node_modules/pacote/lib/remote.js");
+            const protectedSymbols = require("/workspace/tests/fixtures/package-managers/cli/npm/10.9.2/package/node_modules/pacote/lib/util/protected.js");
+            const tar = require("/workspace/tests/fixtures/package-managers/cli/npm/10.9.2/package/node_modules/cacache/node_modules/tar/dist/commonjs/index.js");
             const fetcher = new RemoteFetcher("http://127.0.0.1:${port}/fixture-registry-1.0.0.tgz", {
               cache: "/home/webcontainer/.npm/_cacache",
-              npmBin: "/workspace/vendor/cli/npm/10.9.2/package/bin/npm-cli.js"
+              npmBin: "/workspace/tests/fixtures/package-managers/cli/npm/10.9.2/package/bin/npm-cli.js"
             });
             const stream = fetcher[protectedSymbols.tarballFromResolved]();
             const extractor = tar.x({ cwd: "/workspace/out", strip: 1, noChmod: true, noMtime: true, preserveOwner: false });

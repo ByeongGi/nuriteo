@@ -43,12 +43,6 @@
 !workers/
 !workers/**
 !vendor/
-!vendor/cli/
-!vendor/cli/npm/
-!vendor/cli/npm/10.9.2/
-!vendor/cli/npm/10.9.2/package/
-!vendor/cli/npm/10.9.2/package/node_modules/
-!vendor/cli/npm/10.9.2/package/node_modules/qrcode-terminal/
-!vendor/cli/npm/10.9.2/package/node_modules/qrcode-terminal/vendor/
-!vendor/cli/npm/10.9.2/package/node_modules/qrcode-terminal/vendor/QRCode/
-!vendor/cli/npm/10.9.2/package/node_modules/qrcode-terminal/vendor/QRCode/**
+!vendor/runtime/
+!vendor/runtime/qrcode/
+!vendor/runtime/qrcode/**

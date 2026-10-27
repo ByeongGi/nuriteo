@@ -1,10 +1,10 @@
-// The repository already vendors this small Apache-2.0 QR encoder with the
-// supported CLI toolchain. Importing its encoding core avoids sending a TOTP
-// provisioning URI to a network QR service.
+// Product copy of the MIT QR encoder (Kazuhiko Arase). The package-manager
+// test fixture keeps its own copy inside the npm CLI tree. Encoding locally
+// avoids sending a TOTP provisioning URI to a network QR service.
 // @ts-expect-error vendored CommonJS module has no declaration file
-import QRCode from "../../../../vendor/cli/npm/10.9.2/package/node_modules/qrcode-terminal/vendor/QRCode/index.js";
+import QRCode from "../../../../vendor/runtime/qrcode/index.js";
 // @ts-expect-error vendored CommonJS module has no declaration file
-import QRErrorCorrectLevel from "../../../../vendor/cli/npm/10.9.2/package/node_modules/qrcode-terminal/vendor/QRCode/QRErrorCorrectLevel.js";
+import QRErrorCorrectLevel from "../../../../vendor/runtime/qrcode/QRErrorCorrectLevel.js";
 
 interface QrCodeInstance {
   addData(value: string): void;

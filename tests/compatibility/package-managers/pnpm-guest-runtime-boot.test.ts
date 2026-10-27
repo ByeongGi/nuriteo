@@ -7,7 +7,7 @@ import { CliRegistry, createGuestRuntimeProcessRunner, createPnpmRunner, MemoryP
 
 const root = new URL("../../..", import.meta.url).pathname;
 const fixture = path.join(root, "tests/fixtures/package-managers/pnpm");
-const installed = JSON.parse(fs.readFileSync(new URL("../../../vendor/cli/pnpm/9.15.9/installed.json", import.meta.url), "utf8"));
+const installed = JSON.parse(fs.readFileSync(new URL("../../fixtures/package-managers/cli/pnpm/9.15.9/installed.json", import.meta.url), "utf8"));
 const registry = new CliRegistry([installed]);
 const resolvedEntry = registry.resolve("pnpm");
 const workdir = "/workspace";

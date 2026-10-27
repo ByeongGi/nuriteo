@@ -6,10 +6,10 @@
   "publicGrade": "supported",
   "artifact": {
     "manifest": "vendor/manifests/yarn.json",
-    "installed": "vendor/cli/yarn/1.22.22/installed.json",
-    "entry": "vendor/cli/yarn/1.22.22/package/bin/yarn.js",
+    "installed": "tests/fixtures/package-managers/cli/yarn/1.22.22/installed.json",
+    "entry": "tests/fixtures/package-managers/cli/yarn/1.22.22/package/bin/yarn.js",
     "entrySha256": "148e19db309ec9eaf7720b28df811337906eea8a1758deaa54afee60a6305e04",
-    "bundle": "vendor/cli/yarn/1.22.22/package/lib/cli.js",
+    "bundle": "tests/fixtures/package-managers/cli/yarn/1.22.22/package/lib/cli.js",
     "bundleSha256": "443ed69e76443b89afddccfc9faec1ff16eb5e500979cc079c696dec4c3d94ee",
     "cspFactory": "packages/workspace-runtime/assets/vendor/yarn-cli-1.22.22.mjs",
     "cspFactorySha256": "e6f01b28a30aae3d6bd6cf78302d0b1ba1f5e6e8d2f6f918989b6cd7f2a428a0",
@@ -17,7 +17,7 @@
     "tarballSha256": "c17d3797fb9a9115bf375e31bfd30058cac6bc9c3b8807a3d8cb2094794b51ca"
   },
   "capabilities": [
-    { "id": "vendored-real-cli", "status": "pass", "evidence": ["vendor/cli/yarn/1.22.22/installed.json", "tests/compatibility/package-managers/yarn-vendored-cli.test.ts"] },
+    { "id": "vendored-real-cli", "status": "pass", "evidence": ["tests/fixtures/package-managers/cli/yarn/1.22.22/installed.json", "tests/compatibility/package-managers/yarn-vendored-cli.test.ts"] },
     { "id": "real-cli-bundle-graph", "status": "pass", "evidence": ["tests/compatibility/package-managers/yarn-vendored-cli.test.ts"] },
     { "id": "real-cli-version", "status": "pass", "evidence": ["tests/compatibility/package-managers/yarn-real-cli.test.ts", "tests/compatibility/package-managers/cli-evaluator.test.ts"] },
     { "id": "local-file-install", "status": "pass", "evidence": ["tests/compatibility/package-managers/yarn-guest-runtime-boot.test.ts"] },

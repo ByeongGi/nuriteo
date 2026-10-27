@@ -22,15 +22,15 @@ const tarballLiteral = JSON.stringify([...gzip(createTar([
 ]))]);
 
 const workspace = new MemoryPackageManagerWorkspace([
-  ...readMounts(repoRoot, mountRoot, "vendor/cli/npm/10.9.2/package"),
+  ...readMounts(repoRoot, mountRoot, "tests/fixtures/package-managers/cli/npm/10.9.2/package"),
   {
     path: "/workspace/tar-temp-cli/bin.js",
     data: `
       (async function run(process) {
         try {
-          const { Minipass } = require("/workspace/vendor/cli/npm/10.9.2/package/node_modules/minipass/dist/commonjs/index.js");
-          const tar = require("/workspace/vendor/cli/npm/10.9.2/package/node_modules/cacache/node_modules/tar/dist/commonjs/index.js");
-          const withTempDir = require("/workspace/vendor/cli/npm/10.9.2/package/node_modules/@npmcli/fs/lib/with-temp-dir.js");
+          const { Minipass } = require("/workspace/tests/fixtures/package-managers/cli/npm/10.9.2/package/node_modules/minipass/dist/commonjs/index.js");
+          const tar = require("/workspace/tests/fixtures/package-managers/cli/npm/10.9.2/package/node_modules/cacache/node_modules/tar/dist/commonjs/index.js");
+          const withTempDir = require("/workspace/tests/fixtures/package-managers/cli/npm/10.9.2/package/node_modules/@npmcli/fs/lib/with-temp-dir.js");
           const { readFile } = require("node:fs/promises");
           const result = await withTempDir("/home/webcontainer/.npm/_cacache/tmp", async (dir) => {
             const stream = new Minipass();

@@ -41,16 +41,16 @@ await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
 try {
   const { port } = server.address();
   const workspace = new MemoryPackageManagerWorkspace([
-    ...readMounts(repoRoot, mountRoot, "vendor/cli/npm/10.9.2/package"),
+    ...readMounts(repoRoot, mountRoot, "tests/fixtures/package-managers/cli/npm/10.9.2/package"),
     {
       path: "/workspace/pacote-cli/bin.js",
       data: `
         (async function run(process) {
           try {
-            const pacote = require("/workspace/vendor/cli/npm/10.9.2/package/node_modules/pacote/lib/index.js");
+            const pacote = require("/workspace/tests/fixtures/package-managers/cli/npm/10.9.2/package/node_modules/pacote/lib/index.js");
             const manifest = await pacote.manifest("http://127.0.0.1:${port}/fixture-registry-1.0.0.tgz", {
               cache: "/home/webcontainer/.npm/_cacache",
-              npmBin: "/workspace/vendor/cli/npm/10.9.2/package/bin/npm-cli.js"
+              npmBin: "/workspace/tests/fixtures/package-managers/cli/npm/10.9.2/package/bin/npm-cli.js"
             });
             process.stdout.write(manifest.name + "@" + manifest.version + "\\n");
           } catch (error) {

@@ -41,7 +41,7 @@ function validateDockerfile(source) {
   );
   assert(
     instructions.includes(
-      "COPY vendor/cli/npm/10.9.2/package/node_modules/qrcode-terminal/vendor/QRCode vendor/cli/npm/10.9.2/package/node_modules/qrcode-terminal/vendor/QRCode"
+      "COPY vendor/runtime/qrcode vendor/runtime/qrcode"
     ),
     "the Web image must include the local-only MFA QR encoder"
   );
@@ -135,15 +135,9 @@ function validateBuildContext() {
     "!workers/",
     "!workers/**",
     "!vendor/",
-    "!vendor/cli/",
-    "!vendor/cli/npm/",
-    "!vendor/cli/npm/10.9.2/",
-    "!vendor/cli/npm/10.9.2/package/",
-    "!vendor/cli/npm/10.9.2/package/node_modules/",
-    "!vendor/cli/npm/10.9.2/package/node_modules/qrcode-terminal/",
-    "!vendor/cli/npm/10.9.2/package/node_modules/qrcode-terminal/vendor/",
-    "!vendor/cli/npm/10.9.2/package/node_modules/qrcode-terminal/vendor/QRCode/",
-    "!vendor/cli/npm/10.9.2/package/node_modules/qrcode-terminal/vendor/QRCode/**"
+    "!vendor/runtime/",
+    "!vendor/runtime/qrcode/",
+    "!vendor/runtime/qrcode/**"
   ];
   assert.deepEqual(ignoreRules, expectedIgnoreRules);
 
@@ -155,7 +149,7 @@ function validateBuildContext() {
     "apps/web/package.json",
     "apps/web/next.config.ts",
     "apps/web/src",
-    "vendor/cli/npm/10.9.2/package/node_modules/qrcode-terminal/vendor/QRCode/index.js",
+    "vendor/runtime/qrcode/index.js",
     "packages/api-client/package.json",
     "packages/api-client/src"
   ]) {

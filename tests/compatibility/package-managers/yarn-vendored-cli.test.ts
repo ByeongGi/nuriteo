@@ -30,7 +30,7 @@ const graph = analyzeCliModuleGraph({
 });
 assert.equal(graph.supported, true);
 assert.equal(graph.modules.length, 1, "Yarn Classic's checked artifact is a self-contained webpack bundle");
-assert.equal(readJson("vendor/cli/yarn/1.22.22/package/package.json").version, gate.version);
+assert.equal(readJson("tests/fixtures/package-managers/cli/yarn/1.22.22/package/package.json").version, gate.version);
 
 console.log("yarn vendored CLI artifact test ok");
 

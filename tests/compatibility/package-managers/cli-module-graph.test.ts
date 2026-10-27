@@ -196,9 +196,9 @@ assert.deepEqual(selfReferenceGraph.modules.map((mod) => mod.path), [
 ]);
 
 for (const [name, version] of [["npm", "10.9.2"], ["pnpm", "9.15.9"]]) {
-  const installed = JSON.parse(fs.readFileSync(path.join(root, `vendor/cli/${name}/${version}/installed.json`), "utf8"));
+  const installed = JSON.parse(fs.readFileSync(path.join(root, `tests/fixtures/package-managers/cli/${name}/${version}/installed.json`), "utf8"));
   const installedEntry = path.resolve(root, installed.entryRelative || installed.entry);
-  const packageRoot = path.join(root, `vendor/cli/${name}/${version}/package`);
+  const packageRoot = path.join(root, `tests/fixtures/package-managers/cli/${name}/${version}/package`);
   const graph = analyzeCliModuleGraph({
     entry: installedEntry,
     packageRoot,

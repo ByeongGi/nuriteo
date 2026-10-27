@@ -177,7 +177,7 @@ try {
   if (result.run.exports?.size !== 5) throw new Error("SDK consumer stat smoke failed");
   if (result.services !== "function") throw new Error("SDK consumer service API missing");
   if (result.status !== "stopped") throw new Error("SDK consumer did not teardown");
-  const yarnPackageRoot = path.join(root, "vendor/cli/yarn/1.22.22/package");
+  const yarnPackageRoot = path.join(root, "tests/fixtures/package-managers/cli/yarn/1.22.22/package");
   const yarnWorkspace = new MemoryPackageManagerWorkspace([
     ...["bin/yarn.js", "lib/cli.js", "lib/v8-compile-cache.js", "package.json"].map((name) => ({
       path: `/workspace/vendor/yarn/package/${name}`,

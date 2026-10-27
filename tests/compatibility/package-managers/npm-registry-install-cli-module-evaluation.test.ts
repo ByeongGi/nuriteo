@@ -11,7 +11,7 @@ import {
 } from "../../../packages/node-runtime/src/index.ts";
 
 const repoRoot = new URL("../../..", import.meta.url).pathname;
-const installed = JSON.parse(fs.readFileSync(new URL("../../../vendor/cli/npm/10.9.2/installed.json", import.meta.url), "utf8"));
+const installed = JSON.parse(fs.readFileSync(new URL("../../fixtures/package-managers/cli/npm/10.9.2/installed.json", import.meta.url), "utf8"));
 const registry = new CliRegistry([installed]);
 const entry = registry.resolve("npm");
 const mountRoot = "/workspace";
@@ -52,7 +52,7 @@ await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
 try {
   const { port } = server.address();
   const workspace = new MemoryPackageManagerWorkspace([
-    ...readMounts(repoRoot, mountRoot, "vendor/cli/npm/10.9.2/package"),
+    ...readMounts(repoRoot, mountRoot, "tests/fixtures/package-managers/cli/npm/10.9.2/package"),
     {
       path: "/workspace/project/package.json",
       data: JSON.stringify({

@@ -10,13 +10,13 @@ import {
 const repoRoot = new URL("../../..", import.meta.url).pathname;
 const mountRoot = "/workspace";
 const workspace = new MemoryPackageManagerWorkspace([
-  ...readMounts(repoRoot, mountRoot, "vendor/cli/npm/10.9.2/package"),
+  ...readMounts(repoRoot, mountRoot, "tests/fixtures/package-managers/cli/npm/10.9.2/package"),
   {
     path: "/workspace/cacache-put-cli/bin.js",
     data: `
       (async function run(process) {
         try {
-          const cacache = require("/workspace/vendor/cli/npm/10.9.2/package/node_modules/cacache/lib/index.js");
+          const cacache = require("/workspace/tests/fixtures/package-managers/cli/npm/10.9.2/package/node_modules/cacache/lib/index.js");
           const stream = cacache.put.stream("/home/webcontainer/.npm/_cacache", "fixture-key");
           let size = 0;
           stream.on("size", (value) => {

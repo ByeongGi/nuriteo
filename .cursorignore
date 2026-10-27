@@ -1,5 +1,5 @@
-# Vendored package-manager CLIs are runtime inputs, not project source.
-/vendor/cli/
+# Real npm, pnpm, and Yarn CLIs used by compatibility tests. Keep them tracked.
+/tests/fixtures/package-managers/cli/
 
 # Hashed release evidence. Gates read the files; search does not need them.
 /docs/implementation/self-hosted/evidence/

@@ -10,14 +10,14 @@ import {
 const repoRoot = new URL("../../..", import.meta.url).pathname;
 const mountRoot = "/workspace";
 const workspace = new MemoryPackageManagerWorkspace([
-  ...readMounts(repoRoot, mountRoot, "vendor/cli/npm/10.9.2/package"),
+  ...readMounts(repoRoot, mountRoot, "tests/fixtures/package-managers/cli/npm/10.9.2/package"),
   {
     path: "/workspace/minizlib-cli/bin.js",
     data: `
       (function run(process) {
         try {
           const zlib = require("node:zlib");
-          const minizlib = require("/workspace/vendor/cli/npm/10.9.2/package/node_modules/minizlib/index.js");
+          const minizlib = require("/workspace/tests/fixtures/package-managers/cli/npm/10.9.2/package/node_modules/minizlib/index.js");
           const input = zlib.gzipSync(Buffer.from("minizlib-ok"));
           const unzip = new minizlib.Unzip();
           const chunks = [];

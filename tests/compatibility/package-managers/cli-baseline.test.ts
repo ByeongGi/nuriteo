@@ -25,11 +25,11 @@ const guestCli = createGuestCli(registry);
 const portableRegistry = new CliRegistry([{
   ...installed[0],
   entry: "/stale/checkout/npm-cli.js",
-  entryRelative: "vendor/cli/npm/10.9.2/package/bin/npm-cli.js"
+  entryRelative: "tests/fixtures/package-managers/cli/npm/10.9.2/package/bin/npm-cli.js"
 }], { root: "/portable/checkout" });
 assert.equal(
   portableRegistry.resolve("npm").entry,
-  "/portable/checkout/vendor/cli/npm/10.9.2/package/bin/npm-cli.js"
+  "/portable/checkout/tests/fixtures/package-managers/cli/npm/10.9.2/package/bin/npm-cli.js"
 );
 
 for (const name of ["npm", "pnpm"]) {

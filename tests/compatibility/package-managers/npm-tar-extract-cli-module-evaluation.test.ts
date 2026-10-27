@@ -22,14 +22,14 @@ const tarballLiteral = JSON.stringify([...gzip(createTar([
 ]))]);
 
 const workspace = new MemoryPackageManagerWorkspace([
-  ...readMounts(repoRoot, mountRoot, "vendor/cli/npm/10.9.2/package"),
+  ...readMounts(repoRoot, mountRoot, "tests/fixtures/package-managers/cli/npm/10.9.2/package"),
   {
     path: "/workspace/tar-cli/bin.js",
     data: `
       (async function run(process) {
         try {
-          const { Minipass } = require("/workspace/vendor/cli/npm/10.9.2/package/node_modules/minipass/dist/commonjs/index.js");
-          const tar = require("/workspace/vendor/cli/npm/10.9.2/package/node_modules/cacache/node_modules/tar/dist/commonjs/index.js");
+          const { Minipass } = require("/workspace/tests/fixtures/package-managers/cli/npm/10.9.2/package/node_modules/minipass/dist/commonjs/index.js");
+          const tar = require("/workspace/tests/fixtures/package-managers/cli/npm/10.9.2/package/node_modules/cacache/node_modules/tar/dist/commonjs/index.js");
           const stream = new Minipass();
           const extractor = tar.x({ cwd: "/workspace/out" });
           extractor.on("end", () => process.stdout.write("tar-end\\n"));
