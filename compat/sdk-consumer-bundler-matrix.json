@@ -36,7 +36,7 @@
       "bundler": "vite",
       "command": "vite build",
       "status": "pass",
-      "evidence": ["tests/contract/sdk-consumer/vite-build.test.ts", "docs/archive/productization-2026-09-16/evidence/P14-03.md"],
+      "evidence": ["tests/contract/sdk-consumer/vite-build.test.ts"],
       "notes": "Tarball-installed Vite consumer imports the root SDK package, builds successfully, and verifies worker asset URL strings survive bundling."
     },
     {
@@ -44,7 +44,7 @@
       "bundler": "webpack",
       "command": "webpack build",
       "status": "pass",
-      "evidence": ["tests/contract/sdk-consumer/webpack-build.test.ts", "docs/archive/productization-2026-09-16/evidence/P14-03.md"],
+      "evidence": ["tests/contract/sdk-consumer/webpack-build.test.ts"],
       "notes": "Tarball-installed Webpack consumer imports the root SDK package, builds successfully, and verifies runtime worker URL strings survive bundling when expressed from location.href."
     },
     {
@@ -52,7 +52,7 @@
       "bundler": "rspack",
       "command": "rspack build",
       "status": "pass",
-      "evidence": ["tests/contract/sdk-consumer/rspack-build.test.ts", "docs/archive/productization-2026-09-16/evidence/P14-03.md"],
+      "evidence": ["tests/contract/sdk-consumer/rspack-build.test.ts"],
       "notes": "Tarball-installed Rspack consumer imports the root SDK package, builds successfully, and verifies runtime worker URL strings survive bundling when expressed from location.href."
     },
     {
@@ -60,7 +60,7 @@
       "bundler": "next",
       "command": "next build",
       "status": "pass",
-      "evidence": ["tests/contract/sdk-consumer/next-build.test.ts", "docs/archive/productization-2026-09-16/evidence/P14-03.md"],
+      "evidence": ["tests/contract/sdk-consumer/next-build.test.ts"],
       "notes": "Tarball-installed Next app router client fixture imports the root SDK package with transpilePackages and verifies worker URL strings survive in client assets."
     }
   ],

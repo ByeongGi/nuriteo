@@ -5,7 +5,6 @@ const acceptance = readJson("../../compat/parity-acceptance.json");
 const publicMatrix = readJson("../../compat/public-compatibility-matrix.json");
 const actualResults = readJson("../../compat/ecosystem-fixture-actual-product-results.json");
 const unsupported = readJson("../../compat/unsupported-diagnostics.json");
-const progress = readText("../../docs/archive/productization-2026-09-16/PROGRESS.md");
 const acceptanceDoc = readText("../../docs/productization/parity-acceptance.md");
 
 assert.equal(acceptance.schemaVersion, 1);
@@ -56,9 +55,6 @@ assert.equal(acceptance.documentation.status, "pass");
 assert.equal(acceptance.operations.status, "pass");
 assert.equal(acceptance.operations.supportOwner, "maintainer");
 assert.ok(acceptance.operations.remainingBacklog.length > 0);
-
-assert.match(progress, /\| P20 \| .* \| 4\/4 \| PG20: PASS \| DONE \|/);
-assert.match(progress, /\| C \| WebContainers parity scope \| PASS \|/);
 
 console.log("parity acceptance test ok");
 

@@ -12,8 +12,7 @@
       "status": "supported",
       "supportLevel": "product-target",
       "evidence": [
-        "compat/framework-conformance.json",
-        "docs/archive/productization-2026-09-16/evidence/P11-01.md"
+        "compat/framework-conformance.json"
       ],
       "notes": "Actual Vite 8.2.0 worker-backed path covers install/dev/preview/edit-HMR/build/reload recovery for the product target."
     },

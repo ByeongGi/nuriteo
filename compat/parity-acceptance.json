@@ -12,8 +12,7 @@
         "status": "product-supported",
         "evidence": [
           "compat/node-api-gap.json",
-          "packages/node-runtime/test/run.ts",
-          "docs/archive/productization-2026-09-16/evidence/P9-04.md"
+          "packages/node-runtime/test/run.ts"
         ]
       },
       {
@@ -21,8 +20,7 @@
         "status": "product-supported",
         "evidence": [
           "compat/package-manager-conformance.json",
-          "tests/compatibility/package-managers/run.ts",
-          "docs/archive/productization-2026-09-16/evidence/P10-04.md"
+          "tests/compatibility/package-managers/run.ts"
         ]
       },
       {
@@ -30,8 +28,7 @@
         "status": "product-supported",
         "evidence": [
           "compat/framework-conformance.json",
-          "tests/compatibility/frameworks/vite/vite-react-product-workflow.test.ts",
-          "docs/archive/productization-2026-09-16/evidence/P11-01.md"
+          "tests/compatibility/frameworks/vite/vite-react-product-workflow.test.ts"
         ]
       },
       {
@@ -47,16 +44,14 @@
         "status": "product-supported",
         "evidence": [
           "packages/preview/test/run.ts",
-          "packages/browser-host/test/run.ts",
-          "docs/archive/productization-2026-09-16/evidence/P17-04.md"
+          "packages/browser-host/test/run.ts"
         ]
       },
       {
         "area": "Persistent project storage and recovery",
         "status": "product-supported",
         "evidence": [
-          "packages/browser-host/test/run.ts",
-          "docs/archive/productization-2026-09-16/evidence/P12-04.md"
+          "packages/browser-host/test/run.ts"
         ]
       },
       {
@@ -64,8 +59,7 @@
         "status": "product-supported",
         "evidence": [
           "compat/sdk-consumer-bundler-matrix.json",
-          "tests/contract/sdk-consumer/run.ts",
-          "docs/archive/productization-2026-09-16/evidence/P14-04.md"
+          "tests/contract/sdk-consumer/run.ts"
         ]
       },
       {
@@ -73,16 +67,14 @@
         "status": "product-supported-with-candidates",
         "evidence": [
           "compat/wasm-tool-adapters.json",
-          "compat/wasi-runtime-boundary.json",
-          "docs/archive/productization-2026-09-16/evidence/P19-04.md"
+          "compat/wasi-runtime-boundary.json"
         ]
       },
       {
         "area": "Actual public Vite React ecosystem fixture gate",
         "status": "product-supported",
         "evidence": [
-          "compat/ecosystem-fixture-actual-product-results.json",
-          "docs/archive/productization-2026-09-16/evidence/P18-04.md"
+          "compat/ecosystem-fixture-actual-product-results.json"
         ],
         "requiredPass": 7,
         "actualPass": 10
@@ -125,8 +117,7 @@
     "covers": ["install", "dev", "preview", "edit-hmr", "build", "reload-recovery"],
     "evidence": [
       "tests/compatibility/frameworks/vite/vite-react-product-workflow.test.ts",
-      "compat/ecosystem-fixture-actual-product-results.json",
-      "docs/archive/productization-2026-09-16/evidence/P20-01.md"
+      "compat/ecosystem-fixture-actual-product-results.json"
     ]
   },
   "documentation": {
@@ -140,7 +131,7 @@
       "docs/release/release-checklist.md",
       "docs/productization/parity-acceptance.md"
     ],
-    "evidence": ["docs/archive/productization-2026-09-16/evidence/P20-03.md"]
+    "evidence": ["docs/productization/parity-acceptance.md"]
   },
   "operations": {
     "status": "pass",
@@ -161,7 +152,7 @@
       "Pinned Next.js 15.5.26 full runtime passes strict-CSP browser-worker and release-security gates; native addons remain outside scope",
       "External stable publish still requires one final release checklist reconfirmation at publish time"
     ],
-    "evidence": ["docs/archive/productization-2026-09-16/evidence/P20-04.md"]
+    "evidence": ["docs/release/release-checklist.md"]
   },
   "gate": {
     "id": "PG20",

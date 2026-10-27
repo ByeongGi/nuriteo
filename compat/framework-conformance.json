@@ -62,8 +62,7 @@
       "runtime": "browser-guest-node-runtime",
       "status": "pass",
       "evidence": [
-        "tests/compatibility/frameworks/vite/vite-react-product-workflow.test.ts",
-        "docs/archive/productization-2026-09-16/evidence/P11-01.md"
+        "tests/compatibility/frameworks/vite/vite-react-product-workflow.test.ts"
       ],
       "productGap": "Actual Vite 8.2.0 worker-backed product runtime covers install artifacts, hydrated dependency materialization, actual Vite CLI dev server start, browser preview relay, real Vite import-analysis transform, React bare package import rewrite, TypeScript/TSX transform fallback, real Vite HMR connected/update payloads, actual Vite build dist artifact generation, and worker bridge reload recovery."
     },
@@ -77,8 +76,7 @@
         "tests/compatibility/frameworks/vite/vite-react-product-workflow.test.ts",
         "tests/compatibility/frameworks/vite/vite-vue-svelte-actual.test.ts",
         "compat/framework-actual-validation.json",
-        "compat/framework-product-support.json",
-        "docs/archive/productization-2026-09-16/evidence/P11-02.md"
+        "compat/framework-product-support.json"
       ],
       "supportContract": "The fixture tied to the pinned Vite template-vue upstream passes npm/pnpm install, worker-backed dev/preview, edit-HMR with state preservation, build/dist smoke, and reload recovery within the W6 performance budget."
     },
@@ -92,8 +90,7 @@
         "tests/compatibility/frameworks/vite/vite-react-product-workflow.test.ts",
         "tests/compatibility/frameworks/vite/vite-vue-svelte-actual.test.ts",
         "compat/framework-actual-validation.json",
-        "compat/framework-product-support.json",
-        "docs/archive/productization-2026-09-16/evidence/P11-02.md"
+        "compat/framework-product-support.json"
       ],
       "supportContract": "The fixture tied to the pinned Vite template-svelte upstream passes npm/pnpm install, plugin-backed worker dev/preview, edit-HMR with state preservation, build/dist smoke, and reload recovery within the W6 performance budget."
     },

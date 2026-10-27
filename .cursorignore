@@ -1,0 +1,2 @@
+# Vendored package-manager CLIs are runtime inputs, not project source.
+/vendor/cli/
