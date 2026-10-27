@@ -25,7 +25,7 @@
     { "id": "cancellation-recovery-soak", "status": "pass", "evidence": ["tests/compatibility/package-managers/yarn-guest-runtime-boot.test.ts"] },
     { "id": "registry-resolution-install", "status": "pass", "evidence": ["tests/compatibility/package-managers/yarn-registry-install-real-cli.test.ts"] },
     { "id": "real-cli-browser-execution", "status": "pass", "evidence": ["tests/compatibility/package-managers/yarn-browser-worker-real-cli.test.ts", "packages/workspace-runtime/assets/vendor/yarn-cli-1.22.22.mjs"] },
-    { "id": "detection-override-ui", "status": "pass", "evidence": ["packages/browser-host/test/project-onboarding.test.ts", "apps/web/test/gate-project-runtime-browser.test.ts"] }
+    { "id": "detection-override-ui", "status": "pass", "evidence": ["packages/browser-host/test/project-onboarding.test.ts", "apps/web/test/runtime/gate-project-runtime-browser.test.ts"] }
   ],
   "promotionGate": {
     "status": "passed",

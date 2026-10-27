@@ -15,7 +15,7 @@
       ],
       "evidence": [
         "tests/system/browser/isolation.test.ts",
-        "apps/web/test/gate-project-runtime-browser.test.ts",
+        "apps/web/test/runtime/gate-project-runtime-browser.test.ts",
         "tooling/qualification/browser-capabilities.ts"
       ]
     },

@@ -101,7 +101,7 @@
       "runtime": "browser-guest-node-runtime",
       "status": "pass",
       "evidence": [
-        "apps/web/test/gate-project-runtime-browser.test.ts",
+        "apps/web/test/runtime/gate-project-runtime-browser.test.ts",
         "compat/nextjs-compatibility.json",
         "docs/productization/nextjs-product-support-target.md"
       ],

@@ -65,7 +65,7 @@
   "tests": [
     "packages/workspace-runtime/test/controller-dispose.test.ts",
     "packages/workspace-runtime/test/terminal-session-control.test.ts",
-    "apps/web/test/runtime-journey-browser.test.ts",
-    "apps/web/test/gate-project-runtime-browser.test.ts"
+    "apps/web/test/runtime/runtime-journey-browser.test.ts",
+    "apps/web/test/runtime/gate-project-runtime-browser.test.ts"
   ]
 }

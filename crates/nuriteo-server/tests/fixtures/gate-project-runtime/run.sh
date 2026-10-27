@@ -3,7 +3,7 @@ set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "$script_dir/../../../../../" && pwd)"
-browser_fixture="$repo_root/apps/web/test/gate-project-runtime-browser.test.ts"
+browser_fixture="$repo_root/apps/web/test/runtime/gate-project-runtime-browser.test.ts"
 node_executable="$(mise which node@24.17.0)"
 
 cd "$repo_root"

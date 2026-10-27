@@ -33,7 +33,7 @@
   "evidence": [
     "crates/nuriteo-server/tests/admin_http.rs",
     "crates/nuriteo-server/tests/openapi_contract.rs",
-    "apps/web/test/admin-settings-ux.test.ts",
+    "apps/web/test/admin/admin-settings-ux.test.ts",
     "apps/web/test/admin-settings-browser.test.ts"
   ]
 }

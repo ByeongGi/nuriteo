@@ -80,7 +80,7 @@
       "supportLevel": "pinned-strict-csp-browser-runtime",
       "evidence": [
         "compat/nextjs-compatibility.json",
-        "apps/web/test/gate-project-runtime-browser.test.ts",
+        "apps/web/test/runtime/gate-project-runtime-browser.test.ts",
         "apps/web/test/preview-next-subdomain-browser.test.ts",
         "docs/productization/nextjs-product-support-target.md"
       ],

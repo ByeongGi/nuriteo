@@ -10,7 +10,7 @@
       "status": "pass",
       "evidence": [
         "apps/web",
-        "apps/web/test/gate-project-runtime-browser.test.ts",
+        "apps/web/test/runtime/gate-project-runtime-browser.test.ts",
         "docs/productization/service-readiness-plan.md#sg22"
       ]
     },

@@ -9,4 +9,4 @@ CARGO_TARGET_DIR=/private/tmp/nuriteo-gate002-target \
   ./crates/nuriteo-server/tests/fixtures/gate-collaboration/run.sh
 ```
 
-This fixture is actual Core evidence. It is intentionally separate from `apps/web/test/collaboration-browser.test.ts`, which verifies the production standalone Next.js/BFF/browser boundary against a bounded stateful mock Core.
+This fixture is actual Core evidence. It is intentionally separate from `apps/web/test/project/collaboration-browser.test.ts`, which verifies the production standalone Next.js/BFF/browser boundary against a bounded stateful mock Core.

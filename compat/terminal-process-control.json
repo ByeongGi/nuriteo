@@ -65,7 +65,7 @@
     "crates/system-wasm/src/dispatch.rs",
     "tests/compatibility/package-managers/terminal-commands.test.ts",
     "packages/workspace-runtime/test/terminal-session-control.test.ts",
-    "apps/web/test/runtime-journey-browser.test.ts"
+    "apps/web/test/runtime/runtime-journey-browser.test.ts"
   ],
   "reproductionCommands": [
     "node tooling/checks/check-terminal-process-control.ts",
