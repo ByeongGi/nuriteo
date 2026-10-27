@@ -56,7 +56,7 @@
       "status": "supported",
       "contract": "HTTPS S3-compatible storage that passes the NURITEO capability preflight; bundled RustFS 1.0.0 is the single-host default",
       "qualification": "Compatibility is granted by PUT, GET, HEAD, DELETE, LIST, range, checksum, presign, multipart, and cleanup behavior—not by provider name.",
-      "evidence": ["docs/policies/object-storage.md", "docs/implementation/self-hosted/evidence/S3-003.md"]
+      "evidence": ["docs/policies/operations/object-storage.md", "docs/implementation/self-hosted/evidence/S3-003.md"]
     },
     {
       "id": "SHV1-BROWSER-CHROME",
@@ -88,7 +88,7 @@
       "status": "supported",
       "contract": "Local administrator-managed accounts, expiring invitations, optional TOTP MFA, and multiple instance-wide OIDC providers",
       "qualification": "WebAuthn/passkeys and public self-registration are not part of v1.",
-      "evidence": ["docs/policies/identity-and-access.md"]
+      "evidence": ["docs/policies/identity/identity-and-access.md"]
     },
     {
       "id": "SHV1-UPGRADE",
