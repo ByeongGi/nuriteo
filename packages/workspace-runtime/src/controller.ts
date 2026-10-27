@@ -106,6 +106,7 @@ interface PreviewWorkflowState {
   phase: PreviewWorkflowPhase;
   project: ProjectWorkspaceStore | null;
   projectFiles: PreviewProjectFile[];
+  directories: string[];
   editor: ProjectWorkspaceEditorBridge | null;
   workflow: ProductWorkflow | null;
   install: ProductInstallResult | null;
@@ -159,6 +160,7 @@ export function createPreviewWorkflowController(
     phase: PHASES.idle,
     project: null,
     projectFiles: [],
+    directories: [],
     editor: null,
     workflow: null,
     install: null,
@@ -314,6 +316,7 @@ export function createPreviewWorkflowController(
     state.source = null;
     state.project = null;
     state.projectFiles = [];
+    state.directories = [];
     state.editor = null;
     state.workflow = null;
   }
@@ -941,15 +944,20 @@ export function createPreviewWorkflowController(
     const operation = beginOperation();
     try {
       setPhase(PHASES.installing);
-      log("install start");
-      state.install = state.workflow.install();
-      log(`install ok packages=${state.install.packages.join(",")}`);
-      await installDeclaredPackages({ ignoreScripts: false, manager: "npm", packages: [], save: false, signal: operation.signal });
+      log("의존성 설치 중");
+      await installProjectPackages({
+        ignoreScripts: false,
+        manager: "npm",
+        packages: [],
+        save: false,
+        signal: operation.signal
+      });
+      log(`설치됨 packages=${state.install?.packages.join(",") ?? ""}`);
       setPhase(PHASES.installed);
 
       setPhase(PHASES.startingDev);
-      const dev = state.workflow.startDevServerFromPackageScript(scriptName);
-      log(`dev server ready :${dev.port}`);
+      const dev = await startPreviewDevServer(scriptName);
+      log(`dev server ready :${dev.port} mode=${dev.moduleTransform}`);
 
       await ensureServiceWorker();
       assertOperationActive(operation);
@@ -988,6 +996,68 @@ export function createPreviewWorkflowController(
     const relative = relativeProjectPath(path, state.project?.root || "");
     state.projectFiles.push({ path: relative, kind: "text", bytes: new TextEncoder().encode(data) });
     state.projectFiles.sort((left, right) => left.path.localeCompare(right.path));
+    return getSnapshot();
+  }
+
+  function createDirectory(path: string): PreviewWorkflowSnapshot {
+    if (disposed || !state.workflow) throw new Error("Preview editor is unavailable");
+    const relative = normalizeRelativeProjectPath(path);
+    if (state.projectFiles.some((file) => file.path === relative)) throw new Error(`A file already exists: ${relative}`);
+    if (!state.directories.includes(relative)) state.directories = [...state.directories, relative].sort();
+    state.workflow.workspace.mkdir(`${state.workflow.projectRoot}/${relative}`);
+    return getSnapshot();
+  }
+
+  function movePath(from: string, to: string): PreviewWorkflowSnapshot {
+    if (disposed || !state.editor) throw new Error("Preview editor is unavailable");
+    const source = normalizeRelativeProjectPath(from);
+    const target = normalizeRelativeProjectPath(to);
+    if (source === target) return getSnapshot();
+    if (target === source || target.startsWith(`${source}/`)) throw new Error("Cannot move a directory into itself");
+    const movingFiles = state.projectFiles
+      .filter((file) => file.path === source || file.path.startsWith(`${source}/`))
+      .sort((left, right) => right.path.length - left.path.length);
+    const movingDirectory = state.directories.some((directory) => directory === source || directory.startsWith(`${source}/`));
+    if (movingFiles.length === 0 && !movingDirectory) throw new Error(`No such project path: ${source}`);
+    for (const file of movingFiles) {
+      renameFile(file.path, `${target}${file.path.slice(source.length)}`);
+    }
+    state.directories = state.directories.map((directory) => (
+      directory === source || directory.startsWith(`${source}/`)
+        ? `${target}${directory.slice(source.length)}`
+        : directory
+    ));
+    if (movingFiles.length === 0 && !state.directories.includes(target)) state.directories.push(target);
+    state.directories.sort();
+    const workflow = state.workflow;
+    if (workflow) {
+      const sourceAbsolute = `${workflow.projectRoot}/${source}`;
+      const sourceRemains = state.projectFiles.some((file) => file.path === source || file.path.startsWith(`${source}/`));
+      if (!sourceRemains) workflow.workspace.remove(sourceAbsolute);
+      const movedDirectory = movingDirectory || movingFiles.some((file) => file.path.startsWith(`${source}/`));
+      if (movedDirectory) workflow.workspace.mkdir(`${workflow.projectRoot}/${target}`);
+    }
+    return getSnapshot();
+  }
+
+  function deletePath(path: string): PreviewWorkflowSnapshot {
+    if (disposed || !state.editor) throw new Error("Preview editor is unavailable");
+    const relative = normalizeRelativeProjectPath(path);
+    const files = state.projectFiles
+      .filter((file) => file.path === relative || file.path.startsWith(`${relative}/`))
+      .sort((left, right) => right.path.length - left.path.length);
+    const hadDirectory = state.directories.some((directory) => directory === relative || directory.startsWith(`${relative}/`));
+    if (files.length === 0 && !hadDirectory) throw new Error(`No such project path: ${relative}`);
+    for (const file of files) deleteFile(file.path);
+    state.directories = state.directories.filter((directory) => directory !== relative && !directory.startsWith(`${relative}/`));
+    state.workflow?.workspace.remove(`${state.workflow.projectRoot}/${relative}`);
+    return getSnapshot();
+  }
+
+  function cancelPreview(): PreviewWorkflowSnapshot {
+    for (const operation of operationControllers) operation.abort();
+    try { state.workflow?.stopDevServer(); } catch { /* the preview start owns the failure */ }
+    log("미리보기 시작을 취소했습니다.");
     return getSnapshot();
   }
 
@@ -1230,11 +1300,16 @@ export function createPreviewWorkflowController(
       ...Object.keys(manifest.devDependencies ?? {}),
       ...Object.keys(manifest.optionalDependencies ?? {})
     ]);
+    const exclude = new Set(state.install.packages);
     for (const name of declaredNames) {
-      // Vite, TypeScript, and @types stay as browser shims. App libraries such
-      // as date-fns are often declared in devDependencies and still have to be
-      // fetched, or the preview keeps a product-fixture stub and a bare import.
-      if (!dependencyNames.has(name) && isBrowserToolchainPackage(name)) continue;
+      // Vite, TypeScript, and @types stay as browser shims when they are not
+      // application dependencies. App libraries such as date-fns are often
+      // declared in devDependencies and still have to be fetched, or the
+      // preview keeps a product-fixture stub and a bare import.
+      if (!dependencyNames.has(name) && isBrowserToolchainPackage(name)) {
+        exclude.add(name);
+        continue;
+      }
       try {
         const installed = JSON.parse(state.workflow.workspace.readText(`${state.workflow.projectRoot}/node_modules/${name}/package.json`)) as { version?: string };
         if (installed.version === "product-fixture") fixtureRuntime.add(name);
@@ -1242,6 +1317,18 @@ export function createPreviewWorkflowController(
         fixtureRuntime.add(name);
       }
     }
+    for (const name of fixtureRuntime) exclude.delete(name);
+    const locked = request?.packages.length ? new Map<string, string>() : readLockedDependencyVersions(state.workflow);
+    const declaredRanges = new Map<string, string>([
+      ...Object.entries(manifest.dependencies ?? {}),
+      ...Object.entries(manifest.devDependencies ?? {}),
+      ...Object.entries(manifest.optionalDependencies ?? {})
+    ]);
+    const lockedSpecs = locked.size === 0
+      ? []
+      : [...declaredNames]
+        .filter((name) => !exclude.has(name))
+        .map((name) => `${name}@${locked.get(name) ?? declaredRanges.get(name) ?? "latest"}`);
     return createRegistryPackageInstaller({
       workspace: state.workflow.workspace,
       ...(options.packageFetch ? { fetch: options.packageFetch } : {}),
@@ -1249,7 +1336,8 @@ export function createPreviewWorkflowController(
     }).install({
       cwd: state.workflow.projectRoot,
       ...(request?.packages.length ? { packages: request.packages, save: request.save } : {}),
-      ...(!request?.packages.length ? { exclude: state.install.packages.filter((name) => !fixtureRuntime.has(name)) } : {}),
+      ...(!request?.packages.length && lockedSpecs.length > 0 ? { packages: lockedSpecs, save: false } : {}),
+      ...(!request?.packages.length && lockedSpecs.length === 0 ? { exclude: [...exclude] } : {}),
       ...(request?.signal ? { signal: request.signal } : {})
     });
   }
@@ -1279,18 +1367,45 @@ export function createPreviewWorkflowController(
   }
 
   async function syncDeclaredPackages(): Promise<{ added: string[] }> {
-    if (disposed || !state.workflow || !state.install) return { added: [] };
-    const registryInstall = await installDeclaredPackages({
+    if (disposed || !state.workflow) return { added: [] };
+    const projectInstall = await installProjectPackages({
       ignoreScripts: false,
       manager: "npm",
       packages: [],
       save: false
     });
-    await runInstalledPackageLifecycles(false, registryInstall);
+    return { added: projectInstall.registryInstall.installed.map((entry) => `${entry.name}@${entry.version}`) };
+  }
+
+  async function startPreviewDevServer(scriptName: string) {
+    const workflow = state.workflow;
+    if (!workflow) throw new Error("Failed to load preview workflow");
+    if (isAdapterFrameworkFixture(workflow)) return workflow.startDevServerFromPackageScript(scriptName);
+    if (workflow.template === "next-app") {
+      const readiness = workflow.inspectRealCliReadiness();
+      if (readiness.status !== "ready") {
+        const reason = readiness.cliEntryReadiness.reasons.find((entry) => entry.message)?.message
+          || "개발 서버 준비를 마치지 못했습니다.";
+        throw new Error(reason);
+      }
+    }
+    const dev = await workflow.startDevServerFromCliExecution(scriptName);
+    if (dev.moduleTransform === "adapter") {
+      throw new Error("개발 서버가 프로젝트 개발 명령을 실행하지 못했습니다.");
+    }
+    return dev;
+  }
+
+  async function installProjectPackages(request?: PreviewPackageInstallRequest) {
+    if (!state.workflow) throw new Error("no workflow");
+    if (!state.install) state.install = state.workflow.install();
+    const registryInstall = await installDeclaredPackages(request);
+    const lifecycleOutput = await runInstalledPackageLifecycles(request?.ignoreScripts ?? false, registryInstall);
+    if (lifecycleOutput.length > 0) log(lifecycleOutput.join("\n"));
     const names = new Set(state.install.packages);
     for (const entry of [...registryInstall.installed, ...registryInstall.reused]) names.add(entry.name);
     state.install = { ...state.install, packages: [...names] };
-    return { added: registryInstall.installed.map((entry) => `${entry.name}@${entry.version}`) };
+    return { lifecycleOutput, registryInstall };
   }
 
   const shellLifecycle = createPreviewShellLifecycle({
@@ -1309,17 +1424,15 @@ export function createPreviewWorkflowController(
       if (!state.workflow) return { stdout: "", stderr: "no workflow\n", exitCode: 1 };
       try {
         setPhase(PHASES.installing);
-        // Terminal install refreshes fixture stubs first. Editing package.json
-        // must not take this path, or it would replace real packages with stubs.
-        state.install = state.workflow.install();
-        const registryInstall = await installDeclaredPackages(request);
-        const lifecycleOutput = await runInstalledPackageLifecycles(request?.ignoreScripts ?? false, registryInstall);
+        const projectInstall = await installProjectPackages(request);
+        const registryInstall = projectInstall.registryInstall;
+        const lifecycleOutput = projectInstall.lifecycleOutput;
         syncWorkflowFilesToProject();
         setPhase(PHASES.installed);
         const installed = registryInstall.installed.map((entry) => `${entry.name}@${entry.version}`);
         const reused = registryInstall.reused.map((entry) => `${entry.name}@${entry.version}`);
         const stdout = [
-          `install ok packages=${state.install.packages.join(",")}`,
+          `설치됨 packages=${state.install?.packages.join(",") ?? ""}`,
           ...(installed.length ? [`added ${installed.join(", ")}`] : []),
           ...(reused.length ? [`reused ${reused.join(", ")}`] : []),
           ...lifecycleOutput
@@ -1470,8 +1583,12 @@ export function createPreviewWorkflowController(
     setPreviewErrorBridge,
     getChangeStatus,
     createTextFile,
+    createDirectory,
     renameFile,
+    movePath,
     deleteFile,
+    deletePath,
+    cancelPreview,
     saveTextFile,
     syncDeclaredPackages,
     runPreview,
@@ -1494,6 +1611,61 @@ export function createPreviewWorkflowController(
     dispose,
     log
   };
+}
+
+function normalizeRelativeProjectPath(path: string): string {
+  const relative = path.replace(/^\/+/u, "").replace(/\/+$/u, "");
+  if (!relative || relative.split("/").some((segment) => segment === "" || segment === "." || segment === "..")) {
+    throw new Error(`Invalid project path: ${path}`);
+  }
+  return relative;
+}
+
+function isAdapterFrameworkFixture(workflow: ProductWorkflow): boolean {
+  for (const name of ["next", "vite"]) {
+    const manifestPath = `${workflow.projectRoot}/node_modules/${name}/package.json`;
+    if (!workflow.workspace.exists(manifestPath)) continue;
+    try {
+      const manifest = JSON.parse(workflow.workspace.readText(manifestPath)) as { nuriteoFixture?: unknown; version?: unknown };
+      if (manifest.nuriteoFixture === true || manifest.version === "product-fixture") return true;
+    } catch {
+      return true;
+    }
+  }
+  return false;
+}
+
+function readLockedDependencyVersions(workflow: ProductWorkflow): Map<string, string> {
+  const versions = new Map<string, string>();
+  const root = workflow.projectRoot;
+  const packageLock = `${root}/package-lock.json`;
+  if (workflow.workspace.exists(packageLock)) {
+    try {
+      const parsed = JSON.parse(workflow.workspace.readText(packageLock)) as { packages?: Record<string, { version?: string }> };
+      for (const [path, entry] of Object.entries(parsed.packages ?? {})) {
+        const marker = "node_modules/";
+        const index = path.lastIndexOf(marker);
+        if (index < 0 || !entry.version) continue;
+        const name = path.slice(index + marker.length);
+        if (!name || name.includes("/node_modules/")) continue;
+        versions.set(name, entry.version);
+      }
+    } catch {
+      /* ignore an unreadable lockfile and use package.json ranges */
+    }
+  }
+  const pnpmLock = `${root}/pnpm-lock.yaml`;
+  if (workflow.workspace.exists(pnpmLock)) {
+    try {
+      for (const line of workflow.workspace.readText(pnpmLock).split("\n")) {
+        const match = /^\s*\/?((?:@[^/\s]+\/)?[^@\s]+)@([0-9][^:\s]*):?\s*$/u.exec(line);
+        if (match?.[1] && match[2]) versions.set(match[1], match[2]);
+      }
+    } catch {
+      /* ignore an unreadable lockfile and use package.json ranges */
+    }
+  }
+  return versions;
 }
 
 function isBrowserToolchainPackage(name: string): boolean {

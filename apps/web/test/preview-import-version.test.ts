@@ -13,5 +13,8 @@ assert.equal(
 assert.equal(versionPreviewImportSpecifier("./App.tsx", "5"), "./App.tsx?nuriteo_hmr=5");
 assert.equal(versionPreviewImportSpecifier("ms", "5"), "ms");
 assert.equal(previewModuleRefreshPath(["package.json", "src/App.tsx", "src/main.tsx"]), "src/main.tsx");
+assert.equal(previewModuleRefreshPath(["package.json", "app/layout.tsx", "app/about/page.tsx", "app/page.tsx"]), "app/page.tsx");
+assert.equal(previewModuleRefreshPath(["package.json", "pages/index.tsx"]), "pages/index.tsx");
+assert.equal(previewModuleRefreshPath(["package.json", "app/about/page.tsx"]), "app/about/page.tsx");
 
 console.log("preview import version ok");

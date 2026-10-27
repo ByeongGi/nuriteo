@@ -153,11 +153,15 @@ try {
   await page.getByRole("button", { name: "미리보기 새로고침" }).click();
   await previewFrame.waitForFunction((previous) => performance.timeOrigin !== previous, refreshTimeOrigin);
   await previewFrame.locator("#root").getByText("nuriteo:1").waitFor({ timeout: 20_000 });
-  await previewFrame.evaluate(() => { console.error("studio-console-check"); });
+  await previewFrame.evaluate(() => {
+    console.error("studio-console-check");
+    console.log("studio-log-check", { ok: true });
+  });
   await page.getByRole("toolbar", { name: "하단 패널" }).getByRole("button", { name: /^콘솔/ }).evaluate((button) => {
     if (button instanceof HTMLButtonElement) button.click();
   });
   await page.getByRole("log", { name: "미리보기 콘솔" }).getByText("studio-console-check", { exact: true }).waitFor();
+  await page.getByRole("log", { name: "미리보기 콘솔" }).getByText("studio-log-check {\"ok\":true}", { exact: true }).waitFor();
   assert.equal(await page.evaluate(() => window.__nuriteoRuntimeProbe.runtimeCreatedWorkers), runtimeWorkersBeforeRefresh, "refresh must not restart the browser runtime");
   assert.equal(await previewRegion.getAttribute("data-preview-url"), previewUrlBeforeRefresh, "refresh must preserve the Preview binding");
   await page.getByRole("button", { name: "debug.ts", exact: true }).click();

@@ -136,7 +136,7 @@ export function ForkExampleForm({ example, initialWorkspaces }: ForkExampleFormP
           disabled={pending}
           maxLength={63}
           name="slug"
-          pattern="[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?"
+          pattern="[a-z0-9](?:[a-z0-9\\-]{0,61}[a-z0-9])?"
           required
         />
       <TextField

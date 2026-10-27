@@ -30,7 +30,10 @@ export interface SubdomainPreviewBridge {
 
 export type PreviewChangeKind = "content" | "create" | "delete" | "rename";
 
+export type PreviewConsoleLevel = "debug" | "error" | "info" | "log" | "warn";
+
 export interface PreviewConsoleEntry {
+  readonly level: PreviewConsoleLevel;
   readonly message: string;
   readonly stack: string;
 }
@@ -141,7 +144,7 @@ async function createPreviewBridge(
       return;
     }
     if (isConsoleMessage(event.data, binding.label, binding.runtimeId)) {
-      options.onConsole?.({ message: event.data.message, stack: event.data.stack });
+      options.onConsole?.({ level: event.data.level, message: event.data.message, stack: event.data.stack });
       return;
     }
     if (event.ports.length !== 1) return;
@@ -312,13 +315,13 @@ function isConsoleMessage(
   value: unknown,
   binding: string,
   generation: string
-): value is { binding: string; generation: string; level: "error"; message: string; stack: string; type: string; version: number } {
+): value is { binding: string; generation: string; level: PreviewConsoleLevel; message: string; stack: string; type: string; version: number } {
   return isExactRecord(value, ["binding", "generation", "level", "message", "stack", "type", "version"])
     && value.type === "nuriteo-preview:console"
     && value.version === PROTOCOL_VERSION
     && value.binding === binding
     && value.generation === generation
-    && value.level === "error"
+    && (value.level === "debug" || value.level === "error" || value.level === "info" || value.level === "log" || value.level === "warn")
     && typeof value.message === "string"
     && value.message.length > 0
     && value.message.length <= 2_000

@@ -35,6 +35,10 @@ import { createPreviewWindowUrl } from "#src/runtime/preview-origin-contract.ts"
 import type { PreviewOriginConfiguration } from "#src/runtime/preview-origin-contract.ts";
 import type { PreviewChangeKind, SubdomainPreviewBridge } from "#src/runtime/subdomain-preview-bridge.ts";
 import { planProjectContentReplace } from "#src/app/(authenticated)/projects/studio-content-replace.ts";
+import { closeEditorFile, closeSavedEditorTabs, createEditorDraftState, createEditorTabs, forgetEditorDraft, forgetEditorDraftPrefix, noteEditorDraft, openEditorFile, relocateEditorDraft, relocateEditorPath, renameEditorDraft, renameEditorPath, settleEditorDraft } from "#src/app/(authenticated)/projects/studio-editor-tabs.ts";
+import { appendStudioConsole, freshServerLogLines, studioConsoleSourceLabel } from "#src/app/(authenticated)/projects/studio-preview-console.ts";
+import type { StudioConsoleEntry } from "#src/app/(authenticated)/projects/studio-preview-console.ts";
+import type { EditorDraftState, EditorOpenMode, EditorTabs } from "#src/app/(authenticated)/projects/studio-editor-tabs.ts";
 import { visibleStudioExplorerFiles } from "#src/app/(authenticated)/projects/studio-explorer-files.ts";
 import { useProjectContentSearch, useProjectFileSearch } from "#src/app/(authenticated)/projects/use-project-file-search.ts";
 import { ProjectFileTree } from "#src/app/(authenticated)/projects/project-file-tree.tsx";
@@ -52,7 +56,8 @@ const EMPTY_RUNTIME_STATE: RuntimeViewState = {
   processes: [],
   diagnostics: [],
   localDraftAccess: "none",
-  terminalProcessCount: 0
+  terminalProcessCount: 0,
+  serverLogs: []
 };
 const MAX_TERMINAL_COMMAND_CHARS = 2_048;
 const RUNTIME_BOOT_TIMEOUT_MS = 10_000;
@@ -82,7 +87,7 @@ const ideStyles = tv({
     runtimeMeta: "flex items-center gap-2 text-[0.6875rem] text-muted-foreground",
     headerActions: "flex flex-wrap items-center justify-end gap-1.5 max-[48rem]:w-full max-[48rem]:justify-start [&_[data-slot=button]]:min-h-8 [&_[data-slot=button]]:px-2.5 [&_[data-slot=button]]:text-[0.6875rem] [&_[data-slot=button]]:shadow-none",
     access: "rounded-sm border border-primary/25 bg-selected px-1.5 py-0.5 text-[0.625rem] font-semibold text-primary",
-    saveState: "flex max-w-80 items-center gap-2 truncate text-[0.6875rem] text-muted-foreground",
+    saveState: "flex max-w-80 items-center gap-2 truncate text-[0.6875rem] text-muted-foreground [&_i.is-dirty]:inline-block [&_i.is-dirty]:size-1.5 [&_i.is-dirty]:shrink-0 [&_i.is-dirty]:rounded-full [&_i.is-dirty]:bg-primary",
     quickOpen: "absolute left-1/2 top-14 z-50 grid w-[min(38rem,calc(100%-2rem))] -translate-x-1/2 grid-rows-[auto_minmax(0,20rem)] overflow-hidden rounded-md border border-muted-border bg-raised shadow-xl [&_input]:h-10 [&_input]:w-full [&_input]:border-0 [&_input]:border-b [&_input]:border-muted-border [&_input]:bg-surface [&_input]:px-3 [&_input]:font-mono [&_input]:text-sm [&_input]:outline-none [&_ul]:m-0 [&_ul]:grid [&_ul]:max-h-80 [&_ul]:list-none [&_ul]:overflow-auto [&_ul]:p-1 [&_button]:grid [&_button]:min-h-9 [&_button]:w-full [&_button]:grid-cols-[minmax(0,1fr)_auto] [&_button]:items-center [&_button]:gap-3 [&_button]:rounded-sm [&_button]:border-0 [&_button]:bg-transparent [&_button]:px-3 [&_button]:text-left [&_button]:hover:bg-hover [&_button]:aria-selected:bg-selected [&_button]:aria-selected:text-primary [&_button_strong]:truncate [&_button_strong]:font-mono [&_button_strong]:text-xs [&_button_small]:truncate [&_button_small]:font-mono [&_button_small]:text-[0.625rem] [&_button_small]:text-muted-foreground",
     message: "mx-2 mt-1.5 flex shrink-0 items-center gap-3 rounded border px-2.5 py-1.5 text-[0.6875rem]",
     panelHeading: "flex min-h-9 items-center justify-between gap-3 border-y border-muted-border bg-subtle px-3 [&>div]:flex [&>div]:items-center [&>div]:gap-2 [&_span]:text-[0.625rem] [&_span]:font-semibold [&_span]:uppercase [&_span]:tracking-[0.08em] [&_span]:text-muted-foreground [&_strong]:text-[0.6875rem] [&_strong]:font-semibold [&_strong]:text-foreground",
@@ -110,11 +115,11 @@ const ideStyles = tv({
     fileIcon: "font-mono text-[0.6875rem] text-primary",
     fileEmpty: "px-2 py-4 text-[0.6875rem] text-muted-foreground",
     fileMore: "mt-2 min-h-8 w-full rounded-sm border border-dashed border-muted-border bg-transparent text-[0.6875rem] font-semibold text-primary hover:border-solid hover:bg-hover",
-    editorTabs: "flex min-w-0 items-stretch overflow-x-auto overflow-y-hidden border-b border-muted-border bg-subtle text-[0.6875rem] text-muted-foreground [&>span]:self-center [&>span]:px-3 [&>div]:flex [&>div]:max-w-64 [&>div]:shrink-0 [&>div]:items-center [&>div]:border-r [&>div]:border-muted-border [&>div.is-active]:border-t-2 [&>div.is-active]:border-t-primary [&>div.is-active]:bg-surface [&>div.is-active]:text-foreground [&_.tab-select]:flex [&_.tab-select]:min-w-0 [&_.tab-select]:items-center [&_.tab-select]:gap-2 [&_.tab-select]:border-0 [&_.tab-select]:bg-transparent [&_.tab-select]:px-3 [&_.tab-select]:py-1 [&_.tab-select]:text-inherit [&_.tab-close]:mr-1 [&_.tab-close]:grid [&_.tab-close]:size-6 [&_.tab-close]:place-items-center [&_.tab-close]:border-0 [&_.tab-close]:bg-transparent [&_.tab-close]:text-muted-foreground [&_.tab-close]:hover:bg-hover [&_strong]:max-w-40 [&_strong]:truncate",
+    editorTabs: "flex min-w-0 items-stretch overflow-x-auto overflow-y-hidden border-b border-muted-border bg-subtle text-[0.6875rem] text-muted-foreground [&>span]:self-center [&>span]:px-3 [&>div]:flex [&>div]:max-w-64 [&>div]:shrink-0 [&>div]:items-center [&>div]:border-r [&>div]:border-muted-border [&>div.is-active]:border-t-2 [&>div.is-active]:border-t-primary [&>div.is-active]:bg-surface [&>div.is-active]:text-foreground [&>div.is-preview_strong]:italic [&>div.is-preview_strong]:font-normal [&_.tab-select]:flex [&_.tab-select]:min-w-0 [&_.tab-select]:items-center [&_.tab-select]:gap-2 [&_.tab-select]:border-0 [&_.tab-select]:bg-transparent [&_.tab-select]:px-3 [&_.tab-select]:py-1 [&_.tab-select]:text-inherit [&_.tab-close]:mr-1 [&_.tab-close]:grid [&_.tab-close]:size-6 [&_.tab-close]:place-items-center [&_.tab-close]:border-0 [&_.tab-close]:bg-transparent [&_.tab-close]:text-muted-foreground [&_.tab-close]:hover:bg-hover [&_strong]:max-w-40 [&_strong]:truncate [&_i.is-dirty]:inline-block [&_i.is-dirty]:size-1.5 [&_i.is-dirty]:shrink-0 [&_i.is-dirty]:rounded-full [&_i.is-dirty]:bg-primary",
     editorHost: "relative min-h-0 min-w-0 overflow-hidden bg-surface focus-within:shadow-[inset_0_0_0_1px_var(--n-color-border-focus)]",
     editorPanes: "grid h-full min-h-0 min-w-0 grid-cols-1 divide-x divide-muted-border data-[split=true]:grid-cols-2 max-[56rem]:data-[split=true]:grid-cols-1 max-[56rem]:data-[split=true]:grid-rows-2 max-[56rem]:data-[split=true]:divide-x-0 max-[56rem]:data-[split=true]:divide-y [&>div]:min-h-0 [&>div]:min-w-0",
     editorEmpty: "grid place-content-center justify-items-center p-8 text-center text-muted-foreground [&>span]:mb-3 [&>span]:grid [&>span]:size-12 [&>span]:place-items-center [&>span]:rounded-lg [&>span]:border [&>span]:border-muted-border [&>span]:bg-subtle [&>span]:text-xl [&>span]:text-primary [&_p]:mt-2 [&_p]:max-w-md [&_p]:text-xs",
-    status: "flex min-h-7 min-w-0 items-center justify-between gap-3 border-t border-muted-border bg-subtle px-2.5 text-[0.625rem] text-muted-foreground max-[48rem]:flex-wrap max-[48rem]:py-2 [&>span]:flex [&>span]:min-w-0 [&>span]:items-center [&>span]:gap-2 [&>span]:truncate [&_button]:min-h-6 [&_button]:bg-transparent [&_button]:px-2 [&_button]:text-[0.625rem]",
+    status: "flex min-h-7 min-w-0 items-center justify-between gap-3 border-t border-muted-border bg-subtle px-2.5 text-[0.625rem] text-muted-foreground max-[48rem]:flex-wrap max-[48rem]:py-2 [&>span]:flex [&>span]:min-w-0 [&>span]:items-center [&>span]:gap-2 [&>span]:truncate [&_button]:min-h-6 [&_button]:bg-transparent [&_button]:px-2 [&_button]:text-[0.625rem] [&_i.is-dirty]:inline-block [&_i.is-dirty]:size-1.5 [&_i.is-dirty]:shrink-0 [&_i.is-dirty]:rounded-full [&_i.is-dirty]:bg-primary",
     utilityEmpty: "grid place-content-center justify-items-center p-8 text-center text-muted-foreground [&>span]:mb-3 [&>span]:grid [&>span]:size-12 [&>span]:place-items-center [&>span]:rounded-lg [&>span]:border [&>span]:border-muted-border [&>span]:bg-subtle [&>span]:text-xl [&>span]:text-primary [&_p]:mt-2 [&_p]:max-w-md [&_p]:text-xs",
     preview: "grid min-h-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden [&_iframe]:h-full [&_iframe]:min-h-0 [&_iframe]:w-full [&_iframe]:border-0 [&_iframe]:bg-white",
     previewToolbar: "grid min-h-10 grid-cols-[auto_minmax(8rem,1fr)_auto] items-center gap-1.5 border-b border-muted-border bg-raised px-1.5 text-[0.6875rem] text-muted-foreground",
@@ -164,12 +169,7 @@ type SaveFeature = typeof import("#src/save/project-save.ts");
 const saveFeature = createRetryableLazyFeature<SaveFeature>(() => import("#src/save/project-save.ts"));
 type SidebarPanel = "files" | "search";
 type BottomPanel = "console" | "ports" | "problems" | "processes" | "output" | "terminal";
-interface PreviewConsoleEntry {
-  readonly id: number;
-  readonly message: string;
-  readonly stack: string;
-}
-type FileOperation = "create" | "rename";
+type FileOperation = "create" | "directory" | "rename";
 interface EditorDiagnostic {
   readonly column: number;
   readonly line: number;
@@ -212,18 +212,37 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, onProjectReloa
   const workspaceStartOperationRef = useRef(0);
   const [workspace, setWorkspace] = useState<RuntimeWorkspaceState>();
   const [selectedPath, setSelectedPath] = useState<string>();
-  const [openPaths, setOpenPaths] = useState<readonly string[]>([]);
+  const [editorTabs, setEditorTabs] = useState<EditorTabs>(createEditorTabs);
+  const [editorDrafts, setEditorDrafts] = useState<EditorDraftState>(createEditorDraftState);
   const [editorContent, setEditorContent] = useState("");
   const [editorDiagnostics, setEditorDiagnostics] = useState<readonly EditorDiagnostic[]>([]);
-  const [previewConsole, setPreviewConsole] = useState<readonly PreviewConsoleEntry[]>([]);
+  const [previewConsole, setPreviewConsole] = useState<readonly StudioConsoleEntry[]>([]);
   const previewConsoleIdRef = useRef(0);
+  const previousServerLogsRef = useRef<readonly string[]>([]);
+  const previewCancelRequestedRef = useRef(false);
   const isTerminalOpenRef = useRef(false);
   const [editorPositionRequest, setEditorPositionRequest] = useState<EditorPositionRequest>();
   const [editorFormatRequestId, setEditorFormatRequestId] = useState<number>();
   const [isEditorSplit, setIsEditorSplit] = useState(false);
   const [splitPath, setSplitPath] = useState<string>();
   const [splitContent, setSplitContent] = useState("");
-  const [splitDirty, setSplitDirty] = useState(false);
+  const openPaths = editorTabs.openPaths;
+  const editorDraftsRef = useRef(editorDrafts);
+  const editorTabsRef = useRef(editorTabs);
+  const selectedPathRef = useRef(selectedPath);
+  const editorContentRef = useRef(editorContent);
+  const splitPathRef = useRef(splitPath);
+  const splitContentRef = useRef(splitContent);
+  const appliedEditorContentRef = useRef(editorContent);
+  const appliedSplitContentRef = useRef(splitContent);
+  const suppressEditorChangeRef = useRef(0);
+  const suppressSplitChangeRef = useRef(0);
+  editorDraftsRef.current = editorDrafts;
+  editorTabsRef.current = editorTabs;
+  selectedPathRef.current = selectedPath;
+  editorContentRef.current = editorContent;
+  splitPathRef.current = splitPath;
+  splitContentRef.current = splitContent;
   const [replaceQuery, setReplaceQuery] = useState("");
   const [editorThemePreference, setEditorThemePreference] = useState<EditorThemePreference>("system");
   const terminal = useProjectTerminalSessions();
@@ -253,6 +272,7 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, onProjectReloa
   const [fileOperation, setFileOperation] = useState<FileOperation>();
   const [fileOperationValue, setFileOperationValue] = useState("");
   const [confirmingFileDelete, setConfirmingFileDelete] = useState(false);
+  const [pendingDeletePath, setPendingDeletePath] = useState<string>();
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [matchFileCase, setMatchFileCase] = useState(false);
   const [useFileRegularExpression, setUseFileRegularExpression] = useState(false);
@@ -297,24 +317,16 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, onProjectReloa
   }, []);
 
   useEffect(() => {
-    if (editorStatus !== "저장하지 않은 로컬 변경" || !selectedPath || runtime.localDraftAccess !== "writer") return;
-    const path = selectedPath;
-    const content = editorContent;
+    if (runtime.localDraftAccess !== "writer" || editorDrafts.pending.size === 0) return;
+    const snapshot = [...editorDrafts.pending.entries()];
     const timer = window.setTimeout(() => {
-      void applyDraftChange(path, content);
+      for (const [path, content] of snapshot) {
+        if (editorDraftsRef.current.pending.get(path) !== content) continue;
+        void applyDraftChange(path, content);
+      }
     }, PREVIEW_APPLY_DELAY_MS);
     return () => window.clearTimeout(timer);
-  }, [editorContent, editorStatus, runtime.localDraftAccess, selectedPath]);
-
-  useEffect(() => {
-    if (!splitDirty || !splitPath || splitPath === selectedPath || runtime.localDraftAccess !== "writer") return;
-    const path = splitPath;
-    const content = splitContent;
-    const timer = window.setTimeout(() => {
-      void applyDraftChange(path, content, { clearSplitDirty: true });
-    }, PREVIEW_APPLY_DELAY_MS);
-    return () => window.clearTimeout(timer);
-  }, [runtime.localDraftAccess, selectedPath, splitContent, splitDirty, splitPath]);
+  }, [editorDrafts, runtime.localDraftAccess]);
 
   useEffect(() => {
     const saveShortcut = (event: KeyboardEvent) => {
@@ -443,7 +455,10 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, onProjectReloa
       const firstTextFile = materialized.files.find((file) => file.kind === "text" && file.path === requestedPath)
         ?? materialized.files.find((file) => file.kind === "text");
       setWorkspace(materialized);
-      setOpenPaths([]);
+      const freshDrafts = createEditorDraftState();
+      editorDraftsRef.current = freshDrafts;
+      setEditorDrafts(freshDrafts);
+      setEditorTabs(createEditorTabs());
       if (source === "template") {
         setHasUnpublishedChanges(true);
         setEditorStatus("로컬 초안");
@@ -454,7 +469,7 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, onProjectReloa
         setEditorStatus(`서버 저장본 v${savedContent.descriptor.projectVersion} 복원됨`);
         setResumeStatus(`이 브라우저에 서버 저장본 v${savedContent.descriptor.projectVersion}을 준비했습니다.`);
       }
-      if (firstTextFile) selectFile(firstTextFile.path, materialized);
+      if (firstTextFile) selectFile(firstTextFile.path, materialized, "preview");
       if (previewConfiguration.status === "enabled") void startPreview(adapter);
     } catch (caught) {
       if (workspaceStartOperationRef.current !== operation) return;
@@ -473,10 +488,76 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, onProjectReloa
     }
   }
 
-  function selectFile(path: string, currentWorkspace = workspace) {
+  function readBufferedText(adapter: RuntimeAdapter, path: string): string {
+    const pending = editorDraftsRef.current.pending.get(path);
+    if (pending !== undefined) return pending;
+    return adapter.workspace.readText(path);
+  }
+
+  function showEditorText(content: string): void {
+    appliedEditorContentRef.current = content;
+    const generation = suppressEditorChangeRef.current + 1;
+    suppressEditorChangeRef.current = generation;
+    setEditorContent(content);
+    window.requestAnimationFrame(() => {
+      if (suppressEditorChangeRef.current === generation) suppressEditorChangeRef.current = 0;
+    });
+  }
+
+  function showSplitText(content: string): void {
+    appliedSplitContentRef.current = content;
+    const generation = suppressSplitChangeRef.current + 1;
+    suppressSplitChangeRef.current = generation;
+    setSplitContent(content);
+    window.requestAnimationFrame(() => {
+      if (suppressSplitChangeRef.current === generation) suppressSplitChangeRef.current = 0;
+    });
+  }
+
+  function noteEditorDraftChange(path: string, content: string): void {
+    const next = noteEditorDraft(editorDraftsRef.current, path, content);
+    if (next === editorDraftsRef.current) return;
+    editorDraftsRef.current = next;
+    setEditorDrafts(next);
+    const keepPath = splitPathRef.current;
+    setEditorTabs((current) => openEditorFile(current, path, "pin", keepPath === undefined ? undefined : { keepPath }));
+  }
+
+  function flushPendingDrafts(adapter: RuntimeAdapter): void {
+    const entries = [...editorDraftsRef.current.pending.entries()];
+    if (entries.length === 0) return;
+    let next = adapter.getState();
+    for (const [path, content] of entries) {
+      next = adapter.workspace.writeText(path, content);
+      hotUpdatePreviews(path);
+      editorDraftsRef.current = settleEditorDraft(editorDraftsRef.current, path, content);
+    }
+    setRuntime(next);
+    setWorkspace(adapter.workspace.getState());
+    setEditorDrafts(editorDraftsRef.current);
+    if (selectedPathRef.current && !editorDraftsRef.current.dirtyPaths.has(selectedPathRef.current)) {
+      setEditorStatus((status) => status === "저장하지 않은 로컬 변경" ? "로컬 초안 저장됨" : status);
+    }
+  }
+
+  function flushEditorPath(adapter: RuntimeAdapter, path: string): void {
+    const content = editorDraftsRef.current.pending.get(path);
+    if (content === undefined) return;
+    const next = adapter.workspace.writeText(path, content);
+    setRuntime(next);
+    setWorkspace(adapter.workspace.getState());
+    hotUpdatePreviews(path);
+    editorDraftsRef.current = settleEditorDraft(editorDraftsRef.current, path, content);
+    setEditorDrafts(editorDraftsRef.current);
+    if (path === selectedPathRef.current) {
+      setEditorStatus((status) => status === "저장하지 않은 로컬 변경" ? (next.hmrState === "connected" ? "로컬 초안 저장됨 · HMR 적용됨" : "로컬 초안 저장됨") : status);
+    }
+  }
+
+  function selectFile(path: string, currentWorkspace = workspace, mode: EditorOpenMode = "preview"): void {
     const file = currentWorkspace?.files.find((candidate) => candidate.path === path);
     if (file?.kind !== "text") {
-      setEditorContent("");
+      showEditorText("");
       setSelectedPath(path);
       setError("바이너리 파일과 지원하지 않는 파일은 텍스트 편집기에서 열 수 없습니다.");
       return;
@@ -484,45 +565,68 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, onProjectReloa
     try {
       const adapter = adapterRef.current;
       if (!adapter) throw new Error("runtime unavailable");
+      const keepPath = isEditorSplit ? splitPath : undefined;
+      const tabOptions = keepPath === undefined ? undefined : { keepPath };
+      if (path === selectedPath) {
+        setEditorTabs((current) => openEditorFile(current, path, mode, tabOptions));
+        setError(undefined);
+        return;
+      }
       const previousPath = selectedPath;
       const previousContent = editorContent;
       const wasMirroring = isEditorSplit && splitPath === previousPath && path !== previousPath;
-      persistSelectedEditorToDraft(adapter);
-      if (splitPath && splitPath !== previousPath) persistSplitDraft(adapter);
       if (wasMirroring && previousPath) {
         setSplitPath(previousPath);
-        setSplitContent(previousContent);
-        setSplitDirty(false);
+        showSplitText(previousContent);
       }
-      setEditorContent(adapter.workspace.readText(path));
+      const content = readBufferedText(adapter, path);
+      showEditorText(content);
       setSelectedPath(path);
-      setOpenPaths((current) => current.includes(path) ? current : [...current, path]);
+      const nextKeepPath = wasMirroring ? previousPath : keepPath;
+      setEditorTabs((current) => openEditorFile(current, path, mode, nextKeepPath === undefined ? undefined : { keepPath: nextKeepPath }));
       setEditorDiagnostics([]);
       setEditorPositionRequest(undefined);
       setError(undefined);
+      if (editorDraftsRef.current.dirtyPaths.has(path)) setEditorStatus("저장하지 않은 로컬 변경");
+      else setEditorStatus((status) => status === "저장하지 않은 로컬 변경" ? "로컬 초안" : status);
     } catch {
-      setEditorContent("");
+      showEditorText("");
       setSelectedPath(path);
       setError("이 파일을 텍스트로 열 수 없습니다.");
     }
   }
 
+  function handlePrimaryEditorChange(nextValue: string): void {
+    if (suppressEditorChangeRef.current !== 0) return;
+    if (!selectedPath || nextValue === appliedEditorContentRef.current) return;
+    appliedEditorContentRef.current = nextValue;
+    setEditorContent(nextValue);
+    setEditorStatus("저장하지 않은 로컬 변경");
+    setHasUnpublishedChanges(true);
+    noteEditorDraftChange(selectedPath, nextValue);
+  }
+
+  function handleSplitEditorChange(nextValue: string): void {
+    if (!splitPath || suppressSplitChangeRef.current !== 0) return;
+    if (splitPath === selectedPath) {
+      handlePrimaryEditorChange(nextValue);
+      return;
+    }
+    if (nextValue === appliedSplitContentRef.current) return;
+    appliedSplitContentRef.current = nextValue;
+    setSplitContent(nextValue);
+    setHasUnpublishedChanges(true);
+    noteEditorDraftChange(splitPath, nextValue);
+  }
+
   function persistSelectedEditorToDraft(adapter = adapterRef.current): void {
-    if (!adapter || !selectedPath || editorStatus !== "저장하지 않은 로컬 변경") return;
-    const next = adapter.workspace.writeText(selectedPath, editorContent);
-    setRuntime(next);
-    setWorkspace(adapter.workspace.getState());
-    hotUpdatePreviews(selectedPath);
-    setEditorStatus(next.hmrState === "connected" ? "로컬 초안 저장됨 · HMR 적용됨" : "로컬 초안 저장됨");
+    if (!adapter) return;
+    flushPendingDrafts(adapter);
   }
 
   function persistSplitDraft(adapter = adapterRef.current): void {
-    if (!adapter || !splitPath || splitPath === selectedPath || !splitDirty) return;
-    const next = adapter.workspace.writeText(splitPath, splitContent);
-    setRuntime(next);
-    setWorkspace(adapter.workspace.getState());
-    hotUpdatePreviews(splitPath);
-    setSplitDirty(false);
+    if (!adapter || !splitPath || splitPath === selectedPath) return;
+    flushEditorPath(adapter, splitPath);
   }
 
   function openInSplit(path: string): void {
@@ -532,15 +636,12 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, onProjectReloa
       setError("바이너리 파일과 지원하지 않는 파일은 분할 편집기에서 열 수 없습니다.");
       return;
     }
-    persistSelectedEditorToDraft(adapter);
-    persistSplitDraft(adapter);
     try {
-      const content = path === selectedPath ? editorContent : adapter.workspace.readText(path);
+      const content = path === selectedPath ? editorContent : readBufferedText(adapter, path);
       setSplitPath(path);
-      setSplitContent(content);
-      setSplitDirty(false);
+      showSplitText(content);
       setIsEditorSplit(true);
-      setOpenPaths((current) => current.includes(path) ? current : [...current, path]);
+      setEditorTabs((current) => openEditorFile(current, path, "pin", { keepPath: path }));
       setError(undefined);
     } catch {
       setError("이 파일을 분할 편집기에서 열 수 없습니다.");
@@ -551,8 +652,7 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, onProjectReloa
     persistSplitDraft();
     setIsEditorSplit(false);
     setSplitPath(undefined);
-    setSplitContent("");
-    setSplitDirty(false);
+    showSplitText("");
   }
 
   function toggleSplit(): void {
@@ -562,8 +662,7 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, onProjectReloa
     }
     if (!selectedPath) return;
     setSplitPath(selectedPath);
-    setSplitContent(editorContent);
-    setSplitDirty(false);
+    showSplitText(editorContent);
     setIsEditorSplit(true);
   }
 
@@ -581,6 +680,14 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, onProjectReloa
     setFileOperationValue(directory ? `${directory}/` : "src/");
   }
 
+  function beginCreateDirectory(directoryPath?: string): void {
+    setSidebarPanel("files");
+    setIsSidebarOpen(true);
+    setFileOperation("directory");
+    const directory = directoryPath?.replace(/\/$/u, "");
+    setFileOperationValue(directory ? `${directory}/` : "");
+  }
+
   function beginRename(path: string): void {
     selectFile(path);
     setSidebarPanel("files");
@@ -590,7 +697,9 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, onProjectReloa
   }
 
   function requestDelete(path: string): void {
-    selectFile(path);
+    const isFile = workspace?.files.some((file) => file.path === path) ?? false;
+    if (isFile) selectFile(path);
+    setPendingDeletePath(path);
     setConfirmingFileDelete(true);
   }
 
@@ -598,33 +707,35 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, onProjectReloa
     hotUpdatePreviewBridges(previewBridgeRef.current, previewWindowBridgesRef.current, path, changeKind);
   }
 
-  async function applyDraftChange(path: string, content: string, options?: { clearSplitDirty?: boolean }): Promise<void> {
+  async function applyDraftChange(path: string, content: string): Promise<void> {
     const adapter = adapterRef.current;
     if (!adapter || unmountedRef.current) return;
+    if (editorDraftsRef.current.pending.get(path) !== content) return;
     try {
       const next = adapter.workspace.writeText(path, content);
       setRuntime(next);
       const workspaceState = adapter.workspace.getState();
       setWorkspace(workspaceState);
-      if (options?.clearSplitDirty) setSplitDirty(false);
+      editorDraftsRef.current = settleEditorDraft(editorDraftsRef.current, path, content);
+      setEditorDrafts(editorDraftsRef.current);
+      const wroteActive = path === selectedPathRef.current && editorContentRef.current === content;
       if (path !== "package.json") {
         hotUpdatePreviews(path);
-        if (!options?.clearSplitDirty) {
-          setEditorStatus(next.hmrState === "connected" ? "로컬 초안 저장됨 · HMR 적용됨" : "로컬 초안 저장됨 · 재시작 필요할 수 있음");
-        }
+        if (wroteActive) setEditorStatus(next.hmrState === "connected" ? "로컬 초안 저장됨 · HMR 적용됨" : "로컬 초안 저장됨 · 재시작 필요할 수 있음");
         setError(undefined);
         return;
       }
       const generation = ++packageSyncGenerationRef.current;
-      setEditorStatus("추가한 패키지를 설치하는 중");
+      if (wroteActive) setEditorStatus("추가한 패키지를 설치하는 중");
       const synced = await adapter.workflow.syncDeclaredPackages();
       if (generation !== packageSyncGenerationRef.current || unmountedRef.current) return;
+      const stillActive = path === selectedPathRef.current && editorContentRef.current === content;
       if (synced.added.length > 0) {
         hotUpdatePreviews(previewModuleRefreshPath(workspaceState.files.map((file) => file.path)));
-        setEditorStatus("패키지 설치됨 · 미리보기에 반영됨");
+        if (stillActive) setEditorStatus("패키지 설치됨 · 미리보기에 반영됨");
       } else {
         hotUpdatePreviews(path);
-        setEditorStatus(next.hmrState === "connected" ? "로컬 초안 저장됨 · HMR 적용됨" : "로컬 초안 저장됨 · 재시작 필요할 수 있음");
+        if (stillActive) setEditorStatus(next.hmrState === "connected" ? "로컬 초안 저장됨 · HMR 적용됨" : "로컬 초안 저장됨 · 재시작 필요할 수 있음");
       }
       setError(undefined);
     } catch {
@@ -634,54 +745,66 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, onProjectReloa
   }
 
   function closeFile(path: string): void {
-    const currentIndex = openPaths.indexOf(path);
-    const remainingPaths = openPaths.filter((candidate) => candidate !== path);
-    if (path !== selectedPath) {
-      setOpenPaths(remainingPaths);
-      return;
+    const adapter = adapterRef.current;
+    if (adapter) flushEditorPath(adapter, path);
+    const currentIndex = editorTabsRef.current.openPaths.indexOf(path);
+    const nextTabs = closeEditorFile(editorTabsRef.current, path);
+    setEditorTabs(nextTabs);
+    if (path !== selectedPath) return;
+    if (isEditorSplit && splitPath === path) {
+      showSplitText(editorContent);
     }
-    const wasMirroring = isEditorSplit && splitPath === path;
-    const previousContent = editorContent;
-    persistSelectedEditorToDraft();
-    const nextPath = remainingPaths[Math.min(currentIndex, remainingPaths.length - 1)];
-    setOpenPaths(remainingPaths);
+    const nextPath = nextTabs.openPaths[Math.min(Math.max(currentIndex, 0), nextTabs.openPaths.length - 1)];
     setEditorDiagnostics([]);
     setEditorPositionRequest(undefined);
-    if (wasMirroring) {
-      setSplitContent(previousContent);
-      setSplitDirty(false);
-    }
-    if (nextPath) {
-      const adapter = adapterRef.current;
+    if (nextPath && adapter) {
+      const content = readBufferedText(adapter, nextPath);
+      showEditorText(content);
       setSelectedPath(nextPath);
-      setEditorContent(adapter?.workspace.readText(nextPath) ?? "");
+      if (editorDraftsRef.current.dirtyPaths.has(nextPath)) setEditorStatus("저장하지 않은 로컬 변경");
+      else setEditorStatus((status) => status === "저장하지 않은 로컬 변경" ? "로컬 초안" : status);
       return;
     }
     closeSplit();
     setSelectedPath(undefined);
-    setEditorContent("");
+    showEditorText("");
   }
 
   function closeAllFiles(): void {
-    persistSelectedEditorToDraft();
-    persistSplitDraft();
+    const adapter = adapterRef.current;
+    if (adapter) flushPendingDrafts(adapter);
     setIsEditorSplit(false);
     setSplitPath(undefined);
-    setSplitContent("");
-    setSplitDirty(false);
-    setOpenPaths([]);
+    showSplitText("");
+    setEditorTabs(createEditorTabs());
     setSelectedPath(undefined);
-    setEditorContent("");
+    showEditorText("");
     setEditorDiagnostics([]);
     setEditorPositionRequest(undefined);
   }
 
   function closeSavedFiles(): void {
-    if (hasUnsavedEditorChange && selectedPath) {
-      setOpenPaths([selectedPath]);
+    const nextTabs = closeSavedEditorTabs(editorTabsRef.current, editorDraftsRef.current.dirtyPaths);
+    setEditorTabs(nextTabs);
+    if (splitPath && !nextTabs.openPaths.includes(splitPath)) {
+      setIsEditorSplit(false);
+      setSplitPath(undefined);
+      showSplitText("");
+    }
+    if (selectedPath && nextTabs.openPaths.includes(selectedPath)) return;
+    const nextPath = nextTabs.openPaths.at(-1);
+    setEditorDiagnostics([]);
+    setEditorPositionRequest(undefined);
+    if (!nextPath) {
+      setSelectedPath(undefined);
+      showEditorText("");
       return;
     }
-    closeAllFiles();
+    const adapter = adapterRef.current;
+    const content = adapter ? readBufferedText(adapter, nextPath) : editorDraftsRef.current.pending.get(nextPath) ?? "";
+    showEditorText(content);
+    setSelectedPath(nextPath);
+    if (editorDraftsRef.current.dirtyPaths.has(nextPath)) setEditorStatus("저장하지 않은 로컬 변경");
   }
 
   function changeEditorThemePreference(value: unknown): void {
@@ -704,15 +827,18 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, onProjectReloa
     if (!adapter || !fileOperation || !nextPath) return;
     try {
       persistSelectedEditorToDraft(adapter);
-      if (fileOperation === "create") {
-        const next = adapter.workspace.createText(nextPath);
+      if (fileOperation === "create" || fileOperation === "directory") {
+        const next = fileOperation === "directory"
+          ? adapter.workspace.createDirectory(nextPath)
+          : adapter.workspace.createText(nextPath);
         setRuntime(next);
         setWorkspace(adapter.workspace.getState());
         setFileOperation(undefined);
         setFileOperationValue("");
         setHasUnpublishedChanges(true);
+        if (fileOperation === "directory") return;
         hotUpdatePreviews(nextPath, "create");
-        selectFile(nextPath, adapter.workspace.getState());
+        selectFile(nextPath, adapter.workspace.getState(), "pin");
         return;
       }
       if (!selectedPath || nextPath === selectedPath) {
@@ -723,7 +849,10 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, onProjectReloa
       const next = adapter.workspace.renameText(previousPath, nextPath);
       setRuntime(next);
       setWorkspace(adapter.workspace.getState());
-      setOpenPaths((current) => current.map((path) => path === previousPath ? nextPath : path));
+      editorDraftsRef.current = renameEditorDraft(editorDraftsRef.current, previousPath, nextPath);
+      setEditorDrafts(editorDraftsRef.current);
+      setEditorTabs((current) => renameEditorPath(current, previousPath, nextPath));
+      if (splitPath === previousPath) setSplitPath(nextPath);
       setSelectedPath(nextPath);
       setEditorStatus("파일 이름 변경됨 · 로컬 초안");
       setFileOperation(undefined);
@@ -731,28 +860,101 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, onProjectReloa
       setHasUnpublishedChanges(true);
       hotUpdatePreviews(nextPath, "rename");
     } catch {
-      setError(fileOperation === "create" ? "새 파일을 만들지 못했습니다. 경로와 중복 여부를 확인하세요." : "파일 이름을 변경하지 못했습니다. 경로와 중복 여부를 확인하세요.");
+      setError(fileOperation === "rename" ? "파일 이름을 변경하지 못했습니다. 경로와 중복 여부를 확인하세요." : fileOperation === "directory" ? "새 폴더를 만들지 못했습니다. 경로와 중복 여부를 확인하세요." : "새 파일을 만들지 못했습니다. 경로와 중복 여부를 확인하세요.");
+    }
+  }
+
+  function moveExplorerPath(from: string, targetDirectory: string): void {
+    const adapter = adapterRef.current;
+    const name = from.split("/").at(-1);
+    if (!adapter || !name) return;
+    const destination = targetDirectory ? `${targetDirectory}/${name}` : name;
+    if (destination === from || destination.startsWith(`${from}/`)) return;
+    try {
+      const next = adapter.workspace.movePath(from, destination);
+      setRuntime(next);
+      setWorkspace(adapter.workspace.getState());
+      editorDraftsRef.current = relocateEditorDraft(editorDraftsRef.current, from, destination);
+      setEditorDrafts(editorDraftsRef.current);
+      const nextTabs = relocateEditorPath(editorTabsRef.current, from, destination);
+      setEditorTabs(nextTabs);
+      if (splitPath && (splitPath === from || splitPath.startsWith(`${from}/`))) {
+        setSplitPath(`${destination}${splitPath.slice(from.length)}`);
+      }
+      if (selectedPath && (selectedPath === from || selectedPath.startsWith(`${from}/`))) {
+        setSelectedPath(`${destination}${selectedPath.slice(from.length)}`);
+      }
+      setEditorStatus("파일을 옮겼습니다 · 로컬 초안");
+      setHasUnpublishedChanges(true);
+      setError(undefined);
+      hotUpdatePreviews(destination, "rename");
+    } catch {
+      setError("파일이나 폴더를 옮기지 못했습니다. 경로와 중복 여부를 확인하세요.");
     }
   }
 
   function deleteSelectedFile(): void {
     const adapter = adapterRef.current;
-    if (!adapter || !selectedPath) return;
-    const deletedPath = selectedPath;
+    const deletedPath = pendingDeletePath ?? selectedPath;
+    if (!adapter || !deletedPath) return;
+    const workspaceState = adapter.workspace.getState();
+    const isFile = workspaceState.files.some((file) => file.path === deletedPath);
+    if (!isFile) {
+      try {
+        const next = adapter.workspace.deletePath(deletedPath);
+        editorDraftsRef.current = forgetEditorDraftPrefix(editorDraftsRef.current, deletedPath);
+        setEditorDrafts(editorDraftsRef.current);
+        const affected = editorTabsRef.current.openPaths.filter((path) => path === deletedPath || path.startsWith(`${deletedPath}/`));
+        let nextTabs = editorTabsRef.current;
+        for (const path of affected) nextTabs = closeEditorFile(nextTabs, path);
+        const nextPath = selectedPath && (selectedPath === deletedPath || selectedPath.startsWith(`${deletedPath}/`))
+          ? nextTabs.openPaths.at(-1)
+          : selectedPath;
+        setRuntime(next);
+        setWorkspace(adapter.workspace.getState());
+        setEditorTabs(nextTabs);
+        if (splitPath && (splitPath === deletedPath || splitPath.startsWith(`${deletedPath}/`))) {
+          setIsEditorSplit(false);
+          setSplitPath(undefined);
+          showSplitText("");
+        }
+        setSelectedPath(nextPath);
+        showEditorText(nextPath ? readBufferedText(adapter, nextPath) : "");
+        setEditorDiagnostics([]);
+        setEditorPositionRequest(undefined);
+        setEditorStatus("폴더 삭제됨 · 로컬 초안");
+        setHasUnpublishedChanges(true);
+        setConfirmingFileDelete(false);
+        setPendingDeletePath(undefined);
+        hotUpdatePreviews(deletedPath, "delete");
+      } catch {
+        setConfirmingFileDelete(false);
+        setError("폴더를 삭제하지 못했습니다.");
+      }
+      return;
+    }
     try {
       const next = adapter.workspace.deleteText(deletedPath);
-      const remainingPaths = openPaths.filter((path) => path !== deletedPath);
-      const nextPath = remainingPaths.at(-1);
+      editorDraftsRef.current = forgetEditorDraft(editorDraftsRef.current, deletedPath);
+      setEditorDrafts(editorDraftsRef.current);
+      const nextTabs = closeEditorFile(editorTabsRef.current, deletedPath);
+      const nextPath = nextTabs.openPaths.at(-1);
       setRuntime(next);
       setWorkspace(adapter.workspace.getState());
-      setOpenPaths(remainingPaths);
+      setEditorTabs(nextTabs);
+      if (splitPath === deletedPath) {
+        setIsEditorSplit(false);
+        setSplitPath(undefined);
+        showSplitText("");
+      }
       setSelectedPath(nextPath);
-      setEditorContent(nextPath ? adapter.workspace.readText(nextPath) : "");
+      showEditorText(nextPath ? readBufferedText(adapter, nextPath) : "");
       setEditorDiagnostics([]);
       setEditorPositionRequest(undefined);
       setEditorStatus("파일 삭제됨 · 로컬 초안");
       setHasUnpublishedChanges(true);
       setConfirmingFileDelete(false);
+      setPendingDeletePath(undefined);
       hotUpdatePreviews(deletedPath, "delete");
     } catch {
       setConfirmingFileDelete(false);
@@ -820,24 +1022,57 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, onProjectReloa
         const nextWorkspace = adapter.workspace.getState();
         setWorkspace(nextWorkspace);
         setHasUnpublishedChanges(true);
+        let nextTabs = editorTabsRef.current;
+        let nextDrafts = editorDraftsRef.current;
+        let nextSplitPath = splitPathRef.current;
+        for (const change of changedFiles) {
+          if (change.kind === "rename" && change.previousPath) {
+            nextTabs = renameEditorPath(nextTabs, change.previousPath, change.path);
+            nextDrafts = renameEditorDraft(nextDrafts, change.previousPath, change.path);
+            if (nextSplitPath === change.previousPath) nextSplitPath = change.path;
+          } else if (change.kind === "delete") {
+            nextTabs = closeEditorFile(nextTabs, change.path);
+            nextDrafts = forgetEditorDraft(nextDrafts, change.path);
+            if (nextSplitPath === change.path) nextSplitPath = undefined;
+          } else if (change.kind === "content") {
+            nextDrafts = forgetEditorDraft(nextDrafts, change.path);
+          }
+        }
+        editorDraftsRef.current = nextDrafts;
+        setEditorDrafts(nextDrafts);
+        if (nextSplitPath !== splitPathRef.current) {
+          setSplitPath(nextSplitPath);
+          if (!nextSplitPath) {
+            setIsEditorSplit(false);
+            showSplitText("");
+          }
+        }
         const selectedRename = changedFiles.find((change) => change.kind === "rename" && change.previousPath === selectedPath);
         if (selectedRename) {
-          setOpenPaths((current) => current.map((path) => path === selectedRename.previousPath ? selectedRename.path : path));
+          setEditorTabs(nextTabs);
           setSelectedPath(selectedRename.path);
-          setEditorContent(adapter.workspace.readText(selectedRename.path));
+          showEditorText(adapter.workspace.readText(selectedRename.path));
           setEditorStatus("터미널에서 파일 이름 변경됨 · 로컬 초안");
         } else if (selectedPath && changedFiles.some((change) => change.path === selectedPath && change.kind === "content")) {
-          setEditorContent(adapter.workspace.readText(selectedPath));
+          setEditorTabs(nextTabs);
+          showEditorText(adapter.workspace.readText(selectedPath));
           setEditorStatus("터미널 변경 반영됨 · 로컬 초안");
         } else if (selectedPath && changedFiles.some((change) => change.path === selectedPath && change.kind === "delete")) {
           const availablePaths = new Set(nextWorkspace.files.filter((file) => file.kind === "text").map((file) => file.path));
-          const remainingPaths = openPaths.filter((path) => path !== selectedPath && availablePaths.has(path));
-          const nextPath = remainingPaths.at(-1) ?? nextWorkspace.files.find((file) => file.kind === "text")?.path;
-          setOpenPaths(nextPath && !remainingPaths.includes(nextPath) ? [...remainingPaths, nextPath] : remainingPaths);
+          const fallback = nextTabs.openPaths.at(-1) ?? nextWorkspace.files.find((file) => file.kind === "text")?.path;
+          const nextPath = fallback && availablePaths.has(fallback) ? fallback : undefined;
+          if (nextPath && !nextTabs.openPaths.includes(nextPath)) nextTabs = openEditorFile(nextTabs, nextPath, "preview");
+          setEditorTabs(nextTabs);
           setSelectedPath(nextPath);
-          setEditorContent(nextPath ? adapter.workspace.readText(nextPath) : "");
+          showEditorText(nextPath ? adapter.workspace.readText(nextPath) : "");
           setEditorDiagnostics([]);
           setEditorStatus("터미널에서 파일 삭제됨 · 로컬 초안");
+        } else {
+          setEditorTabs(nextTabs);
+        }
+        const selectedAfter = selectedRename?.path ?? selectedPath;
+        if (nextSplitPath && nextSplitPath !== selectedAfter && changedFiles.some((change) => change.path === nextSplitPath && (change.kind === "content" || change.kind === "rename"))) {
+          showSplitText(adapter.workspace.readText(nextSplitPath));
         }
       }
     } catch {
@@ -960,20 +1195,29 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, onProjectReloa
 
   async function startPreview(adapter: RuntimeAdapter): Promise<void> {
     const sessionId = terminal.activeSessionId;
+    previewCancelRequestedRef.current = false;
+    previousServerLogsRef.current = adapter.getState().serverLogs;
     setIsRunningPreview(true);
     setPreviewConsole([]);
     setBottomPanel("terminal");
     setIsTerminalOpen(true);
-    terminal.append(sessionId, "❯ npm run dev\n의존성을 확인하고 개발 서버를 시작합니다…\n");
+    terminal.append(sessionId, "❯ npm run dev\n의존성 설치 중\n");
     try {
       const next = await adapter.workflow.start();
       if (!next.previewUrl) throw new Error("Preview URL unavailable");
-      terminal.append(sessionId, `개발 서버 준비 완료 · ${next.previewUrl}\n`);
+      terminal.append(sessionId, `설치됨\n개발 서버 준비 완료 · ${next.previewUrl}\n`);
       await swapPreviewBridge(adapter, next.previewUrl);
-    } catch {
+    } catch (error) {
       if (!unmountedRef.current && adapterRef.current === adapter) {
-        terminal.append(sessionId, "개발 서버를 시작하지 못했습니다.\n");
-        setError("의존성 설치와 미리보기 실행을 완료하지 못했습니다.");
+        const cause = error instanceof Error ? error.message.trim() : "";
+        if (previewCancelRequestedRef.current || cause === "Preview controller operation cancelled") {
+          previewCancelRequestedRef.current = false;
+          terminal.append(sessionId, "미리보기 시작을 취소했습니다.\n");
+          setError(undefined);
+        } else {
+          terminal.append(sessionId, cause ? `설치 실패: ${cause}\n` : "개발 서버를 시작하지 못했습니다.\n");
+          setError(cause || "의존성 설치와 미리보기 실행을 완료하지 못했습니다.");
+        }
       }
     } finally {
       if (!unmountedRef.current) setIsRunningPreview(false);
@@ -1005,23 +1249,35 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, onProjectReloa
       ) {
         await swapPreviewBridge(adapter, next.previewUrl);
       }
-    } catch {
+    } catch (error) {
       if (!unmountedRef.current && adapterRef.current === adapter) {
-        setError("복구를 완료하지 못했습니다. 로컬 초안은 유지되므로 작업을 확인한 뒤 다시 시도하세요.");
+        const cause = error instanceof Error ? error.message.trim() : "";
+        if (cause === "Preview controller operation cancelled") setError(undefined);
+        else setError(cause || "복구를 완료하지 못했습니다. 로컬 초안은 유지되므로 작업을 확인한 뒤 다시 시도하세요.");
       }
     } finally {
       if (!unmountedRef.current) setRecoveringAction(undefined);
     }
   }
 
-  function recordPreviewConsole(entry: { message: string; stack: string }): void {
+  function cancelRunningPreview(): void {
+    previewCancelRequestedRef.current = true;
+    try {
+      adapterRef.current?.workflow.cancel();
+    } catch {
+      previewCancelRequestedRef.current = false;
+      if (!unmountedRef.current) setError("미리보기 시작을 취소하지 못했습니다.");
+    }
+  }
+
+  function recordPreviewConsole(entry: { level: StudioConsoleEntry["level"]; message: string; stack: string }, source: StudioConsoleEntry["source"] = "page"): void {
     if (unmountedRef.current) return;
     const message = entry.message.trim();
     if (!message) return;
     const id = previewConsoleIdRef.current + 1;
     previewConsoleIdRef.current = id;
-    setPreviewConsole((current) => [...current, { id, message, stack: entry.stack }].slice(-100));
-    if (!isTerminalOpenRef.current) {
+    setPreviewConsole((current) => appendStudioConsole(current, { id, level: entry.level, message, source, stack: entry.stack }));
+    if (source === "page") {
       setIsTerminalOpen(true);
       setBottomPanel("console");
     }
@@ -1214,6 +1470,8 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, onProjectReloa
       setRuntime(next);
       setWorkspace(adapter.workspace.getState());
       hotUpdatePreviews(selectedPath);
+      editorDraftsRef.current = settleEditorDraft(editorDraftsRef.current, selectedPath, editorContent);
+      setEditorDrafts(editorDraftsRef.current);
       setEditorStatus(next.hmrState === "connected" ? "로컬 초안 저장됨 · HMR 적용됨" : "로컬 초안 저장됨 · 재시작 필요할 수 있음");
     } catch {
       setError("텍스트 변경사항을 안전하게 저장하지 못했습니다.");
@@ -1233,13 +1491,9 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, onProjectReloa
     setIsServerSaving(true);
     setServerSaveStatus("서버 저장 계획을 준비하는 중…");
     try {
-      if (selectedPath && editorStatus === "저장하지 않은 로컬 변경") {
-        const next = adapter.workspace.writeText(selectedPath, editorContent);
-        setRuntime(next);
-        setWorkspace(adapter.workspace.getState());
-        hotUpdatePreviews(selectedPath);
-        setEditorStatus("서버 저장을 위해 로컬 초안에 적용됨");
-      }
+      const hadPendingDraft = editorDraftsRef.current.pending.size > 0;
+      flushPendingDrafts(adapter);
+      if (hadPendingDraft) setEditorStatus("서버 저장을 위해 로컬 초안에 적용됨");
       const { saveCurrentProject } = await saveFeature.load();
       const result = await saveCurrentProject({
         client: createBrowserApiClient(),
@@ -1289,14 +1543,16 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, onProjectReloa
     }
     setWorkspace(undefined);
     setSelectedPath(undefined);
-    setOpenPaths([]);
-    setEditorContent("");
+    const freshDrafts = createEditorDraftState();
+    editorDraftsRef.current = freshDrafts;
+    setEditorDrafts(freshDrafts);
+    setEditorTabs(createEditorTabs());
+    showEditorText("");
     setEditorDiagnostics([]);
     setPreviewConsole([]);
     setIsEditorSplit(false);
     setSplitPath(undefined);
-    setSplitContent("");
-    setSplitDirty(false);
+    showSplitText("");
     setReplaceQuery("");
     setEditorPositionRequest(undefined);
     terminal.reset();
@@ -1357,12 +1613,13 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, onProjectReloa
       setRuntime(next);
       setWorkspace(adapter.workspace.getState());
       const selectedUpdate = plan.updates.find((update) => update.path === selectedPath);
-      if (selectedUpdate) setEditorContent(selectedUpdate.content);
+      if (selectedUpdate) showEditorText(selectedUpdate.content);
       const splitUpdate = plan.updates.find((update) => update.path === splitPath);
       if (splitUpdate && splitPath !== selectedPath) {
-        setSplitContent(splitUpdate.content);
-        setSplitDirty(false);
+        showSplitText(splitUpdate.content);
       }
+      for (const update of plan.updates) editorDraftsRef.current = forgetEditorDraft(editorDraftsRef.current, update.path);
+      setEditorDrafts(editorDraftsRef.current);
       const count = plan.updates.reduce((total, update) => total + update.replacements, 0);
       setEditorStatus(next.hmrState === "connected" ? `${count}곳을 바꿨습니다 · HMR 적용됨` : `${count}곳을 로컬 초안에서 바꿨습니다`);
       setHasUnpublishedChanges(true);
@@ -1393,7 +1650,11 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, onProjectReloa
   const hasIsolatedPreview = isolatedPreviewUrl !== undefined;
   const canWriteLocalDraft = runtime.localDraftAccess === "writer";
   const recoveryDiagnostics = runtime.diagnostics.filter((diagnostic) => diagnostic.actions.length > 0);
-  const readWorkspaceText = useCallback((path: string) => adapterRef.current?.workspace.readText(path) ?? "", []);
+  const readWorkspaceText = useCallback((path: string) => {
+    const pending = editorDraftsRef.current.pending.get(path);
+    if (pending !== undefined) return pending;
+    return adapterRef.current?.workspace.readText(path) ?? "";
+  }, []);
   const explorerFiles = useMemo(
     () => visibleStudioExplorerFiles(workspace?.files ?? EMPTY_WORKSPACE_FILES),
     [workspace]
@@ -1425,10 +1686,17 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, onProjectReloa
     selectedPath,
     useRegularExpression: useFileRegularExpression
   });
-  const hasUnsavedEditorChange = editorStatus === "저장하지 않은 로컬 변경";
+  const activeBufferDirty = editorStatus === "저장하지 않은 로컬 변경";
+  const hasUnsavedEditorChange = activeBufferDirty || editorDrafts.dirtyPaths.size > 0;
   const selectedFileName = selectedPath?.split("/").at(-1);
   const editorLineCount = editorContent.length === 0 ? 1 : editorContent.split("\n").length;
   useUnsavedChangesGuard(hasUnpublishedChanges || hasUnsavedEditorChange);
+
+  useEffect(() => {
+    const fresh = freshServerLogLines(previousServerLogsRef.current, runtime.serverLogs);
+    previousServerLogsRef.current = runtime.serverLogs;
+    for (const line of fresh) recordPreviewConsole({ level: "info", message: line, stack: "" }, "server");
+  }, [runtime.serverLogs]);
 
   useEffect(() => {
     if (!hasWorkspace) return;
@@ -1581,12 +1849,13 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, onProjectReloa
               </div>
               <div className={css.fileActions()}>
                 <Button type="button" size="icon" variant="ghost" aria-label="새 파일" title="새 파일" disabled={!canWriteLocalDraft} onClick={() => beginCreate()}>＋</Button>
+                <Button type="button" size="icon" variant="ghost" aria-label="새 폴더" title="새 폴더" disabled={!canWriteLocalDraft} onClick={() => beginCreateDirectory()}>▣</Button>
                 <Button type="button" size="icon" variant="ghost" aria-label="선택한 파일 이름 변경" title="이름 변경" disabled={!selectedPath || !canWriteLocalDraft} onClick={() => beginFileOperation("rename")}>✎</Button>
-                <Button type="button" size="icon" variant="ghost" aria-label="선택한 파일 삭제" title="삭제" disabled={!selectedPath || !canWriteLocalDraft} onClick={() => setConfirmingFileDelete(true)}>⌫</Button>
+                <Button type="button" size="icon" variant="ghost" aria-label="선택한 파일 삭제" title="삭제" disabled={!selectedPath || !canWriteLocalDraft} onClick={() => { setPendingDeletePath(selectedPath); setConfirmingFileDelete(true); }}>⌫</Button>
                 <kbd>⌘P</kbd>
               </div>
             </div>
-            {fileOperation ? <form className={css.fileOperation()} onSubmit={commitFileOperation}><label className="sr-only" htmlFor={`file-operation-${project.id}`}>{fileOperation === "create" ? "새 파일 경로" : "변경할 파일 경로"}</label><Input id={`file-operation-${project.id}`} autoFocus value={fileOperationValue} onChange={(event) => setFileOperationValue(event.currentTarget.value)} onKeyDown={(event) => { if (event.key === "Escape") setFileOperation(undefined); }} /><Button type="submit" size="sm">{fileOperation === "create" ? "생성" : "변경"}</Button></form> : sidebarPanel === "search" ? (
+            {fileOperation ? <form className={css.fileOperation()} onSubmit={commitFileOperation}><label className="sr-only" htmlFor={`file-operation-${project.id}`}>{fileOperation === "create" ? "새 파일 경로" : fileOperation === "directory" ? "새 폴더 경로" : "변경할 파일 경로"}</label><Input id={`file-operation-${project.id}`} autoFocus value={fileOperationValue} onChange={(event) => setFileOperationValue(event.currentTarget.value)} onKeyDown={(event) => { if (event.key === "Escape") setFileOperation(undefined); }} /><Button type="submit" size="sm">{fileOperation === "rename" ? "변경" : "생성"}</Button></form> : sidebarPanel === "search" ? (
               <div className={css.searchArea()}>
                 <SearchField className={css.fileSearch()} label="코드 검색" aria-busy={isContentSearchPending} aria-invalid={contentSearchError !== undefined} ref={fileSearchRef} value={fileQuery} onChange={(event) => { setFileQuery(event.currentTarget.value); setFileListLimit(FILE_LIST_BATCH_SIZE); }} placeholder="프로젝트 코드 검색" autoComplete="off" />
                 <div className={css.searchControls()} aria-label="파일 검색 옵션">
@@ -1606,7 +1875,7 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, onProjectReloa
               {contentSearchMatches.length > 0 ? <ul>{contentSearchMatches.map((match, index) => <li key={`${match.path}:${match.line}:${match.column}:${index}`}><Button type="button" size="sm" variant="ghost" onClick={() => { selectFile(match.path); setEditorPositionRequest({ column: match.column, line: match.line, requestId: Date.now() }); }}><strong>{match.path}</strong><small>{match.line}:{match.column}</small><span>{match.snippet || "빈 줄"}</span></Button></li>)}</ul> : <p className={css.fileEmpty()}>{fileQuery.trim() ? "일치하는 코드를 찾지 못했습니다." : "검색어를 입력하면 프로젝트 전체 코드를 찾습니다."}</p>}
               {contentSearchMatches.length < totalContentSearchMatches ? <Button className={css.fileMore()} variant="ghost" type="button" onClick={() => setFileListLimit((current) => current + FILE_LIST_BATCH_SIZE)}>검색 결과 더 보기</Button> : null}
             </div> : <div className={css.fileList()}>
-              {visibleFiles.length > 0 ? <ProjectFileTree canWrite={canWriteLocalDraft} files={visibleFiles} hasUnsavedEditorChange={hasUnsavedEditorChange} onCopyPath={copyExplorerPath} onCreateInDirectory={beginCreate} onDelete={requestDelete} onOpenInSplit={openInSplit} onRename={beginRename} onSelect={selectFile} selectedPath={selectedPath} /> : <p className={css.fileEmpty()}>프로젝트 파일이 없습니다.</p>}
+              {visibleFiles.length > 0 || (workspace?.directories.length ?? 0) > 0 ? <ProjectFileTree canWrite={canWriteLocalDraft} directories={workspace?.directories ?? []} dirtyPaths={editorDrafts.dirtyPaths} files={visibleFiles} onCopyPath={copyExplorerPath} onCreateDirectory={beginCreateDirectory} onCreateInDirectory={beginCreate} onDelete={requestDelete} onMove={moveExplorerPath} onOpenInSplit={openInSplit} onPin={(path) => selectFile(path, workspace, "pin")} onRename={beginRename} onSelect={selectFile} selectedPath={selectedPath} /> : <p className={css.fileEmpty()}>프로젝트 파일이 없습니다.</p>}
               {hasMoreFiles ? <Button className={css.fileMore()} variant="ghost" type="button" onClick={() => setFileListLimit((current) => current + FILE_LIST_BATCH_SIZE)}>다음 {Math.min(FILE_LIST_BATCH_SIZE, matchingFiles.length - visibleFiles.length)}개 보기</Button> : null}
             </div>}
           </nav>
@@ -1616,8 +1885,10 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, onProjectReloa
                 {openPaths.length > 0 ? openPaths.map((path) => {
                   const fileName = path.split("/").at(-1) ?? path;
                   const isActive = path === selectedPath;
-                  return <div className={isActive ? "is-active" : undefined} key={path}>
-                    <Button className="tab-select" type="button" size="sm" variant="ghost" aria-pressed={isActive} title={path} onClick={() => selectFile(path)}><span className={css.fileIcon()} aria-hidden="true">#</span><strong>{fileName}</strong>{isActive && hasUnsavedEditorChange ? <i aria-label="저장하지 않은 변경 사항" /> : null}</Button>
+                  const isPreview = editorTabs.previewPath === path && !editorTabs.pinnedPaths.has(path);
+                  const tabClass = [isActive ? "is-active" : "", isPreview ? "is-preview" : ""].filter(Boolean).join(" ") || undefined;
+                  return <div className={tabClass} key={path}>
+                    <Button className="tab-select" type="button" size="sm" variant="ghost" aria-pressed={isActive} title={isPreview ? `${path} · 미리보기` : path} onClick={() => selectFile(path, workspace, "activate")} onDoubleClick={() => selectFile(path, workspace, "pin")}><span className={css.fileIcon()} aria-hidden="true">#</span><strong>{fileName}</strong>{editorDrafts.dirtyPaths.has(path) ? <i className="is-dirty" aria-label="저장하지 않은 변경 사항" /> : null}</Button>
                     <Button className="tab-close" type="button" size="icon" variant="ghost" aria-label={`${fileName} 닫기`} onClick={() => closeFile(path)}>×</Button>
                   </div>;
                 }) : <span>파일을 선택하세요</span>}
@@ -1648,8 +1919,8 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, onProjectReloa
                 </div>
               </div>
               {selectedPath ? <EditorBreadcrumbs className={css.editorBreadcrumbs()} path={selectedPath} /> : null}
-              {selectedPath ? <div className={css.editorHost()}><div className={css.editorPanes()} data-split={isEditorSplit}><ProjectMonacoEditor formatRequestId={editorFormatRequestId} path={selectedPath} priorityPaths={splitPath ? [...openPaths, splitPath] : openPaths} projectKey={`${workspaceScope}:${project.id}`} readOnly={!canWriteLocalDraft} readWorkspaceText={readWorkspaceText} revealPosition={editorPositionRequest} themePreference={editorThemePreference} value={editorContent} workspaceFiles={workspace?.files} onDiagnosticsChange={setEditorDiagnostics} onChange={(nextValue) => { setEditorContent(nextValue); setEditorStatus("저장하지 않은 로컬 변경"); setHasUnpublishedChanges(true); }} />{isEditorSplit && splitPath ? <div className={css.splitPane()}><div className={css.splitPaneBar()}><span title={splitPath}>{splitPath}</span><Button type="button" size="icon" variant="ghost" aria-label="분할 편집기 닫기" onClick={closeSplit}>×</Button></div><ProjectMonacoEditor path={splitPath} projectKey={`${workspaceScope}:${project.id}`} readOnly={!canWriteLocalDraft} themePreference={editorThemePreference} value={splitPath === selectedPath ? editorContent : splitContent} onChange={(nextValue) => { if (splitPath === selectedPath) { setEditorContent(nextValue); setEditorStatus("저장하지 않은 로컬 변경"); } else { setSplitContent(nextValue); setSplitDirty(true); } setHasUnpublishedChanges(true); }} /></div> : null}</div></div> : <div className={css.editorEmpty()}><span aria-hidden="true">⌘</span><strong>편집할 파일을 선택하세요</strong><p>왼쪽 파일 목록에서 선택하거나 <kbd>⌘P</kbd>로 빠르게 찾을 수 있습니다.</p></div>}
-              <div className={css.status()}><span><i className={hasUnsavedEditorChange ? "is-dirty" : ""} aria-hidden="true" />{editorStatus}</span><span>{editorLineCount}줄 · {editorContent.length}자 · UTF-8</span><Button aria-label="로컬 초안에 적용" type="button" size="sm" disabled={!selectedPath || isSaving || !canWriteLocalDraft} onClick={saveSelectedFile}>{isSaving ? "적용 중…" : "로컬 초안에 적용"}</Button></div>
+              {selectedPath ? <div className={css.editorHost()}><div className={css.editorPanes()} data-split={isEditorSplit}><ProjectMonacoEditor formatRequestId={editorFormatRequestId} path={selectedPath} priorityPaths={splitPath ? [...openPaths, splitPath] : openPaths} projectKey={`${workspaceScope}:${project.id}`} readOnly={!canWriteLocalDraft} readWorkspaceText={readWorkspaceText} revealPosition={editorPositionRequest} themePreference={editorThemePreference} value={editorContent} workspaceFiles={workspace?.files} onDiagnosticsChange={setEditorDiagnostics} onChange={handlePrimaryEditorChange} />{isEditorSplit && splitPath ? <div className={css.splitPane()}><div className={css.splitPaneBar()}><span title={splitPath}>{splitPath}</span><Button type="button" size="icon" variant="ghost" aria-label="분할 편집기 닫기" onClick={closeSplit}>×</Button></div><ProjectMonacoEditor path={splitPath} projectKey={`${workspaceScope}:${project.id}`} readOnly={!canWriteLocalDraft} themePreference={editorThemePreference} value={splitPath === selectedPath ? editorContent : splitContent} onChange={handleSplitEditorChange} /></div> : null}</div></div> : <div className={css.editorEmpty()}><span aria-hidden="true">⌘</span><strong>편집할 파일을 선택하세요</strong><p>왼쪽 파일 목록에서 선택하거나 <kbd>⌘P</kbd>로 빠르게 찾을 수 있습니다.</p></div>}
+              <div className={css.status()}><span><i className={activeBufferDirty ? "is-dirty" : ""} aria-hidden="true" />{editorStatus}</span><span>{editorLineCount}줄 · {editorContent.length}자 · UTF-8</span><Button aria-label="로컬 초안에 적용" type="button" size="sm" disabled={!selectedPath || isSaving || !canWriteLocalDraft} onClick={saveSelectedFile}>{isSaving ? "적용 중…" : "로컬 초안에 적용"}</Button></div>
             </section>
             {isTerminalOpen ? <section className={css.terminal()} aria-label="하단 도구 패널" style={{ height: bottomPanelHeight }}>
               <div className="absolute inset-x-0 top-[-0.25rem] z-20 h-2 cursor-row-resize touch-none" role="separator" aria-label="하단 패널 높이 조절" aria-orientation="horizontal" aria-valuemin={120} aria-valuemax={480} aria-valuenow={bottomPanelHeight} onPointerDown={beginBottomPanelResize} />
@@ -1667,12 +1938,12 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, onProjectReloa
                     <Button type="button" size="icon" variant="ghost" aria-label="새 터미널" title="새 터미널" onClick={() => { terminal.create(); setBottomPanel("terminal"); }}>＋</Button>
                     <Button type="button" size="icon" variant="ghost" aria-label="터미널 내용 지우기" title="터미널 내용 지우기 (Ctrl+L)" onClick={() => terminal.clear()}>⌫</Button>
                   </> : null}
-                  {bottomPanel === "console" ? <Button type="button" size="icon" variant="ghost" aria-label="콘솔 내용 지우기" title="콘솔 내용 지우기" onClick={() => setPreviewConsole([])}>⌫</Button> : null}
+                  {bottomPanel === "console" ? <Button type="button" size="icon" variant="ghost" aria-label="콘솔 내용 지우기" title="콘솔 내용 지우기" onClick={() => { previousServerLogsRef.current = runtime.serverLogs; setPreviewConsole([]); }}>⌫</Button> : null}
                   <Button type="button" size="icon" variant="ghost" aria-label="하단 패널 닫기" title="하단 패널 닫기" onClick={() => setIsTerminalOpen(false)}>×</Button>
                 </div>
               </div>
               {bottomPanel === "problems" ? <div className="min-h-0 overflow-auto p-3 text-xs text-white/75">{editorDiagnostics.length > 0 ? <ul className="m-0 grid list-none gap-2 p-0">{editorDiagnostics.map((diagnostic, index) => <li className="grid grid-cols-[auto_minmax(0,1fr)_auto] gap-2" key={`${diagnostic.line}:${diagnostic.column}:${index}`}><span aria-hidden="true">{diagnostic.severity >= 8 ? "●" : "▲"}</span><span>{diagnostic.message}</span><Button className="border-0 bg-transparent font-mono text-white/55 hover:text-white" type="button" size="sm" variant="ghost" onClick={() => setEditorPositionRequest({ column: diagnostic.column, line: diagnostic.line, requestId: Date.now() })}>{selectedFileName}:{diagnostic.line}:{diagnostic.column}</Button></li>)}</ul> : <p className="m-0 text-white/55">현재 파일에서 발견된 문제가 없습니다.</p>}</div> : null}
-              {bottomPanel === "console" ? <div className="min-h-0 overflow-auto p-3 font-mono text-xs text-white/75" role="log" aria-label="미리보기 콘솔">{previewConsole.length > 0 ? <ul className="m-0 grid list-none gap-3 p-0">{previewConsole.map((entry) => <li className="grid gap-1 border-b border-white/10 pb-2" key={entry.id}><p className="m-0 whitespace-pre-wrap text-[var(--n-color-studio-danger)]">{entry.message}</p>{entry.stack && entry.stack !== entry.message ? <pre className="m-0 whitespace-pre-wrap text-white/45">{entry.stack}</pre> : null}</li>)}</ul> : <p className="m-0 text-white/55">미리보기 콘솔 에러가 없습니다.</p>}</div> : null}
+              {bottomPanel === "console" ? <div className="min-h-0 overflow-auto p-3 font-mono text-xs text-white/75" role="log" aria-label="미리보기 콘솔">{previewConsole.length > 0 ? <ul className="m-0 grid list-none gap-3 p-0">{previewConsole.map((entry) => <li className="grid gap-1 border-b border-white/10 pb-2" key={entry.id}><p className={`m-0 whitespace-pre-wrap ${previewConsoleTone(entry.level)}`}><span className="mr-2 text-white/40">{studioConsoleSourceLabel(entry.source)}</span><span className="mr-2 uppercase text-white/40">{entry.level}</span><span>{entry.message}</span></p>{entry.stack && entry.stack !== entry.message ? <pre className="m-0 whitespace-pre-wrap text-white/45">{entry.stack}</pre> : null}</li>)}</ul> : <p className="m-0 text-white/55">미리보기 콘솔 출력이 없습니다.</p>}</div> : null}
               {bottomPanel === "output" ? <pre className="m-0 min-h-0 overflow-auto whitespace-pre-wrap p-3 font-mono text-xs text-white/70" aria-live="polite">{terminal.activeSession.output || "실행 출력을 기다리고 있습니다."}</pre> : null}
               {bottomPanel === "ports" ? runtime.ports.length > 0 ? <ul className={css.runtimeList()} aria-label="열린 포트">{runtime.ports.map((port) => <li key={port.port}><div className="grid min-w-0 gap-0.5"><strong>{port.label} · localhost:{port.port}</strong><span>{port.status === "running" ? "실행 중" : "중지됨"} · <Button className="border-0 bg-transparent p-0 font-inherit text-[var(--n-color-studio-success)] hover:underline" type="button" size="sm" variant="ghost" onClick={openPreviewWindow}>브라우저에서 열기</Button></span></div><Button type="button" size="sm" variant="ghost" aria-label={`포트 ${port.port} 중지`} onClick={() => void stopPreviewPort(port.port)}>중지</Button></li>)}</ul> : <p className="m-0 p-3 text-xs text-white/55">열린 개발 서버 포트가 없습니다.</p> : null}
               {bottomPanel === "processes" ? runtime.processes.length > 0 ? <ul className={css.runtimeList()} aria-label="실행 중 프로세스">{runtime.processes.map((process) => <li key={`${process.terminalId}:${process.pid}:${process.generation ?? 0}`}><div className="grid min-w-0 gap-0.5"><strong>{process.command}</strong><span>PID {process.pid} · {process.terminalId} · {process.cwd}{process.terminalSize ? ` · ${process.terminalSize.cols}×${process.terminalSize.rows}` : ""}</span></div><Button type="button" size="sm" variant="ghost" aria-label={`${process.command} 프로세스 종료`} onClick={() => stopTerminalProcess(process.terminalId)}>종료</Button></li>)}</ul> : <p className="m-0 p-3 text-xs text-white/55">실행 중인 터미널 프로세스가 없습니다.</p> : null}
@@ -1701,19 +1972,19 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, onProjectReloa
                   <span aria-hidden="true">▣</span>
                   <input aria-label="미리보기 주소" value={previewAddress} disabled={!hasIsolatedPreview} spellCheck={false} autoCapitalize="off" autoCorrect="off" placeholder={hasIsolatedPreview ? "/" : "미리보기를 실행하세요"} onFocus={() => { previewAddressEditingRef.current = true; }} onBlur={() => { previewAddressEditingRef.current = false; setPreviewAddress(previewHistory.entries[previewHistory.index] ?? "/"); }} onChange={(event) => setPreviewAddress(event.currentTarget.value)} />
                 </form>
-                <div className={css.previewActions()}>{hasIsolatedPreview ? <><span className={css.live()}><i aria-hidden="true" /> 실행 중</span><Button className="grid size-7 place-items-center rounded-sm border-0 bg-transparent text-xs text-muted-foreground hover:bg-hover hover:text-foreground" type="button" size="icon" variant="ghost" onClick={openPreviewWindow} aria-label="미리보기를 새 탭에서 열기" title="새 탭에서 열기">↗</Button></> : <Button aria-label="미리보기 실행" type="button" size="sm" variant="primary" disabled={isRunningPreview} onClick={() => void runPreview()}>{isRunningPreview ? "설치 중…" : "실행"}</Button>}<Button aria-label="미리보기 닫기" type="button" size="sm" variant="ghost" onClick={() => setIsPreviewOpen(false)}>×</Button></div>
+                <div className={css.previewActions()}>{hasIsolatedPreview ? <><span className={css.live()}><i aria-hidden="true" /> 실행 중</span><Button className="grid size-7 place-items-center rounded-sm border-0 bg-transparent text-xs text-muted-foreground hover:bg-hover hover:text-foreground" type="button" size="icon" variant="ghost" onClick={openPreviewWindow} aria-label="미리보기를 새 탭에서 열기" title="새 탭에서 열기">↗</Button></> : <Button aria-label={isRunningPreview ? "미리보기 취소" : "미리보기 실행"} type="button" size="sm" variant="primary" onClick={() => { if (isRunningPreview) cancelRunningPreview(); else void runPreview(); }}>{isRunningPreview ? "취소" : "실행"}</Button>}<Button aria-label="미리보기 닫기" type="button" size="sm" variant="ghost" onClick={() => setIsPreviewOpen(false)}>×</Button></div>
               </div>
-              {hasIsolatedPreview ? <div className="relative min-h-0 overflow-hidden"><iframe className="block size-full" ref={attachPreviewFrame} title={`${project.name} 미리보기`} src={isolatedPreviewUrl} sandbox="allow-scripts allow-same-origin" allow="cross-origin-isolated" referrerPolicy="no-referrer" />{previewRefreshFailed ? <div className="absolute inset-0 grid place-content-center justify-items-center bg-raised/95 p-8 text-center" role="alert"><strong className="text-sm text-foreground">개발 서버가 중지되었습니다.</strong><p className="mb-4 mt-2 max-w-sm text-xs text-muted-foreground">새로고침할 수 없습니다. 개발 서버를 다시 실행하면 현재 로컬 초안으로 미리보기를 복구합니다.</p><Button type="button" size="sm" variant="primary" disabled={isRunningPreview} onClick={() => void runPreview()}>{isRunningPreview ? "다시 실행 중…" : "개발 서버 다시 실행"}</Button></div> : null}</div> : previewConfiguration.status === "disabled" ? <div className={css.utilityEmpty()} role="status"><strong>미리보기를 사용할 수 없습니다.</strong><p>{previewConfiguration.message} 동일 출처 미리보기는 보안을 위해 비활성화되어 있습니다.</p></div> : runtime.previewUrl ? <div className={css.utilityEmpty()} role="status"><strong>격리된 연결을 준비하고 있습니다.</strong><p>격리된 미리보기 연결이 아직 준비되지 않았습니다. 동일 출처 미리보기는 비활성화되어 있습니다.</p></div> : <div className={css.utilityEmpty()}><span aria-hidden="true">▷</span><strong>실행 결과를 바로 확인하세요</strong><p>의존성을 설치하고 개발 서버를 시작합니다.</p></div>}
+              {hasIsolatedPreview ? <div className="relative min-h-0 overflow-hidden"><iframe className="block size-full" ref={attachPreviewFrame} title={`${project.name} 미리보기`} src={isolatedPreviewUrl} sandbox="allow-scripts allow-same-origin" allow="cross-origin-isolated" referrerPolicy="no-referrer" />{previewRefreshFailed ? <div className="absolute inset-0 grid place-content-center justify-items-center bg-raised/95 p-8 text-center" role="alert"><strong className="text-sm text-foreground">개발 서버가 중지되었습니다.</strong><p className="mb-4 mt-2 max-w-sm text-xs text-muted-foreground">새로고침할 수 없습니다. 개발 서버를 다시 실행하면 현재 로컬 초안으로 미리보기를 복구합니다.</p><Button type="button" size="sm" variant="primary" onClick={() => { if (isRunningPreview) cancelRunningPreview(); else void runPreview(); }}>{isRunningPreview ? "취소" : "개발 서버 다시 실행"}</Button></div> : null}</div> : previewConfiguration.status === "disabled" ? <div className={css.utilityEmpty()} role="status"><strong>미리보기를 사용할 수 없습니다.</strong><p>{previewConfiguration.message} 동일 출처 미리보기는 보안을 위해 비활성화되어 있습니다.</p></div> : runtime.previewUrl ? <div className={css.utilityEmpty()} role="status"><strong>격리된 연결을 준비하고 있습니다.</strong><p>격리된 미리보기 연결이 아직 준비되지 않았습니다. 동일 출처 미리보기는 비활성화되어 있습니다.</p></div> : <div className={css.utilityEmpty()}><span aria-hidden="true">▷</span><strong>실행 결과를 바로 확인하세요</strong><p>의존성을 설치하고 개발 서버를 시작합니다.</p></div>}
             </section>
           </section>
         </div>
       ) : <div className={css.start()} role="status"><span className={css.startMark()} aria-hidden="true">N</span><h4>{isStarting ? "Studio를 준비하고 있습니다" : project.state === "active" ? error ? "Studio를 준비하지 못했습니다" : "Studio가 종료되었습니다" : "보관된 프로젝트입니다"}</h4><p>{isStarting ? `저장본을 확인한 뒤, 저장본이 없으면 프로젝트에 고정된 ${projectTemplateLabel(project.templateId)} 템플릿을 자동으로 엽니다.` : error ?? (project.state === "active" ? "프로젝트에 고정된 시작 템플릿으로 Studio를 다시 열 수 있습니다." : "활성 프로젝트만 Studio에서 열 수 있습니다.")}</p>{!isStarting && project.state === "active" ? <Button type="button" variant="primary" onClick={() => void startWorkspace()}>{error ? "다시 시도" : "Studio 열기"}</Button> : null}</div>}
       <ConfirmationDialog
         confirmLabel="파일 삭제"
-        description={`${selectedPath ?? "선택한 파일"}을 로컬 초안에서 삭제합니다. 서버에 저장하기 전에는 기존 서버 버전에 영향을 주지 않습니다.`}
+        description={`${pendingDeletePath ?? selectedPath ?? "선택한 파일"}을 로컬 초안에서 삭제합니다. 서버에 저장하기 전에는 기존 서버 버전에 영향을 주지 않습니다.`}
         open={confirmingFileDelete}
         title="이 파일을 삭제할까요?"
-        onCancel={() => setConfirmingFileDelete(false)}
+        onCancel={() => { setConfirmingFileDelete(false); setPendingDeletePath(undefined); }}
         onConfirm={deleteSelectedFile}
       />
       <ConfirmationDialog
@@ -1755,6 +2026,14 @@ function workbenchLayoutClass({ focusMode, previewOpen, sidebarOpen }: Readonly<
     return "grid-cols-[3rem_var(--studio-sidebar-width)_minmax(24rem,1fr)] max-[72rem]:grid-cols-[3rem_14rem_minmax(0,1fr)] max-[48rem]:grid-cols-[3rem_minmax(0,1fr)]";
   }
   return undefined;
+}
+
+function previewConsoleTone(level: StudioConsoleEntry["level"]): string {
+  if (level === "error") return "text-[var(--n-color-studio-danger)]";
+  if (level === "warn") return "text-[var(--n-color-studio-warning)]";
+  if (level === "info") return "text-[var(--n-color-studio-syntax-symbol)]";
+  if (level === "debug") return "text-white/45";
+  return "text-white/80";
 }
 
 function projectTemplateLabel(templateId: Project["templateId"]): string {

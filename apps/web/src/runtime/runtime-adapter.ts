@@ -112,6 +112,7 @@ export interface RuntimeViewState {
   diagnostics: readonly RuntimeDiagnostic[];
   localDraftAccess: "none" | "writer" | "conflict" | "lost";
   terminalProcessCount: number;
+  serverLogs: readonly string[];
 }
 
 export interface RuntimeTerminalPort {
@@ -143,6 +144,7 @@ export interface RuntimeWorkflowPort {
   stopPreview(port?: number): boolean;
   restart(): Promise<RuntimeViewState>;
   syncDeclaredPackages(): Promise<{ added: string[] }>;
+  cancel(): void;
   dispose(): Promise<void>;
 }
 
@@ -164,6 +166,7 @@ export interface RuntimeWorkspaceState {
   projectId: string | null;
   root: string | null;
   files: readonly RuntimeWorkspaceFile[];
+  directories: readonly string[];
   totalBytes: number;
   errorCode: string | null;
 }
@@ -188,8 +191,11 @@ export interface RuntimeWorkspacePort {
   getState(): RuntimeWorkspaceState;
   readText(path: string): string;
   createText(path: string, content?: string): RuntimeViewState;
+  createDirectory(path: string): RuntimeViewState;
+  movePath(from: string, to: string): RuntimeViewState;
   renameText(from: string, to: string): RuntimeViewState;
   deleteText(path: string): RuntimeViewState;
+  deletePath(path: string): RuntimeViewState;
   writeText(path: string, content: string): RuntimeViewState;
 }
 
@@ -225,8 +231,12 @@ interface ControllerLike {
   restartDev: PreviewWorkflowController["restartDev"];
   runPreview: PreviewWorkflowController["runPreview"];
   createTextFile: PreviewWorkflowController["createTextFile"];
+  createDirectory: PreviewWorkflowController["createDirectory"];
+  movePath: PreviewWorkflowController["movePath"];
   renameFile: PreviewWorkflowController["renameFile"];
+  cancelPreview: PreviewWorkflowController["cancelPreview"];
   deleteFile: PreviewWorkflowController["deleteFile"];
+  deletePath: PreviewWorkflowController["deletePath"];
   saveTextFile: PreviewWorkflowController["saveTextFile"];
   syncDeclaredPackages: PreviewWorkflowController["syncDeclaredPackages"];
   runRecoveryAction: PreviewWorkflowController["runRecoveryAction"];
@@ -319,10 +329,14 @@ export function createRuntimeAdapter(dependencies: RuntimeAdapterDependencies = 
         removeAdapterDiagnostics("RUNTIME_PREVIEW_FAILED", "RUNTIME_RECOVERY_FAILED");
         applySnapshot(current, snapshot);
         return publicState();
-      } catch {
+      } catch (error) {
+        const cause = error instanceof Error ? error.message.trim() : String(error).trim();
+        if (cause === "Preview controller operation cancelled") {
+          throw new RuntimeAdapterError("RUNTIME_PREVIEW_CANCELLED", cause);
+        }
         const diagnostic = fixedDiagnostic(
           "RUNTIME_PREVIEW_FAILED",
-          "The install and Preview journey did not complete.",
+          cause || "The install and Preview journey did not complete.",
           [{ kind: "retry", label: "Retry Preview" }]
         );
         appendDiagnostic(diagnostic, current.reportDiagnostic);
@@ -344,6 +358,10 @@ export function createRuntimeAdapter(dependencies: RuntimeAdapterDependencies = 
       applySnapshot(current, current.controller.getSnapshot());
       return result;
     },
+    cancel() {
+      const current = requireReady();
+      applySnapshot(current, current.controller.cancelPreview());
+    },
     dispose
   };
 
@@ -364,10 +382,13 @@ export function createRuntimeAdapter(dependencies: RuntimeAdapterDependencies = 
         removeAdapterDiagnostics("RUNTIME_PREVIEW_FAILED", "RUNTIME_RECOVERY_FAILED");
         applySnapshot(current, current.controller.getSnapshot());
         return publicState();
-      } catch {
+      } catch (error) {
+        const cause = error instanceof Error ? error.message.trim() : String(error).trim();
         const diagnostic = fixedDiagnostic(
           "RUNTIME_RECOVERY_FAILED",
-          "The recovery action did not complete. Your Local Draft remains unchanged.",
+          cause
+            ? `${cause} Local Draft remains unchanged.`
+            : "The recovery action did not complete. Your Local Draft remains unchanged.",
           [{ kind, label: recoveryLabel(kind) }]
         );
         appendDiagnostic(diagnostic, current.reportDiagnostic);
@@ -394,6 +415,7 @@ export function createRuntimeAdapter(dependencies: RuntimeAdapterDependencies = 
           projectId: current.projectId,
           root: projectRoot(current.projectId),
           files: materialized.files,
+          directories: [],
           totalBytes: materialized.totalBytes,
           errorCode: null
         };
@@ -438,6 +460,7 @@ export function createRuntimeAdapter(dependencies: RuntimeAdapterDependencies = 
             kind: file.kind,
             sizeBytes: file.bytes.byteLength
           })),
+          directories: [],
           totalBytes: decoded.totalBytes,
           errorCode: null
         };
@@ -501,6 +524,56 @@ export function createRuntimeAdapter(dependencies: RuntimeAdapterDependencies = 
         throw new RuntimeAdapterError("RUNTIME_FILE_CREATE_FAILED", "The Project file could not be created safely.");
       }
     },
+    createDirectory(path) {
+      const current = requireReady();
+      if (state.localDraftAccess !== "writer") throw new RuntimeAdapterError("ELEASEHELD", "Another tab owns this Local Draft writer lease.");
+      if (workspaceState.status !== "ready" || !isSafeRuntimeBundlePath(path) || workspaceState.files.some((file) => file.path === path)) {
+        throw new RuntimeAdapterError("RUNTIME_FILE_CREATE_FAILED", "The Project directory could not be created safely.");
+      }
+      try {
+        const snapshot = current.controller.createDirectory(path);
+        workspaceState = {
+          ...workspaceState,
+          directories: workspaceState.directories.includes(path)
+            ? workspaceState.directories
+            : [...workspaceState.directories, path].sort()
+        };
+        markWorkspaceMutation();
+        applySnapshot(current, snapshot);
+        return publicState();
+      } catch {
+        throw new RuntimeAdapterError("RUNTIME_FILE_CREATE_FAILED", "The Project directory could not be created safely.");
+      }
+    },
+    movePath(from, to) {
+      const current = requireReady();
+      if (state.localDraftAccess !== "writer") throw new RuntimeAdapterError("ELEASEHELD", "Another tab owns this Local Draft writer lease.");
+      if (workspaceState.status !== "ready" || !isSafeRuntimeBundlePath(from) || !isSafeRuntimeBundlePath(to) || from === to || to.startsWith(`${from}/`)) {
+        throw new RuntimeAdapterError("RUNTIME_FILE_RENAME_FAILED", "The Project path could not be moved safely.");
+      }
+      try {
+        const snapshot = current.controller.movePath(from, to);
+        const rewrite = (path: string) => path === from || path.startsWith(`${from}/`) ? `${to}${path.slice(from.length)}` : path;
+        const nextText = new Map<string, string>();
+        for (const [path, content] of workspaceText) nextText.set(rewrite(path), content);
+        workspaceText = nextText;
+        workspaceState = {
+          ...workspaceState,
+          files: workspaceState.files
+            .map((file) => {
+              const path = rewrite(file.path);
+              return path === file.path ? file : { ...file, path, name: path.split("/").at(-1) ?? path };
+            })
+            .sort((left, right) => left.path.localeCompare(right.path)),
+          directories: [...new Set(workspaceState.directories.map(rewrite))].sort()
+        };
+        markWorkspaceMutation();
+        applySnapshot(current, snapshot);
+        return publicState();
+      } catch {
+        throw new RuntimeAdapterError("RUNTIME_FILE_RENAME_FAILED", "The Project path could not be moved safely.");
+      }
+    },
     renameText(from, to) {
       const current = requireReady();
       if (state.localDraftAccess !== "writer") throw new RuntimeAdapterError("ELEASEHELD", "Another tab owns this Local Draft writer lease.");
@@ -549,6 +622,31 @@ export function createRuntimeAdapter(dependencies: RuntimeAdapterDependencies = 
         return publicState();
       } catch {
         throw new RuntimeAdapterError("RUNTIME_FILE_DELETE_FAILED", "The Project file could not be deleted safely.");
+      }
+    },
+    deletePath(path) {
+      const current = requireReady();
+      if (state.localDraftAccess !== "writer") throw new RuntimeAdapterError("ELEASEHELD", "Another tab owns this Local Draft writer lease.");
+      const matches = (candidate: string) => candidate === path || candidate.startsWith(`${path}/`);
+      const removing = workspaceState.status === "ready" ? workspaceState.files.filter((file) => matches(file.path)) : [];
+      const removingDirectory = workspaceState.status === "ready" && workspaceState.directories.some(matches);
+      if (workspaceState.status !== "ready" || !isSafeRuntimeBundlePath(path) || (removing.length === 0 && !removingDirectory)) {
+        throw new RuntimeAdapterError("RUNTIME_FILE_DELETE_FAILED", "The Project path could not be deleted safely.");
+      }
+      try {
+        const snapshot = current.controller.deletePath(path);
+        for (const file of removing) workspaceText.delete(file.path);
+        workspaceState = {
+          ...workspaceState,
+          totalBytes: workspaceState.totalBytes - removing.reduce((total, file) => total + file.sizeBytes, 0),
+          files: workspaceState.files.filter((file) => !matches(file.path)),
+          directories: workspaceState.directories.filter((directory) => !matches(directory))
+        };
+        markWorkspaceMutation();
+        applySnapshot(current, snapshot);
+        return publicState();
+      } catch {
+        throw new RuntimeAdapterError("RUNTIME_FILE_DELETE_FAILED", "The Project path could not be deleted safely.");
       }
     },
     writeText(path, content) {
@@ -728,7 +826,8 @@ export function createRuntimeAdapter(dependencies: RuntimeAdapterDependencies = 
         ports: [],
         processes: [],
         localDraftAccess: "none",
-        terminalProcessCount: 0
+        terminalProcessCount: 0,
+        serverLogs: []
       };
       emit();
       listeners.clear();
@@ -808,7 +907,8 @@ export function createRuntimeAdapter(dependencies: RuntimeAdapterDependencies = 
         ports: [],
         processes: [],
         localDraftAccess: "none",
-        terminalProcessCount: 0
+        terminalProcessCount: 0,
+        serverLogs: []
       };
       emit();
       listeners.clear();
@@ -853,6 +953,7 @@ export function createRuntimeAdapter(dependencies: RuntimeAdapterDependencies = 
       ...state,
       workflowPhase: snapshot.phase,
       hmrState: snapshot.hmrState,
+      serverLogs: snapshot.logs.slice(-100),
       previewUrl: snapshot.previewUrl,
       ports: snapshot.session && snapshot.previewUrl ? [{
         label: "Preview",
@@ -940,7 +1041,8 @@ function createInitialState(): RuntimeViewState {
     processes: [],
     diagnostics: [],
     localDraftAccess: "none",
-    terminalProcessCount: 0
+    terminalProcessCount: 0,
+    serverLogs: []
   };
 }
 
@@ -965,13 +1067,14 @@ function createEmptyWorkspaceState(): RuntimeWorkspaceState {
     projectId: null,
     root: null,
     files: [],
+    directories: [],
     totalBytes: 0,
     errorCode: null
   };
 }
 
 function copyWorkspaceState(value: RuntimeWorkspaceState): RuntimeWorkspaceState {
-  return { ...value, files: value.files.map((file) => ({ ...file })) };
+  return { ...value, directories: [...value.directories], files: value.files.map((file) => ({ ...file })) };
 }
 
 function decodeRuntimeBundleFiles(

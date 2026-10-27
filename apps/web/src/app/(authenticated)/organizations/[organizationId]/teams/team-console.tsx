@@ -419,7 +419,7 @@ export function TeamConsole(props: TeamConsoleProps) {
           {props.canCreateTeam ? (
             <form className={styles.form()} onSubmit={handleCreate} aria-busy={mutation.isPending}>
               <h2>새 팀</h2>
-              <TextField label="슬러그" name="slug" required pattern="[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?" maxLength={63} disabled={mutation.isPending} />
+              <TextField label="슬러그" name="slug" required pattern="[a-z0-9](?:[a-z0-9\\-]{0,61}[a-z0-9])?" maxLength={63} disabled={mutation.isPending} />
               <TextField label="표시 이름" name="displayName" required maxLength={200} disabled={mutation.isPending} />
               <Button type="submit" variant="primary" disabled={mutation.isPending}>팀 만들기</Button>
             </form>

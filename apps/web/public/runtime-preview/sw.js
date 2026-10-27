@@ -2,7 +2,7 @@ const PROTOCOL_VERSION = 1;
 const MAX_RELAY_WAIT_MS = 10_000;
 const MAX_PENDING_REQUESTS = 8;
 const MAX_QUEUED_REQUESTS = 1024;
-const ACTIVE_SESSION_CACHE = "nuriteo-preview-active-v1";
+const ACTIVE_SESSION_CACHE = "nuriteo-preview-active-v2";
 let relay = null;
 let relayBinding = null;
 let relayGeneration = null;
@@ -21,7 +21,13 @@ self.addEventListener("install", (event) => {
     if (!self.registration.active) await self.skipWaiting();
   })());
 });
-self.addEventListener("activate", (event) => event.waitUntil(self.clients.claim()));
+self.addEventListener("activate", (event) => {
+  event.waitUntil((async () => {
+    const names = await caches.keys();
+    await Promise.all(names.filter((name) => name !== ACTIVE_SESSION_CACHE).map((name) => caches.delete(name)));
+    await self.clients.claim();
+  })());
+});
 self.addEventListener("message", (event) => {
   const message = event.data;
   if (isExactRecord(message, ["binding", "generation", "type", "version"])
@@ -261,9 +267,13 @@ async function notifyControlledWindows(message) {
   for (const client of clients) {
     try {
       const url = new URL(client.url);
-      if (url.origin === self.location.origin && url.pathname === "/") client.postMessage(message);
+      if (url.origin === self.location.origin && isPreviewDocumentPath(url.pathname)) client.postMessage(message);
     } catch { /* ignore invalid client metadata */ }
   }
+}
+
+function isPreviewDocumentPath(pathname) {
+  return pathname.startsWith("/") && !pathname.startsWith("/runtime-preview/");
 }
 
 function validApplicationOrigin(value) {

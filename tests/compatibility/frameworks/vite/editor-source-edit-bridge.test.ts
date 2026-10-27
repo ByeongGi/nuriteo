@@ -60,4 +60,16 @@ editor.deleteFile("src/renamed.js");
 assert.equal(lastChange.kind, "source-delete");
 assert.equal(lastDiagnostic.code, "EDEVSERVER_SOURCE_DELETED");
 
+project.writeText("app/about/page.tsx", "export default function Page() { return <h1>About</h1>; }\n");
+editor.editText("app/about/page.tsx", "export default function Page() { return <h1>About edit</h1>; }\n");
+editor.saveFile("app/about/page.tsx");
+assert.equal(lastChange.kind, "source-save");
+assert.equal(lastChange.relativePath, "app/about/page.tsx");
+assert.equal(workflow.hmrUpdates().at(-1).updates[0].path, "/app/about/page.tsx");
+
+project.writeText("package.json", "{\"scripts\":{\"dev\":\"vite\"}}\n");
+editor.editText("package.json", "{\"scripts\":{\"dev\":\"vite\"},\"private\":true}\n");
+editor.saveFile("package.json");
+assert.equal(lastChange.kind, "ignored");
+
 console.log("vite editor source edit bridge test ok");

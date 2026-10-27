@@ -1040,10 +1040,12 @@ export class ViteProductWorkflow {
   }
 
   #installFixturePackage(pkg: string): void {
+    if (shouldKeepInstalledPackage(this.workspace, join(this.projectRoot, "node_modules", pkg, "package.json"))) return;
     const packageRoot = join(this.projectRoot, "node_modules", pkg);
     if (pkg === "react") {
       this.workspace.writeText(join(packageRoot, "package.json"), JSON.stringify({
         name: "react",
+        nuriteoFixture: true,
         version: "18.3.1",
         type: "module",
         exports: {
@@ -1094,6 +1096,7 @@ export class ViteProductWorkflow {
     if (pkg === "react-dom") {
       this.workspace.writeText(join(packageRoot, "package.json"), JSON.stringify({
         name: "react-dom",
+        nuriteoFixture: true,
         version: "18.3.1",
         type: "module",
         exports: {
@@ -1152,6 +1155,7 @@ export class ViteProductWorkflow {
     if (pkg === "@vitejs/plugin-react" || pkg === "@vitejs/plugin-react-swc") {
       this.workspace.writeText(join(packageRoot, "package.json"), JSON.stringify({
         name: pkg,
+        nuriteoFixture: true,
         version: "latest",
         type: "module",
         exports: {
@@ -1988,6 +1992,21 @@ function unwrapExportCondition(value: unknown): string | undefined {
     if (resolved) return resolved;
   }
   return undefined;
+}
+
+export function shouldKeepInstalledPackage(
+  workspace: { exists(path: string): boolean; readText(path: string): string },
+  manifestPath: string
+): boolean {
+  if (!workspace.exists(manifestPath)) return false;
+  try {
+    const manifest = JSON.parse(workspace.readText(manifestPath)) as { nuriteoFixture?: unknown; version?: unknown };
+    if (manifest.nuriteoFixture === true) return false;
+    if (manifest.version === "product-fixture" || manifest.version === "browser-native-shim") return false;
+    return true;
+  } catch {
+    return true;
+  }
 }
 
 export function resolveInstalledPreviewSpecifier(

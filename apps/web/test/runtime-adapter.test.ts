@@ -114,6 +114,7 @@ class FakeController {
     }));
   }
   async restartDev(): Promise<PreviewWorkflowSnapshot> { return this.current; }
+  async syncDeclaredPackages(): Promise<{ added: string[] }> { return { added: [] }; }
   async runPreview(): Promise<PreviewWorkflowSnapshot> {
     this.current = snapshot({ phase: "hmr_connected", hmrState: "connected", previewUrl: "https://nuriteo.test/previews/project/" });
     return this.current;
@@ -123,8 +124,12 @@ class FakeController {
     return this.current;
   }
   createTextFile(): PreviewWorkflowSnapshot { return this.current; }
+  createDirectory(): PreviewWorkflowSnapshot { return this.current; }
+  movePath(): PreviewWorkflowSnapshot { return this.current; }
   renameFile(): PreviewWorkflowSnapshot { return this.current; }
+  cancelPreview(): PreviewWorkflowSnapshot { return this.current; }
   deleteFile(): PreviewWorkflowSnapshot { return this.current; }
+  deletePath(): PreviewWorkflowSnapshot { return this.current; }
   async runRecoveryAction(kind: string): Promise<unknown> {
     this.recoveryKinds.push(kind);
     if (kind === "retry") return this.runPreview();

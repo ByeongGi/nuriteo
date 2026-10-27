@@ -71,8 +71,9 @@ async function reloadModuleGraph(sequence) {
 }
 
 function isSupportedModuleEntry(pathname) {
-  return /^\/src\/main\.(?:[cm]?[jt]sx?)$/iu.test(pathname)
-    || pathname === "/_next/static/chunks/app.js";
+  return pathname.startsWith("/")
+    && !pathname.startsWith("/runtime-preview/")
+    && !pathname.startsWith("/node_modules/");
 }
 
 function dispatchAppliedUpdate(mode, path, sequence) {

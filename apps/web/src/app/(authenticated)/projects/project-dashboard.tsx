@@ -367,7 +367,7 @@ export function ProjectDashboard(props: ProjectDashboardProps) {
               <div className={styles.createHeading()}><div><p className={styles.eyebrow()}>새로 만들기</p><h2>새 프로젝트</h2></div></div>
               <div className={styles.createFields()}>
                 <TextField label="프로젝트 이름" name="name" placeholder="런타임 편집기" required maxLength={200} disabled={mutation.isPending} />
-                <TextField label="슬러그" name="slug" placeholder="runtime-editor" required pattern="[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?" maxLength={63} disabled={mutation.isPending} />
+                <TextField label="슬러그" name="slug" placeholder="runtime-editor" required pattern="[a-z0-9](?:[a-z0-9\\-]{0,61}[a-z0-9])?" maxLength={63} disabled={mutation.isPending} />
               </div>
               <ProjectTemplatePicker disabled={mutation.isPending} />
               <div className={styles.createFooter()}><p>선택한 템플릿은 프로젝트의 실행 방식과 기본 파일 구성을 결정하며 생성 후에는 변경할 수 없습니다.</p><Button className={styles.createButton()} type="submit" variant="primary" disabled={mutation.isPending}>프로젝트 만들기</Button></div>

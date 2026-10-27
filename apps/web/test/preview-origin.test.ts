@@ -162,10 +162,11 @@ assert.match(ideShell, /aria-label="미리보기 주소"/u);
 assert.match(ideShell, /nuriteo-preview:navigate/u);
 assert.match(bootstrap, /event\.source !== frame\.contentWindow/u);
 assert.match(bridge, /console-bridge\.js/u);
-assert.match(bridge, /onConsole\?\.\(\{ message: event\.data\.message, stack: event\.data\.stack \}\)/u);
+assert.match(bridge, /onConsole\?\.\(\{ level: event\.data\.level, message: event\.data\.message, stack: event\.data\.stack \}\)/u);
 assert.match(ideShell, /aria-label="미리보기 콘솔"/u);
 const hmrClient = fs.readFileSync(new URL("../public/runtime-preview/hmr.js", import.meta.url), "utf8");
-assert.match(hmrClient, /pathname === "\/_next\/static\/chunks\/app\.js"/u, "isolated HMR must support Next.js app entries");
+assert.match(hmrClient, /!pathname\.startsWith\("\/runtime-preview\/"\)/u, "HMR reimports the project module entry on every route");
+assert.match(hmrClient, /!pathname\.startsWith\("\/node_modules\/"\)/u);
 
 const signingKey = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 const signed = await issueSignedPreviewBinding(signingKey, 4173, 1_700_000_000_000, 5_000);

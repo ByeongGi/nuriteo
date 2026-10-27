@@ -47,7 +47,7 @@ export function createProjectWorkspaceDevServerChangeBridge<Result = unknown>(
   target: ProjectWorkspaceDevServerChangeTarget<Result>,
   options: ProjectWorkspaceDevServerChangeBridgeOptions = {}
 ): ProjectWorkspaceDevServerChangeBridge<Result> {
-  const sourcePattern = options.sourcePattern || /^src\/.+\.(c|m)?(j|t)sx?$/;
+  const sourcePattern = options.sourcePattern || /^(?!.*(?:^|\/)(?:node_modules|\.pnpm-store)(?:\/|$)).+\.(?:css|[cm]?[jt]sx?)$/;
   return (event) => {
     const relativePath = relativeSourcePath(event, options.root);
     const base = {

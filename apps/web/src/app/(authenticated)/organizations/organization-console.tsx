@@ -297,7 +297,7 @@ export function OrganizationConsole(props: OrganizationConsoleProps) {
       {!props.organization ? (
         <form className={`${styles.form()} ${styles.createForm()}`} onSubmit={create} aria-busy={mutation.isPending}>
           <div><p className="m-0 mb-3 text-xs font-semibold uppercase tracking-[0.08em] text-accent-foreground">새 워크스페이스</p><h2>팀 워크스페이스 설정</h2><p>워크스페이스를 만들면 멤버를 초대하고 프로젝트 접근을 함께 관리할 수 있습니다.</p></div>
-          <TextField label="워크스페이스 주소" description="영문 소문자, 숫자와 하이픈만 사용할 수 있습니다." name="slug" placeholder="nuriteo-team" required pattern="[a-z0-9][a-z0-9-]*" maxLength={63} disabled={mutation.isPending} />
+          <TextField label="워크스페이스 주소" description="영문 소문자, 숫자와 하이픈만 사용할 수 있습니다." name="slug" placeholder="nuriteo-team" required pattern="[a-z0-9][a-z0-9\\-]*" maxLength={63} disabled={mutation.isPending} />
           <TextField label="워크스페이스 이름" name="displayName" placeholder="누리터 팀" required maxLength={200} disabled={mutation.isPending} />
           <Button type="submit" variant="primary" disabled={mutation.isPending}>워크스페이스 만들기</Button>
         </form>

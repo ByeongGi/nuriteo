@@ -123,7 +123,7 @@ async function getDescriptor(
   }
   if (!response.ok) {
     cancel(response.body);
-    throw responseFailure(response.status);
+    throw responseFailure(response.status, "descriptor");
   }
   if (!isMediaType(response.headers.get("content-type"), "application/json")) {
     cancel(response.body);
@@ -161,7 +161,7 @@ async function downloadBundle(
   if (!response.ok) {
     cancel(response.body);
     if (response.status === 412) throw staleDescriptor();
-    throw responseFailure(response.status);
+    throw responseFailure(response.status, "download");
   }
   const declaredLength = parseDecimalHeader(response.headers.get("content-length"));
   if (
@@ -459,8 +459,15 @@ function contentPath(identity: ProjectContentIdentity): string {
   return `/api/v1/workspaces/${segment}/${identity.ownerId}/projects/${identity.projectId}/content`;
 }
 
-function responseFailure(status: number): ProjectContentError {
+function responseFailure(status: number, phase: "descriptor" | "download"): ProjectContentError {
   if (status === 401) return failure("RESUME_AUTHENTICATION_REQUIRED", "Sign in again before resuming this Project.");
+  // The content API answers 404 both for an unknown Project and for a Project
+  // that has no Working Head. The Studio page has already loaded the Project,
+  // so a descriptor 404 is an unsaved Project and the template can be created.
+  // A download 404 means a descriptor existed and the bundle then disappeared.
+  if (status === 404 && phase === "descriptor") {
+    return failure("RESUME_NOT_SAVED", "This Project does not have a current Server Save.");
+  }
   if (status === 409) return failure("RESUME_NOT_SAVED", "This Project does not have a current Server Save.");
   if (status === 404) return failure("RESUME_CONTENT_UNAVAILABLE", "Saved Project content is no longer available.");
   return failure("RESUME_DOWNLOAD_FAILED", "Saved Project content could not be downloaded.");

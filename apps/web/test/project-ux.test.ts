@@ -497,7 +497,7 @@ function testProjectSourceContracts() {
   assert.doesNotMatch(ideShell, />Save<|"Saved · HMR/u);
   assert.match(terminalView, /aria-label=\{`\$\{props\.sessionName\} 콘솔`\}/u);
   assert.match(ideShell, /aria-label="미리보기 콘솔"/u);
-  assert.match(ideShell, /미리보기 콘솔 에러가 없습니다/u);
+  assert.match(ideShell, /미리보기 콘솔 출력이 없습니다/u);
   assert.match(studioStory, /<ProjectIdeShell/u);
   assert.match(studioStory, /<ProjectStudioFrame/u);
   assert.match(studioStory, /resumeProjectContentLoader=\{async \(\) =>/u);

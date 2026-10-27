@@ -12,6 +12,15 @@ const owner = {
   url: `${origin}/runtime-preview/bootstrap`,
   postMessage(value: unknown) { ownerMessages.push(value); }
 };
+const hmrClients = [
+  { url: `${origin}/`, messages: [] as unknown[] },
+  { url: `${origin}/about`, messages: [] as unknown[] },
+  { url: `${origin}/runtime-preview/bootstrap`, messages: [] as unknown[] }
+].map((client) => ({
+  url: client.url,
+  messages: client.messages,
+  postMessage(value: unknown) { client.messages.push(value); }
+}));
 const registration = {
   active: null,
   async unregister() { return true; }
@@ -21,7 +30,7 @@ const workerGlobal = {
   clients: {
     async claim() { return undefined; },
     async get(id: string) { return id === owner.id ? owner : undefined; },
-    async matchAll() { return []; }
+    async matchAll() { return hmrClients; }
   },
   location: new URL(`${origin}/runtime-preview/sw.js`),
   registration,
@@ -65,6 +74,21 @@ channel.port2.postMessage({
 });
 await new Promise((resolve) => setTimeout(resolve, 0));
 assert.equal(ownerMessages.length, 1);
+channel.port2.postMessage({
+  type: "nuriteo-preview:hmr",
+  version: 1,
+  binding,
+  changeKind: "content",
+  generation: runtimeId,
+  nonce: "a".repeat(32),
+  path: "app/about/page.tsx",
+  sequence: 1
+});
+await new Promise((resolve) => setTimeout(resolve, 0));
+assert.equal(hmrClients[0]?.messages.length, 1);
+assert.equal(hmrClients[1]?.messages.length, 1);
+assert.equal(hmrClients[2]?.messages.length, 0);
+assert.equal((hmrClients[1]?.messages[0] as { path?: string }).path, "app/about/page.tsx");
 
 for (const status of [204, 205, 304]) {
   const response = await relayFetch(status, new ArrayBuffer(0), "GET");
@@ -196,7 +220,10 @@ const consoleWindow = {
     }
   }
 };
-const previewConsole = { error(..._args: unknown[]) { /* original sink */ } };
+const previewConsole = {
+  error(..._args: unknown[]) { /* original sink */ },
+  log(..._args: unknown[]) { /* original sink */ }
+};
 vm.runInNewContext(fs.readFileSync(new URL("../public/runtime-preview/console-bridge.js", import.meta.url), "utf8"), {
   Date,
   Error,
@@ -210,7 +237,9 @@ previewConsole.error("studio-console-check");
 const failure = new Error("render failed");
 previewConsole.error(failure);
 consoleWindow.listeners.get("unhandledrejection")?.({ reason: "rejected-promise" });
-assert.equal(consoleMessages.length, 3);
+previewConsole.log("studio-log-check", { ok: true });
+previewConsole.log("studio-log-check", { ok: true });
+assert.equal(consoleMessages.length, 4);
 assert.equal(consoleMessages[0]?.origin, "https://preview.example.test");
 assert.equal(consoleMessages[0]?.value.level, "error");
 assert.equal(consoleMessages[0]?.value.message, "studio-console-check");
@@ -220,6 +249,8 @@ assert.equal(consoleMessages[0]?.value.version, 1);
 assert.equal(consoleMessages[1]?.value.message, "render failed");
 assert.match(String(consoleMessages[1]?.value.stack), /render failed/u);
 assert.equal(consoleMessages[2]?.value.message, "rejected-promise");
+assert.equal(consoleMessages[3]?.value.level, "log");
+assert.equal(consoleMessages[3]?.value.message, "studio-log-check {\"ok\":true}");
 
 async function relayFetch(status: number, body: unknown, method: "GET" | "HEAD"): Promise<Response> {
   let responsePromise: Promise<Response> | undefined;

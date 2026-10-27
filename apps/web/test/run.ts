@@ -51,6 +51,7 @@ await import("./preview-service-worker.test.ts");
 await import("./retryable-lazy-feature.test.ts");
 await import("./studio-explorer-files.test.ts");
 await import("./studio-content-replace.test.ts");
+await import("./studio-editor-tabs.test.ts");
 await import("./runtime-adapter.test.ts");
 await import("./workspace-start.test.ts");
 await import("./runtime-assets.test.ts");

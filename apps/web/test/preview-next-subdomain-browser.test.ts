@@ -112,6 +112,17 @@ try {
   assert.equal(aboutResponse?.status(), 200);
   await projectFrame.getByRole("heading", { name: "About" }).waitFor();
   assert.equal(await projectFrame.evaluate(() => (window as unknown as { __NEXT_PREVIEW_ROUTE__?: string }).__NEXT_PREVIEW_ROUTE__), "/about");
+  const aboutDocumentTimeOrigin = await projectFrame.evaluate(() => performance.timeOrigin);
+  const aboutPath = `${workflow.projectRoot}/app/about/page.tsx`;
+  const editedAbout = workflow.workspace.readText(aboutPath).replace("<h1>About</h1>", "<h1>About HMR</h1>");
+  workflow.applySourceEdit("app/about/page.tsx", editedAbout);
+  await page.evaluate(() => {
+    const hotUpdate = (window as typeof window & { __nuriteoNextPreviewHotUpdate?: (path: string) => void }).__nuriteoNextPreviewHotUpdate;
+    if (!hotUpdate) throw new Error("Next Preview HMR probe unavailable");
+    hotUpdate("app/about/page.tsx");
+  });
+  await projectFrame.getByRole("heading", { name: "About HMR" }).waitFor({ timeout: 20_000 });
+  assert.equal(await projectFrame.evaluate(() => performance.timeOrigin), aboutDocumentTimeOrigin, "Next HMR must update a non-root route without reloading it");
   assert.equal(await projectFrame.evaluate(() => [...document.scripts].filter((script) => !script.src).every((script) => script.nonce.length > 0)), true);
   assert.equal(await projectFrame.evaluate(() => globalThis.crossOriginIsolated), true);
   assert.deepEqual(errors, []);

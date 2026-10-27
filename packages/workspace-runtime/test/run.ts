@@ -2,4 +2,7 @@ await import("./controller-dispose.test.ts");
 await import("./terminal-session-control.test.ts");
 await import("./registry-package-shell.test.ts");
 await import("./ide-offline-soak.test.ts");
+await import("./next-preview-repro.mts");
+await import("./next-app-package.test.ts");
+await import("./studio-preview-scenarios.test.ts");
 await import("./observability-support.test.ts");

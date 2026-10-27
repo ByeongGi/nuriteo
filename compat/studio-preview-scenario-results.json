@@ -1,0 +1,77 @@
+{
+  "recordedAt": "2026-10-27",
+  "scenarios": [
+    {
+      "id": "template-home",
+      "framework": "next",
+      "status": "pass",
+      "detail": "Next template home preview is served"
+    },
+    {
+      "id": "nested-page-edit",
+      "framework": "next",
+      "status": "pass",
+      "detail": "Edited app/about/page.tsx is served for the non-root route"
+    },
+    {
+      "id": "contact-route",
+      "framework": "next",
+      "status": "pass",
+      "detail": "A new app/contact/page.tsx is served at /contact without a studio page list"
+    },
+    {
+      "id": "empty-directory",
+      "framework": "next",
+      "status": "pass",
+      "detail": "A new folder is a directory and does not create a marker file"
+    },
+    {
+      "id": "move-directory",
+      "framework": "next",
+      "status": "pass",
+      "detail": "Moving a folder renames descendant files and leaves the old path"
+    },
+    {
+      "id": "delete-directory",
+      "framework": "next",
+      "status": "pass",
+      "detail": "Deleting a folder removes the directory and its files"
+    },
+    {
+      "id": "declared-package",
+      "framework": "next",
+      "status": "pass",
+      "detail": "A package.json dependency is installed and the preview module imports it"
+    },
+    {
+      "id": "package-lifecycle",
+      "framework": "next",
+      "status": "pass",
+      "detail": "Preview package install runs postinstall and keeps its stdout"
+    },
+    {
+      "id": "preserve-installed-package",
+      "framework": "next",
+      "status": "pass",
+      "detail": "A later preview start does not replace an installed package with the adapter fixture"
+    },
+    {
+      "id": "preview-console-log",
+      "framework": "next",
+      "status": "blocked",
+      "detail": "The adapter preview serves the page module but does not evaluate console.log. Studio console forwarding is covered by the browser preview bridge."
+    },
+    {
+      "id": "restart-skips-server-save",
+      "framework": "next",
+      "status": "pass",
+      "detail": "runPreview only installs, starts the dev server, and binds the preview session. It has no project server save call."
+    },
+    {
+      "id": "fixture-does-not-clobber",
+      "framework": "next",
+      "status": "pass",
+      "detail": "workflow.install keeps a package that is not marked nuriteoFixture"
+    }
+  ]
+}

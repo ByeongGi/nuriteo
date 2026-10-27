@@ -43,6 +43,7 @@ function createStudioRuntimeAdapter({ fileCount = 4, mode = "ready", projectId }
       };
     });
     return {
+      directories: [],
       errorCode: null,
       files,
       projectId,
@@ -96,6 +97,7 @@ function createStudioRuntimeAdapter({ fileCount = 4, mode = "ready", projectId }
       stopPreview: () => true,
       restart: async () => copyRuntimeState(state),
       syncDeclaredPackages: async () => ({ added: [] }),
+      cancel() {},
       dispose: async () => undefined
     },
     workspace: {
@@ -113,6 +115,23 @@ function createStudioRuntimeAdapter({ fileCount = 4, mode = "ready", projectId }
       createText(path, content = "") {
         if (workspaceText.has(path)) throw new Error("Fixture file already exists.");
         workspaceText.set(path, content);
+        return copyRuntimeState(state);
+      },
+      createDirectory() {
+        return copyRuntimeState(state);
+      },
+      movePath(from, to) {
+        const content = workspaceText.get(from);
+        if (content !== undefined) {
+          workspaceText.delete(from);
+          workspaceText.set(to, content);
+        }
+        return copyRuntimeState(state);
+      },
+      deletePath(path) {
+        for (const candidate of [...workspaceText.keys()]) {
+          if (candidate === path || candidate.startsWith(`${path}/`)) workspaceText.delete(candidate);
+        }
         return copyRuntimeState(state);
       },
       renameText(from, to) {
@@ -170,6 +189,7 @@ function runtimeState(
     processes: [],
     projectId,
     terminalProcessCount: 0,
+    serverLogs: [],
     workflowPhase: "idle"
   };
 }

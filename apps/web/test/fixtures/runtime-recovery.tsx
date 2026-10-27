@@ -255,7 +255,8 @@ function baseState(): RuntimeViewState {
     processes: [],
     diagnostics: [],
     localDraftAccess: "none",
-    terminalProcessCount: 0
+    terminalProcessCount: 0,
+    serverLogs: []
   };
 }
 

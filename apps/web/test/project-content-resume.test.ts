@@ -35,6 +35,8 @@ await rejectsInnerChecksumMismatchEvenWithMatchingOuterDigest();
 await rejectsNonCanonicalTarHeaderEvenWithMatchingOuterDigest();
 await rejectsNonZeroTarPaddingEvenWithMatchingOuterDigest();
 await rejectsUnsafeDescriptorAndLimit();
+await treatsMissingDescriptorAsUnsaved();
+await treatsMissingBundleAsUnavailable();
 
 async function resumesVerifiedCurrentHead(): Promise<void> {
   const requests: Array<{ headers: Headers; url: string }> = [];
@@ -136,6 +138,18 @@ async function rejectsNonZeroTarPaddingEvenWithMatchingOuterDigest(): Promise<vo
   await expectCode(() => resumeProjectContent(identity(), {
     fetch: responseSequence(descriptorResponse(changed), bundleResponse(corrupted, changed))
   }), "RESUME_INTEGRITY_FAILED");
+}
+
+async function treatsMissingDescriptorAsUnsaved(): Promise<void> {
+  await expectCode(() => resumeProjectContent(identity(), {
+    fetch: async () => new Response(null, { status: 404 })
+  }), "RESUME_NOT_SAVED");
+}
+
+async function treatsMissingBundleAsUnavailable(): Promise<void> {
+  await expectCode(() => resumeProjectContent(identity(), {
+    fetch: responseSequence(descriptorResponse(descriptor()), new Response(null, { status: 404 }))
+  }), "RESUME_CONTENT_UNAVAILABLE");
 }
 
 async function rejectsUnsafeDescriptorAndLimit(): Promise<void> {

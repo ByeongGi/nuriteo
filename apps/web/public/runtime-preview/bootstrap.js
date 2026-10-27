@@ -61,7 +61,7 @@ function installConsoleForwarder(applicationOrigin, binding, generation) {
     if (!(frame instanceof HTMLIFrameElement) || event.source !== frame.contentWindow) return;
     const message = event.data;
     if (!isExactRecord(message, ["level", "message", "stack", "type", "version"])) return;
-    if (message.type !== "nuriteo-preview:console" || message.version !== PROTOCOL_VERSION || message.level !== "error") return;
+    if (message.type !== "nuriteo-preview:console" || message.version !== PROTOCOL_VERSION || !["debug", "error", "info", "log", "warn"].includes(message.level)) return;
     if (typeof message.message !== "string" || message.message.length === 0 || message.message.length > 2000) return;
     if (typeof message.stack !== "string" || message.stack.length > 4000) return;
     window.parent.postMessage({
@@ -69,7 +69,7 @@ function installConsoleForwarder(applicationOrigin, binding, generation) {
       version: PROTOCOL_VERSION,
       binding,
       generation,
-      level: "error",
+      level: message.level,
       message: message.message,
       stack: message.stack
     }, applicationOrigin);

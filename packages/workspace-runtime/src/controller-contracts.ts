@@ -153,8 +153,12 @@ export interface PreviewWorkflowController {
   setPreviewErrorBridge(enabled: boolean): void;
   getChangeStatus(): PreviewChangeStatus;
   createTextFile(path: string, data?: string): PreviewWorkflowSnapshot;
+  createDirectory(path: string): PreviewWorkflowSnapshot;
   renameFile(from: string, to: string): PreviewWorkflowSnapshot;
+  movePath(from: string, to: string): PreviewWorkflowSnapshot;
   deleteFile(path: string): PreviewWorkflowSnapshot;
+  deletePath(path: string): PreviewWorkflowSnapshot;
+  cancelPreview(): PreviewWorkflowSnapshot;
   saveTextFile(path: string, data: string): PreviewWorkflowSnapshot;
   syncDeclaredPackages(): Promise<{ added: string[] }>;
   runPreview(): Promise<PreviewWorkflowSnapshot>;

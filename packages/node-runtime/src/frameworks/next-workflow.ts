@@ -8,7 +8,7 @@ import { MemoryPackageManagerWorkspace, type PackageManagerWorkspaceMount } from
 import { transpileTypeScript } from "../transforms/typescript.ts";
 import type { CliRunResult, RuntimeEnv } from "../types.ts";
 import type { WorkspaceModuleReader } from "../modules/index.ts";
-import { createViteHmrUpdate, finishPreviewModule, previewJsonModuleSource, resolveInstalledPreviewSpecifier, type ViteProductHmrSocket, type ViteProductHmrUpdate } from "./vite-workflow.ts";
+import { createViteHmrUpdate, finishPreviewModule, previewJsonModuleSource, resolveInstalledPreviewSpecifier, shouldKeepInstalledPackage, type ViteProductHmrSocket, type ViteProductHmrUpdate } from "./vite-workflow.ts";
 
 export type NextProductPackageManager = "npm" | "pnpm" | "yarn";
 
@@ -570,19 +570,19 @@ export class NextProductWorkflow {
       ? pagePath.slice(this.projectRoot.length).replace(/\.(?:tsx?|jsx)$/u, ".js")
       : null;
     const globalsHref = this.workspace.exists(join(this.projectRoot, "app/globals.css"))
-      ? '<link rel="stylesheet" href="./app/globals.css" />'
+      ? '<link rel="stylesheet" href="/app/globals.css" />'
       : "";
     const importMap = JSON.stringify({
       imports: {
-        react: "./node_modules/react/index.js",
-        "react-dom": "./node_modules/react-dom/client.js",
-        "react-dom/client": "./node_modules/react-dom/client.js",
-        "react/jsx-runtime": "./node_modules/react/jsx-runtime.js",
-        "react/jsx-dev-runtime": "./node_modules/react/jsx-runtime.js",
-        next: "./node_modules/next/index.js",
-        "next/link": "./node_modules/next/link.js",
-        "next/navigation": "./node_modules/next/navigation.js",
-        "next/image": "./node_modules/next/image.js"
+        react: "/node_modules/react/index.js",
+        "react-dom": "/node_modules/react-dom/client.js",
+        "react-dom/client": "/node_modules/react-dom/client.js",
+        "react/jsx-runtime": "/node_modules/react/jsx-runtime.js",
+        "react/jsx-dev-runtime": "/node_modules/react/jsx-runtime.js",
+        next: "/node_modules/next/index.js",
+        "next/link": "/node_modules/next/link.js",
+        "next/navigation": "/node_modules/next/navigation.js",
+        "next/image": "/node_modules/next/image.js"
       }
     });
     return [
@@ -599,7 +599,7 @@ export class NextProductWorkflow {
       `<div id="app"><main><h1>${escapeHtml(title)}</h1><p>Next.js Preview</p></main></div>`,
       `<script>window.__NEXT_PREVIEW_ROUTE__=${JSON.stringify(routePath)};</script>`,
       `<script>window.__NEXT_PREVIEW_PAGE_MODULE__=${JSON.stringify(pageModule)};</script>`,
-      "<script type=\"module\" src=\"./_next/static/chunks/app.js\"></script>",
+      "<script type=\"module\" src=\"/_next/static/chunks/app.js\"></script>",
       "</body></html>"
     ].join("");
   }
@@ -759,6 +759,10 @@ export class NextProductWorkflow {
     return this.dependencyArtifacts.some((artifact) => artifact.name === name);
   }
 
+  #shouldKeepInstalledPackage(pkg: string): boolean {
+    return shouldKeepInstalledPackage(this.workspace, join(this.projectRoot, "node_modules", pkg, "package.json"));
+  }
+
   #resolveCommandEntrypoint(command: string): string {
     const [binary] = command.split(/\s+/);
     if (!binary) throw new Error(`missing command binary: ${command}`);
@@ -772,10 +776,12 @@ export class NextProductWorkflow {
   }
 
   #installFixturePackage(pkg: string): void {
+    if (this.#shouldKeepInstalledPackage(pkg)) return;
     const packageRoot = join(this.projectRoot, "node_modules", pkg);
     if (pkg === "next") {
       this.workspace.writeText(join(packageRoot, "package.json"), JSON.stringify({
         name: "next",
+        nuriteoFixture: true,
         version: "15.5.26",
         type: "module",
         bin: { next: "dist/bin/next.cjs" },
@@ -858,6 +864,7 @@ export class NextProductWorkflow {
     if (pkg === "react") {
       this.workspace.writeText(join(packageRoot, "package.json"), JSON.stringify({
         name: "react",
+        nuriteoFixture: true,
         version: "19.0.0",
         type: "module",
         exports: { ".": "./index.js", "./jsx-runtime": "./jsx-runtime.js", "./jsx-dev-runtime": "./jsx-runtime.js" }
@@ -869,6 +876,7 @@ export class NextProductWorkflow {
     if (pkg === "react-dom") {
       this.workspace.writeText(join(packageRoot, "package.json"), JSON.stringify({
         name: "react-dom",
+        nuriteoFixture: true,
         version: "19.0.0",
         type: "module",
         exports: { ".": "./client.js", "./client": "./client.js" }
@@ -1054,9 +1062,8 @@ function buildAppRouterBootstrap(): string {
     "  if (typeof window !== \"undefined\" && window.__NEXT_PREVIEW_PAGE_MODULE__) {",
     "    return versionedModuleUrl(window.__NEXT_PREVIEW_PAGE_MODULE__);",
     "  }",
-    "  // app.js lives at /_next/static/chunks/app.js → go up to preview root.",
-    "  if (!route || route === \"/\") return versionedModuleUrl(\"../../../app/page.js\");",
-    "  return versionedModuleUrl(`../../../app${route}/page.js`);",
+    "  if (!route || route === \"/\") return versionedModuleUrl(\"/app/page.js\");",
+    "  return versionedModuleUrl(`/app${route}/page.js`);",
     "}",
     "",
     "async function mount() {",
