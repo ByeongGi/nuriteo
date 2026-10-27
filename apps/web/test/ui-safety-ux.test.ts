@@ -6,8 +6,8 @@ import { fileURLToPath } from "node:url";
 const webRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const dialog = read("src/components/ui/confirmation-dialog.tsx");
 const guard = read("src/lib/use-unsaved-changes-guard.ts");
-const ide = read("src/app/(authenticated)/projects/project-ide-shell.tsx");
-const fileSearch = read("src/app/(authenticated)/projects/use-project-file-search.ts");
+const ide = read("src/projects/project-ide-shell.tsx");
+const fileSearch = read("src/projects/use-project-file-search.ts");
 
 assert.match(dialog, /@base-ui\/react\/alert-dialog/u);
 assert.match(dialog, /<AlertDialog\.Root/u);

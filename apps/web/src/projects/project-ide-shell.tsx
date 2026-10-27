@@ -11,8 +11,8 @@ import { ConfirmationDialog } from "#src/components/ui/confirmation-dialog.tsx";
 import { Input } from "#src/components/ui/input.tsx";
 import { MenuGroupLabel, MenuItem, MenuPopup, MenuPortal, MenuPositioner, MenuRadioGroup, MenuRadioItem, MenuRadioItemIndicator, MenuRoot, MenuSeparator, MenuTrigger } from "#src/components/ui/menu.tsx";
 import { SearchField } from "#src/components/ui/search-field.tsx";
-import { EDITOR_THEME_OPTIONS, parseEditorThemePreference, readEditorThemePreference, writeEditorThemePreference } from "#src/app/(authenticated)/projects/project-editor-theme.ts";
-import type { EditorThemePreference } from "#src/app/(authenticated)/projects/project-editor-theme.ts";
+import { EDITOR_THEME_OPTIONS, parseEditorThemePreference, readEditorThemePreference, writeEditorThemePreference } from "#src/projects/project-editor-theme.ts";
+import type { EditorThemePreference } from "#src/projects/project-editor-theme.ts";
 import { createBrowserApiClient } from "#src/lib/api/browser-client.ts";
 import { readCsrfCredential } from "#src/lib/api/browser-security.ts";
 import { createRetryableLazyFeature } from "#src/lib/retryable-lazy-feature.ts";
@@ -34,16 +34,16 @@ import type { PreviewHistory } from "#src/runtime/preview-address.ts";
 import { createPreviewWindowUrl } from "#src/runtime/preview-origin-contract.ts";
 import type { PreviewOriginConfiguration } from "#src/runtime/preview-origin-contract.ts";
 import type { PreviewChangeKind, SubdomainPreviewBridge } from "#src/runtime/subdomain-preview-bridge.ts";
-import { planProjectContentReplace } from "#src/app/(authenticated)/projects/studio-content-replace.ts";
-import { closeEditorFile, closeSavedEditorTabs, createEditorDraftState, createEditorTabs, forgetEditorDraft, forgetEditorDraftPrefix, noteEditorDraft, openEditorFile, relocateEditorDraft, relocateEditorPath, renameEditorDraft, renameEditorPath, settleEditorDraft } from "#src/app/(authenticated)/projects/studio-editor-tabs.ts";
-import { appendStudioConsole, freshServerLogLines, studioConsoleSourceLabel } from "#src/app/(authenticated)/projects/studio-preview-console.ts";
-import type { StudioConsoleEntry } from "#src/app/(authenticated)/projects/studio-preview-console.ts";
-import type { EditorDraftState, EditorOpenMode, EditorTabs } from "#src/app/(authenticated)/projects/studio-editor-tabs.ts";
-import { visibleStudioExplorerFiles } from "#src/app/(authenticated)/projects/studio-explorer-files.ts";
-import { useProjectContentSearch, useProjectFileSearch } from "#src/app/(authenticated)/projects/use-project-file-search.ts";
-import { ProjectFileTree } from "#src/app/(authenticated)/projects/project-file-tree.tsx";
-import { ProjectTerminalView } from "#src/app/(authenticated)/projects/project-terminal-view.tsx";
-import { useProjectTerminalSessions } from "#src/app/(authenticated)/projects/use-project-terminal-sessions.ts";
+import { planProjectContentReplace } from "#src/projects/studio-content-replace.ts";
+import { closeEditorFile, closeSavedEditorTabs, createEditorDraftState, createEditorTabs, forgetEditorDraft, forgetEditorDraftPrefix, noteEditorDraft, openEditorFile, relocateEditorDraft, relocateEditorPath, renameEditorDraft, renameEditorPath, settleEditorDraft } from "#src/projects/studio-editor-tabs.ts";
+import { appendStudioConsole, freshServerLogLines, studioConsoleSourceLabel } from "#src/projects/studio-preview-console.ts";
+import type { StudioConsoleEntry } from "#src/projects/studio-preview-console.ts";
+import type { EditorDraftState, EditorOpenMode, EditorTabs } from "#src/projects/studio-editor-tabs.ts";
+import { visibleStudioExplorerFiles } from "#src/projects/studio-explorer-files.ts";
+import { useProjectContentSearch, useProjectFileSearch } from "#src/projects/use-project-file-search.ts";
+import { ProjectFileTree } from "#src/projects/project-file-tree.tsx";
+import { ProjectTerminalView } from "#src/projects/project-terminal-view.tsx";
+import { useProjectTerminalSessions } from "#src/projects/use-project-terminal-sessions.ts";
 
 const EMPTY_RUNTIME_STATE: RuntimeViewState = {
   generation: 0,
@@ -71,7 +71,7 @@ const EMPTY_WORKSPACE_FILES: readonly RuntimeWorkspaceFile[] = [];
 const INITIAL_SERVER_SAVE_STATUS = "이 세션에서 아직 서버에 저장하지 않음";
 
 const ProjectMonacoEditor = dynamic(
-  () => import("#src/app/(authenticated)/projects/project-monaco-editor.tsx").then((module) => module.ProjectMonacoEditor),
+  () => import("#src/projects/project-monaco-editor.tsx").then((module) => module.ProjectMonacoEditor),
   {
     loading: () => <div className="grid h-full min-h-0 place-items-center bg-surface text-xs text-muted-foreground" role="status">코드 편집기를 준비하는 중…</div>,
     ssr: false

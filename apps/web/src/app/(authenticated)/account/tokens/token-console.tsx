@@ -16,7 +16,7 @@ import { addDays, differenceInCalendarDays, isValid, parseISO, startOfDay } from
 import { useDeferredValue, useMemo, useState } from "react";
 import type { FormEvent } from "react";
 
-import { tokenConsoleStyles } from "#src/app/(authenticated)/access-tokens/token-console.styles.ts";
+import { tokenConsoleStyles } from "#src/app/(authenticated)/account/tokens/token-console.styles.ts";
 import { Button } from "#src/components/ui/button.tsx";
 import { CheckboxField } from "#src/components/ui/checkbox.tsx";
 import { CollapsibleContent, CollapsibleIndicator, CollapsiblePanel, CollapsibleRoot, CollapsibleTrigger } from "#src/components/ui/collapsible.tsx";

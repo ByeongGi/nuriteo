@@ -40,9 +40,9 @@ import { projectError, readCsrfCredential } from "#src/lib/api/browser-security.
 import type { CollaborationOperation } from "#src/lib/api/browser-security.ts";
 import { createBrowserApiClient } from "#src/lib/api/browser-client.ts";
 import { useExclusiveMutation } from "#src/lib/use-exclusive-mutation.ts";
-import { ProjectGitPanel } from "#src/app/(authenticated)/projects/project-git-panel.tsx";
-import type { ProjectGitState } from "#src/app/(authenticated)/projects/project-git-panel.tsx";
-import { ProjectTemplatePicker } from "#src/app/(authenticated)/projects/project-template-picker.tsx";
+import { ProjectGitPanel } from "#src/projects/project-git-panel.tsx";
+import type { ProjectGitState } from "#src/projects/project-git-panel.tsx";
+import { ProjectTemplatePicker } from "#src/projects/project-template-picker.tsx";
 
 const projectDashboardStyles = tv({
   slots: {

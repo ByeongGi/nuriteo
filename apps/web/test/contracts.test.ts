@@ -75,7 +75,7 @@ function testStandaloneAndDependencyContract(): void {
     if (sourceFile === "src/lib/qr-matrix.ts") continue;
     // Monaco language contributions and worker entry points must remain static
     // relative URLs so Next/Webpack can include the package-owned browser assets.
-    if (sourceFile === "src/app/(authenticated)/projects/project-monaco-editor.tsx") continue;
+    if (sourceFile === "src/projects/project-monaco-editor.tsx") continue;
     assert.doesNotMatch(read(sourceFile), relativeSourceImport, `${sourceFile} must use the #src/* alias`);
   }
 }
@@ -137,7 +137,7 @@ function testThemeAndTokenContract(): void {
 function testComponentOwnedStyleBoundaries(): void {
   const authenticatedShell = read("src/app/(authenticated)/authenticated-shell-frame.tsx");
   const authenticatedNavigation = read("src/app/(authenticated)/authenticated-navigation.tsx");
-  const projectDashboard = read("src/app/(authenticated)/projects/project-dashboard.tsx");
+  const projectDashboard = read("src/projects/project-dashboard.tsx");
   const adminShell = read("src/app/(admin)/admin/admin-shell-frame.tsx");
   const adminNavigation = read("src/app/(admin)/admin/admin-navigation.tsx");
   const globals = read("src/styles/globals.css");
@@ -231,7 +231,7 @@ function testProductionBoundary(): void {
   assert.match(meRoute, /forwardCurrentUser/u);
   assert.doesNotMatch(`${loginRoute}\n${logoutRoute}\n${meRoute}`, /\[\.\.\.|params|pathname/u);
 
-  const projectGitPanel = read("src/app/(authenticated)/projects/project-git-panel.tsx");
+  const projectGitPanel = read("src/projects/project-git-panel.tsx");
   assert.match(projectGitPanel, /type="password"/u);
   assert.match(projectGitPanel, /REAUTHENTICATION_REQUIRED/u);
   assert.match(projectGitPanel, /최근 인증을 갱신하려면 다시 로그인/u);

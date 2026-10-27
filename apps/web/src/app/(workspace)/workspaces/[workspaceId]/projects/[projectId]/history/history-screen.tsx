@@ -4,8 +4,8 @@ import type { Project } from "@nuriteo/api-client";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-import { ProjectHistoryPanel } from "#src/app/(authenticated)/projects/project-history-panel.tsx";
-import type { ProjectHistoryState, RestoredProjectHead } from "#src/app/(authenticated)/projects/project-history-panel.tsx";
+import { ProjectHistoryPanel } from "#src/projects/project-history-panel.tsx";
+import type { ProjectHistoryState, RestoredProjectHead } from "#src/projects/project-history-panel.tsx";
 import { ProjectSettingsSection } from "#src/app/(workspace)/workspaces/[workspaceId]/projects/[projectId]/settings/project-settings-section.tsx";
 
 export function ProjectHistoryScreen({ initialState, project, projectEtag }: Readonly<{ initialState: ProjectHistoryState; project: Project; projectEtag: string }>) {

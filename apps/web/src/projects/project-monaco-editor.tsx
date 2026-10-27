@@ -9,10 +9,10 @@ import "../../../../node_modules/monaco-editor/esm/vs/language/json/monaco.contr
 import "../../../../node_modules/monaco-editor/esm/vs/language/typescript/monaco.contribution.js";
 import { useEffect, useRef, useState } from "react";
 
-import { EDITOR_THEME_CHANGE_EVENT, parseEditorThemePreference } from "#src/app/(authenticated)/projects/project-editor-theme.ts";
-import type { EditorThemePreference } from "#src/app/(authenticated)/projects/project-editor-theme.ts";
-import { defineProjectMonacoThemes, resolveProjectMonacoTheme } from "#src/app/(authenticated)/projects/project-monaco-theme.ts";
-import { configureMonacoTypeScript, disposeProjectMonacoWorkspace, monacoModelPath, syncProjectMonacoWorkspace } from "#src/app/(authenticated)/projects/project-monaco-workspace.ts";
+import { EDITOR_THEME_CHANGE_EVENT, parseEditorThemePreference } from "#src/projects/project-editor-theme.ts";
+import type { EditorThemePreference } from "#src/projects/project-editor-theme.ts";
+import { defineProjectMonacoThemes, resolveProjectMonacoTheme } from "#src/projects/project-monaco-theme.ts";
+import { configureMonacoTypeScript, disposeProjectMonacoWorkspace, monacoModelPath, syncProjectMonacoWorkspace } from "#src/projects/project-monaco-workspace.ts";
 import type { RuntimeWorkspaceFile } from "#src/runtime/runtime-adapter.ts";
 
 loader.config({ monaco });

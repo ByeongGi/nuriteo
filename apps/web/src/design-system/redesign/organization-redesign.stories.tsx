@@ -15,7 +15,7 @@ import {
   TeamConsole,
   type OrganizationMemberOption,
   type ProjectOption
-} from "#src/app/(authenticated)/organizations/[organizationId]/teams/team-console.tsx";
+} from "#src/design-system/redesign/team-console.tsx";
 import { OrganizationConsole } from "#src/app/(authenticated)/organizations/organization-console.tsx";
 
 const organizationId = "0199ee6c-c777-7000-8000-000000004001";

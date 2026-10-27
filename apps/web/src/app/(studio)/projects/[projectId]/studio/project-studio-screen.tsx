@@ -29,7 +29,7 @@ const studioFrameStyles = tv({
 const studioStyles = studioFrameStyles();
 
 const ProjectIdeShell = dynamic(
-  () => import("#src/app/(authenticated)/projects/project-ide-shell.tsx").then((module) => module.ProjectIdeShell),
+  () => import("#src/projects/project-ide-shell.tsx").then((module) => module.ProjectIdeShell),
   { loading: () => <div className={studioStyles.loading()} role="status">Studio를 준비하는 중…</div>, ssr: false }
 );
 

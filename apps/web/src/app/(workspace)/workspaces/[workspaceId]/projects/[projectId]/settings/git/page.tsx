@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 
-import { ProjectGitPanel } from "#src/app/(authenticated)/projects/project-git-panel.tsx";
+import { ProjectGitPanel } from "#src/projects/project-git-panel.tsx";
 import { loadProjectContext } from "#src/app/(workspace)/workspaces/[workspaceId]/projects/[projectId]/project-context.ts";
 import { ProjectSettingsPanel, ProjectSettingsSection } from "#src/app/(workspace)/workspaces/[workspaceId]/projects/[projectId]/settings/project-settings-section.tsx";
 

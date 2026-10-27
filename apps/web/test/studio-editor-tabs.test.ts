@@ -14,8 +14,8 @@ import {
   renameEditorDraft,
   renameEditorPath,
   settleEditorDraft
-} from "../src/app/(authenticated)/projects/studio-editor-tabs.ts";
-import { appendStudioConsole, freshServerLogLines, studioConsoleSourceLabel } from "../src/app/(authenticated)/projects/studio-preview-console.ts";
+} from "../src/projects/studio-editor-tabs.ts";
+import { appendStudioConsole, freshServerLogLines, studioConsoleSourceLabel } from "../src/projects/studio-preview-console.ts";
 
 const previewA = openEditorFile(createEditorTabs(), "src/App.tsx", "preview");
 const replaced = openEditorFile(previewA, "src/main.tsx", "preview");
@@ -60,8 +60,8 @@ const savedClosed = closeSavedEditorTabs(pinnedBesidePreview, new Set(["src/App.
 assert.deepEqual(savedClosed.openPaths, ["src/App.tsx"]);
 assert.equal(savedClosed.previewPath, undefined);
 
-const shell = fs.readFileSync(new URL("../src/app/(authenticated)/projects/project-ide-shell.tsx", import.meta.url), "utf8");
-const tree = fs.readFileSync(new URL("../src/app/(authenticated)/projects/project-file-tree.tsx", import.meta.url), "utf8");
+const shell = fs.readFileSync(new URL("../src/projects/project-ide-shell.tsx", import.meta.url), "utf8");
+const tree = fs.readFileSync(new URL("../src/projects/project-file-tree.tsx", import.meta.url), "utf8");
 assert.match(shell, /useUnsavedChangesGuard\(hasUnpublishedChanges \|\| hasUnsavedEditorChange\)/u);
 assert.match(shell, /is-preview/u);
 assert.match(shell, /onDoubleClick=\{\(\) => selectFile\(path, workspace, "pin"\)\}/u);

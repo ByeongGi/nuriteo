@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 
 import { AuthenticatedShellFrame } from "#src/app/(authenticated)/authenticated-shell-frame.tsx";
 import { WorkspaceShellFrame } from "#src/app/(workspace)/workspace-shell-frame.tsx";
-import { ProjectDashboard } from "#src/app/(authenticated)/projects/project-dashboard.tsx";
+import { ProjectDashboard } from "#src/projects/project-dashboard.tsx";
 import {
   EmptyWorkspaceScreen as EmptyWorkspaceContent,
   WorkspaceScreen

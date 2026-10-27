@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 
 import type { Project } from "@nuriteo/api-client";
 
-import { ProjectHistoryPanel } from "../../src/app/(authenticated)/projects/project-history-panel.tsx";
+import { ProjectHistoryPanel } from "../../src/projects/project-history-panel.tsx";
 
 declare global {
   interface Window { __nuriteoHistoryProbe: { committedEtag?: string; committedVersion?: number; reloads: number; resumes: number } }

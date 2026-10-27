@@ -8,7 +8,7 @@ import type {
 } from "@nuriteo/api-client";
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 
-import { AccessTokenConsole } from "#src/app/(authenticated)/access-tokens/token-console.tsx";
+import { AccessTokenConsole } from "#src/app/(authenticated)/account/tokens/token-console.tsx";
 import { AuthenticatedShellFrame } from "#src/app/(authenticated)/authenticated-shell-frame.tsx";
 import { IdentityConnections } from "#src/app/(authenticated)/account/identities/identity-connections.tsx";
 import { NotificationCenter } from "#src/app/(authenticated)/notifications/notification-center.tsx";

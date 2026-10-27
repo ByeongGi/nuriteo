@@ -1,7 +1,7 @@
 import { ApiError, listDirectProjectRoles, listOrganizationMembers } from "@nuriteo/api-client";
 import type { Metadata } from "next";
 
-import { ProjectDashboard } from "#src/app/(authenticated)/projects/project-dashboard.tsx";
+import { ProjectDashboard } from "#src/projects/project-dashboard.tsx";
 import { loadProjectContext } from "#src/app/(workspace)/workspaces/[workspaceId]/projects/[projectId]/project-context.ts";
 import { ProjectSettingsNotice, ProjectSettingsPanel, ProjectSettingsSection } from "#src/app/(workspace)/workspaces/[workspaceId]/projects/[projectId]/settings/project-settings-section.tsx";
 

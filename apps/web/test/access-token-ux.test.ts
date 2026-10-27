@@ -54,7 +54,7 @@ async function mutationAmbiguityRequiresReconciliation() {
 }
 
 function sourceContracts() {
-  const console = read("src/app/(authenticated)/access-tokens/token-console.tsx");
+  const console = read("src/app/(authenticated)/account/tokens/token-console.tsx");
   const page = read("src/app/(authenticated)/access-tokens/page.tsx");
   const accountNavigation = read("src/app/(authenticated)/account/_components/account-navigation.tsx");
   assert.match(console, /한 번만 표시/u);

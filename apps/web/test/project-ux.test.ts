@@ -400,10 +400,10 @@ function testProjectSourceContracts() {
     true,
     "workspace-first IA requires a canonical Studio route"
   );
-  const dashboard = read("src/app/(authenticated)/projects/project-dashboard.tsx");
-  const ideShell = read("src/app/(authenticated)/projects/project-ide-shell.tsx");
-  const terminalView = read("src/app/(authenticated)/projects/project-terminal-view.tsx");
-  const templatePicker = read("src/app/(authenticated)/projects/project-template-picker.tsx");
+  const dashboard = read("src/projects/project-dashboard.tsx");
+  const ideShell = read("src/projects/project-ide-shell.tsx");
+  const terminalView = read("src/projects/project-terminal-view.tsx");
+  const templatePicker = read("src/projects/project-template-picker.tsx");
   const legacyPage = read("src/app/(authenticated)/projects/page.tsx");
   const legacyProjectPage = read("src/app/(authenticated)/projects/[projectId]/page.tsx");
   const legacySettingsPage = read("src/app/(authenticated)/projects/[projectId]/settings/page.tsx");
@@ -513,7 +513,8 @@ function testProjectSourceContracts() {
   assert.doesNotMatch(ideShell, /BrowserRuntimeSupervisor|HostProcessTable|createPreviewWorkflowController|service-backend/u);
   assert.doesNotMatch(
     `${dashboard}\n${workspaceProjectsPage}\n${projectSettingsPage}\n${studioScreen}\n${ideShell}`,
-    /localStorage|sessionStorage|console\./u
+    /localStorage|sessionStorage|(?<![\w-])console\./u,
+    "project screens must not use browser storage or console calls"
   );
 }
 

@@ -135,7 +135,7 @@ assert.match(bridge, /MAX_IN_FLIGHT_REQUESTS = 4/u);
 assert.match(bridge, /MAX_QUEUED_REQUESTS = 1024/u);
 assert.match(bridge, /credentials: "omit"/u);
 assert.doesNotMatch(bridge, /fetch\(internalUrl,[\s\S]{0,300}headers:/u, "relay fetch must not forward browser credential headers");
-const ideShell = fs.readFileSync(new URL("../src/app/(authenticated)/projects/project-ide-shell.tsx", import.meta.url), "utf8");
+const ideShell = fs.readFileSync(new URL("../src/projects/project-ide-shell.tsx", import.meta.url), "utf8");
 assert.match(ideShell, /hotUpdatePreviewBridges\(previewBridgeRef\.current, previewWindowBridgesRef\.current, path, changeKind\)/u);
 assert.match(ideShell, /type === "nuriteo-preview-window:ready"[\s\S]{0,100}void reconnect\(\)/u);
 assert.doesNotMatch(ideShell, /type === "nuriteo-preview-window:closed"/u, "reload and close must be distinguished by the opener's live window check");

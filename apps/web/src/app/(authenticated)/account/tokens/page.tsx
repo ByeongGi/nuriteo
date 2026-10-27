@@ -1,7 +1,7 @@
 import { listAccessTokens } from "@nuriteo/api-client";
 import type { Metadata } from "next";
 
-import { AccessTokenConsole } from "#src/app/(authenticated)/access-tokens/token-console.tsx";
+import { AccessTokenConsole } from "#src/app/(authenticated)/account/tokens/token-console.tsx";
 import { EntryUnavailable } from "#src/app/_components/entry-unavailable.tsx";
 import { safeRequestReference } from "#src/lib/api/presentation-error.ts";
 import { createServerApiClient } from "#src/lib/api/server-client.ts";

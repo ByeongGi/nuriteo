@@ -1,7 +1,7 @@
 import { listAccessTokens } from "@nuriteo/api-client";
 import type { Metadata } from "next";
 
-import { AccessTokenConsole } from "#src/app/(authenticated)/access-tokens/token-console.tsx";
+import { AccessTokenConsole } from "#src/app/(authenticated)/account/tokens/token-console.tsx";
 import { loadProjectContext } from "#src/app/(workspace)/workspaces/[workspaceId]/projects/[projectId]/project-context.ts";
 import { ProjectSettingsSection } from "#src/app/(workspace)/workspaces/[workspaceId]/projects/[projectId]/settings/project-settings-section.tsx";
 
