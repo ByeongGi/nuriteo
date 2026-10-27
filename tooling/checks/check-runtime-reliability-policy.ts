@@ -45,7 +45,7 @@ assert(browserWorkerResources.jsHeapHardCap.status === "unavailable-not-claimed"
 assert(browserWorkerResources.pageMemory.scope.includes("not a per-Worker hard limit"), "page memory scope must not imply Worker enforcement");
 assert(fs.existsSync("tooling/benchmarks/measure-browser-worker-resources.ts"), "browser worker resource probe missing");
 assert(fs.existsSync("packages/browser-host/src/resources/browser-resource-policy.ts"), "browser resource policy missing");
-assert(fs.existsSync("packages/browser-host/test/runtime-resource-policy.test.ts"), "browser resource policy test missing");
+assert(fs.existsSync("packages/browser-host/test/resources/runtime-resource-policy.test.ts"), "browser resource policy test missing");
 assert(fs.readFileSync("workers/process-worker.ts", "utf8").includes("installWebAssemblyMemoryLimit"), "process worker WASM memory policy missing");
 assert(fs.readFileSync("workers/cli-nested-worker.ts", "utf8").includes("installWebAssemblyMemoryLimit"), "nested worker WASM memory policy missing");
 assert(fs.readFileSync("tooling/shared/node-thread-cli-worker.ts", "utf8").includes("maxOldGenerationSizeMb: 256"), "Node worker resource limit missing");
@@ -94,7 +94,7 @@ assert(supportMatrix.includes("Edge"), "support matrix must mention Edge");
 assert(supportMatrix.includes("Safari"), "support matrix must mention Safari");
 assert(browserGrades.includes("candidate"), "browser grades doc must define candidate");
 assert(browserGrades.includes("SharedArrayBuffer"), "browser grades doc must discuss SharedArrayBuffer");
-assert(fs.existsSync("packages/browser-host/test/large-node-modules-stress.test.ts"), "large node_modules stress test missing");
+assert(fs.existsSync("packages/browser-host/test/resources/large-node-modules-stress.test.ts"), "large node_modules stress test missing");
 assert(fs.existsSync("packages/workspace-runtime/test/ide-offline-soak.test.ts"), "workspace Runtime soak test missing");
 
 console.log(

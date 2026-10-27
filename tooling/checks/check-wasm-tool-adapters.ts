@@ -7,7 +7,7 @@ function assert(condition, message) {
 const matrix = JSON.parse(fs.readFileSync("compat/wasm-tool-adapters.json", "utf8"));
 const manifest = JSON.parse(fs.readFileSync("vendor/manifests/wasm-adapters.json", "utf8"));
 const source = fs.readFileSync("packages/node-runtime/src/wasm-adapters/policy.ts", "utf8");
-const test = fs.readFileSync("packages/node-runtime/test/wasm-adapters.test.ts", "utf8");
+const test = fs.readFileSync("packages/node-runtime/test/wasm/wasm-adapters.test.ts", "utf8");
 
 assert(matrix.schemaVersion === 1, "unexpected WASM tool adapter schema");
 assert(matrix.requirements.supportedAdaptersMustHaveHash === true, "supported adapters must require hash");

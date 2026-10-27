@@ -116,28 +116,28 @@
       "id": "preview-service-vite-react-template",
       "status": "pass",
       "score": 100,
-      "source": "packages/browser-host/test/project-onboarding.test.ts|apps/web/test/runtime/gate-project-runtime-browser.test.ts",
+      "source": "packages/browser-host/test/project/project-onboarding.test.ts|apps/web/test/runtime/gate-project-runtime-browser.test.ts",
       "notes": "Local service-workflow / adapter validation pass."
     },
     {
       "id": "preview-service-vite-ts-template",
       "status": "pass",
       "score": 100,
-      "source": "packages/browser-host/test/project-onboarding.test.ts|apps/web/test/runtime/gate-project-runtime-browser.test.ts",
+      "source": "packages/browser-host/test/project/project-onboarding.test.ts|apps/web/test/runtime/gate-project-runtime-browser.test.ts",
       "notes": "Local service-workflow / adapter validation pass."
     },
     {
       "id": "preview-service-minimal-npm-template",
       "status": "pass",
       "score": 100,
-      "source": "packages/browser-host/test/project-onboarding.test.ts|apps/web/test/runtime/gate-project-runtime-browser.test.ts",
+      "source": "packages/browser-host/test/project/project-onboarding.test.ts|apps/web/test/runtime/gate-project-runtime-browser.test.ts",
       "notes": "Local service-workflow / adapter validation pass."
     },
     {
       "id": "preview-service-minimal-pnpm-template",
       "status": "pass",
       "score": 100,
-      "source": "packages/browser-host/test/project-onboarding.test.ts|apps/web/test/runtime/gate-project-runtime-browser.test.ts",
+      "source": "packages/browser-host/test/project/project-onboarding.test.ts|apps/web/test/runtime/gate-project-runtime-browser.test.ts",
       "notes": "Local service-workflow / adapter validation pass."
     },
     {

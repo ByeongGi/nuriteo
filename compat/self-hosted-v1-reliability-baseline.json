@@ -35,7 +35,7 @@
       "status": "pass",
       "iterations": 2500,
       "threshold": "all files readable, cache eviction frees bytes, Project files remain, and ENOMEM writes are atomic",
-      "evidence": "packages/browser-host/test/large-node-modules-stress.test.ts"
+      "evidence": "packages/browser-host/test/resources/large-node-modules-stress.test.ts"
     },
     {
       "id": "offline-workflow",

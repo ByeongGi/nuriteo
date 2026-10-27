@@ -18,7 +18,7 @@
       "integrity": "sha256-required",
       "exportContract": "required",
       "fallbackPolicy": "deny-native",
-      "fixture": "packages/node-runtime/test/wasm-adapters.test.ts"
+      "fixture": "packages/node-runtime/test/wasm/wasm-adapters.test.ts"
     }
   ],
   "viteEcosystemCandidates": [

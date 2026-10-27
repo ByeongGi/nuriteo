@@ -26,8 +26,8 @@
     },
     {
       "id": "worker-churn-return-to-budget",
-      "test": "packages/browser-host/test/process-lifecycle.test.ts",
-      "command": "node packages/browser-host/test/process-lifecycle.test.ts",
+      "test": "packages/browser-host/test/process/process-lifecycle.test.ts",
+      "command": "node packages/browser-host/test/process/process-lifecycle.test.ts",
       "status": "required"
     },
     {
@@ -44,8 +44,8 @@
     },
     {
       "id": "large-node-modules-stress",
-      "test": "packages/browser-host/test/large-node-modules-stress.test.ts",
-      "command": "node packages/browser-host/test/large-node-modules-stress.test.ts",
+      "test": "packages/browser-host/test/resources/large-node-modules-stress.test.ts",
+      "command": "node packages/browser-host/test/resources/large-node-modules-stress.test.ts",
       "status": "required"
     }
   ],

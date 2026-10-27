@@ -57,7 +57,7 @@
       "expectedRuntimePath": "pinned WASM adapter with export contract",
       "evidence": [
         "compat/wasm-tool-adapters.json",
-        "packages/node-runtime/test/wasm-adapters.test.ts",
+        "packages/node-runtime/test/wasm/wasm-adapters.test.ts",
         "tests/compatibility/package-managers/native-fallback-policy.test.ts",
         "tests/productization/package-cohort-execution.test.ts"
       ],
@@ -100,7 +100,7 @@
       "requiredErrorCode": "ERR_RUNTIME_UNSUPPORTED_BINARY",
       "evidence": [
         "compat/non-js-tooling-candidates.json",
-        "packages/browser-host/test/support-bundle.test.ts",
+        "packages/browser-host/test/observability/support-bundle.test.ts",
         "tests/productization/package-cohort-execution.test.ts"
       ],
       "notes": "Privileged OS/container features and arbitrary native binaries are outside WebContainers-parity browser scope."

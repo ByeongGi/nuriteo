@@ -61,7 +61,7 @@
       "budgetBytes": 268435456,
       "sampleBytes": 268435456,
       "status": "pass",
-      "evidence": ["packages/node-runtime/test/secondary-builtins.test.ts"]
+      "evidence": ["packages/node-runtime/test/builtins/secondary-builtins.test.ts"]
     }
   ],
   "gate": {

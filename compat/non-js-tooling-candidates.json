@@ -64,8 +64,8 @@
       },
       "fixtures": [
         "tests/fixtures/non-js-tooling/jq-input.json",
-        "packages/node-runtime/test/non-js-tooling.test.ts",
-        "packages/node-runtime/test/project-tooling.test.ts"
+        "packages/node-runtime/test/tooling/non-js-tooling.test.ts",
+        "packages/node-runtime/test/tooling/project-tooling.test.ts"
       ],
       "requiredBeforeSupport": []
     },
@@ -143,7 +143,7 @@
         "status": "candidate-contract-only"
       },
       "fixtures": [
-        "packages/node-runtime/test/project-tooling-candidates.test.ts",
+        "packages/node-runtime/test/tooling/project-tooling-candidates.test.ts",
         "tooling/runtime-evidence/python-wasi-runtime.ts",
         "tests/system/browser/python-wasi-runtime.test.ts",
         "tests/system/browser/fixtures/python-wasi-worker.mjs"
@@ -204,10 +204,10 @@
         "status": "pass"
       },
       "fixtures": [
-        "packages/node-runtime/test/non-js-tooling.test.ts",
+        "packages/node-runtime/test/tooling/non-js-tooling.test.ts",
         "tests/system/browser/non-js-tooling.test.ts",
         "tests/system/browser/fixtures/sqlite-opfs-worker.mjs",
-        "packages/browser-host/test/sqlite-project-client.test.ts"
+        "packages/browser-host/test/tooling/sqlite-project-client.test.ts"
       ],
       "requiredBeforeSupport": []
     },
@@ -294,10 +294,10 @@
         "status": "candidate-contract-only"
       },
       "fixtures": [
-        "packages/node-runtime/test/project-tooling-candidates.test.ts",
-        "packages/node-runtime/test/git-wasm-runtime.test.ts",
-        "packages/node-runtime/test/git-host-transport.test.ts",
-        "packages/browser-host/test/git-opfs-project-client.test.ts",
+        "packages/node-runtime/test/tooling/project-tooling-candidates.test.ts",
+        "packages/node-runtime/test/tooling/git-wasm-runtime.test.ts",
+        "packages/node-runtime/test/tooling/git-host-transport.test.ts",
+        "packages/browser-host/test/tooling/git-opfs-project-client.test.ts",
         "tests/system/browser/fixtures/git-wasm-worker.mjs",
         "tests/system/browser/fixtures/git-opfs-worker.mjs",
         "tests/system/browser/non-js-tooling.test.ts"

@@ -6,7 +6,7 @@ function assert(condition, message) {
 
 const boundary = JSON.parse(fs.readFileSync("compat/wasi-runtime-boundary.json", "utf8"));
 const source = fs.readFileSync("packages/node-runtime/src/wasm-adapters/wasi-boundary.ts", "utf8");
-const test = fs.readFileSync("packages/node-runtime/test/wasi-boundary.test.ts", "utf8");
+const test = fs.readFileSync("packages/node-runtime/test/wasm/wasi-boundary.test.ts", "utf8");
 
 assert(boundary.schemaVersion === 1, "unexpected WASI boundary schema");
 assert(boundary.filesystem.readOutsideProject === "deny", "WASI reads outside project must be denied");

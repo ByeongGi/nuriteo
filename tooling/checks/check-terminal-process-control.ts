@@ -67,11 +67,11 @@ for (const name of ["process-lifecycle.test.ts", "process-terminal-command.test.
 const runtimeRunner = fs.readFileSync("packages/workspace-runtime/test/run.ts", "utf8");
 assert(runtimeRunner.includes("terminal-session-control.test.ts"), "workspace runtime suite no longer includes terminal session evidence");
 
-const lifecycle = fs.readFileSync("packages/browser-host/test/process-lifecycle.test.ts", "utf8");
+const lifecycle = fs.readFileSync("packages/browser-host/test/process/process-lifecycle.test.ts", "utf8");
 assert(lifecycle.includes("outputDroppedBytes"), "bounded output evidence missing");
 assert(lifecycle.includes("stdin-ack"), "stdin credit evidence missing");
 assert(lifecycle.includes("generation + 1"), "stale generation evidence missing");
-const shell = fs.readFileSync("packages/node-runtime/test/shell.test.ts", "utf8");
+const shell = fs.readFileSync("packages/node-runtime/test/process/shell.test.ts", "utf8");
 assert(shell.includes("outputTruncatedBytes"), "bounded shell transcript evidence missing");
 assert(shell.includes("ERR_NURITEO_UNSUPPORTED_SHELL_SYNTAX"), "shell injection diagnostic evidence missing");
 const workerRuntime = fs.readFileSync("packages/browser-host/src/process/worker-runtime.ts", "utf8");
