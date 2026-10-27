@@ -31,7 +31,7 @@ function testStandaloneAndDependencyContract(): void {
   const providers = read("src/app/providers.tsx");
   assert.match(providers, /QueryClientProvider/u);
   assert.match(providers, /staleTime:\s*60_000/u);
-  assert.match(read("src/app/sign-in/sign-in-form.tsx"), /useMutation/u);
+  assert.match(read("src/app/(public)/sign-in/sign-in-form.tsx"), /useMutation/u);
   const buttonStyles = read("src/components/ui/button.styles.ts");
   assert.match(buttonStyles, /const buttonVariants = tv\(/u);
   assert.doesNotMatch(buttonStyles, /["']use client["']/u);
@@ -67,7 +67,7 @@ function testStandaloneAndDependencyContract(): void {
     }
     assert.doesNotMatch(read(sourceFile), /["']@base-ui\/react(?:\/|["'])/u, `${sourceFile} must import Base UI through a shared wrapper`);
   }
-  assert.match(read("src/app/sign-in/sign-in.styles.ts"), /slots:\s*\{/u);
+  assert.match(read("src/app/(public)/sign-in/sign-in.styles.ts"), /slots:\s*\{/u);
   assert.match(read("next.config.ts"), /output:\s*"standalone"/u);
   assert.match(read("postcss.config.mjs"), /"@tailwindcss\/postcss"/u);
   const relativeSourceImport = /(?:\bfrom\s+|\bimport\s*\(\s*|\bimport\s+)["']\.\.?\//u;
@@ -85,8 +85,8 @@ function testServerFirstBoundaries(): void {
     "src/app/layout.tsx",
     "src/app/page.tsx",
     "src/app/loading.tsx",
-    "src/app/setup/page.tsx",
-    "src/app/sign-in/page.tsx"
+    "src/app/(public)/setup/page.tsx",
+    "src/app/(public)/sign-in/page.tsx"
   ] as const) {
     assert.doesNotMatch(read(serverFile), /["']use client["']/u, `${serverFile} must stay server-first`);
   }

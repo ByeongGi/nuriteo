@@ -16,7 +16,7 @@ import {
   AuthenticatedShellFrame,
   AuthenticatedShellLoading
 } from "#src/app/(authenticated)/authenticated-shell-frame.tsx";
-import { signInHref } from "#src/app/sign-in/return-to.ts";
+import { signInHref } from "#src/app/(public)/sign-in/return-to.ts";
 
 export default function AuthenticatedLayout({
   children

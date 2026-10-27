@@ -20,12 +20,12 @@ import {
   reauthenticationHref,
   safeReturnTo,
   signInHref
-} from "../src/app/sign-in/return-to.ts";
+} from "../src/app/(public)/sign-in/return-to.ts";
 import {
   clearOidcReturnToCookie,
   issueOidcReturnToCookie,
   readOidcReturnTo
-} from "../src/app/sign-in/oidc-return-to.ts";
+} from "../src/app/(public)/sign-in/oidc-return-to.ts";
 
 const webRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -78,7 +78,7 @@ function testAuthenticationErrorClassification(): void {
 }
 
 function testCliOnlySetupContract(): void {
-  const setupPage = read("src/app/setup/page.tsx");
+  const setupPage = read("src/app/(public)/setup/page.tsx");
   assert.match(setupPage, /docker compose run --rm bootstrap-admin/u);
   assert.match(setupPage, /getSetupStatus\(client\)/u);
   assert.match(setupPage, /redirect\("\/sign-in"\)/u);
@@ -86,8 +86,8 @@ function testCliOnlySetupContract(): void {
 }
 
 function testAccessibleCredentialBoundary(): void {
-  const signInPage = read("src/app/sign-in/page.tsx");
-  const form = read("src/app/sign-in/sign-in-form.tsx");
+  const signInPage = read("src/app/(public)/sign-in/page.tsx");
+  const form = read("src/app/(public)/sign-in/sign-in-form.tsx");
   const browserClient = read("src/lib/api/browser-client.ts");
 
   assert.match(signInPage, /isExplicitlySignedOut\(error\)/u);
@@ -108,7 +108,7 @@ function testAccessibleCredentialBoundary(): void {
 }
 
 function testActivationAndSystemStateContracts(): void {
-  const activation = read("src/app/activate/activation-form.tsx");
+  const activation = read("src/app/(public)/activate/activation-form.tsx");
   const systemStates = read("src/design-system/production-shells.stories.tsx");
   const projectsLoading = read("src/app/(authenticated)/projects/loading.tsx");
   const workspacesLoading = read("src/app/(authenticated)/workspaces/loading.tsx");

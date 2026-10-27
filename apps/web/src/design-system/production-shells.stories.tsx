@@ -8,7 +8,7 @@ import WorkspacesLoading from "#src/app/(authenticated)/workspaces/loading.tsx";
 import { EntryUnavailable } from "#src/app/_components/entry-unavailable.tsx";
 import { ErrorView } from "#src/app/_components/error-view.tsx";
 import { ProductEntryLoading } from "#src/app/_components/product-entry-shell.tsx";
-import { ActivationForm } from "#src/app/activate/activation-form.tsx";
+import { ActivationForm } from "#src/app/(public)/activate/activation-form.tsx";
 import NotFound from "#src/app/not-found.tsx";
 
 const meta = {

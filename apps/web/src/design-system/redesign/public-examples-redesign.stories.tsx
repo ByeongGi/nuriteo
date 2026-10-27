@@ -1,9 +1,9 @@
 import type { PublicPublishedExample, Workspace } from "@nuriteo/api-client";
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 
-import { PublicExampleDetail } from "#src/app/examples/_components/public-example-detail.tsx";
-import { PublicExamplesScreen } from "#src/app/examples/_components/public-examples-screen.tsx";
-import { ReadOnlyExampleShell } from "#src/app/examples/_components/read-only-example-shell.tsx";
+import { PublicExampleDetail } from "#src/app/(public)/examples/_components/public-example-detail.tsx";
+import { PublicExamplesScreen } from "#src/app/(public)/examples/_components/public-examples-screen.tsx";
+import { ReadOnlyExampleShell } from "#src/app/(public)/examples/_components/read-only-example-shell.tsx";
 
 const publicId = "ExESEhISEhISEhISEhISEhISEhISEhISEhISEhISEgA";
 

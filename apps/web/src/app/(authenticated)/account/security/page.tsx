@@ -3,8 +3,8 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
 import { EntryUnavailable } from "#src/app/_components/entry-unavailable.tsx";
-import { signInHref } from "#src/app/sign-in/return-to.ts";
-import { MfaSecurity } from "#src/app/mfa/security.tsx";
+import { signInHref } from "#src/app/(public)/sign-in/return-to.ts";
+import { MfaSecurity } from "#src/app/(public)/mfa/security.tsx";
 import { safeRequestReference } from "#src/lib/api/presentation-error.ts";
 import { createServerApiClient } from "#src/lib/api/server-client.ts";
 

@@ -1,7 +1,7 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
 
-import { PublishedExamplePreview } from "../../src/app/examples/_components/published-example-preview.tsx";
+import { PublishedExamplePreview } from "../../src/app/(public)/examples/_components/published-example-preview.tsx";
 
 declare global {
   interface Window {

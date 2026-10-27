@@ -9,7 +9,7 @@ import {
   WorkspaceShellFrame,
   WorkspaceShellLoading
 } from "#src/app/(workspace)/workspace-shell-frame.tsx";
-import { signInHref } from "#src/app/sign-in/return-to.ts";
+import { signInHref } from "#src/app/(public)/sign-in/return-to.ts";
 import {
   isExplicitlySignedOut,
   safeRequestReference

@@ -12,7 +12,7 @@ import { AccessTokenConsole } from "#src/app/(authenticated)/account/tokens/toke
 import { AuthenticatedShellFrame } from "#src/app/(authenticated)/authenticated-shell-frame.tsx";
 import { IdentityConnections } from "#src/app/(authenticated)/account/identities/identity-connections.tsx";
 import { NotificationCenter } from "#src/app/(authenticated)/notifications/notification-center.tsx";
-import { MfaSecurity as MfaSecurityScreen } from "#src/app/mfa/security.tsx";
+import { MfaSecurity as MfaSecurityScreen } from "#src/app/(public)/mfa/security.tsx";
 
 const referenceTime = Date.parse("2026-10-22T01:00:00.000Z");
 const activeNotifications = createNotificationInbox(100, false);

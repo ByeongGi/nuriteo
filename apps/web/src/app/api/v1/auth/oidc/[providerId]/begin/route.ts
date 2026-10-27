@@ -1,6 +1,6 @@
 import { forwardOidcNavigation, invalidCollaborationRoute, uuidPathSegment } from "#src/lib/api/collaboration-bff.ts";
-import { copyResponse, issueOidcReturnToCookie } from "#src/app/sign-in/oidc-return-to.ts";
-import { safeReturnTo } from "#src/app/sign-in/return-to.ts";
+import { copyResponse, issueOidcReturnToCookie } from "#src/app/(public)/sign-in/oidc-return-to.ts";
+import { safeReturnTo } from "#src/app/(public)/sign-in/return-to.ts";
 
 export const dynamic = "force-dynamic";
 

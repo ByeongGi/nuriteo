@@ -3,7 +3,7 @@
 import { createApiClient } from "@nuriteo/api-client";
 import type { ApiClient, ApiClientOptions } from "@nuriteo/api-client";
 
-import { reauthenticationHref } from "#src/app/sign-in/return-to.ts";
+import { reauthenticationHref } from "#src/app/(public)/sign-in/return-to.ts";
 
 type BrowserApiClientOptions = Pick<
   ApiClientOptions,

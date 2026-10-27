@@ -13,7 +13,7 @@ import { createServerApiClient } from "#src/lib/api/server-client.ts";
 import { parseThemeMode, THEME_COOKIE_NAME } from "#src/lib/theme.ts";
 import { AdminAccessRequired } from "#src/app/(admin)/admin/_components/admin-access-required.tsx";
 import { AdminShellFrame, AdminShellLoading } from "#src/app/(admin)/admin/admin-shell-frame.tsx";
-import { signInHref } from "#src/app/sign-in/return-to.ts";
+import { signInHref } from "#src/app/(public)/sign-in/return-to.ts";
 
 export default function AdminLayout({ children }: Readonly<{ children: ReactNode }>) {
   return (

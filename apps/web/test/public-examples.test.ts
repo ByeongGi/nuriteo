@@ -95,13 +95,13 @@ function testPublicRouteValidation(): void {
 }
 
 function testReadOnlyPublicExperienceBoundary(): void {
-  const gallery = read("src/app/examples/page.tsx");
-  const galleryScreen = read("src/app/examples/_components/public-examples-screen.tsx");
-  const detail = read("src/app/examples/[publicId]/page.tsx");
-  const detailScreen = read("src/app/examples/_components/public-example-detail.tsx");
-  const version = read("src/app/examples/[publicId]/versions/[versionNumber]/page.tsx");
-  const shell = read("src/app/examples/_components/read-only-example-shell.tsx");
-  const forkForm = read("src/app/examples/_components/fork-example-form.tsx");
+  const gallery = read("src/app/(public)/examples/page.tsx");
+  const galleryScreen = read("src/app/(public)/examples/_components/public-examples-screen.tsx");
+  const detail = read("src/app/(public)/examples/[publicId]/page.tsx");
+  const detailScreen = read("src/app/(public)/examples/_components/public-example-detail.tsx");
+  const version = read("src/app/(public)/examples/[publicId]/versions/[versionNumber]/page.tsx");
+  const shell = read("src/app/(public)/examples/_components/read-only-example-shell.tsx");
+  const forkForm = read("src/app/(public)/examples/_components/fork-example-form.tsx");
   const publicClient = read("src/lib/api/public-server-client.ts");
   const workspaceRoute = read("src/app/api/v1/me/workspaces/route.ts");
 
