@@ -8,7 +8,7 @@ import { spawnSync } from "node:child_process";
 import { CliRegistry, createPnpmRunner } from "../../../packages/node-runtime/src/index.ts";
 
 const root = new URL("../../..", import.meta.url).pathname;
-const fixture = path.join(root, "tests/fixtures/package-managers/pnpm");
+const fixture = path.join(root, "tests/fixtures/package-managers/workspaces/pnpm");
 const installed = ["pnpm"].map((name) => JSON.parse(fs.readFileSync(path.join(root, `tests/fixtures/package-managers/cli/${name}/9.15.9/installed.json`), "utf8")));
 const registry = new CliRegistry(installed);
 const pnpm = createPnpmRunner({

@@ -11,7 +11,7 @@ const pnpmInstalled = JSON.parse(fs.readFileSync(new URL("../../../tests/fixture
 const registry = new CliRegistry([npmInstalled, pnpmInstalled]);
 
 const npmWorkspace = createOpfsPackageWorkspace({ opfs: createMemoryOpfs(), root: "npm-project" });
-mountFixture(path.join(root, "tests/fixtures/package-managers/npm"), "/workspace", npmWorkspace);
+mountFixture(path.join(root, "tests/fixtures/package-managers/workspaces/npm"), "/workspace", npmWorkspace);
 const npm = createNpmRunner({
   registry,
   processRunner: createGuestRuntimeProcessRunner({
@@ -38,7 +38,7 @@ assert.equal(npmWorkspace.exists("/workspace/node_modules/fixture-bin/package.js
 assert.equal(npmWorkspace.exists("/workspace/node_modules/.bin/fixture-hello"), false);
 
 const pnpmWorkspace = createOpfsPackageWorkspace({ opfs: createMemoryOpfs(), root: "pnpm-project" });
-mountFixture(path.join(root, "tests/fixtures/package-managers/pnpm"), "/workspace", pnpmWorkspace);
+mountFixture(path.join(root, "tests/fixtures/package-managers/workspaces/pnpm"), "/workspace", pnpmWorkspace);
 const pnpm = createPnpmRunner({
   registry,
   processRunner: createGuestRuntimeProcessRunner({

@@ -7,7 +7,7 @@ import { spawnSync } from "node:child_process";
 import { CliRegistry, applyPnpmStorePlan, createPackageScriptRunner, createPnpmRunner, createPnpmStorePlan, InstallTransactionInterruptedError } from "../../../packages/node-runtime/src/index.ts";
 
 const root = new URL("../../..", import.meta.url).pathname;
-const fixture = path.join(root, "tests/fixtures/package-managers/pnpm");
+const fixture = path.join(root, "tests/fixtures/package-managers/workspaces/pnpm");
 const installed = JSON.parse(fs.readFileSync(new URL("../../fixtures/package-managers/cli/pnpm/9.15.9/installed.json", import.meta.url), "utf8"));
 const registry = new CliRegistry([installed]);
 const workdir = fs.mkdtempSync(path.join(os.tmpdir(), "pnpm-store-plan-"));

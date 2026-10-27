@@ -12,7 +12,7 @@ import {
   MemoryPackageManagerWorkspace
 } from "../../../packages/node-runtime/src/index.ts";
 
-const fixture = path.resolve(new URL("../../fixtures/package-managers/npm", import.meta.url).pathname);
+const fixture = path.resolve(new URL("../../fixtures/package-managers/workspaces/npm", import.meta.url).pathname);
 const workdir = "/workspace";
 const entry = "/vendor/yarn/bin/yarn.js";
 const installed = {

@@ -85,7 +85,7 @@ assert.equal(tcpDbRecovery.diagnostic.code, "ERR_RUNTIME_TCP_DB_UNSUPPORTED");
 console.log("package cohort execution test ok");
 
 function runPackageManagerCohort(manager) {
-  const fixture = path.join(root, `tests/fixtures/package-managers/${manager}`);
+  const fixture = path.join(root, `tests/fixtures/package-managers/workspaces/${manager}`);
   const installed = JSON.parse(fs.readFileSync(new URL(`../fixtures/package-managers/cli/${manager}/${manager === "npm" ? "10.9.2" : "9.15.9"}/installed.json`, import.meta.url), "utf8"));
   const registry = new CliRegistry([installed]);
   const workdir = "/workspace";
