@@ -15,14 +15,14 @@ export {
   activateIntegrationCa,
   listIntegrationCas,
   stageIntegrationCa
-} from "./integration-ca.ts";
+} from "./integrations/integration-ca.ts";
 export type {
   IntegrationCaBundle,
   IntegrationCaCollection,
   IntegrationCaMutationOptions,
   IntegrationCaState,
   IntegrationCaType
-} from "./integration-ca.ts";
+} from "./integrations/integration-ca.ts";
 export {
   activateOidcProvider,
   createOidcProvider,
@@ -34,7 +34,7 @@ export {
   rotateOidcProviderSecret,
   unlinkOidcIdentity,
   updateOidcProvider
-} from "./oidc.ts";
+} from "./auth/oidc.ts";
 export type {
   CreateOidcProviderInput,
   OidcIdentity,
@@ -42,14 +42,14 @@ export type {
   OidcProvider,
   OidcProviderState,
   UpdateOidcProviderInput
-} from "./oidc.ts";
-export { getSetupStatus } from "./setup.ts";
+} from "./auth/oidc.ts";
+export { getSetupStatus } from "./auth/setup.ts";
 export {
   issueAccessToken,
   listAccessTokens,
   revokeAccessToken,
   rotateAccessToken
-} from "./access-tokens.ts";
+} from "./access/access-tokens.ts";
 export type {
   AccessToken,
   AccessTokenKind,
@@ -58,21 +58,21 @@ export type {
   AccessTokenTarget,
   IssueAccessTokenInput,
   IssuedAccessToken
-} from "./access-tokens.ts";
+} from "./access/access-tokens.ts";
 export {
   getAdminStatus,
   listAdminSettings,
   previewAdminPolicyChange,
   previewAdminPolicyCleanup,
   updateAdminSetting
-} from "./admin.ts";
-export { getAdminOperations } from "./admin-operations.ts";
+} from "./admin/admin.ts";
+export { getAdminOperations } from "./admin/admin-operations.ts";
 export {
   enqueueAdminBackupOperation,
   getAdminBackups,
   listAdminBackupOperations,
   updateAdminBackupPolicy
-} from "./admin-backups.ts";
+} from "./admin/admin-backups.ts";
 export type {
   AdminBackupConsole,
   AdminBackupOperation,
@@ -80,7 +80,7 @@ export type {
   AdminBackupOperationKind,
   AdminBackupPolicy,
   AdminBackupPolicyUpdate
-} from "./admin-backups.ts";
+} from "./admin/admin-backups.ts";
 export {
   beginMfaEnrollment,
   challengeMfa,
@@ -93,8 +93,8 @@ export {
   resetUserMfa,
   searchMfaResetTargets,
   updateMfaPolicy
-} from "./mfa.ts";
-export { createSession, deleteSession, getCurrentUser } from "./auth.ts";
+} from "./auth/mfa.ts";
+export { createSession, deleteSession, getCurrentUser } from "./auth/auth.ts";
 export {
   cancelEmailDelivery,
   getNotificationPreferences,
@@ -103,14 +103,14 @@ export {
   retryEmailDelivery,
   updateNotificationPreferences,
   updateNotificationStatus
-} from "./notifications.ts";
+} from "./integrations/notifications.ts";
 export {
   activateAccount,
   issueActivationInvitation,
   listActivationInvitations,
   reissueActivationInvitation,
   revokeActivationInvitation
-} from "./activation-invitations.ts";
+} from "./access/activation-invitations.ts";
 export {
   acceptOrganizationInvitation,
   archiveOrganization,
@@ -125,8 +125,8 @@ export {
   removeOrganizationMember,
   revokeOrganizationInvitation,
   updateOrganization
-} from "./organizations.ts";
-export { getCurrentWorkspaces } from "./workspaces.ts";
+} from "./access/organizations.ts";
+export { getCurrentWorkspaces } from "./projects/workspaces.ts";
 export {
   activateGitProvider,
   createGitProvider,
@@ -143,7 +143,7 @@ export {
   pullGitRemote,
   rotateGitCredential,
   updateGitProvider
-} from "./git.ts";
+} from "./integrations/git.ts";
 export type {
   GitConnection,
   GitConnectionResult,
@@ -156,7 +156,7 @@ export type {
   GitProviderKind,
   GitRemote,
   GitRemoteResult
-} from "./git.ts";
+} from "./integrations/git.ts";
 export {
   archiveProject,
   changeDirectProjectRole,
@@ -169,7 +169,7 @@ export {
   renameProject,
   restoreProject,
   revokeDirectProjectRole
-} from "./projects.ts";
+} from "./projects/projects.ts";
 export {
   addTeamMember,
   addTeamProjectRole,
@@ -184,7 +184,7 @@ export {
   removeTeamMember,
   removeTeamProjectRole,
   renameTeam
-} from "./teams.ts";
+} from "./access/teams.ts";
 export {
   addPublishedExampleVersion,
   createPublishedExample,
@@ -198,7 +198,7 @@ export {
   selectPublishedExampleActiveVersion,
   setPublishedExampleVisibility,
   unpublishPublishedExample
-} from "./published-examples.ts";
+} from "./projects/published-examples.ts";
 export type {
   AddPublishedExampleVersionInput,
   CreatePublishedExampleInput,
@@ -226,7 +226,7 @@ export type {
   SelectPublishedExampleVersionInput,
   SetPublishedExampleVisibilityInput,
   VersionedPublishedExampleInput
-} from "./published-examples.ts";
+} from "./projects/published-examples.ts";
 export {
   API_PREFIX,
   DEFAULT_MAX_RESPONSE_BYTES,
@@ -255,7 +255,7 @@ export type {
   MfaPolicyMode,
   MfaResetTarget,
   MfaStatus
-} from "./mfa.ts";
+} from "./auth/mfa.ts";
 export type { ApiClientErrorKind } from "./errors.ts";
 export type {
   CreateSessionInput,
@@ -263,7 +263,7 @@ export type {
   MeSession,
   MeUser,
   MeView
-} from "./auth.ts";
+} from "./auth/auth.ts";
 export type { ApiEmptyResult, ApiResult, DomainRequestOptions } from "./domain.ts";
 export type { BrowserMutationOptions } from "./browser-mutation.ts";
 export type {
@@ -275,7 +275,7 @@ export type {
   NotificationInboxItem,
   NotificationPreferences,
   NotificationStatus
-} from "./notifications.ts";
+} from "./integrations/notifications.ts";
 export type {
   AdminSetting,
   AdminSettingApplyMode,
@@ -287,7 +287,7 @@ export type {
   AdminPolicyCleanupPreview,
   AdminPolicyImpact,
   UpdateAdminSettingInput
-} from "./admin.ts";
+} from "./admin/admin.ts";
 export type {
   AdminCleanupQueue,
   AdminDependencyCategory,
@@ -296,7 +296,7 @@ export type {
   AdminOperationsState,
   AdminSupportBundlePreview,
   AdminUsage
-} from "./admin-operations.ts";
+} from "./admin/admin-operations.ts";
 export { OneTimeUrl } from "./one-time-url.ts";
 export type {
   ActivateAccountInput,
@@ -306,7 +306,7 @@ export type {
   IssueActivationInvitationInput,
   IssuedActivationInvitation,
   ReissueActivationInvitationInput
-} from "./activation-invitations.ts";
+} from "./access/activation-invitations.ts";
 export type {
   ArchiveOrganizationInput,
   ChangeOrganizationMemberRoleInput,
@@ -326,16 +326,16 @@ export type {
   OrganizationStatus,
   ReissueOrganizationInvitationInput,
   UpdateOrganizationInput
-} from "./organizations.ts";
+} from "./access/organizations.ts";
 export type { VersionResponse } from "./system.ts";
-export type { SetupStatus } from "./setup.ts";
+export type { SetupStatus } from "./auth/setup.ts";
 export type {
   OrganizationWorkspace,
   PersonalWorkspace,
   Workspace,
   WorkspaceCollection,
   WorkspaceOwnerType
-} from "./workspaces.ts";
+} from "./projects/workspaces.ts";
 export type {
   ChangeDirectProjectRoleInput,
   CreateProjectInput,
@@ -361,7 +361,7 @@ export type {
   RenameProjectInput,
   RevokeDirectProjectRoleInput,
   VersionedProjectInput
-} from "./projects.ts";
+} from "./projects/projects.ts";
 export type {
   AddTeamMemberInput,
   AddTeamProjectRoleInput,
@@ -386,14 +386,14 @@ export type {
   TeamProjectRoleResult,
   TeamResult,
   TeamRole
-} from "./teams.ts";
+} from "./access/teams.ts";
 export {
   createProjectVersion,
   listProjectVersions,
   listRecoveryCheckpoints,
   reconcileProjectHistory,
   restoreProjectHistory
-} from "./history.ts";
+} from "./projects/history.ts";
 export type {
   CreateProjectVersionInput,
   HistoricalReferenceKind,
@@ -409,7 +409,7 @@ export type {
   RecoveryCheckpoint,
   RecoveryCheckpointCollection,
   RestoreProjectHistoryInput
-} from "./history.ts";
+} from "./projects/history.ts";
 export {
   DEFAULT_PROJECT_CONTENT_MAX_BYTES,
   DEFAULT_PROJECT_TRANSFER_TIMEOUT_MS,
@@ -428,8 +428,8 @@ export {
   reconcileSaveSession,
   recordSaveReceipts,
   uploadSaveCapability
-} from "./saves.ts";
-export * from "./registries.ts";
+} from "./projects/saves.ts";
+export * from "./integrations/registries.ts";
 export type {
   CompleteSaveSessionInput,
   CreateSaveSessionInput,
@@ -462,4 +462,4 @@ export type {
   SaveUploadResult,
   TransferRequestOptions,
   UploadSaveCapabilityOptions
-} from "./saves.ts";
+} from "./projects/saves.ts";

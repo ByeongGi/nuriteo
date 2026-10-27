@@ -227,4 +227,4 @@ if [[ "$external_url_override_set" == true ]]; then
 fi
 env "${client_environment[@]}" \
   mise exec node@24.17.0 -- node \
-    "${CLIENT_LIVE_CONTRACT:-packages/api-client/test/organization-live-contract.ts}"
+    "${CLIENT_LIVE_CONTRACT:-packages/api-client/test/access/organization-live-contract.ts}"
