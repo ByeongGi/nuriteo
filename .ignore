@@ -1,3 +1,6 @@
 # Vendored package-manager CLIs are runtime inputs. Keep them tracked;
 # keep them out of ripgrep so searches stay on project source.
 /vendor/cli/
+
+# Release gates hash these evidence files. Keep them tracked and out of search.
+/docs/implementation/self-hosted/evidence/
