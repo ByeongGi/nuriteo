@@ -121,7 +121,12 @@ function NavigationLink({ item, mobilePanel = false, pathname, unreadCount }: Re
       <span className={styles.label()}>{item.label}</span>
       {unreadCount !== undefined && unreadCount > 0 ? (
         <span className={styles.badge()} aria-label={`읽지 않은 알림 ${unreadCount}개`}>
-          {unreadCount > 99 ? "99+" : unreadCount}
+          {(function () {
+    if (unreadCount > 99) {
+        return ("99+");
+    }
+    return (unreadCount);
+})()}
         </span>
       ) : null}
     </Link>

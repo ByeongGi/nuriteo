@@ -107,7 +107,12 @@ export async function publicExampleContentResponse(
     );
     if (!upstream.ok) {
       return publicProblem(
-        upstream.status === 404 ? 404 : upstream.status === 416 ? 416 : 502,
+        upstream.status === 404 ? 404 : (function () {
+    if (upstream.status === 416) {
+        return (416);
+    }
+    return (502);
+})(),
         upstream.status === 404 ? "PUBLIC_CONTENT_NOT_FOUND" : "PUBLIC_CONTENT_UPSTREAM_FAILED"
       );
     }
@@ -170,7 +175,12 @@ function publicJson(data: PublicPublishedExample | { readonly items: readonly Pu
 
 function publicApiFailure(error: unknown): Response {
   if (error instanceof ApiError) {
-    const status = error.status === 404 ? 404 : error.status === 429 ? 429 : 502;
+    const status = error.status === 404 ? 404 : (function () {
+    if (error.status === 429) {
+        return (429);
+    }
+    return (502);
+})();
     return publicProblem(status, status === 404 ? "PUBLIC_EXAMPLE_NOT_FOUND" : "PUBLIC_EXAMPLE_UPSTREAM_FAILED");
   }
   return publicProblem(502, "PUBLIC_EXAMPLE_UPSTREAM_FAILED");

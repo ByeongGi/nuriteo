@@ -413,9 +413,12 @@ function isEtagForKind(
     if (value === null || value.length > 64) return false;
     const pattern = kind === "notification"
       ? NOTIFICATION_ETAG
-      : kind === "notification-preferences"
-        ? NOTIFICATION_PREFERENCES_ETAG
-        : EMAIL_DELIVERY_ETAG;
+      : (function () {
+    if (kind === "notification-preferences") {
+        return (NOTIFICATION_PREFERENCES_ETAG);
+    }
+    return (EMAIL_DELIVERY_ETAG);
+})();
     const match = value.match(pattern);
     if (match === null) return false;
     const version = BigInt(match[1] as string);
@@ -424,9 +427,12 @@ function isEtagForKind(
   if (kind === "organization") return value !== null && STRONG_ETAG.test(value);
   const pattern = kind === "team"
     ? TEAM_ETAG
-    : kind === "team-member"
-      ? TEAM_MEMBER_ETAG
-      : TEAM_PROJECT_ROLE_ETAG;
+    : (function () {
+    if (kind === "team-member") {
+        return (TEAM_MEMBER_ETAG);
+    }
+    return (TEAM_PROJECT_ROLE_ETAG);
+})();
   if (value === null || value.length > 48) return false;
   const match = value.match(pattern);
   if (match === null) return false;

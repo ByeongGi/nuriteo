@@ -440,7 +440,7 @@ function testProjectSourceContracts() {
   assert.doesNotMatch(dashboard, /confirmName|정확한 프로젝트 이름/u);
   assert.match(
     dashboard,
-    /href=\{item\.state === "active"\s*\? projectStudioHref\(workspace\.storageScopeId, item\.id\)\s*:\s*projectDetailHref\(workspace\.storageScopeId, state, item\.id\)\}/u,
+    /href=\{\(function \(\) \{\s*if \(item\.state === "active"\) \{\s*return \(projectStudioHref\(workspace\.storageScopeId, item\.id\)\);\s*\}\s*return \(projectDetailHref\(workspace\.storageScopeId, state, item\.id\)\);\s*\}\)\(\)\}/u,
     "활성 프로젝트의 목록 주 동작은 설정 화면이 아니라 Studio를 열어야 합니다."
   );
   assert.match(

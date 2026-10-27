@@ -71,7 +71,17 @@ export function AuditLogTable({ initialPage }: { readonly initialPage: AuditEven
                 <td><div className={css.primary()}><span className={css.title()}>{auditActionLabel(event.actionCode)}</span><span className={css.mono()} title={event.actionCode}>{event.actionCode}</span></div></td>
                 <td><div className={css.primary()}><span className={css.title()}>{event.actorDisplayName ?? "시스템"}</span><span className={css.mono()} title={event.actorId}>{event.actorId}</span></div></td>
                 <td><div className={css.primary()}><span className={css.title()}>{auditTargetLabel(event.targetType)}</span><span className={css.mono()} title={event.targetId}>{event.targetId}</span></div></td>
-                <td><Badge size="sm" tone={event.result === "succeeded" ? "success" : "danger"} variant="status">{event.result === "succeeded" ? "성공" : "실패"}</Badge></td>
+                <td><Badge size="sm" tone={(function () {
+    if (event.result === "succeeded") {
+        return ("success");
+    }
+    return ("danger");
+})()} variant="status">{(function () {
+    if (event.result === "succeeded") {
+        return ("성공");
+    }
+    return ("실패");
+})()}</Badge></td>
                 <td><time className={css.time()} dateTime={event.occurredAt}>{formatDate(event.occurredAt)}</time></td>
               </tr>)}</tbody>
             </table>

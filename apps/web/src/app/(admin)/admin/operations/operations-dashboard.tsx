@@ -127,7 +127,12 @@ function StateBadge({ state }: { readonly state: AdminOperationsState }) {
   const styles = operationStyles();
   return (
     <span className={styles.status()} data-state={state}>
-      {state === "nominal" ? "정상" : state === "degraded" ? "주의" : "사용 불가"}
+      {state === "nominal" ? "정상" : (function () {
+    if (state === "degraded") {
+        return ("주의");
+    }
+    return ("사용 불가");
+})()}
     </span>
   );
 }

@@ -3,10 +3,10 @@
 import Editor, { loader } from "@monaco-editor/react";
 import type { OnMount } from "@monaco-editor/react";
 import * as monaco from "monaco-editor";
-import "../../../../node_modules/monaco-editor/esm/vs/language/css/monaco.contribution.js";
-import "../../../../node_modules/monaco-editor/esm/vs/language/html/monaco.contribution.js";
-import "../../../../node_modules/monaco-editor/esm/vs/language/json/monaco.contribution.js";
-import "../../../../node_modules/monaco-editor/esm/vs/language/typescript/monaco.contribution.js";
+import "../../node_modules/monaco-editor/esm/vs/language/css/monaco.contribution.js";
+import "../../node_modules/monaco-editor/esm/vs/language/html/monaco.contribution.js";
+import "../../node_modules/monaco-editor/esm/vs/language/json/monaco.contribution.js";
+import "../../node_modules/monaco-editor/esm/vs/language/typescript/monaco.contribution.js";
 import { useEffect, useRef, useState } from "react";
 
 import { EDITOR_THEME_CHANGE_EVENT, parseEditorThemePreference } from "#src/projects/project-editor-theme.ts";
@@ -29,18 +29,18 @@ if (typeof globalThis.Worker !== "undefined") {
   globalThis.MonacoEnvironment = {
     getWorker(_moduleId: string, label: string) {
       if (label === "json") {
-        return new Worker(new URL("../../../../node_modules/monaco-editor/esm/vs/language/json/json.worker.js", import.meta.url), { type: "module" });
+        return new Worker(new URL("../../node_modules/monaco-editor/esm/vs/language/json/json.worker.js", import.meta.url), { type: "module" });
       }
       if (label === "css" || label === "scss" || label === "less") {
-        return new Worker(new URL("../../../../node_modules/monaco-editor/esm/vs/language/css/css.worker.js", import.meta.url), { type: "module" });
+        return new Worker(new URL("../../node_modules/monaco-editor/esm/vs/language/css/css.worker.js", import.meta.url), { type: "module" });
       }
       if (label === "html" || label === "handlebars" || label === "razor") {
-        return new Worker(new URL("../../../../node_modules/monaco-editor/esm/vs/language/html/html.worker.js", import.meta.url), { type: "module" });
+        return new Worker(new URL("../../node_modules/monaco-editor/esm/vs/language/html/html.worker.js", import.meta.url), { type: "module" });
       }
       if (label === "typescript" || label === "javascript") {
-        return new Worker(new URL("../../../../node_modules/monaco-editor/esm/vs/language/typescript/ts.worker.js", import.meta.url), { type: "module" });
+        return new Worker(new URL("../../node_modules/monaco-editor/esm/vs/language/typescript/ts.worker.js", import.meta.url), { type: "module" });
       }
-      return new Worker(new URL("../../../../node_modules/monaco-editor/esm/vs/editor/editor.worker.js", import.meta.url), { type: "module" });
+      return new Worker(new URL("../../node_modules/monaco-editor/esm/vs/editor/editor.worker.js", import.meta.url), { type: "module" });
     }
   };
 }
@@ -100,7 +100,12 @@ export function ProjectMonacoEditor({ formatRequestId, onChange, onDiagnosticsCh
   useEffect(() => {
     const applySelectedTheme = (event: Event) => {
       const preference = event instanceof CustomEvent
-        ? parseEditorThemePreference(typeof event.detail === "string" ? event.detail : undefined)
+        ? parseEditorThemePreference((function () {
+    if (typeof event.detail === "string") {
+        return (event.detail);
+    }
+    return (undefined);
+})())
         : themePreference;
       const selectedTheme = resolveProjectMonacoTheme(preference);
       setTheme(selectedTheme);

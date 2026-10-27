@@ -182,32 +182,95 @@ export function MfaSecurity({
   const isSetupView = view === "setup";
   const isChallengeView = view === "challenge";
   const styles = mfaSecurityStyles({ standalone: view !== "security" });
-  const securityHref = isSetupView ? "/mfa/setup" : isChallengeView ? "/mfa/challenge" : "/account/security";
-  const pageTitle = isSetupView ? "다단계 인증 설정" : isChallengeView ? "다단계 인증 확인" : "계정 보안";
+  const securityHref = isSetupView ? "/mfa/setup" : (function () {
+    if (isChallengeView) {
+        return ("/mfa/challenge");
+    }
+    return ("/account/security");
+})();
+  const pageTitle = isSetupView ? "다단계 인증 설정" : (function () {
+    if (isChallengeView) {
+        return ("다단계 인증 확인");
+    }
+    return ("계정 보안");
+})();
   const pageDescription = isSetupView
     ? `${displayName}님의 계정에 인증 앱을 연결하고 복구 코드를 보관합니다.`
-    : isChallengeView
-      ? "인증 앱의 새 코드 또는 사용하지 않은 복구 코드로 현재 세션을 확인합니다."
-      : `${displayName}님의 로컬 계정을 인증 앱과 일회용 복구 코드로 보호합니다.`;
+    : (function () {
+    if (isChallengeView) {
+        return ("인증 앱의 새 코드 또는 사용하지 않은 복구 코드로 현재 세션을 확인합니다.");
+    }
+    return (`${displayName}님의 로컬 계정을 인증 앱과 일회용 복구 코드로 보호합니다.`);
+})();
   return (
     <main id="main-content" className={styles.root()}>
       {view === "security" ? null : <nav className={styles.productBar()} aria-label="계정 보안 탐색">
-        <Link className={styles.productBrand()} href={status.restricted ? "/mfa/setup" : "/workspaces"}><span className={styles.brandMark()} aria-hidden="true">N</span><strong>NURITEO</strong></Link>
-        {status.restricted ? <span className={styles.productStatus()}>계정 보호 설정이 필요합니다</span> : <div className={styles.productNav()}><Link className={styles.productLink()} href="/workspaces">워크스페이스</Link><Link className={styles.productLink()} href="/account/identities">연결된 로그인</Link><Link className={styles.productLink()} aria-current="page" href={securityHref}>계정 보안</Link></div>}
+        <Link className={styles.productBrand()} href={(function () {
+    if (status.restricted) {
+        return ("/mfa/setup");
+    }
+    return ("/workspaces");
+})()}><span className={styles.brandMark()} aria-hidden="true">N</span><strong>NURITEO</strong></Link>
+        {(function () {
+    if (status.restricted) {
+        return (<span className={styles.productStatus()}>계정 보호 설정이 필요합니다</span>);
+    }
+    return (<div className={styles.productNav()}><Link className={styles.productLink()} href="/workspaces">워크스페이스</Link><Link className={styles.productLink()} href="/account/identities">연결된 로그인</Link><Link className={styles.productLink()} aria-current="page" href={securityHref}>계정 보안</Link></div>);
+})()}
       </nav>}
       <PageHeader density="compact" eyebrow="계정 / 보안" title={pageTitle} description={pageDescription} />
 
       {!isChallengeView ? (
         <SettingsGroup density="compact" title="보안 상태" description="현재 계정에 적용된 로그인 보호 상태입니다.">
-          <SettingsRow density="compact" title="다중 인증" description={status.localAccount ? "인증 앱 기반" : "회사 인증 제공자에서 관리"}><SettingsValue>{status.enrolled ? "켜짐" : "꺼짐"}</SettingsValue></SettingsRow>
-          <SettingsRow density="compact" title="복구 코드" description="안전한 장소에 별도 보관하세요."><SettingsValue>{status.enrolled ? `${status.recoveryCodesRemaining}개` : "—"}</SettingsValue></SettingsRow>
-          <SettingsRow density="compact" title="보안 정책" description={status.restricted ? "설정 전까지 계정 접근이 제한됩니다." : "현재 계정에 정상적으로 접근할 수 있습니다."}><SettingsValue>{status.required ? "필수" : "선택"}</SettingsValue></SettingsRow>
+          <SettingsRow density="compact" title="다중 인증" description={(function () {
+    if (status.localAccount) {
+        return ("인증 앱 기반");
+    }
+    return ("회사 인증 제공자에서 관리");
+})()}><SettingsValue>{(function () {
+    if (status.enrolled) {
+        return ("켜짐");
+    }
+    return ("꺼짐");
+})()}</SettingsValue></SettingsRow>
+          <SettingsRow density="compact" title="복구 코드" description="안전한 장소에 별도 보관하세요."><SettingsValue>{(function () {
+    if (status.enrolled) {
+        return (`${status.recoveryCodesRemaining}개`);
+    }
+    return ("—");
+})()}</SettingsValue></SettingsRow>
+          <SettingsRow density="compact" title="보안 정책" description={(function () {
+    if (status.restricted) {
+        return ("설정 전까지 계정 접근이 제한됩니다.");
+    }
+    return ("현재 계정에 정상적으로 접근할 수 있습니다.");
+})()}><SettingsValue>{(function () {
+    if (status.required) {
+        return ("필수");
+    }
+    return ("선택");
+})()}</SettingsValue></SettingsRow>
         </SettingsGroup>
       ) : null}
 
       {status.required && !status.enrolled ? (
-        <section className={styles.notice({ className: status.restricted ? styles.noticeDanger() : undefined })} role={status.restricted ? "alert" : "status"}>
-          <strong className={styles.noticeTitle()}>{status.restricted ? "계속하려면 인증 앱 설정이 필요합니다" : "인증 앱 설정 기한"}</strong>
+        <section className={styles.notice({ className: (function () {
+    if (status.restricted) {
+        return (styles.noticeDanger());
+    }
+    return (undefined);
+})() })} role={(function () {
+    if (status.restricted) {
+        return ("alert");
+    }
+    return ("status");
+})()}>
+          <strong className={styles.noticeTitle()}>{(function () {
+    if (status.restricted) {
+        return ("계속하려면 인증 앱 설정이 필요합니다");
+    }
+    return ("인증 앱 설정 기한");
+})()}</strong>
           <p className={styles.noticeDescription()}>{deadline?.toLocaleString("ko-KR") ?? "지금 설정하세요"}. 설정 중에도 프로젝트 데이터는 변경되지 않습니다.</p>
         </section>
       ) : null}
@@ -240,7 +303,12 @@ export function MfaSecurity({
           <div className={styles.actions()}>
             <Button size="sm" onClick={copyRecoveryCodes}>모든 코드 복사</Button>
             <Button size="sm" variant="primary" disabled={!copiedRecoveryCodes} onClick={finishRecoveryConfirmation}>
-              {copiedRecoveryCodes ? "코드를 안전하게 저장했습니다" : "계속하려면 코드를 복사하세요"}
+              {(function () {
+    if (copiedRecoveryCodes) {
+        return ("코드를 안전하게 저장했습니다");
+    }
+    return ("계속하려면 코드를 복사하세요");
+})()}
             </Button>
           </div>
         </section>
@@ -250,15 +318,30 @@ export function MfaSecurity({
         <div className={styles.grid()}>
           <CodePanel title="인증 앱 확인" description="새로운 6자리 코드를 입력해 현재 세션을 확인합니다." pending={mutation.isPending} onSubmit={(event) => submitCode(event, false)} />
           <CodePanel title="복구 코드 사용" description={`일회용 코드가 ${status.recoveryCodesRemaining}개 남았습니다. 복구 후 중요한 변경에는 다시 인증해야 합니다.`} pending={mutation.isPending} onSubmit={(event) => submitCode(event, true)} recovery />
-          {!isChallengeView ? <section className={styles.card()}>
+          {(function () {
+    if (!isChallengeView) {
+        return (<section className={styles.card()}>
             <h2>다중 인증 해제</h2>
             <p>인스턴스 정책에서 다중 인증을 필수로 요구하지 않을 때만 해제할 수 있습니다.</p>
             <Button className={styles.cardAction()} size="sm" disabled={mutation.isPending || status.required} onClick={() => setConfirmingDisable(true)}>MFA 해제</Button>
-          </section> : null}
+          </section>);
+    }
+    return (null);
+})()}
         </div>
       ) : null}
 
-      {message ? <p className={styles.feedback({ className: message.tone === "error" ? styles.feedbackError() : styles.feedbackSuccess() })} role={message.tone === "error" ? "alert" : "status"}>{message.text}</p> : null}
+      {message ? <p className={styles.feedback({ className: (function () {
+    if (message.tone === "error") {
+        return (styles.feedbackError());
+    }
+    return (styles.feedbackSuccess());
+})() })} role={(function () {
+    if (message.tone === "error") {
+        return ("alert");
+    }
+    return ("status");
+})()}>{message.text}</p> : null}
       <div className={styles.safeNavigation()}>
         <Button size="sm" aria-label="로그아웃 또는 계정 전환" disabled={mutation.isPending} onClick={signOut}>로그아웃 또는 계정 전환</Button>
       </div>
@@ -284,7 +367,12 @@ function CodePanel({ title, description, pending, onSubmit, recovery = false }: 
       <form className={styles.codeForm()} onSubmit={onSubmit} aria-busy={pending}>
         <label htmlFor={id}>{recovery ? "복구 코드" : "6자리 인증 코드"}</label>
         <Input id={id} name="code" size="sm" autoComplete="one-time-code" inputMode={recovery ? "text" : "numeric"} minLength={6} maxLength={128} required />
-        <Button type="submit" size="sm" variant="primary" disabled={pending}>{pending ? "확인 중…" : recovery ? "계정 복구" : "코드 확인"}</Button>
+        <Button type="submit" size="sm" variant="primary" disabled={pending}>{pending ? "확인 중…" : (function () {
+    if (recovery) {
+        return ("계정 복구");
+    }
+    return ("코드 확인");
+})()}</Button>
       </form>
     </section>
   );

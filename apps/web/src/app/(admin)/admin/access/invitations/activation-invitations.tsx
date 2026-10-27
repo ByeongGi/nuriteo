@@ -149,7 +149,17 @@ export function ActivationInvitations({
           <SelectField label="초대 상태" labelHidden density="compact" options={STATUS_OPTIONS} value={statusFilter} onValueChange={(nextValue) => setStatusFilter(nextValue as "all" | ActivationInvitation["status"])} />
           <span aria-live="polite">현재 페이지 {visibleInvitations.length}개</span>
         </div>
-        {invitations.length === 0 ? <AdminNote>발급한 사용자 초대가 없습니다.</AdminNote> : visibleInvitations.length === 0 ? <AdminNote>검색 조건에 맞는 초대가 없습니다.</AdminNote> : <div className="overflow-x-auto border-t border-muted-border"><table className="w-full min-w-[52rem] border-collapse text-left text-sm" aria-label="사용자 초대 내역"><thead className="bg-subtle text-xs text-muted-foreground"><tr><th className="px-4 py-2.5 font-medium" scope="col">사용자</th><th className="px-4 py-2.5 font-medium" scope="col">상태</th><th className="px-4 py-2.5 font-medium" scope="col">만료 시각</th><th className="px-4 py-2.5 text-right font-medium" scope="col">관리</th></tr></thead><tbody>{visibleInvitations.map((invitation) => <tr className="border-t border-muted-border" key={invitation.id}><td className="px-4 py-3 font-medium text-foreground">{invitation.email}</td><td className="px-4 py-3"><span className="font-semibold text-muted-foreground data-[status=accepted]:text-success data-[status=pending]:text-warning" data-status={invitation.status}>{invitationStatusLabel(invitation.status)}</span></td><td className="px-4 py-3 text-muted-foreground"><time dateTime={invitation.expires_at}>{new Date(invitation.expires_at).toLocaleString("ko-KR")}</time></td><td className="px-4 py-3"><div className="flex justify-end gap-2">{invitation.status === "pending" ? <><Button size="sm" type="button" disabled={mutation.isPending} onClick={() => void reissue(invitation.id)}>다시 발급</Button><Button size="sm" variant="danger" type="button" disabled={mutation.isPending} onClick={() => void revoke(invitation.id)}>초대 취소</Button></> : <span className="text-xs text-muted-foreground">작업 없음</span>}</div></td></tr>)}</tbody></table></div>}
+        {invitations.length === 0 ? <AdminNote>발급한 사용자 초대가 없습니다.</AdminNote> : (function () {
+    if (visibleInvitations.length === 0) {
+        return (<AdminNote>검색 조건에 맞는 초대가 없습니다.</AdminNote>);
+    }
+    return (<div className="overflow-x-auto border-t border-muted-border"><table className="w-full min-w-[52rem] border-collapse text-left text-sm" aria-label="사용자 초대 내역"><thead className="bg-subtle text-xs text-muted-foreground"><tr><th className="px-4 py-2.5 font-medium" scope="col">사용자</th><th className="px-4 py-2.5 font-medium" scope="col">상태</th><th className="px-4 py-2.5 font-medium" scope="col">만료 시각</th><th className="px-4 py-2.5 text-right font-medium" scope="col">관리</th></tr></thead><tbody>{visibleInvitations.map((invitation) => <tr className="border-t border-muted-border" key={invitation.id}><td className="px-4 py-3 font-medium text-foreground">{invitation.email}</td><td className="px-4 py-3"><span className="font-semibold text-muted-foreground data-[status=accepted]:text-success data-[status=pending]:text-warning" data-status={invitation.status}>{invitationStatusLabel(invitation.status)}</span></td><td className="px-4 py-3 text-muted-foreground"><time dateTime={invitation.expires_at}>{new Date(invitation.expires_at).toLocaleString("ko-KR")}</time></td><td className="px-4 py-3"><div className="flex justify-end gap-2">{(function () {
+    if (invitation.status === "pending") {
+        return (<><Button size="sm" type="button" disabled={mutation.isPending} onClick={() => void reissue(invitation.id)}>다시 발급</Button><Button size="sm" variant="danger" type="button" disabled={mutation.isPending} onClick={() => void revoke(invitation.id)}>초대 취소</Button></>);
+    }
+    return (<span className="text-xs text-muted-foreground">작업 없음</span>);
+})()}</div></td></tr>)}</tbody></table></div>);
+})()}
         <footer className="mt-4 flex items-center justify-between gap-4 border-t border-muted-border pt-3 max-[37.5rem]:flex-col max-[37.5rem]:items-stretch"><span className="text-xs text-muted-foreground">{pageIndex + 1}페이지 · 현재 {invitations.length}건</span><nav className="flex justify-end gap-2 max-[37.5rem]:[&_[data-slot=button]]:flex-1" aria-label="사용자 초대 페이지 이동"><Button size="sm" disabled={pageIndex === 0 || pageLoading} onClick={() => setPageIndex((current) => Math.max(0, current - 1))}>이전</Button><Button size="sm" variant="primary" disabled={(pageIndex >= pages.length - 1 && page.nextCursor === null) || pageLoading} onClick={() => void nextPage()}>{pageLoading ? "불러오는 중…" : "다음"}</Button></nav></footer>
       </AdminPanel>
     </AdminPage>
@@ -216,9 +226,24 @@ export function NewActivationInvitation() {
               <SelectField label="유효 기간" name="expiresInSeconds" defaultValue="604800" options={EXPIRATION_OPTIONS} required disabled={mutation.isPending} />
             </div>
             <AdminNote>초대 링크는 한 번만 사용할 수 있습니다. 이메일 발송이 설정되지 않은 환경에서는 발급 직후 링크를 직접 복사해야 합니다.</AdminNote>
-            {deliveryNotice ? <p className="m-0 text-sm text-success" role="status">{deliveryNotice}</p> : null}
-            {error ? <p className="m-0 text-sm text-danger" role="alert">{error}</p> : null}
-            <div className="flex items-center justify-end gap-2"><Link className={buttonVariants({ variant: "secondary" })} href="/admin/access/invitations">취소</Link><Button type="submit" variant="primary" disabled={mutation.isPending}>{mutation.isPending ? "발급 중…" : "초대 발급"}</Button></div>
+            {(function () {
+    if (deliveryNotice) {
+        return (<p className="m-0 text-sm text-success" role="status">{deliveryNotice}</p>);
+    }
+    return (null);
+})()}
+            {(function () {
+    if (error) {
+        return (<p className="m-0 text-sm text-danger" role="alert">{error}</p>);
+    }
+    return (null);
+})()}
+            <div className="flex items-center justify-end gap-2"><Link className={buttonVariants({ variant: "secondary" })} href="/admin/access/invitations">취소</Link><Button type="submit" variant="primary" disabled={mutation.isPending}>{(function () {
+    if (mutation.isPending) {
+        return ("발급 중…");
+    }
+    return ("초대 발급");
+})()}</Button></div>
           </form>
         </AdminSection>
       )}

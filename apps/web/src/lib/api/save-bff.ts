@@ -39,8 +39,17 @@ export function forwardSaveSessionRequest(
   );
   if (session === undefined || !hasNoProjectQuery(request)) return invalidProjectRoute(request);
   const suffix = action === "parts" ? "/parts"
-    : action === "receipts" ? "/parts/receipts"
-      : action === "complete" || action === "reconcile" ? `/${action}` : "";
+    : (function () {
+    if (action === "receipts") {
+        return ("/parts/receipts");
+    }
+    return ((function () {
+    if (action === "complete" || action === "reconcile") {
+        return (`/${action}`);
+    }
+    return ("");
+})());
+})();
   const method = action === "abort" ? "DELETE" : "POST";
   if (request.method !== method) return invalidProjectRoute(request);
   return forwardProjectRequest(request, {

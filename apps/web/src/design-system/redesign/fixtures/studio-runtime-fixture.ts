@@ -59,7 +59,12 @@ function createStudioRuntimeAdapter({ fileCount = 4, mode = "ready", projectId }
         projectId,
         "ready",
         mode === "conflict" ? "conflict" : "writer",
-        mode === "conflict" ? [writerConflictDiagnostic()] : mode === "failure" ? [previewFailureDiagnostic()] : []
+        mode === "conflict" ? [writerConflictDiagnostic()] : (function () {
+    if (mode === "failure") {
+        return ([previewFailureDiagnostic()]);
+    }
+    return ([]);
+})()
       ));
     },
     subscribe(listener) {

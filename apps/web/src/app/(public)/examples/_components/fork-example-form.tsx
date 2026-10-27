@@ -150,11 +150,16 @@ export function ForkExampleForm({ example, initialWorkspaces }: ForkExampleFormP
       {error === undefined ? null : (
         <div className="grid gap-2 text-sm text-danger" role="alert">
           <p className="m-0">{error}</p>
-          {forkSessionEnded ? (
+          {(function () {
+    if (forkSessionEnded) {
+        return ((
             <Link className="w-fit font-semibold text-link underline-offset-4 hover:underline" href={signInHref(returnTo)}>
               로그인하고 계속
             </Link>
-          ) : null}
+          ));
+    }
+    return (null);
+})()}
         </div>
       )}
       <Button disabled={pending || selectedScope === ""} type="submit" variant="primary">

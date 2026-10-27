@@ -28,9 +28,12 @@ export default async function WorkspacesPage({ searchParams }: WorkspacesPagePro
   } = await searchParams;
   const invitationStatus = joined === "1"
     ? "조직 초대를 수락했습니다. 공유 워크스페이스를 사용할 수 있습니다."
-    : invitation === "declined"
-      ? "조직 초대를 거절했습니다. 워크스페이스 접근 권한은 추가되지 않았습니다."
-      : undefined;
+    : (function () {
+    if (invitation === "declined") {
+        return ("조직 초대를 거절했습니다. 워크스페이스 접근 권한은 추가되지 않았습니다.");
+    }
+    return (undefined);
+})();
   try {
     const client = await createServerApiClient();
     const result = await getCurrentWorkspaces(client);

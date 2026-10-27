@@ -54,8 +54,18 @@ export function ExamplesGallery({ examples }: { readonly examples: readonly Publ
 
       {visibleExamples.length === 0 ? (
         <section className={styles.empty()} aria-labelledby="empty-examples-title">
-          <h2 className={styles.emptyTitle()} id="empty-examples-title">{examples.length === 0 ? "아직 공개된 예제가 없습니다" : "검색 결과가 없습니다"}</h2>
-          <p className={styles.emptyDescription()}>{examples.length === 0 ? "프로젝트의 고정 버전을 게시하면 이곳에 표시됩니다." : "검색어나 공개 범위를 바꿔보세요."}</p>
+          <h2 className={styles.emptyTitle()} id="empty-examples-title">{(function () {
+    if (examples.length === 0) {
+        return ("아직 공개된 예제가 없습니다");
+    }
+    return ("검색 결과가 없습니다");
+})()}</h2>
+          <p className={styles.emptyDescription()}>{(function () {
+    if (examples.length === 0) {
+        return ("프로젝트의 고정 버전을 게시하면 이곳에 표시됩니다.");
+    }
+    return ("검색어나 공개 범위를 바꿔보세요.");
+})()}</p>
         </section>
       ) : (
         <section className={styles.grid()} data-filtering={isFiltering} aria-label="공개 예제" aria-busy={isFiltering}>

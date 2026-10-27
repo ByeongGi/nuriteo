@@ -67,7 +67,17 @@ export function ProjectGeneralSettings({ initialEtag, initialProject, workspace 
 
   return (
     <ProjectSettingsSection projectName={project.name} title="일반 설정" description="프로젝트의 기본 정보와 현재 실행 상태를 관리합니다.">
-      {feedback ? <p className={css.feedback({ className: feedback.error ? css.error() : undefined })} role={feedback.error ? "alert" : "status"}>{feedback.text}</p> : null}
+      {feedback ? <p className={css.feedback({ className: (function () {
+    if (feedback.error) {
+        return (css.error());
+    }
+    return (undefined);
+})() })} role={(function () {
+    if (feedback.error) {
+        return ("alert");
+    }
+    return ("status");
+})()}>{feedback.text}</p> : null}
       <SettingsGroup title="프로젝트 정보" description="프로젝트를 식별하고 워크스페이스에 표시되는 정보를 관리합니다.">
         <SettingsRow layout="stacked" title="이름" description="워크스페이스와 Studio에 표시되는 프로젝트 이름입니다.">
           <form className={css.renameForm()} onSubmit={rename} aria-busy={mutation.isPending}>

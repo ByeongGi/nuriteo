@@ -274,14 +274,29 @@ export function OrganizationConsole(props: OrganizationConsoleProps) {
           value={props.organization?.id ?? "create"}
           onValueChange={(organizationId) => {
             const selected = organizationWorkspaces.find((workspace) => workspace.ownerId === organizationId);
-            router.push(selected === undefined ? "/workspaces/new/organization" : `/workspaces/${encodeURIComponent(selected.storageScopeId)}/members`);
+            router.push((function () {
+    if (selected === undefined) {
+        return ("/workspaces/new/organization");
+    }
+    return (`/workspaces/${encodeURIComponent(selected.storageScopeId)}/members`);
+})());
           }}
         />
-        <Link className={styles.switcherLink()} href="/workspaces/new/organization" aria-current={!props.organization ? "page" : undefined}>새 조직</Link>
+        <Link className={styles.switcherLink()} href="/workspaces/new/organization" aria-current={(function () {
+    if (!props.organization) {
+        return ("page");
+    }
+    return (undefined);
+})()}>새 조직</Link>
       </div>}
       {props.organization && !inWorkspace ? (
         <nav className={styles.actions()} aria-label={`${props.organization.displayName} 설정`}>
-          <Link className={styles.actionLink()} href={activeWorkspace === undefined ? "/workspaces" : `/workspaces/${encodeURIComponent(activeWorkspace.storageScopeId)}/teams`}>팀과 권한 관리</Link>
+          <Link className={styles.actionLink()} href={(function () {
+    if (activeWorkspace === undefined) {
+        return ("/workspaces");
+    }
+    return (`/workspaces/${encodeURIComponent(activeWorkspace.storageScopeId)}/teams`);
+})()}>팀과 권한 관리</Link>
         </nav>
       ) : null}
       {oneTimeUrl ? (
@@ -304,22 +319,47 @@ export function OrganizationConsole(props: OrganizationConsoleProps) {
       ) : null}
       {props.organization ? (
         <>
-        {inWorkspace ? null : <MetricGrid className={styles.metrics()} aria-label="조직 지표">
+        {(function () {
+    if (inWorkspace) {
+        return (null);
+    }
+    return (<MetricGrid className={styles.metrics()} aria-label="조직 지표">
           <MetricItem label="멤버" value={props.members?.length ?? 0} description={`소유자 ${props.members?.filter((member) => member.role === "owner").length ?? 0}명`} />
           <MetricItem label="대기 중 초대" value={props.invitations?.filter((invitation) => invitation.status === "pending").length ?? 0} description="아직 참여하지 않은 계정" />
-          <MetricItem label="조직 버전" value={`v${props.organization.version}`} description={props.organization.status === "active" ? "정상 운영 중" : props.organization.status} />
-        </MetricGrid>}
+          <MetricItem label="조직 버전" value={`v${props.organization.version}`} description={(function () {
+    if (props.organization.status === "active") {
+        return ("정상 운영 중");
+    }
+    return (props.organization.status);
+})()} />
+        </MetricGrid>);
+})()}
         <section className={styles.management()}>
-          {inWorkspace ? null : <div className={styles.managementCard()}>
+          {(function () {
+    if (inWorkspace) {
+        return (null);
+    }
+    return (<div className={styles.managementCard()}>
             <h2>{props.organization.displayName}</h2>
-            <p>{props.organization.status === "active" ? "활성 조직" : props.organization.status} · 버전 {props.organization.version}</p>
-            {props.canManage ? (
+            <p>{(function () {
+    if (props.organization.status === "active") {
+        return ("활성 조직");
+    }
+    return (props.organization.status);
+})()} · 버전 {props.organization.version}</p>
+            {(function () {
+    if (props.canManage) {
+        return ((
               <form className={styles.form()} onSubmit={rename} aria-busy={mutation.isPending}>
                 <TextField label="조직 이름" name="displayName" defaultValue={props.organization.displayName} required disabled={mutation.isPending} />
                 <Button type="submit" disabled={mutation.isPending}>이름 저장</Button>
               </form>
-            ) : <p>멤버 권한에서는 조직 정보를 조회할 수만 있습니다.</p>}
-          </div>}
+            ));
+    }
+    return (<p>멤버 권한에서는 조직 정보를 조회할 수만 있습니다.</p>);
+})()}
+          </div>);
+})()}
           <OrganizationMemberDirectory
             canManage={props.canManage}
             currentUserId={props.currentUserId}
@@ -332,7 +372,9 @@ export function OrganizationConsole(props: OrganizationConsoleProps) {
             query={memberQuery}
             totalCount={props.members?.length ?? 0}
           />
-          {props.canManage ? (
+          {(function () {
+    if (props.canManage) {
+        return ((
             <div className={styles.managementCard()}>
               <h2>멤버 초대</h2>
               <form className={styles.form()} onSubmit={invite} aria-busy={mutation.isPending}>
@@ -357,7 +399,10 @@ export function OrganizationConsole(props: OrganizationConsoleProps) {
                 totalCount={props.invitations?.length ?? 0}
               />
             </div>
-          ) : null}
+          ));
+    }
+    return (null);
+})()}
         </section>
         </>
       ) : null}
@@ -391,13 +436,33 @@ function OrganizationMemberDirectory(props: OrganizationMemberDirectoryProps) {
         <ul className={styles.list()} aria-busy={props.isFiltering} aria-label="조직 멤버">
           {props.members.map((member) => (
             <li className={styles.record()} key={member.userId}>
-              <div><strong>{member.displayName}{member.userId === props.currentUserId ? " (나)" : ""}</strong><span>{member.role === "owner" ? "소유자" : "멤버"} · {shortId(member.userId)}</span></div>
-              {props.canManage && member.userId !== props.currentUserId ? (
+              <div><strong>{member.displayName}{(function () {
+    if (member.userId === props.currentUserId) {
+        return (" (나)");
+    }
+    return ("");
+})()}</strong><span>{(function () {
+    if (member.role === "owner") {
+        return ("소유자");
+    }
+    return ("멤버");
+})()} · {shortId(member.userId)}</span></div>
+              {(function () {
+    if (props.canManage && member.userId !== props.currentUserId) {
+        return ((
                 <div className={styles.recordActions()}>
-                  <Button type="button" disabled={props.disabled} onClick={() => void props.onRoleChange(member)}>{member.role === "owner" ? "멤버로 변경" : "소유자로 변경"}</Button>
+                  <Button type="button" disabled={props.disabled} onClick={() => void props.onRoleChange(member)}>{(function () {
+    if (member.role === "owner") {
+        return ("멤버로 변경");
+    }
+    return ("소유자로 변경");
+})()}</Button>
                   <Button type="button" disabled={props.disabled} onClick={() => void props.onRemove(member)}>제외</Button>
                 </div>
-              ) : null}
+              ));
+    }
+    return (null);
+})()}
             </li>
           ))}
         </ul>
@@ -434,13 +499,23 @@ function OrganizationInvitationDirectory(props: OrganizationInvitationDirectoryP
         <ul className={styles.list()} aria-label="조직 초대">
           {props.invitations.map((invitation) => (
             <li className={styles.record()} key={invitation.id}>
-              <div><strong>{invitation.proposedRole === "owner" ? "소유자 초대" : "멤버 초대"} · {shortId(invitation.inviteeUserId)}</strong><span>{invitationStatusLabel(invitation.status)} · {expirationLabel(invitation.expiresAt)}</span></div>
-              {invitation.status === "pending" ? (
+              <div><strong>{(function () {
+    if (invitation.proposedRole === "owner") {
+        return ("소유자 초대");
+    }
+    return ("멤버 초대");
+})()} · {shortId(invitation.inviteeUserId)}</strong><span>{invitationStatusLabel(invitation.status)} · {expirationLabel(invitation.expiresAt)}</span></div>
+              {(function () {
+    if (invitation.status === "pending") {
+        return ((
                 <div className={styles.recordActions()}>
                   <Button type="button" disabled={props.disabled} onClick={() => void props.onReissue(invitation)}>다시 발급</Button>
                   <Button type="button" disabled={props.disabled} onClick={() => void props.onRevoke(invitation)}>취소</Button>
                 </div>
-              ) : null}
+              ));
+    }
+    return (null);
+})()}
             </li>
           ))}
         </ul>

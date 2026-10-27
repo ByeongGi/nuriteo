@@ -318,13 +318,23 @@ function SettingEditor({
       </div>
       {impact ? <ImpactPreview impact={impact.value} /> : null}
       {feedback ? (
-        <div className={styles.feedback()} role={feedback.tone === "error" ? "alert" : "status"}>
+        <div className={styles.feedback()} role={(function () {
+    if (feedback.tone === "error") {
+        return ("alert");
+    }
+    return ("status");
+})()}>
           <span>{feedback.message}</span>
-          {feedback.reconcile ? (
+          {(function () {
+    if (feedback.reconcile) {
+        return ((
             <Button type="button" size="sm" onClick={() => router.refresh()}>
               최신 상태 불러오기
             </Button>
-          ) : null}
+          ));
+    }
+    return (null);
+})()}
         </div>
       ) : null}
     </form>
@@ -399,7 +409,12 @@ function SettingControl({
           {descriptor.unit ? <span>{descriptor.unit}</span> : null}
         </div>
         {nullable ? (
-          <SegmentedControl aria-label={`${descriptor.label} 제한 방식`} disabled={disabled} options={[{ value: "limited", label: "기간 지정" }, { value: "unlimited", label: "제한 없음" }]} value={unlimited ? "unlimited" : "limited"} width="full" onValueChange={(value) => onUnlimited(value === "unlimited")} />
+          <SegmentedControl aria-label={`${descriptor.label} 제한 방식`} disabled={disabled} options={[{ value: "limited", label: "기간 지정" }, { value: "unlimited", label: "제한 없음" }]} value={(function () {
+    if (unlimited) {
+        return ("unlimited");
+    }
+    return ("limited");
+})()} width="full" onValueChange={(value) => onUnlimited(value === "unlimited")} />
         ) : null}
       </>
     );

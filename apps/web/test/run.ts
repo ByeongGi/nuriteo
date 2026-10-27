@@ -22,6 +22,7 @@ await import("./auth/authenticated-shell.test.ts");
 await import("./project/collaboration-ux.test.ts");
 await import("./client/browser-client.test.ts");
 await import("./shell/contracts.test.ts");
+await import("./shell/nested-ternary.test.ts");
 await import("./auth/entry-flow.test.ts");
 await import("./integrations/git-bff.test.ts");
 await import("./project-ux.test.ts");

@@ -204,7 +204,12 @@ export function AccessTokenConsole({ embedded = false, initialTokens, target }: 
         eyebrow="계정"
         title="개인 토큰"
         description="CLI와 자동화에서 사용할 개인 액세스 토큰을 관리합니다."
-        actions={isIssuing || issued !== undefined ? undefined : <Button type="button" size="sm" variant="primary" onClick={() => setIsIssuing(true)}>새 토큰</Button>}
+        actions={(function () {
+    if (isIssuing || issued !== undefined) {
+        return (undefined);
+    }
+    return (<Button type="button" size="sm" variant="primary" onClick={() => setIsIssuing(true)}>새 토큰</Button>);
+})()}
       />}
 
       {issued === undefined ? null : (
@@ -218,7 +223,17 @@ export function AccessTokenConsole({ embedded = false, initialTokens, target }: 
         </section>
       )}
 
-      {feedback ? <p className={styles.feedback({ className: feedback.error ? styles.feedbackError() : styles.feedbackSuccess() })} role={feedback.error ? "alert" : "status"}>{feedback.text}</p> : null}
+      {feedback ? <p className={styles.feedback({ className: (function () {
+    if (feedback.error) {
+        return (styles.feedbackError());
+    }
+    return (styles.feedbackSuccess());
+})() })} role={(function () {
+    if (feedback.error) {
+        return ("alert");
+    }
+    return ("status");
+})()}>{feedback.text}</p> : null}
 
       {isIssuing ? (
         <TokenIssueForm
@@ -232,9 +247,16 @@ export function AccessTokenConsole({ embedded = false, initialTokens, target }: 
       {isIssuing ? null : <section className={styles.panel()} aria-labelledby="token-list-title">
         <div className={styles.headingRow()}>
           <div className={styles.heading()}><h2 className={styles.title()} id="token-list-title">토큰 <small className={styles.titleCount()}>{tokens.length}</small></h2><p className={styles.description()}>사용하지 않는 토큰은 폐기하세요.</p></div>
-          {embedded && issued === undefined ? <Button type="button" size="sm" variant="primary" onClick={() => setIsIssuing(true)}>새 토큰</Button> : null}
+          {(function () {
+    if (embedded && issued === undefined) {
+        return (<Button type="button" size="sm" variant="primary" onClick={() => setIsIssuing(true)}>새 토큰</Button>);
+    }
+    return (null);
+})()}
         </div>
-        {showFilters ? <section className={styles.toolbar()} aria-label="토큰 검색 및 상태 필터">
+        {(function () {
+    if (showFilters) {
+        return (<section className={styles.toolbar()} aria-label="토큰 검색 및 상태 필터">
           <SearchField density="compact" className={styles.search()} label="토큰 검색" value={query} onChange={(event) => setQuery(event.currentTarget.value)} placeholder="이름, 접두사 또는 권한 검색" />
           <SegmentedControl
             aria-label="토큰 상태"
@@ -247,19 +269,57 @@ export function AccessTokenConsole({ embedded = false, initialTokens, target }: 
               { value: "revoked", label: "폐기됨" }
             ]}
           />
-        </section> : null}
-        {visibleTokens.length === 0 ? <div className={styles.empty()}><strong className={styles.emptyTitle()}>{tokens.length === 0 ? "아직 토큰이 없습니다" : "검색 결과가 없습니다"}</strong><p className={styles.emptyDescription()}>{tokens.length === 0 ? "필요할 때 새 토큰을 만들어 CLI와 자동화에 연결할 수 있습니다." : "다른 검색어나 상태를 선택해보세요."}</p></div> : (
+        </section>);
+    }
+    return (null);
+})()}
+        {(function () {
+    if (visibleTokens.length === 0) {
+        return (<div className={styles.empty()}><strong className={styles.emptyTitle()}>{(function () {
+    if (tokens.length === 0) {
+        return ("아직 토큰이 없습니다");
+    }
+    return ("검색 결과가 없습니다");
+})()}</strong><p className={styles.emptyDescription()}>{(function () {
+    if (tokens.length === 0) {
+        return ("필요할 때 새 토큰을 만들어 CLI와 자동화에 연결할 수 있습니다.");
+    }
+    return ("다른 검색어나 상태를 선택해보세요.");
+})()}</p></div>);
+    }
+    return ((
           <ul className={styles.list()} aria-busy={query !== deferredQuery}>
             {visibleTokens.map((token) => <li className={styles.item()} key={token.id}>
-              <div className={styles.itemCopy()}><strong className={styles.itemTitle()}>{token.name}</strong><span className={styles.itemMeta()}><code>{token.prefix}…</code> · {tokenStatusLabel(token.status)} · {formatDate(token.expiresAt)} 만료</span><small className={styles.itemDetail()}>{token.scopes.length === 0 ? "권한 없음" : token.scopes.join(", ")}{token.lastUsedAt === null ? " · 사용 기록 없음" : ` · 마지막 사용 ${formatDate(token.lastUsedAt)}`}</small></div>
-              {token.status === "active" ? <div className={styles.recordActions()}><Button type="button" size="sm" disabled={mutation.isPending} onClick={() => setPendingAction({ action: "rotate", token })}>교체</Button><Button type="button" size="sm" variant="danger" disabled={mutation.isPending} onClick={() => setPendingAction({ action: "revoke", token })}>폐기</Button></div> : null}
+              <div className={styles.itemCopy()}><strong className={styles.itemTitle()}>{token.name}</strong><span className={styles.itemMeta()}><code>{token.prefix}…</code> · {tokenStatusLabel(token.status)} · {formatDate(token.expiresAt)} 만료</span><small className={styles.itemDetail()}>{(function () {
+    if (token.scopes.length === 0) {
+        return ("권한 없음");
+    }
+    return (token.scopes.join(", "));
+})()}{(function () {
+    if (token.lastUsedAt === null) {
+        return (" · 사용 기록 없음");
+    }
+    return (` · 마지막 사용 ${formatDate(token.lastUsedAt)}`);
+})()}</small></div>
+              {(function () {
+    if (token.status === "active") {
+        return (<div className={styles.recordActions()}><Button type="button" size="sm" disabled={mutation.isPending} onClick={() => setPendingAction({ action: "rotate", token })}>교체</Button><Button type="button" size="sm" variant="danger" disabled={mutation.isPending} onClick={() => setPendingAction({ action: "revoke", token })}>폐기</Button></div>);
+    }
+    return (null);
+})()}
             </li>)}
           </ul>
-        )}
+        ));
+})()}
       </section>}
       <ConfirmationDialog
         busy={mutation.isPending}
-        confirmLabel={mutation.isPending ? "처리 중…" : pendingAction?.action === "rotate" ? "교체하고 새 토큰 보기" : "토큰 폐기"}
+        confirmLabel={mutation.isPending ? "처리 중…" : (function () {
+    if (pendingAction?.action === "rotate") {
+        return ("교체하고 새 토큰 보기");
+    }
+    return ("토큰 폐기");
+})()}
         description={`${pendingAction?.token.name ?? "선택한 토큰"}을 사용하는 자동화는 기존 자격 증명으로 더 이상 접근할 수 없습니다.`}
         open={pendingAction !== undefined}
         title={pendingAction?.action === "rotate" ? "토큰을 교체할까요?" : "토큰을 폐기할까요?"}

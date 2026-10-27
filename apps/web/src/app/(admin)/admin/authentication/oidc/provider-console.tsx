@@ -107,8 +107,23 @@ export function OidcProviderConsole({ createMode = false, detailMode = false, in
 
   return <AdminPage id="main-content" contentWidth="standard">
     <AdminPageHeader category="접근 관리" title="로그인 제공자" description="전역 OIDC 제공자의 상태와 사용자 연결을 확인합니다." aside={<div className="flex items-center gap-2"><Badge>등록 {providers.length}개</Badge><Link className={buttonVariants({ size: "sm", variant: "primary" })} href="/admin/authentication/oidc/new">새 제공자</Link></div>} />
-    <AdminPanel aria-labelledby="provider-list"><AdminCollectionHeading><h2 id="provider-list">등록된 제공자</h2><Badge>{providers.length}개</Badge></AdminCollectionHeading>{providers.length === 0 ? <AdminEmptyState title="등록된 로그인 제공자가 없습니다">새 제공자를 등록해 첫 OIDC 연결을 구성하세요.</AdminEmptyState> : <ul className="mt-6 grid list-none gap-2 p-0">{providers.map((provider) => <AdminIntegrationRecord key={provider.id}><div><strong>{provider.displayName}</strong><span>{provider.state === "active" ? "활성" : "비활성"} · 연결된 계정 {provider.linkedIdentityCount}개</span><small>{provider.issuer} · 설정 v{provider.configVersion}</small></div><AdminRecordActions><Link className={buttonVariants({ size: "sm", variant: "secondary" })} href={`/admin/authentication/oidc/${provider.id}`}>상세 보기</Link></AdminRecordActions></AdminIntegrationRecord>)}</ul>}</AdminPanel>
-    {feedback ? <AdminFeedback feedbackTone={feedback.error ? "danger" : "success"} role={feedback.error ? "alert" : "status"}>{feedback.text}</AdminFeedback> : null}
+    <AdminPanel aria-labelledby="provider-list"><AdminCollectionHeading><h2 id="provider-list">등록된 제공자</h2><Badge>{providers.length}개</Badge></AdminCollectionHeading>{providers.length === 0 ? <AdminEmptyState title="등록된 로그인 제공자가 없습니다">새 제공자를 등록해 첫 OIDC 연결을 구성하세요.</AdminEmptyState> : <ul className="mt-6 grid list-none gap-2 p-0">{providers.map((provider) => <AdminIntegrationRecord key={provider.id}><div><strong>{provider.displayName}</strong><span>{(function () {
+    if (provider.state === "active") {
+        return ("활성");
+    }
+    return ("비활성");
+})()} · 연결된 계정 {provider.linkedIdentityCount}개</span><small>{provider.issuer} · 설정 v{provider.configVersion}</small></div><AdminRecordActions><Link className={buttonVariants({ size: "sm", variant: "secondary" })} href={`/admin/authentication/oidc/${provider.id}`}>상세 보기</Link></AdminRecordActions></AdminIntegrationRecord>)}</ul>}</AdminPanel>
+    {feedback ? <AdminFeedback feedbackTone={(function () {
+    if (feedback.error) {
+        return ("danger");
+    }
+    return ("success");
+})()} role={(function () {
+    if (feedback.error) {
+        return ("alert");
+    }
+    return ("status");
+})()}>{feedback.text}</AdminFeedback> : null}
     <ConfirmationDialog busy={mutation.isPending} confirmLabel={mutation.isPending ? "삭제 중…" : "제공자 삭제"} description={`${pendingDeletion?.displayName ?? "선택한 제공자"} 설정과 저장된 비밀키가 영구적으로 삭제됩니다.`} open={pendingDeletion !== undefined} title="인증 제공자를 삭제할까요?" onCancel={() => setPendingDeletion(undefined)} onConfirm={() => { if (pendingDeletion) void remove(pendingDeletion); }} />
   </AdminPage>;
 }
@@ -146,7 +161,17 @@ function OidcProviderCreate({ busy, feedback, onSubmit }: { readonly busy: boole
           <AdminFormActions><AdminFormActionNote>비활성 상태로 저장되며 완료 후 상세 화면으로 이동합니다.</AdminFormActionNote><Button type="submit" variant="primary" disabled={busy}>제공자 등록</Button></AdminFormActions>
         </AdminForm>
       </AdminPanel>
-      {feedback ? <AdminFeedback feedbackTone={feedback.error ? "danger" : "success"} role={feedback.error ? "alert" : "status"}>{feedback.text}</AdminFeedback> : null}
+      {feedback ? <AdminFeedback feedbackTone={(function () {
+    if (feedback.error) {
+        return ("danger");
+    }
+    return ("success");
+})()} role={(function () {
+    if (feedback.error) {
+        return ("alert");
+    }
+    return ("status");
+})()}>{feedback.text}</AdminFeedback> : null}
     </AdminPage>
   );
 }
@@ -208,7 +233,17 @@ function OidcProviderDetail({ busy, feedback, onActivate, onDelete, onDeleteCanc
       <AdminIntegrationDangerSection title="제공자 삭제" description="설정과 저장된 비밀키를 영구적으로 제거합니다. 연결된 계정이 있거나 활성 상태이면 삭제할 수 없습니다.">
         <Button variant="danger" disabled={busy || active || provider.linkedIdentityCount !== 0} onClick={onDelete}>제공자 삭제</Button>
       </AdminIntegrationDangerSection>
-      {feedback ? <AdminFeedback feedbackTone={feedback.error ? "danger" : "success"} role={feedback.error ? "alert" : "status"}>{feedback.text}</AdminFeedback> : null}
+      {feedback ? <AdminFeedback feedbackTone={(function () {
+    if (feedback.error) {
+        return ("danger");
+    }
+    return ("success");
+})()} role={(function () {
+    if (feedback.error) {
+        return ("alert");
+    }
+    return ("status");
+})()}>{feedback.text}</AdminFeedback> : null}
       <ConfirmationDialog busy={busy} confirmLabel={busy ? "삭제 중…" : "제공자 삭제"} description={`${provider.displayName} 설정과 저장된 비밀키가 영구적으로 삭제됩니다.`} open={pendingDeletion !== undefined} title="인증 제공자를 삭제할까요?" onCancel={onDeleteCancel} onConfirm={onDeleteConfirm} />
     </AdminPage>
   );

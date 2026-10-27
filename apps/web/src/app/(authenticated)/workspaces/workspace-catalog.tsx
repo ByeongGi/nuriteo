@@ -159,7 +159,12 @@ export function WorkspaceCatalog({ workspaces }: Readonly<{
                       <strong className={styles.rowTitle()}>{workspace.displayLabel}</strong>
                       <span className={styles.rowMeta()}>
                         <span className={styles.type()}>{workspaceOwnerLabel(workspace)} 워크스페이스</span>
-                        <span className={styles.rowDescription()}>{workspace.ownerType === "user" ? "개인 작업 공간" : "팀과 공유하는 작업 공간"}</span>
+                        <span className={styles.rowDescription()}>{(function () {
+    if (workspace.ownerType === "user") {
+        return ("개인 작업 공간");
+    }
+    return ("팀과 공유하는 작업 공간");
+})()}</span>
                       </span>
                     </span>
                     <span className={styles.arrow()} aria-hidden="true">›</span>

@@ -152,7 +152,17 @@ export function NotificationCenter({
         actions={<Link className={styles.settingsLink()} href="/account/notifications">알림 수신 설정</Link>}
       />
 
-      {feedback ? <p className={styles.feedback({ className: feedback.error ? styles.feedbackError() : styles.feedbackSuccess() })} role={feedback.error ? "alert" : "status"} aria-live="polite">{feedback.text}</p> : null}
+      {feedback ? <p className={styles.feedback({ className: (function () {
+    if (feedback.error) {
+        return (styles.feedbackError());
+    }
+    return (styles.feedbackSuccess());
+})() })} role={(function () {
+    if (feedback.error) {
+        return ("alert");
+    }
+    return ("status");
+})()} aria-live="polite">{feedback.text}</p> : null}
 
       <section className={styles.inbox()} aria-labelledby="notification-inbox-title"><TabsRoot value={view} onValueChange={(value) => setView(value as View)}>
           <div className={styles.heading()}>
@@ -184,29 +194,84 @@ export function NotificationCenter({
           <TabsPanel value={view} aria-busy={query !== deferredQuery}>
             {collection.nextCursor !== null ? <p className={styles.searchScope()}>현재 불러온 알림에서 검색합니다. 더 보기를 누르면 검색 범위가 넓어집니다.</p> : null}
             {visibleItems.length === 0 ? (
-              <div className={styles.empty()}><strong className={styles.emptyTitle()}>{view === "active" ? "새 알림이 없습니다." : "보관된 알림이 없습니다."}</strong><p className={styles.emptyDescription()}>{view === "active" ? "새로운 변경 사항이 생기면 이곳에 표시됩니다." : "보관한 알림을 다시 확인할 수 있습니다."}</p></div>
+              <div className={styles.empty()}><strong className={styles.emptyTitle()}>{(function () {
+    if (view === "active") {
+        return ("새 알림이 없습니다.");
+    }
+    return ("보관된 알림이 없습니다.");
+})()}</strong><p className={styles.emptyDescription()}>{(function () {
+    if (view === "active") {
+        return ("새로운 변경 사항이 생기면 이곳에 표시됩니다.");
+    }
+    return ("보관한 알림을 다시 확인할 수 있습니다.");
+})()}</p></div>
             ) : (
               <ol className={styles.list()} aria-live="polite">
                 {visibleItems.map((item) => (
-                  <li key={item.id} className={styles.item({ className: item.status === "unread" ? styles.itemUnread() : undefined })}>
-                    <span className={styles.indicator({ className: item.status === "unread" ? styles.indicatorUnread() : undefined })} aria-label={item.status === "unread" ? "읽지 않음" : "읽음"} />
+                  <li key={item.id} className={styles.item({ className: (function () {
+    if (item.status === "unread") {
+        return (styles.itemUnread());
+    }
+    return (undefined);
+})() })}>
+                    <span className={styles.indicator({ className: (function () {
+    if (item.status === "unread") {
+        return (styles.indicatorUnread());
+    }
+    return (undefined);
+})() })} aria-label={(function () {
+    if (item.status === "unread") {
+        return ("읽지 않음");
+    }
+    return ("읽음");
+})()} />
                     <div className={styles.itemCopy()}>
                       <p className={styles.itemMeta()}><span className={styles.classification()}>{labelClassification(item.classification)}</span><time dateTime={item.occurredAt}>{formatDate(item.occurredAt)}</time></p>
                       <h3 className={styles.itemTitle()}>{item.title}</h3>
                       <p className={styles.itemSummary()}>{item.summary}</p>
-                      {item.occurrenceCount > 1 ? <small className={styles.itemDetail()}>{item.occurrenceCount}회 발생</small> : null}
-                      {item.actionState !== "none" ? <small className={styles.itemDetail()}>처리 상태: {item.actionState}</small> : null}
+                      {(function () {
+    if (item.occurrenceCount > 1) {
+        return (<small className={styles.itemDetail()}>{item.occurrenceCount}회 발생</small>);
+    }
+    return (null);
+})()}
+                      {(function () {
+    if (item.actionState !== "none") {
+        return (<small className={styles.itemDetail()}>처리 상태: {item.actionState}</small>);
+    }
+    return (null);
+})()}
                     </div>
                     <div className={styles.itemActions()}>
-                      {item.status === "unread" ? <Button aria-label="읽음으로 표시" disabled={mutation.isPending} onClick={() => changeStatus(item, "read")}>읽음</Button> : null}
-                      {item.status === "read" ? <Button aria-label="읽지 않음으로 표시" disabled={mutation.isPending} onClick={() => changeStatus(item, "unread")}>읽지 않음</Button> : null}
-                      {item.status === "archived" ? <Button aria-label="알림 복원" disabled={mutation.isPending} onClick={() => changeStatus(item, "read")}>복원</Button> : <Button aria-label="알림 보관" variant="ghost" disabled={mutation.isPending} onClick={() => changeStatus(item, "archived")}>보관</Button>}
+                      {(function () {
+    if (item.status === "unread") {
+        return (<Button aria-label="읽음으로 표시" disabled={mutation.isPending} onClick={() => changeStatus(item, "read")}>읽음</Button>);
+    }
+    return (null);
+})()}
+                      {(function () {
+    if (item.status === "read") {
+        return (<Button aria-label="읽지 않음으로 표시" disabled={mutation.isPending} onClick={() => changeStatus(item, "unread")}>읽지 않음</Button>);
+    }
+    return (null);
+})()}
+                      {(function () {
+    if (item.status === "archived") {
+        return (<Button aria-label="알림 복원" disabled={mutation.isPending} onClick={() => changeStatus(item, "read")}>복원</Button>);
+    }
+    return (<Button aria-label="알림 보관" variant="ghost" disabled={mutation.isPending} onClick={() => changeStatus(item, "archived")}>보관</Button>);
+})()}
                     </div>
                   </li>
                 ))}
               </ol>
             )}
-            {collection.nextCursor !== null ? <Button className={styles.more()} aria-label="알림 더 보기" disabled={mutation.isPending} onClick={loadMore}>{mutation.isPending ? "불러오는 중…" : "알림 더 보기"}</Button> : null}
+            {collection.nextCursor !== null ? <Button className={styles.more()} aria-label="알림 더 보기" disabled={mutation.isPending} onClick={loadMore}>{(function () {
+    if (mutation.isPending) {
+        return ("불러오는 중…");
+    }
+    return ("알림 더 보기");
+})()}</Button> : null}
           </TabsPanel>
         </TabsRoot></section>
     </main>
@@ -215,7 +280,12 @@ export function NotificationCenter({
 
 function replaceOrPrepend(items: readonly NotificationInboxItem[], item: NotificationInboxItem) {
   const found = items.some((candidate) => candidate.id === item.id);
-  return found ? items.map((candidate) => candidate.id === item.id ? item : candidate) : [item, ...items];
+  return found ? items.map((candidate) => (function () {
+    if (candidate.id === item.id) {
+        return (item);
+    }
+    return (candidate);
+})()) : [item, ...items];
 }
 
 function mergeUniqueNotifications(

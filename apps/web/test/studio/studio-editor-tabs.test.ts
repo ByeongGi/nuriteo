@@ -69,7 +69,7 @@ assert.match(tree, /onDoubleClick=\{\(\) => onPin\(node\.file\.path\)\}/u);
 assert.match(tree, /dirtyPaths\.has\(node\.file\.path\)/u);
 assert.match(shell, /onCreateDirectory=\{beginCreateDirectory\}/u);
 assert.match(shell, /onMove=\{moveExplorerPath\}/u);
-assert.match(shell, /aria-label=\{isRunningPreview \? "미리보기 취소" : "미리보기 실행"\}/u);
+assert.match(shell, /aria-label=\{\(function \(\) \{\s*if \(isRunningPreview\) \{\s*return \("미리보기 취소"\);\s*\}\s*return \("미리보기 실행"\);\s*\}\)\(\)\}/u);
 assert.match(shell, /studioConsoleSourceLabel\(entry\.source\)/u);
 assert.equal(studioConsoleSourceLabel("page"), "페이지");
 assert.equal(studioConsoleSourceLabel("server"), "개발 서버");

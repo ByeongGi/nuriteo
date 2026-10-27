@@ -136,15 +136,45 @@ export function MfaPolicyEditor({ initial, view = "policy" }: { readonly initial
             <NumberField label="유예 기간(일)" min={0} max={30} step={1} value={graceDays} disabled={mutation.isPending} description="0일이면 다음 로그인 직후 접근이 제한됩니다." onValueChange={(nextValue) => { if (nextValue !== null) setGraceDays(nextValue); setImpact(undefined); }} />
           </AdminFormSection>
           <dl className="m-0 grid grid-cols-3 border-t border-muted-border max-[37.5rem]:grid-cols-1 [&>div]:px-5 [&>div]:py-4 [&_dt]:text-xs [&_dt]:text-subtle-foreground [&_dd]:mt-1 [&_dd]:font-mono [&_dd]:text-lg">
-            <div><dt>적용 대상 계정</dt><dd>{previewIsCurrent ? impact.affectedUsers : "—"}</dd></div>
-            <div><dt>등록 필요</dt><dd>{previewIsCurrent ? impact.unenrolledUsers : "—"}</dd></div>
-            <div><dt>즉시 제한</dt><dd>{previewIsCurrent ? impact.immediatelyRestrictedUsers : "—"}</dd></div>
-            <div><dt>등록된 로컬 관리자</dt><dd>{previewIsCurrent ? impact.enrolledLocalAdministrators : "—"}</dd></div>
+            <div><dt>적용 대상 계정</dt><dd>{(function () {
+    if (previewIsCurrent) {
+        return (impact.affectedUsers);
+    }
+    return ("—");
+})()}</dd></div>
+            <div><dt>등록 필요</dt><dd>{(function () {
+    if (previewIsCurrent) {
+        return (impact.unenrolledUsers);
+    }
+    return ("—");
+})()}</dd></div>
+            <div><dt>즉시 제한</dt><dd>{(function () {
+    if (previewIsCurrent) {
+        return (impact.immediatelyRestrictedUsers);
+    }
+    return ("—");
+})()}</dd></div>
+            <div><dt>등록된 로컬 관리자</dt><dd>{(function () {
+    if (previewIsCurrent) {
+        return (impact.enrolledLocalAdministrators);
+    }
+    return ("—");
+})()}</dd></div>
           </dl>
           <AdminFormActions>
-            <AdminFormActionNote>{mode === "off" ? "정책을 완화하면 접근은 즉시 복구되지만 이미 등록된 자격 증명은 해제하지 않습니다." : "활성 로컬 관리자 중 최소 한 명이 MFA와 복구 코드를 확인한 상태여야 합니다."}</AdminFormActionNote>
+            <AdminFormActionNote>{(function () {
+    if (mode === "off") {
+        return ("정책을 완화하면 접근은 즉시 복구되지만 이미 등록된 자격 증명은 해제하지 않습니다.");
+    }
+    return ("활성 로컬 관리자 중 최소 한 명이 MFA와 복구 코드를 확인한 상태여야 합니다.");
+})()}</AdminFormActionNote>
             <Button type="button" onClick={preview} disabled={mutation.isPending}>영향 검토</Button>
-            <Button type="submit" variant="primary" disabled={mutation.isPending || !previewIsCurrent}>{mutation.isPending ? "적용 중…" : "정책 적용"}</Button>
+            <Button type="submit" variant="primary" disabled={mutation.isPending || !previewIsCurrent}>{(function () {
+    if (mutation.isPending) {
+        return ("적용 중…");
+    }
+    return ("정책 적용");
+})()}</Button>
           </AdminFormActions>
         </AdminForm>
       </AdminSection> : null}
@@ -156,13 +186,38 @@ export function MfaPolicyEditor({ initial, view = "policy" }: { readonly initial
           <TextField label="이메일 또는 표시 이름으로 찾기" name="query" required minLength={2} maxLength={200} autoComplete="off" />
           <Button type="submit" disabled={mutation.isPending}>사용자 검색</Button>
         </form>
-        {targets.length > 0 ? <form className="mt-5 grid gap-4 border-t border-muted-border pt-5" onSubmit={reset} aria-busy={mutation.isPending}>
+        {(function () {
+    if (targets.length > 0) {
+        return (<form className="mt-5 grid gap-4 border-t border-muted-border pt-5" onSubmit={reset} aria-busy={mutation.isPending}>
           <RadioCardGroup label="복구할 계정 선택" name="resetTarget" options={targets.map((target) => ({ value: target.credentialGeneration, label: target.displayName, description: target.email }))} value={selectedTarget?.credentialGeneration ?? ""} onValueChange={(credentialGeneration) => { setSelectedTarget(targets.find((target) => target.credentialGeneration === credentialGeneration)); setResetConfirmed(false); }} />
-          {selectedTarget ? <div className="grid gap-3 rounded-lg border border-warning bg-subtle p-4"><p><strong>{selectedTarget.displayName}</strong> ({selectedTarget.email}) 계정의 인증 정보를 초기화합니다.</p><CheckboxField checked={resetConfirmed} onCheckedChange={setResetConfirmed} label="MFA, 복구 코드, 진행 중인 등록과 모든 활성 세션이 폐기됨을 확인했습니다." /><Button className="justify-self-start max-[40rem]:w-full" type="submit" variant="danger" disabled={mutation.isPending || !resetConfirmed}>인증 정보 초기화</Button></div> : null}
-        </form> : null}
+          {(function () {
+    if (selectedTarget) {
+        return (<div className="grid gap-3 rounded-lg border border-warning bg-subtle p-4"><p><strong>{selectedTarget.displayName}</strong> ({selectedTarget.email}) 계정의 인증 정보를 초기화합니다.</p><CheckboxField checked={resetConfirmed} onCheckedChange={setResetConfirmed} label="MFA, 복구 코드, 진행 중인 등록과 모든 활성 세션이 폐기됨을 확인했습니다." /><Button className="justify-self-start max-[40rem]:w-full" type="submit" variant="danger" disabled={mutation.isPending || !resetConfirmed}>인증 정보 초기화</Button></div>);
+    }
+    return (null);
+})()}
+        </form>);
+    }
+    return (null);
+})()}
       </AdminSection> : null}
 
-      {feedback ? <div className={`flex items-center justify-between gap-3 rounded-lg border p-4 ${feedback.tone === "error" ? "border-danger text-danger" : "border-success"}`} role={feedback.tone === "error" ? "alert" : "status"}><span>{feedback.text}</span>{feedback.reconcile ? <Button onClick={() => router.refresh()}>최신 상태 불러오기</Button> : null}</div> : null}
+      {feedback ? <div className={`flex items-center justify-between gap-3 rounded-lg border p-4 ${(function () {
+    if (feedback.tone === "error") {
+        return ("border-danger text-danger");
+    }
+    return ("border-success");
+})()}`} role={(function () {
+    if (feedback.tone === "error") {
+        return ("alert");
+    }
+    return ("status");
+})()}><span>{feedback.text}</span>{(function () {
+    if (feedback.reconcile) {
+        return (<Button onClick={() => router.refresh()}>최신 상태 불러오기</Button>);
+    }
+    return (null);
+})()}</div> : null}
     </AdminPage>
   );
 }

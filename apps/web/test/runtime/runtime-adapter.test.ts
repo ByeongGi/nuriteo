@@ -399,6 +399,7 @@ function readyWriterLease(): LocalDraftWriterLease {
       && !String(error).includes("not allowed")
   );
   assert.deepEqual(adapter.workspace.getState(), {
+    directories: [],
     errorCode: "RUNTIME_MATERIALIZATION_FAILED",
     files: [],
     projectId: draftProjectId,

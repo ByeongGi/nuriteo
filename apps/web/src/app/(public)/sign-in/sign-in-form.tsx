@@ -172,7 +172,12 @@ export function SignInForm({
           {error ? (
             <div id="sign-in-error" className={styles.error()} role="alert" aria-live="polite">
               <p>{error.message}</p>
-              {error.reference ? <p>요청 참조: {error.reference}</p> : null}
+              {(function () {
+    if (error.reference) {
+        return (<p>요청 참조: {error.reference}</p>);
+    }
+    return (null);
+})()}
             </div>
           ) : null}
 

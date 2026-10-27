@@ -113,11 +113,31 @@ export function BackupConsole({ initial, initialOperations = { items: initial.op
       {view === "overview" ? null : <Link className="inline-flex w-fit items-center gap-2 text-xs font-medium text-muted-foreground hover:text-foreground" href="/admin/operations/backups"><span aria-hidden="true">←</span>백업과 복구</Link>}
       <AdminPageHeader
         category="운영"
-        title={view === "policy" ? "백업 정책" : view === "actions" ? "백업 작업 실행" : "백업과 복구"}
-        description={view === "policy" ? "자동 백업 일정과 복구 지점 보존 기준을 설정합니다." : view === "actions" ? "즉시 백업, 복구 훈련 또는 보존 대상 정리를 명시적으로 실행합니다." : "복구 가능 상태와 최근 작업을 확인하고, 필요한 관리 작업으로 이동합니다."}
+        title={view === "policy" ? "백업 정책" : (function () {
+    if (view === "actions") {
+        return ("백업 작업 실행");
+    }
+    return ("백업과 복구");
+})()}
+        description={view === "policy" ? "자동 백업 일정과 복구 지점 보존 기준을 설정합니다." : (function () {
+    if (view === "actions") {
+        return ("즉시 백업, 복구 훈련 또는 보존 대상 정리를 명시적으로 실행합니다.");
+    }
+    return ("복구 가능 상태와 최근 작업을 확인하고, 필요한 관리 작업으로 이동합니다.");
+})()}
         aside={view === "overview" ? <div className="flex flex-wrap items-center gap-2"><AdminSummary>
-          <span className="shrink-0 rounded-full border border-success px-3 py-1 text-xs font-medium text-foreground data-[state=degraded]:border-warning" data-state={state.alerts.length === 0 ? "nominal" : "degraded"}>
-            {state.alerts.length === 0 ? "정상" : "확인 필요"}
+          <span className="shrink-0 rounded-full border border-success px-3 py-1 text-xs font-medium text-foreground data-[state=degraded]:border-warning" data-state={(function () {
+    if (state.alerts.length === 0) {
+        return ("nominal");
+    }
+    return ("degraded");
+})()}>
+            {(function () {
+    if (state.alerts.length === 0) {
+        return ("정상");
+    }
+    return ("확인 필요");
+})()}
           </span>
           <span>복구 지점 {state.restorePoints.length}개</span>
         </AdminSummary><Link className={buttonVariants({ size: "sm", variant: "secondary" })} href="/admin/operations/backups/policy">정책 설정</Link><Link className={buttonVariants({ size: "sm", variant: "primary" })} href="/admin/operations/backups/actions">작업 실행</Link></div> : null}
@@ -126,7 +146,12 @@ export function BackupConsole({ initial, initialOperations = { items: initial.op
       {view === "overview" && state.alerts.length > 0 ? (
         <AdminSection className="border-warning [&_ul]:m-0 [&_ul]:list-none [&_ul]:border-t [&_ul]:border-muted-border [&_ul]:p-0 [&_li]:flex [&_li]:items-start [&_li]:justify-between [&_li]:gap-4 [&_li]:border-b [&_li]:border-muted-border [&_li]:px-4 [&_li]:py-3 [&_li:last-child]:border-b-0 max-[37.5rem]:[&_li]:flex-col max-[37.5rem]:[&_li]:items-stretch" aria-labelledby="backup-alerts-title">
           <AdminSectionHeading><h2 id="backup-alerts-title">백업 알림</h2></AdminSectionHeading>
-          <ul>{state.alerts.map((alert) => <li key={alert.code}><strong>{backupAlertMessage(alert.code, alert.message)}</strong><span>{alert.level === "critical" ? "긴급" : "주의"}</span></li>)}</ul>
+          <ul>{state.alerts.map((alert) => <li key={alert.code}><strong>{backupAlertMessage(alert.code, alert.message)}</strong><span>{(function () {
+    if (alert.level === "critical") {
+        return ("긴급");
+    }
+    return ("주의");
+})()}</span></li>)}</ul>
         </AdminSection>
       ) : null}
 
@@ -149,7 +174,12 @@ export function BackupConsole({ initial, initialOperations = { items: initial.op
         </AdminSectionHeading>
         <div className={styles.formBody()}>
           <AdminFormSection orientation="stacked" title={<PolicySectionTitle step="1">백업 일정</PolicySectionTitle>} description="자동 백업을 켜고, 실제 운영자가 읽는 순서대로 실행 간격과 기준 시각을 설정합니다.">
-            <div className={styles.toggle()}><RadioCardGroup layout="columns" label="자동 백업 상태" name="backupEnabled" options={[{ value: "enabled", label: "자동 백업 사용", description: "설정한 일정에 따라 새 복구 지점을 생성합니다." }, { value: "disabled", label: "자동 백업 사용 안 함", description: "예약 실행만 중지하며 기존 복구 지점은 유지합니다." }]} value={draft.enabled ? "enabled" : "disabled"} onValueChange={(value) => setDraft({ ...draft, enabled: value === "enabled" })} /></div>
+            <div className={styles.toggle()}><RadioCardGroup layout="columns" label="자동 백업 상태" name="backupEnabled" options={[{ value: "enabled", label: "자동 백업 사용", description: "설정한 일정에 따라 새 복구 지점을 생성합니다." }, { value: "disabled", label: "자동 백업 사용 안 함", description: "예약 실행만 중지하며 기존 복구 지점은 유지합니다." }]} value={(function () {
+    if (draft.enabled) {
+        return ("enabled");
+    }
+    return ("disabled");
+})()} onValueChange={(value) => setDraft({ ...draft, enabled: value === "enabled" })} /></div>
             <div className={styles.scheduleList()}>
               <div className={styles.settingRow()}>
                 <div className={styles.settingCopy()}><span className={styles.metricTitle()}>실행 간격</span><span className={styles.metricDescription()}>마지막 실행을 기준으로 다음 백업을 예약합니다.</span></div>
@@ -184,23 +214,63 @@ export function BackupConsole({ initial, initialOperations = { items: initial.op
               </div>
             </div>
           </AdminFormSection>
-          <AdminFormActions><AdminFormActionNote>변경 전 현재 저장소 접근 권한과 최근 복구 훈련 결과를 확인하세요.</AdminFormActionNote><Button type="submit" variant="primary" disabled={mutation.isPending}>{mutation.isPending ? "저장 중…" : "정책 저장"}</Button></AdminFormActions>
+          <AdminFormActions><AdminFormActionNote>변경 전 현재 저장소 접근 권한과 최근 복구 훈련 결과를 확인하세요.</AdminFormActionNote><Button type="submit" variant="primary" disabled={mutation.isPending}>{(function () {
+    if (mutation.isPending) {
+        return ("저장 중…");
+    }
+    return ("정책 저장");
+})()}</Button></AdminFormActions>
         </div>
       </AdminForm> : null}
 
-      {feedback ? <AdminFeedback feedbackTone={feedback.error ? "danger" : "success"} role={feedback.error ? "alert" : "status"}>{feedback.text}</AdminFeedback> : null}
+      {feedback ? <AdminFeedback feedbackTone={(function () {
+    if (feedback.error) {
+        return ("danger");
+    }
+    return ("success");
+})()} role={(function () {
+    if (feedback.error) {
+        return ("alert");
+    }
+    return ("status");
+})()}>{feedback.text}</AdminFeedback> : null}
 
       {view === "overview" ? <AdminSection className="[&_ol]:m-0 [&_ol]:list-none [&_ol]:border-t [&_ol]:border-muted-border [&_ol]:p-0 [&_li]:flex [&_li]:items-start [&_li]:justify-between [&_li]:gap-4 [&_li]:border-b [&_li]:border-muted-border [&_li]:px-4 [&_li]:py-3 [&_li:last-child]:border-b-0 max-[37.5rem]:[&_li]:flex-col max-[37.5rem]:[&_li]:items-stretch" aria-labelledby="restore-points-title">
         <AdminSectionHeading><div><p className="m-0 mb-3 text-xs font-semibold uppercase tracking-[0.08em] text-accent-foreground">검증된 상태</p><h2 id="restore-points-title">복구 지점</h2></div></AdminSectionHeading>
-        {state.restorePoints.length === 0 ? <AdminNote>사용 가능한 완료 복구 지점이 없습니다.</AdminNote> : (
+        {(function () {
+    if (state.restorePoints.length === 0) {
+        return (<AdminNote>사용 가능한 완료 복구 지점이 없습니다.</AdminNote>);
+    }
+    return ((
           <ol>{state.restorePoints.map((point) => <li key={point.id}><div><strong>{new Date(point.completedAt).toLocaleString("ko-KR")}</strong><span>{formatBytes(point.payloadBytes)} · 오브젝트 {point.objectCount}개 · {point.retainedAs.join(", ") || "미보존"}</span></div><Button size="sm" variant="secondary" disabled={mutation.isPending} onClick={() => void run("verify", point.id)}>검증</Button></li>)}</ol>
-        )}
+        ));
+})()}
       </AdminSection> : null}
 
       {view === "overview" ? <AdminSection aria-labelledby="backup-history-title">
         <AdminSectionHeading><div><p className="m-0 mb-3 text-xs font-semibold uppercase tracking-[0.08em] text-accent-foreground">지속 작업 대기열</p><h2 id="backup-history-title">작업 기록</h2></div></AdminSectionHeading>
-        {operationPage.items.length === 0 ? <AdminNote>요청된 백업 작업이 없습니다.</AdminNote> : <div className="overflow-x-auto border-t border-muted-border"><table className="w-full min-w-[46rem] border-collapse text-left text-sm"><thead className="bg-subtle text-xs text-muted-foreground"><tr><th className="px-4 py-2.5 font-medium" scope="col">작업</th><th className="px-4 py-2.5 font-medium" scope="col">실행 방식</th><th className="px-4 py-2.5 font-medium" scope="col">상태</th><th className="px-4 py-2.5 font-medium" scope="col">요청 시각</th></tr></thead><tbody>{operationPage.items.map((operation) => <tr className="border-t border-muted-border" key={operation.id}><td className="px-4 py-3 font-medium text-foreground">{actionLabel(operation.kind)}</td><td className="px-4 py-3 text-muted-foreground">{operation.source === "manual" ? "관리자 실행" : "예약 실행"}</td><td className="px-4 py-3"><span className="font-medium text-foreground">{operationStateLabel(operation.state)}</span>{operation.failureCode ? <span className="ml-2 text-xs text-danger">{operation.failureCode}</span> : null}</td><td className="px-4 py-3 text-muted-foreground"><time dateTime={operation.requestedAt}>{new Date(operation.requestedAt).toLocaleString("ko-KR")}</time></td></tr>)}</tbody></table></div>}
-        <footer className="flex items-center justify-between gap-4 border-t border-muted-border px-4 py-3 max-[37.5rem]:flex-col max-[37.5rem]:items-stretch"><span className="text-xs text-muted-foreground">{operationPageIndex + 1}페이지 · 현재 {operationPage.items.length}건</span><nav className="flex justify-end gap-2 max-[37.5rem]:[&_[data-slot=button]]:flex-1" aria-label="백업 작업 기록 페이지 이동"><Button size="sm" disabled={operationPageIndex === 0 || operationPageLoading} onClick={() => setOperationPageIndex((current) => Math.max(0, current - 1))}>이전</Button><Button size="sm" variant="primary" disabled={(operationPageIndex >= operationPages.length - 1 && operationPage.nextCursor === null) || operationPageLoading} onClick={() => void nextOperationPage()}>{operationPageLoading ? "불러오는 중…" : "다음"}</Button></nav></footer>
+        {(function () {
+    if (operationPage.items.length === 0) {
+        return (<AdminNote>요청된 백업 작업이 없습니다.</AdminNote>);
+    }
+    return (<div className="overflow-x-auto border-t border-muted-border"><table className="w-full min-w-[46rem] border-collapse text-left text-sm"><thead className="bg-subtle text-xs text-muted-foreground"><tr><th className="px-4 py-2.5 font-medium" scope="col">작업</th><th className="px-4 py-2.5 font-medium" scope="col">실행 방식</th><th className="px-4 py-2.5 font-medium" scope="col">상태</th><th className="px-4 py-2.5 font-medium" scope="col">요청 시각</th></tr></thead><tbody>{operationPage.items.map((operation) => <tr className="border-t border-muted-border" key={operation.id}><td className="px-4 py-3 font-medium text-foreground">{actionLabel(operation.kind)}</td><td className="px-4 py-3 text-muted-foreground">{(function () {
+    if (operation.source === "manual") {
+        return ("관리자 실행");
+    }
+    return ("예약 실행");
+})()}</td><td className="px-4 py-3"><span className="font-medium text-foreground">{operationStateLabel(operation.state)}</span>{(function () {
+    if (operation.failureCode) {
+        return (<span className="ml-2 text-xs text-danger">{operation.failureCode}</span>);
+    }
+    return (null);
+})()}</td><td className="px-4 py-3 text-muted-foreground"><time dateTime={operation.requestedAt}>{new Date(operation.requestedAt).toLocaleString("ko-KR")}</time></td></tr>)}</tbody></table></div>);
+})()}
+        <footer className="flex items-center justify-between gap-4 border-t border-muted-border px-4 py-3 max-[37.5rem]:flex-col max-[37.5rem]:items-stretch"><span className="text-xs text-muted-foreground">{operationPageIndex + 1}페이지 · 현재 {operationPage.items.length}건</span><nav className="flex justify-end gap-2 max-[37.5rem]:[&_[data-slot=button]]:flex-1" aria-label="백업 작업 기록 페이지 이동"><Button size="sm" disabled={operationPageIndex === 0 || operationPageLoading} onClick={() => setOperationPageIndex((current) => Math.max(0, current - 1))}>이전</Button><Button size="sm" variant="primary" disabled={(operationPageIndex >= operationPages.length - 1 && operationPage.nextCursor === null) || operationPageLoading} onClick={() => void nextOperationPage()}>{(function () {
+    if (operationPageLoading) {
+        return ("불러오는 중…");
+    }
+    return ("다음");
+})()}</Button></nav></footer>
       </AdminSection> : null}
     </AdminPage>
   );

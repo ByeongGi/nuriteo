@@ -133,17 +133,36 @@ export function IntegrationCaConsole({ appearance = "embedded", initialCollectio
               </AdminFormActions>
             </AdminForm></CollapsibleContent></CollapsiblePanel>
           </CollapsibleRoot>
-          {items.length === 0 ? (
+          {(function () {
+    if (items.length === 0) {
+        return ((
             <AdminEmptyState title="사용자 CA가 없습니다">현재 시스템 신뢰 저장소만 사용하고 있습니다.</AdminEmptyState>
-          ) : (
+          ));
+    }
+    return ((
             <ul className={styles.list()}>
               {items.map((item) => (
                 <li className={styles.item()} key={item.id}>
                   <div className={styles.itemCopy()}>
                     <div className={styles.itemHeading()}>
-                      <strong>{item.state === "active" ? "활성 인증서" : "검증 대기 후보"}</strong>
-                      <Badge size="sm" tone={item.state === "active" ? "success" : "warning"} variant="status">
-                        {item.state === "active" ? "사용 중" : "검증 필요"}
+                      <strong>{(function () {
+    if (item.state === "active") {
+        return ("활성 인증서");
+    }
+    return ("검증 대기 후보");
+})()}</strong>
+                      <Badge size="sm" tone={(function () {
+    if (item.state === "active") {
+        return ("success");
+    }
+    return ("warning");
+})()} variant="status">
+                        {(function () {
+    if (item.state === "active") {
+        return ("사용 중");
+    }
+    return ("검증 필요");
+})()}
                       </Badge>
                     </div>
                     <span className={styles.itemMeta()}>
@@ -151,18 +170,29 @@ export function IntegrationCaConsole({ appearance = "embedded", initialCollectio
                     </span>
                     <p className={styles.fingerprint()}>SHA-256 · {item.fingerprints.join(" · ")}</p>
                   </div>
-                  {item.state === "candidate" ? (
+                  {(function () {
+    if (item.state === "candidate") {
+        return ((
                     <Button variant="primary" disabled={pending} onClick={() => void activate(item)}>
                       사전 점검 후 활성화
                     </Button>
-                  ) : null}
+                  ));
+    }
+    return (null);
+})()}
                 </li>
               ))}
             </ul>
-          )}
+          ));
+})()}
         </>
       )}
-      {message ? <p className={styles.message()} role={message.error ? "alert" : "status"}>{message.text}</p> : null}
+      {message ? <p className={styles.message()} role={(function () {
+    if (message.error) {
+        return ("alert");
+    }
+    return ("status");
+})()}>{message.text}</p> : null}
     </section>
   );
 }

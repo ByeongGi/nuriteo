@@ -53,7 +53,12 @@ export function UpdateReadinessConsole({
         title="버전 관리"
         description="민감 정보를 제거한 호환성 및 사전 점검 보고서를 검토하세요. 승인은 배포 작업에 운영자의 의도만 기록하며 업데이트를 시작하지 않습니다."
         aside={<div className="flex flex-wrap items-center gap-2"><AdminSummary>
-          <span className="shrink-0 rounded-full border border-success px-3 py-1 text-xs font-medium text-foreground data-[state=degraded]:border-warning" data-state={readiness.state === "ready" ? "nominal" : "degraded"}>{readiness.state === "ready" ? "승인 가능" : readiness.state === "current" ? "최신 상태" : "차단됨"}</span>
+          <span className="shrink-0 rounded-full border border-success px-3 py-1 text-xs font-medium text-foreground data-[state=degraded]:border-warning" data-state={readiness.state === "ready" ? "nominal" : "degraded"}>{readiness.state === "ready" ? "승인 가능" : (function () {
+    if (readiness.state === "current") {
+        return ("최신 상태");
+    }
+    return ("차단됨");
+})()}</span>
           <time dateTime={readiness.generatedAt}>{formatTimestamp(readiness.generatedAt)}</time>
         </AdminSummary><Link className={buttonVariants({ size: "sm", variant: "secondary" })} href="/admin/system/updates/history">승인 이력</Link></div>}
       />
@@ -132,14 +137,22 @@ export function UpdateReadinessConsole({
           <div className="flex items-center justify-between gap-4 border-t border-muted-border px-4 py-3 max-[37.5rem]:flex-col max-[37.5rem]:items-stretch [&_label]:flex [&_label]:max-w-[42rem] [&_label]:items-start [&_label]:gap-2 [&_label]:text-sm" aria-busy={mutation.isPending}>
             <CheckboxField checked={acknowledged} disabled={mutation.isPending} onCheckedChange={setAcknowledged} label="차단 요인을 검토했으며 이 작업이 승인만 기록하고 업데이트를 실행하지 않음을 이해했습니다." />
             <Button type="button" disabled={!acknowledged || mutation.isPending} onClick={approve}>
-              {mutation.isPending ? "승인 기록 중…" : "업데이트 승인 기록"}
+              {(function () {
+    if (mutation.isPending) {
+        return ("승인 기록 중…");
+    }
+    return ("업데이트 승인 기록");
+})()}
             </Button>
           </div>
         ) : (
           <AdminNote>
-            {readiness.state === "current"
-              ? "이 인스턴스는 이미 최신 스키마를 사용 중이므로 승인이 필요하지 않습니다."
-              : "사전 점검 차단 요인이 남아 있는 동안에는 승인할 수 없습니다."}
+            {(function () {
+    if (readiness.state === "current") {
+        return ("이 인스턴스는 이미 최신 스키마를 사용 중이므로 승인이 필요하지 않습니다.");
+    }
+    return ("사전 점검 차단 요인이 남아 있는 동안에는 승인할 수 없습니다.");
+})()}
           </AdminNote>
         )}
         {notice ? <p role="status" className="m-0 border-t border-muted-border px-5 py-3">{notice}</p> : null}

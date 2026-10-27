@@ -266,11 +266,21 @@ export function PublishedExamplePreview({
         </div>
         {status === "running" || status === "loading" ? (
           <Button type="button" variant="secondary" onClick={() => void stopPreview()}>
-            {status === "loading" ? "미리보기 취소" : "미리보기 종료"}
+            {(function () {
+    if (status === "loading") {
+        return ("미리보기 취소");
+    }
+    return ("미리보기 종료");
+})()}
           </Button>
         ) : (
           <Button type="button" disabled={disabled || status === "stopping"} onClick={() => void startPreview()}>
-            {status === "stopping" ? "종료하는 중…" : "격리 미리보기 실행"}
+            {(function () {
+    if (status === "stopping") {
+        return ("종료하는 중…");
+    }
+    return ("격리 미리보기 실행");
+})()}
           </Button>
         )}
       </div>

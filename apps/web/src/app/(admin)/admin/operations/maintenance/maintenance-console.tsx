@@ -112,7 +112,17 @@ export function MaintenanceConsole({ initial }: { readonly initial: AdminMainten
         />
       )}
       {feedback ? (
-        <AdminFeedback feedbackTone={feedback.error ? "danger" : "success"} role={feedback.error ? "alert" : "status"}>
+        <AdminFeedback feedbackTone={(function () {
+    if (feedback.error) {
+        return ("danger");
+    }
+    return ("success");
+})()} role={(function () {
+    if (feedback.error) {
+        return ("alert");
+    }
+    return ("status");
+})()}>
           {feedback.text}
         </AdminFeedback>
       ) : null}

@@ -35,7 +35,12 @@ export async function publicPreviewClientIdentity(
     abuseProof: encodeBase64Url(proof),
     setCookie: cookieValue === existing
       ? undefined
-      : `${COOKIE_NAME}=${cookieValue}; HttpOnly; Max-Age=2592000; Path=/; SameSite=Strict${secure ? "; Secure" : ""}`
+      : `${COOKIE_NAME}=${cookieValue}; HttpOnly; Max-Age=2592000; Path=/; SameSite=Strict${(function () {
+    if (secure) {
+        return ("; Secure");
+    }
+    return ("");
+})()}`
   };
 }
 

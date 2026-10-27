@@ -30,7 +30,17 @@ export function MemberDirectory({ canManage, currentUserId, members, organizatio
         <SelectField label="역할 필터" labelHidden options={[{ value: "all", label: "모든 역할" }, { value: "owner", label: "소유자" }, { value: "member", label: "멤버" }]} value={role} onValueChange={(value) => setRole(value === "owner" || value === "member" ? value : "all")} />
       </div>
       <p className={styles.summary()} role="status">전체 {members.length}명 중 {visibleMembers.length}명</p>
-      {visibleMembers.length === 0 ? <div className={styles.empty()}>조건에 맞는 멤버가 없습니다.</div> : <ul className={styles.list()} aria-busy={query !== deferredQuery} aria-label="워크스페이스 멤버">{visibleMembers.map((member) => <li className={styles.row()} key={member.userId}><div className={styles.identity()}><span className={styles.name()}>{member.displayName}{member.userId === currentUserId ? " (나)" : ""}</span><span className={styles.metadata()}>{member.userId}</span></div><span className={styles.role()}>{member.role === "owner" ? "소유자" : "멤버"}</span><Button size="sm" render={<Link href={`${base}/${encodeURIComponent(member.userId)}`} />}>상세 보기</Button></li>)}</ul>}
+      {visibleMembers.length === 0 ? <div className={styles.empty()}>조건에 맞는 멤버가 없습니다.</div> : <ul className={styles.list()} aria-busy={query !== deferredQuery} aria-label="워크스페이스 멤버">{visibleMembers.map((member) => <li className={styles.row()} key={member.userId}><div className={styles.identity()}><span className={styles.name()}>{member.displayName}{(function () {
+    if (member.userId === currentUserId) {
+        return (" (나)");
+    }
+    return ("");
+})()}</span><span className={styles.metadata()}>{member.userId}</span></div><span className={styles.role()}>{(function () {
+    if (member.role === "owner") {
+        return ("소유자");
+    }
+    return ("멤버");
+})()}</span><Button size="sm" render={<Link href={`${base}/${encodeURIComponent(member.userId)}`} />}>상세 보기</Button></li>)}</ul>}
     </WorkspaceSection>
   );
 }

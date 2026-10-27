@@ -180,7 +180,17 @@ export function RegistryConsole({
     <AdminPanel aria-labelledby="registry-list">
       <AdminCollectionHeading><h2 id="registry-list">등록된 저장소</h2><Badge>{registries.length}개</Badge></AdminCollectionHeading>
       {registries.length === 0 ? <AdminEmptyState title="등록된 패키지 저장소가 없습니다">새 저장소를 등록해 첫 npm 호환 연결을 구성하세요.</AdminEmptyState> : <ul className="mt-6 grid list-none gap-2 p-0">{registries.map((registry) => <AdminIntegrationRecord key={registry.id}>
-        <div><strong>{registry.displayName}{registry.isDefault ? " · 기본값" : ""}</strong><span>{registry.state === "active" ? "활성" : "비활성"}</span><small>{registry.baseUrl} · 연결된 스코프 {scopes.filter((scope) => scope.connectionId === registry.id).length}개</small></div>
+        <div><strong>{registry.displayName}{(function () {
+    if (registry.isDefault) {
+        return (" · 기본값");
+    }
+    return ("");
+})()}</strong><span>{(function () {
+    if (registry.state === "active") {
+        return ("활성");
+    }
+    return ("비활성");
+})()}</span><small>{registry.baseUrl} · 연결된 스코프 {scopes.filter((scope) => scope.connectionId === registry.id).length}개</small></div>
         <AdminRecordActions><Link className={buttonVariants({ size: "sm", variant: "secondary" })} href={`/admin/integrations/registries/${registry.id}`}>상세 보기</Link></AdminRecordActions>
       </AdminIntegrationRecord>)}</ul>}
     </AdminPanel>
@@ -199,7 +209,17 @@ export function RegistryConsole({
       </AdminForm>
       {scopes.length === 0 ? <AdminEmptyState title="등록된 스코프 경로가 없습니다">활성 저장소를 선택해 첫 패키지 경로를 추가하세요.</AdminEmptyState> : <ul className="mt-6 grid list-none gap-2 p-0 [&>li]:flex [&>li]:items-center [&>li]:justify-between [&>li]:gap-3 [&>li]:border-b [&>li]:border-muted-border [&>li]:py-3 [&>li>div]:grid [&>li>div]:gap-1 [&_span]:text-xs [&_span]:text-muted-foreground">{scopes.map((route) => <li key={route.scope}><div><strong>{route.scope}</strong><span>{registries.find((registry) => registry.id === route.connectionId)?.displayName ?? "사용할 수 없는 저장소"}</span></div></li>)}</ul>}
     </AdminPanel>
-    {feedback ? <AdminFeedback feedbackTone={feedback.error ? "danger" : "success"} role={feedback.error ? "alert" : "status"}>{feedback.text}</AdminFeedback> : null}
+    {feedback ? <AdminFeedback feedbackTone={(function () {
+    if (feedback.error) {
+        return ("danger");
+    }
+    return ("success");
+})()} role={(function () {
+    if (feedback.error) {
+        return ("alert");
+    }
+    return ("status");
+})()}>{feedback.text}</AdminFeedback> : null}
     <ConfirmationDialog busy={mutation.isPending} confirmLabel={mutation.isPending ? "삭제 중…" : "저장소 삭제"} description={`${pendingDeletion?.displayName ?? "선택한 저장소"}의 자격 증명과 연결된 스코프 경로가 영구적으로 삭제됩니다.`} open={pendingDeletion !== undefined} title="패키지 저장소를 삭제할까요?" onCancel={() => setPendingDeletion(undefined)} onConfirm={() => { if (pendingDeletion) void remove(pendingDeletion); }} />
   </AdminPage>;
 }
@@ -236,7 +256,17 @@ function RegistryCreate({ busy, feedback, onSubmit }: { readonly busy: boolean; 
         </AdminFormSection>
         <AdminFormActions><AdminFormActionNote>비활성 상태로 저장되며 완료 후 상세 화면으로 이동합니다.</AdminFormActionNote><Button type="submit" variant="primary" disabled={busy}>저장소 등록</Button></AdminFormActions>
       </AdminForm></AdminPanel>
-      {feedback ? <AdminFeedback feedbackTone={feedback.error ? "danger" : "success"} role={feedback.error ? "alert" : "status"}>{feedback.text}</AdminFeedback> : null}
+      {feedback ? <AdminFeedback feedbackTone={(function () {
+    if (feedback.error) {
+        return ("danger");
+    }
+    return ("success");
+})()} role={(function () {
+    if (feedback.error) {
+        return ("alert");
+    }
+    return ("status");
+})()}>{feedback.text}</AdminFeedback> : null}
     </AdminPage>
   );
 }
@@ -303,7 +333,17 @@ function RegistryDetail({ busy, feedback, onActivate, onDelete, onDeleteCancel, 
       <AdminIntegrationDangerSection title="저장소 삭제" description="연결 설정, 접근 토큰과 연결된 스코프 경로를 영구적으로 제거합니다. 먼저 저장소를 비활성화해야 합니다.">
         <Button variant="danger" disabled={busy || active} onClick={onDelete}>저장소 삭제</Button>
       </AdminIntegrationDangerSection>
-      {feedback ? <AdminFeedback feedbackTone={feedback.error ? "danger" : "success"} role={feedback.error ? "alert" : "status"}>{feedback.text}</AdminFeedback> : null}
+      {feedback ? <AdminFeedback feedbackTone={(function () {
+    if (feedback.error) {
+        return ("danger");
+    }
+    return ("success");
+})()} role={(function () {
+    if (feedback.error) {
+        return ("alert");
+    }
+    return ("status");
+})()}>{feedback.text}</AdminFeedback> : null}
       <ConfirmationDialog busy={busy} confirmLabel={busy ? "삭제 중…" : "저장소 삭제"} description={`${registry.displayName}의 자격 증명과 연결된 스코프 경로가 영구적으로 삭제됩니다.`} open={pendingDeletion !== undefined} title="패키지 저장소를 삭제할까요?" onCancel={onDeleteCancel} onConfirm={onDeleteConfirm} />
     </AdminPage>
   );

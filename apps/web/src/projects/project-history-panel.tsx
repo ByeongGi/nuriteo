@@ -305,18 +305,38 @@ export function ProjectHistoryPanel({
       </header>
 
       <p className={styles.status()} role="status" aria-live="polite">{status}</p>
-      {error ? <div className={`${styles.feedback()} ${styles.error()}`} role="alert"><p>{error}</p>{stale ? <Button className="justify-self-start" type="button" size="sm" onClick={onReloadProject}>최신 프로젝트 다시 불러오기</Button> : null}</div> : null}
+      {error ? <div className={`${styles.feedback()} ${styles.error()}`} role="alert"><p>{error}</p>{(function () {
+    if (stale) {
+        return (<Button className="justify-self-start" type="button" size="sm" onClick={onReloadProject}>최신 프로젝트 다시 불러오기</Button>);
+    }
+    return (null);
+})()}</div> : null}
       {restoredHead !== undefined ? (
         <div className={`${styles.feedback()} ${styles.restored()}`}>
-          <p><strong>서버 v{restoredHead.projectVersion}을 복구했습니다.</strong> {hasLocalDraft ? "현재 로컬 초안은 열린 상태로 그대로 유지됩니다." : "열린 로컬 초안이 없습니다."}</p>
-          {!archived && hasLocalDraft ? <Button className="justify-self-start" type="button" size="sm" variant="primary" onClick={() => onResumeRestoredSave(restoredHead)}>로컬 초안을 복구한 서버 저장본으로 교체</Button> : null}
+          <p><strong>서버 v{restoredHead.projectVersion}을 복구했습니다.</strong> {(function () {
+    if (hasLocalDraft) {
+        return ("현재 로컬 초안은 열린 상태로 그대로 유지됩니다.");
+    }
+    return ("열린 로컬 초안이 없습니다.");
+})()}</p>
+          {(function () {
+    if (!archived && hasLocalDraft) {
+        return (<Button className="justify-self-start" type="button" size="sm" variant="primary" onClick={() => onResumeRestoredSave(restoredHead)}>로컬 초안을 복구한 서버 저장본으로 교체</Button>);
+    }
+    return (null);
+})()}
         </div>
       ) : null}
 
       {!archived ? (
         <form className={styles.createForm()} onSubmit={createVersion} aria-busy={isMutating}>
           <TextField label="버전 이름" name="versionName" required maxLength={200} disabled={isMutating || projectEtag === undefined} />
-          <Button type="submit" size="sm" disabled={isMutating || projectEtag === undefined}>{isMutating ? "처리 중…" : "버전 만들기"}</Button>
+          <Button type="submit" size="sm" disabled={isMutating || projectEtag === undefined}>{(function () {
+    if (isMutating) {
+        return ("처리 중…");
+    }
+    return ("버전 만들기");
+})()}</Button>
         </form>
       ) : null}
 
@@ -350,12 +370,22 @@ export function ProjectHistoryPanel({
           onRestore={openRestore}
         />
       </div>
-      {cursor !== null ? <Button className={styles.more()} type="button" size="sm" disabled={isLoadingMore} onClick={() => void loadMore()}>{isLoadingMore ? "불러오는 중…" : `버전 ${VERSION_PAGE_SIZE}개 더 보기`}</Button> : null}
+      {cursor !== null ? <Button className={styles.more()} type="button" size="sm" disabled={isLoadingMore} onClick={() => void loadMore()}>{(function () {
+    if (isLoadingMore) {
+        return ("불러오는 중…");
+    }
+    return (`버전 ${VERSION_PAGE_SIZE}개 더 보기`);
+})()}</Button> : null}
 
       <ConfirmationDialog
         busy={isMutating}
         confirmLabel={isMutating ? "복구 중…" : "서버 작업 버전 복구"}
-        description={pendingRestore === undefined ? "" : `선택한 ${formatTimestamp(pendingRestore.createdAt)} 스냅샷을 새로운 서버 작업 버전으로 지정합니다. ${hasLocalDraft ? "직접 교체하기 전까지 열린 로컬 초안은 그대로 유지됩니다." : "브라우저가 로컬 초안을 자동으로 시작하거나 교체하지 않습니다."}`}
+        description={pendingRestore === undefined ? "" : `선택한 ${formatTimestamp(pendingRestore.createdAt)} 스냅샷을 새로운 서버 작업 버전으로 지정합니다. ${(function () {
+    if (hasLocalDraft) {
+        return ("직접 교체하기 전까지 열린 로컬 초안은 그대로 유지됩니다.");
+    }
+    return ("브라우저가 로컬 초안을 자동으로 시작하거나 교체하지 않습니다.");
+})()}`}
         open={pendingRestore !== undefined}
         title={pendingRestore === undefined ? "버전을 복구할까요?" : `${pendingRestore.label}을 복구할까요?`}
         tone="danger"
@@ -380,18 +410,28 @@ function HistoryList({ archived, heading, isLoading, isMutating, items, onRestor
   return (
     <section className={styles.listSection()} aria-label={heading}>
       <div className={styles.listHeading()}><h4>{heading}</h4><Badge size="sm" tone="neutral" variant="count">{items.length}개</Badge></div>
-      {isLoading ? <p className={styles.listEmpty()}>불러오는 중…</p> : items.length === 0 ? <p className={styles.listEmpty()}>아직 {heading}이 없습니다.</p> : (
+      {isLoading ? <p className={styles.listEmpty()}>불러오는 중…</p> : (function () {
+    if (items.length === 0) {
+        return (<p className={styles.listEmpty()}>아직 {heading}이 없습니다.</p>);
+    }
+    return ((
         <ScrollAreaRoot className={styles.scrollRoot()}>
           <ScrollAreaViewport>
             <ScrollAreaContent>
               <ol className={styles.list()}>
-                {items.map((item) => <li className={styles.item()} key={item.id}><div className={styles.itemLayout()}><div className={styles.itemCopy()}><strong title={item.label}>{item.label}</strong><p>{formatTimestamp(item.createdAt)} · {item.detail}</p></div>{archived ? null : <Button type="button" size="sm" disabled={isMutating} onClick={(event) => onRestore(item, event.currentTarget)}>복구</Button>}</div></li>)}
+                {items.map((item) => <li className={styles.item()} key={item.id}><div className={styles.itemLayout()}><div className={styles.itemCopy()}><strong title={item.label}>{item.label}</strong><p>{formatTimestamp(item.createdAt)} · {item.detail}</p></div>{(function () {
+    if (archived) {
+        return (null);
+    }
+    return (<Button type="button" size="sm" disabled={isMutating} onClick={(event) => onRestore(item, event.currentTarget)}>복구</Button>);
+})()}</div></li>)}
               </ol>
             </ScrollAreaContent>
           </ScrollAreaViewport>
           <ScrollAreaScrollbar><ScrollAreaThumb /></ScrollAreaScrollbar>
         </ScrollAreaRoot>
-      )}
+      ));
+})()}
     </section>
   );
 }

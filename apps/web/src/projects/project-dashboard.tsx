@@ -308,7 +308,12 @@ export function ProjectDashboard(props: ProjectDashboardProps) {
         : await changeDirectProjectRole(createBrowserApiClient(), { owner, projectId: project.id, etag, userId: grant.userId, role: nextRole }, { csrfToken: readCsrfCredential() });
       setGrants((items) => result.data.grant === null
         ? items.filter((item) => item.userId !== grant.userId)
-        : items.map((item) => item.userId === grant.userId ? result.data.grant! : item));
+        : items.map((item) => (function () {
+    if (item.userId === grant.userId) {
+        return (result.data.grant!);
+    }
+    return (item);
+})()));
       setEtag(result.etag);
       setProject((current) => current === undefined ? current : { ...current, version: result.data.projectVersion });
       setRoleStatus(nextRole === undefined
@@ -342,28 +347,51 @@ export function ProjectDashboard(props: ProjectDashboardProps) {
         className={styles.header()}
         density="compact"
         eyebrow={project === undefined ? workspace?.displayLabel ?? "워크스페이스" : workspace?.displayLabel ?? "워크스페이스"}
-        title={project === undefined ? view === "create" ? "새 프로젝트" : "프로젝트" : sectionCopy.title}
+        title={project === undefined ? (function () {
+    if (view === "create") {
+        return ("새 프로젝트");
+    }
+    return ("프로젝트");
+})() : sectionCopy.title}
         description={project === undefined
-          ? view === "create"
-            ? "프로젝트 정보와 시작 템플릿을 정하면 즉시 Studio를 열어 개발을 시작합니다."
-            : "프로젝트를 선택해 Studio를 열거나 별도 설정을 관리합니다."
+          ? (function () {
+    if (view === "create") {
+        return ("프로젝트 정보와 시작 템플릿을 정하면 즉시 Studio를 열어 개발을 시작합니다.");
+    }
+    return ("프로젝트를 선택해 Studio를 열거나 별도 설정을 관리합니다.");
+})()
           : `${project.name}의 ${sectionCopy.description}`}
         actions={project === undefined && workspace !== undefined
-          ? view === "create"
-            ? <Link className={buttonVariants({ variant: "secondary" })} href={projectHref(workspace.storageScopeId, state)}>목록으로</Link>
-            : <div className="flex items-center gap-2"><span className={styles.count()}>{projectCountLabel}</span><Link className={buttonVariants({ variant: "primary" })} href={`/workspaces/${encodeURIComponent(workspace.storageScopeId)}/projects/new`}>새 프로젝트</Link></div>
+          ? (function () {
+    if (view === "create") {
+        return (<Link className={buttonVariants({ variant: "secondary" })} href={projectHref(workspace.storageScopeId, state)}>목록으로</Link>);
+    }
+    return (<div className="flex items-center gap-2"><span className={styles.count()}>{projectCountLabel}</span><Link className={buttonVariants({ variant: "primary" })} href={`/workspaces/${encodeURIComponent(workspace.storageScopeId)}/projects/new`}>새 프로젝트</Link></div>);
+})()
           : undefined}
       />
       {error || needsReconciliation ? (
         <div className={styles.feedback()}>
-          {error ? <p role="alert">{error}</p> : null}
-          {needsReconciliation ? <Button type="button" variant="secondary" onClick={() => router.refresh()}>최신 프로젝트 불러오기</Button> : null}
+          {(function () {
+    if (error) {
+        return (<p role="alert">{error}</p>);
+    }
+    return (null);
+})()}
+          {(function () {
+    if (needsReconciliation) {
+        return (<Button type="button" variant="secondary" onClick={() => router.refresh()}>최신 프로젝트 불러오기</Button>);
+    }
+    return (null);
+})()}
         </div>
       ) : null}
       {workspace === undefined ? <p>사용 가능한 워크스페이스가 없습니다. 관리자에게 접근 권한을 요청하세요.</p> : (
         <div className={styles.layout()}>
           <aside className={styles.sidebar()}>
-            {view === "create" ? <form className={styles.createForm()} onSubmit={create} aria-busy={mutation.isPending}>
+            {(function () {
+    if (view === "create") {
+        return (<form className={styles.createForm()} onSubmit={create} aria-busy={mutation.isPending}>
               <div className={styles.createHeading()}><div><p className={styles.eyebrow()}>새로 만들기</p><h2>새 프로젝트</h2></div></div>
               <div className={styles.createFields()}>
                 <TextField label="프로젝트 이름" name="name" placeholder="런타임 편집기" required maxLength={200} disabled={mutation.isPending} />
@@ -371,29 +399,66 @@ export function ProjectDashboard(props: ProjectDashboardProps) {
               </div>
               <ProjectTemplatePicker disabled={mutation.isPending} />
               <div className={styles.createFooter()}><p>선택한 템플릿은 프로젝트의 실행 방식과 기본 파일 구성을 결정하며 생성 후에는 변경할 수 없습니다.</p><Button className={styles.createButton()} type="submit" variant="primary" disabled={mutation.isPending}>프로젝트 만들기</Button></div>
-            </form> : null}
-            {view === "collection" ? <><section className={styles.toolbar()} aria-label="프로젝트 검색 및 상태 필터">
+            </form>);
+    }
+    return (null);
+})()}
+            {(function () {
+    if (view === "collection") {
+        return (<><section className={styles.toolbar()} aria-label="프로젝트 검색 및 상태 필터">
               <SearchField className={styles.search()} density="compact" label="불러온 프로젝트 검색" autoComplete="off" value={projectQuery} onChange={(event) => setProjectQuery(event.currentTarget.value)} placeholder="불러온 프로젝트에서 검색" />
               <nav className={styles.filters()} aria-label="프로젝트 상태">
-                {(["active", "archived", "all"] as const).map((filter) => <Link className={styles.filter()} key={filter} href={projectHref(workspace.storageScopeId, filter)} aria-current={state === filter ? "page" : undefined}>{projectStateLabel(filter)}</Link>)}
+                {(["active", "archived", "all"] as const).map((filter) => <Link className={styles.filter()} key={filter} href={projectHref(workspace.storageScopeId, filter)} aria-current={(function () {
+    if (state === filter) {
+        return ("page");
+    }
+    return (undefined);
+})()}>{projectStateLabel(filter)}</Link>)}
               </nav>
             </section>
             <section className={styles.panel()} aria-busy={isSearchPending} aria-label="프로젝트 목록">
-              <p className="sr-only" role="status" aria-live="polite">{isSearchPending ? "검색 결과를 갱신하는 중" : `${visibleProjects.length}개 프로젝트 표시 중`}</p>
-              {visibleProjects.length === 0 ? <div className={styles.empty()}><strong>검색 결과가 없습니다.</strong><span>다른 이름이나 상태를 선택해보세요.</span></div> : (
+              <p className="sr-only" role="status" aria-live="polite">{(function () {
+    if (isSearchPending) {
+        return ("검색 결과를 갱신하는 중");
+    }
+    return (`${visibleProjects.length}개 프로젝트 표시 중`);
+})()}</p>
+              {(function () {
+    if (visibleProjects.length === 0) {
+        return (<div className={styles.empty()}><strong>검색 결과가 없습니다.</strong><span>다른 이름이나 상태를 선택해보세요.</span></div>);
+    }
+    return ((
                 <ul className={styles.list()} aria-label="프로젝트">
                   {visibleProjects.map((item) => (
                     <li className={styles.item()} key={item.id}>
                       <Link
                         className={styles.main()}
-                        href={item.state === "active"
-                          ? projectStudioHref(workspace.storageScopeId, item.id)
-                          : projectDetailHref(workspace.storageScopeId, state, item.id)}
+                        href={(function () {
+    if (item.state === "active") {
+        return (projectStudioHref(workspace.storageScopeId, item.id));
+    }
+    return (projectDetailHref(workspace.storageScopeId, state, item.id));
+})()}
                       >
                         <b className={styles.initial()} aria-hidden="true">{projectInitial(item.name)}</b>
                         <span className={styles.recordCopy()}><strong>{item.name}</strong><small>{item.slug} · v{item.version}</small></span>
-                        <em className={`${styles.status()} ${item.state === "active" ? styles.activeStatus() : ""}`}><i />{item.state === "active" ? "정상" : "보관됨"}</em>
-                        <span className={styles.rowAction()}>{item.state === "active" ? "편집기 열기" : "보관 설정"}</span>
+                        <em className={`${styles.status()} ${(function () {
+    if (item.state === "active") {
+        return (styles.activeStatus());
+    }
+    return ("");
+})()}`}><i />{(function () {
+    if (item.state === "active") {
+        return ("정상");
+    }
+    return ("보관됨");
+})()}</em>
+                        <span className={styles.rowAction()}>{(function () {
+    if (item.state === "active") {
+        return ("편집기 열기");
+    }
+    return ("보관 설정");
+})()}</span>
                       </Link>
                       <Link
                         className={styles.settings()}
@@ -405,29 +470,148 @@ export function ProjectDashboard(props: ProjectDashboardProps) {
                     </li>
                   ))}
                 </ul>
-              )}
+              ));
+})()}
             </section>
-            {cursor !== null ? <div className={styles.pagination()}><p>{normalizedProjectQuery === "" ? "다음 프로젝트를 이어서 불러올 수 있습니다." : "검색은 현재 불러온 프로젝트에 적용됩니다. 더 불러오면 검색 범위가 넓어집니다."}</p><Button type="button" onClick={() => void loadMore()} disabled={isLoadingMore}>{isLoadingMore ? "불러오는 중…" : "프로젝트 더 불러오기"}</Button></div> : null}</> : null}
+            {(function () {
+    if (cursor !== null) {
+        return (<div className={styles.pagination()}><p>{(function () {
+    if (normalizedProjectQuery === "") {
+        return ("다음 프로젝트를 이어서 불러올 수 있습니다.");
+    }
+    return ("검색은 현재 불러온 프로젝트에 적용됩니다. 더 불러오면 검색 범위가 넓어집니다.");
+})()}</p><Button type="button" onClick={() => void loadMore()} disabled={isLoadingMore}>{(function () {
+    if (isLoadingMore) {
+        return ("불러오는 중…");
+    }
+    return ("프로젝트 더 불러오기");
+})()}</Button></div>);
+    }
+    return (null);
+})()}</>);
+    }
+    return (null);
+})()}
           </aside>
           <section className={styles.detail()}>
-            {project === undefined ? <div className={styles.emptyDetail()}><p className={styles.eyebrow()}>프로젝트 선택</p><h2>프로젝트를 선택하세요</h2><p>왼쪽 목록에서 프로젝트를 선택하면 실행 환경과 접근 권한을 확인할 수 있습니다.</p></div> : (
+            {(function () {
+    if (project === undefined) {
+        return (<div className={styles.emptyDetail()}><p className={styles.eyebrow()}>프로젝트 선택</p><h2>프로젝트를 선택하세요</h2><p>왼쪽 목록에서 프로젝트를 선택하면 실행 환경과 접근 권한을 확인할 수 있습니다.</p></div>);
+    }
+    return ((
               <>
-                <header className={styles.detailHeader()}><div className={styles.detailIdentity()}><Link className={styles.detailBack()} href={projectHref(workspace.storageScopeId, state)} aria-label="프로젝트 목록으로 돌아가기">‹</Link><div className={styles.detailCopy()}><p className={styles.eyebrow()}>{project.state === "active" ? "활성" : "보관됨"} · 버전 {project.version}</p><h2>{project.name}</h2><p>{workspace.displayLabel} / {project.slug}</p></div></div><div className={styles.detailActions()}>{project.state === "active" ? <Link className={buttonVariants({ variant: "primary" })} href={projectStudioHref(workspace.storageScopeId, project.id)}>편집기 열기</Link> : null}<Link className={buttonVariants({ variant: "secondary" })} href={`/workspaces/${encodeURIComponent(workspace.storageScopeId)}/projects/${encodeURIComponent(project.id)}/settings/tokens`}>액세스 토큰</Link></div></header>
-                {detailSection === "all" && project.state === "active" ? <ProjectGitPanel initialState={props.initialGitState} project={project} /> : null}
-                {detailSection === "all" || detailSection === "general" ? <CollapsibleRoot className="mt-1" defaultOpen><CollapsibleTrigger><span>프로젝트 관리</span><small>이름과 표시 정보</small></CollapsibleTrigger><CollapsiblePanel><CollapsibleContent className="grid gap-5"><form className={styles.profileForm()} onSubmit={rename} aria-busy={mutation.isPending}><div><h3>프로젝트 정보</h3><p>목록과 협업 화면에 표시되는 이름입니다.</p></div><TextField label="프로젝트 이름" name="name" defaultValue={project.name} required maxLength={200} disabled={mutation.isPending} /><Button type="submit" disabled={mutation.isPending}>이름 저장</Button></form>{detailSection === "all" ? <section className={styles.projectActions()}><h3>상태 관리</h3><Button type="button" disabled={mutation.isPending} onClick={() => void changeLifecycle(project.state === "active" ? "archive" : "restore")}>{project.state === "active" ? "보관" : "복원"}</Button><p>보관하면 활성 목록에서 숨겨집니다. 삭제한 프로젝트는 복구할 수 없습니다.</p><Button type="button" variant="danger" disabled={mutation.isPending} onClick={() => setConfirmingProjectDelete(true)}>프로젝트 삭제</Button></section> : null}</CollapsibleContent></CollapsiblePanel></CollapsibleRoot> : null}
-                {detailSection === "danger" ? (
+                <header className={styles.detailHeader()}><div className={styles.detailIdentity()}><Link className={styles.detailBack()} href={projectHref(workspace.storageScopeId, state)} aria-label="프로젝트 목록으로 돌아가기">‹</Link><div className={styles.detailCopy()}><p className={styles.eyebrow()}>{(function () {
+    if (project.state === "active") {
+        return ("활성");
+    }
+    return ("보관됨");
+})()} · 버전 {project.version}</p><h2>{project.name}</h2><p>{workspace.displayLabel} / {project.slug}</p></div></div><div className={styles.detailActions()}>{(function () {
+    if (project.state === "active") {
+        return (<Link className={buttonVariants({ variant: "primary" })} href={projectStudioHref(workspace.storageScopeId, project.id)}>편집기 열기</Link>);
+    }
+    return (null);
+})()}<Link className={buttonVariants({ variant: "secondary" })} href={`/workspaces/${encodeURIComponent(workspace.storageScopeId)}/projects/${encodeURIComponent(project.id)}/settings/tokens`}>액세스 토큰</Link></div></header>
+                {(function () {
+    if (detailSection === "all" && project.state === "active") {
+        return (<ProjectGitPanel initialState={props.initialGitState} project={project} />);
+    }
+    return (null);
+})()}
+                {(function () {
+    if (detailSection === "all" || detailSection === "general") {
+        return (<CollapsibleRoot className="mt-1" defaultOpen><CollapsibleTrigger><span>프로젝트 관리</span><small>이름과 표시 정보</small></CollapsibleTrigger><CollapsiblePanel><CollapsibleContent className="grid gap-5"><form className={styles.profileForm()} onSubmit={rename} aria-busy={mutation.isPending}><div><h3>프로젝트 정보</h3><p>목록과 협업 화면에 표시되는 이름입니다.</p></div><TextField label="프로젝트 이름" name="name" defaultValue={project.name} required maxLength={200} disabled={mutation.isPending} /><Button type="submit" disabled={mutation.isPending}>이름 저장</Button></form>{(function () {
+    if (detailSection === "all") {
+        return (<section className={styles.projectActions()}><h3>상태 관리</h3><Button type="button" disabled={mutation.isPending} onClick={() => void changeLifecycle((function () {
+    if (project.state === "active") {
+        return ("archive");
+    }
+    return ("restore");
+})())}>{(function () {
+    if (project.state === "active") {
+        return ("보관");
+    }
+    return ("복원");
+})()}</Button><p>보관하면 활성 목록에서 숨겨집니다. 삭제한 프로젝트는 복구할 수 없습니다.</p><Button type="button" variant="danger" disabled={mutation.isPending} onClick={() => setConfirmingProjectDelete(true)}>프로젝트 삭제</Button></section>);
+    }
+    return (null);
+})()}</CollapsibleContent></CollapsiblePanel></CollapsibleRoot>);
+    }
+    return (null);
+})()}
+                {(function () {
+    if (detailSection === "danger") {
+        return ((
                   <SettingsGroup tone="danger" title="위험 영역" description="프로젝트 가용성과 데이터를 변경하는 작업입니다.">
-                    <SettingsRow title={project.state === "active" ? "프로젝트 보관" : "프로젝트 복원"} description={project.state === "active" ? "활성 목록과 Studio에서 숨기며 필요할 때 복원할 수 있습니다." : "프로젝트를 다시 활성 목록과 Studio에서 사용할 수 있게 합니다."}>
-                      <Button type="button" disabled={mutation.isPending} onClick={() => void changeLifecycle(project.state === "active" ? "archive" : "restore")}>{project.state === "active" ? "프로젝트 보관" : "프로젝트 복원"}</Button>
+                    <SettingsRow title={(function () {
+    if (project.state === "active") {
+        return ("프로젝트 보관");
+    }
+    return ("프로젝트 복원");
+})()} description={(function () {
+    if (project.state === "active") {
+        return ("활성 목록과 Studio에서 숨기며 필요할 때 복원할 수 있습니다.");
+    }
+    return ("프로젝트를 다시 활성 목록과 Studio에서 사용할 수 있게 합니다.");
+})()}>
+                      <Button type="button" disabled={mutation.isPending} onClick={() => void changeLifecycle((function () {
+    if (project.state === "active") {
+        return ("archive");
+    }
+    return ("restore");
+})())}>{(function () {
+    if (project.state === "active") {
+        return ("프로젝트 보관");
+    }
+    return ("프로젝트 복원");
+})()}</Button>
                     </SettingsRow>
                     <SettingsRow layout="stacked" title="프로젝트 영구 삭제" description="삭제한 프로젝트와 기록은 복구할 수 없습니다.">
                       <Button type="button" variant="danger" disabled={mutation.isPending} onClick={() => setConfirmingProjectDelete(true)}>프로젝트 삭제</Button>
                     </SettingsRow>
                   </SettingsGroup>
-                ) : null}
-                {(detailSection === "all" || detailSection === "access") && owner?.ownerType === "organization" ? <section className={styles.accessSection()}><h3>직접 역할</h3>{props.canManageRoles ? <><form className={styles.accessForm()} onSubmit={addRole}><SelectField label="조직 멤버" name="userId" required value={selectedMemberId} disabled={mutation.isPending || !hasAvailableMembers} placeholder="멤버 선택" options={organizationMembers.map((member) => ({ value: member.userId, label: organizationMemberLabel(member), disabled: member.role === "owner" || !hasUniqueMemberLabel(member) || grantedUserIds.has(member.userId) }))} onValueChange={setSelectedMemberId} />{hasAmbiguousMembers ? <p>표시 이름과 조직 역할이 같은 멤버는 이름을 구분한 뒤 직접 역할을 부여할 수 있습니다.</p> : null}{hasAvailableMembers ? null : <p>직접 역할을 부여할 수 있는 조직 멤버가 없습니다.</p>}<SelectField label="역할" name="role" defaultValue="read" disabled={mutation.isPending || !hasAvailableMembers} options={[{ value: "read", label: "읽기" }, { value: "write", label: "쓰기" }, { value: "admin", label: "관리" }]} /><Button type="submit" disabled={mutation.isPending || selectedMemberId === ""}>역할 부여</Button></form>{roleStatus === undefined ? null : <p className={styles.roleStatus()} role="status" aria-live="polite">{roleStatus}</p>}{grants.length === 0 ? <p className={styles.accessHint()}>직접 부여된 역할이 없습니다. 팀 역할 또는 조직 기본 권한이 적용될 수 있습니다.</p> : <ul className={styles.grantList()}>{grants.map((grant, grantIndex) => { const member = memberByUserId.get(grant.userId); const memberIsActionable = member !== undefined && hasUniqueMemberLabel(member); const memberLabel = directGrantMemberLabel(grant, grantIndex, grants, memberByUserId, hasUniqueMemberLabel); return <li key={grant.userId}><div><strong>{memberLabel}</strong><span>{projectRoleLabel(grant.role)}{member === undefined ? "" : ` · 조직 ${organizationRoleLabel(member.role)}`}</span></div><div className={styles.grantActions()}><SelectField label={`${memberLabel} 역할`} labelHidden density="compact" value={grant.role} disabled={mutation.isPending || !memberIsActionable} options={[{ value: "read", label: "읽기" }, { value: "write", label: "쓰기" }, { value: "admin", label: "관리" }]} onValueChange={(nextRole) => void updateRole(grant, roleValue(nextRole))} /><Button type="button" aria-label={`${memberLabel} 역할 제거`} disabled={mutation.isPending} onClick={() => void updateRole(grant)}>제거</Button></div></li>; })}</ul>}</> : <p className={styles.accessHint()}>조직 소유자만 프로젝트의 직접 역할을 확인하고 관리할 수 있습니다.</p>}</section> : null}
+                ));
+    }
+    return (null);
+})()}
+                {(function () {
+    if ((detailSection === "all" || detailSection === "access") && owner?.ownerType === "organization") {
+        return (<section className={styles.accessSection()}><h3>직접 역할</h3>{(function () {
+    if (props.canManageRoles) {
+        return (<><form className={styles.accessForm()} onSubmit={addRole}><SelectField label="조직 멤버" name="userId" required value={selectedMemberId} disabled={mutation.isPending || !hasAvailableMembers} placeholder="멤버 선택" options={organizationMembers.map((member) => ({ value: member.userId, label: organizationMemberLabel(member), disabled: member.role === "owner" || !hasUniqueMemberLabel(member) || grantedUserIds.has(member.userId) }))} onValueChange={setSelectedMemberId} />{(function () {
+    if (hasAmbiguousMembers) {
+        return (<p>표시 이름과 조직 역할이 같은 멤버는 이름을 구분한 뒤 직접 역할을 부여할 수 있습니다.</p>);
+    }
+    return (null);
+})()}{(function () {
+    if (hasAvailableMembers) {
+        return (null);
+    }
+    return (<p>직접 역할을 부여할 수 있는 조직 멤버가 없습니다.</p>);
+})()}<SelectField label="역할" name="role" defaultValue="read" disabled={mutation.isPending || !hasAvailableMembers} options={[{ value: "read", label: "읽기" }, { value: "write", label: "쓰기" }, { value: "admin", label: "관리" }]} /><Button type="submit" disabled={mutation.isPending || selectedMemberId === ""}>역할 부여</Button></form>{(function () {
+    if (roleStatus === undefined) {
+        return (null);
+    }
+    return (<p className={styles.roleStatus()} role="status" aria-live="polite">{roleStatus}</p>);
+})()}{(function () {
+    if (grants.length === 0) {
+        return (<p className={styles.accessHint()}>직접 부여된 역할이 없습니다. 팀 역할 또는 조직 기본 권한이 적용될 수 있습니다.</p>);
+    }
+    return (<ul className={styles.grantList()}>{grants.map((grant, grantIndex) => { const member = memberByUserId.get(grant.userId); const memberIsActionable = member !== undefined && hasUniqueMemberLabel(member); const memberLabel = directGrantMemberLabel(grant, grantIndex, grants, memberByUserId, hasUniqueMemberLabel); return <li key={grant.userId}><div><strong>{memberLabel}</strong><span>{projectRoleLabel(grant.role)}{(function () {
+    if (member === undefined) {
+        return ("");
+    }
+    return (` · 조직 ${organizationRoleLabel(member.role)}`);
+})()}</span></div><div className={styles.grantActions()}><SelectField label={`${memberLabel} 역할`} labelHidden density="compact" value={grant.role} disabled={mutation.isPending || !memberIsActionable} options={[{ value: "read", label: "읽기" }, { value: "write", label: "쓰기" }, { value: "admin", label: "관리" }]} onValueChange={(nextRole) => void updateRole(grant, roleValue(nextRole))} /><Button type="button" aria-label={`${memberLabel} 역할 제거`} disabled={mutation.isPending} onClick={() => void updateRole(grant)}>제거</Button></div></li>; })}</ul>);
+})()}</>);
+    }
+    return (<p className={styles.accessHint()}>조직 소유자만 프로젝트의 직접 역할을 확인하고 관리할 수 있습니다.</p>);
+})()}</section>);
+    }
+    return (null);
+})()}
               </>
-            )}
+            ));
+})()}
           </section>
         </div>
       )}
@@ -566,6 +750,11 @@ function visibleInState(project: Project, state: ProjectListState): boolean {
 
 function upsertProject(projects: readonly Project[], project: Project): readonly Project[] {
   return projects.some((item) => item.id === project.id)
-    ? projects.map((item) => item.id === project.id ? project : item)
+    ? projects.map((item) => (function () {
+    if (item.id === project.id) {
+        return (project);
+    }
+    return (item);
+})())
     : [...projects, project];
 }

@@ -476,7 +476,12 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, onProjectReloa
       const contentCode = projectContentErrorCode(caught);
       const runtimeCode = runtimeErrorCode(caught);
       setError(contentCode === null
-        ? `브라우저 워크스페이스를 안전하게 시작하지 못했습니다.${runtimeCode ? ` (${runtimeCode})` : ""}`
+        ? `브라우저 워크스페이스를 안전하게 시작하지 못했습니다.${(function () {
+    if (runtimeCode) {
+        return (` (${runtimeCode})`);
+    }
+    return ("");
+})()}`
         : resumeErrorMessage(contentCode));
       setResumeStatus(undefined);
       await releaseAdapter();
@@ -550,7 +555,12 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, onProjectReloa
     editorDraftsRef.current = settleEditorDraft(editorDraftsRef.current, path, content);
     setEditorDrafts(editorDraftsRef.current);
     if (path === selectedPathRef.current) {
-      setEditorStatus((status) => status === "저장하지 않은 로컬 변경" ? (next.hmrState === "connected" ? "로컬 초안 저장됨 · HMR 적용됨" : "로컬 초안 저장됨") : status);
+      setEditorStatus((status) => status === "저장하지 않은 로컬 변경" ? ((function () {
+    if (next.hmrState === "connected") {
+        return ("로컬 초안 저장됨 · HMR 적용됨");
+    }
+    return ("로컬 초안 저장됨");
+})()) : status);
     }
   }
 
@@ -860,7 +870,12 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, onProjectReloa
       setHasUnpublishedChanges(true);
       hotUpdatePreviews(nextPath, "rename");
     } catch {
-      setError(fileOperation === "rename" ? "파일 이름을 변경하지 못했습니다. 경로와 중복 여부를 확인하세요." : fileOperation === "directory" ? "새 폴더를 만들지 못했습니다. 경로와 중복 여부를 확인하세요." : "새 파일을 만들지 못했습니다. 경로와 중복 여부를 확인하세요.");
+      setError(fileOperation === "rename" ? "파일 이름을 변경하지 못했습니다. 경로와 중복 여부를 확인하세요." : (function () {
+    if (fileOperation === "directory") {
+        return ("새 폴더를 만들지 못했습니다. 경로와 중복 여부를 확인하세요.");
+    }
+    return ("새 파일을 만들지 못했습니다. 경로와 중복 여부를 확인하세요.");
+})());
     }
   }
 
@@ -1728,17 +1743,37 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, onProjectReloa
             <p>개발 워크스페이스</p>
             <div className={css.runtimeMeta()}>
               <span>{runtimeLifecycleLabel(runtime.lifecycle)}</span>
-              {hasWorkspace ? <span className={css.access()}>{canWriteLocalDraft ? "편집 가능" : "읽기 전용"}</span> : null}
+              {hasWorkspace ? <span className={css.access()}>{(function () {
+    if (canWriteLocalDraft) {
+        return ("편집 가능");
+    }
+    return ("읽기 전용");
+})()}</span> : null}
             </div>
           </div>
           <h3 className="sr-only" id="project-ide-title">{project.name} 개발 편집기</h3>
         </div>
         {hasWorkspace ? <div className={css.headerActions()}>
-          <span className={css.saveState()} role="status" aria-live="polite"><i className={hasUnsavedEditorChange ? "is-dirty" : ""} aria-hidden="true" />{serverSaveStatus}</span>
+          <span className={css.saveState()} role="status" aria-live="polite"><i className={(function () {
+    if (hasUnsavedEditorChange) {
+        return ("is-dirty");
+    }
+    return ("");
+})()} aria-hidden="true" />{serverSaveStatus}</span>
           <Button type="button" size="sm" aria-pressed={isPreviewOpen} onClick={() => setIsPreviewOpen((current) => !current)}>미리보기</Button>
           <Button type="button" size="sm" aria-pressed={isTerminalOpen} onClick={() => setIsTerminalOpen((current) => !current)}>하단 패널</Button>
-          <Button type="button" size="sm" aria-pressed={isFocusMode} onClick={() => setIsFocusMode((current) => !current)}>{isFocusMode ? "패널 표시" : "집중 모드"}</Button>
-          <Button aria-label="서버에 저장" type="button" size="sm" variant="primary" disabled={isServerSaving || !projectEtag || !canWriteLocalDraft} onClick={() => void saveToServer()}>{isServerSaving ? "저장 중…" : "서버에 저장"}<kbd>⌘S</kbd></Button>
+          <Button type="button" size="sm" aria-pressed={isFocusMode} onClick={() => setIsFocusMode((current) => !current)}>{(function () {
+    if (isFocusMode) {
+        return ("패널 표시");
+    }
+    return ("집중 모드");
+})()}</Button>
+          <Button aria-label="서버에 저장" type="button" size="sm" variant="primary" disabled={isServerSaving || !projectEtag || !canWriteLocalDraft} onClick={() => void saveToServer()}>{(function () {
+    if (isServerSaving) {
+        return ("저장 중…");
+    }
+    return ("서버에 저장");
+})()}<kbd>⌘S</kbd></Button>
           <Button aria-label="워크스페이스 종료" type="button" size="sm" onClick={() => {
             if (hasUnpublishedChanges || hasUnsavedEditorChange) setConfirmingWorkspaceStop(true);
             else void stopWorkspace();
@@ -1753,7 +1788,12 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, onProjectReloa
         if (event.key === "Enter" && matchingFiles[quickOpenIndex]) { selectFile(matchingFiles[quickOpenIndex].path); setIsQuickOpenOpen(false); }
       }} /><ul>{matchingFiles.slice(0, 40).map((file, index) => <li key={file.path}><Button type="button" size="sm" variant="ghost" aria-selected={index === quickOpenIndex} onMouseEnter={() => setQuickOpenIndex(index)} onClick={() => { selectFile(file.path); setIsQuickOpenOpen(false); }}><strong>{file.name}</strong><small>{file.path}</small></Button></li>)}</ul></section> : null}
       {error ? <div className={css.message({ className: "border-danger/30 bg-danger/10 text-danger" })} role="alert"><strong>작업을 완료하지 못했습니다.</strong><span>{error}</span></div> : null}
-      {serverSaveFailure ? <div className={css.recoveryActions()} aria-label="서버 저장 복구">{serverSaveFailure === "retry" ? <Button type="button" size="sm" disabled={isServerSaving || !canWriteLocalDraft} onClick={() => void saveToServer()}>서버 저장 다시 시도</Button> : <Button type="button" size="sm" onClick={() => onProjectReload?.()}>최신 프로젝트 다시 불러오기</Button>}</div> : null}
+      {serverSaveFailure ? <div className={css.recoveryActions()} aria-label="서버 저장 복구">{(function () {
+    if (serverSaveFailure === "retry") {
+        return (<Button type="button" size="sm" disabled={isServerSaving || !canWriteLocalDraft} onClick={() => void saveToServer()}>서버 저장 다시 시도</Button>);
+    }
+    return (<Button type="button" size="sm" onClick={() => onProjectReload?.()}>최신 프로젝트 다시 불러오기</Button>);
+})()}</div> : null}
       {resumeStatus ? <p className={css.message({ className: "border-primary/20 bg-selected text-foreground" })} role="status" aria-live="polite">{resumeStatus}</p> : null}
       {recoveryDiagnostics.length > 0 ? (
         <section className={css.recovery()} aria-label="워크스페이스 복구">
@@ -1770,13 +1810,20 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, onProjectReloa
                     disabled={recoveringAction !== undefined}
                     onClick={() => void executeRecovery(action.kind)}
                   >
-                    {recoveringAction === action.kind ? "복구 중…" : recoveryActionLabel(action.kind)}
+                    {(function () {
+    if (recoveringAction === action.kind) {
+        return ("복구 중…");
+    }
+    return (recoveryActionLabel(action.kind));
+})()}
                   </Button>
                 ))}
               </div>
             </div>
           ))}
-          {confirmingWriterTakeover ? (
+          {(function () {
+    if (confirmingWriterTakeover) {
+        return ((
             <div className="mt-3 rounded-md border border-danger p-3" role="alertdialog" aria-labelledby="writer-takeover-title">
               <p id="writer-takeover-title" className="m-0 text-sm font-semibold">다른 탭의 편집 권한을 가져올까요?</p>
               <p className="mb-3 mt-1 text-xs text-muted-foreground">다른 탭은 읽기 전용으로 전환됩니다. 저장하지 않은 편집 내용은 그대로 보이지만 이 탭에서만 로컬 초안을 쓸 수 있습니다.</p>
@@ -1785,7 +1832,10 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, onProjectReloa
                 <Button type="button" size="sm" onClick={() => setConfirmingWriterTakeover(false)}>취소</Button>
               </div>
             </div>
-          ) : null}
+          ));
+    }
+    return (null);
+})()}
         </section>
       ) : null}
       {project.state !== "active" ? <p className="m-3 text-sm text-muted-foreground">보관된 프로젝트는 읽기 전용입니다. 버전과 복구 지점은 계속 확인할 수 있으며, 기록을 변경하거나 워크스페이스를 시작하려면 먼저 프로젝트를 복원하세요.</p> : null}
@@ -1800,7 +1850,12 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, onProjectReloa
               aria-label="프로젝트 파일"
               aria-pressed={isSidebarOpen && sidebarPanel === "files"}
               onClick={() => {
-                setIsSidebarOpen((current) => sidebarPanel === "files" ? !current : true);
+                setIsSidebarOpen((current) => (function () {
+    if (sidebarPanel === "files") {
+        return (!current);
+    }
+    return (true);
+})());
                 setSidebarPanel("files");
                 setFileListLimit(FILE_LIST_BATCH_SIZE);
               }}
@@ -1815,7 +1870,12 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, onProjectReloa
               aria-label="프로젝트 파일 검색"
               aria-pressed={isSidebarOpen && sidebarPanel === "search"}
               onClick={() => {
-                setIsSidebarOpen((current) => sidebarPanel === "search" ? !current : true);
+                setIsSidebarOpen((current) => (function () {
+    if (sidebarPanel === "search") {
+        return (!current);
+    }
+    return (true);
+})());
                 setSidebarPanel("search");
                 setFileListLimit(FILE_LIST_BATCH_SIZE);
                 globalThis.requestAnimationFrame(() => fileSearchRef.current?.focus());
@@ -1829,7 +1889,12 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, onProjectReloa
               type="button"
               size="icon"
               variant="ghost"
-              aria-label={isFocusMode ? "전체 패널 표시" : "편집기에 집중"}
+              aria-label={(function () {
+    if (isFocusMode) {
+        return ("전체 패널 표시");
+    }
+    return ("편집기에 집중");
+})()}
               aria-pressed={isFocusMode}
               onClick={() => setIsFocusMode((current) => !current)}
             >
@@ -1844,8 +1909,18 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, onProjectReloa
             </div>
             <div className={css.panelHeading()}>
               <div>
-                <span>{sidebarPanel === "search" ? "검색" : "프로젝트"}</span>
-                <strong>{sidebarPanel === "search" ? "코드 검색" : "파일"}</strong>
+                <span>{(function () {
+    if (sidebarPanel === "search") {
+        return ("검색");
+    }
+    return ("프로젝트");
+})()}</span>
+                <strong>{(function () {
+    if (sidebarPanel === "search") {
+        return ("코드 검색");
+    }
+    return ("파일");
+})()}</strong>
               </div>
               <div className={css.fileActions()}>
                 <Button type="button" size="icon" variant="ghost" aria-label="새 파일" title="새 파일" disabled={!canWriteLocalDraft} onClick={() => beginCreate()}>＋</Button>
@@ -1855,7 +1930,28 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, onProjectReloa
                 <kbd>⌘P</kbd>
               </div>
             </div>
-            {fileOperation ? <form className={css.fileOperation()} onSubmit={commitFileOperation}><label className="sr-only" htmlFor={`file-operation-${project.id}`}>{fileOperation === "create" ? "새 파일 경로" : fileOperation === "directory" ? "새 폴더 경로" : "변경할 파일 경로"}</label><Input id={`file-operation-${project.id}`} autoFocus value={fileOperationValue} onChange={(event) => setFileOperationValue(event.currentTarget.value)} onKeyDown={(event) => { if (event.key === "Escape") setFileOperation(undefined); }} /><Button type="submit" size="sm">{fileOperation === "rename" ? "변경" : "생성"}</Button></form> : sidebarPanel === "search" ? (
+            {(function () {
+    if (fileOperation) {
+        return (<form className={css.fileOperation()} onSubmit={commitFileOperation}><label className="sr-only" htmlFor={`file-operation-${project.id}`}>{(function () {
+    if (fileOperation === "create") {
+        return ("새 파일 경로");
+    }
+    return ((function () {
+    if (fileOperation === "directory") {
+        return ("새 폴더 경로");
+    }
+    return ("변경할 파일 경로");
+})());
+})()}</label><Input id={`file-operation-${project.id}`} autoFocus value={fileOperationValue} onChange={(event) => setFileOperationValue(event.currentTarget.value)} onKeyDown={(event) => { if (event.key === "Escape") setFileOperation(undefined); }} /><Button type="submit" size="sm">{(function () {
+    if (fileOperation === "rename") {
+        return ("변경");
+    }
+    return ("생성");
+})()}</Button></form>);
+    }
+    return ((function () {
+    if (sidebarPanel === "search") {
+        return ((
               <div className={css.searchArea()}>
                 <SearchField className={css.fileSearch()} label="코드 검색" aria-busy={isContentSearchPending} aria-invalid={contentSearchError !== undefined} ref={fileSearchRef} value={fileQuery} onChange={(event) => { setFileQuery(event.currentTarget.value); setFileListLimit(FILE_LIST_BATCH_SIZE); }} placeholder="프로젝트 코드 검색" autoComplete="off" />
                 <div className={css.searchControls()} aria-label="파일 검색 옵션">
@@ -1867,34 +1963,108 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, onProjectReloa
                   <Button type="submit" size="sm" disabled={!canWriteLocalDraft || fileQuery.length === 0 || totalContentSearchMatches === 0}>모두 바꾸기</Button>
                 </form>
               </div>
-            ) : <span aria-hidden="true" />}
+            ));
+    }
+    return (<span aria-hidden="true" />);
+})());
+})()}
             <p className={css.fileCount()} aria-live="polite">
-              {sidebarPanel === "search" ? contentSearchError ?? `${totalContentSearchMatches}개 코드 검색 결과` : `파일 ${explorerFiles.length}개`}
+              {(function () {
+    if (sidebarPanel === "search") {
+        return (contentSearchError ?? `${totalContentSearchMatches}개 코드 검색 결과`);
+    }
+    return (`파일 ${explorerFiles.length}개`);
+})()}
             </p>
-            {sidebarPanel === "search" ? <div className={css.contentResults()}>
-              {contentSearchMatches.length > 0 ? <ul>{contentSearchMatches.map((match, index) => <li key={`${match.path}:${match.line}:${match.column}:${index}`}><Button type="button" size="sm" variant="ghost" onClick={() => { selectFile(match.path); setEditorPositionRequest({ column: match.column, line: match.line, requestId: Date.now() }); }}><strong>{match.path}</strong><small>{match.line}:{match.column}</small><span>{match.snippet || "빈 줄"}</span></Button></li>)}</ul> : <p className={css.fileEmpty()}>{fileQuery.trim() ? "일치하는 코드를 찾지 못했습니다." : "검색어를 입력하면 프로젝트 전체 코드를 찾습니다."}</p>}
-              {contentSearchMatches.length < totalContentSearchMatches ? <Button className={css.fileMore()} variant="ghost" type="button" onClick={() => setFileListLimit((current) => current + FILE_LIST_BATCH_SIZE)}>검색 결과 더 보기</Button> : null}
-            </div> : <div className={css.fileList()}>
-              {visibleFiles.length > 0 || (workspace?.directories.length ?? 0) > 0 ? <ProjectFileTree canWrite={canWriteLocalDraft} directories={workspace?.directories ?? []} dirtyPaths={editorDrafts.dirtyPaths} files={visibleFiles} onCopyPath={copyExplorerPath} onCreateDirectory={beginCreateDirectory} onCreateInDirectory={beginCreate} onDelete={requestDelete} onMove={moveExplorerPath} onOpenInSplit={openInSplit} onPin={(path) => selectFile(path, workspace, "pin")} onRename={beginRename} onSelect={selectFile} selectedPath={selectedPath} /> : <p className={css.fileEmpty()}>프로젝트 파일이 없습니다.</p>}
-              {hasMoreFiles ? <Button className={css.fileMore()} variant="ghost" type="button" onClick={() => setFileListLimit((current) => current + FILE_LIST_BATCH_SIZE)}>다음 {Math.min(FILE_LIST_BATCH_SIZE, matchingFiles.length - visibleFiles.length)}개 보기</Button> : null}
-            </div>}
+            {(function () {
+    if (sidebarPanel === "search") {
+        return (<div className={css.contentResults()}>
+              {(function () {
+    if (contentSearchMatches.length > 0) {
+        return (<ul>{contentSearchMatches.map((match, index) => <li key={`${match.path}:${match.line}:${match.column}:${index}`}><Button type="button" size="sm" variant="ghost" onClick={() => { selectFile(match.path); setEditorPositionRequest({ column: match.column, line: match.line, requestId: Date.now() }); }}><strong>{match.path}</strong><small>{match.line}:{match.column}</small><span>{match.snippet || "빈 줄"}</span></Button></li>)}</ul>);
+    }
+    return (<p className={css.fileEmpty()}>{(function () {
+    if (fileQuery.trim()) {
+        return ("일치하는 코드를 찾지 못했습니다.");
+    }
+    return ("검색어를 입력하면 프로젝트 전체 코드를 찾습니다.");
+})()}</p>);
+})()}
+              {(function () {
+    if (contentSearchMatches.length < totalContentSearchMatches) {
+        return (<Button className={css.fileMore()} variant="ghost" type="button" onClick={() => setFileListLimit((current) => current + FILE_LIST_BATCH_SIZE)}>검색 결과 더 보기</Button>);
+    }
+    return (null);
+})()}
+            </div>);
+    }
+    return (<div className={css.fileList()}>
+              {(function () {
+    if (visibleFiles.length > 0 || (workspace?.directories.length ?? 0) > 0) {
+        return (<ProjectFileTree canWrite={canWriteLocalDraft} directories={workspace?.directories ?? []} dirtyPaths={editorDrafts.dirtyPaths} files={visibleFiles} onCopyPath={copyExplorerPath} onCreateDirectory={beginCreateDirectory} onCreateInDirectory={beginCreate} onDelete={requestDelete} onMove={moveExplorerPath} onOpenInSplit={openInSplit} onPin={(path) => selectFile(path, workspace, "pin")} onRename={beginRename} onSelect={selectFile} selectedPath={selectedPath} />);
+    }
+    return (<p className={css.fileEmpty()}>프로젝트 파일이 없습니다.</p>);
+})()}
+              {(function () {
+    if (hasMoreFiles) {
+        return (<Button className={css.fileMore()} variant="ghost" type="button" onClick={() => setFileListLimit((current) => current + FILE_LIST_BATCH_SIZE)}>다음 {Math.min(FILE_LIST_BATCH_SIZE, matchingFiles.length - visibleFiles.length)}개 보기</Button>);
+    }
+    return (null);
+})()}
+            </div>);
+})()}
           </nav>
           <div className={css.editorStack()}>
-            <section className={css.editor()} aria-label="텍스트 편집기" data-path={selectedPath ? true : undefined}>
+            <section className={css.editor()} aria-label="텍스트 편집기" data-path={(function () {
+    if (selectedPath) {
+        return (true);
+    }
+    return (undefined);
+})()}>
               <div className={css.editorTabs()} role="toolbar" aria-label="열린 파일">
-                {openPaths.length > 0 ? openPaths.map((path) => {
+                {(function () {
+    if (openPaths.length > 0) {
+        return (openPaths.map((path) => {
                   const fileName = path.split("/").at(-1) ?? path;
                   const isActive = path === selectedPath;
                   const isPreview = editorTabs.previewPath === path && !editorTabs.pinnedPaths.has(path);
-                  const tabClass = [isActive ? "is-active" : "", isPreview ? "is-preview" : ""].filter(Boolean).join(" ") || undefined;
+                  const tabClass = [(function () {
+    if (isActive) {
+        return ("is-active");
+    }
+    return ("");
+})(), (function () {
+    if (isPreview) {
+        return ("is-preview");
+    }
+    return ("");
+})()].filter(Boolean).join(" ") || undefined;
                   return <div className={tabClass} key={path}>
-                    <Button className="tab-select" type="button" size="sm" variant="ghost" aria-pressed={isActive} title={isPreview ? `${path} · 미리보기` : path} onClick={() => selectFile(path, workspace, "activate")} onDoubleClick={() => selectFile(path, workspace, "pin")}><span className={css.fileIcon()} aria-hidden="true">#</span><strong>{fileName}</strong>{editorDrafts.dirtyPaths.has(path) ? <i className="is-dirty" aria-label="저장하지 않은 변경 사항" /> : null}</Button>
+                    <Button className="tab-select" type="button" size="sm" variant="ghost" aria-pressed={isActive} title={(function () {
+    if (isPreview) {
+        return (`${path} · 미리보기`);
+    }
+    return (path);
+})()} onClick={() => selectFile(path, workspace, "activate")} onDoubleClick={() => selectFile(path, workspace, "pin")}><span className={css.fileIcon()} aria-hidden="true">#</span><strong>{fileName}</strong>{(function () {
+    if (editorDrafts.dirtyPaths.has(path)) {
+        return (<i className="is-dirty" aria-label="저장하지 않은 변경 사항" />);
+    }
+    return (null);
+})()}</Button>
                     <Button className="tab-close" type="button" size="icon" variant="ghost" aria-label={`${fileName} 닫기`} onClick={() => closeFile(path)}>×</Button>
                   </div>;
-                }) : <span>파일을 선택하세요</span>}
+                }));
+    }
+    return (<span>파일을 선택하세요</span>);
+})()}
                 <div className="sticky right-0 ml-auto !max-w-none !gap-0 !border-l !border-r-0 !border-muted-border bg-subtle !px-1" role="group" aria-label="편집기 작업">
                   <Button className="grid size-7 place-items-center rounded-sm border-0 bg-transparent text-muted-foreground hover:bg-hover hover:text-foreground" type="button" size="icon" variant="ghost" aria-label="문서 서식 정리" disabled={!selectedPath || !canWriteLocalDraft} onClick={() => setEditorFormatRequestId(Date.now())}>↹</Button>
-                  <Button className="grid size-7 place-items-center rounded-sm border-0 bg-transparent text-muted-foreground hover:bg-hover hover:text-foreground" type="button" size="icon" variant="ghost" aria-label={isEditorSplit ? "편집기 분할 닫기" : "편집기 분할"} disabled={!selectedPath} onClick={toggleSplit}>◫</Button>
+                  <Button className="grid size-7 place-items-center rounded-sm border-0 bg-transparent text-muted-foreground hover:bg-hover hover:text-foreground" type="button" size="icon" variant="ghost" aria-label={(function () {
+    if (isEditorSplit) {
+        return ("편집기 분할 닫기");
+    }
+    return ("편집기 분할");
+})()} disabled={!selectedPath} onClick={toggleSplit}>◫</Button>
                   <MenuRoot>
                     <MenuTrigger className="grid size-7 place-items-center rounded-sm border-0 bg-transparent text-muted-foreground hover:bg-hover hover:text-foreground" type="button" aria-label="편집기 작업 더 보기">•••</MenuTrigger>
                     <MenuPortal>
@@ -1918,36 +2088,170 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, onProjectReloa
                   </MenuRoot>
                 </div>
               </div>
-              {selectedPath ? <EditorBreadcrumbs className={css.editorBreadcrumbs()} path={selectedPath} /> : null}
-              {selectedPath ? <div className={css.editorHost()}><div className={css.editorPanes()} data-split={isEditorSplit}><ProjectMonacoEditor formatRequestId={editorFormatRequestId} path={selectedPath} priorityPaths={splitPath ? [...openPaths, splitPath] : openPaths} projectKey={`${workspaceScope}:${project.id}`} readOnly={!canWriteLocalDraft} readWorkspaceText={readWorkspaceText} revealPosition={editorPositionRequest} themePreference={editorThemePreference} value={editorContent} workspaceFiles={workspace?.files} onDiagnosticsChange={setEditorDiagnostics} onChange={handlePrimaryEditorChange} />{isEditorSplit && splitPath ? <div className={css.splitPane()}><div className={css.splitPaneBar()}><span title={splitPath}>{splitPath}</span><Button type="button" size="icon" variant="ghost" aria-label="분할 편집기 닫기" onClick={closeSplit}>×</Button></div><ProjectMonacoEditor path={splitPath} projectKey={`${workspaceScope}:${project.id}`} readOnly={!canWriteLocalDraft} themePreference={editorThemePreference} value={splitPath === selectedPath ? editorContent : splitContent} onChange={handleSplitEditorChange} /></div> : null}</div></div> : <div className={css.editorEmpty()}><span aria-hidden="true">⌘</span><strong>편집할 파일을 선택하세요</strong><p>왼쪽 파일 목록에서 선택하거나 <kbd>⌘P</kbd>로 빠르게 찾을 수 있습니다.</p></div>}
-              <div className={css.status()}><span><i className={activeBufferDirty ? "is-dirty" : ""} aria-hidden="true" />{editorStatus}</span><span>{editorLineCount}줄 · {editorContent.length}자 · UTF-8</span><Button aria-label="로컬 초안에 적용" type="button" size="sm" disabled={!selectedPath || isSaving || !canWriteLocalDraft} onClick={saveSelectedFile}>{isSaving ? "적용 중…" : "로컬 초안에 적용"}</Button></div>
+              {(function () {
+    if (selectedPath) {
+        return (<EditorBreadcrumbs className={css.editorBreadcrumbs()} path={selectedPath} />);
+    }
+    return (null);
+})()}
+              {(function () {
+    if (selectedPath) {
+        return (<div className={css.editorHost()}><div className={css.editorPanes()} data-split={isEditorSplit}><ProjectMonacoEditor formatRequestId={editorFormatRequestId} path={selectedPath} priorityPaths={(function () {
+    if (splitPath) {
+        return ([...openPaths, splitPath]);
+    }
+    return (openPaths);
+})()} projectKey={`${workspaceScope}:${project.id}`} readOnly={!canWriteLocalDraft} readWorkspaceText={readWorkspaceText} revealPosition={editorPositionRequest} themePreference={editorThemePreference} value={editorContent} workspaceFiles={workspace?.files} onDiagnosticsChange={setEditorDiagnostics} onChange={handlePrimaryEditorChange} />{(function () {
+    if (isEditorSplit && splitPath) {
+        return (<div className={css.splitPane()}><div className={css.splitPaneBar()}><span title={splitPath}>{splitPath}</span><Button type="button" size="icon" variant="ghost" aria-label="분할 편집기 닫기" onClick={closeSplit}>×</Button></div><ProjectMonacoEditor path={splitPath} projectKey={`${workspaceScope}:${project.id}`} readOnly={!canWriteLocalDraft} themePreference={editorThemePreference} value={(function () {
+    if (splitPath === selectedPath) {
+        return (editorContent);
+    }
+    return (splitContent);
+})()} onChange={handleSplitEditorChange} /></div>);
+    }
+    return (null);
+})()}</div></div>);
+    }
+    return (<div className={css.editorEmpty()}><span aria-hidden="true">⌘</span><strong>편집할 파일을 선택하세요</strong><p>왼쪽 파일 목록에서 선택하거나 <kbd>⌘P</kbd>로 빠르게 찾을 수 있습니다.</p></div>);
+})()}
+              <div className={css.status()}><span><i className={(function () {
+    if (activeBufferDirty) {
+        return ("is-dirty");
+    }
+    return ("");
+})()} aria-hidden="true" />{editorStatus}</span><span>{editorLineCount}줄 · {editorContent.length}자 · UTF-8</span><Button aria-label="로컬 초안에 적용" type="button" size="sm" disabled={!selectedPath || isSaving || !canWriteLocalDraft} onClick={saveSelectedFile}>{(function () {
+    if (isSaving) {
+        return ("적용 중…");
+    }
+    return ("로컬 초안에 적용");
+})()}</Button></div>
             </section>
-            {isTerminalOpen ? <section className={css.terminal()} aria-label="하단 도구 패널" style={{ height: bottomPanelHeight }}>
+            {(function () {
+    if (isTerminalOpen) {
+        return (<section className={css.terminal()} aria-label="하단 도구 패널" style={{ height: bottomPanelHeight }}>
               <div className="absolute inset-x-0 top-[-0.25rem] z-20 h-2 cursor-row-resize touch-none" role="separator" aria-label="하단 패널 높이 조절" aria-orientation="horizontal" aria-valuemin={120} aria-valuemax={480} aria-valuenow={bottomPanelHeight} onPointerDown={beginBottomPanelResize} />
               <div className={css.terminalToolbar()}>
                 <div role="toolbar" aria-label="하단 패널">
-                  <Button type="button" size="sm" variant="ghost" aria-pressed={bottomPanel === "problems"} onClick={() => setBottomPanel("problems")}>문제{editorDiagnostics.length > 0 ? ` ${editorDiagnostics.length}` : ""}</Button>
-                  <Button type="button" size="sm" variant="ghost" aria-pressed={bottomPanel === "console"} onClick={() => setBottomPanel("console")}>콘솔{previewConsole.length > 0 ? ` ${previewConsole.length}` : ""}</Button>
+                  <Button type="button" size="sm" variant="ghost" aria-pressed={bottomPanel === "problems"} onClick={() => setBottomPanel("problems")}>문제{(function () {
+    if (editorDiagnostics.length > 0) {
+        return (` ${editorDiagnostics.length}`);
+    }
+    return ("");
+})()}</Button>
+                  <Button type="button" size="sm" variant="ghost" aria-pressed={bottomPanel === "console"} onClick={() => setBottomPanel("console")}>콘솔{(function () {
+    if (previewConsole.length > 0) {
+        return (` ${previewConsole.length}`);
+    }
+    return ("");
+})()}</Button>
                   <Button type="button" size="sm" variant="ghost" aria-pressed={bottomPanel === "output"} onClick={() => setBottomPanel("output")}>출력</Button>
-                  <Button type="button" size="sm" variant="ghost" aria-pressed={bottomPanel === "ports"} onClick={() => setBottomPanel("ports")}>포트{runtime.ports.length > 0 ? ` ${runtime.ports.length}` : ""}</Button>
-                  <Button type="button" size="sm" variant="ghost" aria-pressed={bottomPanel === "processes"} onClick={() => setBottomPanel("processes")}>프로세스{runtime.processes.length > 0 ? ` ${runtime.processes.length}` : ""}</Button>
+                  <Button type="button" size="sm" variant="ghost" aria-pressed={bottomPanel === "ports"} onClick={() => setBottomPanel("ports")}>포트{(function () {
+    if (runtime.ports.length > 0) {
+        return (` ${runtime.ports.length}`);
+    }
+    return ("");
+})()}</Button>
+                  <Button type="button" size="sm" variant="ghost" aria-pressed={bottomPanel === "processes"} onClick={() => setBottomPanel("processes")}>프로세스{(function () {
+    if (runtime.processes.length > 0) {
+        return (` ${runtime.processes.length}`);
+    }
+    return ("");
+})()}</Button>
                   {terminal.sessions.map((session) => <Button key={session.id} type="button" size="sm" variant="ghost" aria-pressed={bottomPanel === "terminal" && terminal.activeSessionId === session.id} title={session.name} onClick={() => { terminal.setActiveSessionId(session.id); setBottomPanel("terminal"); }}>{session.name}</Button>)}
                 </div>
                 <div className={css.terminalActions()}>
-                  {bottomPanel === "terminal" ? <>
+                  {(function () {
+    if (bottomPanel === "terminal") {
+        return (<>
                     <Button type="button" size="icon" variant="ghost" aria-label="새 터미널" title="새 터미널" onClick={() => { terminal.create(); setBottomPanel("terminal"); }}>＋</Button>
                     <Button type="button" size="icon" variant="ghost" aria-label="터미널 내용 지우기" title="터미널 내용 지우기 (Ctrl+L)" onClick={() => terminal.clear()}>⌫</Button>
-                  </> : null}
-                  {bottomPanel === "console" ? <Button type="button" size="icon" variant="ghost" aria-label="콘솔 내용 지우기" title="콘솔 내용 지우기" onClick={() => { previousServerLogsRef.current = runtime.serverLogs; setPreviewConsole([]); }}>⌫</Button> : null}
+                  </>);
+    }
+    return (null);
+})()}
+                  {(function () {
+    if (bottomPanel === "console") {
+        return (<Button type="button" size="icon" variant="ghost" aria-label="콘솔 내용 지우기" title="콘솔 내용 지우기" onClick={() => { previousServerLogsRef.current = runtime.serverLogs; setPreviewConsole([]); }}>⌫</Button>);
+    }
+    return (null);
+})()}
                   <Button type="button" size="icon" variant="ghost" aria-label="하단 패널 닫기" title="하단 패널 닫기" onClick={() => setIsTerminalOpen(false)}>×</Button>
                 </div>
               </div>
-              {bottomPanel === "problems" ? <div className="min-h-0 overflow-auto p-3 text-xs text-white/75">{editorDiagnostics.length > 0 ? <ul className="m-0 grid list-none gap-2 p-0">{editorDiagnostics.map((diagnostic, index) => <li className="grid grid-cols-[auto_minmax(0,1fr)_auto] gap-2" key={`${diagnostic.line}:${diagnostic.column}:${index}`}><span aria-hidden="true">{diagnostic.severity >= 8 ? "●" : "▲"}</span><span>{diagnostic.message}</span><Button className="border-0 bg-transparent font-mono text-white/55 hover:text-white" type="button" size="sm" variant="ghost" onClick={() => setEditorPositionRequest({ column: diagnostic.column, line: diagnostic.line, requestId: Date.now() })}>{selectedFileName}:{diagnostic.line}:{diagnostic.column}</Button></li>)}</ul> : <p className="m-0 text-white/55">현재 파일에서 발견된 문제가 없습니다.</p>}</div> : null}
-              {bottomPanel === "console" ? <div className="min-h-0 overflow-auto p-3 font-mono text-xs text-white/75" role="log" aria-label="미리보기 콘솔">{previewConsole.length > 0 ? <ul className="m-0 grid list-none gap-3 p-0">{previewConsole.map((entry) => <li className="grid gap-1 border-b border-white/10 pb-2" key={entry.id}><p className={`m-0 whitespace-pre-wrap ${previewConsoleTone(entry.level)}`}><span className="mr-2 text-white/40">{studioConsoleSourceLabel(entry.source)}</span><span className="mr-2 uppercase text-white/40">{entry.level}</span><span>{entry.message}</span></p>{entry.stack && entry.stack !== entry.message ? <pre className="m-0 whitespace-pre-wrap text-white/45">{entry.stack}</pre> : null}</li>)}</ul> : <p className="m-0 text-white/55">미리보기 콘솔 출력이 없습니다.</p>}</div> : null}
-              {bottomPanel === "output" ? <pre className="m-0 min-h-0 overflow-auto whitespace-pre-wrap p-3 font-mono text-xs text-white/70" aria-live="polite">{terminal.activeSession.output || "실행 출력을 기다리고 있습니다."}</pre> : null}
-              {bottomPanel === "ports" ? runtime.ports.length > 0 ? <ul className={css.runtimeList()} aria-label="열린 포트">{runtime.ports.map((port) => <li key={port.port}><div className="grid min-w-0 gap-0.5"><strong>{port.label} · localhost:{port.port}</strong><span>{port.status === "running" ? "실행 중" : "중지됨"} · <Button className="border-0 bg-transparent p-0 font-inherit text-[var(--n-color-studio-success)] hover:underline" type="button" size="sm" variant="ghost" onClick={openPreviewWindow}>브라우저에서 열기</Button></span></div><Button type="button" size="sm" variant="ghost" aria-label={`포트 ${port.port} 중지`} onClick={() => void stopPreviewPort(port.port)}>중지</Button></li>)}</ul> : <p className="m-0 p-3 text-xs text-white/55">열린 개발 서버 포트가 없습니다.</p> : null}
-              {bottomPanel === "processes" ? runtime.processes.length > 0 ? <ul className={css.runtimeList()} aria-label="실행 중 프로세스">{runtime.processes.map((process) => <li key={`${process.terminalId}:${process.pid}:${process.generation ?? 0}`}><div className="grid min-w-0 gap-0.5"><strong>{process.command}</strong><span>PID {process.pid} · {process.terminalId} · {process.cwd}{process.terminalSize ? ` · ${process.terminalSize.cols}×${process.terminalSize.rows}` : ""}</span></div><Button type="button" size="sm" variant="ghost" aria-label={`${process.command} 프로세스 종료`} onClick={() => stopTerminalProcess(process.terminalId)}>종료</Button></li>)}</ul> : <p className="m-0 p-3 text-xs text-white/55">실행 중인 터미널 프로세스가 없습니다.</p> : null}
-              {bottomPanel === "terminal" ? <ProjectTerminalView
+              {(function () {
+    if (bottomPanel === "problems") {
+        return (<div className="min-h-0 overflow-auto p-3 text-xs text-white/75">{(function () {
+    if (editorDiagnostics.length > 0) {
+        return (<ul className="m-0 grid list-none gap-2 p-0">{editorDiagnostics.map((diagnostic, index) => <li className="grid grid-cols-[auto_minmax(0,1fr)_auto] gap-2" key={`${diagnostic.line}:${diagnostic.column}:${index}`}><span aria-hidden="true">{(function () {
+    if (diagnostic.severity >= 8) {
+        return ("●");
+    }
+    return ("▲");
+})()}</span><span>{diagnostic.message}</span><Button className="border-0 bg-transparent font-mono text-white/55 hover:text-white" type="button" size="sm" variant="ghost" onClick={() => setEditorPositionRequest({ column: diagnostic.column, line: diagnostic.line, requestId: Date.now() })}>{selectedFileName}:{diagnostic.line}:{diagnostic.column}</Button></li>)}</ul>);
+    }
+    return (<p className="m-0 text-white/55">현재 파일에서 발견된 문제가 없습니다.</p>);
+})()}</div>);
+    }
+    return (null);
+})()}
+              {(function () {
+    if (bottomPanel === "console") {
+        return (<div className="min-h-0 overflow-auto p-3 font-mono text-xs text-white/75" role="log" aria-label="미리보기 콘솔">{(function () {
+    if (previewConsole.length > 0) {
+        return (<ul className="m-0 grid list-none gap-3 p-0">{previewConsole.map((entry) => <li className="grid gap-1 border-b border-white/10 pb-2" key={entry.id}><p className={`m-0 whitespace-pre-wrap ${previewConsoleTone(entry.level)}`}><span className="mr-2 text-white/40">{studioConsoleSourceLabel(entry.source)}</span><span className="mr-2 uppercase text-white/40">{entry.level}</span><span>{entry.message}</span></p>{(function () {
+    if (entry.stack && entry.stack !== entry.message) {
+        return (<pre className="m-0 whitespace-pre-wrap text-white/45">{entry.stack}</pre>);
+    }
+    return (null);
+})()}</li>)}</ul>);
+    }
+    return (<p className="m-0 text-white/55">미리보기 콘솔 출력이 없습니다.</p>);
+})()}</div>);
+    }
+    return (null);
+})()}
+              {(function () {
+    if (bottomPanel === "output") {
+        return (<pre className="m-0 min-h-0 overflow-auto whitespace-pre-wrap p-3 font-mono text-xs text-white/70" aria-live="polite">{terminal.activeSession.output || "실행 출력을 기다리고 있습니다."}</pre>);
+    }
+    return (null);
+})()}
+              {(function () {
+    if (bottomPanel === "ports") {
+        return ((function () {
+    if (runtime.ports.length > 0) {
+        return (<ul className={css.runtimeList()} aria-label="열린 포트">{runtime.ports.map((port) => <li key={port.port}><div className="grid min-w-0 gap-0.5"><strong>{port.label} · localhost:{port.port}</strong><span>{(function () {
+    if (port.status === "running") {
+        return ("실행 중");
+    }
+    return ("중지됨");
+})()} · <Button className="border-0 bg-transparent p-0 font-inherit text-[var(--n-color-studio-success)] hover:underline" type="button" size="sm" variant="ghost" onClick={openPreviewWindow}>브라우저에서 열기</Button></span></div><Button type="button" size="sm" variant="ghost" aria-label={`포트 ${port.port} 중지`} onClick={() => void stopPreviewPort(port.port)}>중지</Button></li>)}</ul>);
+    }
+    return (<p className="m-0 p-3 text-xs text-white/55">열린 개발 서버 포트가 없습니다.</p>);
+})());
+    }
+    return (null);
+})()}
+              {(function () {
+    if (bottomPanel === "processes") {
+        return ((function () {
+    if (runtime.processes.length > 0) {
+        return (<ul className={css.runtimeList()} aria-label="실행 중 프로세스">{runtime.processes.map((process) => <li key={`${process.terminalId}:${process.pid}:${process.generation ?? 0}`}><div className="grid min-w-0 gap-0.5"><strong>{process.command}</strong><span>PID {process.pid} · {process.terminalId} · {process.cwd}{(function () {
+    if (process.terminalSize) {
+        return (` · ${process.terminalSize.cols}×${process.terminalSize.rows}`);
+    }
+    return ("");
+})()}</span></div><Button type="button" size="sm" variant="ghost" aria-label={`${process.command} 프로세스 종료`} onClick={() => stopTerminalProcess(process.terminalId)}>종료</Button></li>)}</ul>);
+    }
+    return (<p className="m-0 p-3 text-xs text-white/55">실행 중인 터미널 프로세스가 없습니다.</p>);
+})());
+    }
+    return (null);
+})()}
+              {(function () {
+    if (bottomPanel === "terminal") {
+        return (<ProjectTerminalView
                 key={terminal.activeSession.id}
                 output={terminal.activeSession.output}
                 sessionName={terminal.activeSession.name}
@@ -1956,8 +2260,14 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, onProjectReloa
                 onInterrupt={() => { adapterRef.current?.terminal.signal("SIGINT", `ide-terminal-${terminal.activeSessionId}`); }}
                 onResize={(cols, rows) => { adapterRef.current?.terminal.resize(cols, rows, `ide-terminal-${terminal.activeSessionId}`); }}
                 onRun={runCommand}
-              /> : null}
-            </section> : null}
+              />);
+    }
+    return (null);
+})()}
+            </section>);
+    }
+    return (null);
+})()}
           </div>
           <section className={css.utility({ className: utilityLayout })} aria-label="미리보기 패널">
             <div className="absolute inset-y-0 left-[-0.25rem] z-20 w-2 cursor-col-resize touch-none max-[72rem]:hidden" role="separator" aria-label="미리보기 너비 조절" aria-orientation="vertical" aria-valuemin={320} aria-valuemax={720} aria-valuenow={previewWidth} onPointerDown={(event) => beginHorizontalResize("preview", event)} />
@@ -1970,15 +2280,95 @@ export function ProjectIdeShell({ assetRevision, onProjectCommit, onProjectReloa
                 </div>
                 <form className={css.previewAddress()} title={isolatedPreviewUrl ?? runtime.previewUrl ?? undefined} onSubmit={submitPreviewAddress}>
                   <span aria-hidden="true">▣</span>
-                  <input aria-label="미리보기 주소" value={previewAddress} disabled={!hasIsolatedPreview} spellCheck={false} autoCapitalize="off" autoCorrect="off" placeholder={hasIsolatedPreview ? "/" : "미리보기를 실행하세요"} onFocus={() => { previewAddressEditingRef.current = true; }} onBlur={() => { previewAddressEditingRef.current = false; setPreviewAddress(previewHistory.entries[previewHistory.index] ?? "/"); }} onChange={(event) => setPreviewAddress(event.currentTarget.value)} />
+                  <Input className="h-auto min-h-0 w-auto rounded-none border-0 bg-transparent p-0 font-mono text-[0.625rem] text-foreground shadow-none outline-none disabled:bg-transparent disabled:text-muted-foreground" aria-label="미리보기 주소" value={previewAddress} disabled={!hasIsolatedPreview} spellCheck={false} autoCapitalize="off" autoCorrect="off" placeholder={(function () {
+    if (hasIsolatedPreview) {
+        return ("/");
+    }
+    return ("미리보기를 실행하세요");
+})()} onFocus={() => { previewAddressEditingRef.current = true; }} onBlur={() => { previewAddressEditingRef.current = false; setPreviewAddress(previewHistory.entries[previewHistory.index] ?? "/"); }} onChange={(event) => setPreviewAddress(event.currentTarget.value)} />
                 </form>
-                <div className={css.previewActions()}>{hasIsolatedPreview ? <><span className={css.live()}><i aria-hidden="true" /> 실행 중</span><Button className="grid size-7 place-items-center rounded-sm border-0 bg-transparent text-xs text-muted-foreground hover:bg-hover hover:text-foreground" type="button" size="icon" variant="ghost" onClick={openPreviewWindow} aria-label="미리보기를 새 탭에서 열기" title="새 탭에서 열기">↗</Button></> : <Button aria-label={isRunningPreview ? "미리보기 취소" : "미리보기 실행"} type="button" size="sm" variant="primary" onClick={() => { if (isRunningPreview) cancelRunningPreview(); else void runPreview(); }}>{isRunningPreview ? "취소" : "실행"}</Button>}<Button aria-label="미리보기 닫기" type="button" size="sm" variant="ghost" onClick={() => setIsPreviewOpen(false)}>×</Button></div>
+                <div className={css.previewActions()}>{(function () {
+    if (hasIsolatedPreview) {
+        return (<><span className={css.live()}><i aria-hidden="true" /> 실행 중</span><Button className="grid size-7 place-items-center rounded-sm border-0 bg-transparent text-xs text-muted-foreground hover:bg-hover hover:text-foreground" type="button" size="icon" variant="ghost" onClick={openPreviewWindow} aria-label="미리보기를 새 탭에서 열기" title="새 탭에서 열기">↗</Button></>);
+    }
+    return (<Button aria-label={(function () {
+    if (isRunningPreview) {
+        return ("미리보기 취소");
+    }
+    return ("미리보기 실행");
+})()} type="button" size="sm" variant="primary" onClick={() => { if (isRunningPreview) cancelRunningPreview(); else void runPreview(); }}>{(function () {
+    if (isRunningPreview) {
+        return ("취소");
+    }
+    return ("실행");
+})()}</Button>);
+})()}<Button aria-label="미리보기 닫기" type="button" size="sm" variant="ghost" onClick={() => setIsPreviewOpen(false)}>×</Button></div>
               </div>
-              {hasIsolatedPreview ? <div className="relative min-h-0 overflow-hidden"><iframe className="block size-full" ref={attachPreviewFrame} title={`${project.name} 미리보기`} src={isolatedPreviewUrl} sandbox="allow-scripts allow-same-origin" allow="cross-origin-isolated" referrerPolicy="no-referrer" />{previewRefreshFailed ? <div className="absolute inset-0 grid place-content-center justify-items-center bg-raised/95 p-8 text-center" role="alert"><strong className="text-sm text-foreground">개발 서버가 중지되었습니다.</strong><p className="mb-4 mt-2 max-w-sm text-xs text-muted-foreground">새로고침할 수 없습니다. 개발 서버를 다시 실행하면 현재 로컬 초안으로 미리보기를 복구합니다.</p><Button type="button" size="sm" variant="primary" onClick={() => { if (isRunningPreview) cancelRunningPreview(); else void runPreview(); }}>{isRunningPreview ? "취소" : "개발 서버 다시 실행"}</Button></div> : null}</div> : previewConfiguration.status === "disabled" ? <div className={css.utilityEmpty()} role="status"><strong>미리보기를 사용할 수 없습니다.</strong><p>{previewConfiguration.message} 동일 출처 미리보기는 보안을 위해 비활성화되어 있습니다.</p></div> : runtime.previewUrl ? <div className={css.utilityEmpty()} role="status"><strong>격리된 연결을 준비하고 있습니다.</strong><p>격리된 미리보기 연결이 아직 준비되지 않았습니다. 동일 출처 미리보기는 비활성화되어 있습니다.</p></div> : <div className={css.utilityEmpty()}><span aria-hidden="true">▷</span><strong>실행 결과를 바로 확인하세요</strong><p>의존성을 설치하고 개발 서버를 시작합니다.</p></div>}
+              {(function () {
+    if (hasIsolatedPreview) {
+        return (<div className="relative min-h-0 overflow-hidden"><iframe className="block size-full" ref={attachPreviewFrame} title={`${project.name} 미리보기`} src={isolatedPreviewUrl} sandbox="allow-scripts allow-same-origin" allow="cross-origin-isolated" referrerPolicy="no-referrer" />{(function () {
+    if (previewRefreshFailed) {
+        return (<div className="absolute inset-0 grid place-content-center justify-items-center bg-raised/95 p-8 text-center" role="alert"><strong className="text-sm text-foreground">개발 서버가 중지되었습니다.</strong><p className="mb-4 mt-2 max-w-sm text-xs text-muted-foreground">새로고침할 수 없습니다. 개발 서버를 다시 실행하면 현재 로컬 초안으로 미리보기를 복구합니다.</p><Button type="button" size="sm" variant="primary" onClick={() => { if (isRunningPreview) cancelRunningPreview(); else void runPreview(); }}>{(function () {
+    if (isRunningPreview) {
+        return ("취소");
+    }
+    return ("개발 서버 다시 실행");
+})()}</Button></div>);
+    }
+    return (null);
+})()}</div>);
+    }
+    return ((function () {
+    if (previewConfiguration.status === "disabled") {
+        return (<div className={css.utilityEmpty()} role="status"><strong>미리보기를 사용할 수 없습니다.</strong><p>{previewConfiguration.message} 동일 출처 미리보기는 보안을 위해 비활성화되어 있습니다.</p></div>);
+    }
+    return ((function () {
+    if (runtime.previewUrl) {
+        return (<div className={css.utilityEmpty()} role="status"><strong>격리된 연결을 준비하고 있습니다.</strong><p>격리된 미리보기 연결이 아직 준비되지 않았습니다. 동일 출처 미리보기는 비활성화되어 있습니다.</p></div>);
+    }
+    return (<div className={css.utilityEmpty()}><span aria-hidden="true">▷</span><strong>실행 결과를 바로 확인하세요</strong><p>의존성을 설치하고 개발 서버를 시작합니다.</p></div>);
+})());
+})());
+})()}
             </section>
           </section>
         </div>
-      ) : <div className={css.start()} role="status"><span className={css.startMark()} aria-hidden="true">N</span><h4>{isStarting ? "Studio를 준비하고 있습니다" : project.state === "active" ? error ? "Studio를 준비하지 못했습니다" : "Studio가 종료되었습니다" : "보관된 프로젝트입니다"}</h4><p>{isStarting ? `저장본을 확인한 뒤, 저장본이 없으면 프로젝트에 고정된 ${projectTemplateLabel(project.templateId)} 템플릿을 자동으로 엽니다.` : error ?? (project.state === "active" ? "프로젝트에 고정된 시작 템플릿으로 Studio를 다시 열 수 있습니다." : "활성 프로젝트만 Studio에서 열 수 있습니다.")}</p>{!isStarting && project.state === "active" ? <Button type="button" variant="primary" onClick={() => void startWorkspace()}>{error ? "다시 시도" : "Studio 열기"}</Button> : null}</div>}
+      ) : <div className={css.start()} role="status"><span className={css.startMark()} aria-hidden="true">N</span><h4>{(function () {
+    if (isStarting) {
+        return ("Studio를 준비하고 있습니다");
+    }
+    return ((function () {
+    if (project.state === "active") {
+        return ((function () {
+    if (error) {
+        return ("Studio를 준비하지 못했습니다");
+    }
+    return ("Studio가 종료되었습니다");
+})());
+    }
+    return ("보관된 프로젝트입니다");
+})());
+})()}</h4><p>{(function () {
+    if (isStarting) {
+        return (`저장본을 확인한 뒤, 저장본이 없으면 프로젝트에 고정된 ${projectTemplateLabel(project.templateId)} 템플릿을 자동으로 엽니다.`);
+    }
+    return (error ?? ((function () {
+    if (project.state === "active") {
+        return ("프로젝트에 고정된 시작 템플릿으로 Studio를 다시 열 수 있습니다.");
+    }
+    return ("활성 프로젝트만 Studio에서 열 수 있습니다.");
+})()));
+})()}</p>{(function () {
+    if (!isStarting && project.state === "active") {
+        return (<Button type="button" variant="primary" onClick={() => void startWorkspace()}>{(function () {
+    if (error) {
+        return ("다시 시도");
+    }
+    return ("Studio 열기");
+})()}</Button>);
+    }
+    return (null);
+})()}</div>}
       <ConfirmationDialog
         confirmLabel="파일 삭제"
         description={`${pendingDeletePath ?? selectedPath ?? "선택한 파일"}을 로컬 초안에서 삭제합니다. 서버에 저장하기 전에는 기존 서버 버전에 영향을 주지 않습니다.`}

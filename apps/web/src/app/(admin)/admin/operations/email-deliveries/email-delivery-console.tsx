@@ -126,7 +126,12 @@ export function EmailDeliveryConsole({ initial }: { readonly initial: EmailDeliv
               <thead className="bg-subtle/70 text-xs font-semibold text-muted-foreground [&_th]:border-b [&_th]:border-muted-border [&_th]:px-4 [&_th]:py-2.5"><tr><th scope="col">수신자</th><th scope="col">템플릿</th><th scope="col">리소스</th><th scope="col">상태</th><th scope="col">시도</th><th scope="col">최근 변경</th><th scope="col" className="text-right">작업</th></tr></thead>
               <tbody>
             {collection.items.map((delivery) => {
-              const pending = confirmation?.id === delivery.id ? confirmation.operation : undefined;
+              const pending = (function () {
+    if (confirmation?.id === delivery.id) {
+        return (confirmation.operation);
+    }
+    return (undefined);
+})();
               return (
                 <EmailDeliveryRows delivery={delivery} key={delivery.id} pending={pending} disabled={mutation.isPending} onApply={apply} onCancelConfirmation={() => setConfirmation(undefined)} />
               );
@@ -137,7 +142,17 @@ export function EmailDeliveryConsole({ initial }: { readonly initial: EmailDeliv
         )}
         <footer className="flex items-center justify-between gap-4 border-t border-muted-border px-4 py-3 max-[37.5rem]:flex-col max-[37.5rem]:items-stretch"><span className="text-xs text-muted-foreground" aria-live="polite">{pageIndex + 1}페이지 · 현재 {collection.items.length}건 · 페이지당 최대 25건</span><nav className="flex justify-end gap-2 max-[37.5rem]:[&_[data-slot=button]]:flex-1" aria-label="이메일 전송 내역 페이지 이동"><Button size="sm" disabled={pageIndex === 0 || mutation.isPending} onClick={() => setPageIndex((current) => Math.max(0, current - 1))}>이전</Button><Button size="sm" variant="primary" disabled={(pageIndex >= pages.length - 1 && collection.nextCursor === null) || mutation.isPending} onClick={() => void nextPage()}>{mutation.isPending ? "불러오는 중…" : "다음"}</Button></nav></footer>
       </AdminSection>
-      {feedback ? <AdminFeedback feedbackTone={feedback.error ? "danger" : "success"} role={feedback.error ? "alert" : "status"}>{feedback.text}</AdminFeedback> : null}
+      {feedback ? <AdminFeedback feedbackTone={(function () {
+    if (feedback.error) {
+        return ("danger");
+    }
+    return ("success");
+})()} role={(function () {
+    if (feedback.error) {
+        return ("alert");
+    }
+    return ("status");
+})()}>{feedback.text}</AdminFeedback> : null}
     </AdminPage>
   );
 }
@@ -148,12 +163,42 @@ function EmailDeliveryRows({ delivery, disabled, onApply, onCancelConfirmation, 
       <td><div className="grid min-w-0 gap-1"><strong className="truncate text-sm">{delivery.recipientEmail}</strong><span className="truncate text-xs text-muted-foreground">{delivery.errorClass ?? "오류 없음"}{delivery.smtpCode === null ? "" : ` · SMTP ${delivery.smtpCode}`}</span></div></td>
       <td><span className="block truncate text-xs" title={delivery.templateId}>{delivery.templateId}</span></td>
       <td><div className="grid min-w-0 gap-1"><span className="truncate text-sm">{delivery.resourceType}</span><span className="truncate font-mono text-xs text-muted-foreground" title={delivery.resourceId}>{delivery.resourceId}</span></div></td>
-      <td><Badge size="sm" variant="status" tone={delivery.state === "sent" ? "success" : delivery.state === "dead_letter" ? "danger" : "neutral"}>{FILTERS.find((item) => item.value === delivery.state)?.label ?? delivery.state}</Badge></td>
+      <td><Badge size="sm" variant="status" tone={delivery.state === "sent" ? "success" : (function () {
+    if (delivery.state === "dead_letter") {
+        return ("danger");
+    }
+    return ("neutral");
+})()}>{FILTERS.find((item) => item.value === delivery.state)?.label ?? delivery.state}</Badge></td>
       <td className="text-sm">{delivery.attemptCount}회</td>
       <td><time className="whitespace-nowrap text-xs text-muted-foreground" dateTime={delivery.updatedAt}>{formatDate(delivery.updatedAt)}</time></td>
-      <td><div className="flex justify-end gap-2">{delivery.state === "dead_letter" ? <Button size="sm" variant={pending === "retry" ? "danger" : "secondary"} disabled={disabled} onClick={() => void onApply(delivery, "retry")}>{pending === "retry" ? "확인" : "재시도"}</Button> : null}{(["pending", "retry_wait"] as const).includes(delivery.state as "pending" | "retry_wait") ? <Button size="sm" variant={pending === "cancel" ? "danger" : "secondary"} disabled={disabled} onClick={() => void onApply(delivery, "cancel")}>{pending === "cancel" ? "확인" : "폐기"}</Button> : null}</div></td>
+      <td><div className="flex justify-end gap-2">{delivery.state === "dead_letter" ? <Button size="sm" variant={(function () {
+    if (pending === "retry") {
+        return ("danger");
+    }
+    return ("secondary");
+})()} disabled={disabled} onClick={() => void onApply(delivery, "retry")}>{(function () {
+    if (pending === "retry") {
+        return ("확인");
+    }
+    return ("재시도");
+})()}</Button> : null}{(["pending", "retry_wait"] as const).includes(delivery.state as "pending" | "retry_wait") ? <Button size="sm" variant={(function () {
+    if (pending === "cancel") {
+        return ("danger");
+    }
+    return ("secondary");
+})()} disabled={disabled} onClick={() => void onApply(delivery, "cancel")}>{(function () {
+    if (pending === "cancel") {
+        return ("확인");
+    }
+    return ("폐기");
+})()}</Button> : null}</div></td>
     </tr>
-    {pending ? <tr><td className="border-b border-danger bg-subtle px-4 py-3 text-sm text-danger" colSpan={7}><div className="flex items-center justify-between gap-4"><span role="alert">{pending === "retry" ? "현재 전송 가능 여부를 다시 확인한 뒤 새로운 시도를 만듭니다." : "이 전송 작업만 영구적으로 폐기합니다."} 최근 관리자 재인증이 필요합니다.</span><Button size="sm" disabled={disabled} onClick={onCancelConfirmation}>취소</Button></div></td></tr> : null}
+    {pending ? <tr><td className="border-b border-danger bg-subtle px-4 py-3 text-sm text-danger" colSpan={7}><div className="flex items-center justify-between gap-4"><span role="alert">{(function () {
+    if (pending === "retry") {
+        return ("현재 전송 가능 여부를 다시 확인한 뒤 새로운 시도를 만듭니다.");
+    }
+    return ("이 전송 작업만 영구적으로 폐기합니다.");
+})()} 최근 관리자 재인증이 필요합니다.</span><Button size="sm" disabled={disabled} onClick={onCancelConfirmation}>취소</Button></div></td></tr> : null}
   </>;
 }
 

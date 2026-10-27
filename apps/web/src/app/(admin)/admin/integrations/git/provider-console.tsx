@@ -100,8 +100,28 @@ export function GitProviderConsole({ createMode = false, detailMode = false, ini
 
   return <AdminPage id="main-content" contentWidth="standard">
     <AdminPageHeader category="연동" title="Git 제공자" description="등록된 Git 연결의 상태, 권한과 검증 결과를 확인합니다." aside={<div className="flex items-center gap-2"><Badge>등록 {providers.length}개</Badge><Link className={buttonVariants({ size: "sm", variant: "primary" })} href="/admin/integrations/git/new">새 제공자</Link></div>} />
-    <AdminPanel aria-labelledby="git-provider-list"><AdminCollectionHeading><h2 id="git-provider-list">등록된 제공자</h2><Badge>{providers.length}개</Badge></AdminCollectionHeading>{providers.length === 0 ? <p>등록된 Git 제공자가 없습니다. 새 제공자를 등록해 첫 연결을 구성하세요.</p> : <ul className="mt-6 grid list-none gap-2 p-0">{providers.map((provider) => <AdminIntegrationRecord key={provider.id}><div><strong>{provider.displayName}</strong><span>{provider.state === "active" ? "활성" : "비활성"} · {providerKindLabel(provider.kind)}</span><small>{provider.host}:{provider.port} · {provider.allowsWrite ? "읽기·쓰기" : "읽기 전용"}</small></div><AdminRecordActions><Link className={buttonVariants({ size: "sm", variant: "secondary" })} href={`/admin/integrations/git/${provider.id}`}>상세 보기</Link></AdminRecordActions></AdminIntegrationRecord>)}</ul>}</AdminPanel>
-    {feedback ? <AdminFeedback feedbackTone={feedback.error ? "danger" : "success"} role={feedback.error ? "alert" : "status"}>{feedback.text}</AdminFeedback> : null}
+    <AdminPanel aria-labelledby="git-provider-list"><AdminCollectionHeading><h2 id="git-provider-list">등록된 제공자</h2><Badge>{providers.length}개</Badge></AdminCollectionHeading>{providers.length === 0 ? <p>등록된 Git 제공자가 없습니다. 새 제공자를 등록해 첫 연결을 구성하세요.</p> : <ul className="mt-6 grid list-none gap-2 p-0">{providers.map((provider) => <AdminIntegrationRecord key={provider.id}><div><strong>{provider.displayName}</strong><span>{(function () {
+    if (provider.state === "active") {
+        return ("활성");
+    }
+    return ("비활성");
+})()} · {providerKindLabel(provider.kind)}</span><small>{provider.host}:{provider.port} · {(function () {
+    if (provider.allowsWrite) {
+        return ("읽기·쓰기");
+    }
+    return ("읽기 전용");
+})()}</small></div><AdminRecordActions><Link className={buttonVariants({ size: "sm", variant: "secondary" })} href={`/admin/integrations/git/${provider.id}`}>상세 보기</Link></AdminRecordActions></AdminIntegrationRecord>)}</ul>}</AdminPanel>
+    {feedback ? <AdminFeedback feedbackTone={(function () {
+    if (feedback.error) {
+        return ("danger");
+    }
+    return ("success");
+})()} role={(function () {
+    if (feedback.error) {
+        return ("alert");
+    }
+    return ("status");
+})()}>{feedback.text}</AdminFeedback> : null}
     <ConfirmationDialog busy={mutation.isPending} confirmLabel={mutation.isPending ? "삭제 중…" : "제공자 삭제"} description={`${pendingDeletion?.displayName ?? "선택한 제공자"} 설정과 인증서 신뢰 구성이 영구적으로 삭제됩니다.`} open={pendingDeletion !== undefined} title="Git 제공자를 삭제할까요?" onCancel={() => setPendingDeletion(undefined)} onConfirm={() => { if (pendingDeletion) void remove(pendingDeletion); }} />
   </AdminPage>;
 }
@@ -126,14 +146,29 @@ function GitProviderCreate({ busy, feedback, onSubmit }: { readonly busy: boolea
       <AdminPageHeader category="Git 제공자" title="새 Git 제공자" description="연결 원본과 권한을 등록한 뒤 상세 화면에서 검증하고 활성화합니다." />
       <AdminConnectionGuide subject="Git 제공자" />
       <AdminPanel><ProviderForm onSubmit={onSubmit} disabled={busy} /></AdminPanel>
-      {feedback ? <AdminFeedback feedbackTone={feedback.error ? "danger" : "success"} role={feedback.error ? "alert" : "status"}>{feedback.text}</AdminFeedback> : null}
+      {feedback ? <AdminFeedback feedbackTone={(function () {
+    if (feedback.error) {
+        return ("danger");
+    }
+    return ("success");
+})()} role={(function () {
+    if (feedback.error) {
+        return ("alert");
+    }
+    return ("status");
+})()}>{feedback.text}</AdminFeedback> : null}
     </AdminPage>
   );
 }
 
 function GitProviderDetail({ busy, feedback, onActivate, onDelete, onDeleteCancel, onDeleteConfirm, onDisable, onUpdate, pendingDeletion, provider }: GitProviderDetailProps) {
   const active = provider.state === "active";
-  const permissions = provider.allowsWrite ? "읽기·쓰기" : provider.allowsRead ? "읽기 전용" : "권한 없음";
+  const permissions = provider.allowsWrite ? "읽기·쓰기" : (function () {
+    if (provider.allowsRead) {
+        return ("읽기 전용");
+    }
+    return ("권한 없음");
+})();
   return (
     <AdminPage id="main-content" contentWidth="standard" aria-busy={busy}>
       <AdminIntegrationBackLink href="/admin/integrations/git">Git 제공자</AdminIntegrationBackLink>
@@ -175,7 +210,17 @@ function GitProviderDetail({ busy, feedback, onActivate, onDelete, onDeleteCance
       <AdminIntegrationDangerSection title="제공자 삭제" description="연결 설정과 인증서 신뢰 구성을 영구적으로 제거합니다. 먼저 제공자를 비활성화해야 합니다.">
         <Button variant="danger" disabled={busy || active} onClick={onDelete}>제공자 삭제</Button>
       </AdminIntegrationDangerSection>
-      {feedback ? <AdminFeedback feedbackTone={feedback.error ? "danger" : "success"} role={feedback.error ? "alert" : "status"}>{feedback.text}</AdminFeedback> : null}
+      {feedback ? <AdminFeedback feedbackTone={(function () {
+    if (feedback.error) {
+        return ("danger");
+    }
+    return ("success");
+})()} role={(function () {
+    if (feedback.error) {
+        return ("alert");
+    }
+    return ("status");
+})()}>{feedback.text}</AdminFeedback> : null}
       <ConfirmationDialog busy={busy} confirmLabel={busy ? "삭제 중…" : "제공자 삭제"} description={`${provider.displayName} 설정과 인증서 신뢰 구성이 영구적으로 삭제됩니다.`} open={pendingDeletion !== undefined} title="Git 제공자를 삭제할까요?" onCancel={onDeleteCancel} onConfirm={onDeleteConfirm} />
     </AdminPage>
   );
@@ -226,40 +271,65 @@ function ProviderForm({ provider, onSubmit, disabled }: { readonly provider?: Gi
             <input type="hidden" name="port" value={preset.port} />
             <input type="hidden" name="apiBaseUrl" value={preset.apiBaseUrl} />
           </>
-        ) : provider ? (
+        ) : (function () {
+    if (provider) {
+        return ((
           <div className="col-span-full grid grid-cols-[minmax(0,1fr)_7rem_minmax(0,1.4fr)] gap-3 rounded-md border border-muted-border bg-subtle px-4 py-3 max-[48rem]:col-auto max-[48rem]:grid-cols-1 [&>span]:grid [&>span]:min-w-0 [&>span]:gap-1 [&_small]:text-xs [&_small]:text-subtle-foreground [&_strong]:[overflow-wrap:anywhere]">
             <span><small>호스트</small><strong>{provider.host}</strong></span>
             <span><small>포트</small><strong>{provider.port}</strong></span>
             <span><small>API</small><strong>{provider.apiBaseUrl}</strong></span>
           </div>
-        ) : (
+        ));
+    }
+    return ((
           <>
             <TextField label="정확한 호스트" name="host" required maxLength={253} disabled={disabled} placeholder="git.example.com" />
             <TextField label="포트" name="port" type="number" min="1" max="65535" defaultValue="443" required disabled={disabled} />
             <TextField className="col-span-full min-w-0 max-[48rem]:col-auto" label="API 기본 URL" name="apiBaseUrl" type="url" required maxLength={2048} disabled={disabled} placeholder="https://git.example.com/api" />
           </>
-        )}
+        ));
+})()}
       </section>
 
       {usesOAuth ? (
-        <section className="col-span-full grid grid-cols-2 gap-4 border-t border-muted-border pt-5 first:border-t-0 first:pt-0 max-[48rem]:grid-cols-1" aria-labelledby={provider ? `provider-oauth-${provider.id}` : "provider-oauth-new"}>
+        <section className="col-span-full grid grid-cols-2 gap-4 border-t border-muted-border pt-5 first:border-t-0 first:pt-0 max-[48rem]:grid-cols-1" aria-labelledby={(function () {
+    if (provider) {
+        return (`provider-oauth-${provider.id}`);
+    }
+    return ("provider-oauth-new");
+})()}>
           <header className="col-span-full grid gap-1 [&_strong]:text-sm [&_strong]:text-foreground [&_span]:text-xs [&_span]:text-subtle-foreground">
-            <strong id={provider ? `provider-oauth-${provider.id}` : "provider-oauth-new"}>OAuth 애플리케이션</strong>
-            <span>{isSelfHosted ? "자체 호스팅 서비스에 등록한 OAuth 애플리케이션 정보를 입력합니다." : "공식 서비스에 등록한 OAuth 애플리케이션의 클라이언트 ID를 입력합니다."}</span>
+            <strong id={(function () {
+    if (provider) {
+        return (`provider-oauth-${provider.id}`);
+    }
+    return ("provider-oauth-new");
+})()}>OAuth 애플리케이션</strong>
+            <span>{(function () {
+    if (isSelfHosted) {
+        return ("자체 호스팅 서비스에 등록한 OAuth 애플리케이션 정보를 입력합니다.");
+    }
+    return ("공식 서비스에 등록한 OAuth 애플리케이션의 클라이언트 ID를 입력합니다.");
+})()}</span>
           </header>
-          {preset ? (
+          {(function () {
+    if (preset) {
+        return ((
             <>
               <TextField className="col-span-full min-w-0 max-[48rem]:col-auto" label="OAuth 클라이언트 ID" name="oauthClientId" defaultValue={provider?.oauthClientId ?? ""} required maxLength={1024} disabled={disabled} />
               <input type="hidden" name="oauthAuthorizationUrl" value={preset.oauthAuthorizationUrl} />
               <input type="hidden" name="oauthTokenUrl" value={preset.oauthTokenUrl} />
             </>
-          ) : (
+          ));
+    }
+    return ((
             <>
               <TextField label="OAuth 인증 URL" name="oauthAuthorizationUrl" type="url" defaultValue={provider?.oauthAuthorizationUrl ?? ""} required maxLength={2048} disabled={disabled} placeholder="https://git.example.com/oauth/authorize" />
               <TextField label="OAuth 토큰 URL" name="oauthTokenUrl" type="url" defaultValue={provider?.oauthTokenUrl ?? ""} required maxLength={2048} disabled={disabled} placeholder="https://git.example.com/oauth/token" />
               <TextField className="col-span-full min-w-0 max-[48rem]:col-auto" label="OAuth 클라이언트 ID" name="oauthClientId" defaultValue={provider?.oauthClientId ?? ""} required maxLength={1024} disabled={disabled} />
             </>
-          )}
+          ));
+})()}
         </section>
       ) : (
         <p className="col-span-full text-xs text-subtle-foreground max-[48rem]:col-auto">일반 HTTPS 제공자는 OAuth를 사용하지 않습니다. 사용자는 프로젝트에서 개인 액세스 토큰을 별도로 연결합니다.</p>

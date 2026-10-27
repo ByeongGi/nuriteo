@@ -222,7 +222,17 @@ export function ProjectGitPanel({ embedded = false, initialState, project }: Rea
       <h3 id="project-git-title">Git 원격 저장소</h3>
       <p>자격 증명은 개발 서버에 한 번만 전송되며 API 응답이나 브라우저 저장소에 남지 않습니다.</p>
       {loading ? <p aria-live="polite">Git 연결을 불러오는 중…</p> : null}
-      {feedback ? <p className={styles.feedback({ className: feedback.error ? styles.error() : styles.success() })} role={feedback.error ? "alert" : "status"}>{feedback.text}</p> : null}
+      {feedback ? <p className={styles.feedback({ className: (function () {
+    if (feedback.error) {
+        return (styles.error());
+    }
+    return (styles.success());
+})() })} role={(function () {
+    if (feedback.error) {
+        return ("alert");
+    }
+    return ("status");
+})()}>{feedback.text}</p> : null}
 
       {!loading && availableProviders.length > 0 ? (
         <form className={styles.form()} onSubmit={connect} aria-busy={mutation.isPending}>

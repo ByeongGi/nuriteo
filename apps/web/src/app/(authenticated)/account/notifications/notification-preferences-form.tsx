@@ -68,7 +68,17 @@ export function NotificationPreferencesForm({ initialPreferences }: Readonly<{
         description="알림함과 분리해 이벤트별 이메일 수신 방식을 관리합니다."
       />
       {feedback ? (
-        <p className={styles.feedback({ className: feedback.error ? styles.error() : undefined })} role={feedback.error ? "alert" : "status"}>
+        <p className={styles.feedback({ className: (function () {
+    if (feedback.error) {
+        return (styles.error());
+    }
+    return (undefined);
+})() })} role={(function () {
+    if (feedback.error) {
+        return ("alert");
+    }
+    return ("status");
+})()}>
           {feedback.text}
         </p>
       ) : null}

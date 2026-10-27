@@ -53,7 +53,17 @@ export function InvitationDirectory({ invitations, organizationId, organizationN
     {oneTimeUrl ? <section className={styles.panel()} aria-live="polite"><h2 className="m-0 text-base">새 초대 링크</h2><p className={styles.panelCopy()}>이 일회용 링크는 화면을 떠나면 다시 표시되지 않습니다.</p><output className="select-all break-all rounded-md bg-subtle p-3 font-mono text-xs">{oneTimeUrl}</output></section> : null}
     {status ? <p className={styles.status()} role="status">{status}</p> : null}{error ? <p className={styles.error()} role="alert">{error}</p> : null}
     <div className="flex justify-end"><SelectField className="w-full sm:max-w-52" label="표시 범위" labelHidden options={[{ value: "pending", label: "대기 중" }, { value: "all", label: `전체 ${invitations.length}` }]} value={filter} onValueChange={(value) => setFilter(value === "all" ? "all" : "pending")} /></div>
-    {visibleInvitations.length === 0 ? <div className={styles.empty()}>표시할 초대가 없습니다.</div> : <ul className={styles.list()} aria-label="워크스페이스 초대">{visibleInvitations.map((invitation) => <li className={styles.row()} key={invitation.id}><div className={styles.identity()}><span className={styles.name()}>{invitation.proposedRole === "owner" ? "소유자 초대" : "멤버 초대"}</span><span className={styles.metadata()}>{invitationStatusLabel(invitation.status)} · {expirationLabel(invitation.expiresAt)}</span></div><span className={styles.role()}>{invitation.inviteeUserId.slice(-8)}</span>{invitation.status === "pending" ? <div className={styles.actions()}><Button size="sm" disabled={mutation.isPending} onClick={() => void reissue(invitation)}>다시 발급</Button><Button size="sm" disabled={mutation.isPending} onClick={() => void revoke(invitation)}>취소</Button></div> : <span />}</li>)}</ul>}
+    {visibleInvitations.length === 0 ? <div className={styles.empty()}>표시할 초대가 없습니다.</div> : <ul className={styles.list()} aria-label="워크스페이스 초대">{visibleInvitations.map((invitation) => <li className={styles.row()} key={invitation.id}><div className={styles.identity()}><span className={styles.name()}>{(function () {
+    if (invitation.proposedRole === "owner") {
+        return ("소유자 초대");
+    }
+    return ("멤버 초대");
+})()}</span><span className={styles.metadata()}>{invitationStatusLabel(invitation.status)} · {expirationLabel(invitation.expiresAt)}</span></div><span className={styles.role()}>{invitation.inviteeUserId.slice(-8)}</span>{(function () {
+    if (invitation.status === "pending") {
+        return (<div className={styles.actions()}><Button size="sm" disabled={mutation.isPending} onClick={() => void reissue(invitation)}>다시 발급</Button><Button size="sm" disabled={mutation.isPending} onClick={() => void revoke(invitation)}>취소</Button></div>);
+    }
+    return (<span />);
+})()}</li>)}</ul>}
   </WorkspaceSection>;
 }
 

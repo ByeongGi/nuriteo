@@ -1321,7 +1321,12 @@ function normalizeDiagnostic(input: PreviewWorkflowSnapshot["diagnostics"][numbe
   const level = input.level?.toLowerCase();
   return {
     code: boundedText(input.code ?? "RUNTIME_DIAGNOSTIC", 64),
-    severity: level === "error" ? "error" : level === "warning" || level === "warn" ? "warning" : "info",
+    severity: level === "error" ? "error" : (function () {
+    if (level === "warning" || level === "warn") {
+        return ("warning");
+    }
+    return ("info");
+})(),
     message: boundedText(redactRuntimeLog(input.message), MAX_DIAGNOSTIC_LENGTH),
     actions: normalizeRecoveryActions(input.recoveryActions)
   };
