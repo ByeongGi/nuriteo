@@ -1,6 +1,6 @@
-import { createFailedMessage, createReadyMessage } from "../packages/protocol/src/messages.ts";
-import { OPCODES, STATUS } from "../packages/protocol/src/generated.ts";
-import { handlePingRequest, respondErrorSync, respondSync, waitForRequest } from "../packages/protocol/src/sync-client.ts";
+import { createFailedMessage, createReadyMessage } from "../protocol/src/messages.ts";
+import { OPCODES, STATUS } from "../protocol/src/generated.ts";
+import { handlePingRequest, respondErrorSync, respondSync, waitForRequest } from "../protocol/src/sync-client.ts";
 
 let processPort = null;
 let syncChannel = null;

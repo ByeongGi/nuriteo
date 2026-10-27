@@ -15,7 +15,7 @@ import {
 import { resolveViteHmrUrl } from "../../packages/preview/src/index.ts";
 import { readProjectDependencyNames } from "../shared/ecosystem-fixture-dependencies.ts";
 import { createFallbackWorkspaceReader, createNodeFsWorkspaceReader } from "../shared/fs-workspace-reader.ts";
-import { NodeThreadCliEvaluationWorker } from "../shared/node-thread-cli-worker.ts";
+import { NodeThreadCliEvaluationWorker } from "../../packages/workers/node-thread-cli-worker.ts";
 
 const root = new URL("../..", import.meta.url).pathname;
 const matrixPath = path.join(root, "compat/ecosystem-fixtures.json");

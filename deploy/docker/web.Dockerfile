@@ -21,6 +21,7 @@ COPY packages/node-runtime/package.json packages/node-runtime/package.json
 COPY packages/preview/package.json packages/preview/package.json
 COPY packages/workspace-runtime/package.json packages/workspace-runtime/package.json
 COPY packages/protocol/package.json packages/protocol/package.json
+COPY packages/workers/package.json packages/workers/package.json
 
 RUN pnpm install --frozen-lockfile --filter @nuriteo/web...
 
@@ -33,7 +34,7 @@ COPY packages/node-runtime packages/node-runtime
 COPY packages/preview packages/preview
 COPY packages/workspace-runtime packages/workspace-runtime
 COPY packages/protocol packages/protocol
-COPY workers workers
+COPY packages/workers packages/workers
 COPY vendor/runtime/qrcode vendor/runtime/qrcode
 COPY packages/workspace-runtime/assets/preview-sw.js packages/workspace-runtime/assets/preview-sw.js
 COPY packages/workspace-runtime/assets/runtime packages/workspace-runtime/assets/runtime

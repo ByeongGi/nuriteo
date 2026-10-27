@@ -1,13 +1,13 @@
-import { createFailedMessage, createReadyMessage } from "../packages/protocol/src/messages.ts";
-import { OPCODES } from "../packages/protocol/src/generated.ts";
-import { requestSync } from "../packages/protocol/src/sync-client.ts";
-import { runNodeProgram } from "../packages/node-runtime/src/bootstrap.ts";
-import { createCliEvaluationHttpBridge, evaluateCliModuleWorkerMessage } from "../packages/node-runtime/src/package-managers/cli-evaluator.ts";
-import { MemoryPackageManagerWorkspace } from "../packages/node-runtime/src/package-managers/workspace.ts";
-import { createProcessWorkerRuntime } from "../packages/browser-host/src/process/worker-runtime.ts";
-import { SystemWasmClient } from "../packages/browser-host/src/process/system-wasm-client.ts";
-import { SystemWasmVirtualPty } from "../packages/browser-host/src/process/virtual-pty.ts";
-import { installWebAssemblyMemoryLimit } from "../packages/browser-host/src/resources/index.ts";
+import { createFailedMessage, createReadyMessage } from "../protocol/src/messages.ts";
+import { OPCODES } from "../protocol/src/generated.ts";
+import { requestSync } from "../protocol/src/sync-client.ts";
+import { runNodeProgram } from "../node-runtime/src/bootstrap.ts";
+import { createCliEvaluationHttpBridge, evaluateCliModuleWorkerMessage } from "../node-runtime/src/package-managers/cli-evaluator.ts";
+import { MemoryPackageManagerWorkspace } from "../node-runtime/src/package-managers/workspace.ts";
+import { createProcessWorkerRuntime } from "../browser-host/src/process/worker-runtime.ts";
+import { SystemWasmClient } from "../browser-host/src/process/system-wasm-client.ts";
+import { SystemWasmVirtualPty } from "../browser-host/src/process/virtual-pty.ts";
+import { installWebAssemblyMemoryLimit } from "../browser-host/src/resources/index.ts";
 
 const YARN_BUNDLE_SHA256 = "443ed69e76443b89afddccfc9faec1ff16eb5e500979cc079c696dec4c3d94ee";
 const YARN_ENTRY_SHA256 = "148e19db309ec9eaf7720b28df811337906eea8a1758deaa54afee60a6305e04";
@@ -355,7 +355,7 @@ async function loadPinnedNextFactories(message) {
   if (await sha256(workspace.readBytes(entry)) !== NEXT_ENTRY_SHA256) {
     throw new Error("ERR_NEXT_CSP_ENTRY_INTEGRITY");
   }
-  const factoryUrl = new URL("../vendor/next-cli-15.5.26.mjs", self.location.href);
+  const factoryUrl = new URL("../../vendor/next-cli-15.5.26.mjs", self.location.href);
   const factoryResponse = await fetch(factoryUrl, { cache: "no-store" });
   if (!factoryResponse.ok || await sha256(new Uint8Array(await factoryResponse.arrayBuffer())) !== NEXT_FACTORY_SHA256) {
     throw new Error("ERR_NEXT_CSP_FACTORY_INTEGRITY");
@@ -383,7 +383,7 @@ async function loadPinnedViteFactories(message) {
   if (message.request.entry.version !== "8.2.0") throw new Error("ERR_VITE_CSP_UNSUPPORTED_VERSION");
   const entry = message.request.entry.entry;
   if (!entry.endsWith("/node_modules/vite/bin/vite.js")) throw new Error("ERR_VITE_CSP_UNEXPECTED_ENTRY");
-  const assetRoot = new URL("../vendor/vite-8.2.0/", self.location.href);
+  const assetRoot = new URL("../../vendor/vite-8.2.0/", self.location.href);
   await verifyStaticAsset(new URL("vite-cli-static-factories.mjs", assetRoot), VITE_FACTORY_SHA256, "ERR_VITE_CSP_FACTORY_INTEGRITY");
   await verifyStaticAsset(new URL("rolldown-wasi-binding.mjs", assetRoot), ROLLDOWN_WASI_BINDING_SHA256, "ERR_ROLLDOWN_WASI_BINDING_INTEGRITY");
   await verifyStaticAsset(new URL("assets/rolldown-binding.wasm", assetRoot), ROLLDOWN_WASI_MODULE_SHA256, "ERR_ROLLDOWN_WASI_MODULE_INTEGRITY");
@@ -427,7 +427,7 @@ async function loadPinnedYarnFactories(message) {
       await sha256(workspace.readBytes(bundle)) !== YARN_BUNDLE_SHA256) {
     throw new Error("ERR_YARN_CSP_BUNDLE_INTEGRITY");
   }
-  const factoryUrl = new URL("../vendor/yarn-cli-1.22.22.mjs", self.location.href);
+  const factoryUrl = new URL("../../vendor/yarn-cli-1.22.22.mjs", self.location.href);
   const factoryResponse = await fetch(factoryUrl, { cache: "no-store" });
   if (!factoryResponse.ok || await sha256(new Uint8Array(await factoryResponse.arrayBuffer())) !== YARN_FACTORY_SHA256) {
     throw new Error("ERR_YARN_CSP_FACTORY_INTEGRITY");

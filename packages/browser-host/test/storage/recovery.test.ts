@@ -67,7 +67,7 @@ const table = new HostProcessTable({
     return worker;
   }
 });
-const prepared = table.prepare({ url: "/workers/process-worker.ts" });
+const prepared = table.prepare({ url: "/packages/workers/process-worker.ts" });
 const failed = await table.start(prepared.pid);
 assert.equal(failed.status, "failed");
 assert.equal(failed.resourcesReleased, true);

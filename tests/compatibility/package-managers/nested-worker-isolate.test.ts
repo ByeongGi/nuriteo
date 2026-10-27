@@ -4,7 +4,7 @@ import {
   createWorkerBackedAsyncCliModuleEvaluator,
   MemoryPackageManagerWorkspace
 } from "../../../packages/node-runtime/src/index.ts";
-import { NodeThreadCliEvaluationWorker } from "../../../tooling/shared/node-thread-cli-worker.ts";
+import { NodeThreadCliEvaluationWorker } from "../../../packages/workers/node-thread-cli-worker.ts";
 
 const workspace = new MemoryPackageManagerWorkspace([
   {

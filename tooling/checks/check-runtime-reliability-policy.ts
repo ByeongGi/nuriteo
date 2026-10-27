@@ -46,9 +46,9 @@ assert(browserWorkerResources.pageMemory.scope.includes("not a per-Worker hard l
 assert(fs.existsSync("tooling/benchmarks/measure-browser-worker-resources.ts"), "browser worker resource probe missing");
 assert(fs.existsSync("packages/browser-host/src/resources/browser-resource-policy.ts"), "browser resource policy missing");
 assert(fs.existsSync("packages/browser-host/test/resources/runtime-resource-policy.test.ts"), "browser resource policy test missing");
-assert(fs.readFileSync("workers/process-worker.ts", "utf8").includes("installWebAssemblyMemoryLimit"), "process worker WASM memory policy missing");
-assert(fs.readFileSync("workers/cli-nested-worker.ts", "utf8").includes("installWebAssemblyMemoryLimit"), "nested worker WASM memory policy missing");
-assert(fs.readFileSync("tooling/shared/node-thread-cli-worker.ts", "utf8").includes("maxOldGenerationSizeMb: 256"), "Node worker resource limit missing");
+assert(fs.readFileSync("packages/workers/process-worker.ts", "utf8").includes("installWebAssemblyMemoryLimit"), "process worker WASM memory policy missing");
+assert(fs.readFileSync("packages/workers/cli-nested-worker.ts", "utf8").includes("installWebAssemblyMemoryLimit"), "nested worker WASM memory policy missing");
+assert(fs.readFileSync("packages/workers/node-thread-cli-worker.ts", "utf8").includes("maxOldGenerationSizeMb: 256"), "Node worker resource limit missing");
 assert(fs.readFileSync("packages/node-runtime/src/package-managers/workspace.ts", "utf8").includes("DEFAULT_WORKSPACE_MEMORY_LIMIT_BYTES"), "guest workspace limit missing");
 assert(policy.timeouts.installMs >= 30_000, "install timeout must be at least 30s");
 assert(policy.timeouts.cliWorkerMs >= 30_000, "CLI worker timeout must be at least 30s");

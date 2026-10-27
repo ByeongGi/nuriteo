@@ -97,7 +97,7 @@ try {
   const page = await browser.newPage();
   await page.goto(`${baseUrl}yarn-worker-fixture`, { waitUntil: "load" });
   const runInBrowserWorker = (args) => page.evaluate(async ({ snapshot, args }) => {
-    const worker = new Worker("/workers/process-worker.ts", { type: "module" });
+    const worker = new Worker("/packages/workers/process-worker.ts", { type: "module" });
     try {
       return await new Promise((resolve, reject) => {
         const timer = setTimeout(() => reject(new Error("Yarn browser worker timed out")), 45000);
@@ -136,7 +136,7 @@ try {
   tamperedWorkspace.writeText(`${guestRoot}/lib/cli.js`, `${tamperedWorkspace.readText(`${guestRoot}/lib/cli.js`)}\n// tampered`);
   const tampered = tamperedWorkspace.snapshot();
   const tamperedResult = await page.evaluate(async (snapshot) => {
-    const worker = new Worker("/workers/process-worker.ts", { type: "module" });
+    const worker = new Worker("/packages/workers/process-worker.ts", { type: "module" });
     try {
       return await new Promise((resolve) => {
         worker.addEventListener("message", (event) => { if (event.data?.type === "cli:result") resolve(event.data); });
@@ -166,7 +166,7 @@ try {
   holdNextTarball = true;
   const waitingForTarball = new Promise((resolve) => { tarballRequested = resolve; });
   await page.evaluate((snapshot) => {
-    const worker = new Worker("/workers/process-worker.ts", { type: "module" });
+    const worker = new Worker("/packages/workers/process-worker.ts", { type: "module" });
     globalThis.__yarnCancellationWorker = worker;
     worker.postMessage({
       id: 2,

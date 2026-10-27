@@ -476,8 +476,8 @@ async function boot(options = {}) {
   ensureIsolated();
   await teardown();
   container = createContainer({
-    systemWorkerUrl: new URL("/workers/system-worker.ts", location.href),
-    processWorkerUrl: new URL("/workers/process-worker.ts", location.href),
+    systemWorkerUrl: new URL("/packages/workers/system-worker.ts", location.href),
+    processWorkerUrl: new URL("/packages/workers/process-worker.ts", location.href),
     timeoutMs: 2500
   });
   setStatus("booting");

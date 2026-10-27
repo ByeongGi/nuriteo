@@ -37,7 +37,7 @@ await withRuntimeLab(async (page, baseUrl) => {
   await page.goto(baseUrl, { waitUntil: "load" });
   const cliWorkerResult = await page.evaluate(async () => {
     const encode = (value) => btoa(value);
-    const worker = new Worker("/workers/process-worker.ts", { type: "module" });
+    const worker = new Worker("/packages/workers/process-worker.ts", { type: "module" });
     try {
       const result = await new Promise((resolve, reject) => {
         const timeout = setTimeout(() => reject(new Error("cli worker evaluation timeout")), 1000);
@@ -91,7 +91,7 @@ await withRuntimeLab(async (page, baseUrl) => {
 
   const esmCliWorkerResult = await page.evaluate(async () => {
     const encode = (value) => btoa(value);
-    const worker = new Worker("/workers/process-worker.ts", { type: "module" });
+    const worker = new Worker("/packages/workers/process-worker.ts", { type: "module" });
     try {
       const result = await new Promise((resolve, reject) => {
         const timeout = setTimeout(() => reject(new Error("esm cli worker evaluation timeout")), 1000);

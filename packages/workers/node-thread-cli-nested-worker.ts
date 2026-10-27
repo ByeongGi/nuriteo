@@ -1,5 +1,5 @@
 import { parentPort, workerData } from "node:worker_threads";
-import { createCliNestedWorkerRuntime } from "../../packages/node-runtime/src/package-managers/cli-evaluator.ts";
+import { createCliNestedWorkerRuntime } from "../node-runtime/src/package-managers/cli-evaluator.ts";
 
 if (!parentPort) throw new Error("Nested CLI worker requires a parent port");
 

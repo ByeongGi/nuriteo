@@ -38,6 +38,21 @@ function writeFile(target, contents) {
   fs.writeFileSync(file, contents);
 }
 
+function stageSdkWorkers() {
+  const sourceDir = path.join(root, "packages/workers");
+  const targetDir = path.join(packageRoot, "workers");
+  fs.mkdirSync(targetDir, { recursive: true });
+  for (const name of ["system-worker.ts", "process-worker.ts", "cli-nested-worker.ts"]) {
+    let source = fs.readFileSync(path.join(sourceDir, name), "utf8");
+    source = source
+      .replaceAll('from "../protocol/', 'from "../packages/protocol/')
+      .replaceAll('from "../node-runtime/', 'from "../packages/node-runtime/')
+      .replaceAll('from "../browser-host/', 'from "../packages/browser-host/')
+      .replaceAll('new URL("../../vendor/', 'new URL("../vendor/');
+    fs.writeFileSync(path.join(targetDir, name), source);
+  }
+}
+
 function rewritePackagedSource(target, replacements) {
   const file = path.join(packageRoot, target);
   let source = fs.readFileSync(file, "utf8");
@@ -211,11 +226,11 @@ for (const dir of [
   "packages/node-runtime",
   "packages/preview",
   "packages/protocol",
-  "workers",
   "vendor/manifests"
 ]) {
   copyDir(dir, path.join(packageRoot, dir));
 }
+stageSdkWorkers();
 fs.mkdirSync(path.join(packageRoot, "vendor"), { recursive: true });
 fs.copyFileSync(
   path.join(root, "packages/workspace-runtime/assets/vendor/yarn-cli-1.22.22.mjs"),

@@ -46,7 +46,7 @@ try {
   const cdp = await browser.newBrowserCDPSession();
   const workerTargets = async () => {
     const targets = (await cdp.send("Target.getTargets")).targetInfos;
-    return targets.filter((target) => target.type === "worker" && target.url.includes("/workers/process-worker.ts")).length;
+    return targets.filter((target) => target.type === "worker" && target.url.includes("/packages/workers/process-worker.ts")).length;
   };
   const baselineTargets = await workerTargets();
   const memoryProbe = async () => page.evaluate(async () => {
@@ -62,7 +62,7 @@ try {
   });
   const before = await memoryProbe();
   const runWorker = (fail) => page.evaluate(async (forceFailure) => {
-      const worker = new Worker("/workers/process-worker.ts", { type: "module" });
+      const worker = new Worker("/packages/workers/process-worker.ts", { type: "module" });
       const channel = new MessageChannel();
       try {
         return await new Promise((resolve, reject) => {
@@ -120,7 +120,7 @@ try {
     date: new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date()),
     status: "pass-with-product-resource-contract",
     executionHost: "strict-csp-headless-chrome",
-    workerEntrypoint: "/workers/process-worker.ts",
+    workerEntrypoint: "/packages/workers/process-worker.ts",
     csp: REQUIRED_RUNTIME_HEADERS.csp,
     crossOriginIsolated: true,
     iterations,

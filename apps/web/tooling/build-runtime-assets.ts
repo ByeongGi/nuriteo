@@ -13,9 +13,9 @@ const outputRoot = resolveOutputRoot(process.argv.slice(2));
 const runtimeAssetSource = path.join(repositoryRoot, "packages/workspace-runtime/assets");
 
 const entries = Object.freeze({
-  "system-worker.js": path.join(repositoryRoot, "workers/system-worker.ts"),
-  "process-worker.js": path.join(repositoryRoot, "workers/process-worker.ts"),
-  "cli-nested-worker.js": path.join(repositoryRoot, "workers/cli-nested-worker.ts")
+  "system-worker.js": path.join(repositoryRoot, "packages/workers/system-worker.ts"),
+  "process-worker.js": path.join(repositoryRoot, "packages/workers/process-worker.ts"),
+  "cli-nested-worker.js": path.join(repositoryRoot, "packages/workers/cli-nested-worker.ts")
 });
 
 const assets = new Map<string, Uint8Array>();
@@ -53,7 +53,7 @@ function cliNestedWorkerAssetPlugin(): Plugin {
     name: "nuriteo-runtime-nested-asset-paths",
     setup(buildContext) {
       buildContext.onLoad({ filter: /workers\/cli-nested-worker\.ts$/ }, (input) => ({
-        contents: replaceRequired(readText(input.path), 'new URL("../vendor/', 'new URL("./vendor/'),
+        contents: replaceRequired(readText(input.path), 'new URL("../../vendor/', 'new URL("./vendor/'),
         loader: "ts"
       }));
     }
@@ -103,7 +103,7 @@ function processWorkerAssetPlugin(rolldownHash: string): Plugin {
         source = replaceRequired(source,
           'new URL(`/vendor/${lane}-${expected.version}/`, self.location.origin)',
           'new URL(`./vendor/${lane}-${expected.version}/`, self.location.href)');
-        source = replaceRequired(source, 'new URL("../vendor/', 'new URL("./vendor/', 3);
+        source = replaceRequired(source, 'new URL("../../vendor/', 'new URL("./vendor/', 3);
         source = replaceRegexRequired(
           source,
           /const ROLLDOWN_WASI_BINDING_SHA256 = "[0-9a-f]{64}";/u,

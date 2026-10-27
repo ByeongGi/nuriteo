@@ -1,5 +1,5 @@
-import { createCliNestedWorkerRuntime, type CliNestedWorkerRequest } from "../packages/node-runtime/src/package-managers/cli-evaluator.ts";
-import { installWebAssemblyMemoryLimit } from "../packages/browser-host/src/resources/index.ts";
+import { createCliNestedWorkerRuntime, type CliNestedWorkerRequest } from "../node-runtime/src/package-managers/cli-evaluator.ts";
+import { installWebAssemblyMemoryLimit } from "../browser-host/src/resources/index.ts";
 
 installWebAssemblyMemoryLimit();
 
@@ -36,7 +36,7 @@ async function initialize(request: CliNestedWorkerRequest): Promise<void> {
 }
 
 async function loadPinnedNextFactories() {
-  const factoryUrl = new URL("../vendor/next-cli-15.5.26.mjs", self.location.href);
+  const factoryUrl = new URL("../../vendor/next-cli-15.5.26.mjs", self.location.href);
   const response = await fetch(factoryUrl, { cache: "no-store" });
   const bytes = new Uint8Array(await response.arrayBuffer());
   if (!response.ok || await sha256(bytes) !== "0c103d7af3c610283437fd6f326f5b6b9aa8aa53880926a7e509d2433c515224") {

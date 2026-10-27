@@ -92,7 +92,7 @@ try {
   assert.equal(documentResponse.headers()["cross-origin-opener-policy"], REQUIRED_RUNTIME_HEADERS.coop);
   assert.equal(documentResponse.headers()["cross-origin-embedder-policy"], REQUIRED_RUNTIME_HEADERS.coep);
   const workerHeaders = await page.evaluate(async () => {
-    const response = await fetch("/workers/process-worker.ts");
+    const response = await fetch("/packages/workers/process-worker.ts");
     return {
       csp: response.headers.get("content-security-policy"),
       coop: response.headers.get("cross-origin-opener-policy"),
@@ -110,7 +110,7 @@ try {
   const browserCdp = await browser.newBrowserCDPSession();
   const workerTargetsBefore = await processWorkerTargetCount(browserCdp);
   const dev = await page.evaluate(async ({ editedAppSource, projectRoot, snapshot }) => {
-      const worker = new Worker("/workers/process-worker.ts", { type: "module" });
+      const worker = new Worker("/packages/workers/process-worker.ts", { type: "module" });
       const pending = [];
       const waiters = [];
       worker.addEventListener("message", (event) => {
@@ -227,7 +227,7 @@ try {
 
   await waitForWorkerTargets(browserCdp, workerTargetsBefore);
   const build = await page.evaluate(async ({ projectRoot, snapshot }) => {
-    const worker = new Worker("/workers/process-worker.ts", { type: "module" });
+    const worker = new Worker("/packages/workers/process-worker.ts", { type: "module" });
     try {
       const message = await new Promise((resolve, reject) => {
         const timeout = setTimeout(() => reject(new Error("Vite build worker timed out")), 60000);
@@ -275,7 +275,7 @@ try {
   await waitForWorkerTargets(browserCdp, workerTargetsBefore);
   assert.ok(build.distFiles.length > 0, `Vite build produced no dist files\n${build.stdout}\n${build.stderr}`);
   const preview = await page.evaluate(async ({ projectRoot, snapshot }) => {
-    const worker = new Worker("/workers/process-worker.ts", { type: "module" });
+    const worker = new Worker("/packages/workers/process-worker.ts", { type: "module" });
     try {
       const resultMessage = await new Promise((resolve, reject) => {
         const timeout = setTimeout(() => reject(new Error("Vite preview worker timed out")), 60000);

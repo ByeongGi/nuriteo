@@ -71,7 +71,7 @@ await withRuntimeLab(async (page, baseUrl) => {
   const watchdog = await page.evaluate(async () => {
     const { BrowserRuntimeSupervisor } = await import("/packages/browser-host/src/supervisor.ts");
     const runtime = new BrowserRuntimeSupervisor({
-      systemWorkerUrl: new URL("/workers/system-worker.ts", location.href),
+      systemWorkerUrl: new URL("/packages/workers/system-worker.ts", location.href),
       processWorkerUrl: new URL("/tests/system/browser/fixtures/hanging-process-worker.ts", location.href),
       timeoutMs: 1000,
       memoryLimitBytes: 1024

@@ -68,7 +68,7 @@ const prepared = readyCase.table.prepare({
   parent: 99,
   cwd: "/workspace/app",
   env: { NODE_ENV: "test" },
-  url: "/workers/process-worker.ts"
+  url: "/packages/workers/process-worker.ts"
 });
 assert.equal(prepared.status, "prepared");
 assert.equal(prepared.pid, 1);
@@ -104,14 +104,14 @@ assert.equal(duplicateStop.status, "exited");
 assert.deepEqual(readyCase.table.list({ activeOnly: true }), []);
 
 const failedCase = createTable("failed");
-const failedPrepared = failedCase.table.prepare({ url: "/workers/process-worker.ts" });
+const failedPrepared = failedCase.table.prepare({ url: "/packages/workers/process-worker.ts" });
 const failed = await failedCase.table.start(failedPrepared.pid);
 assert.equal(failed.status, "failed");
 assert.equal(failed.error, "boom");
 assert.equal(failed.resourcesReleased, true);
 
 const waitCase = createTable("hang");
-const waitPrepared = waitCase.table.prepare({ url: "/workers/process-worker.ts" });
+const waitPrepared = waitCase.table.prepare({ url: "/packages/workers/process-worker.ts" });
 const startPromise = waitCase.table.start(waitPrepared.pid);
 const waitPromise = waitCase.table.wait(waitPrepared.pid);
 const killed = waitCase.table.kill(waitPrepared.pid);
@@ -122,7 +122,7 @@ assert.equal(waited.status, "killed");
 assert.equal(started.status, "killed");
 assert.equal(waitCase.workers[0].terminated, true);
 
-const replacement = waitCase.table.prepare({ url: "/workers/process-worker.ts" });
+const replacement = waitCase.table.prepare({ url: "/packages/workers/process-worker.ts" });
 assert.notEqual(replacement.pid, waitPrepared.pid);
 assert.notEqual(replacement.generation, waitPrepared.generation);
 const signalStart = waitCase.table.start(replacement.pid);
@@ -139,7 +139,7 @@ assert.equal((await signalStart).exitCode, 130);
 
 const gracefulCase = createTable("graceful");
 gracefulCase.table.signalGraceMs = 100;
-const gracefulPrepared = gracefulCase.table.prepare({ url: "/workers/process-worker.ts" });
+const gracefulPrepared = gracefulCase.table.prepare({ url: "/packages/workers/process-worker.ts" });
 await gracefulCase.table.start(gracefulPrepared.pid);
 const gracefulWait = gracefulCase.table.wait(gracefulPrepared.pid);
 assert.equal(gracefulCase.table.signal(gracefulPrepared.pid, "SIGTERM").status, "stopping");
@@ -149,7 +149,7 @@ assert.equal(gracefulExit.signal, "SIGTERM");
 assert.equal(gracefulCase.workers[0].terminated, true);
 
 const teardownCase = createTable("hang");
-const teardownPrepared = teardownCase.table.prepare({ url: "/workers/process-worker.ts" });
+const teardownPrepared = teardownCase.table.prepare({ url: "/packages/workers/process-worker.ts" });
 teardownCase.table.start(teardownPrepared.pid);
 teardownCase.table.teardown();
 const tornDown = await teardownCase.table.wait(teardownPrepared.pid);
@@ -158,7 +158,7 @@ assert.equal(teardownCase.workers[0].terminated, true);
 
 const churn = createTable("hang");
 for (let iteration = 0; iteration < 100; iteration += 1) {
-  const process = churn.table.prepare({ url: "/workers/process-worker.ts" });
+  const process = churn.table.prepare({ url: "/packages/workers/process-worker.ts" });
   const starting = churn.table.start(process.pid);
   const waiting = churn.table.wait(process.pid);
   churn.table.teardown();
@@ -169,7 +169,7 @@ for (let iteration = 0; iteration < 100; iteration += 1) {
   assert.equal(churn.workers.at(-1).listeners.get("error").length, 0);
 }
 assert.equal(churn.workers.filter((worker) => !worker.terminated).length, 0);
-const recovered = churn.table.prepare({ url: "/workers/process-worker.ts" });
+const recovered = churn.table.prepare({ url: "/packages/workers/process-worker.ts" });
 const recoveredStart = churn.table.start(recovered.pid);
 churn.workers.at(-1).emit("message", { data: { type: "ready" } });
 assert.equal((await recoveredStart).status, "ready");
@@ -177,7 +177,7 @@ churn.table.teardown();
 assert.equal(churn.table.registry.size(), 0);
 
 const failedFactory = new HostProcessTable({ workerFactory: () => { throw new Error("allocation failed"); } });
-const failedAllocation = failedFactory.prepare({ url: "/workers/process-worker.ts" });
+const failedAllocation = failedFactory.prepare({ url: "/packages/workers/process-worker.ts" });
 assert.equal((await failedFactory.start(failedAllocation.pid)).status, "failed");
 assert.equal((await failedFactory.wait(failedAllocation.pid)).resourcesReleased, true);
 
@@ -185,7 +185,7 @@ const failedPost = new HostProcessTable({ workerFactory: () => ({
   postMessage() { throw new Error("post failed"); },
   terminate() { throw new Error("terminate failed"); }
 }) });
-const failedSend = failedPost.prepare({ url: "/workers/process-worker.ts" });
+const failedSend = failedPost.prepare({ url: "/packages/workers/process-worker.ts" });
 assert.equal((await failedPost.start(failedSend.pid)).status, "failed");
 assert.equal((await failedPost.wait(failedSend.pid)).resourcesReleased, true);
 assert.equal(failedPost.registry.size(), 0);
@@ -198,7 +198,7 @@ const boundedPrepared = boundedCase.table.prepare({
   argv: ["node", "script.js", "value;not-shell"],
   cwd: "/workspace/app",
   env: { SAFE_VALUE: "yes", API_TOKEN: "secret" },
-  url: "/workers/process-worker.ts"
+  url: "/packages/workers/process-worker.ts"
 });
 await boundedCase.table.start(boundedPrepared.pid);
 assert.deepEqual(boundedCase.workers.at(-1).messages[0].argv, ["node", "script.js", "value;not-shell"]);
@@ -219,11 +219,11 @@ assert.equal(boundedCase.table.list().at(-1).stdout.includes("stale"), false);
 boundedCase.table.teardown();
 
 assert.throws(
-  () => new HostProcessTable().prepare({ cwd: "/workspace/../escape", url: "/workers/process-worker.ts" }),
+  () => new HostProcessTable().prepare({ cwd: "/workspace/../escape", url: "/packages/workers/process-worker.ts" }),
   /absolute normalized path/
 );
 assert.throws(
-  () => new HostProcessTable().prepare({ argv: ["ok", "bad\0arg"], url: "/workers/process-worker.ts" }),
+  () => new HostProcessTable().prepare({ argv: ["ok", "bad\0arg"], url: "/packages/workers/process-worker.ts" }),
   /NUL-free/
 );
 

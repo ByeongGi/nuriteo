@@ -83,7 +83,7 @@ for (const operation of ["pty.open", "pty.attach", "pty.read", "pty.write", "pty
 }
 const wasi = fs.readFileSync("packages/node-runtime/src/builtins/wasi.ts", "utf8");
 assert(wasi.includes("_fdRead") && wasi.includes("_fdWrite") && wasi.includes("WasiStdio"), "WASI terminal stdio bridge missing");
-const processWorker = fs.readFileSync("workers/process-worker.ts", "utf8");
+const processWorker = fs.readFileSync("packages/workers/process-worker.ts", "utf8");
 assert(processWorker.includes("/runtime/system_wasm.wasm"), "production process Worker does not load system WASM");
 assert(fs.existsSync("packages/workspace-runtime/assets/runtime/system_wasm.wasm"), "preview system WASM asset missing");
 

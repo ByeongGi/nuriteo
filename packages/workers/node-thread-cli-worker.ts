@@ -8,7 +8,7 @@ export class NodeThreadCliEvaluationWorker {
   #worker = new Worker(`
     import { parentPort } from "node:worker_threads";
     import { Worker as NestedWorker } from "node:worker_threads";
-    import { createCliEvaluationHttpBridge, evaluateCliModuleWorkerMessage } from ${JSON.stringify(new URL("../../packages/node-runtime/src/package-managers/cli-evaluator.ts", import.meta.url).href)};
+    import { createCliEvaluationHttpBridge, evaluateCliModuleWorkerMessage } from ${JSON.stringify(new URL("../node-runtime/src/package-managers/cli-evaluator.ts", import.meta.url).href)};
     const httpBridges = new Map();
     const webSockets = new Map();
     const nestedWorkers = new Set();

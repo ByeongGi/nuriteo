@@ -54,7 +54,7 @@ await withRuntimeLab(async (page, baseUrl) => {
       .catch((error) => error.name);
 
     observed.sameOriginWorker = await new Promise((resolve) => {
-      const worker = new Worker("/workers/process-worker.ts", { type: "module" });
+      const worker = new Worker("/packages/workers/process-worker.ts", { type: "module" });
       worker.addEventListener("error", () => resolve("error"), { once: true });
       setTimeout(() => {
         worker.terminate();
