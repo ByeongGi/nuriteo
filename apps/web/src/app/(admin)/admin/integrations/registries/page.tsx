@@ -2,7 +2,7 @@ import { listRegistries } from "@nuriteo/api-client";
 import type { Metadata } from "next";
 
 import { EntryUnavailable } from "#src/app/_components/entry-unavailable.tsx";
-import { RegistryConsole } from "#src/app/(admin)/admin/registries/registry-console.tsx";
+import { RegistryConsole } from "#src/app/(admin)/admin/integrations/registries/registry-console.tsx";
 import { createServerApiClient } from "#src/lib/api/server-client.ts";
 import { safeRequestReference } from "#src/lib/api/presentation-error.ts";
 

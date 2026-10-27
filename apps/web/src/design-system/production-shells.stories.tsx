@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 
 import { AdminAccessRequired } from "#src/app/(admin)/admin/_components/admin-access-required.tsx";
 import { AuthenticatedShellLoading } from "#src/app/(authenticated)/authenticated-shell-frame.tsx";
-import AdminUpdatesLoading from "#src/app/(admin)/admin/updates/loading.tsx";
+import AdminUpdatesLoading from "#src/app/(admin)/admin/system/updates/loading.tsx";
 import ProjectsLoading from "#src/app/(authenticated)/projects/loading.tsx";
 import WorkspacesLoading from "#src/app/(authenticated)/workspaces/loading.tsx";
 import { EntryUnavailable } from "#src/app/_components/entry-unavailable.tsx";

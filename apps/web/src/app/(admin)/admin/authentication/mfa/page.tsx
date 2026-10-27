@@ -2,7 +2,7 @@ import { getMfaPolicy } from "@nuriteo/api-client";
 import type { Metadata } from "next";
 
 import { EntryUnavailable } from "#src/app/_components/entry-unavailable.tsx";
-import { MfaPolicyEditor } from "#src/app/(admin)/admin/mfa/policy-editor.tsx";
+import { MfaPolicyEditor } from "#src/app/(admin)/admin/_components/mfa-policy-editor.tsx";
 import { safeRequestReference } from "#src/lib/api/presentation-error.ts";
 import { createServerApiClient } from "#src/lib/api/server-client.ts";
 

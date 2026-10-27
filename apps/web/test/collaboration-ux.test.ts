@@ -374,7 +374,7 @@ function jsonRequest(signal?: AbortSignal): Request {
 
 function testUxSourceContracts() {
   const activation = read("src/app/activate/activation-form.tsx");
-  const admin = read("src/app/(admin)/admin/invitations/activation-invitations.tsx");
+  const admin = read("src/app/(admin)/admin/access/invitations/activation-invitations.tsx");
   const organizations = read("src/app/(authenticated)/organizations/organization-console.tsx");
   const accept = read("src/app/(authenticated)/organization-invitations/accept/accept-invitation.tsx");
   const organizationPage = read("src/app/(authenticated)/organizations/page.tsx");

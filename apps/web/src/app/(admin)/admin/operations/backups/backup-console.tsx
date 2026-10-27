@@ -28,7 +28,7 @@ import { useExclusiveMutation } from "#src/lib/use-exclusive-mutation.ts";
 import { AdminForm, AdminFormActionNote, AdminFormActions, AdminFormSection } from "#src/app/(admin)/admin/_components/admin-form-layout.tsx";
 import { AdminPageHeader } from "#src/app/(admin)/admin/_components/admin-page-header.tsx";
 import { AdminFeedback, AdminNote, AdminPage, AdminSection, AdminSectionHeading, AdminSummary } from "#src/app/(admin)/admin/_components/admin-surface.tsx";
-import { backupConsoleStyles } from "#src/app/(admin)/admin/backups/backup-console.styles.ts";
+import { backupConsoleStyles } from "#src/app/(admin)/admin/operations/backups/backup-console.styles.ts";
 
 const styles = backupConsoleStyles();
 const TIMEZONE_OPTIONS = [

@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 
 import { EntryUnavailable } from "#src/app/_components/entry-unavailable.tsx";
-import { MaintenanceConsole } from "#src/app/(admin)/admin/maintenance/maintenance-console.tsx";
-import { getAdminMaintenanceStatus } from "#src/app/(admin)/admin/maintenance/maintenance-model.ts";
+import { MaintenanceConsole } from "#src/app/(admin)/admin/operations/maintenance/maintenance-console.tsx";
+import { getAdminMaintenanceStatus } from "#src/app/(admin)/admin/operations/maintenance/maintenance-model.ts";
 import { safeRequestReference } from "#src/lib/api/presentation-error.ts";
 import { createServerApiClient } from "#src/lib/api/server-client.ts";
 

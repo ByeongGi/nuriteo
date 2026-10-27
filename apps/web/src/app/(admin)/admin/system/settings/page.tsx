@@ -2,7 +2,7 @@ import { getAdminStatus, listAdminSettings } from "@nuriteo/api-client";
 import type { Metadata } from "next";
 
 import { EntryUnavailable } from "#src/app/_components/entry-unavailable.tsx";
-import { AdminSettings } from "#src/app/(admin)/admin/settings/admin-settings.tsx";
+import { AdminSettings } from "#src/app/(admin)/admin/system/settings/admin-settings.tsx";
 import { safeRequestReference } from "#src/lib/api/presentation-error.ts";
 import { createServerApiClient } from "#src/lib/api/server-client.ts";
 

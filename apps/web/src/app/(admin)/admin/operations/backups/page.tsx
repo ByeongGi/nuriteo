@@ -2,7 +2,7 @@ import { getAdminBackups, listAdminBackupOperations } from "@nuriteo/api-client"
 import type { Metadata } from "next";
 
 import { EntryUnavailable } from "#src/app/_components/entry-unavailable.tsx";
-import { BackupConsole } from "#src/app/(admin)/admin/backups/backup-console.tsx";
+import { BackupConsole } from "#src/app/(admin)/admin/operations/backups/backup-console.tsx";
 import { safeRequestReference } from "#src/lib/api/presentation-error.ts";
 import { createServerApiClient } from "#src/lib/api/server-client.ts";
 

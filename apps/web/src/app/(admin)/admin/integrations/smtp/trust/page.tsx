@@ -2,7 +2,7 @@ import { ApiError, listIntegrationCas } from "@nuriteo/api-client";
 import type { Metadata } from "next";
 
 import { EntryUnavailable } from "#src/app/_components/entry-unavailable.tsx";
-import { SmtpTrustScreen } from "#src/app/(admin)/admin/smtp-trust/smtp-trust-screen.tsx";
+import { SmtpTrustScreen } from "#src/app/(admin)/admin/integrations/smtp/trust/smtp-trust-screen.tsx";
 import { createServerApiClient } from "#src/lib/api/server-client.ts";
 import { safeRequestReference } from "#src/lib/api/presentation-error.ts";
 

@@ -51,7 +51,7 @@ try {
   const page = readSource("src/app/(admin)/admin/operations/maintenance/page.tsx");
   const legacyPage = readSource("src/app/(admin)/admin/maintenance/page.tsx");
   const adminLayout = readSource("src/app/(admin)/admin/layout.tsx");
-  const consoleSource = readSource("src/app/(admin)/admin/maintenance/maintenance-console.tsx");
+  const consoleSource = readSource("src/app/(admin)/admin/operations/maintenance/maintenance-console.tsx");
   const shell = readSource("src/app/(authenticated)/authenticated-shell-frame.tsx");
   assert.match(adminLayout, /is_instance_admin/u);
   assert.match(consoleSource, /최근 관리자 재인증이 필요/u);

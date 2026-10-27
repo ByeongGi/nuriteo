@@ -1,7 +1,7 @@
 import { listOidcIdentities } from "@nuriteo/api-client";
 import type { Metadata } from "next";
 
-import { IdentityConnections } from "#src/app/(authenticated)/identities/identity-connections.tsx";
+import { IdentityConnections } from "#src/app/(authenticated)/account/identities/identity-connections.tsx";
 import { EntryUnavailable } from "#src/app/_components/entry-unavailable.tsx";
 import { safeRequestReference } from "#src/lib/api/presentation-error.ts";
 import { createServerApiClient } from "#src/lib/api/server-client.ts";

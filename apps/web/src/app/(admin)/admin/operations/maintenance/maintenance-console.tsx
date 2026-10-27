@@ -7,7 +7,7 @@ import { tv } from "tailwind-variants";
 
 import { AdminPageHeader } from "#src/app/(admin)/admin/_components/admin-page-header.tsx";
 import { AdminFeedback, AdminPage, AdminSection, AdminSectionHeading } from "#src/app/(admin)/admin/_components/admin-surface.tsx";
-import type { AdminMaintenanceStatus } from "#src/app/(admin)/admin/maintenance/maintenance-model.ts";
+import type { AdminMaintenanceStatus } from "#src/app/(admin)/admin/operations/maintenance/maintenance-model.ts";
 import { Button } from "#src/components/ui/button.tsx";
 import { CheckboxField } from "#src/components/ui/checkbox.tsx";
 import { createBrowserApiClient } from "#src/lib/api/browser-client.ts";

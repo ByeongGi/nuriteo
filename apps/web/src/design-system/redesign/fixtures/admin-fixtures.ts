@@ -13,11 +13,11 @@ import type {
   RegistryConfiguration
 } from "@nuriteo/api-client";
 
-import type { AdminMaintenanceStatus } from "#src/app/(admin)/admin/maintenance/maintenance-model.ts";
+import type { AdminMaintenanceStatus } from "#src/app/(admin)/admin/operations/maintenance/maintenance-model.ts";
 import type {
   AdminUpdateHistory,
   AdminUpdateReadiness
-} from "#src/app/(admin)/admin/updates/update-model.ts";
+} from "#src/app/(admin)/admin/system/updates/update-model.ts";
 
 export const adminOperations: AdminOperations = {
   cleanup: {

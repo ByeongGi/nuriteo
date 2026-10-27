@@ -151,7 +151,7 @@ function sourceContracts(): void {
   const page = read("src/app/(admin)/admin/system/settings/page.tsx");
   const legacySettingsPage = read("src/app/(admin)/admin/settings/page.tsx");
   const adminHome = read("src/app/(admin)/admin/page.tsx");
-  const settings = read("src/app/(admin)/admin/settings/admin-settings.tsx");
+  const settings = read("src/app/(admin)/admin/system/settings/admin-settings.tsx");
   const navigation = read("src/app/(admin)/admin/admin-navigation.tsx");
   const adminLayout = read("src/app/(admin)/admin/layout.tsx");
   const adminShell = read("src/app/(admin)/admin/admin-shell-frame.tsx");

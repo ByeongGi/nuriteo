@@ -3,20 +3,20 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 
 import { AdminShellFrame } from "#src/app/(admin)/admin/admin-shell-frame.tsx";
-import { BackupConsole } from "#src/app/(admin)/admin/backups/backup-console.tsx";
-import { GitProviderConsole } from "#src/app/(admin)/admin/git-providers/provider-console.tsx";
-import { ActivationInvitations, NewActivationInvitation } from "#src/app/(admin)/admin/invitations/activation-invitations.tsx";
-import { MaintenanceConsole } from "#src/app/(admin)/admin/maintenance/maintenance-console.tsx";
-import { MfaPolicyEditor } from "#src/app/(admin)/admin/mfa/policy-editor.tsx";
-import { EmailDeliveryConsole } from "#src/app/(admin)/admin/notifications/email-delivery-console.tsx";
-import { OidcProviderConsole } from "#src/app/(admin)/admin/oidc/provider-console.tsx";
+import { BackupConsole } from "#src/app/(admin)/admin/operations/backups/backup-console.tsx";
+import { GitProviderConsole } from "#src/app/(admin)/admin/integrations/git/provider-console.tsx";
+import { ActivationInvitations, NewActivationInvitation } from "#src/app/(admin)/admin/access/invitations/activation-invitations.tsx";
+import { MaintenanceConsole } from "#src/app/(admin)/admin/operations/maintenance/maintenance-console.tsx";
+import { MfaPolicyEditor } from "#src/app/(admin)/admin/_components/mfa-policy-editor.tsx";
+import { EmailDeliveryConsole } from "#src/app/(admin)/admin/operations/email-deliveries/email-delivery-console.tsx";
+import { OidcProviderConsole } from "#src/app/(admin)/admin/authentication/oidc/provider-console.tsx";
 import { OperationsDashboard } from "#src/app/(admin)/admin/operations/operations-dashboard.tsx";
 import { StorageCleanupPreview } from "#src/app/(admin)/admin/operations/storage-cleanup/cleanup-preview.tsx";
-import { RegistryConsole } from "#src/app/(admin)/admin/registries/registry-console.tsx";
-import { SmtpTrustScreen } from "#src/app/(admin)/admin/smtp-trust/smtp-trust-screen.tsx";
-import { AdminSettings } from "#src/app/(admin)/admin/settings/admin-settings.tsx";
+import { RegistryConsole } from "#src/app/(admin)/admin/integrations/registries/registry-console.tsx";
+import { SmtpTrustScreen } from "#src/app/(admin)/admin/integrations/smtp/trust/smtp-trust-screen.tsx";
+import { AdminSettings } from "#src/app/(admin)/admin/system/settings/admin-settings.tsx";
 import { AuditLogTable } from "#src/app/(admin)/admin/system/audit-log/audit-log-table.tsx";
-import { UpdateApprovalHistory, UpdateReadinessConsole } from "#src/app/(admin)/admin/updates/update-readiness-console.tsx";
+import { UpdateApprovalHistory, UpdateReadinessConsole } from "#src/app/(admin)/admin/system/updates/update-readiness-console.tsx";
 import {
   adminBackup,
   adminCleanup,

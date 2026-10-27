@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 
-import { GitProviderConsole } from "#src/app/(admin)/admin/git-providers/provider-console.tsx";
+import { GitProviderConsole } from "#src/app/(admin)/admin/integrations/git/provider-console.tsx";
 
 export const metadata: Metadata = { title: "새 Git 제공자" };
 

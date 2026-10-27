@@ -10,7 +10,7 @@ import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 
 import { AccessTokenConsole } from "#src/app/(authenticated)/access-tokens/token-console.tsx";
 import { AuthenticatedShellFrame } from "#src/app/(authenticated)/authenticated-shell-frame.tsx";
-import { IdentityConnections } from "#src/app/(authenticated)/identities/identity-connections.tsx";
+import { IdentityConnections } from "#src/app/(authenticated)/account/identities/identity-connections.tsx";
 import { NotificationCenter } from "#src/app/(authenticated)/notifications/notification-center.tsx";
 import { MfaSecurity as MfaSecurityScreen } from "#src/app/mfa/security.tsx";
 

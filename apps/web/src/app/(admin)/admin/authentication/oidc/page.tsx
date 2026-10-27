@@ -2,7 +2,7 @@ import { listAdminOidcProviders } from "@nuriteo/api-client";
 import type { Metadata } from "next";
 
 import { EntryUnavailable } from "#src/app/_components/entry-unavailable.tsx";
-import { OidcProviderConsole } from "#src/app/(admin)/admin/oidc/provider-console.tsx";
+import { OidcProviderConsole } from "#src/app/(admin)/admin/authentication/oidc/provider-console.tsx";
 import { createServerApiClient } from "#src/lib/api/server-client.ts";
 import { safeRequestReference } from "#src/lib/api/presentation-error.ts";
 

@@ -4,7 +4,7 @@ import { ApiError, unlinkOidcIdentity } from "@nuriteo/api-client";
 import type { OidcIdentity } from "@nuriteo/api-client";
 import { useState } from "react";
 
-import { identityConnectionsStyles } from "#src/app/(authenticated)/identities/identity-connections.styles.ts";
+import { identityConnectionsStyles } from "#src/app/(authenticated)/account/identities/identity-connections.styles.ts";
 import { Button } from "#src/components/ui/button.tsx";
 import { ConfirmationDialog } from "#src/components/ui/confirmation-dialog.tsx";
 import { PageHeader } from "#src/components/ui/page-header.tsx";

@@ -1,7 +1,7 @@
 import { listRegistries } from "@nuriteo/api-client";
 import { notFound } from "next/navigation";
 
-import { RegistryConsole } from "#src/app/(admin)/admin/registries/registry-console.tsx";
+import { RegistryConsole } from "#src/app/(admin)/admin/integrations/registries/registry-console.tsx";
 import { createServerApiClient } from "#src/lib/api/server-client.ts";
 
 export default async function RegistryDetailPage({ params }: { readonly params: Promise<{ readonly registryId: string }> }) {

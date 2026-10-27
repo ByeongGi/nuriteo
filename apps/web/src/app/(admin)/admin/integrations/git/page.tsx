@@ -2,7 +2,7 @@ import { listGitProvidersForAdmin } from "@nuriteo/api-client";
 import type { Metadata } from "next";
 
 import { EntryUnavailable } from "#src/app/_components/entry-unavailable.tsx";
-import { GitProviderConsole } from "#src/app/(admin)/admin/git-providers/provider-console.tsx";
+import { GitProviderConsole } from "#src/app/(admin)/admin/integrations/git/provider-console.tsx";
 import { createServerApiClient } from "#src/lib/api/server-client.ts";
 import { safeRequestReference } from "#src/lib/api/presentation-error.ts";
 

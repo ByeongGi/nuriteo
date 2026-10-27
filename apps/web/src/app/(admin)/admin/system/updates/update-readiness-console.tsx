@@ -13,8 +13,8 @@ import { readCsrfCredential } from "#src/lib/api/browser-security.ts";
 import { useExclusiveMutation } from "#src/lib/use-exclusive-mutation.ts";
 import { AdminPageHeader } from "#src/app/(admin)/admin/_components/admin-page-header.tsx";
 import { AdminNote, AdminPage, AdminSection, AdminSectionHeading, AdminSummary } from "#src/app/(admin)/admin/_components/admin-surface.tsx";
-import { getAdminUpdateHistory } from "#src/app/(admin)/admin/updates/update-model.ts";
-import type { AdminUpdateHistory, AdminUpdateReadiness } from "#src/app/(admin)/admin/updates/update-model.ts";
+import { getAdminUpdateHistory } from "#src/app/(admin)/admin/system/updates/update-model.ts";
+import type { AdminUpdateHistory, AdminUpdateReadiness } from "#src/app/(admin)/admin/system/updates/update-model.ts";
 
 export function UpdateReadinessConsole({
   readiness

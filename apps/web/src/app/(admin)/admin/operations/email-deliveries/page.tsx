@@ -2,7 +2,7 @@ import { listEmailDeliveries } from "@nuriteo/api-client";
 import type { Metadata } from "next";
 
 import { EntryUnavailable } from "#src/app/_components/entry-unavailable.tsx";
-import { EmailDeliveryConsole } from "#src/app/(admin)/admin/notifications/email-delivery-console.tsx";
+import { EmailDeliveryConsole } from "#src/app/(admin)/admin/operations/email-deliveries/email-delivery-console.tsx";
 import { safeRequestReference } from "#src/lib/api/presentation-error.ts";
 import { createServerApiClient } from "#src/lib/api/server-client.ts";
 
