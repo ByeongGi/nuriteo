@@ -153,14 +153,14 @@ fn portable_stream_import_verify_export_and_external_tar_listing() {
 #[test]
 fn checked_in_public_manifests_match_the_production_contract() {
     for source in [
-        include_str!("../../../fixtures/backup/portable-v1/valid-minimal.manifest.json"),
-        include_str!("../../../fixtures/backup/portable-v1/valid-optional-extension.manifest.json"),
+        include_str!("../../../platform/fixtures/backup/portable-v1/valid-minimal.manifest.json"),
+        include_str!("../../../platform/fixtures/backup/portable-v1/valid-optional-extension.manifest.json"),
     ] {
         let manifest: PortableBackupManifest = serde_json::from_str(source).unwrap();
         manifest.validate(PortableLimits::default()).unwrap();
     }
     let cases: serde_json::Value = serde_json::from_str(include_str!(
-        "../../../fixtures/backup/portable-v1/cases.json"
+        "../../../platform/fixtures/backup/portable-v1/cases.json"
     ))
     .unwrap();
     assert_eq!(cases["schemaVersion"], 1);

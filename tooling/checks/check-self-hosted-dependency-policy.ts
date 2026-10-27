@@ -4,7 +4,7 @@ import { spawnSync } from "node:child_process";
 
 type Waiver = { ecosystem: string; id: string; package: string; version: string; kind: string; reason: string;
   owner: string; expiresAt: string; replacement: string };
-const policy = JSON.parse(fs.readFileSync("security/dependency-policy.json", "utf8")) as {
+const policy = JSON.parse(fs.readFileSync("platform/security/dependency-policy.json", "utf8")) as {
   schemaVersion: number; taskId: string; severityGate: string; unresolvedCriticalAllowed: number;
   unresolvedHighAllowed: number; lockfiles: string[]; allowedSources: string[]; allowedLicenseExpressions: string[];
   requiredCommands: string[]; waiverRegistry: string; sbomContract: string };

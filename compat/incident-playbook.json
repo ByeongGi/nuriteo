@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "updatedAt": "2026-10-12",
   "status": "self-hosted-v1",
-  "responsePolicy": "security/vulnerability-response-policy.json",
+  "responsePolicy": "platform/security/vulnerability-response-policy.json",
   "supportBundlePolicy": "compat/self-hosted-support-bundle-v1.json",
   "requiredIncidentTypes": [
     "rollback",

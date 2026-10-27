@@ -19,7 +19,7 @@ assert.equal(reproducibility.images.length, 6);
 const qualification = JSON.parse(fs.readFileSync("release/ga/qualification-report.json", "utf8"));
 assert.equal(qualification.status, "PASS");
 assert.equal(qualification.signedArtifacts, true);
-const security = JSON.parse(fs.readFileSync("security/reports/SEC-004.json", "utf8"));
+const security = JSON.parse(fs.readFileSync("platform/security/reports/SEC-004.json", "utf8"));
 assert.equal(security.status, "PASS");
 assert.equal(security.sourceCommit, reproducibility.sourceCommit);
 assert.equal(security.images.reduce((sum, image) => sum + image.critical, 0), 0);

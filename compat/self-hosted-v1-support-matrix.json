@@ -16,7 +16,7 @@
       "status": "supported",
       "contract": "Server, Web, and Operations OCI images on linux/amd64 and linux/arm64",
       "qualification": "REL-001 proved two clean native builds with identical role digests on both architectures; SEC-004 and QUAL-004 bound the promoted arm64 runtime images to that exact set.",
-      "evidence": ["release/ga/reproducible-images.json", "security/reports/SEC-004.json", "release/ga/qualification-report.json"]
+      "evidence": ["release/ga/reproducible-images.json", "platform/security/reports/SEC-004.json", "release/ga/qualification-report.json"]
     },
     {
       "id": "SHV1-COMPOSE-DOCKER",

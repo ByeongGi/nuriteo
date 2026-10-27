@@ -23,7 +23,7 @@
     "check:self-hosted-rc-baseline": "node tooling/checks/check-self-hosted-rc-baseline.ts",
     "check:self-hosted-ga-baseline": "node tooling/checks/check-self-hosted-ga-baseline.ts",
     "check:self-hosted-threat-model": "node tooling/checks/check-self-hosted-threat-model.ts",
-    "check:self-hosted-dependencies": "security/check-dependencies.sh",
+    "check:self-hosted-dependencies": "platform/security/check-dependencies.sh",
     "check:self-hosted-workload-hardening": "node tooling/checks/check-self-hosted-workload-hardening.ts",
     "check:self-hosted-operations-image": "node deploy/docker/check-operations-image.mjs",
     "check:self-hosted-security-release": "node tooling/checks/check-self-hosted-security-release.ts",

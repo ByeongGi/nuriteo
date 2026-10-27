@@ -16,7 +16,7 @@ type Report = {
     high: number; critical: number; secrets: number; runtimeSmoke: string }>;
 };
 
-const policy = JSON.parse(fs.readFileSync("security/image-release-policy.json", "utf8")) as Policy;
+const policy = JSON.parse(fs.readFileSync("platform/security/image-release-policy.json", "utf8")) as Policy;
 const report = JSON.parse(fs.readFileSync(policy.report, "utf8")) as Report;
 
 assert.equal(policy.schemaVersion, 1);
